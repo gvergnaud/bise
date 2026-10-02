@@ -693,6 +693,29 @@ def interrupt_path_of(+dir: String, +port: String) -> String:
 def interrupt_requested(+c: String) -> Bool:
   Bool.not(String.is_empty(String.trim(c)))
 
+# who an interrupt flag names: the hub writes who asked for the stop
+# ("user": Ctrl+C or esc in the TUI; "main" or a task's name: `sb
+# interrupt`; "bise": a stop of the hub's own). "1" (an older hub) and
+# an unreadable flag read as the user.
+def interrupter.of(+t: String) -> String:
+  Bool.pick(String, String.is_empty(t) || String.eq(t, "1") || String.eq(t, "user"),
+    "the user", t)
+
+def interrupter(+c: String) -> String:
+  interrupter.of(String.trim(c))
+
+# the same, from the flag file as read (no file: the user)
+def interrupter_in(m: Maybe<&2, String>) -> String:
+  match m:
+    case None{}:
+      "the user"
+    case Some{+c}:
+      interrupter(c)
+
+# the error of a call an interrupt stopped: "interrupted by main"
+def interrupted_by(+who: String) -> String:
+  String.append("interrupted by ", who)
+
 # ---- a transport failure, without the Http types ----
 
 type NetErr is Data:
@@ -1157,9 +1180,10 @@ def exhausted_text(+tries: Nat, +why: String) -> String:
     " attempts: "]), why)
 
 # an interrupt during the retries stops them, and keeps the error that
-# made them necessary: the user sees both
-def interrupted_text(+tries: Nat, +why: String) -> String:
-  String.append(String.concat(["stopped retrying (interrupted by the user) after ",
+# made them necessary: the user sees both. who: interrupter's answer
+# ("the user", "main")
+def interrupted_text(+who: String, +tries: Nat, +why: String) -> String:
+  String.append(String.concat(["stopped retrying (interrupted by ", who, ") after ",
     Nat.show(tries), " failed attempts; last error: "]), why)
 
 # the pause before a retry is slept in 1 s slices, the flag read between

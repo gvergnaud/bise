@@ -242,10 +242,13 @@ def model_call.step.retry.go(stop: Bool, n: Out, +ipath: String, +k: Nat,
   match stop:
     case True{}:
       do IO<Out & Rem.RemoteRes>:
-        # consume the flag so the boundary drains stay clean
+        # who asked (the flag's content), then consume the flag so the
+        # boundary drains stay clean
+        f : Maybe<&2, String> <- P.read_file(ipath)
+        +who : String <- IO.pure(String, Pvp.interrupter_in(f))
         u : Unit <- P.write_file(ipath, "")
         IO.pure(Out & Rem.RemoteRes,
-          (n, Rem.RRErr{Pvp.interrupted_text(Nat.add(tries, 1n), why)}))
+          (n, Rem.RRErr{Pvp.interrupted_text(who, Nat.add(tries, 1n), why)}))
     case False{}:
       next(k)(n)
 
@@ -382,9 +385,12 @@ def sse.done(rd: Rd, +status: U32, +retry_after: String, +ipath: String,
     case RdStop{st, +parts}:
       do IO<Got>:
         c : Unit <- Http.stream.close(st)
-        # consume the flag: the boundary drains stay clean
+        # who asked (the flag's content), then consume the flag: the
+        # boundary drains stay clean
+        f : Maybe<&2, String> <- P.read_file(ipath)
+        +who : String <- IO.pure(String, Pvp.interrupter_in(f))
         u : Unit <- P.write_file(ipath, "")
-        IO.pure(Got, Got{Pvp.AFail{"interrupted by the user"}, status,
+        IO.pure(Got, Got{Pvp.AFail{Pvp.interrupted_by(who)}, status,
           sse.text(parts)})
 
 @unsafe

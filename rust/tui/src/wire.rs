@@ -527,6 +527,12 @@ pub(crate) fn parse_line(line: &str) -> Option<Ev> {
             return Some(Ev::TurnDone);
         }
         if let Some(why) = t.strip_prefix("failed: ") {
+            // a call an interrupt stopped mid-answer ("interrupted by
+            // main", "by the user"): a stop someone asked for, not a
+            // failure
+            if why.starts_with("interrupted by ") {
+                return Some(Ev::Warn(format!("turn {}", why)));
+            }
             if let Some(line) = no_key(why) {
                 return Some(Ev::Err(line));
             }
