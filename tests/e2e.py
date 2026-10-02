@@ -59,6 +59,24 @@ def host_env():
     return {k: v for k, v in os.environ.items() if k not in AGENT_VARS}
 
 
+def no_real_accounts(tmp):
+    """Tests run on fake data, never the user's real accounts: a throwaway
+    hub gets an empty connector index and a bootstrap URL nothing answers
+    (with a real Mistral key it would fetch his Gmail, Slack...), none of
+    his plugins (~/.agents/plugins: their logins) and its own plugin state
+    (computer use off: not his browser). BISE_TEST_REAL_ACCOUNTS=1 keeps
+    his own, for the one run he asks for."""
+    if os.environ.get("BISE_TEST_REAL_ACCOUNTS") == "1":
+        return {}
+    return {
+        "BEND_MCP_INDEX": os.path.join(tmp, "mcp-index.txt"),
+        "BEND_MCP_BOOTSTRAP_URL": "http://127.0.0.1:9/v1/connectors/bootstrap",
+        "BEND_PLUGINS_HOME": os.path.join(tmp, "user-plugins"),
+        "BEND_PLUGINS_STATE": os.path.join(tmp, "plugins.json"),
+        "BEND_PLUGINS_DATA": os.path.join(tmp, "plugin-data"),
+    }
+
+
 class Env:
     def __init__(self, fake_env=None):
         self.tmp = tempfile.mkdtemp(prefix="sb-e2e-")
@@ -78,6 +96,7 @@ class Env:
             "BEND_MODEL": "mistral-small-latest",
             "MISTRAL_API_KEY": "fake-key",
             "BEND_MCP_INDEX": os.path.join(self.tmp, "mcp-index.txt"),
+            **no_real_accounts(self.tmp),
             "BEND_SKILLS_INDEX": os.path.join(self.tmp, "skills-index.txt"),
             "BEND_BG_ROOT": os.path.join(self.tmp, "bg"),
             # the agents' session logs (BISE-196) and their blobs: never

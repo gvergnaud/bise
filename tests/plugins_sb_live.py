@@ -27,6 +27,7 @@ def main():
                     os.path.join(ws, ".agents/plugins/hello-plugin"))
     e2e.sh(ws, "git init -q && git config user.email t@t && git config user.name t && git config commit.gpgsign false && echo '# demo' > README.md && git add . && git commit -qm init")
     env = {**os.environ, "SB_STATE_DIR": st, "BEND_BG_ROOT": os.path.join(tmp, "bg"),
+           **e2e.no_real_accounts(tmp),
            "BEND_PLUGINS_HOME": os.path.join(tmp, "user-plugins"),
            "BEND_PLUGINS_DATA": os.path.join(tmp, "data")}
     for k in ["BEND_PROVIDER_URL", "BEND_MODEL", "BEND_WORKDIR"]:
