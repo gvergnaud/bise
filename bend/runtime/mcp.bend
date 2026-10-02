@@ -425,12 +425,18 @@ def step3.run2(pr3: Http.Pool & Result<&2, &2, Http.Err, Http.Res>,
     case Done{+res}:
       step3.res(p3, res)
 
+# a call's wait: a connector's 60 s; a plugin tool's bridge bounds its
+# own calls (mcp.json's tool_timeout_sec, 300 s by default), so the
+# REPL waits up to an hour for its answer
+def call_ms(+url: String) -> U32:
+  Bool.pick(U32, is_local(url), 3600000, 60000)
+
 def step3(pr2: Http.Pool & Result<&2, &2, Http.Err, Http.Res>, +url: String,
     +h: Map<&2, List<&2, String>>, +tool: String, +args: String) -> IO(MR):
   (p2, _) = pr2
   do IO<MR>:
     pr3 : Http.Pool & Result<&2, &2, Http.Err, Http.Res> <- Http.pool.how(p2,
-      "POST", url, h, call_body(tool, args), 60000, Http.ModeFollow{})
+      "POST", url, h, call_body(tool, args), call_ms(url), Http.ModeFollow{})
     step3.run2(pr3, url, h, tool, args)
 
 def step2(pr1: Http.Pool & Result<&2, &2, Http.Err, Http.Res>, +url: String,

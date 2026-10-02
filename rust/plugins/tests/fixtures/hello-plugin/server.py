@@ -39,6 +39,10 @@ for line in sys.stdin:
     elif method == "tools/list":
         send({"jsonrpc": "2.0", "id": mid, "result": {"tools": [TOOL]}})
     elif method == "tools/call":
+        # HELLO_NAP: seconds a call takes (the bridge's tool_timeout_sec tests)
+        if os.environ.get("HELLO_NAP"):
+            import time
+            time.sleep(float(os.environ["HELLO_NAP"]))
         text = str(msg.get("params", {}).get("arguments", {}).get("text", ""))
         state = os.environ.get("HELLO_STATE")
         n = 0

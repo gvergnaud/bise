@@ -88,6 +88,73 @@ pub struct Skill {
     pub path: PathBuf,
 }
 
+/// A server's own limits in mcp.json, Codex's keys (`config.toml`'s
+/// `[mcp_servers.<id>]`, also Vibe's): `startup_timeout_sec` (or
+/// `startup_timeout_ms`), `tool_timeout_sec`, `enabled_tools`,
+/// `disabled_tools`. None: the bridge's defaults.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Limits {
+    /// start, handshake and the first tools/list
+    pub startup_timeout: Option<std::time::Duration>,
+    /// one tools/call (and any request an agent sends)
+    pub tool_timeout: Option<std::time::Duration>,
+    /// only these tools (the server's own names); None: all
+    pub enabled_tools: Option<Vec<String>>,
+    /// never these tools, even when enabled
+    pub disabled_tools: Vec<String>,
+}
+
+impl Limits {
+    /// Codex's rule: in `enabled_tools` when it is set, and not in
+    /// `disabled_tools`.
+    pub fn allows(&self, tool: &str) -> bool {
+        self.enabled_tools.as_ref().is_none_or(|e| e.iter().any(|t| t == tool)) && !self.disabled_tools.iter().any(|t| t == tool)
+    }
+
+    /// The keys this struct reads, and `"enabled"` (`false`: the server
+    /// is left out, Codex's switch; read by [`load_mcp`]).
+    pub const KEYS: [&'static str; 6] = ["startup_timeout_sec", "startup_timeout_ms", "tool_timeout_sec", "enabled_tools", "disabled_tools", "enabled"];
+
+    pub fn parse(o: &Map<String, Value>) -> Result<Limits, String> {
+        let secs = |k: &str| -> Result<Option<std::time::Duration>, String> {
+            match o.get(k) {
+                None | Some(Value::Null) => Ok(None),
+                Some(v) => v
+                    .as_f64()
+                    .filter(|s| *s > 0.0 && s.is_finite())
+                    .and_then(|s| std::time::Duration::try_from_secs_f64(s).ok())
+                    .map(Some)
+                    .ok_or(format!("{:?} must be a number of seconds above 0", k)),
+            }
+        };
+        let names = |k: &str| -> Result<Option<Vec<String>>, String> {
+            match o.get(k) {
+                None | Some(Value::Null) => Ok(None),
+                Some(Value::Array(a)) => a
+                    .iter()
+                    .map(|s| s.as_str().map(String::from))
+                    .collect::<Option<Vec<_>>>()
+                    .map(Some)
+                    .ok_or(format!("{:?} must be an array of tool names", k)),
+                Some(_) => Err(format!("{:?} must be an array of tool names", k)),
+            }
+        };
+        let startup = match (secs("startup_timeout_sec")?, o.get("startup_timeout_ms")) {
+            (Some(d), _) => Some(d),
+            (None, None | Some(Value::Null)) => None,
+            (None, Some(v)) => Some(std::time::Duration::from_millis(
+                v.as_u64().filter(|ms| *ms > 0).ok_or("\"startup_timeout_ms\" must be a whole number of milliseconds above 0")?,
+            )),
+        };
+        Ok(Limits {
+            startup_timeout: startup,
+            tool_timeout: secs("tool_timeout_sec")?,
+            enabled_tools: names("enabled_tools")?,
+            disabled_tools: names("disabled_tools")?.unwrap_or_default(),
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct StdioServer {
     pub id: String,
@@ -98,6 +165,7 @@ pub struct StdioServer {
     /// added at spawn time)
     pub env: Vec<(String, String)>,
     pub cwd: PathBuf,
+    pub limits: Limits,
 }
 
 /// A remote server's transport.
@@ -133,6 +201,7 @@ pub struct HttpServer {
     /// `"oauth"`: a registered client for servers without dynamic
     /// registration (Claude Code's `clientId`, `callbackPort`)
     pub oauth: Option<crate::oauth::Config>,
+    pub limits: Limits,
 }
 
 impl std::fmt::Debug for HttpServer {
@@ -614,7 +683,7 @@ enum Parsed {
 /// optional string `headers`.
 fn parse_http(id: &str, transport: Transport, o: &Map<String, Value>, root: &Path, data: &Path) -> Result<HttpServer, String> {
     for k in o.keys() {
-        if !["type", "url", "headers", "oauth"].contains(&k.as_str()) {
+        if !["type", "url", "headers", "oauth"].contains(&k.as_str()) && !Limits::KEYS.contains(&k.as_str()) {
             return Err(format!("unknown field {:?}", k));
         }
     }
@@ -639,7 +708,8 @@ fn parse_http(id: &str, transport: Transport, o: &Map<String, Value>, root: &Pat
         }
     }
     let oauth = o.get("oauth").map(crate::oauth::Config::parse).transpose()?;
-    Ok(HttpServer { id: id.to_string(), transport, url, headers, oauth })
+    let limits = Limits::parse(o)?;
+    Ok(HttpServer { id: id.to_string(), transport, url, headers, oauth, limits })
 }
 
 fn parse_server(id: &str, v: &Value, root: &Path, data: &Path) -> Result<Parsed, String> {
@@ -663,7 +733,7 @@ fn parse_server(id: &str, v: &Value, root: &Path, data: &Path) -> Result<Parsed,
 
 fn parse_stdio(id: &str, o: &Map<String, Value>, root: &Path, data: &Path) -> Result<StdioServer, String> {
     for k in o.keys() {
-        if !["type", "command", "args", "env", "cwd"].contains(&k.as_str()) {
+        if !["type", "command", "args", "env", "cwd"].contains(&k.as_str()) && !Limits::KEYS.contains(&k.as_str()) {
             return Err(format!("unknown field {:?}", k));
         }
     }
@@ -734,6 +804,7 @@ fn parse_stdio(id: &str, o: &Map<String, Value>, root: &Path, data: &Path) -> Re
         args,
         env,
         cwd,
+        limits: Limits::parse(o)?,
     })
 }
 
@@ -771,6 +842,19 @@ fn load_mcp(p: &mut Plugin, out: &mut Vec<Diagnostic>) {
     };
     let data = p.data_root.clone();
     for (id, sv) in servers {
+        match sv.get("enabled") {
+            None | Some(Value::Bool(true)) => {}
+            Some(Value::Bool(false)) => {
+                out.push(diag("plugin.mcp.server_off", Severity::Info, &p.name,
+                    format!("mcp.json server {:?} is off (\"enabled\": false)", id)));
+                continue;
+            }
+            Some(_) => {
+                out.push(diag("plugin.mcp.server_invalid", Severity::Warning, &p.name,
+                    format!("mcp.json server {:?}: \"enabled\" must be true or false; skipped", id)));
+                continue;
+            }
+        }
         match parse_server(id, sv, &p.root, &data) {
             Ok(Parsed::Stdio(s)) => p.servers.push(s),
             Ok(Parsed::Http(s)) => p.remotes.push(s),

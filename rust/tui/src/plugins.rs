@@ -68,9 +68,27 @@ use std::sync::Mutex;
 /// running (one per server at a time).
 static LINES: Mutex<Vec<String>> = Mutex::new(Vec::new());
 static RUNNING: Mutex<Vec<String>> = Mutex::new(Vec::new());
+/// Addresses pasted with `/plugins login NAME <address>`, for the login
+/// of NAME that waits (the browser on another machine).
+static PASTED: Mutex<Vec<(String, String)>> = Mutex::new(Vec::new());
 
 fn say(l: String) {
     LINES.lock().unwrap_or_else(|e| e.into_inner()).push(l);
+}
+
+/// `/plugins login NAME <address>`: the address a browser elsewhere
+/// ended on, for the login of NAME that waits.
+fn paste(workspace: &Path, name: &str, address: &str) -> String {
+    let ts = bend_plugins::login::targets(workspace);
+    let t = match bend_plugins::login::find(&ts, name) {
+        Ok(t) => t.clone(),
+        Err(e) => return e,
+    };
+    if !RUNNING.lock().unwrap_or_else(|e| e.into_inner()).contains(&t.name) {
+        return bend_plugins::login::no_login_waiting(&t.name);
+    }
+    PASTED.lock().unwrap_or_else(|e| e.into_inner()).push((t.name, address.to_string()));
+    String::new()
 }
 
 /// `/plugins login NAME`: the login in a thread; the first line now.
@@ -91,13 +109,23 @@ fn login(workspace: &Path, name: &str) -> String {
     std::thread::spawn(move || {
         let (secrets, sd) = (bend_plugins::oauth::store_dir(), bend_plugins::status::dir());
         let name = t.name.clone();
+        // the link always (another browser, another machine)
         let open = move |u: &str| {
-            bend_plugins::oauth::open_browser(u).or_else(|_| {
-                say(format!("open this link to log in to {}: {}", name, u));
-                Ok(())
-            })
+            let _ = bend_plugins::oauth::open_browser(u);
+            for l in bend_plugins::login::tui_link_lines(&name, u) {
+                say(l);
+            }
+            Ok(())
         };
-        let r = bend_plugins::login::run(&t, &secrets, Some(&sd), &open, bend_plugins::login::WAIT, None);
+        PASTED.lock().unwrap_or_else(|e| e.into_inner()).retain(|(n, _)| *n != t.name);
+        let next = || {
+            let mut p = PASTED.lock().unwrap_or_else(|e| e.into_inner());
+            let i = p.iter().position(|(n, _)| *n == t.name)?;
+            Some(p.remove(i).1)
+        };
+        let bad = || say(bend_plugins::login::bad_paste_tui(&t.name));
+        let paste = bend_plugins::oauth::Paste { next: &next, bad: &bad };
+        let r = bend_plugins::login::run(&t, &secrets, Some(&sd), &open, bend_plugins::login::WAIT, None, Some(&paste));
         say(bend_plugins::login::done_line(&t.name, &r));
         RUNNING.lock().unwrap_or_else(|e| e.into_inner()).retain(|n| *n != t.name);
     });
@@ -152,7 +180,10 @@ pub(crate) fn pump(app: &mut crate::app::App) {
 pub(crate) fn command(typed: &str, workspace: &Path) -> String {
     let mut words = typed.split_whitespace().skip(1);
     match (words.next(), words.next()) {
-        (Some("login"), Some(name)) => login(workspace, name),
+        (Some("login"), Some(name)) => match words.next() {
+            Some(address) => paste(workspace, name, address),
+            None => login(workspace, name),
+        },
         (Some(sub @ ("login" | "logout")), None) => {
             let (secrets, sd) = (bend_plugins::oauth::store_dir(), bend_plugins::status::dir());
             let ts = bend_plugins::login::targets(workspace);

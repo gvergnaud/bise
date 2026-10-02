@@ -1,0 +1,11 @@
+{
+  "client_id": "https://bise.dev/oauth/client.json",
+  "client_name": "bise",
+  "client_uri": "https://bise.dev",
+  "logo_uri": "https://bise.dev/apple-touch-icon.png",
+  "application_type": "native",
+  "redirect_uris": ["http://127.0.0.1/callback", "http://localhost/callback"],
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "none"
+}

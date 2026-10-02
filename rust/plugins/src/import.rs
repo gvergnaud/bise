@@ -23,6 +23,9 @@ use serde_json::{json, Map, Value};
 
 use crate::resolve::{valid_name, MCP_SCHEMA, PLUGIN_SCHEMA};
 
+/// Codex's limit keys ([`limits`]).
+const LIMITS: [&str; 5] = ["startup_timeout_sec", "startup_timeout_ms", "tool_timeout_sec", "enabled_tools", "disabled_tools"];
+
 /// The mark in plugin.json's description: the folder is import-mcp's.
 pub const MARK: &str = "Imported by bise plugins import-mcp";
 
@@ -143,12 +146,6 @@ fn remote(o: &Map<String, Value>, ty: &str) -> Result<(Value, Vec<String>), Stri
             None
         }
     };
-    let known = ["type", "url", "headers", "http_headers", "env_http_headers", "bearer_token_env_var", "enabled", "disabled", "transport", "oauth", "scopes"];
-    let mut dropped: Vec<String> = o.keys().filter(|k| !known.contains(&k.as_str())).cloned().collect();
-    dropped.extend(unused);
-    if !dropped.is_empty() {
-        notes.push(format!("ignored: {}", dropped.join(", ")));
-    }
     let mut out = Map::new();
     out.insert("type".into(), json!(ty));
     out.insert("url".into(), json!(url));
@@ -158,7 +155,34 @@ fn remote(o: &Map<String, Value>, ty: &str) -> Result<(Value, Vec<String>), Stri
     if let Some(a) = oauth {
         out.insert("oauth".into(), Value::Object(a));
     }
+    limits(o, &mut out, &mut notes, &mut unused);
+    let known = ["type", "url", "headers", "http_headers", "env_http_headers", "bearer_token_env_var", "enabled", "disabled", "transport", "oauth", "scopes"];
+    let mut dropped: Vec<String> = o.keys().filter(|k| !known.contains(&k.as_str()) && !LIMITS.contains(&k.as_str())).cloned().collect();
+    dropped.extend(unused);
+    if !dropped.is_empty() {
+        notes.push(format!("ignored: {}", dropped.join(", ")));
+    }
     Ok((Value::Object(out), notes))
+}
+
+/// Codex's (and Vibe's) per-server limits, copied under the same keys
+/// when they are valid ([`crate::resolve::Limits`]); a bad one is said.
+fn limits(o: &Map<String, Value>, out: &mut Map<String, Value>, notes: &mut Vec<String>, unused: &mut Vec<String>) {
+    let mut kept = Vec::new();
+    for k in ["startup_timeout_sec", "startup_timeout_ms", "tool_timeout_sec", "enabled_tools", "disabled_tools"] {
+        let Some(v) = o.get(k).filter(|v| !v.is_null()) else { continue };
+        let one: Map<String, Value> = [(k.to_string(), v.clone())].into_iter().collect();
+        match crate::resolve::Limits::parse(&one) {
+            Ok(_) => {
+                out.insert(k.into(), v.clone());
+                kept.push(k);
+            }
+            Err(e) => unused.push(format!("{} ({})", k, e.replace('"', ""))),
+        }
+    }
+    if !kept.is_empty() {
+        notes.push(kept.join(", "));
+    }
 }
 
 fn valid_var(v: &str) -> bool {
@@ -195,14 +219,28 @@ fn server(v: &Value) -> Result<(Value, Vec<String>), String> {
         Some(_) => return Err("args is not a list of strings".into()),
     }
     let mut notes = Vec::new();
-    let command = if cmd.starts_with('/') {
+    // Codex's cwd: an absolute folder (mcp.json's cwd stays in the
+    // plugin), so sh goes there first
+    let cwd = match o.get("cwd") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(c)) if c.starts_with('/') => Some(c.clone()),
+        Some(_) => return Err("cwd is not an absolute path".into()),
+    };
+    if cmd.contains('/') && !cmd.starts_with('/') {
+        return Err(format!("command {:?} is a relative path: give its absolute path", cmd));
+    }
+    let command = if let Some(c) = &cwd {
+        notes.push("runs in its cwd, through sh".to_string());
+        let mut a = vec![json!("-c"), json!("cd \"$0\" && exec \"$@\""), json!(c), json!(cmd)];
+        a.append(&mut args);
+        args = a;
+        "sh".to_string()
+    } else if cmd.starts_with('/') {
         notes.push("absolute command, run through sh".to_string());
         let mut a = vec![json!("-c"), json!("exec \"$0\" \"$@\""), json!(cmd)];
         a.append(&mut args);
         args = a;
         "sh".to_string()
-    } else if cmd.contains('/') {
-        return Err(format!("command {:?} is a relative path: give its absolute path", cmd));
     } else {
         cmd.to_string()
     };
@@ -228,8 +266,13 @@ fn server(v: &Value) -> Result<(Value, Vec<String>), String> {
         notes.push(format!("{} env var(s)", e.len()));
         out.insert("env".into(), Value::Object(e));
     }
-    let known = ["type", "command", "args", "env", "enabled", "disabled"];
-    let dropped: Vec<&str> = o.keys().map(String::as_str).filter(|k| !known.contains(k)).collect();
+    let mut unused = Vec::new();
+    limits(o, &mut out, &mut notes, &mut unused);
+    // Codex's env_vars: names passed from its environment; bise's
+    // servers get the whole environment, so nothing to write
+    let known = ["type", "command", "args", "env", "enabled", "disabled", "cwd", "env_vars"];
+    let mut dropped: Vec<String> = o.keys().filter(|k| !known.contains(&k.as_str()) && !LIMITS.contains(&k.as_str())).cloned().collect();
+    dropped.extend(unused);
     if !dropped.is_empty() {
         notes.push(format!("ignored: {}", dropped.join(", ")));
     }
@@ -383,7 +426,10 @@ mod tests {
                               "scopes": ["mcp.read"], "oauth": { "client_id": "cx", "client_secret": TOKEN } },
             "ftp": { "url": "ftp://x.test/" },
             "off": { "command": "uvx", "enabled": false },
-            "rel": { "command": "./bin/x" }
+            "rel": { "command": "./bin/x" },
+            "codex-local": { "command": "uvx", "args": ["mcp-x"], "cwd": "/srv/x", "env_vars": ["X_KEY"],
+                             "tool_timeout_sec": 600, "enabled_tools": ["a", "b"], "disabled_tools": ["b"],
+                             "startup_timeout_ms": "soon", "required": true }
         }})
     }
 
@@ -391,7 +437,13 @@ mod tests {
     fn stdio_servers_are_kept_the_rest_said_and_no_token_shows() {
         let p = plan(&input()).unwrap();
         let ids: Vec<&str> = p.servers.keys().map(String::as_str).collect();
-        assert_eq!(ids, ["codex-remote", "github", "linear", "local", "old"]);
+        assert_eq!(ids, ["codex-local", "codex-remote", "github", "linear", "local", "old"]);
+        assert_eq!(
+            p.servers["codex-local"],
+            json!({"type": "stdio", "command": "sh", "args": ["-c", "cd \"$0\" && exec \"$@\"", "/srv/x", "uvx", "mcp-x"],
+                   "tool_timeout_sec": 600, "enabled_tools": ["a", "b"], "disabled_tools": ["b"]})
+        );
+        assert_eq!(p.servers["local"]["startup_timeout_sec"], 20);
         assert_eq!(p.servers["linear"], json!({"type": "http", "url": "https://mcp.linear.app/mcp", "headers": {"Authorization": format!("Bearer {}", TOKEN)}}));
         assert_eq!(p.servers["old"]["type"], "sse");
         assert_eq!(p.servers["old"]["headers"]["X-Key"], "${OLD_KEY}");
@@ -412,7 +464,11 @@ mod tests {
         assert!(!text.contains("k3y"), "a URL path may hold a key: {text}");
         assert!(text.contains("- off: skipped, disabled there"), "{text}");
         assert!(text.contains("- rel: skipped"), "{text}");
-        assert!(text.contains("ignored: startup_timeout_sec"), "{text}");
+        assert!(text.contains("+ local (absolute command, run through sh; startup_timeout_sec)"), "{text}");
+        assert!(
+            text.contains("+ codex-local (runs in its cwd, through sh; tool_timeout_sec, enabled_tools, disabled_tools; ignored: required, startup_timeout_ms (startup_timeout_ms must be a whole number of milliseconds above 0))"),
+            "{text}"
+        );
         assert!(!text.contains(TOKEN));
         // Codex's key and the bare map work too
         assert_eq!(plan(&json!({ "mcp_servers": { "a": { "command": "x" } } })).unwrap().servers.len(), 1);
@@ -432,7 +488,10 @@ mod tests {
         let r = resolve(&roots);
         assert_eq!(r.plugins.len(), 1, "{:?}", r.diagnostics);
         let ids: Vec<&str> = r.plugins[0].servers.iter().map(|s| s.id.as_str()).collect();
-        assert_eq!(ids, ["github", "local"], "{:?}", r.diagnostics);
+        assert_eq!(ids, ["codex-local", "github", "local"], "{:?}", r.diagnostics);
+        let cl = &r.plugins[0].servers[0];
+        assert_eq!(cl.limits.tool_timeout, Some(std::time::Duration::from_secs(600)));
+        assert!(cl.limits.allows("a") && !cl.limits.allows("b") && !cl.limits.allows("c"));
         let remotes: Vec<&str> = r.plugins[0].remotes.iter().map(|s| s.id.as_str()).collect();
         assert_eq!(remotes, ["codex-remote", "linear", "old"], "{:?}", r.diagnostics);
         assert!(write(&root, "from-claude-code", &p).is_ok(), "a rerun rewrites its own import");

@@ -317,3 +317,40 @@ fn the_fingerprint_moves_when_a_plugin_comes_goes_or_changes() {
     fs::remove_dir_all(t.0.join("user/demo")).unwrap();
     assert_eq!(fingerprint(&r), empty, "removed: back to empty");
 }
+
+#[test]
+fn mcp_servers_take_codex_limits_and_can_be_off() {
+    let t = tmp("limits");
+    let p = t.0.join("user/m");
+    write(&p.join("plugin.json"), &manifest("m"));
+    write(
+        &p.join("mcp.json"),
+        &serde_json::json!({
+            "mcpServers": {
+                "a": {"command": "x", "startup_timeout_sec": 45, "tool_timeout_sec": 0.5,
+                      "enabled_tools": ["read", "write"], "disabled_tools": ["write"]},
+                "b": {"url": "https://x.test/mcp", "startup_timeout_ms": 1500, "enabled": true},
+                "c": {"command": "x", "tool_timeout_sec": 0},
+                "d": {"command": "x", "enabled_tools": "read"},
+                "e": {"command": "x", "enabled": false},
+                "f": {"command": "x", "enabled": "no"}
+            }
+        })
+        .to_string(),
+    );
+    let res = resolve(&roots(&t));
+    let pl = &res.plugins[0];
+    let ids: Vec<&str> = pl.servers.iter().map(|s| s.id.as_str()).collect();
+    assert_eq!(ids, vec!["a"], "{:?}", res.diagnostics);
+    let a = &pl.servers[0].limits;
+    assert_eq!(a.startup_timeout, Some(std::time::Duration::from_secs(45)));
+    assert_eq!(a.tool_timeout, Some(std::time::Duration::from_millis(500)));
+    assert!(a.allows("read") && !a.allows("write") && !a.allows("other"));
+    assert_eq!(pl.remotes[0].limits.startup_timeout, Some(std::time::Duration::from_millis(1500)));
+    assert!(pl.remotes[0].limits.allows("anything"));
+    let said: Vec<&str> = res.diagnostics.iter().map(|d| d.message.as_str()).collect();
+    assert!(said.iter().any(|m| m.contains("\"c\": \"tool_timeout_sec\" must be a number of seconds above 0")), "{said:?}");
+    assert!(said.iter().any(|m| m.contains("\"d\": \"enabled_tools\" must be an array of tool names")), "{said:?}");
+    assert!(said.iter().any(|m| m.contains("\"e\" is off")), "{said:?}");
+    assert!(said.iter().any(|m| m.contains("\"f\": \"enabled\" must be true or false")), "{said:?}");
+}

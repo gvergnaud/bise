@@ -69,7 +69,7 @@ fn fixture_plugin_end_to_end() {
         disabled: vec![],
         enabled: vec![],
     };
-    let opts = bridge::Opts { dir: dir.clone(), parent: Some(parent.id()), roots, status_dir: None, secrets_dir: None };
+    let opts = bridge::Opts { dir: dir.clone(), parent: Some(parent.id()), roots, status_dir: None, secrets_dir: None, ready_wait: bridge::READY_WAIT };
     let server = std::thread::spawn(move || bridge::serve(opts));
     let t0 = Instant::now();
     while !dir.join("ready").exists() {
@@ -150,12 +150,96 @@ fn failing_server_is_a_diagnostic() {
         enabled: vec![],
     };
     // nothing to serve: returns once the files are written
-    bridge::serve(bridge::Opts { dir: dir.clone(), parent: None, roots, status_dir: None, secrets_dir: None }).unwrap();
+    bridge::serve(bridge::Opts { dir: dir.clone(), parent: None, roots, status_dir: None, secrets_dir: None, ready_wait: bridge::READY_WAIT }).unwrap();
     assert_eq!(std::fs::read_to_string(dir.join("mcp-index.txt")).unwrap(), "");
     let report = std::fs::read_to_string(dir.join("report.txt")).unwrap();
     assert!(report.contains("plugin.mcp.connection_failed"), "{}", report);
     assert!(report.contains("boom"), "{}", report);
     // the skill still loads
     assert!(std::fs::read_to_string(dir.join("skills-index.txt")).unwrap().contains("hello_plugin:greet"));
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+/// mcp.json's own limits (Codex's keys): `disabled_tools` keeps a tool
+/// out of the index and refuses its call; `tool_timeout_sec` bounds a
+/// call; a server slower than the bridge's ready wait is not waited for:
+/// the files are written, the server joins the index when it is up.
+#[test]
+fn limits_filter_tools_bound_calls_and_late_servers_join() {
+    let (base, plugins) = fixture_root("limits");
+    std::fs::write(
+        plugins.join("hello-plugin/mcp.json"),
+        r#"{"mcpServers":{
+            "off":{"command":"python3","args":["-B","${PLUGIN_ROOT}/server.py"],"disabled_tools":["shout"]},
+            "nap":{"command":"python3","args":["-B","${PLUGIN_ROOT}/server.py"],"env":{"HELLO_NAP":"3"},"tool_timeout_sec":1},
+            "slow":{"command":"sh","args":["-c","sleep 8; exec python3 -B \"$0\"","${PLUGIN_ROOT}/server.py"],"startup_timeout_sec":30},
+            "gone":{"command":"python3","enabled":false}}}"#,
+    )
+    .unwrap();
+    let dir = base.join("run/plugins");
+    let mut parent = std::process::Command::new("sleep").arg("60").spawn().unwrap();
+    let roots = resolve::Roots {
+        builtin: None,
+        user: None,
+        workspace: Some(plugins),
+        data: base.join("data"),
+        disabled: vec![],
+        enabled: vec![],
+    };
+    let opts = bridge::Opts { dir: dir.clone(), parent: Some(parent.id()), roots, status_dir: None, secrets_dir: None, ready_wait: Duration::from_secs(4) };
+    let server = std::thread::spawn(move || bridge::serve(opts));
+    let t0 = Instant::now();
+    while !dir.join("ready").exists() {
+        assert!(t0.elapsed() < Duration::from_secs(15), "bridge never ready");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert!(t0.elapsed() < Duration::from_secs(7), "the ready wait waited for the slow server: {:?}", t0.elapsed());
+    let report = std::fs::read_to_string(dir.join("report.txt")).unwrap();
+    assert!(report.contains("plugin.mcp.server_off") && report.contains("\"gone\" is off"), "{}", report);
+    assert!(!std::fs::read_to_string(dir.join("mcp-index.txt")).unwrap().contains("/hello-plugin/slow"));
+    // on a loaded machine "nap" may itself come after the ready wait
+    let t1 = Instant::now();
+    let index = loop {
+        let index = std::fs::read_to_string(dir.join("mcp-index.txt")).unwrap();
+        if index.contains("/hello-plugin/nap") {
+            break index;
+        }
+        assert!(t1.elapsed() < Duration::from_secs(20), "nap never joined: {}", index);
+        std::thread::sleep(Duration::from_millis(100));
+    };
+    // "off" lists shout but turned it off: the one shout is "nap"'s
+    let cids: Vec<&str> = index.lines().map(|l| l.split(' ').next().unwrap()).collect();
+    assert_eq!(cids.len(), 1, "{}", index);
+    assert!(cids[0].ends_with("/hello-plugin/nap"), "{}", index);
+    let base_url = cids[0].trim_end_matches("/hello-plugin/nap").to_string();
+    let rest = base_url.strip_prefix("http://").unwrap();
+    let (host, token) = rest.split_at(rest.find('/').unwrap());
+    let mut r = BufReader::new(TcpStream::connect(host).unwrap());
+    let call = r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"shout","arguments":{"text":"x"}}}"#;
+    // a disabled tool is not callable
+    let (_, b) = post(&mut r, &format!("{}/hello-plugin/off", token), call);
+    assert!(b.contains("shout is turned off in off's mcp.json"), "{}", b);
+    // the slow server, still starting
+    let (_, b) = post(&mut r, &format!("{}/hello-plugin/slow", token), call);
+    assert!(b.contains("slow is still starting"), "{}", b);
+    // a call longer than tool_timeout_sec
+    let t2 = Instant::now();
+    let (_, b) = post(&mut r, &format!("{}/hello-plugin/nap", token), call);
+    assert!(b.contains("no answer to tools/call within 1s"), "{}", b);
+    assert!(t2.elapsed() < Duration::from_millis(2500), "{:?}", t2.elapsed());
+    // the slow one joins the index (its shout collides with nap's: nap
+    // keeps it, plugin order; the slow server's entry is there anyway)
+    let t0 = Instant::now();
+    loop {
+        let (_, b) = post(&mut r, &format!("{}/hello-plugin/slow", token), call);
+        if b.contains("HELLO-PLUGIN:X") {
+            break;
+        }
+        assert!(t0.elapsed() < Duration::from_secs(30), "the slow server never came up: {}", b);
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    parent.kill().unwrap();
+    parent.wait().unwrap();
+    server.join().unwrap().unwrap();
     let _ = std::fs::remove_dir_all(&base);
 }

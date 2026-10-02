@@ -141,6 +141,13 @@ live REPLs, so two sessions (or two Switchboard tasks) never share it.
    `${PLUGIN_DATA}` and stay inside it (default: the plugin root); an env
    key named `PLUGIN_ROOT`/`PLUGIN_DATA` is rejected. The server gets the
    REPL environment plus `PLUGIN_ROOT`, `PLUGIN_DATA` and its `env`.
+   Any server also takes Codex's (and Vibe's) keys: `startup_timeout_sec`
+   (or `startup_timeout_ms`; start, handshake and first `tools/list`,
+   default 30 s), `tool_timeout_sec` (one call, default 300 s),
+   `enabled_tools` (only these, the server's own names) and
+   `disabled_tools` (never these; a tool left out is neither in the
+   index nor callable), and `"enabled": false` (left out,
+   `plugin.mcp.server_off`).
    A bad server: `plugin.mcp.server_invalid`, skipped.
 8. **Unsupported components.** Present on disk and reported, never read:
    `ai.mistral.vibe/{hooks.toml,agents,knowledge,views}`,
@@ -156,7 +163,12 @@ tests use temp dirs.
 
 - Spawns every stdio server of every enabled plugin in parallel, sends
   `initialize` (protocol `2025-06-18`), `notifications/initialized`,
-  `tools/list`. 10 s per server; a failure gives
+  `tools/list`. 30 s per server unless its `startup_timeout_sec` says
+  otherwise. The index files wait at most 12 s for them (the REPL waits
+  15 s): a server still starting then is in the bridge without tools
+  (`still starting` in the report; a call answers `<server> is still
+  starting: try again in a moment`) and joins the index when it is up.
+  A failure gives
   `plugin.mcp.connection_failed` (with the last stderr lines) and the
   server is left out. stderr goes to `D/<plugin>.<server>.log`.
 - Tool names are made identifiers the same way as namespaces. Two tools
@@ -172,7 +184,9 @@ tests use temp dirs.
   another local process cannot call the tools without reading `D`.
   JSON-RPC over POST: `initialize` answers with the server's cached
   result, notifications answer `202`, anything else is forwarded with a
-  fresh id and answered as `application/json` (60 s timeout). A server
+  fresh id and answered as `application/json` (the server's
+  `tool_timeout_sec`, 300 s by default; the REPL waits up to an hour
+  for a plugin tool, 60 s for a connector). A server
   that died is respawned once on the next call.
 - No server up (no plugin, or every server failed): it exits as soon
   as the files are written, so no process lingers.
@@ -317,7 +331,13 @@ description, not a removed one).
   handshake, at the next request. A request that may have reached the
   server is never sent twice: only a connect failure or an expired
   session retries; a stream that drops mid-call fails that call.
-  Timeouts: 20 s to connect, list and hand-shake, 60 s per call.
+  Redirects: a 307 or 308 (and, for a GET, a 301, 302 or 303) on the
+  server's own origin is followed with the same headers, at most 10
+  (`/mcp` moved to `/mcp/`); another origin is refused (`<host>
+  redirected to another site (<other host>): refused`), so a token
+  never leaves it.
+  Timeouts: the server's `startup_timeout_sec` (30 s) to connect, list
+  and hand-shake, its `tool_timeout_sec` (300 s) per call.
 - **`tools/list`** follows `nextCursor`. On
   `notifications/tools/list_changed` (remote or stdio) the bridge lists
   that server again and rewrites `D/mcp-index.txt` (the REPL reads it at
@@ -340,7 +360,13 @@ description, not a removed one).
   ${VAR}`). It prints the host and the header names, never a value.
   The login's client comes along: Claude Code's `"oauth"` as is,
   Codex's `oauth.client_id`/`client_secret`/`callback_port` and its
-  `scopes` list in those keys.
+  `scopes` list in those keys. Codex's `startup_timeout_sec`,
+  `startup_timeout_ms`, `tool_timeout_sec`, `enabled_tools` and
+  `disabled_tools` are kept as they are (stdio and remote); its stdio
+  `cwd` (an absolute folder) becomes `sh -c 'cd "$0" && exec "$@"'`;
+  its `env_vars` need nothing (bise's servers get the whole
+  environment). Still ignored and said: `required`, `tools.<name>`
+  approval modes, `startup_readiness`, `supports_parallel_tool_calls`.
 - **Login (OAuth).** A remote server without an `Authorization` header
   in its mcp.json can log in (`rust/plugins/src/oauth.rs`, `login.rs`;
   the MCP authorization spec 2025-06-18). Discovery: the 401's
@@ -371,8 +397,23 @@ description, not a removed one).
   good (a 400/401 OAuth error) drops the tokens and keeps the client;
   a token endpoint that is down (no answer, 5xx, 429,
   `temporarily_unavailable`) keeps them, and the access token is still
-  sent until it expires. Not yet: client ID
-  metadata documents (CIMD, spec 2025-11-25).
+  sent until it expires.
+  The client, in the 2025-11-25 spec's order: mcp.json's `clientId`;
+  else, when the login server says `client_id_metadata_document_supported`
+  and takes public clients (`none`), bise's client ID metadata document
+  `https://bise.dev/oauth/client.json` (site/oauth/client.json: a native
+  public client, `http://127.0.0.1/callback` and
+  `http://localhost/callback` on any port, RFC 8252), no registration;
+  else the one registered before; else RFC 7591 registration.
+  Step-up: a 403 with `WWW-Authenticate: Bearer
+  error="insufficient_scope", scope="…"` keeps that scope in the store
+  (`wanted_scope`), the agent reads the login line below and /plugins
+  says `needs a login`; the next login asks for the scopes granted
+  before plus the wanted ones (the challenge's scope first, then
+  mcp.json's, then the metadata's). Logout (`/plugins logout`, `bise
+  plugins logout`): when the metadata named a `revocation_endpoint`
+  (kept in the store), the refresh token then the access token are
+  revoked there first (RFC 7009, best effort), then forgotten.
 - **Login in the bridge.** A server that answers 401 at start stays in
   the bridge without tools (`plugin.mcp.login_needed`, status "needs a
   login"); every 2 s the bridge looks at its store file and connects it
@@ -389,7 +430,26 @@ description, not a removed one).
   `bise :* is logged in to linear. you can close this tab.` or `the login
   didn't go through: <reason>. /plugins login in bise tries again.` Once
   per server and TUI run, when a session found it needs a login: `linear
-  needs a login: /plugins login`. CLI: `bise plugins login [SERVER]`,
+  needs a login: /plugins login`.
+  The browser on another machine (bise over SSH; designer m_4625): the
+  link is always shown under the opening line, `or open this link:
+  <url>`, then `browser on another machine? log in there. the last page
+  won't load: copy its address, then /plugins login linear <address>`;
+  `/plugins login linear <address>` hands that address to the login
+  that waits (its origin and path must be the redirect's, its `state`
+  this login's): a wrong one says `▲ that isn't the address linear sent
+  you back to. copy the whole address from the browser's address bar.`
+  and the login keeps waiting; none waiting: `▲ no login to linear is
+  waiting. /plugins login starts one.` The CLI prints `or open this
+  link:`, the url, a blank row, `browser on another machine? log in
+  there. the last page won't load:` / `paste its address here and press
+  enter.` and reads pasted lines at a `> ` prompt (a wrong one: `that
+  isn't the address linear sent you back to. paste the whole address
+  from the browser's address bar.`, the prompt again). mcp.json's
+  `"oauth": {"callbackUrl": "http://localhost:8765/oauth/back"}` (Codex's
+  `callback_url`; its port is required) is the redirect bise sends; it
+  listens on that port (on every interface when the host is not this
+  machine: a forwarded port). CLI: `bise plugins login [SERVER]`,
   `bise plugins logout SERVER`. Later: an inbox item for it.
 - **Tests:** `tests/fake_mcp_http.py` (a Streamable HTTP or SSE server
   with a required header, pagination, session expiry, dropped streams,
@@ -400,8 +460,13 @@ description, not a removed one).
   with two remote servers through the real bridge) and
   `rust/plugins/tests/oauth.rs` (login, store, refresh after a 401 and
   before expiry, revoked, denied, no registration, the bridge connecting
-  after a login); `tests/tui_mcp_login_tmux.py` (the quiet line,
-  /plugins, the popup, both thread lines, both browser pages).
+  after a login, the step-up, the revocation, CIMD, a pasted address and
+  callbackUrl); `tests/tui_mcp_login_tmux.py` (the quiet line,
+  /plugins, the popup, both thread lines, both browser pages, the
+  browser on another machine at 150 and 80 columns);
+  `tests/plugins_ts_e2e.py` (a stdio, a remote, a list_changed and a
+  late server's tools called as `tools.<plugin>.<tool>` in run_typescript
+  and found by search_tool_functions, through the hub and live REPLs).
 
 ## Known limits
 
@@ -414,8 +479,9 @@ description, not a removed one).
 
 ## Later
 
-- An inbox item when a remote server needs a login; CIMD clients.
+- An inbox item when a remote server needs a login.
 - `ai.mistral.vibe` extension: `toolNamespace`, `toolOverrides`.
-- Per-server enable/disable, a `/plugins` picker with toggles.
+- A `/plugins` picker with per-server toggles (mcp.json's `"enabled":
+  false` works by hand).
 - Plugin descriptions in the system prompt (the spec's default guidance).
 - Hooks, agents, knowledge, views.

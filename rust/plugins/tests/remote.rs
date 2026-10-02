@@ -70,6 +70,7 @@ fn server(transport: Transport, url: String) -> HttpServer {
         url,
         headers: vec![("Authorization".into(), "Bearer ${FAKE_TOKEN}".into()), ("X-Test".into(), "${X_TEST:-from-default}".into())],
         oauth: None,
+        limits: Default::default(),
     }
 }
 
@@ -141,6 +142,29 @@ fn streamable_http_answers_as_a_chunked_event_stream() {
     let c = Remote::start(&server(Transport::Streamable, f.url("/mcp")), &env, on, T).unwrap();
     assert_eq!(c.list_tools(T).unwrap().len(), 3);
     assert_eq!(text(&call(&c, "echo", json!({"text": "sse"})).unwrap()), "echo:sse x-test=from-default");
+}
+
+/// A server whose URL moved on its own site (`/mcp` to `/mcp/`, a
+/// proxy's 307/308) is followed, its headers kept; a redirect to another
+/// origin is refused (the token never goes there), a loop stops at 10.
+#[test]
+fn same_origin_redirects_are_followed_and_another_origin_is_refused() {
+    let f = fake("redir", &["--mode", "streamable", "--require-header", &format!("Authorization=Bearer {}", TOKEN)]);
+    let (on, _) = counter();
+    let c = Remote::start(&server(Transport::Streamable, f.url("/moved")), &env, on, T).unwrap();
+    assert_eq!(text(&call(&c, "echo", json!({"text": "moved"})).unwrap()), "echo:moved x-test=from-default");
+    let mcp_posts = |log: &Value| log.as_array().unwrap().iter().filter(|e| e["method"] == "POST" && e["path"] == "/mcp").cloned().collect::<Vec<Value>>();
+    let log = f.control("log");
+    let posts = mcp_posts(&log);
+    assert!(posts.len() >= 3 && posts.iter().all(|e| e["auth_ok"] == true), "the token went along: {log}");
+    let (on, _) = counter();
+    let e = Remote::start(&server(Transport::Streamable, f.url("/away")), &env, on, T).err().unwrap();
+    assert_eq!(e.to_string(), format!("127.0.0.1:{} redirected to another site (localhost:{}): refused", f.port, f.port));
+    // /away points at this same server as localhost: nothing came
+    assert_eq!(mcp_posts(&f.control("log")).len(), posts.len(), "nothing reached the other origin");
+    let (on, _) = counter();
+    let e = Remote::start(&server(Transport::Streamable, f.url("/loop")), &env, on, T).err().unwrap();
+    assert_eq!(e.to_string(), format!("127.0.0.1:{} redirected more than 10 times", f.port));
 }
 
 #[test]
@@ -242,7 +266,7 @@ fn a_plugin_with_an_http_server_goes_through_the_bridge() {
         enabled: vec![],
     };
     let mut parent = Command::new("sleep").arg("60").spawn().unwrap();
-    let opts = bridge::Opts { dir: dir.clone(), parent: Some(parent.id()), roots, status_dir: Some(status.clone()), secrets_dir: None };
+    let opts = bridge::Opts { dir: dir.clone(), parent: Some(parent.id()), roots, status_dir: Some(status.clone()), secrets_dir: None, ready_wait: bridge::READY_WAIT };
     let srv = std::thread::spawn(move || bridge::serve(opts));
     wait_for("the bridge", || dir.join("ready").exists());
     let index = std::fs::read_to_string(dir.join("mcp-index.txt")).unwrap();

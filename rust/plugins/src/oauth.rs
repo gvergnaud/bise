@@ -46,13 +46,16 @@ pub struct Config {
     pub client_secret: Option<String>,
     pub scopes: Option<String>,
     pub callback_port: Option<u16>,
+    /// the redirect URI to register and send (Codex's `callback_url`:
+    /// a port forwarded from another machine); bise listens on its port
+    pub callback_url: Option<String>,
 }
 
 impl Config {
     pub fn parse(v: &Value) -> Result<Config, String> {
         let o = v.as_object().ok_or("\"oauth\" must be an object")?;
         for k in o.keys() {
-            if !["clientId", "clientSecret", "scopes", "callbackPort"].contains(&k.as_str()) {
+            if !["clientId", "clientSecret", "scopes", "callbackPort", "callbackUrl"].contains(&k.as_str()) {
                 return Err(format!("unknown field oauth.{}", k));
             }
         }
@@ -73,7 +76,17 @@ impl Config {
             None | Some(Value::Null) => None,
             Some(p) => Some(p.as_u64().filter(|p| (1..=65535).contains(p)).ok_or("oauth.callbackPort must be a port number")? as u16),
         };
-        Ok(Config { client_id: s("clientId")?, client_secret: s("clientSecret")?, scopes, callback_port })
+        let callback_url = s("callbackUrl")?;
+        if let Some(u) = &callback_url {
+            let p = Url::parse(u).map_err(|e| format!("oauth.callbackUrl: {}", e))?;
+            if u.contains('?') || u.contains('#') {
+                return Err("oauth.callbackUrl must have no query or fragment".into());
+            }
+            if !p.tls && !u.split("://").nth(1).is_some_and(|r| r.split('/').next().is_some_and(|h| h.contains(':'))) {
+                return Err("oauth.callbackUrl must name its port (bise listens on it)".into());
+            }
+        }
+        Ok(Config { client_id: s("clientId")?, client_secret: s("clientSecret")?, scopes, callback_port, callback_url })
     }
 }
 
@@ -130,6 +143,11 @@ pub struct Saved {
     /// unix seconds
     pub expires_at: Option<u64>,
     pub scope: Option<String>,
+    /// a 403 `insufficient_scope` asked for these: the next login asks
+    /// for them too (step-up)
+    pub wanted_scope: Option<String>,
+    /// RFC 7009: where a logout revokes the tokens
+    pub revocation_endpoint: Option<String>,
 }
 
 impl std::fmt::Debug for Saved {
@@ -160,6 +178,8 @@ impl Saved {
         put("refresh_token", json!(self.refresh_token));
         put("expires_at", json!(self.expires_at));
         put("scope", json!(self.scope));
+        put("wanted_scope", json!(self.wanted_scope));
+        put("revocation_endpoint", json!(self.revocation_endpoint));
         Value::Object(o)
     }
 
@@ -176,6 +196,8 @@ impl Saved {
             refresh_token: s("refresh_token"),
             expires_at: v.get("expires_at").and_then(Value::as_u64),
             scope: s("scope"),
+            wanted_scope: s("wanted_scope"),
+            revocation_endpoint: s("revocation_endpoint"),
         })
     }
 
@@ -222,6 +244,30 @@ pub fn forget(dir: &Path, resource: &str, keep_client: bool) {
             let _ = std::fs::remove_file(file_of(dir, resource));
         }
     }
+}
+
+/// Log out: revoke the tokens at the login server when it has an RFC
+/// 7009 endpoint (the refresh token, then the access token; best effort,
+/// 5 s each), then forget them, the client kept. Returns whether the
+/// server confirmed the revocation (None: it has no endpoint).
+pub fn logout(dir: &Path, resource: &str, config: &Config) -> Option<bool> {
+    let s = load(dir, resource)?;
+    let endpoint = s.revocation_endpoint.clone().filter(|e| Url::parse(e).is_ok_and(|u| u.tls || loopback(&u.host)));
+    let mut confirmed = None;
+    if let Some(ep) = endpoint {
+        let secret = config.client_secret.clone().or_else(|| s.client_secret.clone());
+        for (tok, hint) in [(&s.refresh_token, "refresh_token"), (&s.access_token, "access_token")] {
+            let Some(t) = tok else { continue };
+            let mut pairs = vec![("token", t.as_str()), ("token_type_hint", hint), ("client_id", s.client_id.as_str())];
+            if let Some(x) = &secret {
+                pairs.push(("client_secret", x.as_str()));
+            }
+            let ok = matches!(post(&ep, "application/x-www-form-urlencoded", &form(&pairs)), Ok((200, _)));
+            confirmed = Some(confirmed.unwrap_or(true) && ok);
+        }
+    }
+    forget(dir, resource, true);
+    confirmed
 }
 
 /// The store's lock for one server (every bridge of every agent shares
@@ -350,6 +396,12 @@ pub struct Meta {
     pub scopes: Option<String>,
     /// RFC 9207: the redirect carries `iss`, checked against `issuer`
     pub iss_in_redirect: bool,
+    /// RFC 7009
+    pub revocation_endpoint: Option<String>,
+    /// `client_id_metadata_document_supported` with the `none` token
+    /// endpoint auth method: bise's client ID metadata document
+    /// ([`CLIENT_ID`]) can be the client
+    pub cimd: bool,
 }
 
 fn loopback(host: &str) -> bool {
@@ -379,6 +431,9 @@ fn check_endpoints(m: &Meta, host: &str) -> Result<(), String> {
     let token = web_endpoint("token endpoint", &m.token_endpoint, host)?;
     if let Some(r) = &m.registration_endpoint {
         web_endpoint("registration endpoint", r, host)?;
+    }
+    if let Some(r) = &m.revocation_endpoint {
+        web_endpoint("revocation endpoint", r, host)?;
     }
     if m.iss_in_redirect {
         return Ok(());
@@ -482,6 +537,10 @@ pub fn discover(server: &Url, challenge: Option<&str>) -> Result<Meta, String> {
         }
         let named = s("issuer").filter(|i| !i.is_empty());
         let iss_in_redirect = named.is_some() && m.get("authorization_response_iss_parameter_supported") == Some(&json!(true));
+        let public = m
+            .get("token_endpoint_auth_methods_supported")
+            .and_then(Value::as_array)
+            .is_some_and(|a| a.iter().any(|x| x == "none"));
         let meta = Meta {
             issuer: named.unwrap_or_else(|| issuer.clone()),
             authorization_endpoint: a,
@@ -489,6 +548,8 @@ pub fn discover(server: &Url, challenge: Option<&str>) -> Result<Meta, String> {
             registration_endpoint: s("registration_endpoint"),
             scopes,
             iss_in_redirect,
+            revocation_endpoint: s("revocation_endpoint"),
+            cimd: m.get("client_id_metadata_document_supported") == Some(&json!(true)) && public,
         };
         check_endpoints(&meta, &host)?;
         return Ok(meta);
@@ -508,6 +569,8 @@ pub fn discover(server: &Url, challenge: Option<&str>) -> Result<Meta, String> {
         registration_endpoint: Some(format!("{}/register", o)),
         scopes,
         iss_in_redirect: false,
+        revocation_endpoint: None,
+        cimd: false,
     };
     check_endpoints(&meta, &host)?;
     Ok(meta)
@@ -529,6 +592,27 @@ fn challenge_of(verifier: &str) -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(d.as_ref())
 }
 
+/// bise's client ID metadata document (CIMD, MCP authorization
+/// 2025-11-25; draft-ietf-oauth-client-id-metadata-document): an HTTPS
+/// URL that is the client's ID and serves its metadata
+/// (site/oauth/client.json: a public native client, loopback redirects
+/// on any port, RFC 8252). Used when the login server says
+/// `client_id_metadata_document_supported`, before a registration.
+pub const CLIENT_ID: &str = "https://bise.dev/oauth/client.json";
+
+/// Space-separated scopes, each once, in order.
+fn scope_union<'a>(parts: impl IntoIterator<Item = Option<&'a str>>) -> Option<String> {
+    let mut out: Vec<&str> = Vec::new();
+    for p in parts.into_iter().flatten() {
+        for s in p.split_whitespace() {
+            if !out.contains(&s) {
+                out.push(s);
+            }
+        }
+    }
+    (!out.is_empty()).then(|| out.join(" "))
+}
+
 /// What a login needs besides the server.
 pub struct Login<'a> {
     /// the server's URL, `${VAR}` filled in
@@ -545,6 +629,11 @@ pub struct Login<'a> {
     pub wait: Duration,
     /// set to true to give up early
     pub cancel: Option<&'a std::sync::atomic::AtomicBool>,
+    /// the client ID metadata document's URL ([`CLIENT_ID`]; tests
+    /// serve their own)
+    pub cimd: &'a str,
+    /// a pasted redirect address (the browser on another machine)
+    pub paste: Option<&'a Paste<'a>>,
 }
 
 /// The user's browser: `open` on macOS, `xdg-open` elsewhere. Never
@@ -616,16 +705,66 @@ fn respond(s: &mut TcpStream, status: &str, html: &str) {
     let _ = s.flush();
 }
 
-/// Wait for the browser's redirect: the code, or why not.
+/// What one redirect says: `Err(())` when it is not this login's
+/// answer (another state); else the code, or why there is none.
+fn answer_of(q: &[(String, String)], state: &str, iss: Option<&str>) -> Result<Result<String, String>, ()> {
+    let get = |k: &str| q.iter().find(|(a, _)| a == k).map(|(_, v)| v.clone());
+    if get("state").as_deref() != Some(state) {
+        return Err(());
+    }
+    // RFC 9207: a server that says it sends `iss` must send its own
+    if let Some(want) = iss {
+        if get("iss").as_deref() != Some(want) {
+            return Ok(Err("the answer came from another login server (iss)".into()));
+        }
+    }
+    if let Some(e) = get("error") {
+        let why = get("error_description").filter(|d| !d.is_empty()).unwrap_or(e);
+        return Ok(Err(if why == "access_denied" { "access was denied".to_string() } else { why }));
+    }
+    Ok(match get("code") {
+        Some(c) if !c.is_empty() => Ok(c),
+        _ => Err("the login server sent no code".into()),
+    })
+}
+
+/// A pasted address (the browser on another machine landed on the
+/// redirect, which did not load there): this login's answer when it is
+/// the redirect URI with a query and our state.
+fn pasted_answer(text: &str, redirect: &str, state: &str, iss: Option<&str>) -> Result<Result<String, String>, ()> {
+    let text = text.trim();
+    let (base, q) = text.split_once('?').ok_or(())?;
+    let norm = |u: &str| Url::parse(u).map(|u| (u.origin().replace("://localhost", "://127.0.0.1"), u.path.split('?').next().unwrap_or("").to_string()));
+    match (norm(base), norm(redirect)) {
+        (Ok(a), Ok(b)) if a == b => {}
+        _ => return Err(()),
+    }
+    answer_of(&query(q.split('#').next().unwrap_or("")), state, iss)
+}
+
+/// Where the browser's redirect may come from besides the loopback
+/// listener: a pasted address (`next`), and what to do with one that is
+/// not this login's (`bad`: say so, keep waiting).
+pub struct Paste<'a> {
+    pub next: &'a dyn Fn() -> Option<String>,
+    pub bad: &'a dyn Fn(),
+}
+
+/// Wait for the browser's redirect (or a pasted one): the code, or why
+/// not.
+#[allow(clippy::too_many_arguments)]
 fn wait_callback(
     l: &TcpListener,
+    redirect: &str,
     state: &str,
     iss: Option<&str>,
     name: &str,
     wait: Duration,
     cancel: Option<&std::sync::atomic::AtomicBool>,
+    paste: Option<&Paste<'_>>,
 ) -> Result<String, String> {
     l.set_nonblocking(true).map_err(|e| e.to_string())?;
+    let path_of = Url::parse(redirect).map(|u| u.path.split('?').next().unwrap_or("/").to_string()).unwrap_or_else(|_| "/callback".into());
     let t0 = Instant::now();
     loop {
         if cancel.is_some_and(|c| c.load(std::sync::atomic::Ordering::SeqCst)) {
@@ -633,6 +772,14 @@ fn wait_callback(
         }
         if t0.elapsed() > wait {
             return Err(format!("the browser login wasn't finished in {} min", wait.as_secs().div_ceil(60)));
+        }
+        if let Some(p) = paste {
+            if let Some(text) = (p.next)() {
+                match pasted_answer(&text, redirect, state, iss) {
+                    Ok(r) => return r,
+                    Err(()) => (p.bad)(),
+                }
+            }
         }
         let (mut s, _) = match l.accept() {
             Ok(x) => x,
@@ -654,37 +801,21 @@ fn wait_callback(
         }
         let target = line.split_whitespace().nth(1).unwrap_or("");
         let (path, q) = target.split_once('?').unwrap_or((target, ""));
-        if path != "/callback" {
+        if path != path_of {
             respond(&mut s, "404 Not Found", "");
             continue;
         }
-        let q = query(q);
-        let get = |k: &str| q.iter().find(|(a, _)| a == k).map(|(_, v)| v.clone());
-        if get("state").as_deref() != Some(state) {
-            respond(&mut s, "400 Bad Request", &page(false, name, "the answer was not for this login"));
-            continue;
-        }
-        // RFC 9207: a server that says it sends `iss` must send its own
-        if let Some(want) = iss {
-            if get("iss").as_deref() != Some(want) {
-                respond(&mut s, "400 Bad Request", &page(false, name, "the answer came from another login server"));
-                return Err("the answer came from another login server (iss)".into());
-            }
-        }
-        if let Some(e) = get("error") {
-            let why = get("error_description").filter(|d| !d.is_empty()).unwrap_or(e);
-            let why = if why == "access_denied" { "access was denied".to_string() } else { why };
-            respond(&mut s, "200 OK", &page(false, name, &why));
-            return Err(why);
-        }
-        match get("code") {
-            Some(c) if !c.is_empty() => {
+        match answer_of(&query(q), state, iss) {
+            Err(()) => respond(&mut s, "400 Bad Request", &page(false, name, "the answer was not for this login")),
+            Ok(Ok(c)) => {
                 respond(&mut s, "200 OK", &page(true, name, ""));
                 return Ok(c);
             }
-            _ => {
-                respond(&mut s, "400 Bad Request", &page(false, name, "no code in the answer"));
-                return Err("the login server sent no code".into());
+            Ok(Err(why)) => {
+                let shown = if why.ends_with("(iss)") { "the answer came from another login server" } else { why.as_str() };
+                let status = if why.ends_with("(iss)") || why == "the login server sent no code" { "400 Bad Request" } else { "200 OK" };
+                respond(&mut s, status, &page(false, name, if why == "the login server sent no code" { "no code in the answer" } else { shown }));
+                return Err(why);
             }
         }
     }
@@ -710,19 +841,29 @@ pub fn login(l: &Login<'_>) -> Result<Saved, String> {
     let meta = discover(l.server, l.challenge)?;
     let before = load(l.dir, &resource).filter(|s| s.issuer == meta.issuer);
     // the registered port first, so the registration still matches
-    let want = l.config.callback_port.or_else(|| before.as_ref().filter(|_| l.config.client_id.is_none()).and_then(|s| s.redirect_port));
-    let listener = match want.map(|p| TcpListener::bind(("127.0.0.1", p))) {
+    // oauth.callbackUrl: that redirect, listened for on its port (on
+    // every interface when its host is not this machine: a forwarded
+    // port, Codex's rule)
+    let fixed = l.config.callback_url.as_deref().map(Url::parse).transpose()?;
+    let want = fixed.as_ref().map(|u| u.port).or(l.config.callback_port).or_else(|| before.as_ref().filter(|_| l.config.client_id.is_none()).and_then(|s| s.redirect_port));
+    let bind_host = if fixed.as_ref().is_some_and(|u| !loopback(&u.host)) { "0.0.0.0" } else { "127.0.0.1" };
+    let listener = match want.map(|p| TcpListener::bind((bind_host, p))) {
         Some(Ok(x)) => x,
-        Some(Err(_)) if l.config.callback_port.is_some() => {
-            return Err(format!("port {} (oauth.callbackPort) is busy", l.config.callback_port.unwrap_or(0)))
+        Some(Err(_)) if fixed.is_some() || l.config.callback_port.is_some() => {
+            let key = if fixed.is_some() { "oauth.callbackUrl" } else { "oauth.callbackPort" };
+            return Err(format!("port {} ({}) is busy", want.unwrap_or(0), key));
         }
         _ => TcpListener::bind(("127.0.0.1", 0)).map_err(|e| format!("cannot listen on 127.0.0.1: {}", e))?,
     };
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
-    let redirect = format!("http://127.0.0.1:{}/callback", port);
+    let redirect = l.config.callback_url.clone().unwrap_or_else(|| format!("http://127.0.0.1:{}/callback", port));
+    // the client: mcp.json's, else bise's metadata document when the
+    // server takes one, else the one registered before, else a
+    // registration (the spec's order)
     let (client_id, client_secret) = match (&l.config.client_id, &before) {
         (Some(id), _) => (id.clone(), l.config.client_secret.clone()),
-        (None, Some(b)) if !b.client_id.is_empty() && b.redirect_port == Some(port) => (b.client_id.clone(), b.client_secret.clone()),
+        (None, _) if meta.cimd => (l.cimd.to_string(), None),
+        (None, Some(b)) if !b.client_id.is_empty() && b.client_id != l.cimd && b.redirect_port == Some(port) => (b.client_id.clone(), b.client_secret.clone()),
         _ => register(&meta, &redirect, l.name)?,
     };
     let verifier = random_b64(48);
@@ -736,7 +877,12 @@ pub fn login(l: &Login<'_>) -> Result<Saved, String> {
         ("state", state.clone()),
         ("resource", resource.clone()),
     ];
-    if let Some(s) = l.config.scopes.clone().or_else(|| meta.scopes.clone()) {
+    // the challenge's (or mcp.json's, or the metadata's) scopes; on a
+    // step-up, the ones granted before and the ones a 403 asked for too
+    let base = if l.challenge.and_then(|c| challenge_param(c, "scope")).is_some() { meta.scopes.clone() } else { l.config.scopes.clone().or_else(|| meta.scopes.clone()) };
+    let step_up = before.as_ref().and_then(|b| b.wanted_scope.as_deref());
+    let granted = before.as_ref().filter(|_| step_up.is_some()).and_then(|b| b.scope.as_deref());
+    if let Some(s) = scope_union([base.as_deref(), granted, step_up]) {
         q.push(("scope", s));
     }
     let qs: Vec<(&str, &str)> = q.iter().map(|(k, v)| (*k, v.as_str())).collect();
@@ -744,7 +890,7 @@ pub fn login(l: &Login<'_>) -> Result<Saved, String> {
     let auth_url = format!("{}{}{}", meta.authorization_endpoint, sep, form(&qs));
     (l.open)(&auth_url)?;
     let iss = meta.iss_in_redirect.then_some(meta.issuer.as_str());
-    let code = wait_callback(&listener, &state, iss, l.name, l.wait, l.cancel)?;
+    let code = wait_callback(&listener, &redirect, &state, iss, l.name, l.wait, l.cancel, l.paste)?;
     let mut pairs = vec![
         ("grant_type", "authorization_code"),
         ("code", code.as_str()),
@@ -767,6 +913,7 @@ pub fn login(l: &Login<'_>) -> Result<Saved, String> {
         client_id,
         client_secret: client_secret.filter(|_| l.config.client_id.is_none()),
         redirect_port: Some(port),
+        revocation_endpoint: meta.revocation_endpoint.clone(),
         ..Saved::default()
     };
     store_tokens(&mut saved, &v)?;
@@ -869,6 +1016,18 @@ impl Auth {
                 Ok(None)
             }
             Err((false, e)) => Err(e),
+        }
+    }
+
+    /// A 403 `insufficient_scope` asked for `scope`: kept for the next
+    /// login (the step-up), with what was asked before.
+    pub fn want_scope(&self, scope: &str) {
+        let _l = lock(&self.dir, &self.resource);
+        let Some(mut s) = load(&self.dir, &self.resource) else { return };
+        let w = scope_union([s.wanted_scope.as_deref(), Some(scope)]);
+        if w != s.wanted_scope {
+            s.wanted_scope = w;
+            let _ = save(&self.dir, &s);
         }
     }
 

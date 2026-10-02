@@ -23,8 +23,17 @@ Options:
   --iss good|bad|missing        (oauth) the metadata says the redirect
                                 carries iss (RFC 9207); it does, with this
                                 issuer, another one, or not at all
+  --cimd                        (oauth) the metadata says
+                                client_id_metadata_document_supported: an
+                                https-or-loopback client_id is fetched and
+                                its redirect_uris checked (any port on a
+                                loopback one); /client.json serves one
+(oauth) /revoke (RFC 7009) forgets a token; the tool `admin` needs the
+scope mcp.admin: without it, a 403 insufficient_scope challenge.
 Tools: echo {text} (says the X-Test header it got), add_tool {name}
 (adds a tool, then notifications/tools/list_changed), slow {secs}.
+Redirects: /moved (307 for a POST, 308 else, to /mcp), /away (307 to
+another origin), /loop (307 to itself).
 Control (no auth): POST /control {"action": ...}
   forget_sessions   every Mcp-Session-Id is unknown from now on (404)
   drop_streams      close every open event stream (a dropped connection)
@@ -58,6 +67,7 @@ ap.add_argument("--oauth", action="store_true")
 ap.add_argument("--no-dcr", action="store_true")
 ap.add_argument("--token-ttl", type=int, default=3600)
 ap.add_argument("--iss", choices=["good", "bad", "missing"])
+ap.add_argument("--cimd", action="store_true")
 args = ap.parse_args()
 
 LOCK = threading.RLock()  # re-entered: note() asks required_ok()
@@ -77,6 +87,7 @@ LOG = []
 CLIENTS = {}   # client_id -> redirect_uris
 CODES = {}     # code -> (client_id, redirect_uri, challenge, resource)
 ACCESS = set()
+GRANTED = {}   # access or refresh token -> its scope
 REFRESH = {}   # refresh token -> client_id
 DENY = [False]
 TOKEN_DOWN = [False]
@@ -114,6 +125,12 @@ def call(name, arguments, headers):
                           "inputSchema": {"type": "object"}})
         threading.Timer(0.05, broadcast, ({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"},)).start()
         return {"content": [{"type": "text", "text": "added"}]}
+    with LOCK:
+        added = any(t["name"] == name and t["description"] == "added" for t in TOOLS)
+    if added:
+        return {"content": [{"type": "text", "text": "added-tool:%s" % name}]}
+    if name == "admin":
+        return {"content": [{"type": "text", "text": "admin ok"}]}
     if name == "slow":
         import time
         time.sleep(float(arguments.get("secs", 1)))
@@ -201,13 +218,24 @@ class H(BaseHTTPRequestHandler):
                 m["registration_endpoint"] = b + "/register"
             if args.iss:
                 m["authorization_response_iss_parameter_supported"] = True
+            m["revocation_endpoint"] = b + "/revoke"
+            if args.cimd:
+                m["client_id_metadata_document_supported"] = True
+                m["token_endpoint_auth_methods_supported"] = ["none"]
             return self.send(200, json.dumps(m).encode())
+        if path == "/client.json":
+            self.oauth_log("client_doc")
+            return self.send(200, json.dumps({"client_id": b + "/client.json", "client_name": "test",
+                                              "redirect_uris": ["http://127.0.0.1/callback"],
+                                              "token_endpoint_auth_method": "none"}).encode())
         if path == "/authorize":
             q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
             self.oauth_log("authorize", scope=q.get("scope"), resource=q.get("resource"))
             cid, redirect = q.get("client_id"), q.get("redirect_uri", "")
             with LOCK:
                 ok = redirect in CLIENTS.get(cid, []) or (args.no_dcr and cid == "preregistered")
+            if args.cimd and (cid or "").startswith("http"):
+                ok = self.cimd_ok(cid, redirect)
             if not ok or q.get("code_challenge_method") != "S256" or not q.get("code_challenge") or not q.get("resource"):
                 return self.send(400, b'{"error":"invalid_request"}')
             if DENY[0]:
@@ -216,7 +244,7 @@ class H(BaseHTTPRequestHandler):
             else:
                 code = uuid.uuid4().hex
                 with LOCK:
-                    CODES[code] = (cid, redirect, q["code_challenge"], q["resource"])
+                    CODES[code] = (cid, redirect, q["code_challenge"], q["resource"], q.get("scope", ""))
                 ans = {"code": code, "state": q.get("state", "")}
                 if args.iss in ("good", "bad"):
                     ans["iss"] = b if args.iss == "good" else "https://evil.test"
@@ -227,6 +255,27 @@ class H(BaseHTTPRequestHandler):
             self.end_headers()
             return
         return self.send(404)
+
+    def cimd_ok(self, cid, redirect):
+        """Fetch the client's metadata document; the redirect must be one
+        of its redirect_uris (a loopback one on any port, RFC 8252)."""
+        from urllib.parse import urlparse
+        from urllib.request import urlopen
+        u = urlparse(cid)
+        if u.scheme != "https" and u.hostname not in ("127.0.0.1", "localhost"):
+            return False
+        try:
+            doc = json.loads(urlopen(cid, timeout=5).read())
+        except Exception:
+            return False
+        r = urlparse(redirect)
+        def same(x):
+            x = urlparse(x)
+            port_ok = x.port == r.port or (x.port is None and x.hostname in ("127.0.0.1", "localhost"))
+            return (x.scheme, x.hostname, x.path) == (r.scheme, r.hostname, r.path) and port_ok
+        ok = doc.get("client_id") == cid and any(same(x) for x in doc.get("redirect_uris", []))
+        self.oauth_log("cimd", client=cid, ok=ok)
+        return ok
 
     def oauth_post(self, path):
         from urllib.parse import parse_qs
@@ -248,7 +297,7 @@ class H(BaseHTTPRequestHandler):
                     c = CODES.pop(f.get("code", ""), None)
                     if not c:
                         return self.send(400, b'{"error":"invalid_grant"}')
-                    cid, redirect, challenge, resource = c
+                    cid, redirect, challenge, resource, scope = c
                     v = f.get("code_verifier", "")
                     s256 = base64.urlsafe_b64encode(hashlib.sha256(v.encode()).digest()).rstrip(b"=").decode()
                     if s256 != challenge or f.get("redirect_uri") != redirect or f.get("client_id") != cid:
@@ -257,13 +306,24 @@ class H(BaseHTTPRequestHandler):
                     cid = REFRESH.pop(f.get("refresh_token", ""), None)
                     if not cid:
                         return self.send(400, b'{"error":"invalid_grant"}')
+                    scope = GRANTED.get(f.get("refresh_token", ""), "")
                 else:
                     return self.send(400, b'{"error":"unsupported_grant_type"}')
                 at, rt = "at-" + uuid.uuid4().hex, "rt-" + uuid.uuid4().hex
                 ACCESS.add(at)
                 REFRESH[rt] = cid
+                GRANTED[at] = GRANTED[rt] = scope
             return self.send(200, json.dumps({"access_token": at, "refresh_token": rt, "token_type": "Bearer",
-                                              "expires_in": args.token_ttl}).encode())
+                                              "expires_in": args.token_ttl, "scope": scope}).encode())
+        if path == "/revoke":
+            f = {k: v[0] for k, v in parse_qs(self.body().decode()).items()}
+            tok = f.get("token", "")
+            with LOCK:
+                known = tok in ACCESS or tok in REFRESH
+                ACCESS.discard(tok)
+                REFRESH.pop(tok, None)
+            self.oauth_log("revoke", hint=f.get("token_type_hint"), known=known, client=f.get("client_id"))
+            return self.send(200, b"{}")
         return self.send(404)
 
     def note(self, rpc=None):
@@ -326,11 +386,30 @@ class H(BaseHTTPRequestHandler):
                 return self.send(200, json.dumps(LOG).encode())
         return self.send(200, b"{}")
 
+    def redirected(self, path):
+        """/moved: 307 (POST) or 308 (GET, DELETE) to /mcp, query kept;
+        /away: 307 to the same server named localhost (another origin);
+        /loop: 307 to itself."""
+        query = self.path[len(path):]
+        port = self.server.server_address[1]
+        to = {"/moved": "/mcp" + query, "/away": "http://localhost:%d/mcp" % port, "/loop": "/loop"}.get(path)
+        if to is None:
+            return False
+        with LOCK:
+            LOG.append({"method": self.command, "path": path, "redirect": to})
+        self.send_response(308 if path == "/moved" and self.command != "POST" else 307)
+        self.send_header("Location", to)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+        return True
+
     def do_POST(self):
         path = self.path.split("?")[0]
+        if self.redirected(path):
+            return
         if path == "/control":
             return self.control()
-        if args.oauth and path in ("/register", "/token"):
+        if args.oauth and path in ("/register", "/token", "/revoke"):
             return self.oauth_post(path)
         if args.mode == "streamable" and path == "/mcp":
             return self.streamable_post()
@@ -340,7 +419,9 @@ class H(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?")[0]
-        if args.oauth and (path.startswith("/.well-known/") or path == "/authorize"):
+        if self.redirected(path):
+            return
+        if args.oauth and (path.startswith("/.well-known/") or path in ("/authorize", "/client.json")):
             return self.oauth_get(path)
         if args.mode == "sse" and path == "/sse":
             self.note()
@@ -396,6 +477,14 @@ class H(BaseHTTPRequestHandler):
                 return self.send(404, b'{"error":"unknown session"}')
             if self.headers.get("MCP-Protocol-Version") != "2025-06-18":
                 return self.send(400, b'{"error":"bad protocol version header"}')
+        if args.oauth and msg.get("method") == "tools/call" and (msg.get("params") or {}).get("name") == "admin":
+            tok = (self.headers.get("Authorization") or "")[7:]
+            with LOCK:
+                scope = GRANTED.get(tok, "")
+            if "mcp.admin" not in scope.split():
+                return self.send(403, b'{"error":"insufficient_scope"}', extra=[(
+                    "WWW-Authenticate", 'Bearer error="insufficient_scope", scope="mcp.admin", '
+                    'resource_metadata="http://%s/.well-known/oauth-protected-resource/mcp"' % self.headers.get("Host"))])
         reply = answer(msg, self.headers, sid)
         if reply is None:
             return self.send(202, extra=extra)

@@ -22,6 +22,8 @@ the injected <bise_state> block is not one):
   call's description too (BISE-223);
 - once every marker ran (or there is none), the agent answers
   "done: <last tool result>" or "ack: <the message>";
+- `[[ts: CODE]]`: a run_typescript call with that program (CODE without
+  `]]`);
 - `[[think: TEXT]]`: every reply to that message starts with reasoning
   TEXT (Anthropic thinking + signature, reasoning_content, a Responses
   reasoning item, Gemini thought parts + thoughtSignature);
@@ -74,7 +76,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 FIXTURES = os.path.join(HERE, "providers")
 LOG = os.environ.get("FAKE_LOG", "/tmp/sb-fake.log")
 FAMILIES = ("anthropic", "openai-chat", "openai-responses", "gemini")
-MARK = re.compile(r"\[\[(bash|skill|edit|write_file|apply_patch): (.*?)\]\]", re.S)
+MARK = re.compile(r"\[\[(bash|skill|edit|write_file|apply_patch|ts): (.*?)\]\]", re.S)
 INNER = re.compile(r"\{\{(bash): (.*?)\}\}", re.S)
 THINK = re.compile(r"\[\[think: (.*?)\]\]", re.S)
 ERROR = re.compile(r"\[\[error: (\w+)(?: x(\d+))?(?: retry=(\d+))?\]\]")
@@ -292,6 +294,9 @@ def reply_for(conv, seen=0):
     if calls_done < len(marks):
         tool, arg = marks[calls_done]
         args = {"name": arg.strip()} if tool == "skill" else {"arg": arg.strip()}
+        # `[[ts: CODE]]`: run_typescript with that program
+        if tool == "ts":
+            tool, args = "run_typescript", {"code": arg.strip(), "description": "a scripted program"}
         # `[[edit: JSON]]`, `[[write_file: JSON]]`: Vibe's edit tools
         # take JSON args (approvals-edit)
         if tool in ("edit", "write_file"):

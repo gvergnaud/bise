@@ -96,6 +96,7 @@ pub fn main(args: &[String]) -> i32 {
                 roots: resolve::Roots::standard(Some(&ws)),
                 status_dir: Some(crate::status::dir()),
                 secrets_dir: Some(crate::oauth::store_dir()),
+                ready_wait: bridge::READY_WAIT,
             };
             match bridge::serve(opts) {
                 Ok(()) => 0,

@@ -59,8 +59,9 @@ def skills_index_path() -> IO(String):
 # bend-harness and by the hub), else the bundle's ./bend-harness, else
 # the dev builds. None: no plugins, no error. $PPID is this REPL: the
 # wrapper execs the script, so the REPL is its parent. The bridge
-# touches ready once its files are written (at most 10 s per server,
-# started in parallel); the wait gives up after 15 s.
+# touches ready once its files are written (at most 12 s: a server
+# still starting then joins the index later); the wait gives up after
+# 15 s.
 
 def start_script() -> String:
   "d=\"$1\"

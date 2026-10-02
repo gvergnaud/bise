@@ -46,6 +46,9 @@ pub enum Fail {
     SessionGone,
     /// 401: the server wants a login; the `WWW-Authenticate` header
     Auth { host: String, challenge: Option<String> },
+    /// 403 `insufficient_scope`: the login must be done again with the
+    /// scope the challenge names (step-up, MCP authorization 2025-11-25)
+    Scope { host: String, challenge: String },
     Other(String),
 }
 
@@ -55,6 +58,7 @@ impl std::fmt::Display for Fail {
             Fail::Connect(s) | Fail::Other(s) => f.write_str(s),
             Fail::SessionGone => f.write_str("the server ended the session"),
             Fail::Auth { host, .. } => write!(f, "{} answered 401: it needs a login or a token in \"headers\"", host),
+            Fail::Scope { host, .. } => write!(f, "{} answered 403: the login needs more access (insufficient_scope)", host),
         }
     }
 }
@@ -100,10 +104,18 @@ fn with_auth(headers: &[(String, String)], auth: &Option<Arc<Auth>>) -> Vec<(Str
 }
 
 /// `f` again once when it failed with a 401 and the login has a newer
-/// token (another bridge refreshed it, or a refresh now).
+/// token (another bridge refreshed it, or a refresh now). A 403
+/// `insufficient_scope` leaves the scope it asks for in the store: the
+/// next login asks for it with the ones granted before.
 fn retry_401<T>(auth: &Option<Arc<Auth>>, f: impl Fn() -> Result<T, Fail>) -> Result<T, Fail> {
     match f() {
         Err(Fail::Auth { .. }) if auth.as_ref().is_some_and(|a| a.after_401()) => f(),
+        Err(Fail::Scope { host, challenge }) => {
+            if let (Some(a), Some(scope)) = (auth, crate::oauth::challenge_param(&challenge, "scope")) {
+                a.want_scope(&scope);
+            }
+            Err(Fail::Scope { host, challenge })
+        }
         r => r,
     }
 }
@@ -112,6 +124,11 @@ fn status_fail(status: u16, host: &str, resp: http::Response) -> Fail {
     if status == 401 {
         let challenge = resp.header("www-authenticate").map(String::from);
         return Fail::Auth { host: host.to_string(), challenge };
+    }
+    if status == 403 {
+        if let Some(c) = resp.header("www-authenticate").filter(|c| crate::oauth::challenge_param(c, "error").as_deref() == Some("insufficient_scope")) {
+            return Fail::Scope { host: host.to_string(), challenge: c.to_string() };
+        }
     }
     let body = resp.read_all(64 << 10).map(|b| http::short_body(&b)).unwrap_or_default();
     let what = match status {
@@ -128,6 +145,34 @@ fn status_fail(status: u16, host: &str, resp: http::Response) -> Fail {
         }
     }
     Fail::Other(s)
+}
+
+/// The most redirects one request follows (Codex's limit).
+const MAX_REDIRECTS: usize = 10;
+
+/// One request, following the server's redirects on its own origin (a
+/// `/mcp` that moved to `/mcp/`): 307 and 308 keep the method and the
+/// body; a GET also follows 301, 302 and 303. Another origin is refused,
+/// so the headers (a token) never leave it; at most 10.
+fn send(method: &str, url: &Url, headers: &[(String, String)], body: &[u8], timeout: Duration) -> Result<http::Response, Fail> {
+    let mut at = url.clone();
+    for _ in 0..=MAX_REDIRECTS {
+        let resp = http::send(&http::Request { method, url: &at, headers, body, timeout })?;
+        let follows = match resp.status {
+            307 | 308 => true,
+            301..=303 => method == "GET",
+            _ => false,
+        };
+        let Some(next) = resp.header("location").filter(|_| follows).map(String::from) else {
+            return Ok(resp);
+        };
+        let next = at.join(&next).map_err(|e| Fail::Other(format!("{} redirected to a bad address: {}", url.shown(), e)))?;
+        if next.origin() != url.origin() {
+            return Err(Fail::Other(format!("{} redirected to another site ({}): refused", url.shown(), next.shown())));
+        }
+        at = next;
+    }
+    Err(Fail::Other(format!("{} redirected more than {} times", url.shown(), MAX_REDIRECTS)))
 }
 
 /// A JSON-RPC response to `id`?
@@ -209,7 +254,7 @@ impl Streamable {
     fn post(&self, msg: &Value, want: Option<u64>, timeout: Duration) -> Result<Option<Value>, Fail> {
         let body = msg.to_string();
         let headers = self.request_headers("application/json, text/event-stream", true);
-        let resp = http::send(&http::Request { method: "POST", url: &self.url, headers: &headers, body: body.as_bytes(), timeout })?;
+        let resp = send("POST", &self.url, &headers, body.as_bytes(), timeout)?;
         let status = resp.status;
         if status == 404 && self.session.lock().unwrap_or_else(|e| e.into_inner()).is_some() {
             return Err(Fail::SessionGone);
@@ -313,7 +358,7 @@ impl Streamable {
         let mut wait = 1u64;
         while !self.stop.load(Ordering::SeqCst) {
             let headers = self.request_headers("text/event-stream", false);
-            let r = http::send(&http::Request { method: "GET", url: &self.url, headers: &headers, body: b"", timeout: Duration::from_secs(30) });
+            let r = send("GET", &self.url, &headers, b"", Duration::from_secs(30));
             match r {
                 Ok(resp) if resp.status == 405 => return,
                 Ok(resp) if resp.status == 200 && resp.content_type() == "text/event-stream" => {
@@ -350,7 +395,7 @@ impl Streamable {
         // the spec's way to end a session; best effort
         if self.session.lock().unwrap_or_else(|e| e.into_inner()).is_some() {
             let headers = self.request_headers("application/json", false);
-            let _ = http::send(&http::Request { method: "DELETE", url: &self.url, headers: &headers, body: b"", timeout: Duration::from_secs(2) });
+            let _ = send("DELETE", &self.url, &headers, b"", Duration::from_secs(2));
         }
     }
 }
@@ -384,7 +429,7 @@ impl Sse {
         if !has(&headers, "accept") {
             headers.push(("Accept".into(), "text/event-stream".into()));
         }
-        let resp = http::send(&http::Request { method: "GET", url: &self.url, headers: &headers, body: b"", timeout })?;
+        let resp = send("GET", &self.url, &headers, b"", timeout)?;
         if !(200..300).contains(&resp.status) {
             return Err(status_fail(resp.status, &self.host, resp));
         }
@@ -457,7 +502,7 @@ impl Sse {
         let mut headers = with_auth(&self.headers, &self.auth);
         headers.push(("Content-Type".into(), "application/json".into()));
         let body = msg.to_string();
-        let resp = http::send(&http::Request { method: "POST", url: &endpoint, headers: &headers, body: body.as_bytes(), timeout })?;
+        let resp = send("POST", &endpoint, &headers, body.as_bytes(), timeout)?;
         match resp.status {
             200..=299 => Ok(()),
             404 => Err(Fail::SessionGone),
@@ -681,6 +726,7 @@ mod tests {
             url: "https://${HOST:-mcp.example.com}/mcp".into(),
             headers: vec![("Authorization".into(), "Bearer ${TOKEN}".into()), ("X-Org".into(), "${ORG:-acme}".into())],
             oauth: None,
+            limits: Default::default(),
         };
         let env = |k: &str| (k == "TOKEN").then(|| "s3cret".to_string());
         let (u, h) = target(&s, &env).unwrap();

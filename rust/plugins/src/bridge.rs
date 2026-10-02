@@ -21,11 +21,17 @@ use crate::resolve::{self, Diagnostic, HttpServer, Plugin, Resolution, Severity,
 use crate::status;
 use crate::stdio::Client;
 
-pub const START_TIMEOUT: Duration = Duration::from_secs(10);
-/// a remote server's connect, handshake and tools/list (TLS, the
-/// network): longer than a local process's
-pub const REMOTE_START_TIMEOUT: Duration = Duration::from_secs(20);
-pub const CALL_TIMEOUT: Duration = Duration::from_secs(60);
+/// A server's start, handshake and first tools/list when its mcp.json
+/// says nothing (`startup_timeout_sec`): Codex's 30 s (a first `npx`
+/// download, a remote server's TLS).
+pub const START_TIMEOUT: Duration = Duration::from_secs(30);
+/// One call when mcp.json says nothing (`tool_timeout_sec`): Codex's
+/// 300 s.
+pub const CALL_TIMEOUT: Duration = Duration::from_secs(300);
+/// The index files are written (and `ready` touched) once every server
+/// is up or after this long: the REPL waits 15 s for them. A server
+/// still starting then joins the index when it is up.
+pub const READY_WAIT: Duration = Duration::from_secs(12);
 
 pub struct Opts {
     /// the session's plugin dir (index files, logs, ready marker)
@@ -38,6 +44,8 @@ pub struct Opts {
     pub status_dir: Option<PathBuf>,
     /// the OAuth store (`oauth::store_dir()`); None: no login
     pub secrets_dir: Option<PathBuf>,
+    /// how long the index files wait for the servers ([`READY_WAIT`])
+    pub ready_wait: Duration,
 }
 
 /// A server of a plugin, as mcp.json declares it.
@@ -53,6 +61,21 @@ impl Spec {
             Spec::Stdio(s) => &s.id,
             Spec::Http(s) => &s.id,
         }
+    }
+
+    fn limits(&self) -> &resolve::Limits {
+        match self {
+            Spec::Stdio(s) => &s.limits,
+            Spec::Http(s) => &s.limits,
+        }
+    }
+
+    fn startup_timeout(&self) -> Duration {
+        self.limits().startup_timeout.unwrap_or(START_TIMEOUT)
+    }
+
+    fn call_timeout(&self) -> Duration {
+        self.limits().tool_timeout.unwrap_or(CALL_TIMEOUT)
     }
 }
 
@@ -113,10 +136,15 @@ struct Entry {
     log: PathBuf,
     on_change: OnChange,
     secrets: Option<PathBuf>,
+    /// where its state for `/plugins` goes
+    status_dir: Option<PathBuf>,
     /// a remote server that wants a login: its store file and the
     /// mtime last seen (a change means a login happened)
     login: Mutex<Option<(PathBuf, Option<std::time::SystemTime>)>>,
     client: Mutex<Option<Conn>>,
+    /// still starting after [`READY_WAIT`]: its start thread puts the
+    /// client in, then the index gets its tools
+    starting: std::sync::atomic::AtomicBool,
     /// the server's tools as it listed them
     tools: Mutex<Vec<Value>>,
     /// published tool name -> the server's own name
@@ -125,10 +153,10 @@ struct Entry {
 
 fn start_conn(spec: &Spec, root: &Path, data: &Path, log: &Path, on_change: OnChange, secrets: Option<&Path>) -> Result<Conn, Fail> {
     match spec {
-        Spec::Stdio(s) => Client::start(s, root, data, log, START_TIMEOUT, Some(on_change)).map(Conn::Stdio).map_err(Fail::Other),
+        Spec::Stdio(s) => Client::start(s, root, data, log, spec.startup_timeout(), Some(on_change)).map(Conn::Stdio).map_err(Fail::Other),
         Spec::Http(s) => {
             let env = |k: &str| std::env::var(k).ok();
-            Remote::start_with(s, &env, secrets, on_change, REMOTE_START_TIMEOUT).map(Conn::Remote)
+            Remote::start_with(s, &env, secrets, on_change, spec.startup_timeout()).map(Conn::Remote)
         }
     }
 }
@@ -159,6 +187,15 @@ impl Entry {
             if let Some(src) = self.names.lock().unwrap_or_else(|e| e.into_inner()).get(&published) {
                 params["name"] = json!(src);
             }
+            // enabled_tools / disabled_tools: a tool left out is not
+            // callable either
+            let src = params.get("name").and_then(Value::as_str).unwrap_or("");
+            if !self.spec.limits().allows(src) {
+                return Err(format!("{} is turned off in {}'s mcp.json", published, self.spec.id()));
+            }
+        }
+        if self.starting.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err(format!("{} is still starting: try again in a moment", self.spec.id()));
         }
         let mut guard = self.client.lock().unwrap_or_else(|e| e.into_inner());
         let dead = match guard.as_mut() {
@@ -168,13 +205,19 @@ impl Entry {
         let id = self.spec.id().to_string();
         let said = |e: Fail| match e {
             Fail::Auth { .. } => login_error(&id),
+            // a step-up: the login again, with more scopes (kept in the
+            // store); /plugins says it needs a login
+            Fail::Scope { .. } => {
+                remote_login_status(self.status_dir.as_deref(), &self.plugin_name, &self.spec);
+                login_error(&id)
+            }
             e => e.to_string(),
         };
         if dead {
             *guard = Some(start_conn(&self.spec, &self.plugin_root, &self.data_root, &self.log, self.on_change.clone(), self.secrets.as_deref()).map_err(said)?);
         }
         let c = guard.as_ref().ok_or("no server")?;
-        c.request_raw(method, params, CALL_TIMEOUT).map_err(said)
+        c.request_raw(method, params, self.spec.call_timeout()).map_err(said)
     }
 }
 
@@ -224,10 +267,22 @@ struct Started {
     result: Result<(Conn, Vec<Value>), (String, bool)>,
 }
 
-/// Start every server of every loaded plugin, in parallel. `changed`
-/// gets `<plugin>/<server>` when a server says its tools changed.
-fn start_all(res: &Resolution, dir: &Path, changed: &Sender<String>, secrets: Option<&Path>) -> Vec<Started> {
-    let mut handles = Vec::new();
+/// A server still starting at [`READY_WAIT`]: an entry without a client
+/// until its start thread is done.
+struct Late {
+    plugin: usize,
+    spec: Spec,
+    log: PathBuf,
+    on_change: OnChange,
+}
+
+/// Start every server of every loaded plugin, in parallel, and wait at
+/// most `wait` for them. `changed` gets `<plugin>/<server>` when a
+/// server says its tools changed. The servers not done by then are
+/// [`Late`]; `rx` gets their [`Started`] when they are.
+fn start_all(res: &Resolution, dir: &Path, changed: &Sender<String>, secrets: Option<&Path>, wait: Duration) -> (Vec<Started>, Vec<Late>, Receiver<Started>) {
+    let (done_tx, done_rx) = channel::<(usize, Started)>();
+    let mut launched: Vec<Late> = Vec::new();
     for (i, p) in res.plugins.iter().enumerate() {
         if p.state != resolve::State::Loaded {
             continue;
@@ -241,11 +296,14 @@ fn start_all(res: &Resolution, dir: &Path, changed: &Sender<String>, secrets: Op
                 let _ = tx.lock().unwrap_or_else(|e| e.into_inner()).send(key.clone());
             });
             let secrets = secrets.map(Path::to_path_buf);
-            handles.push(std::thread::spawn(move || {
-                let timeout = if matches!(spec, Spec::Http(_)) { REMOTE_START_TIMEOUT } else { START_TIMEOUT };
+            let n = launched.len();
+            launched.push(Late { plugin: i, spec: spec.clone(), log: log.clone(), on_change: on_change.clone() });
+            let done_tx = done_tx.clone();
+            std::thread::spawn(move || {
+                let timeout = spec.startup_timeout();
                 let result = start_conn(&spec, &root, &data, &log, on_change.clone(), secrets.as_deref())
                     .map_err(|e| {
-                        let login = matches!(e, Fail::Auth { .. }) && login_file(&spec, secrets.as_deref()).is_some();
+                        let login = matches!(e, Fail::Auth { .. } | Fail::Scope { .. }) && login_file(&spec, secrets.as_deref()).is_some();
                         (e.to_string(), login)
                     })
                     .and_then(|c| match c.list_tools(timeout) {
@@ -265,11 +323,32 @@ fn start_all(res: &Resolution, dir: &Path, changed: &Sender<String>, secrets: Op
                         (format!("{} (stderr: {})", e, t.join(" | ")), login)
                     }
                 });
-                Started { plugin: i, spec, log, on_change, result }
-            }));
+                let _ = done_tx.send((n, Started { plugin: i, spec, log, on_change, result }));
+            });
         }
     }
-    handles.into_iter().filter_map(|h| h.join().ok()).collect()
+    drop(done_tx);
+    let deadline = std::time::Instant::now() + wait;
+    let mut got: Vec<(usize, Started)> = Vec::new();
+    while got.len() < launched.len() {
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        match done_rx.recv_timeout(left) {
+            Ok(st) => got.push(st),
+            Err(_) => break,
+        }
+    }
+    got.sort_by_key(|(n, _)| *n);
+    let late: Vec<Late> = launched.into_iter().enumerate().filter(|(n, _)| !got.iter().any(|(g, _)| g == n)).map(|(_, l)| l).collect();
+    // the late ones keep coming on a channel of their own
+    let (late_tx, late_rx) = channel();
+    std::thread::spawn(move || {
+        for (_, st) in done_rx {
+            if late_tx.send(st).is_err() {
+                break;
+            }
+        }
+    });
+    (got.into_iter().map(|(_, st)| st).collect(), late, late_rx)
 }
 
 /// The index of every entry's tools, in order; sets each entry's
@@ -286,6 +365,9 @@ fn index_of(entries: &[Arc<Entry>], base: &str) -> (String, Vec<Diagnostic>, Has
         let used = taken.entry(e.plugin).or_default();
         for t in e.tools.lock().unwrap_or_else(|e| e.into_inner()).iter() {
             let Some(src) = t.get("name").and_then(Value::as_str) else { continue };
+            if !e.spec.limits().allows(src) {
+                continue;
+            }
             let published = resolve::identifier(src);
             if used.contains(&published) {
                 diags.push(Diagnostic {
@@ -329,8 +411,9 @@ fn build(
     changed: &Sender<String>,
     status_dir: Option<&Path>,
     secrets: Option<&Path>,
-) -> (Vec<Arc<Entry>>, Session) {
-    let started = start_all(res, dir, changed, secrets);
+    wait: Duration,
+) -> (Vec<Arc<Entry>>, Session, Receiver<Started>) {
+    let (started, late, late_rx) = start_all(res, dir, changed, secrets, wait);
     let mut entries = Vec::new();
     let mut status: Vec<ServerStatus> = Vec::new();
     let mut extra: Vec<Diagnostic> = Vec::new();
@@ -348,7 +431,9 @@ fn build(
                 data_root: p.data_root.clone(),
                 on_change,
                 secrets: secrets.map(Path::to_path_buf),
+                status_dir: status_dir.map(Path::to_path_buf),
                 login: Mutex::new(login),
+                starting: std::sync::atomic::AtomicBool::new(false),
                 client: Mutex::new(client),
                 tools: Mutex::new(tools),
                 names: Mutex::new(HashMap::new()),
@@ -387,8 +472,36 @@ fn build(
         };
         entries.push(new_entry(Some(client), tools, st.spec, st.log, st.on_change, None));
     }
+    // still starting: in the bridge without tools until its start is done
+    let mut waiting = Vec::new();
+    for l in late {
+        let p: &Plugin = &res.plugins[l.plugin];
+        let e = Arc::new(Entry {
+            key: format!("{}/{}", p.name, l.spec.id()),
+            plugin: l.plugin,
+            plugin_name: p.name.clone(),
+            namespace: p.namespace.clone(),
+            log: l.log,
+            spec: l.spec,
+            plugin_root: p.root.clone(),
+            data_root: p.data_root.clone(),
+            on_change: l.on_change,
+            secrets: secrets.map(Path::to_path_buf),
+            status_dir: status_dir.map(Path::to_path_buf),
+            login: Mutex::new(None),
+            starting: std::sync::atomic::AtomicBool::new(true),
+            client: Mutex::new(None),
+            tools: Mutex::new(Vec::new()),
+            names: Mutex::new(HashMap::new()),
+        });
+        status.push(ServerStatus { plugin: p.name.clone(), server: e.spec.id().to_string(), tools: Err("still starting".into()) });
+        waiting.push(e.key.clone());
+        entries.push(e);
+    }
+    // plugin and server order, whatever the start order
+    entries.sort_by_key(|e| e.plugin);
     let (index, diags, counts) = index_of(&entries, base);
-    for e in entries.iter().filter(|e| e.login.lock().unwrap_or_else(|e| e.into_inner()).is_none()) {
+    for e in entries.iter().filter(|e| e.login.lock().unwrap_or_else(|e| e.into_inner()).is_none() && !waiting.contains(&e.key)) {
         let n = Ok(counts.get(&e.key).copied().unwrap_or(0));
         remote_status(status_dir, &e.plugin_name, &e.spec, &n);
         status.push(ServerStatus { plugin: e.plugin_name.clone(), server: e.spec.id().to_string(), tools: n });
@@ -403,7 +516,7 @@ fn build(
     }
     status.sort_by(|a, b| (&a.plugin, &a.server).cmp(&(&b.plugin, &b.server)));
     let report = report::text(res, Some(&status));
-    (entries, Session { index, skills, report })
+    (entries, Session { index, skills, report }, late_rx)
 }
 
 /// `notifications/tools/list_changed`: list that server's tools again
@@ -425,7 +538,7 @@ fn refresh_loop(rx: Receiver<String>, entries: Arc<Vec<Arc<Entry>>>, dir: PathBu
                         *e.client.lock().unwrap_or_else(|e| e.into_inner()) = Some(c);
                         *e.login.lock().unwrap_or_else(|e| e.into_inner()) = None;
                     }
-                    Err(Fail::Auth { .. }) => continue,
+                    Err(Fail::Auth { .. } | Fail::Scope { .. }) => continue,
                     Err(err) => {
                         remote_status(status_dir.as_deref(), &e.plugin_name, &e.spec, &Err(err.to_string()));
                         continue;
@@ -435,7 +548,7 @@ fn refresh_loop(rx: Receiver<String>, entries: Arc<Vec<Arc<Entry>>>, dir: PathBu
             let listed = {
                 let guard = e.client.lock().unwrap_or_else(|e| e.into_inner());
                 match guard.as_ref() {
-                    Some(c) => c.list_tools(CALL_TIMEOUT),
+                    Some(c) => c.list_tools(e.spec.startup_timeout()),
                     None => continue,
                 }
             };
@@ -448,6 +561,39 @@ fn refresh_loop(rx: Receiver<String>, entries: Arc<Vec<Arc<Entry>>>, dir: PathBu
         let _ = write_atomic(&dir.join("mcp-index.txt"), &index);
         for e in entries.iter().filter(|e| e.client.lock().unwrap_or_else(|e| e.into_inner()).is_some()) {
             remote_status(status_dir.as_deref(), &e.plugin_name, &e.spec, &Ok(counts.get(&e.key).copied().unwrap_or(0)));
+        }
+    }
+}
+
+/// The servers that were still starting when the index was written:
+/// each joins it when its start is done (the refresh lists its tools
+/// and rewrites the index), or says why not in the bridge's log and,
+/// for a remote one, its status.
+fn late_starts(rx: Receiver<Started>, entries: Arc<Vec<Arc<Entry>>>, status_dir: Option<PathBuf>, changed: Sender<String>) {
+    for st in rx {
+        let key = format!("{}/{}", entries.iter().find(|e| e.plugin == st.plugin).map(|e| e.plugin_name.as_str()).unwrap_or(""), st.spec.id());
+        let Some(e) = entries.iter().find(|e| e.key == key) else { continue };
+        match st.result {
+            Ok((c, tools)) => {
+                *e.tools.lock().unwrap_or_else(|e| e.into_inner()) = tools;
+                *e.client.lock().unwrap_or_else(|e| e.into_inner()) = Some(c);
+                e.starting.store(false, std::sync::atomic::Ordering::SeqCst);
+                let _ = changed.send(key);
+            }
+            Err((why, login)) => {
+                e.starting.store(false, std::sync::atomic::Ordering::SeqCst);
+                if login {
+                    let file = login_file(&e.spec, e.secrets.as_deref()).map(|f| {
+                        let m = mtime(&f);
+                        (f, m)
+                    });
+                    *e.login.lock().unwrap_or_else(|e| e.into_inner()) = file;
+                    remote_login_status(status_dir.as_deref(), &e.plugin_name, &e.spec);
+                } else {
+                    remote_status(status_dir.as_deref(), &e.plugin_name, &e.spec, &Err(why.clone()));
+                }
+                eprintln!("MCP server {:?} of {}: {}", e.spec.id(), e.plugin_name, why);
+            }
         }
     }
 }
@@ -596,7 +742,7 @@ pub fn serve(opts: Opts) -> std::io::Result<()> {
     let base = format!("http://127.0.0.1:{}/{}", port, token);
     let mut res = resolve::resolve(&opts.roots);
     let (changed_tx, changed_rx) = channel();
-    let (entries, session) = build(&mut res, &opts.dir, &base, &changed_tx, opts.status_dir.as_deref(), opts.secrets_dir.as_deref());
+    let (entries, session, late) = build(&mut res, &opts.dir, &base, &changed_tx, opts.status_dir.as_deref(), opts.secrets_dir.as_deref(), opts.ready_wait);
     write_atomic(&opts.dir.join("mcp-index.txt"), &session.index)?;
     write_atomic(&opts.dir.join("skills-index.txt"), &session.skills)?;
     write_atomic(&opts.dir.join("report.txt"), &session.report)?;
@@ -609,6 +755,10 @@ pub fn serve(opts: Opts) -> std::io::Result<()> {
     {
         let (entries, dir, base, sd) = (entries.clone(), opts.dir.clone(), base.clone(), opts.status_dir.clone());
         std::thread::spawn(move || refresh_loop(changed_rx, entries, dir, base, sd));
+    }
+    {
+        let (entries, sd, tx) = (entries.clone(), opts.status_dir.clone(), changed_tx.clone());
+        std::thread::spawn(move || late_starts(late, entries, sd, tx));
     }
     {
         let entries = entries.clone();

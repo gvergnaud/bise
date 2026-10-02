@@ -97,6 +97,7 @@ pub fn run(
     open: &dyn Fn(&str) -> Result<(), String>,
     wait: Duration,
     cancel: Option<&AtomicBool>,
+    paste: Option<&oauth::Paste<'_>>,
 ) -> Result<usize, String> {
     let env = |k: &str| std::env::var(k).ok();
     let (url, _) = remote::target(&t.server, &env)?;
@@ -104,6 +105,8 @@ pub fn run(
     // the server's challenge names its login metadata
     let challenge = match Remote::start(&t.server, &env, none.clone(), Duration::from_secs(20)) {
         Err(Fail::Auth { challenge, .. }) => challenge,
+        // a 403 insufficient_scope: its challenge names the scope (step-up)
+        Err(Fail::Scope { challenge, .. }) => Some(challenge),
         Ok(_) => None,
         Err(e) => return Err(e.to_string()),
     };
@@ -117,9 +120,12 @@ pub fn run(
         open,
         wait,
         cancel,
+        cimd: oauth::CLIENT_ID,
+        paste,
     })?;
     let c = Remote::start_with(&t.server, &env, Some(secrets), none, Duration::from_secs(20)).map_err(|e| match e {
         Fail::Auth { .. } => "the server still answers 401 with the new token".to_string(),
+        Fail::Scope { .. } => "the server still wants more access than the login gave".to_string(),
         e => e.to_string(),
     })?;
     let n = c.list_tools(Duration::from_secs(20)).map_err(|e| format!("tools/list: {}", e))?.len();
@@ -129,11 +135,12 @@ pub fn run(
     Ok(n)
 }
 
-/// Forget a server's tokens (its app registration stays).
+/// Forget a server's tokens (its app registration stays), revoked at
+/// the login server first when it can (RFC 7009).
 pub fn logout(t: &Target, secrets: &Path, status_dir: Option<&Path>) -> Result<(), String> {
     let env = |k: &str| std::env::var(k).ok();
     let (url, _) = remote::target(&t.server, &env)?;
-    oauth::forget(secrets, &oauth::resource_of(&url), true);
+    oauth::logout(secrets, &oauth::resource_of(&url), &t.server.oauth.clone().unwrap_or_default());
     if let Some(d) = status_dir {
         status::write(d, &t.plugin, &t.server.id, &Status::login_needed(t.server.transport.as_str(), &t.server.host()));
     }
@@ -146,6 +153,39 @@ pub fn done_line(name: &str, r: &Result<usize, String>) -> String {
         Ok(n) => format!("logged in to {}: {} tool{}, your agents have them now.", name, n, if *n == 1 { "" } else { "s" }),
         Err(e) => format!("▲ couldn't log in to {}: {}. /plugins login tries again.", name, e.trim_end_matches('.')),
     }
+}
+
+/// The CLI's lines after the opening one (designer m_4625).
+pub fn cli_link_lines(url: &str) -> Vec<String> {
+    vec![
+        "or open this link:".into(),
+        format!("  {}", url),
+        String::new(),
+        "browser on another machine? log in there. the last page won't load:".into(),
+        "paste its address here and press enter.".into(),
+    ]
+}
+
+/// The TUI's lines after the opening one (designer m_4625).
+pub fn tui_link_lines(name: &str, url: &str) -> Vec<String> {
+    vec![
+        format!("or open this link: {}", url),
+        format!("browser on another machine? log in there. the last page won't load: copy its address, then /plugins login {} <address>", name),
+    ]
+}
+
+/// A pasted address that is not this login's answer.
+pub fn bad_paste_cli(name: &str) -> String {
+    format!("that isn't the address {} sent you back to. paste the whole address from the browser's address bar.", name)
+}
+
+pub fn bad_paste_tui(name: &str) -> String {
+    format!("▲ that isn't the address {} sent you back to. copy the whole address from the browser's address bar.", name)
+}
+
+/// An address pasted while no login to that server waits.
+pub fn no_login_waiting(name: &str) -> String {
+    format!("▲ no login to {} is waiting. /plugins login starts one.", name)
 }
 
 /// `bise plugins login [NAME]`, `bise plugins logout NAME`; the exit code.
@@ -185,15 +225,46 @@ pub fn main(args: &[String], ws: &Path, logout_cmd: bool) -> i32 {
         };
     }
     println!("{}", out.dim(&format!("opening your browser to log in to {}…", t.name)));
+    // the link always (another browser, another machine), then a pasted
+    // address: the redirect a browser elsewhere could not load
     let open = |u: &str| {
-        let r = oauth::open_browser(u);
-        if r.is_err() {
-            // no browser here: the user opens it
-            println!("open this link to log in: {}", u);
+        let _ = oauth::open_browser(u);
+        for l in cli_link_lines(u) {
+            println!("{}", l);
         }
+        print!("> ");
+        let _ = std::io::Write::flush(&mut std::io::stdout());
         Ok(())
     };
-    let r = run(t, &secrets, Some(&sd), &open, WAIT, None);
+    let (tx, rx) = std::sync::mpsc::channel::<String>();
+    std::thread::spawn(move || {
+        let mut line = String::new();
+        while std::io::stdin().read_line(&mut line).is_ok_and(|n| n > 0) {
+            if !line.trim().is_empty() && tx.send(line.trim().to_string()).is_err() {
+                break;
+            }
+            line.clear();
+        }
+    });
+    let pasted = AtomicBool::new(false);
+    let next = || {
+        let l = rx.try_recv().ok();
+        if l.is_some() {
+            pasted.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+        l
+    };
+    let bad = || {
+        println!("{}", bad_paste_cli(&t.name));
+        print!("> ");
+        let _ = std::io::Write::flush(&mut std::io::stdout());
+    };
+    let paste = oauth::Paste { next: &next, bad: &bad };
+    let r = run(t, &secrets, Some(&sd), &open, WAIT, None, Some(&paste));
+    if !pasted.load(std::sync::atomic::Ordering::SeqCst) {
+        // the browser's redirect came: end the prompt's row
+        println!();
+    }
     let line = done_line(&t.name, &r);
     match r {
         Ok(_) => {
@@ -210,6 +281,21 @@ pub fn main(args: &[String], ws: &Path, logout_cmd: bool) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_paste_lines_say_the_designers_words() {
+        assert_eq!(
+            tui_link_lines("linear", "https://x/a"),
+            [
+                "or open this link: https://x/a",
+                "browser on another machine? log in there. the last page won't load: copy its address, then /plugins login linear <address>"
+            ]
+        );
+        assert_eq!(cli_link_lines("https://x/a")[1], "  https://x/a");
+        assert_eq!(bad_paste_tui("linear"), "▲ that isn't the address linear sent you back to. copy the whole address from the browser's address bar.");
+        assert_eq!(bad_paste_cli("linear"), "that isn't the address linear sent you back to. paste the whole address from the browser's address bar.");
+        assert_eq!(no_login_waiting("linear"), "▲ no login to linear is waiting. /plugins login starts one.");
+    }
 
     #[test]
     fn the_lines_say_the_designers_words() {

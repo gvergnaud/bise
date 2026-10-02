@@ -13,7 +13,13 @@ are temp dirs.
   `logged in to fake: 3 tools, your agents have them now.`; the popup row
   says `logged in · 3 tools`, the browser page `bise :* is logged in`;
 - a denied login: `▲ couldn't log in to fake: access was denied.
-  /plugins login tries again.` and the browser's error page.
+  /plugins login tries again.` and the browser's error page;
+- the browser on another machine (designer m_4625), at 150 and 80
+  columns: the link and `browser on another machine? …` lines under the
+  opening one; a wrong pasted address says `▲ that isn't the address fake
+  sent you back to. …` and the login keeps waiting; the address the
+  browser ended on, pasted with `/plugins login fake <address>`, logs in;
+  pasted again: `▲ no login to fake is waiting. /plugins login starts one.`
 
 SB_DUMP=<dir>: every screen checked, and both pages, written there.
 
@@ -49,6 +55,11 @@ try:
     loc = None
 except urllib.error.HTTPError as e:
     loc = e.headers.get("Location")
+if os.environ.get("MCP_LOGIN_ELSEWHERE"):
+    # the browser is on another machine: its redirect never loads here
+    with open(os.path.join(d, "landed-%d.txt" % time.time_ns()), "w") as f:
+        f.write(loc or "")
+    sys.exit(0)
 page = urllib.request.urlopen(loc).read().decode() if loc else "no redirect"
 with open(os.path.join(d, "page-%d.html" % time.time_ns()), "w") as f:
     f.write(page)
@@ -56,6 +67,14 @@ with open(os.path.join(d, "page-%d.html" % time.time_ns()), "w") as f:
 
 
 def main():
+    login_here()
+    for cols in (150, 80):
+        login_elsewhere(cols)
+
+
+def setup():
+    """A fake OAuth MCP server, a plugin for it, the status a session
+    found (needs a login), the fake `open`: (dir, paths, fake, host)."""
     d = tempfile.mkdtemp(prefix="mcpl-", dir=e2e.short_tmp())
     plugins, status, secrets, pages, shim = (os.path.join(d, x) for x in ("plugins", "status", "secrets", "pages", "bin"))
     for x in (plugins, status, pages, shim):
@@ -89,6 +108,81 @@ def main():
     os.makedirs(os.path.join(status, "remote-one"))
     with open(os.path.join(status, "remote-one", "fake.json"), "w") as f:
         json.dump({"transport": "http", "host": host, "error": "needs a login", "at": int(time.time()), "login": True}, f)
+    return d, (plugins, status, secrets, pages, shim), fake, host
+
+
+def env_of(paths, extra=""):
+    plugins, status, secrets, pages, shim = paths
+    E = e2e.Env()
+    E.env["BEND_PLUGINS_HOME"] = plugins
+    E.env["BEND_MCP_STATUS"] = status
+    E.env["BEND_MCP_SECRETS"] = secrets
+    env = "BISE_EXPORTS_FOR= MCP_LOGIN_PAGES=%s PATH=%s %s" % (shlex.quote(pages), shlex.quote(shim + ":" + os.environ.get("PATH", "")), extra)
+    return E, env
+
+
+def shooter(tag):
+    dump = os.environ.get("SB_DUMP")
+    n = [0]
+
+    def shot(t, name, sc):
+        if dump:
+            os.makedirs(dump, exist_ok=True)
+            n[0] += 1
+            for ext, text in (("txt", sc), ("ansi", t.screen(colors=True))):
+                with open(os.path.join(dump, "%s%02d-%s.%s" % (tag, n[0], name, ext)), "w") as f:
+                    f.write(text)
+    return shot
+
+
+def login_elsewhere(cols):
+    d, paths, fake, host = setup()
+    pages = paths[3]
+    shot = shooter("elsewhere-%d-" % cols)
+    E, env = env_of(paths, "MCP_LOGIN_ELSEWHERE=1")
+    try:
+        with tui_session(cols, 36, env=env, E=E) as t:
+            t.wait("bise :*")
+            t.typed("/plugins login fake")
+            t.keys("Enter")
+            # the long lines wrap in the thread: the needles fit one row
+            sc = t.wait("/plugins login fake <address>")
+            flat = " ".join(sc.replace("│", " ").split())
+            for want in ("opening your browser to log in to fake…", "or open this link:", "http://%s/authorize?" % host,
+                         "browser on another machine? log in there. the last page won't load: copy its address,"):
+                assert want in flat, (want, sc)
+            shot(t, "link", sc)
+            t0 = time.time()
+            while not any(f.startswith("landed-") for f in os.listdir(pages)):
+                assert time.time() - t0 < 10, "the browser never logged in"
+                time.sleep(0.1)
+            landed = open(os.path.join(pages, [f for f in os.listdir(pages) if f.startswith("landed-")][0])).read().strip()
+            assert landed.startswith("http://127.0.0.1:") and "code=" in landed, landed
+            t.typed("/plugins login fake http://127.0.0.1:9/callback?code=nope&state=wrong")
+            t.keys("Enter")
+            sc = t.wait("▲ that isn't the address fake sent you back to.")
+            assert "browser's address bar." in " ".join(sc.replace("│", " ").split()), sc
+            shot(t, "wrong-paste", sc)
+            t.typed("/plugins login fake " + landed)
+            t.keys("Enter")
+            sc = t.wait("logged in to fake: 3 tools, your agents have them now.")
+            shot(t, "pasted", sc)
+            t.typed("/plugins login fake " + landed)
+            t.keys("Enter")
+            sc = t.wait("▲ no login to fake is waiting. /plugins login starts one.")
+            shot(t, "nothing-waits", sc)
+    finally:
+        fake.kill()
+        fake.wait()
+
+
+def login_here():
+    d, (plugins, status, secrets, pages, shim), fake, host = setup()
+
+    def control(action):
+        import urllib.request
+        req = urllib.request.Request("http://%s/control" % host, data=json.dumps({"action": action}).encode(), method="POST")
+        return urllib.request.urlopen(req).read()
 
     dump = os.environ.get("SB_DUMP")
     n = [0]
@@ -111,11 +205,7 @@ def main():
             assert time.time() - t0 < 10, "no browser page %d" % k
             time.sleep(0.1)
 
-    E = e2e.Env()
-    E.env["BEND_PLUGINS_HOME"] = plugins
-    E.env["BEND_MCP_STATUS"] = status
-    E.env["BEND_MCP_SECRETS"] = secrets
-    env = "BISE_EXPORTS_FOR= MCP_LOGIN_PAGES=%s PATH=%s" % (shlex.quote(pages), shlex.quote(shim + ":" + os.environ.get("PATH", "")))
+    E, env = env_of((plugins, status, secrets, pages, shim))
     try:
         with tui_session(COLS, ROWS, env=env, E=E) as t:
             t.wait("bise :*")
@@ -124,6 +214,8 @@ def main():
             # the popup wants an argument: esc closes it, ⏎ runs the line
             t.typed("/plugins list")
             t.keys("Escape")
+            # apart, or the terminal reads ESC ⏎ as alt+⏎
+            time.sleep(0.3)
             t.keys("Enter")
             sc = t.wait("mcp fake · %s · needs a login · /plugins login" % host)
             shot(t, "plugins-needs-login", sc)
