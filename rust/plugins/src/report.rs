@@ -59,12 +59,12 @@ pub fn text_with(res: &Resolution, status: Option<&[ServerStatus]>, status_dir: 
                 Some(Ok(n)) => format!("{} tool{} as tools.{}.* ({} {})", n, if *n == 1 { "" } else { "s" }, p.namespace, s.transport.as_str(), s.host()),
                 Some(Err(_)) => format!("{} {}: unavailable (see diagnostics)", s.transport.as_str(), s.host()),
                 // the static listing: the last state a session saw
+                // (`mcp linear · mcp.linear.app · needs a login · /plugins login`)
                 None => {
                     let last = status_dir.and_then(|d| crate::status::read(d, &p.name, &s.id));
-                    match last {
-                        Some(l) => format!("{} {} · {}", s.transport.as_str(), s.host(), l.line()),
-                        None => format!("{} {} · not connected yet (tools.{}.*)", s.transport.as_str(), s.host(), p.namespace),
-                    }
+                    let state = last.map(|l| l.line()).unwrap_or_else(|| "not connected yet".into());
+                    out.push_str(&format!("  mcp {} · {} · {}\n", s.id, s.host(), state));
+                    continue;
                 }
             };
             out.push_str(&format!("  mcp {}: {}\n", s.id, what));

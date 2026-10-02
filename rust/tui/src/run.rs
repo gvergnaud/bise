@@ -557,6 +557,9 @@ fn ui_loop(app: &mut App, terminal: &mut crate::links::Tui) -> io::Result<()> {
         // BISE-120a: the drafts on disk, once they stop moving
         sb::drafts::tick(app);
         sb::setup::pump(app);
+        // remote MCP logins' lines (`/plugins login`) and the quiet
+        // "needs a login" ones
+        crate::plugins::pump(app);
     }
     Ok(())
 }

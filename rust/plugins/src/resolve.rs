@@ -130,6 +130,9 @@ pub struct HttpServer {
     pub url: String,
     /// never printed: the values may hold tokens
     pub headers: Vec<(String, String)>,
+    /// `"oauth"`: a registered client for servers without dynamic
+    /// registration (Claude Code's `clientId`, `callbackPort`)
+    pub oauth: Option<crate::oauth::Config>,
 }
 
 impl std::fmt::Debug for HttpServer {
@@ -140,6 +143,11 @@ impl std::fmt::Debug for HttpServer {
 }
 
 impl HttpServer {
+    /// No `Authorization` header in mcp.json: bise's login may supply one.
+    pub fn may_login(&self) -> bool {
+        !self.headers.iter().any(|(k, _)| k.eq_ignore_ascii_case("authorization"))
+    }
+
     /// The URL's host (and port), for listings: the path may hold a key.
     pub fn host(&self) -> String {
         let rest = self.url.split_once("://").map(|(_, r)| r).unwrap_or(&self.url);
@@ -606,7 +614,7 @@ enum Parsed {
 /// optional string `headers`.
 fn parse_http(id: &str, transport: Transport, o: &Map<String, Value>, root: &Path, data: &Path) -> Result<HttpServer, String> {
     for k in o.keys() {
-        if !["type", "url", "headers"].contains(&k.as_str()) {
+        if !["type", "url", "headers", "oauth"].contains(&k.as_str()) {
             return Err(format!("unknown field {:?}", k));
         }
     }
@@ -630,7 +638,8 @@ fn parse_http(id: &str, transport: Transport, o: &Map<String, Value>, root: &Pat
             headers.push((k.clone(), expand(v, root, data)));
         }
     }
-    Ok(HttpServer { id: id.to_string(), transport, url, headers })
+    let oauth = o.get("oauth").map(crate::oauth::Config::parse).transpose()?;
+    Ok(HttpServer { id: id.to_string(), transport, url, headers, oauth })
 }
 
 fn parse_server(id: &str, v: &Value, root: &Path, data: &Path) -> Result<Parsed, String> {

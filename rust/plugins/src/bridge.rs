@@ -15,7 +15,7 @@ use serde_json::{json, Value};
 
 use std::sync::mpsc::{channel, Receiver, Sender};
 
-use crate::remote::{OnChange, Remote};
+use crate::remote::{Fail, OnChange, Remote};
 use crate::report::{self, ServerStatus};
 use crate::resolve::{self, Diagnostic, HttpServer, Plugin, Resolution, Severity, StdioServer};
 use crate::status;
@@ -36,6 +36,8 @@ pub struct Opts {
     /// where each remote server's last state goes for `/plugins`
     /// (`status::dir()`); None: nowhere
     pub status_dir: Option<PathBuf>,
+    /// the OAuth store (`oauth::store_dir()`); None: no login
+    pub secrets_dir: Option<PathBuf>,
 }
 
 /// A server of a plugin, as mcp.json declares it.
@@ -76,10 +78,10 @@ impl Conn {
         }
     }
 
-    fn request_raw(&self, method: &str, params: Value, timeout: Duration) -> Result<Value, String> {
+    fn request_raw(&self, method: &str, params: Value, timeout: Duration) -> Result<Value, Fail> {
         match self {
-            Conn::Stdio(c) => c.request_raw(method, params, timeout),
-            Conn::Remote(r) => r.request_raw(method, params, timeout).map_err(|e| e.to_string()),
+            Conn::Stdio(c) => c.request_raw(method, params, timeout).map_err(Fail::Other),
+            Conn::Remote(r) => r.request_raw(method, params, timeout),
         }
     }
 
@@ -110,6 +112,10 @@ struct Entry {
     data_root: PathBuf,
     log: PathBuf,
     on_change: OnChange,
+    secrets: Option<PathBuf>,
+    /// a remote server that wants a login: its store file and the
+    /// mtime last seen (a change means a login happened)
+    login: Mutex<Option<(PathBuf, Option<std::time::SystemTime>)>>,
     client: Mutex<Option<Conn>>,
     /// the server's tools as it listed them
     tools: Mutex<Vec<Value>>,
@@ -117,14 +123,31 @@ struct Entry {
     names: Mutex<HashMap<String, String>>,
 }
 
-fn start_conn(spec: &Spec, root: &Path, data: &Path, log: &Path, on_change: OnChange) -> Result<Conn, String> {
+fn start_conn(spec: &Spec, root: &Path, data: &Path, log: &Path, on_change: OnChange, secrets: Option<&Path>) -> Result<Conn, Fail> {
     match spec {
-        Spec::Stdio(s) => Client::start(s, root, data, log, START_TIMEOUT, Some(on_change)).map(Conn::Stdio),
+        Spec::Stdio(s) => Client::start(s, root, data, log, START_TIMEOUT, Some(on_change)).map(Conn::Stdio).map_err(Fail::Other),
         Spec::Http(s) => {
             let env = |k: &str| std::env::var(k).ok();
-            Remote::start(s, &env, on_change, REMOTE_START_TIMEOUT).map(Conn::Remote).map_err(|e| e.to_string())
+            Remote::start_with(s, &env, secrets, on_change, REMOTE_START_TIMEOUT).map(Conn::Remote)
         }
     }
+}
+
+/// The store file of a remote server that may log in.
+fn login_file(spec: &Spec, secrets: Option<&Path>) -> Option<PathBuf> {
+    let (Spec::Http(s), Some(d)) = (spec, secrets) else { return None };
+    let env = |k: &str| std::env::var(k).ok();
+    let (url, _) = crate::remote::target(s, &env).ok()?;
+    s.may_login().then(|| crate::oauth::file_of(d, &crate::oauth::resource_of(&url)))
+}
+
+fn mtime(p: &Path) -> Option<std::time::SystemTime> {
+    std::fs::metadata(p).and_then(|m| m.modified()).ok()
+}
+
+/// What an agent reads when a server wants a login (the designer's words).
+pub fn login_error(server: &str) -> String {
+    format!("{} needs the user to log in (/plugins login). tell them, or go on without it.", server)
 }
 
 impl Entry {
@@ -142,11 +165,16 @@ impl Entry {
             Some(c) => !c.alive(),
             None => true,
         };
+        let id = self.spec.id().to_string();
+        let said = |e: Fail| match e {
+            Fail::Auth { .. } => login_error(&id),
+            e => e.to_string(),
+        };
         if dead {
-            *guard = Some(start_conn(&self.spec, &self.plugin_root, &self.data_root, &self.log, self.on_change.clone())?);
+            *guard = Some(start_conn(&self.spec, &self.plugin_root, &self.data_root, &self.log, self.on_change.clone(), self.secrets.as_deref()).map_err(said)?);
         }
         let c = guard.as_ref().ok_or("no server")?;
-        c.request_raw(method, params, CALL_TIMEOUT)
+        c.request_raw(method, params, CALL_TIMEOUT).map_err(said)
     }
 }
 
@@ -192,12 +220,13 @@ struct Started {
     spec: Spec,
     log: PathBuf,
     on_change: OnChange,
-    result: Result<(Conn, Vec<Value>), String>,
+    /// Err((why, wants a login))
+    result: Result<(Conn, Vec<Value>), (String, bool)>,
 }
 
 /// Start every server of every loaded plugin, in parallel. `changed`
 /// gets `<plugin>/<server>` when a server says its tools changed.
-fn start_all(res: &Resolution, dir: &Path, changed: &Sender<String>) -> Vec<Started> {
+fn start_all(res: &Resolution, dir: &Path, changed: &Sender<String>, secrets: Option<&Path>) -> Vec<Started> {
     let mut handles = Vec::new();
     for (i, p) in res.plugins.iter().enumerate() {
         if p.state != resolve::State::Loaded {
@@ -211,23 +240,29 @@ fn start_all(res: &Resolution, dir: &Path, changed: &Sender<String>) -> Vec<Star
             let on_change: OnChange = Arc::new(move || {
                 let _ = tx.lock().unwrap_or_else(|e| e.into_inner()).send(key.clone());
             });
+            let secrets = secrets.map(Path::to_path_buf);
             handles.push(std::thread::spawn(move || {
                 let timeout = if matches!(spec, Spec::Http(_)) { REMOTE_START_TIMEOUT } else { START_TIMEOUT };
-                let result = start_conn(&spec, &root, &data, &log, on_change.clone()).and_then(|c| match c.list_tools(timeout) {
-                    Ok(ts) => Ok((c, ts)),
-                    Err(e) => Err(format!("tools/list: {}", e)),
-                });
-                let result = result.map_err(|e| {
+                let result = start_conn(&spec, &root, &data, &log, on_change.clone(), secrets.as_deref())
+                    .map_err(|e| {
+                        let login = matches!(e, Fail::Auth { .. }) && login_file(&spec, secrets.as_deref()).is_some();
+                        (e.to_string(), login)
+                    })
+                    .and_then(|c| match c.list_tools(timeout) {
+                        Ok(ts) => Ok((c, ts)),
+                        Err(e) => Err((format!("tools/list: {}", e), false)),
+                    });
+                let result = result.map_err(|(e, login)| {
                     if matches!(spec, Spec::Http(_)) {
-                        return e;
+                        return (e, login);
                     }
                     let tail = std::fs::read_to_string(&log).unwrap_or_default();
                     let tail: Vec<&str> = tail.lines().rev().take(3).collect();
                     if tail.is_empty() {
-                        e
+                        (e, login)
                     } else {
                         let t: Vec<&str> = tail.into_iter().rev().collect();
-                        format!("{} (stderr: {})", e, t.join(" | "))
+                        (format!("{} (stderr: {})", e, t.join(" | ")), login)
                     }
                 });
                 Started { plugin: i, spec, log, on_change, result }
@@ -279,6 +314,12 @@ fn remote_status(status_dir: Option<&Path>, plugin: &str, spec: &Spec, tools: &R
     }
 }
 
+fn remote_login_status(status_dir: Option<&Path>, plugin: &str, spec: &Spec) {
+    if let (Some(d), Spec::Http(s)) = (status_dir, spec) {
+        status::write(d, plugin, &s.id, &status::Status::login_needed(s.transport.as_str(), &s.host()));
+    }
+}
+
 /// Start the servers and build the index files. The entries are in
 /// plugin and server order.
 fn build(
@@ -287,16 +328,52 @@ fn build(
     base: &str,
     changed: &Sender<String>,
     status_dir: Option<&Path>,
+    secrets: Option<&Path>,
 ) -> (Vec<Arc<Entry>>, Session) {
-    let started = start_all(res, dir, changed);
+    let started = start_all(res, dir, changed, secrets);
     let mut entries = Vec::new();
     let mut status: Vec<ServerStatus> = Vec::new();
     let mut extra: Vec<Diagnostic> = Vec::new();
     for st in started {
         let p: &Plugin = &res.plugins[st.plugin];
+        let new_entry = |client: Option<Conn>, tools: Vec<Value>, spec: Spec, log: PathBuf, on_change: OnChange, login| {
+            Arc::new(Entry {
+                key: format!("{}/{}", p.name, spec.id()),
+                plugin: st.plugin,
+                plugin_name: p.name.clone(),
+                namespace: p.namespace.clone(),
+                log,
+                spec,
+                plugin_root: p.root.clone(),
+                data_root: p.data_root.clone(),
+                on_change,
+                secrets: secrets.map(Path::to_path_buf),
+                login: Mutex::new(login),
+                client: Mutex::new(client),
+                tools: Mutex::new(tools),
+                names: Mutex::new(HashMap::new()),
+            })
+        };
         let (client, tools) = match st.result {
             Ok(ct) => ct,
-            Err(e) => {
+            Err((_, true)) => {
+                // kept, without tools: a login (any session's) brings it up
+                extra.push(Diagnostic {
+                    code: "plugin.mcp.login_needed",
+                    severity: Severity::Info,
+                    plugin: p.name.clone(),
+                    message: format!("MCP server {:?} needs a login: /plugins login", st.spec.id()),
+                });
+                remote_login_status(status_dir, &p.name, &st.spec);
+                status.push(ServerStatus { plugin: p.name.clone(), server: st.spec.id().to_string(), tools: Err("needs a login".into()) });
+                let file = login_file(&st.spec, secrets).map(|f| {
+                    let m = mtime(&f);
+                    (f, m)
+                });
+                entries.push(new_entry(None, Vec::new(), st.spec, st.log, st.on_change, file));
+                continue;
+            }
+            Err((e, false)) => {
                 extra.push(Diagnostic {
                     code: "plugin.mcp.connection_failed",
                     severity: Severity::Warning,
@@ -308,23 +385,10 @@ fn build(
                 continue;
             }
         };
-        entries.push(Arc::new(Entry {
-            key: format!("{}/{}", p.name, st.spec.id()),
-            plugin: st.plugin,
-            plugin_name: p.name.clone(),
-            namespace: p.namespace.clone(),
-            log: st.log,
-            spec: st.spec,
-            plugin_root: p.root.clone(),
-            data_root: p.data_root.clone(),
-            on_change: st.on_change,
-            client: Mutex::new(Some(client)),
-            tools: Mutex::new(tools),
-            names: Mutex::new(HashMap::new()),
-        }));
+        entries.push(new_entry(Some(client), tools, st.spec, st.log, st.on_change, None));
     }
     let (index, diags, counts) = index_of(&entries, base);
-    for e in &entries {
+    for e in entries.iter().filter(|e| e.login.lock().unwrap_or_else(|e| e.into_inner()).is_none()) {
         let n = Ok(counts.get(&e.key).copied().unwrap_or(0));
         remote_status(status_dir, &e.plugin_name, &e.spec, &n);
         status.push(ServerStatus { plugin: e.plugin_name.clone(), server: e.spec.id().to_string(), tools: n });
@@ -354,6 +418,20 @@ fn refresh_loop(rx: Receiver<String>, entries: Arc<Vec<Arc<Entry>>>, dir: PathBu
         keys.dedup();
         for k in keys {
             let Some(e) = entries.iter().find(|e| e.key == k) else { continue };
+            if e.client.lock().unwrap_or_else(|e| e.into_inner()).is_none() {
+                // a login happened: connect now
+                match start_conn(&e.spec, &e.plugin_root, &e.data_root, &e.log, e.on_change.clone(), e.secrets.as_deref()) {
+                    Ok(c) => {
+                        *e.client.lock().unwrap_or_else(|e| e.into_inner()) = Some(c);
+                        *e.login.lock().unwrap_or_else(|e| e.into_inner()) = None;
+                    }
+                    Err(Fail::Auth { .. }) => continue,
+                    Err(err) => {
+                        remote_status(status_dir.as_deref(), &e.plugin_name, &e.spec, &Err(err.to_string()));
+                        continue;
+                    }
+                }
+            }
             let listed = {
                 let guard = e.client.lock().unwrap_or_else(|e| e.into_inner());
                 match guard.as_ref() {
@@ -368,7 +446,7 @@ fn refresh_loop(rx: Receiver<String>, entries: Arc<Vec<Arc<Entry>>>, dir: PathBu
         }
         let (index, _, counts) = index_of(&entries, &base);
         let _ = write_atomic(&dir.join("mcp-index.txt"), &index);
-        for e in entries.iter() {
+        for e in entries.iter().filter(|e| e.client.lock().unwrap_or_else(|e| e.into_inner()).is_some()) {
             remote_status(status_dir.as_deref(), &e.plugin_name, &e.spec, &Ok(counts.get(&e.key).copied().unwrap_or(0)));
         }
     }
@@ -518,7 +596,7 @@ pub fn serve(opts: Opts) -> std::io::Result<()> {
     let base = format!("http://127.0.0.1:{}/{}", port, token);
     let mut res = resolve::resolve(&opts.roots);
     let (changed_tx, changed_rx) = channel();
-    let (entries, session) = build(&mut res, &opts.dir, &base, &changed_tx, opts.status_dir.as_deref());
+    let (entries, session) = build(&mut res, &opts.dir, &base, &changed_tx, opts.status_dir.as_deref(), opts.secrets_dir.as_deref());
     write_atomic(&opts.dir.join("mcp-index.txt"), &session.index)?;
     write_atomic(&opts.dir.join("skills-index.txt"), &session.skills)?;
     write_atomic(&opts.dir.join("report.txt"), &session.report)?;
@@ -541,15 +619,32 @@ pub fn serve(opts: Opts) -> std::io::Result<()> {
             }
         });
     }
-    match opts.parent {
-        Some(pid) => {
-            while alive(pid) {
-                std::thread::sleep(Duration::from_millis(500));
+    // a login (from /plugins login, any session) shows as a change of
+    // the server's store file: connect it then
+    let logins = |entries: &Vec<Arc<Entry>>| {
+        for e in entries {
+            let mut l = e.login.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some((f, seen)) = l.as_mut() {
+                let now = mtime(f);
+                if now.is_some() && now != *seen {
+                    *seen = now;
+                    let _ = changed_tx.send(e.key.clone());
+                }
             }
         }
-        None => loop {
-            std::thread::sleep(Duration::from_secs(3600));
-        },
+    };
+    let mut tick = 0u64;
+    loop {
+        if let Some(pid) = opts.parent {
+            if !alive(pid) {
+                break;
+            }
+        }
+        std::thread::sleep(Duration::from_millis(500));
+        tick += 1;
+        if tick.is_multiple_of(4) {
+            logins(&entries);
+        }
     }
     for e in entries.iter() {
         if let Some(mut c) = e.client.lock().unwrap_or_else(|e| e.into_inner()).take() {

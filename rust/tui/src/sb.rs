@@ -1067,7 +1067,11 @@ pub(crate) fn handle_input(app: &mut App, v: &str) -> Vec<Ev> {
         }
         "/plugins" => {
             let ws = std::path::PathBuf::from(&sb.workspace);
-            out.push(Ev::Info(crate::plugins::command(&typed, &ws)));
+            // one line each: an Info line loses its newlines (designer:
+            // the listing read as one paragraph)
+            for l in crate::plugins::command(&typed, &ws).lines() {
+                out.push(Ev::Info(l.to_string()));
+            }
         }
         "/clear" => {
             clear_feed(app);

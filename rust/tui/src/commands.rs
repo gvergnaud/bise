@@ -86,9 +86,15 @@ pub(crate) const COMMANDS: &[Cmd] = &[
     Cmd { name: "/close", desc: "close an inbox item without answering: /close N [note]", args: &[Arg::Card, Arg::Note] },
     Cmd {
         name: "/plugins",
-        desc: "the workspace's agent plugins: /plugins [list|enable|disable] [<name>]",
+        desc: "the workspace's agent plugins: /plugins [list|enable|disable|login|logout] [<name>]",
         args: &[
-            Arg::Words(&[("list", "the plugins and their state"), ("enable", "turn a plugin on"), ("disable", "turn a plugin off")]),
+            Arg::Words(&[
+                ("list", "the plugins and their state"),
+                ("enable", "turn a plugin on"),
+                ("disable", "turn a plugin off"),
+                ("login", "log in to a remote MCP server"),
+                ("logout", "forget a remote MCP server's login"),
+            ]),
             Arg::Plugin,
         ],
     },
@@ -260,7 +266,7 @@ fn choices(app: &App, arg: Arg, q: &str) -> Vec<Choice> {
         Arg::Task => sb::agent_choices(app, false, q),
         Arg::Archived => sb::agent_choices(app, true, q),
         Arg::Card => sb::card_choices(app, q),
-        Arg::Plugin => crate::plugins::choices(std::path::Path::new(&sb::workspace(app).unwrap_or_default()), q),
+        Arg::Plugin => crate::plugins::choices(std::path::Path::new(&sb::workspace(app).unwrap_or_default()), q, &app.ed.text),
         Arg::Model => model_choices(app, q),
         Arg::Effort => effort_choices(app, q),
         Arg::ComputerUse => computer_use_choices(crate::computer_use::is_on(), q),
@@ -834,7 +840,7 @@ mod arg_tests {
         let n = items(&mut app, "/new ");
         assert_eq!((labels(&n), n[0].fill.as_str()), (vec!["-w".to_string()], "/new -w "));
         assert!(items(&mut app, "/new fix the tests").is_empty());
-        assert_eq!(labels(&items(&mut app, "/plugins ")), ["list", "enable", "disable"]);
+        assert_eq!(labels(&items(&mut app, "/plugins ")), ["list", "enable", "disable", "login", "logout"]);
         let v = items(&mut app, "/restart ");
         assert_eq!(v[0].label, "current");
         assert!(v.iter().any(|i| i.label == "…" && i.run.is_none()), "the versions load");

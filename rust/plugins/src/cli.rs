@@ -10,6 +10,8 @@ pub const USAGE: &str = "usage:
   bise plugins [list] [--workspace DIR] [--json]
   bise plugins enable|disable NAME
   bise plugins import-mcp NAME [--dry-run] < servers.json   (Claude Code's / Codex's MCP servers as one plugin)
+  bise plugins login [SERVER]   log in to a remote MCP server in the browser (no SERVER: the list)
+  bise plugins logout SERVER    forget its tokens
   bise plugins serve --dir DIR [--workspace DIR] [--parent PID]   (internal: the session bridge)
 
 Roots: bise's built-in plugins (<app root>/plugins), ~/.agents/plugins (or $BEND_PLUGINS_HOME)
@@ -76,6 +78,7 @@ pub fn main(args: &[String]) -> i32 {
                 }
             }
         }
+        "login" | "logout" => crate::login::main(&args[1..], &workspace(args), sub == "logout"),
         "import-mcp" => {
             let root = resolve::Roots::standard(None).user.unwrap_or_else(|| resolve::home().join(".agents/plugins"));
             crate::import::main(&args[1..], &root)
@@ -92,6 +95,7 @@ pub fn main(args: &[String]) -> i32 {
                 parent,
                 roots: resolve::Roots::standard(Some(&ws)),
                 status_dir: Some(crate::status::dir()),
+                secrets_dir: Some(crate::oauth::store_dir()),
             };
             match bridge::serve(opts) {
                 Ok(()) => 0,

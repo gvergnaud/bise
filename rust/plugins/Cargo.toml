@@ -11,3 +11,7 @@ serde_json = "1"
 # remote MCP servers (src/http.rs): the TUI's TLS stack, already in the lock
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 webpki-roots = "0.26"
+# OAuth for remote MCP servers (src/oauth.rs): PKCE's SHA-256 and random
+# bytes, base64url; both already in the lock
+ring = "0.17"
+base64 = "0.22"

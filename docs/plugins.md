@@ -338,11 +338,57 @@ description, not a removed one).
   `http_headers`, `env_http_headers` (`{"X-Org": "VAR"}` becomes
   `"${VAR}"`) and `bearer_token_env_var` (`Authorization: Bearer
   ${VAR}`). It prints the host and the header names, never a value.
+- **Login (OAuth).** A remote server without an `Authorization` header
+  in its mcp.json can log in (`rust/plugins/src/oauth.rs`, `login.rs`;
+  the MCP authorization spec 2025-06-18). Discovery: the 401's
+  `WWW-Authenticate` `resource_metadata`, else
+  `/.well-known/oauth-protected-resource[/path]`, then the authorization
+  server's RFC 8414 / OIDC metadata (an older server without any: its
+  origin's `/authorize`, `/token`, `/register`); a server whose metadata
+  lacks PKCE S256 is refused. Client: mcp.json's `"oauth": {"clientId",
+  "clientSecret", "scopes", "callbackPort"}` (Claude Code's keys; GitHub
+  and Slack have no dynamic registration), else the one registered
+  before, else RFC 7591 registration as a public client. The login:
+  PKCE S256, a random state, `resource` = the server URL (RFC 8707), the
+  metadata's scopes, the browser on `http://127.0.0.1:<port>/callback`
+  (the registered port again next time), 5 minutes. Tokens: one file per
+  server URL in `~/.bise/secrets/mcp-oauth/` (`$BEND_MCP_SECRETS`;
+  folder 0700, files 0600, written by rename), never printed, never in a
+  session, a report or /log. Sent as `Authorization: Bearer`; refreshed a
+  minute before expiry or after a 401, under a lock on the file (every
+  agent's bridge shares it, the refresh token rotates); a `resource`
+  refused on refresh is tried once without it; a refresh refused for
+  good drops the tokens and keeps the client. Not yet: client ID
+  metadata documents (CIMD, spec 2025-11-25).
+- **Login in the bridge.** A server that answers 401 at start stays in
+  the bridge without tools (`plugin.mcp.login_needed`, status "needs a
+  login"); every 2 s the bridge looks at its store file and connects it
+  once a login lands there, rewriting the index: no restart. A call that
+  gets a 401 the login can't fix answers the agent `linear needs the user
+  to log in (/plugins login). tell them, or go on without it.`
+- **UI** (designer m_4519). `/plugins`: `mcp linear · mcp.linear.app ·
+  needs a login · /plugins login`. `/plugins login` opens the popup, one
+  row per server that can log in: `linear   mcp.linear.app · needs a
+  login` or `· logged in · 23 tools`; ⏎ runs the login in the
+  background: `opening your browser to log in to linear…`, then `logged
+  in to linear: 23 tools, your agents have them now.` or `▲ couldn't log
+  in to linear: <reason>. /plugins login tries again.` The browser tab:
+  `bise :* is logged in to linear. you can close this tab.` or `the login
+  didn't go through: <reason>. /plugins login in bise tries again.` Once
+  per server and TUI run, when a session found it needs a login: `linear
+  needs a login: /plugins login`. CLI: `bise plugins login [SERVER]`,
+  `bise plugins logout SERVER`. Later: an inbox item for it.
 - **Tests:** `tests/fake_mcp_http.py` (a Streamable HTTP or SSE server
   with a required header, pagination, session expiry, dropped streams,
-  list_changed, a 401) driven by `rust/plugins/tests/remote.rs`
-  (the client, and a plugin with two remote servers through the real
-  bridge).
+  list_changed, a 401; `--oauth`: its own protected resource and
+  authorization server metadata, registration, authorize, token with
+  PKCE checked, rotating refresh tokens, expire/revoke/deny knobs)
+  driven by `rust/plugins/tests/remote.rs` (the client, and a plugin
+  with two remote servers through the real bridge) and
+  `rust/plugins/tests/oauth.rs` (login, store, refresh after a 401 and
+  before expiry, revoked, denied, no registration, the bridge connecting
+  after a login); `tests/tui_mcp_login_tmux.py` (the quiet line,
+  /plugins, the popup, both thread lines, both browser pages).
 
 ## Known limits
 
@@ -355,8 +401,7 @@ description, not a removed one).
 
 ## Later
 
-- OAuth login for remote servers that need it (401 with
-  `WWW-Authenticate`).
+- An inbox item when a remote server needs a login; CIMD clients.
 - `ai.mistral.vibe` extension: `toolNamespace`, `toolOverrides`.
 - Per-server enable/disable, a `/plugins` picker with toggles.
 - Plugin descriptions in the system prompt (the spec's default guidance).

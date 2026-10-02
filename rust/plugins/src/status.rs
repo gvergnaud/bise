@@ -26,6 +26,8 @@ pub struct Status {
     pub tools: Result<usize, String>,
     /// unix seconds
     pub at: u64,
+    /// the server answered 401 and bise can log in (`/plugins login`)
+    pub login: bool,
 }
 
 fn now() -> u64 {
@@ -34,12 +36,20 @@ fn now() -> u64 {
 
 impl Status {
     pub fn now(transport: &str, host: &str, tools: Result<usize, String>) -> Status {
-        Status { transport: transport.into(), host: host.into(), tools, at: now() }
+        Status { transport: transport.into(), host: host.into(), tools, at: now(), login: false }
     }
 
-    /// `connected · 12 tools · 3 min ago` or `✗ <error> · 3 min ago`
+    pub fn login_needed(transport: &str, host: &str) -> Status {
+        Status { login: true, ..Status::now(transport, host, Err("needs a login".into())) }
+    }
+
+    /// `connected · 12 tools · 3 min ago`, `✗ <error> · 3 min ago` or
+    /// `needs a login · /plugins login`
     pub fn line(&self) -> String {
         let ago = ago(now().saturating_sub(self.at));
+        if self.login {
+            return "needs a login · /plugins login".into();
+        }
         match &self.tools {
             Ok(n) => format!("connected · {} tool{} · {}", n, if *n == 1 { "" } else { "s" }, ago),
             Err(e) => format!("✗ {} · {}", e, ago),
@@ -70,7 +80,7 @@ pub fn write(dir: &Path, plugin: &str, server: &str, s: &Status) {
     }
     let v = match &s.tools {
         Ok(n) => json!({"transport": s.transport, "host": s.host, "tools": n, "at": s.at}),
-        Err(e) => json!({"transport": s.transport, "host": s.host, "error": e, "at": s.at}),
+        Err(e) => json!({"transport": s.transport, "host": s.host, "error": e, "at": s.at, "login": s.login}),
     };
     let tmp = f.with_extension(format!("tmp{}", std::process::id()));
     if std::fs::write(&tmp, v.to_string()).is_ok() {
@@ -92,6 +102,7 @@ pub fn read(dir: &Path, plugin: &str, server: &str) -> Option<Status> {
         host: v.get("host").and_then(Value::as_str).unwrap_or("").into(),
         tools,
         at: v.get("at").and_then(Value::as_u64).unwrap_or(0),
+        login: v.get("login").and_then(Value::as_bool).unwrap_or(false),
     })
 }
 
@@ -110,6 +121,10 @@ mod tests {
         write(&d, "p", "linear", &Status::now("http", "mcp.linear.app", Err("HTTP 500 from mcp.linear.app".into())));
         assert!(read(&d, "p", "linear").unwrap().line().starts_with("✗ HTTP 500"));
         assert!(read(&d, "p", "other").is_none());
+        write(&d, "p", "linear", &Status::login_needed("http", "mcp.linear.app"));
+        let l = read(&d, "p", "linear").unwrap();
+        assert!(l.login);
+        assert_eq!(l.line(), "needs a login · /plugins login");
         let _ = std::fs::remove_dir_all(&d);
     }
 }

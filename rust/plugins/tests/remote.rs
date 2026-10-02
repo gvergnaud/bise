@@ -69,6 +69,7 @@ fn server(transport: Transport, url: String) -> HttpServer {
         transport,
         url,
         headers: vec![("Authorization".into(), "Bearer ${FAKE_TOKEN}".into()), ("X-Test".into(), "${X_TEST:-from-default}".into())],
+        oauth: None,
     }
 }
 
@@ -241,7 +242,7 @@ fn a_plugin_with_an_http_server_goes_through_the_bridge() {
         enabled: vec![],
     };
     let mut parent = Command::new("sleep").arg("60").spawn().unwrap();
-    let opts = bridge::Opts { dir: dir.clone(), parent: Some(parent.id()), roots, status_dir: Some(status.clone()) };
+    let opts = bridge::Opts { dir: dir.clone(), parent: Some(parent.id()), roots, status_dir: Some(status.clone()), secrets_dir: None };
     let srv = std::thread::spawn(move || bridge::serve(opts));
     wait_for("the bridge", || dir.join("ready").exists());
     let index = std::fs::read_to_string(dir.join("mcp-index.txt")).unwrap();

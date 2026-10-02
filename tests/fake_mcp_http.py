@@ -12,16 +12,29 @@ Options:
   --page-size N                 tools/list pages of N tools (nextCursor)
   --sse-answers                 (streamable) answer requests as an event
                                 stream, a notification first
+  --oauth                       requests need a Bearer token from this
+                                server's own OAuth: protected resource and
+                                authorization server metadata, /register
+                                (dynamic registration), /authorize (302 to
+                                the redirect with a code), /token (PKCE S256
+                                checked, refresh tokens rotate)
+  --no-dcr                      (oauth) no registration endpoint
+  --token-ttl N                 (oauth) expires_in of the access tokens
 Tools: echo {text} (says the X-Test header it got), add_tool {name}
 (adds a tool, then notifications/tools/list_changed), slow {secs}.
 Control (no auth): POST /control {"action": ...}
   forget_sessions   every Mcp-Session-Id is unknown from now on (404)
   drop_streams      close every open event stream (a dropped connection)
   log               the requests seen: method, rpc, session, protocol,
-                    whether the required header matched
+                    whether the required header matched; oauth steps too
+  expire_tokens     (oauth) every access token is refused from now on
+  revoke_refresh    (oauth) every refresh token too
+  deny_next         (oauth) the next /authorize answers access_denied
 """
 
 import argparse
+import base64
+import hashlib
 import json
 import os
 import queue
@@ -36,9 +49,12 @@ ap.add_argument("--port-file", required=True)
 ap.add_argument("--require-header", default="")
 ap.add_argument("--page-size", type=int, default=0)
 ap.add_argument("--sse-answers", action="store_true")
+ap.add_argument("--oauth", action="store_true")
+ap.add_argument("--no-dcr", action="store_true")
+ap.add_argument("--token-ttl", type=int, default=3600)
 args = ap.parse_args()
 
-LOCK = threading.Lock()
+LOCK = threading.RLock()  # re-entered: note() asks required_ok()
 TOOLS = [
     {"name": "echo", "description": "Echo a text back.",
      "inputSchema": {"type": "object", "properties": {"text": {"type": "string"}}}},
@@ -51,9 +67,19 @@ SESSIONS = set()
 # open event streams: (session or None, queue of SSE frames, a closer)
 STREAMS = []
 LOG = []
+# oauth
+CLIENTS = {}   # client_id -> redirect_uris
+CODES = {}     # code -> (client_id, redirect_uri, challenge, resource)
+ACCESS = set()
+REFRESH = {}   # refresh token -> client_id
+DENY = [False]
 
 
 def required_ok(headers):
+    if args.oauth:
+        auth = headers.get("Authorization") or ""
+        with LOCK:
+            return auth.startswith("Bearer ") and auth[7:] in ACCESS
     if not args.require_header:
         return True
     name, _, value = args.require_header.partition("=")
@@ -143,7 +169,88 @@ class H(BaseHTTPRequestHandler):
         host = self.headers.get("Host")
         self.send(401, b'{"error":"invalid_token"}', extra=[(
             "WWW-Authenticate",
-            'Bearer resource_metadata="http://%s/.well-known/oauth-protected-resource"' % host)])
+            'Bearer error="invalid_token", resource_metadata="http://%s/.well-known/oauth-protected-resource/mcp"' % host)])
+
+    # ---- oauth ----
+    def base(self):
+        return "http://" + self.headers.get("Host")
+
+    def oauth_log(self, step, **kw):
+        with LOCK:
+            LOG.append(dict({"method": self.command, "path": self.path.split("?")[0], "oauth": step}, **kw))
+
+    def oauth_get(self, path):
+        from urllib.parse import parse_qs, urlparse, urlencode
+        b = self.base()
+        if path.startswith("/.well-known/oauth-protected-resource"):
+            self.oauth_log("prm")
+            return self.send(200, json.dumps({"resource": b + "/mcp", "authorization_servers": [b],
+                                              "scopes_supported": ["mcp.read", "mcp.write"]}).encode())
+        if path == "/.well-known/oauth-authorization-server":
+            self.oauth_log("as")
+            m = {"issuer": b, "authorization_endpoint": b + "/authorize", "token_endpoint": b + "/token",
+                 "code_challenge_methods_supported": ["S256"], "response_types_supported": ["code"]}
+            if not args.no_dcr:
+                m["registration_endpoint"] = b + "/register"
+            return self.send(200, json.dumps(m).encode())
+        if path == "/authorize":
+            q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
+            self.oauth_log("authorize", scope=q.get("scope"), resource=q.get("resource"))
+            cid, redirect = q.get("client_id"), q.get("redirect_uri", "")
+            with LOCK:
+                ok = redirect in CLIENTS.get(cid, []) or (args.no_dcr and cid == "preregistered")
+            if not ok or q.get("code_challenge_method") != "S256" or not q.get("code_challenge") or not q.get("resource"):
+                return self.send(400, b'{"error":"invalid_request"}')
+            if DENY[0]:
+                DENY[0] = False
+                loc = redirect + "?" + urlencode({"error": "access_denied", "state": q.get("state", "")})
+            else:
+                code = uuid.uuid4().hex
+                with LOCK:
+                    CODES[code] = (cid, redirect, q["code_challenge"], q["resource"])
+                loc = redirect + "?" + urlencode({"code": code, "state": q.get("state", "")})
+            self.send_response(302)
+            self.send_header("Location", loc)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        return self.send(404)
+
+    def oauth_post(self, path):
+        from urllib.parse import parse_qs
+        if path == "/register":
+            req = json.loads(self.body() or b"{}")
+            cid = "client-" + uuid.uuid4().hex[:8]
+            with LOCK:
+                CLIENTS[cid] = req.get("redirect_uris", [])
+            self.oauth_log("register", auth_method=req.get("token_endpoint_auth_method"))
+            return self.send(201, json.dumps({"client_id": cid, "redirect_uris": req.get("redirect_uris", [])}).encode())
+        if path == "/token":
+            f = {k: v[0] for k, v in parse_qs(self.body().decode()).items()}
+            g = f.get("grant_type")
+            self.oauth_log("token", grant=g, resource=f.get("resource"))
+            with LOCK:
+                if g == "authorization_code":
+                    c = CODES.pop(f.get("code", ""), None)
+                    if not c:
+                        return self.send(400, b'{"error":"invalid_grant"}')
+                    cid, redirect, challenge, resource = c
+                    v = f.get("code_verifier", "")
+                    s256 = base64.urlsafe_b64encode(hashlib.sha256(v.encode()).digest()).rstrip(b"=").decode()
+                    if s256 != challenge or f.get("redirect_uri") != redirect or f.get("client_id") != cid:
+                        return self.send(400, b'{"error":"invalid_grant","error_description":"PKCE or redirect mismatch"}')
+                elif g == "refresh_token":
+                    cid = REFRESH.pop(f.get("refresh_token", ""), None)
+                    if not cid:
+                        return self.send(400, b'{"error":"invalid_grant"}')
+                else:
+                    return self.send(400, b'{"error":"unsupported_grant_type"}')
+                at, rt = "at-" + uuid.uuid4().hex, "rt-" + uuid.uuid4().hex
+                ACCESS.add(at)
+                REFRESH[rt] = cid
+            return self.send(200, json.dumps({"access_token": at, "refresh_token": rt, "token_type": "Bearer",
+                                              "expires_in": args.token_ttl}).encode())
+        return self.send(404)
 
     def note(self, rpc=None):
         with LOCK:
@@ -190,6 +297,14 @@ class H(BaseHTTPRequestHandler):
             with LOCK:
                 for _, q, _ in STREAMS:
                     q.put(None)
+        elif act == "expire_tokens":
+            with LOCK:
+                ACCESS.clear()
+        elif act == "revoke_refresh":
+            with LOCK:
+                REFRESH.clear()
+        elif act == "deny_next":
+            DENY[0] = True
         elif act == "log":
             with LOCK:
                 return self.send(200, json.dumps(LOG).encode())
@@ -199,6 +314,8 @@ class H(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         if path == "/control":
             return self.control()
+        if args.oauth and path in ("/register", "/token"):
+            return self.oauth_post(path)
         if args.mode == "streamable" and path == "/mcp":
             return self.streamable_post()
         if args.mode == "sse" and path == "/messages":
@@ -207,6 +324,8 @@ class H(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?")[0]
+        if args.oauth and (path.startswith("/.well-known/") or path == "/authorize"):
+            return self.oauth_get(path)
         if args.mode == "sse" and path == "/sse":
             self.note()
             if not required_ok(self.headers):

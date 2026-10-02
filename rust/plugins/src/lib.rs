@@ -7,6 +7,8 @@
 //! - `report`: the human and JSON listings;
 //! - `stdio`: a stdio MCP client (one child process, JSON-RPC lines);
 //! - `http`, `remote`: a remote MCP client (Streamable HTTP, SSE);
+//! - `oauth`: the browser login and the tokens of remote servers;
+//! - `login`: `/plugins login`, `bise plugins login|logout`;
 //! - `status`: each remote server's last state, for `/plugins`;
 //! - `bridge`: the per-session loopback HTTP bridge the Bend REPL calls;
 //! - `cli`: the `bise plugins ...` subcommand;
@@ -17,6 +19,8 @@ pub mod bridge;
 pub mod cli;
 pub mod http;
 pub mod import;
+pub mod login;
+pub mod oauth;
 pub mod remote;
 pub mod report;
 pub mod resolve;

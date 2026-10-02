@@ -27,6 +27,7 @@ use std::time::Duration;
 use serde_json::{json, Value};
 
 use crate::http::{self, Url};
+use crate::oauth::Auth;
 use crate::resolve::{expand_env, HttpServer, Transport};
 
 pub const PROTOCOL: &str = crate::stdio::PROTOCOL;
@@ -82,6 +83,29 @@ pub fn target(s: &HttpServer, env: &dyn Fn(&str) -> Option<String>) -> Result<(U
 
 fn has(headers: &[(String, String)], name: &str) -> bool {
     headers.iter().any(|(k, _)| k.eq_ignore_ascii_case(name))
+}
+
+/// The configured headers, and the login's bearer token when there is
+/// one (never over a header the config sets itself).
+fn with_auth(headers: &[(String, String)], auth: &Option<Arc<Auth>>) -> Vec<(String, String)> {
+    let mut h = headers.to_vec();
+    if let Some(a) = auth {
+        if !has(&h, "authorization") {
+            if let Some(t) = a.bearer() {
+                h.push(("Authorization".into(), format!("Bearer {}", t)));
+            }
+        }
+    }
+    h
+}
+
+/// `f` again once when it failed with a 401 and the login has a newer
+/// token (another bridge refreshed it, or a refresh now).
+fn retry_401<T>(auth: &Option<Arc<Auth>>, f: impl Fn() -> Result<T, Fail>) -> Result<T, Fail> {
+    match f() {
+        Err(Fail::Auth { .. }) if auth.as_ref().is_some_and(|a| a.after_401()) => f(),
+        r => r,
+    }
 }
 
 fn status_fail(status: u16, host: &str, resp: http::Response) -> Fail {
@@ -151,6 +175,7 @@ fn init_params() -> Value {
 struct Streamable {
     url: Url,
     headers: Vec<(String, String)>,
+    auth: Option<Arc<Auth>>,
     host: String,
     session: Mutex<Option<String>>,
     protocol: Mutex<Option<String>>,
@@ -164,7 +189,7 @@ struct Streamable {
 
 impl Streamable {
     fn request_headers(&self, accept: &str, json_body: bool) -> Vec<(String, String)> {
-        let mut h = self.headers.clone();
+        let mut h = with_auth(&self.headers, &self.auth);
         if !has(&h, "accept") {
             h.push(("Accept".into(), accept.into()));
         }
@@ -337,6 +362,7 @@ type Pending = Mutex<HashMap<u64, Sender<Value>>>;
 struct Sse {
     url: Url,
     headers: Vec<(String, String)>,
+    auth: Option<Arc<Auth>>,
     host: String,
     /// the POST endpoint of the open stream; None: no stream
     endpoint: Mutex<Option<(Url, u64)>>,
@@ -354,7 +380,7 @@ struct Sse {
 impl Sse {
     /// Open the stream, wait for its endpoint, run the handshake.
     fn connect(self: &Arc<Self>, timeout: Duration) -> Result<Value, Fail> {
-        let mut headers = self.headers.clone();
+        let mut headers = with_auth(&self.headers, &self.auth);
         if !has(&headers, "accept") {
             headers.push(("Accept".into(), "text/event-stream".into()));
         }
@@ -428,7 +454,7 @@ impl Sse {
         let Some((endpoint, _)) = self.endpoint.lock().unwrap_or_else(|e| e.into_inner()).clone() else {
             return Err(Fail::Connect(format!("no event stream from {}", self.host)));
         };
-        let mut headers = self.headers.clone();
+        let mut headers = with_auth(&self.headers, &self.auth);
         headers.push(("Content-Type".into(), "application/json".into()));
         let body = msg.to_string();
         let resp = http::send(&http::Request { method: "POST", url: &endpoint, headers: &headers, body: body.as_bytes(), timeout })?;
@@ -497,6 +523,7 @@ enum Kind {
 /// One remote MCP server, connected.
 pub struct Remote {
     kind: Kind,
+    auth: Option<Arc<Auth>>,
     /// the URL's host, for messages
     pub host: String,
 }
@@ -504,18 +531,41 @@ pub struct Remote {
 impl Remote {
     /// Connect and run the handshake (`initialize`, `initialized`).
     pub fn start(s: &HttpServer, env: &dyn Fn(&str) -> Option<String>, on_change: OnChange, timeout: Duration) -> Result<Remote, Fail> {
+        Remote::start_with(s, env, None, on_change, timeout)
+    }
+
+    /// The same, with the login's tokens: `secrets` is the OAuth store;
+    /// None, or an `Authorization` header in mcp.json: no login.
+    pub fn start_with(
+        s: &HttpServer,
+        env: &dyn Fn(&str) -> Option<String>,
+        secrets: Option<&std::path::Path>,
+        on_change: OnChange,
+        timeout: Duration,
+    ) -> Result<Remote, Fail> {
         let (url, headers) = target(s, env).map_err(Fail::Other)?;
-        Remote::connect(s.transport, url, headers, on_change, timeout)
+        let auth = secrets
+            .filter(|_| s.may_login())
+            .map(|d| Arc::new(Auth::new(d.to_path_buf(), &url, s.oauth.clone().unwrap_or_default())));
+        Remote::connect(s.transport, url, headers, auth, on_change, timeout)
     }
 
     /// The same with the URL and headers already filled in.
-    pub fn connect(transport: Transport, url: Url, headers: Vec<(String, String)>, on_change: OnChange, timeout: Duration) -> Result<Remote, Fail> {
+    pub fn connect(
+        transport: Transport,
+        url: Url,
+        headers: Vec<(String, String)>,
+        auth: Option<Arc<Auth>>,
+        on_change: OnChange,
+        timeout: Duration,
+    ) -> Result<Remote, Fail> {
         let host = url.shown();
         let kind = match transport {
             Transport::Streamable => {
                 let c = Arc::new(Streamable {
                     url,
                     headers,
+                    auth: auth.clone(),
                     host: host.clone(),
                     session: Mutex::new(None),
                     protocol: Mutex::new(None),
@@ -525,10 +575,10 @@ impl Remote {
                     stop: AtomicBool::new(false),
                     listening: Mutex::new(None),
                 });
-                let init = match c.handshake(timeout) {
+                let init = match retry_401(&auth, || c.handshake(timeout)) {
                     Err(Fail::Connect(_)) => {
                         std::thread::sleep(Duration::from_millis(300));
-                        c.handshake(timeout)?
+                        retry_401(&auth, || c.handshake(timeout))?
                     }
                     r => r?,
                 };
@@ -542,6 +592,7 @@ impl Remote {
                 let c = Arc::new(Sse {
                     url,
                     headers,
+                    auth: auth.clone(),
                     host: host.clone(),
                     endpoint: Mutex::new(None),
                     generation: AtomicU64::new(0),
@@ -553,11 +604,11 @@ impl Remote {
                     stream: Mutex::new(None),
                     connecting: Mutex::new(()),
                 });
-                c.ensure(timeout)?;
+                retry_401(&auth, || c.ensure(timeout))?;
                 Kind::Sse(c)
             }
         };
-        Ok(Remote { kind, host })
+        Ok(Remote { kind, host, auth })
     }
 
     /// The server's `initialize` result (the latest handshake's).
@@ -570,10 +621,10 @@ impl Remote {
 
     /// One request; the whole response message (`result` or `error`).
     pub fn request_raw(&self, method: &str, params: Value, timeout: Duration) -> Result<Value, Fail> {
-        match &self.kind {
-            Kind::Streamable(c) => c.request_raw(method, params, timeout),
-            Kind::Sse(c) => c.request_raw(method, params, timeout),
-        }
+        retry_401(&self.auth, || match &self.kind {
+            Kind::Streamable(c) => c.request_raw(method, params.clone(), timeout),
+            Kind::Sse(c) => c.request_raw(method, params.clone(), timeout),
+        })
     }
 
     pub fn request(&self, method: &str, params: Value, timeout: Duration) -> Result<Value, Fail> {
@@ -629,6 +680,7 @@ mod tests {
             transport: Transport::Streamable,
             url: "https://${HOST:-mcp.example.com}/mcp".into(),
             headers: vec![("Authorization".into(), "Bearer ${TOKEN}".into()), ("X-Org".into(), "${ORG:-acme}".into())],
+            oauth: None,
         };
         let env = |k: &str| (k == "TOKEN").then(|| "s3cret".to_string());
         let (u, h) = target(&s, &env).unwrap();
