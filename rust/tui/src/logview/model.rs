@@ -648,7 +648,7 @@ impl Source<'_> {
                 Body::None,
             ),
             Payload::CompactionDone(c) => {
-                let text = parts_text(&c.summary, self.blobs);
+                let text = self.legacy_summary(idx).unwrap_or_else(|| parts_text(&c.summary, self.blobs));
                 push(
                     Role::Summary,
                     format!("compaction {} · replaces #{}..#{} · keeps {}", c.id, c.replaces.from, c.replaces.to, c.kept.len()),
@@ -657,6 +657,25 @@ impl Source<'_> {
             }
             _ => {}
         }
+    }
+
+    /// A compaction written before the summary opened the replacement:
+    /// its compaction_done holds only the preamble line ("The earlier
+    /// conversation was compacted. ..."), and the real summary came
+    /// after the kept messages as a context_injected of kind summary.
+    /// That summary's text, to show on the compaction's row.
+    fn legacy_summary(&self, idx: usize) -> Option<String> {
+        let Some(Payload::CompactionDone(c)) = self.log.events[idx].payload.as_ref() else { return None };
+        if !parts_text(&c.summary, self.blobs).starts_with("The earlier conversation was compacted.") {
+            return None;
+        }
+        self.log.events[idx + 1..].iter().find_map(|e| match e.payload.as_ref()? {
+            Payload::ContextInjected(m) if name_of(&m.kind) == "summary" => Some(Some(parts_text(&m.content, self.blobs))),
+            Payload::UserMessage(_) | Payload::AgentMessage(_) | Payload::ContextInjected(_) => None,
+            // the replacement ends at the first event that is not one of
+            // its messages
+            _ => Some(None),
+        })?
     }
 
     fn text_of(&self, t: &Text) -> String {

@@ -268,6 +268,137 @@ law preserve_recent_keeps_users:
             Con{T.user("u2"), Nil{}}}}}))
     == True{} : Bool}
 
+# ---- compaction keeps the summary, then only the newest user messages ----
+# (user: "il faut garder que les messages récents, avec un nombre de
+# tokens max en partant du plus récent"). Each kc.u* is 40 or 41 chars,
+# 11 estimated tokens; kc.cfg keeps 25 tokens: two of them.
+
+def kc.cfg() -> T.Cfg:
+  T.Cfg{4000n, 25n, 3n, "sys", Nil{}}
+
+def kc.u1() -> T.Msg:
+  T.user("u1: fix the login page, it hangs on load")
+
+def kc.u2() -> T.Msg:
+  T.user("u2: then add a test for the signup flow!")
+
+def kc.u3() -> T.Msg:
+  T.user("u3: and rename the field to email_addr..")
+
+def kc.u4() -> T.Msg:
+  T.user("u4: now bump the version and tag v0.4.0.")
+
+def kc.u5() -> T.Msg:
+  T.user("u5: write the changelog entry for v0.4.0")
+
+def kc.u6() -> T.Msg:
+  T.user("u6: and open the PR on the feature branch")
+
+def kc.ok() -> T.Msg:
+  T.asst("ok", Nil{})
+
+# compaction 1 of a fresh conversation, then two more turns and a
+# compaction, then one more turn and a compaction, then a compaction of
+# an idle context with no new message
+def kc.r1() -> List<&2, T.Msg>:
+  C.replaced(C.replace(kc.cfg(),
+    [kc.u1(), kc.ok(), kc.u2(), kc.ok(), kc.u3(), kc.ok()], "s1"))
+
+def kc.r2() -> List<&2, T.Msg>:
+  C.replaced(C.replace(kc.cfg(), List.append(&2, T.Msg, kc.r1(),
+    [kc.u4(), kc.ok(), kc.u5(), kc.ok()]), "s2"))
+
+def kc.r3() -> List<&2, T.Msg>:
+  C.replaced(C.replace(kc.cfg(), List.append(&2, T.Msg, kc.r2(),
+    [kc.u6(), kc.ok()]), "s3"))
+
+def kc.r4() -> List<&2, T.Msg>:
+  C.replaced(C.replace(kc.cfg(), List.append(&2, T.Msg, kc.r3(),
+    [T.asst("done", Nil{})]), "s4"))
+
+# LAW: a replacement is the summary message first, then the kept user
+# messages, verbatim: no separate preamble, so the session log's
+# compaction_done carries the real summary (what /log shows).
+law compaction_replacement_opens_with_summary:
+  {C.replace(T.Cfg{400n, 40n, 3n, "You are precise.", Nil{}},
+      [T.user("bonjour"), T.asst("réponse", Nil{})], "court")
+    == C.ROk{[C.summary_message("court"), T.user("bonjour")]} : C.RRes}
+
+# LAW: the kept messages are the NEWEST that fit the budget counted from
+# the latest backwards: of three 11-token messages, a 25-token budget
+# keeps the last two.
+law compaction_keeps_newest_within_budget:
+  {kc.r1() == [C.summary_message("s1"), kc.u2(), kc.u3()]
+    : List<&2, T.Msg>}
+
+# LAW: a message is never cut in half: the walk stops at the first one
+# that does not fit, even when an older, smaller one would.
+law compaction_stops_at_first_misfit:
+  {C.kept_users(C.replace(kc.cfg(),
+      [T.user("hi"), kc.ok(), T.user(String.append(
+        "a message far too long for what remains of the budget ",
+        "once the latest one is in")), kc.ok(), kc.u6(), kc.ok()], "s"))
+    == [kc.u6()] : List<&2, T.Msg>}
+
+# LAW: the latest user message is always kept, whole, even over budget.
+law compaction_keeps_latest_over_budget:
+  {C.kept_users(C.replace(T.Cfg{4000n, 2n, 3n, "sys", Nil{}},
+      [kc.u1(), kc.ok(), kc.u2(), kc.ok()], "s"))
+    == [kc.u2()] : List<&2, T.Msg>}
+
+# LAW: across compactions nothing piles up: the context holds ONE
+# summary (an earlier summary is injected, never kept: the summarizer
+# folds it in) and the newest messages within the budget; the messages
+# kept by earlier compactions leave as newer ones come.
+law compaction_second_drops_old_kept:
+  {kc.r2() == [C.summary_message("s2"), kc.u4(), kc.u5()]
+    : List<&2, T.Msg>}
+
+law compaction_third_drops_old_kept:
+  {kc.r3() == [C.summary_message("s3"), kc.u5(), kc.u6()]
+    : List<&2, T.Msg>}
+
+# LAW: compacting a compacted context with no new message keeps the
+# same newest messages (within the budget), not more.
+law compaction_idle_recompaction_stable:
+  {kc.r4() == [C.summary_message("s4"), kc.u5(), kc.u6()]
+    : List<&2, T.Msg>}
+
+# LAW: after each of the four compactions the kept messages fit the
+# budget.
+law compaction_kept_within_budget:
+  {Bool.and(H.within_budget(25n, H.users_of(kc.r1())),
+    Bool.and(H.within_budget(25n, H.users_of(kc.r2())),
+      Bool.and(H.within_budget(25n, H.users_of(kc.r3())),
+        H.within_budget(25n, H.users_of(kc.r4())))))
+    == True{} : Bool}
+
+# LAW: the summarizer is told that older user messages are gone, so its
+# summary carries every request and its state.
+law compaction_prompt_carries_requests:
+  {Bool.and(String.contains(C.compaction_prompt(""),
+      "every request the user made"),
+    String.contains(C.compaction_prompt(""), "any earlier summary, is gone"))
+    == True{} : Bool}
+
+# LAW: the summary message keeps the prefix --resume and the session
+# migration recognise, and its <summary> block parses back to the
+# summary.
+def kc.text(m: T.Msg) -> String:
+  match m:
+    case T.Msg{_, t, _, _}:
+      t
+
+law summary_message_parses_back:
+  {Bool.and(String.starts_with(kc.text(C.summary_message("court")),
+      "Summary of the earlier conversation:"),
+    Maybe.is_some(&2, String, C.parse_summary(kc.text(C.summary_message("court")))))
+    == True{} : Bool}
+
+law summary_message_summary_is_the_block:
+  {C.parse_summary(kc.text(C.summary_message("court")))
+    == Some{"court"} : Maybe<&2, String>}
+
 # ---- the observation wire format (every client parses this) ----
 
 # LAW: an observation renders as exactly one line with the obs prefix.

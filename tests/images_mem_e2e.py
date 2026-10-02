@@ -65,7 +65,15 @@ try:
         if not line or line.startswith(b"  obs: turn_done"): break
     took = time.time() - t1
     after = mb()
-    recs = [json.loads(l) for l in open(os.path.join(tmp, "fake.log"))]
+    # the fake provider logs the request after its reply's stream ends:
+    # turn_done can arrive first (a loaded machine), so wait for the record
+    recs = []
+    for _ in range(100):
+        recs = [json.loads(l) for l in open(os.path.join(tmp, "fake.log")) if l.strip()] \
+            if os.path.exists(os.path.join(tmp, "fake.log")) else []
+        if recs and len(recs[-1].get("image_sha", [])) == N:
+            break
+        time.sleep(0.1)
     import hashlib
     got = recs[-1].get("image_sha", []) if recs else []
     exp = [hashlib.sha256(("data:image/png;base64," + open(os.path.join(imgs, "%032x.b64" % k)).read()).encode()).hexdigest() for k in range(N)]

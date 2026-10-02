@@ -106,6 +106,34 @@ fn a_key_never_shows() {
     assert!(r.body.text().contains("«redacted:anthropic»"));
 }
 
+/// A compaction written before the summary opened the replacement: its
+/// compaction_done holds the preamble, the summary comes after the kept
+/// message. The compaction's row shows the real summary.
+#[test]
+fn an_old_compaction_shows_its_real_summary() {
+    use serde_json::json;
+    let text = |t: &str| json!([{"kind": "text", "text": t}]);
+    let lines = [
+        line(1, None, "session_start", json!({"session": "s-1", "format": 1, "created_by": "bise", "cwd": "/w"})),
+        line(2, Some(1), "turn_started", json!({"cause": "user"})),
+        line(3, Some(1), "user_message", json!({"content": text("fix signup"), "delivery": "prompt"})),
+        line(4, Some(1), "assistant_message", json!({"req": 1, "model": "m", "parts": [{"kind": "text", "text": "done"}], "calls": []})),
+        line(5, Some(1), "turn_ended", json!({"outcome": "done"})),
+        line(6, None, "compaction_started", json!({"id": 1, "trigger": "user"})),
+        line(7, None, "compaction_done", json!({"id": 1, "summary": text("The earlier conversation was compacted. A summary replaces it; continue from the preserved user messages."), "replaces": {"from": 3, "to": 4}, "kept": [3]})),
+        line(8, None, "context_injected", json!({"kind": "summary", "content": text("Summary of the earlier conversation:\n<summary>signup fixed, tests green</summary>")})),
+    ];
+    let bytes = lines.join("\n") + "\n";
+    let log = read_bytes(&[("events.jsonl".into(), bytes.into_bytes())]);
+    let v = View::of("main".into(), log, PathBuf::from("/nonexistent"), Redactor::default());
+    let row = v.history.iter().find(|i| i.role == Role::Summary).expect("a summary row");
+    assert!(row.body.text().contains("signup fixed, tests green"), "{}", row.body.text());
+    // a new compaction already carries its summary: shown as it is
+    let s = view();
+    let row = s.history.iter().find(|i| i.role == Role::Summary).expect("a summary row");
+    assert!(row.body.text().contains("signup fixed"), "{}", row.body.text());
+}
+
 #[test]
 fn what_the_model_got_after_a_compaction() {
     let mut v = view();

@@ -155,9 +155,27 @@ def pick_recent(rev: List<&2, T.Msg>, +budget: Nat, +first: Bool, +stop: Bool,
               Bool.and(Bool.not(fits), Bool.not(first)))),
             pick_recent.put(include, m, acc))
 
+# pick_recent walks newest-first and prepends, so its result is already
+# oldest-first (chronological). A second List.reverse here used to put
+# the kept messages newest-first: the model read them backwards, and the
+# session log's compaction_done could not match them in order (ev.bend
+# kept_walk), so they were written again as new context events.
 def preserve_recent(budget: Nat, ms: List<&2, T.Msg>) -> List<&2, T.Msg>:
-  List.reverse(&2, T.Msg,
-    pick_recent(List.reverse(&2, T.Msg, ms), budget, True{}, False{}, Nil{}))
+  pick_recent(List.reverse(&2, T.Msg, ms), budget, True{}, False{}, Nil{})
+
+# the non-injected user messages of `ms`, in order
+def users_of(ms: List<&2, T.Msg>) -> List<&2, T.Msg>:
+  match ms:
+    case Nil{}:
+      Nil{}
+    case Con{+m, rest}:
+      pick_recent.put(is_user(m), m, users_of(rest))
+
+# the kept messages respect the budget: their tokens fit it, or there is
+# at most one (the latest, kept even over budget)
+def within_budget(+budget: Nat, +ms: List<&2, T.Msg>) -> Bool:
+  Bool.or(Nat.is_le(E.msgs_tokens(ms), budget),
+    Nat.is_le(List.length(&2, T.Msg, ms), 1n))
 
 # ---- the commit convention (pinned by LAWS.bend) ----
 # canonical history is OLDEST-FIRST: a commit lands at the tail, never

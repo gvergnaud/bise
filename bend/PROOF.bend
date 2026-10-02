@@ -101,6 +101,39 @@ def Laws.truncate_keeps_small_messages():
 def Laws.preserve_recent_keeps_users():
   {==}
 
+def Laws.compaction_replacement_opens_with_summary():
+  {==}
+
+def Laws.compaction_keeps_newest_within_budget():
+  {==}
+
+def Laws.compaction_stops_at_first_misfit():
+  {==}
+
+def Laws.compaction_keeps_latest_over_budget():
+  {==}
+
+def Laws.compaction_second_drops_old_kept():
+  {==}
+
+def Laws.compaction_third_drops_old_kept():
+  {==}
+
+def Laws.compaction_idle_recompaction_stable():
+  {==}
+
+def Laws.compaction_kept_within_budget():
+  {==}
+
+def Laws.compaction_prompt_carries_requests():
+  {==}
+
+def Laws.summary_message_parses_back():
+  {==}
+
+def Laws.summary_message_summary_is_the_block():
+  {==}
+
 def Laws.obs_wire_format():
   {==}
 

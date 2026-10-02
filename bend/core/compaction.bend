@@ -139,7 +139,7 @@ def prompt.with_extra(has_extra: Bool, +base: String, +extra: String) -> String:
 
 def compaction_prompt(+extra: String) -> String:
   prompt.with_extra(Bool.not(String.is_empty(extra)),
-    "Summarize the conversation so far for the agent that continues it. Reply with a single <summary>...</summary> block containing a non-empty summary. Do not call tools.", extra)
+    "Summarize the conversation so far for the agent that continues it. Reply with a single <summary>...</summary> block containing a non-empty summary. Do not call tools.\nAfter this compaction the agent sees only your summary and the user's few most recent messages, verbatim; every older user message, and any earlier summary, is gone. So the summary must carry, in order: every request the user made (its key wording, constraints and preferences) and whether it is done, in progress, pending or dropped; the decisions taken and why; the work in progress and its next step; the names it needs to go on (files, commands, branches, ids, people); what an earlier summary said that still matters. Drop what is finished and no longer useful.", extra)
 
 def project.build(f: FitR, +sysmsg: T.Msg, +prompt: T.Msg) -> PRes:
   match f:
@@ -167,30 +167,59 @@ type RRes is Data:
   ROk{history: List<&2, T.Msg>}
   RBig{}
 
+# the one injected message that carries the accepted summary. It opens
+# the replacement, so the session log records its whole text as
+# compaction_done's summary (/log shows the real summary). Its prefix is
+# the one --resume (runtime/main-pure.bend replay) and the session
+# migration recognise as a summary.
+def summary_message(+summary: String) -> T.Msg:
+  T.injected_user(String.append(
+    "Summary of the earlier conversation:\n<summary>", String.append(summary,
+      "</summary>\nThe conversation was compacted: this summary replaces it. The user messages after this one, if any, are the user's most recent ones, kept verbatim for their exact wording; older ones are only in the summary. They were sent before the summary was written: it already says what was done about each, so continue the work from where it stops and do not redo what it reports as done.")))
+
 # 1. the current system message (projected, not stored in canonical history)
-# 2. an injected user-role preamble
-# 3. recent non-injected user messages, preserved within the selection
-#    budget, always including the most recent one
-# 4. an injected final user message containing the accepted summary
-def replace.build(f: FitR, +preamble: T.Msg, +final: T.Msg) -> RRes:
+# 2. the summary message (summary_message)
+# 3. the most recent non-injected user messages, verbatim, that fit the
+#    selection budget counted from the newest (H.preserve_recent: never
+#    cut in half, the latest one always kept). An earlier summary is
+#    injected, so it is never kept: the summarizer folds it into the new
+#    one. A message kept by an earlier compaction is kept again only
+#    while it is still among the newest within the budget: nothing piles
+#    up across compactions.
+def replace.build(f: FitR, +final: T.Msg) -> RRes:
   match f:
     case FOk{sel}:
-      ROk{List.append(&2, T.Msg, Con{preamble, sel}, Con{final, Nil{}})}
+      ROk{Con{final, sel}}
     case FBig{}:
       RBig{}
+
 def replace(cfg: T.Cfg, history: List<&2, T.Msg>, summary: String) -> RRes:
   match cfg:
     case T.Cfg{+threshold, +select_budget, _, +system, +tools}:
       +sysmsg = T.sys(system)
-      +preamble = T.injected_user("The earlier conversation was compacted. A summary replaces it; continue from the preserved user messages.")
-      +final = T.injected_user(String.append(
-        "Summary of the earlier conversation:\n<summary>", String.append(
-          summary, "</summary>")))
+      +final = summary_message(summary)
       overhead = Nat.add(E.msg_tokens(sysmsg),
-        Nat.add(E.msg_tokens(preamble),
-          Nat.add(E.msg_tokens(final), E.tool_tokens(tools))))
+        Nat.add(E.msg_tokens(final), E.tool_tokens(tools)))
       budget = Nat.sub(threshold, overhead)
       replace.build(fit_list(budget, H.preserve_recent(select_budget, history)),
-        preamble, final)
+        final)
+
+# the non-injected user messages of a replacement (what it keeps
+# verbatim), for the laws and tests
+def kept_users(r: RRes) -> List<&2, T.Msg>:
+  match r:
+    case ROk{h}:
+      H.users_of(h)
+    case RBig{}:
+      Nil{}
+
+# the replacement's history (Nil when too large), to chain compactions
+# in the laws
+def replaced(r: RRes) -> List<&2, T.Msg>:
+  match r:
+    case ROk{h}:
+      h
+    case RBig{}:
+      Nil{}
 
 # ---- session-creation validation ----

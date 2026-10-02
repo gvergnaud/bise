@@ -29,9 +29,16 @@ import ./debug.bend as Dbg
 import ./repl-core-pure.bend as Rcp
 import ./oneshot.bend as Os
 
+# how many tokens of the user's most recent messages a compaction keeps
+# verbatim after the summary, counted from the newest (core/history.bend
+# preserve_recent): BEND_COMPACT_KEEP env > config.toml
+# compaction_keep_tokens > 6000. It was 20000: after nine compactions
+# main's context still opened with 30+ user messages from days ago.
+def keep_of_cfg(+envv: String, +cfgt: String) -> Nat:
+  U32.to_nat(St.env_cfg_u32(envv, cfgt, "compaction_keep_tokens", 6000))
+
 # the compaction threshold for real conversations, in approximate
-# tokens, with the ADR 0011 selection budget (20000) for preserved user
-# messages. The same precedence as everything else: BEND_THRESHOLD env
+# tokens. The same precedence as everything else: BEND_THRESHOLD env
 # > config.toml compaction_threshold (tokens or "45%" of the window,
 # BISE-300) > 80 % of the model's context window (from bise's catalog,
 # BISE-150), never above that 80 %: runtime/provider-pure.bend
@@ -125,7 +132,7 @@ def live_prompt(+cat: List<&2, T.ToolDef>, +patch: Bool) -> IO(String):
     +gs : String <- IO.pure(String, Mcpp.groups_section(Mcpp.merged_tools.live(cat, mi)))
     IO.pure(String, Rcp.prompt_extra(Rcp.prompt_extra(live_prompt.go(prompt_join(about_for(extra), Rcp.solo_tone(extra, tone), tu, gs, Rcp.prompt_extra(ct, note)), content), amd), extra))
 
-def live_cfg(+threshold: Nat) -> IO(T.Cfg):
+def live_cfg(+threshold: Nat, +keep: Nat) -> IO(T.Cfg):
   do IO<T.Cfg>:
     # one edit toolset, by the provider of the model this start runs
     # (a later /model switch re-tools each request: main.bend retool)
@@ -133,7 +140,7 @@ def live_cfg(+threshold: Nat) -> IO(T.Cfg):
     +patch : Bool <- IO.pure(Bool, Ed.is_patch_provider(Ed.provider_of(model)))
     +cat : List<&2, T.ToolDef> <- X.catalog_for(patch)
     +p : String <- live_prompt(cat, patch)
-    IO.pure(T.Cfg, T.Cfg{threshold, 20000n, 3n, p, cat})
+    IO.pure(T.Cfg, T.Cfg{threshold, keep, 3n, p, cat})
 
 def live_main() -> IO(Unit):
   do IO<Unit>:
@@ -146,6 +153,9 @@ def live_main() -> IO(Unit):
     +cfgt : String <- St.read_cfg()
     +window : U32 <- Pv.resolved_window()
     +threshold : Nat <- IO.pure(Nat, thr_of_cfg(P.env_or(env, ""), cfgt, window))
+    kenv : Result<&1, &1, U32 & String, String> <- IO.get_env(
+      "BEND_COMPACT_KEEP")
+    +keep : Nat <- IO.pure(Nat, keep_of_cfg(P.env_or(kenv, ""), cfgt))
     +p : U32 <- Rc.repl_port(7702)
     l : Listener <- IO.try(Listener, TCP.listen("127.0.0.1", p))
     # the single source of truth for every client: printed BEFORE the
@@ -161,7 +171,7 @@ def live_main() -> IO(Unit):
     # skills), then the prompt (it lists the skills)
     u5 : Unit <- Pl.start()
     u4 : Unit <- Sk.skills_scan()
-    +cfg : T.Cfg <- live_cfg(threshold)
+    +cfg : T.Cfg <- live_cfg(threshold, keep)
     +ld : P.Load <- P.load(T.new_session(cfg))
     kr : Result<&1, &1, U32 & String, String> <- IO.get_env("MISTRAL_API_KEY")
     +key : String <- IO.pure(String, P.env_or(kr, ""))
