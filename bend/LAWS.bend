@@ -3758,6 +3758,43 @@ law interrupt_flag_semantics:
 law provider_stream_step_timeout:
   {Pv.stream_step_ms() == 90000 : U32}
 
+# LAW: a provider with no idle_timeout_sec (or 0, or not a number) waits
+# 90 s, as before the key existed: nothing changes for who sets nothing.
+law provider_idle_timeout_default:
+  {Bool.and(U32.is_eq(Pv.wait_ms(Pv.stream_wait("", "fake", "fake/m")), 90000),
+      Bool.and(U32.is_eq(Pv.wait_ms(Pv.stream_wait(
+          "[providers.fake]\nidle_timeout_sec = 0\n", "fake", "fake/m")), 90000),
+        U32.is_eq(Pv.wait_ms(Pv.stream_wait(
+          "[providers.fake]\nidle_timeout_sec = \"soon\"\n", "fake", "fake/m")), 90000)))
+    == True{} : Bool}
+
+# LAW: idle_timeout_sec under [providers.<id>] sets the wait of its
+# models, a model's own table wins, another provider keeps 90 s, and a
+# huge value is capped at a day.
+law provider_idle_timeout_set:
+  {Bool.and(U32.is_eq(Pv.wait_ms(Pv.stream_wait(
+        "[providers.fake]\nidle_timeout_sec = 600\n", "fake", "fake/m")), 600000),
+      Bool.and(U32.is_eq(Pv.wait_ms(Pv.stream_wait(
+          "[providers.fake]\nidle_timeout_sec = 600\n[models.\"fake/m\"]\nidle_timeout_sec = 5\n",
+          "fake", "fake/m")), 5000),
+        Bool.and(U32.is_eq(Pv.wait_ms(Pv.stream_wait(
+            "[providers.fake]\nidle_timeout_sec = 600\n", "mistral", "mistral/m")), 90000),
+          U32.is_eq(Pv.wait_ms(Pv.stream_wait(
+            "[providers.fake]\nidle_timeout_sec = 99999999\n", "fake", "fake/m")), 86400000))))
+    == True{} : Bool}
+
+# LAW: a streamed call that times out still retries, and its text names
+# the host, the limit and the key to raise, under its provider's table.
+law attempt_timeout_names_the_key:
+  {Pv.attempt_err_in("127.0.0.1:8080", Pv.Wait{"ollama", 5000}, Pv.NTimeout{})
+    == Pv.ARetry{0, "no answer from 127.0.0.1:8080 in 5 s (timeout) — a slow model or gateway? raise idle_timeout_sec under [providers.ollama] in ~/.bise/config.toml"}
+    : Pv.Attempt}
+
+# LAW: the other transport failures of a streamed call read as before.
+law attempt_err_in_others:
+  {Pv.attempt_err_in("api.example.com", Pv.Wait{"x", 5000}, Pv.NDns{})
+    == Pv.attempt_err("api.example.com", Pv.NDns{}) : Pv.Attempt}
+
 # LAW: a debug event is one JSON object on one line: ts, src, kind, then
 # the fields in order; strings are JSON-escaped (a newline stays \\n).
 law debug_event_line:

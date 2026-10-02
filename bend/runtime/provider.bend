@@ -368,7 +368,7 @@ def sse.body(+status: U32, +retry_after: String, +text: String,
 # a stream cut short keeps what it had received (the debug log shows
 # how far the reply got)
 def sse.done(rd: Rd, +status: U32, +retry_after: String, +ipath: String,
-    +host: String, fam: Api.Style) -> IO(Got):
+    +host: String, +w: Pvp.Wait, fam: Api.Style) -> IO(Got):
   match rd:
     case RdEnd{st, +parts}:
       do IO<Got>:
@@ -377,7 +377,7 @@ def sse.done(rd: Rd, +status: U32, +retry_after: String, +ipath: String,
     case RdErr{st, +parts, +e}:
       do IO<Got>:
         c : Unit <- Http.stream.close(st)
-        IO.pure(Got, Got{Pvp.attempt_err(host, net_of(e)), status,
+        IO.pure(Got, Got{Pvp.attempt_err_in(host, w, net_of(e)), status,
           sse.text(parts)})
     case RdStop{st, +parts}:
       do IO<Got>:
@@ -389,7 +389,7 @@ def sse.done(rd: Rd, +status: U32, +retry_after: String, +ipath: String,
 
 @unsafe
 def sse.head(sr: Http.Stream & Http.Res, +ipath: String, +host: String,
-    fam: Api.Style) -> IO(Got):
+    +w: Pvp.Wait, fam: Api.Style) -> IO(Got):
   match sr:
     case (st, res):
       match res:
@@ -397,25 +397,26 @@ def sse.head(sr: Http.Stream & Http.Res, +ipath: String, +host: String,
           do IO<Got>:
             rd : Rd <- sse.read(st, Nil{}, ipath)
             sse.done(rd, status, Http.header(h, "retry-after"), ipath, host,
-              fam)
+              w, fam)
 
 @unsafe
 def sse.opened(r: Result<&1, &1, Http.Err, Http.Stream>, +ipath: String,
-    +host: String, fam: Api.Style) -> IO(Got):
+    +host: String, +w: Pvp.Wait, fam: Api.Style) -> IO(Got):
   match r:
     case Fail{+e}:
-      IO.pure(Got, got_err(host, e))
+      IO.pure(Got, Got{Pvp.attempt_err_in(host, w, net_of(e)), 0, ""})
     case Done{st}:
-      sse.head(Http.stream.res(st), ipath, host, fam)
+      sse.head(Http.stream.res(st), ipath, host, w, fam)
 
+# the wait (Pvp.stream_wait): the provider's idle_timeout_sec, else 90 s
 @unsafe
 def sse.call(+url: String, hdrs: Map<&2, List<&2, String>>, +body: String,
-    fam: Api.Style) -> IO(Got):
+    +w: Pvp.Wait, fam: Api.Style) -> IO(Got):
   do IO<Got>:
     +ipath : String <- interrupt_path()
     r : Result<&1, &1, Http.Err, Http.Stream> <- Http.open.with("POST", url,
-      hdrs, body, Pvp.stream_step_ms())
-    sse.opened(r, ipath, Pvp.url_host(url), fam)
+      hdrs, body, Pvp.wait_ms(w))
+    sse.opened(r, ipath, Pvp.url_host(url), w, fam)
 
 # the whole reply at once (a family that does not stream)
 def whole.call(+url: String, hdrs: Map<&2, List<&2, String>>, +body: String,
@@ -427,18 +428,18 @@ def whole.call(+url: String, hdrs: Map<&2, List<&2, String>>, +body: String,
 
 @unsafe
 def call.by_style.pick(streams: Bool, st: Api.Style, +url: String,
-    hdrs: Map<&2, List<&2, String>>, +body: String) -> IO(Got):
+    hdrs: Map<&2, List<&2, String>>, +body: String, +w: Pvp.Wait) -> IO(Got):
   match streams:
     case True{}:
-      sse.call(url, hdrs, body, st)
+      sse.call(url, hdrs, body, w, st)
     case False{}:
       whole.call(url, hdrs, body, st)
 
 # the family says whether it streams (core/api.bend)
 @unsafe
 def call.by_style(+st: Api.Style, +url: String,
-    hdrs: Map<&2, List<&2, String>>, +body: String) -> IO(Got):
-  call.by_style.pick(Api.streams(st), st, url, hdrs, body)
+    hdrs: Map<&2, List<&2, String>>, +body: String, +w: Pvp.Wait) -> IO(Got):
+  call.by_style.pick(Api.streams(st), st, url, hdrs, body, w)
 
 # the attempt, into the session debug log when it is an incident
 def model_call.log(+call: Nat, +tries: Nat, +model: String, +url: String,
@@ -632,7 +633,9 @@ def model_call.try(fuel: Nat, +tries: Nat, n: Out, +request: String,
                 Api.with_bearer(bearer, key,
                   Api.with_cache_header(Pvp.cache_header(names), ckey,
                     Api.headers(st, Api.facts_betas(facts), key)))), Http.empty()))
-            +g : Got <- call.by_style(st, url, hdrs, body)
+            # a slow gateway or local model: its idle_timeout_sec
+            +g : Got <- call.by_style(st, url, hdrs, body,
+              Pvp.stream_wait(mfile, prov, String.concat([prov, "/", model])))
             lg : Unit <- model_call.log(call, tries, model, url, json, g)
             # the usage line names the full id (the TUI's catalog key)
             nu : Out <- usage_note(g, n, st, String.concat([prov, "/", model]), req)

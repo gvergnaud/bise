@@ -33,6 +33,9 @@ the injected <bise_state> block is not one):
   breaks with the family's error event; a whole reply gets a 500),
   badname (a final 400: the API refusing a tool name, BISE-293).
   Several markers fail in their order. `retry=S` sets Retry-After (1);
+- `[[slow: S]]`: every request for that message waits S seconds (a
+  float) before its first byte: a local model reading a long prompt, a
+  gateway holding the head (provider-timeout: idle_timeout_sec);
 - `[[fixture: NAME]]`: the first request for that message is answered
   with the recorded file tests/providers/<family>/NAME.sse (streamed) or
   NAME.json (whole), or NAME.<status>.json (an error with that status),
@@ -81,6 +84,7 @@ INNER = re.compile(r"\{\{(bash): (.*?)\}\}", re.S)
 THINK = re.compile(r"\[\[think: (.*?)\]\]", re.S)
 ERROR = re.compile(r"\[\[error: (\w+)(?: x(\d+))?(?: retry=(\d+))?\]\]")
 FIXTURE = re.compile(r"\[\[fixture: ([\w.-]+)\]\]")
+SLOW = re.compile(r"\[\[slow: ([\d.]+)\]\]")
 USAGE = {"input": 10, "cached": 2, "output": 5, "reasoning": 3}
 
 
@@ -646,6 +650,14 @@ class H(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+    def handle(self):
+        # a client that gave up ([[slow: S]] past its idle_timeout_sec)
+        # closed the socket: nothing to answer, no traceback
+        try:
+            super().handle()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
     def send(self, status, data, ctype="application/json", headers=None):
         self.send_response(status)
         self.send_header("content-type", ctype)
@@ -737,6 +749,9 @@ class H(http.server.BaseHTTPRequestHandler):
             seen = State.seen.get(key, 0)
             State.seen[key] = seen + 1
         turn = reply_for(conv, seen)
+        slow = SLOW.search(script_of(conv[idx]["text"])) if idx is not None else None
+        if slow:
+            time.sleep(float(slow.group(1)))
         model = body.get("model") or self.path.split("/models/")[-1].split(":")[0] or "fake"
         status = 200
         if turn["fixture"]:

@@ -69,6 +69,11 @@ pub struct Caps {
     /// (Claude Code's `apiKeyHelper`: a short-lived token); "" = none,
     /// the key comes from `key_env`
     pub key_command: String,
+    /// how long one read of a streamed reply may wait for data, in
+    /// seconds (the head, then each gap between two events): a slow
+    /// gateway or local model; 0 = the runtime's 90 s
+    /// (runtime/provider-pure.bend stream_wait)
+    pub idle_timeout_sec: u64,
 }
 
 /// The thinking modes of the Anthropic family.
@@ -118,6 +123,7 @@ pub const DEFAULT_CAPS: Caps = Caps {
     cache_header: String::new(),
     headers_env: String::new(),
     key_command: String::new(),
+    idle_timeout_sec: 0,
 };
 
 /// Caps as written in a table: a missing field comes from the level below
@@ -137,6 +143,7 @@ pub struct PartialCaps {
     pub cache_header: Option<String>,
     pub headers_env: Option<String>,
     pub key_command: Option<String>,
+    pub idle_timeout_sec: Option<u64>,
     /// prices (BISE-150), in [`Price`]'s unit
     pub input_price: Option<u64>,
     pub output_price: Option<u64>,
@@ -189,6 +196,7 @@ impl PartialCaps {
             cache_header: self.cache_header.clone().unwrap_or_else(|| base.cache_header.clone()),
             headers_env: self.headers_env.clone().unwrap_or_else(|| base.headers_env.clone()),
             key_command: self.key_command.clone().unwrap_or_else(|| base.key_command.clone()),
+            idle_timeout_sec: self.idle_timeout_sec.unwrap_or(base.idle_timeout_sec),
         }
     }
     fn price_over(&self, base: &Price) -> Price {
@@ -213,6 +221,7 @@ impl PartialCaps {
         self.cache_header = o.cache_header.clone().or(self.cache_header.take());
         self.headers_env = o.headers_env.clone().or(self.headers_env.take());
         self.key_command = o.key_command.clone().or(self.key_command.take());
+        self.idle_timeout_sec = o.idle_timeout_sec.or(self.idle_timeout_sec);
         self.input_price = o.input_price.or(self.input_price);
         self.output_price = o.output_price.or(self.output_price);
         self.cache_read_price = o.cache_read_price.or(self.cache_read_price);
@@ -859,6 +868,11 @@ fn cap_field(caps: &mut PartialCaps, k: &str, v: &toml::Value, where_: &str, war
             Some(n) => caps.max_output = Some(n),
             None => warn(bad("a number of tokens > 0")),
         },
+        // the runtime caps it at a day (provider-pure.bend idle_ms)
+        "idle_timeout_sec" => match int().filter(|n| *n <= 86_400) {
+            Some(n) => caps.idle_timeout_sec = Some(n),
+            None => warn(bad("a number of seconds, 1 to 86400")),
+        },
         "input_price" | "output_price" | "cache_read_price" | "cache_write_price" => {
             // USD per million tokens, stored in millionths of a dollar
             let usd = v.as_float().or_else(|| v.as_integer().map(|n| n as f64));
@@ -1332,6 +1346,9 @@ impl Setup {
             if a.max_output != b.max_output {
                 o.push_str(&format!("max_output = {}\n", a.max_output));
             }
+            if a.idle_timeout_sec != b.idle_timeout_sec {
+                o.push_str(&format!("idle_timeout_sec = {}\n", a.idle_timeout_sec));
+            }
             for (k, x, y) in [
                 ("vision", a.vision, b.vision),
                 ("reasoning", a.reasoning, b.reasoning),
@@ -1495,6 +1512,9 @@ fn caps_lines(o: &mut String, c: &Caps) {
     }
     if !c.key_command.is_empty() {
         o.push_str(&format!("key_command = {}\n", q(&c.key_command)));
+    }
+    if c.idle_timeout_sec > 0 {
+        o.push_str(&format!("idle_timeout_sec = {}\n", c.idle_timeout_sec));
     }
 }
 

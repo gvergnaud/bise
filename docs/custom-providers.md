@@ -66,6 +66,7 @@ model of the agents main starts.
 | `small_model` | a cheap model of this provider, for titles and summaries | none |
 | `key_command` | a shell command that prints the key, run before every call (below) | none |
 | `headers_env` | an env variable holding extra headers (below) | none |
+| `idle_timeout_sec` | how long bise waits for the server to send something, in seconds (below) | 90 |
 
 The key is sent as `Authorization: Bearer <key>` (`openai-chat`,
 `openai-responses`) or `x-api-key` (`anthropic`). With `key_env = ""`
@@ -136,6 +137,30 @@ key_env = ""
 context = 32768
 ```
 
+### A slow server: `idle_timeout_sec`
+
+bise streams every reply, and waits at most 90 s for the server to
+send something: the first byte, then each next piece. A local model on
+a slow machine can take longer than that to read a long prompt before
+its first word, and a gateway can hold the request while it queues.
+Then bise retries, and the error says:
+
+```
+no answer from localhost:11434 in 90 s (timeout) — a slow model or gateway? raise idle_timeout_sec under [providers.ollama] in ~/.bise/config.toml
+```
+
+Raise it for that provider only (seconds, 1 to 86400):
+
+```toml
+[providers.ollama]
+idle_timeout_sec = 600
+```
+
+It also works under one model (`[models."ollama/qwen3:32b"]`), and a
+lower value makes a stuck gateway fail sooner. It is a limit on
+silence, not on the whole reply: a long answer that keeps coming is
+never cut. Unset, every provider keeps 90 s.
+
 ## Changing a built-in provider
 
 The same tables change a built-in provider or model, key by key. For
@@ -172,6 +197,8 @@ opencode's `config.json` maps like this:
 | `npm: "@ai-sdk/anthropic"` | `api = "anthropic"` |
 | `models.<name>.limit.context` / `.output` | `[models."<id>/<name>"] context` / `max_output` |
 | `whitelist` / `blacklist` | not needed: any `<id>/<model>` works |
+| `options.chunkTimeout` / `headerTimeout` (ms) | `idle_timeout_sec` (seconds, one limit for both) |
+| `options.timeout` (whole request) | none: bise never cuts a reply that keeps coming |
 
 config.toml takes no key: it goes in `~/.bise/auth.json` (`bise login`),
 in the environment (`key_env`), or comes from a command (`key_command`).

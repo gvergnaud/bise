@@ -47,6 +47,11 @@
 #     headers_env = "ANTHROPIC_CUSTOM_HEADERS"
 #     key_command = "my-tool auth token"
 #   then model = "gateway/claude-opus-5-5".
+# A slow server (a local model reading a long prompt, a gateway that
+#   queues): idle_timeout_sec = how long one read of the streamed reply
+#   waits for data, the first byte then each gap between two events, in
+#   seconds (1 to 86400; unset: 90). Past it the call retries, and the
+#   error names this key. None built in.
 # Prices (BISE-150), USD per million tokens: input_price, output_price,
 #   cache_read_price, cache_write_price (the two cache ones default to
 #   input_price). Unset: the cost is not shown. The list prices, short
