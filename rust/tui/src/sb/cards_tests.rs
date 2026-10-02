@@ -693,6 +693,33 @@ fn an_answer_says_one_line_in_the_thread() {
     assert!(matches!(app.events.last(), Some(Ev::Info(t)) if t == "→ you → @docs : thanks"));
 }
 
+/// update-card: the new-release item (designer): the head alone as the
+/// title, `bise · v… is out` in the strip, the notes text, the running
+/// version dim; `3` opens the release page here and the item stays.
+#[test]
+fn the_new_release_item() {
+    let (mut app, _hub) = app_with_hub();
+    let text = "bise v2026.10.2-5 is out\nthe inbox keeps your place\n/update from any thread\nyou're on v2026.10.2-4\n\n1. update now · your agents keep running\n2. later\n3. release notes ↗";
+    let url = "https://github.com/gvergnaud/bise/releases/tag/v2026.10.2-5";
+    app.sb.cards = vec![Card { place: Some("release:bbb".into()), link: Some(url.into()), ..card(21, "update", "main", text) }];
+    let s = shape(&app.sb.cards[0]);
+    assert_eq!((s.title.as_str(), s.who.as_str(), s.summary.as_str()), ("bise v2026.10.2-5 is out", "bise", "v2026.10.2-5 is out"));
+    assert_eq!(s.options, ["update now · your agents keep running", "later", "release notes ↗"]);
+    assert!(matches!(s.parts.first(), Some(Part::Text(t)) if t == "the inbox keeps your place\n/update from any thread"));
+    assert!(matches!(s.parts.get(1), Some(Part::Evidence(t)) if t == "you're on v2026.10.2-4"));
+    // no notes: no body
+    let bare = card(22, "update", "main", "bise v2026.10.2-5 is out\nyou're on v2026.10.2-4\n\n1. update now · your agents keep running\n2. later\n3. release notes ↗");
+    let s = shape(&bare);
+    assert_eq!(s.parts.len(), 1);
+    assert!(matches!(s.parts.first(), Some(Part::Evidence(t)) if t == "you're on v2026.10.2-4"));
+    // 3: the page opens here, nothing sent, the item stays
+    open(&mut app);
+    crate::links::OPENED.with(|o| o.borrow_mut().clear());
+    assert!(pick_digit(&mut app, 21, 3));
+    crate::links::OPENED.with(|o| assert_eq!(*o.borrow(), [url.to_string()]));
+    assert!(app.sb.card_by_id(21).is_some());
+}
+
 /// pr-design §6.3: the ready-to-merge item, as the hub writes it. Its
 /// head line is the title, the facts dim; a digit answers with the digit
 /// (the hub merges, or files it); `2` opens the PR here and leaves it.

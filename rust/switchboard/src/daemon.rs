@@ -216,6 +216,9 @@ struct Shell {
     /// and the version already announced as ready.
     update_checked: Option<std::time::Instant>,
     update_told: Option<std::path::PathBuf>,
+    /// update-card: when the release channel was last checked (None: not
+    /// yet, the first tick checks).
+    release_checked: Option<std::time::Instant>,
     /// Agents whose REPL was found dead at boot in the middle of a turn
     /// (killed by a restart, a crash): once respawned on their session,
     /// they are told to continue where they left off.
@@ -924,6 +927,8 @@ impl Shell {
             Effect::Pr(e) => log_line(&self.opts.paths, &crate::forge::log_line(&e)),
             Effect::Merge { card, place, number, head, method } => self.merge_pr(card, place, number, head, method),
             Effect::Feature { token, op, name, agents } => self.feature(token, op, name, agents),
+            Effect::Update { card, id, version } => self.update_to(card, id, version),
+            Effect::UpdateLater { id } => versions::update_later(&id),
         }
     }
 
@@ -1615,6 +1620,7 @@ impl Shell {
                     write_json(c, &items);
                 }
             }
+            "version" if s("do") == "update" => self.release_check(Some(id)),
             "version" => {
                 let text = self.version_op(&v);
                 if let Some(c) = self.clients.get_mut(&id) {
@@ -2162,6 +2168,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         release: None,
         update_checked: None,
         update_told: None,
+        release_checked: None,
         resume_turn: BTreeSet::new(),
         recorders: BTreeMap::new(),
         reload_id: String::new(),
@@ -2282,6 +2289,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
                     sh.plugins_changed(false);
                     sh.switch_idle_repls();
                     sh.announce_update();
+                    sh.release_check(None);
                     sh.plan_prs();
                     // computer use (design §7.3): each stop, one line in main's feed
                     for l in sh.cu.poll() {

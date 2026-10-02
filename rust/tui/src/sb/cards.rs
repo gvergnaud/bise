@@ -53,6 +53,9 @@ pub(crate) struct Card {
     /// place's PR.
     pub(super) place: Option<String>,
     pub(super) pr: Option<u64>,
+    /// update-card: the release page an update item's `3` opens (the
+    /// hub's snapshot).
+    pub(super) link: Option<String>,
     /// dev-flow §5.1: a feature's merge item asks once more before its
     /// `3 drop the branch` (`drop computer-use? 14 commits go.`); the
     /// TUI's, kept across snapshots by `Sb::feature_drop_ask`.
@@ -99,6 +102,7 @@ impl Default for Card {
             look: None,
             place: None,
             pr: None,
+            link: None,
             asking: false,
         }
     }
@@ -492,7 +496,7 @@ fn always_option(rerun: bool, always: &[String], body: &[String]) -> String {
 /// `choice_kind`): a digit answers them (the hub acts, then closes the
 /// item); typed words go to main.
 pub(super) fn choice_kind(kind: &str) -> bool {
-    matches!(kind, "merge" | "feature_try" | "feature_merge")
+    matches!(kind, "merge" | "feature_try" | "feature_merge" | "update")
 }
 
 /// A hub item, as the hub writes it: its head line (`#409 is ready to
@@ -527,13 +531,30 @@ fn choice_shape(c: &Card) -> Shape {
                 l.replace('−', minus)
             }));
         }
+    } else if c.kind == "update" {
+        // update-card (designer): the notes are text, the running version
+        // (the last line) is dim; no link line, `3` opens it
+        let rest: Vec<&str> = rest.iter().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
+        if let Some((on, notes)) = rest.split_last() {
+            if !notes.is_empty() {
+                parts.push(Part::Text(notes.join("\n")));
+            }
+            parts.push(Part::Evidence(on.to_string()));
+        }
     } else {
         parts.push(Part::Text(rest.join("\n").trim().to_string()));
     }
     if !c.note.is_empty() {
         parts.push(Part::Note(c.note.clone()));
     }
+    let options: Vec<String> = if theme::ascii_mode() { options.iter().map(|o| o.replace('↗', "->")).collect() } else { options };
     let short = short_labels(&options);
+    if c.kind == "update" {
+        // the hub's own news, not an agent's: the head alone
+        // the row: `bise · v0.0.2 is out`
+        let summary = head.strip_prefix("bise ").unwrap_or(&head).to_string();
+        return Shape::plain(head.clone(), "bise".into(), summary, parts, options, short, Enter::Answer);
+    }
     Shape::plain(format!("{}: {}", c.agent, head), c.agent.clone(), head, parts, options, short, Enter::Answer)
 }
 
@@ -973,6 +994,13 @@ fn pick(app: &mut App, id: u64, i: usize) -> bool {
         // `open it on GitHub`: here, and the item stays (pr-design §6.3)
         if let Some(url) = merge_link(&app.sb, &c) {
             crate::links::open(&url);
+        }
+        return true;
+    }
+    if c.kind == "update" && n == 3 {
+        // update-card `release notes ↗`: here, and the item stays
+        if let Some(url) = c.link.as_deref() {
+            crate::links::open(url);
         }
         return true;
     }

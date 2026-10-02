@@ -589,6 +589,12 @@ pub(super) fn dispatch(app: &mut App, raw: &str) {
             with_feed(app, &s("agent"), |app| prepend_page(app, before, lines));
         }
         "state" => apply_state(app, &v),
+        // update-card: `/update` with a newer release opens its item here
+        "open_card" => {
+            if let Some(id) = v.get("id").and_then(|x| x.as_u64()) {
+                cards::open_view(app, Some(id));
+            }
+        }
         "notice" => {
             for l in s("text").lines() {
                 push_event(&mut app.events, &mut app.cache, Ev::Info(l.to_string()));
@@ -869,6 +875,7 @@ fn apply_state(app: &mut App, v: &Value) {
                     look: None,
                     place: x.get("place").and_then(|p| p.as_str()).map(String::from),
                     pr: x.get("pr").and_then(|n| n.as_u64()),
+                    link: x.get("link").and_then(|p| p.as_str()).map(String::from),
                     // the drop's second ask stays across snapshots
                     asking: sb.feature_drop_ask == x.get("id").and_then(|i| i.as_u64()),
                 })
@@ -1047,6 +1054,8 @@ pub(crate) fn handle_input(app: &mut App, v: &str) -> Vec<Ev> {
             let arg = typed.split_whitespace().nth(1).unwrap_or("");
             sb.send(json!({"op": "version", "do": "restart", "to": arg}));
         }
+        // update-card: the release channel now (the new-release item)
+        "/update" => sb.send(json!({"op": "version", "do": "update"})),
         "/version" => {
             let arg = typed.split_whitespace().nth(1).unwrap_or("");
             let req = match arg {

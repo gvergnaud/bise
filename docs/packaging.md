@@ -364,6 +364,22 @@ repo stays private for now (friends are collaborators), public later.
   today's local build (this Mac's arch only, `--add` another archive),
   make-release.sh, check-release.py, `gh release create` (published, or
   `--draft`).
+- **What's new** (update-card): every release carries 3-5 plain lines
+  for the users. Whoever cuts the release writes them in a file (one
+  line each; blank lines and `#` comments dropped; what users can do now,
+  no commit hashes) and passes it: `publish-release.sh vX.Y.Z --publish
+  --whats-new <file>` (CI path: latest.json is re-uploaded with a
+  `"notes"` list, and the lines go on top of the GitHub notes), or
+  `--local ... --whats-new <file>` (make-release.sh `--whats-new`).
+  Forgotten, or to fix them: `publish-release.sh vX.Y.Z --whats-new
+  <file>` on the published release. An installed bise checks latest.json
+  at its hub's start and every hour (`bise update --manifest`, one small
+  GET; `BISE_RELEASE_CHECK_SECS`; off with `BISE_NO_UPDATE=1`; never in
+  bise's source tree) and, for a newer release, opens ONE quiet inbox
+  item: `bise vX.Y.Z is out`, the lines, `you're on v…`, then `1 update
+  now` (`bise update` + a switch onto it, probation, agents kept), `2
+  later` (not again for this release), `3 release notes ↗`. `/update`
+  checks now. No notes: the item has no body.
 - **Private repo**: a plain download of an asset answers 404. install.sh
   and `bise update` (the daily check, `/restart latest`) then ask
   `gh release download` (the GitHub CLI, `gh auth login`), else the API

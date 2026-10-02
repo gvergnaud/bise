@@ -708,10 +708,15 @@ fn card_row(c: &Card, n: usize, num_style: Style, w: usize, bg: Option<Color>) -
     let lead = num.width() + g.width() + 1;
     let room = w.saturating_sub(lead + 1);
     let first = c.text.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("");
+    // update-card: bise's own news, `bise  v0.0.2 is out`
+    let (who, first) = match c.kind.as_str() {
+        "update" => ("bise", first.strip_prefix("bise ").unwrap_or(first)),
+        _ => (c.agent.as_str(), first),
+    };
     let agent = if first.is_empty() || room < 12 {
-        fit(&c.agent, room)
+        fit(who, room)
     } else {
-        fit(&c.agent, room.saturating_sub(7).max(room / 2))
+        fit(who, room.saturating_sub(7).max(room / 2))
     };
     let rest = room.saturating_sub(agent.width() + 2);
     let title = if rest >= 3 { fit(first, rest) } else { String::new() };
@@ -1308,6 +1313,7 @@ mod tests {
             look: None,
             place: None,
             pr: None,
+            link: None,
             asking: false,
         });
         sb.activity.insert("auth-fix".into());

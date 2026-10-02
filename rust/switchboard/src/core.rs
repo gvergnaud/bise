@@ -431,6 +431,16 @@ pub enum Input {
     },
     /// A feature step ended (dev-flow §5.1, the daemon's thread).
     Feature(FeatureDone),
+    /// update-card: a check of the release channel (the daemon's, at
+    /// the start and every hour, or `/update`).
+    Release(update_card::ReleaseCheck),
+    /// update-card: the end of `1` on an update item (`Effect::Update`):
+    /// Ok, the switch started; Err, why it failed (nothing changed).
+    Updated {
+        card: u64,
+        version: String,
+        res: Result<(), String>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -554,6 +564,18 @@ pub enum Effect {
         name: String,
         /// The feature's agents (live), each with its worktree.
         agents: Vec<(String, String)>,
+    },
+    /// update-card: the user's `1` on an update item: the daemon installs
+    /// release `id` (`bise update` when needed), switches onto it, and
+    /// answers with `Input::Updated` (`version`: its name, for the words).
+    Update {
+        card: u64,
+        id: String,
+        version: String,
+    },
+    /// update-card: `2 later`: the daemon keeps the id, no item again for it.
+    UpdateLater {
+        id: String,
     },
 }
 
@@ -749,6 +771,8 @@ pub struct Hub {
     /// pr-merge (pr-design §6.3): the ready-to-merge items' runtime side
     /// (merge.rs).
     merges: merge::Merges,
+    /// update-card: the new-release item's runtime side (update_card.rs).
+    updates: update_card::Updates,
     dirty: bool,
     link: CoreLink,
     /// How to bring sb-core back when it dies (the daemon's; none: a
@@ -908,6 +932,7 @@ impl Hub {
             pr_news: Default::default(),
             pr_bots: Vec::new(),
             merges: merge::Merges::default(),
+            updates: update_card::Updates::default(),
             dirty: false,
             link,
             revive: None,
@@ -1612,7 +1637,13 @@ impl Hub {
                     "text": c.text,
                     "for_msg": c.for_msg,
                     "age_ms": now.saturating_sub(c.created_ms),
-                    "note": if c.kind == "merge" { self.merge_note(c) } else { self.card_note(c) },
+                    "note": match c.kind.as_str() {
+                        "merge" => self.merge_note(c),
+                        update_card::KIND => self.update_note(c),
+                        _ => self.card_note(c),
+                    },
+                    // update-card: the release page its `3` opens
+                    "link": if c.kind == update_card::KIND { self.update_link(c) } else { None },
                     // a hub item's place and PR (pr-merge): the TUI ties
                     // it to the place's box and opens its link
                     "place": c.place,
@@ -1790,6 +1821,8 @@ impl Hub {
                 self.core(&mut fx, env, None, json!({"t": "confirm_close", "card": card, "res": res}))
             }
             Input::Merged { card, place, number, res } => self.merged(&mut fx, env, card, &place, number, res),
+            Input::Release(c) => self.release_in(&mut fx, env, c),
+            Input::Updated { card, version, res } => self.updated(&mut fx, env, card, &version, res),
         }
         self.refresh_contexts(&mut fx, env.now());
         if self.dirty {
@@ -2536,6 +2569,9 @@ plain text        message to the agent in view (main by default)
 
 #[path = "merge.rs"]
 mod merge;
+
+#[path = "update_card.rs"]
+pub mod update_card;
 
 #[cfg(test)]
 #[path = "core_tests.rs"]

@@ -61,6 +61,7 @@ pub(crate) const COMMANDS: &[Cmd] = &[
         desc: "reload bise, nothing lost (a <commit>: bise's own sources only, built then switched): /restart [current|<commit>]",
         args: &[Arg::DevVersion(&[("current", "the version running now, nothing built")])],
     },
+    Cmd { name: "/update", desc: "look for a new bise release now, and install it from its item", args: &[] },
     Cmd {
         name: "/version",
         desc: "switchboard versions: /version [<commit>|tree|back]",

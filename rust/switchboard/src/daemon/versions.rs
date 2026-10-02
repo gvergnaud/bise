@@ -3,6 +3,7 @@
 //! and the detached switcher that replaces this hub.
 
 use super::{log_line, Msg, Shell};
+use crate::core::{ClientId, Input};
 use bise_home::release::Install;
 use crate::model::MAIN;
 use crate::paths::Paths;
@@ -91,6 +92,109 @@ fn release_line(inst: &Install, running_id: &str) -> Option<String> {
         format!("latest release: {} ({}), installed — /restart switches to it", name, id)
     } else {
         format!("latest release: {} ({}) — /restart latest downloads it and switches", name, id)
+    })
+}
+
+/// update-card: how often an installed hub checks the release channel
+/// (`BISE_RELEASE_CHECK_SECS`, else an hour: several releases a day).
+fn release_every() -> std::time::Duration {
+    let s = std::env::var("BISE_RELEASE_CHECK_SECS").ok().and_then(|s| s.trim().parse().ok()).unwrap_or(3600);
+    std::time::Duration::from_secs(s)
+}
+
+/// The release the user said `later` to (one id, every hub's).
+fn later_file(home: &bise_home::Home) -> PathBuf {
+    home.cache_dir().join("update-later")
+}
+
+/// update-card `2 later`: no item again for release `id`.
+pub(super) fn update_later(id: &str) {
+    let home = bise_home::Home::from_env();
+    let _ = std::fs::create_dir_all(home.cache_dir());
+    let _ = std::fs::write(later_file(&home), id);
+}
+
+/// The last non-empty line of a command's output, without its
+/// `bise update: ` prefix.
+fn last_line(out: &str) -> String {
+    let l = out.lines().rev().map(str::trim).find(|l| !l.is_empty()).unwrap_or("it failed");
+    // the CLI's failure glyph (Style::fail)
+    let l = l.trim_start_matches(['✗', '×']).trim_start();
+    l.split_once(" update: ").filter(|(a, _)| !a.contains(' ')).map_or(l, |(_, b)| b).to_string()
+}
+
+/// The id of the latest release known (`~/.bise/cache/latest.json`).
+fn manifest_id() -> Option<String> {
+    let text = std::fs::read_to_string(bise_home::Home::from_env().release_manifest()).ok()?;
+    let v: Value = serde_json::from_str(&text).ok()?;
+    v.get("id").and_then(|x| x.as_str()).map(String::from)
+}
+
+/// Where a release's page is: the channel's GitHub repo, else bise's.
+fn release_page_base(inst: &Install) -> String {
+    let env = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
+    inst.dist_url(&env)
+        .and_then(|base| bise_home::release::github_asset(&bise_home::release::resolve_url(&base, bise_home::release::MANIFEST)))
+        .map(|a| format!("{}/{}/releases/tag/", a.origin, a.repo))
+        .unwrap_or_else(|| "https://github.com/gvergnaud/bise/releases/tag/".into())
+}
+
+/// Most lines of notes the item shows, and their width.
+const NOTES_MAX: usize = 5;
+const NOTE_WIDTH: usize = 120;
+
+/// update-card: the item's facts from the cached `latest.json` (`notes`:
+/// a list of lines or one text, from publish-release.sh --whats-new), the
+/// running version (its id and VERSION `built=`), the release names seen
+/// (`names`: id -> name), the `later` id and the release page's base.
+fn news_of(
+    manifest: &str,
+    running_id: &str,
+    running_built: &str,
+    names: &serde_json::Map<String, Value>,
+    later: Option<String>,
+    page: &str,
+) -> Option<crate::core::update_card::ReleaseNews> {
+    let v: Value = serde_json::from_str(manifest).ok()?;
+    let s = |k: &str| v.get(k).and_then(|x| x.as_str()).map(str::trim).filter(|x| !x.is_empty()).map(String::from);
+    let id = s("id")?;
+    let version = s("version").unwrap_or_else(|| id.clone());
+    let rel = bise_home::release::Release {
+        version: version.clone(),
+        id: id.clone(),
+        url: String::new(),
+        sha256: String::new(),
+        built: s("built"),
+    };
+    let built = Some(running_built).filter(|b| !b.is_empty());
+    let newer = !running_id.is_empty() && bise_home::release::is_update(&rel, running_id, built);
+    let notes: Vec<String> = match v.get("notes") {
+        Some(Value::Array(a)) => a.iter().filter_map(|x| x.as_str()).map(String::from).collect(),
+        Some(Value::String(t)) => t.lines().map(String::from).collect(),
+        _ => Vec::new(),
+    };
+    let notes = notes
+        .iter()
+        .map(|l| l.trim().trim_start_matches(['-', '*', '•']).trim())
+        .filter(|l| !l.is_empty())
+        .take(NOTES_MAX)
+        .map(|l| clip(l, NOTE_WIDTH))
+        .collect();
+    let tag = s("tag").unwrap_or_else(|| if version == id { id.clone() } else { format!("v{}", version) });
+    let running = if running_id == id {
+        version.clone()
+    } else {
+        names.get(running_id).and_then(|x| x.as_str()).unwrap_or(running_id).to_string()
+    };
+    Some(crate::core::update_card::ReleaseNews {
+        url: format!("{}{}", page, tag),
+        id,
+        version,
+        notes,
+        running_id: running_id.to_string(),
+        running,
+        newer,
+        later,
     })
 }
 
@@ -576,12 +680,112 @@ impl Shell {
             return;
         }
         self.update_told = Some(cur.clone());
+        // update-card: the latest release's item says it already
+        if manifest_id().is_some_and(|id| crate::switch::id_of(&cur) == id) {
+            return;
+        }
         let text = format!(
             "bise {} is installed and ready: /restart switches this hub to it, and so does launching bise again (agents kept)",
             crate::switch::id_of(&cur)
         );
         self.feed(MAIN, &format!("sb info : {}", wire_escape(&text)));
         self.broadcast_versions();
+    }
+
+    /// update-card: check the release channel (`bise update --manifest`,
+    /// on a thread), then give the hub what is known (`Input::Release`):
+    /// at the start and every hour on the tick (`asked` None), or now
+    /// for `/update` (it answers that client). Only an installed bise:
+    /// never bise's source tree; the tick never with `BISE_NO_UPDATE=1`.
+    pub(super) fn release_check(&mut self, asked: Option<ClientId>) {
+        let root = &self.opts.app_root;
+        let Some(inst) = Install::of_root(root) else {
+            if let Some(c) = asked.and_then(|c| self.clients.get_mut(&c)) {
+                let text = "/update updates an installed bise: this one runs from bise's source tree (/restart builds and runs HEAD)";
+                super::write_json(c, &json!({"ev": "notice", "text": text}));
+            }
+            return;
+        };
+        if asked.is_none() {
+            let off = std::env::var(bise_home::release::NO_UPDATE_ENV).is_ok_and(|v| !v.is_empty() && v != "0");
+            if off || self.release_checked.is_some_and(|t| t.elapsed() < release_every()) {
+                return;
+            }
+            self.release_checked = Some(std::time::Instant::now());
+        }
+        let v = crate::switch::version_info(root);
+        let get = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
+        let (running_id, running_built) = (get("id"), get("built"));
+        let (exe, tx) = (self.opts.exe.clone(), self.tx.clone());
+        std::thread::spawn(move || {
+            let out = Command::new(&exe).args(["update", "--manifest"]).stdin(Stdio::null()).output();
+            let error = match &out {
+                Ok(o) if o.status.success() => None,
+                Ok(o) => Some(last_line(&String::from_utf8_lossy(&o.stderr))),
+                Err(e) => Some(format!("{}: {}", exe.display(), e)),
+            };
+            let home = bise_home::Home::from_env();
+            let later = std::fs::read_to_string(later_file(&home)).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+            let names_path = home.cache_dir().join("release-names.json");
+            let mut names: serde_json::Map<String, Value> = std::fs::read_to_string(&names_path)
+                .ok()
+                .and_then(|t| serde_json::from_str(&t).ok())
+                .unwrap_or_default();
+            let page = release_page_base(&inst);
+            let news = std::fs::read_to_string(home.release_manifest())
+                .ok()
+                .and_then(|t| news_of(&t, &running_id, &running_built, &names, later, &page));
+            // the names of the releases seen, so the item can say which
+            // one runs (VERSION has no release name)
+            if let Some(n) = news.as_ref().filter(|n| n.version != n.id && !names.contains_key(&n.id)) {
+                names.insert(n.id.clone(), json!(n.version));
+                let _ = std::fs::write(&names_path, Value::Object(names).to_string());
+            }
+            let _ = tx.send(Msg::In(Input::Release(crate::core::update_card::ReleaseCheck { news, asked, error })));
+        });
+    }
+
+    /// update-card: the user's `1` on an update item: `bise update` when
+    /// release `id` is not installed yet, then a switch onto it (the
+    /// switcher's probation rolls back a version that does not come up).
+    /// Never blocks the hub; the answer is `Input::Updated`.
+    pub(super) fn update_to(&mut self, card: u64, id: String, version: String) {
+        let Some(inst) = Install::of_root(&self.opts.app_root) else {
+            let res = Err("this bise is not an installed one".into());
+            return self.step(Input::Updated { card, version, res });
+        };
+        let (paths, exe, tx) = (self.opts.paths.clone(), self.opts.exe.clone(), self.tx.clone());
+        let running = self.opts.app_root.canonicalize().unwrap_or_else(|_| self.opts.app_root.clone());
+        std::thread::spawn(move || {
+            let res = (|| {
+                if crate::switch::switch_running(&paths) {
+                    return Err("a version switch is already running".to_string());
+                }
+                let dir = match inst.find(&id) {
+                    Some(i) => i.dir,
+                    None => {
+                        let out = Command::new(&exe).arg("update").stdin(Stdio::null()).output().map_err(|e| format!("bise update: {}", e))?;
+                        let said = last_line(&format!(
+                            "{}\n{}",
+                            String::from_utf8_lossy(&out.stdout),
+                            String::from_utf8_lossy(&out.stderr)
+                        ));
+                        // bise update may have found an even newer one
+                        inst.find(&id)
+                            .map(|i| i.dir)
+                            .or_else(|| inst.current().filter(|c| *c != running))
+                            .ok_or(if out.status.success() { format!("{} was not installed", id) } else { said })?
+                    }
+                };
+                if dir == running {
+                    return Err("it is the version running now".to_string());
+                }
+                log_line(&paths, &format!("update-card: switching to {}", dir.display()));
+                spawn_switcher(&paths, &exe, &dir, Switcher::Switch);
+                Ok(())
+            })();
+            let _ = tx.send(Msg::In(Input::Updated { card, version, res }));
+        });
     }
 
     fn start_switch(&self, to: &Path) {
@@ -655,6 +859,45 @@ mod tests {
         assert_eq!(lines[0].chars().count(), 100);
         assert!(lines[0].starts_with("abc1234 é") && lines[0].ends_with('…'));
         assert_eq!(lines[1], "def5678 short");
+    }
+
+    #[test]
+    fn the_release_news_from_latest_json() {
+        use super::news_of;
+        let names: serde_json::Map<String, serde_json::Value> =
+            serde_json::from_str(r#"{"aaa": "2026.10.2-4"}"#).unwrap();
+        let page = "https://github.com/o/r/releases/tag/";
+        let m = r#"{"version": "2026.10.2-5", "id": "bbb", "built": "2026-10-02T18:00:00Z",
+            "notes": ["- the inbox keeps your place", "", "* /update from any thread", "3", "4", "5", "6"],
+            "targets": {}}"#;
+        let n = news_of(m, "aaa", "2026-10-02T12:00:00Z", &names, None, page).unwrap();
+        assert!(n.newer);
+        assert_eq!((n.id.as_str(), n.version.as_str(), n.running.as_str()), ("bbb", "2026.10.2-5", "2026.10.2-4"));
+        assert_eq!(n.notes, ["the inbox keeps your place", "/update from any thread", "3", "4", "5"]);
+        assert_eq!(n.url, "https://github.com/o/r/releases/tag/v2026.10.2-5");
+        // the same version: nothing new; its name is the manifest's
+        let n = news_of(m, "bbb", "2026-10-02T18:00:00Z", &names, None, page).unwrap();
+        assert!(!n.newer);
+        assert_eq!(n.running, "2026.10.2-5");
+        // an older release than the running build: not newer
+        assert!(!news_of(m, "ccc", "2026-10-03T00:00:00Z", &names, None, page).unwrap().newer);
+        // a running version never named: its id; notes as one text; later kept
+        let m2 = r#"{"version": "2026.10.2-5", "id": "bbb", "notes": "one\ntwo"}"#;
+        let n = news_of(m2, "zzz", "", &names, Some("bbb".into()), page).unwrap();
+        assert_eq!((n.running.as_str(), n.notes.len(), n.later.as_deref()), ("zzz", 2, Some("bbb")));
+        // no notes: none
+        let m3 = r#"{"id": "bbb"}"#;
+        let n = news_of(m3, "aaa", "", &names, None, page).unwrap();
+        assert!(n.notes.is_empty() && n.newer);
+        assert_eq!(n.url, "https://github.com/o/r/releases/tag/bbb");
+        assert!(news_of("not json", "aaa", "", &names, None, page).is_none());
+    }
+
+    #[test]
+    fn the_last_line_of_bise_update() {
+        assert_eq!(super::last_line("downloading…\nbise update: cannot reach github.com\n\n"), "cannot reach github.com");
+        assert_eq!(super::last_line("✗ bise update: checksum mismatch for x.tar.gz"), "checksum mismatch for x.tar.gz");
+        assert_eq!(super::last_line(""), "it failed");
     }
 
     use super::version_allowed;

@@ -15,6 +15,10 @@
 //! opens Switchboard or a session; never blocks the start; off with
 //! `BISE_NO_UPDATE=1`.
 //!
+//! `bise update --manifest` (update-card): the hub's check, at its start
+//! and every hour: fetch `latest.json` into the cache, nothing else (no
+//! stamp, no download, no output); the hub shows the new-release item.
+//!
 //! A private GitHub repo (BISE-217): a plain download of a release asset
 //! gets a 404, so [`fetch_file`] asks `gh release download` (the GitHub
 //! CLI, logged in), then the API with `GH_TOKEN`/`GITHUB_TOKEN`; neither:
@@ -276,18 +280,22 @@ enum Mode {
     Install,
     Check,
     Background,
+    /// the hub's check (update-card): the manifest only
+    Manifest,
 }
 
 /// `bise update [--check]`; `--background`: the daily check (quiet).
 pub(crate) fn main(args: &[String]) -> i32 {
-    let mode = if args.iter().any(|a| a == "--background") {
+    let mode = if args.iter().any(|a| a == "--manifest") {
+        Mode::Manifest
+    } else if args.iter().any(|a| a == "--background") {
         Mode::Background
     } else if args.iter().any(|a| a == "--check") {
         Mode::Check
     } else {
         Mode::Install
     };
-    if let Some(a) = args.iter().find(|a| !matches!(a.as_str(), "--background" | "--check")) {
+    if let Some(a) = args.iter().find(|a| !matches!(a.as_str(), "--background" | "--check" | "--manifest")) {
         eprintln!("{}", Style::stderr().fail(&format!("unknown flag {}: {} update [--check]", a, crate::version::cmd_name())));
         return 2;
     }
@@ -332,6 +340,13 @@ fn run(mode: Mode, say: &dyn Fn(String)) -> Result<(), String> {
     )?;
     let home = bise_home::Home::from_env();
     let _ = std::fs::create_dir_all(home.cache_dir());
+    if mode == Mode::Manifest {
+        // the hub's check: the manifest only, for its item (a bad one is
+        // not kept: the last good one stays)
+        let text = fetch_text(&format!("{}/{}", base, release::MANIFEST))?;
+        release::parse_manifest(&text, &host_target())?;
+        return std::fs::write(home.release_manifest(), &text).map_err(|e| format!("{}: {}", home.release_manifest().display(), e));
+    }
     let _ = std::fs::write(home.update_stamp(), now());
     let text = fetch_text(&format!("{}/{}", base, release::MANIFEST))?;
     let target = host_target();

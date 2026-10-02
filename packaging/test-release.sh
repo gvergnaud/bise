@@ -93,7 +93,7 @@ case "$out" in *"$ID1 is up to date"*) ok "update --check: up to date" ;; *) ko 
 
 echo "== a hub on release 1"
 mkdir -p "$WS" && (cd "$WS" && git init -q && echo x > README.md && git add README.md \
-  && git -c user.name=t -c user.email=t@t commit -qm init)
+  && git -c user.name=t -c user.email=t@t -c commit.gpgsign=false commit -qm init)
 (cd "$WS" && E BISE_NO_UPDATE=1 MISTRAL_API_KEY=fake "$BIN" sbd --workspace "$WS" </dev/null >/dev/null 2>"$WORK/hub.err" &)
 state=""
 hub_up() { state="$(ls -d "$T"/.bise/hubs/pr-ws-* 2>/dev/null | head -n 1)"; [ -n "$state" ] && [ -S "$state/hub.sock" ]; }

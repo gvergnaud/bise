@@ -2610,6 +2610,99 @@ mod prs {
         assert_eq!(t.status("dark"), Status::Archived);
     }
 
+    fn release(id: &str, newer: bool, later: Option<&str>) -> Input {
+        use crate::core::update_card::{ReleaseCheck, ReleaseNews};
+        Input::Release(ReleaseCheck {
+            news: Some(ReleaseNews {
+                id: id.into(),
+                version: format!("2026.10.2-{}", id),
+                notes: vec!["the inbox keeps your place".into(), "/update from any thread".into()],
+                url: format!("https://github.com/o/r/releases/tag/v2026.10.2-{}", id),
+                running_id: "4".into(),
+                running: "2026.10.2-4".into(),
+                newer,
+                later: later.map(String::from),
+            }),
+            asked: None,
+            error: None,
+        })
+    }
+
+    fn update_cards(t: &T) -> Vec<Card> {
+        t.hub.st.open_cards().filter(|c| c.kind == "update").cloned().collect()
+    }
+
+    #[test]
+    fn the_new_release_item() {
+        let mut t = T::new();
+        // the running version is the latest: no item
+        t.go(release("4", false, None));
+        assert!(update_cards(&t).is_empty());
+        // a newer one: one item, the user's, quiet
+        t.go(release("5", true, None));
+        let cs = update_cards(&t);
+        assert_eq!(cs.len(), 1, "{:?}", t.hub.st.cards);
+        let c = &cs[0];
+        assert_eq!(c.place.as_deref(), Some("release:5"));
+        assert_eq!(
+            c.text,
+            "bise v2026.10.2-5 is out\nthe inbox keeps your place\n/update from any thread\nyou're on v2026.10.2-4\n\n1. update now · your agents keep running\n2. later\n3. release notes ↗"
+        );
+        let snap = t.hub.snapshot(2_000);
+        let sc = snap["cards"].as_array().unwrap().iter().find(|x| x["kind"] == "update").cloned().unwrap();
+        assert_eq!(sc["link"], json!("https://github.com/o/r/releases/tag/v2026.10.2-5"));
+        // the next check: still one
+        t.go(release("5", true, None));
+        assert_eq!(update_cards(&t).iter().map(|c| c.id).collect::<Vec<_>>(), [c.id]);
+        // `3`: the TUI opened the page, the item stays
+        t.user(MAIN, &format!("/answer {} 3", c.id));
+        assert_eq!(update_cards(&t).len(), 1);
+        // `2 later`: closed, kept by the daemon, not asked again for 5
+        let fx = t.user(MAIN, &format!("/answer {} 2", c.id));
+        assert!(fx.iter().any(|e| matches!(e, Effect::UpdateLater { id } if id == "5")), "{:?}", fx);
+        assert_eq!(closed_as(&t, c.id).as_deref(), Some("later"));
+        t.go(release("5", true, Some("5")));
+        assert!(update_cards(&t).is_empty());
+        // a check that read the daemon's file before `later` was written
+        t.go(release("5", true, None));
+        assert!(update_cards(&t).is_empty());
+        // the next release asks again
+        t.go(release("6", true, Some("5")));
+        let id = update_cards(&t)[0].id;
+        // `1`: the daemon updates; the item stays, `updating…`; twice: once
+        let fx = t.user(MAIN, &format!("/answer {} 1", id));
+        assert!(fx.iter().any(|e| matches!(e, Effect::Update { id: r, version, .. } if r == "6" && version == "v2026.10.2-6")), "{:?}", fx);
+        let fx = t.user(MAIN, &format!("/answer {} 1", id));
+        assert!(!fx.iter().any(|e| matches!(e, Effect::Update { .. })));
+        let note = |t: &T| t.hub.snapshot(3_000)["cards"].as_array().unwrap().iter().find(|x| x["kind"] == "update").map(|x| x["note"].clone());
+        assert_eq!(note(&t), Some(json!("updating to v2026.10.2-6…")));
+        // failed: closed, main told, the running version stays
+        let fx = t.go(Input::Updated { card: id, version: "v2026.10.2-6".into(), res: Err("cannot download the release.".into()) });
+        assert!(
+            has_line(&fx, MAIN, "couldn't update to v2026.10.2-6, you're still on v2026.10.2-4: cannot download the release"),
+            "{:?}",
+            fx
+        );
+        assert_eq!(closed_as(&t, id).as_deref(), Some("update failed"));
+        // asked again at the next check; `1` works: main told, the item
+        // stays until the new hub runs it
+        t.go(release("6", true, None));
+        let id = update_cards(&t)[0].id;
+        t.user(MAIN, &format!("/answer {} 1", id));
+        let fx = t.go(Input::Updated { card: id, version: "v2026.10.2-6".into(), res: Ok(()) });
+        assert!(has_line(&fx, MAIN, "updated to v2026.10.2-6. switching now, your agents keep running."), "{:?}", fx);
+        assert_eq!(update_cards(&t).len(), 1);
+        // the new hub runs 6: the item closes
+        let mut now = release("6", false, None);
+        if let Input::Release(c) = &mut now {
+            let n = c.news.as_mut().unwrap();
+            n.running_id = "6".into();
+        }
+        t.go(now);
+        assert!(update_cards(&t).is_empty());
+        assert_eq!(closed_as(&t, id).as_deref(), Some("updated"));
+    }
+
     #[test]
     fn a_merge_item_goes_when_github_merges_it_and_words_go_to_main() {
         let mut t = T::new();

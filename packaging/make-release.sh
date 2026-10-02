@@ -3,18 +3,23 @@
 # a host serves as is, and what `curl -fsSL <url>/install.sh | sh` and
 # `bise update` read.
 #
-#   make-release.sh --out <dir> [--url <base url>] [--version <name>] <tarball>...
+#   make-release.sh --out <dir> [--url <base url>] [--version <name>]
+#       [--whats-new <file>] <tarball>...
 #
 #   <tarball>   build-dist.sh archives, one per target (darwin-arm64,
 #               darwin-x86_64), all of the same version
 #   --url       the channel's public base URL, stamped into install.sh
 #               (DIST_URL_DEFAULT); default file://<out> (local tests)
 #   --version   the release's name (a tag without v); default: the id
+#   --whats-new what's new, for the users: 3-5 plain lines (blank lines
+#               and # comments dropped), latest.json's "notes"; an
+#               installed bise shows them in its new-release item
 #
 # Output in <out> (existing tarballs of other versions are kept, so an
 # update can still find its version; latest.json names only these):
 #   install.sh                    packaging/install.sh, channel stamped
 #   latest.json                   {version, id, commit, built, published,
+#                                  notes?: [line...],
 #                                  targets: {<os-arch>: {url, file, sha256,
 #                                  size, macos, id, commit, built}}}
 #   bise-<id>-<os-arch>.tar.gz    + .sha256
@@ -24,14 +29,15 @@
 
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-out="" url="" version=""
+out="" url="" version="" whats_new=""
 tarballs=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --out) out="$2"; shift ;;
     --url) url="$2"; shift ;;
     --version) version="$2"; shift ;;
-    -h|--help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --whats-new) whats_new="$2"; shift ;;
+    -h|--help) sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) echo "make-release: unknown argument $1" >&2; exit 2 ;;
     *) tarballs+=("$1") ;;
   esac
@@ -65,13 +71,24 @@ for t in "${tarballs[@]}"; do
     }$entry"
 done
 version="${version:-$id}"
+notes=""
+if [ -n "$whats_new" ]; then
+  [ -f "$whats_new" ] || { echo "make-release: no file $whats_new" >&2; exit 1; }
+  while IFS= read -r l || [ -n "$l" ]; do
+    l="$(printf '%s' "$l" | sed 's/^[[:space:]]*//; s/^[-*•][[:space:]]*//; s/[[:space:]]*$//')"
+    case "$l" in ""|"#"*) continue ;; esac
+    notes="${notes:+$notes, }$(json_str "$l")"
+  done < "$whats_new"
+  [ -z "$notes" ] || notes="
+  \"notes\": [$notes],"
+fi
 cat > "$out/latest.json.tmp" <<EOF
 {
   "version": $(json_str "$version"),
   "id": $(json_str "$id"),
   "commit": $(json_str "$commit"),
   "built": $(json_str "$built"),
-  "published": $(json_str "$(date -u +%Y-%m-%dT%H:%M:%SZ)"),
+  "published": $(json_str "$(date -u +%Y-%m-%dT%H:%M:%SZ)"),$notes
   "targets": {
     $targets
   }

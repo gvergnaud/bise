@@ -173,7 +173,7 @@ turn
 
 echo "== Switchboard hub on a throwaway workspace"
 mkdir -p "$WS" && (cd "$WS" && git init -q && echo x > README.md && git add README.md \
-  && git -c user.name=t -c user.email=t@t commit -qm init)
+  && git -c user.name=t -c user.email=t@t -c commit.gpgsign=false commit -qm init)
 (cd "$WS" && E "$BIN" sbd --workspace "$WS" </dev/null >/dev/null 2>"$DL/hub.err" &)
 state=""; i=0
 while [ $i -lt 150 ]; do

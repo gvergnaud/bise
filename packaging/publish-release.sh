@@ -3,11 +3,13 @@
 # gvergnaud/bise (BISE-217, BISE-220). CI is the one publisher: this
 # script tags, CI builds, the user publishes.
 #
-#   packaging/publish-release.sh [<tag>] [--rev <rev>]
+#   packaging/publish-release.sh [<tag>] [--rev <rev>] [--whats-new <file>]
 #       [--publish] [--repo <owner/repo>] [--remote <git remote>] [--dry-run]
+#   packaging/publish-release.sh <tag> --whats-new <file>
+#       (a draft or a published release: its notes only)
 #   packaging/publish-release.sh --local [<tag>]
 #       [--rev <rev>] [--add <tarball>]... [--from <tarball>]... [--draft]
-#       [--notes <text>] [--dry-run]
+#       [--notes <text>] [--whats-new <file>] [--dry-run]
 #
 #   <tag>      vX.Y.Z (default v<YYYY.M.D>, then -2, -3... when taken)
 #   --rev      the commit to release (default HEAD); it must be on GitHub
@@ -15,6 +17,14 @@
 #   --publish  make the draft the latest release (every install and
 #              `bise update` read it next); with a tag already built, only
 #              that: publish-release.sh <tag> --publish
+#   --whats-new  what's new for the users, 3-5 plain lines in a file
+#              (blank lines and # comments dropped): written into the
+#              release's latest.json ("notes") and on top of its GitHub
+#              notes. Every installed bise reads latest.json within the
+#              hour and shows these lines in its new-release item
+#              (update-card), so write them for users: what they can do
+#              now, no commit hashes. Works on the draft before
+#              --publish, and on a published release (fixes its notes).
 #   --dry-run  say what would be done, change nothing
 #   --next-tag print the tag a release would take now (default above),
 #              change nothing (/release-bise's preview, BISE-235)
@@ -49,7 +59,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$HERE" && git rev-parse --show-toplevel)"
 SITE_INSTALL="$REPO_DIR/site/install.sh"
-repo=gvergnaud/bise channel="" tag="" rev=HEAD notes="" draft=0 dry=0 local=0 publish=0 remote="" next=0
+repo=gvergnaud/bise channel="" tag="" rev=HEAD notes="" whats_new="" draft=0 dry=0 local=0 publish=0 remote="" next=0
 adds=() froms=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -60,12 +70,13 @@ while [ $# -gt 0 ]; do
     --remote) remote="$2"; shift ;;
     --url) channel="$2"; shift ;;
     --notes) notes="$2"; shift ;;
+    --whats-new) whats_new="$2"; shift ;;
     --draft) draft=1 ;;
     --local) local=1 ;;
     --publish) publish=1 ;;
     --dry-run) dry=1 ;;
     --next-tag) next=1 ;;
-    -h|--help) sed -n '2,46p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,57p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) echo "publish-release: unknown argument $1" >&2; exit 2 ;;
     *) tag="$1" ;;
   esac
@@ -73,6 +84,42 @@ while [ $# -gt 0 ]; do
 done
 say() { echo "publish-release: $*" >&2; }
 die() { say "error: $*"; exit 1; }
+if [ -n "$whats_new" ]; then
+  [ -f "$whats_new" ] || die "no file $whats_new (--whats-new)"
+  whats_new="$(cd "$(dirname "$whats_new")" && pwd)/$(basename "$whats_new")"
+  n="$(grep -cvE '^[[:space:]]*(#|$)' "$whats_new" || true)"
+  [ "$n" -ge 1 ] || die "$whats_new has no line (--whats-new: 3-5 plain lines)"
+  [ "$n" -le 5 ] || say "$whats_new has $n lines: the new-release item shows the first 5"
+fi
+# --whats-new on the release <tag> on GitHub: its latest.json gets the
+# lines ("notes", re-uploaded), its GitHub notes get them on top
+put_whats_new() {  # <tag>
+  local d="$work/whats-new"
+  rm -rf "$d"; mkdir -p "$d"
+  gh release download "$1" -R "$repo" -p latest.json -D "$d" || die "cannot download $1's latest.json"
+  python3 - "$d/latest.json" "$whats_new" <<'PY' || die "cannot write the notes into latest.json"
+import json, sys
+m = json.load(open(sys.argv[1]))
+lines = [l.strip().lstrip("-*•").strip() for l in open(sys.argv[2]) if l.strip() and not l.strip().startswith("#")]
+m["notes"] = lines
+json.dump(m, open(sys.argv[1], "w"), indent=2)
+PY
+  if [ "$dry" = 1 ]; then
+    say "dry run: would upload $1's latest.json with these notes:"; cat "$d/latest.json" >&2
+    return 0
+  fi
+  gh release upload "$1" "$d/latest.json" --clobber -R "$repo" >/dev/null || die "cannot upload $1's latest.json"
+  local body
+  body="$(gh release view "$1" -R "$repo" --json body --jq .body)"
+  case "$body" in
+    "What's new:"*) body="${body#*$'\n\n'}" ;;
+  esac
+  gh release edit "$1" -R "$repo" --notes "What's new:
+$(grep -vE '^[[:space:]]*(#|$)' "$whats_new" | sed 's/^[[:space:]]*//; s/^[-*•][[:space:]]*//; s/^/- /')
+
+$body" >/dev/null || die "cannot edit $1's notes"
+  say "$1: what's new written (latest.json and the GitHub notes)"
+}
 channel="${channel:-https://github.com/$repo/releases/latest/download}"
 if [ "$local" = 0 ] && { [ ${#adds[@]} -gt 0 ] || [ ${#froms[@]} -gt 0 ] || [ "$draft" = 1 ]; }; then
   die "--add, --from and --draft go with --local (CI makes a draft already)"
@@ -133,7 +180,7 @@ if [ "$local" = 1 ]; then
   fi
   [ ${#adds[@]} -eq 0 ] || tarballs+=("${adds[@]}")
   for t in "${tarballs[@]}"; do [ -f "$t" ] || die "no archive $t"; done
-  "$HERE/make-release.sh" --out "$work/release" --url "$channel" --version "$version" "${tarballs[@]}" >/dev/null
+  "$HERE/make-release.sh" --out "$work/release" --url "$channel" --version "$version" ${whats_new:+--whats-new "$whats_new"} "${tarballs[@]}" >/dev/null
   "$HERE/check-release.py" "$work/release" --url "$channel" --version "$version" >&2 || die "the release is not what install.sh and bise update read"
   commit="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["commit"])' "$work/release/latest.json")"
   gh api "repos/$repo/commits/$commit" --jq .sha >/dev/null 2>&1 \
@@ -141,9 +188,15 @@ if [ "$local" = 1 ]; then
   targets="$(python3 -c 'import json,sys; print(" ".join(sorted(json.load(open(sys.argv[1]))["targets"])))' "$work/release/latest.json")"
   say "release $tag: $targets (commit ${commit:0:12}) in $work/release"
   ls -la "$work/release" >&2
-  notes="${notes:-bise $version (commit ${commit:0:12}), macOS 14+: $targets.
+  if [ -n "$whats_new" ] && [ -z "$notes" ]; then
+    notes="What's new:
+$(grep -vE '^[[:space:]]*(#|$)' "$whats_new" | sed 's/^[[:space:]]*//; s/^[-*•][[:space:]]*//; s/^/- /')
+
+"
+  fi
+  notes="${notes}bise $version (commit ${commit:0:12}), macOS 14+: $targets.
 Install: curl -fsSL https://bise.dev/install | sh   (private repo: gh auth login first).
-Update: bise update, or /restart latest in Switchboard.}"
+Update: /update in bise, or bise update."
   args=(release create "$tag" "$work/release"/* -R "$repo" --target "$commit" --title "bise $version" --notes "$notes")
   [ "$draft" = 0 ] || args+=(--draft)
   if [ "$dry" = 1 ]; then
@@ -161,6 +214,7 @@ fi
 # ---------------------------------------------------------------- CI path
 st="$(state "$tag")"
 if [ "$st" = published ]; then
+  [ -z "$whats_new" ] || put_whats_new "$tag"
   say "$tag is published already: $channel"
   exit 0
 fi
@@ -213,6 +267,7 @@ fi
 say "the draft:"
 gh release view "$tag" -R "$repo" >&2
 rm -rf "$work"; mkdir -p "$work"
+[ -z "$whats_new" ] || put_whats_new "$tag"
 gh release download "$tag" -R "$repo" -p latest.json -p install.sh -D "$work" \
   || die "cannot download the draft's latest.json and install.sh"
 # shellcheck disable=SC2046

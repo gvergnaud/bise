@@ -298,9 +298,10 @@ pub fn user_kind(kind: &str) -> bool {
 /// `choice_kind`): opened and closed by the hub's Rust side, the user's
 /// digit comes back as `Effect::CardChoice`. `merge`: a PR ready to merge
 /// (pr-design §6.3); `feature_try`, `feature_merge`: a feature branch
-/// ready to try, then to merge (dev-flow §5.1).
+/// ready to try, then to merge (dev-flow §5.1); `update`: a newer bise
+/// release (update-card).
 pub fn choice_kind(kind: &str) -> bool {
-    matches!(kind, "merge" | "feature_try" | "feature_merge")
+    matches!(kind, "merge" | "feature_try" | "feature_merge" | "update")
 }
 
 /// The durable state, as sb-core last sent it.

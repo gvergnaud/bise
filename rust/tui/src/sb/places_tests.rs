@@ -76,6 +76,7 @@ fn mock() -> App {
         look: None,
         place: None,
         pr: None,
+        link: None,
         asking: false,
     });
     app

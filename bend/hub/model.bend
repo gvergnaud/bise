@@ -423,7 +423,7 @@ def put_card(xs: List<&2, Card>, +c: Card) -> List<&2, Card>:
 # `card_open`): the user's digit goes back to Rust (`card_choice`), which
 # acts and closes the item; typed words go to main
 def choice_kind(+k: String) -> Bool:
-  String.eq(k, "merge") || String.eq(k, "feature_try") || String.eq(k, "feature_merge")
+  String.eq(k, "merge") || String.eq(k, "feature_try") || String.eq(k, "feature_merge") || String.eq(k, "update")
 
 # BISE-299: the user's inbox holds only what needs the user, by kind, set
 # at the card's creation: main's escalations (`question`: `sb card`,
