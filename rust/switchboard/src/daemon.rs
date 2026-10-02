@@ -494,6 +494,10 @@ impl Shell {
                     if let Some(e) = &o.push_error {
                         text = format!("{} ({})", text, e);
                     }
+                    let note = crate::land::left_out_note(&o.left_out);
+                    if !note.is_empty() {
+                        text = format!("{}. {}", text, note);
+                    }
                     (json!({"ok": true, "text": text}), ("info".to_string(), text))
                 }
                 Err(e) => (

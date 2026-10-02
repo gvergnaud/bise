@@ -138,11 +138,12 @@ pub enum AgentReq {
         agent: String,
         place: String,
     },
-    /// `sb land [--here] "<message>"` (dev-flow §5): run by the daemon,
-    /// off the hub's loop (`Effect::Land`).
+    /// `sb land [--here] [--add <path>]... "<message>"` (dev-flow §5):
+    /// run by the daemon, off the hub's loop (`Effect::Land`).
     Land {
         here: bool,
         message: String,
+        add: Vec<String>,
     },
     Interrupt {
         agent: String,
@@ -303,6 +304,11 @@ impl AgentReq {
             "land" => AgentReq::Land {
                 here: v.get("here").and_then(|x| x.as_bool()).unwrap_or(false),
                 message: jstr(v, "message"),
+                add: v
+                    .get("add")
+                    .and_then(|x| x.as_array())
+                    .map(|xs| xs.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
+                    .unwrap_or_default(),
             },
             "interrupt" => AgentReq::Interrupt {
                 agent: jstr(v, "agent"),
@@ -1278,7 +1284,7 @@ impl Hub {
 
     /// `sb land` (dev-flow §5): what the land needs from the state. The
     /// daemon adds the repo's flow and runs it (`land::run`).
-    fn land_job(&self, from: &str, here: bool, message: &str) -> Result<crate::land::Job, String> {
+    fn land_job(&self, from: &str, here: bool, message: &str, add: Vec<String>) -> Result<crate::land::Job, String> {
         let name = self.st.resolve(from).ok_or_else(|| format!("unknown agent: {}", from))?;
         let a = &self.st.agents[&name];
         let place = a.ws.place_id(&a.dir);
@@ -1300,6 +1306,8 @@ impl Hub {
             shared: std::path::PathBuf::from(&self.workspace),
             files: a.files.iter().cloned().collect(),
             others,
+            add,
+            since_ms: a.created_ms,
             flow: crate::flow::FlowConfig::default(),
             // a feature's agent lands on the feature (dev-flow §5.1)
             onto: a.ws.feature().map(|f| format!("refs/heads/{}", f)),
@@ -2438,8 +2446,8 @@ impl Hub {
                 Ok(ws) => json!({"cmd": "move", "agent": agent, "ws": ws}),
                 Err(e) => json!({"cmd": "move", "agent": agent, "pre_err": e}),
             },
-            AgentReq::Land { here, message } => {
-                match self.land_job(from, here, &message) {
+            AgentReq::Land { here, message, add } => {
+                match self.land_job(from, here, &message, add) {
                     Ok(job) => {
                         // pr-news: the PR's news go to the place's last lander
                         if job.worktree {

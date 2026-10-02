@@ -37,6 +37,8 @@ fn job(agent: &str, dir: &Path, shared: &Path, files: &[&str], onto: &str) -> Jo
         shared: shared.to_path_buf(),
         files: files.iter().map(|s| s.to_string()).collect(),
         others: Vec::new(),
+        add: Vec::new(),
+        since_ms: 0,
         flow: crate::flow::FlowConfig { mode: Some(crate::flow::FlowMode::Trunk), ..Default::default() },
         onto: Some(format!("refs/heads/{}", onto)),
     }

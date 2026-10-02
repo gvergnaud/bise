@@ -37,6 +37,12 @@ pub struct Job {
     /// archived), as the hub tracked them (absolute or relative).
     pub files: Vec<String>,
     pub others: Vec<(String, Vec<String>)>,
+    /// `sb land --add <path>`: new files the agent claims (made by bash:
+    /// a generator, a download), a folder for every new file under it.
+    pub add: Vec<String>,
+    /// When the agent was created (ms): a new file older than that is not
+    /// its own (the left-out list skips it).
+    pub since_ms: u64,
     pub flow: FlowConfig,
     /// dev-flow §5.1: the agent's feature branch (`refs/heads/computer-
     /// use`): a plain land from its worktree moves it, never main, and is
@@ -54,6 +60,9 @@ pub struct Outcome {
     /// None: no push tried; Some(false): tried, failed (`push_error`).
     pub pushed: Option<bool>,
     pub push_error: Option<String>,
+    /// New files of the place that no agent claimed, made since the agent
+    /// started: not landed, named in the answer ([`left_out_note`]).
+    pub left_out: Vec<String>,
 }
 
 // ---- the queue: one land at a time per target ref ----
@@ -265,11 +274,71 @@ fn sync_index(dir: &Path, target: &str, files: &[String]) {
     }
 }
 
+/// The untracked files of the checkout that git does not ignore, relative
+/// to `dir`, new folders walked (`kit/fonts/a.woff2`, never `kit/`); a
+/// nested repo (`x/`) is not a file to land.
+fn untracked(dir: &Path) -> Result<Vec<String>, String> {
+    let out = git(dir, &["ls-files", "--others", "--exclude-standard", "-z"])?;
+    Ok(out.split('\0').filter(|s| !s.is_empty() && !s.ends_with('/')).map(str::to_string).collect())
+}
+
+/// More new files than this in a worktree are not swept in on their own
+/// (build output git does not ignore): the land says so.
+const SWEEP_MAX: usize = 200;
+
+/// What a land takes: the agent's files that differ from the tip, and
+/// the new files it leaves out (no agent claimed them).
+struct Picked {
+    mine: Vec<String>,
+    left_out: Vec<String>,
+}
+
 /// The agent's files of the place that differ from its tip, refused when
-/// another agent of the place changed one too.
-fn own_changes(job: &Job) -> Result<Vec<String>, String> {
-    let mine: Vec<String> = job.files.iter().filter_map(|f| relative(&job.dir, f)).collect();
-    let mine = changed(&job.dir, &mine)?;
+/// another agent of the place changed one too. Its files: the ones it
+/// wrote with a file tool, the ones it names (`--add`), and in a worktree
+/// it has alone, every new file not ignored (bash made them: a generator,
+/// a download, a new folder). Elsewhere (the shared folder, a shared
+/// worktree) a new file nobody claimed may be anyone's: it is left out,
+/// and named ([`Picked::left_out`]), never swept in.
+fn own_changes(job: &Job) -> Result<Picked, String> {
+    let news = untracked(&job.dir)?;
+    let theirs: Vec<String> = job.others.iter().flat_map(|(_, fs)| fs.iter().filter_map(|x| relative(&job.dir, x))).collect();
+    let mut claim: Vec<String> = job.files.iter().filter_map(|f| relative(&job.dir, f)).collect();
+    let mut named: Vec<(String, Vec<String>)> = Vec::new();
+    for a in &job.add {
+        let p = relative(&job.dir, a).ok_or_else(|| format!("{}: not in your place's folder ({})", a, job.dir.display()))?;
+        let p = p.trim_end_matches('/').to_string();
+        // a folder: its new files, not another agent's (named one by one,
+        // another agent's file is refused below)
+        let under: Vec<String> = news
+            .iter()
+            .filter(|u| **u == p || ((u.starts_with(&format!("{}/", p)) || p == ".") && !theirs.contains(u)))
+            .cloned()
+            .collect();
+        let paths = if under.is_empty() { vec![p.clone()] } else { under };
+        claim.extend(paths.iter().cloned());
+        named.push((a.clone(), paths));
+    }
+    let unclaimed: Vec<String> = news.iter().filter(|u| !claim.contains(u) && !theirs.contains(u)).cloned().collect();
+    let left_out = if job.worktree && job.others.is_empty() {
+        if unclaimed.len() > SWEEP_MAX {
+            return Err(format!(
+                "{} new files not ignored in the worktree (first: {}): add them to .gitignore, or land the ones you want with --add <path>",
+                unclaimed.len(),
+                unclaimed.iter().take(3).cloned().collect::<Vec<_>>().join(", ")
+            ));
+        }
+        claim.extend(unclaimed);
+        Vec::new()
+    } else {
+        unclaimed.into_iter().filter(|f| made_since(&job.dir.join(f), job.since_ms)).collect()
+    };
+    let mut seen = std::collections::BTreeSet::new();
+    claim.retain(|f| seen.insert(f.clone()));
+    let mine = changed(&job.dir, &claim)?;
+    if let Some((a, _)) = named.iter().find(|(_, ps)| !ps.iter().any(|p| mine.contains(p))) {
+        return Err(format!("--add {}: no new or changed file there", a));
+    }
     for f in &mine {
         let who: Vec<&str> = job
             .others
@@ -285,7 +354,35 @@ fn own_changes(job: &Job) -> Result<Vec<String>, String> {
             ));
         }
     }
-    Ok(mine)
+    Ok(Picked { mine, left_out })
+}
+
+/// `path` was last written at or after `since_ms` (unknown: yes).
+fn made_since(path: &Path, since_ms: u64) -> bool {
+    let ms = std::fs::symlink_metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as u64);
+    ms.is_none_or(|ms| ms >= since_ms)
+}
+
+/// The land's word on new files it left out: which, and how to land
+/// them. "" when none.
+pub fn left_out_note(files: &[String]) -> String {
+    if files.is_empty() {
+        return String::new();
+    }
+    let shown: Vec<&str> = files.iter().take(8).map(String::as_str).collect();
+    let more = if files.len() > shown.len() { format!(" (+{} more)", files.len() - shown.len()) } else { String::new() };
+    format!(
+        "left out {} new file{} no agent claimed: {}{}. yours (made by bash)? land {}: sb land --here --add <file or folder> \"<message>\"",
+        files.len(),
+        if files.len() == 1 { "" } else { "s" },
+        shown.join(", "),
+        more,
+        if files.len() == 1 { "it" } else { "them" }
+    )
 }
 
 pub(crate) fn shorten(dir: &Path, sha: &str) -> String {
@@ -353,14 +450,16 @@ pub fn run(job: &Job, queue: &Queue, joined: &mut dyn FnMut()) -> Result<Outcome
     if !job.here && job.worktree && job.flow.mode == Some(FlowMode::Pr) {
         return Err("this repo ships through pull requests: commit with `sb land --here`, then open a PR".into());
     }
-    let mine = own_changes(job)?;
+    let Picked { mine, left_out } = own_changes(job)?;
     if !job.here && job.worktree {
         // a feature's agent lands on the feature (dev-flow §5.1)
         let onto = job.onto.clone().unwrap_or_else(|| main.clone());
-        return land_branch(job, queue, joined, &onto, &main, &mine);
+        return land_branch(job, queue, joined, &onto, &main, &mine, left_out);
     }
     if mine.is_empty() {
-        return Err("nothing of yours to land: the files you changed match the branch".into());
+        let note = left_out_note(&left_out);
+        let note = if note.is_empty() { note } else { format!("; {}", note) };
+        return Err(format!("nothing of yours to land: the files you changed match the branch{}", note));
     }
     if job.message.trim().is_empty() {
         return Err("sb land needs a commit message: sb land [--here] \"<message>\"".into());
@@ -375,6 +474,7 @@ pub fn run(job: &Job, queue: &Queue, joined: &mut dyn FnMut()) -> Result<Outcome
         commits: 1,
         pushed,
         push_error,
+        left_out,
     })
 }
 
@@ -395,7 +495,15 @@ pub(crate) fn move_main(shared: &Path, main: &str, base: &str, tip: &str) -> Res
 /// A worktree's branch onto `main` (the default branch, or the agent's
 /// feature: `real_main` says which is pushed): its agent's files first,
 /// then rebase, check, fast-forward.
-fn land_branch(job: &Job, queue: &Queue, joined: &mut dyn FnMut(), main: &str, real_main: &str, mine: &[String]) -> Result<Outcome, String> {
+fn land_branch(
+    job: &Job,
+    queue: &Queue,
+    joined: &mut dyn FnMut(),
+    main: &str,
+    real_main: &str,
+    mine: &[String],
+    left_out: Vec<String>,
+) -> Result<Outcome, String> {
     let branch = head_ref(&job.dir)?;
     if !mine.is_empty() {
         if job.message.trim().is_empty() {
@@ -452,6 +560,7 @@ fn land_branch(job: &Job, queue: &Queue, joined: &mut dyn FnMut(), main: &str, r
         commits,
         pushed,
         push_error,
+        left_out,
     })
 }
 
@@ -490,6 +599,8 @@ mod tests {
                 .iter()
                 .map(|(n, fs)| (n.to_string(), fs.iter().map(|s| s.to_string()).collect()))
                 .collect(),
+            add: Vec::new(),
+            since_ms: 0,
             flow: FlowConfig::default(),
             onto: None,
         }
@@ -650,6 +761,119 @@ mod tests {
         let mut j = job("x", &ws, &ws, &["a"], &[]);
         j.flow = FlowConfig { mode: Some(FlowMode::Trunk), check: None, push: false, ..FlowConfig::default() };
         assert_eq!(run(&j, &Queue::default(), &mut || {}).unwrap().pushed, None);
+        let _ = std::fs::remove_dir_all(ws.parent().unwrap());
+    }
+
+    fn landed(dir: &Path, rev: &str) -> Vec<String> {
+        git(dir, &["show", "--name-only", "--format=", rev]).unwrap().lines().map(str::to_string).collect()
+    }
+
+    #[test]
+    fn a_worktree_alone_lands_the_new_files_bash_made_and_its_new_folders() {
+        // amb-kit's fonts (a new folder, fetched by curl) and launch's svgs
+        // (written by a generator run through bash): no file tool saw them
+        let ws = repo("wt-new");
+        let wt = ws.parent().unwrap().join("wt");
+        sh(&ws, &format!("git worktree add -q -b sb/x {} main", wt.display()));
+        let wt = wt.canonicalize().unwrap();
+        sh(
+            &wt,
+            "echo gen > a && mkdir -p kit/fonts feat && echo w > kit/fonts/n.woff2 && echo l > kit/fonts/OFL.txt && echo s > feat/v-light.svg && echo ignored > junk.log",
+        );
+        // an ignored file stays out (git's own rule; the worktrees share
+        // the repo's info/exclude)
+        sh(&ws, "echo '*.log' >> .git/info/exclude");
+        let mut j = job("x", &wt, &ws, &["a"], &[]);
+        j.place = "wt:x".into();
+        j.here = false;
+        let o = run(&j, &Queue::default(), &mut || {}).unwrap();
+        assert!(o.left_out.is_empty(), "{:?}", o.left_out);
+        assert_eq!(landed(&ws, "main"), ["a", "feat/v-light.svg", "kit/fonts/OFL.txt", "kit/fonts/n.woff2"]);
+        assert_eq!(git(&ws, &["show", "main:kit/fonts/n.woff2"]).unwrap(), "w");
+        let st = git(&wt, &["status", "--porcelain"]).unwrap();
+        assert!(!st.contains("kit") && !st.contains("feat") && !st.contains("junk"), "{}", st);
+        // --here too, with only new files (no file tool at all)
+        sh(&wt, "mkdir -p more/deep && echo d > more/deep/x.txt");
+        let mut j = job("x", &wt, &ws, &[], &[]);
+        j.place = "wt:x".into();
+        run(&j, &Queue::default(), &mut || {}).unwrap();
+        assert_eq!(landed(&wt, "HEAD"), ["more/deep/x.txt"]);
+        let _ = std::fs::remove_dir_all(ws.parent().unwrap());
+    }
+
+    #[test]
+    fn the_shared_folder_names_the_new_files_it_left_out_and_lands_them_with_add() {
+        let ws = repo("shared-new");
+        // the user's old scratch file: not news, never listed
+        sh(&ws, "echo old > scratch.txt && touch -t 200001010000 scratch.txt");
+        // launch: make.py edited with a tool, run through bash: 2 new svgs in
+        // a new folder; another agent's new file (write_file) next to them
+        sh(&ws, "echo gen2 > a && mkdir -p feat && echo l > feat/v-light.svg && echo d > feat/v-dark.svg && echo y > feat/theirs.txt");
+        let mut j = job("x", &ws, &ws, &["a"], &[("y", &["feat/theirs.txt"])]);
+        j.since_ms = crate::util::now_ms() - 60_000;
+        let o = run(&j, &Queue::default(), &mut || {}).unwrap();
+        assert_eq!(landed(&ws, "main"), ["a"], "never swept in: they may be anyone's");
+        assert_eq!(o.left_out, ["feat/v-dark.svg", "feat/v-light.svg"], "named, not dropped silently");
+        let note = left_out_note(&o.left_out);
+        assert!(note.contains("left out 2 new files") && note.contains("feat/v-dark.svg") && note.contains("--add"), "{}", note);
+        // nothing else of mine: the error names them too
+        let e = run(&j, &Queue::default(), &mut || {}).unwrap_err();
+        assert!(e.contains("nothing of yours") && e.contains("feat/v-light.svg") && e.contains("--add"), "{}", e);
+        // --add the folder: the svgs land, y's file and the user's stay out
+        j.add = vec![ws.join("feat").to_string_lossy().to_string()];
+        j.message = "the svgs".into();
+        let o = run(&j, &Queue::default(), &mut || {}).unwrap();
+        assert!(o.left_out.is_empty(), "{:?}", o.left_out);
+        assert_eq!(landed(&ws, "main"), ["feat/v-dark.svg", "feat/v-light.svg"]);
+        let st = git(&ws, &["status", "--porcelain"]).unwrap();
+        assert_eq!(st.lines().collect::<Vec<_>>(), ["?? feat/theirs.txt", "?? scratch.txt"]);
+        // --add another agent's file: refused, main decides
+        j.add = vec!["feat/theirs.txt".into()];
+        let e = run(&j, &Queue::default(), &mut || {}).unwrap_err();
+        assert!(e.contains("also changed by @y"), "{}", e);
+        // --add a path with nothing new: said, not ignored
+        j.add = vec!["nope".into()];
+        let e = run(&j, &Queue::default(), &mut || {}).unwrap_err();
+        assert!(e.contains("--add nope: no new or changed file"), "{}", e);
+        assert_eq!(log(&ws), lines(&["the svgs", "x's work", "init"]));
+        let _ = std::fs::remove_dir_all(ws.parent().unwrap());
+    }
+
+    #[test]
+    fn a_shared_worktree_never_sweeps_in_new_files_nobody_claimed() {
+        let ws = repo("wt-shared-new");
+        let wt = ws.parent().unwrap().join("wt");
+        sh(&ws, &format!("git worktree add -q -b sb/x {} main", wt.display()));
+        let wt = wt.canonicalize().unwrap();
+        // x and y share the worktree: y made gen/y.txt by bash, its own
+        // y-new.txt with a tool
+        sh(&wt, "echo a2 > a && mkdir gen && echo y > gen/y.txt && echo n > y-new.txt");
+        let mut jx = job("x", &wt, &ws, &["a"], &[("y", &["y-new.txt"])]);
+        jx.place = "wt:x".into();
+        let o = run(&jx, &Queue::default(), &mut || {}).unwrap();
+        assert_eq!(landed(&wt, "HEAD"), ["a"]);
+        assert_eq!(o.left_out, ["gen/y.txt"]);
+        // the plain land: the untracked files do not block, and are named
+        jx.here = false;
+        let o = run(&jx, &Queue::default(), &mut || {}).unwrap();
+        assert_eq!(log(&ws), lines(&["x's work", "init"]));
+        assert_eq!(o.left_out, ["gen/y.txt"]);
+        assert!(!ws.join("gen").exists() && wt.join("y-new.txt").exists());
+        let _ = std::fs::remove_dir_all(ws.parent().unwrap());
+    }
+
+    #[test]
+    fn too_many_new_files_in_a_worktree_are_not_swept_in() {
+        let ws = repo("wt-many");
+        let wt = ws.parent().unwrap().join("wt");
+        sh(&ws, &format!("git worktree add -q -b sb/x {} main", wt.display()));
+        let wt = wt.canonicalize().unwrap();
+        sh(&wt, &format!("mkdir out && for i in $(seq 1 {}); do echo $i > out/$i; done && echo a2 > a", SWEEP_MAX + 1));
+        let mut j = job("x", &wt, &ws, &["a"], &[]);
+        j.place = "wt:x".into();
+        let e = run(&j, &Queue::default(), &mut || {}).unwrap_err();
+        assert!(e.contains(&format!("{} new files not ignored", SWEEP_MAX + 1)) && e.contains(".gitignore"), "{}", e);
+        assert_eq!(git(&wt, &["log", "--format=%s"]).unwrap(), "init", "nothing landed");
         let _ = std::fs::remove_dir_all(ws.parent().unwrap());
     }
 }
