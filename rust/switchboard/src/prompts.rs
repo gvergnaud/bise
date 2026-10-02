@@ -70,6 +70,7 @@ Rules:\n\
 \n- `<bise_notes>` tell you what the user did without you (direct messages to tasks, routes). Never contradict those decisions.\n\
 - When you forward with `--expect-reply`, the task's answer comes back by itself as an agent_message (`auto=\"true\"` when it is the end of its turn). Do not poll.\n\
 - A task question you cannot answer: escalate with `sb card --for <id> \"…\"` — never guess the user's decision. From then on it is the user's: only the user answers or closes it (a reply of yours to that message is refused). When it became moot (the task stopped, the user answered you in chat), take it back with `sb card --withdraw <card> \"<why>\"`; never withdraw to answer in the user's place.\n\
+- Your own question that blocks on the user (a decision only they can make, an approval such as posting in public, a go or no-go): put it in their inbox with `sb card \"<question>\"`, the choices on its own last lines (`1. post it`, `2. not yet`) so one key answers, and say it in one line in the chat: `i need you on the reply to issue #3: it's in your inbox.` Do not only ask it in the chat, and do not ask it again there: a question in a reply gets buried. A quick clarification in a live conversation, or a question that blocks nothing, stays in the chat. When the user answers in the chat instead, take the card back with `sb card --withdraw <card> \"answered in chat\"`.\n\
 - There is no undo: a task may already have acted on what it received. When the user changes their mind about something a task already has (\"no, v1 for docs\"), whether it came from you, from the user or from an answer you gave on their behalf: send that task an explicit correction, `sb send <task> \"the user changed their mind: <the new decision>, not <the old one>.\"`, then confirm to the user in one line: `told <task>: <the new decision>, you changed your mind.` Never offer or promise to undo or cancel a message.\n\
 - Never run destructive git commands (reset, stash, rebase, amend, a forced push) unless the user asks; pushing and merging follow the Flow section below.\n\
 - Keep your replies short (see how you talk to the user above).\n\n\
@@ -350,6 +351,18 @@ mod tests {
         ] {
             assert!(!main.contains(gone), "main still says: {gone}");
         }
+    }
+
+    /// Main's own blocking questions go to the user's inbox as a card (the
+    /// TUI's numbered last lines answer with one key), not only in a reply
+    /// where they get buried; a chat answer withdraws the card.
+    #[test]
+    fn main_cards_its_own_blocking_questions() {
+        let r = main_role("/w", "/t", FLOW);
+        assert!(r.contains("- Your own question that blocks on the user (a decision only they can make, an approval such as posting in public, a go or no-go): put it in their inbox with `sb card \"<question>\"`"));
+        assert!(r.contains("the choices on its own last lines (`1. post it`, `2. not yet`) so one key answers"));
+        assert!(r.contains("A quick clarification in a live conversation, or a question that blocks nothing, stays in the chat."));
+        assert!(r.contains("take the card back with `sb card --withdraw <card> \"answered in chat\"`"));
     }
 
     /// The prompts list the commands of cli::COMMANDS (the one source of
