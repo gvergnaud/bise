@@ -34,6 +34,8 @@ no sessions to juggle and no workflow to set up: the orchestration is built in, 
   </picture>
 </p>
 
+more demos and the docs on [bise.dev](https://bise.dev).
+
 ## install
 
 ```sh
@@ -100,6 +102,20 @@ while you type, the agents panel, the counters and the agents' chatter dim. they
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/zen-dark.svg"><img src="docs/brand/readme/feat/zen-light.svg" width="680" alt="you start typing and everything else fades: the agents, the counts. perf finishes meanwhile. you send, and it all comes back."></picture>
 
+### voice
+
+#### voice to voice
+
+press `ctrl+r` twice for voice mode and just talk to main. it answers out loud while the agents keep working. `space` sends right away, `esc` leaves, and `/voice` picks the model, the voice and the language. the face is drawn in the terminal: it smiles while it listens, turns a * while it thinks, and blows you a kiss when it's done.
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/voicemode-dark.svg"><img src="docs/brand/readme/feat/voicemode-light.svg" width="680" alt="you press ctrl+r twice and ask main to make the pricing page less busy. the face listens, thinks, then talks: main says pricing-page will cut it to three plans. it ends with a kiss."></picture>
+
+#### dictation
+
+set it up with `/voice`, then press `ctrl+r` and talk. your words land in the composer.
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/voice-dark.svg"><img src="docs/brand/readme/feat/voice-light.svg" width="680" alt="you press ctrl+r and say it; a level meter moves while you talk; your words land in the composer as text, and you send them."></picture>
+
 ### coordination
 
 #### main answers routine questions
@@ -121,6 +137,12 @@ agents message each other directly: questions, hand-offs, who edits which file. 
 connect as many MCP servers as you want (GitHub, Linear, Sentry, Slack, your database) and keep them all on. agents call tools from code, so a hundred servers don't fill the context.
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/tools-dark.svg"><img src="docs/brand/readme/feat/tools-light.svg" width="680" alt="42 MCP servers are on. you ask why signup is slow; main writes a few lines of code that call Sentry, GitHub and Slack, and answers in two lines."></picture>
+
+#### computer use
+
+your agents can use your browser: they open pages in their own tab group, in the background, with your logins, and read, click, type, fill forms and take screenshots. they never take your screen or your active tab. on macOS they can drive apps like Notes or Figma too. it's off by default: `/computer-use` sets it up (the Chrome extension, the permissions, a live test). for now it acts without asking first, so give it the jobs you'd give someone at your desk.
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/computer-dark.svg"><img src="docs/brand/readme/feat/computer-light.svg" width="680" alt="you ask main if buy is visible on the mobile pricing page. an agent opens it in a background tab in its own group, reads it, takes a screenshot, and main answers: buy shows on all three plans. your own tab never moved."></picture>
 
 #### Agent Plugins
 
@@ -157,12 +179,6 @@ main does small jobs itself and starts an agent only when a job needs one. no ag
 paste a screenshot with `ctrl+v` or drag it in. it becomes one chip in your message.
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/screenshot-dark.svg"><img src="docs/brand/readme/feat/screenshot-light.svg" width="680" alt="you type a message, paste a screenshot with ctrl+v: it lands as one chip in your text, and the agent gets the image."></picture>
-
-#### voice input
-
-set it up with `/voice`, then press `ctrl+r` and talk. your words land in the composer.
-
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/voice-dark.svg"><img src="docs/brand/readme/feat/voice-light.svg" width="680" alt="you press ctrl+r and say it; a level meter moves while you talk; your words land in the composer as text, and you send them."></picture>
 
 #### quotes
 
