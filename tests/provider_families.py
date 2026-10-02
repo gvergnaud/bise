@@ -19,6 +19,10 @@ D) A real repl-live on the fake through a custom provider (BISE_MODELS_FILE
    provider (headers_env + key_command, Claude Code's
    ANTHROPIC_CUSTOM_HEADERS + apiKeyHelper): its headers and the
    command's key on the wire; a failing command, no call and a clear line.
+   A provider's idle_timeout_sec (provider-timeout) against a fake that
+   waits 3 s before its first byte: 1 s times out, retries with a line
+   that names the key and the provider's table (Ctrl+C keeps that text
+   as the turn's error); 8 s waits and answers.
 """
 import json, os, socket, subprocess, sys, tempfile, time, urllib.error, urllib.request
 
@@ -219,8 +223,12 @@ def part_d():
         '[providers.fakegem]\nname = "Fake Gemini"\napi = "gemini"\nbase_url = "%s"\nkey_env = ""\n\n'
         '[providers.fakegw]\nname = "Fake Gateway"\napi = "anthropic"\nbase_url = "%s"\nkey_env = ""\n'
         'headers_env = "FAKE_GW_HEADERS"\nkey_command = "printf \'gw-%%s\' tok; echo"\n\n'
-        '[models."fakegw/broken"]\nkey_command = "echo nope; exit 3"\n'
-        % (base, base, base, base))
+        '[models."fakegw/broken"]\nkey_command = "echo nope; exit 3"\n\n'
+        '[providers.fakeslow]\nname = "Fake Slow"\napi = "openai-chat"\nbase_url = "%s"\nkey_env = ""\n'
+        'idle_timeout_sec = 1\n\n'
+        '[providers.fakepatient]\nname = "Fake Patient"\napi = "openai-chat"\nbase_url = "%s"\nkey_env = ""\n'
+        'idle_timeout_sec = 8\n'
+        % (base, base, base, base, base, base))
     cfg = os.path.join(tmp, "config.toml")
     s = socket.socket()
     s.bind(("127.0.0.1", 0))
@@ -231,13 +239,16 @@ def part_d():
     env.update(HOME=tmp, XDG_STATE_HOME=os.path.join(tmp, "state"), BISE_MODELS_FILE=models, BEND_CONFIG=cfg,
                BEND_REPL_PORT=str(port), BEND_SESSION_FILE=session, BEND_WIRE_LOG=os.path.join(tmp, "wire.log"),
                BEND_MCP_INDEX=os.path.join(tmp, "mcp.txt"), BEND_SKILLS_INDEX=os.path.join(tmp, "sk.txt"),
-               BEND_BG_ROOT=os.path.join(tmp, "bg"), SB_AGENT="probe",
+               BEND_BG_ROOT=os.path.join(tmp, "bg"), SB_AGENT="probe", TMPDIR=tmp,
                FAKE_GW_HEADERS="source: bise\norg-id : 2\nnot a header")
     log, err = os.path.join(tmp, "repl.log"), os.path.join(tmp, "repl.err")
     repl = subprocess.Popen([os.path.join(ROOT, "repl-live")], cwd=ROOT, env=env,
                             stdout=open(log, "w"), stderr=open(err, "w"))
 
-    def turn(model, text):
+    # the interrupt flag the TUI writes on Ctrl+C (side dir: $TMPDIR)
+    flag = os.path.join(tmp, "bend-interrupt-%d.txt" % port)
+
+    def turn(model, text, ctrl_c_on=None):
         open(cfg, "w").write('model = "%s"\n' % model)
         sock = socket.create_connection(("127.0.0.1", port), timeout=60)
         sock.sendall(("run " + text + "\n").encode())
@@ -248,6 +259,9 @@ def part_d():
             if not line:
                 break
             out.append(line.decode(errors="replace").rstrip())
+            if ctrl_c_on and ctrl_c_on in out[-1]:
+                open(flag, "w").write("1")
+                ctrl_c_on = None
             if line.startswith(b"  obs: turn_done"):
                 break
         sock.close()
@@ -295,6 +309,31 @@ def part_d():
         recs = [json.loads(l) for l in open(F.LOG)][n:]
         check(repl.poll() is None and not recs and any("key_command failed" in l for l in out),
               "a failing key_command: no call, a line that names it: %r" % out[-3:])
+        # provider-timeout: the same slow server (3 s before the first
+        # byte), two idle_timeout_sec; the first ends with a Ctrl+C (ten
+        # attempts with their backoff would take minutes)
+        t0 = time.time()
+        out = turn("fakeslow/m", "[[slow: 3]] hello slow", ctrl_c_on="provider_retry")
+        took = time.time() - t0
+        retry = [l for l in out if "provider_retry" in l]
+        key = "(timeout) — a slow model or gateway? raise idle_timeout_sec under [providers.fakeslow] in ~/.bise/config.toml"
+        check(retry and "no answer from 127.0.0.1:%d in 1 s %s" % (fport, key) in retry[0],
+              "idle_timeout_sec = 1: the read times out after 1 s and the retry line names the key: %r"
+              % (retry[:1] or out[-3:]))
+        stop = [l for l in out if "stopped retrying" in l]
+        check(stop and key in stop[-1] and took < 15 and repl.poll() is None,
+              "Ctrl+C during the retries: the turn's error keeps the timeout text (%.1fs): %r"
+              % (took, stop[-1:] or out[-3:]))
+        n = len([json.loads(l) for l in open(F.LOG)])
+        t0 = time.time()
+        out = turn("fakepatient/m", "[[slow: 3]] hello patient")
+        took = time.time() - t0
+        recs = [json.loads(l) for l in open(F.LOG)][n:]
+        said = [l for l in out if "obs: assistant:" in l]
+        check(not [l for l in out if "provider_retry" in l] and said and "ack: " in said[-1]
+              and [r["status"] for r in recs] == [200] and took >= 3,
+              "idle_timeout_sec = 8: the same 3 s wait answers, no retry (%.1fs): %r"
+              % (took, said[-1:] or out[-3:]))
     finally:
         repl.kill()
         srv.shutdown()

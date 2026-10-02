@@ -4532,3 +4532,16 @@ def Laws.image_part_cap():
 
 def Laws.image_why_checks():
   {==}
+
+# provider-timeout: idle_timeout_sec (runtime/provider-pure.bend)
+def Laws.provider_idle_timeout_default():
+  {==}
+
+def Laws.provider_idle_timeout_set():
+  {==}
+
+def Laws.attempt_timeout_names_the_key():
+  {==}
+
+def Laws.attempt_err_in_others():
+  {==}

@@ -71,7 +71,7 @@ fn a_listed_model_takes_its_own_fields_then_its_providers() {
     let c = Catalog::builtin();
     let r = c.resolve("anthropic/claude-haiku-4-5");
     assert_eq!(r.known, Known::Listed);
-    assert_eq!(r.caps, Caps { context: 200_000, max_output: 64_000, vision: true, reasoning: true, tools: true, thinking: "budget".into(), betas: ANTH_BETAS.into(), efforts: String::new(), effort: String::new(), cache_key: String::new(), cache_header: String::new(), headers_env: String::new(), key_command: String::new() });
+    assert_eq!(r.caps, Caps { context: 200_000, max_output: 64_000, vision: true, reasoning: true, tools: true, thinking: "budget".into(), betas: ANTH_BETAS.into(), efforts: String::new(), effort: String::new(), cache_key: String::new(), cache_header: String::new(), headers_env: String::new(), key_command: String::new(), idle_timeout_sec: 0 });
     let r = c.resolve("mistral/mistral-large-latest");
     assert_eq!((r.caps.context, r.caps.reasoning, r.caps.vision), (262_144, false, true));
     let r = c.resolve("openai/gpt-6-astra");
@@ -820,6 +820,30 @@ fn gateway_keys_reach_the_handoff() {
     assert!(gw.contains("headers_env = \"ANTHROPIC_CUSTOM_HEADERS\"\n"), "{gw}");
     assert!(gw.contains("key_command = \"tool auth token gw\"\n"), "{gw}");
     assert!(h.contains("key_command = \"other\"\n"), "{h}");
+}
+
+#[test]
+fn idle_timeout_sec_per_provider() {
+    // provider-timeout: a slow local model or gateway waits longer
+    // (the runtime reads the same key: provider-pure.bend stream_wait)
+    let cfg = "[providers.slow]\napi = \"openai-chat\"\nbase_url = \"http://localhost:11434/v1\"\nkey_env = \"\"\n\
+               idle_timeout_sec = 600\n\
+               [models.\"slow/quick\"]\nidle_timeout_sec = 30\n\
+               [models.\"slow/bad\"]\nidle_timeout_sec = 0\n\
+               [models.\"slow/huge\"]\nidle_timeout_sec = 100000\n";
+    let s = Setup::from_text(Some(cfg), &|_| None);
+    assert_eq!(s.catalog.resolve("slow/a").caps.idle_timeout_sec, 600);
+    assert_eq!(s.catalog.resolve("slow/quick").caps.idle_timeout_sec, 30, "a model overrides its provider");
+    assert_eq!(s.catalog.resolve("slow/bad").caps.idle_timeout_sec, 600, "0 sets nothing");
+    assert_eq!(s.catalog.resolve("slow/huge").caps.idle_timeout_sec, 600, "past a day sets nothing");
+    let w: Vec<_> = s.catalog.warnings.iter().filter(|w| w.contains("idle_timeout_sec: a number of seconds")).collect();
+    assert_eq!(w.len(), 2, "{:?}", s.catalog.warnings);
+    assert!(!s.catalog.warnings.iter().any(|w| w.contains("unknown key")), "{:?}", s.catalog.warnings);
+    assert_eq!(Catalog::builtin().resolve("ollama/llama3").caps.idle_timeout_sec, 0, "none built in: the runtime's 90 s");
+    let h = s.handoff_toml();
+    let p = &h[h.find("[providers.slow]").unwrap()..];
+    assert!(p.contains("idle_timeout_sec = 600\n"), "{p}");
+    assert!(h.contains("idle_timeout_sec = 30\n"), "{h}");
 }
 
 // ---- model roles (BISE-298) ----
