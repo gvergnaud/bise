@@ -95,6 +95,13 @@ pub fn shim_text(current: Option<&Path>, fallback: &Path) -> String {
     } else {
         s.push_str(&format!("exe={}\n", q(fallback)));
     }
+    // a version folder gets pruned: the shim then pointed at nothing and
+    // Chrome never connected (launch, 22ba932 gone). Fall back to the newest
+    // bise of the same versions folder, then to `bise` on PATH.
+    if let Some(versions) = fallback.parent().and_then(Path::parent).filter(|v| v.file_name().is_some_and(|n| n == "versions")) {
+        s.push_str(&format!("[ -x \"$exe\" ] || exe=$(ls -t {}/*/bise 2>/dev/null | head -n 1)\n", q(versions)));
+    }
+    s.push_str("[ -x \"$exe\" ] || exe=$(command -v bise)\n");
     s.push_str("exec \"$exe\" computer-use chrome-host \"$@\"\n");
     s
 }
@@ -301,6 +308,20 @@ mod tests {
         assert!(shim.contains("computer-use chrome-host"));
         std::fs::write(chrome.manifest_path(&p), "{}").unwrap();
         assert_eq!(manifest_state(&chrome, &p), "stale");
+        // launch: the shim named a dev version that was pruned since; it
+        // falls back to the newest bise of the same versions folder
+        let versions = d.join("versions");
+        std::fs::create_dir_all(versions.join("new")).unwrap();
+        let newer = versions.join("new").join("bise");
+        std::fs::write(&newer, "#!/bin/sh\necho \"newer $*\"\n").unwrap();
+        crate::paths::private(&newer, 0o755).unwrap();
+        let gone = versions.join("pruned").join("bise");
+        let text = shim_text(None, &gone);
+        assert!(text.contains("ls -t") && text.contains("command -v bise"), "{}", text);
+        let sh = d.join("shim.sh");
+        std::fs::write(&sh, &text).unwrap();
+        let out = std::process::Command::new("/bin/sh").arg(&sh).arg("x").output().unwrap();
+        assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "newer computer-use chrome-host x");
         assert_eq!(from_exe("/Applications/Vivaldi.app/Contents/MacOS/Vivaldi").map(|b| b.name), Some("Vivaldi"));
         assert_eq!(from_exe("/usr/bin/true"), None);
         assert_eq!(major("154.0.7000.1"), Some(154));

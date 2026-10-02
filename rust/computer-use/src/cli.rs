@@ -195,6 +195,12 @@ fn run_broker(paths: &Paths, a: &[&str]) -> i32 {
     if stable_extension_dir(paths).join("manifest.json").is_file() {
         let _ = extension_dir(paths);
     }
+    // set up (the shim exists): point the browsers' host at this bise, the
+    // one in use, so a pruned version never leaves Chrome without a host
+    if paths.shim().exists() {
+        let (exe, current) = browsers::exe_and_current();
+        let _ = browsers::repair(paths, &exe, current.as_deref());
+    }
     let mut opts = Opts::new(paths.clone());
     if let Some(i) = a.iter().position(|x| *x == "--idle-exit") {
         opts.idle_exit = a.get(i + 1).and_then(|s| s.parse().ok()).map(Duration::from_secs).filter(|d| !d.is_zero());
