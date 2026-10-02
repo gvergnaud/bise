@@ -1148,14 +1148,14 @@ law gate_reads_its_own_verdict:
 law gate_poll_order:
   {(Gt.found(Some{"7 a allow"}, Some{"1"}, "7", "a"), Gt.found(Some{""}, Some{"1"}, "7", "a"),
     Gt.found(None{}, Some{""}, "7", "a"))
-    == (Some{Gt.VAllow{""}}, Some{Gt.VStop{}}, None{})
+    == (Some{Gt.VAllow{""}}, Some{Gt.VStop{"the user"}}, None{})
     : Maybe<&2, Gt.Verdict> & Maybe<&2, Gt.Verdict> & Maybe<&2, Gt.Verdict>}
 
 # LAW: what the call returns: an allow runs, a denial is its reason, an
 # interrupt says so; the wire lines.
 law gate_results_and_lines:
-  {(Gt.denial(Gt.VAllow{"net"}), Gt.denial(Gt.VDeny{"no"}), Gt.denial(Gt.VStop{}),
-    Gt.ask_line("7", "bash", "ls \"x\"", "a"), Gt.done_line("7", Gt.how_of(Gt.VStop{})),
+  {(Gt.denial(Gt.VAllow{"net"}), Gt.denial(Gt.VDeny{"no"}), Gt.denial(Gt.VStop{"the user"}),
+    Gt.ask_line("7", "bash", "ls \"x\"", "a"), Gt.done_line("7", Gt.how_of(Gt.VStop{"main"})),
     Gt.poll_ms(0n), Gt.poll_ms(10n))
     == (None{}, Some{"no"}, Some{"interrupted by the user"},
         "gate 7 {\"tool\":\"bash\",\"args\":\"ls \\\"x\\\"\",\"nonce\":\"a\"}", "gate-done 7 interrupted",
@@ -2286,10 +2286,28 @@ law interrupt_flag_needs_content:
 # LAW (BR-007): an interrupted retry loop keeps the error that made it
 # retry - for every error text.
 law interrupted_keeps_last_error:
+  for +who: String
   for +n: Nat
   for +why: String
   exs head: String
-  {Pv.interrupted_text(n, why) == String.append(head, why) : String}
+  {Pv.interrupted_text(who, n, why) == String.append(head, why) : String}
+
+# LAW (interrupt-who): an interrupt names who asked for it. The hub writes the asker in
+# the flag ("user", "main", a task's name, "bise"); "1" (an older hub),
+# a blank flag or no file read as the user. The stopped call says so:
+# "interrupted by main", and a gated call's result too.
+law interrupt_names_who:
+  {(Pv.interrupter("main"), Pv.interrupter("user"), Pv.interrupter("1"),
+    Pv.interrupter(" bise\n"), Pv.interrupter_in(None{}), Pv.interrupter_in(Some{"main"}),
+    Pv.interrupted_by(Pv.interrupter("main")), Pv.interrupted_by(Pv.interrupter("user")),
+    Gt.found(None{}, Some{"main"}, "7", "a"), Gt.denial(Gt.VStop{"main"}),
+    Pv.interrupted_text("main", 2n, "x"))
+    == ("main", "the user", "the user", "bise", "the user", "main",
+        "interrupted by main", "interrupted by the user",
+        Some{Gt.VStop{"main"}}, Some{"interrupted by main"},
+        "stopped retrying (interrupted by main) after 2 failed attempts; last error: x")
+    : String & String & String & String & String & String & String & String
+      & Maybe<&2, Gt.Verdict> & Maybe<&2, String> & String}
 
 # LAW: retries exhausted: the final error ends with the last cause.
 law exhausted_keeps_last_error:

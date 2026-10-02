@@ -1391,7 +1391,8 @@ pub(crate) fn pause_mark(
 pub(crate) fn turn_end_of(events: &[Ev], i: usize) -> Option<u64> {
     let ends_turn = |e: &Ev| match e {
         Ev::TurnDone => true,
-        Ev::Warn(t) => t == "turn interrupted",
+        // "turn interrupted by main": a stop mid-answer (wire.rs)
+        Ev::Warn(t) => t == "turn interrupted" || t.starts_with("turn interrupted by "),
         Ev::Err(t) => t.starts_with("turn failed: ") || t.starts_with("turn stopped: "),
         _ => false,
     };

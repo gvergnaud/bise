@@ -7,14 +7,16 @@
 # mode file next to them says `yolo` or `auto`: in `yolo` nothing asks.
 import Base
 import ../vendor/json.bend as J
+import ./provider-pure.bend as Pvp
 
 type Verdict is Data:
   # flags: what follows `allow` (`net`: the sandbox opens the network,
   # approvals-sandbox), "" for a plain allow
   VAllow{flags: String}
   VDeny{reason: String}
-  # ctrl+c on the agent, `sb interrupt`: the call does not run
-  VStop{}
+  # ctrl+c on the agent, `sb interrupt`: the call does not run; who:
+  # who asked (Pvp.interrupter: "the user", "main")
+  VStop{who: String}
 
 # never gated (design §3): the run_typescript wrapper (its calls are gated
 # one by one), search_tool_functions, skill, self.*
@@ -91,9 +93,9 @@ def poll_ms(+k: Nat) -> U32:
 def nonce_of(+a: U32, +b: U32) -> String:
   String.concat(["n", U32.show(a), "x", U32.show(b)])
 
-# a denied or interrupted call's result
-def interrupted() -> String:
-  "interrupted by the user"
+# an interrupted call's result: "interrupted by main" (or "by the user")
+def interrupted(+who: String) -> String:
+  Pvp.interrupted_by(who)
 
 # the mode file (None: no hub wrote one, nothing asks)
 def mode_asks(m: Maybe<&2, String>) -> Bool:
@@ -112,27 +114,27 @@ def stopped(m: Maybe<&2, String>) -> Bool:
     case Some{+t}:
       Bool.not(String.is_empty(String.trim(t)))
 
-def found.int(stop: Bool) -> Maybe<&2, Verdict>:
+def found.int(stop: Bool, +who: String) -> Maybe<&2, Verdict>:
   match stop:
     case True{}:
-      Some{VStop{}}
+      Some{VStop{who}}
     case False{}:
       None{}
 
-def found.pick(v: Maybe<&2, Verdict>, stop: Bool) -> Maybe<&2, Verdict>:
+def found.pick(v: Maybe<&2, Verdict>, stop: Bool, +who: String) -> Maybe<&2, Verdict>:
   match v:
     case Some{+x}:
       Some{x}
     case None{}:
-      found.int(stop)
+      found.int(stop, who)
 
 # one poll: the hub's verdict first, else an interrupt, else nothing yet
-def found(g: Maybe<&2, String>, i: Maybe<&2, String>, +n: String, +nonce: String) -> Maybe<&2, Verdict>:
+def found(g: Maybe<&2, String>, +i: Maybe<&2, String>, +n: String, +nonce: String) -> Maybe<&2, Verdict>:
   match g:
     case None{}:
-      found.int(stopped(i))
+      found.int(stopped(i), Pvp.interrupter_in(i))
     case Some{+t}:
-      found.pick(verdict(t, n, nonce), stopped(i))
+      found.pick(verdict(t, n, nonce), stopped(i), Pvp.interrupter_in(i))
 
 def how_of(v: Verdict) -> String:
   match v:
@@ -140,7 +142,7 @@ def how_of(v: Verdict) -> String:
       "allow"
     case VDeny{_}:
       "deny"
-    case VStop{}:
+    case VStop{_}:
       "interrupted"
 
 # None: the call runs; Some: its failed result
@@ -150,8 +152,8 @@ def denial(v: Verdict) -> Maybe<&2, String>:
       None{}
     case VDeny{+r}:
       Some{r}
-    case VStop{}:
-      Some{interrupted()}
+    case VStop{+w}:
+      Some{interrupted(w)}
 
 # the flags of an allow (`net`), "" otherwise
 def flags(v: Verdict) -> String:

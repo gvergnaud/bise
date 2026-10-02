@@ -889,6 +889,7 @@ fn feed_entities_use_the_book_glyphs() {
     assert_eq!(row(Ev::Compacted { text: "short".into(), open: false }), " ≡ summary ▸");
     assert_eq!(row(Ev::Compacted { text: "short".into(), open: true }), " ≡ summary ▾\n │ short");
     assert_eq!(row(Ev::Warn("turn interrupted".into())), " ▲ turn interrupted");
+    assert_eq!(row(Ev::Warn("turn interrupted by main".into())), " ▲ turn interrupted by main");
     assert_eq!(row(Ev::Err("boom".into())), " ✗ boom");
     assert_eq!(row(Ev::Sub { name: "gh.x".into(), ok: false, preview: "404".into() }), "   ↳ gh.x ✗ 404");
     assert!(row(Ev::You("hi".into(), Mark::Read, false)).starts_with("│  hi"));
@@ -1997,4 +1998,14 @@ fn refusal_parts_split_bise_and_the_provider() {
     );
     assert_eq!(refusal_parts("turn failed: provider unreachable: retries exhausted"), None);
     assert_eq!(refusal_parts("compaction failed: x refused the y. z said: \"w\""), None);
+}
+
+// interrupt-who: a call an interrupt stopped mid-answer names who asked
+// and reads as a dim ▲ stop, not a red ✗ failure
+#[test]
+fn an_interrupt_mid_answer_is_a_dim_stop_naming_who() {
+    for (who, text) in [("main", " ▲ turn interrupted by main"), ("the user", " ▲ turn interrupted by the user")] {
+        let ev = parse_line(&format!("  obs: turn_done: failed: interrupted by {}", who)).expect("parse");
+        assert_eq!(rows_text(&ev_rows(&ev, 0, 100)).join("\n"), text);
+    }
 }

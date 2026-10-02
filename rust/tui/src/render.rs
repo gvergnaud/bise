@@ -381,8 +381,9 @@ pub(crate) fn ev_lines(ev: &Ev, width: usize) -> Vec<Line<'static>> {
         Ev::Compact => compacting_line(0, true),
         Ev::Compacted { text, open } => summary_lines(text, *open, width),
         Ev::Fold { head, text, open } => fold_lines(head, text, *open, width),
-        // an interrupted turn is dim; any other warning reads as text
-        Ev::Warn(t) if t == "turn interrupted" => glyph_line(G_INTERRUPTED, dim_st, t.clone(), dim_st, width),
+        // an interrupted turn ("turn interrupted by main" too) is dim;
+        // any other warning reads as text
+        Ev::Warn(t) if t == "turn interrupted" || t.starts_with("turn interrupted by ") => glyph_line(G_INTERRUPTED, dim_st, t.clone(), dim_st, width),
         Ev::Warn(t) => glyph_line(G_INTERRUPTED, dim_st, t.clone(), text_st, width),
         // a model without vision refused an image: say so, and the way out
         Ev::Err(t) => match crate::attach::no_vision(t) {

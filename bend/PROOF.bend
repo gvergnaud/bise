@@ -405,9 +405,13 @@ def Laws.attempt_connect_names_host():
 def Laws.interrupt_flag_needs_content():
   {==}
 
-def Laws.interrupted_keeps_last_error(n, why):
-  (String.concat(["stopped retrying (interrupted by the user) after ",
+def Laws.interrupted_keeps_last_error(who, n, why):
+  (String.concat(["stopped retrying (interrupted by ", who, ") after ",
     Nat.show(n), " failed attempts; last error: "]), {==})
+
+# every case computes: the flag's text to who, then the texts
+def Laws.interrupt_names_who():
+  {==}
 
 def Laws.exhausted_keeps_last_error(n, why):
   (String.concat(["provider failed after ", Nat.show(n), " attempts: "]),
