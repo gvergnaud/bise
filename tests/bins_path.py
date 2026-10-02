@@ -9,9 +9,12 @@ in the last hour is kept) and pipefail + set -e ended the script before
 cache always has; versions.sh then ran `cp "" ...` and `sb restart` failed.
 
 Checks, with SB_BUILD_DIR in a temp dir (never the shared cache):
-- `path sb-core` next to 4 recent files of that name (a miss: compiles
-  ~15 s): rc 0, stdout = one line, an executable in the cache; the recent
-  files are kept; a second call (a hit) prints the same path;
+- `path sb-core` of a tiny hub tree (bend/hub/main.bend prints a word:
+  a miss compiles it in 0.3 s, never a real sb-core: the EDR of a company
+  Mac deletes fresh unsigned copies, and each one is a new detection) next
+  to 4 recent files of that name: rc 0, stdout = one line, an executable
+  in the cache; the recent files are kept; a second call (a hit) prints
+  the same path;
 - `key` of a source tree without some of the recipe's dirs (an old commit:
   no core/, no rust/home): rc 0 and a 12-hex key.
 
@@ -59,7 +62,14 @@ def main():
             os.chmod(f, 0o755)
             olds.append(f)
 
-        r = run(e, "path", "--src", ROOT, "sb-core")
+        # the tiny hub tree (bend/runtime/: bins.sh's layout since the root cleanup)
+        hub = os.path.join(tmp, "hub")
+        os.makedirs(os.path.join(hub, "bend", "hub"))
+        os.makedirs(os.path.join(hub, "bend", "runtime"))
+        with open(os.path.join(hub, "bend", "hub", "main.bend"), "w") as fh:
+            fh.write('import Base\n\ndef main() -> IO(Unit):\n  IO.print("tiny")\n')
+
+        r = run(e, "path", "--src", hub, "sb-core")
         print(r.stderr, end="", flush=True)
         lines = r.stdout.splitlines()
         check(r.returncode == 0, f"path on a miss exits 0 (rc {r.returncode})")
@@ -70,7 +80,7 @@ def main():
               f"the path is an executable in the temp cache: {p}")
         check(all(os.path.exists(f) for f in olds), "the recent cache files are kept")
 
-        r2 = run(e, "path", "--src", ROOT, "sb-core")
+        r2 = run(e, "path", "--src", hub, "sb-core")
         check(r2.returncode == 0 and r2.stdout.strip() == p and "compiling" not in r2.stderr,
               "a second call is a hit with the same path")
 
@@ -87,8 +97,8 @@ def main():
             r = run(e, "key", "--src", src, name)
             check(r.returncode == 0 and re.fullmatch(r"[0-9a-f]{12}\n", r.stdout) is not None,
                   f"key {name} of a tree without some dirs: rc {r.returncode} {r.stdout!r} {r.stderr[-200:]!r}")
-        # and the key of this tree is unchanged by the filter (all dirs exist)
-        k = run(e, "key", "--src", ROOT, "sb-core").stdout.strip()
+        # and the path is the key of the tree it built
+        k = run(e, "key", "--src", hub, "sb-core").stdout.strip()
         check(p.endswith("sb-core-" + k), "path is <name>-<key>")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

@@ -4,10 +4,12 @@
 #   gate.sh [quick]   what the tree's changes touch, ~5-10 s warm: clippy -D
 #                     warnings (next to the tests, in $target/clippy), the
 #                     tests of the changed crates and of the crates using them; if a .bend file of core/ hub/ vendor/
-#                     or LAWS/PROOF changed: PROOF.bend (4 shards in parallel)
-#                     and, for hub/ vendor/, a quick sb-core for the tests
-#                     (-O1, cached by content; ./sb-core is not touched).
-#                     The bend part runs next to cargo.
+#                     or LAWS/PROOF changed: PROOF.bend (4 shards in parallel).
+#                     The tests run bins.sh's cached sb-core of the tree's
+#                     hub/ vendor/ itself (SB_CORE_BIN = the cache file, one
+#                     compile per source hash for every worktree and the
+#                     full gate; never a copy of its own: the EDR deletes
+#                     fresh unsigned copies). The bend part runs next to cargo.
 #   gate.sh full      everything: cargo build, run_all.sh (it puts ./repl-live
 #                     ./repl-scripted ./sb-core in place with bins.sh: a copy
 #                     from the cache, a compile when their sources changed;
@@ -323,15 +325,23 @@ printf '%s\n' "$changed" | grep -qE '^bend/(hub|vendor)/' && hub_changed=1
 printf '%s\n' "$changed" | grep -qE '^bend/((core|hub|vendor)/.*|LAWS|PROOF)\.bend$' && bend_changed=1
 # ./sb-core (not in git, BISE-114): the build of this tree's hub/ vendor/,
 # from bins.sh's cache shared by every worktree (a copy; ~15 s on a miss).
-# quick with a hub/ change: the tests run a -O1 build instead (below)
+# quick with a hub/ change: bins.sh compiles it in the background (below)
 if [ $hub_changed = 0 ] || [ "$mode" = full ]; then
   scripts/bins.sh sb-core || { echo "FAIL sb-core build"; exit 1; }
 fi
+# the EDR of a company Mac (CrowdStrike) deletes a fresh unsigned binary
+# when it is spawned (~0.2 s): one clear line instead of 30 red tests
+# (a rerun compiles it again in bins.sh's cache, where it survived so far)
+sbcore_gone() {  # <file>: say so and true when the sb-core that was built is gone
+  [ -n "$1" ] && [ ! -e "$1" ] || return 1
+  echo "FAIL sb-core vanished after it was built: an antivirus (EDR) may have removed it ($1)"
+}
 
 if [ "$mode" = full ]; then
   s=$SECONDS
   export FUZZ_RUNS="${FUZZ_RUNS:-2000}"
   tests/run_all.sh & wait $!; rc=$?
+  [ $rc = 0 ] || sbcore_gone "$root/sb-core"
   # every binary built runs on the macOS target (BISE-164): the Bend ones,
   # bise, and the engine when this tree has one
   bins=(./repl-live ./repl-scripted ./sb-core "${CARGO_TARGET_DIR:-rust/target}/debug/bise")
@@ -349,6 +359,10 @@ cache="${CARGO_TARGET_DIR:-$root/rust/target}/gate-cache"
 out="$(mktemp -d "${TMPDIR:-/tmp}/sbgateXXXXXX")"
 mkdir -p "$cache"
 fail() {  # <name> <log>: the failures, the log kept
+  # the tests' sb-core gone: that line alone, not every test it failed
+  if sbcore_gone "${SB_CORE_BIN:-}"; then
+    cp "$2" "$gdir/sb-gate-$1.log"; echo "log of $1: $gdir/sb-gate-$1.log"; exit 1
+  fi
   echo "FAIL $1"
   grep -E "^test .* FAILED|panicked|^error|^warning|^failures:|^Location|^Error" "$2" | head -30
   cp "$2" "$gdir/sb-gate-$1.log"; echo "log: $gdir/sb-gate-$1.log"; exit 1
@@ -373,20 +387,29 @@ proof_job() {
   done
   touch "$cache/proof-ok-$h"; echo "ok   PROOF ($((SECONDS - s))s, $n shards)"
 }
-sbcore_job() {  # a quick sb-core (-O1: half the compile of bend -o's -O3)
-  local h s=$SECONDS; h="$(hash_of bend/hub bend/vendor)"
-  [ -x "$cache/sb-core-$h" ] && { echo "ok   sb-core (cached)"; return 0; }
-  bend bend/hub/main.bend -o "$out/sb-core.c" >"$out/sb-core.log" 2>&1 \
-    && cc -std=c11 -O1 -fno-inline "$out/sb-core.c" -lpthread -lm -o "$out/sb-core" >>"$out/sb-core.log" 2>&1 \
+# the sb-core of the tests: bins.sh's cache file of this tree's hub/ vendor/
+# (keyed by their content), run in place, never copied. It used to be a
+# -O1 build of its own in $cache (7 s instead of 10-16 s), so a hub change
+# compiled sb-core twice (quick, then full), and that fresh copy is what
+# the EDR deleted at its first spawn; the -O3 compile runs next to cargo's.
+sbcore_job() {
+  local s=$SECONDS f
+  f="$(scripts/bins.sh path sb-core 2>"$out/sb-core.log")" && [ -x "$f" ] \
     || { echo "FAIL sb-core build"; tail -20 "$out/sb-core.log"; return 1; }
-  rm -f "$cache"/sb-core-*; mv "$out/sb-core" "$cache/sb-core-$h"
-  echo "ok   sb-core ($((SECONDS - s))s, quick -O1 build for the tests)"
+  sbcore_gone "$f" && return 1
+  echo "$f" >"$out/sbcore.path"
+  if grep -q compiling "$out/sb-core.log"; then echo "ok   sb-core ($((SECONDS - s))s, compiled into bins.sh's cache)"
+  else echo "ok   sb-core (bins.sh's cache)"; fi
 }
 [ $bend_changed = 1 ] && { proof_job >"$out/proof.res" 2>&1; echo $? >"$out/proof.rc"; } &
+rm -f "$cache"/sb-core-*  # the -O1 copies of the gate before
 if [ $hub_changed = 1 ]; then
+  # SB_CORE_BIN is set from $out/sbcore.path once it is built (below)
   { sbcore_job >"$out/sbcore.res" 2>&1; echo $? >"$out/sbcore.rc"; } &
   sbcore_pid=$!
-  export SB_CORE_BIN="$cache/sb-core-$(hash_of bend/hub bend/vendor)"
+else
+  # a hit: ./sb-core was just put in place from it
+  SB_CORE_BIN="$(scripts/bins.sh path sb-core 2>/dev/null)" && export SB_CORE_BIN || unset SB_CORE_BIN
 fi
 # the crates to test: changed ones and the crates depending on them
 pkgs=""
@@ -428,6 +451,7 @@ if [ -n "$pkgs" ]; then
   if [ -n "${sbcore_pid:-}" ]; then
     step test-build bash -c "cd rust && cargo test --offline -q --no-run $args"
     wait "$sbcore_pid"; cat "$out/sbcore.res"; [ "$(cat "$out/sbcore.rc")" = 0 ] || exit 1
+    SB_CORE_BIN="$(cat "$out/sbcore.path")"; export SB_CORE_BIN
   fi
   step "test$(echo "$pkgs" | tr ' ' '_')" bash -c "cd rust && cargo test --offline -q $args"
   grep "test result" "$out"/test_*.log | grep -v " 0 passed" | sed 's/^.*test result/  test result/'
