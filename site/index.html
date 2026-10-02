@@ -235,6 +235,9 @@
   .feat h3 { font-size:17px; margin:20px 0 6px; }
   .feat p { color:var(--dim); font-size:15px; margin:0; max-width:52ch; }
   .mini { background:var(--soft); border-radius:10px; font-size:13.5px; line-height:1.6; padding:18px 2.5ch 14px; }
+  .fgrid .mini.pic, .fgrid .mini.pic:is(*) { padding:0; background:none !important; box-shadow:none !important; overflow:hidden; align-items:center; justify-content:flex-start; }
+  .fgrid .mini.pic::before { display:none !important; }
+  .fgrid .mini.pic img { display:block; width:100%; height:100%; object-fit:contain; object-position:center top; }
   /* no overscroll-behavior: contain here. it makes the box swallow the wheel even
      when there is nothing to scroll; at its ends the page scrolls on */
   .mfeed { height:calc(13.5px * 1.6 * 10); overflow-y:auto; overflow-x:hidden; padding-right:1ch; }  /* no sideways scrollbar over the composer */
@@ -754,7 +757,7 @@
 <!-- features, animated -->
 <section id="features">
   <div class="features">
-    <div class="inner blow" style="margin-bottom:10px"><div class="kicker">kiss your backlog goodbye</div><h2>the models grew up. you can stop babysitting</h2><p class="soft">ten things you'll notice in the first hour</p></div>
+    <div class="inner blow" style="margin-bottom:10px"><div class="kicker">kiss your backlog goodbye</div><h2>the models grew up. you can stop babysitting</h2><p class="soft">twelve things you'll notice in the first hour</p></div>
     <div class="fgrid">
       <div class="grp">the team runs itself</div>
       <div class="feat blow"><div class="mini" data-play="resume"></div><h3>hand it something huge</h3><p>give main a big goal. it splits it into jobs, runs the agents, restarts the ones that stop half-way, and keeps going until it's done.</p></div>
@@ -762,6 +765,9 @@
       <div class="grp">your head stays yours</div>
       <div class="feat blow"><div class="mini" data-play="talk"></div><h3>main is always there</h3><p>main gives the heavy work to the agents, so it's never busy. ask it anything, add one more thing, change your mind: it answers right away, and no job stops.</p></div>
       <div class="feat blow"><div class="mini" data-play="quiet"></div><h3>zen mode while you type</h3><p>start typing and everything else fades: the agents, the counts, the chatter. just you and your words. send it and it all comes back. what the agents said to each other stays folded, ctrl+o opens it.</p></div>
+      <div class="grp">hands off the keyboard</div>
+      <div class="feat blow"><div class="mini pic"><img src="/demos/voicemode-dark.svg" width="680" height="392" loading="lazy" alt="you press ctrl+r twice and ask main to make the pricing page less busy. the face listens, thinks, then talks: main says pricing-page will cut it to three plans. it ends with a kiss."></div><h3>talk to it. it talks back</h3><p>press ctrl+r twice and just talk to main. it answers out loud while the agents keep working, and blows you a kiss when it's done. /voice picks the model, the voice and the language.</p></div>
+      <div class="feat blow"><div class="mini pic"><img src="/demos/computer-dark.svg" width="680" height="332" loading="lazy" alt="you ask main if buy is visible on the mobile pricing page. an agent opens it in a background tab in its own group, reads it, takes a screenshot, and main answers: buy shows on all three plans. your own tab never moved."></div><h3>it can use your browser</h3><p>agents open pages in their own tab group, in the background, with your logins: they read, click, fill forms and take screenshots. never your screen, never your tab. Mac apps too. off until /computer-use.</p></div>
       <div class="grp">no more "yes, continue"</div>
       <div class="feat blow"><div class="mini" data-play="card"></div><h3>you're not the router</h3><p>main answers the agents for you: the obvious questions, the way you would, and it tells you why. only the real decisions reach you.</p></div>
       <div class="feat blow"><div class="mini" data-play="sync"></div><h3>agents sync on their own</h3><p>every agent can talk to every other one. they ask, share and hand off quietly, folded out of your way.</p></div>
