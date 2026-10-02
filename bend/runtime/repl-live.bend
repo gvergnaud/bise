@@ -46,6 +46,12 @@ def keep_of_cfg(+envv: String, +cfgt: String) -> Nat:
 def thr_of_cfg(+envv: String, +cfgt: String, +window: U32) -> Nat:
   U32.to_nat(Pvp.threshold(envv, cfgt, window))
 
+# the same threshold in the Core's estimate units (Pvp.est_units): what
+# the Core's Cfg carries, so the compaction fires at about the
+# provider's count, not a third later
+def thr_core_of_cfg(+envv: String, +cfgt: String, +window: U32) -> Nat:
+  U32.to_nat(Pvp.est_units(Pvp.threshold(envv, cfgt, window)))
+
 # the live system prompt = identity + the exact vibe_sdk sections
 # (tool_use_prompt + current_time_prompt), loaded from prompt-*.txt;
 # a solo session also gets the tone block (prompt-tone.txt, Rcp.solo_tone)
@@ -152,7 +158,9 @@ def live_main() -> IO(Unit):
       "BEND_THRESHOLD")
     +cfgt : String <- St.read_cfg()
     +window : U32 <- Pv.resolved_window()
-    +threshold : Nat <- IO.pure(Nat, thr_of_cfg(P.env_or(env, ""), cfgt, window))
+    +envt : String <- IO.pure(String, P.env_or(env, ""))
+    +threshold : Nat <- IO.pure(Nat, thr_of_cfg(envt, cfgt, window))
+    +core_thr : Nat <- IO.pure(Nat, thr_core_of_cfg(envt, cfgt, window))
     kenv : Result<&1, &1, U32 & String, String> <- IO.get_env(
       "BEND_COMPACT_KEEP")
     +keep : Nat <- IO.pure(Nat, keep_of_cfg(P.env_or(kenv, ""), cfgt))
@@ -171,7 +179,7 @@ def live_main() -> IO(Unit):
     # skills), then the prompt (it lists the skills)
     u5 : Unit <- Pl.start()
     u4 : Unit <- Sk.skills_scan()
-    +cfg : T.Cfg <- live_cfg(threshold, keep)
+    +cfg : T.Cfg <- live_cfg(core_thr, keep)
     +ld : P.Load <- P.load(T.new_session(cfg))
     kr : Result<&1, &1, U32 & String, String> <- IO.get_env("MISTRAL_API_KEY")
     +key : String <- IO.pure(String, P.env_or(kr, ""))

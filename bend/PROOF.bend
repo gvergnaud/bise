@@ -616,6 +616,15 @@ def Laws.deferred_reads_both_requests():
 def Laws.deferred_resets_at_user():
   {==}
 
+def Laws.deferred_survives_injected_message():
+  {==}
+
+def Laws.deferred_resets_after_final_reply():
+  {==}
+
+def Laws.deferred_survives_tool_calls():
+  {==}
+
 def Laws.deferred_empty_history():
   {==}
 
@@ -1016,6 +1025,9 @@ def Laws.window_unknown_model_default():
   {==}
 
 def Laws.threshold_precedence():
+  {==}
+
+def Laws.threshold_in_core_units():
   {==}
 
 def Laws.threshold_tokens_or_percent():

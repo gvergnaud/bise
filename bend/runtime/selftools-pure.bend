@@ -43,9 +43,12 @@ def self_exec(+name: String) -> Xp.ExecRes:
 
 # ---- the deferred-request scan (pure) ----
 # What the JUST-FINISHED turn asked for. The scan walks the history
-# forward, resetting at every user message: only tool results after
-# the LAST user message count, so an old request can never fire twice
-# and a stalled turn's request (skipped by the REPL) does not linger.
+# forward, resetting at every turn boundary: the user's own message,
+# and the message after a turn's final reply. Only tool results of the
+# last turn count, so an old request can never fire twice. An injected
+# message (steering, an agent's report delivered mid-turn) is NOT a
+# boundary: it once wiped main's self.compact, filed just before an
+# agent's report was steered in, and the turn ended without compacting.
 
 type Def is Data:
   Def{compact: Bool, reload: Bool}
@@ -105,28 +108,70 @@ def def_step.msg.tool(is_tool: Bool, +d: Def, +text: String) -> Def:
     case False{}:
       d
 
+# an injected user message (steering, a notification, an agent's
+# message delivered mid-turn) is part of the running turn: the requests
+# before it still stand. Only the user's own message starts a new turn.
+def def_step.msg.injected(injected: Bool, +d: Def) -> Def:
+  match injected:
+    case True{}:
+      d
+    case False{}:
+      def_none()
+
 def def_step.msg.user(is_user: Bool, +role: T.Role, +d: Def,
-    +text: String) -> Def:
+    +text: String, +injected: Bool) -> Def:
   match is_user:
     case True{}:
-      def_none()
+      def_step.msg.injected(injected, d)
     case False{}:
       def_step.msg.tool(def_step.role_is_tool(role), d, text)
 
 def def_step.msg(+d: Def, +m: T.Msg) -> Def:
   match m:
-    case T.Msg{+role, +text, _, _}:
-      def_step.msg.user(def_step.role_is_user(role), role, d, text)
+    case T.Msg{+role, +text, _, +injected}:
+      def_step.msg.user(def_step.role_is_user(role), role, d, text, injected)
 
-def def_scan(msgs: List<&2, T.Msg>, +d: Def) -> Def:
+# a turn's final reply (an assistant message without tool calls) ends
+# it: whatever comes after belongs to a later turn, even when that turn
+# starts with an injected message (an agent's report waking main)
+def def_step.no_calls(calls: List<&2, T.Call>) -> Bool:
+  match calls:
+    case Nil{}:
+      True{}
+    case Con{_, _}:
+      False{}
+
+def def_step.ends.role(role: T.Role, +calls: List<&2, T.Call>) -> Bool:
+  match role:
+    case T.RAsst{}:
+      def_step.no_calls(calls)
+    case _:
+      False{}
+
+def def_step.ends(+m: T.Msg) -> Bool:
+  match m:
+    case T.Msg{+role, _, +calls, _}:
+      def_step.ends.role(role, calls)
+
+# after a turn's end, the next message starts from no request
+def def_step.fresh(ended: Bool, +d: Def) -> Def:
+  match ended:
+    case True{}:
+      def_none()
+    case False{}:
+      d
+
+# ended: the previous message was a turn's final reply
+def def_scan(msgs: List<&2, T.Msg>, +d: Def, ended: Bool) -> Def:
   match msgs:
     case Nil{}:
       d
     case Con{+m, +rest}:
-      def_scan(rest, def_step.msg(d, m))
+      def_scan(rest, def_step.msg(def_step.fresh(ended, d), m),
+        def_step.ends(m))
 
 def deferred_of(+history: List<&2, T.Msg>) -> Def:
-  def_scan(history, def_none())
+  def_scan(history, def_none(), False{})
 
 # the acks a request set carries (the program's result is suffixed
 # with them, so the model reads its own requests back and the

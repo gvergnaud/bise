@@ -671,6 +671,18 @@ def threshold.pick(empty: Bool, +envv: String, +cfgt: String,
 def threshold(+envv: String, +cfgt: String, +window: U32) -> U32:
   threshold.pick(String.is_empty(envv), envv, cfgt, window)
 
+# ---- the threshold in the Core's units ----
+# The threshold the user writes (and the 80 % cap) counts the
+# provider's tokens; the Core compares it with its own estimate, four
+# bytes a token (core/estimate.bend), and providers count about three:
+# on main's history Anthropic counted 1.28x the estimate (507700 real
+# input tokens at an estimate of 396485; 450607 real at 343760). Given
+# as is, a 450000 threshold never fired and main ran past 500k. The
+# Core gets three quarters of it: 337500 for 450000, crossed at about
+# 450k real. On lighter text it compacts a little early, never late.
+def est_units(+n: U32) -> U32:
+  ((n / 4) * 3 + ((n % 4) * 3) / 4 : U32)
+
 def interrupt_path_of(+dir: String, +port: String) -> String:
   String.append(dir, String.append("/bend-interrupt-", String.append(port, ".txt")))
 

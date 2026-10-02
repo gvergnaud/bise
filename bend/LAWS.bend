@@ -869,6 +869,36 @@ law deferred_resets_at_user:
       Con{T.user("new turn"), Con{T.asst("hi", Nil{}), Nil{}}}})
     == Sf.Def{False{}, False{}} : Sf.Def}
 
+# LAW: a message injected mid-turn (an agent's report steered in right
+# after the ack) does not spend the request: the turn still compacts
+# at its end. It once did: main's self.compact was lost that way.
+law deferred_survives_injected_message:
+  {Sf.deferred_of(Con{T.user("hi"),
+      Con{T.tool_res(Sf.COMPACT_ACK()),
+        Con{T.injected_user("<agent_message>report</agent_message>"),
+          Con{T.asst("done", Nil{}), Nil{}}}}})
+    == Sf.Def{True{}, False{}} : Sf.Def}
+
+# LAW: a turn's final reply ends it: a later turn started by an
+# injected message (an agent's report waking main) does not fire the
+# earlier turn's request again.
+law deferred_resets_after_final_reply:
+  {Sf.deferred_of(Con{T.user("hi"),
+      Con{T.tool_res(Sf.RELOAD_ACK()),
+        Con{T.asst("done", Nil{}),
+          Con{T.injected_user("<agent_message>report</agent_message>"),
+            Con{T.asst("noted", Nil{}), Nil{}}}}}})
+    == Sf.Def{False{}, False{}} : Sf.Def}
+
+# LAW: an assistant message WITH tool calls does not end the turn: the
+# request filed before it still stands.
+law deferred_survives_tool_calls:
+  {Sf.deferred_of(Con{T.user("hi"),
+      Con{T.tool_res(Sf.COMPACT_ACK()),
+        Con{T.asst("more", Con{T.Call{1, "bash", "ls"}, Nil{}}),
+          Con{T.tool_res("ok"), Nil{}}}}})
+    == Sf.Def{True{}, False{}} : Sf.Def}
+
 # LAW: no history, no requests.
 law deferred_empty_history:
   {Sf.deferred_of(Nil{}) == Sf.Def{False{}, False{}} : Sf.Def}
@@ -2821,6 +2851,19 @@ law threshold_precedence:
       Pv.threshold("", "model = \"x\"", 200000),
       Pv.threshold("oops", "compaction_threshold = 7000", 200000))
     == (5000, 7000, 160000, 160000) : U32 & U32 & U32 & U32}
+
+# LAW: the Core gets the threshold in its own units, three quarters of
+# the provider's tokens (Pv.est_units). Main's 450000 becomes 337500:
+# its history crossed 450607 real tokens at an estimate of 343760 and
+# peaked at 507700 real (estimate 396485) without compacting; both
+# estimates are past 337500, so it would have compacted near 450k (an
+# estimate just under 337500 still goes out).
+law threshold_in_core_units:
+  {(Pv.est_units(450000), Pv.est_units(160000), Pv.est_units(7),
+      U32.is_lt(343760, Pv.est_units(450000)),
+      U32.is_lt(337499, Pv.est_units(450000)))
+    == (337500, 120000, 5, False{}, True{})
+    : U32 & U32 & U32 & Bool & Bool}
 
 # LAW (BISE-300): config `compaction_threshold` is a number of tokens or
 # a share of the model's window ("45%", spaces allowed around it);
