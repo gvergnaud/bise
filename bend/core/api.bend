@@ -261,6 +261,53 @@ def with_cache_header(+name: String, +key: String, +hs: List<&2, Hdr>)
     -> List<&2, Hdr>:
   with_cache_header.pick(String.is_empty(name), name, key, hs)
 
+# ---- extra headers (a gateway's: the catalog's headers_env) ----
+# The text of the variable headers_env names: one "Name: value" per
+# line, Claude Code's ANTHROPIC_CUSTOM_HEADERS form. A line with no ':'
+# or no name is skipped; the value keeps any ':' of its own.
+
+def extra_header.named(empty: Bool, +n: String, +v: String) -> List<&2, Hdr>:
+  match empty:
+    case True{}:
+      Nil{}
+    case False{}:
+      [Hdr{n, v}]
+
+def extra_header(parts: List<&2, String>) -> List<&2, Hdr>:
+  match parts:
+    case Nil{}:
+      Nil{}
+    case Con{_, Nil{}}:
+      Nil{}
+    case Con{+n, +rest}:
+      extra_header.named(String.is_empty(String.trim(n)), String.trim(n),
+        String.trim(String.join(rest, ":")))
+
+def extra_headers.go(lines: List<&2, String>) -> List<&2, Hdr>:
+  match lines:
+    case Nil{}:
+      Nil{}
+    case Con{+l, rest}:
+      List.append(&2, Hdr, extra_header(String.split(l, ':')),
+        extra_headers.go(rest))
+
+def extra_headers(+text: String) -> List<&2, Hdr>:
+  extra_headers.go(String.split(text, Char.from_u32(10)))
+
+# the headers with the extra ones last: they win over the family's
+def with_extra_headers(+text: String, +hs: List<&2, Hdr>) -> List<&2, Hdr>:
+  List.append(&2, Hdr, hs, extra_headers(text))
+
+# a key from key_command also goes as a bearer token, like Claude Code's
+# apiKeyHelper (X-Api-Key and Authorization): a gateway in front of
+# Anthropic may read only the second
+def with_bearer(on: Bool, +key: String, +hs: List<&2, Hdr>) -> List<&2, Hdr>:
+  match on:
+    case True{}:
+      List.append(&2, Hdr, hs, [Hdr{"Authorization", String.append("Bearer ", key)}])
+    case False{}:
+      hs
+
 # ---- the body and the reply ----
 
 def api_body_for(st: Style, +model: String, +facts: MFacts, +req: W.WReq)

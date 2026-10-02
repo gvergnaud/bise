@@ -32,6 +32,21 @@
 #   the HTTP header that carry the session's routing key ("bise-<hash>",
 #   core/api.bend session_key) to a provider that routes by it; unset:
 #   none sent. Only where the provider's docs name one.
+# A gateway in front of a provider (Claude Code's ANTHROPIC_BASE_URL,
+#   ANTHROPIC_CUSTOM_HEADERS and apiKeyHelper), none built in:
+#   headers_env = the env variable holding extra headers, one
+#   "Name: value" per line; key_command = a shell command printing the
+#   key, run before every call (a short-lived token), its key sent as
+#   the family's header and as Authorization: Bearer; with key_env = ""
+#   (no '"' or '\' in it: single quotes work). E.g. in config.toml:
+#     [providers.gateway]
+#     api = "anthropic"
+#     base_url = "https://gateway.example/v1"
+#     key_env = ""
+#     reasoning = true
+#     headers_env = "ANTHROPIC_CUSTOM_HEADERS"
+#     key_command = "my-tool auth token"
+#   then model = "gateway/claude-opus-5-5".
 # Prices (BISE-150), USD per million tokens: input_price, output_price,
 #   cache_read_price, cache_write_price (the two cache ones default to
 #   input_price). Unset: the cost is not shown. The list prices, short

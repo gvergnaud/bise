@@ -620,9 +620,18 @@ def model_call.try(fuel: Nat, +tries: Nat, n: Out, +request: String,
             +body : String <- IO.pure(String, Enc.utf8.encode(filled))
             dr : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_WIRE_DUMP")
             dump_dbg : Unit <- dump_wire(dump_path(P.env_or(dr, ""), call, tries), body)
+            # a gateway (headers_env, key_command), read on each call:
+            # its extra headers, its key also as a bearer token
+            +hvar : String <- IO.pure(String,
+              Pvp.headers_env(mfile, prov, String.concat([prov, "/", model])))
+            hr : Result<&1, &1, U32 & String, String> <- IO.get_env(hvar)
+            +bearer : Bool <- IO.pure(Bool, Bool.not(String.is_empty(
+              Pvp.key_command(mfile, prov, String.concat([prov, "/", model])))))
             hdrs : Map<&2, List<&2, String>> <- IO.pure(Map<&2, List<&2, String>>,
-              headers_of(Api.with_cache_header(Pvp.cache_header(names), ckey,
-                Api.headers(st, Api.facts_betas(facts), key)), Http.empty()))
+              headers_of(Api.with_extra_headers(P.env_or(hr, ""),
+                Api.with_bearer(bearer, key,
+                  Api.with_cache_header(Pvp.cache_header(names), ckey,
+                    Api.headers(st, Api.facts_betas(facts), key)))), Http.empty()))
             +g : Got <- call.by_style(st, url, hdrs, body)
             lg : Unit <- model_call.log(call, tries, model, url, json, g)
             # the usage line names the full id (the TUI's catalog key)
@@ -641,30 +650,90 @@ def model_call.go(n: Out, +request: String, +key: String, +pv: Pvp.Prov,
     +call : Nat <- IO.now()
     model_call.try(Pvp.max_attempts(), 0n, n, request, key, pv, call, req)
 
-# a provider with a key_env needs that variable set; one with
-# key_env = "" (a local server) calls without a key. No key: one line
-# that says what to do (BISE-294: the TUI names the provider and points
-# at /provider; main's thread reads it as is)
+# a provider with a key_env (or a key_command) needs its key; one with
+# key_env = "" and no key_command (a local server) calls without a key.
+# No key: one line that says what to do (BISE-294: the TUI names the
+# provider and points at /provider; main's thread reads it as is)
 def model_call.key(missing: Bool, n: Out, +request: String, +key: String,
-    +pv: Pvp.Prov, +prov: String, +key_env: String, +req: U32)
+    +pv: Pvp.Prov, +why: String, +req: U32)
     -> IO(Out & Rem.RemoteRes):
   match missing:
     case True{}:
-      IO.pure(Out & Rem.RemoteRes,
-        (n, Rem.RRErr{String.concat(["no ", prov, " key yet (", key_env,
-          " is not set): /provider sets it up"])}))
+      IO.pure(Out & Rem.RemoteRes, (n, Rem.RRErr{why}))
     case False{}:
       model_call.go(n, request, key, pv, req)
 
+def key_cmd.max_output() -> U32:
+  65536
+
+def key_cmd.timeout_ms() -> U32:
+  60000
+
+# key_command's answer: its stdout, trimmed, when it exits 0; else ""
+def key_cmd.out(ok: Bool, +out: String) -> String:
+  match ok:
+    case True{}:
+      String.trim(out)
+    case False{}:
+      ""
+
+def key_cmd.streams(+code: U32, oe: String & String) -> String:
+  match oe:
+    case (out, _):
+      key_cmd.out(U32.is_zero(code), out)
+
+def key_cmd.done(res: U32 & (String & String)) -> String:
+  match res:
+    case (code, oe):
+      key_cmd.streams(code, oe)
+
+def key_cmd.answer(r: Result<&1, &1, U32 & String, U32 & (String & String)>)
+    -> String:
+  match r:
+    case Done{res}:
+      key_cmd.done(res)
+    case Fail{_}:
+      ""
+
+# the key of a call: key_command's output when the catalog names one,
+# run by /bin/sh before every call like Claude Code's apiKeyHelper (a
+# gateway's short-lived token); else the key_env variable's value
+@unsafe
+def key_of.pick(none: Bool, +cmd: String, +env_key: String) -> IO(String):
+  match none:
+    case True{}:
+      IO.pure(String, env_key)
+    case False{}:
+      do IO<String>:
+        r : Result<&1, &1, U32 & String, U32 & (String & String)> <- Process.run(
+          "/bin/sh", Con{"-c", Con{cmd, Nil{}}}, "", key_cmd.max_output(),
+          key_cmd.timeout_ms())
+        IO.pure(String, key_cmd.answer(r))
+
+# the missing key's line: the key_command's, else the key_env's
+def key_why(has_cmd: Bool, +prov: String, +key_env: String) -> String:
+  match has_cmd:
+    case True{}:
+      String.concat(["no ", prov,
+        " key: its key_command failed or printed nothing (config.toml)"])
+    case False{}:
+      String.concat(["no ", prov, " key yet (", key_env,
+        " is not set): /provider sets it up"])
+
+@unsafe
 def model_call.env(n: Out, +request: String, +pv: Pvp.Prov, +req: U32)
     -> IO(Out & Rem.RemoteRes):
   match pv:
-    case Pvp.Prov{+prov, _, _, _, +key_env, _}:
+    case Pvp.Prov{+prov, +model, _, _, +key_env, _}:
       do IO<Out & Rem.RemoteRes>:
+        +mfile : String <- models_file()
+        +cmd : String <- IO.pure(String,
+          Pvp.key_command(mfile, prov, String.concat([prov, "/", model])))
         kr : Result<&1, &1, U32 & String, String> <- IO.get_env(key_env)
-        +key : String <- IO.pure(String, P.env_or(kr, ""))
-        model_call.key(Bool.and(Bool.not(String.is_empty(key_env)),
-          String.is_empty(key)), n, request, key, pv, prov, key_env, req)
+        +key : String <- key_of.pick(String.is_empty(cmd), cmd, P.env_or(kr, ""))
+        model_call.key(Bool.and(Bool.not(Bool.and(String.is_empty(key_env),
+            String.is_empty(cmd))), String.is_empty(key)), n, request, key, pv,
+          key_why(Bool.not(String.is_empty(cmd)), prov, key_env), req)
 
 def model_call.resolved(r: Pvp.Resolved, n: Out, +request: String,
     +req: U32) -> IO(Out & Rem.RemoteRes):

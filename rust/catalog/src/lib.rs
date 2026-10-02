@@ -61,6 +61,14 @@ pub struct Caps {
     pub cache_key: String,
     /// the same key as an HTTP header (xAI `x-grok-conv-id`); "" = none
     pub cache_header: String,
+    /// a gateway in front of the provider: the env variable holding extra
+    /// headers, one `Name: value` per line (Claude Code's
+    /// `ANTHROPIC_CUSTOM_HEADERS`); "" = none
+    pub headers_env: String,
+    /// the command whose stdout is the key, run before every call
+    /// (Claude Code's `apiKeyHelper`: a short-lived token); "" = none,
+    /// the key comes from `key_env`
+    pub key_command: String,
 }
 
 /// The thinking modes of the Anthropic family.
@@ -108,6 +116,8 @@ pub const DEFAULT_CAPS: Caps = Caps {
     effort: String::new(),
     cache_key: String::new(),
     cache_header: String::new(),
+    headers_env: String::new(),
+    key_command: String::new(),
 };
 
 /// Caps as written in a table: a missing field comes from the level below
@@ -125,6 +135,8 @@ pub struct PartialCaps {
     pub effort: Option<String>,
     pub cache_key: Option<String>,
     pub cache_header: Option<String>,
+    pub headers_env: Option<String>,
+    pub key_command: Option<String>,
     /// prices (BISE-150), in [`Price`]'s unit
     pub input_price: Option<u64>,
     pub output_price: Option<u64>,
@@ -175,6 +187,8 @@ impl PartialCaps {
             effort: self.effort.clone().unwrap_or_else(|| base.effort.clone()),
             cache_key: self.cache_key.clone().unwrap_or_else(|| base.cache_key.clone()),
             cache_header: self.cache_header.clone().unwrap_or_else(|| base.cache_header.clone()),
+            headers_env: self.headers_env.clone().unwrap_or_else(|| base.headers_env.clone()),
+            key_command: self.key_command.clone().unwrap_or_else(|| base.key_command.clone()),
         }
     }
     fn price_over(&self, base: &Price) -> Price {
@@ -197,6 +211,8 @@ impl PartialCaps {
         self.effort = o.effort.clone().or(self.effort.take());
         self.cache_key = o.cache_key.clone().or(self.cache_key.take());
         self.cache_header = o.cache_header.clone().or(self.cache_header.take());
+        self.headers_env = o.headers_env.clone().or(self.headers_env.take());
+        self.key_command = o.key_command.clone().or(self.key_command.take());
         self.input_price = o.input_price.or(self.input_price);
         self.output_price = o.output_price.or(self.output_price);
         self.cache_read_price = o.cache_read_price.or(self.cache_read_price);
@@ -894,6 +910,17 @@ fn cap_field(caps: &mut PartialCaps, k: &str, v: &toml::Value, where_: &str, war
             }
             _ => warn(bad("a field or header name (letters, digits, - and _)")),
         },
+        // a gateway: the variable of its extra headers, the command of its key
+        "headers_env" => match v.as_str().map(str::trim) {
+            Some(n) if n.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') => caps.headers_env = Some(n.to_string()),
+            _ => warn(bad("an env variable name (letters, digits and _)")),
+        },
+        // the runtime's reader (core/config.bend) takes a value as written,
+        // escapes included: no '"' or '\\' (single quotes work)
+        "key_command" => match v.as_str().map(str::trim) {
+            Some(c) if !c.contains(['\n', '"', '\\']) => caps.key_command = Some(c.to_string()),
+            _ => warn(bad("a shell command on one line printing the key, with no \" or \\ (use single quotes)")),
+        },
         _ => warn(format!("{}: unknown key {}", where_, k)),
     }
 }
@@ -1297,6 +1324,8 @@ impl Setup {
                 ("effort", a.effort.clone(), b.effort.clone()),
                 ("cache_key", a.cache_key.clone(), b.cache_key.clone()),
                 ("cache_header", a.cache_header.clone(), b.cache_header.clone()),
+                ("headers_env", a.headers_env.clone(), b.headers_env.clone()),
+                ("key_command", a.key_command.clone(), b.key_command.clone()),
             ] {
                 if x != y {
                     o.push_str(&format!("{} = {}\n", k, q(&x)));
@@ -1436,6 +1465,12 @@ fn caps_lines(o: &mut String, c: &Caps) {
     }
     if !c.cache_header.is_empty() {
         o.push_str(&format!("cache_header = {}\n", q(&c.cache_header)));
+    }
+    if !c.headers_env.is_empty() {
+        o.push_str(&format!("headers_env = {}\n", q(&c.headers_env)));
+    }
+    if !c.key_command.is_empty() {
+        o.push_str(&format!("key_command = {}\n", q(&c.key_command)));
     }
 }
 

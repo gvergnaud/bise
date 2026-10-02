@@ -481,6 +481,16 @@ base_url = "https://llm.corp.example/v1"
 key_env = "CORP_LLM_KEY"
 # api = "openai-chat" (default), context = 131072 (defaults of its models)
 
+# a gateway in front of Anthropic, set up like Claude Code's
+# ANTHROPIC_BASE_URL + ANTHROPIC_CUSTOM_HEADERS + apiKeyHelper
+[providers.gateway]
+api = "anthropic"
+base_url = "https://gateway.corp.example/v1"
+key_env = ""
+reasoning = true
+headers_env = "ANTHROPIC_CUSTOM_HEADERS"   # "Name: value" per line
+key_command = "corp-tool auth token llm"   # run before every call
+
 [aliases]
 fast = "groq/openai/gpt-oss-120b"
 ```
@@ -498,6 +508,17 @@ Rules:
   `model` = `BISE_MODEL` > `BEND_MODEL` > config `model` > `default_model`;
   `agent_model` = `BISE_AGENT_MODEL` > config `agent_model` > the
   effective `model`. Empty env values are unset.
+- **A gateway.** `headers_env` names a variable whose text is one
+  `Name: value` per line (Claude Code's `ANTHROPIC_CUSTOM_HEADERS`
+  form); each call reads it and sends those headers after the family's.
+  `key_command` is a shell command (`/bin/sh -c`) run before every call,
+  like Claude Code's `apiKeyHelper`: its stdout, trimmed, is the key (a
+  short-lived token is never stale), sent as the family's header and
+  as `Authorization: Bearer`; a non-zero exit or no output: no call, one
+  line that names the key_command. It wins over `key_env` (set
+  `key_env = ""`, so the first run asks no key). No `"` or `\` in it:
+  the runtime's reader takes a value as written (single quotes work).
+  Both per provider or per model, neither built in.
 - **Bad entries are warnings.** An unknown key, a wrong type, a family
   that does not exist, a model name without `/`, `[provider.x]`
   (singular): ignored, listed by `bise models`. A config that is not

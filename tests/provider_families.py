@@ -15,7 +15,10 @@ D) A real repl-live on the fake through a custom provider (BISE_MODELS_FILE
    + BEND_CONFIG, the registry of BISE-141): a two-call bash turn on
    `anthropic` (streamed, with thinking and one 529 retried), then the
    config's model switched to an openai-chat provider for the next turn.
-   A family the harness does not speak yet must fail cleanly.
+   A family the harness does not speak yet must fail cleanly. A gateway
+   provider (headers_env + key_command, Claude Code's
+   ANTHROPIC_CUSTOM_HEADERS + apiKeyHelper): its headers and the
+   command's key on the wire; a failing command, no call and a clear line.
 """
 import json, os, socket, subprocess, sys, tempfile, time, urllib.error, urllib.request
 
@@ -213,8 +216,11 @@ def part_d():
         'version = 1\ndefault_model = "fake/claude-x"\n\n'
         '[providers.fake]\nname = "Fake"\napi = "anthropic"\nbase_url = "%s"\nkey_env = ""\n\n'
         '[providers.fakeoai]\nname = "Fake OpenAI"\napi = "openai-chat"\nbase_url = "%s"\nkey_env = ""\n\n'
-        '[providers.fakegem]\nname = "Fake Gemini"\napi = "gemini"\nbase_url = "%s"\nkey_env = ""\n'
-        % (base, base, base))
+        '[providers.fakegem]\nname = "Fake Gemini"\napi = "gemini"\nbase_url = "%s"\nkey_env = ""\n\n'
+        '[providers.fakegw]\nname = "Fake Gateway"\napi = "anthropic"\nbase_url = "%s"\nkey_env = ""\n'
+        'headers_env = "FAKE_GW_HEADERS"\nkey_command = "printf \'gw-%%s\' tok; echo"\n\n'
+        '[models."fakegw/broken"]\nkey_command = "echo nope; exit 3"\n'
+        % (base, base, base, base))
     cfg = os.path.join(tmp, "config.toml")
     s = socket.socket()
     s.bind(("127.0.0.1", 0))
@@ -225,7 +231,8 @@ def part_d():
     env.update(HOME=tmp, XDG_STATE_HOME=os.path.join(tmp, "state"), BISE_MODELS_FILE=models, BEND_CONFIG=cfg,
                BEND_REPL_PORT=str(port), BEND_SESSION_FILE=session, BEND_WIRE_LOG=os.path.join(tmp, "wire.log"),
                BEND_MCP_INDEX=os.path.join(tmp, "mcp.txt"), BEND_SKILLS_INDEX=os.path.join(tmp, "sk.txt"),
-               BEND_BG_ROOT=os.path.join(tmp, "bg"), SB_AGENT="probe")
+               BEND_BG_ROOT=os.path.join(tmp, "bg"), SB_AGENT="probe",
+               FAKE_GW_HEADERS="source: bise\norg-id : 2\nnot a header")
     log, err = os.path.join(tmp, "repl.log"), os.path.join(tmp, "repl.err")
     repl = subprocess.Popen([os.path.join(ROOT, "repl-live")], cwd=ROOT, env=env,
                             stdout=open(log, "w"), stderr=open(err, "w"))
@@ -275,6 +282,19 @@ def part_d():
         errs = [l for l in out if "rror" in l or "not supported" in l.lower() or "obs: assistant" in l]
         check(repl.poll() is None and (recs and recs[0]["family"] == "gemini" or errs),
               "a gemini model: a reply, or a clean error before BISE-148: %r" % (errs[-1:] or out[-2:]))
+        n += len(recs)
+        out = turn("fakegw/c", "hello gateway")
+        recs = [json.loads(l) for l in open(F.LOG)][n:]
+        h = recs[0]["headers"] if recs else {}
+        check(len(recs) == 1 and recs[0]["status"] == 200 and h.get("x-api-key") == "gw-tok"
+              and h.get("authorization") == "Bearer gw-tok"
+              and h.get("source") == "bise" and h.get("org-id") == "2" and "not a header" not in json.dumps(h),
+              "a gateway: key_command's key (trimmed, also as a bearer token) and headers_env's headers on the wire: %r" % h)
+        n += len(recs)
+        out = turn("fakegw/broken", "hello broken")
+        recs = [json.loads(l) for l in open(F.LOG)][n:]
+        check(repl.poll() is None and not recs and any("key_command failed" in l for l in out),
+              "a failing key_command: no call, a line that names it: %r" % out[-3:])
     finally:
         repl.kill()
         srv.shutdown()

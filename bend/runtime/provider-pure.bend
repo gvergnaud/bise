@@ -194,6 +194,16 @@ def cache_header(+c: CNames) -> String:
     case CN{_, +h}:
       h
 
+# a gateway (Claude Code's ANTHROPIC_CUSTOM_HEADERS and apiKeyHelper):
+# the variable holding extra headers (headers_env) and the command that
+# prints the key (key_command), "" = none; `id` is the full
+# "provider/model"
+def headers_env(+file: String, +prov: String, +id: String) -> String:
+  Cf.cfg_or(model_key(registry(file), prov, id, "headers_env"), "")
+
+def key_command(+file: String, +prov: String, +id: String) -> String:
+  Cf.cfg_or(model_key(registry(file), prov, id, "key_command"), "")
+
 # ---- the resolution ----
 
 # what a call needs: the provider id, the model id sent on the wire,

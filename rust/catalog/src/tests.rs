@@ -71,7 +71,7 @@ fn a_listed_model_takes_its_own_fields_then_its_providers() {
     let c = Catalog::builtin();
     let r = c.resolve("anthropic/claude-haiku-4-5");
     assert_eq!(r.known, Known::Listed);
-    assert_eq!(r.caps, Caps { context: 200_000, max_output: 64_000, vision: true, reasoning: true, tools: true, thinking: "budget".into(), betas: ANTH_BETAS.into(), efforts: String::new(), effort: String::new(), cache_key: String::new(), cache_header: String::new() });
+    assert_eq!(r.caps, Caps { context: 200_000, max_output: 64_000, vision: true, reasoning: true, tools: true, thinking: "budget".into(), betas: ANTH_BETAS.into(), efforts: String::new(), effort: String::new(), cache_key: String::new(), cache_header: String::new(), headers_env: String::new(), key_command: String::new() });
     let r = c.resolve("mistral/mistral-large-latest");
     assert_eq!((r.caps.context, r.caps.reasoning, r.caps.vision), (262_144, false, true));
     let r = c.resolve("openai/gpt-6-astra");
@@ -796,6 +796,30 @@ fn cache_routing_keys_reach_the_handoff() {
     let oai = &oai[..oai[1..].find("\n[").unwrap()];
     assert!(oai.contains("cache_key = \"prompt_cache_key\""), "{oai}");
     assert!(h.contains("cache_key = \"user\"\n"), "{h}");
+}
+
+#[test]
+fn gateway_keys_reach_the_handoff() {
+    // a gateway in front of Anthropic, set up like Claude Code's
+    // ANTHROPIC_BASE_URL + ANTHROPIC_CUSTOM_HEADERS + apiKeyHelper
+    let cfg = "[providers.gw]\napi = \"anthropic\"\nbase_url = \"https://gw.example/v1\"\nkey_env = \"\"\n\
+               headers_env = \"ANTHROPIC_CUSTOM_HEADERS\"\nkey_command = \"tool auth token gw\"\n\
+               [models.\"gw/b\"]\nkey_command = \"other\"\n\
+               [models.\"gw/bad\"]\nheaders_env = \"A-B\"\nkey_command = 'echo \"k\"'\n";
+    let s = Setup::from_text(Some(cfg), &|_| None);
+    let a = s.catalog.resolve("gw/a").caps;
+    assert_eq!((a.headers_env.as_str(), a.key_command.as_str()), ("ANTHROPIC_CUSTOM_HEADERS", "tool auth token gw"));
+    assert_eq!(s.catalog.resolve("gw/b").caps.key_command, "other", "a model overrides its provider");
+    assert_eq!(s.catalog.resolve("gw/bad").caps.headers_env, "ANTHROPIC_CUSTOM_HEADERS", "a bad name sets nothing");
+    assert!(s.catalog.warnings.iter().any(|w| w.contains("headers_env: an env variable name")), "{:?}", s.catalog.warnings);
+    assert_eq!(s.catalog.resolve("gw/bad").caps.key_command, "tool auth token gw", "a '\"' sets nothing");
+    assert!(s.catalog.warnings.iter().any(|w| w.contains("key_command: a shell command")), "{:?}", s.catalog.warnings);
+    assert_eq!(Catalog::builtin().resolve("anthropic/claude-opus-5-5").caps.key_command, "", "none built in");
+    let h = s.handoff_toml();
+    let gw = &h[h.find("[providers.gw]").unwrap()..];
+    assert!(gw.contains("headers_env = \"ANTHROPIC_CUSTOM_HEADERS\"\n"), "{gw}");
+    assert!(gw.contains("key_command = \"tool auth token gw\"\n"), "{gw}");
+    assert!(h.contains("key_command = \"other\"\n"), "{h}");
 }
 
 // ---- model roles (BISE-298) ----

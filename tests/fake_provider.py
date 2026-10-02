@@ -770,7 +770,9 @@ class H(http.server.BaseHTTPRequestHandler):
                                 "anth_images": anth_image_where(body) if family == "anthropic" else [],
                                 "unavailable": re.findall(r"\[image unavailable: .*?\)\]", json.dumps(body)),
                                 "tool_texts": [m["text"] for m in conv if m["role"] == "tool"],
-                                "system": "\n".join(m["text"] for m in conv if m["role"] == "system")}) + "\n")
+                                "system": "\n".join(m["text"] for m in conv if m["role"] == "system"),
+                                # a gateway: the request's headers (catalog headers_env, key_command)
+                                "headers": {k.lower(): v for k, v in self.headers.items()}}) + "\n")
 
 
 # ---------------------------------------------------------------- tool names

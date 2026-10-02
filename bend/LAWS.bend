@@ -4254,6 +4254,35 @@ law cache_key_header_none:
   {Api.with_cache_header("", "bise-1", [Api.Hdr{"a", "b"}])
     == [Api.Hdr{"a", "b"}] : List<&2, Api.Hdr>}
 
+# ---- a gateway's extra headers (catalog headers_env) ----
+# LAW: one "Name: value" per line (Claude Code's
+# ANTHROPIC_CUSTOM_HEADERS), trimmed, after the family's; a value keeps
+# its own ':'; a line with no ':' or no name is skipped.
+law extra_headers_lines:
+  {Api.with_extra_headers("source: bise\norg-id : 2 \nurl: a:b",
+      [Api.Hdr{"x-api-key", "k"}])
+    == [Api.Hdr{"x-api-key", "k"}, Api.Hdr{"source", "bise"},
+      Api.Hdr{"org-id", "2"}, Api.Hdr{"url", "a:b"}]
+    : List<&2, Api.Hdr>}
+
+law extra_headers_skipped:
+  {Api.extra_headers("no colon\n: no name\n\n") == [] : List<&2, Api.Hdr>}
+
+law extra_headers_none:
+  {Api.with_extra_headers("", [Api.Hdr{"a", "b"}])
+    == [Api.Hdr{"a", "b"}] : List<&2, Api.Hdr>}
+
+# LAW: a key_command's key also rides as a bearer token, after the
+# family's headers (Claude Code's apiKeyHelper); else nothing is added.
+law key_command_bearer:
+  {Api.with_bearer(True{}, "k", [Api.Hdr{"x-api-key", "k"}])
+    == [Api.Hdr{"x-api-key", "k"}, Api.Hdr{"Authorization", "Bearer k"}]
+    : List<&2, Api.Hdr>}
+
+law key_command_bearer_off:
+  {Api.with_bearer(False{}, "k", [Api.Hdr{"x-api-key", "k"}])
+    == [Api.Hdr{"x-api-key", "k"}] : List<&2, Api.Hdr>}
+
 # LAW: a compaction's first attempt shares the prefix (tools included,
 # the COMPACT line first); its retry goes bare (no tool to call).
 law compact_first_attempt_shares:

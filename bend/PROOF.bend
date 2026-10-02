@@ -4311,6 +4311,21 @@ def Laws.cache_key_header():
 def Laws.cache_key_header_none():
   {==}
 
+def Laws.extra_headers_lines():
+  {==}
+
+def Laws.extra_headers_skipped():
+  {==}
+
+def Laws.extra_headers_none():
+  {==}
+
+def Laws.key_command_bearer():
+  {==}
+
+def Laws.key_command_bearer_off():
+  {==}
+
 def Laws.compact_first_attempt_shares():
   {==}
 
