@@ -14,7 +14,14 @@ pub struct ServerStatus {
     pub tools: Result<usize, String>,
 }
 
+/// The listing. `status`: what this session's bridge found (its
+/// report); without it, a remote server shows the last state any
+/// session saw, from `status_dir`.
 pub fn text(res: &Resolution, status: Option<&[ServerStatus]>) -> String {
+    text_with(res, status, None)
+}
+
+pub fn text_with(res: &Resolution, status: Option<&[ServerStatus]>, status_dir: Option<&std::path::Path>) -> String {
     let mut out = String::new();
     if res.plugins.is_empty() {
         out.push_str("no plugins (roots: ~/.agents/plugins, <workspace>/.agents/plugins)\n");
@@ -46,6 +53,22 @@ pub fn text(res: &Resolution, status: Option<&[ServerStatus]>) -> String {
             };
             out.push_str(&format!("  mcp {}: {}\n", s.id, what));
         }
+        for s in &p.remotes {
+            let st = status.and_then(|st| st.iter().find(|x| x.plugin == p.name && x.server == s.id));
+            let what = match st.map(|x| &x.tools) {
+                Some(Ok(n)) => format!("{} tool{} as tools.{}.* ({} {})", n, if *n == 1 { "" } else { "s" }, p.namespace, s.transport.as_str(), s.host()),
+                Some(Err(_)) => format!("{} {}: unavailable (see diagnostics)", s.transport.as_str(), s.host()),
+                // the static listing: the last state a session saw
+                None => {
+                    let last = status_dir.and_then(|d| crate::status::read(d, &p.name, &s.id));
+                    match last {
+                        Some(l) => format!("{} {} · {}", s.transport.as_str(), s.host(), l.line()),
+                        None => format!("{} {} · not connected yet (tools.{}.*)", s.transport.as_str(), s.host(), p.namespace),
+                    }
+                }
+            };
+            out.push_str(&format!("  mcp {}: {}\n", s.id, what));
+        }
         for u in &p.unsupported {
             out.push_str(&format!("  not supported yet: {}\n", u));
         }
@@ -70,7 +93,10 @@ pub fn json(res: &Resolution) -> Value {
             "state": p.state.as_str(),
             "root": p.root,
             "skills": p.skills.iter().map(|s| json!({"name": s.name, "description": s.description, "path": s.path})).collect::<Vec<_>>(),
-            "mcpServers": p.servers.iter().map(|s| json!({"id": s.id, "type": "stdio", "command": s.command, "args": s.args, "cwd": s.cwd})).collect::<Vec<_>>(),
+            "mcpServers": p.servers.iter().map(|s| json!({"id": s.id, "type": "stdio", "command": s.command, "args": s.args, "cwd": s.cwd}))
+                .chain(p.remotes.iter().map(|s| json!({"id": s.id, "type": s.transport.as_str(), "host": s.host(),
+                    "headers": s.headers.iter().map(|(k, _)| k.clone()).collect::<Vec<_>>()})))
+                .collect::<Vec<_>>(),
             "unsupported": p.unsupported,
         })).collect::<Vec<_>>(),
         "diagnostics": res.diagnostics.iter().map(|d| json!({

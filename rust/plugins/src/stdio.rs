@@ -44,6 +44,7 @@ impl Client {
         data_root: &Path,
         log: &Path,
         timeout: Duration,
+        on_change: Option<crate::remote::OnChange>,
     ) -> Result<Client, String> {
         let _ = std::fs::create_dir_all(data_root);
         let err = std::fs::OpenOptions::new()
@@ -96,8 +97,15 @@ impl Client {
                             };
                             let _ = send(&stdin, &reply);
                         }
-                        // a notification (logging, list_changed): ignored
-                        _ => {}
+                        // a notification: list_changed is passed on, the rest
+                        // (logging, progress) ignored
+                        _ => {
+                            if msg.get("method").and_then(Value::as_str) == Some("notifications/tools/list_changed") {
+                                if let Some(f) = &on_change {
+                                    f();
+                                }
+                            }
+                        }
                     }
                 }
                 // EOF: wake every waiter with an error

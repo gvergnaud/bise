@@ -69,7 +69,7 @@ fn fixture_plugin_end_to_end() {
         disabled: vec![],
         enabled: vec![],
     };
-    let opts = bridge::Opts { dir: dir.clone(), parent: Some(parent.id()), roots };
+    let opts = bridge::Opts { dir: dir.clone(), parent: Some(parent.id()), roots, status_dir: None };
     let server = std::thread::spawn(move || bridge::serve(opts));
     let t0 = Instant::now();
     while !dir.join("ready").exists() {
@@ -150,7 +150,7 @@ fn failing_server_is_a_diagnostic() {
         enabled: vec![],
     };
     // nothing to serve: returns once the files are written
-    bridge::serve(bridge::Opts { dir: dir.clone(), parent: None, roots }).unwrap();
+    bridge::serve(bridge::Opts { dir: dir.clone(), parent: None, roots, status_dir: None }).unwrap();
     assert_eq!(std::fs::read_to_string(dir.join("mcp-index.txt")).unwrap(), "");
     let report = std::fs::read_to_string(dir.join("report.txt")).unwrap();
     assert!(report.contains("plugin.mcp.connection_failed"), "{}", report);

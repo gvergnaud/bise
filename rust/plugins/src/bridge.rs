@@ -13,11 +13,18 @@ use std::time::Duration;
 
 use serde_json::{json, Value};
 
+use std::sync::mpsc::{channel, Receiver, Sender};
+
+use crate::remote::{OnChange, Remote};
 use crate::report::{self, ServerStatus};
-use crate::resolve::{self, Diagnostic, Plugin, Resolution, Severity, StdioServer};
+use crate::resolve::{self, Diagnostic, HttpServer, Plugin, Resolution, Severity, StdioServer};
+use crate::status;
 use crate::stdio::Client;
 
 pub const START_TIMEOUT: Duration = Duration::from_secs(10);
+/// a remote server's connect, handshake and tools/list (TLS, the
+/// network): longer than a local process's
+pub const REMOTE_START_TIMEOUT: Duration = Duration::from_secs(20);
 pub const CALL_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub struct Opts {
@@ -26,29 +33,107 @@ pub struct Opts {
     /// exit when this pid is gone (the REPL)
     pub parent: Option<u32>,
     pub roots: resolve::Roots,
+    /// where each remote server's last state goes for `/plugins`
+    /// (`status::dir()`); None: nowhere
+    pub status_dir: Option<PathBuf>,
 }
 
-/// One stdio server of one plugin, as the bridge holds it.
+/// A server of a plugin, as mcp.json declares it.
+#[derive(Clone)]
+enum Spec {
+    Stdio(StdioServer),
+    Http(HttpServer),
+}
+
+impl Spec {
+    fn id(&self) -> &str {
+        match self {
+            Spec::Stdio(s) => &s.id,
+            Spec::Http(s) => &s.id,
+        }
+    }
+}
+
+/// A started server.
+enum Conn {
+    Stdio(Client),
+    Remote(Remote),
+}
+
+impl Conn {
+    fn init(&self) -> Value {
+        match self {
+            Conn::Stdio(c) => c.init.clone(),
+            Conn::Remote(r) => r.init(),
+        }
+    }
+
+    /// A local process can die; a remote client reconnects by itself.
+    fn alive(&mut self) -> bool {
+        match self {
+            Conn::Stdio(c) => c.alive(),
+            Conn::Remote(_) => true,
+        }
+    }
+
+    fn request_raw(&self, method: &str, params: Value, timeout: Duration) -> Result<Value, String> {
+        match self {
+            Conn::Stdio(c) => c.request_raw(method, params, timeout),
+            Conn::Remote(r) => r.request_raw(method, params, timeout).map_err(|e| e.to_string()),
+        }
+    }
+
+    fn list_tools(&self, timeout: Duration) -> Result<Vec<Value>, String> {
+        match self {
+            Conn::Stdio(c) => c.list_tools(timeout),
+            Conn::Remote(r) => r.list_tools(timeout).map_err(|e| e.to_string()),
+        }
+    }
+
+    fn stop(&mut self) {
+        match self {
+            Conn::Stdio(c) => c.stop(),
+            Conn::Remote(r) => r.stop(),
+        }
+    }
+}
+
+/// One server of one plugin, as the bridge holds it.
 struct Entry {
-    spec: StdioServer,
+    /// `<plugin>/<server>`
+    key: String,
+    plugin: usize,
+    plugin_name: String,
+    namespace: String,
+    spec: Spec,
     plugin_root: PathBuf,
     data_root: PathBuf,
     log: PathBuf,
-    client: Mutex<Option<Client>>,
+    on_change: OnChange,
+    client: Mutex<Option<Conn>>,
+    /// the server's tools as it listed them
+    tools: Mutex<Vec<Value>>,
     /// published tool name -> the server's own name
-    names: HashMap<String, String>,
+    names: Mutex<HashMap<String, String>>,
+}
+
+fn start_conn(spec: &Spec, root: &Path, data: &Path, log: &Path, on_change: OnChange) -> Result<Conn, String> {
+    match spec {
+        Spec::Stdio(s) => Client::start(s, root, data, log, START_TIMEOUT, Some(on_change)).map(Conn::Stdio),
+        Spec::Http(s) => {
+            let env = |k: &str| std::env::var(k).ok();
+            Remote::start(s, &env, on_change, REMOTE_START_TIMEOUT).map(Conn::Remote).map_err(|e| e.to_string())
+        }
+    }
 }
 
 impl Entry {
-    fn start(&self) -> Result<Client, String> {
-        Client::start(&self.spec, &self.plugin_root, &self.data_root, &self.log, START_TIMEOUT)
-    }
-
-    /// Forward one JSON-RPC request; a dead server is restarted once.
+    /// Forward one JSON-RPC request; a dead local server is restarted
+    /// once.
     fn forward(&self, method: &str, mut params: Value) -> Result<Value, String> {
         if method == "tools/call" {
             let published = params.get("name").and_then(Value::as_str).unwrap_or("").to_string();
-            if let Some(src) = self.names.get(&published) {
+            if let Some(src) = self.names.lock().unwrap_or_else(|e| e.into_inner()).get(&published) {
                 params["name"] = json!(src);
             }
         }
@@ -58,7 +143,7 @@ impl Entry {
             None => true,
         };
         if dead {
-            *guard = Some(self.start()?);
+            *guard = Some(start_conn(&self.spec, &self.plugin_root, &self.data_root, &self.log, self.on_change.clone())?);
         }
         let c = guard.as_ref().ok_or("no server")?;
         c.request_raw(method, params, CALL_TIMEOUT)
@@ -104,27 +189,38 @@ pub fn index_line(cid: &str, group: &str, tool: &str, desc: &str, schema: Option
 
 struct Started {
     plugin: usize,
-    server: StdioServer,
-    result: Result<(Client, Vec<Value>), String>,
+    spec: Spec,
+    log: PathBuf,
+    on_change: OnChange,
+    result: Result<(Conn, Vec<Value>), String>,
 }
 
-fn start_all(res: &Resolution, dir: &Path) -> Vec<Started> {
+/// Start every server of every loaded plugin, in parallel. `changed`
+/// gets `<plugin>/<server>` when a server says its tools changed.
+fn start_all(res: &Resolution, dir: &Path, changed: &Sender<String>) -> Vec<Started> {
     let mut handles = Vec::new();
     for (i, p) in res.plugins.iter().enumerate() {
         if p.state != resolve::State::Loaded {
             continue;
         }
-        for s in &p.servers {
-            let (s, root, data) = (s.clone(), p.root.clone(), p.data_root.clone());
-            let log = dir.join(format!("{}.{}.log", p.name, s.id));
+        let specs = p.servers.iter().cloned().map(Spec::Stdio).chain(p.remotes.iter().cloned().map(Spec::Http));
+        for spec in specs {
+            let (root, data) = (p.root.clone(), p.data_root.clone());
+            let log = dir.join(format!("{}.{}.log", p.name, spec.id()));
+            let (tx, key) = (Mutex::new(changed.clone()), format!("{}/{}", p.name, spec.id()));
+            let on_change: OnChange = Arc::new(move || {
+                let _ = tx.lock().unwrap_or_else(|e| e.into_inner()).send(key.clone());
+            });
             handles.push(std::thread::spawn(move || {
-                let result = Client::start(&s, &root, &data, &log, START_TIMEOUT).and_then(|c| {
-                    match c.list_tools(START_TIMEOUT) {
-                        Ok(ts) => Ok((c, ts)),
-                        Err(e) => Err(format!("tools/list: {}", e)),
-                    }
+                let timeout = if matches!(spec, Spec::Http(_)) { REMOTE_START_TIMEOUT } else { START_TIMEOUT };
+                let result = start_conn(&spec, &root, &data, &log, on_change.clone()).and_then(|c| match c.list_tools(timeout) {
+                    Ok(ts) => Ok((c, ts)),
+                    Err(e) => Err(format!("tools/list: {}", e)),
                 });
                 let result = result.map_err(|e| {
+                    if matches!(spec, Spec::Http(_)) {
+                        return e;
+                    }
                     let tail = std::fs::read_to_string(&log).unwrap_or_default();
                     let tail: Vec<&str> = tail.lines().rev().take(3).collect();
                     if tail.is_empty() {
@@ -134,26 +230,67 @@ fn start_all(res: &Resolution, dir: &Path) -> Vec<Started> {
                         format!("{} (stderr: {})", e, t.join(" | "))
                     }
                 });
-                Started { plugin: i, server: s, result }
+                Started { plugin: i, spec, log, on_change, result }
             }));
         }
     }
     handles.into_iter().filter_map(|h| h.join().ok()).collect()
 }
 
-/// Start the servers and build the index files. The entries are keyed
-/// by `<plugin>/<server>`.
+/// The index of every entry's tools, in order; sets each entry's
+/// published names. Two tools of one plugin with one name: the later
+/// is dropped (a diagnostic).
+fn index_of(entries: &[Arc<Entry>], base: &str) -> (String, Vec<Diagnostic>, HashMap<String, usize>) {
+    let mut index = String::new();
+    let mut diags = Vec::new();
+    let mut counts = HashMap::new();
+    let mut taken: HashMap<usize, Vec<String>> = HashMap::new();
+    for e in entries {
+        let cid = format!("{}/{}", base, e.key);
+        let mut names = HashMap::new();
+        let used = taken.entry(e.plugin).or_default();
+        for t in e.tools.lock().unwrap_or_else(|e| e.into_inner()).iter() {
+            let Some(src) = t.get("name").and_then(Value::as_str) else { continue };
+            let published = resolve::identifier(src);
+            if used.contains(&published) {
+                diags.push(Diagnostic {
+                    code: "plugin.tool.name_collision",
+                    severity: Severity::Warning,
+                    plugin: e.plugin_name.clone(),
+                    message: format!("tool {}.{} (server {:?}) is already taken; dropped", e.namespace, published, e.spec.id()),
+                });
+                continue;
+            }
+            used.push(published.clone());
+            let desc = t.get("description").and_then(Value::as_str).unwrap_or("");
+            index.push_str(&index_line(&cid, &e.namespace, &published, desc, t.get("inputSchema")));
+            names.insert(published, src.to_string());
+        }
+        counts.insert(e.key.clone(), names.len());
+        *e.names.lock().unwrap_or_else(|e| e.into_inner()) = names;
+    }
+    (index, diags, counts)
+}
+
+/// A remote server's state for `/plugins`.
+fn remote_status(status_dir: Option<&Path>, plugin: &str, spec: &Spec, tools: &Result<usize, String>) {
+    if let (Some(d), Spec::Http(s)) = (status_dir, spec) {
+        status::write(d, plugin, &s.id, &status::Status::now(s.transport.as_str(), &s.host(), tools.clone()));
+    }
+}
+
+/// Start the servers and build the index files. The entries are in
+/// plugin and server order.
 fn build(
     res: &mut Resolution,
     dir: &Path,
     base: &str,
-) -> (HashMap<String, Arc<Entry>>, Session) {
-    let started = start_all(res, dir);
-    let mut entries = HashMap::new();
-    let mut index = String::new();
+    changed: &Sender<String>,
+    status_dir: Option<&Path>,
+) -> (Vec<Arc<Entry>>, Session) {
+    let started = start_all(res, dir, changed);
+    let mut entries = Vec::new();
     let mut status: Vec<ServerStatus> = Vec::new();
-    // published names per plugin, across its servers
-    let mut taken: HashMap<usize, Vec<String>> = HashMap::new();
     let mut extra: Vec<Diagnostic> = Vec::new();
     for st in started {
         let p: &Plugin = &res.plugins[st.plugin];
@@ -164,48 +301,36 @@ fn build(
                     code: "plugin.mcp.connection_failed",
                     severity: Severity::Warning,
                     plugin: p.name.clone(),
-                    message: format!("MCP server {:?}: {}", st.server.id, e),
+                    message: format!("MCP server {:?}: {}", st.spec.id(), e),
                 });
-                status.push(ServerStatus { plugin: p.name.clone(), server: st.server.id.clone(), tools: Err(e) });
+                remote_status(status_dir, &p.name, &st.spec, &Err(e.clone()));
+                status.push(ServerStatus { plugin: p.name.clone(), server: st.spec.id().to_string(), tools: Err(e) });
                 continue;
             }
         };
-        let cid = format!("{}/{}/{}", base, p.name, st.server.id);
-        let mut names = HashMap::new();
-        let mut count = 0;
-        let used = taken.entry(st.plugin).or_default();
-        for t in &tools {
-            let Some(src) = t.get("name").and_then(Value::as_str) else { continue };
-            let published = resolve::identifier(src);
-            if used.contains(&published) {
-                extra.push(Diagnostic {
-                    code: "plugin.tool.name_collision",
-                    severity: Severity::Warning,
-                    plugin: p.name.clone(),
-                    message: format!("tool {}.{} (server {:?}) is already taken; dropped", p.namespace, published, st.server.id),
-                });
-                continue;
-            }
-            used.push(published.clone());
-            let desc = t.get("description").and_then(Value::as_str).unwrap_or("");
-            index.push_str(&index_line(&cid, &p.namespace, &published, desc, t.get("inputSchema")));
-            names.insert(published, src.to_string());
-            count += 1;
-        }
-        status.push(ServerStatus { plugin: p.name.clone(), server: st.server.id.clone(), tools: Ok(count) });
-        entries.insert(
-            format!("{}/{}", p.name, st.server.id),
-            Arc::new(Entry {
-                log: dir.join(format!("{}.{}.log", p.name, st.server.id)),
-                spec: st.server,
-                plugin_root: p.root.clone(),
-                data_root: p.data_root.clone(),
-                client: Mutex::new(Some(client)),
-                names,
-            }),
-        );
+        entries.push(Arc::new(Entry {
+            key: format!("{}/{}", p.name, st.spec.id()),
+            plugin: st.plugin,
+            plugin_name: p.name.clone(),
+            namespace: p.namespace.clone(),
+            log: st.log,
+            spec: st.spec,
+            plugin_root: p.root.clone(),
+            data_root: p.data_root.clone(),
+            on_change: st.on_change,
+            client: Mutex::new(Some(client)),
+            tools: Mutex::new(tools),
+            names: Mutex::new(HashMap::new()),
+        }));
+    }
+    let (index, diags, counts) = index_of(&entries, base);
+    for e in &entries {
+        let n = Ok(counts.get(&e.key).copied().unwrap_or(0));
+        remote_status(status_dir, &e.plugin_name, &e.spec, &n);
+        status.push(ServerStatus { plugin: e.plugin_name.clone(), server: e.spec.id().to_string(), tools: n });
     }
     res.diagnostics.extend(extra);
+    res.diagnostics.extend(diags);
     let mut skills = String::new();
     for p in res.loaded() {
         for s in &p.skills {
@@ -215,6 +340,38 @@ fn build(
     status.sort_by(|a, b| (&a.plugin, &a.server).cmp(&(&b.plugin, &b.server)));
     let report = report::text(res, Some(&status));
     (entries, Session { index, skills, report })
+}
+
+/// `notifications/tools/list_changed`: list that server's tools again
+/// and rewrite the index (the REPL reads it at each search and call).
+fn refresh_loop(rx: Receiver<String>, entries: Arc<Vec<Arc<Entry>>>, dir: PathBuf, base: String, status_dir: Option<PathBuf>) {
+    while let Ok(first) = rx.recv() {
+        // a burst of notifications is one refresh
+        std::thread::sleep(Duration::from_millis(100));
+        let mut keys = vec![first];
+        keys.extend(rx.try_iter());
+        keys.sort();
+        keys.dedup();
+        for k in keys {
+            let Some(e) = entries.iter().find(|e| e.key == k) else { continue };
+            let listed = {
+                let guard = e.client.lock().unwrap_or_else(|e| e.into_inner());
+                match guard.as_ref() {
+                    Some(c) => c.list_tools(CALL_TIMEOUT),
+                    None => continue,
+                }
+            };
+            match listed {
+                Ok(ts) => *e.tools.lock().unwrap_or_else(|e| e.into_inner()) = ts,
+                Err(err) => remote_status(status_dir.as_deref(), &e.plugin_name, &e.spec, &Err(format!("tools/list: {}", err))),
+            }
+        }
+        let (index, _, counts) = index_of(&entries, &base);
+        let _ = write_atomic(&dir.join("mcp-index.txt"), &index);
+        for e in entries.iter() {
+            remote_status(status_dir.as_deref(), &e.plugin_name, &e.spec, &Ok(counts.get(&e.key).copied().unwrap_or(0)));
+        }
+    }
 }
 
 // ---- HTTP ----
@@ -292,7 +449,7 @@ fn handle_rpc(entry: &Entry, body: &[u8]) -> (&'static str, String) {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .as_ref()
-            .map(|c| c.init.clone())
+            .map(Conn::init)
             .unwrap_or_else(|| json!({"protocolVersion": crate::stdio::PROTOCOL, "capabilities": {"tools": {}},
                                      "serverInfo": {"name": "bend-plugin-bridge", "version": "1"}}));
         return ("200 OK", json!({"jsonrpc": "2.0", "id": id, "result": init}).to_string());
@@ -318,13 +475,13 @@ fn stamp(answer: Value, id: Value) -> String {
     }
 }
 
-fn connection(stream: TcpStream, token: String, entries: Arc<HashMap<String, Arc<Entry>>>) {
+fn connection(stream: TcpStream, token: String, entries: Arc<Vec<Arc<Entry>>>) {
     let Ok(mut w) = stream.try_clone() else { return };
     let mut r = BufReader::new(stream);
     while let Some(req) = read_request(&mut r) {
         let prefix = format!("/{}/", token);
         let key = req.path.strip_prefix(&prefix).map(|k| k.trim_end_matches('/').to_string());
-        let out = match (req.method.as_str(), key.and_then(|k| entries.get(&k).cloned())) {
+        let out = match (req.method.as_str(), key.and_then(|k| entries.iter().find(|e| e.key == k).cloned())) {
             ("POST", Some(e)) => handle_rpc(&e, &req.body),
             (_, Some(_)) => ("405 Method Not Allowed", String::new()),
             (_, None) => ("404 Not Found", String::new()),
@@ -360,7 +517,8 @@ pub fn serve(opts: Opts) -> std::io::Result<()> {
     let token = token();
     let base = format!("http://127.0.0.1:{}/{}", port, token);
     let mut res = resolve::resolve(&opts.roots);
-    let (entries, session) = build(&mut res, &opts.dir, &base);
+    let (changed_tx, changed_rx) = channel();
+    let (entries, session) = build(&mut res, &opts.dir, &base, &changed_tx, opts.status_dir.as_deref());
     write_atomic(&opts.dir.join("mcp-index.txt"), &session.index)?;
     write_atomic(&opts.dir.join("skills-index.txt"), &session.skills)?;
     write_atomic(&opts.dir.join("report.txt"), &session.report)?;
@@ -369,6 +527,10 @@ pub fn serve(opts: Opts) -> std::io::Result<()> {
     // nothing to serve: the files say so, no process lingers
     if entries.is_empty() {
         return Ok(());
+    }
+    {
+        let (entries, dir, base, sd) = (entries.clone(), opts.dir.clone(), base.clone(), opts.status_dir.clone());
+        std::thread::spawn(move || refresh_loop(changed_rx, entries, dir, base, sd));
     }
     {
         let entries = entries.clone();
@@ -389,7 +551,7 @@ pub fn serve(opts: Opts) -> std::io::Result<()> {
             std::thread::sleep(Duration::from_secs(3600));
         },
     }
-    for e in entries.values() {
+    for e in entries.iter() {
         if let Some(mut c) = e.client.lock().unwrap_or_else(|e| e.into_inner()).take() {
             c.stop();
         }

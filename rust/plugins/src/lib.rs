@@ -6,6 +6,8 @@
 //! - `state`: the enable/disable file;
 //! - `report`: the human and JSON listings;
 //! - `stdio`: a stdio MCP client (one child process, JSON-RPC lines);
+//! - `http`, `remote`: a remote MCP client (Streamable HTTP, SSE);
+//! - `status`: each remote server's last state, for `/plugins`;
 //! - `bridge`: the per-session loopback HTTP bridge the Bend REPL calls;
 //! - `cli`: the `bise plugins ...` subcommand;
 //! - `import`: `bise plugins import-mcp`, another agent's MCP servers as
@@ -13,8 +15,11 @@
 
 pub mod bridge;
 pub mod cli;
+pub mod http;
 pub mod import;
+pub mod remote;
 pub mod report;
 pub mod resolve;
 pub mod state;
+pub mod status;
 pub mod stdio;

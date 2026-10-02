@@ -184,7 +184,10 @@ fn mcp_servers_expand_and_contain() {
     assert_eq!(pl.servers[1].cwd, t.0.join("data/m/x"));
     let c = codes(&res);
     assert_eq!(c.iter().filter(|c| **c == "plugin.mcp.server_invalid").count(), 4, "{:?}", res.diagnostics);
-    assert!(c.contains(&"plugin.component.unsupported"));
+    // "f" is a remote server now
+    assert_eq!(pl.remotes.len(), 1);
+    assert_eq!((pl.remotes[0].id.as_str(), pl.remotes[0].transport), ("f", Transport::Streamable));
+    assert!(!c.contains(&"plugin.component.unsupported"));
 }
 
 #[test]
@@ -195,7 +198,7 @@ fn bad_mcp_json_and_unsupported_components() {
         &p.join("plugin.json"),
         &format!("{{\"$schema\":\"{}\",\"name\":\"u\",\"extensions\":{{\"ai.mistral.vibe\":{{\"schemaVersion\":1}}}}}}", PLUGIN_SCHEMA),
     );
-    write(&p.join("mcp.json"), "{\"mcpServers\":{}}");
+    write(&p.join("mcp.json"), "{\"$schema\":\"https://example.com/other.json\",\"mcpServers\":{}}");
     write(&p.join("ai.mistral.vibe/hooks.toml"), "");
     write(&p.join("connectors.json"), "{}");
     let res = resolve(&roots(&t));

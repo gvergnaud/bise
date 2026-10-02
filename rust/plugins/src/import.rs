@@ -6,8 +6,11 @@
 //! never through an agent's screen; the output names servers, never
 //! their env values.
 //!
-//! Only stdio servers load in bise today: an http/sse one is skipped
-//! (said). A command given as an absolute path runs through
+//! stdio servers, and remote ones: Claude Code's `type` http/sse with
+//! `url` and `headers`, Codex's `url` with `http_headers`,
+//! `env_http_headers` and `bearer_token_env_var` (those two become
+//! `${VAR}` references, filled from bise's environment when the server
+//! connects). Header values are written, never printed. A command given as an absolute path runs through
 //! `sh -c 'exec "$0" "$@"'` (the plugin schema takes a bare executable
 //! or a path inside the plugin). Run again, it rewrites its own plugin
 //! (marked in plugin.json's description); another plugin of that name is
@@ -55,7 +58,81 @@ pub fn plan(input: &Value) -> Result<Plan, String> {
     Ok(Plan { servers, lines })
 }
 
-/// One server in the plugin schema's stdio shape; Err = why it can't be.
+/// A remote server (Claude Code's `{"type": "http"|"sse", "url",
+/// "headers"}`, Codex's `{"url", "bearer_token_env_var", "http_headers",
+/// "env_http_headers"}`) in the plugin schema's shape. Header values are
+/// copied, never printed: `${VAR}` references stay as they are and are
+/// filled from bise's environment when the server connects.
+fn remote(o: &Map<String, Value>, ty: &str) -> Result<(Value, Vec<String>), String> {
+    let url = o.get("url").and_then(Value::as_str).filter(|u| !u.is_empty()).ok_or("no url")?;
+    if !(url.starts_with("http://") || url.starts_with("https://") || url.starts_with("${")) {
+        return Err("the url is not http(s)".into());
+    }
+    let ty = match ty {
+        "sse" => "sse",
+        "http" | "streamable-http" | "streamable_http" | "streamableHttp" | "stdio" => "http",
+        t => return Err(format!("type {:?} is not a transport bise knows", t)),
+    };
+    let mut headers = Map::new();
+    let add = |k: &str, v: String, headers: &mut Map<String, Value>| -> Result<(), String> {
+        if k.is_empty() || k.contains([':', ' ', '\r', '\n']) || v.contains(['\r', '\n']) {
+            return Err(format!("header {:?} is not a valid header", k));
+        }
+        headers.insert(k.to_string(), json!(v));
+        Ok(())
+    };
+    for key in ["headers", "http_headers"] {
+        if let Some(h) = o.get(key) {
+            let h = h.as_object().ok_or(format!("{} is not an object", key))?;
+            for (k, v) in h {
+                let v = v.as_str().ok_or(format!("header {} is not a string", k))?;
+                add(k, v.to_string(), &mut headers)?;
+            }
+        }
+    }
+    // Codex: a header from an env var, and the bearer token's env var
+    if let Some(h) = o.get("env_http_headers") {
+        let h = h.as_object().ok_or("env_http_headers is not an object")?;
+        for (k, v) in h {
+            let var = v.as_str().filter(|v| valid_var(v)).ok_or(format!("env_http_headers {} is not an env var name", k))?;
+            add(k, format!("${{{}}}", var), &mut headers)?;
+        }
+    }
+    if let Some(v) = o.get("bearer_token_env_var") {
+        let var = v.as_str().filter(|v| valid_var(v)).ok_or("bearer_token_env_var is not an env var name")?;
+        add("Authorization", format!("Bearer ${{{}}}", var), &mut headers)?;
+    }
+    let mut notes = vec![format!("{} {}", ty, host_of(url))];
+    if !headers.is_empty() {
+        let names: Vec<&str> = headers.keys().map(String::as_str).collect();
+        notes.push(format!("header{} {}", if names.len() == 1 { "" } else { "s" }, names.join(", ")));
+    }
+    let known = ["type", "url", "headers", "http_headers", "env_http_headers", "bearer_token_env_var", "enabled", "disabled", "transport"];
+    let dropped: Vec<&str> = o.keys().map(String::as_str).filter(|k| !known.contains(k)).collect();
+    if !dropped.is_empty() {
+        notes.push(format!("ignored: {}", dropped.join(", ")));
+    }
+    let mut out = Map::new();
+    out.insert("type".into(), json!(ty));
+    out.insert("url".into(), json!(url));
+    if !headers.is_empty() {
+        out.insert("headers".into(), Value::Object(headers));
+    }
+    Ok((Value::Object(out), notes))
+}
+
+fn valid_var(v: &str) -> bool {
+    !v.is_empty() && v.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') && !v.starts_with(|c: char| c.is_ascii_digit())
+}
+
+/// The URL's host, for the lines printed (a path may hold a key).
+fn host_of(url: &str) -> String {
+    let rest = url.split_once("://").map(|(_, r)| r).unwrap_or(url);
+    let hp = rest.split(['/', '?', '#']).next().unwrap_or("");
+    hp.rsplit_once('@').map(|(_, h)| h).unwrap_or(hp).to_string()
+}
+
+/// One server in the plugin schema's shape; Err = why it can't be.
 fn server(v: &Value) -> Result<(Value, Vec<String>), String> {
     let o = v.as_object().ok_or("not an object")?;
     let ty = o.get("type").and_then(Value::as_str).unwrap_or("stdio");
@@ -63,13 +140,13 @@ fn server(v: &Value) -> Result<(Value, Vec<String>), String> {
         return Err("disabled there".into());
     }
     let Some(cmd) = o.get("command").and_then(Value::as_str).filter(|c| !c.is_empty()) else {
-        return Err(match o.get("url") {
-            Some(_) => format!("a remote ({}) server: bise runs stdio servers only for now", if ty == "stdio" { "http" } else { ty }),
-            None => "no command".into(),
-        });
+        return match o.get("url") {
+            Some(_) => remote(o, ty),
+            None => Err("no command and no url".into()),
+        };
     };
     if ty != "stdio" {
-        return Err(format!("type {:?}: bise runs stdio servers only for now", ty));
+        return Err(format!("type {:?} with a command: not a transport bise knows", ty));
     }
     let mut args: Vec<Value> = Vec::new();
     match o.get("args") {
@@ -167,7 +244,7 @@ fn write_private(file: &Path, text: &str) -> Result<(), String> {
 pub fn main(args: &[String], root: &Path) -> i32 {
     let usage = "usage: bise plugins import-mcp NAME [--dry-run] < servers.json
   servers.json: {\"mcpServers\": {...}} (Claude Code's shape; Codex's mcp_servers as JSON works too).
-  Writes ~/.agents/plugins/NAME/ (plugin.json, mcp.json 0600); stdio servers only.";
+  Writes ~/.agents/plugins/NAME/ (plugin.json, mcp.json 0600): stdio, http and sse servers.";
     let dry = args.iter().any(|a| a == "--dry-run");
     let (out, err) = (Style::stdout(), Style::stderr());
     let rest: Vec<&String> = args.iter().filter(|a| *a != "--dry-run").collect();
@@ -258,8 +335,11 @@ mod tests {
         json!({ "mcpServers": {
             "github": { "type": "stdio", "command": "npx", "args": ["-y", "@mcp/github"], "env": { "GITHUB_TOKEN": TOKEN } },
             "local": { "command": "/opt/tools/mcp-local", "args": ["--quiet"], "startup_timeout_sec": 20 },
-            "linear": { "type": "http", "url": "https://mcp.linear.app/mcp" },
-            "codex-remote": { "url": "https://x.test/mcp" },
+            "linear": { "type": "http", "url": "https://mcp.linear.app/mcp", "headers": { "Authorization": format!("Bearer {}", TOKEN) } },
+            "old": { "type": "sse", "url": "https://old.test/k3y/sse", "headers": { "X-Key": "${OLD_KEY}" }, "oauth": {} },
+            "codex-remote": { "url": "https://x.test/mcp", "bearer_token_env_var": "X_TOKEN",
+                              "http_headers": { "X-Region": "eu" }, "env_http_headers": { "X-Org": "X_ORG" } },
+            "ftp": { "url": "ftp://x.test/" },
             "off": { "command": "uvx", "enabled": false },
             "rel": { "command": "./bin/x" }
         }})
@@ -269,12 +349,23 @@ mod tests {
     fn stdio_servers_are_kept_the_rest_said_and_no_token_shows() {
         let p = plan(&input()).unwrap();
         let ids: Vec<&str> = p.servers.keys().map(String::as_str).collect();
-        assert_eq!(ids, ["github", "local"]);
+        assert_eq!(ids, ["codex-remote", "github", "linear", "local", "old"]);
+        assert_eq!(p.servers["linear"], json!({"type": "http", "url": "https://mcp.linear.app/mcp", "headers": {"Authorization": format!("Bearer {}", TOKEN)}}));
+        assert_eq!(p.servers["old"]["type"], "sse");
+        assert_eq!(p.servers["old"]["headers"]["X-Key"], "${OLD_KEY}");
+        assert_eq!(
+            p.servers["codex-remote"],
+            json!({"type": "http", "url": "https://x.test/mcp",
+                   "headers": {"X-Region": "eu", "X-Org": "${X_ORG}", "Authorization": "Bearer ${X_TOKEN}"}})
+        );
         assert_eq!(p.servers["local"]["command"], "sh");
         assert_eq!(p.servers["local"]["args"], json!(["-c", "exec \"$0\" \"$@\"", "/opt/tools/mcp-local", "--quiet"]));
         let text = p.lines.join("\n");
-        assert!(text.contains("- linear: skipped, a remote (http) server"), "{text}");
-        assert!(text.contains("- codex-remote: skipped, a remote (http)"), "{text}");
+        assert!(text.contains("+ linear (http mcp.linear.app; header Authorization)"), "{text}");
+        assert!(text.contains("+ old (sse old.test; header X-Key; ignored: oauth)"), "{text}");
+        assert!(text.contains("+ codex-remote (http x.test; headers Authorization, X-Org, X-Region)"), "{text}");
+        assert!(text.contains("- ftp: skipped, the url is not http(s)"), "{text}");
+        assert!(!text.contains("k3y"), "a URL path may hold a key: {text}");
         assert!(text.contains("- off: skipped, disabled there"), "{text}");
         assert!(text.contains("- rel: skipped"), "{text}");
         assert!(text.contains("ignored: startup_timeout_sec"), "{text}");
@@ -298,6 +389,8 @@ mod tests {
         assert_eq!(r.plugins.len(), 1, "{:?}", r.diagnostics);
         let ids: Vec<&str> = r.plugins[0].servers.iter().map(|s| s.id.as_str()).collect();
         assert_eq!(ids, ["github", "local"], "{:?}", r.diagnostics);
+        let remotes: Vec<&str> = r.plugins[0].remotes.iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(remotes, ["codex-remote", "linear", "old"], "{:?}", r.diagnostics);
         assert!(write(&root, "from-claude-code", &p).is_ok(), "a rerun rewrites its own import");
         std::fs::create_dir_all(root.join("mine")).unwrap();
         std::fs::write(root.join("mine/plugin.json"), "{\"name\":\"mine\"}").unwrap();

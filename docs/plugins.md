@@ -20,6 +20,11 @@ Supported now (the portable base of the spec):
 - `skills/*/SKILL.md` in the skills catalog and the `skill` tool;
 - local `stdio` MCP servers from `mcp.json`: started with the session,
   their tools callable as `tools.<namespace>.<tool>`;
+- remote MCP servers from `mcp.json`: Streamable HTTP (`"type": "http"`
+  or `"streamable-http"`) and the legacy HTTP+SSE transport (`"type":
+  "sse"`), with `url` and `headers` (`${VAR}`, `${VAR:-default}`), the
+  shape Claude Code, Cursor and Vibe use, so their `.mcp.json` works as
+  is (below, "Remote servers");
 - a list with diagnostics: `bend-harness plugins` (CLI) and `/plugins`
   (TUI);
 - enable and disable, per plugin name.
@@ -27,7 +32,6 @@ Supported now (the portable base of the spec):
 Not supported yet, reported as `plugin.component.unsupported` in the
 diagnostics (the rest of the plugin still loads):
 
-- `streamable-http` and `sse` servers in `mcp.json`;
 - everything under `ai.mistral.vibe/` (hooks, agents, knowledge, views),
   `connectors.json`, `libraries.json`;
 - the `ai.mistral.vibe` manifest extension (`toolNamespace`,
@@ -53,7 +57,7 @@ fixtures in `vibe_sdk/harness/plugins/`.
 | MCP tool names | `tools.<group>.<tool>`, group = namespace, `toolOverrides` rename | `tools.<namespace>.<tool>`, no overrides; a name collision drops the later tool |
 | Tool exposure | `programmatic` by default, overridable | programmatic only: `search_tool_functions`, `run_typescript`, direct call by dotted name (like our connectors) |
 | stdio transport | persistent clients in the Vibe MCP registry | persistent servers behind a per-session loopback bridge (below) |
-| HTTP transports | yes | not yet |
+| HTTP transports | yes | Streamable HTTP and SSE, static headers, behind the same bridge (below) |
 | Enable / disable | none at plugin level (mounting = enabling); `disabled` per MCP server in config | `bend-harness plugins disable <name>`, stored in `~/.bend-harness/plugins.json` |
 | Hooks, knowledge, agents, views, connectors, libraries | loaded (some broken locally, see the plugin-creator skill) | listed as unsupported |
 | Inspect | `/plugins`, `/reload-plugins` (behind `--experimental-harness`) | `/plugins` (TUI), `bend-harness plugins` (CLI), `/reload` re-resolves |
@@ -125,8 +129,12 @@ live REPLs, so two sessions (or two Switchboard tasks) never share it.
    `plugin.skill.invalid`, skipped.
 7. **MCP.** `mcp.json` must match the 1.0.0 MCP schema (`$schema` const,
    `mcpServers` object). A bad file: `plugin.mcp.invalid`, no server
-   loads. Per server: `stdio` only (`plugin.component.unsupported` for
-   the HTTP types). `command` is a bare executable (looked up in `PATH`)
+   loads. No `$schema` is fine (a file copied from Claude Code, Cursor
+   or Vibe); a different one is an error. Per server: `type` `stdio`
+   (the default with a `command`), `http`/`streamable-http` (the default
+   with a `url` and no `command`) or `sse`; another type is
+   `plugin.component.unsupported`. A remote server takes `url` and
+   `headers` only (see "Remote servers"). A stdio server: `command` is a bare executable (looked up in `PATH`)
    or `./x` resolved inside the root. `${PLUGIN_ROOT}` and
    `${PLUGIN_DATA}` are replaced in `command`, `args`, `env` values and
    `cwd`; `cwd` must start with `./`, `${PLUGIN_ROOT}` or
@@ -272,6 +280,70 @@ description, not a removed one).
 - `bend PROOF.bend`, the scripted e2e suite and the TUI tmux suite stay
   green (scripted runs never start the bridge).
 
+### Remote servers (Streamable HTTP, SSE)
+
+```json
+{"mcpServers": {
+  "linear": {"type": "http", "url": "https://mcp.linear.app/mcp",
+             "headers": {"Authorization": "Bearer ${LINEAR_API_KEY}"}},
+  "legacy": {"type": "sse", "url": "https://example.com/sse"}
+}}
+```
+
+- **Where.** The bridge holds them like the stdio servers: the REPL
+  calls the same loopback URL, nothing changes on the Bend side, and a
+  token never reaches the REPL, a session or `/log`.
+- **Config.** `url` (http or https) and `headers` (string values).
+  `${PLUGIN_ROOT}`/`${PLUGIN_DATA}` are replaced at resolve time;
+  `${VAR}` and `${VAR:-default}` (Claude Code's syntax) only when the
+  bridge connects, from its environment (the REPL's, so the user's shell
+  and bise's `.env`). An unset variable: `header Authorization uses
+  ${LINEAR_API_KEY}, which is not set`, and the server is left out.
+  Listings show the host and the header names, never a value or the
+  URL's path (it may hold a key).
+- **Client** (`rust/plugins/src/http.rs`, `remote.rs`): blocking
+  HTTP/1.1, rustls with the webpki roots, one connection per request
+  (a server that restarted is just a new connection). Streamable HTTP:
+  each message a POST with `Accept: application/json,
+  text/event-stream`; the answer as JSON or as an event stream (chunked
+  or not; other messages on it are handled: `ping` answered, the rest
+  refused); `Mcp-Session-Id` from `initialize` and
+  `MCP-Protocol-Version` on every later request; a 404 on a session is a
+  new handshake and the request again; a server announcing
+  `tools.listChanged` gets a GET event stream for its notifications,
+  reopened with backoff when it drops (405: none). SSE: the GET stream's
+  `endpoint` event gives the POST URL (same origin only); the answers
+  come on the stream; a dropped stream is reopened, with a new
+  handshake, at the next request. A request that may have reached the
+  server is never sent twice: only a connect failure or an expired
+  session retries; a stream that drops mid-call fails that call.
+  Timeouts: 20 s to connect, list and hand-shake, 60 s per call.
+- **`tools/list`** follows `nextCursor`. On
+  `notifications/tools/list_changed` (remote or stdio) the bridge lists
+  that server again and rewrites `D/mcp-index.txt` (the REPL reads it at
+  each search and call).
+- **Errors** are one line naming the host: `mcp.example.com refused the
+  connection`, `HTTP 403 from mcp.example.com: forbidden`,
+  `mcp.example.com answered 401: it needs a login or a token in
+  "headers"`, `mcp.example.com did not answer within 20s`; they go to
+  `plugin.mcp.connection_failed` like a stdio server's.
+- **State for `/plugins`.** The bridge writes each remote server's last
+  state to `~/.bise/mcp-status/<plugin>/<server>.json`
+  (`$BEND_MCP_STATUS`; host, transport, tool count or the error line,
+  time). The static listing (`/plugins`, `bise plugins list`) shows it:
+  `mcp linear: http mcp.linear.app · connected · 23 tools · 2 min ago`,
+  or `· ✗ <error> · …`, or `· not connected yet` before any session.
+- **Importers.** `bise plugins import-mcp` keeps remote servers: Claude
+  Code's `type`/`url`/`headers` as they are; Codex's `url` with
+  `http_headers`, `env_http_headers` (`{"X-Org": "VAR"}` becomes
+  `"${VAR}"`) and `bearer_token_env_var` (`Authorization: Bearer
+  ${VAR}`). It prints the host and the header names, never a value.
+- **Tests:** `tests/fake_mcp_http.py` (a Streamable HTTP or SSE server
+  with a required header, pagination, session expiry, dropped streams,
+  list_changed, a 401) driven by `rust/plugins/tests/remote.rs`
+  (the client, and a plugin with two remote servers through the real
+  bridge).
+
 ## Known limits
 
 - The TUI `$` skill popup reads the shared index only: workspace and
@@ -283,7 +355,8 @@ description, not a removed one).
 
 ## Later
 
-- HTTP MCP servers straight from the REPL (it has the client already).
+- OAuth login for remote servers that need it (401 with
+  `WWW-Authenticate`).
 - `ai.mistral.vibe` extension: `toolNamespace`, `toolOverrides`.
 - Per-server enable/disable, a `/plugins` picker with toggles.
 - Plugin descriptions in the system prompt (the spec's default guidance).

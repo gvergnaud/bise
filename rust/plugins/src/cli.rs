@@ -31,7 +31,7 @@ pub fn workspace(args: &[String]) -> PathBuf {
 
 /// The static listing for a workspace (no server started).
 pub fn listing(ws: &std::path::Path) -> String {
-    report::text(&resolve::resolve(&resolve::Roots::standard(Some(ws))), None)
+    report::text_with(&resolve::resolve(&resolve::Roots::standard(Some(ws))), None, Some(&crate::status::dir()))
 }
 
 /// Returns the process exit code.
@@ -44,7 +44,7 @@ pub fn main(args: &[String]) -> i32 {
             if args.iter().any(|a| a == "--json") {
                 println!("{}", serde_json::to_string_pretty(&report::json(&res)).unwrap_or_default());
             } else {
-                print!("{}", report::text(&res, None));
+                print!("{}", report::text_with(&res, None, Some(&crate::status::dir())));
             }
             0
         }
@@ -91,6 +91,7 @@ pub fn main(args: &[String]) -> i32 {
                 dir: PathBuf::from(dir),
                 parent,
                 roots: resolve::Roots::standard(Some(&ws)),
+                status_dir: Some(crate::status::dir()),
             };
             match bridge::serve(opts) {
                 Ok(()) => 0,

@@ -51,7 +51,7 @@ Show a short plan, only the lines with something to do, e.g.:
     AGENTS.md  ~/.bise/AGENTS.md ← a copy of ~/.claude/CLAUDE.md
     repos      read CLAUDE.md where there is no AGENTS.md
     skills     review-pr, linked into ~/.agents/skills
-    MCP        github (Claude Code), fs (Codex); linear skipped (remote)
+    MCP        github, linear (remote, http) from Claude Code; fs (Codex)
     terminal   4 Ghostty lines for cmd+v/f/k/a (backup kept)
     ok?
 
@@ -73,7 +73,9 @@ Then stop and wait for the user's answer.
   (a folder without AGENTS.md then gives its CLAUDE.md to the agents).
 - **Skills:** for each skill folder not in ~/.agents/skills yet:
   `mkdir -p ~/.agents/skills && ln -s ~/.claude/skills/NAME ~/.agents/skills/NAME`.
-- **MCP servers** (the tokens go through the pipe, never shown):
+- **MCP servers**, local and remote (http/sse with their headers; the tokens go
+  through the pipe, never shown; a `${VAR}` reference stays one, filled from
+  bise's environment when the server connects):
   `jq '{mcpServers: (.mcpServers // {})}' ~/.claude.json | bise plugins import-mcp from-claude-code`
   `python3 -c 'import tomllib,json,os; c=tomllib.load(open(os.path.expanduser("~/.codex/config.toml"),"rb")); print(json.dumps({"mcpServers": c.get("mcp_servers", {})}))' | bise plugins import-mcp from-codex`
   Then `bise plugins list` must show them without errors.

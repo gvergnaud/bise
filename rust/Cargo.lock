@@ -101,7 +101,9 @@ name = "bend-plugins"
 version = "0.1.0"
 dependencies = [
  "bise-home",
+ "rustls",
  "serde_json",
+ "webpki-roots 0.26.11",
 ]
 
 [[package]]

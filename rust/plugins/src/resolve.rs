@@ -100,6 +100,92 @@ pub struct StdioServer {
     pub cwd: PathBuf,
 }
 
+/// A remote server's transport.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Transport {
+    /// Streamable HTTP (MCP 2025-03-26+): `"type": "http"` (Claude
+    /// Code, Cursor) or `"streamable-http"` (Vibe, the plugin schema)
+    Streamable,
+    /// the legacy HTTP+SSE transport (MCP 2024-11-05): `"type": "sse"`
+    Sse,
+}
+
+impl Transport {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Transport::Streamable => "http",
+            Transport::Sse => "sse",
+        }
+    }
+}
+
+/// A remote MCP server (`"type": "http" | "streamable-http" | "sse"`).
+/// `${PLUGIN_ROOT}`/`${PLUGIN_DATA}` are expanded here; `${VAR}` and
+/// `${VAR:-default}` stay until the bridge connects ([`expand_env`]), so
+/// a token never sits in a resolution, a report or a listing.
+#[derive(Clone, PartialEq)]
+pub struct HttpServer {
+    pub id: String,
+    pub transport: Transport,
+    pub url: String,
+    /// never printed: the values may hold tokens
+    pub headers: Vec<(String, String)>,
+}
+
+impl std::fmt::Debug for HttpServer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let names: Vec<&str> = self.headers.iter().map(|(k, _)| k.as_str()).collect();
+        write!(f, "HttpServer {{ id: {:?}, transport: {:?}, host: {:?}, headers: {:?} }}", self.id, self.transport, self.host(), names)
+    }
+}
+
+impl HttpServer {
+    /// The URL's host (and port), for listings: the path may hold a key.
+    pub fn host(&self) -> String {
+        let rest = self.url.split_once("://").map(|(_, r)| r).unwrap_or(&self.url);
+        let hp = rest.split(['/', '?', '#']).next().unwrap_or("");
+        hp.rsplit_once('@').map(|(_, h)| h).unwrap_or(hp).to_string()
+    }
+}
+
+/// `${VAR}` and `${VAR:-default}` replaced from `lookup` (Claude Code's
+/// .mcp.json syntax). A variable that is unset (or empty, with no
+/// default) is an error naming it. `$VAR` without braces and an
+/// unclosed `${` stay as they are.
+pub fn expand_env(s: &str, lookup: &dyn Fn(&str) -> Option<String>) -> Result<String, String> {
+    let mut out = String::new();
+    let mut rest = s;
+    while let Some(i) = rest.find("${") {
+        out.push_str(&rest[..i]);
+        let after = &rest[i + 2..];
+        let Some(j) = after.find('}') else {
+            out.push_str(&rest[i..]);
+            return Ok(out);
+        };
+        let inner = &after[..j];
+        let (name, default) = match inner.split_once(":-") {
+            Some((n, d)) => (n, Some(d)),
+            None => (inner, None),
+        };
+        let ok_name = !name.is_empty()
+            && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+            && !name.starts_with(|c: char| c.is_ascii_digit());
+        if !ok_name {
+            out.push_str("${");
+            rest = after;
+            continue;
+        }
+        match (lookup(name).filter(|v| !v.is_empty() || default.is_none()), default) {
+            (Some(v), _) => out.push_str(&v),
+            (None, Some(d)) => out.push_str(d),
+            (None, None) => return Err(format!("${{{}}} is not set", name)),
+        }
+        rest = &after[j + 1..];
+    }
+    out.push_str(rest);
+    Ok(out)
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Plugin {
     /// the manifest name; the folder name when the manifest is invalid
@@ -113,6 +199,8 @@ pub struct Plugin {
     pub state: State,
     pub skills: Vec<Skill>,
     pub servers: Vec<StdioServer>,
+    /// remote servers (Streamable HTTP, SSE)
+    pub remotes: Vec<HttpServer>,
     /// components present on disk but not supported yet
     pub unsupported: Vec<String>,
 }
@@ -508,12 +596,63 @@ fn contained(base: &Path, p: &Path) -> bool {
     target.starts_with(base)
 }
 
-fn parse_server(id: &str, v: &Value, root: &Path, data: &Path) -> Result<StdioServer, String> {
-    let o = v.as_object().ok_or("must be an object")?;
-    let ty = o.get("type").and_then(Value::as_str).ok_or("missing \"type\"")?;
-    if ty != "stdio" {
-        return Err(format!("unsupported:type {:?} (only stdio is supported yet)", ty));
+/// One server of mcp.json.
+enum Parsed {
+    Stdio(StdioServer),
+    Http(HttpServer),
+}
+
+/// A remote server: `url` (http or https, `${VAR}` allowed) and
+/// optional string `headers`.
+fn parse_http(id: &str, transport: Transport, o: &Map<String, Value>, root: &Path, data: &Path) -> Result<HttpServer, String> {
+    for k in o.keys() {
+        if !["type", "url", "headers"].contains(&k.as_str()) {
+            return Err(format!("unknown field {:?}", k));
+        }
     }
+    let raw = o.get("url").and_then(Value::as_str).filter(|s| !s.is_empty()).ok_or("\"url\" must be a non-empty string")?;
+    let url = expand(raw, root, data);
+    let checked = if url.contains("${") { None } else { Some(crate::http::Url::parse(&url).map_err(|e| format!("\"url\": {}", e))?) };
+    if checked.is_none() && !(url.starts_with("http://") || url.starts_with("https://") || url.starts_with("${")) {
+        return Err("\"url\" must start with http:// or https://".into());
+    }
+    let mut headers = Vec::new();
+    if let Some(h) = o.get("headers") {
+        let h = h.as_object().ok_or("\"headers\" must be an object")?;
+        for (k, v) in h {
+            if k.is_empty() || !k.chars().all(|c| c.is_ascii_alphanumeric() || "!#$%&'*+-.^_`|~".contains(c)) {
+                return Err(format!("header name {:?} is not a valid HTTP header name", k));
+            }
+            let v = v.as_str().ok_or(format!("header {} must be a string", k))?;
+            if v.contains(['\r', '\n']) {
+                return Err(format!("header {} has a line break", k));
+            }
+            headers.push((k.clone(), expand(v, root, data)));
+        }
+    }
+    Ok(HttpServer { id: id.to_string(), transport, url, headers })
+}
+
+fn parse_server(id: &str, v: &Value, root: &Path, data: &Path) -> Result<Parsed, String> {
+    let o = v.as_object().ok_or("must be an object")?;
+    // no "type": stdio with a command, http with a url (Claude Code's
+    // and Cursor's files leave it out)
+    let ty = match o.get("type") {
+        Some(t) => t.as_str().ok_or("\"type\" must be a string")?,
+        None if o.contains_key("url") && !o.contains_key("command") => "http",
+        None => "stdio",
+    };
+    match ty {
+        "stdio" => parse_stdio(id, o, root, data).map(Parsed::Stdio),
+        "http" | "streamable-http" | "streamable_http" | "streamableHttp" => {
+            parse_http(id, Transport::Streamable, o, root, data).map(Parsed::Http)
+        }
+        "sse" => parse_http(id, Transport::Sse, o, root, data).map(Parsed::Http),
+        t => Err(format!("unsupported:type {:?} (stdio, http, streamable-http or sse)", t)),
+    }
+}
+
+fn parse_stdio(id: &str, o: &Map<String, Value>, root: &Path, data: &Path) -> Result<StdioServer, String> {
     for k in o.keys() {
         if !["type", "command", "args", "env", "cwd"].contains(&k.as_str()) {
             return Err(format!("unknown field {:?}", k));
@@ -613,7 +752,9 @@ fn load_mcp(p: &mut Plugin, out: &mut Vec<Diagnostic>) {
     if let Some(k) = o.keys().find(|k| *k != "$schema" && *k != "mcpServers") {
         return out.push(bad(format!("unknown field /{} (the schema is closed)", k)));
     }
-    if o.get("$schema").and_then(Value::as_str) != Some(MCP_SCHEMA) {
+    // no $schema: a .mcp.json copied from Claude Code, Cursor or Vibe
+    // works as is; a different one is still an error
+    if o.get("$schema").is_some_and(|s| s.as_str() != Some(MCP_SCHEMA)) {
         return out.push(bad(format!("/$schema must be \"{}\"", MCP_SCHEMA)));
     }
     let Some(servers) = o.get("mcpServers").and_then(Value::as_object) else {
@@ -622,7 +763,8 @@ fn load_mcp(p: &mut Plugin, out: &mut Vec<Diagnostic>) {
     let data = p.data_root.clone();
     for (id, sv) in servers {
         match parse_server(id, sv, &p.root, &data) {
-            Ok(s) => p.servers.push(s),
+            Ok(Parsed::Stdio(s)) => p.servers.push(s),
+            Ok(Parsed::Http(s)) => p.remotes.push(s),
             Err(e) => match e.strip_prefix("unsupported:") {
                 Some(why) => {
                     p.unsupported.push(format!("mcp server {}", id));
@@ -697,6 +839,7 @@ fn discover(root: &Path, scope: Scope, data: &Path, out: &mut Vec<Diagnostic>) -
             state: State::Invalid,
             skills: Vec::new(),
             servers: Vec::new(),
+            remotes: Vec::new(),
             unsupported: Vec::new(),
         };
         let parsed = std::fs::read_to_string(&manifest)
