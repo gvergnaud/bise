@@ -1010,10 +1010,220 @@ def t_theme(c):
     return svg(680, 270, a + f'<g class="sw">{b}</g>', css,
                "the same bise screen in your terminal's dark colors, then light, then dark again; the text stops at a reading width.", c, pad=16)
 
+# ---------- voice to voice: the voice-mode face (rust/tui/src/voicemode/kiss.rs), drawn as pixels ----------
+def kiss_dots(pose, ms=0, level=.5, slow=1.0):
+    """the 41 x 18 dots of the big kiss (kiss.rs, ported from the mocks' face()): 'listen' (the smile breathes),
+    'talk' (the smile a little rounder, still), 'think' (the * turns), 'speak' (a ring with the level, arcs beside),
+    'kiss' (the lips press, pucker, a small * puffs up and away). the colon on the left, the mouth on the right."""
+    import math
+    W_, H_, CX, CY = 41, 18, 23, 8.5
+    D = [[0] * W_ for _ in range(H_)]
+    def st(x, y):
+        x, y = math.floor(x + .5), math.floor(y + .5)
+        if 0 <= x < W_ and 0 <= y < H_: D[y][x] = 1
+    def fr(a, b, step):
+        v = a
+        while v <= b + 1e-9: yield v; v += step
+    def star(r, rot, x0, y0):
+        for a in range(3):
+            g = rot + a * math.pi / 3
+            for s_ in fr(-r, r, .25): x, y = x0 + s_ * math.sin(g) * 1.15, y0 - s_ * math.cos(g); st(x, y); st(x + .5, y)
+    def paren(h, b):
+        for y in fr(CY - h, CY + h, .25): u = (y - CY) / h; x = CX - 1.5 + b * (1 - u * u); st(x, y); st(x + 1, y)
+    def ring(rx, ry):
+        ix, iy = max(.5, rx - 1.7), max(.5, ry - 1.4)
+        for y in range(H_):
+            for x in range(W_):
+                dx, dy = x - CX, y - CY
+                if (dx / rx) ** 2 + (dy / ry) ** 2 <= 1 and (dx / ix) ** 2 + (dy / iy) ** 2 > 1: D[y][x] = 1
+    def arcs(v):
+        for j in range(0 if v < .15 else 1 if v < .4 else 2 if v < .7 else 3):
+            rx, ry = 12 + 2.5 * j, 5.5 + 1.5 * j
+            for a in fr(-.9, .9, .04): st(CX + rx * math.cos(a), CY + ry * math.sin(a))
+    for y0 in (4, 11):  # the eyes (the colon)
+        for y in range(y0, y0 + 3):
+            for x in range(6, 10): st(x, y)
+    if pose == "speak":
+        if level < .08: paren(5.5, 3)
+        else: ring(4.5 + level * 2.5, 1.8 + level * 6.5); arcs(level)
+    elif pose == "think": star(5, math.floor(ms / 150) * math.pi / 12, CX, CY)
+    elif pose == "kiss":
+        k = slow
+        if ms < 150 * k: paren(5.5, 1.2)
+        elif ms < 300 * k: star(3, 0, CX, CY)
+        elif ms < 800 * k:
+            star(5, 0, CX, CY)
+            p = (ms - 300 * k) / (500 * k); f = [(9, -2, 2), (12, -3, 2), (14, -4, 1.5)][min(2, math.floor(p * 3))]
+            star(f[2], 0, CX + f[0], CY + f[1])
+        else: paren(5.5, 3)
+    elif pose == "talk": paren(5.5, 3.6)
+    else: paren(5.5, 3.6 if pose == "listen" and math.floor(ms / 1200) % 2 else 3)
+    return tuple(tuple(r) for r in D)
+
+def dots_path(D, x0, y0, dw, dh):
+    """the dots as one path: a rectangle per run of lit dots on a row."""
+    out = []
+    for y, row in enumerate(D):
+        x = 0
+        while x < len(row):
+            if row[x]:
+                n = 1
+                while x + n < len(row) and row[x + n]: n += 1
+                out.append(f"M{x0 + x * dw:.1f} {y0 + y * dh:.1f}h{n * dw:.1f}v{dh:.1f}h-{n * dw:.1f}z")
+                x += n
+            else: x += 1
+    return "".join(out)
+
+def flick(tl, spans):
+    """shown during each (a, b) of spans, hidden in between: one element for every time a frame comes back."""
+    spans = sorted(spans); merged = []
+    for a, b in spans:
+        if merged and a <= merged[-1][1] + .02: merged[-1][1] = max(merged[-1][1], b)
+        else: merged.append([a, b])
+    tl.n += 1; k = f"f{tl.n}"; T = tl.T; p = lambda v: f"{max(0, min(100, v / T * 100)):.3f}%"
+    fr = ["0%{opacity:0}"] + [f"{p(a)}{{opacity:0}}{p(a + .004)},{p(b)}{{opacity:1}}{p(b + .004)}{{opacity:0}}" for a, b in merged] + ["100%{opacity:0}"]
+    tl.css.append(f"@keyframes {k}{{{''.join(fr)}}}.{k}{{opacity:0;animation:{k} {T}s linear infinite}}")
+    return k
+
+def words_in(tl, x, y, text, t0, step, c, color="text", size=14, faint=None):
+    """the words of text appear one by one from t0, step s apart (as they're said); faint: the line is there, faint, from that time."""
+    import math
+    ws = text.split(" "); T = tl.T; p = lambda v: f"{v / T * 100:.3f}%"
+    tl.n += 1; k = f"w{tl.n}"; cid = f"wc{tl.n}"
+    fr = ["0%{width:0}"]; w_prev = 0; n = 0
+    for i, w in enumerate(ws):
+        n += len(w) + (1 if i else 0); at = t0 + i * step; wv = n * CW + 2
+        fr.append(f"{p(at)}{{width:{w_prev:.1f}px}}{p(at + .004)}{{width:{wv:.1f}px}}"); w_prev = wv
+    fr.append(f"{p(T - .3)}{{width:{w_prev:.1f}px}}100%{{width:0}}")
+    tl.css.append(f"@keyframes {k}{{{''.join(fr)}}}.{k}{{animation:{k} {T}s linear infinite}}")
+    under = ""
+    if faint is not None:
+        kf = tl.show(faint, dur=.15)
+        under = f'<text class="{kf}" x="{x}" y="{y}" font-size="{size}" fill="{c["faint"]}" xml:space="preserve">{E(text)}</text>'
+    return (under + f'<clipPath id="{cid}"><rect class="{k}" x="{x - 1}" y="{y - size - 2}" height="{size + 8}" width="0"/></clipPath>'
+            f'<text x="{x}" y="{y}" font-size="{size}" fill="{c[color]}" clip-path="url(#{cid})" xml:space="preserve">{E(text)}</text>')
+
+def speech_level(t):
+    import math
+    gap = 1 if math.sin(t * 1.9) > -.55 else .05
+    return max(0, min(1, (.55 + .45 * math.sin(t * 13.1) * math.sin(t * 4.3 + 1)) * gap))
+
+def t_voicemode(c):
+    """voice to voice: ctrl+r twice, you talk, main answers out loud; the face listens, thinks, speaks, kisses."""
+    T = 11.5
+    m = Tui(c, T, H=360); m.typed = []
+    m.top = 172  # the voice pane takes the composer's place, at half the screen
+    you_s = "can you make the pricing page less busy?"
+    main_1, main_2 = "sure. pricing-page will cut it to three", "plans and send you a preview."
+    m.header([(0, 4.6, f'{m.gust()} 1 working'), (4.6, None, f'{m.gust()} 2 working')])
+    m.main(0.1, "cookies is on it. the banner is getting smaller.")
+    m.row(2.1, f'<tspan font-weight="700">{E(you_s)}</tspan> <tspan fill="{c["faint"]}">said</tspan> {m.acc("✓✓")}', gap=8)
+    m.main(4.6, "pricing-page started.")
+    top, o = m.top, m.over
+    o.append(f'<rect x="0" y="{top}" width="{m.W}" height="{m.H - top}" fill="{c["foot"]}"/>')
+    m.chrome.append(f'<path d="M0 {top} H{m.W}" stroke="{c["line"]}"/>'
+                    f'<text x="24" y="{top + 4}" font-size="12" fill="{c["dim"]}">voice mode · {m.acc_b("main")}</text>'
+                    f'<text x="64" y="{m.H - 16}" font-size="12" fill="{c["faint"]}" xml:space="preserve">space send   m mute   esc leave</text>')
+    o.append(f'<rect x="24" y="{top + 22}" width="3" height="118" fill="{c["acc"]}"/>')
+    # the face: one path per distinct frame, flicked on each time it comes back
+    fx, fy, dw, dh = 44, top + 26, 4.4, 4.6
+    tline = []  # (t0, t1, dots)
+    def run(a, b, step, f):
+        t = a
+        while t < b - 1e-6:
+            t2 = min(b, t + step); tline.append((t, t2, f(t))); t = t2
+    run(0, .5, .5, lambda t: kiss_dots("listen", 0))
+    run(.5, 2.1, 1.6, lambda t: kiss_dots("talk"))
+    run(2.1, 3.0, .15, lambda t: kiss_dots("think", (t - 2.1) * 1000))
+    run(3.0, 6.7, .12, lambda t: kiss_dots("speak", level=round(speech_level(t * 1.6 + 3) * 12) / 12))
+    run(6.7, 8.1, .065, lambda t: kiss_dots("kiss", (t - 6.7) * 1000, slow=1.3))
+    run(8.1, T, .6, lambda t: kiss_dots("listen", (t - 8.1) * 1000 + 1200))
+    frames = {}
+    for a, b, D in tline: frames.setdefault(D, []).append((a, b))
+    for D, spans in frames.items():
+        o.append(f'<path class="{flick(m.tl, spans)}" d="{dots_path(D, fx, fy, dw, dh)}" fill="{c["acc"]}"/>')
+    # the status row under the face
+    sy = top + 132
+    bars = "".join(f'<rect class="vb{i % 3}" x="{140 + i * 8}" y="{sy - 11}" width="5" height="12" rx="1" fill="{c["acc"]}"/>' for i in range(7))
+    for j, ks in enumerate(["0%,100%{transform:scaleY(.15)}30%{transform:scaleY(1)}60%{transform:scaleY(.45)}",
+                            "0%,100%{transform:scaleY(.7)}25%{transform:scaleY(.2)}70%{transform:scaleY(.95)}",
+                            "0%,100%{transform:scaleY(.4)}45%{transform:scaleY(.8)}80%{transform:scaleY(.1)}"]):
+        m.tl.css.append(f"@keyframes vb{j}{{{ks}}}.vb{j}{{transform-box:fill-box;transform-origin:bottom;animation:vb{j} {1.0 + j * .17:.2f}s ease-in-out infinite}}")
+    status = lambda html: f'<text x="{fx}" y="{sy}" font-size="13" fill="{c["acc"]}" xml:space="preserve">{html}</text>'
+    o.append(f'<g class="{flick(m.tl, [(0, .5), (6.7, T)])}">{status("● listening")}</g>')
+    o.append(f'<g class="{flick(m.tl, [(.5, 2.1)])}">{status("● listening")}{bars}</g>')
+    for i in range(6):
+        o.append(f'<g class="{flick(m.tl, [(2.1 + i * .15, 2.1 + (i + 1) * .15 if i < 5 else 3.0)])}">{status("about to answer " + "●" * i + "·" * (5 - i))}</g>')
+    o.append(f'<g class="{flick(m.tl, [(3.0, 6.7)])}">{status(")))  speaking")}</g>')
+    # the captions, right of the face: who talks, the words as they're said (main's not-yet-said words faint)
+    cx, cy = 270, top + 50
+    o.append(f'<g class="{flick(m.tl, [(.5, 3.0)])}"><text x="{cx}" y="{cy}" font-size="12" fill="{c["acc"]}">you</text></g>'
+             f'<g class="{flick(m.tl, [(3.0, T - .3)])}"><text x="{cx}" y="{cy}" font-size="12" fill="{c["dim"]}">{m.acc(":*")} main</text></g>')
+    you_w = words_in(m.tl, cx, cy + 26, you_s, .6, .18, c)
+    o.append(f'<g class="{flick(m.tl, [(.5, 3.0)])}">{you_w}</g>')
+    n1 = len(main_1.split(" "))
+    mw = words_in(m.tl, cx, cy + 26, main_1, 3.1, .22, c, faint=3.0) + words_in(m.tl, cx, cy + 48, main_2, 3.1 + n1 * .22, .22, c, faint=3.0)
+    o.append(f'<g class="{flick(m.tl, [(3.0, T - .3)])}">{mw}</g>')
+    return m.svg("you press ctrl+r twice and ask main to make the pricing page less busy. the face listens, thinks, then talks: main says pricing-page will cut it to three plans. it ends with a kiss.")
+
+def t_computer(c):
+    """computer use: an agent opens the page in your browser, in its own tab group, in the background; reads it,
+    takes a screenshot; main answers. your own tab never moves."""
+    T = 11
+    m = Tui(c, T, H=300); m.typed = []
+    ask = "is buy visible on mobile pricing?"  # short: it stays left of the browser
+    m.header([(2.4, 5.9, f'{m.gust()} 1 working'), (5.9, None, f'{m.acc("✓")} 1 done')])
+    m.type(0.3, 1.5, ask); m.you(1.7, ask, gap=0)
+    m.main(2.3, "qa is checking it in your browser.")
+    m.row(3.2, m.dim("ƒ qa · opened /pricing"), size=13)
+    m.row(3.9, m.dim("ƒ qa · read it at 390 px"), size=13)
+    m.row(4.6, m.dim("ƒ qa · took a screenshot"), size=13)
+    m.main(5.5, "yes: buy shows on all 3 plans.")
+    m.main(6.0, "your tab was never touched.")
+    m.composer([(0.3, 1.7)])
+    # the browser, beside: your tab stays in front; the agent's tab opens in its own group, behind
+    bx, by, bw, bh = 384, 60, 272, 156
+    o = m.over
+    page = c["bg"] if c["mode"] == "light" else c["raised"]
+    o.append(f'<rect x="{bx}" y="{by}" width="{bw}" height="{bh}" rx="8" fill="{c["foot"]}" stroke="{c["faint"]}"/>'
+             f'<rect x="{bx + 8}" y="{by + 7}" width="70" height="20" rx="5" fill="{page}"/>'
+             f'<text x="{bx + 18}" y="{by + 21}" font-size="11" fill="{c["text"]}">inbox</text>'
+             f'<rect x="{bx + 8}" y="{by + 32}" width="{bw - 16}" height="18" rx="9" fill="{page}"/>'
+             f'<text x="{bx + 20}" y="{by + 45}" font-size="10" fill="{c["dim"]}">mail.acme.dev/inbox</text>'
+             f'<rect x="{bx + 8}" y="{by + 56}" width="{bw - 16}" height="{bh - 64}" rx="4" fill="{page}"/>')
+    for i in range(4):  # your inbox: the page you're on, untouched
+        yy = by + 70 + i * 19
+        o.append(f'<rect x="{bx + 18}" y="{yy}" width="8" height="8" rx="4" fill="{c["wind"]}"/>'
+                 f'<rect x="{bx + 32}" y="{yy + 1}" width="{60 + (i * 37) % 50}" height="6" rx="3" fill="{c["wind"]}"/>'
+                 f'<rect x="{bx + 130}" y="{yy + 1}" width="{90 - (i * 23) % 40}" height="6" rx="3" fill="{c["line"]}"/>')
+    kg = m.tl.show(3.0)
+    o.append(f'<g class="{kg}"><rect x="{bx + 86}" y="{by + 10}" width="32" height="14" rx="4" fill="{c["acc"]}"/>'
+             f'<text x="{bx + 102}" y="{by + 21}" text-anchor="middle" font-size="10" font-weight="700" fill="{page}">bise</text>'
+             f'<rect x="{bx + 122}" y="{by + 7}" width="78" height="20" rx="5" fill="{c["chip"]}"/>'
+             f'<rect x="{bx + 122}" y="{by + 25}" width="78" height="2" fill="{c["acc"]}"/>'
+             f'<text x="{bx + 146}" y="{by + 21}" font-size="11" fill="{c["dim"]}">pricing</text></g>')
+    ks, kd = m.tl.show(3.0, 3.8, dur=.05), m.tl.show(3.8, dur=.05)
+    o.append(f'<text class="{ks}" x="{bx + 130}" y="{by + 21}" font-size="11"><tspan class="g" fill="{c["acc"]}">∿</tspan></text>'
+             f'<rect class="{kd}" x="{bx + 130}" y="{by + 13}" width="9" height="9" rx="2" fill="{c["acc"]}"/>')
+    # the screenshot: a flash on the agent's tab, then a small card of the page it saw, out of the tab
+    kf = m.tl.show(4.55, 4.75, dur=.05)
+    o.append(f'<rect class="{kf}" x="{bx + 120}" y="{by + 5}" width="82" height="24" rx="5" fill="#fff" opacity=".9"/>')
+    sx, sy, sw, sh = bx + 128, by + 64, 118, 82
+    cards = "".join(f'<rect x="{sx + 8 + i * 36}" y="{sy + 16}" width="30" height="56" rx="3" fill="{c["foot"]}" stroke="{c["line"]}"/>'
+                    f'<rect x="{sx + 13 + i * 36}" y="{sy + 24}" width="20" height="4" rx="2" fill="{c["wind"]}"/>'
+                    f'<rect x="{sx + 13 + i * 36}" y="{sy + 34}" width="14" height="3" rx="1.5" fill="{c["line"]}"/>'
+                    f'<rect x="{sx + 12 + i * 36}" y="{sy + 58}" width="22" height="9" rx="4.5" fill="{c["acc"]}"/>' for i in range(3))
+    kc = m.tl.show(4.7, dur=.25)
+    o.append(f'<g class="{kc}"><rect x="{sx + 3}" y="{sy + 3}" width="{sw}" height="{sh}" rx="4" fill="{c["wind"]}"/>'
+             f'<rect x="{sx}" y="{sy}" width="{sw}" height="{sh}" rx="4" fill="{page}" stroke="{c["faint"]}"/>'
+             f'<text x="{sx + 8}" y="{sy + 11}" font-size="8" fill="{c["faint"]}">pricing · 390 px</text>{cards}</g>')
+    return m.svg("you ask main if buy is visible on the mobile pricing page. an agent opens it in a background tab in its own group, reads it, takes a screenshot, and main answers: buy shows on all three plans. your own tab never moved.")
+
 SCENES = [("talk", t_talk), ("zen", t_zen), ("screenshot", t_screenshot),
           ("resume", t_resume), ("worktree", t_worktree), ("card", t_card), ("sync", t_sync), ("tools", t_tools), ("plugins", t_plugins),
           ("direct", t_direct), ("prs", t_prs), ("tokens", t_tokens), ("voice", t_voice), ("quote", t_quote), ("model", t_model),
-          ("shell", t_shell), ("restart", t_restart), ("proof", t_proof), ("theme", t_theme)]
+          ("shell", t_shell), ("restart", t_restart), ("proof", t_proof), ("theme", t_theme),
+          ("voicemode", t_voicemode), ("computer", t_computer)]
 
 FEATS = [("quiet", f_quiet), ("steer", f_steer)] + SCENES
 
