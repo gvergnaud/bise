@@ -329,3 +329,170 @@ fn the_exact_body_when_logged() {
     assert_eq!(model::iso_ms("2026-10-02T00:00:00.000Z"), Some(1_790_899_200_000));
 }
 
+
+/// A blank row after each entry, so they read apart (the user: "ça
+/// manque d'espace entre les messages").
+#[test]
+fn a_blank_row_between_entries() {
+    let mut v = view();
+    v.sel = 0;
+    v.top = (0, 0);
+    let t = text(&lines(&mut v, 120, 80));
+    let rows: Vec<&str> = t.lines().collect();
+    // every header (a `#n` at the start) but the first has a blank row above
+    let heads: Vec<usize> = (0..rows.len()).filter(|&y| rows[y].trim_start().starts_with('#') || rows[y].starts_with("›")).collect();
+    assert!(heads.len() > 5, "{t}");
+    for &y in &heads[1..] {
+        assert_eq!(rows[y - 1], "", "no blank row above row {y}:\n{t}");
+    }
+    // a turn's rule has a blank row above and below
+    let r = rows.iter().position(|l| l.starts_with("── turn 2")).expect("turn 2's rule");
+    assert!(rows[r - 1].is_empty() && rows[r + 1].is_empty(), "{t}");
+}
+
+/// Wide screens: prose wraps at the prose measure, nothing passes the
+/// entry measure (the user: "c'est full width, difficile à lire").
+#[test]
+fn bodies_stop_at_the_measure() {
+    use serde_json::json;
+    let long = ["the system prompt is long"; 40].join(" ");
+    let text_of = |t: &str| json!([{"kind": "text", "text": t}]);
+    let ls = [
+        line(1, None, "session_start", json!({"session": "s-1", "format": 1, "created_by": "bise", "cwd": "/w"})),
+        line(2, Some(1), "turn_started", json!({"cause": "user"})),
+        line(3, Some(1), "user_message", json!({"content": text_of(&long), "delivery": "prompt"})),
+    ];
+    let log = read_bytes(&[("events.jsonl".into(), (ls.join("\n") + "\n").into_bytes())]);
+    let mut v = View::of("main".into(), log, PathBuf::from("/nonexistent"), Redactor::default());
+    v.toggle_all();
+    let t = text(&lines(&mut v, 220, 60));
+    let body: Vec<&str> = t.lines().filter(|l| l.contains("prompt is long") && !l.contains("› you")).collect();
+    assert!(body.len() > 3, "{t}");
+    // the rail and the indent (4), then at most 91 columns of prose
+    assert!(body.iter().all(|l| l.chars().count() <= 4 + crate::render::PROSE_MAX), "{t}");
+    assert!(body.iter().all(|l| l.starts_with("  ▎ ")), "{t}");
+    // the header's size sits at the measure, not at the screen's edge
+    let head = t.lines().find(|l| l.contains("› you")).unwrap();
+    assert!(head.chars().count() <= MEASURE, "{head}");
+}
+
+/// One color per kind, on the label and the rail (designer's pick);
+/// the labels keep the thread's glyphs.
+#[test]
+fn each_kind_has_its_color_and_label() {
+    let v = view();
+    let label = |pred: &dyn Fn(&Item) -> bool| {
+        let it = v.history.iter().find(|i| pred(i)).expect("an entry");
+        role_label(it, "main")
+    };
+    type Case<'a> = (&'a dyn Fn(&Item) -> bool, &'a str, ratatui::style::Color);
+    let cases: [Case; 8] = [
+        (&|i| i.role == Role::You, "› you", theme::accent()),
+        (&|i| i.role == Role::Assistant, ":* main", theme::text()),
+        (&|i| i.role == Role::Thinking, "∴ thinking", theme::dim()),
+        (&|i| i.role == Role::Call && i.tool == "bash", "$ bash", theme::syntax_call()),
+        (&|i| i.role == Role::Result { ok: false }, "  ✗ result", theme::error()),
+        (&|i| i.role == Role::Injected, "⊕ bise", theme::syntax_type()),
+        (&|i| i.role == Role::System, "§ system", theme::syntax_number()),
+        (&|i| i.role == Role::Summary, "≡ summary", theme::syntax_string()),
+    ];
+    for (pred, word, color) in cases {
+        let (w, st) = label(pred);
+        assert_eq!((w.as_str(), st.fg), (word, Some(color)));
+    }
+    assert_eq!(label(&|i| i.role == Role::Result { ok: true }).0, "  └ result");
+    // the rail of an open body: its kind's color; none for events
+    let call = v.history.iter().find(|i| i.tool == "bash").unwrap();
+    let rows = entry_rows(call, 120, true, Mode::History, "main");
+    assert_eq!(rows[1].spans[0].content, "  ▎ ");
+    assert_eq!(rows[1].spans[0].style.fg, Some(theme::syntax_call()));
+    assert_eq!(rail(&Role::Event).content, "    ");
+}
+
+#[test]
+fn the_key_bar_says_top_and_bottom() {
+    let mut v = view();
+    let k = |v: &View, w| text(&[key_row(v, w)]);
+    assert_eq!(
+        k(&v, 150),
+        "/ search   f filter   g top   G bottom   tab what the model got   space open   ctrl+o open all   esc close"
+    );
+    // narrow: from the right, never `/ search` nor `esc close`
+    assert_eq!(k(&v, 60), "/ search   f filter   g top   G bottom   esc close");
+    assert_eq!(k(&v, 20), "/ search   esc close");
+    v.set_mode(Mode::Model);
+    assert!(k(&v, 160).starts_with("/ search   f filter   [ ] request   g top   G bottom   tab full history"), "{}", k(&v, 160));
+    v.set_mode(Mode::History);
+    v.search = Some(Search { text: "signup".into(), typing: false });
+    v.rehit();
+    v.sel = 0;
+    v.jump(true);
+    let bar = k(&v, 120);
+    assert!(bar.starts_with("/ search   n next   N previous   esc clear search"), "{bar}");
+    assert!(bar.ends_with("1 of 3"), "{bar}");
+}
+
+/// Typing in `/` moves the cursor to the first match from where it was;
+/// esc puts it back; n and N go round the ends and say so.
+#[test]
+fn incsearch_wraps_and_esc_goes_back() {
+    let mut v = view();
+    let at = v.sel;
+    let role = |v: &View| v.items()[v.vis[v.sel]].role.clone();
+    v.start_search();
+    for c in "signup".chars() {
+        v.search.as_mut().unwrap().text.push(c);
+        v.incsearch();
+    }
+    // the cursor was at the end: round to the first match
+    assert_eq!(role(&v), Role::You);
+    v.search_cancel();
+    assert_eq!(v.sel, at);
+    assert!(v.search.is_none());
+    // from the top
+    (v.sel, v.top) = (0, (0, 0));
+    v.start_search();
+    v.search.as_mut().unwrap().text = "signup".into();
+    v.incsearch();
+    v.search_done();
+    assert_eq!(role(&v), Role::You);
+    assert!(v.is_open(v.vis[v.sel]));
+    assert_eq!(v.hit_label(), "1 of 3");
+    v.jump(false);
+    assert_eq!(v.hit_label(), "back to the last · 3 of 3");
+    v.wrapped = "";
+    v.jump(true);
+    assert_eq!(v.hit_label(), "back to the first · 1 of 3");
+    // g and G: the top and the bottom
+    v.search = None;
+    let bottom = v.vis.len() - 1;
+    v.bottom();
+    assert_eq!(v.sel, bottom);
+}
+
+/// The top bar counts the requests as the subtitle does (by position: a
+/// REPL restart numbers its requests from 1 again), in the singular for
+/// one, and says when there is none.
+#[test]
+fn the_top_bar_counts_like_the_subtitle() {
+    use serde_json::json;
+    let text_of = |t: &str| json!([{"kind": "text", "text": t}]);
+    let reply = |seq, turn| line(seq, Some(turn), "assistant_message", json!({"req": 1, "model": "m", "parts": [{"kind": "text", "text": "ok"}], "calls": []}));
+    let mk = |ls: &[String]| {
+        let log = read_bytes(&[("events.jsonl".into(), (ls.join("\n") + "\n").into_bytes())]);
+        View::of("main".into(), log, PathBuf::from("/nonexistent"), Redactor::default())
+    };
+    let start = line(1, None, "session_start", json!({"session": "s-1", "format": 1, "created_by": "bise", "cwd": "/w"}));
+    let ask = |seq, turn| line(seq, Some(turn), "user_message", json!({"content": text_of("hi"), "delivery": "prompt"}));
+    // two REPLs, each with its request 1
+    let mut v = mk(&[start.clone(), ask(2, 1), reply(3, 1), ask(4, 2), reply(5, 2)]);
+    let t = text(&lines(&mut v, 150, 30));
+    assert!(t.contains("what the model got · request 2 of 2"), "{t}");
+    assert!(t.contains("· 5 entries · 2 requests"), "{t}");
+    let mut v = mk(&[start.clone(), ask(2, 1), reply(3, 1)]);
+    let t = text(&lines(&mut v, 150, 30));
+    assert!(t.contains("request 1 of 1") && t.contains("· 1 request"), "{t}");
+    let mut v = mk(&[start]);
+    let t = text(&lines(&mut v, 150, 30));
+    assert!(t.contains("what the model got · no request yet") && t.contains("· 1 entry · 0 requests"), "{t}");
+}
