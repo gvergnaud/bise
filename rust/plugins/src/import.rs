@@ -107,8 +107,45 @@ fn remote(o: &Map<String, Value>, ty: &str) -> Result<(Value, Vec<String>), Stri
         let names: Vec<&str> = headers.keys().map(String::as_str).collect();
         notes.push(format!("header{} {}", if names.len() == 1 { "" } else { "s" }, names.join(", ")));
     }
-    let known = ["type", "url", "headers", "http_headers", "env_http_headers", "bearer_token_env_var", "enabled", "disabled", "transport"];
-    let dropped: Vec<&str> = o.keys().map(String::as_str).filter(|k| !known.contains(k)).collect();
+    // the login's client: Claude Code's "oauth" {clientId, clientSecret,
+    // callbackPort, scopes}, Codex's oauth {client_id, client_secret,
+    // callback_port} and "scopes" list, in mcp.json's (Claude's) keys
+    let mut oauth = Map::new();
+    let mut unused = Vec::new();
+    if let Some(a) = o.get("oauth").and_then(Value::as_object) {
+        for (k, v) in a {
+            let to = match k.as_str() {
+                "clientId" | "client_id" => "clientId",
+                "clientSecret" | "client_secret" => "clientSecret",
+                "callbackPort" | "callback_port" => "callbackPort",
+                "scopes" => "scopes",
+                _ => {
+                    unused.push(format!("oauth.{}", k));
+                    continue;
+                }
+            };
+            oauth.insert(to.into(), v.clone());
+        }
+    }
+    if let Some(s) = o.get("scopes").filter(|_| !oauth.contains_key("scopes")) {
+        oauth.insert("scopes".into(), s.clone());
+    }
+    let oauth = match crate::oauth::Config::parse(&Value::Object(oauth.clone())) {
+        Ok(_) if oauth.is_empty() => None,
+        Ok(_) => {
+            let mut what: Vec<&str> = oauth.keys().filter(|k| *k != "clientSecret").map(String::as_str).collect();
+            what.sort();
+            notes.push(format!("oauth {}", what.join(", ")));
+            Some(oauth)
+        }
+        Err(e) => {
+            unused.push(format!("oauth ({})", e));
+            None
+        }
+    };
+    let known = ["type", "url", "headers", "http_headers", "env_http_headers", "bearer_token_env_var", "enabled", "disabled", "transport", "oauth", "scopes"];
+    let mut dropped: Vec<String> = o.keys().filter(|k| !known.contains(&k.as_str())).cloned().collect();
+    dropped.extend(unused);
     if !dropped.is_empty() {
         notes.push(format!("ignored: {}", dropped.join(", ")));
     }
@@ -117,6 +154,9 @@ fn remote(o: &Map<String, Value>, ty: &str) -> Result<(Value, Vec<String>), Stri
     out.insert("url".into(), json!(url));
     if !headers.is_empty() {
         out.insert("headers".into(), Value::Object(headers));
+    }
+    if let Some(a) = oauth {
+        out.insert("oauth".into(), Value::Object(a));
     }
     Ok((Value::Object(out), notes))
 }
@@ -336,9 +376,11 @@ mod tests {
             "github": { "type": "stdio", "command": "npx", "args": ["-y", "@mcp/github"], "env": { "GITHUB_TOKEN": TOKEN } },
             "local": { "command": "/opt/tools/mcp-local", "args": ["--quiet"], "startup_timeout_sec": 20 },
             "linear": { "type": "http", "url": "https://mcp.linear.app/mcp", "headers": { "Authorization": format!("Bearer {}", TOKEN) } },
-            "old": { "type": "sse", "url": "https://old.test/k3y/sse", "headers": { "X-Key": "${OLD_KEY}" }, "oauth": {} },
+            "old": { "type": "sse", "url": "https://old.test/k3y/sse", "headers": { "X-Key": "${OLD_KEY}" },
+                     "oauth": { "clientId": "abc", "callbackPort": 8765, "bogus": 1 } },
             "codex-remote": { "url": "https://x.test/mcp", "bearer_token_env_var": "X_TOKEN",
-                              "http_headers": { "X-Region": "eu" }, "env_http_headers": { "X-Org": "X_ORG" } },
+                              "http_headers": { "X-Region": "eu" }, "env_http_headers": { "X-Org": "X_ORG" },
+                              "scopes": ["mcp.read"], "oauth": { "client_id": "cx", "client_secret": TOKEN } },
             "ftp": { "url": "ftp://x.test/" },
             "off": { "command": "uvx", "enabled": false },
             "rel": { "command": "./bin/x" }
@@ -353,17 +395,19 @@ mod tests {
         assert_eq!(p.servers["linear"], json!({"type": "http", "url": "https://mcp.linear.app/mcp", "headers": {"Authorization": format!("Bearer {}", TOKEN)}}));
         assert_eq!(p.servers["old"]["type"], "sse");
         assert_eq!(p.servers["old"]["headers"]["X-Key"], "${OLD_KEY}");
+        assert_eq!(p.servers["old"]["oauth"], json!({"clientId": "abc", "callbackPort": 8765}));
         assert_eq!(
             p.servers["codex-remote"],
             json!({"type": "http", "url": "https://x.test/mcp",
-                   "headers": {"X-Region": "eu", "X-Org": "${X_ORG}", "Authorization": "Bearer ${X_TOKEN}"}})
+                   "headers": {"X-Region": "eu", "X-Org": "${X_ORG}", "Authorization": "Bearer ${X_TOKEN}"},
+                   "oauth": {"clientId": "cx", "clientSecret": TOKEN, "scopes": ["mcp.read"]}})
         );
         assert_eq!(p.servers["local"]["command"], "sh");
         assert_eq!(p.servers["local"]["args"], json!(["-c", "exec \"$0\" \"$@\"", "/opt/tools/mcp-local", "--quiet"]));
         let text = p.lines.join("\n");
         assert!(text.contains("+ linear (http mcp.linear.app; header Authorization)"), "{text}");
-        assert!(text.contains("+ old (sse old.test; header X-Key; ignored: oauth)"), "{text}");
-        assert!(text.contains("+ codex-remote (http x.test; headers Authorization, X-Org, X-Region)"), "{text}");
+        assert!(text.contains("+ old (sse old.test; header X-Key; oauth callbackPort, clientId; ignored: oauth.bogus)"), "{text}");
+        assert!(text.contains("+ codex-remote (http x.test; headers Authorization, X-Org, X-Region; oauth clientId, scopes)"), "{text}");
         assert!(text.contains("- ftp: skipped, the url is not http(s)"), "{text}");
         assert!(!text.contains("k3y"), "a URL path may hold a key: {text}");
         assert!(text.contains("- off: skipped, disabled there"), "{text}");

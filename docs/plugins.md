@@ -338,6 +338,9 @@ description, not a removed one).
   `http_headers`, `env_http_headers` (`{"X-Org": "VAR"}` becomes
   `"${VAR}"`) and `bearer_token_env_var` (`Authorization: Bearer
   ${VAR}`). It prints the host and the header names, never a value.
+  The login's client comes along: Claude Code's `"oauth"` as is,
+  Codex's `oauth.client_id`/`client_secret`/`callback_port` and its
+  `scopes` list in those keys.
 - **Login (OAuth).** A remote server without an `Authorization` header
   in its mcp.json can log in (`rust/plugins/src/oauth.rs`, `login.rs`;
   the MCP authorization spec 2025-06-18). Discovery: the 401's
@@ -345,7 +348,14 @@ description, not a removed one).
   `/.well-known/oauth-protected-resource[/path]`, then the authorization
   server's RFC 8414 / OIDC metadata (an older server without any: its
   origin's `/authorize`, `/token`, `/register`); a server whose metadata
-  lacks PKCE S256 is refused. Client: mcp.json's `"oauth": {"clientId",
+  lacks PKCE S256 is refused; a metadata URL that times out or answers
+  5xx is an error, never a guess of the default paths. The endpoints
+  must be https (http only on 127.0.0.1/localhost), and the login page
+  must be on the issuer's or the token endpoint's origin (the RFC 9700
+  mix-up attack; Codex's rule and its Figma/Robinhood exceptions)
+  unless the metadata says `authorization_response_iss_parameter_supported`:
+  then the redirect's `iss` must be the issuer (RFC 9207), else the
+  code is never sent. Client: mcp.json's `"oauth": {"clientId",
   "clientSecret", "scopes", "callbackPort"}` (Claude Code's keys; GitHub
   and Slack have no dynamic registration), else the one registered
   before, else RFC 7591 registration as a public client. The login:
@@ -358,7 +368,10 @@ description, not a removed one).
   minute before expiry or after a 401, under a lock on the file (every
   agent's bridge shares it, the refresh token rotates); a `resource`
   refused on refresh is tried once without it; a refresh refused for
-  good drops the tokens and keeps the client. Not yet: client ID
+  good (a 400/401 OAuth error) drops the tokens and keeps the client;
+  a token endpoint that is down (no answer, 5xx, 429,
+  `temporarily_unavailable`) keeps them, and the access token is still
+  sent until it expires. Not yet: client ID
   metadata documents (CIMD, spec 2025-11-25).
 - **Login in the bridge.** A server that answers 401 at start stays in
   the bridge without tools (`plugin.mcp.login_needed`, status "needs a

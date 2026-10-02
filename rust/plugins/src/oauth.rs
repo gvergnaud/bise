@@ -300,6 +300,22 @@ fn get_json(url: &str) -> Result<Option<Value>, String> {
     Ok(serde_json::from_slice(&b).ok().filter(Value::is_object))
 }
 
+/// The same, but a server that does not answer or answers 5xx is an
+/// error (only a 4xx or a non-JSON body means "not here").
+fn get_json_status(url: &str) -> Result<Option<Value>, String> {
+    let u = Url::parse(url)?;
+    let h = vec![("Accept".to_string(), "application/json".to_string())];
+    let r = http::send(&http::Request { method: "GET", url: &u, headers: &h, body: b"", timeout: T }).map_err(|e| e.to_string())?;
+    if r.status >= 500 {
+        return Err(format!("HTTP {} from {}", r.status, u.shown()));
+    }
+    if !(200..300).contains(&r.status) {
+        return Ok(None);
+    }
+    let b = r.read_all(1 << 20).map_err(|e| e.to_string())?;
+    Ok(serde_json::from_slice(&b).ok().filter(Value::is_object))
+}
+
 fn post(url: &str, ctype: &str, body: &str) -> Result<(u16, Value), String> {
     let u = Url::parse(url)?;
     let h = vec![("Content-Type".to_string(), ctype.to_string()), ("Accept".to_string(), "application/json".to_string())];
@@ -332,6 +348,51 @@ pub struct Meta {
     pub registration_endpoint: Option<String>,
     /// space-separated
     pub scopes: Option<String>,
+    /// RFC 9207: the redirect carries `iss`, checked against `issuer`
+    pub iss_in_redirect: bool,
+}
+
+fn loopback(host: &str) -> bool {
+    host == "localhost" || host == "::1" || host.starts_with("127.")
+}
+
+/// A login endpoint bise may open or post to: https, or http on this
+/// machine. Anything else (`file:`, an app's scheme, a `-flag` for
+/// `open`, a code sent in clear) is refused.
+fn web_endpoint(what: &str, url: &str, host: &str) -> Result<Url, String> {
+    let u = Url::parse(url).map_err(|_| format!("{}'s login server gives a {} that is not an http(s) URL: refused", host, what))?;
+    if !u.tls && !loopback(&u.host) {
+        return Err(format!("{}'s login server gives a {} over plain http: refused", host, what));
+    }
+    Ok(u)
+}
+
+/// The endpoints are web URLs, and the page that gets the user's consent
+/// belongs to the server that will take the code (RFC 9700 §4.4, the
+/// mix-up attack: a server naming a real login page with its own token
+/// endpoint would get the code and the PKCE verifier). The authorize
+/// endpoint must share the issuer's or the token endpoint's origin,
+/// unless the redirect's `iss` is checked (RFC 9207). Codex's rule, with
+/// its two exceptions until those providers send `iss`.
+fn check_endpoints(m: &Meta, host: &str) -> Result<(), String> {
+    let auth = web_endpoint("login page", &m.authorization_endpoint, host)?;
+    let token = web_endpoint("token endpoint", &m.token_endpoint, host)?;
+    if let Some(r) = &m.registration_endpoint {
+        web_endpoint("registration endpoint", r, host)?;
+    }
+    if m.iss_in_redirect {
+        return Ok(());
+    }
+    let issuer = Url::parse(&m.issuer).map(|u| u.origin()).unwrap_or_default();
+    let known = matches!(
+        (m.issuer.as_str(), auth.origin().as_str(), token.origin().as_str()),
+        ("https://api.figma.com/" | "https://api.figma.com", "https://www.figma.com", "https://api.figma.com")
+            | ("https://agent.robinhood.com/mcp/trading", "https://robinhood.com", "https://api.robinhood.com")
+    );
+    if auth.origin() == issuer || auth.origin() == token.origin() || known {
+        return Ok(());
+    }
+    Err(format!("{}'s login page ({}) is on another site than its login server: refused", host, auth.shown()))
 }
 
 /// One parameter of a `WWW-Authenticate: Bearer k="v", …` challenge.
@@ -399,8 +460,19 @@ pub fn discover(server: &Url, challenge: Option<&str>) -> Result<Meta, String> {
             a.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(" ")
         }).filter(|s| !s.is_empty());
     }
+    // a metadata URL that could not be read (no answer, 5xx) is not "no
+    // metadata": guessing the default paths then would register and log
+    // in at the wrong place
+    let mut unreachable = None;
     for u in as_metadata_urls(&issuer_url) {
-        let Ok(Some(m)) = get_json(&u) else { continue };
+        let m = match get_json_status(&u) {
+            Ok(Some(m)) => m,
+            Ok(None) => continue,
+            Err(e) => {
+                unreachable.get_or_insert(e);
+                continue;
+            }
+        };
         let s = |k: &str| m.get(k).and_then(Value::as_str).map(String::from);
         let (Some(a), Some(t)) = (s("authorization_endpoint"), s("token_endpoint")) else { continue };
         if let Some(methods) = m.get("code_challenge_methods_supported").and_then(Value::as_array) {
@@ -408,20 +480,37 @@ pub fn discover(server: &Url, challenge: Option<&str>) -> Result<Meta, String> {
                 return Err(format!("{}'s login server does not support PKCE (S256): bise can't log in safely", host));
             }
         }
-        return Ok(Meta { issuer: s("issuer").unwrap_or(issuer), authorization_endpoint: a, token_endpoint: t, registration_endpoint: s("registration_endpoint"), scopes });
+        let named = s("issuer").filter(|i| !i.is_empty());
+        let iss_in_redirect = named.is_some() && m.get("authorization_response_iss_parameter_supported") == Some(&json!(true));
+        let meta = Meta {
+            issuer: named.unwrap_or_else(|| issuer.clone()),
+            authorization_endpoint: a,
+            token_endpoint: t,
+            registration_endpoint: s("registration_endpoint"),
+            scopes,
+            iss_in_redirect,
+        };
+        check_endpoints(&meta, &host)?;
+        return Ok(meta);
+    }
+    if let Some(e) = unreachable {
+        return Err(format!("cannot read {}'s login metadata: {}", host, e));
     }
     if prm.is_none() && challenge.is_none() {
         return Err(format!("{} gives no login metadata", host));
     }
     // 2025-03-26 servers without metadata: the default paths
     let o = issuer_url.origin();
-    Ok(Meta {
+    let meta = Meta {
         issuer: o.clone(),
         authorization_endpoint: format!("{}/authorize", o),
         token_endpoint: format!("{}/token", o),
         registration_endpoint: Some(format!("{}/register", o)),
         scopes,
-    })
+        iss_in_redirect: false,
+    };
+    check_endpoints(&meta, &host)?;
+    Ok(meta)
 }
 
 // ---- login ----
@@ -528,7 +617,14 @@ fn respond(s: &mut TcpStream, status: &str, html: &str) {
 }
 
 /// Wait for the browser's redirect: the code, or why not.
-fn wait_callback(l: &TcpListener, state: &str, name: &str, wait: Duration, cancel: Option<&std::sync::atomic::AtomicBool>) -> Result<String, String> {
+fn wait_callback(
+    l: &TcpListener,
+    state: &str,
+    iss: Option<&str>,
+    name: &str,
+    wait: Duration,
+    cancel: Option<&std::sync::atomic::AtomicBool>,
+) -> Result<String, String> {
     l.set_nonblocking(true).map_err(|e| e.to_string())?;
     let t0 = Instant::now();
     loop {
@@ -567,6 +663,13 @@ fn wait_callback(l: &TcpListener, state: &str, name: &str, wait: Duration, cance
         if get("state").as_deref() != Some(state) {
             respond(&mut s, "400 Bad Request", &page(false, name, "the answer was not for this login"));
             continue;
+        }
+        // RFC 9207: a server that says it sends `iss` must send its own
+        if let Some(want) = iss {
+            if get("iss").as_deref() != Some(want) {
+                respond(&mut s, "400 Bad Request", &page(false, name, "the answer came from another login server"));
+                return Err("the answer came from another login server (iss)".into());
+            }
         }
         if let Some(e) = get("error") {
             let why = get("error_description").filter(|d| !d.is_empty()).unwrap_or(e);
@@ -640,7 +743,8 @@ pub fn login(l: &Login<'_>) -> Result<Saved, String> {
     let sep = if meta.authorization_endpoint.contains('?') { '&' } else { '?' };
     let auth_url = format!("{}{}{}", meta.authorization_endpoint, sep, form(&qs));
     (l.open)(&auth_url)?;
-    let code = wait_callback(&listener, &state, l.name, l.wait, l.cancel)?;
+    let iss = meta.iss_in_redirect.then_some(meta.issuer.as_str());
+    let code = wait_callback(&listener, &state, iss, l.name, l.wait, l.cancel)?;
     let mut pairs = vec![
         ("grant_type", "authorization_code"),
         ("code", code.as_str()),
@@ -670,6 +774,16 @@ pub fn login(l: &Login<'_>) -> Result<Saved, String> {
     Ok(saved)
 }
 
+/// A refresh answer that means the refresh token is no good: RFC 6749
+/// §5.2 errors come as 400 (401 for a client the server forgot). A 429,
+/// a 403 from a proxy, a 5xx or "try later" is not: the tokens stay, a
+/// later refresh may work (Codex drops a login only on a definitive
+/// rejection too).
+fn refused_for_good(status: u16, v: &Value) -> bool {
+    let e = v.get("error").and_then(Value::as_str).unwrap_or("");
+    matches!(status, 400 | 401) && !matches!(e, "temporarily_unavailable" | "server_error" | "slow_down")
+}
+
 /// One refresh: the new tokens, or why not (`fatal`: the refresh token
 /// is no good, a login is needed).
 fn refresh(s: &Saved, config: &Config) -> Result<Saved, (bool, String)> {
@@ -691,8 +805,7 @@ fn refresh(s: &Saved, config: &Config) -> Result<Saved, (bool, String)> {
         (status, v) = attempt(false).map_err(|e| (false, e))?;
     }
     if !(200..300).contains(&status) {
-        let fatal = (400..500).contains(&status);
-        return Err((fatal, oauth_error(&v)));
+        return Err((refused_for_good(status, &v), oauth_error(&v)));
     }
     let mut n = s.clone();
     store_tokens(&mut n, &v).map_err(|e| (false, e))?;
@@ -720,7 +833,12 @@ impl Auth {
         let tok = if s.fresh() || s.refresh_token.is_none() {
             s.access_token.clone()
         } else {
-            self.refreshed(s.access_token.as_deref()).ok().flatten()
+            match self.refreshed(s.access_token.as_deref()) {
+                Ok(t) => t,
+                // the refresh could not be done now (no answer, 5xx, 429):
+                // the token still works until it expires
+                Err(_) => s.access_token.clone().filter(|_| s.expires_at.is_none_or(|e| e > now())),
+            }
         };
         *self.used.lock().unwrap_or_else(|e| e.into_inner()) = tok.clone();
         tok
@@ -783,6 +901,43 @@ mod tests {
         let u = Url::parse("https://auth.x.test/tenant1").unwrap();
         assert_eq!(as_metadata_urls(&u)[0], "https://auth.x.test/.well-known/oauth-authorization-server/tenant1");
         assert_eq!(as_metadata_urls(&Url::parse("https://a.test").unwrap())[1], "https://a.test/.well-known/openid-configuration");
+    }
+
+    #[test]
+    fn login_endpoints_are_web_urls_on_the_login_servers_site() {
+        let m = |issuer: &str, a: &str, t: &str| Meta {
+            issuer: issuer.into(),
+            authorization_endpoint: a.into(),
+            token_endpoint: t.into(),
+            ..Meta::default()
+        };
+        let ok = |x: &Meta| check_endpoints(x, "mcp.x.test");
+        assert!(ok(&m("https://auth.x.test", "https://auth.x.test/authorize", "https://auth.x.test/token")).is_ok());
+        assert!(ok(&m("https://auth.x.test", "https://login.x.test/a", "https://login.x.test/t")).is_ok(), "same site as the token endpoint");
+        assert!(ok(&m("http://127.0.0.1:5", "http://127.0.0.1:5/authorize", "http://127.0.0.1:5/token")).is_ok(), "loopback http");
+        // never an app's scheme, a file or a flag for `open`, never a code in clear
+        for bad in ["file:///Applications/Calculator.app", "x-apple.systempreferences:", "-a Calculator", "http://auth.x.test/authorize"] {
+            let e = ok(&m("https://auth.x.test", bad, "https://auth.x.test/token")).unwrap_err();
+            assert!(e.ends_with(": refused") && e.starts_with("mcp.x.test's login server gives a login page"), "{}", e);
+        }
+        assert!(ok(&m("https://auth.x.test", "https://auth.x.test/a", "http://auth.x.test/token")).is_err());
+        // the mix-up attack: a real login page, the attacker's token endpoint
+        let mixup = m("https://evil.test", "https://accounts.google.com/o/oauth2/auth", "https://evil.test/token");
+        assert_eq!(ok(&mixup).unwrap_err(), "mcp.x.test's login page (accounts.google.com) is on another site than its login server: refused");
+        // …allowed when the redirect's iss is checked (RFC 9207)
+        assert!(ok(&Meta { iss_in_redirect: true, ..mixup }).is_ok());
+        // Codex's exception for Figma
+        assert!(ok(&m("https://api.figma.com", "https://www.figma.com/oauth/mcp", "https://api.figma.com/v1/oauth/token")).is_ok());
+    }
+
+    #[test]
+    fn only_a_definitive_refusal_drops_the_tokens() {
+        assert!(refused_for_good(400, &json!({"error": "invalid_grant"})));
+        assert!(refused_for_good(401, &json!({"error": "invalid_client"})));
+        assert!(!refused_for_good(400, &json!({"error": "temporarily_unavailable"})));
+        for s in [403, 404, 408, 429, 500, 503] {
+            assert!(!refused_for_good(s, &json!({"error": "x"})), "{}", s);
+        }
     }
 
     #[test]

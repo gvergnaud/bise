@@ -20,6 +20,9 @@ Options:
                                 checked, refresh tokens rotate)
   --no-dcr                      (oauth) no registration endpoint
   --token-ttl N                 (oauth) expires_in of the access tokens
+  --iss good|bad|missing        (oauth) the metadata says the redirect
+                                carries iss (RFC 9207); it does, with this
+                                issuer, another one, or not at all
 Tools: echo {text} (says the X-Test header it got), add_tool {name}
 (adds a tool, then notifications/tools/list_changed), slow {secs}.
 Control (no auth): POST /control {"action": ...}
@@ -30,6 +33,8 @@ Control (no auth): POST /control {"action": ...}
   expire_tokens     (oauth) every access token is refused from now on
   revoke_refresh    (oauth) every refresh token too
   deny_next         (oauth) the next /authorize answers access_denied
+  token_down        (oauth) /token answers 503 from now on
+  token_up          (oauth) /token works again
 """
 
 import argparse
@@ -52,6 +57,7 @@ ap.add_argument("--sse-answers", action="store_true")
 ap.add_argument("--oauth", action="store_true")
 ap.add_argument("--no-dcr", action="store_true")
 ap.add_argument("--token-ttl", type=int, default=3600)
+ap.add_argument("--iss", choices=["good", "bad", "missing"])
 args = ap.parse_args()
 
 LOCK = threading.RLock()  # re-entered: note() asks required_ok()
@@ -73,6 +79,7 @@ CODES = {}     # code -> (client_id, redirect_uri, challenge, resource)
 ACCESS = set()
 REFRESH = {}   # refresh token -> client_id
 DENY = [False]
+TOKEN_DOWN = [False]
 
 
 def required_ok(headers):
@@ -192,6 +199,8 @@ class H(BaseHTTPRequestHandler):
                  "code_challenge_methods_supported": ["S256"], "response_types_supported": ["code"]}
             if not args.no_dcr:
                 m["registration_endpoint"] = b + "/register"
+            if args.iss:
+                m["authorization_response_iss_parameter_supported"] = True
             return self.send(200, json.dumps(m).encode())
         if path == "/authorize":
             q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
@@ -208,7 +217,10 @@ class H(BaseHTTPRequestHandler):
                 code = uuid.uuid4().hex
                 with LOCK:
                     CODES[code] = (cid, redirect, q["code_challenge"], q["resource"])
-                loc = redirect + "?" + urlencode({"code": code, "state": q.get("state", "")})
+                ans = {"code": code, "state": q.get("state", "")}
+                if args.iss in ("good", "bad"):
+                    ans["iss"] = b if args.iss == "good" else "https://evil.test"
+                loc = redirect + "?" + urlencode(ans)
             self.send_response(302)
             self.send_header("Location", loc)
             self.send_header("Content-Length", "0")
@@ -229,6 +241,8 @@ class H(BaseHTTPRequestHandler):
             f = {k: v[0] for k, v in parse_qs(self.body().decode()).items()}
             g = f.get("grant_type")
             self.oauth_log("token", grant=g, resource=f.get("resource"))
+            if TOKEN_DOWN[0]:
+                return self.send(503, b'{"error":"temporarily_unavailable"}')
             with LOCK:
                 if g == "authorization_code":
                     c = CODES.pop(f.get("code", ""), None)
@@ -305,6 +319,8 @@ class H(BaseHTTPRequestHandler):
                 REFRESH.clear()
         elif act == "deny_next":
             DENY[0] = True
+        elif act in ("token_down", "token_up"):
+            TOKEN_DOWN[0] = act == "token_down"
         elif act == "log":
             with LOCK:
                 return self.send(200, json.dumps(LOG).encode())

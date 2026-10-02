@@ -183,6 +183,44 @@ fn a_short_lived_token_is_refreshed_before_it_expires() {
 }
 
 #[test]
+fn a_token_endpoint_that_is_down_keeps_the_login() {
+    let f = fake("down", &["--mode", "streamable", "--oauth", "--token-ttl", "30"]);
+    let secrets = f.dir.join("secrets");
+    let t = f.target(None);
+    let page = Arc::new(Mutex::new(String::new()));
+    login::run(&t, &secrets, None, &browser(page), T, None).unwrap();
+    let resource = oauth::resource_of(&Url::parse(&f.url("/mcp")).unwrap());
+    // the refresh a minute before expiry gets a 503: the token still
+    // works for 30 s, so it is sent, and the login stays (the login's
+    // own client may still be refreshing in its notification thread)
+    f.control("token_down");
+    std::thread::sleep(Duration::from_millis(300));
+    let first = oauth::load(&secrets, &resource).unwrap();
+    assert!(first.access_token.is_some() && first.refresh_token.is_some());
+    let c = Remote::start_with(&t.server, &env, Some(&secrets), none(), T).unwrap();
+    assert_eq!(c.list_tools(T).unwrap().len(), 3);
+    let kept = oauth::load(&secrets, &resource).unwrap();
+    assert_eq!((kept.access_token.as_ref(), kept.refresh_token.as_ref()), (first.access_token.as_ref(), first.refresh_token.as_ref()));
+    // up again: the next request refreshes
+    f.control("token_up");
+    assert_eq!(c.list_tools(T).unwrap().len(), 3);
+    assert_ne!(oauth::load(&secrets, &resource).unwrap().access_token, first.access_token);
+}
+
+#[test]
+fn a_server_that_sends_iss_must_send_its_own() {
+    let page = Arc::new(Mutex::new(String::new()));
+    let f = fake("iss", &["--mode", "streamable", "--oauth", "--iss", "good"]);
+    assert_eq!(login::run(&f.target(None), &f.dir.join("secrets"), None, &browser(page.clone()), T, None).unwrap(), 3);
+    for (tag, how) in [("issbad", "bad"), ("issnone", "missing")] {
+        let f = fake(tag, &["--mode", "streamable", "--oauth", "--iss", how]);
+        let e = login::run(&f.target(None), &f.dir.join("secrets"), None, &browser(page.clone()), T, None).unwrap_err();
+        assert_eq!(e, "the answer came from another login server (iss)", "{}", how);
+        assert!(!f.oauth_steps().iter().any(|s| s["oauth"] == "token"), "{}: the code is never sent", how);
+    }
+}
+
+#[test]
 fn a_denied_login_and_a_server_without_registration_say_why() {
     let f = fake("deny", &["--mode", "streamable", "--oauth"]);
     let secrets = f.dir.join("secrets");
