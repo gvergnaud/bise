@@ -395,6 +395,33 @@ fn jev_through_openrouter_and_the_default_chain() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// One key, every role: a fresh install with one provider's key (in
+/// auth.json, as the first run saves it) and main set to its pick has a
+/// checker at once, of that provider: auto mode works with any one key.
+#[test]
+fn one_key_alone_gives_auto_mode_a_checker() {
+    for (pid, main, checker) in [
+        ("anthropic", "anthropic/claude-opus-5-5", Route::Chat { model: "anthropic/claude-haiku-4-5".into() }),
+        ("openai", "openai/gpt-6-astra", Route::Chat { model: "openai/gpt-6-luna".into() }),
+        ("google", "google/gemini-3.8-flash", Route::Chat { model: "google/gemini-3.5-flash-lite".into() }),
+        ("mistral", "mistral/mistral-medium-latest", Route::Chat { model: "mistral/mistral-small-latest".into() }),
+        ("openrouter", "openrouter/anthropic/claude-sonnet-5.5", Route::Jev { via: Via::OpenRouter, model: "typesafe/jev-1.13".into() }),
+        ("groq", "groq/openai/gpt-oss-120b", Route::Chat { model: "groq/openai/gpt-oss-20b".into() }),
+        ("xai", "xai/grok-4.7", Route::Chat { model: "xai/grok-4.3".into() }),
+        ("deepseek", "deepseek/deepseek-v4-pro", Route::Chat { model: "deepseek/deepseek-flash".into() }),
+        ("cerebras", "cerebras/gpt-oss-120b", Route::Chat { model: "cerebras/gpt-oss-120b".into() }),
+    ] {
+        let (h, dir) = home(&format!("[roles]
+main = \"{main}\"
+"));
+        std::fs::write(h.auth_file(), format!("{{\"{pid}\": {{\"type\": \"api\", \"key\": \"k-test\"}}}}")).unwrap();
+        let r = Runner::with(&h, Box::new(super::check::Wire::default()), Box::new(|_| None));
+        assert_eq!(r.route(), checker, "{pid}");
+        assert_ne!(r.checker(), Checker::Off, "{pid}");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
 #[test]
 fn errors_are_cards_then_a_notice_then_a_cool_down() {
     let (port, seen) = server(|_| (401, r#"{"error": {"message": "invalid key ts-bad-key-999"}}"#.to_string()));

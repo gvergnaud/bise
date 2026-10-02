@@ -220,6 +220,9 @@ def agent_of(conv):
             # the hub's one-shot call for a task's role line (BISE-126)
             if m["text"].startswith("# bise role line"):
                 return "(role line)"
+            # auto mode's checker as a chat model (approvals, design §4.2)
+            if m["text"].startswith("# bise checker"):
+                return "(checker)"
             g = re.search(r"# Your role: task `([^`]+)`", m["text"])
             if g:
                 return g.group(1)
@@ -260,6 +263,13 @@ def reply_for(conv, seen=0):
     if agent_of(conv) == "(role line)":
         # a fixed line (the tests read it in the snapshot), never a script
         turn["text"] = "Fake Role Line."
+        return turn
+    if agent_of(conv) == "(checker)":
+        # strict JSON: contained unless the state names a force push or
+        # an rm -rf (then a card), never secrets
+        state = " ".join(m["text"] for m in conv if m["role"] == "user")
+        risky = "--force" in state or "rm -rf" in state
+        turn["text"] = json.dumps({"contained": not risky, "serves_task": True, "secrets": False})
         return turn
     idx = last_user(conv)
     if idx is None:

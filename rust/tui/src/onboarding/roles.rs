@@ -788,7 +788,10 @@ fn role_row(o: &Onb, role: &r::Role, selected: bool, flash: bool, w: usize, pw: 
         pieces.push(s(format!("no key {} enter fixes it", d), theme::dim()));
     } else {
         match src {
-            _ if voice_none || (voice_off && src != Source::Picked) => pieces.push(s(format!("off {} enter sets it up", d), theme::dim())),
+            // one key, every role: a key that can't listen says so here
+            // (voice follows the keys; none of them transcribes)
+            _ if voice_none => pieces.push(s(format!("off {} none of your keys listens {} enter sets it up", d, d), theme::dim())),
+            _ if voice_off && src != Source::Picked => pieces.push(s(format!("off {} enter sets it up", d), theme::dim())),
             _ if checker_off => pieces.push(s(format!("off {} every command asks you", d), theme::dim())),
             Source::None => pieces.push(s(format!("none yet {} enter picks one", d), theme::dim())),
             Source::Picked | Source::Env(_) => {

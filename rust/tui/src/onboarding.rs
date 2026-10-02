@@ -168,7 +168,10 @@ impl Provider {
 pub(crate) fn setup_of(env: Env, home: &bise_home::Home) -> bise_catalog::Setup {
     let text = std::fs::read_to_string(home.config_file()).ok();
     let files = bise_catalog::auth::EnvFile::read_all(&home.env_files());
+    let store = bise_catalog::auth::Store::read(&home.auth_file()).unwrap_or_default();
+    // one key, every role: the checker and voice follow the keys found
     bise_catalog::Setup::from_parts(text.as_deref(), env, &|k| bise_catalog::with_files(env, &files, k))
+        .with_keys(&bise_catalog::auth::Keys { env, store: &store, files: &files })
 }
 
 /// Where `login` keeps the keys (auth.json) and where the old ones are.
@@ -1367,6 +1370,9 @@ fn model_lines(o: &Onb, w: u16, gap: usize) -> Vec<Line<'static>> {
         }
         Sub::Works(_, m) => {
             let mut v = vec![title(format!("it works: {} answered.", short_model(m))), dim(format!("main uses {}.", m))];
+            if let Some(l) = helpers_line(o) {
+                v.push(dim(l));
+            }
             if let Some(n) = &o.shadows {
                 v.push(dim(format!("{} in your environment holds another key: i use this one.", n)));
             }
@@ -1393,6 +1399,28 @@ fn model_lines(o: &Onb, w: u16, gap: usize) -> Vec<Line<'static>> {
 /// A model's id without its provider.
 fn short_model(m: &str) -> String {
     bise_catalog::split_name(m).map_or(m.to_string(), |(_, id)| id.to_string())
+}
+
+/// The first run's word on the roles one key runs (one key, every role):
+/// `small jobs and auto's checker use claude-haiku-4-5.`; Jev:
+/// `small jobs use gemini-3.8-flash. auto's checker: Jev, by OpenRouter.`
+/// None: no small jobs model.
+fn helpers_line(o: &Onb) -> Option<String> {
+    let small = o.setup.small_model.clone();
+    if small.is_empty() {
+        return None;
+    }
+    let (checker, _) = o.role_model(bise_catalog::roles::CLASSIFY);
+    let short = short_model(&small);
+    Some(match bise_catalog::roles::jev_of(&checker) {
+        Some((via, _)) => {
+            let by = o.setup.catalog.provider(via).map_or(via.to_string(), |p| p.name.clone());
+            format!("small jobs use {}. auto's checker: Jev, by {}.", short, by)
+        }
+        None if checker == small => format!("small jobs and auto's checker use {}.", short),
+        None if checker == bise_catalog::roles::CHECKER_OFF || checker.is_empty() => format!("small jobs use {}.", short),
+        None => format!("small jobs use {}. auto's checker: {}.", short, short_model(&checker)),
+    })
 }
 
 /// What the optional keys unlock, for those not set (BISE-266): the
@@ -2240,6 +2268,8 @@ mod tests {
         assert!(matches!(&o.sub, Sub::Works(_, m) if m == "mistral/mistral-medium-latest"));
         let sc = screen(&o, 10, 110, 30);
         assert!(sc.contains("it works: mistral-medium-latest answered.") && sc.contains("main uses mistral/mistral-medium-latest."), "{}", sc);
+        // one key, every role: what runs the small jobs and auto's checker
+        assert!(sc.contains("small jobs and auto's checker use mistral-small-latest."), "{}", sc);
         // a Mistral key runs the connectors and the voice input: no extras
         assert!(!sc.contains("optional.") && !sc.contains("web search"), "{}", sc);
         use std::os::unix::fs::PermissionsExt;

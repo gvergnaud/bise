@@ -340,6 +340,9 @@ model = "anthropic/claude-sonnet-5.5"
 api = "openai-chat"
 base_url = "https://openrouter.ai/api/v1"
 key_env = "OPENROUTER_API_KEY"
+# small jobs (titles, summaries) with an OpenRouter key alone: the
+# cheapest fast model listed here (the checker is Jev, OpenRouter's too)
+small_model = "google/gemini-3.8-flash"
 # sticky routing to the provider that holds the cache (BISE-268;
 # openrouter.ai/blog/tutorials/prompt-caching-sticky-routing)
 cache_header = "x-session-id"

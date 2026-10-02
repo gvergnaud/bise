@@ -91,6 +91,23 @@ pub fn checker_default(small: &str, ready: &dyn Fn(&str) -> bool) -> String {
     }
 }
 
+/// The voice model when the role is unset (one key, every role): the
+/// catalog's `default_voice_model` when its provider has a key, else the
+/// voice pick of the first provider that listens and has one (an OpenAI
+/// key alone: OpenAI's), else the default (voice stays off until a key:
+/// `/models` says so). `has_key`: a provider id has its key.
+pub fn voice_default(c: &crate::Catalog, has_key: &dyn Fn(&str) -> bool) -> String {
+    let d = c.default_voice_model.clone();
+    if crate::split_name(&d).is_some_and(|(p, _)| has_key(p)) {
+        return d;
+    }
+    c.providers
+        .iter()
+        .find(|p| !p.stt.is_empty() && !p.voice_model.is_empty() && !p.hidden && p.needs.is_empty() && has_key(&p.id))
+        .map(|p| format!("{}/{}", p.id, p.voice_model))
+        .unwrap_or(d)
+}
+
 /// Every role, in the order the screens list them.
 pub const ROLES: &[Role] = &[
     Role {

@@ -1184,6 +1184,27 @@ impl Setup {
         }
     }
 
+    /// The roles bise picks by the keys found, when unset (one key gives
+    /// every role a model): the checker ([`roles::checker_default`]: Jev
+    /// by TypeSafe or OpenRouter, else the small jobs model) and voice
+    /// ([`roles::voice_default`]: the provider that has a key and
+    /// listens). A role set in config.toml or an env var stays.
+    pub fn with_keys(mut self, keys: &auth::Keys) -> Setup {
+        let c = &self.catalog;
+        let has_key =
+            |id: &str| c.provider(id).is_some_and(|p| p.needs.is_empty() && (p.key_env.is_empty() || keys.for_provider(p).is_some()));
+        let ready = |id: &str| c.provider(id).is_some_and(|p| keys.ready(p) || (!p.chats() && has_key(id)));
+        let classify = (self.classify_model_from == "default").then(|| roles::checker_default(&self.small_model, &ready));
+        let voice = (self.voice.from == "default").then(|| c.canonical_stt(&roles::voice_default(c, &has_key)));
+        if let Some(m) = classify {
+            self.classify_model = m;
+        }
+        if let Some(m) = voice {
+            self.voice.model = m;
+        }
+        self
+    }
+
     /// A role's model (canonical "provider/id") and where it came from
     /// ([`roles::Source`]; BISE-298). Unknown role: main's.
     pub fn role_model(&self, id: &str) -> (String, roles::Source) {
@@ -1214,9 +1235,12 @@ impl Setup {
     /// hub see the same URL.
     pub fn load(config: &Path) -> Setup {
         let text = std::fs::read_to_string(config).ok();
-        let files = auth::EnvFile::read_all(&bise_home::Home::from_env().env_files());
+        let home = bise_home::Home::from_env();
+        let files = auth::EnvFile::read_all(&home.env_files());
         let real = |k: &str| std::env::var(k).ok();
+        let store = auth::Store::read(&home.auth_file()).unwrap_or_default();
         Setup::from_parts(text.as_deref(), &real, &|k| with_files(&real, &files, k))
+            .with_keys(&auth::Keys { env: &real, store: &store, files: &files })
     }
 
     /// The model of a role: "main" or "agent".
@@ -1541,3 +1565,6 @@ pub fn export_handoff(config: &Path, cache_dir: &Path, env: &dyn Fn(&str) -> Opt
 mod tests;
 #[cfg(test)]
 mod auth_tests;
+#[cfg(test)]
+#[path = "one_key_tests.rs"]
+mod one_key_tests;
