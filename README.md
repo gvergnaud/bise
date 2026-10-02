@@ -59,6 +59,8 @@ read https://bise.dev/setup.md and set bise up for me
 
 your agent installs bise and brings over what you already have: your API key, your model, your `CLAUDE.md`, skills and MCP servers. it shows you one plan and waits for your yes. it never prints a key. if your agent can't open links, paste [the full prompt](https://bise.dev/setup) instead. a Claude Pro/Max or ChatGPT subscription isn't an API key: bise needs a key.
 
+using LiteLLM or another gateway, or any OpenAI-compatible base URL? see [custom providers](docs/custom-providers.md).
+
 > [!NOTE]
 > bise is pre-release. **macOS only for now** (Apple silicon and Intel). linux is next.
 > bring your own key: Anthropic, OpenAI, Mistral and more.
