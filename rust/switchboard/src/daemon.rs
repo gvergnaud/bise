@@ -128,6 +128,8 @@ enum Msg {
         client: Option<ClientId>,
         v: Value,
     },
+    /// The end of a `/update` build in bise's source tree (dev-update).
+    Update(Value),
     /// A line for main's thread (the version switcher).
     Notice {
         kind: String,
@@ -210,6 +212,9 @@ struct Shell {
     restored: BTreeSet<String>,
     /// Versions being built (`/version <commit>`), by revision.
     building: BTreeSet<String>,
+    /// The `/update` build in bise's source tree (dev-update): HEAD's
+    /// short hash and when it started.
+    updating: Option<(String, std::time::Instant)>,
     /// The `/release-bise` running (BISE-235).
     release: Option<release::ReleaseRun>,
     /// An installed bise (BISE-172): when `current` was last looked at,
@@ -1602,6 +1607,9 @@ impl Shell {
         if let Some(r) = self.release_hello() {
             push(&r);
         }
+        if let Some(u) = self.update_hello() {
+            push(&u);
+        }
         crate::util::timing(&format!("client hello built ({} bytes)", out.len()));
         if stream.write_all(out.as_bytes()).is_err() {
             return;
@@ -1620,7 +1628,7 @@ impl Shell {
                     write_json(c, &items);
                 }
             }
-            "version" if s("do") == "update" => self.release_check(Some(id)),
+            "version" if s("do") == "update" => self.update_op(id),
             "version" => {
                 let text = self.version_op(&v);
                 if let Some(c) = self.clients.get_mut(&id) {
@@ -2165,6 +2173,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         switch_spawned: BTreeSet::new(),
         restored: BTreeSet::new(),
         building: BTreeSet::new(),
+        updating: None,
         release: None,
         update_checked: None,
         update_told: None,
@@ -2474,6 +2483,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
                 sh.broadcast_versions();
             }
             Msg::Release { client, v } => sh.release_event(client, v),
+            Msg::Update(v) => sh.update_event(v),
             Msg::RoleLine { dir, key, line } => sh.step(Input::RoleLine { dir, key, line }),
             Msg::GateChecked { dir, n, req, out } => sh.on_checked(&dir, &n, *req, out),
             Msg::BuildEnded { rev } => {

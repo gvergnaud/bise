@@ -132,7 +132,7 @@ pub(super) fn event(app: &mut App, v: &Value) {
             let since = std::time::Instant::now().checked_sub(std::time::Duration::from_secs(elapsed));
             app.sb.release = Some((s("tag"), since.unwrap_or_else(std::time::Instant::now)));
         }
-        Row::Done(_) | Row::Failed { .. } => {
+        Row::Done(_) | Row::Failed { .. } | Row::Warned { .. } => {
             app.sb.release = None;
             app.sb.calls += 1;
         }
@@ -147,6 +147,40 @@ pub(super) fn event(app: &mut App, v: &Value) {
     });
 }
 
+/// An `update` event of the hub (dev-update: `/update` in bise's source
+/// tree builds HEAD): `building` puts `∿ building <sha> · 2m` in the
+/// header; `built` clears it (the switch says the rest in main's
+/// thread); `failed` clears it and puts `▲ couldn't build …` in main's
+/// feed, the build's last lines folded under it.
+pub(super) fn update_event(app: &mut App, v: &Value) {
+    let s = |k: &str| str_of(v, k);
+    match s("state").as_str() {
+        "building" => {
+            let elapsed = v.get("elapsed").and_then(|x| x.as_u64()).unwrap_or(0);
+            let since = std::time::Instant::now().checked_sub(std::time::Duration::from_secs(elapsed));
+            app.sb.updating = Some((s("rev"), since.unwrap_or_else(std::time::Instant::now)));
+        }
+        "built" => {
+            app.sb.updating = None;
+            app.sb.calls += 1;
+        }
+        "failed" => {
+            app.sb.updating = None;
+            app.sb.calls += 1;
+            let tail = v
+                .get("tail")
+                .and_then(|x| x.as_array())
+                .map(|a| a.iter().filter_map(|l| l.as_str().map(str::to_string)).collect())
+                .unwrap_or_default();
+            let row = Row::Warned { text: s("text"), tail, open: false };
+            feed::with_feed(app, "main", |app| {
+                push_event(&mut app.events, &mut app.cache, Ev::Release(row));
+            });
+        }
+        _ => {}
+    }
+}
+
 /// `12s`, `12m`, `1h 5m`.
 fn took(secs: u64) -> String {
     match secs {
@@ -157,16 +191,16 @@ fn took(secs: u64) -> String {
 }
 
 /// The header's item while a release runs: the gust, then `releasing
-/// v2026.10.3 · 12m` (empty when none runs).
+/// v2026.10.3 · 12m`; else while `/update` builds (dev-update): the
+/// gust, then `building 1152b33 · 2m` (empty when neither runs).
 pub(super) fn header_item(sb: &Sb, gust: &[Span<'static>]) -> Vec<Span<'static>> {
-    let Some((tag, since)) = &sb.release else {
-        return Vec::new();
+    let text = match (&sb.release, &sb.updating) {
+        (Some((tag, since)), _) => format!(" releasing {} · {}", tag, took(since.elapsed().as_secs())),
+        (None, Some((rev, since))) => format!(" building {} · {}", rev, took(since.elapsed().as_secs())),
+        (None, None) => return Vec::new(),
     };
     let mut out: Vec<Span<'static>> = gust.to_vec();
-    out.push(Span::styled(
-        format!(" releasing {} · {}", tag, took(since.elapsed().as_secs())),
-        Style::default().fg(dim()),
-    ));
+    out.push(Span::styled(text, Style::default().fg(dim())));
     out
 }
 
@@ -243,6 +277,39 @@ mod tests {
         let at = t.iter().position(|l| l == " ✓ draft checked").expect("the step");
         assert!(t[at + 1..].iter().any(|l| l == " ✓ dry run of v2026.10.3 · nothing pushed, nothing published"), "{t:#?}");
         assert!(app.sb.release.is_none() && header_item(&app.sb, &[]).is_empty());
+    }
+
+    #[test]
+    fn dev_update_shows_its_build_in_the_header_then_a_failure_in_mains_feed() {
+        let (mut app, _hub) = app_and_hub();
+        dispatch(&mut app, &json!({"ev": "update", "state": "building", "rev": "1152b33", "elapsed": 130}).to_string());
+        let head: String = header_item(&app.sb, &[]).iter().map(|s| s.content.to_string()).collect();
+        assert_eq!(head, " building 1152b33 · 2m");
+        // a release running wins the header
+        app.sb.release = Some(("v2026.10.3".into(), std::time::Instant::now()));
+        let head: String = header_item(&app.sb, &[]).iter().map(|s| s.content.to_string()).collect();
+        assert_eq!(head, " releasing v2026.10.3 · 0s");
+        app.sb.release = None;
+        let tail: Vec<String> = (1..=20).map(|i| format!("line {}", i)).collect();
+        let mut app2 = app;
+        dispatch(
+            &mut app2,
+            &json!({"ev": "update", "state": "failed", "rev": "1152b33", "tail": tail,
+                "text": "couldn't build 1152b33, you're still on 9f0e2aa: error: could not compile `bise`"})
+            .to_string(),
+        );
+        assert!(app2.sb.updating.is_none() && header_item(&app2.sb, &[]).is_empty());
+        let t = feed_text(&app2);
+        let at = t
+            .iter()
+            .position(|l| l == " ▲ couldn't build 1152b33, you're still on 9f0e2aa: error: could not compile `bise`")
+            .unwrap_or_else(|| panic!("{t:#?}"));
+        assert_eq!(t[at + 1], "   ▸ 20 more lines");
+        // built: the header clears, the switch speaks in main's thread
+        dispatch(&mut app2, &json!({"ev": "update", "state": "building", "rev": "1152b33"}).to_string());
+        assert!(app2.sb.updating.is_some());
+        dispatch(&mut app2, &json!({"ev": "update", "state": "built", "rev": "1152b33"}).to_string());
+        assert!(app2.sb.updating.is_none());
     }
 
     #[test]

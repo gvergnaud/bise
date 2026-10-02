@@ -171,6 +171,9 @@ pub(super) struct Sb {
     release_ask: Option<release::Ask>,
     /// The release running: its tag, since when (the header's item).
     release: Option<(String, std::time::Instant)>,
+    /// `/update` building HEAD in the dev build (dev-update): its short
+    /// hash, since when (the header's item when no release runs).
+    updating: Option<(String, std::time::Instant)>,
     /// `D` on an agent asks first (book §16): the agent to drop on `y`.
     drop_ask: Option<String>,
     /// The feeds out of view where lines arrived since their last visit.
@@ -621,6 +624,7 @@ pub(super) fn dispatch(app: &mut App, raw: &str) {
             sb.calls += 1;
         }
         "release" => release::event(app, &v),
+        "update" => release::update_event(app, &v),
         "approvals" => approvals_event(app, &v),
         "focus" => focus(app, &s("focus")),
         "renamed" => {

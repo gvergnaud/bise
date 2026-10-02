@@ -30,22 +30,25 @@ pub(crate) enum Row {
     Done(String),
     /// the script failed: `✗` and why, its last lines under a fold
     Failed { text: String, tail: Vec<String>, open: bool },
+    /// dev-update: `/update` could not build, the running version stays:
+    /// `▲` and why, the build's last lines under a fold
+    Warned { text: String, tail: Vec<String>, open: bool },
 }
 
 impl Row {
     /// For you (level 2): the result.
     pub(crate) fn is_l2(&self) -> bool {
-        matches!(self, Row::Done(_) | Row::Failed { .. })
+        matches!(self, Row::Done(_) | Row::Failed { .. } | Row::Warned { .. })
     }
 
     /// Something to open (ctrl+o, a click): a failure's tail.
     pub(crate) fn discloses(&self) -> bool {
-        matches!(self, Row::Failed { tail, .. } if !tail.is_empty())
+        matches!(self, Row::Failed { tail, .. } | Row::Warned { tail, .. } if !tail.is_empty())
     }
 
     pub(crate) fn open_mut(&mut self) -> Option<&mut bool> {
         match self {
-            Row::Failed { open, .. } => Some(open),
+            Row::Failed { open, .. } | Row::Warned { open, .. } => Some(open),
             _ => None,
         }
     }
@@ -104,9 +107,12 @@ pub(crate) fn lines(row: &Row, width: usize) -> Vec<Line<'static>> {
             vec![Span::styled(t.clone(), text_st)],
             width,
         ),
-        Row::Failed { text: t, tail, open } => {
-            let err_st = Style::default().fg(error());
-            let mut out = one(lead(G_FAILED, err_st), vec![Span::styled(t.clone(), text_st)], width);
+        Row::Failed { text: t, tail, open } | Row::Warned { text: t, tail, open } => {
+            let glyph = match row {
+                Row::Failed { .. } => lead(G_FAILED, Style::default().fg(error())),
+                _ => lead(G_INTERRUPTED, dim_st),
+            };
+            let mut out = one(glyph, vec![Span::styled(t.clone(), text_st)], width);
             if tail.is_empty() {
                 return out;
             }

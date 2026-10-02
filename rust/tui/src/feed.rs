@@ -1437,7 +1437,7 @@ fn own_open(ev: &Ev) -> Option<bool> {
             Some(td.opened && (td.expanded || !crate::toolbox::box_folds(td)))
         }
         Ev::Tool(td) => Some(td.expanded),
-        Ev::Release(crate::release_row::Row::Failed { open, .. }) => Some(*open),
+        Ev::Release(crate::release_row::Row::Failed { open, .. } | crate::release_row::Row::Warned { open, .. }) => Some(*open),
         _ => None,
     }
 }

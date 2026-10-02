@@ -72,6 +72,58 @@ fn restart_plan(dev: bool, installed: bool, arg: &str) -> RestartPlan {
     }
 }
 
+/// What `/update` does (dev-update): an installed bise asks the release
+/// channel (update-card), whatever the workspace; a dev version in bise's
+/// source tree builds that tree's HEAD and switches to it; anything else
+/// says it has nothing to update from.
+#[derive(Debug, PartialEq)]
+enum UpdateRoute {
+    Release,
+    DevHead,
+    Nothing,
+}
+
+fn update_route(installed: bool, dev: bool) -> UpdateRoute {
+    match (installed, dev) {
+        (true, _) => UpdateRoute::Release,
+        (false, true) => UpdateRoute::DevHead,
+        (false, false) => UpdateRoute::Nothing,
+    }
+}
+
+/// `/update` in bise's source tree, once HEAD is known.
+#[derive(Debug, PartialEq)]
+enum DevUpdate {
+    /// HEAD is the running version
+    OnIt,
+    /// HEAD is built already: switch to it
+    Switch(PathBuf),
+    /// build HEAD, then switch
+    Build,
+}
+
+/// `running`: the running version's dir (canonical) and id.
+fn dev_update_plan(head: &str, running: &Path, running_id: Option<&str>, versions_dir: &Path) -> DevUpdate {
+    let dir = versions_dir.join(head);
+    let on_it = running_id == Some(head) || dir.canonicalize().is_ok_and(|d| d == running);
+    if on_it {
+        DevUpdate::OnIt
+    } else if crate::switch::exe_of(&dir).is_some() {
+        DevUpdate::Switch(dir)
+    } else {
+        DevUpdate::Build
+    }
+}
+
+/// The failed build's row (designer): the sentence with the last error
+/// line, and the build's last lines for the fold (at most 20).
+fn update_failed(head: &str, running: &str, stderr: &str) -> (String, Vec<String>) {
+    let lines: Vec<String> = stderr.lines().map(|l| l.trim_end().to_string()).filter(|l| !l.trim().is_empty()).collect();
+    let last = lines.last().cloned().unwrap_or_else(|| "the build failed".into());
+    let tail = lines[lines.len().saturating_sub(20)..].to_vec();
+    (format!("couldn't build {}, you're still on {}: {}", head, running, clip(last.trim(), 200)), tail)
+}
+
 /// How often an installed hub looks at `current` (an update installed
 /// by `bise update` or the daily check).
 const UPDATE_LOOK: std::time::Duration = std::time::Duration::from_secs(30);
@@ -701,7 +753,7 @@ impl Shell {
         let root = &self.opts.app_root;
         let Some(inst) = Install::of_root(root) else {
             if let Some(c) = asked.and_then(|c| self.clients.get_mut(&c)) {
-                let text = "/update updates an installed bise: this one runs from bise's source tree (/restart builds and runs HEAD)";
+                let text = "/update updates an installed bise, or bise's source tree: this workspace is neither";
                 super::write_json(c, &json!({"ev": "notice", "text": text}));
             }
             return;
@@ -743,6 +795,125 @@ impl Shell {
             }
             let _ = tx.send(Msg::In(Input::Release(crate::core::update_card::ReleaseCheck { news, asked, error })));
         });
+    }
+
+    /// `/update` from a TUI (dev-update): the release channel in an
+    /// installed bise, HEAD of the source tree in the dev build.
+    pub(super) fn update_op(&mut self, client: ClientId) {
+        let installed = Install::of_root(&self.opts.app_root).is_some();
+        let dev = crate::switch::dev_workspace(&self.opts.paths.workspace);
+        match update_route(installed, dev) {
+            UpdateRoute::Release | UpdateRoute::Nothing => self.release_check(Some(client)),
+            UpdateRoute::DevHead => {
+                let text = self.dev_update();
+                if let Some(c) = self.clients.get_mut(&client) {
+                    super::write_json(c, &json!({"ev": "notice", "text": text}));
+                }
+            }
+        }
+    }
+
+    /// `/update` in bise's source tree (dev-update): build the workspace's
+    /// HEAD (`scripts/versions.sh build`, like `/restart`; never a pull,
+    /// the working tree untouched), then switch to it (the switcher's
+    /// probation rolls back a version that does not come up, agents
+    /// kept). While it builds, every TUI gets `update` events (`building`
+    /// with its start, then `built` or `failed` with the build's tail).
+    fn dev_update(&mut self) -> String {
+        use crate::switch;
+        let paths = self.opts.paths.clone();
+        if switch::switch_running(&paths) {
+            return "a version switch is in progress (probation): wait for it to end, or /version back".into();
+        }
+        if let Some((rev, since)) = &self.updating {
+            return format!("already building {} · {}", rev, super::release::took(since.elapsed().as_secs()));
+        }
+        // the source tree is the workspace: its HEAD, whatever repo the
+        // running version came from
+        let repo = self.opts.paths.workspace.clone();
+        let (_, versions_dir) = self.version_ctx();
+        let head = crate::tools_env::git_command()
+            .ok()
+            .and_then(|mut c| c.args(["rev-parse", "--short", "HEAD"]).current_dir(&repo).stdin(Stdio::null()).output().ok())
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default();
+        if head.is_empty() {
+            return format!("no latest commit found in {}", repo.display());
+        }
+        let root = &self.opts.app_root;
+        let running = root.canonicalize().unwrap_or_else(|_| root.clone());
+        let running_id = switch::version_id(root);
+        match dev_update_plan(&head, &running, running_id.as_deref(), &versions_dir) {
+            DevUpdate::OnIt => return format!("you're on the latest commit, {}.", head),
+            DevUpdate::Switch(dir) => {
+                self.start_switch(&dir);
+                return format!("restarting on the latest commit, {}. your agents keep running.", head);
+            }
+            DevUpdate::Build => {}
+        }
+        let Some(script) = switch::versions_script(&repo) else {
+            return format!("scripts/versions.sh not found in {}", repo.display());
+        };
+        if !self.building.insert(head.clone()) {
+            return format!("already building {}", head);
+        }
+        let since = std::time::Instant::now();
+        self.updating = Some((head.clone(), since));
+        let ev = self.update_hello();
+        if let Some(v) = ev {
+            self.broadcast(&v);
+        }
+        self.broadcast_versions();
+        let (exe, tx) = (self.opts.exe.clone(), self.tx.clone());
+        let running_name = running_id.unwrap_or_else(|| "the dev tree".into());
+        let answer = format!("building the latest commit, {}, then restarting on it. your agents keep running.", head);
+        std::thread::spawn(move || {
+            let home = bise_home::Home::from_env();
+            let out = Command::new(&script)
+                .args(["build", &head])
+                .env("SB_VERSIONS_DIR", &versions_dir)
+                .env("SB_BUILD_DIR", home.build_dir())
+                .current_dir(&repo)
+                .stdin(Stdio::null())
+                .output();
+            let _ = tx.send(Msg::BuildEnded { rev: head.clone() });
+            let ev = match out {
+                Ok(o) if o.status.success() => {
+                    let dir = String::from_utf8_lossy(&o.stdout).lines().last().unwrap_or("").trim().to_string();
+                    spawn_switcher(&paths, &exe, Path::new(&dir), Switcher::Switch);
+                    json!({"ev": "update", "state": "built", "rev": head})
+                }
+                Ok(o) => {
+                    let (text, tail) = update_failed(&head, &running_name, &String::from_utf8_lossy(&o.stderr));
+                    json!({"ev": "update", "state": "failed", "rev": head, "text": text, "tail": tail})
+                }
+                Err(e) => {
+                    let (text, tail) = update_failed(&head, &running_name, &format!("{}: {}", script.display(), e));
+                    json!({"ev": "update", "state": "failed", "rev": head, "text": text, "tail": tail})
+                }
+            };
+            let _ = tx.send(Msg::Update(ev));
+        });
+        answer
+    }
+
+    /// The end of a `/update` build (dev-update): to every TUI (each puts
+    /// a failure in main's feed, its tail folded); a failure also goes to
+    /// the hub's log.
+    pub(super) fn update_event(&mut self, v: Value) {
+        self.updating = None;
+        if v.get("state").and_then(|x| x.as_str()) == Some("failed") {
+            let text = v.get("text").and_then(|x| x.as_str()).unwrap_or("");
+            log_line(&self.opts.paths, &format!("/update: {}", text));
+        }
+        self.broadcast(&v);
+    }
+
+    /// For a TUI that connects while `/update` builds: the build's start.
+    pub(super) fn update_hello(&self) -> Option<Value> {
+        let (rev, since) = self.updating.as_ref()?;
+        Some(json!({"ev": "update", "state": "building", "rev": rev, "elapsed": since.elapsed().as_secs()}))
     }
 
     /// update-card: the user's `1` on an update item: `bise update` when
@@ -850,6 +1021,48 @@ pub(super) fn spawn_switcher(paths: &Paths, exe: &Path, to: &Path, how: Switcher
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn update_asks_the_release_channel_when_installed_and_builds_head_in_the_source_tree() {
+        use super::{update_route, UpdateRoute};
+        assert_eq!(update_route(true, false), UpdateRoute::Release);
+        assert_eq!(update_route(true, true), UpdateRoute::Release, "an installed bise, even in the repo");
+        assert_eq!(update_route(false, true), UpdateRoute::DevHead);
+        assert_eq!(update_route(false, false), UpdateRoute::Nothing);
+    }
+
+    #[test]
+    fn dev_update_is_on_it_switches_to_a_built_head_or_builds_it() {
+        use super::{dev_update_plan, DevUpdate};
+        let t = std::env::temp_dir().join(format!("sb-dev-update-{}", std::process::id()));
+        let versions = t.join("versions");
+        let running = versions.join("aaa1111");
+        std::fs::create_dir_all(&running).unwrap();
+        let running = running.canonicalize().unwrap();
+        // HEAD runs: by its dir, or by its id (a dev tree's VERSION)
+        assert_eq!(dev_update_plan("aaa1111", &running, None, &versions), DevUpdate::OnIt);
+        assert_eq!(dev_update_plan("bbb2222", &t, Some("bbb2222"), &versions), DevUpdate::OnIt);
+        // HEAD not built: build it; built (a binary in its dir): switch
+        assert_eq!(dev_update_plan("bbb2222", &running, Some("aaa1111"), &versions), DevUpdate::Build);
+        let built = versions.join("bbb2222");
+        std::fs::create_dir_all(&built).unwrap();
+        assert_eq!(dev_update_plan("bbb2222", &running, Some("aaa1111"), &versions), DevUpdate::Build, "no binary yet");
+        std::fs::write(built.join(crate::switch::EXE), "").unwrap();
+        assert_eq!(dev_update_plan("bbb2222", &running, Some("aaa1111"), &versions), DevUpdate::Switch(built));
+        let _ = std::fs::remove_dir_all(&t);
+    }
+
+    #[test]
+    fn a_failed_update_build_says_its_last_line_and_folds_its_tail() {
+        let err: String = (1..=30).map(|i| format!("line {}\n", i)).collect::<String>() + "\nerror: could not compile `bise`\n\n";
+        let (text, tail) = super::update_failed("bbb2222", "aaa1111", &err);
+        assert_eq!(text, "couldn't build bbb2222, you're still on aaa1111: error: could not compile `bise`");
+        assert_eq!(tail.len(), 20);
+        assert_eq!(tail.last().unwrap(), "error: could not compile `bise`");
+        let (text, tail) = super::update_failed("bbb2222", "aaa1111", "");
+        assert_eq!(text, "couldn't build bbb2222, you're still on aaa1111: the build failed");
+        assert!(tail.is_empty());
+    }
+
     #[test]
     fn commit_lines_are_cut_to_100_chars() {
         let long = format!("abc1234 {}", "é".repeat(3000));
