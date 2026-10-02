@@ -120,6 +120,10 @@ pub(crate) struct View {
     dumps: Vec<(u64, PathBuf)>,
     /// the model view's request has its exact body (its first entry)
     exact: bool,
+    /// where the cursor was when `/` opened (esc in the field goes back)
+    origin: (usize, (usize, usize)),
+    /// `n` or `N` went round the end: "back to the first" (until a key)
+    wrapped: &'static str,
 }
 
 /// The session folder of `agent` in this hub: `agents/<agent>/session`
@@ -142,12 +146,14 @@ pub(crate) fn open(app: &mut App, typed: &str) -> Result<(), String> {
     let req: Option<u64> = typed.split_whitespace().nth(1).and_then(|w| w.trim_start_matches('#').parse().ok());
     let mut v = View::load(agent, &dir)?;
     if let Some(n) = req {
-        match v.requests.iter().position(|r| r.req == n) {
+        // requests count from 1 in the log (a REPL restart starts its own
+        // numbers again: the position, never the REPL's number)
+        match (n as usize).checked_sub(1).filter(|&i| i < v.requests.len()) {
             Some(i) => {
                 v.req = i;
                 v.set_mode(Mode::Model);
             }
-            None => v.note = format!("no request {n} in this log: the last one is {}", v.requests.last().map(|r| r.req).unwrap_or(0)),
+            None => v.note = format!("no request {n} in this log: the last one is {}", v.requests.len()),
         }
     }
     app.logview = Some(v);
@@ -194,6 +200,8 @@ impl View {
             width: 100,
             dumps: Vec::new(),
             exact: false,
+            origin: (0, (0, 0)),
+            wrapped: "",
         };
         v.refilter();
         v.bottom();
@@ -347,14 +355,14 @@ impl View {
     fn rows(&mut self, k: usize, width: usize) -> &[Line<'static>] {
         let i = self.vis[k];
         let open = self.is_open(i);
-        let sel = k == self.sel;
         let key = (self.mi() as u8, i);
         let fresh = matches!(self.cache.get(&key), Some((w, o, _)) if *w == width && *o == open);
         if !fresh {
-            let rows = entry_rows(&self.items()[i], width, open, self.mode, &agent_word(&self.agent));
+            let mut rows = entry_rows(&self.items()[i], width, open, self.mode, &agent_word(&self.agent));
+            // a blank row after each entry: they read apart
+            rows.push(Line::from(""));
             self.cache.insert(key, (width, open, rows));
         }
-        let _ = sel;
         &self.cache[&key].2
     }
 
@@ -455,10 +463,21 @@ impl View {
             return;
         }
         let next = if forward {
-            self.hits.iter().copied().find(|&k| k > self.sel).unwrap_or(self.hits[0])
+            self.hits.iter().copied().find(|&k| k > self.sel).unwrap_or_else(|| {
+                self.wrapped = "back to the first";
+                self.hits[0]
+            })
         } else {
-            self.hits.iter().rev().copied().find(|&k| k < self.sel).unwrap_or(*self.hits.last().unwrap())
+            self.hits.iter().rev().copied().find(|&k| k < self.sel).unwrap_or_else(|| {
+                self.wrapped = "back to the last";
+                *self.hits.last().unwrap()
+            })
         };
+        self.show_hit(next);
+    }
+
+    /// The cursor on the shown entry `next`, opened, at the top.
+    fn show_hit(&mut self, next: usize) {
         self.sel = next;
         let i = self.vis[next];
         if !self.is_open(i) && !matches!(self.items()[i].body, Body::None) {
@@ -467,7 +486,51 @@ impl View {
         self.top = (next, 0);
     }
 
-    /// `n of m` for the key bar.
+    /// `/` opens the field; the cursor's place is kept for esc.
+    pub(crate) fn start_search(&mut self) {
+        self.origin = (self.sel, self.top);
+        self.search = Some(Search { text: String::new(), typing: true });
+        self.hits.clear();
+    }
+
+    /// The field changed: the cursor goes to the first match from where
+    /// `/` opened (round the end if none after), or back there.
+    pub(crate) fn incsearch(&mut self) {
+        self.rehit();
+        let (o, top) = self.origin;
+        match self.hits.iter().copied().find(|&k| k >= o).or(self.hits.first().copied()) {
+            Some(k) => (self.sel, self.top) = (k, (k, 0)),
+            None => (self.sel, self.top) = (o.min(self.vis.len().saturating_sub(1)), top),
+        }
+    }
+
+    /// ⏎ in the field: the cursor's match opens (the next one when the
+    /// cursor is on none).
+    pub(crate) fn search_done(&mut self) {
+        if let Some(s) = self.search.as_mut() {
+            s.typing = false;
+        }
+        if self.hits.contains(&self.sel) {
+            self.show_hit(self.sel);
+        } else {
+            self.jump(true);
+        }
+    }
+
+    /// esc in the field: no search, the cursor back where it was.
+    pub(crate) fn search_cancel(&mut self) {
+        self.search = None;
+        self.hits.clear();
+        let (o, top) = self.origin;
+        (self.sel, self.top) = (o.min(self.vis.len().saturating_sub(1)), top);
+    }
+
+    /// A search is set (typed and ⏎): `n`/`N` go through it.
+    fn searching(&self) -> bool {
+        self.search.as_ref().is_some_and(|s| !s.typing && !s.text.is_empty())
+    }
+
+    /// `3 of 12` for the key bar, after the wrap note.
     fn hit_label(&self) -> String {
         if self.search.as_ref().is_none_or(|s| s.text.is_empty()) {
             return String::new();
@@ -475,9 +538,14 @@ impl View {
         if self.hits.is_empty() {
             return "no match".into();
         }
-        match self.hits.iter().position(|&k| k == self.sel) {
+        let n = match self.hits.iter().position(|&k| k == self.sel) {
             Some(p) => format!("{} of {}", p + 1, self.hits.len()),
             None => format!("{} matches", self.hits.len()),
+        };
+        if self.wrapped.is_empty() {
+            n
+        } else {
+            format!("{} {} {n}", self.wrapped, dot())
         }
     }
 }
@@ -491,25 +559,21 @@ pub(crate) fn on_key(app: &mut App, k: &KeyEvent) -> bool {
         return true;
     }
     let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
-    let width = app.area_w.saturating_sub(2).max(20);
+    let width = app.area_w.saturating_sub(2).clamp(20, MEASURE);
     // the search field takes the keys while typed in
+    // the wrap note lasts until the next key
+    v.wrapped = "";
     if let Some(s) = v.search.as_mut().filter(|s| s.typing) {
         match k.code {
-            KeyCode::Esc => {
-                v.search = None;
-                v.hits.clear();
-            }
-            KeyCode::Enter => {
-                s.typing = false;
-                v.jump(true);
-            }
+            KeyCode::Esc => v.search_cancel(),
+            KeyCode::Enter => v.search_done(),
             KeyCode::Backspace => {
                 s.text.pop();
-                v.rehit();
+                v.incsearch();
             }
             KeyCode::Char(c) if !ctrl => {
                 s.text.push(c);
-                v.rehit();
+                v.incsearch();
             }
             _ => {}
         }
@@ -581,7 +645,7 @@ pub(crate) fn on_key(app: &mut App, k: &KeyEvent) -> bool {
                 v.toggle(i);
             }
         }
-        KeyCode::Char('/') => v.search = Some(Search { text: String::new(), typing: true }),
+        KeyCode::Char('/') => v.start_search(),
         KeyCode::Char('n') => v.jump(true),
         KeyCode::Char('N') => v.jump(false),
         KeyCode::Char('f') => {
@@ -611,7 +675,7 @@ pub(crate) fn on_key(app: &mut App, k: &KeyEvent) -> bool {
 /// The mouse while open: the wheel scrolls, the rest is swallowed.
 pub(crate) fn mouse(app: &mut App, m: &crossterm::event::MouseEvent) -> bool {
     use crossterm::event::MouseEventKind;
-    let width = app.area_w.saturating_sub(2).max(20);
+    let width = app.area_w.saturating_sub(2).clamp(20, MEASURE);
     let Some(v) = app.logview.as_mut() else { return false };
     match m.kind {
         MouseEventKind::ScrollUp => v.scroll(-3, width),
@@ -623,37 +687,70 @@ pub(crate) fn mouse(app: &mut App, m: &crossterm::event::MouseEvent) -> bool {
 
 // ---- the words and rows (pure) ----
 
-/// The role column: glyph and word, and its color.
-pub(crate) fn role_label(it: &Item, agent_word: &str) -> (String, Style) {
-    let st = |c| Style::default().fg(c);
-    let g = theme::glyph;
-    match &it.role {
-        Role::You => (format!("{} you", g(theme::G_YOU)), st(theme::accent())),
-        Role::Assistant => (format!("{} {agent_word}", g(theme::G_MAIN)), st(theme::text())),
-        Role::Thinking => (format!("{} thinking", g(theme::G_THINK)), st(theme::dim())),
-        Role::Call => {
-            let w = match it.tool.as_str() {
-                "bash" => format!("{} bash", g(theme::G_BASH)),
-                "run_typescript" => format!("{} ts", g(theme::G_TS)),
-                "edit" => format!("{} edit", g(theme::G_PATCH)),
-                "write_file" => format!("{} write", g(theme::G_PATCH)),
-                "apply_patch" => format!("{} patch", g(theme::G_PATCH)),
-                "read_file" => "⇄ read".to_string(),
-                t => t.to_string(),
-            };
-            (w, st(theme::text()))
-        }
-        Role::Result { ok: true } => (format!("  {} result", g(theme::G_SUBCALL)), st(theme::dim())),
-        Role::Result { ok: false } => (format!("  {} result", g(theme::G_FAILED)), st(theme::error())),
-        Role::Message => (format!("{} message", g(theme::G_MSG)), st(theme::text())),
-        Role::Injected => ("⊕ injected".into(), st(theme::faint())),
-        Role::System => ("§ system".into(), st(theme::faint())),
-        Role::Tools => ("§ tools".into(), st(theme::faint())),
-        Role::Summary => (format!("{} summary", g(theme::G_SUMMARY)), st(theme::dim())),
-        Role::Error => (format!("{} error", g(theme::G_INTERRUPTED)), st(theme::error())),
-        Role::Event => ("· event".into(), st(theme::faint())),
+/// The color of a kind of entry: its label and its rail (designer's
+/// pick; /log's alone, the thread never colors by kind). The bodies stay
+/// text and dim. Under `NO_COLOR`, none: the labels' glyphs tell.
+pub(crate) fn kind_color(role: &Role) -> ratatui::style::Color {
+    if std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty()) {
+        return ratatui::style::Color::Reset;
+    }
+    match role {
+        Role::You => theme::accent(),
+        Role::Assistant => theme::text(),
+        Role::Thinking => theme::dim(),
+        Role::Call => theme::syntax_call(),
+        Role::Result { ok: true } => theme::dim(),
+        Role::Result { ok: false } | Role::Error => theme::error(),
+        Role::Message => theme::syntax_keyword(),
+        Role::Injected => theme::syntax_type(),
+        Role::System | Role::Tools => theme::syntax_number(),
+        Role::Summary => theme::syntax_string(),
+        Role::Event => theme::faint(),
     }
 }
+
+/// The role column: glyph and word, and its color.
+pub(crate) fn role_label(it: &Item, agent_word: &str) -> (String, Style) {
+    let st = Style::default().fg(kind_color(&it.role));
+    let g = theme::glyph;
+    let w = match &it.role {
+        Role::You => format!("{} you", g(theme::G_YOU)),
+        Role::Assistant => format!("{} {agent_word}", g(theme::G_MAIN)),
+        Role::Thinking => format!("{} thinking", g(theme::G_THINK)),
+        Role::Call => match it.tool.as_str() {
+            "bash" => format!("{} bash", g(theme::G_BASH)),
+            "run_typescript" => format!("{} ts", g(theme::G_TS)),
+            "edit" => format!("{} edit", g(theme::G_PATCH)),
+            "write_file" => format!("{} write", g(theme::G_PATCH)),
+            "apply_patch" => format!("{} patch", g(theme::G_PATCH)),
+            "read_file" => "⇄ read".to_string(),
+            t => t.to_string(),
+        },
+        Role::Result { ok: true } => format!("  {} result", if theme::ascii_mode() { "`" } else { "└" }),
+        Role::Result { ok: false } => format!("  {} result", g(theme::G_FAILED)),
+        Role::Message => format!("{} message", g(theme::G_MSG)),
+        Role::Injected => "⊕ bise".into(),
+        Role::System => "§ system".into(),
+        Role::Tools => "§ tools".into(),
+        Role::Summary => format!("{} summary", g(theme::G_SUMMARY)),
+        Role::Error => format!("{} error", g(theme::G_INTERRUPTED)),
+        Role::Event => "· event".into(),
+    };
+    (w, st)
+}
+
+/// The rail left of an open body, in its kind's color (none for events).
+fn rail(role: &Role) -> Span<'static> {
+    if *role == Role::Event {
+        return Span::raw("    ");
+    }
+    let r = if theme::ascii_mode() { "  | " } else { "  ▎ " };
+    Span::styled(r, Style::default().fg(kind_color(role)))
+}
+
+/// The widest an entry draws: a body's 4-column indent and the code
+/// measure. A wider screen leaves the rest empty.
+pub(crate) const MEASURE: usize = 4 + crate::render::CODE_MAX + 1;
 
 /// The assistant's word in the role column: the agent's name when it
 /// fits (`:* main`), else `agent`.
@@ -693,8 +790,8 @@ fn rule_row(words: &str, width: usize, style: Style) -> Line<'static> {
 pub(crate) fn entry_rows(it: &Item, width: usize, open: bool, mode: Mode, who: &str) -> Vec<Line<'static>> {
     let faint = Style::default().fg(theme::faint());
     if let Some(r) = &it.rule {
-        let st = if r.starts_with("compacted") || r.contains("compacted") {
-            Style::default().fg(theme::dim())
+        let st = if r.contains("compacted") {
+            Style::default().fg(kind_color(&Role::Summary))
         } else {
             faint
         };
@@ -723,12 +820,11 @@ pub(crate) fn entry_rows(it: &Item, width: usize, open: bool, mode: Mode, who: &
     if matches!(it.body, Body::None) {
         return rows;
     }
-    let pad4 = "    ";
     if !open {
         let t = it.body.text();
         rows.push(Line::from(Span::styled(
             format!(
-                "{pad4}{} {} lines {} {}",
+                "    {} {} lines {} {}",
                 theme::glyph("▸"),
                 t.lines().count().max(1),
                 if theme::ascii_mode() { "-" } else { "·" },
@@ -740,11 +836,11 @@ pub(crate) fn entry_rows(it: &Item, width: usize, open: bool, mode: Mode, who: &
     }
     let inner = body_width(width);
     if !it.meta.is_empty() {
-        rows.push(Line::from(vec![Span::raw(pad4), Span::styled(it.meta.clone(), faint)]));
+        rows.push(Line::from(vec![rail(&it.role), Span::styled(it.meta.clone(), faint)]));
     }
     let body = body_rows(&it.body, inner, it.role == Role::Thinking);
     rows.extend(body.into_iter().map(|l| {
-        let mut spans = vec![Span::raw(pad4)];
+        let mut spans = vec![rail(&it.role)];
         spans.extend(l.spans);
         Line::from(spans)
     }));
@@ -771,7 +867,8 @@ fn body_rows_all(b: &Body, width: usize, thinking: bool) -> Vec<Line<'static>> {
     match b {
         Body::None => Vec::new(),
         Body::Md(t) => {
-            let rows = crate::markdown::md_lines(t, width, width);
+            // prose at the prose measure, its tables and code to the code one
+            let rows = crate::markdown::md_lines(t, width.min(crate::render::PROSE_MAX), width);
             if !thinking {
                 return rows;
             }
@@ -868,9 +965,10 @@ fn top_rows(v: &View, width: usize) -> Vec<Line<'static>> {
     let off = Style::default().fg(theme::dim());
     let faint = Style::default().fg(theme::faint());
     let (h, m) = if v.mode == Mode::History { (on, off) } else { (off, on) };
-    let req = match v.requests.get(v.req) {
-        Some(r) => format!("what the model got {} request {} of {}", dot(), r.req, v.requests.last().map(|r| r.req).unwrap_or(0)),
-        None => "what the model got".into(),
+    // the requests by position, as the subtitle counts them
+    let (req, m) = match v.requests.get(v.req) {
+        Some(_) => (format!("what the model got {} request {} of {}", dot(), v.req + 1, v.requests.len()), m),
+        None => (format!("what the model got {} no request yet", dot()), faint),
     };
     let mut first = vec![
         Span::styled(format!("log of {}   ", v.agent), faint),
@@ -896,24 +994,25 @@ fn top_rows(v: &View, width: usize) -> Vec<Line<'static>> {
                     .unwrap_or_default();
                 let n = v.model.iter().filter(|i| i.rule.is_none() && !matches!(i.role, Role::System | Role::Tools)).count();
                 format!(
-                    "turn {} {} {} {} {}{usage} {} {n} entries",
+                    "turn {} {} {} {} {}{usage} {} {}",
                     r.turn.unwrap_or(0),
                     dot(),
                     r.time,
                     dot(),
                     r.model,
-                    dot()
+                    dot(),
+                    count(n, "entry", "entries")
                 )
             }
             None => "no request in this log yet".into(),
         }
     } else {
         format!(
-            "every entry of the session log, in order {} {} entries {} {} requests",
+            "every entry of the session log, in order {} {} {} {}",
             dot(),
-            v.history.iter().filter(|i| i.rule.is_none()).count(),
+            count(v.history.iter().filter(|i| i.rule.is_none()).count(), "entry", "entries"),
             dot(),
-            v.requests.len()
+            count(v.requests.len(), "request", "requests")
         )
     };
     rows.push(Line::from(Span::styled(crate::render::fit_chars(&second, width), faint)));
@@ -929,6 +1028,11 @@ fn top_rows(v: &View, width: usize) -> Vec<Line<'static>> {
         rows.push(Line::from(Span::styled(crate::render::fit_chars(&v.note, width), Style::default().fg(theme::error()))));
     }
     rows
+}
+
+/// `1 entry`, `2 entries`.
+fn count(n: usize, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
 }
 
 fn dot() -> &'static str {
@@ -956,18 +1060,48 @@ fn key_row(v: &View, width: usize) -> Line<'static> {
     }
     let keys: &[(&str, &str)] = if v.picker.is_some() {
         &[("space", "show/hide"), ("a", "show all"), ("esc", "done")]
+    } else if v.searching() {
+        &[("/", "search"), ("n", "next"), ("N", "previous"), ("esc", "clear search")]
     } else if v.mode == Mode::Model {
-        &[("/", "search"), ("f", "filter"), ("[ ]", "request"), ("tab", "full history"), ("space", "open"), ("ctrl+o", "open all"), ("esc", "close")]
+        &[
+            ("/", "search"),
+            ("f", "filter"),
+            ("[ ]", "request"),
+            ("g", "top"),
+            ("G", "bottom"),
+            ("tab", "full history"),
+            ("space", "open"),
+            ("ctrl+o", "open all"),
+            ("esc", "close"),
+        ]
     } else {
-        &[("/", "search"), ("f", "filter"), ("tab", "what the model got"), ("space", "open"), ("ctrl+o", "open all"), ("esc", "close")]
+        &[
+            ("/", "search"),
+            ("f", "filter"),
+            ("g", "top"),
+            ("G", "bottom"),
+            ("tab", "what the model got"),
+            ("space", "open"),
+            ("ctrl+o", "open all"),
+            ("esc", "close"),
+        ]
     };
+    let right = v.hit_label();
+    let room = if right.is_empty() { width } else { width.saturating_sub(right.width() + 3) };
+    let key_w = |(k, w): &(&str, &str)| k.width() + 1 + w.width();
+    // narrow: drop keys from the right, never the first nor the last
+    let mut keys: Vec<(&str, &str)> = keys.to_vec();
+    let total = |ks: &[(&str, &str)]| ks.iter().map(key_w).sum::<usize>() + 3 * ks.len().saturating_sub(1);
+    while keys.len() > 2 && total(&keys) > room {
+        keys.remove(keys.len() - 2);
+    }
     let mut spans = Vec::new();
-    for (k, w) in keys {
+    for (n, (k, w)) in keys.iter().enumerate() {
         spans.push(Span::styled(format!("{k} "), text));
-        spans.push(Span::styled(format!("{w}   "), dim));
+        let gap = if n + 1 < keys.len() { "   " } else { "" };
+        spans.push(Span::styled(format!("{w}{gap}"), dim));
     }
     let used: usize = spans.iter().map(|s| s.content.width()).sum();
-    let right = v.hit_label();
     if !right.is_empty() && used + right.width() < width {
         spans.push(Span::raw(" ".repeat(width - used - right.width())));
         spans.push(Span::styled(right, dim));
@@ -991,14 +1125,16 @@ fn picker_rows(v: &View, p: &Picker) -> Vec<Line<'static>> {
 
 /// The screen: the top bar, the entries from `top`, the key bar.
 pub(crate) fn lines(v: &mut View, width: usize, height: usize) -> Vec<Line<'static>> {
-    if v.width != width {
-        v.width = width;
+    // the entries at the measure; the bars across the screen
+    let ew = width.min(MEASURE);
+    if v.width != ew {
+        v.width = ew;
         v.cache.clear();
     }
     let top = top_rows(v, width);
     let body_h = height.saturating_sub(top.len() + 2).max(1);
     v.page = body_h;
-    v.reveal(width, body_h);
+    v.reveal(ew, body_h);
     let needle = v.search.as_ref().map(|s| s.text.to_ascii_lowercase()).unwrap_or_default();
     let mut out = top;
     out.push(Line::from(""));
@@ -1007,7 +1143,7 @@ pub(crate) fn lines(v: &mut View, width: usize, height: usize) -> Vec<Line<'stat
     let mut skip = v.top.1;
     while body.len() < body_h && k < v.vis.len() {
         let sel = k == v.sel;
-        let rows = v.rows(k, width).to_vec();
+        let rows = v.rows(k, ew).to_vec();
         for (r, mut l) in rows.into_iter().enumerate() {
             if skip > 0 {
                 skip -= 1;
