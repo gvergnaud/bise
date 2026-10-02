@@ -541,8 +541,9 @@ def compaction.kept(+c: Ctx, +pre: String, +old: Nat, k: Kept)
                 Con{J.kv("kept", J.arr(nats(ks))), Nil{}}}}})),
         msgs_evs(fresh, c, Nil{})}
 
-# the Core's replacement: [preamble, kept…, summary]; the preamble is
-# the compaction_done summary (inserted at the start of the range)
+# the Core's replacement: [summary message, kept…] (core/compaction.bend
+# replace); the summary message is the compaction_done summary (inserted
+# at the start of the range), so /log shows the real summary
 def compaction(+c: Ctx, +bh: List<&2, T.Msg>, nh: List<&2, T.Msg>)
     -> List<&2, String>:
   match nh:

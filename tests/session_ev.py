@@ -65,8 +65,10 @@ def read_until_idle(f, out):
         if line == "--- idle":
             return
 
-def run_repl(script, sends, resume_txt=None):
-    """The wire lines of one scripted session, and its saved session file."""
+def run_repl(script, sends, resume_txt=None, restored_turn=True):
+    """The wire lines of one scripted session, and its saved session file.
+    restored_turn: a resumed session runs its restored queue first (False:
+    nothing queued, no turn to wait for)."""
     home = tempfile.mkdtemp(prefix="sb-session-ev-")
     try:
         env = {k: v for k, v in os.environ.items()
@@ -95,7 +97,7 @@ def run_repl(script, sends, resume_txt=None):
             sock = socket.create_connection(("127.0.0.1", port), timeout=60)
             f = sock.makefile("rb")
             wire = []
-            if resume_txt is not None:
+            if resume_txt is not None and restored_turn:
                 read_until_idle(f, wire)  # the restored queue runs by itself
             for s in sends:
                 sock.sendall((s + "\n").encode())
@@ -391,23 +393,23 @@ def case_compaction():
     cut = [i for i, e in enumerate(got) if e["type"].startswith("compaction")]
     fcut = [i for i, e in enumerate(want) if e["type"].startswith("compaction")]
     check_same(got[:cut[0]], want[:fcut[0]], "11-compaction (turns 1-2)")
-    # after compaction_done: the Core's summary message, then turn 3
-    if got[cut[-1] + 1]["type"] != "context_injected" or \
-            got[cut[-1] + 1]["data"]["kind"] != "summary":
-        fail("11-compaction: the summary message follows compaction_done: %r" % got[cut[-1] + 1])
-    check_same(got[cut[-1] + 2:], want[fcut[-1] + 1:], "11-compaction (turn 3)")
-    # the compaction: user-triggered, then the Core's replacement
-    # [preamble (compaction_done), kept..., summary (context_injected)]
+    # after compaction_done: turn 3 directly (the replacement is the
+    # summary message (compaction_done) then the kept user messages, no
+    # separate summary event)
+    check_same(got[cut[-1] + 1:], want[fcut[-1] + 1:], "11-compaction (turn 3)")
     kinds = [e["type"] for e in got[cut[0]:cut[-1] + 1]]
     if kinds != ["compaction_started", "compaction_done"]:
         fail("11-compaction: compaction facts %r" % kinds)
+    # compaction_done carries the real summary (what /log shows), not a
+    # preamble
     done = got[cut[-1]]["data"]
-    if got[cut[0]]["data"]["trigger"] != "user" or not done["summary"][0]["text"].startswith(
-            "The earlier conversation was compacted"):
+    summary = done["summary"][0]["text"]
+    if got[cut[0]]["data"]["trigger"] != "user" or not summary.startswith(
+            "Summary of the earlier conversation:\n<summary>The REPL conversation so far"):
         fail("11-compaction: %r" % got[cut[0]:cut[-1] + 1])
     summ = [e for e in w.log if e["type"] == "context_injected" and e["data"]["kind"] == "summary"]
-    if len(summ) != 1:
-        fail("11-compaction: one context_injected summary expected, got %r" % summ)
+    if summ:
+        fail("11-compaction: no context_injected summary expected, got %r" % summ)
     print("ok 11-compaction: %d facts, context %r" % (len(w.log), w.context))
 
 QUEUE_TXT = ("BEND-SESSION 2\nTOOL bash : Run a shell command.\nCFG 800000 20000 3 You are bise.\n"

@@ -15,7 +15,7 @@ type Call is Data:
   Call{id: U32, name: String, args: String}
 
 # one model-visible message. `injected` marks Core-injected context
-# (preamble, steering, notifications, summary); preserved user messages
+# (preamble, steering, notifications, summary); kept user messages
 # are never injected, so "most recent non-injected user message" is decidable.
 type Msg is Data:
   Msg{role: Role, text: String, calls: List<&2, Call>, injected: Bool}
