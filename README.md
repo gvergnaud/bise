@@ -16,6 +16,7 @@
   <a href="https://bise.dev">bise.dev</a> ·
   <a href="#install">install</a> ·
   <a href="#features">features</a> ·
+  <a href="https://bise.dev/docs/">docs</a> ·
   <a href="https://bise.dev/book/">brand book</a>
 </p>
 
