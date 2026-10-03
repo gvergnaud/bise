@@ -393,3 +393,59 @@ fn the_step_after_a_login() {
     let s = Setup::from_text(Some("model = \"anthropic/claude-x\"\n"), &|_| None);
     assert!(auth_cli::next_after_login(&s, p, Some("mistral/x"), false).starts_with("bise config set model mistral/x"));
 }
+
+/// The ChatGPT sign-in in `bise providers` and `bise auth status`: its
+/// states in the designer's words, never a token; an oauth entry is no
+/// "not an API key" warning.
+#[test]
+fn a_sign_in_shows_its_state_in_the_lists_and_never_a_token() {
+    use crate::auth::OAuth;
+    let dir = tmp("signin-rows");
+    let ps = paths(&dir);
+    let c = Catalog::builtin();
+    let st = bise_home::style::Style::PLAIN;
+    let none = |_: &str| None;
+    let row = |store: &Store| {
+        let keys = Keys { env: &none, store, files: &[] };
+        let out = auth_cli::render_providers(&c, &keys, &ps, "", &st);
+        out.lines().find(|l| l.trim_start().starts_with("ChatGPT")).unwrap_or("").trim().to_string()
+    };
+    let mut store = Store::default();
+    assert_eq!(row(&store), "ChatGPT           not set up");
+    let o = OAuth {
+        client_id: "oaiapp_x".into(),
+        email: "you@example.com".into(),
+        plan: "plus".into(),
+        access: SECRET.into(),
+        refresh: "rt-SECRET".into(),
+        saved_at: crate::chatgpt::rfc3339(1_790_000_000),
+        expires: u64::MAX / 2,
+        ..OAuth::default()
+    };
+    store.set_oauth("chatgpt", &o);
+    // a fresh saved_at: signed in
+    store.set_oauth("chatgpt", &OAuth { saved_at: crate::chatgpt::rfc3339(4_000_000_000), ..o.clone() });
+    assert_eq!(row(&store), "ChatGPT           ✓ signed in · you@example.com · Plus");
+    let keys = Keys { env: &none, store: &store, files: &[] };
+    let all = auth_cli::render_providers(&c, &keys, &ps, "chatgpt", &st);
+    assert!(!all.contains("SECRET") && !all.contains("not an API key"), "{all}");
+    let list = auth_cli::statuses(&c, &keys, "chatgpt", None);
+    let s = list.iter().find(|s| s.id == "chatgpt").unwrap();
+    assert_eq!((s.auth.as_str(), s.state.as_str(), s.email.as_deref(), s.plan.as_deref(), s.main), ("chatgpt", "signed in", Some("you@example.com"), Some("Plus"), true));
+    assert!(s.good_until.is_some());
+    // the coding plans stay out until set up
+    assert!(list.iter().all(|s| s.id != "zai-coding"));
+    let d = crate::detect::Detected { codex_chatgpt: true, claude_plan: false };
+    let json = auth_cli::status_json(&list, &d).to_string();
+    assert!(!json.contains("SECRET") && json.contains("\"codex_chatgpt\":true"), "{json}");
+    let text = auth_cli::render_status(&list, &d, &st);
+    assert!(text.contains("· codex: signed in with ChatGPT") && !text.contains("SECRET"), "{text}");
+    // signed out (the client kept), then expired
+    store.sign_out("chatgpt", false);
+    assert_eq!(row(&store), "ChatGPT           signed out");
+    store.sign_out("chatgpt", true);
+    assert_eq!(row(&store), "ChatGPT           ▲ sign-in expired · bise login chatgpt");
+    let keys = Keys { env: &none, store: &store, files: &[] };
+    assert_eq!(auth_cli::statuses(&c, &keys, "", None).iter().find(|s| s.id == "chatgpt").unwrap().state, "expired");
+    let _ = std::fs::remove_dir_all(&dir);
+}

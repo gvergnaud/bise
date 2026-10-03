@@ -157,8 +157,11 @@ dependencies = [
 name = "bise-catalog"
 version = "0.1.0"
 dependencies = [
+ "base64",
+ "bend-plugins",
  "bise-home",
  "libc",
+ "ring",
  "serde_json",
  "toml",
 ]
