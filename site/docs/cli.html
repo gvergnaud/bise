@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>the bise command · bise docs</title>
+<meta name="description" content="every subcommand of bise, for your terminal and your scripts. bise --help prints the same list.">
+<link rel="canonical" href="https://bise.dev/docs/cli">
+<meta name="theme-color" content="#f2ede2">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="alternate" type="text/markdown" href="/docs/cli.md">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="bise">
+<meta property="og:url" content="https://bise.dev/docs/cli">
+<meta property="og:title" content="the bise command · bise docs">
+<meta property="og:description" content="every subcommand of bise, for your terminal and your scripts. bise --help prints the same list.">
+<meta property="og:image" content="https://bise.dev/og.png?v=paper">
+<meta name="twitter:card" content="summary_large_image">
+<script>{ const q = location.search; let d = null; try { d = localStorage.getItem('bise-theme'); } catch {} if (/[?&]dark\b/.test(q) || (!/[?&]light\b/.test(q) && (d ?? (matchMedia('(prefers-color-scheme: dark)').matches ? '1' : '0')) === '1')) document.documentElement.classList.add('pd'); }</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Caveat:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/docs/docs.css">
+</head>
+<body>
+<header class="top">
+  <button class="menu" type="button" aria-label="the pages" aria-expanded="false">≡</button>
+  <a class="logo" href="/">bise <span class="acc">:*</span></a>
+  <a class="docs" href="/docs">docs</a>
+  <div class="search">
+    <input type="search" placeholder="/ search" aria-label="search the docs" autocomplete="off" spellcheck="false">
+    <div class="results" hidden></div>
+  </div>
+  <nav>
+    <a href="https://github.com/gvergnaud/bise">GitHub</a>
+    <button id="theme" type="button" title="light / dark">◐</button>
+  </nav>
+</header>
+<div class="wrap">
+  <aside class="side"><nav aria-label="the docs">
+<div class="grp">get started</div><ul>
+<li><a href="/docs">what bise is</a></li>
+<li><a href="/docs/install">install and first run</a></li>
+</ul>
+<div class="grp">models</div><ul>
+<li><a href="/docs/providers">providers and keys</a></li>
+<li><a href="/docs/models">models and roles</a></li>
+<li><a href="/docs/gateways">gateways and local models</a></li>
+</ul>
+<div class="grp">using bise</div><ul>
+<li><a href="/docs/agents">main and the agents</a></li>
+<li><a href="/docs/approvals">approvals</a></li>
+<li><a href="/docs/flow">landing work</a></li>
+<li><a href="/docs/voice">voice</a></li>
+<li><a href="/docs/computer-use">computer use</a></li>
+</ul>
+<div class="grp">extend</div><ul>
+<li><a href="/docs/plugins">plugins and MCP</a></li>
+<li><a href="/docs/skills">instructions and skills</a></li>
+</ul>
+<div class="grp">reference</div><ul>
+<li><a href="/docs/config">config.toml</a></li>
+<li><a href="/docs/cli" class="here" aria-current="page">the bise command</a></li>
+<li><a href="/docs/keys">keys and commands</a></li>
+<li><a href="/docs/troubleshooting">troubleshooting</a></li>
+<li><a href="/docs/updates">updates</a></li>
+</ul>
+  </nav></aside>
+  <main>
+    <article>
+      <div class="head">
+        <h1>the bise command</h1>
+        <button class="copymd" type="button" data-md="/docs/cli.md">copy as markdown</button>
+      </div>
+      <p class="lede">every subcommand of bise, for your terminal and your scripts. bise --help prints the same list.</p>
+<h2 id="start"><a class="anchor" href="#start" aria-hidden="true">#</a>start</h2>
+<div class="table"><table><thead><tr><th>command</th><th>what it does</th></tr></thead><tbody><tr><td><code>bise</code></td><td>open bise in this folder: main and its agents</td></tr><tr><td><code>bise switchboard --stop</code></td><td>stop this folder's bise and its agents; <code>--keep-agents</code>: they go on</td></tr></tbody></table></div>
+<h2 id="keys-and-models"><a class="anchor" href="#keys-and-models" aria-hidden="true">#</a>keys and models</h2>
+<div class="table"><table><thead><tr><th>command</th><th>what it does</th></tr></thead><tbody><tr><td><code>bise login [provider]</code></td><td>add a provider's key: checked with one tiny call, then saved. see <a href="/docs/providers#add-a-key">providers and keys</a></td></tr><tr><td><code>bise logout [provider]</code></td><td>remove it</td></tr><tr><td><code>bise providers</code></td><td>your providers: which are set up, where each key comes from (also <code>bise auth list</code>)</td></tr><tr><td><code>bise auth check [provider]</code></td><td>one tiny call with the key bise finds; saves nothing. <code>--model provider/model</code></td></tr><tr><td><code>bise models [filter]</code></td><td>the models bise knows, and which have a key. <code>voice</code> as the filter: the speech models</td></tr><tr><td><code>bise config get KEY</code></td><td>read a setting: <code>main</code>, <code>agents</code>, <code>small</code>, <code>voice</code>, <code>approvals</code>, <code>compaction_threshold</code>, <code>project_doc_fallback_filenames</code></td></tr><tr><td><code>bise config set KEY VALUE</code></td><td>write it in config.toml. see <a href="/docs/config">config.toml</a></td></tr></tbody></table></div>
+<h2 id="setup"><a class="anchor" href="#setup" aria-hidden="true">#</a>setup</h2>
+<div class="table"><table><thead><tr><th>command</th><th>what it does</th></tr></thead><tbody><tr><td><code>bise setup scan</code></td><td>what this Mac has for bise: where keys are, tools, repos, Claude Code's and Codex's setup. never prints a key</td></tr><tr><td><code>bise setup ghostty</code></td><td>add the Ghostty lines for <code class="key">cmd+v</code>/<code>f</code>/<code>k</code>/<code>a</code>/<code>↑↓</code>; <code>--dry-run</code> shows the change only</td></tr><tr><td><code>bise plugins [list]</code></td><td>agent plugins and what's wrong with them; <code>--json</code></td></tr><tr><td><code>bise plugins enable NAME</code> / <code>disable NAME</code></td><td>turn a plugin on or off</td></tr><tr><td><code>bise plugins import-mcp NAME [--dry-run] &lt; servers.json</code></td><td>Claude Code's or Codex's MCP servers as one plugin</td></tr><tr><td><code>bise plugins login [SERVER]</code> / <code>logout SERVER</code></td><td>log in to a remote MCP server in the browser, or forget it. see <a href="/docs/plugins#logging-in-oauth">plugins and MCP</a></td></tr><tr><td><code>bise doctor</code></td><td>check this Mac, the install, keys, models and running bise; <code>--verbose</code>. see <a href="/docs/troubleshooting">troubleshooting</a></td></tr></tbody></table></div>
+<h2 id="the-install"><a class="anchor" href="#the-install" aria-hidden="true">#</a>the install</h2>
+<div class="table"><table><thead><tr><th>command</th><th>what it does</th></tr></thead><tbody><tr><td><code>bise update</code></td><td>install the latest release; <code>--check</code> only says if there is one. see <a href="/docs/updates">updates</a></td></tr><tr><td><code>bise uninstall</code></td><td>remove bise; <code>--purge</code> also removes <code>~/.bise</code>: settings, keys and threads</td></tr><tr><td><code>bise --version</code></td><td>this version</td></tr><tr><td><code>bise session show [&lt;id&gt;]</code></td><td>a session's log: the transcript; <code>--context</code> what the model sees now; <code>--raw</code> the log lines</td></tr></tbody></table></div>
+<h2 id="for-programs"><a class="anchor" href="#for-programs" aria-hidden="true">#</a>for programs</h2>
+<div class="table"><table><thead><tr><th>command</th><th>what it does</th></tr></thead><tbody><tr><td><code>bise --headless</code></td><td>one session without the TUI: <code>--model NAME</code>, <code>--port N</code>, <code>--continue</code>, <code>--resume ID</code> (a prefix of the id works)</td></tr><tr><td><code>bise sb &lt;command&gt;</code></td><td>the agents' own tool (<code>sb</code> is a link to bise). <code>sb help</code> lists its commands</td></tr></tbody></table></div>
+    </article>
+    <nav class="pn"><a class="prev" href="/docs/config"><span>previous</span>config.toml</a><a class="next" href="/docs/keys"><span>next</span>keys and commands</a></nav>
+    <footer>
+      <p>for agents: <a href="/docs/cli.md">bise.dev/docs/cli.md</a></p>
+      <p><a href="https://github.com/gvergnaud/bise/blob/main/site/docs/cli.md">edit this page on GitHub</a></p>
+    </footer>
+  </main>
+  <aside class="toc"><div class="toch">on this page</div><ul><li class="l2"><a href="#start">start</a></li><li class="l2"><a href="#keys-and-models">keys and models</a></li><li class="l2"><a href="#setup">setup</a></li><li class="l2"><a href="#the-install">the install</a></li><li class="l2"><a href="#for-programs">for programs</a></li></ul></aside>
+</div>
+<script src="/docs/docs.js" defer></script>
+</body>
+</html>

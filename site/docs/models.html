@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>models and roles · bise docs</title>
+<meta name="description" content="which model does what in bise, and how to change each one.">
+<link rel="canonical" href="https://bise.dev/docs/models">
+<meta name="theme-color" content="#f2ede2">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="alternate" type="text/markdown" href="/docs/models.md">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="bise">
+<meta property="og:url" content="https://bise.dev/docs/models">
+<meta property="og:title" content="models and roles · bise docs">
+<meta property="og:description" content="which model does what in bise, and how to change each one.">
+<meta property="og:image" content="https://bise.dev/og.png?v=paper">
+<meta name="twitter:card" content="summary_large_image">
+<script>{ const q = location.search; let d = null; try { d = localStorage.getItem('bise-theme'); } catch {} if (/[?&]dark\b/.test(q) || (!/[?&]light\b/.test(q) && (d ?? (matchMedia('(prefers-color-scheme: dark)').matches ? '1' : '0')) === '1')) document.documentElement.classList.add('pd'); }</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Caveat:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/docs/docs.css">
+</head>
+<body>
+<header class="top">
+  <button class="menu" type="button" aria-label="the pages" aria-expanded="false">≡</button>
+  <a class="logo" href="/">bise <span class="acc">:*</span></a>
+  <a class="docs" href="/docs">docs</a>
+  <div class="search">
+    <input type="search" placeholder="/ search" aria-label="search the docs" autocomplete="off" spellcheck="false">
+    <div class="results" hidden></div>
+  </div>
+  <nav>
+    <a href="https://github.com/gvergnaud/bise">GitHub</a>
+    <button id="theme" type="button" title="light / dark">◐</button>
+  </nav>
+</header>
+<div class="wrap">
+  <aside class="side"><nav aria-label="the docs">
+<div class="grp">get started</div><ul>
+<li><a href="/docs">what bise is</a></li>
+<li><a href="/docs/install">install and first run</a></li>
+</ul>
+<div class="grp">models</div><ul>
+<li><a href="/docs/providers">providers and keys</a></li>
+<li><a href="/docs/models" class="here" aria-current="page">models and roles</a></li>
+<li><a href="/docs/gateways">gateways and local models</a></li>
+</ul>
+<div class="grp">using bise</div><ul>
+<li><a href="/docs/agents">main and the agents</a></li>
+<li><a href="/docs/approvals">approvals</a></li>
+<li><a href="/docs/flow">landing work</a></li>
+<li><a href="/docs/voice">voice</a></li>
+<li><a href="/docs/computer-use">computer use</a></li>
+</ul>
+<div class="grp">extend</div><ul>
+<li><a href="/docs/plugins">plugins and MCP</a></li>
+<li><a href="/docs/skills">instructions and skills</a></li>
+</ul>
+<div class="grp">reference</div><ul>
+<li><a href="/docs/config">config.toml</a></li>
+<li><a href="/docs/cli">the bise command</a></li>
+<li><a href="/docs/keys">keys and commands</a></li>
+<li><a href="/docs/troubleshooting">troubleshooting</a></li>
+<li><a href="/docs/updates">updates</a></li>
+</ul>
+  </nav></aside>
+  <main>
+    <article>
+      <div class="head">
+        <h1>models and roles</h1>
+        <button class="copymd" type="button" data-md="/docs/models.md">copy as markdown</button>
+      </div>
+      <p class="lede">which model does what in bise, and how to change each one.</p>
+<p>bise uses models for a few different jobs. each job is a <strong>role</strong>, and each role has its own model. you pick one model at the first run; every other role follows it or picks a cheap one for you.</p>
+<h2 id="the-roles"><a class="anchor" href="#the-roles" aria-hidden="true">#</a>the roles</h2>
+<div class="table"><table><thead><tr><th>role</th><th>what it does</th><th>unset</th></tr></thead><tbody><tr><td><code>main</code></td><td>your team lead: the agent you talk to</td><td>the model of the first run</td></tr><tr><td><code>agents</code></td><td>the agents main starts</td><td>same as main</td></tr><tr><td><code>small</code></td><td>small jobs: titles, summaries</td><td>the cheap model of main's provider</td></tr><tr><td><code>voice</code></td><td>listens when you talk (<code class="key">ctrl+r</code>)</td><td>Mistral's or OpenAI's speech model, when you have that key</td></tr><tr><td><code>classify</code></td><td>the checker: in auto, decides which commands run and which ask you</td><td>Jev, through TypeSafe or OpenRouter when you have one of those keys, else your small jobs model. see <a href="/docs/approvals">approvals</a></td></tr></tbody></table></div>
+<p><code class="key">/models</code> shows them all, with what each one resolves to. pick a row to change it: role, then provider, then model, then effort.</p>
+<h2 id="change-a-model"><a class="anchor" href="#change-a-model" aria-hidden="true">#</a>change a model</h2>
+<p>for the agent you're looking at, now:</p>
+<div class="code"><div class="box"><pre><code class="lang-text">/model anthropic/claude-sonnet-5-5</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p><code class="key">/model &lt;model&gt; default</code> also makes it the default for new sessions: main's role when you're in main's view, the agents' role in an agent's view.</p>
+<p>from a terminal, for every new session:</p>
+<div class="code"><div class="box"><pre><code class="lang-sh">bise config set main anthropic/claude-opus-5-5
+bise config set agents openai/gpt-6.1-sol
+bise config set small mistral/mistral-small-latest
+bise config get main</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>or in <code>~/.bise/config.toml</code>:</p>
+<div class="code"><div class="file">~/.bise/config.toml</div><div class="box"><pre><code class="lang-toml">[roles]
+main = &quot;anthropic/claude-opus-5-5&quot;      <span class="c"># your team lead</span>
+agents = &quot;openai/gpt-6.1-sol&quot;           <span class="c"># the agents main starts (unset: main&#x27;s)</span>
+small = &quot;mistral/mistral-small-latest&quot;  <span class="c"># titles, summaries</span>
+voice = &quot;mistral/voxtral-transcribe-3&quot;  <span class="c"># listens when you talk</span>
+
+[roles.main]                            <span class="c"># the table form, to set the effort too</span>
+model = &quot;anthropic/claude-opus-5-5&quot;
+effort = &quot;high&quot;</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>a role is either one line or a table, not both. an environment variable wins over the file for one session: <code>BISE_MODEL</code> (main), <code>BISE_AGENT_MODEL</code>, <code>BISE_SMALL_MODEL</code>, <code>BISE_VOICE_MODEL</code>, <code>BISE_CLASSIFY_MODEL</code>.</p>
+<aside class="callout note"><span class="label">note</span><p>older config files have <code>model</code>, <code>agent_model</code>, <code>small_model</code> and <code>[voice] model</code> at the top. they keep working. when bise writes a role, it moves it under <code>[roles]</code>.</p></aside>
+<h2 id="reasoning-effort"><a class="anchor" href="#reasoning-effort" aria-hidden="true">#</a>reasoning effort</h2>
+<p>for a model that reasons, <code class="key">/reasoning</code> picks how hard it thinks:</p>
+<div class="code"><div class="box"><pre><code class="lang-text">/reasoning high</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>Anthropic's models take <code>none</code>, <code>low</code>, <code>medium</code>, <code>high</code> and <code>max</code>; the others <code>none</code>, <code>low</code>, <code>medium</code> and <code>high</code>. unset, a model gets <code>high</code>. the effort shows on the divider next to the model.</p>
+<h2 id="compaction"><a class="anchor" href="#compaction" aria-hidden="true">#</a>compaction</h2>
+<p>when a conversation grows close to the model's context window, bise compacts it: it replaces the older part with a summary, so the agent goes on. by default that happens at 80% of the window. to compact earlier:</p>
+<div class="code"><div class="box"><pre><code class="lang-sh">bise config set compaction_threshold 450000   <span class="c"># tokens</span>
+bise config set compaction_threshold 45%      <span class="c"># a share of the window</span></code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>the threshold is at most 80% of the window. <code class="key">/compact</code> compacts the agent you're looking at now.</p>
+<h2 id="what-a-model-can-do"><a class="anchor" href="#what-a-model-can-do" aria-hidden="true">#</a>what a model can do</h2>
+<p>each model in the list has a context window, a max output, and whether it reads images and reasons. a model bise doesn't list gets its provider's defaults. for a model behind your own gateway, you set these yourself: see <a href="/docs/gateways#model-limits">gateways and local models</a>.</p>
+<div class="code"><div class="box"><pre><code class="lang-sh">bise models anthropic</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<div class="code"><div class="box"><pre><code class="lang-text">anthropic  Anthropic · anthropic · key: env ANTHROPIC_API_KEY
+  anthropic/claude-opus-5-5      1M ctx  128k out vision reasoning $4/$20
+  anthropic/claude-sonnet-5-5    1M ctx  128k out vision reasoning $2/$10
+  anthropic/claude-haiku-4-5   200k ctx   64k out vision reasoning $1/$5</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>prices are list prices in USD per million tokens, input then output. bise shows a turn's cost when it knows the price.</p>
+    </article>
+    <nav class="pn"><a class="prev" href="/docs/providers"><span>previous</span>providers and keys</a><a class="next" href="/docs/gateways"><span>next</span>gateways and local models</a></nav>
+    <footer>
+      <p>for agents: <a href="/docs/models.md">bise.dev/docs/models.md</a></p>
+      <p><a href="https://github.com/gvergnaud/bise/blob/main/site/docs/models.md">edit this page on GitHub</a></p>
+    </footer>
+  </main>
+  <aside class="toc"><div class="toch">on this page</div><ul><li class="l2"><a href="#the-roles">the roles</a></li><li class="l2"><a href="#change-a-model">change a model</a></li><li class="l2"><a href="#reasoning-effort">reasoning effort</a></li><li class="l2"><a href="#compaction">compaction</a></li><li class="l2"><a href="#what-a-model-can-do">what a model can do</a></li></ul></aside>
+</div>
+<script src="/docs/docs.js" defer></script>
+</body>
+</html>

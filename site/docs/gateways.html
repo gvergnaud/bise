@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gateways and local models · bise docs</title>
+<meta name="description" content="LiteLLM, a company proxy, vLLM, Ollama or LM Studio: any server that speaks OpenAI&#x27;s or Anthropic&#x27;s API works as a provider.">
+<link rel="canonical" href="https://bise.dev/docs/gateways">
+<meta name="theme-color" content="#f2ede2">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="alternate" type="text/markdown" href="/docs/gateways.md">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="bise">
+<meta property="og:url" content="https://bise.dev/docs/gateways">
+<meta property="og:title" content="gateways and local models · bise docs">
+<meta property="og:description" content="LiteLLM, a company proxy, vLLM, Ollama or LM Studio: any server that speaks OpenAI&#x27;s or Anthropic&#x27;s API works as a provider.">
+<meta property="og:image" content="https://bise.dev/og.png?v=paper">
+<meta name="twitter:card" content="summary_large_image">
+<script>{ const q = location.search; let d = null; try { d = localStorage.getItem('bise-theme'); } catch {} if (/[?&]dark\b/.test(q) || (!/[?&]light\b/.test(q) && (d ?? (matchMedia('(prefers-color-scheme: dark)').matches ? '1' : '0')) === '1')) document.documentElement.classList.add('pd'); }</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Caveat:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/docs/docs.css">
+</head>
+<body>
+<header class="top">
+  <button class="menu" type="button" aria-label="the pages" aria-expanded="false">≡</button>
+  <a class="logo" href="/">bise <span class="acc">:*</span></a>
+  <a class="docs" href="/docs">docs</a>
+  <div class="search">
+    <input type="search" placeholder="/ search" aria-label="search the docs" autocomplete="off" spellcheck="false">
+    <div class="results" hidden></div>
+  </div>
+  <nav>
+    <a href="https://github.com/gvergnaud/bise">GitHub</a>
+    <button id="theme" type="button" title="light / dark">◐</button>
+  </nav>
+</header>
+<div class="wrap">
+  <aside class="side"><nav aria-label="the docs">
+<div class="grp">get started</div><ul>
+<li><a href="/docs">what bise is</a></li>
+<li><a href="/docs/install">install and first run</a></li>
+</ul>
+<div class="grp">models</div><ul>
+<li><a href="/docs/providers">providers and keys</a></li>
+<li><a href="/docs/models">models and roles</a></li>
+<li><a href="/docs/gateways" class="here" aria-current="page">gateways and local models</a></li>
+</ul>
+<div class="grp">using bise</div><ul>
+<li><a href="/docs/agents">main and the agents</a></li>
+<li><a href="/docs/approvals">approvals</a></li>
+<li><a href="/docs/flow">landing work</a></li>
+<li><a href="/docs/voice">voice</a></li>
+<li><a href="/docs/computer-use">computer use</a></li>
+</ul>
+<div class="grp">extend</div><ul>
+<li><a href="/docs/plugins">plugins and MCP</a></li>
+<li><a href="/docs/skills">instructions and skills</a></li>
+</ul>
+<div class="grp">reference</div><ul>
+<li><a href="/docs/config">config.toml</a></li>
+<li><a href="/docs/cli">the bise command</a></li>
+<li><a href="/docs/keys">keys and commands</a></li>
+<li><a href="/docs/troubleshooting">troubleshooting</a></li>
+<li><a href="/docs/updates">updates</a></li>
+</ul>
+  </nav></aside>
+  <main>
+    <article>
+      <div class="head">
+        <h1>gateways and local models</h1>
+        <button class="copymd" type="button" data-md="/docs/gateways.md">copy as markdown</button>
+      </div>
+      <p class="lede">LiteLLM, a company proxy, vLLM, Ollama or LM Studio: any server that speaks OpenAI&#x27;s or Anthropic&#x27;s API works as a provider.</p>
+<p>bise talks to any server that speaks one of three APIs: OpenAI's Chat Completions, Anthropic's Messages, or OpenAI's Responses. so a gateway like <a href="https://docs.litellm.ai/docs/simple_proxy" rel="noopener">LiteLLM</a>, a company proxy, vLLM, or any OpenAI-compatible URL works. you add it as a provider in <code>~/.bise/config.toml</code>.</p>
+<h2 id="litellm-in-three-steps"><a class="anchor" href="#litellm-in-three-steps" aria-hidden="true">#</a>LiteLLM in three steps</h2>
+<ol><li>add the provider:</li></ol>
+<div class="code"><div class="file">~/.bise/config.toml</div><div class="box"><pre><code class="lang-toml">[providers.litellm]
+name = &quot;LiteLLM&quot;
+api = &quot;openai-chat&quot;
+base_url = &quot;http://localhost:4000/v1&quot;
+key_env = &quot;LITELLM_API_KEY&quot;
+small_model = &quot;mistral-small&quot;   <span class="c"># a cheap model, for titles and summaries</span>
+
+[roles]
+main = &quot;litellm/claude-sonnet-4-5&quot;</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>the part after <code>litellm/</code> is a <code>model_name</code> from your LiteLLM config, as it is. names with a <code>/</code> work too: <code>litellm/anthropic/claude-sonnet-4-5</code>.</p>
+<ol><li>give bise the key (your LiteLLM master key or a virtual key). save it:</li></ol>
+<div class="code"><div class="box"><pre><code class="lang-sh">bise login litellm</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>or export the variable named by <code>key_env</code>:</p>
+<div class="code"><div class="box"><pre><code class="lang-sh">export LITELLM_API_KEY=your-litellm-key</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<ol><li>check it:</li></ol>
+<div class="code"><div class="box"><pre><code class="lang-sh">bise auth check litellm   <span class="c"># one tiny call</span>
+bise providers            <span class="c"># LiteLLM  ✓ ready</span></code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>then start <code>bise</code>. <code>/model litellm/&lt;model&gt;</code> switches the agent you're looking at, and <code>bise config set agents litellm/&lt;model&gt;</code> sets the model of the agents main starts.</p>
+<h2 id="the-provider-table"><a class="anchor" href="#the-provider-table" aria-hidden="true">#</a>the provider table</h2>
+<p><code>[providers.&lt;id&gt;]</code>. every key is optional but <code>base_url</code>.</p>
+<div class="table"><table><thead><tr><th>key</th><th>what it does</th><th>unset</th></tr></thead><tbody><tr><td><code>name</code></td><td>the name bise shows</td><td>the id</td></tr><tr><td><code>api</code></td><td>the wire API: <code>openai-chat</code> (<code>/chat/completions</code>), <code>anthropic</code> (<code class="key">/messages</code>), <code>openai-responses</code> (<code class="key">/responses</code>)</td><td><code>openai-chat</code></td></tr><tr><td><code>base_url</code></td><td>the URL bise adds the path above to: keep the <code>/v1</code></td><td>none</td></tr><tr><td><code>key_env</code></td><td>the variable that holds the key; <code>&quot;&quot;</code> for a server that needs none</td><td>none</td></tr><tr><td><code>small_model</code></td><td>a cheap model of this provider, for titles and summaries</td><td>none</td></tr><tr><td><code>key_command</code></td><td>a command that prints the key, run before every call</td><td>none</td></tr><tr><td><code>headers_env</code></td><td>a variable that holds extra headers</td><td>none</td></tr><tr><td><code>idle_timeout_sec</code></td><td>how long bise waits for the server to send something, in seconds</td><td>90</td></tr></tbody></table></div>
+<p>the key goes out as <code>Authorization: Bearer &lt;key&gt;</code> (<code>openai-chat</code>, <code>openai-responses</code>) or <code>x-api-key</code> (<code>anthropic</code>). with <code>key_env = &quot;&quot;</code> and no <code>key_command</code>, bise sends no key.</p>
+<h2 id="model-limits"><a class="anchor" href="#model-limits" aria-hidden="true">#</a>model limits</h2>
+<p>a model bise doesn't know gets these defaults: 128k context, 16k output, no images, no reasoning, tools on. set the real ones per model, or for the whole provider (the same keys in <code>[providers.&lt;id&gt;]</code>):</p>
+<div class="code"><div class="file">~/.bise/config.toml</div><div class="box"><pre><code class="lang-toml">[models.&quot;litellm/claude-sonnet-4-5&quot;]
+context = 1000000
+max_output = 64000
+vision = true       <span class="c"># it reads images</span>
+reasoning = true    <span class="c"># it thinks; /reasoning picks the effort</span>
+tools = true
+
+<span class="c"># optional, USD per million tokens: bise then shows the cost</span>
+input_price = 3.0
+output_price = 15.0</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>the context matters: bise compacts a conversation before it fills the window. a window set too large ends in an error from the server instead.</p>
+<h2 id="gateways-behind-a-login"><a class="anchor" href="#gateways-behind-a-login" aria-hidden="true">#</a>gateways behind a login</h2>
+<p>some gateways want a short-lived token or extra headers, the way Claude Code uses <code>apiKeyHelper</code> and <code>ANTHROPIC_CUSTOM_HEADERS</code>:</p>
+<div class="code"><div class="file">~/.bise/config.toml</div><div class="box"><pre><code class="lang-toml">[providers.gateway]
+name = &quot;Company gateway&quot;
+api = &quot;anthropic&quot;
+base_url = &quot;https://gateway.example.com/v1&quot;
+key_env = &quot;&quot;
+key_command = &quot;my-tool auth token&quot;     <span class="c"># its output is the key, run before every call</span>
+headers_env = &quot;GATEWAY_HEADERS&quot;        <span class="c"># one &quot;Name: value&quot; per line</span>
+reasoning = true</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<div class="code"><div class="box"><pre><code class="lang-sh">export GATEWAY_HEADERS=&quot;x-team: platform&quot;</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>the key from <code>key_command</code> goes out both as the API's own header and as <code>Authorization: Bearer</code>. a command that fails or prints nothing stops the call with one line that names it. write <code>key_command</code> on one line, with no <code>&quot;</code> or <code>\</code> (single quotes work).</p>
+<p>LiteLLM also serves Anthropic's API (<code>/v1/messages</code>), so the same LiteLLM works with <code>api = &quot;anthropic&quot;</code> when you want Claude's thinking blocks kept as they are.</p>
+<h2 id="local-models"><a class="anchor" href="#local-models" aria-hidden="true">#</a>local models</h2>
+<p>Ollama (<code>ollama/&lt;model&gt;</code>, on <code>localhost:11434</code>) and LM Studio (<code>lmstudio/&lt;model&gt;</code>, on <code>localhost:1234</code>) are built in and need no key:</p>
+<div class="code"><div class="box"><pre><code class="lang-sh">bise config set main ollama/qwen3:32b</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>another local server (vLLM, llama.cpp, ...):</p>
+<div class="code"><div class="file">~/.bise/config.toml</div><div class="box"><pre><code class="lang-toml">[providers.vllm]
+name = &quot;vLLM&quot;
+base_url = &quot;http://localhost:8000/v1&quot;
+key_env = &quot;&quot;
+context = 32768</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<h3 id="a-slow-server-idle-timeout-sec"><a class="anchor" href="#a-slow-server-idle-timeout-sec" aria-hidden="true">#</a>a slow server: idle_timeout_sec</h3>
+<p>bise streams every reply and waits at most 90 s for the server to send something: the first byte, then each next piece. a local model on a slow machine can take longer than that to read a long prompt, and a gateway can hold a request while it queues. then bise retries, and the error says:</p>
+<div class="code"><div class="box"><pre><code class="lang-text">no answer from localhost:11434 in 90 s (timeout) — a slow model or gateway? raise idle_timeout_sec under [providers.ollama] in ~/.bise/config.toml</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>raise it for that provider only (seconds, 1 to 86400):</p>
+<div class="code"><div class="file">~/.bise/config.toml</div><div class="box"><pre><code class="lang-toml">[providers.ollama]
+idle_timeout_sec = 600</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>it also works for one model (<code>[models.&quot;ollama/qwen3:32b&quot;]</code>), and a lower value makes a stuck gateway fail sooner. it limits silence, not the whole reply: a long answer that keeps coming is never cut.</p>
+<h2 id="change-a-built-in-provider"><a class="anchor" href="#change-a-built-in-provider" aria-hidden="true">#</a>change a built-in provider</h2>
+<p>the same tables change a built-in provider or model, key by key. OpenAI through a proxy:</p>
+<div class="code"><div class="file">~/.bise/config.toml</div><div class="box"><pre><code class="lang-toml">[providers.openai]
+base_url = &quot;https://openai-proxy.example.com/v1&quot;</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>the built-in list, with every key it takes, is <a href="https://github.com/gvergnaud/bise/blob/main/rust/catalog/models.toml" rel="noopener">models.toml</a>; its header explains each one.</p>
+<h2 id="when-something-is-wrong"><a class="anchor" href="#when-something-is-wrong" aria-hidden="true">#</a>when something is wrong</h2>
+<ul><li><code>bise models &lt;id&gt;</code> shows the provider as bise reads it, its models and where the key comes from. an unknown key or a wrong type in config.toml shows there as a warning.</li><li><code>bise auth check &lt;id&gt;</code> makes one tiny call and says what failed.</li><li><code>unknown provider &#x27;x&#x27;</code>: the part before the first <code>/</code> of the model name has no <code>[providers.x]</code> table.</li></ul>
+<h2 id="coming-from-opencode"><a class="anchor" href="#coming-from-opencode" aria-hidden="true">#</a>coming from OpenCode</h2>
+<div class="table"><table><thead><tr><th>OpenCode <code>provider.&lt;id&gt;</code></th><th>bise <code>[providers.&lt;id&gt;]</code></th></tr></thead><tbody><tr><td><code>options.baseURL</code></td><td><code>base_url</code></td></tr><tr><td><code>options.apiKey</code></td><td><code>bise login &lt;id&gt;</code> (saved in <code>~/.bise/auth.json</code>)</td></tr><tr><td><code>env</code></td><td><code>key_env</code></td></tr><tr><td><code>npm: &quot;@ai-sdk/openai-compatible&quot;</code></td><td><code>api = &quot;openai-chat&quot;</code></td></tr><tr><td><code>npm: &quot;@ai-sdk/anthropic&quot;</code></td><td><code>api = &quot;anthropic&quot;</code></td></tr><tr><td><code>models.&lt;name&gt;.limit.context</code> / <code>.output</code></td><td><code>[models.&quot;&lt;id&gt;/&lt;name&gt;&quot;] context</code> / <code>max_output</code></td></tr><tr><td><code>whitelist</code> / <code>blacklist</code></td><td>not needed: any <code>&lt;id&gt;/&lt;model&gt;</code> works</td></tr><tr><td><code>options.chunkTimeout</code> / <code>headerTimeout</code> (ms)</td><td><code>idle_timeout_sec</code> (seconds, one limit for both)</td></tr><tr><td><code>options.timeout</code> (the whole request)</td><td>none: bise never cuts a reply that keeps coming</td></tr></tbody></table></div>
+<p>config.toml never holds a key: it goes in <code>~/.bise/auth.json</code> (<code>bise login</code>), in the environment (<code>key_env</code>), or comes from a command (<code>key_command</code>).</p>
+    </article>
+    <nav class="pn"><a class="prev" href="/docs/models"><span>previous</span>models and roles</a><a class="next" href="/docs/agents"><span>next</span>main and the agents</a></nav>
+    <footer>
+      <p>for agents: <a href="/docs/gateways.md">bise.dev/docs/gateways.md</a></p>
+      <p><a href="https://github.com/gvergnaud/bise/blob/main/site/docs/gateways.md">edit this page on GitHub</a></p>
+    </footer>
+  </main>
+  <aside class="toc"><div class="toch">on this page</div><ul><li class="l2"><a href="#litellm-in-three-steps">LiteLLM in three steps</a></li><li class="l2"><a href="#the-provider-table">the provider table</a></li><li class="l2"><a href="#model-limits">model limits</a></li><li class="l2"><a href="#gateways-behind-a-login">gateways behind a login</a></li><li class="l2"><a href="#local-models">local models</a></li><li class="l3"><a href="#a-slow-server-idle-timeout-sec">a slow server: idle_timeout_sec</a></li><li class="l2"><a href="#change-a-built-in-provider">change a built-in provider</a></li><li class="l2"><a href="#when-something-is-wrong">when something is wrong</a></li><li class="l2"><a href="#coming-from-opencode">coming from OpenCode</a></li></ul></aside>
+</div>
+<script src="/docs/docs.js" defer></script>
+</body>
+</html>

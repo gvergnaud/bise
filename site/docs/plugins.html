@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>plugins and MCP · bise docs</title>
+<meta name="description" content="a plugin is a folder with skills and MCP servers. bise loads it in every agent, local stdio servers and remote ones, with their logins.">
+<link rel="canonical" href="https://bise.dev/docs/plugins">
+<meta name="theme-color" content="#f2ede2">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="alternate" type="text/markdown" href="/docs/plugins.md">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="bise">
+<meta property="og:url" content="https://bise.dev/docs/plugins">
+<meta property="og:title" content="plugins and MCP · bise docs">
+<meta property="og:description" content="a plugin is a folder with skills and MCP servers. bise loads it in every agent, local stdio servers and remote ones, with their logins.">
+<meta property="og:image" content="https://bise.dev/og.png?v=paper">
+<meta name="twitter:card" content="summary_large_image">
+<script>{ const q = location.search; let d = null; try { d = localStorage.getItem('bise-theme'); } catch {} if (/[?&]dark\b/.test(q) || (!/[?&]light\b/.test(q) && (d ?? (matchMedia('(prefers-color-scheme: dark)').matches ? '1' : '0')) === '1')) document.documentElement.classList.add('pd'); }</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Caveat:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/docs/docs.css">
+</head>
+<body>
+<header class="top">
+  <button class="menu" type="button" aria-label="the pages" aria-expanded="false">≡</button>
+  <a class="logo" href="/">bise <span class="acc">:*</span></a>
+  <a class="docs" href="/docs">docs</a>
+  <div class="search">
+    <input type="search" placeholder="/ search" aria-label="search the docs" autocomplete="off" spellcheck="false">
+    <div class="results" hidden></div>
+  </div>
+  <nav>
+    <a href="https://github.com/gvergnaud/bise">GitHub</a>
+    <button id="theme" type="button" title="light / dark">◐</button>
+  </nav>
+</header>
+<div class="wrap">
+  <aside class="side"><nav aria-label="the docs">
+<div class="grp">get started</div><ul>
+<li><a href="/docs">what bise is</a></li>
+<li><a href="/docs/install">install and first run</a></li>
+</ul>
+<div class="grp">models</div><ul>
+<li><a href="/docs/providers">providers and keys</a></li>
+<li><a href="/docs/models">models and roles</a></li>
+<li><a href="/docs/gateways">gateways and local models</a></li>
+</ul>
+<div class="grp">using bise</div><ul>
+<li><a href="/docs/agents">main and the agents</a></li>
+<li><a href="/docs/approvals">approvals</a></li>
+<li><a href="/docs/flow">landing work</a></li>
+<li><a href="/docs/voice">voice</a></li>
+<li><a href="/docs/computer-use">computer use</a></li>
+</ul>
+<div class="grp">extend</div><ul>
+<li><a href="/docs/plugins" class="here" aria-current="page">plugins and MCP</a></li>
+<li><a href="/docs/skills">instructions and skills</a></li>
+</ul>
+<div class="grp">reference</div><ul>
+<li><a href="/docs/config">config.toml</a></li>
+<li><a href="/docs/cli">the bise command</a></li>
+<li><a href="/docs/keys">keys and commands</a></li>
+<li><a href="/docs/troubleshooting">troubleshooting</a></li>
+<li><a href="/docs/updates">updates</a></li>
+</ul>
+  </nav></aside>
+  <main>
+    <article>
+      <div class="head">
+        <h1>plugins and MCP</h1>
+        <button class="copymd" type="button" data-md="/docs/plugins.md">copy as markdown</button>
+      </div>
+      <p class="lede">a plugin is a folder with skills and MCP servers. bise loads it in every agent, local stdio servers and remote ones, with their logins.</p>
+<p>bise loads <a href="https://agent-plugins.org/specification" rel="noopener">Agent Plugins 1.0</a>: a folder with a <code>plugin.json</code>, an optional <code>skills/</code> folder and an optional <code>mcp.json</code>. the same plugin works in every agent.</p>
+<h2 id="where-plugins-live"><a class="anchor" href="#where-plugins-live" aria-hidden="true">#</a>where plugins live</h2>
+<div class="table"><table><thead><tr><th>folder</th><th>for</th></tr></thead><tbody><tr><td><code>~/.agents/plugins/&lt;name&gt;/</code></td><td>you, in every repo</td></tr><tr><td><code>&lt;repo&gt;/.agents/plugins/&lt;name&gt;/</code></td><td>this repo only. it wins over a plugin of the same name in your folder</td></tr></tbody></table></div>
+<p>a plugin folder:</p>
+<div class="code"><div class="box"><pre><code class="lang-text">my-plugin/
+  plugin.json
+  skills/
+    review/SKILL.md
+  mcp.json</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<div class="code"><div class="file">plugin.json</div><div class="box"><pre><code class="lang-json">{
+  &quot;$schema&quot;: &quot;https://agent-plugins.org/schemas/1.0.0/plugin.schema.json&quot;,
+  &quot;name&quot;: &quot;my-plugin&quot;,
+  &quot;version&quot;: &quot;0.1.0&quot;,
+  &quot;description&quot;: &quot;what it gives the agents&quot;
+}</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>its skills show as <code>my-plugin:review</code>, and its MCP tools as <code>tools.my_plugin.&lt;tool&gt;</code>.</p>
+<h2 id="see-and-change-them"><a class="anchor" href="#see-and-change-them" aria-hidden="true">#</a>see and change them</h2>
+<div class="code"><div class="box"><pre><code class="lang-sh">bise plugins                    <span class="c"># every plugin, its state, and what&#x27;s wrong with it</span>
+bise plugins disable my-plugin
+bise plugins enable my-plugin</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>in bise, <code class="key">/plugins</code> does the same. the open agents pick up a change at their next idle.</p>
+<h2 id="mcp-servers"><a class="anchor" href="#mcp-servers" aria-hidden="true">#</a>MCP servers</h2>
+<p><code>mcp.json</code> lists the servers. it takes the same shape as Claude Code's, Cursor's and Vibe's <code>.mcp.json</code>, so a file copied from them works as it is.</p>
+<h3 id="local-servers-stdio"><a class="anchor" href="#local-servers-stdio" aria-hidden="true">#</a>local servers (stdio)</h3>
+<div class="code"><div class="file">mcp.json</div><div class="box"><pre><code class="lang-json">{
+  &quot;mcpServers&quot;: {
+    &quot;files&quot;: {
+      &quot;command&quot;: &quot;npx&quot;,
+      &quot;args&quot;: [&quot;-y&quot;, &quot;@modelcontextprotocol/server-filesystem&quot;, &quot;${PLUGIN_ROOT}/data&quot;],
+      &quot;env&quot;: { &quot;LOG_LEVEL&quot;: &quot;warn&quot; }
+    }
+  }
+}</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<ul><li><code>command</code> is a program on your <code>PATH</code>, or <code>./x</code> inside the plugin.</li><li><code>${PLUGIN_ROOT}</code> is the plugin's folder; <code>${PLUGIN_DATA}</code> a folder of its own that survives updates, <code>~/.bend-harness/plugin-data/&lt;name&gt;/</code>.</li><li>a server gets your environment, plus <code>PLUGIN_ROOT</code>, <code>PLUGIN_DATA</code> and its <code>env</code>.</li></ul>
+<h3 id="remote-servers"><a class="anchor" href="#remote-servers" aria-hidden="true">#</a>remote servers</h3>
+<div class="code"><div class="file">mcp.json</div><div class="box"><pre><code class="lang-json">{
+  &quot;mcpServers&quot;: {
+    &quot;linear&quot;: { &quot;type&quot;: &quot;http&quot;, &quot;url&quot;: &quot;https://mcp.linear.app/mcp&quot; },
+    &quot;internal&quot;: {
+      &quot;type&quot;: &quot;http&quot;,
+      &quot;url&quot;: &quot;https://mcp.example.com/mcp&quot;,
+      &quot;headers&quot;: { &quot;Authorization&quot;: &quot;Bearer ${INTERNAL_MCP_TOKEN}&quot; }
+    },
+    &quot;legacy&quot;: { &quot;type&quot;: &quot;sse&quot;, &quot;url&quot;: &quot;https://example.com/sse&quot; }
+  }
+}</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p><code>http</code> (or <code>streamable-http</code>) is Streamable HTTP; <code>sse</code> the older HTTP+SSE. <code>${VAR}</code> and <code>${VAR:-default}</code> come from your environment when the server connects. a variable that isn't set leaves that server out, and <code>bise plugins</code> says which.</p>
+<h3 id="logging-in-oauth"><a class="anchor" href="#logging-in-oauth" aria-hidden="true">#</a>logging in (OAuth)</h3>
+<p>a remote server with no <code>Authorization</code> header can log you in with your browser:</p>
+<div class="code"><div class="box"><pre><code class="lang-sh">bise plugins login            <span class="c"># the servers that can log in</span>
+bise plugins login linear
+bise plugins logout linear    <span class="c"># forget its tokens</span></code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>in bise: <code class="key">/plugins login</code>. the server's tools reach your agents as soon as you're logged in, no restart. the tokens stay in <code>~/.bise/secrets/mcp-oauth/</code>, readable only by you; they are never printed or sent to a model.</p>
+<p>with bise on another machine (SSH), log in in your local browser. the last page won't load: copy its address, then paste it into <code>bise plugins login</code>, or run <code class="key">/plugins login linear &lt;address&gt;</code>.</p>
+<p>for a server with no dynamic registration (GitHub, Slack), give the client in <code>mcp.json</code>:</p>
+<div class="code"><div class="file">mcp.json</div><div class="box"><pre><code class="lang-json">{
+  &quot;mcpServers&quot;: {
+    &quot;github&quot;: {
+      &quot;type&quot;: &quot;http&quot;,
+      &quot;url&quot;: &quot;https://api.githubcopilot.com/mcp/&quot;,
+      &quot;oauth&quot;: { &quot;clientId&quot;: &quot;your-client-id&quot;, &quot;callbackPort&quot;: 8765 }
+    }
+  }
+}</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<h3 id="server-options"><a class="anchor" href="#server-options" aria-hidden="true">#</a>server options</h3>
+<p>these keys work on any server, local or remote (Codex's names):</p>
+<div class="table"><table><thead><tr><th>key</th><th>what it does</th><th>default</th></tr></thead><tbody><tr><td><code>startup_timeout_sec</code></td><td>start, handshake and first tool list</td><td>30</td></tr><tr><td><code>tool_timeout_sec</code></td><td>one call</td><td>300</td></tr><tr><td><code>enabled_tools</code></td><td>only these tools</td><td>all</td></tr><tr><td><code>disabled_tools</code></td><td>never these tools</td><td>none</td></tr><tr><td><code>enabled</code></td><td><code>false</code> leaves the server out</td><td>true</td></tr></tbody></table></div>
+<h2 id="bring-your-servers-from-claude-code-or-codex"><a class="anchor" href="#bring-your-servers-from-claude-code-or-codex" aria-hidden="true">#</a>bring your servers from Claude Code or Codex</h2>
+<div class="code"><div class="box"><pre><code class="lang-sh">bise plugins import-mcp my-servers --dry-run &lt; servers.json
+bise plugins import-mcp my-servers &lt; servers.json</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>it turns a list of MCP servers (Claude Code's or Codex's) into one plugin named <code>my-servers</code>. it keeps remote servers, their headers and their login clients, and prints host and header names, never a value.</p>
+<h2 id="how-agents-use-the-tools"><a class="anchor" href="#how-agents-use-the-tools" aria-hidden="true">#</a>how agents use the tools</h2>
+<p>MCP tools are not all put in the model's prompt. an agent searches for the tool it needs, reads its description, and calls it from a small TypeScript program. so many servers cost few tokens until they are used.</p>
+<h2 id="not-supported-yet"><a class="anchor" href="#not-supported-yet" aria-hidden="true">#</a>not supported yet</h2>
+<p>hooks, agents, knowledge, views, <code>connectors.json</code> and <code>libraries.json</code> of the spec are listed by <code>bise plugins</code> as not supported; the rest of the plugin still loads.</p>
+    </article>
+    <nav class="pn"><a class="prev" href="/docs/computer-use"><span>previous</span>computer use</a><a class="next" href="/docs/skills"><span>next</span>instructions and skills</a></nav>
+    <footer>
+      <p>for agents: <a href="/docs/plugins.md">bise.dev/docs/plugins.md</a></p>
+      <p><a href="https://github.com/gvergnaud/bise/blob/main/site/docs/plugins.md">edit this page on GitHub</a></p>
+    </footer>
+  </main>
+  <aside class="toc"><div class="toch">on this page</div><ul><li class="l2"><a href="#where-plugins-live">where plugins live</a></li><li class="l2"><a href="#see-and-change-them">see and change them</a></li><li class="l2"><a href="#mcp-servers">MCP servers</a></li><li class="l3"><a href="#local-servers-stdio">local servers (stdio)</a></li><li class="l3"><a href="#remote-servers">remote servers</a></li><li class="l3"><a href="#logging-in-oauth">logging in (OAuth)</a></li><li class="l3"><a href="#server-options">server options</a></li><li class="l2"><a href="#bring-your-servers-from-claude-code-or-codex">bring your servers from Claude Code or Codex</a></li><li class="l2"><a href="#how-agents-use-the-tools">how agents use the tools</a></li><li class="l2"><a href="#not-supported-yet">not supported yet</a></li></ul></aside>
+</div>
+<script src="/docs/docs.js" defer></script>
+</body>
+</html>

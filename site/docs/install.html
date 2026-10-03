@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>install and first run · bise docs</title>
+<meta name="description" content="one command installs bise. the first run asks for one thing, the model, and only when it finds no key.">
+<link rel="canonical" href="https://bise.dev/docs/install">
+<meta name="theme-color" content="#f2ede2">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="alternate" type="text/markdown" href="/docs/install.md">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="bise">
+<meta property="og:url" content="https://bise.dev/docs/install">
+<meta property="og:title" content="install and first run · bise docs">
+<meta property="og:description" content="one command installs bise. the first run asks for one thing, the model, and only when it finds no key.">
+<meta property="og:image" content="https://bise.dev/og.png?v=paper">
+<meta name="twitter:card" content="summary_large_image">
+<script>{ const q = location.search; let d = null; try { d = localStorage.getItem('bise-theme'); } catch {} if (/[?&]dark\b/.test(q) || (!/[?&]light\b/.test(q) && (d ?? (matchMedia('(prefers-color-scheme: dark)').matches ? '1' : '0')) === '1')) document.documentElement.classList.add('pd'); }</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Caveat:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/docs/docs.css">
+</head>
+<body>
+<header class="top">
+  <button class="menu" type="button" aria-label="the pages" aria-expanded="false">≡</button>
+  <a class="logo" href="/">bise <span class="acc">:*</span></a>
+  <a class="docs" href="/docs">docs</a>
+  <div class="search">
+    <input type="search" placeholder="/ search" aria-label="search the docs" autocomplete="off" spellcheck="false">
+    <div class="results" hidden></div>
+  </div>
+  <nav>
+    <a href="https://github.com/gvergnaud/bise">GitHub</a>
+    <button id="theme" type="button" title="light / dark">◐</button>
+  </nav>
+</header>
+<div class="wrap">
+  <aside class="side"><nav aria-label="the docs">
+<div class="grp">get started</div><ul>
+<li><a href="/docs">what bise is</a></li>
+<li><a href="/docs/install" class="here" aria-current="page">install and first run</a></li>
+</ul>
+<div class="grp">models</div><ul>
+<li><a href="/docs/providers">providers and keys</a></li>
+<li><a href="/docs/models">models and roles</a></li>
+<li><a href="/docs/gateways">gateways and local models</a></li>
+</ul>
+<div class="grp">using bise</div><ul>
+<li><a href="/docs/agents">main and the agents</a></li>
+<li><a href="/docs/approvals">approvals</a></li>
+<li><a href="/docs/flow">landing work</a></li>
+<li><a href="/docs/voice">voice</a></li>
+<li><a href="/docs/computer-use">computer use</a></li>
+</ul>
+<div class="grp">extend</div><ul>
+<li><a href="/docs/plugins">plugins and MCP</a></li>
+<li><a href="/docs/skills">instructions and skills</a></li>
+</ul>
+<div class="grp">reference</div><ul>
+<li><a href="/docs/config">config.toml</a></li>
+<li><a href="/docs/cli">the bise command</a></li>
+<li><a href="/docs/keys">keys and commands</a></li>
+<li><a href="/docs/troubleshooting">troubleshooting</a></li>
+<li><a href="/docs/updates">updates</a></li>
+</ul>
+  </nav></aside>
+  <main>
+    <article>
+      <div class="head">
+        <h1>install and first run</h1>
+        <button class="copymd" type="button" data-md="/docs/install.md">copy as markdown</button>
+      </div>
+      <p class="lede">one command installs bise. the first run asks for one thing, the model, and only when it finds no key.</p>
+<h2 id="install"><a class="anchor" href="#install" aria-hidden="true">#</a>install</h2>
+<div class="code"><div class="box"><pre><code class="lang-sh">curl -fsSL https://bise.dev/install | sh</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>the installer picks the build for your Mac (Apple silicon or Intel), checks its sha256, and puts it in <code>~/.local/share/bise</code>. the <code>bise</code> command goes in <code>~/.local/bin</code>. no sudo.</p>
+<p>open a new terminal if <code>bise</code> is not found yet, or run <code>~/.local/bin/bise</code>. then check:</p>
+<div class="code"><div class="box"><pre><code class="lang-sh">bise --version</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<aside class="callout note"><span class="label">note</span><p><code>~/.local/bin</code> must be on your <code>PATH</code>. the installer adds it to your shell's rc file unless you pass <code>--no-modify-path</code>.</p></aside>
+<h3 id="let-a-coding-agent-do-it"><a class="anchor" href="#let-a-coding-agent-do-it" aria-hidden="true">#</a>let a coding agent do it</h3>
+<p>if you use Claude Code, Codex or another coding agent, paste this into it:</p>
+<div class="code"><div class="box"><pre><code class="lang-text">read https://bise.dev/setup.md and set up bise for me</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>it installs bise, then runs <code>bise setup scan</code>, which lists what your Mac already has (the API keys and where they are, your agent's model, its instructions file, skills and MCP servers) without ever printing a key. it shows you one short plan and waits for your yes before it writes anything.</p>
+<h2 id="first-run"><a class="anchor" href="#first-run" aria-hidden="true">#</a>first run</h2>
+<p>go to a repo and start bise:</p>
+<div class="code"><div class="box"><pre><code class="lang-sh">cd your-repo
+bise</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>the first run has up to four short screens:</p>
+<ol><li><strong>hello</strong>: any key goes on.</li><li><strong>the theme</strong>: light or dark, picked from your terminal's background. <code class="key">/theme</code> changes it later.</li><li><strong>the model</strong>: only when bise found no key. you pick a provider, a model, and paste its key. bise checks it with one tiny call before it saves it. see <a href="/docs/providers">providers and keys</a>.</li><li><strong>how it works</strong>: three lines about main, the agents and the inbox.</li></ol>
+<p>when bise finds keys in your environment (<code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, ...), it skips the model screen and uses them. <code class="key">/welcome</code> replays these screens.</p>
+<p>the model you pick becomes main's. the agents use the same one unless you change it, and the small jobs (titles, summaries) get a cheap model of the same provider. see <a href="/docs/models">models and roles</a>.</p>
+<h2 id="what-goes-where"><a class="anchor" href="#what-goes-where" aria-hidden="true">#</a>what goes where</h2>
+<div class="table"><table><thead><tr><th>path</th><th>what it holds</th></tr></thead><tbody><tr><td><code>~/.local/share/bise</code></td><td>the app: one folder per version, <code>current</code> points to the one in use</td></tr><tr><td><code>~/.local/bin/bise</code></td><td>the command</td></tr><tr><td><code>~/.bise/config.toml</code></td><td>your settings: models, approvals, voice. see <a href="/docs/config">config.toml</a></td></tr><tr><td><code>~/.bise/auth.json</code></td><td>your saved keys and sign-ins. only you can read it</td></tr><tr><td><code>~/.bise/hubs/</code></td><td>one folder per repo where bise runs: its agents and their threads</td></tr><tr><td><code>~/.bise/sessions/</code></td><td>the conversation logs</td></tr></tbody></table></div>
+<p><code>BISE_HOME</code> moves <code>~/.bise</code> somewhere else.</p>
+<h2 id="ghostty"><a class="anchor" href="#ghostty" aria-hidden="true">#</a>Ghostty</h2>
+<p>in Ghostty, a few keys need one line each in Ghostty's config before they reach bise: <code class="key">cmd+v</code> (paste an image), <code class="key">cmd+f</code>, <code class="key">cmd+k</code>, <code class="key">cmd+a</code> and <code class="key">cmd+↑↓</code>. <code class="key">/setup</code> offers them, or:</p>
+<div class="code"><div class="box"><pre><code class="lang-sh">bise setup ghostty --dry-run   <span class="c"># shows the change, writes nothing</span>
+bise setup ghostty             <span class="c"># adds the lines, after a backup of the file</span></code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<h2 id="uninstall"><a class="anchor" href="#uninstall" aria-hidden="true">#</a>uninstall</h2>
+<div class="code"><div class="box"><pre><code class="lang-sh">bise uninstall           <span class="c"># removes the app, keeps ~/.bise</span>
+bise uninstall --purge   <span class="c"># also removes ~/.bise: your settings, keys and threads</span></code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<aside class="callout careful"><span class="label">▲ careful</span><p><code>--purge</code> deletes your saved keys, sign-ins and every agent's thread.</p></aside>
+    </article>
+    <nav class="pn"><a class="prev" href="/docs"><span>previous</span>what bise is</a><a class="next" href="/docs/providers"><span>next</span>providers and keys</a></nav>
+    <footer>
+      <p>for agents: <a href="/docs/install.md">bise.dev/docs/install.md</a></p>
+      <p><a href="https://github.com/gvergnaud/bise/blob/main/site/docs/install.md">edit this page on GitHub</a></p>
+    </footer>
+  </main>
+  <aside class="toc"><div class="toch">on this page</div><ul><li class="l2"><a href="#install">install</a></li><li class="l3"><a href="#let-a-coding-agent-do-it">let a coding agent do it</a></li><li class="l2"><a href="#first-run">first run</a></li><li class="l2"><a href="#what-goes-where">what goes where</a></li><li class="l2"><a href="#ghostty">Ghostty</a></li><li class="l2"><a href="#uninstall">uninstall</a></li></ul></aside>
+</div>
+<script src="/docs/docs.js" defer></script>
+</body>
+</html>

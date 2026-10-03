@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>troubleshooting · bise docs</title>
+<meta name="description" content="bise doctor checks your Mac, the install, your keys and models in one command. start there.">
+<link rel="canonical" href="https://bise.dev/docs/troubleshooting">
+<meta name="theme-color" content="#f2ede2">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="alternate" type="text/markdown" href="/docs/troubleshooting.md">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="bise">
+<meta property="og:url" content="https://bise.dev/docs/troubleshooting">
+<meta property="og:title" content="troubleshooting · bise docs">
+<meta property="og:description" content="bise doctor checks your Mac, the install, your keys and models in one command. start there.">
+<meta property="og:image" content="https://bise.dev/og.png?v=paper">
+<meta name="twitter:card" content="summary_large_image">
+<script>{ const q = location.search; let d = null; try { d = localStorage.getItem('bise-theme'); } catch {} if (/[?&]dark\b/.test(q) || (!/[?&]light\b/.test(q) && (d ?? (matchMedia('(prefers-color-scheme: dark)').matches ? '1' : '0')) === '1')) document.documentElement.classList.add('pd'); }</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Caveat:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/docs/docs.css">
+</head>
+<body>
+<header class="top">
+  <button class="menu" type="button" aria-label="the pages" aria-expanded="false">≡</button>
+  <a class="logo" href="/">bise <span class="acc">:*</span></a>
+  <a class="docs" href="/docs">docs</a>
+  <div class="search">
+    <input type="search" placeholder="/ search" aria-label="search the docs" autocomplete="off" spellcheck="false">
+    <div class="results" hidden></div>
+  </div>
+  <nav>
+    <a href="https://github.com/gvergnaud/bise">GitHub</a>
+    <button id="theme" type="button" title="light / dark">◐</button>
+  </nav>
+</header>
+<div class="wrap">
+  <aside class="side"><nav aria-label="the docs">
+<div class="grp">get started</div><ul>
+<li><a href="/docs">what bise is</a></li>
+<li><a href="/docs/install">install and first run</a></li>
+</ul>
+<div class="grp">models</div><ul>
+<li><a href="/docs/providers">providers and keys</a></li>
+<li><a href="/docs/models">models and roles</a></li>
+<li><a href="/docs/gateways">gateways and local models</a></li>
+</ul>
+<div class="grp">using bise</div><ul>
+<li><a href="/docs/agents">main and the agents</a></li>
+<li><a href="/docs/approvals">approvals</a></li>
+<li><a href="/docs/flow">landing work</a></li>
+<li><a href="/docs/voice">voice</a></li>
+<li><a href="/docs/computer-use">computer use</a></li>
+</ul>
+<div class="grp">extend</div><ul>
+<li><a href="/docs/plugins">plugins and MCP</a></li>
+<li><a href="/docs/skills">instructions and skills</a></li>
+</ul>
+<div class="grp">reference</div><ul>
+<li><a href="/docs/config">config.toml</a></li>
+<li><a href="/docs/cli">the bise command</a></li>
+<li><a href="/docs/keys">keys and commands</a></li>
+<li><a href="/docs/troubleshooting" class="here" aria-current="page">troubleshooting</a></li>
+<li><a href="/docs/updates">updates</a></li>
+</ul>
+  </nav></aside>
+  <main>
+    <article>
+      <div class="head">
+        <h1>troubleshooting</h1>
+        <button class="copymd" type="button" data-md="/docs/troubleshooting.md">copy as markdown</button>
+      </div>
+      <p class="lede">bise doctor checks your Mac, the install, your keys and models in one command. start there.</p>
+<h2 id="bise-doctor"><a class="anchor" href="#bise-doctor" aria-hidden="true">#</a>bise doctor</h2>
+<div class="code"><div class="box"><pre><code class="lang-sh">bise doctor</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>it checks this Mac, the install, your keys, each role's model and the running bise, without the network and without printing a key. each line is <code>✓</code> (fine) or <code>?</code> (worth a look), and every <code>?</code> says how to fix it:</p>
+<div class="code"><div class="box"><pre><code class="lang-text">checking your setup
+
+✓ macOS       macOS 15.5 arm64
+✓ bise        bise 3f2a91c0 (darwin-arm64) · ~/.local/share/bise/versions/3f2a91c0/bise
+✓ home        ~/.bise (default): config.toml ✓, auth.json ✓, hubs/ ✓, sessions/ ✓
+✓ git         git version 2.50.1
+✓ github      gh logged in; this repo&#x27;s PRs: github.com/you/your-repo
+✓ keys        anthropic (auth.json), mistral (env MISTRAL_API_KEY)
+✓ main        anthropic/claude-opus-5-5 · high
+✓ agents      same as main
+✓ small jobs  anthropic/claude-haiku-4-5 · titles, summaries
+✓ voice       mistral/voxtral-transcribe-3 · language auto · listens when you talk
+? PATH        `bise` is not on PATH
+              fix: add ~/.local/bin to PATH (the installer does it; open a new terminal)
+
+? 1 thing to check. it says how.</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p><code>bise doctor --verbose</code> says more on each line.</p>
+<h2 id="common-problems"><a class="anchor" href="#common-problems" aria-hidden="true">#</a>common problems</h2>
+<h3 id="bise-command-not-found"><a class="anchor" href="#bise-command-not-found" aria-hidden="true">#</a><code>bise: command not found</code></h3>
+<p><code>~/.local/bin</code> isn't on your <code>PATH</code> yet. open a new terminal, or run <code>~/.local/bin/bise</code>. the installer adds the line to your shell's rc file unless you passed <code>--no-modify-path</code>.</p>
+<h3 id="a-key-doesnt-work"><a class="anchor" href="#a-key-doesnt-work" aria-hidden="true">#</a>a key doesn't work</h3>
+<div class="code"><div class="box"><pre><code class="lang-sh">bise providers               <span class="c"># where each key comes from</span>
+bise auth check anthropic    <span class="c"># one tiny call; says what failed</span></code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>a key saved in bise (<code>~/.bise/auth.json</code>) wins over the one in your environment. if you changed the key in your shell, <code>bise logout &lt;provider&gt;</code> drops the saved one. when the check says the account has no credit, it links the provider's billing page.</p>
+<h3 id="unknown-provider-x"><a class="anchor" href="#unknown-provider-x" aria-hidden="true">#</a><code>unknown provider &#x27;x&#x27;</code></h3>
+<p>the part before the first <code>/</code> of a model name must be a provider bise knows, or one you added under <code>[providers.x]</code> in config.toml. <code>bise models</code> lists them. see <a href="/docs/gateways">gateways and local models</a>.</p>
+<h3 id="no-answer-from-a-local-model-or-a-gateway"><a class="anchor" href="#no-answer-from-a-local-model-or-a-gateway" aria-hidden="true">#</a>no answer from a local model or a gateway</h3>
+<p><code>no answer from localhost:11434 in 90 s (timeout)</code> means the server sent nothing for 90 s. a local model reading a long prompt can take longer: raise <code>idle_timeout_sec</code> for that provider. see <a href="/docs/gateways#a-slow-server-idle_timeout_sec">a slow server</a>.</p>
+<h3 id="a-key-doesnt-reach-bise-in-ghostty"><a class="anchor" href="#a-key-doesnt-reach-bise-in-ghostty" aria-hidden="true">#</a>a key doesn't reach bise in Ghostty</h3>
+<p><code class="key">cmd+v</code> with an image, <code class="key">cmd+f</code>, <code class="key">cmd+k</code>, <code class="key">cmd+a</code> and <code class="key">cmd+↑↓</code> need one line each in Ghostty's config: <code>bise setup ghostty</code>, or <code class="key">/setup</code>.</p>
+<h3 id="a-remote-mcp-server-has-no-tools"><a class="anchor" href="#a-remote-mcp-server-has-no-tools" aria-hidden="true">#</a>a remote MCP server has no tools</h3>
+<p><code>bise plugins</code> (or <code class="key">/plugins</code>) shows each server's state. <code>needs a login</code>: run <code>bise plugins login &lt;server&gt;</code>. a header that uses an unset variable leaves the server out and names the variable.</p>
+<h3 id="an-agent-seems-stuck"><a class="anchor" href="#an-agent-seems-stuck" aria-hidden="true">#</a>an agent seems stuck</h3>
+<p>look for <code>?</code> in the panel: it may wait for you in the inbox (<code class="key">ctrl+1</code>). <code class="key">/interrupt</code> in its view stops its turn, and a message starts the next one. <code class="key">/stop &lt;agent&gt;</code> also takes its hands off Chrome and your apps.</p>
+<h2 id="logs"><a class="anchor" href="#logs" aria-hidden="true">#</a>logs</h2>
+<div class="code"><div class="box"><pre><code class="lang-sh">bise session show            <span class="c"># the newest session&#x27;s transcript</span>
+bise session show &lt;id&gt;       <span class="c"># one session (a prefix of its id works)</span>
+bise session show --context  <span class="c"># what the model sees now</span></code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<h2 id="still-stuck"><a class="anchor" href="#still-stuck" aria-hidden="true">#</a>still stuck</h2>
+<p>open an issue on <a href="https://github.com/gvergnaud/bise/issues" rel="noopener">GitHub</a> with the output of <code>bise doctor</code> and what you did. it never prints a key, so you can paste it as it is; check it holds no private path you'd rather keep.</p>
+    </article>
+    <nav class="pn"><a class="prev" href="/docs/keys"><span>previous</span>keys and commands</a><a class="next" href="/docs/updates"><span>next</span>updates</a></nav>
+    <footer>
+      <p>for agents: <a href="/docs/troubleshooting.md">bise.dev/docs/troubleshooting.md</a></p>
+      <p><a href="https://github.com/gvergnaud/bise/blob/main/site/docs/troubleshooting.md">edit this page on GitHub</a></p>
+    </footer>
+  </main>
+  <aside class="toc"><div class="toch">on this page</div><ul><li class="l2"><a href="#bise-doctor">bise doctor</a></li><li class="l2"><a href="#common-problems">common problems</a></li><li class="l3"><a href="#bise-command-not-found">bise: command not found</a></li><li class="l3"><a href="#a-key-doesnt-work">a key doesn't work</a></li><li class="l3"><a href="#unknown-provider-x">unknown provider &#x27;x&#x27;</a></li><li class="l3"><a href="#no-answer-from-a-local-model-or-a-gateway">no answer from a local model or a gateway</a></li><li class="l3"><a href="#a-key-doesnt-reach-bise-in-ghostty">a key doesn't reach bise in Ghostty</a></li><li class="l3"><a href="#a-remote-mcp-server-has-no-tools">a remote MCP server has no tools</a></li><li class="l3"><a href="#an-agent-seems-stuck">an agent seems stuck</a></li><li class="l2"><a href="#logs">logs</a></li><li class="l2"><a href="#still-stuck">still stuck</a></li></ul></aside>
+</div>
+<script src="/docs/docs.js" defer></script>
+</body>
+</html>

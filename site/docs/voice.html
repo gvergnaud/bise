@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>voice · bise docs</title>
+<meta name="description" content="ctrl+r dictates into the composer. ctrl+r twice starts voice mode, a spoken conversation with the agent in view.">
+<link rel="canonical" href="https://bise.dev/docs/voice">
+<meta name="theme-color" content="#f2ede2">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="alternate" type="text/markdown" href="/docs/voice.md">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="bise">
+<meta property="og:url" content="https://bise.dev/docs/voice">
+<meta property="og:title" content="voice · bise docs">
+<meta property="og:description" content="ctrl+r dictates into the composer. ctrl+r twice starts voice mode, a spoken conversation with the agent in view.">
+<meta property="og:image" content="https://bise.dev/og.png?v=paper">
+<meta name="twitter:card" content="summary_large_image">
+<script>{ const q = location.search; let d = null; try { d = localStorage.getItem('bise-theme'); } catch {} if (/[?&]dark\b/.test(q) || (!/[?&]light\b/.test(q) && (d ?? (matchMedia('(prefers-color-scheme: dark)').matches ? '1' : '0')) === '1')) document.documentElement.classList.add('pd'); }</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Caveat:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/docs/docs.css">
+</head>
+<body>
+<header class="top">
+  <button class="menu" type="button" aria-label="the pages" aria-expanded="false">≡</button>
+  <a class="logo" href="/">bise <span class="acc">:*</span></a>
+  <a class="docs" href="/docs">docs</a>
+  <div class="search">
+    <input type="search" placeholder="/ search" aria-label="search the docs" autocomplete="off" spellcheck="false">
+    <div class="results" hidden></div>
+  </div>
+  <nav>
+    <a href="https://github.com/gvergnaud/bise">GitHub</a>
+    <button id="theme" type="button" title="light / dark">◐</button>
+  </nav>
+</header>
+<div class="wrap">
+  <aside class="side"><nav aria-label="the docs">
+<div class="grp">get started</div><ul>
+<li><a href="/docs">what bise is</a></li>
+<li><a href="/docs/install">install and first run</a></li>
+</ul>
+<div class="grp">models</div><ul>
+<li><a href="/docs/providers">providers and keys</a></li>
+<li><a href="/docs/models">models and roles</a></li>
+<li><a href="/docs/gateways">gateways and local models</a></li>
+</ul>
+<div class="grp">using bise</div><ul>
+<li><a href="/docs/agents">main and the agents</a></li>
+<li><a href="/docs/approvals">approvals</a></li>
+<li><a href="/docs/flow">landing work</a></li>
+<li><a href="/docs/voice" class="here" aria-current="page">voice</a></li>
+<li><a href="/docs/computer-use">computer use</a></li>
+</ul>
+<div class="grp">extend</div><ul>
+<li><a href="/docs/plugins">plugins and MCP</a></li>
+<li><a href="/docs/skills">instructions and skills</a></li>
+</ul>
+<div class="grp">reference</div><ul>
+<li><a href="/docs/config">config.toml</a></li>
+<li><a href="/docs/cli">the bise command</a></li>
+<li><a href="/docs/keys">keys and commands</a></li>
+<li><a href="/docs/troubleshooting">troubleshooting</a></li>
+<li><a href="/docs/updates">updates</a></li>
+</ul>
+  </nav></aside>
+  <main>
+    <article>
+      <div class="head">
+        <h1>voice</h1>
+        <button class="copymd" type="button" data-md="/docs/voice.md">copy as markdown</button>
+      </div>
+      <p class="lede">ctrl+r dictates into the composer. ctrl+r twice starts voice mode, a spoken conversation with the agent in view.</p>
+<h2 id="dictation"><a class="anchor" href="#dictation" aria-hidden="true">#</a>dictation</h2>
+<p><code class="key">ctrl+r</code> records; any key stops and keeps the text in the composer, ready to edit and send. <code class="key">esc</code> or <code class="key">ctrl+c</code> stops and drops it.</p>
+<p>dictation needs a speech-to-text model, the <strong>voice</strong> role. with a Mistral or an OpenAI key, bise picks one for you. <code class="key">/voice</code> shows what is set and changes it: the model, the language, the voice.</p>
+<div class="table"><table><thead><tr><th>provider</th><th>models</th><th>key</th></tr></thead><tbody><tr><td>Mistral</td><td><code>mistral/voxtral-transcribe-3</code>, <code>mistral/voxtral-small-transcribe-3</code></td><td><code>MISTRAL_API_KEY</code></td></tr><tr><td>OpenAI</td><td><code>openai/gpt-transcribe</code>, <code>openai/gpt-4o-mini-transcribe</code>, <code>openai/gpt-4o-transcribe</code>, <code>openai/whisper-1</code></td><td><code>OPENAI_API_KEY</code></td></tr><tr><td>Groq</td><td><code>groq/whisper-large-v3-turbo</code>, <code>groq/whisper-large-v3</code></td><td><code>GROQ_API_KEY</code></td></tr><tr><td>ElevenLabs</td><td><code>elevenlabs/scribe_v2</code>, <code>elevenlabs/scribe_v1</code></td><td><code>ELEVENLABS_API_KEY</code></td></tr><tr><td>Deepgram</td><td><code>deepgram/nova-3</code></td><td><code>DEEPGRAM_API_KEY</code></td></tr></tbody></table></div>
+<p><code>bise models voice</code> lists them with the state of each key.</p>
+<h2 id="voice-mode"><a class="anchor" href="#voice-mode" aria-hidden="true">#</a>voice mode</h2>
+<p><code class="key">ctrl+r</code> twice starts voice mode: you talk with the agent in view, and it answers out loud.</p>
+<div class="table"><table><thead><tr><th>key</th><th>in voice mode</th></tr></thead><tbody><tr><td><code class="key">space</code></td><td>send now</td></tr><tr><td><code class="key">hold space</code></td><td>keep the floor, or cut in when it talks on speakers</td></tr><tr><td><code>m</code></td><td>mute</td></tr><tr><td><code class="key">tab</code></td><td>type instead</td></tr><tr><td><code class="key">esc</code></td><td>leave voice mode (<code class="key">ctrl+c</code> too)</td></tr></tbody></table></div>
+<p>with headphones it listens hands-free. on speakers you hold <code class="key">space</code> while you talk, so it doesn't hear itself. today only Mistral's voice model speaks, so voice mode needs a Mistral key.</p>
+<p>by default it reads aloud what needs you and what you asked. the first time, voice mode says who hears you: your audio goes to the speech-to-text provider, and the text it speaks goes to Mistral.</p>
+<h2 id="settings"><a class="anchor" href="#settings" aria-hidden="true">#</a>settings</h2>
+<p><code class="key">/voice</code> changes all of these. they live in <code>[voice]</code>:</p>
+<div class="code"><div class="file">~/.bise/config.toml</div><div class="box"><pre><code class="lang-toml">[roles]
+voice = &quot;mistral/voxtral-transcribe-3&quot;   <span class="c"># dictation&#x27;s model</span>
+
+[voice]
+language = &quot;fr&quot;                          <span class="c"># unset: detected</span>
+vocabulary = [&quot;bise&quot;, &quot;config.toml&quot;]     <span class="c"># words to spell right</span>
+listen = &quot;auto&quot;                          <span class="c"># auto (hands-free with headphones, hold on speakers), hands-free, hold</span>
+tts_voice = &quot;…&quot;                          <span class="c"># the voice it speaks with; unset: the default voice</span>
+speed = 1.0                              <span class="c"># 0.8 to 1.6</span>
+read_aloud = &quot;needs&quot;                     <span class="c"># needs (what needs you + what you asked), all, nothing</span>
+sounds = true</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p><code>BISE_VOICE_MODEL</code> sets the dictation model for one session.</p>
+    </article>
+    <nav class="pn"><a class="prev" href="/docs/flow"><span>previous</span>landing work</a><a class="next" href="/docs/computer-use"><span>next</span>computer use</a></nav>
+    <footer>
+      <p>for agents: <a href="/docs/voice.md">bise.dev/docs/voice.md</a></p>
+      <p><a href="https://github.com/gvergnaud/bise/blob/main/site/docs/voice.md">edit this page on GitHub</a></p>
+    </footer>
+  </main>
+  <aside class="toc"><div class="toch">on this page</div><ul><li class="l2"><a href="#dictation">dictation</a></li><li class="l2"><a href="#voice-mode">voice mode</a></li><li class="l2"><a href="#settings">settings</a></li></ul></aside>
+</div>
+<script src="/docs/docs.js" defer></script>
+</body>
+</html>

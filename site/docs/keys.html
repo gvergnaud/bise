@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>keys and commands · bise docs</title>
+<meta name="description" content="the keys and slash commands of bise. in the app, /help shows the essential ones and /shortcuts every one.">
+<link rel="canonical" href="https://bise.dev/docs/keys">
+<meta name="theme-color" content="#f2ede2">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="alternate" type="text/markdown" href="/docs/keys.md">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="bise">
+<meta property="og:url" content="https://bise.dev/docs/keys">
+<meta property="og:title" content="keys and commands · bise docs">
+<meta property="og:description" content="the keys and slash commands of bise. in the app, /help shows the essential ones and /shortcuts every one.">
+<meta property="og:image" content="https://bise.dev/og.png?v=paper">
+<meta name="twitter:card" content="summary_large_image">
+<script>{ const q = location.search; let d = null; try { d = localStorage.getItem('bise-theme'); } catch {} if (/[?&]dark\b/.test(q) || (!/[?&]light\b/.test(q) && (d ?? (matchMedia('(prefers-color-scheme: dark)').matches ? '1' : '0')) === '1')) document.documentElement.classList.add('pd'); }</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Caveat:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/docs/docs.css">
+</head>
+<body>
+<header class="top">
+  <button class="menu" type="button" aria-label="the pages" aria-expanded="false">≡</button>
+  <a class="logo" href="/">bise <span class="acc">:*</span></a>
+  <a class="docs" href="/docs">docs</a>
+  <div class="search">
+    <input type="search" placeholder="/ search" aria-label="search the docs" autocomplete="off" spellcheck="false">
+    <div class="results" hidden></div>
+  </div>
+  <nav>
+    <a href="https://github.com/gvergnaud/bise">GitHub</a>
+    <button id="theme" type="button" title="light / dark">◐</button>
+  </nav>
+</header>
+<div class="wrap">
+  <aside class="side"><nav aria-label="the docs">
+<div class="grp">get started</div><ul>
+<li><a href="/docs">what bise is</a></li>
+<li><a href="/docs/install">install and first run</a></li>
+</ul>
+<div class="grp">models</div><ul>
+<li><a href="/docs/providers">providers and keys</a></li>
+<li><a href="/docs/models">models and roles</a></li>
+<li><a href="/docs/gateways">gateways and local models</a></li>
+</ul>
+<div class="grp">using bise</div><ul>
+<li><a href="/docs/agents">main and the agents</a></li>
+<li><a href="/docs/approvals">approvals</a></li>
+<li><a href="/docs/flow">landing work</a></li>
+<li><a href="/docs/voice">voice</a></li>
+<li><a href="/docs/computer-use">computer use</a></li>
+</ul>
+<div class="grp">extend</div><ul>
+<li><a href="/docs/plugins">plugins and MCP</a></li>
+<li><a href="/docs/skills">instructions and skills</a></li>
+</ul>
+<div class="grp">reference</div><ul>
+<li><a href="/docs/config">config.toml</a></li>
+<li><a href="/docs/cli">the bise command</a></li>
+<li><a href="/docs/keys" class="here" aria-current="page">keys and commands</a></li>
+<li><a href="/docs/troubleshooting">troubleshooting</a></li>
+<li><a href="/docs/updates">updates</a></li>
+</ul>
+  </nav></aside>
+  <main>
+    <article>
+      <div class="head">
+        <h1>keys and commands</h1>
+        <button class="copymd" type="button" data-md="/docs/keys.md">copy as markdown</button>
+      </div>
+      <p class="lede">the keys and slash commands of bise. in the app, /help shows the essential ones and /shortcuts every one.</p>
+<p>hold <code>ctrl</code> (or <code>⌥</code>) in bise to see that key's shortcuts where they act, in Ghostty and kitty. <code>/</code> in the composer lists the commands; <code class="key">tab</code> completes, <code class="key">⏎</code> runs.</p>
+<h2 id="talking"><a class="anchor" href="#talking" aria-hidden="true">#</a>talking</h2>
+<div class="table"><table><thead><tr><th>key</th><th>what it does</th></tr></thead><tbody><tr><td><code class="key">⏎</code></td><td>send to the agent in view; while it works, steer its turn</td></tr><tr><td><code class="key">tab</code></td><td>while it works: queue your message for after its turn</td></tr><tr><td><code class="key">shift+⏎</code></td><td>a new line (<code class="key">alt+⏎</code> and <code class="key">ctrl+j</code> too)</td></tr><tr><td><code>@agent …</code></td><td>a message to an agent without leaving main; <code>@main …</code> from inside an agent</td></tr><tr><td><code>@</code> + a path</td><td>attach a file</td></tr><tr><td><code>$</code></td><td>a skill: the popup lists them</td></tr><tr><td><code class="key">ctrl+c</code></td><td>interrupt the turn of the agent in view; again, or at idle, quit (the agents keep running)</td></tr><tr><td><code class="key">shift+tab</code></td><td>switch the approvals mode: yolo / auto</td></tr><tr><td><code class="key">ctrl+r</code></td><td>dictation; twice: voice mode. see <a href="/docs/voice">voice</a></td></tr><tr><td><code class="key">esc</code></td><td>put the draft away (<code>↑</code> brings it back)</td></tr></tbody></table></div>
+<h2 id="agents"><a class="anchor" href="#agents" aria-hidden="true">#</a>agents</h2>
+<div class="table"><table><thead><tr><th>key</th><th>what it does</th></tr></thead><tbody><tr><td><code>⌥</code> + <code>0</code>…<code>9</code></td><td>go to main (<code>0</code>) or to the agent with that number</td></tr><tr><td><code class="key">alt+↓</code> / <code class="key">alt+↑</code></td><td>select the next / previous agent; <code class="key">⏎</code> enters it, <code class="key">space</code> previews it</td></tr><tr><td><code class="key">ctrl+s</code></td><td>find an agent by name (<code class="key">cmd+k</code>, <code class="key">/switch</code>)</td></tr><tr><td><code class="key">esc</code></td><td>in an agent: back to main</td></tr></tbody></table></div>
+<h2 id="inbox"><a class="anchor" href="#inbox" aria-hidden="true">#</a>inbox</h2>
+<div class="table"><table><thead><tr><th>key</th><th>what it does</th></tr></thead><tbody><tr><td><code class="key">ctrl+1</code>…<code class="key">ctrl+9</code></td><td>open the inbox item with that number (or click it)</td></tr><tr><td><code>1</code>-<code>9</code></td><td>an item open: pick an option</td></tr><tr><td><code>←</code> / <code>→</code></td><td>an item open: the previous / next one</td></tr><tr><td><code class="key">ctrl+x</code></td><td>an item open: close it without answering</td></tr></tbody></table></div>
+<h2 id="the-feed"><a class="anchor" href="#the-feed" aria-hidden="true">#</a>the feed</h2>
+<div class="table"><table><thead><tr><th>key</th><th>what it does</th></tr></thead><tbody><tr><td><code class="key">ctrl+o</code></td><td>open or close everything folded</td></tr><tr><td><code class="key">ctrl+f</code></td><td>find (<code class="key">cmd+f</code> in Ghostty with its lines)</td></tr><tr><td><code class="key">ctrl+y</code></td><td>copy a code block</td></tr><tr><td><code class="key">ctrl+l</code></td><td>clear the display</td></tr><tr><td>`<code> ctrl+</code> ``</td><td>show or hide a terminal panel in the workspace (<code class="key">ctrl+space</code> too)</td></tr></tbody></table></div>
+<p>select text in the feed, then type: the selection goes into your message as a quote.</p>
+<h2 id="commands"><a class="anchor" href="#commands" aria-hidden="true">#</a>commands</h2>
+<div class="table"><table><thead><tr><th>command</th><th>what it does</th></tr></thead><tbody><tr><td><code class="key">/help</code></td><td>the commands and the essential keys</td></tr><tr><td><code class="key">/shortcuts</code></td><td>every keyboard shortcut (also <code class="key">/keys</code>)</td></tr><tr><td><code class="key">/inbox</code></td><td>open what waits for you, the most blocking first</td></tr><tr><td><code>/answer N text</code></td><td>answer inbox item N</td></tr><tr><td><code>/close N [note]</code></td><td>close inbox item N without answering</td></tr><tr><td><code>/new [-w] [name:] objective</code></td><td>start an agent; <code>-w</code> in its own git worktree</td></tr><tr><td><code class="key">/agents</code></td><td>list the agents and what they do</td></tr><tr><td><code class="key">/switch</code></td><td>find an agent by name, archived ones too</td></tr><tr><td><code class="key">/rename &lt;agent&gt; &lt;new-name&gt;</code></td><td>rename an agent</td></tr><tr><td><code class="key">/isolate &lt;agent&gt;</code></td><td>give an agent its own git worktree</td></tr><tr><td><code class="key">/archive &lt;agent&gt;</code></td><td>stop an agent and archive it, with its worktree</td></tr><tr><td><code class="key">/restore &lt;agent&gt;</code></td><td>bring an archived agent back</td></tr><tr><td><code class="key">/archived</code></td><td>show or hide the archived agents</td></tr><tr><td><code class="key">/interrupt</code></td><td>interrupt the turn of the agent in view</td></tr><tr><td><code class="key">/stop &lt;agent&gt;</code></td><td>stop an agent's turn and its hands on Chrome or an app, until you write to it</td></tr><tr><td><code class="key">/model [&lt;model&gt;] [default]</code></td><td>the model of the agent in view; <code>default</code>: for new sessions too</td></tr><tr><td><code class="key">/models</code></td><td>which model does what: main, agents, small jobs, voice, the checker</td></tr><tr><td><code class="key">/provider</code></td><td>set up a provider's key, or change it</td></tr><tr><td><code class="key">/reasoning [&lt;effort&gt;]</code></td><td>the reasoning effort of the agent in view</td></tr><tr><td><code class="key">/approvals [yolo|auto]</code></td><td>the mode, the checker and your saved rules; or switch the mode</td></tr><tr><td><code class="key">/compact</code></td><td>compact the conversation of the agent in view</td></tr><tr><td><code class="key">/voice</code></td><td>dictation and voice mode: the model, the voice, the language</td></tr><tr><td><code class="key">/computer-use [off|uninstall]</code></td><td>turn on and set up computer use; or turn it off</td></tr><tr><td><code class="key">/plugins [list|enable|disable|login|logout] [&lt;name&gt;]</code></td><td>the agent plugins</td></tr><tr><td><code class="key">/theme [auto|light|dark]</code></td><td>the theme; auto follows your terminal</td></tr><tr><td><code class="key">/setup</code></td><td>check your terminal and repo again, and offer what would help</td></tr><tr><td><code class="key">/welcome</code></td><td>replay the first run</td></tr><tr><td><code class="key">/update</code></td><td>look for a new release now</td></tr><tr><td><code class="key">/restart</code></td><td>reload bise; nothing is lost</td></tr><tr><td><code class="key">/quit</code></td><td>quit; the agents keep running</td></tr></tbody></table></div>
+    </article>
+    <nav class="pn"><a class="prev" href="/docs/cli"><span>previous</span>the bise command</a><a class="next" href="/docs/troubleshooting"><span>next</span>troubleshooting</a></nav>
+    <footer>
+      <p>for agents: <a href="/docs/keys.md">bise.dev/docs/keys.md</a></p>
+      <p><a href="https://github.com/gvergnaud/bise/blob/main/site/docs/keys.md">edit this page on GitHub</a></p>
+    </footer>
+  </main>
+  <aside class="toc"><div class="toch">on this page</div><ul><li class="l2"><a href="#talking">talking</a></li><li class="l2"><a href="#agents">agents</a></li><li class="l2"><a href="#inbox">inbox</a></li><li class="l2"><a href="#the-feed">the feed</a></li><li class="l2"><a href="#commands">commands</a></li></ul></aside>
+</div>
+<script src="/docs/docs.js" defer></script>
+</body>
+</html>

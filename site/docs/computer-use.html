@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>computer use · bise docs</title>
+<meta name="description" content="agents that open pages in Chrome and click and type in your Mac apps, in the background, with your logins. off until you turn it on.">
+<link rel="canonical" href="https://bise.dev/docs/computer-use">
+<meta name="theme-color" content="#f2ede2">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="alternate" type="text/markdown" href="/docs/computer-use.md">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="bise">
+<meta property="og:url" content="https://bise.dev/docs/computer-use">
+<meta property="og:title" content="computer use · bise docs">
+<meta property="og:description" content="agents that open pages in Chrome and click and type in your Mac apps, in the background, with your logins. off until you turn it on.">
+<meta property="og:image" content="https://bise.dev/og.png?v=paper">
+<meta name="twitter:card" content="summary_large_image">
+<script>{ const q = location.search; let d = null; try { d = localStorage.getItem('bise-theme'); } catch {} if (/[?&]dark\b/.test(q) || (!/[?&]light\b/.test(q) && (d ?? (matchMedia('(prefers-color-scheme: dark)').matches ? '1' : '0')) === '1')) document.documentElement.classList.add('pd'); }</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Caveat:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/docs/docs.css">
+</head>
+<body>
+<header class="top">
+  <button class="menu" type="button" aria-label="the pages" aria-expanded="false">≡</button>
+  <a class="logo" href="/">bise <span class="acc">:*</span></a>
+  <a class="docs" href="/docs">docs</a>
+  <div class="search">
+    <input type="search" placeholder="/ search" aria-label="search the docs" autocomplete="off" spellcheck="false">
+    <div class="results" hidden></div>
+  </div>
+  <nav>
+    <a href="https://github.com/gvergnaud/bise">GitHub</a>
+    <button id="theme" type="button" title="light / dark">◐</button>
+  </nav>
+</header>
+<div class="wrap">
+  <aside class="side"><nav aria-label="the docs">
+<div class="grp">get started</div><ul>
+<li><a href="/docs">what bise is</a></li>
+<li><a href="/docs/install">install and first run</a></li>
+</ul>
+<div class="grp">models</div><ul>
+<li><a href="/docs/providers">providers and keys</a></li>
+<li><a href="/docs/models">models and roles</a></li>
+<li><a href="/docs/gateways">gateways and local models</a></li>
+</ul>
+<div class="grp">using bise</div><ul>
+<li><a href="/docs/agents">main and the agents</a></li>
+<li><a href="/docs/approvals">approvals</a></li>
+<li><a href="/docs/flow">landing work</a></li>
+<li><a href="/docs/voice">voice</a></li>
+<li><a href="/docs/computer-use" class="here" aria-current="page">computer use</a></li>
+</ul>
+<div class="grp">extend</div><ul>
+<li><a href="/docs/plugins">plugins and MCP</a></li>
+<li><a href="/docs/skills">instructions and skills</a></li>
+</ul>
+<div class="grp">reference</div><ul>
+<li><a href="/docs/config">config.toml</a></li>
+<li><a href="/docs/cli">the bise command</a></li>
+<li><a href="/docs/keys">keys and commands</a></li>
+<li><a href="/docs/troubleshooting">troubleshooting</a></li>
+<li><a href="/docs/updates">updates</a></li>
+</ul>
+  </nav></aside>
+  <main>
+    <article>
+      <div class="head">
+        <h1>computer use</h1>
+        <button class="copymd" type="button" data-md="/docs/computer-use.md">copy as markdown</button>
+      </div>
+      <p class="lede">agents that open pages in Chrome and click and type in your Mac apps, in the background, with your logins. off until you turn it on.</p>
+<p>computer use lets an agent see and act in a web page or an app: open a page, read it, click, type, fill a form, take a screenshot. it works in Chrome, in background tabs of the agent's own tab group, with your logins. with Accessibility allowed, it also drives your Mac apps (Notes, TextEdit, Figma, ...). it never takes your screen or your active tab.</p>
+<h2 id="turn-it-on"><a class="anchor" href="#turn-it-on" aria-hidden="true">#</a>turn it on</h2>
+<p>computer use is off until you turn it on. off, it costs nothing: no tools, no process, no file.</p>
+<div class="code"><div class="box"><pre><code class="lang-text">/computer-use</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>this turns it on and opens its setup, one step at a time. bise checks each step by itself while you do it:</p>
+<ol><li><strong>Chrome</strong>: open, and recent enough.</li><li><strong>the extension</strong>: bise's Chrome extension, loaded in <code>chrome://extensions</code>. bise copies the folder's path for you.</li><li><strong>a test</strong>: bise opens a tab in the background and clicks a button.</li><li><strong>apps</strong>, optional: turn on bise Computer Use in System Settings → Privacy &amp; Security → Accessibility. Screen Recording is optional too, for screenshots of apps.</li></ol>
+<p>then ask any agent to use Chrome or an app. the agents that are already open get computer use at their next idle.</p>
+<h2 id="what-happens-when-an-agent-acts"><a class="anchor" href="#what-happens-when-an-agent-acts" aria-hidden="true">#</a>what happens when an agent acts</h2>
+<aside class="callout careful"><span class="label">▲ careful</span><p>in yolo, agents act without asking, purchases included. <code class="key">shift+tab</code> switches to auto, where agents ask you in their thread before buying, sending or posting. in both modes, they never type passwords: when a site asks you to log in, the agent asks you to do it.</p></aside>
+<ul><li>what the agents see (page text, screenshots) goes only to the model of the agent that took it. the setup screen names that provider.</li><li>some places are off limits in every mode: Chrome's own pages (<code>chrome://</code>, settings), the extension stores, and apps like password managers and your terminal. the agent asks you to do that step.</li><li><code class="key">/stop &lt;agent&gt;</code> stops an agent's turn and its hands on Chrome or an app, until you write to it again. Chrome's "bise started debugging this browser" bar has a Cancel button that does the same.</li></ul>
+<h2 id="turn-it-off"><a class="anchor" href="#turn-it-off" aria-hidden="true">#</a>turn it off</h2>
+<div class="code"><div class="box"><pre><code class="lang-text">/computer-use off         # agents lose it at their next idle
+/computer-use uninstall   # also removes the browser hosts and bise&#x27;s computer-use files</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>after an uninstall, two things are yours to do: remove the extension in Chrome, and remove bise Computer Use from System Settings → Privacy &amp; Security (Accessibility, Screen Recording).</p>
+<h2 id="limits"><a class="anchor" href="#limits" aria-hidden="true">#</a>limits</h2>
+<ul><li>Chrome only for now. Safari and Firefox are not supported.</li><li>macOS only.</li><li>pages bise can't read: <code>chrome://</code> pages, the Chrome Web Store, other extensions' pages, the text inside the PDF viewer.</li></ul>
+    </article>
+    <nav class="pn"><a class="prev" href="/docs/voice"><span>previous</span>voice</a><a class="next" href="/docs/plugins"><span>next</span>plugins and MCP</a></nav>
+    <footer>
+      <p>for agents: <a href="/docs/computer-use.md">bise.dev/docs/computer-use.md</a></p>
+      <p><a href="https://github.com/gvergnaud/bise/blob/main/site/docs/computer-use.md">edit this page on GitHub</a></p>
+    </footer>
+  </main>
+  <aside class="toc"><div class="toch">on this page</div><ul><li class="l2"><a href="#turn-it-on">turn it on</a></li><li class="l2"><a href="#what-happens-when-an-agent-acts">what happens when an agent acts</a></li><li class="l2"><a href="#turn-it-off">turn it off</a></li><li class="l2"><a href="#limits">limits</a></li></ul></aside>
+</div>
+<script src="/docs/docs.js" defer></script>
+</body>
+</html>

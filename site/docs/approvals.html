@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>approvals · bise docs</title>
+<meta name="description" content="two modes for every agent at once. yolo runs everything. auto runs what is clearly safe and asks you about the risky calls.">
+<link rel="canonical" href="https://bise.dev/docs/approvals">
+<meta name="theme-color" content="#f2ede2">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="alternate" type="text/markdown" href="/docs/approvals.md">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="bise">
+<meta property="og:url" content="https://bise.dev/docs/approvals">
+<meta property="og:title" content="approvals · bise docs">
+<meta property="og:description" content="two modes for every agent at once. yolo runs everything. auto runs what is clearly safe and asks you about the risky calls.">
+<meta property="og:image" content="https://bise.dev/og.png?v=paper">
+<meta name="twitter:card" content="summary_large_image">
+<script>{ const q = location.search; let d = null; try { d = localStorage.getItem('bise-theme'); } catch {} if (/[?&]dark\b/.test(q) || (!/[?&]light\b/.test(q) && (d ?? (matchMedia('(prefers-color-scheme: dark)').matches ? '1' : '0')) === '1')) document.documentElement.classList.add('pd'); }</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Caveat:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/docs/docs.css">
+</head>
+<body>
+<header class="top">
+  <button class="menu" type="button" aria-label="the pages" aria-expanded="false">≡</button>
+  <a class="logo" href="/">bise <span class="acc">:*</span></a>
+  <a class="docs" href="/docs">docs</a>
+  <div class="search">
+    <input type="search" placeholder="/ search" aria-label="search the docs" autocomplete="off" spellcheck="false">
+    <div class="results" hidden></div>
+  </div>
+  <nav>
+    <a href="https://github.com/gvergnaud/bise">GitHub</a>
+    <button id="theme" type="button" title="light / dark">◐</button>
+  </nav>
+</header>
+<div class="wrap">
+  <aside class="side"><nav aria-label="the docs">
+<div class="grp">get started</div><ul>
+<li><a href="/docs">what bise is</a></li>
+<li><a href="/docs/install">install and first run</a></li>
+</ul>
+<div class="grp">models</div><ul>
+<li><a href="/docs/providers">providers and keys</a></li>
+<li><a href="/docs/models">models and roles</a></li>
+<li><a href="/docs/gateways">gateways and local models</a></li>
+</ul>
+<div class="grp">using bise</div><ul>
+<li><a href="/docs/agents">main and the agents</a></li>
+<li><a href="/docs/approvals" class="here" aria-current="page">approvals</a></li>
+<li><a href="/docs/flow">landing work</a></li>
+<li><a href="/docs/voice">voice</a></li>
+<li><a href="/docs/computer-use">computer use</a></li>
+</ul>
+<div class="grp">extend</div><ul>
+<li><a href="/docs/plugins">plugins and MCP</a></li>
+<li><a href="/docs/skills">instructions and skills</a></li>
+</ul>
+<div class="grp">reference</div><ul>
+<li><a href="/docs/config">config.toml</a></li>
+<li><a href="/docs/cli">the bise command</a></li>
+<li><a href="/docs/keys">keys and commands</a></li>
+<li><a href="/docs/troubleshooting">troubleshooting</a></li>
+<li><a href="/docs/updates">updates</a></li>
+</ul>
+  </nav></aside>
+  <main>
+    <article>
+      <div class="head">
+        <h1>approvals</h1>
+        <button class="copymd" type="button" data-md="/docs/approvals.md">copy as markdown</button>
+      </div>
+      <p class="lede">two modes for every agent at once. yolo runs everything. auto runs what is clearly safe and asks you about the risky calls.</p>
+<h2 id="the-two-modes"><a class="anchor" href="#the-two-modes" aria-hidden="true">#</a>the two modes</h2>
+<div class="table"><table><thead><tr><th>mode</th><th>what runs without asking</th></tr></thead><tbody><tr><td><code>yolo</code></td><td>everything. nothing asks, no exceptions. this is the default</td></tr><tr><td><code>auto</code></td><td>reads, edits in the repo, local git, <code>sb</code>, and the rules you saved. a checker model judges the rest, and the risky calls ask you</td></tr></tbody></table></div>
+<p>the mode is one for main and every agent. it shows on the divider after the model, for example <code>you → main · opus 5.5 · high · yolo</code>.</p>
+<p><code class="key">shift+tab</code> switches between them. bise remembers your pick in <code>~/.bise/config.toml</code>, for every repo, after a restart too. or:</p>
+<div class="code"><div class="box"><pre><code class="lang-text">/approvals auto</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<div class="code"><div class="box"><pre><code class="lang-sh">bise config set approvals auto</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p><code>BISE_APPROVALS=auto bise</code> sets it for one session only, without writing the file.</p>
+<h2 id="what-auto-runs-at-once"><a class="anchor" href="#what-auto-runs-at-once" aria-hidden="true">#</a>what auto runs at once</h2>
+<ul><li><strong>reads</strong>, anywhere but the secret paths (your keys, <code>~/.ssh</code>, ...).</li><li><strong>edits</strong> in the roots: the repo you started bise in and below, <code>~/.bise</code> (but <code>auth.json</code>, <code>approvals.toml</code> and <code>hubs/</code>), and each agent's own temp folder.</li><li>plain shell writes bise can read (<code>mkdir</code>, <code>rm</code>, <code>sed -i</code>, <code>cat &gt; file</code>) inside the roots, like edits.</li><li><strong>local git</strong>: <code>add</code>, <code>commit</code>, <code>apply</code>. <code>checkout</code>, <code>reset</code>, <code>clean</code> and <code>restore</code> go to the checker.</li><li><code>sb</code>, the agents' own tool.</li><li>the rules you saved with "always allow".</li></ul>
+<p>on macOS, the commands of auto run in a sandbox that lets them write only in the roots.</p>
+<p>everything else goes to the <strong>checker</strong>, a small model that looks at the command and the task. most of what it sees runs. what may not be undoable, or doesn't look like part of the task, asks you.</p>
+<h2 id="when-an-agent-asks-you"><a class="anchor" href="#when-an-agent-asks-you" aria-hidden="true">#</a>when an agent asks you</h2>
+<p>the question waits in your inbox:</p>
+<div class="code"><div class="box"><pre><code class="lang-text">┃ ? api-v2 wants to run                                   1/3
+┃   $ git push origin main --force
+┃   it pushes to main and rewrites its history.
+┃   1 allow   2 always allow git push here   3 no
+┃   or type why not, then ⏎</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<ul><li><code>1</code> allows it once.</li><li><code>2</code> allows it and every command like it in this repo from now on. the item names the rule it saves, like <code>cargo test *</code>.</li><li><code>3</code>, or type why not and <code class="key">⏎</code>: the agent gets no, with your words.</li></ul>
+<p>the agent waits as long as it takes. switching to yolo leaves the waiting items open. a few calls always ask, with no "always" option, and say why: <code>it rewrites main. this one always asks.</code></p>
+<h2 id="your-rules"><a class="anchor" href="#your-rules" aria-hidden="true">#</a>your rules</h2>
+<p><code class="key">/approvals</code> shows the mode, the checker, and the rules you saved, and removes one. the rules live in <code>~/.bise/approvals.toml</code>, per repo (a repo's worktrees share them). an agent can't edit that file.</p>
+<h2 id="the-checker"><a class="anchor" href="#the-checker" aria-hidden="true">#</a>the checker</h2>
+<p>the checker is a role, like main's model: <code class="key">/models</code> changes it.</p>
+<div class="table"><table><thead><tr><th>checker</th><th>when</th><th>what leaves your Mac</th></tr></thead><tbody><tr><td>Jev, by TypeSafe</td><td>the default when you have a TypeSafe or an OpenRouter key</td><td>the command, the script it runs, the start of the task, the paths</td></tr><tr><td>your small jobs model</td><td>no TypeSafe or OpenRouter key</td><td>the same, to that model's provider</td></tr><tr><td>a local model (Ollama, LM Studio)</td><td>you pick it in <code class="key">/models</code></td><td>nothing</td></tr><tr><td>off</td><td><code class="key">/models</code>, then off</td><td>nothing. auto then runs reads and edits, and every other command asks you</td></tr></tbody></table></div>
+<p>the first time you switch to auto, bise says in one line which model checks and where it runs.</p>
+<aside class="callout note"><span class="label">note</span><p>auto reads the text of a command; it can't see what a program does once it runs. it stops mistakes and casual prompt injection. it is not a wall against a determined attacker.</p></aside>
+    </article>
+    <nav class="pn"><a class="prev" href="/docs/agents"><span>previous</span>main and the agents</a><a class="next" href="/docs/flow"><span>next</span>landing work</a></nav>
+    <footer>
+      <p>for agents: <a href="/docs/approvals.md">bise.dev/docs/approvals.md</a></p>
+      <p><a href="https://github.com/gvergnaud/bise/blob/main/site/docs/approvals.md">edit this page on GitHub</a></p>
+    </footer>
+  </main>
+  <aside class="toc"><div class="toch">on this page</div><ul><li class="l2"><a href="#the-two-modes">the two modes</a></li><li class="l2"><a href="#what-auto-runs-at-once">what auto runs at once</a></li><li class="l2"><a href="#when-an-agent-asks-you">when an agent asks you</a></li><li class="l2"><a href="#your-rules">your rules</a></li><li class="l2"><a href="#the-checker">the checker</a></li></ul></aside>
+</div>
+<script src="/docs/docs.js" defer></script>
+</body>
+</html>
