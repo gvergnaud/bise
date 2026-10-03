@@ -491,8 +491,9 @@ pub(crate) fn parse_line(line: &str) -> Option<Ev> {
         )));
     }
     if let Some(t) = o.strip_prefix("candidate_discarded: ") {
-        // no key: the turn's end says it, once (BISE-294)
-        if no_key(t).is_some() {
+        // no key, or a ChatGPT plan line: the turn's end says it, once
+        // (BISE-294; subscriptions)
+        if no_key(t).is_some() || is_plan_line(t) {
             return None;
         }
         return Some(Ev::Warn(format!("candidate discarded: {}", t)));

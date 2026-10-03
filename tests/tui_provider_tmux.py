@@ -83,6 +83,11 @@ def main():
             t.keys("Down")
             t.wait_any([lambda s: "›" in s], 5)
         t.keys("Enter")
+        # subscriptions: OpenRouter signs in or takes a key
+        t.wait("› sign in with OpenRouter")
+        t.keys("Down")
+        t.wait("› paste a key")
+        t.keys("Enter")
         sc = t.wait("paste your OpenRouter key")
         assert "get one: https://openrouter.ai/settings/keys" in sc, sc
         # a wrong key: its words, nothing saved

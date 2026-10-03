@@ -54,8 +54,13 @@ def at(sc, text):
 
 def to_paste(t, name):
     """From the key step to `paste your <name> key`."""
-    t.wait("which model should do the work?", 40)
-    t.wait("i found no key in your environment.")
+    t.wait("how do you want to pay for the models?", 40)
+    t.wait("↑↓ choose   ⏎ go   esc back")
+    # subscriptions: a plan first, then `an API key` (two rows down)
+    t.keys("Down")
+    t.wait("› OpenRouter")
+    t.keys("Down")
+    t.wait("› an API key")
     t.keys("Enter")
     t.wait("which provider?")
     for _ in range(20):

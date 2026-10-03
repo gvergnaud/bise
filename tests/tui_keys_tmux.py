@@ -3,7 +3,7 @@ provider, in a clean bise home and HOME (no key, no model), with the fake
 provider behind each provider's base_url (config.toml):
 
 - the launch has no model: the key step shows (already onboarded: only
-  it), `set up a provider` → the provider (its hint) → its model (the
+  it), `an API key` (under the plans) → the provider (its hint) → its model (the
   pick, recommended) → `paste your <Name> key` with the keys page;
 - a "bad" key: the provider's words (`says this key is wrong`), nothing
   saved; enter tries again; a good key → `it works: <model> answered.`;
@@ -63,9 +63,13 @@ def one(pid, name, model, keys_url, family):
     blank = " ".join("%s=" % k for k in key_envs())
     env = "BISE_HOME=%s HOME=%s SB_SETUP=off %s" % (root, home, blank)
     with tui_session(110, 34, env, E=E) as t:
-        t.wait("which model should do the work?", 40)
-        sc = t.wait("i found no key in your environment.")
-        assert "1 · set up a provider" in sc, sc
+        t.wait("how do you want to pay for the models?", 40)
+        t.wait("↑↓ choose   ⏎ go   esc back")
+        # subscriptions: a plan first, then `an API key` (two rows down)
+        t.keys("Down")
+        t.wait("› OpenRouter")
+        t.keys("Down")
+        t.wait("› an API key")
         t.keys("Enter")
         t.wait("which provider?")
         cur = re.compile(r"› (\d+) · ")
@@ -90,7 +94,7 @@ def one(pid, name, model, keys_url, family):
         t.typed("bad-key-123")
         t.keys("Enter")
         sc = t.wait("says this key is wrong.")
-        assert "%s says this key is wrong." % name in sc and "enter try again" in sc, sc
+        assert "%s says this key is wrong." % name in sc and "⏎ try again" in sc, sc
         # BISE-282: the provider's own words, dim, under bise's
         assert '%s said: "invalid api key"' % name in sc, sc
         assert not os.path.exists(os.path.join(root, "auth.json")), "nothing saved"

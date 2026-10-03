@@ -1391,7 +1391,7 @@ fn model_lines(o: &Onb, w: u16, gap: usize) -> Vec<Line<'static>> {
                 v.push(Line::from(s(format!("  ↓ {} more", n - from - WHICH_ROWS), theme::dim())));
             }
             blanks(&mut v, gap);
-            v.push(keyline("{↑↓} choose · {enter} ok · {esc} back"));
+            v.push(keybar("↑↓ choose   ⏎ ok   esc back"));
             v
         }
         Sub::Model(p, i, f) => {
@@ -1437,7 +1437,7 @@ fn model_lines(o: &Onb, w: u16, gap: usize) -> Vec<Line<'static>> {
                 v.push(dim(format!("{} has no model listed: type its id.", p.name)));
             }
             blanks(&mut v, gap);
-            v.push(keyline("{↑↓} choose · {enter} ok · {esc} back"));
+            v.push(keybar("↑↓ choose   ⏎ ok   esc back"));
             v
         }
         Sub::Paste(p, _, b) => {
@@ -1467,13 +1467,13 @@ fn model_lines(o: &Onb, w: u16, gap: usize) -> Vec<Line<'static>> {
             let line = format!("it goes in {}, only you can read it.", at);
             v.push(dim(if at.starts_with('~') && line.width() <= w as usize { line } else { "it goes in bise's auth.json, only you can read it.".into() }));
             blanks(&mut v, gap);
-            v.push(keyline(if o.picking().is_some() { "{enter} check it · {esc} back to the providers" } else { "{enter} check · {esc} back" }));
+            v.push(keybar(if o.picking().is_some() { "⏎ check it   esc back to the providers" } else { "⏎ check   esc back" }));
             v
         }
         Sub::Confirm(p, _, _) => {
             let mut v = vec![title(format!("{} has a key in {} already.", p.name, auth_shown(o)))];
             blanks(&mut v, gap);
-            v.push(keyline("{enter} replaces it · {esc} keeps the old one"));
+            v.push(keybar("⏎ replaces it   esc keeps the old one"));
             v
         }
         Sub::Checking(_, _, Tried::Plan(a)) => {
@@ -1486,7 +1486,7 @@ fn model_lines(o: &Onb, w: u16, gap: usize) -> Vec<Line<'static>> {
         Sub::Checking(p, m, _) => {
             let mut v = vec![title("checking your key with one tiny call…"), dim(format!("{} on {}", short_model(m), p.name))];
             blanks(&mut v, gap);
-            v.push(keyline("{esc} back"));
+            v.push(keybar("esc back"));
             v
         }
         Sub::Failed(p, m, Tried::Plan(a), f) => {
@@ -1582,11 +1582,11 @@ fn model_lines(o: &Onb, w: u16, gap: usize) -> Vec<Line<'static>> {
                 _ => {}
             }
             blanks(&mut v, gap);
-            v.push(keyline(match (&f.why, t) {
-                (Why::Model | Why::NoAccess, _) => "{enter} pick another model · {tab} another provider · {esc} back",
-                (Why::WrongKey, Tried::Found(_)) => "{enter} paste another key · {tab} another provider · {esc} back",
-                (Why::NoCredit, _) => "{enter} check again · {tab} another provider · {esc} back",
-                _ => "{enter} try again · {tab} another provider · {esc} back",
+            v.push(keybar(match (&f.why, t) {
+                (Why::Model | Why::NoAccess, _) => "⏎ pick another model   tab another provider   esc back",
+                (Why::WrongKey, Tried::Found(_)) => "⏎ paste another key   tab another provider   esc back",
+                (Why::NoCredit, _) => "⏎ check again   tab another provider   esc back",
+                _ => "⏎ try again   tab another provider   esc back",
             }));
             v
         }
@@ -1622,7 +1622,7 @@ fn model_lines(o: &Onb, w: u16, gap: usize) -> Vec<Line<'static>> {
                 v.push(dim("agents, voice and the rest: /models".into()));
             }
             blanks(&mut v, gap);
-            v.push(keyline("{enter} go on"));
+            v.push(keybar("⏎ go on"));
             v
         }
     }
@@ -2541,7 +2541,7 @@ mod tests {
         o.on_key(key(KeyCode::Enter), 1, &e);
         // the keys page, the field, where it goes
         let sc = screen(&o, 10, 110, 30);
-        for s in ["paste your Mistral key", "get one: https://console.mistral.ai/api-keys", "it goes in ~/.bend-harness/auth.json, only you can read it.", "enter check · esc back"] {
+        for s in ["paste your Mistral key", "get one: https://console.mistral.ai/api-keys", "it goes in ~/.bend-harness/auth.json, only you can read it.", "⏎ check   esc back"] {
             assert!(sc.contains(s), "{}\n{}", s, sc);
         }
         // the link is a hit for the OSC 8 backend
@@ -2553,7 +2553,7 @@ mod tests {
         assert!(sc.contains("Mistral says this key is wrong.") && sc.contains("copy it again from https://console.mistral.ai/api-keys"), "{}", sc);
         // BISE-282: the provider's own words under bise's
         assert!(sc.contains("Mistral said: \"invalid x-api-key\""), "{}", sc);
-        assert!(sc.contains("enter try again · tab another provider · esc back"), "{}", sc);
+        assert!(sc.contains("⏎ try again   tab another provider   esc back"), "{}", sc);
         assert!(!hm(&h).auth_file().exists() && !hm(&h).config_file().exists());
         o.on_key(key(KeyCode::Enter), 1, &e);
         assert!(matches!(&o.sub, Sub::Paste(p, m, b) if p.id == "mistral" && m == "mistral/mistral-medium-latest" && b.is_empty()));
@@ -2562,7 +2562,7 @@ mod tests {
         type_key(&mut o, &e, "broke-key");
         let sc = screen(&o, 10, 110, 30);
         assert!(sc.contains("? the key works, but your Mistral account has no credit yet."), "{}", sc);
-        assert!(sc.contains("i saved the key. add credit, then enter checks again.") && sc.contains("enter check again"), "{}", sc);
+        assert!(sc.contains("i saved the key. add credit, then enter checks again.") && sc.contains("⏎ check again"), "{}", sc);
         assert_eq!(bise_catalog::auth::Store::read(&hm(&h).auth_file()).unwrap().key("mistral"), Some("broke-key"));
         assert!(!hm(&h).config_file().exists());
         o.on_key(key(KeyCode::Enter), 1, &e);
@@ -2590,7 +2590,7 @@ mod tests {
         paste(&mut o, "locked-key");
         let sc = screen(&o, 10, 110, 30);
         assert!(sc.contains("✗ this key can't use mistral-medium-latest.") && sc.contains("Mistral said: \"not for you\""), "{}", sc);
-        assert!(sc.contains("your account may not have access to this model yet.") && sc.contains("enter pick another model"), "{}", sc);
+        assert!(sc.contains("your account may not have access to this model yet.") && sc.contains("⏎ pick another model"), "{}", sc);
         o.on_key(key(KeyCode::Enter), 1, &e);
         assert!(matches!(&o.sub, Sub::Model(p, 0, _) if p.id == "mistral"));
         paste(&mut o, "good-key");

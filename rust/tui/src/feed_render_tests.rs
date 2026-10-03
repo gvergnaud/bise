@@ -2035,6 +2035,23 @@ fn the_chatgpt_plan_lines_are_a_warning_and_the_rest_a_failure() {
     assert!(rows_text(&ev_rows(&ev, 0, 200)).join("\n").starts_with(" ✗ "));
 }
 
+// subscriptions: an expired sign-in shows once, at the turn's end, never
+// as a discarded candidate first
+#[test]
+fn a_plan_line_shows_once_not_as_a_discarded_candidate() {
+    let l = "your ChatGPT sign-in expired. sign in again in /provider, or run bise login chatgpt.";
+    let evs: Vec<Ev> = [format!("  obs: candidate_discarded: {}", l), format!("  obs: turn_done: failed: {}", l)]
+        .iter()
+        .filter_map(|x| parse_line(x))
+        .collect();
+    let text: Vec<String> = evs.iter().flat_map(|e| rows_text(&ev_rows(e, 0, 200))).collect();
+    let all = text.join(" ");
+    assert_eq!(all.matches("your ChatGPT sign-in expired.").count(), 1, "{all}");
+    assert!(!all.contains("candidate discarded"), "{all}");
+    // another discarded candidate still says so
+    assert!(parse_line("  obs: candidate_discarded: the answer was empty").is_some());
+}
+
 // interrupt-who: a call an interrupt stopped mid-answer names who asked
 // and reads as a dim ▲ stop, not a red ✗ failure
 #[test]

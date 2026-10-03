@@ -710,7 +710,7 @@ pub(super) fn lines(o: &Onb, w: u16, gap: usize) -> Option<Vec<Line<'static>>> {
             }
             said(&mut v);
             blanks(&mut v, gap);
-            v.push(keyline("{↑↓} choose · {enter} change · {esc} back"));
+            v.push(keybar("↑↓ choose   ⏎ change   esc back"));
             Some(v)
         }
         (Screen::Pick(id, _), Sub::List) => Some(provider_lines(o, id, w, gap, &said)),
@@ -727,7 +727,7 @@ pub(super) fn lines(o: &Onb, w: u16, gap: usize) -> Option<Vec<Line<'static>>> {
                 option(&mut v, k == *i, name, "", w);
             }
             blanks(&mut v, gap);
-            v.push(keyline("{↑↓} choose · {enter} ok · {esc} back"));
+            v.push(keybar("↑↓ choose   ⏎ ok   esc back"));
             Some(v)
         }
         _ => None,
@@ -1021,7 +1021,7 @@ fn provider_lines(o: &Onb, id: &'static str, w: u16, gap: usize, said: &dyn Fn(&
         Screen::Pick(_, Back::Close) if id == r::VOICE => "not now",
         _ => "back",
     };
-    v.push(keyline(&format!("{{↑↓}} choose · {{enter}} ok · {{esc}} {}", esc)));
+    v.push(keybar(&format!("↑↓ choose   ⏎ ok   esc {}", esc)));
     v
 }
 
@@ -1116,6 +1116,6 @@ fn model_lines(
     }
     said(&mut v);
     blanks(&mut v, gap);
-    v.push(keyline("{↑↓} choose · {enter} ok · {esc} back"));
+    v.push(keybar("↑↓ choose   ⏎ ok   esc back"));
     v
 }

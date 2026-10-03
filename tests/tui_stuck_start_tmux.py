@@ -59,8 +59,13 @@ def main():
         t.keys("Space")
         t.wait("←→ switch · enter keep")
         t.keys("Enter")
-        t.wait("which model should do the work?", 40)
-        t.wait("i found no key in your environment.")
+        t.wait("how do you want to pay for the models?", 40)
+        t.wait("↑↓ choose   ⏎ go   esc back")
+        # subscriptions: a plan first, then `an API key` (two rows down)
+        t.keys("Down")
+        t.wait("› OpenRouter")
+        t.keys("Down")
+        t.wait("› an API key")
         t.keys("Enter")
         t.wait("which provider?")
         for _ in range(20):
@@ -85,7 +90,7 @@ def main():
         t.keys("Enter")
         # the steps left (how it works, maybe a folder), to the thread
         for _ in range(10):
-            sc = t.wait_any(["any key ↵", "enter", NORMAL], 30)[1]
+            sc = t.wait_any(["any key ↵", "enter", "⏎", NORMAL], 30)[1]
             if NORMAL in sc:
                 break
             t.keys("Enter")

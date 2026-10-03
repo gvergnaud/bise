@@ -122,7 +122,7 @@ fn models_lists_each_role_with_its_provider_then_its_model() {
     assert!(line_of(&sc, "voice ").trim_end().ends_with("off · enter sets it up"), "{sc}");
     // what the role under the cursor is for, once, under the list
     assert!(sc.contains("main: talks with you and starts the agents."), "{sc}");
-    assert!(sc.contains("↑↓ choose · enter change · esc back"), "{sc}");
+    assert!(sc.contains("↑↓ choose   ⏎ change   esc back"), "{sc}");
     // the checker (approvals): no Jev key, the small jobs model
     assert!(line_of(&sc, "checker ").contains("auto · Mistral · mistral-small-latest"), "{sc}");
 }
@@ -341,7 +341,7 @@ fn a_provider_not_set_up_goes_through_its_key_step_then_its_models() {
     assert!(matches!(&o.sub, Sub::Paste(p, m, _) if p.id == "openai" && m == "openai/gpt-6-astra"), "{:?}", o.sub);
     let sc = screen(&o);
     assert!(sc.contains("paste your OpenAI key") && sc.contains("for main. then you pick the model."), "{sc}");
-    assert!(sc.contains("enter check it · esc back to the providers"), "{sc}");
+    assert!(sc.contains("⏎ check it   esc back to the providers"), "{sc}");
     // esc: back to the providers, on OpenAI
     o.on_key(key(KeyCode::Esc), 1, &e);
     assert!(matches!(o.pick_rows("main").get(o.sel), Some(PRow::Provider(p)) if p.id == "openai"));

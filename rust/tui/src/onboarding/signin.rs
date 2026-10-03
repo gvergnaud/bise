@@ -368,7 +368,7 @@ impl Onb {
         self.refresh_keys(env);
         let t = match answer {
             Ok(true) => "✓ signed out of ChatGPT.".to_string(),
-            Ok(false) => "✓ signed out here. ChatGPT didn't confirm: to be sure, remove bise from the connected apps in your ChatGPT settings.".to_string(),
+            Ok(false) => "✓ signed out here. ChatGPT didn't confirm: to be sure, remove bise in your ChatGPT settings.".to_string(),
             Err(e) => format!("▲ couldn't sign out: {}", e.trim_end_matches('.')),
         };
         if let Some(pn) = &mut self.panel {

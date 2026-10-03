@@ -28,6 +28,7 @@ import socket
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.parse
 
@@ -136,15 +137,16 @@ def main():
     auth_p, auth = fake_auth()
     try:
         # ---- 150 columns: sign in, the plan checked, main on the plan ----
-        E = e2e.Env()
-        shots = shots or os.path.join(E.tmp, "shots")
-        os.makedirs(shots, exist_ok=True)
+        # the captures outlive each throwaway Env (both are removed on close)
+        shots = shots or tempfile.mkdtemp(prefix="sb-subs-shots-")
 
         def shot(name, sc):
+            os.makedirs(shots, exist_ok=True)
             with open(os.path.join(shots, name + ".txt"), "w") as f:
                 f.write(sc)
             print("---- %s ----\n%s" % (name, sc))
 
+        E = e2e.Env()
         root, clip, line = setup(E, auth, after=3)
         with tui_session(150, 40, line, E=E) as t:
             sc = to_pay_step(t)

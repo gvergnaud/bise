@@ -702,7 +702,7 @@ pub(super) fn lines(o: &Onb, w: u16, gap: usize) -> Option<Vec<Line<'static>>> {
             }
             said(&mut v);
             blanks(&mut v, gap);
-            v.push(keyline("{↑↓} choose · {enter} open · {esc} back"));
+            v.push(keybar("↑↓ choose   ⏎ open   esc back"));
             v
         }
         Sub::Menu(p, i) => {
@@ -749,7 +749,7 @@ pub(super) fn lines(o: &Onb, w: u16, gap: usize) -> Option<Vec<Line<'static>>> {
             }
             said(&mut v);
             blanks(&mut v, gap);
-            v.push(keyline(if items.is_empty() { "{esc} back" } else { "{↑↓} choose · {enter} ok · {esc} back" }));
+            v.push(keybar(if items.is_empty() { "esc back" } else { "↑↓ choose   ⏎ ok   esc back" }));
             v
         }
         Sub::Remove(p) => {
@@ -765,7 +765,7 @@ pub(super) fn lines(o: &Onb, w: u16, gap: usize) -> Option<Vec<Line<'static>>> {
                 v.push(dim(format!("{} still gives me a key.", n)));
             }
             blanks(&mut v, gap);
-            v.push(keyline("{enter} remove · {esc} keep it"));
+            v.push(keybar("⏎ remove   esc keep it"));
             v
         }
         // the plan signed in from here: who, and where its roles are picked
@@ -792,7 +792,7 @@ pub(super) fn lines(o: &Onb, w: u16, gap: usize) -> Option<Vec<Line<'static>>> {
                 v.push(dim(format!("{} in your environment holds another key: i use this one.", n)));
             }
             blanks(&mut v, gap);
-            v.push(keyline("{enter} ok"));
+            v.push(keybar("⏎ ok"));
             v
         }
         _ => return None,

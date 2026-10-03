@@ -455,7 +455,7 @@ fn enter_on_chatgpt_signs_in_or_opens_its_menu() {
     settle(&mut o, &e);
     assert_eq!(o.sub, Sub::List);
     let sc = screen(&o);
-    has(&sc, &["signed out here. ChatGPT didn't confirm: to be sure, remove bise from the connected apps in your ChatGPT settings."]);
+    has(&sc, &["signed out here. ChatGPT didn't confirm: to be sure, remove bise in your ChatGPT settings."]);
     assert!(chatgpt_row(&sc).contains("signed out"), "{sc}");
 }
 
