@@ -115,6 +115,11 @@ reasoning = true
 export GATEWAY_HEADERS="x-team: platform"
 ```
 
+`bise auth check <provider> --model <provider/model>` runs `key_command`
+and sends the same extra headers as a model request. It does not save the
+command's output. Provider listings and `bise doctor` report the command
+as configured but unchecked; they do not run it.
+
 The key from `key_command` is sent both as the API's own header and as
 `Authorization: Bearer`. A command that fails or prints nothing stops
 the call with one line naming it. Write `key_command` on one line, with

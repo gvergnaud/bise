@@ -568,7 +568,7 @@ fn keys_and_model(home: &bise_home::Home) -> (Check, Vec<Check>, Check) {
             let fix = fix.split_once(": ").map(|(_, f)| f.to_string()).unwrap_or(fix);
             return Err((format!("{}: {} has no base URL", what, r.provider), fix));
         }
-        if !r.key_env.is_empty() && keys.find(&r.provider, &r.key_env).is_none() {
+        if r.caps.key_command.is_empty() && !r.key_env.is_empty() && keys.find(&r.provider, &r.key_env).is_none() {
             return Err((format!("{}: no {} key", what, r.provider), no_key_fix(&setup, &r, &found)));
         }
         Ok(what)

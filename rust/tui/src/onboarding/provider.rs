@@ -505,6 +505,7 @@ fn from_words(o: &Onb, f: &From) -> String {
 /// `not set up` (the roles it runs follow: [`role_tags`]).
 fn state_spans(o: &Onb, p: &Provider) -> Vec<Span<'static>> {
     let v = match o.key_state(&p.id).and_then(|k| k.from.clone()) {
+        _ if o.setup.catalog.provider(&p.id).is_some_and(|p| !p.key_command().is_empty()) => vec![s("authentication via key_command (not checked)", theme::text())],
         _ if p.key_env.is_empty() => vec![s("✓ ", theme::accent()), s("no key needed", theme::text())],
         // the ✓ says ready (designer, BISE-298)
         Some(f) => vec![s("✓ ", theme::accent()), s(from_words(o, &f), theme::text())],
@@ -646,6 +647,7 @@ pub(super) fn lines(o: &Onb, w: u16, gap: usize) -> Option<Vec<Line<'static>>> {
             let ks = o.key_state(&p.id);
             let mut v = vec![title(p.name.clone())];
             let head = match ks.and_then(|k| k.from.clone()) {
+                _ if o.setup.catalog.provider(&p.id).is_some_and(|p| !p.key_command().is_empty()) => "authentication via key_command (not checked)".to_string(),
                 _ if p.key_env.is_empty() => "✓ no key needed".to_string(),
                 Some(f) => format!("✓ ready · {}", from_words(o, &f)),
                 None => "not set up".to_string(),

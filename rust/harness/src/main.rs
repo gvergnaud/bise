@@ -165,7 +165,9 @@ fn auth_paths() -> bise_catalog::auth_cli::Paths {
 /// The first run's live key check (BISE-266), for `login --check` and
 /// `auth check`: `BEND_PROVIDER_URL` points it at the tests' fake provider.
 fn key_check(setup: &bise_catalog::Setup, model: &str, key: &str) -> Result<(), bise_catalog::auth_cli::CheckFail> {
-    bend_tui::check_model(setup, model, key, &|k: &str| std::env::var(k).ok().filter(|v| !v.is_empty()))
+    let files = bise_catalog::auth::EnvFile::read_all(&auth_paths().env_files);
+    let env = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
+    bend_tui::check_model(setup, model, key, &|k| bise_catalog::with_files(&env, &files, k))
 }
 
 /// Every provider's key where the Bend runtime reads it: getenv(key_env)

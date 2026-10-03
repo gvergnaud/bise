@@ -26,6 +26,9 @@ pub fn key_state(p: &Provider, keys: &Keys, home: Option<&Path>) -> String {
     if !p.needs.is_empty() {
         return format!("not usable yet ({})", p.needs);
     }
+    if !p.key_command().is_empty() {
+        return "authentication via key_command (not checked)".into();
+    }
     if p.key_env.is_empty() {
         return "no key needed".into();
     }

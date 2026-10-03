@@ -186,6 +186,52 @@ pub fn loose_mode(path: &Path) -> Option<u32> {
 
 // ---- the old .env files ----
 
+/// Run an explicitly requested key check. Never include output in an error.
+/// Listing providers must not call this function.
+pub fn command_key(command: &str, timeout: std::time::Duration) -> Result<String, String> {
+    use std::io::Read;
+    use std::os::unix::process::CommandExt;
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+
+    let error = || "key_command failed or printed no valid key (config.toml)".to_string();
+    let mut child = Command::new("/bin/sh")
+        .args(["-c", command])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .process_group(0)
+        .spawn()
+        .map_err(|_| error())?;
+    let stdout = child.stdout.take().expect("piped stdout");
+    let reader = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        stdout.take(8193).read_to_end(&mut bytes).map(|_| bytes)
+    });
+    let start = Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break Some(status),
+            Ok(None) if start.elapsed() < timeout => std::thread::sleep(Duration::from_millis(10)),
+            _ => break None,
+        }
+    };
+    // Stop descendants too: they must not keep the stdout pipe open.
+    // SAFETY: this child was started in its own process group.
+    unsafe { libc::kill(-(child.id() as i32), libc::SIGKILL); }
+    let _ = child.wait();
+    let bytes = reader.join().map_err(|_| error())?.map_err(|_| error())?;
+    if !status.is_some_and(|s| s.success()) || bytes.len() > 8192 {
+        return Err(error());
+    }
+    let text = String::from_utf8(bytes).map_err(|_| error())?;
+    let key = text.trim();
+    if key.is_empty() || key.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err(error());
+    }
+    Ok(key.to_string())
+}
+
 /// One `.env` file: its path and its `KEY=VALUE` lines.
 #[derive(Clone, Debug, Default)]
 pub struct EnvFile {
@@ -314,7 +360,7 @@ impl Keys<'_> {
     /// or it needs none (a local server). The model pickers list only
     /// these providers' models.
     pub fn ready(&self, p: &Provider) -> bool {
-        p.needs.is_empty() && p.chats() && (p.key_env.is_empty() || self.for_provider(p).is_some())
+        p.needs.is_empty() && p.chats() && (!p.key_command().is_empty() || p.key_env.is_empty() || self.for_provider(p).is_some())
     }
 
     /// The environment variable holding ANOTHER key for provider `id`
@@ -332,6 +378,9 @@ impl Keys<'_> {
     /// "env MISTRAL_API_KEY", "auth.json", "auth.json · env MISTRAL_API_KEY
     /// holds another key, unused".
     pub fn source(&self, p: &Provider, home: Option<&Path>) -> Option<String> {
+        if !p.key_command().is_empty() {
+            return Some("key_command (not checked)".into());
+        }
         let f = self.for_provider(p)?;
         let from = f.from.describe(home);
         Some(match self.shadowed(&p.id, &p.key_env) {

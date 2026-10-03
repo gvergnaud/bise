@@ -343,13 +343,14 @@ pub fn render_list_styled(c: &Catalog, keys: &Keys, paths: &Paths, st: &Style) -
 pub fn render_providers(c: &Catalog, keys: &Keys, paths: &Paths, main: &str, st: &Style) -> String {
     let home = paths.home.as_deref();
     let mut o = format!("{}\n\n", st.title("your providers"));
-    let chat = |p: &&Provider| !p.key_env.is_empty() && p.needs.is_empty() && p.chats();
+    let chat = |p: &&Provider| (!p.key_command().is_empty() || !p.key_env.is_empty()) && p.needs.is_empty() && p.chats();
     let (shown, rest): (Vec<&Provider>, Vec<&Provider>) =
-        c.providers.iter().filter(chat).partition(|p| !p.hidden || keys.for_provider(p).is_some() || p.id == main);
+        c.providers.iter().filter(chat).partition(|p| !p.hidden || keys.source(p, home).is_some() || p.id == main);
     let w = shown.iter().map(|p| p.name.chars().count()).max().unwrap_or(8).max(16) + 2;
     for p in &shown {
         let name = format!("{:<w$}", p.name, w = w);
         let mut state = match keys.for_provider(p) {
+            _ if !p.key_command().is_empty() => st.dim("authentication via key_command (not checked)"),
             Some(f) => {
                 let from = match &f.from {
                     From::AuthFile => "saved in bise".to_string(),
@@ -394,7 +395,7 @@ pub fn render_providers(c: &Catalog, keys: &Keys, paths: &Paths, main: &str, st:
             st.ask(&format!("{} is readable by others (mode {:o}): chmod 600 it", tilde(&paths.auth_file, home), m))
         ));
     }
-    if !shown.iter().any(|p| keys.for_provider(p).is_some()) {
+    if !shown.iter().any(|p| keys.source(p, home).is_some()) {
         o.push_str(&format!("{}\n", st.next(&format!("{} login <provider>", CLI))));
     } else {
         o.push_str(&format!("{}\n", st.dim(&format!("{} login <provider> sets one up or changes it; in bise: /provider", CLI))));
@@ -645,10 +646,10 @@ pub fn check_main(args: &[String], paths: &Paths, check: Checker) -> i32 {
         }
         (None, None) => c.resolve(&setup.model).provider,
     };
-    let p = match check_provider(c, &id) {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("{}", err.fail(&e));
+    let p = match c.provider(&id) {
+        Some(p) => p,
+        None => {
+            eprintln!("{}", err.fail(&format!("unknown provider '{}'", id)));
             return 1;
         }
     };
@@ -659,19 +660,27 @@ pub fn check_main(args: &[String], paths: &Paths, check: Checker) -> i32 {
             return 2;
         }
     };
+    if c.resolve(&model).caps.key_command.is_empty() && p.key_env.is_empty() {
+        eprintln!("{}", err.fail(&format!("{} ({}) needs no key", p.id, p.name)));
+        return 1;
+    }
     let store = match read_store(paths) {
         Ok(s) => s,
         Err(code) => return code,
     };
     let files = EnvFile::read_all(&paths.env_files);
     let keys = Keys { env: &real_env, store: &store, files: &files };
-    let Some(found) = keys.for_provider(p) else {
+    let (key, from) = if !c.resolve(&model).caps.key_command.is_empty() {
+        // The checker runs the command for each request, including a retry.
+        (String::new(), "key_command".to_string())
+    } else if let Some(found) = keys.for_provider(p) {
+        (found.key, found.from.describe(paths.home.as_deref()))
+    } else {
         eprintln!("{}", err.fail(&format!("no {} key.", p.name)));
         eprintln!("{}", err.next(&format!("{} login {}  (or set {})", CLI, p.id, p.key_env)));
         return 1;
     };
-    let from = found.from.describe(paths.home.as_deref());
-    match check(&setup, &model, &found.key) {
+    match check(&setup, &model, &key) {
         Ok(()) => {
             println!("{}", out.ok(&format!("{} answered with the key from {}.", model, from)));
             0

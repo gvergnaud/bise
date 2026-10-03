@@ -295,6 +295,11 @@ pub struct Provider {
 }
 
 impl Provider {
+    /// The configured key source. Reading it does not run the command.
+    pub fn key_command(&self) -> &str {
+        self.caps.key_command.as_deref().unwrap_or("")
+    }
+
     /// It runs chats: not voice only (`stt`), not decisions only.
     pub fn chats(&self) -> bool {
         !self.stt_only && !self.decides

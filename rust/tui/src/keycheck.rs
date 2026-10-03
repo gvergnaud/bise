@@ -22,6 +22,8 @@ pub(crate) struct Call {
     pub base_url: String,
     pub model: String,
     pub key: String,
+    pub key_command: String,
+    pub headers_env: String,
     /// a voice model (BISE-298): the call transcribes [`SILENCE_MS`] of
     /// silence, which proves the key and the model at once
     pub voice: bool,
@@ -65,6 +67,8 @@ pub(crate) enum Why {
     /// nothing was called: the provider has no base URL; what to set
     /// (bise_catalog::Catalog::no_base_url)
     NoUrl(String),
+    /// A local gateway setting or a required request header is invalid.
+    Configuration(String),
 }
 
 /// The check's answer before any call: the model's provider has no base
@@ -140,6 +144,19 @@ pub(crate) fn request(c: &Call, env: &dyn Fn(&str) -> Option<String>) -> crate::
         (format!("{base}/chat/completions"), vec![("Authorization".to_string(), format!("Bearer {}", c.key))], b)
     };
     headers.push(("Content-Type".into(), "application/json".into()));
+    if !c.key_command.is_empty() {
+        headers.retain(|(name, _)| !name.eq_ignore_ascii_case("Authorization"));
+        headers.push(("Authorization".into(), format!("Bearer {}", c.key)));
+    }
+    for line in env(&c.headers_env).unwrap_or_default().lines() {
+        if let Some((name, value)) = line.split_once(':') {
+            let name = name.trim();
+            if !name.is_empty() {
+                headers.retain(|(old, _)| !old.eq_ignore_ascii_case(name));
+                headers.push((name.into(), value.trim().into()));
+            }
+        }
+    }
     let url = env("BEND_PROVIDER_URL").filter(|u| !u.trim().is_empty()).unwrap_or(endpoint);
     crate::voice::http::Request { url, headers, body: body.to_string().into_bytes() }
 }
@@ -203,6 +220,9 @@ fn why(status: u16, body: &[u8]) -> Result<(), Why> {
         // some providers say a bad key with a 400
         400 if about(&["api key", "api_key", "apikey", "authentication", "unauthorized"]) => Err(Why::WrongKey),
         400 | 422 if about(&["model"]) => Err(Why::Model),
+        400 | 422 if about(&["missing required header", "missing header"]) => {
+            Err(Why::Configuration("the provider requires a request header; check headers_env in config.toml".into()))
+        }
         // past the key and the model: a 400 about the small request itself
         400 | 422 => Ok(()),
         s => Err(Why::Unreachable(format!("it answered {}", s))),
@@ -314,6 +334,12 @@ fn check_with(c: &Call, env: &dyn Fn(&str) -> Option<String>, retry_after: Durat
 }
 
 fn check_once(c: &Call, env: &dyn Fn(&str) -> Option<String>) -> Result<(), Fail> {
+    let mut call = c.clone();
+    if !call.key_command.is_empty() {
+        call.key = bise_catalog::auth::command_key(&call.key_command, Duration::from_secs(60))
+            .map_err(|e| Fail::of(Why::Configuration(e)))?;
+    }
+    let c = &call;
     let req = request(c, env);
     match crate::voice::http::send(&req, Duration::from_secs(20)) {
         Ok(r) => verdict(r.status, &r.body, &c.key),
@@ -336,7 +362,7 @@ pub fn check_model(
     if r.known == bise_catalog::Known::NoProvider {
         return Err(CheckFail { kind: CheckKind::Other(format!("unknown provider '{}' in {}", r.provider, model)), said: String::new() });
     }
-    let call = Call { provider: r.provider.clone(), api: r.api.clone(), base_url: r.base_url.clone(), model: r.id.clone(), key: key.to_string(), voice: false };
+    let call = Call { provider: r.provider.clone(), api: r.api.clone(), base_url: r.base_url.clone(), model: r.id.clone(), key: key.to_string(), key_command: r.caps.key_command.clone(), headers_env: r.caps.headers_env.clone(), voice: false };
     let answer = match no_url(&call, &setup.catalog, env("BEND_PROVIDER_URL").as_deref()) {
         Some(f) => Err(f),
         None => check(&call, env),
@@ -348,7 +374,7 @@ pub fn check_model(
             Why::Model => CheckKind::Model,
             Why::NoAccess => CheckKind::NoAccess,
             Why::Unreachable(e) => CheckKind::Unreachable(e),
-            Why::NoUrl(e) => CheckKind::Other(e),
+            Why::NoUrl(e) | Why::Configuration(e) => CheckKind::Other(e),
         },
         said: f.said,
     })
@@ -359,7 +385,7 @@ mod tests {
     use super::*;
 
     fn call(api: &str, provider: &str) -> Call {
-        Call { provider: provider.into(), api: api.into(), base_url: "https://x.test/v1/".into(), model: "m1".into(), key: "k-secret".into(), voice: false }
+        Call { provider: provider.into(), api: api.into(), base_url: "https://x.test/v1/".into(), model: "m1".into(), key: "k-secret".into(), key_command: String::new(), headers_env: String::new(), voice: false }
     }
 
     /// Ben's first run (2026-10-01): the foundry key found, no URL. No
@@ -565,5 +591,46 @@ mod tests {
         let env = move |k: &str| (k == "BEND_PROVIDER_URL").then(|| url.clone());
         assert_eq!(check_with(&call("anthropic", "anthropic"), &env, Duration::from_millis(10)), Ok(()));
         assert_eq!(server.join().unwrap(), 2);
+    }
+
+    #[test]
+    fn a_gateway_check_sends_the_command_key_and_custom_headers() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let setup = bise_catalog::Setup::from_text(Some(&format!(r#"
+[providers.gateway]
+api = "anthropic"
+base_url = "http://{}/v1"
+key_env = ""
+key_command = "printf fresh-token"
+headers_env = "GATEWAY_HEADERS"
+"#, listener.local_addr().unwrap())), &|_| None);
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+            let mut bytes = Vec::new();
+            let mut buf = [0; 4096];
+            while !bytes.windows(4).any(|s| s == b"\r\n\r\n") {
+                let n = stream.read(&mut buf).unwrap();
+                assert!(n > 0);
+                bytes.extend_from_slice(&buf[..n]);
+            }
+            write!(stream, "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{{}}").unwrap();
+            String::from_utf8(bytes).unwrap().to_ascii_lowercase()
+        });
+        let env = |k: &str| (k == "GATEWAY_HEADERS").then(|| "source: gateway-test\nx-team: platform".into());
+        assert_eq!(check_model(&setup, "gateway/model", "stale-token", &env), Ok(()));
+        let sent = server.join().unwrap();
+        for header in ["authorization: bearer fresh-token", "x-api-key: fresh-token", "source: gateway-test", "x-team: platform"] {
+            assert!(sent.contains(header), "missing {header}");
+        }
+        assert!(!sent.contains("stale-token"));
+    }
+
+    #[test]
+    fn missing_gateway_headers_do_not_pass_the_key_check() {
+        let failure = verdict(400, br#"{"error":{"message":"Missing required header: source"}}"#, "secret").unwrap_err();
+        assert!(matches!(failure.why, Why::Configuration(_)));
+        assert!(failure.said.contains("Missing required header"));
     }
 }
