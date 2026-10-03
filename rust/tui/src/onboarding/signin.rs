@@ -257,7 +257,7 @@ impl Onb {
             Ok(f) => {
                 let _ = (self.logins.open)(f.url());
                 self.flow = Some(f);
-                Sub::SignIn(k, false)
+                Sub::SignIn(k, None)
             }
             Err(e) => self.sign_in_note(format!("▲ {}", e.trim_end_matches('.'))),
         }

@@ -336,8 +336,8 @@ pub(crate) enum Sub {
     Remove(Provider),
     /// OpenRouter's key step: `sign in with OpenRouter` or `paste a key`
     OpenRouter(usize),
-    /// a sign-in waits for the browser; the link was copied (`c`)
-    SignIn(Kind, bool),
+    /// a sign-in waits for the browser; when its link was copied (`c`)
+    SignIn(Kind, Option<Instant>),
 }
 
 /// A row of `which model?`: a model of the catalog, or the id typed.
@@ -735,9 +735,10 @@ impl Onb {
                 }
                 self.sign_in_note(UNFINISHED.into())
             }
-            (Sub::SignIn(kind, _), KeyCode::Char('c')) => {
+            // only on c: the clipboard is never written unasked
+            (Sub::SignIn(kind, at), KeyCode::Char('c')) => {
                 let copied = self.flow.as_ref().is_some_and(|f| crate::clipboard::copy(f.url()));
-                Sub::SignIn(kind, copied)
+                Sub::SignIn(kind, if copied { Some(Instant::now()) } else { at })
             }
             (s @ Sub::SignIn(..), _) => s,
             // OpenRouter: sign in, or paste its key
@@ -1351,11 +1352,10 @@ fn model_lines(o: &Onb, w: u16, gap: usize) -> Vec<Line<'static>> {
         Sub::List | Sub::Menu(..) | Sub::Remove(_) | Sub::Effort(..) => model_list(o, w, gap),
         Sub::SignIn(k, copied) => {
             let mut v = vec![title(format!("waiting for you to sign in to {} in your browser…", k.name()))];
-            if *copied {
-                v.push(dim("the link is in your clipboard.".into()));
-            }
             blanks(&mut v, gap);
-            v.push(keybar("c copy the link   esc cancel"));
+            // designer: after c, the key's word says it for 2 s
+            let just = copied.is_some_and(|at| at.elapsed() < COPIED_FOR);
+            v.push(keybar(if just { "c copied   esc cancel" } else { "c copy the link   esc cancel" }));
             v
         }
         Sub::OpenRouter(i) => {
@@ -1671,6 +1671,9 @@ fn extras(o: &Onb) -> Vec<String> {
     v
 }
 
+/// How long the waiting screen's key bar says `c copied`.
+const COPIED_FOR: Duration = Duration::from_secs(2);
+
 /// The key step's label column (designer: the descriptions line up).
 const PAY_W: usize = 27;
 
@@ -1734,11 +1737,24 @@ fn model_list(o: &Onb, w: u16, gap: usize) -> Vec<Line<'static>> {
         } else {
             vec![s(padded(&label, lw), theme::text())]
         };
-        let fits = 2 + lw + desc.width() <= w as usize;
-        if fits {
-            name.push(s(desc.clone(), theme::dim()));
+        // on the label/description grid (designer): the description on
+        // the row; too long, split at its ' · ', the rest on a line under
+        // the description column; else under the row
+        let room = (w as usize).saturating_sub(2 + lw);
+        let (head, tail) = match desc.split_once(" · ") {
+            _ if desc.width() <= room => (desc.clone(), None),
+            Some((h, t)) if h.width() <= room && t.width() <= room => (h.to_string(), Some(t.to_string())),
+            _ => (String::new(), None),
+        };
+        if head.is_empty() {
+            option(&mut v, i == o.sel, name, &desc, w);
+        } else {
+            name.push(s(head, theme::dim()));
+            option(&mut v, i == o.sel, name, "", w);
+            if let Some(t) = tail {
+                v.push(Line::from(s(format!("{}{}", " ".repeat(2 + lw), t), theme::dim())));
+            }
         }
-        option(&mut v, i == o.sel, name, if fits { "" } else { &desc }, w);
     }
     // Claude Code's plan, no Anthropic key: why it isn't one of the ways
     let anthropic = o.found.iter().any(|p| p.id == "anthropic");

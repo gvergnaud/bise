@@ -220,9 +220,18 @@ fn codex_signed_in_marks_the_chatgpt_row() {
     script(PlanState::NotSetUp, Detected { codex_chatgpt: true, claude_plan: false }, vec![]);
     let o = first_run(&e);
     has(&screen(&o), &["› Continue with ChatGPT      use your Plus or Pro plan · you use it in Codex already"]);
-    // 80 columns: the description goes under its label, whole
+    // 80 columns (designer): every row on the label/description grid, the
+    // Codex mark on a second line under the description column
     let sc = screen_at(&o, 80, 36);
-    has(&sc, &["Continue with ChatGPT", "use your Plus or Pro plan · you use it in Codex already"]);
+    let rows: Vec<&str> = sc.lines().collect();
+    let r1 = rows.iter().position(|l| l.contains("› Continue with ChatGPT")).expect("row 1");
+    // columns in chars (`›` is one column, three bytes)
+    let at = |r: &str, pat: &str| r.find(pat).map(|b| r[..b].chars().count());
+    let col = at(rows[r1], "use your Plus or Pro plan").expect("on the row");
+    assert!(!rows[r1].contains("Codex"), "{sc}");
+    assert_eq!(at(rows[r1 + 1], "you use it in Codex already"), Some(col), "{sc}");
+    assert_eq!(at(rows[r1 + 2], "sign in, or paste its key"), Some(col), "{sc}");
+    assert_eq!(at(rows[r1 + 2], "OpenRouter"), at(rows[r1], "Continue"), "{sc}");
 }
 
 #[test]
@@ -251,14 +260,15 @@ fn continue_with_chatgpt_waits_then_signs_in_checks_and_runs_main_on_the_plan() 
     o.sel = row_of(&o, Opt::ChatGpt);
     o.on_key(key(KeyCode::Enter), 1, &e);
     // waiting: the browser opened on the link
-    assert_eq!(o.sub, Sub::SignIn(Kind::ChatGpt, false));
+    assert_eq!(o.sub, Sub::SignIn(Kind::ChatGpt, None));
     assert_eq!(OPENED.with(|x| x.borrow().clone()), vec![URL.to_string()]);
     let sc = screen(&o);
     has(&sc, &["waiting for you to sign in to ChatGPT in your browser…", "c copy the link   esc cancel"]);
     // c copies the link
     o.on_key(key(KeyCode::Char('c')), 2, &e);
     assert_eq!(crate::clipboard::test_clipboard().as_deref(), Some(URL));
-    has(&screen(&o), &["the link is in your clipboard."]);
+    has(&screen(&o), &["c copied   esc cancel"]);
+    assert!(matches!(o.sub, Sub::SignIn(Kind::ChatGpt, Some(_))));
     // still waiting, then back from the browser: signed in, the plan checked
     o.tick(&e);
     assert!(matches!(o.sub, Sub::SignIn(..)));
@@ -330,7 +340,7 @@ fn an_expired_plan_check_says_so_and_enter_signs_in_again() {
     assert!(matches!(o.sub, Sub::Failed(_, _, Tried::Plan(_), _)), "{:?}", o.sub);
     has(&screen(&o), &[EXPIRED, "⏎ sign in again"]);
     o.on_key(key(KeyCode::Enter), 2, &e);
-    assert_eq!(o.sub, Sub::SignIn(Kind::ChatGpt, false));
+    assert_eq!(o.sub, Sub::SignIn(Kind::ChatGpt, None));
     // the plan's limit: its own line
     o.logins.token = |_| Ok("tok-limit-SECRET".into());
     script(PlanState::SignedIn(me()), Detected::default(), vec![Poll::Done(Some(me()))]);
@@ -355,7 +365,7 @@ fn openrouter_offers_sign_in_or_a_key() {
     // sign in: the browser, then (its key saved) its models
     o.sub = Sub::OpenRouter(0);
     o.on_key(key(KeyCode::Enter), 3, &e);
-    assert_eq!(o.sub, Sub::SignIn(Kind::OpenRouter, false));
+    assert_eq!(o.sub, Sub::SignIn(Kind::OpenRouter, None));
     has(&screen(&o), &["waiting for you to sign in to OpenRouter in your browser…"]);
     settle(&mut o, &e);
     assert!(matches!(&o.sub, Sub::Model(p, ..) if p.id == "openrouter"), "{:?}", o.sub);
@@ -421,7 +431,7 @@ fn enter_on_chatgpt_signs_in_or_opens_its_menu() {
     let mut o = panel(&e);
     o.sel = 0;
     o.on_key(key(KeyCode::Enter), 1, &e);
-    assert_eq!(o.sub, Sub::SignIn(Kind::ChatGpt, false));
+    assert_eq!(o.sub, Sub::SignIn(Kind::ChatGpt, None));
     has(&screen(&o), &["waiting for you to sign in to ChatGPT in your browser…"]);
     // esc: back to the list, the line said, the listener closed
     o.on_key(key(KeyCode::Esc), 2, &e);
@@ -500,4 +510,53 @@ fn the_plans_models_say_the_plan_pays() {
     let sc = screen(&o);
     let row = sc.lines().find(|l| l.contains("gpt-6.1-luna")).unwrap_or_default();
     assert!(row.contains("your ChatGPT plan"), "{sc}");
+}
+
+// ---- the designer's captures (SUBS_SHOTS=<dir> cargo test -p bend-tui
+// --lib captures_for_the_designer -- --ignored) ----
+
+#[test]
+#[ignore]
+fn captures_for_the_designer() {
+    let Some(dir) = std::env::var_os("SUBS_SHOTS").map(PathBuf::from) else { return };
+    std::fs::create_dir_all(&dir).unwrap();
+    let save = |name: &str, sc: &str| std::fs::write(dir.join(format!("{name}.txt")), sc).unwrap();
+    let h = tmp("shots");
+    let e = home_env(&h, &[]);
+    // /provider, the four ChatGPT states, at 80 and 150
+    for (name, state) in [("signed-in", PlanState::SignedIn(me())), ("signed-out", PlanState::SignedOut), ("not-set-up", PlanState::NotSetUp), ("expired", PlanState::Expired)] {
+        script(state, Detected::default(), vec![]);
+        let o = panel(&e);
+        save(&format!("7-provider-{name}-80"), &screen_at(&o, 80, 30));
+        save(&format!("7-provider-{name}-150"), &screen_at(&o, 150, 30));
+    }
+    // its menu
+    script(PlanState::SignedIn(me()), Detected::default(), vec![]);
+    let mut o = panel(&e);
+    o.on_key(key(KeyCode::Enter), 1, &e);
+    save("8-provider-menu-80", &screen_at(&o, 80, 30));
+    // /models: main's models on the plan
+    let mut o = Onb::provider_panel(&e, provider::Ask { open: roles::Open::Pick(bise_catalog::roles::MAIN), ..Default::default() });
+    o.with_logins(fake(), &e);
+    save("9-models-providers-80", &screen_at(&o, 80, 30));
+    let p = o.plan_provider().unwrap();
+    o.sub = Sub::Model(p, 0, String::new());
+    save("9-models-plan-80", &screen_at(&o, 80, 30));
+    // the turn lines in the feed, at 80 (the usage link's wrap)
+    let lines = [
+        "your ChatGPT plan's limit for bise is reached. your usage is at chatgpt.com/settings/usage, or switch model with /model.",
+        "ChatGPT plan use is off for bise. turn it on in your ChatGPT settings, or pick another provider in /provider.",
+        "ChatGPT couldn't check your plan's usage. try again in a moment, or switch model with /model.",
+        "your ChatGPT sign-in expired. sign in again in /provider, or run bise login chatgpt.",
+    ];
+    let mut out = String::new();
+    for l in lines {
+        let ev = crate::wire::parse_line(&format!("  obs: turn_done: failed: {}", l)).expect("parse");
+        for r in crate::render::ev_rows(&ev, 0, 80) {
+            out.push_str(&r.spans.iter().map(|s| s.content.to_string()).collect::<String>());
+            out.push('\n');
+        }
+        out.push('\n');
+    }
+    save("10-turn-lines-80", &out);
 }

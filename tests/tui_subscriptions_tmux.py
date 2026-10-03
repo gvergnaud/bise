@@ -159,7 +159,7 @@ def main():
             sc = t.wait(WAITING, 20)
             has(sc, "c copy the link   esc cancel")
             t.keys("c")
-            sc = t.wait("the link is in your clipboard.")
+            sc = t.wait("c copied   esc cancel")
             shot("2-waiting-150", sc)
             link = open(clip).read()
             assert link.startswith(auth + "/api/accounts/authorize?"), link
@@ -184,7 +184,7 @@ def main():
         root, clip, line = setup(E, auth, after=1)
         with tui_session(80, 30, line, E=E) as t:
             sc = to_pay_step(t)
-            has(sc, "Continue with ChatGPT", CODEX, CLAUDE)
+            has(sc, "Continue with ChatGPT", "use your Plus or Pro plan", "you use it in Codex already", CLAUDE)
             shot("4-pay-80", sc)
             control(auth, action="deny_next")
             t.keys("Enter")
@@ -199,7 +199,7 @@ def main():
             t.keys("Enter")
             t.wait(WAITING, 20)
             t.keys("c")
-            t.wait("the link is in your clipboard.")
+            t.wait("c copied   esc cancel")
             q = urllib.parse.parse_qs(urllib.parse.urlparse(open(clip).read()).query)
             port = int(urllib.parse.urlparse(q["redirect_uri"][0]).port)
             socket.create_connection(("127.0.0.1", port), timeout=2).close()   # listening
