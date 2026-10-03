@@ -2714,14 +2714,14 @@ law provider_resolves_alias:
       "[providers.foundry]\nbase_url = \"https://foundry.example.net/anthropic/v1\"", "")
     == Pv.ROk{Pv.Prov{"foundry", "claude-opus-5-5", Api.Anthropic{},
       "https://foundry.example.net/anthropic/v1/messages",
-      "ANTHROPIC_FOUNDRY_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "high"}}} : Pv.Resolved}
+      "ANTHROPIC_FOUNDRY_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "high", False{}}}} : Pv.Resolved}
 
 law provider_legacy_claude_is_foundry:
   {Pv.resolve("", "claude-opus-5-5", "", "", "",
       "[providers.foundry]\nbase_url = \"https://foundry.example.net/anthropic/v1\"", "")
     == Pv.ROk{Pv.Prov{"foundry", "claude-opus-5-5", Api.Anthropic{},
       "https://foundry.example.net/anthropic/v1/messages",
-      "ANTHROPIC_FOUNDRY_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "high"}}} : Pv.Resolved}
+      "ANTHROPIC_FOUNDRY_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "high", False{}}}} : Pv.Resolved}
 
 # LAW: bise ships no URL for the foundry proxy (a private one): without
 # a base_url in config.toml (so in the models file), no call, the error
@@ -2750,14 +2750,14 @@ base_url = \"\"", "")
 law provider_legacy_glm_is_mistral:
   {Pv.resolve("", "zai-glm-5-3", "", "", "", "", "")
     == Pv.ROk{Pv.Prov{"mistral", "zai-glm-5-3", Api.OpenAI{},
-      "https://api.mistral.ai/v1/chat/completions", "MISTRAL_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "high"}}} : Pv.Resolved}
+      "https://api.mistral.ai/v1/chat/completions", "MISTRAL_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "high", False{}}}} : Pv.Resolved}
 
 # LAW: a model the registry does not list works on its provider's
 # defaults.
 law provider_unlisted_model_works:
   {Pv.resolve("", "", "", "", "model = \"mistral/brand-new-7b\"", "", "")
     == Pv.ROk{Pv.Prov{"mistral", "brand-new-7b", Api.OpenAI{},
-      "https://api.mistral.ai/v1/chat/completions", "MISTRAL_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "high"}}} : Pv.Resolved}
+      "https://api.mistral.ai/v1/chat/completions", "MISTRAL_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "high", False{}}}} : Pv.Resolved}
 
 # LAW: the choice order (as rust/catalog's Setup): main = BISE_MODEL >
 # BEND_MODEL > config model; a sub-agent (BISE_ROLE=agent) =
@@ -2933,7 +2933,7 @@ law provider_from_models_file:
       "[providers.work]\napi = \"openai-chat\"\nbase_url = \"https://llm.corp.example/v1/\"\nkey_env = \"CORP_KEY\"\nneeds = \"\"",
       "")
     == Pv.ROk{Pv.Prov{"work", "qwen/q3-coder", Api.OpenAI{},
-      "https://llm.corp.example/v1/chat/completions", "CORP_KEY", Api.MFacts{False{}, 0n, "max_tokens", "", "", ""}}}
+      "https://llm.corp.example/v1/chat/completions", "CORP_KEY", Api.MFacts{False{}, 0n, "max_tokens", "", "", "", False{}}}}
     : Pv.Resolved}
 
 # LAW: a model's own key wins over its provider's (a model on another
@@ -2943,7 +2943,7 @@ law provider_model_key_wins:
       "[providers.local]\napi = \"openai-chat\"\nbase_url = \"http://localhost:1234/v1\"\nkey_env = \"\"\n[models.\"local/m\"]\napi = \"anthropic\"",
       "")
     == Pv.ROk{Pv.Prov{"local", "m", Api.Anthropic{},
-      "http://localhost:1234/v1/messages", "", Api.MFacts{False{}, 0n, "max_tokens", "", "", ""}}} : Pv.Resolved}
+      "http://localhost:1234/v1/messages", "", Api.MFacts{False{}, 0n, "max_tokens", "", "", "", False{}}}} : Pv.Resolved}
 
 # LAW: the models file wins over the built-in entries, key by key; its
 # aliases and default_model are used.
@@ -2953,14 +2953,14 @@ law provider_file_over_builtin:
       "")
     == Pv.ROk{Pv.Prov{"foundry", "claude-x", Api.Anthropic{},
       "https://api.anthropic.com/v1/messages",
-      "ANTHROPIC_FOUNDRY_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "high"}}} : Pv.Resolved}
+      "ANTHROPIC_FOUNDRY_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "high", False{}}}} : Pv.Resolved}
 
 # LAW: BEND_PROVIDER_URL (the tests' fake provider) wins over the URL.
 law provider_url_env_wins:
   {Pv.resolve("", "mistral-small-latest", "", "", "", "",
       "http://127.0.0.1:9/v1/chat/completions")
     == Pv.ROk{Pv.Prov{"mistral", "mistral-small-latest", Api.OpenAI{},
-      "http://127.0.0.1:9/v1/chat/completions", "MISTRAL_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "high"}}}
+      "http://127.0.0.1:9/v1/chat/completions", "MISTRAL_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "high", False{}}}}
     : Pv.Resolved}
 
 # LAW: a long file is read to its end (a pair line takes 3 steps of the
@@ -3285,7 +3285,7 @@ law resp_style_of_api:
 # pair on call_1; Anthropic's signed span is dropped (not replayed as
 # text either); the tools are functions, strict off.
 law resp_body_maps:
-  {Api.api_body_for(Api.OpenAIResp{}, "gpt-6.1-sol", Api.MFacts{True{}, 0n, "max_tokens", "", "", "medium"},
+  {Api.api_body_for(Api.OpenAIResp{}, "gpt-6.1-sol", Api.MFacts{True{}, 0n, "max_tokens", "", "", "medium", False{}},
       W.parse_wire("MODEL default\nTOOL bash : Run a command.\nMSG system : Be brief.\nMSG user : hi\nMSG assistant : <think>plan\\nBENDSIG::oair:ENC1</think>\\nok\n  CALL 1 bash : ls\nMSG tool : a.txt\nMSG assistant : <think>old\\nBENDSIG::anthsig</think>\\nbye\nMSG user : again\nEND\n"))
     == "{\"model\":\"gpt-6.1-sol\",\"store\":false,\"reasoning\":{\"effort\":\"medium\",\"summary\":\"auto\"},\"include\":[\"reasoning.encrypted_content\"],\"input\":[{\"role\":\"developer\",\"content\":\"Be brief.\"},{\"role\":\"user\",\"content\":\"hi\"},{\"type\":\"reasoning\",\"summary\":[{\"type\":\"summary_text\",\"text\":\"plan\"}],\"encrypted_content\":\"ENC1\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"ok\"}]},{\"type\":\"function_call\",\"call_id\":\"call_1\",\"name\":\"bash\",\"arguments\":\"{\\\"arg\\\":\\\"ls\\\"}\"},{\"type\":\"function_call_output\",\"call_id\":\"call_1\",\"output\":\"a.txt\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"bye\"}]},{\"role\":\"user\",\"content\":\"again\"}],\"tools\":[{\"type\":\"function\",\"name\":\"bash\",\"description\":\"Run a command.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"arg\":{\"type\":\"string\"},\"description\":{\"type\":\"string\",\"description\":\"One short line shown to the user while this runs: what you are doing, in the user's language. 8 words at most, starting lowercase, no final period. E.g. 'weighing the hero image', 'je lance les tests du signup'.\"}},\"required\":[\"arg\"]},\"strict\":false}],\"tool_choice\":\"auto\"}"
     : String}
@@ -3293,7 +3293,7 @@ law resp_body_maps:
 # LAW: a model the catalog does not mark as reasoning sends no
 # reasoning, no include; an output cap rides as max_output_tokens.
 law resp_body_plain_model:
-  {Api.api_body_for(Api.OpenAIResp{}, "m", Api.MFacts{False{}, 64n, "max_tokens", "", "", ""},
+  {Api.api_body_for(Api.OpenAIResp{}, "m", Api.MFacts{False{}, 64n, "max_tokens", "", "", "", False{}},
       W.parse_wire("MODEL default\nMSG user : hi\nEND\n"))
     == "{\"model\":\"m\",\"store\":false,\"max_output_tokens\":64,\"input\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
     : String}
@@ -3336,6 +3336,186 @@ law resp_usage:
   {Api.usage_of(Api.OpenAIResp{},
       Rs.usage("data: {\"type\":\"response.completed\",\"response\":{\"output\":[],\"usage\":{\"input_tokens\":12,\"input_tokens_details\":{\"cached_tokens\":8},\"output_tokens\":3}}}\n"))
     == Api.Usage{12n, 3n, 8n, 0n} : Api.Usage}
+
+# ---- the ChatGPT plan route (shape = "chatgpt-plan", docs/subscriptions-design.md) ----
+# OpenAI's plan route (developers.openai.com/siwc, preview limitations)
+# takes store false and stream true, refuses an output cap and the
+# other fields below, a role "system" item, and function tools outside
+# a namespace. The fixture: a reasoning model WITH an output cap in the
+# catalog (the plan body must drop it), a system prompt, a tool, a call
+# and its output in the history.
+
+def plan.req() -> W.WReq:
+  W.parse_wire("MODEL default
+TOOL bash : Run a command.
+MSG system : Be brief.
+MSG user : hi
+MSG assistant : <think>plan\\nBENDSIG::oair:ENC1</think>\\nok
+  CALL 1 bash : ls
+MSG tool : a.txt
+MSG user : again
+END
+")
+
+# what goes on the wire: the family's stream body of the plan body
+def plan.body() -> String:
+  Api.wire_body(Api.OpenAIResp{}, Api.api_body_for(Api.OpenAIResp{}, "gpt-6.1-sol",
+    Api.MFacts{True{}, 4096n, "max_tokens", "", "", "medium", True{}}, plan.req()))
+
+# LAW: the plan body, whole: streamed, not stored, no output cap though
+# the catalog sets one, the system prompt a developer message, the tool
+# inside the "bise" namespace, the replayed call carrying its namespace.
+law resp_plan_body_maps:
+  {plan.body()
+    == "{\"stream\":true,\"model\":\"gpt-6.1-sol\",\"store\":false,\"reasoning\":{\"effort\":\"medium\",\"summary\":\"auto\"},\"include\":[\"reasoning.encrypted_content\"],\"input\":[{\"role\":\"developer\",\"content\":\"Be brief.\"},{\"role\":\"user\",\"content\":\"hi\"},{\"type\":\"reasoning\",\"summary\":[{\"type\":\"summary_text\",\"text\":\"plan\"}],\"encrypted_content\":\"ENC1\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"ok\"}]},{\"type\":\"function_call\",\"call_id\":\"call_1\",\"name\":\"bash\",\"arguments\":\"{\\\"arg\\\":\\\"ls\\\"}\",\"namespace\":\"bise\"},{\"type\":\"function_call_output\",\"call_id\":\"call_1\",\"output\":\"a.txt\"},{\"role\":\"user\",\"content\":\"again\"}],\"tools\":[{\"type\":\"namespace\",\"name\":\"bise\",\"description\":\"bise's tools\",\"tools\":[{\"type\":\"function\",\"name\":\"bash\",\"description\":\"Run a command.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"arg\":{\"type\":\"string\"},\"description\":{\"type\":\"string\",\"description\":\"One short line shown to the user while this runs: what you are doing, in the user's language. 8 words at most, starting lowercase, no final period. E.g. 'weighing the hero image', 'je lance les tests du signup'.\"}},\"required\":[\"arg\"]},\"strict\":false}]}],\"tool_choice\":\"auto\"}"
+    : String}
+
+# LAW: present: "stream": true first, "store": false.
+law resp_plan_streams_unstored:
+  {Bool.and(String.starts_with(plan.body(), "{\"stream\":true,"),
+    String.contains(plan.body(), "\"store\":false,")) == True{} : Bool}
+
+# LAW: absent: every field the plan route refuses, as a key.
+law resp_plan_no_refused_fields:
+  {List.any(&2, String, k => String.contains(plan.body(), k),
+    ["\"max_output_tokens\":", "\"temperature\":", "\"top_p\":", "\"metadata\":",
+      "\"user\":", "\"prompt_cache_retention\":", "\"safety_identifier\":",
+      "\"truncation\":", "\"previous_response_id\":", "\"background\":",
+      "\"conversation\":", "\"max_tool_calls\":", "\"top_logprobs\":",
+      "\"moderation\":", "\"prompt\":"])
+    == False{} : Bool}
+
+# LAW: absent: a role "system" item (the system prompt is a developer
+# message); present: "tools" opens on the "bise" namespace (the
+# function tools sit in it: resp_plan_body_maps pins the whole list).
+law resp_plan_no_system_item_no_bare_tool:
+  {Bool.or(String.contains(plan.body(), "\"role\":\"system\""),
+    Bool.not(String.contains(plan.body(),
+      "],\"tools\":[{\"type\":\"namespace\",\"name\":\"bise\",")))
+    == False{} : Bool}
+
+# LAW: the namespace round trip: a call the plan route sends back
+# inside the "bise" namespace is a CALL line with the tool's own name,
+# and that name maps back to the harness tool of the request.
+law resp_plan_namespaced_call_back:
+  {W.reply_names_in(W.req_tools(plan.req()),
+      Rs.reply_any("event: response.completed
+data: {\"type\":\"response.completed\",\"response\":{\"error\":null,\"output\":[{\"type\":\"function_call\",\"call_id\":\"call_x\",\"name\":\"bash\",\"namespace\":\"bise\",\"arguments\":\"{\\\"arg\\\":\\\"pwd\\\"}\"}]}}
+
+"))
+    == "OK 
+CALL 1 bash : pwd
+END
+" : String}
+
+# LAW: without the shape, the body is today's: no namespace, no
+# namespace on a replayed call, the input items and tools as before
+# (resp_body_maps and resp_body_plain_model pin today's whole bodies).
+law resp_no_shape_items_unchanged:
+  for xs: List<&2, J.Json>
+  {Rs.items_for(False{}, xs) == xs : List<&2, J.Json>}
+
+law resp_no_shape_tools_unchanged:
+  for ts: List<&2, W.WTool>
+  {Rs.tools_for(False{}, ts) == Rs.tools_json(ts) : List<&2, J.Json>}
+
+law resp_no_shape_no_namespace:
+  {String.contains(Api.api_body_for(Api.OpenAIResp{}, "gpt-6.1-sol",
+      Api.MFacts{True{}, 4096n, "max_tokens", "", "", "medium", False{}}, plan.req()),
+    "namespace") == False{} : Bool}
+
+# LAW: the shape comes from the models file: providers.<p>.shape =
+# "chatgpt-plan" is the plan; absent, or another word, is not.
+law plan_shape_from_models_file:
+  {Bool.and(Api.facts_plan(Pv.facts(Cf.parse_toml("[providers.chatgpt]
+api = \"openai-responses\"
+shape = \"chatgpt-plan\"
+"), "chatgpt", "chatgpt/gpt-6.1-sol", "")),
+    Bool.not(Bool.or(Api.facts_plan(Pv.facts(Cf.parse_toml("[providers.openai]
+api = \"openai-responses\"
+"), "openai", "openai/gpt-6.1-sol", "")),
+      Api.facts_plan(Pv.facts(Cf.parse_toml("[providers.chatgpt]
+shape = \"chatgpt\"
+"), "chatgpt", "chatgpt/gpt-6.1-sol", "")))))
+    == True{} : Bool}
+
+# ---- the plan's errors, one line each (design, final words §5) ----
+
+# LAW: the usage limit mid-stream (response.failed, a 200) ends the
+# turn on bise's line, no retry.
+law plan_limit_mid_stream:
+  {Pv.attempt_plan(True{}, 200,
+      Api.error_code(Api.OpenAIResp{}, "event: response.output_text.delta
+data: {\"type\":\"response.output_text.delta\",\"delta\":\"hel\"}
+
+event: response.failed
+data: {\"type\":\"response.failed\",\"response\":{\"status\":\"failed\",\"error\":{\"code\":\"subscription_sharing_usage_limit_exceeded\",\"message\":\"limit\"},\"output\":[]}}
+
+"),
+      Pv.ARetry{0, "provider 200: limit"})
+    == Pv.AFail{"your ChatGPT plan's limit for bise is reached. it resets on its own, or switch model with /model."}
+    : Pv.Attempt}
+
+# LAW: the usage limit before the stream (a 429 with OpenAI's error
+# object): the same line, not a retry.
+law plan_limit_429:
+  {Pv.attempt_plan(True{}, 429,
+      Api.error_code(Api.OpenAIResp{}, "{\"error\":{\"code\":\"subscription_sharing_usage_limit_exceeded\",\"message\":\"limit\",\"type\":\"usage_limit\"}}"),
+      Pv.attempt_status(429, "", "ERROR provider 429: limit
+END
+"))
+    == Pv.AFail{"your ChatGPT plan's limit for bise is reached. it resets on its own, or switch model with /model."}
+    : Pv.Attempt}
+
+# LAW: plan use unavailable, mid-stream: its line.
+law plan_usage_unavailable_mid_stream:
+  {Pv.attempt_plan(True{}, 200,
+      Api.error_code(Api.OpenAIResp{}, "event: response.failed
+data: {\"type\":\"response.failed\",\"response\":{\"error\":{\"code\":\"subscription_sharing_usage_unavailable\",\"message\":\"off\"},\"output\":[]}}
+
+"), Pv.ARetry{0, "provider 200: off"})
+    == Pv.AFail{"ChatGPT plan use is off for bise. turn it on in your ChatGPT settings, or pick another provider in /provider."}
+    : Pv.Attempt}
+
+# LAW: plan use unavailable, before the stream (a 503): its line.
+law plan_usage_unavailable_503:
+  {Pv.attempt_plan(True{}, 503,
+      Api.error_code(Api.OpenAIResp{}, "{\"error\":{\"code\":\"subscription_sharing_usage_unavailable\",\"message\":\"off\"}}"),
+      Pv.ARetry{0, "provider 503 (transient)"})
+    == Pv.AFail{"ChatGPT plan use is off for bise. turn it on in your ChatGPT settings, or pick another provider in /provider."}
+    : Pv.Attempt}
+
+# LAW: a 401 on a plan provider (OpenAI's {"detail": ...} admission
+# body, or any other) is the expired sign-in, never "refused the key".
+law plan_401_expired:
+  {Pv.attempt_plan(True{}, 401,
+      Api.error_code(Api.OpenAIResp{}, "{\"detail\":\"Unauthorized\"}"),
+      Pv.AFail{"OpenAI refused the key (401). check it with /setup."})
+    == Pv.AFail{"your ChatGPT sign-in expired. sign in again in /provider, or run bise login chatgpt."}
+    : Pv.Attempt}
+
+# LAW: the token command failing on a plan provider (signed out, the
+# refresh refused) is the expired sign-in too; another provider's
+# key_command keeps its line.
+law plan_key_command_failed:
+  {Bool.and(String.eq(Pv.key_why(True{}, True{}, "chatgpt", ""),
+      "your ChatGPT sign-in expired. sign in again in /provider, or run bise login chatgpt."),
+    String.eq(Pv.key_why(True{}, False{}, "corp", ""),
+      "no corp key: its key_command failed or printed nothing (config.toml)"))
+    == True{} : Bool}
+
+# LAW: a plan provider's other attempts are unchanged (a completed
+# stream, another error code, another status).
+law plan_other_attempts_unchanged:
+  for a: Pv.Attempt
+  {Pv.attempt_plan(True{}, 400, "invalid_request_error", a) == a : Pv.Attempt}
+
+# LAW: without the shape, no attempt changes, whatever the code.
+law plan_no_shape_unchanged:
+  for +s: U32
+  for +c: String
+  for a: Pv.Attempt
+  {Pv.attempt_plan(False{}, s, c, a) == a : Pv.Attempt}
 
 # ---- a refused request, in bise's words and the provider's (BISE-293) ----
 # The feed showed the provider's raw JSON twice; now one line: who
@@ -3729,7 +3909,7 @@ law oai_stream_json_body:
 # reason gets no reasoning_effort; its max_output is the cap, named
 # max_completion_tokens on OpenAI, max_tokens elsewhere.
 law oai_body_no_reasoning_cap:
-  {Api.api_body_for(Api.OpenAI{}, "m", Api.MFacts{False{}, 4096n, "max_tokens", "", "", ""},
+  {Api.api_body_for(Api.OpenAI{}, "m", Api.MFacts{False{}, 4096n, "max_tokens", "", "", "", False{}},
       W.parse_wire("MODEL default
 MSG user : hi
 END
@@ -3737,7 +3917,7 @@ END
     == "{\"model\":\"m\",\"max_tokens\":4096,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}" : String}
 
 law oai_body_openai_cap:
-  {Api.api_body_for(Api.OpenAI{}, "m", Api.MFacts{True{}, 128000n, "max_completion_tokens", "", "", "high"},
+  {Api.api_body_for(Api.OpenAI{}, "m", Api.MFacts{True{}, 128000n, "max_completion_tokens", "", "", "high", False{}},
       W.parse_wire("MODEL default
 MSG user : hi
 END
@@ -3761,7 +3941,7 @@ reasoning = false",
       "")
     == Pv.ROk{Pv.Prov{"openai", "gpt-4.1", Api.OpenAI{},
       "https://api.openai.com/v1/chat/completions", "OPENAI_API_KEY",
-      Api.MFacts{False{}, 200n, "max_completion_tokens", "", "", ""}}}
+      Api.MFacts{False{}, 200n, "max_completion_tokens", "", "", "", False{}}}}
     : Pv.Resolved}
 
 # LAW: only a non-empty flag is a Ctrl+C - the runtime clears the flag to
@@ -4201,7 +4381,7 @@ law family_headers_anthropic_betas:
 # (the dispatch passes max output, thinking word and reasoning through).
 law api_body_anth_follows_facts:
   {Api.api_body_for(Api.Anthropic{}, "m",
-      Api.MFacts{False{}, 200n, "max_tokens", "", "", ""},
+      Api.MFacts{False{}, 200n, "max_tokens", "", "", "", False{}},
       W.parse_wire("MODEL default
 MSG user : salut
 END
@@ -4302,7 +4482,7 @@ law window_follows_the_choice:
 
 # LAW: the chat body sends the call's effort word as is.
 law oai_body_sends_the_effort:
-  {Api.api_body_for(Api.OpenAI{}, "m", Api.MFacts{True{}, 0n, "max_tokens", "", "", "low"},
+  {Api.api_body_for(Api.OpenAI{}, "m", Api.MFacts{True{}, 0n, "max_tokens", "", "", "low", False{}},
       W.parse_wire("MODEL default
 MSG user : hi
 END

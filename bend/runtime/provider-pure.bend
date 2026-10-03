@@ -396,6 +396,12 @@ def effort_of(+reg: List<&2, Cf.KV>, +prov: String, +id: String,
   effort_pick(has_word(xs, asked), asked,
     effort_default(xs, Cf.cfg_or(model_key(reg, prov, id, "effort"), "")))
 
+# the request rules of a provider (`shape`, the catalog's: subs-auth
+# writes providers.chatgpt.shape = "chatgpt-plan"): only that exact
+# word is the ChatGPT plan route; absent or anything else, today's body
+def is_plan_shape(+shape: String) -> Bool:
+  String.eq(shape, "chatgpt-plan")
+
 def facts(+reg: List<&2, Cf.KV>, +prov: String, +id: String, +asked: String)
     -> Api.MFacts:
   Api.MFacts{String.eq(Cf.cfg_or(model_key(reg, prov, id, "reasoning"), ""),
@@ -404,7 +410,8 @@ def facts(+reg: List<&2, Cf.KV>, +prov: String, +id: String, +asked: String)
     max_key.pick(String.eq(prov, "openai")),
     Cf.cfg_or(model_key(reg, prov, id, "thinking"), ""),
     Cf.cfg_or(model_key(reg, prov, id, "betas"), ""),
-    effort_of(reg, prov, id, asked)}
+    effort_of(reg, prov, id, asked),
+    is_plan_shape(Cf.cfg_or(model_key(reg, prov, id, "shape"), ""))}
 
 def resolve.family(m: Maybe<&2, Api.Style>, +api: String, +prov: String,
     +model: String, +id: String, +base: String, +key_env: String,
@@ -1080,6 +1087,70 @@ def attempt_for(+tools: List<&2, W.WTool>, +name: String, +key: String,
           Bool.not(U32.is_eq(status, 200))), why, name, status, body, key)
     case ARetry{+ms, +why}:
       ARetry{ms, why}
+
+# ---- the ChatGPT plan's failures (shape = "chatgpt-plan") ----
+# The designer's lines (docs/subscriptions-design.md, final words §5).
+# OpenAI's plan route says a usage limit with a code, in a non-200 JSON
+# body (429, 503) or mid-stream in response.failed (a 200): either way
+# the turn stops on bise's line, never a retry loop on a limit nor an
+# "OpenAI refused the key" on a sign-in that expired.
+
+def PLAN_LIMIT() -> String:
+  "your ChatGPT plan's limit for bise is reached. it resets on its own, or switch model with /model."
+
+def PLAN_OFF() -> String:
+  "ChatGPT plan use is off for bise. turn it on in your ChatGPT settings, or pick another provider in /provider."
+
+def PLAN_EXPIRED() -> String:
+  "your ChatGPT sign-in expired. sign in again in /provider, or run bise login chatgpt."
+
+# the line for a reply's status and error code, None: not the plan's
+def plan_line(+status: U32, +code: String) -> Maybe<&2, String>:
+  Bool.pick(Maybe<&2, String>,
+    String.eq(code, "subscription_sharing_usage_limit_exceeded"),
+    Some{PLAN_LIMIT()},
+    Bool.pick(Maybe<&2, String>,
+      String.eq(code, "subscription_sharing_usage_unavailable"),
+      Some{PLAN_OFF()},
+      Bool.pick(Maybe<&2, String>, U32.is_eq(status, 401),
+        Some{PLAN_EXPIRED()}, None{})))
+
+def attempt_plan.line(m: Maybe<&2, String>, a: Attempt) -> Attempt:
+  match m:
+    case Some{+l}:
+      AFail{l}
+    case None{}:
+      a
+
+# a call's attempt on a plan provider: its own line when the reply is
+# one of the plan's failures; any other attempt (or provider) unchanged
+def attempt_plan(plan: Bool, +status: U32, +code: String, a: Attempt)
+    -> Attempt:
+  match plan:
+    case True{}:
+      attempt_plan.line(plan_line(status, code), a)
+    case False{}:
+      a
+
+# the missing key's line: a plan's token command failed (signed out, the
+# refresh refused): its sign-in expired; else the key_command's, else
+# the key_env's
+def key_why.cmd(plan: Bool, +prov: String) -> String:
+  match plan:
+    case True{}:
+      PLAN_EXPIRED()
+    case False{}:
+      String.concat(["no ", prov,
+        " key: its key_command failed or printed nothing (config.toml)"])
+
+def key_why(has_cmd: Bool, plan: Bool, +prov: String, +key_env: String)
+    -> String:
+  match has_cmd:
+    case True{}:
+      key_why.cmd(plan, prov)
+    case False{}:
+      String.concat(["no ", prov, " key yet (", key_env,
+        " is not set): /provider sets it up"])
 
 def attempt_err.pick(retryable: Bool, +host: String, +e: NetErr) -> Attempt:
   match retryable:

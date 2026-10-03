@@ -454,12 +454,14 @@ def model_call.log(+call: Nat, +tries: Nat, +model: String, +url: String,
     case Got{+a, +status, +raw}:
       Dbg.attempt(call, tries, model, url, status, json, raw, a)
 
-# the attempt the Core reads (Pvp.attempt_for, BISE-293)
-def got_for(+tools: List<&2, W.WTool>, +name: String, +key: String, g: Got)
-    -> Pvp.Attempt:
+# the attempt the Core reads (Pvp.attempt_for, BISE-293); on a ChatGPT
+# plan provider, its failures read as the plan's lines (Pvp.attempt_plan)
+def got_for(+tools: List<&2, W.WTool>, +name: String, +key: String,
+    plan: Bool, +st: Api.Style, g: Got) -> Pvp.Attempt:
   match g:
     case Got{+a, +status, +raw}:
-      Pvp.attempt_for(tools, name, key, status, raw, a)
+      Pvp.attempt_plan(plan, status, Api.error_code(st, raw),
+        Pvp.attempt_for(tools, name, key, status, raw, a))
 
 def got_attempt(g: Got) -> Pvp.Attempt:
   match g:
@@ -648,7 +650,8 @@ def model_call.try(fuel: Nat, +tries: Nat, n: Out, +request: String,
             # BISE-293: the calls named back through the request's
             # tools, a refusal in bise's words and the provider's
             model_call.step(got_for(W.req_tools(wreq),
-                Pvp.prov_display(mfile, prov), key, g), nu, k, tries, req,
+                Pvp.prov_display(mfile, prov), key, Api.facts_plan(facts), st, g),
+              nu, k, tries, req,
               k2 => n2 => model_call.try(k2, Nat.add(tries, 1n), n2, request,
                 key, pv, call, req))
 
@@ -719,21 +722,13 @@ def key_of.pick(none: Bool, +cmd: String, +env_key: String) -> IO(String):
           key_cmd.timeout_ms())
         IO.pure(String, key_cmd.answer(r))
 
-# the missing key's line: the key_command's, else the key_env's
-def key_why(has_cmd: Bool, +prov: String, +key_env: String) -> String:
-  match has_cmd:
-    case True{}:
-      String.concat(["no ", prov,
-        " key: its key_command failed or printed nothing (config.toml)"])
-    case False{}:
-      String.concat(["no ", prov, " key yet (", key_env,
-        " is not set): /provider sets it up"])
-
+# the missing key's line: Pvp.key_why (a ChatGPT plan's: its sign-in
+# expired; the key_command's, else the key_env's)
 @unsafe
 def model_call.env(n: Out, +request: String, +pv: Pvp.Prov, +req: U32)
     -> IO(Out & Rem.RemoteRes):
   match pv:
-    case Pvp.Prov{+prov, +model, _, _, +key_env, _}:
+    case Pvp.Prov{+prov, +model, _, _, +key_env, +facts}:
       do IO<Out & Rem.RemoteRes>:
         +mfile : String <- models_file()
         +cmd : String <- IO.pure(String,
@@ -742,7 +737,8 @@ def model_call.env(n: Out, +request: String, +pv: Pvp.Prov, +req: U32)
         +key : String <- key_of.pick(String.is_empty(cmd), cmd, P.env_or(kr, ""))
         model_call.key(Bool.and(Bool.not(Bool.and(String.is_empty(key_env),
             String.is_empty(cmd))), String.is_empty(key)), n, request, key, pv,
-          key_why(Bool.not(String.is_empty(cmd)), prov, key_env), req)
+          Pvp.key_why(Bool.not(String.is_empty(cmd)), Api.facts_plan(facts), prov,
+            key_env), req)
 
 def model_call.resolved(r: Pvp.Resolved, n: Out, +request: String,
     +req: U32) -> IO(Out & Rem.RemoteRes):

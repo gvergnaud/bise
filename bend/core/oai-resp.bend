@@ -48,6 +48,60 @@ def tools_json(ts: List<&2, W.WTool>) -> List<&2, J.Json>:
     case Con{+t, rest}:
       Con{tool_json(t), tools_json(rest)}
 
+# ---- the ChatGPT plan route (shape = "chatgpt-plan", docs/subscriptions-design.md) ----
+# OpenAI's plan route takes function tools only inside a namespace
+# (OpenAI's function-calling docs, "Defining namespaces"; Codex's
+# create_tools_json_for_responses_lite): every tool goes in one
+# {"type":"namespace","name":"bise",...}. A call comes back as a
+# function_call with the tool's own name and "namespace":"bise" (Codex's
+# ResponseItem::FunctionCall), so the CALL line reads `name` as before;
+# a replayed call carries the namespace back, as Codex replays it.
+
+def PLAN_NS() -> String:
+  "bise"
+
+def plan_tools_json(+ts: List<&2, W.WTool>) -> List<&2, J.Json>:
+  [J.obj(Con{J.kv("type", J.str("namespace")),
+    Con{J.kv("name", J.str(PLAN_NS())),
+    Con{J.kv("description", J.str("bise's tools")),
+    Con{J.kv("tools", J.arr(tools_json(ts))), Nil{}}}}})]
+
+def tools_for(plan: Bool, +ts: List<&2, W.WTool>) -> List<&2, J.Json>:
+  match plan:
+    case True{}:
+      plan_tools_json(ts)
+    case False{}:
+      tools_json(ts)
+
+# a replayed function_call item gets "namespace":"bise" last; any other
+# item is unchanged
+def plan_item.call(is_call: Bool, +o: J.Json) -> J.Json:
+  match is_call:
+    case True{}:
+      match o:
+        case J.JObj{+kvs}:
+          J.JObj{List.append(&2, Sigma<&2, &2, String, _ => J.Json>, kvs,
+            Con{J.kv("namespace", J.str(PLAN_NS())), Nil{}})}
+        case _:
+          o
+    case False{}:
+      o
+
+def plan_items(os: List<&2, J.Json>) -> List<&2, J.Json>:
+  match os:
+    case Nil{}:
+      Nil{}
+    case Con{+o, rest}:
+      Con{plan_item.call(String.eq(J.get_str_or(o, "type", ""), "function_call"), o),
+        plan_items(rest)}
+
+def items_for(plan: Bool, +os: List<&2, J.Json>) -> List<&2, J.Json>:
+  match plan:
+    case True{}:
+      plan_items(os)
+    case False{}:
+      os
+
 # ---- input items ----
 
 def item_msg(+role: String, +content: J.Json) -> J.Json:
@@ -210,9 +264,10 @@ def input_items(+msgs: List<&2, W.WMsg>) -> List<&2, J.Json>:
 
 # what the catalog says of the model (core/api.bend MFacts): whether it
 # reasons, its output cap (0n: none sent), the call's effort ("": the
-# API's default)
+# API's default), whether the provider is a ChatGPT plan (shape =
+# "chatgpt-plan": no output cap ever, the tools in one namespace)
 type Opts is Data:
-  Opts{reasoning: Bool, output: Nat, effort: String}
+  Opts{reasoning: Bool, output: Nat, effort: String, plan: Bool}
 
 def reasoning_json.effort(empty: Bool, +effort: String) -> J.Json:
   match empty:
@@ -245,27 +300,31 @@ def body.cap(none: Bool, +output: Nat,
       Con{J.kv("max_output_tokens", J.JNum{output}), rest}
 
 # a compaction call offers no tools at all
-def body.tools(empty: Bool, +tools: List<&2, W.WTool>,
+def body.tools(empty: Bool, plan: Bool, +tools: List<&2, W.WTool>,
     +rest: List<&2, Sigma<&2, &2, String, _ => J.Json>>)
     -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   match empty:
     case True{}:
       rest
     case False{}:
-      Con{J.kv("tools", J.arr(tools_json(tools))),
+      Con{J.kv("tools", J.arr(tools_for(plan, tools))),
         Con{J.kv("tool_choice", J.str("auto")), rest}}
 
+# the plan route sends no output cap (it refuses max_output_tokens);
+# the body never carries temperature, top_p, metadata, user,
+# truncation, previous_response_id or prompt_cache_retention on any
+# route, and the stream's "stream": true comes from stream_body
 def api_body(+model: String, +o: Opts, +req: W.WReq) -> String:
   match o:
-    case Opts{+reasoning, +output, +effort}:
+    case Opts{+reasoning, +output, +effort, +plan}:
       match req:
         case W.WReq{+tools, +msgs, _}:
           J.stringify(J.obj(Con{J.kv("model", J.str(model)),
             Con{J.kv("store", J.JBool{False{}}),
               body.reasoning(reasoning, effort,
-                body.cap(Nat.is_eq(output, 0n), output,
-                  Con{J.kv("input", J.arr(input_items(msgs))),
-                    body.tools(W.is_empty_tools(tools), tools, Nil{})}))}}))
+                body.cap(Bool.or(plan, Nat.is_eq(output, 0n)), output,
+                  Con{J.kv("input", J.arr(items_for(plan, input_items(msgs)))),
+                    body.tools(W.is_empty_tools(tools), plan, tools, Nil{})}))}}))
 
 # the stream's body: the same, with "stream": true first
 def stream_body(+body: String) -> String:
@@ -461,3 +520,26 @@ def usage.of(m: Maybe<&2, J.Json>) -> J.Json:
 
 def usage(+sse: String) -> J.Json:
   usage.of(final_of(sse))
+
+# ---- the error code of a reply (the ChatGPT plan's errors) ----
+# The code OpenAI put in the error of a reply, "" when there is none: a
+# whole JSON body's error.code (a non-200 answer, or a 200 that ignored
+# "stream"), else the stream's terminal event's (response.failed's
+# response.error.code, or an error event's code). runtime/
+# provider-pure.bend turns the plan's codes into bise's lines.
+def error_code.of(m: Maybe<&2, J.Json>) -> String:
+  match m:
+    case Some{+r}:
+      J.get_str_or(W.field_or(r, "error", J.JNull{}), "code", "")
+    case None{}:
+      ""
+
+def error_code.pick(is_json: Bool, +body: String) -> String:
+  match is_json:
+    case True{}:
+      error_code.of(Some{W.parse_json(body)})
+    case False{}:
+      error_code.of(final_of(body))
+
+def error_code(+body: String) -> String:
+  error_code.pick(String.starts_with(String.trim(body), "{"), body)

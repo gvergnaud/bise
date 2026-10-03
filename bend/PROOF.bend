@@ -1208,6 +1208,58 @@ def Laws.resp_status_error():
 def Laws.resp_usage():
   {==}
 
+# the ChatGPT plan route (core/oai-resp.bend, runtime/provider-pure.bend)
+def Laws.resp_plan_body_maps():
+  {==}
+
+def Laws.resp_plan_streams_unstored():
+  {==}
+
+def Laws.resp_plan_no_refused_fields():
+  {==}
+
+def Laws.resp_plan_no_system_item_no_bare_tool():
+  {==}
+
+def Laws.resp_plan_namespaced_call_back():
+  {==}
+
+def Laws.resp_no_shape_items_unchanged(xs):
+  {==}
+
+def Laws.resp_no_shape_tools_unchanged(ts):
+  {==}
+
+def Laws.resp_no_shape_no_namespace():
+  {==}
+
+def Laws.plan_shape_from_models_file():
+  {==}
+
+def Laws.plan_limit_mid_stream():
+  {==}
+
+def Laws.plan_limit_429():
+  {==}
+
+def Laws.plan_usage_unavailable_mid_stream():
+  {==}
+
+def Laws.plan_usage_unavailable_503():
+  {==}
+
+def Laws.plan_401_expired():
+  {==}
+
+def Laws.plan_key_command_failed():
+  {==}
+
+def Laws.plan_other_attempts_unchanged(a):
+  {==}
+
+def Laws.plan_no_shape_unchanged(s, c, a):
+  {==}
+
 def Laws.refusal_quotes_the_provider():
   {==}
 

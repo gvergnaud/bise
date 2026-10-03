@@ -166,7 +166,9 @@ def wire_body(st: Style, +body: String) -> String:
 # output = `max_output` (0n: not set); max_key = the name of the output
 # cap in an OpenAI Chat body ("max_completion_tokens" for OpenAI itself,
 # whose reasoning models refuse max_tokens; "max_tokens" elsewhere);
-# thinking / betas: the raw keys (Anthropic, BISE-146; "" = not set).
+# thinking / betas: the raw keys (Anthropic, BISE-146; "" = not set);
+# plan: the provider's `shape = "chatgpt-plan"` (OpenAI's ChatGPT plan
+# route: core/oai-resp.bend's plan body, the plan's error lines).
 
 # effort: the reasoning effort of the call (BISE-135: the session's
 # choice, config, the model's default; "" = none sent), already checked
@@ -174,21 +176,26 @@ def wire_body(st: Style, +body: String) -> String:
 
 type MFacts is Data:
   MFacts{reasoning: Bool, output: Nat, max_key: String, thinking: String,
-    betas: String, effort: String}
+    betas: String, effort: String, plan: Bool}
 
 def facts_betas(f: MFacts) -> String:
   match f:
-    case MFacts{_, _, _, _, +betas, _}:
+    case MFacts{_, _, _, _, +betas, _, _}:
       betas
 
 def facts_effort(f: MFacts) -> String:
   match f:
-    case MFacts{_, _, _, _, _, +effort}:
+    case MFacts{_, _, _, _, _, +effort, _}:
       effort
+
+def facts_plan(f: MFacts) -> Bool:
+  match f:
+    case MFacts{_, _, _, _, _, _, +plan}:
+      plan
 
 # no catalog entry: today's body (reasoning_effort high, no output cap)
 def facts0() -> MFacts:
-  MFacts{True{}, 0n, "max_tokens", "", "", "high"}
+  MFacts{True{}, 0n, "max_tokens", "", "", "high", False{}}
 
 # ---- the prompt cache's routing key (BISE-268) ----
 # Some providers route a request to the machine that holds its cached
@@ -315,18 +322,18 @@ def api_body_for(st: Style, +model: String, +facts: MFacts, +req: W.WReq)
   match st:
     case OpenAI{}:
       match facts:
-        case MFacts{+reasoning, +output, +max_key, _, _, +effort}:
+        case MFacts{+reasoning, +output, +max_key, _, _, +effort, _}:
           Oai.api_body_with(model, Oai.Opts{reasoning, output, max_key, effort},
             req)
     case Anthropic{}:
       match facts:
-        case MFacts{+reasoning, +output, _, +thinking, _, +effort}:
+        case MFacts{+reasoning, +output, _, +thinking, _, +effort, _}:
           Anth.api_body_anth_for(model, output, thinking, reasoning, effort,
             req)
     case OpenAIResp{}:
       match facts:
-        case MFacts{+reasoning, +output, _, _, _, +effort}:
-          Rs.api_body(model, Rs.Opts{reasoning, output, effort}, req)
+        case MFacts{+reasoning, +output, _, _, _, +effort, +plan}:
+          Rs.api_body(model, Rs.Opts{reasoning, output, effort, plan}, req)
 
 def reply_of_for(st: Style, +status: U32, +body: String) -> String:
   match st:
@@ -346,6 +353,18 @@ def stream_reply(st: Style, +text: String) -> String:
       As.reply_any(text)
     case OpenAIResp{}:
       Rs.reply_any(text)
+
+# the code in a reply's error ("" none): the Responses family reads
+# error.code (whole JSON, or the stream's terminal event); the others
+# say nothing (no family but the plan route has a code bise maps yet)
+def error_code(st: Style, +body: String) -> String:
+  match st:
+    case OpenAI{}:
+      ""
+    case Anthropic{}:
+      ""
+    case OpenAIResp{}:
+      Rs.error_code(body)
 
 # ---- the token usage ----
 # in: every input token of the call (cached ones included); out: the
