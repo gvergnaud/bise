@@ -139,6 +139,9 @@ pub(crate) fn all_providers(setup: &bise_catalog::Setup, ready: &dyn Fn(&bise_ca
         .iter()
         // voice-only ones (ElevenLabs) once they have a key (BISE-298)
         .filter(|p| p.needs.is_empty() && (!p.stt_only || ready(p)) && !offered.iter().any(|o| o.id == p.id))
+        // a sign-in (chatgpt) is no key and no local server: its own rows
+        // (subs-tui); until then not listed as a ready keyless provider
+        .filter(|p| !p.signs_in())
         // a private proxy (no keys page: foundry) only once it has a key
         .filter(|p| p.key_env.is_empty() || !p.keys_url.is_empty() || ready(p))
         .map(Provider::of)
