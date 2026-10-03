@@ -169,6 +169,51 @@ pub(crate) fn git(dir: &Path, args: &[&str]) -> Result<String, String> {
     git_in(dir, args, None)
 }
 
+// ---- signing ----
+
+/// `git commit` signs in `dir` (`commit.gpgsign`, repo or global): so do
+/// bise's commits. `git rebase` reads it on its own; `commit-tree` does
+/// not (it gets `-S`).
+pub(crate) fn signs(dir: &Path) -> bool {
+    git(dir, &["config", "--type=bool", "--get", "commit.gpgsign"]).is_ok_and(|v| v == "true")
+}
+
+/// A git error that is the signing's: gpg or ssh-keygen could not sign,
+/// so git could not write the commit (no conflict).
+pub(crate) fn signing_error(e: &str) -> bool {
+    let e = e.to_lowercase();
+    e.contains("failed to write commit object") || e.contains("sign")
+}
+
+/// The one line when signing fails: git's own words (its hints left
+/// out), the work kept, what to do. `again`: `land again`, `sync again`.
+pub(crate) fn signing_failed(e: &str, again: &str) -> String {
+    let words: Vec<&str> = e
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with("hint:"))
+        .map(|l| {
+            // `git commit-tree: error: …` (git_in's prefix, then git's)
+            let l = match l.strip_prefix("git ").and_then(|r| r.split_once(": ")) {
+                Some((cmd, rest)) if !cmd.contains(' ') => rest,
+                _ => l,
+            };
+            l.strip_prefix("error: ").or_else(|| l.strip_prefix("fatal: ")).unwrap_or(l)
+        })
+        .collect();
+    format!("commit signing failed: {}; your work is kept, {} once signing works", words.join("; "), again)
+}
+
+/// Why a rebase without conflicts failed: the signing line when it is
+/// the signing's, else `other`.
+pub(crate) fn rebase_failed(dir: &Path, e: &str, again: &str, other: String) -> String {
+    if signing_error(e) && signs(dir) {
+        signing_failed(e, again)
+    } else {
+        other
+    }
+}
+
 /// A tracked file path, relative to the place's folder: absolute paths
 /// outside it are not the place's (a private worktree of `gate.sh new`).
 pub fn relative(dir: &Path, f: &str) -> Option<String> {
@@ -232,6 +277,7 @@ pub fn commit_files(
     message: &str,
     after_read: &mut dyn FnMut(),
 ) -> Result<String, String> {
+    let sign = signs(dir);
     for _ in 0..5 {
         let old = git(dir, &["rev-parse", "--verify", target])?;
         let idx = tmp_index("idx");
@@ -244,7 +290,14 @@ pub fn commit_files(
             if tree == git(dir, &["rev-parse", &format!("{}^{{tree}}", old)])? {
                 return Err("nothing to land: your files are already committed".to_string());
             }
-            git(dir, &["commit-tree", "-p", &old, "-m", message, &tree])
+            // commit-tree never reads commit.gpgsign: -S signs it the way
+            // `git commit` would (gpg.format, user.signingkey), and a
+            // signing that fails fails the land, never an unsigned commit
+            let mut args = vec!["commit-tree", "-p", &old, "-m", message, &tree];
+            if sign {
+                args.insert(1, "-S");
+            }
+            git(dir, &args).map_err(|e| if sign { signing_failed(&e, "land again") } else { e })
         })();
         let _ = std::fs::remove_file(&idx);
         let new = res?;
@@ -426,8 +479,14 @@ pub(crate) fn push(shared: &Path, target: &str) -> Result<(), String> {
             return Err(format!("{} moved on {}; not rebased: the shared folder has changes", b, remote));
         }
         git(shared, &["rebase", "-q", &theirs]).map_err(|e| {
+            let conflicts = git(shared, &["diff", "--name-only", "--diff-filter=U"]).unwrap_or_default();
             let _ = git(shared, &["rebase", "--abort"]);
-            format!("{} moved on {} and the rebase conflicts: {}", b, remote, e)
+            let other = format!("{} moved on {} and the rebase conflicts: {}", b, remote, e);
+            if conflicts.is_empty() {
+                rebase_failed(shared, &e, "push again", other)
+            } else {
+                other
+            }
         })?;
     }
     git(shared, &["push", "-q", &remote, &spec]).map(|_| ())
@@ -532,7 +591,7 @@ fn land_branch(
             let _ = git(&job.dir, &["rebase", "--abort"]);
             let files: Vec<&str> = conflicts.lines().collect();
             return Err(if files.is_empty() {
-                format!("the rebase on {} failed: {}", short(main), e)
+                rebase_failed(&job.dir, &e, "land again", format!("the rebase on {} failed: {}", short(main), e))
             } else {
                 format!(
                     "{} changed on {} too: the rebase conflicts. rebase {} on {} yourself, then sb land again",
@@ -875,5 +934,121 @@ mod tests {
         assert!(e.contains(&format!("{} new files not ignored", SWEEP_MAX + 1)) && e.contains(".gitignore"), "{}", e);
         assert_eq!(git(&wt, &["log", "--format=%s"]).unwrap(), "init", "nothing landed");
         let _ = std::fs::remove_dir_all(ws.parent().unwrap());
+    }
+
+    // ---- signing: a throwaway ssh key in the test's temp folder, the
+    // repo's own config (never the user's key or config) ----
+
+    /// A throwaway ed25519 key next to the repo; the repo signs with it
+    /// (`gpg.format ssh`, the private key file: no ssh agent asked).
+    fn sign_with_throwaway_key(ws: &Path) -> PathBuf {
+        let key = ws.parent().unwrap().join("throwaway-key");
+        sh(ws, &format!("ssh-keygen -q -t ed25519 -N '' -C throwaway -f {}", key.display()));
+        sh(
+            ws,
+            &format!(
+                "git config gpg.format ssh && git config user.signingkey {} && git config commit.gpgsign true",
+                key.display()
+            ),
+        );
+        key
+    }
+
+    fn signed(dir: &Path, rev: &str) -> bool {
+        git(dir, &["cat-file", "-p", rev]).unwrap().contains("gpgsig -----BEGIN SSH SIGNATURE-----")
+    }
+
+    fn assert_signing_line(e: &str, again: &str) {
+        assert!(e.starts_with("commit signing failed: "), "{}", e);
+        assert!(e.ends_with(&format!("; your work is kept, {} once signing works", again)), "{}", e);
+        assert!(e.contains("missing-key"), "git's words name the key: {}", e);
+        assert!(!e.contains('\n') && !e.contains("hint:"), "one line: {}", e);
+    }
+
+    #[test]
+    fn a_land_signs_when_commit_gpgsign_is_true() {
+        let ws = repo("sign-on");
+        sign_with_throwaway_key(&ws);
+        sh(&ws, "echo a2 > a");
+        run(&job("x", &ws, &ws, &["a"], &[]), &Queue::default(), &mut || {}).unwrap();
+        assert_eq!(log(&ws), lines(&["x's work", "init"]));
+        assert!(signed(&ws, "main"), "{}", git(&ws, &["cat-file", "-p", "main"]).unwrap());
+        let _ = std::fs::remove_dir_all(ws.parent().unwrap());
+    }
+
+    #[test]
+    fn a_land_is_unsigned_when_commit_gpgsign_is_false() {
+        let ws = repo("sign-off");
+        let key = sign_with_throwaway_key(&ws);
+        sh(&ws, "git config commit.gpgsign false");
+        sh(&ws, "echo a2 > a");
+        run(&job("x", &ws, &ws, &["a"], &[]), &Queue::default(), &mut || {}).unwrap();
+        assert!(!signed(&ws, "main"));
+        assert!(key.exists());
+        let _ = std::fs::remove_dir_all(ws.parent().unwrap());
+    }
+
+    #[test]
+    fn a_missing_key_fails_the_land_in_one_line_and_keeps_the_work() {
+        let ws = repo("sign-missing");
+        sign_with_throwaway_key(&ws);
+        let missing = ws.parent().unwrap().join("missing-key");
+        sh(&ws, &format!("git config user.signingkey {}", missing.display()));
+        sh(&ws, "echo a2 > a");
+        let before = git(&ws, &["rev-parse", "main"]).unwrap();
+        let e = run(&job("x", &ws, &ws, &["a"], &[]), &Queue::default(), &mut || {}).unwrap_err();
+        assert_signing_line(&e, "land again");
+        // never an unsigned commit: main did not move, the change is there
+        assert_eq!(git(&ws, &["rev-parse", "main"]).unwrap(), before);
+        assert_eq!(std::fs::read_to_string(ws.join("a")).unwrap().trim_end(), "a2");
+        assert_eq!(git(&ws, &["status", "--porcelain"]).unwrap().trim(), "M a");
+        let _ = std::fs::remove_dir_all(ws.parent().unwrap());
+    }
+
+    #[test]
+    fn a_land_that_rebases_signs_and_a_missing_key_keeps_the_branch() {
+        let ws = repo("sign-rebase");
+        let key = sign_with_throwaway_key(&ws);
+        let wt = ws.parent().unwrap().join("wt");
+        sh(&ws, &format!("git worktree add -q -b sb/x {} main", wt.display()));
+        let wt = wt.canonicalize().unwrap();
+        sh(&wt, "echo a2 > a");
+        let mut j = job("x", &wt, &ws, &["a"], &[]);
+        j.place = "wt:x".into();
+        run(&j, &Queue::default(), &mut || {}).unwrap();
+        assert!(signed(&wt, "HEAD"), "the --here commit is signed");
+        // main moves: the plain land rebases, and the rebased commit is signed
+        sh(&ws, "echo c2 > c && git commit -qam c-on-main");
+        j.here = false;
+        run(&j, &Queue::default(), &mut || {}).unwrap();
+        assert_eq!(log(&ws), lines(&["x's work", "c-on-main", "init"]));
+        assert!(signed(&ws, "main"), "the rebased commit is signed");
+        // the key goes missing: the rebase fails on signing, nothing moves
+        sh(&wt, "echo a3 > a");
+        j.here = true;
+        run(&j, &Queue::default(), &mut || {}).unwrap();
+        sh(&ws, &format!("git config user.signingkey {}", key.display()));
+        sh(&ws, "echo c3 > c && git commit -qam c3");
+        let missing = ws.parent().unwrap().join("missing-key");
+        sh(&ws, &format!("git config user.signingkey {}", missing.display()));
+        let (main_before, branch_before) = (git(&ws, &["rev-parse", "main"]).unwrap(), git(&wt, &["rev-parse", "HEAD"]).unwrap());
+        j.here = false;
+        let e = run(&j, &Queue::default(), &mut || {}).unwrap_err();
+        assert_signing_line(&e, "land again");
+        assert_eq!(git(&ws, &["rev-parse", "main"]).unwrap(), main_before);
+        assert_eq!(git(&wt, &["rev-parse", "HEAD"]).unwrap(), branch_before, "the branch keeps its commit");
+        assert!(git(&wt, &["status", "--porcelain"]).unwrap().is_empty(), "the rebase was aborted");
+        let _ = std::fs::remove_dir_all(ws.parent().unwrap());
+    }
+
+    #[test]
+    fn the_signing_line_keeps_gits_words_and_drops_its_hints() {
+        let e = "git rebase: error: Couldn't load public key /k/missing-key: No such file or directory?\n\nerror: failed to write commit object\nhint: Could not execute the todo command\nhint:     git rebase --continue";
+        assert_eq!(
+            signing_failed(e, "land again"),
+            "commit signing failed: Couldn't load public key /k/missing-key: No such file or directory?; failed to write commit object; your work is kept, land again once signing works"
+        );
+        assert!(signing_error("error: gpg failed to sign the data\nfatal: failed to write commit object"));
+        assert!(!signing_error("git rebase: error: could not apply 1234... x"));
     }
 }

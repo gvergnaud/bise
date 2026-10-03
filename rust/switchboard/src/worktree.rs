@@ -410,6 +410,10 @@ impl Env for GitEnv {
                 let tree = git_env(&path, &["write-tree"], &env)?;
                 let mut id_env: Vec<(&str, &str)> = identity(&path);
                 id_env.extend_from_slice(&env);
+                // not signed on purpose: this commit only holds files under
+                // refs/switchboard/trash (never pushed); a restore checks
+                // its files out on a fresh branch, never the commit itself.
+                // Signing it would make a drop fail whenever signing does.
                 let msg = format!("switchboard: backup of task {}", name);
                 let commit = git_env(
                     &path,

@@ -226,7 +226,8 @@ pub fn rebase(shared: &Path, scratch: &Path, name: &str, check: Option<&str>) ->
         let _ = git(&s.dir, &["rebase", "--abort"]);
         let files: Vec<&str> = conflicts.lines().collect();
         return Err(if files.is_empty() {
-            format!("the rebase of {} on {} failed: {}", name, short(&main), e)
+            let other = format!("the rebase of {} on {} failed: {}", name, short(&main), e);
+            crate::land::rebase_failed(&s.dir, &e, "sync again", other)
         } else {
             format!("{} changed on {} too: the rebase of {} conflicts", files.join(", "), short(&main), name)
         });
@@ -254,8 +255,11 @@ pub fn follow(worktrees: &[(String, PathBuf)], old: &str, new: &str) -> Vec<(Str
             continue;
         }
         if let Err(e) = git(dir, &["rebase", "-q", "--onto", new, old]) {
+            let conflicts = git(dir, &["diff", "--name-only", "--diff-filter=U"]).unwrap_or_default();
             let _ = git(dir, &["rebase", "--abort"]);
-            left.push((agent.clone(), format!("its rebase conflicts ({})", crate::util::clip(&e, 120))));
+            let why = format!("its rebase conflicts ({})", crate::util::clip(&e, 120));
+            let why = if conflicts.is_empty() { crate::land::rebase_failed(dir, &e, "sync again", why) } else { why };
+            left.push((agent.clone(), why));
         }
     }
     left
