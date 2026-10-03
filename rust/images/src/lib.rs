@@ -15,6 +15,9 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+// the tests run on a temp HOME, never the user's (bise_home::test_home)
+bise_home::test_home!();
+
 /// Longest side sent to the model; bigger images are downscaled.
 pub const MAX_DIMENSION: u32 = 2048;
 /// Largest image sent as is (5 MB of base64 at Anthropic).

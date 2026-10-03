@@ -14,6 +14,9 @@
 
 use std::path::{Path, PathBuf};
 
+// the tests run on a temp HOME, never the user's (bise_home::test_home)
+bise_home::test_home!();
+
 pub mod auth;
 pub mod auth_cli;
 pub mod cli;

@@ -24,6 +24,9 @@
 //! the child on the same port — the checkpoint restores the session,
 //! background commands keep running.
 
+// the tests run on a temp HOME, never the user's (bise_home::test_home)
+bise_home::test_home!();
+
 use std::io::Write;
 use std::net::TcpListener;
 

@@ -15,6 +15,9 @@
 //! - `import`: `bise plugins import-mcp`, another agent's MCP servers as
 //!   one plugin (BISE-273).
 
+// the tests run on a temp HOME, never the user's (bise_home::test_home)
+bise_home::test_home!();
+
 pub mod bridge;
 pub mod cli;
 pub mod http;

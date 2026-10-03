@@ -22,6 +22,9 @@
 //! - `mcp`: the MCP server; `host`: the native host relay;
 //! - `cli`: `bise computer-use ...`.
 
+// the tests run on a temp HOME, never the user's (bise_home::test_home)
+bise_home::test_home!();
+
 pub mod b64;
 pub mod broker;
 pub mod browsers;

@@ -35,7 +35,10 @@ pub mod migrate;
 pub mod prefs;
 pub mod release;
 pub mod style;
+pub mod test_home;
 pub use migrate::migrate;
+
+crate::test_home!();
 pub use prefs::{Pref, Slot};
 
 /// Moves the whole state (the bise layout, at this path).

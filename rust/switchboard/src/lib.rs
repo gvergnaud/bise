@@ -18,6 +18,9 @@
 //! - `cli`: the `sb` command the agents call through their bash tool;
 //! - `client`: how a client (TUI, headless test) reaches the hub.
 
+// the tests run on a temp HOME, never the user's (bise_home::test_home)
+bise_home::test_home!();
+
 pub mod agents_md;
 pub mod approvals;
 pub mod board;
