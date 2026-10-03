@@ -1095,22 +1095,38 @@ def attempt_for(+tools: List<&2, W.WTool>, +name: String, +key: String,
 # the turn stops on bise's line, never a retry loop on a limit nor an
 # "OpenAI refused the key" on a sign-in that expired.
 
+# subscription_sharing_usage_limit_exceeded: OpenAI says not to infer a
+# reset time from it, so the line points at the usage page
 def PLAN_LIMIT() -> String:
-  "your ChatGPT plan's limit for bise is reached. it resets on its own, or switch model with /model."
+  "your ChatGPT plan's limit for bise is reached. your usage is at chatgpt.com/settings/usage, or switch model with /model."
 
+# subscription_sharing_user_not_eligible (403): final, no retry
 def PLAN_OFF() -> String:
   "ChatGPT plan use is off for bise. turn it on in your ChatGPT settings, or pick another provider in /provider."
+
+# subscription_sharing_usage_unavailable, once the retries are spent
+def PLAN_UNCHECKED_LINE() -> String:
+  "ChatGPT couldn't check your plan's usage. try again in a moment, or switch model with /model."
 
 def PLAN_EXPIRED() -> String:
   "your ChatGPT sign-in expired. sign in again in /provider, or run bise login chatgpt."
 
-# the line for a reply's status and error code, None: not the plan's
+# the retries' cause while ChatGPT cannot check the plan's usage
+# (subscription_sharing_usage_unavailable: OpenAI's errors-and-recovery
+# says retry later with a bounded backoff); PLAN_UNCHECKED_LINE is said
+# only once the retries are spent (exhausted_for)
+def PLAN_UNCHECKED() -> String:
+  "ChatGPT could not check your plan's usage (subscription_sharing_usage_unavailable)"
+
+# the final line for a reply's status and error code, None: not one of
+# the plan's final failures (a usage limit, plan use not allowed, a
+# sign-in refused)
 def plan_line(+status: U32, +code: String) -> Maybe<&2, String>:
   Bool.pick(Maybe<&2, String>,
     String.eq(code, "subscription_sharing_usage_limit_exceeded"),
     Some{PLAN_LIMIT()},
     Bool.pick(Maybe<&2, String>,
-      String.eq(code, "subscription_sharing_usage_unavailable"),
+      String.eq(code, "subscription_sharing_user_not_eligible"),
       Some{PLAN_OFF()},
       Bool.pick(Maybe<&2, String>, U32.is_eq(status, 401),
         Some{PLAN_EXPIRED()}, None{})))
@@ -1122,13 +1138,32 @@ def attempt_plan.line(m: Maybe<&2, String>, a: Attempt) -> Attempt:
     case None{}:
       a
 
-# a call's attempt on a plan provider: its own line when the reply is
-# one of the plan's failures; any other attempt (or provider) unchanged
+# usage unavailable: a transient failure, retried with the usual policy
+# (the server's Retry-After when the attempt had one, else the backoff)
+def plan_retry(a: Attempt) -> Attempt:
+  match a:
+    case ARetry{+ms, _}:
+      ARetry{ms, PLAN_UNCHECKED()}
+    case _:
+      ARetry{0, PLAN_UNCHECKED()}
+
+def attempt_plan.pick(unchecked: Bool, +status: U32, +code: String,
+    a: Attempt) -> Attempt:
+  match unchecked:
+    case True{}:
+      plan_retry(a)
+    case False{}:
+      attempt_plan.line(plan_line(status, code), a)
+
+# a call's attempt on a plan provider: a usage limit or a refused
+# sign-in ends the turn on its line; usage unavailable is retried; any
+# other attempt (or provider) unchanged
 def attempt_plan(plan: Bool, +status: U32, +code: String, a: Attempt)
     -> Attempt:
   match plan:
     case True{}:
-      attempt_plan.line(plan_line(status, code), a)
+      attempt_plan.pick(String.eq(code, "subscription_sharing_usage_unavailable"),
+        status, code, a)
     case False{}:
       a
 
@@ -1249,6 +1284,12 @@ def retry_line(+n: Nat, +why: String, +delay_ms: U32) -> String:
 def exhausted_text(+tries: Nat, +why: String) -> String:
   String.append(String.concat(["provider failed after ", Nat.show(tries),
     " attempts: "]), why)
+
+# the same, but a ChatGPT plan whose usage could never be checked ends
+# on the designer's line alone
+def exhausted_for(+tries: Nat, +why: String) -> String:
+  Bool.pick(String, String.eq(why, PLAN_UNCHECKED()), PLAN_UNCHECKED_LINE(),
+    exhausted_text(tries, why))
 
 # an interrupt during the retries stops them, and keeps the error that
 # made them necessary: the user sees both. who: interrupter's answer

@@ -1248,6 +1248,12 @@ def Laws.plan_usage_unavailable_mid_stream():
 def Laws.plan_usage_unavailable_503():
   {==}
 
+def Laws.plan_usage_unavailable_exhausted():
+  {==}
+
+def Laws.plan_not_eligible():
+  {==}
+
 def Laws.plan_401_expired():
   {==}
 

@@ -266,7 +266,7 @@ def model_call.step.retry(can: Bool, n: Out, +k: Nat, +tries: Nat,
         model_call.step.retry.go(stop, n2, ipath, k, tries, why, next)
     case False{}:
       IO.pure(Out & Rem.RemoteRes,
-        (n, Rem.RRErr{Pvp.exhausted_text(Nat.add(tries, 1n), why)}))
+        (n, Rem.RRErr{Pvp.exhausted_for(Nat.add(tries, 1n), why)}))
 
 def model_call.step(a: Pvp.Attempt, n: Out, +k: Nat, +tries: Nat, +req: U32,
     next: Nat -> Out -> IO(Out & Rem.RemoteRes)) -> IO(Out & Rem.RemoteRes):

@@ -3453,7 +3453,7 @@ data: {\"type\":\"response.failed\",\"response\":{\"status\":\"failed\",\"error\
 
 "),
       Pv.ARetry{0, "provider 200: limit"})
-    == Pv.AFail{"your ChatGPT plan's limit for bise is reached. it resets on its own, or switch model with /model."}
+    == Pv.AFail{"your ChatGPT plan's limit for bise is reached. your usage is at chatgpt.com/settings/usage, or switch model with /model."}
     : Pv.Attempt}
 
 # LAW: the usage limit before the stream (a 429 with OpenAI's error
@@ -3464,24 +3464,48 @@ law plan_limit_429:
       Pv.attempt_status(429, "", "ERROR provider 429: limit
 END
 "))
-    == Pv.AFail{"your ChatGPT plan's limit for bise is reached. it resets on its own, or switch model with /model."}
+    == Pv.AFail{"your ChatGPT plan's limit for bise is reached. your usage is at chatgpt.com/settings/usage, or switch model with /model."}
     : Pv.Attempt}
 
-# LAW: plan use unavailable, mid-stream: its line.
+# LAW: usage unavailable mid-stream (OpenAI: the usage could not be
+# checked, retry later with a bounded backoff): a retry, its cause
+# named, not a final line.
 law plan_usage_unavailable_mid_stream:
   {Pv.attempt_plan(True{}, 200,
       Api.error_code(Api.OpenAIResp{}, "event: response.failed
 data: {\"type\":\"response.failed\",\"response\":{\"error\":{\"code\":\"subscription_sharing_usage_unavailable\",\"message\":\"off\"},\"output\":[]}}
 
 "), Pv.ARetry{0, "provider 200: off"})
-    == Pv.AFail{"ChatGPT plan use is off for bise. turn it on in your ChatGPT settings, or pick another provider in /provider."}
+    == Pv.ARetry{0, "ChatGPT could not check your plan's usage (subscription_sharing_usage_unavailable)"}
     : Pv.Attempt}
 
-# LAW: plan use unavailable, before the stream (a 503): its line.
+# LAW: usage unavailable before the stream (a 503): a retry that keeps
+# the server's Retry-After.
 law plan_usage_unavailable_503:
   {Pv.attempt_plan(True{}, 503,
       Api.error_code(Api.OpenAIResp{}, "{\"error\":{\"code\":\"subscription_sharing_usage_unavailable\",\"message\":\"off\"}}"),
-      Pv.ARetry{0, "provider 503 (transient)"})
+      Pv.attempt_status(503, "5", "ERROR provider 503: off
+END
+"))
+    == Pv.ARetry{5000, "ChatGPT could not check your plan's usage (subscription_sharing_usage_unavailable)"}
+    : Pv.Attempt}
+
+# LAW: once the retries are spent on an unchecked usage, the turn ends
+# on the line alone (no "provider failed after N attempts:"); any other
+# cause keeps today's text.
+law plan_usage_unavailable_exhausted:
+  {Bool.and(String.eq(Pv.exhausted_for(10n,
+        "ChatGPT could not check your plan's usage (subscription_sharing_usage_unavailable)"),
+      "ChatGPT couldn't check your plan's usage. try again in a moment, or switch model with /model."),
+    String.eq(Pv.exhausted_for(10n, "timeout"), Pv.exhausted_text(10n, "timeout")))
+    == True{} : Bool}
+
+# LAW: plan use not allowed for this user or workspace
+# (subscription_sharing_user_not_eligible, a 403): final, its line.
+law plan_not_eligible:
+  {Pv.attempt_plan(True{}, 403,
+      Api.error_code(Api.OpenAIResp{}, "{\"error\":{\"code\":\"subscription_sharing_user_not_eligible\",\"message\":\"no\"}}"),
+      Pv.AFail{"OpenAI refused the key (403). check it with /setup."})
     == Pv.AFail{"ChatGPT plan use is off for bise. turn it on in your ChatGPT settings, or pick another provider in /provider."}
     : Pv.Attempt}
 
