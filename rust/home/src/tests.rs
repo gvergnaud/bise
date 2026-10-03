@@ -420,3 +420,16 @@ fn a_fresh_home_starts_in_dot_bise_and_explicit_homes_never_migrate() {
     assert!(!migrate::is_hub_id("versions") && !migrate::is_hub_id("x-1234abcd.moved-2026") && !migrate::is_hub_id("-12345678"));
     assert!(!migrate::is_hub_id("x-1234ABCD"));
 }
+
+/// The guard (test_home): this binary runs on a temp HOME, the place
+/// variables unset; a Home from the env never names the user's files.
+#[test]
+fn the_tests_run_on_a_temp_home() {
+    assert!(crate::test_home::active(), "HOME = {:?}", std::env::var_os("HOME"));
+    for k in [BISE_HOME, EXPORTS_FOR, "BEND_CONFIG", "SB_SOCKET", "XDG_STATE_HOME"] {
+        assert_eq!(std::env::var_os(k), None, "{k}");
+    }
+    let h = Home::from_env();
+    assert!(h.config_file().starts_with(std::env::temp_dir()), "{:?}", h.config_file());
+    assert!(crate::test_home::is_place_var("BEND_SKILLS_INDEX") && !crate::test_home::is_place_var("PATH"));
+}
