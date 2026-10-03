@@ -180,13 +180,18 @@ entries. Each row says what pays: `ChatGPT plan` vs the price.
 
 ### Errors in a turn (one line each, the runtime's)
 
-- usage limit (`subscription_sharing_usage_limit_exceeded`): "your ChatGPT
-  plan's limit for bise is reached: it resets on its own, or switch model
-  (/models)".
-- `subscription_sharing_usage_unavailable`: "ChatGPT plan use is off for
-  bise: turn it on in ChatGPT settings, or /provider".
-- 401 / token command failed: "ChatGPT sign-in expired: /provider (or
-  `bise login chatgpt`)".
+Per OpenAI's errors-and-recovery table (checked 2026-10-03; the final
+words are in the last section):
+- `subscription_sharing_usage_limit_exceeded` (429, or mid-stream): no
+  retry; the limit line, linking chatgpt.com/settings/usage. OpenAI: do not
+  infer a reset time from this code (an app-specific limit can apply).
+- `subscription_sharing_usage_unavailable` (503, or mid-stream): usage
+  could not be checked, transient: retry with bounded backoff, keep the
+  credentials; the line only after the retries.
+- `subscription_sharing_user_not_eligible` (403): plan use is off for this
+  user/workspace/policy: no retry, no OAuth loop; the "plan use is off"
+  line.
+- 401 / token command failed: the sign-in expired line.
 
 ## The runtime's `chatgpt-plan` request shape (Bend, with laws)
 
@@ -280,10 +285,15 @@ the first-run list, /provider its rows and menu.
    `· claude code   signed in with a Claude plan. that plan doesn't run in bise (Anthropic's terms): use an Anthropic API key.`
    Date as `3 Nov` (year only when not this year); `1 day` when it's 1.
 5. Errors in a turn (warn lines):
-   `▲ your ChatGPT plan's limit for bise is reached. it resets on its own, or switch model with /model.`
-   (when the error says when it resets: `it resets at 18:00.`)
+   limit (`usage_limit_exceeded`; OpenAI says not to guess a reset time, so no "it resets"):
+   `▲ your ChatGPT plan's limit for bise is reached. see chatgpt.com/settings/usage, or switch model with /model.`
+   plan use off (`user_not_eligible`):
    `▲ ChatGPT plan use is off for bise. turn it on in your ChatGPT settings, or pick another provider in /provider.`
+   usage not checked, after the retries (`usage_unavailable`, transient):
+   `▲ ChatGPT couldn't check your plan's usage just now. try again in a moment, or switch model with /model.`
    `▲ your ChatGPT sign-in expired. sign in again in /provider, or run bise login chatgpt.`
+   (the limit line and the usage-not-checked line changed after the designer's sign-off: OpenAI's
+   error table; designer asked to confirm, m_6370+)
 6. /models: the right column says `your ChatGPT plan` in place of the price, dim like the prices.
 
 Sign-off: send the designer tmux captures (first run at 150 and 80 cols
