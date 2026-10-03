@@ -43,8 +43,9 @@ fn usage() -> String {
   {cli} auth check [provider]   one tiny call with the key bise finds; saves nothing
       --model provider/model
 
-a key is looked up in the environment first (e.g. OPENAI_API_KEY), then
-in auth.json, then in the old .env files. a key is never printed.
+a key is looked up in auth.json first (what you give bise is what it
+uses), then in the environment (e.g. OPENAI_API_KEY), then in the old
+.env files. a key is never printed.
 see also: {cli} models (the providers)",
         cli = CLI
     )
