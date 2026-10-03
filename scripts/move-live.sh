@@ -217,7 +217,11 @@ if [ -n "$(hub_pid "$OLD_STATE")" ]; then
 fi
 
 # 5. backup, stop
-rsync -a --exclude hub.sock "$OLD_STATE/" "$BK/state/"
+# not -a (it implies -D): copying a socket fails with "mkstempsock: Invalid
+# argument" past the 104-byte socket path limit (macOS's openrsync has no
+# --no-specials). agents/*/tmp: scratch, not state.
+rsync -rlptg --exclude /hub.sock --exclude '/agents/*/tmp/' "$OLD_STATE/" "$BK/state/" \
+  || die "the state backup to $BK/state failed (rsync above); nothing was moved"
 say "hub state backed up: $BK/state"
 if [ -n "$(hub_pid "$OLD_STATE")" ]; then
   "$exe" switchboard --stop --workspace "$OLD" >/dev/null 2>&1 || true
@@ -240,7 +244,8 @@ if [ -d "$OLD_STATE/worktrees" ]; then
     git -C "$NEW" worktree move "$w" "$NEW_STATE/worktrees/$(basename "$w")"
   done
 fi
-rsync -a --exclude hub.sock --exclude hub.pid --exclude switch.pid --exclude hub.root \
+# sockets and FIFOs stay behind (-rlptg, not -a); the agents' tmp moves
+rsync -rlptg --exclude hub.sock --exclude hub.pid --exclude switch.pid --exclude hub.root \
   --exclude bin/ --exclude worktrees/ --exclude 'agents/*/repl.json' --exclude 'agents/*/repl.pid' \
   "$OLD_STATE/" "$NEW_STATE/"
 python3 - "$NEW_STATE/journal.jsonl" "$OLD" "$NEW" "$OLD_STATE" "$NEW_STATE" <<'PY'

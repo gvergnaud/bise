@@ -2047,6 +2047,14 @@ pub fn drop_sb_link(bin_dir: &Path) {
     }
 }
 
+/// One step of the hub's start, in hub.log (`boot: ...`): the switcher
+/// waits while they come and names the last one when the hub never
+/// answers (switch.rs replace_hub). SB_TIMING gets it too.
+fn boot_step(paths: &Paths, what: &str) {
+    log_line(paths, &format!("boot: {}", what));
+    crate::util::timing(what);
+}
+
 pub fn run(opts: Opts) -> std::io::Result<()> {
     let paths = opts.paths.clone();
     std::fs::create_dir_all(&paths.state)?;
@@ -2112,7 +2120,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         log_line(&paths, &format!("worktree not moved: {}", e));
     }
     crate::sweep::follow_moves(&mut events, &paths.worktrees);
-    crate::util::timing(&format!("journal read ({} events)", events.len()));
+    boot_step(&paths, &format!("journal read ({} events)", events.len()));
     if !unreadable.is_empty() {
         log_line(&paths, &format!("journal: {} unreadable lines (not replayed), at line {}", unreadable.len(), lines_list(&unreadable)));
     }
@@ -2125,7 +2133,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
             &format!("journal: {} events of a kind this hub does not know (not applied; a newer hub wrote them?): {}", skipped.len(), kinds.join(", ")),
         );
     }
-    crate::util::timing("journal replayed");
+    boot_step(&paths, "journal replayed");
     // sb-core dies (an OOM, a runtime error, killed): the hub restarts it
     // on the journal instead of dying with it (BISE-292)
     {
@@ -2226,10 +2234,10 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
             sh.buffers.insert(a.name.clone(), tail);
         }
     }
-    crate::util::timing(&format!(
-        "transcripts read ({} buffered lines)",
-        sh.buffers.values().map(|b| b.len()).sum::<usize>()
-    ));
+    boot_step(
+        &paths,
+        &format!("transcripts read ({} buffered lines)", sh.buffers.values().map(|b| b.len()).sum::<usize>()),
+    );
 
     {
         let tx = tx.clone();
@@ -2288,7 +2296,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     sh.down = sh.down_dirs();
     sh.reap_procs(None);
     sh.start_prs();
-    crate::util::timing("boot done (REPLs spawned)");
+    boot_step(&paths, "boot done (REPLs spawned)");
 
     let mut keep_agents = false;
     while let Ok(m) = rx.recv() {

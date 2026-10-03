@@ -3099,3 +3099,47 @@ mod prs {
         assert!(!fx.iter().any(|e| matches!(e, Effect::Spawn { agent, .. } if agent == "github")), "{:?}", fx);
     }
 }
+
+/// Boot replays the journal in batches (`replay_many`, messages kept
+/// newest first in sb-core during a batch): the same state as one
+/// `replay` per event, the unknown kinds still named, across batches
+/// (REPLAY_BATCH: 500).
+#[test]
+fn a_batched_replay_builds_the_same_state_as_one_event_at_a_time() {
+    let ws = json!({"mode": "shared", "path": "/w", "branch": null, "base_commit": null, "dropped": false});
+    let mut ev = vec![json!({"type": "task_created", "name": "a", "parent": "main", "ws": ws, "at_ms": 1})];
+    let msg = |id: u64, from: &str, to: &str, reply: Option<u64>| {
+        json!({"type": "message_sent", "msg": {"id": id, "thread": id, "from": from, "to": to, "reply_to": reply,
+            "expect_reply": reply.is_none(), "auto": false, "text": format!("fake {}", id), "created_ms": 1000 + id, "plain": true}})
+    };
+    for id in 1..=1200u64 {
+        ev.push(msg(id, "main", "a", None));
+        if id % 3 == 0 {
+            ev.push(json!({"type": "message_state", "id": id, "state": "delivered"}));
+        }
+        if id % 5 == 0 {
+            // an answer to an old question settles it (across batches)
+            ev.push(msg(id + 100_000, "a", "main", Some(id / 2)));
+        }
+        if id % 7 == 0 {
+            ev.push(json!({"type": "message_settled", "id": id - 6}));
+        }
+        if id == 600 {
+            ev.push(json!({"type": "from_a_newer_hub", "name": "a"}));
+        }
+    }
+    ev.push(json!({"type": "message_state", "id": 1, "state": "read"}));
+    let mut batched = Hub::new("/w");
+    let skipped = batched.replay(&ev);
+    assert_eq!(skipped, vec![json!({"type": "from_a_newer_hub", "name": "a"})]);
+    let mut one = Hub::new("/w");
+    for e in &ev {
+        one.raw(&json!({"t": "replay", "ev": e}));
+    }
+    one.view_all();
+    assert_eq!(batched.st.msgs.len(), 1200 + 240);
+    assert_eq!(batched.st.msgs, one.st.msgs);
+    assert_eq!(batched.st.order, one.st.order);
+    assert_eq!(batched.st.agents["a"].ws, one.st.agents["a"].ws);
+    assert_eq!(batched.raw(&json!({"t": "view_all"})), one.raw(&json!({"t": "view_all"})));
+}
