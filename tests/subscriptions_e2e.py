@@ -421,11 +421,16 @@ class World:
         if link and browse_it:
             st, url, body = browse(link)
             out.append("[browser] %s %s\n" % (st, url.split("?")[0]))
+        # read on from the same buffered stream (communicate() would skip
+        # what readline already buffered); a watchdog ends a stuck login
+        dog = threading.Timer(30 * load_factor(), p.kill)
+        dog.start()
         try:
-            rest, err = p.communicate(timeout=30 * load_factor())
-        except subprocess.TimeoutExpired:
-            p.kill()
-            rest, err = p.communicate()
+            rest = p.stdout.read()
+            err = p.stderr.read()
+            p.wait()
+        finally:
+            dog.cancel()
         return p.returncode, "".join(out) + rest, err, link
 
     def requests(self):
@@ -481,7 +486,7 @@ def t_login(W):
     chatgpt_config(W)
     out, link = signed_in(W)
     check("open this link in a browser on this machine:" in out, "the --no-browser line: %r" % out)
-    port = urllib.parse.urlsplit(link).port
+    port = urllib.parse.urlsplit(query(link)["redirect_uri"]).port
     check("ssh -L %d:127.0.0.1:%d" % (port, port) in out, "the SSH hint names the port: %r" % out)
     check("✓ signed in as you@example.com · ChatGPT Plus." in out, "signed in line: %r" % out)
     a = W.auth_json()["chatgpt"]
@@ -527,7 +532,7 @@ def t_turn_refresh(W):
     jti1 = reqs[-1]["plan"]["jti"]
     # a tool call through the namespace and back
     c.say("run it [[bash: echo plan-tool-ok]]")
-    c.wait_line("main", "done: plan-tool-ok", 90)
+    c.wait_line("main", "done: tool bash ok: plan-tool-ok", 90)
     c.wait_idle("main")
     # the hour passes: bise sees the token about to end and refreshes it
     a = W.auth_json()
@@ -604,9 +609,10 @@ def t_errors(W):
     c.say("unavailable early [[plan: unavailable-503]]")
     c.wait_line("main", "ack: unavailable early", 120)
     c.wait_idle("main")
-    # every time: the line, only after the retries
-    c.say("unavailable always [[plan: unavailable x99]]")
-    c.wait_line("main", "ChatGPT couldn't check your plan's usage.", 240)
+    # every time: the line, only after the retries (503s with Retry-After:
+    # 1 s, so the bounded backoff ends in seconds, not minutes)
+    c.say("unavailable always [[plan: unavailable-503 x99]]")
+    c.wait_line("main", "ChatGPT couldn't check your plan's usage.", 120)
     c.wait_idle("main")
     check(len(sent(W, "unavailable always")) >= 2, "the line came after retries: %d" % len(sent(W, "unavailable always")))
     # not eligible (403): plan use is off, no retry

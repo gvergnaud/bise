@@ -813,7 +813,9 @@ class H(http.server.BaseHTTPRequestHandler):
         if fail in ("limit-429", "unavailable-503", "not-eligible"):
             st, code, message = PLAN_FAILS[{"limit-429": "limit", "unavailable-503": "unavailable"}.get(fail, fail)]
             status = st
-            self.send(st, json.dumps(oai_error(None, message, code)).encode())
+            # a 429/503 says when to come back (1 s: the tests' retries stay short)
+            hdr = {"retry-after": "1"} if st in (429, 503) else {}
+            self.send(st, json.dumps(oai_error(None, message, code)).encode(), headers=hdr)
         elif fail:
             status = "failed:" + PLAN_FAILS[fail][1]
             self.send_sse([sse_bytes(family, [e]) for e in sse_plan_failed(turn, model, fail)])
@@ -1054,6 +1056,7 @@ def effort_of(body):
 #   unavailable  mid-stream response.failed, subscription_sharing_usage_unavailable
 #   limit-429    before the stream: 429 with the same code
 #   unavailable-503 before the stream: 503 with the same code
+# (the 429 and 503 carry Retry-After: 1)
 #   not-eligible before the stream: 403 subscription_sharing_user_not_eligible
 PLAN_SCOPE = "chatgpt.tokens.use.direct"
 PLAN_RESOURCE = "https://api.openai.com/v1"
