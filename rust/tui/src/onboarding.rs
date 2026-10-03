@@ -113,6 +113,18 @@ pub(crate) fn keys_due(env: Env) -> bool {
     model_blocked(&setup, &find_keys(env, &home, &setup))
 }
 
+/// The setup item's ChatGPT line (subscriptions design): Codex is signed
+/// in with ChatGPT and the plan isn't set up here. Read once per process
+/// (the detection may ask the keychain).
+pub(crate) fn chatgpt_hint(env: Env) -> bool {
+    static HINT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *HINT.get_or_init(|| {
+        let home = home_of(env);
+        let l = Logins::real();
+        (l.detect)(home.user_home(), env).codex_chatgpt && (l.state)(&auth_paths(&home)) == PlanState::NotSetUp
+    })
+}
+
 /// The launch of the Switchboard UI: the onboarding when it is due, else
 /// only its key step when the model can't run.
 pub(crate) fn request_if_due(app: &mut App) {

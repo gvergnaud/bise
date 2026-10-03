@@ -384,6 +384,19 @@ pub(crate) fn ev_lines(ev: &Ev, width: usize) -> Vec<Line<'static>> {
         // an interrupted turn ("turn interrupted by main" too) is dim;
         // any other warning reads as text
         Ev::Warn(t) if t == "turn interrupted" || t.starts_with("turn interrupted by ") => glyph_line(G_INTERRUPTED, dim_st, t.clone(), dim_st, width),
+        // the plan's limit line: its usage page clickable (OSC 8)
+        Ev::Warn(t) if crate::wire::is_plan_line(t) && t.contains(crate::wire::PLAN_USAGE_TEXT) => {
+            use unicode_width::UnicodeWidthStr;
+            let (a, b) = t.split_once(crate::wire::PLAN_USAGE_TEXT).unwrap_or((t, ""));
+            let first = Span::styled(format!(" {} ", G_INTERRUPTED), dim_st);
+            let pad = Span::raw(" ".repeat(first.content.width()));
+            let line = Line::from(vec![
+                Span::styled(a.to_string(), text_st),
+                crate::textlayer::link(crate::wire::PLAN_USAGE_TEXT, crate::wire::PLAN_USAGE_URL, text_st),
+                Span::styled(b.to_string(), text_st),
+            ]);
+            hung_rows(&first, &pad, [line], width)
+        }
         Ev::Warn(t) => glyph_line(G_INTERRUPTED, dim_st, t.clone(), text_st, width),
         // a model without vision refused an image: say so, and the way out
         Ev::Err(t) => match crate::attach::no_vision(t) {

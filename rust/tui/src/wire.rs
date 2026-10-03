@@ -533,6 +533,12 @@ pub(crate) fn parse_line(line: &str) -> Option<Ev> {
             if why.starts_with("interrupted by ") {
                 return Some(Ev::Warn(format!("turn {}", why)));
             }
+            // the ChatGPT plan's own lines (subscriptions design, item 5):
+            // a limit, plan use off, usage not checked, the sign-in
+            // expired: a ▲ that says what to do, not a ✗ failure
+            if is_plan_line(why) {
+                return Some(Ev::Warn(why.to_string()));
+            }
             if let Some(line) = no_key(why) {
                 return Some(Ev::Err(line));
             }
@@ -549,6 +555,24 @@ pub(crate) fn parse_line(line: &str) -> Option<Ev> {
     }
     Some(Ev::Raw(o.to_string()))
 }
+
+/// The openings of the runtime's ChatGPT plan lines (bend/runtime, the
+/// designer's final words): matched on these, not the whole line.
+const PLAN_LINES: [&str; 4] = [
+    "your ChatGPT plan's limit for bise is reached.",
+    "ChatGPT plan use is off for bise.",
+    "ChatGPT couldn't check your plan's usage.",
+    "your ChatGPT sign-in expired.",
+];
+
+/// A turn ended on one of the ChatGPT plan's lines.
+pub(crate) fn is_plan_line(t: &str) -> bool {
+    PLAN_LINES.iter().any(|p| t.starts_with(p))
+}
+
+/// The plan's usage page, as the limit line says it, and where it links.
+pub(crate) const PLAN_USAGE_TEXT: &str = "chatgpt.com/settings/usage";
+pub(crate) const PLAN_USAGE_URL: &str = "https://chatgpt.com/settings/usage";
 
 /// BISE-293: a turn failed on a refused request, as the runtime words
 /// it (`provider-pure.bend` refusal): `turn failed: OpenAI refused the

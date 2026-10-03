@@ -2000,6 +2000,41 @@ fn refusal_parts_split_bise_and_the_provider() {
     assert_eq!(refusal_parts("compaction failed: x refused the y. z said: \"w\""), None);
 }
 
+// subscriptions (design item 5): the ChatGPT plan's four turn lines read as
+// a ▲ that says what to do, matched on their openings; the limit line's
+// usage page is a link; any other failure stays a ✗
+#[test]
+fn the_chatgpt_plan_lines_are_a_warning_and_the_rest_a_failure() {
+    let lines = [
+        "your ChatGPT plan's limit for bise is reached. your usage is at chatgpt.com/settings/usage, or switch model with /model.",
+        "ChatGPT plan use is off for bise. turn it on in your ChatGPT settings, or pick another provider in /provider.",
+        "ChatGPT couldn't check your plan's usage. try again in a moment, or switch model with /model.",
+        "your ChatGPT sign-in expired. sign in again in /provider, or run bise login chatgpt.",
+    ];
+    for l in lines {
+        let ev = parse_line(&format!("  obs: turn_done: failed: {}", l)).expect("parse");
+        assert!(matches!(&ev, Ev::Warn(w) if w == l), "{l}");
+        let text = rows_text(&ev_rows(&ev, 0, 200)).iter().map(|r| r.trim()).collect::<Vec<_>>().join(" ");
+        assert_eq!(text, format!("▲ {}", l));
+    }
+    // the limit line: one link, the usage page, on its own words
+    let ev = Ev::Warn(lines[0].to_string());
+    let rows = ev_rows(&ev, 0, 200);
+    let linked: Vec<String> = rows
+        .iter()
+        .flat_map(|r| r.spans.iter())
+        .filter(|sp| sp.style.add_modifier.contains(ratatui::style::Modifier::UNDERLINED))
+        .map(|sp| sp.content.to_string())
+        .collect();
+    assert_eq!(linked, vec!["chatgpt.com/settings/usage".to_string()]);
+    // a reworded tail still matches; another provider's failure stays ✗
+    let ev = parse_line("  obs: turn_done: failed: your ChatGPT sign-in expired. (401)").expect("parse");
+    assert!(matches!(ev, Ev::Warn(_)));
+    let ev = parse_line("  obs: turn_done: failed: OpenAI refused the request (400).").expect("parse");
+    assert!(matches!(&ev, Ev::Err(t) if t == "turn failed: OpenAI refused the request (400)."));
+    assert!(rows_text(&ev_rows(&ev, 0, 200)).join("\n").starts_with(" ✗ "));
+}
+
 // interrupt-who: a call an interrupt stopped mid-answer names who asked
 // and reads as a dim ▲ stop, not a red ✗ failure
 #[test]

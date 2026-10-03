@@ -313,3 +313,12 @@ fn ascii_marks() {
     crate::theme::set_ascii_for_tests(false);
     assert_eq!(infos(&app), vec!["- not now · type /setup whenever you want"]);
 }
+
+// subscriptions (designer): the ask says the ChatGPT plan works here too
+// only when Codex uses it and bise doesn't
+#[test]
+fn the_ask_names_the_chatgpt_plan_only_when_codex_uses_it() {
+    let text = |l: &Look| l.body.iter().map(|p| format!("{p:?}")).collect::<Vec<_>>().join("\n");
+    assert!(text(&ask_look(Scope::All, true)).contains("use your ChatGPT plan here too · /provider"));
+    assert!(!text(&ask_look(Scope::All, false)).contains("ChatGPT"));
+}

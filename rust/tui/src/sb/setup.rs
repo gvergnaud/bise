@@ -137,9 +137,12 @@ fn listed(v: &[&str]) -> String {
     }
 }
 
+/// The setup item's line when Codex uses ChatGPT and bise doesn't yet.
+pub(crate) const PLAN_HINT: &str = "use your ChatGPT plan here too · /provider";
+
 /// The ask: what `set up` does before any yes (screens `setup, by the
 /// hand · 2`). The count and the list are the checks that will run.
-fn ask_look(scope: Scope) -> Look {
+fn ask_look(scope: Scope, plan_hint: bool) -> Look {
     let subjects = tune::subjects(scope, cfg!(target_os = "macos"));
     let (q, first) = match scope {
         Scope::All => (
@@ -158,7 +161,12 @@ fn ask_look(scope: Scope) -> Look {
             Para::Text(first),
             Para::Text("checking changes nothing. each fix i find comes back here as its own item, with the exact change, and you say yes or no to each one.".into()),
             Para::Dim("your agents keep working meanwhile. not now? type /setup whenever you want.".into()),
-        ],
+        ]
+        .into_iter()
+        // subscriptions (designer): Codex signed in with ChatGPT, the plan
+        // not set up here
+        .chain(plan_hint.then(|| Para::Dim(PLAN_HINT.into())))
+        .collect(),
         options: vec!["yes, check".into(), "not now".into()],
         ..Look::default()
     }
@@ -205,7 +213,7 @@ fn keys_why(add: &[String]) -> String {
 /// The look of setup item `w` (screens `setup, by the hand · 2-5`).
 fn offer_look(v: &Vars, w: &What) -> Look {
     match w {
-        What::Ask(s) => ask_look(*s),
+        What::Ask(s) => ask_look(*s, crate::onboarding::chatgpt_hint(&lookup(v))),
         What::Keys { terminal, file, add } => {
             let term = term_title(terminal);
             let old = std::fs::read_to_string(file).ok();
