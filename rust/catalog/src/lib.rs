@@ -30,6 +30,11 @@ pub mod voice;
 /// The command's name in messages and usages (BISE-165: was `bend-harness`).
 pub const CLI: &str = "bise";
 
+/// A provider's state when its key comes from `key_command`: listings,
+/// doctor and `/provider` never run the command, so it is not checked
+/// (`bise auth check` runs it).
+pub const KEY_COMMAND_STATE: &str = "key from key_command · not checked";
+
 /// The built-in list, shipped in the binary.
 pub const BUILTIN: &str = include_str!("../models.toml");
 
@@ -313,6 +318,11 @@ pub const AUTHS: [&str; 2] = ["api", "chatgpt"];
 pub const SHAPES: [&str; 1] = ["chatgpt-plan"];
 
 impl Provider {
+    /// The configured key source. Reading it does not run the command.
+    pub fn key_command(&self) -> &str {
+        self.caps.key_command.as_deref().unwrap_or("")
+    }
+
     /// It runs chats: not voice only (`stt`), not decisions only.
     pub fn chats(&self) -> bool {
         !self.stt_only && !self.decides

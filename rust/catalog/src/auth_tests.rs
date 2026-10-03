@@ -34,6 +34,47 @@ fn no_env(_: &str) -> Option<String> {
 }
 
 #[test]
+fn gateway_status_does_not_execute_or_disclose_the_key_command() {
+    let dir = tmp("gateway-status");
+    std::fs::create_dir_all(&dir).unwrap();
+    let marker = dir.join("executed");
+    let setup = Setup::from_text(Some(&format!(r#"
+[providers.gateway]
+name = "Company gateway"
+base_url = "https://gateway.test/v1"
+key_env = ""
+key_command = "touch {}; printf secret-token"
+"#, marker.display())), &no_env);
+    let keys = Keys { env: &no_env, store: &Store::default(), files: &[] };
+    let provider = setup.catalog.provider("gateway").unwrap();
+    let status = crate::cli::key_state(provider, &keys, None);
+    let listing = auth_cli::render_list(&setup.catalog, &keys, &paths(&dir));
+    for text in [&status, &listing] {
+        assert!(text.contains(crate::KEY_COMMAND_STATE), "{text}");
+        assert!(!text.contains("secret-token"));
+    }
+    assert!(listing.contains("Company gateway"));
+    assert!(keys.source(provider, None).is_some());
+    assert!(!marker.exists(), "a status check must not execute the command");
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn command_keys_are_bounded_and_errors_do_not_disclose_output() {
+    use std::time::{Duration, Instant};
+    let timeout = Duration::from_secs(2);
+    assert_eq!(crate::auth::command_key("printf '  test-token  '", timeout).unwrap(), "test-token");
+    for command in ["true", "printf secret-token; exit 3", "printf 'secret token'", "yes secret-token | head -c 9000"] {
+        let error = crate::auth::command_key(command, timeout).unwrap_err();
+        assert!(error.contains("key_command"));
+        assert!(!error.contains("secret"));
+    }
+    let start = Instant::now();
+    assert!(crate::auth::command_key("sleep 30", Duration::from_millis(30)).is_err());
+    assert!(start.elapsed() < Duration::from_secs(2));
+}
+
+#[test]
 fn login_writes_a_0600_file_in_a_0700_dir_and_logout_removes_the_key() {
     let dir = tmp("login");
     let ps = paths(&dir);

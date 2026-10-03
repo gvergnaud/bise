@@ -224,7 +224,7 @@ pub(crate) fn model_blocked(setup: &bise_catalog::Setup, found: &[Provider]) -> 
     let r = setup.catalog.resolve(&setup.model);
     r.known == bise_catalog::Known::NoProvider
         || !r.needs.is_empty()
-        || (!r.key_env.is_empty() && !found.iter().any(|p| p.id == r.provider))
+        || (r.caps.key_command.is_empty() && !r.key_env.is_empty() && !found.iter().any(|p| p.id == r.provider))
 }
 
 /// `provider/model`: the provider's pick (its catalog `model`), else the
@@ -713,7 +713,7 @@ impl Onb {
                 Why::WrongKey => Sub::Paste(p, m, String::new()),
                 Why::NoCredit | Why::Unreachable(_) => self.start_check(p, m, t.again(), env),
                 // the URL may be set now (config.toml, a .env file)
-                Why::NoUrl(_) => {
+                Why::NoUrl(_) | Why::Configuration(_) => {
                     self.setup = setup_of(env, &self.home);
                     self.start_check(p, m, t.again(), env)
                 }
@@ -779,7 +779,7 @@ impl Onb {
             let r = self.setup.catalog.resolve(&model);
             (r.api, r.base_url, r.id)
         };
-        let call = crate::keycheck::Call { provider: p.id.clone(), api, base_url, model: id, key: the_key, voice };
+        let call = crate::keycheck::Call { provider: p.id.clone(), api, base_url, model: id, key: the_key, key_command: String::new(), headers_env: self.setup.catalog.resolve(&model).caps.headers_env, voice };
         let (tx, rx) = std::sync::mpsc::channel();
         let (check, url) = (self.checker, env("BEND_PROVIDER_URL"));
         // no base URL (foundry without ANTHROPIC_FOUNDRY_BASE_URL): no
@@ -1323,6 +1323,7 @@ fn model_lines(o: &Onb, w: u16, gap: usize) -> Vec<Line<'static>> {
                 Why::Model => v.push(err(format!("{} doesn't know {}. pick another model.", p.name, short_model(m)))),
                 Why::NoAccess => v.push(err(format!("this key can't use {}.", short_model(m)))),
                 Why::Unreachable(e) => v.push(err(format!("i couldn't reach {}: {}.", p.name, e.trim_end_matches('.')))),
+                Why::Configuration(e) => v.push(err(e.clone())),
                 Why::NoUrl(_) => v.push(err(format!("{} has no URL yet: i didn't call it.", p.name))),
             }
             // BISE-282: the provider's own words, cut to the width; a url

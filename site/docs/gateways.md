@@ -99,6 +99,8 @@ reasoning = true
 export GATEWAY_HEADERS="x-team: platform"
 ```
 
+`bise auth check <provider> --model <provider/model>` runs `key_command` and sends the same headers as a model call; the key it prints is never saved or shown. `bise auth status`, `bise doctor` and `/provider` never run the command: they say `key from key_command · not checked`.
+
 the key from `key_command` goes out both as the API's own header and as `Authorization: Bearer`. a command that fails or prints nothing stops the call with one line that names it. write `key_command` on one line, with no `"` or `\` (single quotes work).
 
 LiteLLM also serves Anthropic's API (`/v1/messages`), so the same LiteLLM works with `api = "anthropic"` when you want Claude's thinking blocks kept as they are.
