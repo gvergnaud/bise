@@ -176,7 +176,7 @@ impl Provider {
             keys_url: p.keys_url.clone(),
             signup_url: p.signup_url.clone(),
             billing_url: p.billing_url.clone(),
-            plan: p.id == PLAN_PROVIDER,
+            plan: p.signs_in(),
         }
     }
 }

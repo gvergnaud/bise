@@ -126,7 +126,9 @@ def to_pay_step(t):
     t.keys("Space")
     t.wait("←→ switch")
     t.keys("Enter")
-    return t.wait(PAY)
+    # the whole step drawn: its key bar is the last row
+    t.wait(PAY)
+    return t.wait("↑↓ choose   ⏎ go   esc back")
 
 
 def main():

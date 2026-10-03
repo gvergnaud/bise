@@ -137,7 +137,9 @@ impl Logins {
         }
     }
 
-    /// Nothing signed in, nothing detected, no sign-in possible.
+    /// Nothing signed in, nothing detected, no sign-in possible (the
+    /// unit tests' start).
+    #[cfg(test)]
     pub(crate) fn none() -> Logins {
         Logins {
             start: |_, _| Err("sign-in isn't available in this build".into()),
@@ -152,12 +154,69 @@ impl Logins {
     }
 }
 
+/// bise_catalog's sign-ins (subs-auth: `chatgpt`, `openrouter_login`,
+/// `detect`) behind the seam.
 #[cfg(not(test))]
 mod real {
     use super::*;
+    use bise_catalog::{chatgpt, detect, openrouter_login};
+
+    /// A catalog sign-in handle as a [`Flow`]; its drop cancels it.
+    struct Handle<T: Clone + Send + 'static>(chatgpt::SignIn<T>, fn(T) -> Option<Account>);
+
+    impl<T: Clone + Send + 'static> Flow for Handle<T> {
+        fn url(&self) -> &str {
+            self.0.url()
+        }
+        fn poll(&mut self) -> Poll {
+            match self.0.poll() {
+                chatgpt::Poll::Waiting => Poll::Waiting,
+                chatgpt::Poll::Done(t) => Poll::Done((self.1)(t)),
+                chatgpt::Poll::Denied => Poll::Denied,
+                chatgpt::Poll::Unfinished => Poll::Unfinished,
+                chatgpt::Poll::Failed(e) => Poll::Failed(e),
+            }
+        }
+        fn cancel(&mut self) {
+            self.0.cancel();
+        }
+    }
+
+    fn start(k: Kind, paths: &Paths) -> Result<Box<dyn Flow>, String> {
+        Ok(match k {
+            Kind::ChatGpt => Box::new(Handle(chatgpt::start(paths, chatgpt::Mode::Again)?, |a: chatgpt::Account| {
+                Some(Account { email: a.email, plan: a.plan })
+            })),
+            Kind::OpenRouter => Box::new(Handle(openrouter_login::start(paths)?, |_: ()| None)),
+        })
+    }
+
+    fn state(paths: &Paths) -> PlanState {
+        let store = bise_catalog::auth::Store::read(&paths.auth_file).unwrap_or_default();
+        match chatgpt::state(&store) {
+            chatgpt::State::NotSetUp => PlanState::NotSetUp,
+            chatgpt::State::SignedOut { .. } => PlanState::SignedOut,
+            chatgpt::State::SignedIn { email, plan } => PlanState::SignedIn(Account { email, plan }),
+            chatgpt::State::Expired { .. } => PlanState::Expired,
+        }
+    }
 
     pub(super) fn logins() -> Logins {
-        Logins { open: crate::links::open, ..Logins::none() }
+        Logins {
+            start,
+            state,
+            detect: |home, env| {
+                let d = detect::detect(home, env);
+                Detected { codex_chatgpt: d.codex_chatgpt, claude_plan: d.claude_plan }
+            },
+            sign_out: chatgpt::sign_out,
+            token: |p| chatgpt::access_token(p).map_err(|e| e.to_string()),
+            models: |p| chatgpt::cached_models(p).into_iter().map(|m| PlanModel { slug: m.slug, name: m.display_name }).collect(),
+            fetch_models: |p| {
+                let _ = chatgpt::fetch_models(p);
+            },
+            open: |u| bise_catalog::auth_cli::open_url(u).is_ok(),
+        }
     }
 }
 

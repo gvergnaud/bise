@@ -134,7 +134,7 @@ pub(crate) fn key_states(env: Env, home: &bise_home::Home, setup: &bise_catalog:
 /// others that run chats (hidden ones, local servers), in catalog order.
 pub(crate) fn all_providers(setup: &bise_catalog::Setup, ready: &dyn Fn(&bise_catalog::Provider) -> bool) -> (Vec<Provider>, Vec<Provider>) {
     // the ChatGPT plan first (subscriptions design), then the keys
-    let mut offered: Vec<Provider> = setup.catalog.provider(PLAN_PROVIDER).filter(|p| p.needs.is_empty()).map(Provider::of).into_iter().collect();
+    let mut offered: Vec<Provider> = setup.catalog.providers.iter().filter(|p| p.signs_in() && p.needs.is_empty()).map(Provider::of).collect();
     offered.extend(key_providers(setup));
     let others = setup
         .catalog
@@ -142,8 +142,7 @@ pub(crate) fn all_providers(setup: &bise_catalog::Setup, ready: &dyn Fn(&bise_ca
         .iter()
         // voice-only ones (ElevenLabs) once they have a key (BISE-298)
         .filter(|p| p.needs.is_empty() && (!p.stt_only || ready(p)) && !offered.iter().any(|o| o.id == p.id))
-        // a sign-in (chatgpt) is no key and no local server: its own rows
-        // (subs-tui); until then not listed as a ready keyless provider
+        // a sign-in (chatgpt) is no key and no local server: first, above
         .filter(|p| !p.signs_in())
         // a private proxy (no keys page: foundry) only once it has a key
         .filter(|p| p.key_env.is_empty() || !p.keys_url.is_empty() || ready(p))

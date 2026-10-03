@@ -290,7 +290,9 @@ impl Onb {
             let ready = |p: &bise_catalog::Provider| self.ready(&Provider::of(p));
             let (offered, others) = provider::all_providers(&self.setup, &ready);
             let more = self.pn().more;
-            let chat = |p: &Provider| self.chats(p) && !(checker && p.id == "openrouter");
+            // the checker: the ChatGPT plan only once signed in (its
+            // sign-in is not a step of the checker's picker)
+            let chat = |p: &Provider| self.chats(p) && !(checker && p.id == "openrouter") && !(checker && p.plan && !self.ready(p));
             let (shown, rest): (Vec<Provider>, Vec<Provider>) =
                 others.into_iter().filter(|p| chat(p)).partition(|p| more || self.ready(p));
             (offered.into_iter().filter(|p| chat(p)).chain(shown).collect(), rest)
