@@ -582,17 +582,38 @@ def t_turn_refresh(W):
 
 
 def t_errors(W):
-    """a usage limit mid-stream, plan use off, invalid_grant -> the expired line"""
+    """a usage limit mid-stream, usage not checked (retried), plan use off, invalid_grant -> the expired line"""
     chatgpt_config(W)
     signed_in(W)
     c = W.E.start_hub()
     c.wait_status("main", "idle", 60)
+    # OpenAI's errors-and-recovery table (design §Errors in a turn)
+    # the limit: no retry, the line names the usage page
     c.say("hit the limit [[plan: limit]]")
     c.wait_line("main", "your ChatGPT plan's limit for bise is reached", 90)
     c.wait_idle("main")
-    c.say("usage off [[plan: unavailable]]")
+    check(any("chatgpt.com/settings/usage" in l for l in c.lines("main")), "the limit line names the usage page")
+    check(len(sent(W, "hit the limit")) == 1, "a limit is not retried: %d" % len(sent(W, "hit the limit")))
+    # usage not checked once (mid-stream), then fine: retried, a normal turn
+    c.say("unavailable once [[plan: unavailable]]")
+    c.wait_line("main", "ack: unavailable once", 120)
+    c.wait_idle("main")
+    check(not any("couldn't check your plan's usage" in l for l in c.lines("main")), "no line after a good retry")
+    check(len(sent(W, "unavailable once")) >= 2, "usage_unavailable is retried")
+    # before the stream too (503)
+    c.say("unavailable early [[plan: unavailable-503]]")
+    c.wait_line("main", "ack: unavailable early", 120)
+    c.wait_idle("main")
+    # every time: the line, only after the retries
+    c.say("unavailable always [[plan: unavailable x99]]")
+    c.wait_line("main", "ChatGPT couldn't check your plan's usage just now", 240)
+    c.wait_idle("main")
+    check(len(sent(W, "unavailable always")) >= 2, "the line came after retries: %d" % len(sent(W, "unavailable always")))
+    # not eligible (403): plan use is off, no retry
+    c.say("not eligible [[plan: not-eligible x99]]")
     c.wait_line("main", "ChatGPT plan use is off for bise", 90)
     c.wait_idle("main")
+    check(len(sent(W, "not eligible")) == 1, "not_eligible is not retried: %d" % len(sent(W, "not eligible")))
     # the refresh token is refused: the expired line, signed out, the client kept
     control(W.A, "invalid_grant", on=True)
     control(W.A, "expire_access")
@@ -618,6 +639,11 @@ def t_errors(W):
     c.wait_line("main", "ack: signed in again", 90)
     c.wait_idle("main")
     print("ok   errors: usage limit, plan use off, invalid_grant -> expired, sign in again")
+
+
+def sent(W, needle):
+    """the plan requests whose user message holds needle"""
+    return [r for r in W.plan_requests() if needle in r.get("user", "")]
 
 
 def t_logout(W):

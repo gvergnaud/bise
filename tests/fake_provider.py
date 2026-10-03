@@ -810,8 +810,8 @@ class H(http.server.BaseHTTPRequestHandler):
             ns = plan_namespaces(body)
             for c in turn["calls"]:
                 c["namespace"] = ns.get(c["name"])
-        if fail in ("limit-429", "not-eligible"):
-            st, code, message = PLAN_FAILS["limit" if fail == "limit-429" else fail]
+        if fail in ("limit-429", "unavailable-503", "not-eligible"):
+            st, code, message = PLAN_FAILS[{"limit-429": "limit", "unavailable-503": "unavailable"}.get(fail, fail)]
             status = st
             self.send(st, json.dumps(oai_error(None, message, code)).encode())
         elif fail:
@@ -1053,6 +1053,7 @@ def effort_of(body):
 #   limit        mid-stream response.failed, subscription_sharing_usage_limit_exceeded
 #   unavailable  mid-stream response.failed, subscription_sharing_usage_unavailable
 #   limit-429    before the stream: 429 with the same code
+#   unavailable-503 before the stream: 503 with the same code
 #   not-eligible before the stream: 403 subscription_sharing_user_not_eligible
 PLAN_SCOPE = "chatgpt.tokens.use.direct"
 PLAN_RESOURCE = "https://api.openai.com/v1"
