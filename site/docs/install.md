@@ -55,8 +55,8 @@ the model you pick becomes main's. the agents use the same one unless you change
 |---|---|
 | `~/.local/share/bise` | the app: one folder per version, `current` points to the one in use |
 | `~/.local/bin/bise` | the command |
-| `~/.bise/config.toml` | your settings: models, approvals, voice. see [config.toml](config) |
-| `~/.bise/auth.json` | your saved keys and sign-ins. only you can read it |
+| `~/.bise/config.toml` | your [settings](config): models, approvals, voice |
+| `~/.bise/auth.json` | your saved keys and sign-ins, readable only by you |
 | `~/.bise/hubs/` | one folder per repo where bise runs: its agents and their threads |
 | `~/.bise/sessions/` | the conversation logs |
 

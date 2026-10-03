@@ -7,8 +7,8 @@ description: two modes for every agent at once. yolo runs everything. auto runs 
 
 | mode | what runs without asking |
 |---|---|
-| `yolo` | everything. nothing asks, no exceptions. this is the default |
-| `auto` | reads, edits in the repo, local git, `sb`, and the rules you saved. a checker model judges the rest, and the risky calls ask you |
+| `yolo` | everything, no exceptions (the default) |
+| `auto` | reads, edits in the repo, local git, `sb` and your saved rules; a checker model judges the rest, and the risky calls ask you |
 
 the mode is one for main and every agent. it shows on the divider after the model, for example `you → main · opus 5.5 · high · yolo`.
 
@@ -68,7 +68,7 @@ the checker is a role, like main's model: `/models` changes it.
 | Jev, by TypeSafe | the default when you have a TypeSafe or an OpenRouter key | the command, the script it runs, the start of the task, the paths |
 | your small jobs model | no TypeSafe or OpenRouter key | the same, to that model's provider |
 | a local model (Ollama, LM Studio) | you pick it in `/models` | nothing |
-| off | `/models`, then off | nothing. auto then runs reads and edits, and every other command asks you |
+| off | `/models`, then off | nothing (auto then runs reads and edits, and every other command asks you) |
 
 the first time you switch to auto, bise says in one line which model checks and where it runs.
 

@@ -7,7 +7,7 @@ description: how the agents' work reaches your repo: small commits straight on m
 
 | flow | for | what the agents do |
 |---|---|---|
-| **trunk** | a repo only you push to | land small commits on your default branch, one at a time, each one checked. no pull request |
+| **trunk** | a repo only you push to | land small commits on your default branch, one at a time, each one checked, with no pull request |
 | **PR** | a repo you share | each task gets its own branch in a worktree, pushes it, opens a pull request, and follows it until it is merged |
 
 bise suggests a flow from the repo itself:

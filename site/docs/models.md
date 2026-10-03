@@ -13,7 +13,7 @@ bise uses models for a few different jobs. each job is a **role**, and each role
 | `agents` | the agents main starts | same as main |
 | `small` | small jobs: titles, summaries | the cheap model of main's provider |
 | `voice` | listens when you talk (`ctrl+r`) | Mistral's or OpenAI's speech model, when you have that key |
-| `classify` | the checker: in auto, decides which commands run and which ask you | Jev, through TypeSafe or OpenRouter when you have one of those keys, else your small jobs model. see [approvals](approvals) |
+| `classify` | the checker: in auto, decides which commands run and which ask you | Jev, through TypeSafe or OpenRouter when you have one of those keys, else your small jobs model ([more](approvals#the-checker)) |
 
 `/models` shows them all, with what each one resolves to. pick a row to change it: role, then provider, then model, then effort.
 

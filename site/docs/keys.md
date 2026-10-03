@@ -17,7 +17,7 @@ hold `ctrl` (or `⌥`) in bise to see that key's shortcuts where they act, in Gh
 | `$` | a skill: the popup lists them |
 | `ctrl+c` | interrupt the turn of the agent in view; again, or at idle, quit (the agents keep running) |
 | `shift+tab` | switch the approvals mode: yolo / auto |
-| `ctrl+r` | dictation; twice: voice mode. see [voice](voice) |
+| `ctrl+r` | dictation; twice: [voice mode](voice#voice-mode) |
 | `esc` | put the draft away (`↑` brings it back) |
 
 ## agents

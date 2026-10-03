@@ -10,7 +10,7 @@ bise loads [Agent Plugins 1.0](https://agent-plugins.org/specification): a folde
 | folder | for |
 |---|---|
 | `~/.agents/plugins/<name>/` | you, in every repo |
-| `<repo>/.agents/plugins/<name>/` | this repo only. it wins over a plugin of the same name in your folder |
+| `<repo>/.agents/plugins/<name>/` | this repo only; it wins over a plugin of the same name in your folder |
 
 a plugin folder:
 

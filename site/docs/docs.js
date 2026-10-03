@@ -18,6 +18,14 @@
   for (const b of document.querySelectorAll('.copy')) {
     b.onclick = () => write(b.parentElement.querySelector('code').innerText.replace(/\n$/, '')).then(() => copied(b, 'copied'), () => copied(b, 'select it'));
   }
+  // the fade on a code block's right edge, while there's more to scroll
+  for (const pre of document.querySelectorAll('.code pre')) {
+    const box = pre.parentElement;
+    const more = () => box.classList.toggle('more', pre.scrollLeft + pre.clientWidth < pre.scrollWidth - 1);
+    pre.addEventListener('scroll', more, { passive: true });
+    addEventListener('resize', more);
+    more();
+  }
   const md = document.querySelector('.copymd');
   if (md) md.onclick = () => fetch(md.dataset.md).then((x) => x.text()).then(write).then(() => copied(md, 'copied'), () => copied(md, "couldn't copy"));
 

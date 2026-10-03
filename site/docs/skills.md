@@ -45,7 +45,7 @@ bise looks for skills in:
 | `~/.agents/skills/` | you, in every repo |
 | `~/.vibe/skills/` | you, shared with Vibe |
 | `<repo>/.agents/skills/` | this repo |
-| a plugin's `skills/` | the plugin's, named `<plugin>:<skill>`. see [plugins and MCP](plugins) |
+| a plugin's `skills/` | the [plugin's](plugins), named `<plugin>:<skill>` |
 
 type `$` in the composer to see them; `$review-pr` in your message points the agent at that skill. a skill you add or edit shows up without a restart.
 

@@ -90,6 +90,7 @@ bise tells ChatGPT to end its sign-in. if ChatGPT doesn't confirm, the line says
 bise login openrouter            # asks: sign in with your browser, or paste a key
 bise login openrouter --browser
 bise login openrouter --key
+bise login openrouter --no-browser   # prints the link (SSH: forward its port, as for ChatGPT)
 ```
 
 the browser sign-in makes a normal OpenRouter API key for bise and saves it, so nothing else changes: the models are `openrouter/<vendor>/<model>`, paid with your OpenRouter credit.
@@ -115,7 +116,7 @@ or the first run's **a coding plan key**. the key is checked with one tiny call,
 | file | what |
 |---|---|
 | `~/.bise/auth.json` | the keys, and the ChatGPT sign-in: its tokens, your email and plan. only you can read it (0600) |
-| `~/.bise/host-id` | an id for this Mac, made once before the first ChatGPT sign-in. not a secret |
+| `~/.bise/host-id` | an id for this machine, made once before the first ChatGPT sign-in. not a secret |
 
 the ChatGPT token renews by itself while bise runs. a token never goes in the environment, a log, or a command line.
 
@@ -127,7 +128,7 @@ bise doctor             # also says how long the ChatGPT sign-in is good for
 
 ## what bise sees from your other tools
 
-bise looks whether Codex is signed in with ChatGPT, and whether Claude Code is signed in with a Claude plan. it looks only at whether the files are there, never at the tokens, to tell you the right next step:
+bise looks whether Codex is signed in with ChatGPT, and whether Claude Code is signed in with a Claude plan. it looks only at whether their login is there (a file, or on a Mac a keychain entry), never at the tokens, to tell you the right next step:
 
 - Codex with ChatGPT: the first run marks **Continue with ChatGPT**, "you use it in Codex already". bise still signs in on its own.
 - Claude Code with a Claude plan: one line says that plan works only in Claude Code.
@@ -139,4 +140,4 @@ bise looks whether Codex is signed in with ChatGPT, and whether Claude Code is s
 | Claude Pro or Max | Anthropic's terms allow these plans only in Claude Code and Anthropic's apps. for Claude in bise, use an Anthropic API key, or Claude through OpenRouter |
 | GitHub Copilot | Copilot's sign-in for other tools comes from partnerships with those tools (OpenCode has one). bise has none |
 | SuperGrok | the same: no partnership with xAI. an xAI API key works |
-| Gemini CLI, Antigravity | Google's terms keep these logins to Google's tools. a Google AI Studio key works, with a free tier to start |
+| Gemini CLI, Antigravity | Google's terms keep these logins to Google's tools. a Google AI Studio key works |

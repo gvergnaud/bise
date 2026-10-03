@@ -89,4 +89,4 @@ see [landing work](flow).
 | `BISE_HOME` | moves `~/.bise` |
 | `BISE_MODEL`, `BISE_AGENT_MODEL`, `BISE_SMALL_MODEL`, `BISE_VOICE_MODEL`, `BISE_CLASSIFY_MODEL` | a role's model for this session |
 | `BISE_APPROVALS` | `yolo` or `auto` for this session, never written |
-| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, ... | a provider's key. see [providers and keys](providers#the-providers) |
+| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, ... | a provider's key (see [providers and keys](providers#the-providers)) |
