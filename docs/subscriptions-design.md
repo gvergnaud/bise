@@ -226,3 +226,65 @@ On `shape = "chatgpt-plan"` (openai-responses family), the body:
   un-namespaced tools, a bad token) with OpenAI's error shapes; usage-limit
   knobs mid-stream; `/v1/models` with `visibility`.
 - OpenRouter: `/auth` redirect + `/api/v1/auth/keys` with PKCE check.
+
+## Final words (designer, m_6334): these replace the drafts above
+
+Rules: TUI and CLI lines start lowercase; brand names keep their capitals
+(ChatGPT, OpenRouter, Claude Code, Codex); a failure is ▲, never ✗; the
+key bar is "key word", three spaces between pairs. Exception: "Continue
+with ChatGPT" exactly (OpenAI's rule). No new layout: the key step reuses
+the first-run list, /provider its rows and menu.
+
+1. First run, the key step
+   - title: `how do you want to pay for the models?`
+   - subtitle (dim): `a plan you already have, or a key. you can add more later in /provider.`
+   - rows (label, then dim description):
+     `› Continue with ChatGPT      use your Plus or Pro plan`
+     `  OpenRouter                 sign in, or paste its key`
+     `  an API key                 Anthropic, OpenAI, Google, Mistral…`
+     `  a coding plan key          GLM, Kimi or MiniMax`
+   - key bar: `↑↓ choose   ⏎ go   esc back`
+   - Codex signed in with ChatGPT: row 1's description becomes
+     `use your Plus or Pro plan · you use it in Codex already`.
+   - Claude Code with a Claude plan, no Anthropic key, one dim line under the list:
+     `your Claude plan works only in Claude Code (Anthropic's terms). for Claude here, use an API key.`
+   - waiting: `waiting for you to sign in to ChatGPT in your browser…`, key bar `c copy the link   esc cancel`
+   - back: `✓ signed in as you@example.com · ChatGPT Plus`, then `checking your plan…`,
+     then `main and your agents use <model> now, on your plan.`
+   - refused or no plan scope:
+     `▲ ChatGPT signed you in but didn't let bise use your plan. try again and allow it, or pick another way.`
+   - esc, or 5 min without an answer: `▲ the sign-in wasn't finished. try again, or pick another way.`
+   - setup card (key found, Codex detected, chatgpt not set up): `use your ChatGPT plan here too · /provider`
+2. /provider, the chatgpt row (name column: ChatGPT):
+   `✓ signed in · you@example.com · Plus` · `signed out` · `not set up` ·
+   `▲ sign-in expired · ⏎ sign in again`. Menu: `sign in again or switch account`,
+   `sign out`, `your plan's usage on chatgpt.com ↗`. OpenRouter's key step:
+   two rows, `sign in with OpenRouter` and `paste a key`.
+3. CLI
+   - `bise login chatgpt`:
+     `opening your browser to sign in to ChatGPT…` / `or open this link:` / `  <url>` /
+     `waiting… ctrl+c cancels.` / `✓ signed in as you@example.com · ChatGPT Plus.`
+   - `--no-browser`: `open this link in a browser on this machine:` / `  <url>` /
+     `over SSH, forward the port first: ssh -L <port>:127.0.0.1:<port> <host>` / `waiting… ctrl+c cancels.`
+   - refused: `ChatGPT signed you in but didn't let bise use your plan. run it again and allow it.`
+   - `bise login openrouter` on a terminal: `OpenRouter: 1 sign in with your browser   2 paste a key` / `> `
+   - `bise logout chatgpt`: `signed out of ChatGPT.`; not confirmed:
+     `signed out here. ChatGPT didn't confirm: to be sure, remove bise from the connected apps in your ChatGPT settings.`
+     (check the real name of that settings page; if unsure, say `in your ChatGPT settings`.)
+   - `bise auth token chatgpt` on a terminal: `this prints a secret for bise's own use, so not on a terminal.`
+4. `bise doctor`:
+   `✓ chatgpt       signed in as you@example.com (Plus) · renews by itself · good until 3 Nov`
+   `▲ chatgpt       the sign-in ends in 2 days: run bise login chatgpt`
+   `· codex         signed in with ChatGPT. bise signs in on its own: bise login chatgpt`
+   `· claude code   signed in with a Claude plan. that plan doesn't run in bise (Anthropic's terms): use an Anthropic API key.`
+   Date as `3 Nov` (year only when not this year); `1 day` when it's 1.
+5. Errors in a turn (warn lines):
+   `▲ your ChatGPT plan's limit for bise is reached. it resets on its own, or switch model with /model.`
+   (when the error says when it resets: `it resets at 18:00.`)
+   `▲ ChatGPT plan use is off for bise. turn it on in your ChatGPT settings, or pick another provider in /provider.`
+   `▲ your ChatGPT sign-in expired. sign in again in /provider, or run bise login chatgpt.`
+6. /models: the right column says `your ChatGPT plan` in place of the price, dim like the prices.
+
+Sign-off: send the designer tmux captures (first run at 150 and 80 cols
+with the Codex mark and the Claude line, waiting, signed in, refused;
+/provider with each chatgpt state; the 3 turn errors; doctor).
