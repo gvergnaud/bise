@@ -35,6 +35,7 @@ type Split is Data:
 type Tag is Data:
   TInit{}
   TReplay{}
+  TReplayMany{}
   TPing{}
   TView{}
   TStep{}
@@ -79,11 +80,47 @@ def replay(+h: H.Hub, m: Maybe<&2, M.Ev>) -> H.Hub & String:
     case Some{+e}:
       (H.Hub{M.apply(H.Hub.d(h), e), H.Hub.r(h)}, "{}")
 
+# {"t":"replay_many","evs":[..]}: a batch of journal events at boot,
+# answered {"skipped":[<index in the batch>..]}. The messages stay newest
+# first through the batch (M.apply_rev): linear, where one `replay` per
+# event was quadratic in the messages (a 20k-event journal: ~18 s).
+def evs_of(evs: List<&2, J.Json>) -> List<&2, Maybe<&2, M.Ev>>:
+  match evs:
+    case Nil{}:
+      Nil{}
+    case Con{+e, +rest}:
+      C.ev_of(e) <> evs_of(rest)
+
+def json_list(m: Maybe<&2, J.Json>) -> List<&2, J.Json>:
+  match m:
+    case Some{J.JArr{+vals}}:
+      vals
+    case _:
+      Nil{}
+
+def replay_many.go(ms: List<&2, Maybe<&2, M.Ev>>, +st: M.St, +i: Nat, +sk: List<&2, J.Json>) -> M.St & List<&2, J.Json>:
+  match ms:
+    case Nil{}:
+      (st, List.reverse(&2, J.Json, sk))
+    case Con{None{}, +rest}:
+      replay_many.go(rest, st, 1n+i, J.JNum{i} <> sk)
+    case Con{Some{+e}, +rest}:
+      replay_many.go(rest, M.apply_rev(e, st), 1n+i, sk)
+
+def replay_many.done(p: M.St & List<&2, J.Json>, +r: X.R) -> H.Hub & String:
+  match p:
+    case (+d, +sk):
+      (H.Hub{M.msgs_rev(d), r}, J.stringify(J.obj([J.kv("skipped", J.JArr{sk})])))
+
+def replay_many(+h: H.Hub, +evs: List<&2, J.Json>) -> H.Hub & String:
+  replay_many.done(replay_many.go(evs_of(evs), M.msgs_rev(H.Hub.d(h)), 0n, Nil{}), H.Hub.r(h))
+
 def tag_of(+t: String) -> Tag:
   Bool.pick(Tag, String.eq(t, "init"), TInit{},
+    Bool.pick(Tag, String.eq(t, "replay_many"), TReplayMany{},
     Bool.pick(Tag, String.eq(t, "replay"), TReplay{},
       Bool.pick(Tag, String.eq(t, "ping"), TPing{},
-        Bool.pick(Tag, String.eq(t, "view_all"), TView{}, TStep{}))))
+        Bool.pick(Tag, String.eq(t, "view_all"), TView{}, TStep{})))))
 
 def handle.tag(tag: Tag, +h: H.Hub, +i: J.Json) -> H.Hub & String:
   match tag:
@@ -91,6 +128,8 @@ def handle.tag(tag: Tag, +h: H.Hub, +i: J.Json) -> H.Hub & String:
       (H.hub_new(J.get_str_or(i, "workspace", "")), "{}")
     case TReplay{}:
       replay(h, C.ev_of(Maybe.default(&2, J.Json, J.get(i, "ev"), J.JNull{})))
+    case TReplayMany{}:
+      replay_many(h, json_list(J.get(i, "evs")))
     case TPing{}:
       (h, "{}")
     case TView{}:

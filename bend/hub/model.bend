@@ -541,6 +541,101 @@ def apply_all(evs: List<&2, Ev>, +st: St) -> St:
     case Con{+e, +rest}:
       apply_all(rest, apply(st, e))
 
+# The boot replay of a journal in batches (main.bend `replay_many`).
+# `apply` keeps the messages oldest first: a message_sent is a snoc and a
+# message_state walks to a recent id, both linear in the messages, so a
+# 20k-event journal replayed in ~18 s (quadratic). During a batch the
+# messages are kept newest first (msgs_rev): a message_sent is a cons,
+# and a message_state or a settle finds a recent id near the head and
+# stops there (map_msg and rec_of use Bool.pick, which computes both
+# branches: they always walk the whole list). The messages' own events
+# take those early-stopping lookups; every other event is `apply`
+# itself. A message is found by its id (unique): the order of the list
+# does not change which one an event touches.
+
+# the head of `xs` is the message `id`
+def msg_at(xs: List<&2, MRec>, +id: Nat) -> Bool:
+  match xs:
+    case Nil{}:
+      False{}
+    case Con{+h, _}:
+      Nat.is_eq(Msg.id(MRec.msg(h)), id)
+
+# map_msg that stops at the message; `hit`: msg_at(xs, id)
+def map_msg.fast(xs: List<&2, MRec>, +hit: Bool, +id: Nat, +op: MsgOp) -> List<&2, MRec>:
+  match xs hit:
+    case Nil{} _:
+      Nil{}
+    case Con{+h, +t} True{}:
+      rec_op(h, op) <> t
+    case Con{+h, +t} False{}:
+      h <> map_msg.fast(t, msg_at(t, id), id, op)
+
+# rec_of that stops at the message; `hit`: msg_at(xs, id)
+def rec_of.fast(xs: List<&2, MRec>, +hit: Bool, +id: Nat) -> Maybe<&2, MRec>:
+  match xs hit:
+    case Nil{} _:
+      None{}
+    case Con{+h, _} True{}:
+      Some{h}
+    case Con{_, +t} False{}:
+      rec_of.fast(t, msg_at(t, id), id)
+
+def map_msg.rev(+xs: List<&2, MRec>, +id: Nat, +op: MsgOp) -> List<&2, MRec>:
+  map_msg.fast(xs, msg_at(xs, id), id, op)
+
+# apply.settle, with the early-stopping lookups
+def apply_rev.settle.if(ok: Bool, +msgs: List<&2, MRec>, +id: Nat) -> List<&2, MRec>:
+  match ok:
+    case True{}:
+      map_msg.rev(msgs, id, OSettle{})
+    case False{}:
+      msgs
+
+def apply_rev.settle.go(orig: Maybe<&2, MRec>, +msgs: List<&2, MRec>, +id: Nat, +from: String) -> List<&2, MRec>:
+  match orig:
+    case None{}:
+      msgs
+    case Some{+o}:
+      apply_rev.settle.if(String.eq(Msg.to(MRec.msg(o)), from) || String.eq(from, USER()), msgs, id)
+
+def apply_rev.settle(r: Maybe<&2, Nat>, +msgs: List<&2, MRec>, +from: String) -> List<&2, MRec>:
+  match r:
+    case None{}:
+      msgs
+    case Some{+id}:
+      apply_rev.settle.go(rec_of.fast(msgs, msg_at(msgs, id), id), msgs, id, from)
+
+def apply_rev.op(+st: St, +id: Nat, +op: MsgOp) -> St:
+  match st:
+    case St{+agents, +order, +msgs, +cards, +notes, +nm, +nc}:
+      St{agents, order, map_msg.rev(msgs, id, op), cards, notes, nm, nc}
+
+def apply_rev.sent(+st: St, +m: Msg) -> St:
+  match st:
+    case St{+agents, +order, +msgs, +cards, +notes, +nm, +nc}:
+      St{agents, order,
+        apply_rev.settle(Msg.reply_to(m), MRec{m, Queued{"new"}, False{}} <> msgs, Msg.from(m)),
+        cards, notes, Nat.max(Nat.max(nm, 1n+Msg.id(m)), 1n+Msg.thread(m)), nc}
+
+# `apply` on a state whose messages are newest first
+def apply_rev(+e: Ev, +st: St) -> St:
+  match e:
+    case EMsgSent{+m}:
+      apply_rev.sent(st, m)
+    case EMsgState{+id, +s}:
+      apply_rev.op(st, id, OSt{s})
+    case ESettled{+id}:
+      apply_rev.op(st, id, OSettle{})
+    case _:
+      apply(st, e)
+
+# the messages turned around: oldest first <-> newest first
+def msgs_rev(+st: St) -> St:
+  match st:
+    case St{+agents, +order, +msgs, +cards, +notes, +nm, +nc}:
+      St{agents, order, List.reverse(&2, MRec, msgs), cards, notes, nm, nc}
+
 def card_of(xs: List<&2, Card>, +id: Nat) -> Maybe<&2, Card>:
   find(~Card, ~Nat, ~Card.id, ~(a => b => Nat.is_eq(a, b)), xs, id)
 

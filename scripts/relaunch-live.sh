@@ -65,7 +65,11 @@ mkdir -p "$state"
 # 2. back up the hub state (journal, sessions, transcripts)
 if [ -f "$state/journal.jsonl" ]; then
   backup="/tmp/sb-live-backup-$(date +%Y%m%d-%H%M%S)"
-  rsync -a --exclude hub.sock "$state/" "$backup/"
+  # not -a (it implies -D): copying a socket fails with "mkstempsock:
+  # Invalid argument" past the 104-byte socket path limit, and macOS's
+  # openrsync has no --no-specials. agents/*/tmp: scratch, not state.
+  rsync -rlptg --exclude /hub.sock --exclude '/agents/*/tmp/' "$state/" "$backup/" \
+    || { echo "relaunch-live: the state backup to $backup failed (rsync above); nothing was restarted" >&2; exit 1; }
   echo "state backed up: $backup"
 fi
 

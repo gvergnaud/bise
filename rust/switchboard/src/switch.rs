@@ -216,33 +216,85 @@ fn replace_hub(paths: &Paths, root: &Path, same: bool) -> Result<(), String> {
         // an older version's hub would write its sb script through the link
         crate::daemon::drop_sb_link(&paths.bin_dir());
     }
+    // what the new hub writes: only its own lines name why it failed
+    // (an older line of hub.err once passed for the cause)
+    let (err_file, log_file) = (paths.state.join("hub.err"), paths.log());
+    let (err0, log0) = (file_len(&err_file), file_len(&log_file));
     let mut child = start_hub(paths, root, same).map_err(|e| e.to_string())?;
     let t0 = Instant::now();
-    while t0.elapsed() < Duration::from_secs(20) {
+    let (mut seen, mut moved) = (log0, Instant::now());
+    let exited = loop {
         if ping(paths) {
             return Ok(());
         }
-        if let Ok(Some(_)) = child.try_wait() {
-            break;
+        if let Ok(Some(s)) = child.try_wait() {
+            break Some(s);
+        }
+        let len = file_len(&log_file);
+        if len != seen {
+            (seen, moved) = (len, Instant::now());
+        }
+        if !start_waits(t0.elapsed(), moved.elapsed()) {
+            break None;
         }
         std::thread::sleep(Duration::from_millis(100));
-    }
+    };
     let _ = child.kill();
-    let err = std::fs::read_to_string(paths.state.join("hub.err")).unwrap_or_default();
-    let tail = err
-        .lines()
-        .rev()
-        .find(|l| !l.trim().is_empty())
-        .unwrap_or("")
-        .trim();
-    Err(format!(
-        "the hub did not start{}",
-        if tail.is_empty() {
-            String::new()
-        } else {
-            format!(" ({})", crate::util::clip(tail, 200))
+    let err = last_line(&read_from(&err_file, err0), |_| true);
+    let step = last_line(&read_from(&log_file, log0), |l| !l.contains(" switch: "));
+    Err(start_failure(exited.map(|s| s.to_string()), t0.elapsed(), &step, &err))
+}
+
+/// Starting hub: wait while it boots. Up to START_MAX in all, and never
+/// START_STILL without a new line in hub.log (its boot steps, BISE: a
+/// hub whose journal replay took 17 s failed a flat 20 s wait).
+const START_MAX: Duration = Duration::from_secs(90);
+const START_STILL: Duration = Duration::from_secs(20);
+
+fn start_waits(total: Duration, since_progress: Duration) -> bool {
+    total < START_MAX && since_progress < START_STILL
+}
+
+/// Why the new hub is not up, from its own lines: its last boot step
+/// (hub.log) and its last error line (hub.err).
+fn start_failure(exited: Option<String>, waited: Duration, step: &str, err: &str) -> String {
+    let mut s = match exited {
+        Some(status) => format!("the hub did not start: it exited ({})", status),
+        None => format!("the hub did not start: no answer after {} s", waited.as_secs()),
+    };
+    if !step.is_empty() {
+        s.push_str(&format!("; last boot step: {}", crate::util::clip(step, 160)));
+    }
+    if !err.is_empty() {
+        s.push_str(&format!("; hub.err: {}", crate::util::clip(err, 200)));
+    }
+    s
+}
+
+fn file_len(p: &Path) -> u64 {
+    std::fs::metadata(p).map_or(0, |m| m.len())
+}
+
+/// The text of `p` after its first `from` bytes.
+fn read_from(p: &Path, from: u64) -> String {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut out = Vec::new();
+    if let Ok(mut f) = std::fs::File::open(p) {
+        if f.seek(SeekFrom::Start(from)).is_ok() {
+            let _ = f.read_to_end(&mut out);
         }
-    ))
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// The last non-empty line of `text` that `keep` keeps, without a
+/// hub.log time stamp.
+fn last_line(text: &str, keep: impl Fn(&str) -> bool) -> String {
+    let l = text.lines().rev().map(str::trim).find(|l| !l.is_empty() && keep(l)).unwrap_or("");
+    match l.split_once(' ') {
+        Some((ms, rest)) if !ms.is_empty() && ms.chars().all(|c| c.is_ascii_digit()) => rest.to_string(),
+        _ => l.to_string(),
+    }
 }
 
 /// The id of the version at `root` (from its `VERSION` file); None for
@@ -307,17 +359,76 @@ pub fn abort_probation(paths: &Paths) {
 /// `sbswitch --to <version dir> [--probation <s>]`: the whole switch.
 /// Copy the hub state (journal, sessions, transcripts) aside before a
 /// switch or a restart: `/tmp/sb-backup-<state dir name>-<ms>`.
-fn backup(paths: &Paths) -> Option<PathBuf> {
-    let name = paths.state.file_name()?.to_string_lossy().to_string();
-    let dest = PathBuf::from(format!("/tmp/sb-backup-{}-{}", name, now_ms()));
-    let ok = std::process::Command::new("rsync")
-        .args(["-a", "--exclude", "hub.sock"])
-        .arg(format!("{}/", paths.state.display()))
+fn backup(paths: &Paths) -> Result<PathBuf, String> {
+    backup_in(&paths.state, Path::new("/tmp"), now_ms(), KEEP_BACKUPS)
+}
+
+/// The backups of one state dir kept in /tmp: each holds the journal
+/// and every transcript, a few GB once a workspace has lived.
+const KEEP_BACKUPS: usize = 5;
+
+/// Back `state` up into `<dir>/sb-backup-<state dir name>-<ms>`, then
+/// keep only the `keep` newest backups of that state dir (only after a
+/// backup that worked: a failing one never costs an old one).
+fn backup_in(state: &Path, dir: &Path, ms: u64, keep: usize) -> Result<PathBuf, String> {
+    let name = state
+        .file_name()
+        .ok_or("the state dir has no name")?
+        .to_string_lossy()
+        .to_string();
+    let prefix = format!("sb-backup-{}-", name);
+    let dest = dir.join(format!("{}{}", prefix, ms));
+    backup_to(state, &dest)?;
+    let mut old: Vec<(u64, PathBuf)> = std::fs::read_dir(dir)
+        .map(|rd| {
+            rd.flatten()
+                .filter_map(|e| {
+                    let f = e.file_name().to_string_lossy().to_string();
+                    let ms = f.strip_prefix(&prefix)?;
+                    // only <ms>: another state dir's name may extend this one
+                    if ms.is_empty() || !ms.chars().all(|c| c.is_ascii_digit()) {
+                        return None;
+                    }
+                    let ms: u64 = ms.parse().ok()?;
+                    e.file_type().ok()?.is_dir().then(|| (ms, e.path()))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    old.sort();
+    let drop = old.len().saturating_sub(keep);
+    for (_, p) in old.into_iter().take(drop) {
+        let _ = std::fs::remove_dir_all(p);
+    }
+    Ok(dest)
+}
+
+/// `rsync` of the state dir `src` into `dest`, regular files, links and
+/// dirs only. Not `-a`: it implies -D, and copying a unix socket makes
+/// rsync bind a new one at the destination, which fails (`mkstempsock:
+/// Invalid argument`) once the path passes the 104-byte socket limit, as
+/// the e2e and tmux sockets under agents/*/tmp do. macOS's openrsync has
+/// no --no-specials, hence the explicit -rlptg. The agents' scratch
+/// folders (agents/*/tmp: sockets, FIFOs, GBs of test trees) are not
+/// state. rsync's stderr is kept for the error, never left in hub.err.
+fn backup_to(src: &Path, dest: &Path) -> Result<(), String> {
+    let out = std::process::Command::new("rsync")
+        .args(["-rlptg", "--exclude", "/hub.sock", "--exclude", "/agents/*/tmp/"])
+        .arg(format!("{}/", src.display()))
         .arg(format!("{}/", dest.display()))
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false);
-    ok.then_some(dest)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .map_err(|e| format!("rsync: {}", e))?;
+    if out.status.success() {
+        return Ok(());
+    }
+    let err = String::from_utf8_lossy(&out.stderr);
+    let first = err.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("");
+    Err(if first.is_empty() {
+        format!("rsync {}", out.status)
+    } else {
+        format!("rsync {}: {}", out.status, crate::util::clip(first, 200))
+    })
 }
 
 /// The workspace is bise's own source tree (dev mode, BISE-131): there
@@ -404,9 +515,13 @@ fn run_locked(paths: &Paths, to: &Path, period: Duration, restart: bool, reload:
     }
     let (from_id, to_id) = (id_of(&from), id_of(&to));
     log(paths, &format!("{} -> {}", from.display(), to.display()));
-    let saved = backup(paths)
-        .map(|d| format!(" · state backed up: {}", d.display()))
-        .unwrap_or_default();
+    let saved = match backup(paths) {
+        Ok(d) => format!(" · state backed up: {}", d.display()),
+        Err(e) => {
+            log(paths, &format!("state backup failed: {}", e));
+            format!(" · the state backup failed ({}): nothing is backed up", e)
+        }
+    };
     let what = if reload {
         format!("reloading bise on version {}: the hub, every agent and the TUI restart, nothing lost", to_id)
     } else if from == to {
@@ -661,5 +776,102 @@ mod state_tests {
             assert_eq!(st["current"], "v");
         }
         assert_eq!(super::state_of(Some("{\"good\": \"x\"}"))["good"], "x");
+    }
+
+    /// A state dir with a socket and a FIFO deep down (an e2e hub's
+    /// socket, a tmux socket, a bg command's stdin): the backup copies the
+    /// state and skips them, where `rsync -a` died on "mkstempsock:
+    /// Invalid argument" (the hub's own c2c30af8 switch); the agents'
+    /// scratch folders are not copied; only the 5 newest backups stay.
+    #[test]
+    fn a_backup_skips_sockets_fifos_and_scratch_and_keeps_the_newest_five() {
+        use std::path::Path;
+        let t = std::env::temp_dir().join(format!("sb-bk-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&t);
+        let st = t.join("state-of-a-workspace");
+        let run = st.join("agents/x/run");
+        let deep = st.join("agents/x/tmp/sb-e2e-0000/st");
+        for d in [&run, &deep] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        std::fs::write(st.join("journal.jsonl"), "{}\n").unwrap();
+        std::fs::write(st.join("agents/x/transcript.log"), "1\tsb you : fake\n").unwrap();
+        std::fs::write(deep.join("big.bin"), "scratch").unwrap();
+        // made from inside the folder: a full path may pass the socket limit
+        let mk = |d: &Path| {
+            let ok = std::process::Command::new("python3")
+                .current_dir(d)
+                .args(["-c", "import socket,os; socket.socket(socket.AF_UNIX).bind('hub.sock'); os.mkfifo('0.in')"])
+                .status()
+                .unwrap()
+                .success();
+            assert!(ok, "socket and fifo made in {}", d.display());
+        };
+        mk(&run);
+        mk(&deep);
+        let dir = t.join("backups-in-a-folder-with-a-long-enough-name-to-pass-the-limit");
+        std::fs::create_dir_all(&dir).unwrap();
+        for ms in 1..=6u64 {
+            std::fs::create_dir_all(dir.join(format!("sb-backup-state-of-a-workspace-{}", ms))).unwrap();
+        }
+        // another state dir whose name extends this one's, and a stray file
+        std::fs::create_dir_all(dir.join("sb-backup-state-of-a-workspace-2-7")).unwrap();
+        std::fs::create_dir_all(dir.join("sb-backup-state-of-a-workspace-x")).unwrap();
+        let b = super::backup_in(&st, &dir, 100, 5).expect("the backup works");
+        assert_eq!(b, dir.join("sb-backup-state-of-a-workspace-100"));
+        assert_eq!(std::fs::read_to_string(b.join("journal.jsonl")).unwrap(), "{}\n");
+        assert!(b.join("agents/x/transcript.log").is_file());
+        assert!(b.join("agents/x/run").is_dir());
+        assert!(!b.join("agents/x/run/hub.sock").exists() && !b.join("agents/x/run/0.in").exists());
+        assert!(!b.join("agents/x/tmp").exists(), "scratch is not state");
+        let mut left: Vec<String> =
+            std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        left.sort();
+        assert_eq!(
+            left,
+            [
+                "sb-backup-state-of-a-workspace-100",
+                "sb-backup-state-of-a-workspace-2-7",
+                "sb-backup-state-of-a-workspace-3",
+                "sb-backup-state-of-a-workspace-4",
+                "sb-backup-state-of-a-workspace-5",
+                "sb-backup-state-of-a-workspace-6",
+                "sb-backup-state-of-a-workspace-x",
+            ]
+        );
+        // a failed backup says why and costs no old one
+        let e = super::backup_in(&t.join("no-such-state"), &dir, 200, 1).unwrap_err();
+        assert!(e.starts_with("rsync "), "{}", e);
+        assert!(dir.join("sb-backup-state-of-a-workspace-3").is_dir());
+        let _ = std::fs::remove_dir_all(&t);
+    }
+
+    #[test]
+    fn a_starting_hub_gets_time_while_its_boot_steps_move() {
+        use super::start_waits;
+        use std::time::Duration;
+        let s = Duration::from_secs;
+        assert!(start_waits(s(19), s(19)));
+        assert!(start_waits(s(60), s(3)), "a slow boot that moves");
+        assert!(!start_waits(s(25), s(20)), "no new step for 20 s");
+        assert!(!start_waits(s(90), s(1)), "90 s at most");
+    }
+
+    #[test]
+    fn a_start_failure_names_the_new_hubs_last_step_and_error_only() {
+        use super::{last_line, start_failure};
+        use std::time::Duration;
+        let log = "1790975537485 hub start pid=1 workspace=/w\n1790975538124 boot: journal read (21056 events)\n1790975540000 switch: x -> y\n";
+        let step = last_line(log, |l| !l.contains(" switch: "));
+        assert_eq!(step, "boot: journal read (21056 events)");
+        assert_eq!(
+            start_failure(None, Duration::from_secs(41), &step, ""),
+            "the hub did not start: no answer after 41 s; last boot step: boot: journal read (21056 events)"
+        );
+        assert_eq!(
+            start_failure(Some("exit status: 1".into()), Duration::from_secs(1), "", "Error: Address in use"),
+            "the hub did not start: it exited (exit status: 1); hub.err: Error: Address in use"
+        );
+        assert_eq!(last_line("\n  \n", |_| true), "");
     }
 }

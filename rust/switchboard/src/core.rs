@@ -817,6 +817,8 @@ impl Revive {
 pub const PR_STALE_MS: u64 = 10 * 60 * 1000;
 
 const REVIVE_LIMIT: usize = 3;
+/// Journal events per `replay_many` line at boot (a few hundred KB).
+const REPLAY_BATCH: usize = 500;
 const REVIVE_WINDOW_MS: u64 = 60_000;
 
 type Fx = Vec<Effect>;
@@ -975,8 +977,12 @@ impl Hub {
     /// then sends the whole state. Returns the events sb-core did not
     /// apply (a kind it does not know: the journal was written by a newer
     /// hub before a /version rollback), for the caller to log.
+    /// Batches of REPLAY_BATCH events (`replay_many`): one event per call
+    /// was quadratic in the messages (a 20k-event journal took ~18 s at
+    /// boot, past the switcher's wait).
     pub fn replay(&mut self, events: &[Value]) -> Vec<Value> {
         let mut skipped = Vec::new();
+        let mut core: Vec<&Value> = Vec::new();
         for ev in events {
             // the hub's own lines (the PR numbers): never sb-core's
             if crate::forge::is_pr_line(ev) {
@@ -984,9 +990,14 @@ impl Hub {
                 self.pr_news.read_journal(ev);
                 continue;
             }
-            let out = self.raw(&json!({"t": "replay", "ev": ev}));
-            if out["skipped"].as_bool() == Some(true) {
-                skipped.push(ev.clone());
+            core.push(ev);
+        }
+        for batch in core.chunks(REPLAY_BATCH) {
+            let out = self.raw(&json!({"t": "replay_many", "evs": batch}));
+            for i in out["skipped"].as_array().into_iter().flatten().filter_map(Value::as_u64) {
+                if let Some(ev) = batch.get(i as usize) {
+                    skipped.push((*ev).clone());
+                }
             }
         }
         self.view_all();
