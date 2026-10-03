@@ -223,6 +223,12 @@ def part_d():
         '[providers.fakegem]\nname = "Fake Gemini"\napi = "gemini"\nbase_url = "%s"\nkey_env = ""\n\n'
         '[providers.fakegw]\nname = "Fake Gateway"\napi = "anthropic"\nbase_url = "%s"\nkey_env = ""\n'
         'headers_env = "FAKE_GW_HEADERS"\nkey_command = "printf \'gw-%%s\' tok; echo"\n\n'
+        '[providers.fakegw.headers]\n"source" = "config"\n"x-team" = "platform"\n'
+        '"x-quoted" = "hello \\"world\\""\n\n'
+        '[models."fakegw/native"]\nheaders_env = ""\n'
+        '[models."fakegw/native".headers]\n"source" = "model"\n\n'
+        '[models."fakegw/missing"]\nheaders_env = "UNSET_GW_HEADERS"\n\n'
+        '[models."fakegw/empty"]\nheaders_env = "EMPTY_GW_HEADERS"\n\n'
         '[models."fakegw/broken"]\nkey_command = "echo nope; exit 3"\n\n'
         '[providers.fakeslow]\nname = "Fake Slow"\napi = "openai-chat"\nbase_url = "%s"\nkey_env = ""\n'
         'idle_timeout_sec = 1\n\n'
@@ -240,7 +246,7 @@ def part_d():
                BEND_REPL_PORT=str(port), BEND_SESSION_FILE=session, BEND_WIRE_LOG=os.path.join(tmp, "wire.log"),
                BEND_MCP_INDEX=os.path.join(tmp, "mcp.txt"), BEND_SKILLS_INDEX=os.path.join(tmp, "sk.txt"),
                BEND_BG_ROOT=os.path.join(tmp, "bg"), SB_AGENT="probe", TMPDIR=tmp,
-               FAKE_GW_HEADERS="source: bise\norg-id : 2\nnot a header")
+               FAKE_GW_HEADERS="source: bise\norg-id : 2\nnot a header", EMPTY_GW_HEADERS="   ")
     log, err = os.path.join(tmp, "repl.log"), os.path.join(tmp, "repl.err")
     repl = subprocess.Popen([os.path.join(ROOT, "repl-live")], cwd=ROOT, env=env,
                             stdout=open(log, "w"), stderr=open(err, "w"))
@@ -302,9 +308,21 @@ def part_d():
         h = recs[0]["headers"] if recs else {}
         check(len(recs) == 1 and recs[0]["status"] == 200 and h.get("x-api-key") == "gw-tok"
               and h.get("authorization") == "Bearer gw-tok"
-              and h.get("source") == "bise" and h.get("org-id") == "2" and "not a header" not in json.dumps(h),
+              and h.get("source") == "bise" and h.get("x-team") == "platform" and h.get("org-id") == "2" and "not a header" not in json.dumps(h),
               "a gateway: key_command's key (trimmed, also as a bearer token) and headers_env's headers on the wire: %r" % h)
         n += len(recs)
+        out = turn("fakegw/native", "hello native headers")
+        recs = [json.loads(l) for l in open(F.LOG)][n:]
+        h = recs[0]["headers"] if recs else {}
+        check(len(recs) == 1 and h.get("source") == "model" and h.get("x-team") == "platform"
+              and h.get("x-quoted") == 'hello "world"',
+              "native headers need no environment; model overrides and escaped values reach the server: %r" % h)
+        n += len(recs)
+        for model, variable in [("missing", "UNSET_GW_HEADERS"), ("empty", "EMPTY_GW_HEADERS")]:
+            out = turn("fakegw/" + model, "hello missing headers")
+            recs = [json.loads(l) for l in open(F.LOG)][n:]
+            check(not recs and any(variable in line and "not set or is empty" in line for line in out),
+                  "an unset or blank headers_env stops before HTTP and names the variable: " + model)
         out = turn("fakegw/broken", "hello broken")
         recs = [json.loads(l) for l in open(F.LOG)][n:]
         check(repl.poll() is None and not recs and any("key_command failed" in l for l in out),
@@ -326,9 +344,11 @@ def part_d():
               % (took, stop[-1:] or out[-3:]))
         n = len([json.loads(l) for l in open(F.LOG)])
         t0 = time.time()
-        out = turn("fakepatient/m", "[[slow: 3]] hello patient")
+        out = turn("fakepatient/patient", "[[slow: 3]] hello patient")
         took = time.time() - t0
+        # The interrupted slow request can finish after the next turn starts.
         recs = [json.loads(l) for l in open(F.LOG)][n:]
+        recs = [r for r in recs if r.get("model") == "patient"]
         said = [l for l in out if "obs: assistant:" in l]
         check(not [l for l in out if "provider_retry" in l] and said and "ack: " in said[-1]
               and [r["status"] for r in recs] == [200] and took >= 3,

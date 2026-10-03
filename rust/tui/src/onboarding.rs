@@ -779,7 +779,7 @@ impl Onb {
             let r = self.setup.catalog.resolve(&model);
             (r.api, r.base_url, r.id)
         };
-        let call = crate::keycheck::Call { provider: p.id.clone(), api, base_url, model: id, key: the_key, voice };
+        let call = crate::keycheck::Call { provider: p.id.clone(), api, base_url, model: id, key: the_key, headers: self.setup.catalog.resolve(&model).caps.headers.into_iter().collect(), voice };
         let (tx, rx) = std::sync::mpsc::channel();
         let (check, url) = (self.checker, env("BEND_PROVIDER_URL"));
         // no base URL (foundry without ANTHROPIC_FOUNDRY_BASE_URL): no

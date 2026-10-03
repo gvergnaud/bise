@@ -12,6 +12,7 @@
 //! ([`Setup::handoff_toml`], the path in `BISE_MODELS_FILE`); the format
 //! and the per-call rule are in docs/research/providers.md §7.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 // the tests run on a temp HOME, never the user's (bise_home::test_home)
@@ -68,6 +69,8 @@ pub struct Caps {
     /// headers, one `Name: value` per line (Claude Code's
     /// `ANTHROPIC_CUSTOM_HEADERS`); "" = none
     pub headers_env: String,
+    /// Static gateway headers, normalized to lowercase names.
+    pub headers: BTreeMap<String, String>,
     /// the command whose stdout is the key, run before every call
     /// (Claude Code's `apiKeyHelper`: a short-lived token); "" = none,
     /// the key comes from `key_env`
@@ -125,6 +128,7 @@ pub const DEFAULT_CAPS: Caps = Caps {
     cache_key: String::new(),
     cache_header: String::new(),
     headers_env: String::new(),
+    headers: BTreeMap::new(),
     key_command: String::new(),
     idle_timeout_sec: 0,
 };
@@ -145,6 +149,7 @@ pub struct PartialCaps {
     pub cache_key: Option<String>,
     pub cache_header: Option<String>,
     pub headers_env: Option<String>,
+    pub headers: Option<BTreeMap<String, String>>,
     pub key_command: Option<String>,
     pub idle_timeout_sec: Option<u64>,
     /// prices (BISE-150), in [`Price`]'s unit
@@ -198,6 +203,13 @@ impl PartialCaps {
             cache_key: self.cache_key.clone().unwrap_or_else(|| base.cache_key.clone()),
             cache_header: self.cache_header.clone().unwrap_or_else(|| base.cache_header.clone()),
             headers_env: self.headers_env.clone().unwrap_or_else(|| base.headers_env.clone()),
+            headers: {
+                let mut headers = base.headers.clone();
+                if let Some(own) = &self.headers {
+                    headers.extend(own.clone());
+                }
+                headers
+            },
             key_command: self.key_command.clone().unwrap_or_else(|| base.key_command.clone()),
             idle_timeout_sec: self.idle_timeout_sec.unwrap_or(base.idle_timeout_sec),
         }
@@ -223,6 +235,9 @@ impl PartialCaps {
         self.cache_key = o.cache_key.clone().or(self.cache_key.take());
         self.cache_header = o.cache_header.clone().or(self.cache_header.take());
         self.headers_env = o.headers_env.clone().or(self.headers_env.take());
+        if let Some(headers) = &o.headers {
+            self.headers.get_or_insert_with(BTreeMap::new).extend(headers.clone());
+        }
         self.key_command = o.key_command.clone().or(self.key_command.take());
         self.idle_timeout_sec = o.idle_timeout_sec.or(self.idle_timeout_sec);
         self.input_price = o.input_price.or(self.input_price);
@@ -927,6 +942,22 @@ fn cap_field(caps: &mut PartialCaps, k: &str, v: &toml::Value, where_: &str, war
             }
             _ => warn(bad("a field or header name (letters, digits, - and _)")),
         },
+        "headers" => match v.as_table() {
+            Some(table) => {
+                let mut headers = BTreeMap::new();
+                for (name, value) in table {
+                    let valid_name = !name.is_empty() && name.bytes().all(|b| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b));
+                    match value.as_str().filter(|v| v.bytes().all(|b| b == b'\t' || (0x20..=0x7e).contains(&b))) {
+                        Some(value) if valid_name && !headers.contains_key(&name.to_ascii_lowercase()) => {
+                            headers.insert(name.to_ascii_lowercase(), value.trim().to_string());
+                        }
+                        _ => warn(bad("unique HTTP header names with string values and no control characters")),
+                    }
+                }
+                caps.headers = Some(headers);
+            }
+            None => warn(bad("a table of HTTP header names and string values")),
+        },
         // a gateway: the variable of its extra headers, the command of its key
         "headers_env" => match v.as_str().map(str::trim) {
             Some(n) if n.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') => caps.headers_env = Some(n.to_string()),
@@ -1329,13 +1360,16 @@ impl Setup {
             }
             o.push_str(&format!("key_env = {}\n", q(&p.key_env)));
             o.push_str(&format!("needs = {}\n", q(&p.needs)));
-            caps_lines(&mut o, &c.provider_caps(p));
+            let caps = c.provider_caps(p);
+            caps_lines(&mut o, &caps);
+            headers_table(&mut o, &format!("providers.{}", key(&p.id)), &caps.headers);
         }
         for m in c.models.iter().filter(|m| !m.stt) {
             let r = c.resolve(&m.name());
             o.push_str(&format!("\n[models.{}]\n", q(&m.name())));
             let Some(p) = c.provider(&m.provider) else {
                 caps_lines(&mut o, &r.caps); // no provider to fall back to
+                headers_table(&mut o, &format!("models.{}", q(&m.name())), &r.caps.headers);
                 continue;
             };
             if r.api != p.api {
@@ -1374,6 +1408,9 @@ impl Setup {
                 if x != y {
                     o.push_str(&format!("{} = {}\n", k, q(&x)));
                 }
+            }
+            if a.headers != b.headers {
+                headers_table(&mut o, &format!("models.{}", q(&m.name())), &a.headers);
             }
         }
         o
@@ -1485,6 +1522,15 @@ pub fn set_config_key(text: &str, key: &str, value: &str) -> String {
     let mut s = out.join("\n");
     s.push('\n');
     s
+}
+
+fn headers_table(o: &mut String, section: &str, headers: &BTreeMap<String, String>) {
+    if !headers.is_empty() {
+        o.push_str(&format!("\n[{}.headers]\n", section));
+        for (name, value) in headers {
+            o.push_str(&format!("{} = {}\n", q(name), q(value)));
+        }
+    }
 }
 
 fn caps_lines(o: &mut String, c: &Caps) {

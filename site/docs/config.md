@@ -67,7 +67,7 @@ dictation's `language` and `vocabulary`, and voice mode's `listen`, `tts_voice`,
 
 ## [providers.&lt;id&gt;] and [models."&lt;id&gt;/&lt;model&gt;"]
 
-add a provider, or change a built-in one key by key: `name`, `api`, `base_url`, `key_env`, `small_model`, `key_command`, `headers_env`, `idle_timeout_sec`, and a model's `context`, `max_output`, `vision`, `reasoning`, `tools` and prices. see [gateways and local models](gateways).
+add a provider, or change a built-in one key by key: `name`, `api`, `base_url`, `key_env`, `small_model`, `key_command`, `headers`, `headers_env`, `idle_timeout_sec`, and a model's `context`, `max_output`, `vision`, `reasoning`, `tools` and prices. see [gateways and local models](gateways).
 
 ## the repo's settings
 

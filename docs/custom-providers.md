@@ -65,6 +65,7 @@ model of the agents main starts.
 | `key_env` | the env variable holding the key; `""` for a server that needs no key | none |
 | `small_model` | a cheap model of this provider, for titles and summaries | none |
 | `key_command` | a shell command that prints the key, run before every call (below) | none |
+| `headers` | a table of static HTTP headers; model values override provider values | none |
 | `headers_env` | an env variable holding extra headers (below) | none |
 | `idle_timeout_sec` | how long bise waits for the server to send something, in seconds (below) | 90 |
 
@@ -123,6 +124,31 @@ no `"` or `\` (use single quotes).
 LiteLLM also serves the Anthropic API (`/v1/messages`), so the same
 LiteLLM works with `api = "anthropic"` when you want Claude's thinking
 blocks kept as they are.
+
+## Headers in config.toml
+
+Set non-secret routing headers directly in the provider table. This works
+without a shell startup file or a modified launcher:
+
+```toml
+[providers.gateway]
+api = "openai-chat"
+base_url = "https://gateway.example.com/v1"
+key_env = ""
+key_command = "my-tool auth token"
+headers = { source = "bise", "x-team" = "platform" }
+```
+
+A `[providers.gateway.headers]` table also works. Model-level `headers`
+override the provider's headers by name. Names are case-insensitive.
+`headers_env`, when configured, overrides both. Keep credentials in
+`key_command`, `key_env`, or the key store.
+
+If `headers_env` names an unset or blank variable, Bise stops before the
+request and names the variable. Set it before starting Bise and restart
+an existing hub, or use `headers` and remove `headers_env`. Invalid header
+names, duplicate names, non-string values, and control characters are
+reported as configuration warnings without printing header values.
 
 ## Local servers
 

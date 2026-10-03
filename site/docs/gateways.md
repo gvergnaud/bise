@@ -56,6 +56,7 @@ then start `bise`. `/model litellm/<model>` switches the agent you're looking at
 | `key_env` | the variable that holds the key; `""` for a server that needs none | none |
 | `small_model` | a cheap model of this provider, for titles and summaries | none |
 | `key_command` | a command that prints the key, run before every call | none |
+| `headers` | a table of static HTTP headers; model values override provider values | none |
 | `headers_env` | a variable that holds extra headers | none |
 | `idle_timeout_sec` | how long bise waits for the server to send something, in seconds | 90 |
 
@@ -102,6 +103,31 @@ export GATEWAY_HEADERS="x-team: platform"
 the key from `key_command` goes out both as the API's own header and as `Authorization: Bearer`. a command that fails or prints nothing stops the call with one line that names it. write `key_command` on one line, with no `"` or `\` (single quotes work).
 
 LiteLLM also serves Anthropic's API (`/v1/messages`), so the same LiteLLM works with `api = "anthropic"` when you want Claude's thinking blocks kept as they are.
+
+## Headers in config.toml
+
+Set non-secret routing headers directly in the provider table. This works
+without a shell startup file or a modified launcher:
+
+```toml
+[providers.gateway]
+api = "openai-chat"
+base_url = "https://gateway.example.com/v1"
+key_env = ""
+key_command = "my-tool auth token"
+headers = { source = "bise", "x-team" = "platform" }
+```
+
+A `[providers.gateway.headers]` table also works. Model-level `headers`
+override the provider's headers by name. Names are case-insensitive.
+`headers_env`, when configured, overrides both. Keep credentials in
+`key_command`, `key_env`, or the key store.
+
+If `headers_env` names an unset or blank variable, Bise stops before the
+request and names the variable. Set it before starting Bise and restart
+an existing hub, or use `headers` and remove `headers_env`. Invalid header
+names, duplicate names, non-string values, and control characters are
+reported as configuration warnings without printing header values.
 
 ## local models
 

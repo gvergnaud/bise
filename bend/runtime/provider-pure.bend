@@ -9,6 +9,7 @@ import ../core/api.bend as Api
 import ../core/wire.bend as W
 import ../core/text.bend as Tx
 import ../core/config.bend as Cf
+import ../vendor/json.bend as J
 
 # ---- the provider registry ----
 # A model id is "provider/model" (the model may hold '/' itself:
@@ -200,6 +201,40 @@ def cache_header(+c: CNames) -> String:
 # "provider/model"
 def headers_env(+file: String, +prov: String, +id: String) -> String:
   Cf.cfg_or(model_key(registry(file), prov, id, "headers_env"), "")
+
+# Rust writes each header as a quoted TOML value. Its escapes are also
+# valid JSON escapes. Decode them before constructing the HTTP headers.
+def header_value(+raw: String) -> String:
+  Maybe.default(&2, String,
+    J.as_str(W.parse_json(String.concat(["\"", raw, "\""]))), "")
+
+def header_row(hit: Bool, +key: String, +value: String, +prefix: String) -> String:
+  match hit:
+    case True{}:
+      String.concat([Cf.cfg_val(String.drop(key, String.length(prefix))),
+        ": ", header_value(value), "\n"])
+    case False{}:
+      ""
+
+def header_rows(kvs: List<&2, Cf.KV>, +prefix: String) -> String:
+  match kvs:
+    case Nil{}:
+      ""
+    case Con{Cf.KV{+key, +value}, +rest}:
+      String.append(header_row(String.starts_with(key, prefix), key, value, prefix),
+        header_rows(rest, prefix))
+
+def headers(+file: String, +prov: String, +id: String) -> String:
+  +reg = registry(file)
+  String.append(header_rows(reg, String.concat(["providers.", prov, ".headers."])),
+    header_rows(reg, String.concat(["models.\"", id, "\".headers."])))
+
+def headers_missing(+name: String, +value: String) -> Bool:
+  Bool.and(Bool.not(String.is_empty(name)), String.is_empty(String.trim(value)))
+
+def headers_why(+name: String) -> String:
+  String.concat(["headers_env names ", name,
+    ", but it is not set or is empty in this Bise process; set it before starting Bise, restart the hub, or use headers in config.toml"])
 
 def key_command(+file: String, +prov: String, +id: String) -> String:
   Cf.cfg_or(model_key(registry(file), prov, id, "key_command"), "")

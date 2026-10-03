@@ -22,6 +22,7 @@ pub(crate) struct Call {
     pub base_url: String,
     pub model: String,
     pub key: String,
+    pub headers: Vec<(String, String)>,
     /// a voice model (BISE-298): the call transcribes [`SILENCE_MS`] of
     /// silence, which proves the key and the model at once
     pub voice: bool,
@@ -140,6 +141,10 @@ pub(crate) fn request(c: &Call, env: &dyn Fn(&str) -> Option<String>) -> crate::
         (format!("{base}/chat/completions"), vec![("Authorization".to_string(), format!("Bearer {}", c.key))], b)
     };
     headers.push(("Content-Type".into(), "application/json".into()));
+    for (name, value) in &c.headers {
+        headers.retain(|(old, _)| !old.eq_ignore_ascii_case(name));
+        headers.push((name.clone(), value.clone()));
+    }
     let url = env("BEND_PROVIDER_URL").filter(|u| !u.trim().is_empty()).unwrap_or(endpoint);
     crate::voice::http::Request { url, headers, body: body.to_string().into_bytes() }
 }
@@ -336,7 +341,7 @@ pub fn check_model(
     if r.known == bise_catalog::Known::NoProvider {
         return Err(CheckFail { kind: CheckKind::Other(format!("unknown provider '{}' in {}", r.provider, model)), said: String::new() });
     }
-    let call = Call { provider: r.provider.clone(), api: r.api.clone(), base_url: r.base_url.clone(), model: r.id.clone(), key: key.to_string(), voice: false };
+    let call = Call { provider: r.provider.clone(), api: r.api.clone(), base_url: r.base_url.clone(), model: r.id.clone(), key: key.to_string(), headers: r.caps.headers.into_iter().collect(), voice: false };
     let answer = match no_url(&call, &setup.catalog, env("BEND_PROVIDER_URL").as_deref()) {
         Some(f) => Err(f),
         None => check(&call, env),
@@ -359,7 +364,7 @@ mod tests {
     use super::*;
 
     fn call(api: &str, provider: &str) -> Call {
-        Call { provider: provider.into(), api: api.into(), base_url: "https://x.test/v1/".into(), model: "m1".into(), key: "k-secret".into(), voice: false }
+        Call { provider: provider.into(), api: api.into(), base_url: "https://x.test/v1/".into(), model: "m1".into(), key: "k-secret".into(), headers: Vec::new(), voice: false }
     }
 
     /// Ben's first run (2026-10-01): the foundry key found, no URL. No
@@ -565,5 +570,15 @@ mod tests {
         let env = move |k: &str| (k == "BEND_PROVIDER_URL").then(|| url.clone());
         assert_eq!(check_with(&call("anthropic", "anthropic"), &env, Duration::from_millis(10)), Ok(()));
         assert_eq!(server.join().unwrap(), 2);
+    }
+
+    #[test]
+    fn the_key_check_sends_static_gateway_headers() {
+        let mut c = call("openai-chat", "gateway");
+        c.headers = vec![("source".into(), "bise".into()), ("x-team".into(), "platform".into())];
+        let request = request(&c, &|_| None);
+        assert!(request.headers.contains(&("source".into(), "bise".into())));
+        assert!(request.headers.contains(&("x-team".into(), "platform".into())));
+        assert!(request.headers.contains(&("Authorization".into(), "Bearer k-secret".into())));
     }
 }
