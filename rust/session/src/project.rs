@@ -99,7 +99,15 @@ pub fn parts_text(parts: &[Part], blobs: &Path) -> Result<String, String> {
             Part::Thinking { text, signature, .. } => {
                 o.push_str("<think>");
                 o.push_str(text);
-                if let Some(sig) = signature.as_deref().filter(|s| !s.is_empty()) {
+                // a signature a redactor rewrote (a log written before
+                // redact::opaque_key) no longer checks: the span goes
+                // unsigned and the Core drops it from the request (the
+                // model thinks again) instead of a 400 on every turn
+                let sig = signature.as_deref().filter(|s| !s.is_empty());
+                if sig.is_some_and(crate::redact::has_marker) {
+                    eprintln!("session projection: a thinking signature carries a redaction marker: the block goes unsigned");
+                }
+                if let Some(sig) = sig.filter(|s| !crate::redact::has_marker(s)) {
                     o.push_str("\nBENDSIG::");
                     o.push_str(sig);
                 }

@@ -97,7 +97,9 @@ impl Redactor {
         shapes(&out)
     }
 
-    /// Every string of a JSON value, in place.
+    /// Every string of a JSON value, in place, except the opaque provider
+    /// tokens (`opaque_key`): a thinking part's signature, a redacted
+    /// thinking part's data.
     pub fn value(&self, v: &mut Value) {
         match v {
             Value::String(s) => {
@@ -107,10 +109,38 @@ impl Redactor {
                 }
             }
             Value::Array(a) => a.iter_mut().for_each(|x| self.value(x)),
-            Value::Object(o) => o.values_mut().for_each(|x| self.value(x)),
+            Value::Object(o) => {
+                let skip = opaque_key(o);
+                for (k, x) in o.iter_mut() {
+                    if Some(k.as_str()) != skip {
+                        self.value(x);
+                    }
+                }
+            }
             _ => {}
         }
     }
+}
+
+/// The key of a part object that holds an opaque token the provider
+/// checks byte for byte: a thinking part's `signature`, a redacted
+/// thinking part's `data`. Never redacted: base64 can hold a key shape
+/// by chance (a '+AKIA…' run read as an AWS key, 2026-10-03), and a
+/// changed signature makes every later request fail ("Invalid
+/// `signature` in `thinking` block"). Encrypted provider data holds no
+/// key of ours in clear.
+fn opaque_key(o: &serde_json::Map<String, Value>) -> Option<&'static str> {
+    match o.get("kind").and_then(Value::as_str) {
+        Some("thinking") => Some("signature"),
+        Some("redacted_thinking") => Some("data"),
+        _ => None,
+    }
+}
+
+/// Does a text carry a redaction marker? A signature that does was
+/// rewritten by a redactor older than `opaque_key`: it no longer checks.
+pub fn has_marker(s: &str) -> bool {
+    s.contains("«redacted:")
 }
 
 /// Replace the tokens that have a well-known key shape.

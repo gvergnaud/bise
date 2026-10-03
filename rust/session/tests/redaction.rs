@@ -70,6 +70,76 @@ fn shapes_need_their_length_and_a_word_start() {
     assert_eq!(r.text("é sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ012345 é"), "é «redacted:openai» é");
 }
 
+/// A fake Anthropic signature with a '+AKIA…' run, the shape of the
+/// 2026-10-03 incident (ambient-lead: 400 "Invalid `signature` in
+/// `thinking` block" on every turn after a relaunch).
+const SIG: &str = "CAQSow8KEAgSGAI4AUIIdGhpbmtpbmcSDKB3+AKIAKubtGw81qvCY6GbTERv8N1A5H98um7C/t++Kkfkeq==";
+
+/// A session with one turn whose assistant message carries `parts`,
+/// written through a redactor; the events as written.
+fn turn_log(t: &std::path::Path, parts: Value) -> (PathBuf, Vec<Value>) {
+    let dir = t.join("s");
+    let start = serde_json::json!({"session": "s-test", "format": 1, "created_by": "test", "cwd": "/fake"});
+    let mut w = Writer::create(&dir, &t.join("blobs"), start, "test").unwrap();
+    w.redactor = Some(Redactor::new(vec![]));
+    w.append("context_set", serde_json::json!({"system": {"text": "You are bise."}, "tools": [{"name": "bash", "description": "Run."}]}), None).unwrap();
+    w.append("turn_started", serde_json::json!({"cause": "user"}), Some(1)).unwrap();
+    w.append("user_message", serde_json::json!({"content": [{"kind": "text", "text": "hi"}], "delivery": "prompt"}), Some(1)).unwrap();
+    let (_, data) = w
+        .append_data("assistant_message", serde_json::json!({"req": 1, "model": "fake/m", "parts": parts, "calls": [], "stop": "end"}), Some(1))
+        .unwrap();
+    w.append("turn_ended", serde_json::json!({"outcome": "done"}), Some(1)).unwrap();
+    (dir, vec![data])
+}
+
+#[test]
+fn a_thinking_signature_is_never_redacted() {
+    let t = tmp("sig");
+    let key = "AKIAABCDEFGHIJKLMNOP";
+    let parts = serde_json::json!([
+        {"kind": "thinking", "text": format!("the key {key} leaked"), "signature": SIG, "provider": "anthropic"},
+        {"kind": "redacted_thinking", "data": format!("x+{key}"), "provider": "anthropic"},
+        {"kind": "text", "text": format!("signature: {key}")}
+    ]);
+    let (dir, written) = turn_log(&t, parts);
+    let p = &written[0]["parts"];
+    assert_eq!(p[0]["signature"], SIG, "the signature is written byte for byte");
+    assert_eq!(p[1]["data"], format!("x+{key}"), "redacted thinking data too");
+    assert_eq!(p[0]["text"], "the key «redacted:aws» leaked", "the thinking text is still redacted");
+    assert_eq!(p[2]["text"], "signature: «redacted:aws»", "a text part is still redacted");
+    let raw = std::fs::read_to_string(dir.join("events.jsonl")).unwrap();
+    assert!(raw.contains(SIG));
+    // a 'signature' key outside a thinking part is any other string
+    let r = Redactor::new(vec![]);
+    let mut v = serde_json::json!({"args": {"signature": key}});
+    r.value(&mut v);
+    assert_eq!(v["args"]["signature"], "«redacted:aws»");
+}
+
+#[test]
+fn a_signature_a_redactor_rewrote_projects_unsigned() {
+    let t = tmp("marker");
+    // a log from before the fix: the signature carries the marker
+    let bad = SIG.replace("AKIAKubtGw81qvCY6GbTERv8N1A5H98um7C", "«redacted:aws»");
+    assert_ne!(bad, SIG);
+    let parts = serde_json::json!([
+        {"kind": "thinking", "text": "plan", "signature": bad, "provider": "anthropic"},
+        {"kind": "text", "text": "ok"}
+    ]);
+    let (dir, _) = turn_log(&t, parts);
+    let log = read_dir(&dir).unwrap();
+    let text = bise_session::project::project(&log, &bise_session::State::rebuild(&log), &t.join("blobs")).unwrap();
+    let line = text.lines().find(|l| l.starts_with("MSG False assistant")).unwrap();
+    assert_eq!(line, "MSG False assistant : <think>plan</think>ok", "no BENDSIG: the Core drops the block");
+    // a good signature still rides
+    let t2 = tmp("good");
+    let parts = serde_json::json!([{"kind": "thinking", "text": "plan", "signature": SIG, "provider": "anthropic"}, {"kind": "text", "text": "ok"}]);
+    let (dir, _) = turn_log(&t2, parts);
+    let log = read_dir(&dir).unwrap();
+    let text = bise_session::project::project(&log, &bise_session::State::rebuild(&log), &t2.join("blobs")).unwrap();
+    assert!(text.contains(&format!("<think>plan\\nBENDSIG::{SIG}</think>ok")), "{text}");
+}
+
 #[test]
 fn short_values_are_not_redacted_and_the_longest_wins() {
     let r = Redactor::new(vec![("A".into(), "abc".into()), ("B".into(), "longsecret-1".into()), ("C".into(), "longsecret-12".into())]);
