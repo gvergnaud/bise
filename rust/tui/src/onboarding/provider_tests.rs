@@ -157,7 +157,10 @@ fn setting_up_a_provider_runs_every_state_of_the_first_run() {
     let hm = home_of(&e);
     let mut o = panel(&e, Ask::default());
     open_row(&mut o, &e, "OpenRouter");
-    // not set up: straight to its key, checked with its pick
+    // not set up: sign in or paste (subscriptions), then its key, checked with its pick
+    assert_eq!(o.sub, Sub::OpenRouter(0));
+    o.on_key(key(KeyCode::Down), 1, &e);
+    o.on_key(key(KeyCode::Enter), 1, &e);
     let Sub::Paste(p, m, _) = &o.sub else { panic!("{:?}", o.sub) };
     assert_eq!((p.id.as_str(), m.clone()), ("openrouter", format!("openrouter/{}", p.model)));
     let sc = screen(&o);
@@ -176,6 +179,8 @@ fn setting_up_a_provider_runs_every_state_of_the_first_run() {
     o.on_key(key(KeyCode::Esc), 1, &e);
     assert!(matches!(o.sub, Sub::List), "no key yet: back to the list, {:?}", o.sub);
     open_row(&mut o, &e, "OpenRouter");
+    o.on_key(key(KeyCode::Down), 1, &e);
+    o.on_key(key(KeyCode::Enter), 1, &e);
     paste(&mut o, &e, "locked-key");
     assert!(screen(&o).contains("this key can't use"));
     // tab: another provider, from the list
@@ -183,6 +188,8 @@ fn setting_up_a_provider_runs_every_state_of_the_first_run() {
     assert!(matches!(o.sub, Sub::List));
     assert!(matches!(&o.rows()[o.sel], Row::P(p) if p.id == "openrouter"));
     // no credit: the key is saved, the billing page linked
+    o.on_key(key(KeyCode::Enter), 1, &e);
+    o.on_key(key(KeyCode::Down), 1, &e);
     o.on_key(key(KeyCode::Enter), 1, &e);
     paste(&mut o, &e, "broke-key");
     let sc = screen(&o);

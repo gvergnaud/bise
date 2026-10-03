@@ -18,6 +18,7 @@
 //!
 //! A pick is written at once (`set_role`), then `/models` flashes its row.
 
+use super::signin::Kind;
 use super::*;
 use bise_catalog::roles::{self as r, Source};
 use std::sync::Mutex;
@@ -587,6 +588,11 @@ impl Onb {
                         Sub::List
                     }
                     Some(PRow::Provider(p)) if self.ready(&p) => self.models_step(id, p, env),
+                    // the plan: its sign-in, then its models
+                    Some(PRow::Provider(p)) if p.plan => {
+                        self.pn_mut().key_first = true;
+                        self.sign_in(Kind::ChatGpt)
+                    }
                     // not set up: its key, checked with its first model, then its models
                     Some(PRow::Provider(p)) => {
                         self.pn_mut().key_first = true;
@@ -974,7 +980,9 @@ fn provider_lines(o: &Onb, id: &'static str, w: u16, gap: usize, said: &dyn Fn(&
                     [one] => format!("{} uses it", one),
                     many => format!("{} use it", many.join(", ")),
                 };
-                if p.key_env.is_empty() {
+                if p.plan {
+                    name.extend(provider::plan_spans(o));
+                } else if p.key_env.is_empty() {
                     // a local server: nothing checked it runs (designer)
                     name.push(s("no key needed", theme::dim()));
                 } else if o.ready(p) {
@@ -1070,11 +1078,21 @@ fn model_lines(
                 if rec.as_deref() == Some(m.as_str()) {
                     tags.push("recommended".into());
                 }
-                if tags.is_empty() {
+                let mut n = if tags.is_empty() {
                     vec![s(short_model(m), theme::text())]
                 } else {
                     vec![s(pad(&short_model(m), mw), theme::text()), s(tags.join(" "), theme::accent())]
+                };
+                // what pays (designer): the plan, dim, in the right column
+                if p.plan {
+                    let used: usize = 2 + n.iter().map(|x| x.content.width()).sum::<usize>();
+                    let pays = "your ChatGPT plan";
+                    let at = (2 + mw + 14).max(used + 3);
+                    if at + pays.width() <= w as usize {
+                        n.push(s(format!("{}{}", " ".repeat(at - used), pays), theme::dim()));
+                    }
                 }
+                n
             }
             // designer (BISE-289): '+' accent, the tail when it fits
             ModelRow::Typed(m) => {

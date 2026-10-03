@@ -90,6 +90,9 @@ impl Fail {
     }
 }
 
+/// The plan's usage couldn't be checked (`usage_unavailable`, transient).
+pub(crate) const USAGE_UNCHECKED: &str = "the plan's usage wasn't checked";
+
 /// The longest provider message kept.
 const SAID_MAX: usize = 200;
 
@@ -127,6 +130,19 @@ pub(crate) fn request(c: &Call, env: &dyn Fn(&str) -> Option<String>) -> crate::
                 "model": c.model,
                 "max_tokens": 16,
                 "messages": [{ "role": "user", "content": "hi" }],
+            }),
+        )
+    } else if c.provider == crate::onboarding::PLAN_PROVIDER {
+        // the ChatGPT plan's route (subscriptions design): store false,
+        // always streamed, no output cap nor sampling field
+        (
+            format!("{base}/responses"),
+            vec![("Authorization".to_string(), format!("Bearer {}", c.key))],
+            serde_json::json!({
+                "model": c.model,
+                "input": [{ "type": "message", "role": "user", "content": [{ "type": "input_text", "text": "hi" }] }],
+                "store": false,
+                "stream": true,
             }),
         )
     } else if c.api == "openai-responses" {
@@ -196,10 +212,22 @@ pub(crate) fn verdict(status: u16, body: &[u8], key: &str) -> Result<(), Fail> {
 /// first (Anthropic's `error.type`, OpenAI's `error.code`), then the
 /// status and the words of the body.
 fn why(status: u16, body: &[u8]) -> Result<(), Why> {
+    let text = String::from_utf8_lossy(body).to_ascii_lowercase();
+    // the ChatGPT plan's own refusals, in an error body or mid-stream
+    // (`response.failed`, a 200; OpenAI's error table): its limit is
+    // reached, plan use is off, or its usage couldn't be checked
+    if text.contains("usage_limit_exceeded") {
+        return Err(Why::NoCredit);
+    }
+    if text.contains("user_not_eligible") {
+        return Err(Why::NoAccess);
+    }
+    if text.contains("usage_unavailable") {
+        return Err(Why::Unreachable(USAGE_UNCHECKED.into()));
+    }
     if (200..300).contains(&status) {
         return Ok(());
     }
-    let text = String::from_utf8_lossy(body).to_ascii_lowercase();
     let about = |words: &[&str]| words.iter().any(|w| text.contains(w));
     let money = ["credit", "quota", "billing", "balance", "insufficient", "payment", "purchase", "funds"];
     if status == 402 {

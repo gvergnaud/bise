@@ -46,6 +46,11 @@ mod provider_tests;
 mod roles;
 #[cfg(test)]
 mod roles_tests;
+mod signin;
+#[cfg(test)]
+mod signin_tests;
+pub(crate) use signin::PLAN_PROVIDER;
+use signin::{Account, Kind, Logins, PlanState, UNFINISHED};
 pub(crate) use provider::{request as provider_request, take_line as provider_line, Ask};
 pub(crate) use roles::{take_voice_out, Open, VoiceOut};
 
@@ -144,6 +149,8 @@ pub(crate) struct Provider {
     pub signup_url: String,
     /// where credit is added (BISE-282); "" = none
     pub billing_url: String,
+    /// paid by the ChatGPT plan: a sign-in, not a key
+    pub plan: bool,
 }
 
 impl Provider {
@@ -157,9 +164,14 @@ impl Provider {
             keys_url: p.keys_url.clone(),
             signup_url: p.signup_url.clone(),
             billing_url: p.billing_url.clone(),
+            plan: p.id == PLAN_PROVIDER,
         }
     }
 }
+
+/// The coding plans' providers (subscriptions design: API keys with their
+/// own coding base URLs), the key step's `a coding plan key` row.
+pub(crate) const CODING_PLANS: [&str; 3] = ["zai-coding", "kimi-code", "minimax"];
 
 /// The catalog and the model choice (`Setup`: `BISE_MODEL` >
 /// `BEND_MODEL` > `model` in config.toml > the default).
@@ -275,7 +287,14 @@ pub(crate) enum Step {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Opt {
     Use(Provider),
+    /// `Continue with ChatGPT`: the plan's sign-in
+    ChatGpt,
+    /// OpenRouter: sign in, or paste its key
+    OpenRouter,
+    /// `an API key`: which provider, then its key
     Paste,
+    /// `a coding plan key`: GLM, Kimi or MiniMax
+    Coding,
 }
 
 /// Where the model step is.
@@ -303,6 +322,10 @@ pub(crate) enum Sub {
     Effort(String, usize),
     /// `/provider`: remove its saved key?
     Remove(Provider),
+    /// OpenRouter's key step: `sign in with OpenRouter` or `paste a key`
+    OpenRouter(usize),
+    /// a sign-in waits for the browser; the link was copied (`c`)
+    SignIn(Kind, bool),
 }
 
 /// A row of `which model?`: a model of the catalog, or the id typed.
@@ -328,6 +351,9 @@ pub(crate) enum Tried {
     /// found where the harness finds it (BISE-282: said, as "the key in
     /// ANTHROPIC_API_KEY"): where
     Found(String),
+    /// the ChatGPT plan's sign-in: who signed in (the token is fetched
+    /// for the call, never kept here)
+    Plan(Account),
 }
 
 impl std::fmt::Debug for Tried {
@@ -336,6 +362,7 @@ impl std::fmt::Debug for Tried {
         match self {
             Tried::Pasted(_) => write!(f, "Pasted"),
             Tried::Found(w) => write!(f, "Found({})", w),
+            Tried::Plan(a) => write!(f, "Plan({})", a.email),
         }
     }
 }
@@ -345,7 +372,7 @@ impl Tried {
     fn again(&self) -> Option<String> {
         match self {
             Tried::Pasted(k) => Some(k.clone()),
-            Tried::Found(_) => None,
+            Tried::Found(_) | Tried::Plan(_) => None,
         }
     }
 }
@@ -362,6 +389,8 @@ fn real_check(c: &crate::keycheck::Call, url: Option<String>) -> Result<(), crat
 pub(crate) enum Note {
     Failed(String),
     NotAKey,
+    /// a sign-in that didn't end signed in: the ▲ line under the list
+    SignIn(String),
 }
 
 /// What a key did.
@@ -418,6 +447,18 @@ pub(crate) struct Onb {
     pub panel: Option<provider::Panel>,
     /// every provider's key state (where, never the key)
     pub keys: Vec<provider::KeyState>,
+    /// the sign-ins (the real ones; the tests put fakes)
+    pub logins: Logins,
+    /// the logins seen on this machine (Codex, Claude Code): presence only
+    pub seen: signin::Detected,
+    /// the ChatGPT plan's state
+    pub plan: PlanState,
+    /// the sign-in under way (`Sub::SignIn`)
+    pub flow: Option<Box<dyn signin::Flow>>,
+    /// `a coding plan key` was picked: `which provider?` lists those
+    pub coding: bool,
+    /// `/provider`'s sign out of ChatGPT, under way (Ok(true): confirmed)
+    pub signing_out: Option<std::sync::mpsc::Receiver<Result<bool, String>>>,
 }
 
 /// Where the mode at start came from (book §15 step 2 says which).
@@ -474,8 +515,15 @@ impl Onb {
             shadows: None,
             panel: None,
             keys: Vec::new(),
+            logins: Logins::real(),
+            seen: signin::Detected::default(),
+            plan: PlanState::NotSetUp,
+            flow: None,
+            coding: false,
+            signing_out: None,
             home,
         };
+        o.seen = (o.logins.detect)(o.home.user_home(), env);
         o.refresh_keys(env);
         o.ask_key = model_blocked(&o.setup, &o.found);
         o
@@ -501,12 +549,32 @@ impl Onb {
         found.sort_by_key(|p| p.id != self.mine);
         self.found = found;
         self.keys = provider::key_states(env, &self.home, &self.setup);
+        self.plan = (self.logins.state)(&auth_paths(&self.home));
+    }
+
+    /// Put other sign-ins (the tests' fakes): the plan's state and what
+    /// is detected are read again with them.
+    #[cfg(test)]
+    pub(crate) fn with_logins(&mut self, l: Logins, env: Env) {
+        self.logins = l;
+        self.seen = (l.detect)(self.home.user_home(), env);
+        self.refresh_keys(env);
+    }
+
+    /// The providers `which provider?` lists: the coding plans after `a
+    /// coding plan key`, else every one a key is pasted for.
+    pub(crate) fn which_list(&self) -> Vec<Provider> {
+        if !self.coding {
+            return self.providers.iter().filter(|p| !CODING_PLANS.contains(&p.id.as_str())).cloned().collect();
+        }
+        CODING_PLANS.iter().filter_map(|id| self.setup.catalog.provider(id)).filter(|p| !p.key_env.is_empty()).map(Provider::of).collect()
     }
 
     /// The rows of the model step.
     pub(crate) fn opts(&self) -> Vec<Opt> {
         let mut v: Vec<Opt> = self.found.iter().map(|p| Opt::Use(p.clone())).collect();
-        v.push(Opt::Paste);
+        // how you pay (subscriptions design): a plan you have, or a key
+        v.extend([Opt::ChatGpt, Opt::OpenRouter, Opt::Paste, Opt::Coding]);
         v
     }
 
@@ -571,6 +639,13 @@ impl Onb {
                 theme::set_mode(self.start);
                 Out::Skip
             }
+            // the key step's esc: back to the theme (designer: `esc back`);
+            // alone (a launch whose model can't run), back to the thread
+            (Step::Model, KeyCode::Esc) if !self.keys_only => {
+                self.note = None;
+                self.go(Step::Theme, now);
+                Out::Stay
+            }
             (_, KeyCode::Esc) => Out::Skip,
             (Step::Theme, KeyCode::Left | KeyCode::Right | KeyCode::Up | KeyCode::Down) => {
                 self.pick = if self.pick == Mode::Dark { Mode::Light } else { Mode::Dark };
@@ -593,7 +668,23 @@ impl Onb {
             (Step::Model, KeyCode::Enter) => match self.opts().get(self.sel) {
                 Some(Opt::Paste) => {
                     self.note = None;
-                    self.sub = Sub::Which(self.providers.iter().position(|p| p.id == self.mine).unwrap_or(0));
+                    self.coding = false;
+                    self.sub = Sub::Which(self.which_list().iter().position(|p| p.id == self.mine).unwrap_or(0));
+                    Out::Stay
+                }
+                Some(Opt::Coding) => {
+                    self.note = None;
+                    self.coding = true;
+                    self.sub = Sub::Which(0);
+                    Out::Stay
+                }
+                Some(Opt::ChatGpt) => {
+                    self.sub = self.sign_in(Kind::ChatGpt);
+                    Out::Stay
+                }
+                Some(Opt::OpenRouter) => {
+                    self.note = None;
+                    self.sub = Sub::OpenRouter(0);
                     Out::Stay
                 }
                 // BISE-266: a found key is checked too, with the model
@@ -625,6 +716,32 @@ impl Onb {
             if k.code == KeyCode::Down { (i + 1) % n } else { (i + n - 1) % n }
         };
         self.sub = match (sub, k.code) {
+            // a sign-in: esc stops it (its listener closes); c copies the link
+            (Sub::SignIn(..), KeyCode::Esc) => {
+                if let Some(mut f) = self.flow.take() {
+                    f.cancel();
+                }
+                self.sign_in_note(UNFINISHED.into())
+            }
+            (Sub::SignIn(kind, _), KeyCode::Char('c')) => {
+                let copied = self.flow.as_ref().is_some_and(|f| crate::clipboard::copy(f.url()));
+                Sub::SignIn(kind, copied)
+            }
+            (s @ Sub::SignIn(..), _) => s,
+            // OpenRouter: sign in, or paste its key
+            (Sub::OpenRouter(i), KeyCode::Up | KeyCode::Down) => Sub::OpenRouter(1 - i.min(1)),
+            (Sub::OpenRouter(0), KeyCode::Enter) => self.sign_in(Kind::OpenRouter),
+            (Sub::OpenRouter(_), KeyCode::Enter) => match self.openrouter() {
+                Some(p) if self.panel.is_some() => self.paste_for(p, None),
+                Some(p) => Sub::Model(p, 0, String::new()),
+                None => Sub::List,
+            },
+            // the plan's check failed: its sign-in again, or the same call
+            (Sub::Failed(p, m, t @ Tried::Plan(_), f), KeyCode::Enter) => match f.why {
+                Why::WrongKey => self.sign_in(Kind::ChatGpt),
+                Why::Model => Sub::Model(p, 0, String::new()),
+                _ => self.start_check(p, m, t.again(), env),
+            },
             // a running check: esc drops it (its answer is ignored)
             (Sub::Checking(..), KeyCode::Esc) => {
                 self.pending = None;
@@ -639,8 +756,8 @@ impl Onb {
             // esc empties the filter first
             (Sub::Model(p, _, f), KeyCode::Esc) if !f.is_empty() => Sub::Model(p, 0, String::new()),
             (_, KeyCode::Esc) => Sub::List,
-            (Sub::Which(i), KeyCode::Up | KeyCode::Down) => Sub::Which(updown(i, self.providers.len())),
-            (Sub::Which(i), KeyCode::Enter) => match self.providers.get(i) {
+            (Sub::Which(i), KeyCode::Up | KeyCode::Down) => Sub::Which(updown(i, self.which_list().len())),
+            (Sub::Which(i), KeyCode::Enter) => match self.which_list().get(i) {
                 Some(p) => Sub::Model(p.clone(), 0, String::new()),
                 None => Sub::List,
             },
@@ -718,7 +835,10 @@ impl Onb {
                     self.start_check(p, m, t.again(), env)
                 }
             },
-            (Sub::Failed(p, ..), KeyCode::Tab) => Sub::Which(self.providers.iter().position(|x| x.id == p.id).unwrap_or(0)),
+            (Sub::Failed(p, ..), KeyCode::Tab) => {
+                self.coding = CODING_PLANS.contains(&p.id.as_str());
+                Sub::Which(self.which_list().iter().position(|x| x.id == p.id).unwrap_or(0))
+            }
             (s, _) => s,
         };
         Out::Stay
@@ -734,6 +854,16 @@ impl Onb {
         // a role's steps (BISE-301): the one recommended for the role first
         let first = self.picking().and_then(|id| self.recommended(id, p)).or_else(|| pick_of(p, &self.model));
         let mut v: Vec<String> = first.into_iter().collect();
+        // the plan: the account's own list (cached at sign-in and when
+        // /models opens), then the catalog's
+        if p.plan {
+            for m in (self.logins.models)(&auth_paths(&self.home)) {
+                let full = format!("{}/{}", p.id, m.slug);
+                if !v.contains(&full) {
+                    v.push(full);
+                }
+            }
+        }
         for m in self.setup.catalog.models.iter().filter(|m| m.provider == p.id && !m.stt) {
             let full = format!("{}/{}", m.provider, m.id);
             if !v.contains(&full) {
@@ -761,6 +891,17 @@ impl Onb {
     fn start_check(&mut self, p: Provider, model: String, key: Option<String>, env: Env) -> Sub {
         let (the_key, tried) = match key {
             Some(k) => (k.clone(), Tried::Pasted(k)),
+            // the plan: its access token, fetched for this call only
+            None if p.plan => {
+                let who = match &self.plan {
+                    PlanState::SignedIn(a) => a.clone(),
+                    _ => Account { email: String::new(), plan: None },
+                };
+                match (self.logins.token)(&auth_paths(&self.home)) {
+                    Ok(t) => (t, Tried::Plan(who)),
+                    Err(e) => return Sub::Failed(p, model, Tried::Plan(who), crate::keycheck::Fail { why: Why::WrongKey, said: e }),
+                }
+            }
             None => match self.found_key(&p, env) {
                 Some(f) => (f.key, Tried::Found(self.where_(&f.from))),
                 None => return Sub::Paste(p, model, String::new()),
@@ -830,6 +971,8 @@ impl Onb {
     /// The check's answer, when it came: it works (the key saved when it
     /// was pasted, the model written) or it failed (why).
     pub(crate) fn tick(&mut self, env: Env) {
+        self.tick_sign_in(env);
+        self.tick_sign_out(env);
         let Some(rx) = &self.pending else { return };
         let answer = match rx.try_recv() {
             Ok(a) => a,
@@ -1170,17 +1313,6 @@ fn auth_shown(o: &Onb) -> String {
     bise_catalog::auth::tilde(&o.home.auth_file(), Some(o.home.user_home()))
 }
 
-/// Every provider you can paste a key for: "anthropic, openai, … and zai"
-/// (all of them: "and 9 more" does not say what you can paste).
-fn paste_sub(ps: &[Provider]) -> String {
-    let ids: Vec<&str> = ps.iter().map(|p| p.id.as_str()).collect();
-    match ids.split_last() {
-        None => String::new(),
-        Some((last, [])) => last.to_string(),
-        Some((last, rest)) => format!("{} and {}", rest.join(", "), last),
-    }
-}
-
 /// `text` in lines of at most `w` columns, cut at spaces.
 fn words_in(text: &str, w: usize) -> Vec<String> {
     let mut out: Vec<String> = vec![String::new()];
@@ -1205,18 +1337,40 @@ fn model_lines(o: &Onb, w: u16, gap: usize) -> Vec<Line<'static>> {
     let dim = |t: String| Line::from(s(t, theme::dim()));
     match &o.sub {
         Sub::List | Sub::Menu(..) | Sub::Remove(_) | Sub::Effort(..) => model_list(o, w, gap),
+        Sub::SignIn(k, copied) => {
+            let mut v = vec![title(format!("waiting for you to sign in to {} in your browser…", k.name()))];
+            if *copied {
+                v.push(dim("the link is in your clipboard.".into()));
+            }
+            blanks(&mut v, gap);
+            v.push(keybar("c copy the link   esc cancel"));
+            v
+        }
+        Sub::OpenRouter(i) => {
+            let mut v = vec![title("OpenRouter"), dim("sign in with your browser, or paste its key.".into())];
+            blanks(&mut v, gap);
+            option(&mut v, *i == 0, vec![s("sign in with OpenRouter", theme::text())], "", w);
+            option(&mut v, *i == 1, vec![s("paste a key", theme::text())], "", w);
+            blanks(&mut v, gap);
+            v.push(keybar("↑↓ choose   ⏎ go   esc back"));
+            v
+        }
         Sub::Which(i) => {
-            let mut v = vec![title("which provider?")];
+            let list = o.which_list();
+            let mut v = vec![title(if o.coding { "which coding plan?" } else { "which provider?" })];
             blanks(&mut v, gap);
             // a window of WHICH_ROWS rows around the cursor
-            let n = o.providers.len();
+            let n = list.len();
             let from = i.saturating_sub(WHICH_ROWS / 2).min(n.saturating_sub(WHICH_ROWS));
             if from > 0 {
                 v.push(Line::from(s(format!("  ↑ {} more", from), theme::dim())));
             }
             // the hints in one column (designer, BISE-298)
-            let nw = o.providers.iter().map(|p| format!("{} · {}", o.providers.len(), p.name).width()).max().unwrap_or(0) + 2;
-            for (k, p) in o.providers.iter().enumerate().skip(from).take(WHICH_ROWS) {
+            let nw = list.iter().map(|p| format!("{} · {}", n, p.name).width()).max().unwrap_or(0) + 2;
+            if list.is_empty() {
+                v.push(dim("  this bise has no coding plan provider yet.".into()));
+            }
+            for (k, p) in list.iter().enumerate().skip(from).take(WHICH_ROWS) {
                 let head = format!("{} · {}", k + 1, p.name);
                 let pad = " ".repeat(nw.saturating_sub(head.width()));
                 option(&mut v, k == *i, vec![s(format!("{}{}", head, pad), theme::text()), s(p.hint.clone(), theme::dim())], "", w);
@@ -1252,6 +1406,9 @@ fn model_lines(o: &Onb, w: u16, gap: usize) -> Vec<Line<'static>> {
                         let mut n = vec![s(format!("{} · {}", k + 1, m), theme::text())];
                         if pick.as_ref() == Some(m) {
                             n.push(s("  recommended", theme::accent()));
+                        }
+                        if p.plan {
+                            n.push(s("   your ChatGPT plan", theme::dim()));
                         }
                         n
                     }
@@ -1307,24 +1464,64 @@ fn model_lines(o: &Onb, w: u16, gap: usize) -> Vec<Line<'static>> {
             v.push(keyline("{enter} replaces it · {esc} keeps the old one"));
             v
         }
+        Sub::Checking(_, _, Tried::Plan(a)) => {
+            let mut v = signed_in(a);
+            v.push(dim("checking your plan…".into()));
+            blanks(&mut v, gap);
+            v.push(keybar("esc back"));
+            v
+        }
         Sub::Checking(p, m, _) => {
             let mut v = vec![title("checking your key with one tiny call…"), dim(format!("{} on {}", short_model(m), p.name))];
             blanks(&mut v, gap);
             v.push(keyline("{esc} back"));
             v
         }
+        Sub::Failed(p, m, Tried::Plan(a), f) => {
+            let err = |t: &str| Line::from(s(t.to_string(), theme::error()));
+            let mut v = if a.email.is_empty() { Vec::new() } else { signed_in(a) };
+            v.push(match &f.why {
+                Why::WrongKey => err(signin::EXPIRED),
+                // its usage page clickable (designer)
+                Why::NoCredit => {
+                    let (a, b) = signin::LIMIT.split_once(signin::LIMIT_LINK).unwrap_or((signin::LIMIT, ""));
+                    Line::from(vec![
+                        s(a.to_string(), theme::error()),
+                        crate::textlayer::link(signin::LIMIT_LINK, signin::PLAN_USAGE_URL, Style::default().fg(theme::error()).add_modifier(Modifier::UNDERLINED)),
+                        s(b.to_string(), theme::error()),
+                    ])
+                }
+                Why::NoAccess => err(signin::PLAN_OFF),
+                Why::Unreachable(e) if e == crate::keycheck::USAGE_UNCHECKED => err(signin::UNCHECKED),
+                Why::Model => err(&format!("▲ your plan doesn't run {}. pick another model.", short_model(m))),
+                Why::Unreachable(e) => err(&format!("▲ i couldn't reach {}: {}.", p.name, e.trim_end_matches('.'))),
+                Why::NoUrl(_) => err(&format!("▲ {} has no URL yet: i didn't call it.", p.name)),
+            });
+            if !f.said.is_empty() {
+                for l in words_in(&format!("{} said: \"{}\"", p.name, f.said), w as usize) {
+                    v.push(dim(l));
+                }
+            }
+            blanks(&mut v, gap);
+            v.push(keybar(match f.why {
+                Why::WrongKey => "⏎ sign in again   tab another way   esc back",
+                Why::Model => "⏎ pick another model   tab another way   esc back",
+                _ => "⏎ try again   tab another way   esc back",
+            }));
+            v
+        }
         Sub::Failed(p, m, t, f) => {
             let err = |t: String| Line::from(s(format!("{} {}", theme::glyph(theme::G_FAILED), t), theme::error()));
             // "the key" (pasted) or "the key in ANTHROPIC_API_KEY" (found)
             let the_key = match t {
-                Tried::Pasted(_) => "the key".to_string(),
+                Tried::Pasted(_) | Tried::Plan(_) => "the key".to_string(),
                 Tried::Found(w) => format!("the key in {}", w),
             };
             let mut v = Vec::new();
             match &f.why {
                 Why::WrongKey => v.push(err(match t {
-                    Tried::Pasted(_) => format!("{} says this key is wrong.", p.name),
                     Tried::Found(_) => format!("{} doesn't work. {} says it's wrong.", the_key, p.name),
+                    _ => format!("{} says this key is wrong.", p.name),
                 })),
                 // BISE-282: not a failure of the key: it needs the user
                 Why::NoCredit => v.push(Line::from(vec![
@@ -1358,7 +1555,7 @@ fn model_lines(o: &Onb, w: u16, gap: usize) -> Vec<Line<'static>> {
                     }
                     v.push(dim(match t {
                         Tried::Pasted(_) => "i saved the key. add credit, then enter checks again.".into(),
-                        Tried::Found(_) => "add credit, then enter checks again.".into(),
+                        _ => "add credit, then enter checks again.".into(),
                     }));
                 }
                 (Why::NoAccess, _) => v.push(dim("your account may not have access to this model yet. pick another one.".into())),
@@ -1378,6 +1575,16 @@ fn model_lines(o: &Onb, w: u16, gap: usize) -> Vec<Line<'static>> {
                 (Why::NoCredit, _) => "{enter} check again · {tab} another provider · {esc} back",
                 _ => "{enter} try again · {tab} another provider · {esc} back",
             }));
+            v
+        }
+        Sub::Works(p, m) if p.plan => {
+            let mut v = match &o.plan {
+                PlanState::SignedIn(a) => signed_in(a),
+                _ => vec![title(format!("it works: {} answered.", short_model(m)))],
+            };
+            v.push(dim(format!("main and your agents use {} now, on your plan.", short_model(m))));
+            blanks(&mut v, gap);
+            v.push(keybar("⏎ go on"));
             v
         }
         Sub::Works(_, m) => {
@@ -1452,49 +1659,126 @@ fn extras(o: &Onb) -> Vec<String> {
     v
 }
 
+/// The key step's label column (designer: the descriptions line up).
+const PAY_W: usize = 27;
+
+/// `label` padded to `n` columns (at least one space after).
+fn padded(label: &str, n: usize) -> String {
+    let w = label.width();
+    if w >= n { format!("{} ", label) } else { format!("{}{}", label, " ".repeat(n - w)) }
+}
+
+/// The first run's key step (designer, subscriptions): how you pay, a
+/// plan you have or a key; the keys found first. Each row: its label,
+/// then its description, dim, on the same line when it fits, else under.
 fn model_list(o: &Onb, w: u16, gap: usize) -> Vec<Line<'static>> {
-    let found = match o.found.len() {
-        0 => "i found no key in your environment.".to_string(),
-        1 => "i found a key in your environment.".to_string(),
-        n => format!("i found {} keys in your environment.", n),
-    };
-    let mut v = vec![title("which model should do the work?"), Line::from(s(found, theme::dim()))];
+    let mut v = vec![
+        title("how do you want to pay for the models?"),
+        Line::from(s("a plan you already have, or a key. you can add more later in /provider.", theme::dim())),
+    ];
     blanks(&mut v, gap);
-    for (i, opt) in o.opts().into_iter().enumerate() {
-        if i > 0 {
-            v.push(Line::raw(""));
-        }
-        let n = i + 1;
-        let (name, sub) = match opt {
+    let opts = o.opts();
+    let lw = opts
+        .iter()
+        .map(|x| match x {
+            Opt::Use(p) => format!("{} ", p.key_env).width() + 1,
+            _ => 0,
+        })
+        .max()
+        .unwrap_or(0)
+        .max(PAY_W);
+    for (i, opt) in opts.into_iter().enumerate() {
+        let (label, found, desc) = match opt {
             Opt::Use(p) => (
-                vec![s(format!("{} · use {} ", n, p.key_env), theme::text()), s("found", theme::accent())],
+                p.key_env.clone(),
+                true,
                 if p.id == o.mine {
-                    format!("{}, already set up. nothing to paste.", p.id)
+                    format!("{}, already set up", p.name)
                 } else {
                     // BISE-266: enter moves the model to this provider
                     match pick_of(&p, &o.model) {
-                        Some(m) => format!("{}. i'll use {}.", p.name, short_model(&m)),
-                        None => format!("{}. set model in {}.", p.id, bise_catalog::auth::tilde(&o.home.config_file(), Some(o.home.user_home()))),
+                        Some(m) => format!("{}. i'll use {}", p.name, short_model(&m)),
+                        None => format!("{}. set model in {}", p.name, bise_catalog::auth::tilde(&o.home.config_file(), Some(o.home.user_home()))),
                     }
                 },
             ),
-            Opt::Paste => (
-                vec![s(
-                    format!("{} · {}", n, if o.found.is_empty() { "set up a provider" } else { "set up another provider" }),
-                    theme::text(),
-                )],
-                paste_sub(&o.providers),
+            Opt::ChatGpt => (
+                "Continue with ChatGPT".to_string(),
+                false,
+                if o.seen.codex_chatgpt {
+                    "use your Plus or Pro plan · you use it in Codex already".to_string()
+                } else {
+                    "use your Plus or Pro plan".to_string()
+                },
             ),
+            Opt::OpenRouter => ("OpenRouter".to_string(), false, "sign in, or paste its key".to_string()),
+            Opt::Paste => ("an API key".to_string(), false, "Anthropic, OpenAI, Google, Mistral…".to_string()),
+            Opt::Coding => ("a coding plan key".to_string(), false, "GLM, Kimi or MiniMax".to_string()),
         };
-        option(&mut v, i == o.sel, name, &sub, w);
+        let mut name = if found {
+            // `ANTHROPIC_API_KEY found`, padded to the column
+            let used = label.width() + 1 + "found".width();
+            vec![s(format!("{} ", label), theme::text()), s("found", theme::accent()), Span::raw(" ".repeat(lw.saturating_sub(used).max(1)))]
+        } else {
+            vec![s(padded(&label, lw), theme::text())]
+        };
+        let fits = 2 + lw + desc.width() <= w as usize;
+        if fits {
+            name.push(s(desc.clone(), theme::dim()));
+        }
+        option(&mut v, i == o.sel, name, if fits { "" } else { &desc }, w);
     }
-    if let Some(Note::Failed(e)) = &o.note {
+    // Claude Code's plan, no Anthropic key: why it isn't one of the ways
+    let anthropic = o.found.iter().any(|p| p.id == "anthropic");
+    if o.seen.claude_plan && !anthropic {
         v.push(Line::raw(""));
-        v.push(Line::from(s(format!("{} couldn't save the key: {}", theme::glyph(theme::G_FAILED), e), theme::error())));
+        for l in words_in("your Claude plan works only in Claude Code (Anthropic's terms). for Claude here, use an API key.", w as usize) {
+            v.push(Line::from(s(l, theme::dim())));
+        }
+    }
+    match &o.note {
+        Some(Note::Failed(e)) => {
+            v.push(Line::raw(""));
+            v.push(Line::from(s(format!("{} couldn't save the key: {}", theme::glyph(theme::G_FAILED), e), theme::error())));
+        }
+        Some(Note::SignIn(t)) => {
+            v.push(Line::raw(""));
+            for l in words_in(t, w as usize) {
+                v.push(Line::from(s(l, theme::error())));
+            }
+        }
+        _ => {}
     }
     blanks(&mut v, gap);
-    v.push(keyline("{↑↓} choose · {enter} ok"));
+    v.push(keybar("↑↓ choose   ⏎ go   esc back"));
     v
+}
+
+/// The key bar of the subscription screens (designer): `key word`, three
+/// spaces between pairs, the key in text color, its word dim.
+fn keybar(text: &str) -> Line<'static> {
+    let mut v = Vec::new();
+    for (i, pair) in text.split("   ").enumerate() {
+        if i > 0 {
+            v.push(s("   ", theme::dim()));
+        }
+        match pair.split_once(' ') {
+            Some((k, word)) => {
+                v.push(s(k.to_string(), theme::text()));
+                v.push(s(format!(" {}", word), theme::dim()));
+            }
+            None => v.push(s(pair.to_string(), theme::text())),
+        }
+    }
+    Line::from(v)
+}
+
+/// `✓ signed in as you@example.com · ChatGPT Plus` (the title).
+fn signed_in(a: &Account) -> Vec<Line<'static>> {
+    vec![Line::from(vec![
+        s("✓ ", theme::accent()),
+        bold(format!("signed in as {} · {}", a.email, signin::plan_words(a)), theme::text()),
+    ])]
 }
 
 /// How it works (designer's v4 copy, as the landing: main is your team
@@ -1644,6 +1928,11 @@ fn draw_page(f: &mut Frame, o: &Onb, now: u64) {
     // BISE-298: /provider and /models get 80 columns on a wide terminal
     let col = if o.panel.is_some() && area.width >= 90 {
         let w = 80;
+        Rect { x: body.x + (body.width - w) / 2, width: w, ..body }
+    } else if o.step == Step::Model && o.sub == Sub::List && area.width >= 100 {
+        // the key step's rows: a label, then its description on the
+        // same line (designer, subscriptions)
+        let w = 88;
         Rect { x: body.x + (body.width - w) / 2, width: w, ..body }
     } else {
         column(body)
@@ -2090,28 +2379,27 @@ mod tests {
         o.go(Step::Model, 0);
         let sc = screen(&o, 10, 110, 30);
         for s in [
-            "which model should do the work?",
-            "i found a key in your environment.",
-            "1 · use ANTHROPIC_FOUNDRY_API_KEY found",
-            "foundry, already set up. nothing to paste.",
-            "2 · set up another provider",
-            "↑↓ choose · enter ok",
+            "how do you want to pay for the models?",
+            "a plan you already have, or a key. you can add more later in /provider.",
+            "› ANTHROPIC_FOUNDRY_API_KEY found",
+            "Anthropic (foundry proxy), already set up",
+            "Continue with ChatGPT      use your Plus or Pro plan",
+            "OpenRouter                 sign in, or paste its key",
+            "an API key                 Anthropic, OpenAI, Google, Mistral…",
+            "a coding plan key          GLM, Kimi or MiniMax",
+            "↑↓ choose   ⏎ go   esc back",
         ] {
             assert!(sc.contains(s), "{}\n{}", s, sc);
         }
-        // every provider offered, by name, no "and 9 more"; the private
-        // proxy never (BISE-266)
-        let all = paste_sub(&o.providers);
-        assert!(all.starts_with("anthropic, openai, ") && !all.contains("foundry") && !all.ends_with('.'), "{}", all);
-        assert!(flat(&sc).contains(&all) && !sc.contains(" more"), "{}", sc);
-        // API keys only: no browser sign-in row (BISE-215); ↑↓ wrap
-        assert!(!sc.contains("3 · ") && !sc.contains("browser"), "{}", sc);
-        o.on_key(key(KeyCode::Down), 1, &e);
-        assert_eq!(o.sel, 1);
-        o.on_key(key(KeyCode::Down), 1, &e);
+        // no detection: no Codex mark, no Claude line
+        assert!(!sc.contains("Codex") && !sc.contains("Claude Code"), "{}", sc);
+        // ↑↓ wrap over the five rows
+        for _ in 0..5 {
+            o.on_key(key(KeyCode::Down), 1, &e);
+        }
         assert_eq!(o.sel, 0);
         // the providers: name and hint, the five on one screen
-        o.on_key(key(KeyCode::Up), 1, &e);
+        o.sel = 3;
         o.on_key(key(KeyCode::Enter), 1, &e);
         assert_eq!(o.sub, Sub::Which(0));
         let sc = screen(&o, 10, 110, 30);
@@ -2212,7 +2500,8 @@ mod tests {
         // no model at all (BISE-266): the step shows
         assert!(o.ask_key && o.found.is_empty() && o.model.is_empty());
         o.go(Step::Model, 0);
-        assert!(screen(&o, 10, 110, 30).contains("1 · set up a provider"));
+        assert!(screen(&o, 10, 110, 30).contains("› Continue with ChatGPT"));
+        o.sel = o.opts().iter().position(|x| *x == Opt::Paste).unwrap();
         o.on_key(key(KeyCode::Enter), 1, &e);
         let mistral = o.providers.iter().position(|p| p.id == "mistral").unwrap();
         o.sub = Sub::Which(mistral);
@@ -2304,7 +2593,7 @@ mod tests {
         assert!(o.ask_key);
         o.go(Step::Model, 0);
         let sc = screen(&o, 10, 110, 30);
-        assert!(sc.contains("1 · use OPENAI_API_KEY found") && sc.contains("OpenAI. i'll use gpt-6-astra."), "{}", sc);
+        assert!(sc.contains("› OPENAI_API_KEY found") && sc.contains("OpenAI. i'll use gpt-6-astra"), "{}", sc);
         o.on_key(key(KeyCode::Enter), 1, &e);
         assert!(matches!(&o.sub, Sub::Model(p, 0, _) if p.id == "openai"));
         o.on_key(key(KeyCode::Enter), 1, &e);
@@ -2403,7 +2692,7 @@ mod tests {
         let start = col(rows[i], "Mistral").unwrap();
         let next: Vec<char> = rows[i + 1].chars().collect();
         assert!(next[start] != ' ' && next[start - 4..start].iter().all(|c| *c == ' '), "{}", sc);
-        assert!(sc.contains("mistral-medium-latest."), "{}", sc);
+        assert!(sc.contains("mistral-medium-latest"), "{}", sc);
     }
 
     #[test]
@@ -2412,7 +2701,7 @@ mod tests {
         let mut o = onb(&h, "/w");
         o.go(Step::Model, 0);
         let sc = screen(&o, 10, 110, 30);
-        assert!(sc.contains("i found no key in your environment.") && sc.contains("1 · set up a provider"), "{}", sc);
+        assert!(sc.contains("how do you want to pay for the models?") && sc.contains("› Continue with ChatGPT") && !sc.contains(" found"), "{}", sc);
     }
 
     #[test]
