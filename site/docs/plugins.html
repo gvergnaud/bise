@@ -75,7 +75,7 @@
       <p class="lede">a plugin is a folder with skills and MCP servers. bise loads it in every agent, local stdio servers and remote ones, with their logins.</p>
 <p>bise loads <a href="https://agent-plugins.org/specification" rel="noopener">Agent Plugins 1.0</a>: a folder with a <code>plugin.json</code>, an optional <code>skills/</code> folder and an optional <code>mcp.json</code>. the same plugin works in every agent.</p>
 <h2 id="where-plugins-live"><a class="anchor" href="#where-plugins-live" aria-hidden="true">#</a>where plugins live</h2>
-<div class="table"><table><thead><tr><th>folder</th><th>for</th></tr></thead><tbody><tr><td><code>~/.agents/plugins/&lt;name&gt;/</code></td><td>you, in every repo</td></tr><tr><td><code>&lt;repo&gt;/.agents/plugins/&lt;name&gt;/</code></td><td>this repo only. it wins over a plugin of the same name in your folder</td></tr></tbody></table></div>
+<div class="table"><table><thead><tr><th>folder</th><th>for</th></tr></thead><tbody><tr><td><code>~/.agents/plugins/&lt;name&gt;/</code></td><td>you, in every repo</td></tr><tr><td><code>&lt;repo&gt;/.agents/plugins/&lt;name&gt;/</code></td><td>this repo only; it wins over a plugin of the same name in your folder</td></tr></tbody></table></div>
 <p>a plugin folder:</p>
 <div class="code"><div class="box"><pre><code class="lang-text">my-plugin/
   plugin.json

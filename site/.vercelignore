@@ -4,3 +4,4 @@ README.md
 .gitignore
 .env*
 .vercel
+*.tmpl
