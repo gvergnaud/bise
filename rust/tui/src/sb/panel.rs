@@ -578,21 +578,54 @@ pub(crate) fn draw_panel(app: &App, frame: &mut Frame, area: Rect) {
     let live = i;
     cards_lines(app, w, &mut lines, &mut owners, &mut sel_row);
     archived_lines(sb, live, w, &mut lines, &mut owners, &mut sel_row);
-    // the body under the title: scrolled to keep the selection in view;
-    // what does not fit below ends in `+ {n} more`
+    // the body under the title: scrolled to keep the selection in view,
+    // or where the wheel or a `↑`/`↓` row put it (sidebar-more); what
+    // does not fit ends in `↓ {n} more`, what is hidden over it starts
+    // with `↑ {n} more`
     let h = (area.height as usize).saturating_sub(2);
-    let (top, shown, more) = window(lines.len(), &owners, &boxes, sel_row, h, sb.archived_open, sb.archived().len());
-    let mut body: Vec<Line> = lines.into_iter().skip(top).take(shown).collect();
-    if let Some(n) = more {
-        body.push(Line::from(Span::styled(format!(" + {} more", n), Style::default().fg(dim()))));
+    let wanted = sb.panel_hits.try_borrow().ok().and_then(|p| p.scroll).filter(|(_, s)| *s == sel_row).map(|(t, _)| t);
+    let archived = sb.archived().len();
+    let weigh = |hit: &Hit| match hit {
+        Hit::Agent(name) => {
+            let a = sb.agent(name).filter(|a| !a.archived());
+            Hidden {
+                n: 1,
+                ask: a.is_some_and(|a| needs_you(sb, a)) as usize,
+                failed: a.is_some_and(|a| a.status == "failed") as usize,
+            }
+        }
+        Hit::Card(_) => Hidden { n: 1, ..Hidden::default() },
+        Hit::Archived if !sb.archived_open => Hidden { n: archived, ..Hidden::default() },
+        _ => Hidden::default(),
+    };
+    let win = window(lines.len(), &owners, &boxes, sel_row, h, wanted, weigh);
+    let (top, shown) = (win.top, win.shown);
+    let up = win.up.is_some() as usize;
+    let mut body: Vec<Line> = Vec::new();
+    if let Some(n) = win.up {
+        body.push(more_line(n, true, w));
+    }
+    body.extend(lines.into_iter().skip(top).take(shown));
+    if let Some(n) = win.down {
+        body.push(more_line(n, false, w));
     }
     if let Ok(mut hits) = sb.panel_hits.try_borrow_mut() {
         hits.area = area;
         hits.rows = owners
             .into_iter()
             .filter(|(r, _)| *r >= top && *r - top < shown)
-            .map(|(r, hit)| (area.y.saturating_add(2 + (r - top) as u16), hit))
+            .map(|(r, hit)| (area.y.saturating_add((2 + up + r - top) as u16), hit))
             .collect();
+        let body_y = area.y.saturating_add(2);
+        if win.up.is_some() {
+            hits.rows.push((body_y, Hit::Up));
+        }
+        if win.down.is_some() {
+            hits.rows.push((body_y.saturating_add((up + shown) as u16), Hit::Down));
+        }
+        // the scroll the wheel or a click asked for, as drawn (clamped)
+        hits.scroll = hits.scroll.filter(|(_, s)| *s == sel_row).map(|_| (top, sel_row));
+        hits.view = View { top, shown, sel_row, overflow: win.up.is_some() || win.down.is_some() };
         // BISE-272: the hand over the rows a click opens
         for (y, _) in &hits.rows {
             crate::pointer::region(Rect { y: *y, height: 1, ..area }.intersection(area), crate::pointer::Shape::Pointer);
@@ -606,12 +639,35 @@ pub(crate) fn draw_panel(app: &App, frame: &mut Frame, area: Rect) {
     crate::textlayer::text(area);
 }
 
-/// The first body row shown in `h` rows, how many rows show, and the `+
-/// {n} more` count when rows are left below: the agents under the
-/// window (a folded archived section counts its agents). A box
-/// (`boxes`, rows [start, end)) never splits (pr-design §4.1 rule 6):
-/// cut at the top it goes up whole (down whole when it holds the
-/// selection), cut at the bottom it goes under `+ n more` whole; a box
+/// What a `↑`/`↓ n more` row hides (sidebar-more): `n` items (agents,
+/// cards, the agents of a folded archived section), how many of those
+/// agents need you and how many failed.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+struct Hidden {
+    n: usize,
+    ask: usize,
+    failed: usize,
+}
+
+/// The panel's body in a window: its first row, how many rows show, and
+/// what the `↑ n more` row over them and the `↓ n more` row under them
+/// hide (None: no such row).
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+struct Win {
+    top: usize,
+    shown: usize,
+    up: Option<Hidden>,
+    down: Option<Hidden>,
+}
+
+/// The window of `len` body rows in `h` rows. Its top: `wanted` (the
+/// wheel, a click on a `↑`/`↓` row), else where the selection (and the
+/// row under it) stays in view over the `↓` row. Rows hidden over it
+/// start with `↑ n more`, rows left under it end in `↓ n more`; `weigh`
+/// says what a hidden row's target counts for. A box (`boxes`, rows
+/// [start, end)) never splits (pr-design §4.1 rule 6): cut at the top it
+/// goes up whole (down whole when it holds the selection; not when you
+/// scrolled), cut at the bottom it goes under `↓ n more` whole; a box
 /// taller than the window splits.
 fn window(
     len: usize,
@@ -619,51 +675,93 @@ fn window(
     boxes: &[(usize, usize)],
     sel_row: Option<usize>,
     h: usize,
-    archived_open: bool,
-    archived: usize,
-) -> (usize, usize, Option<usize>) {
+    wanted: Option<usize>,
+    weigh: impl Fn(&Hit) -> Hidden,
+) -> Win {
     if len <= h || h < 2 {
-        return (0, len, None);
+        return Win { top: 0, shown: len, up: None, down: None };
     }
-    // the selection (and the row under it) stays in view, over the
-    // `+ n more` row
-    let mut top = sel_row.map_or(0, |r| (r + 3).saturating_sub(h)).min(len - h);
+    let hidden = |rows: &mut dyn Iterator<Item = &(usize, Hit)>| {
+        let mut seen: Vec<&Hit> = Vec::new();
+        let mut out = Hidden::default();
+        for (_, hit) in rows {
+            if !seen.contains(&hit) {
+                seen.push(hit);
+                let w = weigh(hit);
+                out = Hidden { n: out.n + w.n, ask: out.ask + w.ask, failed: out.failed + w.failed };
+            }
+        }
+        out
+    };
+    // `rows`: how many list rows a window from `top` has above the `↓` row
+    let top_for = |rows: usize| wanted.unwrap_or_else(|| sel_row.map_or(0, |r| (r + 2).saturating_sub(rows)));
     let cut = |at: usize| boxes.iter().copied().find(|(s, e)| *s < at && at < *e);
-    if let Some((s, e)) = cut(top) {
-        let holds_sel = sel_row.is_some_and(|r| r >= s && r < e);
-        top = if holds_sel { s } else { e };
+    // `up_ok`: a `↑` row may take the first row
+    let place = |up_ok: bool| {
+        let mut top = top_for(h - 1).min(len - h);
+        if top > 0 && up_ok {
+            // a `↑` row takes the first row: one less for the list
+            top = top_for(h - 2).min(len - (h - 1));
+        }
+        if let Some((s, e)) = cut(top).filter(|_| wanted.is_none()) {
+            let holds_sel = sel_row.is_some_and(|r| r >= s && r < e);
+            top = if holds_sel { s } else { e };
+        }
+        let above = |top: usize| Some(hidden(&mut owners.iter().filter(|(r, _)| *r < top))).filter(|n| up_ok && n.n > 0);
+        let up = above(top);
+        let room = h - up.is_some() as usize;
+        if top + room >= len {
+            // the end of the list fits: no `↓ n more`
+            return Win { top, shown: len - top, up, down: None };
+        }
+        let mut end = top + room - 1;
+        if let Some((s, _)) = cut(end) {
+            // a box that starts after a blank row: the blank goes too
+            if s > top + 1 {
+                end = s - 1;
+            }
+        }
+        let down = hidden(&mut owners.iter().filter(|(r, _)| *r >= end));
+        if down.n == 0 {
+            // only rows with no target below (a blank, a worktree): the end
+            let top = len - room;
+            return Win { top, shown: room, up: up.and_then(|_| above(top)), down: None };
+        }
+        Win { top, shown: end - top, up, down: Some(down) }
+    };
+    let win = place(h >= 3);
+    // the selection (its whole box when it is in one) not in view with a
+    // `↑` row: none, the rows over it go unmarked (a short panel)
+    let in_view = |w: &Win| {
+        let Some(r) = sel_row.filter(|_| wanted.is_none()) else { return true };
+        let (s, e) = boxes.iter().copied().find(|(s, e)| *s <= r && r < *e && e - s < h).unwrap_or((r, r + 1));
+        s >= w.top && e <= w.top + w.shown
+    };
+    if win.up.is_some() && !in_view(&win) {
+        return place(false);
     }
-    if top + h >= len {
-        // the end of the list fits: no `+ n more`
-        return (top, len - top, None);
-    }
-    let mut end = top + h - 1;
-    if let Some((s, _)) = cut(end) {
-        // a box that starts after a blank row: the blank goes too
-        if s > top + 1 {
-            end = s - 1;
+    win
+}
+
+/// A `↑ 6 more` / `↓ 24 more` row (sidebar-more, designer): dim; when
+/// what it hides needs you, ` · ? 2` in accent (bold under NO_COLOR),
+/// then a failure ` · ✗ 1` if it fits (the `?` wins).
+fn more_line(n: Hidden, up: bool, w: usize) -> Line<'static> {
+    let d = Style::default().fg(dim());
+    let arrow = crate::theme::glyph(if up { "↑" } else { "↓" });
+    let mut spans = vec![Span::styled(format!(" {} {} more", arrow, n.n), d)];
+    let bold = std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty());
+    let ask_st = if bold { Style::default().add_modifier(Modifier::BOLD) } else { Style::default().fg(accent()) };
+    let marks = [(n.ask, G_NEEDS_YOU, ask_st), (n.failed, G_FAILED, Style::default().fg(error()))];
+    for (k, g, st) in marks.into_iter().filter(|(k, _, _)| *k > 0) {
+        let tail = vec![Span::styled(" · ", d), Span::styled(format!("{} {}", crate::theme::glyph(g), k), st)];
+        let wd: usize = spans.iter().chain(&tail).map(|s| s.content.width()).sum();
+        // one column of margin on the right
+        if wd < w {
+            spans.extend(tail);
         }
     }
-    let mut below: Vec<&Hit> = Vec::new();
-    for (r, hit) in owners {
-        if *r >= end && !below.contains(&hit) {
-            below.push(hit);
-        }
-    }
-    let n = below
-        .iter()
-        .map(|h| match h {
-            Hit::Agent(_) | Hit::Card(_) => 1,
-            Hit::Cards => 0,
-            Hit::Archived if !archived_open => archived,
-            Hit::Archived => 0,
-        })
-        .sum::<usize>();
-    if n == 0 {
-        let top = len - h;
-        return (top, h, None);
-    }
-    (top, end - top, Some(n))
+    Line::from(spans)
 }
 
 /// The cards section, under the live agents (BISE-125): a title row
@@ -802,6 +900,22 @@ pub(crate) enum Hit {
     Card(u64),
     /// The title of the cards section: the card view on the top card.
     Cards,
+    /// `↑ n more`: the panel scrolls a page up (sidebar-more).
+    Up,
+    /// `↓ n more`: the panel scrolls a page down.
+    Down,
+}
+
+/// The panel's window as the last frame drew it (sidebar-more): its
+/// first body row, how many list rows it showed, the selection's row
+/// then, and whether rows were hidden (the wheel scrolls the panel only
+/// then).
+#[derive(Debug, Default, Clone, Copy)]
+struct View {
+    top: usize,
+    shown: usize,
+    sel_row: Option<usize>,
+    overflow: bool,
 }
 
 /// Where the last frame drew the panel, and what each of its rows leads
@@ -813,6 +927,18 @@ pub(crate) struct PanelHits {
     /// The panel's numbers (Alt+N): agent name → number, kept while the
     /// agent lives (see [`Sb::numbers`]).
     slots: Vec<(String, usize)>,
+    /// The first body row you scrolled to (the wheel, a `↑`/`↓` row),
+    /// and the selection's row then: a new selection (Alt+↑/↓, a card
+    /// shown) drops it, the panel follows the selection again.
+    scroll: Option<(usize, Option<usize>)>,
+    view: View,
+}
+
+impl PanelHits {
+    /// Scroll the panel's body to `top` (clamped at the next draw).
+    fn scroll_to(&mut self, top: usize) {
+        self.scroll = Some((top, self.view.sel_row));
+    }
 }
 
 impl Sb {
@@ -874,6 +1000,17 @@ impl PanelHits {
 /// the same path as Alt+N. `true` when the click was the panel's.
 pub(crate) fn panel_mouse(app: &mut App, m: &crossterm::event::MouseEvent) -> bool {
     use crossterm::event::{MouseButton, MouseEventKind};
+    if matches!(m.kind, MouseEventKind::ScrollUp | MouseEventKind::ScrollDown) {
+        // sidebar-more: the wheel over a panel taller than its room
+        // scrolls it 3 rows; else it goes on to the history
+        let Ok(mut hits) = app.sb.panel_hits.try_borrow_mut() else { return false };
+        if !hits.contains(m.column, m.row) || !hits.view.overflow {
+            return false;
+        }
+        let top = hits.view.top;
+        hits.scroll_to(if m.kind == MouseEventKind::ScrollUp { top.saturating_sub(3) } else { top + 3 });
+        return true;
+    }
     if m.kind != MouseEventKind::Down(MouseButton::Left) {
         return false;
     }
@@ -899,6 +1036,15 @@ pub(crate) fn panel_mouse(app: &mut App, m: &crossterm::event::MouseEvent) -> bo
         Some(Hit::Card(id)) => super::cards::open_view(app, Some(id)),
         Some(Hit::Cards) if app.sb.card.open => super::cards::close_view(app),
         Some(Hit::Cards) => super::cards::open_view(app, None),
+        // a page that way, less one row: the last row you saw stays in
+        // view (designer)
+        Some(Hit::Up | Hit::Down) => {
+            if let Ok(mut hits) = app.sb.panel_hits.try_borrow_mut() {
+                let View { top, shown, .. } = hits.view;
+                let page = shown.saturating_sub(1).max(1);
+                hits.scroll_to(if target == Some(Hit::Up) { top.saturating_sub(page) } else { top + page });
+            }
+        }
         _ => {}
     }
     true
@@ -1589,7 +1735,79 @@ mod tests {
         assert_eq!(num(&app, "a"), Some(4));
     }
 
-    /// More agents than rows: the list ends with `+ {n} more`, and
+    /// sidebar-more: a click on `↓ n more` scrolls a page less one row
+    /// (the last row seen stays), `↑ n more` back; the wheel 3 rows; the
+    /// rows say when a hidden agent needs you or failed; a new selection
+    /// takes the scroll back; every agent is reached.
+    #[test]
+    fn the_more_rows_scroll_the_panel() {
+        use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+        let mut app = bench::test_app_drained();
+        {
+            let sb = &mut app.sb;
+            sb.agents.push(Agent { name: "main".into(), main: true, status: "idle".into(), ..Agent::default() });
+            for i in 1..=30 {
+                sb.agents.push(agent(&format!("a{:02}", i), "working"));
+            }
+            sb.agents[25].waiting_on = "you".into();
+            sb.agents[28].waiting_on = "you".into();
+            sb.agents[29].status = "failed".into();
+        }
+        let ev = |kind, row| MouseEvent { kind, column: 3, row, modifiers: KeyModifiers::NONE };
+        let click = |app: &mut App, row| panel_mouse(app, &ev(MouseEventKind::Down(MouseButton::Left), row));
+        let t = trimmed(&panel_rows(&app, 40, 10));
+        assert_eq!(t[9], format!(" ↓ 24 more · {G_NEEDS_YOU} 2 · {G_FAILED} 1"), "{}", t.join("\n"));
+        let mut term = Terminal::new(TestBackend::new(40, 10)).unwrap();
+        term.draw(|f| draw_panel(&app, f, f.area())).unwrap();
+        let x = t[9].chars().position(|c| c == '?').unwrap() as u16;
+        assert_eq!(term.backend().buffer().cell((x, 9)).unwrap().fg, accent());
+        // narrow: the failure goes, the question stays
+        let t = trimmed(&panel_rows(&app, 22, 10));
+        assert_eq!(t[9], format!(" ↓ 24 more · {G_NEEDS_YOU} 2"), "{}", t.join("\n"));
+        // a click on `↓`: a06 (the last row seen) is now under `↑ 6 more`
+        let t = trimmed(&panel_rows(&app, 40, 10));
+        assert!(t[8].contains("a06"), "{}", t.join("\n"));
+        assert!(click(&mut app, 9));
+        let t = trimmed(&panel_rows(&app, 40, 10));
+        assert_eq!(t[2], " ↑ 6 more", "{}", t.join("\n"));
+        assert!(t[3].contains("a06"), "{}", t.join("\n"));
+        // down to the end: the last agent shows, no `↓` row
+        for _ in 0..10 {
+            if !trimmed(&panel_rows(&app, 40, 10))[9].contains('↓') {
+                break;
+            }
+            assert!(click(&mut app, 9));
+        }
+        let t = trimmed(&panel_rows(&app, 40, 10));
+        assert!(t[9].contains("a30"), "{}", t.join("\n"));
+        assert!(t[2].starts_with(" ↑ ") && t[2].contains(" more"), "{}", t.join("\n"));
+        // a click on the last agent focuses it
+        assert!(click(&mut app, 9));
+        assert_eq!(app.sb.focus, "a30");
+        // `↑` back up, then the wheel: 3 rows a notch
+        for _ in 0..10 {
+            if !trimmed(&panel_rows(&app, 40, 10))[2].contains('↑') {
+                break;
+            }
+            assert!(click(&mut app, 2));
+        }
+        let t = trimmed(&panel_rows(&app, 40, 10));
+        assert!(t[2].contains("main"), "{}", t.join("\n"));
+        assert!(panel_mouse(&mut app, &ev(MouseEventKind::ScrollDown, 5)));
+        let t = trimmed(&panel_rows(&app, 40, 10));
+        assert_eq!(t[2], " ↑ 3 more", "main, a01, a02 went up: {}", t.join("\n"));
+        assert!(t[3].contains("a03"), "{}", t.join("\n"));
+        // a selection (Alt+↓) takes the scroll back
+        app.sb.selected = Some(0);
+        let t = trimmed(&panel_rows(&app, 40, 10));
+        assert!(t[2].contains("main"), "{}", t.join("\n"));
+        // a panel with room: the wheel goes on to the history
+        let t = trimmed(&panel_rows(&app, 40, 60));
+        assert!(!t.iter().any(|r| r.contains("more")));
+        assert!(!panel_mouse(&mut app, &ev(MouseEventKind::ScrollDown, 5)));
+    }
+
+    /// More agents than rows: the list ends with `↓ {n} more`, and
     /// scrolls to keep the selection in view.
     #[test]
     fn overflow_ends_with_more() {
@@ -1603,11 +1821,13 @@ mod tests {
         }
         let t = trimmed(&panel_rows(&app, 28, 10));
         // title + 1 blank row + 7 agents + the more row
-        assert_eq!(t[9], " + 24 more", "{}", t.join("\n"));
+        assert_eq!(t[9], " ↓ 24 more", "{}", t.join("\n"));
         app.sb.selected = Some(30);
         let t = trimmed(&panel_rows(&app, 28, 10));
         assert!(t.iter().any(|r| r.contains("a30")), "{}", t.join("\n"));
-        assert!(!t.iter().any(|r| r.contains("more")), "nothing left below");
+        assert!(!t.iter().any(|r| r.contains("↓")), "nothing left below");
+        // sidebar-more: what is hidden over it is counted on the first row
+        assert_eq!(t[2], " ↑ 24 more", "{}", t.join("\n"));
         app.sb.selected = Some(15);
         let t = trimmed(&panel_rows(&app, 28, 10));
         assert!(t.iter().any(|r| r.contains("a15")), "{}", t.join("\n"));
@@ -2437,9 +2657,9 @@ mod cards_tests {
             app.sb.cards.push(card(1000 + i, "done", "debt-solo", &format!("report {i}")));
         }
         let t = rows(&app, 28, 14);
-        assert!(t[13].starts_with(" + ") && t[13].ends_with(" more"), "{}", t.join("\n"));
+        assert!(t[13].starts_with(" ↓ ") && t[13].ends_with(" more"), "{}", t.join("\n"));
         // 33 cards; title, blank, 3 agents, blank, cards title, 6 cards: 27 below
-        assert_eq!(t[13], " + 27 more", "{}", t.join("\n"));
+        assert_eq!(t[13], " ↓ 27 more", "{}", t.join("\n"));
         assert!(t.iter().any(|r| r.starts_with(" 1 ? docs  v1")), "the strip's order: {}", t.join("\n"));
         // a card far down shown in the box: the panel scrolls to it
         super::super::cards::open_view(&mut app, Some(1029));
