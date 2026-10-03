@@ -31,6 +31,10 @@ const TABLE: &[(&str, &str, &str, &str, &str)] = &[
     ),
     // no smaller model listed: the main one (already a fast one)
     ("cerebras", "gpt-oss-120b", "gpt-oss-120b", "cerebras/gpt-oss-120b", "-"),
+    // the coding plans (keys too); Kimi and MiniMax list one model
+    ("zai-coding", "glm-5.3", "glm-5.3-flash", "zai-coding/glm-5.3-flash", "-"),
+    ("kimi-code", "kimi-for-coding", "kimi-for-coding", "kimi-code/kimi-for-coding", "-"),
+    ("minimax", "MiniMax-M3", "MiniMax-M3", "minimax/MiniMax-M3", "-"),
 ];
 
 /// What the first run saves as main for `p` (onboarding's `pick_of`,
@@ -91,7 +95,7 @@ fn one_key_gives_every_role_a_model_of_that_provider() {
                 assert_eq!(s.catalog.resolve(checker).known, Known::Listed, "{pid}: {checker}");
             }
             // a cheaper model for the small jobs whenever one is listed
-            if pid != "cerebras" {
+            if !["cerebras", "kimi-code", "minimax"].contains(&pid) {
                 assert_ne!(s.small_model, s.model, "{pid}");
             }
             // voice: its provider's when it listens, else the default,
@@ -149,4 +153,42 @@ fn a_voice_only_key_gives_voice_its_provider() {
     .unwrap();
     let s = Setup::from_text(None, &|_| None).with_keys(&auth::Keys { env: &|_| None, store: &both, files: &[] });
     assert_eq!(s.voice.model, "mistral/voxtral-transcribe-3");
+}
+
+/// A ChatGPT sign-in alone (no key at all): ready when signed in, every
+/// chat role on a chatgpt model, the small jobs on the cheapest one listed.
+#[test]
+fn a_chatgpt_sign_in_alone_gives_every_role_a_plan_model() {
+    let c = Catalog::builtin();
+    let p = c.provider("chatgpt").unwrap();
+    assert!(p.signs_in() && p.key_env.is_empty() && p.shape == "chatgpt-plan");
+    let signed_in = auth::Store::parse(
+        r#"{"chatgpt": {"type": "oauth", "client_id": "oaiapp_x", "email": "you@example.com", "access": "a", "refresh": "r", "expires": 1}}"#,
+    )
+    .unwrap();
+    let keys = auth::Keys { env: &|_| None, store: &signed_in, files: &[] };
+    assert!(keys.ready(p));
+    assert_eq!(keys.source(p, None).as_deref(), Some("ChatGPT sign-in (you@example.com)"));
+    // signed out (the client kept), or no entry: not ready, never a key
+    let mut out = signed_in.clone();
+    assert!(out.sign_out("chatgpt", false));
+    for s in [&out, &auth::Store::default()] {
+        let k = auth::Keys { env: &|_| None, store: s, files: &[] };
+        assert!(!k.ready(p) && k.source(p, None).is_none() && k.for_provider(p).is_none());
+    }
+    // the defaults after the sign-in: the catalog's list, then the account's
+    let (main, small) = roles::one_login_defaults(&c, "chatgpt", "openai", &[]).unwrap();
+    assert_eq!((main.as_str(), small.as_str()), ("chatgpt/gpt-6.1-sol", "chatgpt/gpt-6-luna"));
+    let listed: Vec<String> = ["gpt-6-astra", "gpt-6.1-sol"].iter().map(|s| s.to_string()).collect();
+    let (main, small) = roles::one_login_defaults(&c, "chatgpt", "openai", &listed).unwrap();
+    assert_eq!((main.as_str(), small.as_str()), ("chatgpt/gpt-6.1-sol", "chatgpt/gpt-6.1-sol"));
+    // what the first run then saves: every role a listed plan model
+    let cfg = roles::with_role("", roles::MAIN, "chatgpt/gpt-6.1-sol");
+    let s = Setup::from_text(Some(&cfg), &|_| None).with_keys(&keys);
+    for m in [&s.model, &s.agent_model, &s.small_model, &s.classify_model] {
+        let r = s.catalog.resolve(m);
+        assert_eq!((r.provider.as_str(), r.known), ("chatgpt", Known::Listed), "{m}");
+        assert_eq!(r.price.input, None, "{m}: the plan pays");
+    }
+    assert_eq!(s.small_model, "chatgpt/gpt-6-luna");
 }

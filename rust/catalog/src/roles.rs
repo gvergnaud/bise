@@ -108,6 +108,39 @@ pub fn voice_default(c: &crate::Catalog, has_key: &dyn Fn(&str) -> bool) -> Stri
         .unwrap_or(d)
 }
 
+/// What a model of `pid` costs, for picking the cheapest: its own prices,
+/// else its twin's under `twin` (a ChatGPT plan model has none: the plan
+/// pays; the same id at `openai` says which is cheaper). (output, input)
+/// per million tokens; unknown = the most.
+fn price_rank(c: &crate::Catalog, pid: &str, twin: &str, id: &str) -> (u64, u64) {
+    let mut p = c.resolve(&format!("{}/{}", pid, id)).price;
+    if p.output.is_none() && !twin.is_empty() {
+        p = c.resolve(&format!("{}/{}", twin, id)).price;
+    }
+    (p.output.unwrap_or(u64::MAX), p.input.unwrap_or(u64::MAX))
+}
+
+/// One login, every role (the ChatGPT plan alone): main and the small
+/// jobs model of provider `pid` among `listed` (the account's own list,
+/// the ids without the provider; empty = the catalog's entries of
+/// `pid`). main: the provider's pick when listed, else the first one;
+/// small: the cheapest one listed (prices of `pid`, else of `twin`, the
+/// pay-per-token provider with the same ids: "openai" for "chatgpt").
+/// None when nothing is listed. The agents follow main, the checker the
+/// small model ([`checker_default`]).
+pub fn one_login_defaults(c: &crate::Catalog, pid: &str, twin: &str, listed: &[String]) -> Option<(String, String)> {
+    let p = c.provider(pid)?;
+    let ids: Vec<String> = if listed.is_empty() {
+        c.models.iter().filter(|m| m.provider == pid && !m.stt).map(|m| m.id.clone()).collect()
+    } else {
+        listed.to_vec()
+    };
+    let first = ids.first()?;
+    let main = if ids.contains(&p.model) { p.model.clone() } else { first.clone() };
+    let small = ids.iter().min_by_key(|id| price_rank(c, pid, twin, id)).cloned().unwrap_or_else(|| main.clone());
+    Some((format!("{}/{}", pid, main), format!("{}/{}", pid, small)))
+}
+
 /// Every role, in the order the screens list them.
 pub const ROLES: &[Role] = &[
     Role {

@@ -15,6 +15,8 @@ pub(crate) enum Mark {
     Ok,
     Warn,
     Fail,
+    /// `·`: a fact, nothing to do (another tool's login found)
+    Info,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -57,6 +59,7 @@ pub(crate) fn render(checks: &[Check], st: &Style, home: Option<&Path>) -> Strin
             Mark::Ok => st.ok(&format!("{}  {}", st.dim(&name), detail)),
             Mark::Warn => st.ask(&format!("{}  {}", name, detail)),
             Mark::Fail => st.fail(&format!("{}  {}", name, detail)),
+            Mark::Info => format!("{} {}  {}", st.dim("·"), st.dim(&name), st.dim(&detail)),
         };
         o.push_str(&line);
         o.push('\n');
@@ -152,6 +155,58 @@ pub(crate) fn disk_check(where_: &Path, avail_kb: Option<u64>) -> Check {
     } else {
         ok("disk", detail)
     }
+}
+
+fn info(name: &'static str, detail: impl Into<String>) -> Check {
+    Check { mark: Mark::Info, name, detail: detail.into(), fix: None }
+}
+
+/// The ChatGPT sign-in's line (no network, never a token): signed in,
+/// who, the plan, until when the sign-in lasts unless a call renews it
+/// (warned under 3 days); expired; None when it was never set up or is
+/// signed out (nothing to check).
+pub(crate) fn chatgpt_check(store: &Store, now: u64) -> Option<Check> {
+    use bise_catalog::chatgpt::{self, State};
+    let cli = bise_catalog::CLI;
+    let again = format!("run {} login chatgpt", cli);
+    match chatgpt::state_at(store, now) {
+        State::NotSetUp | State::SignedOut { .. } => None,
+        State::Expired { email } => {
+            let who = if email.is_empty() { String::new() } else { format!(" ({})", email) };
+            Some(warn("chatgpt", format!("the sign-in{} expired", who), again))
+        }
+        State::SignedIn { email, plan } => {
+            let o = store.oauth(chatgpt::ID)?;
+            let until = chatgpt::good_until(&o);
+            let left = until.map(|t| t.saturating_sub(now) / 86_400);
+            if let Some(d) = left.filter(|d| *d < 3) {
+                let days = if d == 1 { "1 day".to_string() } else { format!("{} days", d) };
+                let when = if d == 0 { "today".to_string() } else { format!("in {}", days) };
+                return Some(warn("chatgpt", format!("the sign-in ends {}", when), again));
+            }
+            let mut d = format!("signed in as {}", if email.is_empty() { "your account" } else { &email });
+            if let Some(p) = plan {
+                d.push_str(&format!(" ({})", p));
+            }
+            d.push_str(" · renews by itself");
+            if let Some(t) = until {
+                d.push_str(&format!(" · good until {}", chatgpt::short_date(t, now)));
+            }
+            Some(ok("chatgpt", d))
+        }
+    }
+}
+
+/// The other tools' logins found (presence only): info lines.
+pub(crate) fn detected_checks(d: &bise_catalog::detect::Detected) -> Vec<Check> {
+    let mut v = Vec::new();
+    if d.codex_chatgpt {
+        v.push(info("codex", format!("signed in with ChatGPT. bise signs in on its own: {} login chatgpt", bise_catalog::CLI)));
+    }
+    if d.claude_plan {
+        v.push(info("claude code", "signed in with a Claude plan. that plan doesn't run in bise (Anthropic's terms): use an Anthropic API key."));
+    }
+    v
 }
 
 /// The keys line: the providers with a key and where it comes from.
@@ -568,6 +623,9 @@ fn keys_and_model(home: &bise_home::Home) -> (Check, Vec<Check>, Check) {
             let fix = fix.split_once(": ").map(|(_, f)| f.to_string()).unwrap_or(fix);
             return Err((format!("{}: {} has no base URL", what, r.provider), fix));
         }
+        if setup.catalog.provider(&r.provider).is_some_and(|p| p.signs_in() && !keys.signed_in(p)) {
+            return Err((format!("{}: not signed in to {}", what, r.provider), format!("`{} login {}`", bise_catalog::CLI, r.provider)));
+        }
         if !r.key_env.is_empty() && keys.find(&r.provider, &r.key_env).is_none() {
             return Err((format!("{}: no {} key", what, r.provider), no_key_fix(&setup, &r, &found)));
         }
@@ -752,6 +810,13 @@ pub(crate) fn main(args: &[String]) -> i32 {
         keys,
     ];
     let mut checks = checks;
+    // the ChatGPT sign-in, then the other tools' logins (presence only)
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    if let Ok(store) = Store::read(&home.auth_file()) {
+        checks.extend(chatgpt_check(&store, now));
+    }
+    let env = |k: &str| std::env::var(k).ok();
+    checks.extend(detected_checks(&bise_catalog::detect::detect(home.user_home(), &env)));
     checks.extend(models);
     checks.extend([compaction, voice, hubs(&home), disk(&home)]);
     checks.extend(tmux());
@@ -841,6 +906,53 @@ mod tests {
         let none = keys_check(&[]);
         assert_eq!(none.mark, Mark::Fail);
         assert!(none.fix.unwrap().contains("bise login"));
+    }
+
+    /// The ChatGPT line and the other tools' logins: never a token.
+    #[test]
+    fn the_chatgpt_sign_in_and_other_logins_get_their_lines() {
+        use bise_catalog::auth::OAuth;
+        use bise_catalog::chatgpt::{parse_rfc3339, rfc3339};
+        let now = parse_rfc3339("2026-10-04T12:00:00Z").unwrap();
+        let mut store = Store::default();
+        assert_eq!(chatgpt_check(&store, now), None);
+        let o = OAuth {
+            client_id: "oaiapp_x".into(),
+            email: "you@example.com".into(),
+            plan: "plus".into(),
+            access: "at-secret".into(),
+            refresh: "rt-secret".into(),
+            saved_at: rfc3339(now - 4 * 86_400),
+            ..OAuth::default()
+        };
+        store.set_oauth("chatgpt", &o);
+        let c = chatgpt_check(&store, now).unwrap();
+        assert_eq!(c.mark, Mark::Ok);
+        assert_eq!(c.detail, "signed in as you@example.com (Plus) · renews by itself · good until 30 Oct");
+        let rendered = render(&[c], &Style::PLAIN, None);
+        assert!(!rendered.contains("secret"), "{rendered}");
+        // under 3 days left: a warning
+        store.set_oauth("chatgpt", &OAuth { saved_at: rfc3339(now - 28 * 86_400), ..o.clone() });
+        let c = chatgpt_check(&store, now).unwrap();
+        assert_eq!((c.mark, c.detail.as_str(), c.fix.as_deref()), (Mark::Warn, "the sign-in ends in 2 days", Some("run bise login chatgpt")));
+        store.set_oauth("chatgpt", &OAuth { saved_at: rfc3339(now - 29 * 86_400), ..o.clone() });
+        assert_eq!(chatgpt_check(&store, now).unwrap().detail, "the sign-in ends in 1 day");
+        // a refused refresh: expired; signed out by the user: nothing
+        store.sign_out("chatgpt", true);
+        assert_eq!(chatgpt_check(&store, now).unwrap().detail, "the sign-in (you@example.com) expired");
+        store.sign_out("chatgpt", false);
+        assert_eq!(chatgpt_check(&store, now), None);
+        // detection: info lines, nothing to fix
+        let d = bise_catalog::detect::Detected { codex_chatgpt: true, claude_plan: true };
+        let lines = detected_checks(&d);
+        assert_eq!(lines.iter().map(|c| (c.mark, c.name)).collect::<Vec<_>>(), [(Mark::Info, "codex"), (Mark::Info, "claude code")]);
+        assert_eq!(lines[0].detail, "signed in with ChatGPT. bise signs in on its own: bise login chatgpt");
+        let text = render(&lines, &Style::PLAIN, None);
+        assert!(text.starts_with("· codex "), "{text}");
+        assert_eq!(summary(&lines, &Style::PLAIN), "✓ all good.");
+        assert!(detected_checks(&Default::default()).is_empty());
+        // a sign-in alone passes the keys check
+        assert_eq!(keys_check(&[("chatgpt".into(), "ChatGPT sign-in (you@example.com)".into())]).mark, Mark::Ok);
     }
 
     /// A base URL in doctor's lines: never its user:password nor its query.

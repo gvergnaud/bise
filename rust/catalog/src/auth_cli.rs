@@ -33,8 +33,13 @@ fn usage() -> String {
       --no-check                a terminal: save it without the call
       --model provider/model    the model of that call (default: the one in use, else the provider's)
       --from FILE               read it from FILE's PROVIDER_API_KEY=... line (.env, shell rc)
-  {cli} logout [provider]       remove it
+  {cli} login chatgpt           sign in with your ChatGPT plan (Plus, Pro) in your browser
+      --no-browser              print the link, open nothing (SSH: forward its port)
+  {cli} login openrouter        sign in with OpenRouter in your browser, or paste a key
+      --browser | --key         which one, without asking
+  {cli} logout [provider]       remove it (chatgpt: signs out, ChatGPT told)
   {cli} auth list               your keys: where each one comes from
+  {cli} auth status [--json]    every provider: how it logs in, its state, the other tools' logins found
   {cli} auth check [provider]   one tiny call with the key bise finds; saves nothing
       --model provider/model
 
@@ -51,6 +56,8 @@ pub fn auth_main(args: &[String], paths: &Paths, check: Checker) -> i32 {
         None | Some("list") | Some("ls") => list_main(paths),
         Some("login") => login_main(&args[1..], paths, check),
         Some("check") => check_main(&args[1..], paths, check),
+        Some("token") => token_main(&args[1..], paths),
+        Some("status") => status_main(&args[1..], paths),
         Some("logout") => logout_main(&args[1..], paths),
         Some("-h") | Some("--help") => {
             println!("{}", usage());
@@ -146,6 +153,11 @@ pub struct Opts {
     pub no_check: bool,
     pub model: Option<String>,
     pub from: Option<PathBuf>,
+    /// `--no-browser`: a browser sign-in prints its link, opens nothing
+    pub no_browser: bool,
+    /// `--browser` / `--key`: OpenRouter's way, without asking
+    pub browser: bool,
+    pub key: bool,
 }
 
 /// Parse `[provider] [--check] [--model M] [--from FILE]`; Err = exit code.
@@ -160,6 +172,9 @@ pub fn parse_opts(args: &[String]) -> Result<Opts, i32> {
             }
             "--check" => o.check = true,
             "--no-check" => o.no_check = true,
+            "--no-browser" => o.no_browser = true,
+            "--browser" => o.browser = true,
+            "--key" => o.key = true,
             "--model" | "--from" => {
                 let Some(v) = it.next().filter(|v| !v.starts_with('-')) else {
                     eprintln!("{} needs a value\n{}", a, usage());
@@ -343,13 +358,17 @@ pub fn render_list_styled(c: &Catalog, keys: &Keys, paths: &Paths, st: &Style) -
 pub fn render_providers(c: &Catalog, keys: &Keys, paths: &Paths, main: &str, st: &Style) -> String {
     let home = paths.home.as_deref();
     let mut o = format!("{}\n\n", st.title("your providers"));
-    let chat = |p: &&Provider| !p.key_env.is_empty() && p.needs.is_empty() && p.chats();
+    let chat = |p: &&Provider| (!p.key_env.is_empty() || p.signs_in()) && p.needs.is_empty() && p.chats();
+    let set_up = |p: &Provider| keys.for_provider(p).is_some() || (p.signs_in() && keys.store.oauth(&p.id).is_some());
     let (shown, rest): (Vec<&Provider>, Vec<&Provider>) =
-        c.providers.iter().filter(chat).partition(|p| !p.hidden || keys.for_provider(p).is_some() || p.id == main);
+        c.providers.iter().filter(chat).partition(|p| !p.hidden || set_up(p) || p.id == main);
     let w = shown.iter().map(|p| p.name.chars().count()).max().unwrap_or(8).max(16) + 2;
     for p in &shown {
         let name = format!("{:<w$}", p.name, w = w);
-        let mut state = match keys.for_provider(p) {
+        let mut state = if p.signs_in() {
+            sign_in_state(p, keys.store, st)
+        } else {
+            match keys.for_provider(p) {
             Some(f) => {
                 let from = match &f.from {
                     From::AuthFile => "saved in bise".to_string(),
@@ -363,6 +382,7 @@ pub fn render_providers(c: &Catalog, keys: &Keys, paths: &Paths, main: &str, st:
                 s
             }
             None => st.dim("not set up"),
+            }
         };
         if p.id == main {
             state.push_str(&st.dim(" · main uses it"));
@@ -381,6 +401,7 @@ pub fn render_providers(c: &Catalog, keys: &Keys, paths: &Paths, main: &str, st:
     for id in keys.store.providers() {
         match c.provider(id) {
             None => o.push_str(&format!("{}\n", st.ask(&format!("auth.json has '{}', a provider bise does not know (ignored)", id)))),
+            Some(p) if p.signs_in() && keys.store.oauth(id).is_some() => {}
             Some(_) if keys.store.key(id).is_none() => {
                 o.push_str(&format!("{}\n", st.ask(&format!("auth.json's '{}' entry is not an API key (ignored)", id))))
             }
@@ -400,6 +421,376 @@ pub fn render_providers(c: &Catalog, keys: &Keys, paths: &Paths, main: &str, st:
         o.push_str(&format!("{}\n", st.dim(&format!("{} login <provider> sets one up or changes it; in bise: /provider", CLI))));
     }
     o
+}
+
+/// The warning mark of the designer's words (a failure: ▲, never ✗).
+pub const WARN: &str = "▲";
+
+/// "▲ msg" (the accent, like ✓).
+pub fn warn_line(st: &Style, msg: &str) -> String {
+    format!("{} {}", st.accent(WARN), msg)
+}
+
+/// A provider that signs in, as a row of the list (the designer's
+/// words): `✓ signed in · you@example.com · Plus`, `signed out`, `not set
+/// up`, `▲ sign-in expired · bise login chatgpt`.
+pub fn sign_in_state(p: &Provider, store: &Store, st: &Style) -> String {
+    use crate::chatgpt::State;
+    match crate::chatgpt::state(store) {
+        State::SignedIn { email, plan } => {
+            let mut parts = vec!["signed in".to_string()];
+            parts.extend([Some(email).filter(|e| !e.is_empty()), plan].into_iter().flatten());
+            format!("{} {}", st.accent(bise_home::style::OK), st.dim(&parts.join(" · ")))
+        }
+        State::SignedOut { .. } => st.dim("signed out"),
+        State::NotSetUp => st.dim("not set up"),
+        State::Expired { .. } => warn_line(st, &format!("sign-in expired · {} login {}", CLI, p.id)),
+    }
+}
+
+// ---- the sign-ins (chatgpt.rs, openrouter_login.rs) ----
+
+/// Open a sign-in link: `BISE_BROWSER=none` opens nothing (tests,
+/// agents); `BISE_BROWSER=<command> [args]` runs that command with the
+/// URL as its last argument (no shell; not waited for: a fake browser in
+/// the tests); unset: the user's browser (`open`, `xdg-open`). The TUI
+/// uses it too.
+pub fn open_url(url: &str) -> Result<(), String> {
+    let cmd = std::env::var("BISE_BROWSER").ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
+    match cmd.as_deref() {
+        Some("none") => Ok(()),
+        Some(c) => {
+            let mut words = c.split_whitespace();
+            let prog = words.next().unwrap_or(c);
+            let mut child = std::process::Command::new(prog)
+                .args(words)
+                .arg(url)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .map_err(|e| format!("cannot run BISE_BROWSER ({}): {}", prog, e))?;
+            std::thread::spawn(move || {
+                let _ = child.wait();
+            });
+            Ok(())
+        }
+        None => bend_plugins::oauth::open_browser(url),
+    }
+}
+
+/// The lines before the wait (the designer's words), on stdout: the
+/// link alone on its line, two spaces in.
+fn sign_in_intro(out: &Style, what: &str, url: &str, port: u16, no_browser: bool) {
+    if no_browser {
+        println!("open this link in a browser on this machine:");
+        println!("  {}", out.link(url));
+        println!("{}", out.dim(&format!("over SSH, forward the port first: ssh -L {p}:127.0.0.1:{p} <host>", p = port)));
+    } else {
+        println!("opening your browser to sign in to {}…", what);
+        println!("or open this link:");
+        println!("  {}", out.link(url));
+        if let Err(e) = open_url(url) {
+            println!("{}", out.dim(&format!("({}: open the link yourself)", e)));
+        }
+    }
+    println!("{}", out.dim("waiting… ctrl+c cancels."));
+}
+
+const UNFINISHED: &str = "the sign-in wasn't finished. try again, or pick another way.";
+
+/// `bise login chatgpt [--no-browser]`.
+fn chatgpt_login_main(paths: &Paths, setup: &Setup, no_browser: bool) -> i32 {
+    use crate::chatgpt::{self, Mode, Poll};
+    let (out, err) = (Style::stdout(), Style::stderr());
+    let s = match chatgpt::start(paths, Mode::Again) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("{}", warn_line(&err, &format!("{}.", e.trim_end_matches('.'))));
+            return 1;
+        }
+    };
+    sign_in_intro(&out, "ChatGPT", s.url(), s.port(), no_browser);
+    match s.wait() {
+        Poll::Done(a) => {
+            let plan = a.plan.map(|p| format!(" · ChatGPT {}", p)).unwrap_or_default();
+            println!("{}", out.ok(&format!("signed in as {}{}.", a.email, plan)));
+            // the account's models for /models (best effort, the cache)
+            let listed: Vec<String> = chatgpt::fetch_models(paths).map(|m| m.into_iter().map(|m| m.slug).collect()).unwrap_or_default();
+            if setup.model.trim().is_empty() {
+                if let Some((main, _)) = crate::roles::one_login_defaults(&setup.catalog, chatgpt::ID, "openai", &listed) {
+                    let text = std::fs::read_to_string(&paths.config).unwrap_or_default();
+                    let new = crate::roles::with_role(&text, crate::roles::MAIN, &main);
+                    if let Some(d) = paths.config.parent() {
+                        let _ = std::fs::create_dir_all(d);
+                    }
+                    if std::fs::write(&paths.config, new).is_ok() {
+                        println!("{}", out.dim(&format!("main and your agents use {} now, on your plan.", main)));
+                    }
+                }
+            }
+            println!("{}", out.dim("bise is running? the next agents it starts use it."));
+            0
+        }
+        Poll::Denied => {
+            eprintln!("{}", warn_line(&err, "ChatGPT signed you in but didn't let bise use your plan. run it again and allow it."));
+            1
+        }
+        Poll::Unfinished | Poll::Waiting => {
+            eprintln!("{}", warn_line(&err, UNFINISHED));
+            1
+        }
+        Poll::Failed(e) => {
+            eprintln!("{}", warn_line(&err, &e));
+            1
+        }
+    }
+}
+
+/// OpenRouter on a terminal: `1 sign in with your browser   2 paste a
+/// key`. Some(true): the browser; None: no answer.
+fn ask_openrouter_way(err: &Style) -> Option<bool> {
+    eprintln!("OpenRouter: {} sign in with your browser   {} paste a key", err.accent("1"), err.accent("2"));
+    eprint!("> ");
+    let _ = std::io::stderr().flush();
+    let mut line = String::new();
+    std::io::stdin().lock().read_line(&mut line).ok()?;
+    match line.trim() {
+        "1" | "b" | "browser" => Some(true),
+        "2" | "k" | "key" | "" => Some(false),
+        _ => None,
+    }
+}
+
+/// `bise login openrouter --browser`: a key minted by OpenRouter, saved.
+fn openrouter_login_main(paths: &Paths, no_browser: bool) -> i32 {
+    use crate::chatgpt::Poll;
+    let (out, err) = (Style::stdout(), Style::stderr());
+    let s = match crate::openrouter_login::start(paths) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("{}", warn_line(&err, &format!("{}.", e.trim_end_matches('.'))));
+            return 1;
+        }
+    };
+    sign_in_intro(&out, "OpenRouter", s.url(), s.port(), no_browser);
+    match s.wait() {
+        Poll::Done(()) => {
+            let file = tilde(&paths.auth_file, paths.home.as_deref());
+            println!("{}", out.ok(&format!("signed in to OpenRouter: its key is saved in {}.", file)));
+            println!("{}", out.dim("bise is running? the next agents it starts use it."));
+            0
+        }
+        Poll::Denied => {
+            eprintln!("{}", warn_line(&err, "OpenRouter didn't give bise a key. run it again and allow it, or paste a key."));
+            1
+        }
+        Poll::Unfinished | Poll::Waiting => {
+            eprintln!("{}", warn_line(&err, UNFINISHED));
+            1
+        }
+        Poll::Failed(e) => {
+            eprintln!("{}", warn_line(&err, &e));
+            1
+        }
+    }
+}
+
+/// `bise logout chatgpt`: revoke, then drop the tokens (the client kept).
+fn chatgpt_logout_main(paths: &Paths) -> i32 {
+    let (out, err) = (Style::stdout(), Style::stderr());
+    match crate::chatgpt::sign_out(paths) {
+        Ok(true) => {
+            println!("{}", out.ok("signed out of ChatGPT."));
+            0
+        }
+        Ok(false) => {
+            println!(
+                "{}",
+                warn_line(&out, "signed out here. ChatGPT didn't confirm: to be sure, remove bise in your ChatGPT settings.")
+            );
+            0
+        }
+        Err(e) => {
+            eprintln!("{}", warn_line(&err, &e));
+            1
+        }
+    }
+}
+
+/// `bise auth token <provider>`: the runtime's key_command. stdout = the
+/// access token alone; never on a terminal; a failure is one line on
+/// stderr and exit 1 (the runtime's "key_command failed" path).
+pub fn token_main(args: &[String], paths: &Paths) -> i32 {
+    let err = Style::stderr();
+    let id = match args {
+        [id] if !id.starts_with('-') => id.as_str(),
+        _ => {
+            eprintln!("usage: {} auth token chatgpt  (for bise's runtime)", CLI);
+            return 2;
+        }
+    };
+    let setup = Setup::load(&paths.config);
+    if !setup.catalog.provider(id).is_some_and(|p| p.signs_in()) {
+        eprintln!("{}", warn_line(&err, &format!("'{}' doesn't sign in: its key is in auth.json or the environment.", id)));
+        return 2;
+    }
+    if std::io::stdout().is_terminal() {
+        eprintln!("{}", warn_line(&err, "this prints a secret for bise's own use, so not on a terminal."));
+        return 2;
+    }
+    match crate::chatgpt::access_token(paths) {
+        Ok(t) => {
+            let mut o = std::io::stdout().lock();
+            let _ = writeln!(o, "{}", t);
+            let _ = o.flush();
+            0
+        }
+        Err(e) => {
+            eprintln!("{}", e);
+            1
+        }
+    }
+}
+
+/// One provider in `bise auth status`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Status {
+    pub id: String,
+    pub name: String,
+    /// "api" | "chatgpt"
+    pub auth: String,
+    /// "ready", "not set up"; a sign-in: "signed in", "signed out",
+    /// "expired", "not set up"
+    pub state: String,
+    /// where its key comes from (never the key), or the sign-in's account
+    pub from: Option<String>,
+    pub email: Option<String>,
+    pub plan: Option<String>,
+    /// a sign-in: when it ends unless a call renews it (RFC 3339)
+    pub good_until: Option<String>,
+    /// main's provider
+    pub main: bool,
+}
+
+/// Every chat provider a user can set up (the hidden ones only when set
+/// up or in use), in catalog order. No network, no secret.
+pub fn statuses(c: &Catalog, keys: &Keys, main: &str, home: Option<&std::path::Path>) -> Vec<Status> {
+    use crate::chatgpt::State;
+    let mut v = Vec::new();
+    for p in c.providers.iter().filter(|p| (!p.key_env.is_empty() || p.signs_in()) && p.needs.is_empty() && p.chats()) {
+        let mut s = Status {
+            id: p.id.clone(),
+            name: p.name.clone(),
+            auth: if p.signs_in() { p.auth.clone() } else { "api".into() },
+            state: "not set up".into(),
+            from: None,
+            email: None,
+            plan: None,
+            good_until: None,
+            main: p.id == main,
+        };
+        if p.signs_in() {
+            let o = keys.store.oauth(&p.id);
+            (s.state, s.email, s.plan) = match crate::chatgpt::state(keys.store) {
+                State::NotSetUp => ("not set up".into(), None, None),
+                State::SignedOut { email } => ("signed out".into(), email, None),
+                State::Expired { email } => ("expired".into(), Some(email), None),
+                State::SignedIn { email, plan } => ("signed in".into(), Some(email), plan),
+            };
+            s.from = keys.source(p, home);
+            s.good_until = o.filter(|o| o.signed_in()).and_then(|o| crate::chatgpt::good_until(&o)).map(crate::chatgpt::rfc3339);
+        } else if let Some(from) = keys.source(p, home) {
+            s.state = "ready".into();
+            s.from = Some(from);
+        }
+        if p.hidden && s.state == "not set up" && !s.main {
+            continue;
+        }
+        v.push(s);
+    }
+    v
+}
+
+/// `bise auth status --json`: the providers and the other tools' logins.
+pub fn status_json(list: &[Status], d: &crate::detect::Detected) -> serde_json::Value {
+    let ps: Vec<serde_json::Value> = list
+        .iter()
+        .map(|s| {
+            serde_json::json!({
+                "id": s.id, "name": s.name, "auth": s.auth, "state": s.state, "from": s.from,
+                "email": s.email, "plan": s.plan, "good_until": s.good_until, "main": s.main,
+            })
+        })
+        .collect();
+    serde_json::json!({"providers": ps, "detected": {"codex_chatgpt": d.codex_chatgpt, "claude_plan": d.claude_plan}})
+}
+
+/// `bise auth status` as text.
+pub fn render_status(list: &[Status], d: &crate::detect::Detected, st: &Style) -> String {
+    let w = list.iter().map(|s| s.name.chars().count()).max().unwrap_or(8).max(16) + 2;
+    let mut o = format!("{}\n\n", st.title("how bise pays for the models"));
+    for s in list {
+        let how = if s.auth == "api" { "key" } else { "sign-in" };
+        let mut parts = vec![s.state.clone()];
+        parts.extend(s.email.clone().filter(|_| s.auth != "api"));
+        parts.extend(s.plan.clone());
+        if s.auth == "api" {
+            parts.extend(s.from.clone());
+        }
+        if s.main {
+            parts.push("main uses it".into());
+        }
+        let mark = match s.state.as_str() {
+            "ready" | "signed in" => format!("{} ", st.accent(bise_home::style::OK)),
+            "expired" => format!("{} ", st.accent(WARN)),
+            _ => String::new(),
+        };
+        o.push_str(&format!("  {:<w$}{:<9}{}{}\n", s.name, st.dim(how), mark, st.dim(&parts.join(" · ")), w = w));
+    }
+    let mut found = Vec::new();
+    if d.codex_chatgpt {
+        found.push(format!("codex: signed in with ChatGPT. bise signs in on its own: {} login chatgpt", CLI));
+    }
+    if d.claude_plan {
+        found.push("claude code: signed in with a Claude plan. that plan doesn't run in bise (Anthropic's terms): use an Anthropic API key.".to_string());
+    }
+    if !found.is_empty() {
+        o.push('\n');
+        for f in found {
+            o.push_str(&format!("{}\n", st.dim(&format!("· {}", f))));
+        }
+    }
+    o
+}
+
+/// `bise auth status [--json]`.
+pub fn status_main(args: &[String], paths: &Paths) -> i32 {
+    let json = match args {
+        [] => false,
+        [a] if a == "--json" => true,
+        _ => {
+            eprintln!("usage: {} auth status [--json]", CLI);
+            return 2;
+        }
+    };
+    let setup = Setup::load(&paths.config);
+    let store = match read_store(paths) {
+        Ok(s) => s,
+        Err(code) => return code,
+    };
+    let files = EnvFile::read_all(&paths.env_files);
+    let keys = Keys { env: &real_env, store: &store, files: &files };
+    let main = setup.catalog.resolve(&setup.model).provider;
+    let list = statuses(&setup.catalog, &keys, &main, paths.home.as_deref());
+    let home = paths.home.clone().unwrap_or_default();
+    let d = crate::detect::detect(&home, &real_env);
+    if json {
+        println!("{}", status_json(&list, &d));
+    } else {
+        print!("{}", render_status(&list, &d, &Style::stdout()));
+    }
+    0
 }
 
 fn list_main(paths: &Paths) -> i32 {
@@ -460,6 +851,16 @@ pub fn login_main(args: &[String], paths: &Paths, check: Checker) -> i32 {
             return 2;
         }
     };
+    // a sign-in, not a key
+    if c.provider(&id).is_some_and(|p| p.signs_in()) {
+        return chatgpt_login_main(paths, &setup, opts.no_browser);
+    }
+    if id == crate::openrouter_login::ID && !opts.key && opts.from.is_none() {
+        let browser = opts.browser || opts.no_browser || (tty && ask_openrouter_way(&err) == Some(true));
+        if browser {
+            return openrouter_login_main(paths, opts.no_browser);
+        }
+    }
     let p = match check_provider(c, &id) {
         Ok(p) => p,
         Err(e) => {
@@ -700,7 +1101,8 @@ pub fn logout_main(args: &[String], paths: &Paths) -> i32 {
     let id = match arg {
         Some(id) => id,
         None => {
-            let stored = store.providers();
+            // a signed-out sign-in (its client kept) is nothing to log out of
+            let stored: Vec<&str> = store.providers().into_iter().filter(|id| store.oauth(id).is_none_or(|o| o.signed_in())).collect();
             match stored.as_slice() {
                 [] => {
                     eprintln!("{}", Style::stderr().fail(&format!("no key stored in {}", tilde(&paths.auth_file, paths.home.as_deref()))));
@@ -716,6 +1118,9 @@ pub fn logout_main(args: &[String], paths: &Paths) -> i32 {
             }
         }
     };
+    if setup.catalog.provider(&id).is_some_and(|p| p.signs_in()) {
+        return chatgpt_logout_main(paths);
+    }
     match logout(paths, &id, &real_env, &setup.catalog) {
         Ok(lines) => {
             let out = Style::stdout();

@@ -10,3 +10,9 @@ toml = { version = "1", features = ["preserve_order"] }
 serde_json = "1"
 libc = "0.2"
 bise-home = { path = "../home" }
+# the ChatGPT and OpenRouter sign-ins (src/chatgpt.rs, src/openrouter_login.rs):
+# the MCP OAuth helpers and HTTP client (rust/plugins/src/{oauth,http}.rs),
+# ring for the ID token's RS256 signature, base64url; all in the lock
+bend-plugins = { path = "../plugins" }
+ring = "0.17"
+base64 = "0.22"

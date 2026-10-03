@@ -19,8 +19,11 @@ bise_home::test_home!();
 
 pub mod auth;
 pub mod auth_cli;
+pub mod chatgpt;
 pub mod cli;
 pub mod config_cli;
+pub mod detect;
+pub mod openrouter_login;
 pub mod roles;
 pub mod voice;
 
@@ -289,16 +292,50 @@ pub struct Provider {
     /// its recommended voice model (the voice screen's pick, BISE-298),
     /// its id without the provider; "" = its first listed one
     pub voice_model: String,
+    /// how it logs in, one of [`AUTHS`]: "" or "api" = a key
+    /// (`key_env`, auth.json); "chatgpt" = the ChatGPT sign-in
+    /// ([`chatgpt`]: `bise login chatgpt`, its token printed by
+    /// `bise auth token <id>`, its `key_command` in the models file)
+    pub auth: String,
+    /// the request rules of its models for the runtime, one of
+    /// [`SHAPES`] ("" = the family's own; "chatgpt-plan": the ChatGPT
+    /// plan's Responses body, runtime/provider-pure.bend)
+    pub shape: String,
     /// the defaults of its models
     pub caps: PartialCaps,
     pub source: Source,
 }
+
+/// How a provider logs in ([`Provider::auth`]); "" means "api".
+pub const AUTHS: [&str; 2] = ["api", "chatgpt"];
+
+/// The request shapes the runtime knows ([`Provider::shape`]).
+pub const SHAPES: [&str; 1] = ["chatgpt-plan"];
 
 impl Provider {
     /// It runs chats: not voice only (`stt`), not decisions only.
     pub fn chats(&self) -> bool {
         !self.stt_only && !self.decides
     }
+
+    /// It logs in with the ChatGPT sign-in (`auth = "chatgpt"`), not a key.
+    pub fn signs_in(&self) -> bool {
+        self.auth == "chatgpt"
+    }
+}
+
+/// The `key_command` of a provider that signs in (`auth = "chatgpt"`):
+/// this very binary, single-quoted, `auth token <id>` (the runtime runs
+/// it before every call; it prints the access token, refreshed under
+/// the lock). None when the binary's path cannot be single-quoted in the
+/// models file (a `'`, `"`, `\` or a line break in it).
+pub fn self_token_command(id: &str) -> Option<String> {
+    let exe = std::env::current_exe().ok()?;
+    let exe = exe.to_str()?;
+    if exe.contains(['\'', '"', '\\', '\n', '\r']) {
+        return None;
+    }
+    Some(format!("'{}' auth token {}", exe, id))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -641,6 +678,8 @@ impl Catalog {
                                 voice_model: String::new(),
                                 model: String::new(),
                                 hidden: false,
+                                auth: String::new(),
+                                shape: String::new(),
                                 caps: PartialCaps::default(),
                                 source: src,
                             });
@@ -681,6 +720,16 @@ impl Catalog {
                                     "billing_url" => set_str(&mut p.billing_url, s(), &where_, fk, &mut warn),
                                     "model" => set_str(&mut p.model, s(), &where_, fk, &mut warn),
                                     "voice_model" => set_str(&mut p.voice_model, s(), &where_, fk, &mut warn),
+                                    "auth" => match s() {
+                                        Some(a) if a.is_empty() || AUTHS.contains(&a.as_str()) => {
+                                            p.auth = if a == "api" { String::new() } else { a }
+                                        }
+                                        _ => warn(format!("{}.auth: one of {}", where_, AUTHS.join(", "))),
+                                    },
+                                    "shape" => match s() {
+                                        Some(a) if a.is_empty() || SHAPES.contains(&a.as_str()) => p.shape = a,
+                                        _ => warn(format!("{}.shape: \"\" or one of {}", where_, SHAPES.join(", "))),
+                                    },
                                     "hidden" => match fv.as_bool() {
                                         Some(b) => p.hidden = b,
                                         None => warn(format!("{}.hidden: true or false", where_)),
@@ -1329,7 +1378,19 @@ impl Setup {
             }
             o.push_str(&format!("key_env = {}\n", q(&p.key_env)));
             o.push_str(&format!("needs = {}\n", q(&p.needs)));
-            caps_lines(&mut o, &c.provider_caps(p));
+            if !p.auth.is_empty() {
+                o.push_str(&format!("auth = {}\n", q(&p.auth)));
+            }
+            if !p.shape.is_empty() {
+                o.push_str(&format!("shape = {}\n", q(&p.shape)));
+            }
+            let mut caps = c.provider_caps(p);
+            // a provider that signs in: its token comes from this binary
+            // (`bise auth token <id>`), unless config.toml names a command
+            if p.signs_in() && caps.key_command.is_empty() {
+                caps.key_command = self_token_command(&p.id).unwrap_or_default();
+            }
+            caps_lines(&mut o, &caps);
         }
         for m in c.models.iter().filter(|m| !m.stt) {
             let r = c.resolve(&m.name());

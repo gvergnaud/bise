@@ -329,13 +329,16 @@ pub fn query(q: &str) -> Vec<(String, String)> {
     q.split('&').filter(|p| !p.is_empty()).map(|p| p.split_once('=').unwrap_or((p, ""))).map(|(k, v)| (dec(k), dec(v))).collect()
 }
 
-fn form(pairs: &[(&str, &str)]) -> String {
+/// Pairs as `application/x-www-form-urlencoded` (also bise_catalog's
+/// ChatGPT and OpenRouter sign-ins).
+pub fn form(pairs: &[(&str, &str)]) -> String {
     pairs.iter().map(|(k, v)| format!("{}={}", enc(k), enc(v))).collect::<Vec<_>>().join("&")
 }
 
 const T: Duration = Duration::from_secs(15);
 
-fn get_json(url: &str) -> Result<Option<Value>, String> {
+/// A JSON object at `url`; None when the answer is not 2xx or not one.
+pub fn get_json(url: &str) -> Result<Option<Value>, String> {
     let u = Url::parse(url)?;
     let h = vec![("Accept".to_string(), "application/json".to_string())];
     let r = http::send(&http::Request { method: "GET", url: &u, headers: &h, body: b"", timeout: T }).map_err(|e| e.to_string())?;
@@ -362,7 +365,9 @@ fn get_json_status(url: &str) -> Result<Option<Value>, String> {
     Ok(serde_json::from_slice(&b).ok().filter(Value::is_object))
 }
 
-fn post(url: &str, ctype: &str, body: &str) -> Result<(u16, Value), String> {
+/// POST `body` as `ctype`: the status and the JSON answer (a body that is
+/// not JSON comes as `{"error": <its start>}`).
+pub fn post(url: &str, ctype: &str, body: &str) -> Result<(u16, Value), String> {
     let u = Url::parse(url)?;
     let h = vec![("Content-Type".to_string(), ctype.to_string()), ("Accept".to_string(), "application/json".to_string())];
     let r = http::send(&http::Request { method: "POST", url: &u, headers: &h, body: body.as_bytes(), timeout: T }).map_err(|e| e.to_string())?;
@@ -578,7 +583,8 @@ pub fn discover(server: &Url, challenge: Option<&str>) -> Result<Meta, String> {
 
 // ---- login ----
 
-fn random_b64(n: usize) -> String {
+/// `n` random bytes, base64url without padding (a PKCE verifier, a state).
+pub fn random_b64(n: usize) -> String {
     let mut b = vec![0u8; n];
     let ok = ring::rand::SecureRandom::fill(&ring::rand::SystemRandom::new(), &mut b).is_ok();
     if !ok {
@@ -587,7 +593,8 @@ fn random_b64(n: usize) -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&b)
 }
 
-fn challenge_of(verifier: &str) -> String {
+/// PKCE S256: base64url(SHA-256(verifier)), no padding.
+pub fn challenge_of(verifier: &str) -> String {
     let d = ring::digest::digest(&ring::digest::SHA256, verifier.as_bytes());
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(d.as_ref())
 }

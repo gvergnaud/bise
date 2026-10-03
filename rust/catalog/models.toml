@@ -238,6 +238,40 @@ output_price = 0.5
 cache_read_price = 0.01
 cache_write_price = 0.125
 
+# ---- ChatGPT plan (Sign in with ChatGPT, docs/subscriptions-design.md) ----
+# Checked 2026-10-03: developers.openai.com/siwc/token-sharing-open-source
+# (+ /sign-in, /models-and-inference): the public Responses API with the
+# OAuth access token as Bearer, store false and stream true on every
+# call, the account's models from GET /v1/models (`bise login chatgpt`
+# caches them). No key: `bise login chatgpt` signs in, and the models
+# file gets key_command = '<this bise>' auth token chatgpt (it prints
+# the access token, refreshed under ~/.bise/auth.json.lock). No prices:
+# the plan pays. Same ids as openai/... but billed to the plan.
+
+[providers.chatgpt]
+name = "ChatGPT"
+hint = "your Plus or Pro plan"
+model = "gpt-6.1-sol"
+api = "openai-responses"
+base_url = "https://api.openai.com/v1"
+key_env = ""
+auth = "chatgpt"
+# the plan route's request rules (runtime/provider-pure.bend)
+shape = "chatgpt-plan"
+small_model = "gpt-6-luna"
+context = 1050000
+max_output = 128000
+vision = true
+reasoning = true
+efforts = "low,medium,high,xhigh,max"
+
+[models."chatgpt/gpt-6.1-sol"]
+
+[models."chatgpt/gpt-6-astra"]
+
+[models."chatgpt/gpt-6-luna"]
+efforts = "none,low,medium,high,xhigh,max"
+
 # ---- Google (OpenAI-compatible endpoint until the gemini family, BISE-148) ----
 # Checked 2026-09-30: ai.google.dev/gemini-api/docs/models ("for any new
 # projects, use 3.5 Flash-Lite or 3.8 Flash"; 2.5 kept for past users
@@ -656,6 +690,66 @@ reasoning = true
 
 [models."cerebras/qwen-3.8-27b"]
 context = 128000
+
+# ---- coding plans: a plan's API key and its coding endpoint ----
+# Each plan names third-party coding tools as targets (OpenCode, Cline,
+# Claude Code...). Hidden from the first run's key list: its "a coding
+# plan key" row offers them; `bise login <id>` works as for any key.
+
+# Checked 2026-10-03: docs.z.ai/guides/overview/quick-start (model
+# glm-5.3) and zcode.z.ai/en/docs/configuration ("for a Coding Plan, the
+# OpenAI URL must be the Coding-only endpoint (/api/coding/paas/v4), not
+# the general endpoint /api/paas/v4").
+[providers.zai-coding]
+name = "GLM Coding Plan"
+hidden = true
+hint = "Z.ai's GLM, on your coding plan"
+keys_url = "https://z.ai/manage-apikey/apikey-list"
+model = "glm-5.3"
+api = "openai-chat"
+base_url = "https://api.z.ai/api/coding/paas/v4"
+key_env = "ZAI_API_KEY"
+small_model = "glm-5.3-flash"
+context = 1048576
+
+[models."zai-coding/glm-5.3"]
+
+[models."zai-coding/glm-5.3-flash"]
+
+# Checked 2026-10-03: kimi.com/en/help/kimi-code/membership-guide (the
+# OpenAI-compatible base URL https://api.kimi.com/coding/v1; "always use
+# the model ID kimi-for-coding", which follows Kimi's latest model).
+[providers.kimi-code]
+name = "Kimi Code"
+hidden = true
+hint = "Kimi, on your Kimi membership"
+keys_url = "https://www.kimi.com/code/console"
+model = "kimi-for-coding"
+api = "openai-chat"
+base_url = "https://api.kimi.com/coding/v1"
+key_env = "KIMI_API_KEY"
+
+[models."kimi-code/kimi-for-coding"]
+
+# Checked 2026-10-03: platform.minimax.io/docs/api-reference/text-openai-api
+# (OpenAI-compatible at https://api.minimax.io/v1, the same URL for the
+# plan's key; MiniMax-M3 1M context, image input; MiniMax-M3.1-Flash-Preview
+# "available only through M Plan and MiniMax Code for now").
+[providers.minimax]
+name = "MiniMax"
+hidden = true
+hint = "MiniMax, on your M plan"
+keys_url = "https://platform.minimax.io/user-center/basic-information/interface-key"
+model = "MiniMax-M3"
+api = "openai-chat"
+base_url = "https://api.minimax.io/v1"
+key_env = "MINIMAX_API_KEY"
+context = 1000000
+vision = true
+
+[models."minimax/MiniMax-M3"]
+
+[models."minimax/MiniMax-M3.1-Flash-Preview"]
 
 # ---- local (no key): any model name the server has ----
 

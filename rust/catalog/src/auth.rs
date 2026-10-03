@@ -96,6 +96,51 @@ impl Store {
         );
     }
 
+    /// An API key with where it came from (`"via": "openrouter-login"`).
+    pub fn set_via(&mut self, provider: &str, key: &str, via: &str) {
+        self.entries.insert(
+            provider.to_string(),
+            serde_json::json!({ "type": "api", "key": key, "via": via }),
+        );
+    }
+
+    /// The `"type": "oauth"` entry of `provider` (a sign-in: signed in,
+    /// or signed out with its client kept).
+    pub fn oauth(&self, provider: &str) -> Option<OAuth> {
+        let e = self.entries.get(provider)?.as_object()?;
+        if e.get("type").and_then(|t| t.as_str()) != Some("oauth") {
+            return None;
+        }
+        Some(OAuth::from_json(e))
+    }
+
+    /// Write `provider`'s oauth entry; keys of the old entry this module
+    /// does not know stay as they were.
+    pub fn set_oauth(&mut self, provider: &str, o: &OAuth) {
+        let mut e = match self.entries.get(provider) {
+            Some(serde_json::Value::Object(old)) if old.get("type").and_then(|t| t.as_str()) == Some("oauth") => old.clone(),
+            _ => serde_json::Map::new(),
+        };
+        for k in OAuth::KEYS {
+            e.remove(*k);
+        }
+        e.extend(o.to_json());
+        self.entries.insert(provider.to_string(), serde_json::Value::Object(e));
+    }
+
+    /// Sign `provider` out: its tokens dropped, its client kept (OpenAI
+    /// asks to reuse the issued client: `client_id`, `email`, `subject`
+    /// stay). `expired`: the sign-in ended by itself (a refresh refused),
+    /// so screens say "sign-in expired" rather than "signed out".
+    /// Whether there was a sign-in to end.
+    pub fn sign_out(&mut self, provider: &str, expired: bool) -> bool {
+        let Some(o) = self.oauth(provider) else { return false };
+        let had = o.signed_in();
+        let kept = OAuth { client_id: o.client_id, email: o.email, subject: o.subject, expired, ..OAuth::default() };
+        self.set_oauth(provider, &kept);
+        had
+    }
+
     /// Whether there was an entry.
     pub fn remove(&mut self, provider: &str) -> bool {
         self.entries.remove(provider).is_some()
@@ -129,6 +174,120 @@ impl Store {
             let _ = std::fs::remove_file(&tmp);
         }
         res
+    }
+}
+
+/// An `"type": "oauth"` entry of auth.json (OpenCode's layout, the
+/// fields of OpenAI's credential record): a sign-in's account, client and
+/// tokens. `expires` is in ms since the epoch (OpenCode's field). Debug
+/// never shows a token.
+#[derive(Clone, Default, PartialEq, Eq)]
+pub struct OAuth {
+    /// the issued client (`oaiapp_...`), kept on sign-out
+    pub client_id: String,
+    pub email: String,
+    /// the ID token's validated `sub`
+    pub subject: String,
+    /// the ChatGPT plan ("plus", "pro"), when the ID token says it
+    pub plan: String,
+    pub access: String,
+    pub refresh: String,
+    /// ms since the epoch; 0 = unknown
+    pub expires: u64,
+    /// kept for the next sign-in's `id_token_hint`
+    pub id_token: String,
+    pub scopes: Vec<String>,
+    /// when the refresh token was last given (UTC, RFC 3339): the
+    /// sign-in lasts 30 days from there
+    pub saved_at: String,
+    /// signed out by a refused refresh (the screens' "sign-in expired")
+    pub expired: bool,
+}
+
+impl std::fmt::Debug for OAuth {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "OAuth {{ client_id: {:?}, email: {:?}, plan: {:?}, signed_in: {}, expires: {}, expired: {} }}",
+            self.client_id,
+            self.email,
+            self.plan,
+            self.signed_in(),
+            self.expires,
+            self.expired
+        )
+    }
+}
+
+impl OAuth {
+    /// The keys this module writes (the others of an entry are kept).
+    const KEYS: &'static [&'static str] = &[
+        "type", "client_id", "email", "subject", "plan", "access", "refresh", "expires", "id_token", "scopes", "saved_at", "expired",
+    ];
+
+    fn from_json(e: &serde_json::Map<String, serde_json::Value>) -> OAuth {
+        let s = |k: &str| e.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+        OAuth {
+            client_id: s("client_id"),
+            email: s("email"),
+            subject: s("subject"),
+            plan: s("plan"),
+            access: s("access"),
+            refresh: s("refresh"),
+            expires: e.get("expires").and_then(|v| v.as_u64()).unwrap_or(0),
+            id_token: s("id_token"),
+            scopes: e
+                .get("scopes")
+                .and_then(|v| v.as_array())
+                .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+                .unwrap_or_default(),
+            saved_at: s("saved_at"),
+            expired: e.get("expired").and_then(|v| v.as_bool()).unwrap_or(false),
+        }
+    }
+
+    fn to_json(&self) -> serde_json::Map<String, serde_json::Value> {
+        let mut o = serde_json::Map::new();
+        o.insert("type".into(), "oauth".into());
+        for (k, v) in [
+            ("client_id", &self.client_id),
+            ("email", &self.email),
+            ("subject", &self.subject),
+            ("plan", &self.plan),
+            ("access", &self.access),
+            ("refresh", &self.refresh),
+        ] {
+            if !v.is_empty() {
+                o.insert(k.into(), v.clone().into());
+            }
+        }
+        if self.expires > 0 {
+            o.insert("expires".into(), self.expires.into());
+        }
+        if !self.id_token.is_empty() {
+            o.insert("id_token".into(), self.id_token.clone().into());
+        }
+        if !self.scopes.is_empty() {
+            o.insert("scopes".into(), self.scopes.clone().into());
+        }
+        if !self.saved_at.is_empty() {
+            o.insert("saved_at".into(), self.saved_at.clone().into());
+        }
+        if self.expired {
+            o.insert("expired".into(), true.into());
+        }
+        o
+    }
+
+    /// It has a refresh token (or at least an access token): calls can
+    /// get a token without the browser.
+    pub fn signed_in(&self) -> bool {
+        !self.refresh.is_empty() || !self.access.is_empty()
+    }
+
+    /// It was granted the ChatGPT plan's use (`chatgpt.tokens.use.direct`).
+    pub fn plan_scope(&self) -> bool {
+        self.scopes.iter().any(|s| s == "chatgpt.tokens.use.direct")
     }
 }
 
@@ -314,7 +473,16 @@ impl Keys<'_> {
     /// or it needs none (a local server). The model pickers list only
     /// these providers' models.
     pub fn ready(&self, p: &Provider) -> bool {
+        if p.signs_in() {
+            return p.needs.is_empty() && p.chats() && self.signed_in(p);
+        }
         p.needs.is_empty() && p.chats() && (p.key_env.is_empty() || self.for_provider(p).is_some())
+    }
+
+    /// `p` signs in (`auth = "chatgpt"`) and is signed in (auth.json has
+    /// its tokens; no network: an expired one is found at the next call).
+    pub fn signed_in(&self, p: &Provider) -> bool {
+        p.signs_in() && self.store.oauth(&p.id).is_some_and(|o| o.signed_in())
     }
 
     /// The environment variable holding ANOTHER key for provider `id`
@@ -332,6 +500,13 @@ impl Keys<'_> {
     /// "env MISTRAL_API_KEY", "auth.json", "auth.json · env MISTRAL_API_KEY
     /// holds another key, unused".
     pub fn source(&self, p: &Provider, home: Option<&Path>) -> Option<String> {
+        if p.signs_in() {
+            let o = self.store.oauth(&p.id).filter(|o| o.signed_in())?;
+            return Some(match o.email.as_str() {
+                "" => format!("{} sign-in", p.name),
+                e => format!("{} sign-in ({})", p.name, e),
+            });
+        }
         let f = self.for_provider(p)?;
         let from = f.from.describe(home);
         Some(match self.shadowed(&p.id, &p.key_env) {

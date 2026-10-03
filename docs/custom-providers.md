@@ -67,6 +67,8 @@ model of the agents main starts.
 | `key_command` | a shell command that prints the key, run before every call (below) | none |
 | `headers_env` | an env variable holding extra headers (below) | none |
 | `idle_timeout_sec` | how long bise waits for the server to send something, in seconds (below) | 90 |
+| `auth` | how it logs in: `"api"` (a key) or `"chatgpt"` (the ChatGPT sign-in, below) | `"api"` |
+| `shape` | the request rules of its models: `"chatgpt-plan"` (the ChatGPT plan's Responses body) | the API's own |
 
 The key is sent as `Authorization: Bearer <key>` (`openai-chat`,
 `openai-responses`) or `x-api-key` (`anthropic`). With `key_env = ""`
@@ -119,6 +121,37 @@ The key from `key_command` is sent both as the API's own header and as
 `Authorization: Bearer`. A command that fails or prints nothing stops
 the call with one line naming it. Write `key_command` on one line, with
 no `"` or `\` (use single quotes).
+
+## Subscriptions: ChatGPT, OpenRouter's sign-in, coding plans
+
+Built in, nothing to write:
+
+- `chatgpt`: your ChatGPT plan (Plus, Pro), through OpenAI's "Sign in
+  with ChatGPT". `bise login chatgpt` signs in in your browser
+  (`--no-browser` prints the link; over SSH forward its port);
+  `bise logout chatgpt` signs out. Its models are `chatgpt/<id>`
+  (`chatgpt/gpt-6.1-sol`), billed to the plan, next to `openai/<id>`,
+  billed to an API key. The provider has `auth = "chatgpt"`,
+  `shape = "chatgpt-plan"` and no `key_env`: bise writes its
+  `key_command` itself (`'<this bise>' auth token chatgpt`, which prints
+  the access token and renews it under `~/.bise/auth.json.lock`). The
+  sign-in lives in `~/.bise/auth.json` (`"type": "oauth"`), the machine's
+  id in `~/.bise/host-id`.
+- `openrouter`: `bise login openrouter --browser` signs in with
+  OpenRouter, which makes a normal API key for bise (saved in auth.json,
+  `"via": "openrouter-login"`); `--key` pastes one as before.
+- Coding plans, keys like any other: `zai-coding` (GLM Coding Plan,
+  `ZAI_API_KEY`), `kimi-code` (Kimi Code, `KIMI_API_KEY`), `minimax`
+  (`MINIMAX_API_KEY`). `bise login <id>`.
+
+`bise auth status [--json]` lists every provider, how it logs in and its
+state, never a secret. bise never uses Codex's or Claude Code's logins:
+it only notices them (`bise doctor`) to say what to do. A Claude plan
+runs only in Claude Code (Anthropic's terms): use an Anthropic API key.
+
+For tests: `BISE_CHATGPT_ISSUER` and `BISE_OPENROUTER_AUTH` move the
+login servers, `BISE_BROWSER=none` (or a command) replaces the browser,
+`BISE_DETECT_KEYCHAIN=0` skips the keychain probe.
 
 LiteLLM also serves the Anthropic API (`/v1/messages`), so the same
 LiteLLM works with `api = "anthropic"` when you want Claude's thinking
