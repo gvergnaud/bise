@@ -34,6 +34,7 @@
 #   none sent. Only where the provider's docs name one.
 # A gateway in front of a provider (Claude Code's ANTHROPIC_BASE_URL,
 #   ANTHROPIC_CUSTOM_HEADERS and apiKeyHelper), none built in:
+#   headers = a table of static HTTP headers (model values override the provider);
 #   headers_env = the env variable holding extra headers, one
 #   "Name: value" per line; key_command = a shell command printing the
 #   key, run before every call (a short-lived token), its key sent as

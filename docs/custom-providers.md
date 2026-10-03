@@ -65,6 +65,7 @@ model of the agents main starts.
 | `key_env` | the env variable holding the key; `""` for a server that needs no key | none |
 | `small_model` | a cheap model of this provider, for titles and summaries | none |
 | `key_command` | a shell command that prints the key, run before every call (below) | none |
+| `headers` | a table of static HTTP headers; model values override provider values | none |
 | `headers_env` | an env variable holding extra headers (below) | none |
 | `idle_timeout_sec` | how long bise waits for the server to send something, in seconds (below) | 90 |
 | `auth` | how it logs in: `"api"` (a key) or `"chatgpt"` (the ChatGPT sign-in, below) | `"api"` |
@@ -161,6 +162,32 @@ login servers, `BISE_BROWSER=none` (or a command) replaces the browser,
 LiteLLM also serves the Anthropic API (`/v1/messages`), so the same
 LiteLLM works with `api = "anthropic"` when you want Claude's thinking
 blocks kept as they are.
+
+## Headers in config.toml
+
+Headers that are not secrets (a team, a source, a route) can live in the
+provider table, with no variable to export before starting bise:
+
+```toml
+[providers.gateway]
+api = "openai-chat"
+base_url = "https://gateway.example.com/v1"
+key_env = ""
+key_command = "my-tool auth token"
+headers = { source = "bise", "x-team" = "platform" }
+```
+
+A `[providers.gateway.headers]` table works too. A model's `headers` win
+over its provider's, name by name (names ignore case), and `headers_env`'s
+win over both. Keys stay in `key_command`, `key_env` or `bise login`,
+never in `headers`.
+
+When `headers_env` names a variable that is not set or is blank, bise
+stops before the call and names it: set it before starting bise, or move
+the headers to `headers`. `bise auth check` fails the same way. A bad
+header (a name with spaces, the same name twice, a value that isn't a
+string or holds a line break) is a config warning, which never shows the
+value.
 
 ## Local servers
 

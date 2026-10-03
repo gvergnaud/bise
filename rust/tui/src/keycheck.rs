@@ -23,6 +23,9 @@ pub(crate) struct Call {
     pub model: String,
     pub key: String,
     pub key_command: String,
+    /// config.toml's `headers` (provider, then model), sent before
+    /// `headers_env`'s, which win by name like the runtime's
+    pub headers: Vec<(String, String)>,
     pub headers_env: String,
     /// a voice model (BISE-298): the call transcribes [`SILENCE_MS`] of
     /// silence, which proves the key and the model at once
@@ -148,14 +151,16 @@ pub(crate) fn request(c: &Call, env: &dyn Fn(&str) -> Option<String>) -> crate::
         headers.retain(|(name, _)| !name.eq_ignore_ascii_case("Authorization"));
         headers.push(("Authorization".into(), format!("Bearer {}", c.key)));
     }
-    for line in env(&c.headers_env).unwrap_or_default().lines() {
-        if let Some((name, value)) = line.split_once(':') {
-            let name = name.trim();
-            if !name.is_empty() {
-                headers.retain(|(old, _)| !old.eq_ignore_ascii_case(name));
-                headers.push((name.into(), value.trim().into()));
-            }
-        }
+    let from_env = env(&c.headers_env).unwrap_or_default();
+    let env_headers = from_env.lines().filter_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        let name = name.trim();
+        (!name.is_empty()).then(|| (name.to_string(), value.trim().to_string()))
+    });
+    // the runtime's order: config.toml's headers, then headers_env's
+    for (name, value) in c.headers.iter().cloned().chain(env_headers) {
+        headers.retain(|(old, _)| !old.eq_ignore_ascii_case(&name));
+        headers.push((name, value));
     }
     let url = env("BEND_PROVIDER_URL").filter(|u| !u.trim().is_empty()).unwrap_or(endpoint);
     crate::voice::http::Request { url, headers, body: body.to_string().into_bytes() }
@@ -351,6 +356,12 @@ fn check_once(c: &Call, env: &dyn Fn(&str) -> Option<String>) -> Result<(), Fail
 /// BISE-273): `model` ("provider/id") resolved in `setup`'s catalog,
 /// called with `key`; Err = why, the provider's words kept (never the
 /// key). The command says it (bise_catalog::auth_cli::check_lines).
+/// The line when `headers_env` names an unset or blank variable: the
+/// runtime's words (runtime/provider-pure.bend `headers_why`).
+fn headers_env_missing(name: &str) -> String {
+    format!("{} (headers_env in config.toml) is not set or is blank: set it before starting bise, or use headers in config.toml", name)
+}
+
 pub fn check_model(
     setup: &bise_catalog::Setup,
     model: &str,
@@ -362,7 +373,23 @@ pub fn check_model(
     if r.known == bise_catalog::Known::NoProvider {
         return Err(CheckFail { kind: CheckKind::Other(format!("unknown provider '{}' in {}", r.provider, model)), said: String::new() });
     }
-    let call = Call { provider: r.provider.clone(), api: r.api.clone(), base_url: r.base_url.clone(), model: r.id.clone(), key: key.to_string(), key_command: r.caps.key_command.clone(), headers_env: r.caps.headers_env.clone(), voice: false };
+    // the runtime's rule (Pvp.headers_why): a named headers variable that
+    // is unset or blank stops the call before the key and the network
+    let hvar = &r.caps.headers_env;
+    if !hvar.is_empty() && env(hvar).filter(|v| !v.trim().is_empty()).is_none() {
+        return Err(CheckFail { kind: CheckKind::Other(headers_env_missing(hvar)), said: String::new() });
+    }
+    let call = Call {
+        provider: r.provider.clone(),
+        api: r.api.clone(),
+        base_url: r.base_url.clone(),
+        model: r.id.clone(),
+        key: key.to_string(),
+        key_command: r.caps.key_command.clone(),
+        headers: r.caps.headers.clone().into_iter().collect(),
+        headers_env: r.caps.headers_env.clone(),
+        voice: false,
+    };
     let answer = match no_url(&call, &setup.catalog, env("BEND_PROVIDER_URL").as_deref()) {
         Some(f) => Err(f),
         None => check(&call, env),
@@ -385,7 +412,7 @@ mod tests {
     use super::*;
 
     fn call(api: &str, provider: &str) -> Call {
-        Call { provider: provider.into(), api: api.into(), base_url: "https://x.test/v1/".into(), model: "m1".into(), key: "k-secret".into(), key_command: String::new(), headers_env: String::new(), voice: false }
+        Call { provider: provider.into(), api: api.into(), base_url: "https://x.test/v1/".into(), model: "m1".into(), key: "k-secret".into(), key_command: String::new(), headers: Vec::new(), headers_env: String::new(), voice: false }
     }
 
     /// Ben's first run (2026-10-01): the foundry key found, no URL. No
@@ -632,5 +659,43 @@ headers_env = "GATEWAY_HEADERS"
         let failure = verdict(400, br#"{"error":{"message":"Missing required header: source"}}"#, "secret").unwrap_err();
         assert!(matches!(failure.why, Why::Configuration(_)));
         assert!(failure.said.contains("Missing required header"));
+    }
+
+    /// PR #6 (main m_6508): an unset or blank headers_env fails the check
+    /// like a turn, before the key_command and before any request.
+    #[test]
+    fn an_unset_or_blank_headers_env_fails_the_check_before_any_call() {
+        use bise_catalog::auth_cli::CheckKind;
+        let dir = std::env::temp_dir().join(format!("keycheck-hdrs-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let marker = dir.join("ran");
+        let setup = bise_catalog::Setup::from_text(Some(&format!(r#"
+[providers.gateway]
+api = "openai-chat"
+base_url = "http://127.0.0.1:9/v1"
+key_env = ""
+key_command = "touch {}; printf tok"
+headers_env = "GW_HEADERS"
+"#, marker.display())), &|_| None);
+        for value in [None, Some("   ")] {
+            let env = |k: &str| (k == "GW_HEADERS").then(|| value.map(str::to_string)).flatten();
+            let f = check_model(&setup, "gateway/m", "", &env).unwrap_err();
+            match &f.kind {
+                CheckKind::Other(e) => assert!(e.contains("GW_HEADERS") && e.contains("not set or is blank") && !e.contains("hub"), "{e}"),
+                k => panic!("{k:?}"),
+            }
+        }
+        assert!(!marker.exists(), "the key_command must not run");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn the_key_check_sends_static_gateway_headers() {
+        let mut c = call("openai-chat", "gateway");
+        c.headers = vec![("source".into(), "bise".into()), ("x-team".into(), "platform".into())];
+        let request = request(&c, &|_| None);
+        assert!(request.headers.contains(&("source".into(), "bise".into())));
+        assert!(request.headers.contains(&("x-team".into(), "platform".into())));
+        assert!(request.headers.contains(&("Authorization".into(), "Bearer k-secret".into())));
     }
 }

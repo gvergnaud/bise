@@ -637,7 +637,8 @@ def model_call.try(fuel: Nat, +tries: Nat, n: Out, +request: String,
             +bearer : Bool <- IO.pure(Bool, Bool.not(String.is_empty(
               Pvp.key_command(mfile, prov, String.concat([prov, "/", model])))))
             hdrs : Map<&2, List<&2, String>> <- IO.pure(Map<&2, List<&2, String>>,
-              headers_of(Api.with_extra_headers(P.env_or(hr, ""),
+              headers_of(Api.with_extra_headers(String.append(
+                Pvp.headers(mfile, prov, String.concat([prov, "/", model])), P.env_or(hr, "")),
                 Api.with_bearer(bearer, key,
                   Api.with_cache_header(Pvp.cache_header(names), ckey,
                     Api.headers(st, Api.facts_betas(facts), key)))), Http.empty()))
@@ -725,7 +726,7 @@ def key_of.pick(none: Bool, +cmd: String, +env_key: String) -> IO(String):
 # the missing key's line: Pvp.key_why (a ChatGPT plan's: its sign-in
 # expired; the key_command's, else the key_env's)
 @unsafe
-def model_call.env(n: Out, +request: String, +pv: Pvp.Prov, +req: U32)
+def model_call.auth(n: Out, +request: String, +pv: Pvp.Prov, +req: U32)
     -> IO(Out & Rem.RemoteRes):
   match pv:
     case Pvp.Prov{+prov, +model, _, _, +key_env, +facts}:
@@ -739,6 +740,28 @@ def model_call.env(n: Out, +request: String, +pv: Pvp.Prov, +req: U32)
             String.is_empty(cmd))), String.is_empty(key)), n, request, key, pv,
           Pvp.key_why(Bool.not(String.is_empty(cmd)), Api.facts_plan(facts), prov,
             key_env), req)
+
+@unsafe
+def model_call.headers_ready(missing: Bool, +hvar: String, n: Out,
+    +request: String, +pv: Pvp.Prov, +req: U32) -> IO(Out & Rem.RemoteRes):
+  match missing:
+    case True{}:
+      IO.pure(Out & Rem.RemoteRes, (n, Rem.RRErr{Pvp.headers_why(hvar)}))
+    case False{}:
+      model_call.auth(n, request, pv, req)
+
+@unsafe
+def model_call.env(n: Out, +request: String, +pv: Pvp.Prov, +req: U32)
+    -> IO(Out & Rem.RemoteRes):
+  match pv:
+    case Pvp.Prov{+prov, +model, _, _, +key_env, +facts}:
+      do IO<Out & Rem.RemoteRes>:
+        +mfile : String <- models_file()
+        +hvar : String <- IO.pure(String,
+          Pvp.headers_env(mfile, prov, String.concat([prov, "/", model])))
+        hr : Result<&1, &1, U32 & String, String> <- IO.get_env(hvar)
+        model_call.headers_ready(Pvp.headers_missing(hvar, P.env_or(hr, "")),
+          hvar, n, request, pv, req)
 
 def model_call.resolved(r: Pvp.Resolved, n: Out, +request: String,
     +req: U32) -> IO(Out & Rem.RemoteRes):
