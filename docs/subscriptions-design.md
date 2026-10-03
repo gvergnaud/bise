@@ -264,7 +264,7 @@ the first-run list, /provider its rows and menu.
 2. /provider, the chatgpt row (name column: ChatGPT):
    `✓ signed in · you@example.com · Plus` · `signed out` · `not set up` ·
    `▲ sign-in expired · ⏎ sign in again`. Menu: `sign in again or switch account`,
-   `sign out`, `your plan's usage on chatgpt.com ↗`. OpenRouter's key step:
+   `sign out`, `your plan's usage on chatgpt.com ↗` (opens https://chatgpt.com/settings/usage). OpenRouter's key step:
    two rows, `sign in with OpenRouter` and `paste a key`.
 3. CLI
    - `bise login chatgpt`:
@@ -286,14 +286,14 @@ the first-run list, /provider its rows and menu.
    Date as `3 Nov` (year only when not this year); `1 day` when it's 1.
 5. Errors in a turn (warn lines):
    limit (`usage_limit_exceeded`; OpenAI says not to guess a reset time, so no "it resets"):
-   `▲ your ChatGPT plan's limit for bise is reached. see chatgpt.com/settings/usage, or switch model with /model.`
+   `▲ your ChatGPT plan's limit for bise is reached. your usage is at chatgpt.com/settings/usage, or switch model with /model.`
+   (the URL clickable, https://chatgpt.com/settings/usage: the exact path OpenAI's error table links)
    plan use off (`user_not_eligible`):
    `▲ ChatGPT plan use is off for bise. turn it on in your ChatGPT settings, or pick another provider in /provider.`
    usage not checked, after the retries (`usage_unavailable`, transient):
-   `▲ ChatGPT couldn't check your plan's usage just now. try again in a moment, or switch model with /model.`
+   `▲ ChatGPT couldn't check your plan's usage. try again in a moment, or switch model with /model.`
    `▲ your ChatGPT sign-in expired. sign in again in /provider, or run bise login chatgpt.`
-   (the limit line and the usage-not-checked line changed after the designer's sign-off: OpenAI's
-   error table; designer asked to confirm, m_6370+)
+   (the limit and usage-not-checked lines: OpenAI's error table, signed off by the designer, m_6374)
 6. /models: the right column says `your ChatGPT plan` in place of the price, dim like the prices.
 
 Sign-off: send the designer tmux captures (first run at 150 and 80 cols
