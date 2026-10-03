@@ -34,7 +34,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
-from tui_tmux import tui_session, run, wait_until  # noqa: E402
+from tui_tmux import MAIN_IDLE, tui_session, run, wait_until  # noqa: E402
 from subscriptions_e2e import auth_log, control, snapshot_real  # noqa: E402
 
 NORMAL = "   @ file   "
@@ -193,7 +193,11 @@ def main():
             t.typed("after it expired")
             t.keys("Enter")
             sc = t.wait("your ChatGPT sign-in expired", 90)
+            t.wait_re(MAIN_IDLE, 30)
+            sc = t.screen()
             assert "sign in again in /provider, or run bise login chatgpt." in flat(sc), sc
+            # one line, the plan's: no "candidate discarded" line repeating it
+            assert flat(sc).count("your ChatGPT sign-in expired") == 1 and "candidate discarded" not in sc, sc
             t.typed("/provider")
             t.keys("Enter")
             sc = t.wait("the keys i can use.", 30)
