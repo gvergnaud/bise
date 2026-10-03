@@ -598,7 +598,7 @@ def t_errors(W):
     c.say("unavailable once [[plan: unavailable]]")
     c.wait_line("main", "ack: unavailable once", 120)
     c.wait_idle("main")
-    check(not any("couldn't check your plan's usage" in l for l in c.lines("main")), "no line after a good retry")
+    check(not any("couldn't check your plan's usage." in l for l in c.lines("main")), "no line after a good retry")
     check(len(sent(W, "unavailable once")) >= 2, "usage_unavailable is retried")
     # before the stream too (503)
     c.say("unavailable early [[plan: unavailable-503]]")
@@ -606,7 +606,7 @@ def t_errors(W):
     c.wait_idle("main")
     # every time: the line, only after the retries
     c.say("unavailable always [[plan: unavailable x99]]")
-    c.wait_line("main", "ChatGPT couldn't check your plan's usage just now", 240)
+    c.wait_line("main", "ChatGPT couldn't check your plan's usage.", 240)
     c.wait_idle("main")
     check(len(sent(W, "unavailable always")) >= 2, "the line came after retries: %d" % len(sent(W, "unavailable always")))
     # not eligible (403): plan use is off, no retry
