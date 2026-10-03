@@ -63,7 +63,9 @@ pub(crate) enum Poll {
     Denied,
     /// cancelled, or 5 minutes without an answer
     Unfinished,
-    /// anything else, one line, no secret in it
+    /// anything else, one line, no secret in it (the unit tests' fake
+    /// never fails this way)
+    #[cfg_attr(test, allow(dead_code))]
     Failed(String),
 }
 

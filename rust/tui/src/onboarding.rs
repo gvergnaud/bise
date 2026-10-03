@@ -1508,6 +1508,7 @@ fn model_lines(o: &Onb, w: u16, gap: usize) -> Vec<Line<'static>> {
                 Why::Model => err(&format!("▲ your plan doesn't run {}. pick another model.", short_model(m))),
                 Why::Unreachable(e) => err(&format!("▲ i couldn't reach {}: {}.", p.name, e.trim_end_matches('.'))),
                 Why::NoUrl(_) => err(&format!("▲ {} has no URL yet: i didn't call it.", p.name)),
+                Why::Configuration(e) => err(&format!("▲ {}", e.trim_end_matches('.'))),
             });
             if !f.said.is_empty() {
                 for l in words_in(&format!("{} said: \"{}\"", p.name, f.said), w as usize) {
