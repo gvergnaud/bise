@@ -59,7 +59,17 @@ def key_envs():
 
 
 def flat(sc):
-    return " ".join(r.strip() for r in sc.splitlines() if r.strip())
+    """the screen's rows without the frame's edges, joined: a line reads
+    across its wrap"""
+    out = []
+    for r in sc.splitlines():
+        cells = [c.strip() for c in r.split("│")]
+        # the thread's column: the first cell after the frame's edge (a
+        # message's gutter `│  │  text` puts it one cell further)
+        text = next((c for c in cells[1:3] if c), "") if len(cells) > 2 else r.strip()
+        if text:
+            out.append(text)
+    return " ".join(out)
 
 
 def main():
@@ -199,8 +209,13 @@ def main():
             wait_until(lambda: len(links()) > n, 30, lambda: "no second sign-in link: %r" % links())
             again = links()[-1]
             assert "client_id=" + a["client_id"] in again and "agent_name_hint" not in again, again
-            t.wait_re(r"ChatGPT +✓ signed in · you@example\.com · Plus|✓ signed in as you@example\.com", 60)
-            t.keys("Escape")
+            t.wait_re(r"✓ signed in · you@example\.com · Plus|✓ signed in as you@example\.com", 60)
+            # back out of the ChatGPT menu and /provider to the thread
+            for _ in range(4):
+                if NORMAL in t.screen():
+                    break
+                t.keys("Escape")
+                time.sleep(0.4)
             t.wait(NORMAL)
             t.typed("signed in again")
             t.keys("Enter")
