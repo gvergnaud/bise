@@ -58,7 +58,7 @@ switching from Claude Code or Codex? paste this into it:
 read https://bise.dev/setup.md and set bise up for me
 ```
 
-your agent installs bise and brings over what you already have: your API key, your model, your `CLAUDE.md`, skills and MCP servers. it shows you one plan and waits for your yes. it never prints a key. if your agent can't open links, paste [the full prompt](https://bise.dev/setup) instead. a Claude Pro/Max or ChatGPT subscription isn't an API key: bise needs a key.
+your agent installs bise and brings over what you already have: your API key, your model, your `CLAUDE.md`, skills and MCP servers. it shows you one plan and waits for your yes. it never prints a key. if your agent can't open links, paste [the full prompt](https://bise.dev/setup) instead. no API key? your ChatGPT Plus or Pro plan works too (`bise login chatgpt`), and so do [a few other plans](https://bise.dev/docs/subscriptions). a Claude Pro/Max plan works only in Claude Code.
 
 using LiteLLM or another gateway, or any OpenAI-compatible base URL? see [custom providers](docs/custom-providers.md).
 
