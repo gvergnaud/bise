@@ -14,20 +14,4 @@ To publish one:
 
 | draft | waits for |
 |---|---|
-| `subscriptions.md` | the release with ChatGPT sign-in, OpenRouter sign-in and the coding plans (subs-lead) |
-
-In the same land as `subscriptions.md` (main m_6624), `site/setup.md`'s
-rule about subscriptions (line 21) becomes:
-
-```
-- A ChatGPT Plus or Pro plan works: `bise login chatgpt` (or the first
-  run's "Continue with ChatGPT"); the user signs in in the browser, you
-  can't do it for them (`--no-browser` prints the link). OpenRouter can
-  sign in too (`bise login openrouter`), and the GLM, Kimi and MiniMax
-  coding plans are keys (`bise login zai-coding`, `kimi-code`,
-  `minimax`). A Claude Pro/Max login can't be used (Anthropic's terms:
-  bise needs an Anthropic API key); Copilot and SuperGrok are not
-  supported. bise.dev/docs/subscriptions says more.
-```
-
-Then designer deploys both together.
+| (none now) | `subscriptions.md` went live with v2026.10.2-15 |

@@ -18,9 +18,14 @@ so its first run asks almost nothing. Work in the user's shell, step by step.
 - Read first, write after: show the user ONE short plan and wait for their
   yes. Then do only what they approved.
 - Safe to run twice: skip what is already done.
-- A Claude Pro/Max or ChatGPT/Codex subscription login (OAuth) is NOT an API
-  key and bise can't use it. If that is all the user has, say so: bise's
-  first run will ask for a key and link the provider's keys page.
+- A ChatGPT Plus or Pro plan works: `bise login chatgpt` (or the first
+  run's "Continue with ChatGPT"); the user signs in in the browser, you
+  can't do it for them (`--no-browser` prints the link). OpenRouter can
+  sign in too (`bise login openrouter`), and the GLM, Kimi and MiniMax
+  coding plans are keys (`bise login zai-coding`, `kimi-code`,
+  `minimax`). A Claude Pro/Max login can't be used (Anthropic's terms:
+  bise needs an Anthropic API key); Copilot and SuperGrok are not
+  supported. bise.dev/docs/subscriptions says more.
 
 ## 1. Install
 

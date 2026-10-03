@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>subscriptions · bise docs</title>
+<meta name="description" content="use a plan you already pay for, ChatGPT Plus or Pro, or a coding plan from Z.ai, Kimi or MiniMax, in place of an API key.">
+<link rel="canonical" href="https://bise.dev/docs/subscriptions">
+<meta name="theme-color" content="#f2ede2">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="alternate" type="text/markdown" href="/docs/subscriptions.md">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="bise">
+<meta property="og:url" content="https://bise.dev/docs/subscriptions">
+<meta property="og:title" content="subscriptions · bise docs">
+<meta property="og:description" content="use a plan you already pay for, ChatGPT Plus or Pro, or a coding plan from Z.ai, Kimi or MiniMax, in place of an API key.">
+<meta property="og:image" content="https://bise.dev/og.png?v=paper">
+<meta name="twitter:card" content="summary_large_image">
+<script>{ const q = location.search; let d = null; try { d = localStorage.getItem('bise-theme'); } catch {} if (/[?&]dark\b/.test(q) || (!/[?&]light\b/.test(q) && (d ?? (matchMedia('(prefers-color-scheme: dark)').matches ? '1' : '0')) === '1')) document.documentElement.classList.add('pd'); }</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Caveat:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/docs/docs.css">
+</head>
+<body>
+<header class="top">
+  <button class="menu" type="button" aria-label="the pages" aria-expanded="false">≡</button>
+  <a class="logo" href="/">bise <span class="acc">:*</span></a>
+  <a class="docs" href="/docs">docs</a>
+  <div class="search">
+    <input type="search" placeholder="/ search" aria-label="search the docs" autocomplete="off" spellcheck="false">
+    <div class="results" hidden></div>
+  </div>
+  <nav>
+    <a href="https://github.com/gvergnaud/bise">GitHub</a>
+    <button id="theme" type="button" title="light / dark">◐</button>
+  </nav>
+</header>
+<div class="wrap">
+  <aside class="side"><nav aria-label="the docs">
+<div class="grp">get started</div><ul>
+<li><a href="/docs">what bise is</a></li>
+<li><a href="/docs/install">install and first run</a></li>
+</ul>
+<div class="grp">models</div><ul>
+<li><a href="/docs/providers">providers and keys</a></li>
+<li><a href="/docs/subscriptions" class="here" aria-current="page">subscriptions</a></li>
+<li><a href="/docs/models">models and roles</a></li>
+<li><a href="/docs/gateways">gateways and local models</a></li>
+</ul>
+<div class="grp">using bise</div><ul>
+<li><a href="/docs/agents">main and the agents</a></li>
+<li><a href="/docs/approvals">approvals</a></li>
+<li><a href="/docs/flow">landing work</a></li>
+<li><a href="/docs/voice">voice</a></li>
+<li><a href="/docs/computer-use">computer use</a></li>
+</ul>
+<div class="grp">extend</div><ul>
+<li><a href="/docs/plugins">plugins and MCP</a></li>
+<li><a href="/docs/skills">instructions and skills</a></li>
+</ul>
+<div class="grp">reference</div><ul>
+<li><a href="/docs/config">config.toml</a></li>
+<li><a href="/docs/cli">the bise command</a></li>
+<li><a href="/docs/keys">keys and commands</a></li>
+<li><a href="/docs/troubleshooting">troubleshooting</a></li>
+<li><a href="/docs/updates">updates</a></li>
+</ul>
+  </nav></aside>
+  <main>
+    <article>
+      <div class="head">
+        <h1>subscriptions</h1>
+        <button class="copymd" type="button" data-md="/docs/subscriptions.md">copy as markdown</button>
+      </div>
+      <p class="lede">use a plan you already pay for, ChatGPT Plus or Pro, or a coding plan from Z.ai, Kimi or MiniMax, in place of an API key.</p>
+<p>an API key bills each call. a plan is a monthly price you may already pay. bise can use a few plans, signed in with the provider's own login or with the plan's key.</p>
+<div class="table"><table><thead><tr><th>plan</th><th>how bise uses it</th><th>set it up</th></tr></thead><tbody><tr><td>ChatGPT Plus or Pro</td><td>"Sign in with ChatGPT", in your browser</td><td><code>bise login chatgpt</code></td></tr><tr><td>OpenRouter</td><td>sign in in your browser: it makes an OpenRouter key for bise</td><td><code>bise login openrouter</code></td></tr><tr><td>GLM Coding Plan (Z.ai)</td><td>the plan's API key</td><td><code>bise login zai-coding</code></td></tr><tr><td>Kimi Code</td><td>the plan's API key</td><td><code>bise login kimi-code</code></td></tr><tr><td>MiniMax M plan</td><td>the plan's API key</td><td><code>bise login minimax</code></td></tr></tbody></table></div>
+<p>the first run asks how you want to pay for the models: Continue with ChatGPT, OpenRouter, an API key, or a coding plan key. later, <code class="key">/provider</code> adds or changes any of them.</p>
+<h2 id="chatgpt-plus-or-pro"><a class="anchor" href="#chatgpt-plus-or-pro" aria-hidden="true">#</a>ChatGPT Plus or Pro</h2>
+<p>bise signs in with OpenAI's "Sign in with ChatGPT": your ChatGPT plan pays for the calls, not an API account.</p>
+<h3 id="sign-in"><a class="anchor" href="#sign-in" aria-hidden="true">#</a>sign in</h3>
+<p>in bise, the first run's <strong>Continue with ChatGPT</strong>, or <code class="key">/provider</code>, then ChatGPT. in a terminal:</p>
+<div class="code"><div class="box"><pre><code class="lang-sh">bise login chatgpt</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<div class="code"><div class="box"><pre><code class="lang-text">opening your browser to sign in to ChatGPT…
+or open this link:
+  https://auth.openai.com/...
+waiting… ctrl+c cancels.
+✓ signed in as you@example.com · ChatGPT Plus.</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>sign in to ChatGPT in the browser and allow bise to use your plan. bise checks the plan with one tiny call, then main and your agents use a ChatGPT model on your plan.</p>
+<h3 id="over-ssh-or-from-an-agent"><a class="anchor" href="#over-ssh-or-from-an-agent" aria-hidden="true">#</a>over SSH, or from an agent</h3>
+<div class="code"><div class="box"><pre><code class="lang-sh">bise login chatgpt --no-browser</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>it prints the link and waits. the sign-in comes back to <code>127.0.0.1</code> on the machine where bise runs, so over SSH, forward that port first; the command prints the exact line, like <code>ssh -L &lt;port&gt;:127.0.0.1:&lt;port&gt; &lt;host&gt;</code>.</p>
+<p>a coding agent setting bise up for you can run this command, but only you can sign in: the browser asks for your consent.</p>
+<h3 id="the-models"><a class="anchor" href="#the-models" aria-hidden="true">#</a>the models</h3>
+<p>ChatGPT models are named <code>chatgpt/&lt;model&gt;</code>, for example <code>chatgpt/gpt-6.1-sol</code>. they are OpenAI's models, billed to your plan. <code>openai/&lt;model&gt;</code> stays your API key: you can have both and mix them across roles.</p>
+<p><code class="key">/models</code> lists the models your plan offers, and says <code>your ChatGPT plan</code> where the others show a price.</p>
+<div class="code"><div class="box"><pre><code class="lang-sh">bise config set main chatgpt/gpt-6.1-sol
+bise config set small chatgpt/gpt-6-luna</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<h3 id="limits-and-errors"><a class="anchor" href="#limits-and-errors" aria-hidden="true">#</a>limits and errors</h3>
+<p>your plan has a usage limit for apps like bise. when it's reached, the turn ends with:</p>
+<div class="code"><div class="box"><pre><code class="lang-text">▲ your ChatGPT plan&#x27;s limit for bise is reached. your usage is at chatgpt.com/settings/usage, or switch model with /model.</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>your usage is at <a href="https://chatgpt.com/settings/usage" rel="noopener">chatgpt.com/settings/usage</a>; <code class="key">/provider</code> links it too. the other lines you may see:</p>
+<div class="table"><table><thead><tr><th>line</th><th>what to do</th></tr></thead><tbody><tr><td><code>▲ ChatGPT plan use is off for bise. turn it on in your ChatGPT settings, or pick another provider in /provider.</code></td><td>your account or workspace doesn't allow plan use in other apps</td></tr><tr><td><code>▲ ChatGPT couldn&#x27;t check your plan&#x27;s usage. try again in a moment, or switch model with /model.</code></td><td>OpenAI couldn't check your usage; bise already retried</td></tr><tr><td><code>▲ your ChatGPT sign-in expired. sign in again in /provider, or run bise login chatgpt.</code></td><td>sign in again</td></tr></tbody></table></div>
+<h3 id="sign-out"><a class="anchor" href="#sign-out" aria-hidden="true">#</a>sign out</h3>
+<div class="code"><div class="box"><pre><code class="lang-sh">bise logout chatgpt</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>bise tells ChatGPT to end its sign-in. if ChatGPT doesn't confirm, the line says so: then remove bise in your ChatGPT settings to be sure.</p>
+<h2 id="openrouter"><a class="anchor" href="#openrouter" aria-hidden="true">#</a>OpenRouter</h2>
+<div class="code"><div class="box"><pre><code class="lang-sh">bise login openrouter            <span class="c"># asks: sign in with your browser, or paste a key</span>
+bise login openrouter --browser
+bise login openrouter --key
+bise login openrouter --no-browser   <span class="c"># prints the link (SSH: forward its port, as for ChatGPT)</span></code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>the browser sign-in makes a normal OpenRouter API key for bise and saves it, so nothing else changes: the models are <code>openrouter/&lt;vendor&gt;/&lt;model&gt;</code>, paid with your OpenRouter credit.</p>
+<h2 id="coding-plans"><a class="anchor" href="#coding-plans" aria-hidden="true">#</a>coding plans</h2>
+<p>Z.ai, Kimi and MiniMax sell coding plans for tools like bise. each plan gives you an API key for its coding endpoint; bise has a provider for each.</p>
+<div class="table"><table><thead><tr><th>plan</th><th>provider</th><th>key variable</th><th>starts with</th><th>get the key</th></tr></thead><tbody><tr><td>GLM Coding Plan</td><td><code>zai-coding</code></td><td><code>ZAI_API_KEY</code></td><td><code>zai-coding/glm-5.3</code></td><td><a href="https://z.ai/manage-apikey/apikey-list" rel="noopener">z.ai</a></td></tr><tr><td>Kimi Code</td><td><code>kimi-code</code></td><td><code>KIMI_API_KEY</code></td><td><code>kimi-code/kimi-for-coding</code></td><td><a href="https://www.kimi.com/code/console" rel="noopener">kimi.com</a></td></tr><tr><td>MiniMax M plan</td><td><code>minimax</code></td><td><code>MINIMAX_API_KEY</code></td><td><code>minimax/MiniMax-M3</code></td><td><a href="https://platform.minimax.io/user-center/basic-information/interface-key" rel="noopener">platform.minimax.io</a></td></tr></tbody></table></div>
+<div class="code"><div class="box"><pre><code class="lang-sh">bise login zai-coding</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>or the first run's <strong>a coding plan key</strong>. the key is checked with one tiny call, then saved like any key (see <a href="/docs/providers#where-a-key-comes-from">providers and keys</a>).</p>
+<h2 id="where-its-saved"><a class="anchor" href="#where-its-saved" aria-hidden="true">#</a>where it's saved</h2>
+<div class="table"><table><thead><tr><th>file</th><th>what</th></tr></thead><tbody><tr><td><code>~/.bise/auth.json</code></td><td>the keys, and the ChatGPT sign-in: its tokens, your email and plan. only you can read it (0600)</td></tr><tr><td><code>~/.bise/host-id</code></td><td>an id for this machine, made once before the first ChatGPT sign-in. not a secret</td></tr></tbody></table></div>
+<p>the ChatGPT token renews by itself while bise runs. a token never goes in the environment, a log, or a command line.</p>
+<div class="code"><div class="box"><pre><code class="lang-sh">bise auth status        <span class="c"># every provider: how it logs in, its state. never a secret</span>
+bise auth status --json <span class="c"># the same, for a script or an agent</span>
+bise doctor             <span class="c"># also says how long the ChatGPT sign-in is good for</span></code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<h2 id="what-bise-sees-from-your-other-tools"><a class="anchor" href="#what-bise-sees-from-your-other-tools" aria-hidden="true">#</a>what bise sees from your other tools</h2>
+<p>bise looks whether Codex is signed in with ChatGPT, and whether Claude Code is signed in with a Claude plan. it looks only at whether their login is there (a file, or on a Mac a keychain entry), never at the tokens, to tell you the right next step:</p>
+<ul><li>Codex with ChatGPT: the first run marks <strong>Continue with ChatGPT</strong>, "you use it in Codex already". bise still signs in on its own.</li><li>Claude Code with a Claude plan: one line says that plan works only in Claude Code.</li></ul>
+<h2 id="not-supported"><a class="anchor" href="#not-supported" aria-hidden="true">#</a>not supported</h2>
+<div class="table"><table><thead><tr><th>plan</th><th>why</th></tr></thead><tbody><tr><td>Claude Pro or Max</td><td>Anthropic's terms allow these plans only in Claude Code and Anthropic's apps. for Claude in bise, use an Anthropic API key, or Claude through OpenRouter</td></tr><tr><td>GitHub Copilot</td><td>Copilot's sign-in for other tools comes from partnerships with those tools (OpenCode has one). bise has none</td></tr><tr><td>SuperGrok</td><td>the same: no partnership with xAI. an xAI API key works</td></tr><tr><td>Gemini CLI, Antigravity</td><td>Google's terms keep these logins to Google's tools. a Google AI Studio key works</td></tr></tbody></table></div>
+    </article>
+    <nav class="pn"><a class="prev" href="/docs/providers"><span>previous</span>providers and keys</a><a class="next" href="/docs/models"><span>next</span>models and roles</a></nav>
+    <footer>
+      <p>for agents: <a href="/docs/subscriptions.md">bise.dev/docs/subscriptions.md</a></p>
+      <p><a href="https://github.com/gvergnaud/bise/blob/main/site/docs/subscriptions.md">edit this page on GitHub</a></p>
+    </footer>
+  </main>
+  <aside class="toc"><div class="toch">on this page</div><ul><li class="l2"><a href="#chatgpt-plus-or-pro">ChatGPT Plus or Pro</a></li><li class="l3"><a href="#sign-in">sign in</a></li><li class="l3"><a href="#over-ssh-or-from-an-agent">over SSH, or from an agent</a></li><li class="l3"><a href="#the-models">the models</a></li><li class="l3"><a href="#limits-and-errors">limits and errors</a></li><li class="l3"><a href="#sign-out">sign out</a></li><li class="l2"><a href="#openrouter">OpenRouter</a></li><li class="l2"><a href="#coding-plans">coding plans</a></li><li class="l2"><a href="#where-its-saved">where it's saved</a></li><li class="l2"><a href="#what-bise-sees-from-your-other-tools">what bise sees from your other tools</a></li><li class="l2"><a href="#not-supported">not supported</a></li></ul></aside>
+</div>
+<script src="/docs/docs.js" defer></script>
+</body>
+</html>

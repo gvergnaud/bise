@@ -3,8 +3,6 @@ title: subscriptions
 description: use a plan you already pay for, ChatGPT Plus or Pro, or a coding plan from Z.ai, Kimi or MiniMax, in place of an API key.
 ---
 
-<!-- draft: goes live with the release that ships subscriptions. at the release, move it to site/docs/ and run python3 site/docs/build.py (docs/site-drafts/README.md) -->
-
 an API key bills each call. a plan is a monthly price you may already pay. bise can use a few plans, signed in with the provider's own login or with the plan's key.
 
 | plan | how bise uses it | set it up |

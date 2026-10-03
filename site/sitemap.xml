@@ -6,6 +6,7 @@
   <url><loc>https://bise.dev/docs</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://bise.dev/docs/install</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
   <url><loc>https://bise.dev/docs/providers</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://bise.dev/docs/subscriptions</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
   <url><loc>https://bise.dev/docs/models</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
   <url><loc>https://bise.dev/docs/gateways</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
   <url><loc>https://bise.dev/docs/agents</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
