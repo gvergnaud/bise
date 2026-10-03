@@ -74,6 +74,7 @@ import socketserver
 import sys
 import threading
 import time
+import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FIXTURES = os.path.join(HERE, "providers")
@@ -85,6 +86,7 @@ THINK = re.compile(r"\[\[think: (.*?)\]\]", re.S)
 ERROR = re.compile(r"\[\[error: (\w+)(?: x(\d+))?(?: retry=(\d+))?\]\]")
 FIXTURE = re.compile(r"\[\[fixture: ([\w.-]+)\]\]")
 SLOW = re.compile(r"\[\[slow: ([\d.]+)\]\]")
+PLAN = re.compile(r"\[\[plan: ([\w-]+)(?: x(\d+))?\]\]")
 USAGE = {"input": 10, "cached": 2, "output": 5, "reasoning": 3}
 
 
@@ -478,8 +480,13 @@ def resp_items(turn, encrypted):
         out.append({"id": "msg_fake", "type": "message", "status": "completed", "role": "assistant",
                     "content": [{"type": "output_text", "text": turn["text"], "annotations": []}]})
     for c in turn["calls"]:
-        out.append({"id": "fc_" + c["id"], "type": "function_call", "status": "completed",
-                    "call_id": c["id"], "name": c["name"], "arguments": json.dumps(c["args"])})
+        it = {"id": "fc_" + c["id"], "type": "function_call", "status": "completed",
+              "call_id": c["id"], "name": c["name"], "arguments": json.dumps(c["args"])}
+        # the ChatGPT plan route: a tool of a namespace comes back with its
+        # own name and the namespace (Codex's FunctionCall.namespace)
+        if c.get("namespace"):
+            it["namespace"] = c["namespace"]
+        out.append(it)
     return out
 
 
@@ -706,6 +713,30 @@ class H(http.server.BaseHTTPRequestHandler):
         else:
             self.send(200, json.dumps({"model": model, "text": os.environ.get("FAKE_STT_TEXT", "")}).encode())
 
+    def do_GET(self):
+        """GET .../models: with a plan token the account's list as the plan
+        route answers it ({"models": [{slug, display_name, visibility}]},
+        server order); with a key the API's {"object": "list", "data"}"""
+        p = self.path.split("?")[0].rstrip("/")
+        if not p.endswith("/models"):
+            return self.send(404, json.dumps({"error": {"message": "Not found", "type": "invalid_request_error",
+                                                        "param": None, "code": None}}).encode())
+        token = bearer_of(self.headers)
+        if is_jwt(token):
+            err, claims = plan_token(token)
+            with open(LOG, "a") as f:
+                f.write(json.dumps({"agent": "", "family": "models", "path": self.path, "status": err[0] if err else 200,
+                                    "plan": plan_view(claims)}) + "\n")
+            if err:
+                return self.send(err[0], json.dumps(err[1]).encode())
+            return self.send(200, json.dumps({"models": plan_models()}).encode())
+        if not token or "bad" in token:
+            return self.send(401, json.dumps({"error": {"message": "Incorrect API key provided.",
+                                                        "type": "invalid_request_error", "param": None,
+                                                        "code": "invalid_api_key"}}).encode())
+        data = [{"id": m["slug"], "object": "model", "created": 0, "owned_by": "openai"} for m in plan_models()]
+        self.send(200, json.dumps({"object": "list", "data": data}).encode())
+
     def do_POST(self):
         n = int(self.headers.get("content-length", "0"))
         raw = self.rfile.read(n)
@@ -715,9 +746,29 @@ class H(http.server.BaseHTTPRequestHandler):
         family = family_of(self.path)
         stream = (":streamGenerateContent" in self.path) if family == "gemini" else body.get("stream") is True
         sse = stream and (family != "gemini" or "alt=sse" in self.path)
+        # the ChatGPT plan route: a Responses call with a JWT Bearer (its
+        # base64 may hold "bad": checked before the key words below)
+        token = bearer_of(self.headers)
+        plan = None
+        if family == "openai-responses" and is_jwt(token):
+            err, claims = plan_token(token)
+            if not err:
+                e = plan_body_error(body)
+                err = (400, e) if e else None
+            if err:
+                with open(LOG, "a") as f:
+                    f.write(json.dumps({"agent": "", "family": family, "path": self.path, "status": err[0],
+                                        "plan_error": err[1], "plan": plan_view(claims),
+                                        "body_keys": sorted(body)}) + "\n")
+                self.send(err[0], json.dumps(err[1]).encode())
+                return
+            plan = claims
         # BISE-266: a key holding "bad" is refused (401), one holding
         # "broke" has no credit (402): the first run's key check
         auth = " ".join(self.headers.get(h, "") for h in ("authorization", "x-api-key", "x-goog-api-key"))
+        if plan:
+            # a plan token's base64 is not a key word
+            auth = ""
         # $FAKE_CREDIT: once that file exists, the "broke" account has
         # credit (the user added some: tui_stuck_start_tmux.py)
         credit = os.environ.get("FAKE_CREDIT")
@@ -754,7 +805,19 @@ class H(http.server.BaseHTTPRequestHandler):
             time.sleep(float(slow.group(1)))
         model = body.get("model") or self.path.split("/models/")[-1].split(":")[0] or "fake"
         status = 200
-        if turn["fixture"]:
+        fail = plan_fail(script_of(conv[idx]["text"]) if idx is not None else "", seen) if plan else None
+        if plan:
+            ns = plan_namespaces(body)
+            for c in turn["calls"]:
+                c["namespace"] = ns.get(c["name"])
+        if fail in ("limit-429", "not-eligible"):
+            st, code, message = PLAN_FAILS["limit" if fail == "limit-429" else fail]
+            status = st
+            self.send(st, json.dumps(oai_error(None, message, code)).encode())
+        elif fail:
+            status = "failed:" + PLAN_FAILS[fail][1]
+            self.send_sse([sse_bytes(family, [e]) for e in sse_plan_failed(turn, model, fail)])
+        elif turn["fixture"]:
             status, data, is_sse = fixture_reply(family, turn["fixture"], sse)
             if is_sse:
                 self.send_sse([data])
@@ -802,7 +865,11 @@ class H(http.server.BaseHTTPRequestHandler):
                                 "tool_texts": [m["text"] for m in conv if m["role"] == "tool"],
                                 "system": "\n".join(m["text"] for m in conv if m["role"] == "system"),
                                 # a gateway: the request's headers (catalog headers_env, key_command)
-                                "headers": {k.lower(): v for k, v in self.headers.items()}}) + "\n")
+                                "headers": {k.lower(): v for k, v in self.headers.items()},
+                                # the ChatGPT plan route: whose token (no
+                                # secret: client, subject, token id) and the
+                                # body's top-level fields
+                                "plan": plan_view(plan), "body_keys": sorted(body)}) + "\n")
 
 
 # ---------------------------------------------------------------- tool names
@@ -969,6 +1036,210 @@ def effort_of(body):
     if th.get("budget_tokens"):
         return "budget:%d" % th["budget_tokens"]
     return ""
+
+
+# ------------------------------------------------------- ChatGPT plan route
+# A Responses request whose Bearer is a JWT is ChatGPT plan usage (Sign in
+# with ChatGPT, tests/fake_openai_auth.py issues the token): the same URL
+# as the API key route, the token decides. Strict like OpenAI's preview
+# (developers.openai.com/siwc/token-sharing-open-source/preview-limitations
+# and errors-and-recovery): store false and stream true, an input array, no
+# system item, none of the unsupported fields, function tools only inside
+# namespaces, no hosted tools, a model of the account's list; the token
+# checked with the issuer that made it (its signature, exp, scope, and not
+# revoked: POST <iss>/_fake/introspect, loopback issuers only).
+# `[[plan: KIND]]` / `[[plan: KIND xN]]` in the user message: the first N
+# requests for it (N = 1) hit the plan's limits:
+#   limit        mid-stream response.failed, subscription_sharing_usage_limit_exceeded
+#   unavailable  mid-stream response.failed, subscription_sharing_usage_unavailable
+#   limit-429    before the stream: 429 with the same code
+#   not-eligible before the stream: 403 subscription_sharing_user_not_eligible
+PLAN_SCOPE = "chatgpt.tokens.use.direct"
+PLAN_RESOURCE = "https://api.openai.com/v1"
+PLAN_UNSUPPORTED = ("background", "conversation", "max_output_tokens", "max_tool_calls", "metadata",
+                    "moderation", "multi_agent", "prompt", "prompt_cache_retention", "safety_identifier",
+                    "temperature", "top_logprobs", "top_p", "truncation", "user", "previous_response_id",
+                    "service_tier")
+PLAN_HOSTED = ("image_generation", "file_search", "code_interpreter", "computer_use_preview", "computer_use",
+               "mcp", "tool_search", "programmatic_tool_calling", "local_shell")
+PLAN_FAILS = {
+    "limit": (429, "subscription_sharing_usage_limit_exceeded",
+              "You've reached the usage limit for this app on your ChatGPT plan. "
+              "Manage it in ChatGPT settings: https://chatgpt.com/settings/usage"),
+    "unavailable": (503, "subscription_sharing_usage_unavailable",
+                    "ChatGPT plan usage could not be checked right now. Try again later."),
+    "not-eligible": (403, "subscription_sharing_user_not_eligible",
+                     "ChatGPT plan usage is not available for this user or workspace."),
+}
+
+
+def plan_models():
+    """the account's model list, the real /v1/models shape of this route:
+    $FAKE_PLAN_MODELS = "slug[:display name[:hide]],..." or three listed
+    models and one hidden"""
+    spec = os.environ.get("FAKE_PLAN_MODELS")
+    if spec:
+        out = []
+        for one in spec.split(","):
+            p = one.strip().split(":")
+            out.append({"slug": p[0], "display_name": p[1] if len(p) > 1 and p[1] else p[0],
+                        "visibility": "hide" if len(p) > 2 and p[2] == "hide" else "list"})
+        return out
+    return [{"slug": "gpt-6.1-sol", "display_name": "GPT-6.1 Sol", "visibility": "list"},
+            {"slug": "gpt-6-astra", "display_name": "GPT-6 Astra", "visibility": "list"},
+            {"slug": "gpt-6-luna", "display_name": "GPT-6 Luna", "visibility": "list"},
+            {"slug": "gpt-6-internal-eval", "display_name": "internal eval", "visibility": "hide"}]
+
+
+def bearer_of(headers):
+    a = headers.get("authorization") or ""
+    return a[7:].strip() if a.lower().startswith("bearer ") else ""
+
+
+def is_jwt(token):
+    parts = token.split(".")
+    if len(parts) != 3:
+        return False
+    try:
+        head = json.loads(base64.urlsafe_b64decode(parts[0] + "=" * (-len(parts[0]) % 4)))
+    except ValueError:
+        return False
+    return isinstance(head, dict) and head.get("alg") == "RS256"
+
+
+def plan_token(token):
+    """(None, claims) when the issuer honours the token, else (status, body):
+    the direct-route admission errors (a {"detail"} body) or the structured
+    subscription_sharing_* ones"""
+    try:
+        claims = json.loads(base64.urlsafe_b64decode(token.split(".")[1] + "=" * (-len(token.split(".")[1]) % 4)))
+    except (ValueError, IndexError):
+        return (401, {"detail": "Invalid authorization token."}), None
+    iss = str(claims.get("iss", ""))
+    if not re.match(r"^http://127\.0\.0\.1:\d+$", iss):
+        # a fake only ever asks a loopback issuer
+        return (401, {"detail": "Invalid authorization token."}), None
+    try:
+        req = urllib.request.Request(iss + "/_fake/introspect", json.dumps({"token": token}).encode(),
+                                     {"content-type": "application/json"})
+        info = json.loads(urllib.request.urlopen(req, timeout=5).read())
+    except (OSError, ValueError):
+        return (503, {"detail": "Direct routing is unavailable."}), None
+    if not info.get("active"):
+        if info.get("reason") == "revoked":
+            return (401, oai_error(None, "The subscriber context could not be validated.",
+                                   "subscription_sharing_invalid_user")), claims
+        if info.get("reason") == "expired":
+            return (401, {"detail": "Access token expired."}), claims
+        return (401, {"detail": "Invalid authorization token."}), claims
+    if PLAN_SCOPE not in str(claims.get("scope", "")).split(" "):
+        return (403, oai_error(None, "The signed permission context does not authorize this operation.",
+                               "chatpass_v2_scope_not_authorized")), claims
+    return None, claims
+
+
+def plan_body_error(body):
+    """OpenAI's 400 for the first thing the plan route refuses, None when
+    the body is fine"""
+    def unsupported(param, message):
+        return oai_error(param, message, "subscription_sharing_unsupported_capability")
+    if body.get("store") is not False:
+        return unsupported("store", "ChatGPT plan usage requires `store` to be false.")
+    if body.get("stream") is not True:
+        return unsupported("stream", "ChatGPT plan usage requires `stream` to be true.")
+    for k in PLAN_UNSUPPORTED:
+        if k in body:
+            return unsupported(k, "Unsupported parameter for ChatGPT plan usage: '%s'." % k)
+    if body.get("model") not in [m["slug"] for m in plan_models()]:
+        return oai_error("model", "The model `%s` does not exist or you do not have access to it." % body.get("model"),
+                         "model_not_found")
+    inp = body.get("input")
+    if not isinstance(inp, list):
+        return unsupported("input", "ChatGPT plan usage requires `input` to be an array.")
+    namespaces = {}
+    for i, t in enumerate(body.get("tools") or []):
+        kind = t.get("type")
+        if kind == "namespace":
+            if not NAME_OK.match(t.get("name") or ""):
+                return oai_error("tools[%d].name" % i, "Invalid namespace name.", "invalid_value")
+            if not isinstance(t.get("tools"), list) or not t["tools"]:
+                return oai_error("tools[%d].tools" % i, "A namespace needs at least one tool.", "invalid_value")
+            names = set()
+            for j, f in enumerate(t["tools"]):
+                if f.get("type") not in ("function", "custom"):
+                    return unsupported("tools[%d].tools[%d].type" % (i, j),
+                                       "Only function and custom tools can be grouped in a namespace.")
+                if not NAME_OK.match(f.get("name") or ""):
+                    return oai_error("tools[%d].tools[%d].name" % (i, j),
+                                     "Invalid 'tools[%d].tools[%d].name': string does not match pattern. Expected "
+                                     "a string that matches the pattern '^[a-zA-Z0-9_-]+$'." % (i, j), "invalid_value")
+                names.add(f["name"])
+            namespaces[t["name"]] = names
+        elif kind in ("function", "custom"):
+            return unsupported("tools[%d]" % i, "Function and custom tools must be grouped in a namespace for "
+                               "ChatGPT plan usage.")
+        elif kind in PLAN_HOSTED:
+            return unsupported("tools[%d].type" % i, "The tool type '%s' is not supported for ChatGPT plan usage."
+                               % kind)
+    for i, it in enumerate(inp):
+        if not isinstance(it, dict):
+            return oai_error("input[%d]" % i, "Invalid input item.", "invalid_value")
+        kind = it.get("type", "message")
+        if kind == "message" and it.get("role") == "system":
+            return unsupported("input[%d].role" % i, "System messages are not supported for ChatGPT plan usage; "
+                               "use `instructions` or a developer message.")
+        if kind == "function_call" and it.get("namespace") is not None:
+            if it["namespace"] not in namespaces or it.get("name") not in namespaces[it["namespace"]]:
+                return oai_error("input[%d].namespace" % i, "No tool '%s' in namespace '%s'." %
+                                 (it.get("name"), it["namespace"]), "invalid_value")
+    return None
+
+
+def plan_view(claims):
+    """a plan token in the log, no secret: its client, subject and id"""
+    if not claims:
+        return None
+    return {"client_id": claims.get("client_id"), "sub": claims.get("sub"), "jti": claims.get("jti"),
+            "exp": claims.get("exp")}
+
+
+def plan_namespaces(body):
+    """tool name -> its namespace"""
+    out = {}
+    for t in body.get("tools") or []:
+        if t.get("type") == "namespace":
+            for f in t.get("tools") or []:
+                out.setdefault(f.get("name"), t.get("name"))
+    return out
+
+
+def plan_fail(user, seen):
+    """the `[[plan: KIND xN]]` failure for this request, or None"""
+    m = PLAN.search(user or "")
+    if not m or seen >= int(m.group(2) or 1):
+        return None
+    return m.group(1)
+
+
+def sse_plan_failed(turn, model, kind):
+    """a stream that starts, says a few words, then response.failed with
+    the plan's code (a usage limit hit after streaming has begun)"""
+    _, code, message = PLAN_FAILS[kind]
+    ev = []
+
+    def add(t, **d):
+        ev.append((t, dict({"type": t, "sequence_number": len(ev)}, **d)))
+    add("response.created", response=whole_responses(turn, model, status="in_progress"))
+    add("response.in_progress", response=whole_responses(turn, model, status="in_progress"))
+    item = {"id": "msg_fake", "type": "message", "status": "in_progress", "role": "assistant", "content": []}
+    add("response.output_item.added", output_index=0, item=item)
+    add("response.content_part.added", item_id="msg_fake", output_index=0, content_index=0,
+        part={"type": "output_text", "text": "", "annotations": []})
+    add("response.output_text.delta", item_id="msg_fake", output_index=0, content_index=0, delta="Working on ",
+        logprobs=[])
+    failed = dict(whole_responses(turn, model, status="failed"), error={"code": code, "message": message})
+    add("response.failed", response=failed)
+    return ev
 
 
 class Server(http.server.ThreadingHTTPServer):
