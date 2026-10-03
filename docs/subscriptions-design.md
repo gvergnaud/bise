@@ -13,8 +13,9 @@ Research: docs/subscriptions-research.md. Scope of this release:
    with a Claude plan. Presence only: bise never reads their tokens.
 
 Not in scope (terms): Claude Pro/Max, Gemini CLI/Antigravity, Copilot,
-SuperGrok logins. Main asks Gabriel; the design leaves room (an `oauth`
-entry is per provider) but nothing is built.
+SuperGrok logins. Decided by Gabriel (2026-10-03): no Claude plan login;
+Copilot and SuperGrok dropped for now (no partnership asked). The design
+leaves room (an `oauth` entry is per provider) but nothing is built.
 
 ## Why `chatgpt` is its own provider (not `openai` with another key)
 
