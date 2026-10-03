@@ -82,7 +82,7 @@ your usage is at [chatgpt.com/settings/usage](https://chatgpt.com/settings/usage
 bise logout chatgpt
 ```
 
-bise tells ChatGPT to end its sign-in. if ChatGPT doesn't confirm, the line says so: then remove bise from the connected apps in your ChatGPT settings.
+bise tells ChatGPT to end its sign-in. if ChatGPT doesn't confirm, the line says so: then remove bise in your ChatGPT settings to be sure.
 
 ## OpenRouter
 
