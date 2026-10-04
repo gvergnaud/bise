@@ -1,4 +1,10 @@
 {
+ "fake-no-model.404.json": {
+  "source": "fake_provider.py fixtures (the shape of the docs in providers.md §8, not a recorded reply)",
+  "expect": {
+   "error": true
+  }
+ },
  "fake-overloaded.503.json": {
   "source": "fake_provider.py fixtures (the shape of the docs in providers.md §8, not a recorded reply)",
   "expect": {

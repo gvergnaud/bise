@@ -84,6 +84,9 @@ pub enum AgentReq {
         /// `--why`: main's reason when it answers a task for the user
         /// (shown in the `answered` line of main's feed).
         why: String,
+        /// `--model`/`--effort` with the text (issue #4): the task moves
+        /// to that model from its next turn, then the message goes.
+        switch: Option<(String, String)>,
     },
     Wait {
         msg: u64,
@@ -126,6 +129,16 @@ pub enum AgentReq {
         /// `--feature <name>` (dev-flow §5.1): a new worktree from the
         /// feature's tip, landing on it. "" = none.
         feature: String,
+        /// `--model`, `--effort`, `--profile` (issue #4): all "" = the
+        /// agents default, as before.
+        ask: bise_catalog::spawn::Ask,
+    },
+    /// `sb send <task> --model <id> [--effort <e>]` without a text
+    /// (issue #4): the task's model from its next turn.
+    Switch {
+        to: String,
+        model: String,
+        effort: String,
     },
     /// `sb feature new|sync|ready|merge|drop|list [<name>]` (dev-flow
     /// §5.1): the daemon's (`Effect::Feature`), git off the hub's loop.
@@ -230,6 +243,8 @@ impl AgentReq {
                     m => return Err(format!("unknown mode: {} (steer|queued)", m)),
                 },
                 why: jstr(v, "why"),
+                switch: (v.get("model").is_some() || v.get("effort").is_some())
+                    .then(|| (jstr(v, "model"), jstr(v, "effort"))),
             },
             "wait" => AgentReq::Wait {
                 msg: parse_msg_id(&jstr(v, "msg")).ok_or("invalid message id")?,
@@ -292,6 +307,16 @@ impl AgentReq {
                     .unwrap_or(false),
                 place: jstr(v, "place"),
                 feature: jstr(v, "feature"),
+                ask: bise_catalog::spawn::Ask {
+                    model: jstr(v, "model"),
+                    effort: jstr(v, "effort"),
+                    profile: jstr(v, "profile"),
+                },
+            },
+            "switch" => AgentReq::Switch {
+                to: jstr(v, "to"),
+                model: jstr(v, "model"),
+                effort: jstr(v, "effort"),
             },
             "feature" => AgentReq::Feature {
                 op: jstr(v, "step"),
@@ -530,6 +555,36 @@ pub enum Effect {
         card: u64,
         agent: String,
         text: String,
+    },
+    /// Issue #4: the answer to a spawn that asked for a model (`--model`,
+    /// `--effort`, `--profile`): the daemon picks what runs (the agents
+    /// default when the ask cannot), writes the task's choice file before
+    /// its first call, says it in the answer `body` (`model`) and, for a
+    /// fallback, in a line of the task's thread.
+    SpawnModel {
+        token: Token,
+        agent: String,
+        ask: bise_catalog::spawn::Ask,
+        body: Value,
+    },
+    /// Issue #4: `sb send <task> --model <id> [--effort <e>]`: the task's
+    /// model from its next turn (a line in its thread says who moved it);
+    /// `token`: the request to answer (None: a message goes with it, its
+    /// own answer is the reply).
+    Switch {
+        token: Option<Token>,
+        from: String,
+        to: String,
+        model: String,
+        effort: String,
+    },
+    /// Issue #4: the provider refused the model a task was spawned on
+    /// before it ever answered (`why`: the runtime's refusal line): the
+    /// daemon moves it to the agents default, says so in its thread and
+    /// to main, and starts its turn again.
+    ModelRefused {
+        agent: String,
+        why: String,
     },
     /// `/model`, `/reasoning` (BISE-135): the daemon checks the words
     /// against the catalog, writes the agent's choice (and config.toml
@@ -793,6 +848,17 @@ pub struct Hub {
     /// Who asked for the interrupt sb-core is deciding on (the user, an
     /// agent); none: the hub's own (`Effect::Interrupt::by`).
     interrupt_by: Option<String>,
+    /// Issue #4, set by the daemon from the choice files: each agent's
+    /// model for `sb list`, `sb tasks` and the roster.
+    pub models: board::Models,
+    /// Issue #4: the tasks on a model asked at their spawn (or by `sb
+    /// send --model`) that has not answered a turn yet: a provider that
+    /// refuses it moves them to the agents default (`Effect::ModelRefused`).
+    /// Set by the daemon, cleared at the agent's first turn end.
+    pub model_trial: BTreeSet<String>,
+    /// The spawns that asked for a model, by request token: their answer
+    /// waits for the daemon's pick (`Effect::SpawnModel`).
+    spawn_asks: BTreeMap<Token, bise_catalog::spawn::Ask>,
 }
 
 /// What the hub needs to restart a dead sb-core (BISE-292): the journal
@@ -953,6 +1019,9 @@ impl Hub {
             revive: None,
             revived: Vec::new(),
             interrupt_by: None,
+            models: BTreeMap::new(),
+            model_trial: BTreeSet::new(),
+            spawn_asks: BTreeMap::new(),
         };
         hub.view_all();
         hub
@@ -1976,10 +2045,18 @@ impl Hub {
                 };
                 fx.push(line(&agent, &jstr(f, "kind"), &text))
             }
-            "reply" => fx.push(Effect::Reply {
-                token: f["token"].as_u64().unwrap_or(0),
-                body: f["body"].clone(),
-            }),
+            "reply" => {
+                let token = f["token"].as_u64().unwrap_or(0);
+                let body = f["body"].clone();
+                match self.spawn_asks.remove(&token) {
+                    // issue #4: a spawn that asked for a model: the daemon
+                    // picks it, writes the task's choice, then answers
+                    Some(ask) if body["ok"] == json!(true) && body["name"].is_string() => {
+                        fx.push(Effect::SpawnModel { token, agent: jstr(&body, "name"), ask, body })
+                    }
+                    _ => fx.push(Effect::Reply { token, body }),
+                }
+            }
             "deliver" => self.deliver(fx, env, f),
             // not the client's `confirm` (a yes/no in the status row): a card's
             // the user's digit on a hub item (merge.rs)
@@ -2148,6 +2225,14 @@ impl Hub {
             // Main's own failures show in main's view (its turn_done line);
             // a stop the user asked for (Ctrl+C) is not news to anyone.
             Wire::TurnDone(t) => {
+                // issue #4: the first turn on a model asked at the spawn;
+                // refused by its provider, the task moves to the default
+                if self.model_trial.remove(agent) {
+                    if let Some(why) = model_refusal(&t) {
+                        fx.push(Effect::ModelRefused { agent: agent.to_string(), why });
+                        return;
+                    }
+                }
                 if let Some(summary) = failed_turn_report(agent, &t) {
                     if self.st.agents.contains_key(agent) {
                         let q = json!({"cmd": "report", "kind": "turn_failed",
@@ -2363,13 +2448,28 @@ impl Hub {
             let text = if name == MAIN {
                 board::main_context(&self.st, now)
             } else {
-                board::task_context(&self.st, &name, now)
+                board::task_context(&self.st, &name, now, &self.models)
             };
             if self.contexts.get(&name) != Some(&text) {
                 self.contexts.insert(name.clone(), text.clone());
                 fx.push(Effect::Context { agent: name, text });
             }
         }
+    }
+
+    /// Issue #4: who `sb send --model` may move: a task, by main or its
+    /// parent. Its name, or the words of the refusal.
+    fn switch_target(&self, from: &str, to: &str) -> Result<String, String> {
+        let to = self.st.resolve(to.trim_start_matches('@')).ok_or_else(|| format!("unknown agent: {}", to))?;
+        let from = self.st.resolve(from).unwrap_or_default();
+        let parent = self.st.agents.get(&to).and_then(|a| a.parent.clone()).unwrap_or_default();
+        if to == MAIN {
+            return Err("sb send --model moves a task; main's model is the user's (/model)".into());
+        }
+        if from != MAIN && from != parent {
+            return Err(format!("sb send --model is main's (or the parent's): ask {}", if parent.is_empty() { MAIN } else { &parent }));
+        }
+        Ok(to)
     }
 
     fn agent_req(&mut self, fx: &mut Fx, env: &mut dyn Env, token: Token, from: &str, req: AgentReq) {
@@ -2381,9 +2481,9 @@ impl Hub {
                     return;
                 };
                 let text = if req == AgentReq::List {
-                    board::roster(&self.st, &from, env.now()).join("\n")
+                    board::roster(&self.st, &from, env.now(), &self.models).join("\n")
                 } else {
-                    board::tasks_detail(&self.st, env.now())
+                    board::tasks_detail(&self.st, env.now(), &self.models)
                 };
                 reply(fx, json!({"ok": true, "text": text}));
                 return;
@@ -2395,8 +2495,28 @@ impl Hub {
                 reply_to,
                 queued,
                 why,
-            } => json!({"cmd": "send", "to": to, "text": text, "expect_reply": expect_reply,
-                        "reply_to": reply_to, "queued": queued, "why": why}),
+                switch,
+            } => {
+                // issue #4: the model first, so the message's turn runs on it
+                if let Some((model, effort)) = switch {
+                    match self.switch_target(from, &to) {
+                        Ok(to) => fx.push(Effect::Switch { token: None, from: from.to_string(), to, model, effort }),
+                        Err(e) => {
+                            reply(fx, json!({"ok": false, "error": e}));
+                            return;
+                        }
+                    }
+                }
+                json!({"cmd": "send", "to": to, "text": text, "expect_reply": expect_reply,
+                        "reply_to": reply_to, "queued": queued, "why": why})
+            }
+            AgentReq::Switch { to, model, effort } => {
+                match self.switch_target(from, &to) {
+                    Ok(to) => fx.push(Effect::Switch { token: Some(token), from: from.to_string(), to, model, effort }),
+                    Err(e) => reply(fx, json!({"ok": false, "error": e})),
+                }
+                return;
+            }
             AgentReq::Wait { msg, timeout_s } => {
                 json!({"cmd": "wait", "msg": msg, "timeout_s": timeout_s})
             }
@@ -2453,7 +2573,12 @@ impl Hub {
                 with_changes,
                 place,
                 feature,
+                ask,
             } => {
+                // issue #4: the answer waits for the daemon's pick of the model
+                if !ask.is_empty() {
+                    self.spawn_asks.insert(token, ask);
+                }
                 let name = Some(name.as_str()).filter(|n| !n.is_empty());
                 let join = match (place.as_str(), feature.as_str()) {
                     // dev-flow §5.1: its own worktree, from the feature's tip
@@ -2538,6 +2663,25 @@ fn direct_exchange(task: &str, sent: &[String], reply: &str) -> (String, String)
         clip_tail(&one_line(reply), 2000)
     );
     (note, format!("You talked to @{} ({} message{})", task, n, s))
+}
+
+/// Issue #4: a failed turn's line that says the provider refused the
+/// model or its key (a 400, 401, 403, 404 or 422, not for the request's
+/// size): the status's words, `the provider refused it (404)`; None for
+/// any other failure (network, rate limit, server error, a stop).
+fn model_refusal(turn_done: &str) -> Option<String> {
+    let why = turn_done.strip_prefix("failed: ")?;
+    // the size's own refusal compacts (core/wire.bend too_large_mark)
+    if why.contains("the request is too large") {
+        return None;
+    }
+    let at = why.find(" refused the ")?;
+    let rest = &why[at..];
+    let open = rest.find('(')?;
+    let status: u16 = rest[open + 1..].split(')').next()?.trim().parse().ok()?;
+    [400, 401, 403, 404, 422]
+        .contains(&status)
+        .then(|| format!("the provider refused it ({})", status))
 }
 
 /// BR-007: the report a failed turn of a task sends to its parent, or

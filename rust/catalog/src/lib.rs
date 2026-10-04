@@ -25,7 +25,9 @@ pub mod cli;
 pub mod config_cli;
 pub mod detect;
 pub mod openrouter_login;
+pub mod names;
 pub mod roles;
+pub mod spawn;
 pub mod voice;
 
 /// The command's name in messages and usages (BISE-165: was `bend-harness`).
@@ -1065,6 +1067,9 @@ pub struct Setup {
     /// config `compaction_threshold` as written (BISE-300): "450000" or
     /// "45%"; None when unset. [`compaction_threshold`] resolves it.
     pub compaction_threshold: Option<String>,
+    /// `[profiles]` (issue #4): named model + effort pairs for
+    /// `sb spawn --profile`, in the file's order
+    pub profiles: Vec<(String, spawn::Profile)>,
 }
 
 /// config.toml's text with its top-level `model` set to `model`
@@ -1184,6 +1189,7 @@ impl Setup {
         let mut voice_cfg = voice::VoiceConfig::default();
         let mut classify_cfg: Option<String> = None;
         let mut threshold_cfg: Option<String> = None;
+        let mut profiles = Vec::new();
         if let Some(text) = config {
             match text.parse::<toml::Table>() {
                 Ok(t) => {
@@ -1205,6 +1211,7 @@ impl Setup {
                     agent_effort_cfg = agents.effort.or_else(|| s("agent_reasoning_effort"));
                     classify_cfg = r.get(roles::CLASSIFY).model;
                     threshold_cfg = read_threshold(&t, &mut catalog.warnings);
+                    profiles = spawn::read_profiles(&t, &mut catalog.warnings);
                     if let Some(v) = r.voice {
                         voice_cfg = voice::VoiceConfig {
                             model: v.model.or(voice_cfg.model),
@@ -1288,6 +1295,7 @@ impl Setup {
             classify_model,
             classify_model_from,
             compaction_threshold: threshold_cfg,
+            profiles,
         }
     }
 
@@ -1511,6 +1519,17 @@ pub const CHOICE_ENV: &str = "BISE_SESSION_CHOICE";
 pub struct Choice {
     pub model: String,
     pub effort: String,
+    /// who picked it (issue #4): "--model", "profile fast", "sb send
+    /// --model"; "" = `/model` (or a file from before)
+    pub by: String,
+    /// a fallback: the model or profile asked that does not run, and why
+    /// ("unknown model"); "" = none. The model above is then empty: the
+    /// agents default runs.
+    pub asked: String,
+    pub why: String,
+    /// an effort the model does not take ("gpt-9 has no effort setting:
+    /// high is ignored"); "" = none
+    pub note: String,
 }
 
 impl Choice {
@@ -1518,6 +1537,10 @@ impl Choice {
         Choice {
             model: loose_key(text, "model").unwrap_or_default(),
             effort: loose_key(text, "reasoning_effort").unwrap_or_default(),
+            by: loose_key(text, "by").unwrap_or_default(),
+            asked: loose_key(text, "asked").unwrap_or_default(),
+            why: loose_key(text, "why").unwrap_or_default(),
+            note: loose_key(text, "note").unwrap_or_default(),
         }
     }
 
@@ -1528,7 +1551,15 @@ impl Choice {
 
     pub fn to_toml(&self) -> String {
         let mut o = String::from("# this session's model (BISE-135: /model, /reasoning); written by bise\n");
-        for (k, v) in [("model", &self.model), ("reasoning_effort", &self.effort)] {
+        let keys = [
+            ("model", &self.model),
+            ("reasoning_effort", &self.effort),
+            ("by", &self.by),
+            ("asked", &self.asked),
+            ("why", &self.why),
+            ("note", &self.note),
+        ];
+        for (k, v) in keys {
             if !v.is_empty() {
                 o.push_str(&format!("{} = {}\n", k, q(v)));
             }
@@ -1707,3 +1738,6 @@ mod auth_tests;
 #[cfg(test)]
 #[path = "one_key_tests.rs"]
 mod one_key_tests;
+
+#[cfg(test)]
+mod spawn_tests;
