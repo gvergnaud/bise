@@ -89,6 +89,7 @@ mod file_links;
 mod keyprobe;
 pub mod timing;
 mod crash;
+mod termtitle;
 mod help;
 mod approvals_screen;
 mod logview;

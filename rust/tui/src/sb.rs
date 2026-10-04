@@ -67,6 +67,19 @@ pub(crate) fn strip_rows(app: &App) -> usize {
     card_draw::strip_ids(&app.sb).len()
 }
 
+/// What the terminal's tab title says (termtitle.rs): the workspace's
+/// folder, the inbox's cards, the new artifacts, the agents at work
+/// (working or waiting on another agent; main and archived left out).
+pub(crate) fn title_status(app: &App) -> crate::termtitle::Status {
+    let sb = &app.sb;
+    crate::termtitle::Status {
+        repo: crate::termtitle::repo_name(&sb.workspace),
+        inbox: sb.sorted_cards().len(),
+        new: crate::artifacts::new_count(),
+        running: sb.agents.iter().filter(|a| !a.main && a.busy()).count(),
+    }
+}
+
 pub(crate) fn ctrl_view(app: &App) -> CtrlView {
     let sb = &app.sb;
     CtrlView {

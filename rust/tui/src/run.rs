@@ -492,6 +492,8 @@ fn ui_loop(app: &mut App, terminal: &mut crate::links::Tui) -> io::Result<()> {
                 let _ = terminal.clear();
             }
         }
+        // the terminal's tab title: inbox, new artifacts, agents at work, repo
+        crate::termtitle::tick(&sb::title_status(app), std::time::Instant::now());
         // the voice chip moves every 50 ms while recording or
         // transcribing (its meter, blink and wave; Vibe's poll)
         let wait = if backlog || app.find.as_ref().is_some_and(|f| f.busy()) {

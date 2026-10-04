@@ -129,6 +129,8 @@ pub(crate) fn restore_terminal() {
     use crossterm::terminal::{disable_raw_mode, LeaveAlternateScreen};
     // BISE-92: the terminal's own background back first
     crate::theme_detect::restore_terminal_bg();
+    // term-title: the tab title you had
+    crate::termtitle::restore();
     let mut out = std::io::stdout();
     // BISE-272: the default mouse pointer, if bise changed it
     crate::pointer::restore(&mut out);
