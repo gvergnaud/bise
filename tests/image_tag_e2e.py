@@ -26,6 +26,8 @@ image block with bad base64, like the real API):
 import os, socket, subprocess, sys, tempfile, time, json, shutil, base64
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
+sys.path.insert(0, HERE)
+import wait  # noqa: E402
 OP = "<" + "image"   # never a literal tag in this file's output
 PNG = base64.b64encode(bytes.fromhex(
     "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
@@ -98,11 +100,10 @@ def turn(model, text):
 
 
 try:
-    t0 = time.time()
-    while "REPL on" not in open(log).read():
-        if repl.poll() is not None or time.time() - t0 > 60:
-            sys.exit("FAIL image_tag_e2e: no REPL")
-        time.sleep(0.1)
+    def banner():
+        assert repl.poll() is None, "FAIL image_tag_e2e: the REPL exited"
+        return "REPL on" in open(log).read()
+    wait.until(banner, 60, "image_tag_e2e: the REPL banner")
     recs = turn("fake/claude-x", "[[bash: cat %s]]" % out_txt)
     check([r.get("status") for r in recs] == [200, 200],
           "anthropic: a bash result with a plain and a wrapped marker: every call 200 (was a 400 on each turn): %r"

@@ -9,9 +9,11 @@ reads back: a value, a typed program that calls a tool (the call goes
 out through the runtime and its result comes back into the re-run), a
 failed inner call, a throw.
 """
-import glob, os, re, signal, socket, stat, subprocess, sys, tempfile, time
+import glob, os, re, signal, socket, stat, subprocess, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import wait  # noqa: E402
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
 EXE = os.path.join(os.path.abspath(os.environ.get("CARGO_TARGET_DIR") or os.path.join(ROOT, "rust", "target")),
                    "debug", "bise")
@@ -170,11 +172,17 @@ def check_atomic_save(home, session):
     proc = subprocess.Popen(["/bin/sh", "-c", atomic_script(), session], stdin=subprocess.PIPE)
     proc.stdin.write(b"BEND-SESSION 2\n" + b"x" * 65536)
     proc.stdin.flush()
-    time.sleep(0.2)
+
+    def mid_save():
+        """the save is under way: its temp file next to the session has bytes"""
+        d = os.path.dirname(session)
+        return [p for p in os.listdir(d) if ".tmp." in p and os.path.getsize(os.path.join(d, p)) > 0]
+    wait.until(mid_save, 10, "the save's temp file")
     proc.send_signal(signal.SIGKILL)
     proc.wait()
+    # the `mv` is the killed shell's: nothing can replace the session now
+    # (its orphan `cat` only ends its temp file once stdin closes)
     proc.stdin.close()
-    time.sleep(0.2)
     if open(session, "rb").read() != old:
         sys.exit("FAIL a killed save changed the session file")
     print("atomic save: 0600, a killed save keeps the old checkpoint")

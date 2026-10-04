@@ -13,6 +13,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
+import wait  # noqa: E402
 
 FAILS = []
 
@@ -81,8 +82,7 @@ def main():
         check(loaded, "the relaunched REPL loaded hello-plugin")
         # nothing changes: no second relaunch
         pid = repl_pid(E)
-        time.sleep(5)
-        check(repl_pid(E) == pid, "no relaunch while nothing changes")
+        wait.holds(lambda: repl_pid(E) == pid, 5, "no relaunch while nothing changes (REPL %s)" % pid)
         # disabling it relaunches again
         # (and /computer-use turning computer use on, in the same write)
         open(E.env["BEND_PLUGINS_STATE"], "w").write('{"disabled": ["hello-plugin"], "enabled": ["computer"]}')

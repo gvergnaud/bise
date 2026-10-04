@@ -26,6 +26,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 import scripted_ts  # noqa: E402  (EXE, jsrt_env, run_session)
+import wait  # noqa: E402
 
 PRIVATE = ("BEND_SESSION_FILE", "BEND_CONTEXT_FILE", "BEND_WIRE_LOG", "BEND_REPL_PORT",
            "BEND_DEBUG_DIR", "BEND_EXTRA_PROMPT", "BEND_WORKDIR", "SB_SOCKET", "SB_AGENT",
@@ -94,11 +95,10 @@ def part_a(tmp):
     repl = subprocess.Popen([os.path.join(ROOT, "repl-live")], cwd=ROOT, env=env,
                             stdout=open(log, "w"), stderr=open(err, "w"))
     try:
-        t0 = time.time()
-        while "REPL on" not in open(log).read():
-            if repl.poll() is not None or time.time() - t0 > 60:
-                sys.exit("FAIL no REPL banner: %s" % open(err).read()[-500:])
-            time.sleep(0.1)
+        def banner():
+            assert repl.poll() is None, "FAIL the REPL exited: %s" % open(err).read()[-500:]
+            return "REPL on" in open(log).read()
+        wait.until(banner, 60, "the REPL banner")
         out0 = os.path.join(bg, "bend-bg-%d" % port, "0.out")
         cmds = ["sleep 8; echo job-done", "sleep 4", "echo before; cat " + out0,
                 "yes aaaaaaaaa | head -c 3000000",

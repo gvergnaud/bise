@@ -13,6 +13,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
+import wait  # noqa: E402
 
 
 def main():
@@ -30,8 +31,7 @@ def main():
     ok = False
     try:
         sock = os.path.join(st, "hub.sock")
-        while not os.path.exists(sock):
-            time.sleep(0.1)
+        wait.until(lambda: os.path.exists(sock), 20, "the hub's socket")
         c = e2e.Client(sock)
         c.wait_status("main", "idle", 90)
         c.say("Crée une tâche nommée hello qui écrit le fichier hello.txt contenant exactement le mot bonjour "

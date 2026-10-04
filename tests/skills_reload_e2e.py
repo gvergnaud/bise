@@ -12,10 +12,10 @@ import json
 import os
 import shutil
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
+import wait  # noqa: E402
 
 FAILS = []
 
@@ -64,8 +64,7 @@ def main():
             return open(log).read().count("plugins or skills changed: the REPL of main relaunches")
 
         # nothing changes: no relaunch (no timer for skills either)
-        time.sleep(3)
-        check(repl_pid(E) == pid and relaunches() == 0, "no relaunch while nothing changes")
+        wait.holds(lambda: repl_pid(E) == pid and relaunches() == 0, 3, "no relaunch while nothing changes")
         same = turn("hello same")
         check(repl_pid(E) == pid, "a turn with no skill change keeps the REPL")
 
@@ -73,8 +72,7 @@ def main():
         # first (the say waits for the new REPL) and that turn has it
         os.makedirs(folder)
         open(path, "w").write(skill("The first gamma text."))
-        time.sleep(3)
-        check(repl_pid(E) == pid, "no timer: an idle REPL is not relaunched by itself")
+        wait.holds(lambda: repl_pid(E) == pid, 3, "no timer: an idle REPL is not relaunched by itself")
         added = turn("hello added")
         check(repl_pid(E) not in (None, pid), "main's REPL relaunched before the turn")
         check("relaunches before its turn" in open(log).read(), "the hub logged the skills change")

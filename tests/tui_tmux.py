@@ -10,31 +10,30 @@ import re
 import shlex
 import subprocess
 import sys
-import time
 import traceback
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
+import wait  # noqa: E402
 
 def tmux(*a):
     return subprocess.run(["tmux", *a], capture_output=True, text=True).stdout
 
 
-def wait_until(fn, timeout, what, poll=0.2):
-    """Call `fn` until it returns a truthy value, and return it; after
-    `timeout` s: AssertionError(what()). The one poll loop of the tmux
-    tests (the screen, the fake provider's log, a file). `timeout` is for
-    an idle machine: a loaded one gets it times load_factor() (read at
-    each poll), so a test that passes returns as soon as it would, and
-    only a broken one waits longer before failing."""
-    t0 = time.time()
-    while True:
-        got = fn()
-        if got:
-            return got
-        if time.time() - t0 >= timeout * e2e.load_factor():
-            raise AssertionError(what())
-        time.sleep(poll)
+def wait_until(fn, timeout, what, poll=wait.SCREEN_POLL):
+    """wait.until at the screen's pace (a capture-pane every 0.2 s): the
+    screen, the fake provider's log, a file."""
+    return wait.until(fn, timeout, what, poll)
+
+
+def on_screen(cond, sc):
+    """`cond` holds on the screen `sc`: a substring, a compiled regex
+    (searched) or a function of the screen."""
+    if isinstance(cond, str):
+        return cond in sc
+    if isinstance(cond, re.Pattern):
+        return cond.search(sc) is not None
+    return bool(cond(sc))
 
 
 class Tui:
@@ -61,18 +60,12 @@ class Tui:
         substring, a compiled regex (searched multiline) or a function of
         the screen. The one poll loop of the tmux tests: a flake fix here
         fixes them all."""
-        def holds(c, sc):
-            if isinstance(c, str):
-                return c in sc
-            if isinstance(c, re.Pattern):
-                return c.search(sc) is not None
-            return bool(c(sc))
         last = [""]
 
         def match():
             last[0] = sc = self.screen(colors)
             for i, c in enumerate(conds):
-                if holds(c, sc):
+                if on_screen(c, sc):
                     return i, sc
             return None
 
@@ -104,6 +97,45 @@ class Tui:
         gone.__doc__ = "gone: %r" % needle
         return self.wait_any([gone], timeout, poll=0.1)[1]
 
+    def sync(self, mark="¤"):
+        """A sentinel for "nothing happens" checks: every key and click
+        sent before it was handled once a mark typed after them shows in
+        the composer, then is erased (the TUI reads its input in order).
+        Then check that nothing happened: no fixed wait."""
+        self.typed(mark)
+        self.wait(mark, 10)
+        self.keys("BSpace")
+        self.wait_gone(mark)
+
+    def press_until(self, key, cond, sel=None, tries=20, must=True):
+        """Press `key` until `cond` (as in wait_any) is on screen; return
+        the screen. After each press, wait until the TUI drew it before
+        the next one (a blind gap read the screen too early under load and
+        the next key overshot the row, BISE-292; two esc too close are
+        alt+esc): the match of the regex `sel` (the selected row) changed,
+        or the screen did. Not there after `tries`: AssertionError, or
+        None when not `must` (the caller waits on)."""
+        for _ in range(tries):
+            sc = self.screen()
+            if on_screen(cond, sc):
+                return sc
+            was = sel.search(sc).group(0) if sel and sel.search(sc) else None
+            self.keys(key)
+
+            def drawn(s, sc=sc, was=was):
+                if on_screen(cond, s):
+                    return True
+                if sel:
+                    m = sel.search(s)
+                    return m is not None and m.group(0) != was
+                return s != sc
+            drawn.__doc__ = "the TUI drew %s" % key
+            self.wait_any([drawn], 10)
+        if not must:
+            return None
+        print(self.screen())
+        raise AssertionError("not on screen after %d %s: %s" % (tries, key, cond))
+
     def start(self, cols, rows, extra_env=""):
         """(Re)open the TUI: a new tmux session of the same name."""
         tmux("kill-session", "-t", self.name)
@@ -116,9 +148,7 @@ class Tui:
         sock = os.path.join(self.E.state, "hub.sock")
         try:
             e2e.Client(sock).send({"op": "stop_hub"})
-            t0 = time.time()
-            while os.path.exists(sock) and time.time() - t0 < 1:
-                time.sleep(0.05)
+            wait.until(lambda: not os.path.exists(sock), 1, "the hub's socket gone", poll=0.05)
         except Exception:
             pass
         if not ok:

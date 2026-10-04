@@ -27,6 +27,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 import provider_folds as P  # noqa: E402
+import wait  # noqa: E402
 
 # row -> (catalog provider, model, family override). The cheapest
 # tool-capable model of each provider of rust/catalog/models.toml.
@@ -211,11 +212,12 @@ def harness_turn(row, prov, model, family, base, key_env, env):
     repl = subprocess.Popen([os.path.join(ROOT, "repl-live")], cwd=ROOT, env=e,
                             stdout=open(log, "w"), stderr=open(err, "w"))
     try:
-        t0 = time.time()
-        while "REPL on" not in open(log).read():
-            if repl.poll() is not None or time.time() - t0 > 60:
-                return "FAIL %s: no REPL banner %s" % (row, open(err).read()[-300:])
-            time.sleep(0.1)
+        try:
+            wait.until(lambda: repl.poll() is not None or "REPL on" in open(log).read(), 60, "the REPL banner")
+        except AssertionError:
+            pass
+        if "REPL on" not in open(log).read():
+            return "FAIL %s: no REPL banner %s" % (row, open(err).read()[-300:])
         sock = socket.create_connection(("127.0.0.1", port), timeout=300)
         sock.sendall(("run Run `echo %s` with your bash tool, then say done.\n" % token).encode())
         f = sock.makefile("rb")

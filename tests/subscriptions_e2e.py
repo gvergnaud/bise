@@ -31,7 +31,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import fake_openai_auth as FA  # noqa: E402
 import fake_provider as FP  # noqa: E402
-from e2e import EXE, ROOT, Env, check, host_env, load_factor  # noqa: E402
+from e2e import EXE, ROOT, Env, check, host_env  # noqa: E402
+import wait  # noqa: E402
+from wait import load_factor  # noqa: E402
 
 RESOURCE = "https://api.openai.com/v1"
 SCOPE = "openid profile email offline_access resource.invoke chatgpt.tokens.use.direct"
@@ -687,9 +689,9 @@ base_url = "%s"
     def items():
         return [x for x in c.cards() if x["kind"] == "signin"]
     c.wait(lambda: len(items()) == 1, 30, "the signin item")
-    time.sleep(2)
-    check(not any("[report: turn_failed]" in l for l in c.lines("main")), "no report to main: %r" % c.lines("main")[-4:])
-    check(c.agent("main")["status"] == "idle", "main did not take a turn on t1's expiry")
+    wait.holds(lambda: not any("[report: turn_failed]" in l for l in c.lines("main")) and c.agent("main")["status"] == "idle",
+               2, lambda: "no report to main, main idle (no turn on t1's expiry): %s %r"
+               % (c.agent("main")["status"], c.lines("main")[-4:]))
     # main hits it too: still one item, it names both
     c.say("main mid work")
     c.wait_line("main", "your ChatGPT sign-in expired", 90)

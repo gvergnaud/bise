@@ -15,6 +15,8 @@ import http.server, json, os, socket, subprocess, sys, tempfile, threading, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
+sys.path.insert(0, HERE)
+import wait  # noqa: E402
 NL = chr(10)
 OLD = "old-cid old tool : #kept" + NL
 
@@ -81,12 +83,12 @@ def start(tmp, name, gw, extra):
     repl = subprocess.Popen([os.path.join(ROOT, "repl-live")], cwd=d, env=env,
                             stdout=open(log, "w"), stderr=subprocess.STDOUT)
     try:
-        t0 = time.time()
-        while "[mcp]" not in open(log).read():
-            if repl.poll() is not None or time.time() - t0 > 60:
-                sys.exit("FAIL %s: no [mcp] line: %s" % (name, open(log).read()[-500:]))
-            time.sleep(0.1)
-        time.sleep(0.2)
+        def done():
+            """the bootstrap's last line: the index written, or kept"""
+            assert repl.poll() is None, "FAIL %s: the REPL exited: %s" % (name, open(log).read()[-500:])
+            text = open(log).read()
+            return "[mcp] connector index written" in text or "the connector index on disk is kept" in text
+        wait.until(done, 60, lambda: "%s: the bootstrap's [mcp] line: %s" % (name, open(log).read()[-500:]))
         return open(index).read(), open(log).read()
     finally:
         repl.kill()

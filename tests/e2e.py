@@ -16,6 +16,9 @@ import tempfile
 import threading
 import time
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import wait  # noqa: E402
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
 # the binary cargo built: $CARGO_TARGET_DIR (a gate's own target) or rust/target
@@ -32,18 +35,6 @@ AGENT_VARS = ("SB_CORE_BIN", "SB_SOCKET", "SB_AGENT", "SB_TASK", "SB_PORT_OFFSET
               "SB_BUILD_DIR", "SB_VERSIONS_DIR", "SB_LAUNCH_DIR", "BISE_ROLE", "BISE_EXPORTS_FOR",
               # its tmp/bg and run/ (approvals-mode, gate file, sandbox profiles)
               "BEND_BG_DIR", "BEND_AGENT_RUN")
-
-
-def load_factor():
-    """How much slower than an idle machine this one is now: the load
-    average per core, at least 1, at most 4 (5 agents building at once
-    reach 3-4). Every poll loop of the tests scales its timeout by it
-    (Env.wait, tui_tmux.wait_until): a test that passes returns as soon
-    as it would, only a broken one waits longer before failing."""
-    try:
-        return max(1.0, min(4.0, os.getloadavg()[0] / (os.cpu_count() or 1)))
-    except OSError:
-        return 1.0
 
 
 def short_tmp():
@@ -118,11 +109,7 @@ class Env:
         self.hub = subprocess.Popen([EXE, "sbd", "--workspace", self.ws], cwd=ROOT, env=self.env,
                                     stdin=subprocess.DEVNULL, stdout=err, stderr=err)
         sock = os.path.join(self.state, "hub.sock")
-        t0 = time.time()
-        while not os.path.exists(sock):
-            if time.time() - t0 > 20:
-                raise RuntimeError("hub did not start")
-            time.sleep(0.05)
+        wait.until(lambda: os.path.exists(sock), 20, "the hub's socket %s" % sock, poll=0.05)
         return Client(sock)
 
     def stop_hub(self):
@@ -208,17 +195,8 @@ class Client:
             return list((self.state or {}).get("cards", []))
 
     def wait(self, pred, timeout=90, what="condition"):
-        """`timeout` is for an idle machine: times load_factor() (read at
-        each poll) on a loaded one (BISE-292)."""
-        t0 = time.time()
-        while time.time() - t0 < timeout * load_factor():
-            try:
-                if pred():
-                    return
-            except Exception:
-                pass
-            time.sleep(0.1)
-        raise AssertionError("timeout waiting for %s" % what)
+        """wait.until on the hub's state: pred's value once truthy."""
+        return wait.until(pred, timeout, what)
 
     def wait_line(self, agent, needle, timeout=90):
         self.wait(lambda: any(needle in l for l in self.lines(agent)), timeout, "%r in %s" % (needle, agent))
@@ -251,9 +229,11 @@ def t_spawn_and_auto_reply(E, c):
     # t1's turn ends: its reply comes back to main automatically
     c.wait_line("main", "sb msg-in : t1 m_", 90)
     c.wait_idle("main", "t1")
+    # main's turn on the reply may start after the idle seen above (the
+    # msg-in line comes first): wait for its model call
+    c.wait(lambda: any('auto="true"' in r["user"] and "from=\"t1\"" in r["user"]
+                       for r in E.fake_requests() if r["agent"] == "main"), 60, "main saw t1's automatic reply")
     reqs = [r for r in E.fake_requests() if r["agent"] == "main"]
-    check(any('auto="true"' in r["user"] and "from=\"t1\"" in r["user"] for r in reqs),
-          "main saw t1's automatic reply")
     # the board reaches main's model calls
     board = open(os.path.join(E.state, "agents", "main", "context.txt")).read()
     check("t1" in board and "<task_board>" in board, "main's context has the board: " + board)
@@ -521,9 +501,24 @@ def t_session_crashes(E, c):
     c.say("[[bash: sleep 30; echo late]]")
     c.wait(lambda: any(e["type"] == "tool_started" or (e["type"] == "assistant_message" and e["data"]["calls"]
                        and "sleep 30" in e["data"]["calls"][0]["args"]) for e in evs()), 60, "the call in the log")
-    time.sleep(0.5)
+    repl = int(open(os.path.join(adir, "repl.pid")).read().strip())
+
+    def running():
+        """the call's `sleep 30` runs under the REPL: the kill cuts a tool call"""
+        rows = [l.split(None, 2) for l in subprocess.run(["ps", "-axww", "-o", "pid=,ppid=,command="],
+                                                         capture_output=True, text=True).stdout.splitlines()]
+        parent = {int(r[0]): int(r[1]) for r in rows if len(r) == 3}
+        for r in rows:
+            if len(r) == 3 and r[2].startswith("sleep 30"):
+                p = int(r[0])
+                while p > 1:
+                    p = parent.get(p, 1)
+                    if p == repl:
+                        return True
+        return False
+    c.wait(running, 60, "the call's sleep 30 running under the REPL %d" % repl)
     n = len(evs())
-    os.kill(int(open(os.path.join(adir, "repl.pid")).read().strip()), 9)
+    os.kill(repl, 9)
     c.wait(lambda: any(e["type"] == "process_opened" and e["data"]["resume"] for e in evs()[n:]), 60, "resumed")
     after = evs()[n:]
     types = [e["type"] for e in after]

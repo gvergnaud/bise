@@ -24,6 +24,8 @@ $FAKE_MAX_BODY with the foundry proxy's 400:
 import os, socket, subprocess, sys, tempfile, time, json, shutil, base64
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
+sys.path.insert(0, HERE)
+import wait  # noqa: E402
 OP = "<" + "image"   # never a literal tag in this file's output
 PNG = bytes.fromhex(
     "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
@@ -87,11 +89,10 @@ def start(fake_max, bise_max, tag):
     repl = subprocess.Popen([os.path.join(ROOT, "repl-live")], cwd=ROOT, env=env, stdout=open(log, "w"),
                             stderr=open(os.path.join(tmp, "err-%s" % tag), "w"))
     procs.append(repl)
-    t0 = time.time()
-    while "REPL on" not in open(log).read():
-        if repl.poll() is not None or time.time() - t0 > 60:
-            sys.exit("FAIL request_size_e2e: no REPL (%s)" % tag)
-        time.sleep(0.1)
+    def banner():
+        assert repl.poll() is None, "FAIL request_size_e2e: the REPL exited (%s)" % tag
+        return "REPL on" in open(log).read()
+    wait.until(banner, 60, "request_size_e2e: the REPL banner (%s)" % tag)
     return port
 
 

@@ -13,10 +13,10 @@ import os
 import shutil
 import subprocess
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
+import wait  # noqa: E402
 
 FAILS = []
 HELLO = os.path.join(e2e.ROOT, "rust/plugins/tests/fixtures/hello-plugin")
@@ -69,11 +69,7 @@ def main():
     web = subprocess.Popen([sys.executable, os.path.join(e2e.HERE, "fake_mcp_http.py"), "--mode", "streamable",
                             "--port-file", port_file], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
-        t0 = time.time()
-        while not os.path.exists(port_file) or not open(port_file).read().strip():
-            assert time.time() - t0 < 10, "the fake MCP server never started"
-            time.sleep(0.05)
-        port = open(port_file).read().strip()
+        port = wait.until(lambda: open(port_file).read().strip(), 10, "the fake MCP server's port file", poll=0.05)
         shutil.copytree(HELLO, os.path.join(user, "hello-plugin"))
         plugin(user, "remote-one", {"web": {"url": "http://127.0.0.1:%s/mcp" % port}})
         # slower than the bridge's 12 s ready wait: in the index later
@@ -88,7 +84,8 @@ def main():
         # the remote server adds a tool: list_changed, the bridge lists
         # again, the REPL reads the new index at the next search and call
         run(c, "return await tools.remote_one.add_tool({name: 'fresh_tool'})", "added")
-        time.sleep(1.5)
+        c.wait(lambda: "fresh_tool" in open(os.path.join(run_dir(E), "mcp-index.txt")).read(), 30,
+               "the bridge's new list in the index")
         run(c, "return await search_tool_functions({query: 'fresh_tool'})", "remote_one.fresh_tool")
         run(c, "return await tools.remote_one.fresh_tool({})", "added-tool:fresh_tool")
         # the late server is up by now (13 s after the start)

@@ -22,9 +22,11 @@ Scenarios: 01-short, 11-compaction (two turns, /compact, a third turn),
 13-queue (the REPL resumes the fixture's queue: the popped input is
 cause "queue" + from_queue, the held notification from_queue).
 """
-import copy, json, os, re, shutil, socket, subprocess, sys, tempfile, time
+import copy, json, os, re, shutil, socket, subprocess, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import wait  # noqa: E402
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
 REPL = os.path.join(ROOT, "repl-scripted")
 FIX = os.path.join(HERE, "fixtures", "session")
@@ -97,16 +99,27 @@ def run_repl(script, sends, resume_txt=None, restored_turn=True):
             sock = socket.create_connection(("127.0.0.1", port), timeout=60)
             f = sock.makefile("rb")
             wire = []
+
+            def saved_now():
+                return open(sess, "rb").read() if os.path.exists(sess) else b""
+
+            def run_saved(before, what):
+                """the session file is written after each run, right after
+                its `--- idle` (repl-core: emit, then P.save): wait for
+                that save before the next run, so each change seen is
+                this run's own"""
+                wait.until(lambda: saved_now() != before, 10, "the save of %s after %s" % (sess, what))
             if resume_txt is not None and restored_turn:
+                before = saved_now()
                 read_until_idle(f, wire)  # the restored queue runs by itself
+                run_saved(before, "the restored turn")
             for s in sends:
+                before = saved_now()
                 sock.sendall((s + "\n").encode())
                 read_until_idle(f, wire)
+                run_saved(before, repr(s[:40]))
             sock.sendall(b"quit\n")
             sock.close()
-            # the session file is written after each run: wait for the
-            # last one (the quit closes the connection first)
-            time.sleep(0.3)
         finally:
             proc.kill()
             proc.wait()

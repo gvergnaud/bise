@@ -23,6 +23,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 import fake_provider as F  # noqa: E402
+import wait  # noqa: E402
 
 FAILS = []
 
@@ -129,11 +130,10 @@ def main():
         return [json.loads(l) for l in open(F.LOG)]
 
     try:
-        t1 = time.time()
-        while "REPL on" not in open(log).read():
-            if repl.poll() is not None or time.time() - t1 > 60:
-                sys.exit("FAIL no REPL banner: %s" % open(err).read()[-800:])
-            time.sleep(0.1)
+        def banner():
+            assert repl.poll() is None, "FAIL the REPL exited: %s" % open(err).read()[-800:]
+            return "REPL on" in open(log).read()
+        wait.until(banner, 60, "the REPL banner")
 
         # ---- A: one toolset per provider ----
         def seen(r):

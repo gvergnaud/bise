@@ -15,6 +15,8 @@ the REPL's footprint after the turn stays under 300 MB (802 MB before).
 import os, socket, subprocess, sys, tempfile, time, base64, random, json
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
+sys.path.insert(0, HERE)
+import wait  # noqa: E402
 N = 20
 LIMIT_MB = 300
 tmp = tempfile.mkdtemp(prefix="sb-imgmem-")
@@ -51,10 +53,10 @@ def mb():
     rss = subprocess.run(["ps", "-o", "rss=", "-p", str(repl.pid)], capture_output=True, text=True).stdout
     return int(rss.strip() or 0) / 1024
 try:
-    t0 = time.time()
-    while "REPL on" not in open(log).read():
-        if repl.poll() is not None or time.time() - t0 > 60: sys.exit("no REPL")
-        time.sleep(0.1)
+    def banner():
+        assert repl.poll() is None, "no REPL: it exited"
+        return "REPL on" in open(log).read()
+    wait.until(banner, 60, "the REPL banner")
     before = mb()
     sock = socket.create_connection(("127.0.0.1", port), timeout=300)
     t1 = time.time()
@@ -67,13 +69,15 @@ try:
     after = mb()
     # the fake provider logs the request after its reply's stream ends:
     # turn_done can arrive first (a loaded machine), so wait for the record
-    recs = []
-    for _ in range(100):
-        recs = [json.loads(l) for l in open(os.path.join(tmp, "fake.log")) if l.strip()] \
+    def records():
+        return [json.loads(l) for l in open(os.path.join(tmp, "fake.log")) if l.strip()] \
             if os.path.exists(os.path.join(tmp, "fake.log")) else []
-        if recs and len(recs[-1].get("image_sha", [])) == N:
-            break
-        time.sleep(0.1)
+    try:
+        wait.until(lambda: (lambda r: r and len(r[-1].get("image_sha", [])) == N)(records()), 10,
+                   "the fake's record of the %d images" % N)
+    except AssertionError:
+        pass  # the checks below say what came
+    recs = records()
     import hashlib
     got = recs[-1].get("image_sha", []) if recs else []
     exp = [hashlib.sha256(("data:image/png;base64," + open(os.path.join(imgs, "%032x.b64" % k)).read()).encode()).hexdigest() for k in range(N)]

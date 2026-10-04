@@ -28,6 +28,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 from repl_bash_env import clean_env, free_port, tool_results  # noqa: E402
+import wait  # noqa: E402
 
 SKILL = """---
 name: alpha
@@ -84,21 +85,25 @@ def main():
             fails.append("%s %s" % (name, detail))
 
     try:
-        t0 = time.time()
-        while "REPL on" not in open(log).read():
-            if repl.poll() is not None or time.time() - t0 > 60:
-                sys.exit("FAIL no REPL banner: %s" % open(err).read()[-500:])
-            time.sleep(0.1)
-        while not os.path.exists(index) and time.time() - t0 < 30:
-            time.sleep(0.1)  # the scan may end after the banner
+        def banner():
+            assert repl.poll() is None, "FAIL the REPL exited: %s" % open(err).read()[-500:]
+            return "REPL on" in open(log).read()
+        wait.until(banner, 60, "the REPL banner")
+        # the scan may end after the banner; the check below says what is missing
+        try:
+            wait.until(lambda: os.path.exists(index), 30, "the shared index %s" % index)
+        except AssertionError:
+            pass
         idx = open(index).read() if os.path.exists(index) else ""
         check("the scan writes the shared index (its folder created)",
               idx.startswith("alpha\tThe alpha test skill.\t/"), repr(idx))
         check("no temp file is left next to it", os.path.isdir(cache) and os.listdir(cache) == ["skills-index.txt"],
               repr(os.listdir(cache)))
         sidx = os.path.join(tmp, "run", str(port), "skills-index.txt")
-        while not os.path.exists(sidx) and time.time() - t0 < 30:
-            time.sleep(0.1)  # the scan writes it after the shared index
+        try:  # the scan writes it after the shared index
+            wait.until(lambda: os.path.exists(sidx), 30, "the session's index %s" % sidx)
+        except AssertionError:
+            pass
         check("the session's index is under $BEND_RUN_DIR/<port>",
               os.path.exists(sidx) and not os.path.exists(os.path.join(tmp, ".bend-harness")),
               repr((os.listdir(tmp), os.listdir(os.path.dirname(sidx))

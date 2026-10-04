@@ -82,7 +82,8 @@ def main():
 
         out = sb("t1", wt, "artifact", "add", plan)
         check(out.startswith("pricing plans is unchanged: still v1"), out)
-        time.sleep(1.1)
+        # no mtime gap needed: the signature is <bytes>:<mtime ms>
+        # (artifacts.rs, Store::add's `sig`) and the bytes change here
         open(plan, "a").write("pro,20\n")
         out = sb("t1", wt, "artifact", "add", "out/pricing-plans.csv")
         check(out.startswith("added pricing plans (sheet) · v2"), out)

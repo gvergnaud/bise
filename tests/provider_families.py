@@ -31,6 +31,7 @@ ROOT = os.path.abspath(os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 import fake_provider as F  # noqa: E402
 import provider_folds as P  # noqa: E402
+import wait  # noqa: E402
 
 FAILS = []
 
@@ -274,11 +275,10 @@ def part_d():
         return out
 
     try:
-        t0 = time.time()
-        while "REPL on" not in open(log).read():
-            if repl.poll() is not None or time.time() - t0 > 60:
-                sys.exit("FAIL no REPL banner: %s" % open(err).read()[-500:])
-            time.sleep(0.1)
+        def banner():
+            assert repl.poll() is None, "FAIL the REPL exited: %s" % open(err).read()[-500:]
+            return "REPL on" in open(log).read()
+        wait.until(banner, 60, "the REPL banner")
         out = turn("fake/claude-x", "[[error: overloaded retry=0]] [[think: two steps]] [[bash: echo a1]] [[bash: echo a2]]")
         recs = [json.loads(l) for l in open(F.LOG)]
         text = open(session).read()
