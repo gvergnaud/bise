@@ -1,0 +1,13 @@
+# The reviewed time.sleep( lines of tests/*.py outside tests/wait.py
+# (tests/sleep_check.py, docs/issues/10-tests-wait.md): a sleep that is
+# the behavior under test, never a wait for a state.
+# One line each: <file> | <the line's text, stripped> | <why>.
+# A new one needs a review (architect): a test waits with wait.until,
+# wait.holds or wait.stable (tests/wait.py).
+fake_provider.py | time.sleep(float(slow.group(1))) | the fake model's [[slow: N]] reply: a slow provider is the input of the tests that use it
+fake_mcp_http.py | time.sleep(float(arguments.get("secs", 1))) | the fake MCP server's `slow` tool: a slow tool call is the input
+fake_openai_auth.py | time.sleep(wait) | the fake ChatGPT auth server's slow_refresh: a slow token refresh is the input
+repl_bash_env.py | HOG = "python3 -c 'import time; m=\"%s\"; a=[b\"x\"*(25<<20) for k in range(12)]; time.sleep(30)'" | the memory hog's command line: a process that must stay alive until the watchdog kills it
+subscriptions_tui_tmux.py | time.sleep(4) | the fake browser script: the user takes 4 s to click, so the waiting bar shows
+tui_computer_use_tmux.py | time.sleep(3) | the fake computer-use helper's live-test: a slow check is the input (the TUI shows it running)
+tui_text_layer_tmux.py | time.sleep(DOUBLE_CLICK_GAP) | two presses on one cell within 400 ms are a double click (app::MouseState::press): the gap between two clicks is the input

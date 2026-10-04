@@ -353,6 +353,10 @@ fi
 
 # ---- quick
 t0=$SECONDS
+# no blind time.sleep in tests/ (docs/issues/10-tests-wait.md): a test
+# waits for a state with tests/wait.py; the check proves itself first
+python3 "$root/tests/sleep_check.py" --self-test >/dev/null && python3 "$root/tests/sleep_check.py" >/dev/null \
+  || { python3 "$root/tests/sleep_check.py"; echo "GATE quick FAILED"; exit 1; }
 cache="${CARGO_TARGET_DIR:-$root/rust/target}/gate-cache"
 # the PROOF shards sit in a copy of bend/ in it and import it relatively
 # (bend refuses an absolute import path with a dot, like ~/.bise/gate/...)
