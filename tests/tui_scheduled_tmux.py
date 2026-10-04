@@ -118,7 +118,7 @@ def wide(t, E):
     t.keys("M-1")
     sc = t.wait("scheduled #1 ended · stopped by you")
     assert "t1 scheduled #1 · every 2m · 6 times · next" in sc, sc
-    assert "scheduled #1 · run now by you · check the build" in sc, sc
+    assert "scheduled #1 · ran now, by you · check the build" in sc, sc
     assert "the user stopped timer" not in sc and "(stop it:" not in sc, sc
     no_switchboard(sc)
     shot(t, "150-agent-thread")

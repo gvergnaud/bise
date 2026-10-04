@@ -192,7 +192,7 @@ pub(crate) fn is_hub(from: &str) -> bool {
 /// `timer #48 (every 2m, 2/6, set by answer-line): <words>` then the
 /// stop hint) as its ◷ line: `scheduled #48 · 2 of 6 · <first words> ▸`,
 /// `scheduled #48 · 1 of 6 · waited 4m for answer-line to finish ▸`,
-/// `scheduled #48 · run now by you · <first words> ▸`. None: not a wake.
+/// `scheduled #48 · ran now, by you · <first words> ▸`. None: not a wake.
 pub(crate) fn run_line(text: &str) -> Option<Ev> {
     let rest = text.strip_prefix("timer #")?;
     let (id, rest) = rest.split_once(" (")?;
@@ -215,7 +215,7 @@ pub(crate) fn run_line(text: &str) -> Option<Ev> {
         }
     }
     if now {
-        head.push_str(" · run now by you");
+        head.push_str(" · ran now, by you");
     }
     match waited {
         Some(w) => head.push_str(&format!(" · {w}")),
@@ -254,7 +254,7 @@ mod tests {
         let (h, _) = head(run_line("timer #48 (every 2m, 1/6, waited 4m for answer-line to finish, set by answer-line): x\n(stop it: sb every --stop 48)"));
         assert_eq!(h, "scheduled #48 · 1 of 6 · waited 4m for answer-line to finish");
         let (h, _) = head(run_line("timer #51 (every day 07:30, run now by the user, set by main): ship\n(stop it: sb every --stop 51)"));
-        assert_eq!(h, "scheduled #51 · run now by you · ship");
+        assert_eq!(h, "scheduled #51 · ran now, by you · ship");
         assert!(run_line("timer set: #1 @main every 10m").is_none());
         assert!(run_line("hello").is_none());
         assert!(is_stop_note("the user stopped timer #3 (x): don't set it again unless they ask"));

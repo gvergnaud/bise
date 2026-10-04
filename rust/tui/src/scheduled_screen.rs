@@ -186,7 +186,7 @@ pub(crate) fn key_bar(sc: &Screen, sel: Option<&Task>, wide: bool) -> Line<'stat
         return if active { keys(&[("r", "run now"), ("x", "stop"), ("esc", "back to the list")]) } else { keys(&[("esc", "back to the list")]) };
     }
     let esc = if sc.query.is_empty() { "close" } else { "clear the search" };
-    let tab = if sc.ended_too { "running only" } else { "ended too" };
+    let tab = if sc.ended_too { "active only" } else { "ended too" };
     let mut pairs: Vec<(&str, &str)> = Vec::new();
     if sel.is_some() {
         pairs.push(("⏎", "open"));

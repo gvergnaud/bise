@@ -53,7 +53,7 @@ fn the_list_soonest_first_then_ended_on_tab_and_find() {
     assert!(t.iter().any(|l| l.contains("#44") && l.contains("stopped by you")), "{t:?}");
     assert!(t.iter().any(|l| l.contains("#47") && l.contains("ran its 3 times")));
     assert_eq!(hits.len(), 4);
-    assert!(t[t.len() - 1].starts_with("⏎ open   r run now   x stop   / find   tab running only   esc close"), "{}", t[t.len() - 1]);
+    assert!(t[t.len() - 1].starts_with("⏎ open   r run now   x stop   / find   tab active only   esc close"), "{}", t[t.len() - 1]);
     sc.query = "designer".into();
     assert_eq!(shown(&sc, &all).iter().map(|t| t.id).collect::<Vec<_>>(), vec![53]);
 }
