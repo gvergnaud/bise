@@ -167,6 +167,20 @@ in a repo that takes pull requests, each change gets its own branch and PR, and 
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/prs-dark.svg"><img src="docs/brand/readme/feat/prs-light.svg" width="680" alt="cookies opens pull request #409. CI fails, it fixes the test; a review bot asks for a bigger button, you say do it; #409 merges. the panel shows where it stands."></picture>
 
+### what they made
+
+#### artifacts
+
+what agents make for you (a page, a doc, a sheet, slides, a PR) lands in `/artifacts`: one list, newest first, with its versions. `/` finds one, `space` shows it in Quick Look. in a reply it's a ↗ link that opens it, and `@` puts one in your message.
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/artifacts-dark.svg"><img src="docs/brand/readme/feat/artifacts-light.svg" width="680" alt="pricing-page made a page and a sheet: they show in the thread as links. you type /artifacts: every page, doc, sheet, deck and PR your agents made, in one list. you search deck and press space: the deck opens in Quick Look."></picture>
+
+#### diffs beside the thread
+
+click `± 3 files` under an agent's work, or press `ctrl+g`: its changes against main open on the right, file by file. `tab` goes to the next file, `⏎` opens the line in your editor, and `/diff` picks any branch.
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/diff-dark.svg"><img src="docs/brand/readme/feat/diff-light.svg" width="680" alt="pricing-page landed: ± 3 files +42 −18. a click opens its diff against main on the right, file by file, green and red. tab goes to the next file; enter opens the line in your editor."></picture>
+
 ## details
 
 small things, done carefully.
@@ -194,6 +208,12 @@ select lines in the history and start typing: they're attached to your message a
 a large model for the hard job, a fast one for chores. `/model` and `/reasoning` set them per agent.
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/model-dark.svg"><img src="docs/brand/readme/feat/model-light.svg" width="680" alt="each agent shows its model in the panel. you switch to release and type /model opus, then /reasoning hi: its line goes from haiku·lo to opus·hi."></picture>
+
+#### scheduled tasks
+
+agents can wake themselves on a schedule: check the build every 2 minutes, ship a release every morning. `/scheduled` lists them; `r` runs one now, `x` stops it.
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/scheduled-dark.svg"><img src="docs/brand/readme/feat/scheduled-light.svg" width="680" alt="you ask main to check the build every 2 minutes: answer-line gets a scheduled task, wakes, reports, and stops it once the build is green. /scheduled lists every scheduled task: what wakes your agents, and when."></picture>
 
 #### built-in shell
 

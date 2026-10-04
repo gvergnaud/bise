@@ -1219,11 +1219,162 @@ def t_computer(c):
              f'<text x="{sx + 8}" y="{sy + 11}" font-size="8" fill="{c["faint"]}">pricing · 390 px</text>{cards}</g>')
     return m.svg("you ask main if buy is visible on the mobile pricing page. an agent opens it in a background tab in its own group, reads it, takes a screenshot, and main answers: buy shows on all three plans. your own tab never moved.")
 
+
+# ---------- artifacts, diffs, scheduled tasks (designer, for the release after v2026.10.2-18) ----------
+def _okerr(c):
+    return ({"dark": "#b9d99a", "light": "#3f7a2a"}[c["mode"]], {"dark": "#ff8a80", "light": "#b3261e"}[c["mode"]])
+
+def _artline(m, t, title, meta, y=None, gap=0):
+    """an artifact in the thread: the ↗ chip (tint, accent) then its kind, dim."""
+    c = m.c
+    if y is None: m.y += gap; yy = m.y; m.y += 27
+    else: yy = y
+    k = m.tl.show(t); m.marks.append((t, yy, y is not None, len(m.feed)))
+    n = cells(title) + 2; w = (n + 1) * CW
+    m.feed.append(f'<g class="{k}"><rect x="{m.fx - 4}" y="{yy - 15}" width="{w:.1f}" height="20" rx="3" fill="{c["chip"]}"/>'
+                  f'<text x="{m.fx + 2}" y="{yy}" font-size="14" fill="{c["acc"]}" xml:space="preserve">↗ {E(title)}</text>'
+                  f'<text x="{m.fx + w + 8:.1f}" y="{yy}" font-size="13" fill="{c["dim"]}" xml:space="preserve">{E(meta)}</text></g>')
+    return yy
+
+def t_artifacts(c):
+    """artifacts: what agents make lands in one list; /artifacts finds it; space shows it."""
+    m = Tui(c, 12, H=300, keys="@ file   / commands   ⏎ send"); m.typed = []
+    m.header([(0, 1.0, f'{m.gust()} 1 working'), (1.0, None, f'{m.acc("↗")} 2 new')])
+    m.main(0.3, "pricing-page is done. the page and the numbers:")
+    _artline(m, 0.7, "pricing page", "page · v3")
+    _artline(m, 0.9, "pricing-plans.xlsx", "sheet")
+    m.type(1.8, 2.6, "/artifacts")
+    m.composer([(1.8, 2.8)])
+    # the full screen, over everything under the header
+    W, H = m.W, m.H; x0 = 32
+    def scr(t0, t1, query, rows, sel, keys):
+        k = m.tl.show(t0, t1, dur=0.12); o = []
+        o.append(f'<rect x="0" y="43" width="{W}" height="{H-43}" fill="{c["bg"]}"/>')
+        o.append(f'<text x="{x0}" y="70" font-size="13" font-weight="700" fill="{c["text"]}" xml:space="preserve">artifacts <tspan font-weight="400" fill="{c["dim"]}">· what your agents made</tspan></text>')
+        o.append(f'<text x="{W-24}" y="70" text-anchor="end" font-size="12" fill="{c["dim"]}">all agents · 9</text>')
+        o.append(f'<text x="{x0}" y="94" font-size="13" fill="{c["faint"] if not query else c["text"]}" xml:space="preserve">/ {E(query or "find: a title, an agent, a kind")}</text>')
+        y = 124
+        for i, r in enumerate(rows):
+            if r[0] == "group":
+                o.append(f'<text x="{x0+14}" y="{y}" font-size="12" fill="{c["faint"]}">{r[1]}</text>'); y += 22; continue
+            title, kind, agent, when = r
+            if i == sel:
+                o.append(f'<rect x="{x0-8}" y="{y-15}" width="{W-2*x0+16}" height="21" rx="3" fill="{c["chip"]}"/>')
+                o.append(f'<text x="{x0}" y="{y}" font-size="13" fill="{c["acc"]}">›</text>')
+            o.append(f'<text x="{x0+14}" y="{y}" font-size="13" fill="{c["text"]}" xml:space="preserve">{E(title)}</text>'
+                     f'<text x="{x0+14+25*7.8:.0f}" y="{y}" font-size="13" fill="{c["dim"]}" xml:space="preserve">{kind}</text>'
+                     f'<text x="{x0+14+33*7.8:.0f}" y="{y}" font-size="13" fill="{c["dim"]}" xml:space="preserve">{agent}</text>'
+                     f'<text x="{x0+14+48*7.8:.0f}" y="{y}" font-size="13" fill="{c["dim"]}" xml:space="preserve">{when}</text>')
+            y += 22
+        o.append(f'<text x="{x0}" y="{H-16}" font-size="12" fill="{c["faint"]}" xml:space="preserve">{keys}</text>')
+        m.last.append(f'<g class="{k}">{"".join(o)}</g>')
+    ALL = [("group", "today"), ("pricing page", "page", "pricing-page", "now"), ("pricing-plans.xlsx", "sheet", "pricing-page", "now"),
+           ("onboarding deck", "slides", "launch", "3 h"), ("capsule, round 9", "site", "ambient", "4 h"),
+           ("PR #6 · head checks", "PR", "pr-review", "5 h")]
+    KEYS = "⏎ open   space quick look   v versions   esc close"
+    scr(3.0, 4.0, None, ALL, 1, KEYS)
+    scr(4.0, 4.6, None, ALL, 2, KEYS)
+    scr(4.6, 5.4, None, ALL, 3, KEYS)
+    DECK = [("group", "today"), ("onboarding deck", "slides", "launch", "3 h"), ("group", "this week"), ("investor deck, draft", "slides", "designer", "tue")]
+    scr(5.4, 5.8, "de", ALL[:1] + ALL[3:4] + DECK[2:], 1, "⏎ done   ↑↓ choose   esc clear the search")
+    scr(5.8, 6.6, "deck", DECK, 1, "⏎ done   ↑↓ choose   esc clear the search")
+    scr(6.6, None, "deck   1 of 2", DECK, 1, KEYS)
+    press(m, 7.3, "space", y=m.H - 16 - 0)
+    # quick look: the slide, over the terminal
+    k = m.tl.show(7.6, dur=0.2)
+    qx, qy, qw, qh = 300, 118, 340, 150
+    m.last.append(f'<g class="{k}"><rect x="{qx}" y="{qy}" width="{qw}" height="{qh}" rx="9" fill="#2b2826" stroke="#00000055"/>'
+                  f'<circle cx="{qx+14}" cy="{qy+13}" r="4.5" fill="#ff5f57"/><circle cx="{qx+28}" cy="{qy+13}" r="4.5" fill="#febc2e"/><circle cx="{qx+42}" cy="{qy+13}" r="4.5" fill="#28c840"/>'
+                  f'<text x="{qx+qw/2}" y="{qy+17}" text-anchor="middle" font-size="11" fill="#d8d2c8" font-family="-apple-system, system-ui, sans-serif">onboarding deck.pptx</text>'
+                  f'<rect x="{qx+14}" y="{qy+28}" width="{qw-28}" height="{qh-40}" rx="3" fill="#f7f4ee"/>'
+                  f'<text x="{qx+30}" y="{qy+52}" font-size="10" fill="#b8416b" font-family="-apple-system, system-ui, sans-serif">bise · onboarding</text>'
+                  f'<text x="{qx+30}" y="{qy+80}" font-size="19" fill="#1b1917" font-family="Georgia, serif">your first hour with bise</text>'
+                  f'<text x="{qx+30}" y="{qy+100}" font-size="11" fill="#6b645a" font-family="Georgia, serif">talk to main. it starts the agents.</text>'
+                  f'<text x="{qx+qw-24}" y="{qy+qh-18}" text-anchor="end" font-size="9" fill="#857d72" font-family="-apple-system, system-ui, sans-serif">1 / 12</text></g>')
+    return m.svg("pricing-page made a page and a sheet: they show in the thread as links. you type /artifacts: every page, doc, sheet, deck and PR your agents made, in one list. you search deck and press space: the deck opens in Quick Look.")
+
+def t_diff(c):
+    """diffs beside the thread: a click on ± 3 files opens the agent's changes against main on the right."""
+    ok, err = _okerr(c)
+    m = Tui(c, 11, H=300, keys="@ file   / commands   ⏎ send"); m.typed = []
+    m.header([(0, None, f'{m.gust()} 1 working')])
+    m.main(0.3, "three plans now.")
+    yy = m.row(0.6, f'{m.acc("✓")} pricing-page landed', gap=4)
+    y2 = m.row(0.6, f'<tspan fill="{c["acc"]}" text-decoration="underline">± 3 files</tspan> <tspan fill="{ok}">+42</tspan> <tspan fill="{err}">−18</tspan>  {m.dim("a1b2c3d")}', size=13, x=m.fx + 14)
+    m.composer([])
+    # the pointer clicks ± 3 files
+    kp = m.tl.show(1.4, 2.0, dur=0.1); px, py = m.fx + 14 + 40, y2 + 2
+    m.over.append(f'<path class="{kp}" d="M{px} {py} l0 15 l4 -4 l3 7 l3 -1 l-3 -7 l6 0 z" fill="{c["text"]}" stroke="{c["bg"]}" stroke-width="1"/>')
+    W, H, top = m.W, m.H, m.top; x0 = 300
+    def panel(t0, t1, focus_file, lines, keys):
+        k = m.tl.show(t0, t1, dur=0.15); o = []
+        o.append(f'<rect x="{x0}" y="43" width="{W-x0}" height="{top-43}" fill="{c["bg"]}"/><line x1="{x0}" y1="43" x2="{x0}" y2="{top}" stroke="{c["acc"]}"/>')
+        o.append(f'<text x="{x0+16}" y="66" font-size="13" font-weight="700" fill="{c["acc"]}" xml:space="preserve">pricing-page <tspan font-weight="400" fill="{c["dim"]}">vs main · 3 files</tspan> <tspan font-weight="400" fill="{ok}">+42</tspan> <tspan font-weight="400" fill="{err}">−18</tspan></text>')
+        o.append(f'<text x="{x0+16}" y="92" font-size="12" fill="{c["text"]}" xml:space="preserve"><tspan fill="{c["faint"]}">▾</tspan> {E(focus_file[0])}  <tspan fill="{ok}">{focus_file[1]}</tspan> <tspan fill="{err}">{focus_file[2]}</tspan></text>')
+        y = 114
+        for kind, num, code in lines:
+            if kind == "+": o.append(f'<rect x="{x0+1}" y="{y-14}" width="{W-x0-1}" height="19" fill="{ok}" fill-opacity=".14"/>')
+            if kind == "-": o.append(f'<rect x="{x0+1}" y="{y-14}" width="{W-x0-1}" height="19" fill="{err}" fill-opacity=".14"/>')
+            mk = {"+": f'<tspan fill="{ok}">+</tspan>', "-": f'<tspan fill="{err}">−</tspan>', " ": " "}[kind]
+            o.append(f'<text x="{x0+16}" y="{y}" font-size="12" fill="{c["text"]}" xml:space="preserve"><tspan fill="{c["faint"]}">{num:>3}</tspan> {mk} {E(code)}</text>')
+            y += 19
+        m.last.append(f'<g class="{k}">{"".join(o)}</g>')
+        kk = m.tl.show(t0, t1, dur=0.15)
+        m.last.append(f'<g class="{kk}"><rect x="40" y="{H-30}" width="{W-60}" height="22" fill="{c["foot"]}"/>'
+                      f'<text x="64" y="{H-16}" font-size="12" fill="{c["faint"]}" xml:space="preserve">{keys}</text></g>')
+    F1 = [(" ", 40, '<section className="plans">'), ("-", 41, '  <Banner text="save 20%" />'), ("-", 42, '  <Plan name="free" />'),
+          ("-", 43, '  <Plan name="starter" />'), ("+", 41, '  <Plan name="free" note="…" />'), (" ", 44, '  <Plan name="team" />'),
+          ("-", 45, '  <Plan name="business" />'), ("+", 43, '  <Plan name="company" />'), (" ", 47, "</section>")]
+    F2 = [("+", 1, "export const plans = ["), ("+", 2, '  { name: "free", price: 0 },'), ("+", 3, '  { name: "team", price: 12 },'),
+          ("+", 4, '  { name: "company", contact: true },'), ("+", 5, "]")]
+    KEYS = "↑↓ scroll   tab next file   ⏎ open in your editor   esc close"
+    panel(2.0, 4.8, ("src/pages/pricing.tsx", "+30", "−12"), F1, KEYS)
+    press(m, 4.5, "tab", y=H - 16)
+    panel(4.8, None, ("src/data/plans.ts", "+10", ""), F2, KEYS)
+    # ⏎ on a line: it opens in your editor, the thread says so
+    ks = m.tl.show(6.6, dur=0.1)
+    m.last.append(f'<rect class="{ks}" x="{x0+1}" y="{114+2*19-14}" width="{W-x0-1}" height="19" fill="{c["acc"]}" fill-opacity=".18"/>')
+    press(m, 6.9, "⏎", y=H - 16)
+    m.row(7.4, m.dim("· opened plans.ts:3 in your editor"), size=12, gap=4)
+    return m.svg("pricing-page landed: ± 3 files +42 −18. a click opens its diff against main on the right, file by file, green and red. tab goes to the next file; enter opens the line in your editor.")
+
+def t_scheduled(c):
+    """scheduled tasks: an agent wakes on a schedule; /scheduled lists them."""
+    m = Tui(c, 10.5, H=280); m.typed = []
+    ask = "check the build every 2 min till it's green"
+    m.header([(0, None, f'{m.gust()} 2 working')])
+    m.type(0.3, 1.5, ask); m.you(1.6, ask)
+    m.main(2.1, "answer-line will look every 2 minutes.")
+    m.row(2.5, f'{m.dim("◷ main scheduled #48 for answer-line · every 2m · next 14:22")}', size=12)
+    m.main(4.4, "answer-line: still building, 312 of 498.", gap=6)
+    m.main(5.6, "answer-line: green.")
+    m.row(5.9, f'{m.dim("◷ scheduled #48 ended · stopped by answer-line")}', size=12)
+    m.type(6.4, 7.0, "/scheduled")
+    m.composer([(0.3, 1.6), (6.4, 7.1)])
+    # the list
+    W, H = m.W, m.H; x0 = 32
+    k = m.tl.show(7.2, dur=0.12); o = [f'<rect x="0" y="43" width="{W}" height="{H-43}" fill="{c["bg"]}"/>']
+    o.append(f'<text x="{x0}" y="70" font-size="13" font-weight="700" fill="{c["text"]}" xml:space="preserve">scheduled <tspan font-weight="400" fill="{c["dim"]}">· what wakes your agents, and when</tspan></text>')
+    o.append(f'<text x="{W-24}" y="70" text-anchor="end" font-size="12" fill="{c["dim"]}">2 active</text>')
+    rows = [("#51", "release18", "every day 07:30", "next 07:30"), ("#52", "launch", "every 15m", "next 14:45 · in 14m")]
+    y = 104
+    for i, (nid, ag, when, nxt) in enumerate(rows):
+        if i == 0: o.append(f'<rect x="{x0-8}" y="{y-15}" width="{W-2*x0+16}" height="21" rx="3" fill="{c["chip"]}"/><text x="{x0}" y="{y}" font-size="13" fill="{c["acc"]}">›</text>')
+        o.append(f'<text x="{x0+14}" y="{y}" font-size="13" fill="{c["text"]}" xml:space="preserve"><tspan fill="{c["faint"]}">{nid}</tspan>  <tspan fill="{c["acc"]}">◷</tspan> {ag}</text>'
+                 f'<text x="{x0+14+19*7.8:.0f}" y="{y}" font-size="13" fill="{c["dim"]}">{when}</text>'
+                 f'<text x="{x0+14+37*7.8:.0f}" y="{y}" font-size="13" fill="{c["dim"]}">{nxt}</text>')
+        y += 24
+    o.append(f'<text x="{x0+14}" y="{y+10}" font-size="12" fill="{c["faint"]}">ended: #48 answer-line · stopped by answer-line</text>')
+    o.append(f'<text x="{x0}" y="{H-16}" font-size="12" fill="{c["faint"]}" xml:space="preserve">⏎ open   r run now   x stop   tab ended too   esc close</text>')
+    m.last.append(f'<g class="{k}">{"".join(o)}</g>')
+    return m.svg("you ask main to check the build every 2 minutes: answer-line gets a scheduled task, wakes, reports, and stops it once the build is green. /scheduled lists every scheduled task: what wakes your agents, and when.")
+
 SCENES = [("talk", t_talk), ("zen", t_zen), ("screenshot", t_screenshot),
           ("resume", t_resume), ("worktree", t_worktree), ("card", t_card), ("sync", t_sync), ("tools", t_tools), ("plugins", t_plugins),
           ("direct", t_direct), ("prs", t_prs), ("tokens", t_tokens), ("voice", t_voice), ("quote", t_quote), ("model", t_model),
           ("shell", t_shell), ("restart", t_restart), ("proof", t_proof), ("theme", t_theme),
-          ("voicemode", t_voicemode), ("computer", t_computer)]
+          ("voicemode", t_voicemode), ("computer", t_computer),
+          ("artifacts", t_artifacts), ("diff", t_diff), ("scheduled", t_scheduled)]
 
 FEATS = [("quiet", f_quiet), ("steer", f_steer)] + SCENES
 
