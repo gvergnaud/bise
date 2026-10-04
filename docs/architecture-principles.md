@@ -167,9 +167,14 @@ new feed-text parsing in the TUI, no growth of `daemon::run`.
 
 1. One owner for the journal: timers and PR news go through sb-core as
    inputs; Rust-only lines only for view state, behind one trait.
-2. Land ambient-app's hub pieces on main in slices (pages, keeps, card_link,
-   every).
-3. Split `daemon::run` into one function per `Msg` kind in `daemon/`.
+2. (decided: no.) main stays the terminal product: ambient's hub pieces
+   (pages, the page server, keeps, card_link) stay on ambient-app until the
+   user decides to merge ambient. Only scheduled tasks (`sb every`,
+   `/scheduled`) come to main. The drift between main and ambient-app is a
+   known, accepted cost: do not port ambient pieces to main without his word.
+3. Split `daemon::run` into one function per `Msg` kind in `daemon/`, on
+   main; ambient-lead takes the split into ambient-app at its next merge
+   from main.
 4. A typed client protocol shared by the hub, the TUI and the ambient core.
 5. Group `core::Hub`'s runtime fields by feature, in their modules.
 6. The 1,000-line rule as a gate check, with a shrinking exceptions list.
