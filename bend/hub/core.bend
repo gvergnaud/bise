@@ -1195,7 +1195,8 @@ def timer_count(-o: M.St, due: Bool, +cx: X.Cx<o>, +t: TM.Timer, +next: Nat) -> 
 
 # a fire counts only when its message was queued (law fire_is_a_message,
 # amb-tools m_5822: a one-shot timer was spent on a lost wake)
-# the wake was refused (rare: timer_may wanted it idle and active): a due
+# the wake was refused (unreachable today, a safety net never driven live:
+# timer_may wants it idle and active, and send then always queues): a due
 # one is tried again in a minute, nothing counted, one line that says so
 # (every_fired undelivered, the hub's warn); a run now is just not done
 def timer_retry(-o: M.St, due: Bool, +cx: X.Cx<o>, +t: TM.Timer) -> X.Cx<o>:
