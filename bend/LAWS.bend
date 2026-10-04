@@ -1736,11 +1736,13 @@ if [ $? -ne 0 ]; then echo \"background: could not write /tmp/bend-bg-0/$i.cmd (
 L=${BEND_MEM_LIMIT_MB:-}; if [ -z \"$L\" ]; then m=$(sysctl -n hw.memsize 2>/dev/null); m=$((${m:-0}/4194304)); if [ $m -eq 0 ] || [ $m -gt 8192 ]; then m=8192; fi; if [ $m -lt 2048 ]; then m=2048; fi; L=$m; fi
 ( ulimit -f 102400; set -m; ( BEND_STDIN=$BG/$i.in /bin/sh $BG/$i.cmd ) > $BG/$i.out 2>&1 </dev/null 9<&- & C=$!; set +m; echo $C > $BG/$i.pid; if [ \"$L\" -gt 0 ] 2>/dev/null; then ( while kill -0 -$C 2>/dev/null; do sleep 2; k=$(ps -axo pgid=,pid=,rss=,ucomm= 2>/dev/null | awk -v g=$C -v l=$((L*1024)) '$1==g && $3>l {print \"pid \" $2 \" (\" $4 \") at \" int($3/1024) \" MB\"; exit}'); if [ -n \"$k\" ]; then kill -9 -$C 2>/dev/null; if { [ -d $BG/$i.slot ] && [ \"$(cat $BG/$i.pid 2>/dev/null)\" = \"$C\" ]; } || { [ ! -d $BG/$i.slot ] && [ -e $BG/$i.rc ]; }; then echo \"[bash: killed $k of RAM, over the limit of $L MB per process (BEND_MEM_LIMIT_MB, 0 = no limit). A process that keeps growing is a leak or a command that never ends: e.g. its output piped into grep -m1 or head, or a CLI left running in the background]\" >> $BG/$i.out; fi; break; fi; done ) >/dev/null 2>&1 & fi; wait $C; R=$?; if [ \"$(cat $BG/$i.pid 2>/dev/null)\" = \"$C\" ]; then echo $R > $BG/$i.rc; rm -f $BG/$i.pid $BG/$i.cmd $BG/$i.in; rmdir $BG/$i.slot 2>/dev/null; fi; exit $R ) >/dev/null 2>&1 &
 r=$!
+sleep 30 >/dev/null 2>&1 </dev/null 9<&- & t=$!
+trap 'kill $t 2>/dev/null; exit 143' HUP INT TERM
 e=0
 while kill -0 $r 2>/dev/null; do
   if [ $e -lt 5 ]; then sleep 0.02; else sleep 0.1; fi
   e=$((e+1))
-  if [ $e -ge 305 ]; then
+  if ! kill -0 $t 2>/dev/null; then
     printf '%s\\n' \"BEND-BG-HANDOFF-6f2c9e5b\"
     printf '%s\\n' \"background: still running after 30s - id $i (dir /tmp/bend-bg-0)\"
     printf '%s\\n' \"  output: tail -n 50 /tmp/bend-bg-0/$i.out\"
@@ -1752,6 +1754,7 @@ while kill -0 $r 2>/dev/null; do
     exit 0
   fi
 done
+kill $t 2>/dev/null; wait $t 2>/dev/null
 wait $r
 s=$?
 if [ ! -d /tmp/bend-bg-0 ]; then echo \"background: the bg dir vanished before the exit code was recorded: /tmp/bend-bg-0\"; rm -f \"$0\"; exit 1; fi
@@ -1850,11 +1853,28 @@ law bg_slot_paths:
            String.eq(Sh.bg_slot("/d", "4", ".cmd"), "/d/4.cmd")))))
     == True{} : Bool}
 
-# LAW: the poll loop probes ten times per second of sync window.
-# LAW: the poll loop probes fast first (5 x 20ms), then 100ms steps:
-# a trivial command costs ~30ms of polling, the window stays ~after.
-law bg_poll_iters_table:
-  {Sh.bg_poll_iters(30) == 305 : U32}
+# LAW: the sync window is a clock, never a count of poll turns: a
+# `sleep <after>` timer beside the runner, and the poll hands off when
+# the timer is gone. (A count of `sleep 0.1` turns ran slow by the
+# exec of each sleep: under load a 6 s window lasted 8 s and a 30 s
+# one up to 40 s.) The timer holds no pipe and no fifo, is killed on
+# a sync end and by the trap when the wrapper is stopped. The poll
+# still probes fast first (5 x 20 ms), then 100 ms steps.
+law bg_wrapper_window_is_a_clock:
+  {Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5),
+       "r=$!
+sleep 5 >/dev/null 2>&1 </dev/null 9<&- & t=$!
+trap 'kill $t 2>/dev/null; exit 143' HUP INT TERM
+"),
+   Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5), "  if ! kill -0 $t 2>/dev/null; then"),
+   Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5),
+       "done
+kill $t 2>/dev/null; wait $t 2>/dev/null
+wait $r"),
+   Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5),
+       "  if [ $e -lt 5 ]; then sleep 0.02; else sleep 0.1; fi"),
+     Bool.not(String.contains(Sh.bg_wrap("x", "/d", 5), "if [ $e -ge "))))))
+    == True{} : Bool}
 
 # LAW: the headline names the window, the slot id and the dir — the
 # agent can ls the dir right away.

@@ -253,10 +253,26 @@ def bg_write_note(+test: String, +bg: String, +ext: String, +why: String)
         String.append(bg_slot(bg, "$i", ext),
           String.append(why, "\"; fi")))))))
 
-# 5 iterations at 20ms then 100ms steps: a trivial command costs
-# ~30ms of polling instead of ~120ms, and the window stays ~after secs
-def bg_poll_iters(+after: U32) -> U32:
-  U32.add(U32.mul(after, 10), 5)
+# The sync window is a CLOCK: a `sleep <after>` timer the wrapper starts
+# beside the runner; the window ends when the timer does. (It was a
+# count of poll turns, after * 10 + 5, each one a `sleep 0.1` plus the
+# exec of /bin/sleep: under load, nice 10 and the EDR's exec cost a
+# turn took 120-140 ms, a 6 s window lasted 7.6-8.4 s and a 30 s one
+# 34-40 s, so an 8 s job came back whole in a 6 s window.) The poll
+# itself stays: 5 turns at 20 ms then 100 ms steps, so a trivial
+# command costs ~30 ms. The timer is the wrapper's child, outside the
+# command's process group (set -m is in the runner): the memory
+# watchdog never sees it, and killing it never touches the command.
+# It never outlives the wrapper: killed on a sync end, and by the trap
+# when the wrapper is stopped (HUP, INT, TERM); at the handoff it has
+# already ended. Its output goes nowhere (it holds no pipe of the
+# tool's), and it drops the fifo's fd 9.
+def bg_timer(+after: U32) -> String:
+  String.append("sleep ", String.append(U32.show(after),
+    " >/dev/null 2>&1 </dev/null 9<&- & t=$!"))
+
+def bg_timer_trap() -> String:
+  "trap 'kill $t 2>/dev/null; exit 143' HUP INT TERM"
 
 # Every wait is TOTAL: the wrapper polls its own child, the runner
 # ($!), and reads the exit code from `wait`, so it never waits for a
@@ -405,7 +421,6 @@ def bg_wrap.echo(+line: String, +rest: String) -> String:
   bg_wrap.seg(String.append("    printf '%s\\n' \"", String.append(line, "\"")), rest)
 
 def bg_wrap(+command: String, +bg: String, +after: U32) -> String:
-  +niter = bg_poll_iters(after)
   +sent = bg_sentinel(command)
   bg_wrap.seg(String.append("BG=", bg),
   bg_wrap.seg(bg_unset_private(),
@@ -431,12 +446,13 @@ def bg_wrap(+command: String, +bg: String, +after: U32) -> String:
       String.append(bg_mem_watch(),
       "; wait $C; R=$?; if [ \"$(cat $BG/$i.pid 2>/dev/null)\" = \"$C\" ]; then echo $R > $BG/$i.rc; rm -f $BG/$i.pid $BG/$i.cmd $BG/$i.in; rmdir $BG/$i.slot 2>/dev/null; fi; exit $R ) >/dev/null 2>&1 &")),
   bg_wrap.seg("r=$!",
+  bg_wrap.seg(bg_timer(after),
+  bg_wrap.seg(bg_timer_trap(),
   bg_wrap.seg("e=0",
   bg_wrap.seg("while kill -0 $r 2>/dev/null; do",
   bg_wrap.seg("  if [ $e -lt 5 ]; then sleep 0.02; else sleep 0.1; fi",
   bg_wrap.seg("  e=$((e+1))",
-  bg_wrap.seg(String.append("  if [ $e -ge ",
-    String.append(U32.show(niter), " ]; then")),
+  bg_wrap.seg("  if ! kill -0 $t 2>/dev/null; then",
   bg_wrap.seg(String.append("    printf '%s\\n' \"",
     String.append(HANDOFF_MARKER(), "\"")),
   bg_wrap.echo(bg_headline(bg, "$i", after),
@@ -450,6 +466,7 @@ def bg_wrap(+command: String, +bg: String, +after: U32) -> String:
   bg_wrap.seg("    exit 0",
   bg_wrap.seg("  fi",
   bg_wrap.seg("done",
+  bg_wrap.seg("kill $t 2>/dev/null; wait $t 2>/dev/null",
   bg_wrap.seg("wait $r",
   bg_wrap.seg("s=$?",
   bg_wrap.seg(bg_rc_guard(bg),
@@ -460,7 +477,7 @@ def bg_wrap(+command: String, +bg: String, +after: U32) -> String:
   bg_wrap.seg("rm -f $BG/$i.in $BG/$i.out $BG/$i.pid $BG/$i.cmd $BG/$i.rc 2>/dev/null",
   bg_wrap.seg("rmdir $BG/$i.slot 2>/dev/null",
   bg_wrap.seg("rm -f \"$0\"",
-  "exit $s")))))))))))))))))))))))))))))))))))))))))))
+  "exit $s"))))))))))))))))))))))))))))))))))))))))))))))
 
 # ---- the sandbox (approvals-sandbox, approvals-design.md §6) ----
 # In auto on macOS the hub's allow line carries flags: "sandbox" runs the

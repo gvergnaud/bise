@@ -493,7 +493,7 @@ def Laws.bash_cleanup_cmd_quotes_the_dir():
 def Laws.bg_slot_paths():
   {==}
 
-def Laws.bg_poll_iters_table():
+def Laws.bg_wrapper_window_is_a_clock():
   {==}
 
 def Laws.bg_headline_names_window_id_dir():

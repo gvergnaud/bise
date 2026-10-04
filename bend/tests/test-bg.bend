@@ -23,7 +23,7 @@
 # a cat of it fed on itself up to a 100 MiB result that killed the REPL):
 # each background job below takes the next id.
 #
-# Gates: no FAIL line (22 checks, s01-s22).
+# Gates: no FAIL line (24 checks, s01-s24).
 import Base
 import ../runtime/main.bend as Rt
 import ../runtime/bash.bend as Sh
@@ -31,6 +31,7 @@ import ../runtime/bash-pure.bend as Shp
 import ../runtime/tools.bend as X
 import ../runtime/tools-pure.bend as Xp
 import ../runtime/persist.bend as P
+import ../runtime/proc.bend as Proc
 
 def bg() -> String:
   "/tmp/bgtest/bend-bg-0"
@@ -260,6 +261,39 @@ job-done"),
             Bool.not(String.contains(String.append(res_out(r22a),
               String.append(res_out(r22b), res_out(r22c))), "background:"))))),
       "s22 stdin readers (read, cat, rg with no path) end in sync")
+
+    # ---- s23 the sync window is a clock, not a count of poll turns ----
+    # A `sleep` on PATH that costs 0.15 s more per call (the exec cost
+    # under load, the EDR): a window counted in `sleep 0.1` turns ran
+    # 25 x >= 0.25 s >= 6 s and a 4 s job came back whole; the timer
+    # (one `sleep 2`, 2.15 s here) hands off. Raw wrapper, own dir.
+    m23 : String <- Proc.run(Con{"/bin/mkdir", Con{"-p", Con{"/tmp/bgtest/shim", Nil{}}}})
+    w23 : Unit <- P.write_file("/tmp/bgtest/shim/sleep",
+      "#!/bin/sh
+/bin/sleep \"$1\"; /bin/sleep 0.15
+")
+    x23 : String <- Proc.run(Con{"/bin/chmod", Con{"+x", Con{"/tmp/bgtest/shim/sleep", Nil{}}}})
+    s23 : Unit <- P.write_file("/tmp/bgtest/w23.sh", String.append("PATH=/tmp/bgtest/shim:$PATH
+",
+      Shp.bg_wrap("/bin/sleep 4; echo came-back-whole", "/tmp/bgtest/clock", 2)))
+    +o23 : String <- Proc.run(Con{"/bin/sh", Con{"/tmp/bgtest/w23.sh", Nil{}}})
+    u23 : Unit <- check(Bool.and(String.contains(o23, "still running after 2s"),
+        Bool.not(String.contains(o23, "came-back-whole"))),
+      "s23 a slow poll (sleep +0.15 s) still hands off at the 2 s clock")
+
+    # ---- s24 a wrapper stopped mid-window leaves no timer behind ----
+    # A TERM to the wrapper's own pid 1 s in (a pkill -f of its path
+    # would also hit the runner: a forked subshell keeps the wrapper's
+    # argv); the trap kills the `sleep 37` and the wrapper exits 143.
+    # Without the trap the timer lives on.
+    s24 : Unit <- P.write_file("/tmp/bgtest/w24.sh",
+      Shp.bg_wrap("/bin/sleep 3; echo late", "/tmp/bgtest/clock", 37))
+    +o24 : String <- Proc.run(Con{"/bin/sh", Con{"-c",
+      Con{"/bin/sh /tmp/bgtest/w24.sh > /dev/null & w=$!; /bin/sleep 1; kill -TERM $w; wait $w; echo rc:$?; /bin/sleep 0.3; pgrep -fx 'sleep 37' || echo no-timer-left",
+        Nil{}}}})
+    u24 : Unit <- check(Bool.and(String.contains(o24, "rc:143"),
+        String.contains(o24, "no-timer-left")),
+      "s24 a wrapper stopped mid-window leaves no timer process")
 
     # ---- s14 the agent rm -rf's its own bg dir: fast failure, no hang ----
     +r14 : Xp.ExecRes <- Sh.bash_exec(String.append("rm -rf ", bg()))
