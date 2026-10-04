@@ -11,7 +11,6 @@ python3 -u tests/tui_composer_tmux.py
 """
 import os
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
@@ -66,7 +65,7 @@ def main():
         t.typed("first message")
         t.keys("Enter")
         t.wait("first message")
-        time.sleep(0.5)
+        wait_composer(t, "")   # sent: the history has it
         # a draft; Up shows the history, Down brings the draft back
         t.typed("my draft words")
         wait_composer(t, "my draft words")
@@ -111,7 +110,7 @@ def main():
         os.remove(clip)
         mouse(t, "press", x + 2, y)
         mouse(t, "release", x + 2, y)
-        time.sleep(0.5)
+        t.sync()
         assert not os.path.exists(clip)
         # the composer: a double click selects the word, the release copies
         x, y = find(t, "Ymy! draft")

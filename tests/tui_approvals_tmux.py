@@ -26,6 +26,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
+import wait  # noqa: E402
 from tui_tmux import tui_session, run, MAIN_IDLE  # noqa: E402
 
 COLS, ROWS = 140, 40
@@ -202,10 +203,8 @@ def session(E, env, home, bise, shot):
         # the fold says the sandbox was off for it (designer)
         sc = t.wait("you let t3 run it outside the sandbox: echo hi > ~/Desktop/x.txt")
         shot(t, "fold-sandbox-rerun", sc)
-        deadline = time.time() + 30
         out = os.path.join(home, "Desktop", "x.txt")
-        while not os.path.exists(out) and time.time() < deadline:
-            time.sleep(0.2)
+        wait.until(lambda: os.path.exists(out), 30, "the rerun's %s" % out)
         assert open(out).read() == "hi\n", "run again outside the sandbox"
 
 

@@ -18,7 +18,6 @@ import os
 import re
 import sys
 import tempfile
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
@@ -52,7 +51,6 @@ def main():
 
     with tui_session(120, 40, env, E=E) as t:
         t.wait(NORMAL, 60)
-        time.sleep(1)
 
         def cap(name):
             """designer's review: the screen as the user sees it (SB_DUMP=dir)"""
@@ -65,7 +63,9 @@ def main():
 
         t.typed("/models")
         t.keys("Enter")
-        sc = t.wait("which model does what?")
+        t.wait("which model does what?")
+        # the roles' states drawn (a key check may land a frame later)
+        sc = t.wait_re(r"checker +auto · TypeSafe · jev-1.13")
         assert re.search(r"checker +auto · TypeSafe · jev-1.13", sc), sc
         for _ in range(4):
             t.keys("Down")
@@ -75,7 +75,10 @@ def main():
         assert "checker: in auto, decides which commands run and which ask you. " in flat and "only used" not in flat, sc
         # 1. which provider?
         t.keys("Enter")
-        sc = t.wait("checker: which provider?")
+        t.wait("checker: which provider?")
+        # the providers' key checks drawn (they land a frame or two later)
+        ready = [re.compile(r"TypeSafe +✓ ready$", re.M), re.compile(r"Anthropic +✓ ready · main, agents, small jobs use it")]
+        sc = t.wait_any([lambda s: all(r.search(s) for r in ready)])[1]
         cap("02-checker-providers")
         assert "now: auto · TypeSafe · jev-1.13" in sc, sc
         assert "the checker sees the command, the script it runs, and your request." in sc, sc

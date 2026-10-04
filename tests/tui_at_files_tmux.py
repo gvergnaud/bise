@@ -7,7 +7,6 @@ python3 -u tests/tui_at_files_tmux.py
 """
 import os
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
@@ -65,7 +64,7 @@ def main():
         wait_composer(t, "read src/app.rs and src/sb/mention.rs")
         # mid-word @ (an email) opens nothing
         t.typed("to a@b")
-        time.sleep(0.5)
+        t.sync()
         assert "▪" not in t.screen(), t.screen()
         t.keys("C-u")
         # picking an agent at the start keeps the routing form

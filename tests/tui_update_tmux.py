@@ -42,12 +42,12 @@ def main():
         t.wait("bise :*")
         t.wait_re(MAIN_IDLE)
         t.typed("/update")
-        time.sleep(0.3)
+        t.wait("/update look for a new bise release")   # the popup's row
         t.keys("Enter")
         t.wait("building the latest commit, %s, then restarting on it. your agents keep running." % head)
         t.wait("building %s · " % head)              # the header's item
         t.typed("/update")
-        time.sleep(0.3)
+        t.wait("/update look for a new bise release")
         t.keys("Enter")
         t.wait("already building %s · " % head)
         sc = t.wait("couldn't build %s, you're still on " % head, 30)

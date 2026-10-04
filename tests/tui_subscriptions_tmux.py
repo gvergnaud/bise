@@ -29,11 +29,11 @@ import stat
 import subprocess
 import sys
 import tempfile
-import time
 import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
+import wait  # noqa: E402
 from tui_tmux import tui_session, run  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -209,12 +209,13 @@ def main():
             sc = t.wait("wasn't finished", 10)
             has(sc, UNFINISHED, PAY)
             shot("6-unfinished-80", sc)
-            time.sleep(0.5)
-            try:
-                socket.create_connection(("127.0.0.1", port), timeout=2).close()
-                raise AssertionError("the loopback listener is still open on %d" % port)
-            except OSError:
-                pass
+            def closed():
+                try:
+                    socket.create_connection(("127.0.0.1", port), timeout=2).close()
+                    return False
+                except OSError:
+                    return True
+            wait.until(closed, 5, "the loopback listener on %d closed" % port)
             assert not os.path.exists(os.path.join(root, "auth.json")) or "access" not in open(os.path.join(root, "auth.json")).read()
     finally:
         auth_p.kill()

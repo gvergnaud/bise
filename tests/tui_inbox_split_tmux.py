@@ -8,9 +8,9 @@ python3 -u tests/tui_inbox_split_tmux.py
 """
 import os
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import wait  # noqa: E402
 from tui_tmux import tui_session, run, in_view, MAIN_IDLE  # noqa: E402
 
 COLS, ROWS = 150, 42
@@ -40,10 +40,10 @@ def main():
         t.wait_re(in_view("main"))
         # a few frames later, still nothing for the user: no strip, no
         # "needs you" in the header
-        time.sleep(1.5)
-        sc = t.screen()
-        for gone in ("waiting for you", "ctrl+1 open", "needs you", "ia needs you"):
-            assert gone not in sc, (gone, sc)
+        # (no state says "the hub decided not to show it": a window)
+        gone = ("waiting for you", "ctrl+1 open", "needs you", "ia needs you")
+        wait.holds(lambda: (lambda s: not any(g in s for g in gone) and s)(t.screen()), 1.5,
+                   "nothing for the user: %r" % (gone,), poll=wait.SCREEN_POLL)
         # main escalates: one row in the user's inbox
         t.typed('[[bash: sb card "ship the export on friday?"]]')
         t.keys("Enter")
@@ -62,7 +62,6 @@ def main():
         t.keys("Enter")
         t.wait_gone("waiting for you", 20)
         t.wait("✓ you answered main: yes friday")
-        time.sleep(0.3)
         print("PASS tui inbox split")
 
 

@@ -12,9 +12,9 @@ TMPDIR=/tmp/ch-run python3 -u tests/tui_ctrl_hints_tmux.py
 """
 import os
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import wait  # noqa: E402
 from tui_tmux import tui_session, run, tmux, MAIN_IDLE  # noqa: E402
 
 CTRL_DOWN = "\x1b[57442;5u"
@@ -48,8 +48,9 @@ def check(cols, rows):
         t.wait_gone(HINT, timeout=2)
         # ctrl+o: a combo, no hints even held
         raw(t, CTRL_DOWN + "\x1b[111;5u" + "\x1b[111;5:3u")
-        time.sleep(0.8)
-        assert HINT not in t.screen(), t.screen()
+        # held well past ctrlhint::DELAY (150 ms): a window, no state shows it
+        wait.holds(lambda: (lambda s: HINT not in s and s)(t.screen()), 0.8, "no ctrl hints after ctrl+o",
+                   poll=wait.SCREEN_POLL)
         raw(t, CTRL_UP)
         # the typed text: a dead key's é, option's å, caps lock's A, a plain t
         raw(t, "\x1b[101;;233u" + "\x1b[101;1:3u" + "\x1b[97;3;229u" + "\x1b[97;65;65u" + "t")
@@ -67,8 +68,8 @@ def check(cols, rows):
         t.wait("\u00e9\u00e5At\u00e7", timeout=5)
         # cmd held before any cmd key: nothing; after cmd+c: the cmd keys
         raw(t, CMD_DOWN)
-        time.sleep(0.8)
-        assert CMD_HINT not in t.screen(), t.screen()
+        wait.holds(lambda: (lambda s: CMD_HINT not in s and s)(t.screen()), 0.8, "no cmd hints before a cmd key",
+                   poll=wait.SCREEN_POLL)
         raw(t, CMD_UP + CMD_DOWN + "\x1b[99;9u" + "\x1b[99;9:3u" + CMD_UP)
         raw(t, CMD_DOWN)
         sc = t.wait(CMD_HINT, timeout=5)

@@ -156,11 +156,7 @@ def main():
             a = json.load(open(os.path.join(root, "auth.json")))["chatgpt"]
             assert a["type"] == "oauth" and a["client_id"].startswith("oaiapp_") and a["access"], sorted(a)
             # on to the thread (the steps left, any key each)
-            for _ in range(4):
-                if NORMAL in t.screen():
-                    break
-                t.keys("Enter")
-                time.sleep(0.6)
+            t.press_until("Enter", NORMAL, tries=4, must=False)
             t.wait(NORMAL, 30)
             # 2. one turn, answered by the plan route
             t.typed("hello from the plan")
@@ -185,20 +181,13 @@ def main():
             t.wait("main", 30)
             t.keys("Enter")
             sc = t.wait("ChatGPT", 30)
-            for _ in range(20):
-                if "your ChatGPT plan" in t.screen() or re.search(r"› *ChatGPT", t.screen()):
-                    break
-                t.keys("Down")
-                time.sleep(0.2)
+            t.press_until("Down", lambda s: "your ChatGPT plan" in s or re.search(r"› *ChatGPT", s),
+                          sel=re.compile(r"› *\S+"), must=False)
             if "your ChatGPT plan" not in t.screen():
                 t.keys("Enter")
             sc = t.wait("your ChatGPT plan", 30)
             assert re.search(r"gpt-6\.1-sol.*your ChatGPT plan", sc), sc
-            for _ in range(3):
-                if NORMAL in t.screen():
-                    break
-                t.keys("Escape")
-                time.sleep(0.3)
+            t.press_until("Escape", NORMAL, tries=3, must=False)
             t.wait(NORMAL)
             # 4. the sign-in expires: the refresh is refused
             control(A, "invalid_grant", on=True)

@@ -14,7 +14,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from tui_tmux import tui_session, run, MAIN_IDLE  # noqa: E402
+from tui_tmux import tui_session, run, wait_until, MAIN_IDLE  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WAV = os.path.join(HERE, "..", "rust", "tui", "src", "voicemode", "testdata", "sentence.wav")
@@ -89,7 +89,9 @@ def main():
         print("---- muted while main speaks ----\n" + sc)
         # its voice ends: the smile at rest, `○ muted` alone
         sc = t.wait_re(r"(?<!· )○ muted", timeout=40)
-        time.sleep(1.5)  # after the end-of-turn kiss
+        # after the end-of-turn kiss: the face back in its resting colors
+        wait_until(lambda: "speaking" not in t.screen() and face_colors(t) <= unmuted | {""}, 10,
+                   lambda: "the smile at rest: %r vs %r" % (face_colors(t), unmuted))
         sc = t.screen()
         assert "speaking" not in sc, sc
         save("big-rest-muted", t)

@@ -13,10 +13,10 @@ python3 -u tests/tui_file_links_tmux.py
 import os
 import sys
 import tempfile
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
+import wait  # noqa: E402
 from tui_tmux import tui_session, run, wait_until, MAIN_IDLE  # noqa: E402
 
 COLS, ROWS = 150, 42
@@ -78,8 +78,8 @@ def main():
         t.wait("opening plan.md:3 in code")
         # the missing path is plain text: a click opens nothing
         click(t, rows[y].find("missing/nope.md") + 3, y)
-        time.sleep(0.5)
-        assert len(args_of(log)) == 2, args_of(log)
+        # the opener is a process of its own: its log line may come late
+        wait.holds(lambda: len(args_of(log)) == 2, 0.5, lambda: "no open on plain text: %r" % args_of(log))
     os.remove(log)
 
     # a terminal editor: in the terminal panel, `+line file`; it exits on

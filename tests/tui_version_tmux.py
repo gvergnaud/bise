@@ -51,9 +51,11 @@ def main():
         for _ in range(len(second)):
             t.keys("BSpace")
         t.wait("the working tree")
-        t.keys("Down")
-        t.keys("Down")
-        time.sleep(0.3)
+        for _ in range(2):
+            # the selected row is a color: each move drawn before the next key
+            before = t.screen(colors=True)
+            t.keys("Down")
+            t.wait_any([lambda s, before=before: s != before], 10, colors=True)
         # Tab fills the composer with the selected entry
         t.keys("Tab")
         sc = t.wait("/version %s" % second)
@@ -61,14 +63,14 @@ def main():
         for _ in range(len("/version %s" % second)):
             t.keys("BSpace")
         t.typed("/version zzzz999")   # matches no entry: the popup is closed
-        time.sleep(0.3)
+        t.wait("/version zzzz999")
+        t.wait_gone("the working tree")
         t.keys("Enter")
         t.wait("unknown commit zzzz999")
         # Enter on an entry builds, then switches: the build is announced
         # (the working tree: a commit would first check out a worktree)
         t.typed("/version ")
-        t.wait("the working tree")
-        time.sleep(0.3)
+        t.wait("the working tree")   # the popup's first row, selected
         t.keys("Enter")
         t.wait("version tree: building", 20)
         t.wait("build of tree failed", 20)

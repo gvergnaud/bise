@@ -7,9 +7,9 @@ python3 -u tests/tui_undelivered_tmux.py
 """
 import os
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import e2e  # noqa: E402
 from tui_tmux import tui_session, run, in_view  # noqa: E402
 
 ASK = "✗ not delivered: t1 stopped. ⏎ send again · esc drop"
@@ -23,7 +23,8 @@ def main():
         t.typed("/new -w t1: idle")
         t.keys("Enter")
         t.wait("@t1", 30)
-        time.sleep(2)
+        # t1 started and idle in the hub before the archive
+        e2e.Client(os.path.join(t.E.state, "hub.sock")).wait_idle("t1", timeout=60)
         t.typed("/archive t1")
         t.keys("Enter")
         if t.wait_any(["answer y", "@t1 archived"], 20)[0] == 0:

@@ -17,6 +17,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tui_tmux import tui_session, run, wait_until, MAIN_IDLE  # noqa: E402
 
 COLS, ROWS = 150, 42
+# two presses on one cell within 400 ms are a double click
+# (app::MouseState::press): the gap is the input, not a wait
+DOUBLE_CLICK_GAP = 0.5
 CARD_URL = "https://perf.example/report"
 BOX_URL = "https://box.example/y"
 
@@ -48,7 +51,7 @@ def at(sc, text, last=False):
 def click(t, x, y):
     t.typed(sgr(0, x, y) + sgr(0, x, y, "m"))
     # never the next press's double click
-    time.sleep(0.5)
+    time.sleep(DOUBLE_CLICK_GAP)
 
 
 def drag_copies(t, clip, text, last=False):
@@ -60,7 +63,7 @@ def drag_copies(t, clip, text, last=False):
     t.typed(sgr(0, x, y) + sgr(32, x + 2, y) + sgr(32, end, y) + sgr(0, end, y, "m"))
     wait_until(lambda: read(clip) == text, 10, lambda: "the drag copies %r: %r" % (text, read(clip)))
     t.wait("copied %d chars" % len(text))
-    time.sleep(0.5)
+    time.sleep(DOUBLE_CLICK_GAP)
 
 
 def opens(t, log, url, text, last=False):
@@ -122,11 +125,7 @@ def main():
         t.wait("/shortcuts")
         # the help opens on the commands; its sections come after them, so
         # page down to "talk to agents" (each new command pushes it lower)
-        for _ in range(6):
-            if "talk to agents" in t.screen():
-                break
-            t.keys("NPage")
-            time.sleep(0.3)
+        t.press_until("NPage", "talk to agents", tries=6, must=False)
         t.wait("talk to agents")
         drag_copies(t, clip, "talk to agents")
         assert "talk to agents" in t.screen(), "the help stays open"

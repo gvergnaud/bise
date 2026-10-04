@@ -7,20 +7,13 @@ python3 -u tests/tui_clear_tmux.py
 """
 import os
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tui_tmux import tui_session, run, MAIN_IDLE  # noqa: E402
 
 
 def scroll_up_until(t, needle, tries=30):
-    for _ in range(tries):
-        if needle in t.screen():
-            return t.screen()
-        t.keys("PageUp")
-        time.sleep(0.3)
-    print(t.screen())
-    raise AssertionError("not back after scrolling up: %r" % needle)
+    return t.press_until("PageUp", needle, tries=tries)
 
 
 def main():
@@ -48,7 +41,7 @@ def main():
         # scrolling up brings the cleared lines back, in order
         sc = scroll_up_until(t, "ack: first-marker")
         t.keys("End")
-        time.sleep(0.5)
+        t.sync()   # the End handled (it may not move the view)
         sc = t.screen()
         print("---- scrolled back, then End ----\n" + sc)
         for a, b in [("first-marker", "second-marker"), ("ack: second-marker", "display cleared"),

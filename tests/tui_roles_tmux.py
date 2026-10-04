@@ -25,7 +25,6 @@ import os
 import re
 import sys
 import tempfile
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
@@ -72,7 +71,6 @@ def main():
 
     with tui_session(120, 40, env, E=E) as t:
         t.wait(NORMAL, 60)
-        time.sleep(1)
         dump = os.environ.get("SB_DUMP")
 
         def cap(name):
@@ -83,7 +81,9 @@ def main():
 
         # voice off, no voice key: ctrl+r opens voice's providers (BISE-301)
         t.keys("C-r")
-        sc = t.wait("voice: which provider?")
+        t.wait("voice: which provider?")
+        # the providers' states drawn (a key check may land a frame later)
+        sc = t.wait_re(r"› Mistral +not set up · recommended")
         cap("01-voice-providers-none-ready")
         assert "only the providers that can listen. ctrl+r starts, any key stops." in sc, sc
         assert re.search(r"› Mistral +not set up · recommended", sc), sc
@@ -187,8 +187,7 @@ def main():
         t.keys("Escape")
         t.wait("which model does what?")
         t.keys("Escape")
-        t.wait(NORMAL)
-        time.sleep(0.5)
+        t.wait(NORMAL)   # the esc handled alone: the next key is not alt+key
         t.typed("/model ")
         sc = t.wait("model for main")
         cap("13-model-popup")
@@ -212,11 +211,7 @@ def main():
         assert re.search(r"Mistral +✓ saved in bise +main · agents · small jobs · voice", sc), sc
         assert re.search(r"Anthropic +✓ from ANTHROPIC_API_KEY *$", sc, re.M), sc
         # Mistral's menu: keys and accounts; who uses it
-        for _ in range(12):
-            if re.search(r"› Mistral ", t.screen()):
-                break
-            t.keys("Down")
-            time.sleep(0.2)
+        t.press_until("Down", re.compile(r"› Mistral "), sel=re.compile(r"› \S+"), tries=12)
         t.keys("Enter")
         sc = t.wait("1 · paste a new key")
         cap("15-provider-menu")
@@ -233,12 +228,13 @@ def main():
         t.keys("Escape")
         t.wait("the keys i can use.")
         t.keys("Escape")
-        t.wait(NORMAL)
-        time.sleep(0.5)
+        t.wait(NORMAL)   # the esc handled alone: the next key is not alt+key
 
         def talk():
             t.keys("C-r")
-            time.sleep(0.8)
+            # the recording chip's clock past 1 s: a clip longer than
+            # voice::MIN_CLIP (200 ms), then any key stops
+            t.wait_re(r"● \S{6} 0:0[1-9]", 10)
             t.keys("Space")
 
         # while talking: a wrong key

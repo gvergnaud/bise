@@ -13,7 +13,6 @@ import json
 import os
 import re
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
@@ -115,8 +114,8 @@ def main():
         t.keys("Enter")
         t.typed("```")
         wait_composer(t, "- one\n- two\n  - sub\n```ts\nconst x = 42\n```")
-        time.sleep(0.3)
-        sc = t.screen(colors=True)
+        # the highlighter's colors on the drawn frame
+        sc = t.wait_any([lambda s: fg_of(s, "const") in KEYWORD], 10, colors=True)[1]
         assert fg_of(sc, "const") in KEYWORD, fg_of(sc, "const")
         # the code's 42, not the divider's context (BISE-303: `42k · 4%`)
         assert fg_of(sc, "x = 42", 4) in NUMBER, fg_of(sc, "x = 42", 4)

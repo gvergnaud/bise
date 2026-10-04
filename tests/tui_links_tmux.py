@@ -9,9 +9,9 @@ python3 -u tests/tui_links_tmux.py
 import os
 import sys
 import tempfile
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import wait  # noqa: E402
 from tui_tmux import tui_session, run, wait_until, MAIN_IDLE  # noqa: E402
 
 COLS, ROWS = 150, 42
@@ -47,8 +47,9 @@ def main():
         # a click on the plain text next to it opens nothing
         x = rows[y].find("ack:")
         t.typed("\x1b[<0;%d;%dM\x1b[<0;%d;%dm" % (x + 1, y + 1, x + 1, y + 1))
-        time.sleep(0.5)
-        assert open(log).read().split() == ["https://guide.example/start"], open(log).read()
+        # the opener is a process of its own: its log line may come late
+        wait.holds(lambda: open(log).read().split() == ["https://guide.example/start"], 0.5,
+                   lambda: "no open on plain text: %r" % open(log).read())
         # a local url with a port, in bold, in code and bare (launch's
         # message): each its own OSC 8, without the stars or the period
         t.typed("here **http://127.0.0.1:4748/hero-cine.html**. and `http://localhost:5173/a` or http://127.0.0.1:4748/user-stories.html.")

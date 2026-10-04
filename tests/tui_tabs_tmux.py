@@ -9,11 +9,10 @@ gone on resize).
 python3 -u tests/tui_tabs_tmux.py
 """
 import os
-import re
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import wait  # noqa: E402
 from tui_tmux import tui_session, run, tmux, MAIN_IDLE  # noqa: E402
 
 COLS, ROWS = 120, 30
@@ -27,14 +26,7 @@ def call(n, desc):
 
 def settle(t):
     """The screen once it stops changing (a frame may be in flight)."""
-    last = None
-    for _ in range(30):
-        sc = t.screen()
-        if sc == last:
-            return sc
-        last = sc
-        time.sleep(0.2)
-    return last
+    return wait.stable(t.screen, 10, "the screen")
 
 
 def main():
@@ -46,16 +38,17 @@ def main():
         t.wait_re(r"\$ caches +✓", 60)
         t.wait("done: ", 30)
         t.keys("C-o")  # every call open: its output in the box
-        time.sleep(0.5)
+        settle(t)
+        # each scroll drawn before the next (the ghost cells come from the
+        # frames in between)
         for k in ["PageUp"] * 4 + ["PageDown"] * 2 + ["PageUp"] + ["PageDown"] * 4 + ["PageUp"] * 2:
             t.keys(k)
-            time.sleep(0.15)
+            wait.stable(t.screen, 10, "the screen after %s" % k, quiet=0.2)
         scrolled = settle(t)
         # a full redraw: a resize repaints every cell
         tmux("resize-window", "-t", t.name, "-x", str(COLS - 1))
-        time.sleep(0.5)
+        t.wait_any([lambda s, w=scrolled: s != w], 10)   # drawn at the new width
         tmux("resize-window", "-t", t.name, "-x", str(COLS))
-        time.sleep(0.3)
         clean = settle(t)
         print("---- scrolled ----\n%s\n---- redrawn ----\n%s" % (scrolled, clean))
         diff = [(i, a, b) for i, (a, b) in enumerate(zip(scrolled.splitlines(), clean.splitlines())) if a != b]

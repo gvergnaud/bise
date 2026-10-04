@@ -10,7 +10,6 @@ python3 -u tests/tui_skills_reload_tmux.py
 import os
 import shutil
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
@@ -28,32 +27,31 @@ def main():
         t.wait("bise :*")
         t.wait_re(MAIN_IDLE)
         t.typed("$zeta")
-        time.sleep(1.2)
+        t.sync()   # the popup drawn for $zeta: no such skill anywhere yet
         assert "$zeta-reload" not in t.screen(), t.screen()
         t.keys("C-u")
-        # added while the TUI runs
+        # added while the TUI runs (skills::index rescans when the `$`
+        # popup asks after a second: it asks at every frame while open)
         os.makedirs(folder)
         open(os.path.join(folder, "SKILL.md"), "w").write(skill("Zeta first text"))
-        time.sleep(1.2)
         t.typed("$zeta")
         sc = t.wait("$zeta-reload")
         assert "Zeta first text" in sc, sc
         t.keys("C-u")
         t.wait_gone("$zeta-reload")
-        # its description edited
-        time.sleep(1.2)
+        # its description edited (longer: the folder's stats move)
         open(os.path.join(folder, "SKILL.md"), "w").write(skill("Zeta second, longer text"))
         t.typed("$zeta")
         sc = t.wait("Zeta second, longer text")
         assert "Zeta first text" not in sc, sc
         t.keys("C-u")
         t.wait_gone("$zeta-reload")
-        # removed
-        time.sleep(1.2)
+        # removed: gone from the open popup within its rescan (~1 s)
         shutil.rmtree(folder)
         t.typed("$zeta")
-        time.sleep(1.5)
-        assert "$zeta-reload" not in t.screen(), t.screen()
+        t.sync()
+        sc = t.wait_gone("$zeta-reload", timeout=2)
+        assert "$zeta-reload" not in sc, sc
         t.keys("C-u")
         print("PASS tui skills reload")
 

@@ -12,7 +12,6 @@ python3 -u tests/tui_cards_tmux.py
 """
 import os
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tui_tmux import tui_session, run, in_view, MAIN_IDLE  # noqa: E402
@@ -61,7 +60,7 @@ def main():
         t.wait("/ commands   ctrl+1 inbox")
         # ctrl+g is gone: nothing happens
         t.keys("C-g")
-        time.sleep(0.3)
+        t.sync()
         assert "you → ? main" not in t.screen(), t.screen()
         # ctrl+2: the second row opens in place, the draft steps aside
         t.typed(CTRL % ord("2"))
@@ -119,7 +118,6 @@ def main():
         t.wait("you → ? main · your answer")
         t.keys("Escape")
         t.wait_re(in_view("main"))
-    time.sleep(0.3)
     print("PASS tui cards")
 
 

@@ -16,10 +16,10 @@ import json
 import os
 import re
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
+import wait  # noqa: E402
 from tui_tmux import tui_session, run  # noqa: E402
 
 NORMAL = "   @ file   "
@@ -68,13 +68,7 @@ def main():
         t.wait("› an API key")
         t.keys("Enter")
         t.wait("which provider?")
-        for _ in range(20):
-            if re.search(r"› \d+ · OpenAI ", t.screen()):
-                break
-            t.keys("Down")
-            time.sleep(0.15)
-        else:
-            raise AssertionError("no row for OpenAI:\n" + t.screen())
+        t.press_until("Down", re.compile(r"› \d+ · OpenAI "), sel=re.compile(r"› (\d+) · "))
         t.keys("Enter")
         t.wait("which model?")
         t.keys("Enter")
@@ -94,7 +88,8 @@ def main():
             if NORMAL in sc:
                 break
             t.keys("Enter")
-            time.sleep(0.5)
+            # the TUI drew the next step before the next Enter
+            t.wait_any([lambda s, sc=sc: s != sc], 10)
         t.wait(NORMAL, 30)
         with open(os.path.join(root, "config.toml")) as f:
             assert 'main = "openai/' in f.read()
@@ -106,14 +101,8 @@ def main():
         print(sc)
         assert not os.path.exists(stall), "the stall hook was used"
         # restarted: it answers the message sent while it was stuck
-        t0 = time.time()
-        while time.time() - t0 < 60:
-            reqs = [r for r in E.fake_requests() if r["agent"] == "main" and "hello" in r.get("user", "")]
-            if reqs:
-                break
-            time.sleep(0.3)
-        else:
-            raise AssertionError("main never answered 'hello':\n" + t.screen())
+        reqs = wait.until(lambda: [r for r in E.fake_requests() if r["agent"] == "main" and "hello" in r.get("user", "")],
+                          60, lambda: "main answering 'hello':\n" + t.screen())
         # the model picked in the key step (the catalog's OpenAI pick)
         with open(os.path.join(root, "config.toml")) as f:
             picked = re.search(r'^main = "openai/([^"]+)"', f.read(), re.M).group(1)

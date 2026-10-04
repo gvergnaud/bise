@@ -9,9 +9,9 @@ python3 -u tests/tui_archived_tmux.py
 """
 import os
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import wait  # noqa: E402
 from tui_tmux import tui_session, run, panel_row, in_view, MAIN_IDLE  # noqa: E402
 
 COLS, ROWS = 150, 42
@@ -80,9 +80,8 @@ def main():
         sc = t.wait("t1 is archived. /restore brings it back · esc → main")
         print("---- archived feed ----\n" + sc)
         # the hub never got the line, it stays in the composer
-        time.sleep(0.5)
-        sc = t.screen()
-        assert "you: hello-archived" not in sc, sc
+        sc = wait.holds(lambda: (lambda s: "you: hello-archived" not in s and s)(t.screen()), 0.5,
+                        "the hub never got the line")
         assert "hello-archived" in sc, sc
         t.keys("C-u")
         # /restore's picker: the archived agent in view first

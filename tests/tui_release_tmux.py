@@ -10,7 +10,6 @@ python3 -u tests/tui_release_tmux.py
 """
 import os
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
@@ -57,7 +56,7 @@ def main():
         t.typed("/release-b")
         t.wait("tag HEAD, CI builds it")
         t.typed("ise dry-run")
-        time.sleep(0.3)
+        t.wait("/release-bise dry-run")   # the whole line in the composer
         t.keys("Enter")
         sc = t.wait("dry run of v2026.10.3: nothing is pushed or published. go?")
         assert "release v2026.10.3 · " in sc and "fix the voice chip · 2 commits since v2026.10.1 · dry run" in sc, sc

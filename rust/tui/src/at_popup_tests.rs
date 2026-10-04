@@ -302,16 +302,19 @@ fn every_key_on_every_row_never_panics() {
     }
 }
 
-/// Rows once the outside folder is read (a background read).
+/// Rows once the outside folder is read (a background read): up to
+/// 30 s, like the index above (a 1 s bound failed on a loaded machine,
+/// docs/issues/10-tests-wait.md); returns as soon as a file row shows.
 fn rows_read(app: &App) -> Vec<String> {
-    for _ in 0..200 {
+    let t0 = std::time::Instant::now();
+    loop {
         let r = rows(app);
         if r.iter().any(|l| !l.ends_with("/")) {
             return r;
         }
+        assert!(t0.elapsed().as_secs() < 30, "the outside folder is not read after 30 s: {r:?}");
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
-    rows(app)
 }
 
 #[test]

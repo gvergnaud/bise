@@ -35,6 +35,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
+import wait  # noqa: E402
 from tui_tmux import tui_session, run  # noqa: E402
 
 COLS, ROWS = 120, 36
@@ -84,11 +85,7 @@ def setup():
     os.chmod(os.path.join(shim, "open"), 0o755)
     port_file = os.path.join(d, "port")
     fake = subprocess.Popen([sys.executable, os.path.join(HERE, "fake_mcp_http.py"), "--mode", "streamable", "--oauth", "--port-file", port_file])
-    t0 = time.time()
-    while not os.path.exists(port_file):
-        assert time.time() - t0 < 10, "the fake server never started"
-        time.sleep(0.05)
-    port = int(open(port_file).read())
+    port = int(wait.until(lambda: open(port_file).read().strip(), 10, "the fake server's port file", poll=0.05))
     host = "127.0.0.1:%d" % port
     url = "http://%s/mcp" % host
 
@@ -152,10 +149,7 @@ def login_elsewhere(cols):
                          "browser on another machine? log in there. the last page won't load: copy its address,"):
                 assert want in flat, (want, sc)
             shot(t, "link", sc)
-            t0 = time.time()
-            while not any(f.startswith("landed-") for f in os.listdir(pages)):
-                assert time.time() - t0 < 10, "the browser never logged in"
-                time.sleep(0.1)
+            wait.until(lambda: any(f.startswith("landed-") for f in os.listdir(pages)), 10, "the browser's login")
             landed = open(os.path.join(pages, [f for f in os.listdir(pages) if f.startswith("landed-")][0])).read().strip()
             assert landed.startswith("http://127.0.0.1:") and "code=" in landed, landed
             t.typed("/plugins login fake http://127.0.0.1:9/callback?code=nope&state=wrong")
@@ -197,13 +191,8 @@ def login_here():
                 f.write(t.screen(colors=True))
 
     def page(k):
-        t0 = time.time()
-        while True:
-            got = sorted(os.listdir(pages))
-            if len(got) >= k:
-                return open(os.path.join(pages, got[k - 1])).read()
-            assert time.time() - t0 < 10, "no browser page %d" % k
-            time.sleep(0.1)
+        got = wait.until(lambda: (lambda g: len(g) >= k and g)(sorted(os.listdir(pages))), 10, "browser page %d" % k)
+        return open(os.path.join(pages, got[k - 1])).read()
 
     E, env = env_of((plugins, status, secrets, pages, shim))
     try:
@@ -213,9 +202,11 @@ def login_here():
             shot(t, "quiet-line", sc)
             # the popup wants an argument: esc closes it, ⏎ runs the line
             t.typed("/plugins list")
+            t.wait("list the plugins and their state")   # the popup open
             t.keys("Escape")
-            # apart, or the terminal reads ESC ⏎ as alt+⏎
-            time.sleep(0.3)
+            # the esc handled alone (the popup closed) before the ⏎, or
+            # the terminal reads ESC ⏎ as alt+⏎
+            t.wait_gone("list the plugins and their state")
             t.keys("Enter")
             sc = t.wait("mcp fake · %s · needs a login · /plugins login" % host)
             shot(t, "plugins-needs-login", sc)

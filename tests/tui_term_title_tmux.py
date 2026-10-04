@@ -17,10 +17,10 @@ import os
 import shlex
 import subprocess
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
+import wait  # noqa: E402
 from tui_tmux import Tui, tmux, wait_until, run, MAIN_IDLE  # noqa: E402
 
 BEFORE = "before-bise"
@@ -97,8 +97,8 @@ def off(t):
     t.wait("bise :*")
     t.wait_re(MAIN_IDLE)
     t.wait("inbox · 1 waiting for you")   # the card: a title would say it
-    time.sleep(1.5)
-    assert title(t) == BEFORE, title(t)
+    # a window: a title written by a later tick would show in it
+    wait.holds(lambda: title(t) == BEFORE, 1.5, lambda: "no title written: %r" % title(t))
     quit_tui(t)
     assert title(t) == BEFORE, title(t)
     print("ok: BISE_TERM_TITLE=0 leaves %r" % title(t))

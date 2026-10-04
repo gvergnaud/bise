@@ -37,8 +37,9 @@ def main():
         q = next(i for i, r in enumerate(rows) if r.endswith("voice-marker check the build"))
         assert rows[q - 1].endswith("you"), rows
         assert rows[q + 3].endswith(":* main"), rows
-        # esc: voice mode ends, its line in the thread
-        time.sleep(1.0)
+        # esc: voice mode ends, its line in the thread (once main's voice
+        # ended: listening again)
+        t.wait("● listening", 30)
         t.keys("Escape")
         sc = t.wait("voice mode ended")
         assert "1 thing said" in sc, sc

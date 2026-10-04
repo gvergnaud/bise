@@ -21,10 +21,10 @@ import json
 import re
 import os
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
+import wait  # noqa: E402
 from tui_tmux import tui_session, run, wait_until  # noqa: E402
 
 NORMAL = "   @ file   "  # the key bar (BISE-98/99; `ctrl+1 inbox` may come before it, BISE-248)
@@ -101,12 +101,13 @@ def main():
     with tui_session(120, 34, env(root, home), E=E) as t:
         # 1 welcome: typed, then the :* pop; any key goes on
         sc = t.wait("any key ↵", 30)
-        time.sleep(0.5)
-        sc = t.screen()
         # the fake env has MISTRAL_API_KEY: no key step, three dots
-        for s in ["hi, i'm bise :*", "bise /beez/ · french, n.", "1. a quick kiss on the cheek :*",
-                  "2. a brisk north wind", "3. a terminal where multi-agent coding is painless",
-                  "ideas in. little kisses out. also pull requests.", "● ○ ○"]:
+        welcome = ["hi, i'm bise :*", "bise /beez/ · french, n.", "1. a quick kiss on the cheek :*",
+                   "2. a brisk north wind", "3. a terminal where multi-agent coding is painless",
+                   "ideas in. little kisses out. also pull requests.", "● ○ ○"]
+        # typed one letter at a time: the whole welcome drawn
+        sc = t.wait_any([lambda s: all(w in flat(s) for w in welcome)], 10)[1]
+        for s in welcome:
             assert s in flat(sc), sc
         assert "● ○ ○ ○" not in sc, sc
         rows = sc.splitlines()
@@ -120,8 +121,9 @@ def main():
                   "on it: auth-fix takes it.", "auth-fix is done.", "○ ● ○"]:
             assert s in flat(sc), sc
         shot("2-theme", sc)
+        dark = t.screen(colors=True)
         t.keys("Right")
-        time.sleep(0.3)
+        t.wait_any([lambda s: s != dark], 10, colors=True)   # the light preview drawn
         t.keys("Left")
         # 3 how it works, one line at a time (a key was found: no key step,
         # no folder step)
@@ -193,8 +195,9 @@ def main():
         # the second launch: no onboarding
         t.start(120, 34, env(root, home))
         sc = t.wait(NORMAL)
-        time.sleep(0.5)
-        sc = t.screen()
+        # a window: no state says "the onboarding will not come"
+        sc = wait.holds(lambda: (lambda s: not any(x in s for x in ("can i set bise up", "any key ↵", "hi, i'm")) and s)(
+            t.screen()), 0.5, "no onboarding on the second launch", poll=wait.SCREEN_POLL)
         assert "can i set bise up" not in sc, sc   # asked once per user
         assert "any key ↵" not in sc and "hi, i'm" not in sc, sc
         assert READY not in sc and not composer_holds(sc, DEMO), sc   # BISE-284: the first open only

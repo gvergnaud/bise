@@ -6,7 +6,6 @@ python3 -u tests/tui_panel_click_tmux.py
 """
 import os
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tui_tmux import tui_session, run, panel_row, in_view, MAIN_IDLE  # noqa: E402
@@ -53,7 +52,6 @@ def main():
         # the feed still takes clicks: the composer keeps its text
         t.typed("still here")
         t.wait("still here")
-        time.sleep(0.3)
         print("PASS tui panel click")
 
 

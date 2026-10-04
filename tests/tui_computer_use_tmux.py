@@ -24,10 +24,10 @@ import os
 import shutil
 import sys
 import tempfile
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
+import wait  # noqa: E402
 from tui_tmux import tui_session, run  # noqa: E402
 
 COLS, ROWS = 120, 40
@@ -90,12 +90,7 @@ def main():
             return ""
 
     def called(what, timeout=10):
-        t0 = time.time()
-        while time.time() - t0 < timeout:
-            if what in calls():
-                return
-            time.sleep(0.1)
-        raise AssertionError("not called: %r in\n%s" % (what, calls()))
+        wait.until(lambda: what in calls(), timeout, lambda: "a call %r in\n%s" % (what, calls()))
 
     dump = os.environ.get("SB_DUMP")
     n = [0]

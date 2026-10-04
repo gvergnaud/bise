@@ -95,7 +95,7 @@ def main():
         assert len(sizes) >= 2, "the sizes wrap: %r\n%s" % (sizes, sc)
         # a click on the sizes does nothing
         click_on(t, "11.35.59.png 1×1")
-        time.sleep(0.5)
+        t.sync()
         assert not opened(t.screen()), t.screen()
         # a click on the hint opens it whole, `▾` after its last line
         click_on(t, "▸ 6 more lines")
@@ -115,7 +115,6 @@ def main():
         t.wait_any([opened], 10)
         t.keys("C-o")
         t.wait("▸ 6 more lines")
-        time.sleep(0.3)
         print("PASS tui you fold click")
 
 

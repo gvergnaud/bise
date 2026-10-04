@@ -10,7 +10,6 @@ python3 -u tests/tui_code_blocks_tmux.py
 import os
 import sys
 import tempfile
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tui_tmux import tui_session, run, wait_until, MAIN_IDLE  # noqa: E402
@@ -72,7 +71,8 @@ def main():
         t.wait("✓ copied ─╮")
         t.wait("copied %d chars" % len(CODE_TS))
         # ctrl+y (the mouse away): the newest block on screen
-        time.sleep(1.6)
+        # once `✓ copied` is over (codeblock::COPIED_FOR)
+        t.wait_gone("✓ copied ─╮")
         t.keys("C-y")
         wait_until(lambda: read(clip) == CODE_SH, 10, lambda: "clipboard: %r" % read(clip))
         print("PASS tui code blocks")

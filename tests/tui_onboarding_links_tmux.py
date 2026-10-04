@@ -18,10 +18,10 @@ import json
 import os
 import re
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
+import wait  # noqa: E402
 from tui_tmux import tui_session, run, wait_until  # noqa: E402
 
 
@@ -63,13 +63,7 @@ def to_paste(t, name):
     t.wait("› an API key")
     t.keys("Enter")
     t.wait("which provider?")
-    for _ in range(20):
-        if re.search(r"› \d+ · %s " % re.escape(name), t.screen()):
-            break
-        t.keys("Down")
-        time.sleep(0.15)
-    else:
-        raise AssertionError("no row for %s:\n%s" % (name, t.screen()))
+    t.press_until("Down", re.compile(r"› \d+ · %s " % re.escape(name)), sel=re.compile(r"› (\d+) · "))
     t.keys("Enter")
     t.wait("which model?")
     t.keys("Enter")
@@ -124,8 +118,8 @@ def anthropic():
         # a click on the words before it opens nothing
         gx, gy = at(sc, "get one:")
         click(t, gx + 1, gy)
-        time.sleep(0.6)
-        assert read(log).split() == [url], read(log)
+        # the opener is a process of its own: its log line may come late
+        wait.holds(lambda: read(log).split() == [url], 0.6, lambda: "no open on the words: %r" % read(log))
         # a drag over it, past its end: copied
         t.typed(sgr(0, x, y) + sgr(32, x + 20, y) + sgr(32, x + len(url) + 8, y) + sgr(0, x + len(url) + 8, y, "m"))
         wait_until(lambda: read(clip) == url, 10, lambda: "the drag copies the url: %r" % read(clip))
@@ -172,8 +166,7 @@ def openai():
         n = len(read(log).split())
         qx, qy = at(sc, 'billing/."')
         click(t, qx + 3, qy)
-        time.sleep(0.6)
-        assert len(read(log).split()) == n, "the provider's words opened: %r" % read(log)
+        wait.holds(lambda: len(read(log).split()) == n, 0.6, lambda: "the provider's words opened: %r" % read(log))
         lines = sc.split("\n")
         ly = next(i for i, l in enumerate(lines) if l.strip() == billing)
         click(t, lines[ly].index(billing) + 5, ly)
