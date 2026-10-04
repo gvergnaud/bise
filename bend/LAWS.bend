@@ -1734,7 +1734,7 @@ whoami
 XQ-3131618372-EOF
 if [ $? -ne 0 ]; then echo \"background: could not write /tmp/bend-bg-0/$i.cmd (disk full?)\"; rm -f $BG/$i.in $BG/$i.cmd; rmdir $BG/$i.slot 2>/dev/null; rm -f \"$0\"; exit 1; fi
 L=${BEND_MEM_LIMIT_MB:-}; if [ -z \"$L\" ]; then m=$(sysctl -n hw.memsize 2>/dev/null); m=$((${m:-0}/4194304)); if [ $m -eq 0 ] || [ $m -gt 8192 ]; then m=8192; fi; if [ $m -lt 2048 ]; then m=2048; fi; L=$m; fi
-( ulimit -f 102400; set -m; ( /bin/sh $BG/$i.cmd ) > $BG/$i.out 2>&1 <&9 & C=$!; set +m; echo $C > $BG/$i.pid; if [ \"$L\" -gt 0 ] 2>/dev/null; then ( while kill -0 -$C 2>/dev/null; do sleep 2; k=$(ps -axo pgid=,pid=,rss=,ucomm= 2>/dev/null | awk -v g=$C -v l=$((L*1024)) '$1==g && $3>l {print \"pid \" $2 \" (\" $4 \") at \" int($3/1024) \" MB\"; exit}'); if [ -n \"$k\" ]; then kill -9 -$C 2>/dev/null; if { [ -d $BG/$i.slot ] && [ \"$(cat $BG/$i.pid 2>/dev/null)\" = \"$C\" ]; } || { [ ! -d $BG/$i.slot ] && [ -e $BG/$i.rc ]; }; then echo \"[bash: killed $k of RAM, over the limit of $L MB per process (BEND_MEM_LIMIT_MB, 0 = no limit). A process that keeps growing is a leak or a command that never ends: e.g. its output piped into grep -m1 or head, or a CLI left running in the background]\" >> $BG/$i.out; fi; break; fi; done ) >/dev/null 2>&1 & fi; wait $C; R=$?; if [ \"$(cat $BG/$i.pid 2>/dev/null)\" = \"$C\" ]; then echo $R > $BG/$i.rc; rm -f $BG/$i.pid $BG/$i.cmd $BG/$i.in; rmdir $BG/$i.slot 2>/dev/null; fi; exit $R ) >/dev/null 2>&1 &
+( ulimit -f 102400; set -m; ( BEND_STDIN=$BG/$i.in /bin/sh $BG/$i.cmd ) > $BG/$i.out 2>&1 </dev/null 9<&- & C=$!; set +m; echo $C > $BG/$i.pid; if [ \"$L\" -gt 0 ] 2>/dev/null; then ( while kill -0 -$C 2>/dev/null; do sleep 2; k=$(ps -axo pgid=,pid=,rss=,ucomm= 2>/dev/null | awk -v g=$C -v l=$((L*1024)) '$1==g && $3>l {print \"pid \" $2 \" (\" $4 \") at \" int($3/1024) \" MB\"; exit}'); if [ -n \"$k\" ]; then kill -9 -$C 2>/dev/null; if { [ -d $BG/$i.slot ] && [ \"$(cat $BG/$i.pid 2>/dev/null)\" = \"$C\" ]; } || { [ ! -d $BG/$i.slot ] && [ -e $BG/$i.rc ]; }; then echo \"[bash: killed $k of RAM, over the limit of $L MB per process (BEND_MEM_LIMIT_MB, 0 = no limit). A process that keeps growing is a leak or a command that never ends: e.g. its output piped into grep -m1 or head, or a CLI left running in the background]\" >> $BG/$i.out; fi; break; fi; done ) >/dev/null 2>&1 & fi; wait $C; R=$?; if [ \"$(cat $BG/$i.pid 2>/dev/null)\" = \"$C\" ]; then echo $R > $BG/$i.rc; rm -f $BG/$i.pid $BG/$i.cmd $BG/$i.in; rmdir $BG/$i.slot 2>/dev/null; fi; exit $R ) >/dev/null 2>&1 &
 r=$!
 e=0
 while kill -0 $r 2>/dev/null; do
@@ -1744,7 +1744,7 @@ while kill -0 $r 2>/dev/null; do
     printf '%s\\n' \"BEND-BG-HANDOFF-6f2c9e5b\"
     printf '%s\\n' \"background: still running after 30s - id $i (dir /tmp/bend-bg-0)\"
     printf '%s\\n' \"  output: tail -n 50 /tmp/bend-bg-0/$i.out\"
-    printf '%s\\n' \"  stdin (if it reads): printf '%s\\n' 'text' > /tmp/bend-bg-0/$i.in  (a command that reads stdin WAITS for input indefinitely: feed it or kill it)\"
+    printf '%s\\n' \"  stdin (only if the command reads the fifo in BEND_STDIN): printf '%s\\n' 'text' > /tmp/bend-bg-0/$i.in  (otherwise its stdin is /dev/null)\"
     printf '%s\\n' \"  status: kill -0 $(cat /tmp/bend-bg-0/$i.pid) && echo RUNNING || cat /tmp/bend-bg-0/$i.rc 2>/dev/null\"
     printf '%s\\n' \"  kill: kill $(cat /tmp/bend-bg-0/$i.pid)\"
     if [ ! -s /tmp/bend-bg-0/$i.pid ]; then echo \"background: could not write /tmp/bend-bg-0/$i.pid (disk full?) - the command runs under the runner pid $r\"; fi
@@ -1872,9 +1872,9 @@ law bg_tail_cmd_concrete:
 law bg_stdin_cmd_concrete:
   {Bool.and(
      String.eq(Sh.bg_stdin_cmd("/tmp/bend-bg-0", "3"),
-       "  stdin (if it reads): printf '%s\\n' 'text' > /tmp/bend-bg-0/3.in  (a command that reads stdin WAITS for input indefinitely: feed it or kill it)"),
+       "  stdin (only if the command reads the fifo in BEND_STDIN): printf '%s\\n' 'text' > /tmp/bend-bg-0/3.in  (otherwise its stdin is /dev/null)"),
      String.contains(Sh.bg_stdin_cmd("/tmp/bend-bg-0", "3"),
-       "feed it or kill it")) == True{} : Bool}
+       "BEND_STDIN")) == True{} : Bool}
 
 law bg_status_cmd_concrete:
   {Sh.bg_status_cmd("/tmp/bend-bg-0", "3")
@@ -1917,6 +1917,16 @@ law bg_wrapper_fifo_rdrw:
   {String.contains(Sh.bg_wrap("x", "/d", 5), "exec 9<>$BG/$i.in")
     == True{} : Bool}
 
+# LAW (issue #9): the command's stdin is /dev/null, never the fifo: a
+# command that reads a non-tty stdin (rg with no path, cat) gets EOF at
+# once instead of waiting out the sync window. The fifo is reached by
+# name only ($BEND_STDIN), and the command does not inherit fd 9.
+law bg_wrapper_stdin_devnull:
+  {Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5),
+       "( BEND_STDIN=$BG/$i.in /bin/sh $BG/$i.cmd ) > $BG/$i.out 2>&1 </dev/null 9<&- &"),
+     Bool.not(String.contains(Sh.bg_wrap("x", "/d", 5), "<&9")))
+    == True{} : Bool}
+
 # LAW: a detached runner is the command's real parent and records the
 # TRUE exit code (a sibling cannot wait — that produced 127). The
 # record is ownership-checked: the rc lands only if the runner's pid
@@ -1934,7 +1944,7 @@ law bg_wrapper_runner_waits_and_records:
 # the wrapper is the memory watchdog's own ps | awk, read by $( ) inside
 # the watchdog: no command output goes through it.
 law bg_wrapper_output_is_a_file:
-  {Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5), "( /bin/sh $BG/$i.cmd ) > $BG/$i.out 2>&1"),
+  {Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5), " /bin/sh $BG/$i.cmd ) > $BG/$i.out 2>&1"),
    Bool.and(String.contains(Sh.bg_mem_watch(), "k=$(ps -axo pgid=,pid=,rss=,ucomm= 2>/dev/null | awk "),
      Bool.not(String.contains(Sh.bg_wrap("x", "/d", 5), ".cmd ) |"))))
     == True{} : Bool}

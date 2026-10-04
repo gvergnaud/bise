@@ -23,7 +23,7 @@
 # a cat of it fed on itself up to a 100 MiB result that killed the REPL):
 # each background job below takes the next id.
 #
-# Gates: no FAIL line (21 checks, s01-s21).
+# Gates: no FAIL line (22 checks, s01-s22).
 import Base
 import ../runtime/main.bend as Rt
 import ../runtime/bash.bend as Sh
@@ -143,7 +143,7 @@ def main() -> IO(Unit):
     +u9w : Unit <- IO.sleep(1100)
 
     # ---- s10 the fifo feeds a reader: printf > .in ----
-    +r10 : Xp.ExecRes <- Sh.bash_exec("read x; echo got:$x")
+    +r10 : Xp.ExecRes <- Sh.bash_exec("read x < \"$BEND_STDIN\"; echo got:$x")
     f10 : Xp.ExecRes <- Sh.bash_exec(
       String.append("printf 'fifo-ok\\n' > ", slot("1", ".in")))
     +u10w : Unit <- IO.sleep(1100)
@@ -246,6 +246,20 @@ job-done"),
     +r21 : Xp.ExecRes <- Sh.bash_exec("echo \"env:[${BEND_SESSION_FILE-}][${BEND_WIRE_LOG-}]\"")
     u21 : Unit <- check(String.contains(res_out(r21), "env:[][]"),
       "s21 REPL session vars unset in the command")
+
+    # ---- s22 stdin is /dev/null: readers get EOF, never the window ----
+    # (issue #9: the stdin was a fifo that never closed, so rg with no
+    # path, cat or read waited out the whole sync window, then handed
+    # off). Each one ends in sync, well inside the 2 s window.
+    +r22a : Xp.ExecRes <- Sh.bash_exec("read x; echo read-rc:$?")
+    +r22b : Xp.ExecRes <- Sh.bash_exec("cat; echo cat-done")
+    +r22c : Xp.ExecRes <- Sh.bash_exec("d=$(mktemp -d); cd $d; echo foo > f; if command -v rg >/dev/null; then rg foo; else grep -r foo; fi; echo rg-rc:$?; rm -rf $d")
+    u22 : Unit <- check(Bool.and(String.contains(res_out(r22a), "read-rc:1"),
+        Bool.and(String.contains(res_out(r22b), "cat-done"),
+          Bool.and(String.contains(res_out(r22c), "rg-rc:0"),
+            Bool.not(String.contains(String.append(res_out(r22a),
+              String.append(res_out(r22b), res_out(r22c))), "background:"))))),
+      "s22 stdin readers (read, cat, rg with no path) end in sync")
 
     # ---- s14 the agent rm -rf's its own bg dir: fast failure, no hang ----
     +r14 : Xp.ExecRes <- Sh.bash_exec(String.append("rm -rf ", bg()))

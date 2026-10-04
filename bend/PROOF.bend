@@ -514,6 +514,9 @@ def Laws.bg_kill_cmd_concrete():
 def Laws.bg_wrapper_fifo_rdrw():
   {==}
 
+def Laws.bg_wrapper_stdin_devnull():
+  {==}
+
 def Laws.bg_wrapper_runner_waits_and_records():
   {==}
 

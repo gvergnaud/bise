@@ -91,8 +91,14 @@ def exec_of(+out: String) -> Xp.ExecRes:
 #
 # Wrapper shape (bg_wrap below):
 #   - id: the first free slot (no .pid) in the session's bg dir
-#   - stdin: a fifo held RDWR (never EOF, never blocks at open) — the
-#     agent feeds it with printf > <id>.in whenever the command reads
+#   - stdin: /dev/null, EOF at once. A command that reads stdin when it
+#     is not a tty (rg or grep -r with no path, cat) used to get a fifo
+#     that never closed and waited out the whole sync window (issue #9:
+#     ~35 s a turn). A command that wants input later reads the fifo
+#     by name: `cmd < "$BEND_STDIN"` (the slot's <id>.in). The runner
+#     holds the fifo RDWR on fd 9 (never EOF, the open never blocks)
+#     and the command does not inherit fd 9; the agent feeds it with
+#     printf > <id>.in
 #   - a detached RUNNER subshell is the command's real parent (a sibling
 #     cannot wait: 127); it records the pid, waits, writes the exit
 #     code to <id>.rc and exits with it — the wrapper polls the RUNNER
@@ -201,9 +207,9 @@ def bg_tail_cmd(+bg: String, +id: String) -> String:
   String.append("  output: tail -n 50 ", bg_slot(bg, id, ".out"))
 
 def bg_stdin_cmd(+bg: String, +id: String) -> String:
-  String.append("  stdin (if it reads): printf '%s\\n' 'text' > ",
+  String.append("  stdin (only if the command reads the fifo in BEND_STDIN): printf '%s\\n' 'text' > ",
     String.append(bg_slot(bg, id, ".in"),
-      "  (a command that reads stdin WAITS for input indefinitely: feed it or kill it)"))
+      "  (otherwise its stdin is /dev/null)"))
 
 def bg_status_cmd(+bg: String, +id: String) -> String:
   String.append("  status: kill -0 $(cat ",
@@ -421,7 +427,7 @@ def bg_wrap(+command: String, +bg: String, +after: U32) -> String:
   # (polling, handoff, result print) as its body - the wrapper then
   # exits before printing anything and the tool returns empty.
   bg_wrap.seg(bg_mem_limit(),
-  bg_wrap.seg(String.append("( ulimit -f 102400; set -m; ( /bin/sh $BG/$i.cmd ) > $BG/$i.out 2>&1 <&9 & C=$!; set +m; echo $C > $BG/$i.pid; ",
+  bg_wrap.seg(String.append("( ulimit -f 102400; set -m; ( BEND_STDIN=$BG/$i.in /bin/sh $BG/$i.cmd ) > $BG/$i.out 2>&1 </dev/null 9<&- & C=$!; set +m; echo $C > $BG/$i.pid; ",
       String.append(bg_mem_watch(),
       "; wait $C; R=$?; if [ \"$(cat $BG/$i.pid 2>/dev/null)\" = \"$C\" ]; then echo $R > $BG/$i.rc; rm -f $BG/$i.pid $BG/$i.cmd $BG/$i.in; rmdir $BG/$i.slot 2>/dev/null; fi; exit $R ) >/dev/null 2>&1 &")),
   bg_wrap.seg("r=$!",
