@@ -142,7 +142,7 @@ pub(crate) fn mode(app: &App) -> Mode {
         Mode::Find
     } else if commands::popup_open(app) && files::token(&app.ed.text, app.ed.cursor).is_some() {
         Mode::FilePopup
-    } else if app.feed_sel.is_some() && app.mouse.drag.is_none() {
+    } else if (app.feed_sel.is_some() && app.mouse.drag.is_none()) || crate::diffquote::selected(app) {
         Mode::Quote
     } else if !app.pending && attach::strip_height(app) > 0 {
         Mode::Images

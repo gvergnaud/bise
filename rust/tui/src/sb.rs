@@ -641,7 +641,7 @@ pub(super) fn dispatch(app: &mut App, raw: &str) {
             app.cache.iter_mut().for_each(|c| *c = None);
         }
         "diff" => crate::diffview::event(app, &v),
-        "branches" => crate::diffview::branches_event(&v),
+        "branches" => crate::diffbranches::branches_event(&v),
         // update-card: `/update` with a newer release opens its item here
         "open_card" => {
             if let Some(id) = v.get("id").and_then(|x| x.as_u64()) {

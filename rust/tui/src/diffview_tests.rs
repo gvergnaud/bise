@@ -20,6 +20,7 @@ fn panel(d: Diff) -> Panel {
         what: "pricing-page vs main".into(),
         last_land: None,
         side: true,
+        sel: None,
     }
 }
 
@@ -128,6 +129,7 @@ fn the_doors_name_what_they_open() {
     assert_eq!(ask_of_url("bise-diff:pr/7"), Some(Ask::Pr(7)));
     assert_eq!(ask_of_url("https://x"), None);
     assert!(is_lock("web/package-lock.json") && is_lock("Cargo.lock") && !is_lock("src/lock.rs"));
+    use crate::diffbranches::{branch_words, Branch};
     let b = Branch { branch: "fix-csv".into(), pr: Some(7), add: 8, del: 2, ..Default::default() };
     assert_eq!(branch_words(&b, 0), "no agent · PR #7 open");
     let b = Branch { branch: "sculpt".into(), agents: vec!["s1".into(), "s2".into()], commits: 4, ..Default::default() };

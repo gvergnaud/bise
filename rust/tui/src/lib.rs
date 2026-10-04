@@ -99,6 +99,8 @@ mod artifacts;
 mod artifacts_screen;
 mod scheduled;
 mod scheduled_screen;
+mod diffbranches;
+mod diffquote;
 mod diffview;
 mod computer_use;
 mod keybar;

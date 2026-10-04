@@ -274,13 +274,13 @@ fn choices(app: &App, arg: Arg, q: &str) -> Vec<Choice> {
         Arg::Card => sb::card_choices(app, q),
         Arg::Branch => {
             let now = crate::when::now_ms();
-            crate::diffview::branches(app)
+            crate::diffbranches::branches(app)
                 .into_iter()
                 .filter(|b| matches(q, &[&b.branch]))
                 .map(|b| Choice {
                     value: b.branch.clone(),
                     label: b.branch.clone(),
-                    desc: format!("{}   {}", crate::diffview::branch_words(&b, now), crate::diffview::counts(b.add, b.del)),
+                    desc: format!("{}   {}", crate::diffbranches::branch_words(&b, now), crate::diffview::counts(b.add, b.del)),
                     mark: None,
                 })
                 .collect()

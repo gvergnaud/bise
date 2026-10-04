@@ -258,7 +258,7 @@ pub(crate) fn composer_key(app: &mut App, k: &crossterm::event::KeyEvent) {
         }
         // the composer's selection, else the feed's
         Action::Copy => {
-            if let Some(t) = app.ed.selected_text().or_else(|| feed_selection_text(app)) {
+            if let Some(t) = app.ed.selected_text().or_else(|| feed_selection_text(app)).or_else(|| crate::diffquote::text(app)) {
                 copy_text(app, &t);
             }
         }

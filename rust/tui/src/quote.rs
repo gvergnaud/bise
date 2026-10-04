@@ -53,17 +53,42 @@ pub(crate) fn is_quote(label: &str) -> bool {
 /// The tag a quote sends: `<selection from="main">\n{text}\n</selection>`.
 /// A `</selection>` inside the text is broken (`</selection >`) so the
 /// tag always ends where it should; a `"` in `from` becomes `'`.
+#[cfg(test)]
 pub(crate) fn tag(from: &str, text: &str) -> String {
-    let from = from.replace('"', "'");
+    tag_at(from, &Where::default(), text)
+}
+
+/// Where in a diff a quote comes from (diffquote.rs): the file, the
+/// lines in the new file and in the old one (`192-194`; empty: none).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct Where {
+    pub(crate) file: String,
+    pub(crate) new: String,
+    pub(crate) old: String,
+}
+
+/// The tag of a quote from a diff: `<selection from="t1 vs main"
+/// file="src/a.rs" new="12-14" old="11-12">`, an attribute only when
+/// it has a value.
+pub(crate) fn tag_at(from: &str, at: &Where, text: &str) -> String {
+    let attr = |s: &str| s.replace('"', "'").replace('\n', " ");
+    let mut head = format!("{TAG_OPEN}{}\"", attr(from));
+    for (k, v) in [("file", &at.file), ("new", &at.new), ("old", &at.old)] {
+        if !v.is_empty() {
+            head.push_str(&format!(" {k}=\"{}\"", attr(v)));
+        }
+    }
     let text = text.replace(TAG_CLOSE, "</selection >");
-    format!("{TAG_OPEN}{from}\">\n{text}\n{TAG_CLOSE}")
+    format!("{head}>\n{text}\n{TAG_CLOSE}")
 }
 
 /// A quote read back from its tag.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct Quote {
     pub(crate) from: String,
     pub(crate) text: String,
+    /// from a diff: where (else all empty)
+    pub(crate) at: Where,
 }
 
 /// The tag at the start of `s` (spaces and newlines before it allowed):
@@ -71,14 +96,28 @@ pub(crate) struct Quote {
 fn parse_one(s: &str) -> Option<(Quote, &str)> {
     let s = s.trim_start();
     let rest = s.strip_prefix(TAG_OPEN)?;
-    let (from, rest) = rest.split_once("\">")?;
-    if from.contains('\n') {
+    let (head, rest) = rest.split_once("\">")?;
+    if head.contains('\n') {
         return None;
+    }
+    // `from` up to its quote, then ` key="value"` pairs
+    let (from, mut attrs) = head.split_once('"').unwrap_or((head, ""));
+    let mut at = Where::default();
+    while !attrs.trim_start().is_empty() {
+        let (k, v) = attrs.trim_start().split_once("=\"")?;
+        let (v, more) = v.split_once('"').unwrap_or((v, ""));
+        match k {
+            "file" => at.file = v.to_string(),
+            "new" => at.new = v.to_string(),
+            "old" => at.old = v.to_string(),
+            _ => {}
+        }
+        attrs = more;
     }
     let (text, rest) = rest.split_once(TAG_CLOSE)?;
     let text = text.strip_prefix('\n').unwrap_or(text);
     let text = text.strip_suffix('\n').unwrap_or(text);
-    Some((Quote { from: from.to_string(), text: text.to_string() }, rest))
+    Some((Quote { from: from.to_string(), text: text.to_string(), at }, rest))
 }
 
 /// The tags in front of a message, and its text after them (the newline
@@ -123,9 +162,26 @@ pub(crate) fn preview(text: &str, max: usize) -> String {
 }
 
 /// What the strip and the history say after the words: `main · 3 lines`.
+/// The words the strip and the history preview: a diff's lines without
+/// their marks (` `, `-`, `+`), else the text.
+pub(crate) fn words(q: &Quote) -> String {
+    if q.at.file.is_empty() {
+        return q.text.clone();
+    }
+    q.text.lines().map(|l| l.get(1..).unwrap_or("")).collect::<Vec<_>>().join("\n")
+}
+
+/// From a diff, the place instead of the speaker (designer m_7568):
+/// `src/quote.rs:192-194 · 3 lines`, `src/a.rs:40-41 · 2 removed lines`.
 pub(crate) fn about(q: &Quote) -> String {
     let n = line_count(&q.text);
-    format!("{} · {} line{}", q.from, n, if n == 1 { "" } else { "s" })
+    let s = if n == 1 { "" } else { "s" };
+    match (&q.at.file, &q.at.new, &q.at.old) {
+        (f, _, _) if f.is_empty() => format!("{} · {} line{}", q.from, n, s),
+        (f, new, _) if !new.is_empty() => format!("{}:{} · {} line{}", f, new, n, s),
+        (f, _, old) if !old.is_empty() => format!("{}:{} · {} removed line{}", f, old, n, s),
+        (f, _, _) => format!("{} · {} line{}", f, n, s),
+    }
 }
 
 /// The quote an attachment holds (a quote's marker is its tag).
@@ -145,6 +201,11 @@ pub(crate) fn chips(text: &str) -> Vec<(usize, usize, usize)> {
 /// ([`crate::attach::insert_chip`]), one undo step. `Err`: why not (a
 /// flash). The text is trimmed and cut to [`MAX_CHARS`].
 pub(crate) fn add(app: &mut App, from: &str, text: &str) -> Result<String, String> {
+    add_at(app, from, &Where::default(), text)
+}
+
+/// [`add`] for a quote from a diff: its tag says where.
+pub(crate) fn add_at(app: &mut App, from: &str, at: &Where, text: &str) -> Result<String, String> {
     let text = text.trim_matches('\n').trim_end();
     if text.trim().is_empty() {
         return Err("nothing selected".into());
@@ -159,7 +220,7 @@ pub(crate) fn add(app: &mut App, from: &str, text: &str) -> Result<String, Strin
     // the lowest free number, shared with images and pastes (BISE-240)
     let n = crate::attach::next_number(app);
     let l = label(n);
-    app.attachments.push(Attachment { label: l.clone(), marker: tag(from, &text), info: Default::default() });
+    app.attachments.push(Attachment { label: l.clone(), marker: tag_at(from, at, &text), info: Default::default() });
     crate::attach::insert_chip(&mut app.ed, &l);
     Ok(crate::attach::chip_name(&l))
 }
@@ -190,7 +251,8 @@ pub(crate) fn speakers(app: &App, from: usize, to: usize) -> String {
 /// A typed key with a selection in the history: the selection becomes a
 /// quote (and ends). None without a selection.
 pub(crate) fn take_selection(app: &mut App) -> Option<Result<String, String>> {
-    let sel = app.feed_sel?;
+    // lines selected in the diff panel quote the same way (diffquote.rs)
+    let Some(sel) = app.feed_sel else { return crate::diffquote::take(app) };
     if app.mouse.drag.is_some() {
         return None;
     }
@@ -219,8 +281,19 @@ pub(crate) fn take_selection(app: &mut App) -> Option<Result<String, String>> {
 // bold, no tint. It is drawn last over the history: no layout moves.
 
 /// The popup's row, in at most `width` columns: the long form, else the
-/// short one, else none.
-pub(crate) fn hint_line(width: usize, no_color: bool) -> Option<ratatui::text::Line<'static>> {
+/// short one, else none. `who`: the agent it names (the diff's popup,
+/// designer m_7568: ` type ask t1 about it `), dropped when it does
+/// not fit; empty: none (the thread's).
+pub(crate) fn hint_line(width: usize, no_color: bool, who: &str) -> Option<ratatui::text::Line<'static>> {
+    if !who.is_empty() {
+        if let Some(l) = hint_words(width, no_color, &format!(" ask {who} about it")) {
+            return Some(l);
+        }
+    }
+    hint_words(width, no_color, " ask about it")
+}
+
+fn hint_words(width: usize, no_color: bool, words: &str) -> Option<ratatui::text::Line<'static>> {
     use ratatui::style::{Modifier, Style};
     use ratatui::text::{Line, Span};
     let bg = if no_color { Style::default() } else { Style::default().bg(crate::theme::pill_bg()) };
@@ -237,7 +310,7 @@ pub(crate) fn hint_line(width: usize, no_color: bool) -> Option<ratatui::text::L
     let long = vec![
         Span::styled(open, bg),
         Span::styled("type", key),
-        Span::styled(" ask about it", ask),
+        Span::styled(words.to_string(), ask),
         Span::styled(" · ", sep),
         Span::styled("cmd+c", copy_key),
         Span::styled(" copy", copy),
@@ -277,7 +350,7 @@ pub(crate) fn draw_hint(app: &App, frame: &mut ratatui::Frame) {
     let area = ratatui::layout::Rect { x: app.feed_x, y: app.feed_y, width: app.area_w.min(u16::MAX as usize) as u16, height: app.area_h.min(u16::MAX as usize) as u16 }
         .intersection(frame.area());
     let no_color = std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty());
-    let Some(line) = hint_line(area.width as usize, no_color) else { return };
+    let Some(line) = hint_line(area.width as usize, no_color, "") else { return };
     let vis: Vec<(usize, usize)> = app.vis_events.iter().copied().zip(app.vis_rows.iter().copied()).collect();
     let Some(r) = hint_rect(sel, &vis, area, line.width() as u16) else { return };
     crate::pointer::region(r, crate::pointer::Shape::Default); // BISE-272: over what it covers
@@ -296,8 +369,8 @@ mod tests {
         let msg = format!("{t}\n{}\nwhy?", tag("you, docs", "x </selection> y"));
         let (qs, rest) = split(&msg);
         assert_eq!(rest, "why?");
-        assert_eq!(qs[0], Quote { from: "main".into(), text: "fn a() {}\n  b".into() });
-        assert_eq!(qs[1], Quote { from: "you, docs".into(), text: "x </selection > y".into() });
+        assert_eq!(qs[0], Quote { from: "main".into(), text: "fn a() {}\n  b".into(), ..Default::default() });
+        assert_eq!(qs[1], Quote { from: "you, docs".into(), text: "x </selection > y".into(), ..Default::default() });
         assert_eq!(split("hello <selection from=\"x\">"), (vec![], "hello <selection from=\"x\">"));
         assert_eq!(split("<selection from=\"x\">\nno end"), (vec![], "<selection from=\"x\">\nno end"));
     }
@@ -449,9 +522,29 @@ mod tests {
     fn preview_and_about() {
         assert_eq!(preview("the login\n  breaks on safari", 40), "the login breaks on safari");
         assert_eq!(preview("the login breaks on safari", 12), "the login b…");
-        let q = Quote { from: "main".into(), text: "a\nb\nc\n".into() };
+        let q = Quote { from: "main".into(), text: "a\nb\nc\n".into(), ..Default::default() };
         assert_eq!(about(&q), "main · 3 lines");
-        assert_eq!(about(&Quote { from: "you".into(), text: "a".into() }), "you · 1 line");
+        assert_eq!(about(&Quote { from: "you".into(), text: "a".into(), ..Default::default() }), "you · 1 line");
+        let at = |new: &str, old: &str| Where { file: "src/quote.rs".into(), new: new.into(), old: old.into() };
+        let d = |text: &str, at| Quote { from: "t1 vs main".into(), text: text.into(), at };
+        assert_eq!(about(&d(" a\n-b\n+c", at("192-193", "190-191"))), "src/quote.rs:192-193 · 3 lines");
+        assert_eq!(about(&d("-a\n-b", at("", "190-191"))), "src/quote.rs:190-191 · 2 removed lines");
+    }
+
+    /// A quote from a diff says where in its tag, and reads back.
+    #[test]
+    fn a_diff_tag_says_where() {
+        let at = Where { file: "src/a \"b\".rs".into(), new: "12-14".into(), old: "11".into() };
+        let t = tag_at("t1 vs main", &at, " fn a() {\n-    x\n+    y");
+        assert_eq!(t, "<selection from=\"t1 vs main\" file=\"src/a 'b'.rs\" new=\"12-14\" old=\"11\">\n fn a() {\n-    x\n+    y\n</selection>");
+        let msg = format!("{t}\nwhy?");
+        let (qs, rest) = split(&msg);
+        assert_eq!(rest, "why?");
+        assert_eq!(qs[0].from, "t1 vs main");
+        assert_eq!(qs[0].at, Where { file: "src/a 'b'.rs".into(), new: "12-14".into(), old: "11".into() });
+        let only_new = tag_at("PR #7", &Where { file: "x.rs".into(), new: "3".into(), old: String::new() }, "+a");
+        assert!(only_new.starts_with("<selection from=\"PR #7\" file=\"x.rs\" new=\"3\">\n"), "{only_new}");
+        assert_eq!(split(&only_new).0[0].at.old, "");
     }
 
     // ---- the popup over the selection ----
@@ -465,23 +558,27 @@ mod tests {
     #[test]
     fn the_hint_reads_like_the_key_bar() {
         use ratatui::style::Modifier;
-        let l = hint_line(80, false).unwrap();
+        let l = hint_line(80, false, "").unwrap();
         assert_eq!(row_text(&l), " type ask about it · cmd+c copy ");
+        // the diff's names who gets it, else the thread's words
+        assert_eq!(row_text(&hint_line(80, false, "t1").unwrap()), " type ask t1 about it · cmd+c copy ");
+        assert_eq!(row_text(&hint_line(30, false, "t1").unwrap()), " type ask t1 about it ");
+        assert_eq!(row_text(&hint_line(20, false, "t1").unwrap()), " type ask about it ");
         assert_eq!(l.spans[1].style.fg, Some(crate::theme::accent()));
         assert!(l.spans[1].style.add_modifier.contains(Modifier::BOLD));
         assert_eq!(l.spans[2].style.fg, Some(crate::theme::accent()));
         assert_eq!(l.spans[4].style.fg, Some(crate::theme::text()));
         assert_eq!(l.spans[5].style.fg, Some(crate::theme::dim()));
         assert!(l.spans.iter().all(|s| s.style.bg == Some(crate::theme::pill_bg())), "the pill under every cell");
-        assert_eq!(row_text(&hint_line(31, false).unwrap()), " type ask about it ");
-        assert_eq!(row_text(&hint_line(19, false).unwrap()), " type ask about it ");
-        assert!(hint_line(18, false).is_none());
-        let n = hint_line(80, true).unwrap();
+        assert_eq!(row_text(&hint_line(31, false, "").unwrap()), " type ask about it ");
+        assert_eq!(row_text(&hint_line(19, false, "").unwrap()), " type ask about it ");
+        assert!(hint_line(18, false, "").is_none());
+        let n = hint_line(80, true, "").unwrap();
         assert_eq!(row_text(&n), "[ type ask about it · cmd+c copy ]");
         assert!(n.spans.iter().all(|s| s.style.bg.is_none()), "NO_COLOR: no tint");
         assert!(n.spans[1].style.add_modifier.contains(Modifier::BOLD) && n.spans[2].style.add_modifier.contains(Modifier::BOLD));
-        assert_eq!(row_text(&hint_line(33, true).unwrap()), "[ type ask about it ]");
-        assert!(hint_line(20, true).is_none());
+        assert_eq!(row_text(&hint_line(33, true, "").unwrap()), "[ type ask about it ]");
+        assert!(hint_line(20, true, "").is_none());
     }
 
     /// Above the first row at the selection's first column; pushed left

@@ -787,6 +787,9 @@ struct BoxRow {
     label: String,
     preview: Preview,
     source: String,
+    /// a quote from a diff: its place (`src/a.rs:12-14`) stays, the
+    /// preview gives way first
+    place: bool,
 }
 
 enum Preview {
@@ -818,17 +821,18 @@ fn box_rows(app: &App) -> Vec<BoxRow> {
         .into_iter()
         .map(|(n, q)| {
             let source = crate::quote::about(&q);
-            (n, BoxRow { label: crate::quote::label(n), preview: Preview::Quote(q.text), source })
+            let place = !q.at.file.is_empty();
+            (n, BoxRow { label: crate::quote::label(n), preview: Preview::Quote(crate::quote::words(&q)), source, place })
         })
         .collect();
     rows.extend(shown(app).into_iter().map(|(n, a)| {
         let (_, source) = strip_row(n, &a.info);
-        (n, BoxRow { label: a.label.clone(), preview: Preview::File(file_name(&a.info.source).to_string()), source })
+        (n, BoxRow { label: a.label.clone(), preview: Preview::File(file_name(&a.info.source).to_string()), source, place: false })
     }));
     // a paste: its first words like a quote's, `240 lines · 9.8 kB`
     rows.extend(shown_pastes(app).into_iter().map(|p| {
         let source = crate::pasted::about(&p.text);
-        (p.n, BoxRow { label: crate::pasted::label(p.n), preview: Preview::Quote(p.text), source })
+        (p.n, BoxRow { label: crate::pasted::label(p.n), preview: Preview::Quote(p.text), source, place: false })
     }));
     rows.sort_by_key(|(n, _)| *n);
     rows.into_iter().map(|(_, r)| r).collect()
@@ -845,7 +849,7 @@ fn box_row(r: &BoxRow, iw: usize) -> Vec<Span<'static>> {
     let with_source = iw.saturating_sub(chip + ROW_GAP + r.source.width());
     let (preview, source) = if natural.width() <= with_source {
         (natural, r.source.clone())
-    } else if with_source >= PREVIEW_MIN {
+    } else if with_source >= PREVIEW_MIN || (r.place && with_source >= 4) {
         (r.preview.cut(with_source), r.source.clone())
     } else {
         (r.preview.cut(iw.saturating_sub(chip)), String::new())

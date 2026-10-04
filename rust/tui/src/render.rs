@@ -973,7 +973,7 @@ pub(crate) fn user_block_lines(msg: &str, mark: Mark, open: bool, width: usize) 
             let about = format!(" · {}", crate::quote::about(q));
             let room = width.saturating_sub(3 + 2 + unicode_width::UnicodeWidthStr::width(about.as_str())).clamp(8, 60);
             let g = crate::theme::glyph(crate::theme::G_QUOTE);
-            Line::from(Span::styled(format!("{g} {}{about}", crate::quote::preview(&q.text, room)), d))
+            Line::from(Span::styled(format!("{g} {}{about}", crate::quote::preview(&crate::quote::words(q), room)), d))
         })
         .collect();
     let folds = you_folds(msg);

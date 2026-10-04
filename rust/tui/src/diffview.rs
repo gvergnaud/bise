@@ -27,6 +27,10 @@
 //! esc closes; ctrl+g closes it from anywhere (its title row says so).
 //! Full screen (no composer) also keeps j k ] [ and `f` the file list;
 //! there a click or ⏎ on `all 9 files ▸` opens it too.
+//!
+//! A drag over the lines (or shift+↑↓) selects them; typing quotes them
+//! in the composer, like a selection in the thread: diffquote.rs. The
+//! `/diff` picker's branches are diffbranches.rs.
 
 use crate::app::App;
 use crate::theme::{self, accent, dim, faint, text};
@@ -250,6 +254,8 @@ pub(crate) struct Panel {
     /// the agent's last land in the feed (its range): an empty diff of
     /// that agent offers it
     pub(crate) last_land: Option<Ask>,
+    /// the lines selected (select + type to quote, diffquote.rs)
+    pub(crate) sel: Option<crate::diffquote::Sel>,
 }
 
 static REQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
@@ -310,6 +316,7 @@ pub(crate) fn request(app: &mut App, ask: Ask, by: By) {
         page: 10,
         changes_seen: None,
         side: true,
+        sel: None,
     });
 }
 
@@ -420,8 +427,8 @@ pub(crate) enum Kind {
     /// a file's head `▾ path  +4 −6`
     FileHead(usize),
     Hunk(usize),
-    /// a line of a file: the file, its new line (or old one when removed)
-    Code(usize, Option<u32>),
+    /// a line of a file: the file, its numbers and text (diffquote.rs)
+    Code(usize, crate::diffquote::CodeLine),
     /// `▸ 212 more lines in this file · ⏎ shows them`
     Fold(usize),
     End,
@@ -617,7 +624,7 @@ pub(crate) fn body_rows(p: &Panel, d: &Diff, width: usize) -> Vec<(Line<'static>
                         Span::styled(code, st),
                         Span::styled(" ".repeat(if mark == " " { 0 } else { fill }), st),
                     ]),
-                    Kind::Code(i, nn.or(o)),
+                    Kind::Code(i, crate::diffquote::CodeLine { old: o, new: nn, raw: l.clone() }),
                 ));
             }
         }
@@ -812,7 +819,12 @@ pub(crate) fn lines(p: &mut Panel, width: usize, height: usize, now: u64) -> Vec
     let rows = body_rows(p, &d, width);
     let body_h = height.saturating_sub(3).max(1);
     p.page = body_h;
-    p.rows = rows.iter().map(|(_, k)| k.clone()).collect();
+    let kinds: Vec<Kind> = rows.iter().map(|(_, k)| k.clone()).collect();
+    // new rows (a fold, the agent's new changes): the selection was theirs
+    if kinds != p.rows {
+        p.sel = None;
+    }
+    p.rows = kinds;
     p.cursor = p.cursor.min(rows.len().saturating_sub(1));
     if p.cursor < p.top {
         p.top = p.cursor;
@@ -829,7 +841,13 @@ pub(crate) fn lines(p: &mut Panel, width: usize, height: usize, now: u64) -> Vec
     let mut out = head_rows(p, &d, width, scrolled, now);
     out.push(Line::from(""));
     for (k, (line, _)) in rows.into_iter().enumerate().skip(p.top).take(body_h) {
-        let line = if p.focused && k == p.cursor {
+        let line = if p.sel.is_some_and(|s| s.has(k)) {
+            // the thread's selection tint, the full row (designer m_7568)
+            let mut spans: Vec<Span<'static>> = line.spans.into_iter().map(|s| Span::styled(s.content, s.style.bg(theme::selection_bg()))).collect();
+            let used: usize = spans.iter().map(|s| s.content.width()).sum();
+            spans.push(Span::styled(" ".repeat(width.saturating_sub(used)), Style::default().bg(theme::selection_bg())));
+            Line::from(spans)
+        } else if p.focused && k == p.cursor && p.sel.is_none() {
             Line::from(line.spans.into_iter().map(|s| Span::styled(s.content, s.style.bg(theme::selection_bg()))).collect::<Vec<_>>())
         } else {
             line
@@ -851,7 +869,8 @@ pub(crate) fn key_pairs(app: &App) -> Vec<(&'static str, String)> {
     match p.rows.get(p.cursor) {
         Some(Kind::LastLand) if !full => vec![("⏎", "show what it landed last".to_string()), ("esc", "close".into()), write],
         Some(Kind::LastLand) => vec![("⏎", "show what it landed last".to_string()), ("esc", "close".into())],
-        Some(Kind::Code(i, Some(line))) if p.focused => {
+        Some(Kind::Code(i, c)) if p.focused && c.line().is_some() => {
+            let line = c.line().unwrap_or(0);
             let path = p.diff.as_ref().and_then(|d| d.files.get(*i)).map(|f| f.path.clone()).unwrap_or_default();
             let mut v = vec![("⏎", format!("open {}:{} in your editor", path, line)), ("↑↓", "move".into()), ("esc", "close".into())];
             if !full {
@@ -883,7 +902,20 @@ pub(crate) fn draw_side(app: &mut App, frame: &mut Frame, area: Rect) {
     p.area = area;
     p.body = Rect { y: inner.y + 3, height: inner.height.saturating_sub(3), ..inner };
     frame.render_widget(Paragraph::new(rows), inner);
-    crate::textlayer::text(inner);
+    text_rects(p, inner);
+    crate::diffquote::draw_hint(app, frame);
+}
+
+/// The panel's text for the text layer (links, word selection): the
+/// whole of it, but the lines of a diff, which select whole lines
+/// (diffquote.rs).
+fn text_rects(p: &Panel, r: Rect) {
+    if p.list.is_some() || p.rows.is_empty() || p.body.is_empty() {
+        crate::textlayer::text(r);
+        return;
+    }
+    crate::textlayer::text(Rect { height: p.body.y.saturating_sub(r.y), ..r });
+    crate::textlayer::text(Rect { y: p.body.bottom(), height: r.bottom().saturating_sub(p.body.bottom()), ..r });
 }
 
 /// Under [`SIDE_FROM`] columns: the whole screen, its frame `bise :* ──
@@ -920,7 +952,10 @@ pub(crate) fn draw_full(app: &mut App, frame: &mut Frame) {
     }
     let kb = Rect { y: area.bottom().saturating_sub(1), height: 1, ..area };
     frame.render_widget(Paragraph::new(Line::from(spans)), kb);
-    crate::textlayer::text(area);
+    if let Some(p) = app.diff.as_ref() {
+        text_rects(p, area);
+    }
+    crate::diffquote::draw_hint(app, frame);
 }
 
 // ---- keys and the mouse ----
@@ -991,7 +1026,8 @@ fn enter(app: &mut App) {
         }
         Some(Kind::ListFile(i)) => go_to_file(p, i),
         Some(Kind::More) | Some(Kind::FilesHead) => p.list = Some(List::default()),
-        Some(Kind::Code(i, line)) => {
+        Some(Kind::Code(i, c)) => {
+            let line = c.line();
             let Some(f) = d.files.get(i) else { return };
             if f.abs.is_empty() {
                 return;
@@ -1047,6 +1083,11 @@ pub(crate) fn on_key(app: &mut App, k: &KeyEvent) -> bool {
         }
         return true;
     }
+    // lines selected: shift+↑↓, esc, a letter quotes (diffquote.rs)
+    if crate::diffquote::on_key(app, k) {
+        return true;
+    }
+    let Some(p) = app.diff.as_mut() else { return false };
     let n = p.rows.len();
     let page = p.page.max(3);
     match panel_key(k, full) {
@@ -1124,6 +1165,13 @@ pub(crate) fn panel_key(k: &KeyEvent, full: bool) -> Option<PanelKey> {
 pub(crate) fn mouse(app: &mut App, m: &crossterm::event::MouseEvent) -> bool {
     use crossterm::event::{MouseButton, MouseEventKind};
     let Some(p) = app.diff.as_mut() else { return false };
+    // a drag that selects lines keeps its events, out of the panel too
+    if crate::diffquote::dragging(p) && matches!(m.kind, MouseEventKind::Drag(_) | MouseEventKind::Up(_)) {
+        if let Some(t) = crate::diffquote::mouse(p, m) {
+            crate::input::copy_text(app, &t);
+        }
+        return true;
+    }
     let full = !p.side;
     let inside = full || (m.column >= p.area.x && m.column < p.area.right() && m.row >= p.area.y && m.row < p.area.bottom());
     if !inside {
@@ -1154,10 +1202,14 @@ pub(crate) fn mouse(app: &mut App, m: &crossterm::event::MouseEvent) -> bool {
                 enter(app);
             } else if m.row >= p.body.y && m.row < p.body.bottom() && p.list.is_none() {
                 let k = p.top + (m.row - p.body.y) as usize;
+                p.sel = None;
                 if k < p.rows.len() {
                     p.cursor = k;
                     if matches!(p.rows[k], Kind::Fold(_) | Kind::ListFile(_) | Kind::More | Kind::FilesHead | Kind::FileHead(_) | Kind::LastLand) {
                         enter(app);
+                    } else {
+                        // a line: a drag from it selects (diffquote.rs)
+                        crate::diffquote::mouse(p, m);
                     }
                 }
             }
@@ -1194,75 +1246,6 @@ pub(crate) fn url_of(ask: &Ask) -> String {
         Ask::Pr(n) => format!("bise-diff:pr/{}", n),
         Ask::Range(r, a) => format!("bise-diff:range/{}?agent={}", r, a),
     }
-}
-
-// ---- /diff's branches ----
-
-/// One branch the `/diff` picker offers (the hub's `branches` event).
-#[derive(Clone, Debug, Default, PartialEq)]
-pub(crate) struct Branch {
-    pub(crate) branch: String,
-    pub(crate) agents: Vec<String>,
-    pub(crate) commits: u64,
-    pub(crate) uncommitted: bool,
-    pub(crate) pr: Option<u64>,
-    pub(crate) landed_ms: Option<u64>,
-    pub(crate) add: usize,
-    pub(crate) del: usize,
-}
-
-thread_local! {
-    static BRANCHES: std::cell::RefCell<(Vec<Branch>, Option<std::time::Instant>)> = const { std::cell::RefCell::new((Vec::new(), None)) };
-}
-
-pub(crate) fn branches_event(v: &Value) {
-    let rows = v
-        .get("rows")
-        .and_then(|x| x.as_array())
-        .map(|a| {
-            a.iter()
-                .map(|r| Branch {
-                    branch: s(r, "branch"),
-                    agents: r.get("agents").and_then(|x| x.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default(),
-                    commits: n(r, "commits"),
-                    uncommitted: b(r, "uncommitted"),
-                    pr: r.get("pr").and_then(|x| x.as_u64()),
-                    landed_ms: r.get("landed_ms").and_then(|x| x.as_u64()),
-                    add: n(r, "add") as usize,
-                    del: n(r, "del") as usize,
-                })
-                .filter(|b| !b.branch.is_empty())
-                .collect()
-        })
-        .unwrap_or_default();
-    BRANCHES.with(|c| c.borrow_mut().0 = rows);
-}
-
-/// The branches the hub last sent; asks again at most every 5 s while
-/// the picker is up.
-pub(crate) fn branches(app: &App) -> Vec<Branch> {
-    let stale = BRANCHES.with(|c| c.borrow().1.is_none_or(|t| t.elapsed() > std::time::Duration::from_secs(5)));
-    if stale {
-        BRANCHES.with(|c| c.borrow_mut().1 = Some(std::time::Instant::now()));
-        app.sb.send_shared(serde_json::json!({"op": "branches"}));
-    }
-    BRANCHES.with(|c| c.borrow().0.clone())
-}
-
-/// What the picker says of a branch: `landed 3 min ago`, `s1, s2 · 4
-/// commits`, `launch · not committed yet`, `no agent · PR #7 open`.
-pub(crate) fn branch_words(b: &Branch, now: u64) -> String {
-    let who = if b.agents.is_empty() { "no agent".to_string() } else { b.agents.join(", ") };
-    if let Some(ms) = b.landed_ms {
-        return format!("landed {}", crate::artifacts::ago_words(ms, now));
-    }
-    let what = match (b.pr, b.commits, b.uncommitted) {
-        (Some(n), _, _) => format!("PR #{} open", n),
-        (None, 0, true) => "not committed yet".to_string(),
-        (None, 1, _) => "1 commit".to_string(),
-        (None, c, _) => format!("{} commits", c),
-    };
-    format!("{} · {}", who, what)
 }
 
 #[cfg(test)]
