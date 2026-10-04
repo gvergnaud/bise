@@ -629,7 +629,7 @@ fn open_selected(app: &mut App) {
     if v.is_none() {
         if let artifacts::How::Diff(n) = artifacts::how(&a, None, true) {
             app.artifacts = None;
-            crate::diffview::request(app, crate::diffview::Ask::Pr(n));
+            crate::diffview::request(app, crate::diffview::Ask::Pr(n), crate::diffview::By::Key);
             return;
         }
     }

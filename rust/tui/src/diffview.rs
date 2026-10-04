@@ -15,12 +15,18 @@
 //! lock and generated files fold by themselves; an image is one row
 //! that opens it.
 //!
-//! Keys (the page's no-clash table): the panel takes the keys while it
-//! has the focus (it opens focused, its title in the accent); esc gives
-//! them back to the composer and the panel stays; a click in it takes
-//! them again; ctrl+g closes it. ↑↓ or the wheel move, `]` `[` the next
-//! and previous file, `f` the file list, ⏎ opens the line in your
-//! editor, or unfolds.
+//! Keys (the page's no-clash table, designer m_7291: a letter is never
+//! lost and never does something you didn't mean): opened by a key
+//! (ctrl+g, `/diff`) the panel has the keys, its title in the accent,
+//! the composer dim with no cursor (`the diff has the keys · type to
+//! write here`); opened by a click it leaves them to the composer. A
+//! click in it takes them; a click out of it, a paste, or any key that
+//! isn't the panel's gives them back (a letter types in the composer).
+//! On the right its keys are ↑↓ pgup pgdn home end, tab / shift+tab the
+//! next / previous file, ⏎ opens the line in your editor or unfolds,
+//! esc closes; ctrl+g closes it from anywhere (its title row says so).
+//! Full screen (no composer) also keeps j k ] [ and `f` the file list;
+//! there a click or ⏎ on `all 9 files ▸` opens it too.
 
 use crate::app::App;
 use crate::theme::{self, accent, dim, faint, text};
@@ -243,15 +249,25 @@ fn ask_json(ask: &Ask, req: u64) -> Value {
     }
 }
 
-/// Opens the panel on `ask` (focused) and asks the hub for it.
-pub(crate) fn request(app: &mut App, ask: Ask) {
+/// How the panel was opened: by a key (ctrl+g, `/diff`, ⏎ in
+/// /artifacts), it takes the keys; by a click (a `± 3 files`, an agent's
+/// ψ, a PR's chip), the composer keeps them (designer m_7291).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum By {
+    Key,
+    Click,
+}
+
+/// Opens the panel on `ask` and asks the hub for it; `by` a key it
+/// takes the keys.
+pub(crate) fn request(app: &mut App, ask: Ask, by: By) {
     let req = REQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     app.sb.send(ask_json(&ask, req));
     app.diff = Some(Panel {
         ask,
         req,
         diff: None,
-        focused: true,
+        focused: by == By::Key,
         cursor: 0,
         top: 0,
         unfolded: HashSet::new(),
@@ -306,7 +322,24 @@ pub(crate) fn toggle(app: &mut App) {
         app.diff = None;
     } else {
         let a = app.sb.focus_name().to_string();
-        request(app, Ask::Agent(a));
+        request(app, Ask::Agent(a), By::Key);
+    }
+}
+
+/// The panel is on the right and has the keys: the composer looks
+/// unfocused (no cursor, `the diff has the keys · type to write here`).
+pub(crate) fn has_keys(app: &App) -> bool {
+    app.diff.as_ref().is_some_and(|p| p.focused && p.side)
+}
+
+/// The composer's dim line while the panel has the keys.
+pub(crate) const COMPOSER_NOTE: &str = "the diff has the keys · type to write here";
+
+/// The panel on the right gives the keys back to the composer (a key
+/// that isn't the panel's, a paste, a click out of it).
+pub(crate) fn give_back(app: &mut App) {
+    if let Some(p) = app.diff.as_mut().filter(|p| p.side) {
+        p.focused = false;
     }
 }
 
@@ -326,7 +359,7 @@ pub(crate) fn side_w(width: u16) -> u16 {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Kind {
     Blank,
-    /// `files … f the whole list`
+    /// `files … all 9 files ▸` (a click or ⏎: the list)
     FilesHead,
     /// a file of the list on top: its index
     ListFile(usize),
@@ -442,15 +475,11 @@ pub(crate) fn body_rows(p: &Panel, d: &Diff, width: usize) -> Vec<(Line<'static>
     let mut out: Vec<(Line<'static>, Kind)> = Vec::new();
     let d_st = Style::default().fg(dim());
     if d.files.len() > 1 {
-        let right = "f the whole list";
+        // a click or ⏎ on it opens the list (designer m_7291)
+        let right = format!("all {} files {}", d.files.len(), theme::glyph(theme::G_CLOSED));
         let gap = width.saturating_sub(5 + right.width() + 2).max(1);
         out.push((
-            Line::from(vec![
-                Span::styled("files", Style::default().fg(text())),
-                Span::raw(" ".repeat(gap)),
-                Span::styled("f", Style::default().fg(text())),
-                Span::styled(" the whole list", d_st),
-            ]),
+            Line::from(vec![Span::styled("files", Style::default().fg(text())), Span::raw(" ".repeat(gap)), Span::styled(right, d_st)]),
             Kind::FilesHead,
         ));
         for (i, f) in d.files.iter().enumerate().take(TOP_FILES) {
@@ -570,6 +599,9 @@ pub(crate) fn head_rows(p: &Panel, d: &Diff, width: usize, scrolled_file: Option
     if d.working {
         first.push(Span::styled(format!("   {} still working", theme::glyph(theme::G_WORKING)), Style::default().fg(dim())));
     }
+    if p.side {
+        close_hint(&mut first, width);
+    }
     let second = match scrolled_file {
         Some((i, pct)) if d.files.len() > 1 || pct > 0 => {
             let path = d.files.get(i).map_or(String::new(), |f| f.path.clone());
@@ -600,6 +632,19 @@ pub(crate) fn head_rows(p: &Panel, d: &Diff, width: usize, scrolled_file: Option
         }
     };
     vec![Line::from(first), Line::from(Span::styled(cut(&second, width), Style::default().fg(dim())))]
+}
+
+/// The title row's right end on the right of the screen: `ctrl+g close`,
+/// dim, focused or not (designer m_7291), when it fits.
+pub(crate) const CLOSE_HINT: &str = "ctrl+g close";
+
+fn close_hint(spans: &mut Vec<Span<'static>>, width: usize) {
+    let used: usize = spans.iter().map(|s| s.content.width()).sum();
+    let w = CLOSE_HINT.width();
+    if used + 3 + w + 2 <= width {
+        spans.push(Span::raw(" ".repeat(width - used - w - 2)));
+        spans.push(Span::styled(CLOSE_HINT, Style::default().fg(dim())));
+    }
 }
 
 /// The file list's lines (`f`): the filter, the files, the legend.
@@ -710,18 +755,25 @@ pub(crate) fn key_pairs(app: &App) -> Vec<(&'static str, String)> {
     if p.list.is_some() {
         return vec![("⏎", "go to the file".into()), ("esc", "back to the diff".into())];
     }
+    // on the right: printable keys type in the composer (designer m_7291)
+    let write = ("", "type to write".to_string());
     match p.rows.get(p.cursor) {
         Some(Kind::Code(i, Some(line))) if p.focused => {
             let path = p.diff.as_ref().and_then(|d| d.files.get(*i)).map(|f| f.path.clone()).unwrap_or_default();
-            let close = if full { ("esc", "close".to_string()) } else { ("ctrl+g", "close".to_string()) };
-            vec![("⏎", format!("open {}:{} in your editor", path, line)), ("↑↓", "move".into()), close]
-        }
-        _ => {
-            let mut v = vec![("↑↓", "scroll".to_string()), ("] [", "next file".into()), ("f", "files".into())];
-            v.push(("⏎", if full { "editor".into() } else { "open in your editor".into() }));
-            v.push(if full { ("esc", "close".into()) } else { ("ctrl+g", "close".into()) });
+            let mut v = vec![("⏎", format!("open {}:{} in your editor", path, line)), ("↑↓", "move".into()), ("esc", "close".into())];
+            if !full {
+                v.push(write);
+            }
             v
         }
+        _ if full => vec![
+            ("↑↓", "scroll".to_string()),
+            ("tab", "next file".into()),
+            ("f", "files".into()),
+            ("⏎", "editor".into()),
+            ("esc", "close".into()),
+        ],
+        _ => vec![("↑↓", "scroll".to_string()), ("tab", "next file".into()), ("⏎", "open in your editor".into()), ("esc", "close".into()), write],
     }
 }
 
@@ -870,7 +922,7 @@ pub(crate) fn on_key(app: &mut App, k: &KeyEvent) -> bool {
     if !p.focused && !full {
         return false;
     }
-    // the file list: its filter takes the letters
+    // the file list: its filter takes the letters (it shows them)
     if let Some(l) = p.list.as_mut() {
         let Some(d) = p.diff.clone() else { return true };
         let shown = list_matches(&d, &l.filter);
@@ -899,24 +951,73 @@ pub(crate) fn on_key(app: &mut App, k: &KeyEvent) -> bool {
     }
     let n = p.rows.len();
     let page = p.page.max(3);
-    match k.code {
-        KeyCode::Esc if full => app.diff = None,
-        KeyCode::Esc => p.focused = false,
-        KeyCode::Up | KeyCode::Char('k') if !ctrl => p.cursor = p.cursor.saturating_sub(1),
-        KeyCode::Down | KeyCode::Char('j') if !ctrl => p.cursor = (p.cursor + 1).min(n.saturating_sub(1)),
-        KeyCode::PageUp => p.cursor = p.cursor.saturating_sub(page),
-        KeyCode::PageDown => p.cursor = (p.cursor + page).min(n.saturating_sub(1)),
-        KeyCode::Home => p.cursor = 0,
-        KeyCode::End => p.cursor = n.saturating_sub(1),
-        KeyCode::Char(']') => next_file(p, true),
-        KeyCode::Char('[') => next_file(p, false),
-        KeyCode::Char('f') if !ctrl => p.list = Some(List::default()),
-        KeyCode::Enter => enter(app),
-        KeyCode::Char('c') if ctrl => return false,
-        // the rest stays in the panel (the composer gets them back with esc)
-        _ => {}
+    match panel_key(k, full) {
+        Some(PanelKey::Close) => app.diff = None,
+        Some(PanelKey::Up) => p.cursor = p.cursor.saturating_sub(1),
+        Some(PanelKey::Down) => p.cursor = (p.cursor + 1).min(n.saturating_sub(1)),
+        Some(PanelKey::PageUp) => p.cursor = p.cursor.saturating_sub(page),
+        Some(PanelKey::PageDown) => p.cursor = (p.cursor + page).min(n.saturating_sub(1)),
+        Some(PanelKey::Top) => p.cursor = 0,
+        Some(PanelKey::Bottom) => p.cursor = n.saturating_sub(1),
+        Some(PanelKey::NextFile) => next_file(p, true),
+        Some(PanelKey::PrevFile) => next_file(p, false),
+        Some(PanelKey::Files) => p.list = Some(List::default()),
+        Some(PanelKey::Enter) => enter(app),
+        // ctrl+c interrupts, wherever the keys are
+        None if ctrl && k.code == KeyCode::Char('c') => return false,
+        // full screen: no composer to give it to
+        None if full => {}
+        // on the right: a key that isn't the panel's gives the keys back
+        // and acts in the composer (a letter is never lost)
+        None => {
+            p.focused = false;
+            return false;
+        }
     }
     true
+}
+
+/// What a key does in the panel while it has the keys.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PanelKey {
+    Close,
+    Up,
+    Down,
+    PageUp,
+    PageDown,
+    Top,
+    Bottom,
+    NextFile,
+    PrevFile,
+    Files,
+    Enter,
+}
+
+/// The focus rules (designer m_7291): on the right the panel has no
+/// letter keys (every printable key types in the composer): ↑↓ pgup
+/// pgdn home end, tab / shift+tab the next / previous file, ⏎, esc
+/// closes. Full screen (no composer) also has j k ] [ and f. None: not
+/// the panel's.
+pub(crate) fn panel_key(k: &KeyEvent, full: bool) -> Option<PanelKey> {
+    let plain = !k.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER);
+    Some(match k.code {
+        KeyCode::Esc => PanelKey::Close,
+        KeyCode::Up if plain => PanelKey::Up,
+        KeyCode::Down if plain => PanelKey::Down,
+        KeyCode::PageUp => PanelKey::PageUp,
+        KeyCode::PageDown => PanelKey::PageDown,
+        KeyCode::Home => PanelKey::Top,
+        KeyCode::End => PanelKey::Bottom,
+        KeyCode::Tab if plain && !k.modifiers.contains(KeyModifiers::SHIFT) => PanelKey::NextFile,
+        KeyCode::BackTab | KeyCode::Tab if plain => PanelKey::PrevFile,
+        KeyCode::Enter if plain && !k.modifiers.contains(KeyModifiers::SHIFT) => PanelKey::Enter,
+        KeyCode::Char('k') if full && plain => PanelKey::Up,
+        KeyCode::Char('j') if full && plain => PanelKey::Down,
+        KeyCode::Char(']') if full && plain => PanelKey::NextFile,
+        KeyCode::Char('[') if full && plain => PanelKey::PrevFile,
+        KeyCode::Char('f') if full && plain => PanelKey::Files,
+        _ => return None,
+    })
 }
 
 /// The mouse over the panel: the wheel scrolls it, a click takes the
@@ -928,6 +1029,11 @@ pub(crate) fn mouse(app: &mut App, m: &crossterm::event::MouseEvent) -> bool {
     let full = !p.side;
     let inside = full || (m.column >= p.area.x && m.column < p.area.right() && m.row >= p.area.y && m.row < p.area.bottom());
     if !inside {
+        // a click out of it (the composer, the thread) gives the keys
+        // back; the click goes on
+        if matches!(m.kind, MouseEventKind::Down(_)) {
+            p.focused = false;
+        }
         return false;
     }
     match m.kind {
@@ -946,7 +1052,7 @@ pub(crate) fn mouse(app: &mut App, m: &crossterm::event::MouseEvent) -> bool {
                 let k = p.top + (m.row - p.body.y) as usize;
                 if k < p.rows.len() {
                     p.cursor = k;
-                    if matches!(p.rows[k], Kind::Fold(_) | Kind::ListFile(_) | Kind::More | Kind::FileHead(_)) {
+                    if matches!(p.rows[k], Kind::Fold(_) | Kind::ListFile(_) | Kind::More | Kind::FilesHead | Kind::FileHead(_)) {
                         enter(app);
                     }
                 }

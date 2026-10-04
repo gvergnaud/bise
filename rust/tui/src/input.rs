@@ -523,6 +523,8 @@ pub(crate) fn on_paste(app: &mut App, text: &str) {
     if crate::find::on_paste(app, text) {
         return;
     }
+    // the paste lands in the composer: it has the keys again
+    crate::diffview::give_back(app);
     // normalize CRLF/CR so a terminal paste behaves like the
     // typed newline, then insert at the cursor
     let text = text.replace("\r\n", "\n").replace('\r', "\n");

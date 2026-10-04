@@ -590,14 +590,15 @@ pub(crate) fn open(app: &mut crate::App, url: &str) -> String {
             return format!("no artifact {} (it was removed?)", id);
         };
         if let (None, crate::artifacts::How::Diff(n)) = (v, crate::artifacts::how(&a, None, true)) {
-            crate::diffview::request(app, crate::diffview::Ask::Pr(n));
+            crate::diffview::request(app, crate::diffview::Ask::Pr(n), crate::diffview::By::Click);
             return format!("PR #{} · its diff", n);
         }
         return crate::artifacts::open(app, &a, v);
     }
     // `± 3 files` under a landed line (site/m/artifacts D): the diff panel
     if let Some(ask) = crate::diffview::ask_of_url(url) {
-        crate::diffview::request(app, ask);
+        // a click (a `± 3 files`): the composer keeps the keys
+        crate::diffview::request(app, ask, crate::diffview::By::Click);
         return String::new();
     }
     if url == crate::artifacts_screen::OPEN_URL {

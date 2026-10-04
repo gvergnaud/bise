@@ -56,8 +56,10 @@ fn text(lines: &[Line]) -> String {
 fn one_file_shows_its_hunk_with_both_line_numbers() {
     let mut p = panel(Diff::of(&one_file()));
     let out = text(&lines(&mut p, 78, 30, 0));
-    assert!(out.starts_with("pricing-page vs main · 1 file +1 −2\nbranch pricing-page · 2 commits"), "{out}");
-    assert!(!out.contains("f the whole list"), "one file: no list on top\n{out}");
+    let (title, rest) = out.split_once('\n').unwrap();
+    assert!(title.starts_with("pricing-page vs main · 1 file +1 −2   ") && title.ends_with("ctrl+g close"), "{out}");
+    assert!(rest.starts_with("branch pricing-page · 2 commits"), "{out}");
+    assert!(!out.contains("files ▸"), "one file: no list on top\n{out}");
     assert!(out.contains("▾ src/pages/pricing.tsx"), "{out}");
     assert!(out.contains("@@ export function Pricing() @@"), "{out}");
     assert!(out.contains("  38   38   export function Pricing() {"), "{out}");
@@ -75,7 +77,7 @@ fn many_files_list_the_first_six_fold_the_big_and_the_generated() {
     assert!(head.contains("pricing-page vs main · 9 files +545 −466   ∿ still working"), "{head}");
     assert!(head.contains("branch pricing-page · 6 commits + changes not committed yet"), "{head}");
     assert!(out.starts_with("files"), "{out}");
-    assert!(out.contains("f the whole list"), "{out}");
+    assert!(out.contains("all 9 files ▸"), "{out}");
     assert!(out.contains("M src/pages/pricing.tsx") && out.contains("D src/components/Banner.tsx"), "{out}");
     assert!(out.contains("  ↓ 3 more"), "{out}");
     assert!(out.contains("more lines in this file · ⏎ shows them"), "{out}");
@@ -136,4 +138,165 @@ fn an_answer_to_an_older_ask_is_dropped() {
     let v = json!({"req": 99});
     let d = Diff::of(&v);
     assert!(d.files.is_empty());
+}
+
+// ---- the focus rules (designer m_7291: a letter is never lost) ----
+
+fn key(code: KeyCode, mods: KeyModifiers) -> KeyEvent {
+    KeyEvent::new(code, mods)
+}
+
+fn ch(c: char) -> KeyEvent {
+    key(KeyCode::Char(c), KeyModifiers::NONE)
+}
+
+/// An app with the panel on the right (`side`) or full screen, with the
+/// keys, its rows built.
+fn app_with_panel(side: bool) -> App {
+    let mut app = crate::sb::bench::test_app();
+    let mut p = panel(Diff::of(&many_files()));
+    p.side = side;
+    let _ = lines(&mut p, 78, 30, 0);
+    app.diff = Some(p);
+    app
+}
+
+#[test]
+fn on_the_right_the_panel_has_no_letter_keys() {
+    for c in ['a', 'f', 'j', 'k', ']', '[', ' ', 'F', '?', '/', '@'] {
+        assert_eq!(panel_key(&ch(c), false), None, "{c:?} types in the composer");
+    }
+    assert_eq!(panel_key(&key(KeyCode::Tab, KeyModifiers::NONE), false), Some(PanelKey::NextFile));
+    assert_eq!(panel_key(&key(KeyCode::BackTab, KeyModifiers::SHIFT), false), Some(PanelKey::PrevFile));
+    assert_eq!(panel_key(&key(KeyCode::Esc, KeyModifiers::NONE), false), Some(PanelKey::Close));
+    assert_eq!(panel_key(&key(KeyCode::Up, KeyModifiers::NONE), false), Some(PanelKey::Up));
+    assert_eq!(panel_key(&key(KeyCode::Enter, KeyModifiers::NONE), false), Some(PanelKey::Enter));
+    // shift+⏎ is the composer's newline
+    assert_eq!(panel_key(&key(KeyCode::Enter, KeyModifiers::SHIFT), false), None);
+    // full screen (no composer) keeps its letters, and tab
+    assert_eq!(panel_key(&ch('f'), true), Some(PanelKey::Files));
+    assert_eq!(panel_key(&ch('j'), true), Some(PanelKey::Down));
+    assert_eq!(panel_key(&ch(']'), true), Some(PanelKey::NextFile));
+    assert_eq!(panel_key(&key(KeyCode::Tab, KeyModifiers::NONE), true), Some(PanelKey::NextFile));
+}
+
+#[test]
+fn a_letter_typed_with_the_panel_focused_goes_to_the_composer() {
+    let mut app = app_with_panel(true);
+    assert!(has_keys(&app));
+    // "fix this": its f must not open the file list
+    for c in "fix this".chars() {
+        let k = ch(c);
+        if !on_key(&mut app, &k) {
+            crate::input::composer_key(&mut app, &k);
+        }
+    }
+    assert_eq!(app.ed.text, "fix this");
+    let p = app.diff.as_ref().expect("the panel stays open");
+    assert!(p.list.is_none() && !p.focused);
+    assert!(!has_keys(&app));
+    // the composer has the keys: ↑ is the composer's, not the panel's
+    let cursor = app.diff.as_ref().unwrap().cursor;
+    assert!(!on_key(&mut app, &key(KeyCode::Down, KeyModifiers::NONE)));
+    assert_eq!(app.diff.as_ref().unwrap().cursor, cursor);
+}
+
+#[test]
+fn the_panels_keys_move_it_and_esc_closes_it() {
+    let mut app = app_with_panel(true);
+    assert!(on_key(&mut app, &key(KeyCode::Tab, KeyModifiers::NONE)));
+    let p = app.diff.as_ref().unwrap();
+    assert!(matches!(p.rows[p.cursor], Kind::FileHead(0)), "tab: the first file");
+    assert!(on_key(&mut app, &key(KeyCode::Tab, KeyModifiers::NONE)));
+    let p = app.diff.as_ref().unwrap();
+    assert!(matches!(p.rows[p.cursor], Kind::FileHead(1)), "tab: the next file");
+    assert!(on_key(&mut app, &key(KeyCode::BackTab, KeyModifiers::SHIFT)));
+    let p = app.diff.as_ref().unwrap();
+    assert!(matches!(p.rows[p.cursor], Kind::FileHead(0)), "shift+tab: back");
+    assert!(p.focused);
+    assert!(on_key(&mut app, &key(KeyCode::Esc, KeyModifiers::NONE)));
+    assert!(app.diff.is_none(), "esc closes the panel that has the keys");
+}
+
+#[test]
+fn esc_with_the_composer_focused_is_the_composers() {
+    let mut app = app_with_panel(true);
+    app.diff.as_mut().unwrap().focused = false;
+    assert!(!on_key(&mut app, &key(KeyCode::Esc, KeyModifiers::NONE)));
+    assert!(app.diff.is_some());
+    // ctrl+g closes it from anywhere
+    assert!(on_key(&mut app, &key(KeyCode::Char('g'), KeyModifiers::CONTROL)));
+    assert!(app.diff.is_none());
+}
+
+#[test]
+fn the_file_list_keeps_its_letters() {
+    let mut app = app_with_panel(true);
+    app.diff.as_mut().unwrap().list = Some(List::default());
+    assert!(on_key(&mut app, &ch('c')));
+    assert_eq!(app.diff.as_ref().unwrap().list.as_ref().unwrap().filter, "c");
+    assert!(app.ed.text.is_empty());
+    assert!(on_key(&mut app, &key(KeyCode::Esc, KeyModifiers::NONE)));
+    assert!(app.diff.as_ref().is_some_and(|p| p.list.is_none() && p.focused), "esc: back to the diff");
+}
+
+#[test]
+fn full_screen_keeps_every_key() {
+    let mut app = app_with_panel(false);
+    assert!(on_key(&mut app, &ch('x')));
+    assert!(app.ed.text.is_empty());
+    assert!(on_key(&mut app, &ch('f')));
+    assert!(app.diff.as_ref().unwrap().list.is_some());
+}
+
+#[test]
+fn a_paste_or_a_click_out_of_it_gives_the_keys_back() {
+    use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+    let mut app = app_with_panel(true);
+    crate::input::on_paste(&mut app, "hello");
+    assert_eq!(app.ed.text, "hello");
+    assert!(!has_keys(&app));
+    let p = app.diff.as_mut().unwrap();
+    p.area = Rect { x: 70, y: 0, width: 80, height: 30 };
+    p.body = Rect { x: 71, y: 3, width: 78, height: 27 };
+    let click = |x, y| MouseEvent { kind: MouseEventKind::Down(MouseButton::Left), column: x, row: y, modifiers: KeyModifiers::NONE };
+    assert!(mouse(&mut app, &click(80, 1)), "a click in it");
+    assert!(has_keys(&app), "takes the keys");
+    assert!(!mouse(&mut app, &click(10, 35)), "a click in the composer goes on");
+    assert!(!has_keys(&app), "and gives them back");
+}
+
+#[test]
+fn a_click_door_leaves_the_keys_to_the_composer() {
+    let mut app = crate::sb::bench::test_app();
+    request(&mut app, Ask::Branch("sb/t1".into()), By::Click);
+    assert!(!app.diff.as_ref().unwrap().focused);
+    request(&mut app, Ask::Branch("sb/t1".into()), By::Key);
+    assert!(app.diff.as_ref().unwrap().focused);
+}
+
+#[test]
+fn the_title_row_says_ctrl_g_close_and_the_list_its_count() {
+    let mut p = panel(Diff::of(&many_files()));
+    p.focused = false;
+    let out = text(&lines(&mut p, 78, 30, 0));
+    let first = out.lines().next().unwrap();
+    assert!(first.ends_with("ctrl+g close"), "{first}");
+    assert!(first.chars().count() <= 76, "{first}");
+    assert!(out.contains("all 9 files ▸"), "{out}");
+    // full screen: esc closes, the key bar says it
+    p.side = false;
+    let out = text(&lines(&mut p, 78, 30, 0));
+    assert!(!out.contains("ctrl+g close"), "{out}");
+}
+
+#[test]
+fn the_key_bar_says_where_the_keys_go() {
+    let mut app = app_with_panel(true);
+    app.diff.as_mut().unwrap().cursor = 0;
+    let bar = |app: &App| crate::keybar::line(app, 150).spans.iter().map(|s| s.content.to_string()).collect::<String>();
+    assert_eq!(bar(&app), "↑↓ scroll   tab next file   ⏎ open in your editor   esc close   type to write");
+    app.diff.as_mut().unwrap().focused = false;
+    let b = bar(&app);
+    assert!(b.ends_with("   ctrl+g close") && !b.contains("tip"), "{b}");
 }

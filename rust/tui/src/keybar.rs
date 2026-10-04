@@ -222,6 +222,20 @@ fn keys_line(app: &App, width: u16) -> Line<'static> {
     }
     let inbox = (crate::sb::ctrl_view(app).cards > 0).then_some(if app.ctrl_digits { INBOX } else { INBOX_COMMAND });
     let bar = Bar { typing, agent, inbox };
+    // the diff panel open, the composer with the keys: its bar, then
+    // `ctrl+g close` (designer m_7291), no tip
+    if app.diff.is_some() {
+        let close = format!("   {}", crate::diffview::CLOSE_HINT);
+        let room = usize::from(width).saturating_sub(close.width());
+        let Line { mut spans, .. } = render_with(mode(app), room as u16, None, bar);
+        let used: usize = spans.iter().map(|s| s.content.width()).sum();
+        if used + close.width() <= usize::from(width) {
+            spans.push(Span::raw("   "));
+            spans.push(Span::styled("ctrl+g", Style::default().fg(theme::text())));
+            spans.push(Span::styled(" close", Style::default().fg(theme::dim())));
+        }
+        return Line::from(spans);
+    }
     render_with(mode(app), width, Some(current_tip(typing)), bar)
 }
 

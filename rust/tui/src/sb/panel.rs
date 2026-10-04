@@ -1057,14 +1057,14 @@ pub(crate) fn panel_mouse(app: &mut App, m: &crossterm::event::MouseEvent) -> bo
         }
         // site/m/artifacts D: a click on an agent's ψ opens its diff
         Some(Hit::Agent(name)) if right && sb.agent(&name).is_some_and(|a| !a.archived() && place_label(a).is_some()) => {
-            crate::diffview::request(app, crate::diffview::Ask::Agent(name));
+            crate::diffview::request(app, crate::diffview::Ask::Agent(name), crate::diffview::By::Click);
         }
         Some(Hit::Agent(name)) if sb.agent(&name).is_some() => focus(app, &name),
         Some(Hit::Archived) => {
             let sb = &mut app.sb;
             sb.toggle_archived();
         }
-        Some(Hit::Place(branch)) => crate::diffview::request(app, crate::diffview::Ask::Branch(branch)),
+        Some(Hit::Place(branch)) => crate::diffview::request(app, crate::diffview::Ask::Branch(branch), crate::diffview::By::Click),
         Some(Hit::Card(id)) => super::cards::open_view(app, Some(id)),
         Some(Hit::Cards) if app.sb.card.open => super::cards::close_view(app),
         Some(Hit::Cards) => super::cards::open_view(app, None),

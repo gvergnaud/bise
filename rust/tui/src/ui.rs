@@ -833,9 +833,12 @@ fn draw_composer(app: &mut App, frame: &mut Frame, area: Rect, inner: usize, lea
     let empty = app.ed.is_empty();
     // the find box has the keys (BISE-297): the draft as it is, no caret
     let finding = app.find.is_some();
+    // the diff panel has the keys (designer m_7291): no caret, the draft
+    // dim, the placeholder says where the keys are
+    let diff_keys = crate::diffview::has_keys(app);
     let rows = if empty {
-        let note = sb::placeholder(app).unwrap_or_default();
-        let caret = if finding { Style::default() } else { Style::default().fg(text()).add_modifier(Modifier::REVERSED) };
+        let note = if diff_keys { crate::diffview::COMPOSER_NOTE.to_string() } else { sb::placeholder(app).unwrap_or_default() };
+        let caret = if finding || diff_keys { Style::default() } else { Style::default().fg(text()).add_modifier(Modifier::REVERSED) };
         let mut spans = vec![Span::styled(" ", caret)];
         if !note.is_empty() {
             spans.push(Span::styled(format!(" {}", note), Style::default().fg(dim())));
@@ -858,6 +861,13 @@ fn draw_composer(app: &mut App, frame: &mut Frame, area: Rect, inner: usize, lea
         typed_lines(app, text_w, text_rows)
             .into_iter()
             .map(|l| Line::from(l.spans.into_iter().map(|s| Span::styled(s.content, s.style.remove_modifier(Modifier::REVERSED))).collect::<Vec<_>>()))
+            .collect()
+    } else if diff_keys {
+        typed_lines(app, text_w, text_rows)
+            .into_iter()
+            .map(|l| {
+                Line::from(l.spans.into_iter().map(|s| Span::styled(s.content, s.style.remove_modifier(Modifier::REVERSED).fg(dim()))).collect::<Vec<_>>())
+            })
             .collect()
     } else {
         typed_lines(app, text_w, text_rows)

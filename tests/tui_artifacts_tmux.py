@@ -12,8 +12,11 @@ real `sb artifact add`, tmux at 150 and 80 columns.
   @ finds the doc by name: a `↗ q3 plan` chip in the composer, the key
       bar says how it goes; sent, the reply names it as a chip
   t1 in its own worktree commits 2 files: `/diff sb/t1` opens the panel
-      on the right (150), the agents panel comes back with ctrl+g; at 80
-      the diff takes the screen, esc closes it
+      on the right (150) with the keys, the composer dim and saying so;
+      ⏎ on `all 2 files ▸` the file list; `fix this` typed lands in the
+      composer (its f opens nothing), the bar ends `ctrl+g close`; a
+      click in the panel takes the keys, esc closes it; ctrl+g opens and
+      closes; at 80 the diff takes the screen, esc closes it
 
 ART_SHOTS=<dir> keeps the captures (.txt and .ansi) for the designer.
 
@@ -169,28 +172,70 @@ def wide(t, E):
         with open(os.path.join(wt, "README"), "a") as f:
             f.write("pricing\n")
         e2e.sh(wt, "git add -A && git commit -qm pricing")
-        command(t, "/diff " + branch, "files")
-        sc = t.wait("src/pricing.tsx")
-        assert "vs main · 2 files" in sc and "f the whole list" in sc, sc
-        assert "ctrl+g close" in sc, sc
-        shot(t, "150-diff")
-        t.keys("f")
-        sc = t.wait("type to filter the files")
-        assert "M changed   A added   D deleted" in sc, sc
-        shot(t, "150-diff-files")
-        t.keys("Escape")
-        t.wait_gone("type to filter the files")
-        # esc gives the keys back to the composer, the panel stays
-        t.keys("Escape")
-        t.typed("hello")
-        sc = t.wait("hello")
-        assert "vs main · 2 files" in sc, sc
-        t.keys("C-u")
-        t.keys("C-g")
-        t.wait_gone("vs main · 2 files")
-        sc = t.wait("agents")
+        diff_focus(t, branch, "150")
         light(t, "150", branch)
         return branch
+
+
+def click(t, x, y):
+    """A left press + release (SGR 1006) at 0-based (x, y)."""
+    t.typed("\x1b[<0;%d;%dM\x1b[<0;%d;%dm" % (x + 1, y + 1, x + 1, y + 1))
+
+
+def at(sc, needle):
+    for y, row in enumerate(sc.splitlines()):
+        x = row.find(needle)
+        if x >= 0:
+            return x, y
+    raise AssertionError("not on screen: %r\n%s" % (needle, sc))
+
+
+def diff_focus(t, branch, width):
+    """The diff panel on the right and the composer (designer m_7291): a
+    letter is never lost. Opened by a key the panel has the keys and the
+    composer says so; typed letters land in the composer (an `f` never
+    opens the file list); esc closes; a click door leaves the keys to the
+    composer; `ctrl+g close` always on the title row."""
+    command(t, "/diff " + branch, "files")
+    sc = t.wait("src/pricing.tsx")
+    assert "vs main · 2 files" in sc and "all 2 files ▸" in sc, sc
+    title = [r for r in sc.splitlines() if "vs main · 2 files" in r][0]
+    assert "ctrl+g close" in title, title
+    sc = t.wait("the diff has the keys · type to write here")
+    assert "↑↓ scroll   tab next file   ⏎ open in your editor   esc close   type to write" in sc, sc
+    shot(t, width + "-diff")
+    # ⏎ on `all 2 files ▸` (the cursor's first row): the list
+    t.keys("Enter")
+    sc = t.wait("type to filter the files")
+    assert "M changed   A added   D deleted" in sc, sc
+    shot(t, width + "-diff-files")
+    t.keys("Escape")
+    t.wait_gone("type to filter the files")
+    # typed with the panel focused: in the composer, the panel stays
+    t.typed("fix this")
+    sc = t.wait("fix this")
+    assert "vs main · 2 files" in sc and "type to filter the files" not in sc, sc
+    assert "the diff has the keys" not in sc, sc
+    sc = t.wait("ctrl+g close", 5)
+    assert sc.splitlines()[-2].rstrip(" │").endswith("ctrl+g close"), sc.splitlines()[-2]
+    shot(t, width + "-diff-typed")
+    # the composer has the keys: esc is its own, the panel stays
+    t.keys("C-u")
+    t.keys("Escape")
+    sc = t.wait("vs main · 2 files")
+    # a click in the panel takes the keys back; esc closes it
+    x, y = at(sc, "src/pricing.tsx")
+    click(t, x, y)
+    t.wait("the diff has the keys · type to write here")
+    t.keys("Escape")
+    t.wait_gone("vs main · 2 files")
+    # ctrl+g opens it with the keys (main's own changes), ctrl+g closes
+    t.keys("C-g")
+    sc = t.wait("the diff has the keys · type to write here")
+    shot(t, width + "-diff-ctrl-g")
+    t.keys("C-g")
+    t.wait_gone("the diff has the keys")
+    t.wait("agents")
 
 
 def light(t, width, branch):
@@ -237,6 +282,8 @@ def narrow(t, branch):
         command(t, "/diff " + branch, "src/pricing.tsx")
         sc = t.wait("esc close")
         assert "bise :* ── diff" in sc, sc
+        assert "↑↓ scroll   tab next file   f files   ⏎ editor   esc close" in sc, sc
+        assert "ctrl+g close" not in sc and "the diff has the keys" not in sc, sc
         shot(t, "80-diff")
         t.keys("Escape")
         t.wait_gone("bise :* ── diff")

@@ -1104,9 +1104,9 @@ pub(crate) fn handle_input(app: &mut App, v: &str) -> Vec<Ev> {
             let branch = typed.trim_start_matches("/diff").trim();
             if branch.is_empty() {
                 let a = app.sb.focus.clone();
-                crate::diffview::request(app, crate::diffview::Ask::Agent(a));
+                crate::diffview::request(app, crate::diffview::Ask::Agent(a), crate::diffview::By::Key);
             } else {
-                crate::diffview::request(app, crate::diffview::Ask::Branch(branch.to_string()));
+                crate::diffview::request(app, crate::diffview::Ask::Branch(branch.to_string()), crate::diffview::By::Key);
             }
             return out;
         }
