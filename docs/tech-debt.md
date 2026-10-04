@@ -162,6 +162,14 @@ Ranked by value: risk removed per hour spent.
 - **fix:** find the cause first (a keystroke before the focus moved back
   to the composer is the likely one), then run it in parallel.
 - **risk:** low; the time is the cost.
+- **done (docs/issues/10-tests-wait.md):** no race in the TUI. The old
+  needle `to the composer` sat in the key bar's tip `ctrl+r speaks into
+  the composer`: after Ctrl+U the composer is empty and the bar shows its
+  tip, so `wait_gone` failed. The tip is a random one of 10 per session
+  (`keybar::current_tip` seeds with the clock), so it failed now and then
+  whatever the load (2 of 5 parallel vs 0 of 5 alone was a small sample).
+  a361130f changed the needle and left `ALONE=`; `ALONE=` is gone, the
+  test runs with the others.
 
 ### 11. The workspace id is computed in 4 places — cheap (S)
 
@@ -215,3 +223,14 @@ A flake the batch's full gate found (2 runs of 2), not in the known list:
 `tui_demo_tips_tmux` typed the three spawns while main was still in a
 turn on `other`'s ack; the fake only acked them and dev-api never came.
 The test now waits for main idle 2 s in a row first (4 of 4 in parallel).
+
+Batch 3 (docs/issues/10-tests-wait.md, agent tests-wait): items 1, 2, 3
+and 10 for good.
+
+| item | commit | what |
+|---|---|---|
+| 1 | 0799998e | `tests/wait.py` is the one way a test waits (`until`, `holds`, `stable`, `load_factor`); `Env.wait`, `wait_until` and the per-file loops call it; the e2e blind waits wait for state |
+| 1, 2 | fff86261 | the tmux tests' blind waits: `Tui.sync()` sentinel, `Tui.press_until()` (each key drawn before the next), drawn states |
+| 3 | fff86261 | `at_popup_tests::rows_read` waits up to 30 s too |
+| 1 | 5490b106 | `tests/sleep_check.py` (run_all.sh, gate.sh quick) refuses a new blind `time.sleep(` outside wait.py and `tests/sleep_exceptions.txt` |
+| 10 | (this batch's last) | `ALONE=` gone: the old needle sat in a key-bar tip (item 10 above) |

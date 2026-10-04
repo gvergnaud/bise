@@ -1,6 +1,9 @@
 # 10 · Tests wait for state, never a fixed time: one wait helper, no blind sleeps, no test run alone
 
-Status: in progress (agent tests-wait). Root node 2 of the architecture page's tech debt list; label: tech-debt.
+Status: done (agent tests-wait), with one check not run (below). Root node 2 of the architecture page's tech debt list; label: tech-debt.
+Commits: 0799998e (tests/wait.py, the e2e waits), fff86261 (the tmux waits, at_popup_tests), 5490b106 (tests/sleep_check.py + sleep_exceptions.txt in run_all.sh and gate.sh quick; the duplicate tui_checker_tmux out of TESTS), and the last one (ALONE= gone, tui_onboarding_tmux's welcome clock, docs/tech-debt.md items 1, 2, 3, 10).
+Numbers: `rg -n 'time\.sleep\(' tests/*.py` went from 112 lines to 8: tests/sleep_exceptions.txt's 7 reviewed entries (the fakes' slow replies, the memory hog, the fake browser's 4 s, the fake helper's 3 s, the double-click gap). The check refuses a planted `time.sleep(2)` and passes the tree. tui_term_tmux: cause found (the old needle 'to the composer' sat in a random key-bar tip, fixed by a361130f, ALONE was left), 10 of 10 at SB_TEST_JOBS=4 and 20 of 20 at 4-6 at once. 'Nothing happens' windows on wait.holds (each times load_factor()): about 25 s in the e2e tests (every 6, idle_exit 6, plugins_reload 5, skills_reload 3+3, subscriptions 2) and about 8 s in the tmux tests; the others use a sentinel (Tui.sync()). Full gate: before 680 s (8a0da264, load ~30, red: agent_tmp_e2e, idle_exit_e2e, repl_bash_env, tui_checker_tmux, tui_onboarding_tmux); after 453 s (load 7-20, red: agent_tmp_e2e and repl_bash_env, the bash tool's background handoff, sent to the bg-handoff agent; tui_version_tmux, which wants the tree's HEAD in the version list, so it fails on any unlanded branch commit; tui_onboarding_tmux, fixed in the last commit, then 2 of 2; subscriptions_tui_tmux, 2 of 2 alone after, cause not found). The loads differ, so the two times don't compare well.
+Not run: the 5 x run_all.sh with SB_TEST_JOBS=4 beside a cargo build (battery: one heavy job at a time, main m_7694); main asks for it when the machine is on power.
 
 ## The problem
 

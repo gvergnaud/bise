@@ -15,11 +15,12 @@
 
 python3 -u tests/home_migrate.py
 """
-import json, os, socket, subprocess, sys, tempfile, time
+import json, os, socket, subprocess, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from e2e import EXE, ROOT, host_env, load_factor, short_tmp  # noqa: E402
+from e2e import EXE, ROOT, host_env, short_tmp  # noqa: E402
+import wait  # noqa: E402
 
 PRIVATE = ("BEND_SESSION_FILE", "BEND_CONTEXT_FILE", "BEND_WIRE_LOG", "BEND_REPL_PORT",
            "BEND_DEBUG_DIR", "BEND_EXTRA_PROMPT", "BEND_WORKDIR", "SB_STATE_DIR", "BISE_HOME",
@@ -66,13 +67,8 @@ def main():
         err = open(os.path.join(tmp, "hub.err"), "a")
         subprocess.Popen([EXE, "sbd", "--workspace", w], env=env, cwd=ROOT, stdin=subprocess.DEVNULL,
                          stdout=subprocess.DEVNULL, stderr=err, start_new_session=True)
-        # 15 s on an idle machine, times load_factor() (BISE-292)
-        t0 = time.time()
-        while time.time() - t0 < 15 * load_factor():
-            if os.path.exists(os.path.join(sd, "hub.sock")) and sb(env, sd, "list").returncode == 0:
-                return
-            time.sleep(0.1)
-        sys.exit("FAIL hub did not start in %s (%s)" % (sd, os.path.join(tmp, "hub.err")))
+        wait.until(lambda: os.path.exists(os.path.join(sd, "hub.sock")) and sb(env, sd, "list").returncode == 0,
+                   15, "the hub of %s answering (%s)" % (sd, os.path.join(tmp, "hub.err")))
 
     def stop(env, w, sd):
         """Stop the hub of `w` and wait until it is gone as the migration
@@ -95,12 +91,7 @@ def main():
                 return True
             except (OSError, ValueError):
                 return False
-        t0 = time.time()
-        while time.time() - t0 < 30 * load_factor():
-            if not busy():
-                return
-            time.sleep(0.1)
-        sys.exit("FAIL the hub of %s still runs 30 s after --stop" % w)
+        wait.until(lambda: not busy(), 30, "the hub of %s gone after --stop" % w)
 
     def sb(env, sd, *args):
         e = dict(env, SB_SOCKET=os.path.join(sd, "hub.sock"), SB_AGENT="main")

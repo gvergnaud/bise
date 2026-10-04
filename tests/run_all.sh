@@ -43,9 +43,6 @@ clippy_dir="${CARGO_TARGET_DIR:-$PWD/rust/target}/clippy"
 TESTS="e2e subscriptions_e2e agents_md_e2e images_mem_e2e agent_tmp_e2e foundry_url_e2e approvals_e2e approvals_restart_e2e approvals_sandbox_e2e one_key_auto_e2e edit_tools_e2e bise_demo_e2e PROOF worktree_home feature_e2e every_e2e proc_cleanup idle_exit_e2e artifacts_e2e long_socket_e2e core_restart scripted_ts session_ev compaction_e2e repl_bash_env mcp_bootstrap mcp_utf8 plugins_reload_e2e plugins_ts_e2e skills_reload_e2e skills_scan provider_families home_migrate versions_prune bins_path repo_paths tui_tmux tui_help_tmux tui_ctrl_hints_tmux tui_composer_tmux tui_version_tmux tui_at_files_tmux tui_skills_reload_tmux tui_checker_tmux
 tui_images_tmux tui_paste_tmux tui_clear_tmux tui_archived_tmux tui_waits_tmux tui_undelivered_tmux tui_queue_tmux
 tui_onboarding_tmux tui_onboarding_links_tmux subscriptions_tui_tmux tui_stuck_start_tmux tui_keys_tmux tui_subscriptions_tmux tui_provider_tmux tui_panel_click_tmux tui_drafts_tmux tui_reload_tmux tui_links_tmux tui_tool_rows_tmux tui_tabs_tmux tui_select_popup_tmux tui_release_tmux tui_update_tmux tui_cards_tmux tui_approvals_tmux tui_inbox_split_tmux tui_find_tmux tui_term_select_tmux tui_palette_tmux tui_file_links_tmux tui_cmd_a_tmux tui_cmd_arrows_tmux tui_composer_scroll_tmux tui_turn_time_tmux tui_markdown_tmux tui_code_blocks_tmux tui_demo_tips_tmux tui_text_layer_tmux tui_tool_names_tmux tui_openai_responses_tmux tui_voice_tmux tui_voice_keys_tmux tui_voice_mute_tmux tui_you_fold_click_tmux tui_mcp_login_tmux tui_log_tmux"
-# alone, after the others: under parallel load its Ctrl+U sometimes leaves
-# the composer text (failed 2 runs out of 5 in parallel, 0 alone)
-ALONE="tui_term_tmux"
 echo "== E2E (real hub, REPLs, git; scripted provider), Bend laws (PROOF.bend), the TUI under tmux ($jobs jobs)"
 out="$(mktemp -d -t sb-run-all)"
 one() {  # <test>: its last line; its whole output kept on failure
@@ -63,7 +60,6 @@ export -f one; export out
 rc=0
 # e2e and PROOF first: the longest
 printf '%s\n' $TESTS | xargs -P "$jobs" -I{} bash -c 'one {}' || rc=$?
-for t in $ALONE; do one "$t" || rc=1; done
 if [ $rc != 0 ]; then
   for f in "$out"/*.log; do grep -q -E "Error|FAIL|Traceback|FALSE|fail" "$f" && { echo "---- $f"; tail -15 "$f"; }; done
   echo "FAILED: e2e/tmux (logs: $out)"

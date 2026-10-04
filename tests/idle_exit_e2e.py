@@ -19,10 +19,10 @@ import signal
 import socket
 import subprocess
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
+import wait  # noqa: E402
 from e2e import EXE, check  # noqa: E402
 
 GRACE = 4
@@ -57,15 +57,6 @@ def leave(c):
         pass
 
 
-def wait(pred, timeout, what):
-    t0 = time.time()
-    while time.time() - t0 < timeout * e2e.load_factor():
-        if pred():
-            return
-        time.sleep(0.1)
-    raise AssertionError("timeout waiting for %s" % what)
-
-
 def stopped(E):
     return E.hub is not None and E.hub.poll() is not None
 
@@ -87,23 +78,25 @@ def main():
         check("idle exit: after %d s" % GRACE in log(E), "the hub says its grace")
 
         # a quick relaunch: back within the grace, the hub stays
+        n = log(E).count("idle exit: a UI is back")
         leave(c)
-        time.sleep(1)
+        wait.until(lambda: "idle exit: no UI left" in log(E), GRACE, "the hub seeing the UI leave")
         c = e2e.Client(os.path.join(E.state, "hub.sock"))
-        time.sleep(GRACE + 3)
-        check(E.hub.poll() is None, "a UI back within the grace: the hub stays")
+        wait.until(lambda: log(E).count("idle exit: a UI is back") > n, GRACE, "the hub seeing the UI back")
+        # past the grace: still up
+        wait.holds(lambda: E.hub.poll() is None, GRACE + 2, "a UI back within the grace: the hub stays")
 
         # the last UI leaves while t1 is mid-turn: the hub waits for it
         c.say("[[slow: 12]] long turn", focus="t1")
         c.wait_status("t1", "working", 30)
         leave(c)
-        wait(lambda: "the hub waits for: t1 mid-turn" in log(E), GRACE + 10, "the hub waiting for t1's turn")
+        wait.until(lambda: "the hub waits for: t1 mid-turn" in log(E), GRACE + 10, "the hub waiting for t1's turn")
         check(E.hub.poll() is None, "no stop mid-turn")
-        wait(lambda: stopped(E), 60, "the hub stopped after t1's turn")
+        wait.until(lambda: stopped(E), 60, "the hub stopped after t1's turn")
         L = log(E)
         check("nothing runs: the hub stops" in L, "the stop says why")
         check("REPLs saved and gone: 2 of 2" in L, "both REPLs checkpointed and exited: %s" % L[-600:])
-        wait(lambda: not repls(E.state), 15, "no process of the hub left")
+        wait.until(lambda: not repls(E.state), 15, "no process of the hub left")
         E.hub = None
 
         # the next start: everything is back
@@ -122,10 +115,10 @@ def main():
         c.wait(lambda: os.path.isdir(bg) and any(f.endswith(".slot") for f in os.listdir(bg)), 30, "t1's job in the background")
         c.wait_idle("t1")
         leave(c)
-        wait(lambda: "t1's background job" in log(E), GRACE + 10, "the hub waiting for t1's job")
-        wait(lambda: stopped(E), 60, "the hub stopped after the job")
+        wait.until(lambda: "t1's background job" in log(E), GRACE + 10, "the hub waiting for t1's job")
+        wait.until(lambda: stopped(E), 60, "the hub stopped after the job")
         check(any(f.endswith(".rc") for f in os.listdir(bg)), "the job ran to its end (its .rc)")
-        wait(lambda: not repls(E.state), 15, "no process of the hub left")
+        wait.until(lambda: not repls(E.state), 15, "no process of the hub left")
         E.hub = None
 
         # a hub killed -9: its REPLs see no hub and exit by themselves
@@ -136,7 +129,7 @@ def main():
         os.kill(E.hub.pid, signal.SIGKILL)
         E.hub.wait()
         E.hub = None
-        wait(lambda: not repls(E.state), 30, "the orphan REPLs exited")
+        wait.until(lambda: not repls(E.state), 30, "the orphan REPLs exited")
         # the dead hub's socket file stays (a `bise` finds it refused and
         # starts a hub, which replaces it); start_hub waits for the file
         os.remove(os.path.join(E.state, "hub.sock"))

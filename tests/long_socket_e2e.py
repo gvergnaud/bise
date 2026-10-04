@@ -11,10 +11,10 @@ import os
 import stat
 import subprocess
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
+import wait  # noqa: E402
 from e2e import EXE, check  # noqa: E402
 
 MAX = 103
@@ -57,13 +57,10 @@ def main():
         err = open(os.path.join(E.tmp, "hub.stderr"), "a")
         hub = subprocess.Popen([EXE, "sbd", "--workspace", E.ws], cwd=e2e.ROOT, env=env,
                                stdin=subprocess.DEVNULL, stdout=err, stderr=err)
-        t0 = time.time()
-        natural = None
-        while natural is None:
+        def sock():
             check(hub.poll() is None, "the hub exited: %s" % open(os.path.join(E.tmp, "hub.stderr")).read()[-500:])
-            check(time.time() - t0 < 30 * e2e.load_factor(), "no hub.sock under the long HOME")
-            natural = find_sock(home)
-            time.sleep(0.1)
+            return find_sock(home)
+        natural = wait.until(sock, 30, "a hub.sock under the long HOME")
         check(len(natural.encode()) > MAX, "the natural path overflows (%d bytes): %s" % (len(natural), natural))
         short = short_path(natural)
         link = os.path.dirname(short)

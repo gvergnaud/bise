@@ -115,8 +115,15 @@ def main():
         assert "bise /beez/" in rows[hi + 2], sc      # the definition, a blank row under the name
         shot("1-welcome", sc)
         # 2 theme: two previews, ←→ switches live
+        # the welcome is done on a clock (onboarding::WELCOME_END, 30 ms
+        # after `any key ↵` is whole); a key before it only shows it all
+        # (rushed) and the screen says nothing of it: one more key then
         t.keys("Space")
-        sc = t.wait("←→ switch · enter keep")
+        try:
+            sc = t.wait("←→ switch · enter keep", 3)
+        except AssertionError:
+            t.keys("Space")
+            sc = t.wait("←→ switch · enter keep")
         for s in ["so i picked dark.", "you can change it any time with /theme.", "fix the flaky login test",
                   "on it: auth-fix takes it.", "auth-fix is done.", "○ ● ○"]:
             assert s in flat(sc), sc
