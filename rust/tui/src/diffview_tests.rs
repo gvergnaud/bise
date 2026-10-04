@@ -354,6 +354,9 @@ fn a_gone_folder_is_one_dim_line_that_offers_the_last_land() {
     p.last_land = Some(Ask::Range("aaa..bbb".into(), "diff-focus".into()));
     let out = text(&lines(&mut p, 78, 20, 0));
     assert!(out.contains("diff-focus is archived and its folder is gone · show what it landed last"), "{out}");
+    // its title row ends with `ctrl+g close`, like every title row (designer m_7487)
+    let rows = lines(&mut p, 78, 20, 0);
+    assert!(text(&rows[..1]).trim_end().ends_with("ctrl+g close"), "{out}");
     let mut app = crate::sb::bench::test_app();
     app.diff = Some(p);
     assert_eq!(key_pairs(&app)[0], ("⏎", "show what it landed last".to_string()));
@@ -367,4 +370,5 @@ fn a_git_failure_is_marked_and_dim() {
     let mut p = panel(Diff::of(&bad));
     let out = text(&lines(&mut p, 78, 20, 0));
     assert!(out.contains("▲ git couldn't read this diff: bad revision 'abc..def'"), "{out}");
+    assert!(text(&lines(&mut p, 78, 20, 0)[..1]).trim_end().ends_with("ctrl+g close"), "{out}");
 }
