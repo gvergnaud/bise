@@ -105,7 +105,13 @@ pub(crate) struct Diff {
     pub(crate) landed_ms: Option<u64>,
     pub(crate) working: bool,
     pub(crate) files: Vec<File>,
+    /// a real failure (drawn with ▲)
     pub(crate) error: String,
+    /// a state in plain words, not a failure: `t1 is archived and its
+    /// folder is gone`, `there's no branch named sb/x.` (designer m_7393)
+    pub(crate) note: String,
+    /// the agent's folder is gone (its last land is offered)
+    pub(crate) gone: bool,
 }
 
 fn s(v: &Value, k: &str) -> String {
@@ -171,6 +177,8 @@ impl Diff {
             working: b(v, "working"),
             files,
             error: s(v, "error"),
+            note: s(v, "note"),
+            gone: b(v, "gone"),
         }
     }
 
@@ -743,8 +751,24 @@ pub(crate) fn lines(p: &mut Panel, width: usize, height: usize, now: u64) -> Vec
         p.rows.clear();
         return vec![
             Line::from(Span::styled(d.title.clone(), Style::default().fg(text()).add_modifier(Modifier::BOLD))),
-            Line::from(Span::styled(d.error.clone(), Style::default().fg(theme::error()))),
+            Line::from(vec![Span::styled("▲ ", Style::default().fg(theme::error())), Span::styled(d.error.clone(), Style::default().fg(dim()))]),
         ];
+    }
+    // a state, not a failure (designer m_7393): one dim line; a gone
+    // folder offers what the agent landed last
+    if !d.note.is_empty() {
+        p.rows.clear();
+        let mut line = vec![Span::styled(d.note.clone(), Style::default().fg(dim()))];
+        if let (true, Some(Ask::Range(..))) = (d.gone, &p.last_land) {
+            p.rows.push(Kind::LastLand);
+            p.cursor = 0;
+            p.top = 0;
+            let link = Style::default().fg(text()).add_modifier(Modifier::UNDERLINED);
+            let link = if p.focused { link.bg(theme::selection_bg()) } else { link };
+            line.push(Span::styled(" · ", Style::default().fg(dim())));
+            line.push(Span::styled("show what it landed last", link));
+        }
+        return vec![Line::from(Span::styled(d.title.clone(), Style::default().fg(text()).add_modifier(Modifier::BOLD))), Line::from(line)];
     }
     if d.files.is_empty() {
         p.rows.clear();
@@ -1111,7 +1135,13 @@ pub(crate) fn mouse(app: &mut App, m: &crossterm::event::MouseEvent) -> bool {
         }
         MouseEventKind::Down(MouseButton::Left) => {
             p.focused = true;
-            if m.row >= p.body.y && m.row < p.body.bottom() && p.list.is_none() {
+            // a gone folder's line (`t1's folder is gone · show what it
+            // landed last`) sits right under the title, above the body:
+            // its only row, a click under the title opens it
+            if matches!(p.rows.as_slice(), [Kind::LastLand]) && p.diff.as_ref().is_some_and(|d| !d.note.is_empty()) && m.row > p.body.y.saturating_sub(3) && m.row < p.body.bottom() {
+                p.cursor = 0;
+                enter(app);
+            } else if m.row >= p.body.y && m.row < p.body.bottom() && p.list.is_none() {
                 let k = p.top + (m.row - p.body.y) as usize;
                 if k < p.rows.len() {
                     p.cursor = k;

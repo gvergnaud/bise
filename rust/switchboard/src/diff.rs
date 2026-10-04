@@ -168,7 +168,26 @@ pub fn stat(files: &[File]) -> (usize, u64, u64) {
     (files.len(), files.iter().map(|f| f.add).sum(), files.iter().map(|f| f.del).sum())
 }
 
+/// git's error in one readable line: its first line without `fatal:` or
+/// `error:`, after `git couldn't read this diff:` (designer m_7393; the
+/// TUI adds the ▲).
+pub fn readable(stderr: &str) -> String {
+    let line = stderr.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("it failed");
+    let line = ["fatal:", "error:"].iter().find_map(|p| line.strip_prefix(p)).unwrap_or(line).trim();
+    format!("git couldn't read this diff: {}", line)
+}
+
+/// Whether `br` names a commit in the repo at `dir` (a branch, a tag).
+pub fn has_ref(dir: &Path, br: &str) -> bool {
+    !br.is_empty() && !br.starts_with('-') && git(dir, &["rev-parse", "--verify", "-q", &format!("{}^{{commit}}", br)]).is_ok()
+}
+
 fn git(dir: &Path, args: &[&str]) -> Result<String, String> {
+    // never in a folder that is gone (a removed worktree): git would
+    // say `fatal: cannot change to …`
+    if !dir.is_dir() {
+        return Err(format!("git couldn't read this diff: {} is gone", dir.display()));
+    }
     let out = Command::new("git")
         .arg("-C")
         .arg(dir)
@@ -179,7 +198,7 @@ fn git(dir: &Path, args: &[&str]) -> Result<String, String> {
     if out.status.success() {
         Ok(String::from_utf8_lossy(&out.stdout).to_string())
     } else {
-        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+        Err(readable(&String::from_utf8_lossy(&out.stderr)))
     }
 }
 
@@ -257,6 +276,9 @@ pub fn own_files(dir: &Path, files: &[String]) -> Result<Vec<File>, String> {
 
 /// A branch with no checkout of its own: `base...branch`.
 pub fn branch(dir: &Path, base: &str, br: &str) -> Result<(Vec<File>, usize), String> {
+    if !has_ref(dir, br) {
+        return Err(format!("there's no branch named {}.", br));
+    }
     let files = parse(&git(dir, &diff_args(&[&format!("{}...{}", base, br)]))?);
     let commits = git(dir, &["rev-list", "--count", &format!("{}..{}", base, br)])?.trim().parse().unwrap_or(0);
     Ok((files, commits))
@@ -284,7 +306,9 @@ pub fn pr(dir: &Path, n: u64) -> Result<Vec<File>, String> {
         .output()
         .map_err(|e| format!("gh: {}", e))?;
     if !out.status.success() {
-        return Err(format!("gh pr diff {}: {}", n, String::from_utf8_lossy(&out.stderr).trim()));
+        let why = String::from_utf8_lossy(&out.stderr);
+        let why = why.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("it failed");
+        return Err(format!("gh couldn't read PR #{}: {}", n, why));
     }
     Ok(parse(&String::from_utf8_lossy(&out.stdout)))
 }
