@@ -86,7 +86,9 @@ impl Drop for Look {
 /// `/artifacts` opens the screen (`add <path or link>` adds one).
 pub(crate) fn open(app: &mut App) {
     let agent = app.sb.focus_name().to_string();
-    let sel = artifacts::all().first().map(|a| a.id.clone());
+    // the header's `↗ designer · pricing page` opens on that one (the
+    // newest new one), else on the newest
+    let sel = artifacts::new_rows().first().or(artifacts::all().first()).map(|a| a.id.clone());
     app.artifacts = Some(Screen { agent, sel, ..Default::default() });
     // you looked: the header's `↗ N new` goes
     artifacts::mark_seen();
@@ -559,29 +561,18 @@ pub(crate) fn lines(sc: &mut Screen, all: &[Artifact], width: usize, height: usi
 
 // ---- drawing ----
 
-/// The workspace as the frame says it: `~/acme`.
-fn workspace_words(app: &App) -> String {
-    let ws = crate::sb::workspace(app).unwrap_or_default();
-    artifacts::short_target(&ws)
-}
-
-/// The frame of a full screen of bise: `╭─ bise :* ── {name} ──── ~/acme ─╮`.
+/// The frame of a full screen of bise: `╭─ bise :* · ~/acme ── {name} ───╮`
+/// (the path as the main screen's top edge says it, topedge.rs: its last
+/// name when short, then nothing; the name always).
 pub(crate) fn draw_frame(app: &App, frame: &mut Frame, full: Rect, name: &str) -> Rect {
     let cols = crate::layout::cols(full.width, full.height);
     let cols = crate::layout::Cols { panel: None, ..cols };
-    let mut title = app.sb.title();
-    title.push(Span::styled(" ── ", crate::chrome::line_style()));
-    title.push(Span::styled(name.to_string(), Style::default().fg(text())));
-    let ws = workspace_words(app);
-    let summary = move |room: usize| {
-        if ws.width() <= room {
-            vec![Span::styled(ws.clone(), Style::default().fg(dim()))]
-        } else {
-            Vec::new()
-        }
-    };
+    let title = app.sb.title();
+    let paths = crate::topedge::paths(&crate::sb::workspace(app).unwrap_or_default(), "");
+    let name = name.to_string();
+    let edge = move |room: usize| (crate::topedge::screen_head(room, &paths, &name), Vec::new());
     if cols.framed {
-        crate::chrome::draw_frame(frame.buffer_mut(), full, cols, title, Vec::new(), summary, full.bottom());
+        crate::chrome::draw_frame(frame.buffer_mut(), full, cols, title, edge, full.bottom());
     }
     let m = cols.margin;
     let top = u16::from(cols.framed);

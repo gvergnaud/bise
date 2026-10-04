@@ -287,6 +287,17 @@ pub(crate) fn new_count() -> u64 {
     STORE.with(|st| st.borrow().new)
 }
 
+/// The new rows, newest first (the header's `↗ designer · pricing
+/// page`): the hub counts the rows whose current version came after you
+/// last looked, your own adds left out, so they are the first `new` of
+/// the list (newest first) that you did not add.
+pub(crate) fn new_rows() -> Vec<Artifact> {
+    STORE.with(|st| {
+        let st = st.borrow();
+        st.rows.iter().filter(|a| a.by != "you").take(st.new as usize).cloned().collect()
+    })
+}
+
 /// You looked: the header's count goes (the hub is told too).
 pub(crate) fn mark_seen() {
     STORE.with(|st| st.borrow_mut().new = 0);
