@@ -975,6 +975,16 @@ def send(-o: M.St, +cx: X.Cx<o>, +s: Snd) -> X.Cx<o> & SendR:
 def msg(+from: String, +to: String, +text: String, +expect: Bool, +reply_to: Maybe<&2, Nat>, +plain: Bool, +auto: Bool) -> Snd:
   Snd{from, to, text, expect, reply_to, plain, auto, False{}, None{}}
 
+def fst(-o: M.St, p: X.Cx<o> & SendR) -> X.Cx<o>:
+  match p:
+    case (+cx, _):
+      cx
+
+# a notification of the hub to main: it wakes main like any message (a
+# main note waits for main's next turn instead)
+def notify_main(-o: M.St, +cx: X.Cx<o>, +text: String) -> X.Cx<o>:
+  fst(o, send(o, cx, msg(M.HUB(), M.MAIN(), text, False{}, None{}, False{}, False{})))
+
 def create.go.new(-o: M.St, +cx: X.Cx<o>, +t: NewTask, +name: String, +ws: J.Json, +e: {M.name_taken(X.d(o, cx), name) == False{} : Bool}) -> X.Cx<o> & TaskR:
   +parent = NewTask.parent(t)
   +label = branch_label(M.ws_branch(ws))
@@ -1481,9 +1491,12 @@ def answer.q.sent(-o: M.St, p: X.Cx<o> & SendR, +c: M.Card, +asker: String, +tex
       +cx3 = line(o, cx2, M.MAIN(), "route", cat(["you → @", asker, " (answer to card #", ns(id), ") : ", text]))
       close_card(o, cx3, id, "answered")
 
+# main's own card: the answer wakes main with a turn that holds it, like
+# a card for an agent reaches that agent (a main note would wait for the
+# user's next message)
 def answer.q.main(-o: M.St, +cx: X.Cx<o>, +c: M.Card, +text: String) -> X.Cx<o>:
   +id = M.Card.id(c)
-  +cx2 = note_main(o, cx, cat(["the user answered card #", ns(id), " (\"", M.one_line(M.Card.text(c)), "\"): \"", M.one_line(text), "\""]))
+  +cx2 = notify_main(o, cx, cat(["the user answered card #", ns(id), " (\"", M.one_line(M.Card.text(c)), "\"): \"", M.one_line(text), "\""]))
   close_card(o, cx2, id, "answered")
 
 def answer.q(-o: M.St, m: Maybe<&2, M.Msg>, +cx: X.Cx<o>, +c: M.Card, +text: String) -> X.Cx<o>:
@@ -1553,8 +1566,9 @@ def answer.choice(-o: M.St, num: Bool, +cx: X.Cx<o>, +c: M.Card, +text: String) 
         J.kv("place", C.jmaybe_str(M.Card.place(c))), J.kv("pr", C.jmaybe_nat(M.Card.pr(c))),
         J.kv("text", J.JStr{String.trim(text)})])
     case False{}:
+      # words are for main: they wake it (answer.q.main)
       +id = M.Card.id(c)
-      +cx2 = note_main(o, cx, cat(["the user answered card #", ns(id), " (\"", M.one_line(M.Card.text(c)), "\") in words: \"", M.one_line(text), "\""]))
+      +cx2 = notify_main(o, cx, cat(["the user answered card #", ns(id), " (\"", M.one_line(M.Card.text(c)), "\") in words: \"", M.one_line(text), "\""]))
       close_card(o, cx2, id, "answered")
 
 def answer.kind(-o: M.St, k: CardK, +cx: X.Cx<o>, +c: M.Card, +text: String) -> X.Cx<o>:
@@ -1905,17 +1919,7 @@ def req_ask.res(-o: M.St, p: X.Cx<o> & SendR, +token: Nat, +from: String, +timeo
     case (+cx, SOk{+m}):
       wait(o, cx, token, from, M.Msg.id(m), timeout)
 
-def fst(-o: M.St, p: X.Cx<o> & SendR) -> X.Cx<o>:
-  match p:
-    case (+cx, _):
-      cx
-
 # ---- the REPLs ----
-
-
-# a notification of the hub to main: it wakes main like any message
-def notify_main(-o: M.St, +cx: X.Cx<o>, +text: String) -> X.Cx<o>:
-  fst(o, send(o, cx, msg(M.HUB(), M.MAIN(), text, False{}, None{}, False{}, False{})))
 
 def decl_of(+s: String) -> M.Decl:
   Bool.pick(M.Decl, String.eq(s, "done"), M.DDone{}, Bool.pick(M.Decl, String.eq(s, "blocked"), M.DBlocked{}, M.DWorking{}))

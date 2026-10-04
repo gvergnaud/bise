@@ -1480,6 +1480,31 @@ fn the_user_closes_a_card_without_answering() {
     assert!(has_line(&fx, MAIN, &format!("#{} closed", card)), "{:?}", fx);
 }
 
+/// card-wake: answering main's own card (no --for) starts a main turn
+/// holding the answer, like a card for a task reaches that task; it does
+/// not wait as a note for the user's next message.
+#[test]
+fn answering_a_main_card_starts_a_main_turn_holding_the_answer() {
+    let mut t = T::new();
+    t.user(MAIN, "prépare la release");
+    let (_, _) = t.req(MAIN, AgentReq::Card { text: "on publie ce soir ?".into(), for_msg: None });
+    let card = *t.hub.st.cards.keys().next().unwrap();
+    t.turn(MAIN, "J'ai demandé à l'utilisateur.");
+    assert_eq!(t.status(MAIN), Status::Idle);
+    let fx = t.user(MAIN, &format!("/answer {} oui, à 20h", card));
+    assert!(t.hub.st.cards.is_empty());
+    let said = say_to(&fx, MAIN).expect("the answer starts a main turn");
+    assert!(said.contains(&format!("card #{}", card)) && said.contains("on publie ce soir ?") && said.contains("oui, à 20h"), "{said}");
+    assert_eq!(t.status(MAIN), Status::Working);
+    assert!(!t.hub.st.main_notes.iter().any(|n| n.contains("oui, à 20h")), "{:?}", t.hub.st.main_notes);
+    // busy: a second answer steers the running turn
+    t.req(MAIN, AgentReq::Card { text: "et le changelog ?".into(), for_msg: None });
+    let card = *t.hub.st.cards.keys().next().unwrap();
+    let fx = t.user(MAIN, &format!("/answer {} je l'écris", card));
+    let steered = steer_to(&fx, MAIN).expect("a busy main gets it at once");
+    assert!(steered.contains("je l'écris"), "{steered}");
+}
+
 /// docs asks main (a plain send, not an ask), main answers, docs waits
 /// afterwards: (question id, reply id, the fx of main's reply).
 fn question_then_reply(t: &mut T, queued: bool) -> (u64, u64) {
@@ -2811,10 +2836,11 @@ mod prs {
         spawn_wt(&mut t, "dark");
         t.go(report(1_000, Ok(vec![ready_pr("tip1", &[])]), None));
         let id = merge_cards(&t)[0].id;
-        // words, not a digit: main gets them, the item closes
-        t.user(MAIN, &format!("/answer {} wait for the release", id));
+        // words, not a digit: main gets them in a turn, the item closes
+        let fx = t.user(MAIN, &format!("/answer {} wait for the release", id));
         assert_eq!(closed_as(&t, id).as_deref(), Some("answered"));
-        assert!(t.hub.st.main_notes.iter().any(|n| n.contains("wait for the release")), "{:?}", t.hub.st.main_notes);
+        let said = say_to(&fx, MAIN).unwrap_or_default();
+        assert!(said.contains("in words") && said.contains("wait for the release"), "{:?}", fx);
         // a new review opens it again; merged on GitHub: withdrawn
         t.go(report(2_000, Ok(vec![ready_pr("tip1", &["alice"])]), None));
         let id = merge_cards(&t)[0].id;
