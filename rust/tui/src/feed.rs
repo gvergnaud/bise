@@ -73,6 +73,10 @@ pub(crate) fn event_rows(events: &[Ev], i: usize, debug: bool, width: usize, tic
 }
 
 fn event_rows_of(events: &[Ev], i: usize, debug: bool, width: usize, tick: u32) -> EventRows {
+    // a run of ↗ lines aligns its kind column (designer, m_7220)
+    if matches!(events[i], Ev::Made { .. }) {
+        crate::render::set_made_pad(made_run_pad(events, i));
+    }
     if is_l3(&events[i]) && ev_visible(&events[i], debug) {
         let (rows, live) = l3_rows(events, i, debug, width, tick);
         return EventRows { width: width as u16, main: main_feed(), rows, live, urls: Vec::new(), blocks: Vec::new() };
@@ -358,6 +362,8 @@ pub(crate) fn is_notice(ev: &Ev) -> bool {
             | Ev::Err(_)
             | Ev::Info(_)
             | Ev::Pr { .. }
+            | Ev::Made { .. }
+            | Ev::Landed { .. }
             | Ev::Compact
             | Ev::Compacted { .. }
             | Ev::Fold { .. }
@@ -481,7 +487,30 @@ fn merge_report_and_card(events: &mut [Ev], cache: &mut [Option<EventRows>], ev:
     Some(false)
 }
 
+/// The widest title (cut at 28) of the run of ↗ lines `events[i]` is in.
+fn made_run_pad(events: &[Ev], i: usize) -> usize {
+    use unicode_width::UnicodeWidthStr;
+    let made = |e: &Ev| match e {
+        Ev::Made { title, .. } => Some(title.width().min(crate::render::MADE_TITLE_MAX)),
+        _ => None,
+    };
+    let back = events[..=i].iter().rev().map_while(made);
+    let fwd = events[i + 1..].iter().map_while(made);
+    back.chain(fwd).max().unwrap_or(0)
+}
+
 pub(crate) fn push_event(events: &mut Vec<Ev>, cache: &mut Vec<Option<EventRows>>, ev: Ev) -> bool {
+    // a new ↗ line may widen its run: the run's rows are built again
+    if matches!(ev, Ev::Made { .. }) {
+        for k in (0..events.len()).rev() {
+            if !matches!(events[k], Ev::Made { .. }) {
+                break;
+            }
+            if let Some(c) = cache.get_mut(k) {
+                *c = None;
+            }
+        }
+    }
     if let Some(appended) = merge_report_and_card(events, cache, &ev) {
         return appended;
     }

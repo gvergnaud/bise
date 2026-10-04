@@ -41,6 +41,9 @@ pub(crate) enum Arg {
     /// `/computer-use`'s own, by the plugin's state: off → "on" (runs the
     /// bare `/computer-use`); on → setup (the bare one), off, uninstall
     ComputerUse,
+    /// a branch to diff against main (the hub's `branches`: agents'
+    /// branches, shared worktrees, PRs, branches with no agent)
+    Branch,
     /// free text, required: the rest of the line (nothing to complete)
     Text,
     /// free text, optional: the value before it can already run
@@ -98,6 +101,8 @@ pub(crate) const COMMANDS: &[Cmd] = &[
             Arg::Plugin,
         ],
     },
+    Cmd { name: "/artifacts", desc: "what your agents made: pages, docs, files, links", args: &[] },
+    Cmd { name: "/diff", desc: "a branch's changes against main, in a panel on the right: /diff [<branch>]", args: &[Arg::Branch] },
     Cmd { name: "/inbox", desc: "open what waits for you, the most blocking first (also /cards)", args: &[] },
     Cmd { name: "/agents", desc: "list the agents and what they do", args: &[] },
     Cmd { name: "/switch", desc: "find an agent by name, archived ones too, and open it (also cmd+k, ctrl+s)", args: &[] },
@@ -266,6 +271,19 @@ fn choices(app: &App, arg: Arg, q: &str) -> Vec<Choice> {
         Arg::Task => sb::agent_choices(app, false, q),
         Arg::Archived => sb::agent_choices(app, true, q),
         Arg::Card => sb::card_choices(app, q),
+        Arg::Branch => {
+            let now = crate::when::now_ms();
+            crate::diffview::branches(app)
+                .into_iter()
+                .filter(|b| matches(q, &[&b.branch]))
+                .map(|b| Choice {
+                    value: b.branch.clone(),
+                    label: b.branch.clone(),
+                    desc: format!("{}   {}", crate::diffview::branch_words(&b, now), crate::diffview::counts(b.add, b.del)),
+                    mark: None,
+                })
+                .collect()
+        }
         Arg::Plugin => crate::plugins::choices(std::path::Path::new(&sb::workspace(app).unwrap_or_default()), q, &app.ed.text),
         Arg::Model => model_choices(app, q),
         Arg::Effort => effort_choices(app, q),
@@ -489,6 +507,7 @@ pub(crate) fn popup_title(app: &App) -> Option<&'static str> {
     match arg_slot(&app.ed.text)? {
         (c, _, 0, _) if c.name == "/archive" => Some("archive which agent?"),
         (c, _, 0, _) if c.name == "/restore" => Some("restore which agent?"),
+        (c, _, 0, _) if c.name == "/diff" => Some("diff which branch vs main?"),
         _ => None,
     }
 }
@@ -499,6 +518,8 @@ pub(crate) fn popup_open(app: &App) -> bool {
     !app.ed.browsing() && app.popup_dismissed.as_deref() != Some(app.ed.text.as_str())
 }
 
+/// Artifacts listed after the agents in the `@` popup.
+const ARTIFACT_ROWS: usize = 8;
 /// Files listed after the agents in the `@` popup.
 const FILE_ROWS: usize = 50;
 /// The file and folder marks of the `@` popup.
@@ -533,6 +554,30 @@ pub(crate) fn at_items(app: &App) -> Vec<PopItem> {
             folder: false,
         }
     });
+    // site/m/artifacts C: the artifacts by name, after the agents; a
+    // pick puts a `↗ title` chip in your message, never `@name`
+    let now = crate::when::now_ms();
+    let made: Vec<PopItem> = crate::artifacts::all()
+        .into_iter()
+        .filter(|a| !q.contains('/') && matches(&q, &[&a.title, &a.agent, &a.kind, &a.id]))
+        .take(ARTIFACT_ROWS)
+        .map(|a| {
+            let (fill, fill_cursor) = files::replace_token(&app.ed.text, start, app.ed.cursor, "");
+            let who = if a.agent.is_empty() { a.by.clone() } else { a.agent.clone() };
+            PopItem {
+                label: a.title.clone(),
+                desc: format!("{} · {} · {}", a.kind_word(), who, crate::artifacts::ago_words(a.ts_ms, now)),
+                mark: Some(("↗", theme::accent())),
+                fill,
+                fill_cursor,
+                run: None,
+                closable: true,
+                path: Some(crate::artifacts::url_of(&a.id, None)),
+                folder: false,
+            }
+        })
+        .collect();
+    let agents = agents.chain(made);
     // the Switchboard workspace, else the folder the TUI runs in
     let root = sb::workspace(app)
         .map(std::path::PathBuf::from)

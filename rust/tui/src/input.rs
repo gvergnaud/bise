@@ -340,6 +340,12 @@ fn on_screen_mouse(app: &mut App, m: &crossterm::event::MouseEvent, term_h: u16)
     if crate::logview::mouse(app, m) {
         return;
     }
+    if crate::artifacts_screen::mouse(app, m) {
+        return;
+    }
+    if crate::diffview::mouse(app, m) {
+        return;
+    }
     if crate::computer_use::mouse(app, m) {
         return;
     }
@@ -595,6 +601,9 @@ pub(crate) fn on_key(app: &mut App, k: &crossterm::event::KeyEvent) -> bool {
     if crate::logview::on_key(app, k) {
         return false;
     }
+    if crate::artifacts_screen::on_key(app, k) {
+        return false;
+    }
     if crate::computer_use::on_key(app, k) {
         return false;
     }
@@ -602,6 +611,11 @@ pub(crate) fn on_key(app: &mut App, k: &crossterm::event::KeyEvent) -> bool {
         return false;
     }
     if k.kind != KeyEventKind::Press {
+        return false;
+    }
+    // the diff panel (site/m/artifacts D): ctrl+g opens and closes it;
+    // focused, it takes the keys (esc gives them back)
+    if crate::diffview::on_key(app, k) {
         return false;
     }
     // voice mode (voicemode/live.rs): its keys first; ctrl+r twice enters
@@ -854,6 +868,14 @@ fn at_nav(app: &mut App, k: &crossterm::event::KeyEvent, sel: Option<&PopItem>) 
 /// Take the popup entry `c` into the composer (a picked path ranks first
 /// in the next `@` searches; a folder is browsed, not picked).
 fn pick(app: &mut App, c: &PopItem) {
+    // an artifact (site/m/artifacts C): the `@token` goes, its chip comes
+    if let Some((id, _)) = c.path.as_deref().and_then(crate::artifacts::parse_url) {
+        app.ed.set(&c.fill, c.fill_cursor);
+        let title = crate::artifacts::get(&id).map_or(id.clone(), |a| a.title);
+        crate::attach::insert_artifact(app, &id, &title);
+        app.popup_sel = 0;
+        return;
+    }
     if let Some(p) = c.path.as_ref().filter(|_| !c.folder) {
         files::picked(p);
         // an image is attached, not inserted as a path

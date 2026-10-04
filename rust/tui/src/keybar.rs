@@ -173,6 +173,26 @@ pub(crate) fn flashing(a: &crate::sb::Approvals) -> bool {
 /// switch of approvals mode, the switch's line (the mode itself is on the
 /// divider, after the model: chrome.rs [`crate::chrome::Who`]).
 pub(crate) fn line(app: &App, width: u16) -> Line<'static> {
+    let dimmed = Style::default().fg(theme::dim());
+    // the diff panel has the keys (site/m/artifacts D)
+    if app.diff.as_ref().is_some_and(|p| p.focused) {
+        let pairs = crate::diffview::key_pairs(app);
+        let pairs: Vec<(&str, &str)> = pairs.iter().map(|(k, w)| (*k, w.as_str())).collect();
+        return pairs_line(&pairs, usize::from(width)).0;
+    }
+    // an artifact's chip under the mouse (site/m/artifacts E): what it is
+    if let Some(words) = app
+        .hover
+        .and_then(|(x, y)| crate::links::hit_url(x, y))
+        .and_then(|u| crate::artifacts::hover_words(&u, crate::when::now_ms()))
+    {
+        return Line::from(Span::styled(cut(&words, usize::from(width)), dimmed));
+    }
+    // a draft with an artifact's chip: how it goes
+    if crate::attach::has_artifact(&app.ed.text) && !app.ed.text.trim().is_empty() {
+        let pairs = [("⏎", "send"), ("", "the ↗ chips go as the artifact's link and title, never as @name")];
+        return pairs_line(&pairs, usize::from(width)).0;
+    }
     let a = &app.sb.approvals;
     let dim = Style::default().fg(theme::dim());
     if flashing(a) {

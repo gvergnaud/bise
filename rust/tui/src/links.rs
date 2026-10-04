@@ -274,6 +274,14 @@ pub(crate) fn with_urls(
             continue;
         }
         let url = &events[e].3[u];
+        // an artifact's chip copies as `artifacts mock (bise.dev/m/artifacts)`
+        if let Some(link) = crate::artifacts::copy_link(url) {
+            inserts.push((i, t, format!(" ({})", link)));
+            continue;
+        }
+        if url.starts_with("artifact:") || url.starts_with("bise-") {
+            continue;
+        }
         let label = link_label(events[e].2, events[e].3, u);
         if label.trim() != url.as_str()
             && label.trim() != url.trim_start_matches("mailto:")
@@ -362,6 +370,12 @@ pub(crate) fn push_hit(h: Hit) {
 #[cfg(test)]
 pub(crate) fn frame_hits() -> Vec<Hit> {
     FRAME.with(|f| f.borrow().clone())
+}
+
+/// The url of the link drawn at `(x, y)` so far this frame (the key bar
+/// says what an artifact's chip under the mouse is).
+pub(crate) fn hit_url(x: u16, y: u16) -> Option<String> {
+    FRAME.with(|f| f.borrow().iter().find(|h| h.y == y && h.x0 <= x && x < h.x1).map(|h| h.url.clone()))
 }
 
 /// The frame's links that `gone` says a later text covered (textlayer.rs).

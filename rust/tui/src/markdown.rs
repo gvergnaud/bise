@@ -51,7 +51,8 @@ fn md_link_at(cs: &[char], i: usize) -> Option<(String, String, usize)> {
     let url = inner.split_whitespace().next().unwrap_or("");
     let url = url.strip_prefix('<').and_then(|u| u.strip_suffix('>')).unwrap_or(url);
     let label: String = cs[i + 1..close].iter().collect();
-    if crate::links::linkable(url) {
+    // an artifact (site/m/artifacts E): `[the mock](artifact:artifacts@v3)`
+    if crate::artifacts::parse_url(url).is_some() || crate::links::linkable(url) {
         return Some((label, url.to_string(), end + 1));
     }
     // a link to a local file (BISE-264): `[the guide](docs/guide.md#L12)`
@@ -67,6 +68,29 @@ fn autolink_at(cs: &[char], i: usize) -> Option<(String, usize)> {
     }
     let url: String = cs[i + 1..close].iter().collect();
     crate::links::linkable(&url).then_some((url, close + 1))
+}
+
+/// An artifact named in a reply (site/m/artifacts E) is a chip: an
+/// `artifact:` link (its label, else the artifact's title), or a plain
+/// link or path the list has registered (its title). False: `url` names
+/// no artifact, the caller draws it as before.
+fn artifact_chip(spans: &mut Vec<Span<'static>>, label: Option<&str>, url: &str) -> bool {
+    let (id, v) = match crate::artifacts::parse_url(url) {
+        Some(x) => x,
+        None => match crate::artifacts::resolve(url) {
+            Some(id) => (id, None),
+            None => return false,
+        },
+    };
+    let known = crate::artifacts::get(&id);
+    let title = match (label.filter(|l| !l.trim().is_empty() && crate::artifacts::parse_url(url).is_some()), &known) {
+        (Some(l), _) => l.to_string(),
+        (None, Some(a)) => a.title.clone(),
+        (None, None) => id.clone(),
+    };
+    let gone = known.as_ref().is_some_and(|a| a.gone);
+    spans.extend(crate::render::artifact_chip(&title, gone, &crate::artifacts::url_of(&id, v)));
+    true
 }
 
 /// The spans of a link: its label (inline styles kept), each span tagged
@@ -117,7 +141,9 @@ fn spans_of(s: &str, base: Style, links: bool) -> Vec<Span<'static>> {
                 if !plain.is_empty() {
                     spans.push(Span::styled(std::mem::take(&mut plain), base));
                 }
-                link_spans(&mut spans, &label, &url, base.fg.unwrap_or(theme::text()), base);
+                if !artifact_chip(&mut spans, Some(&label), &url) {
+                    link_spans(&mut spans, &label, &url, base.fg.unwrap_or(theme::text()), base);
+                }
                 i = end;
                 continue;
             }
@@ -138,8 +164,10 @@ fn spans_of(s: &str, base: Style, links: bool) -> Vec<Span<'static>> {
                     spans.push(Span::styled(std::mem::take(&mut plain), base));
                 }
                 let url: String = cs[i..i + n].iter().collect();
-                let tag = crate::links::add(&url);
-                spans.push(Span::styled(url, crate::links::link_style(base, theme::dim(), tag)));
+                if !artifact_chip(&mut spans, None, &url) {
+                    let tag = crate::links::add(&url);
+                    spans.push(Span::styled(url, crate::links::link_style(base, theme::dim(), tag)));
+                }
                 i += n;
                 continue;
             }
@@ -150,11 +178,11 @@ fn spans_of(s: &str, base: Style, links: bool) -> Vec<Span<'static>> {
                 if !plain.is_empty() {
                     spans.push(Span::styled(std::mem::take(&mut plain), base));
                 }
-                let tag = crate::links::add(&url);
-                spans.push(Span::styled(
-                    cs[i..i + n].iter().collect::<String>(),
-                    crate::links::link_style(base, theme::dim(), tag),
-                ));
+                let shown: String = cs[i..i + n].iter().collect();
+                if !artifact_chip(&mut spans, None, &shown) {
+                    let tag = crate::links::add(&url);
+                    spans.push(Span::styled(shown, crate::links::link_style(base, theme::dim(), tag)));
+                }
                 i += n;
                 continue;
             }

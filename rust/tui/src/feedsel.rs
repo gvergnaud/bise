@@ -58,7 +58,9 @@ pub(crate) fn is_soft(line: &Line) -> bool {
 }
 
 pub(crate) fn line_text(line: &Line) -> String {
-    line.spans.iter().map(|s| s.content.as_ref()).collect()
+    // an artifact's chip keeps its words on one row with non-breaking
+    // spaces (render::artifact_chip): copied, they are spaces
+    line.spans.iter().map(|s| s.content.as_ref()).collect::<String>().replace('\u{a0}', " ")
 }
 
 /// The text of the columns [from, to) of `s` (a wide grapheme counts

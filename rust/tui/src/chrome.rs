@@ -46,7 +46,7 @@ fn pieces() -> Pieces {
     }
 }
 
-fn line_style() -> Style {
+pub(crate) fn line_style() -> Style {
     Style::default().fg(crate::theme::rule())
 }
 
