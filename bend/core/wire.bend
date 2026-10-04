@@ -1016,6 +1016,32 @@ def squeeze(+s: String) -> String:
 def err_said(+body: String) -> String:
   squeeze(err_text(body))
 
+# ---- a request refused for its size (big-request, 2026-10-04) ----
+# A 413, or a 400 whose words say the body is too big: Anthropic through
+# the foundry proxy answers 400 "Request content length exceeded 32 MB
+# limit"; Anthropic's own API 413 request_too_large; gateways "payload
+# too large" / "request entity too large".
+def size_words(+s: String) -> Bool:
+  Bool.or(String.contains(s, "content length exceeded"),
+    Bool.or(String.contains(s, "request_too_large"),
+      Bool.or(String.contains(s, "request too large"),
+        Bool.or(String.contains(s, "payload too large"),
+          Bool.or(String.contains(s, "request entity too large"),
+            String.contains(s, "request is too large"))))))
+
+def size_refused(+status: U32, +body: String) -> Bool:
+  Bool.or(U32.is_eq(status, 413),
+    Bool.and(U32.is_eq(status, 400), size_words(String.to_lower(body))))
+
+# the words a refusal for size carries in bise's line
+# (runtime/provider-pure.bend refusal.head); the Core reads them on a
+# failed call and compacts (core/session.bend)
+def too_large_mark() -> String:
+  "the request is too large"
+
+def too_large(+error: String) -> Bool:
+  String.contains(error, too_large_mark())
+
 def reply_err(+status: U32, +body: String) -> String:
   String.append("ERROR provider ",
     String.append(U32.show(status),

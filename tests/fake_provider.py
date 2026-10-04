@@ -742,6 +742,16 @@ class H(http.server.BaseHTTPRequestHandler):
         raw = self.rfile.read(n)
         if is_stt(self.path):
             return self.stt(raw)
+        # big-request: $FAKE_MAX_BODY bytes at most, like Anthropic through
+        # the foundry proxy (32 MB): a bigger body gets its 400
+        mx = int(os.environ.get("FAKE_MAX_BODY", "0") or 0)
+        if mx and n > mx:
+            with open(LOG, "a") as f:
+                f.write(json.dumps({"agent": "", "family": family_of(self.path), "path": self.path,
+                                    "status": 400, "size_refused": n}) + "\n")
+            self.send(400, json.dumps({"type": "error", "error": {
+                "type": "invalid_request_error", "message": "Request content length exceeded 32 MB limit."}}).encode())
+            return
         body = json.loads(raw or b"{}")
         family = family_of(self.path)
         stream = (":streamGenerateContent" in self.path) if family == "gemini" else body.get("stream") is True

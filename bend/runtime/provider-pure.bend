@@ -9,6 +9,7 @@ import ../core/api.bend as Api
 import ../core/wire.bend as W
 import ../core/text.bend as Tx
 import ../core/config.bend as Cf
+import ../core/image.bend as Im
 import ../vendor/json.bend as J
 
 # ---- the provider registry ----
@@ -1039,17 +1040,25 @@ def refusal.who(+name: String) -> String:
 
 # bise's line of a refused request: who refused, the status, what to
 # check (the designer's words, BISE-282's pattern)
-def refusal.head(+who: String, +status: U32) -> String:
+# (big: a refusal for size, W.size_refused: a 413 or a 400 that says so;
+# its line carries W.too_large_mark, which the Core reads to compact)
+def refusal.head(+who: String, +status: U32, big: Bool) -> String:
   +s = U32.show(status)
   Bool.pick(String, Bool.or(U32.is_eq(status, 401), U32.is_eq(status, 403)),
     String.concat([who, " refused the key (", s, "). check it with /setup."]),
     Bool.pick(String, U32.is_eq(status, 404),
       String.concat([who, " refused the request (", s,
         "). check the model name and the provider URL."]),
-      Bool.pick(String, U32.is_eq(status, 413),
-        String.concat([who, " refused the request (", s,
-          "). the request is too large."]),
+      Bool.pick(String, big,
+        String.concat([who, " refused the request (", s, "). ",
+          W.too_large_mark(), "."]),
         String.concat([who, " refused the request (", s, ")."]))))
+
+# the retry line of a request refused for its size (model_call.sized)
+def size_retry_why(+name: String, +status: U32, +half: Nat) -> String:
+  String.concat([refusal.who(name), " refused the request for its size (",
+    U32.show(status), "): sending it again with fewer images, under ",
+    Im.bytes_text(half)])
 
 # the key, if the provider echoed it, as ...<last 4>
 def mask.at(fuel: Nat, m: Maybe<&2, Nat>, +s: String, +key: String)
@@ -1098,7 +1107,7 @@ def refusal(+name: String, +status: U32, +body: String, +key: String)
     -> String:
   +who = refusal.who(name)
   +said = said_cut(mask(W.err_said(body), key))
-  String.append(refusal.head(who, status),
+  String.append(refusal.head(who, status, W.size_refused(status, body)),
     refusal.said(String.is_empty(said), who, said))
 
 def attempt_for.fail(refused: Bool, +why: String, +name: String,

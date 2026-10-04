@@ -515,6 +515,41 @@ law steering_survives_fail:
         S.apply(steer_flow.steered(law_cfg()), T.FailTurn{"boom"}),
         steer_flow.steered(law_cfg()))), "penguins") == True{} : Bool}
 
+# big-request: what an apply says, in short: "compact" when it starts a
+# compaction, "fail" when it ends the turn, "other" else
+def big_flow.verdict(obs: List<&2, T.Obs>) -> String:
+  match obs:
+    case Nil{}:
+      "other"
+    case Con{+o, rest}:
+      match o:
+        case T.CompactionStarted{_, _}:
+          "compact"
+        case T.TurnDone{_}:
+          "fail"
+        case _:
+          big_flow.verdict(rest)
+
+def big_flow.of(r: T.Res) -> String:
+  match r:
+    case T.Accepted{obs, _, _}:
+      big_flow.verdict(obs)
+    case T.Rejected{+why}:
+      String.append("rejected: ", why)
+
+def big_flow.err() -> String:
+  "Anthropic refused the request (400). the request is too large. Anthropic said: \"Request content length exceeded 32 MB limit.\""
+
+# LAW (big-request): a call refused for its size, in a history that has
+# an assistant message, starts a compaction instead of failing the turn
+# (the agent recovers by itself); right after a compaction (no assistant
+# message left: nothing to shrink) or for another failure, the turn fails.
+law size_refusal_compacts:
+  {Con{big_flow.of(S.apply(steer_flow(law_cfg()), T.CompletionFail{3, big_flow.err()})),
+    Con{big_flow.of(S.apply(steer_flow.started(law_cfg()), T.CompletionFail{0, big_flow.err()})),
+      Con{big_flow.of(S.apply(steer_flow(law_cfg()), T.CompletionFail{3, "boom"})), Nil{}}}}
+    == Con{"compact", Con{"fail", Con{"fail", Nil{}}}} : List<&2, String>}
+
 # arrival order: two steers, committed in the order they arrived
 def steer_order.one(+cfg: T.Cfg) -> T.Session:
   S.res_next(S.apply(steer_flow.started(cfg),
@@ -3568,6 +3603,23 @@ law refusal_without_words:
   {Pv.refusal("Mistral", 400, "", "")
     == "Mistral refused the request (400)." : String}
 
+# LAW (big-request): a refusal for size says so, in the words the Core
+# reads to compact: the foundry proxy's 400, a 413; another 400 does not.
+law refusal_for_size:
+  {Pv.refusal("Anthropic", 400,
+      "{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Request content length exceeded 32 MB limit.\"}}", "")
+    == "Anthropic refused the request (400). the request is too large. Anthropic said: \"Request content length exceeded 32 MB limit.\""
+    : String}
+
+law size_refused_cases:
+  {Con{W.size_refused(400, "Request content length exceeded 32 MB limit."),
+    Con{W.size_refused(413, ""),
+      Con{W.size_refused(400, "{\"error\":{\"type\":\"request_too_large\"}}"),
+        Con{W.size_refused(400, "invalid base64 data"),
+          Con{W.size_refused(500, "request too large"), Nil{}}}}}}
+    == Con{True{}, Con{True{}, Con{True{}, Con{False{}, Con{False{}, Nil{}}}}}}
+    : List<&2, Bool>}
+
 # LAW: the attempt the Core reads: a refusal in those words, a reply's
 # calls named back, a transport failure (status 0) as it was.
 law attempt_for_names_the_calls:
@@ -4750,15 +4802,60 @@ law image_part_unavailable_is_text:
 
 law image_part_filled:
   {Im.body_fill(Im.body_segs("[{\"a\":1},\"@@BENDPART:o|image/png|/s/1.b64|n@@\"]"),
-    Con{Im.IROk{"QUJD"}, Nil{}})
+    Con{Im.IROk{"QUJD", 4n}, Nil{}})
     == "[{\"a\":1},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,QUJD\"}}]"
     : String}
 
 # LAW: the 20 most recent good images go; an older one becomes text.
 law image_part_cap:
-  {Im.res_cap(Con{Im.IROk{"a"}, Con{Im.IRBad{"x"}, Con{Im.IROk{"b"}, Nil{}}}}, 1n)
+  {Im.res_cap(Con{Im.IROk{"a", 1n}, Con{Im.IRBad{"x"}, Con{Im.IROk{"b", 1n}, Nil{}}}}, 1n)
     == Con{Im.IRBad{"older than the 1 most recent images"}, Con{Im.IRBad{"x"},
-      Con{Im.IROk{"b"}, Nil{}}}} : List<&2, Im.IRes>}
+      Con{Im.IROk{"b", 1n}, Nil{}}}} : List<&2, Im.IRes>}
+
+# LAW (big-request): the images that go fit the request's byte limit.
+# Four images of 1 MiB under a 3 MiB limit: the count cap halves (20,
+# 10, 5, 2) until the kept ones fit, the oldest become text that says
+# why.
+law image_part_fit_bytes:
+  {Im.res_fit(Con{Im.IROk{"a", 1048576n}, Con{Im.IROk{"b", 1048576n},
+      Con{Im.IROk{"c", 1048576n}, Con{Im.IROk{"d", 1048576n}, Nil{}}}}},
+      20n, 5n, 3145728n)
+    == Con{Im.IRBad{"removed to keep the request under 3 MB"},
+      Con{Im.IRBad{"removed to keep the request under 3 MB"},
+        Con{Im.IROk{"c", 1048576n}, Con{Im.IROk{"d", 1048576n}, Nil{}}}}}
+    : List<&2, Im.IRes>}
+
+# LAW (big-request): the count cap and the byte limit together: the ones
+# over the count say so, the next ones dropped for the bytes say that, a
+# bad one keeps its own reason, the newest goes.
+law image_part_fit_count_then_bytes:
+  {Im.res_fit(Con{Im.IROk{"a", 1048576n}, Con{Im.IRBad{"x"},
+      Con{Im.IROk{"b", 1048576n}, Con{Im.IROk{"c", 1048576n},
+        Con{Im.IROk{"d", 1048576n}, Nil{}}}}}}, 2n, 5n, 1572864n)
+    == Con{Im.IRBad{"older than the 2 most recent images"}, Con{Im.IRBad{"x"},
+      Con{Im.IRBad{"older than the 2 most recent images"},
+        Con{Im.IRBad{"removed to keep the request under 1 MB"},
+          Con{Im.IROk{"d", 1048576n}, Nil{}}}}}}
+    : List<&2, Im.IRes>}
+
+# LAW (big-request): under the limit nothing changes; a limit no image
+# fits sends none.
+law image_part_fit_under_limit:
+  {Im.res_fit(Con{Im.IROk{"a", 10n}, Con{Im.IROk{"b", 10n}, Nil{}}}, 20n, 5n, 100n)
+    == Con{Im.IROk{"a", 10n}, Con{Im.IROk{"b", 10n}, Nil{}}} : List<&2, Im.IRes>}
+
+law image_part_fit_none:
+  {Im.res_fit(Con{Im.IROk{"a", 10n}, Nil{}}, 20n, 50n, 40n)
+    == Con{Im.IRBad{"removed to keep the request under 0 KB"}, Nil{}}
+    : List<&2, Im.IRes>}
+
+# LAW (big-request): a filled body says what it weighs: its text plus the
+# images that went.
+law image_fill_fit_weighs:
+  {Im.fill_fit(Im.body_segs("[{\"a\":1},\"@@BENDPART:a|image/png|/s/1.b64|n@@\"]"),
+      Con{Im.IROk{"QUJD", 4n}, Nil{}}, 20n, 1000n)
+    == Im.IFill{"[{\"a\":1},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"QUJD\"}}]",
+      14n, 4n} : Im.IFill}
 
 # LAW: a .b64 file is sent only if non-empty, a multiple of 4 bytes, base64
 law image_why_checks:

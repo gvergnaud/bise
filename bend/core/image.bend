@@ -472,9 +472,10 @@ type IBSeg is Data:
   IBText{s: String}
   IBPart{ph: IPh}
 
-# what the IO step found for a placeholder: the file part, or why not
+# what the IO step found for a placeholder: the file part and its size
+# (bytes of base64 sent), or why not
 type IRes is Data:
-  IROk{part: String}
+  IROk{part: String, size: Nat}
   IRBad{why: String}
 
 # a placeholder is always an item after the frame's text part: `,"@@BENDPART:`
@@ -586,32 +587,121 @@ def res_count(+rs: List<&2, IRes>) -> Nat:
       0n
     case Con{+r, +rest}:
       match r:
-        case IROk{_}:
+        case IROk{_, _}:
           1n+res_count(rest)
         case IRBad{_}:
           res_count(rest)
 
-def res_cap.go(rs: List<&2, IRes>, +drop: Nat, +why: String) -> List<&2, IRes>:
+# the oldest `d1` good images become text `w1`, the `d2` good ones after
+# them `w2`; the others go
+def res_drop.go(rs: List<&2, IRes>, +d1: Nat, +d2: Nat, +w1: String,
+    +w2: String) -> List<&2, IRes>:
   match rs:
     case Nil{}:
       Nil{}
     case Con{+r, +rest}:
       match r:
-        case IROk{+part}:
-          match drop:
+        case IROk{+part, +size}:
+          match d1:
             case 0n:
-              Con{IROk{part}, res_cap.go(rest, 0n, why)}
+              match d2:
+                case 0n:
+                  Con{IROk{part, size}, res_drop.go(rest, 0n, 0n, w1, w2)}
+                case 1n+e:
+                  Con{IRBad{w2}, res_drop.go(rest, 0n, e, w1, w2)}
             case 1n+d:
-              Con{IRBad{why}, res_cap.go(rest, d, why)}
+              Con{IRBad{w1}, res_drop.go(rest, d, d2, w1, w2)}
         case IRBad{+w}:
-          Con{IRBad{w}, res_cap.go(rest, drop, why)}
+          Con{IRBad{w}, res_drop.go(rest, d1, d2, w1, w2)}
+
+def res_cap.why(+cap: Nat) -> String:
+  String.append("older than the ", String.append(Nat.show(cap),
+    " most recent images"))
 
 # the `cap` most recent images go (stepped, img_kept); the older ones
 # become text
 def res_cap(+rs: List<&2, IRes>, +cap: Nat) -> List<&2, IRes>:
-  res_cap.go(rs, Nat.sub(res_count(rs), img_kept(res_count(rs), cap)),
-    String.append("older than the ", String.append(Nat.show(cap),
-      " most recent images")))
+  res_drop.go(rs, Nat.sub(res_count(rs), img_kept(res_count(rs), cap)), 0n,
+    res_cap.why(cap), "")
+
+# ---- the request's byte limit (2026-10-04, task big-request) ----
+# A provider refuses a body over its size (Anthropic through the foundry
+# proxy: 400 "Request content length exceeded 32 MB limit"). Screenshots
+# are most of it: ambient's 20 most recent were 32.9 MB of base64, so
+# every turn got that 400, and an agent stuck that way never took a turn
+# again. Now the images that go fit a byte limit: when the body without
+# its images (`base`) plus the kept ones would pass `limit`, the count
+# cap halves (20, 10, 5, 2, 1, 0), stepped like img_kept so the dropped
+# set stays put for a while (the prompt cache); the oldest go first and
+# become text that says why.
+
+# the bytes of the `k` most recent good images (rs: newest first)
+def res_last_bytes.go(rs: List<&2, IRes>, +k: Nat) -> Nat:
+  match rs:
+    case Nil{}:
+      0n
+    case Con{+r, +rest}:
+      match r:
+        case IROk{_, +size}:
+          match k:
+            case 0n:
+              0n
+            case 1n+j:
+              Nat.add(size, res_last_bytes.go(rest, j))
+        case IRBad{_}:
+          res_last_bytes.go(rest, k)
+
+def res_last_bytes(+rs: List<&2, IRes>, +k: Nat) -> Nat:
+  res_last_bytes.go(List.reverse(&2, IRes, rs), k)
+
+# the bytes the kept images of count cap `c` weigh
+def res_cap_bytes(+rs: List<&2, IRes>, +c: Nat) -> Nat:
+  res_last_bytes(rs, img_kept(res_count(rs), c))
+
+def res_fit.pick(fuel: Nat, fits: Bool, +rs: List<&2, IRes>, +c: Nat,
+    +base: Nat, +limit: Nat) -> Nat:
+  match fuel:
+    case 0n:
+      Bool.pick(Nat, fits, c, 0n)
+    case 1n+k:
+      match fits:
+        case True{}:
+          c
+        case False{}:
+          res_fit.pick(k,
+            Nat.is_le(Nat.add(base, res_cap_bytes(rs, Nat.div(c, 2n))), limit),
+            rs, Nat.div(c, 2n), base, limit)
+
+# the count cap that fits: `cap`, else halved until the body fits (0: no
+# image at all; a body over the limit without images is the provider's
+# to refuse)
+def res_fit_cap(+rs: List<&2, IRes>, +cap: Nat, +base: Nat, +limit: Nat) -> Nat:
+  res_fit.pick(32n, Nat.is_le(Nat.add(base, res_cap_bytes(rs, cap)), limit),
+    rs, cap, base, limit)
+
+# a byte count the user reads: MB from 1 MB (MiB, as the APIs count),
+# else KB
+def bytes_text(+n: Nat) -> String:
+  Bool.pick(String, Nat.is_le(1048576n, n),
+    String.append(Nat.show(Nat.div(n, 1048576n)), " MB"),
+    String.append(Nat.show(Nat.div(n, 1024n)), " KB"))
+
+def res_fit.why(+limit: Nat) -> String:
+  String.append("removed to keep the request under ", bytes_text(limit))
+
+# the images that go: the `cap` most recent, fewer when they would make
+# the body pass `limit` bytes (`base`: the body without its images)
+def res_fit(+rs: List<&2, IRes>, +cap: Nat, +base: Nat, +limit: Nat)
+    -> List<&2, IRes>:
+  +n = res_count(rs)
+  +by_count = Nat.sub(n, img_kept(n, cap))
+  res_drop.go(rs, by_count,
+    Nat.sub(Nat.sub(n, img_kept(n, res_fit_cap(rs, cap, base, limit))), by_count),
+    res_cap.why(cap), res_fit.why(limit))
+
+# the bytes of the good images that go
+def res_bytes(+rs: List<&2, IRes>) -> Nat:
+  res_last_bytes(rs, res_count(rs))
 
 def unavailable_text(+name: String, +why: String) -> String:
   String.concat(["[image unavailable: ", name, " (", why, ")]"])
@@ -621,7 +711,7 @@ def ph_json(+ph: IPh, r: IRes) -> String:
   match ph:
     case IPh{+st, +mime, +b64, +name}:
       match r:
-        case IROk{+part}:
+        case IROk{+part, _}:
           img_splice(J.stringify(image_json(st, mime, b64)),
             Con{IL{b64, part}, Nil{}})
         case IRBad{+why}:
@@ -656,3 +746,30 @@ def body_fill.go(segs: List<&2, IBSeg>, +rs: List<&2, IRes>,
 # the body with each placeholder replaced (rs: one per placeholder, in order)
 def body_fill(segs: List<&2, IBSeg>, +rs: List<&2, IRes>) -> String:
   body_fill.go(segs, rs, Nil{})
+
+# the chars of a body without its image parts (about its bytes: the JSON
+# is ASCII but for the text the user and the tools wrote)
+def segs_text_len(segs: List<&2, IBSeg>) -> Nat:
+  match segs:
+    case Nil{}:
+      0n
+    case Con{+g, rest}:
+      match g:
+        case IBText{+s}:
+          Nat.add(String.length(s), segs_text_len(rest))
+        case IBPart{_}:
+          segs_text_len(rest)
+
+# a filled body, what it weighs (about) and what its images weigh
+type IFill is Data:
+  IFill{body: String, bytes: Nat, img_bytes: Nat}
+
+def fill_fit.go(+segs: List<&2, IBSeg>, +rs: List<&2, IRes>) -> IFill:
+  IFill{body_fill(segs, rs), Nat.add(segs_text_len(segs), res_bytes(rs)),
+    res_bytes(rs)}
+
+# the body with its images filled: the `cap` most recent, fewer when they
+# would make it pass `limit` bytes (res_fit)
+def fill_fit(+segs: List<&2, IBSeg>, +rs: List<&2, IRes>, +cap: Nat,
+    +limit: Nat) -> IFill:
+  fill_fit.go(segs, res_fit(rs, cap, segs_text_len(segs), limit))

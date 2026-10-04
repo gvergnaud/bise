@@ -659,6 +659,9 @@ def Laws.steering_survives_interrupt():
 def Laws.steering_survives_fail():
   {==}
 
+def Laws.size_refusal_compacts():
+  {==}
+
 def Laws.steering_arrival_order():
   {==}
 
@@ -1276,6 +1279,12 @@ def Laws.refusal_without_a_name_or_json():
   {==}
 
 def Laws.refusal_without_words():
+  {==}
+
+def Laws.refusal_for_size():
+  {==}
+
+def Laws.size_refused_cases():
   {==}
 
 def Laws.attempt_for_names_the_calls():
@@ -4590,6 +4599,21 @@ def Laws.image_part_filled():
   {==}
 
 def Laws.image_part_cap():
+  {==}
+
+def Laws.image_part_fit_bytes():
+  {==}
+
+def Laws.image_part_fit_count_then_bytes():
+  {==}
+
+def Laws.image_part_fit_under_limit():
+  {==}
+
+def Laws.image_part_fit_none():
+  {==}
+
+def Laws.image_fill_fit_weighs():
   {==}
 
 def Laws.image_why_checks():

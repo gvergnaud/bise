@@ -498,8 +498,8 @@ def head_of(r: Result<&1, &1, U32 & String, String>) -> String:
       ""
 
 def img_check.why(+why: String, +path: String, +n: U32) -> Im.IRes:
-  Bool.pick(Im.IRes, String.is_empty(why), Im.IROk{Http.file_part(path, n)},
-    Im.IRBad{why})
+  Bool.pick(Im.IRes, String.is_empty(why),
+    Im.IROk{Http.file_part(path, n), U32.to_nat(n)}, Im.IRBad{why})
 
 def img_check.head(fr: File & Result<&1, &1, U32 & String, String>,
     +path: String, +n: U32) -> IO(Im.IRes):
@@ -558,25 +558,71 @@ def img_checks(phs: List<&2, Im.IPh>, +dir: String,
         img_checks(rest, dir, Con{r, acc})
 
 @unsafe
-def img_body.fill(+segs: List<&2, Im.IBSeg>) -> IO(String):
-  do IO<String>:
+def img_body.fill(+segs: List<&2, Im.IBSeg>, +limit: Nat) -> IO(Im.IFill):
+  do IO<Im.IFill>:
     +dir : String <- img_dir()
     rs : List<&2, Im.IRes> <- img_checks(Im.body_phs(segs), dir, Nil{})
-    IO.pure(String, Im.body_fill(segs, Im.res_cap(rs, img_cap())))
+    IO.pure(Im.IFill, Im.fill_fit(segs, rs, img_cap(), limit))
 
 # a body without image part costs one scan
 @unsafe
-def img_body.pick(has: Bool, +json: String) -> IO(String):
+def img_body.pick(has: Bool, +json: String, +limit: Nat) -> IO(Im.IFill):
   match has:
     case True{}:
-      img_body.fill(Im.body_segs(json))
+      img_body.fill(Im.body_segs(json), limit)
     case False{}:
-      IO.pure(String, json)
+      IO.pure(Im.IFill, Im.IFill{json, String.length(json), 0n})
 
-# the printed body, each image part checked and filled (or made text)
+# the printed body, each image part checked and filled (or made text),
+# the images within the byte limit (Im.res_fit); with its weight
 @unsafe
-def img_body(+json: String) -> IO(String):
-  img_body.pick(String.contains(json, Im.part_open()), json)
+def img_body(+json: String, +limit: Nat) -> IO(Im.IFill):
+  img_body.pick(String.contains(json, Im.part_open()), json, limit)
+
+# the byte limit of a request (big-request, 2026-10-04): what bise lets
+# the images make a body weigh. $BISE_REQUEST_MAX_BYTES, else 24 MiB:
+# under Anthropic's 32 MB (and the foundry proxy's), OpenAI's and
+# Mistral's, with room for the text. A provider that still refuses the
+# size gets one retry with half the weight (model_call.sized).
+def req_limit.default() -> Nat:
+  25165824n
+
+def req_limit.of(m: Maybe<&2, U32>) -> Nat:
+  match m:
+    case None{}:
+      req_limit.default()
+    case Some{+v}:
+      Bool.pick(Nat, U32.is_eq(v, 0), req_limit.default(), U32.to_nat(v))
+
+def req_limit() -> IO(Nat):
+  do IO<Nat>:
+    r : Result<&1, &1, U32 & String, String> <- IO.get_env("BISE_REQUEST_MAX_BYTES")
+    IO.pure(Nat, req_limit.of(U32.read(String.trim(P.env_or(r, "")))))
+
+def fill_body(+f: Im.IFill) -> String:
+  match f:
+    case Im.IFill{+b, _, _}:
+      b
+
+def fill_bytes(+f: Im.IFill) -> Nat:
+  match f:
+    case Im.IFill{_, +n, _}:
+      n
+
+def fill_img_bytes(+f: Im.IFill) -> Nat:
+  match f:
+    case Im.IFill{_, _, +n}:
+      n
+
+def got_status(g: Got) -> U32:
+  match g:
+    case Got{_, +status, _}:
+      status
+
+def got_raw(g: Got) -> String:
+  match g:
+    case Got{_, _, +raw}:
+      raw
 
 # a request whose tool calls were not all answered (a history cut by a
 # restart): the guard answered them; one line in the debug log and one
@@ -598,8 +644,8 @@ def unpaired_log(bad: Bool, +call: Nat, +req: U32) -> IO(Unit):
 # names the call in the debug log
 @unsafe
 def model_call.try(fuel: Nat, +tries: Nat, n: Out, +request: String,
-    +key: String, +pv: Pvp.Prov, +call: Nat, +req: U32)
-    -> IO(Out & Rem.RemoteRes):
+    +key: String, +pv: Pvp.Prov, +call: Nat, +req: U32, +limit: Nat,
+    +shrunk: Bool) -> IO(Out & Rem.RemoteRes):
   match fuel:
     case 0n:
       IO.pure(Out & Rem.RemoteRes,
@@ -625,8 +671,8 @@ def model_call.try(fuel: Nat, +tries: Nat, n: Out, +request: String,
               Osp.light_if(Bool.not(String.is_empty(P.env_or(osr, ""))),
                 Api.wire_body(st, Api.with_cache_key(Pvp.cache_field(names), ckey,
                   Api.api_body_for(st, model, facts, W.pair_wire(wreq))))))
-            +filled : String <- img_body(json)
-            +body : String <- IO.pure(String, Enc.utf8.encode(filled))
+            +fill : Im.IFill <- img_body(json, limit)
+            +body : String <- IO.pure(String, Enc.utf8.encode(fill_body(fill)))
             dr : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_WIRE_DUMP")
             dump_dbg : Unit <- dump_wire(dump_path(P.env_or(dr, ""), call, tries), body)
             # a gateway (headers_env, key_command), read on each call:
@@ -648,20 +694,49 @@ def model_call.try(fuel: Nat, +tries: Nat, n: Out, +request: String,
             lg : Unit <- model_call.log(call, tries, model, url, json, g)
             # the usage line names the full id (the TUI's catalog key)
             nu : Out <- usage_note(g, n, st, String.concat([prov, "/", model]), req)
-            # BISE-293: the calls named back through the request's
-            # tools, a refusal in bise's words and the provider's
-            model_call.step(got_for(W.req_tools(wreq),
-                Pvp.prov_display(mfile, prov), key, Api.facts_plan(facts), st, g),
+            # big-request: a body over the provider's size limit goes
+            # again once, its images within half its weight
+            # (model_call.sized); else BISE-293: the calls named back
+            # through the request's tools, a refusal in bise's words and
+            # the provider's
+            model_call.sized(Bool.and(Bool.not(shrunk),
+                Bool.and(W.size_refused(got_status(g), got_raw(g)),
+                  Nat.is_lt(0n, fill_img_bytes(fill)))),
               nu, k, tries, req,
-              k2 => n2 => model_call.try(k2, Nat.add(tries, 1n), n2, request,
-                key, pv, call, req))
+              Pvp.size_retry_why(Pvp.prov_display(mfile, prov), got_status(g),
+                Nat.div(fill_bytes(fill), 2n)),
+              k4 => n3 => model_call.step(got_for(W.req_tools(wreq),
+                  Pvp.prov_display(mfile, prov), key, Api.facts_plan(facts), st, g),
+                n3, k4, tries, req,
+                k2 => n2 => model_call.try(k2, Nat.add(tries, 1n), n2, request,
+                  key, pv, call, req, limit, shrunk)),
+              k3 => n4 => model_call.try(k3, Nat.add(tries, 1n), n4, request,
+                key, pv, call, req, Nat.div(fill_bytes(fill), 2n), True{}))
+
+# a request the provider refused for its size, that had images: one line
+# (a retry the TUI shows), then the same request at once with half the
+# weight (the oldest images go). Once per call: a second refusal is the
+# turn's failure, and the Core compacts (core/session.bend).
+def model_call.sized(big: Bool, nu: Out, +k: Nat, +tries: Nat, +req: U32,
+    +why: String, step: Nat -> Out -> IO(Out & Rem.RemoteRes),
+    again: Nat -> Out -> IO(Out & Rem.RemoteRes)) -> IO(Out & Rem.RemoteRes):
+  match big:
+    case False{}:
+      step(k)(nu)
+    case True{}:
+      do IO<Out & Rem.RemoteRes>:
+        n1 : Out <- note(nu, Pvp.retry_line(tries, why, 0))
+        n2 : Out <- note(n1, Ev.retry(req, Nat.add(tries, 1n), why, 0))
+        again(k)(n2)
 
 @unsafe
 def model_call.go(n: Out, +request: String, +key: String, +pv: Pvp.Prov,
     +req: U32) -> IO(Out & Rem.RemoteRes):
   do IO<Out & Rem.RemoteRes>:
     +call : Nat <- IO.now()
-    model_call.try(Pvp.max_attempts(), 0n, n, request, key, pv, call, req)
+    +limit : Nat <- req_limit()
+    model_call.try(Pvp.max_attempts(), 0n, n, request, key, pv, call, req,
+      limit, False{})
 
 # a provider with a key_env (or a key_command) needs its key; one with
 # key_env = "" and no key_command (a local server) calls without a key.

@@ -621,17 +621,62 @@ def apply.completion(action: U32, +text: String, +calls: List<&2, T.Call>,
 
 # ---- completion failure ----
 
+# any assistant message: a history compaction can still shrink (a
+# replacement holds the summary and user messages only, so a call
+# refused for its size right after a compaction is not compacted again)
+def has_asst(hs: List<&2, T.Msg>) -> Bool:
+  match hs:
+    case Nil{}:
+      False{}
+    case Con{+m, rest}:
+      match m:
+        case T.Msg{+role, _, _, _}:
+          match role:
+            case T.RAsst{}:
+              True{}
+            case _:
+              has_asst(rest)
+
+# the turn a compaction carries: the notifications that arrived during
+# the refused call go with it (dispatch delivers them after)
+def turn_with_notifs(turn: Maybe<&2, T.Turn>, +notifs: List<&2, String>)
+    -> Maybe<&2, T.Turn>:
+  match turn:
+    case None{}:
+      Some{T.Turn{0n, Nil{}, notifs}}
+    case Some{t}:
+      match t:
+        case T.Turn{+nulls, +steer, +tnotifs}:
+          Some{T.Turn{nulls, steer, List.append(&2, String, notifs, tnotifs)}}
+
+# big-request (2026-10-04): a call the provider refused for its size,
+# after the images were already cut (runtime/provider.bend), starts an
+# automatic compaction instead of failing the turn: the turn goes on
+# from the replacement, like a compaction past the token threshold.
+# Any other failure fails the active turn; the candidate is discarded
+# without entering model context.
+def apply.completion_fail.big(big: Bool, +error: String, +s: T.Session)
+    -> T.Res:
+  match big:
+    case True{}:
+      match s:
+        case T.Sess{+cfg, +history, _, +actions, +turn, _, _, +notifs}:
+          dispatch_result(start_compaction(True{}, "", cfg, history, actions,
+              turn_with_notifs(turn, notifs), Nil{}, Nil{}),
+            Con{T.CandidateDiscarded{error}, Nil{}}, bump_inputs(s))
+    case False{}:
+      T.Accepted{Con{T.CandidateDiscarded{error},
+          Con{T.TurnDone{String.append("failed: ", error)}, Nil{}}},
+        Nil{}, bump_inputs(finish_turn(s))}
+
 def apply.completion_fail.agent(matched: Bool, +error: String,
     +s: T.Session) -> T.Res:
   match matched:
     case False{}:
       T.Rejected{"stale completion action"}
     case True{}:
-      # the candidate is discarded without entering model context; an
-      # ordinary provider failure fails the active turn
-      T.Accepted{Con{T.CandidateDiscarded{error},
-          Con{T.TurnDone{String.append("failed: ", error)}, Nil{}}},
-        Nil{}, bump_inputs(finish_turn(s))}
+      apply.completion_fail.big(Bool.and(W.too_large(error),
+          has_asst(sess_history(s))), error, s)
 
 def apply.completion_fail.comp(matched: Bool, +error: String, +auto: Bool,
     +s: T.Session) -> T.Res:

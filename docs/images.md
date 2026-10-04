@@ -112,6 +112,21 @@ content block only at the last step, the provider request.
   base64 per image, 8000 px; Mistral 10 MB.
 - At most 20 images per request (the oldest ones become text
   `[image omitted: <path>]`).
+- And within a byte limit (task `big-request`, 2026-10-04: ambient's 20
+  most recent screenshots were 32.9 MB of base64, so every turn got
+  Anthropic's 400 "Request content length exceeded 32 MB limit" through
+  the foundry proxy, and the agent never took a turn again): when the
+  body without its images plus the kept ones would pass
+  `$BISE_REQUEST_MAX_BYTES` (default 24 MiB), the count cap halves (20,
+  10, 5, 2, 1, 0; stepped like the count cap, for the prompt cache) and
+  the oldest become `[image unavailable: <name> (removed to keep the
+  request under N MB)]` (`Im.res_fit`). A provider that still refuses the
+  size (a 413, or a 400 that says so: `W.size_refused`) gets the request
+  again once, at once, with half its weight (`model_call.sized`, a
+  `provider_retry` line); a second refusal for size makes the Core compact
+  instead of failing the turn, unless the history holds no assistant
+  message (just compacted). Test: `tests/request_size_e2e.py` (the fake
+  provider refuses a body over `$FAKE_MAX_BODY` with that 400).
 
 ### The REPL: marker -> content blocks (`core/api.bend`, `runtime/provider.bend`)
 
