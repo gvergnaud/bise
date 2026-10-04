@@ -69,6 +69,7 @@ type In is Data:
   IForge{}
   IForgeCard{}
   ICardOpen{}
+  IHubMsg{}
   INone{}
 
 type CardK is Data:
@@ -2545,7 +2546,10 @@ def in_tag(+t: String) -> In:
   # opens them and closes them (`card_close`: done, or withdrawn)
   Bool.pick(In, String.eq(t, "card_open"), ICardOpen{},
   Bool.pick(In, String.eq(t, "card_close"), IConfirmClose{},
-  INone{})))))))))))))))))))))))))))))))
+  # a message of the hub itself (from `bise`) to any agent: the timers of
+  # `sb every` (docs/ambient-roadmap.md B) wake their agent with it
+  Bool.pick(In, String.eq(t, "hub_msg"), IHubMsg{},
+  INone{}))))))))))))))))))))))))))))))))
 
 # `/close N`: the user files a card without answering it
 def close_by_user(-o: M.St, m: Maybe<&2, M.Card>, +cx: X.Cx<o>, +id: Nat) -> X.Cx<o>:
@@ -2633,6 +2637,8 @@ def dispatch.go(-o: M.St, tag: In, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
       open_card(o, cx, "question", C.get_s(i, "agent"), C.get_s(i, "text"), None{})
     case ICardOpen{}:
       hub_card(o, cx, C.get_s(i, "kind"), C.get_s(i, "agent"), C.get_s(i, "text"), C.opt_str(J.get(i, "place")), C.opt_nat(J.get(i, "pr")))
+    case IHubMsg{}:
+      fst(o, send(o, cx, msg(M.HUB(), C.get_s(i, "to"), C.get_s(i, "text"), False{}, None{}, False{}, False{})))
     case INone{}:
       cx
 

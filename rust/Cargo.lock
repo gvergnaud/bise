@@ -1784,6 +1784,7 @@ dependencies = [
  "bise-home",
  "bise-session",
  "brush-parser",
+ "libc",
  "serde",
  "serde_json",
  "toml",
