@@ -1,7 +1,10 @@
 //! `/artifacts` (site/m/artifacts, B): what your agents made, full
 //! screen, like /log. One list, newest first, grouped by day, the same
 //! at 80 and 150 columns (columns drop as it narrows); the line under
-//! the list says what the selected one is and where it lives.
+//! the list says what the selected one is and where it lives. The rows
+//! new when it opened (the header's `↗ N new`) say `new` in the accent
+//! for the whole visit, and so do their new versions in the versions
+//! box ([`Fresh`]); the hub has them seen at once.
 //!
 //! Keys (designer, m_7193): the list holds them when it opens: ↑↓, ⏎
 //! open, space Quick Look, v versions, r show in Finder, c copy, @ put
@@ -28,6 +31,9 @@ pub(crate) const OPEN_URL: &str = "bise-artifacts:open";
 /// From this many columns of text the screen has its wide columns
 /// (agent before age, the last column's words, the long key bar).
 const WIDE_FROM: usize = 110;
+
+/// The mark of a row new on this visit, after its title.
+const NEW_TAG: &str = " new";
 
 /// The open screen.
 #[derive(Default)]
@@ -57,6 +63,39 @@ pub(crate) struct Screen {
     pub(crate) search_y: Option<u16>,
     /// the screen column where the rows start
     pub(crate) x0: u16,
+    /// what was new when it opened (and what came while it is open):
+    /// marked `new` for this visit, though the hub has them seen
+    pub(crate) fresh: Fresh,
+}
+
+/// The rows marked `new` on this visit: their ids, and when you had
+/// last looked (a version after it is new in the versions box; none
+/// from an older hub: only the current version).
+#[derive(Default, Clone, Debug, PartialEq)]
+pub(crate) struct Fresh {
+    pub(crate) ids: Vec<String>,
+    pub(crate) since: Option<u64>,
+}
+
+impl Fresh {
+    /// The new rows now, kept on top of the ones already marked.
+    pub(crate) fn take(&mut self, rows: &[Artifact], since: Option<u64>) {
+        for a in rows {
+            if !self.ids.contains(&a.id) {
+                self.ids.push(a.id.clone());
+            }
+        }
+        // the first look of the visit sets it; later ones are this visit's own
+        if self.since.is_none() {
+            self.since = since;
+        }
+    }
+    pub(crate) fn row(&self, a: &Artifact) -> bool {
+        self.ids.contains(&a.id)
+    }
+    pub(crate) fn version(&self, a: &Artifact, v: &artifacts::Version) -> bool {
+        self.row(a) && self.since.map_or(v.v == a.v, |s| v.ts_ms > s)
+    }
 }
 
 /// What a row of the last frame was.
@@ -88,9 +127,25 @@ pub(crate) fn open(app: &mut App) {
     let agent = app.sb.focus_name().to_string();
     // the header's `↗ designer · pricing page` opens on that one (the
     // newest new one), else on the newest
-    let sel = artifacts::new_rows().first().or(artifacts::all().first()).map(|a| a.id.clone());
-    app.artifacts = Some(Screen { agent, sel, ..Default::default() });
+    let new = artifacts::new_rows();
+    let sel = new.first().or(artifacts::all().first()).map(|a| a.id.clone());
+    // the new ones stay marked while it is open
+    let mut fresh = Fresh::default();
+    fresh.take(&new, artifacts::seen_ms());
+    app.artifacts = Some(Screen { agent, sel, fresh, ..Default::default() });
     // you looked: the header's `↗ N new` goes
+    artifacts::mark_seen();
+    app.sb.send(serde_json::json!({"op": "artifacts", "do": "seen"}));
+}
+
+/// The hub's list came while the screen is open: what came new is
+/// marked too, and seen at once (you are looking at it).
+pub(crate) fn on_list(app: &mut App) {
+    let Some(sc) = app.artifacts.as_mut() else { return };
+    if artifacts::new_count() == 0 {
+        return;
+    }
+    sc.fresh.take(&artifacts::new_rows(), None);
     artifacts::mark_seen();
     app.sb.send(serde_json::json!({"op": "artifacts", "do": "seen"}));
 }
@@ -181,9 +236,10 @@ fn cols(width: usize) -> Cols {
 /// The title as the thread's ↗ chips draw it (render::artifact_chip):
 /// tinted, the accent on the chip's light background with a blank on
 /// each side; bracketed (no tint), bold. Selected, bold; a gone file,
-/// struck through; the search's letters underlined. The rest of the
-/// column stays blank, out of the chip.
-fn title_spans(title: &str, hits: &[usize], w: usize, selected: bool, gone: bool) -> Vec<Span<'static>> {
+/// struck through; the search's letters underlined. New on this visit:
+/// ` new` in the accent right after it. The rest of the column stays
+/// blank, out of the chip.
+fn title_spans(title: &str, hits: &[usize], w: usize, selected: bool, gone: bool, fresh: bool) -> Vec<Span<'static>> {
     let tinted = matches!(crate::render::chip_form(), crate::render::ChipForm::Tinted);
     let mut st = if tinted {
         Style::default().fg(accent()).bg(theme::chip_bg())
@@ -199,7 +255,8 @@ fn title_spans(title: &str, hits: &[usize], w: usize, selected: bool, gone: bool
     // tinted: a blank inside the chip on each side (the first one is the
     // column the row's mark leaves, see `item_line`), one after it
     let side = if tinted { " " } else { "" };
-    let room = w.saturating_sub(2 * side.len() + 1).max(1);
+    let tag = if fresh { NEW_TAG.width() } else { 0 };
+    let room = w.saturating_sub(2 * side.len() + 1 + tag).max(1);
     let shown = cut(title, room);
     let hit_st = st.add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
     let n = shown.chars().count() - usize::from(shown.width() < title.width());
@@ -213,14 +270,17 @@ fn title_spans(title: &str, hits: &[usize], w: usize, selected: bool, gone: bool
             _ => out.push(Span::styled(c.to_string(), s)),
         }
     }
-    let used = shown.width() + 2 * side.len();
+    if fresh {
+        out.push(Span::styled(NEW_TAG, Style::default().fg(accent()).add_modifier(Modifier::BOLD)));
+    }
+    let used = shown.width() + 2 * side.len() + tag;
     out.push(Span::raw(" ".repeat(w.saturating_sub(used))));
     out.retain(|s| !s.content.is_empty());
     out
 }
 
 /// One artifact's row, its `v3`'s columns (from the row's start).
-fn item_line(a: &Artifact, hits: &[usize], selected: bool, c: &Cols, clock: &Clock, width: usize) -> (Line<'static>, Option<(u16, u16)>) {
+fn item_line(a: &Artifact, hits: &[usize], selected: bool, fresh: bool, c: &Cols, clock: &Clock, width: usize) -> (Line<'static>, Option<(u16, u16)>) {
     let d = Style::default().fg(dim());
     // tinted, the chip's first blank takes the mark's second column: the
     // title's letters stay where they were
@@ -232,7 +292,7 @@ fn item_line(a: &Artifact, hits: &[usize], selected: bool, c: &Cols, clock: &Clo
         Span::raw(format!(" {}", after))
     };
     let mut spans = vec![mark];
-    spans.extend(title_spans(&a.title, hits, c.title + usize::from(chip), selected, a.gone));
+    spans.extend(title_spans(&a.title, hits, c.title + usize::from(chip), selected, a.gone, fresh));
     spans.push(Span::styled(pad(&a.kind_word(), c.kind), d));
     let age = Span::styled(pad(&clock.age(a.ts_ms, !c.wide), c.age), d);
     let agent = Span::styled(pad(&a.agent_words(), c.agent), d);
@@ -269,7 +329,7 @@ fn item_line(a: &Artifact, hits: &[usize], selected: bool, c: &Cols, clock: &Clo
 }
 
 /// The versions box's rows under the selected row.
-fn box_line(a: &Artifact, row: &Body, vsel: usize, clock: &Clock, wide: bool) -> Line<'static> {
+fn box_line(a: &Artifact, row: &Body, vsel: usize, fresh: &Fresh, clock: &Clock, wide: bool) -> Line<'static> {
     let w: usize = if wide { 58 } else { 44 };
     let edge = Style::default().fg(faint());
     let lead = Span::raw("    ");
@@ -307,12 +367,16 @@ fn box_line(a: &Artifact, row: &Body, vsel: usize, clock: &Clock, wide: bool) ->
             let sel = *i == vsel;
             let mark = if sel { Span::styled(format!("{} ", theme::glyph(theme::G_YOU)), Style::default().fg(accent())) } else { Span::raw("  ") };
             let st = if sel { Style::default().fg(text()).add_modifier(Modifier::BOLD) } else { Style::default().fg(text()) };
-            let mut body = vec![
-                mark,
-                Span::styled(pad(&format!("v{}", v.v), 5), st),
-                Span::styled(pad(&clock.ago(v.ts_ms), 13), Style::default().fg(dim())),
-                Span::styled(pad(&v.note, 15), Style::default().fg(dim())),
-            ];
+            // a new version: `new` right after its name, as the list has
+            // it (designer m_7579); the column only when one is new
+            let any_new = a.versions.iter().any(|x| fresh.version(a, x));
+            let mut body = vec![mark, Span::styled(pad(&format!("v{}", v.v), if any_new { 4 } else { 5 }), st)];
+            if any_new {
+                let tag = if fresh.version(a, v) { NEW_TAG.trim_start() } else { "" };
+                body.push(Span::styled(pad(tag, 6), Style::default().fg(accent()).add_modifier(Modifier::BOLD)));
+            }
+            body.push(Span::styled(pad(&clock.ago(v.ts_ms), 13), Style::default().fg(dim())));
+            body.push(Span::styled(pad(&v.note, 15), Style::default().fg(dim())));
             if wide && v.v == a.v {
                 body.push(Span::styled("the current one", Style::default().fg(faint())));
             }
@@ -524,15 +588,15 @@ pub(crate) fn lines(sc: &mut Screen, all: &[Artifact], width: usize, height: usi
                 Body::Group(g) => Line::from(Span::styled(format!("  {}", g.words()), Style::default().fg(dim()))),
                 Body::Item(i) => {
                     let (a, h) = &list[*i];
-                    let (line, vhit) = item_line(a, h, Some(*i) == sel_i, &c, clock, width);
+                    let (line, vhit) = item_line(a, h, Some(*i) == sel_i, sc.fresh.row(a), &c, clock, width);
                     hits.push((out.len(), Hit::Row(a.id.clone(), vhit)));
                     line
                 }
                 Body::Version(v) => {
                     hits.push((out.len(), Hit::Version(*v)));
-                    box_line(sel.expect("a box is under the selection"), row, sc.versions.unwrap_or(0), clock, c.wide)
+                    box_line(sel.expect("a box is under the selection"), row, sc.versions.unwrap_or(0), &sc.fresh, clock, c.wide)
                 }
-                _ => box_line(sel.expect("a box is under the selection"), row, sc.versions.unwrap_or(0), clock, c.wide),
+                _ => box_line(sel.expect("a box is under the selection"), row, sc.versions.unwrap_or(0), &sc.fresh, clock, c.wide),
             };
             out.push(line);
             shown_rows += 1;

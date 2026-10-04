@@ -244,6 +244,8 @@ struct Store {
     rows: Vec<Artifact>,
     /// added since you last looked (the header's `↗ 3 new`)
     new: u64,
+    /// when you last looked (the hub's `seen_ms`; an older hub: none)
+    seen_ms: Option<u64>,
 }
 
 thread_local! {
@@ -266,11 +268,18 @@ pub(crate) fn set_from(v: &Value) {
         v.get("rows").and_then(|x| x.as_array()).map(|a| a.iter().filter_map(Artifact::of).collect()).unwrap_or_default();
     rows.sort_by_key(|a| std::cmp::Reverse(a.ts_ms));
     let new = n(v, "new");
+    let seen_ms = v.get("seen_ms").and_then(|x| x.as_u64());
     STORE.with(|st| {
         let mut st = st.borrow_mut();
         st.rows = rows;
         st.new = new;
+        st.seen_ms = seen_ms;
     });
+}
+
+/// When you last looked, as the hub said (none from an older hub).
+pub(crate) fn seen_ms() -> Option<u64> {
+    STORE.with(|st| st.borrow().seen_ms)
 }
 
 /// The list, newest first.

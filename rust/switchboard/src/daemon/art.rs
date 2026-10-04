@@ -63,14 +63,16 @@ impl Shell {
         }
     }
 
-    /// `{"ev":"artifacts","rows":[…],"new":N}`.
+    /// `{"ev":"artifacts","rows":[…],"new":N,"seen_ms":T}`.
     pub(super) fn artifacts_ev(&self) -> Value {
         let store = self.art_store();
         let who = self.art_who();
+        let now = now_ms();
         json!({
             "ev": "artifacts",
             "rows": store.rows(&who, &self.hub.workspace),
-            "new": store.new_count(now_ms()),
+            "new": store.new_count(now),
+            "seen_ms": store.seen_ms(now),
         })
     }
 

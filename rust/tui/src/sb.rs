@@ -637,6 +637,7 @@ pub(super) fn dispatch(app: &mut App, raw: &str) {
         // the feed's chips are built again with the new titles
         "artifacts" => {
             crate::artifacts::set_from(&v);
+            crate::artifacts_screen::on_list(app);
             app.cache.iter_mut().for_each(|c| *c = None);
         }
         "diff" => crate::diffview::event(app, &v),

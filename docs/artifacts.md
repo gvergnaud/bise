@@ -117,11 +117,16 @@ may be written in is in the row's `keys`. The prompts:
 
 ### `artifacts`
 
-`{"ev":"artifacts","rows":[A…],"new":N}`: the whole list, newest first
+`{"ev":"artifacts","rows":[A…],"new":N,"seen_ms":T}`: the whole list, newest first
 (the current version's time). Sent in the hello right after `ready`,
 after every add, after `seen`, and at an agent's idle when the list
 changed (a page published). `new`: rows whose current version came after
-`seen_ms`, the user's own adds left out.
+`seen_ms`, the user's own adds left out. `seen_ms`: when the user last
+looked. The TUI keeps, at `/artifacts`' opening, the `new` rows and this
+`seen_ms`, then says `seen`: those rows say `new` (the accent) for the
+whole visit, and in the versions box each version after that `seen_ms`
+(no `seen_ms`, an older hub: the current one). A row that comes new
+while the screen is open is marked too and seen at once.
 
 A row:
 

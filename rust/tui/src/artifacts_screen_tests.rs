@@ -177,7 +177,7 @@ fn the_pr_row_offers_github_and_a_gone_file_says_the_copy_opens() {
 fn titles_are_drawn_as_chips() {
     use unicode_width::UnicodeWidthStr;
     let tinted = matches!(crate::render::chip_form(), crate::render::ChipForm::Tinted);
-    let spans = title_spans("pricing page", &[], 20, false, false);
+    let spans = title_spans("pricing page", &[], 20, false, false, false);
     assert_eq!(spans.iter().map(|s| s.content.width()).sum::<usize>(), 20);
     let chip = &spans[0].style;
     if tinted {
@@ -187,10 +187,63 @@ fn titles_are_drawn_as_chips() {
         assert!(chip.add_modifier.contains(Modifier::BOLD));
     }
     assert_eq!(spans.last().unwrap().style, Style::default(), "the padding is not in the chip");
-    let sel = title_spans("pricing page", &[], 20, true, true);
+    let sel = title_spans("pricing page", &[], 20, true, true, false);
     assert!(sel[0].style.add_modifier.contains(Modifier::BOLD | Modifier::CROSSED_OUT));
     // a long title is cut inside its column, one blank after the chip
-    let long = title_spans("a very long title that does not fit", &[2], 20, false, false);
+    let long = title_spans("a very long title that does not fit", &[2], 20, false, false, false);
     assert_eq!(long.iter().map(|s| s.content.width()).sum::<usize>(), 20);
     assert!(long.iter().any(|s| s.style.add_modifier.contains(Modifier::UNDERLINED)), "{long:?}");
+    // new on this visit: ` new` in the accent after the chip, in the same 20 columns
+    let new = title_spans("a very long title that does not fit", &[], 20, false, false, true);
+    assert_eq!(new.iter().map(|s| s.content.width()).sum::<usize>(), 20);
+    let tag = new.iter().find(|s| s.content == " new").expect("the mark");
+    assert_eq!(tag.style.fg, Some(accent()));
+}
+
+/// Opened from `↗ 3 new`: the 3 new rows say `new` for the whole visit
+/// (the hub has them seen already); the others do not.
+#[test]
+fn the_new_rows_say_new_while_the_list_is_open() {
+    let all = afternoon();
+    let mut fresh = Fresh::default();
+    fresh.take(&all[..3], Some(T - 50 * MIN));
+    let mut sc = Screen { fresh, ..screen() };
+    let out = render(&mut sc, &all, 144, 24);
+    let marked: Vec<&str> = out.lines().filter(|l| l.contains(" new ")).collect();
+    assert_eq!(marked.len(), 3, "{out}");
+    // tinted, the chip's blank sits between the title and the mark
+    let gap = if matches!(crate::render::chip_form(), crate::render::ChipForm::Tinted) { "  " } else { " " };
+    assert!(out.contains(&format!("› pricing page{gap}new")), "{out}");
+    assert!(out.contains(&format!("pricing-plans.xlsx{gap}new")) && out.contains(&format!("bise for everyone{gap}new")), "{out}");
+    assert!(!out.lines().any(|l| l.contains("onboarding deck") && l.contains(" new ")), "{out}");
+    let out = render(&mut sc, &all, 74, 24);
+    assert_eq!(out.lines().filter(|l| l.contains(" new ")).count(), 3, "{out}");
+    for l in out.lines() {
+        assert!(unicode_width::UnicodeWidthStr::width(l) <= 74, "too wide: {l}");
+    }
+    // the versions box: the versions after you last looked (v2, v3), not v1
+    sc.sel = Some("pricing-page".into());
+    sc.versions = Some(0);
+    let out = render(&mut sc, &all, 144, 26);
+    // the mark right after the version's name, as the list has it (designer m_7579)
+    assert!(out.contains("│ › v3  new   12 min ago   2 notes open   the current one"), "{out}");
+    assert!(out.contains("│   v2  new   40 min ago   3 notes done"), "{out}");
+    assert!(out.contains("│   v1        1 h ago"), "{out}");
+    assert!(!out.lines().any(|l| l.contains(" v1 ") && l.contains("new")), "{out}");
+    // more come while it is open: marked too, the first look kept
+    sc.fresh.take(&all[3..4], None);
+    assert_eq!(sc.fresh.since, Some(T - 50 * MIN));
+    assert!(sc.fresh.row(&all[3]));
+}
+
+/// An older hub sends no `seen_ms`: a new row's current version only.
+#[test]
+fn without_the_hubs_seen_only_the_current_version_is_new() {
+    let all = afternoon();
+    let mut fresh = Fresh::default();
+    fresh.take(&all[..1], None);
+    let p = &all[0];
+    let new: Vec<u32> = p.versions.iter().filter(|v| fresh.version(p, v)).map(|v| v.v).collect();
+    assert_eq!(new, [3]);
+    assert!(!fresh.version(&all[1], &p.versions[0]), "a row not new has no new version");
 }
