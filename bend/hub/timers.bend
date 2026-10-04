@@ -154,11 +154,26 @@ def runs_unrun(+rs: List<&2, Nat>, +last: Nat) -> List<&2, Nat>:
 # ---- one record, one line ----
 
 # `every_fired`: its count, its next time, when it ran
-def Timer.fire(x: Timer, +fired: Nat, +next: Nat, +at: Nat, +undelivered: Bool) -> Timer:
+def Timer.fire.ran(x: Timer, +fired: Nat, +next: Nat, +at: Nat) -> Timer:
   match x:
     case Timer{+id, +agent, +by, +text, +sched, _, +until, +times, _, +page, _, +runs}:
-      Timer{id, agent, by, text, sched, next, until, times, fired, page, at,
-        Bool.pick(List<&2, Nat>, undelivered, runs_unrun(runs, at), runs_add(runs, at))}
+      Timer{id, agent, by, text, sched, next, until, times, fired, page, at, runs_add(runs, at)}
+
+# an `undelivered` line: sb-core's (its count unchanged, the wake was
+# refused) only moves the next time; an old hub's (count - 1) took back
+# the run it had counted
+def Timer.fire.lost(x: Timer, +fired: Nat, +next: Nat, +at: Nat) -> Timer:
+  match x:
+    case Timer{+id, +agent, +by, +text, +sched, _, +until, +times, +fd, +page, +last, +runs}:
+      Bool.pick(Timer, Nat.is_eq(fired, fd), Timer{id, agent, by, text, sched, next, until, times, fd, page, last, runs},
+        Timer{id, agent, by, text, sched, next, until, times, fired, page, at, runs_unrun(runs, at)})
+
+def Timer.fire(x: Timer, +fired: Nat, +next: Nat, +at: Nat, +undelivered: Bool) -> Timer:
+  match undelivered:
+    case False{}:
+      Timer.fire.ran(x, fired, next, at)
+    case True{}:
+      Timer.fire.lost(x, fired, next, at)
 
 # `every_run`: a run now, outside the count, the next wake unchanged
 def Timer.run(x: Timer, +at: Nat) -> Timer:

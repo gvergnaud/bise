@@ -4241,9 +4241,11 @@ law stop_leaves_no_waiter:
 
 # LAW: a fire counts only when its message was queued (amb-tools m_5822: a
 # one-shot timer was spent on a lost wake). After the wake's send `p`: a
-# refused send leaves the journal as it was (no every_fired, no stop); a
-# queued one adds exactly the fire (every_fired with fired + 1, or
-# every_run for a run now) and, for its last time, the timer's stop.
+# refused send adds only the retry line (a due wake: every_fired
+# undelivered, fired unchanged, next in a minute; a run now: nothing), no
+# count and no stop; a queued one adds exactly the fire (every_fired with
+# fired + 1, or every_run for a run now) and, for its last time, the
+# timer's stop.
 law fire_is_a_message:
   for -o: HM.St
   for p: HX.Cx<o> & HC.SendR

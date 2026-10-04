@@ -4793,10 +4793,19 @@ def hub_count_journal(-o: HM.St, +due: Bool, +cx: HX.Cx<o>, +t: HTM.Timer, +next
           HX.journal(HX.Core.fx(o, HX.Cx.c(o, cx2))), HM.snoc(HM.Ev, HX.journal(HX.Core.fx(o, HX.Cx.c(o, cx))), ev),
           hub_fx_emit(o, cx, ev, Unit{}, Unit{}, Unit{})))
 
+def hub_retry_journal(-o: HM.St, +due: Bool, +cx: HX.Cx<o>, +t: HTM.Timer)
+    -> {HX.journal(HX.Core.fx(o, HX.Cx.c(o, HC.timer_retry(o, due, cx, t)))) == HI.fire_retry(due, HX.journal(HX.Core.fx(o, HX.Cx.c(o, cx))), t, HC.now(o, cx)) : List<&2, HM.Ev>}:
+  match due:
+    case False{}:
+      {==}
+    case True{}:
+      hub_fx_emit(o, cx, HM.ETimerFired{HTM.Timer.id(t), HTM.Timer.fired(t), Nat.add(HC.now(o, cx), HTM.MIN_MS()), HTM.Timer.last(t), True{}},
+        Unit{}, Unit{}, Unit{})
+
 def Laws.fire_is_a_message(o, p, t, due, next):
   match p:
     case (cx, HC.SErr{e}):
-      {==}
+      hub_retry_journal(o, due, cx, t)
     case (cx, HC.SOk{m}):
       hub_count_journal(o, due, cx, t, next)
 

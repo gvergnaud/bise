@@ -1195,12 +1195,23 @@ def timer_count(-o: M.St, due: Bool, +cx: X.Cx<o>, +t: TM.Timer, +next: Nat) -> 
 
 # a fire counts only when its message was queued (law fire_is_a_message,
 # amb-tools m_5822: a one-shot timer was spent on a lost wake)
+# the wake was refused (rare: timer_may wanted it idle and active): a due
+# one is tried again in a minute, nothing counted, one line that says so
+# (every_fired undelivered, the hub's warn); a run now is just not done
+def timer_retry(-o: M.St, due: Bool, +cx: X.Cx<o>, +t: TM.Timer) -> X.Cx<o>:
+  match due:
+    case False{}:
+      cx
+    case True{}:
+      emit(o, cx, M.ETimerFired{TM.Timer.id(t), TM.Timer.fired(t), Nat.add(now(o, cx), TM.MIN_MS()), TM.Timer.last(t), True{}},
+        Unit{}, Unit{}, Unit{})
+
 def timer_fire.sent(-o: M.St, p: X.Cx<o> & SendR, +t: TM.Timer, +due: Bool, +next: Nat) -> X.Cx<o>:
   match p:
     case (+cx, SOk{_}):
       timer_count(o, due, cx, t, next)
     case (+cx, SErr{_}):
-      cx
+      timer_retry(o, due, cx, t)
 
 def timer_fire.go(-o: M.St, ok: Bool, +cx: X.Cx<o>, +t: TM.Timer, +text: String, +due: Bool, +next: Nat) -> X.Cx<o>:
   match ok:

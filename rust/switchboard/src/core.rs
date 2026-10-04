@@ -1496,7 +1496,7 @@ impl Hub {
                     return no;
                 }
                 json!({"ok": true, "text": format!("timer #{} stopped", id)})
-            }
+            },
             EveryReq::Add { to, text, sched, until_ms, times, page } => {
                 let to = if to.is_empty() { by.clone() } else { to };
                 let agent = match self.st.resolve(&to) {
@@ -1515,24 +1515,15 @@ impl Hub {
                 if times == Some(0) {
                     return json!({"ok": false, "error": "sb every: --times is at least 1"});
                 }
-                // the first wake on the hub's clock; sb-core gives the id
-                let mut set = json!({"t": "every_set", "agent": agent, "by": by, "text": text.trim(), "next_ms": sched.first(now)});
-                match sched {
-                    crate::every::Sched::Every(p) => set["every_ms"] = json!(p),
-                    crate::every::Sched::Daily(m) => set["daily_min"] = json!(m),
-                }
-                for (k, v) in [("until_ms", until_ms.map(|u| json!(u))), ("times", times.map(|t| json!(t))), ("page", page.map(|p| json!(p)))] {
-                    if let Some(v) = v {
-                        set[k] = v;
-                    }
-                }
-                let n = fx.len();
-                self.core(fx, env, None, set);
+                let n = crate::every::New { agent, by, text: text.trim().to_string(), sched, until_ms, times, page };
+                // sb-core gives the id: its every_set journal line's
+                let k = fx.len();
+                self.core(fx, env, None, n.input(now));
                 let set_id = |e: &Effect| match e {
                     Effect::Journal(j) if j["type"] == "every_set" => j["id"].as_u64(),
                     _ => None,
                 };
-                let Some(id) = fx[n..].iter().find_map(set_id) else {
+                let Some(id) = fx[k..].iter().find_map(set_id) else {
                     return json!({"ok": false, "error": format!("sb every: no active agent @{}", to)});
                 };
                 let line = self.st.timers.list(now).lines().find(|l| l.starts_with(&format!("#{} ", id))).unwrap_or_default().to_string();
@@ -1568,6 +1559,14 @@ impl Hub {
                 Some(e) => (&e.timer, e.json(), "end"),
                 None => return,
             },
+            // a refused wake (fire_is_a_message): tried again in a minute
+            Some("every_fired") if ev["undelivered"] == true => {
+                if let Some(t) = self.st.timers.map.get(&id) {
+                    let w = format!("timer #{id}: its wake did not reach @{}; tried again in a minute", t.agent);
+                    fx.push(line(MAIN, "warn", &w));
+                }
+                return;
+            }
             _ => return,
         };
         v["ev"] = json!(what);

@@ -235,3 +235,31 @@ fn a_journal_of_298407ff_replays_to_the_same_scheduled_list() {
     let list = hub.timers().list(now);
     assert!(list.starts_with("#2 @main every day 07:30 · next ") && list.ends_with("\"make the morning page\" (by main)"), "{list}");
 }
+
+/// A refused wake (fire_is_a_message; unreachable from the tick today:
+/// timer_may wants an active, idle agent) writes today's retry line,
+/// every_fired undelivered with its count unchanged and the next wake a
+/// minute later: two of them replay to no fire counted, no run, the next
+/// wake moved twice; an old hub's undelivered line (count - 1, after the
+/// fired line it took back) still takes back its run.
+#[test]
+fn refused_wakes_are_retried_a_minute_apart_and_never_counted() {
+    let mut t = hub();
+    let id = every(&mut t, MAIN, "w", Sched::Every(10 * MIN_MS), None, Some(1));
+    let mut events = t.journal.borrow().clone();
+    let due = N + 10 * MIN_MS;
+    for k in 0..2 {
+        events.push(json!({"type": "every_fired", "id": id, "fired": 0, "next_ms": due + (k + 1) * MIN_MS, "at": 0, "undelivered": true}));
+    }
+    let mut back = Hub::new("/w");
+    assert!(back.replay(&events).is_empty(), "every line read");
+    let tm = &back.timers().map[&id];
+    assert_eq!((tm.fired, tm.next_ms, tm.last_ms, tm.runs.len()), (0, due + 2 * MIN_MS, 0, 0));
+    // an old hub's: fired 1 at `due`, then undelivered (fired 0): the run goes
+    events.push(json!({"type": "every_fired", "id": id, "fired": 1, "next_ms": due + 20 * MIN_MS, "at": due + 2 * MIN_MS}));
+    events.push(json!({"type": "every_fired", "id": id, "fired": 0, "next_ms": due + 3 * MIN_MS, "at": due + 2 * MIN_MS, "undelivered": true}));
+    let mut back = Hub::new("/w");
+    assert!(back.replay(&events).is_empty());
+    let tm = &back.timers().map[&id];
+    assert_eq!((tm.fired, tm.next_ms, tm.runs.len()), (0, due + 3 * MIN_MS, 0));
+}

@@ -154,11 +154,20 @@ def fire_count(due: Bool, +xs: List<&2, M.Ev>, +t: TM.Timer, +next: Nat, +at: Na
     case True{}:
       fire_spent(TM.spent(t), M.snoc(M.Ev, xs, M.ETimerFired{TM.Timer.id(t), 1n+TM.Timer.fired(t), next, at, False{}}), TM.Timer.id(t), at)
 
-# law fire_is_a_message: the journal after the wake's send `p`: unchanged
-# when the send was refused, the fire's events when it was queued
+# what a refused wake adds: a due one, only its retry line (fired
+# unchanged, tried again in a minute); a run now, nothing
+def fire_retry(due: Bool, +xs: List<&2, M.Ev>, +t: TM.Timer, +now: Nat) -> List<&2, M.Ev>:
+  match due:
+    case False{}:
+      xs
+    case True{}:
+      M.snoc(M.Ev, xs, M.ETimerFired{TM.Timer.id(t), TM.Timer.fired(t), Nat.add(now, TM.MIN_MS()), TM.Timer.last(t), True{}})
+
+# law fire_is_a_message: the journal after the wake's send `p`: only the
+# retry line when the send was refused, the fire's events when it was queued
 def fire_journal(-o: M.St, p: X.Cx<o> & H.SendR, +t: TM.Timer, +due: Bool, +next: Nat) -> List<&2, M.Ev>:
   match p:
     case (+cx, H.SErr{_}):
-      X.journal(X.Core.fx(o, X.Cx.c(o, cx)))
+      fire_retry(due, X.journal(X.Core.fx(o, X.Cx.c(o, cx))), t, H.now(o, cx))
     case (+cx, H.SOk{_}):
       fire_count(due, X.journal(X.Core.fx(o, X.Cx.c(o, cx))), t, next, H.now(o, cx))
