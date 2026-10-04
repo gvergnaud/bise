@@ -82,8 +82,8 @@ dependency, so this layout must stay stable (ambient-lead was told):
   `…/p/<id>/v/<n>`. No port file: `page:<id>`.
 
 A page row has `by: "page"`. `sb artifact add` of a page's link stores
-nothing and answers `that is the bise page <id> (v3): it is in by
-itself. link it as [<title>](artifact:<id>)`. A stored artifact and a
+nothing and answers `<id> is a bise page (v3): it's in already. link
+it as [<title>](artifact:<id>)` (words signed off by designer, m_7214). A stored artifact and a
 page with the same id (only possible with an older store): the page's
 id gets `-page`.
 

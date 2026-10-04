@@ -751,7 +751,7 @@ pub fn added_text(a: &Added) -> String {
     let v = m.current().map_or(1, |v| v.v);
     let link = format!("[{}](artifact:{})", m.title, m.id);
     if a.page {
-        return format!("that is the bise page {} (v{}): it is in by itself. link it as {}", m.id, v, link);
+        return format!("{} is a bise page (v{}): it's in already. link it as {}", m.id, v, link);
     }
     let what = if a.new_version {
         format!("added {} ({}) · v{}", m.title, m.kind, v)

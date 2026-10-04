@@ -195,7 +195,7 @@ fn pages_get_in_by_themselves_with_versions_and_notes() {
     // adding the page's link names the page, stores nothing
     let a = add(&s, &root, "http://127.0.0.1:47438/p/pricing-page", None, 400).unwrap();
     assert!(a.page);
-    assert!(added_text(&a).starts_with("that is the bise page pricing-page (v3): it is in by itself."));
+    assert_eq!(added_text(&a), "pricing-page is a bise page (v3): it's in already. link it as [pricing page](artifact:pricing-page)");
     assert!(s.stored().is_empty());
     // a stored artifact never takes a page's id
     std::fs::write(root.join("pricing page"), b"x").unwrap();
