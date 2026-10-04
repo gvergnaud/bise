@@ -689,6 +689,17 @@ pub(crate) fn head_rows(p: &Panel, d: &Diff, width: usize, scrolled_file: Option
     vec![Line::from(first), Line::from(Span::styled(cut(&second, width), Style::default().fg(dim())))]
 }
 
+/// The title row of a diff with nothing to count (a failure, a gone
+/// folder): its title, and `ctrl+g close` on the right like every
+/// title row (designer m_7487).
+fn bare_title(p: &Panel, d: &Diff, width: usize) -> Line<'static> {
+    let mut spans = vec![Span::styled(d.title.clone(), Style::default().fg(text()).add_modifier(Modifier::BOLD))];
+    if p.side {
+        close_hint(&mut spans, width);
+    }
+    Line::from(spans)
+}
+
 /// The title row's right end on the right of the screen: `ctrl+g close`,
 /// dim, focused or not (designer m_7291), when it fits.
 pub(crate) const CLOSE_HINT: &str = "ctrl+g close";
@@ -750,7 +761,7 @@ pub(crate) fn lines(p: &mut Panel, width: usize, height: usize, now: u64) -> Vec
     if !d.error.is_empty() {
         p.rows.clear();
         return vec![
-            Line::from(Span::styled(d.title.clone(), Style::default().fg(text()).add_modifier(Modifier::BOLD))),
+            bare_title(p, &d, width),
             Line::from(vec![Span::styled("▲ ", Style::default().fg(theme::error())), Span::styled(d.error.clone(), Style::default().fg(dim()))]),
         ];
     }
@@ -768,7 +779,7 @@ pub(crate) fn lines(p: &mut Panel, width: usize, height: usize, now: u64) -> Vec
             line.push(Span::styled(" · ", Style::default().fg(dim())));
             line.push(Span::styled("show what it landed last", link));
         }
-        return vec![Line::from(Span::styled(d.title.clone(), Style::default().fg(text()).add_modifier(Modifier::BOLD))), Line::from(line)];
+        return vec![bare_title(p, &d, width), Line::from(line)];
     }
     if d.files.is_empty() {
         p.rows.clear();
