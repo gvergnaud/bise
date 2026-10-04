@@ -82,7 +82,7 @@ pub fn start_ctx(ctx: &Ctx) -> Result<SignIn<()>, String> {
                 Ok(()) => Step::End("200 OK", page(true, "OpenRouter", ""), Poll::Done(())),
                 Err(line) => Step::End("200 OK", page(false, "OpenRouter", &line), Poll::Failed(line)),
             }
-        })
+        }, &|_| {})
     }))
 }
 

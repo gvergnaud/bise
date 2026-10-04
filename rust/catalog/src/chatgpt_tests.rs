@@ -306,7 +306,8 @@ fn a_first_sign_in_registers_checks_and_saves_the_plan_tokens() {
     assert_eq!(s.poll(), Poll::Waiting);
     let (status, page_) = consent(&fake, s.url(), Some(CLIENT), None);
     assert_eq!(status, 200);
-    assert!(page_.contains("signed in to ChatGPT"), "{page_}");
+    // the devkit's order: the tab is answered first, the result shows in bise
+    assert!(page_.contains("finishing your ChatGPT sign-in"), "{page_}");
     assert_eq!(s.wait(), Poll::Done(Account { email: "you@example.com".into(), plan: Some("Plus".into()) }));
     let o = entry(&ctx).unwrap();
     assert_eq!((o.client_id.as_str(), o.email.as_str(), o.subject.as_str(), o.plan.as_str()), (CLIENT, "you@example.com", "user-1", "plus"));
@@ -408,10 +409,9 @@ fn a_refused_code_exchange_keeps_the_issued_client_for_the_retry() {
     let p = params(s.url());
     // a code the server does not know (spent, expired): invalid_grant
     let cb = format!("{}?{}", p["redirect_uri"], form(&[("code", "code-spent"), ("state", &p["state"]), ("scope", SCOPES), ("client_id", CLIENT)]));
-    let (status, page_) = browse(&cb);
+    let (status, _) = browse(&cb);
     assert_eq!(status, 200);
-    assert!(page_.contains("invalid_grant"), "{page_}");
-    assert!(matches!(s.wait(), Poll::Failed(l) if l.contains("ChatGPT refused the sign-in")));
+    assert!(matches!(s.wait(), Poll::Failed(l) if l.contains("ChatGPT refused the sign-in") && l.contains("invalid_grant")));
     let o = entry(&ctx).expect("the issued client is kept");
     assert_eq!(o.client_id, CLIENT);
     assert!(o.access.is_empty() && o.refresh.is_empty() && o.email.is_empty());
@@ -424,6 +424,66 @@ fn a_refused_code_exchange_keeps_the_issued_client_for_the_retry() {
     consent(&fake, s.url(), None, None);
     assert!(matches!(s.wait(), Poll::Done(_)));
     assert_eq!(entry(&ctx).unwrap().email, "you@example.com");
+}
+
+/// One raw request to the listener (a method other than GET, headers).
+fn raw(url: &str, method: &str, headers: &[&str]) -> String {
+    use std::io::{Read, Write};
+    let u = Url::parse(url).unwrap();
+    let target = url.splitn(4, '/').nth(3).map(|t| format!("/{t}")).unwrap_or_else(|| "/".into());
+    let mut s = std::net::TcpStream::connect((u.host.as_str(), u.port)).unwrap();
+    let mut req = format!("{method} {target} HTTP/1.1\r\nHost: {}:{}\r\n", u.host, u.port);
+    for h in headers {
+        req.push_str(h);
+        req.push_str("\r\n");
+    }
+    req.push_str("\r\n");
+    s.write_all(req.as_bytes()).unwrap();
+    let mut out = String::new();
+    let _ = s.read_to_string(&mut out);
+    out
+}
+
+// The real ChatGPT sign-in on v2026.10.2-16 failed where OpenAI's devkit,
+// same machine and account, signed in. The devkit's listener answers
+// only a GET, reads the whole request, answers the tab first and then
+// exchanges the code; bise's took any method on the path (a private
+// network preflight or a HEAD would spend the one-time code), read the
+// request line only, and held the tab while it exchanged. Now the
+// devkit's way, and the sign-in log says what came in.
+#[test]
+fn only_the_browsers_get_spends_the_code_and_the_tab_is_answered_first() {
+    let fake = Fake::start();
+    let dir = tmp("listener");
+    let ctx = fake.ctx(&dir);
+    let s = start_ctx(&ctx, Mode::Again).unwrap();
+    let p = params(s.url());
+    let issued = CLIENT.to_string();
+    let code = format!("code-{}", random_b64(6));
+    fake.with(|g| g.codes.insert(code.clone(), (issued, p["code_challenge"].clone(), p["nonce"].clone(), p["redirect_uri"].clone())));
+    let cb = format!("{}?{}", p["redirect_uri"], form(&[("code", &code), ("state", &p["state"]), ("scope", SCOPES), ("client_id", CLIENT)]));
+    // a private network preflight and a HEAD first: 404, the code unspent
+    for m in ["OPTIONS", "HEAD"] {
+        let out = raw(&cb, m, &["Origin: https://auth.openai.com", "Access-Control-Request-Method: GET", "Access-Control-Request-Private-Network: true"]);
+        assert!(out.starts_with("HTTP/1.1 404"), "{m}: {out}");
+        assert_eq!(s.poll(), Poll::Waiting, "{m}");
+    }
+    assert!(fake.with(|g| g.token_forms.is_empty()), "nothing exchanged yet");
+    // the browser's GET, with the headers a browser sends: the tab gets its
+    // page, then the code is exchanged once
+    let out = raw(&cb, "GET", &["Sec-Fetch-Mode: navigate", "Sec-Fetch-Site: cross-site", "Accept: text/html", "User-Agent: test"]);
+    assert!(out.starts_with("HTTP/1.1 200") && out.contains("finishing your ChatGPT sign-in"), "{out}");
+    assert!(matches!(s.wait(), Poll::Done(_)));
+    assert_eq!(fake.with(|g| g.token_forms.len()), 1);
+    // the log: what came in and what ChatGPT said, never a value
+    let log = std::fs::read_to_string(dir.join("logs").join("chatgpt-signin.log")).unwrap();
+    for want in ["start client=new", "OPTIONS /auth/callback", "access-control-request-private-network: true", "HEAD /auth/callback", "GET /auth/callback [code(", "sec-fetch-mode: navigate", "code exchange: client=issued", "-> 200", "end signed in"] {
+        assert!(log.contains(want), "{want}: {log}");
+    }
+    let o = entry(&ctx).unwrap();
+    for secret in [code.as_str(), p["state"].as_str(), p["nonce"].as_str(), o.access.as_str(), o.refresh.as_str()] {
+        assert!(!log.contains(secret), "a value in the log: {log}");
+    }
 }
 
 #[test]

@@ -763,6 +763,55 @@ pub(crate) enum Step<T> {
     Again(&'static str, String),
     /// the end: the page, then the result
     End(&'static str, String, Poll<T>),
+    /// the end, finished after the page: the browser gets its page and
+    /// the connection is closed first, then the work runs (OpenAI's
+    /// devkit answers the browser before it exchanges the code)
+    Then(&'static str, String, Box<dyn FnOnce() -> Poll<T> + Send>),
+}
+
+/// The request head the browser sent: its method, path, query, and the
+/// few headers the sign-in log keeps.
+struct Head {
+    method: String,
+    path: String,
+    query: String,
+    /// `name: value` of the headers that say what the request is for
+    /// (fetch metadata, prefetch, private network preflight)
+    notes: Vec<String>,
+}
+
+/// Read a whole request head (up to the blank line, 100 lines at most):
+/// leaving headers unread makes the close a reset, which a browser may
+/// answer by sending the request again.
+fn read_head(s: &TcpStream) -> Option<Head> {
+    let mut r = BufReader::new(s.try_clone().ok()?);
+    let mut line = String::new();
+    r.read_line(&mut line).ok()?;
+    let mut words = line.split_whitespace();
+    let method = words.next()?.to_string();
+    let target = words.next().unwrap_or("").to_string();
+    let (path, query) = target.split_once('?').map(|(p, q)| (p.to_string(), q.to_string())).unwrap_or((target, String::new()));
+    let mut notes = Vec::new();
+    for _ in 0..100 {
+        let mut h = String::new();
+        if r.read_line(&mut h).ok()? == 0 || h.trim().is_empty() {
+            break;
+        }
+        if let Some((k, v)) = h.split_once(':') {
+            let k = k.trim().to_ascii_lowercase();
+            if k.starts_with("sec-fetch-") || k == "sec-purpose" || k == "purpose" || k.starts_with("access-control-request-") || k == "host" {
+                notes.push(format!("{}: {}", k, v.trim()));
+            }
+        }
+    }
+    Some(Head { method, path, query, notes })
+}
+
+/// One line in the sign-in log: what reached the listener, never a value
+/// of the query (the parameter names only).
+fn head_line(h: &Head) -> String {
+    let names: Vec<String> = query(&h.query).into_iter().map(|(k, v)| format!("{}({})", k, v.len())).collect();
+    format!("{} {} [{}] {}", h.method, h.path, names.join(" "), h.notes.join("; "))
 }
 
 /// Wait on `l` for requests to `path` until `cancel`, the deadline, or a
@@ -773,6 +822,7 @@ pub(crate) fn serve<T>(
     deadline: Instant,
     cancel: &AtomicBool,
     answer: &mut Answer<'_, T>,
+    log: &dyn Fn(&str),
 ) -> Poll<T> {
     if l.set_nonblocking(true).is_err() {
         return Poll::Failed("cannot listen for the browser".into());
@@ -791,22 +841,28 @@ pub(crate) fn serve<T>(
         };
         let _ = s.set_nonblocking(false);
         let _ = s.set_read_timeout(Some(Duration::from_secs(5)));
-        let mut line = String::new();
-        let Ok(c) = s.try_clone() else { continue };
-        if BufReader::new(c).read_line(&mut line).is_err() {
+        let Some(h) = read_head(&s) else {
+            log("a connection with no request (closed or silent)");
             continue;
-        }
-        let target = line.split_whitespace().nth(1).unwrap_or("");
-        let (p, q) = target.split_once('?').unwrap_or((target, ""));
-        if p != path {
+        };
+        log(&head_line(&h));
+        // only a GET is the browser coming back (the devkit's rule): a
+        // prefetch or a private network preflight never spends the code
+        if h.path != path || h.method != "GET" {
             respond(&mut s, "404 Not Found", "");
             continue;
         }
-        match answer(&query(q)) {
+        match answer(&query(&h.query)) {
             Step::Again(status, html) => respond(&mut s, status, &html),
             Step::End(status, html, r) => {
                 respond(&mut s, status, &html);
                 return r;
+            }
+            Step::Then(status, html, work) => {
+                respond(&mut s, status, &html);
+                let _ = s.shutdown(std::net::Shutdown::Both);
+                drop(s);
+                return work();
             }
         }
     }
@@ -888,6 +944,7 @@ pub fn start(paths: &Paths, mode: Mode) -> Result<SignIn<Account>, String> {
 }
 
 /// What a pending sign-in keeps.
+#[derive(Clone)]
 struct Pending {
     ctx: Ctx,
     client: String,
@@ -945,10 +1002,22 @@ pub fn start_ctx(ctx: &Ctx, mode: Mode) -> Result<SignIn<Account>, String> {
     let url = format!("{}/api/accounts/authorize?{}", ctx.issuer, form(&q));
     let deadline = Instant::now() + ctx.wait;
     Ok(SignIn::spawn(url, port, move |cancel| {
-        serve(&listener, CALLBACK_PATH, deadline, cancel, &mut |q| callback(&p, q))
+        let log_ctx = p.ctx.clone();
+        signin_log(&log_ctx, &format!("start client={} port={}", if p.dynamic { "new" } else { "saved" }, port));
+        let r = serve(&listener, CALLBACK_PATH, deadline, cancel, &mut |q| callback(&p, q), &|l| signin_log(&log_ctx, l));
+        signin_log(&log_ctx, &format!("end {}", match &r {
+            Poll::Done(_) => "signed in".to_string(),
+            Poll::Denied => "denied".to_string(),
+            Poll::Unfinished => "unfinished (cancelled or no answer in time)".to_string(),
+            Poll::Failed(l) => format!("failed: {}", l),
+            Poll::Waiting => "waiting".to_string(),
+        }));
+        r
     }))
 }
 
+/// The tab's page once the browser is back: the result shows in bise.
+const FINISHING_LINE: &str = "bise is finishing your ChatGPT sign-in: go back to bise to see it.";
 const DENIED_LINE: &str = "ChatGPT signed you in but didn't let bise use your plan. try again and allow it, or pick another way.";
 
 /// One request on the callback path.
@@ -975,10 +1044,37 @@ fn callback(p: &Pending, q: &[(String, String)]) -> Step<Account> {
     let Some(code) = get("code").filter(|c| !c.is_empty()) else {
         return fail("ChatGPT sent no code. try again.".into());
     };
-    match finish(p, &client, code, get("scope")) {
-        Ok(Some(a)) => Step::End("200 OK", page(true, "ChatGPT", ""), Poll::Done(a)),
-        Ok(None) => Step::End("200 OK", page(false, "ChatGPT", DENIED_LINE), Poll::Denied),
-        Err(line) => fail(line),
+    // the devkit's order: the browser gets its page and leaves, then the
+    // code is exchanged once (the result shows in bise, not in the tab)
+    let (p, code, scope) = (p.clone(), code.to_string(), get("scope").map(str::to_string));
+    Step::Then(
+        "200 OK",
+        page(false, "ChatGPT", FINISHING_LINE),
+        Box::new(move || match finish(&p, &client, &code, scope.as_deref()) {
+            Ok(Some(a)) => Poll::Done(a),
+            Ok(None) => Poll::Denied,
+            Err(line) => Poll::Failed(line),
+        }),
+    )
+}
+
+/// `~/.bise/logs/chatgpt-signin.log`: what reached the sign-in's
+/// listener and what ChatGPT answered, one line each, with the time; the
+/// parameter names and lengths only, never a code, token or state.
+fn signin_log(ctx: &Ctx, line: &str) {
+    let dir = ctx.root.join("logs");
+    if crate::auth::create_private_dir(&dir).is_err() {
+        return;
+    }
+    let mut o = std::fs::OpenOptions::new();
+    o.create(true).append(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        o.mode(0o600);
+    }
+    if let Ok(mut f) = o.open(dir.join("chatgpt-signin.log")) {
+        let _ = writeln!(f, "{} {}", rfc3339(now_secs()), line);
     }
 }
 
@@ -1001,6 +1097,7 @@ fn finish(p: &Pending, client: &str, code: &str, cb_scope: Option<&str>) -> Resu
         ("resource", RESOURCE),
     ]);
     let (status, v) = post(&meta.token_endpoint, FORM, &body).map_err(|e| format!("i couldn't reach ChatGPT's sign-in server: {}", e))?;
+    signin_log(&p.ctx, &format!("code exchange: client={} code({}) verifier({}) -> {} {}", if p.dynamic { "issued" } else { "saved" }, code.len(), p.verifier.len(), status, if (200..300).contains(&status) { String::new() } else { oauth_error(&v) }));
     if !(200..300).contains(&status) {
         return Err(format!("ChatGPT refused the sign-in: {}. try again.", oauth_error(&v)));
     }
