@@ -16,6 +16,16 @@ from tui_tmux import tui_session, run, in_view, MAIN_IDLE  # noqa: E402
 COLS, ROWS = 150, 42
 
 
+def inbox_box(sc):
+    """The rows of the inbox box: from its `╭─ inbox` top to its `╰` bottom."""
+    lines = sc.splitlines()
+    top = next((i for i, l in enumerate(lines) if "╭─ inbox" in l), None)
+    assert top is not None, sc
+    col = lines[top].index("╭─ inbox")
+    end = next((i for i in range(top + 1, len(lines)) if lines[i][col:col + 1] == "╰"), len(lines) - 1)
+    return "\n".join(lines[top:end + 1])
+
+
 def main():
     with tui_session(COLS, ROWS, env="BISE_CTRL_DIGITS=1") as t:
         t.wait("bise :*")
@@ -39,7 +49,11 @@ def main():
         t.keys("Enter")
         t.wait("waiting for you", 60)
         sc = t.wait("? main · ship the export on friday?")
-        assert "ia asks main ·" not in sc and "? ia ·" not in sc, sc
+        # the inbox box only: main's thread may quote the task's question
+        # ('ia asked: ia asks main · i answered: …')
+        box = inbox_box(sc)
+        assert "? main · ship the export on friday?" in box, sc
+        assert "ia asks main" not in box and "? ia ·" not in box, box
         # only the user answers it: open it, type, ⏎; it leaves the strip
         t.typed("\x1b[49;5u")             # ctrl+1, the kitty form (BISE-302)
         t.wait("your answer")
