@@ -1134,10 +1134,14 @@ impl Hub {
             }
             agents.insert(name, agent);
         }
-        self.st.order = parse(&v["order"]).unwrap_or_default();
-        // hub-lag: a step's view leaves out the archived agents it did
-        // not change (view.bend `changed`): keep them as they are, minus
-        // the ones gone from the order (a rename)
+        // idle-cpu: the order, the cards and the notes change only by an
+        // event: a step with none leaves them out (view.bend `durable_kvs`)
+        if let Some(order) = v.get("order") {
+            self.st.order = parse(order).unwrap_or_default();
+        }
+        // hub-lag, idle-cpu: a step's view leaves out the agents it did
+        // not change (view.bend `changed`; an idle tick sends none): keep
+        // them as they are, minus the ones gone from the order (a rename)
         if v["all_agents"].as_bool() == Some(false) {
             let order: BTreeSet<&String> = self.st.order.iter().collect();
             for (name, a) in std::mem::take(&mut self.st.agents) {
@@ -1165,13 +1169,17 @@ impl Hub {
             }
             self.st.msgs.insert(m.id, m);
         }
-        self.st.cards = v["cards"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|c| parse(c).map(|c: Card| (c.id, c)))
-            .collect();
-        self.st.main_notes = parse(&v["notes"]).unwrap_or_default();
+        if let Some(cards) = v.get("cards") {
+            self.st.cards = cards
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|c| parse(c).map(|c: Card| (c.id, c)))
+                .collect();
+        }
+        if let Some(notes) = v.get("notes") {
+            self.st.main_notes = parse(notes).unwrap_or_default();
+        }
         self.st.next_msg = v["next_msg"].as_u64().unwrap_or(1);
         self.st.next_card = v["next_card"].as_u64().unwrap_or(1);
     }
