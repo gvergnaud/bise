@@ -119,7 +119,10 @@ def wide(t, E):
     sc = t.wait("scheduled #1 ended · stopped by you")
     assert "t1 scheduled #1 · every 2m · 6 times · next" in sc, sc
     assert "scheduled #1 · ran now, by you · check the build" in sc, sc
-    assert "the user stopped timer" not in sc and "(stop it:" not in sc, sc
+    # the fake model's `ack: <its input>` replies quote what the agent read:
+    # only the thread's lines before them are bise's
+    lines = sc.split(" ack: ")[0]
+    assert "the user stopped timer" not in lines and "(stop it:" not in lines, sc
     no_switchboard(sc)
     shot(t, "150-agent-thread")
     t.keys("M-0")

@@ -180,7 +180,7 @@ pub(crate) fn answered_lines(agent: &str, question: &str, answer: &str, why: &st
     }
     let room = width.saturating_sub(RAIL.len());
     let mut body: Vec<Line<'static>> = Vec::new();
-    let mut part = |label: &str, words: &str, body: &mut Vec<Line<'static>>| {
+    let part = |label: &str, words: &str, body: &mut Vec<Line<'static>>| {
         // the label goes in the words before the wrap (after it, the
         // first row ran over and left a word alone), then turns dim
         let src = if label.is_empty() { code_style(words.trim()) } else { format!("{} {}", label, code_style(words.trim())) };
