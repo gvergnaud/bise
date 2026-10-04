@@ -870,6 +870,8 @@ pub(crate) fn card_parts(t: &str) -> Option<(&str, &str, &str)> {
 fn card_lines(t: &str, closed: &str, width: usize) -> Vec<Line<'static>> {
     let text_st = Style::default().fg(text());
     let (kind, name, body) = card_parts(t).unwrap_or(("question", "", t));
+    // bise's own items (opened for main): bise asks, not main
+    let name = if matches!(kind, "signin" | "update") { "bise" } else { name };
     match kind {
         "done" => {
             let check = Style::default().fg(accent());

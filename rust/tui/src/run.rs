@@ -492,6 +492,8 @@ fn ui_loop(app: &mut App, terminal: &mut crate::links::Tui) -> io::Result<()> {
                 let _ = terminal.clear();
             }
         }
+        // expired-ux: the ChatGPT sign-in again from the thread, its answer
+        crate::resign::tick(app);
         // the terminal's tab title: inbox, new artifacts, agents at work, repo
         crate::termtitle::tick(&sb::title_status(app), std::time::Instant::now());
         // the voice chip moves every 50 ms while recording or

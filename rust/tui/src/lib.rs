@@ -90,6 +90,7 @@ mod keyprobe;
 pub mod timing;
 mod crash;
 mod termtitle;
+mod resign;
 mod help;
 mod approvals_screen;
 mod logview;

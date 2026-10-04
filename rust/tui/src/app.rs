@@ -50,6 +50,8 @@ pub(crate) struct App {
     pub(crate) quote_hint: bool,
     /// ctrl+f: the find field, open (find.rs)
     pub(crate) find: Option<crate::find::Find>,
+    /// expired-ux: the ChatGPT sign-in again, from the thread (resign.rs)
+    pub(crate) resign: Option<crate::resign::ReSignIn>,
     /// cmd+k / ctrl+s: the agent palette, open (sb/palette.rs, BISE-265)
     pub(crate) palette: Option<crate::sb::palette::Palette>,
     /// a cmd key (SUPER, not cmd alone) reached us this session: the
@@ -304,6 +306,7 @@ impl App {
             feed_sel: None,
             quote_hint: false,
             find: None,
+            resign: None,
             palette: None,
             cmd_keys: false,
             ctrl_digits: true,

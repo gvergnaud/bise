@@ -68,6 +68,9 @@ const INBOX_COMMAND: Pair = ("/inbox", "");
 /// bar in the accent, so you notice you can just type (book §13).
 const ASK: Pair = ("type", "ask about it");
 
+/// expired-ux: the agent in view waits for the ChatGPT sign-in.
+pub(crate) const SIGN_IN_AGAIN: Pair = ("⏎", "sign in again");
+
 /// The bar at rest (BISE-303, designer's "less on screen"): the three
 /// characters that start something. `⏎ send`, `? help` (? still opens
 /// it on an empty composer), `⌥0-9 switch` (the panel's numbers say it)
@@ -221,6 +224,22 @@ fn keys_line(app: &App, width: u16) -> Line<'static> {
         return pairs_line(&pairs, usize::from(width)).0;
     }
     let inbox = (crate::sb::ctrl_view(app).cards > 0).then_some(if app.ctrl_digits { INBOX } else { INBOX_COMMAND });
+    // expired-ux: the sign-in again waits for the browser (the first
+    // run's words, designer m_7456)
+    if let Some(r) = app.resign.as_ref() {
+        let copy = if r.just_copied() { ("c", "copied") } else { ("c", "copy the link") };
+        let pairs = [("", crate::resign::WAITING), copy, ("esc", "cancel")];
+        return pairs_line(&pairs, usize::from(width)).0;
+    }
+    // expired-ux: the agent in view stopped on the expired ChatGPT
+    // sign-in: ⏎ signs in again, first
+    if mode(app) == Mode::Default && !typing && app.diff.is_none() && app.sb.waits_for_sign_in() {
+        let mut pairs: Vec<Pair> = if agent { vec![BACK] } else { Vec::new() };
+        pairs.push(SIGN_IN_AGAIN);
+        pairs.extend(REST);
+        pairs.extend(inbox);
+        return pairs_line(&pairs, usize::from(width)).0;
+    }
     let bar = Bar { typing, agent, inbox };
     // the diff panel open, the composer with the keys: its bar, then
     // `ctrl+g close` (designer m_7291), no tip

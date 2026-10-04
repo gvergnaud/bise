@@ -60,6 +60,9 @@ pub(crate) struct Card {
     /// `3 drop the branch` (`drop computer-use? 14 commits go.`); the
     /// TUI's, kept across snapshots by `Sb::feature_drop_ask`.
     pub(super) asking: bool,
+    /// expired-ux: a `signin` item's agents, stopped on the expired
+    /// ChatGPT sign-in (the hub's snapshot): ⏎ in their thread signs in.
+    pub(super) waiting: Vec<String>,
 }
 
 /// A paragraph of an item the TUI writes itself.
@@ -104,6 +107,7 @@ impl Default for Card {
             pr: None,
             link: None,
             asking: false,
+            waiting: Vec::new(),
         }
     }
 }
@@ -492,11 +496,21 @@ fn always_option(rerun: bool, always: &[String], body: &[String]) -> String {
     }
 }
 
+impl super::Sb {
+    /// expired-ux: the agent in view stopped on the expired ChatGPT
+    /// sign-in (the open `signin` item names it): ⏎ on an empty composer
+    /// signs in again.
+    pub(crate) fn waits_for_sign_in(&self) -> bool {
+        let me = self.focus_name();
+        self.cards.iter().any(|c| c.kind == "signin" && c.waiting.iter().any(|a| a == me))
+    }
+}
+
 /// The hub's items with numbered options, about a place (the hub's
 /// `choice_kind`): a digit answers them (the hub acts, then closes the
 /// item); typed words go to main.
 pub(super) fn choice_kind(kind: &str) -> bool {
-    matches!(kind, "merge" | "feature_try" | "feature_merge" | "update")
+    matches!(kind, "merge" | "feature_try" | "feature_merge" | "update" | "signin")
 }
 
 /// A hub item, as the hub writes it: its head line (`#409 is ready to
@@ -554,6 +568,10 @@ fn choice_shape(c: &Card) -> Shape {
         // the row: `bise · v0.0.2 is out`
         let summary = head.strip_prefix("bise ").unwrap_or(&head).to_string();
         return Shape::plain(head.clone(), "bise".into(), summary, parts, options, short, Enter::Answer);
+    }
+    if c.kind == "signin" {
+        // expired-ux: bise's own item too, the head alone
+        return Shape::plain(head.clone(), "bise".into(), head, parts, options, short, Enter::Answer);
     }
     Shape::plain(format!("{}: {}", c.agent, head), c.agent.clone(), head, parts, options, short, Enter::Answer)
 }
@@ -728,7 +746,7 @@ pub(super) fn kind_look(kind: &str) -> (u8, &'static str, Color) {
     match kind {
         "approval" | "confirm" => (0, theme::G_NEEDS_YOU, theme::accent()),
         // a PR ready to merge (pr-design §6.3): yours to act on, pink
-        "question" | "merge" | "feature_try" | "feature_merge" => (1, theme::G_NEEDS_YOU, theme::accent()),
+        "question" | "merge" | "feature_try" | "feature_merge" | "signin" => (1, theme::G_NEEDS_YOU, theme::accent()),
         "blocked" => (2, theme::G_NEEDS_YOU, theme::accent()),
         "failed" => (3, theme::G_FAILED, theme::error()),
         "restart" => (3, theme::G_RESTART_FAILED, theme::error()),
@@ -995,6 +1013,13 @@ fn pick(app: &mut App, id: u64, i: usize) -> bool {
         if let Some(url) = merge_link(&app.sb, &c) {
             crate::links::open(&url);
         }
+        return true;
+    }
+    if c.kind == "signin" && n == 1 {
+        // expired-ux `sign in again`: the TUI's own ChatGPT sign-in (the
+        // browser, resign.rs); the hub closes the item once auth.json
+        // says it's back
+        crate::resign::start(app);
         return true;
     }
     if c.kind == "update" && n == 3 {

@@ -2472,7 +2472,11 @@ def idle.nudge(-o: M.St, go: Bool, +cx: X.Cx<o>, +agent: String) -> X.Cx<o>:
     case False{}:
       cx
 
-def idle.agent(-o: M.St, m: Maybe<&2, M.Agent>, +cx: X.Cx<o>, +agent: String, +leftover: Bool, +unread: Bool, +steered: List<&2, Nat>) -> X.Cx<o>:
+# held (expired-ux): the turn stopped on the expired ChatGPT sign-in and
+# goes on once the user signs in again: no automatic reply nor report (a
+# `(no written reply…)` woke the parent, on the same plan, into a turn
+# that failed too); the questions stay unanswered for the turn to come
+def idle.agent(-o: M.St, m: Maybe<&2, M.Agent>, +cx: X.Cx<o>, +agent: String, +leftover: Bool, +unread: Bool, +steered: List<&2, Nat>, +held: Bool) -> X.Cx<o>:
   match m:
     case None{}:
       cx
@@ -2481,15 +2485,15 @@ def idle.agent(-o: M.St, m: Maybe<&2, M.Agent>, +cx: X.Cx<o>, +agent: String, +l
       +r = rr(o, cx2)
       +text = kv_get(X.R.last(r), agent)
       +cx3 = set_r(o, cx2, X.R.with_last(r, kv_del(X.R.last(r), agent)))
-      +qs = skip_steered(M.unanswered_for(st(o, cx3), agent), leftover || unread, steered)
+      +qs = skip_steered(M.unanswered_for(st(o, cx3), agent), leftover || unread || held, steered)
       +body = Bool.pick(String, M.trim_is_empty(text), "(no written reply at the end of the turn)", text)
-      +cx4 = auto_replies(o, qs, cx3, agent, body)
+      +cx4 = pick_lazy(X.Cx<o>, held, u => cx3, u => auto_replies(o, qs, cx3, agent, body))
       # RFC 0001 §7.2: the automatic report (board only)
-      +cx5 = idle.report(o, Bool.not(M.Agent.is_main(a)) && Bool.not(M.trim_is_empty(text)), cx4, agent, text)
+      +cx5 = idle.report(o, Bool.not(M.Agent.is_main(a)) && Bool.not(M.trim_is_empty(text)) && Bool.not(held), cx4, agent, text)
       +cx6 = idle.nudge(o, unread && List.is_empty(&2, M.Msg, M.queued_for(st(o, cx5), agent)), cx5, agent)
       pump(o, cx6, agent)
 
-def repl_idle(-o: M.St, +cx: X.Cx<o>, +agent: String, +leftover: Bool) -> X.Cx<o>:
+def repl_idle(-o: M.St, +cx: X.Cx<o>, +agent: String, +leftover: Bool, +held: Bool) -> X.Cx<o>:
   +cx1 = fail_waiters(o, cx, agent, "turn_ended")
   +r = rr(o, cx1)
   +steered = steer_get(X.R.steered(r), agent)
@@ -2500,7 +2504,7 @@ def repl_idle(-o: M.St, +cx: X.Cx<o>, +agent: String, +leftover: Bool) -> X.Cx<o
   +unread = Bool.not(leftover) && Nat.is_gt(X.Cnt.recv(c), X.Cnt.inj(c)) && Bool.not(List.is_empty(&2, Nat, steered))
   # leftover: the runtime never read them: they go again, as a new turn
   +cx3 = pick_lazy(X.Cx<o>, leftover, u => requeue(o, steered, cx2), u => cx2)
-  idle.agent(o, M.get_agent(st(o, cx3), agent), cx3, agent, leftover, unread, steered)
+  idle.agent(o, M.get_agent(st(o, cx3), agent), cx3, agent, leftover, unread, steered, held)
 
 # ---- waits (RFC 0003 §6.2) ----
 
@@ -2547,7 +2551,8 @@ def in_tag(+t: String) -> In:
   Bool.pick(In, String.eq(t, "card_open"), ICardOpen{},
   Bool.pick(In, String.eq(t, "card_close"), IConfirmClose{},
   # a message of the hub itself (from `bise`) to any agent: the timers of
-  # `sb every` (docs/ambient-roadmap.md B) wake their agent with it
+  # `sb every` (docs/ambient-roadmap.md B) wake their agent with it, and
+  # the agents an expired ChatGPT sign-in stopped go on (expired-ux)
   Bool.pick(In, String.eq(t, "hub_msg"), IHubMsg{},
   INone{}))))))))))))))))))))))))))))))))
 
@@ -2580,7 +2585,7 @@ def dispatch.go(-o: M.St, tag: In, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
     case ITick{}:
       tick(o, cx)
     case IIdle{}:
-      repl_idle(o, cx, C.get_s(i, "agent"), C.get_b(i, "leftover"))
+      repl_idle(o, cx, C.get_s(i, "agent"), C.get_b(i, "leftover"), C.get_b(i, "held"))
     case ITurnStarted{}:
       turn_started(o, cx, C.get_s(i, "agent"))
     case ISteerRx{}:

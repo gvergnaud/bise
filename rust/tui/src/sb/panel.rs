@@ -834,6 +834,8 @@ fn card_row(c: &Card, n: usize, num_style: Style, w: usize, bg: Option<Color>) -
     // update-card: bise's own news, `bise  v0.0.2 is out`
     let (who, first) = match c.kind.as_str() {
         "update" => ("bise", first.strip_prefix("bise ").unwrap_or(first)),
+        // expired-ux: bise's own item, not an agent's
+        "signin" => ("bise", first),
         _ => (c.agent.as_str(), first),
     };
     let agent = if first.is_empty() || room < 12 {
@@ -1493,6 +1495,7 @@ mod tests {
             pr: None,
             link: None,
             asking: false,
+            waiting: Vec::new(),
         });
         sb.activity.insert("auth-fix".into());
         app

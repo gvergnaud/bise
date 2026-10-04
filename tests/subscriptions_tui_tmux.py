@@ -15,8 +15,11 @@ the designer's final words):
    say `your ChatGPT plan` in place of a price;
 4. the sign-in expires (the refresh refused): the turn ends on
    `your ChatGPT sign-in expired`, /provider shows
-   `▲ sign-in expired · ⏎ sign in again`, and enter there signs in again
-   with the saved client.
+   `▲ sign-in expired · ⏎ sign in again`; back in the thread the inbox
+   has bise's `signin` item and the key bar `⏎ sign in again`: ⏎ on the
+   empty composer signs in again straight away (the saved client), the
+   screen comes back to the thread by itself, the item closes and main's
+   turn goes on from bise's message, nothing retyped (expired-ux).
 subs-tui's own tmux test stops at the first run's composer; this one
 takes the turn, /provider, /models and the expired login from there.
 
@@ -39,11 +42,15 @@ from subscriptions_e2e import auth_log, control, snapshot_real  # noqa: E402
 
 NORMAL = "   @ file   "
 
-BROWSER = r'''import sys, urllib.request
+BROWSER = r'''import os, sys, time, urllib.request
 # the fake "browser": open the link (the fake consents at once and
-# redirects to bise's loopback), as a click would
+# redirects to bise's loopback), as a click would; `<log>.slow` there:
+# the user takes 4 s to click (the waiting bar shows)
 url = sys.argv[-1]
-with open(%r, "a") as f:
+log = %r
+if os.path.exists(log + ".slow"):
+    time.sleep(4)
+with open(log, "a") as f:
     f.write(url + "\n")
 try:
     urllib.request.urlopen(url, timeout=30).read()
@@ -88,6 +95,10 @@ def main():
     os.makedirs(root)
     with open(os.path.join(root, "config.toml"), "w") as f:
         f.write('[providers.chatgpt]\nbase_url = "http://127.0.0.1:%s/v1"\n' % port)
+    # the first-card hint seen already: its note would cover the thread's
+    # expired line when bise's sign-in item comes
+    with open(os.path.join(root, "prefs.json"), "w") as f:
+        json.dump({"hints": {"first_card": True, "first_level3": True}}, f)
     opened = os.path.join(E.tmp, "browser.log")
     script = os.path.join(E.tmp, "browser.py")
     with open(script, "w") as f:
@@ -108,6 +119,16 @@ def main():
 
     def plan_reqs(needle):
         return [r for r in E.fake_requests() if r.get("plan") and needle in r.get("user", "")]
+
+    def shot(t, name):
+        """SUBS_SHOTS=<dir>: the screen, with its colors, for the designer"""
+        d = os.environ.get("SUBS_SHOTS")
+        if d:
+            os.makedirs(d, exist_ok=True)
+            with open(os.path.join(d, name + ".ans"), "w") as f:
+                f.write(t.screen(colors=True))
+            with open(os.path.join(d, name + ".txt"), "w") as f:
+                f.write(t.screen())
     ok = False
     try:
         with tui_session(120, 36, env, E=E) as t:
@@ -195,32 +216,51 @@ def main():
             sc = t.wait("your ChatGPT sign-in expired", 90)
             t.wait_re(MAIN_IDLE, 30)
             sc = t.screen()
-            assert "sign in again in /provider, or run bise login chatgpt." in flat(sc), sc
+            # the TUI's words: ⏎ signs in again (the CLI keeps /provider)
+            assert "▲ your ChatGPT sign-in expired. ⏎ signs you in again." in flat(sc), sc
             # one line, the plan's: no "candidate discarded" line repeating it
-            assert flat(sc).count("your ChatGPT sign-in expired") == 1 and "candidate discarded" not in sc, sc
+            # (bise's sign-in item, open above the composer, says it once
+            # more in its own words)
+            assert flat(sc).count("▲ your ChatGPT sign-in expired") == 1 and "candidate discarded" not in sc, sc
             t.typed("/provider")
             t.keys("Enter")
             sc = t.wait("the keys i can use.", 30)
             assert re.search(r"ChatGPT +▲ sign-in expired · ⏎ sign in again", sc), sc
-            # enter on it signs in again, with the saved client
+            t.keys("Escape")
+            # expired-ux: one item in the inbox, and ⏎ on the empty
+            # composer signs in again (the key bar says it)
+            sc = t.wait("⏎ sign in again", 30)
+            assert "bise" in sc and "your ChatGPT sign-in expired" in sc, sc
+            shot(t, "1-expired")
             control(A, "invalid_grant", on=False)
             n = len(links())
-            # ChatGPT is the first row: enter on it
+            # the user takes a moment in the browser: the thread waits,
+            # its key bar says so (the first run's words)
+            open(opened + ".slow", "w").close()
             t.keys("Enter")
-            sc = t.wait_any(["sign in again or switch account", "waiting for you to sign in to ChatGPT"], 20)[1]
-            if "sign in again or switch account" in sc:
-                t.keys("Enter")
+            sc = t.wait("waiting for you to sign in to ChatGPT in your browser…   c copy the link   esc cancel", 10)
+            assert "▲ your ChatGPT sign-in expired" in flat(sc), sc
+            shot(t, "2-signing-in")
+            os.remove(opened + ".slow")
+            # the saved client, no /provider screen on the way
             wait_until(lambda: len(links()) > n, 30, lambda: "no second sign-in link: %r" % links())
             again = links()[-1]
             assert "client_id=" + a["client_id"] in again and "agent_name_hint" not in again, again
-            t.wait_re(r"✓ signed in · you@example\.com · Plus|✓ signed in as you@example\.com", 60)
-            # back out of the ChatGPT menu and /provider to the thread
-            for _ in range(4):
-                if NORMAL in t.screen():
-                    break
-                t.keys("Escape")
-                time.sleep(0.4)
-            t.wait(NORMAL)
+            # main's turn goes on from bise's message: nothing retyped
+            t.wait_gone("waiting for you to sign in to ChatGPT", 60)
+            wait_until(lambda: plan_reqs("sign-in is back") and plan_reqs("sign-in is back")[-1]["status"] == 200, 90,
+                       lambda: "main did not go on: %r" % plan_reqs("sign-in is back"))
+            def went_on(s):
+                """main's answer to bise's message, in the thread"""
+                return re.search(r"ack: .*sign-in is back", flat(s))
+            t.wait_any([went_on], 90)
+            sc = t.wait("bise needs you · signed in again", 30)
+            # bise's message, named bise (designer m_7456)
+            assert "bise → main" in sc and "switchboard" not in sc, sc
+            shot(t, "3-went-on")
+            # the item closed by itself: the key bar's sign-in is gone
+            t.wait_gone("⏎ sign in again", 30)
+            t.wait_re(MAIN_IDLE, 60)
             t.typed("signed in again")
             t.keys("Enter")
             t.wait("ack: signed in again", 90)

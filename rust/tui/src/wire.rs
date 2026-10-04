@@ -568,6 +568,12 @@ pub(crate) fn parse_line(line: &str) -> Option<Ev> {
             // a limit, plan use off, usage not checked, the sign-in
             // expired: a ▲ that says what to do, not a ✗ failure
             if is_plan_line(why) {
+                // expired-ux (designer m_7456): the TUI signs in again on
+                // ⏎, a shorter path than the runtime's /provider (the
+                // CLI keeps the runtime's words)
+                if why.starts_with(PLAN_LINES[3]) {
+                    return Some(Ev::Warn(EXPIRED_TUI.into()));
+                }
                 return Some(Ev::Warn(why.to_string()));
             }
             if let Some(line) = no_key(why) {
@@ -595,6 +601,10 @@ const PLAN_LINES: [&str; 4] = [
     "ChatGPT couldn't check your plan's usage.",
     "your ChatGPT sign-in expired.",
 ];
+
+/// The expired sign-in's line in the TUI (designer m_7456): ⏎ in the
+/// thread signs in again (keybar.rs, input.rs).
+pub(crate) const EXPIRED_TUI: &str = "your ChatGPT sign-in expired. ⏎ signs you in again.";
 
 /// A turn ended on one of the ChatGPT plan's lines.
 pub(crate) fn is_plan_line(t: &str) -> bool {

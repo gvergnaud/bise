@@ -3318,6 +3318,63 @@ mod prs {
         );
         assert!(!fx.iter().any(|e| matches!(e, Effect::Spawn { agent, .. } if agent == "github")), "{:?}", fx);
     }
+
+    fn signin_cards(t: &T) -> Vec<Card> {
+        t.hub.st.open_cards().filter(|c| c.kind == "signin").cloned().collect()
+    }
+
+    /// A turn of `agent` that stops on the expired ChatGPT sign-in.
+    fn expired_turn(t: &mut T, agent: &str) -> Vec<Effect> {
+        t.go(Input::ReplLine { agent: agent.into(), line: "  obs: turn_started".into() });
+        t.go(Input::ReplLine {
+            agent: agent.into(),
+            line: "  obs: turn_done: failed: your ChatGPT sign-in expired. sign in again in /provider, or run bise login chatgpt.".into(),
+        });
+        t.go(Input::ReplIdle { agent: agent.into(), leftover: false })
+    }
+
+    /// expired-ux: one item whichever agents stop on the expired sign-in,
+    /// no report nor automatic reply to the parent; signed in again, the
+    /// item closes and each agent goes on from bise's message.
+    #[test]
+    fn the_expired_sign_in_item() {
+        let mut t = T::new();
+        t.spawn_task("t1");
+        let fx = expired_turn(&mut t, "t1");
+        assert!(say_to(&fx, MAIN).is_none(), "main is not woken: {:?}", fx);
+        assert!(!t.hub.st.msgs.values().any(|m| m.to == MAIN && m.from == "t1"), "no report nor auto reply to main");
+        let cs = signin_cards(&t);
+        assert_eq!(cs.len(), 1, "{:?}", t.hub.st.cards);
+        assert_eq!(cs[0].place.as_deref(), Some("signin:chatgpt"));
+        assert!(cs[0].text.starts_with("your ChatGPT sign-in expired
+"), "{}", cs[0].text);
+        expired_turn(&mut t, MAIN);
+        assert_eq!(signin_cards(&t).len(), 1, "still one item");
+        assert_eq!(t.hub.signin.stopped, vec!["t1".to_string(), MAIN.to_string()]);
+        // signed in again: closed, both go on
+        let fx = t.go(Input::SignedIn);
+        assert!(signin_cards(&t).is_empty());
+        for a in ["t1", MAIN] {
+            let said = say_to(&fx, a).unwrap_or_default();
+            assert!(said.contains("sign-in is back"), "{a}: {:?}", fx);
+        }
+        // nothing waits any more: a second sign-in does nothing
+        let fx = t.go(Input::SignedIn);
+        assert!(say_to(&fx, "t1").is_none() && say_to(&fx, MAIN).is_none());
+    }
+
+    /// An agent that ends another turn (the user's new message) does not
+    /// wait any more; nobody waits: the item closes.
+    #[test]
+    fn the_sign_in_item_closes_when_nobody_waits() {
+        let mut t = T::new();
+        expired_turn(&mut t, MAIN);
+        assert_eq!(signin_cards(&t).len(), 1);
+        t.go(Input::ReplLine { agent: MAIN.into(), line: "  obs: turn_started".into() });
+        t.go(Input::ReplLine { agent: MAIN.into(), line: "  obs: turn_done: completed".into() });
+        assert!(signin_cards(&t).is_empty());
+        assert!(t.hub.signin.stopped.is_empty());
+    }
 }
 
 /// Boot replays the journal in batches (`replay_many`, messages kept

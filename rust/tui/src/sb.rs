@@ -944,6 +944,11 @@ fn apply_state(app: &mut App, v: &Value) {
                     link: x.get("link").and_then(|p| p.as_str()).map(String::from),
                     // the drop's second ask stays across snapshots
                     asking: sb.feature_drop_ask == x.get("id").and_then(|i| i.as_u64()),
+                    waiting: x
+                        .get("waiting")
+                        .and_then(|w| w.as_array())
+                        .map(|w| w.iter().filter_map(|a| a.as_str().map(String::from)).collect())
+                        .unwrap_or_default(),
                 })
                 .collect()
         })

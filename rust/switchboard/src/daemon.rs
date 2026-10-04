@@ -2559,6 +2559,32 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
             }
         });
     }
+    // expired-ux: the ChatGPT sign-in coming back (the TUI's sign-in,
+    // `bise login chatgpt`): auth.json read again when it changed, once a
+    // second (a stat); signed in again after not being: Input::SignedIn
+    {
+        let tx = tx.clone();
+        std::thread::spawn(move || {
+            let path = bise_home::Home::from_env().auth_file();
+            let mut seen: Option<std::time::SystemTime> = None;
+            let mut was_in: Option<bool> = None;
+            loop {
+                std::thread::sleep(Duration::from_secs(1));
+                let m = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
+                if m == seen && was_in.is_some() {
+                    continue;
+                }
+                seen = m;
+                let store = bise_catalog::auth::Store::read(&path).unwrap_or_default();
+                let now_in = matches!(bise_catalog::chatgpt::state(&store), bise_catalog::chatgpt::State::SignedIn { .. });
+                let back = now_in && was_in == Some(false);
+                was_in = Some(now_in);
+                if back && tx.send(Msg::In(Input::SignedIn)).is_err() {
+                    break;
+                }
+            }
+        });
+    }
     // a rollback's warning, left by the switcher for this hub
     let notice = paths.state.join("switch-notice");
     if let Ok(t) = std::fs::read_to_string(&notice) {

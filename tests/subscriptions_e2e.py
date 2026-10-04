@@ -648,6 +648,71 @@ def t_errors(W):
     print("ok   errors: usage limit, plan use off, invalid_grant -> expired, sign in again")
 
 
+def expire(W):
+    """the refresh token refused, the access token past its end: the next
+    call finds the sign-in expired"""
+    control(W.A, "invalid_grant", on=True)
+    control(W.A, "expire_access")
+    a = W.auth_json()
+    a["chatgpt"]["expires"] = int(time.time() * 1000) - 1000
+    W.write_auth_json(a)
+
+
+def t_expiry(W):
+    """expired-ux: the sign-in expires while a background task works and
+    then in main's turn: ONE `signin` item for the user naming both, no
+    BR-007 report to main (on the same plan, its turn would fail too);
+    signed in again (bise login chatgpt), the item closes by itself and
+    both go on from bise's message, nothing retyped"""
+    W.config('''approvals = "yolo"
+
+[roles]
+main = "chatgpt/gpt-6.1-sol"
+agents = "chatgpt/gpt-6.1-sol"
+
+[providers.chatgpt]
+base_url = "%s"
+''' % W.P)
+    signed_in(W)
+    c = W.E.start_hub()
+    c.wait_status("main", "idle", 60)
+    # a task: its first call fine, a slow tool, its next call after the expiry
+    c.say('[[bash: sb spawn t1 --objective "work {{bash: sleep 6; echo slept}}"]]')
+    c.wait_status("t1", ["working"], 60)
+    c.wait_idle("main")
+    expire(W)
+    c.wait_line("t1", "your ChatGPT sign-in expired", 120)
+    c.wait_idle("t1")
+
+    def items():
+        return [x for x in c.cards() if x["kind"] == "signin"]
+    c.wait(lambda: len(items()) == 1, 30, "the signin item")
+    time.sleep(2)
+    check(not any("[report: turn_failed]" in l for l in c.lines("main")), "no report to main: %r" % c.lines("main")[-4:])
+    check(c.agent("main")["status"] == "idle", "main did not take a turn on t1's expiry")
+    # main hits it too: still one item, it names both
+    c.say("main mid work")
+    c.wait_line("main", "your ChatGPT sign-in expired", 90)
+    c.wait_idle("main")
+    c.wait(lambda: items() and items()[0].get("waiting") == ["t1", "main"], 30, "the item names t1 and main")
+    it = items()
+    check(len(it) == 1 and it[0]["note"] == "stopped: t1, main" and it[0]["text"].startswith("your ChatGPT sign-in expired"),
+          "one item: %r" % it)
+    n = len(W.plan_requests())
+    # signed in again from the CLI: the hub sees auth.json, closes the item
+    control(W.A, "invalid_grant", on=False)
+    signed_in(W)
+    c.wait(lambda: not items(), 30, "the signin item closed by itself")
+    check(any("signed in again" in l for l in c.lines("main")), "closed as signed in again")
+
+    def resumed(agent):
+        return [r for r in W.plan_requests()[n:] if r.get("agent") == agent and r.get("status") == 200
+                and "sign-in is back" in r.get("user", "")]
+    c.wait(lambda: resumed("t1") and resumed("main"), 90, "t1 and main went on")
+    c.wait_idle("t1", "main")
+    print("ok   expiry: one item for a task and main, closed at the sign-in, both went on")
+
+
 def sent(W, needle):
     """the plan requests whose user message holds needle"""
     return [r for r in W.plan_requests() if needle in r.get("user", "")]
@@ -798,7 +863,7 @@ def t_detect(W):
 
 
 SCENARIOS = [("login", t_login), ("denied", t_denied), ("turn", t_turn_refresh), ("errors", t_errors),
-             ("logout", t_logout), ("openrouter", t_openrouter), ("coding", t_coding_plans), ("detect", t_detect)]
+             ("expiry", t_expiry), ("logout", t_logout), ("openrouter", t_openrouter), ("coding", t_coding_plans), ("detect", t_detect)]
 
 
 def main(argv):

@@ -2013,9 +2013,12 @@ fn the_chatgpt_plan_lines_are_a_warning_and_the_rest_a_failure() {
     ];
     for l in lines {
         let ev = parse_line(&format!("  obs: turn_done: failed: {}", l)).expect("parse");
-        assert!(matches!(&ev, Ev::Warn(w) if w == l), "{l}");
+        // expired-ux: the TUI's own words for the expired sign-in (⏎
+        // signs in again from the thread, designer m_7456)
+        let shown = if l.starts_with("your ChatGPT sign-in expired.") { crate::wire::EXPIRED_TUI } else { l };
+        assert!(matches!(&ev, Ev::Warn(w) if w == shown), "{l}");
         let text = rows_text(&ev_rows(&ev, 0, 200)).iter().map(|r| r.trim()).collect::<Vec<_>>().join(" ");
-        assert_eq!(text, format!("▲ {}", l));
+        assert_eq!(text, format!("▲ {}", shown));
     }
     // the limit line: one link, the usage page, on its own words
     let ev = Ev::Warn(lines[0].to_string());

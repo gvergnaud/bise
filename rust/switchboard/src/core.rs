@@ -504,6 +504,9 @@ pub enum Input {
     /// update-card: a check of the release channel (the daemon's, at
     /// the start and every hour, or `/update`).
     Release(update_card::ReleaseCheck),
+    /// expired-ux: the ChatGPT sign-in is back (the daemon reads
+    /// auth.json): the `signin` item closes, its agents go on.
+    SignedIn,
     /// update-card: the end of `1` on an update item (`Effect::Update`):
     /// Ok, the switch started; Err, why it failed (nothing changed).
     Updated {
@@ -879,6 +882,9 @@ pub struct Hub {
     merges: merge::Merges,
     /// update-card: the new-release item's runtime side (update_card.rs).
     updates: update_card::Updates,
+    /// expired-ux: the agents waiting for the ChatGPT sign-in
+    /// (signin_card.rs).
+    signin: signin_card::SignIn,
     dirty: bool,
     link: CoreLink,
     /// How to bring sb-core back when it dies (the daemon's; none: a
@@ -1056,6 +1062,7 @@ impl Hub {
             pr_bots: Vec::new(),
             merges: merge::Merges::default(),
             updates: update_card::Updates::default(),
+            signin: signin_card::SignIn::default(),
             dirty: false,
             link,
             revive: None,
@@ -1947,8 +1954,12 @@ impl Hub {
                     "note": match c.kind.as_str() {
                         "merge" => self.merge_note(c),
                         update_card::KIND => self.update_note(c),
+                        signin_card::KIND => self.signin_note(),
                         _ => self.card_note(c),
                     },
+                    // expired-ux: the agents that wait for the sign-in
+                    // (⏎ in their thread signs in)
+                    "waiting": if c.kind == signin_card::KIND { Some(self.signin_waiting()) } else { None },
                     // update-card: the release page its `3` opens
                     "link": if c.kind == update_card::KIND { self.update_link(c) } else { None },
                     // a hub item's place and PR (pr-merge): the TUI ties
@@ -2075,7 +2086,12 @@ impl Hub {
                     &mut fx,
                     env,
                     None,
-                    json!({"t": "idle", "agent": agent, "leftover": leftover}),
+                    // expired-ux: a turn that stopped on the expired
+                    // ChatGPT sign-in is held, not over: no automatic
+                    // reply (`(no written reply…)` woke its parent, on the
+                    // same plan, into a turn that failed too)
+                    json!({"t": "idle", "agent": agent, "leftover": leftover,
+                        "held": self.signin.stopped.contains(&agent)}),
                 );
                 self.ask_role(&mut fx, env.now(), &agent);
             }
@@ -2133,6 +2149,7 @@ impl Hub {
             }
             Input::Merged { card, place, number, res } => self.merged(&mut fx, env, card, &place, number, res),
             Input::Release(c) => self.release_in(&mut fx, env, c),
+            Input::SignedIn => self.signed_in(&mut fx, env),
             Input::Updated { card, version, res } => self.updated(&mut fx, env, card, &version, res),
         }
         self.refresh_contexts(&mut fx, env.now());
@@ -2440,6 +2457,12 @@ impl Hub {
                         fx.push(Effect::ModelRefused { agent: agent.to_string(), why });
                         return;
                     }
+                }
+                // expired-ux: the ChatGPT sign-in expired: the user's
+                // `signin` item says it, the agent waits for the sign-in
+                // (its parent, on the same plan, can't help)
+                if self.signin_turn(fx, env, agent, &t) {
+                    return;
                 }
                 if let Some(summary) = failed_turn_report(agent, &t) {
                     if self.st.agents.contains_key(agent) {
@@ -2984,6 +3007,9 @@ mod merge;
 
 #[path = "update_card.rs"]
 pub mod update_card;
+
+#[path = "signin_card.rs"]
+pub mod signin_card;
 
 #[cfg(test)]
 #[path = "core_tests.rs"]

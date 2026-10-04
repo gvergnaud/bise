@@ -50,7 +50,9 @@ mod signin;
 #[cfg(test)]
 mod signin_tests;
 pub(crate) use signin::PLAN_PROVIDER;
-use signin::{Account, Kind, Logins, PlanState, UNFINISHED};
+// expired-ux: the thread's own sign-in again (resign.rs)
+pub(crate) use signin::{Flow, Kind, Logins, Poll, DENIED, UNFINISHED};
+use signin::{Account, PlanState};
 pub(crate) use provider::{request as provider_request, take_line as provider_line, Ask};
 pub(crate) use roles::{take_voice_out, Open, VoiceOut};
 

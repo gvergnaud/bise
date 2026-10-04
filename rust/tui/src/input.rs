@@ -597,6 +597,11 @@ pub(crate) fn on_key(app: &mut App, k: &crossterm::event::KeyEvent) -> bool {
     if crate::sb::proves_ctrl_digits(k) {
         app.ctrl_digits = true;
     }
+    // expired-ux: the ChatGPT sign-in again waits for the browser: c
+    // copies its link, esc cancels it (resign.rs)
+    if app.help.is_none() && crate::resign::key(app, k) {
+        return false;
+    }
     if help::on_key(app, k) {
         return false;
     }
@@ -770,6 +775,10 @@ pub(crate) fn on_key(app: &mut App, k: &crossterm::event::KeyEvent) -> bool {
                 } else {
                     pick(app, c);
                 }
+            } else if app.ed.text.trim().is_empty() && !app.pending && app.sb.waits_for_sign_in() {
+                // expired-ux: the agent in view stopped on the expired
+                // ChatGPT sign-in: ⏎ signs in again (the key bar says it)
+                crate::resign::start(app);
             } else if crate::mdlive::enter_makes_newline(&app.ed.text, app.ed.cursor) {
                 // BISE-276: in a code block ⏎ is a newline (you never
                 // send half a block): close it with ``` to send
