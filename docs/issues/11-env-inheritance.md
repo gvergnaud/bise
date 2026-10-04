@@ -1,6 +1,6 @@
 # 11 · A child process never inherits bise's internal environment variables: one registry, one builder
 
-Status: next, after 10. Root node 3 of the architecture page's tech debt list; label: tech-debt.
+Status: waits until the performance fixes of issue 9 are in (the user's priority), then next. Root node 3 of the architecture page's tech debt list; label: tech-debt.
 
 ## The problem
 
@@ -31,7 +31,7 @@ Evidence:
 ## Scope
 
 - The places that spawn bise processes: `rust/switchboard/src/daemon.rs` and `daemon/repl.rs` (REPLs, sb-core), `rust/switchboard/src/client.rs` (starting the hub), `rust/harness`, the registry (in `rust/home`, next to `Home::exports`), `tests/e2e.py`.
-- Hub work: it goes on a feature branch the user tries before main, and must merge cleanly into the ambient-app branch.
+- Hub work: it lands straight on main after the architect's review and the full gate (the user, no feature branch for tech-debt fixes), and must merge cleanly into the ambient-app branch.
 
 ## Out of scope
 
