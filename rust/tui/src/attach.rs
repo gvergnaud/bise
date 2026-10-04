@@ -243,8 +243,43 @@ pub(crate) fn chips(text: &str) -> Vec<(usize, usize, usize)> {
     v.extend(crate::quote::chips(text));
     v.extend(crate::pasted::chips(text));
     v.extend(find_labels(text, crate::voice::chip::OPEN));
+    v.extend(find_labels(text, ARTIFACT_OPEN));
     v.sort_unstable();
     v
+}
+
+// ---- an artifact's chip (site/m/artifacts C, E) ----
+
+/// How the label of an artifact's chip starts (`[Artifact #3]`): the
+/// composer draws it ` ↗ pricing page `; on send it becomes
+/// `[pricing page](artifact:pricing-page)`, the title and the link,
+/// never `@name` (that sends to an agent).
+pub(crate) const ARTIFACT_OPEN: &str = "[Artifact #";
+
+thread_local! {
+    /// the title of each artifact chip, by its label
+    static ARTIFACT_TITLES: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
+}
+
+/// The title an artifact chip shows.
+fn artifact_title(label: &str) -> Option<String> {
+    label.starts_with(ARTIFACT_OPEN).then(|| ARTIFACT_TITLES.with(|t| t.borrow().get(label).cloned()).unwrap_or_default())
+}
+
+/// Puts the chip of artifact `id` at the cursor (`@` in /artifacts, a
+/// pick in the `@` popup).
+pub(crate) fn insert_artifact(app: &mut App, id: &str, title: &str) {
+    let n = next_number(app);
+    let label = format!("{ARTIFACT_OPEN}{n}]");
+    let marker = format!("[{}]({})", title.replace(['[', ']'], ""), crate::artifacts::url_of(id, None));
+    ARTIFACT_TITLES.with(|t| t.borrow_mut().insert(label.clone(), title.to_string()));
+    app.attachments.push(Attachment { label: label.clone(), marker, info: Info { source: id.to_string(), ..Default::default() } });
+    insert_chip(&mut app.ed, &label);
+}
+
+/// The draft holds an artifact's chip (the key bar says how it goes).
+pub(crate) fn has_artifact(text: &str) -> bool {
+    !find_labels(text, ARTIFACT_OPEN).is_empty()
 }
 
 /// The image labels `[Image #N]` in `text`.
@@ -310,6 +345,9 @@ fn chip_parts(label: &str) -> (&'static str, &str) {
 
 /// A chip named in a sentence (the flash): `▣ 1`, `❝ 1`.
 pub(crate) fn chip_name(label: &str) -> String {
+    if let Some(t) = artifact_title(label) {
+        return format!("↗ {t}");
+    }
     let (g, n) = chip_parts(label);
     format!("{g} {n}")
 }
@@ -318,6 +356,12 @@ pub(crate) fn chip_name(label: &str) -> String {
 /// ` ❝ 1 ` (one padding cell each side, on the `pill` tint), or, with no
 /// tint (`NO_COLOR`, `BISE_ASCII=1`), `[❝ 1]`. Same width both ways.
 pub(crate) fn chip_text(label: &str) -> String {
+    if let Some(t) = artifact_title(label) {
+        return match crate::render::chip_form() {
+            crate::render::ChipForm::Tinted => format!(" ↗ {t} "),
+            crate::render::ChipForm::Bracketed => format!("[↗ {t}]"),
+        };
+    }
     let (g, n) = chip_parts(label);
     match crate::render::chip_form() {
         crate::render::ChipForm::Tinted => format!(" {g} {n} "),
@@ -345,7 +389,11 @@ pub(crate) fn is_voice(label: &str) -> bool {
 /// every span (the selection's background, the cursor's REVERSED), so
 /// the whole pill takes it.
 pub(crate) fn chip_pill(label: &str, over: Style) -> Vec<Span<'static>> {
-    let (g, n) = chip_parts(label);
+    let artifact = artifact_title(label);
+    let (g, n) = match &artifact {
+        Some(t) => ("↗", t.as_str()),
+        None => chip_parts(label),
+    };
     let (open, close, bg) = match crate::render::chip_form() {
         crate::render::ChipForm::Tinted => (" ", " ", Some(crate::theme::pill_bg())),
         crate::render::ChipForm::Bracketed => ("[", "]", None),
@@ -418,6 +466,15 @@ fn wxh((w, h): (u32, u32)) -> String {
 /// `text` as spans in `style`, each image marker an accent chip
 /// `▣ login.png` (a user line of the history; one line, no `\n`).
 pub(crate) fn chip_spans(text: &str, style: Style) -> Vec<Span<'static>> {
+    // an artifact's chip as sent, `[pricing page](artifact:pricing-page)`:
+    // the same chip as in the composer and in replies (site/m/artifacts E)
+    if let Some((a, b, title, url)) = artifact_link(text) {
+        let mut out = chip_spans(&text[..a], style);
+        let gone = crate::artifacts::parse_url(&url).and_then(|(id, _)| crate::artifacts::get(&id)).is_some_and(|x| x.gone);
+        out.extend(crate::render::artifact_chip(&title, gone, &url));
+        out.extend(chip_spans(&text[b..], style));
+        return out.into_iter().filter(|s| !s.content.is_empty()).collect();
+    }
     // a paste's chip mark (pasted::fold): `▤ 1`, accent
     let marks = crate::pasted::marks(text);
     if marks.is_empty() {
@@ -439,6 +496,25 @@ pub(crate) fn chip_spans(text: &str, style: Style) -> Vec<Span<'static>> {
         out.extend(image_spans(rest, style));
     }
     out
+}
+
+/// The first `[title](artifact:id)` in `text`: its byte range, its title
+/// and its url.
+fn artifact_link(text: &str) -> Option<(usize, usize, String, String)> {
+    let mut from = 0;
+    while let Some(m) = text[from..].find("](artifact:").map(|i| from + i) {
+        let close = text[m..].find(')').map(|i| m + i);
+        let open = text[..m].rfind('[');
+        if let (Some(a), Some(c)) = (open, close) {
+            let title = &text[a + 1..m];
+            let url = &text[m + 2..c];
+            if !title.contains(']') && crate::artifacts::parse_url(url).is_some() {
+                return Some((a, c + 1, title.to_string(), url.to_string()));
+            }
+        }
+        from = m + 2;
+    }
+    None
 }
 
 /// [`chip_spans`] for a text with no paste mark: each image marker

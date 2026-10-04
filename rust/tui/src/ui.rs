@@ -15,10 +15,18 @@ pub(crate) fn draw(app: &mut App, frame: &mut Frame) {
     // book §8 "The frame": the frame, the history and the panel, the
     // divider, the composer pane
     let cols = crate::layout::cols(full.width, full.height);
+    // the diff panel (site/m/artifacts D) takes the agents panel's
+    // place, wider; under its width the whole screen
+    let cols = match app.diff.is_some() && crate::diffview::side(full.width) {
+        true => crate::layout::with_side(cols, full.width, crate::diffview::side_w(full.width)),
+        false => cols,
+    };
     let rows = crate::layout::rows(full.width, full.height);
     draw_bise(app, frame, full, cols, rows);
     approvals_screen::draw(app, frame);
     crate::logview::draw(app, frame);
+    crate::diffview::draw_full(app, frame);
+    crate::artifacts_screen::draw(app, frame);
     computer_use::draw(app, frame);
     help::draw(app, frame);
 }
@@ -147,7 +155,11 @@ fn draw_bise(app: &mut App, frame: &mut Frame, area: Rect, cols: crate::layout::
     if let Some(p) = cols.panel {
         let h = divider_y.saturating_sub(body.y + 1);
         let r = Rect { x: area.x + p.x, width: p.w, y: body.y, height: h }.intersection(area);
-        sb::draw_panel(app, frame, r);
+        if app.diff.is_some() {
+            crate::diffview::draw_side(app, frame, r);
+        } else {
+            sb::draw_panel(app, frame, r);
+        }
     }
     // the history: from the column's x to the feed area's right edge
     // (tables and code may run there)

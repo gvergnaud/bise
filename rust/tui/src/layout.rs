@@ -146,6 +146,28 @@ pub(crate) fn cols(width: u16, height: u16) -> Cols {
     Cols { framed, margin, feed_x, feed_w, x0, col_w, wide_w, panel, pane_w: inner.max(1) }
 }
 
+/// `c` with a side panel `w` columns wide in the agents panel's place
+/// (the diff panel, site/m/artifacts D): framed, its rule `RULE_TO_TEXT`
+/// columns left of it and the history ending `FEED_TO_RULE` left of the
+/// rule; the reading column takes what is left (centered when it can).
+pub(crate) fn with_side(c: Cols, width: u16, w: u16) -> Cols {
+    let margin = c.margin;
+    let (feed_w, panel) = if c.framed {
+        let x = width.saturating_sub(margin + w);
+        let rule = x.saturating_sub(RULE_TO_TEXT);
+        let feed_w = (rule.saturating_sub(FEED_TO_RULE) + 1).saturating_sub(margin).max(1);
+        (feed_w, Panel { x, w: w + PANEL_EDGE, rule: Some(rule) })
+    } else {
+        let feed_w = width.saturating_sub(2 * margin + w + 2).max(1);
+        (feed_w, Panel { x: margin + feed_w + 2, w, rule: None })
+    };
+    let feed_x = margin;
+    let col_w = feed_w.min(COLUMN);
+    let x0 = if feed_w >= CENTER_FROM { feed_x + (feed_w - col_w) / 2 } else { feed_x };
+    let wide_w = (feed_x + feed_w - x0).min(WIDE);
+    Cols { feed_x, feed_w, x0, col_w, wide_w, panel: Some(panel), ..c }
+}
+
 /// The rows of a screen `height` tall (y relative to its top).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Rows {

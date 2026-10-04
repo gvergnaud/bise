@@ -119,6 +119,10 @@ pub(super) struct Agent {
     model: String,
     effort: String,
     efforts: Vec<String>,
+    /// site/m/artifacts D: what it changed against main (files, +, −),
+    /// None when the hub does not know (the `± 9 files` door, the live
+    /// diff panel)
+    changes: Option<(u64, u64, u64)>,
 }
 
 impl Agent {
@@ -292,6 +296,16 @@ impl Sb {
     /// How many things asked for you so far (zen, BISE-121).
     pub(crate) fn calls(&self) -> u64 {
         self.calls
+    }
+
+    /// [`Sb::send`] from a shared borrow (a popup asking the hub for
+    /// its list while it draws).
+    pub(crate) fn send_shared(&self, v: Value) {
+        let mut s = v.to_string();
+        s.push('\n');
+        if let Ok(mut w) = self.writer.lock() {
+            let _ = w.write_all(s.as_bytes());
+        }
     }
 
     pub(crate) fn send(&mut self, v: Value) {
@@ -592,6 +606,14 @@ pub(super) fn dispatch(app: &mut App, raw: &str) {
             with_feed(app, &s("agent"), |app| prepend_page(app, before, lines));
         }
         "state" => apply_state(app, &v),
+        // artifacts (site/m/artifacts, docs/artifacts.md): the whole list;
+        // the feed's chips are built again with the new titles
+        "artifacts" => {
+            crate::artifacts::set_from(&v);
+            app.cache.iter_mut().for_each(|c| *c = None);
+        }
+        "diff" => crate::diffview::event(app, &v),
+        "branches" => crate::diffview::branches_event(&v),
         // update-card: `/update` with a newer release opens its item here
         "open_card" => {
             if let Some(id) = v.get("id").and_then(|x| x.as_u64()) {
@@ -645,6 +667,7 @@ pub(super) fn dispatch(app: &mut App, raw: &str) {
         "hello" => {
             let sb = &mut app.sb;
             sb.workspace = s("workspace");
+            crate::artifacts::set_workspace(&sb.workspace);
             sb.version = v
                 .pointer("/version/id")
                 .and_then(|x| x.as_str())
@@ -857,11 +880,21 @@ fn apply_state(app: &mut App, v: &Value) {
                         .and_then(|e| e.as_array())
                         .map(|e| e.iter().filter_map(|w| w.as_str().map(String::from)).collect())
                         .unwrap_or_default(),
+                    changes: x.get("changes").filter(|c| c.is_object()).map(|c| {
+                        let n = |k: &str| c.get(k).and_then(|x| x.as_u64()).unwrap_or(0);
+                        (n("files"), n("add"), n("del"))
+                    }),
                 })
                 .collect()
         })
         .unwrap_or_default();
     sb.places = places::parse(v);
+    // an open diff panel on an agent follows its changes (site/m/artifacts D)
+    if let Some(crate::diffview::Ask::Agent(name)) = app.diff.as_ref().map(|p| p.ask.clone()) {
+        let changes = app.sb.agents.iter().find(|a| a.name == name).and_then(|a| a.changes);
+        crate::diffview::on_changes(app, &name, changes);
+    }
+    let sb = &mut app.sb;
     sb.flow = s(v, "flow");
     sb.cards = v
         .get("cards")
@@ -1047,6 +1080,37 @@ pub(crate) fn handle_input(app: &mut App, v: &str) -> Vec<Ev> {
             out.push(Ev::Warn(format!("/log: {e}")));
         }
         return out;
+    }
+    // site/m/artifacts: `/artifacts` (the full screen), `/artifacts add
+    // <path or link>`, `/diff [<branch>]`
+    match typed.split_whitespace().next() {
+        Some("/artifacts") => {
+            let rest = typed.trim_start_matches("/artifacts").trim();
+            match rest.strip_prefix("add") {
+                Some(target) if rest == "add" || rest.starts_with("add ") => {
+                    let target = target.trim();
+                    if target.is_empty() {
+                        out.push(Ev::Warn("/artifacts add <path or link>".into()));
+                    } else {
+                        let agent = app.sb.focus.clone();
+                        app.sb.send(json!({"op": "artifacts", "do": "add", "target": target, "agent": agent}));
+                    }
+                }
+                _ => crate::artifacts_screen::open(app),
+            }
+            return out;
+        }
+        Some("/diff") => {
+            let branch = typed.trim_start_matches("/diff").trim();
+            if branch.is_empty() {
+                let a = app.sb.focus.clone();
+                crate::diffview::request(app, crate::diffview::Ask::Agent(a));
+            } else {
+                crate::diffview::request(app, crate::diffview::Ask::Branch(branch.to_string()));
+            }
+            return out;
+        }
+        _ => {}
     }
     let sb = &mut app.sb;
     let first = typed.split_whitespace().next().unwrap_or("");
@@ -1366,6 +1430,26 @@ pub(super) fn parse_hub_line(rest: &str) -> Option<Ev> {
                 Ok(number) => Ev::Pr { tone, number, url, text, url_row: false },
                 Err(_) => Ev::Info(text),
             }
+        }
+        // site/m/artifacts C: `artifact : id : agent : title : kind : v`
+        "artifact" => {
+            let mut f = raw.splitn(5, " : ").map(field);
+            let mut next = || f.next().unwrap_or_default();
+            let (id, agent, title, kind, v) = (next(), next(), next(), next(), next());
+            if id.is_empty() {
+                return Some(Ev::Info(text));
+            }
+            Ev::Made { id, agent, title, kind, v: v.trim_start_matches('v').parse().unwrap_or(1) }
+        }
+        // site/m/artifacts D: `landed : agent : target : from : sha : files : add : del`
+        "landed" => {
+            let f: Vec<String> = raw.splitn(7, " : ").map(field).collect();
+            let g = |i: usize| f.get(i).cloned().unwrap_or_default();
+            let num = |i: usize| g(i).trim().parse::<u64>().unwrap_or(0);
+            if g(3).is_empty() {
+                return None;
+            }
+            Ev::Landed { agent: g(0), from: g(2), sha: g(3), files: num(4), add: num(5), del: num(6) }
         }
         "spawn" => Ev::Info(format!("✚ {}", text)),
         // computer use (design §7.3): `↖ api-v2 stopped driving Chrome · you stopped it`

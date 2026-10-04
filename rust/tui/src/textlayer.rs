@@ -583,6 +583,27 @@ pub(crate) fn copy_note(text: &str) -> String {
 /// Opens `url` (a click on a link): a local file in your editor
 /// (BISE-264), the rest in the default app. The note for the status row.
 pub(crate) fn open(app: &mut crate::App, url: &str) -> String {
+    // an artifact's chip (site/m/artifacts E): it opens like ⏎ in
+    // /artifacts (a PR: its diff)
+    if let Some((id, v)) = crate::artifacts::parse_url(url) {
+        let Some(a) = crate::artifacts::get(&id) else {
+            return format!("no artifact {} (it was removed?)", id);
+        };
+        if let (None, crate::artifacts::How::Diff(n)) = (v, crate::artifacts::how(&a, None, true)) {
+            crate::diffview::request(app, crate::diffview::Ask::Pr(n));
+            return format!("PR #{} · its diff", n);
+        }
+        return crate::artifacts::open(app, &a, v);
+    }
+    // `± 3 files` under a landed line (site/m/artifacts D): the diff panel
+    if let Some(ask) = crate::diffview::ask_of_url(url) {
+        crate::diffview::request(app, ask);
+        return String::new();
+    }
+    if url == crate::artifacts_screen::OPEN_URL {
+        crate::artifacts_screen::open(app);
+        return String::new();
+    }
     if let Some(t) = crate::file_links::target_of_url(url) {
         crate::file_links::open(app, &t)
     } else if crate::links::open(url) {

@@ -16,6 +16,10 @@ pub(crate) struct App {
     pub(crate) approvals: Option<approvals_screen::Screen>,
     /// `/log`, the raw session of the agent in view, when open (dev only)
     pub(crate) logview: Option<crate::logview::View>,
+    /// `/artifacts`, the full screen of what your agents made, when open
+    pub(crate) artifacts: Option<crate::artifacts_screen::Screen>,
+    /// the diff panel (ctrl+g, `/diff`, `± 3 files`), when open
+    pub(crate) diff: Option<crate::diffview::Panel>,
     // the /computer-use screen, when open (computer_use.rs)
     pub(crate) computer_use: Option<computer_use::Screen>,
     pub(crate) debug: bool,
@@ -283,6 +287,8 @@ impl App {
             help: None,
             approvals: None,
             logview: None,
+            artifacts: None,
+            diff: None,
             computer_use: None,
             debug,
             follow: true,

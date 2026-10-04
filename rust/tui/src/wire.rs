@@ -185,6 +185,27 @@ pub(crate) enum Ev {
         text: String,
         url_row: bool,
     },
+    // site/m/artifacts C: an artifact made or added again (the hub's
+    // `artifact : id : agent : title : kind : v`): `↗ pricing page   page
+    // · v3 · pricing-page`, the chip opens it
+    Made {
+        id: String,
+        agent: String,
+        title: String,
+        kind: String,
+        v: u32,
+    },
+    // site/m/artifacts D: an agent landed (`landed : agent : target :
+    // from : sha : files : add : del`): `± 3 files +42 −18  a1b2c3d`
+    // under the landed line, a click opens its diff
+    Landed {
+        agent: String,
+        from: String,
+        sha: String,
+        files: u64,
+        add: u64,
+        del: u64,
+    },
     // in memory only (BISE-298): a failure in the turn errors' two-line
     // pattern (BISE-293): `glyph head` (✗ error, ? accent), then dim
     // lines (the provider's words, what to do)

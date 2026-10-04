@@ -454,6 +454,27 @@ impl Sb {
     /// the header keeps the inbox's (`~/acme · # 1 in the inbox`); all of
     /// them with ctrl held (`words`).
     pub(crate) fn summary(&self, room: usize, short: bool, words: bool, gust: &[Span<'static>]) -> Vec<Span<'static>> {
+        // site/m/artifacts: `↗ 3 new` since you last looked, last; a
+        // click opens /artifacts (`↗ 3` when short of room)
+        let new = crate::artifacts::new_count();
+        if new > 0 {
+            let st = Style::default().fg(accent());
+            for label in [format!("↗ {} new", new), format!("↗ {}", new)] {
+                let w = label.width();
+                if w + 3 + 6 <= room {
+                    let mut out = self.summary_of(room - w - 3, short, words, gust);
+                    if !out.is_empty() {
+                        out.push(Span::styled(" · ", Style::default().fg(dim())));
+                    }
+                    out.push(crate::textlayer::link(label, crate::artifacts_screen::OPEN_URL, st));
+                    return out;
+                }
+            }
+        }
+        self.summary_of(room, short, words, gust)
+    }
+
+    fn summary_of(&self, room: usize, short: bool, words: bool, gust: &[Span<'static>]) -> Vec<Span<'static>> {
         // a release running (BISE-235): one more item after the counts
         let item = super::release::header_item(self, gust);
         let item_w: usize = item.iter().map(|s| s.content.width()).sum();
@@ -532,6 +553,10 @@ pub(crate) fn draw_panel(app: &App, frame: &mut Frame, area: Rect) {
             // a shared worktree's section (option B, sidebar-wt): 1 blank
             // row, its title, held its lid; git's, never a row (no hit)
             lines.push(Line::from(""));
+            // site/m/artifacts D: a click on its label opens its diff
+            if let Some(b) = &p.branch {
+                owners.push((lines.len(), Hit::Place(b.clone())));
+            }
             lines.push(p.title(w, held));
             if let Some(lid) = p.lid_line(w).filter(|_| held) {
                 lines.push(lid);
@@ -904,6 +929,8 @@ pub(crate) enum Hit {
     Up,
     /// `↓ n more`: the panel scrolls a page down.
     Down,
+    /// A shared worktree's label `ψ sculpt`: its branch's diff.
+    Place(String),
 }
 
 /// The panel's window as the last frame drew it (sidebar-more): its
@@ -1028,11 +1055,16 @@ pub(crate) fn panel_mouse(app: &mut App, m: &crossterm::event::MouseEvent) -> bo
             app.sb.send(serde_json::json!({"op": "interrupt", "agent": name}));
             crate::computer_use::stop(&name);
         }
+        // site/m/artifacts D: a click on an agent's ψ opens its diff
+        Some(Hit::Agent(name)) if right && sb.agent(&name).is_some_and(|a| !a.archived() && place_label(a).is_some()) => {
+            crate::diffview::request(app, crate::diffview::Ask::Agent(name));
+        }
         Some(Hit::Agent(name)) if sb.agent(&name).is_some() => focus(app, &name),
         Some(Hit::Archived) => {
             let sb = &mut app.sb;
             sb.toggle_archived();
         }
+        Some(Hit::Place(branch)) => crate::diffview::request(app, crate::diffview::Ask::Branch(branch)),
         Some(Hit::Card(id)) => super::cards::open_view(app, Some(id)),
         Some(Hit::Cards) if app.sb.card.open => super::cards::close_view(app),
         Some(Hit::Cards) => super::cards::open_view(app, None),

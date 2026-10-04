@@ -298,6 +298,87 @@ fn pr_lines(tone: &str, number: u64, url: &str, text: &str, url_row: bool, width
     rows
 }
 
+/// An artifact as a chip (site/m/artifacts E): ` ↗ pricing page ` on the
+/// chips' tint, in the accent, one link to `url` (a click opens it, like
+/// ⏎ in /artifacts); a gone file struck through, `▲` after it. Under
+/// `NO_COLOR` (or ASCII): bold, `[↗ pricing page]`. Never wraps across
+/// two rows: its spaces are non-breaking.
+pub(crate) fn artifact_chip(title: &str, gone: bool, url: &str) -> Vec<Span<'static>> {
+    let tag = crate::links::add(url);
+    let form = chip_form();
+    let base = match form {
+        ChipForm::Tinted => Style::default().fg(accent()).bg(chip_bg()),
+        ChipForm::Bracketed => Style::default().add_modifier(Modifier::BOLD),
+    };
+    let st = Style { add_modifier: crate::links::with_tag(base.add_modifier, tag), ..base };
+    let title_st = if gone { st.add_modifier(Modifier::CROSSED_OUT) } else { st };
+    // non-breaking spaces inside: the wrap never splits a chip
+    let title = title.replace(' ', "\u{a0}");
+    let (open, close) = match form {
+        ChipForm::Tinted => ("\u{a0}", "\u{a0}"),
+        ChipForm::Bracketed => ("[", "]"),
+    };
+    let mut out = vec![Span::styled(format!("{}↗\u{a0}", open), st), Span::styled(title, title_st), Span::styled(close.to_string(), st)];
+    if gone {
+        out.push(Span::styled(format!(" {}", crate::theme::glyph(crate::theme::G_INTERRUPTED)), Style::default().fg(error())));
+    }
+    out
+}
+
+/// A ↗ line's title is cut at this width (its run's kind column).
+pub(crate) const MADE_TITLE_MAX: usize = 28;
+
+thread_local! {
+    /// the width the titles of the ↗ line being built pad to (its run's
+    /// widest, feed.rs sets it)
+    static MADE_PAD: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+pub(crate) fn set_made_pad(w: usize) {
+    MADE_PAD.with(|c| c.set(w));
+}
+
+/// site/m/artifacts C: `↗ pricing page   page · v3 · pricing-page` (the
+/// agent named from 80 columns of feed: at 150, not at 80).
+fn made_lines(id: &str, agent: &str, title: &str, kind: &str, v: u32, width: usize) -> Vec<Line<'static>> {
+    use unicode_width::UnicodeWidthStr;
+    let gone = crate::artifacts::get(id).is_some_and(|a| a.gone);
+    let mut spans = vec![Span::raw(" ")];
+    let title = crate::artifacts_screen::cut(title, MADE_TITLE_MAX);
+    spans.extend(artifact_chip(&title, gone, &crate::artifacts::url_of(id, None)));
+    // the kind column of the run (designer, m_7220)
+    let pad = MADE_PAD.with(|c| c.get()).saturating_sub(title.width());
+    spans.push(Span::raw("\u{a0}".repeat(pad)));
+    let mut words = vec![crate::artifacts::kind_word(kind)];
+    if v > 1 {
+        words.push(format!("v{}", v));
+    }
+    if width >= 80 && !agent.is_empty() {
+        words.push(agent.to_string());
+    }
+    spans.push(Span::styled(format!("   {}", words.join(" · ")), Style::default().fg(dim())));
+    crate::wrap_line(Line::from(spans), width.max(1))
+}
+
+/// site/m/artifacts D: under `✓ x landed 2 commits on main (a1b2c3d)`,
+/// `± 3 files +42 −18  a1b2c3d`; `± 3 files` links to the diff (never
+/// opened by itself).
+fn landed_lines(agent: &str, from: &str, sha: &str, files: u64, add: u64, del: u64, width: usize) -> Vec<Line<'static>> {
+    let ask = crate::diffview::Ask::Range(format!("{}..{}", from, sha), agent.to_string());
+    let url = crate::diffview::url_of(&ask);
+    let tag = crate::links::add(&url);
+    let label = format!("{} {}", crate::theme::glyph(crate::theme::G_PATCH), crate::diffview::files_word(files as usize));
+    let mut spans = vec![Span::raw("   "), Span::styled(label, crate::links::link_style(Style::default(), text(), tag))];
+    if add > 0 {
+        spans.push(Span::styled(format!(" +{}", add), Style::default().fg(crate::theme::ok())));
+    }
+    if del > 0 {
+        spans.push(Span::styled(format!(" −{}", del), Style::default().fg(error())));
+    }
+    spans.push(Span::styled(format!("  {}", sha.chars().take(7).collect::<String>()), Style::default().fg(faint())));
+    crate::wrap_line(Line::from(spans), width.max(1))
+}
+
 pub(crate) fn ev_lines(ev: &Ev, width: usize) -> Vec<Line<'static>> {
     let dim_st = Style::default().fg(dim());
     let text_st = Style::default().fg(text());
@@ -428,6 +509,8 @@ pub(crate) fn ev_lines(ev: &Ev, width: usize) -> Vec<Line<'static>> {
         }
         Ev::Info(t) => glyph_line(G_NOTE, Style::default().fg(faint()), bend_images::display(t), dim_st, width),
         Ev::Pr { tone, number, url, text, url_row } => pr_lines(tone, *number, url, text, *url_row, width),
+        Ev::Made { id, agent, title, kind, v } => made_lines(id, agent, title, kind, *v, width),
+        Ev::Landed { agent, from, sha, files, add, del } => landed_lines(agent, from, sha, *files, *add, *del, width),
         Ev::Approval { ok, text, note, asked, open } => answer_lines(*ok, text, note, asked, *open, width),
         Ev::Said { glyph, head, dim } => {
             // ✗ a failure (error); ? it needs you, ✓ it worked (accent)

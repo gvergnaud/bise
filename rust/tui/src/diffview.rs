@@ -1,0 +1,1060 @@
+//! The diff panel (site/m/artifacts, D): an agent's changes, or any
+//! branch, against main, drawn in the TUI. It opens on the right only
+//! when you ask (ctrl+g, a click on `± 3 files` under a landed line, on
+//! an agent's ψ in the panel, `/diff <branch>`), takes the agents
+//! panel's place (80 columns wide at 150), and closes back to it. Under
+//! [`SIDE_FROM`] columns there is no right side: it takes the screen.
+//!
+//! What it shows comes from the hub (`{"op":"diff"}` → `ev diff`,
+//! docs/artifacts.md): the branch vs main, commits and changes not
+//! committed yet together. A header with the files and the +/− counts,
+//! then each file with its hunks, old and new line numbers, added lines
+//! tinted green, removed ones red. Many files: the first 6 on top, `f`
+//! the whole list with a filter. A file over [`BIG`] changed lines shows
+//! its first hunks and `▸ 212 more lines in this file · ⏎ shows them`;
+//! lock and generated files fold by themselves; an image is one row
+//! that opens it.
+//!
+//! Keys (the page's no-clash table): the panel takes the keys while it
+//! has the focus (it opens focused, its title in the accent); esc gives
+//! them back to the composer and the panel stays; a click in it takes
+//! them again; ctrl+g closes it. ↑↓ or the wheel move, `]` `[` the next
+//! and previous file, `f` the file list, ⏎ opens the line in your
+//! editor, or unfolds.
+
+use crate::app::App;
+use crate::theme::{self, accent, dim, faint, text};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use ratatui::layout::Rect;
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Clear, Paragraph};
+use ratatui::Frame;
+use serde_json::Value;
+use std::collections::HashSet;
+use unicode_width::UnicodeWidthStr;
+
+/// From this many columns the panel is on the right; under it, the
+/// whole screen.
+pub(crate) const SIDE_FROM: u16 = 120;
+/// The panel's width at most (unified diff, never side by side).
+pub(crate) const PANEL_W: u16 = 80;
+/// A file with more changed lines than this shows its first hunks only.
+pub(crate) const BIG: usize = 200;
+/// The files listed on top before `↓ 3 more`.
+const TOP_FILES: usize = 6;
+
+/// What the panel shows.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Ask {
+    /// an agent's changes (its branch, or its files in the shared folder)
+    Agent(String),
+    /// a branch vs main
+    Branch(String),
+    /// a GitHub PR
+    Pr(u64),
+    /// a landed range `from..to`, by an agent
+    Range(String, String),
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct Hunk {
+    pub(crate) old: u32,
+    pub(crate) new: u32,
+    pub(crate) head: String,
+    /// ` x`, `-x`, `+x`
+    pub(crate) lines: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct File {
+    pub(crate) path: String,
+    pub(crate) old_path: Option<String>,
+    /// M A D R
+    pub(crate) status: String,
+    pub(crate) add: usize,
+    pub(crate) del: usize,
+    pub(crate) binary: bool,
+    pub(crate) image: bool,
+    pub(crate) generated: bool,
+    /// its absolute path (⏎ opens it in your editor)
+    pub(crate) abs: String,
+    /// the hub cut it (over 5000 lines)
+    pub(crate) cut: bool,
+    pub(crate) hunks: Vec<Hunk>,
+}
+
+impl File {
+    fn changed(&self) -> usize {
+        self.add + self.del
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct Diff {
+    pub(crate) title: String,
+    pub(crate) branch: String,
+    pub(crate) commits: u64,
+    pub(crate) uncommitted: bool,
+    pub(crate) landed_ms: Option<u64>,
+    pub(crate) working: bool,
+    pub(crate) files: Vec<File>,
+    pub(crate) error: String,
+}
+
+fn s(v: &Value, k: &str) -> String {
+    v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string()
+}
+fn n(v: &Value, k: &str) -> u64 {
+    v.get(k).and_then(|x| x.as_u64()).unwrap_or(0)
+}
+fn b(v: &Value, k: &str) -> bool {
+    v.get(k).and_then(|x| x.as_bool()).unwrap_or(false)
+}
+
+impl Diff {
+    /// The hub's `diff` event.
+    pub(crate) fn of(v: &Value) -> Diff {
+        let files = v
+            .get("files")
+            .and_then(|x| x.as_array())
+            .map(|a| {
+                a.iter()
+                    .map(|f| File {
+                        path: s(f, "path"),
+                        old_path: f.get("old_path").and_then(|x| x.as_str()).filter(|x| !x.is_empty()).map(String::from),
+                        status: {
+                            let st = s(f, "status");
+                            if st.is_empty() { "M".into() } else { st }
+                        },
+                        add: n(f, "add") as usize,
+                        del: n(f, "del") as usize,
+                        binary: b(f, "binary"),
+                        image: b(f, "image"),
+                        generated: b(f, "generated"),
+                        abs: s(f, "abs"),
+                        cut: b(f, "cut"),
+                        hunks: f
+                            .get("hunks")
+                            .and_then(|x| x.as_array())
+                            .map(|hs| {
+                                hs.iter()
+                                    .map(|h| Hunk {
+                                        old: n(h, "old") as u32,
+                                        new: n(h, "new") as u32,
+                                        head: s(h, "head"),
+                                        lines: h
+                                            .get("lines")
+                                            .and_then(|x| x.as_array())
+                                            .map(|ls| ls.iter().filter_map(|l| l.as_str().map(String::from)).collect())
+                                            .unwrap_or_default(),
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        Diff {
+            title: s(v, "title"),
+            branch: s(v, "branch"),
+            commits: n(v, "commits"),
+            uncommitted: b(v, "uncommitted"),
+            landed_ms: v.get("landed_ms").and_then(|x| x.as_u64()),
+            working: b(v, "working"),
+            files,
+            error: s(v, "error"),
+        }
+    }
+
+    pub(crate) fn add(&self) -> usize {
+        self.files.iter().map(|f| f.add).sum()
+    }
+    pub(crate) fn del(&self) -> usize {
+        self.files.iter().map(|f| f.del).sum()
+    }
+}
+
+/// `+42 −18`, `+41`, `−26`.
+pub(crate) fn counts(add: usize, del: usize) -> String {
+    match (add, del) {
+        (0, 0) => String::new(),
+        (a, 0) => format!("+{}", a),
+        (0, d) => format!("−{}", d),
+        (a, d) => format!("+{} −{}", a, d),
+    }
+}
+
+/// `1 file`, `9 files`.
+pub(crate) fn files_word(n: usize) -> String {
+    if n == 1 {
+        "1 file".to_string()
+    } else {
+        format!("{} files", n)
+    }
+}
+
+// ---- the panel's state ----
+
+/// The file list (`f`): its filter and the file selected.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct List {
+    pub(crate) filter: String,
+    pub(crate) sel: usize,
+}
+
+pub(crate) struct Panel {
+    pub(crate) ask: Ask,
+    pub(crate) req: u64,
+    pub(crate) diff: Option<Diff>,
+    /// the panel has the keys
+    pub(crate) focused: bool,
+    /// the cursor's row in the body, the first body row shown
+    pub(crate) cursor: usize,
+    pub(crate) top: usize,
+    /// big files shown whole, folded files opened (by path)
+    pub(crate) unfolded: HashSet<String>,
+    /// files you folded (by path)
+    pub(crate) folded: HashSet<String>,
+    pub(crate) list: Option<List>,
+    /// the body rows of the last frame (keys and clicks)
+    pub(crate) rows: Vec<Kind>,
+    /// the screen rect of the body in the last frame, and of the panel
+    pub(crate) body: Rect,
+    pub(crate) area: Rect,
+    /// the body rows the last frame showed
+    pub(crate) page: usize,
+    /// the agent's changes when it was last asked (asked again when
+    /// the hub's count moves)
+    pub(crate) changes_seen: Option<(u64, u64, u64)>,
+    /// the last frame drew it on the right (else full screen)
+    pub(crate) side: bool,
+}
+
+static REQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+fn ask_json(ask: &Ask, req: u64) -> Value {
+    match ask {
+        Ask::Agent(a) => serde_json::json!({"op": "diff", "req": req, "agent": a}),
+        Ask::Branch(br) => serde_json::json!({"op": "diff", "req": req, "branch": br}),
+        Ask::Pr(n) => serde_json::json!({"op": "diff", "req": req, "pr": n}),
+        Ask::Range(r, a) => serde_json::json!({"op": "diff", "req": req, "range": r, "agent": a}),
+    }
+}
+
+/// Opens the panel on `ask` (focused) and asks the hub for it.
+pub(crate) fn request(app: &mut App, ask: Ask) {
+    let req = REQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    app.sb.send(ask_json(&ask, req));
+    app.diff = Some(Panel {
+        ask,
+        req,
+        diff: None,
+        focused: true,
+        cursor: 0,
+        top: 0,
+        unfolded: HashSet::new(),
+        folded: HashSet::new(),
+        list: None,
+        rows: Vec::new(),
+        body: Rect::default(),
+        area: Rect::default(),
+        page: 10,
+        changes_seen: None,
+        side: true,
+    });
+}
+
+/// Asks the hub again (the agent's changes moved): the panel keeps
+/// where it is.
+pub(crate) fn refresh(app: &mut App) {
+    let Some(p) = app.diff.as_mut() else { return };
+    let req = REQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    p.req = req;
+    let v = ask_json(&p.ask, req);
+    app.sb.send(v);
+}
+
+/// The hub's `diff` event: the panel's, when it answers its last ask.
+pub(crate) fn event(app: &mut App, v: &Value) {
+    let Some(p) = app.diff.as_mut() else { return };
+    if v.get("req").and_then(|x| x.as_u64()) != Some(p.req) {
+        return;
+    }
+    p.diff = Some(Diff::of(v));
+}
+
+/// The agent's changes moved (the hub's state): an open panel on that
+/// agent asks again, so it stays live while the agent works.
+pub(crate) fn on_changes(app: &mut App, agent: &str, changes: Option<(u64, u64, u64)>) {
+    let Some(p) = app.diff.as_mut() else { return };
+    if p.ask != Ask::Agent(agent.to_string()) {
+        return;
+    }
+    if p.changes_seen.is_some() && p.changes_seen != changes {
+        p.changes_seen = changes;
+        refresh(app);
+    } else {
+        p.changes_seen = changes;
+    }
+}
+
+/// ctrl+g: the agent in view's diff, or the panel closes.
+pub(crate) fn toggle(app: &mut App) {
+    if app.diff.is_some() {
+        app.diff = None;
+    } else {
+        let a = app.sb.focus_name().to_string();
+        request(app, Ask::Agent(a));
+    }
+}
+
+/// The panel is on the right (else full screen) at this width.
+pub(crate) fn side(width: u16) -> bool {
+    width >= SIDE_FROM
+}
+
+/// The panel's width on the right of a `width`-column screen.
+pub(crate) fn side_w(width: u16) -> u16 {
+    PANEL_W.min(width.saturating_sub(64))
+}
+
+// ---- the rows (pure) ----
+
+/// What a body row is (keys and clicks).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Kind {
+    Blank,
+    /// `files … f the whole list`
+    FilesHead,
+    /// a file of the list on top: its index
+    ListFile(usize),
+    /// `↓ 3 more`: the file list
+    More,
+    /// a file's head `▾ path  +4 −6`
+    FileHead(usize),
+    Hunk(usize),
+    /// a line of a file: the file, its new line (or old one when removed)
+    Code(usize, Option<u32>),
+    /// `▸ 212 more lines in this file · ⏎ shows them`
+    Fold(usize),
+    End,
+}
+
+fn tint(add: bool) -> Option<Color> {
+    if std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty()) {
+        return None;
+    }
+    let dark = theme::mode() == theme::Mode::Dark;
+    Some(match (add, dark) {
+        (true, true) => Color::Rgb(0x1f, 0x33, 0x26),
+        (false, true) => Color::Rgb(0x3d, 0x22, 0x24),
+        (true, false) => Color::Rgb(0xdf, 0xf2, 0xe1),
+        (false, false) => Color::Rgb(0xfa, 0xe0, 0xe0),
+    })
+}
+
+fn add_st() -> Style {
+    let st = Style::default().fg(theme::ok());
+    tint(true).map_or(st, |c| st.bg(c))
+}
+fn del_st() -> Style {
+    let st = Style::default().fg(theme::error());
+    tint(false).map_or(st, |c| st.bg(c))
+}
+
+fn cut(s: &str, w: usize) -> String {
+    if s.width() <= w {
+        return s.to_string();
+    }
+    let mut out = String::new();
+    for c in s.chars() {
+        if out.width() + unicode_width::UnicodeWidthChar::width(c).unwrap_or(0) + 1 > w {
+            break;
+        }
+        out.push(c);
+    }
+    out.push_str(theme::ellipsis());
+    out
+}
+
+/// `path` cut from the left when too long: `…ents/Plan.tsx`.
+fn cut_left(s: &str, w: usize) -> String {
+    if s.width() <= w {
+        return s.to_string();
+    }
+    crate::ui::truncate_left(s, w)
+}
+
+fn counts_spans(add: usize, del: usize) -> Vec<Span<'static>> {
+    let mut v = Vec::new();
+    if add > 0 {
+        v.push(Span::styled(format!("+{}", add), Style::default().fg(theme::ok())));
+    }
+    if del > 0 {
+        if add > 0 {
+            v.push(Span::raw(" "));
+        }
+        v.push(Span::styled(format!("−{}", del), Style::default().fg(theme::error())));
+    }
+    v
+}
+
+/// A file row of the list: `M src/pages/pricing.tsx      +30 −12`.
+fn list_row(f: &File, width: usize, sel: bool) -> Line<'static> {
+    let num_w = 12;
+    let path_w = width.saturating_sub(num_w + 4);
+    let path = cut_left(&f.path, path_w);
+    let st = if sel { Style::default().fg(text()).add_modifier(Modifier::BOLD) } else { Style::default().fg(text()) };
+    let mut spans = vec![
+        Span::styled(format!("{} ", f.status), Style::default().fg(dim())),
+        Span::styled(format!("{:<w$}", path, w = path_w), st),
+        Span::raw("  "),
+    ];
+    if f.binary || f.image {
+        spans.push(Span::styled("binary", Style::default().fg(dim())));
+    } else {
+        spans.extend(counts_spans(f.add, f.del));
+    }
+    Line::from(spans)
+}
+
+/// The file is folded (lock and generated files, until ⏎; a file you
+/// folded).
+fn is_folded(p: &Panel, f: &File) -> bool {
+    if p.folded.contains(&f.path) {
+        return true;
+    }
+    (f.generated || is_lock(&f.path)) && !p.unfolded.contains(&f.path)
+}
+
+/// Lock files fold by themselves.
+pub(crate) fn is_lock(path: &str) -> bool {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    name.ends_with(".lock")
+        || matches!(name, "package-lock.json" | "pnpm-lock.yaml" | "yarn.lock" | "Cargo.lock" | "Gemfile.lock" | "poetry.lock" | "go.sum" | "composer.lock")
+}
+
+/// The body's rows, under the 2 head rows: the file list on top (more
+/// than one file), then each file.
+pub(crate) fn body_rows(p: &Panel, d: &Diff, width: usize) -> Vec<(Line<'static>, Kind)> {
+    let mut out: Vec<(Line<'static>, Kind)> = Vec::new();
+    let d_st = Style::default().fg(dim());
+    if d.files.len() > 1 {
+        let right = "f the whole list";
+        let gap = width.saturating_sub(5 + right.width() + 2).max(1);
+        out.push((
+            Line::from(vec![
+                Span::styled("files", Style::default().fg(text())),
+                Span::raw(" ".repeat(gap)),
+                Span::styled("f", Style::default().fg(text())),
+                Span::styled(" the whole list", d_st),
+            ]),
+            Kind::FilesHead,
+        ));
+        for (i, f) in d.files.iter().enumerate().take(TOP_FILES) {
+            out.push((list_row(f, width, false), Kind::ListFile(i)));
+        }
+        if d.files.len() > TOP_FILES {
+            out.push((Line::from(Span::styled(format!("  ↓ {} more", d.files.len() - TOP_FILES), d_st)), Kind::More));
+        }
+        out.push((Line::from(""), Kind::Blank));
+    }
+    let num = |n: Option<u32>| n.map_or("    ".to_string(), |n| format!("{:>4}", n));
+    for (i, f) in d.files.iter().enumerate() {
+        let folded = is_folded(p, f);
+        let glyph = if folded || f.image || f.binary { theme::G_CLOSED } else { theme::G_OPEN };
+        let mut name = cut_left(&f.path, width.saturating_sub(24));
+        if let Some(old) = &f.old_path {
+            name = cut_left(&format!("{} → {}", old, f.path), width.saturating_sub(24));
+        }
+        let note = if f.image {
+            " · an image, ⏎ opens it"
+        } else if f.binary {
+            " · binary"
+        } else if folded && (f.generated || is_lock(&f.path)) {
+            " · generated, folded"
+        } else if folded {
+            " · folded"
+        } else {
+            ""
+        };
+        let head = format!("{} {}{}", theme::glyph(glyph), name, note);
+        let pad = 50usize.min(width.saturating_sub(14)).max(head.width() + 2);
+        let mut spans = vec![Span::styled(format!("{:<w$}", head, w = pad), Style::default().fg(text()).add_modifier(Modifier::BOLD))];
+        if !(f.binary || f.image) {
+            spans.extend(counts_spans(f.add, f.del));
+        }
+        out.push((Line::from(spans), Kind::FileHead(i)));
+        if folded || f.image || f.binary {
+            out.push((Line::from(""), Kind::Blank));
+            continue;
+        }
+        let whole = p.unfolded.contains(&f.path) || f.changed() <= BIG;
+        let mut changed = 0usize;
+        let mut hidden = 0usize;
+        for h in &f.hunks {
+            let hunk_changed = h.lines.iter().filter(|l| l.starts_with('+') || l.starts_with('-')).count();
+            if !whole && changed > 0 && changed + hunk_changed > BIG / 2 {
+                hidden += hunk_changed;
+                continue;
+            }
+            changed += hunk_changed;
+            let head = if h.head.is_empty() { "@@".to_string() } else { format!("@@ {} @@", h.head) };
+            out.push((Line::from(Span::styled(cut(&head, width), Style::default().fg(faint()))), Kind::Hunk(i)));
+            let (mut old, mut new) = (h.old, h.new);
+            for l in &h.lines {
+                let (mark, body) = l.split_at(l.chars().next().map_or(0, |c| c.len_utf8()));
+                let (o, nn, m, st) = match mark {
+                    "+" => {
+                        new += 1;
+                        (None, Some(new - 1), "+", add_st())
+                    }
+                    "-" => {
+                        old += 1;
+                        (Some(old - 1), None, "−", del_st())
+                    }
+                    _ => {
+                        old += 1;
+                        new += 1;
+                        (Some(old - 1), Some(new - 1), " ", Style::default().fg(text()))
+                    }
+                };
+                let body = body.replace('\t', "    ");
+                let lead = format!("{} {} {} ", num(o), num(nn), m);
+                let room = width.saturating_sub(lead.width());
+                let code = cut(&body, room);
+                let fill = room.saturating_sub(code.width());
+                let num_st = if mark == " " { Style::default().fg(faint()) } else { st };
+                out.push((
+                    Line::from(vec![
+                        Span::styled(lead, num_st),
+                        Span::styled(code, st),
+                        Span::styled(" ".repeat(if mark == " " { 0 } else { fill }), st),
+                    ]),
+                    Kind::Code(i, nn.or(o)),
+                ));
+            }
+        }
+        if hidden > 0 {
+            out.push((
+                Line::from(Span::styled(format!("{} {} more lines in this file · ⏎ shows them", theme::glyph(theme::G_CLOSED), hidden), d_st)),
+                Kind::Fold(i),
+            ));
+        }
+        if f.cut {
+            out.push((Line::from(Span::styled("the rest of this file is too long to show here", d_st)), Kind::Blank));
+        }
+        out.push((Line::from(""), Kind::Blank));
+    }
+    out.push((Line::from(Span::styled(format!("end of the diff · {}", files_word(d.files.len())), d_st)), Kind::End));
+    out
+}
+
+/// The file a body row belongs to (the head's `file 5 of 9`).
+fn file_at(rows: &[Kind], k: usize) -> Option<usize> {
+    rows.get(..=k.min(rows.len().saturating_sub(1)))?.iter().rev().find_map(|r| match r {
+        Kind::FileHead(i) | Kind::Hunk(i) | Kind::Code(i, _) | Kind::Fold(i) => Some(*i),
+        _ => None,
+    })
+}
+
+/// The 2 head rows: `pricing-page vs main · 9 files +429 −367   ∿ still
+/// working`, then the branch (`branch x · 6 commits + changes not
+/// committed yet`), or once scrolled `file 5 of 9 · path · 62%`.
+pub(crate) fn head_rows(p: &Panel, d: &Diff, width: usize, scrolled_file: Option<(usize, usize)>, now: u64) -> Vec<Line<'static>> {
+    let title_st = if p.focused { Style::default().fg(accent()).add_modifier(Modifier::BOLD) } else { Style::default().fg(text()).add_modifier(Modifier::BOLD) };
+    let mut first = vec![Span::styled(format!("{} · {} ", d.title, files_word(d.files.len())), title_st)];
+    first.extend(counts_spans(d.add(), d.del()));
+    if d.working {
+        first.push(Span::styled(format!("   {} still working", theme::glyph(theme::G_WORKING)), Style::default().fg(dim())));
+    }
+    let second = match scrolled_file {
+        Some((i, pct)) if d.files.len() > 1 || pct > 0 => {
+            let path = d.files.get(i).map_or(String::new(), |f| f.path.clone());
+            format!("file {} of {} · {} · {}%", i + 1, d.files.len(), cut_left(&path, width.saturating_sub(24)), pct)
+        }
+        _ => {
+            let mut s = if d.branch.is_empty() { String::new() } else { format!("branch {}", d.branch) };
+            let commits = match d.commits {
+                0 => String::new(),
+                1 => "1 commit".to_string(),
+                c => format!("{} commits", c),
+            };
+            let tail = match (commits.is_empty(), d.uncommitted) {
+                (false, true) => format!("{} + changes not committed yet", commits),
+                (true, true) => "changes not committed yet".to_string(),
+                (false, false) => commits,
+                (true, false) => String::new(),
+            };
+            for part in [tail, d.landed_ms.map(|ms| format!("landed {}", crate::artifacts::ago_words(ms, now))).unwrap_or_default()] {
+                if !part.is_empty() {
+                    if !s.is_empty() {
+                        s.push_str(" · ");
+                    }
+                    s.push_str(&part);
+                }
+            }
+            s
+        }
+    };
+    vec![Line::from(first), Line::from(Span::styled(cut(&second, width), Style::default().fg(dim())))]
+}
+
+/// The file list's lines (`f`): the filter, the files, the legend.
+fn list_lines(d: &Diff, l: &List, width: usize, height: usize) -> (Vec<Line<'static>>, Vec<usize>) {
+    let mut out = Vec::new();
+    if l.filter.is_empty() {
+        out.push(Line::from(Span::styled(format!("{} type to filter the files", theme::glyph(theme::G_YOU)), Style::default().fg(faint()))));
+    } else {
+        out.push(Line::from(vec![
+            Span::styled(format!("{} ", theme::glyph(theme::G_YOU)), Style::default().fg(accent())),
+            Span::styled(l.filter.clone(), Style::default().fg(text())),
+            Span::styled("▏", Style::default().fg(accent())),
+        ]));
+    }
+    out.push(Line::from(""));
+    let shown = list_matches(d, &l.filter);
+    let room = height.saturating_sub(out.len() + 2);
+    let sel = l.sel.min(shown.len().saturating_sub(1));
+    let top = sel.saturating_sub(room.saturating_sub(1));
+    for (k, &i) in shown.iter().enumerate().skip(top).take(room) {
+        let mut line = list_row(&d.files[i], width.saturating_sub(2), k == sel);
+        let mark = if k == sel { Span::styled(format!("{} ", theme::glyph(theme::G_YOU)), Style::default().fg(accent())) } else { Span::raw("  ") };
+        line.spans.insert(0, mark);
+        out.push(line);
+    }
+    if shown.is_empty() {
+        out.push(Line::from(Span::styled("  nothing matches", Style::default().fg(dim()))));
+    }
+    out.push(Line::from(""));
+    out.push(Line::from(Span::styled("M changed   A added   D deleted   R renamed", Style::default().fg(dim()))));
+    (out, shown)
+}
+
+/// The files whose path has every word of `filter`.
+pub(crate) fn list_matches(d: &Diff, filter: &str) -> Vec<usize> {
+    let words: Vec<String> = filter.split_whitespace().map(|w| w.to_lowercase()).collect();
+    (0..d.files.len()).filter(|&i| words.iter().all(|w| d.files[i].path.to_lowercase().contains(w.as_str()))).collect()
+}
+
+/// The panel's lines in `width` × `height`; sets its rows, cursor and
+/// window.
+pub(crate) fn lines(p: &mut Panel, width: usize, height: usize, now: u64) -> Vec<Line<'static>> {
+    let Some(d) = p.diff.clone() else {
+        let what = match &p.ask {
+            Ask::Agent(a) => format!("{}'s changes", a),
+            Ask::Branch(b) => format!("{} vs main", b),
+            Ask::Pr(n) => format!("PR #{}", n),
+            Ask::Range(r, _) => r.clone(),
+        };
+        p.rows.clear();
+        return vec![Line::from(Span::styled(what, Style::default().fg(text()).add_modifier(Modifier::BOLD))), Line::from(Span::styled("reading the diff…", Style::default().fg(dim())))];
+    };
+    if !d.error.is_empty() {
+        p.rows.clear();
+        return vec![
+            Line::from(Span::styled(d.title.clone(), Style::default().fg(text()).add_modifier(Modifier::BOLD))),
+            Line::from(Span::styled(d.error.clone(), Style::default().fg(theme::error()))),
+        ];
+    }
+    if d.files.is_empty() {
+        p.rows.clear();
+        let mut v = head_rows(p, &d, width, None, now);
+        v.push(Line::from(""));
+        v.push(Line::from(Span::styled("no changes against main", Style::default().fg(dim()))));
+        return v;
+    }
+    if let Some(l) = p.list.clone() {
+        let mut v = head_rows(p, &d, width, None, now);
+        v.truncate(1);
+        let (rest, _) = list_lines(&d, &l, width, height.saturating_sub(1));
+        v.extend(rest);
+        return v;
+    }
+    let rows = body_rows(p, &d, width);
+    let body_h = height.saturating_sub(3).max(1);
+    p.page = body_h;
+    p.rows = rows.iter().map(|(_, k)| k.clone()).collect();
+    p.cursor = p.cursor.min(rows.len().saturating_sub(1));
+    if p.cursor < p.top {
+        p.top = p.cursor;
+    }
+    if p.cursor >= p.top + body_h {
+        p.top = p.cursor + 1 - body_h;
+    }
+    p.top = p.top.min(rows.len().saturating_sub(body_h.min(rows.len())));
+    let scrolled = (p.top > 0).then(|| {
+        let i = file_at(&p.rows, p.top + body_h / 2).unwrap_or(0);
+        let pct = ((p.top + body_h).min(rows.len()) * 100 / rows.len().max(1)).min(100);
+        (i, pct)
+    });
+    let mut out = head_rows(p, &d, width, scrolled, now);
+    out.push(Line::from(""));
+    for (k, (line, _)) in rows.into_iter().enumerate().skip(p.top).take(body_h) {
+        let line = if p.focused && k == p.cursor {
+            Line::from(line.spans.into_iter().map(|s| Span::styled(s.content, s.style.bg(theme::selection_bg()))).collect::<Vec<_>>())
+        } else {
+            line
+        };
+        out.push(line);
+    }
+    out
+}
+
+/// The keys the key bar shows while the panel has them.
+pub(crate) fn key_pairs(app: &App) -> Vec<(&'static str, String)> {
+    let Some(p) = app.diff.as_ref() else { return Vec::new() };
+    let full = !p.side;
+    if p.list.is_some() {
+        return vec![("⏎", "go to the file".into()), ("esc", "back to the diff".into())];
+    }
+    match p.rows.get(p.cursor) {
+        Some(Kind::Code(i, Some(line))) if p.focused => {
+            let path = p.diff.as_ref().and_then(|d| d.files.get(*i)).map(|f| f.path.clone()).unwrap_or_default();
+            let close = if full { ("esc", "close".to_string()) } else { ("ctrl+g", "close".to_string()) };
+            vec![("⏎", format!("open {}:{} in your editor", path, line)), ("↑↓", "move".into()), close]
+        }
+        _ => {
+            let mut v = vec![("↑↓", "scroll".to_string()), ("] [", "next file".into()), ("f", "files".into())];
+            v.push(("⏎", if full { "editor".into() } else { "open in your editor".into() }));
+            v.push(if full { ("esc", "close".into()) } else { ("ctrl+g", "close".into()) });
+            v
+        }
+    }
+}
+
+// ---- drawing ----
+
+/// The panel in `area` (the agents panel's place).
+pub(crate) fn draw_side(app: &mut App, frame: &mut Frame, area: Rect) {
+    let now = crate::when::now_ms();
+    let Some(p) = app.diff.as_mut() else { return };
+    p.side = true;
+    frame.render_widget(Clear, area);
+    let inner = Rect { x: area.x + 1, width: area.width.saturating_sub(2), ..area };
+    let rows = lines(p, inner.width as usize, inner.height as usize, now);
+    p.area = area;
+    p.body = Rect { y: inner.y + 3, height: inner.height.saturating_sub(3), ..inner };
+    frame.render_widget(Paragraph::new(rows), inner);
+    crate::textlayer::text(inner);
+}
+
+/// Under [`SIDE_FROM`] columns: the whole screen, its frame `bise :* ──
+/// diff`, its key bar at the bottom.
+pub(crate) fn draw_full(app: &mut App, frame: &mut Frame) {
+    if app.diff.is_none() || side(frame.area().width) {
+        return;
+    }
+    let full = frame.area();
+    crate::pointer::region(full, crate::pointer::Shape::Default);
+    frame.render_widget(Clear, full);
+    if full.width < 30 || full.height < 8 {
+        return;
+    }
+    let area = crate::artifacts_screen::draw_frame(app, frame, full, "diff");
+    let body = Rect { y: area.y + 1, height: area.height.saturating_sub(3), ..area };
+    let now = crate::when::now_ms();
+    if let Some(p) = app.diff.as_mut() {
+        p.focused = true;
+        p.side = false;
+        let rows = lines(p, body.width as usize, body.height as usize, now);
+        p.area = full;
+        p.body = Rect { y: body.y + 3, height: body.height.saturating_sub(3), ..body };
+        frame.render_widget(Paragraph::new(rows), body);
+    }
+    let pairs = key_pairs(app);
+    let mut spans = Vec::new();
+    for (i, (k, w)) in pairs.iter().enumerate() {
+        if i > 0 {
+            spans.push(Span::raw("   "));
+        }
+        spans.push(Span::styled(k.to_string(), Style::default().fg(text())));
+        spans.push(Span::styled(format!(" {}", w), Style::default().fg(dim())));
+    }
+    let kb = Rect { y: area.bottom().saturating_sub(1), height: 1, ..area };
+    frame.render_widget(Paragraph::new(Line::from(spans)), kb);
+    crate::textlayer::text(area);
+}
+
+// ---- keys and the mouse ----
+
+fn next_file(p: &mut Panel, fwd: bool) {
+    let heads: Vec<usize> = p.rows.iter().enumerate().filter(|(_, k)| matches!(k, Kind::FileHead(_))).map(|(i, _)| i).collect();
+    let to = if fwd { heads.iter().find(|&&h| h > p.cursor) } else { heads.iter().rev().find(|&&h| h < p.cursor) };
+    if let Some(&h) = to {
+        p.cursor = h;
+        p.top = h;
+    }
+}
+
+fn go_to_file(p: &mut Panel, i: usize) {
+    if let Some(h) = p.rows.iter().position(|k| *k == Kind::FileHead(i)) {
+        p.cursor = h;
+        p.top = h;
+    } else {
+        // the rows are built at the next frame: aim at it then
+        p.pending_file(i);
+    }
+}
+
+impl Panel {
+    fn pending_file(&mut self, i: usize) {
+        // the body rows of a diff always hold every file's head; built
+        // from the diff now
+        if let Some(d) = self.diff.clone() {
+            let rows = body_rows(self, &d, 80);
+            self.rows = rows.into_iter().map(|(_, k)| k).collect();
+            if let Some(h) = self.rows.iter().position(|k| *k == Kind::FileHead(i)) {
+                self.cursor = h;
+                self.top = h;
+            }
+        }
+    }
+}
+
+/// ⏎: the line in your editor, or unfold, or the image opens.
+fn enter(app: &mut App) {
+    let Some(p) = app.diff.as_mut() else { return };
+    let Some(d) = p.diff.clone() else { return };
+    match p.rows.get(p.cursor).cloned() {
+        Some(Kind::Fold(i)) => {
+            if let Some(f) = d.files.get(i) {
+                p.unfolded.insert(f.path.clone());
+            }
+        }
+        Some(Kind::FileHead(i)) => {
+            let Some(f) = d.files.get(i) else { return };
+            if f.image || f.binary {
+                let t = crate::file_links::Target { path: f.abs.clone().into(), line: None, col: None };
+                let url = crate::file_links::url_of(&t);
+                let ok = crate::links::open(&url);
+                app.flash = Some((if ok { format!("opening {}", f.path) } else { format!("could not open {}", f.path) }, std::time::Instant::now()));
+            } else if is_folded(p, f) {
+                p.folded.remove(&f.path);
+                p.unfolded.insert(f.path.clone());
+            } else {
+                p.folded.insert(f.path.clone());
+                p.unfolded.remove(&f.path);
+            }
+        }
+        Some(Kind::ListFile(i)) => go_to_file(p, i),
+        Some(Kind::More) | Some(Kind::FilesHead) => p.list = Some(List::default()),
+        Some(Kind::Code(i, line)) => {
+            let Some(f) = d.files.get(i) else { return };
+            if f.abs.is_empty() {
+                return;
+            }
+            let t = crate::file_links::Target { path: f.abs.clone().into(), line, col: None };
+            let note = crate::file_links::open(app, &t);
+            app.flash = Some((note, std::time::Instant::now()));
+        }
+        _ => {}
+    }
+}
+
+/// Keys: ctrl+g everywhere (open, close); the rest while the panel has
+/// the focus. True when taken.
+pub(crate) fn on_key(app: &mut App, k: &KeyEvent) -> bool {
+    if k.kind != KeyEventKind::Press {
+        return false;
+    }
+    let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
+    if ctrl && k.code == KeyCode::Char('g') {
+        toggle(app);
+        return true;
+    }
+    let Some(p) = app.diff.as_mut() else { return false };
+    let full = !p.side;
+    if !p.focused && !full {
+        return false;
+    }
+    // the file list: its filter takes the letters
+    if let Some(l) = p.list.as_mut() {
+        let Some(d) = p.diff.clone() else { return true };
+        let shown = list_matches(&d, &l.filter);
+        match k.code {
+            KeyCode::Esc => p.list = None,
+            KeyCode::Up => l.sel = l.sel.saturating_sub(1),
+            KeyCode::Down => l.sel = (l.sel + 1).min(shown.len().saturating_sub(1)),
+            KeyCode::Enter => {
+                let pick = shown.get(l.sel.min(shown.len().saturating_sub(1))).copied();
+                p.list = None;
+                if let Some(i) = pick {
+                    go_to_file(p, i);
+                }
+            }
+            KeyCode::Backspace => {
+                l.filter.pop();
+                l.sel = 0;
+            }
+            KeyCode::Char(c) if !ctrl => {
+                l.filter.push(c);
+                l.sel = 0;
+            }
+            _ => {}
+        }
+        return true;
+    }
+    let n = p.rows.len();
+    let page = p.page.max(3);
+    match k.code {
+        KeyCode::Esc if full => app.diff = None,
+        KeyCode::Esc => p.focused = false,
+        KeyCode::Up | KeyCode::Char('k') if !ctrl => p.cursor = p.cursor.saturating_sub(1),
+        KeyCode::Down | KeyCode::Char('j') if !ctrl => p.cursor = (p.cursor + 1).min(n.saturating_sub(1)),
+        KeyCode::PageUp => p.cursor = p.cursor.saturating_sub(page),
+        KeyCode::PageDown => p.cursor = (p.cursor + page).min(n.saturating_sub(1)),
+        KeyCode::Home => p.cursor = 0,
+        KeyCode::End => p.cursor = n.saturating_sub(1),
+        KeyCode::Char(']') => next_file(p, true),
+        KeyCode::Char('[') => next_file(p, false),
+        KeyCode::Char('f') if !ctrl => p.list = Some(List::default()),
+        KeyCode::Enter => enter(app),
+        KeyCode::Char('c') if ctrl => return false,
+        // the rest stays in the panel (the composer gets them back with esc)
+        _ => {}
+    }
+    true
+}
+
+/// The mouse over the panel: the wheel scrolls it, a click takes the
+/// keys and moves the cursor there (⏎ on what it clicked: a fold, a
+/// file of the list).
+pub(crate) fn mouse(app: &mut App, m: &crossterm::event::MouseEvent) -> bool {
+    use crossterm::event::{MouseButton, MouseEventKind};
+    let Some(p) = app.diff.as_mut() else { return false };
+    let full = !p.side;
+    let inside = full || (m.column >= p.area.x && m.column < p.area.right() && m.row >= p.area.y && m.row < p.area.bottom());
+    if !inside {
+        return false;
+    }
+    match m.kind {
+        MouseEventKind::ScrollUp => {
+            p.top = p.top.saturating_sub(3);
+            p.cursor = p.cursor.min(p.top + p.page.saturating_sub(1)).max(p.top);
+        }
+        MouseEventKind::ScrollDown => {
+            let max = p.rows.len().saturating_sub(p.page);
+            p.top = (p.top + 3).min(max);
+            p.cursor = p.cursor.max(p.top);
+        }
+        MouseEventKind::Down(MouseButton::Left) => {
+            p.focused = true;
+            if m.row >= p.body.y && m.row < p.body.bottom() && p.list.is_none() {
+                let k = p.top + (m.row - p.body.y) as usize;
+                if k < p.rows.len() {
+                    p.cursor = k;
+                    if matches!(p.rows[k], Kind::Fold(_) | Kind::ListFile(_) | Kind::More | Kind::FileHead(_)) {
+                        enter(app);
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+    true
+}
+
+// ---- the doors ----
+
+/// A `bise-diff:` url (the `± 3 files` under a landed line):
+/// `bise-diff:range/<from>..<to>?agent=<a>`, `bise-diff:agent/<a>`,
+/// `bise-diff:branch/<b>`.
+pub(crate) fn ask_of_url(url: &str) -> Option<Ask> {
+    let rest = url.strip_prefix("bise-diff:")?;
+    let (kind, arg) = rest.split_once('/')?;
+    match kind {
+        "agent" => Some(Ask::Agent(arg.to_string())),
+        "branch" => Some(Ask::Branch(arg.to_string())),
+        "pr" => arg.parse().ok().map(Ask::Pr),
+        "range" => {
+            let (range, agent) = arg.split_once("?agent=").unwrap_or((arg, ""));
+            Some(Ask::Range(range.to_string(), agent.to_string()))
+        }
+        _ => None,
+    }
+}
+
+pub(crate) fn url_of(ask: &Ask) -> String {
+    match ask {
+        Ask::Agent(a) => format!("bise-diff:agent/{}", a),
+        Ask::Branch(b) => format!("bise-diff:branch/{}", b),
+        Ask::Pr(n) => format!("bise-diff:pr/{}", n),
+        Ask::Range(r, a) => format!("bise-diff:range/{}?agent={}", r, a),
+    }
+}
+
+// ---- /diff's branches ----
+
+/// One branch the `/diff` picker offers (the hub's `branches` event).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct Branch {
+    pub(crate) branch: String,
+    pub(crate) agents: Vec<String>,
+    pub(crate) commits: u64,
+    pub(crate) uncommitted: bool,
+    pub(crate) pr: Option<u64>,
+    pub(crate) landed_ms: Option<u64>,
+    pub(crate) add: usize,
+    pub(crate) del: usize,
+}
+
+thread_local! {
+    static BRANCHES: std::cell::RefCell<(Vec<Branch>, Option<std::time::Instant>)> = const { std::cell::RefCell::new((Vec::new(), None)) };
+}
+
+pub(crate) fn branches_event(v: &Value) {
+    let rows = v
+        .get("rows")
+        .and_then(|x| x.as_array())
+        .map(|a| {
+            a.iter()
+                .map(|r| Branch {
+                    branch: s(r, "branch"),
+                    agents: r.get("agents").and_then(|x| x.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default(),
+                    commits: n(r, "commits"),
+                    uncommitted: b(r, "uncommitted"),
+                    pr: r.get("pr").and_then(|x| x.as_u64()),
+                    landed_ms: r.get("landed_ms").and_then(|x| x.as_u64()),
+                    add: n(r, "add") as usize,
+                    del: n(r, "del") as usize,
+                })
+                .filter(|b| !b.branch.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+    BRANCHES.with(|c| c.borrow_mut().0 = rows);
+}
+
+/// The branches the hub last sent; asks again at most every 5 s while
+/// the picker is up.
+pub(crate) fn branches(app: &App) -> Vec<Branch> {
+    let stale = BRANCHES.with(|c| c.borrow().1.is_none_or(|t| t.elapsed() > std::time::Duration::from_secs(5)));
+    if stale {
+        BRANCHES.with(|c| c.borrow_mut().1 = Some(std::time::Instant::now()));
+        app.sb.send_shared(serde_json::json!({"op": "branches"}));
+    }
+    BRANCHES.with(|c| c.borrow().0.clone())
+}
+
+/// What the picker says of a branch: `landed 3 min ago`, `s1, s2 · 4
+/// commits`, `launch · not committed yet`, `no agent · PR #7 open`.
+pub(crate) fn branch_words(b: &Branch, now: u64) -> String {
+    let who = if b.agents.is_empty() { "no agent".to_string() } else { b.agents.join(", ") };
+    if let Some(ms) = b.landed_ms {
+        return format!("landed {}", crate::artifacts::ago_words(ms, now));
+    }
+    let what = match (b.pr, b.commits, b.uncommitted) {
+        (Some(n), _, _) => format!("PR #{} open", n),
+        (None, 0, true) => "not committed yet".to_string(),
+        (None, 1, _) => "1 commit".to_string(),
+        (None, c, _) => format!("{} commits", c),
+    };
+    format!("{} · {}", who, what)
+}
+
+#[cfg(test)]
+#[path = "diffview_tests.rs"]
+mod tests;
