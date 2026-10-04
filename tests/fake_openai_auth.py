@@ -441,9 +441,11 @@ class H(http.server.BaseHTTPRequestHandler):
             return bad("code_challenge_method must be S256")
         if not CHALLENGE.match(q.get("code_challenge", "")):
             return bad("code_challenge must be a base64url SHA-256 digest without padding")
-        host = q.get("ext_agent_host_id", "")
-        if not HOST_ID.match(host):
-            return bad("ext_agent_host_id is required (urn:uuid:, urn:ietf:params:oauth:jwk-thumbprint: or did:key:)")
+        # optional, like OpenAI's devkit (sendHostId defaults to false);
+        # when sent, one of the documented formats
+        host = q.get("ext_agent_host_id")
+        if host is not None and not HOST_ID.match(host):
+            return bad("ext_agent_host_id must be urn:uuid:, urn:ietf:params:oauth:jwk-thumbprint: or did:key:")
         if fresh and not q.get("agent_name_hint"):
             return bad("agent_name_hint is required with dynamic_agent_client")
         if not fresh and "agent_name_hint" in q:

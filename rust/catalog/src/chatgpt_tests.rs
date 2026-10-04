@@ -99,6 +99,7 @@ impl Fake {
             issuer: self.url.clone(),
             base_url: format!("{}/v1", self.url),
             wait: Duration::from_secs(20),
+            send_host_id: false,
         }
     }
 
@@ -297,7 +298,7 @@ fn a_first_sign_in_registers_checks_and_saves_the_plan_tokens() {
     assert!(s.url().starts_with(&format!("{}/api/accounts/authorize?", fake.url)));
     assert_eq!(p["client_id"], DYNAMIC_CLIENT);
     assert_eq!(p["agent_name_hint"], "bise");
-    assert!(p["ext_agent_host_id"].starts_with("urn:uuid:") && p["ext_agent_host_id"].len() == 45, "{}", p["ext_agent_host_id"]);
+    assert!(!p.contains_key("ext_agent_host_id"), "the host id is off by default (OpenAI's devkit)");
     assert_eq!(p["redirect_uri"], format!("http://127.0.0.1:{}/auth/callback", s.port()));
     assert_eq!((p["scope"].as_str(), p["resource"].as_str()), (SCOPES, RESOURCE));
     assert_eq!((p["response_type"].as_str(), p["code_challenge_method"].as_str()), ("code", "S256"));
@@ -316,7 +317,7 @@ fn a_first_sign_in_registers_checks_and_saves_the_plan_tokens() {
     assert_eq!(state(&Store::read(&ctx.auth_file).unwrap()), State::SignedIn { email: "you@example.com".into(), plan: Some("Plus".into()) });
     // the files: auth.json and host-id private, the host id kept
     let host = std::fs::read_to_string(dir.join("host-id")).unwrap();
-    assert_eq!(host.trim(), p["ext_agent_host_id"]);
+    assert!(host.trim().starts_with("urn:uuid:") && host.trim().len() == 45, "{host}");
     #[cfg(unix)]
     for f in ["auth.json", "host-id"] {
         use std::os::unix::fs::PermissionsExt;
@@ -336,8 +337,8 @@ fn a_first_sign_in_registers_checks_and_saves_the_plan_tokens() {
     assert_eq!(p2["client_id"], CLIENT);
     assert!(!p2.contains_key("agent_name_hint"));
     assert_eq!(p2["login_hint"], "you@example.com");
-    assert_eq!(p2["id_token_hint"], o.id_token);
-    assert_eq!(p2["ext_agent_host_id"], p["ext_agent_host_id"]);
+    // no token in a browser URL (`open` gets it as an argument), no host id
+    assert!(!p2.contains_key("id_token_hint") && !p2.contains_key("ext_agent_host_id"));
     assert_ne!((&p2["state"], &p2["nonce"]), (&p["state"], &p["nonce"]));
     consent(&fake, s.url(), None, None);
     assert!(matches!(s.wait(), Poll::Done(_)));
@@ -353,6 +354,76 @@ fn a_first_sign_in_registers_checks_and_saves_the_plan_tokens() {
     s.cancel();
     assert_eq!(s.wait(), Poll::Unfinished);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The authorization request's parameters, by name, sorted.
+fn names(url: &str) -> Vec<String> {
+    let mut v: Vec<String> = params(url).into_keys().collect();
+    v.sort();
+    v
+}
+
+// v2026.10.2-15: a real sign-in was refused at the code exchange
+// (invalid_grant) while bise sent ext_agent_host_id (and, signing in
+// again, the ID token as id_token_hint), which OpenAI's own sign-in
+// devkit (github.com/openai/sign-in-with-chatgpt-devkit, f723814,
+// packages/local/src/oauth.ts) does not send by default. bise's request
+// is now the devkit's, name for name.
+#[test]
+fn the_authorization_request_is_the_devkits_name_for_name() {
+    let fake = Fake::start();
+    let dir = tmp("devkit");
+    let ctx = fake.ctx(&dir);
+    let devkit_new = ["agent_name_hint", "client_id", "code_challenge", "code_challenge_method", "nonce", "redirect_uri", "resource", "response_type", "scope", "state"];
+    let s = start_ctx(&ctx, Mode::Again).unwrap();
+    assert_eq!(names(s.url()), devkit_new);
+    consent(&fake, s.url(), Some(CLIENT), None);
+    assert!(matches!(s.wait(), Poll::Done(_)));
+    // signing in again: the saved client and the email, nothing else
+    let devkit_again = ["client_id", "code_challenge", "code_challenge_method", "login_hint", "nonce", "redirect_uri", "resource", "response_type", "scope", "state"];
+    let s = start_ctx(&ctx, Mode::Again).unwrap();
+    assert_eq!(names(s.url()), devkit_again);
+    let o = entry(&ctx).unwrap();
+    assert!(!s.url().contains(&o.id_token) && !s.url().contains(&o.access), "no token in the browser URL");
+    // BISE_CHATGPT_SEND_HOST_ID=on: the host id comes back, the rest the same
+    let on = Ctx { send_host_id: true, ..ctx.clone() };
+    let s = start_ctx(&on, Mode::NewAccount).unwrap();
+    let p = params(s.url());
+    let host = std::fs::read_to_string(dir.join("host-id")).unwrap();
+    assert_eq!(p["ext_agent_host_id"], host.trim());
+    let mut want: Vec<String> = devkit_new.iter().map(|s| s.to_string()).chain(["ext_agent_host_id".to_string()]).collect();
+    want.sort();
+    assert_eq!(names(s.url()), want);
+}
+
+// The devkit's onRegistration: the issued client is kept before the
+// one-time code exchange, so a refused exchange is retried with it and
+// bise is not registered a second time.
+#[test]
+fn a_refused_code_exchange_keeps_the_issued_client_for_the_retry() {
+    let fake = Fake::start();
+    let dir = tmp("refused-code");
+    let ctx = fake.ctx(&dir);
+    let s = start_ctx(&ctx, Mode::Again).unwrap();
+    let p = params(s.url());
+    // a code the server does not know (spent, expired): invalid_grant
+    let cb = format!("{}?{}", p["redirect_uri"], form(&[("code", "code-spent"), ("state", &p["state"]), ("scope", SCOPES), ("client_id", CLIENT)]));
+    let (status, page_) = browse(&cb);
+    assert_eq!(status, 200);
+    assert!(page_.contains("invalid_grant"), "{page_}");
+    assert!(matches!(s.wait(), Poll::Failed(l) if l.contains("ChatGPT refused the sign-in")));
+    let o = entry(&ctx).expect("the issued client is kept");
+    assert_eq!(o.client_id, CLIENT);
+    assert!(o.access.is_empty() && o.refresh.is_empty() && o.email.is_empty());
+    assert_eq!(state(&Store::read(&ctx.auth_file).unwrap()), State::NotSetUp, "a client alone is not a sign-in");
+    // the retry: the kept client, no new registration, and it works
+    let s = start_ctx(&ctx, Mode::Again).unwrap();
+    let p2 = params(s.url());
+    assert_eq!(p2["client_id"], CLIENT);
+    assert!(!p2.contains_key("agent_name_hint"));
+    consent(&fake, s.url(), None, None);
+    assert!(matches!(s.wait(), Poll::Done(_)));
+    assert_eq!(entry(&ctx).unwrap().email, "you@example.com");
 }
 
 #[test]
@@ -420,7 +491,11 @@ fn an_id_token_with_a_bad_signature_or_nonce_saves_nothing() {
         let r = s.wait();
         let want = if knob == "sig" { "bad signature" } else { "nonce" };
         assert!(matches!(&r, Poll::Failed(l) if l.contains("ID token didn't check out") && l.contains(want) && !l.contains("at-")), "{knob}: {r:?}");
-        assert!(entry(&ctx).is_none(), "{knob}");
+        // no account and no token saved; only the issued client, kept
+        // for the retry (the devkit's onRegistration)
+        let o = entry(&ctx).unwrap();
+        assert!(o.client_id == CLIENT && o.email.is_empty() && o.access.is_empty() && o.refresh.is_empty() && o.id_token.is_empty(), "{knob}");
+        assert_eq!(state(&Store::read(&ctx.auth_file).unwrap()), State::NotSetUp, "{knob}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
@@ -545,6 +620,7 @@ fn child_prints_its_token() {
         issuer: issuer.into(),
         base_url: String::new(),
         wait: Duration::from_secs(1),
+        send_host_id: false,
     };
     println!("TOKEN={}", access_token_ctx(&ctx).unwrap());
 }

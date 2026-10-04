@@ -56,6 +56,12 @@ pub const ID: &str = "chatgpt";
 /// `BISE_CHATGPT_ISSUER`: where the sign-in server is (tests).
 pub const ISSUER_ENV: &str = "BISE_CHATGPT_ISSUER";
 pub const DEFAULT_ISSUER: &str = "https://auth.openai.com";
+/// `BISE_CHATGPT_SEND_HOST_ID=on`: send the host id (`ext_agent_host_id`)
+/// in the authorization request. Off by default, like OpenAI's own
+/// sign-in devkit (`sendHostId: false`, "enable only when the
+/// authorization provider supports ext_agent_host_id"): a sign-in that
+/// sent it was refused at the code exchange (`invalid_grant`, v2026.10.2-15).
+pub const HOST_ID_ENV: &str = "BISE_CHATGPT_SEND_HOST_ID";
 /// The `resource` of every token request (the public API).
 pub const RESOURCE: &str = "https://api.openai.com/v1";
 /// Identity scopes, then the plan's.
@@ -93,6 +99,9 @@ pub struct Ctx {
     pub base_url: String,
     /// how long a sign-in waits for the browser
     pub wait: Duration,
+    /// send `ext_agent_host_id` in the authorization request
+    /// ([`HOST_ID_ENV`]; off by default)
+    pub send_host_id: bool,
 }
 
 impl Ctx {
@@ -105,7 +114,8 @@ impl Ctx {
         let text = std::fs::read_to_string(&paths.config).ok();
         let setup = crate::Setup::from_text(text.as_deref(), &|k| std::env::var(k).ok());
         let base_url = setup.catalog.provider(ID).map(|p| p.base_url.clone()).filter(|u| !u.is_empty()).unwrap_or_else(|| RESOURCE.into());
-        Ctx { auth_file: paths.auth_file.clone(), root, issuer: issuer.trim_end_matches('/').to_string(), base_url, wait: WAIT }
+        let send_host_id = std::env::var(HOST_ID_ENV).map(|v| matches!(v.trim(), "1" | "on" | "true" | "yes")).unwrap_or(false);
+        Ctx { auth_file: paths.auth_file.clone(), root, issuer: issuer.trim_end_matches('/').to_string(), base_url, wait: WAIT, send_host_id }
     }
 
     fn lock_file(&self) -> PathBuf {
@@ -260,6 +270,10 @@ pub fn good_until(o: &OAuth) -> Option<u64> {
 /// The state at `now` (seconds since the epoch).
 pub fn state_at(store: &Store, now: u64) -> State {
     let Some(o) = store.oauth(ID) else { return State::NotSetUp };
+    // a client kept from a sign-in that never finished: no account yet
+    if !o.expired && !o.signed_in() && o.email.is_empty() && o.subject.is_empty() {
+        return State::NotSetUp;
+    }
     let email = (!o.email.is_empty()).then(|| o.email.clone());
     if o.expired {
         return State::Expired { email: o.email };
@@ -453,6 +467,19 @@ impl Drop for Lock {
 
 fn write_store(ctx: &Ctx, store: &Store) -> Result<(), String> {
     store.write(&ctx.auth_file).map_err(|e| format!("cannot write {}: {}", ctx.auth_file.display(), e))
+}
+
+/// Save a newly issued client alone (no account, no token yet): the
+/// next sign-in reuses it. An entry that already holds a sign-in is left
+/// as it is.
+fn keep_client(ctx: &Ctx, client: &str) -> Result<(), String> {
+    let _l = lock(&ctx.lock_file())?;
+    let mut store = Store::read(&ctx.auth_file)?;
+    if store.oauth(ID).is_some_and(|o| !o.access.is_empty() || !o.refresh.is_empty()) {
+        return Ok(());
+    }
+    store.set_oauth(ID, &OAuth { client_id: client.to_string(), ..OAuth::default() });
+    write_store(ctx, &store)
 }
 
 // ---- the token (bise auth token chatgpt) ----
@@ -894,11 +921,13 @@ pub fn start_ctx(ctx: &Ctx, mode: Mode) -> Result<SignIn<Account>, String> {
     if p.dynamic {
         q.push(("agent_name_hint", "bise"));
     }
-    q.push(("ext_agent_host_id", &host));
+    // OpenAI's devkit: the host id only where the deployment takes it,
+    // and no id_token_hint (the browser URL goes through `open`'s
+    // arguments: no token in it); a saved email as login_hint
+    if ctx.send_host_id {
+        q.push(("ext_agent_host_id", &host));
+    }
     if let Some(o) = &saved {
-        if !o.id_token.is_empty() {
-            q.push(("id_token_hint", &o.id_token));
-        }
         if !o.email.is_empty() {
             q.push(("login_hint", &o.email));
         }
@@ -956,6 +985,12 @@ fn callback(p: &Pending, q: &[(String, String)]) -> Step<Account> {
 /// Exchange the code, check the ID token and the plan scope, save.
 /// Ok(None): signed in without the plan's use (the client kept).
 fn finish(p: &Pending, client: &str, code: &str, cb_scope: Option<&str>) -> Result<Option<Account>, String> {
+    if p.dynamic {
+        // OpenAI's devkit (onRegistration): keep the issued client before
+        // the one-time code exchange, so a failed exchange is retried with
+        // it instead of registering bise again
+        keep_client(&p.ctx, client)?;
+    }
     let meta = discover(&p.ctx)?;
     let body = form(&[
         ("grant_type", "authorization_code"),

@@ -192,8 +192,7 @@ def t_servers():
         check(http("GET", c.authorize_url(redirect_uri="http://127.0.0.1:5555/callback"))[0] == 400,
               "another callback path refused")
         check(http("GET", c.authorize_url(client_id="oaiapp_never"))[0] == 400, "unknown client refused")
-        for over, err in (({"ext_agent_host_id": None}, "invalid_request"),
-                          ({"ext_agent_host_id": "you@example.com"}, "invalid_request"),
+        for over, err in (({"ext_agent_host_id": "you@example.com"}, "invalid_request"),
                           ({"agent_name_hint": None}, "invalid_request"),
                           ({"code_challenge_method": "plain"}, "invalid_request"),
                           ({"nonce": None}, "invalid_request"),
@@ -499,8 +498,10 @@ def t_login(W):
     host = open(os.path.join(W.bise, "host-id")).read().strip()
     check(re.match(r"^urn:uuid:[0-9a-f-]{36}$", host), "host-id: %r" % host)
     q = query(link)
+    # OpenAI's devkit's request: no host id, no token in the link
     check(q["client_id"] == "dynamic_agent_client" and q["agent_name_hint"] == "bise"
-          and q["ext_agent_host_id"] == host and q["redirect_uri"].endswith("/auth/callback")
+          and "ext_agent_host_id" not in q and "id_token_hint" not in q
+          and q["redirect_uri"].endswith("/auth/callback")
           and q["resource"] == RESOURCE, "the authorize link: %r" % {k: q[k] for k in q if k != "code_challenge"})
     # a token never in stdout or stderr
     check(a["access"] not in out and a["refresh"] not in out, "no token printed")
@@ -639,8 +640,8 @@ def t_errors(W):
     out, link = signed_in(W)
     q = query(link)
     check(q["client_id"] == a["chatgpt"]["client_id"] and "agent_name_hint" not in q
-          and q["ext_agent_host_id"] == open(os.path.join(W.bise, "host-id")).read().strip(),
-          "a second sign-in reuses the client: %r" % {k: q[k] for k in ("client_id", "ext_agent_host_id")})
+          and "ext_agent_host_id" not in q and "id_token_hint" not in q,
+          "a second sign-in reuses the client, no token in the link: %r" % sorted(q))
     c.say("signed in again")
     c.wait_line("main", "ack: signed in again", 90)
     c.wait_idle("main")
