@@ -1028,6 +1028,10 @@ fn submit(app: &mut App) {
         return;
     }
     app.history.insert(0, app.ed.text.clone());
+    // the chips go out whole, as a message to the thread would
+    // (input.rs): a paste's text inline in its tag, an image's marker
+    // with its saved path; a bare `[Paste #1]` reached the asker empty
+    let text = crate::attach::expand(app, &text);
     match enter {
         Enter::Deny => answer(app, id, &format!("deny: {text}"), None),
         _ => answer(app, id, &text, None),

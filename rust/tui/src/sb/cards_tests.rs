@@ -782,3 +782,42 @@ fn an_answer_by_voice_shows_then_counts() {
     let q = voice_question(&app).unwrap();
     assert_eq!((q.id, q.approval, q.options.len()), (12, false, 2));
 }
+
+/// card-paste (cards #390, #395): an answer typed in a card carries
+/// what the user pasted, like a message to the thread: a long paste's
+/// text inline in its tag, a pasted image as its marker with the saved
+/// path, never the bare chips `[Paste #1]` / `[Image #2]`.
+#[test]
+fn an_answer_carries_its_paste_and_its_image() {
+    let (mut app, mut hub) = app_with_hub();
+    app.sb.cards = vec![card(395, "question", "ci", "what does the build print?")];
+    open(&mut app);
+    app.ed.insert("here: ");
+    let out: String = (1..=20).map(|i| format!("error[E0{i:03}]: line {i}\n")).collect();
+    crate::pasted::add(&mut app, &out);
+    // a pasted screenshot, already in the image store (fake: no file written)
+    let stored = bend_images::Stored {
+        kind: bend_images::Kind::Png,
+        width: 800,
+        height: 600,
+        file: "/fake/.bise/images/ab12.png".into(),
+        b64: "/fake/.bise/images/ab12.b64".into(),
+    };
+    let n = crate::attach::next_number(&mut app);
+    let l = crate::attach::label(n);
+    let marker = bend_images::marker(&l, &stored.file.to_string_lossy(), &stored);
+    app.attachments.push(crate::attach::Attachment { label: l.clone(), marker, info: Default::default() });
+    crate::attach::insert_chip(&mut app.ed, &l);
+    assert_eq!(app.ed.text, "here: [Paste #1] [Image #2] ");
+    key(&mut app, KeyCode::Enter, KeyModifiers::NONE);
+    let s = sent(&mut hub);
+    assert_eq!(s.len(), 1, "{s:?}");
+    let a = &s[0];
+    assert!(a.starts_with("/answer 395 here: <pasted n=\"1\" lines=\"20\">\nerror[E0001]: line 1\n"), "{a}");
+    assert!(a.contains("error[E0020]: line 20\n</pasted>"), "{a}");
+    assert!(a.contains("path=\"/fake/.bise/images/ab12.png\""), "{a}");
+    // no bare chip left (the marker keeps the label as its name)
+    assert!(!a.contains("[Paste #"), "{a}");
+    assert!(!a.replace("<image name=\"[Image #2]\"", "").contains("[Image #"), "{a}");
+    assert!(app.attachments.is_empty(), "sent with the answer");
+}
