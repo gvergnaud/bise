@@ -276,7 +276,7 @@ fn file_len(p: &Path) -> u64 {
 }
 
 /// The text of `p` after its first `from` bytes.
-fn read_from(p: &Path, from: u64) -> String {
+pub(crate) fn read_from(p: &Path, from: u64) -> String {
     use std::io::{Read, Seek, SeekFrom};
     let mut out = Vec::new();
     if let Ok(mut f) = std::fs::File::open(p) {
@@ -289,7 +289,7 @@ fn read_from(p: &Path, from: u64) -> String {
 
 /// The last non-empty line of `text` that `keep` keeps, without a
 /// hub.log time stamp.
-fn last_line(text: &str, keep: impl Fn(&str) -> bool) -> String {
+pub(crate) fn last_line(text: &str, keep: impl Fn(&str) -> bool) -> String {
     let l = text.lines().rev().map(str::trim).find(|l| !l.is_empty() && keep(l)).unwrap_or("");
     match l.split_once(' ') {
         Some((ms, rest)) if !ms.is_empty() && ms.chars().all(|c| c.is_ascii_digit()) => rest.to_string(),
