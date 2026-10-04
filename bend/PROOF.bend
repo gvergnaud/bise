@@ -2806,7 +2806,7 @@ def hub_str_cmp_refl(+s: String) -> {String.cmp(s, s) == ((s, s), EQ{}) : (Strin
 
 # every string equals itself
 def hub_str_eq_refl(+s: String) -> {String.eq(s, s) == True{} : Bool}:
-  %Equal.sym((String & String) & Cmp, String.cmp(s, s), ((s, s), EQ{}), hub_str_cmp_refl(s)) : {String.eq.fin(_) == True{} : Bool}
+  %Equal.sym((String & String) & Cmp, String.cmp(s, s), ((s, s), EQ{}), hub_str_cmp_refl(s)) : {Cmp.is_eq(Pair.snd(String & String, Cmp, _)) == True{} : Bool}
   {==}
 
 # ---- L4 support: a delivery attempt never leaves its agent stuck ----
@@ -3307,7 +3307,7 @@ def hub_cmpc_sound(+a: String, +b: String, +e: {Cmp.is_eq(hub_cmpc(a, b)) == Tru
       {==}
 
 def hub_str_eq_sound.k(+a: String, +b: String, e: {String.eq(a, b) == True{} : Bool}) -> {Cmp.is_eq(hub_cmpc(a, b)) == True{} : Bool}:
-  %hub_scmp_shape(a, b) : {String.eq.fin(_) == True{} : Bool}
+  %hub_scmp_shape(a, b) : {Cmp.is_eq(Pair.snd(String & String, Cmp, _)) == True{} : Bool}
   e
 
 # String.eq is sound: strings it finds equal are the same string

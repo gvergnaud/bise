@@ -372,7 +372,8 @@ hash_of() {  # <dirs/files...>: one hash of the .bend files' names and contents
 }
 # the bend part, in the background (it takes longer than cargo)
 proof_job() {
-  local h; h="$(hash_of bend/core bend/hub bend/vendor bend/LAWS.bend bend/PROOF.bend)"
+  # keyed by the bend version too: a new checker rechecks the same files
+  local h; h="$(hash_of bend/core bend/hub bend/vendor bend/LAWS.bend bend/PROOF.bend)-$(BEND_NO_TELEMETRY=1 bend version 2>/dev/null | tr -dc '0-9.')"
   [ -f "$cache/proof-ok-$h" ] && { echo "ok   PROOF (cached)"; return 0; }
   local d="$out/proof" n=4 s=$SECONDS i pids=()
   mkdir -p "$d"

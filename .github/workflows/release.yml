@@ -35,9 +35,9 @@ env:
   BISE_CMD: bise
   # pinned Bend: the release archive and its sha256 per arch (the values
   # of https://bend-lang.com/install.sh for this version)
-  BEND_VERSION: "2.0.32"
-  BEND_SHA256_ARM64: d7debc002f59264f648dc94e45c2a9fab23e4b1ee0a390bf2acd8b1673e0cf55
-  BEND_SHA256_X64: 6c3fea18ade9912e3015472fe76a2b1372acbf72b82404b3dea1a1243c5ed09e
+  BEND_VERSION: "2.0.35"
+  BEND_SHA256_ARM64: 2582f25057a519c330e6875798b784b727d4201f1c1f6944a105348f0eb8972e
+  BEND_SHA256_X64: 7e59da4513e32ea7526464b342344a992a56372cdf62e0c55a30e9ce26baaeef
   RUST_VERSION: "1.97.1"
   CARGO_TERM_COLOR: never
   # bend asks bend-lang.com for a newer version once a day: not on CI

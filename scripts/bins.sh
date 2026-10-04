@@ -95,16 +95,19 @@ recipe() {
 # the key: every .bend file under the source dirs and the .c/.js of
 # their foreign effects (bend/vendor/http/effs), by content (never a
 # date: a fresh checkout has fresh mtimes), and the macOS target (a
-# binary built for another one is another binary). Packages (0x…) are
-# immutable.
+# binary built for another one is another binary), and the bend version
+# (a new toolchain compiles the same sources to another binary: without
+# it, the cache kept serving the old compiler's builds). Packages (0x…)
+# are immutable.
 key() {  # <src> <name>
   local r; r="$(recipe "$2" "$1")"
   if [ "${r%% *}" = cargo ]; then jsrt_key "$1" ${r#cargo }; return; fi
   set -- "$1" $r
   # only the dirs <src> has (find exits 1 on a missing one: pipefail)
   local d dirs=(); for d in "${@:3}"; do if [ -e "$1/$d" ]; then dirs+=("$d"); fi; done
+  local v; v="$(BEND_NO_TELEMETRY=1 bend version 2>/dev/null || echo "bend ?")"
   (cd "$1" && { find "${dirs[@]}" -type f \( -name '*.bend' -o -name '*.c' -o -name '*.js' \) -print0 | sort -z | xargs -0 cat
-                echo "MACOSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET"; } | shasum | cut -c1-12)
+                echo "MACOSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET"; echo "$v"; } | shasum | cut -c1-12)
 }
 
 # the key of a cargo binary: every file (path and content) of its crate
