@@ -39,6 +39,7 @@ import ./hub/model.bend as HM
 import ./hub/cx.bend as HX
 import ./hub/core.bend as HC
 import ./hub/inv.bend as HI
+import ./hub/timers.bend as HTM
 
 # LAW: a checkpoint restores to exactly the session it exported.
 law checkpoint_roundtrip:
@@ -4228,6 +4229,60 @@ law stop_leaves_no_waiter:
   for +life: HM.Life
   for +why: String
   HC.NoneOf(HC.waiters_of_cx(o, HC.stop_task(o, cx, n, life, why)), n)
+
+# ---- the timers of `sb every` (hub/timers.bend, core.bend `timer_fire`) ----
+# The timers' state is in HM.St and their lines (every_set, every_fired,
+# every_run, every_stop) are events like the others: hub_run_replays,
+# msg_ids_fresh and the rest cover them as they are. The two laws on the
+# wake are LOCAL: they are stated on core.bend's `timer_fire`, the only
+# path a timer wake takes (the tick's due wakes and /scheduled's run now),
+# not over any sequence of inputs: the global form would need a fourth
+# proof field in HX.Core and an obligation at every emit of the hub.
+
+# LAW: a fire counts only when its message was queued (amb-tools m_5822: a
+# one-shot timer was spent on a lost wake). After the wake's send `p`: a
+# refused send leaves the journal as it was (no every_fired, no stop); a
+# queued one adds exactly the fire (every_fired with fired + 1, or
+# every_run for a run now) and, for its last time, the timer's stop.
+law fire_is_a_message:
+  for -o: HM.St
+  for p: HX.Cx<o> & HC.SendR
+  for +t: HTM.Timer
+  for +due: Bool
+  for +next: Nat
+  {HX.journal(HX.Core.fx(o, HX.Cx.c(o, HC.timer_fire.sent(o, p, t, due, next)))) == HI.fire_journal(o, p, t, due, next) : List<&2, HM.Ev>}
+
+# LAW: a timer never stacks wakes: while a message from bise is still
+# queued for its agent, a fire (due or run now) changes nothing at all.
+law wake_never_stacked:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +t: HTM.Timer
+  for +text: String
+  for +due: Bool
+  for +next: Nat
+  for q: {HC.bise_queued(HX.d(o, cx), HTM.Timer.agent(t)) == True{} : Bool}
+  {HC.timer_fire(o, cx, t, text, due, next) == cx : HX.Cx<o>}
+
+# LAW (per event): a counted fire leaves a timer below its times, or it was
+# the last one (`spent`: fire_is_a_message shows the same step stops it).
+# With the guard (a due wake fires only below its times, HTM.may_fire), a
+# timer with times = n never fires more than n times.
+law times_bound:
+  for +t: HTM.Timer
+  for +next: Nat
+  for +at: Nat
+  {HTM.under(HTM.Timer.fire(t, 1n+HTM.Timer.fired(t), next, at, False{})) == Bool.not(HTM.spent(t)) : Bool}
+
+# LAW: dropping (archiving) a task leaves no live timer of it, in the same
+# step (beside stop_leaves_no_waiter). A stop (`sb stop`) keeps them: they
+# wait, as before.
+law stop_leaves_no_timer:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +n: String
+  for +why: String
+  HI.TimerNoneOf(HTM.Tms.live(HM.St.tm(HX.d(o, HC.stop_task(o, cx, n, HM.LArchived{}, why)))), n)
 
 # LAW (L2, no message lost or doubled): a new hub keeps each message as
 # ONE record — its text and its single delivery state; no state exists

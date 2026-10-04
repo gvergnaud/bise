@@ -8,6 +8,8 @@ import ./cx.bend as X
 
 import ./core.bend as H
 
+import ./timers.bend as TM
+
 # the message ids, in the order of the state
 def ids(xs: List<&2, M.MRec>) -> List<&2, Nat>:
   match xs:
@@ -124,3 +126,39 @@ def NamesOK(ps: List<&2, List<&2, String>>) -> Data:
 # another one
 def NamesApart(+s: M.St) -> Data:
   NamesOK(profile(M.St.agents(s)))
+
+# ---- the timers (`sb every`, hub/timers.bend) ----
+
+# law stop_leaves_no_timer: no timer of the list belongs to `n`
+def TimerNoneOf(xs: List<&2, TM.Timer>, +n: String) -> Data:
+  match xs:
+    case Nil{}:
+      Unit
+    case Con{+t, +r}:
+      X.Both<{String.eq(TM.Timer.agent(t), n) == False{} : Bool}, TimerNoneOf(r, n)>
+
+def fire_spent(sp: Bool, +xs: List<&2, M.Ev>, +id: Nat, +at: Nat) -> List<&2, M.Ev>:
+  match sp:
+    case True{}:
+      M.snoc(M.Ev, xs, M.ETimerStop{id, "it ran its times", at})
+    case False{}:
+      xs
+
+# what a fire whose message was queued adds to the journal: a run now is
+# a run; a due wake is counted (fired + 1, its next time), and its last
+# one ends the timer
+def fire_count(due: Bool, +xs: List<&2, M.Ev>, +t: TM.Timer, +next: Nat, +at: Nat) -> List<&2, M.Ev>:
+  match due:
+    case False{}:
+      M.snoc(M.Ev, xs, M.ETimerRun{TM.Timer.id(t), at})
+    case True{}:
+      fire_spent(TM.spent(t), M.snoc(M.Ev, xs, M.ETimerFired{TM.Timer.id(t), 1n+TM.Timer.fired(t), next, at, False{}}), TM.Timer.id(t), at)
+
+# law fire_is_a_message: the journal after the wake's send `p`: unchanged
+# when the send was refused, the fire's events when it was queued
+def fire_journal(-o: M.St, p: X.Cx<o> & H.SendR, +t: TM.Timer, +due: Bool, +next: Nat) -> List<&2, M.Ev>:
+  match p:
+    case (+cx, H.SErr{_}):
+      X.journal(X.Core.fx(o, X.Cx.c(o, cx)))
+    case (+cx, H.SOk{_}):
+      fire_count(due, X.journal(X.Core.fx(o, X.Cx.c(o, cx))), t, next, H.now(o, cx))

@@ -68,7 +68,7 @@ def answer.go(need: Maybe<&2, J.Json>, +h: H.Hub, +fx: List<&2, X.Fx>, +before: 
       (h, J.stringify(J.obj([J.kv("fx", J.JArr{fxs_json(fx)}), J.kv("dirty", J.JBool{X.R.dirty(H.Hub.r(h))}),
         J.kv("view", V.view(H.Hub.d(h), X.R.rts(H.Hub.r(h)), X.R.waiters(H.Hub.r(h)), False{}, V.touched(X.journal(fx)),
           V.changed(X.journal(fx), before, X.R.rts(H.Hub.r(h)), X.R.waiters(H.Hub.r(h))),
-          Bool.not(List.is_empty(&2, M.Ev, X.journal(fx)))))])))
+          X.journal(fx)))])))
 
 # the answer line of a committed step (H.commit, the law run_replays)
 def answer(+before: List<&2, V.Mark>, +o: H.Out) -> H.Hub & String:
@@ -136,7 +136,7 @@ def handle.tag(tag: Tag, +h: H.Hub, +i: J.Json) -> H.Hub & String:
     case TPing{}:
       (h, "{}")
     case TView{}:
-      (h, J.stringify(J.obj([J.kv("view", V.view(H.Hub.d(h), X.R.rts(H.Hub.r(h)), X.R.waiters(H.Hub.r(h)), True{}, Nil{}, Nil{}, True{}))])))
+      (h, J.stringify(J.obj([J.kv("view", V.view(H.Hub.d(h), X.R.rts(H.Hub.r(h)), X.R.waiters(H.Hub.r(h)), True{}, Nil{}, Nil{}, Nil{}))])))
     case TStep{}:
       answer(V.marks(X.R.rts(H.Hub.r(h)), X.R.waiters(H.Hub.r(h))), H.commit(h, i))
 

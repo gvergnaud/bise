@@ -1,13 +1,23 @@
-//! `sb every` (docs/ambient-roadmap.md B, standing orders): the hub's
-//! timers, so an agent never burns turns sleeping. A timer wakes its
-//! agent with a message from `bise` every N (at least a minute) or every
-//! day at HH:MM (local time), until a time or for N times. Durable: three
-//! journal lines of the hub's own (`every_set`, `every_fired`,
-//! `every_stop`), read back at the hub's start like the PR lines. A wake
-//! while the agent is busy waits for its next idle: one pending wake at
-//! most, never stacked. A dropped agent's timers stop with it.
+//! `sb every` (docs/ambient-roadmap.md B, standing orders): the words and
+//! the clock of the hub's timers. A timer wakes its agent with a message
+//! from `bise` every N (at least a minute) or every day at HH:MM (local
+//! time), until a time or for N times.
 //!
-//! Pure: the clock and the agents' states come from the hub (`core.rs`).
+//! The timers themselves are sb-core's (bend/hub/timers.bend and
+//! core.bend's timers section): their state, their journal lines
+//! (`every_set`, `every_fired`, `every_run`, `every_stop`, replayed with
+//! the rest of the journal), the decision to fire (due, its agent idle,
+//! never a second wake while one from bise is queued), and a dropped
+//! agent's timers ending with it; laws fire_is_a_message,
+//! wake_never_stacked, times_bound, stop_leaves_no_timer in LAWS.bend.
+//!
+//! Here, pure: the parsing of `sb every`'s arguments (parse_dur,
+//! parse_hhmm, parse_until), the labels, `sb every`'s list and the wake
+//! texts (sb-core asks for them with an `every_wake` need), the local
+//! clock (next_daily), and [`Timers`], the read-only mirror of the timers
+//! sb-core's view carries (`timers`, `timers_ended`) for /scheduled, the
+//! ◷ lines and `sb every`. The clock and the view come from the hub
+//! (`core.rs`).
 
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -21,8 +31,6 @@ pub fn min_ms() -> u64 {
 }
 const HOUR_MS: u64 = 60 * MIN_MS;
 const DAY_MS: u64 = 24 * HOUR_MS;
-/// A wake that did not reach its agent is tried again this much later.
-const RETRY_MS: u64 = MIN_MS;
 
 /// When a timer fires.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -41,18 +49,11 @@ impl Sched {
         }
     }
 
-    /// The first time after `now` (Every: from `from`, a missed period is
-    /// skipped, never caught up).
-    fn next(&self, from: u64, now: u64) -> u64 {
+    /// A new timer's first wake: a period from now, or the next time the
+    /// local clock reads its minute.
+    pub fn first(&self, now: u64) -> u64 {
         match self {
-            Sched::Every(p) => {
-                let n = from + p;
-                if n <= now {
-                    now + p
-                } else {
-                    n
-                }
-            }
+            Sched::Every(p) => now + p,
             Sched::Daily(m) => next_daily(now, *m),
         }
     }
@@ -82,14 +83,28 @@ pub struct Timer {
 }
 
 impl Timer {
-    fn ran(&mut self, at: u64) {
-        if at == 0 || self.runs.last() == Some(&at) {
-            return;
-        }
-        self.runs.push(at);
-        if self.runs.len() > RUNS_KEPT {
-            self.runs.remove(0);
-        }
+    /// A timer of sb-core's view (timers.bend `timer_json`), None when it
+    /// is not one.
+    pub fn from_view(v: &Value) -> Option<Timer> {
+        let sched = match (v["every_ms"].as_u64(), v["daily_min"].as_u64()) {
+            (Some(p), _) => Sched::Every(p),
+            (None, Some(m)) => Sched::Daily(m as u32),
+            _ => return None,
+        };
+        Some(Timer {
+            id: v["id"].as_u64()?,
+            agent: v["agent"].as_str().unwrap_or_default().to_string(),
+            by: v["by"].as_str().unwrap_or_default().to_string(),
+            text: v["text"].as_str().unwrap_or_default().to_string(),
+            sched,
+            next_ms: v["next_ms"].as_u64().unwrap_or(0),
+            until_ms: v["until_ms"].as_u64(),
+            times: v["times"].as_u64(),
+            fired: v["fired"].as_u64().unwrap_or(0),
+            page: v["page"].as_str().map(String::from),
+            last_ms: v["last_ms"].as_u64().unwrap_or(0),
+            runs: v["runs"].as_array().into_iter().flatten().filter_map(Value::as_u64).collect(),
+        })
     }
 
     /// The timer in the hub's state (amb-mac's menu, m_5435).
@@ -113,46 +128,13 @@ impl Timer {
     }
 }
 
-/// What `add` takes: a request already parsed and checked.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct New {
-    pub agent: String,
-    pub by: String,
-    pub text: String,
-    pub sched: Sched,
-    pub until_ms: Option<u64>,
-    pub times: Option<u64>,
-    pub page: Option<String>,
-}
-
-/// What a tick asks the hub to do for one timer.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Act {
-    /// wake `agent` with `text`; `journal` records it. The hub then says
-    /// whether it reached the agent: [`Timers::delivered`] or
-    /// [`Timers::undelivered`] (a fire counts only once delivered)
-    Wake { id: u64, agent: String, text: String, journal: Value },
-    /// the timer ends (`journal` records why)
-    Stop { journal: Value },
-}
-
-/// The agent of a timer as the hub sees it at a tick.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AgentNow {
-    /// archived, dropped, unknown: its timers stop
-    Gone,
-    /// ready for a wake now
-    Idle,
-    /// busy, starting, stopped: the wake waits
-    Busy,
-}
-
+/// The timers as sb-core's view last sent them (a mirror: never changed
+/// here).
 #[derive(Clone, Debug, Default)]
 pub struct Timers {
     pub map: BTreeMap<u64, Timer>,
-    last_id: u64,
-    /// the timers that ended, newest last (the TUI's `/scheduled`
-    /// shows a week of them; at most [`ENDED_KEPT`])
+    /// the timers that ended, newest last (the TUI's `/scheduled` shows a
+    /// week of them; sb-core keeps the last 200)
     pub ended: Vec<Ended>,
 }
 
@@ -165,11 +147,8 @@ pub struct Ended {
     pub why: String,
 }
 
-const ENDED_KEPT: usize = 200;
 /// How long `/scheduled` shows an ended timer.
 pub const ENDED_SHOWN_MS: u64 = 7 * DAY_MS;
-/// The last runs a timer keeps (its opened view: 'its runs').
-const RUNS_KEPT: usize = 5;
 
 /// How a timer ended, from its `why`: `times` (it ran its times),
 /// `until` (its end time passed), `gone` (its agent is gone), `stopped`
@@ -204,121 +183,26 @@ impl Ended {
     }
 }
 
-/// Whether a journal event is one of the timers' lines.
-pub fn is_line(ev: &Value) -> bool {
-    matches!(ev["type"].as_str(), Some("every_set" | "every_fired" | "every_stop" | "every_run"))
-}
-
 impl Timers {
-    /// Read one journal line (idempotent: a replay gives the same state).
-    pub fn read(&mut self, ev: &Value) {
-        let id = ev["id"].as_u64().unwrap_or(0);
-        match ev["type"].as_str() {
-            Some("every_set") => {
-                let sched = match (ev["every_ms"].as_u64(), ev["daily_min"].as_u64()) {
-                    (Some(p), _) => Sched::Every(p.max(1000)),
-                    (None, Some(m)) => Sched::Daily(m as u32 % (24 * 60)),
-                    _ => return,
-                };
-                self.last_id = self.last_id.max(id);
-                self.map.insert(
-                    id,
-                    Timer {
-                        id,
-                        agent: ev["agent"].as_str().unwrap_or_default().to_string(),
-                        by: ev["by"].as_str().unwrap_or_default().to_string(),
-                        text: ev["text"].as_str().unwrap_or_default().to_string(),
-                        sched,
-                        next_ms: ev["next_ms"].as_u64().unwrap_or(0),
-                        until_ms: ev["until_ms"].as_u64(),
-                        times: ev["times"].as_u64(),
-                        fired: 0,
-                        page: ev["page"].as_str().map(String::from),
-                        last_ms: 0,
-                        runs: Vec::new(),
-                    },
-                );
-            }
-            Some("every_fired") => {
-                if let Some(t) = self.map.get_mut(&id) {
-                    t.fired = ev["fired"].as_u64().unwrap_or(t.fired);
-                    t.next_ms = ev["next_ms"].as_u64().unwrap_or(t.next_ms);
-                    t.last_ms = ev["at"].as_u64().unwrap_or(t.last_ms);
-                    if ev["undelivered"].as_bool() == Some(true) {
-                        // the lost wake was its last run: not a run
-                        let at = t.runs.pop();
-                        if at.is_some_and(|a| a != t.last_ms) {
-                            t.runs.extend(at);
-                        }
-                    } else {
-                        t.ran(t.last_ms);
-                    }
-                }
-            }
-            // a run now (`/scheduled`'s r): outside the count, the next
-            // wake unchanged
-            Some("every_run") => {
-                if let Some(t) = self.map.get_mut(&id) {
-                    t.last_ms = ev["at"].as_u64().unwrap_or(t.last_ms);
-                    t.ran(t.last_ms);
-                }
-            }
-            Some("every_stop") => {
-                if let Some(timer) = self.map.remove(&id) {
-                    let why = ev["why"].as_str().unwrap_or_default().to_string();
-                    self.ended.push(Ended { timer, ended_ms: ev["at"].as_u64().unwrap_or(0), why });
-                    if self.ended.len() > ENDED_KEPT {
-                        self.ended.remove(0);
-                    }
-                }
-            }
-            _ => {}
-        }
+    /// The live timers of sb-core's view (`timers`), in id order.
+    pub fn load_live(&mut self, v: &Value) {
+        self.map = v.as_array().into_iter().flatten().filter_map(Timer::from_view).map(|t| (t.id, t)).collect();
     }
 
-    /// A new timer: its journal line (already read in) and its id.
-    pub fn add(&mut self, n: New, now: u64) -> (u64, Value) {
-        let id = self.last_id + 1;
-        let next = match n.sched {
-            Sched::Every(p) => now + p,
-            Sched::Daily(m) => next_daily(now, m),
-        };
-        let mut j = json!({"type": "every_set", "id": id, "agent": n.agent, "by": n.by, "text": n.text,
-                           "next_ms": next, "at": now});
-        match n.sched {
-            Sched::Every(p) => j["every_ms"] = json!(p),
-            Sched::Daily(m) => j["daily_min"] = json!(m),
-        }
-        if let Some(u) = n.until_ms {
-            j["until_ms"] = json!(u);
-        }
-        if let Some(t) = n.times {
-            j["times"] = json!(t);
-        }
-        if let Some(p) = &n.page {
-            j["page"] = json!(p);
-        }
-        self.read(&j);
-        (id, j)
-    }
-
-    /// Stop a timer: its journal line (already read in), or None.
-    pub fn stop(&mut self, id: u64, why: &str, now: u64) -> Option<Value> {
-        self.map.contains_key(&id).then(|| {
-            let j = json!({"type": "every_stop", "id": id, "why": why, "at": now});
-            self.read(&j);
-            j
-        })
-    }
-
-    /// `/scheduled`'s run now: one wake of timer `id` at once, outside
-    /// its count, its next wake unchanged. Its agent, the wake's text and
-    /// its journal line (already read in), or None.
-    pub fn run_now(&mut self, id: u64, now: u64) -> Option<(String, String, Value)> {
-        let t = self.map.get(&id)?.clone();
-        let j = json!({"type": "every_run", "id": id, "at": now});
-        self.read(&j);
-        Some((t.agent.clone(), wake_text(&t, Wake::Now, now), j))
+    /// The ended timers of sb-core's view (`timers_ended`), oldest first.
+    pub fn load_ended(&mut self, v: &Value) {
+        self.ended = v
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|e| {
+                Some(Ended {
+                    timer: Timer::from_view(e)?,
+                    ended_ms: e["ended_ms"].as_u64().unwrap_or(0),
+                    why: e["why"].as_str().unwrap_or_default().to_string(),
+                })
+            })
+            .collect();
     }
 
     /// The timers in the hub's state: the running ones, then the ones
@@ -328,60 +212,34 @@ impl Timers {
         self.map.values().map(Timer::json).chain(ended).collect()
     }
 
-    /// One tick: what to do now. `agent` says how each agent is; the
-    /// acts' journal lines are already read in.
-    pub fn tick(&mut self, now: u64, agent: impl Fn(&str) -> AgentNow) -> Vec<Act> {
-        let mut acts = Vec::new();
-        let ids: Vec<u64> = self.map.keys().copied().collect();
-        for id in ids {
-            let t = self.map[&id].clone();
-            let a = agent(&t.agent);
-            let why = if a == AgentNow::Gone {
-                Some(format!("@{} is gone", t.agent))
-            } else if t.until_ms.is_some_and(|u| now >= u) {
-                Some("its end time passed".to_string())
-            } else {
-                None
-            };
-            if let Some(why) = why {
-                if let Some(journal) = self.stop(id, &why, now) {
-                    acts.push(Act::Stop { journal });
-                }
-                continue;
-            }
-            if now < t.next_ms || a != AgentNow::Idle {
-                continue;
-            }
-            let fired = t.fired + 1;
-            let journal = json!({"type": "every_fired", "id": id, "fired": fired, "next_ms": t.sched.next(t.next_ms, now), "at": now});
-            self.read(&journal);
-            // due while its agent was busy: how long it waited
-            let waited = now.saturating_sub(t.next_ms);
-            let wake = Wake::Due { fired, waited_ms: if waited >= MIN_MS { waited } else { 0 } };
-            acts.push(Act::Wake { id, agent: t.agent.clone(), text: wake_text(&t, wake, now), journal });
-        }
-        acts
+    /// The answer to sb-core's `every_wake` need (core.bend
+    /// `timers_tick`): for each wake it may send (`id`, the count it
+    /// would reach, how long it waited), the message (today's words) and,
+    /// for a daily timer, its next time on the local clock. Matched by id.
+    pub fn wakes(&self, q: &Value, now: u64) -> Value {
+        let wakes: Vec<Value> = q["wakes"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|w| {
+                let t = self.map.get(&w["id"].as_u64()?)?;
+                let waited = w["waited_ms"].as_u64().unwrap_or(0);
+                let fired = w["fired"].as_u64().unwrap_or(t.fired + 1);
+                let wake = Wake::Due { fired, waited_ms: if waited >= MIN_MS { waited } else { 0 } };
+                let next = match t.sched {
+                    Sched::Daily(m) => next_daily(now, m),
+                    Sched::Every(_) => 0,
+                };
+                Some(json!({"id": t.id, "text": wake_text(t, wake, now), "next_ms": next}))
+            })
+            .collect();
+        json!({"wakes": wakes})
     }
 
-    /// The wake of timer `id` reached its agent: the timer ends when it
-    /// ran its times (its journal line, already read in).
-    pub fn delivered(&mut self, id: u64, now: u64) -> Option<Value> {
-        let t = self.map.get(&id)?;
-        if t.times.is_some_and(|n| t.fired >= n) {
-            return self.stop(id, "it ran its times", now);
-        }
-        None
-    }
-
-    /// The wake of timer `id` did not reach its agent (the core dropped
-    /// it): the fire does not count and it is tried again in a minute
-    /// (amb-tools m_5822: a one-shot timer was spent on a lost wake). Its
-    /// journal line, already read in.
-    pub fn undelivered(&mut self, id: u64, now: u64) -> Option<Value> {
-        let t = self.map.get(&id)?;
-        let j = json!({"type": "every_fired", "id": id, "fired": t.fired.saturating_sub(1), "next_ms": now + RETRY_MS, "at": t.last_ms, "undelivered": true});
-        self.read(&j);
-        Some(j)
+    /// `/scheduled`'s run now: the message of timer `id` (outside its
+    /// count), or None.
+    pub fn run_text(&self, id: u64, now: u64) -> Option<String> {
+        Some(wake_text(self.map.get(&id)?, Wake::Now, now))
     }
 
     /// `sb every`: one line per timer, or a line saying there is none.
@@ -644,14 +502,6 @@ mod tests {
 
     const NOW: u64 = 1_790_000_000_000;
 
-    fn new(sched: Sched) -> New {
-        New { agent: "w".into(), by: "main".into(), text: "check HN".into(), sched, until_ms: None, times: None, page: None }
-    }
-
-    fn wakes(acts: &[Act]) -> usize {
-        acts.iter().filter(|a| matches!(a, Act::Wake { .. })).count()
-    }
-
     #[test]
     fn durations_parse_and_label() {
         assert_eq!(parse_dur("10m").unwrap(), 10 * MIN_MS);
@@ -665,170 +515,18 @@ mod tests {
         assert!(parse_hhmm("24:00").is_err());
     }
 
+    /// How a timer ended, from its `why` (the views' `end`).
     #[test]
-    fn a_timer_fires_when_due_and_its_agent_is_idle_never_stacked() {
-        let mut ts = Timers::default();
-        let (id, _) = ts.add(new(Sched::Every(10 * MIN_MS)), NOW);
-        assert_eq!(id, 1);
-        assert!(ts.tick(NOW + MIN_MS, |_| AgentNow::Idle).is_empty(), "not due yet");
-        // due while busy: nothing, however long it stays busy
-        for k in 0..30 {
-            assert!(ts.tick(NOW + (10 + k) * MIN_MS, |_| AgentNow::Busy).is_empty());
-        }
-        // idle again: one wake, the next one a period later (no catch-up)
-        let acts = ts.tick(NOW + 40 * MIN_MS, |_| AgentNow::Idle);
-        assert_eq!(wakes(&acts), 1);
-        let Act::Wake { text, journal, .. } = &acts[0] else { panic!() };
-        // due at +10m, busy until +40m: it says how long it waited
-        assert!(text.starts_with("timer #1 (every 10m, waited 30m for w to finish, set by main): check HN"), "{}", text);
-        assert_eq!(journal["next_ms"], NOW + 50 * MIN_MS);
-        assert!(ts.tick(NOW + 41 * MIN_MS, |_| AgentNow::Idle).is_empty());
-        assert_eq!(wakes(&ts.tick(NOW + 50 * MIN_MS, |_| AgentNow::Idle)), 1);
-    }
-
-    #[test]
-    fn the_journal_rebuilds_the_timers() {
-        let mut ts = Timers::default();
-        let mut lines = vec![ts.add(new(Sched::Every(MIN_MS)), NOW).1];
-        let mut n = new(Sched::Every(5 * MIN_MS));
-        n.agent = "x".into();
-        n.times = Some(2);
-        lines.push(ts.add(n, NOW).1);
-        for a in ts.tick(NOW + 5 * MIN_MS, |_| AgentNow::Idle) {
-            match a {
-                Act::Wake { journal, .. } | Act::Stop { journal } => lines.push(journal),
-            }
-        }
-        lines.push(ts.stop(1, "asked", NOW + 6 * MIN_MS).unwrap());
-        let mut back = Timers::default();
-        for l in lines.iter().chain(lines.iter()) {
-            assert!(is_line(l));
-            back.read(l);
-        }
-        assert_eq!(back.map, ts.map);
-        assert_eq!(back.map[&2].fired, 1);
-        assert_eq!(back.add(new(Sched::Every(MIN_MS)), NOW).0, 3, "ids never reused");
-    }
-
-    #[test]
-    fn timers_end_with_their_times_their_end_or_their_agent() {
-        let mut ts = Timers::default();
-        let mut n = new(Sched::Every(MIN_MS));
-        n.times = Some(2);
-        ts.add(n, NOW);
-        let mut n = new(Sched::Every(MIN_MS));
-        n.until_ms = Some(NOW + 3 * MIN_MS);
-        n.agent = "u".into();
-        ts.add(n, NOW);
-        ts.add(New { agent: "gone".into(), ..new(Sched::Every(MIN_MS)) }, NOW);
-        let st = |a: &str| if a == "gone" { AgentNow::Gone } else { AgentNow::Idle };
-        let deliver = |ts: &mut Timers, acts: Vec<Act>| {
-            for a in acts {
-                if let Act::Wake { id, .. } = a {
-                    ts.delivered(id, NOW);
-                }
-            }
-        };
-        let acts = ts.tick(NOW + MIN_MS, st);
-        assert_eq!(wakes(&acts), 2);
-        assert!(!ts.map.contains_key(&3), "a dropped agent's timer stops");
-        deliver(&mut ts, acts);
-        let acts = ts.tick(NOW + 2 * MIN_MS, st);
-        assert!(ts.map.contains_key(&1), "its second fire counts once delivered");
-        deliver(&mut ts, acts);
-        assert!(!ts.map.contains_key(&1), "two times: done");
-        ts.tick(NOW + 3 * MIN_MS, st);
-        assert!(ts.map.is_empty(), "past its end");
-    }
-
-    /// amb-tools m_5822: a one-shot day timer fired, its wake never reached
-    /// main, and `it ran its times` spent it. A fire counts only once its
-    /// wake is delivered; a lost one is tried again a minute later.
-    #[test]
-    fn a_one_shot_timer_is_spent_only_by_a_delivered_wake() {
-        let mut ts = Timers::default();
-        let mut n = new(Sched::Daily(7 * 60 + 30));
-        n.times = Some(1);
-        let (id, set) = ts.add(n, NOW);
-        let due = ts.map[&id].next_ms;
-        let mut lines = vec![set];
-        let acts = ts.tick(due, |_| AgentNow::Idle);
-        assert_eq!(wakes(&acts), 1);
-        let Act::Wake { journal, .. } = &acts[0] else { panic!() };
-        lines.push(journal.clone());
-        // lost: not spent, not counted, due again in a minute
-        let j = ts.undelivered(id, due).unwrap();
-        lines.push(j);
-        assert_eq!((ts.map[&id].fired, ts.map[&id].next_ms), (0, due + RETRY_MS));
-        assert!(ts.tick(due + 1000, |_| AgentNow::Idle).is_empty(), "no retry before the minute");
-        // the retry is delivered: now it ran its times
-        let acts = ts.tick(due + RETRY_MS, |_| AgentNow::Idle);
-        assert_eq!(wakes(&acts), 1);
-        let Act::Wake { text, journal, .. } = &acts[0] else { panic!() };
-        assert!(text.contains("1/1"), "{text}");
-        lines.push(journal.clone());
-        lines.push(ts.delivered(id, due + RETRY_MS).expect("ran its times"));
-        assert!(ts.map.is_empty());
-        // the journal replays to the same end
-        let mut back = Timers::default();
-        for l in &lines {
-            back.read(l);
-        }
-        assert!(back.map.is_empty());
-        // a delivered wake of a timer with times left: no stop
-        let (id2, _) = ts.add(new(Sched::Every(MIN_MS)), NOW);
-        ts.tick(NOW + MIN_MS, |_| AgentNow::Idle);
-        assert_eq!(ts.delivered(id2, NOW + MIN_MS), None);
-    }
-
-    /// `/scheduled`: a week of ended timers with why they ended, each
-    /// timer's last runs, a run now outside the count, and the wake's
-    /// text says how long a busy agent made it wait.
-    #[test]
-    fn ended_timers_runs_and_run_now() {
-        let mut ts = Timers::default();
-        let mut n = new(Sched::Every(2 * MIN_MS));
-        n.times = Some(6);
-        let (id, set) = ts.add(n, NOW);
-        let mut lines = vec![set];
-        // due at +2m, its agent busy until +6m: one wake that waited 4m
-        assert!(ts.tick(NOW + 5 * MIN_MS, |_| AgentNow::Busy).is_empty());
-        let acts = ts.tick(NOW + 6 * MIN_MS, |_| AgentNow::Idle);
-        let Act::Wake { text, journal, .. } = &acts[0] else { panic!() };
-        assert!(text.starts_with("timer #1 (every 2m, 1/6, waited 4m for w to finish, set by main): check HN"), "{text}");
-        lines.push(journal.clone());
-        // a run now: outside the count, the next wake unchanged
-        let next = ts.map[&id].next_ms;
-        let (agent, text, j) = ts.run_now(id, NOW + 7 * MIN_MS).unwrap();
-        assert_eq!(agent, "w");
-        assert!(text.starts_with("timer #1 (every 2m, run now by the user, set by main): check HN"), "{text}");
-        lines.push(j);
-        assert_eq!((ts.map[&id].fired, ts.map[&id].next_ms), (1, next));
-        assert_eq!(ts.map[&id].runs, vec![NOW + 6 * MIN_MS, NOW + 7 * MIN_MS]);
-        assert!(ts.run_now(99, NOW).is_none());
-        // stopped by the user: ended, with when and why, in the state a week
-        lines.push(ts.stop(id, "stopped by the user", NOW + 8 * MIN_MS).unwrap());
-        assert!(ts.map.is_empty());
-        let st = ts.state(NOW + 9 * MIN_MS);
-        assert_eq!(st.len(), 1);
-        assert_eq!((st[0]["end"].as_str(), st[0]["stopped_by"].as_str()), (Some("stopped"), Some("user")));
-        assert_eq!(st[0]["ended_ms"], NOW + 8 * MIN_MS);
-        assert_eq!(st[0]["runs"].as_array().unwrap().len(), 2);
-        assert!(ts.state(NOW + 8 * MIN_MS + ENDED_SHOWN_MS).is_empty(), "a week later: gone from the list");
-        // the journal gives back the same ended timer
-        let mut back = Timers::default();
-        for l in &lines {
-            back.read(l);
-        }
-        assert_eq!(back.ended, ts.ended);
+    fn ends_read_from_why() {
         assert_eq!(end_of("it ran its times").0, "times");
         assert_eq!(end_of("its end time passed").0, "until");
         assert_eq!(end_of("@w is gone").0, "gone");
         assert_eq!(end_of("stopped by answer-line"), ("stopped", "answer-line".to_string()));
     }
 
+    /// The local clock (the timers' tests on sb-core are in core_tests).
     #[test]
-    fn daily_timers_land_on_the_local_clock() {
+    fn the_local_clock() {
         let n = next_daily(NOW, 7 * 60 + 30);
         assert!(n > NOW && n <= NOW + DAY_MS + HOUR_MS);
         let tm = tm_of(n).unwrap();

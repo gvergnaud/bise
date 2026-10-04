@@ -13,6 +13,8 @@ import ./cx.bend as X
 
 import ./core.bend as H
 
+import ./timers.bend as TM
+
 def jdecl(d: Maybe<&2, M.Decl>, +note: String) -> J.Json:
   match d:
     case None{}:
@@ -280,13 +282,56 @@ def durable_kvs(durable: Bool, +s: M.St) -> List<&2, Sigma<&2, &2, String, _ => 
     case False{}:
       Nil{}
 
+# an event of the timers (`ended`: one that ends a timer)
+def timer_ev(+ended: Bool, e: M.Ev) -> Bool:
+  match e:
+    case M.ETimerSet{_, _}:
+      Bool.not(ended)
+    case M.ETimerFired{_, _, _, _, _}:
+      Bool.not(ended)
+    case M.ETimerRun{_, _}:
+      Bool.not(ended)
+    case M.ETimerStop{_, _, _}:
+      True{}
+    case _:
+      False{}
+
+def timer_evs(+ended: Bool, evs: List<&2, M.Ev>) -> Bool:
+  match evs:
+    case Nil{}:
+      False{}
+    case Con{+e, +t}:
+      timer_ev(ended, e) || timer_evs(ended, t)
+
+def timers_live(go: Bool, +s: M.St) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  match go:
+    case True{}:
+      [J.kv("timers", J.JArr{TM.live_json(TM.Tms.live(M.St.tm(s)))})]
+    case False{}:
+      Nil{}
+
+def timers_ended(go: Bool, +s: M.St) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  match go:
+    case True{}:
+      [J.kv("timers_ended", J.JArr{TM.ended_list_json(TM.Tms.ended(M.St.tm(s)))})]
+    case False{}:
+      Nil{}
+
+# the timers (`sb every`) only when a step changed them: an idle tick
+# carries none (idle-cpu), a fire no ended ones
+def timers_kvs(+all: Bool, +evs: List<&2, M.Ev>, +s: M.St) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  List.append(&2, Sigma<&2, &2, String, _ => J.Json>,
+    timers_live(all || timer_evs(False{}, evs), s), timers_ended(all || timer_evs(True{}, evs), s))
+
 # the view: the agents in `names` (or all), the messages in `ids` (or
-# all); the order, cards and notes when `durable` (or all)
-def view(+s: M.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +all: Bool, +ids: List<&2, Nat>, +names: List<&2, String>, +durable: Bool) -> J.Json:
-  J.obj(List.append(&2, Sigma<&2, &2, String, _ => J.Json>,
-    [J.kv("agents", J.JArr{agents_json(M.St.agents(s), rts, ws, s, all, names)}),
+# all); the order, cards and notes when `durable` (or all); the timers
+# when an event of `evs` (the step's journal) changed them (or all)
+def view(+s: M.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +all: Bool, +ids: List<&2, Nat>, +names: List<&2, String>, +evs: List<&2, M.Ev>) -> J.Json:
+  J.obj(List.concat(&2, Sigma<&2, &2, String, _ => J.Json>,
+    [[J.kv("agents", J.JArr{agents_json(M.St.agents(s), rts, ws, s, all, names)}),
       J.kv("all_agents", J.JBool{all}),
       J.kv("msgs", J.JArr{msgs_json(all || Bool.not(List.is_empty(&2, Nat, ids)), M.St.msgs(s), all, ids)}),
       J.kv("all_msgs", J.JBool{all}),
       J.kv("next_msg", J.JNum{M.St.next_msg(s)}), J.kv("next_card", J.JNum{M.St.next_card(s)})],
-    durable_kvs(all || durable, s)))
+    durable_kvs(all || Bool.not(List.is_empty(&2, M.Ev, evs)), s),
+    timers_kvs(all, evs, s)]))

@@ -7,6 +7,8 @@ import ../vendor/json.bend as J
 
 import ./model.bend as M
 
+import ./timers.bend as TM
+
 def jmaybe_nat(m: Maybe<&2, Nat>) -> J.Json:
   match m:
     case None{}:
@@ -118,6 +120,22 @@ def ev_json(e: M.Ev) -> J.Json:
       J.obj([ty("main_note"), J.kv("text", J.JStr{text}), J.kv("at_ms", J.JNum{at})])
     case M.ENotesFlushed{}:
       J.obj([ty("main_notes_flushed")])
+    # the timers' lines, in the shape every.rs wrote them (old hubs read them)
+    case M.ETimerSet{+t, +at}:
+      J.obj(List.append(&2, Sigma<&2, &2, String, _ => J.Json>,
+        [ty("every_set"), J.kv("id", J.JNum{TM.Timer.id(t)}), J.kv("agent", J.JStr{TM.Timer.agent(t)}),
+          J.kv("by", J.JStr{TM.Timer.by(t)}), J.kv("text", J.JStr{TM.Timer.text(t)}),
+          J.kv("next_ms", J.JNum{TM.Timer.next(t)}), J.kv("at", J.JNum{at}), TM.sched_kv(TM.Timer.sched(t))],
+        TM.opt_kvs(t)))
+    case M.ETimerFired{+id, +fired, +next, +at, +undelivered}:
+      J.obj(List.append(&2, Sigma<&2, &2, String, _ => J.Json>,
+        [ty("every_fired"), J.kv("id", J.JNum{id}), J.kv("fired", J.JNum{fired}), J.kv("next_ms", J.JNum{next}),
+          J.kv("at", J.JNum{at})],
+        Bool.pick(List<&2, Sigma<&2, &2, String, _ => J.Json>>, undelivered, [J.kv("undelivered", J.JBool{True{}})], Nil{})))
+    case M.ETimerRun{+id, +at}:
+      J.obj([ty("every_run"), J.kv("id", J.JNum{id}), J.kv("at", J.JNum{at})])
+    case M.ETimerStop{+id, +why, +at}:
+      J.obj([ty("every_stop"), J.kv("id", J.JNum{id}), J.kv("why", J.JStr{why}), J.kv("at", J.JNum{at})])
 
 # ---- decoding (the journal replayed at boot) ----
 
@@ -192,6 +210,10 @@ type EvK is Data:
   KCardClosed{}
   KMainNote{}
   KNotesFlushed{}
+  KEverySet{}
+  KEveryFired{}
+  KEveryRun{}
+  KEveryStop{}
   KUnknown{}
 
 def ev_kind(+t: String) -> EvK:
@@ -210,7 +232,29 @@ def ev_kind(+t: String) -> EvK:
   Bool.pick(EvK, String.eq(t, "card_closed"), KCardClosed{},
   Bool.pick(EvK, String.eq(t, "main_note"), KMainNote{},
   Bool.pick(EvK, String.eq(t, "main_notes_flushed"), KNotesFlushed{},
-  KUnknown{})))))))))))))))
+  Bool.pick(EvK, String.eq(t, "every_set"), KEverySet{},
+  Bool.pick(EvK, String.eq(t, "every_fired"), KEveryFired{},
+  Bool.pick(EvK, String.eq(t, "every_run"), KEveryRun{},
+  Bool.pick(EvK, String.eq(t, "every_stop"), KEveryStop{},
+  KUnknown{})))))))))))))))))))
+
+# an every_set's schedule, as every.rs read it: every_ms (at least 1 s),
+# else daily_min (mod a day), else not a timer (the line is skipped)
+def sched_of(e: Maybe<&2, Nat>, d: Maybe<&2, Nat>) -> Maybe<&2, TM.Sched>:
+  match e:
+    case Some{+p}:
+      Some{TM.Every{Nat.max(p, 1000n)}}
+    case None{}:
+      Maybe.map(&2, Nat, TM.Sched, m => TM.Daily{Nat.mod(m, 1440n)}, d)
+
+def timer_set_of(s: Maybe<&2, TM.Sched>, +j: J.Json) -> Maybe<&2, M.Ev>:
+  match s:
+    case None{}:
+      None{}
+    case Some{+sc}:
+      Some{M.ETimerSet{TM.Timer{get_nat(j, "id"), get_s(j, "agent"), get_s(j, "by"), get_s(j, "text"), sc,
+        get_nat(j, "next_ms"), opt_nat(J.get(j, "until_ms")), opt_nat(J.get(j, "times")), 0n,
+        opt_str(J.get(j, "page")), 0n, Nil{}}, get_nat(j, "at")}}
 
 # a match on the kind, not a Bool.pick chain: the chain decoded the event
 # as every kind, then kept one
@@ -246,6 +290,14 @@ def ev_of.kind(k: EvK, +j: J.Json, +n: String) -> Maybe<&2, M.Ev>:
       Some{M.EMainNote{get_s(j, "text"), get_nat(j, "at_ms")}}
     case KNotesFlushed{}:
       Some{M.ENotesFlushed{}}
+    case KEverySet{}:
+      timer_set_of(sched_of(opt_nat(J.get(j, "every_ms")), opt_nat(J.get(j, "daily_min"))), j)
+    case KEveryFired{}:
+      Some{M.ETimerFired{get_nat(j, "id"), get_nat(j, "fired"), get_nat(j, "next_ms"), get_nat(j, "at"), get_b(j, "undelivered")}}
+    case KEveryRun{}:
+      Some{M.ETimerRun{get_nat(j, "id"), get_nat(j, "at")}}
+    case KEveryStop{}:
+      Some{M.ETimerStop{get_nat(j, "id"), get_s(j, "why"), get_nat(j, "at")}}
     case KUnknown{}:
       None{}
 

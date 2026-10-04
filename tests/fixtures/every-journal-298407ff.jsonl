@@ -1,0 +1,60 @@
+{"at_ms":1791131802591,"brief":{"constraints":[],"context":"","done_when":null,"objective":"stay around","report_format":null},"name":"t1","parent":"user","type":"task_created","ws":{"base_commit":null,"branch":null,"dropped":false,"mode":"shared","path":"/Users/gabrielvergnaud/.bise/hubs/harness-3abb2bd8/agents/core-timers/tmp/sb-e2e-fovs_kg6/ws"}}
+{"at_ms":1791131802591,"text":"the user created the agent @t1: stay around","type":"main_note"}
+{"msg":{"auto":false,"created_ms":1791131802591,"expect_reply":false,"from":"user","id":1,"plain":true,"queued":false,"reply_to":null,"text":"# Task `t1`\n\nObjective: stay around\n\nNo end criterion: this is a long-running task. Stay available.\n","thread":1,"to":"t1"},"type":"message_sent"}
+{"id":1,"state":"delivered","type":"message_state"}
+{"name":"t1","report":{"at_ms":1791131804334,"auto":true,"decisions":[],"kind":"turn","summary":"ack: # Task `t1` Objective: stay around No end criterion: this is a long-running task. Stay available."},"type":"reported"}
+{"msg":{"auto":false,"created_ms":1791131804423,"expect_reply":false,"from":"user","id":2,"plain":true,"queued":false,"reply_to":null,"text":"[[bash: sb every 0s \"x\" --to t1]]","thread":2,"to":"main"},"type":"message_sent"}
+{"type":"main_notes_flushed"}
+{"id":2,"state":"delivered","type":"message_state"}
+{"msg":{"auto":false,"created_ms":1791131804948,"expect_reply":false,"from":"user","id":3,"plain":true,"queued":false,"reply_to":null,"text":"[[bash: printf '\\133\\133bash: sleep 4\\135\\135 ping the board' | sb every 1s - --to t1]]","thread":3,"to":"main"},"type":"message_sent"}
+{"id":3,"state":"delivered","type":"message_state"}
+{"agent":"t1","at":1791131805087,"by":"main","every_ms":1000,"id":1,"next_ms":1791131806087,"text":"[[bash: sleep 4]] ping the board","type":"every_set"}
+{"at":1791131806420,"fired":1,"id":1,"next_ms":1791131807087,"type":"every_fired"}
+{"msg":{"auto":false,"created_ms":1791131806420,"expect_reply":false,"from":"switchboard","id":4,"plain":false,"queued":false,"reply_to":null,"text":"timer #1 (every 1s, set by main): [[bash: sleep 4]] ping the board\n(stop it: sb every --stop 1)","thread":4,"to":"t1"},"type":"message_sent"}
+{"id":4,"state":"delivered","type":"message_state"}
+{"name":"t1","report":{"at_ms":1791131810802,"auto":true,"decisions":[],"kind":"turn","summary":"done: tool bash ok:"},"type":"reported"}
+{"at":1791131810988,"fired":2,"id":1,"next_ms":1791131811988,"type":"every_fired"}
+{"msg":{"auto":false,"created_ms":1791131810988,"expect_reply":false,"from":"switchboard","id":5,"plain":false,"queued":false,"reply_to":null,"text":"timer #1 (every 1s, set by main): [[bash: sleep 4]] ping the board\n(stop it: sb every --stop 1)","thread":5,"to":"t1"},"type":"message_sent"}
+{"id":5,"state":"delivered","type":"message_state"}
+{"name":"t1","report":{"at_ms":1791131815400,"auto":true,"decisions":[],"kind":"turn","summary":"done: tool bash ok:"},"type":"reported"}
+{"at":1791131815544,"fired":3,"id":1,"next_ms":1791131816544,"type":"every_fired"}
+{"msg":{"auto":false,"created_ms":1791131815544,"expect_reply":false,"from":"switchboard","id":6,"plain":false,"queued":false,"reply_to":null,"text":"timer #1 (every 1s, set by main): [[bash: sleep 4]] ping the board\n(stop it: sb every --stop 1)","thread":6,"to":"t1"},"type":"message_sent"}
+{"id":6,"state":"delivered","type":"message_state"}
+{"msg":{"auto":false,"created_ms":1791131818473,"expect_reply":false,"from":"user","id":7,"plain":true,"queued":false,"reply_to":null,"text":"[[bash: sb every]]","thread":7,"to":"main"},"type":"message_sent"}
+{"id":7,"state":"delivered","type":"message_state"}
+{"msg":{"auto":false,"created_ms":1791131820715,"expect_reply":false,"from":"user","id":8,"plain":true,"queued":false,"reply_to":null,"text":"[[bash: sb every --stop 1]]","thread":8,"to":"main"},"type":"message_sent"}
+{"id":8,"state":"delivered","type":"message_state"}
+{"name":"t1","report":{"at_ms":1791131821194,"auto":true,"decisions":[],"kind":"turn","summary":"done: tool bash ok:"},"type":"reported"}
+{"at":1791131821753,"fired":4,"id":1,"next_ms":1791131822753,"type":"every_fired"}
+{"msg":{"auto":false,"created_ms":1791131821753,"expect_reply":false,"from":"switchboard","id":9,"plain":false,"queued":false,"reply_to":null,"text":"timer #1 (every 1s, set by main): [[bash: sleep 4]] ping the board\n(stop it: sb every --stop 1)","thread":9,"to":"t1"},"type":"message_sent"}
+{"id":9,"state":"delivered","type":"message_state"}
+{"at":1791131822212,"id":1,"type":"every_stop","why":"stopped by main"}
+{"name":"t1","report":{"at_ms":1791131828014,"auto":true,"decisions":[],"kind":"turn","summary":"done: tool bash ok:"},"type":"reported"}
+{"msg":{"auto":false,"created_ms":1791131834135,"expect_reply":false,"from":"user","id":10,"plain":true,"queued":false,"reply_to":null,"text":"[[bash: sb every --stop 1]]","thread":10,"to":"main"},"type":"message_sent"}
+{"id":10,"state":"delivered","type":"message_state"}
+{"msg":{"auto":false,"created_ms":1791131835907,"expect_reply":false,"from":"user","id":11,"plain":true,"queued":false,"reply_to":null,"text":"[[bash: sb every day 07:30 \"make the morning page\"]]","thread":11,"to":"main"},"type":"message_sent"}
+{"id":11,"state":"delivered","type":"message_state"}
+{"agent":"main","at":1791131836075,"by":"main","daily_min":450,"id":2,"next_ms":1791178200000,"text":"make the morning page","type":"every_set"}
+{"msg":{"auto":false,"created_ms":1791131836337,"expect_reply":false,"from":"user","id":12,"plain":true,"queued":false,"reply_to":null,"text":"[[bash: sb every 3s \"pong\" --to t1]]","thread":12,"to":"main"},"type":"message_sent"}
+{"id":12,"state":"delivered","type":"message_state"}
+{"agent":"t1","at":1791131836511,"by":"main","every_ms":3000,"id":3,"next_ms":1791131839511,"text":"pong","type":"every_set"}
+{"msg":{"auto":false,"created_ms":1791131836876,"expect_reply":false,"from":"user","id":13,"plain":true,"queued":false,"reply_to":null,"text":"[[bash: sb tasks]]","thread":13,"to":"main"},"type":"message_sent"}
+{"id":13,"state":"delivered","type":"message_state"}
+{"msg":{"auto":false,"created_ms":1791131838482,"expect_reply":false,"from":"user","id":14,"plain":true,"queued":false,"reply_to":null,"text":"[[bash: sb every]]","thread":14,"to":"main"},"type":"message_sent"}
+{"id":14,"state":"delivered","type":"message_state"}
+{"at":1791131839904,"fired":1,"id":3,"next_ms":1791131842511,"type":"every_fired"}
+{"msg":{"auto":false,"created_ms":1791131839904,"expect_reply":false,"from":"switchboard","id":15,"plain":false,"queued":false,"reply_to":null,"text":"timer #3 (every 3s, set by main): pong\n(stop it: sb every --stop 3)","thread":15,"to":"t1"},"type":"message_sent"}
+{"id":15,"state":"delivered","type":"message_state"}
+{"lifecycle":"archived","name":"t1","reason":"drop","type":"lifecycle"}
+{"at_ms":1791131839991,"text":"the user dropped the agent @t1","type":"main_note"}
+{"at":1791131840397,"id":3,"type":"every_stop","why":"@t1 is gone"}
+{"msg":{"auto":false,"created_ms":1791131841580,"expect_reply":false,"from":"user","id":16,"plain":true,"queued":false,"reply_to":null,"text":"[[bash: sb every]]","thread":16,"to":"main"},"type":"message_sent"}
+{"type":"main_notes_flushed"}
+{"id":16,"state":"delivered","type":"message_state"}
+{"msg":{"auto":false,"created_ms":1791131842019,"expect_reply":false,"from":"user","id":17,"plain":true,"queued":false,"reply_to":null,"text":"[[bash: sb every day 18:38 \"ONE-SHOT brief\" --times 1 --until 23:59]]","thread":17,"to":"main"},"type":"message_sent"}
+{"id":17,"state":"delivered","type":"message_state"}
+{"agent":"main","at":1791131842221,"by":"main","daily_min":1118,"id":4,"next_ms":1791131880000,"text":"ONE-SHOT brief","times":1,"type":"every_set","until_ms":1791151140000}
+{"at":1791131880422,"fired":1,"id":4,"next_ms":1791218280000,"type":"every_fired"}
+{"msg":{"auto":false,"created_ms":1791131880422,"expect_reply":false,"from":"switchboard","id":18,"plain":false,"queued":false,"reply_to":null,"text":"timer #4 (every day 18:38, until 23:59, 1/1, set by main): ONE-SHOT brief\n(stop it: sb every --stop 4)","thread":18,"to":"main"},"type":"message_sent"}
+{"id":18,"state":"delivered","type":"message_state"}
+{"at":1791131880764,"id":4,"type":"every_stop","why":"it ran its times"}

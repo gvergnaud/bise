@@ -825,7 +825,7 @@ fn worktrees_need_git() {
 fn every_sets_lists_and_stops_timers() {
     use crate::every::Sched;
     let mut t = T::new();
-    let add = |sched, to: &str| AgentReq::Every(EveryReq::Add { to: to.into(), text: "check HN".into(), sched, until_ms: None, times: None });
+    let add = |sched, to: &str| AgentReq::Every(EveryReq::Add { to: to.into(), text: "check HN".into(), sched, until_ms: None, times: None, page: None });
     for (req, why) in [
         (add(Sched::Every(30_000), ""), "at least 1m"),
         (add(Sched::Every(600_000), "ghost"), "no active agent @ghost"),
@@ -3420,3 +3420,7 @@ fn a_batched_replay_builds_the_same_state_as_one_event_at_a_time() {
     assert_eq!(batched.st.agents["a"].ws, one.st.agents["a"].ws);
     assert_eq!(batched.raw(&json!({"t": "view_all"})), one.raw(&json!({"t": "view_all"})));
 }
+
+/// `sb every`'s timers on sb-core (every_tests.rs).
+#[path = "every_tests.rs"]
+mod every_tests;

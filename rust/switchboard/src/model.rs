@@ -317,6 +317,8 @@ pub struct State {
     pub main_notes: Vec<String>,
     pub next_msg: u64,
     pub next_card: u64,
+    /// `sb every`'s timers (sb-core's view `timers`, `timers_ended`)
+    pub timers: crate::every::Timers,
 }
 
 impl State {

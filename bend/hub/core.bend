@@ -11,6 +11,8 @@ import ./cx.bend as X
 
 import ./codec.bend as C
 
+import ./timers.bend as TM
+
 type Snd is Data:
   Snd{from: String, to: String, text: String, expect: Bool,
     reply_to: Maybe<&2, Nat>, plain: Bool, auto: Bool, queued: Bool,
@@ -70,6 +72,9 @@ type In is Data:
   IForgeCard{}
   ICardOpen{}
   IHubMsg{}
+  IEverySet{}
+  IEveryStop{}
+  IEveryRun{}
   INone{}
 
 type CardK is Data:
@@ -1104,6 +1109,272 @@ def create_in(-o: M.St, +cx: X.Cx<o>, +t: NewTask, j: Maybe<&2, J.Json>) -> X.Cx
     case _:
       create_task(o, cx, t)
 
+# ---- timers (`sb every`, hub/timers.bend) ----
+# The steps of the timers, wired around timers.bend's pure decisions.
+# They live here, not in timers.bend: they call send, pump, emit and ask,
+# which are core's, and timers.bend (imported by model.bend) cannot
+# import core (Bend has no import cycles).
+
+def tms(-o: M.St, +cx: X.Cx<o>) -> TM.Tms:
+  M.St.tm(st(o, cx))
+
+def live(-o: M.St, +cx: X.Cx<o>) -> List<&2, TM.Timer>:
+  TM.Tms.live(tms(o, cx))
+
+def from_bise(xs: List<&2, M.Msg>) -> Bool:
+  match xs:
+    case Nil{}:
+      False{}
+    case Con{+h, +t}:
+      String.eq(M.Msg.from(h), M.HUB()) || from_bise(t)
+
+# a message from bise is queued for `n` (a wake not delivered yet)
+def bise_queued(+s: M.St, +n: String) -> Bool:
+  from_bise(M.queued_for(s, n))
+
+def timer_agent.go(+s: M.St, m: Maybe<&2, String>) -> Maybe<&2, M.Agent>:
+  match m:
+    case None{}:
+      None{}
+    case Some{+n}:
+      M.get_agent(s, n)
+
+# the agent of a timer (by its name or an old one)
+def timer_agent(+s: M.St, +n: String) -> Maybe<&2, M.Agent>:
+  timer_agent.go(s, M.resolve(s, n))
+
+def life_gone(l: M.Life) -> Bool:
+  match l:
+    case M.LArchived{}:
+      True{}
+    case _:
+      False{}
+
+def ready.go(-o: M.St, m: Maybe<&2, M.Agent>, +cx: X.Cx<o>) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{+a}:
+      is_active(M.Agent.life(a)) && is_idle(X.Rt.run(rt(o, cx, M.Agent.name(a))))
+
+# active and idle: a wake reaches it now
+def timer_ready(-o: M.St, +cx: X.Cx<o>, +n: String) -> Bool:
+  ready.go(o, timer_agent(st(o, cx), n), cx)
+
+def gone.go(m: Maybe<&2, M.Agent>) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{+a}:
+      life_gone(M.Agent.life(a))
+
+# unknown or archived: its timers end
+def timer_gone(+s: M.St, +n: String) -> Bool:
+  gone.go(timer_agent(s, n))
+
+def timer_may(-o: M.St, +cx: X.Cx<o>, +t: TM.Timer, +due: Bool) -> Bool:
+  TM.may_fire(bise_queued(st(o, cx), TM.Timer.agent(t)), due, t, timer_ready(o, cx, TM.Timer.agent(t)), now(o, cx))
+
+def timer_spent(-o: M.St, spent: Bool, +cx: X.Cx<o>, +id: Nat, +at: Nat) -> X.Cx<o>:
+  match spent:
+    case True{}:
+      emit(o, cx, M.ETimerStop{id, "it ran its times", at}, Unit{}, Unit{}, Unit{})
+    case False{}:
+      cx
+
+# the wake reached the queue: a due one counts (and ends the timer when it
+# ran its times, law times_bound), a run now is only a run
+def timer_count(-o: M.St, due: Bool, +cx: X.Cx<o>, +t: TM.Timer, +next: Nat) -> X.Cx<o>:
+  match due:
+    case False{}:
+      emit(o, cx, M.ETimerRun{TM.Timer.id(t), now(o, cx)}, Unit{}, Unit{}, Unit{})
+    case True{}:
+      timer_spent(o, TM.spent(t),
+        emit(o, cx, M.ETimerFired{TM.Timer.id(t), 1n+TM.Timer.fired(t), next, now(o, cx), False{}}, Unit{}, Unit{}, Unit{}),
+        TM.Timer.id(t), now(o, cx))
+
+# a fire counts only when its message was queued (law fire_is_a_message,
+# amb-tools m_5822: a one-shot timer was spent on a lost wake)
+def timer_fire.sent(-o: M.St, p: X.Cx<o> & SendR, +t: TM.Timer, +due: Bool, +next: Nat) -> X.Cx<o>:
+  match p:
+    case (+cx, SOk{_}):
+      timer_count(o, due, cx, t, next)
+    case (+cx, SErr{_}):
+      cx
+
+def timer_fire.go(-o: M.St, ok: Bool, +cx: X.Cx<o>, +t: TM.Timer, +text: String, +due: Bool, +next: Nat) -> X.Cx<o>:
+  match ok:
+    case False{}:
+      cx
+    case True{}:
+      timer_fire.sent(o, send(o, cx, msg(M.HUB(), TM.Timer.agent(t), text, False{}, None{}, False{}, False{})), t, due, next)
+
+# the only way a timer wakes its agent: a due wake (`due`, counted, its
+# next time `next`) from the tick, or /scheduled's run now; never while a
+# wake from bise is still queued for it (law wake_never_stacked)
+def timer_fire(-o: M.St, +cx: X.Cx<o>, +t: TM.Timer, +text: String, +due: Bool, +next: Nat) -> X.Cx<o>:
+  timer_fire.go(o, timer_may(o, cx, t, due), cx, t, text, due, next)
+
+# {"t":"every_set"}: the hub checked the request and computed `next_ms`
+# (its clock); a timer only for an active agent
+def timer_set.new(-o: M.St, s: Maybe<&2, TM.Sched>, +cx: X.Cx<o>, +agent: String, +i: J.Json) -> X.Cx<o>:
+  match s:
+    case None{}:
+      cx
+    case Some{+sc}:
+      +t = {TM.Timer{1n+TM.Tms.last_id(tms(o, cx)), agent, C.get_s(i, "by"), C.get_s(i, "text"), sc,
+        C.get_nat(i, "next_ms"), C.opt_nat(J.get(i, "until_ms")), C.opt_nat(J.get(i, "times")), 0n,
+        C.opt_str(J.get(i, "page")), 0n, Nil{}} : TM.Timer}
+      emit(o, cx, M.ETimerSet{t, now(o, cx)}, Unit{}, Unit{}, Unit{})
+
+def timer_set.active(-o: M.St, ok: Bool, +cx: X.Cx<o>, +agent: String, +i: J.Json) -> X.Cx<o>:
+  match ok:
+    case False{}:
+      cx
+    case True{}:
+      timer_set.new(o, C.sched_of(C.opt_nat(J.get(i, "every_ms")), C.opt_nat(J.get(i, "daily_min"))), cx, agent, i)
+
+def timer_set.agent(-o: M.St, m: Maybe<&2, M.Agent>, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
+  match m:
+    case None{}:
+      cx
+    case Some{+a}:
+      timer_set.active(o, is_active(M.Agent.life(a)), cx, M.Agent.name(a), i)
+
+def timer_set(-o: M.St, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
+  timer_set.agent(o, timer_agent(st(o, cx), C.get_s(i, "agent")), cx, i)
+
+# {"t":"every_stop"}: `sb every --stop`, /scheduled's x; `wake` (the
+# user's stop): what bise tells its agent, in the same step
+def timer_stop.found(-o: M.St, m: Maybe<&2, TM.Timer>, +cx: X.Cx<o>, +id: Nat, +why: String, +wake: String) -> X.Cx<o>:
+  match m:
+    case None{}:
+      cx
+    case Some{+t}:
+      +cx2 = emit(o, cx, M.ETimerStop{id, why, now(o, cx)}, Unit{}, Unit{}, Unit{})
+      pick_lazy(X.Cx<o>, String.is_empty(wake), u => cx2,
+        u => fst(o, send(o, cx2, msg(M.HUB(), TM.Timer.agent(t), wake, False{}, None{}, False{}, False{}))))
+
+def timer_stop(-o: M.St, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
+  timer_stop.found(o, TM.find(live(o, cx), C.get_nat(i, "id")), cx, C.get_nat(i, "id"), C.get_s(i, "why"), C.get_s(i, "wake"))
+
+# {"t":"every_run"}: /scheduled's run now, through timer_fire
+def timer_run.found(-o: M.St, m: Maybe<&2, TM.Timer>, +cx: X.Cx<o>, +text: String) -> X.Cx<o>:
+  match m:
+    case None{}:
+      cx
+    case Some{+t}:
+      timer_fire(o, cx, t, text, False{}, 0n)
+
+def timer_run(-o: M.St, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
+  timer_run.found(o, TM.find(live(o, cx), C.get_nat(i, "id")), cx, C.get_s(i, "text"))
+
+def timers_gone.each(-o: M.St, ids: List<&2, Nat>, +cx: X.Cx<o>, +why: String) -> X.Cx<o>:
+  match ids:
+    case Nil{}:
+      cx
+    case Con{+id, +rest}:
+      timers_gone.each(o, rest, emit(o, cx, M.ETimerStop{id, why, now(o, cx)}, Unit{}, Unit{}, Unit{}), why)
+
+def timers_gone.if(-o: M.St, archived: Bool, +cx: X.Cx<o>, +n: String, +ns: List<&2, String>) -> X.Cx<o>:
+  match archived:
+    case False{}:
+      cx
+    case True{}:
+      timers_gone.each(o, TM.ids_in(live(o, cx), ns), cx, cat(["@", n, " is gone"]))
+
+# an archived (dropped) agent's timers end with it, in the same step (law
+# stop_leaves_no_timer); a stopped one's wait for it, as before
+def timers_gone(-o: M.St, +life: M.Life, +cx: X.Cx<o>, +n: String) -> X.Cx<o>:
+  timers_gone.if(o, life_gone(life), cx, n, M.names_of(st(o, cx), n))
+
+# ---- the timers at a tick ----
+
+def wake_q.go(ok: Bool, +t: TM.Timer, +now: Nat) -> List<&2, J.Json>:
+  match ok:
+    case False{}:
+      Nil{}
+    case True{}:
+      [J.obj(List.append(&2, Sigma<&2, &2, String, _ => J.Json>,
+        [J.kv("id", J.JNum{TM.Timer.id(t)}), J.kv("fired", J.JNum{1n+TM.Timer.fired(t)}),
+          J.kv("waited_ms", J.JNum{Nat.sub(now, TM.Timer.next(t))})],
+        Bool.pick(List<&2, Sigma<&2, &2, String, _ => J.Json>>, TM.is_daily(TM.Timer.sched(t)), [TM.sched_kv(TM.Timer.sched(t))], Nil{})))]
+
+# the wakes this tick may send (their texts and daily next times come
+# from the hub: one {need} for them all, answered by id)
+def wake_qs(-o: M.St, ts: List<&2, TM.Timer>, +cx: X.Cx<o>) -> List<&2, J.Json>:
+  match ts:
+    case Nil{}:
+      Nil{}
+    case Con{+t, +rest}:
+      +ok = Maybe.is_none(&2, String, TM.end_why(t, timer_gone(st(o, cx), TM.Timer.agent(t)), now(o, cx))) && timer_may(o, cx, t, True{})
+      List.append(&2, J.Json, wake_q.go(ok, t, now(o, cx)), wake_qs(o, rest, cx))
+
+def wake_ans(xs: List<&2, J.Json>, +id: Nat) -> Maybe<&2, J.Json>:
+  match xs:
+    case Nil{}:
+      None{}
+    case Con{+h, +t}:
+      Bool.pick(Maybe<&2, J.Json>, Nat.is_eq(C.get_nat(h, "id"), id), Some{h}, wake_ans(t, id))
+
+def timers_tick.wake(-o: M.St, a: Maybe<&2, J.Json>, +cx: X.Cx<o>, +t: TM.Timer) -> X.Cx<o>:
+  match a:
+    case None{}:
+      cx
+    case Some{+w}:
+      timer_fire(o, cx, t, C.get_s(w, "text"), True{},
+        TM.next_of(TM.Timer.sched(t), TM.Timer.next(t), now(o, cx), C.get_nat(w, "next_ms")))
+
+def timers_tick.end(-o: M.St, w: Maybe<&2, String>, +cx: X.Cx<o>, +t: TM.Timer, +ans: List<&2, J.Json>) -> X.Cx<o>:
+  match w:
+    case Some{+why}:
+      emit(o, cx, M.ETimerStop{TM.Timer.id(t), why, now(o, cx)}, Unit{}, Unit{}, Unit{})
+    case None{}:
+      timers_tick.wake(o, wake_ans(ans, TM.Timer.id(t)), cx, t)
+
+def timers_tick.each(-o: M.St, ts: List<&2, TM.Timer>, +cx: X.Cx<o>, +ans: List<&2, J.Json>) -> X.Cx<o>:
+  match ts:
+    case Nil{}:
+      cx
+    case Con{+t, +rest}:
+      +cx2 = timers_tick.end(o, TM.end_why(t, timer_gone(st(o, cx), TM.Timer.agent(t)), now(o, cx)), cx, t, ans)
+      timers_tick.each(o, rest, cx2, ans)
+
+def json_arr(m: Maybe<&2, J.Json>) -> List<&2, J.Json>:
+  match m:
+    case Some{J.JArr{+vals}}:
+      vals
+    case _:
+      Nil{}
+
+def timers_tick.asked(-o: M.St, p: X.Cx<o> & Maybe<&2, J.Json>, +ts: List<&2, TM.Timer>) -> X.Cx<o>:
+  match p:
+    case (+cx, None{}):
+      # the step halts: the hub answers, then runs the tick again (same now)
+      cx
+    case (+cx, Some{+a}):
+      timers_tick.each(o, ts, cx, json_arr(J.get(a, "wakes")))
+
+def timers_tick.ask(-o: M.St, qs: List<&2, J.Json>, +cx: X.Cx<o>, +ts: List<&2, TM.Timer>) -> X.Cx<o>:
+  match qs:
+    case Nil{}:
+      timers_tick.each(o, ts, cx, Nil{})
+    case Con{+q, +rest}:
+      timers_tick.asked(o, ask(o, cx, J.obj([J.kv("q", J.JStr{"every_wake"}), J.kv("wakes", J.JArr{q <> rest})])), ts)
+
+def timers_tick.go(-o: M.St, work: Bool, +cx: X.Cx<o>) -> X.Cx<o>:
+  match work:
+    case False{}:
+      cx
+    case True{}:
+      timers_tick.ask(o, wake_qs(o, live(o, cx), cx), cx, live(o, cx))
+
+# the timers due now wake their idle agents (a busy one: at its next
+# idle), the ended ones stop. A tick with none due or past its end does
+# nothing (idle-cpu)
+def timers_tick(-o: M.St, +cx: X.Cx<o>) -> X.Cx<o>:
+  timers_tick.go(o, TM.any_work(live(o, cx), now(o, cx)), cx)
+
 def reject_ids(-o: M.St, ids: List<&2, Nat>, +cx: X.Cx<o>) -> X.Cx<o>:
   match ids:
     case Nil{}:
@@ -1126,7 +1397,7 @@ def stop_task.go(-o: M.St, +cx: X.Cx<o>, +name: String, +life: M.Life, +reason: 
 
 # no wait of the stopped task survives (law stop_leaves_no_waiter)
 def stop_task(-o: M.St, +cx: X.Cx<o>, +name: String, +life: M.Life, +reason: String) -> X.Cx<o>:
-  set_waiters(o, stop_task.go(o, cx, name, life, reason), waiters_not(X.R.waiters(rr(o, cx)), name))
+  set_waiters(o, timers_gone(o, life, stop_task.go(o, cx, name, life, reason), name), waiters_not(X.R.waiters(rr(o, cx)), name))
 
 # stop_task, after saying which of the user's queued messages will never
 # arrive (BISE-86)
@@ -2554,7 +2825,11 @@ def in_tag(+t: String) -> In:
   # `sb every` (docs/ambient-roadmap.md B) wake their agent with it, and
   # the agents an expired ChatGPT sign-in stopped go on (expired-ux)
   Bool.pick(In, String.eq(t, "hub_msg"), IHubMsg{},
-  INone{}))))))))))))))))))))))))))))))))
+  # the timers of `sb every` (hub/timers.bend): set, stop, run now
+  Bool.pick(In, String.eq(t, "every_set"), IEverySet{},
+  Bool.pick(In, String.eq(t, "every_stop"), IEveryStop{},
+  Bool.pick(In, String.eq(t, "every_run"), IEveryRun{},
+  INone{})))))))))))))))))))))))))))))))))))
 
 # `/close N`: the user files a card without answering it
 def close_by_user(-o: M.St, m: Maybe<&2, M.Card>, +cx: X.Cx<o>, +id: Nat) -> X.Cx<o>:
@@ -2583,7 +2858,7 @@ def dispatch.go(-o: M.St, tag: In, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
     case IReq{}:
       agent_req(o, cx, C.get_nat(i, "token"), C.get_s(i, "from"), Maybe.default(&2, J.Json, J.get(i, "req"), J.JNull{}))
     case ITick{}:
-      tick(o, cx)
+      timers_tick(o, tick(o, cx))
     case IIdle{}:
       repl_idle(o, cx, C.get_s(i, "agent"), C.get_b(i, "leftover"), C.get_b(i, "held"))
     case ITurnStarted{}:
@@ -2644,6 +2919,12 @@ def dispatch.go(-o: M.St, tag: In, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
       hub_card(o, cx, C.get_s(i, "kind"), C.get_s(i, "agent"), C.get_s(i, "text"), C.opt_str(J.get(i, "place")), C.opt_nat(J.get(i, "pr")))
     case IHubMsg{}:
       fst(o, send(o, cx, msg(M.HUB(), C.get_s(i, "to"), C.get_s(i, "text"), False{}, None{}, False{}, False{})))
+    case IEverySet{}:
+      timer_set(o, cx, i)
+    case IEveryStop{}:
+      timer_stop(o, cx, i)
+    case IEveryRun{}:
+      timer_run(o, cx, i)
     case INone{}:
       cx
 

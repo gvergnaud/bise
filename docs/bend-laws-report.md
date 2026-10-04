@@ -28,6 +28,10 @@ suites d'entrées.
 | delivered_once (L3) | Un message est livré seulement depuis la file. Il n'y retourne que par un steer_leftover explicite. |
 | stop_leaves_no_queue, stop_leaves_no_card (L12) | Un stop ou un drop ne laisse ni message en file ni carte ouverte de la tâche. |
 | init_cards_unique, cards_unique | Deux cartes ouvertes n'ont jamais le même id (hypothèse de L12). |
+| fire_is_a_message | Un timer (sb every) ne compte un tir que si son message de réveil est en file, dans le même pas. |
+| wake_never_stacked | Un timer ne tire jamais vers un agent qui a déjà un message de bise en file. |
+| times_bound | Un timer ne tire jamais plus que ses `--times` : le dernier tir l'arrête dans le même pas. |
+| stop_leaves_no_timer | Un archivage ou un drop ne laisse aucun timer de l'agent (sb stop les garde en attente). |
 | init_names_apart, names_apart | Les noms et anciens noms de deux agents ne se croisent jamais (préalable de L4). |
 
 ## Lois ouvertes

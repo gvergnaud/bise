@@ -5,6 +5,13 @@
 //! keeps a read-only mirror of the durable state (for the views: board,
 //! snapshot, contexts, prompts), fed only by the journal events and the
 //! runtime changes sb-core emits.
+//!
+//! `sb every`'s timers are sb-core's too (bend/hub/timers.bend): their
+//! journal lines replay with the rest, the tick decides the wakes. Here
+//! only the request's checks and words, the first wake's time
+//! (`every_set`), the `every_wake` need (wake texts, a daily timer's next
+//! time on the local clock, every.rs), the ◷ lines of a set or ended
+//! timer, and the mirror `st.timers` from the view.
 
 use crate::board;
 use crate::model::*;
@@ -208,7 +215,7 @@ pub enum EveryReq {
     List,
     Stop(u64),
     /// `to` "": the caller
-    Add { to: String, text: String, sched: crate::every::Sched, until_ms: Option<u64>, times: Option<u64> },
+    Add { to: String, text: String, sched: crate::every::Sched, until_ms: Option<u64>, times: Option<u64>, page: Option<String> },
 }
 
 /// `m_12` or `12`.
@@ -398,6 +405,7 @@ impl AgentReq {
                     },
                     until_ms: v["until_ms"].as_u64(),
                     times: v["times"].as_u64(),
+                    page: v["page"].as_str().filter(|p| !p.is_empty()).map(String::from),
                 },
                 o => return Err(format!("sb every: unknown step {}", o)),
             }),
@@ -874,8 +882,6 @@ pub struct Hub {
     /// checks' tries (forge/news.rs); `pr_bots`: the repo's `[pr]
     /// trusted_bots` (the daemon reads config.toml).
     pr_news: crate::forge::news::News,
-    /// `sb every`'s timers (every.rs), from the journal's own lines.
-    every: crate::every::Timers,
     pub pr_bots: Vec<String>,
     /// pr-merge (pr-design §6.3): the ready-to-merge items' runtime side
     /// (merge.rs).
@@ -1058,7 +1064,6 @@ impl Hub {
             pr_late: None,
             pr_done: BTreeSet::new(),
             pr_news: Default::default(),
-            every: Default::default(),
             pr_bots: Vec::new(),
             merges: merge::Merges::default(),
             updates: update_card::Updates::default(),
@@ -1106,11 +1111,6 @@ impl Hub {
             if crate::forge::is_pr_line(ev) {
                 crate::forge::read_line(&mut self.pr_known, ev);
                 self.pr_news.read_journal(ev);
-                continue;
-            }
-            // the timers' lines (sb every): the hub's own too
-            if crate::every::is_line(ev) {
-                self.every.read(ev);
                 continue;
             }
             core.push(ev);
@@ -1303,6 +1303,13 @@ impl Hub {
         if let Some(notes) = v.get("notes") {
             self.st.main_notes = parse(notes).unwrap_or_default();
         }
+        // sb every's timers: only in a view whose step changed them
+        if let Some(t) = v.get("timers") {
+            self.st.timers.load_live(t);
+        }
+        if let Some(t) = v.get("timers_ended") {
+            self.st.timers.load_ended(t);
+        }
         self.st.next_msg = v["next_msg"].as_u64().unwrap_or(1);
         self.st.next_card = v["next_card"].as_u64().unwrap_or(1);
     }
@@ -1466,28 +1473,31 @@ impl Hub {
 
     /// `sb every`'s timers (the state's `timers`).
     pub fn timers(&self) -> &crate::every::Timers {
-        &self.every
+        &self.st.timers
     }
 
-    /// `sb every` (every.rs): set, list or stop a timer; the reply.
-    fn every_req(&mut self, fx: &mut Fx, env: &mut dyn Env, from: &str, r: EveryReq) -> Value {
+    /// `sb every` (every.rs): set, list or stop a timer; the reply. The
+    /// request's checks and words are here; the timer is sb-core's
+    /// (`every_set`, `every_stop` inputs, hub/timers.bend).
+    fn timer_req(&mut self, fx: &mut Fx, env: &mut dyn Env, from: &str, r: EveryReq) -> Value {
         let now = env.now();
         let Some(by) = self.st.resolve(from) else {
             return json!({"ok": false, "error": format!("unknown agent: {}", from)});
         };
         match r {
-            EveryReq::List => json!({"ok": true, "text": self.every.list(now)}),
-            EveryReq::Stop(id) => match self.every.stop(id, &format!("stopped by {}", by), now) {
-                Some(j) => {
-                    fx.push(Effect::Journal(j));
-                    self.every_ended_lines(fx, id);
-                    // the views' state carries the timers (/scheduled, the panel's ◷)
-                    self.dirty = true;
-                    json!({"ok": true, "text": format!("timer #{} stopped", id)})
+            EveryReq::List => json!({"ok": true, "text": self.st.timers.list(now)}),
+            EveryReq::Stop(id) => {
+                let no = json!({"ok": false, "error": format!("no timer #{} (`sb every` lists them)", id)});
+                if !self.st.timers.map.contains_key(&id) {
+                    return no;
                 }
-                None => json!({"ok": false, "error": format!("no timer #{} (`sb every` lists them)", id)}),
-            },
-            EveryReq::Add { to, text, sched, until_ms, times } => {
+                self.core(fx, env, None, json!({"t": "every_stop", "id": id, "why": format!("stopped by {}", by), "wake": ""}));
+                if self.st.timers.map.contains_key(&id) {
+                    return no;
+                }
+                json!({"ok": true, "text": format!("timer #{} stopped", id)})
+            }
+            EveryReq::Add { to, text, sched, until_ms, times, page } => {
                 let to = if to.is_empty() { by.clone() } else { to };
                 let agent = match self.st.resolve(&to) {
                     Some(a) if self.st.agents[&a].lifecycle == Lifecycle::Active => a,
@@ -1505,17 +1515,27 @@ impl Hub {
                 if times == Some(0) {
                     return json!({"ok": false, "error": "sb every: --times is at least 1"});
                 }
-                // --page (a page's watch) is ambient-app's: no pages here
-                let n = crate::every::New { agent, by, text: text.trim().to_string(), sched, until_ms, times, page: None };
-                let (id, j) = self.every.add(n, now);
-                fx.push(Effect::Journal(j));
-                self.dirty = true;
-                if let Some(t) = self.every.map.get(&id) {
-                    let mut ev = t.json();
-                    ev["ev"] = json!("set");
-                    self.every_lines(fx, &t.agent.clone(), &t.by.clone(), &ev);
+                // the first wake on the hub's clock; sb-core gives the id
+                let mut set = json!({"t": "every_set", "agent": agent, "by": by, "text": text.trim(), "next_ms": sched.first(now)});
+                match sched {
+                    crate::every::Sched::Every(p) => set["every_ms"] = json!(p),
+                    crate::every::Sched::Daily(m) => set["daily_min"] = json!(m),
                 }
-                let line = self.every.list(now).lines().find(|l| l.starts_with(&format!("#{} ", id))).unwrap_or_default().to_string();
+                for (k, v) in [("until_ms", until_ms.map(|u| json!(u))), ("times", times.map(|t| json!(t))), ("page", page.map(|p| json!(p)))] {
+                    if let Some(v) = v {
+                        set[k] = v;
+                    }
+                }
+                let n = fx.len();
+                self.core(fx, env, None, set);
+                let set_id = |e: &Effect| match e {
+                    Effect::Journal(j) if j["type"] == "every_set" => j["id"].as_u64(),
+                    _ => None,
+                };
+                let Some(id) = fx[n..].iter().find_map(set_id) else {
+                    return json!({"ok": false, "error": format!("sb every: no active agent @{}", to)});
+                };
+                let line = self.st.timers.list(now).lines().find(|l| l.starts_with(&format!("#{} ", id))).unwrap_or_default().to_string();
                 json!({"ok": true, "id": id, "text": format!("timer set: {} (stop it: sb every --stop {})", line, id)})
             }
         }
@@ -1525,7 +1545,7 @@ impl Hub {
     /// line): its agent's feed, and main's when main set it for another
     /// agent (main's thread shows the timers main sets, never another
     /// agent's wakes). `ev`: the timer's state json with `ev` set/end.
-    fn every_lines(&self, fx: &mut Fx, agent: &str, by: &str, ev: &Value) {
+    fn timer_lines(&self, fx: &mut Fx, agent: &str, by: &str, ev: &Value) {
         fx.push(line(agent, "scheduled", &ev.to_string()));
         if by == MAIN && agent != MAIN {
             // main's copy says so: its ended line names the agent
@@ -1535,88 +1555,39 @@ impl Hub {
         }
     }
 
-    /// The ◷ line of timer `id` that just ended (its `every_stop` read in).
-    fn every_ended_lines(&self, fx: &mut Fx, id: u64) {
-        if let Some(e) = self.every.ended.iter().rev().find(|e| e.timer.id == id) {
-            let mut ev = e.json();
-            ev["ev"] = json!("end");
-            self.every_lines(fx, &e.timer.agent, &e.timer.by, &ev);
-        }
+    /// The ◷ line of a timer sb-core just set or ended (its `every_set` or
+    /// `every_stop`; the step's view, loaded first, has the timer).
+    fn timer_journal_lines(&self, fx: &mut Fx, ev: &Value) {
+        let id = ev["id"].as_u64().unwrap_or(0);
+        let (t, mut v, what) = match ev["type"].as_str() {
+            Some("every_set") => match self.st.timers.map.get(&id) {
+                Some(t) => (t, t.json(), "set"),
+                None => return,
+            },
+            Some("every_stop") => match self.st.timers.ended.iter().rev().find(|e| e.timer.id == id) {
+                Some(e) => (&e.timer, e.json(), "end"),
+                None => return,
+            },
+            _ => return,
+        };
+        v["ev"] = json!(what);
+        self.timer_lines(fx, &t.agent, &t.by, &v);
     }
 
     /// `/scheduled`'s stop (the user): the timer ends, its agent hears it
-    /// from bise once, the ◷ line says so.
-    fn every_stop_by_user(&mut self, fx: &mut Fx, env: &mut dyn Env, id: u64, why: &str) {
-        let Some(t) = self.every.map.get(&id).cloned() else { return };
-        if let Some(j) = self.every.stop(id, "stopped by the user", env.now()) {
-            fx.push(Effect::Journal(j));
-            self.every_ended_lines(fx, id);
-            let text = format!("the user stopped timer #{} ({}){}: don't set it again unless they ask", id, t.text, why);
-            self.core(fx, env, None, json!({"t": "hub_msg", "to": t.agent, "text": text}));
-            self.dirty = true;
-        }
+    /// from bise once in the same sb-core step, the ◷ line says so.
+    fn timer_stop_by_user(&mut self, fx: &mut Fx, env: &mut dyn Env, id: u64, why: &str) {
+        let Some(t) = self.st.timers.map.get(&id) else { return };
+        let wake = format!("the user stopped timer #{} ({}){}: don't set it again unless they ask", id, t.text, why);
+        self.core(fx, env, None, json!({"t": "every_stop", "id": id, "why": "stopped by the user", "wake": wake}));
     }
 
     /// `/scheduled`'s run now: one wake of timer `id` at once, outside its
-    /// count (a busy agent gets it at the end of its turn).
-    fn every_run_now(&mut self, fx: &mut Fx, env: &mut dyn Env, id: u64) {
-        if let Some((agent, text, j)) = self.every.run_now(id, env.now()) {
-            fx.push(Effect::Journal(j));
-            self.core(fx, env, None, json!({"t": "hub_msg", "to": agent, "text": text}));
-            self.dirty = true;
-        }
-    }
-
-    /// The timers due now wake their idle agents (a busy one: at its
-    /// next idle, one wake); the ended ones stop. Each change in the journal.
-    fn every_tick(&mut self, fx: &mut Fx, env: &mut dyn Env) {
-        if self.every.map.is_empty() {
-            return;
-        }
-        let st = &self.st;
-        let acts = self.every.tick(env.now(), |name| {
-            use crate::every::AgentNow;
-            match st.resolve(name).and_then(|n| st.agents.get(&n)) {
-                None => AgentNow::Gone,
-                Some(a) if a.lifecycle == Lifecycle::Archived => AgentNow::Gone,
-                Some(a) if a.lifecycle == Lifecycle::Active && a.run == Run::Idle => AgentNow::Idle,
-                Some(_) => AgentNow::Busy,
-            }
-        });
-        // a run or an end changes the views' state (/scheduled, the ◷)
-        if !acts.is_empty() {
-            self.dirty = true;
-        }
-        for a in acts {
-            match a {
-                crate::every::Act::Wake { id, agent, text, journal } => {
-                    fx.push(Effect::Journal(journal));
-                    let n = fx.len();
-                    self.core(fx, env, None, json!({"t": "hub_msg", "to": agent, "text": text}));
-                    // a fire counts once its message is sent (amb-tools
-                    // m_5822: an sb-core without hub_msg dropped it and the
-                    // one-shot timer was spent): else retried in a minute
-                    let sent = fx[n..].iter().any(|e| matches!(e, Effect::Journal(j) if j["type"] == "message_sent"));
-                    if sent {
-                        if let Some(j) = self.every.delivered(id, env.now()) {
-                            fx.push(Effect::Journal(j));
-                            self.every_ended_lines(fx, id);
-                        }
-                    } else if let Some(j) = self.every.undelivered(id, env.now()) {
-                        fx.push(Effect::Journal(j));
-                        fx.push(line(
-                            MAIN,
-                            "warn",
-                            &format!("timer #{id}: its wake did not reach @{agent}; tried again in a minute (an old sb-core? scripts/bins.sh sb-core)"),
-                        ));
-                    }
-                }
-                crate::every::Act::Stop { journal } => {
-                    let id = journal["id"].as_u64().unwrap_or(0);
-                    fx.push(Effect::Journal(journal));
-                    self.every_ended_lines(fx, id);
-                }
-            }
+    /// count, through sb-core's only wake path (timer_fire: never a second
+    /// wake while one from bise is queued).
+    fn timer_run_now(&mut self, fx: &mut Fx, env: &mut dyn Env, id: u64) {
+        if let Some(text) = self.st.timers.run_text(id, env.now()) {
+            self.core(fx, env, None, json!({"t": "every_run", "id": id, "text": text}));
         }
     }
 
@@ -2135,12 +2106,10 @@ impl Hub {
                 self.interrupt_by = None;
             }
             Input::Agent { token, from, req } => self.agent_req(&mut fx, env, token, &from, req),
-            Input::Tick => {
-                self.core(&mut fx, env, None, json!({"t": "tick"}));
-                self.every_tick(&mut fx, env);
-            }
-            Input::EveryStop { id, why } => self.every_stop_by_user(&mut fx, env, id, &why),
-            Input::EveryRun { id } => self.every_run_now(&mut fx, env, id),
+            // the waits' timeouts, then sb every's timers (sb-core decides)
+            Input::Tick => self.core(&mut fx, env, None, json!({"t": "tick"})),
+            Input::EveryStop { id, why } => self.timer_stop_by_user(&mut fx, env, id, &why),
+            Input::EveryRun { id } => self.timer_run_now(&mut fx, env, id),
             Input::ConfirmOpen { agent, text } => {
                 self.core(&mut fx, env, None, json!({"t": "confirm_open", "agent": agent, "text": text}))
             }
@@ -2164,7 +2133,9 @@ impl Hub {
     /// replayed with the answers), then apply the effects it returns.
     fn core(&mut self, fx: &mut Fx, env: &mut dyn Env, client: Option<ClientId>, input: Value) {
         let mut input = input;
-        input["now"] = json!(env.now());
+        // one now for the input and its re-sends (a need replays the step)
+        let now = env.now();
+        input["now"] = json!(now);
         input["git"] = json!(env.is_git());
         let mut ans: Vec<Value> = Vec::new();
         loop {
@@ -2175,6 +2146,11 @@ impl Hub {
             }
             let Some(out) = out else { return };
             if let Some(q) = out.get("need") {
+                // sb every's wakes: their words and the local clock
+                if q["q"] == "every_wake" {
+                    ans.push(self.st.timers.wakes(q, now));
+                    continue;
+                }
                 let a = self.query(env, q);
                 ans.push(a);
                 continue;
@@ -2241,6 +2217,8 @@ impl Hub {
             "journal" => {
                 assert!(f["ev"].is_object(), "sb-core: bad event {}", f["ev"]);
                 fx.push(Effect::Journal(f["ev"].clone()));
+                // a timer set or ended (sb every): its ◷ lines
+                self.timer_journal_lines(fx, &f["ev"]);
             }
             // the runtime state comes with the view
             "rt" => {}
@@ -2716,8 +2694,8 @@ impl Hub {
                 } else {
                     let mut t = board::tasks_detail(&self.st, env.now(), &self.models);
                     // the standing orders (sb every): what wakes whom, when
-                    let timers = self.every.list(env.now());
-                    if !self.every.map.is_empty() {
+                    let timers = self.st.timers.list(env.now());
+                    if !self.st.timers.map.is_empty() {
                         t.push_str(&format!("\n\n## timers (sb every)\n{}", timers));
                     }
                     t
@@ -2874,7 +2852,7 @@ impl Hub {
             AgentReq::Restore { agent } => json!({"cmd": "restore", "agent": agent}),
             AgentReq::Isolate { agent } => json!({"cmd": "isolate", "agent": agent}),
             AgentReq::Every(r) => {
-                let body = self.every_req(fx, env, from, r);
+                let body = self.timer_req(fx, env, from, r);
                 reply(fx, body);
                 return;
             }
