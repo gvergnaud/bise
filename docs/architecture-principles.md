@@ -130,9 +130,13 @@ The second time you write a rule down, write a test or a gate step instead.
 
 - Good: `paths::tests::ids_match_the_python_copies` pins the Python copies of
   the workspace id; `sb land` refuses another agent's file, after b4c2d14
-  undid two commits.
-- Bad: `tui_term_tmux` runs alone "for an unknown cause"
-  (`tests/run_all.sh`, `ALONE=`): the race is hidden, not fixed.
+  undid two commits; `tests/sleep_check.py` (51c92fd3, in `run_all.sh` and
+  `gate.sh quick`) refuses a new blind `time.sleep` in `tests/`, after the
+  same flaky-wait fix was made test by test (docs/issues/10-tests-wait.md).
+- Bad: a2138027 widened `repl_bash_env`'s margins instead of asking why the
+  bash tool's 6 s window lasted 8 s: the window was counted in loop turns
+  (`bg_poll_iters` in `bend/runtime/bash-pure.bend`), a clock that runs slow
+  under load, and the test stayed red until bg-handoff measured it.
 
 ### 7. Prove it on the real thing, with fake data
 
