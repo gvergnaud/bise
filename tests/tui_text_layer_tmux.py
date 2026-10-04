@@ -119,6 +119,14 @@ def main():
         t.keys("BSpace", "BSpace", "BSpace")
         t.typed("/help")
         t.keys("Enter")
+        t.wait("/shortcuts")
+        # the help opens on the commands; its sections come after them, so
+        # page down to "talk to agents" (each new command pushes it lower)
+        for _ in range(6):
+            if "talk to agents" in t.screen():
+                break
+            t.keys("NPage")
+            time.sleep(0.3)
         t.wait("talk to agents")
         drag_copies(t, clip, "talk to agents")
         assert "talk to agents" in t.screen(), "the help stays open"
