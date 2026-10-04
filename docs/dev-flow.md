@@ -54,8 +54,13 @@ Checked when the hub starts in a repo, again when the remote changes:
 | the repo's AGENTS.md / CONTRIBUTING says "open a PR" | PR, suggested |
 | none of the above (you alone) | trunk, suggested |
 
-"Suggested" means main asks once, at the first task that changes code,
-with the suggestion first (one question in your inbox, 2 options):
+No remote and nothing saved: trunk is the only flow, no question.
+"Suggested" means main asks once, with the suggestion first (one
+question in your inbox, 2 options), and the question never holds work
+(issue #9): until it is saved nothing is pushed. Trunk suggested: tasks
+land locally and main asks after the first land. PR suggested: each
+task commits on its own branch (`sb land --here`, no PR); on the answer
+main saves it and tells those tasks to `sb land`.
 
 ```
 ┃ ? main needs you · how should agents ship code here?

@@ -213,8 +213,11 @@ pub enum Source {
     Saved,
     /// The branch is protected: PRs whatever the config says.
     Forced,
-    /// Detected, not asked yet: main asks at the first code change.
+    /// Detected, not asked yet: the work goes on (nothing pushed) and
+    /// main asks once, in a card that blocks nothing.
     Suggested,
+    /// No remote, nothing saved: trunk is the only flow, no question.
+    Only,
 }
 
 /// The flow as the prompts, the approvals and `/flow` read it.
@@ -240,6 +243,7 @@ pub fn resolve(cfg: &FlowConfig, det: Option<&Detected>) -> Option<Flow> {
     let (mode, source) = match (det, cfg.mode) {
         (Some(d), _) if d.forced() => (FlowMode::Pr, Source::Forced),
         (_, Some(m)) => (m, Source::Saved),
+        (Some(d), None) if d.signal == Signal::NoRemote => (FlowMode::Trunk, Source::Only),
         (Some(d), None) => (d.mode(), Source::Suggested),
         (None, None) => return None,
     };
@@ -296,10 +300,11 @@ pub fn show(f: Option<&Flow>) -> String {
         ),
         Source::Forced => " no other choice while it is protected.".to_string(),
         Source::Suggested => format!(
-            " suggested, not asked yet: main asks at the first code change; `/flow {}` or `/flow {}` sets it now.",
+            " suggested, not saved: nothing is pushed until it is; `/flow {}` or `/flow {}` saves it.",
             f.mode.as_str(),
             other_word(f.mode)
         ),
+        Source::Only => " the only flow without a remote: nothing to push, nothing to ask.".to_string(),
     };
     let check = f
         .check
@@ -392,7 +397,7 @@ pub fn main_section(f: Option<&Flow>, style: Option<&str>) -> String {
     let words = "- The user's words win for one task: \"open a PR\", \"just commit it\". The user may switch the repo's flow with `/flow`: `sb flow` says the current one.";
     let Some(f) = f else {
         return format!(
-            "## Flow\n\n{places}\n- How this repo ships code is not known yet: run `sb flow` before the first task that changes code; it says the flow, and the question to ask the user when it is not set.\n- Never push or merge unless the user asks.\n{words}"
+            "## Flow\n\n{places}\n- How this repo ships code is not known yet (`sb flow` says it once it is). Never hold work for it: until then `sb land` commits locally, nothing is pushed.\n- Never push or merge unless the user asks.\n{words}"
         );
     };
     let mode = match f.mode {
@@ -413,15 +418,27 @@ pub fn main_section(f: Option<&Flow>, style: Option<&str>) -> String {
     };
     let ask = match f.source {
         Source::Suggested => format!(
-            "\n- The flow above is only suggested ({why}) and not saved: at the first task that changes code, ask the user once, `sb card \"{q}\"`, then save their answer with `sb flow pr|trunk`. Never ask again after that.",
+            "\n- The flow above is only suggested ({why}), not saved, and never holds work: {until} At the {when}, ask the user once in a card that blocks nothing, `sb card \"{q}\"`, save the answer with `sb flow pr|trunk`{then}, and never ask again.",
             why = f.why.clone().unwrap_or_default().trim_end_matches('.'),
+            until = match f.mode {
+                FlowMode::Trunk => "lands stay local (nothing pushed) until it is saved.",
+                FlowMode::Pr => "until it is saved, a task that changes code takes `--place new` and commits on its branch with `sb land --here` (nothing pushed; a task dropped before the answer keeps its commits for `sb restore`).",
+            },
+            when = match f.mode {
+                FlowMode::Trunk => "first land",
+                FlowMode::Pr => "first such task",
+            },
+            then = match f.mode {
+                FlowMode::Trunk => "",
+                FlowMode::Pr => ", then tell those tasks to `sb land` (pr opens their PR, trunk moves the base)",
+            },
             q = question(f).replace('\n', "\\n").replace('"', "\\\"")
         ),
         Source::Forced => format!(
             "\n- The first time a task changes code, tell the user in one line: \"{} is protected here: every agent opens a PR\".",
             f.base
         ),
-        Source::Saved => String::new(),
+        Source::Saved | Source::Only => String::new(),
     };
     let check = format!(
         "\n- Every commit passes {} before it lands or is pushed: your briefs need not repeat the git rules (private index, check, push); the tasks' prompts carry them.",
@@ -484,6 +501,13 @@ pub fn task_place(f: Option<&Flow>, p: &TaskPlace, style: Option<&str>) -> Strin
             p.path
         ),
         (Some(f), Some(b)) => match f.mode {
+            // the PR flow is only suggested: commits on the branch, no PR
+            // and no push until main says the user's answer
+            FlowMode::Pr if f.source == Source::Suggested => format!(
+                "`{path}` — a git worktree on branch `{b}`, {shared_by}. Work only there. Commit your files on the branch with `sb land --here \"<message>\"`; run {check} first. How this repo ships is not chosen yet: no PR, no push; main tells you when to `sb land`.{style}",
+                path = p.path,
+                check = check_line(f)
+            ),
             FlowMode::Pr => format!(
                 "`{path}` — a git worktree on branch `{b}` from `origin/{base}`, {shared_by}. Work only there. Commit only your files, with `sb land --here \"<message>\"`; run {check} first. Open the PR with `gh pr create` (the repo's template if it has one) if nobody has; the hub pushes the branch. You stay until it is merged: fix the reviews and red checks sent to you, rebase when it conflicts (`git push --force-with-lease`, this branch only, after telling the branch's other agents). Never merge, approve, close, or write on GitHub.{style}",
                 path = p.path,

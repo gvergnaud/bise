@@ -1263,7 +1263,7 @@ impl Shell {
             }
             if let Some(f) = now.as_ref().filter(|f| f.source == devflow::Source::Suggested) {
                 text.push_str(&format!(
-                    "\nnot saved: ask the user once (`sb card`), then save the answer with `sb flow pr|trunk`. the question:\n{}",
+                    "\nnot saved, and it holds no work: ask the user once in a card that blocks nothing (`sb card`), then save the answer with `sb flow pr|trunk`. the question:\n{}",
                     devflow::question(f)
                 ));
             }

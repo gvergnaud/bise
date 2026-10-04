@@ -138,6 +138,11 @@ fn forced_then_saved_then_suggested() {
     assert_eq!((f.mode, f.source), (FlowMode::Pr, Source::Forced));
     let f = resolve(&cfg(Some(FlowMode::Trunk)), None).unwrap();
     assert_eq!((f.mode, f.source, f.base.as_str()), (FlowMode::Trunk, Source::Saved, "main"));
+    // issue #9: no remote, nothing saved: trunk, the only flow, no question
+    let f = resolve(&cfg(None), Some(&det(Signal::NoRemote))).unwrap();
+    assert_eq!((f.mode, f.source), (FlowMode::Trunk, Source::Only));
+    let f = resolve(&cfg(Some(FlowMode::Pr)), Some(&det(Signal::NoRemote))).unwrap();
+    assert_eq!((f.mode, f.source), (FlowMode::Pr, Source::Saved));
 }
 
 #[test]
@@ -161,7 +166,9 @@ fn slash_flow_shows_why_and_switches() {
         "flow: lands on main · straight to main, tested commits, pushed after every land. only you committed on main in the last 90 days. saved in .switchboard/config.toml; `/flow pr` switches. check: `tests/gate.sh`."
     );
     let f = resolve(&cfg(None), Some(&alone)).unwrap();
-    assert!(show(Some(&f)).contains("suggested, not asked yet"));
+    assert!(show(Some(&f)).contains("suggested, not saved: nothing is pushed until it is; `/flow trunk` or `/flow pr` saves it."));
+    let only = resolve(&cfg(None), Some(&det(Signal::NoRemote))).unwrap();
+    assert!(show(Some(&only)).contains("the only flow without a remote: nothing to push, nothing to ask."));
     let prot = resolve(&cfg(None), Some(&det(Signal::Protected { branch: "main".into() }))).unwrap();
     assert!(show(Some(&prot)).starts_with("flow: lands via PRs · a PR per task (you merge). main is protected here"));
     assert!(switch(Some(&prot), FlowMode::Trunk).unwrap_err().contains("main is protected here"));
@@ -198,7 +205,7 @@ fn mains_flow_section_by_flow() {
         assert!(s.contains("\"open a PR\", \"just commit it\""));
         assert!(!s.contains("ONLY when the user"));
     }
-    assert!(main_section(None, None).contains("run `sb flow` before the first task that changes code"));
+    assert!(main_section(None, None).contains("Never hold work for it: until then `sb land` commits locally, nothing is pushed."));
     let pr = main_section(Some(&flow(FlowMode::Pr, Source::Saved)), Some("short subject lines"));
     assert!(pr.contains("ships through pull requests (base `main`)"));
     assert!(pr.contains("You never merge; the user does"));
@@ -212,10 +219,21 @@ fn mains_flow_section_by_flow() {
     assert!(trunk.contains("The hub pushes `main` after every land."));
     let local = Flow { push: false, ..flow(FlowMode::Trunk, Source::Saved) };
     assert!(main_section(Some(&local), None).contains("Lands stay local (`push = false`)"));
-    // not saved yet: the question, once, then `sb flow`
+    // not saved yet (issue #9): the question, once, in a card that holds
+    // no work; PR suggested: commits on the task's branch meanwhile
     let s = main_section(Some(&flow(FlowMode::Pr, Source::Suggested)), None);
-    assert!(s.contains("ask the user once, `sb card \"how should agents ship code here? alice committed on main in the last 90 days.\\n1 a PR per task (you merge)  ← suggested\\n2 straight to main, tested commits\"`"));
-    assert!(s.contains("save their answer with `sb flow pr|trunk`. Never ask again"));
+    assert!(s.contains("ask the user once in a card that blocks nothing, `sb card \"how should agents ship code here? alice committed on main in the last 90 days.\\n1 a PR per task (you merge)  ← suggested\\n2 straight to main, tested commits\"`"));
+    assert!(s.contains("never holds work: until it is saved, a task that changes code takes `--place new` and commits on its branch with `sb land --here`"));
+    assert!(s.contains("keeps its commits for `sb restore`"));
+    assert!(s.contains("At the first such task,"));
+    assert!(s.contains("save the answer with `sb flow pr|trunk`, then tell those tasks to `sb land` (pr opens their PR, trunk moves the base), and never ask again."));
+    let s = main_section(Some(&flow(FlowMode::Trunk, Source::Suggested)), None);
+    assert!(s.contains("never holds work: lands stay local (nothing pushed) until it is saved. At the first land, ask the user once"));
+    assert!(s.contains("save the answer with `sb flow pr|trunk`, and never ask again."));
+    // no remote: no question at all
+    let s = main_section(Some(&flow(FlowMode::Trunk, Source::Only)), None);
+    assert!(s.contains("ships straight to `main`, through `sb land`"));
+    assert!(!s.contains("sb card"));
     // forced: no question, one line the first time
     let s = main_section(Some(&flow(FlowMode::Pr, Source::Forced)), None);
     assert!(!s.contains("sb card"));
@@ -240,6 +258,10 @@ fn a_tasks_place_line_by_flow_and_place() {
     assert!(task_place(Some(&pr), &alone, None).contains("yours alone for now; others may join"));
     let s = task_place(Some(&pr), &shared, None);
     assert!(s.contains("commit nothing here") && s.contains("Do not revert changes you did not make."));
+    // issue #9: PR flow only suggested: commits on the branch, no PR, no push
+    let s = task_place(Some(&flow(FlowMode::Pr, Source::Suggested)), &wt, None);
+    assert!(s.contains("Commit your files on the branch with `sb land --here \"<message>\"`; run `./gate.sh --quick` first."));
+    assert!(s.contains("no PR, no push; main tells you when to `sb land`.") && !s.contains("gh pr create"));
 
     let s = task_place(Some(&trunk), &shared, None);
     for w in ["Commit nothing by hand: run `./gate.sh --quick`, then `sb land \"<message>\"`", "Never `git add -A`, stash, reset, rebase or amend here.", "Do not revert changes you did not make."] {
@@ -298,7 +320,7 @@ fn the_question_is_asked_once_then_saved() {
     let others = det(Signal::Others { branch: "main".into(), names: vec!["alice".into()] });
     let text = "[worktree]\nbase = \"HEAD\"\n";
     let before = resolve(&FlowConfig::parse(text), Some(&others)).unwrap();
-    assert!(main_section(Some(&before), None).contains("ask the user once, `sb card"));
+    assert!(main_section(Some(&before), None).contains("ask the user once in a card that blocks nothing, `sb card"));
     let saved = crate::flow::with_mode(text, switch(Some(&before), FlowMode::Trunk).map(|_| FlowMode::Trunk).unwrap());
     let after = resolve(&FlowConfig::parse(&saved), Some(&others)).unwrap();
     assert_eq!((after.mode, after.source), (FlowMode::Trunk, Source::Saved));
