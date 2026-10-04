@@ -273,11 +273,16 @@ impl Shell {
         enum Ask {
             Agent(String, Where, Option<String>),
             Branch(String),
-            Range(String),
+            Range(String, String),
             Pr(u64),
             Bad(String),
         }
-        let ask = if !s("agent").is_empty() {
+        // a range first: the door under a landed line names its agent
+        // too (for the title), and must show that land, never the
+        // agent's branch vs today's main (empty once landed)
+        let ask = if !s("range").is_empty() {
+            Ask::Range(s("range"), s("agent"))
+        } else if !s("agent").is_empty() {
             match self.hub.st.agents.get(&s("agent")).or_else(|| {
                 let n = self.art_who()(&s("agent")).map(|(n, _)| n)?;
                 self.hub.st.agents.get(&n)
@@ -290,8 +295,6 @@ impl Shell {
             }
         } else if !s("branch").is_empty() {
             Ask::Branch(s("branch"))
-        } else if !s("range").is_empty() {
-            Ask::Range(s("range"))
         } else if let Some(n) = v.get("pr").and_then(|x| x.as_u64()) {
             Ask::Pr(n)
         } else {
@@ -316,7 +319,10 @@ impl Shell {
                         })
                     }
                     Where::Shared { dir, files } => {
-                        ev["title"] = json!(format!("{} · its files vs HEAD", name));
+                        // the shared folder isn't only main's (designer
+                        // m_7354): `your folder vs main`, the same shape
+                        // as a branch's; the files are still the agent's
+                        ev["title"] = json!(format!("your folder vs {}", base_of(&dir)));
                         ev["base"] = json!("HEAD");
                         ev["branch"] = json!(null);
                         ev["commits"] = json!(0);
@@ -335,8 +341,12 @@ impl Shell {
                         (f, Some(shared.clone()))
                     })
                 }
-                Ask::Range(r) => {
-                    ev["title"] = json!(r);
+                Ask::Range(r, agent) => {
+                    // `diff-focus landed on main · e0f3df5` (the TUI's
+                    // head adds `· 11 files`)
+                    let to: String = r.split("..").last().unwrap_or(&r).trim_start_matches('.').chars().take(7).collect();
+                    let title = if agent.is_empty() { r.clone() } else { format!("{} landed on {} · {}", agent, base_of(&shared), to) };
+                    ev["title"] = json!(title);
                     ev["branch"] = json!(null);
                     ev["base"] = json!(r.split("..").next().unwrap_or(""));
                     diff::range(&shared, &r).map(|(f, c)| {

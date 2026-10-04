@@ -17,6 +17,8 @@ fn panel(d: Diff) -> Panel {
         area: Rect::default(),
         page: 10,
         changes_seen: None,
+        what: "pricing-page vs main".into(),
+        last_land: None,
         side: true,
     }
 }
@@ -299,4 +301,42 @@ fn the_key_bar_says_where_the_keys_go() {
     app.diff.as_mut().unwrap().focused = false;
     let b = bar(&app);
     assert!(b.ends_with("   ctrl+g close") && !b.contains("tip"), "{b}");
+}
+
+// ---- a landed door: that land, never the branch vs today's main ----
+
+#[test]
+fn a_land_is_titled_by_its_agent_and_its_commit() {
+    assert_eq!(range_title("a1b2c3d4..e0f3df59aa", "diff-focus"), "diff-focus landed on main · e0f3df5");
+    assert_eq!(range_title("a1b2..e0f3", ""), "a1b2..e0f3");
+}
+
+#[test]
+fn the_last_land_of_an_agent_is_its_newest_landed_line() {
+    use crate::wire::Ev;
+    let land = |a: &str, from: &str, sha: &str| Ev::Landed { agent: a.into(), from: from.into(), sha: sha.into(), files: 3, add: 1, del: 1 };
+    let events = vec![land("t1", "aaa", "bbb"), land("t2", "ccc", "ddd"), land("t1", "bbb", "eee")];
+    assert_eq!(last_land(&events, "t1"), Some(Ask::Range("bbb..eee".into(), "t1".into())));
+    assert_eq!(last_land(&events, "t3"), None);
+}
+
+#[test]
+fn an_empty_diff_of_an_agent_that_landed_offers_its_last_land() {
+    let empty = json!({"ev": "diff", "req": 1, "title": "pricing-page vs main", "branch": "pricing-page", "files": []});
+    let mut p = panel(Diff::of(&empty));
+    let out = text(&lines(&mut p, 78, 20, 0));
+    assert!(out.contains("no changes against main"), "never landed: {out}");
+    p.last_land = Some(Ask::Range("aaa..bbb".into(), "pricing-page".into()));
+    let out = text(&lines(&mut p, 78, 20, 0));
+    assert!(out.contains("pricing-page's work is all on main already · show what it landed last"), "{out}");
+    assert!(!out.contains("no changes"), "{out}");
+    // ⏎ on it: that land's range, with the keys
+    let mut app = crate::sb::bench::test_app();
+    app.diff = Some(p);
+    assert_eq!(key_pairs(&app)[0], ("⏎", "show what it landed last".to_string()));
+    assert!(on_key(&mut app, &key(KeyCode::Enter, KeyModifiers::NONE)));
+    let p = app.diff.as_ref().unwrap();
+    assert_eq!(p.ask, Ask::Range("aaa..bbb".into(), "pricing-page".into()));
+    assert_eq!(p.what, "pricing-page landed on main · bbb");
+    assert!(p.focused);
 }

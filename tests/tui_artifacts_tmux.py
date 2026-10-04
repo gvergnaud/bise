@@ -174,7 +174,7 @@ def wide(t, E):
         e2e.sh(wt, "git add -A && git commit -qm pricing")
         diff_focus(t, branch, "150")
         light(t, "150", branch)
-        return branch
+        return branch, wt
 
 
 def click(t, x, y):
@@ -290,15 +290,51 @@ def narrow(t, branch):
         light(t, "80", branch)
 
 
+def landed(t, E, env, branch, wt):
+    """t1 lands: the `± 2 files` under its landed line opens that land
+    (`t1 landed on main · <sha> · 2 files`, its files), never t1's branch
+    vs today's main, empty once landed; `/diff <its branch>` says its
+    work is all on main already and ⏎ shows what it landed last."""
+    t.start(150, 40, env)
+    t.wait("bise :*")
+    t.wait_re(MAIN_IDLE)
+    out = sb(E, "t1", wt, "land", "make the pricing page")
+    sha = re.search(r"\(([0-9a-f]{7,})\)", out).group(1)[:7]
+    sc = t.wait("± 2 files")
+    shot(t, "150-landed-line")
+    x, y = at(sc, "± 2 files")
+    click(t, x + 2, y)
+    sc = t.wait("t1 landed on main · %s · 2 files" % sha)
+    sc = t.wait("src/pricing.tsx")
+    assert "no changes against main" not in sc and "still working" not in sc, sc
+    assert "README" in sc, sc
+    # a click door: the composer keeps the keys
+    assert "the diff has the keys" not in sc and "ctrl+g close" in sc, sc
+    shot(t, "150-landed-diff")
+    t.keys("C-g")
+    t.wait_gone("t1 landed on main")
+    # the branch, now on main: says so, ⏎ shows its last land
+    command(t, "/diff " + branch, "work is all on main already")
+    sc = t.wait("t1's work is all on main already · show what it landed last")
+    assert "⏎ show what it landed last" in sc, sc
+    shot(t, "150-landed-empty")
+    t.keys("Enter")
+    sc = t.wait("t1 landed on main · %s · 2 files" % sha)
+    t.keys("Escape")
+    t.wait_gone("t1 landed on main")
+
+
 def main():
     nbsp_as_spaces(Tui)
     E = e2e.Env()
     env, _ = fakes(E)
     with tui_session(150, 40, env, E=E) as t:
-        branch = wide(t, E)
+        branch, wt = wide(t, E)
         print("PASS tui artifacts 150")
         narrow(t, branch)
         print("PASS tui artifacts 80")
+        landed(t, E, env, branch, wt)
+        print("PASS tui artifacts landed")
 
 
 if __name__ == "__main__":

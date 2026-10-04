@@ -236,6 +236,12 @@ pub(crate) struct Panel {
     pub(crate) changes_seen: Option<(u64, u64, u64)>,
     /// the last frame drew it on the right (else full screen)
     pub(crate) side: bool,
+    /// its title until the hub answers (`t1 vs main`, `your folder vs
+    /// main`)
+    pub(crate) what: String,
+    /// the agent's last land in the feed (its range): an empty diff of
+    /// that agent offers it
+    pub(crate) last_land: Option<Ask>,
 }
 
 static REQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
@@ -263,7 +269,24 @@ pub(crate) enum By {
 pub(crate) fn request(app: &mut App, ask: Ask, by: By) {
     let req = REQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     app.sb.send(ask_json(&ask, req));
+    // the shared folder isn't only main's (designer m_7354)
+    let what = match &ask {
+        Ask::Agent(a) if app.sb.in_shared_folder(a) => "your folder vs main".to_string(),
+        Ask::Agent(a) => format!("{} vs main", a),
+        Ask::Branch(b) => format!("{} vs main", b),
+        Ask::Pr(n) => format!("PR #{}", n),
+        Ask::Range(r, a) => range_title(r, a),
+    };
+    // whose work this is: an empty diff then says it is on main
+    let owner = match &ask {
+        Ask::Agent(a) => Some(a.clone()),
+        Ask::Branch(b) => app.sb.agent_of_branch(b),
+        _ => None,
+    };
+    let last_land = owner.as_deref().and_then(|a| last_land(&app.events, a));
     app.diff = Some(Panel {
+        what,
+        last_land,
         ask,
         req,
         diff: None,
@@ -280,6 +303,27 @@ pub(crate) fn request(app: &mut App, ask: Ask, by: By) {
         changes_seen: None,
         side: true,
     });
+}
+
+/// A land's title: `diff-focus landed on main · e0f3df5` (the head adds
+/// `· 11 files`), the range's own words without an agent.
+pub(crate) fn range_title(range: &str, agent: &str) -> String {
+    let to: String = range.split("..").last().unwrap_or(range).trim_start_matches('.').chars().take(7).collect();
+    if agent.is_empty() {
+        range.to_string()
+    } else {
+        format!("{} landed on main · {}", agent, to)
+    }
+}
+
+/// The newest land of `agent` in the feed: its range (old main..new).
+pub(crate) fn last_land(events: &[crate::wire::Ev], agent: &str) -> Option<Ask> {
+    events.iter().rev().find_map(|e| match e {
+        crate::wire::Ev::Landed { agent: a, from, sha, .. } if a == agent && !from.is_empty() => {
+            Some(Ask::Range(format!("{}..{}", from, sha), agent.to_string()))
+        }
+        _ => None,
+    })
 }
 
 /// Asks the hub again (the agent's changes moved): the panel keeps
@@ -373,6 +417,9 @@ pub(crate) enum Kind {
     /// `▸ 212 more lines in this file · ⏎ shows them`
     Fold(usize),
     End,
+    /// `show what it landed last` (an agent's diff empty, its work on main):
+    /// ⏎ or a click opens that land's range
+    LastLand,
 }
 
 fn tint(add: bool) -> Option<Color> {
@@ -688,12 +735,7 @@ pub(crate) fn list_matches(d: &Diff, filter: &str) -> Vec<usize> {
 /// window.
 pub(crate) fn lines(p: &mut Panel, width: usize, height: usize, now: u64) -> Vec<Line<'static>> {
     let Some(d) = p.diff.clone() else {
-        let what = match &p.ask {
-            Ask::Agent(a) => format!("{}'s changes", a),
-            Ask::Branch(b) => format!("{} vs main", b),
-            Ask::Pr(n) => format!("PR #{}", n),
-            Ask::Range(r, _) => r.clone(),
-        };
+        let what = p.what.clone();
         p.rows.clear();
         return vec![Line::from(Span::styled(what, Style::default().fg(text()).add_modifier(Modifier::BOLD))), Line::from(Span::styled("reading the diff…", Style::default().fg(dim())))];
     };
@@ -708,7 +750,21 @@ pub(crate) fn lines(p: &mut Panel, width: usize, height: usize, now: u64) -> Vec
         p.rows.clear();
         let mut v = head_rows(p, &d, width, None, now);
         v.push(Line::from(""));
-        v.push(Line::from(Span::styled("no changes against main", Style::default().fg(dim()))));
+        match &p.last_land {
+            // its work is on main (designer): say so, and offer its last land
+            Some(Ask::Range(_, a)) => {
+                p.rows.push(Kind::LastLand);
+                p.cursor = 0;
+                p.top = 0;
+                let link = Style::default().fg(text()).add_modifier(Modifier::UNDERLINED);
+                let link = if p.focused { link.bg(theme::selection_bg()) } else { link };
+                v.push(Line::from(vec![
+                    Span::styled(format!("{}'s work is all on main already · ", a), Style::default().fg(dim())),
+                    Span::styled("show what it landed last", link),
+                ]));
+            }
+            _ => v.push(Line::from(Span::styled("no changes against main", Style::default().fg(dim())))),
+        }
         return v;
     }
     if let Some(l) = p.list.clone() {
@@ -758,6 +814,8 @@ pub(crate) fn key_pairs(app: &App) -> Vec<(&'static str, String)> {
     // on the right: printable keys type in the composer (designer m_7291)
     let write = ("", "type to write".to_string());
     match p.rows.get(p.cursor) {
+        Some(Kind::LastLand) if !full => vec![("⏎", "show what it landed last".to_string()), ("esc", "close".into()), write],
+        Some(Kind::LastLand) => vec![("⏎", "show what it landed last".to_string()), ("esc", "close".into())],
         Some(Kind::Code(i, Some(line))) if p.focused => {
             let path = p.diff.as_ref().and_then(|d| d.files.get(*i)).map(|f| f.path.clone()).unwrap_or_default();
             let mut v = vec![("⏎", format!("open {}:{} in your editor", path, line)), ("↑↓", "move".into()), ("esc", "close".into())];
@@ -866,8 +924,13 @@ impl Panel {
     }
 }
 
-/// ⏎: the line in your editor, or unfold, or the image opens.
+/// ⏎: the line in your editor, or unfold, or the image opens; on
+/// `show what it landed last`, that land's diff.
 fn enter(app: &mut App) {
+    if let Some((Some(Kind::LastLand), Some(ask), focused)) = app.diff.as_ref().map(|p| (p.rows.get(p.cursor).cloned(), p.last_land.clone(), p.focused)) {
+        request(app, ask, if focused { By::Key } else { By::Click });
+        return;
+    }
     let Some(p) = app.diff.as_mut() else { return };
     let Some(d) = p.diff.clone() else { return };
     match p.rows.get(p.cursor).cloned() {
@@ -1052,7 +1115,7 @@ pub(crate) fn mouse(app: &mut App, m: &crossterm::event::MouseEvent) -> bool {
                 let k = p.top + (m.row - p.body.y) as usize;
                 if k < p.rows.len() {
                     p.cursor = k;
-                    if matches!(p.rows[k], Kind::Fold(_) | Kind::ListFile(_) | Kind::More | Kind::FilesHead | Kind::FileHead(_)) {
+                    if matches!(p.rows[k], Kind::Fold(_) | Kind::ListFile(_) | Kind::More | Kind::FilesHead | Kind::FileHead(_) | Kind::LastLand) {
                         enter(app);
                     }
                 }

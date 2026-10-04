@@ -461,6 +461,17 @@ impl Sb {
         self.agents.iter().find(|a| a.name == name)
     }
 
+    /// `name` works in the shared folder (no branch, no worktree of its
+    /// own): its diff is `your folder vs main` (designer m_7354).
+    pub(crate) fn in_shared_folder(&self, name: &str) -> bool {
+        self.agent(name).is_some_and(|a| a.branch.is_none() && a.mode != "worktree")
+    }
+
+    /// The agent working on `branch`, if one is.
+    pub(crate) fn agent_of_branch(&self, branch: &str) -> Option<String> {
+        self.agents.iter().find(|a| a.branch.as_deref() == Some(branch)).map(|a| a.name.clone())
+    }
+
     /// The entry of the panel highlighted by ⌥↑↓.
     fn selected_agent(&self) -> Option<&Agent> {
         self.nav().get(self.selected?).copied()
