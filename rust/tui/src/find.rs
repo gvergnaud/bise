@@ -1,9 +1,14 @@
 //! ctrl+f: find in the history (BISE-237, book §16 "Find").
 //!
-//! The field is a small box over the top-right of the history
-//! (BISE-297, like an editor's or a browser's find): the composer stays
-//! with its draft, the box has the keys until esc; every edit searches
-//! again.
+//! The field is a box in the top-right corner of the history pane
+//! (find_bar.rs: its place, its keys, its chevrons and ×): the composer
+//! stays with its draft, the box has the keys until esc; every edit
+//! searches again.
+//! The whole thread is searched: once the events the feed holds are
+//! scanned, the feed asks the hub for the page before them
+//! (sb::feed::want_older), one at a time until the first line; a page
+//! that comes in front shifts the counts and only its events are
+//! scanned (the counter says `3/12+` meanwhile).
 //! Long histories stay fast: the search never renders the history. It
 //! reads an index of each event's raw text (lowered once, kept while
 //! the field is open) and scans it in time slices (a few ms per frame),
@@ -15,8 +20,6 @@
 
 use crate::app::App;
 use crate::wire::{Ev, ToolData};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use std::time::{Duration, Instant};
@@ -33,14 +36,7 @@ const FIELD_CAP: usize = 256 * 1024;
 const LIVE_TAIL: usize = 16;
 /// How long `back to the newest` / `back to the oldest` shows.
 const NOTE_FOR: Duration = Duration::from_millis(1500);
-/// The box's size (designer): 40 columns, at least 24 when the feed
-/// has room, 3 rows (its border, the field, its border).
-const BOX_W: u16 = 40;
-const BOX_MIN_W: u16 = 24;
-pub(crate) const BOX_H: u16 = 3;
-/// Rows of context kept above a match the view moves to: the box's
-/// rows and 1 blank row, the match lands under the box (designer).
-const CONTEXT_ROWS: isize = BOX_H as isize + 1;
+
 
 /// Which scan an event belongs to: your messages and the replies are
 /// searched first.
@@ -68,7 +64,18 @@ pub(crate) struct Loc {
 }
 
 pub(crate) struct Find {
-    pub(crate) query: String,
+    /// the field: the composer's editing model (one text field
+    /// behaviour: selection, word moves and deletes, undo)
+    pub(crate) ed: crate::editor::Editor,
+    /// the field's first shown char (a long query scrolls to its cursor)
+    pub(crate) hscroll: usize,
+    /// where the last frame drew the box's parts (clicks, drags)
+    pub(crate) bar: Option<crate::find_bar::Parts>,
+    /// a press in the field selects while the mouse drags
+    pub(crate) dragging: bool,
+    /// rows of the history the box covers (the view keeps the match
+    /// under it)
+    pub(crate) cover: usize,
     needle: String,
     sensitive: bool,
     /// the feed it searches (another agent's view closes it)
@@ -96,7 +103,13 @@ pub(crate) struct Find {
 impl Find {
     fn new(focus: &str, n: usize, first: Option<usize>) -> Find {
         Find {
-            query: String::new(),
+            ed: crate::editor::Editor::default(),
+            hscroll: 0,
+            bar: None,
+            dragging: false,
+            // the box from the row over the history's first: 2 of its rows
+            // (find_bar::draw says it from the first frame on)
+            cover: crate::find_bar::BOX_H as usize - 1,
             needle: String::new(),
             sensitive: false,
             focus: focus.to_string(),
@@ -119,10 +132,28 @@ impl Find {
         !self.needle.is_empty() && self.next != [0, 0]
     }
 
+    /// The loaded part is all scanned for a query: the feed asks the hub
+    /// for the page before it (sb::feed::want_older), until the whole
+    /// thread is in.
+    pub(crate) fn wants_older(&self) -> bool {
+        !self.needle.is_empty() && self.next == [0, 0]
+    }
+
+    /// The feed it searches (the placeholder names it).
+    pub(crate) fn focus_name(&self) -> &str {
+        &self.focus
+    }
+
+    /// Some match found (the chevrons are live).
+    pub(crate) fn has_matches(&self) -> bool {
+        self.total > 0
+    }
+
     /// A new query: every count again, from the newest.
     fn restart(&mut self) {
-        self.sensitive = self.query.chars().any(char::is_uppercase);
-        self.needle = if self.sensitive { self.query.clone() } else { lower(&self.query) };
+        let q = &self.ed.text;
+        self.sensitive = q.chars().any(char::is_uppercase);
+        self.needle = if self.sensitive { q.clone() } else { lower(q) };
         let n = self.hits.len();
         self.hits.iter_mut().for_each(|h| *h = 0);
         self.total = 0;
@@ -211,20 +242,27 @@ impl Find {
             let mut idx: Vec<Option<Entry>> = (0..d).map(|_| None).collect();
             idx.append(&mut self.index);
             self.index = idx;
-            self.hits = vec![0; n];
+            // the counts so far hold, moved by `d`; only the new events
+            // in front are left to scan (every page of a long thread is
+            // scanned once, never the whole feed again)
+            let mut hits = vec![0; d];
+            hits.append(&mut self.hits);
+            self.hits = hits;
             self.cur = self.cur.map(|(i, k)| (i + d, k));
             self.loc = None;
             crate::feed::shift_undo(&mut self.undo, d);
-            let cur = self.cur;
-            let (jump, note) = (self.jump, self.note);
-            self.restart();
-            (self.cur, self.jump, self.note) = (cur, jump, note);
+            if !self.needle.is_empty() {
+                self.next = [self.next[0] + d, self.next[1] + d];
+            }
         } else if n > self.seen_len {
             // new lines at the end: seen now, the scans go on below
             self.hits.resize(n, 0);
             for i in (self.seen_len..n).rev() {
                 self.rescan(events, i);
             }
+        } else if n == self.seen_len && first < self.seen_first {
+            // a page of older lines that made no event (the thread's
+            // first lines): every index holds
         } else {
             // cleared or cut: nothing of the old indexes holds
             self.index.clear();
@@ -243,7 +281,7 @@ impl Find {
     }
 
     /// Up the history (older); past the oldest, back to the newest.
-    fn older(&mut self) {
+    pub(crate) fn older(&mut self) {
         let newest = || self.hits.iter().rposition(|&h| h > 0);
         let to = match self.cur {
             Some((i, k)) if k > 0 => Some((i, k - 1)),
@@ -263,7 +301,7 @@ impl Find {
     }
 
     /// Down the history (newer); past the newest, back to the oldest.
-    fn newer(&mut self) {
+    pub(crate) fn newer(&mut self) {
         let n = self.hits.len();
         let to = match self.cur {
             Some((i, k)) if k + 1 < self.hits[i] => Some((i, k + 1)),
@@ -282,7 +320,7 @@ impl Find {
         }
     }
 
-    /// The counter, right of the field: `3 of 12` (`12+` when older
+    /// The counter, right of the field: `3/12` (`3/12+` while older
     /// lines are not loaded), `no match`, or a fresh wrap note.
     pub(crate) fn counter(&self, more: bool, now: Instant) -> String {
         if let Some((t, at)) = self.note {
@@ -298,7 +336,7 @@ impl Find {
         }
         let plus = if more { "+" } else { "" };
         match self.rank() {
-            Some(r) => format!("{} of {}{}", r, self.total, plus),
+            Some(r) => format!("{}/{}{}", r, self.total, plus),
             None => format!("{}{}", self.total, plus),
         }
     }
@@ -496,8 +534,9 @@ fn tool_text(td: &ToolData) -> String {
 
 // ---- the app side ----
 
-/// Whether older lines of this feed are not loaded (the counter says `12+`).
-fn more_before(app: &App) -> bool {
+/// Whether older lines of this feed are not loaded yet (the counter
+/// says `3/12+` while find pages them in).
+pub(crate) fn more_before(app: &App) -> bool {
     app.win.first_pos().is_some_and(|p| p > 1)
 }
 
@@ -514,75 +553,11 @@ pub(crate) fn close(app: &mut App) {
 }
 
 /// The query changed: what the old match opened closes, the scan starts.
-fn edited(app: &mut App) {
+pub(crate) fn edited(app: &mut App) {
     let Some(f) = app.find.as_mut() else { return };
     let undo = std::mem::take(&mut f.undo);
     f.restart();
     crate::feed::unreveal(&mut app.events, &mut app.cache, undo);
-}
-
-/// The keys of the find field; `true` when handled. ctrl+f opens it;
-/// so does cmd+f when the terminal passes it through (SUPER under the
-/// kitty keyboard protocol, e.g. Ghostty `keybind = super+f=unbind`).
-pub(crate) fn on_key(app: &mut App, k: &KeyEvent) -> bool {
-    let ctrl_f = k.code == KeyCode::Char('f') && (k.modifiers == KeyModifiers::CONTROL || k.modifiers == KeyModifiers::SUPER);
-    let Some(f) = app.find.as_mut() else {
-        if ctrl_f {
-            open(app);
-            return true;
-        }
-        return false;
-    };
-    let word = |q: &mut String| {
-        let t = q.trim_end().len();
-        // after the last blank (a wide one too: its bytes, not 1)
-        let cut = q[..t].char_indices().rfind(|(_, c)| c.is_whitespace()).map_or(0, |(i, c)| i + c.len_utf8());
-        q.truncate(cut);
-    };
-    match (k.code, k.modifiers) {
-        (KeyCode::Esc, _) => {
-            close(app);
-            return true;
-        }
-        (KeyCode::Enter, m) if m.contains(KeyModifiers::SHIFT) => f.newer(),
-        (KeyCode::Enter, _) | (KeyCode::Up, _) => f.older(),
-        _ if ctrl_f => f.older(),
-        (KeyCode::Down, _) => f.newer(),
-        // the feed still scrolls, ctrl+c still interrupts or quits
-        (KeyCode::PageUp | KeyCode::PageDown | KeyCode::End | KeyCode::Home, _) => return false,
-        (KeyCode::Char('c'), KeyModifiers::CONTROL) => return false,
-        (KeyCode::Backspace, m) if m.intersects(KeyModifiers::ALT | KeyModifiers::CONTROL) => {
-            word(&mut f.query);
-            edited(app);
-        }
-        (KeyCode::Char('w'), KeyModifiers::CONTROL) => {
-            word(&mut f.query);
-            edited(app);
-        }
-        (KeyCode::Char('u'), KeyModifiers::CONTROL) => {
-            f.query.clear();
-            edited(app);
-        }
-        (KeyCode::Backspace, _) => {
-            f.query.pop();
-            edited(app);
-        }
-        (KeyCode::Char(c), m) if !m.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER) => {
-            f.query.push(c);
-            edited(app);
-        }
-        _ => {}
-    }
-    true
-}
-
-/// A paste while the field is open goes to the query (one line).
-pub(crate) fn on_paste(app: &mut App, text: &str) -> bool {
-    let Some(f) = app.find.as_mut() else { return false };
-    let one: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    f.query.push_str(&one);
-    edited(app);
-    true
 }
 
 /// The frame's share of the work, before the feed is drawn at width
@@ -595,6 +570,9 @@ pub(crate) fn step(app: &mut App, width: usize, budget: Duration) {
         app.find = None;
         return;
     }
+    // a page came in front: the last frame's rows (vis_events) name
+    // other events now, they say nothing of what is on screen
+    let moved = f.seen_first != app.win.first_pos();
     f.sync(&app.events, app.win.first_pos());
     f.scan(&app.events, budget);
     let Some((i, k)) = f.cur else {
@@ -630,13 +608,15 @@ pub(crate) fn step(app: &mut App, width: usize, budget: Duration) {
     }
     // already on screen, below the box (nothing opened above it): the
     // view stays
-    let shown = app.vis_events.iter().zip(&app.vis_rows).skip(BOX_H as usize).any(|(&e, &r)| e == i && r == row);
+    let cover = app.find.as_ref().map_or(0, |f| f.cover);
+    let shown = !moved && app.vis_events.iter().zip(&app.vis_rows).skip(cover).any(|(&e, &r)| e == i && r == row);
     if shown && !revealed {
         return;
     }
     app.follow = false;
     app.anchor = (i, row);
-    app.scroll = -CONTEXT_ROWS;
+    // the match lands under the box, 1 blank row between (designer)
+    app.scroll = -(cover as isize + 1);
 }
 
 /// Every match in the drawn rows of event `i`: (row, from, to).
@@ -649,82 +629,6 @@ fn spots_of(app: &mut App, i: usize, width: usize, needle: &str, sensitive: bool
         out.extend(matches_in(&text, needle, sensitive).into_iter().map(|(a, b)| (r, a, b)));
     }
     out
-}
-
-/// Where the box goes over the history `feed`: its top border on the
-/// feed's first row, its right border 1 column in from the feed's right
-/// edge. None when the feed has no room for it.
-pub(crate) fn box_rect(feed: Rect) -> Option<Rect> {
-    let room = feed.width.saturating_sub(2);
-    if room < 8 || feed.height < BOX_H {
-        return None;
-    }
-    let w = BOX_W.min(room).max(BOX_MIN_W.min(room));
-    Some(Rect { x: feed.right() - 1 - w, y: feed.y, width: w, height: BOX_H })
-}
-
-/// Where the box is drawn over the history `feed` this frame: top-right
-/// ([`box_rect`]); at the history's very top (nothing left to scroll)
-/// the current match can sit where the box goes: the box then goes to
-/// the bottom-right, the match stays seen.
-pub(crate) fn box_at(app: &App, feed: Rect) -> Option<Rect> {
-    let r = box_rect(feed)?;
-    let Some(l) = app.find.as_ref().and_then(|f| f.loc) else { return Some(r) };
-    let y = (0..app.vis_events.len()).find(|&y| app.vis_events[y] == l.ev && app.vis_rows.get(y) == Some(&l.row));
-    let under = y.is_some_and(|y| {
-        let (a, b) = (feed.x as usize + l.from, feed.x as usize + l.to);
-        y < BOX_H as usize && a < r.right() as usize && b > r.x as usize
-    });
-    if under && feed.height > 2 * BOX_H {
-        return Some(Rect { y: feed.bottom() - BOX_H, ..r });
-    }
-    Some(r)
-}
-
-/// The box's field row, `w` columns (its inside): ` ⌕ signup▏  3 of 12 `,
-/// the placeholder `find in main` dim when empty, the counter dim and
-/// right-aligned (`no match` in the error red).
-pub(crate) fn row(app: &App, w: usize) -> Line<'static> {
-    let Some(f) = app.find.as_ref() else { return Line::default() };
-    let d = Style::default().fg(crate::theme::dim());
-    let cursor = Span::styled(" ", Style::default().fg(crate::theme::text()).add_modifier(Modifier::REVERSED));
-    let count = f.counter(more_before(app), Instant::now());
-    let count_st = if count == "no match" { Style::default().fg(crate::theme::error()) } else { d };
-    let lens = format!("{} ", crate::theme::glyph("⌕"));
-    // 1 blank column each side, the glyph, 1 blank before the counter
-    let pad = 1 + lens.width();
-    let room = w.saturating_sub(pad + 1 + count.width() + usize::from(!count.is_empty())).max(1);
-    let mut spans: Vec<Span<'static>> = vec![Span::raw(" "), Span::styled(lens, d)];
-    let used = if f.query.is_empty() {
-        spans.push(cursor);
-        let p = format!(" find in {}", f.focus);
-        let p: String = p.chars().take(room.saturating_sub(1)).collect();
-        let n = 1 + p.width();
-        spans.push(Span::styled(p, d));
-        n
-    } else {
-        // a long query shows its end
-        let q = &f.query;
-        let mut shown: Vec<&str> = Vec::new();
-        let mut n = 1usize;
-        for g in q.graphemes(true).rev() {
-            if n + g.width() > room {
-                break;
-            }
-            n += g.width();
-            shown.push(g);
-        }
-        shown.reverse();
-        spans.push(Span::styled(shown.concat(), Style::default().fg(crate::theme::text())));
-        spans.push(cursor);
-        n
-    };
-    if !count.is_empty() {
-        let gap = w.saturating_sub(pad + used + count.width() + 1).max(1);
-        spans.push(Span::raw(" ".repeat(gap)));
-        spans.push(Span::styled(count, count_st));
-    }
-    Line::from(spans)
 }
 
 #[cfg(test)]

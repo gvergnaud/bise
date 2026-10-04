@@ -59,7 +59,7 @@ fn cmd_a_elsewhere_types_nothing_and_keeps_the_draft() {
     // find and the agent palette: their query untouched
     press(&mut app, KeyCode::Char('f'), KeyModifiers::CONTROL);
     cmd_a(&mut app);
-    assert_eq!(app.find.as_ref().unwrap().query, "");
+    assert_eq!(app.find.as_ref().unwrap().ed.text, "");
     press(&mut app, KeyCode::Esc, KeyModifiers::NONE);
     press(&mut app, KeyCode::Char('s'), KeyModifiers::CONTROL);
     cmd_a(&mut app);

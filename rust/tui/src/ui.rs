@@ -253,9 +253,16 @@ fn draw_bise(app: &mut App, frame: &mut Frame, area: Rect, cols: crate::layout::
             }
         }
     }
-    // the find box (BISE-297): top-right of the history, over it
+    // the find bar (find_bar.rs): flush in the history pane's top-right
+    // corner, from the row under the frame's top edge, its right edge
+    // the column left of the panel's rule (or of the frame's edge; bare,
+    // left of the scrollbar)
     if app.find.is_some() && !view {
-        draw_find(app, frame, feed);
+        let top = area.y + 1;
+        let right = bar.map_or(feed.right().saturating_sub(1), |b| b.x);
+        let left = area.x + u16::from(cols.framed);
+        let pane = Rect { x: left, y: top, width: right.saturating_sub(left), height: feed.bottom().saturating_sub(top) };
+        crate::find_bar::draw(app, frame, pane, feed);
     }
     // the raised pane (book §13, BISE-212): the grey fills the inside of
     // the frame, from the row under the divider to the row above the
@@ -921,36 +928,6 @@ fn draw_composer(app: &mut App, frame: &mut Frame, area: Rect, inner: usize, lea
 pub(crate) fn composer_more(n: usize, up: bool) -> String {
     let (g, way) = if up { ("↑", "above") } else { ("↓", "below") };
     format!("{} {} {} {}", g, n, if n == 1 { "line" } else { "lines" }, way)
-}
-
-/// The find box (BISE-237, BISE-297; designer): 3 rows over the
-/// history `feed`, its top border on the first history row, 1 column in
-/// from its right edge, 40 columns (the feed less 2 on a narrow screen,
-/// at least 24 when it fits); a rounded dim border, the raised grey
-/// inside (NO_COLOR: the border only); ` ⌕ query▏   3 of 12 `. At the
-/// history's top, over the current match: bottom-right (`find::box_at`).
-fn draw_find(app: &mut App, frame: &mut Frame, feed: Rect) {
-    let Some(r) = crate::find::box_at(app, feed) else { return };
-    let r = r.intersection(frame.area());
-    if r.height < 3 || r.width < 5 {
-        return;
-    }
-    let plain = crate::find::no_color();
-    let mut block = Block::default().borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded);
-    block = if plain {
-        block
-    } else {
-        block.border_style(Style::default().fg(dim()).bg(theme::raised())).style(Style::default().bg(theme::raised()))
-    };
-    frame.render_widget(Clear, r);
-    let inner = block.inner(r);
-    frame.render_widget(block, r);
-    let row = Rect { height: 1, ..inner };
-    let line = crate::find::row(app, row.width as usize);
-    frame.render_widget(Paragraph::new(line), row);
-    // BISE-290: the query and the counter select and copy
-    crate::textlayer::text(row);
-    crate::pointer::region(row, crate::pointer::Shape::Text);
 }
 
 /// The composer's bar: accent as soon as there is text, an image or a

@@ -3,7 +3,7 @@ top-right of the history; the composer stays with its draft. Two
 messages carry `needle`, a long one between them (opened with ctrl+o)
 pushes the first off the screen. ctrl+f: the box opens top-right, the
 draft stays in the composer; type `needle`: the newest match is current
-(`4 of 4`); ↑ goes up match by match and the view scrolls to the old
+(`4/4`); ↑ goes up match by match and the view scrolls to the old
 one, never under the box; ↓ comes back; esc closes the box and the keys
 go back to the composer (typing adds to the draft). NO_COLOR: the
 current match is reversed, the others underlined. Through the real
@@ -58,24 +58,24 @@ def main():
         assert "my draft" in sc, sc
         t.wait("⏎ older   shift+⏎ newer   esc close")
         t.typed("needle")
-        sc = t.wait("4 of 4")
+        sc = t.wait("4/4")
         assert "my draft" in sc, sc
         # the current match reversed, the others underlined (NO_COLOR)
         col = t.screen(colors=True)
         assert "\x1b[7mneedle" in col, col[-3000:]
         assert "\x1b[4mneedle" in col, col[-3000:]
         t.keys("Up")
-        t.wait("3 of 4")
+        t.wait("3/4")
         # up again: the ack of the first one, far above; the view goes
         # there (the history's top), the match never under the box
         t.keys("Up")
-        sc = t.wait("2 of 4")
+        sc = t.wait("2/4")
         sc = t.wait("ack: the needle one")
         assert "the needle two" not in sc, sc
         y, x = where(sc, "ack: the needle one")
         assert y > box_y + 1 or x + len("ack: the needle one") < box_x - 3, sc
         t.keys("Up")
-        t.wait("1 of 4")
+        t.wait("1/4")
         # past the oldest: back to the newest
         t.keys("Up")
         t.wait("back to the newest")
@@ -85,9 +85,9 @@ def main():
         t.wait("the needle one")
         # ↓ newer (shift+⏎ too: the unit tests, tmux sends it as ⏎)
         t.keys("Down")
-        t.wait("2 of 4")
+        t.wait("2/4")
         t.keys("Enter")
-        t.wait("1 of 4")
+        t.wait("1/4")
         # esc: the box closes, the view stays, the keys are the composer's
         t.keys("Escape")
         sc = t.wait_gone("⌕")

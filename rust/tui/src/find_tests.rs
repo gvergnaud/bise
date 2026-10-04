@@ -75,7 +75,7 @@ fn ctrl_f_opens_the_field_and_esc_closes_it() {
     assert!(s.contains("my draft"), "the composer stays with its draft: {s}");
     assert!(s.contains("⏎ older   shift+⏎ newer   esc close"), "{s}");
     typed(&mut app, "sign");
-    assert_eq!(app.find.as_ref().unwrap().query, "sign");
+    assert_eq!(app.find.as_ref().unwrap().ed.text, "sign");
     assert_eq!(app.ed.text, "my draft", "the draft waits");
     press(&mut app, KeyCode::Esc, KeyModifiers::NONE);
     assert!(app.find.is_none());
@@ -98,12 +98,12 @@ fn messages_come_first_then_up_and_down_with_a_counter() {
     let f = app.find.as_ref().unwrap();
     // the newest message wins over the newer tool call
     assert_eq!(f.cur, Some((1, 1)));
-    assert_eq!(counter(&app), "3 of 4");
+    assert_eq!(counter(&app), "3/4");
     press(&mut app, KeyCode::Enter, KeyModifiers::NONE);
     assert_eq!(app.find.as_ref().unwrap().cur, Some((1, 0)));
     press(&mut app, KeyCode::Up, KeyModifiers::NONE);
     assert_eq!(app.find.as_ref().unwrap().cur, Some((0, 0)));
-    assert_eq!(counter(&app), "1 of 4");
+    assert_eq!(counter(&app), "1/4");
     // past the oldest: back to the newest, and it says so
     press(&mut app, KeyCode::Char('f'), KeyModifiers::CONTROL);
     assert_eq!(app.find.as_ref().unwrap().cur, Some((2, 0)));
@@ -140,7 +140,7 @@ fn the_matches_are_painted_the_current_one_on_the_accent() {
     // the newest match is current: the second one
     assert_eq!(b[(x2, y)].bg, crate::theme::accent());
     assert_eq!(b[(x1, y)].bg, crate::theme::pill_bg());
-    assert!(s.contains("2 of 2"), "{s}");
+    assert!(s.contains("2/2"), "{s}");
     // the match is on the history's first row, the view cannot go up:
     // the box goes to the bottom-right, off the match
     let field = s.lines().position(|l| l.contains('⌕')).expect("the box");
@@ -204,12 +204,12 @@ fn a_paste_goes_to_the_query_and_new_lines_are_searched() {
     press(&mut app, KeyCode::Char('w'), KeyModifiers::CONTROL);
     press(&mut app, KeyCode::Char('u'), KeyModifiers::CONTROL);
     crate::input::on_paste(&mut app, "late\nnews");
-    assert_eq!(app.find.as_ref().unwrap().query, "late news");
+    assert_eq!(app.find.as_ref().unwrap().ed.text, "late news");
     draw(&mut app);
     assert_eq!(counter(&app), "no match");
     app.events.push(Ev::Assistant("the late news".into()));
     draw(&mut app);
-    assert_eq!(counter(&app), "1 of 1");
+    assert_eq!(counter(&app), "1/1");
 }
 
 /// A long history: 50 000 events (your messages, replies, calls with
@@ -234,7 +234,7 @@ fn find_is_fast_on_50k_events() {
     let mut slow = Duration::ZERO;
     let mut steps = 0;
     let t0 = Instant::now();
-    f.query = "zebra".into();
+    f.ed.set("zebra", 5);
     f.restart();
     while f.busy() {
         let t = Instant::now();
@@ -247,7 +247,7 @@ fn find_is_fast_on_50k_events() {
     assert_eq!(f.cur, Some((10, 0)));
     // a second query: the index is built, only the scan runs
     let t1 = Instant::now();
-    f.query = "signup".into();
+    f.ed.set("signup", 6);
     f.restart();
     let mut steps2 = 0;
     let mut found_at = None;
@@ -303,7 +303,7 @@ fn cmd_f_opens_the_field_like_ctrl_f() {
     assert!(app.find.is_none());
     press(&mut app, KeyCode::Char('f'), KeyModifiers::SUPER);
     assert!(app.find.is_some());
-    assert!(app.find.as_ref().unwrap().query.is_empty(), "no 'f' typed");
+    assert!(app.find.as_ref().unwrap().ed.text.is_empty(), "no 'f' typed");
     press(&mut app, KeyCode::Esc, KeyModifiers::NONE);
     assert!(app.find.is_none());
     press(&mut app, KeyCode::Char('f'), KeyModifiers::CONTROL);
@@ -345,13 +345,17 @@ fn the_hints_say_cmd_f_once_a_cmd_key_arrived() {
     assert!(all.contains(" cmd+f ") && all.contains(" ctrl+f "), "{all}");
 }
 
-/// The box (BISE-297, designer): top-right of the history, its top
-/// border on the first history row, 1 column in from the feed's right
-/// edge, 40 columns, rounded dim border on the raised grey; the composer
-/// under it keeps its draft, no caret (the box has the keys).
+/// The box (user QA 2026-10-04): flush in the top-right corner of the
+/// history pane (the row under the frame's top edge, its right border
+/// against the panel's rule), 48 columns, rounded dim border on the
+/// raised grey, ` ⌕ signup  1/1  ↑  ↓  × `; the composer under it keeps
+/// its draft, no caret (the box has the keys).
 #[test]
-fn the_box_floats_top_right_and_the_composer_stays() {
-    let mut app = app_with(vec![Ev::You("ship the signup page".into(), Mark::Sent, false)]);
+fn the_box_sits_in_the_corner_and_the_composer_stays() {
+    // the match low on the screen: the box stays in its corner
+    let mut events: Vec<Ev> = (0..40).map(|i| Ev::Assistant(format!("filler {i}"))).collect();
+    events.push(Ev::You("ship the signup page".into(), Mark::Sent, false));
+    let mut app = app_with(events);
     app.ed.insert("my draft");
     draw(&mut app);
     press(&mut app, KeyCode::Char('f'), KeyModifiers::CONTROL);
@@ -363,16 +367,16 @@ fn the_box_floats_top_right_and_the_composer_stays() {
     let top = lines.iter().position(|l| l.contains('⌕')).expect("the box's field") - 1;
     let field = lines[top + 1];
     assert!(lines[top + 2].contains('╰'), "{s}");
-    assert!(field.contains("⌕ signup") && field.contains("1 of 1"), "{field}");
-    // 40 columns wide, top-right: the history's first row, right edge
+    assert!(field.contains("⌕ signup") && field.contains("1/1  ↑  ↓  × │"), "{field}");
+    // 48 columns wide, in the corner: right under the frame's top edge,
+    // its right border against the panel's rule
+    assert_eq!(top, 1, "under the top edge: {s}");
     let row: Vec<&str> = (0..b.area.width).map(|x| b[(x, top as u16)].symbol()).collect();
     let x0 = row.iter().skip(1).position(|&c| c == "╭").unwrap() + 1;
     let x1 = x0 + row[x0..].iter().position(|&c| c == "╮").unwrap();
-    assert_eq!(x1 - x0 + 1, 40, "{s}");
-    assert!(x1 as u16 > b.area.width / 2, "right half: {s}");
-    assert!(lines[..top].iter().any(|l| l.contains("bise")), "under the header: {s}");
-    let feed_right = app.feed_x + app.area_w as u16;
-    assert_eq!(x1 as u16, feed_right - 2, "1 column in from the feed's edge: {s}");
+    assert_eq!(x1 - x0 + 1, 48, "{s}");
+    let rule = (0..b.area.width).find(|&x| b[(x, 5)].symbol() == "│" && x > 2).expect("the panel's rule") as usize;
+    assert_eq!(x1 + 1, rule, "against the rule: {s}");
     // the border dim, the inside on the raised grey
     assert_eq!(b[(x0 as u16, top as u16)].fg, crate::theme::dim());
     assert_eq!(b[(x0 as u16 + 3, top as u16 + 1)].bg, crate::theme::raised());
@@ -390,17 +394,6 @@ fn the_box_floats_top_right_and_the_composer_stays() {
     assert!(!s.contains('⌕'), "{s}");
 }
 
-/// The box's placement on a narrow feed: at least 24 columns, and never
-/// wider than the feed less 2.
-#[test]
-fn the_box_fits_the_feed() {
-    let r = box_rect(Rect::new(3, 2, 90, 20)).unwrap();
-    assert_eq!((r.x, r.y, r.width, r.height), (3 + 90 - 1 - 40, 2, 40, 3));
-    assert_eq!(box_rect(Rect::new(0, 0, 30, 20)).unwrap().width, 28);
-    assert_eq!(box_rect(Rect::new(0, 0, 20, 20)).unwrap().width, 18);
-    assert!(box_rect(Rect::new(0, 0, 9, 20)).is_none());
-    assert!(box_rect(Rect::new(0, 0, 90, 2)).is_none());
-}
 
 /// `no match` in the error red; the empty field names the feed.
 #[test]
@@ -441,7 +434,11 @@ fn the_current_match_is_never_under_the_box() {
     draw(&mut app);
     let loc = app.find.as_ref().unwrap().loc.expect("the match is drawn");
     let row = (0..app.vis_events.len()).position(|y| app.vis_events[y] == 60 && app.vis_rows[y] == loc.row).expect("on screen");
-    assert_eq!(row, BOX_H as usize + 1, "under the box, 1 blank row between");
+    // the box covers the history's first rows from under the frame's
+    // top edge: the match lands under it, 1 blank row between
+    let cover = app.find.as_ref().unwrap().cover;
+    assert!(cover > 0 && cover <= crate::find_bar::BOX_H as usize, "{cover}");
+    assert_eq!(row, cover + 1, "under the box, 1 blank row between");
 }
 
 /// A click in your message takes the keys back: the box closes.

@@ -82,6 +82,7 @@ mod models;
 mod term;
 mod feedsel;
 mod find;
+mod find_bar;
 mod links;
 mod textlayer;
 mod pointer;

@@ -458,3 +458,52 @@ fn replayed_history_gets_its_time_marks() {
     let old = json!({"lines": [{"pos": 1, "line": "x"}, {"pos": 2, "line": "y"}]});
     assert_eq!(parse_history(&old).iter().map(|l| l.ts).collect::<Vec<_>>(), vec![None, None]);
 }
+
+/// Find searches the whole thread (user QA 2026-10-04): once what the
+/// feed holds is scanned, it asks the hub for the page before it, even
+/// while the view follows the tail; a match in that page is found and
+/// becomes the current one, and only the new page is scanned.
+#[test]
+fn find_pages_in_the_older_lines() {
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    let mut app = test_app();
+    let mut term = Terminal::new(TestBackend::new(120, 30)).unwrap();
+    for pos in 1001..1011 {
+        dispatch(&mut app, &json!({"ev": "line", "agent": "main", "line": format!("  obs: assistant: new {}", pos), "pos": pos}).to_string());
+    }
+    term.draw(|f| draw_sb(&mut app, f)).unwrap();
+    assert!(!app.win.loading, "a following view asks nothing by itself");
+    crate::input::on_key(&mut app, &KeyEvent::new(KeyCode::Char('f'), KeyModifiers::CONTROL));
+    for c in "ancient".chars() {
+        crate::input::on_key(&mut app, &KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+    }
+    term.draw(|f| draw_sb(&mut app, f)).unwrap();
+    assert!(app.win.loading, "the loaded part is scanned: a page is asked");
+    let page: Vec<Value> = (1..1001)
+        .map(|p| {
+            let t = if p == 3 { "the ancient bug" } else { "filler" };
+            json!({"pos": p, "line": format!("  obs: assistant: {} {}", t, p)})
+        })
+        .collect();
+    dispatch(&mut app, &json!({"ev": "history", "agent": "main", "before": 1001, "lines": page}).to_string());
+    for _ in 0..100 {
+        term.draw(|f| draw_sb(&mut app, f)).unwrap();
+        if !app.find.as_ref().unwrap().busy() {
+            break;
+        }
+    }
+    let f = app.find.as_ref().unwrap();
+    assert_eq!(f.counter(crate::find::more_before(&app), Instant::now()), "1/1");
+    assert!(f.cur.is_some());
+    assert!(!app.win.loading && !crate::find::more_before(&app), "the whole thread is in");
+    term.draw(|f| draw_sb(&mut app, f)).unwrap();
+    let s = screen(&term).join("\n");
+    assert!(
+        s.contains("the ancient bug"),
+        "the view goes to it: cur {:?} anchor {:?} follow {} n {}\n{s}",
+        app.find.as_ref().unwrap().cur,
+        app.anchor,
+        app.follow,
+        app.events.len()
+    );
+}

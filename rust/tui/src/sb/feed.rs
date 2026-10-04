@@ -139,7 +139,9 @@ pub(super) fn seen_at(app: &mut App, pos: Option<usize>, n0: usize) {
 /// A feed that follows its tail keeps its last events only: the oldest
 /// go, cut at a line boundary (they come back by pages).
 pub(super) fn trim_window(app: &mut App) {
-    if !app.follow || app.events.len() <= MAX_EVENTS {
+    // an open find keeps the pages it brought in (its counts and its
+    // matches index them)
+    if !app.follow || app.find.is_some() || app.events.len() <= MAX_EVENTS {
         return;
     }
     let want = app.events.len() - KEEP_EVENTS;
@@ -191,10 +193,14 @@ pub(super) fn empty_feed(app: &mut App) {
     app.feed_sel = None;
 }
 
-/// The view came close to the first event it holds: ask the hub for the
-/// lines before it (one page at a time).
+/// The view came close to the first event it holds, or an open find has
+/// scanned all it holds: ask the hub for the lines before it (one page
+/// at a time).
 pub(super) fn want_older(app: &mut App) {
-    if app.follow || app.win.loading || app.anchor.0 >= PAGE_AHEAD {
+    // find searches the whole thread: once what is loaded is scanned,
+    // the page before it, until the first line (find.rs)
+    let finding = app.find.as_ref().is_some_and(|f| f.wants_older());
+    if app.win.loading || (!finding && (app.follow || app.anchor.0 >= PAGE_AHEAD)) {
         return;
     }
     let Some(before) = app.win.first_pos.filter(|p| *p > 1) else { return };

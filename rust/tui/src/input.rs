@@ -343,6 +343,10 @@ fn on_screen_mouse(app: &mut App, m: &crossterm::event::MouseEvent, term_h: u16)
     if crate::artifacts_screen::mouse(app, m) {
         return;
     }
+    // the find bar: its chevrons, its ×, its field (find_bar.rs)
+    if crate::find_bar::on_mouse(app, m) {
+        return;
+    }
     if crate::scheduled_screen::mouse(app, m) {
         return;
     }
@@ -523,7 +527,7 @@ pub(crate) fn on_paste(app: &mut App, text: &str) {
     if sb::palette::on_paste(app, text) {
         return;
     }
-    if crate::find::on_paste(app, text) {
+    if crate::find_bar::on_paste(app, text) {
         return;
     }
     // the paste lands in the composer: it has the keys again
@@ -655,7 +659,7 @@ pub(crate) fn on_key(app: &mut App, k: &crossterm::event::KeyEvent) -> bool {
         return false;
     }
     // ctrl+f: the find field takes the keys while it is open (BISE-237)
-    if crate::find::on_key(app, k) {
+    if crate::find_bar::on_key(app, k) {
         return false;
     }
     if app.popup_dismissed.as_deref() != Some(app.ed.text.as_str()) {
