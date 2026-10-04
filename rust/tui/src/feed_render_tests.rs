@@ -1113,10 +1113,10 @@ fn level_two_and_answered_lines() {
     };
     let (mut events, mut cache) = arrive(vec![to_you("docs", "the examples use v2."), why]);
     let rows = cached_text(&events, &mut cache, 100);
-    assert_eq!(rows, vec![" @ docs to you: the examples use v2.", "", " :* docs asked: v1 or v2? i answered: v2 ▸ why"]);
+    assert_eq!(rows, vec![" @ docs to you: the examples use v2.", "", " :* docs asked: v1 or v2? · i answered: v2 ▸ why"]);
     assert!(toggle_event(&mut events, &mut cache, 1));
     let rows = cached_text(&events, &mut cache, 100);
-    assert_eq!(rows[2..], [" :* docs asked: v1 or v2? i answered: v2 ▾ why", " │ the brief says v2."]);
+    assert_eq!(rows[2..], [" :* docs asked: v1 or v2? · i answered: v2 ▾ why", " │ the brief says v2."]);
     // a long level-3 message: 2 rows, `… ▸`; open, its whole text,
     // hung under its first column, `▾` at the end (BISE-106)
     let long = format!("heads-up: {}", "i'm touching web/src/auth ".repeat(8));
@@ -1181,7 +1181,7 @@ fn whats_for_you_matches_the_mockup() {
         &chip_row("main", "docs"),
         &under("v2, the brief says so."),
         "",
-        " :* docs asked: v1 or v2 for the examples? i answered: v2 ▸ why",
+        " :* docs asked: v1 or v2 for the examples? · i answered: v2 ▸ why",
         "",
         &chip_row("auth-fix", "release"),
         &under("heads-up, i'm touching web/src/auth."),

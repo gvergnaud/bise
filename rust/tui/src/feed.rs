@@ -937,7 +937,8 @@ pub(crate) fn discloses(ev: &Ev) -> bool {
         Ev::Tool(td) => tool_discloses(td),
         Ev::AgentMsg { text, level: 3, .. } if !is_brief(text) && report_parts(text).is_none() => l3_long(text),
         Ev::AgentMsg { text, .. } => is_brief(text) || report_parts(text).is_some(),
-        Ev::Answered { why, .. } => !why.trim().is_empty(),
+        // a why, or a question or answer longer than its gist
+        Ev::Answered { agent, question, answer, why, .. } => crate::answered::answered_opens(agent, question, answer, why),
         Ev::Compacted { text, .. } | Ev::Fold { text, .. } => !text.trim().is_empty(),
         Ev::Release(r) => r.discloses(),
         // a long message of yours folds (BISE-239)

@@ -50,6 +50,7 @@ mod syntax;
 mod mdlive;
 mod sanitize;
 mod render;
+mod answered;
 mod toolbox;
 mod toolrow;
 mod release_row;

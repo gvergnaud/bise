@@ -1568,7 +1568,7 @@ mod hub_line_tests {
         let text = draw(&evs);
         let ab = format!("{} a → b", crate::render::G_ENVELOPE);
         let why = format!("{} why", crate::theme::G_CLOSED);
-        for want in [ab.as_str(), "hello b", "docs asked: v1 or v2? i answered: v2", why.as_str()] {
+        for want in [ab.as_str(), "hello b", "docs asked: v1 or v2? · i answered: v2", why.as_str()] {
             assert!(text.contains(want), "{want:?} missing in:\n{text}");
         }
     }

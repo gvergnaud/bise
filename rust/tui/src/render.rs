@@ -533,7 +533,9 @@ pub(crate) fn ev_lines(ev: &Ev, width: usize) -> Vec<Line<'static>> {
         }
         Ev::AgentMsg { from, to, text, level: 3, id, open, .. } => l3_lines(from, to, id, text, *open, width),
         Ev::AgentMsg { from, text, .. } => l2_lines(from, text, width),
-        Ev::Answered { agent, question, answer, why, open } => answered_lines(agent, question, answer, why, *open, width),
+        Ev::Answered { agent, question, answer, why, open } => {
+            crate::answered::answered_lines(agent, question, answer, why, *open, width)
+        }
         Ev::TimeMark(t) => vec![Line::from(Span::styled(format!(" {} {} {}", G_NOTE, t, G_NOTE), Style::default().fg(faint())))],
         Ev::Card { text, closed } => card_lines(text, closed, width),
         Ev::CardClosed { .. } | Ev::Ended(_) => vec![],
@@ -663,7 +665,7 @@ fn chip_names(from: &str, to: &str, cap: usize, frame: usize, room: usize) -> (S
 
 /// `line` cut to `room` columns, `tail` after it (a cut row's `… ▸`):
 /// at the end of a word when the row has one, no space before `tail`.
-fn cut_row(line: Line<'static>, room: usize, tail: &str) -> Line<'static> {
+pub(crate) fn cut_row(line: Line<'static>, room: usize, tail: &str) -> Line<'static> {
     use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
     let keep = room.saturating_sub(tail.width());
     let cells: Vec<(char, Style)> = line.spans.iter().flat_map(|sp| sp.content.chars().map(move |c| (c, sp.style))).collect();
@@ -823,28 +825,6 @@ fn l2_lines(from: &str, body: &str, width: usize) -> Vec<Line<'static>> {
     }
     let mark = Span::styled(format!(" {} ", glyph), glyph_st);
     hung_rows(&mark, &Span::raw("   "), lines, width)
-}
-
-/// Main answered an agent for you (level 2): `:* docs asked: v1 or v2?
-/// i answered: v2. ▸ why`; open, the why under the rail.
-fn answered_lines(agent: &str, question: &str, answer: &str, why: &str, open: bool, width: usize) -> Vec<Line<'static>> {
-    let text_st = Style::default().fg(text());
-    let q = question.trim().replace('\n', " ");
-    let sep = if q.ends_with(['?', '.', '!', ':']) { " " } else { "; " };
-    let mut line = vec![Span::styled(
-        format!("{} asked: {}{}i answered: {}", agent, q, sep, answer.trim().replace('\n', " ")),
-        text_st,
-    )];
-    if !why.trim().is_empty() {
-        line.push(Span::styled(format!(" {} why", if open { G_OPEN } else { G_CLOSED }), Style::default().fg(dim())));
-    }
-    let mark = Span::styled(format!(" {} ", G_MAIN), main_mark_st());
-    let mut ls = hung_rows(&mark, &Span::raw("   "), [Line::from(line)], width);
-    if open && !why.trim().is_empty() {
-        let bar = Span::styled(RAIL, Style::default().fg(rule()));
-        ls.extend(barred_rows(&bar, md_lines(why.trim(), width.saturating_sub(3), width.saturating_sub(3)), width));
-    }
-    ls
 }
 
 /// The fold of a run of level-3 lines (book §10): `▸ 47 messages
