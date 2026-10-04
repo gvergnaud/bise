@@ -95,53 +95,9 @@ pub(crate) fn fit(spans: Vec<Span<'static>>, room: usize) -> Vec<Span<'static>> 
     out
 }
 
-/// The role line keeps at least this many columns (its ` · ` included)
-/// before the summary shortens for it; under it, it goes (BISE-126).
-const ROLE_MIN: usize = 12;
-/// What the summary leaves to the role line at most: the path goes
-/// before the line is cut under this.
-const ROLE_KEEP: usize = 27;
-
-/// The role line and the summary in `room` columns (BISE-126): the
-/// summary drops its path to leave the line up to ROLE_KEEP columns, then
-/// ROLE_MIN, but never a count: the counts come first; the line takes
-/// what the summary leaves.
-pub(crate) fn share_room(
-    room: usize,
-    role: Vec<Span<'static>>,
-    summary: impl Fn(usize) -> Vec<Span<'static>>,
-) -> (Vec<Span<'static>>, Vec<Span<'static>>) {
-    let role_w: usize = role.iter().map(|s| s.content.width()).sum();
-    let full = summary(room);
-    if role_w == 0 {
-        return (Vec::new(), full);
-    }
-    let counts = |s: &[Span]| -> usize {
-        let t: String = s.iter().map(|x| x.content.as_ref()).collect();
-        t.split_whitespace().filter(|w| w.chars().all(|c| c.is_ascii_digit())).count()
-    };
-    let want = counts(&full);
-    let s = [role_w.min(ROLE_KEEP), ROLE_MIN.min(role_w)]
-        .into_iter()
-        .map(|r| summary(room.saturating_sub(r)))
-        .find(|s| counts(s) == want)
-        .unwrap_or(full);
-    let w: usize = s.iter().map(|x| x.content.width()).sum();
-    (fit_role(role, room.saturating_sub(w)), s)
-}
-
-/// The role line in `room` columns: cut with `…`, or nothing under
-/// ROLE_MIN.
-fn fit_role(role: Vec<Span<'static>>, room: usize) -> Vec<Span<'static>> {
-    let w: usize = role.iter().map(|s| s.content.width()).sum();
-    if w == 0 || room < ROLE_MIN.min(w) {
-        return Vec::new();
-    }
-    fit(role, room)
-}
-
 /// The frame on `area`'s edge, framed screens only: the rounded border,
-/// the title from column 3 (1 space each side) and the summary ending at
+/// the title from column 3 (1 space each side), what `edge` puts after
+/// it (the path, the role line: topedge.rs) and the summary ending at
 /// F − 4 in the top edge, the panel's rule from row 1 down to the divider
 /// (joined `┬` on the top edge, `┴` on the divider, unless text covers
 /// the join).
@@ -150,8 +106,7 @@ pub(crate) fn draw_frame(
     area: Rect,
     cols: Cols,
     title: Vec<Span<'static>>,
-    role: Vec<Span<'static>>,
-    summary: impl Fn(usize) -> Vec<Span<'static>>,
+    edge: impl Fn(usize) -> (Vec<Span<'static>>, Vec<Span<'static>>),
     divider_y: u16,
 ) {
     let area = area.intersection(buf.area);
@@ -183,8 +138,8 @@ pub(crate) fn draw_frame(
         }
         buf[(x, t)].set_symbol(p.top_join).set_style(st);
     }
-    // the title from column 3, 1 space each side; the viewed task's role
-    // line right after it (BISE-126)
+    // the title from column 3, 1 space each side; the path and the viewed
+    // task's role line right after it (BISE-126)
     let mut head = vec![Span::raw(" ")];
     head.extend(title);
     head.push(Span::raw(" "));
@@ -195,10 +150,10 @@ pub(crate) fn draw_frame(
     let end = r - (cols.margin - 1); // exclusive: F - 3 holds its space
     let start = hx + head_w + 2;
     let room = end.saturating_sub(start) as usize;
-    let (role, s) = share_room(room, role, summary);
+    let (after, s) = edge(room);
     let w: u16 = s.iter().map(|s| s.content.width() as u16).sum();
     let space = head.pop();
-    head.extend(role);
+    head.extend(after);
     head.extend(space);
     put(buf, hx, t, &head, r);
     if w > 0 && w as usize <= room {

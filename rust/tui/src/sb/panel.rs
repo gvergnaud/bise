@@ -412,9 +412,9 @@ impl Sb {
         let left_w: usize = spans.iter().map(|s| s.content.width()).sum();
         // one column of margin on the right, two of gap after `bise :*`
         let room = (width as usize).saturating_sub(left_w + 3);
-        let (role, right) = chrome::share_room(room, self.role_spans(), |r| self.summary(r, short, words, gust));
+        let (after, right) = self.edge(room, words, |r| self.summary(r, short, words, gust));
         let right_w: usize = right.iter().map(|s| s.content.width()).sum();
-        spans.extend(role);
+        spans.extend(after);
         let left_w: usize = spans.iter().map(|s| s.content.width()).sum();
         let pad = (width as usize).saturating_sub(left_w + right_w + 1);
         if pad >= 2 {
@@ -447,30 +447,31 @@ impl Sb {
         ]
     }
 
-    /// The summary in at most `room` columns (book §8 "The frame"): the
-    /// workspace (`~/acme`, dim) then the counts; not enough room, the
-    /// path goes first, then the counts shorten (`∿ 3 · ? 1`). BISE-303:
-    /// with the panel shown (not `short`) the agents' counts are its job,
-    /// the header keeps the inbox's (`~/acme · # 1 in the inbox`); all of
-    /// them with ctrl held (`words`).
+    /// The top edge in `room` columns (book §8 "The frame", topedge.rs):
+    /// after the logo the workspace (`· ~/acme`, dim; ctrl held, what
+    /// happens to the work after it, dev-flow §7) and the role line; on
+    /// the right the counts (`counts`: [`Sb::summary`], maybe with the
+    /// voice before them) then what came new in /artifacts since you
+    /// last looked (`↗ designer · pricing page`, a click opens the screen).
+    pub(crate) fn edge(
+        &self,
+        room: usize,
+        words: bool,
+        counts: impl Fn(usize) -> Vec<Span<'static>>,
+    ) -> (Vec<Span<'static>>, Vec<Span<'static>>) {
+        let flow = if words { super::places::flow_words(&self.flow) } else { "" };
+        let paths = crate::topedge::paths(&self.workspace, flow);
+        let link = |t: String, st: Style| crate::textlayer::link(t, crate::artifacts_screen::OPEN_URL, st);
+        let notice = crate::topedge::notice(crate::artifacts::new_count(), &crate::artifacts::new_rows(), &link);
+        crate::topedge::lay(room, &paths, self.role_spans(), counts, &notice)
+    }
+
+    /// The counts in at most `room` columns (book §8 "The frame"): not
+    /// enough room, they shorten (`∿ 3 · ? 1`). BISE-303: with the panel
+    /// shown (not `short`) the agents' counts are its job, the header
+    /// keeps the inbox's (`# 1 in the inbox`); all of them with ctrl held
+    /// (`words`). A release running: one more item after them.
     pub(crate) fn summary(&self, room: usize, short: bool, words: bool, gust: &[Span<'static>]) -> Vec<Span<'static>> {
-        // site/m/artifacts: `↗ 3 new` since you last looked, last; a
-        // click opens /artifacts (`↗ 3` when short of room)
-        let new = crate::artifacts::new_count();
-        if new > 0 {
-            let st = Style::default().fg(accent());
-            for label in [format!("↗ {} new", new), format!("↗ {}", new)] {
-                let w = label.width();
-                if w + 3 + 6 <= room {
-                    let mut out = self.summary_of(room - w - 3, short, words, gust);
-                    if !out.is_empty() {
-                        out.push(Span::styled(" · ", Style::default().fg(dim())));
-                    }
-                    out.push(crate::textlayer::link(label, crate::artifacts_screen::OPEN_URL, st));
-                    return out;
-                }
-            }
-        }
         self.summary_of(room, short, words, gust)
     }
 
@@ -499,36 +500,7 @@ impl Sb {
                 Some(n) => fit_counts(n, short, room, gust),
             }
         };
-        // the path only beside the counts as they are when nothing is short
-        let whole = fitted(usize::MAX);
-        let whole_w: usize = whole.iter().map(|s| s.content.width()).sum();
-        let mut path = home_path(&self.workspace);
-        // ctrl held: what happens to the work, after the folder (dev-flow §7)
-        let flow = super::places::flow_words(&self.flow);
-        if words && !flow.is_empty() && !path.is_empty() {
-            let with = format!("{} · {}", path, flow);
-            if with.width() + 3 + whole_w <= room {
-                path = with;
-            }
-        }
-        if path.is_empty() || path.width() + 3 + whole_w > room {
-            return fitted(room);
-        }
-        // only idle agents: no counts, so no separator after the path (QA F)
-        if whole.is_empty() {
-            return vec![Span::styled(path, Style::default().fg(dim()))];
-        }
-        let mut out = vec![Span::styled(format!("{} · ", path), Style::default().fg(dim()))];
-        out.extend(whole);
-        out
-    }
-}
-
-/// `path` with the home folder as `~`.
-fn home_path(path: &str) -> String {
-    match std::env::var("HOME") {
-        Ok(h) if !h.is_empty() && (path == h || path.starts_with(&format!("{}/", h))) => format!("~{}", &path[h.len()..]),
-        _ => path.to_string(),
+        fitted(room)
     }
 }
 
@@ -2198,29 +2170,26 @@ mod chrome_tests {
         let mut app = busy();
         let rows = draw(&mut app, 120, 20);
         // framed (book §8 "The frame"): the title from column 3 in the
-        // top edge, the path and the counts ending at F - 4
+        // top edge, the path after it, the counts ending at F - 4
         let head = &rows[0];
-        assert!(head.starts_with("╭─ bise :* ─"), "{:?}", head);
+        assert!(head.starts_with("╭─ bise :* · bench ─"), "{:?}", head);
         // BISE-303: the panel counts the agents, the header the inbox
-        assert!(head.ends_with(" bench · # 1 in the inbox ─╮"), "{:?}", head);
+        assert!(head.ends_with("─ # 1 in the inbox ─╮"), "{:?}", head);
         assert_eq!(head.chars().count(), 120, "{:?}", head);
         // ctrl held: every count
         app.hold = held_ctrl();
         let rows = draw(&mut app, 120, 20);
-        let right = "bench · ∿ 3 working · … 1 waiting · ? 1 needs you · ✓ 1 done · # 1 in the inbox";
-        assert!(rows[0].ends_with(&format!(" {} ─╮", right)), "{:?}", rows[0]);
+        let right = "∿ 3 working · … 1 waiting · ? 1 needs you · ✓ 1 done · # 1 in the inbox";
+        assert!(rows[0].starts_with("╭─ bise :* · bench ─") && rows[0].ends_with(&format!("─ {} ─╮", right)), "{:?}", rows[0]);
         app.hold = crate::ctrlhint::Hold::default();
         assert!(!rows.iter().any(|r| r.contains("Switchboard")));
         // 60 columns, no panel: the short counts
         let rows = draw(&mut app, 60, 20);
-        assert!(rows[0].ends_with(" bench · ∿ 3 · … 1 · ? 1 · ✓ 1 · # 1 ─╮"), "{:?}", rows[0]);
-        // too narrow for the path: it goes first
-        let rows = draw(&mut app, 60, 20);
-        assert!(rows[0].starts_with("╭─ bise :* ─"), "{:?}", rows[0]);
+        assert!(rows[0].starts_with("╭─ bise :* · bench ─") && rows[0].ends_with("─ ∿ 3 · … 1 · ? 1 · ✓ 1 · # 1 ─╮"), "{:?}", rows[0]);
         // under 60 columns: no frame, the header row with margins of 1
         let rows = draw(&mut app, 59, 20);
-        let summary = "bench · ∿ 3 · … 1 · ? 1 · ✓ 1 · # 1";
-        assert_eq!(rows[0], format!(" bise :*{}{}", " ".repeat(59 - 8 - summary.chars().count() - 1), summary));
+        let summary = "∿ 3 · … 1 · ? 1 · ✓ 1 · # 1";
+        assert_eq!(rows[0], format!(" bise :* · bench{}{}", " ".repeat(59 - 16 - summary.chars().count() - 1), summary));
         // no agents: the words
         let mut app = with_main();
         let rows = draw(&mut app, 120, 20);
@@ -2229,8 +2198,8 @@ mod chrome_tests {
         assert!(rows[0].ends_with("no agents yet"), "{:?}", rows[0]);
     }
 
-    /// QA F: only idle agents, no count to show: the path ends the header,
-    /// with no lone ` · ` after it.
+    /// QA F: only idle agents, no count to show: the path after the logo,
+    /// nothing on the right, no lone ` · `.
     #[test]
     fn idle_agents_leave_no_lone_separator_in_the_header() {
         let mut app = busy();
@@ -2239,14 +2208,14 @@ mod chrome_tests {
         }
         app.sb.cards.clear();
         let rows = draw(&mut app, 120, 20);
-        assert!(rows[0].ends_with(" bench ─╮"), "{:?}", rows[0]);
+        assert!(rows[0].starts_with("╭─ bise :* · bench ──") && rows[0].ends_with("───╮"), "{:?}", rows[0]);
         let rows = draw(&mut app, 59, 20);
         assert!(!rows[0].trim_end().ends_with('·'), "{:?}", rows[0]);
     }
 
-    /// BISE-126: viewing a task, its role line follows the title, dim;
-    /// the path goes before the line is cut under ROLE_KEEP; too narrow,
-    /// it is cut, then it goes; main's view shows none.
+    /// BISE-126: viewing a task, its role line follows the path, dim; it
+    /// keeps ROLE_KEEP columns, then ROLE_MIN before the path goes; too
+    /// narrow, it is cut, then it goes; main's view shows none.
     #[test]
     fn the_viewed_task_s_role_line_follows_the_title() {
         let mut app = busy();
@@ -2260,24 +2229,28 @@ mod chrome_tests {
         app.sb.focus = "auth-fix".into();
         let rows = draw(&mut app, 136, 20);
         let full = "∿ 3 working · … 1 waiting · ? 1 needs you · ✓ 1 done · # 1 in the inbox";
-        assert!(rows[0].starts_with("╭─ bise :* · fixing the safari login redirect ─"), "{:?}", rows[0]);
-        assert!(rows[0].ends_with(&format!(" {} ─╮", full)), "the path went first: {:?}", rows[0]);
+        assert!(rows[0].starts_with("╭─ bise :* · bench · fixing the safari login redirect ─"), "{:?}", rows[0]);
+        assert!(rows[0].ends_with(&format!(" {} ─╮", full)), "{:?}", rows[0]);
         assert_eq!(rows[0].chars().count(), 136);
+        // shorter: the path goes before the line is cut under ROLE_KEEP
+        let rows = draw(&mut app, 120, 20);
+        assert!(rows[0].starts_with("╭─ bise :* · fixing the safari login redir… ─"), "{:?}", rows[0]);
+        assert!(rows[0].ends_with(&format!(" {} ─╮", full)), "{:?}", rows[0]);
         // dim, like the summary
         let line = app.sb.header(200, false, true, &super::still_gust());
         let role = line.spans.iter().find(|s| s.content.contains("safari")).unwrap();
         assert_eq!(role.style.fg, Some(crate::theme::dim()));
-        // wide: the path comes back
+        // wide: the whole line
         let rows = draw(&mut app, 160, 20);
-        assert!(rows[0].contains("redirect ─") && rows[0].contains("bench · ∿ 3 working"), "{:?}", rows[0]);
-        // narrow: the counts shorten, the line is cut with …
+        assert!(rows[0].starts_with("╭─ bise :* · bench · fixing the safari login redirect ─"), "{:?}", rows[0]);
+        // narrow: the counts shorten, the path goes, the line is cut with …
         let rows = draw(&mut app, 60, 20);
         assert!(rows[0].starts_with("╭─ bise :* · fixing"), "{:?}", rows[0]);
         assert!(rows[0].contains('…') && rows[0].ends_with("∿ 3 · … 1 · ? 1 · ✓ 1 · # 1 ─╮"), "{:?}", rows[0]);
         assert_eq!(rows[0].chars().count(), 60);
         // no frame: the header row, the same order
         let rows = draw(&mut app, 59, 20);
-        assert!(rows[0].starts_with(" bise :* · fixing"), "{:?}", rows[0]);
+        assert!(rows[0].starts_with(" bise :* · bench · fixing"), "{:?}", rows[0]);
         assert!(rows[0].ends_with("∿ 3 · … 1 · ? 1 · ✓ 1 · # 1"), "{:?}", rows[0]);
         // no room left: no line at all, never a lone "·"
         let rows = draw(&mut app, 50, 20);
@@ -2289,18 +2262,18 @@ mod chrome_tests {
             a.role.clear();
         }
         let rows = draw(&mut app, 120, 20);
-        assert!(rows[0].starts_with("╭─ bise :* ─"), "{:?}", rows[0]);
+        assert!(rows[0].starts_with("╭─ bise :* · bench ─"), "{:?}", rows[0]);
     }
 
-    /// The summary drops the path first, then the words.
+    /// The summary (the counts) shortens its words.
     #[test]
-    fn summary_drops_the_path_first() {
+    fn summary_shortens_its_words() {
         let app = busy();
         let sb = &app.sb;
         let text = |room: usize, short: bool| sb.summary(room, short, true, &super::still_gust()).iter().map(|s| s.content.to_string()).collect::<String>();
         let full = "∿ 3 working · … 1 waiting · ? 1 needs you · ✓ 1 done · # 1 in the inbox";
-        assert_eq!(text(100, false), format!("bench · {}", full));
-        assert_eq!(text(full.chars().count() + 7, false), full);
+        assert_eq!(text(100, false), full);
+        assert_eq!(text(full.chars().count(), false), full);
         assert_eq!(text(full.chars().count() - 1, false), "∿ 3 · … 1 · ? 1 · ✓ 1 · # 1");
     }
 

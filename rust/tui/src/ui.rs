@@ -134,9 +134,9 @@ fn draw_bise(app: &mut App, frame: &mut Frame, area: Rect, cols: crate::layout::
     let sb = &app.sb;
     if cols.framed {
         let title = sb.title();
-        let role = sb.role_spans();
-        let summary = |room: usize| voice_header(voice.as_ref().map(|(v, _)| v), room, |room| sb.summary(room, short, words, &gust));
-        chrome::draw_frame(frame.buffer_mut(), area, cols, title, role, summary, divider_y);
+        let counts = |room: usize| voice_header(voice.as_ref().map(|(v, _)| v), room, |room| sb.summary(room, short, words, &gust));
+        let edge = |room: usize| sb.edge(room, words, counts);
+        chrome::draw_frame(frame.buffer_mut(), area, cols, title, edge, divider_y);
         crate::textlayer::text(Rect { height: 1, ..area }); // BISE-290: the title row
     } else if chunks[0].height > 0 {
         let r = Rect { height: 1, ..chunks[0] };

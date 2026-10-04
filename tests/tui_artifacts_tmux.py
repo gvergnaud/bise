@@ -103,7 +103,8 @@ def wide(t, E):
         out = sb(E, "main", E.ws, "artifact", "add", "docs/q3-plan.md", "--title", "q3 plan")
         assert "link it as [q3 plan](artifact:q3-plan)" in out, out
         sb(E, "main", E.ws, "artifact", "add", "https://bise.dev/m/artifacts", "--title", "artifacts mock")
-        sc = t.wait_re(r"↗ \d new")
+        # the header says how many and who (header-new): `↗ 2 new artifacts · main`
+        sc = t.wait("↗ 2 new artifacts · main")
         sc = t.wait("artifacts mock")
         assert "↗ q3 plan" in sc and "doc · main" in sc, sc
         shot(t, "150-thread")
@@ -281,12 +282,12 @@ def narrow(t, branch):
         t.wait_gone("all agents · 2")
         command(t, "/diff " + branch, "src/pricing.tsx")
         sc = t.wait("esc close")
-        assert "bise :* ── diff" in sc, sc
+        assert "bise :* · ws ── diff" in sc, sc
         assert "↑↓ scroll   tab next file   f files   ⏎ editor   esc close" in sc, sc
         assert "ctrl+g close" not in sc and "the diff has the keys" not in sc, sc
         shot(t, "80-diff")
         t.keys("Escape")
-        t.wait_gone("bise :* ── diff")
+        t.wait_gone("bise :* · ws ── diff")
         light(t, "80", branch)
 
 

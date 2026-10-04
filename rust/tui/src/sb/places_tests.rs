@@ -373,12 +373,16 @@ fn ctrl_held_says_the_words() {
     assert_eq!(app.sb.places[5].row_mark(true).style.fg, Some(faint()));
     // the header: `↑ 4 PRs` with the counts, the flow after the folder
     app.sb.workspace = "/w/acme".into();
-    let h: String = app.sb.summary(200, false, true, &[]).iter().map(|s| s.content.to_string()).collect();
-    assert!(h.starts_with("/w/acme · lands via PRs · "), "{h}");
-    assert!(h.contains(&format!("{} 4 PRs · # 1 in the inbox", G_PR)), "{h}");
+    let text = |sb: &crate::sb::Sb, words: bool| -> (String, String) {
+        let (l, r) = sb.edge(200, words, |room| sb.summary(room, false, words, &[]));
+        (l.iter().map(|s| s.content.to_string()).collect(), r.iter().map(|s| s.content.to_string()).collect())
+    };
+    let (l, r) = text(&app.sb, true);
+    assert_eq!(l, " · /w/acme · lands via PRs");
+    assert!(r.contains(&format!("{} 4 PRs · # 1 in the inbox", G_PR)), "{r}");
     let rest = mock();
-    let h: String = rest.sb.summary(200, false, false, &[]).iter().map(|s| s.content.to_string()).collect();
-    assert!(!h.contains("PR") && !h.contains("lands"), "{h}");
+    let (l, r) = text(&rest.sb, false);
+    assert!(!r.contains("PR") && !l.contains("lands"), "{l} {r}");
 }
 
 /// The 24-column panel (95 wide): the same blocks; a row drops its time
