@@ -129,10 +129,16 @@ pub(crate) fn macos_check(version: Option<&str>, min: &str, arch: &str, rosetta:
 /// The Unix socket path limit (sun_path, macOS: 104 bytes with the NUL).
 pub(crate) const SOCKET_MAX: usize = 103;
 
-pub(crate) fn socket_check(socket: &Path) -> Check {
-    let n = socket.as_os_str().len();
+/// `natural`: the socket's place in the hub dir (`<state>/hub.sock`); a
+/// path over the limit is reached through its short link
+/// (`bise_home::socket`).
+pub(crate) fn socket_check(natural: &Path) -> Check {
+    let n = natural.as_os_str().len();
+    let socket = bise_home::socket::socket_path(natural);
     if n <= SOCKET_MAX {
-        ok("socket", format!("{} bytes (max {}): {}", n, SOCKET_MAX, socket.display()))
+        ok("socket", format!("{} bytes (max {}): {}", n, SOCKET_MAX, natural.display()))
+    } else if socket.as_os_str().len() <= SOCKET_MAX {
+        ok("socket", format!("{} bytes, over the {} max: reached as {}", n, SOCKET_MAX, socket.display()))
     } else {
         fail(
             "socket",
@@ -752,7 +758,7 @@ fn hubs(home: &bise_home::Home) -> Check {
     let old_dir = home.user_home().join(".local/state/switchboard");
     let old = if old_dir == home.hubs_dir() { 0 } else { count(&old_dir) };
     let detail = format!("{}; {} running in {}, {} in the old place", here, new, home.hubs_dir().display(), old);
-    let socket = socket_check(&paths.socket());
+    let socket = socket_check(&paths.natural_socket());
     if socket.mark == Mark::Fail {
         return socket;
     }
@@ -884,9 +890,10 @@ mod tests {
         let short = format!("/Users/me/.bise/hubs/{}-0123abcd/hub.sock", "a".repeat(32));
         assert_eq!(socket_check(Path::new(&short)).mark, Mark::Ok);
         let long = format!("/Users/me/{}/hubs/x-0123abcd/hub.sock", "d".repeat(80));
+        // over the limit: fine, reached through /tmp/bise-<uid>/<hash>/
         let c = socket_check(Path::new(&long));
-        assert_eq!(c.mark, Mark::Fail);
-        assert!(c.fix.unwrap().contains("BISE_HOME"));
+        assert_eq!(c.mark, Mark::Ok);
+        assert!(c.detail.contains("reached as /tmp/bise-"), "{}", c.detail);
     }
 
     #[test]

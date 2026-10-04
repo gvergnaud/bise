@@ -248,6 +248,7 @@ fn flock(paths: &Paths) -> Result<std::fs::File, StartError> {
 /// Start a broker: take the lock, bind the socket (0600), serve in threads.
 pub fn start(opts: Opts) -> Result<Handle, StartError> {
     let lockf = flock(&opts.paths)?;
+    opts.paths.prepare_sockets().map_err(StartError::Io)?;
     let sock = opts.paths.socket();
     let _ = std::fs::remove_file(&sock);
     let listener = UnixListener::bind(&sock).map_err(StartError::Io)?;

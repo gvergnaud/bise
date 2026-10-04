@@ -34,6 +34,7 @@ use std::path::{Path, PathBuf};
 pub mod migrate;
 pub mod prefs;
 pub mod release;
+pub mod socket;
 pub mod style;
 pub mod test_home;
 pub use migrate::migrate;

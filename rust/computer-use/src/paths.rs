@@ -23,12 +23,25 @@ impl Paths {
 
     pub fn new(run: impl Into<PathBuf>, root: impl Into<PathBuf>, home: impl Into<PathBuf>) -> Paths {
         let run = run.into();
-        Paths { app_socket: run.join("computer-use-app.sock"), run, root: root.into(), home: home.into() }
+        // a run dir too long for a unix socket: both sockets are reached
+        // through one short link to it (`bise_home::socket`; the broker
+        // makes it at its start, before the helper binds)
+        let app_socket = bise_home::socket::socket_path(&run.join("computer-use-app.sock"));
+        Paths { app_socket, run, root: root.into(), home: home.into() }
     }
 
-    /// C3: the agents' (and the relays') socket.
+    /// C3: the agents' (and the relays') socket: `<run>/computer-use.sock`,
+    /// or its short path when that is too long.
     pub fn socket(&self) -> PathBuf {
-        self.run.join("computer-use.sock")
+        bise_home::socket::socket_path(&self.run.join("computer-use.sock"))
+    }
+
+    /// Make [`Paths::socket`] and the default `app_socket` bindable (the
+    /// short link to `run`, when needed).
+    pub fn prepare_sockets(&self) -> std::io::Result<()> {
+        bise_home::socket::prepare_socket(&self.run.join("computer-use.sock"))?;
+        bise_home::socket::prepare_socket(&self.run.join("computer-use-app.sock"))?;
+        Ok(())
     }
 
     /// C6: `state.json`, `events.jsonl`, the broker's lock and log.

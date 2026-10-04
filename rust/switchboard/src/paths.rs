@@ -66,8 +66,20 @@ impl Paths {
         Paths { workspace, state, worktrees }
     }
 
+    /// The hub's socket as clients and the hub reach it: `<state>/hub.sock`
+    /// when that fits in a unix socket address, else its short path
+    /// through `/tmp/bise-<uid>/<hash>/` (`bise_home::socket`; the hub
+    /// makes the link before it binds, [`Paths::prepare_socket`]).
     pub fn socket(&self) -> PathBuf {
+        bise_home::socket::socket_path(&self.natural_socket())
+    }
+    /// Where the socket file lives: `<state>/hub.sock`.
+    pub fn natural_socket(&self) -> PathBuf {
         self.state.join("hub.sock")
+    }
+    /// Make [`Paths::socket`] bindable (the short link, when needed).
+    pub fn prepare_socket(&self) -> std::io::Result<PathBuf> {
+        bise_home::socket::prepare_socket(&self.natural_socket())
     }
     pub fn journal(&self) -> PathBuf {
         self.state.join("journal.jsonl")

@@ -33,11 +33,33 @@ pub fn start_hub(paths: &Paths, exe: &Path, app_root: &Path) -> std::io::Result<
     Ok(())
 }
 
+/// The one line a user reads when the hub did not come up: its cause (the
+/// last line the hub wrote to hub.err, without Rust's `Error: Custom {..}`
+/// wrapping) and where its log is.
+fn not_started(cause: &str, err_file: &Path) -> String {
+    let cause = cause.strip_prefix("Error: ").unwrap_or(cause);
+    // `Custom { kind: Other, error: "..." }` / `Os { code: .., message: "..." }`
+    let cause = match (cause.find("error: \"").or_else(|| cause.find("message: \"")), cause.rfind('"')) {
+        (Some(i), Some(j)) if cause.starts_with(|c: char| c.is_ascii_uppercase()) && cause.contains(" { ") => {
+            let start = cause[i..].find('"').map(|k| i + k + 1).unwrap_or(i);
+            if start < j { &cause[start..j] } else { cause }
+        }
+        _ => cause,
+    };
+    if cause.is_empty() {
+        format!("the hub did not start in 15 s (its log: {})", err_file.display())
+    } else {
+        format!("the hub did not start: {} (its log: {})", crate::util::clip(cause, 200), err_file.display())
+    }
+}
+
 /// A client connection (the TUI, a test): `hello` already sent.
 pub fn connect(paths: &Paths, exe: &Path, app_root: &Path) -> std::io::Result<UnixStream> {
     let mut s = match UnixStream::connect(paths.socket()) {
         Ok(s) => s,
         Err(_) => {
+            let err_file = paths.state.join("hub.err");
+            let err0 = std::fs::metadata(&err_file).map_or(0, |m| m.len());
             start_hub(paths, exe, app_root)?;
             let t0 = Instant::now();
             loop {
@@ -45,10 +67,8 @@ pub fn connect(paths: &Paths, exe: &Path, app_root: &Path) -> std::io::Result<Un
                     break s;
                 }
                 if t0.elapsed() > Duration::from_secs(15) {
-                    return Err(std::io::Error::other(format!(
-                        "the hub did not start (see {})",
-                        paths.state.join("hub.err").display()
-                    )));
+                    let cause = crate::switch::last_line(&crate::switch::read_from(&err_file, err0), |_| true);
+                    return Err(std::io::Error::other(not_started(&cause, &err_file)));
                 }
                 std::thread::sleep(Duration::from_millis(100));
             }
@@ -139,5 +159,27 @@ pub fn request_retry(
             return r;
         }
         std::thread::sleep(Duration::from_millis(250));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The user's fresh install: a raw `Error: Custom { .. }` line in
+    /// hub.err becomes one human line with the cause and the log.
+    #[test]
+    fn a_hub_that_did_not_start_says_why_in_one_line() {
+        let log = Path::new("/h/.bise/hubs/x-0123abcd/hub.err");
+        let raw = r#"Error: Custom { kind: InvalidInput, error: "path must be shorter than SUN_LEN" }"#;
+        assert_eq!(
+            not_started(raw, log),
+            "the hub did not start: path must be shorter than SUN_LEN (its log: /h/.bise/hubs/x-0123abcd/hub.err)"
+        );
+        let os = r#"Error: Os { code: 48, kind: AddrInUse, message: "Address already in use" }"#;
+        assert!(not_started(os, log).starts_with("the hub did not start: Address already in use (its log: "));
+        assert_eq!(not_started("bise: disk full", log), "the hub did not start: bise: disk full (its log: /h/.bise/hubs/x-0123abcd/hub.err)");
+        assert_eq!(not_started("", log), "the hub did not start in 15 s (its log: /h/.bise/hubs/x-0123abcd/hub.err)");
+        assert!(!not_started(raw, log).contains('\n'));
     }
 }

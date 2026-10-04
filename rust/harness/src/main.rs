@@ -507,7 +507,17 @@ fn with_applet(argv0: Option<&std::ffi::OsStr>, rest: Vec<String>) -> Vec<String
     }
 }
 
-fn main() -> std::io::Result<()> {
+/// An error that ends bise: one human line on stderr (its Display, never
+/// the `Error: Custom { kind: .. }` Debug dump of a returned io::Error),
+/// exit 1.
+fn main() {
+    if let Err(e) = run_main() {
+        eprintln!("bise: {}", e);
+        std::process::exit(1);
+    }
+}
+
+fn run_main() -> std::io::Result<()> {
     // every mode (TUI, hub daemon, sb CLI): a panic leaves a log with its
     // backtrace, and a TUI gives the terminal back before it reports
     bend_tui::install_crash_hook();

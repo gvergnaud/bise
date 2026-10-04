@@ -2327,6 +2327,8 @@ fn boot_step(paths: &Paths, what: &str) {
 pub fn run(opts: Opts) -> std::io::Result<()> {
     let paths = opts.paths.clone();
     std::fs::create_dir_all(&paths.state)?;
+    // a state path too long for a unix socket: the short link first
+    paths.prepare_socket()?;
     // one hub per workspace
     if UnixStream::connect(paths.socket()).is_ok() {
         eprintln!("a hub is already running for {}", paths.workspace.display());
