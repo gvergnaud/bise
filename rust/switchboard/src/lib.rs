@@ -23,6 +23,7 @@ bise_home::test_home!();
 
 pub mod agents_md;
 pub mod approvals;
+pub mod artifacts;
 pub mod board;
 pub mod cli;
 pub mod client;
@@ -30,6 +31,7 @@ pub mod computer_use;
 pub mod core;
 pub mod daemon;
 pub mod devflow;
+pub mod diff;
 pub mod feature;
 pub mod flow;
 pub mod forge;

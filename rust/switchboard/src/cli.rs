@@ -73,6 +73,11 @@ pub const COMMANDS: &[CmdDoc] = &[
         "commit the files you changed (only yours, never another agent's) with that message. `--here`: on your place's branch (the shared folder: its branch, main). Without it, from a worktree: the branch is rebased on main, checked, and main moves to it (pushed when the repo says so); from the shared folder, the same as `--here`. A file another agent also changed is refused: main decides. New files: in a worktree you have alone, every new file not ignored is yours and lands; elsewhere, new files you made with bash (a generator, a download) land only with `--add <file or folder>`, and the land names the new files it left out.",
     ),
     cmd(
+        "sb artifact add <path or link> [--title \"<t>\"] [--kind <k>] | sb artifact list [<words>] [--agent <a>]",
+        Who::Everyone,
+        "artifacts: what you made for the user to look at (a doc, a sheet, a deck, a site, an image, a PR, a deploy), listed in the user's /artifacts with a copy of each version of a file (50 MB at most). `add` registers it, or its next version when the same path or link comes again, and prints its id; bise pages get in by themselves. Not the code you changed for a task (that's the commit), not scratch files. `list`: the ids, to link them.",
+    ),
+    cmd(
         "sb inspect main --origin",
         Who::Task,
         "the user message that led to your creation, verbatim, and main's turn up to the spawn.",
@@ -619,6 +624,35 @@ pub fn build(args: &[String]) -> Result<Value, String> {
             }
             req.insert("origin".into(), json!(o.contains_key("origin")));
         }
+        "artifact" => {
+            let usage = "usage: sb artifact add <path or link> [--title \"<t>\"] [--kind <k>] | sb artifact list [<words>] [--agent <a>]";
+            let (pos, o) = parse_args(rest, &["title", "kind", "agent"], &[])?;
+            match pos.first().map(String::as_str) {
+                Some("add") => {
+                    let target = match &pos[1..] {
+                        [t] => t.clone(),
+                        _ => return Err(usage.into()),
+                    };
+                    req.insert("do".into(), json!("add"));
+                    req.insert("target".into(), json!(target));
+                    let cwd = std::env::current_dir().map(|d| d.to_string_lossy().to_string()).unwrap_or_default();
+                    req.insert("cwd".into(), json!(cwd));
+                    for k in ["title", "kind"] {
+                        if o.contains_key(k) {
+                            req.insert(k.into(), json!(str_of(&o, k)));
+                        }
+                    }
+                }
+                Some("list") => {
+                    req.insert("do".into(), json!("list"));
+                    req.insert("words".into(), json!(pos[1..].join(" ")));
+                    if o.contains_key("agent") {
+                        req.insert("agent".into(), json!(str_of(&o, "agent").trim_start_matches('@')));
+                    }
+                }
+                _ => return Err(usage.into()),
+            }
+        }
         "help" | "--help" | "-h" => return Err(usage()),
         other => return Err(format!("unknown command: {}\n{}", other, usage())),
     }
@@ -636,7 +670,7 @@ pub fn render(cmd: &str, v: &Value) -> (bool, String) {
         return (false, e);
     }
     let text = match cmd {
-        "list" | "tasks" | "inspect" | "history" | "show" => s("text"),
+        "list" | "tasks" | "inspect" | "history" | "show" | "artifact" => s("text"),
         // issue #4: `sb send <task> --model <id>` alone: the hub's line
         "send" if s("cmd") == "switch" => s("text"),
         "send" => format!("sent {} to {} ({}, thread {})", s("message_id"), s("to"), s("delivery"), s("thread")),

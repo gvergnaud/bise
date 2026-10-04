@@ -10,6 +10,7 @@
 //!   every line of each feed, for the views, `sb inspect` and
 //!   `sb history`.
 
+mod art;
 mod features;
 mod gate;
 mod repl;
@@ -153,6 +154,17 @@ enum Msg {
     Land {
         line: Option<(String, String)>,
     },
+    /// An agent's changes, computed off the loop (`daemon/art.rs`).
+    Changes {
+        name: String,
+        v: Value,
+    },
+    /// An answer computed off the loop (a `diff`, the `branches`) for
+    /// one client.
+    ToClient {
+        id: ClientId,
+        v: Value,
+    },
     /// `keep`: leave the REPLs running for the next hub to adopt.
     Shutdown {
         keep: bool,
@@ -284,6 +296,8 @@ struct Shell {
     /// holds on the hub besides the `hello` clients: a page server gets
     /// a clone, and each open event stream holds one while it is open
     holds: crate::idle::Holds,
+    /// artifacts and diffs (`daemon/art.rs`, docs/artifacts.md)
+    art: art::Art,
 }
 
 /// What an agent whose turn was cut by a restart receives.
@@ -644,8 +658,10 @@ impl Shell {
             let res = crate::land::run(&job, &queue, &mut || {
                 let _ = txj.send(Msg::Land { line: None });
             });
+            let mut landed: Option<String> = None;
             let (body, line) = match res {
                 Ok(o) => {
+                    landed = art::landed_fields(&job.shared, &job.agent, &o.target, &o.sha, o.commits);
                     let mut text = crate::flow::land_line(&job.agent, o.commits, &o.target, &o.sha, o.pushed);
                     if let Some(e) = &o.push_error {
                         text = format!("{} ({})", text, e);
@@ -663,6 +679,10 @@ impl Shell {
             };
             write_json(&mut stream, &body);
             let _ = tx.send(Msg::Land { line: Some(line) });
+            // the ± door of the land, right after its line (docs/artifacts.md)
+            if let Some(f) = landed {
+                let _ = tx.send(Msg::Land { line: Some(("landed".to_string(), f)) });
+            }
         });
     }
 
@@ -693,6 +713,9 @@ impl Shell {
                 v["effort"] = json!(u.effort);
                 v["efforts"] = json!(u.model.efforts());
                 v["model_from"] = json!(u.model_from);
+                // the "± 9 files so far" door (docs/artifacts.md)
+                let name = v["name"].as_str().unwrap_or("").to_string();
+                v["changes"] = self.art.changes.get(&name).cloned().unwrap_or(Value::Null);
             }
         }
         snap
@@ -1794,6 +1817,7 @@ impl Shell {
             return;
         }
         self.feed(&name, line);
+        self.art_on_line(&name, line);
         if line == "--- idle" {
             let leftover = self
                 .repls
@@ -1824,6 +1848,7 @@ impl Shell {
     /// `ready`, the versions, in one write (thousands of lines: one
     /// syscall, not one per line).
     fn client_hello(&mut self, id: ClientId, mut stream: UnixStream) {
+        let art_ev = self.artifacts_ev();
         let mut out = String::new();
         let mut push = |v: &Value| {
             out.push_str(&v.to_string());
@@ -1845,6 +1870,7 @@ impl Shell {
         }
         push(&self.approvals_ev(false));
         push(&json!({"ev": "ready"}));
+        push(&art_ev);
         push(&self.version_items());
         if let Some(r) = self.release_hello() {
             push(&r);
@@ -1915,6 +1941,10 @@ impl Shell {
                 focus: s("focus"),
             }),
             "release" => self.release_op(id, &v),
+            // artifacts and diffs (docs/artifacts.md)
+            "artifacts" => self.artifacts_op(id, &v),
+            "diff" => self.diff_op(id, &v),
+            "branches" => self.branches_op(id),
             // shift+tab, `/approvals [yolo|auto]` (approvals-design.md §8)
             "approvals" => {
                 let m = match s("mode").as_str() {
@@ -2090,6 +2120,10 @@ impl Shell {
             }
             "history" | "show" => {
                 let body = self.search(cmd, &v);
+                write_json(&mut stream, &body);
+            }
+            "artifact" => {
+                let body = self.artifact_cmd(&from, &v);
                 write_json(&mut stream, &body);
             }
             _ => match AgentReq::from_json(&v) {
@@ -2462,6 +2496,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
             std::time::Instant::now(),
         ),
         holds: crate::idle::Holds::default(),
+        art: art::Art::default(),
     };
     match sh.idle.grace() {
         Some(g) => log_line(&paths, &format!("idle exit: after {} s without a UI, once nothing runs", g.as_secs())),
@@ -2752,6 +2787,12 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
             }
             Msg::Release { client, v } => sh.release_event(client, v),
             Msg::Update(v) => sh.update_event(v),
+            Msg::Changes { name, v } => sh.on_changes(name, v),
+            Msg::ToClient { id, v } => {
+                if let Some(c) = sh.clients.get_mut(&id) {
+                    write_json(c, &v);
+                }
+            }
             Msg::RoleLine { dir, key, line } => sh.step(Input::RoleLine { dir, key, line }),
             Msg::GateChecked { dir, n, req, out } => sh.on_checked(&dir, &n, *req, out),
             Msg::BuildEnded { rev } => {
