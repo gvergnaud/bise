@@ -54,6 +54,14 @@
     {
       "source": "/install",
       "destination": "/install.sh"
+    },
+    {
+      "source": "/artifacts",
+      "destination": "https://bise-artifacts.vercel.app/artifacts"
+    },
+    {
+      "source": "/artifacts/:path*",
+      "destination": "https://bise-artifacts.vercel.app/artifacts/:path*"
     }
   ],
   "redirects": [
