@@ -169,3 +169,28 @@ fn the_pr_row_offers_github_and_a_gone_file_says_the_copy_opens() {
     assert!(out.contains("subscriptions design · doc · by subs-lead (archived), sun 12:41 · its worktree is gone: ⏎ opens the copy bise kept"), "{out}");
     assert!(out.contains("r show in Finder"), "{out}");
 }
+
+/// The titles look like the thread's ↗ chips: the accent on the chip's
+/// light background, the column's blanks out of the chip; selected,
+/// bold; a gone file, struck through.
+#[test]
+fn titles_are_drawn_as_chips() {
+    use unicode_width::UnicodeWidthStr;
+    let tinted = matches!(crate::render::chip_form(), crate::render::ChipForm::Tinted);
+    let spans = title_spans("pricing page", &[], 20, false, false);
+    assert_eq!(spans.iter().map(|s| s.content.width()).sum::<usize>(), 20);
+    let chip = &spans[0].style;
+    if tinted {
+        assert_eq!((chip.fg, chip.bg), (Some(accent()), Some(theme::chip_bg())));
+        assert_eq!(spans[0].content, " pricing page ");
+    } else {
+        assert!(chip.add_modifier.contains(Modifier::BOLD));
+    }
+    assert_eq!(spans.last().unwrap().style, Style::default(), "the padding is not in the chip");
+    let sel = title_spans("pricing page", &[], 20, true, true);
+    assert!(sel[0].style.add_modifier.contains(Modifier::BOLD | Modifier::CROSSED_OUT));
+    // a long title is cut inside its column, one blank after the chip
+    let long = title_spans("a very long title that does not fit", &[2], 20, false, false);
+    assert_eq!(long.iter().map(|s| s.content.width()).sum::<usize>(), 20);
+    assert!(long.iter().any(|s| s.style.add_modifier.contains(Modifier::UNDERLINED)), "{long:?}");
+}

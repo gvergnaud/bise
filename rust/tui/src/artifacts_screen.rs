@@ -176,32 +176,61 @@ fn cols(width: usize) -> Cols {
     }
 }
 
-/// The title with the search's letters in the accent.
-fn title_spans(title: &str, hits: &[usize], w: usize, st: Style) -> Vec<Span<'static>> {
-    let shown = pad(title, w);
-    if hits.is_empty() {
-        return vec![Span::styled(shown, st)];
+/// The title as the thread's ↗ chips draw it (render::artifact_chip):
+/// tinted, the accent on the chip's light background with a blank on
+/// each side; bracketed (no tint), bold. Selected, bold; a gone file,
+/// struck through; the search's letters underlined. The rest of the
+/// column stays blank, out of the chip.
+fn title_spans(title: &str, hits: &[usize], w: usize, selected: bool, gone: bool) -> Vec<Span<'static>> {
+    let tinted = matches!(crate::render::chip_form(), crate::render::ChipForm::Tinted);
+    let mut st = if tinted {
+        Style::default().fg(accent()).bg(theme::chip_bg())
+    } else {
+        Style::default().fg(text()).add_modifier(Modifier::BOLD)
+    };
+    if selected {
+        st = st.add_modifier(Modifier::BOLD);
     }
+    if gone {
+        st = st.add_modifier(Modifier::CROSSED_OUT);
+    }
+    // tinted: a blank inside the chip on each side (the first one is the
+    // column the row's mark leaves, see `item_line`), one after it
+    let side = if tinted { " " } else { "" };
+    let room = w.saturating_sub(2 * side.len() + 1).max(1);
+    let shown = cut(title, room);
+    let hit_st = st.add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
+    let n = shown.chars().count() - usize::from(shown.width() < title.width());
+    let cells = side.chars().map(|c| (c, st)).chain(shown.chars().enumerate().map(|(i, c)| {
+        (c, if i < n && hits.contains(&i) { hit_st } else { st })
+    }));
     let mut out: Vec<Span<'static>> = Vec::new();
-    let hit_st = st.fg(accent()).add_modifier(Modifier::BOLD);
-    let n = cut(title, w).chars().count();
-    for (i, c) in shown.chars().enumerate() {
-        let s = if i < n && hits.contains(&i) { hit_st } else { st };
+    for (c, s) in cells.chain(side.chars().map(|c| (c, st))) {
         match out.last_mut() {
             Some(last) if last.style == s => last.content.to_mut().push(c),
             _ => out.push(Span::styled(c.to_string(), s)),
         }
     }
+    let used = shown.width() + 2 * side.len();
+    out.push(Span::raw(" ".repeat(w.saturating_sub(used))));
+    out.retain(|s| !s.content.is_empty());
     out
 }
 
 /// One artifact's row, its `v3`'s columns (from the row's start).
 fn item_line(a: &Artifact, hits: &[usize], selected: bool, c: &Cols, clock: &Clock, width: usize) -> (Line<'static>, Option<(u16, u16)>) {
-    let st = if selected { Style::default().fg(text()).add_modifier(Modifier::BOLD) } else { Style::default().fg(text()) };
     let d = Style::default().fg(dim());
-    let mark = if selected { Span::styled(format!("{} ", theme::glyph(theme::G_YOU)), Style::default().fg(accent())) } else { Span::raw("  ") };
+    // tinted, the chip's first blank takes the mark's second column: the
+    // title's letters stay where they were
+    let chip = matches!(crate::render::chip_form(), crate::render::ChipForm::Tinted);
+    let after = if chip { "" } else { " " };
+    let mark = if selected {
+        Span::styled(format!("{}{}", theme::glyph(theme::G_YOU), after), Style::default().fg(accent()))
+    } else {
+        Span::raw(format!(" {}", after))
+    };
     let mut spans = vec![mark];
-    spans.extend(title_spans(&a.title, hits, c.title, st));
+    spans.extend(title_spans(&a.title, hits, c.title + usize::from(chip), selected, a.gone));
     spans.push(Span::styled(pad(&a.kind_word(), c.kind), d));
     let age = Span::styled(pad(&clock.age(a.ts_ms, !c.wide), c.age), d);
     let agent = Span::styled(pad(&a.agent_words(), c.agent), d);
