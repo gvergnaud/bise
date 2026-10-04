@@ -232,20 +232,7 @@ impl Shell {
         let place = self.art_where(a);
         let (tx, name) = (self.tx.clone(), name.to_string());
         std::thread::spawn(move || {
-            let files = match &place {
-                Where::Checkout { dir, base } => {
-                    let base = base.clone().unwrap_or_else(|| diff::trunk(dir));
-                    diff::checkout(dir, &base).map(|(f, _, _)| f)
-                }
-                Where::Shared { dir, files } => diff::own_files(dir, files),
-            };
-            let v = match files {
-                Ok(f) if !f.is_empty() => {
-                    let (files, add, del) = diff::stat(&f);
-                    json!({"files": files, "add": add, "del": del})
-                }
-                _ => Value::Null,
-            };
+            let v = changes_of(&place);
             let _ = tx.send(Msg::Changes { name, v });
         });
     }
@@ -332,6 +319,28 @@ impl Shell {
                 .collect();
             let _ = tx.send(Msg::ToClient { id, v: json!({"ev": "branches", "base": base, "rows": rows}) });
         });
+    }
+}
+
+/// An agent's `changes` in the state: `{files, add, del}` of its
+/// checkout against its base (commits and uncommitted edits, untracked
+/// files included) or of its own files in the shared folder; null when
+/// there are none or git cannot say (a folder that is gone: diff.rs
+/// never runs git in it).
+fn changes_of(place: &Where) -> Value {
+    let files = match place {
+        Where::Checkout { dir, base } => {
+            let base = base.clone().unwrap_or_else(|| diff::trunk(dir));
+            diff::checkout(dir, &base).map(|(f, _, _)| f)
+        }
+        Where::Shared { dir, files } => diff::own_files(dir, files),
+    };
+    match files {
+        Ok(f) if !f.is_empty() => {
+            let (files, add, del) = diff::stat(&f);
+            json!({"files": files, "add": add, "del": del})
+        }
+        _ => Value::Null,
     }
 }
 
@@ -556,6 +565,32 @@ mod tests {
         let ev = diff_answer(Ask::Agent("t1".into(), Where::Shared { dir: wt.clone(), files: vec!["a.txt".into()] }, None, false), &shared, json!(1));
         no_git_fatal(&ev);
         let _ = std::fs::remove_dir_all(shared.parent().unwrap());
+    }
+
+    #[test]
+    fn changes_count_a_commit_and_an_uncommitted_edit() {
+        let root = std::env::temp_dir().join(format!("sb-art-changes-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (shared, wt) = (root.join("repo"), root.join("wt-t1"));
+        std::fs::create_dir_all(&shared).unwrap();
+        sh(&shared, &["init", "-q", "-b", "main"]);
+        std::fs::write(shared.join("README"), "hello\n").unwrap();
+        sh(&shared, &["add", "."]);
+        sh(&shared, &["commit", "-q", "-m", "init"]);
+        sh(&shared, &["worktree", "add", "-q", "-b", "sb/t1", wt.to_str().unwrap()]);
+        let place = Where::Checkout { dir: wt.clone(), base: None };
+        assert_eq!(changes_of(&place), Value::Null, "nothing yet");
+        std::fs::create_dir_all(wt.join("out")).unwrap();
+        std::fs::write(wt.join("out/plans.csv"), "plan,price\nfree,0\npro,20\n").unwrap();
+        sh(&wt, &["add", "out"]);
+        sh(&wt, &["commit", "-q", "-m", "plans"]);
+        std::fs::write(wt.join("README"), "hello\nmore\n").unwrap();
+        std::fs::write(wt.join("new.txt"), "x\n").unwrap();
+        assert_eq!(changes_of(&place), json!({"files": 3, "add": 5, "del": 0}));
+        // its folder gone: null, and no git in it
+        sh(&shared, &["worktree", "remove", "--force", wt.to_str().unwrap()]);
+        assert_eq!(changes_of(&place), Value::Null);
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

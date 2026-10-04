@@ -118,9 +118,16 @@ def main():
         c.wait(lambda: any(r["id"] == "weekly-update" for r in last_art(c)["rows"]), 60, "the page in the list")
         page = [r for r in last_art(c)["rows"] if r["id"] == "weekly-update"][0]
         check(page["kind"] == "page" and page["target"] == "http://127.0.0.1:47999/p/weekly-update", page)
-        c.wait(lambda: (c.agent("t1") or {}).get("changes"), 60, "t1's changes in the state")
-        ch = c.agent("t1")["changes"]
-        check(ch["files"] == 2 and ch["add"] >= 4, ch)
+        # t1 may have measured its changes already (an idle right after its
+        # artifact add: the csv alone, untracked, 1 file +2): wait for the
+        # measure of this turn, not the first one seen
+        def settled():
+            ch = (c.agent("t1") or {}).get("changes")
+            return ch and ch["files"] == 2 and ch["add"] >= 4
+        try:
+            c.wait(settled, 60, "t1's changes in the state")
+        except AssertionError:
+            check(False, "t1's changes: %r" % (c.agent("t1") or {}).get("changes"))
 
         c.send({"op": "diff", "req": 7, "agent": "t1"})
         c.wait(lambda: any(e.get("req") == 7 for e in evs(c, "diff")), 30, "the diff")
@@ -140,7 +147,8 @@ def main():
         c.send({"op": "diff", "req": 8, "branch": "no-such-branch"})
         c.wait(lambda: any(e.get("req") == 8 for e in evs(c, "diff")), 30, "the bad diff")
         bad = [e for e in evs(c, "diff") if e.get("req") == 8][0]
-        check(bad.get("error") and bad["files"] == [], bad)
+        check(bad.get("note") == "there's no branch named no-such-branch." and "error" not in bad
+              and bad["files"] == [], bad)
 
         ok = True
         print("artifacts_e2e: PASS")
