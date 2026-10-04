@@ -481,6 +481,152 @@ impl Shell {
         self.setup().in_use(if is_main { "main" } else { "agent" }, &choice)
     }
 
+    // ---- the model of a task, chosen at its spawn (issue #4) ----
+
+    /// Whether a provider can run a turn now: its key or its sign-in
+    /// (auth.json, the env, the .env files: the REPLs' own sources).
+    fn key_ready() -> impl Fn(&bise_catalog::Provider) -> bool {
+        let home = bise_home::Home::from_env();
+        let files = bise_catalog::auth::EnvFile::read_all(&home.env_files());
+        let store = bise_catalog::auth::Store::read(&home.auth_file()).unwrap_or_default();
+        move |p| {
+            let env = |k: &str| std::env::var(k).ok();
+            bise_catalog::auth::Keys { env: &env, store: &store, files: &files }.ready(p)
+        }
+    }
+
+    /// A line of the hub in an agent's thread (`sb info : ...`).
+    fn info_line(&mut self, agent: &str, text: &str) {
+        self.feed(agent, &format!("sb info : {}", wire_escape(text)));
+    }
+
+    /// `sb spawn ... --model/--effort/--profile`: pick what the new task
+    /// runs on (the agents default when the ask cannot run), write its
+    /// choice file before its first call, put the fallback's line at the
+    /// top of its thread. The words of main's answer (`on gpt-9 · low`).
+    fn spawn_model(&mut self, agent: &str, ask: &bise_catalog::spawn::Ask) -> String {
+        let Some(dir) = self.dir_of(agent) else { return String::new() };
+        let ready = Self::key_ready();
+        let pick = self.setup().spawn_pick(ask, &ready);
+        if let Err(e) = pick.choice.write(&self.choice_path(&dir)) {
+            log_line(&self.opts.paths, &format!("{}: its model choice is not saved: {}", agent, e));
+        }
+        if !pick.choice.model.is_empty() {
+            self.hub.model_trial.insert(agent.to_string());
+        }
+        if !pick.line.is_empty() {
+            self.info_line(agent, &pick.line);
+        }
+        log_line(&self.opts.paths, &format!("{}: spawned {}", agent, pick.answer));
+        self.refresh_models();
+        pick.answer
+    }
+
+    /// `sb send <task> --model <id> [--effort <e>]`: the task's choice
+    /// from its next turn, a line in its thread. Unlike the spawn, a model
+    /// that cannot run is refused (the task keeps its model): main asked
+    /// a running task to move, it hears why not.
+    fn switch_model(&mut self, from: &str, to: &str, model: &str, effort: &str) -> Result<String, String> {
+        let dir = self.dir_of(to).ok_or_else(|| format!("unknown agent: {}", to))?;
+        let ready = Self::key_ready();
+        let ask = bise_catalog::spawn::Ask { model: model.into(), effort: effort.into(), profile: String::new() };
+        let mut pick = self.setup().spawn_pick(&ask, &ready);
+        if !pick.choice.why.is_empty() {
+            return Err(format!("@{} stays on its model: asked {}: {}", to, pick.choice.asked, pick.choice.why));
+        }
+        let before = bise_catalog::Choice::read(&self.choice_path(&dir));
+        if model.trim().is_empty() {
+            // an effort alone: on the model it runs now
+            pick.choice.model = before.model.clone();
+            let ask2 = bise_catalog::spawn::Ask { model: before.model.clone(), effort: effort.into(), profile: String::new() };
+            if !before.model.is_empty() {
+                pick = self.setup().spawn_pick(&ask2, &ready);
+            }
+        }
+        pick.choice.by = "sb send --model".into();
+        pick.choice.write(&self.choice_path(&dir)).map_err(|e| format!("@{}'s choice is not saved: {}", to, e))?;
+        let used = self.in_use(&dir, false);
+        let on = bise_catalog::names::with_effort(&used.model.name, &used.effort);
+        let by = if from == MAIN { "main".to_string() } else { from.to_string() };
+        self.info_line(to, &format!("{} moved this agent to {}, from its next turn.", by, on));
+        if !pick.choice.model.is_empty() {
+            self.hub.model_trial.insert(to.to_string());
+        }
+        self.refresh_models();
+        if self.repls.contains_key(&dir) {
+            // another context window: the compaction threshold follows
+            self.reload_repls.insert(dir);
+        }
+        let note = if pick.choice.note.is_empty() { String::new() } else { format!(" ({})", pick.choice.note) };
+        Ok(format!("@{} moves to {}, from its next turn{}", to, on, note))
+    }
+
+    /// The provider refused the model a task was spawned on, before any
+    /// turn of it ended well: the agents default, a line in its thread,
+    /// a word to main, and its turn starts again.
+    fn model_refused(&mut self, agent: &str, why: &str) {
+        let Some(dir) = self.dir_of(agent) else { return };
+        let path = self.choice_path(&dir);
+        let before = bise_catalog::Choice::read(&path);
+        let asked = before.model.clone();
+        let choice = bise_catalog::Choice { asked: asked.clone(), why: why.to_string(), ..Default::default() };
+        if let Err(e) = choice.write(&path) {
+            log_line(&self.opts.paths, &format!("{}: its model choice is not saved: {}", agent, e));
+        }
+        let used = self.in_use(&dir, false);
+        let on = bise_catalog::names::with_effort(&used.model.name, &used.effort);
+        let short = bise_catalog::names::long_name(&asked);
+        let text = format!("asked for {}: {}. running on {}, the agents default.", short, why, on);
+        self.info_line(agent, &text);
+        log_line(&self.opts.paths, &format!("{}: {}", agent, text));
+        self.refresh_models();
+        // main hears it as a report of the task (its spawn answer named the
+        // model it asked), and the task's turn starts again on the default
+        let report = AgentReq::Report { kind: "progress".into(), summary: text.clone(), decisions: Vec::new() };
+        self.step(Input::Agent { token: 0, from: agent.to_string(), req: report });
+        self.step(Input::Agent {
+            token: 0,
+            from: MAIN.to_string(),
+            req: AgentReq::Send {
+                to: agent.to_string(),
+                text: format!("bise: {} your turn starts again on it: carry on with your task.", text),
+                expect_reply: false,
+                reply_to: None,
+                queued: true,
+                why: String::new(),
+                switch: None,
+            },
+        });
+        let snap = self.snapshot();
+        self.broadcast(&snap);
+    }
+
+    /// Each agent's model for `sb list`, `sb tasks` and the roster
+    /// (issue #4): its tag and its `model:` line, from its choice file.
+    fn refresh_models(&mut self) {
+        let who: Vec<(String, String, bool)> =
+            self.hub.st.agents.values().map(|a| (a.name.clone(), a.dir.clone(), a.is_main)).collect();
+        self.setup(); // re-read when config.toml changed
+        let setup = &self.setup.as_ref().expect("just set").1;
+        let used: Vec<(String, bise_catalog::InUse, bise_catalog::Choice)> = who
+            .iter()
+            .map(|(name, dir, main)| {
+                let c = bise_catalog::Choice::read(&self.choice_path(dir));
+                (name.clone(), setup.in_use(if *main { "main" } else { "agent" }, &c), c)
+            })
+            .collect();
+        let others: Vec<&str> = used.iter().map(|(_, u, _)| u.model.name.as_str()).collect();
+        let models: crate::board::Models = used
+            .iter()
+            .map(|(n, u, c)| {
+                // whole: the roster sizes its column (board::roster)
+                let tag = bise_catalog::names::tag(&u.model.name, &u.effort, &others, "·", usize::MAX);
+                (n.clone(), (tag, setup.model_line(c)))
+            })
+            .collect();
+        self.hub.models = models;
+    }
+
     /// The client snapshot with each agent's model and effort: its full
     /// id, the effort ("" when the model takes none), and the words it
     /// takes (the `/reasoning` list).
@@ -521,6 +667,8 @@ impl Shell {
     }
 
     fn snapshot(&mut self) -> Value {
+        // issue #4: each agent's model, for sb list / sb tasks too
+        self.refresh_models();
         // the repo's flow, as config.toml says now (flow-prompts saves it)
         self.hub.flow = crate::flow::FlowConfig::load(&self.opts.paths).mode;
         // pr-news: whose bots' comments reach the agents (`[pr] trusted_bots`)
@@ -594,6 +742,8 @@ impl Shell {
                 return format!("{} is not usable yet (needs {})", r.name, r.needs);
             }
             choice.model = r.name.clone();
+            // the user's pick: no longer the spawn's ask nor its fallback
+            choice = bise_catalog::Choice { model: choice.model, effort: choice.effort, ..Default::default() };
         }
         if let Some(e) = &effort {
             let target = match &model {
@@ -946,6 +1096,27 @@ impl Shell {
                 self.broadcast(&snap);
                 self.switch_idle_repls();
             }
+            Effect::SpawnModel { token, agent, ask, mut body } => {
+                body["model"] = json!(self.spawn_model(&agent, &ask));
+                if let Some(mut s) = self.replies.remove(&token) {
+                    write_json(&mut s, &body);
+                }
+                let snap = self.snapshot();
+                self.broadcast(&snap);
+            }
+            Effect::Switch { token, from, to, model, effort } => {
+                let res = self.switch_model(&from, &to, &model, &effort);
+                if let Some(mut s) = token.and_then(|t| self.replies.remove(&t)) {
+                    let body = match &res {
+                        Ok(text) => json!({"ok": true, "cmd": "switch", "text": text}),
+                        Err(e) => json!({"ok": false, "error": e}),
+                    };
+                    write_json(&mut s, &body);
+                }
+                let snap = self.snapshot();
+                self.broadcast(&snap);
+            }
+            Effect::ModelRefused { agent, why } => self.model_refused(&agent, &why),
             Effect::Pr(e) => log_line(&self.opts.paths, &crate::forge::log_line(&e)),
             Effect::Merge { card, place, number, head, method } => self.merge_pr(card, place, number, head, method),
             Effect::Feature { token, op, name, agents } => self.feature(token, op, name, agents),

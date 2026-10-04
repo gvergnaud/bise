@@ -57,80 +57,17 @@ pub(crate) fn lacks_vision(model: &str) -> bool {
 
 // ---- the model and effort shown (BISE-135) ----
 
-/// A model's name for people: its id without the provider, the date or
-/// build suffix, `-latest` and the `claude-`/`zai-` prefix, version
-/// digits joined: `foundry/claude-opus-5-5` -> `opus 5.5`,
-/// `mistral/devstral-medium-2509` -> `devstral-medium`, `openai/gpt-5.1-codex`
-/// -> `gpt-5.1-codex`.
+/// A model's name for people (`foundry/claude-opus-5-5` -> `opus 5.5`):
+/// [`bise_catalog::names::long_name`], the hub's `sb list` uses it too.
 pub(crate) fn long_name(model: &str) -> String {
-    let id = model.rsplit('/').next().unwrap_or(model);
-    let mut parts: Vec<&str> = id.split('-').filter(|p| !p.is_empty()).collect();
-    while parts.len() > 1 {
-        let last = parts[parts.len() - 1];
-        let dated = last.len() >= 4 && last.chars().all(|c| c.is_ascii_digit());
-        if last == "latest" || dated {
-            parts.pop();
-        } else {
-            break;
-        }
-    }
-    if parts.len() > 1 && matches!(parts[0], "claude" | "zai") {
-        parts.remove(0);
-    }
-    // the trailing one-digit groups are a version: opus-5-5 -> opus 5.5
-    let digits = |p: &str| !p.is_empty() && p.len() <= 2 && p.chars().all(|c| c.is_ascii_digit());
-    let n = parts.iter().rev().take_while(|p| digits(p)).count();
-    if n > 0 && n < parts.len() {
-        let (head, ver) = parts.split_at(parts.len() - n);
-        return format!("{} {}", head.join("-"), ver.join("."));
-    }
-    parts.join("-")
+    bise_catalog::names::long_name(model)
 }
 
-/// A model's family: the first word of its [`long_name`], with its
-/// version when that is glued to it (`gpt-5.1`, `gemini-2.5`): `opus`,
-/// `devstral`, `glm`.
-pub(crate) fn family(model: &str) -> String {
-    let long = long_name(model);
-    let head = long.split(' ').next().unwrap_or("");
-    let mut words = head.split('-');
-    let first = words.next().unwrap_or("").to_string();
-    match words.next() {
-        Some(v) if v.starts_with(|c: char| c.is_ascii_digit()) => format!("{}-{}", first, v),
-        _ => first,
-    }
-}
-
-/// The short form of an effort: lo, med, hi, max; `off` for none.
-pub(crate) fn short_effort(effort: &str) -> &str {
-    match effort {
-        "low" => "lo",
-        "medium" => "med",
-        "high" => "hi",
-        "none" => "off",
-        e => e,
-    }
-}
-
-/// The panel's tag, `opus·hi` (ASCII `opus.hi`): the family (with its
-/// version when `others` run another model of the same family), cut to
-/// 10 columns; the effort's short form after a middle dot, none when
-/// the model takes none.
+/// The panel's tag, `opus·hi` (ASCII `opus.hi`):
+/// [`bise_catalog::names::tag`], the same as `sb list`'s.
 pub(crate) fn tag(model: &str, effort: &str, others: &[&str]) -> String {
-    if model.is_empty() {
-        return String::new();
-    }
-    let fam = family(model);
-    let clash = others.iter().any(|o| !o.is_empty() && *o != model && family(o) == fam);
-    let mut name = if clash { long_name(model).replace(' ', "") } else { fam };
-    if name.chars().count() > 10 {
-        name = name.chars().take(9).collect::<String>() + "…";
-    }
-    if effort.is_empty() {
-        return name;
-    }
     let dot = if crate::theme::ascii_mode() { "." } else { "·" };
-    format!("{}{}{}", name, dot, short_effort(effort))
+    bise_catalog::names::tag(model, effort, others, dot, 10)
 }
 
 /// The efforts a model takes and the one it gets by default (the
@@ -362,6 +299,7 @@ mod tests {
         assert_eq!(long_name("openai/gpt-5.1-codex"), "gpt-5.1-codex");
         assert_eq!(long_name("mistral/zai-glm-5-3"), "glm 5.3");
         assert_eq!(long_name("anthropic/claude-3-5-sonnet-20241022"), "3-5-sonnet");
+        let family = bise_catalog::names::family;
         assert_eq!(family("foundry/claude-opus-5-5"), "opus");
         assert_eq!(family("openai/gpt-5.1-codex"), "gpt-5.1");
         assert_eq!(family("mistral/devstral-medium-2509"), "devstral");

@@ -851,6 +851,8 @@ class H(http.server.BaseHTTPRequestHandler):
         last = [m for m in conv if m["role"] == "user"]
         with open(LOG, "a") as f:
             f.write(json.dumps({"agent": agent, "last_user": (last[-1]["text"] if last else "")[:3000],
+                                # the model asked (issue #4: a task's own model)
+                                "model": model, "status": status,
                                 "user": u["text"][:3000], "reply": openai_view(turn),
                                 # BISE-240: a long user text past the 3000 kept above
                                 "user_len": len(u["text"]), "user_tail": u["text"][-300:],

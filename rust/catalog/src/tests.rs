@@ -722,12 +722,12 @@ fn a_session_choice_wins_over_config_and_env() {
     assert_eq!((agent.model.name.as_str(), agent.model_from), ("mistral/zai-glm-5-3", "config"));
     assert_eq!((agent.effort.as_str(), agent.effort_from), ("high", "model"));
     // the session's choice first, aliases resolved
-    let c = Choice { model: "opus-5.5".into(), effort: "max".into() };
+    let c = Choice { model: "opus-5.5".into(), effort: "max".into(), ..Default::default() };
     let u = s.in_use("agent", &c);
     assert_eq!((u.model.name.as_str(), u.model_from), ("foundry/claude-opus-5-5", "session"));
     assert_eq!((u.effort.as_str(), u.effort_from), ("max", "session"));
     // an effort alone keeps the role's model
-    let e = s.in_use("main", &Choice { model: String::new(), effort: "low".into() });
+    let e = s.in_use("main", &Choice { model: String::new(), effort: "low".into(), ..Default::default() });
     assert_eq!((e.model.name.as_str(), e.effort.as_str()), ("openai/gpt-5", "low"));
     // agent_reasoning_effort for the sub-agents only
     let s = setup("model = \"opus-5.5\"\nreasoning_effort = \"low\"\nagent_reasoning_effort = \"max\"\n");
@@ -740,13 +740,14 @@ fn a_choice_round_trips_through_its_file() {
     let dir = std::env::temp_dir().join(format!("bise-choice-{}", std::process::id()));
     let path = dir.join("agent/choice.toml");
     assert_eq!(Choice::read(&path), Choice::default(), "no file: nothing picked");
-    let c = Choice { model: "anthropic/claude-sonnet-4-5".into(), effort: "low".into() };
+    let c = Choice { model: "anthropic/claude-sonnet-4-5".into(), effort: "low".into(), ..Default::default() };
     c.write(&path).unwrap();
     assert_eq!(Choice::read(&path), c);
     let text = std::fs::read_to_string(&path).unwrap();
     assert!(text.contains("model = \"anthropic/claude-sonnet-4-5\"\nreasoning_effort = \"low\"\n"), "{text}");
-    Choice { model: String::new(), effort: "max".into() }.write(&path).unwrap();
-    assert_eq!(Choice::read(&path), Choice { model: String::new(), effort: "max".into() });
+    let c = Choice { model: String::new(), effort: "max".into(), ..Default::default() };
+    c.write(&path).unwrap();
+    assert_eq!(Choice::read(&path), c);
     let _ = std::fs::remove_dir_all(&dir);
 }
 

@@ -151,6 +151,7 @@ impl T {
                 with_changes: false,
                 place: String::new(),
                 feature: String::new(),
+                ask: Default::default(),
             },
         );
         assert!(
@@ -262,6 +263,7 @@ fn the_board_of_main_follows_the_tasks() {
             with_changes: false,
             place: String::new(),
             feature: String::new(),
+            ask: Default::default(),
         },
     );
     let ctx = fx
@@ -334,6 +336,7 @@ fn ask_waits_for_the_reply() {
             reply_to: Some(id),
             queued: false,
             why: String::new(),
+            switch: None,
         },
     );
     let r = reply(&fx, tok).expect("the wait ends");
@@ -385,6 +388,7 @@ fn a_waiting_agent_says_who_it_waits_on() {
             reply_to: Some(id),
             queued: false,
             why: String::new(),
+            switch: None,
         },
     );
     assert!(reply(&fx, tok).is_some(), "the wait ends");
@@ -703,6 +707,7 @@ fn answering_in_the_task_view_answers_its_question() {
             reply_to: None,
             queued: false,
             why: String::new(),
+            switch: None,
         },
     );
     let id = t
@@ -792,6 +797,7 @@ fn peers_cannot_reach_an_archived_task_but_the_user_can() {
             reply_to: None,
             queued: false,
             why: String::new(),
+            switch: None,
         },
     );
     assert!(reply(&fx, tok).unwrap()["error"]
@@ -916,6 +922,7 @@ fn journal_replay_rebuilds_the_same_state() {
             with_changes: false,
             place: String::new(),
             feature: String::new(),
+            ask: Default::default(),
         },
     );
     record(fx);
@@ -1068,6 +1075,7 @@ fn many_task_messages_always_reach_main() {
                 reply_to: None,
                 queued: false,
                 why: String::new(),
+                switch: None,
             },
         );
         assert!(say_to(&fx, MAIN).is_some(), "message {} held: {:?}", i, fx);
@@ -1105,6 +1113,7 @@ fn a_user_message_to_main_starts_with_the_task_status() {
             reply_to: None,
             queued: false,
             why: String::new(),
+            switch: None,
         },
     );
     let s = steer_to(&fx, MAIN).or_else(|| say_to(&fx, MAIN)).unwrap();
@@ -1128,6 +1137,7 @@ fn sb_tasks_details_every_task() {
             reply_to: None,
             queued: false,
             why: String::new(),
+            switch: None,
         },
     );
     let (tok, fx) = t.req(MAIN, AgentReq::Tasks);
@@ -1179,6 +1189,7 @@ fn agents_talk_as_long_as_they_want() {
                 reply_to: last,
                 queued: false,
                 why: String::new(),
+                switch: None,
             },
         );
         assert_eq!(reply(&fx, tok).unwrap()["ok"], true, "message {}", i);
@@ -1203,6 +1214,7 @@ fn send(t: &mut T, from: &str, to: &str, text: &str, queued: bool) -> (u64, Vec<
             reply_to: None,
             queued,
             why: String::new(),
+            switch: None,
         },
     )
 }
@@ -1293,6 +1305,7 @@ fn a_queued_message_does_not_end_a_wait() {
             reply_to: Some(q),
             queued: true,
             why: String::new(),
+            switch: None,
         },
     );
     assert!(
@@ -1320,6 +1333,7 @@ fn docs_question_card(t: &mut T) -> (u64, u64) {
             reply_to: None,
             queued: false,
             why: String::new(),
+            switch: None,
         },
     );
     let id = t
@@ -1359,6 +1373,7 @@ fn main_cannot_answer_an_escalated_question_only_the_user_can() {
             reply_to: None,
             queued: false,
             why: String::new(),
+            switch: None,
         },
     );
     assert!(t.hub.st.cards.contains_key(&card));
@@ -1375,6 +1390,7 @@ fn main_cannot_answer_an_escalated_question_only_the_user_can() {
             reply_to: Some(id),
             queued: false,
             why: String::new(),
+            switch: None,
         },
     );
     let e = err_of(&fx, tok);
@@ -1392,6 +1408,7 @@ fn main_cannot_answer_an_escalated_question_only_the_user_can() {
             reply_to: Some(id),
             queued: false,
             why: String::new(),
+            switch: None,
         },
     );
     let e = err_of(&fx, tok);
@@ -1421,6 +1438,7 @@ fn agent_traffic_never_reaches_the_user_inbox() {
                 reply_to: None,
                 queued: false,
                 why: String::new(),
+                switch: None,
             },
         )
     };
@@ -1465,6 +1483,7 @@ fn main_withdraws_its_own_card_with_a_why() {
             reply_to: Some(id),
             queued: false,
             why: String::new(),
+            switch: None,
         },
     );
     assert_eq!(reply(&fx, tok).unwrap()["ok"], true, "{:?}", fx);
@@ -1518,6 +1537,7 @@ fn question_then_reply(t: &mut T, queued: bool) -> (u64, u64) {
             reply_to: None,
             queued: false,
             why: String::new(),
+            switch: None,
         },
     );
     let q = t.hub.st.msgs.values().find(|m| m.text == "v1 ou v2 ?").unwrap().id;
@@ -1530,6 +1550,7 @@ fn question_then_reply(t: &mut T, queued: bool) -> (u64, u64) {
             reply_to: Some(q),
             queued,
             why: String::new(),
+            switch: None,
         },
     );
     let r = t.hub.st.msgs.values().find(|m| m.text == "v2").unwrap().id;
@@ -1663,6 +1684,7 @@ fn spawn_in(t: &mut T, name: &str, place: &str) -> (u64, Vec<Effect>) {
             with_changes: false,
             place: if place == "new" { String::new() } else { place.into() },
             feature: String::new(),
+            ask: Default::default(),
         },
     )
 }
@@ -1813,6 +1835,7 @@ fn a_restored_idle_task_gets_its_queued_mail() {
             reply_to: None,
             queued: true,
             why: String::new(),
+            switch: None,
         },
     );
     t.req(
@@ -1848,6 +1871,73 @@ fn a_failed_turn_of_a_task_reaches_main() {
         "{:?}",
         fx
     );
+}
+
+/// Issue #4: a spawn that asks for a model waits for the daemon's pick
+/// (`SpawnModel`, its answer inside); one that asks nothing is answered
+/// as before.
+#[test]
+fn a_spawn_with_a_model_is_answered_by_the_daemons_pick() {
+    let mut t = T::new();
+    let spawn = |name: &str, model: &str| AgentReq::Spawn {
+        name: name.into(),
+        brief: Brief { objective: "o".into(), ..Brief::default() },
+        worktree: false,
+        with_changes: false,
+        place: String::new(),
+        feature: String::new(),
+        ask: bise_catalog::spawn::Ask { model: model.into(), ..Default::default() },
+    };
+    let (tok, fx) = t.req(MAIN, spawn("fast", "mistral/mistral-small-latest"));
+    let picked = fx.iter().find_map(|e| match e {
+        Effect::SpawnModel { token, agent, ask, body } if *token == tok => Some((agent.clone(), ask.model.clone(), body.clone())),
+        _ => None,
+    });
+    let (agent, model, body) = picked.unwrap_or_else(|| panic!("{:?}", fx));
+    assert_eq!((agent.as_str(), model.as_str(), body["ok"].clone()), ("fast", "mistral/mistral-small-latest", json!(true)));
+    assert!(reply(&fx, tok).is_none(), "{:?}", fx);
+    let (tok, fx) = t.req(MAIN, spawn("plain", ""));
+    assert!(reply(&fx, tok).is_some_and(|b| b["ok"] == true), "{:?}", fx);
+    assert!(!fx.iter().any(|e| matches!(e, Effect::SpawnModel { .. })), "{:?}", fx);
+}
+
+/// Issue #4: a task's first turn on a model asked at its spawn, refused
+/// by the provider: the daemon moves it (`ModelRefused`), main gets no
+/// turn-failed report. Any other failure, or a later turn, reports as before.
+#[test]
+fn a_refused_spawn_model_moves_the_task_instead_of_failing() {
+    let mut t = T::new();
+    t.spawn_task("big");
+    t.hub.model_trial.insert("big".into());
+    let fx = t.go(Input::ReplLine {
+        agent: "big".into(),
+        line: "  obs: turn_done: failed: Mistral refused the request (404). check the model name and the provider URL. Mistral said: \"no such model\"".into(),
+    });
+    assert!(
+        fx.iter().any(|e| matches!(e, Effect::ModelRefused { agent, why } if agent == "big" && why == "the provider refused it (404)")),
+        "{:?}",
+        fx
+    );
+    assert!(say_to(&fx, MAIN).is_none(), "no turn-failed report: {:?}", fx);
+    assert!(!t.hub.model_trial.contains("big"));
+    // the trial is over: the next failure is a failure
+    let fx = t.go(Input::ReplLine {
+        agent: "big".into(),
+        line: "  obs: turn_done: failed: Mistral refused the request (404).".into(),
+    });
+    assert!(!fx.iter().any(|e| matches!(e, Effect::ModelRefused { .. })), "{:?}", fx);
+}
+
+#[test]
+fn model_refusal_reads_the_refusals_of_a_model() {
+    let r = |s: &str| model_refusal(s);
+    assert_eq!(r("failed: OpenAI refused the key (401). check it with /setup.").as_deref(), Some("the provider refused it (401)"));
+    assert_eq!(r("failed: the provider refused the request (400). x said: \"model\"").as_deref(), Some("the provider refused it (400)"));
+    assert_eq!(r("failed: Mistral refused the request (429)."), None);
+    assert_eq!(r("failed: Mistral refused the request (500)."), None);
+    assert_eq!(r("failed: Anthropic refused the request (400). the request is too large."), None);
+    assert_eq!(r("failed: provider failed after 10 attempts: cannot reach api"), None);
+    assert_eq!(r("completed"), None);
 }
 
 #[test]
@@ -1907,6 +1997,7 @@ fn send_v2(t: &mut T, from: &str, to: &str, text: &str, expect: bool, reply_to: 
             reply_to,
             queued: false,
             why: why.into(),
+            switch: None,
         },
     );
     let r = reply(&fx, tok).expect("send answers");
@@ -1996,6 +2087,7 @@ fn main_answering_a_question_is_answered() {
             reply_to: None,
             queued: false,
             why: String::new(),
+            switch: None,
         },
     );
     t.turn(MAIN, "thinking");
@@ -2019,6 +2111,7 @@ fn main_answering_a_question_is_answered() {
             reply_to: None,
             queued: false,
             why: String::new(),
+            switch: None,
         },
     );
     let q2 = t.hub.st.msgs.values().filter(|m| m.from == "docs" && m.to == MAIN).map(|m| m.id).max().unwrap();
@@ -2082,6 +2175,7 @@ fn a_message_the_user_cannot_deliver_says_so() {
             reply_to: None,
             queued: false,
             why: String::new(),
+            switch: None,
         },
     );
     assert!(fx.iter().all(|e| !matches!(e, Effect::Line { line, .. } if line.starts_with("sb undelivered"))), "{:?}", fx);
@@ -2364,7 +2458,7 @@ fn bench_step() {
     let t0 = std::time::Instant::now();
     for _ in 0..10 {
         for n in &active {
-            let _ = if n == MAIN { board::main_context(&h.st, env.now) } else { board::task_context(&h.st, n, env.now) };
+            let _ = if n == MAIN { board::main_context(&h.st, env.now) } else { board::task_context(&h.st, n, env.now, &h.models) };
         }
     }
     eprintln!("refresh_contexts alone: {:?}", t0.elapsed() / 10);
@@ -2539,6 +2633,7 @@ mod prs {
                 with_changes: false,
                 place: String::new(),
                 feature: String::new(),
+                ask: Default::default(),
             },
         );
         assert!(fx.iter().any(|e| matches!(e, Effect::Spawn { agent, .. } if agent == name)), "{:?}", fx);
@@ -3190,6 +3285,7 @@ mod prs {
                 with_changes: false,
                 place: String::new(),
                 feature: String::new(),
+                ask: Default::default(),
             },
         );
         assert!(!fx.iter().any(|e| matches!(e, Effect::Spawn { agent, .. } if agent == "github")), "{:?}", fx);

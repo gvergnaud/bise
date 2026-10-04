@@ -8,6 +8,12 @@ use crate::prompts::relation;
 use crate::util::{age, clip, one_line};
 use std::collections::BTreeMap;
 
+/// Each agent's model (issue #4), by name: its short tag (`opus·hi`, the
+/// TUI panel's) for `sb list` and the roster, and its `model:` line for
+/// `sb tasks` (`openai/gpt-9 · low (profile fast)`). The daemon fills it
+/// from the agents' choice files; an agent missing from it shows none.
+pub type Models = BTreeMap<String, (String, String)>;
+
 fn ws_label(a: &Agent) -> String {
     match a.ws.mode {
         Mode::Worktree if a.ws.dropped => " [worktree dropped]".to_string(),
@@ -227,7 +233,7 @@ pub fn status_block(st: &State, now: u64) -> String {
 }
 
 /// `sb tasks`: every task in detail, for main (and anyone).
-pub fn tasks_detail(st: &State, now: u64) -> String {
+pub fn tasks_detail(st: &State, now: u64, models: &Models) -> String {
     let mut out: Vec<String> = Vec::new();
     for a in st.tasks() {
         let mut b = vec![format!(
@@ -249,6 +255,9 @@ pub fn tasks_detail(st: &State, now: u64) -> String {
             age(a.created_ms, now),
             a.parent.clone().unwrap_or_default()
         )];
+        if let Some((_, line)) = models.get(&a.name) {
+            b.push(format!("model: {}", line));
+        }
         b.push(format!(
             "objective: {}",
             clip(&one_line(&a.brief.objective), 300)
@@ -346,8 +355,9 @@ pub fn tasks_detail(st: &State, now: u64) -> String {
 
 /// The group roster, as `name` sees it (`sb list`, and the context of a
 /// task).
-pub fn roster(st: &State, viewer: &str, now: u64) -> Vec<String> {
+pub fn roster(st: &State, viewer: &str, now: u64, models: &Models) -> Vec<String> {
     let viewer_parent = st.agents.get(viewer).and_then(|a| a.parent.clone());
+    let width = models.values().map(|(t, _)| t.chars().count().min(18)).max().unwrap_or(0);
     st.order
         .iter()
         .filter_map(|n| st.agents.get(n))
@@ -373,12 +383,16 @@ pub fn roster(st: &State, viewer: &str, now: u64) -> Vec<String> {
                 .filter(|(_, n)| !n.is_empty())
                 .map(|(_, n)| format!(" — {}", clip(&one_line(n), 60)))
                 .unwrap_or_default();
+            // its model's tag, a column of its own (issue #4): as wide as
+            // the longest tag (at most 18), a name never cut mid-word
+            let model = models.get(&a.name).map(|(t, _)| format!("{:<w$} ", clip(t, 18), w = width)).unwrap_or_default();
             format!(
-                "{:<24} {:<6} {:<9} {:>4}  {}{}",
+                "{:<24} {:<6} {:<9} {:>4}  {}{}{}",
                 a.name,
                 rel,
                 a.status().as_str(),
                 age(if a.is_main { now } else { a.created_ms }, now),
+                model,
                 clip(&a.description(), 70),
                 note
             )
@@ -387,12 +401,12 @@ pub fn roster(st: &State, viewer: &str, now: u64) -> Vec<String> {
 }
 
 /// The block appended to every model request of a task.
-pub fn task_context(st: &State, name: &str, now: u64) -> String {
+pub fn task_context(st: &State, name: &str, now: u64, models: &Models) -> String {
     let mut s = format!(
         "<bise_state>\nLive state injected by bise before this call (not a user message). You are `{}`.\n<group>\n",
         name
     );
-    for l in roster(st, name, now) {
+    for l in roster(st, name, now, models) {
         s.push_str(&l);
         s.push('\n');
     }
@@ -497,7 +511,7 @@ mod tests {
     #[test]
     fn a_task_sees_its_relations() {
         let st = state();
-        let r = roster(&st, "docs", 0);
+        let r = roster(&st, "docs", 0, &Models::new());
         assert!(
             r.iter()
                 .any(|l| l.starts_with("main") && l.contains("parent")),
