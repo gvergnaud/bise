@@ -17,6 +17,9 @@ real `sb artifact add`, tmux at 150 and 80 columns.
       composer (its f opens nothing), the bar ends `ctrl+g close`; a
       click in the panel takes the keys, esc closes it; ctrl+g opens and
       closes; at 80 the diff takes the screen, esc closes it
+  t1 lands: its door opens that land; its worktree removed by hand, a
+      click on its ψ never shows git's fatal: its branch vs main, then
+      (branch deleted) `t1's folder is gone · show what it landed last`
 
 ART_SHOTS=<dir> keeps the captures (.txt and .ansi) for the designer.
 
@@ -325,6 +328,44 @@ def landed(t, E, env, branch, wt):
     t.wait_gone("t1 landed on main")
 
 
+def psi_of(sc, name):
+    """The ψ at the end of `name`'s row in the agents panel."""
+    for y, row in enumerate(sc.splitlines()):
+        m = re.search(r"\d ○ %s\b.*(ψ)" % re.escape(name), row)
+        if m:
+            return m.start(1), y
+    raise AssertionError("no ψ for %s:\n%s" % (name, sc))
+
+
+def gone(t, E, branch, wt):
+    """t1's worktree removed by hand: a click on its ψ never shows git's
+    `fatal: cannot change to …`; its branch still there, its branch vs
+    main (all on main); its branch gone too, one dim line `t1's folder
+    is gone · show what it landed last`, and a click on the link opens
+    that land (designer m_7393)."""
+    sc = t.wait("t1")
+    e2e.sh(E.ws, "git worktree remove --force %s" % wt)
+    assert not os.path.exists(wt)
+    sc = t.screen()
+    click(t, *psi_of(sc, "t1"))
+    sc = t.wait("t1's work is all on main already · show what it landed last")
+    assert "fatal" not in sc and "cannot change" not in sc, sc
+    shot(t, "150-gone-branch")
+    t.keys("C-g")
+    t.wait_gone("all on main already")
+    e2e.sh(E.ws, "git branch -D %s" % branch)
+    sc = t.screen()
+    click(t, *psi_of(sc, "t1"))
+    sc = t.wait("t1's folder is gone · show what it landed last")
+    assert "fatal" not in sc and "cannot change" not in sc and "▲" not in sc, sc
+    shot(t, "150-gone")
+    x, y = at(sc, "show what it landed last")
+    click(t, x + 2, y)
+    t.wait("t1 landed on main · ")
+    t.keys("C-g")
+    t.wait_gone("t1 landed on main")
+
+
 def main():
     nbsp_as_spaces(Tui)
     E = e2e.Env()
@@ -336,6 +377,8 @@ def main():
         print("PASS tui artifacts 80")
         landed(t, E, env, branch, wt)
         print("PASS tui artifacts landed")
+        gone(t, E, branch, wt)
+        print("PASS tui artifacts gone")
 
 
 if __name__ == "__main__":

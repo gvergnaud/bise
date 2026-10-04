@@ -270,13 +270,6 @@ impl Shell {
         let s = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
         let req = v.get("req").cloned().unwrap_or(Value::Null);
         let shared = PathBuf::from(&self.hub.workspace);
-        enum Ask {
-            Agent(String, Where, Option<String>),
-            Branch(String),
-            Range(String, String),
-            Pr(u64),
-            Bad(String),
-        }
         // a range first: the door under a landed line names its agent
         // too (for the title), and must show that land, never the
         // agent's branch vs today's main (empty once landed)
@@ -289,7 +282,14 @@ impl Shell {
             }) {
                 Some(a) => {
                     let branch = a.ws.branch.clone().or_else(|| a.place_branch.clone());
-                    Ask::Agent(a.name.clone(), self.art_where(a), branch)
+                    let archived = a.status() == crate::model::Status::Archived;
+                    // an archived or dropped agent's worktree is removed (or
+                    // soon): not the shared folder
+                    let place = match self.art_where(a) {
+                        Where::Shared { dir, .. } if dir != shared && (archived || !dir.is_dir()) => Where::Checkout { dir, base: None },
+                        w => w,
+                    };
+                    Ask::Agent(a.name.clone(), place, branch, archived)
                 }
                 None => Ask::Bad(format!("no agent {}", s("agent"))),
             }
@@ -302,76 +302,7 @@ impl Shell {
         };
         let tx = self.tx.clone();
         std::thread::spawn(move || {
-            let base_of = |d: &Path| diff::trunk(d);
-            let mut ev = json!({"ev": "diff", "req": req, "working": false, "uncommitted": false, "landed_ms": null});
-            let out: Result<(Vec<diff::File>, Option<PathBuf>), String> = match ask {
-                Ask::Agent(name, place, branch) => match place {
-                    Where::Checkout { dir, base } => {
-                        let base = base.unwrap_or_else(|| base_of(&dir));
-                        ev["title"] = json!(format!("{} vs {}", name, base));
-                        ev["base"] = json!(base);
-                        ev["branch"] = json!(branch);
-                        diff::checkout(&dir, &base).map(|(f, c, u)| {
-                            ev["commits"] = json!(c);
-                            ev["uncommitted"] = json!(u);
-                            ev["working"] = json!(true);
-                            (f, Some(dir))
-                        })
-                    }
-                    Where::Shared { dir, files } => {
-                        // the shared folder isn't only main's (designer
-                        // m_7354): `your folder vs main`, the same shape
-                        // as a branch's; the files are still the agent's
-                        ev["title"] = json!(format!("your folder vs {}", base_of(&dir)));
-                        ev["base"] = json!("HEAD");
-                        ev["branch"] = json!(null);
-                        ev["commits"] = json!(0);
-                        ev["uncommitted"] = json!(true);
-                        ev["working"] = json!(true);
-                        diff::own_files(&dir, &files).map(|f| (f, Some(dir)))
-                    }
-                },
-                Ask::Branch(b) => {
-                    let base = base_of(&shared);
-                    ev["title"] = json!(format!("{} vs {}", b, base));
-                    ev["base"] = json!(base);
-                    ev["branch"] = json!(b);
-                    diff::branch(&shared, &base, &b).map(|(f, c)| {
-                        ev["commits"] = json!(c);
-                        (f, Some(shared.clone()))
-                    })
-                }
-                Ask::Range(r, agent) => {
-                    // `diff-focus landed on main · e0f3df5` (the TUI's
-                    // head adds `· 11 files`)
-                    let to: String = r.split("..").last().unwrap_or(&r).trim_start_matches('.').chars().take(7).collect();
-                    let title = if agent.is_empty() { r.clone() } else { format!("{} landed on {} · {}", agent, base_of(&shared), to) };
-                    ev["title"] = json!(title);
-                    ev["branch"] = json!(null);
-                    ev["base"] = json!(r.split("..").next().unwrap_or(""));
-                    diff::range(&shared, &r).map(|(f, c)| {
-                        ev["commits"] = json!(c);
-                        (f, Some(shared.clone()))
-                    })
-                }
-                Ask::Pr(n) => {
-                    ev["title"] = json!(format!("PR #{}", n));
-                    ev["pr"] = json!(n);
-                    diff::pr(&shared, n).map(|f| (f, None))
-                }
-                Ask::Bad(e) => Err(e),
-            };
-            match out {
-                Ok((files, root)) => {
-                    let (n, add, del) = diff::stat(&files);
-                    ev["stat"] = json!({"files": n, "add": add, "del": del});
-                    ev["files"] = json!(files.iter().map(|f| diff::file_json(f, root.as_deref())).collect::<Vec<_>>());
-                }
-                Err(e) => {
-                    ev["files"] = json!([]);
-                    ev["error"] = json!(e);
-                }
-            }
+            let ev = diff_answer(ask, &shared, req);
             let _ = tx.send(Msg::ToClient { id, v: ev });
         });
     }
@@ -404,6 +335,123 @@ impl Shell {
     }
 }
 
+/// What the `diff` op asks for.
+#[derive(Clone, Debug)]
+enum Ask {
+    /// name, where, branch, archived
+    Agent(String, Where, Option<String>, bool),
+    Branch(String),
+    Range(String, String),
+    Pr(u64),
+    Bad(String),
+}
+
+/// The `diff` event answering `ask` (git runs in `shared` or the
+/// agent's own folder, never in one that is gone).
+fn diff_answer(ask: Ask, shared: &Path, req: Value) -> Value {
+    let shared = shared.to_path_buf();
+    let base_of = |d: &Path| diff::trunk(d);
+    let mut ev = json!({"ev": "diff", "req": req, "working": false, "uncommitted": false, "landed_ms": null});
+    let out: Result<(Vec<diff::File>, Option<PathBuf>), String> = match ask {
+        // its folder is gone (archived, or removed by hand): never
+        // git in it; its branch vs main if the branch is still
+        // there, else one plain line (designer m_7393)
+        Ask::Agent(name, Where::Checkout { dir, .. }, branch, archived) if archived || !dir.is_dir() => {
+            let base = base_of(&shared);
+            ev["title"] = json!(format!("{} vs {}", name, base));
+            ev["base"] = json!(base);
+            ev["branch"] = json!(branch);
+            match branch.filter(|b| diff::has_ref(&shared, b)) {
+                Some(b) => diff::branch(&shared, &base, &b).map(|(f, c)| {
+                    ev["commits"] = json!(c);
+                    (f, Some(shared.clone()))
+                }),
+                None => {
+                    ev["gone"] = json!(true);
+                    ev["note"] = json!(if archived {
+                        format!("{} is archived and its folder is gone", name)
+                    } else {
+                        format!("{}'s folder is gone", name)
+                    });
+                    Ok((Vec::new(), None))
+                }
+            }
+        }
+        Ask::Agent(name, place, branch, _) => match place {
+            Where::Checkout { dir, base } => {
+                let base = base.unwrap_or_else(|| base_of(&dir));
+                ev["title"] = json!(format!("{} vs {}", name, base));
+                ev["base"] = json!(base);
+                ev["branch"] = json!(branch);
+                diff::checkout(&dir, &base).map(|(f, c, u)| {
+                    ev["commits"] = json!(c);
+                    ev["uncommitted"] = json!(u);
+                    ev["working"] = json!(true);
+                    (f, Some(dir))
+                })
+            }
+            Where::Shared { dir, files } => {
+                // the shared folder isn't only main's (designer
+                // m_7354): `your folder vs main`, the same shape
+                // as a branch's; the files are still the agent's
+                ev["title"] = json!(format!("your folder vs {}", base_of(&dir)));
+                ev["base"] = json!("HEAD");
+                ev["branch"] = json!(null);
+                ev["commits"] = json!(0);
+                ev["uncommitted"] = json!(true);
+                ev["working"] = json!(true);
+                diff::own_files(&dir, &files).map(|f| (f, Some(dir)))
+            }
+        },
+        Ask::Branch(b) => {
+            let base = base_of(&shared);
+            ev["title"] = json!(format!("{} vs {}", b, base));
+            ev["base"] = json!(base);
+            ev["branch"] = json!(b);
+            if diff::has_ref(&shared, &b) {
+                diff::branch(&shared, &base, &b).map(|(f, c)| {
+                    ev["commits"] = json!(c);
+                    (f, Some(shared.clone()))
+                })
+            } else {
+                ev["note"] = json!(format!("there's no branch named {}.", b));
+                Ok((Vec::new(), None))
+            }
+        }
+        Ask::Range(r, agent) => {
+            // `diff-focus landed on main · e0f3df5` (the TUI's
+            // head adds `· 11 files`)
+            let to: String = r.split("..").last().unwrap_or(&r).trim_start_matches('.').chars().take(7).collect();
+            let title = if agent.is_empty() { r.clone() } else { format!("{} landed on {} · {}", agent, base_of(&shared), to) };
+            ev["title"] = json!(title);
+            ev["branch"] = json!(null);
+            ev["base"] = json!(r.split("..").next().unwrap_or(""));
+            diff::range(&shared, &r).map(|(f, c)| {
+                ev["commits"] = json!(c);
+                (f, Some(shared.clone()))
+            })
+        }
+        Ask::Pr(n) => {
+            ev["title"] = json!(format!("PR #{}", n));
+            ev["pr"] = json!(n);
+            diff::pr(&shared, n).map(|f| (f, None))
+        }
+        Ask::Bad(e) => Err(e),
+    };
+    match out {
+        Ok((files, root)) => {
+            let (n, add, del) = diff::stat(&files);
+            ev["stat"] = json!({"files": n, "add": add, "del": del});
+            ev["files"] = json!(files.iter().map(|f| diff::file_json(f, root.as_deref())).collect::<Vec<_>>());
+        }
+        Err(e) => {
+            ev["files"] = json!([]);
+            ev["error"] = json!(e);
+        }
+    }
+    ev
+}
+
 /// The `landed` line of a land, after its `info` line in main's feed:
 /// `agent : target : from : sha : files : add : del` (from = the
 /// target's tip before, short). None when git cannot say.
@@ -431,4 +479,93 @@ pub(super) fn landed_fields(shared: &Path, agent: &str, target: &str, sha: &str,
         add.to_string(),
         del.to_string(),
     ]))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sh(dir: &Path, args: &[&str]) {
+        let ok = std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(["-c", "user.email=t@t", "-c", "user.name=t", "-c", "commit.gpgsign=false"])
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(ok.status.success(), "git {:?}: {}", args, String::from_utf8_lossy(&ok.stderr));
+    }
+
+    /// A repo with an agent's worktree on sb/t1 (one commit), then the
+    /// worktree removed as an archive does.
+    fn gone(name: &str) -> (PathBuf, PathBuf) {
+        let root = std::env::temp_dir().join(format!("sb-art-{}-{}", name, std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let shared = root.join("repo");
+        let wt = root.join("wt-t1");
+        std::fs::create_dir_all(&shared).unwrap();
+        sh(&shared, &["init", "-q", "-b", "main"]);
+        std::fs::write(shared.join("a.txt"), "one\n").unwrap();
+        sh(&shared, &["add", "."]);
+        sh(&shared, &["commit", "-q", "-m", "base"]);
+        sh(&shared, &["worktree", "add", "-q", "-b", "sb/t1", wt.to_str().unwrap()]);
+        std::fs::write(wt.join("a.txt"), "one\ntwo\n").unwrap();
+        sh(&wt, &["commit", "-q", "-am", "t1"]);
+        sh(&shared, &["worktree", "remove", "--force", wt.to_str().unwrap()]);
+        assert!(!wt.exists());
+        (shared, wt)
+    }
+
+    fn agent(wt: &Path, branch: Option<&str>, archived: bool) -> Ask {
+        Ask::Agent("t1".into(), Where::Checkout { dir: wt.to_path_buf(), base: None }, branch.map(String::from), archived)
+    }
+
+    fn no_git_fatal(ev: &Value) {
+        let s = ev.to_string();
+        assert!(!s.contains("fatal") && !s.contains("cannot change to"), "{s}");
+    }
+
+    #[test]
+    fn a_gone_worktree_shows_its_branch_vs_main() {
+        let (shared, wt) = gone("branch");
+        for archived in [true, false] {
+            let ev = diff_answer(agent(&wt, Some("sb/t1"), archived), &shared, json!(1));
+            no_git_fatal(&ev);
+            assert_eq!(ev["title"], "t1 vs main");
+            assert_eq!(ev["error"], Value::Null);
+            assert_eq!(ev["note"], Value::Null);
+            assert_eq!(ev["commits"], 1);
+            assert_eq!(ev["files"][0]["path"], "a.txt");
+        }
+        let _ = std::fs::remove_dir_all(shared.parent().unwrap());
+    }
+
+    #[test]
+    fn a_gone_worktree_without_its_branch_says_so_in_one_line() {
+        let (shared, wt) = gone("nobranch");
+        sh(&shared, &["branch", "-q", "-D", "sb/t1"]);
+        let ev = diff_answer(agent(&wt, Some("sb/t1"), true), &shared, json!(1));
+        no_git_fatal(&ev);
+        assert_eq!(ev["note"], "t1 is archived and its folder is gone");
+        assert_eq!(ev["gone"], true);
+        assert_eq!(ev["error"], Value::Null);
+        assert_eq!(ev["files"], json!([]));
+        let ev = diff_answer(agent(&wt, None, false), &shared, json!(1));
+        assert_eq!(ev["note"], "t1's folder is gone");
+        // the same folder seen as a shared-folder agent's: never git in it
+        let ev = diff_answer(Ask::Agent("t1".into(), Where::Shared { dir: wt.clone(), files: vec!["a.txt".into()] }, None, false), &shared, json!(1));
+        no_git_fatal(&ev);
+        let _ = std::fs::remove_dir_all(shared.parent().unwrap());
+    }
+
+    #[test]
+    fn other_git_errors_read_as_one_line() {
+        let (shared, _) = gone("errors");
+        let ev = diff_answer(Ask::Branch("sb/nope".into()), &shared, json!(1));
+        assert_eq!(ev["note"], "there's no branch named sb/nope.");
+        let ev = diff_answer(Ask::Range("abc1234..def5678".into(), String::new()), &shared, json!(1));
+        let e = ev["error"].as_str().unwrap();
+        assert!(e.starts_with("git couldn't read this diff: ") && !e.contains('\n') && !e.contains("fatal"), "{e}");
+        let _ = std::fs::remove_dir_all(shared.parent().unwrap());
+    }
 }

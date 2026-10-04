@@ -340,3 +340,31 @@ fn an_empty_diff_of_an_agent_that_landed_offers_its_last_land() {
     assert_eq!(p.what, "pricing-page landed on main · bbb");
     assert!(p.focused);
 }
+
+// ---- an agent whose folder is gone: one plain line, never git's fatal ----
+
+#[test]
+fn a_gone_folder_is_one_dim_line_that_offers_the_last_land() {
+    let gone = json!({"ev": "diff", "req": 1, "title": "diff-focus vs main", "files": [], "gone": true,
+                      "note": "diff-focus is archived and its folder is gone"});
+    let mut p = panel(Diff::of(&gone));
+    let out = text(&lines(&mut p, 78, 20, 0));
+    assert!(out.contains("diff-focus is archived and its folder is gone"), "{out}");
+    assert!(!out.contains("show what") && !out.contains("▲") && !out.contains("no changes"), "no land: {out}");
+    p.last_land = Some(Ask::Range("aaa..bbb".into(), "diff-focus".into()));
+    let out = text(&lines(&mut p, 78, 20, 0));
+    assert!(out.contains("diff-focus is archived and its folder is gone · show what it landed last"), "{out}");
+    let mut app = crate::sb::bench::test_app();
+    app.diff = Some(p);
+    assert_eq!(key_pairs(&app)[0], ("⏎", "show what it landed last".to_string()));
+    assert!(on_key(&mut app, &key(KeyCode::Enter, KeyModifiers::NONE)));
+    assert_eq!(app.diff.as_ref().unwrap().ask, Ask::Range("aaa..bbb".into(), "diff-focus".into()));
+}
+
+#[test]
+fn a_git_failure_is_marked_and_dim() {
+    let bad = json!({"ev": "diff", "req": 1, "title": "abc..def", "files": [], "error": "git couldn't read this diff: bad revision 'abc..def'"});
+    let mut p = panel(Diff::of(&bad));
+    let out = text(&lines(&mut p, 78, 20, 0));
+    assert!(out.contains("▲ git couldn't read this diff: bad revision 'abc..def'"), "{out}");
+}
