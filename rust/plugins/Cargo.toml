@@ -8,6 +8,8 @@ description = "Agent Plugins 1.0 for the Bend harness: resolver, diagnostics, st
 [dependencies]
 bise-home = { path = "../home" }
 serde_json = "1"
+# kill(2) for the parent watch (src/bridge.rs Parent)
+libc = "0.2"
 # remote MCP servers (src/http.rs): the TUI's TLS stack, already in the lock
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 webpki-roots = "0.26"

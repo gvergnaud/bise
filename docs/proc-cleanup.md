@@ -11,7 +11,7 @@ to pid 1, `sbtui*` tmux sessions stayed. Now the hub kills them.
 | event | what is killed |
 |---|---|
 | a task is stopped (`sb stop`, `/stop`) or archived (`/drop`, `sb drop`) | every process that agent started until then (a REPL restored after that is not hit) |
-| the hub quits for good (`stop_hub`, not a reload that keeps the REPLs) | every process of every agent |
+| the hub quits for good (`stop_hub`, not a reload that keeps the REPLs; also its idle exit, docs/idle-exit.md) | every process of every agent |
 | the hub starts | the processes of the agents that are not live: stopped, archived, or unknown to this hub (left by an earlier hub) |
 
 A turn interrupt (esc, `sb interrupt`) kills nothing: the agent goes on

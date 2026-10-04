@@ -33,6 +33,7 @@ pub mod devflow;
 pub mod feature;
 pub mod flow;
 pub mod forge;
+pub mod idle;
 pub mod land;
 pub mod model;
 pub mod paths;

@@ -716,14 +716,45 @@ fn connection(stream: TcpStream, token: String, entries: Arc<Vec<Arc<Entry>>>) {
     }
 }
 
-fn alive(pid: u32) -> bool {
-    std::process::Command::new("kill")
-        .args(["-0", &pid.to_string()])
-        .stdout(std::process::Stdio::null())
+/// The REPL the bridge serves (`--parent`), by pid and start time.
+/// Bridges outlived their REPL (idle-exit audit: plugin servers whose
+/// `--parent` was dead): a `kill -0` every 500 ms spawned a `kill` each
+/// time (two a second per bridge) and took a pid the system had reused
+/// for another process as the parent still alive. Now kill(2) without a
+/// process, and every `IDENTITY_EVERY` the start time is compared too.
+pub struct Parent {
+    pid: u32,
+    started: Option<String>,
+}
+
+/// How often the parent's start time is read again (one `ps`).
+const IDENTITY_EVERY: u64 = 20;
+
+impl Parent {
+    pub fn new(pid: u32) -> Parent {
+        Parent { pid, started: started(pid) }
+    }
+
+    /// `deep`: compare the start time too (a reused pid is not it).
+    pub fn alive(&self, deep: bool) -> bool {
+        let Ok(p) = i32::try_from(self.pid) else { return false };
+        // SAFETY: kill(2) with signal 0 only checks; a positive pid
+        if p <= 0 || unsafe { libc::kill(p, 0) } != 0 {
+            return false;
+        }
+        !deep || self.started.is_none() || started(self.pid) == self.started
+    }
+}
+
+/// A process's start time as `ps` says it (None: gone or unreadable).
+fn started(pid: u32) -> Option<String> {
+    let o = std::process::Command::new("ps")
+        .args(["-p", &pid.to_string(), "-o", "lstart="])
         .stderr(std::process::Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+        .output()
+        .ok()?;
+    let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
+    (!s.is_empty()).then_some(s)
 }
 
 fn write_atomic(path: &Path, text: &str) -> std::io::Result<()> {
@@ -783,10 +814,11 @@ pub fn serve(opts: Opts) -> std::io::Result<()> {
             }
         }
     };
+    let parent = opts.parent.map(Parent::new);
     let mut tick = 0u64;
     loop {
-        if let Some(pid) = opts.parent {
-            if !alive(pid) {
+        if let Some(p) = &parent {
+            if !p.alive(tick.is_multiple_of(IDENTITY_EVERY)) {
                 break;
             }
         }
@@ -802,6 +834,25 @@ pub fn serve(opts: Opts) -> std::io::Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod parent_tests {
+    use super::*;
+
+    #[test]
+    fn the_parent_is_its_pid_and_its_start_time() {
+        let mut c = std::process::Command::new("sleep").arg("30").spawn().unwrap();
+        let p = Parent::new(c.id());
+        assert!(p.started.is_some());
+        assert!(p.alive(false) && p.alive(true));
+        // the same pid with another start time: a reused pid, not it
+        let other = Parent { pid: c.id(), started: Some("Thu Jan  1 00:00:00 1970".into()) };
+        assert!(other.alive(false) && !other.alive(true));
+        c.kill().unwrap();
+        c.wait().unwrap();
+        assert!(!p.alive(false) && !p.alive(true));
+    }
 }
 
 #[cfg(test)]

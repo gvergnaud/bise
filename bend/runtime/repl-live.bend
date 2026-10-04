@@ -148,6 +148,80 @@ def live_cfg(+threshold: Nat, +keep: Nat) -> IO(T.Cfg):
     +p : String <- live_prompt(cat, patch)
     IO.pure(T.Cfg, T.Cfg{threshold, keep, 3n, p, cat})
 
+# ---- idle-exit: a REPL whose hub is gone for good exits ----
+# A hub that stops for good asks its REPLs to checkpoint and exit; one
+# that died (killed, crashed) leaves them running for the next hub to
+# adopt. Nobody may come back: ten times per BEND_HUB_GONE_MS (default
+# 10 min, so every minute) the REPL looks at its hub's pid (hub.pid next
+# to $SB_SOCKET), and after ten looks in a row without a live hub it
+# exits; its plugins bridge follows it (--parent). Its session is saved
+# at every turn boundary and before each provider call: the next hub
+# restores it. A switch's hub is back in seconds (the count restarts).
+# Not under a hub (no SB_SOCKET: tests, a bare repl-live): no watch.
+
+# 0: the hub's process is alive; anything else: gone (or no hub.pid)
+def hub_look.script() -> String:
+  "kill -0 \"$(cat \"$(dirname \"$SB_SOCKET\")/hub.pid\" 2>/dev/null)\" 2>/dev/null"
+
+def hub_look.res(r: U32 & (String & String)) -> Bool:
+  match r:
+    case (code, _):
+      U32.is_lt(0, code)
+
+# True: gone; a look that could not run says nothing (not gone)
+def hub_look.of(r: Result<&1, &1, U32 & String, U32 & (String & String)>) -> Bool:
+  match r:
+    case Done{res}:
+      hub_look.res(res)
+    case Fail{_}:
+      False{}
+
+def hub_look() -> IO(Bool):
+  do IO<Bool>:
+    r : Result<&1, &1, U32 & String, U32 & (String & String)> <- Process.run(
+      "/bin/sh", Con{"-c", Con{hub_look.script(), Nil{}}}, "", 4096, 10000)
+    IO.pure(Bool, hub_look.of(r))
+
+# the misses in a row after this look
+def hub_watch.count(gone: Bool, +misses: U32) -> U32:
+  match gone:
+    case True{}:
+      (misses + 1 : U32)
+    case False{}:
+      0
+
+@unsafe
+def hub_watch.next(over: Bool, +every: U32, +misses: U32) -> IO(Unit):
+  match over:
+    case True{}:
+      do IO<Unit>:
+        u : Unit <- IO.print("hub-gone-exit")
+        IO.die(Unit, 0, "")
+    case False{}:
+      hub_watch(every, misses)
+
+@unsafe
+def hub_watch(+every: U32, +misses: U32) -> IO(Unit):
+  do IO<Unit>:
+    s : Unit <- IO.sleep(every)
+    +gone : Bool <- hub_look()
+    +m : U32 <- IO.pure(U32, hub_watch.count(gone, misses))
+    hub_watch.next(U32.is_lt(9, m), every, m)
+
+def hub_watch_start.go(off: Bool, +ms: U32) -> IO(Unit):
+  match off:
+    case True{}:
+      IO.pure(Unit, Unit{})
+    case False{}:
+      IO.spawn(Unit, hub_watch(U32.div(ms, 10), 0))
+
+def hub_watch_start() -> IO(Unit):
+  do IO<Unit>:
+    sr : Result<&1, &1, U32 & String, String> <- IO.get_env("SB_SOCKET")
+    gr : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_HUB_GONE_MS")
+    +ms : U32 <- IO.pure(U32, Maybe.default(&2, U32, U32.read(P.env_or(gr, "")), 600000))
+    hub_watch_start.go(String.is_empty(P.env_or(sr, "")), ms)
+
 def live_main() -> IO(Unit):
   do IO<Unit>:
     # the config template lands on disk on first run, before anything
@@ -185,12 +259,14 @@ def live_main() -> IO(Unit):
     +key : String <- IO.pure(String, P.env_or(kr, ""))
     u : Unit <- Mcp.bootstrap(key)
     u3 : Unit <- Sh.bash_cleanup(U32.show(p))
+    w : Unit <- hub_watch_start()
     f : Rc.Flow <- Rc.serve(True{}, l, Rc.ld_greet(ld), Rc.ld_sess(ld))
     # Stop (a /reload) lands here: main returns, the process exits 0,
     # and the parent respawns the latest code on the same session.
     # The marker line lets the parent tell a reload from a crash.
     u2 : Unit <- Rc.flow_note(f)
-    IO.pure(Unit, Unit{})
+    # exit now: the hub watch above would keep the program running
+    IO.die(Unit, 0, "")
 
 # BISE_ONESHOT=<request file> (BISE-126): one provider call, its answer on
 # stdout, exit (runtime/oneshot.bend); else the live REPL

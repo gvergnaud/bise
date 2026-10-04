@@ -278,6 +278,12 @@ struct Shell {
     prs: Option<crate::forge::poll::Poller>,
     /// computer use's events.jsonl: each stop, one line in main's feed
     cu: crate::computer_use::Watch,
+    /// idle-exit (`idle.rs`): no UI for the grace and nothing runs, the
+    /// hub stops for good
+    idle: crate::idle::Watch,
+    /// holds on the hub besides the `hello` clients: a page server gets
+    /// a clone, and each open event stream holds one while it is open
+    holds: crate::idle::Holds,
 }
 
 /// What an agent whose turn was cut by a restart receives.
@@ -285,6 +291,10 @@ struct Shell {
 /// shell's PATH, its AGENTS.md: seconds at most) before its start counts
 /// as failed (BISE-291).
 const START_LIMIT: Duration = Duration::from_secs(20);
+
+/// At a stop for good, how long the REPLs get to checkpoint and exit
+/// before SIGTERM.
+const REPL_QUIT: Duration = Duration::from_secs(5);
 
 /// Tests only (tui_stuck_start_tmux.py): `SB_STALL_START=<file>` holds
 /// the next REPL start before its spawn, forever, while that file
@@ -1302,6 +1312,60 @@ impl Shell {
         }
     }
 
+    /// What keeps a hub with no UI up (idle-exit rule 2): an agent
+    /// mid-turn (or waiting in `sb wait`), a REPL starting or switching,
+    /// a background job of an agent, a build of the hub's own.
+    fn idle_busy(&self) -> Vec<String> {
+        let mut v = Vec::new();
+        for name in &self.hub.st.order {
+            let Some(a) = self.hub.st.agents.get(name) else { continue };
+            if a.lifecycle != Lifecycle::Active {
+                continue;
+            }
+            if a.run == crate::model::Run::Busy {
+                v.push(format!("{} mid-turn", a.name));
+            }
+            let jobs = crate::idle::bg_jobs(&self.opts.paths.agent_tmp(&a.dir).join("bg"), crate::procs::alive);
+            if !jobs.is_empty() {
+                v.push(format!("{}'s background job {}", a.name, jobs.join(" ")));
+            }
+        }
+        if !self.starts.is_empty() {
+            v.push("a REPL starting".into());
+        }
+        if !self.switching.is_empty() {
+            v.push("a REPL switching".into());
+        }
+        if !self.building.is_empty() {
+            v.push("a version build".into());
+        }
+        if self.updating.is_some() {
+            v.push("the /update build".into());
+        }
+        if self.release.is_some() {
+            v.push("/release-bise".into());
+        }
+        v
+    }
+
+    /// idle-exit, at each tick: no UI for the grace and nothing runs,
+    /// the hub stops for good (the stop of `bise --stop`).
+    fn idle_check(&mut self) {
+        let uis = self.clients.len() + self.holds.count();
+        // the look reads self: the watch is taken out for it
+        let mut w = std::mem::replace(&mut self.idle, crate::idle::Watch::new(None, std::time::Instant::now()));
+        let step = w.step(std::time::Instant::now(), uis, || self.idle_busy());
+        self.idle = w;
+        match step {
+            crate::idle::Step::Stay => {}
+            crate::idle::Step::Say(s) => log_line(&self.opts.paths, &s),
+            crate::idle::Step::Stop(s) => {
+                log_line(&self.opts.paths, &s);
+                let _ = self.tx.send(Msg::Shutdown { keep: false });
+            }
+        }
+    }
+
     /// Start the REPL of `name` on a supervisor thread. `port`: the port of the process it replaces (a switch keeps the
     /// port: background commands and steer files are keyed by it).
     fn spawn_on(
@@ -2063,6 +2127,11 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         eprintln!("a hub is already running for {}", paths.workspace.display());
         return Ok(());
     }
+    wait_previous_hub(&paths);
+    if UnixStream::connect(paths.socket()).is_ok() {
+        eprintln!("a hub is already running for {}", paths.workspace.display());
+        return Ok(());
+    }
     let _ = std::fs::remove_file(paths.socket());
     let listener = UnixListener::bind(paths.socket())?;
     std::fs::write(paths.pid_file(), std::process::id().to_string())?;
@@ -2214,7 +2283,19 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         features: features::Features::load(&paths.state),
         prs: None,
         cu: crate::computer_use::Watch::new(),
+        idle: crate::idle::Watch::new(
+            crate::idle::grace(
+                std::env::var(crate::idle::ENV).ok().as_deref(),
+                &std::fs::read_to_string(bise_home::Home::from_env().config_file()).unwrap_or_default(),
+            ),
+            std::time::Instant::now(),
+        ),
+        holds: crate::idle::Holds::default(),
     };
+    match sh.idle.grace() {
+        Some(g) => log_line(&paths, &format!("idle exit: after {} s without a UI, once nothing runs", g.as_secs())),
+        None => log_line(&paths, "idle exit: off (the hub runs until stopped)"),
+    }
     // the features' facts (dev-flow §5.1), off the loop
     sh.refresh_features();
     // the role lines of an earlier hub (BISE-126)
@@ -2315,6 +2396,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
                     sh.announce_update();
                     sh.release_check(None);
                     sh.plan_prs();
+                    sh.idle_check();
                     // computer use (design §7.3): each stop, one line in main's feed
                     for l in sh.cu.poll() {
                         sh.feed(crate::model::MAIN, &format!("sb computer : {}", crate::util::wire_escape(&l)));
@@ -2520,13 +2602,35 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
             }
         }
     }
+    // for good: no new client reaches a hub that is going (it would wait
+    // for a hello that never comes); a `bise` meanwhile starts the next
+    // hub, which waits for this one to be gone (`wait_previous_hub`)
+    if !keep_agents {
+        let _ = std::fs::remove_file(paths.socket());
+    }
     sh.flush_offsets();
     if keep_agents {
         log_line(&paths, "hub stop (REPLs kept for the next hub)");
     } else {
         log_line(&paths, "hub stop");
-        for (_, pid) in sh.pids.values() {
-            kill_pid(*pid);
+        // idle-exit: each idle REPL checkpoints its session and exits (the
+        // `reload` of a switch: a turn boundary, nothing lost); a busy
+        // one refuses and gets SIGTERM after, as before
+        let pids: Vec<u32> = sh.pids.values().map(|(_, p)| *p).collect();
+        for r in sh.repls.values_mut() {
+            let _ = r.stream.write_all(b"reload\n");
+        }
+        let t0 = std::time::Instant::now();
+        while pids.iter().any(|p| crate::procs::alive(*p)) && t0.elapsed() < REPL_QUIT {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        let left: Vec<u32> = pids.iter().copied().filter(|p| crate::procs::alive(*p)).collect();
+        log_line(
+            &paths,
+            &format!("REPLs saved and gone: {} of {}", pids.len() - left.len(), pids.len()),
+        );
+        for pid in left {
+            kill_pid(pid);
         }
         // for good: what every agent started goes with it (BISE-243)
         let none = BTreeSet::new();
@@ -2541,9 +2645,45 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
             log_line(&paths, &format!("processes of the agents killed: {}", crate::procs::describe(&hit)));
         }
     }
-    let _ = std::fs::remove_file(paths.socket());
-    let _ = std::fs::remove_file(paths.pid_file());
+    // the next hub's socket and pid are not ours to remove
+    let ours = std::fs::read_to_string(paths.pid_file()).is_ok_and(|p| p.trim() == std::process::id().to_string());
+    if ours {
+        if keep_agents {
+            let _ = std::fs::remove_file(paths.socket());
+        }
+        let _ = std::fs::remove_file(paths.pid_file());
+    }
     Ok(())
+}
+
+/// How long a starting hub waits for the previous one of its workspace
+/// to finish stopping (its REPLs checkpoint, its agents' processes go).
+const PREVIOUS_HUB_WAIT: Duration = Duration::from_secs(15);
+
+/// A hub that stops for good removes its socket first: a `bise` launched
+/// meanwhile starts a new hub at once. That one waits here until the
+/// previous hub's process (`hub.pid`, still a `sbd`) is gone, so the two
+/// never share a REPL, a session or the reap of the agents' processes.
+fn wait_previous_hub(paths: &Paths) {
+    let Some(pid) = std::fs::read_to_string(paths.pid_file()).ok().and_then(|p| p.trim().parse::<u32>().ok()) else {
+        return;
+    };
+    if pid == std::process::id() || !crate::procs::alive(pid) {
+        return;
+    }
+    let cmd = Command::new("ps")
+        .args(["-p", &pid.to_string(), "-o", "command="])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+        .unwrap_or_default();
+    if !cmd.contains(" sbd") {
+        return;
+    }
+    let t0 = std::time::Instant::now();
+    while crate::procs::alive(pid) && t0.elapsed() < PREVIOUS_HUB_WAIT {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    log_line(paths, &format!("waited {} ms for the previous hub (pid {}) to stop", t0.elapsed().as_millis(), pid));
 }
 
 /// A hash of a REPL's spawn keys (never the keys themselves, kept).
