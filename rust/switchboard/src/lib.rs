@@ -32,6 +32,7 @@ pub mod core;
 pub mod daemon;
 pub mod devflow;
 pub mod diff;
+pub mod every;
 pub mod feature;
 pub mod flow;
 pub mod forge;

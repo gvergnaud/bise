@@ -95,6 +95,8 @@ mod approvals_screen;
 mod logview;
 mod artifacts;
 mod artifacts_screen;
+mod scheduled;
+mod scheduled_screen;
 mod diffview;
 mod computer_use;
 mod keybar;

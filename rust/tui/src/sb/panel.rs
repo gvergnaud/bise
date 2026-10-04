@@ -136,9 +136,16 @@ fn columns(app: &App, sb: &Sb, a: &Agent, boxed: bool, drop: usize) -> Vec<Span<
     } else {
         let time = a.turn_ms.filter(|_| a.status == "working").map(short_age).unwrap_or_default();
         let fill = sb.usage_of(app, &a.name).map(|u| u.short()).unwrap_or_default();
-        match drop {
-            0 => vec![Span::styled(format!(" {:>3}  {:>3}", time, fill), d)],
-            1 => vec![Span::styled(format!(" {:>3}", fill), d)],
+        // site/m/timers: a scheduled task's next run takes the time's
+        // place, faint: `◷ 1m`, `◷ 07:30`
+        let next = next_run(sb, &a.name, crate::when::now_ms());
+        match (drop, next) {
+            (0, Some(n)) => vec![
+                Span::styled(format!(" {:>7}", n), Style::default().fg(faint())),
+                Span::styled(format!("  {:>3}", fill), d),
+            ],
+            (0, None) => vec![Span::styled(format!(" {:>3}  {:>3}", time, fill), d)],
+            (1, _) => vec![Span::styled(format!(" {:>3}", fill), d)],
             _ => Vec::new(),
         }
     };
@@ -151,6 +158,19 @@ fn columns(app: &App, sb: &Sb, a: &Agent, boxed: bool, drop: usize) -> Vec<Span<
 
 /// The state word's columns: the time's 3, 2 between, the %'s 3.
 const STATE_W: usize = 8;
+
+/// site/m/timers: `agent`'s next scheduled run, `◷ 1m` within the hour,
+/// else `◷ 07:30`; None: nothing scheduled for it.
+pub(super) fn next_run(sb: &Sb, agent: &str, now: u64) -> Option<String> {
+    let t = sb.timers.iter().filter(|t| t.active() && t.agent == agent).min_by_key(|t| t.next_ms)?;
+    let left = t.next_ms.saturating_sub(now);
+    let when = if left < 3_600_000 {
+        format!("{}m", left.div_ceil(60_000).max(1))
+    } else {
+        crate::scheduled::ahead(t.next_ms, now).rsplit(' ').next().unwrap_or_default().to_string()
+    };
+    Some(format!("{} {}", crate::theme::glyph(G_SCHEDULED), when))
+}
 
 /// One row of the panel, `w` columns: ` N G name marks …… right `. The
 /// name is cut to leave room for the marks and the right side; `bg`
@@ -573,6 +593,14 @@ pub(crate) fn draw_panel(app: &App, frame: &mut Frame, area: Rect) {
         }
     }
     let live = i;
+    // site/m/timers: what the ◷ on a row says, when one has it
+    if sb.timers.iter().any(|t| t.active() && sb.agent(&t.agent).is_some_and(|a| !a.archived())) {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            fit(&format!(" {} = its next run · /scheduled", crate::theme::glyph(G_SCHEDULED)), w),
+            Style::default().fg(faint()),
+        )));
+    }
     cards_lines(app, w, &mut lines, &mut owners, &mut sel_row);
     archived_lines(sb, live, w, &mut lines, &mut owners, &mut sel_row);
     // the body under the title: scrolled to keep the selection in view,

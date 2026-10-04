@@ -343,6 +343,9 @@ fn on_screen_mouse(app: &mut App, m: &crossterm::event::MouseEvent, term_h: u16)
     if crate::artifacts_screen::mouse(app, m) {
         return;
     }
+    if crate::scheduled_screen::mouse(app, m) {
+        return;
+    }
     if crate::diffview::mouse(app, m) {
         return;
     }
@@ -604,6 +607,9 @@ pub(crate) fn on_key(app: &mut App, k: &crossterm::event::KeyEvent) -> bool {
         return false;
     }
     if crate::artifacts_screen::on_key(app, k) {
+        return false;
+    }
+    if crate::scheduled_screen::on_key(app, k) {
         return false;
     }
     if crate::computer_use::on_key(app, k) {

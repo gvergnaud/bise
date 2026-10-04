@@ -699,6 +699,8 @@ impl Shell {
         // the features' lids and Δ (dev-flow §5.1)
         self.feature_views();
         let mut snap = self.hub.snapshot(now_ms());
+        // sb every's timers, running then a week of ended ones (/scheduled)
+        snap["timers"] = json!(self.hub.timers().state(now_ms()));
         // one gate card for several agents' identical calls: it names them all
         self.gate_card_agents(&mut snap);
         let who: Vec<(String, String, bool)> =
@@ -1981,6 +1983,14 @@ impl Shell {
             "interrupt" => self.step(Input::ClientInterrupt {
                 client: id,
                 agent: s("agent"),
+            }),
+            // `/scheduled`'s x (stop) and r (run now)
+            "every_stop" => self.step(Input::EveryStop {
+                id: v.get("id").and_then(|x| x.as_u64()).unwrap_or(0),
+                why: String::new(),
+            }),
+            "every_run" => self.step(Input::EveryRun {
+                id: v.get("id").and_then(|x| x.as_u64()).unwrap_or(0),
             }),
             "stop_hub" => {
                 let keep = v

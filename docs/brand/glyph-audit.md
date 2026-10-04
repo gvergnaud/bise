@@ -126,6 +126,7 @@ needed. "ASCII" is the last resort for a future plain-ASCII mode.
 | `◇` | brief | SF | `◊` | `+` | in all fonts; almost the same shape |
 | `✗` | failed | Fira, Cascadia | `×` | `x` | in all fonts; pairs with `✓` |
 | `↪` | wrap marker | SF, Cascadia; can become emoji | `»` (faint) | `>` | in all fonts, never emoji |
+| `◷` | a scheduled task (sb every): its ◷ lines, the next run on an agent's row, /scheduled (site/m/timers) | new, not audited in the six fonts | keep (one cell; `⏱` is an emoji in most fonts and takes two) | `@` | a clock face, faint; `@` reads "at a time" |
 | `▸` / `▾` | closed / open | Fira | keep | `>` / `v` | only Fira lacks them; `▶ ▼` are in all fonts but look too heavy. Keep them. |
 
 No change needed: `› :* $ λ ± ? ▲ · … ○ – ✓ ✓✓ • ┃ │ ─`.

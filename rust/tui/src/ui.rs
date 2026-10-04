@@ -27,6 +27,7 @@ pub(crate) fn draw(app: &mut App, frame: &mut Frame) {
     crate::logview::draw(app, frame);
     crate::diffview::draw_full(app, frame);
     crate::artifacts_screen::draw(app, frame);
+    crate::scheduled_screen::draw(app, frame);
     computer_use::draw(app, frame);
     help::draw(app, frame);
 }

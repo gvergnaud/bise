@@ -102,6 +102,7 @@ pub(crate) const COMMANDS: &[Cmd] = &[
         ],
     },
     Cmd { name: "/artifacts", desc: "what your agents made: pages, docs, files, links", args: &[] },
+    Cmd { name: "/scheduled", desc: "your scheduled tasks: list, open, run now, stop", args: &[] },
     Cmd { name: "/diff", desc: "a branch's changes against main, in a panel on the right: /diff [<branch>]", args: &[Arg::Branch] },
     Cmd { name: "/inbox", desc: "open what waits for you, the most blocking first (also /cards)", args: &[] },
     Cmd { name: "/agents", desc: "list the agents and what they do", args: &[] },

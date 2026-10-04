@@ -333,6 +333,7 @@ pub(crate) const G_COMPACTING: &str = "≡"; // compaction running (dim, pulsing
 pub(crate) const G_SUMMARY: &str = "≡"; // compaction summary (dim, still)
 pub(crate) const G_INTERRUPTED: &str = "▲"; // turn interrupted (dim)
 pub(crate) const G_WRAP: &str = "»"; // a wrapped code row continues (faint; was ↪)
+pub(crate) const G_SCHEDULED: &str = "◷"; // a scheduled task (sb every), its lines and next run (faint; site/m/timers)
 
 // agent status
 pub(crate) const G_STARTING: &str = "·"; // dim, pulsing
@@ -456,6 +457,7 @@ pub(crate) const LEGEND: &[Symbol] = &[
     sym(HISTORY, G_COMPACTING, Tone::Dim, "compaction: it pulses while running, then its summary"),
     sym(HISTORY, G_INTERRUPTED, Tone::Dim, "turn interrupted"),
     sym(HISTORY, G_WRAP, Tone::Faint, "a long code row goes on"),
+    sym(HISTORY, G_SCHEDULED, Tone::Faint, "a scheduled task: set, a run, ended; on an agent's row, its next run (/scheduled)"),
     sym(HISTORY, "▸ ▾", Tone::Text, "folded / open: click or space"),
     sym(HISTORY, "▸ 3 more lines", Tone::Dim, "folded lines: click, space or ctrl+o"),
 ];
@@ -513,6 +515,7 @@ pub(crate) const ASCII: &[(&str, &str)] = &[
     ("⇄", "/"),
     ("↻", "("),
     ("Δ", "A"),
+    ("◷", "@"),
     ("▸", "+"),
     ("▾", "-"),
     // the replaced ones, while old code still draws them
@@ -998,7 +1001,7 @@ mod tests {
             ("G_MSG", G_MSG), ("G_IMAGE", G_IMAGE), ("G_QUOTE", G_QUOTE), ("G_PASTE", G_PASTE),
             ("G_CARD", G_CARD),
             ("G_COMPACTING", G_COMPACTING), ("G_SUMMARY", G_SUMMARY), ("G_INTERRUPTED", G_INTERRUPTED),
-            ("G_WRAP", G_WRAP), ("G_STARTING", G_STARTING), ("G_WORKING", G_WORKING),
+            ("G_WRAP", G_WRAP), ("G_SCHEDULED", G_SCHEDULED), ("G_STARTING", G_STARTING), ("G_WORKING", G_WORKING),
             ("G_WAITING", G_WAITING), ("G_NEEDS_YOU", G_NEEDS_YOU), ("G_DONE", G_DONE),
             ("G_FAILED", G_FAILED), ("G_IDLE", G_IDLE), ("G_STOPPED", G_STOPPED),
             ("G_SENDING", G_SENDING), ("G_RECEIVED", G_RECEIVED), ("G_READ", G_READ),

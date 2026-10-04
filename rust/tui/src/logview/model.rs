@@ -572,7 +572,7 @@ impl Source<'_> {
                 let reply = if m.expects_reply { " · expects a reply" } else { "" };
                 push(
                     Role::Message,
-                    format!("from {} ({}) {}{reply} · {}", m.from, name_of(&m.relation), m.hub_msg, first_line(&text, 60)),
+                    format!("from {} ({}) {}{reply} · {}", crate::sb::shown_name(&m.from), name_of(&m.relation), m.hub_msg, first_line(&text, 60)),
                     Body::Md(text),
                 );
             }

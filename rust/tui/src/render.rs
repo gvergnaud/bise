@@ -462,6 +462,7 @@ pub(crate) fn ev_lines(ev: &Ev, width: usize) -> Vec<Line<'static>> {
         Ev::Compact => compacting_line(0, true),
         Ev::Compacted { text, open } => summary_lines(text, *open, width),
         Ev::Fold { head, text, open } => fold_lines(head, text, *open, width),
+        Ev::Scheduled { head, words, open } => scheduled_lines(head, words, *open, width),
         // an interrupted turn ("turn interrupted by main" too) is dim;
         // any other warning reads as text
         Ev::Warn(t) if t == "turn interrupted" || t.starts_with("turn interrupted by ") => glyph_line(G_INTERRUPTED, dim_st, t.clone(), dim_st, width),
@@ -1519,6 +1520,25 @@ fn fold_lines(head: &str, text: &str, open: bool, width: usize) -> Vec<Line<'sta
         let bar = Span::styled(RAIL, Style::default().fg(rule()));
         let rows: Vec<Line<'static>> =
             text.lines().map(|l| Line::from(Span::styled(l.to_string(), dim_st))).collect();
+        ls.extend(barred_rows(&bar, rows, width));
+    }
+    ls
+}
+
+/// site/m/timers: a scheduled task's line, faint, `◷ head ▸` (it says
+/// when something happened, it asks nothing); open, the words it sends
+/// under the rail, faint too. No words: no `▸`.
+pub(crate) fn scheduled_lines(head: &str, words: &str, open: bool, width: usize) -> Vec<Line<'static>> {
+    let st = Style::default().fg(faint());
+    let mut row = vec![Span::styled(format!("{} ", crate::theme::glyph(G_SCHEDULED)), st), Span::styled(head.to_string(), st)];
+    let words = words.trim();
+    if !words.is_empty() {
+        row.push(Span::styled(format!(" {}", crate::theme::glyph(if open { G_OPEN } else { G_CLOSED })), st));
+    }
+    let mut ls = wrap_line(Line::from(row), width.max(1));
+    if open && !words.is_empty() {
+        let bar = Span::styled(RAIL, Style::default().fg(rule()));
+        let rows: Vec<Line<'static>> = words.lines().map(|l| Line::from(Span::styled(l.to_string(), st))).collect();
         ls.extend(barred_rows(&bar, rows, width));
     }
     ls

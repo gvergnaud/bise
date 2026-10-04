@@ -115,6 +115,7 @@ pub(crate) const ROWS: &[Row] = &[
     r(FEED, "ctrl+o", "open or close everything folded").top(),
     FIND,
     r(FEED, "/artifacts", "what your agents made, full screen: / find, ⏎ open, space quick look, v versions, @ put it in a message").top(),
+    r(FEED, "/scheduled", "your scheduled tasks (agents set them with sb every), full screen: ⏎ open, r run now, x stop, tab ended too"),
     r(FEED, "click ↗", "an artifact's chip: open it (a page in the browser, a .md in your editor, a file in its app)"),
     r(FEED, "ctrl+g|/diff", "the diff panel: the agent in view's changes against main (/diff <branch>: any branch); ctrl+g again closes it"),
     r(FEED, "click ± 3 files|click ψ", "the diff of what an agent landed, or of its branch (the composer keeps the keys; a click in the panel takes them)"),
@@ -715,7 +716,9 @@ mod tests {
                     let ok = !first.is_uppercase() || proper.iter().any(|p| w.starts_with(p));
                     assert!(ok, "capital in {:?}: {:?}", text, w);
                 }
-                assert!(!text.to_lowercase().contains("task"), "task in {:?}", text);
+                // "scheduled task" is the user's word for sb every's (card
+                // #411, site/m/timers): an agent's wake, never an agent
+                assert!(!text.to_lowercase().replace("scheduled task", "").contains("task"), "task in {:?}", text);
             }
         }
         assert!(!ROWS.iter().any(|r| r.keys.contains("ctrl+z")), "no undo (book §13)");

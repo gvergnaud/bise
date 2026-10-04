@@ -224,6 +224,9 @@ pub(super) struct Sb {
     /// The approvals mode, its checker and saved rules (the hub's
     /// `approvals` event, approvals-design.md §8).
     pub(crate) approvals: Approvals,
+    /// The scheduled tasks (sb every), active then a week of ended ones
+    /// (the state's `timers`): /scheduled and the panel's ◷ next run.
+    pub(crate) timers: Vec<crate::scheduled::Task>,
 }
 
 /// What the hub says of approvals: the global mode (`yolo` / `auto`),
@@ -919,6 +922,8 @@ fn apply_state(app: &mut App, v: &Value) {
         crate::diffview::on_changes(app, &name, changes);
     }
     let sb = &mut app.sb;
+    // an older hub has no `timers`: keep none
+    sb.timers = crate::scheduled::from_state(v);
     sb.flow = s(v, "flow");
     sb.cards = v
         .get("cards")
@@ -1108,6 +1113,11 @@ pub(crate) fn handle_input(app: &mut App, v: &str) -> Vec<Ev> {
     // site/m/artifacts: `/artifacts` (the full screen), `/artifacts add
     // <path or link>`, `/diff [<branch>]`
     match typed.split_whitespace().next() {
+        // site/m/timers: the scheduled tasks, full screen
+        Some("/scheduled") => {
+            crate::scheduled_screen::open(app);
+            return out;
+        }
         Some("/artifacts") => {
             let rest = typed.trim_start_matches("/artifacts").trim();
             match rest.strip_prefix("add") {
@@ -1308,6 +1318,18 @@ pub(super) fn prs_events(v: &serde_json::Value) -> Vec<Ev> {
     out
 }
 
+/// A sender or receiver as the user reads it: the hub's own id
+/// `switchboard` (bise's old name, still its id in the journals and the
+/// routing) shows as `bise`, like the agents read it (prompts.rs
+/// `shown_sender`); any other name stays.
+pub(crate) fn shown_name(name: &str) -> String {
+    if name == "switchboard" {
+        "bise".into()
+    } else {
+        name.to_string()
+    }
+}
+
 /// The synthetic lines of the hub (`sb <kind> : <text>`) as feed events.
 /// A hub line `sb <kind> : <text>` (hub line protocol, contract C2).
 /// v1 kinds keep working (an old transcript still renders); v2 adds:
@@ -1332,6 +1354,16 @@ pub(super) fn parse_hub_line(rest: &str) -> Option<Ev> {
         "msg-in" => {
             let (head, body) = text.split_once(" : ").unwrap_or(("", text.as_str()));
             let (from, id) = head.split_once(' ').unwrap_or((head, ""));
+            // a scheduled task's run reads as its ◷ line; the note of a
+            // stop is for the agent only (site/m/timers)
+            if crate::scheduled::is_hub(from) {
+                if let Some(ev) = crate::scheduled::run_line(body) {
+                    return Some(ev);
+                }
+                if crate::scheduled::is_stop_note(body) {
+                    return None;
+                }
+            }
             match from.strip_prefix('@') {
                 Some(f) => Ev::AgentMsg {
                     from: f.to_string(),
@@ -1343,7 +1375,7 @@ pub(super) fn parse_hub_line(rest: &str) -> Option<Ev> {
                     fold: false,
                 },
                 None => Ev::AgentMsg {
-                    from: from.to_string(),
+                    from: shown_name(from),
                     to: String::new(),
                     text: body.to_string(),
                     level: 3,
@@ -1362,9 +1394,16 @@ pub(super) fn parse_hub_line(rest: &str) -> Option<Ev> {
                 Some((t, id)) if is_msg_id(id) => (t, id),
                 _ => (to, ""),
             };
+            // main's thread never shows another agent's runs, nor the
+            // note of a stop (site/m/timers): its ◷ lines say enough
+            if crate::scheduled::is_hub(from)
+                && (crate::scheduled::run_line(body).is_some() || crate::scheduled::is_stop_note(body))
+            {
+                return None;
+            }
             Ev::AgentMsg {
-                from: from.to_string(),
-                to: to.to_string(),
+                from: shown_name(from),
+                to: shown_name(to),
                 text: body.to_string(),
                 level: 3,
                 id: id.to_string(),
@@ -1375,7 +1414,7 @@ pub(super) fn parse_hub_line(rest: &str) -> Option<Ev> {
         "msg-you" => {
             let (from, body) = text.split_once(" : ").unwrap_or(("", text.as_str()));
             Ev::AgentMsg {
-                from: from.to_string(),
+                from: shown_name(from),
                 to: "you".into(),
                 text: body.to_string(),
                 level: 2,
@@ -1480,6 +1519,8 @@ pub(super) fn parse_hub_line(rest: &str) -> Option<Ev> {
         "computer" => Ev::Info(text),
         "direct" => Ev::Info(format!("⇄ {}", text)),
         "warn" => Ev::Warn(text),
+        // site/m/timers: a scheduled task set or ended (`scheduled : <json>`)
+        "scheduled" => return crate::scheduled::hub_line(&text),
         _ => Ev::Info(text),
     })
 }
@@ -1547,6 +1588,20 @@ mod hub_line_tests {
             Some("answered docs|v1 : v2?|v2|the brief says v2")
         );
         assert_eq!(p("answered : docs : q : a : ").as_deref(), Some("answered docs|q|a|"));
+    }
+
+    /// The hub's own id `switchboard` (bise's old name) never reaches the
+    /// user: its messages read as from `bise`, in main's feed (`msg`), in
+    /// an agent's (`msg-in`) and to the user (`msg-you`); the chip says so.
+    #[test]
+    fn the_hub_reads_bise() {
+        assert_eq!(p("msg : switchboard → main m_7 : card #3 closed"), Some(msg("bise", "main", "card #3 closed", 3, "m_7")));
+        assert_eq!(p("msg-in : switchboard m_8 : timer #48"), Some(msg("bise", "", "timer #48", 3, "m_8")));
+        assert_eq!(p("msg-you : switchboard : hi"), Some(msg("bise", "you", "hi", 2, "")));
+        // a name that only contains it stays
+        assert_eq!(p("msg : switchboard-ui → main : hi"), Some(msg("switchboard-ui", "main", "hi", 3, "")));
+        let rows = draw(&[parse_hub_line("msg : switchboard → answer-line m_9 : timer #48").unwrap()]);
+        assert!(rows.contains("bise → answer-line") && !rows.contains("switchboard"), "{rows}");
     }
 
     /// An old (v1) transcript still parses to what it drew before.
@@ -1873,7 +1928,8 @@ mod nav_key_tests {
         }
         for c in crate::commands::COMMANDS {
             assert!(!c.desc.chars().next().unwrap().is_uppercase(), "{}", c.desc);
-            assert!(!c.desc.contains("task"), "{}", c.desc);
+            // "scheduled task" is the user's word (card #411, site/m/timers)
+            assert!(!c.desc.replace("scheduled task", "").contains("task"), "{}", c.desc);
         }
     }
 

@@ -68,6 +68,11 @@ pub const COMMANDS: &[CmdDoc] = &[
         "open a hit: the entry with its neighbors, the commands to move earlier/later, and the agents, messages and commits it mentions.",
     ),
     cmd(
+        "sb every <10m|1h|day 07:30> \"<message>\" [--until <18:00|tomorrow 18:00|2h>] [--times <n>] [--to <agent>] | sb every | sb every --stop <id>",
+        Who::Everyone,
+        "a standing order: the hub wakes you (or `--to` that agent) with the message on a timer, every N (at least 1m) or every day at that time, until a time or for n times. Never sleep or loop in a turn to wait: set a timer and end your turn. A wake while busy waits for the end of the turn (one, never stacked). No argument: the timers; `--stop` ends one. A dropped agent's timers stop with it.",
+    ),
+    cmd(
         "sb land [--here] [--add <path>]... \"<message>\"",
         Who::Everyone,
         "commit the files you changed (only yours, never another agent's) with that message. `--here`: on your place's branch (the shared folder: its branch, main). Without it, from a worktree: the branch is rebased on main, checked, and main moves to it (pushed when the repo says so); from the shared folder, the same as `--here`. A file another agent also changed is refused: main decides. New files: in a worktree you have alone, every new file not ignored is yours and lands; elsewhere, new files you made with bash (a generator, a download) land only with `--add <file or folder>`, and the land names the new files it left out.",
@@ -305,6 +310,51 @@ fn str_of(opts: &Map<String, Value>, k: &str) -> String {
     }
 }
 
+const EVERY_USAGE: &str = "usage: sb every <10m|1h|day 07:30> \"<message>\" [--until <18:00|tomorrow 18:00|2h>] [--times <n>] [--to <agent>] | sb every | sb every --stop <id>";
+
+/// `sb every` (docs/ambient-roadmap.md B): the durations and times are
+/// read here, with the agent's own clock and time zone (every.rs).
+fn every_req(rest: &[String], req: &mut Map<String, Value>) -> Result<(), String> {
+    let (pos, o) = parse_args(rest, &["until", "times", "to", "stop"], &[])?;
+    if o.contains_key("stop") {
+        let id = str_of(&o, "stop").trim_start_matches('#').parse::<u64>().map_err(|_| EVERY_USAGE.to_string())?;
+        req.insert("step".into(), json!("stop"));
+        req.insert("id".into(), json!(id));
+        return Ok(());
+    }
+    if pos.is_empty() || pos == ["list"] {
+        req.insert("step".into(), json!("list"));
+        return Ok(());
+    }
+    let now = crate::util::now_ms();
+    let words = match pos[0].as_str() {
+        "day" | "daily" => {
+            let at = pos.get(1).ok_or(EVERY_USAGE)?;
+            req.insert("daily_min".into(), json!(crate::every::parse_hhmm(at)?));
+            &pos[2..]
+        }
+        d => {
+            // the hub checks the minimum (1m)
+            let ms = crate::every::parse_dur(d)?;
+            req.insert("every_ms".into(), json!(ms));
+            &pos[1..]
+        }
+    };
+    req.insert("step".into(), json!("add"));
+    req.insert("text".into(), json!(text_of(words).map_err(|_| EVERY_USAGE.to_string())?));
+    let until = str_of(&o, "until");
+    if !until.is_empty() {
+        req.insert("until_ms".into(), json!(crate::every::parse_until(&until, now)?));
+    }
+    let times = str_of(&o, "times");
+    if !times.is_empty() {
+        let n = times.parse::<u64>().ok().filter(|n| *n > 0).ok_or("sb every: --times is a number, at least 1")?;
+        req.insert("times".into(), json!(n));
+    }
+    req.insert("to".into(), json!(str_of(&o, "to")));
+    Ok(())
+}
+
 /// The JSON request for `sb <args>`.
 pub fn build(args: &[String]) -> Result<Value, String> {
     let Some(cmd) = args.first() else {
@@ -536,6 +586,7 @@ pub fn build(args: &[String]) -> Result<Value, String> {
                 _ => return Err(usage.into()),
             }
         }
+        "every" => every_req(rest, &mut req)?,
         "land" => {
             let (pos, o) = parse_args(rest, &["add"], &["here"])?;
             req.insert("here".into(), json!(o.contains_key("here")));
@@ -719,6 +770,7 @@ pub fn render(cmd: &str, v: &Value) -> (bool, String) {
         "move" => format!("@{} moved", s("name")),
         // the hub's line: `✓ x landed 1 commit on main (abc1234)`
         "land" => s("text"),
+        "every" => s("text"),
         "flow" => s("text"),
         "feature" => s("text"),
         "worktree" if s("path").is_empty() => "the hub knows you work in your own workspace again".to_string(),

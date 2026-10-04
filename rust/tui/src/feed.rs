@@ -367,6 +367,7 @@ pub(crate) fn is_notice(ev: &Ev) -> bool {
             | Ev::Compact
             | Ev::Compacted { .. }
             | Ev::Fold { .. }
+            | Ev::Scheduled { .. }
             | Ev::TurnDone
             | Ev::TimeMark(_)
     ) || matches!(ev, Ev::Release(r) if !r.is_l2())
@@ -939,7 +940,7 @@ pub(crate) fn discloses(ev: &Ev) -> bool {
         Ev::AgentMsg { text, .. } => is_brief(text) || report_parts(text).is_some(),
         // a why, or a question or answer longer than its gist
         Ev::Answered { agent, question, answer, why, .. } => crate::answered::answered_opens(agent, question, answer, why),
-        Ev::Compacted { text, .. } | Ev::Fold { text, .. } => !text.trim().is_empty(),
+        Ev::Compacted { text, .. } | Ev::Fold { text, .. } | Ev::Scheduled { words: text, .. } => !text.trim().is_empty(),
         Ev::Release(r) => r.discloses(),
         // a long message of yours folds (BISE-239)
         Ev::You(t, ..) => crate::render::you_folds(t),
@@ -1060,6 +1061,7 @@ fn toggle_own(events: &mut [Ev], cache: &mut [Option<EventRows>], i: usize) -> b
         | Ev::Answered { open, .. }
         | Ev::Compacted { open, .. }
         | Ev::Fold { open, .. }
+        | Ev::Scheduled { open, .. }
         | Ev::Approval { open, .. }
         | Ev::You(_, _, open) => *open = !*open,
         Ev::Tool(td) if crate::toolbox::opens_as_box(td) => {
@@ -1461,6 +1463,7 @@ fn own_open(ev: &Ev) -> Option<bool> {
         | Ev::Answered { open, .. }
         | Ev::Compacted { open, .. }
         | Ev::Fold { open, .. }
+        | Ev::Scheduled { open, .. }
         | Ev::Approval { open, .. }
         | Ev::You(_, _, open) => Some(*open),
         // a row, or an open box that still hides lines, is closed

@@ -222,6 +222,15 @@ pub(crate) enum Ev {
         text: String,
         open: bool,
     },
+    // site/m/timers: a scheduled task (sb every) set, run or ended, one
+    // faint `◷ head ▸` row; `words`, the words it sends, open under it
+    // (empty: no ▸). From the hub's `scheduled : <json>` lines and the
+    // runs' `msg-in` from bise (sb.rs `scheduled_line`).
+    Scheduled {
+        head: String,
+        words: String,
+        open: bool,
+    },
     Idle,
     Raw(String),
     // switchboard (hub line protocol v2, contract C2): a message between

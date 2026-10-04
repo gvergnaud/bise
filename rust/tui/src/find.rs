@@ -424,6 +424,7 @@ fn tier_of(ev: &Ev) -> Option<Tier> {
         | Ev::Card { .. }
         | Ev::Compacted { .. }
         | Ev::Fold { .. }
+        | Ev::Scheduled { .. }
         | Ev::Undelivered { .. } => Some(Tier::Other),
         _ => None,
     }
@@ -457,6 +458,7 @@ fn sig(ev: &Ev) -> u64 {
         ],
         Ev::Card { text, .. } | Ev::Compacted { text, .. } | Ev::Undelivered { text, .. } => [5, text.len(), 0, 0, 0],
         Ev::Fold { head, text, open } => [6, head.len(), text.len(), *open as usize, 0],
+        Ev::Scheduled { head, words, open } => [8, head.len(), words.len(), *open as usize, 0],
         Ev::Pr { text, .. } => [7, text.len(), 0, 0, 0],
         _ => [0; 5],
     };
@@ -471,7 +473,7 @@ fn haystack(ev: &Ev) -> String {
         Ev::AgentMsg { text, .. } => vec![cap(text)],
         Ev::Answered { question, answer, why, .. } => vec![cap(question), cap(answer), cap(why)],
         Ev::Card { text, .. } | Ev::Compacted { text, .. } | Ev::Undelivered { text, .. } => vec![cap(text)],
-        Ev::Fold { head, text, .. } => vec![cap(head), cap(text)],
+        Ev::Fold { head, text, .. } | Ev::Scheduled { head, words: text, .. } => vec![cap(head), cap(text)],
         Ev::Pr { number, text, .. } => return format!("#{} {}", number, cap(text)),
         Ev::Tool(td) => return tool_text(td),
         _ => Vec::new(),

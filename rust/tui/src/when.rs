@@ -55,6 +55,17 @@ fn day_and_time(ms: u64, off: i32, now: u64, now_off: i32) -> String {
     }
 }
 
+/// A time to come (a scheduled task's next run): `14:22` today,
+/// `tomorrow 07:30`, else the day and the time (`oct 6 07:30`).
+pub(crate) fn ahead(ms: u64, off: i32, now: u64, now_off: i32) -> String {
+    let (y, m, d, h, mi) = civil(ms, off);
+    let (ty, tm, td, ..) = civil(now + DAY, now_off);
+    if (y, m, d) == (ty, tm, td) {
+        return format!("tomorrow {:02}:{:02}", h, mi);
+    }
+    day_and_time(ms, off, now, now_off)
+}
+
 /// When a turn ended, as its hover says (the designer's words): under
 /// a day the time and how long ago (`12:41 · now`, `12:41 · 5m ago`,
 /// `12:41 · 1h ago`), else the day and the time (`yesterday 18:02`,

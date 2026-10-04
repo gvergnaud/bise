@@ -106,7 +106,8 @@ pub fn agent_threads(st: &State, limit: usize) -> Vec<String> {
             format!(
                 "t_{} {}  {} message{}  {}  \"{}\"",
                 t,
-                parties.join(" ↔ "),
+                // the hub's own id `switchboard` reads `bise`
+                parties.iter().map(|p| crate::prompts::shown_sender(p)).collect::<Vec<_>>().join(" ↔ "),
                 ms.len(),
                 if ms.len() > 1 { "s" } else { "" },
                 if open { "open" } else { "answered" },

@@ -18,6 +18,8 @@ pub(crate) struct App {
     pub(crate) logview: Option<crate::logview::View>,
     /// `/artifacts`, the full screen of what your agents made, when open
     pub(crate) artifacts: Option<crate::artifacts_screen::Screen>,
+    /// `/scheduled`, the full screen of the scheduled tasks, when open
+    pub(crate) scheduled: Option<crate::scheduled_screen::Screen>,
     /// the diff panel (ctrl+g, `/diff`, `± 3 files`), when open
     pub(crate) diff: Option<crate::diffview::Panel>,
     // the /computer-use screen, when open (computer_use.rs)
@@ -288,6 +290,7 @@ impl App {
             approvals: None,
             logview: None,
             artifacts: None,
+            scheduled: None,
             diff: None,
             computer_use: None,
             debug,

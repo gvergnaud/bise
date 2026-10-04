@@ -819,6 +819,34 @@ fn worktrees_need_git() {
     assert!(!t.hub.st.agents.contains_key("x"));
 }
 
+/// `sb every` (every.rs): at least a minute, an active agent, a message;
+/// set, listed in `sb tasks`, stopped, each change in the journal.
+#[test]
+fn every_sets_lists_and_stops_timers() {
+    use crate::every::Sched;
+    let mut t = T::new();
+    let add = |sched, to: &str| AgentReq::Every(EveryReq::Add { to: to.into(), text: "check HN".into(), sched, until_ms: None, times: None });
+    for (req, why) in [
+        (add(Sched::Every(30_000), ""), "at least 1m"),
+        (add(Sched::Every(600_000), "ghost"), "no active agent @ghost"),
+    ] {
+        let (tok, fx) = t.req(MAIN, req);
+        let e = reply(&fx, tok).unwrap()["error"].as_str().unwrap().to_string();
+        assert!(e.contains(why), "{}", e);
+        assert!(!fx.iter().any(|e| matches!(e, Effect::Journal(_))));
+    }
+    let (tok, fx) = t.req(MAIN, add(Sched::Every(600_000), ""));
+    let r = reply(&fx, tok).unwrap();
+    assert!(r["text"].as_str().unwrap().starts_with("timer set: #1 @main every 10m"), "{}", r);
+    assert!(fx.iter().any(|e| matches!(e, Effect::Journal(j) if j["type"] == "every_set")));
+    let (tok, fx) = t.req(MAIN, AgentReq::Tasks);
+    assert!(reply(&fx, tok).unwrap()["text"].as_str().unwrap().contains("## timers (sb every)\n#1 @main every 10m"));
+    let (tok, fx) = t.req(MAIN, AgentReq::Every(EveryReq::Stop(1)));
+    assert_eq!(reply(&fx, tok).unwrap()["text"], "timer #1 stopped");
+    let (tok, fx) = t.req(MAIN, AgentReq::Every(EveryReq::List));
+    assert!(reply(&fx, tok).unwrap()["text"].as_str().unwrap().starts_with("no timers"));
+}
+
 #[test]
 fn shared_tasks_touching_one_file_tell_main() {
     let mut t = T::new();

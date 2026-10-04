@@ -57,6 +57,13 @@ fn cases() -> Vec<Vec<&'static str>> {
         vec!["feature", "merge"],
         vec!["spawn", "cu-a", "--feature", "computer-use", "--objective", "do it"],
         vec!["spawn", "cu-b", "--feature", "computer-use", "--place", "new", "--objective", "do it"],
+        // standing orders (sb every)
+        vec!["every"],
+        // an absolute --until: a relative one differs by the ms between two runs
+        vec!["every", "10m", "check HN", "--until", "2030-01-01 18:00", "--times", "3", "--to", "t1"],
+        vec!["every", "day", "07:30", "make the morning page"],
+        vec!["every", "--stop", "2"],
+        vec!["every", "soon", "x"],
         vec!["version"],
         vec!["version", "switch", "HEAD"],
         vec!["restart", "current"],
