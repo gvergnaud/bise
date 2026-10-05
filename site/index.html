@@ -336,8 +336,8 @@
   .dwin .tool { font-family:"JetBrains Mono",monospace; font-size:10.5px; color:var(--dim); display:grid; grid-template-columns:2.2em 1fr auto; }
   .dwin .env { font-family:"JetBrains Mono",monospace; font-size:10.5px; color:var(--dim); } .dwin .env .c { background:var(--raised); border-radius:5px; padding:0 6px; margin-right:6px; }
   .dwin .shot { margin-left:2.2em; width:150px; height:64px; border-radius:8px; background:linear-gradient(135deg,#4a3530,#1f1a18 55%,#3b2f2c); position:relative; box-shadow:0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent); }
-  .dwin .shot::after { content:"0.9 s"; position:absolute; right:8px; bottom:6px; font-family:"JetBrains Mono",monospace; font-size:18px; font-weight:700; color:var(--acc); }
-  .dwin .shot::before { content:"signup, before → after"; position:absolute; left:8px; top:5px; font-size:9.5px; color:#d8cfc2; }
+  .dwin .shot::after { content:"1 charge"; position:absolute; right:8px; bottom:6px; font-family:"JetBrains Mono",monospace; font-size:18px; font-weight:700; color:var(--acc); }
+  .dwin .shot::before { content:"checkout, before → after"; position:absolute; left:8px; top:5px; font-size:9.5px; color:#d8cfc2; }
   .dwin .inbox { background:var(--raised); border-radius:9px; padding:6px 10px; display:flex; justify-content:space-between; gap:10px; font-size:11.5px; box-shadow:inset 2px 0 0 var(--acc); }
   .dwin .inbox .o { color:var(--dim); white-space:nowrap; font-size:10.5px; } .dwin .inbox .o b { color:var(--acc); font-family:"JetBrains Mono",monospace; font-weight:400; }
   .dwin .cp { background:var(--raised); border-radius:11px; padding:8px 12px 9px; } .dwin .cp .to { color:var(--dim); font-size:10.5px; display:flex; justify-content:space-between; }
@@ -735,15 +735,15 @@
     <h2>one thread. a whole team.</h2>
     <p class="soft"><b>main</b> is your team lead. it splits your ideas into jobs and runs the other agents.</p>
 <div class="org" id="org" aria-label="you talk to main, main runs four agents">
-  <div class="msg"><span class="who">you → <span class="acc">main</span></span>dark mode please. also the csv export crashes on emoji 😭</div>
+  <div class="msg"><span class="who">you → <span class="acc">main</span></span>Apple Pay at checkout please. also search misses tshirt 😭</div>
   <div class="wire"></div>
   <div class="boss"><b><span class="acc">:*</span> main</b><span class="dim">always listening · knows the whole repo</span></div>
   <div class="wire w2"></div>
   <div class="team">
-    <div class="agent" data-a="theme"><b><span class="st">∿</span> theme</b><span>dark colors, in one place</span></div>
-    <div class="agent" data-a="toggle"><b><span class="st">∿</span> toggle</b><span>a switch in settings</span></div>
-    <div class="agent" data-a="docs"><b><span class="st">∿</span> docs</b><span>fresh screenshots</span></div>
-    <div class="agent" data-a="emoji-csv"><b><span class="st">∿</span> emoji-csv</b><span>unrelated, so it runs too</span></div>
+    <div class="agent" data-a="wallet"><b><span class="st">∿</span> wallet</b><span>the Apple Pay sheet</span></div>
+    <div class="agent" data-a="checkout"><b><span class="st">∿</span> checkout</b><span>the order flow</span></div>
+    <div class="agent" data-a="docs"><b><span class="st">∿</span> docs</b><span>the merchant setup</span></div>
+    <div class="agent" data-a="search"><b><span class="st">∿</span> search</b><span>unrelated, so it runs too</span></div>
   </div>
 </div>
     <ul class="how">
@@ -793,29 +793,29 @@
     <h2>polished down to the last character</h2>
     <p class="soft">hundreds of tiny details. you'll feel them before you see them.</p>
     <div class="minis">
-      <div class="mini"><div class="mv"><span class="t">you</span>  fix the typo in the footer
+      <div class="mini"><div class="mv"><span class="t">you</span>  set the eval timeout to 120 s
 <span class="acc">:*</span>   done, i did it myself.
      too small for an agent.
 <span class="faint">     0 agents started</span></div><p><b>your token bill can relax</b>bise starts an agent when a job needs one. that's the whole rule. there's no committee of agents reviewing each other in circles.</p></div>
       <div class="mini"><div class="mv"><span class="faint">╭ attached ─────────────────────╮</span>
-<span class="faint">│</span> <span class="pill">▣ 1</span> cart.png   <span class="faint">1440×900</span>      <span class="faint">│</span>
+<span class="faint">│</span> <span class="pill">▣ 1</span> terrain.png <span class="faint">1440×900</span>      <span class="faint">│</span>
 <span class="faint">╰───────────────────────────────╯</span>
-<span class="bar"><span class="t">it hides the buy button </span><span class="pill">▣ 1</span><span class="cur"></span></span></div><p><b>show it a screenshot</b>paste it with ctrl+v or drag it in. an image is one chip in your text.</p></div>
+<span class="bar"><span class="t">shadow acne at dusk </span><span class="pill">▣ 1</span><span class="cur"></span></span></div><p><b>show it a screenshot</b>paste it with ctrl+v or drag it in. an image is one chip in your text.</p></div>
       <div class="mini"><div class="mv"><span class="acc">●</span> <span class="t">listening</span>  <span class="wave"><span>▂</span><span>▅</span><span>▃</span><span>▆</span><span>▂</span></span>
 
-<span class="bar"><span class="t">and make the button pink</span><span class="cur"></span></span>
+<span class="bar"><span class="t">and test it with 2% packet loss</span><span class="cur"></span></span>
 <span class="faint">ctrl+r to stop</span></div><p><b>or just talk</b>turn on /voice, press ctrl+r, say it.</p></div>
-      <div class="mini"><div class="mv"><span class="acc">:*</span> perf is done. signup went from
-   <span class="hl">4.1 s to 0.9 s</span> on a phone
+      <div class="mini"><div class="mv"><span class="acc">:*</span> cache is done. hit rate went
+   <span class="hl">from 12% to 71%</span> on prod
 
 <span class="bar"><span class="pill">❝ 1</span><span class="t"> what made the difference?</span><span class="cur"></span></span></div><p><b>ask about anything on screen</b>select a few lines in the history and start typing: they come along as a quote.</p></div>
       <div class="mini"><div class="mv"><span class="acc">:*</span> <span class="t">main</span>         <span class="faint">opus·hi</span>
-<span class="acc">∿</span> <span class="t">perf</span>         <span class="faint">opus·hi</span>
-<span class="acc">∿</span> <span class="t">cookies</span>      <span class="faint">haiku·lo</span>
+<span class="acc">∿</span> <span class="t">ingest</span>       <span class="faint">opus·hi</span>
+<span class="acc">∿</span> <span class="t">alerts</span>       <span class="faint">haiku·lo</span>
 <span class="acc">∿</span> <span class="t">release</span>      <span class="faint">haiku·lo</span></div><p><b>a model per agent</b>the big one for the hard job, a fast one for the chores. /model and /reasoning.</p></div>
-      <div class="mini"><div class="mv"><span class="faint">◷ main scheduled #48 for answer-line</span>
+      <div class="mini"><div class="mv"><span class="faint">◷ main scheduled #48 for ingest</span>
 <span class="faint">  every 2m · next 14:22</span>
-<span class="acc">:*</span> answer-line: green.
+<span class="acc">:*</span> ingest: lag 4 s.
 <span class="faint">◷ scheduled #48 ended</span></div><p><b>scheduled tasks</b>agents wake themselves on a schedule: watch a build, ship every morning. /scheduled lists them, runs one now, stops it.</p></div>
       <div class="mini"><div class="mv"><span class="acc">$</span> <span class="t">npm test</span>
 <span class="acc">✓</span> 142 passed <span class="faint">(3.1 s)</span>
@@ -823,7 +823,7 @@
 <span class="faint">ctrl+` hides it. it keeps running</span></div><p><b>a real shell, one key away</b>ctrl+` opens a terminal in your repo. it keeps running while hidden.</p></div>
       <div class="mini"><div class="mv"><span class="dim">you</span> /restart
 <span class="faint">bise v2026.10.3 → v2026.10.4</span>
-<span class="acc">∿</span> perf  <span class="acc">∿</span> dark-mode  <span class="acc">∿</span> cookies
+<span class="acc">∿</span> rag  <span class="acc">∿</span> dedupe  <span class="acc">∿</span> cache
 <span class="faint">back to work at once</span></div><p><b>restart whenever you like</b>update to the latest version mid-work, or quit and come back tomorrow. no work is ever lost: your agents resume right away, and your thread, your draft and your queue come back too.</p></div>
       <div class="mini"><div class="mv"><span class="acc">$</span> bend PROOF.bend
 <span class="acc">✓</span> no message lost
@@ -833,11 +833,11 @@
 <span class="faint">ALL PROOFS CHECK</span></div><p><b>agent communication is proven correct</b>we have the proof, thanks to <a href="https://bend-lang.com" target="_blank" rel="noopener" style="color:var(--text);text-decoration:underline;text-decoration-color:var(--faint);text-underline-offset:3px">Bend</a>, a language built for the LLM era. no message lost, none sent twice.</p></div>
       <div class="mini"><div class="mv two"><div class="dk"><span class="t">bise</span> <span class="acc">:*</span>
 
-<span class="acc">∿</span> <span class="t">dark-mode</span>
-<span class="acc">✓</span> cookies</div><div class="lt"><span class="t">bise</span> <span class="acc">:*</span>
+<span class="acc">∿</span> <span class="t">streaming</span>
+<span class="acc">✓</span> shadows</div><div class="lt"><span class="t">bise</span> <span class="acc">:*</span>
 
-<span class="acc">∿</span> <span class="t">dark-mode</span>
-<span class="acc">✓</span> cookies</div></div><p><b>your terminal</b>your colors, light or dark, text at a reading width.</p></div>
+<span class="acc">∿</span> <span class="t">streaming</span>
+<span class="acc">✓</span> shadows</div></div><p><b>your terminal</b>your colors, light or dark, text at a reading width.</p></div>
     </div>
   </div>
 </section>
@@ -916,32 +916,32 @@
     <p>the same bise, in a window. your repos in a sidebar, one thread each. the agents on the right. a notification only when something needs you. i drew the screens. if enough of you want it, i'll build it.</p>
     <div class="dstage blow" id="dstage">
       <a class="dwin" href="book/desktop.html" aria-label="see the desktop app screens">
-        <div class="tb"><i style="background:#ec6a5e"></i><i style="background:#f4bf4f"></i><i style="background:#61c554"></i><span><b>acme</b> · one thread</span></div>
+        <div class="tb"><i style="background:#ec6a5e"></i><i style="background:#f4bf4f"></i><i style="background:#61c554"></i><span><b>storefront</b> · one thread</span></div>
         <div class="bd">
           <div class="sd"><div class="h">repos</div>
-            <div class="r on"><b>acme</b><span class="m acc"><span class="dbr">∿</span> 3</span><span class="l"><i class="ph" style="width:80%;margin-top:5px"></i></span></div>
+            <div class="r on"><b>storefront</b><span class="m acc"><span class="dbr">∿</span> 3</span><span class="l"><i class="ph" style="width:80%;margin-top:5px"></i></span></div>
             <div class="r"><span>blog</span><span class="m acc">? 1</span><span class="l"><i class="ph" style="width:64%;margin-top:5px"></i></span></div>
             <div class="r"><span>bise</span><span class="m acc">✓</span><span class="l"><i class="ph" style="width:72%;margin-top:5px"></i></span></div>
             <div class="r"><span>dotfiles</span><span></span><span class="l"><i class="ph" style="width:50%;margin-top:5px"></i></span></div></div>
           <div class="ct">
             <i class="ph" style="width:46%"></i><i class="ph" style="width:70%"></i>
-            <div class="you" style="margin-top:6px">signup is slow on mobile. can you look?</div>
-            <div class="bs"><span class="g">:*</span><span>on it. perf is profiling signup on a mid-range phone.</span></div>
+            <div class="you" style="margin-top:6px">checkout errors jumped this morning. can you look?</div>
+            <div class="bs"><span class="g">:*</span><span>on it. checkout is reading last night's payment events.</span></div>
             <div class="tool"><span>$</span><i class="ph" style="width:58%;align-self:center"></i><span></span></div>
             <div class="tool"><span>✉</span><i class="ph" style="width:40%;align-self:center"></i><span></span></div>
-            <div class="bs"><span class="g">✓</span><span>perf is done. signup went from 4.1 s to 0.9 s</span></div>
-            <div class="inbox"><span><span class="acc">?</span> dark-mode · which gray wins?</span><span class="o"><b>1</b> tokens · <b>2</b> new ones</span></div>
+            <div class="bs"><span class="g">✓</span><span>checkout is done. one charge per order now</span></div>
+            <div class="inbox"><span><span class="acc">?</span> search · reindex now?</span><span class="o"><b>1</b> now · <b>2</b> tonight</span></div>
             <div class="cp"><div class="to"><span>you → <b>main</b></span><span><span class="dbr acc">∿</span> 3 working</span></div><div class="tx"><span id="dtype"></span><span class="cu"></span></div></div>
           </div>
           <div class="ag"><div class="h">agents</div>
             <div class="a"><span class="g">:*</span><span>main</span><i class="x ph" style="width:70%;margin-top:4px"></i></div>
-            <div class="a"><span class="g">✓</span><span>perf</span><i class="x ph" style="width:50%;margin-top:4px"></i></div>
-            <div class="a"><span class="g">?</span><span>dark-mode</span><i class="x ph" style="width:80%;margin-top:4px"></i></div>
-            <div class="a"><span class="g dbr">∿</span><span>cookies</span><i class="x ph" style="width:44%;margin-top:4px"></i></div>
-            <div class="a"><span class="g dbr">∿</span><span>emoji-csv</span><i class="x ph" style="width:56%;margin-top:4px"></i></div></div>
+            <div class="a"><span class="g">✓</span><span>checkout</span><i class="x ph" style="width:50%;margin-top:4px"></i></div>
+            <div class="a"><span class="g">?</span><span>search</span><i class="x ph" style="width:80%;margin-top:4px"></i></div>
+            <div class="a"><span class="g dbr">∿</span><span>stock</span><i class="x ph" style="width:44%;margin-top:4px"></i></div>
+            <div class="a"><span class="g dbr">∿</span><span>promo</span><i class="x ph" style="width:56%;margin-top:4px"></i></div></div>
         </div>
       </a>
-      <div class="dnote" id="dnote"><span class="ic">:*</span><div><b>dark-mode needs you</b><span>which gray wins? tokens, or new ones</span></div></div>
+      <div class="dnote" id="dnote"><span class="ic">:*</span><div><b>search needs you</b><span>reindex now, or tonight at 02:00?</span></div></div>
     </div>
     <div class="ctas"><a class="main" href="https://x.com/GabrielVergnaud" target="_blank" rel="noopener">i want it · tell me on X ↗</a><a href="https://github.com/gvergnaud/bise/issues" target="_blank" rel="noopener">or on GitHub ↗</a><a href="book/desktop.html">see every screen →</a></div>
   </div>
@@ -995,7 +995,7 @@ document.querySelectorAll(".blow").forEach((b) => io.observe(b));
 // ---- how: the org chart plays once, when seen ----
 const org = document.getElementById("org");
 if (org) new IntersectionObserver((es, o) => { if (!es[0].isIntersecting) return; o.disconnect(); org.classList.add("go"); if (reduced) return;
-  for (const [n, t] of [["theme", 4200], ["emoji-csv", 5400], ["docs", 7000], ["toggle", 8600]]) setTimeout(() => { const a = org.querySelector(`[data-a="${n}"]`); a.classList.add("done"); a.querySelector(".st").textContent = "✓"; }, t);
+  for (const [n, t] of [["wallet", 4200], ["search", 5400], ["docs", 7000], ["checkout", 8600]]) setTimeout(() => { const a = org.querySelector(`[data-a="${n}"]`); a.classList.add("done"); a.querySelector(".st").textContent = "✓"; }, t);
 }, { threshold: .4 }).observe(org);
 
 // ---- the wind: soft streams of ASCII drifting to the right ----
@@ -1095,9 +1095,9 @@ function arcWake(g, b, Y, t, d0 = 0) {
 }
 function branch(s) {
     s.p = []; s.puff = []; s.b = []; s.ev = []; s.evn = 0; s.q = []; s.cur = null; s.kx = -2; s.flash = 0; s.last = -99;
-    const NAMES = ["feat: throw confetti", "feat: dark mode", "feat: gif picker", "feat: drag & drop", "feat: party mode", "feat: hide a konami code",
-      "feat: typing dots", "feat: voice notes", "feat: emoji reactions", "fix: emoji in csv export", "fix: search crème brûlée", "fix: banner covers buy",
-      "fix: dark mode flash", "perf: faster signup", "style: rounder buttons", "feat: leaderboard"];
+    const NAMES = ["feat: Apple Pay checkout", "fix: 3DS double charge", "fix: flash sale oversell", "fix: search tshirt", "feat: p99 alert hysteresis", "fix: ingest lag at peak",
+      "feat: tail sampling", "fix: shadow acne at dusk", "perf: decode off main", "fix: co-op desync", "feat: PBR materials", "fix: eval set leak",
+      "perf: prompt cache hits", "fix: RAG cites right chunk", "feat: model card", "fix: promo stacking"];
     const say = (g, Y, x, text) => {
       for (const row of [Y + 2, Y + 3, Y + 4, Y + 1, Y + 5]) {
         if (row >= g.rows) continue;
@@ -1276,7 +1276,7 @@ const sec = document.querySelector(".sky");
 (() => {
   const stage = document.getElementById("dstage"); if (!stage) return;
   const typed = document.getElementById("dtype"), note = document.getElementById("dnote");
-  const lines = ["and the cookie banner hides the buy button", "also the csv export crashes on emoji 😭", "ship it when it's green"];
+  const lines = ["and the flash sale oversold the linen shirt", "also the promo code stacks again 😭", "ship it when it's green"];
   let on = false, f = 0;
   new IntersectionObserver(([e]) => { on = e.isIntersecting; if (on) stage.classList.add("in"); }, { threshold: .3 }).observe(stage);
   setInterval(() => { if (!on || document.hidden) return; f++; stage.querySelectorAll(".dbr").forEach((e, i) => e.textContent = "·~∿≈∿~"[(f + i * 2) % 6]); }, 110);
@@ -1372,26 +1372,26 @@ async function run() {
   seed();
   await fsleep(1200);
   // one idea...
-  await send("signup is slow on mobile. can you look?");
+  await send("customers got charged twice on 3-D Secure timeouts");
   await fsleep(600);
-  main("on it. perf is profiling it on a mid-range phone.");
-  agent(1, "∿", "perf", "0m"); count();
+  main("on it. checkout replays the timeout against Stripe in test mode.");
+  agent(1, "∿", "checkout", "0m"); count();
   await fsleep(900);
   // ...then they come faster
-  await send("oh and dark mode. people keep asking", 1.4);
+  await send("oh and the flash sale oversold again", 1.4);
   await fsleep(450);
-  main("dark-mode started. settings page first, then the rest.");
-  agent(2, "∿", "dark-mode", "0m"); count();
+  main("stock started: two carts can still grab the last unit.");
+  agent(2, "∿", "stock", "0m"); count();
   await fsleep(500);
-  await send("and the cookie banner hides the buy button on mobile", 1.8);
+  await send("and search finds nothing for tshirt, 400 for t-shirt", 1.8);
   await fsleep(400);
-  main("freeing the button. cookies started.");
-  agent(3, "∿", "cookies", "0m"); count();
+  main("search started. the tokenizer splits on the hyphen.");
+  agent(3, "∿", "search", "0m"); count();
   await fsleep(300);
-  await send("wait also the csv export crashes on emoji 😭", 2.4);
+  await send("wait also BLACKFRIDAY stacks with the member discount 😭", 2.4);
   await fsleep(350);
-  main("emoji-csv is on it. it's always unicode.");
-  agent(4, "∿", "emoji-csv", "0m"); count();
+  main("promo is on it. the rule engine applies both.");
+  agent(4, "∿", "promo", "0m"); count();
   await fsleep(250);
   await send("OK LAST ONE. release notes for all of this", 3);
   await fsleep(500);
@@ -1400,29 +1400,29 @@ async function run() {
   await fsleep(1600);
   // the team sorts itself out
   add(`▸ 9 messages between 5 agents`, "l3 b");
-  for (const [n, a] of [[1, "perf"], [2, "dark-mode"], [3, "cookies"], [4, "emoji-csv"], [5, "release"]]) agent(n, "∿", a, "2m");
+  for (const [n, a] of [[1, "checkout"], [2, "stock"], [3, "search"], [4, "promo"], [5, "release"]]) agent(n, "∿", a, "2m");
   await fsleep(1500);
-  main("dark-mode asked which gray. i said the one in tokens.css, like everywhere else.");
+  main("stock asked how long a cart holds stock. i said 10 min, like the app.");
   await fsleep(1800);
   // change your mind mid-run
-  await send("actually keep the cookie banner. legal wants it. just smaller");
+  await send("actually keep the member discount. just never stacked");
   await fsleep(700);
-  main("told cookies. the banner stays, half the size.");
+  main("told promo. one discount per order, the biggest one wins.");
   await fsleep(1500);
-  const card = add(`<div class="t">? perf needs you</div><div>the hero image is 4.2 MB. compress it, or lazy-load it?</div><div class="faint">1 · compress   2 · both   alt+r answer with text</div>`, "card b");
+  const card = add(`<div class="t">? search needs you</div><div>reindexing takes 25 min, search is stale meanwhile.</div><div class="faint">1 · now   2 · tonight 02:00   or type your answer</div>`, "card b");
   await fsleep(1900);
   await type("2"); setTyped("");
-  card.classList.add("answered"); card.querySelector(".t").textContent = "✓ perf · you said both";
+  card.classList.add("answered"); card.querySelector(".t").textContent = "✓ search · you said tonight 02:00";
   await fsleep(1300);
   // everything ships
-  agent(4, `<span class="acc">✓</span>`, "emoji-csv", "3m"); count();
-  add(`<span class="who acc">✓</span>emoji-csv done · 🦄 exports fine now. the file was read as latin-1.`, "b");
+  agent(4, `<span class="acc">✓</span>`, "promo", "3m"); count();
+  add(`<span class="who acc">✓</span>promo done · one discount per order, the biggest one wins.`, "b");
   await fsleep(1300);
-  agent(1, `<span class="acc">✓</span>`, "perf", "4m"); count();
-  add(`<span class="who acc">✓</span>perf done · signup: 4.1 s → 0.9 s on a mid-range phone.`, "b");
+  agent(1, `<span class="acc">✓</span>`, "checkout", "4m"); count();
+  add(`<span class="who acc">✓</span>checkout done · one charge per order. 212 customers to refund.`, "b");
   await fsleep(1200);
-  agent(3, `<span class="acc">✓</span>`, "cookies", "4m"); agent(2, `<span class="acc">✓</span>`, "dark-mode", "5m"); count();
-  add(`<span class="who acc">✓</span>cookies and dark-mode done · the buy button is free. settings is dark.`, "b");
+  agent(3, `<span class="acc">✓</span>`, "search", "4m"); agent(2, `<span class="acc">✓</span>`, "stock", "5m"); count();
+  add(`<span class="who acc">✓</span>stock and search done · 0 oversold in 10,000 runs. reindex at 02:00.`, "b");
   await fsleep(1500);
   agent(5, `<span class="acc">✓</span>`, "release", "6m"); count();
   add(`<span class="who acc">✓</span>release done · 2.5 notes drafted. five things, zero tabs.`, "b");
@@ -1455,45 +1455,45 @@ seed();  // the still frame, until the whole demo is on screen
 // ---- feature demos: tiny scripted terminals, played only while on screen ----
 const plays = {
   async talk(m) {
-    m.line(`<span class="pulse acc">∿</span> <span class="dim">perf, dark-mode and cookies are working</span>`); await m.wait(900);
-    await m.send("what's perf doing right now?");
-    await m.main("timing signup on a phone. 4.1 s so far, it's on the images."); await m.wait(500);
-    await m.send("and the csv export crashes on emoji 😭");
-    await m.main("emoji-csv started. 4 working, i'm still here."); await m.wait(3200);
+    m.line(`<span class="pulse acc">∿</span> <span class="dim">ingest, sampling and alerts are working</span>`); await m.wait(900);
+    await m.send("what's ingest doing right now?");
+    await m.main("replaying tuesday's peak: 4 min of lag, too few partitions."); await m.wait(500);
+    await m.send("and the otel upgrade dropped the pod labels 😭");
+    await m.main("otel started. 4 working, i'm still here."); await m.wait(3200);
   },
   async steer(m) {
-    m.line(`<span class="dim"><span class="pulse acc">∿</span> cookies · deleting the banner…</span>`); await m.wait(1400);
-    const d = await m.send("@cookies keep the banner. legal wants it. just smaller", true);
+    m.line(`<span class="dim"><span class="pulse acc">∿</span> promo · removing the member discount…</span>`); await m.wait(1400);
+    const d = await m.send("@promo keep the member discount. just never stacked", true);
     await m.wait(1200); d.querySelector(".tick").outerHTML = `<span class="tick read">✓✓</span>`; await m.wait(700);
-    m.line(`<span class="dim">@ cookies to you:</span> got it. it stays, half the size.`, "b"); await m.wait(2200);
-    m.line(`<span class="acc">✓</span> cookies done · 3m 40s`, "b"); await m.wait(3200);
+    m.line(`<span class="dim">@ promo to you:</span> got it. it stays, the biggest one wins.`, "b"); await m.wait(2200);
+    m.line(`<span class="acc">✓</span> promo done · 3m 40s`, "b"); await m.wait(3200);
   },
   async prs(m) {
-    await m.main("cookies opened #409: the banner stops covering buy."); await m.wait(1300);
-    m.line(`<span class="err">↑</span> <span class="dim">#409 · checks fail: e2e/checkout.spec.ts</span>`); await m.wait(1300);
-    await m.main("cookies fixed the test. #409 is green."); await m.wait(1300);
-    m.line(`<span class="dim">↑ #409 · review-bot: still too tall on an iPhone SE</span>`); await m.wait(1200);
-    await m.send("ha. fair, make it smaller");
-    await m.main("told cookies. shorter banner, pushed to #409."); await m.wait(1500);
-    m.line(`<span class="acc">✓</span> #409 merged · cookies archived, its worktree removed`, "b"); await m.wait(3200);
+    await m.main("checkout opened #812: one idempotency key per order."); await m.wait(1300);
+    m.line(`<span class="err">↑</span> <span class="dim">#812 · checks fail: e2e/checkout.spec.ts</span>`); await m.wait(1300);
+    await m.main("checkout fixed the test. #812 is green."); await m.wait(1300);
+    m.line(`<span class="dim">↑ #812 · review-bot: cap the capture retries at 3</span>`); await m.wait(1200);
+    await m.send("good bot. do it");
+    await m.main("told checkout. 3 retries, pushed to #812."); await m.wait(1500);
+    m.line(`<span class="acc">✓</span> #812 merged · checkout archived, its worktree removed`, "b"); await m.wait(3200);
   },
   async direct(m) {
     m.line(`<span class="faint">you → </span><span class="acc">main</span>`); await m.wait(1000);
     await m.type("⌥1"); m.clear();
-    m.line(`<span class="faint">you → </span><span class="acc">perf</span>`, "b"); await m.wait(600);
-    await m.send("so why is signup slow?");
-    m.line(`<span class="dim">@ perf to you:</span> the hero image is 4.2 MB. on a mid-range phone, that's 3 s.`, "b"); await m.wait(1800);
-    await m.send("ouch. add a check so it can't come back");
-    m.line(`<span class="dim">@ perf to you:</span> on it.`, "b"); await m.wait(900);
+    m.line(`<span class="faint">you → </span><span class="acc">streaming</span>`, "b"); await m.wait(600);
+    await m.send("so why the frame spikes?");
+    m.line(`<span class="dim">@ streaming to you:</span> textures decode on the main thread. 38 ms in the forest.`, "b"); await m.wait(1800);
+    await m.send("ouch. add a perf test so it can't come back");
+    m.line(`<span class="dim">@ streaming to you:</span> on it.`, "b"); await m.wait(900);
     await m.type("⌥0"); m.clear();
     m.line(`<span class="faint">you → </span><span class="acc">main</span>`, "b"); await m.wait(3000);
   },
   async sync(m) {
     const ls = [
-      ["release", "emoji-csv", "did the export format change?"],
-      ["emoji-csv", "release", "no. same columns, now in utf-8."],
-      ["release", "dark-mode", "a screenshot for the notes?"],
-      ["dark-mode", "release", "done, docs/dark.png"],
+      ["report", "rag", "did the eval set change?"],
+      ["rag", "report", "no. same 1,200 questions, new embeddings."],
+      ["report", "dedupe", "the leaked rows, for the appendix?"],
+      ["dedupe", "report", "done, data/leaked.csv"],
     ];
     const els = [];
     for (const [i, [f, t, x]] of ls.entries()) { els.push(m.line(`<span class="chip">✉ <span class="s">${f}</span> <span class="ar">→</span> ${t}</span><span class="dim">${x}</span>`, i === 2 ? "l3 b" : "l3")); await m.wait(1000); }
@@ -1501,20 +1501,20 @@ const plays = {
     els.slice(1).forEach((e) => e.remove());
     els[0].className = ""; els[0].innerHTML = `<span class="dim">▸ 4 messages between 3 agents</span>`;
     await m.wait(1100);
-    m.line(`<span class="acc">:*</span> release has what it needs. nothing for you.`, "b"); await m.wait(3200);
+    m.line(`<span class="acc">:*</span> report has what it needs. nothing for you.`, "b"); await m.wait(3200);
   },
   async mcp(m) {
     m.line(`<span class="acc">:*</span> 42 MCP servers on. all of them, all the time.`); await m.wait(700);
     m.line(`<span class="faint">github · linear · sentry · slack · notion · postgres · datadog · +35</span>`); await m.wait(1000);
-    await m.send("why did signups drop yesterday?");
-    m.line(`<span class="dim">$ typescript · signups</span>`, "b"); await m.wait(400);
+    await m.send("checkout errors jumped this morning. why?");
+    m.line(`<span class="dim">$ typescript · checkout</span>`, "b"); await m.wait(400);
     for (const l of [
-      `drop = <span class="acc">await</span> tools.datadog.query(<span class="ok">"signups"</span>)`,
-      `deploy = <span class="acc">await</span> tools.github.deployAt(drop.start)`,
-      `talk = <span class="acc">await</span> tools.slack.search(<span class="ok">"signup"</span>)`,
+      `errs = <span class="acc">await</span> tools.sentry.issues(<span class="ok">"checkout"</span>)`,
+      `deploy = <span class="acc">await</span> tools.github.deployAt(errs.first)`,
+      `talk = <span class="acc">await</span> tools.slack.search(<span class="ok">"checkout"</span>)`,
     ]) { m.line(`<span class="dim">│</span> ${l}`); await m.wait(450); }
     await m.wait(800);
-    m.line(`<span class="acc">:*</span> a deploy at 14:02 broke the email check. #support saw it at 14:30. want a fix?`, "b"); await m.wait(3600);
+    m.line(`<span class="acc">:*</span> #812 cut the 3-D Secure timeout to 5 s at 08:12. #support has 40 tickets. want a fix?`, "b"); await m.wait(3600);
   },
   async plugins(m) {
     await m.type("bise"); m.clear();
@@ -1524,7 +1524,7 @@ const plays = {
     m.line(`<span class="acc">:*</span> everything you had works here. nothing to port.`, "b"); await m.wait(3400);
   },
   async quiet(m) {
-    const first = m.line(`<span class="acc">:*</span> on it: perf, dark-mode and cookies started.`);
+    const first = m.line(`<span class="acc">:*</span> on it: rag, dedupe and cache started.`);
     const feed = first.parentElement, box = feed.closest(".mini");
     if (!box.querySelector(".qwrap")) {
       const w = document.createElement("div"); w.className = "qwrap"; feed.before(w); w.append(feed);
@@ -1534,7 +1534,7 @@ const plays = {
       box.insertAdjacentHTML("beforeend", `<div class="mkeys"><span class="k">⏎</span> send  <span class="k">ctrl+o</span> open  <span class="k">⌥1-4</span> agents</div>`);
     }
     const panel = box.querySelector(".mpanel"), cnt = box.querySelector(".cnt");
-    const agents = [["main", ":*"], ["perf", "∿"], ["dark-mode", "∿"], ["cookies", "∿"]];
+    const agents = [["main", ":*"], ["rag", "∿"], ["dedupe", "∿"], ["cache", "∿"]];
     const draw = () => {
       panel.innerHTML = agents.map(([n, s]) => `<div><span class="acc${s === "∿" ? " pulse" : ""}">${s}</span> <span class="t">${n}</span></div>`).join("");
       const w = agents.filter(([, s]) => s === "∿").length, d = agents.filter(([, s]) => s === "✓").length;
@@ -1544,41 +1544,41 @@ const plays = {
     box.classList.remove("zen"); draw();
     m.line(`<span class="dim">▸ 9 messages between 3 agents</span>`); await m.wait(1300);
     box.classList.add("zen");
-    const typing = m.type("pricing page: three tiers and a yearly toggle");
-    await m.wait(1100); set("perf", "✓"); m.line(`<span class="acc">✓</span> perf is done · signup 4.1 s → 0.9 s`, "b");
+    const typing = m.type("an eval report for all of this, when they're done");
+    await m.wait(1100); set("rag", "✓"); m.line(`<span class="acc">✓</span> rag is done · right chunk cited 61% → 94%`, "b");
     await m.wait(1300); m.line(`<span class="dim">▸ 4 more messages</span>`);
-    await m.wait(900); set("dark-mode", "✓");
+    await m.wait(900); set("dedupe", "✓");
     await typing; await m.wait(800);
     m.clear(); box.classList.remove("zen");
-    m.line(`pricing page: three tiers and a yearly toggle<span class="tick read">✓✓</span>`, "b you"); await m.wait(700);
-    set("pricing", "∿"); m.line(`<span class="acc">:*</span> on it: pricing started.`, "b"); await m.wait(3000);
+    m.line(`an eval report for all of this, when they're done<span class="tick read">✓✓</span>`, "b you"); await m.wait(700);
+    set("report", "∿"); m.line(`<span class="acc">:*</span> on it: report started.`, "b"); await m.wait(3000);
   },
   async card(m) {
-    m.line(`<span class="chip">✉ <span class="s">dark-mode</span> <span class="ar">→</span> main</span><span class="dim">which gray for the borders?</span>`, "l3"); await m.wait(1100);
-    m.line(`<span class="acc">:*</span> i told dark-mode: the gray in tokens.css, like everywhere else.`, "b"); await m.wait(1500);
-    m.line(`<span class="chip">✉ <span class="s">api-docs</span> <span class="ar">→</span> main</span><span class="dim">keep /v1 in the examples?</span>`, "l3"); await m.wait(1100);
-    m.line(`<span class="acc">:*</span> i told api-docs: /v2 only, /v1 is gone since march.`, "b"); await m.wait(1500);
-    m.line(`<span class="chip">✉ <span class="s">release</span> <span class="ar">→</span> main</span><span class="dim">dark mode is big. 2.5 or 3.0?</span>`, "l3"); await m.wait(1100);
-    m.line(`<span class="acc">:*</span> that one's yours: release asks if dark mode makes it 2.5 or 3.0.`, "b"); await m.wait(1300);
-    await m.send("3.0. it's a big one");
-    m.line(`<span class="acc">:*</span> told release. it's tagging 3.0.`, "b"); await m.wait(3200);
+    m.line(`<span class="chip">✉ <span class="s">ingest</span> <span class="ar">→</span> main</span><span class="dim">24 partitions or 48?</span>`, "l3"); await m.wait(1100);
+    m.line(`<span class="acc">:*</span> i told ingest: 48, like the traces topic. the brokers have room.`, "b"); await m.wait(1500);
+    m.line(`<span class="chip">✉ <span class="s">sampling</span> <span class="ar">→</span> main</span><span class="dim">keep every error span?</span>`, "l3"); await m.wait(1100);
+    m.line(`<span class="acc">:*</span> i told sampling: yes, errors are always kept. like the old sampler.`, "b"); await m.wait(1500);
+    m.line(`<span class="chip">✉ <span class="s">alerts</span> <span class="ar">→</span> main</span><span class="dim">should p99 page on-call at night?</span>`, "l3"); await m.wait(1100);
+    m.line(`<span class="acc">:*</span> that one's yours: alerts asks if p99 pages at night.`, "b"); await m.wait(1300);
+    await m.send("only above 2 s for 10 min");
+    m.line(`<span class="acc">:*</span> told alerts: it pages above 2 s for 10 minutes.`, "b"); await m.wait(3200);
   },
   async resume(m) {
-    await m.send("move every page to the new design system");
-    m.line(`<span class="acc">:*</span> 12 pages. i'll run 3 agents at a time and keep going till it's done.`, "b"); await m.wait(1500);
-    m.line(`<span class="dim"><span class="pulse acc">∿</span> pages-1 · <span class="pulse acc">∿</span> pages-2 · <span class="pulse acc">∿</span> pages-3</span>`); await m.wait(1400);
-    m.line(`<span class="err">✗</span> pages-2 stopped: the provider answered 503.`, "b"); await m.wait(1400);
-    m.line(`<span class="acc">:*</span> started pages-2 again, from page 7.`); await m.wait(1600);
-    m.line(`<span class="dim">▸ 9 agents over 40 minutes</span>`, "b"); await m.wait(1000);
-    m.line(`<span class="acc">✓</span> 12 of 12 pages on the new system, tests green.`, "b"); await m.wait(3200);
+    await m.send("port all 40 materials to the new PBR shader");
+    m.line(`<span class="acc">:*</span> 40 materials. i'll run 3 agents at a time and keep going till it's done.`, "b"); await m.wait(1500);
+    m.line(`<span class="dim"><span class="pulse acc">∿</span> mat-1 · <span class="pulse acc">∿</span> mat-2 · <span class="pulse acc">∿</span> mat-3</span>`); await m.wait(1400);
+    m.line(`<span class="err">✗</span> mat-2 stopped: the provider answered 503.`, "b"); await m.wait(1400);
+    m.line(`<span class="acc">:*</span> started mat-2 again, from material 23.`); await m.wait(1600);
+    m.line(`<span class="dim">▸ 9 agents over 50 minutes</span>`, "b"); await m.wait(1000);
+    m.line(`<span class="acc">✓</span> 40 of 40 ported, every screenshot test matches.`, "b"); await m.wait(3200);
   },
   async worktree(m) {
-    const r = [`<span class="faint">0</span> <span class="acc">:*</span> main`, `<span class="faint">1</span> <span class="pulse acc">∿</span> dark-mode`, `<span class="faint">2</span> <span class="pulse acc">∿</span> cookies`];
+    const r = [`<span class="faint">0</span> <span class="acc">:*</span> main`, `<span class="faint">1</span> <span class="pulse acc">∿</span> search`, `<span class="faint">2</span> <span class="pulse acc">∿</span> promo`];
     const rows = r.map((h) => m.line(h)); await m.wait(1200);
-    m.line(`<span class="acc">:*</span> perf needs a clean build to time signup. it gets its own worktree.`, "b"); await m.wait(900);
-    const p = m.line(`<span class="faint">3</span> <span class="pulse acc">∿</span> perf <span class="acc">ψ</span>`); await m.wait(2600);
-    p.innerHTML = `<span class="faint">3</span> <span class="acc">✓</span> perf`;
-    m.line(`<span class="acc">✓</span> perf done · signup 4.1 s → 0.9 s. worktree cleaned up.`, "b"); await m.wait(3400);
+    m.line(`<span class="acc">:*</span> stock needs a clean build to replay the flash sale. it gets its own worktree.`, "b"); await m.wait(900);
+    const p = m.line(`<span class="faint">3</span> <span class="pulse acc">∿</span> stock <span class="acc">ψ</span>`); await m.wait(2600);
+    p.innerHTML = `<span class="faint">3</span> <span class="acc">✓</span> stock`;
+    m.line(`<span class="acc">✓</span> stock done · 0 oversold in 10,000 runs. worktree cleaned up.`, "b"); await m.wait(3400);
   },
 };
 // each demo is a tiny terminal. only one plays at a time (the director
@@ -1713,13 +1713,13 @@ document.querySelectorAll(".feat p, .facts, .mv").forEach(cellify);
   addEventListener("resize", lockSwap); requestAnimationFrame(lockSwap); document.fonts && document.fonts.ready.then(lockSwap);
   const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const S = [
-    ["perf", "profiling signup on a phone…", "should i continue? (y/n)"],
-    ["dark-mode", "edited 14 files in settings/", "which gray? (again)"],
-    ["cookies", "moved the banner off buy", "waiting for your review"],
-    ["emoji-csv", "npm test", "✗ 3 tests failed", true],
-    ["release", "drafting notes for 2.5", "what did perf change?"],
-    ["perf (2)", "wait, which session was it?", "context lost. paste it again?"],
-    ["dark-mode (2)", "conflict in tokens.css", "✗ merge conflict", true],
+    ["checkout", "replaying the 3DS timeout…", "should i continue? (y/n)"],
+    ["stock", "edited 9 files in cart/", "lock the row or the sku? (again)"],
+    ["search", "changed the tokenizer", "waiting for your review"],
+    ["promo", "npm test", "✗ 3 tests failed", true],
+    ["release", "drafting notes for 2.5", "what did checkout change?"],
+    ["checkout (2)", "wait, which session was it?", "context lost. paste it again?"],
+    ["stock (2)", "conflict in cart/reserve.ts", "✗ merge conflict", true],
   ];
   let wins = [], run = 0, state = "today", switches = 0, waiting = 0;
   const sleep = (ms) => new Promise((r) => setTimeout(r, RM ? Math.min(ms, 60) : ms));
