@@ -74,8 +74,11 @@ Le passage inverse (`worktree` → `shared`) n'existe pas : ce serait un merge.
 
 Pendant l'état `starting`, le hub :
 
-1. Résout la base : `worktree.base` (défaut : `HEAD` du workspace) en un
-   commit. Il l'enregistre comme `base_commit`.
+1. Résout la base : `worktree.base` (défaut : la pointe de main, la
+   branche par défaut du dépôt, jamais le `HEAD` du workspace qui peut
+   être sur la branche d'un autre agent ; en flow PR, sa copie
+   `origin/<main>`, sans fetch ; issue #8, `trunk.rs`) en un commit. Il
+   l'enregistre comme `base_commit`.
 2. Choisit le nom de branche `sb/<nom>`. Si la branche existe déjà, il
    ajoute `-2`, `-3`, etc.
 3. Lance `git worktree add -b <branche> <chemin> <base_commit>`.
@@ -208,7 +211,7 @@ Les refs de sauvegarde n'expirent jamais : le hub ne les supprime pas. Un
 ```toml
 [worktree]
 root = ""                        # vide = $XDG_STATE_HOME/switchboard/<id>/worktrees
-base = "HEAD"                    # ou "origin/main"
+base = ""                        # vide = la pointe de main ; ou "origin/main", "HEAD"
 branch_prefix = "sb/"
 copy = [".env", ".env.local"]    # copiés du workspace s'ils existent
 setup = ""                       # par exemple "pnpm install --frozen-lockfile"

@@ -1,6 +1,8 @@
 //! The git side of RFC 0002: create a task worktree, measure what a drop
 //! would lose, save it in a hidden ref, remove, restore. `GitEnv` is the
-//! daemon's `core::Env`.
+//! daemon's `core::Env`. A new worktree starts from main's tip
+//! (`trunk::start_ref`, issue #8), never the shared folder's HEAD;
+//! `--with-changes` adds the shared folder's edits on top.
 
 use crate::core::{Env, Loss};
 use crate::model::{Mode, Workspace};
@@ -13,7 +15,8 @@ use std::process::Command;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Config {
     pub root: Option<PathBuf>,
-    pub base: String,
+    /// Where a new worktree starts; None: main's tip (`trunk`, issue #8).
+    pub base: Option<String>,
     pub branch_prefix: String,
     pub copy: Vec<String>,
     pub setup: String,
@@ -23,7 +26,7 @@ impl Default for Config {
     fn default() -> Config {
         Config {
             root: None,
-            base: "HEAD".into(),
+            base: None,
             branch_prefix: "sb/".into(),
             copy: Vec::new(),
             setup: String::new(),
@@ -64,9 +67,7 @@ impl Config {
                         .map(PathBuf::from)
                 }
                 "base" => {
-                    c.base = Some(toml_str(v))
-                        .filter(|s| !s.is_empty())
-                        .unwrap_or(c.base)
+                    c.base = Some(toml_str(v)).filter(|s| !s.is_empty())
                 }
                 "branch_prefix" => c.branch_prefix = toml_str(v),
                 "setup" => c.setup = toml_str(v),
@@ -271,14 +272,15 @@ impl Env for GitEnv {
     }
 
     fn worktree_create(&mut self, name: &str, with_changes: bool) -> Result<Workspace, String> {
-        let base = git(
-            self.ws(),
-            &[
-                "rev-parse",
-                "--verify",
-                &format!("{}^{{commit}}", self.config.base),
-            ],
-        )?;
+        // issue #8: main's tip, never the shared folder's HEAD (it may be
+        // on another agent's branch); PR flow: the PR's base, origin's copy
+        let flow = crate::devflow::resolve(
+            &crate::flow::FlowConfig::load(&self.paths),
+            crate::devflow::read_cache(&self.paths.state).as_ref(),
+        );
+        let pr = flow.is_some_and(|f| f.mode == crate::flow::FlowMode::Pr);
+        let start = crate::trunk::start_ref(self.ws(), self.config.base.as_deref(), pr);
+        let base = git(self.ws(), &["rev-parse", "--verify", &format!("{}^{{commit}}", start)])?;
         let branch = self.free_branch(name);
         let path = self.free_path(name);
         if let Some(p) = path.parent() {
@@ -545,7 +547,8 @@ mod tests {
         let c = Config::parse(
             "[other]\nbase = \"x\"\n[worktree]\nbase = \"origin/main\" # comment\ncopy = [\".env\", \".env.local\"]\nsetup = \"pnpm i\"\nbranch_prefix = \"t/\"\n",
         );
-        assert_eq!(c.base, "origin/main");
+        assert_eq!(c.base.as_deref(), Some("origin/main"));
+        assert_eq!(Config::parse("[worktree]\nsetup = \"x\"\n").base, None, "unset: main's tip");
         assert_eq!(c.copy, vec![".env".to_string(), ".env.local".to_string()]);
         assert_eq!(c.setup, "pnpm i");
         assert_eq!(c.branch_prefix, "t/");
@@ -627,6 +630,41 @@ mod tests {
             std::fs::read_to_string(env.paths.workspace.join("f")).unwrap(),
             "a\nmine\n"
         );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    /// Issue #8: the shared folder on another agent's branch (a commit
+    /// main lacks) with a dirty file; `repo` makes `main` its branch.
+    fn on_another_branch(env: &GitEnv) -> String {
+        sh(&env.paths.workspace, "git branch -M main");
+        let main = git(&env.paths.workspace, &["rev-parse", "main"]).unwrap();
+        sh(
+            &env.paths.workspace,
+            "git checkout -qb sb/other && echo theirs > o && git add o && git commit -qm theirs && echo dirty >> f",
+        );
+        main
+    }
+
+    #[test]
+    fn a_new_worktree_starts_from_main_tip_not_the_shared_head() {
+        let (root, mut env) = repo("base");
+        let main = on_another_branch(&env);
+        let ws = env.worktree_create("t", false).unwrap();
+        let p = Path::new(&ws.path);
+        assert_eq!(ws.base_commit.as_deref(), Some(main.as_str()));
+        assert_eq!(git(p, &["rev-parse", "HEAD"]).unwrap(), main);
+        assert!(!p.join("o").exists(), "no commit of sb/other");
+        assert_eq!(std::fs::read_to_string(p.join("f")).unwrap(), "a\n", "clean");
+        // --with-changes: main's tip, with the shared folder's edits
+        let wc = env.worktree_create("u", true).unwrap();
+        let q = Path::new(&wc.path);
+        assert_eq!(git(q, &["rev-parse", "HEAD"]).unwrap(), main);
+        assert_eq!(std::fs::read_to_string(q.join("f")).unwrap(), "a\ndirty\n");
+        // `[worktree] base` set: it wins
+        env.config.base = Some("sb/other".into());
+        let other = git(&env.paths.workspace, &["rev-parse", "sb/other"]).unwrap();
+        let ob = env.worktree_create("v", false).unwrap();
+        assert_eq!(ob.base_commit.as_deref(), Some(other.as_str()));
         let _ = std::fs::remove_dir_all(root);
     }
 
