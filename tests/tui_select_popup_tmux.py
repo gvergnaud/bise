@@ -1,5 +1,5 @@
 """The popup over a selection, in a real terminal (tmux) against the
-fake provider: a drag over the reply puts ` type ask about it · cmd+c
+fake provider: a drag over the reply puts ` type to ask about it · cmd+c
 copy ` on the row right above the selection, at its first column;
 typing takes the selection as a quote and the popup goes away.
 
@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tui_tmux import tui_session, run, wait_until, MAIN_IDLE  # noqa: E402
 
 COLS, ROWS = 120, 36
-HINT = " type ask about it · cmd+c copy "
+HINT = " type to ask about it · cmd+c copy "
 
 
 def main():
