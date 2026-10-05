@@ -37,7 +37,12 @@ Crates: `home` (every path) ← `session`, `plugins`, `images` ← `catalog` ←
 - **Rust ↔ Bend runtime**: environment variables (`BEND_WORKDIR`,
   `BEND_EXTRA_PROMPT`, `BEND_CONTEXT_FILE`, `BISE_MODELS_FILE`,
   `Home::exports`) and the plugins' loopback HTTP bridge
-  (`plugins/src/bridge.rs`).
+  (`plugins/src/bridge.rs`). Every bise variable is in one table,
+  `bise_home::env::VARS` (`rust/home/src/env.rs`), as a user setting, an
+  internal one or a test setting; every bise child process gets its whole
+  environment from `env_for`, so no child inherits an internal variable
+  (issue 11). Not covered: an agent's own bash commands, which inherit its
+  REPL's environment (that is how `sb` finds `SB_SOCKET`).
 
 ### Where state lives
 
@@ -63,6 +68,11 @@ Crates: `home` (every path) ← `session`, `plugins`, `images` ← `catalog` ←
 - **A path under `$HOME` or the state dir** → ask `bise_home::Home` (or
   `switchboard::paths::Paths`). Never join `$HOME` yourself. Sockets:
   `bise_home::socket`.
+- **A new environment variable** → a row in `bise_home::env::VARS` with its
+  kind (a unit test fails on a name that isn't there). A test knob is read
+  through `env::test_setting` and handed to pure code as an argument. A
+  process bise starts gets its environment from `env_for`, never by
+  inheriting and removing names by hand.
 - **A new journal line** → sb-core's, through an effect. A Rust-only line
   (like today's `pr_*` and `every_*`) needs the architect's yes first.
 - **Something the TUI must know** → a field of a typed event on the socket,
