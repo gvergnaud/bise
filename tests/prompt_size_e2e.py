@@ -7,8 +7,8 @@ spawns t1, and the first call of each:
 - carries every tool, search_tool_functions and run_typescript with its
   whole description (the user: they hold first-party functions such as
   self.compact, connectors or not), and the tool-use section;
-- lists the skills as `- <name>: <description>` lines, each description
-  whole, no path;
+- lists the skills in their vibe_sdk XML blocks, each description whole
+  (the user, card #423);
 - stays under a size budget (the skills catalog aside: the machine's own
   ~/.agents/skills land there).
 """
@@ -97,8 +97,8 @@ if t1 and main:
         check(flat(tools.get("run_typescript", "")) == flat(FULL), "%s: run_typescript's whole description" % who)
         check("## Using tool functions" in s and "search_tool_functions" in s, "%s: the tool-use section" % who)
         cat = re.findall(r"<available-skills>\n(.*?)</available-skills>", s, re.S)
-        check(not cat or all(l.startswith("- ") and "<path>" not in l for l in cat[0].splitlines()),
-              "%s: the skills catalog is `- <name>: <description>` lines, no path" % who)
+        check(not cat or ("<skill>" in cat[0] and "<description>" in cat[0]),
+              "%s: the skills catalog keeps its XML blocks" % who)
     w = (weight(t1), weight(main))
     print("weights (chars, skills aside): t1 %d, main %d" % w)
     check(w[0] < TASK_BUDGET, "t1's prompt + tools: %d chars < %d" % (w[0], TASK_BUDGET))
