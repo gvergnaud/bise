@@ -245,40 +245,40 @@ def demo_b(c):
                     f'<text x="{fx+4}" y="{y[0]}" font-size="12" fill="{c["dim"]}" xml:space="preserve">✉ <tspan font-weight="700" fill="{c["text"]}">{a_}</tspan> <tspan fill="{c["faint"]}">→</tspan> {b_}</text>'
                     f'<text x="{fx+12}" y="{y[0]+22}" font-size="13" fill="{c["dim"]}">{E(text)}</text></g>')
         y[0] += 50
-    say(0.8, 2.6, 2.8, "signup is slow on mobile. can you look?", gap=0)
-    main(3.4, "on it. perf is profiling it on a mid-range phone.")
-    tool(4.2, "ƒ", "perf · reading the Sentry trace")
-    say(4.6, 5.8, 6.0, "oh and dark mode. people keep asking")
-    main(6.5, "dark-mode started. settings page first, then the rest.")
-    say(6.9, 7.9, 8.1, "and the cookie banner hides the buy button on mobile")
-    main(8.6, "freeing the button. cookies started.")
-    chip(9.4, "dark-mode", "cookies", "the banner uses the old gray. i'm switching it, don't.")
-    say(10.0, 10.9, 11.1, "wait also the csv export crashes on emoji 😭")
-    main(11.6, "emoji-csv is on it. it's always unicode.")
-    tool(12.4, "$", "emoji-csv · running the export test")
-    line(13.4, "⌥1 · now talking to perf", gap=10, color="dim", size=13)
-    say(13.9, 14.8, 15.0, "why 0.9 s and not 0.5?", gap=4)
-    line(15.8, f'<tspan fill="{c["dim"]}">@ perf:</tspan> the fonts block the first paint. preloading them.')
+    say(0.8, 2.6, 2.8, "some customers got charged twice when 3-D Secure timed out", gap=0)
+    main(3.4, "on it. checkout replays the timeout against Stripe in test mode.")
+    tool(4.2, "ƒ", "checkout · reading payment_intent events from last night")
+    say(4.6, 5.8, 6.0, "and the flash sale oversold the linen shirt again")
+    main(6.5, "stock started: two carts can still reserve the last unit.")
+    say(6.9, 7.9, 8.1, "search finds nothing for tshirt, 400 results for t-shirt")
+    main(8.6, "search started. the tokenizer splits on the hyphen.")
+    chip(9.4, "stock", "checkout", "i lock the cart row in the same query. land first, i'll rebase.")
+    say(10.0, 10.9, 11.1, "also BLACKFRIDAY stacks with the member discount 😭")
+    main(11.6, "promo is on it. the rule engine applies both, in any order.")
+    tool(12.4, "$", "promo · running the discount tests")
+    line(13.4, "⌥1 · now talking to checkout", gap=10, color="dim", size=13)
+    say(13.9, 14.8, 15.0, "only on 3-D Secure, or on retries too?", gap=4)
+    line(15.8, f'<tspan fill="{c["dim"]}">@ checkout:</tspan> any retry after a timeout. one idempotency key per order now.')
     line(16.8, "⌥0 · back to main", gap=6, color="dim", size=13)
-    main(17.4, "dark-mode asked which gray. i said the one in tokens.css.")
+    main(17.4, "stock asked how long a cart holds stock. i said 10 min, like the app.")
     # the card: it asks, you press 2, it folds to one answered line
     y[0] += 18; cy0 = y[0]
     k = tl.show(19.6, 22.0, dur=0.2); a2 = tl.show(22.0, dur=0.2)
     marks.append((19.6, cy0 + 44))
     feed.append(f'<g class="{k}"><rect x="{fx-16}" y="{cy0-16}" width="600" height="68" rx="4" fill="{c["raised"]}"/><rect x="{fx-16}" y="{cy0-16}" width="3" height="68" fill="{c["acc"]}"/>'
-               f'<text x="{fx}" y="{cy0}" font-size="14" font-weight="700" fill="{c["acc"]}">? perf needs you</text>'
-               f'<text x="{fx}" y="{cy0+21}" font-size="14" fill="{c["text"]}">the hero image is 4.2 MB. compress it, or lazy-load it?</text>'
-               f'<text x="{fx}" y="{cy0+42}" font-size="13" fill="{c["dim"]}" xml:space="preserve">1 · compress   2 · both   alt+r answer with text</text></g>'
-               f'<text class="{a2}" x="{fx}" y="{cy0}" font-size="14" fill="{c["dim"]}">{acc("✓")} perf · you said both</text>')
+               f'<text x="{fx}" y="{cy0}" font-size="14" font-weight="700" fill="{c["acc"]}">? search needs you</text>'
+               f'<text x="{fx}" y="{cy0+21}" font-size="14" fill="{c["text"]}">reindexing takes 25 min, search is stale meanwhile.</text>'
+               f'<text x="{fx}" y="{cy0+42}" font-size="13" fill="{c["dim"]}" xml:space="preserve">1 · now   2 · tonight 02:00   or type your answer</text></g>'
+               f'<text class="{a2}" x="{fx}" y="{cy0}" font-size="14" fill="{c["dim"]}">{acc("✓")} search · you said tonight 02:00</text>')
     y[0] = cy0 + lh
-    done = [(23.4, "emoji-csv done", "🦄 exports fine now. the file was read as latin-1."),
-            (24.6, "perf done", "signup: 4.1 s → 0.9 s on a mid-range phone."),
-            (25.8, "cookies and dark-mode done", "the buy button is free. settings is dark."),
-            (27.0, "all four done", "four things, zero tabs.")]
+    done = [(23.4, "promo done", "one discount per order, the biggest one wins."),
+            (24.6, "checkout done", "one charge per order. 212 customers to refund."),
+            (25.8, "stock and search done", "0 oversold in 10,000 runs. reindex at 02:00."),
+            (27.0, "all four done", "landed on main. the release goes out at 16:00.")]
     for i, (t, a, b) in enumerate(done):
         line(t, f'{acc("✓")} {a} <tspan fill="{c["dim"]}">· {E(b)}</tspan>', gap=14 if i == 0 else 0)
-    say(28.0, 28.8, 29.0, "you're the best")
-    main(29.6, ":*")
+    say(28.0, 28.8, 29.0, "draft the refund email, i'll send it")
+    main(29.6, "drafted, it's in your artifacts :*")
     # the frame, sized to the story
     H = 600; top = H - 150; view = top - 14  # the feed shows rows 49..view, then scrolls
     css_scroll, cur, frames = [], 0, ["0%{transform:translateY(0)}"]
@@ -294,14 +294,14 @@ def demo_b(c):
                f'<g clip-path="url(#feedclip)"><g class="scr">{"".join(feed)}</g></g>')
     out.insert(0, f'<rect width="{W}" height="{H}" fill="{c["bg"]}"/>'
                f'<text x="24" y="32" font-size="14" fill="{c["text"]}" font-weight="700">bise {acc(":*")}</text>'
-               f'<text x="{W-24}" y="32" text-anchor="end" font-size="13" fill="{c["dim"]}">~/acme</text>'
+               f'<text x="{W-24}" y="32" text-anchor="end" font-size="13" fill="{c["dim"]}">~/storefront</text>'
                f'<line x1="0" y1="48" x2="{W}" y2="48" stroke="{c["line"]}"/>'
                f'<line x1="680" y1="48" x2="680" y2="{top}" stroke="{c["line"]}"/>'
                f'<text x="700" y="76" font-size="12" fill="{c["dim"]}">agents · ⌥ + number</text>'
                f'<text x="700" y="102" font-size="14" fill="{c["dim"]}">0 {acc(":*")} <tspan fill="{c["text"]}">main</tspan></text>')
     # the panel: each agent's ∿ turns into a ✓ when it ships
-    for n, (name, t0, t1) in enumerate([("perf", 3.5, 24.6), ("dark-mode", 6.6, 25.8), ("cookies", 8.7, 25.8),
-                                         ("emoji-csv", 11.7, 23.4)], 1):
+    for n, (name, t0, t1) in enumerate([("checkout", 3.5, 24.6), ("stock", 6.6, 25.8), ("search", 8.7, 25.8),
+                                         ("promo", 11.7, 23.4)], 1):
         yy = 102 + n * 24; k = tl.show(t0)
         out.append(f'<text class="{k}" x="700" y="{yy}" font-size="14" fill="{c["dim"]}" xml:space="preserve">{n} <tspan class="g" fill="{c["acc"]}">∿</tspan> <tspan fill="{c["text"]}">{name}</tspan></text>')
         d = tl.show(t1)
@@ -310,9 +310,9 @@ def demo_b(c):
     out.append(f'<rect x="0" y="{top}" width="{W}" height="{H-top}" fill="{c["foot"]}"/>'
                f'<path d="M0 {top} H{W}" stroke="{c["line"]}"/>'
                f'<text class="{tl.show(0, 13.4, dur=0.1)}" x="24" y="{top+26}" font-size="13" fill="{c["dim"]}">you → <tspan fill="{c["acc"]}" font-weight="700">main</tspan></text>'
-               f'<text class="{tl.show(13.4, 16.8, dur=0.1)}" x="24" y="{top+26}" font-size="13" fill="{c["dim"]}">you → <tspan fill="{c["acc"]}" font-weight="700">perf</tspan></text>'
+               f'<text class="{tl.show(13.4, 16.8, dur=0.1)}" x="24" y="{top+26}" font-size="13" fill="{c["dim"]}">you → <tspan fill="{c["acc"]}" font-weight="700">checkout</tspan></text>'
                f'<text class="{tl.show(16.8, dur=0.1)}" x="24" y="{top+26}" font-size="13" fill="{c["dim"]}">you → <tspan fill="{c["acc"]}" font-weight="700">main</tspan></text>'
-               f'<text x="24" y="{top+102}" font-size="12" fill="{c["faint"]}">⏎ send · @ agent · ⌥0-9 switch · / commands · ? help</text>')
+               f'<text x="24" y="{top+102}" font-size="12" fill="{c["faint"]}" xml:space="preserve">@ file   $ skills   / commands   ctrl+1 inbox</text>')
     for n, (t0, t1) in [(1, (3.5, 6.6)), (2, (6.6, 8.7)), (3, (8.7, 11.7)), (4, (11.7, 23.4)),
                         (3, (23.4, 24.6)), (2, (24.6, 25.8))]:
         k = tl.show(t0, t1, dur=0.15)
@@ -326,7 +326,7 @@ def demo_b(c):
                    f'<g class="{vis}"><text x="24" y="{top+62}" font-size="15" fill="{c["text"]}" clip-path="url(#{cid})">{E(text)}</text></g>')
     css_gust = "@keyframes g{0%{opacity:.3}50%{opacity:1}100%{opacity:.3}}.g{animation:g 1.2s infinite}"
     return svg(W, H, "".join(out), "".join(tl.css) + css_gust + css_scroll,
-               "a bise session: four ideas in a row, agents call tools and message each other, you ask one agent directly, one card asks you, everything ships.", c, caption="fig. 1 · a bise session, playing live")
+               "a bise session on a store: double charges when 3-D Secure times out, a flash sale that oversells, search that misses tshirt, a promo code that stacks. four agents, one asks you when to reindex, everything lands.", c, caption="fig. 1 · a bise session, playing live")
 
 # ---------- team ----------
 def team(c):
@@ -415,16 +415,16 @@ class Mini:
 def f_steer(c):
     m = Mini(c, 10, 230, "✓ sent · ✓✓ read")
     yy = m.y; m.y += 27
-    m.swap(0.4, 3.6, m.fx, yy, f'<tspan class="g" fill="{c["acc"]}">∿</tspan> cookies <tspan fill="{c["dim"]}">· deleting the banner…</tspan>',
-           f'<tspan class="g" fill="{c["acc"]}">∿</tspan> cookies <tspan fill="{c["dim"]}">· shrinking the banner…</tspan>')
-    m.you(1.4, "@cookies keep the banner. legal wants it. just smaller", read=1.2)
-    m.row(3.3, f'{m.dim("@ cookies:")} got it. it stays, half the size.', gap=4)
+    m.swap(0.4, 3.6, m.fx, yy, f'<tspan class="g" fill="{c["acc"]}">∿</tspan> promo <tspan fill="{c["dim"]}">· removing the member discount…</tspan>',
+           f'<tspan class="g" fill="{c["acc"]}">∿</tspan> promo <tspan fill="{c["dim"]}">· keeping it, one per order…</tspan>')
+    m.you(1.4, "@promo keep the member discount. just never stacked", read=1.2)
+    m.row(3.3, f'{m.dim("@ promo:")} got it. it stays, the biggest one wins.', gap=4)
     m.row(4.2, f'{m.dim("the correction lands in the running agent. nothing restarts.")}', size=13, gap=6)
     return m.svg("you correct a running agent; the double check shows it read the message; it changes course.")
 
 def f_quiet(c):
     m = Mini(c, 12, 250, "ctrl+o opens it all · ctrl+o folds it back")
-    m.row(0.3, f'{m.acc(":*")} perf and theme are on it.', gap=0)
+    m.row(0.3, f'{m.acc(":*")} ingest and sampling are on it.', gap=0)
     y0 = m.y
     g = f'<tspan fill="{c["faint"]}">▸</tspan>'
     for (t0, t1, n) in [(1.0, 2.0, 3), (2.0, 3.0, 7), (3.0, 4.2, 12)]:
@@ -433,11 +433,11 @@ def f_quiet(c):
     kp = m.tl.show(3.7, 4.2, dur=0.1)
     m.o.append(f'<g class="{kp}"><rect x="{m.W-92}" y="{y0-15}" width="64" height="20" rx="3" fill="{c["chip"]}"/>'
                f'<text x="{m.W-60}" y="{y0}" text-anchor="middle" font-size="12" fill="{c["text"]}">ctrl+o</text></g>')
-    rows = [(4.3, f'{m.acc("✉")} perf {m.dim("→")} theme {m.dim("· which file has the colors?")}', None),
-            (4.5, f'{m.dim("ƒ")} reading the Lighthouse report', "✓"),
-            (4.7, f'{m.acc("✉")} theme {m.dim("→")} perf {m.dim("· tokens.css. i’m on it, don’t touch it")}', None),
-            (4.9, f'{m.dim("$")} npm run build', "✓"),
-            (5.1, f'{m.dim("$")} running the signup test', "✓")]
+    rows = [(4.3, f'{m.acc("✉")} ingest {m.dim("→")} sampling {m.dim("· which topic has the spans?")}', None),
+            (4.5, f'{m.dim("ƒ")} reading the consumer lag dashboard', "✓"),
+            (4.7, f'{m.acc("✉")} sampling {m.dim("→")} ingest {m.dim("· traces-v2. i’m on it, don’t touch it")}', None),
+            (4.9, f'{m.dim("$")} make bench', "✓"),
+            (5.1, f'{m.dim("$")} replaying the peak traffic', "✓")]
     for i, (t0, html, mark) in enumerate(rows):
         yy = y0 + i * 27
         if mark: html += f' <tspan fill="{c["acc"]}">{mark}</tspan>'
@@ -446,7 +446,7 @@ def f_quiet(c):
     m.o.append(f'<g class="{kp2}"><rect x="{m.W-92}" y="{y0-15}" width="64" height="20" rx="3" fill="{c["chip"]}"/>'
                f'<text x="{m.W-60}" y="{y0}" text-anchor="middle" font-size="12" fill="{c["text"]}">ctrl+o</text></g>')
     m.row(8.5, f'{g} {m.dim("12 folded · tool calls and messages between agents")}', y=y0)
-    m.row(9.0, f'{m.acc("✓")} perf done {m.dim("· signup 4.1 s → 0.9 s")}', y=y0 + 27)
+    m.row(9.0, f'{m.acc("✓")} ingest done {m.dim("· lag 4 min → 4 s at peak")}', y=y0 + 27)
     m.row(0.3, f'{m.dim("what matters to you shows. the rest is one key away, in full.")}', size=13, y=m.H - 22)
     return m.svg("the work between agents stays folded into one line; ctrl+o opens every tool call and message, ctrl+o folds them back.")
 
@@ -461,7 +461,7 @@ def cells(s):
 class Tui(Mini):
     """a Mini with the TUI's chrome. the chrome (header, panel, key bar, rules) sits in groups that zen can fade."""
     W = 680
-    def __init__(s, c, T, H=270, panel=False, keys="⏎ send   @ agent   ⌥0-9 switch   ctrl+o open   ? help"):
+    def __init__(s, c, T, H=270, panel=False, keys="@ file   $ skills   / commands   ctrl+1 inbox"):
         s.c, s.T, s.H, s.W = c, T, H, 680
         s.tl = TL(T); s.fx, s.y = 40, 72
         s.chrome, s.feed, s.over = [], [], []  # the chrome (fades in zen), the feed and the composer (never fade)
@@ -610,45 +610,45 @@ class Tui(Mini):
 def t_talk(c):
     """main is always available: the agents do the heavy work, so main answers right away while they run."""
     m = Tui(c, 10); m.typed = []
-    one, two = "what's perf doing right now?", "and the csv export crashes on emoji 😭"
+    one, two = "what's ingest doing right now?", "and the otel upgrade dropped the pod labels 😭"
     m.header([(0, 5.3, f'{m.gust()} 3 working'), (5.3, None, f'{m.gust()} 4 working')])
-    m.row(0.1, f'{m.gust()} {m.dim("perf, dark-mode and cookies are working")}', size=13)
+    m.row(0.1, f'{m.gust()} {m.dim("ingest, sampling and alerts are working")}', size=13)
     m.type(0.6, 1.8, one); m.you(1.9, one, gap=8)
-    m.main(2.4, "timing signup on a phone. 4.1 s so far, it's on the images.")
+    m.main(2.4, "replaying tuesday's peak: 4 min of lag, too few partitions.")
     m.type(3.0, 4.6, two); m.you(4.8, two, gap=8)
-    m.main(5.3, "emoji-csv started. 4 working, i'm still here.")
+    m.main(5.3, "otel started. 4 working, i'm still here.")
     m.composer([(0.6, 1.9), (3.0, 4.8)])
-    return m.svg("three agents are working. you ask main what perf is doing and it answers right away; you add a job, it starts one more agent and is still there.")
+    return m.svg("three agents are working on a telemetry pipeline. you ask main what ingest is doing and it answers right away; you add a job, it starts one more agent and is still there.")
 
 def t_zen(c):
     """zen mode while you type: the chrome steps back, the feed keeps coming, the send brings it all back."""
     m = Tui(c, 11, panel=True)
     m.typed = []
-    msg = "release notes for all of this, when they're done"
+    msg = "an eval report for all of this, when they're done"
     m.header([(0, 3.0, f'{m.gust()} 3 working'), (3.0, 4.9, f'{m.gust()} 2 working · {m.acc("✓")} 1 done'),
               (4.9, 6.9, f'{m.gust()} 1 working · {m.acc("✓")} 2 done'), (6.9, None, f'{m.gust()} 2 working · {m.acc("✓")} 2 done')])
-    m.agents([(0, "main", [(0, ":*")]), (0, "perf", [(0, m.gust()), (3.0, "✓")]), (0, "dark-mode", [(0, m.gust()), (4.9, "✓")]),
-              (0, "cookies", [(0, m.gust())]), (6.9, "release", [(6.9, m.gust())])])
-    m.main(0.1, "on it: perf, dark-mode and cookies started.")
+    m.agents([(0, "main", [(0, ":*")]), (0, "rag", [(0, m.gust()), (3.0, "✓")]), (0, "dedupe", [(0, m.gust()), (4.9, "✓")]),
+              (0, "cache", [(0, m.gust())]), (6.9, "report", [(6.9, m.gust())])])
+    m.main(0.1, "on it: rag, dedupe and cache started.")
     m.row(0.1, f'{m.dim("▸ 9 messages between 3 agents")}', size=13)
     m.type(1.6, 5.4, msg)
-    m.row(3.0, f'{m.acc("✓")} perf done {m.dim("· signup 4.1 s → 0.9 s")}', gap=8)
+    m.row(3.0, f'{m.acc("✓")} rag done {m.dim("· right chunk cited 61% → 94%")}', gap=8)
     m.row(4.2, f'{m.dim("▸ 4 more messages")}', size=13)
     m.you(6.2, msg, gap=8)
-    m.main(6.9, "on it: release started.")
+    m.main(6.9, "on it: report started.")
     m.zen(1.6, 6.2)
     k = m.tl.show(1.6, 6.2, dur=0.25)
     m.over.append(f'<text class="{k}" x="{m.W-24}" y="{m.top+34}" text-anchor="end" font-size="12" fill="{c["acc"]}">zen</text>')
     m.composer([(1.6, 6.2)])
-    return m.svg("you start typing and everything else fades: the agents, the counts. perf finishes meanwhile. you send, and it all comes back.")
+    return m.svg("you start typing and everything else fades: the agents, the counts. rag finishes meanwhile. you send, and it all comes back.")
 
 def t_screenshot(c):
     """show it a screenshot: ctrl+v pastes an image; it is one chip in your text."""
-    m = Tui(c, 10, keys="ctrl+v paste image   @ file   ⏎ send   ? help")
+    m = Tui(c, 10, keys="ctrl+v paste image   @ file   $ skills   / commands")
     m.typed = []
-    a, b = "the cookie banner hides the buy button ", "on mobile"
+    a, b = "shadow acne all over the terrain ", "at dusk"
     m.header([(0, None, f'{m.gust()} 2 working')])
-    m.main(0.1, "perf and dark-mode are on it.")
+    m.main(0.1, "streaming and netcode are on it.")
     x1 = m.type(0.4, 2.0, a)
     chip_w = 5 * CW  # ` ▣ 1 `: 5 cells
     m.type(3.4, 4.1, b, x=x1 + chip_w + CW)
@@ -673,57 +673,57 @@ def t_screenshot(c):
     ky = m.y - 27
     k = m.tl.show(send)
     m.feed.append(f'<g class="{k}">{chip(m.fx + cells(a) * CW, ky)}</g>')
-    m.main(5.4, "cookies started. it has the screenshot.", gap=0)
+    m.main(5.4, "shadows started. it has the screenshot.", gap=0)
     m.composer([(0.4, send)])
     return m.svg("you type a message, paste a screenshot with ctrl+v: it lands as one chip in your text, and the agent gets the image.")
 
 def t_resume(c):
     """hand it something huge: one big goal, main runs agents in waves, restarts the one that stops, keeps going."""
     m = Tui(c, 11.5); m.typed = []
-    goal = "dark mode on every page, not just settings"
+    goal = "port all 40 materials to the new PBR shader"
     m.header([(2.3, 4.8, f'{m.gust()} 3 working'), (4.8, 6.0, f'{m.gust()} 2 working'), (6.0, 8.2, f'{m.gust()} 3 working'),
               (8.2, None, f'{m.acc("✓")} 9 done')])
     m.type(0.2, 1.5, goal); m.you(1.7, goal, gap=0)
-    m.main(2.3, "12 pages. i'll run 3 agents at a time and keep going till it's done.")
+    m.main(2.3, "40 materials. i'll run 3 agents at a time and keep going till it's done.")
     g = m.gust()
-    m.row(3.4, f'{g} dark-1 {m.dim("·")} {g} dark-2 {m.dim("·")} {g} dark-3', color="dim", gap=8)
-    m.row(4.8, f'{m.acc("✗")} dark-2 {m.dim("stopped: the provider answered 503.")}')
-    m.main(6.0, "started dark-2 again, from page 7.")
-    m.row(7.2, f'{m.dim("▸ 9 agents over 40 minutes")}', size=13, gap=8)
-    m.row(8.2, f'{m.acc("✓")} 12 of 12 pages dark, tests green.')
+    m.row(3.4, f'{g} mat-1 {m.dim("·")} {g} mat-2 {m.dim("·")} {g} mat-3', color="dim", gap=8)
+    m.row(4.8, f'{m.acc("✗")} mat-2 {m.dim("stopped: the provider answered 503.")}')
+    m.main(6.0, "started mat-2 again, from material 23.")
+    m.row(7.2, f'{m.dim("▸ 9 agents over 50 minutes")}', size=13, gap=8)
+    m.row(8.2, f'{m.acc("✓")} 40 of 40 ported, every screenshot test matches.')
     m.composer([(0.2, 1.7)])
-    return m.svg("you give main one big goal. it runs three agents at a time, starts again the one that stops on an error, and keeps going until all 12 pages are done.")
+    return m.svg("you give main one big goal: port 40 materials to a new shader. it runs three agents at a time, starts again the one that stops on an error, and keeps going until all 40 are done.")
 
 def t_worktree(c):
     """worktrees? don't think about it: one agent gets its own copy, works there, it is cleaned up after."""
     m = Tui(c, 10, panel=True); m.typed = []
     psi = f' <tspan fill="{c["acc"]}">ψ</tspan>'
     m.header([(0, 1.9, f'{m.gust()} 2 working'), (1.9, 5.0, f'{m.gust()} 3 working'), (5.0, None, f'{m.gust()} 2 working · {m.acc("✓")} 1 done')])
-    m.agents([(0, "main", [(0, ":*")]), (0, "dark-mode", [(0, m.gust())]), (0, "cookies", [(0, m.gust())]),
-              (1.9, "perf", [(1.9, m.gust()), (5.0, "✓")])])
+    m.agents([(0, "main", [(0, ":*")]), (0, "search", [(0, m.gust())]), (0, "promo", [(0, m.gust())]),
+              (1.9, "stock", [(1.9, m.gust()), (5.0, "✓")])])
     k = m.tl.show(1.9, 5.0, dur=0.01)  # the ψ next to perf while its worktree lives
     m.chrome.append(f'<text class="{k}" x="{m.px + 20 + 5 * 8.45:.0f}" y="{90 + 3 * 22}" font-size="14" fill="{c["acc"]}">ψ</text>')
-    m.main(0.2, "dark-mode and cookies share your folder.")
-    m.main(1.3, "perf needs a clean build to time signup.", gap=8)
-    m.row(1.9, f'   it gets its own worktree:{psi} perf.', color="text")
-    m.row(5.0, f'{m.acc("✓")} perf done {m.dim("· signup 4.1 s → 0.9 s")}', gap=8)
+    m.main(0.2, "search and promo share your folder.")
+    m.main(1.3, "stock needs a clean build to replay the flash sale.", gap=8)
+    m.row(1.9, f'   it gets its own worktree:{psi} stock.', color="text")
+    m.row(5.0, f'{m.acc("✓")} stock done {m.dim("· 0 oversold in 10,000 runs")}', gap=8)
     m.row(5.6, f'{m.dim("  worktree merged and cleaned up.")}', size=13)
     m.composer([])
-    return m.svg("dark-mode and cookies share your folder; perf gets its own worktree for a clean build, finishes, and the worktree is cleaned up.")
+    return m.svg("search and promo share your folder; stock gets its own worktree to replay a flash sale on a clean build, finishes, and the worktree is cleaned up.")
 
 def t_card(c):
     """you're not the router: main answers the obvious questions for you; only the real decision reaches you."""
     m = Tui(c, 12); m.typed = []
     m.header([(0, None, f'{m.gust()} 3 working')])
-    m.msg(0.4, "dark-mode", "main", "which gray for the borders?")
-    m.main(1.4, "i told dark-mode: the gray in tokens.css, like everywhere else.")
-    m.msg(2.7, "emoji-csv", "main", "add a BOM so excel opens it?", gap=8)
-    m.main(3.7, "i told emoji-csv: yes, excel needs it. the old exports had one.")
-    m.msg(5.0, "cookies", "main", "legal wants the banner. drop it anyway?", gap=8)
-    m.main(6.0, f'{m.acc("that one's yours:")} cookies asks if the banner can go.')
-    ans = "it stays. half the size"
+    m.msg(0.4, "ingest", "main", "24 partitions or 48?")
+    m.main(1.4, "i told ingest: 48, like the traces topic. the brokers have room.")
+    m.msg(2.7, "sampling", "main", "keep every error span?", gap=8)
+    m.main(3.7, "i told sampling: yes, errors are always kept. like the old sampler.")
+    m.msg(5.0, "alerts", "main", "should p99 page on-call at night?", gap=8)
+    m.main(6.0, f'{m.acc("that one's yours:")} alerts asks if p99 pages at night.')
+    ans = "only above 2 s for 10 min"
     m.type(6.6, 7.6, ans); m.you(7.8, ans, gap=8)
-    m.main(8.4, "told cookies. half the size, the buy button shows.")
+    m.main(8.4, "told alerts: it pages above 2 s for 10 minutes.")
     m.composer([(6.6, 7.8)])
     return m.svg("three agents ask main a question. main answers two of them itself, the way you would, and passes you the one decision that is yours.")
 
@@ -732,19 +732,19 @@ def t_sync(c):
     m = Tui(c, 9); m.typed = []
     m.header([(0, None, f'{m.gust()} 3 working')])
     y0 = m.y
-    m.msg(0.5, "release", "emoji-csv", "did the export format change?", out=4.4)
-    m.msg(1.4, "emoji-csv", "release", "no. same columns, now in utf-8.", out=4.4)
-    m.msg(2.3, "release", "dark-mode", "a screenshot for the notes?", out=4.4)
-    m.msg(3.2, "dark-mode", "release", "done, docs/dark.png", out=4.4)
+    m.msg(0.5, "report", "rag", "did the eval set change?", out=4.4)
+    m.msg(1.4, "rag", "report", "no. same 1,200 questions, new embeddings.", out=4.4)
+    m.msg(2.3, "report", "dedupe", "the leaked rows, for the appendix?", out=4.4)
+    m.msg(3.2, "dedupe", "report", "done, data/leaked.csv", out=4.4)
     m.row(4.6, f'{m.dim("▸ 4 messages between 3 agents")}', size=13, y=y0)
-    m.row(5.3, f'{m.acc(":*")} release has what it needs. nothing for you.', y=y0 + 35)
+    m.row(5.3, f'{m.acc(":*")} report has what it needs. nothing for you.', y=y0 + 35)
     m.composer([])
-    return m.svg("release asks emoji-csv and dark-mode what it needs; they answer; the four messages fold into one line, and main says there is nothing for you.")
+    return m.svg("report asks rag and dedupe what it needs for the eval report; they answer; the four messages fold into one line, and main says there is nothing for you.")
 
 def t_tools(c):
     """all your MCPs, always on: bise calls them from code, so a hundred servers don't fill its context."""
     m = Tui(c, 10); m.typed = []
-    q = "signup is slow on mobile. since when?"
+    q = "checkout errors jumped this morning. why?"
     m.header([(0, None, "42 MCP servers")])
     m.main(0.2, "42 MCP servers on. all of them, all the time.")
     m.row(0.2, f'{m.dim("  github · linear · sentry · slack · notion · postgres · +36")}', size=13)
@@ -752,19 +752,19 @@ def t_tools(c):
     m.row(2.9, f'<tspan fill="{c["faint"]}">╭─</tspan> {m.dim("ƒ typescript")}', size=13, gap=8)
     bar = f'<tspan fill="{c["faint"]}">│</tspan>'
     aw = f'<tspan fill="{c["acc"]}">await</tspan>'
-    for i, line in enumerate([f'slow = {aw} tools.sentry.slowest("signup", "mobile")',
-                              f'pr   = {aw} tools.github.mergedBefore(slow.since)',
-                              f'said = {aw} tools.slack.search("signup slow")']):
+    for i, line in enumerate([f'slow = {aw} tools.sentry.issues("checkout", "24h")',
+                              f'pr   = {aw} tools.github.mergedBefore(slow.first)',
+                              f'said = {aw} tools.slack.search("checkout error")']):
         m.row(3.3 + i * 0.45, f'{bar} {line}', size=13, color="dim")
-    m.main(5.0, "since tuesday: #412 added a 4.2 MB hero image.", gap=8)
-    m.row(5.4, "  #support saw it the same day. want perf on it?")
+    m.main(5.0, "since 08:12: #812 cut the 3-D Secure timeout to 5 s.", gap=8)
+    m.row(5.4, "  #support has 40 tickets. want checkout on it?")
     m.composer([(0.7, 2.2)])
-    return m.svg("42 MCP servers are on. you ask why signup is slow; main writes a few lines of code that call Sentry, GitHub and Slack, and answers in two lines.")
+    return m.svg("42 MCP servers are on. you ask why checkout errors jumped; main writes a few lines of code that call Sentry, GitHub and Slack, and answers in two lines.")
 
 def t_plugins(c):
     """bring your Agent Plugins: skills, MCP servers, hooks load as they are."""
     m = Tui(c, 9); m.typed = []
-    ask = "draft the release notes, the usual way"
+    ask = "write the patch notes, the usual way"
     m.header([(5.2, None, f'{m.gust()} 1 working')])
     m.main(0.4, "hi. i found your setup:")
     for i, (a, b) in enumerate([("14 skills", "~/.agents/skills"), ("3 plugins", "~/.agents/plugins, .vibe"), ("6 MCP servers", ".mcp.json")]):
@@ -772,9 +772,9 @@ def t_plugins(c):
         m.row(1.0 + i * 0.5, f'   {m.acc("✓")} {a}<tspan x="{m.fx + 22 * CW:.0f}" fill="{c["dim"]}">{E(b)}</tspan>')
     m.main(2.8, "everything you had works here. nothing to port.", gap=8)
     m.type(3.4, 4.6, ask); m.you(4.8, ask, gap=8)
-    m.main(5.4, "release started, with your release-notes skill.")
+    m.main(5.4, "patch-notes started, with your patch-notes skill.")
     m.composer([(3.4, 4.8)])
-    return m.svg("on its first run, bise finds your skills, plugins and MCP servers; you ask for release notes and the agent uses your own skill.")
+    return m.svg("on its first run, bise finds your skills, plugins and MCP servers; you ask for the game's patch notes and the agent uses your own skill.")
 
 def press(m, t, label, x=None, y=None, dur=0.5):
     """a key pressed: its name on a key cap, for half a second (right of the composer row by default)."""
@@ -787,58 +787,58 @@ def press(m, t, label, x=None, y=None, dur=0.5):
 def t_direct(c):
     """talk to any agent, anytime: ⌥1, ask perf why, push it, ⌥0 back to main."""
     m = Tui(c, 11); m.typed = []
-    q1, q2 = "so why is signup slow?", "ouch. add a check so it can't come back"
+    q1, q2 = "so why the spikes?", "ouch. add a perf test so it can't come back"
     m.header([(0, None, f'{m.gust()} 3 working')])
-    m.main(0.2, "perf is on it. signup takes 4.1 s on a phone.")
-    press(m, 1.0, "⌥1"); m.row(1.4, f'{m.dim("⌥1 · now talking to perf")}', size=13, gap=8)
+    m.main(0.2, "streaming is on it. frames spike to 40 ms in the forest.")
+    press(m, 1.0, "⌥1"); m.row(1.4, f'{m.dim("⌥1 · now talking to streaming")}', size=13, gap=8)
     m.type(1.9, 2.9, q1); m.you(3.1, q1, gap=4)
-    m.row(3.8, f'{m.dim("@ perf to you:")} the hero image is 4.2 MB. on a phone, 3 s.')
+    m.row(3.8, f'{m.dim("@ streaming to you:")} textures decode on the main thread. 38 ms.')
     m.type(4.4, 5.8, q2); m.you(6.0, q2)
-    m.row(6.6, f'{m.dim("@ perf to you:")} on it.')
+    m.row(6.6, f'{m.dim("@ streaming to you:")} on it.')
     press(m, 7.2, "⌥0"); m.row(7.6, f'{m.dim("⌥0 · back to main")}', size=13, gap=8)
-    m.composer([(1.9, 3.1), (4.4, 6.0)], who=[(0, 1.4, "main"), (1.4, 7.6, "perf"), (7.6, None, "main")])
-    return m.svg("you press alt+1 and talk to perf directly: why is signup slow, then add a check. alt+0 takes you back to main. nobody stopped.")
+    m.composer([(1.9, 3.1), (4.4, 6.0)], who=[(0, 1.4, "main"), (1.4, 7.6, "streaming"), (7.6, None, "main")])
+    return m.svg("you press alt+1 and talk to streaming directly: why the frame spikes, then add a perf test. alt+0 takes you back to main. nobody stopped.")
 
 def t_prs(c):
     """fits your PR flow: its own branch and PR, CI, a review bot, you, merged; the panel shows where it stands."""
     m = Tui(c, 11, panel=True); m.typed = []
     ans = "good bot. do it"
     m.header([(0, 7.8, f'{m.gust()} 1 working'), (7.8, None, f'{m.acc("✓")} 1 done')])
-    m.agents([(0, "main", [(0, ":*")]), (0, "cookies", [(0, m.gust()), (7.8, "✓")])])
+    m.agents([(0, "main", [(0, ":*")]), (0, "checkout", [(0, m.gust()), (7.8, "✓")])])
     # under cookies, its PR's state (the panel shows where each one stands)
-    for (t0, t1, html) in [(0.3, 1.6, f'#409 {m.dim("· checks")} {m.gust()}'), (1.6, 2.9, f'#409 {m.dim("·")} {m.acc("✗ checks")}'),
-                           (2.9, 4.2, f'#409 {m.dim("· green")}'), (4.2, 7.8, f'#409 {m.dim("· review")}'), (7.8, None, f'#409 {m.dim("· merged")}')]:
+    for (t0, t1, html) in [(0.3, 1.6, f'#812 {m.dim("· checks")} {m.gust()}'), (1.6, 2.9, f'#812 {m.dim("·")} {m.acc("✗ checks")}'),
+                           (2.9, 4.2, f'#812 {m.dim("· green")}'), (4.2, 7.8, f'#812 {m.dim("· review")}'), (7.8, None, f'#812 {m.dim("· merged")}')]:
         k = m.tl.show(t0, t1, dur=0.01)
         m.chrome.append(f'<text class="{k}" x="{m.px + 20}" y="{90 + 2 * 22}" font-size="12" fill="{c["text"]}" xml:space="preserve">{html}</text>')
-    m.main(0.3, "cookies opened #409: the banner, half the size.")
-    m.row(1.6, f'{m.acc("↑")} {m.dim("#409 · checks fail: e2e/checkout.spec.ts")}', size=13)
-    m.main(2.9, "cookies fixed the test. #409 is green.")
-    m.row(4.2, f'{m.acc("↑")} {m.dim("#409 · review-bot: make the close button 44 px")}', size=13)
+    m.main(0.3, "checkout opened #812: one idempotency key per order.")
+    m.row(1.6, f'{m.acc("↑")} {m.dim("#812 · checks fail: e2e/checkout.spec.ts")}', size=13)
+    m.main(2.9, "checkout fixed the test. #812 is green.")
+    m.row(4.2, f'{m.acc("↑")} {m.dim("#812 · review-bot: cap the capture retries at 3")}', size=13)
     m.type(4.8, 5.6, ans); m.you(5.8, ans)
-    m.main(6.4, "told cookies. 44 px, pushed to #409.")
-    m.row(7.8, f'{m.acc("✓")} #409 merged {m.dim("· cookies archived, worktree removed")}', gap=8)
+    m.main(6.4, "told checkout. 3 retries, pushed to #812.")
+    m.row(7.8, f'{m.acc("✓")} #812 merged {m.dim("· checkout archived, worktree removed")}', gap=8)
     m.composer([(4.8, 5.8)])
-    return m.svg("cookies opens pull request #409. CI fails, it fixes the test; a review bot asks for a bigger button, you say do it; #409 merges. the panel shows where it stands.")
+    return m.svg("checkout opens pull request #812. CI fails, it fixes the test; a review bot asks to cap the retries, you say do it; #812 merges. the panel shows where it stands.")
 
 def t_tokens(c):
     """your token bill can relax: a job too small for an agent, main does it itself."""
     m = Tui(c, 8); m.typed = []
-    ask = "fix the typo in the footer"
+    ask = "set the eval timeout to 120 s"
     m.header([(0, None, f'{m.gust()} 2 working')])
-    m.main(0.2, "perf and dark-mode are on it.")
+    m.main(0.2, "rag and dedupe are on it.")
     m.type(0.6, 1.6, ask); m.you(1.8, ask, gap=8)
     m.main(2.5, "done, i did it myself. too small for an agent.")
-    m.row(3.1, f'{m.dim("  footer.html · recieve → receive")}', size=13)
+    m.row(3.1, f'{m.dim("  evals/config.yaml · timeout_s: 60 → 120")}', size=13)
     m.row(3.7, f'<tspan fill="{c["faint"]}">  0 agents started</tspan>', size=13)
     m.composer([(0.6, 1.8)])
-    return m.svg("you ask for a one-word typo fix. main does it itself: too small for an agent. 0 agents started, the count stays at 2.")
+    return m.svg("you ask to change one number in a config file. main does it itself: too small for an agent. 0 agents started, the count stays at 2.")
 
 def t_voice(c):
     """or just talk: /voice on, ctrl+r, say it; it lands as text in the composer."""
-    m = Tui(c, 9.5, keys="ctrl+r record   ⏎ send   @ agent   ? help"); m.typed = []
-    said = "and keep the buy button visible on small phones"
+    m = Tui(c, 9.5, keys="ctrl+r dictate   @ file   $ skills   / commands"); m.typed = []
+    said = "and test it with two percent packet loss too"
     m.header([(0, None, f'{m.gust()} 1 working')])
-    m.main(0.2, "cookies started. the banner is getting smaller.")
+    m.main(0.2, "netcode started. it replays the desync at 150 ms.")
     press(m, 0.9, "ctrl+r")
     # recording: the dot, a level meter (the newest bar on the right), the time; the key bar says how to stop
     rec0, rec1 = 1.1, 3.6
@@ -861,7 +861,7 @@ def t_voice(c):
         m.tl.css.append(f"@keyframes mb{j}{{{ks}}}.mb{j}{{transform-box:fill-box;transform-origin:bottom;animation:mb{j} {1.0 + j * .17:.2f}s ease-in-out infinite}}")
     m.type(3.7, 4.3, said)  # the words land at once, as the transcript does
     m.you(5.2, said, gap=8)
-    m.main(5.8, "told cookies: the buy button stays visible.")
+    m.main(5.8, "told netcode: 150 ms and 2% packet loss.")
     m.composer([(3.7, 5.2)])
     return m.svg("you press ctrl+r and say it; a level meter moves while you talk; your words land in the composer as text, and you send them.")
 
@@ -871,11 +871,11 @@ def t_quote(c):
     q = "what made the difference?"
     hl = ink.PAPER[c["mode"]]["hl"]
     m.header([(0, None, f'{m.acc("✓")} 1 done')])
-    yy = m.main(0.2, "perf is done. signup went from 4.1 s to 0.9 s on a phone.")
+    yy = m.main(0.2, "cache is done. the hit rate went from 12% to 71% on prod.")
     # the selection: the words light up as you drag over them
-    x0 = m.fx + cells(":* perf is done. signup went from ") * CW
+    x0 = m.fx + cells(":* cache is done. the hit rate went from ") * CW
     k = m.tl.show(1.0, 4.3, dur=0.5)
-    m.feed.insert(len(m.feed) - 1, f'<rect class="{k}" x="{x0 - 2:.0f}" y="{yy - 15}" width="{cells("4.1 s to 0.9 s") * CW + 4:.0f}" height="20" rx="2" fill="{hl}"/>')
+    m.feed.insert(len(m.feed) - 1, f'<rect class="{k}" x="{x0 - 2:.0f}" y="{yy - 15}" width="{cells("12% to 71%") * CW + 4:.0f}" height="20" rx="2" fill="{hl}"/>')
     chip_w = 5 * CW
     x1 = 64 + chip_w + CW
     m.type(2.2, 3.4, q, x=x1)
@@ -887,9 +887,9 @@ def t_quote(c):
     kf = m.tl.show(4.3)
     m.feed.append(f'<g class="{kf}">{chip(m.fx, m.y - 27)}</g>')
     m.marks.append((4.3, m.y - 27, False, len(m.feed) - 1))
-    m.row(5.0, f'{m.dim("@ perf to you:")} a 180 KB hero image, and the fonts load first.')
+    m.row(5.0, f'{m.dim("@ cache to you:")} the date moved to the end of the prompt.')
     m.composer([(2.0, 4.3)])
-    return m.svg("you select '4.1 s to 0.9 s' in perf's answer and start typing: the lines come along as a quote chip, and perf answers about them.")
+    return m.svg("you select '12% to 71%' in cache's answer and start typing: the lines come along as a quote chip, and cache answers about them.")
 
 def t_model(c):
     """a model per agent: the big one for the hard job, a fast one for the chores. /model and /reasoning."""
@@ -897,13 +897,13 @@ def t_model(c):
     m.px = m.W - 200
     cmd1, cmd2 = "/model opus", "/reasoning hi"
     m.header([(0, None, f'{m.gust()} 3 working')])
-    m.agents([(0, "main", [(0, ":*")]), (0, "perf", [(0, m.gust())]), (0, "cookies", [(0, m.gust())]), (0, "release", [(0, m.gust())])])
+    m.agents([(0, "main", [(0, ":*")]), (0, "ingest", [(0, m.gust())]), (0, "alerts", [(0, m.gust())]), (0, "release", [(0, m.gust())])])
     for i, spans in enumerate([[(0, None, "opus·hi")], [(0, None, "opus·hi")], [(0, None, "haiku·lo")],
                                [(0, 3.4, "haiku·lo"), (3.4, 5.6, "opus·lo"), (5.6, None, "opus·hi")]]):
         for (t0, t1, s_) in spans:
             k = m.tl.show(t0, t1, dur=0.01)
             m.chrome.append(f'<text class="{k}" x="{m.W - 24}" y="{90 + i * 22}" text-anchor="end" font-size="12" fill="{c["acc"] if t0 else c["faint"]}">{s_}</text>')
-    m.main(0.2, "release is on haiku: release notes are a chore.")
+    m.main(0.2, "release is on haiku: the changelog is a chore.")
     press(m, 0.9, "⌥3"); m.row(1.2, f'{m.dim("⌥3 · now talking to release")}', size=13, gap=8)
     m.type(1.7, 2.6, cmd1); m.you(2.8, cmd1, gap=4)
     m.row(3.4, f'{m.dim("release · model opus")}', size=13)
@@ -947,11 +947,11 @@ def t_shell(c):
     """a real shell, one key away: ctrl+` opens a terminal in your repo; hidden, it keeps running."""
     m = Tui(c, 10); m.typed = []
     m.header([(0, 4.6, f'{m.gust()} 2 working'), (4.6, None, f'<tspan fill="{c["acc"]}">$</tspan> npm run dev · {m.gust()} 2 working')])
-    m.main(0.2, "perf and dark-mode are on it.")
-    m.main(5.0, "perf: signup is 0.9 s on a phone now.", gap=8)
+    m.main(0.2, "checkout and stock are on it.")
+    m.main(5.0, "checkout: a 3-D Secure timeout retries with the same key.", gap=8)
     press(m, 0.7, "ctrl+`"); press(m, 4.2, "ctrl+`"); press(m, 6.2, "ctrl+`")
     pane(m, [(1.0, 4.5), (6.5, None)], [(1.4, 2.1, "npm run dev"), (2.5, f'ready on {m.acc("localhost:3000")}'),
-                                         (3.0, "GET /signup 200 · 4.1 s"), (5.0, "GET /signup 200 · 0.9 s")])
+                                         (3.0, "POST /checkout 502 · 3DS timeout"), (5.0, "POST /checkout 200 · 1 charge")], title="~/storefront")
     m.composer([])
     return m.svg("ctrl+` opens a terminal in your repo; you start the dev server and hide it; it keeps running; ctrl+` again and the new requests are there.")
 
@@ -970,11 +970,11 @@ def t_proof(c):
 def t_restart(c):
     """restart whenever you like: bise goes away and comes back; the agents resume, your draft is still there."""
     m = Tui(c, 8.5); m.typed = []
-    draft = "and the release notes once they're all done"
+    draft = "and the eval report once they're all done"
     m.header([(0, None, f'{m.gust()} 3 working')])
-    m.main(0.2, "perf, dark-mode and cookies are on it.")
+    m.main(0.2, "rag, dedupe and cache are on it.")
     m.type(0.5, 1.8, draft)
-    m.row(4.3, f'{m.acc("↻")} back. perf, dark-mode and cookies picked up where they were.', gap=8)
+    m.row(4.3, f'{m.acc("↻")} back. rag, dedupe and cache picked up where they were.', gap=8)
     m.row(4.9, f'{m.dim("  your thread and your draft are here too.")}', size=13)
     # the restart: the screen goes, bise starts again
     k = m.tl.show(2.3, 3.9, dur=0.2)
@@ -992,9 +992,9 @@ def t_theme(c):
         m.chrome.append(f'<text x="24" y="28" font-size="13" font-weight="700" fill="{cc["text"]}">bise {m.acc(":*")}</text>'
                         f'<line x1="0" y1="42" x2="{m.W}" y2="42" stroke="{cc["line"]}"/>'
                         f'<text x="{m.W - 24}" y="28" text-anchor="end" font-size="12" fill="{cc["dim"]}">{m.gust()} 1 working · {m.acc("✓")} 1 done</text>')
-        rows = [f'{m.acc(":*")} dark-mode is done. every page follows your system',
-                f'   theme now, and the borders use the gray in tokens.css.',
-                f'<tspan class="g" fill="{cc["acc"]}">∿</tspan> perf {m.dim("· timing signup on a phone")}']
+        rows = [f'{m.acc(":*")} shadows is done. no acne at any cascade now,',
+                f'   and the bias follows the angle of the sun.',
+                f'<tspan class="g" fill="{cc["acc"]}">∿</tspan> streaming {m.dim("· decoding textures off the main thread")}']
         for i, r in enumerate(rows):
             m.feed.append(f'<text x="{m.fx}" y="{72 + i * 27 + (8 if i == 2 else 0)}" font-size="14" fill="{cc["text"]}" xml:space="preserve">{r}</text>')
         # the reading width: the text stops at a comfortable measure, whatever the window's width
@@ -1113,12 +1113,12 @@ def t_voicemode(c):
     T = 11.5
     m = Tui(c, T, H=360); m.typed = []
     m.top = 172  # the voice pane takes the composer's place, at half the screen
-    you_s = "can you make the pricing page less busy?"
-    main_1, main_2 = "sure. pricing-page will cut it to three", "plans and send you a preview."
+    you_s = "can we move the promo field out of checkout?"
+    main_1, main_2 = "sure. promo will move it to the cart", "and send you a preview."
     m.header([(0, 4.6, f'{m.gust()} 1 working'), (4.6, None, f'{m.gust()} 2 working')])
-    m.main(0.1, "cookies is on it. the banner is getting smaller.")
+    m.main(0.1, "stock is on it. the flash sale is next.")
     m.row(2.1, f'<tspan font-weight="700">{E(you_s)}</tspan> <tspan fill="{c["faint"]}">said</tspan> {m.acc("✓✓")}', gap=8)
-    m.main(4.6, "pricing-page started.")
+    m.main(4.6, "promo started.")
     top, o = m.top, m.over
     o.append(f'<rect x="0" y="{top}" width="{m.W}" height="{m.H - top}" fill="{c["foot"]}"/>')
     m.chrome.append(f'<path d="M0 {top} H{m.W}" stroke="{c["line"]}"/>'
@@ -1164,21 +1164,21 @@ def t_voicemode(c):
     n1 = len(main_1.split(" "))
     mw = words_in(m.tl, cx, cy + 26, main_1, 3.1, .22, c, faint=3.0) + words_in(m.tl, cx, cy + 48, main_2, 3.1 + n1 * .22, .22, c, faint=3.0)
     o.append(f'<g class="{flick(m.tl, [(3.0, T - .3)])}">{mw}</g>')
-    return m.svg("you press ctrl+r twice and ask main to make the pricing page less busy. the face listens, thinks, then talks: main says pricing-page will cut it to three plans. it ends with a kiss.")
+    return m.svg("you press ctrl+r twice and ask main to move the promo field out of checkout. the face listens, thinks, then talks: main says promo will move it to the cart. it ends with a kiss.")
 
 def t_computer(c):
     """computer use: an agent opens the page in your browser, in its own tab group, in the background; reads it,
     takes a screenshot; main answers. your own tab never moves."""
     T = 11
     m = Tui(c, T, H=300); m.typed = []
-    ask = "is buy visible on mobile pricing?"  # short: it stays left of the browser
+    ask = "is add to cart visible on mobile?"  # short: it stays left of the browser
     m.header([(2.4, 5.9, f'{m.gust()} 1 working'), (5.9, None, f'{m.acc("✓")} 1 done')])
     m.type(0.3, 1.5, ask); m.you(1.7, ask, gap=0)
     m.main(2.3, "qa is checking it in your browser.")
-    m.row(3.2, m.dim("ƒ qa · opened /pricing"), size=13)
+    m.row(3.2, m.dim("ƒ qa · opened /products/linen-shirt"), size=13)
     m.row(3.9, m.dim("ƒ qa · read it at 390 px"), size=13)
     m.row(4.6, m.dim("ƒ qa · took a screenshot"), size=13)
-    m.main(5.5, "yes: buy shows on all 3 plans.")
+    m.main(5.5, "yes: it shows for all 3 colors.")
     m.main(6.0, "your tab was never touched.")
     m.composer([(0.3, 1.7)])
     # the browser, beside: your tab stays in front; the agent's tab opens in its own group, behind
@@ -1189,7 +1189,7 @@ def t_computer(c):
              f'<rect x="{bx + 8}" y="{by + 7}" width="70" height="20" rx="5" fill="{page}"/>'
              f'<text x="{bx + 18}" y="{by + 21}" font-size="11" fill="{c["text"]}">inbox</text>'
              f'<rect x="{bx + 8}" y="{by + 32}" width="{bw - 16}" height="18" rx="9" fill="{page}"/>'
-             f'<text x="{bx + 20}" y="{by + 45}" font-size="10" fill="{c["dim"]}">mail.acme.dev/inbox</text>'
+             f'<text x="{bx + 20}" y="{by + 45}" font-size="10" fill="{c["dim"]}">admin.storefront.dev/orders</text>'
              f'<rect x="{bx + 8}" y="{by + 56}" width="{bw - 16}" height="{bh - 64}" rx="4" fill="{page}"/>')
     for i in range(4):  # your inbox: the page you're on, untouched
         yy = by + 70 + i * 19
@@ -1201,7 +1201,7 @@ def t_computer(c):
              f'<text x="{bx + 102}" y="{by + 21}" text-anchor="middle" font-size="10" font-weight="700" fill="{page}">bise</text>'
              f'<rect x="{bx + 122}" y="{by + 7}" width="78" height="20" rx="5" fill="{c["chip"]}"/>'
              f'<rect x="{bx + 122}" y="{by + 25}" width="78" height="2" fill="{c["acc"]}"/>'
-             f'<text x="{bx + 146}" y="{by + 21}" font-size="11" fill="{c["dim"]}">pricing</text></g>')
+             f'<text x="{bx + 146}" y="{by + 21}" font-size="11" fill="{c["dim"]}">shop</text></g>')
     ks, kd = m.tl.show(3.0, 3.8, dur=.05), m.tl.show(3.8, dur=.05)
     o.append(f'<text class="{ks}" x="{bx + 130}" y="{by + 21}" font-size="11"><tspan class="g" fill="{c["acc"]}">∿</tspan></text>'
              f'<rect class="{kd}" x="{bx + 130}" y="{by + 13}" width="9" height="9" rx="2" fill="{c["acc"]}"/>')
@@ -1216,8 +1216,8 @@ def t_computer(c):
     kc = m.tl.show(4.7, dur=.25)
     o.append(f'<g class="{kc}"><rect x="{sx + 3}" y="{sy + 3}" width="{sw}" height="{sh}" rx="4" fill="{c["wind"]}"/>'
              f'<rect x="{sx}" y="{sy}" width="{sw}" height="{sh}" rx="4" fill="{page}" stroke="{c["faint"]}"/>'
-             f'<text x="{sx + 8}" y="{sy + 11}" font-size="8" fill="{c["faint"]}">pricing · 390 px</text>{cards}</g>')
-    return m.svg("you ask main if buy is visible on the mobile pricing page. an agent opens it in a background tab in its own group, reads it, takes a screenshot, and main answers: buy shows on all three plans. your own tab never moved.")
+             f'<text x="{sx + 8}" y="{sy + 11}" font-size="8" fill="{c["faint"]}">linen shirt · 390 px</text>{cards}</g>')
+    return m.svg("you ask main if add to cart is visible on a mobile product page. an agent opens it in a background tab in its own group, reads it, takes a screenshot, and main answers: it shows for all three colors. your own tab never moved.")
 
 
 # ---------- artifacts, diffs, scheduled tasks (designer, for the release after v2026.10.2-18) ----------
@@ -1240,9 +1240,9 @@ def t_artifacts(c):
     """artifacts: what agents make lands in one list; /artifacts finds it; space shows it."""
     m = Tui(c, 12, H=300, keys="@ file   / commands   ⏎ send"); m.typed = []
     m.header([(0, 1.0, f'{m.gust()} 1 working'), (1.0, None, f'{m.acc("↗")} 2 new')])
-    m.main(0.3, "pricing-page is done. the page and the numbers:")
-    _artline(m, 0.7, "pricing page", "page · v3")
-    _artline(m, 0.9, "pricing-plans.xlsx", "sheet")
+    m.main(0.3, "report is done. the eval report and the data:")
+    _artline(m, 0.7, "rag eval report", "page · v3")
+    _artline(m, 0.9, "eval-results.xlsx", "sheet")
     m.type(1.8, 2.6, "/artifacts")
     m.composer([(1.8, 2.8)])
     # the full screen, over everything under the header
@@ -1268,14 +1268,14 @@ def t_artifacts(c):
             y += 22
         o.append(f'<text x="{x0}" y="{H-16}" font-size="12" fill="{c["faint"]}" xml:space="preserve">{keys}</text>')
         m.last.append(f'<g class="{k}">{"".join(o)}</g>')
-    ALL = [("group", "today"), ("pricing page", "page", "pricing-page", "now"), ("pricing-plans.xlsx", "sheet", "pricing-page", "now"),
-           ("onboarding deck", "slides", "launch", "3 h"), ("capsule, round 9", "site", "ambient", "4 h"),
-           ("PR #6 · head checks", "PR", "pr-review", "5 h")]
+    ALL = [("group", "today"), ("rag eval report", "page", "report", "now"), ("eval-results.xlsx", "sheet", "report", "now"),
+           ("model card deck", "slides", "launch", "3 h"), ("chat demo, round 9", "site", "demo", "4 h"),
+           ("PR #64 · cache the prompt", "PR", "cache", "5 h")]
     KEYS = "⏎ open   space quick look   v versions   esc close"
     scr(3.0, 4.0, None, ALL, 1, KEYS)
     scr(4.0, 4.6, None, ALL, 2, KEYS)
     scr(4.6, 5.4, None, ALL, 3, KEYS)
-    DECK = [("group", "today"), ("onboarding deck", "slides", "launch", "3 h"), ("group", "this week"), ("investor deck, draft", "slides", "designer", "tue")]
+    DECK = [("group", "today"), ("model card deck", "slides", "launch", "3 h"), ("group", "this week"), ("board deck, draft", "slides", "report", "tue")]
     scr(5.4, 5.8, "de", ALL[:1] + ALL[3:4] + DECK[2:], 1, "⏎ done   ↑↓ choose   esc clear the search")
     scr(5.8, 6.6, "deck", DECK, 1, "⏎ done   ↑↓ choose   esc clear the search")
     scr(6.6, None, "deck   1 of 2", DECK, 1, KEYS)
@@ -1285,21 +1285,21 @@ def t_artifacts(c):
     qx, qy, qw, qh = 300, 118, 340, 150
     m.last.append(f'<g class="{k}"><rect x="{qx}" y="{qy}" width="{qw}" height="{qh}" rx="9" fill="#2b2826" stroke="#00000055"/>'
                   f'<circle cx="{qx+14}" cy="{qy+13}" r="4.5" fill="#ff5f57"/><circle cx="{qx+28}" cy="{qy+13}" r="4.5" fill="#febc2e"/><circle cx="{qx+42}" cy="{qy+13}" r="4.5" fill="#28c840"/>'
-                  f'<text x="{qx+qw/2}" y="{qy+17}" text-anchor="middle" font-size="11" fill="#d8d2c8" font-family="-apple-system, system-ui, sans-serif">onboarding deck.pptx</text>'
+                  f'<text x="{qx+qw/2}" y="{qy+17}" text-anchor="middle" font-size="11" fill="#d8d2c8" font-family="-apple-system, system-ui, sans-serif">model card deck.pptx</text>'
                   f'<rect x="{qx+14}" y="{qy+28}" width="{qw-28}" height="{qh-40}" rx="3" fill="#f7f4ee"/>'
-                  f'<text x="{qx+30}" y="{qy+52}" font-size="10" fill="#b8416b" font-family="-apple-system, system-ui, sans-serif">bise · onboarding</text>'
-                  f'<text x="{qx+30}" y="{qy+80}" font-size="19" fill="#1b1917" font-family="Georgia, serif">your first hour with bise</text>'
-                  f'<text x="{qx+30}" y="{qy+100}" font-size="11" fill="#6b645a" font-family="Georgia, serif">talk to main. it starts the agents.</text>'
+                  f'<text x="{qx+30}" y="{qy+52}" font-size="10" fill="#b8416b" font-family="-apple-system, system-ui, sans-serif">acme-assist · model card</text>'
+                  f'<text x="{qx+30}" y="{qy+80}" font-size="19" fill="#1b1917" font-family="Georgia, serif">acme-assist 2.1, evaluated</text>'
+                  f'<text x="{qx+30}" y="{qy+100}" font-size="11" fill="#6b645a" font-family="Georgia, serif">RAG 94% · leaked rows 0 · cache hit 71%</text>'
                   f'<text x="{qx+qw-24}" y="{qy+qh-18}" text-anchor="end" font-size="9" fill="#857d72" font-family="-apple-system, system-ui, sans-serif">1 / 12</text></g>')
-    return m.svg("pricing-page made a page and a sheet: they show in the thread as links. you type /artifacts: every page, doc, sheet, deck and PR your agents made, in one list. you search deck and press space: the deck opens in Quick Look.")
+    return m.svg("report made an eval report and a sheet: they show in the thread as links. you type /artifacts: every page, doc, sheet, deck and PR your agents made, in one list. you search deck and press space: the deck opens in Quick Look.")
 
 def t_diff(c):
     """diffs beside the thread: a click on ± 3 files opens the agent's changes against main on the right."""
     ok, err = _okerr(c)
     m = Tui(c, 11, H=300, keys="@ file   / commands   ⏎ send"); m.typed = []
     m.header([(0, None, f'{m.gust()} 1 working')])
-    m.main(0.3, "three plans now.")
-    yy = m.row(0.6, f'{m.acc("✓")} pricing-page landed', gap=4)
+    m.main(0.3, "one charge per order now.")
+    yy = m.row(0.6, f'{m.acc("✓")} checkout landed', gap=4)
     y2 = m.row(0.6, f'<tspan fill="{c["acc"]}" text-decoration="underline">± 3 files</tspan> <tspan fill="{ok}">+42</tspan> <tspan fill="{err}">−18</tspan>  {m.dim("a1b2c3d")}', size=13, x=m.fx + 14)
     m.composer([])
     # the pointer clicks ± 3 files
@@ -1309,7 +1309,7 @@ def t_diff(c):
     def panel(t0, t1, focus_file, lines, keys):
         k = m.tl.show(t0, t1, dur=0.15); o = []
         o.append(f'<rect x="{x0}" y="43" width="{W-x0}" height="{top-43}" fill="{c["bg"]}"/><line x1="{x0}" y1="43" x2="{x0}" y2="{top}" stroke="{c["acc"]}"/>')
-        o.append(f'<text x="{x0+16}" y="66" font-size="13" font-weight="700" fill="{c["acc"]}" xml:space="preserve">pricing-page <tspan font-weight="400" fill="{c["dim"]}">vs main · 3 files</tspan> <tspan font-weight="400" fill="{ok}">+42</tspan> <tspan font-weight="400" fill="{err}">−18</tspan></text>')
+        o.append(f'<text x="{x0+16}" y="66" font-size="13" font-weight="700" fill="{c["acc"]}" xml:space="preserve">checkout <tspan font-weight="400" fill="{c["dim"]}">vs main · 3 files</tspan> <tspan font-weight="400" fill="{ok}">+42</tspan> <tspan font-weight="400" fill="{err}">−18</tspan></text>')
         o.append(f'<text x="{x0+16}" y="92" font-size="12" fill="{c["text"]}" xml:space="preserve"><tspan fill="{c["faint"]}">▾</tspan> {E(focus_file[0])}  <tspan fill="{ok}">{focus_file[1]}</tspan> <tspan fill="{err}">{focus_file[2]}</tspan></text>')
         y = 114
         for kind, num, code in lines:
@@ -1322,33 +1322,33 @@ def t_diff(c):
         kk = m.tl.show(t0, t1, dur=0.15)
         m.last.append(f'<g class="{kk}"><rect x="40" y="{H-30}" width="{W-60}" height="22" fill="{c["foot"]}"/>'
                       f'<text x="64" y="{H-16}" font-size="12" fill="{c["faint"]}" xml:space="preserve">{keys}</text></g>')
-    F1 = [(" ", 40, '<section className="plans">'), ("-", 41, '  <Banner text="save 20%" />'), ("-", 42, '  <Plan name="free" />'),
-          ("-", 43, '  <Plan name="starter" />'), ("+", 41, '  <Plan name="free" note="…" />'), (" ", 44, '  <Plan name="team" />'),
-          ("-", 45, '  <Plan name="business" />'), ("+", 43, '  <Plan name="company" />'), (" ", 47, "</section>")]
-    F2 = [("+", 1, "export const plans = ["), ("+", 2, '  { name: "free", price: 0 },'), ("+", 3, '  { name: "team", price: 12 },'),
-          ("+", 4, '  { name: "company", contact: true },'), ("+", 5, "]")]
+    F1 = [(" ", 40, 'async function capture(order) {'), ("-", 41, '  const key = uuid()'), ("-", 42, '  if (timedOut) retry()'),
+          ("-", 43, '  await stripe.capture(order)'), ("+", 41, '  const key = order.id'), (" ", 44, '  log.info("capture", order.id)'),
+          ("-", 45, '  return charge(order)'), ("+", 43, '  return charge(order, { key })'), (" ", 47, "}")]
+    F2 = [("+", 1, "export const retry = {"), ("+", 2, '  attempts: 3,'), ("+", 3, '  sameKey: true,'),
+          ("+", 4, '  backoffMs: [400, 1600, 6400],'), ("+", 5, "}")]
     KEYS = "↑↓ scroll   tab next file   ⏎ open in your editor   esc close"
-    panel(2.0, 4.8, ("src/pages/pricing.tsx", "+30", "−12"), F1, KEYS)
+    panel(2.0, 4.8, ("src/checkout/capture.ts", "+30", "−12"), F1, KEYS)
     press(m, 4.5, "tab", y=H - 16)
-    panel(4.8, None, ("src/data/plans.ts", "+10", ""), F2, KEYS)
+    panel(4.8, None, ("src/checkout/retry.ts", "+10", ""), F2, KEYS)
     # ⏎ on a line: it opens in your editor, the thread says so
     ks = m.tl.show(6.6, dur=0.1)
     m.last.append(f'<rect class="{ks}" x="{x0+1}" y="{114+2*19-14}" width="{W-x0-1}" height="19" fill="{c["acc"]}" fill-opacity=".18"/>')
     press(m, 6.9, "⏎", y=H - 16)
-    m.row(7.4, m.dim("· opened plans.ts:3 in your editor"), size=12, gap=4)
-    return m.svg("pricing-page landed: ± 3 files +42 −18. a click opens its diff against main on the right, file by file, green and red. tab goes to the next file; enter opens the line in your editor.")
+    m.row(7.4, m.dim("· opened retry.ts:3 in your editor"), size=12, gap=4)
+    return m.svg("checkout landed: ± 3 files +42 −18. a click opens its diff against main on the right, file by file, green and red. tab goes to the next file; enter opens the line in your editor.")
 
 def t_scheduled(c):
     """scheduled tasks: an agent wakes on a schedule; /scheduled lists them."""
     m = Tui(c, 10.5, H=280); m.typed = []
-    ask = "check the build every 2 min till it's green"
+    ask = "check the ingest lag every 2 min till it's under 10 s"
     m.header([(0, None, f'{m.gust()} 2 working')])
     m.type(0.3, 1.5, ask); m.you(1.6, ask)
-    m.main(2.1, "answer-line will look every 2 minutes.")
-    m.row(2.5, f'{m.dim("◷ main scheduled #48 for answer-line · every 2m · next 14:22")}', size=12)
-    m.main(4.4, "answer-line: still building, 312 of 498.", gap=6)
-    m.main(5.6, "answer-line: green.")
-    m.row(5.9, f'{m.dim("◷ scheduled #48 ended · stopped by answer-line")}', size=12)
+    m.main(2.1, "ingest will look every 2 minutes.")
+    m.row(2.5, f'{m.dim("◷ main scheduled #48 for ingest · every 2m · next 14:22")}', size=12)
+    m.main(4.4, "ingest: lag 3 min 40 s, falling.", gap=6)
+    m.main(5.6, "ingest: lag 4 s.")
+    m.row(5.9, f'{m.dim("◷ scheduled #48 ended · stopped by ingest")}', size=12)
     m.type(6.4, 7.0, "/scheduled")
     m.composer([(0.3, 1.6), (6.4, 7.1)])
     # the list
@@ -1356,7 +1356,7 @@ def t_scheduled(c):
     k = m.tl.show(7.2, dur=0.12); o = [f'<rect x="0" y="43" width="{W}" height="{H-43}" fill="{c["bg"]}"/>']
     o.append(f'<text x="{x0}" y="70" font-size="13" font-weight="700" fill="{c["text"]}" xml:space="preserve">scheduled <tspan font-weight="400" fill="{c["dim"]}">· what wakes your agents, and when</tspan></text>')
     o.append(f'<text x="{W-24}" y="70" text-anchor="end" font-size="12" fill="{c["dim"]}">2 active</text>')
-    rows = [("#51", "release18", "every day 07:30", "next 07:30"), ("#52", "launch", "every 15m", "next 14:45 · in 14m")]
+    rows = [("#51", "release", "every day 07:30", "next 07:30"), ("#52", "alerts", "every 15m", "next 14:45 · in 14m")]
     y = 104
     for i, (nid, ag, when, nxt) in enumerate(rows):
         if i == 0: o.append(f'<rect x="{x0-8}" y="{y-15}" width="{W-2*x0+16}" height="21" rx="3" fill="{c["chip"]}"/><text x="{x0}" y="{y}" font-size="13" fill="{c["acc"]}">›</text>')
@@ -1364,10 +1364,10 @@ def t_scheduled(c):
                  f'<text x="{x0+14+19*7.8:.0f}" y="{y}" font-size="13" fill="{c["dim"]}">{when}</text>'
                  f'<text x="{x0+14+37*7.8:.0f}" y="{y}" font-size="13" fill="{c["dim"]}">{nxt}</text>')
         y += 24
-    o.append(f'<text x="{x0+14}" y="{y+10}" font-size="12" fill="{c["faint"]}">ended: #48 answer-line · stopped by answer-line</text>')
+    o.append(f'<text x="{x0+14}" y="{y+10}" font-size="12" fill="{c["faint"]}">ended: #48 ingest · stopped by ingest</text>')
     o.append(f'<text x="{x0}" y="{H-16}" font-size="12" fill="{c["faint"]}" xml:space="preserve">⏎ open   r run now   x stop   tab ended too   esc close</text>')
     m.last.append(f'<g class="{k}">{"".join(o)}</g>')
-    return m.svg("you ask main to check the build every 2 minutes: answer-line gets a scheduled task, wakes, reports, and stops it once the build is green. /scheduled lists every scheduled task: what wakes your agents, and when.")
+    return m.svg("you ask main to check the ingest lag every 2 minutes: ingest gets a scheduled task, wakes, reports, and stops it once the lag is under 10 s. /scheduled lists every scheduled task: what wakes your agents, and when.")
 
 SCENES = [("talk", t_talk), ("zen", t_zen), ("screenshot", t_screenshot),
           ("resume", t_resume), ("worktree", t_worktree), ("card", t_card), ("sync", t_sync), ("tools", t_tools), ("plugins", t_plugins),

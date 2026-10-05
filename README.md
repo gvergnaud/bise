@@ -83,13 +83,13 @@ four words to learn: you, main, agents, inbox.
 
 give main a large goal. it splits it into jobs, runs agents in parallel, restarts any that stop on an error, and keeps going until the goal is done.
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/resume-dark.svg"><img src="docs/brand/readme/feat/resume-light.svg" width="680" alt="you give main one big goal. it runs three agents at a time, starts again the one that stops on an error, and keeps going until all 12 pages are done."></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/resume-dark.svg"><img src="docs/brand/readme/feat/resume-light.svg" width="680" alt="you give main one big goal: port 40 materials to a new shader. it runs three agents at a time, starts again the one that stops on an error, and keeps going until all 40 are done."></picture>
 
 #### automatic worktrees
 
 agents share your checkout by default. when one needs an isolated copy (a clean build, a risky change), it creates a git worktree, works there, and removes it when it's done. no branches to name, no folders to clean up.
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/worktree-dark.svg"><img src="docs/brand/readme/feat/worktree-light.svg" width="680" alt="dark-mode and cookies share your folder; perf gets its own worktree for a clean build, finishes, and the worktree is cleaned up."></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/worktree-dark.svg"><img src="docs/brand/readme/feat/worktree-light.svg" width="680" alt="search and promo share your folder; stock gets its own worktree to replay a flash sale on a clean build, finishes, and the worktree is cleaned up."></picture>
 
 ### focus
 
@@ -97,13 +97,13 @@ agents share your checkout by default. when one needs an isolated copy (a clean 
 
 main hands the heavy work to agents, so it's never busy. ask it anything while five agents run: it listens and answers right away, and nothing you send interrupts a job.
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/talk-dark.svg"><img src="docs/brand/readme/feat/talk-light.svg" width="680" alt="three agents are working. you ask main what perf is doing and it answers right away; you add a job, it starts one more agent and is still there."></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/talk-dark.svg"><img src="docs/brand/readme/feat/talk-light.svg" width="680" alt="three agents are working on a telemetry pipeline. you ask main what ingest is doing and it answers right away; you add a job, it starts one more agent and is still there."></picture>
 
 #### zen mode
 
 while you type, the agents panel, the counters and the agents' chatter dim. they come back when you send. messages between agents stay folded; `ctrl+o` expands them.
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/zen-dark.svg"><img src="docs/brand/readme/feat/zen-light.svg" width="680" alt="you start typing and everything else fades: the agents, the counts. perf finishes meanwhile. you send, and it all comes back."></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/zen-dark.svg"><img src="docs/brand/readme/feat/zen-light.svg" width="680" alt="you start typing and everything else fades: the agents, the counts. rag finishes meanwhile. you send, and it all comes back."></picture>
 
 ### voice
 
@@ -111,7 +111,7 @@ while you type, the agents panel, the counters and the agents' chatter dim. they
 
 press `ctrl+r` twice for voice mode and just talk to main. it answers out loud while the agents keep working. `space` sends right away, `esc` leaves, and `/voice` picks the model, the voice and the language. the face is drawn in the terminal: it smiles while it listens, turns a * while it thinks, and blows you a kiss when it's done.
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/voicemode-dark.svg"><img src="docs/brand/readme/feat/voicemode-light.svg" width="680" alt="you press ctrl+r twice and ask main to make the pricing page less busy. the face listens, thinks, then talks: main says pricing-page will cut it to three plans. it ends with a kiss."></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/voicemode-dark.svg"><img src="docs/brand/readme/feat/voicemode-light.svg" width="680" alt="you press ctrl+r twice and ask main to move the promo field out of checkout. the face listens, thinks, then talks: main says promo will move it to the cart. it ends with a kiss."></picture>
 
 #### dictation
 
@@ -131,7 +131,7 @@ agents ask main, not you. main answers what it can, the way you would, and says 
 
 agents message each other directly: questions, hand-offs, who edits which file. these messages are folded in your thread.
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/sync-dark.svg"><img src="docs/brand/readme/feat/sync-light.svg" width="680" alt="release asks emoji-csv and dark-mode what it needs; they answer; the four messages fold into one line, and main says there is nothing for you."></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/sync-dark.svg"><img src="docs/brand/readme/feat/sync-light.svg" width="680" alt="report asks rag and dedupe what it needs for the eval report; they answer; the four messages fold into one line, and main says there is nothing for you."></picture>
 
 ### tools
 
@@ -139,19 +139,19 @@ agents message each other directly: questions, hand-offs, who edits which file. 
 
 connect as many MCP servers as you want (GitHub, Linear, Sentry, Slack, your database) and keep them all on. agents call tools from code, so a hundred servers don't fill the context.
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/tools-dark.svg"><img src="docs/brand/readme/feat/tools-light.svg" width="680" alt="42 MCP servers are on. you ask why signup is slow; main writes a few lines of code that call Sentry, GitHub and Slack, and answers in two lines."></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/tools-dark.svg"><img src="docs/brand/readme/feat/tools-light.svg" width="680" alt="42 MCP servers are on. you ask why checkout errors jumped; main writes a few lines of code that call Sentry, GitHub and Slack, and answers in two lines."></picture>
 
 #### computer use
 
 your agents can use your browser: they open pages in their own tab group, in the background, with your logins, and read, click, type, fill forms and take screenshots. they never take your screen or your active tab. on macOS they can drive apps like Notes or Figma too. it's off by default: `/computer-use` sets it up (the Chrome extension, the permissions, a live test). for now it acts without asking first, so give it the jobs you'd give someone at your desk.
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/computer-dark.svg"><img src="docs/brand/readme/feat/computer-light.svg" width="680" alt="you ask main if buy is visible on the mobile pricing page. an agent opens it in a background tab in its own group, reads it, takes a screenshot, and main answers: buy shows on all three plans. your own tab never moved."></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/computer-dark.svg"><img src="docs/brand/readme/feat/computer-light.svg" width="680" alt="you ask main if add to cart is visible on a mobile product page. an agent opens it in a background tab in its own group, reads it, takes a screenshot, and main answers: it shows for all three colors. your own tab never moved."></picture>
 
 #### Agent Plugins
 
 skills, MCP servers and hooks in the [Agent Plugins](https://agent-plugins.org) format load as they are, from `~/.agents/plugins` or your repo. Vibe plugins too.
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/plugins-dark.svg"><img src="docs/brand/readme/feat/plugins-light.svg" width="680" alt="on its first run, bise finds your skills, plugins and MCP servers; you ask for release notes and the agent uses your own skill."></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/plugins-dark.svg"><img src="docs/brand/readme/feat/plugins-light.svg" width="680" alt="on its first run, bise finds your skills, plugins and MCP servers; you ask for the game&#x27;s patch notes and the agent uses your own skill."></picture>
 
 ### control
 
@@ -159,13 +159,13 @@ skills, MCP servers and hooks in the [Agent Plugins](https://agent-plugins.org) 
 
 `⌥` + a number, or `@name`, talks to one agent directly. ask it why, redirect it, then `⌥0` takes you back to main. the other agents keep running.
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/direct-dark.svg"><img src="docs/brand/readme/feat/direct-light.svg" width="680" alt="you press alt+1 and talk to perf directly: why is signup slow, then add a check. alt+0 takes you back to main. nobody stopped."></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/direct-dark.svg"><img src="docs/brand/readme/feat/direct-light.svg" width="680" alt="you press alt+1 and talk to streaming directly: why the frame spikes, then add a perf test. alt+0 takes you back to main. nobody stopped."></picture>
 
 #### pull requests
 
 in a repo that takes pull requests, each change gets its own branch and PR, and goes through your CI, review bots and teammates. the panel shows each PR's state: checks, review, merged.
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/prs-dark.svg"><img src="docs/brand/readme/feat/prs-light.svg" width="680" alt="cookies opens pull request #409. CI fails, it fixes the test; a review bot asks for a bigger button, you say do it; #409 merges. the panel shows where it stands."></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/prs-dark.svg"><img src="docs/brand/readme/feat/prs-light.svg" width="680" alt="checkout opens pull request #812. CI fails, it fixes the test; a review bot asks to cap the retries, you say do it; #812 merges. the panel shows where it stands."></picture>
 
 ### what they made
 
@@ -173,13 +173,13 @@ in a repo that takes pull requests, each change gets its own branch and PR, and 
 
 what agents make for you (a page, a doc, a sheet, slides, a PR) lands in `/artifacts`: one list, newest first, with its versions. `/` finds one, `space` shows it in Quick Look. in a reply it's a ↗ link that opens it, and `@` puts one in your message.
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/artifacts-dark.svg"><img src="docs/brand/readme/feat/artifacts-light.svg" width="680" alt="pricing-page made a page and a sheet: they show in the thread as links. you type /artifacts: every page, doc, sheet, deck and PR your agents made, in one list. you search deck and press space: the deck opens in Quick Look."></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/artifacts-dark.svg"><img src="docs/brand/readme/feat/artifacts-light.svg" width="680" alt="report made an eval report and a sheet: they show in the thread as links. you type /artifacts: every page, doc, sheet, deck and PR your agents made, in one list. you search deck and press space: the deck opens in Quick Look."></picture>
 
 #### diffs beside the thread
 
 click `± 3 files` under an agent's work, or press `ctrl+g`: its changes against main open on the right, file by file. `tab` goes to the next file, `⏎` opens the line in your editor, and `/diff` picks any branch.
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/diff-dark.svg"><img src="docs/brand/readme/feat/diff-light.svg" width="680" alt="pricing-page landed: ± 3 files +42 −18. a click opens its diff against main on the right, file by file, green and red. tab goes to the next file; enter opens the line in your editor."></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/diff-dark.svg"><img src="docs/brand/readme/feat/diff-light.svg" width="680" alt="checkout landed: ± 3 files +42 −18. a click opens its diff against main on the right, file by file, green and red. tab goes to the next file; enter opens the line in your editor."></picture>
 
 ## details
 
@@ -189,7 +189,7 @@ small things, done carefully.
 
 main does small jobs itself and starts an agent only when a job needs one. no agents reviewing each other in loops, so fewer tokens.
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/tokens-dark.svg"><img src="docs/brand/readme/feat/tokens-light.svg" width="680" alt="you ask for a one-word typo fix. main does it itself: too small for an agent. 0 agents started, the count stays at 2."></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/tokens-dark.svg"><img src="docs/brand/readme/feat/tokens-light.svg" width="680" alt="you ask to change one number in a config file. main does it itself: too small for an agent. 0 agents started, the count stays at 2."></picture>
 
 #### images
 
@@ -201,7 +201,7 @@ paste a screenshot with `ctrl+v` or drag it in. it becomes one chip in your mess
 
 select lines in the history and start typing: they're attached to your message as a quote.
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/quote-dark.svg"><img src="docs/brand/readme/feat/quote-light.svg" width="680" alt="you select &#x27;4.1 s to 0.9 s&#x27; in perf&#x27;s answer and start typing: the lines come along as a quote chip, and perf answers about them."></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/quote-dark.svg"><img src="docs/brand/readme/feat/quote-light.svg" width="680" alt="you select &#x27;12% to 71%&#x27; in cache&#x27;s answer and start typing: the lines come along as a quote chip, and cache answers about them."></picture>
 
 #### a model per agent
 
@@ -213,7 +213,7 @@ a large model for the hard job, a fast one for chores. `/model` and `/reasoning`
 
 agents can wake themselves on a schedule: check the build every 2 minutes, ship a release every morning. `/scheduled` lists them; `r` runs one now, `x` stops it.
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/scheduled-dark.svg"><img src="docs/brand/readme/feat/scheduled-light.svg" width="680" alt="you ask main to check the build every 2 minutes: answer-line gets a scheduled task, wakes, reports, and stops it once the build is green. /scheduled lists every scheduled task: what wakes your agents, and when."></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/feat/scheduled-dark.svg"><img src="docs/brand/readme/feat/scheduled-light.svg" width="680" alt="you ask main to check the ingest lag every 2 minutes: ingest gets a scheduled task, wakes, reports, and stops it once the lag is under 10 s. /scheduled lists every scheduled task: what wakes your agents, and when."></picture>
 
 #### built-in shell
 
