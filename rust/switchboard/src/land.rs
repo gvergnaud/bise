@@ -12,6 +12,9 @@
 //!   agent landed its files), the repo's check runs if main had moved,
 //!   main moves to the branch (fast-forward); in trunk flow with `push`,
 //!   main is pushed. From the shared folder: `--here`, then the push.
+//!   main is the repo's default branch (`trunk::trunk_ref`, issue #8),
+//!   not the shared folder's branch: its files move only when it has
+//!   main checked out ([`move_main`]).
 //! - One land at a time per target ref ([`Queue`]): the others wait in
 //!   line, and the views say so (`waits to land · 2nd`).
 
@@ -505,7 +508,7 @@ fn pushed(job: &Job, target: &str, main: &str) -> (Option<bool>, Option<String>)
 
 /// `sb land` for `job`, in line on `queue`. `joined`: the views refresh.
 pub fn run(job: &Job, queue: &Queue, joined: &mut dyn FnMut()) -> Result<Outcome, String> {
-    let main = head_ref(&job.shared)?;
+    let main = crate::trunk::trunk_ref(&job.shared)?;
     if !job.here && job.worktree && job.flow.mode == Some(FlowMode::Pr) {
         return Err("this repo ships through pull requests: commit with `sb land --here`, then open a PR".into());
     }

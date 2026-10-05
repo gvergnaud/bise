@@ -3,7 +3,9 @@
 //! a build the user tries, a merge on the user's go only.
 //!
 //! - A **feature** is a local branch named after it (`computer-use`, no
-//!   prefix), made from main's tip (or an existing local branch, adopted:
+//!   prefix), made from main's tip (`trunk::trunk_ref`: the default
+//!   branch, whatever the shared folder has checked out; issue #8) (or
+//!   an existing local branch, adopted:
 //!   the by-hand recipe of approvals and computer-use), never pushed.
 //! - Its agents: `sb spawn --feature <name>` gives each a worktree on
 //!   `sb/<agent>` from the feature's tip (`Workspace::feature`); `sb land`
@@ -25,7 +27,7 @@
 //! Git runs here, in the daemon's threads (never on the hub's loop),
 //! through `land`'s helpers; the words are here too, pure and tested.
 
-use crate::land::{git, head_ref, short};
+use crate::land::{git, short};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -174,7 +176,7 @@ pub fn facts(shared: &Path, main: &str, name: &str) -> Result<Facts, String> {
 /// local branch adopted as it is (computer-use's, made by hand). The
 /// feature and whether it was adopted.
 pub fn create(shared: &Path, name: &str, now: u64) -> Result<Feature, String> {
-    let main = head_ref(shared)?;
+    let main = crate::trunk::trunk_ref(shared)?;
     valid(name, &main)?;
     if exists(shared, name) {
         let base = git(shared, &["merge-base", &main, &branch_ref(name)])
@@ -213,7 +215,7 @@ impl Drop for Scratch {
 /// there (`check`), then the branch moved (compare-and-swap). None:
 /// already on main's tip. Some(old tip, new tip).
 pub fn rebase(shared: &Path, scratch: &Path, name: &str, check: Option<&str>) -> Result<Option<(String, String)>, String> {
-    let main = head_ref(shared)?;
+    let main = crate::trunk::trunk_ref(shared)?;
     let b = branch_ref(name);
     let old = git(shared, &["rev-parse", "--verify", &b])?;
     let base = git(shared, &["rev-parse", "--verify", &main])?;
@@ -301,7 +303,7 @@ pub struct Merged {
 /// pushed when the flow says so. The branch itself is deleted after, by
 /// [`trash`], once the agents are archived.
 pub fn merge(shared: &Path, scratch: &Path, name: &str, flow: &crate::flow::FlowConfig) -> Result<Merged, String> {
-    let main = head_ref(shared)?;
+    let main = crate::trunk::trunk_ref(shared)?;
     let b = branch_ref(name);
     let base = git(shared, &["rev-parse", "--verify", &main])?;
     let old = git(shared, &["rev-parse", "--verify", &b])?;
@@ -385,7 +387,7 @@ pub fn home_short(p: &str) -> String {
 /// The diff for `2 show the diff`, written to `file`: the stat, then the
 /// patch, against where it leaves main.
 pub fn write_diff(shared: &Path, name: &str, file: &Path) -> Result<(), String> {
-    let main = head_ref(shared)?;
+    let main = crate::trunk::trunk_ref(shared)?;
     let range = format!("{}...{}", main, branch_ref(name));
     let stat = git(shared, &["diff", "--stat", &range])?;
     let patch = git(shared, &["diff", &range])?;
