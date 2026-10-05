@@ -31,6 +31,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+pub mod env;
 pub mod migrate;
 pub mod prefs;
 pub mod release;
