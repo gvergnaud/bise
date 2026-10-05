@@ -75,7 +75,7 @@ pub const COMMANDS: &[CmdDoc] = &[
     cmd(
         "sb land [--here] [--add <path>]... \"<message>\"",
         Who::Everyone,
-        "commit the files you changed (only yours, never another agent's) with that message. `--here`: on your place's branch. Without it, from a worktree: rebased on main, checked, and main moves to it (pushed when the repo says so). A file another agent also changed is refused: main decides. New files land by themselves in a worktree you have alone; elsewhere, those you made with bash only with `--add <file or folder>`, and the land names the new files it left out.",
+        "commit the files you changed (only yours, never another agent's) with that message. `--here`: on your place's branch. Without it, from a worktree: rebased on main, checked, and main moves to it (pushed when the repo says so). A file another agent also changed is refused: main decides. In a worktree you have alone, every change lands (changed, deleted, renamed or new files, however made: sed, a script, cargo); elsewhere, files you changed with bash land only with `--add <file or folder>`, and the land names every change it left out.",
     ),
     cmd(
         "sb artifact add <path or link> [--title \"<t>\"] [--kind <k>] | sb artifact list [<words>] [--agent <a>]",

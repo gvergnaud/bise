@@ -3,10 +3,13 @@
 //! swap `update-ref`, then the place's index synced), as one checked step
 //! the hub runs for an agent, off its loop (the daemon's thread).
 //!
-//! - `--here`: the agent's own files (the hub's list, RFC 0001 §10.3) are
-//!   committed on its place's branch: the shared folder's (main), or its
-//!   worktree's. Another agent's half-done files are never in it; a file
-//!   another agent of the place also changed is refused (main decides).
+//! - `--here`: the agent's own changes are committed on its place's
+//!   branch: the shared folder's (main), or its worktree's. In a worktree
+//!   it has alone, every change of it against the tip, however made; else
+//!   its files (the hub's list, RFC 0001 §10.3, and `--add`), the other
+//!   changes since it started named (`land_pick`, issue 12). Another
+//!   agent's half-done files are never in it; a file another agent of
+//!   the place also changed is refused (main decides).
 //! - plain, from a worktree: its own files first (with the message), then
 //!   the branch is rebased on main (the worktree must be clean: every
 //!   agent landed its files), the repo's check runs if main had moved,
@@ -19,6 +22,8 @@
 //!   line, and the views say so (`waits to land · 2nd`).
 
 use crate::flow::{FlowConfig, FlowMode};
+pub use crate::land_pick::left_out_note;
+use crate::land_pick::{pick, Change, Claims, Picked};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
@@ -232,29 +237,6 @@ pub fn relative(dir: &Path, f: &str) -> Option<String> {
     (!rel.is_empty() && !rel.starts_with("..")).then_some(rel)
 }
 
-/// Of `files`, those that differ from the checkout's HEAD (changed,
-/// added, deleted), in order.
-fn changed(dir: &Path, files: &[String]) -> Result<Vec<String>, String> {
-    if files.is_empty() {
-        return Ok(Vec::new());
-    }
-    let mut args = vec!["status", "--porcelain=v1", "-z", "--untracked-files=all", "--"];
-    args.extend(files.iter().map(String::as_str));
-    let out = git(dir, &args)?;
-    let mut seen: Vec<String> = Vec::new();
-    let mut parts = out.split('\0').filter(|s| !s.is_empty());
-    while let Some(e) = parts.next() {
-        let (xy, path) = e.split_at(e.len().min(3));
-        seen.push(path.to_string());
-        if xy.starts_with('R') || xy.starts_with('C') {
-            if let Some(old) = parts.next() {
-                seen.push(old.to_string());
-            }
-        }
-    }
-    Ok(files.iter().filter(|f| seen.contains(f)).cloned().collect())
-}
-
 /// The ref the checkout at `dir` is on (`refs/heads/main`).
 pub(crate) fn head_ref(dir: &Path) -> Result<String, String> {
     git(dir, &["symbolic-ref", "-q", "HEAD"]).map_err(|_| format!("{} is not on a branch (detached HEAD)", dir.display()))
@@ -330,115 +312,40 @@ fn sync_index(dir: &Path, target: &str, files: &[String]) {
     }
 }
 
-/// The untracked files of the checkout that git does not ignore, relative
-/// to `dir`, new folders walked (`kit/fonts/a.woff2`, never `kit/`); a
-/// nested repo (`x/`) is not a file to land.
-fn untracked(dir: &Path) -> Result<Vec<String>, String> {
-    let out = git(dir, &["ls-files", "--others", "--exclude-standard", "-z"])?;
-    Ok(out.split('\0').filter(|s| !s.is_empty() && !s.ends_with('/')).map(str::to_string).collect())
+/// Every change of the checkout against its tip (`git status`, the whole
+/// tree, new folders walked: `kit/fonts/a.woff2`; a nested repo stays
+/// `x/`), each with whether it was written since `since_ms` (deleted or
+/// unknown: yes).
+fn changes(dir: &Path, since_ms: u64) -> Result<Vec<Change>, String> {
+    let out = git(dir, &["status", "--porcelain=v1", "-z", "--untracked-files=all"])?;
+    let mut all = Vec::new();
+    let mut parts = out.split('\0').filter(|s| !s.is_empty());
+    while let Some(e) = parts.next() {
+        let (xy, path) = e.split_at(e.len().min(3));
+        let from = if xy.starts_with('R') || xy.starts_with('C') { parts.next().map(str::to_string) } else { None };
+        let ms = std::fs::symlink_metadata(dir.join(path))
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as u64);
+        all.push(Change { path: path.to_string(), from, recent: ms.is_none_or(|ms| ms >= since_ms) });
+    }
+    Ok(all)
 }
 
-/// More new files than this in a worktree are not swept in on their own
-/// (build output git does not ignore): the land says so.
-const SWEEP_MAX: usize = 200;
-
-/// What a land takes: the agent's files that differ from the tip, and
-/// the new files it leaves out (no agent claimed them).
-struct Picked {
-    mine: Vec<String>,
-    left_out: Vec<String>,
-}
-
-/// The agent's files of the place that differ from its tip, refused when
-/// another agent of the place changed one too. Its files: the ones it
-/// wrote with a file tool, the ones it names (`--add`), and in a worktree
-/// it has alone, every new file not ignored (bash made them: a generator,
-/// a download, a new folder). Elsewhere (the shared folder, a shared
-/// worktree) a new file nobody claimed may be anyone's: it is left out,
-/// and named ([`Picked::left_out`]), never swept in.
+/// What the land takes and names ([`crate::land_pick::pick`]): the
+/// place's changes, the agent's claims (its file tools' files, `--add`)
+/// and the other agents' files, relative to the place's folder.
 fn own_changes(job: &Job) -> Result<Picked, String> {
-    let news = untracked(&job.dir)?;
-    let theirs: Vec<String> = job.others.iter().flat_map(|(_, fs)| fs.iter().filter_map(|x| relative(&job.dir, x))).collect();
-    let mut claim: Vec<String> = job.files.iter().filter_map(|f| relative(&job.dir, f)).collect();
-    let mut named: Vec<(String, Vec<String>)> = Vec::new();
+    let rel = |fs: &[String]| -> Vec<String> { fs.iter().filter_map(|f| relative(&job.dir, f)).collect() };
+    let mut add = Vec::new();
     for a in &job.add {
         let p = relative(&job.dir, a).ok_or_else(|| format!("{}: not in your place's folder ({})", a, job.dir.display()))?;
-        let p = p.trim_end_matches('/').to_string();
-        // a folder: its new files, not another agent's (named one by one,
-        // another agent's file is refused below)
-        let under: Vec<String> = news
-            .iter()
-            .filter(|u| **u == p || ((u.starts_with(&format!("{}/", p)) || p == ".") && !theirs.contains(u)))
-            .cloned()
-            .collect();
-        let paths = if under.is_empty() { vec![p.clone()] } else { under };
-        claim.extend(paths.iter().cloned());
-        named.push((a.clone(), paths));
+        add.push((a.clone(), p));
     }
-    let unclaimed: Vec<String> = news.iter().filter(|u| !claim.contains(u) && !theirs.contains(u)).cloned().collect();
-    let left_out = if job.worktree && job.others.is_empty() {
-        if unclaimed.len() > SWEEP_MAX {
-            return Err(format!(
-                "{} new files not ignored in the worktree (first: {}): add them to .gitignore, or land the ones you want with --add <path>",
-                unclaimed.len(),
-                unclaimed.iter().take(3).cloned().collect::<Vec<_>>().join(", ")
-            ));
-        }
-        claim.extend(unclaimed);
-        Vec::new()
-    } else {
-        unclaimed.into_iter().filter(|f| made_since(&job.dir.join(f), job.since_ms)).collect()
-    };
-    let mut seen = std::collections::BTreeSet::new();
-    claim.retain(|f| seen.insert(f.clone()));
-    let mine = changed(&job.dir, &claim)?;
-    if let Some((a, _)) = named.iter().find(|(_, ps)| !ps.iter().any(|p| mine.contains(p))) {
-        return Err(format!("--add {}: no new or changed file there", a));
-    }
-    for f in &mine {
-        let who: Vec<&str> = job
-            .others
-            .iter()
-            .filter(|(_, fs)| fs.iter().filter_map(|x| relative(&job.dir, x)).any(|x| &x == f))
-            .map(|(n, _)| n.as_str())
-            .collect();
-        if !who.is_empty() {
-            return Err(format!(
-                "{} is also changed by @{}: not landed, main decides who lands it",
-                f,
-                who.join(", @")
-            ));
-        }
-    }
-    Ok(Picked { mine, left_out })
-}
-
-/// `path` was last written at or after `since_ms` (unknown: yes).
-fn made_since(path: &Path, since_ms: u64) -> bool {
-    let ms = std::fs::symlink_metadata(path)
-        .and_then(|m| m.modified())
-        .ok()
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_millis() as u64);
-    ms.is_none_or(|ms| ms >= since_ms)
-}
-
-/// The land's word on new files it left out: which, and how to land
-/// them. "" when none.
-pub fn left_out_note(files: &[String]) -> String {
-    if files.is_empty() {
-        return String::new();
-    }
-    let shown: Vec<&str> = files.iter().take(8).map(String::as_str).collect();
-    let more = if files.len() > shown.len() { format!(" (+{} more)", files.len() - shown.len()) } else { String::new() };
-    format!(
-        "left out {} new file{} no agent claimed: {}{}. yours (made by bash)? land {}: sb land --here --add <file or folder> \"<message>\"",
-        files.len(),
-        if files.len() == 1 { "" } else { "s" },
-        shown.join(", "),
-        more,
-        if files.len() == 1 { "it" } else { "them" }
-    )
+    let others: Vec<(String, Vec<String>)> = job.others.iter().map(|(n, fs)| (n.clone(), rel(fs))).collect();
+    let claims = Claims { files: &rel(&job.files), add: &add, others: &others };
+    pick(&changes(&job.dir, job.since_ms)?, &claims, job.worktree && job.others.is_empty())
 }
 
 pub(crate) fn shorten(dir: &Path, sha: &str) -> String {
@@ -629,14 +536,15 @@ fn land_branch(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::land_pick::SWEEP_MAX;
     use std::process::Command;
 
-    fn sh(dir: &Path, script: &str) {
+    pub(super) fn sh(dir: &Path, script: &str) {
         let ok = Command::new("/bin/sh").arg("-c").arg(script).current_dir(dir).status().unwrap().success();
         assert!(ok, "{}", script);
     }
 
-    fn repo(tag: &str) -> PathBuf {
+    pub(super) fn repo(tag: &str) -> PathBuf {
         let root = std::env::temp_dir().join(format!("sb-land-test-{}-{}-{}", tag, std::process::id(), crate::util::now_ms()));
         let ws = root.join("repo");
         std::fs::create_dir_all(&ws).unwrap();
@@ -647,7 +555,7 @@ mod tests {
         ws.canonicalize().unwrap()
     }
 
-    fn job(agent: &str, dir: &Path, shared: &Path, files: &[&str], others: &[(&str, &[&str])]) -> Job {
+    pub(super) fn job(agent: &str, dir: &Path, shared: &Path, files: &[&str], others: &[(&str, &[&str])]) -> Job {
         Job {
             agent: agent.into(),
             here: true,
@@ -668,11 +576,11 @@ mod tests {
         }
     }
 
-    fn lines(xs: &[&str]) -> String {
+    pub(super) fn lines(xs: &[&str]) -> String {
         xs.join("\u{a}")
     }
 
-    fn log(dir: &Path) -> String {
+    pub(super) fn log(dir: &Path) -> String {
         git(dir, &["log", "--format=%s", "main"]).unwrap()
     }
 
@@ -826,7 +734,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(ws.parent().unwrap());
     }
 
-    fn landed(dir: &Path, rev: &str) -> Vec<String> {
+    pub(super) fn landed(dir: &Path, rev: &str) -> Vec<String> {
         git(dir, &["show", "--name-only", "--format=", rev]).unwrap().lines().map(str::to_string).collect()
     }
 
@@ -877,7 +785,7 @@ mod tests {
         assert_eq!(landed(&ws, "main"), ["a"], "never swept in: they may be anyone's");
         assert_eq!(o.left_out, ["feat/v-dark.svg", "feat/v-light.svg"], "named, not dropped silently");
         let note = left_out_note(&o.left_out);
-        assert!(note.contains("left out 2 new files") && note.contains("feat/v-dark.svg") && note.contains("--add"), "{}", note);
+        assert!(note.contains("left out 2 files") && note.contains("feat/v-dark.svg") && note.contains("--add"), "{}", note);
         // nothing else of mine: the error names them too
         let e = run(&j, &Queue::default(), &mut || {}).unwrap_err();
         assert!(e.contains("nothing of yours") && e.contains("feat/v-light.svg") && e.contains("--add"), "{}", e);
@@ -934,7 +842,7 @@ mod tests {
         let mut j = job("x", &wt, &ws, &["a"], &[]);
         j.place = "wt:x".into();
         let e = run(&j, &Queue::default(), &mut || {}).unwrap_err();
-        assert!(e.contains(&format!("{} new files not ignored", SWEEP_MAX + 1)) && e.contains(".gitignore"), "{}", e);
+        assert!(e.contains(&format!("{} new or changed files not ignored", SWEEP_MAX + 1)) && e.contains(".gitignore"), "{}", e);
         assert_eq!(git(&wt, &["log", "--format=%s"]).unwrap(), "init", "nothing landed");
         let _ = std::fs::remove_dir_all(ws.parent().unwrap());
     }
@@ -1055,3 +963,7 @@ mod tests {
         assert!(!signing_error("git rebase: error: could not apply 1234... x"));
     }
 }
+
+#[cfg(test)]
+#[path = "land_tests.rs"]
+mod land_tests;

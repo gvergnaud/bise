@@ -188,14 +188,19 @@ the shared tree"), made a command so no agent has to get it right alone:
    other agents' stay where they are.
 3. A file changed by two agents (an overlap, ⇄): `sb land` refuses and
    main asks who takes it.
-4. New files bash made (a generator, a download, a new folder) are not
-   tracked: here they may be anyone's, so they land only when the agent
-   names them, `sb land --add <file or folder>` (a folder: its new files
-   that are no other agent's). Never silently: the land's answer names
-   the new files it left out that no agent claimed, made since the agent
-   started. In a worktree an agent has alone, every new file git does
-   not ignore is its own and lands (more than 200: refused, says
-   `.gitignore` or `--add`); a shared worktree follows the shared rule.
+4. Files changed outside the file tools (a new file from a generator or
+   a download, a tracked file edited by `sed` or a script, `Cargo.lock`
+   by cargo, a cherry-pick) are not tracked: here they may be anyone's,
+   so they land only when the agent names them, `sb land --add <file or
+   folder>` (a folder: its changes that are no other agent's). Never
+   silently: the land's answer names every change it left out that no
+   agent claimed, made since the agent started (a deleted file always),
+   and a nested repo (`x/`) it never lands. In a worktree an agent has
+   alone, every change git does not ignore is its own and lands (tracked
+   files modified, deleted or renamed, new files; more than 200 it did
+   not claim: refused, says `.gitignore` or `--add`), so `git status`
+   there is clean after; a shared worktree follows the shared rule
+   (issue 12, `land_pick.rs`).
 
 **From a worktree** (bigger change, one agent or several):
 
