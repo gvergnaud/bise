@@ -45,7 +45,7 @@ impl Features {
     /// The facts of every feature, against main (git; a thread's).
     pub(super) fn refresh(&self, shared: &Path) {
         let names: Vec<String> = self.lock().reg.features.iter().map(|f| f.name.clone()).collect();
-        let Ok(main) = crate::land::head_ref(shared) else { return };
+        let Ok(main) = crate::trunk::trunk_ref(shared) else { return };
         let facts: BTreeMap<String, Facts> =
             names.into_iter().filter_map(|n| feature::facts(shared, &main, &n).ok().map(|f| (n, f))).collect();
         self.lock().facts = facts;
@@ -199,7 +199,7 @@ impl Shell {
 
     /// The views' part, before a snapshot (`Shell::snapshot`).
     pub(super) fn feature_views(&mut self) {
-        let main = crate::land::head_ref(&self.opts.paths.workspace).unwrap_or_else(|_| "main".into());
+        let main = crate::trunk::trunk_ref(&self.opts.paths.workspace).unwrap_or_else(|_| "main".into());
         let (lids, trying) = self.features.views(crate::land::short(&main), crate::util::now_ms());
         self.hub.feature_lids = lids;
         self.hub.trying = trying;
@@ -220,7 +220,7 @@ impl Shell {
 }
 
 fn main_short(shared: &Path) -> String {
-    crate::land::head_ref(shared).map(|m| crate::land::short(&m).to_string()).unwrap_or_else(|_| "main".into())
+    crate::trunk::trunk_ref(shared).map(|m| crate::land::short(&m).to_string()).unwrap_or_else(|_| "main".into())
 }
 
 fn agents_line(agents: &[(String, String)]) -> String {
@@ -366,7 +366,7 @@ fn step(job: &Job) -> Out {
         }
         "merge" => {
             let _feat_turn = job.queue.wait_turn(&feature_ref, &place, &mut || {});
-            let main_ref = crate::land::head_ref(&job.shared)?;
+            let main_ref = crate::trunk::trunk_ref(&job.shared)?;
             let _main_turn = job.queue.wait_turn(&main_ref, &place, &mut || {});
             let m = feature::merge(&job.shared, &job.scratch, name, &job.flow)?;
             let kept = feature::trash(&job.shared, name, now).unwrap_or_default();

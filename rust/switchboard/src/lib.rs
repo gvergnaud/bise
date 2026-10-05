@@ -50,6 +50,7 @@ pub mod sweep;
 pub mod switch;
 pub mod tools_env;
 pub mod transcript;
+pub mod trunk;
 pub mod util;
 pub mod wire;
 pub mod worktree;
