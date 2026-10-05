@@ -1,6 +1,6 @@
 # 12 · sb land takes every change of a worktree the agent has alone, and names what it leaves out elsewhere
 
-Status: proposed (the next tech-debt slice by the user's criterion: the debt that spreads the most). Root node 4 of the architecture page's tech debt list; label: tech-debt.
+Status: done (1d887949: the pure `land_pick::pick` with its unit tests, `own_changes` a thin shell over one `git status`, git-backed tests in `land_tests.rs`, the `sb land` row and dev-flow §5; then this Status commit). Reviewed by architect; `cargo test -p switchboard land`, the four e2e above and gate.sh quick green; one full gate green but `tui_select_popup_tmux`, red on main since fe4cde09 (the hint became 'type to ask about it', the test still waits for 'type ask about it'; not this change). Root node 4 of the architecture page's tech debt list; label: tech-debt.
 
 ## The problem
 
