@@ -1,6 +1,6 @@
 # 11 · A child process never inherits bise's internal environment variables: one registry, one builder
 
-Status: waits until the performance fixes of issue 9 are in (the user's priority), then next. Root node 3 of the architecture page's tech debt list; label: tech-debt.
+Status: in progress (the perf fixes shipped in v2026.10.2-19; picked by the user's criterion: the debt that spreads the most, see the evidence below). Root node 3 of the architecture page's tech debt list; label: tech-debt.
 
 ## The problem
 
@@ -12,7 +12,9 @@ Evidence:
 - 65607a5f: a test read the real HOME's skills.
 - `tests/run_all.sh` has to `unset SB_CORE_BIN` before the Rust tests.
 - `bise_home` stamps its exports (`BISE_EXPORTS_FOR` = the HOME) to notice exports that came from another HOME: the same problem, worked around.
-- Rust reads environment variables in about 200 places, spread over the crates.
+- Rust reads environment variables in 134 places, 73 distinct names, spread over every crate (harness/src/main.rs 12, switchboard/src/daemon.rs 8, harness/src/doctor.rs 8, ...). Every feature adds one: `SB_EVERY_MIN_MS` (scheduled tasks), `BISE_HOME_WORKSPACE` (ambient-app's home workspace).
+- 6586f6d2 (skills: another HOME's default path taken as an override) and 2e2ff832 are the same family.
+- `tests/proc_cleanup.py` passes inside `run_all.sh` and times out alone ('t1's hub and its REPL', bg-handoff, Oct 5): `run_all.sh` sets PATH and unsets `SB_CORE_BIN`, an alone run doesn't. The likely first case for the registry.
 
 ## The result (what is true after)
 
