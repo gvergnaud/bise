@@ -25,15 +25,13 @@ import os, socket, subprocess, sys, tempfile, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
+import bise_env  # noqa: E402
 import scripted_ts  # noqa: E402  (EXE, jsrt_env, run_session)
 import wait  # noqa: E402
 
-PRIVATE = ("BEND_SESSION_FILE", "BEND_CONTEXT_FILE", "BEND_WIRE_LOG", "BEND_REPL_PORT",
-           "BEND_DEBUG_DIR", "BEND_EXTRA_PROMPT", "BEND_WORKDIR", "SB_SOCKET", "SB_AGENT",
-           "SB_TASK", "SB_CORE_BIN", "SB_PORT_OFFSET",
-           # the calling agent's tmp/bg and run/ (tools_env::temp_env): its
-           # bg dir won over BEND_BG_ROOT, the slots were the agent's
-           "BEND_BG_DIR", "BEND_AGENT_RUN")
+# the calling agent's variables: bise's internal and test ones (its
+# tmp/bg and run/ too: its bg dir won over BEND_BG_ROOT)
+PRIVATE = bise_env.NOT_INHERITED
 
 
 # a process that holds 300 MB (touched pages), then sleeps 30 s

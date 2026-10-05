@@ -19,6 +19,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import bise_env  # noqa: E402
 import e2e  # noqa: E402
 import wait  # noqa: E402
 from tui_tmux import Tui, tmux, wait_until, run, MAIN_IDLE  # noqa: E402
@@ -33,7 +34,7 @@ def start(t, extra_env=""):
     tmux("kill-session", "-t", t.name)
     envs = " ".join("%s=%s" % (k, shlex.quote(v)) for k, v in E.env.items()
                     if k.startswith(("SB_", "BEND_", "MISTRAL_")) or k == "BISE_APPROVALS")
-    unset = " ".join("-u " + k for k in e2e.AGENT_VARS)
+    unset = " ".join("-u " + k for k in bise_env.NOT_INHERITED)
     cmd = ("printf '\\033]2;%s\\007'; sleep 0.3; cd %s && env %s %s%s %s switchboard --workspace %s; "
            "echo \"[switchboard exited: $?]\"; sleep 600") % (
         BEFORE, e2e.ROOT, unset, extra_env + " " if extra_env else "", envs, e2e.EXE, E.ws)

@@ -55,9 +55,9 @@ impl Paths {
         let workspace = workspace
             .canonicalize()
             .unwrap_or_else(|_| workspace.to_path_buf());
-        let (state, worktrees) = match std::env::var("SB_STATE_DIR") {
-            Ok(d) if !d.is_empty() => (PathBuf::from(&d), PathBuf::from(d).join("worktrees")),
-            _ => {
+        let (state, worktrees) = match bise_home::env::test_setting("SB_STATE_DIR") {
+            Some(d) => (PathBuf::from(&d), PathBuf::from(d).join("worktrees")),
+            None => {
                 let home = bise_home::Home::from_env();
                 let id = workspace_id(&workspace);
                 (home.hub_dir(&id), home.worktrees_dir().join(id))

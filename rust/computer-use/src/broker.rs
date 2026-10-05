@@ -703,7 +703,7 @@ pub fn find_helper(home: &std::path::Path) -> Option<PathBuf> {
     let env = |k: &str| std::env::var_os(k).filter(|v| !v.is_empty()).map(PathBuf::from);
     let exe_dir = std::env::current_exe().ok().and_then(|e| e.canonicalize().ok()).and_then(|e| e.parent().map(PathBuf::from));
     let mut c: Vec<PathBuf> = Vec::new();
-    c.extend(env("BISE_CU_HELPER"));
+    c.extend(bise_home::env::test_setting("BISE_CU_HELPER").map(PathBuf::from));
     c.extend(env("BISE_APP_ROOT").map(|r| r.join(&app)));
     c.extend(exe_dir.map(|d| d.join(&app)));
     c.push(PathBuf::from("/Applications").join(&app));

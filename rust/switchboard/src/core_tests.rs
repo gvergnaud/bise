@@ -2449,7 +2449,7 @@ fn flow_is_the_users_and_mains() {
 #[test]
 #[ignore]
 fn bench_step() {
-    let Ok(path) = std::env::var("SB_BENCH_JOURNAL") else { return };
+    let Some(path) = bise_home::env::test_setting("SB_BENCH_JOURNAL") else { return };
     let events: Vec<Value> = std::fs::read_to_string(path)
         .unwrap()
         .lines()

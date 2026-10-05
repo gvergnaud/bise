@@ -18,6 +18,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import wait  # noqa: E402
+from bise_env import clean_env  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
@@ -25,16 +26,9 @@ ROOT = os.path.abspath(os.path.join(HERE, ".."))
 EXE = os.path.join(os.path.abspath(os.environ.get("CARGO_TARGET_DIR") or os.path.join(ROOT, "rust", "target")),
                    "debug", "bise")
 
-# An agent's shell carries its hub's identity and sb-core (an older
-# version): a throwaway hub must not inherit them. It picks the tree's
-# sb-core and gives its own agents their SB_ variables.
-# the calling agent's variables: its hub's, and the dirs its hub exported
-# (SB_BUILD_DIR made tui_version_tmux's build of tree succeed in the
-# real build dir instead of failing in its throwaway BISE_HOME)
-AGENT_VARS = ("SB_CORE_BIN", "SB_SOCKET", "SB_AGENT", "SB_TASK", "SB_PORT_OFFSET",
-              "SB_BUILD_DIR", "SB_VERSIONS_DIR", "SB_LAUNCH_DIR", "BISE_ROLE", "BISE_EXPORTS_FOR",
-              # its tmp/bg and run/ (approvals-mode, gate file, sandbox profiles)
-              "BEND_BG_DIR", "BEND_AGENT_RUN")
+# A throwaway hub gets the caller's environment minus every bise internal
+# and test variable (bise_env.clean_env: the copy of rust/home/src/env.rs):
+# from an agent's shell, never its hub's identity, sb-core or folders.
 
 
 def short_tmp():
@@ -43,11 +37,6 @@ def short_tmp():
     sandbox), else /tmp (an agent's own $TMPDIR is too deep)."""
     t = tempfile.gettempdir()
     return t if len(t) <= 40 else "/tmp"
-
-
-def host_env():
-    """os.environ without the calling agent's SB_ variables."""
-    return {k: v for k, v in os.environ.items() if k not in AGENT_VARS}
 
 
 def no_real_accounts(tmp):
@@ -78,10 +67,10 @@ class Env:
         self.fake_log = os.path.join(self.tmp, "fake.log")
         self.fake = subprocess.Popen(
             [sys.executable, "-u", os.path.join(HERE, "fake_provider.py")],
-            stdout=subprocess.PIPE, text=True, env={**host_env(), "FAKE_LOG": self.fake_log, **(fake_env or {})})
+            stdout=subprocess.PIPE, text=True, env=clean_env(FAKE_LOG=self.fake_log, **(fake_env or {})))
         port = self.fake.stdout.readline().split()[1]
         self.env = {
-            **host_env(),
+            **clean_env(),
             "SB_STATE_DIR": self.state,
             "BEND_PROVIDER_URL": "http://127.0.0.1:%s/v1/chat/completions" % port,
             "BEND_MODEL": "mistral-small-latest",

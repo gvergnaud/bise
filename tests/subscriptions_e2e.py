@@ -31,7 +31,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import fake_openai_auth as FA  # noqa: E402
 import fake_provider as FP  # noqa: E402
-from e2e import EXE, ROOT, Env, check, host_env  # noqa: E402
+from bise_env import clean_env  # noqa: E402
+from e2e import EXE, ROOT, Env, check  # noqa: E402
 import wait  # noqa: E402
 from wait import load_factor  # noqa: E402
 
@@ -365,7 +366,7 @@ class World:
         os.makedirs(self.bise)
         self.fake_log = self.E.fake_log
         self.auth = subprocess.Popen([sys.executable, "-u", os.path.join(HERE, "fake_openai_auth.py")],
-                                     stdout=subprocess.PIPE, text=True, env=host_env())
+                                     stdout=subprocess.PIPE, text=True, env=clean_env())
         self.A = "http://127.0.0.1:%s" % self.auth.stdout.readline().split()[1]
         self.P = self.E.env["BEND_PROVIDER_URL"].rsplit("/v1/", 1)[0] + "/v1"
         env = self.E.env

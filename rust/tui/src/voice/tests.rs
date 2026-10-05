@@ -424,7 +424,7 @@ fn the_batch_transcriber_talks_to_a_fake_server() {
 #[test]
 #[ignore]
 fn real_api_transcribes_a_wav() {
-    let path = std::env::var("SB_STT_WAV").expect("SB_STT_WAV");
+    let path = bise_home::env::test_setting("SB_STT_WAV").expect("SB_STT_WAV");
     let bytes = std::fs::read(path).unwrap();
     let data = bytes.windows(4).position(|w| w == b"data").unwrap() + 8;
     let samples: Vec<i16> = bytes[data..].chunks_exact(2).map(|b| i16::from_le_bytes([b[0], b[1]])).collect();

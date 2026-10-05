@@ -44,9 +44,9 @@ const NOT_HERE: &str =
 
 /// The script: `BISE_RELEASE_SCRIPT`, else the repo's own.
 pub(super) fn script(repo: &Path) -> PathBuf {
-    match std::env::var("BISE_RELEASE_SCRIPT") {
-        Ok(s) if !s.is_empty() => PathBuf::from(s),
-        _ => repo.join("packaging/publish-release.sh"),
+    match bise_home::env::test_setting("BISE_RELEASE_SCRIPT") {
+        Some(s) => PathBuf::from(s),
+        None => repo.join("packaging/publish-release.sh"),
     }
 }
 

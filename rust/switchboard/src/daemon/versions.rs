@@ -150,7 +150,7 @@ fn release_line(inst: &Install, running_id: &str) -> Option<String> {
 /// update-card: how often an installed hub checks the release channel
 /// (`BISE_RELEASE_CHECK_SECS`, else an hour: several releases a day).
 fn release_every() -> std::time::Duration {
-    let s = std::env::var("BISE_RELEASE_CHECK_SECS").ok().and_then(|s| s.trim().parse().ok()).unwrap_or(3600);
+    let s = bise_home::env::test_setting("BISE_RELEASE_CHECK_SECS").and_then(|s| s.trim().parse().ok()).unwrap_or(3600);
     std::time::Duration::from_secs(s)
 }
 
@@ -998,6 +998,9 @@ pub(super) fn spawn_switcher(paths: &Paths, exe: &Path, to: &Path, how: Switcher
         .append(true)
         .open(paths.state.join("hub.err"));
     let mut cmd = Command::new(exe);
+    // the hub's own environment minus its internal variables: the
+    // switcher starts the next hub with its own (bise_home::env)
+    bise_home::env::for_child(bise_home::env::Child::Hub, [] as [(&str, &str); 0]).apply(&mut cmd);
     cmd.arg("sbswitch")
         .arg("--workspace")
         .arg(&paths.workspace)

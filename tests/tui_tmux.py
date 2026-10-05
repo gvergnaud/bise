@@ -13,6 +13,7 @@ import sys
 import traceback
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import bise_env  # noqa: E402
 import e2e  # noqa: E402
 import wait  # noqa: E402
 
@@ -234,7 +235,7 @@ def start_tui(E, cols, rows, extra_env, session):
     # holds `node`: the pane ran a node REPL and bise never started)
     envs = " ".join("%s=%s" % (k, shlex.quote(v)) for k, v in E.env.items()
                     if k.startswith(("SB_", "BEND_", "MISTRAL_")) or k == "BISE_APPROVALS")
-    unset = " ".join("-u " + k for k in e2e.AGENT_VARS)   # tmux's server env may carry them
+    unset = " ".join("-u " + k for k in bise_env.NOT_INHERITED)   # tmux's server env may carry them
     # a TUI that exits early leaves its last screen and its exit code
     # until close() kills the session (the timeout print shows them)
     cmd = "cd %s && env %s %s%s %s switchboard --workspace %s; echo \"[switchboard exited: $?]\"; sleep 600" % (

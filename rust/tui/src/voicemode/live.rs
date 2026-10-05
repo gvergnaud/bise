@@ -113,7 +113,7 @@ impl super::Synthesizer for FakeSynth {
 
 fn fake_ports(wav: &str) -> Result<(Ports, Jobs), String> {
     let mic = super::audio::ScriptedMic::from_wav_file(std::path::Path::new(wav))?;
-    let heard = std::env::var("BISE_VOICE_FAKE_HEARD").ok().filter(|h| !h.trim().is_empty());
+    let heard = bise_home::env::test_setting("BISE_VOICE_FAKE_HEARD").filter(|h| !h.trim().is_empty());
     let ports = Ports {
         mic: Box::new(mic),
         vad: Box::new(super::vad::Vad::new()),
@@ -167,7 +167,7 @@ pub(crate) fn enter(app: &mut App) {
     drop_dictation(app);
     let cfg = config::load();
     let now = Instant::now();
-    let fake = std::env::var("BISE_VOICE_FAKE").ok().filter(|v| !v.is_empty());
+    let fake = bise_home::env::test_setting("BISE_VOICE_FAKE");
     let ready = match fake {
         Some(wav) => fake_ports(&wav),
         None => live_jobs(&cfg).and_then(|jobs| Ok((live_ports(&jobs.listen)?, jobs))),
@@ -189,7 +189,7 @@ pub(crate) fn enter(app: &mut App) {
 /// ctrl+r twice: voice mode, after the first-time "who hears you"
 /// screen when it was never shown (voice-settings' settings.rs).
 pub(crate) fn request(app: &mut App) {
-    if !config::load().seen_privacy && std::env::var("BISE_VOICE_FAKE").map_or(true, |v| v.is_empty()) {
+    if !config::load().seen_privacy && bise_home::env::test_setting("BISE_VOICE_FAKE").is_none() {
         super::settings::request(super::settings::Open::Privacy);
         return;
     }

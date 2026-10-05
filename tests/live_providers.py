@@ -27,6 +27,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 import provider_folds as P  # noqa: E402
+import bise_env  # noqa: E402
 import wait  # noqa: E402
 
 # row -> (catalog provider, model, family override). The cheapest
@@ -199,9 +200,7 @@ def harness_turn(row, prov, model, family, base, key_env, env):
     port = s.getsockname()[1]
     s.close()
     session = os.path.join(tmp, "session.txt")
-    e = {k: v for k, v in env.items() if k not in (
-        "BEND_SESSION_FILE", "BEND_CONTEXT_FILE", "BEND_WIRE_LOG", "BEND_REPL_PORT", "BEND_PROVIDER_URL",
-        "SB_SOCKET", "SB_AGENT", "SB_TASK", "SB_CORE_BIN", "BEND_MODEL", "BISE_MODEL")}
+    e = {k: v for k, v in env.items() if k not in bise_env.NOT_INHERITED + ("BEND_PROVIDER_URL", "BEND_MODEL", "BISE_MODEL")}
     legacy = {"foundry": model, "mistral": model}.get(pid, "%s/%s" % (pid, model))
     e.update(HOME=tmp, XDG_STATE_HOME=os.path.join(tmp, "state"), BISE_MODELS_FILE=os.path.join(tmp, "models.toml"),
              BISE_MODEL="%s/%s" % (pid, model), BEND_MODEL=legacy, BEND_REPL_PORT=str(port),

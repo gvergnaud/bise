@@ -14,7 +14,7 @@ use std::io::Write;
 pub(crate) fn copy(text: &str) -> bool {
     // tmux tests of the binary: the copy goes to a file, never the
     // user's clipboard
-    if let Some(f) = std::env::var_os("BEND_CLIPBOARD_FILE") {
+    if let Some(f) = bise_home::env::test_setting("BEND_CLIPBOARD_FILE") {
         return std::fs::write(f, text).is_ok();
     }
     system_copy(text)
@@ -88,7 +88,7 @@ mod tests {
     fn a_copy_in_unit_tests_stays_in_the_test_buffer() {
         // pbcopy and OSC 52 are not even compiled under cfg(test): the
         // user's clipboard never gets test text
-        if std::env::var_os("BEND_CLIPBOARD_FILE").is_some() {
+        if bise_home::env::test_setting("BEND_CLIPBOARD_FILE").is_some() {
             return;
         }
         assert!(super::copy("👍 test text"));

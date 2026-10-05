@@ -24,6 +24,7 @@ use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdout, Command, Stdio};
 
 
@@ -709,16 +710,14 @@ pub struct FeatureDone {
     pub line: Option<(String, String)>,
 }
 
-/// The sb-core executable: `SB_CORE_BIN` (the harness sets it from its
-/// app root), else `sb-core` next to the executable; a debug build (the
-/// tests) also tries the root of the repository it was built from. No
-/// build-machine path in a release build (BISE-163, packaging.md C4).
-pub fn core_bin() -> std::path::PathBuf {
-    if let Ok(p) = std::env::var("SB_CORE_BIN") {
-        if !p.is_empty() {
-            return p.into();
-        }
-    }
+/// The sb-core executable when the app root has none: `sb-core` next to
+/// the executable; a debug build (the tests) also tries the root of the
+/// repository it was built from. No build-machine path in a release build
+/// (BISE-163, packaging.md C4). The hub gets its sb-core from the harness
+/// (`daemon::Opts::core_bin`: the app root's), never from the environment:
+/// an inherited `SB_CORE_BIN` once ran a stale sb-core on every version
+/// after it (5d136677).
+pub fn default_core_bin() -> std::path::PathBuf {
     let next_to_exe = std::env::current_exe()
         .ok()
         .map(|e| std::fs::canonicalize(&e).unwrap_or(e))
@@ -744,10 +743,10 @@ pub struct CoreLink {
 impl CoreLink {
     /// Start sb-core on a free port. A port taken meanwhile (parallel
     /// hubs) is retried on another one.
-    pub fn start() -> std::io::Result<CoreLink> {
+    pub fn start(bin: &Path) -> std::io::Result<CoreLink> {
         let mut last = None;
         for _ in 0..5 {
-            match CoreLink::try_start() {
+            match CoreLink::try_start(bin) {
                 Ok(l) => return Ok(l),
                 Err(e) => last = Some(e),
             }
@@ -755,13 +754,13 @@ impl CoreLink {
         Err(last.unwrap())
     }
 
-    fn try_start() -> std::io::Result<CoreLink> {
+    fn try_start(bin: &Path) -> std::io::Result<CoreLink> {
         let port = std::net::TcpListener::bind("127.0.0.1:0")?
             .local_addr()?
             .port();
-        let mut cmd = Command::new(core_bin());
-        cmd.env("SB_CORE_PORT", port.to_string())
-            .stdin(Stdio::null())
+        let mut cmd = Command::new(bin);
+        bise_home::env::for_child(bise_home::env::Child::Core, [("SB_CORE_PORT", port.to_string())]).apply(&mut cmd);
+        cmd.stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
         // it lives as long as the hub: a pipe of a concurrent spawn must
@@ -893,6 +892,8 @@ pub struct Hub {
     signin: signin_card::SignIn,
     dirty: bool,
     link: CoreLink,
+    /// The sb-core it runs (and starts again after a death).
+    core_bin: PathBuf,
     /// How to bring sb-core back when it dies (the daemon's; none: a
     /// death panics, as at boot and in most tests).
     revive: Option<Revive>,
@@ -1035,9 +1036,18 @@ fn run_of(s: &str) -> Run {
 }
 
 impl Hub {
+    /// The tests' hub: their sb-core is the test setting `SB_CORE_BIN`
+    /// (the gate's cache file), else [`default_core_bin`].
+    #[cfg(test)]
     pub fn new(workspace: &str) -> Hub {
-        let mut link = CoreLink::start().unwrap_or_else(|e| {
-            panic!("sb-core not found ({}): {}", core_bin().display(), e)
+        let bin = bise_home::env::test_setting("SB_CORE_BIN").map(PathBuf::from).unwrap_or_else(default_core_bin);
+        Hub::with_core(workspace, bin)
+    }
+
+    /// A hub whose decisions run in the sb-core at `core_bin`.
+    pub fn with_core(workspace: &str, core_bin: PathBuf) -> Hub {
+        let mut link = CoreLink::start(&core_bin).unwrap_or_else(|e| {
+            panic!("sb-core not found ({}): {}", core_bin.display(), e)
         });
         link.call(&json!({"t": "init", "workspace": workspace}))
             .unwrap_or_else(|e| panic!("sb-core: {}", e));
@@ -1070,6 +1080,7 @@ impl Hub {
             signin: signin_card::SignIn::default(),
             dirty: false,
             link,
+            core_bin,
             revive: None,
             revived: Vec::new(),
             interrupt_by: None,
@@ -1187,7 +1198,7 @@ impl Hub {
         r.times.push(now);
         (r.log)(&format!("sb-core stopped ({}): restarting it on the journal", why));
         let events = (r.journal)();
-        self.link = CoreLink::start().unwrap_or_else(|e| panic!("sb-core: {} (and it cannot restart: {})", why, e));
+        self.link = CoreLink::start(&self.core_bin).unwrap_or_else(|e| panic!("sb-core: {} (and it cannot restart: {})", why, e));
         let runs: Vec<(String, Run)> = self
             .st
             .agents
@@ -1503,7 +1514,7 @@ impl Hub {
                     Some(a) if self.st.agents[&a].lifecycle == Lifecycle::Active => a,
                     _ => return json!({"ok": false, "error": format!("sb every: no active agent @{}", to)}),
                 };
-                if matches!(sched, crate::every::Sched::Every(p) if p < crate::every::min_ms()) {
+                if matches!(sched, crate::every::Sched::Every(p) if p < crate::every::min_ms(bise_home::env::test_setting("SB_EVERY_MIN_MS").as_deref())) {
                     return json!({"ok": false, "error": "sb every: at least 1m between two wakes"});
                 }
                 if text.trim().is_empty() {

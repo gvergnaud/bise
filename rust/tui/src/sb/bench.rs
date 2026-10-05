@@ -78,8 +78,8 @@ fn ms(t: Instant) -> f64 {
 #[test]
 #[ignore]
 fn bench_long_feed() {
-    let path = std::env::var("SB_BENCH_TRANSCRIPT").expect("SB_BENCH_TRANSCRIPT");
-    let want: usize = std::env::var("SB_BENCH_LINES").ok().and_then(|s| s.parse().ok()).unwrap_or(4000);
+    let path = bise_home::env::test_setting("SB_BENCH_TRANSCRIPT").expect("SB_BENCH_TRANSCRIPT");
+    let want: usize = bise_home::env::test_setting("SB_BENCH_LINES").and_then(|s| s.parse().ok()).unwrap_or(4000);
     let raw = std::fs::read_to_string(&path).unwrap();
     let src: Vec<String> = raw
         .lines()

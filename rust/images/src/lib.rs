@@ -550,7 +550,7 @@ pub fn pasted_images(pasted: &str) -> Option<Vec<PathBuf>> {
 /// The clipboard image as PNG bytes: `$BEND_CLIPBOARD_IMAGE_FILE` (tests),
 /// macOS `osascript`, else `wl-paste` / `xclip`.
 pub fn clipboard_image() -> Result<Vec<u8>, String> {
-    if let Some(f) = std::env::var_os("BEND_CLIPBOARD_IMAGE_FILE") {
+    if let Some(f) = bise_home::env::test_setting("BEND_CLIPBOARD_IMAGE_FILE") {
         return std::fs::read(&f).map_err(|e| format!("clipboard: {e}"));
     }
     if cfg!(target_os = "macos") {

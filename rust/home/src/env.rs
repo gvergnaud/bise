@@ -77,7 +77,7 @@ pub const VARS: &[Var] = &[
     internal("BEND_FRESH_PROMPT", "a resumed REPL takes this start's prompt"),
     internal("BEND_HARNESS_BIN", "the bise binary a REPL starts its plugins bridge with"),
     user("BEND_IMAGE_DIR", "the image store (a Home path)"),
-    internal("BEND_JSRT_BIN", "the run_typescript engine of the app root, for the REPLs"),
+    test("BEND_JSRT_BIN", "the run_typescript engine bise gives its REPLs (the app root's; a test names one when its tree has none)"),
     user("BEND_MCP_INDEX", "the MCP connector index (a Home path)"),
     user("BEND_MCP_SECRETS", "the MCP OAuth secrets folder"),
     user("BEND_MCP_STATUS", "the MCP status folder"),

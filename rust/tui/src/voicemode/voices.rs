@@ -232,7 +232,7 @@ pub fn load(api: Endpoint) {
         if matches!(*s, State::Loading | State::Ready(_)) {
             return;
         }
-        if std::env::var("BISE_VOICE_FAKE").is_ok_and(|v| !v.is_empty()) {
+        if bise_home::env::test_setting("BISE_VOICE_FAKE").is_some() {
             *s = State::Ready(fake());
             return;
         }

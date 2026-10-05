@@ -24,10 +24,10 @@ use std::collections::BTreeMap;
 
 pub const MIN_MS: u64 = 60_000;
 
-/// The shortest period the hub takes: a minute; `$SB_EVERY_MIN_MS` lowers
-/// it for the tests (a real hub never sets it).
-pub fn min_ms() -> u64 {
-    std::env::var("SB_EVERY_MIN_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(MIN_MS)
+/// The shortest period the hub takes: a minute; `test` (the test setting
+/// `SB_EVERY_MIN_MS`) lowers it for the tests (a real hub never sets it).
+pub fn min_ms(test: Option<&str>) -> u64 {
+    test.and_then(|v| v.parse().ok()).unwrap_or(MIN_MS)
 }
 const HOUR_MS: u64 = 60 * MIN_MS;
 const DAY_MS: u64 = 24 * HOUR_MS;

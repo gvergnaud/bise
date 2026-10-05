@@ -239,7 +239,7 @@ fn times_and_refs() {
 #[test]
 #[ignore]
 fn bench_real() {
-    let Ok(dir) = std::env::var("SB_SEARCH_BENCH") else { return };
+    let Some(dir) = bise_home::env::test_setting("SB_SEARCH_BENCH") else { return };
     let dir = PathBuf::from(dir);
     let t = std::time::Instant::now();
     let mut ix = Index::default();

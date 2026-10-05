@@ -181,12 +181,13 @@ fn start_hub(paths: &Paths, root: &Path, same: bool) -> std::io::Result<std::pro
         .open(paths.state.join("hub.err"))?;
     let mine = || std::env::current_exe().ok().filter(|_| same);
     let exe = exe_of(root).or_else(mine).unwrap_or_else(|| root.join(EXE));
-    Command::new(exe)
-        .arg("sbd")
+    let mut cmd = Command::new(exe);
+    // the new version's own files, not the old hub's inherited root; no
+    // other internal variable of the old hub's (bise_home::env)
+    bise_home::env::for_child(bise_home::env::Child::Hub, [("BISE_APP_ROOT", root)]).apply(&mut cmd);
+    cmd.arg("sbd")
         .arg("--workspace")
         .arg(&paths.workspace)
-        // the new version's own files, not the old hub's inherited root
-        .env("BISE_APP_ROOT", root)
         .current_dir(root)
         .stdin(Stdio::null())
         .stdout(Stdio::null())

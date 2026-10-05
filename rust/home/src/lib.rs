@@ -1,6 +1,8 @@
 //! Where bise keeps its state (BISE-160): one [`Home`], every path.
 //!
 //! No other code joins `$HOME` with a state path: it asks a `Home`.
+//! Every bise environment variable and the environment of each bise child
+//! process: [`env`] (issue 11).
 //!
 //! Two layouts:
 //!

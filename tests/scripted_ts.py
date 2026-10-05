@@ -13,6 +13,7 @@ import glob, os, re, signal, socket, stat, subprocess, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import bise_env  # noqa: E402
 import wait  # noqa: E402
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
 EXE = os.path.join(os.path.abspath(os.environ.get("CARGO_TARGET_DIR") or os.path.join(ROOT, "rust", "target")),
@@ -32,11 +33,9 @@ def jsrt_env():
             return {"BEND_JSRT_BIN": p}
     sys.exit("FAIL no bend-jsrt: build it with ./run.sh (or cd rust/jsrt && cargo build)")
 
-SESSION_VARS = ("BEND_SESSION_FILE", "BEND_CONTEXT_FILE", "BEND_WIRE_LOG", "BEND_REPL_PORT",
-                "BEND_DEBUG_DIR", "SB_SOCKET", "SB_AGENT", "SB_TASK", "SB_CORE_BIN",
-                # the agent's run/ and tmp/bg: its REPL's files went to the
-                # live agent's run/ (and a sandboxed gate cannot write there)
-                "BEND_AGENT_RUN", "BEND_BG_DIR")
+# the calling agent's variables (its run/ and tmp/bg too: its REPL's
+# files went to the live agent's run/): bise's internal and test ones
+SESSION_VARS = bise_env.NOT_INHERITED
 
 PROGRAMS = [
     ("return 6 * 7", "tool run_typescript ok: 42"),
@@ -93,12 +92,11 @@ def main():
 def check_programs(home, programs):
     """One scripted session runs the programs; each tool result must start
     with its expected text. Returns the session file."""
-    env = dict(os.environ, HOME=home, BISE_HOME=os.path.join(home, "bise"),
-               BEND_SESSIONS_DIR=os.path.join(home, "sessions"), **jsrt_env())
     # run from an agent's shell, the env names that agent's live session
     # (its context, wire log, steer/interrupt files, hub): never touch it
-    for k in SESSION_VARS:
-        env.pop(k, None)
+    env = {k: v for k, v in os.environ.items() if k not in SESSION_VARS}
+    env.update(HOME=home, BISE_HOME=os.path.join(home, "bise"),
+               BEND_SESSIONS_DIR=os.path.join(home, "sessions"), **jsrt_env())
     # the stamp of the paths the hub exported for ITS home: with our HOME
     # it would mark BEND_SESSIONS_DIR above as stale too (bise_home)
     env.pop("BISE_EXPORTS_FOR", None)

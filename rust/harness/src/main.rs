@@ -263,15 +263,14 @@ fn cache_dir() -> std::path::PathBuf {
 
 /// The merged catalog for the REPLs this process starts: BISE_MODELS_FILE
 /// (providers.md §7), the base URLs' variables from the env, then the .env
-/// files. Never stops a start. The hub writes it again at each REPL spawn
-/// and each keys check ([`env_for_spawn`]): a config.toml or .env edit
-/// reaches the next call without a hub restart.
-fn export_models_file() {
+/// files, written now; its path for the REPL. Never stops a start. The
+/// hub writes it again at each REPL spawn and each keys check
+/// ([`env_for_spawn`]): a config.toml or .env edit reaches the next call
+/// without a hub restart.
+fn models_file() -> Option<std::path::PathBuf> {
     let files = bise_catalog::auth::EnvFile::read_all(&auth_paths().env_files);
     let env = |k: &str| bise_catalog::with_files(&|k| std::env::var(k).ok(), &files, k);
-    if let Some(p) = bise_catalog::export_handoff(&config_file(), &cache_dir(), &env) {
-        std::env::set_var("BISE_MODELS_FILE", p);
-    }
+    bise_catalog::export_handoff(&config_file(), &cache_dir(), &env)
 }
 
 // ---- switchboard (docs/): one main agent, task agents ----
@@ -290,12 +289,12 @@ fn app_root_or_exit(repl: &str) -> std::path::PathBuf {
     })
 }
 
-/// The V8 engine the runtime runs `run_typescript` with, handed to it as
-/// BEND_JSRT_BIN (its REPLs inherit it): `bend-jsrt` in the app root (a
-/// version dir, a bundle), else the dev tree's debug build (./run.sh builds
-/// it), else its release build. An inherited value is not a choice (it
-/// names another hub's version): the app root's own engine wins.
-fn export_jsrt_bin(root: &std::path::Path) {
+/// The V8 engine the runtime runs `run_typescript` with, handed to the
+/// REPLs as BEND_JSRT_BIN: `bend-jsrt` in the app root (a version dir, a
+/// bundle), else the dev tree's debug build (./run.sh builds it), else its
+/// release build; else the test setting BEND_JSRT_BIN (a test's tree has
+/// none built). Never an engine of another version when the root has one.
+fn jsrt_bin(root: &std::path::Path) -> Option<std::path::PathBuf> {
     let found = [
         "bend-jsrt",
         "rust/jsrt/target/debug/bend-jsrt",
@@ -304,10 +303,9 @@ fn export_jsrt_bin(root: &std::path::Path) {
     .iter()
     .map(|rel| root.join(rel))
     .find(|p| p.exists());
-    if let Some(p) = found {
-        let p = std::path::absolute(&p).unwrap_or(p);
-        std::env::set_var("BEND_JSRT_BIN", p);
-    }
+    found
+        .map(|p| std::path::absolute(&p).unwrap_or(p))
+        .or_else(|| bise_home::env::test_setting("BEND_JSRT_BIN").map(std::path::PathBuf::from))
 }
 
 /// The workspace a switchboard command is about: --workspace, else the
@@ -331,26 +329,31 @@ fn sb_workspace(args: &[String]) -> std::path::PathBuf {
 fn run_sbd(args: &[String]) -> std::io::Result<()> {
     let paths = switchboard::paths::Paths::for_workspace(&sb_workspace(args));
     let root = live_app_root_or_exit();
-    // the hub's decisions (sb-core) come from the same app root as the
-    // REPLs: a version runs its own sb-core, not the dev tree's. An
-    // SB_CORE_BIN in the environment is not a choice: it was inherited
-    // from the hub that started this one (a version switch, a dev hub
-    // started by an agent) and names that hub's sb-core. Kept, a stale
-    // sb-core ran on every version after it (measured: a journal replay
-    // of 2000 events took 10.5 s instead of 0.2 s).
-    if root.join("sb-core").exists() {
-        std::env::set_var("SB_CORE_BIN", root.join("sb-core"));
-    }
-    export_jsrt_bin(&root);
     // the agents' REPLs load their MCP index like a normal session: its
     // path came with bise_home's exports (main)
     switchboard::daemon::run(switchboard::daemon::Opts {
         paths,
+        core_bin: core_bin_of(&root),
+        jsrt_bin: jsrt_bin(&root),
         repl_bin: root.join("repl-live"),
         app_root: root,
         exe: std::env::current_exe()?,
         spawn_env: Some(env_for_spawn),
     })
+}
+
+/// The hub's decisions (sb-core) come from the same app root as the REPLs:
+/// a version runs its own sb-core, not the dev tree's, and never one named
+/// by the environment (an inherited SB_CORE_BIN ran a stale sb-core on
+/// every version after it: a journal replay of 2000 events took 10.5 s
+/// instead of 0.2 s, 5d136677).
+fn core_bin_of(root: &std::path::Path) -> std::path::PathBuf {
+    let own = root.join("sb-core");
+    if own.exists() {
+        own
+    } else {
+        switchboard::core::default_core_bin()
+    }
 }
 
 fn run_switchboard(args: &[String], debug: bool) -> std::io::Result<()> {
@@ -403,10 +406,12 @@ fn run_switchboard(args: &[String], debug: bool) -> std::io::Result<()> {
                 .unwrap_or(root)
         };
         let mut cmd = Command::new(&next);
+        // that version's TUI: this one's environment without its internal
+        // variables (bise_home::env), with that version's app root
+        bise_home::env::for_child(bise_home::env::Child::Hub, [(approot::ENV, &root)]).apply(&mut cmd);
         cmd.arg("switchboard")
             .arg("--workspace")
             .arg(&paths.workspace)
-            .env(approot::ENV, &root)
             .current_dir(&root);
         if debug {
             cmd.arg("--debug");
@@ -553,7 +558,6 @@ fn run_main() -> std::io::Result<()> {
             Some("sb") => std::process::exit(switchboard::cli::main(&args[1..])),
             Some("sbd") => {
                 load_keys();
-                export_models_file();
                 return run_sbd(&args[1..]);
             }
             Some("sbswitch") => {
@@ -654,7 +658,7 @@ fn run_main() -> std::io::Result<()> {
     if let Some(m) = model {
         std::env::set_var("BEND_MODEL", m);
     }
-    export_models_file();
+    let models = models_file();
 
     // run FROM ANYWHERE: every runtime path (the bend sources, the tool
     // descriptions, the jsrt engine, the reload recompile) is relative to
@@ -666,7 +670,7 @@ fn run_main() -> std::io::Result<()> {
     let repl_name = if scripted { "repl-scripted" } else { "repl-live" };
     let root = app_root_or_exit(repl_name);
     std::env::set_current_dir(&root)?;
-    export_jsrt_bin(&root);
+    let jsrt = jsrt_bin(&root);
     let repl_bin = root.join(repl_name);
 
     // REPL port: forced, or pick a free one (bind 0, drop, hand over)
@@ -722,12 +726,10 @@ fn run_main() -> std::io::Result<()> {
         .trim_end_matches(".txt")
         .to_string();
     eprintln!("session : {}", session_id);
-    std::env::set_var("BEND_SESSION_FILE", &session_file);
 
     // the session debug log (events.jsonl + crash snapshots), shared
     // with the REPL through BEND_DEBUG_DIR
     let dbg = debuglog::DebugLog::open(debuglog::dir_for(&session_file));
-    std::env::set_var("BEND_DEBUG_DIR", dbg.dir());
     dbg.install_panic_hook();
     let repl_mtime = std::fs::metadata(&repl_bin)
         .and_then(|m| m.modified())
@@ -747,9 +749,8 @@ fn run_main() -> std::io::Result<()> {
             ("resumed", (resume || resume_id.is_some()).to_string()),
         ],
     );
-    if resume || resume_id.is_some() {
-        std::env::set_var("BEND_CONTINUE", "1");
-    }
+    // the next spawn restores the checkpointed session (BEND_CONTINUE)
+    let mut cont = resume || resume_id.is_some();
 
     // MCP connector index: the live REPL bootstraps the connector catalog
     // here at startup; search_mcp_tools/call_mcp_tool read it
@@ -816,24 +817,37 @@ fn run_main() -> std::io::Result<()> {
             .open(&err_path)?;
         let err_start = std::fs::metadata(&err_path).map(|m| m.len()).unwrap_or(0);
         let mut cmd = Command::new(&repl_bin);
-        // a harness started from an agent's shell (a scripted test) must
-        // not write into that agent: its wire log, context, role, sb
-        // identity belong to the agent's own REPL (once: a scripted REPL
-        // wrote "Program complete." turns into a live agent's wire log)
-        for v in HUB_ONLY_VARS {
-            cmd.env_remove(v);
+        // never an internal variable of the shell that started it (a
+        // scripted test from an agent's shell must not write into that
+        // agent: its wire log, context, role, sb identity belong to the
+        // agent's own REPL; once a scripted REPL's "Program complete."
+        // turned into a live agent's wire log, BISE-122)
+        let mut env = bise_home::env::for_child(
+            bise_home::env::Child::Repl,
+            [
+                ("BEND_REPL_PORT", std::ffi::OsString::from(repl_port.to_string())),
+                ("BEND_SESSION_FILE", session_file.clone().into()),
+                ("BEND_DEBUG_DIR", dbg.dir().as_os_str().to_os_string()),
+                // the REPL starts its plugins bridge with this binary
+                ("BEND_HARNESS_BIN", std::env::current_exe().unwrap_or_default().into()),
+                // whether rg and git are there, told once (BISE-166)
+                ("BEND_TOOLS_NOTE", tools_note.clone().into()),
+            ],
+        );
+        if let Some(p) = &jsrt {
+            env.set("BEND_JSRT_BIN", p);
         }
-        cmd.env("BEND_REPL_PORT", repl_port.to_string())
-            // the REPL starts its plugins bridge with this binary
-            .env("BEND_HARNESS_BIN", std::env::current_exe().unwrap_or_default())
-            // whether rg and git are there, told once (BISE-166)
-            .env("BEND_TOOLS_NOTE", &tools_note)
-            .stdout(Stdio::from(log_file))
-            .stderr(Stdio::from(err_file));
-        match crash_note.take() {
-            Some(note) => cmd.env("BEND_CRASH_NOTE", note),
-            None => cmd.env_remove("BEND_CRASH_NOTE"),
-        };
+        if let Some(p) = &models {
+            env.set("BISE_MODELS_FILE", p);
+        }
+        if cont {
+            env.set("BEND_CONTINUE", "1");
+        }
+        if let Some(note) = crash_note.take() {
+            env.set("BEND_CRASH_NOTE", note);
+        }
+        env.apply(&mut cmd);
+        cmd.stdout(Stdio::from(log_file)).stderr(Stdio::from(err_file));
         let spawned_at = Instant::now();
         let mut child = cmd.spawn()?;
         dbg.event(
@@ -962,7 +976,7 @@ fn run_main() -> std::io::Result<()> {
                     );
                 }
                 // the respawn restores the checkpointed session
-                std::env::set_var("BEND_CONTINUE", "1");
+                cont = true;
                 cause = "reload";
                 continue;
             }
@@ -999,7 +1013,7 @@ fn run_main() -> std::io::Result<()> {
                     "the Bend REPL crashed ({}) — restarting on the saved session ({}/{})...",
                     why, crashes, MAX_CRASH_RESTARTS
                 );
-                std::env::set_var("BEND_CONTINUE", "1");
+                cont = true;
                 crash_note = Some(why);
                 cause = "crash";
                 continue;
@@ -1020,24 +1034,6 @@ fn run_main() -> std::io::Result<()> {
         }
     }
 }
-
-/// The variables the Switchboard hub gives an agent's REPL: they name
-/// that agent (its wire log, context file, role, workdir, sb identity).
-/// The harness's own REPL never inherits them from the shell that
-/// started it (BISE-122); it sets BEND_SESSION_FILE and BEND_REPL_PORT
-/// itself (and BEND_CONTINUE, from its own --continue: not in this list).
-const HUB_ONLY_VARS: [&str; 9] = [
-    "BEND_WIRE_LOG",
-    "BEND_CONTEXT_FILE",
-    "BEND_EXTRA_PROMPT",
-    // the AGENTS.md section of that agent's folder (BISE-232)
-    "BEND_AGENTS_MD",
-    "BEND_WORKDIR",
-    "SB_SOCKET",
-    "SB_AGENT",
-    "SB_TASK",
-    "SB_PORT_OFFSET",
-];
 
 const MAX_CRASH_RESTARTS: usize = 5;
 // a generation that lived longer than this was not a crash loop

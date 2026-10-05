@@ -41,7 +41,7 @@ use unicode_width::UnicodeWidthStr;
 /// `bise computer-use <args>`: this executable, or `$BISE_COMPUTER_USE`
 /// (a program that takes `<args>` alone: the tests' fake).
 fn command(args: &[&str]) -> Command {
-    let mut c = match std::env::var_os("BISE_COMPUTER_USE").filter(|v| !v.is_empty()) {
+    let mut c = match bise_home::env::test_setting("BISE_COMPUTER_USE") {
         Some(p) => Command::new(p),
         None => {
             let mut c = Command::new(std::env::current_exe().unwrap_or_else(|_| PathBuf::from("bise")));
@@ -107,7 +107,7 @@ pub(crate) fn fire(args: &[&str]) {
 
 /// `open <args>` (an app, a URL), detached.
 fn open(args: &[String]) {
-    if std::env::var_os("BISE_COMPUTER_USE").is_some_and(|v| !v.is_empty()) {
+    if bise_home::env::test_setting("BISE_COMPUTER_USE").is_some() {
         // the tests' fake: never the user's apps; the fake logs it
         let mut a = vec!["open".to_string()];
         a.extend(args.iter().cloned());

@@ -16,6 +16,7 @@ import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import bise_env  # noqa: E402
 import e2e  # noqa: E402
 from e2e import EXE, check  # noqa: E402
 
@@ -74,7 +75,7 @@ def main():
         # where its tmux socket is (TMUX_TMPDIR: its temp folder, when it fits)
         "echo \"${TMUX_TMPDIR:-}\" > %s\n"
         "echo started\n" % (tag, child_st, EXE, child_ws, tsock, tag, os.path.join(E.tmp, "t1-tmux")))
-    user = subprocess.Popen(["sleep", "909" + tag], env=e2e.host_env())
+    user = subprocess.Popen(["sleep", "909" + tag], env=bise_env.clean_env())
     ok = True
     try:
         c = E.start_hub()
@@ -91,7 +92,7 @@ def main():
         # t1's tmux socket is in its temp folder when it fits (TMUX_TMPDIR,
         # approvals-design.md §7.1), else in /tmp
         t1_dir = open(os.path.join(E.tmp, "t1-tmux")).read().strip()
-        t1_tmux = {k: v for k, v in e2e.host_env().items() if k != "TMUX_TMPDIR"}
+        t1_tmux = {k: v for k, v in bise_env.clean_env().items() if k != "TMUX_TMPDIR"}
         if t1_dir:
             t1_tmux["TMUX_TMPDIR"] = t1_dir
         check(subprocess.run(["tmux", "-L", tsock, "has-session"], env=t1_tmux).returncode == 0, "t1's tmux")
@@ -121,7 +122,7 @@ def main():
         # (a tmux server: macOS hides the environment of its own binaries)
         gsock = tsock + "-ghost"
         subprocess.run(["tmux", "-L", gsock, "new-session", "-d", "-s", "g", "sleep 905" + tag], check=True,
-                       env={**e2e.host_env(), "BISE_OWNERS": "%s.ghost.1" % hub_id(sock)})
+                       env={**bise_env.clean_env(), "BISE_OWNERS": "%s.ghost.1" % hub_id(sock)})
         c = E.start_hub()
         c.wait(lambda: not alive("sleep 905" + tag), 20, "the ghost's tmux killed at the start")
         check(user.poll() is None, "the user's sleep survives the start")

@@ -18,12 +18,13 @@ pub fn start_hub(paths: &Paths, exe: &Path, app_root: &Path) -> std::io::Result<
         .create(true)
         .append(true)
         .open(paths.state.join("hub.err"))?;
-    Command::new(exe)
-        .arg("sbd")
+    let mut cmd = Command::new(exe);
+    // the TUI's environment minus every internal variable (bise_home::env),
+    // with the TUI's app root: the hub never uses its own lookup's
+    bise_home::env::for_child(bise_home::env::Child::Hub, [("BISE_APP_ROOT", app_root)]).apply(&mut cmd);
+    cmd.arg("sbd")
         .arg("--workspace")
         .arg(&paths.workspace)
-        // the hub uses the TUI's app root, never its own lookup's
-        .env("BISE_APP_ROOT", app_root)
         .current_dir(app_root)
         .stdin(Stdio::null())
         .stdout(Stdio::null())

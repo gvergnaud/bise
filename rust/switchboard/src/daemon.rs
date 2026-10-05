@@ -50,6 +50,10 @@ pub struct Opts {
     pub paths: Paths,
     /// Where repl-live and the runtime's relative files live.
     pub app_root: PathBuf,
+    /// The sb-core of the app root (never one named by the environment).
+    pub core_bin: PathBuf,
+    /// The run_typescript engine the REPLs get (BEND_JSRT_BIN).
+    pub jsrt_bin: Option<PathBuf>,
     /// The bise executable (the `sb` shim calls it).
     pub exe: PathBuf,
     pub repl_bin: PathBuf,
@@ -314,7 +318,7 @@ const REPL_QUIT: Duration = Duration::from_secs(5);
 /// the next REPL start before its spawn, forever, while that file
 /// exists; the file is removed, so only one start stalls.
 fn stall_for_tests() {
-    let Some(f) = std::env::var_os("SB_STALL_START") else {
+    let Some(f) = bise_home::env::test_setting("SB_STALL_START") else {
         return;
     };
     if std::fs::remove_file(&f).is_ok() {
@@ -1643,52 +1647,56 @@ impl Shell {
         };
         let (session, cont) = self.prepare_session(&a, &dir, &adir, resume);
         let mut cmd = Command::new(&self.opts.repl_bin);
-        cmd.current_dir(&self.opts.app_root)
-            .env("BEND_REPL_PORT", port.to_string())
-            .env("BEND_SESSION_FILE", &session)
-            .env("BEND_EXTRA_PROMPT", adir.join("role.md"))
-            .env("BEND_CONTEXT_FILE", adir.join("context.txt"))
-            .env("BEND_WORKDIR", &a.ws.path)
-            // the REPL starts its plugins bridge with this binary
-            // (`bise plugins serve`, docs/plugins.md)
-            .env("BEND_HARNESS_BIN", &self.opts.exe)
-            .env("SB_SOCKET", self.opts.paths.socket())
-            .env("BEND_WIRE_LOG", adir.join("wire.log"))
-            .env("SB_AGENT", &a.name)
-            // which model: config.toml `model`, or `agent_model` (BISE-142)
-            .env("BISE_ROLE", if a.is_main { "main" } else { "agent" })
-            // its own model and effort, over both (BISE-135: /model)
-            .env(bise_catalog::CHOICE_ENV, adir.join("choice.toml"))
-            // RFC 0002 §9: two dev servers must not fight for one port
-            .env("SB_TASK", &a.name)
-            // what it starts is its: killed at its stop or /drop (BISE-243)
-            .env(
-                crate::procs::ENV,
-                crate::procs::for_repl(
-                    std::env::var(crate::procs::ENV).ok().as_deref(),
-                    &self.proc_hub,
-                    &dir,
-                    crate::util::now_ms(),
+        cmd.current_dir(&self.opts.app_root);
+        // its whole environment: the hub's minus every internal and test
+        // variable (bise_home::env), plus what names this agent
+        let mut env = bise_home::env::for_child(
+            bise_home::env::Child::Repl,
+            [
+                ("BEND_REPL_PORT", std::ffi::OsString::from(port.to_string())),
+                ("BEND_SESSION_FILE", session.clone().into()),
+                ("BEND_EXTRA_PROMPT", adir.join("role.md").into()),
+                ("BEND_CONTEXT_FILE", adir.join("context.txt").into()),
+                ("BEND_WORKDIR", a.ws.path.clone().into()),
+                // the REPL starts its plugins bridge with this binary
+                // (`bise plugins serve`, docs/plugins.md)
+                ("BEND_HARNESS_BIN", self.opts.exe.clone().into()),
+                ("SB_SOCKET", self.opts.paths.socket().into()),
+                ("BEND_WIRE_LOG", adir.join("wire.log").into()),
+                ("SB_AGENT", a.name.clone().into()),
+                // which model: config.toml `model`, or `agent_model` (BISE-142)
+                ("BISE_ROLE", (if a.is_main { "main" } else { "agent" }).into()),
+                // its own model and effort, over both (BISE-135: /model)
+                (bise_catalog::CHOICE_ENV, adir.join("choice.toml").into()),
+                // RFC 0002 §9: two dev servers must not fight for one port
+                ("SB_TASK", a.name.clone().into()),
+                // what it starts is its: killed at its stop or /drop (BISE-243)
+                (
+                    crate::procs::ENV,
+                    crate::procs::for_repl(
+                        std::env::var(crate::procs::ENV).ok().as_deref(),
+                        &self.proc_hub,
+                        &dir,
+                        crate::util::now_ms(),
+                    )
+                    .into(),
                 ),
-            )
-            .env(
-                "SB_PORT_OFFSET",
-                self.hub
-                    .st
-                    .order
-                    .iter()
-                    .position(|n| *n == a.name)
-                    .unwrap_or(0)
-                    .to_string(),
-            )
-            .env_remove("BEND_CONTINUE")
-            .env_remove("BEND_FRESH_PROMPT")
-            .env_remove("BEND_CRASH_NOTE")
-            // this hub's sb-core is not the agents' business (a hub an
-            // agent starts picks its own)
-            .env_remove("SB_CORE_BIN")
-            // nor its app root: a harness an agent runs finds its own
-            .env_remove("BISE_APP_ROOT");
+                (
+                    "SB_PORT_OFFSET",
+                    self.hub
+                        .st
+                        .order
+                        .iter()
+                        .position(|n| *n == a.name)
+                        .unwrap_or(0)
+                        .to_string()
+                        .into(),
+                ),
+            ],
+        );
+        if let Some(j) = &self.opts.jsrt_bin {
+            env.set("BEND_JSRT_BIN", j);
+        }
         // dev: the exact body of every model request, one file each in
         // agents/<a>/requests/ (the TUI's /log shows them), when the hub
         // runs with BISE_DEBUG_REQUESTS=1 or <hub>/debug-requests exists
@@ -1697,13 +1705,11 @@ impl Shell {
         if debug_requests(&self.opts.paths.state) {
             let req_dir = adir.join("requests");
             if std::fs::create_dir_all(&req_dir).is_ok() {
-                cmd.env("BEND_WIRE_DUMP", format!("{}/", req_dir.display()));
+                env.set("BEND_WIRE_DUMP", format!("{}/", req_dir.display()));
             }
-        } else {
-            cmd.env_remove("BEND_WIRE_DUMP");
         }
         for (k, v) in crate::tools_env::temp_env(&tmp, &run) {
-            cmd.env(k, v);
+            env.set(k, v);
         }
         let keys = self.opts.spawn_env.map(|f| f()).unwrap_or_default();
         self.spawn_keys.insert(dir.clone(), hash_keys(&keys));
@@ -1718,25 +1724,25 @@ impl Shell {
         self.spawn_plugins.insert(dir.clone(), spawned);
         for (k, v) in keys {
             match v {
-                Some(v) => cmd.env(k, v),
-                None => cmd.env_remove(k),
+                Some(v) => env.set(k, v),
+                None => env.unset(k),
             };
         }
         // its own session: what it starts is found by session id too,
         // even a macOS binary whose environment is hidden (BISE-243)
         crate::procs::own_session(&mut cmd);
         if resume && cont && session.exists() {
-            cmd.env("BEND_CONTINUE", "1");
+            env.set("BEND_CONTINUE", "1");
             // its plugins changed since its prompt was built: the restored
             // session takes this start's prompt (runtime/persist.bend
             // with_cfg), else it never learns of a new plugin
             if prompt_is_stale(&adir, fp) {
-                cmd.env("BEND_FRESH_PROMPT", "1");
+                env.set("BEND_FRESH_PROMPT", "1");
             }
         }
         let _ = std::fs::write(adir.join(PROMPT_PLUGINS_FILE), fp.to_string());
         if let Some(n) = crash_note {
-            cmd.env("BEND_CRASH_NOTE", n);
+            env.set("BEND_CRASH_NOTE", n);
         }
         self.bins.insert(dir.clone(), self.opts.repl_bin.clone());
         self.ports.insert(dir.clone(), port);
@@ -1752,11 +1758,11 @@ impl Shell {
             // for. Here, off the hub's loop: the first spawn may wait for
             // the login shell (read once, at most 3 s)
             let agent_path = crate::tools_env::hub_agent_path(&paths.bin_dir());
-            cmd.env("BEND_TOOLS_NOTE", crate::tools_env::session_note(&agent_path, &workdir))
-                .env("PATH", agent_path);
+            env.set("BEND_TOOLS_NOTE", crate::tools_env::session_note(&agent_path, &workdir))
+                .set("PATH", agent_path);
             // the AGENTS.md files of its working folder (a task: its
             // worktree's), read again at each start and /reload (BISE-232)
-            cmd.env(
+            env.set(
                 crate::agents_md::ENV,
                 crate::agents_md::write_for(
                     &workdir,
@@ -1764,6 +1770,7 @@ impl Shell {
                     &adir.join("agents-md.md"),
                 ),
             );
+            env.apply(&mut cmd);
             supervise(cmd, dir, gen, adir, port, tx, paths)
         });
     }
@@ -2222,17 +2229,13 @@ const ONESHOT_TIMEOUT: Duration = Duration::from_secs(60);
 /// The provider's error text never holds a key.
 fn oneshot(repl: &Path, root: &Path, req_file: &Path, model: &str) -> Result<String, String> {
     let mut cmd = Command::new(repl);
+    // the main order of the resolution, BISE_MODEL first (no BISE_ROLE:
+    // a REPL never inherits it), not the user's agent model
+    bise_home::env::for_child(bise_home::env::Child::Repl, [("BISE_ONESHOT", req_file.as_os_str()), ("BISE_MODEL", model.as_ref())])
+        .unset("BISE_AGENT_MODEL")
+        .unset("BEND_MODEL")
+        .apply(&mut cmd);
     cmd.current_dir(root)
-        .env("BISE_ONESHOT", req_file)
-        .env("BISE_MODEL", model)
-        // the main order of the resolution, BISE_MODEL first
-        .env_remove("BISE_ROLE")
-        .env_remove("BISE_AGENT_MODEL")
-        .env_remove("BEND_MODEL")
-        .env_remove("BEND_REPL_PORT")
-        .env_remove("BEND_SESSION_FILE")
-        .env_remove("BEND_WIRE_LOG")
-        .env_remove("BEND_CONTEXT_FILE")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null());
@@ -2393,7 +2396,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     });
     crate::util::timing("start (socket bound)");
     let workspace = paths.workspace.to_string_lossy().to_string();
-    let mut hub = Hub::new(&workspace);
+    let mut hub = Hub::with_core(&workspace, opts.core_bin.clone());
     let (mut events, unreadable) = read_journal(&std::fs::read_to_string(paths.journal()).unwrap_or_default());
     // BISE-230: the task worktrees of the old place (<state>/worktrees/)
     // move to <home>/worktrees/<id>/<task>/, and the journal follows

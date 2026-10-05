@@ -119,7 +119,7 @@ pub(crate) fn insert_live_chip(ed: &mut crate::editor::Editor) {
 /// empty text) never touch the real clipboard: one osascript each would
 /// take seconds.
 fn clipboard_bytes() -> Result<Vec<u8>, String> {
-    if cfg!(test) && std::env::var_os("BEND_CLIPBOARD_IMAGE_FILE").is_none() {
+    if cfg!(test) && bise_home::env::test_setting("BEND_CLIPBOARD_IMAGE_FILE").is_none() {
         return Err("no clipboard in unit tests".into());
     }
     bend_images::clipboard_image()

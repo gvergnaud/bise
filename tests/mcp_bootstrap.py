@@ -16,14 +16,13 @@ import http.server, json, os, socket, subprocess, sys, tempfile, threading, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
+import bise_env  # noqa: E402
 import wait  # noqa: E402
 NL = chr(10)
 OLD = "old-cid old tool : #kept" + NL
 
-PRIVATE = ("BEND_SESSION_FILE", "BEND_CONTEXT_FILE", "BEND_WIRE_LOG", "BEND_REPL_PORT",
-           "BEND_DEBUG_DIR", "BEND_EXTRA_PROMPT", "BEND_WORKDIR", "SB_SOCKET", "SB_AGENT",
-           "SB_TASK", "SB_CORE_BIN", "SB_PORT_OFFSET", "BISE_EXPORTS_FOR", "BISE_HOME",
-           "MISTRAL_API_KEY", "ANTHROPIC_FOUNDRY_API_KEY", "BEND_MODEL")
+# bise's internal and test variables, and the user's home and keys
+PRIVATE = bise_env.NOT_INHERITED + ("BISE_HOME", "MISTRAL_API_KEY", "ANTHROPIC_FOUNDRY_API_KEY", "BEND_MODEL")
 
 CONNECTORS = {"connectors": [{
     "id": "c-1", "name": "Slack", "status": {"is_ready": True},

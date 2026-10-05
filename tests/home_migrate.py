@@ -19,7 +19,8 @@ import json, os, socket, subprocess, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from e2e import EXE, ROOT, host_env, short_tmp  # noqa: E402
+from bise_env import clean_env  # noqa: E402
+from e2e import EXE, ROOT, short_tmp  # noqa: E402
 import wait  # noqa: E402
 
 PRIVATE = ("BEND_SESSION_FILE", "BEND_CONTEXT_FILE", "BEND_WIRE_LOG", "BEND_REPL_PORT",
@@ -42,7 +43,7 @@ def main():
     os.makedirs(os.path.join(home, ".bend-harness"))
     with open(os.path.join(home, ".bend-harness", "config.toml"), "w") as f:
         f.write('model = "zai-glm-5-3"\n')
-    base = {k: v for k, v in host_env().items() if k not in PRIVATE}
+    base = {k: v for k, v in clean_env().items() if k not in PRIVATE}
     base.update(HOME=home, MISTRAL_API_KEY="fake", SB_ONBOARDING="off",
                 BEND_PROVIDER_URL="http://127.0.0.1:9/v1/chat/completions")
     old_env = dict(base, BISE_NO_MIGRATE="1")

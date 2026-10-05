@@ -110,7 +110,7 @@ impl Ctx {
     /// can move it).
     pub fn of(paths: &Paths) -> Ctx {
         let root = paths.auth_file.parent().map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("."));
-        let issuer = std::env::var(ISSUER_ENV).ok().filter(|s| !s.trim().is_empty()).unwrap_or_else(|| DEFAULT_ISSUER.into());
+        let issuer = bise_home::env::test_setting(ISSUER_ENV).filter(|s| !s.trim().is_empty()).unwrap_or_else(|| DEFAULT_ISSUER.into());
         let text = std::fs::read_to_string(&paths.config).ok();
         let setup = crate::Setup::from_text(text.as_deref(), &|k| std::env::var(k).ok());
         let base_url = setup.catalog.provider(ID).map(|p| p.base_url.clone()).filter(|u| !u.is_empty()).unwrap_or_else(|| RESOURCE.into());

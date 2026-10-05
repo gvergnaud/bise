@@ -397,17 +397,15 @@ fn write_private(file: &Path, text: &str) -> std::io::Result<()> {
 /// One provider call through `repl-live`'s one-shot mode (like the role
 /// lines, daemon.rs), killed after `timeout`.
 fn oneshot(repl: &Path, root: &Path, req_file: &Path, model: &str, timeout: Duration) -> Result<String, CheckErr> {
-    let mut child = Command::new(repl)
+    let mut cmd = Command::new(repl);
+    // a REPL's environment (no internal variable of the hub's), the main
+    // order of the model resolution with BISE_MODEL first
+    bise_home::env::for_child(bise_home::env::Child::Repl, [("BISE_ONESHOT", req_file.as_os_str()), ("BISE_MODEL", model.as_ref())])
+        .unset("BISE_AGENT_MODEL")
+        .unset("BEND_MODEL")
+        .apply(&mut cmd);
+    let mut child = cmd
         .current_dir(root)
-        .env("BISE_ONESHOT", req_file)
-        .env("BISE_MODEL", model)
-        .env_remove("BISE_ROLE")
-        .env_remove("BISE_AGENT_MODEL")
-        .env_remove("BEND_MODEL")
-        .env_remove("BEND_REPL_PORT")
-        .env_remove("BEND_SESSION_FILE")
-        .env_remove("BEND_WIRE_LOG")
-        .env_remove("BEND_CONTEXT_FILE")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())

@@ -371,7 +371,7 @@ pub fn voice_enabled_from(settings: Option<&str>, env: Option<&str>) -> bool {
 }
 
 pub fn load_voice_enabled() -> bool {
-    let env = std::env::var("SB_VOICE").ok();
+    let env = bise_home::env::test_setting("SB_VOICE");
     voice_enabled(settings().get().and_then(|v| v.as_bool()), env.as_deref())
 }
 
@@ -495,7 +495,7 @@ impl Voice {
     pub fn live(enabled: bool) -> Self {
         // the tmux tests' microphone (BISE-298): a tone, no device; voice
         // mode's fake (BISE_VOICE_FAKE) never opens the real mic either
-        let fake = |k: &str| std::env::var(k).is_ok_and(|v| !v.is_empty());
+        let fake = |k: &str| bise_home::env::test_setting(k).is_some();
         if fake("SB_VOICE_FAKE_MIC") || fake("BISE_VOICE_FAKE") {
             return Voice::new(enabled, Box::new(ToneRecorder), Box::new(BatchTranscriber));
         }

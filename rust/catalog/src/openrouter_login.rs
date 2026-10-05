@@ -39,7 +39,7 @@ pub struct Ctx {
 
 impl Ctx {
     pub fn of(paths: &Paths) -> Ctx {
-        let origin = std::env::var(AUTH_ENV).ok().filter(|s| !s.trim().is_empty()).unwrap_or_else(|| DEFAULT_ORIGIN.into());
+        let origin = bise_home::env::test_setting(AUTH_ENV).filter(|s| !s.trim().is_empty()).unwrap_or_else(|| DEFAULT_ORIGIN.into());
         Ctx { auth_file: paths.auth_file.clone(), origin: origin.trim().trim_end_matches('/').to_string(), wait: WAIT }
     }
 }

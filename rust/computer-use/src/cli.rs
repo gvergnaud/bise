@@ -312,7 +312,7 @@ pub fn setup_check(paths: &Paths, helper: Option<&std::path::Path>, start: Optio
 pub fn extension_dir(paths: &Paths) -> Option<PathBuf> {
     let env = |k: &str| std::env::var_os(k).filter(|v| !v.is_empty()).map(PathBuf::from);
     let mut c: Vec<PathBuf> = Vec::new();
-    c.extend(env("BISE_CU_EXTENSION"));
+    c.extend(bise_home::env::test_setting("BISE_CU_EXTENSION").map(PathBuf::from));
     c.extend(env("BISE_APP_ROOT").map(|r| r.join("computer-use").join("extension")));
     // a version dir or a bundle: the executable's folder holds VERSION
     if let Some(dir) = std::env::current_exe().ok().and_then(|e| e.canonicalize().ok()).and_then(|e| e.parent().map(PathBuf::from)) {

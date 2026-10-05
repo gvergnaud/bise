@@ -36,6 +36,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import bise_env  # noqa: E402
 import e2e  # noqa: E402
 from tui_tmux import MAIN_IDLE, tui_session, run, wait_until  # noqa: E402
 from subscriptions_e2e import auth_log, control, snapshot_real  # noqa: E402
@@ -87,7 +88,7 @@ def main():
     for k in ("BEND_MODEL", "MISTRAL_API_KEY", "BEND_PROVIDER_URL"):
         E.env.pop(k, None)
     auth = subprocess.Popen([sys.executable, "-u", os.path.join(e2e.HERE, "fake_openai_auth.py")],
-                            stdout=subprocess.PIPE, text=True, env=e2e.host_env())
+                            stdout=subprocess.PIPE, text=True, env=bise_env.clean_env())
     A = "http://127.0.0.1:%s" % auth.stdout.readline().split()[1]
     home = os.path.join(E.tmp, "home")
     root = os.path.join(E.tmp, "bise-home")
