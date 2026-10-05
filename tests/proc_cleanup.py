@@ -12,6 +12,7 @@ Run: python3 -u tests/proc_cleanup.py
 import os
 import subprocess
 import sys
+import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -47,6 +48,13 @@ def hub_id(sock):
 def main():
     if not os.path.exists(EXE):
         sys.exit("build first: cd rust && cargo build")
+    # the hubs' sockets must keep their natural place (<state>/hub.sock):
+    # the REPLs are found by SB_SOCKET=<child-st>/hub.sock and the ghost by
+    # the hash of that path. Under an agent's deep $TMPDIR the path does
+    # not fit a unix socket, the hub reaches it through /tmp/bise-<uid>/...
+    # and nothing matched: green in the gate (a short TMPDIR), a timeout
+    # alone ("t1's hub and its REPL")
+    tempfile.tempdir = e2e.short_tmp()
     E = e2e.Env()
     tag = str(os.getpid())  # sleep 901<pid>: a number, and ours
     tsock = "sbpc-%d" % os.getpid()
