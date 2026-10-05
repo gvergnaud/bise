@@ -66,7 +66,7 @@ const INBOX_COMMAND: Pair = ("/inbox", "");
 
 /// The first pair while text is selected (BISE-134): the one pair of the
 /// bar in the accent, so you notice you can just type (book §13).
-const ASK: Pair = ("type", "ask about it");
+const ASK: Pair = ("type", "to ask about it");
 
 /// expired-ux: the agent in view waits for the ChatGPT sign-in.
 pub(crate) const SIGN_IN_AGAIN: Pair = ("⏎", "sign in again");
@@ -532,10 +532,10 @@ mod tests {
     #[test]
     fn a_selection_pops_type_ask_about_it_in_the_accent() {
         let l = render(Mode::Quote, 100, false, false, None);
-        assert_eq!(text(&l), "type ask about it   cmd+c copy   esc drop");
+        assert_eq!(text(&l), "type to ask about it   cmd+c copy   esc drop");
         let style = |c: &str| l.spans.iter().find(|s| s.content == c).unwrap().style;
         // the pair drawn with ask_styles (NO_COLOR read from the env)
-        assert_eq!((style("type"), style(" ask about it")), ask_styles(no_color()));
+        assert_eq!((style("type"), style(" to ask about it")), ask_styles(no_color()));
         // the others keep their style
         assert_eq!(style("cmd+c").fg, Some(theme::text()));
         assert_eq!(style(" copy").fg, Some(theme::dim()));

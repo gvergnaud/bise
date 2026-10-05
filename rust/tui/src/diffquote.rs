@@ -7,7 +7,7 @@
 //! cursor while the panel has the keys. The release copies the lines,
 //! their diff marks kept (`copied 3 lines`). Then the thread's popup
 //! sits over the selection and names who gets it, the agent in view
-//! (` type ask t1 about it · cmd+c copy `; [`crate::quote::hint_line`]).
+//! (` type to ask t1 about it · cmd+c copy `; [`crate::quote::hint_line`]).
 //!
 //! Typing quotes it: the chip goes in the composer you're in (never
 //! another thread: the agent in view gets it, as in the thread), one

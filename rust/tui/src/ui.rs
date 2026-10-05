@@ -374,7 +374,7 @@ fn draw_bise(app: &mut App, frame: &mut Frame, area: Rect, cols: crate::layout::
         frame.render_widget(Paragraph::new(keys), kb);
         crate::textlayer::text(kb); // BISE-290
     }
-    // last: the "type ask about it" popup over a selection in the history
+    // last: the "type to ask about it" popup over a selection in the history
     crate::quote::draw_hint(app, frame);
 }
 
@@ -461,7 +461,7 @@ fn draw_feed(app: &mut App, frame: &mut Frame, area: Rect, bar: Option<Rect>) {
     // find (BISE-237): its share of the scan, the view to its match
     crate::find::step(app, area_w, crate::find::BUDGET);
     let down = app.scroll > 0;
-    // a scroll puts the "type ask about it" popup away (quote.rs)
+    // a scroll puts the "type to ask about it" popup away (quote.rs)
     if app.scroll != 0 {
         app.quote_hint = false;
     }

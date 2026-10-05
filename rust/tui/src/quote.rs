@@ -265,11 +265,11 @@ pub(crate) fn take_selection(app: &mut App) -> Option<Result<String, String>> {
 
 // ---- the popup over the selection (BISE-229) ----
 //
-// The key bar says `type ask about it` at the bottom of the screen, far
+// The key bar says `type to ask about it` at the bottom of the screen, far
 // from the eyes that follow the selection (user: « mes yeux suivent la
 // sélection mais le hint est tout en bas »). So once a drag ends, a
 // one-row pill says it right above the selection's first row too:
-// ` type ask about it · cmd+c copy ` on the pink pill, the words and
+// ` type to ask about it · cmd+c copy ` on the pink pill, the words and
 // colors of the key bar. No room above (the first row is the feed's
 // top row, or scrolled out): under the last row. No room either (the
 // selection fills the feed): none, the key bar says it. It starts at
@@ -277,20 +277,20 @@ pub(crate) fn take_selection(app: &mut App) -> Option<Result<String, String>> {
 // (never over the panel, the divider or the composer). Narrow: without
 // `· cmd+c copy`; narrower than the short pill: none. A press, a scroll,
 // typing (the quote chip takes over) or esc (the selection ends) puts it
-// away. `NO_COLOR`: `[ type ask about it · cmd+c copy ]`, the ask pair
+// away. `NO_COLOR`: `[ type to ask about it · cmd+c copy ]`, the ask pair
 // bold, no tint. It is drawn last over the history: no layout moves.
 
 /// The popup's row, in at most `width` columns: the long form, else the
 /// short one, else none. `who`: the agent it names (the diff's popup,
-/// designer m_7568: ` type ask t1 about it `), dropped when it does
+/// designer m_7568: ` type to ask t1 about it `), dropped when it does
 /// not fit; empty: none (the thread's).
 pub(crate) fn hint_line(width: usize, no_color: bool, who: &str) -> Option<ratatui::text::Line<'static>> {
     if !who.is_empty() {
-        if let Some(l) = hint_words(width, no_color, &format!(" ask {who} about it")) {
+        if let Some(l) = hint_words(width, no_color, &format!(" to ask {who} about it")) {
             return Some(l);
         }
     }
-    hint_words(width, no_color, " ask about it")
+    hint_words(width, no_color, " to ask about it")
 }
 
 fn hint_words(width: usize, no_color: bool, words: &str) -> Option<ratatui::text::Line<'static>> {
@@ -559,25 +559,25 @@ mod tests {
     fn the_hint_reads_like_the_key_bar() {
         use ratatui::style::Modifier;
         let l = hint_line(80, false, "").unwrap();
-        assert_eq!(row_text(&l), " type ask about it · cmd+c copy ");
+        assert_eq!(row_text(&l), " type to ask about it · cmd+c copy ");
         // the diff's names who gets it, else the thread's words
-        assert_eq!(row_text(&hint_line(80, false, "t1").unwrap()), " type ask t1 about it · cmd+c copy ");
-        assert_eq!(row_text(&hint_line(30, false, "t1").unwrap()), " type ask t1 about it ");
-        assert_eq!(row_text(&hint_line(20, false, "t1").unwrap()), " type ask about it ");
+        assert_eq!(row_text(&hint_line(80, false, "t1").unwrap()), " type to ask t1 about it · cmd+c copy ");
+        assert_eq!(row_text(&hint_line(30, false, "t1").unwrap()), " type to ask t1 about it ");
+        assert_eq!(row_text(&hint_line(22, false, "t1").unwrap()), " type to ask about it ");
         assert_eq!(l.spans[1].style.fg, Some(crate::theme::accent()));
         assert!(l.spans[1].style.add_modifier.contains(Modifier::BOLD));
         assert_eq!(l.spans[2].style.fg, Some(crate::theme::accent()));
         assert_eq!(l.spans[4].style.fg, Some(crate::theme::text()));
         assert_eq!(l.spans[5].style.fg, Some(crate::theme::dim()));
         assert!(l.spans.iter().all(|s| s.style.bg == Some(crate::theme::pill_bg())), "the pill under every cell");
-        assert_eq!(row_text(&hint_line(31, false, "").unwrap()), " type ask about it ");
-        assert_eq!(row_text(&hint_line(19, false, "").unwrap()), " type ask about it ");
-        assert!(hint_line(18, false, "").is_none());
+        assert_eq!(row_text(&hint_line(31, false, "").unwrap()), " type to ask about it ");
+        assert_eq!(row_text(&hint_line(22, false, "").unwrap()), " type to ask about it ");
+        assert!(hint_line(21, false, "").is_none());
         let n = hint_line(80, true, "").unwrap();
-        assert_eq!(row_text(&n), "[ type ask about it · cmd+c copy ]");
+        assert_eq!(row_text(&n), "[ type to ask about it · cmd+c copy ]");
         assert!(n.spans.iter().all(|s| s.style.bg.is_none()), "NO_COLOR: no tint");
         assert!(n.spans[1].style.add_modifier.contains(Modifier::BOLD) && n.spans[2].style.add_modifier.contains(Modifier::BOLD));
-        assert_eq!(row_text(&hint_line(33, true, "").unwrap()), "[ type ask about it ]");
+        assert_eq!(row_text(&hint_line(33, true, "").unwrap()), "[ type to ask about it ]");
         assert!(hint_line(20, true, "").is_none());
     }
 
@@ -642,7 +642,7 @@ mod tests {
         assert!(!frame_text(&mut app, 100, 30).iter().any(|r| r.contains("ask about it ·")), "not while dragging");
         mouse(&mut app, MouseEventKind::Up(MouseButton::Left), x + 7);
         let after = frame_text(&mut app, 100, 30);
-        let hint = " type ask about it · cmd+c copy ";
+        let hint = " type to ask about it · cmd+c copy ";
         assert!(after[y as usize - 1].contains(hint), "{after:#?}");
         assert_eq!(col(&after[y as usize - 1], hint), Some(x as usize), "at the selection's first column");
         // only that row changes, and only under the pill

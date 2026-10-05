@@ -45,7 +45,7 @@ pub(crate) struct App {
     pub(crate) feed_y: u16,
     /// the in-app selection in the feed
     pub(crate) feed_sel: Option<feedsel::FeedSel>,
-    /// the "type ask about it" popup over the selection is up: set when
+    /// the "type to ask about it" popup over the selection is up: set when
     /// a drag ends, dropped by a press or a scroll (quote.rs)
     pub(crate) quote_hint: bool,
     /// ctrl+f: the find field, open (find.rs)

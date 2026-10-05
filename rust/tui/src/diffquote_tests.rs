@@ -131,7 +131,7 @@ fn a_drag_selects_lines_and_the_popup_names_who_gets_it() {
     t.draw(|f| crate::run::draw_frame(&mut app, f)).unwrap();
     let b = t.backend().buffer().clone();
     let screen: Vec<String> = (0..30).map(|y| (0..150).map(|x| b[(x, y)].symbol()).collect()).collect();
-    assert!(screen.iter().any(|r| r.contains(" type ask pricing-page about it · cmd+c copy ")), "{screen:#?}");
+    assert!(screen.iter().any(|r| r.contains(" type to ask pricing-page about it · cmd+c copy ")), "{screen:#?}");
     // a plain click: no selection
     let p = app.diff.as_ref().unwrap();
     let y = p.body.y + 3;
