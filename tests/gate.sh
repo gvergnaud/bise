@@ -314,7 +314,6 @@ gate_lock() {
 }
 [ "$mode" = full ] && gate_lock
 export PATH="$HOME/.bend/bin:$HOME/.cargo/bin:$PATH"
-unset SB_CORE_BIN
 # the oldest macOS the binaries run on (rust/.cargo/config.toml, BISE-164):
 # for the quick sb-core's cc too
 export MACOSX_DEPLOYMENT_TARGET; MACOSX_DEPLOYMENT_TARGET="$(scripts/bins.sh macos-target)"

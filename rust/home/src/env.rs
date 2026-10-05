@@ -101,7 +101,7 @@ pub const VARS: &[Var] = &[
     internal("BISE_APP_ROOT", "the app root of the hub a TUI or a version switch starts"),
     user("BISE_ASCII", "ASCII-only drawing"),
     user("BISE_BROWSER", "the browser a login opens"),
-    test("BISE_CHATGPT_ISSUER", "where ChatGPT's sign-in server is (tests)"),
+    user("BISE_CHATGPT_ISSUER", "where ChatGPT's sign-in server is (the tests' fake; read below the REPLs by `bise auth token`)"),
     user("BISE_CHATGPT_SEND_HOST_ID", "send ext_agent_host_id at the ChatGPT sign-in"),
     user("BISE_CLASSIFY_MODEL", "the approvals checker's model"),
     user("BISE_CLICKS", "mouse clicks on or off, over what is detected"),

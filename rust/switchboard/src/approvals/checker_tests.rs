@@ -484,13 +484,13 @@ fn fake_repl(dir: &std::path::Path, reply: &str) -> std::path::PathBuf {
 fn a_chat_model_through_the_oneshot() {
     let (h, dir) = home("[roles]\nclassify = \"mistral/mistral-small-latest\"\n");
     let repl = fake_repl(&dir, r#"ONESHOT_OK {"contained": true, "serves_task": true, "secrets": false, "reason": "tests"}"#);
-    let r = Runner::with(&h, Box::new(super::check::Wire::default()), Box::new(|_| None)).with_oneshot(repl, dir.clone());
+    let r = Runner::with(&h, Box::new(super::check::Wire::default()), Box::new(|_| None)).with_oneshot(repl, dir.clone(), None);
     assert_eq!(r.checker(), Checker::Model);
     assert!(matches!(r.check(&req("cargo test")), CheckOut::Allow { .. }));
     assert_eq!(std::fs::read_to_string(dir.join("model.txt")).unwrap().trim(), "model=mistral/mistral-small-latest");
     // an answer that isn't the JSON: a card, never another checker
     let repl = fake_repl(&dir, "ONESHOT_OK looks fine to me");
-    let r = Runner::with(&h, Box::new(super::check::Wire::default()), Box::new(|_| None)).with_oneshot(repl, dir.clone());
+    let r = Runner::with(&h, Box::new(super::check::Wire::default()), Box::new(|_| None)).with_oneshot(repl, dir.clone(), None);
     assert!(matches!(r.check(&req("cargo test")), CheckOut::Card { reason, .. } if reason == WHY_FAILED));
     let _ = std::fs::remove_dir_all(dir);
 }

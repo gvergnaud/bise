@@ -41,7 +41,7 @@ fn main() {
         if let Ok(repl) = std::env::var("EVAL_REPL") {
             let repl = std::fs::canonicalize(repl).expect("EVAL_REPL");
             let app = repl.parent().map(PathBuf::from).unwrap_or_default();
-            runner = runner.with_oneshot(repl, app);
+            runner = runner.with_oneshot(repl, app, None);
         }
         runner
     };

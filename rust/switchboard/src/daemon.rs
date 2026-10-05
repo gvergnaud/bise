@@ -1325,17 +1325,18 @@ impl Shell {
         let setup = bise_catalog::Setup::load(&bise_home::Home::from_env().config_file());
         let broken = self.small_broken.clone();
         let (repl, root) = (self.opts.repl_bin.clone(), self.opts.app_root.clone());
-        let (tx, paths) = (self.tx.clone(), self.opts.paths.clone());
+        let (tx, paths, spawn_env) = (self.tx.clone(), self.opts.paths.clone(), self.opts.spawn_env);
         std::thread::spawn(move || {
             use std::sync::atomic::Ordering;
+            let keys = spawn_env.map(|f| f()).unwrap_or_default();
             let small = setup.small_model.clone();
             let agent = setup.agent_model.clone();
             let first = if broken.load(Ordering::Relaxed) { agent.clone() } else { small.clone() };
-            let mut got = oneshot(&repl, &root, &req_file, &first);
+            let mut got = oneshot(&repl, &root, &req_file, &first, &keys);
             if let Err(e) = &got {
                 log_line(&paths, &format!("role line of {}: {} failed: {}", dir, first, e));
                 if first != agent {
-                    got = oneshot(&repl, &root, &req_file, &agent);
+                    got = oneshot(&repl, &root, &req_file, &agent, &keys);
                     match &got {
                         Ok(_) => {
                             broken.store(true, Ordering::Relaxed);
@@ -2226,15 +2227,11 @@ const ONESHOT_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// One provider call through `repl-live`'s one-shot mode (BISE_ONESHOT,
 /// runtime/oneshot.bend) with `model`: the reply's text, or why not.
-/// The provider's error text never holds a key.
-fn oneshot(repl: &Path, root: &Path, req_file: &Path, model: &str) -> Result<String, String> {
+/// `keys`: the REPLs' spawn env (the keys, BISE_MODELS_FILE). The
+/// provider's error text never holds a key.
+fn oneshot(repl: &Path, root: &Path, req_file: &Path, model: &str, keys: &[(String, Option<String>)]) -> Result<String, String> {
     let mut cmd = Command::new(repl);
-    // the main order of the resolution, BISE_MODEL first (no BISE_ROLE:
-    // a REPL never inherits it), not the user's agent model
-    bise_home::env::for_child(bise_home::env::Child::Repl, [("BISE_ONESHOT", req_file.as_os_str()), ("BISE_MODEL", model.as_ref())])
-        .unset("BISE_AGENT_MODEL")
-        .unset("BEND_MODEL")
-        .apply(&mut cmd);
+    crate::approvals::check::oneshot_env(req_file, model, keys).apply(&mut cmd);
     cmd.current_dir(root)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
@@ -2452,7 +2449,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     // the checker (approvals-design.md §4): a chat model in the role runs
     // through repl-live's one-shot, like the role lines
     let runner = crate::approvals::check::Runner::new(&bise_home::Home::from_env())
-        .with_oneshot(opts.repl_bin.clone(), opts.app_root.clone());
+        .with_oneshot(opts.repl_bin.clone(), opts.app_root.clone(), opts.spawn_env);
     let mut sh = Shell {
         opts,
         hub,

@@ -114,9 +114,11 @@ impl Runner {
         Runner::with(home, Box::new(Wire::default()), Box::new(|k| std::env::var(k).ok()))
     }
 
-    /// The chat route's one-shot REPL (`repl-live`, run in `root`).
-    pub fn with_oneshot(self, repl: PathBuf, root: PathBuf) -> Runner {
-        Runner { net: Box::new(Wire { oneshot: Some((repl, root)), run_dir: Some(self.home.run_dir()) }), ..self }
+    /// The chat route's one-shot REPL (`repl-live`, run in `root`, with
+    /// the REPLs' spawn env: the keys, BISE_MODELS_FILE).
+    pub fn with_oneshot(self, repl: PathBuf, root: PathBuf, spawn_env: Option<crate::daemon::SpawnEnv>) -> Runner {
+        let wire = Wire { oneshot: Some((repl, root)), spawn_env, run_dir: Some(self.home.run_dir()) };
+        Runner { net: Box::new(wire), ..self }
     }
 
     /// A checker on another network and environment (tests).
@@ -328,6 +330,8 @@ fn provider_words(body: &str, key: &str) -> String {
 pub struct Wire {
     /// `repl-live` and the folder it runs in
     oneshot: Option<(PathBuf, PathBuf)>,
+    /// the one-shot REPL's keys and models file, computed at each call
+    spawn_env: Option<crate::daemon::SpawnEnv>,
     /// where a chat request file is written
     run_dir: Option<PathBuf>,
 }
@@ -382,7 +386,8 @@ impl Net for Wire {
         if let Err(e) = written {
             return Err(CheckErr::Transport(format!("cannot write the request: {}", e)));
         }
-        let got = oneshot(repl, root, &file, model, timeout);
+        let keys = self.spawn_env.map(|f| f()).unwrap_or_default();
+        let got = oneshot(repl, root, &file, model, &keys, timeout);
         let _ = std::fs::remove_file(&file);
         got
     }
@@ -396,14 +401,25 @@ fn write_private(file: &Path, text: &str) -> std::io::Result<()> {
 
 /// One provider call through `repl-live`'s one-shot mode (like the role
 /// lines, daemon.rs), killed after `timeout`.
-fn oneshot(repl: &Path, root: &Path, req_file: &Path, model: &str, timeout: Duration) -> Result<String, CheckErr> {
+/// A one-shot REPL's environment: a REPL's (no internal variable of the
+/// hub's) with the REPLs' `keys` and models file, BISE_ONESHOT, and the
+/// main order of the model resolution with BISE_MODEL first (not the
+/// user's agent model).
+pub(crate) fn oneshot_env(req_file: &Path, model: &str, keys: &[(String, Option<String>)]) -> bise_home::env::ChildEnv {
+    let mut env = bise_home::env::for_child(bise_home::env::Child::Repl, [("BISE_ONESHOT", req_file.as_os_str())]);
+    for (k, v) in keys {
+        match v {
+            Some(v) => env.set(k, v),
+            None => env.unset(k),
+        };
+    }
+    env.set("BISE_MODEL", model).unset("BISE_AGENT_MODEL").unset("BEND_MODEL");
+    env
+}
+
+fn oneshot(repl: &Path, root: &Path, req_file: &Path, model: &str, keys: &[(String, Option<String>)], timeout: Duration) -> Result<String, CheckErr> {
     let mut cmd = Command::new(repl);
-    // a REPL's environment (no internal variable of the hub's), the main
-    // order of the model resolution with BISE_MODEL first
-    bise_home::env::for_child(bise_home::env::Child::Repl, [("BISE_ONESHOT", req_file.as_os_str()), ("BISE_MODEL", model.as_ref())])
-        .unset("BISE_AGENT_MODEL")
-        .unset("BEND_MODEL")
-        .apply(&mut cmd);
+    oneshot_env(req_file, model, keys).apply(&mut cmd);
     let mut child = cmd
         .current_dir(root)
         .stdin(Stdio::null())
