@@ -135,8 +135,8 @@ pub(crate) const ROWS: &[Row] = &[
     r(EDIT, "ctrl+option+backspace|ctrl+option+delete", "delete a subword before / after"),
     r(EDIT, "cmd+backspace|ctrl+u", "delete to the line start"),
     r(EDIT, "ctrl+k", "delete to the line end"),
-    r(EDIT, "ctrl+/|cmd+z", "undo your typing (only the composer: sent messages have no undo)"),
-    r(EDIT, "alt+/|ctrl+shift+/|cmd+shift+z", "redo"),
+    r(EDIT, "ctrl+z|cmd+z|ctrl+/", "undo your last edit in the composer (a sent message has no undo)"),
+    r(EDIT, "ctrl+shift+z|ctrl+y|cmd+shift+z", "redo (ctrl+y right after an undo, in terminals that send ctrl+shift+z as ctrl+z)"),
     r(EDIT, "esc", "put the draft away in the history (↑ brings it back)"),
     r(EDIT, "tab|⏎", "pick from the /, @ or $ popup (esc closes it)"),
     r(EDIT, ":name:", "typed, becomes its emoji (:tada: → 🎉)").top(),
@@ -721,7 +721,9 @@ mod tests {
                 assert!(!text.to_lowercase().replace("scheduled task", "").contains("task"), "task in {:?}", text);
             }
         }
-        assert!(!ROWS.iter().any(|r| r.keys.contains("ctrl+z")), "no undo (book §13)");
+        // ctrl+z undoes the composer only; sent messages say they have none
+        let z: Vec<_> = ROWS.iter().filter(|r| r.keys.split('|').any(|k| k == "ctrl+z")).collect();
+        assert!(z.len() == 1 && z[0].action.contains("a sent message has no undo"), "book §13");
         let o: Vec<_> = ROWS.iter().filter(|r| r.keys.split('|').any(|k| k == "ctrl+o")).collect();
         assert_eq!(o.len(), 1, "ctrl+o is only the folds (no shell)");
         assert_eq!(o[0].action, "open or close everything folded");

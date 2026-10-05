@@ -73,6 +73,7 @@ mod files;
 mod plugins;
 mod emoji;
 mod editor;
+mod undo;
 mod clipboard;
 mod attach;
 mod quote;
@@ -137,6 +138,8 @@ pub use crash::install as install_crash_hook;
 mod at_popup_tests;
 #[cfg(test)]
 mod fuzz_tests;
+#[cfg(test)]
+mod editor_undo_tests;
 #[cfg(test)]
 mod links_tests;
 #[cfg(test)]

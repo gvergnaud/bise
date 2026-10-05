@@ -1896,16 +1896,14 @@ mod nav_key_tests {
         app.events.iter().filter_map(|e| match e { Ev::Info(t) => Some(t.clone()), _ => None }).collect()
     }
 
-    /// No undo (book §13, §17): ctrl+z and a typed /cancel only say so;
-    /// the draft stays, nothing goes to the hub, the composer's own undo
-    /// (cmd+z, ctrl+/) does not answer to ctrl+z.
+    /// No undo (book §13, §17): a typed /cancel, and ctrl+z once the
+    /// composer has nothing left to undo, only say so; the draft stays,
+    /// nothing goes to the hub.
     #[test]
     fn ctrl_z_and_cancel_say_no_undo() {
         let mut app = bench::test_app();
         app.ed.text = "draft".into();
         assert!(press(&mut app, KeyCode::Char('z'), KeyModifiers::CONTROL));
-        let k = KeyEvent::new(KeyCode::Char('z'), KeyModifiers::CONTROL);
-        assert!(crate::editor::action(&k).is_none());
         assert_eq!(app.ed.text, "draft");
         assert_eq!(infos(&app), vec![NO_UNDO.to_string()]);
         assert!(NO_UNDO.starts_with("no undo: an agent may already have acted."));
