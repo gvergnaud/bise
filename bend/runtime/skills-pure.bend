@@ -144,17 +144,16 @@ def escape_xml(s: String) -> String:
     case SCon{Chr{+c}, +t}:
       String.append(esc_code(U32.is_eq(c, 38), c), escape_xml(t))
 
-# one <skill> entry, the exact vibe_sdk format
+# one catalog line, `- <name>: <description>`, the description whole
+# (prompt-diet: vibe_sdk's <skill><name><description><path> block cost
+# ~70 chars a skill; the skill tool resolves the name, so the path is
+# not listed)
 def skill_entry(+sk: Skill) -> String:
   match sk:
-    case Skill{+name, +desc, +path}:
-      String.append("  <skill>\n    <name>",
+    case Skill{+name, +desc, _}:
+      String.append("- ",
         String.append(escape_xml(name),
-          String.append("</name>\n    <description>",
-            String.append(escape_xml(desc),
-              String.append("</description>\n    <path>",
-                String.append(escape_xml(path),
-                  "</path>\n  </skill>"))))))
+          String.append(": ", escape_xml(desc))))
 
 # dedupe by name, first occurrence wins (the conn_names.go pattern)
 def names_has(names: List<&2, String>, +v: String) -> Bool:
@@ -200,7 +199,7 @@ def skills_catalog(+content: String) -> String:
 # the rules section, the exact vibe_sdk text (read_file -> bash: the
 # Bend harness reaches files through the shell)
 def skills_rules() -> String:
-  "## Available Skills\n\nSkills contain task-specific instructions. When a request matches a skill description, proactively call the `skill` tool with its exact name before starting the task, then follow the loaded instructions. If that skill's full instructions are already present in the current context, follow them without calling `skill` again. Load every skill that materially applies.\n\nCall `skill` only with a name listed in `<available-skills>`. Connector names and unlisted names in skill instructions are not skills.\n\nDo not read a root `SKILL.md` path with `bash` after loading a skill. Use `bash` only for support or reference files mentioned by the loaded skill."
+  "## Available Skills\n\nSkills contain task-specific instructions. When a request matches a skill below, call the `skill` tool with its exact name before starting the task, then follow what it loads (not again when its instructions are already in the context). Load every skill that materially applies. Only the names listed in `<available-skills>` are skills."
 
 # args are the exact vibe_sdk schema: {"name": "..."}
 def args_name.pick(empty: Bool, +name: String) -> Maybe<&2, String>:

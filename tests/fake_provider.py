@@ -754,6 +754,11 @@ class H(http.server.BaseHTTPRequestHandler):
             return
         body = json.loads(raw or b"{}")
         family = family_of(self.path)
+        # prompt-diet: $FAKE_BODIES gets every whole request body, one JSON
+        # line each, for the tests that weigh what a call carries
+        if os.environ.get("FAKE_BODIES"):
+            with open(os.environ["FAKE_BODIES"], "a") as f:
+                f.write(json.dumps({"family": family, "body": body}) + "\n")
         stream = (":streamGenerateContent" in self.path) if family == "gemini" else body.get("stream") is True
         sse = stream and (family != "gemini" or "alt=sse" in self.path)
         # the ChatGPT plan route: a Responses call with a JWT Bearer (its

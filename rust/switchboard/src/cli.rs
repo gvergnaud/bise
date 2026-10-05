@@ -60,7 +60,7 @@ pub const COMMANDS: &[CmdDoc] = &[
     cmd(
         "sb history \"<words>\" [--agent <a>] [--role user|assistant|message|tool|hub] [--since 2w] [--until <date>] [--archived|--live] [--page <n>]",
         Who::Everyone,
-        "search every agent's thread (main, tasks, archived tasks), from before any compaction too: ranked hits `<agent>#<pos>` with a one-line snippet, 10 per page. Use it when the user mentions past work (\"what you did last week on X\").",
+        "search every agent's thread (main, tasks, archived tasks), from before any compaction too: ranked hits `<agent>#<pos>`, 10 per page. Use it when the user mentions past work (\"what you did last week on X\").",
     ),
     cmd(
         "sb show <agent>#<pos> [--context <n>]",
@@ -70,17 +70,17 @@ pub const COMMANDS: &[CmdDoc] = &[
     cmd(
         "sb every <10m|1h|day 07:30> \"<message>\" [--until <18:00|tomorrow 18:00|2h>] [--times <n>] [--to <agent>] | sb every | sb every --stop <id>",
         Who::Everyone,
-        "a standing order: the hub wakes you (or `--to` that agent) with the message on a timer, every N (at least 1m) or every day at that time, until a time or for n times. Never sleep or loop in a turn to wait: set a timer and end your turn. A wake while busy waits for the end of the turn (one, never stacked). No argument: the timers; `--stop` ends one. A dropped agent's timers stop with it.",
+        "a standing order: the hub wakes you (or `--to` that agent) with the message every N (at least 1m) or every day at that time, until a time or for n times. Never sleep or loop in a turn to wait: set a timer and end your turn. A wake while busy waits for the end of the turn (one, never stacked). No argument: the timers; `--stop` ends one.",
     ),
     cmd(
         "sb land [--here] [--add <path>]... \"<message>\"",
         Who::Everyone,
-        "commit the files you changed (only yours, never another agent's) with that message. `--here`: on your place's branch (the shared folder: its branch, main). Without it, from a worktree: the branch is rebased on main, checked, and main moves to it (pushed when the repo says so); from the shared folder, the same as `--here`. A file another agent also changed is refused: main decides. New files: in a worktree you have alone, every new file not ignored is yours and lands; elsewhere, new files you made with bash (a generator, a download) land only with `--add <file or folder>`, and the land names the new files it left out.",
+        "commit the files you changed (only yours, never another agent's) with that message. `--here`: on your place's branch. Without it, from a worktree: rebased on main, checked, and main moves to it (pushed when the repo says so). A file another agent also changed is refused: main decides. New files land by themselves in a worktree you have alone; elsewhere, those you made with bash only with `--add <file or folder>`, and the land names the new files it left out.",
     ),
     cmd(
         "sb artifact add <path or link> [--title \"<t>\"] [--kind <k>] | sb artifact list [<words>] [--agent <a>]",
         Who::Everyone,
-        "artifacts: what you made for the user to look at (a doc, a sheet, a deck, a site, an image, a PR, a deploy), listed in the user's /artifacts with a copy of each version of a file (50 MB at most). `add` registers it, or its next version when the same path or link comes again, and prints its id; bise pages get in by themselves. Not the code you changed for a task (that's the commit), not scratch files. `list`: the ids, to link them.",
+        "what you made for the user to look at, in the user's /artifacts (a copy of each version of a file, 50 MB at most). `add` registers it, or its next version for the same path or link, and prints its id; bise pages get in by themselves. Not code changes (the commit), not scratch files. `list`: the ids, to link them.",
     ),
     cmd(
         "sb inspect main --origin",
@@ -139,11 +139,6 @@ pub const COMMANDS: &[CmdDoc] = &[
         "sb restore <task>",
         Who::Main,
         "reopen a stopped or archived task (and its saved worktree). Use it ONLY when the user explicitly asks; never on your own initiative.",
-    ),
-    cmd(
-        "sb history \"<query>\"",
-        Who::Main,
-        "search your whole past thread and the hub journal. Use it before saying you do not remember.",
     ),
     cmd(
         "sb version [list | switch <commit|id|tree> | rollback]",

@@ -621,32 +621,34 @@ law drain_next_of_rejected_keeps_session:
 # The prompt carries name+description+path only; the `skill` tool loads
 # the full SKILL.md on exact-name demand.
 
-# LAW: the rules section is the vibe_sdk contract: proactive loading,
-# exact names, and no re-reading the SKILL.md root.
+# LAW: the rules section is the vibe_sdk contract, shortened
+# (prompt-diet): loading before the task, exact names, listed names only.
 law skills_rules_contract:
   {Bool.and(
      String.contains(Sk.skills_rules(), "## Available Skills"),
      Bool.and(
        String.contains(Sk.skills_rules(),
-         "proactively call the `skill` tool with its exact name"),
+         "call the `skill` tool with its exact name before starting the task"),
        String.contains(Sk.skills_rules(),
-         "Do not read a root `SKILL.md` path with `bash`"))) == True{} : Bool}
+         "Only the names listed in `<available-skills>` are skills"))) == True{} : Bool}
 
 # LAW: XML escaping per vibe_sdk prompt.rs: &, <, >, ", '.
 law skills_escape_xml:
   {Sk.escape_xml("a<b>&c\"d'e")
     == "a&lt;b&gt;&amp;c&quot;d&apos;e" : String}
 
-# LAW: one index line renders exactly one vibe_sdk catalog entry.
+# LAW: one index line renders exactly one catalog line, `- <name>:
+# <description>` with the description whole (prompt-diet: no vibe_sdk
+# XML block, no path).
 law skills_entry_format:
   {Sk.skill_entry(Sk.Skill{"review", "Review code.", "/skills/review/SKILL.md"})
-    == "  <skill>\n    <name>review</name>\n    <description>Review code.</description>\n    <path>/skills/review/SKILL.md</path>\n  </skill>" : String}
+    == "- review: Review code." : String}
 
 # LAW: the catalog section wraps the entries, deduped by name, first
 # occurrence winning.
 law skills_catalog_dedupes:
   {Sk.skills_catalog("one\td1\t/p1\none\td2\t/p2\ntwo\td3\t/p3")
-    == "<available-skills>\n  <skill>\n    <name>one</name>\n    <description>d1</description>\n    <path>/p1</path>\n  </skill>\n  <skill>\n    <name>two</name>\n    <description>d3</description>\n    <path>/p3</path>\n  </skill>\n</available-skills>" : String}
+    == "<available-skills>\n- one: d1\n- two: d3\n</available-skills>" : String}
 
 # LAW: an empty index yields no section at all (the prompt stays clean).
 law skills_catalog_empty_is_empty:
