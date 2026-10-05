@@ -59,6 +59,12 @@ fn the_notice_says_who_and_what() {
     );
     // one maker: no `+0`
     assert_eq!(forms(2, &rows[..1].iter().chain(&rows[2..]).cloned().collect::<Vec<_>>())[..2], ["↗ 2 new artifacts · designer", "↗ 2 new artifacts"]);
+    // 5 makers: the 2 newest, then +3; narrower, the newest +4
+    let five: Vec<_> = ["architect", "page-notes", "slow-turns", "prompt-diet", "launch"].iter().map(|w| art("x", w)).collect();
+    assert_eq!(forms(12, &five)[..3], ["↗ 12 new artifacts · architect, page-notes +3", "↗ 12 new artifacts · architect +4", "↗ 12 new artifacts"]);
+    // 3 makers
+    let three = &five[..3];
+    assert_eq!(forms(3, three)[..2], ["↗ 3 new artifacts · architect, page-notes +1", "↗ 3 new artifacts · architect +2"]);
     // no maker known (the list not there yet): the count in words
     assert_eq!(forms(2, &[]), ["↗ 2 new artifacts", "↗ 2 new", "↗ 2"]);
     let mine = Artifact { agent: String::new(), by: "page".into(), ..art("plan", "") };
@@ -127,7 +133,7 @@ fn several_new_ones_drop_their_names_one_by_one() {
     let rows = [art("a", "designer"), art("b", "art-demo"), art("c", "launch")];
     let n = notice(3, &rows, &plain);
     let at = |room| edge(room, &acme(), "", "", &n);
-    let all = "↗ 3 new artifacts · designer, art-demo, launch";
+    let all = "↗ 3 new artifacts · designer, art-demo +1";
     assert_eq!(at(" · /w/lab/acme".width() + all.width()).1, all);
     assert_eq!(at(" · acme".width() + all.width()), (" · acme".into(), all.into()));
     assert_eq!(at(" · /w/lab/acme".width() + "↗ 3 new artifacts · designer +2".width()).1, "↗ 3 new artifacts · designer +2");

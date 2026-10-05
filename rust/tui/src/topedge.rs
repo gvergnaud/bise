@@ -75,7 +75,11 @@ pub(crate) fn notice(new: u64, rows: &[Artifact], link: &dyn Fn(String, Style) -
     } else if !names.is_empty() {
         let mut spans = vec![arrow(), link(words(new), st), link(sep(), quiet)];
         let head = width(&spans);
-        spans.push(link(names.join(", "), st));
+        // at most the 2 newest makers, then `+N` for the rest
+        let shown = names.len().min(2);
+        let rest = names.len() - shown;
+        let more = if rest > 0 { format!(" +{}", rest) } else { String::new() };
+        spans.push(link(format!("{}{}", names[..shown].join(", "), more), st));
         out.push(one(spans.clone(), None, true));
         if names.len() > 1 {
             spans.pop();
