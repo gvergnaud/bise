@@ -191,8 +191,10 @@ pub(crate) fn key(app: &mut App, k: &crossterm::event::KeyEvent, popup_open: boo
             }
             true
         }
-        // no undo (book §13): say it, and how to change course
-        (KeyCode::Char('z'), KeyModifiers::CONTROL) => {
+        // ctrl+z undoes the composer's edits (editor.rs); with nothing
+        // left to undo there, no undo of what was sent (book §13): say
+        // it, and how to change course
+        (KeyCode::Char('z'), KeyModifiers::CONTROL) if !app.ed.can_undo() => {
             push_event(&mut app.events, &mut app.cache, Ev::Info(NO_UNDO.into()));
             true
         }

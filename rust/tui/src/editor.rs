@@ -1,5 +1,6 @@
 //! The composer's editing model: the text, a cursor and a selection on
-//! grapheme boundaries, undo/redo, and the history recall that keeps the
+//! grapheme boundaries, undo/redo (the stack and its steps: undo.rs),
+//! and the history recall that keeps the
 //! draft. The key map (`action`) turns terminal key events into editing
 //! actions; the popups, sending and voice live in lib.rs and call in.
 //!
@@ -9,6 +10,8 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
+
+use crate::undo::{Kind, Snap, Steps};
 
 // ---- grapheme helpers ----
 
@@ -397,20 +400,6 @@ pub(crate) fn ci_at(rows: &[Vec<InputCell>], row: usize, col: usize) -> usize {
 
 // ---- the editor ----
 
-/// What an undo step groups: consecutive edits of one kind merge.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Kind {
-    Typing,
-    Deleting,
-    Voice,
-    Other,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-struct Snap {
-    text: String,
-    cursor: usize,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Motion {
@@ -463,9 +452,8 @@ pub(crate) struct Editor {
     pub(crate) cursor: usize,
     /// the other end of the selection (none when equal to the cursor)
     pub(crate) anchor: Option<usize>,
-    undo: Vec<Snap>,
-    redo: Vec<Snap>,
-    last: Option<Kind>,
+    /// undo/redo (undo.rs)
+    steps: Steps,
     /// history browsing: the entry shown (0 = newest), the draft saved on
     /// the first Up, and the edits made to recalled entries
     hist_idx: Option<usize>,
@@ -513,26 +501,19 @@ impl Editor {
     }
 
     fn snap(&self) -> Snap {
-        Snap { text: self.text.clone(), cursor: self.cursor }
+        Snap { text: self.text.clone(), cursor: self.cursor, anchor: self.anchor, hist: self.hist_idx }
     }
 
     /// Records the state before an edit of `kind` (merged with the edit
     /// before when of the same kind; typing breaks at word starts).
     fn checkpoint(&mut self, kind: Kind, word_start: bool) {
-        let merge = self.last == Some(kind) && kind != Kind::Other && !word_start;
-        if !merge {
-            self.undo.push(self.snap());
-            if self.undo.len() > 200 {
-                self.undo.remove(0);
-            }
-        }
-        self.redo.clear();
-        self.last = Some(kind);
+        let before = self.snap();
+        self.steps.record(kind, word_start, || before);
     }
 
     /// Ends the current undo group (a move, a pause in the voice).
     pub(crate) fn break_undo(&mut self) {
-        self.last = None;
+        self.steps.end_group();
     }
 
     fn replace(&mut self, a: usize, b: usize, s: &str) {
@@ -555,7 +536,7 @@ impl Editor {
         self.checkpoint(if a != b { Kind::Other } else { kind }, word_start);
         self.replace(a, b, s);
         if a != b {
-            self.last = Some(kind);
+            self.steps.continue_as(kind);
         }
     }
 
@@ -628,7 +609,7 @@ impl Editor {
                 }
             }
         };
-        self.undo.iter_mut().chain(self.redo.iter_mut()).chain(self.draft.iter_mut()).for_each(strip);
+        self.steps.states_mut().chain(self.draft.iter_mut()).for_each(strip);
         for t in self.scratch.values_mut() {
             *t = t.replacen(label, "", 1);
         }
@@ -638,15 +619,11 @@ impl Editor {
         let b = byte_at_char(&self.text, p);
         self.text.replace_range(b..b + label.len(), with);
         self.anchor = None;
-        self.last = None;
+        self.break_undo();
         if with.is_empty() {
             self.cursor = before.cursor;
         } else {
-            self.undo.push(before);
-            if self.undo.len() > 200 {
-                self.undo.remove(0);
-            }
-            self.redo.clear();
+            self.steps.push(Snap { anchor: None, ..before });
             self.cursor = p + cursor.min(with.chars().count());
         }
         true
@@ -825,24 +802,45 @@ impl Editor {
     }
 
     pub(crate) fn undo(&mut self) -> bool {
-        let Some(s) = self.undo.pop() else { return false };
-        self.redo.push(self.snap());
+        let now = self.snap();
+        let Some(s) = self.steps.undo(now) else { return false };
         self.restore(s);
         true
     }
 
     pub(crate) fn redo(&mut self) -> bool {
-        let Some(s) = self.redo.pop() else { return false };
-        self.undo.push(self.snap());
+        let now = self.snap();
+        let Some(s) = self.steps.redo(now) else { return false };
         self.restore(s);
         true
     }
 
+    pub(crate) fn can_undo(&self) -> bool {
+        self.steps.can_undo()
+    }
+
+    pub(crate) fn can_redo(&self) -> bool {
+        self.steps.can_redo()
+    }
+
+    /// Back to a kept state: the text, the cursor, the selection and the
+    /// history entry shown (out of the history: the draft is the text
+    /// again; back into it: the text now is the draft).
     fn restore(&mut self, s: Snap) {
+        match (self.hist_idx, s.hist) {
+            (Some(_), None) => {
+                self.draft = None;
+                self.scratch.clear();
+            }
+            (None, Some(_)) => self.draft = Some(self.snap()),
+            _ => {}
+        }
+        let n = s.text.chars().count();
         self.text = s.text;
-        self.cursor = s.cursor.min(self.len());
-        self.anchor = None;
-        self.last = None;
+        self.cursor = s.cursor.min(n);
+        self.anchor = s.anchor.map(|a| a.min(n));
+        self.hist_idx = s.hist;
+        self.goal = None;
     }
 
     /// Up on the first row: the next older history entry (`history[0]` is
@@ -854,6 +852,7 @@ impl Editor {
         if next >= history.len() {
             return false;
         }
+        self.checkpoint(Kind::Recall, false);
         match self.hist_idx {
             None => self.draft = Some(self.snap()),
             Some(i) => self.keep_scratch(history, i),
@@ -866,15 +865,15 @@ impl Editor {
     /// the saved draft as it was. False when not browsing.
     pub(crate) fn history_down(&mut self, history: &[String]) -> bool {
         let Some(i) = self.hist_idx else { return false };
+        self.checkpoint(Kind::Recall, false);
         self.keep_scratch(history, i);
         if i == 0 {
-            let d = self.draft.take().unwrap_or(Snap { text: String::new(), cursor: 0 });
+            let d = self.draft.take().unwrap_or_default();
             self.hist_idx = None;
             self.scratch.clear();
             self.text = d.text;
             self.cursor = d.cursor.min(self.len());
             self.anchor = None;
-            self.last = None;
         } else {
             self.show_entry(history, i - 1);
         }
@@ -895,7 +894,6 @@ impl Editor {
         self.text = self.scratch.get(&i).or(history.get(i)).cloned().unwrap_or_default();
         self.cursor = self.len();
         self.anchor = None;
-        self.last = None;
     }
 
     /// Applies an editing action. `Up`/`Down`/`Copy`/`Cut` need the
@@ -1070,6 +1068,11 @@ pub(crate) fn action(k: &KeyEvent) -> Option<Action> {
             'd' => DeleteForward(Unit::Grapheme),
             'c' if shift => Copy,
             'x' if shift => Cut,
+            // ctrl+shift+z only where the terminal tells it from ctrl+z
+            // (the kitty keyboard protocol); ctrl+y redoes everywhere
+            // (input.rs, it copies a code block when there is no redo)
+            'z' if shift => Redo,
+            'z' => Undo,
             // Ctrl+/ (kitty) = Ctrl+_ = 0x1F, which the legacy parser
             // reads as Ctrl+7; with Shift (Ctrl+?) it redoes
             '/' | '_' | '7' if !shift => Undo,

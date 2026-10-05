@@ -680,8 +680,13 @@ pub(crate) fn on_key(app: &mut App, k: &crossterm::event::KeyEvent) -> bool {
         (KeyCode::Char('c'), KeyModifiers::CONTROL) => return true,
         // ctrl+o: open or close everything folded (book §11, §16)
         (KeyCode::Char('o'), KeyModifiers::CONTROL) => toggle_everything(app),
-        // ctrl+y: copy the code block under the mouse, else the newest
-        // on screen (codeblock.rs)
+        // ctrl+y: redo in the composer right after an undo (ctrl+shift+z
+        // where the terminal tells it from ctrl+z), else copy the code
+        // block under the mouse, else the newest on screen (codeblock.rs)
+        (KeyCode::Char('y'), KeyModifiers::CONTROL) if app.ed.can_redo() => {
+            app.ed.redo();
+            app.popup_sel = 0;
+        }
         (KeyCode::Char('y'), KeyModifiers::CONTROL) => crate::codeblock::copy_key(app),
         // space on the item selected in the feed (composer empty; an
         // agent selected in the panel keeps space for its preview)
