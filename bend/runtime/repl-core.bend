@@ -39,6 +39,7 @@ import ../core/session.bend as S
 import ./persist.bend as P
 import ./model.bend as M
 import ./main.bend as R
+import ./drain.bend as Dr
 import ./main-pure.bend as Rp
 import ../runtime/provider.bend as Pv
 import ../runtime/selftools.bend as Sf
@@ -94,7 +95,7 @@ def repl_out(out: Pv.Out, +sess: T.Session,
 def repl_reload.busy(out: Pv.Out, +sess: T.Session,
     next: Socket -> T.Session -> IO(Flow)) -> IO(Flow):
   do IO<Flow>:
-    out2 : Pv.Out <- R.emit(out,
+    out2 : Pv.Out <- Dr.emit(out,
       Con{"  obs: reload refused: not between turns — finish or interrupt the pending turn first",
         Con{"--- idle", Nil{}}})
     repl_out(out2, sess, next)
@@ -121,7 +122,7 @@ def repl_reload(out: Pv.Out, ok: Bool, +sess: T.Session,
   match ok:
     case True{}:
       do IO<Flow>:
-        out2 : Pv.Out <- R.emit(out,
+        out2 : Pv.Out <- Dr.emit(out,
           Con{"  obs: reload: restarting the harness with the latest code",
             Con{"  obs: reload: the session is preserved — background commands keep running",
               Con{"--- idle", Nil{}}}})
@@ -241,7 +242,7 @@ def repl_end_stalled.stalled(+live: Bool, active: Bool, e: R.RtEnd,
       match e:
         case R.REnd{+sess2, out2}:
           do IO<Flow>:
-            out3 : Pv.Out <- R.emit(out2,
+            out3 : Pv.Out <- Dr.emit(out2,
               Con{"  obs: turn_stalled: execution budget exhausted",
                 Con{"--- idle", Nil{}}})
             P.save(sess2)
@@ -287,7 +288,7 @@ def repl_plan(+live: Bool, s: Socket, plan: Rcp.Plan, +sess: T.Session,
         IO.pure(Flow, Go{sess})
     case Rcp.PHelp{}:
       do IO<Flow>:
-        out2 : Pv.Out <- R.emit(Pv.ONet{s}, repl_help())
+        out2 : Pv.Out <- Dr.emit(Pv.ONet{s}, repl_help())
         repl_out(out2, sess, next)
     case Rcp.PReload{}:
       do IO<Flow>:
@@ -309,7 +310,7 @@ def repl_interpret(+live: Bool, s: Socket, i: Cm.Interpretation, +sess: T.Sessio
       # a local warning: no protocol effect, the session is untouched;
       # the idle marker keeps the client contract (batch + idle)
       do IO<Flow>:
-        out2 : Pv.Out <- R.emit(Pv.ONet{s},
+        out2 : Pv.Out <- Dr.emit(Pv.ONet{s},
           Con{String.append("  obs: ", warning), Con{"--- idle", Nil{}}})
         repl_out(out2, sess, next)
 
@@ -395,11 +396,11 @@ def greet_out(greet: Maybe<&2, Nat>, s: Socket, +sess: T.Session,
       do IO<Pv.Out>:
         cr : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_CRASH_NOTE")
         +note : String <- IO.pure(String, P.env_or(cr, ""))
-        R.emit(Pv.ONet{s}, List.concat(&2, String, [pre,
+        Dr.emit(Pv.ONet{s}, List.concat(&2, String, [pre,
           greet_lines(n, P.history_of(sess)),
           crash_lines(String.is_empty(note), note)]))
     case None{}:
-      R.emit(Pv.ONet{s}, pre)
+      Dr.emit(Pv.ONet{s}, pre)
 
 # the model the session-log facts name: the resolved one (live), or
 # "scripted"
