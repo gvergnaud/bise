@@ -44,6 +44,7 @@ pub mod paths;
 pub mod place;
 pub mod procs;
 pub mod prompts;
+pub mod recycle;
 pub mod role;
 pub mod router;
 pub mod search;

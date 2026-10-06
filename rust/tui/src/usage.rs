@@ -2,7 +2,8 @@
 //!
 //! After each model call the REPL prints one feed line
 //! (runtime/usage-pure.bend):
-//! `  obs: usage: model=M in=I out=O cache_read=R cache_write=W`.
+//! `  obs: usage: model=M in=I out=O cache_read=R cache_write=W`
+//! (parsed by bise_session::usage_line; the display is here).
 //! `in` counts every input token of the call (cached ones included):
 //! the context the model saw. The context after the call is `in + out`
 //! (the reply joins the history). A compaction resets it: the last
@@ -23,27 +24,16 @@ pub struct Usage {
 }
 
 impl Usage {
-    /// Parse the text after `obs: usage: `. Unknown keys are ignored; a
-    /// line without `in=` is not a usage line.
+    /// Parse the text after `obs: usage: `: the one parser of the line
+    /// is bise_session::usage_line (the hub reads it too).
     pub fn parse(t: &str) -> Option<Usage> {
-        let mut u = Usage::default();
-        let mut has_in = false;
-        for kv in t.split_whitespace() {
-            let Some((k, v)) = kv.split_once('=') else { continue };
-            let n = || v.parse::<u64>().ok();
-            match k {
-                "model" => u.model = v.to_string(),
-                "in" => {
-                    u.input = n()?;
-                    has_in = true;
-                }
-                "out" => u.output = n()?,
-                "cache_read" => u.cache_read = n()?,
-                "cache_write" => u.cache_write = n()?,
-                _ => {}
-            }
-        }
-        has_in.then_some(u)
+        bise_session::usage_line::parse(t).map(|u| Usage {
+            model: u.model,
+            input: u.input,
+            output: u.output,
+            cache_read: u.cache_read,
+            cache_write: u.cache_write,
+        })
     }
 
     /// Tokens in the context after the call.
@@ -136,13 +126,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_the_repl_line() {
+    fn the_parsed_line_gives_the_context() {
+        // the parse itself is tested in bise_session::usage_line
         let u = Usage::parse("model=claude-opus-5-5 in=40312 out=512 cache_read=40000 cache_write=300").unwrap();
-        assert_eq!(u.model, "claude-opus-5-5");
         assert_eq!((u.input, u.output, u.cache_read, u.cache_write), (40312, 512, 40000, 300));
         assert_eq!(u.context(), 40824);
-        assert!(Usage::parse("model=m out=3").is_none());
-        assert!(Usage::parse("model=m in=x").is_none());
     }
 
     #[test]

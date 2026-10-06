@@ -130,6 +130,7 @@ pub const VARS: &[Var] = &[
     test("BISE_OPENROUTER_AUTH", "where OpenRouter's login is (tests)"),
     internal("BISE_OWNERS", "the agents a process belongs to (BISE-243)"),
     user("BISE_POINTER", "mouse pointer shapes on or off"),
+    user("BISE_RECYCLE_TOKENS", "context tokens an agent's REPL reads before the hub restarts it at idle (0: never)"),
     user("BISE_REDUCE_MOTION", "fewer animations"),
     test("BISE_RELEASE_CHECK_SECS", "how often the hub checks for a release (tests)"),
     test("BISE_RELEASE_SCRIPT", "the release script the hub runs (tests)"),

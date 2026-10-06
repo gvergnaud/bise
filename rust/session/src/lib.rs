@@ -20,3 +20,4 @@ pub mod migrate;
 pub mod show;
 pub mod recorder;
 pub mod pairing;
+pub mod usage_line;
