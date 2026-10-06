@@ -36,6 +36,12 @@ the injected <bise_state> block is not one):
 - `[[slow: S]]`: every request for that message waits S seconds (a
   float) before its first byte: a local model reading a long prompt, a
   gateway holding the head (provider-timeout: idle_timeout_sec);
+- `[[drip: N S]]` (streamed Anthropic only): the head and a first event
+  at once, then N ping events S seconds apart before the reply: a model
+  that generates for a long time. The log line says how many pings went
+  out (`drip_sent`) and whether the client hung up first (`drip_cut`):
+  a stop must close the connection, so the provider stops generating
+  (issue 13);
 - `[[fixture: NAME]]`: the first request for that message is answered
   with the recorded file tests/providers/<family>/NAME.sse (streamed) or
   NAME.json (whole), or NAME.<status>.json (an error with that status),
@@ -86,6 +92,7 @@ THINK = re.compile(r"\[\[think: (.*?)\]\]", re.S)
 ERROR = re.compile(r"\[\[error: (\w+)(?: x(\d+))?(?: retry=(\d+))?\]\]")
 FIXTURE = re.compile(r"\[\[fixture: ([\w.-]+)\]\]")
 SLOW = re.compile(r"\[\[slow: ([\d.]+)\]\]")
+DRIP = re.compile(r"\[\[drip: (\d+) ([\d.]+)\]\]")
 PLAN = re.compile(r"\[\[plan: ([\w-]+)(?: x(\d+))?\]\]")
 USAGE = {"input": 10, "cached": 2, "output": 5, "reasoning": 3}
 
@@ -691,6 +698,34 @@ class H(http.server.BaseHTTPRequestHandler):
         self.wfile.write(b"0\r\n\r\n")
         self.close_connection = True
 
+    def send_sse_drip(self, data_chunks, n, gap):
+        """[[drip: N S]]: the first chunk at once, N pings S s apart, then
+        the rest; (pings sent, the client hung up first)."""
+        crlf, lf = bytes([13, 10]), bytes([10])
+        ping = b"event: ping" + lf + b'data: {"type": "ping"}' + lf + lf
+        chunks = data_chunks[:1] + [None] * n + data_chunks[1:]
+        self.send_response(200)
+        self.send_header("content-type", "text/event-stream")
+        self.send_header("transfer-encoding", "chunked")
+        self.send_header("connection", "close")
+        self.end_headers()
+        sent = 0
+        self.close_connection = True
+        try:
+            for c in chunks:
+                if c is None:
+                    time.sleep(gap)
+                    c = ping
+                    sent += 1
+                if c:
+                    self.wfile.write(b"%x" % len(c) + crlf + c + crlf)
+                    self.wfile.flush()
+            self.wfile.write(b"0" + crlf + crlf)
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            return sent, True
+        return sent, False
+
     def stt(self, raw):
         """BISE-298: speech to text (a recording, the voice key check).
         The key's word picks the answer: "bad" 401, "broke" 402 (until
@@ -818,6 +853,8 @@ class H(http.server.BaseHTTPRequestHandler):
         slow = SLOW.search(script_of(conv[idx]["text"])) if idx is not None else None
         if slow:
             time.sleep(float(slow.group(1)))
+        drip = DRIP.search(script_of(conv[idx]["text"])) if idx is not None else None
+        self.drip = None
         model = body.get("model") or self.path.split("/models/")[-1].split(":")[0] or "fake"
         status = 200
         fail = plan_fail(script_of(conv[idx]["text"]) if idx is not None else "", seen) if plan else None
@@ -848,6 +885,9 @@ class H(http.server.BaseHTTPRequestHandler):
             out = render(family, turn, model, stream, body, mid)
             if not stream:
                 self.send(200, json.dumps(out).encode())
+            elif sse and drip and family == "anthropic":
+                self.drip = self.send_sse_drip([sse_bytes(family, [e]) for e in out],
+                                               int(drip.group(1)), float(drip.group(2)))
             elif sse:
                 self.send_sse([sse_bytes(family, [e]) for e in out])
             else:  # Gemini without alt=sse: one JSON array
@@ -868,6 +908,9 @@ class H(http.server.BaseHTTPRequestHandler):
                                 # write time must carry every byte)
                                 "image_sha": [hashlib.sha256(i.encode()).hexdigest() for m in conv for i in m["images"]],
                                 "family": family, "path": self.path, "stream": stream, "status": status,
+                                # [[drip: N S]]: pings sent, and whether the client hung up first
+                                "drip_sent": self.drip[0] if self.drip else None,
+                                "drip_cut": self.drip[1] if self.drip else None,
                                 "error": turn["error"], "fixture": turn["fixture"],
                                 # BISE-135: the model and effort the call asked for
                                 "model": model, "effort": effort_of(body),
