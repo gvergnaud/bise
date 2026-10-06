@@ -593,14 +593,6 @@ pub(crate) fn draw_panel(app: &App, frame: &mut Frame, area: Rect) {
         }
     }
     let live = i;
-    // site/m/timers: what the ◷ on a row says, when one has it
-    if sb.timers.iter().any(|t| t.active() && sb.agent(&t.agent).is_some_and(|a| !a.archived())) {
-        lines.push(Line::from(""));
-        lines.push(Line::from(Span::styled(
-            fit(&format!(" {} = its next run · /scheduled", crate::theme::glyph(G_SCHEDULED)), w),
-            Style::default().fg(faint()),
-        )));
-    }
     cards_lines(app, w, &mut lines, &mut owners, &mut sel_row);
     archived_lines(sb, live, w, &mut lines, &mut owners, &mut sel_row);
     // the body under the title: scrolled to keep the selection in view,

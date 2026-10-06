@@ -71,8 +71,9 @@ def wide(t, E):
     # main's thread: main's own, never t1's; the panel's ◷ and its legend
     sc = t.wait("main scheduled #2 for t2 · every day 07:30")
     assert "t1 scheduled #1" not in sc, sc
-    sc = t.wait("= its next run · /scheduled")
+    sc = t.wait("◷ 07:30")
     assert "◷ 2m" in sc and "◷ 07:30" in sc, sc
+    assert "= its next run" not in sc, sc
     no_switchboard(sc)
     shot(t, "150-main-thread")
     # /scheduled: the list, soonest first

@@ -61,6 +61,7 @@ pub(crate) const TIPS: &[&str] = &[
     "esc puts your draft away, ↑ brings it back",
     "shift+⏎ adds a new line",
     "ctrl+r speaks into the composer (turn it on with /voice)",
+    "/scheduled lists your scheduled tasks and when each runs next",
     "ctrl+r twice starts voice mode: talk with the agent in view",
     "/theme switches between light and dark",
 ];
