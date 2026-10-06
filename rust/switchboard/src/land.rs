@@ -246,8 +246,13 @@ pub(crate) fn short(r: &str) -> &str {
     r.strip_prefix("refs/heads/").unwrap_or(r)
 }
 
+/// A private index path no other land of this process shares: two lands
+/// in the same millisecond (two agents of one hub, parallel tests) once
+/// shared one file, and one's read-tree emptied the other's tree.
 fn tmp_index(tag: &str) -> PathBuf {
-    std::env::temp_dir().join(format!("sb-land-{}-{}-{}", tag, std::process::id(), crate::util::now_ms()))
+    static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    std::env::temp_dir().join(format!("sb-land-{}-{}-{}-{}", tag, std::process::id(), crate::util::now_ms(), seq))
 }
 
 /// Commit `files` (relative to `dir`, as they are in it) on `target`
@@ -582,6 +587,15 @@ mod tests {
 
     pub(super) fn log(dir: &Path) -> String {
         git(dir, &["log", "--format=%s", "main"]).unwrap()
+    }
+
+    #[test]
+    fn two_lands_in_the_same_millisecond_never_share_a_private_index() {
+        // issue 12's flake: pid + ms only, two parallel lands shared one
+        // index and one commit lost a file the other's read-tree dropped
+        let a: Vec<PathBuf> = (0..100).map(|_| tmp_index("idx")).collect();
+        let b: std::collections::BTreeSet<&PathBuf> = a.iter().collect();
+        assert_eq!(b.len(), a.len());
     }
 
     #[test]
