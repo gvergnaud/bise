@@ -48,6 +48,33 @@ pub fn note(stopped: &[String]) -> Option<String> {
     (!stopped.is_empty()).then(|| format!("stopped: {}", stopped.join(", ")))
 }
 
+/// The daemon's watch on auth.json (stat once a second): `Input::SignedIn`
+/// each time the file changed and reads signed in, the first read aside.
+/// Not "signed out, then signed in": the not-signed-in state can last
+/// less than a poll (the refresh refused, then a sign-in within the
+/// second) or never reach the file (a 401 on a token the file still
+/// calls good), and then nobody went on. A change while nobody waits
+/// costs nothing: [`Hub::signed_in`] returns at once.
+#[derive(Debug, Default)]
+pub struct AuthWatch {
+    seen: Option<std::time::SystemTime>,
+    read: bool,
+}
+
+impl AuthWatch {
+    /// One poll: `modified` = the file's mtime (None: no file),
+    /// `signed_in` reads it. True: send `Input::SignedIn`.
+    pub fn poll(&mut self, modified: Option<std::time::SystemTime>, signed_in: impl FnOnce() -> bool) -> bool {
+        if self.read && modified == self.seen {
+            return false;
+        }
+        let first = !self.read;
+        self.read = true;
+        self.seen = modified;
+        signed_in() && !first
+    }
+}
+
 /// The hub's side of the item (runtime: a restart forgets who waits;
 /// the item, kept by sb-core, still closes at the sign-in).
 #[derive(Debug, Default)]
@@ -129,6 +156,25 @@ mod tests {
         assert!(!expired("completed"));
         assert!(!expired("failed: your ChatGPT plan's limit for bise is reached."));
         assert!(!expired("your ChatGPT sign-in expired."));
+    }
+
+    #[test]
+    fn a_change_to_signed_in_is_the_sign_in_back() {
+        use std::time::{Duration, UNIX_EPOCH};
+        let at = |s| Some(UNIX_EPOCH + Duration::from_secs(s));
+        let mut w = AuthWatch::default();
+        // the first read: the state the hub found, nobody to resume
+        assert!(!w.poll(at(1), || true));
+        // unchanged: not read again
+        assert!(!w.poll(at(1), || panic!("read again")));
+        // the expired state and the new sign-in fell within one poll
+        // (the flake of subscriptions_tui_tmux): signed in, changed
+        assert!(w.poll(at(3), || true));
+        // a change that reads signed out or expired: nothing
+        assert!(!w.poll(at(4), || false));
+        assert!(w.poll(at(5), || true));
+        // the file gone: no sign-in
+        assert!(!w.poll(None, || false));
     }
 
     #[test]
