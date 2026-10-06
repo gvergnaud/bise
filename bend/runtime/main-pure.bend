@@ -839,6 +839,66 @@ def drain_steer.next_of(+sess: T.Session, res: T.Res) -> T.Session:
     case T.Accepted{_, _, +next}:
       next
 
+# the result of a call a stop left behind (main.bend exec_tool.raced):
+# who stopped it, and that it may still finish
+def abandoned(+who: String, +what: String) -> String:
+  String.concat(["interrupted by ", who, ": the turn stopped without waiting for ",
+    what, ", which cannot be cancelled from here; it may still finish (on its server, for a remote call)"])
+
+# ---- a tool that a stop cut (issue 13) ----
+# The tool came back with the interrupt flag set (the bash wrapper
+# stopped its command, or the call ended meanwhile): its own result is
+# applied BEFORE the boundary drain applies the interrupt, so the
+# history keeps what ran and was cut ("interrupted by <who>" and the
+# output so far) instead of the Core's bare "interrupted". The call then
+# has its one result: interrupt_closes answers only the calls still
+# waiting. The acts the result asked for (the next model call) wait in
+# First until the drain: a turn the interrupt ended drops them and goes
+# idle (the batch's next tools never start); a turn still on runs them.
+type First is Data:
+  First{lines: List<&2, String>, rt: Rt, acts: List<&2, T.Act>}
+
+def tool_first.res(+rt: Rt, +sess: T.Session, +cmd: T.Cmd, res: T.Res)
+    -> First:
+  match rt:
+    case Rt{_, +script, +cmds, +live}:
+      match res:
+        case T.Rejected{+reason}:
+          First{Con{String.append("core rejected: ", reason), Nil{}}, rt, Nil{}}
+        case T.Accepted{+obs, +acts, +next}:
+          First{List.append(&2, String, obs_lines(obs),
+              Ev.evs(False{}, sess, cmd, res)),
+            Rt{next, script, cmds, live}, acts}
+
+def tool_first(+rt: Rt, +cmd: T.Cmd) -> First:
+  match rt:
+    case Rt{+sess, _, _, _}:
+      tool_first.res(rt, sess, cmd, S.apply(sess, cmd))
+
+def turn_on(s: T.Session) -> Bool:
+  match s:
+    case T.Sess{_, _, _, _, +turn, _, _, _}:
+      match turn:
+        case None{}:
+          False{}
+        case Some{_}:
+          True{}
+
+def after_first.go(on: Bool, +acts: List<&2, T.Act>, +after: List<&2, T.Act>)
+    -> Job:
+  match on:
+    case True{}:
+      JActs{List.append(&2, T.Act, acts, after)}
+    case False{}:
+      JIdle{}
+
+# the job after the drain: rt is the drained state
+def after_first(+rt: Rt, +acts: List<&2, T.Act>, +after: List<&2, T.Act>)
+    -> Job:
+  match rt:
+    case Rt{+sess, _, _, _}:
+      after_first.go(turn_on(sess), acts, after)
+
 # one drained steering line: its escaped newlines come back (the same
 # wire convention as a socket "steer"), so a multi-line message fits the
 # one-line-per-steer file format
