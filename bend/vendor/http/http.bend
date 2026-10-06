@@ -2376,6 +2376,50 @@ def stream.read(st: Stream) -> IO(Stream & Result<&2, &2, Err, Maybe<&2, String>
         m : Socket & Result<&1, &1, U32 & String, U32 & Array<U32>> <- io.recv.words(tls, s, 65536, ms)
         stream.read(stream.got(tls, ms, res, rb, m))
 
+# bise patch (issue 13): stream.read that waits at most `ms` for the next
+# piece and keeps the stream open when nothing came, so a reader can look
+# at something else (a cancel) while the server is silent. Done{Some{p}}:
+# what stream.read answers; Done{None{}}: `ms` passed with nothing. A
+# timed-out read leaves the socket and the TLS session as they were (the
+# effect returns before a record is taken), so the next read goes on.
+def stream.poll.wrap(r: Stream & Result<&2, &2, Err, Maybe<&2, String>>)
+    -> Stream & Result<&2, &2, Err, Maybe<&2, Maybe<&2, String>>>:
+  (st, res) = r
+  match res:
+    case Fail{e}:
+      (st, Fail{e})
+    case Done{m}:
+      (st, Done{Some{m}})
+
+# a read that only timed out is quiet: the stream stays as it was
+@unsafe
+def stream.poll.fail(quiet: Bool, +tls: Bool, s: Socket, +ms: U32, res: Res, +rb: Rb, +code: U32, why: String) -> IO(Stream & Result<&2, &2, Err, Maybe<&2, Maybe<&2, String>>>):
+  match quiet:
+    case True{}:
+      IO.pure(Stream & Result<&2, &2, Err, Maybe<&2, Maybe<&2, String>>>, (Stream{tls, s, ms, res, rb, PoNone{}}, Done{None{}}))
+    case False{}:
+      IO.bind(Stream & Result<&2, &2, Err, Maybe<&2, String>>, Stream & Result<&2, &2, Err, Maybe<&2, Maybe<&2, String>>>, stream.read(Stream{tls, s, ms, res, RbDone{}, PoBad{err.or_late(code, ErrRead{code, why})}}), x => IO.pure(Stream & Result<&2, &2, Err, Maybe<&2, Maybe<&2, String>>>, stream.poll.wrap(x)))
+
+@unsafe
+def stream.poll.got(+tls: Bool, +ms: U32, res: Res, +rb: Rb, m: Socket & Result<&1, &1, U32 & String, U32 & Array<U32>>) -> IO(Stream & Result<&2, &2, Err, Maybe<&2, Maybe<&2, String>>>):
+  (s, r) = m
+  match r:
+    case Fail{(+code, why)}:
+      stream.poll.fail(err.late(code), tls, s, ms, res, rb, code, why)
+    case Done{p}:
+      IO.bind(Stream & Result<&2, &2, Err, Maybe<&2, String>>, Stream & Result<&2, &2, Err, Maybe<&2, Maybe<&2, String>>>, stream.read(stream.got.piece(tls, s, ms, res, rb, p)), x => IO.pure(Stream & Result<&2, &2, Err, Maybe<&2, Maybe<&2, String>>>, stream.poll.wrap(x)))
+
+@unsafe
+def stream.poll(st: Stream, wait: U32) -> IO(Stream & Result<&2, &2, Err, Maybe<&2, Maybe<&2, String>>>):
+  Stream{+tls, s, +ms, res, +rb, out} = st
+  match out:
+    case PoNone{}:
+      do IO<Stream & Result<&2, &2, Err, Maybe<&2, Maybe<&2, String>>>>:
+        m : Socket & Result<&1, &1, U32 & String, U32 & Array<U32>> <- io.recv.words(tls, s, 65536, wait)
+        stream.poll.got(tls, ms, res, rb, m)
+    case _:
+      IO.bind(Stream & Result<&2, &2, Err, Maybe<&2, String>>, Stream & Result<&2, &2, Err, Maybe<&2, Maybe<&2, String>>>, stream.read(Stream{tls, s, ms, res, rb, out}), x => IO.pure(Stream & Result<&2, &2, Err, Maybe<&2, Maybe<&2, String>>>, stream.poll.wrap(x)))
+
 # Status and headers. Its body is "": read the body with stream.read.
 def stream.res(st: Stream) -> Stream & Res:
   Stream{tls, s, ms, +res, rb, out} = st

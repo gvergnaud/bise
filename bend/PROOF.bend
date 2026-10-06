@@ -808,6 +808,24 @@ def Laws.chunk_lines_empty():
 def Laws.interrupt_path_is_per_port():
   {==}
 
+def Laws.race_result_wins(f):
+  {==}
+
+def Laws.race_no_flag_waits():
+  {==}
+
+def Laws.race_flag_stops_naming_who():
+  {==}
+
+def Laws.race_ticker_ends_on_close():
+  {==}
+
+def Laws.race_cancel_is_its_own():
+  {==}
+
+def Laws.race_cancel_path_is_per_port():
+  {==}
+
 def Laws.bash_stop_cuts_its_own_group():
   {==}
 

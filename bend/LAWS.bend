@@ -35,6 +35,7 @@ import ./vendor/json.bend as J
 import ./runtime/debug-pure.bend as Dg
 import ./runtime/usage-pure.bend as Us
 import ./runtime/gate-pure.bend as Gt
+import ./runtime/race-pure.bend as Rc
 import ./hub/model.bend as HM
 import ./hub/cx.bend as HX
 import ./hub/core.bend as HC
@@ -175,7 +176,39 @@ law interrupt_path_is_per_port:
   {Pv.interrupt_path_of("/h/agents/a/run", "7702")
     == "/h/agents/a/run/bend-interrupt-7702.txt" : String}
 
-# ---- a stop cuts the running call (issue 13) ----
+# ---- a call raced against the interrupt flag (issue 13, race-pure) ----
+
+# LAW: a result that is in wins, whatever the flag says (the boundary
+# drain after it applies the interrupt).
+law race_result_wins:
+  for +f: Maybe<&2, String>
+  {Rc.decide(True{}, f) == Rc.VWon{} : Rc.Verdict}
+
+# LAW: a tick with no flag, or a cleared one (an empty file), waits.
+law race_no_flag_waits:
+  {Con{Rc.decide(False{}, None{}), Con{Rc.decide(False{}, Some{""}),
+    Con{Rc.decide(False{}, Some{" \n"}), Nil{}}}}
+    == Con{Rc.VWait{}, Con{Rc.VWait{}, Con{Rc.VWait{}, Nil{}}}} : List<&2, Rc.Verdict>}
+
+# LAW: a set flag stops, naming who asked ("1" and "user": the user).
+law race_flag_stops_naming_who:
+  {Con{Rc.decide(False{}, Some{"main"}), Con{Rc.decide(False{}, Some{"1"}), Nil{}}}
+    == Con{Rc.VStop{"main"}, Con{Rc.VStop{"the user"}, Nil{}}} : List<&2, Rc.Verdict>}
+
+# LAW: the ticker ends once its tick is refused (the channel closed).
+law race_ticker_ends_on_close:
+  {Rc.tick_again(False{}) == False{} : Bool}
+
+# LAW: an attempt is cancelled only by its own token, never by a stale
+# file or none; the cancel file is per process, next to the flag.
+law race_cancel_is_its_own:
+  {Con{Rc.cancelled(Some{"1700-0\n"}, "1700-0"), Con{Rc.cancelled(Some{"1600-0"}, "1700-0"),
+    Con{Rc.cancelled(None{}, "1700-0"), Con{Rc.cancelled(Some{""}, "1700-0"), Nil{}}}}}
+    == Con{True{}, Con{False{}, Con{False{}, Con{False{}, Nil{}}}}} : List<&2, Bool>}
+
+law race_cancel_path_is_per_port:
+  {Rc.cancel_path_of("/h/agents/a/run", "7702")
+    == "/h/agents/a/run/bend-cancel-7702.txt" : String}
 
 # LAW: the bash wrapper reads the flag in its poll loop and stops only
 # the sync command's own group (-$C), TERM before KILL; never the
@@ -2400,12 +2433,12 @@ law exhausted_keeps_last_error:
   exs head: String
   {Pv.exhausted_text(n, why) == String.append(head, why) : String}
 
-# LAW: a pause is slept in 1 s slices, the flag read before each one; an
-# interrupt empties what is left.
+# LAW: a pause is slept in 100 ms slices, the flag read before each one;
+# an interrupt empties what is left.
 law retry_wait_slices:
-  {Bool.and(Nat.is_eq(Pv.wait_slices(8000), 9n),
-      Bool.and(U32.is_eq(Pv.slice_ms(False{}, 2500), 1000),
-        Bool.and(U32.is_eq(Pv.left_after(False{}, 2500), 1500),
+  {Bool.and(Nat.is_eq(Pv.wait_slices(8000), 81n),
+      Bool.and(U32.is_eq(Pv.slice_ms(False{}, 2500), 100),
+        Bool.and(U32.is_eq(Pv.left_after(False{}, 2500), 2400),
           Bool.and(U32.is_eq(Pv.slice_ms(True{}, 2500), 0),
             U32.is_eq(Pv.left_after(True{}, 2500), 0)))))
     == True{} : Bool}

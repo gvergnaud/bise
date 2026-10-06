@@ -1342,14 +1342,15 @@ def interrupted_text(+who: String, +tries: Nat, +why: String) -> String:
   String.append(String.concat(["stopped retrying (interrupted by ", who, ") after ",
     Nat.show(tries), " failed attempts; last error: "]), why)
 
-# the pause before a retry is slept in 1 s slices, the flag read between
-# them: how many slices a pause takes
+# the pause before a retry is slept in 100 ms slices, the flag read
+# between them, so a stop lands within one slice (issue 13: under 1 s;
+# they were 1 s): how many slices a pause takes
 def wait_slices(+ms: U32) -> Nat:
-  U32.to_nat(U32.add(U32.div(ms, 1000), 1))
+  U32.to_nat(U32.add(U32.div(ms, 100), 1))
 
 # one slice of the pause: nothing left or an interrupt -> 0
 def slice_ms(stop: Bool, +left: U32) -> U32:
-  Bool.pick(U32, stop, 0, U32.min(left, 1000))
+  Bool.pick(U32, stop, 0, U32.min(left, 100))
 
 def left_after(stop: Bool, +left: U32) -> U32:
-  Bool.pick(U32, stop, 0, U32.sub(left, U32.min(left, 1000)))
+  Bool.pick(U32, stop, 0, U32.sub(left, U32.min(left, 100)))

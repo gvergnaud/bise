@@ -21,6 +21,9 @@ import ./debug-pure.bend as Dp
 import ./usage-pure.bend as Us
 import ./oneshot-pure.bend as Osp
 import ../core/ev.bend as Ev
+import ./race.bend as Race
+import ./race-pure.bend as Rcp
+import ./sse-read.bend as Sr
 # ---- the live provider call, fully in Bend (hub HTTP client) ----
 # The wire request (MODEL/TOOL/MSG/CALL lines) becomes the provider
 # JSON in core/api.bend, is POSTed by the hub HTTP client, and the reply
@@ -279,64 +282,6 @@ def model_call.step(a: Pvp.Attempt, n: Out, +k: Nat, +tries: Nat, +req: U32,
       model_call.step.retry(Nat.is_lt(0n, k), n, k, tries,
         Pvp.retry_delay_ms(after_ms, tries), why, req, next)
 
-# ---- the streamed call (every family): Server-Sent Events ----
-# The body arrives in pieces (raw bytes; decoded once, whole). Between
-# two pieces the interrupt flag is read, so a Ctrl+C lands during a
-# long generation instead of after it; a read that waits longer than
-# stream_step_ms is a dead connection (a timeout the policy retries).
-
-type Rd is Type:
-  RdEnd{st: Http.Stream, parts: List<&2, String>}
-  RdErr{st: Http.Stream, parts: List<&2, String>, e: Http.Err}
-  RdStop{st: Http.Stream, parts: List<&2, String>}
-
-@unsafe
-def sse.flag.set(on: Bool, st: Http.Stream, +parts: List<&2, String>,
-    +ipath: String) -> IO(Rd):
-  match on:
-    case True{}:
-      IO.pure(Rd, RdStop{st, parts})
-    case False{}:
-      sse.read(st, parts, ipath)
-
-@unsafe
-def sse.flag(f: Maybe<&2, String>, st: Http.Stream, +parts: List<&2, String>,
-    +ipath: String) -> IO(Rd):
-  match f:
-    case None{}:
-      sse.read(st, parts, ipath)
-    case Some{+c}:
-      sse.flag.set(Pvp.interrupt_requested(c), st, parts, ipath)
-
-@unsafe
-def sse.piece(m: Maybe<&2, String>, st: Http.Stream, +parts: List<&2, String>,
-    +ipath: String) -> IO(Rd):
-  match m:
-    case None{}:
-      IO.pure(Rd, RdEnd{st, parts})
-    case Some{+p}:
-      do IO<Rd>:
-        f : Maybe<&2, String> <- P.read_file(ipath)
-        sse.flag(f, st, Con{p, parts}, ipath)
-
-@unsafe
-def sse.got(r: Http.Stream & Result<&2, &2, Http.Err, Maybe<&2, String>>,
-    +parts: List<&2, String>, +ipath: String) -> IO(Rd):
-  match r:
-    case (st, res):
-      match res:
-        case Fail{+e}:
-          IO.pure(Rd, RdErr{st, parts, e})
-        case Done{+m}:
-          sse.piece(m, st, parts, ipath)
-
-@unsafe
-def sse.read(st: Http.Stream, +parts: List<&2, String>, +ipath: String)
-    -> IO(Rd):
-  do IO<Rd>:
-    r : Http.Stream & Result<&2, &2, Http.Err, Maybe<&2, String>> <- Http.stream.read(st)
-    sse.got(r, parts, ipath)
-
 # the body text, decoded once from the raw pieces (newest first)
 def sse.text(+parts: List<&2, String>) -> String:
   Enc.utf8.decode(String.join(List.reverse(&2, String, parts), ""))
@@ -370,59 +315,60 @@ def sse.body(+status: U32, +retry_after: String, +text: String,
 
 # a stream cut short keeps what it had received (the debug log shows
 # how far the reply got)
-def sse.done(rd: Rd, +status: U32, +retry_after: String, +ipath: String,
+def sse.done(rd: Sr.Rd, +status: U32, +retry_after: String, +ck: Sr.Ck,
     +host: String, +w: Pvp.Wait, fam: Api.Style) -> IO(Got):
   match rd:
-    case RdEnd{st, +parts}:
+    case Sr.RdEnd{st, +parts}:
       do IO<Got>:
         c : Unit <- Http.stream.close(st)
         sse.body(status, retry_after, sse.text(parts), fam)
-    case RdErr{st, +parts, +e}:
+    case Sr.RdErr{st, +parts, +e}:
       do IO<Got>:
         c : Unit <- Http.stream.close(st)
         IO.pure(Got, Got{Pvp.attempt_err_in(host, w, net_of(e)), status,
           sse.text(parts)})
-    case RdStop{st, +parts}:
-      do IO<Got>:
-        c : Unit <- Http.stream.close(st)
-        # who asked (the flag's content), then consume the flag: the
-        # boundary drains stay clean
-        f : Maybe<&2, String> <- P.read_file(ipath)
-        +who : String <- IO.pure(String, Pvp.interrupter_in(f))
-        u : Unit <- P.write_file(ipath, "")
-        IO.pure(Got, Got{Pvp.AFail{Pvp.interrupted_by(who)}, status,
-          sse.text(parts)})
+    case Sr.RdStop{st, +parts}:
+      # cancelled: the race already answered the turn (call.raced) and
+      # nobody reads this Got; the connection closes, the provider stops,
+      # and the cancel file (its own token) is emptied
+      match ck:
+        case Sr.Ck{+cpath, _, _}:
+          do IO<Got>:
+            c : Unit <- Http.stream.close(st)
+            u : Unit <- P.write_file(cpath, "")
+            IO.pure(Got, Got{Pvp.AFail{"cancelled"}, status, sse.text(parts)})
 
 @unsafe
-def sse.head(sr: Http.Stream & Http.Res, +ipath: String, +host: String,
+def sse.head(sr: Http.Stream & Http.Res, +ck: Sr.Ck, +host: String,
     +w: Pvp.Wait, fam: Api.Style) -> IO(Got):
   match sr:
     case (st, res):
       match res:
         case Http.Res{+status, +h, _}:
           do IO<Got>:
-            rd : Rd <- sse.read(st, Nil{}, ipath)
-            sse.done(rd, status, Http.header(h, "retry-after"), ipath, host,
+            rd : Sr.Rd <- Sr.sse.check(st, Nil{}, ck, 0)
+            sse.done(rd, status, Http.header(h, "retry-after"), ck, host,
               w, fam)
 
 @unsafe
-def sse.opened(r: Result<&1, &1, Http.Err, Http.Stream>, +ipath: String,
+def sse.opened(r: Result<&1, &1, Http.Err, Http.Stream>, +ck: Sr.Ck,
     +host: String, +w: Pvp.Wait, fam: Api.Style) -> IO(Got):
   match r:
     case Fail{+e}:
       IO.pure(Got, Got{Pvp.attempt_err_in(host, w, net_of(e)), 0, ""})
     case Done{st}:
-      sse.head(Http.stream.res(st), ipath, host, w, fam)
+      sse.head(Http.stream.res(st), ck, host, w, fam)
 
-# the wait (Pvp.stream_wait): the provider's idle_timeout_sec, else 90 s
+# the wait (Pvp.stream_wait): the provider's idle_timeout_sec, else 90 s;
+# tok: the attempt's token in the cancel file at cpath
 @unsafe
-def sse.call(+url: String, hdrs: Map<&2, List<&2, String>>, +body: String,
-    +w: Pvp.Wait, fam: Api.Style) -> IO(Got):
+def sse.call(+tok: String, +cpath: String, +url: String,
+    hdrs: Map<&2, List<&2, String>>, +body: String, +w: Pvp.Wait,
+    fam: Api.Style) -> IO(Got):
   do IO<Got>:
-    +ipath : String <- interrupt_path()
     r : Result<&1, &1, Http.Err, Http.Stream> <- Http.open.with("POST", url,
       hdrs, body, Pvp.wait_ms(w))
-    sse.opened(r, ipath, Pvp.url_host(url), w, fam)
+    sse.opened(r, Sr.Ck{cpath, tok, Pvp.wait_ms(w)}, Pvp.url_host(url), w, fam)
 
 # the whole reply at once (a family that does not stream)
 def whole.call(+url: String, hdrs: Map<&2, List<&2, String>>, +body: String,
@@ -433,19 +379,54 @@ def whole.call(+url: String, hdrs: Map<&2, List<&2, String>>, +body: String,
     model_call.verdict(r, st, Pvp.url_host(url))
 
 @unsafe
-def call.by_style.pick(streams: Bool, st: Api.Style, +url: String,
-    hdrs: Map<&2, List<&2, String>>, +body: String, +w: Pvp.Wait) -> IO(Got):
+def call.by_style.pick(streams: Bool, +tok: String, +cpath: String,
+    st: Api.Style, +url: String, hdrs: Map<&2, List<&2, String>>,
+    +body: String, +w: Pvp.Wait) -> IO(Got):
   match streams:
     case True{}:
-      sse.call(url, hdrs, body, w, st)
+      sse.call(tok, cpath, url, hdrs, body, w, st)
     case False{}:
       whole.call(url, hdrs, body, st)
 
 # the family says whether it streams (core/api.bend)
 @unsafe
-def call.by_style(+st: Api.Style, +url: String,
+def call.by_style(+tok: String, +cpath: String, +st: Api.Style, +url: String,
     hdrs: Map<&2, List<&2, String>>, +body: String, +w: Pvp.Wait) -> IO(Got):
-  call.by_style.pick(Api.streams(st), st, url, hdrs, body, w)
+  call.by_style.pick(Api.streams(st), tok, cpath, st, url, hdrs, body, w)
+
+# the cancel file of this REPL (race-pure.bend), next to its interrupt flag
+def cancel_path() -> IO(String):
+  do IO<String>:
+    pr : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_REPL_PORT")
+    +p : String <- IO.pure(String, P.env_or(pr, "0"))
+    +d : String <- P.side_dir()
+    IO.pure(String, Rcp.cancel_path_of(d, p))
+
+# a stop wins the race: the attempt is left behind with its token in the
+# cancel file (it closes its connection at its next piece or quiet
+# slice), and the call ends as an interrupted attempt (AFail: no retry);
+# the boundary drain after model_call then applies the interrupt
+def call.raced.got(r: Race.Raced<Got>, +tok: String, +cpath: String)
+    -> IO(Got):
+  match r:
+    case Race.Won{g}:
+      IO.pure(Got, g)
+    case Race.Stopped{+who}:
+      do IO<Got>:
+        u : Unit <- P.write_file(cpath, tok)
+        IO.pure(Got, Got{Pvp.AFail{Pvp.interrupted_by(who)}, 0, ""})
+
+# every model attempt goes through here (the one call.by_style caller):
+# raced against the interrupt flag, so a stop ends it within a tick
+@unsafe
+def call.raced(+tok: String, +st: Api.Style, +url: String,
+    hdrs: Map<&2, List<&2, String>>, +body: String, +w: Pvp.Wait) -> IO(Got):
+  do IO<Got>:
+    +ipath : String <- interrupt_path()
+    +cpath : String <- cancel_path()
+    r : Race.Raced<Got> <- Race.until_stop(Got, ipath,
+      call.by_style(tok, cpath, st, url, hdrs, body, w))
+    call.raced.got(r, tok, cpath)
 
 # the attempt, into the session debug log when it is an incident
 def model_call.log(+call: Nat, +tries: Nat, +model: String, +url: String,
@@ -689,7 +670,8 @@ def model_call.try(fuel: Nat, +tries: Nat, n: Out, +request: String,
                   Api.with_cache_header(Pvp.cache_header(names), ckey,
                     Api.headers(st, Api.facts_betas(facts), key)))), Http.empty()))
             # a slow gateway or local model: its idle_timeout_sec
-            +g : Got <- call.by_style(st, url, hdrs, body,
+            +g : Got <- call.raced(String.concat([Nat.show(call), "-", Nat.show(tries)]),
+              st, url, hdrs, body,
               Pvp.stream_wait(mfile, prov, String.concat([prov, "/", model])))
             lg : Unit <- model_call.log(call, tries, model, url, json, g)
             # the usage line names the full id (the TUI's catalog key)
