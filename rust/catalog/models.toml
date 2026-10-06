@@ -349,6 +349,20 @@ input_price = 0.15
 output_price = 0.6
 cache_read_price = 0.015
 
+# Mistral Large 4 (public preview, 2026-10-06; alias mistral-large-4-0):
+# reasoning, vision, tools. Checked 2026-10-06: /v1/models gives
+# max_context_length 524288 (the docs card says 1M: the API's number
+# wins); max output 256k (vals.ai, Vercel's gateway). Prices: the docs
+# card's preview rates (list 1.36 / 0.14 / 4.18).
+[models."mistral/mistral-large-4"]
+vision = true
+reasoning = true
+context = 524288
+max_output = 262144
+input_price = 0.68
+output_price = 2.09
+cache_read_price = 0.07
+
 # Mistral Large 3 (2512): no reasoning
 [models."mistral/mistral-large-latest"]
 vision = true

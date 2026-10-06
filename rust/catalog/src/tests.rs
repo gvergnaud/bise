@@ -107,6 +107,10 @@ fn a_listed_model_takes_its_own_fields_then_its_providers() {
     assert_eq!(r.caps, Caps { context: 200_000, max_output: 64_000, vision: true, reasoning: true, tools: true, thinking: "budget".into(), betas: ANTH_BETAS.into(), efforts: String::new(), effort: String::new(), cache_key: String::new(), cache_header: String::new(), headers_env: String::new(), headers: Default::default(), key_command: String::new(), idle_timeout_sec: 0 });
     let r = c.resolve("mistral/mistral-large-latest");
     assert_eq!((r.caps.context, r.caps.reasoning, r.caps.vision), (262_144, false, true));
+    let r = c.resolve("mistral/mistral-large-4");
+    assert_eq!(r.known, Known::Listed);
+    assert_eq!((r.caps.context, r.caps.max_output, r.caps.reasoning, r.caps.vision, r.caps.tools), (524_288, 262_144, true, true, true));
+    assert_eq!(r.efforts(), ["none", "high"], "Mistral's reasoning_effort words");
     let r = c.resolve("openai/gpt-6-astra");
     assert_eq!((r.caps.context, r.caps.max_output, r.caps.reasoning, r.caps.vision), (1_050_000, 128_000, true, true));
 }
