@@ -255,7 +255,9 @@ fn title_spans(title: &str, hits: &[usize], w: usize, selected: bool, gone: bool
     // tinted: a blank inside the chip on each side (the first one is the
     // column the row's mark leaves, see `item_line`), one after it
     let side = if tinted { " " } else { "" };
-    let tag = if fresh { NEW_TAG.width() } else { 0 };
+    // the mark's column is kept on every row (new or blank, never title
+    // text): every title is cut at the same width (designer m_8783)
+    let tag = NEW_TAG.width();
     let room = w.saturating_sub(2 * side.len() + 1 + tag).max(1);
     let shown = cut(title, room);
     let hit_st = st.add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
@@ -270,11 +272,16 @@ fn title_spans(title: &str, hits: &[usize], w: usize, selected: bool, gone: bool
             _ => out.push(Span::styled(c.to_string(), s)),
         }
     }
-    if fresh {
-        out.push(Span::styled(NEW_TAG, Style::default().fg(accent()).add_modifier(Modifier::BOLD)));
-    }
     let used = shown.width() + 2 * side.len() + tag;
-    out.push(Span::raw(" ".repeat(w.saturating_sub(used))));
+    if fresh {
+        // the marks line up in one column: the padding goes before the mark,
+        // and the column's reserved blank after it
+        out.push(Span::raw(" ".repeat(w.saturating_sub(used + 1))));
+        out.push(Span::styled(NEW_TAG, Style::default().fg(accent()).add_modifier(Modifier::BOLD)));
+        out.push(Span::raw(" ".repeat(w.saturating_sub(used).min(1))));
+    } else {
+        out.push(Span::raw(" ".repeat(w.saturating_sub(used - tag))));
+    }
     out.retain(|s| !s.content.is_empty());
     out
 }

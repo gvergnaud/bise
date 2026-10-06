@@ -1,0 +1,42 @@
+env: /Users/gabrielvergnaud/.bise/worktrees/harness-3abb2bd8/new-col/harness/rust/target/debug/bise: No such file or directory
+[[bash: sb spawn docs --objective "document the api {{bash: sb report blocked 'v1 or v2 for the api docs? the brief says keep old clients, but v2 remo
+ves /users.'}}"]] [[bash: sb spawn bench --objective "benchmark the api {{bash: sb report done 'p95 at 180 ms, nothing to fix.'}}"]] [[bash: sb spawn
+deploy --objective "deploy staging {{bash: sb report failed 'the staging token expired.'}}"]]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

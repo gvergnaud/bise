@@ -1,0 +1,34 @@
+timeout waiting for 'bise :*'
+01 first-run empty main feed
+timeout waiting for 'new agent @deploy'
+02 you-ask-main-starts-agents 
+timeout waiting for 'new agent @talk-b'
+03 levels-and-reports what's for you, what isn't + reports in main + busy hour (fold)
+04 cards-a-question ctrl+g
+05 cards-every-kind-1 ctrl+n
+06 cards-every-kind-2 ctrl+n
+07 cards-every-kind-3 ctrl+n
+08 cards-every-kind-4 ctrl+n
+09 cards-every-kind-5 ctrl+n
+10 card-full-screen ctrl+f
+11 agents-panel-selection ctrl+k twice
+12 preview-an-agent space
+13 inside-an-agent enter on the selection
+14 everything-disclosed ctrl+o
+timeout waiting for 'needs you |'
+15 markdown-tables 
+16 a-failing-tool 
+17 turn-in-progress-steer sending / received marks
+18 message-marks-read after the turn
+19 talk-to-an-agent-from-main 
+20 images-attaching 
+21 images-in-the-history 
+22 slash-commands 
+23 help 
+24 versions 
+25 terminal-panel ctrl+` (NUL)
+26 drop-an-agent D on a selection
+27 compaction-running 
+28 compaction-done 
+29 narrow-terminal 64 columns
+30 provider-error fake provider killed

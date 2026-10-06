@@ -211,10 +211,28 @@ fn the_new_rows_say_new_while_the_list_is_open() {
     let out = render(&mut sc, &all, 144, 24);
     let marked: Vec<&str> = out.lines().filter(|l| l.contains(" new ")).collect();
     assert_eq!(marked.len(), 3, "{out}");
-    // tinted, the chip's blank sits between the title and the mark
-    let gap = if matches!(crate::render::chip_form(), crate::render::ChipForm::Tinted) { "  " } else { " " };
-    assert!(out.contains(&format!("› pricing page{gap}new")), "{out}");
-    assert!(out.contains(&format!("pricing-plans.xlsx{gap}new")) && out.contains(&format!("bise for everyone{gap}new")), "{out}");
+    // the marks sit in one column, after the titles, whatever their length
+    for t in ["› pricing page", "pricing-plans.xlsx", "bise for everyone"] {
+        assert!(marked.iter().any(|l| l.contains(t)), "{out}");
+    }
+    let col = |l: &str| unicode_width::UnicodeWidthStr::width(&l[..l.find(" new ").unwrap()]);
+    let cols: Vec<usize> = marked.iter().map(|l| col(l)).collect();
+    assert!(cols.iter().all(|&c| c == cols[0]), "marks not aligned {cols:?}\n{out}");
+    // the mark's column is 'new' or blank: no title crosses it, cut or not
+    let at = |l: &str, from: usize, n: usize| -> String {
+        let mut x = 0;
+        l.chars().filter(|c| { let w = unicode_width::UnicodeWidthChar::width(*c).unwrap_or(0); let k = x; x += w; k >= from && k < from + n }).collect()
+    };
+    for w in [144usize, 74] {
+        let out = render(&mut sc, &all, w, 24);
+        let c0 = out.lines().find(|l| l.contains(" new ")).map(col).unwrap();
+        // the list's rows: `  › ` or 4 blanks, then a title
+        let rows = out.lines().filter(|l| l.starts_with("  › ") || (l.starts_with("    ") && !l[4..].starts_with(' ')));
+        for l in rows {
+            let cell = at(l, c0, 5);
+            assert!(cell == " new " || cell.trim().is_empty(), "title in the mark column at {w}: {l}\n{out}");
+        }
+    }
     assert!(!out.lines().any(|l| l.contains("onboarding deck") && l.contains(" new ")), "{out}");
     let out = render(&mut sc, &all, 74, 24);
     assert_eq!(out.lines().filter(|l| l.contains(" new ")).count(), 3, "{out}");
