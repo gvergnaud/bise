@@ -18,7 +18,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import wait  # noqa: E402
-from bise_env import clean_env  # noqa: E402
+from bise_env import clean_env, refuse_real_run_dir  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
@@ -57,6 +57,17 @@ def no_real_accounts(tmp):
     }
 
 
+def own_side_channels(tmp):
+    """The per-session folders a test's REPLs write by port, always under its
+    tmp, real accounts or not: the run dir (plugins/ready, report, the
+    session's indexes) and the images, never the user's ~/.bise/run where
+    they collide with his live REPLs' (bise_env.refuse_real_run_dir)."""
+    return {
+        "BEND_RUN_DIR": os.path.join(tmp, "run"),
+        "BEND_IMAGE_DIR": os.path.join(tmp, "images"),
+    }
+
+
 class Env:
     def __init__(self, fake_env=None):
         self.tmp = tempfile.mkdtemp(prefix="sb-e2e-")
@@ -70,7 +81,10 @@ class Env:
             stdout=subprocess.PIPE, text=True, env=clean_env(FAKE_LOG=self.fake_log, **(fake_env or {})))
         port = self.fake.stdout.readline().split()[1]
         self.env = {
-            **clean_env(),
+            # none of the caller's path overrides (his ~/.bise paths): the
+            # ones below are this test's
+            **clean_env(own_paths=True),
+            **own_side_channels(self.tmp),
             "SB_STATE_DIR": self.state,
             "BEND_PROVIDER_URL": "http://127.0.0.1:%s/v1/chat/completions" % port,
             "BEND_MODEL": "mistral-small-latest",
@@ -94,6 +108,7 @@ class Env:
         self.hub = None
 
     def start_hub(self):
+        refuse_real_run_dir(self.env, self.tmp)
         err = open(os.path.join(self.tmp, "hub.stderr"), "a")
         self.hub = subprocess.Popen([EXE, "sbd", "--workspace", self.ws], cwd=ROOT, env=self.env,
                                     stdin=subprocess.DEVNULL, stdout=err, stderr=err)

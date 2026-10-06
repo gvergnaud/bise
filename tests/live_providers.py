@@ -200,7 +200,9 @@ def harness_turn(row, prov, model, family, base, key_env, env):
     port = s.getsockname()[1]
     s.close()
     session = os.path.join(tmp, "session.txt")
-    e = {k: v for k, v in env.items() if k not in bise_env.NOT_INHERITED + ("BEND_PROVIDER_URL", "BEND_MODEL", "BISE_MODEL")}
+    # an own HOME: none of the caller's path overrides (his BEND_RUN_DIR...) either
+    e = {k: v for k, v in env.items()
+         if k not in bise_env.NOT_INHERITED + bise_env.OWN_PATHS + ("BEND_PROVIDER_URL", "BEND_MODEL", "BISE_MODEL")}
     legacy = {"foundry": model, "mistral": model}.get(pid, "%s/%s" % (pid, model))
     e.update(HOME=tmp, XDG_STATE_HOME=os.path.join(tmp, "state"), BISE_MODELS_FILE=os.path.join(tmp, "models.toml"),
              BISE_MODEL="%s/%s" % (pid, model), BEND_MODEL=legacy, BEND_REPL_PORT=str(port),

@@ -15,7 +15,7 @@ import sys
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(REPO, "scripts"))
-from bend_client import BendSession  # noqa: E402
+from bend_client import RUN_DIR, BendSession  # noqa: E402
 
 base = "/tmp/plugins-live-%d" % os.getpid()
 ws = os.path.join(base, "ws")
@@ -31,7 +31,7 @@ fails = []
 s = BendSession.fresh()
 try:
     port = s.ready["port"]
-    run = os.path.join(os.environ.get("BEND_RUN_DIR") or os.path.expanduser("~/.bend-harness/run"), str(port))
+    run = os.path.join(RUN_DIR, str(port))   # bend_client's own run dir, never the user's
     report = open(os.path.join(run, "plugins/report.txt")).read()
     print(report)
     if "hello-plugin v0.1.0 [loaded] workspace" not in report or "1 tool as tools.hello_plugin.*" not in report:

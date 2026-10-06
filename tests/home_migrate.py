@@ -43,8 +43,9 @@ def main():
     os.makedirs(os.path.join(home, ".bend-harness"))
     with open(os.path.join(home, ".bend-harness", "config.toml"), "w") as f:
         f.write('model = "zai-glm-5-3"\n')
-    base = {k: v for k, v in clean_env().items() if k not in PRIVATE}
-    base.update(HOME=home, MISTRAL_API_KEY="fake", SB_ONBOARDING="off",
+    # an own HOME: clean_env drops the caller's path overrides too
+    base = {k: v for k, v in clean_env(HOME=home).items() if k not in PRIVATE}
+    base.update(MISTRAL_API_KEY="fake", SB_ONBOARDING="off",
                 BEND_PROVIDER_URL="http://127.0.0.1:9/v1/chat/completions")
     old_env = dict(base, BISE_NO_MIGRATE="1")
     old_root = os.path.join(home, ".local", "state", "switchboard")

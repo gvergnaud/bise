@@ -356,6 +356,9 @@ t0=$SECONDS
 # waits for a state with tests/wait.py; the check proves itself first
 python3 "$root/tests/sleep_check.py" --self-test >/dev/null && python3 "$root/tests/sleep_check.py" >/dev/null \
   || { python3 "$root/tests/sleep_check.py"; echo "GATE quick FAILED"; exit 1; }
+# a test's env never keeps the caller's path overrides with an own HOME, and
+# its hub's BEND_RUN_DIR is under its tmp (tests/bise_env.py's self-test)
+python3 "$root/tests/bise_env.py" >/dev/null || { python3 "$root/tests/bise_env.py"; echo "GATE quick FAILED"; exit 1; }
 cache="${CARGO_TARGET_DIR:-$root/rust/target}/gate-cache"
 # the PROOF shards sit in a copy of bend/ in it and import it relatively
 # (bend refuses an absolute import path with a dot, like ~/.bise/gate/...)

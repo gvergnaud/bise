@@ -40,6 +40,9 @@ import time
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUN = os.path.join(REPO, "run.sh")
 SESSIONS_DIR = "/tmp/bend-sessions"
+# the session's side channels (plugins/ready, report, indexes, by port):
+# never the caller's $BEND_RUN_DIR, the user's ~/.bise/run
+RUN_DIR = "/tmp/bend-run"
 IDLE = "--- idle"
 DEFAULT_TIMEOUT = 900.0
 
@@ -80,6 +83,7 @@ class BendSession:
     def _start(cls, args, bg_after=None, timeout=600):
         env = dict(os.environ)
         env["BEND_SESSIONS_DIR"] = SESSIONS_DIR
+        env["BEND_RUN_DIR"] = RUN_DIR
         if bg_after is not None:
             env["BEND_BG_AFTER"] = str(bg_after)
         os.makedirs(SESSIONS_DIR, exist_ok=True)

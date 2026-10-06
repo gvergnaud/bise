@@ -29,19 +29,18 @@ import bise_env  # noqa: E402
 import scripted_ts  # noqa: E402  (EXE, jsrt_env, run_session)
 import wait  # noqa: E402
 
-# the calling agent's variables: bise's internal and test ones (its
-# tmp/bg and run/ too: its bg dir won over BEND_BG_ROOT)
-PRIVATE = bise_env.NOT_INHERITED
-
 
 # a process that holds 300 MB (touched pages), then sleeps 30 s
 HOG = "python3 -c 'import time; m=\"%s\"; a=[b\"x\"*(25<<20) for k in range(12)]; time.sleep(30)'"
 
 
 def clean_env(home):
-    env = {k: v for k, v in os.environ.items() if k not in PRIVATE}
-    env.update(HOME=home, XDG_STATE_HOME=os.path.join(home, "state"))
-    return env
+    # the calling agent's variables: bise's internal and test ones (its
+    # tmp/bg and run/ too: its bg dir won over BEND_BG_ROOT), and with an
+    # own HOME none of the caller's path overrides either (his
+    # BEND_RUN_DIR: the REPL reads it raw, its run/<port> landed in ~/.bise/run)
+    return bise_env.clean_env(HOME=home, XDG_STATE_HOME=os.path.join(home, "state"),
+                              BEND_RUN_DIR=os.path.join(home, "run"))
 
 
 def free_port():
