@@ -1,6 +1,6 @@
 # 13 · An interrupt should cut the running model call or tool, not wait for it
 
-Status: open. Owner: the Bend runtime (bend/runtime, repl-live), assigned by main.
+Status: done (on main at c4768dee). Owner: the Bend runtime (bend/runtime, repl-live), assigned by main.
 
 ## What happens
 
