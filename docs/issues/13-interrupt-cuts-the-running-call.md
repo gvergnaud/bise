@@ -40,3 +40,20 @@ The desktop bar asks for a stop under 1 s, and the TUI has the same wait. A stop
   turn that is not interrupted is unchanged; the session after an interrupt resumes normally on the
   next message (no half-written assistant message kept).
 - Plan to architect before code (it is the Bend runtime).
+
+## What was done (sb/interrupt, task `interrupt`)
+
+- The model attempt is raced against the flag (runtime/race.bend, a 100 ms ticker while a call is in
+  flight); a stop answers at once and the left-behind attempt closes its connection at its next
+  piece or quiet slice (the cancel file; vendor http `stream.poll`), so the provider stops charging.
+- The bash wrapper's poll loop reads the flag: TERM, then KILL, to the sync command's own process
+  group; a background handoff is never touched. Its result says who stopped it and is kept in the
+  history (the tool's own result before the interrupt); the batch's next calls never start.
+- Search, MCP calls and run_typescript's sleep are raced too (they cannot be killed: the result
+  says so). Edits and writes are not raced.
+- Measured (tests/interrupt_e2e.py, the flag write to `turn_done: interrupted`): model call with no
+  head 0.04-0.05 s, streaming model call 0.07-0.10 s, bash `sleep` 0.09-0.22 s (before: 7.3-7.9 s in
+  the TUI, 12.5 s in the desktop app).
+- Not covered: the wait for the response head inside `Http.open.with`. The turn still ends at once,
+  but the left-behind connection closes only when the head arrives (a streamed reply sends its head
+  before it generates, so no output is paid for meanwhile).

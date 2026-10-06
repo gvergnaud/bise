@@ -13,7 +13,9 @@ A) a model call that has not answered yet ([[slow: 20]]: nothing for
 B) a model call that streams for a long time ([[drip: 100 0.2]]): the
    turn ends AND the connection closes, so the provider stops
    generating (the fake logs how many pings went out before the client
-   hung up: no more tokens are paid);
+   hung up: no more tokens are paid); B') a reply paused 0.5 s inside
+   an event (longer than the reader's 200 ms quiet slice) arrives byte
+   for byte;
 C) a bash `sleep` (a background job started in an earlier turn survives:
    only the sync command's own process group is stopped); the sleep is
    gone, the call's one tool result says who stopped it, the batch's next
@@ -22,7 +24,7 @@ D) the next message gets its answer (the session resumes, no half
    message), and a restart on the checkpoint (BEND_CONTINUE) keeps the
    one tool result.
 """
-import json, os, socket, subprocess, sys, tempfile, time
+import hashlib, json, os, socket, subprocess, sys, tempfile, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
@@ -62,11 +64,13 @@ def main():
     port = s.getsockname()[1]
     s.close()
     session = os.path.join(tmp, "session.txt")
+    dump = os.path.join(tmp, "wire-dump")
     env = {k: v for k, v in os.environ.items() if not k.startswith(("BEND_", "SB_", "BISE_"))}
     env.update(HOME=tmp, XDG_STATE_HOME=os.path.join(tmp, "state"), BISE_MODELS_FILE=models, BEND_CONFIG=cfg,
                BEND_REPL_PORT=str(port), BEND_SESSION_FILE=session, BEND_WIRE_LOG=os.path.join(tmp, "wire.log"),
                BEND_MCP_INDEX=os.path.join(tmp, "mcp.txt"), BEND_SKILLS_INDEX=os.path.join(tmp, "sk.txt"),
-               BEND_BG_ROOT=os.path.join(tmp, "bg"), BEND_BG_AFTER="3", SB_AGENT="probe", TMPDIR=tmp)
+               BEND_BG_ROOT=os.path.join(tmp, "bg"), BEND_BG_AFTER="3", SB_AGENT="probe", TMPDIR=tmp,
+               BEND_WIRE_DUMP=dump)
     log, err = os.path.join(tmp, "repl.log"), os.path.join(tmp, "repl.err")
     flag = os.path.join(tmp, "bend-interrupt-%d.txt" % port)
     procs = []
@@ -137,6 +141,22 @@ def main():
         rec = wait.until(drip_rec, 10, "the fake's log line of the dripped request")
         check(rec["drip_cut"] and rec["drip_sent"] < 30,
               "B the client hung up after %d of 100 pings: the provider stopped generating" % rec["drip_sent"])
+
+        # B') a stream that pauses mid-event longer than the reader's quiet
+        # slice (200 ms): every byte still comes through (the wire dump of
+        # the reply is the fake's body, byte for byte)
+        n0 = len(open(F.LOG).read().splitlines())
+        out, _ = turn("[[split: 0.5]] a reply in two halves")
+
+        def split_rec():
+            for l in open(F.LOG).read().splitlines()[n0:]:
+                r = json.loads(l)
+                if r.get("split_sha"):
+                    return r
+        rec = wait.until(split_rec, 10, "the fake's log line of the split reply")
+        got = hashlib.sha256(open(dump + ".reply", "rb").read()).hexdigest()
+        check(got == rec["split_sha"] and any("ack:" in l and "two halves" in l for l in out),
+              "B' a reply paused 0.5 s inside an event arrives byte for byte")
 
         # C) a background job from an earlier turn, then a long sync bash
         out, _ = turn("[[bash: sleep 41.25]]")

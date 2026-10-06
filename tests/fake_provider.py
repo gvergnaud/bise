@@ -42,6 +42,10 @@ the injected <bise_state> block is not one):
   out (`drip_sent`) and whether the client hung up first (`drip_cut`):
   a stop must close the connection, so the provider stops generating
   (issue 13);
+- `[[split: S]]` (streamed Anthropic only): the whole streamed body cut
+  in two in the middle (inside an event), S seconds between the halves;
+  the log line has its sha256 (`split_sha`): the client must read it
+  byte for byte across a pause longer than its quiet slice (issue 13);
 - `[[fixture: NAME]]`: the first request for that message is answered
   with the recorded file tests/providers/<family>/NAME.sse (streamed) or
   NAME.json (whole), or NAME.<status>.json (an error with that status),
@@ -93,6 +97,7 @@ ERROR = re.compile(r"\[\[error: (\w+)(?: x(\d+))?(?: retry=(\d+))?\]\]")
 FIXTURE = re.compile(r"\[\[fixture: ([\w.-]+)\]\]")
 SLOW = re.compile(r"\[\[slow: ([\d.]+)\]\]")
 DRIP = re.compile(r"\[\[drip: (\d+) ([\d.]+)\]\]")
+SPLIT = re.compile(r"\[\[split: ([\d.]+)\]\]")
 PLAN = re.compile(r"\[\[plan: ([\w-]+)(?: x(\d+))?\]\]")
 USAGE = {"input": 10, "cached": 2, "output": 5, "reasoning": 3}
 
@@ -726,6 +731,26 @@ class H(http.server.BaseHTTPRequestHandler):
             return sent, True
         return sent, False
 
+    def send_sse_split(self, data_chunks, gap):
+        """[[split: S]]: the body in two writes, cut mid-event, S s apart;
+        its sha256."""
+        crlf = bytes([13, 10])
+        body = b"".join(c for c in data_chunks if c)
+        half = len(body) // 2
+        self.send_response(200)
+        self.send_header("content-type", "text/event-stream")
+        self.send_header("transfer-encoding", "chunked")
+        self.send_header("connection", "close")
+        self.end_headers()
+        self.close_connection = True
+        for i, part in enumerate((body[:half], body[half:])):
+            if i:
+                time.sleep(gap)
+            self.wfile.write(b"%x" % len(part) + crlf + part + crlf)
+            self.wfile.flush()
+        self.wfile.write(b"0" + crlf + crlf)
+        return hashlib.sha256(body).hexdigest()
+
     def stt(self, raw):
         """BISE-298: speech to text (a recording, the voice key check).
         The key's word picks the answer: "bad" 401, "broke" 402 (until
@@ -855,6 +880,8 @@ class H(http.server.BaseHTTPRequestHandler):
             time.sleep(float(slow.group(1)))
         drip = DRIP.search(script_of(conv[idx]["text"])) if idx is not None else None
         self.drip = None
+        split = SPLIT.search(script_of(conv[idx]["text"])) if idx is not None else None
+        self.split = None
         model = body.get("model") or self.path.split("/models/")[-1].split(":")[0] or "fake"
         status = 200
         fail = plan_fail(script_of(conv[idx]["text"]) if idx is not None else "", seen) if plan else None
@@ -885,6 +912,9 @@ class H(http.server.BaseHTTPRequestHandler):
             out = render(family, turn, model, stream, body, mid)
             if not stream:
                 self.send(200, json.dumps(out).encode())
+            elif sse and split and family == "anthropic":
+                self.split = self.send_sse_split([sse_bytes(family, [e]) for e in out],
+                                                 float(split.group(1)))
             elif sse and drip and family == "anthropic":
                 self.drip = self.send_sse_drip([sse_bytes(family, [e]) for e in out],
                                                int(drip.group(1)), float(drip.group(2)))
@@ -911,6 +941,7 @@ class H(http.server.BaseHTTPRequestHandler):
                                 # [[drip: N S]]: pings sent, and whether the client hung up first
                                 "drip_sent": self.drip[0] if self.drip else None,
                                 "drip_cut": self.drip[1] if self.drip else None,
+                                "split_sha": self.split,
                                 "error": turn["error"], "fixture": turn["fixture"],
                                 # BISE-135: the model and effort the call asked for
                                 "model": model, "effort": effort_of(body),
