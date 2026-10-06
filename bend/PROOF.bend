@@ -808,6 +808,9 @@ def Laws.chunk_lines_empty():
 def Laws.interrupt_path_is_per_port():
   {==}
 
+def Laws.bash_stop_cuts_its_own_group():
+  {==}
+
 def Laws.say_multiline_unescapes():
   {==}
 

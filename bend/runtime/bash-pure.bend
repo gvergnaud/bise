@@ -420,9 +420,27 @@ def bg_wrap.seg(+a: String, +b: String) -> String:
 def bg_wrap.echo(+line: String, +rest: String) -> String:
   bg_wrap.seg(String.append("    printf '%s\\n' \"", String.append(line, "\"")), rest)
 
-def bg_wrap(+command: String, +bg: String, +after: U32) -> String:
+# ---- a stop cuts the sync command (issue 13) ----
+# The poll loop reads the REPL's interrupt flag ($IF: the hub writes who
+# asked; a cleared flag is an empty file, so the test is a builtin until
+# a stop comes). A set flag stops the SYNC command only: TERM to its own
+# process group (-$C, the pid the runner wrote), up to 0.5 s for it to
+# go, then KILL; the loop ends and the result is the output so far, then
+# a line naming who stopped it, exit 130. A background handoff is never
+# touched: its wrapper has exited, nothing polls the flag for it. The
+# flag stays for the turn's boundary drain (runtime/drain.bend), which
+# ends the turn.
+def bg_stop_check() -> String:
+  "  if [ -s \"$IF\" ] && [ -s $BG/$i.pid ] && grep -q '[^[:space:]]' \"$IF\" 2>/dev/null; then x=$(tr -d '\\n\\r' < \"$IF\"); case \"$x\" in \"\"|1|user) x=\"the user\";; esac; C=$(cat $BG/$i.pid 2>/dev/null); kill -TERM -$C 2>/dev/null; n=0; while kill -0 -$C 2>/dev/null && [ $n -lt 5 ]; do sleep 0.1; n=$((n+1)); done; kill -KILL -$C 2>/dev/null; break; fi"
+
+def bg_stop_note() -> String:
+  "if [ -n \"$x\" ]; then echo \"[bash: interrupted by $x: the command was stopped (TERM to its process group, then KILL); its output so far is above. Check what it changed before you run it again]\"; s=130; fi"
+
+# ipath: the REPL's interrupt flag (provider-pure interrupt_path_of)
+def bg_wrap(+command: String, +bg: String, +after: U32, +ipath: String) -> String:
   +sent = bg_sentinel(command)
   bg_wrap.seg(String.append("BG=", bg),
+  bg_wrap.seg(String.append("IF=", ipath),
   bg_wrap.seg(bg_unset_private(),
   bg_wrap.seg("mkdir -p $BG",
   bg_wrap.seg("i=0",
@@ -449,9 +467,11 @@ def bg_wrap(+command: String, +bg: String, +after: U32) -> String:
   bg_wrap.seg(bg_timer(after),
   bg_wrap.seg(bg_timer_trap(),
   bg_wrap.seg("e=0",
+  bg_wrap.seg("x=",
   bg_wrap.seg("while kill -0 $r 2>/dev/null; do",
   bg_wrap.seg("  if [ $e -lt 5 ]; then sleep 0.02; else sleep 0.1; fi",
   bg_wrap.seg("  e=$((e+1))",
+  bg_wrap.seg(bg_stop_check(),
   bg_wrap.seg("  if ! kill -0 $t 2>/dev/null; then",
   bg_wrap.seg(String.append("    printf '%s\\n' \"",
     String.append(HANDOFF_MARKER(), "\"")),
@@ -474,10 +494,11 @@ def bg_wrap(+command: String, +bg: String, +after: U32) -> String:
   bg_wrap.seg(bg_cat_out(bg),
   bg_wrap.seg(bg_write_note("! -s", bg, ".rc",
     " (disk full?) - the output above may be incomplete"),
+  bg_wrap.seg(bg_stop_note(),
   bg_wrap.seg("rm -f $BG/$i.in $BG/$i.out $BG/$i.pid $BG/$i.cmd $BG/$i.rc 2>/dev/null",
   bg_wrap.seg("rmdir $BG/$i.slot 2>/dev/null",
   bg_wrap.seg("rm -f \"$0\"",
-  "exit $s"))))))))))))))))))))))))))))))))))))))))))))))
+  "exit $s"))))))))))))))))))))))))))))))))))))))))))))))))))
 
 # ---- the sandbox (approvals-sandbox, approvals-design.md §6) ----
 # In auto on macOS the hub's allow line carries flags: "sandbox" runs the

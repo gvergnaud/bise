@@ -175,6 +175,20 @@ law interrupt_path_is_per_port:
   {Pv.interrupt_path_of("/h/agents/a/run", "7702")
     == "/h/agents/a/run/bend-interrupt-7702.txt" : String}
 
+# ---- a stop cuts the running call (issue 13) ----
+
+# LAW: the bash wrapper reads the flag in its poll loop and stops only
+# the sync command's own group (-$C), TERM before KILL; never the
+# runner or the wrapper (a background handoff has no poll loop left).
+law bash_stop_cuts_its_own_group:
+  {Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), "IF=/i"),
+   Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), Sh.bg_stop_check()),
+   Bool.and(String.contains(Sh.bg_stop_check(), "kill -TERM -$C"),
+   Bool.and(String.contains(Sh.bg_stop_check(), "kill -KILL -$C"),
+   Bool.and(Bool.not(String.contains(Sh.bg_stop_check(), "kill -TERM $r")),
+     String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), Sh.bg_stop_note()))))))
+    == True{} : Bool}
+
 # ---- multi-line tool args on the wire ----
 
 # LAW: the wire arg encoding is reversible on newlines - tool args are
@@ -1717,8 +1731,9 @@ law mcp_bootstrap_url_parity:
 
 # LAW: the wrapper script, byte for byte.
 law bg_wrapper_script:
-  {Sh.bg_wrap("whoami", "/tmp/bend-bg-0", 30)
+  {Sh.bg_wrap("whoami", "/tmp/bend-bg-0", 30, "/i")
     == "BG=/tmp/bend-bg-0
+IF=/i
 unset BEND_SESSION_FILE BEND_CONTEXT_FILE BEND_WIRE_LOG BEND_REPL_PORT BEND_EXTRA_PROMPT BEND_CONTINUE BEND_CRASH_NOTE BEND_DEBUG_DIR
 mkdir -p $BG
 i=0
@@ -1739,9 +1754,11 @@ r=$!
 sleep 30 >/dev/null 2>&1 </dev/null 9<&- & t=$!
 trap 'kill $t 2>/dev/null; exit 143' HUP INT TERM
 e=0
+x=
 while kill -0 $r 2>/dev/null; do
   if [ $e -lt 5 ]; then sleep 0.02; else sleep 0.1; fi
   e=$((e+1))
+  if [ -s \"$IF\" ] && [ -s $BG/$i.pid ] && grep -q '[^[:space:]]' \"$IF\" 2>/dev/null; then x=$(tr -d '\\n\\r' < \"$IF\"); case \"$x\" in \"\"|1|user) x=\"the user\";; esac; C=$(cat $BG/$i.pid 2>/dev/null); kill -TERM -$C 2>/dev/null; n=0; while kill -0 -$C 2>/dev/null && [ $n -lt 5 ]; do sleep 0.1; n=$((n+1)); done; kill -KILL -$C 2>/dev/null; break; fi
   if ! kill -0 $t 2>/dev/null; then
     printf '%s\\n' \"BEND-BG-HANDOFF-6f2c9e5b\"
     printf '%s\\n' \"background: still running after 30s - id $i (dir /tmp/bend-bg-0)\"
@@ -1761,6 +1778,7 @@ if [ ! -d /tmp/bend-bg-0 ]; then echo \"background: the bg dir vanished before t
 if [ ! -f /tmp/bend-bg-0/$i.out ]; then echo \"background: could not write /tmp/bend-bg-0/$i.out (disk full?)\"; fi
 n=$(wc -c < $BG/$i.out 2>/dev/null); n=$((${n:-0}+0)); if [ $n -gt 1048576 ]; then echo \"[bash: the output is $n bytes; only its first 1048576 follow. The rest is lost: redirect a big output to a file and read it in parts]\"; head -c 1048576 $BG/$i.out; echo; else cat $BG/$i.out 2>/dev/null; fi
 if [ ! -s /tmp/bend-bg-0/$i.rc ]; then echo \"background: could not write /tmp/bend-bg-0/$i.rc (disk full?) - the output above may be incomplete\"; fi
+if [ -n \"$x\" ]; then echo \"[bash: interrupted by $x: the command was stopped (TERM to its process group, then KILL); its output so far is above. Check what it changed before you run it again]\"; s=130; fi
 rm -f $BG/$i.in $BG/$i.out $BG/$i.pid $BG/$i.cmd $BG/$i.rc 2>/dev/null
 rmdir $BG/$i.slot 2>/dev/null
 rm -f \"$0\"
@@ -1861,19 +1879,19 @@ law bg_slot_paths:
 # a sync end and by the trap when the wrapper is stopped. The poll
 # still probes fast first (5 x 20 ms), then 100 ms steps.
 law bg_wrapper_window_is_a_clock:
-  {Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5),
+  {Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5, "/i"),
        "r=$!
 sleep 5 >/dev/null 2>&1 </dev/null 9<&- & t=$!
 trap 'kill $t 2>/dev/null; exit 143' HUP INT TERM
 "),
-   Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5), "  if ! kill -0 $t 2>/dev/null; then"),
-   Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5),
+   Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), "  if ! kill -0 $t 2>/dev/null; then"),
+   Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5, "/i"),
        "done
 kill $t 2>/dev/null; wait $t 2>/dev/null
 wait $r"),
-   Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5),
+   Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5, "/i"),
        "  if [ $e -lt 5 ]; then sleep 0.02; else sleep 0.1; fi"),
-     Bool.not(String.contains(Sh.bg_wrap("x", "/d", 5), "if [ $e -ge "))))))
+     Bool.not(String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), "if [ $e -ge "))))))
     == True{} : Bool}
 
 # LAW: the headline names the window, the slot id and the dir — the
@@ -1916,25 +1934,25 @@ law bg_kill_cmd_concrete:
 # hung 19 minutes.
 law bg_wrapper_waits_on_runner:
   {Bool.and(
-     Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5), "fi; exit $R ) >/dev/null 2>&1 &
+     Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), "fi; exit $R ) >/dev/null 2>&1 &
 r=$!"),
-       String.contains(Sh.bg_wrap("x", "/d", 5), "while kill -0 $r 2>/dev/null; do")),
-     Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5), "wait $r
+       String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), "while kill -0 $r 2>/dev/null; do")),
+     Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), "wait $r
 s=$?"),
-       Bool.not(String.contains(Sh.bg_wrap("x", "/d", 5), "while [ ! -e $BG/$i.rc ]"))))
+       Bool.not(String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), "while [ ! -e $BG/$i.rc ]"))))
     == True{} : Bool}
 
 # LAW: a slot file the runner could not write is named to the model —
 # the call returns, and says why a file is missing.
 law bg_wrapper_reports_unwritable_files:
   {Bool.and(
-     String.contains(Sh.bg_wrap("x", "/d", 5), Sh.bg_write_note("! -f", "/d", ".out", " (disk full?)")),
-     Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5), "could not write /d/$i.rc (disk full?)"),
-       String.contains(Sh.bg_wrap("x", "/d", 5), Sh.bg_cmd_fail("/d"))))
+     String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), Sh.bg_write_note("! -f", "/d", ".out", " (disk full?)")),
+     Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), "could not write /d/$i.rc (disk full?)"),
+       String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), Sh.bg_cmd_fail("/d"))))
     == True{} : Bool}
 
 law bg_wrapper_fifo_rdrw:
-  {String.contains(Sh.bg_wrap("x", "/d", 5), "exec 9<>$BG/$i.in")
+  {String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), "exec 9<>$BG/$i.in")
     == True{} : Bool}
 
 # LAW (issue #9): the command's stdin is /dev/null, never the fifo: a
@@ -1942,9 +1960,9 @@ law bg_wrapper_fifo_rdrw:
 # once instead of waiting out the sync window. The fifo is reached by
 # name only ($BEND_STDIN), and the command does not inherit fd 9.
 law bg_wrapper_stdin_devnull:
-  {Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5),
+  {Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5, "/i"),
        "( BEND_STDIN=$BG/$i.in /bin/sh $BG/$i.cmd ) > $BG/$i.out 2>&1 </dev/null 9<&- &"),
-     Bool.not(String.contains(Sh.bg_wrap("x", "/d", 5), "<&9")))
+     Bool.not(String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), "<&9")))
     == True{} : Bool}
 
 # LAW: a detached runner is the command's real parent and records the
@@ -1953,10 +1971,10 @@ law bg_wrapper_stdin_devnull:
 # still owns the slot.
 law bg_wrapper_runner_waits_and_records:
   {Bool.and(
-     String.contains(Sh.bg_wrap("x", "/d", 5),
+     String.contains(Sh.bg_wrap("x", "/d", 5, "/i"),
        "C=$!; set +m; echo $C > $BG/$i.pid; "),
-   Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5), " & fi; wait $C; R=$?"),
-     String.contains(Sh.bg_wrap("x", "/d", 5), "echo $R > $BG/$i.rc")))
+   Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), " & fi; wait $C; R=$?"),
+     String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), "echo $R > $BG/$i.rc")))
     == True{} : Bool}
 
 # LAW: output goes to a FILE, never a pipe — the orphan-holding-pipe
@@ -1964,9 +1982,9 @@ law bg_wrapper_runner_waits_and_records:
 # the wrapper is the memory watchdog's own ps | awk, read by $( ) inside
 # the watchdog: no command output goes through it.
 law bg_wrapper_output_is_a_file:
-  {Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5), " /bin/sh $BG/$i.cmd ) > $BG/$i.out 2>&1"),
+  {Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), " /bin/sh $BG/$i.cmd ) > $BG/$i.out 2>&1"),
    Bool.and(String.contains(Sh.bg_mem_watch(), "k=$(ps -axo pgid=,pid=,rss=,ucomm= 2>/dev/null | awk "),
-     Bool.not(String.contains(Sh.bg_wrap("x", "/d", 5), ".cmd ) |"))))
+     Bool.not(String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), ".cmd ) |"))))
     == True{} : Bool}
 
 # LAW: the wrapper NEVER kills the command — ending a background
@@ -1974,8 +1992,8 @@ law bg_wrapper_output_is_a_file:
 # memory watchdog kills the command's process group (kill -9 -$C) once
 # one of its processes is over the limit; no other kill -9 exists.
 law bg_wrapper_never_kills:
-  {Bool.and(Bool.not(String.contains(Sh.bg_wrap("x", "/d", 5), "kill $c")),
-     Bool.and(Bool.not(String.contains(Sh.bg_wrap("x", "/d", 5), "kill -9 $")),
+  {Bool.and(Bool.not(String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), "kill $c")),
+     Bool.and(Bool.not(String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), "kill -9 $")),
        String.contains(Sh.bg_mem_watch(), "$3>l {print")))
     == True{} : Bool}
 
@@ -1997,11 +2015,11 @@ law bg_wrapper_watches_memory:
 # fifo are removed by the runner; out and rc stay readable) — the bg
 # dir cannot grow without bound and slots are recycled.
 law bg_wrapper_runner_frees_slot:
-  {String.contains(Sh.bg_wrap("x", "/d", 5),
+  {String.contains(Sh.bg_wrap("x", "/d", 5, "/i"),
      "rm -f $BG/$i.pid $BG/$i.cmd $BG/$i.in") == True{} : Bool}
 
 law bg_wrapper_cleans_slot:
-  {String.contains(Sh.bg_wrap("x", "/d", 5),
+  {String.contains(Sh.bg_wrap("x", "/d", 5, "/i"),
      "rm -f $BG/$i.in $BG/$i.out $BG/$i.pid $BG/$i.cmd $BG/$i.rc")
     == True{} : Bool}
 
@@ -2010,9 +2028,9 @@ law bg_wrapper_cleans_slot:
 # command that really exits 199 still reports 199.
 law bg_wrapper_handoff_marker:
   {Bool.and(
-     String.contains(Sh.bg_wrap("x", "/d", 5),
+     String.contains(Sh.bg_wrap("x", "/d", 5, "/i"),
        String.append("printf '%s\\n' \"", Sh.HANDOFF_MARKER())),
-     Bool.not(String.contains(Sh.bg_wrap("x", "/d", 5), "exit 199")))
+     Bool.not(String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), "exit 199")))
     == True{} : Bool}
 
 # LAW: the wrapper carries a vanished-dir guard — an agent that cleans
@@ -2033,10 +2051,10 @@ law bg_rc_guard_names_the_dir:
 # loop retried forever).
 law bg_wrapper_atomic_slot_allocation:
   {Bool.and(
-     String.contains(Sh.bg_wrap("x", "/d", 5),
+     String.contains(Sh.bg_wrap("x", "/d", 5, "/i"),
        "|| ! mkdir $BG/$i.slot 2>/dev/null; do
   if [ -e $BG/$i.slot ] || [ -e $BG/$i.out ] || [ -e $BG/$i.rc ]; then i=$((i+1)); else f=$((f+1)); fi"),
-     String.contains(Sh.bg_wrap("x", "/d", 5), Sh.bg_slot_fail("/d")))
+     String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), Sh.bg_slot_fail("/d")))
     == True{} : Bool}
 
 # LAW: a slot that still holds a finished job's results (.out, .rc) is
@@ -2054,14 +2072,14 @@ law bg_wrapper_keeps_finished_results:
 law bg_wrapper_output_back_bounded:
   {Bool.and(String.eq(Sh.bg_out_max(), "1048576"),
      Bool.and(String.contains(Sh.bg_cat_out("/d"), "head -c 1048576 $BG/$i.out"),
-       String.contains(Sh.bg_wrap("x", "/d", 5), Sh.bg_cat_out("/d"))))
+       String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), Sh.bg_cat_out("/d"))))
     == True{} : Bool}
 
 # LAW: the command never inherits the REPL's private environment (its
 # session file, wire log, context file, port): a REPL started from an
 # agent's shell wrote its turns into the live agent's wire log.
 law bg_wrapper_unsets_repl_env:
-  {Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5),
+  {Bool.and(String.contains(Sh.bg_wrap("x", "/d", 5, "/i"),
        "
 unset BEND_SESSION_FILE BEND_CONTEXT_FILE BEND_WIRE_LOG BEND_REPL_PORT "),
      Bool.not(String.contains(Sh.bg_unset_private(), "SB_SOCKET")))
@@ -2071,21 +2089,21 @@ unset BEND_SESSION_FILE BEND_CONTEXT_FILE BEND_WIRE_LOG BEND_REPL_PORT "),
 # 50MiB) — an output-looping background command dies at the cap
 # instead of filling the disk (once: a 6.4GB .out).
 law bg_wrapper_output_capped:
-  {String.contains(Sh.bg_wrap("x", "/d", 5), "( ulimit -f 102400; set -m; ( ")
+  {String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), "( ulimit -f 102400; set -m; ( ")
     == True{} : Bool}
 
 # LAW: the runner checks it still OWNS the slot before writing the rc
 # and freeing the files — a recycled slot cannot be corrupted by the
 # previous command's dying runner.
 law bg_wrapper_runner_ownership_check:
-  {String.contains(Sh.bg_wrap("x", "/d", 5),
+  {String.contains(Sh.bg_wrap("x", "/d", 5, "/i"),
      "if [ \"$(cat $BG/$i.pid 2>/dev/null)\" = \"$C\" ]; then") == True{}
     : Bool}
 
 # LAW: both exit paths delete the wrapper script ($0) — no more
 # +1 leaked script per bash call (the byte law pins both occurrences).
 law bg_wrapper_cleans_its_script:
-  {String.contains(Sh.bg_wrap("x", "/d", 5), "rm -f \"$0\"") == True{}
+  {String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), "rm -f \"$0\"") == True{}
     : Bool}
 
 # LAW: multi-line commands stay intact — the heredoc and the runner
@@ -2093,8 +2111,8 @@ law bg_wrapper_cleans_its_script:
 # with spaces, restructuring scripts).
 law bg_wrapper_multiline_command_intact:
   {Bool.and(
-     String.contains(Sh.bg_wrap("echo a\necho b", "/d", 5), "echo a\necho b"),
-     Bool.not(String.contains(Sh.bg_wrap("echo a\necho b", "/d", 5),
+     String.contains(Sh.bg_wrap("echo a\necho b", "/d", 5, "/i"), "echo a\necho b"),
+     Bool.not(String.contains(Sh.bg_wrap("echo a\necho b", "/d", 5, "/i"),
        "echo a echo b"))) == True{} : Bool}
 
 # LAW: the .cmd heredoc sentinel derives from the command's own hash —
@@ -2107,7 +2125,7 @@ law bg_sentinel_derives_from_command:
        Sh.bg_sentinel("whoamiX")))) == True{} : Bool}
 
 law bg_wrapper_has_the_guard:
-  {String.contains(Sh.bg_wrap("x", "/d", 5), Sh.bg_rc_guard("/d"))
+  {String.contains(Sh.bg_wrap("x", "/d", 5, "/i"), Sh.bg_rc_guard("/d"))
     == True{} : Bool}
 
 # LAW: the wrapper filename derives from the script's own content:

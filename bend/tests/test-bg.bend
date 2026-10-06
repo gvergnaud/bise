@@ -275,7 +275,7 @@ job-done"),
     x23 : String <- Proc.run(Con{"/bin/chmod", Con{"+x", Con{"/tmp/bgtest/shim/sleep", Nil{}}}})
     s23 : Unit <- P.write_file("/tmp/bgtest/w23.sh", String.append("PATH=/tmp/bgtest/shim:$PATH
 ",
-      Shp.bg_wrap("/bin/sleep 4; echo came-back-whole", "/tmp/bgtest/clock", 2)))
+      Shp.bg_wrap("/bin/sleep 4; echo came-back-whole", "/tmp/bgtest/clock", 2, "/tmp/bgtest/no-flag")))
     +o23 : String <- Proc.run(Con{"/bin/sh", Con{"/tmp/bgtest/w23.sh", Nil{}}})
     u23 : Unit <- check(Bool.and(String.contains(o23, "still running after 2s"),
         Bool.not(String.contains(o23, "came-back-whole"))),
@@ -287,7 +287,7 @@ job-done"),
     # argv); the trap kills the `sleep 37` and the wrapper exits 143.
     # Without the trap the timer lives on.
     s24 : Unit <- P.write_file("/tmp/bgtest/w24.sh",
-      Shp.bg_wrap("/bin/sleep 3; echo late", "/tmp/bgtest/clock", 37))
+      Shp.bg_wrap("/bin/sleep 3; echo late", "/tmp/bgtest/clock", 37, "/tmp/bgtest/no-flag"))
     +o24 : String <- Proc.run(Con{"/bin/sh", Con{"-c",
       Con{"/bin/sh /tmp/bgtest/w24.sh > /dev/null & w=$!; /bin/sleep 1; kill -TERM $w; wait $w; echo rc:$?; /bin/sleep 0.3; pgrep -fx 'sleep 37' || echo no-timer-left",
         Nil{}}}})

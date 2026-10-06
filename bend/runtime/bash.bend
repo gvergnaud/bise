@@ -13,6 +13,7 @@ import ./mcp.bend as Mcp
 import ./proc.bend as Proc
 import ./settings.bend as St
 import ./bash-pure.bend as Shp
+import ./provider-pure.bend as Pvp
 def bg_after.env(+envv: String, +dflt: U32) -> U32:
   Shp.bg_after.read(U32.read(envv), dflt)
 
@@ -62,10 +63,11 @@ def bash_exec_as(command: String, +flags: String) -> IO(Xp.ExecRes):
     # subshell both accept multi-line commands (flatten silently
     # restructured them)
     wr : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_WORKDIR")
+    +side : String <- P.side_dir()
+    # the interrupt flag: a stop cuts the sync command (Shp.bg_stop_check)
     +script : String <- IO.pure(String,
       Shp.bg_wrap(Shp.with_workdir(P.env_or(wr, ""), String.trim(command)),
-        bg, secs))
-    +side : String <- P.side_dir()
+        bg, secs, Pvp.interrupt_path_of(side, port)))
     +path : String <- IO.pure(String, Shp.bash_script_path(side, port, script))
     w : Unit <- P.write_file(path, script)
     out : String <- Proc.run(Shp.sh_argv(Shp.sandbox_profile(side, flags), path))
