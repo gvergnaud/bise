@@ -63,7 +63,7 @@ fn bise_home_moves_everything() {
     assert_eq!(h.drafts_dir(), p("/b/drafts"));
     assert_eq!(h.versions_dir(), p("/b/dev/versions"));
     assert_eq!(h.build_dir(), p("/b/dev/build"));
-    for pref in [Pref::Voice, Pref::Theme, Pref::Hints, Pref::Tip, Pref::Onboarded, Pref::Setup] {
+    for pref in [Pref::Voice, Pref::Theme, Pref::Hints, Pref::Tip, Pref::Onboarded, Pref::Setup, Pref::ExcludedApps] {
         assert_eq!(h.pref(pref), Slot::key("/b/prefs.json", pref.key()));
     }
 }
@@ -432,4 +432,59 @@ fn the_tests_run_on_a_temp_home() {
     let h = Home::from_env();
     assert!(h.config_file().starts_with(std::env::temp_dir()), "{:?}", h.config_file());
     assert!(crate::test_home::is_place_var("BEND_SKILLS_INDEX") && !crate::test_home::is_place_var("PATH"));
+}
+
+#[test]
+fn excluded_apps_start_from_the_seed_and_then_are_his() {
+    let d = tmp("excluded");
+    let h = Home::at(&d);
+    let slot = h.pref(Pref::ExcludedApps);
+    assert_eq!(slot, Slot::key(h.prefs_file(), "excluded_apps"));
+    let seed = prefs::excluded_apps(slot.get());
+    assert!(seed.contains(&"com.1password.1password".to_string()) && seed.contains(&"com.apple.MobileSMS".to_string()));
+    slot.set(serde_json::json!(["com.apple.MobileSMS", "com.example.bank"])).unwrap();
+    assert_eq!(prefs::excluded_apps(slot.get()), vec!["com.apple.MobileSMS", "com.example.bank"]);
+    slot.set(serde_json::json!([])).unwrap();
+    assert!(prefs::excluded_apps(slot.get()).is_empty(), "he cleared it: nothing excluded, not the seed again");
+}
+
+#[test]
+fn the_window_sets_known_prefs_by_dotted_key_and_keeps_their_types() {
+    use serde_json::json;
+    let o = json!({"theme": "dark", "quiet": {"call": true, "batch_min": 20}});
+    let v = prefs::set_dotted(&o, "quiet.call", json!(false)).unwrap();
+    assert_eq!(v, json!({"theme": "dark", "quiet": {"call": false, "batch_min": 20}}));
+    assert_eq!(prefs::set_dotted(&o, "context.url", json!(true)).unwrap()["context"], json!({"url": true}));
+    assert_eq!(prefs::set_dotted(&json!({"voice": "old"}), "voice.fn_hold", json!(true)).unwrap()["voice"], json!({"fn_hold": true}));
+    assert_eq!(prefs::set_dotted(&o, "quiet.call", Value::Null).unwrap()["quiet"], json!({"batch_min": 20}), "null takes it out");
+    assert!(prefs::set_dotted(&o, "hints", json!({})).is_err(), "never hints whole");
+    // S36: a one-time hint marked seen, the TUI's key in the same object
+    let h = prefs::set_dotted(&json!({"hints": {"first_agent": true}}), "hints.first_card", json!(true)).unwrap();
+    assert_eq!(h["hints"], json!({"first_agent": true, "first_card": true}));
+    for name in prefs::WINDOW_HINTS {
+        assert!(prefs::set_dotted(&o, &format!("hints.{name}"), json!(true)).is_ok(), "{name}");
+    }
+    assert!(prefs::set_dotted(&o, "hints.first_card", json!(false)).is_err(), "never unseen by the window");
+    assert!(prefs::set_dotted(&o, "hints.first_card", Value::Null).is_err(), "never taken out");
+    assert!(prefs::set_dotted(&o, "hints.first_card", json!("yes")).is_err());
+    assert!(prefs::set_dotted(&o, "hints.other", json!(true)).is_err(), "only the TUI's hints");
+    assert!(prefs::set_dotted(&o, "hints.first_card.x", json!(true)).is_err());
+    assert!(prefs::set_dotted(&o, "setup.asked", json!(true)).is_err());
+    assert!(prefs::set_dotted(&o, "quiet..call", json!(true)).is_err());
+    assert!(prefs::set_dotted(&o, "shots_keep_days", json!("7")).is_err(), "a number stays a number");
+    assert!(prefs::set_dotted(&o, "excluded_apps", json!(["a", 1])).is_err());
+    assert!(prefs::set_dotted(&o, "onboarded", json!("yes")).is_err());
+    assert!(prefs::set_dotted(&o, "theme", json!("purple")).is_err());
+    assert!(prefs::set_dotted(&o, "shots_keep_days.x", json!(1)).is_err());
+    assert_eq!(prefs::set_dotted(&o, "shots_keep_days", json!(14)).unwrap()["shots_keep_days"], json!(14));
+    let w = prefs::for_window(Some(json!({"theme": "dark"})));
+    assert_eq!(w["theme"], json!("dark"));
+    assert!(w["excluded_apps"].as_array().is_some_and(|a| a.contains(&json!("com.apple.MobileSMS"))), "the seed, resolved");
+    assert_eq!(prefs::for_window(Some(json!({"excluded_apps": []})))["excluded_apps"], json!([]));
+    assert_eq!(prefs::for_window(None)["onboarded"], json!(false), "a fresh home: not onboarded");
+    assert_eq!(prefs::for_window(Some(json!({"onboarded": true})))["onboarded"], json!(true));
+    // the seed's names ride along, one table for the window; never a key it sets
+    assert_eq!(w["app_names"]["com.apple.MobileSMS"], json!("Messages"));
+    assert_eq!(w["app_names"].as_object().map(|m| m.len()), Some(prefs::EXCLUDED_APPS_SEED.len()));
+    assert!(prefs::set_dotted(&o, "app_names", json!({})).is_err());
 }

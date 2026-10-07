@@ -254,6 +254,76 @@ pub fn is_update(release: &Release, current_id: &str, current_built: Option<&str
     }
 }
 
+/// The desktop app's build for one target (bar S.6): `latest.json`'s
+/// optional `desktop: {<os-arch>: {version, id, url, sha256, built}}`, the
+/// app's zip next to bise's tarballs on the same channel. One reader:
+/// this module; the window's core hands the app a typed `app_update`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DesktopRelease {
+    /// its name (`2026.10.2-26`), else its id
+    pub version: String,
+    pub id: String,
+    /// the zip: absolute, or relative to the channel's base URL
+    pub url: String,
+    pub sha256: String,
+    /// when it was built (the app's VERSION `built=`)
+    pub built: String,
+}
+
+/// `latest.json`'s desktop build for `target`. Err: one line (no desktop
+/// build in this release, or not for this Mac, or a field missing).
+pub fn parse_desktop(text: &str, target: &str) -> Result<DesktopRelease, String> {
+    let v: Value = serde_json::from_str(text).map_err(|e| format!("{} is not valid JSON: {}", MANIFEST, e))?;
+    let t = v
+        .pointer(&format!("/desktop/{}", target))
+        .ok_or_else(|| format!("the release has no desktop app for {}", target))?;
+    let s = |k: &str| t.get(k).and_then(|y| y.as_str()).map(str::trim).filter(|y| !y.is_empty()).map(str::to_string);
+    let id = s("id").ok_or("the desktop release has no id")?;
+    let url = s("url").ok_or("the desktop release has no url")?;
+    let built = s("built").ok_or("the desktop release has no build time")?;
+    let sha256 = s("sha256").ok_or("the desktop release has no sha256")?;
+    if sha256.len() != 64 || !sha256.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(format!("bad sha256 in the desktop release: {}", sha256));
+    }
+    Ok(DesktopRelease { version: s("version").unwrap_or_else(|| id.clone()), id, url, sha256: sha256.to_ascii_lowercase(), built })
+}
+
+/// Whether the desktop `release` replaces the running app (`current_id`,
+/// `current_built`: its VERSION). Stricter than [`is_update`], as the app
+/// swaps itself (architect m_11169): another id AND a later build time;
+/// the same build, an older one (a downgrade), or an app that doesn't know
+/// when it was built (a dev run) is never offered one. Both build times
+/// are UTC RFC 3339 with a `Z` (`2026-10-08T10:00:00Z`), written by the
+/// same packaging step, so they compare as strings; either side in
+/// another form (`+00:00`, a bare date) is refused, so a format drift
+/// can never turn into a downgrade.
+pub fn is_desktop_update(release: &DesktopRelease, current_id: &str, current_built: Option<&str>) -> bool {
+    match current_built.map(str::trim).filter(|c| utc_z(c)) {
+        Some(c) => utc_z(&release.built) && release.id != current_id && release.built.as_str() > c,
+        None => false,
+    }
+}
+
+/// `YYYY-MM-DDTHH:MM:SS[.frac]Z`: the one build-time form compared.
+fn utc_z(t: &str) -> bool {
+    let b = t.as_bytes();
+    let digits = |r: std::ops::Range<usize>| r.into_iter().all(|i| b.get(i).is_some_and(u8::is_ascii_digit));
+    b.len() >= 20
+        && t.ends_with('Z')
+        && digits(0..4)
+        && b[4] == b'-'
+        && digits(5..7)
+        && b[7] == b'-'
+        && digits(8..10)
+        && b[10] == b'T'
+        && digits(11..13)
+        && b[13] == b':'
+        && digits(14..16)
+        && b[16] == b':'
+        && digits(17..19)
+        && (b.len() == 20 || (b[19] == b'.' && digits(20..b.len() - 1) && b.len() > 21))
+}
+
 /// A GitHub release asset, named by its download URL:
 /// `<scheme>://<host>/<owner>/<repo>/releases/latest/download/<name>` or
 /// `.../releases/download/<tag>/<name>` (any host: GitHub Enterprise, a
@@ -474,5 +544,68 @@ mod tests {
         let env = |k: &str| (k == DIST_URL_ENV).then(|| "https://x".to_string());
         assert_eq!(i.dist_url(&env).as_deref(), Some("https://x"));
         let _ = std::fs::remove_dir_all(&t);
+    }
+
+    fn with_desktop(desktop: &str) -> String {
+        format!(r#"{{"version":"0.2.0","id":"top","targets":{{"darwin-arm64":{{"url":"b.tar.gz","sha256":"{SHA}","id":"top"}}}},"desktop":{desktop}}}"#)
+    }
+
+    #[test]
+    fn the_desktop_entry_is_read_for_this_mac_only() {
+        let up = SHA.to_ascii_uppercase();
+        let text = with_desktop(&format!(
+            r#"{{"darwin-arm64":{{"version":"2026.10.2-26","id":"d26","url":"bise-desktop-arm64.zip","sha256":"{up}","built":"2026-10-08T10:00:00Z"}}}}"#
+        ));
+        let d = parse_desktop(&text, "darwin-arm64").unwrap();
+        assert_eq!(
+            d,
+            DesktopRelease {
+                version: "2026.10.2-26".into(),
+                id: "d26".into(),
+                url: "bise-desktop-arm64.zip".into(),
+                sha256: SHA.into(),
+                built: "2026-10-08T10:00:00Z".into()
+            }
+        );
+        assert_eq!(parse_desktop(&text, "darwin-x86_64").unwrap_err(), "the release has no desktop app for darwin-x86_64");
+        // today's manifests (bise only) still parse for bise, and say no app
+        assert!(parse_manifest(&text, "darwin-arm64").is_ok());
+        assert!(parse_desktop(&manifest("darwin-arm64", "x"), "darwin-arm64").unwrap_err().contains("no desktop app"));
+    }
+
+    #[test]
+    fn a_desktop_entry_missing_a_field_or_with_a_bad_sha_is_refused() {
+        let e = |entry: &str| parse_desktop(&with_desktop(&format!(r#"{{"darwin-arm64":{entry}}}"#)), "darwin-arm64").unwrap_err();
+        assert!(e(&format!(r#"{{"url":"a","sha256":"{SHA}","built":"t"}}"#)).contains("no id"));
+        assert!(e(&format!(r#"{{"id":"d","sha256":"{SHA}","built":"t"}}"#)).contains("no url"));
+        assert!(e(&format!(r#"{{"id":"d","url":"a","sha256":"{SHA}"}}"#)).contains("no build time"));
+        assert!(e(r#"{"id":"d","url":"a","sha256":"abc","built":"t"}"#).contains("bad sha256"));
+        assert!(parse_desktop("{", "darwin-arm64").unwrap_err().contains("not valid JSON"));
+    }
+
+    #[test]
+    fn a_desktop_update_is_another_id_built_later_never_the_same_or_a_downgrade() {
+        let r = |id: &str, built: &str| DesktopRelease { version: id.into(), id: id.into(), url: "u".into(), sha256: SHA.into(), built: built.into() };
+        let now = Some("2026-10-07T10:00:00Z");
+        assert!(is_desktop_update(&r("d26", "2026-10-08T10:00:00Z"), "d25", now));
+        assert!(!is_desktop_update(&r("d25", "2026-10-08T10:00:00Z"), "d25", now), "the same id");
+        assert!(!is_desktop_update(&r("d26", "2026-10-07T10:00:00Z"), "d25", now), "the same build time");
+        assert!(!is_desktop_update(&r("d24", "2026-10-06T10:00:00Z"), "d25", now), "a downgrade");
+        assert!(!is_desktop_update(&r("d26", "2026-10-08T10:00:00Z"), "dev", None), "a dev run: never");
+        assert!(!is_desktop_update(&r("d26", "2026-10-08T10:00:00Z"), "dev", Some(" ")), "a blank build time: never");
+    }
+
+    #[test]
+    fn a_build_time_in_another_form_is_refused_never_a_downgrade() {
+        let r = |built: &str| DesktopRelease { version: "v".into(), id: "d26".into(), url: "u".into(), sha256: SHA.into(), built: built.into() };
+        // the same instant, the other form, on either side: refused
+        assert!(!is_desktop_update(&r("2026-10-07T10:00:00Z"), "d25", Some("2026-10-07T10:00:00+00:00")));
+        assert!(!is_desktop_update(&r("2026-10-07T10:00:00+00:00"), "d25", Some("2026-10-07T10:00:00Z")));
+        // later, but not in the one form: refused too
+        assert!(!is_desktop_update(&r("2026-10-08"), "d25", Some("2026-10-07T10:00:00Z")));
+        assert!(!is_desktop_update(&r("2026-10-08T10:00:00+00:00"), "d25", Some("2026-10-07T10:00:00Z")));
+        // fractions of a second are the same form
+        assert!(is_desktop_update(&r("2026-10-07T10:00:00.5Z"), "d25", Some("2026-10-07T10:00:00.1Z")));
+        assert!(!is_desktop_update(&r("2026-10-07T10:00:00.Z"), "d25", Some("2026-10-07T09:00:00Z")));
     }
 }

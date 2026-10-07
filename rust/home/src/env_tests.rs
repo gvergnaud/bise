@@ -132,12 +132,16 @@ fn parent() -> Vec<(OsString, OsString)> {
 
 #[test]
 fn no_child_inherits_an_internal_variable() {
-    for child in [Child::Hub, Child::Core, Child::Repl] {
+    for child in [Child::Hub, Child::Core, Child::Repl, Child::Shell] {
         let env = env_for(child, parent(), [("SB_AGENT", "t1")]);
         let get = |k: &str| env.get(k).map(|v| v.to_string_lossy().into_owned());
-        for junk in ["SB_CORE_BIN", "SB_SOCKET", "SB_TASK", "BISE_ROLE", "BISE_SESSION_CHOICE", "BISE_APP_ROOT", "BEND_WORKDIR", "BEND_WIRE_LOG", "BISE_OWNERS", "BISE_HOME_WORKSPACE"] {
+        for junk in ["SB_CORE_BIN", "SB_SOCKET", "SB_TASK", "BISE_ROLE", "BISE_SESSION_CHOICE", "BISE_APP_ROOT", "BEND_WORKDIR", "BEND_WIRE_LOG", "BISE_OWNERS"] {
             assert_eq!(get(junk), None, "{child:?} inherited {junk}");
         }
+        // a test's home workspace: a hub keeps it (its home check), no
+        // other child (the hub sets it for its agents)
+        let ws = (child == Child::Hub).then(|| "/junk".to_string());
+        assert_eq!(get("BISE_HOME_WORKSPACE"), ws, "{child:?}");
         // what the parent set for it
         assert_eq!(get("SB_AGENT").as_deref(), Some("t1"), "{child:?}");
         // the user's own environment and settings

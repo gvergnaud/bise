@@ -2,7 +2,8 @@
 //!
 //! No other code joins `$HOME` with a state path: it asks a `Home`.
 //! Every bise environment variable and the environment of each bise child
-//! process: [`env`] (issue 11).
+//! process: [`env`] (issue 11). A workspace's hub id: [`hub_id`]. The
+//! projects registry (`projects.json`, bise layout only): [`projects`].
 //!
 //! Two layouts:
 //!
@@ -33,13 +34,17 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+pub mod clock;
 pub mod env;
+pub mod hub_id;
 pub mod migrate;
 pub mod prefs;
+pub mod projects;
 pub mod release;
 pub mod socket;
 pub mod style;
 pub mod test_home;
+pub use hub_id::hub_id;
 pub use migrate::migrate;
 
 crate::test_home!();
@@ -348,7 +353,8 @@ impl Home {
         self.tui_state().join("drafts")
     }
 
-    /// `prefs.json` (bise layout): voice, theme, hints, tip, onboarded.
+    /// `prefs.json` (bise layout): voice, theme, hints, tip, onboarded,
+    /// setup, excluded_apps.
     pub fn prefs_file(&self) -> PathBuf {
         self.root.join("prefs.json")
     }
@@ -366,6 +372,7 @@ impl Home {
             Pref::Tip => Slot::file(self.legacy_state().join("tip")),
             Pref::Onboarded => Slot::file(self.legacy_state().join("onboarded")),
             Pref::Setup => Slot::file(self.legacy_state().join("setup.json")),
+            Pref::ExcludedApps => Slot::file(self.legacy_state().join("excluded_apps.json")),
         }
     }
 

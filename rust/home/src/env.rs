@@ -97,6 +97,7 @@ pub const VARS: &[Var] = &[
     internal("BEND_WIRE_LOG", "a REPL's event log, read by the hub"),
     internal("BEND_WORKDIR", "an agent's working directory"),
     user("BISE_AGENT_MODEL", "the agents' model"),
+    test("BISE_AMBIENT_FAKE_VOICE", "the ambient core's fake voice: a file of words read at talk_start (harness A, ambient-qa)"),
     user("BISE_APPROVALS", "the approvals mode of this session"),
     internal("BISE_APP_ROOT", "the app root of the hub a TUI or a version switch starts"),
     user("BISE_ASCII", "ASCII-only drawing"),
@@ -118,7 +119,10 @@ pub const VARS: &[Var] = &[
     internal("BISE_EXPORTS_FOR", "the stamp of the exported Home paths"),
     test("BISE_GITHUB_API", "the GitHub API base (tests: a stub server)"),
     user("BISE_HOME", "where bise keeps its state (~/.bise)"),
-    internal("BISE_HOME_WORKSPACE", "ambient's home workspace, for its agents"),
+    // a test's: a hub started by the CLI or the ambient core keeps it, or
+    // its home check takes the real $HOME/bise (amb-core m_8700); the hub
+    // sets it for its agents itself
+    test("BISE_HOME_WORKSPACE", "bise's home workspace (tests); a hub passes it to its agents"),
     user("BISE_HYPERLINKS", "terminal hyperlinks on or off"),
     user("BISE_IDLE_EXIT", "how long a hub without a UI waits before it quits"),
     user("BISE_MODEL", "the main model"),
@@ -130,6 +134,7 @@ pub const VARS: &[Var] = &[
     test("BISE_OPENROUTER_AUTH", "where OpenRouter's login is (tests)"),
     user("BISE_OPTION_DIGITS", "read Option+digit characters as ⌥0-9 (1) or never (0), over the keyboard layout"),
     internal("BISE_OWNERS", "the agents a process belongs to (BISE-243)"),
+    internal("BISE_PAGES_EXPORT", "the public pages' export folder, for the mirror command the hub runs (pages/mirror.rs)"),
     user("BISE_POINTER", "mouse pointer shapes on or off"),
     test("BISE_PROTO_BLESS", "bise-proto's ts test rewrites apps/desktop/src/proto instead of failing on stale files"),
     user("BISE_RECYCLE_TOKENS", "context tokens an agent's REPL reads before the hub restarts it at idle (0: never)"),
@@ -137,6 +142,7 @@ pub const VARS: &[Var] = &[
     test("BISE_RELEASE_CHECK_SECS", "how often the hub checks for a release (tests)"),
     test("BISE_RELEASE_SCRIPT", "the release script the hub runs (tests)"),
     internal("BISE_ROLE", "main or agent, for a REPL's model"),
+    user("BISE_ROUTE_MODEL", "the model that picks a project for unclear words to bise (unset: no pick, they stay with bise)"),
     user("BISE_SANDBOX", "0: no sandbox for the agents' commands"),
     internal("BISE_SESSION_CHOICE", "an agent's own model and effort file"),
     user("BISE_SMALL_MODEL", "the small model"),
@@ -144,6 +150,7 @@ pub const VARS: &[Var] = &[
     user("BISE_SOUNDS_LINE", "the voice sounds' line WAV (a dev command)"),
     user("BISE_TERM_BG", "the terminal's background, over what is detected"),
     user("BISE_TERM_TITLE", "the terminal title on or off"),
+    test("BISE_TEST_HOME", "a whole test run's jail (the desktop harness): every bise of the run refuses a workspace, state dir or BISE_HOME outside it, and his real home (test_home::jail)"),
     user("BISE_THEME", "the theme"),
     user("BISE_UPDATE_INTERVAL", "seconds between update checks"),
     user("BISE_VOICE_AEC", "0: voice without echo cancelling"),
@@ -198,6 +205,9 @@ pub enum Child {
     Core,
     /// An agent's REPL, a one-shot or checker REPL.
     Repl,
+    /// His own shell (the desktop's terminal panel, `bise pty`): his
+    /// settings only, nothing of bise's internals or of a test run.
+    Shell,
 }
 
 /// The test settings a hub never gets: `SB_CORE_BIN` is the cargo tests'
