@@ -622,6 +622,34 @@ fn permissions(sh: &Arc<Shared>) -> Value {
     }
 }
 
+/// ctl `show` (bise ambient's page for the user, docs/ambient-pages.md
+/// §2.8): the extension brings the tab under `url_prefix` in its "bise"
+/// group forward, else opens `url` there, and focuses its window. Command
+/// connections only, never an agent's tool. It doesn't wait for a browser
+/// (no `live_links` wait, no sleeping-worker wait): the caller falls back
+/// to its own `open` at once, and a late answer would open the page twice.
+fn show(sh: &Arc<Shared>, args: &Value) -> Reply {
+    let url = str_of(args, "url").unwrap_or("").trim();
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return Err(err("bad_args", "show takes an http or https url"));
+    }
+    let live: Vec<(u64, Browser)> = lock(&sh.inner).browsers.iter().filter_map(|l| l.browser.map(|b| (l.id, b))).collect();
+    let pick = match str_of(args, "browser") {
+        Some(w) => live.iter().find(|(_, b)| b.key.eq_ignore_ascii_case(w) || b.name.eq_ignore_ascii_case(w)).copied(),
+        None => live.first().copied(),
+    };
+    let Some((link, b)) = pick else {
+        return Err(no_browser(sh));
+    };
+    let mut fwd = json!({"url": url});
+    if let Some(p) = str_of(args, "url_prefix").filter(|p| !p.is_empty()) {
+        fwd["url_prefix"] = json!(p);
+    }
+    let mut r = forward(sh, link, None, None, "show", &fwd, Duration::from_secs(5) + sh.opts.slack)?;
+    r["browser"] = json!(b.key);
+    Ok(r)
+}
+
 fn ctl_loop(sh: &Arc<Shared>, w: Writer, lines: Lines) {
     for line in lines {
         let Ok(line) = line else { break };
@@ -663,6 +691,7 @@ fn ctl_loop(sh: &Arc<Shared>, w: Writer, lines: Lines) {
                 Ok(json!({"released": agent}))
             }
             "status" => Ok(full_status(sh)),
+            "show" => show(sh, &args),
             "request" => request_permission(sh, str_of(&args, "what").unwrap_or("")),
             "permissions" => Ok(permissions(sh)),
             // computer use turned off (`bise computer-use off`): every

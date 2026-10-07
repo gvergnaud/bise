@@ -26,6 +26,7 @@ pub mod config_cli;
 pub mod detect;
 pub mod openrouter_login;
 pub mod names;
+pub mod picks;
 pub mod roles;
 pub mod spawn;
 pub mod voice;
@@ -515,6 +516,19 @@ impl Catalog {
         self.providers.iter().find(|p| p.id == id)
     }
 
+    /// A provider's name for people, by its id or its key variable
+    /// (`OPENROUTER_API_KEY` -> OpenRouter); the id or the variable itself
+    /// when the catalog has none. The TUI's and the hub's (a missing
+    /// key's line, bise_proto's `words::no_key`).
+    pub fn provider_name(&self, id: &str, key_env: &str) -> String {
+        let p = if id.is_empty() {
+            self.providers.iter().find(|p| !p.key_env.is_empty() && p.key_env == key_env && p.chats())
+        } else {
+            self.provider(id)
+        };
+        p.map(|p| p.name.clone()).unwrap_or_else(|| if id.is_empty() { key_env.to_string() } else { id.to_string() })
+    }
+
     pub fn model(&self, name: &str) -> Option<&Model> {
         let (p, m) = split_name(name)?;
         self.models.iter().find(|x| x.provider == p && x.id == m)
@@ -584,6 +598,20 @@ impl Catalog {
     /// The caps of a provider's unlisted models.
     pub fn provider_caps(&self, p: &Provider) -> Caps {
         p.caps.over(&DEFAULT_CAPS)
+    }
+
+    /// Whether a model reads images, as far as the catalog knows: Some
+    /// only for a listed model (its `vision` cap); None for an empty name,
+    /// an unlisted model or an unknown provider (the provider decides, so
+    /// nothing is refused on a guess). The one rule for the TUI's
+    /// refusal and the hub's agent rows (bise desktop K4).
+    pub fn vision(&self, model: &str) -> Option<bool> {
+        let m = model.trim();
+        if m.is_empty() {
+            return None;
+        }
+        let r = self.resolve(m);
+        (r.known == Known::Listed).then_some(r.caps.vision)
     }
 
     /// Resolve any name. Never fails: see [`Known`].

@@ -145,6 +145,25 @@ fn an_unknown_provider_resolves_without_failing() {
     }
 }
 
+/// bise desktop K4 (architect m_10064): the one vision rule, moved from
+/// the TUI's models.rs lacks_vision (its asserts with it).
+#[test]
+fn only_a_listed_model_says_whether_it_reads_images() {
+    let c = Catalog::builtin();
+    assert_eq!(c.vision("mistral/codestral-latest"), Some(false));
+    assert_eq!(c.vision("mistral/mistral-medium-latest"), Some(true));
+    assert_eq!(c.vision("anthropic/claude-haiku-4-5"), Some(true));
+    // unlisted or unknown: the provider decides, never a guess
+    assert_eq!(c.vision("ollama/llava"), None);
+    assert_eq!(c.vision("nowhere/m"), None);
+    assert_eq!(c.vision(""), None);
+    // a model he lists in config.toml with vision: his catalog says so
+    let s = setup("[models.\"ollama/llava\"]
+vision = true
+");
+    assert_eq!(s.catalog.vision("ollama/llava"), Some(true));
+}
+
 #[test]
 fn model_ids_may_hold_slashes() {
     let c = Catalog::builtin();
@@ -1163,5 +1182,41 @@ fn export_handoff_again_follows_config_and_env_edits() {
     std::fs::write(&cfg, OPUS).unwrap();
     export_handoff(&cfg, &cache, &no_env).unwrap();
     assert!(!read(&p).contains("foundry.example") && !read(&p).contains("base_url = \"\""));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Law (architect m_10795): config.toml has one locked writer of a role
+/// (the TUI's roles screen and the desktop's core): writers racing on
+/// different roles lose no change, and no tmp file is left.
+#[test]
+fn racing_role_writers_lose_no_change() {
+    let dir = std::env::temp_dir().join(format!("bise-roles-race-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let file = dir.join("config.toml");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(&file, "[voice]\nlanguage = \"fr\"\n").unwrap();
+    let ids = [roles::MAIN, roles::AGENTS, roles::SMALL, roles::CLASSIFY];
+    let threads: Vec<_> = ids
+        .iter()
+        .enumerate()
+        .map(|(i, id)| {
+            let (file, id) = (file.clone(), id.to_string());
+            std::thread::spawn(move || {
+                for n in 0..10 {
+                    roles::save_role(&file, &id, Some(&format!("mistral/m{i}-{n}")), None).unwrap();
+                }
+            })
+        })
+        .collect();
+    for t in threads {
+        t.join().unwrap();
+    }
+    let text = std::fs::read_to_string(&file).unwrap();
+    for (i, id) in ids.iter().enumerate() {
+        assert!(text.contains(&format!("{id} = \"mistral/m{i}-9\"")), "{id} lost its change:\n{text}");
+    }
+    assert!(text.contains("language = \"fr\""), "{text}");
+    let left: Vec<_> = std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()).map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| n.contains(".tmp-")).collect();
+    assert!(left.is_empty(), "{left:?}");
     let _ = std::fs::remove_dir_all(&dir);
 }

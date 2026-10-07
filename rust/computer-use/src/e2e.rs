@@ -216,6 +216,7 @@ fn ext_reply(st: &Mutex<ExtState>, msg: &Value, jpeg: &[u8]) -> Value {
                 }
             }
         }
+        "show" => ok(json!({"tab_id": 77, "created": true, "url": args["url"]})),
         _ => fail("bad_args", "unknown op", json!({})),
     }
 }
@@ -707,6 +708,39 @@ fn mcp_protocol_and_not_set_up() {
     for h in brokers.lock().unwrap().drain(..) {
         h.shutdown();
     }
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// ctl `show` (bise ambient, docs/ambient-pages.md §2.8): a command
+/// connection's, never an agent's tool; no browser answers at once (no
+/// 3 s wait for relays: the caller falls back to its own open); the
+/// extension gets url and url_prefix with no agent, and no agent appears.
+#[test]
+fn show_for_the_user_on_command_connections_only() {
+    let (d, p) = paths();
+    let o = opts(&p);
+    let brokers: Brokers = Default::default();
+    brokers.lock().unwrap().push(broker::start(o.clone()).unwrap());
+    let show = |args: Value| Conn::ctl(&p).unwrap().call("show", &args).unwrap();
+    let t0 = Instant::now();
+    let none = |e: Value| e["code"] == "no_browser" || e["code"] == "not_set_up";
+    assert!(none(show(json!({"url": "http://127.0.0.1:47123/p/weekly"})).unwrap_err()));
+    assert!(t0.elapsed() < Duration::from_secs(1), "show waited {:?} for a browser", t0.elapsed());
+
+    let ext = FakeExt::start(&p, starter(o, brokers.clone()), "chrome", jpeg(&d));
+    connected(&p, 1);
+    let r = show(json!({"url": "http://127.0.0.1:47123/p/weekly?v=2", "url_prefix": "http://127.0.0.1:47123/p/weekly"})).unwrap();
+    assert_eq!(r, json!({"tab_id": 77, "created": true, "url": "http://127.0.0.1:47123/p/weekly?v=2", "browser": "chrome"}));
+    let req = ext.st.lock().unwrap().requests.iter().find(|m| m["op"] == "show").cloned().unwrap();
+    assert_eq!(req["args"], json!({"url": "http://127.0.0.1:47123/p/weekly?v=2", "url_prefix": "http://127.0.0.1:47123/p/weekly"}));
+    assert!(req.get("agent").is_none());
+    assert_eq!(show(json!({"url": "file:///etc/passwd"})).unwrap_err()["code"], "bad_args");
+    assert!(none(show(json!({"url": "https://x.org", "browser": "edge"})).unwrap_err()));
+
+    // an agent can't show
+    let mut a = agent(&p, "api-v2", &d);
+    assert_eq!(code(&mut a, "show", json!({"url": "https://x.org"}))["code"], "bad_args");
+    assert!(state::read(&p)["agents"].get("ambient").is_none());
     let _ = std::fs::remove_dir_all(&d);
 }
 

@@ -35,6 +35,8 @@ fn usage() -> String {
       --from FILE               read it from FILE's PROVIDER_API_KEY=... line (.env, shell rc)
   {cli} login chatgpt           sign in with your ChatGPT plan (Plus, Pro) in your browser
       --no-browser              print the link, open nothing (SSH: forward its port)
+      --events                  JSON lines for a program: open (its url), then done or error
+                                (a stable interface: bise's desktop core reads it)
   {cli} login openrouter        sign in with OpenRouter in your browser, or paste a key
       --browser | --key         which one, without asking
   {cli} logout [provider]       remove it (chatgpt: signs out, ChatGPT told)
@@ -159,6 +161,12 @@ pub struct Opts {
     /// `--browser` / `--key`: OpenRouter's way, without asking
     pub browser: bool,
     pub key: bool,
+    /// `--events`: a browser sign-in prints JSON lines for a program (the
+    /// desktop's core) instead of the prose: {"ev":"open","url"}, then
+    /// {"ev":"done"} or {"ev":"error","text"}. A program interface (the
+    /// desktop core's sign-in port, ambient/setup.rs): keep it stable,
+    /// add fields, never rename or drop one
+    pub events: bool,
 }
 
 /// Parse `[provider] [--check] [--model M] [--from FILE]`; Err = exit code.
@@ -176,6 +184,7 @@ pub fn parse_opts(args: &[String]) -> Result<Opts, i32> {
             "--no-browser" => o.no_browser = true,
             "--browser" => o.browser = true,
             "--key" => o.key = true,
+            "--events" => o.events = true,
             "--model" | "--from" => {
                 let Some(v) = it.next().filter(|v| !v.starts_with('-')) else {
                     eprintln!("{} needs a value\n{}", a, usage());
@@ -486,6 +495,20 @@ pub fn open_url(url: &str) -> Result<(), String> {
     }
 }
 
+/// `--events`: one JSON line on stdout, flushed (the reader acts on it at once).
+fn event(v: serde_json::Value) {
+    println!("{v}");
+    let _ = std::io::stdout().flush();
+}
+
+/// `--events`' start: the link, then the browser (unless `--no-browser`).
+fn events_open(url: &str, no_browser: bool) {
+    event(serde_json::json!({"ev": "open", "url": url}));
+    if !no_browser {
+        let _ = open_url(url);
+    }
+}
+
 /// The lines before the wait (the designer's words), on stdout: the
 /// link alone on its line, two spaces in.
 fn sign_in_intro(out: &Style, what: &str, url: &str, port: u16, no_browser: bool) {
@@ -507,18 +530,43 @@ fn sign_in_intro(out: &Style, what: &str, url: &str, port: u16, no_browser: bool
 const UNFINISHED: &str = "the sign-in wasn't finished. try again, or pick another way.";
 
 /// `bise login chatgpt [--no-browser]`.
-fn chatgpt_login_main(paths: &Paths, setup: &Setup, no_browser: bool) -> i32 {
+fn chatgpt_login_main(paths: &Paths, setup: &Setup, no_browser: bool, events: bool) -> i32 {
     use crate::chatgpt::{self, Mode, Poll};
     let (out, err) = (Style::stdout(), Style::stderr());
+    let fail = |text: &str| {
+        if events {
+            event(serde_json::json!({"ev": "error", "text": text}));
+        } else {
+            eprintln!("{}", warn_line(&err, text));
+        }
+        1
+    };
     let s = match chatgpt::start(paths, Mode::Again) {
         Ok(s) => s,
-        Err(e) => {
-            eprintln!("{}", warn_line(&err, &format!("{}.", e.trim_end_matches('.'))));
-            return 1;
-        }
+        Err(e) => return fail(&format!("{}.", e.trim_end_matches('.'))),
     };
-    sign_in_intro(&out, "ChatGPT", s.url(), s.port(), no_browser);
+    if events {
+        events_open(s.url(), no_browser);
+    } else {
+        sign_in_intro(&out, "ChatGPT", s.url(), s.port(), no_browser);
+    }
     match s.wait() {
+        Poll::Done(a) if events => {
+            // the same default role as the terminal's, without the prose
+            let listed: Vec<String> = chatgpt::fetch_models(paths).map(|m| m.into_iter().map(|m| m.slug).collect()).unwrap_or_default();
+            if setup.model.trim().is_empty() {
+                if let Some((main, _)) = crate::roles::one_login_defaults(&setup.catalog, chatgpt::ID, "openai", &listed) {
+                    let text = std::fs::read_to_string(&paths.config).unwrap_or_default();
+                    let new = crate::roles::with_role(&text, crate::roles::MAIN, &main);
+                    if let Some(d) = paths.config.parent() {
+                        let _ = std::fs::create_dir_all(d);
+                    }
+                    let _ = std::fs::write(&paths.config, new);
+                }
+            }
+            event(serde_json::json!({"ev": "done", "email": a.email}));
+            0
+        }
         Poll::Done(a) => {
             let plan = a.plan.map(|p| format!(" · ChatGPT {}", p)).unwrap_or_default();
             println!("{}", out.ok(&format!("signed in as {}{}.", a.email, plan)));
@@ -539,18 +587,9 @@ fn chatgpt_login_main(paths: &Paths, setup: &Setup, no_browser: bool) -> i32 {
             println!("{}", out.dim("bise is running? the next agents it starts use it."));
             0
         }
-        Poll::Denied => {
-            eprintln!("{}", warn_line(&err, "ChatGPT signed you in but didn't let bise use your plan. run it again and allow it."));
-            1
-        }
-        Poll::Unfinished | Poll::Waiting => {
-            eprintln!("{}", warn_line(&err, UNFINISHED));
-            1
-        }
-        Poll::Failed(e) => {
-            eprintln!("{}", warn_line(&err, &e));
-            1
-        }
+        Poll::Denied => fail("ChatGPT signed you in but didn't let bise use your plan. run it again and allow it."),
+        Poll::Unfinished | Poll::Waiting => fail(UNFINISHED),
+        Poll::Failed(e) => fail(&e),
     }
 }
 
@@ -570,36 +609,40 @@ fn ask_openrouter_way(err: &Style) -> Option<bool> {
 }
 
 /// `bise login openrouter --browser`: a key minted by OpenRouter, saved.
-fn openrouter_login_main(paths: &Paths, no_browser: bool) -> i32 {
+fn openrouter_login_main(paths: &Paths, no_browser: bool, events: bool) -> i32 {
     use crate::chatgpt::Poll;
     let (out, err) = (Style::stdout(), Style::stderr());
+    let fail = |text: &str| {
+        if events {
+            event(serde_json::json!({"ev": "error", "text": text}));
+        } else {
+            eprintln!("{}", warn_line(&err, text));
+        }
+        1
+    };
     let s = match crate::openrouter_login::start(paths) {
         Ok(s) => s,
-        Err(e) => {
-            eprintln!("{}", warn_line(&err, &format!("{}.", e.trim_end_matches('.'))));
-            return 1;
-        }
+        Err(e) => return fail(&format!("{}.", e.trim_end_matches('.'))),
     };
-    sign_in_intro(&out, "OpenRouter", s.url(), s.port(), no_browser);
+    if events {
+        events_open(s.url(), no_browser);
+    } else {
+        sign_in_intro(&out, "OpenRouter", s.url(), s.port(), no_browser);
+    }
     match s.wait() {
+        Poll::Done(()) if events => {
+            event(serde_json::json!({"ev": "done"}));
+            0
+        }
         Poll::Done(()) => {
             let file = tilde(&paths.auth_file, paths.home.as_deref());
             println!("{}", out.ok(&format!("signed in to OpenRouter: its key is saved in {}.", file)));
             println!("{}", out.dim("bise is running? the next agents it starts use it."));
             0
         }
-        Poll::Denied => {
-            eprintln!("{}", warn_line(&err, "OpenRouter didn't give bise a key. run it again and allow it, or paste a key."));
-            1
-        }
-        Poll::Unfinished | Poll::Waiting => {
-            eprintln!("{}", warn_line(&err, UNFINISHED));
-            1
-        }
-        Poll::Failed(e) => {
-            eprintln!("{}", warn_line(&err, &e));
-            1
-        }
+        Poll::Denied => fail("OpenRouter didn't give bise a key. run it again and allow it, or paste a key."),
+        Poll::Unfinished | Poll::Waiting => fail(UNFINISHED),
+        Poll::Failed(e) => fail(&e),
     }
 }
 
@@ -860,12 +903,12 @@ pub fn login_main(args: &[String], paths: &Paths, check: Checker) -> i32 {
     };
     // a sign-in, not a key
     if c.provider(&id).is_some_and(|p| p.signs_in()) {
-        return chatgpt_login_main(paths, &setup, opts.no_browser);
+        return chatgpt_login_main(paths, &setup, opts.no_browser, opts.events);
     }
     if id == crate::openrouter_login::ID && !opts.key && opts.from.is_none() {
-        let browser = opts.browser || opts.no_browser || (tty && ask_openrouter_way(&err) == Some(true));
+        let browser = opts.browser || opts.no_browser || opts.events || (tty && ask_openrouter_way(&err) == Some(true));
         if browser {
-            return openrouter_login_main(paths, opts.no_browser);
+            return openrouter_login_main(paths, opts.no_browser, opts.events);
         }
     }
     let p = match check_provider(c, &id) {

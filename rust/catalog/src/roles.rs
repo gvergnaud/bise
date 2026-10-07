@@ -429,6 +429,39 @@ pub fn set_role(text: &str, id: &str, model: Option<&str>, effort: Option<&str>)
     }
 }
 
+/// Set role `id` in `config.toml` (the file at `file`, [`set_role`]'s
+/// edit): the one writer of a role for the TUI's roles screen and the
+/// desktop's core (architect m_10795). An exclusive flock on
+/// `config.toml.lock` around the whole read-edit-write, a tmp name only
+/// this call uses, then a rename: two writers at once never lose a change.
+pub fn save_role(file: &std::path::Path, id: &str, model: Option<&str>, effort: Option<&str>) -> Result<(), String> {
+    if let Some(dir) = file.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("couldn't write config.toml: {e}"))?;
+    }
+    let _lock = lock(&file.with_extension("toml.lock")).map_err(|e| format!("couldn't lock config.toml: {e}"))?;
+    let text = std::fs::read_to_string(file).unwrap_or_default();
+    let tmp = file.with_extension(format!("toml.tmp-{}-{}", std::process::id(), TMP.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+    std::fs::write(&tmp, set_role(&text, id, model, effort)).map_err(|e| format!("couldn't write config.toml: {e}"))?;
+    std::fs::rename(&tmp, file).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        format!("couldn't write config.toml: {e}")
+    })
+}
+
+/// Each write's own tmp name in this process (with the pid: across them).
+static TMP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// An exclusive flock on `path`, held until the file is dropped.
+fn lock(path: &std::path::Path) -> std::io::Result<std::fs::File> {
+    use std::os::unix::io::AsRawFd;
+    let f = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(path)?;
+    // SAFETY: flock on a descriptor this function owns; blocks until free
+    if unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX) } != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(f)
+}
+
 fn table_is_empty(text: &str, table: &str) -> bool {
     let mut cur = String::new();
     let mut empty = true;
