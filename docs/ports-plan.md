@@ -1,9 +1,9 @@
 # Linux and Windows: the plan (ports)
 
-Status: Linux proven (linux-arm64 and linux-x86_64 tarballs, built and
-installed in containers, test-install.sh green: §3). The CI jobs are a
-proposal on the branch `sb/ports`, not wired to a release (§5).
-Windows: an assessment and a compile check (§6), no port.
+Status: Linux in the releases (linux-nix: both arches built by
+release.yml and listed in latest.json, NixOS through the flake; §7).
+Windows: an assessment and a compile check (§6), no port. Later: a
+static musl build (§8).
 
 ## 1. The short version
 
@@ -193,3 +193,32 @@ prebuilt, not a mingw one.
 6. Linux tests in CI (cargo tests + a Linux mode of the gate).
 7. Linux voice (dlopen ALSA).
 8. Native Windows: only after Bend runs on Windows.
+
+Done (linux-nix): steps 1-3 (release.yml builds and releases both
+Linux arches; latest.json has them; install.sh picks them), the
+`$SHELL` default and `doctor` part of step 4, and NixOS through a binary
+flake (`flake.nix`, `nix/package.nix`, docs/nixos.md,
+`packaging/test-nix.sh`).
+
+## 8. Later: a static musl build (Alpine, older glibc)
+
+Not now; what it would take, for Alpine and the distros under glibc
+2.34 (Ubuntu 20.04, Debian 11, RHEL 8):
+
+- **V8 is the blocker.** rusty_v8 ships no musl prebuilt: `bend-jsrt`
+  would build V8 from source for `*-unknown-linux-musl` (hours per arch
+  on CI, a GN/ninja toolchain, a big cache), or bise runs JS another way
+  on musl.
+- **TLS.** `wire.c` `dlopen`s `libssl.so.3`; a static binary cannot
+  `dlopen` the system's libraries. It needs OpenSSL linked in statically
+  (or another TLS library) and the CA bundle found at run time
+  (`/etc/ssl/certs`, `SSL_CERT_FILE`).
+- **Bend binaries.** The C that `bend -o x.c` prints is plain C11 +
+  pthreads: `musl-gcc` or `zig cc -target <arch>-linux-musl -static`
+  should compile it; to check (`poll`, `posix_spawnp`, `dlopen` uses).
+- **Rust.** The `*-unknown-linux-musl` targets are fine for bise itself
+  (cpal is already off on Linux).
+- **Cheaper for older glibc only:** build on an older image (glibc 2.28
+  or 2.31) with the same dynamic linking; then `wire.c` also needs
+  OpenSSL 1.1 (`libssl.so.1.1`) as a fallback, and rusty_v8's prebuilt
+  must link against that glibc (to check).

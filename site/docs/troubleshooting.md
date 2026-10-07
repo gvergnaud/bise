@@ -1,6 +1,6 @@
 ---
 title: troubleshooting
-description: bise doctor checks your Mac, the install, your keys and models in one command. start there.
+description: bise doctor checks your machine, the install, your keys and models in one command. start there.
 ---
 
 ## bise doctor
@@ -9,7 +9,7 @@ description: bise doctor checks your Mac, the install, your keys and models in o
 bise doctor
 ```
 
-it checks this Mac, the install, your keys, each role's model and the running bise, without the network and without printing a key. each line is `✓` (fine) or `?` (worth a look), and every `?` says how to fix it:
+it checks this machine (macOS, or Linux: the distro and what is off there), the install, your keys, each role's model and the running bise, without the network and without printing a key. each line is `✓` (fine) or `?` (worth a look), and every `?` says how to fix it:
 
 ```text
 checking your setup

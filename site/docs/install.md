@@ -9,7 +9,7 @@ description: one command installs bise. the first run asks for one thing, the mo
 curl -fsSL https://bise.dev/install | sh
 ```
 
-the installer picks the build for your Mac (Apple silicon or Intel), checks its sha256, and puts it in `~/.local/share/bise`. the `bise` command goes in `~/.local/bin`. no sudo.
+the installer picks the build for your machine (a Mac with Apple silicon or Intel, Linux on x86_64 or arm64), checks its sha256, and puts it in `~/.local/share/bise`. the `bise` command goes in `~/.local/bin`. no sudo.
 
 open a new terminal if `bise` is not found yet, or run `~/.local/bin/bise`. then check:
 
@@ -19,6 +19,29 @@ bise --version
 
 > note: `~/.local/bin` must be on your `PATH`. the installer adds it to your shell's rc file unless you pass `--no-modify-path`.
 
+### linux
+
+the same command works on Linux, x86_64 and arm64. the build needs glibc 2.34 or newer:
+
+| works | not yet |
+|---|---|
+| Ubuntu 22.04 and newer, Debian 12 and newer, Fedora, RHEL, Rocky and Alma 9, Amazon Linux 2023, Arch, WSL2 with Ubuntu 22.04+ | Alpine (musl), Ubuntu 20.04, Debian 11, RHEL 8 (older glibc) |
+
+it needs `git`, and OpenSSL 3 (`libssl.so.3`, there by default on the systems above) for its HTTPS calls. `bise doctor` shows your distro and what is off on Linux.
+
+on Linux, these are macOS only and stay off: the [sandbox](approvals) of `auto` approvals (auto checks each command instead, and says so once), [voice](voice), [computer use](computer-use) and the desktop app.
+
+### nixos
+
+NixOS has no `/lib64/ld-linux`, so the installer stops and points here. install with Nix instead:
+
+```sh
+nix profile install github:gvergnaud/bise                              # with flakes
+nix-env -if https://github.com/gvergnaud/bise/archive/main.tar.gz      # without
+```
+
+in a NixOS or home-manager config: the input `github:gvergnaud/bise`, then `inputs.bise.packages.${pkgs.system}.bise` (or `overlays.default`, which adds `pkgs.bise`). update with `nix profile upgrade bise`, then run `bise` again in the folder: the agents move to the new version.
+
 ### let a coding agent do it
 
 if you use Claude Code, Codex or another coding agent, paste this into it:
@@ -27,7 +50,7 @@ if you use Claude Code, Codex or another coding agent, paste this into it:
 read https://bise.dev/setup.md and set up bise for me
 ```
 
-it installs bise, then runs `bise setup scan`, which lists what your Mac already has (the API keys and where they are, your agent's model, its instructions file, skills and MCP servers) without ever printing a key. it shows you one short plan and waits for your yes before it writes anything.
+it installs bise, then runs `bise setup scan`, which lists what your machine already has (the API keys and where they are, your agent's model, its instructions file, skills and MCP servers) without ever printing a key. it shows you one short plan and waits for your yes before it writes anything.
 
 ## first run
 

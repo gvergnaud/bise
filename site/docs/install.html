@@ -76,14 +76,24 @@
       <p class="lede">one command installs bise. the first run asks for one thing, the model, and only when it finds no key.</p>
 <h2 id="install"><a class="anchor" href="#install" aria-hidden="true">#</a>install</h2>
 <div class="code"><div class="box"><pre><code class="lang-sh">curl -fsSL https://bise.dev/install | sh</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
-<p>the installer picks the build for your Mac (Apple silicon or Intel), checks its sha256, and puts it in <code>~/.local/share/bise</code>. the <code>bise</code> command goes in <code>~/.local/bin</code>. no sudo.</p>
+<p>the installer picks the build for your machine (a Mac with Apple silicon or Intel, Linux on x86_64 or arm64), checks its sha256, and puts it in <code>~/.local/share/bise</code>. the <code>bise</code> command goes in <code>~/.local/bin</code>. no sudo.</p>
 <p>open a new terminal if <code>bise</code> is not found yet, or run <code>~/.local/bin/bise</code>. then check:</p>
 <div class="code"><div class="box"><pre><code class="lang-sh">bise --version</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
 <aside class="callout note"><span class="label">note</span><p><code>~/.local/bin</code> must be on your <code>PATH</code>. the installer adds it to your shell's rc file unless you pass <code>--no-modify-path</code>.</p></aside>
+<h3 id="linux"><a class="anchor" href="#linux" aria-hidden="true">#</a>linux</h3>
+<p>the same command works on Linux, x86_64 and arm64. the build needs glibc 2.34 or newer:</p>
+<div class="table"><table><thead><tr><th>works</th><th>not yet</th></tr></thead><tbody><tr><td>Ubuntu 22.04 and newer, Debian 12 and newer, Fedora, RHEL, Rocky and Alma 9, Amazon Linux 2023, Arch, WSL2 with Ubuntu 22.04+</td><td>Alpine (musl), Ubuntu 20.04, Debian 11, RHEL 8 (older glibc)</td></tr></tbody></table></div>
+<p>it needs <code>git</code>, and OpenSSL 3 (<code>libssl.so.3</code>, there by default on the systems above) for its HTTPS calls. <code>bise doctor</code> shows your distro and what is off on Linux.</p>
+<p>on Linux, these are macOS only and stay off: the <a href="/docs/approvals">sandbox</a> of <code>auto</code> approvals (auto checks each command instead, and says so once), <a href="/docs/voice">voice</a>, <a href="/docs/computer-use">computer use</a> and the desktop app.</p>
+<h3 id="nixos"><a class="anchor" href="#nixos" aria-hidden="true">#</a>nixos</h3>
+<p>NixOS has no <code>/lib64/ld-linux</code>, so the installer stops and points here. install with Nix instead:</p>
+<div class="code"><div class="box"><pre><code class="lang-sh">nix profile install github:gvergnaud/bise                              <span class="c"># with flakes</span>
+nix-env -if https://github.com/gvergnaud/bise/archive/main.tar.gz      <span class="c"># without</span></code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
+<p>in a NixOS or home-manager config: the input <code>github:gvergnaud/bise</code>, then <code>inputs.bise.packages.${pkgs.system}.bise</code> (or <code>overlays.default</code>, which adds <code>pkgs.bise</code>). update with <code>nix profile upgrade bise</code>, then run <code>bise</code> again in the folder: the agents move to the new version.</p>
 <h3 id="let-a-coding-agent-do-it"><a class="anchor" href="#let-a-coding-agent-do-it" aria-hidden="true">#</a>let a coding agent do it</h3>
 <p>if you use Claude Code, Codex or another coding agent, paste this into it:</p>
 <div class="code"><div class="box"><pre><code class="lang-text">read https://bise.dev/setup.md and set up bise for me</code></pre><button class="copy" type="button" aria-label="copy the code">copy</button></div></div>
-<p>it installs bise, then runs <code>bise setup scan</code>, which lists what your Mac already has (the API keys and where they are, your agent's model, its instructions file, skills and MCP servers) without ever printing a key. it shows you one short plan and waits for your yes before it writes anything.</p>
+<p>it installs bise, then runs <code>bise setup scan</code>, which lists what your machine already has (the API keys and where they are, your agent's model, its instructions file, skills and MCP servers) without ever printing a key. it shows you one short plan and waits for your yes before it writes anything.</p>
 <h2 id="first-run"><a class="anchor" href="#first-run" aria-hidden="true">#</a>first run</h2>
 <p>go to a repo and start bise:</p>
 <div class="code"><div class="box"><pre><code class="lang-sh">cd your-repo
@@ -110,7 +120,7 @@ bise uninstall --purge   <span class="c"># also removes ~/.bise: your settings, 
       <p><a href="https://github.com/gvergnaud/bise/blob/main/site/docs/install.md">edit this page on GitHub</a></p>
     </footer>
   </main>
-  <aside class="toc"><div class="toch">on this page</div><ul><li class="l2"><a href="#install">install</a></li><li class="l3"><a href="#let-a-coding-agent-do-it">let a coding agent do it</a></li><li class="l2"><a href="#first-run">first run</a></li><li class="l2"><a href="#what-goes-where">what goes where</a></li><li class="l2"><a href="#ghostty">Ghostty</a></li><li class="l2"><a href="#uninstall">uninstall</a></li></ul></aside>
+  <aside class="toc"><div class="toch">on this page</div><ul><li class="l2"><a href="#install">install</a></li><li class="l3"><a href="#linux">linux</a></li><li class="l3"><a href="#nixos">nixos</a></li><li class="l3"><a href="#let-a-coding-agent-do-it">let a coding agent do it</a></li><li class="l2"><a href="#first-run">first run</a></li><li class="l2"><a href="#what-goes-where">what goes where</a></li><li class="l2"><a href="#ghostty">Ghostty</a></li><li class="l2"><a href="#uninstall">uninstall</a></li></ul></aside>
 </div>
 <script src="/docs/docs.js" defer></script>
 </body>

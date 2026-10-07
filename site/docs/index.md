@@ -41,4 +41,4 @@ every page is also plain Markdown: add `.md` to its address, for example `bise.d
 
 ## requirements
 
-bise runs on macOS, on Apple silicon and Intel. you need git. linux is next.
+bise runs on macOS (Apple silicon and Intel) and on Linux (x86_64 and arm64, glibc 2.34 or newer). you need git; on Linux, OpenSSL 3 too. NixOS installs it with [the flake](install#nixos). see [install](install#linux) for the Linux details.

@@ -63,7 +63,7 @@ your agent installs bise and brings over what you already have: your API key, yo
 using LiteLLM or another gateway, or any OpenAI-compatible base URL? see [custom providers](docs/custom-providers.md).
 
 > [!NOTE]
-> bise is pre-release. **macOS only for now** (Apple silicon and Intel). linux is next.
+> bise is pre-release. **macOS** (Apple silicon and Intel) **and Linux** (x86_64 and arm64, glibc 2.34+: Ubuntu 22.04+, Debian 12+, Fedora, RHEL 9, Arch, WSL2). NixOS: [the flake](docs/nixos.md). the desktop app, voice and computer use are macOS only.
 > bring your own key: Anthropic, OpenAI, Mistral and more.
 
 ## how it works

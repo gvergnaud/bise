@@ -278,6 +278,11 @@ if [ "$os" = darwin ] && [ "$arch" = x86_64 ] && [ "$(sysctl -n sysctl.proc_tran
   arch=arm64
 fi
 target="$os-$arch"
+# NixOS has no /lib64/ld-linux*: the glibc build would not start (nix-ld
+# makes it work: NIX_LD set). The flake patches it for the store.
+if [ "$os" = linux ] && [ -e /etc/NIXOS ] && [ -z "${NIX_LD:-}" ]; then
+  die "NixOS: install bise with Nix instead: nix profile install github:gvergnaud/bise (flakes), or nix-env -if https://github.com/gvergnaud/bise/archive/main.tar.gz"
+fi
 # the bundle this file is in; never when piped (`curl | sh`: $0 is sh)
 here=""
 [ -f "$0" ] && here="$(cd "$(dirname "$0")" && pwd)"
