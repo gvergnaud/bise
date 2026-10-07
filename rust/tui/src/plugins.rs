@@ -12,6 +12,62 @@
 
 use std::path::Path;
 
+/// The plugins of `workspace` as rows (the desktop's `plugins` event, P.1):
+/// bend_plugins' resolution (built-in, user and workspace plugins, their
+/// state) and, for each, its remote MCP servers that log in, with the
+/// state `/plugins login` shows (needs a login, logged in, not logged in;
+/// `pending`: a login whose browser is open, by name). The TUI's popup
+/// reads the same resolution ([`choices`]).
+pub(crate) fn rows(workspace: &Path, pending: &[String]) -> Vec<bise_proto::draft::Plugin> {
+    let res = bend_plugins::resolve::resolve(&bend_plugins::resolve::Roots::standard(Some(workspace)));
+    let (secrets, sd) = (bend_plugins::oauth::store_dir(), bend_plugins::status::dir());
+    let targets = bend_plugins::login::targets(workspace);
+    res.plugins
+        .iter()
+        .map(|p| bise_proto::draft::Plugin {
+            name: p.name.clone(),
+            state: p.state.as_str().into(),
+            scope: p.scope.as_str().into(),
+            what: p.description.clone().filter(|d| !d.trim().is_empty()),
+            logins: targets.iter().filter(|t| t.plugin == p.name).map(|t| login_row(t, &secrets, &sd, pending)).collect(),
+        })
+        .collect()
+}
+
+/// One server's login as a row: what `/plugins login`'s popup says, as data.
+fn login_row(t: &bend_plugins::login::Target, secrets: &Path, sd: &Path, pending: &[String]) -> bise_proto::draft::PluginLogin {
+    let last = bend_plugins::status::read(sd, &t.plugin, &t.server.id);
+    let state = if pending.contains(&t.name) {
+        "pending"
+    } else if last.as_ref().is_some_and(|s| s.login) {
+        "needs"
+    } else if bend_plugins::login::logged_in(t, secrets) {
+        "in"
+    } else {
+        "out"
+    };
+    bise_proto::draft::PluginLogin {
+        name: t.name.clone(),
+        host: t.server.host(),
+        state: state.into(),
+        tools: last.and_then(|s| s.tools.ok()).map(|n| n as u32),
+    }
+}
+
+/// Turn plugin `name` on or off through bend_plugins' one writer.
+pub(crate) fn set(name: &str, on: bool) -> Result<bool, String> {
+    let path = bend_plugins::state::state_path();
+    bend_plugins::state::set_enabled(&path, name, on).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// Forget the login of server `name` (`/plugins logout NAME`).
+pub(crate) fn logout(workspace: &Path, name: &str) -> Result<String, String> {
+    let ts = bend_plugins::login::targets(workspace);
+    let t = bend_plugins::login::find(&ts, name)?;
+    bend_plugins::login::logout(t, &bend_plugins::oauth::store_dir(), Some(&bend_plugins::status::dir()))?;
+    Ok(t.name.clone())
+}
+
 /// The plugins of `workspace` matching `q` (the `/plugins enable|disable`
 /// argument, BISE-117). Resolved again at most every 5 s: the popup asks
 /// at every frame.
@@ -193,27 +249,19 @@ pub(crate) fn command(typed: &str, workspace: &Path) -> String {
             let rows: Vec<String> = ts.iter().map(|t| format!("  {}   {}", t.name, bend_plugins::login::state(t, &secrets, &sd))).collect();
             format!("/plugins {} NAME:\n{}", sub, rows.join("\n"))
         }
-        (Some("logout"), Some(name)) => {
-            let ts = bend_plugins::login::targets(workspace);
-            match bend_plugins::login::find(&ts, name)
-                .and_then(|t| bend_plugins::login::logout(t, &bend_plugins::oauth::store_dir(), Some(&bend_plugins::status::dir())).map(|_| t))
-            {
-                Ok(t) => format!("logged out of {}.", t.name),
-                Err(e) => e,
-            }
-        }
-        (Some(sub @ ("enable" | "disable")), Some(name)) => {
-            let path = bend_plugins::state::state_path();
-            match bend_plugins::state::set_enabled(&path, name, sub == "enable") {
-                Ok(changed) => format!(
-                    "{} {}{} — applies at the next /reload",
-                    name,
-                    if sub == "enable" { "enabled" } else { "disabled" },
-                    if changed { "" } else { " (unchanged)" }
-                ),
-                Err(e) => format!("{}: {}", path.display(), e),
-            }
-        }
+        (Some("logout"), Some(name)) => match logout(workspace, name) {
+            Ok(n) => format!("logged out of {n}."),
+            Err(e) => e,
+        },
+        (Some(sub @ ("enable" | "disable")), Some(name)) => match set(name, sub == "enable") {
+            Ok(changed) => format!(
+                "{} {}{} — applies at the next /reload",
+                name,
+                if sub == "enable" { "enabled" } else { "disabled" },
+                if changed { "" } else { " (unchanged)" }
+            ),
+            Err(e) => e,
+        },
         (None, _) | (Some("list"), _) => {
             let text = bend_plugins::cli::listing(workspace);
             format!("plugins ({})\n{}", workspace.display(), text.trim_end())

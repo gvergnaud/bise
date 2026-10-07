@@ -321,17 +321,10 @@ fn a_local_provider_needs_no_key() {
     assert!(!hm.config_file().exists());
 }
 
+/// The list's rule (ready providers only) is bise_catalog::picks's,
+/// tested there; here: a keyless provider's model can't be picked yet.
 #[test]
-fn the_model_list_has_only_the_models_of_ready_providers() {
-    let picks = crate::models::picks_with(&|id| id == "anthropic");
-    assert!(!picks.is_empty());
-    for p in &picks {
-        let full = crate::models::full_name(&p.value).unwrap_or_default();
-        assert!(full.starts_with("anthropic/"), "{} = {}", p.value, full);
-    }
-    let all = crate::models::picks_with(&|_| true);
-    assert!(all.iter().any(|p| p.value.starts_with("openrouter/")));
-    assert!(all.len() > picks.len());
+fn a_model_of_a_provider_with_no_key_is_keyless() {
     // what a machine with no key reads: the keyless ones
     let h = tmp("ready");
     let hs = h.to_string_lossy().to_string();

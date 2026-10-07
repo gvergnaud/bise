@@ -1,7 +1,11 @@
 //! The agent wire protocol as feed events: `Ev` and the parsers of the
-//! runtime lines (live and replayed history).
+//! runtime lines (live and replayed history). The lines are read by
+//! bise-proto's `thread::lines` (the one parser the hub's fold uses too);
+//! here they become the TUI's events.
 
-use crate::{fmt_elapsed, sb, truncate_chars, unescape_md, usage};
+use crate::{fmt_elapsed, sb, truncate_chars, usage};
+use bise_proto::thread::lines::{self, Obs, Rec, TurnEnd};
+use bise_proto::thread::{words, Notice, NoticeLevel};
 
 // ---- feed events ----
 
@@ -307,35 +311,10 @@ pub(crate) enum Ev {
 
 // the wire carries the model's reasoning wrapped in think markers inside
 // the assistant text (the transport the API re-send depends on); the TUI
-// never shows the markers: it splits them into a Thinking section
-pub(crate) const THINK_START: &str = "<think>";
-pub(crate) const THINK_END: &str = "</think>";
-
-pub(crate) fn split_thinking(s: &str) -> Option<(String, String)> {
-    // one reply can carry several thinking blocks: every span joins the
-    // section, the text around them stays visible
-    let mut think: Vec<&str> = Vec::new();
-    let mut visible = String::new();
-    let mut rest = s;
-    while let Some(start) = rest.find(THINK_START) {
-        let after = &rest[start + THINK_START.len()..];
-        let Some(end) = after.find(THINK_END) else {
-            break;
-        };
-        visible.push_str(&rest[..start]);
-        think.push(&after[..end]);
-        rest = &after[end + THINK_END.len()..];
-        // the wire carries newlines as a literal backslash-n escape
-        if let Some(r) = rest.strip_prefix("\\n") {
-            rest = r;
-        }
-    }
-    if think.is_empty() {
-        return None;
-    }
-    visible.push_str(rest);
-    Some((think.join("\\n"), visible))
-}
+// never shows the markers: it splits them into a Thinking section (one
+// reply can carry several blocks; the text around them stays visible).
+// The one parser of the line is bise-proto's (thread::lines).
+pub(crate) use bise_proto::thread::lines::split_thinking;
 
 // --resume / reload: the REPL replays the restored history as the live
 // wire lines, each prefixed "history " (runtime/main.bend replay). Two
@@ -350,266 +329,90 @@ pub(crate) fn strip_history(line: &str) -> (&str, bool) {
 }
 
 pub(crate) fn parse_history_line(line: &str) -> Option<Ev> {
-    // a replayed message was committed: the model read it
-    if let Some(t) = line.strip_prefix("you : ") {
-        return Some(Ev::You(unescape_md(t), Mark::Read, false));
-    }
-    // steering the Core committed: your message with this text was read;
-    // none (a notification): the old info line
-    if let Some(t) = line.strip_prefix("injected : ") {
-        let text = unescape_md(t);
-        let flat = text.replace('\n', " ");
-        let info = Ev::Info(format!("injected · {}", truncate_chars(flat.trim(), 110)));
-        return Some(Ev::MarkYou { text, mark: Mark::Read, or: Some(Box::new(info)) });
-    }
-    parse_line(line)
-}
-
-// "2/10 · provider 529 (transient) · retry in 4s" -> the warning the
-// user reads while the call waits
-pub(crate) fn provider_retry_text(t: &str) -> String {
-    let parts: Vec<&str> = t.split(" · ").collect();
-    match parts.as_slice() {
-        // "2/10" failed: the plan is attempt 3/10 after the pause
-        [n, why, wait] => {
-            let next = n
-                .split_once('/')
-                .and_then(|(a, b)| Some((a.parse::<u32>().ok()? + 1, b)))
-                .map(|(a, b)| format!("retry {}/{}", a, b))
-                .unwrap_or_else(|| "retry".into());
-            format!(
-                "model call failed (attempt {}): {} · {} in {}",
-                n,
-                why,
-                next,
-                wait.trim_start_matches("retry in ")
-            )
-        }
-        _ => format!("model call failed: {}", t),
-    }
+    rec_ev(lines::read_history(line))
 }
 
 pub(crate) fn parse_line(line: &str) -> Option<Ev> {
-    if line.is_empty() {
-        return None;
-    }
-    // switchboard: the hub's own lines in a feed
-    if let Some(rest) = line.strip_prefix("sb ") {
-        return sb::parse_hub_line(rest);
-    }
-    if line == "--- idle" {
-        return Some(Ev::Idle);
-    }
-    // the session-log facts (BISE-195): for the hub's writer, not the feed
-    if line.starts_with("  ev: ") {
-        return None;
-    }
-    // runtime annotations: tool #<id> <name> : <args>
-    if let Some(r) = line.strip_prefix("tool #") {
-        let (id_s, rest) = r.split_once(' ')?;
-        let id: u32 = id_s.parse().ok()?;
-        let (name, args) = rest.split_once(" : ").unwrap_or((rest, ""));
-        return Some(Ev::ToolInfo {
-            id,
-            name: name.trim().to_string(),
-            args: args.to_string(),
-        });
-    }
-    // tool_intent #<id> : <one line> (bash, run_typescript: BISE-223)
-    if let Some(r) = line.strip_prefix("tool_intent #") {
-        let (id_s, rest) = r.split_once(" : ")?;
-        let id: u32 = id_s.trim().parse().ok()?;
-        let text = rest.trim();
-        if text.is_empty() {
-            return None;
+    rec_ev(lines::read(line))
+}
+
+/// A transcript line, read by bise-proto's one parser
+/// (`thread::lines`, architect m_10476), as the TUI's feed event.
+fn rec_ev(rec: Rec) -> Option<Ev> {
+    Some(match rec {
+        // the session-log facts (BISE-195) are for the hub's writer
+        Rec::Empty | Rec::Fact | Rec::Dropped => return None,
+        Rec::Idle => Ev::Idle,
+        // switchboard: the hub's own lines in a feed
+        Rec::Hub(h) => return sb::hub_ev(h),
+        // runtime annotations, merged into the matching Tool by id
+        Rec::Tool { id, name, args } => Ev::ToolInfo { id, name, args },
+        Rec::ToolIntent { id, text } => Ev::ToolIntent { id, text },
+        Rec::ToolCode { id, code } => Ev::ToolCode { id, code },
+        Rec::ToolResult { id, ok, preview } => Ev::ToolResult { id, ok, preview },
+        Rec::Sub { name, ok, preview } => Ev::Sub { name, ok, preview },
+        // BR-003: right after an interrupt, an info; else an error
+        Rec::Rejected(r) => notice_ev(words::rejected(&r)),
+        // a replayed message was committed: the model read it
+        Rec::HistYou(t) => Ev::You(t, Mark::Read, false),
+        // steering the Core committed: your message with this text was
+        // read; none (a notification): the old info line
+        Rec::Injected(text) => {
+            let flat = text.replace('\n', " ");
+            let info = Ev::Info(format!("injected · {}", truncate_chars(flat.trim(), 110)));
+            Ev::MarkYou { text, mark: Mark::Read, or: Some(Box::new(info)) }
         }
-        return Some(Ev::ToolIntent { id, text: text.to_string() });
-    }
-    // tool_code #<id> : <full args, wire-encoded> (run_typescript only)
-    if let Some(r) = line.strip_prefix("tool_code #") {
-        let (id_s, rest) = r.split_once(" : ")?;
-        let id: u32 = id_s.trim().parse().ok()?;
-        return Some(Ev::ToolCode {
-            id,
-            code: rest.to_string(),
-        });
-    }
-    // tool_result #<id> <ok|fail> : <preview>
-    if let Some(r) = line.strip_prefix("tool_result #") {
-        let (id_s, rest) = r.split_once(' ')?;
-        let id: u32 = id_s.parse().ok()?;
-        let (st, preview) = rest.split_once(" : ").unwrap_or((rest, ""));
-        return Some(Ev::ToolResult {
-            id,
-            ok: st.trim() == "ok",
-            preview: preview.to_string(),
-        });
-    }
-    // subtool <name> <ok|fail> : <preview>
-    if let Some(r) = line.strip_prefix("subtool ") {
-        let (name, rest) = r.split_once(' ')?;
-        let (st, preview) = rest.split_once(" : ").unwrap_or((rest, ""));
-        return Some(Ev::Sub {
-            name: name.to_string(),
-            ok: st.trim() == "ok",
-            preview: preview.to_string(),
-        });
-    }
-    if let Some(r) = line.strip_prefix("core rejected: ") {
-        // BR-003: right after an interrupt the in-flight completion has
-        // no turn to land on - expected plumbing, not an error
-        if r == "no pending completion" || r == "no pending tool result" {
-            return Some(Ev::Info(
-                "in-flight response dropped (turn interrupted)".into(),
-            ));
-        }
-        return Some(Ev::Err(r.to_string()));
-    }
-    let Some(o) = line.strip_prefix("  obs: ") else {
-        return Some(Ev::Raw(line.to_string()));
-    };
-    if o == "turn_started" {
-        return Some(Ev::Turn);
-    }
-    if let Some(t) = o.strip_prefix("assistant: ") {
+        Rec::Raw(l) => Ev::Raw(l),
+        Rec::Obs(o) => return obs_ev(o),
+    })
+}
+
+fn obs_ev(o: Obs) -> Option<Ev> {
+    Some(match o {
+        Obs::TurnStarted => Ev::Turn,
         // tool-call-only replies carry no text
-        return if t.is_empty() {
-            None
-        } else {
-            Some(Ev::Assistant(t.to_string()))
-        };
-    }
-    if o == "assistant:" {
-        return None;
-    }
-    if let Some(n) = o.strip_prefix("tool_started #") {
-        let id: u32 = n.parse().ok()?;
-        return Some(Ev::Tool(ToolData::bare(id, ToolState::Run)));
-    }
-    if let Some(rest) = o.strip_prefix("tool_finished #") {
-        let (id_s, tail) = rest.split_once(' ')?;
-        let id: u32 = id_s.parse().ok()?;
-        let state = match tail {
-            "ok" => ToolState::Ok,
-            _ => ToolState::Fail,
-        };
-        return Some(Ev::Tool(ToolData::bare(id, state)));
-    }
-    if o.starts_with("tool_result_committed") {
-        return None;
-    }
-    // C3: steering moves the mark of your message, no info line
-    if let Some(t) = o.strip_prefix("steering_received: ") {
-        return Some(Ev::MarkYou { text: t.to_string(), mark: Mark::Received, or: None });
-    }
-    if let Some(t) = o.strip_prefix("steered: ") {
-        return Some(Ev::MarkYou { text: t.to_string(), mark: Mark::Read, or: None });
-    }
-    if let Some(t) = o.strip_prefix("notification_received: ") {
-        return Some(Ev::Info(format!("notification : {}", t)));
-    }
-    if let Some(t) = o.strip_prefix("notification_delivered: ") {
-        return Some(Ev::Info(format!("notification delivered to the model: {}", t)));
-    }
-    if let Some(t) = o.strip_prefix("provider_retry: ") {
-        return Some(Ev::Warn(provider_retry_text(t)));
-    }
-    if let Some(t) = o.strip_prefix("harness_restarted: ") {
-        return Some(Ev::Err(format!(
-            "the harness crashed ({}) and restarted — the current turn is interrupted, the history is restored up to the last model call",
-            t
-        )));
-    }
-    if let Some(t) = o.strip_prefix("candidate_discarded: ") {
-        // no key, or a ChatGPT plan line: the turn's end says it, once
-        // (BISE-294; subscriptions)
-        if no_key(t).is_some() || is_plan_line(t) {
-            return None;
-        }
-        return Some(Ev::Warn(format!("candidate discarded: {}", t)));
-    }
-    if o.starts_with("compaction_started #") {
-        return Some(Ev::Compact);
-    }
-    if let Some(t) = o.strip_prefix("context_compaction_failed: ") {
-        return Some(Ev::Err(format!("compaction failed: {}", t)));
-    }
-    if let Some(t) = o.strip_prefix("session_restored: ") {
-        return Some(Ev::Info(format!(
-            "session restored · {} messages",
-            t.trim_end_matches(" messages")
-        )));
-    }
-    if let Some(t) = o.strip_prefix("compaction_done: ") {
-        return Some(Ev::Compacted { text: t.to_string(), open: false });
-    }
-    if let Some(t) = o.strip_prefix("usage: ") {
-        return usage::Usage::parse(t).map(Ev::Usage);
-    }
-    if o == "null_iteration" {
-        return Some(Ev::Warn(
-            "empty response from the model — retrying".into(),
-        ));
-    }
-    if let Some(t) = o.strip_prefix("turn_done: ") {
+        Obs::Assistant(t) if t.is_empty() => return None,
+        Obs::Assistant(t) => Ev::Assistant(t),
+        Obs::ToolStarted(id) => Ev::Tool(ToolData::bare(id, ToolState::Run)),
+        Obs::ToolFinished { id, ok } => Ev::Tool(ToolData::bare(id, if ok { ToolState::Ok } else { ToolState::Fail })),
+        Obs::Plumbing => return None,
+        // C3: steering moves the mark of your message, no info line
+        Obs::SteeringReceived(text) => Ev::MarkYou { text, mark: Mark::Received, or: None },
+        Obs::Steered(text) => Ev::MarkYou { text, mark: Mark::Read, or: None },
+        Obs::CompactionStarted => Ev::Compact,
+        Obs::CompactionDone(text) => Ev::Compacted { text, open: false },
+        Obs::Usage(t) => return usage::Usage::parse(&t).map(Ev::Usage),
         // a completed turn needs no annotation; a failure or an
         // interrupt must never disappear — the turn just stops
-        if t == "completed" {
-            return Some(Ev::TurnDone);
-        }
-        if let Some(why) = t.strip_prefix("failed: ") {
-            // a call an interrupt stopped mid-answer ("interrupted by
-            // main", "by the user"): a stop someone asked for, not a
-            // failure
-            if why.starts_with("interrupted by ") {
-                return Some(Ev::Warn(format!("turn {}", why)));
-            }
-            // the ChatGPT plan's own lines (subscriptions design, item 5):
-            // a limit, plan use off, usage not checked, the sign-in
-            // expired: a ▲ that says what to do, not a ✗ failure
-            if is_plan_line(why) {
-                // expired-ux (designer m_7456): the TUI signs in again on
-                // ⏎, a shorter path than the runtime's /provider (the
-                // CLI keeps the runtime's words)
-                if why.starts_with(PLAN_LINES[3]) {
-                    return Some(Ev::Warn(EXPIRED_TUI.into()));
-                }
-                return Some(Ev::Warn(why.to_string()));
-            }
-            if let Some(line) = no_key(why) {
-                return Some(Ev::Err(line));
-            }
-            return Some(Ev::Err(format!("turn failed: {}", why)));
-        }
-        if t == "interrupted" {
-            return Some(Ev::Warn("turn interrupted".into()));
-        }
-        return Some(Ev::Err(format!("turn stopped: {}", t)));
+        Obs::TurnDone(TurnEnd::Completed) => Ev::TurnDone,
+        // expired-ux (designer m_7456): the TUI signs in again on ⏎, a
+        // shorter path than the runtime's /provider (the CLI and the
+        // window keep the runtime's words)
+        Obs::TurnDone(TurnEnd::Failed(why)) if words::is_expired_line(&why) => Ev::Warn(EXPIRED_TUI.into()),
+        Obs::Other(o) => Ev::Raw(o),
+        // the notices (a failed turn and why, a retry, a stop someone
+        // asked for...): the words the hub's fold shows too
+        o => return words::obs_notice(&o, &crate::models::provider_name).map(notice_ev),
+    })
+}
+
+/// A notice (bise-proto's words) as the TUI's line of its level.
+pub(crate) fn notice_ev(n: Notice) -> Ev {
+    match n.level {
+        NoticeLevel::Warn => Ev::Warn(n.text),
+        NoticeLevel::Err => Ev::Err(n.text),
+        NoticeLevel::Info | NoticeLevel::Unknown => Ev::Info(n.text),
     }
-    // the runtime ran out of execution budget mid-turn (never silent)
-    if let Some(t) = o.strip_prefix("turn_stalled: ") {
-        return Some(Ev::Err(format!("turn stopped: {}", t)));
-    }
-    Some(Ev::Raw(o.to_string()))
 }
 
 /// The openings of the runtime's ChatGPT plan lines (bend/runtime, the
 /// designer's final words): matched on these, not the whole line.
-const PLAN_LINES: [&str; 4] = [
-    "your ChatGPT plan's limit for bise is reached.",
-    "ChatGPT plan use is off for bise.",
-    "ChatGPT couldn't check your plan's usage.",
-    "your ChatGPT sign-in expired.",
-];
+/// (bise-proto's `thread::words`: the one list of them)
+pub(crate) use bise_proto::thread::words::is_plan_line;
 
 /// The expired sign-in's line in the TUI (designer m_7456): ⏎ in the
 /// thread signs in again (keybar.rs, input.rs).
 pub(crate) const EXPIRED_TUI: &str = "your ChatGPT sign-in expired. ⏎ signs you in again.";
-
-/// A turn ended on one of the ChatGPT plan's lines.
-pub(crate) fn is_plan_line(t: &str) -> bool {
-    PLAN_LINES.iter().any(|p| t.starts_with(p))
-}
 
 /// The plan's usage page, as the limit line says it, and where it links.
 pub(crate) const PLAN_USAGE_TEXT: &str = "chatgpt.com/settings/usage";
@@ -697,14 +500,11 @@ pub(crate) fn parse_history(v: &serde_json::Value) -> Vec<HistLine> {
 /// (OPENROUTER_API_KEY is not set): /provider sets it up`), and the older
 /// runtime's bare `OPENROUTER_API_KEY is not set`, as the designer's line:
 /// `turn stopped: no OpenRouter key yet. /provider sets it up.`
+#[cfg(test)]
 pub(crate) fn no_key(why: &str) -> Option<String> {
-    let why = why.trim();
-    let name = if let Some(rest) = why.strip_prefix("no ") {
-        let (id, _) = rest.split_once(" key yet (")?;
-        why.contains(" is not set)").then(|| crate::models::provider_name(id, ""))?
-    } else {
-        let var = why.strip_suffix(" is not set")?;
-        (var.ends_with("_KEY") && !var.contains(' ')).then(|| crate::models::provider_name("", var))?
-    };
-    Some(format!("turn stopped: no {} key yet. /provider sets it up.", name))
+    words::no_key(why, &|id, var| crate::models::provider_name(id, var))
 }
+
+#[cfg(test)]
+#[path = "wire_agree_tests.rs"]
+mod agree_tests;

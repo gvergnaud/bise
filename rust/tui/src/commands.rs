@@ -584,30 +584,9 @@ pub(crate) fn at_items(app: &App) -> Vec<PopItem> {
         .map(std::path::PathBuf::from)
         .or_else(|| std::env::current_dir().ok())
         .unwrap_or_default();
-    // `@../`, `@~/`, `@/`: the typed folder's own listing, no index
-    let outside = files::outside(&q);
-    let (mut hits, locked) = if outside {
-        let o = files::search_outside(&root, &q, FILE_ROWS);
-        (o.hits, o.locked)
-    } else {
-        (files::search(&root, &q, FILE_ROWS), false)
-    };
-    // browsing a folder: the folder itself last (↑ from the first row),
-    // so ⏎ can still insert a folder reference
-    let this = if outside {
-        // even an empty or locked one: it is what the user typed
-        files::parent_query(&q).map(|_| q.strip_suffix('/').filter(|p| !p.is_empty()).unwrap_or("/"))
-    } else {
-        files::parent_query(&q)
-            .and_then(|_| hits.first())
-            .and_then(|h| h.path.rsplit_once('/'))
-            .map(|(parent, _)| parent)
-            .filter(|parent| parent.to_lowercase() == q.trim_end_matches('/').to_lowercase())
-    }
-    .map(|parent| parent.to_string());
-    if this.is_some() {
-        hits.truncate(FILE_ROWS - 1);
-    }
+    // `@../`, `@~/`, `@/`: the typed folder's own listing, no index; a
+    // folder browsed: its own row last (files::pick, the window's too)
+    let files::Pick { hits, this, outside, locked } = files::pick(&root, &q, FILE_ROWS);
     // an outside path is sent in a form the tools read (`~/` expanded)
     let sent = |p: &str| if outside { files::sent_path(p) } else { p.to_string() };
     let files = hits.into_iter().map(|h| {

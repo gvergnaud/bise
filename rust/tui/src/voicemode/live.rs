@@ -152,6 +152,23 @@ fn live_jobs(cfg: &VoiceModeConfig) -> Result<Jobs, String> {
     Ok(Jobs { listen: config::listen_job()?, say: config::say_job(cfg) })
 }
 
+/// The desktop core's voice mode (ambient core/voice_mode.rs): the same
+/// ports, jobs and settings as ctrl+r twice here (BISE_VOICE_FAKE's fakes
+/// when set). `fake_only`: harness A's core, which never opens a device:
+/// without BISE_VOICE_FAKE it refuses.
+pub(crate) fn for_core(fake_only: bool) -> Result<(Ports, Jobs, VoiceModeConfig), String> {
+    let cfg = config::load();
+    let (ports, jobs) = match bise_home::env::test_setting("BISE_VOICE_FAKE") {
+        Some(wav) => fake_ports(&wav)?,
+        None if fake_only => return Err("voice mode: no fake voice here (BISE_VOICE_FAKE)".into()),
+        None => {
+            let jobs = live_jobs(&cfg)?;
+            (live_ports(&jobs.listen)?, jobs)
+        }
+    };
+    Ok((ports, jobs, cfg))
+}
+
 /// A faint line in the thread in view.
 fn note(app: &mut App, text: String) {
     push_event(&mut app.events, &mut app.cache, Ev::Info(format!("· {}", text)));
@@ -263,17 +280,8 @@ fn answer_by_voice(app: &mut App, text: &str) -> bool {
     use super::answers;
     let Some(q) = crate::sb::voice_question(app) else { return false };
     let now = Instant::now();
-    let (i, line) = if q.approval {
-        if !answers::is_allow(text) {
-            return false;
-        }
-        // the first option is the item's "allow" (once)
-        let Some(label) = q.options.first() else { return false };
-        (0, answers::heard_allow(text, label))
-    } else {
-        let Some(i) = answers::pick(text, &q.options) else { return false };
-        (i, answers::heard_line(text, i + 1, &q.options[i]))
-    };
+    // the first option is an approval's "allow" (once)
+    let Some((i, line)) = answers::decide(text, q.approval, &q.options) else { return false };
     crate::sb::show_heard(q.id, line.clone(), now);
     if let Some(vm) = app.voice_mode.as_mut() {
         vm.show_heard(line, now);

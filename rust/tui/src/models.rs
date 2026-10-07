@@ -51,8 +51,10 @@ pub(crate) fn model_for(main: bool) -> String {
 /// A listed model the catalog says cannot read images. An unlisted one
 /// is not refused here: the provider says (the no-vision line then
 /// comes from its error).
+/// The rule is bise_catalog's `Catalog::vision` (shared with the hub's
+/// agent rows, bise desktop K4).
 pub(crate) fn lacks_vision(model: &str) -> bool {
-    resolve(model).is_some_and(|r| r.known == Known::Listed && !r.caps.vision)
+    setup().catalog.vision(model) == Some(false)
 }
 
 // ---- the model and effort shown (BISE-135) ----
@@ -79,52 +81,15 @@ pub(crate) fn efforts(model: &str) -> (Vec<String>, String) {
     }
 }
 
-/// One model the `/model` popup offers.
-pub(crate) struct Pick {
-    /// what `/model` takes: a full id, or an alias
-    pub(crate) value: String,
-    pub(crate) desc: String,
-    /// BISE-301: its provider's name, the header `/model` groups it
-    /// under ("" for an alias)
-    pub(crate) provider: String,
-    /// what its row says under that header: `1M`, `128k · config.toml`,
-    /// `= anthropic/claude-opus-5-5`
-    pub(crate) short: String,
-}
+/// One model the `/model` popup offers ([`bise_catalog::picks`], the
+/// hub's typed `models` rows use the same rule).
+pub(crate) use bise_catalog::picks::Pick;
 
-/// The chat models of the catalog (built in and config.toml's) whose
-/// provider can run a turn now (BISE-294: a key found, or none needed),
-/// then the aliases to them: `/model`'s list (BISE-117 completion).
+/// The chat models whose provider can run a turn now, then the aliases
+/// to them: `/model`'s list (BISE-117 completion).
 pub(crate) fn picks() -> Vec<Pick> {
     let ready = ready_ids();
-    picks_with(&|id| ready.iter().any(|r| r == id))
-}
-
-/// [`picks`] for the providers `ready` says yes to.
-pub(crate) fn picks_with(ready: &dyn Fn(&str) -> bool) -> Vec<Pick> {
-    let c = &setup().catalog;
-    let mut out = Vec::new();
-    for m in c.models.iter().filter(|m| !m.stt) {
-        let Some(p) = c.provider(&m.provider).filter(|p| p.chats() && p.needs.is_empty() && ready(&p.id)) else {
-            continue;
-        };
-        let r = c.resolve(&m.name());
-        let ctx = match r.caps.context {
-            n if n >= 1_000_000 => format!("{}M", n / 1_000_000),
-            n => format!("{}k", n / 1000),
-        };
-        let mine = if m.source == bise_catalog::Source::Config { " · config.toml" } else { "" };
-        out.push(Pick {
-            value: m.name(),
-            desc: format!("{} · {} · {}{}", long_name(&m.name()), p.name, ctx, mine),
-            provider: p.name.clone(),
-            short: format!("{}{}", ctx, mine),
-        });
-    }
-    for (a, to) in c.aliases.iter().filter(|(_, to)| ready(&c.resolve(to).provider)) {
-        out.push(Pick { value: a.clone(), desc: format!("= {}", to), provider: String::new(), short: format!("= {}", to) });
-    }
-    out
+    bise_catalog::picks::picks(setup(), &|id| ready.iter().any(|r| r == id))
 }
 
 /// The providers that can run a turn now: a key found where the
@@ -169,14 +134,11 @@ pub(crate) fn forget_keys() {
     FORGOT.store(true, std::sync::atomic::Ordering::SeqCst);
 }
 
-/// The ready providers for an environment and a bise home.
+/// The ready providers for an environment and a bise home
+/// ([`bise_catalog::picks::ready_in`]).
 #[cfg_attr(test, allow(dead_code))]
 pub(crate) fn ready_in(env: &dyn Fn(&str) -> Option<String>, home: &bise_home::Home) -> Vec<String> {
-    use bise_catalog::auth::{EnvFile, Keys, Store};
-    let store = Store::read(&home.auth_file()).unwrap_or_default();
-    let files = EnvFile::read_all(&home.env_files());
-    let keys = Keys { env, store: &store, files: &files };
-    setup().catalog.providers.iter().filter(|p| keys.ready(p)).map(|p| p.id.clone()).collect()
+    bise_catalog::picks::ready_in(setup(), env, home)
 }
 
 /// A model `/model` may not switch to yet: its provider is known and
@@ -189,6 +151,19 @@ pub(crate) fn keyless(model: &str) -> Option<(String, String)> {
     (!ok).then(|| (p.id.clone(), p.name.clone()))
 }
 
+/// `/model <model> [default]` of a provider without a key: its provider
+/// id and the full model id. The one rule for the TUI (sb.rs: the
+/// provider's setup opens, then the line runs) and the window core (R8:
+/// the line is held until the provider works).
+pub(crate) fn model_needs_key(line: &str) -> Option<(String, String)> {
+    let mut w = line.split_whitespace();
+    if w.next() != Some("/model") {
+        return None;
+    }
+    let full = full_name(w.next()?)?;
+    keyless(&full).map(|(id, _)| (id, full))
+}
+
 /// A model as `/model` takes it (a full id, a bare one, an alias) as its
 /// full `provider/model` id; None for a provider nobody knows.
 pub(crate) fn full_name(model: &str) -> Option<String> {
@@ -199,13 +174,7 @@ pub(crate) fn full_name(model: &str) -> Option<String> {
 /// (`OPENROUTER_API_KEY` -> OpenRouter); the id or the variable itself
 /// when the catalog has none.
 pub(crate) fn provider_name(id: &str, key_env: &str) -> String {
-    let c = &setup().catalog;
-    let p = if id.is_empty() {
-        c.providers.iter().find(|p| !p.key_env.is_empty() && p.key_env == key_env && p.chats())
-    } else {
-        c.provider(id)
-    };
-    p.map(|p| p.name.clone()).unwrap_or_else(|| if id.is_empty() { key_env.to_string() } else { id.to_string() })
+    setup().catalog.provider_name(id, key_env)
 }
 
 /// The providers not ready, the offered ones first: `/model`'s last
@@ -353,16 +322,5 @@ mod tests {
         assert_eq!(free_id_of("openai/gpt-6-astra", "openrouter").as_deref(), Some("openrouter/openai/gpt-6-astra"));
         assert_eq!(free_id_of("openrouter/x/y", "openrouter").as_deref(), Some("openrouter/x/y"));
         assert_eq!(free_id_of("openai", "openai").as_deref(), Some("openai/openai"));
-    }
-
-    #[test]
-    fn only_a_listed_model_without_vision_is_refused() {
-        assert!(lacks_vision("mistral/codestral-latest"));
-        assert!(!lacks_vision("mistral/mistral-medium-latest"));
-        assert!(!lacks_vision("anthropic/claude-haiku-4-5"));
-        // unlisted or unknown: the provider decides
-        assert!(!lacks_vision("ollama/llava"));
-        assert!(!lacks_vision("nowhere/m"));
-        assert!(!lacks_vision(""));
     }
 }

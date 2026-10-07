@@ -35,11 +35,16 @@ pub fn listener_for(_job: &ListenJob) -> Box<dyn Listener> {
 /// One batch request per turn (voice::transcribe_clip), at Flush.
 pub struct BatchListener;
 
+/// Your languages across talks (the capsule opens a listener per talk):
+/// the last you spoke stays known for the next talk.
+static LANGS: std::sync::Mutex<Option<Langs>> = std::sync::Mutex::new(None);
+
 impl Listener for BatchListener {
     fn start(&self, job: ListenJob, audio: Receiver<ListenMsg>, events: Sender<Heard>, cancel: Arc<AtomicBool>) {
         std::thread::spawn(move || {
-            let mut langs = Langs::new(system_languages());
+            let mut langs = LANGS.lock().unwrap_or_else(|e| e.into_inner()).clone().unwrap_or_else(|| Langs::new(system_languages()));
             run_batch(&job.batch, &audio, &events, &cancel, &mut langs, &|req| http::send(req, BATCH_TIMEOUT));
+            *LANGS.lock().unwrap_or_else(|e| e.into_inner()) = Some(langs);
         });
     }
 }
@@ -51,6 +56,9 @@ impl Listener for BatchListener {
 // наверное."). A turn whose words are in a script none of your languages
 // write (Cyrillic for a French and English speaker) is transcribed again
 // with your language: the last one you spoke, else your Mac's first.
+
+/// A clip shorter than this is short: auto-detect is unsure on it.
+const SHORT_CLIP_SECS: f32 = 4.0;
 
 /// A writing system, enough to tell a misdetection.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -111,7 +119,7 @@ fn base(lang: &str) -> String {
 
 /// Your languages: the ones you spoke in this voice mode (the last
 /// first), then your Mac's.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Langs {
     spoken: Vec<String>,
     system: Vec<String>,
@@ -138,6 +146,21 @@ impl Langs {
             return None;
         }
         known.next().cloned()
+    }
+
+    /// The language to check an English transcript of `secs` of audio
+    /// in (ambient-lead m_6275: his first French ask came back as
+    /// English): auto-detect is unsure on the first words of a session
+    /// and on short clips, so when you have not spoken yet here, or the
+    /// clip is short, and your language (the last you spoke, else your
+    /// Mac's first) is not English, the clip is heard again in it. None:
+    /// keep the transcript.
+    pub fn recheck(&self, text: &str, secs: f32) -> Option<String> {
+        if super::speak::language(text) != Some("en") || !(self.spoken.is_empty() || secs < SHORT_CLIP_SECS) {
+            return None;
+        }
+        let mine = self.spoken.first().or(self.system.first())?;
+        (mine != "en" && script_of_lang(mine) == Script::Latin).then(|| mine.clone())
     }
 
     /// A turn was kept: its language (when it tells) is the last you spoke.
@@ -215,6 +238,23 @@ fn run_batch(
                         if let Ok(t) = voice::transcribe_clip(&again, &clip, cancel, send) {
                             super::debug::log(|| format!("language guard · \"{}\" redone in {} · \"{}\"", first, lang, t));
                             result = Ok(t);
+                        }
+                    }
+                }
+                // auto language, and the words came back English where you
+                // likely spoke yours (the session's first words, a short
+                // clip): heard again in yours, kept when it reads as not
+                // English (an English ask stays English)
+                let secs = clip.len() as f32 / MIC_RATE as f32;
+                if let (true, Ok(text)) = (auto, &result) {
+                    if let Some(lang) = langs.recheck(text, secs) {
+                        let again = VoiceJob { language: Some(lang.clone()), ..job.clone() };
+                        if let Ok(t) = voice::transcribe_clip(&again, &clip, cancel, send) {
+                            let keep = !t.is_empty() && super::speak::language(&t) != Some("en");
+                            super::debug::log(|| format!("language recheck · \"{}\" heard in {} · \"{}\" · {}", text, lang, t, if keep { "kept" } else { "dropped" }));
+                            if keep {
+                                result = Ok(t);
+                            }
                         }
                     }
                 }

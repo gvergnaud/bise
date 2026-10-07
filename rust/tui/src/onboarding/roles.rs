@@ -440,12 +440,8 @@ impl Onb {
 
     /// Write a role's choice in config.toml and read the setup again.
     fn save_role(&mut self, id: &str, model: Option<&str>, effort: Option<&str>, env: Env) -> Result<(), String> {
-        let file = self.home.config_file();
-        let text = std::fs::read_to_string(&file).unwrap_or_default();
-        if let Some(dir) = file.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-        }
-        std::fs::write(&file, r::set_role(&text, id, model, effort)).map_err(|e| format!("couldn't write config.toml: {}", e))?;
+        // the one locked writer, the desktop's core's too
+        r::save_role(&self.home.config_file(), id, model, effort)?;
         self.setup = setup_of(env, &self.home);
         self.model = self.setup.model.clone();
         self.mine = self.setup.catalog.resolve(&self.model).provider;

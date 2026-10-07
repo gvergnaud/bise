@@ -144,6 +144,21 @@ pub fn pick(heard: &str, choices: &[String]) -> Option<usize> {
     }
 }
 
+/// The one decision of an answer by voice (the TUI's live.rs and the
+/// window's core both call it): the 0-based option the words answer and
+/// the heard line, or None (the words go as words). An approval takes
+/// only the word "allow" ([`is_allow`]), as its first option (allow
+/// once); a question takes [`pick`].
+pub fn decide(heard: &str, approval: bool, options: &[String]) -> Option<(usize, String)> {
+    if approval {
+        let label = options.first()?;
+        is_allow(heard).then(|| (0, heard_allow(heard, label)))
+    } else {
+        let i = pick(heard, options)?;
+        Some((i, heard_line(heard, i + 1, &options[i])))
+    }
+}
+
 /// The line shown while the answer waits: `heard "the first one" → 1
 /// smaller` (the turn cut to 24 characters, the label to 24).
 pub fn heard_line(heard: &str, num: usize, label: &str) -> String {

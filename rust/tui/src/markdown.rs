@@ -12,17 +12,7 @@ use crate::wrap_line;
 // bold, italic and code.
 
 pub(crate) fn unescape_md(s: &str) -> String {
-    let mut out = String::new();
-    let mut chars = s.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c == '\\' && chars.peek() == Some(&'n') {
-            chars.next();
-            out.push('\n');
-        } else {
-            out.push(c);
-        }
-    }
-    out
+    bise_proto::thread::lines::unescape(s)
 }
 
 /// A markdown link `[label](url "title")` at `cs[i]` (`[`): the label,

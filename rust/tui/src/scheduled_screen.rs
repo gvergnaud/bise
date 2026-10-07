@@ -119,7 +119,7 @@ fn row(t: &Task, selected: bool, width: usize, now: u64) -> Line<'static> {
             if t.next_ms.saturating_sub(now) < 24 * 3_600_000 && !n.contains("tomorrow") {
                 n.push_str(&format!(" · {}", countdown(t.next_ms, now)));
             }
-            (n, t.so_far(now))
+            (n, crate::scheduled::so_far(t, now))
         }
         None => {
             let n = if t.next_ms.saturating_sub(now) < 24 * 3_600_000 && !ahead(t.next_ms, now).contains("tomorrow") {
@@ -127,7 +127,7 @@ fn row(t: &Task, selected: bool, width: usize, now: u64) -> Line<'static> {
             } else {
                 ahead(t.next_ms, now).replace("tomorrow", "tmrw")
             };
-            (n, t.so_far(now))
+            (n, crate::scheduled::so_far(t, now))
         }
     };
     spans.push(Span::styled(pad(&next, next_w), soft));
@@ -322,7 +322,7 @@ pub(crate) fn opened_lines(sc: &Screen, t: &Task, width: usize, height: usize, n
         Some(e) => out.push(label("ended", format!("{} · {}", ahead(e, now), t.ended_words()))),
         None => out.push(label("next run", format!("{} · {}", ahead(t.next_ms, now), countdown(t.next_ms, now)))),
     }
-    let mut far = t.so_far(now);
+    let mut far = crate::scheduled::so_far(t, now);
     if far.starts_with("until") || far.is_empty() {
         far = format!("{} run{}", t.fired, if t.fired == 1 { "" } else { "s" });
     }

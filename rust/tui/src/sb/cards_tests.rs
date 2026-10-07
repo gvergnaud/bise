@@ -777,7 +777,8 @@ fn an_answer_by_voice_shows_then_counts() {
     show_heard(14, "heard \"allow\" → allow once".into(), now);
     assert!(answer_by_voice(&mut app, 14, 0));
     assert_eq!(heard_on(14, now), None);
-    assert_eq!(sent(&mut hub), vec!["/answer 14 allow once"]);
+    // an approval answers with its digit (the composer rule)
+    assert_eq!(sent(&mut hub), vec!["/answer 14 1"]);
     // then the question: its two options
     let q = voice_question(&app).unwrap();
     assert_eq!((q.id, q.approval, q.options.len()), (12, false, 2));

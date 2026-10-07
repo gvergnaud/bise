@@ -210,6 +210,53 @@ fn a_transcript_in_a_script_you_never_use_is_redone_in_your_language() {
     assert_eq!(*langs_sent.lock().unwrap(), [false, true], "auto first, then French");
 }
 
+/// Law (ambient-lead m_6275, dogfood: his first French ask came back as
+/// 'You, I suppose that's what you said.'): with auto language, an
+/// English transcript of the session's first words (or of a short clip)
+/// is heard again in your language when it is not English, and kept when
+/// it reads as yours; an English ask stays English; once you spoke
+/// English, a long English clip is not checked again.
+#[test]
+fn first_words_read_as_english_are_heard_again_in_your_language() {
+    let job = VoiceJob { language: None, ..crate::voice::fakes::job() };
+    let turn = |langs: &mut Langs, secs: f32, said_fr: &'static str, said_en: &'static str| {
+        let (audio, rx) = mpsc::channel();
+        let (tx, heard) = mpsc::channel();
+        let cancel = AtomicBool::new(false);
+        let sent = std::sync::Mutex::new(Vec::<bool>::new());
+        let send = |req: &http::Request| {
+            let body = String::from_utf8_lossy(&req.body).to_string();
+            let with_fr = body.contains("name=\"language\"") && body.contains("\r\n\r\nfr\r\n");
+            sent.lock().unwrap().push(with_fr);
+            // auto: the model's guess; in French: what it hears in French
+            let text = if with_fr { said_fr } else { said_en };
+            Ok(http::Response { status: 200, body: format!(r#"{{"text":"{}"}}"#, text).into_bytes() })
+        };
+        audio.send(ListenMsg::Audio(vec![3000; (secs * MIC_RATE as f32) as usize])).unwrap();
+        audio.send(ListenMsg::Flush).unwrap();
+        drop(audio);
+        run_batch(&job, &rx, &tx, &cancel, langs, &send);
+        let Heard::Text(t) = heard.try_recv().unwrap() else { panic!("no words") };
+        let sent = sent.lock().unwrap().clone();
+        (t.trim().to_string(), sent)
+    };
+    let mut langs = Langs::new(vec!["fr-FR".into(), "en-FR".into()]);
+    // the first ask, French, guessed English: heard again in French
+    let (t, sent) = turn(&mut langs, 6.0, "Est-ce que tu peux lancer les tests ?", "You, I suppose that's what you said.");
+    assert_eq!((t.as_str(), sent), ("Est-ce que tu peux lancer les tests ?", vec![false, true]));
+    // an English ask, short: checked in French, the English words come back, kept
+    let (t, sent) = turn(&mut langs, 2.0, "run the tests now", "run the tests now");
+    assert_eq!((t.as_str(), sent), ("run the tests now", vec![false, true]));
+    // now English is the last spoken: a long English ask is not checked
+    let (t, sent) = turn(&mut langs, 6.0, "-", "please run the tests and tell me what fails");
+    assert_eq!((t.as_str(), sent), ("please run the tests and tell me what fails", vec![false]));
+    // an English speaker's Mac: never checked
+    let mut en = Langs::new(vec!["en-US".into()]);
+    assert_eq!(en.recheck("you said it", 1.0), None);
+    en.heard("you said it");
+    assert_eq!(Langs::new(vec!["fr-FR".into()]).recheck("Tu m'entends ou pas ?", 1.0), None, "French words: kept");
+}
+
 #[test]
 fn your_languages_keep_their_words_and_the_last_spoken_leads() {
     let mut l = Langs::new(vec!["fr-FR".into(), "en-FR".into(), "en_US.UTF-8".into()]);

@@ -8,6 +8,7 @@
 //! `Sb::views` and are swapped in on focus change.
 
 use super::*;
+use bise_proto::thread::lines::{self, GateStep, Hub};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::os::unix::net::UnixStream;
@@ -21,6 +22,7 @@ pub(super) use mention::mentions;
 mod cards;
 pub(super) use cards::{card_choices, card_mouse, proves_ctrl_digits};
 pub(crate) use cards::{answer_by_voice, show_heard, voice_question};
+pub(crate) use cards::{ambient_local, ambient_options, ambient_reply, split_choices};
 use cards::{Card, CardView};
 mod card_draw;
 pub(super) use card_draw::{box_height, card_frame, BoxFit, card_view_open, divider_label as card_divider_label, draw_box, draw_view as draw_card_view, fit_pairs as fit_card_pairs, key_pairs as card_key_pairs};
@@ -286,6 +288,18 @@ impl Rule {
             added: str_of(v, "added").parse().ok(),
             from: str_of(v, "from"),
             outside: v.get("sandbox").and_then(|x| x.as_bool()) == Some(false),
+        }
+    }
+
+    /// Its facts for the words (bise_proto::approvals).
+    pub(crate) fn facts(&self) -> bise_proto::approvals::RuleFacts<'_> {
+        bise_proto::approvals::RuleFacts {
+            tool: &self.tool,
+            pattern: &self.pattern,
+            path: &self.path,
+            from: &self.from,
+            every: self.every,
+            outside: self.outside,
         }
     }
 }
@@ -766,7 +780,7 @@ fn ingest_for(app: &mut App, agent: &str, line: String, pos: Option<usize>, ts: 
         }
     }
     // an answer given here: its fold line is in this feed already
-    let answer_id = line.strip_prefix("sb route : ").and_then(|r| answer_route(&unescape_md(r)).map(|(_, id, _)| id));
+    let answer_id = line.strip_prefix("sb route : ").and_then(|r| lines::answer_route(&unescape_md(r)).map(|(_, id, _)| id));
     let folded = answer_id.is_some_and(|id| sb.folded_in(id, agent));
     // BISE-307: what the item asked, for its line to open on (the
     // inbox's card while the hub still holds it)
@@ -1077,14 +1091,6 @@ fn model_overrides(app: &App) -> Vec<(String, String)> {
         .collect()
 }
 
-/// `/model <model> [default]` of a provider without a key: its provider
-/// id and the full model id.
-fn model_needs_key(typed: &str) -> Option<(String, String)> {
-    let arg = typed.split_whitespace().nth(1)?;
-    let full = crate::models::full_name(arg)?;
-    crate::models::keyless(&full).map(|(id, _)| (id, full))
-}
-
 /// One line typed by the user: the client's own commands (/voice,
 /// /quit, /clear, /help, /theme…) here, the rest goes to the hub.
 pub(crate) fn handle_input(app: &mut App, v: &str) -> Vec<Ev> {
@@ -1143,19 +1149,16 @@ pub(crate) fn handle_input(app: &mut App, v: &str) -> Vec<Ev> {
             crate::scheduled_screen::open(app);
             return out;
         }
+        // bise_proto::slash reads it, as the hub reads the window's line
         Some("/artifacts") => {
-            let rest = typed.trim_start_matches("/artifacts").trim();
-            match rest.strip_prefix("add") {
-                Some(target) if rest == "add" || rest.starts_with("add ") => {
-                    let target = target.trim();
-                    if target.is_empty() {
-                        out.push(Ev::Warn("/artifacts add <path or link>".into()));
-                    } else {
-                        let agent = app.sb.focus.clone();
-                        app.sb.send(json!({"op": "artifacts", "do": "add", "target": target, "agent": agent}));
-                    }
+            use bise_proto::slash::{artifacts, Artifacts, ARTIFACTS_ADD};
+            match artifacts(&typed) {
+                Some(Artifacts::Usage) => out.push(Ev::Warn(ARTIFACTS_ADD.into())),
+                Some(Artifacts::Add(target)) => {
+                    let agent = app.sb.focus.clone();
+                    app.sb.send(json!({"op": "artifacts", "do": "add", "target": target, "agent": agent}));
                 }
-                _ => crate::artifacts_screen::open(app),
+                Some(Artifacts::List) | None => crate::artifacts_screen::open(app),
             }
             return out;
         }
@@ -1265,8 +1268,8 @@ pub(crate) fn handle_input(app: &mut App, v: &str) -> Vec<Ev> {
         }
         // a model whose provider has no key: set it up first, then the
         // line runs (never saved blindly, BISE-294)
-        "/model" if model_needs_key(&typed).is_some() => {
-            let (id, model) = model_needs_key(&typed).unwrap_or_default();
+        "/model" if crate::models::model_needs_key(&typed).is_some() => {
+            let (id, model) = crate::models::model_needs_key(&typed).unwrap_or_default();
             crate::onboarding::provider_request(crate::onboarding::Ask {
                 provider: Some(id),
                 model: Some(model),
@@ -1316,31 +1319,41 @@ pub(super) fn draw_sb(app: &mut App, frame: &mut Frame) {
     }
 }
 
-/// A message id: `m_<digits>`.
-pub(crate) fn is_msg_id(s: &str) -> bool {
-    s.strip_prefix("m_").is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
-}
-
-/// The hub's line for an answer to an item (core.bend `answer.q.sent`):
-/// `you → @{asker} (answer to card #{id}) : {text}` → (asker, id, text).
-fn answer_route(text: &str) -> Option<(&str, u64, &str)> {
-    let (head, said) = text.split_once(" : ")?;
-    let (who, id) = head.strip_prefix("you → @")?.split_once(" (answer to card #")?;
-    Some((who, id.strip_suffix(')')?.parse().ok()?, said))
-}
 
 /// The feed rows of the hub's `prs` answer to `/prs`:
-/// `{head, rows: [{tone, number, url, text}]}`.
+/// `{head, rows: [bise-proto rows::Pr]}`; each row's tone is the TUI's
+/// look of what it means ([`pr_tone`]), never a color from the wire.
 pub(super) fn prs_events(v: &serde_json::Value) -> Vec<Ev> {
     // the head at col 1, like every feed row's glyph column (designer)
     let head = format!(" {}", v["head"].as_str().unwrap_or_default());
     let mut out = vec![Ev::Fold { head, text: String::new(), open: false }];
     for r in v["rows"].as_array().into_iter().flatten() {
-        let s = |k: &str| r[k].as_str().unwrap_or_default().to_string();
-        let Some(number) = r["number"].as_u64() else { continue };
-        out.push(Ev::Pr { tone: s("tone"), number, url: s("url"), text: s("text"), url_row: true });
+        let Ok(pr) = serde_json::from_value::<bise_proto::rows::Pr>(r.clone()) else { continue };
+        out.push(Ev::Pr { tone: pr_tone(&pr).into(), number: pr.number, url: pr.url, text: pr.text, url_row: true });
     }
     out
+}
+
+/// A `/prs` row's tone: red when its checks fail, dim for a draft, else
+/// plain (the PR line's look, designer).
+pub(super) fn pr_tone(pr: &bise_proto::rows::Pr) -> &'static str {
+    use bise_proto::rows::{PrChecks, PrState};
+    match (pr.checks, pr.state) {
+        (PrChecks::Fail, _) => "red",
+        (_, PrState::Draft) => "dim",
+        _ => "plain",
+    }
+}
+
+/// A PR news line's state (bise_proto: what it means, never a color, the
+/// window's too) as the TUI's look: news plain, done dim, failing red.
+pub(crate) fn pr_look(state: bise_proto::thread::PrNewsState) -> &'static str {
+    use bise_proto::thread::PrNewsState;
+    match state {
+        PrNewsState::Done => "dim",
+        PrNewsState::Failing => "red",
+        PrNewsState::News | PrNewsState::Unknown => "plain",
+    }
 }
 
 /// A sender or receiver as the user reads it: the hub's own id
@@ -1348,205 +1361,108 @@ pub(super) fn prs_events(v: &serde_json::Value) -> Vec<Ev> {
 /// routing) shows as `bise`, like the agents read it (prompts.rs
 /// `shown_sender`); any other name stays.
 pub(crate) fn shown_name(name: &str) -> String {
-    if name == "switchboard" {
-        "bise".into()
-    } else {
-        name.to_string()
-    }
+    bise_proto::thread::lines::shown_name(name)
 }
 
-/// The synthetic lines of the hub (`sb <kind> : <text>`) as feed events.
-/// A hub line `sb <kind> : <text>` (hub line protocol, contract C2).
-/// v1 kinds keep working (an old transcript still renders); v2 adds:
-/// - `msg : {from} → {to} : {text}`: between agents (level 3);
-/// - `msg-you : {from} : {text}`: an agent writing to the user (level 2);
-/// - `answered : {agent} : {question} : {answer} : {why}`: main answered
-///   an agent for the user (level 2). Inside a field the hub escapes
-///   `" : "` as `" \: "` (core.rs `field_escape`); undone here.
+/// A hub line `sb <kind> : <text>` (hub line protocol, contract C2) as a
+/// feed event; the line is read by bise-proto's `thread::lines::hub`
+/// (the tests' entry: `wire::parse_line` calls [`hub_ev`] itself).
+#[cfg(test)]
 pub(super) fn parse_hub_line(rest: &str) -> Option<Ev> {
-    let (kind, raw) = rest.split_once(" : ").unwrap_or((rest, ""));
-    let text = unescape_md(raw);
-    let field = |s: &str| unescape_md(&s.replace(" \\: ", " : "));
-    Some(match kind {
-        "you" => Ev::You(text, Mark::Sent, false),
-        // BISE-86: `undelivered : {name} : {text}` (fields escaped)
-        "undelivered" => {
-            let (name, t) = raw.split_once(" : ").unwrap_or((raw, ""));
-            Ev::Undelivered { name: field(name), text: field(t), open: true }
-        }
-        // v1: what this feed's owner received: `{from} m_<n> : {text}`
-        // (`@{from} : {text}` for an old direct reply to the user)
-        "msg-in" => {
-            let (head, body) = text.split_once(" : ").unwrap_or(("", text.as_str()));
-            let (from, id) = head.split_once(' ').unwrap_or((head, ""));
+    hub_ev(lines::hub(rest))
+}
+
+/// The hub's own lines in a feed as feed events. v1 kinds keep working
+/// (an old transcript still renders); v2 adds `msg` (between agents,
+/// level 3), `msg-you` (an agent writing to the user, level 2) and
+/// `answered` (main answered an agent for the user, level 2).
+pub(crate) fn hub_ev(h: Hub) -> Option<Ev> {
+    let msg = |from: String, to: String, text: String, level: u8, id: String| Ev::AgentMsg { from, to, text, level, id, open: false, fold: false };
+    Some(match h {
+        Hub::You(text) => Ev::You(text, Mark::Sent, false),
+        // S9: the fn context of the 'you' line before it (the window's
+        // thread shows it on his message; the TUI doesn't)
+        Hub::Context(_) => return None,
+        // BISE-86
+        Hub::Undelivered { to, text } => Ev::Undelivered { name: to, text, open: true },
+        // v1: what this feed's owner received (`@{from}`: an old direct
+        // reply to the user)
+        Hub::MsgIn { from, id, body } => {
             // a scheduled task's run reads as its ◷ line; the note of a
             // stop is for the agent only (site/m/timers)
-            if crate::scheduled::is_hub(from) {
-                if let Some(ev) = crate::scheduled::run_line(body) {
+            if crate::scheduled::is_hub(&from) {
+                if let Some(ev) = crate::scheduled::run_line(&body) {
                     return Some(ev);
                 }
-                if crate::scheduled::is_stop_note(body) {
+                if crate::scheduled::is_stop_note(&body) {
                     return None;
                 }
             }
             match from.strip_prefix('@') {
-                Some(f) => Ev::AgentMsg {
-                    from: f.to_string(),
-                    to: "you".into(),
-                    text: body.to_string(),
-                    level: 2,
-                    id: id.to_string(),
-                    open: false,
-                    fold: false,
-                },
-                None => Ev::AgentMsg {
-                    from: shown_name(from),
-                    to: String::new(),
-                    text: body.to_string(),
-                    level: 3,
-                    id: id.to_string(),
-                    open: false,
-                    fold: false,
-                },
+                Some(f) => msg(f.to_string(), "you".into(), body, 2, id),
+                None => msg(shown_name(&from), String::new(), body, 3, id),
             }
         }
-        // `{from} → {to} m_<n> : {text}` (the id since BISE-110; an older
-        // line has none)
-        "msg" => {
-            let (head, body) = text.split_once(" : ").unwrap_or(("", text.as_str()));
-            let (from, to) = head.split_once(" → ").unwrap_or((head, ""));
-            let (to, id) = match to.rsplit_once(' ') {
-                Some((t, id)) if is_msg_id(id) => (t, id),
-                _ => (to, ""),
-            };
+        Hub::Msg { from, to, id, body } => {
             // main's thread never shows another agent's runs, nor the
             // note of a stop (site/m/timers): its ◷ lines say enough
-            if crate::scheduled::is_hub(from)
-                && (crate::scheduled::run_line(body).is_some() || crate::scheduled::is_stop_note(body))
-            {
+            if crate::scheduled::is_hub(&from) && (crate::scheduled::run_line(&body).is_some() || crate::scheduled::is_stop_note(&body)) {
                 return None;
             }
-            Ev::AgentMsg {
-                from: shown_name(from),
-                to: shown_name(to),
-                text: body.to_string(),
-                level: 3,
-                id: id.to_string(),
-                open: false,
-                fold: false,
-            }
+            msg(shown_name(&from), shown_name(&to), body, 3, id)
         }
-        "msg-you" => {
-            let (from, body) = text.split_once(" : ").unwrap_or(("", text.as_str()));
-            Ev::AgentMsg {
-                from: shown_name(from),
-                to: "you".into(),
-                text: body.to_string(),
-                level: 2,
-                id: String::new(),
-                open: false,
-                fold: false,
-            }
-        }
-        "answered" => {
-            let mut f = raw.splitn(4, " : ").map(field);
-            let mut next = || f.next().unwrap_or_default();
-            Ev::Answered {
-                agent: next(),
-                question: next(),
-                answer: next(),
-                why: next(),
-                open: false,
-            }
-        }
-        // a gate's card (approvals-design.md §9): the tool row says it waits
-        // and the inbox holds it; its fold comes with the answer
-        "card" if is_confirm_card(&text) => return None,
-        "card" => Ev::Card { text, closed: String::new() },
+        // what this feed's owner (a task) sent another agent, sb-core's
+        // line (architect m_10203); `from` empty: the owner
+        // (render::l3_sender). Its `sb send` box goes quiet as for main's
+        // `msg` lines (BISE-110: same id)
+        Hub::Sent { to, id, body, .. } => msg(String::new(), shown_name(&to), body, 3, id),
+        Hub::MsgYou { from, body } => msg(shown_name(&from), "you".into(), body, 2, String::new()),
+        Hub::Answered { agent, question, answer, why } => Ev::Answered { agent, question, answer, why, open: false },
+        // a gate's card (approvals-design.md §9): the tool row says it
+        // waits and the inbox holds it; its fold comes with the answer
+        Hub::Card { id: Some(_), kind, .. } if kind == "confirm" => return None,
+        Hub::Card { text, .. } => Ev::Card { text, closed: String::new() },
         // the approvals gate (approvals-design.md §3.1, §10)
-        "gate" => match text.split_whitespace().next() {
-            Some("check") => Ev::Gate(crate::wire::Gate::Check),
-            Some("card") => Ev::Gate(crate::wire::Gate::Card),
-            _ => Ev::Gate(crate::wire::Gate::Done),
-        },
-        // a gate's card answered, folded (§9): `allowed : who : what`,
-        // `outside : who : what`, `outside-always : who : rules` or
-        // `no : who : what : note`
-        "approval" => {
-            let f: Vec<String> = raw.split(" : ").map(field).collect();
-            let get = |i: usize| f.get(i).cloned().unwrap_or_default();
-            // BISE-307: never cut here, the line cuts at the width and
-            // opens whole
-            let (who, what) = (get(1), get(2).trim().to_string());
-            // a sandbox card's fold says the sandbox was off for it (designer)
-            let ok = |text: String| Ev::Approval { ok: true, text, note: String::new(), asked: String::new(), open: false };
-            match get(0).as_str() {
-                "allowed" => ok(format!("you allowed {}: {}", who, what)),
-                "outside" => ok(format!("you let {} run it outside the sandbox: {}", who, what)),
-                "outside-always" => ok(format!("you always let {} run outside the sandbox here", what)),
-                _ => Ev::Approval {
-                    ok: false,
-                    text: format!("you said no to {}: {}", who, what),
-                    note: get(3).trim().to_string(),
-                    asked: String::new(),
-                    open: false,
-                },
-            }
+        Hub::Gate(GateStep::Check) => Ev::Gate(crate::wire::Gate::Check),
+        Hub::Gate(GateStep::Card) => Ev::Gate(crate::wire::Gate::Card),
+        Hub::Gate(GateStep::Done) => Ev::Gate(crate::wire::Gate::Done),
+        // a gate's card answered, folded (§9); BISE-307: never cut here,
+        // the line cuts at the width and opens whole
+        // a sandbox card's fold says the sandbox was off for it (designer);
+        // the sentences are bise_proto's (the hub's fold says the same)
+        Hub::Approval { how, who, what, note } => {
+            let (ok, text, note) = bise_proto::thread::words::approval(&how, &who, &what, &note);
+            Ev::Approval { ok, text, note, asked: String::new(), open: false }
         }
-        "card-closed" => match text.strip_prefix('#').and_then(|t| t.split_once(' ')) {
-            Some((id, res)) if id.parse::<u64>().is_ok() => Ev::CardClosed {
-                id: id.parse().unwrap_or(0),
-                res: res.trim().to_string(),
-            },
-            _ => Ev::Info(format!("card {} ", text)),
-        },
+        Hub::CardClosed { id, res } => Ev::CardClosed { id, res },
         // an answer to an item: the box's fold line (BISE-305, designer:
         // one sentence), `✓ you answered flow-prompts: oui`
-        "route" => match answer_route(&text) {
-            Some((who, _, said)) => {
-                let (text, note) = cards::answered(who, said);
-                Ev::Approval { ok: true, text, note, asked: String::new(), open: false }
-            }
-            None => Ev::Info(format!("→ {}", text)),
+        Hub::Route { who, said, .. } => {
+            let (text, note) = cards::answered(&who, &said);
+            Ev::Approval { ok: true, text, note, asked: String::new(), open: false }
+        }
+        // pr-news (pr-design §4)
+        Hub::Pr { state, number, url, text } => Ev::Pr { tone: pr_look(state).into(), number, url, text, url_row: false },
+        // site/m/artifacts C
+        Hub::Artifact { id, agent, title, kind, v } => Ev::Made { id, agent, title, kind, v },
+        // site/m/artifacts D
+        Hub::Landed { agent, from, sha, files, add, del, .. } => Ev::Landed { agent, from, sha, files, add, del },
+        // a spawn (✚), computer use (design §7.3: `↖ api-v2 stopped
+        // driving Chrome · you stopped it`), a direct message (⇄), a
+        // warning: the notices the hub's fold shows too
+        h @ (Hub::Spawn(_) | Hub::Computer(_) | Hub::Direct(_) | Hub::Warn(_)) => {
+            return bise_proto::thread::words::hub_notice(&h).map(crate::wire::notice_ev)
+        }
+        // site/m/timers: a scheduled task set or ended
+        Hub::Scheduled(json) => return crate::scheduled::hub_line(&json),
+        Hub::Stopped(text) => Ev::Info(text),
+        // a known kind's line that doesn't parse, as before
+        Hub::Other { kind, text } => match kind.as_str() {
+            "card-closed" => Ev::Info(format!("card {} ", text)),
+            "route" => Ev::Info(format!("→ {}", text)),
+            "landed" => return None,
+            _ => Ev::Info(text),
         },
-        // pr-news: `pr : tone : number : url : text` (fields escaped)
-        "pr" => {
-            let mut f = raw.splitn(4, " : ").map(field);
-            let mut next = || f.next().unwrap_or_default();
-            let (tone, number, url, text) = (next(), next(), next(), next());
-            match number.parse::<u64>() {
-                Ok(number) => Ev::Pr { tone, number, url, text, url_row: false },
-                Err(_) => Ev::Info(text),
-            }
-        }
-        // site/m/artifacts C: `artifact : id : agent : title : kind : v`
-        "artifact" => {
-            let mut f = raw.splitn(5, " : ").map(field);
-            let mut next = || f.next().unwrap_or_default();
-            let (id, agent, title, kind, v) = (next(), next(), next(), next(), next());
-            if id.is_empty() {
-                return Some(Ev::Info(text));
-            }
-            Ev::Made { id, agent, title, kind, v: v.trim_start_matches('v').parse().unwrap_or(1) }
-        }
-        // site/m/artifacts D: `landed : agent : target : from : sha : files : add : del`
-        "landed" => {
-            let f: Vec<String> = raw.splitn(7, " : ").map(field).collect();
-            let g = |i: usize| f.get(i).cloned().unwrap_or_default();
-            let num = |i: usize| g(i).trim().parse::<u64>().unwrap_or(0);
-            if g(3).is_empty() {
-                return None;
-            }
-            Ev::Landed { agent: g(0), from: g(2), sha: g(3), files: num(4), add: num(5), del: num(6) }
-        }
-        "spawn" => Ev::Info(format!("✚ {}", text)),
-        // computer use (design §7.3): `↖ api-v2 stopped driving Chrome · you stopped it`
-        "computer" => Ev::Info(text),
-        "direct" => Ev::Info(format!("⇄ {}", text)),
-        "warn" => Ev::Warn(text),
-        // site/m/timers: a scheduled task set or ended (`scheduled : <json>`)
-        "scheduled" => return crate::scheduled::hub_line(&text),
-        _ => Ev::Info(text),
     })
 }
 
@@ -1594,10 +1510,30 @@ mod hub_line_tests {
         assert_eq!(p("pr : plain : x : u : hi"), Some("info hi".into()));
         // `/prs`: a dim head at col 1, each row a PR line with its URL under it
         let evs = prs_events(&serde_json::json!({"head": "1 PR open", "rows": [
-            {"tone": "red", "number": 415, "url": "https://github.com/o/r/pull/415", "text": "sb/x · x · checks fail: e2e"}]}));
+            {"number": 415, "url": "https://github.com/o/r/pull/415", "branch": "sb/x", "agents": ["x"], "state": "open", "checks": "fail",
+             "failing": ["e2e"], "review": "none", "words": "checks fail: e2e", "text": "sb/x · x · checks fail: e2e"}]}));
+        assert!(matches!(&evs[1], Ev::Pr { tone, number: 415, .. } if tone == "red"), "failing checks: red");
         let rows = draw(&evs);
         assert!(rows.starts_with(" 1 PR open\n"), "{rows}");
         assert!(rows.contains("#415 sb/x · x · checks fail: e2e\n   https://github.com/o/r/pull/415"), "{rows}");
+    }
+
+    /// Law (architect m_10314): a `/prs` row's tone, from what it means,
+    /// is the one the hub sent before (forge::news: Checks::Fail red,
+    /// else a draft dim, else plain), for every state and checks.
+    #[test]
+    fn a_pr_rows_tone_is_its_meanings_look() {
+        use bise_proto::rows::{Pr, PrChecks, PrReview, PrState};
+        let row = |state, checks| Pr {
+            number: 1, url: String::new(), branch: String::new(), agents: vec![], state, checks,
+            failing: vec![], review: PrReview::None, words: String::new(), text: String::new(),
+        };
+        for state in [PrState::Open, PrState::Draft, PrState::Unknown] {
+            for checks in [PrChecks::Pass, PrChecks::Fail, PrChecks::Running, PrChecks::None, PrChecks::Unknown] {
+                let before = if checks == PrChecks::Fail { "red" } else if state == PrState::Draft { "dim" } else { "plain" };
+                assert_eq!(pr_tone(&row(state, checks)), before, "{state:?} {checks:?}");
+            }
+        }
     }
 
     #[test]
@@ -1659,6 +1595,23 @@ mod hub_line_tests {
         // level 3: a chip, the id as the receiver (BISE-106)
         let (m3, to_you) = (format!("{} docs → m_3", crate::render::G_ENVELOPE), format!("{G_MSG} docs to you"));
         for want in [m3.as_str(), "done", to_you.as_str(), "la v2", "docs needs you", "→ you → @docs"] {
+            assert!(text.contains(want), "{want:?} missing in:\n{text}");
+        }
+    }
+
+    /// sb-core's `sent` line (architect m_10203): what this feed's owner
+    /// sent, a level-3 message from the owner, with its id (so its
+    /// `sb send` box goes quiet) and its fields unescaped.
+    #[test]
+    fn a_sent_line_is_the_owners_message() {
+        assert_eq!(p("sent : main : m_9 : 1 : cart \\: or checkout?"), Some(msg("", "main", "cart : or checkout?", 3, "m_9")));
+        assert_eq!(p("sent : switchboard : m_4 : 0 : hi"), Some(msg("", "bise", "hi", 3, "m_4")));
+        assert_eq!(p("sent : main"), Some("info main".into()), "a short line is never lost");
+        crate::render::set_feed_owner("gift-ui");
+        let text = draw(&[parse_hub_line("sent : main : m_9 : 1 : cart or checkout?").unwrap()]);
+        crate::render::set_feed_owner("");
+        let head = format!("{} gift-ui → main", crate::render::G_ENVELOPE);
+        for want in [head.as_str(), "cart or checkout?"] {
             assert!(text.contains(want), "{want:?} missing in:\n{text}");
         }
     }
@@ -2000,11 +1953,4 @@ mod nav_key_tests {
             assert_eq!(nav(KeyCode::Char(c), KeyModifiers::CONTROL), None);
         }
     }
-}
-
-/// `#12 confirm @api-v2 : …`: a gate's card line.
-fn is_confirm_card(text: &str) -> bool {
-    text.strip_prefix('#')
-        .and_then(|t| t.split_once(' '))
-        .is_some_and(|(id, rest)| id.parse::<u64>().is_ok() && rest.starts_with("confirm @"))
 }

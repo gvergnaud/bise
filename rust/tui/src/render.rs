@@ -178,10 +178,8 @@ pub(crate) fn ev_rows(ev: &Ev, tick: u32, width: usize) -> Vec<Line<'static>> {
 // expanded (ctrl+o, or a click) the reasoning shows under a faint rail
 pub(crate) fn thinking_lines(ms: u128, text: &str, open: bool, width: usize) -> Vec<Line<'static>> {
     let dim_st = Style::default().fg(dim());
-    let label = match fmt_think_ms(ms) {
-        d if d.is_empty() => "thought".to_string(),
-        d => format!("thought for {}", d),
-    };
+    // the hub's fold says the same (bise-proto's words)
+    let label = bise_proto::thread::words::thought_for(u64::try_from(ms).unwrap_or(u64::MAX));
     let head = Line::from(vec![
         Span::styled(format!(" {} ", G_THINK), dim_st),
         Span::styled(label, dim_st),
@@ -203,20 +201,6 @@ pub(crate) fn thinking_lines(ms: u128, text: &str, open: bool, width: usize) -> 
     rows
 }
 
-// 800ms -> "0.8s"; 4200ms -> "4.2s"; 12_300ms -> "12s"; 90_000 -> "1m30s";
-// 0 (no measured duration: a replayed section, or lines that arrived in
-// the same batch) -> ""
-pub(crate) fn fmt_think_ms(ms: u128) -> String {
-    if ms == 0 {
-        String::new()
-    } else if ms < 10_000 {
-        format!("{}.{}s", ms / 1000, (ms % 1000) / 100)
-    } else if ms < 60_000 {
-        format!("{}s", ms / 1000)
-    } else {
-        format!("{}m{}s", ms / 60_000, (ms % 60_000) / 1000)
-    }
-}
 
 thread_local! {
     /// the feed drawn is main's (ui.rs sets it before each frame)
@@ -560,6 +544,19 @@ const L3_LONG: usize = 60;
 /// A closed level-3 text shows at most this many rows, then `… ▸`.
 const L3_ROWS: usize = 2;
 
+/// Who sent a level-3 message: `from`, or with none (sb-core's `sent`
+/// line: what this feed's owner sent) the owner.
+pub(crate) fn l3_sender(from: &str) -> String {
+    if !from.is_empty() {
+        return from.to_string();
+    }
+    if main_feed() {
+        "main".to_string()
+    } else {
+        feed_owner()
+    }
+}
+
 /// Who a level-3 message went to: `to`, or with none (what this feed's
 /// owner received) the owner (`main` in main's feed), else the message id.
 pub(crate) fn l3_receiver(to: &str, id: &str) -> String {
@@ -767,7 +764,7 @@ fn l3_chip_row(form: ChipForm, from: &str, to: &str, id: &str, width: usize) -> 
         40..=59 => (16, false),
         _ => (10, true),
     };
-    let (s, r) = chip_names(from, &l3_receiver(to, id), cap, chip_frame(compact, form), w);
+    let (s, r) = chip_names(&l3_sender(from), &l3_receiver(to, id), cap, chip_frame(compact, form), w);
     let mut head = vec![Span::raw(L3_X)];
     head.extend(chip_spans(&s, &r, form, compact));
     Line::from(head)

@@ -210,11 +210,7 @@ pub(crate) fn gone_words(copy: bool) -> String {
 }
 
 pub(crate) fn kind_word(kind: &str) -> String {
-    match kind {
-        "pr" | "PR" => "PR".to_string(),
-        "" => "file".to_string(),
-        k => k.to_string(),
-    }
+    bise_proto::thread::words::kind_word(kind)
 }
 
 pub(crate) fn is_url(s: &str) -> bool {

@@ -50,7 +50,7 @@ pub(super) struct View {
     pub(super) tail_visible: bool,
     pub(super) pending: bool,
     pub(super) interrupt_requested: bool,
-    pub(super) last_line_at: Option<std::time::Instant>,
+    pub(super) last_line_at: u64,
     pub(super) last_ts: Option<u64>,
     /// the agent's composer draft, kept while another is in focus
     pub(super) ed: crate::editor::Editor,
@@ -73,7 +73,7 @@ impl View {
             tail_visible: true,
             pending: false,
             interrupt_requested: false,
-            last_line_at: None,
+            last_line_at: 0,
             last_ts: None,
             ed: crate::editor::Editor::default(),
             queued: Vec::new(),

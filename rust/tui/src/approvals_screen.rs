@@ -6,6 +6,7 @@
 //! hub's `approvals` event (`app.sb.approvals`).
 
 use crate::sb::{Approvals, Rule};
+use bise_proto::approvals;
 use crate::{theme, App};
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::layout::Rect;
@@ -93,71 +94,15 @@ fn dot() -> &'static str {
 }
 
 /// What a rule allows, as the list shows it: `cargo test *`, `edits to
-/// ~/notes`, `gmail.send_email`.
+/// ~/notes`, `gmail.send_email` (bise_proto::approvals, the window's
+/// words too).
 pub(crate) fn rule_what(r: &Rule) -> String {
-    const EDIT_TOOLS: [&str; 3] = ["edit", "write_file", "apply_patch"];
-    if !r.path.is_empty() {
-        format!("edits to {}", tilde(&r.path))
-    } else if r.tool == "bash" || (EDIT_TOOLS.contains(&r.tool.as_str()) && r.pattern.is_empty()) {
-        if r.pattern.is_empty() { r.tool.clone() } else { r.pattern.clone() }
-    } else if r.pattern.is_empty() {
-        r.tool.clone()
-    } else {
-        format!("{} {}", r.tool, r.pattern)
-    }
-}
-
-/// Its age in words: `today`, `yesterday`, `3 days ago`, `2 weeks ago`,
-/// `5 months ago`; "" when the file does not say.
-pub(crate) fn age(days: Option<i64>) -> String {
-    match days {
-        None => String::new(),
-        Some(d) if d <= 0 => "today".into(),
-        Some(1) => "yesterday".into(),
-        Some(d) if d < 14 => format!("{d} days ago"),
-        Some(d) if d < 60 => format!("{} weeks ago", d / 7),
-        Some(d) if d < 730 => format!("{} months ago", d / 30),
-        Some(d) => format!("{} years ago", d / 365),
-    }
-}
-
-/// Where it came from: the card's agents (`from api-v2`, `3 agents`),
-/// or the file's own words.
-pub(crate) fn source(from: &str) -> String {
-    let mut parts = from.split(", ").filter(|p| !p.is_empty());
-    match parts.next() {
-        None => String::new(),
-        Some(first) if first.starts_with("card") => {
-            let names: Vec<&str> = parts.collect();
-            match names.len() {
-                0 => "from a card".into(),
-                1 => format!("from {}", names[0]),
-                n => format!("{n} agents"),
-            }
-        }
-        Some(_) => format!("from {from}"),
-    }
+    approvals::what(&r.facts(), std::env::var("HOME").ok().as_deref())
 }
 
 /// The right column of a rule: its age, its source, where it applies.
 pub(crate) fn rule_note(r: &Rule, days: Option<i64>) -> String {
-    let mut v: Vec<String> = Vec::new();
-    for w in [age(days), source(&r.from)] {
-        if !w.is_empty() {
-            v.push(w);
-        }
-    }
-    let connector = r.tool.contains('.') && r.pattern.is_empty() && r.path.is_empty();
-    if connector && v.is_empty() {
-        v.push("a connector".into());
-    }
-    if r.every {
-        v.push("every project".into());
-    }
-    if r.outside {
-        v.push("outside the sandbox".into());
-    }
-    v.join(&format!(" {} ", dot()))
+    approvals::note(&r.facts(), days, dot())
 }
 
 fn tilde(p: &str) -> String {
@@ -451,13 +396,7 @@ what runs without asking you in /w/acme.
 
     #[test]
     fn the_words_of_a_rule() {
-        assert_eq!(age(Some(0)), "today");
-        assert_eq!(age(Some(1)), "yesterday");
-        assert_eq!(age(Some(9)), "9 days ago");
-        assert_eq!(age(Some(21)), "3 weeks ago");
-        assert_eq!(source("card #3, web"), "from web");
-        assert_eq!(source("card"), "from a card");
-        assert_eq!(source("me, by hand"), "from me, by hand");
+        // age and source: bise_proto::approvals' own tests
         let mut r = Rule { tool: "write_file".into(), path: "/n/notes/".into(), every: true, ..Default::default() };
         assert_eq!(rule_what(&r), "edits to /n/notes/");
         assert_eq!(rule_note(&r, None), "every project");

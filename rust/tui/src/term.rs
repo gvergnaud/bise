@@ -18,7 +18,7 @@
 //! vt100 parser that the `tui-term` widget draws.
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
-use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
+use portable_pty::{Child, MasterPty, PtySize};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, Borders};
@@ -302,21 +302,11 @@ struct Pty {
 
 impl Pty {
     /// `argv` (a shell, or an editor on a file: BISE-264) in `cwd`.
+    /// (bise's one pty spawn, pty.rs: his shell's environment rule)
     fn spawn(argv: &[&str], cwd: &str, rows: u16, cols: u16) -> Result<Pty, String> {
-        let pair = native_pty_system()
-            .openpty(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 })
-            .map_err(|e| e.to_string())?;
-        let Some(prog) = argv.first() else { return Err("nothing to run".into()) };
-        let mut cmd = CommandBuilder::new(prog);
-        cmd.args(&argv[1..]);
-        if std::path::Path::new(cwd).is_dir() {
-            cmd.cwd(cwd);
-        }
-        cmd.env("TERM", "xterm-256color");
-        let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
-        drop(pair.slave);
-        let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
-        let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+        let crate::pty::Spawned { master, child } = crate::pty::spawn(argv, std::path::Path::new(cwd), rows, cols)?;
+        let mut reader = master.try_clone_reader().map_err(|e| e.to_string())?;
+        let writer = master.take_writer().map_err(|e| e.to_string())?;
         let parser = Arc::new(Mutex::new(vt100::Parser::new(rows, cols, SCROLLBACK)));
         let exited = Arc::new(AtomicBool::new(false));
         let (p, x) = (parser.clone(), exited.clone());
@@ -334,7 +324,7 @@ impl Pty {
             }
             x.store(true, Ordering::SeqCst);
         });
-        Ok(Pty { parser, writer, master: pair.master, child, exited, size: (rows, cols) })
+        Ok(Pty { parser, writer, master, child, exited, size: (rows, cols) })
     }
 
     fn alive(&mut self) -> bool {

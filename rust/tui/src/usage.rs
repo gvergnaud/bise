@@ -53,21 +53,14 @@ impl Usage {
     /// The divider's form at rest (BISE-303): "42k · 21%", or "42k"
     /// without a known window.
     pub fn compact(&self) -> String {
-        let used = self.context();
-        match context_window(&self.model) {
-            Some(w) => format!("{} · {}%", fmt_tokens(used), percent(used, w)),
-            None => fmt_tokens(used),
-        }
+        // the hub's agent rows say the same (bise-proto's words)
+        words::context_words(self.context(), context_window(&self.model))
     }
 
     /// The compact form for the task list: "21%", or "42k" without a
     /// known window.
     pub fn short(&self) -> String {
-        let used = self.context();
-        match context_window(&self.model) {
-            Some(w) => format!("{}%", percent(used, w)),
-            None => fmt_tokens(used),
-        }
+        words::short_words(self.context(), context_window(&self.model))
     }
 
     /// What the call cost in USD; None when the model's prices are not
@@ -84,41 +77,18 @@ impl Usage {
     }
 }
 
-fn percent(used: u64, window: u64) -> u64 {
-    if window == 0 {
-        return 0;
-    }
-    // saturating: a corrupt token count never overflows (debug panics)
-    used.saturating_mul(100).saturating_add(window / 2) / window
-}
-
-/// 950 -> "950", 42_310 -> "42k", 1_250_000 -> "1.2M".
-pub fn fmt_tokens(n: u64) -> String {
-    if n < 1000 {
-        n.to_string()
-    } else if n < 1_000_000 {
-        format!("{}k", (n + 500) / 1000)
-    } else {
-        let tenths = (n + 50_000) / 100_000;
-        if tenths.is_multiple_of(10) {
-            format!("{}M", tenths / 10)
-        } else {
-            format!("{}.{}M", tenths / 10, tenths % 10)
-        }
-    }
-}
+use bise_proto::thread::words::{self, percent, tokens as fmt_tokens};
 
 /// The usage of the current context of a feed: the last usage event,
 /// unless a compaction came after it.
+/// The rule is bise_proto's `lines::current_usage`, the hub's too.
 pub fn current(events: &[Ev]) -> Option<&Usage> {
-    for e in events.iter().rev() {
-        match e {
-            Ev::Usage(u) => return Some(u),
-            Ev::Compacted { .. } => return None,
-            _ => {}
-        }
-    }
-    None
+    use bise_proto::thread::lines::{current_usage, UsageMark};
+    current_usage(events.iter().map(|e| match e {
+        Ev::Usage(u) => UsageMark::Usage(u),
+        Ev::Compacted { .. } => UsageMark::Compacted,
+        _ => UsageMark::Other,
+    }))
 }
 
 #[cfg(test)]

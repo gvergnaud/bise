@@ -20,13 +20,12 @@ pub(crate) fn ingest_line(app: &mut App, line: String, ts: Option<u64>) {
     if line.starts_with("  obs: turn_started") || line.starts_with("  obs: turn_done:") {
         crate::queue::seen(app);
     }
-    // thinking duration: the model's reply arrives one
-    // batch after the previous wire line
-    let now = std::time::Instant::now();
-    let ms = app
-        .last_line_at
-        .map_or(0, |t| now.duration_since(t).as_millis());
-    app.last_line_at = Some(now);
+    // thinking duration: the model's reply arrives one batch after the
+    // previous wire line (bise-proto's words::thought_ms, the hub's fold
+    // makes the same; ms since the epoch, when each line arrived)
+    let now = crate::when::now_ms();
+    let ms = u128::from(bise_proto::thread::words::thought_ms(app.last_line_at, now));
+    app.last_line_at = now;
     let (line, replayed) = strip_history(&line);
     // a line after a pause: a time mark first (BISE-14, book §10). The
     // hub's time says the pause, replayed feeds included (BISE-271); a

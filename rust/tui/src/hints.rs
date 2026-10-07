@@ -510,6 +510,16 @@ mod tests {
         assert_eq!(auto_text("jev", "TypeSafe", &c), "auto sends commands to Jev (TypeSafe) to check them. /models changes it.");
     }
 
+    /// S36: the window marks seen exactly the TUI's hints, by the same
+    /// keys (bise_home prefs::WINDOW_HINTS), so one seen in either never
+    /// shows again.
+    #[test]
+    fn the_window_marks_the_tuis_own_hints() {
+        let all = [Hint::FirstAgent, Hint::FirstLevel3, Hint::FirstCard, Hint::FirstSteer, Hint::FirstYolo, Hint::FirstAuto];
+        let keys: Vec<&str> = all.iter().map(|h| h.key()).collect();
+        assert_eq!(keys, bise_home::prefs::WINDOW_HINTS, "a new Hint: add its key to bise_home's prefs::WINDOW_HINTS too (rust/home/src/prefs.rs), the window's list");
+    }
+
     fn tmp(tag: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("bise-hints-{}-{}-{:?}", tag, std::process::id(), std::thread::current().id()));
         let _ = std::fs::remove_dir_all(&d);

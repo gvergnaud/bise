@@ -7,6 +7,9 @@ description = "Ratatui terminal UI for the Bend Unified Harness (Rust port of re
 
 [dependencies]
 bise-home = { path = "../home" }
+# the typed client protocol (bise desktop S3a/S3b): the ambient core's
+# projects rows (ambient/projects.rs) and the agents view's typed threads
+bise-proto = { path = "../proto" }
 # /log (logview.rs): the agent's session log, read-only
 bise-session = { path = "../session" }
 bise-catalog = { path = "../catalog" }

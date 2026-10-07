@@ -739,24 +739,22 @@ impl Sb {
     }
 }
 
-/// A card kind: its rank in reading order (what blocks an agent first),
-/// its glyph and its color. Color means attention (book §5): needs you
-/// in accent, failures in error, the rest plain text.
+/// A card kind: its rank in reading order (what blocks an agent first:
+/// bise-proto's `card_rank`, the one table, which the desktop's inbox
+/// reads too), its glyph and its color. Color means attention (book §5):
+/// needs you in accent, failures in error, the rest plain text.
 pub(super) fn kind_look(kind: &str) -> (u8, &'static str, Color) {
-    match kind {
-        "approval" | "confirm" => (0, theme::G_NEEDS_YOU, theme::accent()),
+    let (glyph, color) = match kind {
         // a PR ready to merge (pr-design §6.3): yours to act on, pink
-        "question" | "merge" | "feature_try" | "feature_merge" | "signin" => (1, theme::G_NEEDS_YOU, theme::accent()),
-        "blocked" => (2, theme::G_NEEDS_YOU, theme::accent()),
-        "failed" => (3, theme::G_FAILED, theme::error()),
-        "restart" => (3, theme::G_RESTART_FAILED, theme::error()),
-        "drop" => (4, theme::G_STOPPED, theme::text()),
-        "overlap" => (5, theme::G_OVERLAP, theme::text()),
-        "done" => (6, theme::done_glyph(), theme::text()),
-        // the setup card and its offers (BISE-245): they block nothing
-        "setup" => (7, theme::G_NEEDS_YOU, theme::accent()),
-        _ => (6, theme::G_CARD, theme::accent()),
-    }
+        "approval" | "confirm" | "question" | "merge" | "feature_try" | "feature_merge" | "signin" | "blocked" | "setup" => (theme::G_NEEDS_YOU, theme::accent()),
+        "failed" => (theme::G_FAILED, theme::error()),
+        "restart" => (theme::G_RESTART_FAILED, theme::error()),
+        "drop" => (theme::G_STOPPED, theme::text()),
+        "overlap" => (theme::G_OVERLAP, theme::text()),
+        "done" => (theme::done_glyph(), theme::text()),
+        _ => (theme::G_CARD, theme::accent()),
+    };
+    (bise_proto::rows::card_rank(kind), glyph, color)
 }
 
 /// The color of a card kind's glyph: its hue, except done's check, in
@@ -923,22 +921,14 @@ pub(super) fn fold_of(c: &Card, reply: &str, picked: Option<&str>) -> Fold {
     Fold { ok: true, text, note: String::new(), asked: String::new() }
 }
 
-/// A short answer: on the sentence's line (`you answered perf: both`).
-const ON_THE_LINE: usize = 30;
-
 /// The sentence of an answer to `who` and the words under it (BISE-307,
 /// designer): a picked option or any short one-line answer stays on the
 /// line (`you answered perf: both`), anything longer goes under it, whole
 /// (`you answered main` + the words). The same split for the box's own
 /// fold and the hub's line (another view, a reload).
 pub(super) fn answered(who: &str, words: &str) -> (String, String) {
-    use unicode_width::UnicodeWidthStr;
-    let w = words.trim();
-    if !w.contains('\n') && w.width() <= ON_THE_LINE {
-        (format!("you answered {who}: {w}"), String::new())
-    } else {
-        (format!("you answered {who}"), w.to_string())
-    }
+    // bise_proto's words (the hub's fold of the route line says the same)
+    bise_proto::thread::words::answered_split(who, words, &unicode_width::UnicodeWidthStr::width)
 }
 
 /// Card `id` is answered or closed: hidden until the hub drops it; the
@@ -975,6 +965,12 @@ fn pick(app: &mut App, id: u64, i: usize) -> bool {
     let Some(c) = app.sb.card_by_id(id).cloned() else { return false };
     let s = shape(&c);
     let (Some(reply), Some(said)) = (s.options.get(i), s.short.get(i)) else { return false };
+    // an approval answers with its digit (the composer rule: sb-core takes
+    // only 1, 2 or 3 on it, never words), the history says the option's
+    if matches!(c.kind.as_str(), "confirm" | "approval") {
+        answer(app, id, &s.num(i).to_string(), Some(said));
+        return true;
+    }
     if !choice_kind(&c.kind) {
         answer(app, id, reply, Some(said));
         return true;
@@ -1265,7 +1261,7 @@ pub(crate) fn card_mouse(app: &mut App, m: &crossterm::event::MouseEvent) -> boo
 /// The choices an agent gives at the end of its question: its last
 /// lines `1. v1` / `1) v1` / `1 - v1`, numbered 1, 2, … (two to nine).
 /// Returns the text without them, and the choices (none: the text as is).
-fn split_choices(text: &str) -> (String, Vec<String>) {
+pub(crate) fn split_choices(text: &str) -> (String, Vec<String>) {
     let lines: Vec<&str> = text.trim_end().lines().collect();
     let choice = |l: &str| -> Option<(u32, String)> {
         let l = l.trim();
@@ -1276,7 +1272,10 @@ fn split_choices(text: &str) -> (String, Vec<String>) {
             .strip_prefix(". ")
             .or_else(|| rest.strip_prefix(") "))
             .or_else(|| rest.strip_prefix(" - "))
-            .or_else(|| rest.strip_prefix(" – "))?
+            .or_else(|| rest.strip_prefix(" – "))
+            // '1 a PR per task' (pm's C fail 41): a bare space too; only
+            // a run of 2+ such lines numbered from 1 ends a card
+            .or_else(|| rest.strip_prefix(' ').filter(|r| !r.starts_with(['-', '–', ' '])))?
             .trim();
         (!label.is_empty()).then(|| (n, label.to_string()))
     };
@@ -1290,12 +1289,55 @@ fn split_choices(text: &str) -> (String, Vec<String>) {
     tail.reverse();
     let numbered = tail.iter().enumerate().all(|(i, (n, _))| *n as usize == i + 1);
     if tail.len() < 2 || tail.len() > 9 || !numbered {
-        return (text.to_string(), Vec::new());
+        return split_inline(text).unwrap_or_else(|| (text.to_string(), Vec::new()));
     }
     let body = lines[..lines.len() - tail.len()].join("\n").trim_end().to_string();
     (body, tail.into_iter().map(|(_, l)| l).collect())
 }
 
+
+/// The choices written inline at the end of the last line (ambient-lead
+/// m_6486, main's real shape: 'Que fais-tu ? 1. regarde … 2. arrête …
+/// 3. laisse …'): ' 1. ' (or ' 1) ') then ' 2. ' … in order, two to
+/// nine, the question before the first. None: no such list.
+fn split_inline(text: &str) -> Option<(String, Vec<String>)> {
+    let t = text.trim_end();
+    let line_at = t.rfind('\n').map_or(0, |i| i + 1);
+    let line = &t[line_at..];
+    for sep in [". ", ") "] {
+        // the markers ' n. ' in order, each after a space (or at the start)
+        let mut at: Vec<(usize, usize)> = Vec::new();
+        let mut from = 0;
+        for n in 1..=9 {
+            let m = format!("{n}{sep}");
+            let found = line[from..].match_indices(&m).map(|(i, _)| from + i).find(|&i| i == 0 || line[..i].ends_with(' '));
+            match found {
+                Some(i) => {
+                    at.push((i, i + m.len()));
+                    from = i + m.len();
+                }
+                None => break,
+            }
+        }
+        if at.len() < 2 {
+            continue;
+        }
+        let options: Vec<String> = at
+            .iter()
+            .enumerate()
+            .map(|(k, &(_, start))| {
+                let end = at.get(k + 1).map_or(line.len(), |&(i, _)| i);
+                line[start..end].trim().trim_end_matches([',', ';']).trim().to_string()
+            })
+            .collect();
+        if options.iter().any(|o| o.is_empty()) {
+            continue;
+        }
+        let body = format!("{}{}", &t[..line_at], line[..at[0].0].trim_end()).trim_end().to_string();
+        return Some((body, options));
+    }
+    None
+}
 
 /// The open cards matching `q` (their number, kind, agent or text):
 /// the card argument of `/close` and `/answer`.
@@ -1402,6 +1444,53 @@ fn with_heard(c: &Card, mut s: Shape) -> Shape {
         s.parts.push(Part::Note(line));
     }
     s
+}
+
+// ---- bise ambient (docs/ambient-app.md §4): the same options and replies ----
+
+/// A hub card as the ambient core gets it (no TUI state on it).
+fn ambient_card(kind: &str, agent: &str, text: &str) -> Card {
+    Card {
+        id: 0,
+        kind: kind.into(),
+        agent: agent.into(),
+        text: text.into(),
+        age_ms: 0,
+        seen_at: std::time::Instant::now(),
+        note: String::new(),
+        look: None,
+        place: None,
+        pr: None,
+        link: None,
+        asking: false,
+        waiting: Vec::new(),
+    }
+}
+
+/// A card's numbered options as the inbox box shows them: `(digit,
+/// whole label)` (a hard confirm's `no` is 3, like the box's).
+pub(crate) fn ambient_options(kind: &str, agent: &str, text: &str) -> Vec<(usize, String)> {
+    let s = base_shape(&ambient_card(kind, agent, text));
+    s.options.iter().enumerate().map(|(i, o)| (s.num(i), o.clone())).collect()
+}
+
+/// What digit `d` sends as `/answer <id> <reply>`, as the box's `pick`
+/// does: a hub item's digit itself, else the option's words. None: no
+/// such option, or one the box acts on locally (a PR or release page to
+/// open, the feature drop's second ask).
+pub(crate) fn ambient_reply(kind: &str, agent: &str, text: &str, d: usize) -> Option<String> {
+    let s = base_shape(&ambient_card(kind, agent, text));
+    let i = s.by_digit(d)?;
+    if !choice_kind(kind) {
+        return s.options.get(i).cloned();
+    }
+    (!ambient_local(kind, d)).then(|| d.to_string())
+}
+
+/// Digit `d` of a `kind` card is one the box acts on itself (a PR or
+/// release page to open, the feature drop's second ask).
+pub(crate) fn ambient_local(kind: &str, d: usize) -> bool {
+    matches!((kind, d), ("merge", 2) | ("update", 3) | ("feature_merge", 3))
 }
 
 

@@ -85,7 +85,7 @@ pub(crate) struct App {
     pub(crate) events: Vec<Ev>,
     // when the last wire line arrived (thinking duration = the delta to
     // the assistant line) and the ctrl+o state of new thinking sections
-    pub(crate) last_line_at: Option<std::time::Instant>,
+    pub(crate) last_line_at: u64,
     /// the hub's time of the last live line of the feed (ms since the
     /// epoch; BISE-271: the pause marks of a replayed feed)
     pub(crate) last_ts: Option<u64>,
@@ -325,7 +325,7 @@ impl App {
             area_w,
             area_h: 24,
             events: Vec::new(),
-            last_line_at: None,
+            last_line_at: 0,
             last_ts: None,
             hover: None,
             copy_hit: None,

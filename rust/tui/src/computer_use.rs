@@ -316,9 +316,10 @@ pub(crate) struct Row {
     pub(crate) apps: bool,
 }
 
-/// What runs now, started from this screen.
+/// What runs now, started from this screen (or the desktop's page: pub
+/// for ambient::setup's ports; the module itself stays private).
 #[derive(Clone, Debug, Default, PartialEq)]
-pub(crate) struct Busy {
+pub struct Busy {
     /// the live test runs
     pub(crate) live_test: bool,
     /// Screen Recording granted: the helper reopens (since when)
@@ -361,20 +362,26 @@ impl Screen {
             last: Vec::new(),
             stop: Arc::new(AtomicBool::new(false)),
         };
-        let (check, stop) = (s.check.clone(), s.stop.clone());
-        std::thread::spawn(move || {
-            while !stop.load(Ordering::SeqCst) {
-                let t0 = Instant::now();
-                if let Some(v) = json_of(&["setup-check", "--json"]) {
-                    *lock(&check) = Some(v);
-                }
-                while !stop.load(Ordering::SeqCst) && t0.elapsed() < Duration::from_secs(1) {
-                    std::thread::sleep(Duration::from_millis(50));
-                }
-            }
-        });
+        let check = s.check.clone();
+        poll(move |v| *lock(&check) = Some(v), s.stop.clone());
         s
     }
+}
+
+/// One setup-check a second on its own thread until `stop` (the TUI's
+/// screen and the desktop's computer-use page, P.2): each answer to `got`.
+pub(crate) fn poll(got: impl Fn(Value) + Send + 'static, stop: Arc<AtomicBool>) {
+    std::thread::spawn(move || {
+        while !stop.load(Ordering::SeqCst) {
+            let t0 = Instant::now();
+            if let Some(v) = json_of(&["setup-check", "--json"]) {
+                got(v);
+            }
+            while !stop.load(Ordering::SeqCst) && t0.elapsed() < Duration::from_secs(1) {
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
+    });
 }
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -712,6 +719,19 @@ pub(crate) fn follow(before: &[Row], now: &[Row], sel: usize) -> usize {
 /// ⏎ on the selected row.
 fn act(sc: &mut Screen, check: &Value, row: &Row) {
     *lock(&sc.said) = None;
+    let Some(f) = row.fix.as_deref() else { return };
+    let said = sc.said.clone();
+    if let Some(flash) = fix(check, f, sc.busy.clone(), move |t| *lock(&said) = Some(t)) {
+        sc.flash = Some((flash, Instant::now()));
+    }
+}
+
+/// A row's fix (`row.fix`): open the browser's page, add or reload the
+/// extension, repair the native host, run the live test, ask macOS for
+/// a permission. The TUI's ⏎ and the desktop's button (P.2) both run it,
+/// only on his act. What went wrong later goes to `said`; the flash it
+/// returns says what it just did.
+pub(crate) fn fix(check: &Value, fix: &str, busy: Arc<Mutex<Busy>>, said: impl Fn(String) + Send + 'static) -> Option<String> {
     let pick = check
         .get("browsers")
         .and_then(Value::as_array)
@@ -726,71 +746,99 @@ fn act(sc: &mut Screen, check: &Value, row: &Row) {
             vec!["-a".into(), app.clone(), url.to_string()]
         }
     };
-    match row.fix.as_deref() {
-        Some("install_browser") => open(&["https://www.google.com/chrome/".to_string()]),
-        Some("open_browser") if !app.is_empty() => open(&["-a".into(), app.clone()]),
-        Some("update_browser") => open(&with_app("chrome://settings/help")),
-        Some("add_extension") => {
+    match fix {
+        "install_browser" => open(&["https://www.google.com/chrome/".to_string()]),
+        "open_browser" if !app.is_empty() => open(&["-a".into(), app.clone()]),
+        "update_browser" => open(&with_app("chrome://settings/help")),
+        "add_extension" => {
             let dir = check.get("extension").map(|e| str_at(e, "dir").to_string()).unwrap_or_default();
             let copied = !dir.is_empty() && crate::clipboard::copy(&dir);
             open(&with_app("chrome://extensions"));
-            sc.flash = Some((if copied { format!("opened {} path copied", dot()) } else { "opened".into() }, Instant::now()));
+            return Some(if copied { format!("opened {} path copied", dot()) } else { "opened".into() });
         }
-        Some("reload_extension") => open(&with_app("chrome://extensions")),
-        Some("repair") => {
-            let said = sc.said.clone();
+        "reload_extension" => open(&with_app("chrome://extensions")),
+        "repair" => {
             std::thread::spawn(move || {
                 let ok = command(&["repair"]).stdout(Stdio::null()).status().is_ok_and(|s| s.success());
                 if !ok {
-                    *lock(&said) = Some("repair failed: bise computer-use repair says why".into());
+                    said("repair failed: bise computer-use repair says why".into());
                 }
             });
         }
-        Some("run_live_test") => run_live_test(sc),
-        Some(f @ ("request_accessibility" | "request_screen_recording")) => {
+        "run_live_test" => live_test(&busy),
+        f @ ("request_accessibility" | "request_screen_recording") => {
             let what = f.trim_start_matches("request_").to_string();
-            let (busy, said) = (sc.busy.clone(), sc.said.clone());
             std::thread::spawn(move || {
                 let v = json_of(&["request", &what]);
                 if what == "screen_recording" && v.as_ref().is_some_and(|v| v["relaunching"] == true) {
                     lock(&busy).reopening = Some(Instant::now());
                 } else if v.is_none() {
-                    *lock(&said) = Some("bise Computer Use didn't answer. try again".into());
+                    said("bise Computer Use didn't answer. try again".into());
                 }
             });
         }
         _ => {}
     }
+    None
 }
 
 fn run_live_test(sc: &mut Screen) {
-    let busy = sc.busy.clone();
+    live_test(&sc.busy);
+}
+
+/// The live test on its own thread, once at a time.
+pub(crate) fn live_test(busy: &Arc<Mutex<Busy>>) {
     {
-        let mut b = lock(&busy);
+        let mut b = lock(busy);
         if b.live_test {
             return;
         }
         b.live_test = true;
     }
+    let busy = busy.clone();
     std::thread::spawn(move || {
         let _ = command(&["live-test", "--json"]).stdout(Stdio::null()).status();
         lock(&busy).live_test = false;
     });
 }
 
+/// The reopened helper said yes, or it never came back (a minute): it no
+/// longer reopens.
+pub(crate) fn settle(b: &mut Busy, check: &Value) {
+    let granted = check
+        .get("rows")
+        .and_then(Value::as_array)
+        .is_some_and(|l| l.iter().any(|r| str_at(r, "id") == "screen_recording" && str_at(r, "state") == "done"));
+    if b.reopening.is_some_and(|t| granted || t.elapsed() > Duration::from_secs(60)) {
+        b.reopening = None;
+    }
+}
+
+/// A row as the desktop's `computer_use` event carries it.
+pub(crate) fn row_data(r: &Row) -> bise_proto::draft::CuRow {
+    let state = match r.st {
+        St::Done => "done",
+        St::Waits => "waits",
+        St::Checking => "checking",
+        St::Failed => "failed",
+        St::NotYet => "not_yet",
+    };
+    bise_proto::draft::CuRow {
+        id: r.id.clone(),
+        label: r.label.clone(),
+        state: state.into(),
+        detail: r.detail.clone(),
+        help: r.help.clone(),
+        action: r.action.clone(),
+        fix: r.fix.clone(),
+        apps: r.apps,
+    }
+}
+
 /// The rows now (and the cursor and the live test that runs by itself).
 fn refresh(sc: &mut Screen) -> (Value, Vec<Row>) {
     let check = lock(&sc.check).clone().unwrap_or(Value::Null);
-    {
-        // the reopened helper said yes, or it never came back (a minute)
-        let mut b = lock(&sc.busy);
-        let granted = check.get("rows").and_then(Value::as_array).is_some_and(|l| {
-            l.iter().any(|r| str_at(r, "id") == "screen_recording" && str_at(r, "state") == "done")
-        });
-        if b.reopening.is_some_and(|t| granted || t.elapsed() > Duration::from_secs(60)) {
-            b.reopening = None;
-        }
-    }
+    settle(&mut lock(&sc.busy), &check);
     let busy = lock(&sc.busy).clone();
     let now = rows(&check, &busy);
     sc.sel = follow(&sc.last, &now, sc.sel);

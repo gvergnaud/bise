@@ -206,11 +206,7 @@ pub(crate) fn counts(add: usize, del: usize) -> String {
 
 /// `1 file`, `9 files`.
 pub(crate) fn files_word(n: usize) -> String {
-    if n == 1 {
-        "1 file".to_string()
-    } else {
-        format!("{} files", n)
-    }
+    bise_proto::thread::words::files_word(n as u64)
 }
 
 // ---- the panel's state ----
