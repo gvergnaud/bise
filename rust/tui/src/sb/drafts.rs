@@ -18,6 +18,12 @@
 //! at once (its turn ended while the TUI was away). Later, they are
 //! dropped: old lines never fire at an idle agent (book §8).
 //!
+//! The inbox answers and what is open (the agent in view, the open item,
+//! the scroll, a popup and its query) go in the same file too
+//! (keep-state): sb/keep.rs says what and when they come back. The file
+//! is read field by field: a newer TUI's fields are left out, a missing
+//! or broken file is an empty one (the TUI always starts).
+//!
 //! A crash or a killed terminal loses at most the last [`DEBOUNCE`].
 //! [`restore`] reads it back at start. Writes are atomic (a temp file,
 //! then a rename) and private (0600, the folder 0700); an empty state
@@ -27,7 +33,7 @@
 //! Under `cargo test` nothing is on disk unless a test gives a folder
 //! ([`use_dir`]).
 
-use super::{App, View};
+use super::{keep, App, View};
 use serde_json::{json, Value};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -60,11 +66,20 @@ struct Saved {
     history: Vec<String>,
     /// agent → its queued messages, oldest first (the non-empty queues)
     queues: BTreeMap<String, Vec<crate::queue::Queued>>,
+    /// card id → its inbox answer being written (sb/keep.rs)
+    answers: BTreeMap<u64, keep::Text>,
+    /// what is open (sb/keep.rs; back after a reload only)
+    view: Option<keep::View>,
 }
 
 impl Saved {
     fn is_empty(&self) -> bool {
-        self.drafts.is_empty() && self.attachments.is_empty() && self.history.is_empty() && self.queues.is_empty()
+        self.drafts.is_empty()
+            && self.attachments.is_empty()
+            && self.history.is_empty()
+            && self.queues.is_empty()
+            && self.answers.is_empty()
+            && self.view.is_none()
     }
 }
 
@@ -157,6 +172,12 @@ fn to_json(workspace: &str, s: &Saved) -> Value {
         v["queues"] = Value::Object(queues);
         v["queues_ms"] = json!(now_ms());
     }
+    if !s.answers.is_empty() {
+        v["answers"] = keep::answers_json(&s.answers);
+    }
+    if let Some(view) = &s.view {
+        v["view"] = keep::view_json(view, now_ms());
+    }
     v
 }
 
@@ -224,7 +245,9 @@ fn from_json(v: &Value) -> Saved {
         .map(|l| l.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
         .unwrap_or_default();
     history.truncate(HISTORY_MAX);
-    Saved { drafts, attachments, history, queues }
+    let answers = keep::answers_from(v.get("answers"));
+    let view = keep::view_from(v.get("view"), now_ms());
+    Saved { drafts, attachments, history, queues, answers, view }
 }
 
 fn now_ms() -> u64 {
@@ -330,7 +353,7 @@ fn snapshot(app: &App) -> Saved {
             queues.entry(a.clone()).or_insert_with(Vec::new).splice(0..0, l.iter().cloned());
         }
     });
-    Saved { drafts, attachments, history, queues }
+    Saved { drafts, attachments, history, queues, answers: keep::answers(app), view: keep::view(app) }
 }
 
 /// An attachment still usable: a quote or a paste (its text is its
@@ -376,6 +399,8 @@ pub(crate) fn restore(app: &mut App) {
         app.history = s.history;
     }
     QUEUES.with(|q| *q.borrow_mut() = std::mem::take(&mut s.queues));
+    // the inbox answers and the view: back at the hub's `ready`
+    keep::hold(std::mem::take(&mut s.answers), s.view.take());
     STATE.with(|st| *st.borrow_mut() = State { file: Some(file), written: Some(saved), seen: None, failed: false });
 }
 
@@ -434,9 +459,20 @@ pub(crate) fn save_now(app: &App) {
     })
 }
 
-/// The UI ends: what is not written yet goes on disk.
+/// The UI ends: written even when unchanged, so the times the queues and
+/// the view are judged by (`queues_ms`, `view.ms`) are the end's (a
+/// reload takes them back).
 pub(crate) fn flush(app: &App) {
-    save_now(app)
+    STATE.with(|st| {
+        let st = &mut *st.borrow_mut();
+        let Some(file) = st.file.clone() else { return };
+        let snap = snapshot(app);
+        if snap.queues.is_empty() && snap.view.is_none() && st.written.as_ref() == Some(&snap) {
+            return;
+        }
+        write(st, &file, &app.sb.workspace, &snap);
+        st.seen = Some((snap, Instant::now()));
+    })
 }
 
 #[cfg(test)]

@@ -519,6 +519,10 @@ fn ui_loop(app: &mut App, terminal: &mut crate::links::Tui) -> io::Result<()> {
                 }
             }
             let Some(ev) = crate::ctrlhint::for_handlers(ev).map(crate::optkeys::read_back) else { continue };
+            // keep-state: a reload waits while keys arrive
+            if matches!(ev, Event::Key(_) | Event::Paste(_)) {
+                app.sb.reload_wait.key(std::time::Instant::now());
+            }
             let term_h = terminal.size().map(|s| s.height).unwrap_or(24);
             let before = Before::of(app);
             let zen_ev = ev.clone();
@@ -560,6 +564,10 @@ fn ui_loop(app: &mut App, terminal: &mut crate::links::Tui) -> io::Result<()> {
         }
         // BISE-120a: the drafts on disk, once they stop moving
         sb::drafts::tick(app);
+        // keep-state: the reload the hub asked for, once the keys stop
+        if app.sb.reload_wait.due(std::time::Instant::now()) {
+            app.should_quit = true;
+        }
         sb::setup::pump(app);
         // remote MCP logins' lines (`/plugins login`) and the quiet
         // "needs a login" ones

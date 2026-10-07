@@ -210,6 +210,11 @@ impl Overlay {
     pub(crate) fn new(page: Page) -> Overlay {
         Overlay { page, filter: String::new(), scroll: 0, max_scroll: 0, visible: 1 }
     }
+
+    /// Its page (a reload opens the same one, sb/keep.rs).
+    pub(crate) fn page(&self) -> Page {
+        self.page
+    }
 }
 
 /// The page a command opens: /help, /shortcuts and its aliases.

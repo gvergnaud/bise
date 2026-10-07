@@ -176,7 +176,7 @@ pub(super) struct CardView {
     pub(super) area: Rect,
     pub(super) strip: Rect,
     /// The drafts of the cards out of view (esc keeps them).
-    drafts: HashMap<u64, Editor>,
+    pub(super) drafts: HashMap<u64, Editor>,
     /// The thread's draft while the view is open.
     pub(super) thread: Option<Editor>,
     /// Answered or closed here, still in the hub's last snapshot: hidden.
@@ -720,7 +720,7 @@ impl Sb {
         self.card.folded.iter().any(|(i, a)| *i == id && a == agent)
     }
 
-    fn card_ids(&self) -> Vec<u64> {
+    pub(super) fn card_ids(&self) -> Vec<u64> {
         self.sorted_cards().iter().map(|c| c.id).collect()
     }
 

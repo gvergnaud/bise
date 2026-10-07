@@ -42,6 +42,10 @@ mod client;
 pub(crate) mod setup;
 mod tune;
 pub(crate) mod drafts;
+mod keep;
+#[cfg(test)]
+mod keep_tests;
+pub(crate) mod reload_wait;
 mod keys;
 pub(crate) mod release;
 pub(super) use keys::key;
@@ -209,6 +213,9 @@ pub(super) struct Sb {
     /// first hello): a hub with another one was started by a reload
     /// (BISE-131), which this TUI follows by re-executing itself.
     reload_seen: Option<String>,
+    /// A reload asked by the hub, waiting for the keys to stop
+    /// (keep-state, sb/reload_wait.rs).
+    pub(crate) reload_wait: reload_wait::Wait,
     /// The strip and the card view (ctrl+1-9, a click), never opened by the hub.
     card: CardView,
     /// Set by the last draw: the panel rows and their agents (clicks).
@@ -589,6 +596,8 @@ pub(super) fn background_events(app: &App) -> usize {
 /// feed, so the feeds start empty again. The focus and the drafts stay.
 fn hub_reconnected(app: &mut App) {
     app.connected = true;
+    // the scroll comes back at the replay's `ready` (keep-state)
+    keep::before_reconnect(app);
     feed::empty_feed(app);
     app.win = FeedWindow::default();
     app.pending = false;
@@ -715,12 +724,11 @@ pub(super) fn dispatch(app: &mut App, raw: &str) {
             if first {
                 sb.reload_seen = Some(reload);
             }
-            if !exe.is_empty() && follow_hub_exe(&exe) {
-                app.should_quit = true;
-            } else if reloaded && follow_reload() {
-                // a reload (BISE-131): the same binary starts again; the
-                // drafts and queues are written when the UI ends
-                app.should_quit = true;
+            // a reload (BISE-131) starts the same binary again; both wait
+            // for the keys to stop (sb/reload_wait.rs, run.rs quits); the
+            // drafts, queues and view are written when the UI ends
+            if (!exe.is_empty() && follow_hub_exe(&exe)) || (reloaded && follow_reload()) {
+                app.sb.reload_wait.ask(std::time::Instant::now());
             }
         }
         "ready" => {
@@ -729,6 +737,8 @@ pub(super) fn dispatch(app: &mut App, raw: &str) {
             // the queues saved by the TUI before this one (a reload, a
             // restart): back now that the feeds say who is busy
             drafts::requeue(app);
+            // the inbox answers and what was open (a reload)
+            keep::apply(app);
         }
         _ => {}
     }

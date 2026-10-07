@@ -393,6 +393,8 @@ fn divider_text(app: &App) -> (String, Vec<Vec<Span<'static>>>) {
             spans.push(Span::styled(format!(" · {} new lines", app.unseen), Style::default().fg(text())));
         }
         vec![spans]
+    } else if app.sb.reload_wait.waiting(std::time::Instant::now()) {
+        vec![vec![Span::styled(sb::reload_wait::NOTE, d)]]
     } else if let Some(t) = fresh_note(&app.voice_note) {
         vec![vec![Span::styled(format!("{} ", theme::glyph("●")), Style::default().fg(accent())), Span::styled(t, Style::default().fg(text()))]]
     } else if let Some(t) = fresh_note(&app.flash) {
