@@ -192,9 +192,20 @@ if [ -n "$state" ] && [ -S "$state/hub.sock" ]; then
   if [ -L "$state/bin/sb" ]; then ok "bin/sb is a link to bise"; else ko "bin/sb is not a link"; fi
   ps -axo command= | grep -F "$root/repl-live" | grep -v grep >/dev/null && ok "main agent's repl-live runs from the version dir" || ko "main agent's repl-live not running"
   (cd "$WS" && E "$BIN" switchboard --stop --workspace "$WS") 2>&1 | sed 's/^/     /'
-  i=0; while [ -e "$state/hub.sock" ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+  # the hub removes hub.sock first and exits after: wait for its process
+  # too (CI checked 2 ms after the socket went and saw the hub still there)
   pid="$(cat "$state/hub.pid" 2>/dev/null)"
-  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then ko "hub still running after --stop"; else ok "hub stopped"; fi
+  i=0
+  while { [ -e "$state/hub.sock" ] || { [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; }; } && [ $i -lt 150 ]; do
+    sleep 0.1; i=$((i + 1))
+  done
+  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+    ko "hub still running 15 s after --stop"
+    ps -o pid=,stat=,command= -p "$pid" 2>/dev/null | sed 's/^/     /'
+    tail -n 15 "$state/hub.log" 2>/dev/null | cut -c1-200 | sed 's/^/     /'
+  else
+    ok "hub stopped"
+  fi
   ps -axo command= | grep -F "$root/repl-live" | grep -v grep >/dev/null && ko "agent REPLs left behind" || ok "no agent REPL left"
 else
   ko "hub did not start"; tail -n 5 "$DL/hub.err"
