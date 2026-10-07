@@ -226,6 +226,29 @@ def pane_rows(rows):
     return out[::-1]
 
 
+XDG_HOMES = ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME")
+
+
+def pane_env(env):
+    """What a pane's command sets from the test's env. A pane starts from
+    the tmux server's env, i.e. whoever started the server (the user's
+    real HOME): the TUI starts the hub, so a HOME left to the server made
+    the hub's REPLs scan his ~/.vibe/skills and ~/.agents/skills (32
+    tui_*_tmux tests failed bise_env.refuse_real_skills, m_10559). So the
+    HOME, the toolchain homes, PATH, the XDG homes and every bise variable
+    (SB_, BEND_, BISE_, MISTRAL_) come from the test, never the server."""
+    keep = ("HOME", "CARGO_HOME", "RUSTUP_HOME", "PATH") + XDG_HOMES
+    return {k: v for k, v in env.items()
+            if k in keep or k.startswith(("SB_", "BEND_", "BISE_", "MISTRAL_"))}
+
+
+def pane_unset(env):
+    """What a pane's command unsets before it sets pane_env (env(1) applies
+    the -u first): every internal and test variable, the caller's path
+    overrides and the XDG homes, whatever the server's env holds."""
+    return list(bise_env.NOT_INHERITED + bise_env.OWN_PATHS + XDG_HOMES)
+
+
 def start_tui(E, cols, rows, extra_env, session):
     """Open the switchboard TUI of the throwaway hub E in the tmux session
     `session`, with E's SB_/BEND_/MISTRAL_ env and its BISE_APPROVALS
@@ -233,9 +256,9 @@ def start_tui(E, cols, rows, extra_env, session):
     # shlex.quote, not list2cmdline: the line runs in `sh -c`/`zsh -c`, where
     # double quotes still run backticks and $(…) (an agent's BEND_TOOLS_NOTE
     # holds `node`: the pane ran a node REPL and bise never started)
-    envs = " ".join("%s=%s" % (k, shlex.quote(v)) for k, v in E.env.items()
-                    if k.startswith(("SB_", "BEND_", "MISTRAL_")) or k == "BISE_APPROVALS")
-    unset = " ".join("-u " + k for k in bise_env.NOT_INHERITED)   # tmux's server env may carry them
+    bise_env.refuse_real_home(E.env)
+    envs = " ".join("%s=%s" % (k, shlex.quote(v)) for k, v in pane_env(E.env).items())
+    unset = " ".join("-u " + k for k in pane_unset(E.env))   # tmux's server env may carry them
     # a TUI that exits early leaves its last screen and its exit code
     # until close() kills the session (the timeout print shows them)
     cmd = "cd %s && env %s %s%s %s switchboard --workspace %s; echo \"[switchboard exited: $?]\"; sleep 600" % (
