@@ -36,7 +36,7 @@ def start(t, extra_env=""):
     unset = " ".join("-u " + k for k in pane_unset(E.env))
     cmd = ("printf '\\033]2;%s\\007'; sleep 0.3; cd %s && env %s %s%s %s switchboard --workspace %s; "
            "echo \"[switchboard exited: $?]\"; sleep 600") % (
-        BEFORE, e2e.ROOT, unset, extra_env + " " if extra_env else "", envs, e2e.EXE, E.ws)
+        BEFORE, e2e.ROOT, unset, envs, " " + extra_env if extra_env else "", e2e.EXE, E.ws)
     tmux("new-session", "-d", "-s", t.name, "-x", "150", "-y", "40", cmd)
 
 

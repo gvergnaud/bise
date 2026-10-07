@@ -82,12 +82,12 @@ trap 'rm -rf \"$t\"' EXIT
 job() {
   id=\"$1\"; shift
   ( \"$@\" > \"$t/$id\" 2>/dev/null; : > \"$t/$id.ok\" ) < /dev/null > /dev/null 2>&1 &
-  printf '%s %s\\n' \"$id\" \"$!\" >> \"$t/pids\"
+  echo \"$!\" > \"$t/$id.pid\"
 }
 settle() {
   n=$((n + 1))
   ( sleep \"$lim\"; : > \"$t/late$n\" ) < /dev/null > /dev/null 2>&1 &
-  tp=$!
+  kills=\"$kills,$!\"
   while :; do
     all=1
     for id in \"$@\"; do [ -e \"$t/$id.ok\" ] || { all=0; break; }; done
@@ -95,12 +95,10 @@ settle() {
     [ -e \"$t/late$n\" ] && break
     sleep 0.05
   done
-  pkill -P \"$tp\" 2>/dev/null
 }
 ok() {
   [ -e \"$t/$1.ok\" ] && return 0
-  p=$(sed -n \"s/^$1 //p\" \"$t/pids\")
-  [ -n \"$p\" ] && pkill -9 -P \"$p\" 2>/dev/null
+  read -r p < \"$t/$1.pid\" && kills=\"$kills,$p\"
   printf 'skills scan: skipped %s (no answer in %s s)\\n' \"$2\" \"$lim\"
   return 1
 }
@@ -108,20 +106,20 @@ entries() {
   [ -d \"$1\" ] || return 0
   for d in \"$1\"/*; do [ -e \"$d\" ] && printf '%s\\n' \"$d\"; done
 }
-line() {
-  n=$(sed -n 's/^name:[[:space:]]*//p' \"$t/$1\" | head -n 1)
-  s=$(sed -n 's/^description:[[:space:]]*//p' \"$t/$1\" | head -n 1)
-  n=$(printf '%s' \"$n\" | tr -d '\\t\\r\"')
-  s=$(printf '%s' \"$s\" | tr -d '\\t\\r\"')
-  [ -n \"$n\" ] && [ -n \"$s\" ] && printf '%s\\t%s\\t%s\\n' \"$n\" \"$s\" \"$2\"
-}
 index() {
-  for r in \"$@\"; do
-    [ -f \"$t/r$r.files\" ] || continue
-    while IFS=' ' read -r id f; do
-      [ -e \"$t/$id.ok\" ] && line \"$id\" \"$f\"
-    done < \"$t/r$r.files\"
-  done
+  for r; do shift; [ -f \"$t/r$r.files\" ] && set -- \"$@\" \"$t/r$r.files\"; done
+  [ $# -gt 0 ] || return 0
+  awk -v t=\"$t\" '{
+    id = $1; p = substr($0, length($1) + 2); ok = t \"/\" id \".ok\"
+    if ((getline x < ok) < 0) next
+    close(ok); f = t \"/\" id; n = \"\"; s = \"\"; hn = 0; hs = 0
+    while ((getline l < f) > 0) {
+      if (!hn && l ~ /^name:/) { hn = 1; sub(/^name:[ \\t]*/, \"\", l); n = l; gsub(/[\\t\\r\"]/, \"\", n) }
+      else if (!hs && l ~ /^description:/) { hs = 1; sub(/^description:[ \\t]*/, \"\", l); s = l; gsub(/[\\t\\r\"]/, \"\", s) }
+    }
+    close(f)
+    if (n != \"\" && s != \"\") printf \"%s\\t%s\\t%s\\n\", n, s, p
+  }' \"$@\"
 }
 w=\"${BEND_WORKDIR:-$PWD}\"
 b=\"\"; [ \"${BISE_ROLE:-}\" = main ] && b=\"$PWD/prompts/skills\"
@@ -147,6 +145,7 @@ for r in 1 2 3 4; do
   [ -f \"$t/r$r.files\" ] || continue
   while IFS=' ' read -r id f; do ok \"$id\" \"$f\" || true; done < \"$t/r$r.files\"
 done
+[ -n \"$kills\" ] && pkill -9 -P \"${kills#,}\" 2>/dev/null
 mkdir -p \"$(dirname \"$1\")\" \"$(dirname \"$2\")\"
 { index 1 2; true; } > \"$1.$$\" && mv -f \"$1.$$\" \"$1\"
 { index 3; cat \"$3\" 2>/dev/null; index 4; true; } > \"$2.$$\" && mv -f \"$2.$$\" \"$2\""

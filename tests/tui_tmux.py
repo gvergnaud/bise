@@ -144,8 +144,11 @@ class Tui:
 
     def close(self, ok):
         """Kill the session, stop the hub the TUI started, clean up (the
-        throwaway dirs are kept, SB_KEEP, when the test failed)."""
+        throwaway dirs are kept, SB_KEEP, when the test failed). A hub of
+        another tree fails the test that passed (refuse_other_root)."""
         tmux("kill-session", "-t", self.name)
+        if ok and "BISE_APP_ROOT" not in self.E.env:
+            refuse_other_root(self.E.state)
         sock = os.path.join(self.E.state, "hub.sock")
         try:
             e2e.Client(sock).send({"op": "stop_hub"})
@@ -236,10 +239,25 @@ def pane_env(env):
     the hub's REPLs scan his ~/.vibe/skills and ~/.agents/skills (32
     tui_*_tmux tests failed bise_env.refuse_real_skills, m_10559). So the
     HOME, the toolchain homes, PATH, the XDG homes and every bise variable
-    (SB_, BEND_, BISE_, MISTRAL_) come from the test, never the server."""
+    (SB_, BEND_, BISE_, MISTRAL_) come from the test, never the server, and
+    BISE_APP_ROOT is this tree (docs/issues/14: a pane ran another gate's
+    runtime) unless the test names one."""
     keep = ("HOME", "CARGO_HOME", "RUSTUP_HOME", "PATH") + XDG_HOMES
-    return {k: v for k, v in env.items()
-            if k in keep or k.startswith(("SB_", "BEND_", "BISE_", "MISTRAL_"))}
+    out = {k: v for k, v in env.items()
+           if k in keep or k.startswith(("SB_", "BEND_", "BISE_", "MISTRAL_"))}
+    out.setdefault("BISE_APP_ROOT", e2e.ROOT)
+    return out
+
+
+def refuse_other_root(state):
+    """The hub the TUI started runs this tree's runtime: its hub.root is
+    e2e.ROOT (docs/issues/14), else the test tested other code."""
+    try:
+        root = open(os.path.join(state, "hub.root")).read().strip()
+    except FileNotFoundError:
+        return
+    if os.path.realpath(root) != os.path.realpath(e2e.ROOT):
+        raise AssertionError("the TUI's hub ran another tree: hub.root %s, this tree %s" % (root, e2e.ROOT))
 
 
 def pane_unset(env):
@@ -261,8 +279,10 @@ def start_tui(E, cols, rows, extra_env, session):
     unset = " ".join("-u " + k for k in pane_unset(E.env))   # tmux's server env may carry them
     # a TUI that exits early leaves its last screen and its exit code
     # until close() kills the session (the timeout print shows them)
+    # the test's extra_env last: it wins over E.env (tui_onboarding_tmux
+    # gives its own HOME and BISE_HOME there)
     cmd = "cd %s && env %s %s%s %s switchboard --workspace %s; echo \"[switchboard exited: $?]\"; sleep 600" % (
-        e2e.ROOT, unset, extra_env + " " if extra_env else "", envs, e2e.EXE, E.ws)
+        e2e.ROOT, unset, envs, " " + extra_env if extra_env else "", e2e.EXE, E.ws)
     tmux("new-session", "-d", "-s", session, "-x", str(cols), "-y", str(rows), cmd)
 
 

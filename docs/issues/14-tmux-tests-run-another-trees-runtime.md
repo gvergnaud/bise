@@ -1,6 +1,12 @@
 # 14 · a TUI test under tmux can run another tree's runtime
 
-Status: open. Found by `interrupt` (issue 13) while two gates ran at once. Label: tests.
+Status: done (skills-scan, the commit after b6bcc687), but for one part. Found by `interrupt` (issue 13) while two gates ran at once. Label: tests.
+
+What was done, in `tests/tui_tmux.py`: a pane gets its env from the test, never the tmux server (`pane_env`: HOME, PATH, the toolchain and XDG homes, every `SB_`/`BEND_`/`BISE_`/`MISTRAL_` variable, and `BISE_APP_ROOT=e2e.ROOT` unless the test sets one; `pane_unset` drops the internal and test variables, the path overrides and the XDG homes first). A passing test whose hub's `hub.root` is not `e2e.ROOT` fails (`refuse_other_root`). The same root cause leaked the user's HOME into the tmux tests' hubs (they scanned his `~/.vibe/skills`, `bise_env.refuse_real_skills` caught it, b6bcc687).
+
+Left:
+- the check that `e2e.EXE` is this tree's build. A foreign `bise` from a stale `CARGO_TARGET_DIR` is not caught (its hub's root is pinned to this tree, but the binary itself is another tree's).
+- each test run's own tmux server (`tmux -L bise-<pid>`). Tried: every tmux test passed on it but `tui_onboarding_tmux`, which three times hung ~950-1000 s in one call, at a different step each time (a server started from the launchd job, not from the user's session; cause not found). The pane's env no longer depends on the server, so what is left of the shared server is its options and its load.
 
 ## The problem
 

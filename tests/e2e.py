@@ -105,6 +105,11 @@ class Env:
             # waited on the real checker and a card: proc_cleanup's t1
             # never left "starting"). The approvals tests pop it.
             "BISE_APPROVALS": "yolo",
+            # never his keychain: the Claude-plan probe (security
+            # find-generic-password) is off unless a test fakes it
+            # (found/missing); from a tmux server a launchd job started it
+            # also waited minutes (tui_onboarding_tmux 1010 s)
+            "BISE_DETECT_KEYCHAIN": "off",
         }
         self.hub = None
 
