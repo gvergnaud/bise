@@ -33,6 +33,7 @@ use std::net::TcpListener;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
+mod ambient;
 mod approot;
 mod debuglog;
 mod doctor;
@@ -567,6 +568,16 @@ fn run_main() -> std::io::Result<()> {
                 load_keys();
                 return run_sbd(&args[1..]);
             }
+            // bise ambient (docs/ambient-app.md): the macOS app's core, its
+            // child on stdio JSON, a client of the workspace's hub
+            Some("ambient-core") => {
+                load_keys();
+                std::process::exit(ambient::core(&args[1..])?);
+            }
+            // the desktop's terminal panel: one shell, bise-proto pty lines
+            Some("pty") => std::process::exit(bend_tui::pty::main(&args[1..])),
+            // bise ambient: open the app on this workspace (scripts/desktop.sh)
+            Some("ambient") => std::process::exit(ambient::launch(&args[1..])?),
             Some("sbswitch") => {
                 // the version switcher: detached, from the old version's binary
                 let rest = &args[1..];

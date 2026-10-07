@@ -61,6 +61,22 @@ fn rosetta_target(target: &str, rosetta: bool) -> String {
 
 /// Where this bise runs from, in the words of the update: an install,
 /// else why there is nothing to update.
+/// bise's release channel for the desktop app's update check (bar S.6,
+/// the window's core: `SetupPorts::manifest`): `(latest.json or why not,
+/// the channel's base URL, this Mac's target)`. The channel is the same
+/// as `bise update`'s: `BISE_DIST_URL`, else the install's, else
+/// [`release::DIST_URL`] (a bise in an app bundle isn't an install).
+pub(crate) fn desktop_manifest() -> (Result<String, String>, String, String) {
+    let base = this_install()
+        .ok()
+        .and_then(|i| i.dist_url(&env))
+        .or_else(|| env(release::DIST_URL_ENV))
+        .unwrap_or_else(|| release::DIST_URL.to_string());
+    let base = base.trim_end_matches('/').to_string();
+    let text = fetch_text(&format!("{}/{}", base, release::MANIFEST));
+    (text, base, host_target())
+}
+
 fn this_install() -> Result<Install, String> {
     let root = crate::approot::locate("repl-live").map(|(r, _)| r)?;
     let kind = release::root_kind(&root);
