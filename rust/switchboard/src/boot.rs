@@ -16,6 +16,7 @@
 //! starting hub while lines other than heartbeats come.
 //! The thread and the effects are `daemon/boot.rs`.
 
+use crate::watch::Watch;
 use std::time::Duration;
 
 /// No progress for this long: one heartbeat line, then one every period.
@@ -52,14 +53,17 @@ pub enum OnStuck {
 #[derive(Debug, Clone)]
 pub struct BootWatch {
     step: String,
-    moved_ms: u64,
+    /// stuck: STUCK_AFTER without progress (crate::watch, the rule REPL
+    /// starts follow too)
+    watch: Watch,
     said_ms: u64,
     stuck_said: bool,
 }
 
 impl BootWatch {
     pub fn new(step: &str, now_ms: u64) -> BootWatch {
-        BootWatch { step: step.to_string(), moved_ms: now_ms, said_ms: now_ms, stuck_said: false }
+        let watch = Watch::new(now_ms, STUCK_AFTER.as_millis() as u64);
+        BootWatch { step: step.to_string(), watch, said_ms: now_ms, stuck_said: false }
     }
 
     /// A new boot step: progress.
@@ -70,7 +74,7 @@ impl BootWatch {
 
     /// The step moved (the replay applied a batch).
     pub fn progress(&mut self, now_ms: u64) {
-        self.moved_ms = now_ms;
+        self.watch.moved(now_ms);
         self.said_ms = now_ms;
         self.stuck_said = false;
     }
@@ -78,8 +82,8 @@ impl BootWatch {
     /// The verdict at `now_ms`: each heartbeat once per STILL_EVERY,
     /// stuck once per stall.
     pub fn tick(&mut self, now_ms: u64) -> Verdict {
-        let still = now_ms.saturating_sub(self.moved_ms);
-        if still >= STUCK_AFTER.as_millis() as u64 && !self.stuck_said {
+        let still = self.watch.still_ms(now_ms);
+        if self.watch.stalled(now_ms) && !self.stuck_said {
             self.stuck_said = true;
             self.said_ms = now_ms;
             return Verdict::Stuck { step: self.step.clone(), secs: still / 1000 };

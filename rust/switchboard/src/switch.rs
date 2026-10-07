@@ -339,6 +339,13 @@ pub fn id_of(root: &Path) -> String {
 
 /// Watch the new hub for the probation period. Err: the reason to roll back.
 fn probation(paths: &Paths, period: Duration) -> Result<(), String> {
+    // the hub reads the deadline (on_probation: it reports its failures
+    // and does not idle-exit): from now, not from before the backup and
+    // the start, else the hub thought it over and idle-exited while this
+    // loop still watched it, and its exit read as a crash
+    let mut st = read_state(paths);
+    st["probation_until"] = json!(now_ms() + period.as_millis() as u64 + 5_000);
+    write_state(paths, &st);
     let t0 = Instant::now();
     let mut misses = 0;
     while t0.elapsed() < period {
@@ -450,16 +457,24 @@ fn backup_to(src: &Path, dest: &Path) -> Result<(), String> {
         .stdin(std::process::Stdio::null())
         .output()
         .map_err(|e| format!("rsync: {}", e))?;
-    if out.status.success() || out.status.code() == Some(24) {
+    let err = String::from_utf8_lossy(&out.stderr);
+    if out.status.success() || out.status.code() == Some(24) || (out.status.code() == Some(23) && only_vanished(&err)) {
         return Ok(());
     }
-    let err = String::from_utf8_lossy(&out.stderr);
     let first = err.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("");
     Err(if first.is_empty() {
         format!("rsync {}", out.status)
     } else {
         format!("rsync {}: {}", out.status, crate::util::clip(first, 200))
     })
+}
+
+/// rsync's errors are only files gone mid-copy: macOS's openrsync says
+/// exit 23 with `<file>: open (2)` (ENOENT) where rsync says 24 (an
+/// agent's role-request.txt vanished in an e2e's backup).
+fn only_vanished(stderr: &str) -> bool {
+    let errs: Vec<&str> = stderr.lines().filter(|l| l.contains("error")).collect();
+    !errs.is_empty() && errs.iter().all(|l| l.contains(": open (2)") || l.contains("No such file or directory (2)"))
 }
 
 /// The workspace is bise's own source tree (dev mode, BISE-131): there
@@ -885,6 +900,16 @@ mod state_tests {
         assert!(e.starts_with("rsync "), "{}", e);
         assert!(dir.join("sb-backup-state-of-a-workspace-3").is_dir());
         let _ = std::fs::remove_dir_all(&t);
+    }
+
+    #[test]
+    fn a_file_gone_mid_backup_is_not_a_failed_backup_another_error_is() {
+        use super::only_vanished;
+        let gone = "rsync(40552): error: /st/agents/t7/role-request.txt: open (2) in /v\nrsync(40552): error: /st/agents/a/run/bend-sh-1.sh: open (2)\n";
+        assert!(only_vanished(gone));
+        assert!(!only_vanished("rsync(1): error: /st/journal.jsonl: open (13)\n"), "permission denied is a failure");
+        assert!(!only_vanished(&format!("{}rsync(1): error: write failed: No space left on device (28)\n", gone)));
+        assert!(!only_vanished(""));
     }
 
     #[test]

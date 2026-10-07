@@ -10,7 +10,7 @@ use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc::Sender;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// What a hub needs to reconnect to a running REPL (`repl.json`).
 pub(super) struct ReplInfo {
@@ -151,6 +151,7 @@ pub(super) fn adopt(r: ReplInfo, dir: String, gen: u64, adir: PathBuf, tx: Sende
             dir: dir.clone(),
             gen,
             reason,
+            cause: super::repl_starts::Gone::Died,
         });
     };
     let wire = adir.join("wire.log");
@@ -215,6 +216,7 @@ pub(super) fn supervise(
             dir: dir.clone(),
             gen,
             reason,
+            cause: super::repl_starts::Gone::Died,
         });
     };
     let log = match std::fs::File::create(&log_path) {
@@ -236,19 +238,15 @@ pub(super) fn supervise(
         gen,
         pid: child.id(),
     });
-    let start = Instant::now();
     let info = loop {
         let content = std::fs::read_to_string(&log_path).unwrap_or_default();
         if content.contains("REPL on") {
             break content;
         }
+        // no time limit here: a start without progress is the hub's to
+        // end (repl_starts), it kills this child
         if let Ok(Some(st)) = child.try_wait() {
             return gone(format!("the REPL died at startup ({})", st));
-        }
-        if start.elapsed() > Duration::from_secs(30) {
-            let _ = child.kill();
-            let _ = child.wait();
-            return gone("the REPL did not start within 30 s".into());
         }
         std::thread::sleep(Duration::from_millis(50));
     };

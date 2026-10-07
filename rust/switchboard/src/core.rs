@@ -1155,6 +1155,12 @@ impl Hub {
         }
     }
 
+    /// The agents a client is looking at (a REPL start for them goes
+    /// first, daemon/repl_starts.rs).
+    pub fn focused(&self) -> BTreeSet<String> {
+        self.clients.values().map(|c| c.focus.clone()).collect()
+    }
+
     /// sb-core's pid (a stuck boot stops it with the hub).
     pub fn core_pid(&self) -> u32 {
         self.link.child.id()

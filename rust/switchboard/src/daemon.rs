@@ -19,6 +19,7 @@ mod features;
 mod gate;
 mod history;
 mod repl;
+mod repl_starts;
 mod recycling;
 mod release;
 mod session_log;
@@ -105,10 +106,16 @@ enum Msg {
         /// Offset in the wire log just after this line.
         offset: u64,
     },
+    /// A phase of a start is done (repl_starts: progress).
+    ReplStartStep {
+        dir: String,
+        gen: u64,
+    },
     ReplGone {
         dir: String,
         gen: u64,
         reason: String,
+        cause: repl_starts::Gone,
     },
     ClientNew {
         id: ClientId,
@@ -201,11 +208,13 @@ struct Shell {
     next_gen: u64,
     /// Every REPL process alive, connected or not: (generation, pid).
     pids: BTreeMap<String, (u64, u32)>,
-    /// REPLs asked for whose process is not spawned yet: (generation,
-    /// since). One stuck there past START_LIMIT is a failed start, said
-    /// in main's feed and restarted (BISE-291: it stayed `starting`
-    /// forever, with no line anywhere).
-    starts: BTreeMap<String, (u64, std::time::Instant)>,
+    /// REPL starts in flight, at most repl_start::MAX_IN_FLIGHT; one
+    /// without progress is a failed start (daemon/repl_starts.rs;
+    /// BISE-291: it stayed `starting` forever, with no line anywhere).
+    starts: crate::repl_start::Starts,
+    /// fresh spawns waiting for a slot, and the stalled ones that go first
+    start_queue: BTreeMap<String, repl_starts::Queued>,
+    restart_first: BTreeSet<String>,
     clients: BTreeMap<ClientId, UnixStream>,
     replies: BTreeMap<Token, UnixStream>,
     /// The last lines of each feed, with their transcript positions and
@@ -315,11 +324,6 @@ struct Shell {
 }
 
 /// What an agent whose turn was cut by a restart receives.
-/// How long a REPL may wait for its process to be spawned (the login
-/// shell's PATH, its AGENTS.md: seconds at most) before its start counts
-/// as failed (BISE-291).
-const START_LIMIT: Duration = Duration::from_secs(20);
-
 /// At a stop for good, how long the REPLs get to checkpoint and exit
 /// before SIGTERM.
 const REPL_QUIT: Duration = Duration::from_secs(5);
@@ -993,6 +997,8 @@ impl Shell {
             Effect::Kill { agent } => {
                 if let Some(dir) = self.dir_of(&agent) {
                     self.gens.remove(&dir);
+                    self.starts.ended(&dir);
+                    self.start_queue.remove(&dir);
                     if let Some(r) = self.repls.remove(&dir) {
                         let _ = r.stream.shutdown(std::net::Shutdown::Both);
                     }
@@ -1470,8 +1476,11 @@ impl Shell {
             })
             .map(|a| (a.name.clone(), a.dir.clone()))
             .collect();
+        // a few at a time (repl_starts): 22 at once failed a switch
+        let stale = self.switch_admitted(stale);
         for (name, dir) in stale {
             let Some(r) = self.repls.get_mut(&dir) else {
+                self.starts.ended(&dir);
                 continue;
             };
             if r.stream.write_all(b"reload\n").is_ok() {
@@ -1513,6 +1522,10 @@ impl Shell {
         }
         if !self.switching.is_empty() {
             v.push("a REPL switching".into());
+        }
+        // its idle exit read as a crash: the switch rolled back
+        if crate::switch::on_probation(&self.opts.paths) {
+            v.push("a version switch on probation".into());
         }
         if !self.building.is_empty() {
             v.push("a version build".into());
@@ -1608,6 +1621,23 @@ impl Shell {
                 self.resume_turn.insert(dir.clone());
             }
         }
+        // a fresh process, in a free slot (repl_starts); a switch's new
+        // process holds the slot of its reload
+        if !self.starts.in_flight(&dir) {
+            let q = repl_starts::Queued { name: a.name.clone(), gen, resume, crash_note, port, asked_ms: now_ms() };
+            return self.queue_start(&dir, q);
+        }
+        self.spawn_fresh(&a.name, gen, resume, crash_note, port);
+    }
+
+    /// A fresh REPL process of `name` (generation `gen`), in its slot.
+    fn spawn_fresh(&mut self, name: &str, gen: u64, resume: bool, crash_note: Option<String>, port: Option<u16>) {
+        let Some(a) = self.hub.st.agents.get(name).cloned() else {
+            return;
+        };
+        let dir = a.dir.clone();
+        let adir = self.opts.paths.agent_dir(&dir);
+        let (tmp, run) = (self.opts.paths.agent_tmp(&dir), self.opts.paths.agent_run(&dir));
         // a fresh process: a fresh wire log
         write_logged(&self.opts.paths, &adir.join("wire.log"), "");
         write_logged(&self.opts.paths, &adir.join("wire.offset"), "0");
@@ -1619,6 +1649,7 @@ impl Shell {
                     dir,
                     gen,
                     reason: format!("no free port: {}", e),
+                    cause: repl_starts::Gone::Died,
                 });
                 return;
             }
@@ -1725,7 +1756,6 @@ impl Shell {
         }
         self.bins.insert(dir.clone(), self.opts.repl_bin.clone());
         self.ports.insert(dir.clone(), port);
-        self.starts.insert(dir.clone(), (gen, std::time::Instant::now()));
         let tx = self.tx.clone();
         let paths = self.opts.paths.clone();
         let workdir = std::path::PathBuf::from(&a.ws.path);
@@ -1739,6 +1769,8 @@ impl Shell {
             let agent_path = crate::tools_env::hub_agent_path(&paths.bin_dir());
             env.set("BEND_TOOLS_NOTE", crate::tools_env::session_note(&agent_path, &workdir))
                 .set("PATH", agent_path);
+            let step = || tx.send(Msg::ReplStartStep { dir: dir.clone(), gen }).is_ok();
+            step();
             // the AGENTS.md files of its working folder (a task: its
             // worktree's), read again at each start and /reload (BISE-232)
             env.set(
@@ -1749,31 +1781,11 @@ impl Shell {
                     &adir.join("agents-md.md"),
                 ),
             );
+            step();
+            repl_starts::slow_spawn_for_tests();
             env.apply(&mut cmd);
             supervise(cmd, dir, gen, adir, port, tx, paths)
         });
-    }
-
-    /// A REPL whose process is still not spawned START_LIMIT after it
-    /// was asked for: its start failed. It goes as a crash (a line in
-    /// main's feed, a restart, a card after MAX_CRASHES); what its stuck
-    /// thread sends later belongs to an old generation and is dropped.
-    fn check_starts(&mut self) {
-        let late: Vec<(String, u64)> = self
-            .starts
-            .iter()
-            .filter(|(_, (_, since))| since.elapsed() > START_LIMIT)
-            .map(|(dir, (gen, _))| (dir.clone(), *gen))
-            .collect();
-        for (dir, gen) in late {
-            self.starts.remove(&dir);
-            let reason = format!(
-                "its REPL did not start in {} s: the hub never got to run it; `bise doctor` shows where the hub's log is",
-                START_LIMIT.as_secs()
-            );
-            log_line(&self.opts.paths, &format!("repl {} not started: {}", dir, reason));
-            let _ = self.tx.send(Msg::ReplGone { dir, gen, reason });
-        }
     }
 
     fn on_repl_line(&mut self, dir: &str, line: &str) {
@@ -2263,7 +2275,9 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         gens: BTreeMap::new(),
         next_gen: 1,
         pids: BTreeMap::new(),
-        starts: BTreeMap::new(),
+        starts: Default::default(),
+        start_queue: BTreeMap::new(),
+        restart_first: BTreeSet::new(),
         clients: BTreeMap::new(),
         replies: BTreeMap::new(),
         buffers: BTreeMap::new(),
@@ -2473,6 +2487,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
                     },
                 );
                 sh.switch_spawned.remove(&dir);
+                sh.starts.connected(&dir);
                 sh.recycle_started(&dir);
                 crate::util::timing(&format!("repl connected {} (adopted {})", dir, adopted));
                 if let Some(q) = sh.switching.remove(&dir) {
@@ -2521,9 +2536,14 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
                     }
                 }
             }
+            Msg::ReplStartStep { dir, gen } => {
+                if sh.gens.get(&dir) == Some(&gen) {
+                    sh.start_progress(&dir);
+                }
+            }
             Msg::ReplSpawned { dir, gen, pid } => {
-                if sh.starts.get(&dir).is_some_and(|(g, _)| *g == gen) {
-                    sh.starts.remove(&dir);
+                if sh.gens.get(&dir) == Some(&gen) {
+                    sh.start_progress(&dir);
                 }
                 let _ = std::fs::write(
                     sh.opts.paths.agent_dir(&dir).join("repl.pid"),
@@ -2553,6 +2573,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
                 dir,
                 gen,
                 reason,
+                cause,
             } => {
                 // a killed generation is not live anymore: its exit is
                 // expected; any exit of the live one is a crash (the hub
@@ -2560,7 +2581,13 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
                 if sh.gens.get(&dir) != Some(&gen) {
                     continue;
                 }
-                sh.starts.remove(&dir);
+                // the old process of a switch exits as asked: its slot
+                // stays for the new one (progress); any other end frees it
+                if sh.switching.contains_key(&dir) && !sh.switch_spawned.contains(&dir) && cause == repl_starts::Gone::Died {
+                    sh.start_progress(&dir);
+                } else {
+                    sh.starts.ended(&dir);
+                }
                 sh.gens.remove(&dir);
                 sh.repls.remove(&dir);
                 sh.gate_forget(&dir);
@@ -2583,11 +2610,10 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
                 sh.switch_spawned.remove(&dir);
                 sh.restored.remove(&dir);
                 // a new version on probation: a REPL that dies is a
-                // reason to roll back
-                crate::switch::report_failure(
-                    &sh.opts.paths,
-                    &format!("the REPL of {} stopped: {}", dir, reason),
-                );
+                // reason to roll back, a slow start is not (repl_start)
+                if cause.reports() {
+                    crate::switch::report_failure(&sh.opts.paths, &format!("the REPL of {} stopped: {}", dir, reason));
+                }
                 if let Some(name) = sh.agent_by_dir(&dir).map(|a| a.name.clone()) {
                     sh.step(Input::ReplExited {
                         agent: name,

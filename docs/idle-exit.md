@@ -18,7 +18,9 @@ TUI, the ambient app's core) plus the holds others take on it
    mid-turn (also inside `sb wait`), a background job of an agent's bash
    tool (`<agent>/tmp/bg/<n>.slot` with a live `<n>.pid`, at most 6 h
    old: a forgotten dev server does not hold it forever), a REPL starting
-   or switching, a `/version` build, `/update`, `/release-bise`. hub.log
+   or switching, a version switch on probation (its switcher read the
+   idle exit as a crash and rolled back), a `/version` build, `/update`,
+   `/release-bise`. hub.log
    says what it waits for, once per change.
 3. then it stops for good, the stop of `bise --stop`: the socket goes
    first (a `bise` launched meanwhile starts the next hub, which waits for
