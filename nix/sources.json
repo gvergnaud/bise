@@ -1,5 +1,13 @@
 {
-  "version": "none",
-  "id": "",
-  "built": ""
+  "version": "2026.10.2-27",
+  "id": "509360e",
+  "built": "2026-10-07T14:53:22Z",
+  "aarch64-linux": {
+    "url": "https://github.com/gvergnaud/bise/releases/download/v2026.10.2-27/bise-509360e-linux-arm64.tar.gz",
+    "sha256": "156f62faf43adcce2abf7ad5f3928d88595fca1d78297a7fe4184fcb894cdd5a"
+  },
+  "x86_64-linux": {
+    "url": "https://github.com/gvergnaud/bise/releases/download/v2026.10.2-27/bise-509360e-linux-x86_64.tar.gz",
+    "sha256": "879e9acae38b165b1e17aa25da66860782742e0231ce6a7333390b06846a5846"
+  }
 }
