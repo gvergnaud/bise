@@ -39,10 +39,13 @@ tmux -L bisenix kill-server 2>/dev/null
 rm -rf "$W"; mkdir -p "$H" "$WS" "$F/nix"
 
 # a clean user: the throwaway HOME, the system profile's PATH + its own
-# nix profile, no key in any file (the key comes from the env)
-E() { env -i HOME="$H" USER="${USER:-me}" SHELL=/run/current-system/sw/bin/bash TERM=xterm-256color LANG=C.UTF-8 \
-  PATH="$H/.nix-profile/bin:$H/.local/state/nix/profile/bin:/run/wrappers/bin:/run/current-system/sw/bin:$(dirname "$(command -v tmux)"):$(dirname "$(command -v git)")" \
-  NIX_PATH="${NIX_PATH:-}" "$@"; }
+# nix profile, no key in any file (the key comes from the env). Off
+# NixOS (Nix in a container) the tools come from where this shell finds
+# them (coreutils, ps, git, tmux)
+tooldirs=""; for c in env ps git tmux nix; do d="$(dirname "$(command -v "$c" 2>/dev/null || echo /x/x)")"; [ "$d" = /x ] || tooldirs="$tooldirs:$d"; done
+E() { env -i HOME="$H" USER="${USER:-me}" SHELL="$(command -v bash)" TERM=xterm-256color LANG=C.UTF-8 \
+  PATH="$H/.nix-profile/bin:$H/.local/state/nix/profile/bin:/run/wrappers/bin:/run/current-system/sw/bin$tooldirs" \
+  NIX_PATH="${NIX_PATH:-}" ${NIX_SSL_CERT_FILE:+NIX_SSL_CERT_FILE="$NIX_SSL_CERT_FILE"} ${NIX_CONFIG:+NIX_CONFIG="$NIX_CONFIG"} "$@"; }
 
 echo "== the flake, with sources.json on this tarball"
 system="$("${NIX[@]}" eval --impure --raw --expr builtins.currentSystem)"
@@ -80,7 +83,11 @@ ssl=""; for d in $(echo "$rp" | tr ':' ' '); do [ -e "$d/libssl.so.3" ] && ssl="
 [ -n "$ssl" ] && ok "repl-live's RUNPATH has libssl.so.3 (wire.c dlopens it): $ssl" || ko "no libssl.so.3 in repl-live's RUNPATH: $rp"
 v="$(E "$BIN" --version 2>&1)"
 has "$v" "$target" && ok "--version: $v" || ko "--version: $v"
-check "the app root is read-only" sh -c "! touch '$root/.w' 2>/dev/null"
+if [ "$(id -u)" = 0 ] && [ ! -d /run/current-system ]; then
+  echo "  skip the app root is read-only (root in a Nix container can write the store; NixOS mounts it read-only)"
+else
+  check "the app root is read-only" sh -c "! touch '$root/.w' 2>/dev/null"
+fi
 out="$(E "$BIN" update 2>&1)"
 has "$out" "installed with Nix" && ok "bise update names Nix: $(echo "$out" | tail -n 1)" || ko "bise update: $out"
 

@@ -10,6 +10,9 @@ use bise_catalog::auth::{EnvFile, Keys, Store};
 use bise_home::style::{hang, Style};
 use switchboard::tools_env;
 
+mod os;
+use os::{linux_check, os_release_name};
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Mark {
     Ok,
@@ -124,28 +127,6 @@ pub(crate) fn macos_check(version: Option<&str>, min: &str, arch: &str, rosetta:
         }
         _ => ok("macOS", detail),
     }
-}
-
-/// The OS line on Linux: the distro (`/etc/os-release`), the arch, and
-/// what bise does not have there (macOS-only), so nobody looks for it.
-pub(crate) fn linux_check(pretty_name: Option<&str>, arch: &str, nixos: bool) -> Check {
-    let name = pretty_name.unwrap_or("Linux");
-    let how = if nixos { " (the Nix flake)" } else { "" };
-    ok(
-        "Linux",
-        format!(
-            "{} {}{} · macOS-only, off here: the sandbox (auto checks each command), voice, computer use, the desktop app",
-            name, arch, how
-        ),
-    )
-}
-
-/// `PRETTY_NAME` of an os-release file.
-pub(crate) fn os_release_name(text: &str) -> Option<String> {
-    text.lines()
-        .find_map(|l| l.strip_prefix("PRETTY_NAME="))
-        .map(|v| v.trim().trim_matches('"').to_string())
-        .filter(|v| !v.is_empty())
 }
 
 /// The Unix socket path limit (sun_path, macOS: 104 bytes with the NUL).
@@ -876,22 +857,6 @@ pub(crate) fn main(args: &[String]) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn linux_says_its_distro_and_what_is_macos_only() {
-        let t = "NAME=NixOS
-PRETTY_NAME=\"NixOS 25.11 (Xantusia)\"
-ID=nixos
-";
-        assert_eq!(os_release_name(t).as_deref(), Some("NixOS 25.11 (Xantusia)"));
-        assert_eq!(os_release_name("ID=x
-"), None);
-        let c = linux_check(Some("NixOS 25.11 (Xantusia)"), "arm64", true);
-        assert_eq!(c.mark, Mark::Ok);
-        assert!(c.detail.starts_with("NixOS 25.11 (Xantusia) arm64 (the Nix flake) · macOS-only"), "{}", c.detail);
-        assert!(c.detail.contains("the sandbox (auto checks each command)"), "{}", c.detail);
-        assert_eq!(linux_check(None, "x86_64", false).detail.split(" · ").next(), Some("Linux x86_64"));
-    }
 
     #[test]
     fn macos_versions() {
