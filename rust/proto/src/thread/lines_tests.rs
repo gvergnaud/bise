@@ -1,0 +1,102 @@
+use super::*;
+use crate::rows::ReportKind;
+
+#[test]
+fn runtime_lines_read_as_their_kind() {
+    assert_eq!(read(""), Rec::Empty);
+    assert_eq!(read("--- idle"), Rec::Idle);
+    assert_eq!(read("  ev: turn"), Rec::Fact);
+    assert_eq!(read("tool #3 bash : cargo test"), Rec::Tool { id: 3, name: "bash".into(), args: "cargo test".into() });
+    assert_eq!(read("tool #x bash : y"), Rec::Dropped);
+    assert_eq!(read("tool_intent #3 : running the tests "), Rec::ToolIntent { id: 3, text: "running the tests".into() });
+    assert_eq!(read("tool_intent #3 :  "), Rec::Dropped);
+    assert_eq!(read("tool_code #3 : a\\Nb"), Rec::ToolCode { id: 3, code: "a\\Nb".into() });
+    assert_eq!(read("tool_result #3 fail : exit 1"), Rec::ToolResult { id: 3, ok: false, preview: "exit 1".into() });
+    assert_eq!(read("subtool slack.send ok : sent"), Rec::Sub { name: "slack.send".into(), ok: true, preview: "sent".into() });
+    assert_eq!(read("core rejected: no pending completion"), Rec::Rejected("no pending completion".into()));
+    assert_eq!(read("second line"), Rec::Raw("second line".into()));
+    assert_eq!(read_history("you : a\\nb"), Rec::HistYou("a\nb".into()));
+    assert_eq!(read_history("injected : x"), Rec::Injected("x".into()));
+    assert_eq!(read_history("--- idle"), Rec::Idle);
+}
+
+#[test]
+fn observations_read_as_their_kind() {
+    let o = |s: &str| match read(&format!("  obs: {s}")) {
+        Rec::Obs(o) => o,
+        r => panic!("{r:?}"),
+    };
+    assert_eq!(o("turn_started"), Obs::TurnStarted);
+    assert_eq!(o("assistant: <think>hm</think>ok"), Obs::Assistant("<think>hm</think>ok".into()));
+    assert_eq!(o("assistant:"), Obs::Assistant(String::new()));
+    assert_eq!(o("tool_started #4"), Obs::ToolStarted(4));
+    assert_eq!(o("tool_finished #4 failed"), Obs::ToolFinished { id: 4, ok: false });
+    assert_eq!(o("tool_result_committed #4"), Obs::Plumbing);
+    assert_eq!(o("compaction_started #2 auto"), Obs::CompactionStarted);
+    assert_eq!(o("compaction_done: the summary"), Obs::CompactionDone("the summary".into()));
+    assert_eq!(o("context_compaction_failed: x"), Obs::CompactionFailed("x".into()));
+    assert_eq!(o("usage: model=m in=1 out=2"), Obs::Usage("model=m in=1 out=2".into()));
+    assert_eq!(o("provider_retry: 2/10 · 529 · retry in 4s"), Obs::ProviderRetry("2/10 · 529 · retry in 4s".into()));
+    assert_eq!(o("turn_done: completed"), Obs::TurnDone(TurnEnd::Completed));
+    assert_eq!(o("turn_done: interrupted"), Obs::TurnDone(TurnEnd::Interrupted { by: None }));
+    assert_eq!(o("turn_done: failed: interrupted by main"), Obs::TurnDone(TurnEnd::Interrupted { by: Some("main".into()) }));
+    assert_eq!(o("turn_done: failed: 500"), Obs::TurnDone(TurnEnd::Failed("500".into())));
+    assert_eq!(o("turn_done: budget"), Obs::TurnDone(TurnEnd::Other("budget".into())));
+    assert_eq!(o("turn_stalled: budget"), Obs::TurnStalled("budget".into()));
+    assert_eq!(o("null_iteration"), Obs::NullIteration);
+    assert_eq!(o("something new"), Obs::Other("something new".into()));
+}
+
+#[test]
+fn hub_lines_read_their_fields() {
+    let h = |s: &str| match read(&format!("sb {s}")) {
+        Rec::Hub(h) => h,
+        r => panic!("{r:?}"),
+    };
+    assert_eq!(h("you : a\\nb"), Hub::You("a\nb".into()));
+    assert_eq!(h("undelivered : fix : d'abord \\: les tests"), Hub::Undelivered { to: "fix".into(), text: "d'abord : les tests".into() });
+    assert_eq!(h("msg-in : docs m_3 : hi : there"), Hub::MsgIn { from: "docs".into(), id: "m_3".into(), body: "hi : there".into() });
+    assert_eq!(h("msg : a → b m_9 : hello"), Hub::Msg { from: "a".into(), to: "b".into(), id: "m_9".into(), body: "hello".into() });
+    assert_eq!(h("msg : a → b c : hello"), Hub::Msg { from: "a".into(), to: "b c".into(), id: String::new(), body: "hello".into() });
+    assert_eq!(h("sent : main : m_9 : 1 : cart \\: or not"), Hub::Sent { to: "main".into(), id: "m_9".into(), ask: true, body: "cart : or not".into() });
+    assert_eq!(h("sent : main"), Hub::Other { kind: "sent".into(), text: "main".into() });
+    assert_eq!(h("answered : docs : v1 or v2? : v2 : the brief"), Hub::Answered { agent: "docs".into(), question: "v1 or v2?".into(), answer: "v2".into(), why: "the brief".into() });
+    assert_eq!(h("card : #3 confirm @api : run it?"), Hub::Card { text: "#3 confirm @api : run it?".into(), id: Some(3), kind: "confirm".into(), body: "run it?".into() });
+    assert_eq!(h("gate : check 4"), Hub::Gate(GateStep::Check));
+    assert_eq!(h("approval : no : api : rm -rf : not that"), Hub::Approval { how: "no".into(), who: "api".into(), what: "rm -rf".into(), note: "not that".into() });
+    assert_eq!(h("card-closed : #3 answered"), Hub::CardClosed { id: 3, res: "answered".into() });
+    assert_eq!(h("card-closed : odd"), Hub::Other { kind: "card-closed".into(), text: "odd".into() });
+    assert_eq!(h("route : you → @docs (answer to card #4) : v2"), Hub::Route { who: "docs".into(), card: 4, said: "v2".into() });
+    assert_eq!(h("pr : red : 412 : https://x/412 : checks fail \\: e2e"), Hub::Pr { state: crate::thread::PrNewsState::Failing, number: 412, url: "https://x/412".into(), text: "checks fail : e2e".into() });
+    assert_eq!(h("pr : plain : x : u : hi"), Hub::Other { kind: "pr".into(), text: "hi".into() });
+    assert_eq!(h("artifact : q3 : designer : Q3 plan : page : v2"), Hub::Artifact { id: "q3".into(), agent: "designer".into(), title: "Q3 plan".into(), kind: "page".into(), v: 2 });
+    assert_eq!(h("landed : api : main : sb/api : a1b2c3d : 3 : 42 : 18"), Hub::Landed { agent: "api".into(), target: "main".into(), from: "sb/api".into(), sha: "a1b2c3d".into(), files: 3, add: 42, del: 18 });
+    assert_eq!(h("landed : api : main : sb/api :  : 3"), Hub::Other { kind: "landed".into(), text: "api : main : sb/api :  : 3".into() });
+    assert_eq!(h("stopped : stopped"), Hub::Stopped("stopped".into()));
+    assert_eq!(h("whatever : x"), Hub::Other { kind: "whatever".into(), text: "x".into() });
+}
+
+#[test]
+fn bash_calls_read_as_reports_and_publishes() {
+    assert_eq!(report_in(r#"cd x && sb report done "landed \"a\"" --decision y"#), Some((ReportKind::Done, "landed \"a\"".into())));
+    assert_eq!(report_in("sb report progress 'half'"), Some((ReportKind::Progress, "half".into())));
+    assert_eq!(report_in("sb report nope x"), None);
+    assert_eq!(publish_in("sb page publish ./weekly.html"), Some("weekly".into()));
+    assert_eq!(publish_in("sb page publish a.html --id perf-notes"), Some("perf-notes".into()));
+}
+
+/// architect m_10999: the current usage is the last usage line unless a
+/// compaction ended after it (the TUI over its events, the hub over a
+/// transcript tail).
+#[test]
+fn the_current_usage_is_the_last_one_unless_compacted_after() {
+    let cur = |ls: &[&str]| current_usage(ls.iter().map(|l| usage_mark(l)));
+    let u1 = "  obs: usage: model=m in=10 out=2";
+    let u2 = "  obs: usage: model=m in=30 out=1";
+    let done = "  obs: compaction_done: the summary";
+    assert_eq!(cur(&[]), None);
+    assert_eq!(cur(&[u1, "--- idle", u2, "sb you : hi"]), Some("model=m in=30 out=1".into()));
+    assert_eq!(cur(&[u1, done]), None);
+    assert_eq!(cur(&[u1, done, u2]), Some("model=m in=30 out=1".into()));
+    assert_eq!(usage_mark("tool #3 bash : ls"), UsageMark::Other);
+}

@@ -1,0 +1,46 @@
+{"cmd":"hello","proto":1}
+{"cmd":"subscribe","project":"acme-1a2b3c4d","agent":"perf"}
+{"cmd":"subscribe","project":"acme-1a2b3c4d","agent":"perf","limit":60}
+{"cmd":"unsubscribe","project":"acme-1a2b3c4d","agent":"perf"}
+{"cmd":"page","project":"acme-1a2b3c4d","agent":"perf","before":200,"limit":60}
+{"cmd":"page","project":"acme-1a2b3c4d","agent":"perf","before":4}
+{"cmd":"send","project":"acme-1a2b3c4d","agent":"perf","text":"look at the cold bench","mode":"now"}
+{"cmd":"send","project":"acme-1a2b3c4d","agent":"perf","text":"and the warm one","mode":"now","cid":12}
+{"cmd":"send","project":"acme-1a2b3c4d","agent":"main","text":"then the warm one","mode":"queued"}
+{"cmd":"send","project":"acme-1a2b3c4d","agent":"main","text":"why is this slow?","mode":"now","context":{"app":"Safari","url":"https://grafana.acme.test/d/p99","title":"p99 latency"}}
+{"cmd":"send","project":"acme-1a2b3c4d","agent":"main","text":"what stands out here","mode":"now","files":["/Users/ana/notes/q3-notes.md","/Users/ana/Desktop/shot.png"]}
+{"cmd":"answer","project":"acme-1a2b3c4d","card":9,"reply":"1"}
+{"cmd":"answer","project":"acme-1a2b3c4d","card":10,"reply":"yes"}
+{"cmd":"close","project":"acme-1a2b3c4d","card":9}
+{"cmd":"confirm","project":"acme-1a2b3c4d","id":3,"yes":true}
+{"cmd":"confirm","project":"acme-1a2b3c4d","id":4,"yes":false}
+{"cmd":"approvals","project":"acme-1a2b3c4d"}
+{"cmd":"approvals","project":"acme-1a2b3c4d","mode":"toggle"}
+{"cmd":"remove_rule","project":"acme-1a2b3c4d","rule":{"tool":"bash","pattern":"cargo test *","project":"/Users/me/acme","added":"1791100000000","from":"card #3, perf"}}
+{"cmd":"stop","project":"acme-1a2b3c4d","agent":"perf"}
+{"cmd":"archive","project":"acme-1a2b3c4d","agent":"perf","force":true}
+{"cmd":"archive","project":"acme-1a2b3c4d","agent":"old-fix","force":false}
+{"cmd":"unarchive","project":"acme-1a2b3c4d","agent":"old-fix"}
+{"cmd":"artifacts_seen","project":"acme-1a2b3c4d"}
+{"cmd":"hello","proto":1,"typed_only":true}
+{"cmd":"diff","project":"acme-1a2b3c4d","agent":"perf"}
+{"cmd":"diff","project":"acme-1a2b3c4d","agent":"perf","commit":"e0f3df5a9c1b2d3e4f5a6b7c8d9e0f1a2b3c4d5e"}
+{"cmd":"worktrees","project":"acme-1a2b3c4d"}
+{"cmd":"dev_servers","project":"acme-1a2b3c4d"}
+{"cmd":"route_correct","project":"bise-home-00000000","rid":3,"to":"shop-5e6f7a8b"}
+{"cmd":"route_cancel","project":"bise-home-00000000","rid":3}
+{"cmd":"merged","project":"acme-1a2b3c4d"}
+{"cmd":"features","project":"acme-1a2b3c4d"}
+{"cmd":"prs","project":"acme-1a2b3c4d"}
+{"cmd":"scheduled","project":"acme-1a2b3c4d"}
+{"cmd":"scheduled_stop","project":"acme-1a2b3c4d","id":48}
+{"cmd":"models","project":"acme-1a2b3c4d"}
+{"cmd":"new","project":"acme-1a2b3c4d","name":"fix","brief":"-w the login button: keep its label","worktree":true,"with_changes":true}
+{"cmd":"new","project":"acme-1a2b3c4d","brief":"x: look at the flaky e2e"}
+{"cmd":"rename","project":"acme-1a2b3c4d","agent":"perf","to":"perf-hub"}
+{"cmd":"model","project":"acme-1a2b3c4d","agent":"perf","model":"mistral/devstral-medium-latest","default":true}
+{"cmd":"effort","project":"acme-1a2b3c4d","agent":"perf","effort":"high"}
+{"cmd":"follow","project":"acme-1a2b3c4d","agent":"perf","on":true}
+{"cmd":"follow","project":"acme-1a2b3c4d","agent":"perf","on":false}
+{"cmd":"slash","project":"acme-1a2b3c4d","agent":"perf","line":"/rename perf perf2","cid":31}
+{"cmd":"slash","project":"acme-1a2b3c4d","agent":"main","line":"/flow"}

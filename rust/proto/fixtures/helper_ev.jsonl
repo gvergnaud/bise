@@ -1,0 +1,29 @@
+{"ev":"hello","proto":1,"version":"0.1.0","pid":4242,"responsible":{"pid":4200,"path":"/Applications/bise.app/Contents/MacOS/bise"}}
+{"ev":"hello","proto":1,"version":"0.1.0","pid":4242}
+{"ev":"fn","act":"talk_start","by":"fn"}
+{"ev":"fn","act":"talk_start","by":"right_option"}
+{"ev":"fn","act":"talk_end"}
+{"ev":"fn","act":"cancel"}
+{"ev":"fn","act":"tap"}
+{"ev":"fn","act":"double"}
+{"ev":"fn","act":"key","key":"space"}
+{"ev":"fn","act":"key","key":"1"}
+{"ev":"fn","act":"esc"}
+{"ev":"context","context":{"app":"Safari","url":"https://github.com/acme/checkout/pull/42","title":"checkout: fix the card field on Safari #42","selection":"the card number field loses focus","window_text":"Conversation 3  Commits 2  Files changed 4"},"bundle":"com.apple.Safari"}
+{"ev":"context","id":"c7","context":{"app":"Code","title":"main.rs — telemetry","file":"/Users/u/w/telemetry/src/main.rs"},"bundle":"com.microsoft.VSCode"}
+{"ev":"context","id":"c8","context":{},"bundle":"com.1password.1password","excluded":true}
+{"ev":"front","app":"Safari","bundle":"com.apple.Safari","title":"checkout: fix the card field on Safari #42","url":"https://github.com/acme/checkout/pull/42"}
+{"ev":"front","app":"Code","bundle":"com.microsoft.VSCode","title":"main.rs — telemetry","path":"/Users/u/w/telemetry/src/main.rs"}
+{"ev":"front","app":null}
+{"ev":"perms","accessibility":"allowed","mic":"ask","screen":"ask","calendar":"ask"}
+{"ev":"perms","accessibility":"ask","mic":"denied","screen":"allowed","calendar":"denied"}
+{"ev":"quiet","on":true,"why":"call"}
+{"ev":"quiet","on":true,"why":"sharing"}
+{"ev":"quiet","on":true,"why":"meeting"}
+{"ev":"quiet","on":true,"why":"full_screen"}
+{"ev":"quiet","on":false,"why":""}
+{"ev":"shot","id":"s1","path":"/Users/u/.bise/run/shots/fn-1791100400000.png","app":"Safari","title":"checkout: fix the card field on Safari #42"}
+{"ev":"shot","id":"s2","app":"1Password","skipped":true}
+{"ev":"shot","id":"s3"}
+{"ev":"error","id":"s4","message":"shot: no dir"}
+{"ev":"error","message":"not JSON: expected value at line 1 column 1"}

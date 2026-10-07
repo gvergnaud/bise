@@ -1,0 +1,7 @@
+{"ev":"started","pid":4242,"shell":"/bin/zsh","cwd":"/w/shop","cols":80,"rows":24}
+{"ev":"data","data":"bHMNCg=="}
+{"ev":"screen","data":"G1s/MTA0OWgbW0gbWzJK","cols":80,"rows":24,"alternate":true}
+{"ev":"screen","data":"G1tIG1sySiQg","cols":120,"rows":30,"alternate":false}
+{"ev":"exit","code":0}
+{"ev":"exit"}
+{"ev":"error","text":"write: base64: Invalid symbol 33, offset 0."}

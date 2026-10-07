@@ -1,0 +1,85 @@
+//! An agent's change as the review shows it: its files, their hunks, and
+//! what it measured (the `diff` event, desktop S7).
+
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum LineKind {
+    Ctx,
+    Add,
+    Del,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct DiffLine {
+    pub kind: LineKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub old: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub new: Option<u32>,
+    pub text: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Hunk {
+    pub header: String,
+    pub lines: Vec<DiffLine>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct DiffFile {
+    pub path: String,
+    /// added, modified, deleted, renamed
+    pub status: String,
+    pub add: u32,
+    pub del: u32,
+    pub hunks: Vec<Hunk>,
+    /// its hunks were cut (too long, generated, binary): the review says
+    /// so, never shows it as complete
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub truncated: bool,
+    /// a renamed file's old path ("renamed from decode.rs")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<String>,
+    /// a binary file: no lines (`truncated` too), its words are its own
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub binary: bool,
+    /// a generated file (a lock file, a build output): its lines are
+    /// left out (`truncated` too when it had some)
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub generated: bool,
+    /// its size in bytes after the change, for a binary file still there
+    /// ("a binary file, 2.1 MB")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<u64>,
+    /// the agent's word on this file ("new: 4 workers"), from its summary
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+/// What a change measured, before and after (the review's result line,
+/// amb-web m_8304): "worst frame, PS5 replay · forest level 40 → 15 ms".
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct DiffResult {
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sub: Option<String>,
+    pub before: f64,
+    pub after: f64,
+    pub unit: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub series: Option<Series>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Series {
+    pub before: Vec<f64>,
+    pub after: Vec<f64>,
+}

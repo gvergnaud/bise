@@ -131,6 +131,7 @@ pub const VARS: &[Var] = &[
     user("BISE_OPTION_DIGITS", "read Option+digit characters as ⌥0-9 (1) or never (0), over the keyboard layout"),
     internal("BISE_OWNERS", "the agents a process belongs to (BISE-243)"),
     user("BISE_POINTER", "mouse pointer shapes on or off"),
+    test("BISE_PROTO_BLESS", "bise-proto's ts test rewrites apps/desktop/src/proto instead of failing on stale files"),
     user("BISE_RECYCLE_TOKENS", "context tokens an agent's REPL reads before the hub restarts it at idle (0: never)"),
     user("BISE_REDUCE_MOTION", "fewer animations"),
     test("BISE_RELEASE_CHECK_SECS", "how often the hub checks for a release (tests)"),
