@@ -22,6 +22,8 @@ pub(crate) struct Reach {
 /// disambiguate on; inside tmux (`$TMUX`), what its options say; then
 /// the overrides.
 pub(crate) fn detect(protocol: bool) -> Reach {
+    // ⌥0-9 where Option types characters: the layout (optkeys.rs)
+    crate::optkeys::detect();
     let mut r = Reach { ctrl_digits: protocol, clicks: true };
     if std::env::var_os("TMUX").is_some_and(|v| !v.is_empty()) {
         if let Some(out) = tmux_options() {

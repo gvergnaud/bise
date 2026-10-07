@@ -14,7 +14,10 @@
 //! [`push_hit`]); [`LinkBackend`] wraps the cells the diff writes there in
 //! `ESC ]8;id=…;url ESC \` … `ESC ]8;; ESC \`. Only the drawn cells get the
 //! escape: widths and the diff are ratatui's own, and a link wrapped on 2
-//! rows is 2 pieces with the same id (one hover, one link).
+//! rows is 2 pieces with the same id (one hover, one link). The url in
+//! the OSC 8 is the one the OS can open ([`outside`]: an artifact's
+//! page or file, never `artifact:` or another bise scheme, which the
+//! terminal's own cmd+click could not route); the plain click is bise's.
 
 use ratatui::backend::{Backend, ClearType, CrosstermBackend, WindowSize};
 use ratatui::buffer::Cell;
@@ -383,6 +386,33 @@ pub(crate) fn drop_hits(gone: impl Fn(&Hit) -> bool) {
     FRAME.with(|f| f.borrow_mut().retain(|h| !gone(h)));
 }
 
+/// What the terminal opens on its own click (cmd+click in iTerm2,
+/// Ghostty, kitty…): a url the OS can route, never bise's own schemes,
+/// which macOS can't (`artifact:`, `bise-diff:`, `bise-artifacts:`).
+/// An artifact gives its page's or link's url, or its file's `file://`
+/// when the file is here; the rest of bise's links get no OSC 8 (their
+/// plain click is bise's, textlayer.rs).
+pub(crate) fn outside(url: &str) -> Option<String> {
+    let target = |u: &str| {
+        let (id, v) = crate::artifacts::parse_url(u)?;
+        Some(crate::artifacts::get(&id)?.open_target(v))
+    };
+    outside_of(url, target, |p| p.exists())
+}
+
+/// [`outside`] with the artifact's target and the file system given.
+pub(crate) fn outside_of(url: &str, target: impl Fn(&str) -> Option<String>, exists: impl Fn(&std::path::Path) -> bool) -> Option<String> {
+    if linkable(url) {
+        return Some(url.to_string());
+    }
+    let t = target(url)?;
+    if linkable(&t) {
+        return Some(t);
+    }
+    let p = std::path::PathBuf::from(&t);
+    (p.is_absolute() && exists(&p)).then(|| crate::file_links::url_of(&crate::file_links::Target { path: p, line: None, col: None }))
+}
+
 /// The OSC 8 opening of `url`: its bytes outside printable ASCII
 /// percent-encoded (the spec's 32-126), never an escape.
 pub(crate) fn osc8_open(id: &str, url: &str) -> String {
@@ -495,9 +525,10 @@ impl<W: Write> LinkBackend<W> {
                     }
                     j += 1;
                 }
-                match h {
-                    Some(k) => {
-                        write!(self.out.borrow_mut(), "{}", osc8_open(&hits[k].id, &hits[k].url))?;
+                // the url the terminal's own click opens (none: no OSC 8)
+                match h.and_then(|k| outside(&hits[k].url).map(|u| (k, u))) {
+                    Some((k, url)) => {
+                        write!(self.out.borrow_mut(), "{}", osc8_open(&hits[k].id, &url))?;
                         self.inner.draw(cells[i..j].iter().copied())?;
                         write!(self.out.borrow_mut(), "{}", OSC8_CLOSE)?;
                     }

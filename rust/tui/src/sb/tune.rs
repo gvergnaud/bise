@@ -292,6 +292,24 @@ fn check_cmd_keys(ctx: &Ctx) -> (Check, Option<Offer>) {
     }
 }
 
+/// ⌥0-9 (go to an agent) where Option types characters by default
+/// (iTerm2, Terminal.app): on a U.S. layout bise reads `¡™£…` as ⌥1-0
+/// (optkeys.rs); elsewhere the terminal's setting it needs. None in the
+/// terminals whose Option is theirs to set (Ghostty, kitty, WezTerm).
+pub(crate) fn option_digits(term: &Term, layout: crate::optkeys::Layout) -> Option<Check> {
+    let fix = match term {
+        Term::Iterm => "Profiles › Keys › Left Option key: Esc+",
+        Term::Apple => "Settings › Profiles › Keyboard › Use Option as Meta key",
+        _ => return None,
+    };
+    Some(match layout {
+        crate::optkeys::Layout::Us => Check { mark: Mark::Fine, text: "⌥0-9 reach me".into() },
+        crate::optkeys::Layout::Other => {
+            Check { mark: Mark::Note, text: format!("⌥0-9 type characters here? {} {fix}", term_name(term)) }
+        }
+    })
+}
+
 /// `cmd+v, cmd+f, cmd+k, cmd+a and cmd+↑↓`, `cmd+f`: what the missing
 /// lines give (each key once).
 pub(crate) fn keys_of(add: &[String]) -> String {
@@ -419,6 +437,7 @@ fn jobs(scope: Scope, mac: bool) -> Vec<(&'static str, Job)> {
         v.push(("your terminal", plain(check_terminal)));
         if mac {
             v.push(("its keys", Box::new(|c: &Ctx| Some(check_cmd_keys(c)))));
+            v.push(("⌥0-9", Box::new(|c: &Ctx| option_digits(&terminal(c).0, crate::optkeys::layout()).map(|k| (k, None)))));
         }
         v.push(("colors", plain(check_truecolor)));
         v.push(("glyphs", plain(check_glyphs)));

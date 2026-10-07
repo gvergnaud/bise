@@ -141,6 +141,45 @@ fn cell(s: &'static str, tag: u8) -> Cell {
     c
 }
 
+/// iTerm2 (Gauthier): a cmd+click on an artifact chip opened
+/// `artifact:…`, which macOS can't route. The terminal gets the real
+/// thing, or no OSC 8 at all (bise's plain click still opens it).
+#[test]
+fn the_terminal_gets_only_urls_the_os_can_open() {
+    let target = |u: &str| match u {
+        "artifact:page" => Some("http://127.0.0.1:47438/p/page".to_string()),
+        "artifact:doc@v2" => Some("/w/docs/q3 plan.md".to_string()),
+        "artifact:gone" => Some("/w/old.md".to_string()),
+        _ => None,
+    };
+    let here = |p: &std::path::Path| p.starts_with("/w/docs");
+    let out = |u: &str| links::outside_of(u, target, here);
+    assert_eq!(out("https://a.b/x").as_deref(), Some("https://a.b/x"));
+    assert_eq!(out("file:///w/a.rs").as_deref(), Some("file:///w/a.rs"));
+    assert_eq!(out("artifact:page").as_deref(), Some("http://127.0.0.1:47438/p/page"));
+    assert_eq!(out("artifact:doc@v2").as_deref(), Some("file:///w/docs/q3%20plan.md"));
+    // a file not here, an unknown artifact, bise's own panels: no OSC 8
+    for u in ["artifact:gone", "artifact:nope", "bise-diff:pr/412", "bise-artifacts:open"] {
+        assert_eq!(out(u), None, "{u}");
+    }
+}
+
+#[test]
+fn bise_links_get_no_osc8_but_stay_links() {
+    links::begin_frame();
+    links::push_hit(Hit { y: 0, x0: 0, x1: 2, tag: 1, url: "bise-diff:pr/412".into(), id: "e1-0".into() });
+    links::push_hit(Hit { y: 0, x0: 3, x1: 5, tag: 2, url: "artifact:not-registered".into(), id: "e1-1".into() });
+    let mut be = LinkBackend::new(Vec::<u8>::new());
+    let (a, b, c, d) = (cell("#", 1), cell("4", 1), cell("o", 2), cell("k", 2));
+    let cells = [(0, 0, &a), (1, 0, &b), (3, 0, &c), (4, 0, &d)];
+    be.draw(cells.iter().copied()).unwrap();
+    let out = String::from_utf8(be.take_output()).unwrap();
+    assert!(!out.contains("\x1b]8"), "{out:?}");
+    assert!(out.contains('#') && out.contains('k'));
+    // the click is still bise's: the hit map keeps the url
+    assert_eq!(links::hit_url(4, 0).as_deref(), Some("artifact:not-registered"));
+}
+
 #[test]
 fn the_backend_wraps_link_cells_in_osc8_and_nothing_else() {
     links::begin_frame();

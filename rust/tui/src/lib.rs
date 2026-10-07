@@ -111,6 +111,7 @@ mod onboarding;
 mod hints;
 mod tour;
 mod ctrlhint;
+mod optkeys;
 mod reach;
 mod queue;
 mod layout;

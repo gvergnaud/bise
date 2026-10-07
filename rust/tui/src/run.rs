@@ -518,7 +518,7 @@ fn ui_loop(app: &mut App, terminal: &mut crate::links::Tui) -> io::Result<()> {
                     continue;
                 }
             }
-            let Some(ev) = crate::ctrlhint::for_handlers(ev) else { continue };
+            let Some(ev) = crate::ctrlhint::for_handlers(ev).map(crate::optkeys::read_back) else { continue };
             let term_h = terminal.size().map(|s| s.height).unwrap_or(24);
             let before = Before::of(app);
             let zen_ev = ev.clone();

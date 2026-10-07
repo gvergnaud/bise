@@ -37,6 +37,24 @@ fn the_terminal_comes_from_its_variables() {
 }
 
 #[test]
+fn option_digits_name_the_setting_where_option_types_characters() {
+    use crate::optkeys::Layout;
+    // iTerm2 on a U.S. layout: bise reads ¡™£… as ⌥1-0 (optkeys.rs)
+    assert_eq!(option_digits(&Term::Iterm, Layout::Us), Some(Check { mark: Mark::Fine, text: "⌥0-9 reach me".into() }));
+    // another layout keeps its Option characters: the setting, a note
+    assert_eq!(
+        option_digits(&Term::Iterm, Layout::Other),
+        Some(Check { mark: Mark::Note, text: "⌥0-9 type characters here? iterm2 Profiles › Keys › Left Option key: Esc+".into() })
+    );
+    let apple = option_digits(&Term::Apple, Layout::Other).unwrap();
+    assert!(apple.text.contains("Use Option as Meta key"), "{}", apple.text);
+    // the terminals whose Option is theirs to set: nothing to say
+    for t in [Term::Ghostty, Term::Kitty, Term::Wezterm, Term::Tmux, Term::Unknown] {
+        assert_eq!(option_digits(&t, Layout::Other), None);
+    }
+}
+
+#[test]
 fn ghostty_gets_an_offer_for_the_lines_it_misses() {
     let h = tmp("ghostty");
     let c = ctx(&h, &h, &[("TERM_PROGRAM", "ghostty")]);
@@ -152,10 +170,10 @@ fn the_summary_and_main_s_line() {
     assert_eq!(f.line(), "2 small fixes would help. each one waits in your inbox with the exact change. yes or no to each, whenever you want.");
     let fine = Found { checks: vec![c(Mark::Fine); 7], offers: Vec::new() };
     assert_eq!(fine.summary(), "checked 7 things · all fine");
-    // the ask counts the checks that run: 8 on macOS, 7 elsewhere
+    // the ask counts the checks that run: 9 on macOS, 7 elsewhere
     assert_eq!(
         subjects(Scope::All, true),
-        ["your terminal", "its keys", "colors", "glyphs", "git", "gh", "an AGENTS.md", "the connectors key"]
+        ["your terminal", "its keys", "⌥0-9", "colors", "glyphs", "git", "gh", "an AGENTS.md", "the connectors key"]
     );
     assert_eq!(subjects(Scope::All, false).len(), 7);
     f.offers.clear();
