@@ -97,7 +97,8 @@ def main():
         t.keys("C-u")
         t.typed("hello")
         t.keys("Enter")
-        sc = t.wait("did not start in 20 s", 60)
+        # no progress for 45 s (crate::repl_start): a failed start
+        sc = t.wait("made no progress in 45 s", 120)
         print(sc)
         assert not os.path.exists(stall), "the stall hook was used"
         # restarted: it answers the message sent while it was stuck
