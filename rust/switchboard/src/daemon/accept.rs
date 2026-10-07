@@ -46,9 +46,10 @@ impl Doors {
         out
     }
 
-    /// Who opened `s`, and its pid and program for the log.
-    fn who(&self, s: &UnixStream) -> (Who, String) {
-        let Some(pid) = crate::peer_os::peer_pid(s) else {
+    /// Who opened the connection of `pid` (read at its accept), and its
+    /// pid and program for the log.
+    fn who(&self, pid: Option<u32>) -> (Who, String) {
+        let Some(pid) = pid else {
             return (Who::Gone, "pid unknown".into());
         };
         let table = crate::procs::snapshot();
@@ -67,12 +68,15 @@ pub(super) fn accept_loop(listener: UnixListener, tx: Sender<Msg>, doors: Arc<Do
     for conn in listener.incoming() {
         let Ok(stream) = conn else { continue };
         let id = doors.next.fetch_add(1, Ordering::Relaxed);
+        // at once: a peer that writes one line and closes (a `notice`)
+        // has no pid to read once it is gone
+        let pid = crate::peer_os::peer_pid(&stream);
         let (tx, doors) = (tx.clone(), doors.clone());
-        std::thread::spawn(move || serve(stream, id, &tx, &doors, sock));
+        std::thread::spawn(move || serve(stream, pid, id, &tx, &doors, sock));
     }
 }
 
-fn serve(stream: UnixStream, id: u64, tx: &Sender<Msg>, doors: &Doors, sock: Sock) {
+fn serve(stream: UnixStream, pid: Option<u32>, id: u64, tx: &Sender<Msg>, doors: &Doors, sock: Sock) {
     let Ok(read_half) = stream.try_clone() else {
         return;
     };
@@ -101,8 +105,8 @@ fn serve(stream: UnixStream, id: u64, tx: &Sender<Msg>, doors: &Doors, sock: Soc
             );
         }
         Access::User => {
-            let (who, peer) = doors.who(&stream);
-            if let Some(why) = who.refusal() {
+            let (who, peer) = doors.who(pid);
+            if let Some(why) = who.refusal_of(&op) {
                 log_line(&doors.paths, &format!("client refused on hub.sock ({op}): {peer}: {why}"));
                 write_json(&mut stream, &json!({"ev": "refused", "ok": false, "error": why}));
                 return;

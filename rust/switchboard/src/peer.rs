@@ -5,8 +5,9 @@
 //!
 //! - `agent.sock` (the agents' `SB_SOCKET`): agent requests (`agent`,
 //!   `version`) and `ping`, nothing else;
-//! - `hub.sock` (clients: the TUI, the desktop's core, tests): `hello` and
-//!   `notice` only from a process that is not an agent's ([`judge`]);
+//! - `hub.sock` (clients: the TUI, the desktop's core, tests): `hello`
+//!   only from a process that is not an agent's ([`judge`]; a peer whose
+//!   process is gone is refused), `notice` unless it is proven an agent's;
 //!   `ping`; and, until the release after v2026.10.2-25, agent requests
 //!   from REPLs adopted from an older hub, whose `SB_SOCKET` is still
 //!   hub.sock (a shim, logged per request).
@@ -85,6 +86,17 @@ pub enum Who {
 }
 
 impl Who {
+    /// The refusal of the first op `op`: a `hello` (the user's authority)
+    /// is refused unless [`Who::Outside`] (fail closed); a `notice` (a
+    /// line in main's thread, sent by a process that writes and closes at
+    /// once) only when it is proven an agent's.
+    pub fn refusal_of(&self, op: &str) -> Option<String> {
+        match (op, self) {
+            ("notice", Who::Gone) => None,
+            _ => self.refusal(),
+        }
+    }
+
     /// The line the caller prints when refused; None when served.
     pub fn refusal(&self) -> Option<String> {
         match self {
@@ -291,6 +303,16 @@ mod tests {
         procs.push(p(901, 900, 900, None));
         assert_eq!(judge(&procs, 900, &hub), Who::Outside);
         assert_eq!(judge(&procs, 301, &hub), Who::Outside);
+    }
+
+    #[test]
+    fn a_hello_fails_closed_but_a_notice_only_on_proof() {
+        // a notice is written, then the socket closed: its pid may be gone
+        assert!(Who::Gone.refusal_of("hello").is_some());
+        assert!(Who::Gone.refusal_of("notice").is_none());
+        assert!(Who::Agent("t1".into()).refusal_of("notice").is_some());
+        assert!(Who::OtherHub("x".into()).refusal_of("notice").is_some());
+        assert!(Who::Outside.refusal_of("hello").is_none());
     }
 
     #[test]
