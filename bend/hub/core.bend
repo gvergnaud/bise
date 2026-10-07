@@ -13,6 +13,10 @@ import ./codec.bend as C
 
 import ./timers.bend as TM
 
+import ./xhub-model.bend as XH
+
+import ./xhub.bend as XB
+
 type Snd is Data:
   Snd{from: String, to: String, text: String, expect: Bool,
     reply_to: Maybe<&2, Nat>, plain: Bool, auto: Bool, queued: Bool,
@@ -75,6 +79,15 @@ type In is Data:
   IEverySet{}
   IEveryStop{}
   IEveryRun{}
+  IXIn{}
+  IXAck{}
+  IXFail{}
+  IXReply{}
+  IRouteHold{}
+  IRouteCorrect{}
+  IRouteCancel{}
+  IRoutePick{}
+  IFollow{}
   INone{}
 
 type CardK is Data:
@@ -90,6 +103,7 @@ type Cmd is Data:
   CAsk{}
   CStatus{}
   CReport{}
+  CFollow{}
   CSpawn{}
   CInterrupt{}
   CStop{}
@@ -101,6 +115,8 @@ type Cmd is Data:
   CIsolate{}
   CMove{}
   CWithdraw{}
+  CProjectSend{}
+  CProjectAsk{}
 
 # the hub after an input: the new state and its effects, or, when a git
 # answer is missing, the hub unchanged and the query (the daemon replays
@@ -448,7 +464,7 @@ def status_of_run(+a: M.Agent, x: X.Rt) -> String:
 # the status every view shows (model.rs Agent::status)
 def status_str(a: M.Agent, +x: X.Rt) -> String:
   match a:
-    case M.Agent{+n, +im, +pa, life, +de, +al, +fi, +ws, +di, +br, +cr, +fa, +no, +rp, +sn}:
+    case M.Agent{+n, +im, +pa, life, +de, +al, +fi, +ws, +di, +br, +cr, +fa, +no, +rp, +sn, +fo}:
       match life:
         case M.LArchived{}:
           "archived"
@@ -457,7 +473,7 @@ def status_str(a: M.Agent, +x: X.Rt) -> String:
         case M.LFailed{}:
           "failed"
         case M.LActive{}:
-          status_of_run(M.Agent{n, im, pa, M.LActive{}, de, al, fi, ws, di, br, cr, fa, no, rp, sn}, x)
+          status_of_run(M.Agent{n, im, pa, M.LActive{}, de, al, fi, ws, di, br, cr, fa, no, rp, sn, fo}, x)
 
 # the relation of the sender to the recipient, as the recipient reads it
 # (prompts.rs relation)
@@ -962,10 +978,28 @@ def feed_main(-o: M.St, +cx: X.Cx<o>, +m: M.Msg, +why: String) -> X.Cx<o>:
       v => line(o, cx, M.MAIN(), "msg", cat([from, " → ", to, " ", mid(M.Msg.id(m)), " : ", M.Msg.text(m)])),
       v => cx))
 
+# What a task sent is a fact of its own thread (desktop bar A.3, S16;
+# architect m_10203): a message from a task (not main, whose feed has
+# `msg` for every message, not the user) to another agent writes one
+# line in the task's own feed, `sent : {to} : m_<n> : {ask} : {text}`
+# (ask 1: it waits for a reply, --expect-reply or sb ask). A message to
+# the user is `msg-you` already. A view only: no state changes.
+# The sender must be an agent of this hub (architect m_10280): '@bise'
+# (a cross-hub delegation) or the hub's own name has no feed here.
+def is_task_send(-o: M.St, +cx: X.Cx<o>, +from: String, +to: String) -> Bool:
+  has_agent(o, cx, from) && Bool.not(String.eq(from, M.MAIN())) && Bool.not(String.eq(to, M.USER()))
+
+def feed_sender(-o: M.St, +cx: X.Cx<o>, +m: M.Msg) -> X.Cx<o>:
+  +from = M.Msg.from(m)
+  +to = M.Msg.to(m)
+  pick_lazy(X.Cx<o>, is_task_send(o, cx, from, to),
+    u => line_fields(o, cx, from, "sent", [to, mid(M.Msg.id(m)), Bool.pick(String, M.Msg.expect(m), "1", "0"), M.Msg.text(m)]),
+    u => cx)
+
 def send.fed(-o: M.St, p: X.Cx<o> & SendR, +why: String) -> X.Cx<o> & SendR:
   match p:
     case (+cx, SOk{+m}):
-      (feed_main(o, cx, m, why), SOk{m})
+      (feed_main(o, feed_sender(o, cx, m), m, why), SOk{m})
     case (+cx, SErr{+e}):
       (cx, SErr{e})
 
@@ -1838,10 +1872,67 @@ def is_number(+t: String) -> Bool:
   +s = String.trim(t)
   Bool.pick(Bool, String.is_empty(s), False{}, digits(String.to_list(s)))
 
-# a hub item's answer (M.choice_kind): a number goes to the hub's Rust
-# side (the `card_choice` effect), which acts and closes the item (a merge
-# runs `gh pr merge`: the item stays open meanwhile); words go to main,
-# and close it
+def opt_line(+l: String, +n: String) -> Bool:
+  String.starts_with(l, String.append(n, ".")) || String.starts_with(l, String.append(n, ")"))
+
+def any_opt(xs: List<&2, String>, +n: String) -> Bool:
+  match xs:
+    case Nil{}:
+      False{}
+    case Con{+h, +t}:
+      opt_line(String.trim(h), n) || any_opt(t, n)
+
+# one of the card's options: a number with its line (`2.` or `2)`) in the
+# card's text
+def is_option(+card: String, +t: String) -> Bool:
+  is_number(t) && any_opt(String.lines(card), String.trim(t))
+
+# a deny alias (lead m_10900): `no` or `no: <why>`, any case, on the
+# lowered trimmed answer; it can only refuse (`nope`, `now` are words)
+def is_no(+l: String) -> Bool:
+  String.eq(l, "no") || String.starts_with(l, "no:")
+
+# a deny alias is an answer; else the options and the TUI's `deny:`
+def confirm_pick(no: Bool, +s: String) -> Bool:
+  match no:
+    case True{}:
+      True{}
+    case False{}:
+      String.eq(s, "1") || String.eq(s, "2") || String.eq(s, "3") || String.starts_with(String.to_lower(s), "deny:")
+
+# an approval card's answer (the composer rule, lead m_8777): its options
+# 1 allow, 2 always, 3 no, the TUI's explicit deny action (`deny: <why>`,
+# a refusal with its note) or its aliases `no` and `no: <why>`; typed
+# words never answer it
+def confirm_ok(+t: String) -> Bool:
+  +s = String.trim(t)
+  confirm_pick(is_no(String.to_lower(s)), s)
+
+# what a confirm card waits for, said when words are refused
+def confirm_opts() -> String:
+  "1 allow · 2 always · 3 no · or no: <why>"
+
+# typed words on an approval card: the card stays open, nothing wakes
+def words_refused(-o: M.St, +cx: X.Cx<o>, +c: M.Card, +opts: String) -> X.Cx<o>:
+  notice(o, cx, cat(["card #", ns(M.Card.id(c)), " waits for ", opts, " — typed words don't answer it"]))
+
+def answer.confirm(-o: M.St, ok: Bool, +cx: X.Cx<o>, +c: M.Card, +text: String) -> X.Cx<o>:
+  match ok:
+    case True{}:
+      # the approvals gate (approvals-design.md §9): the answer is the
+      # verdict of the waiting call, written to its gate by the hub's
+      # Rust side (the `confirm` effect), never a message to the agent
+      +cx2 = out(o, cx, [J.kv("fx", J.JStr{"confirm"}), J.kv("card", J.JNum{M.Card.id(c)}),
+        J.kv("agent", J.JStr{M.Card.agent(c)}), J.kv("text", J.JStr{text})])
+      close_card(o, cx2, M.Card.id(c), "answered")
+    case False{}:
+      words_refused(o, cx, c, confirm_opts())
+
+# a hub item's answer (M.choice_kind): one of its numbers goes to the
+# hub's Rust side (the `card_choice` effect), which acts and closes the
+# item (a merge runs `gh pr merge`: the item stays open meanwhile); typed
+# words don't answer it (the composer rule: the window sends them to the
+# agent as a message)
 def answer.choice(-o: M.St, num: Bool, +cx: X.Cx<o>, +c: M.Card, +text: String) -> X.Cx<o>:
   match num:
     case True{}:
@@ -1850,10 +1941,7 @@ def answer.choice(-o: M.St, num: Bool, +cx: X.Cx<o>, +c: M.Card, +text: String) 
         J.kv("place", C.jmaybe_str(M.Card.place(c))), J.kv("pr", C.jmaybe_nat(M.Card.pr(c))),
         J.kv("text", J.JStr{String.trim(text)})])
     case False{}:
-      # words are for main: they wake it (answer.q.main)
-      +id = M.Card.id(c)
-      +cx2 = notify_main(o, cx, cat(["the user answered card #", ns(id), " (\"", M.one_line(M.Card.text(c)), "\") in words: \"", M.one_line(text), "\""]))
-      close_card(o, cx2, id, "answered")
+      words_refused(o, cx, c, "one of its numbers")
 
 def answer.kind(-o: M.St, k: CardK, +cx: X.Cx<o>, +c: M.Card, +text: String) -> X.Cx<o>:
   match k:
@@ -1862,14 +1950,9 @@ def answer.kind(-o: M.St, k: CardK, +cx: X.Cx<o>, +c: M.Card, +text: String) -> 
     case KDrop{}:
       answer.drop(o, is_yes(text), cx, c)
     case KConfirm{}:
-      # the approvals gate (approvals-design.md §9): the answer is the
-      # verdict of the waiting call, written to its gate by the hub's
-      # Rust side (the `confirm` effect), never a message to the agent
-      +cx2 = out(o, cx, [J.kv("fx", J.JStr{"confirm"}), J.kv("card", J.JNum{M.Card.id(c)}),
-        J.kv("agent", J.JStr{M.Card.agent(c)}), J.kv("text", J.JStr{text})])
-      close_card(o, cx2, M.Card.id(c), "answered")
+      answer.confirm(o, confirm_ok(text), cx, c, text)
     case KChoice{}:
-      answer.choice(o, is_number(text), cx, c, text)
+      answer.choice(o, is_option(M.Card.text(c), text), cx, c, text)
     case KOther{}:
       close_card(o, cx, M.Card.id(c), "vue")
 
@@ -1907,16 +1990,19 @@ def says.sent(-o: M.St, p: X.Cx<o> & SendR, +to: String, +text: String) -> X.Cx<
     case (+cx, SOk{_}):
       pick_lazy(X.Cx<o>, String.eq(to, M.MAIN()), u => cx, u => user_sent(o, cx, text))
 
-def says.card(-o: M.St, card: Maybe<&2, Nat>, +cx: X.Cx<o>, +to: String, +text: String) -> X.Cx<o>:
+def says.card(-o: M.St, card: Maybe<&2, Nat>, +cx: X.Cx<o>, +to: String, +text: String, +queued: Bool) -> X.Cx<o>:
   match card:
     case Some{+id}:
       answer_card(o, user_sent(o, cx, text), id, text)
     case None{}:
-      says.sent(o, send(o, cx, msg(M.USER(), to, text, False{}, None{}, True{}, False{})), to, text)
+      says.sent(o, send(o, cx, Snd{M.USER(), to, text, False{}, None{}, True{}, False{}, queued, None{}}), to, text)
 
-# plain text from the user to the agent in focus
-def user_says(-o: M.St, +cx: X.Cx<o>, +to: String, +text: String) -> X.Cx<o>:
-  says.card(o, Bool.pick(Maybe<&2, Nat>, String.eq(to, M.MAIN()), None{}, question_card(M.St.cards(st(o, cx)), st(o, cx), to)), cx, to, text)
+# plain text from the user to the agent in focus. `queued` (the window's
+# "send queued"): a queued-mode message, held while the agent is busy and
+# said at its turn's end (law user_queued_waits_for_turn_end); it never
+# answers a question card (law user_queued_never_answers_a_card)
+def user_says(-o: M.St, +cx: X.Cx<o>, +to: String, +text: String, +queued: Bool) -> X.Cx<o>:
+  says.card(o, Bool.pick(Maybe<&2, Nat>, queued || String.eq(to, M.MAIN()), None{}, question_card(M.St.cards(st(o, cx)), st(o, cx), to)), cx, to, text, queued)
 
 def close_names(xs: List<&2, String>, +target: String) -> List<&2, String>:
   match xs:
@@ -1938,7 +2024,7 @@ def route.sent(-o: M.St, p: X.Cx<o> & SendR, +name: String, +text: String, +focu
         u => note_main(o, cx2, cat(["the user wrote directly to @", name, ": \"", M.one_line(text), "\""])), u => cx2)
       cx3
 
-def route.target(-o: M.St, m: Maybe<&2, String>, +cx: X.Cx<o>, +target: String, +text: String, +focus: String) -> X.Cx<o>:
+def route.target(-o: M.St, m: Maybe<&2, String>, +cx: X.Cx<o>, +target: String, +text: String, +focus: String, +queued: Bool) -> X.Cx<o>:
   match m:
     case None{}:
       +close = close_names(M.St.order(st(o, cx)), target)
@@ -1948,13 +2034,13 @@ def route.target(-o: M.St, m: Maybe<&2, String>, +cx: X.Cx<o>, +target: String, 
       # RFC 0003 §5.1: from another view, the task reads it tagged and
       # its answer comes back to that view
       +elsewhere = Bool.not(String.eq(name, focus))
-      route.sent(o, send(o, cx, Snd{M.USER(), name, text, elsewhere, None{}, Bool.not(elsewhere), False{}, False{},
+      route.sent(o, send(o, cx, Snd{M.USER(), name, text, elsewhere, None{}, Bool.not(elsewhere), False{}, queued,
         Bool.pick(Maybe<&2, String>, elsewhere, Some{focus}, None{})}), name, text, focus)
 
-# `@task text`: a direct message, without main
-def route(-o: M.St, +cx: X.Cx<o>, +target: String, +text: String, +focus: String) -> X.Cx<o>:
-  pick_lazy(X.Cx<o>, String.eq(target, M.MAIN()), u => user_says(o, cx, M.MAIN(), text),
-    u => route.target(o, M.resolve(st(o, cx), target), cx, target, text, focus))
+# `@task text`: a direct message, without main; `queued` as user_says
+def route(-o: M.St, +cx: X.Cx<o>, +target: String, +text: String, +focus: String, +queued: Bool) -> X.Cx<o>:
+  pick_lazy(X.Cx<o>, String.eq(target, M.MAIN()), u => user_says(o, cx, M.MAIN(), text, queued),
+    u => route.target(o, M.resolve(st(o, cx), target), cx, target, text, focus, queued))
 
 def user_new.res(-o: M.St, p: X.Cx<o> & TaskR) -> X.Cx<o>:
   match p:
@@ -2035,11 +2121,21 @@ def rename.old(-o: M.St, m: Maybe<&2, String>, +cx: X.Cx<o>, +name: String, +new
       pick_lazy(X.Cx<o>, String.eq(old, M.MAIN()), u => notice(o, cx, String.append("no agent named @", name)),
         u => rename.go(o, valid && Bool.not(M.name_taken(st(o, cx), new)), cx, old, new))
 
+# the typed fact of a stop (desktop reset, architect m_9650 D): in the same
+# step as the interrupt, a 'stopped' line in that agent's feed; the thread's
+# fold turns it into an entry of kind 'stopped' at its position
+def stopped(-o: M.St, +cx: X.Cx<o>, +agent: String) -> X.Cx<o>:
+  line(o, cx, agent, "stopped", "stopped")
+
+# the interrupt's effect for that agent (the shell flags its REPL)
+def interrupt.fx(-o: M.St, +cx: X.Cx<o>, +n: String) -> X.Cx<o>:
+  out(o, cx, [J.kv("fx", J.JStr{"interrupt"}), J.kv("agent", J.JStr{n})])
+
 def interrupt.go(-o: M.St, m: Maybe<&2, String>, +cx: X.Cx<o>) -> X.Cx<o>:
   match m:
     case Some{+n}:
       pick_lazy(X.Cx<o>, is_busy(X.Rt.run(rt(o, cx, n))),
-        u => out(o, cx, [J.kv("fx", J.JStr{"interrupt"}), J.kv("agent", J.JStr{n})]),
+        u => stopped(o, interrupt.fx(o, cx, n), n),
         u => notice(o, cx, "no turn in progress to interrupt"))
     case None{}:
       notice(o, cx, "no turn in progress to interrupt")
@@ -2057,6 +2153,383 @@ def focus(-o: M.St, +cx: X.Cx<o>, +f: String, note: Maybe<&2, String>, +direct: 
       line(o, note_main(o, cx, n), M.MAIN(), "direct", direct)
     case None{}:
       cx
+
+# ---- cross-hub (S2, hub/xhub.bend) ----
+# The steps of bise's cross-hub messages, wired around xhub.bend's pure
+# decisions: they call send, emit, out and reply, which are core's, and
+# xhub.bend cannot import core (Bend has no import cycles). Nothing is
+# decided here. Home side (bise's hub): `sb project send|ask` puts an
+# entry in the outbox and asks the hub for an `xdeliver`; the delivery's
+# ack or failure (a retry act, timers.bend's one clock) and the project's
+# answer (to main, from `@<project>`) come back as inputs. Project side:
+# `x_in` says it to main once per origin, as the user's words via bise
+# or as `@bise`'s question; main's answer (the end of its turn, or
+# `sb send @bise --reply-to`) goes back once, as an `xreply`.
+
+def xst(-o: M.St, +cx: X.Cx<o>) -> XH.Xs:
+  M.St.x(st(o, cx))
+
+def xemit(-o: M.St, +cx: X.Cx<o>, +e: XH.XEv) -> X.Cx<o>:
+  emit(o, cx, M.EX{e}, Unit{}, Unit{}, Unit{})
+
+def aemit(-o: M.St, +cx: X.Cx<o>, +e: TM.ActEv) -> X.Cx<o>:
+  emit(o, cx, M.EAct{e}, Unit{}, Unit{}, Unit{})
+
+def xdeliver(-o: M.St, +cx: X.Cx<o>, +ob: XH.Out) -> X.Cx<o>:
+  out(o, cx, [J.kv("fx", J.JStr{"xdeliver"}), J.kv("xid", J.JNum{XH.Out.xid(ob)}),
+    J.kv("project", J.JStr{XH.Out.project(ob)}), J.kv("kind", J.JStr{XH.kind_str(XH.Out.kind(ob))}),
+    J.kv("msg", J.JNum{XH.Out.msg(ob)}), J.kv("text", J.JStr{XH.Out.text(ob)}), J.kv("context", J.JStr{XH.Out.context(ob)})])
+
+# home: a new outbox entry, journaled, then its first delivery
+def xsend.new(-o: M.St, +cx: X.Cx<o>, +token: Nat, +ob: XH.Out) -> X.Cx<o>:
+  +cx2 = xdeliver(o, xemit(o, cx, XH.XOut{ob}), ob)
+  reply(o, cx2, token, ok_body([J.kv("xid", J.JNum{XH.Out.xid(ob)}), J.kv("project", J.JStr{XH.Out.project(ob)})]))
+
+def xsend.fwd(-o: M.St, f: XB.Fwd, +cx: X.Cx<o>, +token: Nat, +project: String, +id: Nat) -> X.Cx<o>:
+  match f:
+    case XB.FwdErr{+e}:
+      reply_err(o, cx, token, e)
+    case XB.FwdOk{+text}:
+      xsend.new(o, cx, token, XB.new_out(xst(o, cx), project, XH.KInput{}, id, text, ""))
+
+# `sb project send <p> --input m_<n>` (main only, req.main): `pre_err`,
+# the hub's (an unknown project, this hub itself)
+def req_xsend(-o: M.St, pre: Maybe<&2, String>, +cx: X.Cx<o>, +token: Nat, +q: J.Json) -> X.Cx<o>:
+  match pre:
+    case Some{+e}:
+      reply_err(o, cx, token, e)
+    case None{}:
+      xsend.fwd(o, XB.forward(st(o, cx), M.MAIN(), C.get_nat(q, "msg")), cx, token, C.get_s(q, "project"), C.get_nat(q, "msg"))
+
+def req_xask.go(-o: M.St, err: Maybe<&2, String>, +cx: X.Cx<o>, +token: Nat, +q: J.Json) -> X.Cx<o>:
+  match err:
+    case Some{+e}:
+      reply_err(o, cx, token, e)
+    case None{}:
+      xsend.new(o, cx, token, XB.new_out(xst(o, cx), C.get_s(q, "project"), XH.KAsk{}, 0n, C.get_s(q, "text"), ""))
+
+# `sb project ask <p> "<question>"` (main only): bise's own words
+def req_xask(-o: M.St, pre: Maybe<&2, String>, +cx: X.Cx<o>, +token: Nat, +q: J.Json) -> X.Cx<o>:
+  req_xask.go(o, Maybe.or(&2, String, pre, XB.ask_ok(C.get_s(q, "text"))), cx, token, q)
+
+# home: the project hub has it (a late ack of a settled send: nothing)
+def xack(-o: M.St, m: Maybe<&2, XH.Out>, +cx: X.Cx<o>, +xid: Nat) -> X.Cx<o>:
+  match m:
+    case None{}:
+      cx
+    case Some{_}:
+      xemit(o, cx, XH.XOp{xid, XH.OpAcked{}})
+
+# home: a delivery failed: one more try, and the next one's act
+def xfail(-o: M.St, m: Maybe<&2, XH.Out>, +cx: X.Cx<o>, +xid: Nat) -> X.Cx<o>:
+  match m:
+    case None{}:
+      cx
+    case Some{+ob}:
+      +cx2 = xemit(o, cx, XH.XOp{xid, XH.OpTried{}})
+      aemit(o, cx2, TM.ActSet{XB.retry_act(tms(o, cx2), xid, XH.Out.tries(ob), now(o, cx2))})
+
+def xanswer.kind(k: XH.XKind, +ob: XH.Out, +text: String) -> String:
+  match k:
+    case XH.KInput{}:
+      cat(["(answer to the user's ", mid(XH.Out.msg(ob)), " you forwarded) ", text])
+    case XH.KAsk{}:
+      cat(["(answer to your question \"", M.clip(M.one_line(XH.Out.text(ob)), 200n), "\") ", text])
+    case XH.KJobEnd{}:
+      text
+
+def xanswer.text(+ob: XH.Out, +text: String) -> String:
+  xanswer.kind(XH.Out.kind(ob), ob, text)
+
+# home: the project's answer settles its send, once (law
+# xhub_outbox_settles_once) and reaches main from `@<project>`
+def xanswer(-o: M.St, m: Maybe<&2, XH.Out>, +cx: X.Cx<o>, +xid: Nat, +name: String, +text: String) -> X.Cx<o>:
+  match m:
+    case None{}:
+      cx
+    case Some{+ob}:
+      +cx2 = xemit(o, cx, XH.XOp{xid, XH.OpSettled{}})
+      fst(o, send(o, cx2, msg(String.append("@", name), M.MAIN(), xanswer.text(ob, text), False{}, None{}, False{}, False{})))
+
+def xretry(-o: M.St, m: Maybe<&2, XH.Out>, +cx: X.Cx<o>) -> X.Cx<o>:
+  match m:
+    case None{}:
+      cx
+    case Some{+ob}:
+      xdeliver(o, cx, ob)
+
+# ---- the routing hold (S2 step 2) ----
+# His words to bise's main that the shell's route.rs sends to a project
+# (input route_hold) wait HOLD_MS on the one clock (a RouteSend act): the
+# window shows them (fx route) and he may correct the target or cancel.
+# At the fire they become his message to main (an id, recorded, never a
+# turn: law route_fire_makes_no_turn) forwarded by the outbox, and main
+# gets a note with the id. A cancel says them to main as today.
+
+def route_ev(-o: M.St, +cx: X.Cx<o>, +r: XH.Route) -> X.Cx<o>:
+  out(o, cx, [J.kv("fx", J.JStr{"route"}), J.kv("rid", J.JNum{XH.Route.rid(r)}),
+    J.kv("to", J.JStr{XH.Route.to(r)}), J.kv("name", J.JStr{XH.Route.name(r)}),
+    J.kv("text", J.JStr{XH.Route.text(r)}), J.kv("due_ms", J.JNum{XH.Route.due(r)}),
+    J.kv("why", J.JStr{XH.Route.why(r)})])
+
+def route_done(-o: M.St, +cx: X.Cx<o>, +rid: Nat, +state: String, +to: String, +xid: J.Json) -> X.Cx<o>:
+  out(o, cx, [J.kv("fx", J.JStr{"route_done"}), J.kv("rid", J.JNum{rid}), J.kv("state", J.JStr{state}),
+    J.kv("to", J.JStr{to}), J.kv("xid", xid)])
+
+# home: the input route_hold (the shell's route.rs picked `to`, a project
+# hub id, `name` its name): held, its act set, the window told
+def route_hold.to(-o: M.St, +cx: X.Cx<o>, +text: String, +via: String, +to: String, +name: String, +why: String, +context: String) -> X.Cx<o>:
+  +r = XB.new_route(xst(o, cx), tms(o, cx), text, via, to, name, why, now(o, cx), context)
+  +cx2 = xemit(o, cx, XH.XRouteHeld{r})
+  route_ev(o, aemit(o, cx2, TM.ActSet{XB.route_act(r)}), r)
+
+# S2 step 5: his unclear words (no `to`: the shell asks BISE_ROUTE_MODEL):
+# held PICK_MS with no target, the shell asked for a pick (fx route_ask),
+# the window told nothing until a project is picked
+def route_unclear(-o: M.St, +cx: X.Cx<o>, +text: String, +via: String, +context: String) -> X.Cx<o>:
+  +r = XB.new_route_at(xst(o, cx), tms(o, cx), text, via, "", "", "", Nat.add(now(o, cx), XB.PICK_MS()), context)
+  +cx2 = aemit(o, xemit(o, cx, XH.XRouteHeld{r}), TM.ActSet{XB.route_act(r)})
+  out(o, cx2, [J.kv("fx", J.JStr{"route_ask"}), J.kv("rid", J.JNum{XH.Route.rid(r)}), J.kv("text", J.JStr{text})])
+
+def route_hold(-o: M.St, +cx: X.Cx<o>, +text: String, +via: String, +to: String, +name: String, +why: String, +context: String) -> X.Cx<o>:
+  pick_lazy(X.Cx<o>, String.is_empty(to),
+    u => route_unclear(o, cx, text, via, context),
+    u => route_hold.to(o, cx, text, via, to, name, why, context))
+
+# his plain words to main behind an unclear route: held with no target,
+# due `d` (the latest unclear due), never asked about: at its fire it goes
+# plain to main like the unclear one before it
+def route_behind(-o: M.St, +cx: X.Cx<o>, +text: String, +d: Nat) -> X.Cx<o>:
+  +r = XB.new_route_at(xst(o, cx), tms(o, cx), text, "", "", "", "", d, "")
+  aemit(o, xemit(o, cx, XH.XRouteHeld{r}), TM.ActSet{XB.route_act(r)})
+
+def user_input.behind(-o: M.St, m: Maybe<&2, Nat>, +cx: X.Cx<o>, +to: String, +text: String, +queued: Bool) -> X.Cx<o>:
+  match m:
+    case None{}:
+      user_says(o, cx, to, text, queued)
+    case Some{+d}:
+      route_behind(o, cx, text, d)
+
+# his plain words (inputs say, and route to main): to bise's main while an
+# unclear route of his waits for the model's pick, held behind it, due at
+# the latest unclear due, so both reach main in order (law
+# route_plain_waits_behind_unclear); else user_says. A queued input waits
+# for main's turn end already: never held here.
+def user_input(-o: M.St, +cx: X.Cx<o>, +to: String, +text: String, +queued: Bool) -> X.Cx<o>:
+  user_input.behind(o, Bool.pick(Maybe<&2, Nat>, Bool.not(queued) && String.eq(to, M.MAIN()), XB.unclear_due(XH.Xs.routes(xst(o, cx))), None{}), cx, to, text, queued)
+
+# an unclear route's act fired with no target: it ends, and his words
+# reach bise's main as a plain message (the cancel path, no route_done:
+# the window never saw it)
+def route_plain(-o: M.St, +cx: X.Cx<o>, +r: XH.Route) -> X.Cx<o>:
+  +cx2 = xemit(o, cx, XH.XRoute{XH.Route.rid(r), XH.REnd{XH.RCancelled{}}})
+  says.sent(o, send(o, cx2, Snd{M.USER(), M.MAIN(), XH.Route.text(r), False{}, None{}, True{}, False{}, False{}, XB.via_of(XH.Route.via(r))}), M.MAIN(), XH.Route.text(r))
+
+def route_fire.sent(-o: M.St, +cx: X.Cx<o>, +r: XH.Route, +id: Nat) -> X.Cx<o>:
+  +cx2 = emit(o, mark_delivered(o, cx, id), M.ESettled{id}, Unit{}, Unit{}, Unit{})
+  +ob = XB.new_out(xst(o, cx2), XH.Route.to(r), XH.KInput{}, id, XH.Route.text(r), XH.Route.context(r))
+  +cx3 = xdeliver(o, xemit(o, cx2, XH.XOut{ob}), ob)
+  +cx4 = xemit(o, cx3, XH.XRoute{XH.Route.rid(r), XH.REnd{XH.RSent{}}})
+  +cx5 = route_done(o, cx4, XH.Route.rid(r), "sent", XH.Route.to(r), J.JNum{XH.Out.xid(ob)})
+  note_main(o, cx5, cat(["the user's words went to the project ", XH.Route.name(r), " (", mid(id), ", routed by bise): \"",
+    M.clip(M.one_line(XH.Route.text(r)), 300n), "\"; its answer comes back to you from @", XH.Route.name(r)]))
+
+# his routed words as his message to main, journaled only: no send (a
+# send would pump main, a turn), no waiter, no card (law
+# route_fire_makes_no_turn)
+def route_said(-o: M.St, +cx: X.Cx<o>, +r: XH.Route) -> X.Cx<o>:
+  +msg = {M.Msg{M.St.next_msg(st(o, cx)), M.St.next_msg(st(o, cx)), M.USER(), M.MAIN(), None{}, False{}, False{}, XH.Route.text(r), now(o, cx), True{}, False{}, XB.via_of(XH.Route.via(r))} : M.Msg}
+  emit(o, cx, M.EMsgSent{msg}, {==}, quiet_ok(False{}, False{}), Unit{})
+
+# home: a held route's act fired: his message to main is created now (an
+# id for the history and `--input`), delivered and settled at once with
+# no turn (law route_fire_makes_no_turn), then forwarded once
+def route_fire(-o: M.St, m: Maybe<&2, XH.Route>, +cx: X.Cx<o>) -> X.Cx<o>:
+  match m:
+    case None{}:
+      cx
+    case Some{+r}:
+      route_fire.sent(o, route_said(o, cx, r), r, M.St.next_msg(st(o, cx)))
+
+def route_gone(-o: M.St, +cx: X.Cx<o>, +rid: Nat) -> X.Cx<o>:
+  notice(o, cx, cat(["route ", Nat.show(rid), " already went or was cancelled"]))
+
+# home: the input route_cancel: a held route ends, its act with it, and
+# his words reach main as a plain message (today's path)
+def route_cancel.go(-o: M.St, m: Maybe<&2, XH.Route>, +cx: X.Cx<o>, +rid: Nat) -> X.Cx<o>:
+  match m:
+    case None{}:
+      route_gone(o, cx, rid)
+    case Some{+r}:
+      +cx2 = aemit(o, cx, TM.ActDone{XH.Route.act(r)})
+      +cx3 = xemit(o, cx2, XH.XRoute{rid, XH.REnd{XH.RCancelled{}}})
+      +cx4 = route_done(o, cx3, rid, "cancelled", XH.Route.to(r), J.JNull{})
+      says.sent(o, send(o, cx4, Snd{M.USER(), M.MAIN(), XH.Route.text(r), False{}, None{}, True{}, False{}, False{}, XB.via_of(XH.Route.via(r))}), M.MAIN(), XH.Route.text(r))
+
+def route_cancel(-o: M.St, +cx: X.Cx<o>, +rid: Nat) -> X.Cx<o>:
+  route_cancel.go(o, XB.held(xst(o, cx), rid), cx, rid)
+
+def route_correct.go(-o: M.St, m: Maybe<&2, XH.Route>, +cx: X.Cx<o>, +rid: Nat, +to: String, +name: String) -> X.Cx<o>:
+  match m:
+    case None{}:
+      route_gone(o, cx, rid)
+    case Some{+r}:
+      route_ev(o, xemit(o, cx, XH.XRoute{rid, XH.RTo{to, name}}), XH.Route.with_to(r, to, name))
+
+# home: the input route_correct (the shell checked `to` in the registry):
+# a held route gets its new project, same due time; `bise` keeps his
+# words here (a cancel); a route not held: a notice (law
+# route_correct_only_held)
+def route_correct(-o: M.St, +cx: X.Cx<o>, +rid: Nat, +to: String, +name: String) -> X.Cx<o>:
+  pick_lazy(X.Cx<o>, String.eq(to, XB.VIA_BISE()),
+    u => route_cancel(o, cx, rid),
+    u => route_correct.go(o, XB.held(xst(o, cx), rid), cx, rid, to, name))
+
+# a held route's act fired: with no target, plain to main (law
+# route_unclear_goes_plain); else forwarded (route_fire)
+def route_go(-o: M.St, m: Maybe<&2, XH.Route>, +cx: X.Cx<o>) -> X.Cx<o>:
+  match m:
+    case None{}:
+      cx
+    case Some{+r}:
+      pick_lazy(X.Cx<o>, XB.is_unclear(r),
+        u => route_plain(o, cx, r),
+        u => route_fire(o, Some{r}, cx))
+
+# the model's pick (the shell checked `to` in the registry) for an unclear
+# route still held: it ends, its act with it, and a held route to that
+# project starts (his 2 s to correct start now); a route that already
+# went or got a target: nothing (law route_pick_only_unclear)
+def route_pick.go(-o: M.St, m: Maybe<&2, XH.Route>, +cx: X.Cx<o>, +to: String, +name: String, +why: String) -> X.Cx<o>:
+  match m:
+    case None{}:
+      cx
+    case Some{+r}:
+      pick_lazy(X.Cx<o>, XB.is_unclear(r) && Bool.not(String.is_empty(to)),
+        u => route_hold.to(o, xemit(o, aemit(o, cx, TM.ActDone{XH.Route.act(r)}), XH.XRoute{XH.Route.rid(r), XH.REnd{XH.RCancelled{}}}),
+          XH.Route.text(r), XH.Route.via(r), to, name, why, XH.Route.context(r)),
+        u => cx)
+
+def route_pick(-o: M.St, +cx: X.Cx<o>, +rid: Nat, +to: String, +name: String, +why: String) -> X.Cx<o>:
+  route_pick.go(o, XB.held(xst(o, cx), rid), cx, to, name, why)
+
+def act_fire(-o: M.St, w: TM.What, +cx: X.Cx<o>) -> X.Cx<o>:
+  match w:
+    case TM.Retry{+xid}:
+      xretry(o, XB.pending(xst(o, cx), xid), cx)
+    case TM.RouteSend{+rid}:
+      route_go(o, XB.held(xst(o, cx), rid), cx)
+
+def acts_tick.each(-o: M.St, xs: List<&2, TM.Act>, +cx: X.Cx<o>) -> X.Cx<o>:
+  match xs:
+    case Nil{}:
+      cx
+    case Con{+a, +rest}:
+      acts_tick.each(o, rest, act_fire(o, TM.Act.what(a), aemit(o, cx, TM.ActDone{TM.Act.id(a)})))
+
+# the acts due at the tick fire once each (laws act_fires_once,
+# act_due_only); none due: nothing (idle-cpu)
+def acts_tick(-o: M.St, +cx: X.Cx<o>) -> X.Cx<o>:
+  acts_tick.each(o, TM.acts_due(TM.Tms.acts(tms(o, cx)), now(o, cx)), cx)
+
+def xboot.each(-o: M.St, xs: List<&2, XH.Out>, +cx: X.Cx<o>) -> X.Cx<o>:
+  match xs:
+    case Nil{}:
+      cx
+    case Con{+ob, +rest}:
+      xboot.each(o, rest, xdeliver(o, cx, ob))
+
+# home: at boot the pending sends go again (the project drops a second
+# copy: law xhub_xin_delivered_once)
+def xboot(-o: M.St, +cx: X.Cx<o>) -> X.Cx<o>:
+  xboot.each(o, XB.pendings(XH.Xs.outbox(xst(o, cx))), cx)
+
+def xin.snd(k: XH.XKind, +text: String) -> Snd:
+  match k:
+    case XH.KInput{}:
+      Snd{M.USER(), M.MAIN(), text, True{}, None{}, False{}, False{}, False{}, Some{XB.VIA_BISE()}}
+    case XH.KAsk{}:
+      Snd{XB.FROM_BISE(), M.MAIN(), text, True{}, None{}, False{}, False{}, False{}, None{}}
+    case XH.KJobEnd{}:
+      Snd{XB.FROM_BISE(), M.MAIN(), text, False{}, None{}, False{}, False{}, False{}, None{}}
+
+def xin.sent(-o: M.St, p: X.Cx<o> & SendR, +token: Nat, +hub: String, +xid: Nat, +k: XH.XKind) -> X.Cx<o>:
+  match p:
+    case (+cx, SErr{+e}):
+      reply_err(o, cx, token, e)
+    case (+cx, SOk{+m}):
+      reply(o, xemit(o, cx, XH.XGot{XH.XIn{hub, xid, M.Msg.id(m), k, False{}}}), token, ok_body(Nil{}))
+
+# J, bise's home hub: the line a followed task's end says in bise's main,
+# from `@<project>`: the same words as a local task's report to main
+def xjob_end.line(+j: J.Json) -> String:
+  cat(["[report: ", C.get_s(j, "state"), "] @", C.get_s(j, "agent"), " (followed): ", String.trim(C.get_s(j, "summary"))])
+
+def xjob_end.sent(-o: M.St, p: X.Cx<o> & SendR, +token: Nat, +hub: String, +xid: Nat, +j: J.Json) -> X.Cx<o>:
+  match p:
+    case (+cx, SErr{+e}):
+      reply_err(o, cx, token, e)
+    case (+cx, SOk{+m}):
+      +cx2 = xemit(o, cx, XH.XGot{XH.XIn{hub, xid, M.Msg.id(m), XH.KJobEnd{}, True{}}})
+      +cx3 = out(o, cx2, [J.kv("fx", J.JStr{"followed_end"}), J.kv("project", J.JStr{hub}),
+        J.kv("agent", J.JStr{C.get_s(j, "agent")}), J.kv("key", J.JNum{C.get_nat(j, "key")}),
+        J.kv("state", J.JStr{C.get_s(j, "state")}), J.kv("label", J.JStr{C.get_s(j, "label")}),
+        J.kv("summary", J.JStr{C.get_s(j, "summary")})])
+      reply(o, cx3, token, ok_body(Nil{}))
+
+# J, bise's home hub: a task it follows in the project `name` ended: one
+# line in bise's main from `@<name>`, a message like a local task's end
+# report (it wakes main by the same rule: main tells him), recorded as
+# received once (law xhub_xin_delivered_once), and fx followed_end for
+# the window
+def xjob_end(-o: M.St, r: Result<&2, &2, String, J.Json>, +cx: X.Cx<o>, +token: Nat, +hub: String, +xid: Nat, +name: String) -> X.Cx<o>:
+  match r:
+    case Fail{+e}:
+      reply_err(o, cx, token, cat(["a job_end that isn't JSON: ", e]))
+    case Done{+j}:
+      xjob_end.sent(o, send(o, cx, msg(String.append("@", name), M.MAIN(), xjob_end.line(j), False{}, None{}, False{}, False{})), token, hub, xid, j)
+
+def xin.kind(-o: M.St, k: XH.XKind, +cx: X.Cx<o>, +token: Nat, +hub: String, +xid: Nat, +text: String, +name: String) -> X.Cx<o>:
+  match k:
+    case XH.KJobEnd{}:
+      xjob_end(o, J.parse(text), cx, token, hub, xid, name)
+    case XH.KInput{}:
+      xin.sent(o, send(o, cx, xin.snd(XH.KInput{}, text)), token, hub, xid, XH.KInput{})
+    case XH.KAsk{}:
+      xin.sent(o, send(o, cx, xin.snd(XH.KAsk{}, text)), token, hub, xid, XH.KAsk{})
+
+# project: bise's message, said to main once per origin (hub, xid); bise's
+# home hub: a followed task's end (kind job_end, `name` the project's)
+def xin(-o: M.St, seen: Bool, +cx: X.Cx<o>, +token: Nat, +hub: String, +xid: Nat, +k: XH.XKind, +text: String, +name: String) -> X.Cx<o>:
+  match seen:
+    case True{}:
+      reply(o, cx, token, ok_body([J.kv("seen", J.JBool{True{}})]))
+    case False{}:
+      xin.kind(o, k, cx, token, hub, xid, text, name)
+
+# project: main answered bise's message: settled here, sent back once
+# (law xhub_xin_replied_once)
+def xreplied(-o: M.St, +cx: X.Cx<o>, +i: XH.XIn, +text: String) -> X.Cx<o>:
+  +cx2 = emit(o, cx, M.ESettled{XH.XIn.msg(i)}, Unit{}, Unit{}, Unit{})
+  +cx3 = xemit(o, cx2, XH.XReplied{XH.XIn.hub(i), XH.XIn.xid(i)})
+  out(o, cx3, [J.kv("fx", J.JStr{"xreply"}), J.kv("hub", J.JStr{XH.XIn.hub(i)}),
+    J.kv("xid", J.JNum{XH.XIn.xid(i)}), J.kv("text", J.JStr{text})])
+
+def xreply_due(+s: M.St, +from: String, r: Maybe<&2, Nat>) -> Maybe<&2, XH.XIn>:
+  match r:
+    case None{}:
+      None{}
+    case Some{+id}:
+      Bool.pick(Maybe<&2, XH.XIn>, String.eq(from, M.MAIN()), XB.reply_due(M.St.x(s), id), None{})
+
+# project: `sb send @bise --reply-to m_<n> "..."`: main's answer to an
+# open message of bise's, before its turn ends
+def req_xreply(-o: M.St, r: Maybe<&2, XH.XIn>, +cx: X.Cx<o>, +token: Nat, +q: J.Json) -> X.Cx<o>:
+  match r:
+    case None{}:
+      reply_err(o, cx, token, "@bise takes only main's answer to an open message from bise: sb send @bise --reply-to m_<n> \"...\"")
+    case Some{+i}:
+      reply(o, xreplied(o, cx, i, C.get_s(q, "text")), token, ok_body([J.kv("to", J.JStr{XB.FROM_BISE()}), J.kv("delivery", J.JStr{"sent"})]))
 
 # ---- the agents' `sb` requests (RFC 0003 §4, RFC 0001 §7.2, §7.5) ----
 
@@ -2142,7 +2615,9 @@ def req_send.hold(+s: M.St, r: Maybe<&2, Nat>) -> Maybe<&2, Nat>:
       M.card_holding(M.St.cards(s), id)
 
 def req_send(-o: M.St, +cx: X.Cx<o>, +token: Nat, +from: String, +q: J.Json) -> X.Cx<o>:
-  req_send.held(o, req_send.hold(st(o, cx), C.opt_nat(J.get(q, "reply_to"))), cx, token, from, q)
+  pick_lazy(X.Cx<o>, String.eq(C.get_s(q, "to"), XB.FROM_BISE()),
+    u => req_xreply(o, xreply_due(st(o, cx), from, C.opt_nat(J.get(q, "reply_to"))), cx, token, q),
+    u => req_send.held(o, req_send.hold(st(o, cx), C.opt_nat(J.get(q, "reply_to"))), cx, token, from, q))
 def wait.park(-o: M.St, +cx: X.Cx<o>, +w: X.Waiter) -> X.Cx<o>:
   +r = rr(o, cx)
   +cx2 = set_r(o, cx, X.R.with_waiters(r, M.snoc(X.Waiter, X.R.waiters(r), w)))
@@ -2218,6 +2693,111 @@ def req_status(-o: M.St, +cx: X.Cx<o>, +token: Nat, +from: String, +is_main: Boo
     u => notify_main(o, cx2, cat(["@", from, " is blocked: ", Bool.pick(String, String.is_empty(note), "(no note)", note)])), u => cx2)
   reply(o, cx3, token, ok_body(Nil{}))
 
+# ---- followed jobs (bise desktop S10) ----
+# Someone (his main, the window) follows a task: when it ends, done or
+# failed, the hub says so once (fx job_end, for his notification) and the
+# follow ends with it (one job per follow: law follow_one_shot). Before
+# its end, a followed task's reports make no job_end (law
+# follow_quiet_before_end); its progress (`sb report progress --step n/m`)
+# only moves the `jobs` rows.
+
+# the job's name: the task's objective, one line
+def job_label(+a: M.Agent) -> String:
+  M.clip(M.one_line(J.get_str_or(M.Agent.brief(a), "objective", "")), 120n)
+
+# J: the end of a job followed for another hub (bise's home hub): to its
+# outbox, journaled, delivered until that hub has it (a restart of either
+# hub loses nothing: the project's boot sends its pending entries again,
+# the home hub drops a second copy, law xhub_xin_delivered_once)
+def job_end.back(-o: M.St, local: Bool, +cx: X.Cx<o>, +hub: String, +j: J.Json) -> X.Cx<o>:
+  match local:
+    case True{}:
+      cx
+    case False{}:
+      +ob = XB.new_out(xst(o, cx), hub, XH.KJobEnd{}, 0n, J.stringify(j), "")
+      xdeliver(o, xemit(o, cx, XH.XOut{ob}), ob)
+
+# `key`: the job's (its end's time on this hub's clock), the same in the
+# fx job_end and in what goes back to `hub`, so a window that hears both
+# shows one line
+def job_end.go(-o: M.St, f: Bool, +cx: X.Cx<o>, +name: String, +state: String, +summary: String, +label: String, +hub: String) -> X.Cx<o>:
+  match f:
+    case True{}:
+      +cx2 = emit(o, cx, M.EJobEnd{name, state}, Unit{}, Unit{}, Unit{})
+      +key = now(o, cx2)
+      +cx3 = out(o, cx2, [J.kv("fx", J.JStr{"job_end"}), J.kv("agent", J.JStr{name}), J.kv("state", J.JStr{state}),
+        J.kv("label", J.JStr{label}), J.kv("summary", J.JStr{summary}), J.kv("key", J.JNum{key}), J.kv("hub", J.JStr{hub})])
+      job_end.back(o, String.is_empty(hub), cx3, hub, J.obj([J.kv("agent", J.JStr{name}), J.kv("key", J.JNum{key}),
+        J.kv("state", J.JStr{state}), J.kv("label", J.JStr{label}), J.kv("summary", J.JStr{summary})]))
+    case False{}:
+      cx
+
+def job_end.of(-o: M.St, m: Maybe<&2, M.Agent>, +cx: X.Cx<o>, +name: String, +state: String, +summary: String) -> X.Cx<o>:
+  match m:
+    case None{}:
+      cx
+    case Some{+a}:
+      job_end.go(o, M.Agent.follow(a), cx, name, state, summary, job_label(a), M.Agent.follow_hub(a))
+
+# a task's end (done, failed): its job_end when followed, once (laws
+# follow_done_once, follow_failed_at_once)
+def job_end(-o: M.St, +cx: X.Cx<o>, +name: String, +state: String, +summary: String) -> X.Cx<o>:
+  job_end.of(o, M.get_agent(st(o, cx), name), cx, name, state, summary)
+
+def is_archived_life(l: M.Life) -> Bool:
+  match l:
+    case M.LArchived{}:
+      True{}
+    case _:
+      False{}
+
+def follow_err.of(m: Maybe<&2, M.Agent>, +name: String) -> Maybe<&2, String>:
+  match m:
+    case None{}:
+      Some{cat(["no agent named @", name])}
+    case Some{+a}:
+      Bool.pick(Maybe<&2, String>, M.Agent.is_main(a), Some{"main isn't a job: follow one of its tasks"},
+        Bool.pick(Maybe<&2, String>, is_archived_life(M.Agent.life(a)), Some{cat(["@", name, " is archived"])}, None{}))
+
+# who can be followed: a task of this hub, not main, not archived
+def follow_err(+s: M.St, +name: String) -> Maybe<&2, String>:
+  follow_err.of(M.get_agent(s, name), name)
+
+# `hub`: who asked ("" this hub's own main or window; else bise's home
+# hub, J): journaled with the follow, cleared at its job_end
+def follow_set(-o: M.St, +cx: X.Cx<o>, +name: String, +on: Bool, +hub: String) -> X.Cx<o>:
+  emit(o, cx, M.EFollow{name, on, hub}, Unit{}, Unit{}, Unit{})
+
+# the input follow (the window's typed command, or bise's `sb follow
+# <p>/<agent>` on this hub's socket): an error is the asker's notice
+def follow_in(-o: M.St, err: Maybe<&2, String>, +cx: X.Cx<o>, +name: String, +on: Bool) -> X.Cx<o>:
+  match err:
+    case Some{+e}:
+      notice(o, cx, e)
+    case None{}:
+      follow_set(o, cx, name, on, "")
+
+def req_follow.go(-o: M.St, err: Maybe<&2, String>, +cx: X.Cx<o>, +token: Nat, +name: String, +on: Bool, +hub: String) -> X.Cx<o>:
+  match err:
+    case Some{+e}:
+      reply_err(o, cx, token, e)
+    case None{}:
+      reply(o, follow_set(o, cx, name, on, hub), token, ok_body([J.kv("agent", J.JStr{name}), J.kv("on", J.JBool{on})]))
+
+# `sb follow <agent> [--off]`: main only (his say-so goes through main)
+def req_follow(-o: M.St, +cx: X.Cx<o>, +token: Nat, +from: String, +q: J.Json) -> X.Cx<o>:
+  +name = C.get_s(q, "agent")
+  req_follow.go(o,
+    Bool.pick(Maybe<&2, String>, String.eq(from, M.MAIN()), follow_err(st(o, cx), name), Some{"only main follows a task: ask main"}),
+    cx, token, name, Bool.not(C.get_b(q, "off")), C.get_s(q, "hub"))
+
+# the report's done and failed: their state change, then the job's end
+def report_done(-o: M.St, +cx: X.Cx<o>, +from: String) -> X.Cx<o>:
+  emit(o, cx, M.EDeclared{from, Some{M.DDone{}}, ""}, Unit{}, Unit{}, Unit{})
+
+def report_failed(-o: M.St, +cx: X.Cx<o>, +from: String, +summary: String) -> X.Cx<o>:
+  emit(o, cx, M.ELifecycle{from, M.LFailed{}, Some{summary}}, Unit{}, Unit{}, Unit{})
+
 def report_lines(xs: List<&2, String>) -> List<&2, String>:
   match xs:
     case Nil{}:
@@ -2239,11 +2819,11 @@ def req_report.sent(-o: M.St, p: X.Cx<o> & SendR, +token: Nat) -> X.Cx<o>:
 
 def req_report.kind(-o: M.St, +cx: X.Cx<o>, +from: String, +kind: String, +summary: String) -> X.Cx<o>:
   pick_lazy(X.Cx<o>, String.eq(kind, "done"),
-    u => emit(o, cx, M.EDeclared{from, Some{M.DDone{}}, ""}, Unit{}, Unit{}, Unit{}),
+    u => job_end(o, report_done(o, cx, from), from, "done", summary),
     u => pick_lazy(X.Cx<o>, String.eq(kind, "blocked"),
       u => emit(o, cx, M.EDeclared{from, Some{M.DBlocked{}}, summary}, Unit{}, Unit{}, Unit{}),
       u => pick_lazy(X.Cx<o>, String.eq(kind, "failed"),
-        u => emit(o, cx, M.ELifecycle{from, M.LFailed{}, Some{summary}}, Unit{}, Unit{}, Unit{}),
+        u => job_end(o, report_failed(o, cx, from, summary), from, "failed", summary),
         u => cx)))
 
 def req_report.go(-o: M.St, is_main: Bool, +cx: X.Cx<o>, +token: Nat, +from: String, +q: J.Json) -> X.Cx<o>:
@@ -2254,8 +2834,12 @@ def req_report.go(-o: M.St, is_main: Bool, +cx: X.Cx<o>, +token: Nat, +from: Str
       +kind = C.get_s(q, "kind")
       +summary = C.get_s(q, "summary")
       +decisions = jstr_list(Maybe.default(&2, List<&2, J.Json>, J.get_arr(q, "decisions"), Nil{}))
+      # S10: a progress's --step n/m; emitter 5: its --result (proto's
+      # DiffResult, checked by the CLI); null when absent
       +cx2 = emit(o, cx, M.EReported{from, J.obj([J.kv("at_ms", J.JNum{now(o, cx)}), J.kv("kind", J.JStr{kind}),
-        J.kv("summary", J.JStr{summary}), J.kv("decisions", J.JArr{jstrs(decisions)}), J.kv("auto", J.JBool{False{}})])}, Unit{}, Unit{}, Unit{})
+        J.kv("summary", J.JStr{summary}), J.kv("decisions", J.JArr{jstrs(decisions)}), J.kv("auto", J.JBool{False{}}),
+        J.kv("step", Maybe.default(&2, J.Json, J.get(q, "step"), J.JNull{})), J.kv("of", Maybe.default(&2, J.Json, J.get(q, "of"), J.JNull{})),
+        J.kv("result", Maybe.default(&2, J.Json, J.get(q, "result"), J.JNull{}))])}, Unit{}, Unit{}, Unit{})
       +cx3 = req_report.kind(o, cx2, from, kind, summary)
       +parent = Maybe.default(&2, String, parent_of(M.get_agent(st(o, cx3), from)), M.MAIN())
       +to = Bool.pick(String, String.eq(parent, M.USER()), M.MAIN(), parent)
@@ -2298,7 +2882,7 @@ def req_interrupt(-o: M.St, m: Maybe<&2, String>, +cx: X.Cx<o>, +token: Nat, +ag
       reply_err(o, cx, token, String.append("no agent named ", agent))
     case Some{+n}:
       pick_lazy(X.Cx<o>, is_busy(X.Rt.run(rt(o, cx, n))),
-        u => reply(o, out(o, cx, [J.kv("fx", J.JStr{"interrupt"}), J.kv("agent", J.JStr{n})]), token, ok_body(Nil{})),
+        u => reply(o, stopped(o, interrupt.fx(o, cx, n), n), token, ok_body(Nil{})),
         u => reply_err(o, cx, token, "no turn in progress"))
 
 def req_stop(-o: M.St, m: Maybe<&2, String>, +cx: X.Cx<o>, +token: Nat, +agent: String, +reason: String) -> X.Cx<o>:
@@ -2332,9 +2916,20 @@ def req_card.settle(-o: M.St, m: Maybe<&2, Nat>, +cx: X.Cx<o>) -> X.Cx<o>:
     case Some{+id}:
       emit(o, cx, M.ESettled{id}, Unit{}, Unit{}, Unit{})
 
+# a card main opens for a task's message (`sb card --for m_<n>`) shows in
+# that task's own feed too (a registered agent of this hub, not main) (bar A.3, architect m_10203), with the line
+# main's feed gets: a view; open or answered still comes from the cards
+def is_task_of(-o: M.St, +cx: X.Cx<o>, +agent: String) -> Bool:
+  has_agent(o, cx, agent) && Bool.not(String.eq(agent, M.MAIN()))
+
+def card_to_asker(-o: M.St, +cx: X.Cx<o>, +id: Nat, +agent: String, +text: String) -> X.Cx<o>:
+  pick_lazy(X.Cx<o>, is_task_of(o, cx, agent),
+    u => line(o, cx, agent, "card", cat(["#", ns(id), " question @", agent, " : ", text])),
+    u => cx)
+
 def req_card.go(-o: M.St, +cx: X.Cx<o>, +token: Nat, +agent: String, +text: String, +for_msg: Maybe<&2, Nat>) -> X.Cx<o>:
   +id = M.St.next_card(st(o, cx))
-  +cx2 = open_card(o, cx, "question", agent, text, for_msg)
+  +cx2 = card_to_asker(o, open_card(o, cx, "question", agent, text, for_msg), id, agent, text)
   # main hands the question over: no automatic reply
   +cx3 = req_card.settle(o, for_msg, cx2)
   reply(o, cx3, token, ok_body([J.kv("card", J.JNum{id})]))
@@ -2415,6 +3010,7 @@ def cmd_tag(+c: String) -> Cmd:
   Bool.pick(Cmd, String.eq(c, "ask"), CAsk{},
   Bool.pick(Cmd, String.eq(c, "status"), CStatus{},
   Bool.pick(Cmd, String.eq(c, "report"), CReport{},
+  Bool.pick(Cmd, String.eq(c, "follow"), CFollow{},
   Bool.pick(Cmd, String.eq(c, "spawn"), CSpawn{},
   Bool.pick(Cmd, String.eq(c, "interrupt"), CInterrupt{},
   Bool.pick(Cmd, String.eq(c, "stop"), CStop{},
@@ -2424,7 +3020,9 @@ def cmd_tag(+c: String) -> Cmd:
   Bool.pick(Cmd, String.eq(c, "restore"), CRestore{},
   Bool.pick(Cmd, String.eq(c, "isolate"), CIsolate{},
   Bool.pick(Cmd, String.eq(c, "move"), CMove{},
-  Bool.pick(Cmd, String.eq(c, "withdraw"), CWithdraw{}, CCard{})))))))))))))))
+  Bool.pick(Cmd, String.eq(c, "withdraw"), CWithdraw{},
+  Bool.pick(Cmd, String.eq(c, "project_send"), CProjectSend{},
+  Bool.pick(Cmd, String.eq(c, "project_ask"), CProjectAsk{}, CCard{}))))))))))))))))))
 
 def req.main.go(-o: M.St, c: Cmd, +cx: X.Cx<o>, +token: Nat, +q: J.Json) -> X.Cx<o>:
   match c:
@@ -2448,6 +3046,10 @@ def req.main.go(-o: M.St, c: Cmd, +cx: X.Cx<o>, +token: Nat, +q: J.Json) -> X.Cx
       req_task.res(o, move_task(o, C.opt_str(J.get(q, "pre_err")), cx, C.get_s(q, "agent"), J.get(q, "ws")), token)
     case CWithdraw{}:
       req_withdraw(o, M.card_of(M.St.cards(st(o, cx)), C.get_nat(q, "card")), cx, token, C.get_nat(q, "card"), C.get_s(q, "why"))
+    case CProjectSend{}:
+      req_xsend(o, C.opt_str(J.get(q, "pre_err")), cx, token, q)
+    case CProjectAsk{}:
+      req_xask(o, C.opt_str(J.get(q, "pre_err")), cx, token, q)
     case _:
       req_card(o, C.opt_nat(J.get(q, "for")), cx, token, C.get_s(q, "text"))
 
@@ -2470,6 +3072,8 @@ def req.go(-o: M.St, c: Cmd, +cx: X.Cx<o>, +token: Nat, +from: String, +q: J.Jso
       req_status(o, cx, token, from, String.eq(from, M.MAIN()), q)
     case CReport{}:
       req_report.go(o, String.eq(from, M.MAIN()), cx, token, from, q)
+    case CFollow{}:
+      req_follow(o, cx, token, from, q)
     case other:
       req.main(o, String.eq(from, M.MAIN()), cx, token, other, q)
 
@@ -2613,7 +3217,7 @@ def crash.restart(-o: M.St, +cx: X.Cx<o>, +agent: String, +n: Nat, +reason: Stri
 
 def crash.fail(-o: M.St, +cx: X.Cx<o>, +agent: String, +n: Nat, +reason: String) -> X.Cx<o>:
   +why = cat(["the REPL crashed ", ns(n), " times: ", reason])
-  +cx2 = emit(o, cx, M.ELifecycle{agent, M.LFailed{}, Some{why}}, Unit{}, Unit{}, Unit{})
+  +cx2 = job_end(o, emit(o, cx, M.ELifecycle{agent, M.LFailed{}, Some{why}}, Unit{}, Unit{}, Unit{}), agent, "failed", why)
   +cx3 = line(o, cx2, M.MAIN(), "warn", cat(["@", agent, " failed: ", why]))
   pick_lazy(X.Cx<o>, String.eq(agent, M.MAIN()), u => cx3,
     u => notify_main(o, cx3, cat(["agent @", agent, " failed: ", why, ". It is not restarted anymore. A new message from you or the user restarts it; otherwise tell the user."])))
@@ -2719,7 +3323,7 @@ def skip_steered(xs: List<&2, M.Msg>, +skip: Bool, +ids: List<&2, Nat>) -> List<
 
 # RFC 0003 §5.1: the end-of-turn answer to `@task message` typed in
 # another view goes back to that view, and main gets it as a note
-def auto_reply(-o: M.St, via: Maybe<&2, String>, +cx: X.Cx<o>, +agent: String, +m: M.Msg, +body: String) -> X.Cx<o>:
+def auto_reply.local(-o: M.St, via: Maybe<&2, String>, +cx: X.Cx<o>, +agent: String, +m: M.Msg, +body: String) -> X.Cx<o>:
   match via:
     case None{}:
       fst(o, send(o, cx, msg(agent, M.Msg.from(m), body, False{}, Some{M.Msg.id(m)}, False{}, True{})))
@@ -2729,6 +3333,17 @@ def auto_reply(-o: M.St, via: Maybe<&2, String>, +cx: X.Cx<o>, +agent: String, +
       +cx3 = line(o, cx2, view, "msg-you", cat([agent, " : ", body]))
       note_main(o, cx3, cat(["@", agent, " answered the user (asked from @", view, "'s view: \"", M.clip(M.one_line(M.Msg.text(m)), 500n),
         "\"): \"", M.clip_tail(M.one_line(body), 2000n), "\""]))
+
+# a message bise sent this hub (S2) is answered back to bise's hub
+def auto_reply.x(-o: M.St, r: Maybe<&2, XH.XIn>, via: Maybe<&2, String>, +cx: X.Cx<o>, +agent: String, +m: M.Msg, +body: String) -> X.Cx<o>:
+  match r:
+    case Some{+i}:
+      xreplied(o, cx, i, body)
+    case None{}:
+      auto_reply.local(o, via, cx, agent, m, body)
+
+def auto_reply(-o: M.St, via: Maybe<&2, String>, +cx: X.Cx<o>, +agent: String, +m: M.Msg, +body: String) -> X.Cx<o>:
+  auto_reply.x(o, XB.reply_due(xst(o, cx), M.Msg.id(m)), via, cx, agent, m, body)
 
 # RFC 0003 §7: a question gets an answer, the end of the turn
 def auto_replies(-o: M.St, qs: List<&2, M.Msg>, +cx: X.Cx<o>, +agent: String, +body: String) -> X.Cx<o>:
@@ -2841,7 +3456,23 @@ def in_tag(+t: String) -> In:
   Bool.pick(In, String.eq(t, "every_set"), IEverySet{},
   Bool.pick(In, String.eq(t, "every_stop"), IEveryStop{},
   Bool.pick(In, String.eq(t, "every_run"), IEveryRun{},
-  INone{})))))))))))))))))))))))))))))))))))
+  # bise's cross-hub messages (S2, the `cross-hub` section): a project
+  # hub receives one (x_in); bise's home hub hears how its delivery went
+  # (x_ack, x_fail) and the project's answer (x_reply)
+  Bool.pick(In, String.eq(t, "x_in"), IXIn{},
+  Bool.pick(In, String.eq(t, "x_ack"), IXAck{},
+  Bool.pick(In, String.eq(t, "x_fail"), IXFail{},
+  Bool.pick(In, String.eq(t, "x_reply"), IXReply{},
+  # the routing hold (S2 step 2, the `routing hold` section): his words
+  # held for a project (route_hold), its correction or cancel
+  Bool.pick(In, String.eq(t, "route_hold"), IRouteHold{},
+  Bool.pick(In, String.eq(t, "route_correct"), IRouteCorrect{},
+  Bool.pick(In, String.eq(t, "route_cancel"), IRouteCancel{},
+  # S2 step 5: the model's pick for his unclear words
+  Bool.pick(In, String.eq(t, "route_pick"), IRoutePick{},
+  # S10: follow a task (the window's typed command, bise's sb follow)
+  Bool.pick(In, String.eq(t, "follow"), IFollow{},
+  INone{}))))))))))))))))))))))))))))))))))))))))))))
 
 # `/close N`: the user files a card without answering it
 def close_by_user(-o: M.St, m: Maybe<&2, M.Card>, +cx: X.Cx<o>, +id: Nat) -> X.Cx<o>:
@@ -2870,7 +3501,7 @@ def dispatch.go(-o: M.St, tag: In, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
     case IReq{}:
       agent_req(o, cx, C.get_nat(i, "token"), C.get_s(i, "from"), Maybe.default(&2, J.Json, J.get(i, "req"), J.JNull{}))
     case ITick{}:
-      timers_tick(o, tick(o, cx))
+      acts_tick(o, timers_tick(o, tick(o, cx)))
     case IIdle{}:
       repl_idle(o, cx, C.get_s(i, "agent"), C.get_b(i, "leftover"), C.get_b(i, "held"))
     case ITurnStarted{}:
@@ -2888,11 +3519,13 @@ def dispatch.go(-o: M.St, tag: In, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
     case IExited{}:
       repl_exited(o, cx, C.get_s(i, "agent"), C.get_b(i, "crashed"), C.get_s(i, "reason"))
     case IBoot{}:
-      boot(o, cx)
+      xboot(o, boot(o, cx))
     case ISay{}:
-      user_says(o, cx, C.get_s(i, "focus"), C.get_s(i, "text"))
+      user_input(o, cx, C.get_s(i, "focus"), C.get_s(i, "text"), C.get_b(i, "queued"))
     case IRoute{}:
-      route(o, cx, C.get_s(i, "target"), C.get_s(i, "text"), C.get_s(i, "focus"))
+      pick_lazy(X.Cx<o>, String.eq(C.get_s(i, "target"), M.MAIN()),
+        u => user_input(o, cx, M.MAIN(), C.get_s(i, "text"), C.get_b(i, "queued")),
+        u => route(o, cx, C.get_s(i, "target"), C.get_s(i, "text"), C.get_s(i, "focus"), C.get_b(i, "queued")))
     case INew{}:
       user_new.res(o, create_task(o, cx, new_task(M.USER(), i)))
     case IDrop{}:
@@ -2937,6 +3570,24 @@ def dispatch.go(-o: M.St, tag: In, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
       timer_stop(o, cx, i)
     case IEveryRun{}:
       timer_run(o, cx, i)
+    case IXIn{}:
+      xin(o, XB.seen(xst(o, cx), C.get_s(i, "hub"), C.get_nat(i, "xid")), cx, C.get_nat(i, "token"), C.get_s(i, "hub"), C.get_nat(i, "xid"), XH.kind_of(C.get_s(i, "kind")), C.get_s(i, "text"), C.get_s(i, "name"))
+    case IXAck{}:
+      xack(o, XB.pending(xst(o, cx), C.get_nat(i, "xid")), cx, C.get_nat(i, "xid"))
+    case IXFail{}:
+      xfail(o, XB.pending(xst(o, cx), C.get_nat(i, "xid")), cx, C.get_nat(i, "xid"))
+    case IXReply{}:
+      xanswer(o, XB.open(xst(o, cx), C.get_nat(i, "xid")), cx, C.get_nat(i, "xid"), C.get_s(i, "name"), C.get_s(i, "text"))
+    case IRouteHold{}:
+      route_hold(o, cx, C.get_s(i, "text"), C.get_s(i, "via"), C.get_s(i, "to"), C.get_s(i, "name"), C.get_s(i, "why"), C.get_s(i, "context"))
+    case IRouteCorrect{}:
+      route_correct(o, cx, C.get_nat(i, "rid"), C.get_s(i, "to"), C.get_s(i, "name"))
+    case IRouteCancel{}:
+      route_cancel(o, cx, C.get_nat(i, "rid"))
+    case IRoutePick{}:
+      route_pick(o, cx, C.get_nat(i, "rid"), C.get_s(i, "to"), C.get_s(i, "name"), C.get_s(i, "why"))
+    case IFollow{}:
+      follow_in(o, follow_err(st(o, cx), C.get_s(i, "agent")), cx, C.get_s(i, "agent"), C.get_b(i, "on"))
     case INone{}:
       cx
 

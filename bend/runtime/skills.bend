@@ -45,8 +45,10 @@ def index_path() -> IO(String):
 #      ($BEND_WORKDIR/.agents/skills - the hub runs a task's REPL in the
 #      app root, so $PWD would miss the task's workspace - else
 #      $PWD/.agents/skills), then the plugin skills ($3, written by the
-#      plugins bridge, runtime/plugins.bend), then, for main only
-#      (BISE_ROLE=main, set by the hub), bise's built-in skills: the app
+#      plugins bridge, runtime/plugins.bend), then every agent's
+#      built-in skills, the app root's prompts/skills-all (bise-pages),
+#      then, for main only (BISE_ROLE=main, set by the hub), main's
+#      built-in skills: the app
 #      root's prompts/skills (the hub runs the REPL in the app root, and
 #      versions.sh and build-dist.sh ship prompts/ whole), e.g. bise-demo
 # Each index is written to a temp file then renamed: every REPL start
@@ -123,14 +125,14 @@ index() {
 }
 w=\"${BEND_WORKDIR:-$PWD}\"
 b=\"\"; [ \"${BISE_ROLE:-}\" = main ] && b=\"$PWD/prompts/skills\"
-set -- \"$1\" \"$2\" \"$3\" \"$HOME/.agents/skills\" \"$HOME/.vibe/skills\" \"$w/.agents/skills\" \"$b\"
+set -- \"$1\" \"$2\" \"$3\" \"$HOME/.agents/skills\" \"$HOME/.vibe/skills\" \"$w/.agents/skills\" \"$PWD/prompts/skills-all\" \"$b\"
 r=0; rs=\"\"
-for root in \"$4\" \"$5\" \"$6\" \"$7\"; do
+for root in \"$4\" \"$5\" \"$6\" \"$7\" \"$8\"; do
   r=$((r + 1)); [ -n \"$root\" ] && { job \"r$r\" entries \"$root\"; rs=\"$rs r$r\"; }
 done
 settle $rs
 k=0; fs=\"\"; r=0
-for root in \"$4\" \"$5\" \"$6\" \"$7\"; do
+for root in \"$4\" \"$5\" \"$6\" \"$7\" \"$8\"; do
   r=$((r + 1)); [ -n \"$root\" ] || continue
   ok \"r$r\" \"$root\" || continue
   while IFS= read -r d; do
@@ -141,14 +143,14 @@ for root in \"$4\" \"$5\" \"$6\" \"$7\"; do
   done < \"$t/r$r\"
 done
 settle $fs
-for r in 1 2 3 4; do
+for r in 1 2 3 4 5; do
   [ -f \"$t/r$r.files\" ] || continue
   while IFS=' ' read -r id f; do ok \"$id\" \"$f\" || true; done < \"$t/r$r.files\"
 done
 [ -n \"$kills\" ] && pkill -9 -P \"${kills#,}\" 2>/dev/null
 mkdir -p \"$(dirname \"$1\")\" \"$(dirname \"$2\")\"
 { index 1 2; true; } > \"$1.$$\" && mv -f \"$1.$$\" \"$1\"
-{ index 3; cat \"$3\" 2>/dev/null; index 4; true; } > \"$2.$$\" && mv -f \"$2.$$\" \"$2\""
+{ index 3; cat \"$3\" 2>/dev/null; index 4 5; true; } > \"$2.$$\" && mv -f \"$2.$$\" \"$2\""
 
 # the backstop: the script bounds itself (two waits of $lim s), so this
 # only fires if the shell itself hangs; the REPL then starts on the

@@ -2954,16 +2954,21 @@ mod prs {
     }
 
     #[test]
-    fn a_merge_item_goes_when_github_merges_it_and_words_go_to_main() {
+    fn a_merge_item_goes_when_github_merges_it_and_words_never_answer_it() {
         let mut t = T::new();
         spawn_wt(&mut t, "dark");
         t.go(report(1_000, Ok(vec![ready_pr("tip1", &[])]), None));
         let id = merge_cards(&t)[0].id;
-        // words, not a digit: main gets them in a turn, the item closes
-        let fx = t.user(MAIN, &format!("/answer {} wait for the release", id));
-        assert_eq!(closed_as(&t, id).as_deref(), Some("answered"));
-        let said = say_to(&fx, MAIN).unwrap_or_default();
-        assert!(said.contains("in words") && said.contains("wait for the release"), "{:?}", fx);
+        // words, not one of its numbers (the composer rule): refused, the
+        // item stays open, main is not woken; a number it doesn't list too
+        for words in ["wait for the release", "7"] {
+            let fx = t.user(MAIN, &format!("/answer {} {}", id, words));
+            assert!(t.hub.st.cards.contains_key(&id), "still open after {words:?}");
+            assert!(say_to(&fx, MAIN).is_none() && steer_to(&fx, MAIN).is_none(), "{:?}", fx);
+            assert!(format!("{:?}", fx).contains("typed words don't answer it"), "{:?}", fx);
+        }
+        // `3 not yet` closes it
+        t.user(MAIN, &format!("/answer {} 3", id));
         // a new review opens it again; merged on GitHub: withdrawn
         t.go(report(2_000, Ok(vec![ready_pr("tip1", &["alice"])]), None));
         let id = merge_cards(&t)[0].id;

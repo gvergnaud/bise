@@ -9,6 +9,8 @@ import ./model.bend as M
 
 import ./timers.bend as TM
 
+import ./xhub-model.bend as XH
+
 def jmaybe_nat(m: Maybe<&2, Nat>) -> J.Json:
   match m:
     case None{}:
@@ -85,6 +87,44 @@ def mst_kvs(s: M.MSt) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
 def ty(+t: String) -> Sigma<&2, &2, String, _ => J.Json>:
   J.kv("type", J.JStr{t})
 
+def op_type(op: XH.OutOp) -> String:
+  match op:
+    case XH.OpAcked{}:
+      "x_acked"
+    case XH.OpTried{}:
+      "x_failed"
+    case XH.OpSettled{}:
+      "x_settled"
+
+def route_op_json(+rid: Nat, op: XH.RouteOp) -> J.Json:
+  match op:
+    case XH.RTo{+to, +name}:
+      J.obj([ty("route_set"), J.kv("rid", J.JNum{rid}), J.kv("to", J.JStr{to}), J.kv("name", J.JStr{name})])
+    case XH.REnd{+s}:
+      J.obj([ty(String.append("route_", XH.rst_str(s))), J.kv("rid", J.JNum{rid})])
+
+def x_json(e: XH.XEv) -> J.Json:
+  match e:
+    case XH.XOut{+o}:
+      J.obj([ty("x_out"), J.kv("out", XH.out_json(o))])
+    case XH.XOp{+xid, +op}:
+      J.obj([ty(op_type(op)), J.kv("xid", J.JNum{xid})])
+    case XH.XGot{+i}:
+      J.obj([ty("x_in"), J.kv("in", XH.xin_json(i))])
+    case XH.XReplied{+h, +xid}:
+      J.obj([ty("x_replied"), J.kv("hub", J.JStr{h}), J.kv("xid", J.JNum{xid})])
+    case XH.XRouteHeld{+r}:
+      J.obj([ty("route_held"), J.kv("route", XH.route_json(r))])
+    case XH.XRoute{+rid, +op}:
+      route_op_json(rid, op)
+
+def act_ev_json(e: TM.ActEv) -> J.Json:
+  match e:
+    case TM.ActSet{+a}:
+      J.obj([ty("act_set"), J.kv("act", TM.act_json(a))])
+    case TM.ActDone{+id}:
+      J.obj([ty("act_done"), J.kv("id", J.JNum{id})])
+
 def ev_json(e: M.Ev) -> J.Json:
   match e:
     case M.ETaskCreated{+name, +parent, +brief, +ws, +at}:
@@ -136,6 +176,16 @@ def ev_json(e: M.Ev) -> J.Json:
       J.obj([ty("every_run"), J.kv("id", J.JNum{id}), J.kv("at", J.JNum{at})])
     case M.ETimerStop{+id, +why, +at}:
       J.obj([ty("every_stop"), J.kv("id", J.JNum{id}), J.kv("why", J.JStr{why}), J.kv("at", J.JNum{at})])
+    # bise desktop S2 (an older sb-core reads these as unknown: skipped)
+    case M.EX{+xe}:
+      x_json(xe)
+    case M.EAct{+ae}:
+      act_ev_json(ae)
+    # bise desktop S10 (an older sb-core reads these as unknown: skipped)
+    case M.EFollow{+name, +on, +hub}:
+      J.obj([ty("follow"), J.kv("name", J.JStr{name}), J.kv("on", J.JBool{on}), J.kv("hub", J.JStr{hub})])
+    case M.EJobEnd{+name, +state}:
+      J.obj([ty("job_end"), J.kv("name", J.JStr{name}), J.kv("state", J.JStr{state})])
 
 # ---- decoding (the journal replayed at boot) ----
 
@@ -214,7 +264,38 @@ type EvK is Data:
   KEveryFired{}
   KEveryRun{}
   KEveryStop{}
+  KXOut{}
+  KXAcked{}
+  KXFailed{}
+  KXSettled{}
+  KXIn{}
+  KXReplied{}
+  KActSet{}
+  KActDone{}
+  KRouteHeld{}
+  KRouteSet{}
+  KRouteSent{}
+  KRouteCancelled{}
+  KFollow{}
+  KJobEnd{}
   KUnknown{}
+
+def ev_kind.x(+t: String) -> EvK:
+  Bool.pick(EvK, String.eq(t, "x_out"), KXOut{},
+  Bool.pick(EvK, String.eq(t, "x_acked"), KXAcked{},
+  Bool.pick(EvK, String.eq(t, "x_failed"), KXFailed{},
+  Bool.pick(EvK, String.eq(t, "x_settled"), KXSettled{},
+  Bool.pick(EvK, String.eq(t, "x_in"), KXIn{},
+  Bool.pick(EvK, String.eq(t, "x_replied"), KXReplied{},
+  Bool.pick(EvK, String.eq(t, "act_set"), KActSet{},
+  Bool.pick(EvK, String.eq(t, "act_done"), KActDone{},
+  Bool.pick(EvK, String.eq(t, "route_held"), KRouteHeld{},
+  Bool.pick(EvK, String.eq(t, "route_set"), KRouteSet{},
+  Bool.pick(EvK, String.eq(t, "route_sent"), KRouteSent{},
+  Bool.pick(EvK, String.eq(t, "route_cancelled"), KRouteCancelled{},
+  Bool.pick(EvK, String.eq(t, "follow"), KFollow{},
+  Bool.pick(EvK, String.eq(t, "job_end"), KJobEnd{},
+  KUnknown{}))))))))))))))
 
 def ev_kind(+t: String) -> EvK:
   Bool.pick(EvK, String.eq(t, "task_created"), KTaskCreated{},
@@ -236,7 +317,28 @@ def ev_kind(+t: String) -> EvK:
   Bool.pick(EvK, String.eq(t, "every_fired"), KEveryFired{},
   Bool.pick(EvK, String.eq(t, "every_run"), KEveryRun{},
   Bool.pick(EvK, String.eq(t, "every_stop"), KEveryStop{},
-  KUnknown{})))))))))))))))))))
+  ev_kind.x(t))))))))))))))))))))
+
+# bise desktop S2's kinds (an older sb-core has none: KUnknown, skipped)
+def out_st_of(+s: String) -> XH.OutSt:
+  Bool.pick(XH.OutSt, String.eq(s, "settled"), XH.OSettled{}, Bool.pick(XH.OutSt, String.eq(s, "acked"), XH.OAcked{}, XH.OPending{}))
+
+def out_of(+j: J.Json) -> XH.Out:
+  XH.Out{get_nat(j, "xid"), get_s(j, "project"), XH.kind_of(get_s(j, "kind")), get_nat(j, "msg"), get_s(j, "text"),
+    out_st_of(get_s(j, "state")), get_nat(j, "tries"), get_s(j, "context")}
+
+def xin_of(+j: J.Json) -> XH.XIn:
+  XH.XIn{get_s(j, "hub"), get_nat(j, "xid"), get_nat(j, "msg"), XH.kind_of(get_s(j, "kind")), get_b(j, "replied")}
+
+def route_of(+j: J.Json) -> XH.Route:
+  XH.Route{get_nat(j, "rid"), get_s(j, "text"), get_s(j, "via"), get_s(j, "to"), get_s(j, "name"), get_nat(j, "due_ms"),
+    get_nat(j, "act"), get_s(j, "why"), XH.rst_of(get_s(j, "state")), get_s(j, "context")}
+
+def what_of(+j: J.Json) -> TM.What:
+  Bool.pick(TM.What, String.eq(get_s(j, "kind"), "retry"), TM.Retry{get_nat(j, "xid")}, TM.RouteSend{get_nat(j, "rid")})
+
+def act_of(+j: J.Json) -> TM.Act:
+  TM.Act{get_nat(j, "id"), get_nat(j, "due"), what_of(get_j(j, "what"))}
 
 # an every_set's schedule, as every.rs read it: every_ms (at least 1 s),
 # else daily_min (mod a day), else not a timer (the line is skipped)
@@ -298,6 +400,35 @@ def ev_of.kind(k: EvK, +j: J.Json, +n: String) -> Maybe<&2, M.Ev>:
       Some{M.ETimerRun{get_nat(j, "id"), get_nat(j, "at")}}
     case KEveryStop{}:
       Some{M.ETimerStop{get_nat(j, "id"), get_s(j, "why"), get_nat(j, "at")}}
+    case KXOut{}:
+      Some{M.EX{XH.XOut{out_of(get_j(j, "out"))}}}
+    case KXAcked{}:
+      Some{M.EX{XH.XOp{get_nat(j, "xid"), XH.OpAcked{}}}}
+    case KXFailed{}:
+      Some{M.EX{XH.XOp{get_nat(j, "xid"), XH.OpTried{}}}}
+    case KXSettled{}:
+      Some{M.EX{XH.XOp{get_nat(j, "xid"), XH.OpSettled{}}}}
+    case KXIn{}:
+      Some{M.EX{XH.XGot{xin_of(get_j(j, "in"))}}}
+    case KXReplied{}:
+      Some{M.EX{XH.XReplied{get_s(j, "hub"), get_nat(j, "xid")}}}
+    case KActSet{}:
+      Some{M.EAct{TM.ActSet{act_of(get_j(j, "act"))}}}
+    case KActDone{}:
+      Some{M.EAct{TM.ActDone{get_nat(j, "id")}}}
+    case KFollow{}:
+      # J: an older journal has no hub ("": this hub's own follow)
+      Some{M.EFollow{get_s(j, "name"), get_b(j, "on"), get_s(j, "hub")}}
+    case KJobEnd{}:
+      Some{M.EJobEnd{get_s(j, "name"), get_s(j, "state")}}
+    case KRouteHeld{}:
+      Some{M.EX{XH.XRouteHeld{route_of(get_j(j, "route"))}}}
+    case KRouteSet{}:
+      Some{M.EX{XH.XRoute{get_nat(j, "rid"), XH.RTo{get_s(j, "to"), get_s(j, "name")}}}}
+    case KRouteSent{}:
+      Some{M.EX{XH.XRoute{get_nat(j, "rid"), XH.REnd{XH.RSent{}}}}}
+    case KRouteCancelled{}:
+      Some{M.EX{XH.XRoute{get_nat(j, "rid"), XH.REnd{XH.RCancelled{}}}}}
     case KUnknown{}:
       None{}
 

@@ -37,7 +37,19 @@ type Ended is Data:
   Ended{t: Timer, at: Nat, why: String}
 
 type Tms is Data:
-  Tms{live: List<&2, Timer>, ended: List<&2, Ended>, last_id: Nat}
+  Tms{live: List<&2, Timer>, ended: List<&2, Ended>, last_id: Nat, acts: List<&2, Act>, next_act: Nat}
+
+# an act (bise desktop S2): an internal step sb-core takes at a time, on
+# the same clock and the same due rule as the wake timers (the tick's
+# now): send a held route (RouteSend, the route's id) or try a cross-
+# hub delivery again (Retry, the outbox's xid). Journal: act_set, act_done
+# (laws act_fires_once, act_due_only).
+type What is Data:
+  RouteSend{rid: Nat}
+  Retry{xid: Nat}
+
+type Act is Data:
+  Act{id: Nat, due: Nat, what: What}
 
 def RUNS_KEPT() -> Nat:
   5n
@@ -49,7 +61,7 @@ def MIN_MS() -> Nat:
   60000n
 
 def empty() -> Tms:
-  Tms{Nil{}, Nil{}, 0n}
+  Tms{Nil{}, Nil{}, 0n, Nil{}, 1n}
 
 # ---- fields ----
 
@@ -115,18 +127,43 @@ def Timer.runs(x: Timer) -> List<&2, Nat>:
 
 def Tms.live(x: Tms) -> List<&2, Timer>:
   match x:
-    case Tms{+live, _, _}:
+    case Tms{+live, _, _, _, _}:
       live
 
 def Tms.ended(x: Tms) -> List<&2, Ended>:
   match x:
-    case Tms{_, +ended, _}:
+    case Tms{_, +ended, _, _, _}:
       ended
 
 def Tms.last_id(x: Tms) -> Nat:
   match x:
-    case Tms{_, _, +last_id}:
+    case Tms{_, _, +last_id, _, _}:
       last_id
+
+def Tms.acts(x: Tms) -> List<&2, Act>:
+  match x:
+    case Tms{_, _, _, +acts, _}:
+      acts
+
+def Tms.next_act(x: Tms) -> Nat:
+  match x:
+    case Tms{_, _, _, _, +n}:
+      n
+
+def Act.id(x: Act) -> Nat:
+  match x:
+    case Act{+id, _, _}:
+      id
+
+def Act.due(x: Act) -> Nat:
+  match x:
+    case Act{_, +due, _}:
+      due
+
+def Act.what(x: Act) -> What:
+  match x:
+    case Act{_, _, +w}:
+      w
 
 # ---- a timer's runs ----
 
@@ -267,18 +304,18 @@ def all_in(xs: List<&2, Nat>, +ys: List<&2, Nat>) -> Bool:
 
 def set(+tm: Tms, +x: Timer) -> Tms:
   match tm:
-    case Tms{+live, +ended, +last}:
-      Tms{put(live, x), ended, Nat.max(last, Timer.id(x))}
+    case Tms{+live, +ended, +last, +acts, +na}:
+      Tms{put(live, x), ended, Nat.max(last, Timer.id(x)), acts, na}
 
 def fired(+tm: Tms, +id: Nat, +fired: Nat, +next: Nat, +at: Nat, +undelivered: Bool) -> Tms:
   match tm:
-    case Tms{+live, +ended, +last}:
-      Tms{fire_in(live, id, fired, next, at, undelivered), ended, last}
+    case Tms{+live, +ended, +last, +acts, +na}:
+      Tms{fire_in(live, id, fired, next, at, undelivered), ended, last, acts, na}
 
 def run(+tm: Tms, +id: Nat, +at: Nat) -> Tms:
   match tm:
-    case Tms{+live, +ended, +last}:
-      Tms{run_in(live, id, at), ended, last}
+    case Tms{+live, +ended, +last, +acts, +na}:
+      Tms{run_in(live, id, at), ended, last, acts, na}
 
 def cap(+xs: List<&2, Ended>) -> List<&2, Ended>:
   List.drop(&2, Ended, xs, Nat.sub(List.length(&2, Ended, xs), ENDED_KEPT()))
@@ -294,8 +331,54 @@ def ended_add(m: Maybe<&2, Timer>, +xs: List<&2, Ended>, +at: Nat, +why: String)
 # the ended ones when it was live
 def stop(+tm: Tms, +id: Nat, +why: String, +at: Nat) -> Tms:
   match tm:
-    case Tms{+live, +ended, +last}:
-      Tms{drop(live, id), ended_add(find(live, id), ended, at, why), last}
+    case Tms{+live, +ended, +last, +acts, +na}:
+      Tms{drop(live, id), ended_add(find(live, id), ended, at, why), last, acts, na}
+
+# ---- the acts (bise desktop S2) ----
+
+def act_drop(xs: List<&2, Act>, +id: Nat) -> List<&2, Act>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case Con{+h, +t}:
+      Bool.pick(List<&2, Act>, Nat.is_eq(Act.id(h), id), act_drop(t, id), h <> act_drop(t, id))
+
+def act_find(xs: List<&2, Act>, +id: Nat) -> Maybe<&2, Act>:
+  match xs:
+    case Nil{}:
+      None{}
+    case Con{+h, +t}:
+      Bool.pick(Maybe<&2, Act>, Nat.is_eq(Act.id(h), id), Some{h}, act_find(t, id))
+
+# act_set: one more act (its id the next free one)
+def act_set(+tm: Tms, +a: Act) -> Tms:
+  match tm:
+    case Tms{+live, +ended, +last, +acts, +na}:
+      Tms{live, ended, last, List.append(&2, Act, acts, [a]), Nat.max(na, 1n+Act.id(a))}
+
+# act_done: it fired (or was dropped): gone, whatever it was
+def act_done(+tm: Tms, +id: Nat) -> Tms:
+  match tm:
+    case Tms{+live, +ended, +last, +acts, +na}:
+      Tms{live, ended, last, act_drop(acts, id), na}
+
+# the acts due at `now` (due <= now), in order
+def acts_due(xs: List<&2, Act>, +now: Nat) -> List<&2, Act>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case Con{+h, +t}:
+      Bool.pick(List<&2, Act>, Nat.is_le(Act.due(h), now), h <> acts_due(t, now), acts_due(t, now))
+
+def what_json(w: What) -> J.Json:
+  match w:
+    case RouteSend{+m}:
+      J.obj([J.kv("kind", J.JStr{"route_send"}), J.kv("rid", J.JNum{m})])
+    case Retry{+x}:
+      J.obj([J.kv("kind", J.JStr{"retry"}), J.kv("xid", J.JNum{x})])
+
+def act_json(+a: Act) -> J.Json:
+  J.obj([J.kv("id", J.JNum{Act.id(a)}), J.kv("due", J.JNum{Act.due(a)}), J.kv("what", what_json(Act.what(a)))])
 
 # ---- the pure decisions (core.bend's timers section wires them) ----
 
@@ -448,3 +531,15 @@ def ended_list_json(xs: List<&2, Ended>) -> List<&2, J.Json>:
       Nil{}
     case Con{+h, +t}:
       ended_json(h) <> ended_list_json(t)
+
+# the acts' journal kinds (model.bend's Ev EAct)
+type ActEv is Data:
+  ActSet{a: Act}
+  ActDone{id: Nat}
+
+def act_apply(+tm: Tms, e: ActEv) -> Tms:
+  match e:
+    case ActSet{+a}:
+      act_set(tm, a)
+    case ActDone{+id}:
+      act_done(tm, id)

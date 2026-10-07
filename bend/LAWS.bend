@@ -41,6 +41,9 @@ import ./hub/cx.bend as HX
 import ./hub/core.bend as HC
 import ./hub/inv.bend as HI
 import ./hub/timers.bend as HTM
+import ./hub/xhub-model.bend as HXH
+import ./hub/xhub.bend as HXB
+import ./hub/codec.bend as HCo
 
 # LAW: a checkpoint restores to exactly the session it exported.
 law checkpoint_roundtrip:
@@ -4425,6 +4428,362 @@ law stop_leaves_no_queue:
   for u: HI.Unique(HX.d(o, cx))
   {HM.queued_for(HX.d(o, HC.stop_task(o, cx, n, life, why)), n) == Nil{} : List<&2, HM.Msg>}
 
+# ---- queued user input (the window's "send queued", bise desktop) ----
+# The user's `input {queued: true}` is a queued-mode message (Msg.queued),
+# the path `sb send --mode queued` already takes. An older sb-core ignores
+# the field and delivers at once (a safe degrade, no journal change).
+
+# LAW: a queued input never answers a question card, at send: it is a
+# message for the next turn. A card still open at the turn's end stays
+# open; the input arrives as a message (says.card with no card).
+law user_queued_never_answers_a_card:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +to: String
+  for +text: String
+  {HC.user_says(o, cx, to, text, True{}) == HC.says.card(o, None{}, cx, to, text, True{}) : HX.Cx<o>}
+
+def any_queued(xs: List<&2, HM.Msg>) -> Bool:
+  match xs:
+    case Nil{}:
+      False{}
+    case Con{+h, +t}:
+      HM.Msg.queued(h) || any_queued(t)
+
+# LAW: what a busy agent is handed (steered) holds no queued-mode message:
+# a queued input waits for the turn's end. So a plain input sent while
+# queued ones wait goes first (steered); the queued ones follow at idle,
+# in id order (queued_for), in one say batch (user_queued_said_at_idle),
+# each once (delivered_once).
+law user_queued_waits_for_turn_end:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +name: String
+  for +q: List<&2, HM.Msg>
+  for +m: Bool
+  {HC.pump.run(o, HM.RBusy{}, cx, name, q, m) == HC.pump.batch(o, HC.not_queued_mode(q), cx, name, True{}, m) : HX.Cx<o>}
+
+law busy_batch_has_no_queued:
+  for +xs: List<&2, HM.Msg>
+  {any_queued(HC.not_queued_mode(xs)) == False{} : Bool}
+
+# LAW: at idle, everything queued for the agent goes in one say batch, in
+# its order (queued and plain alike).
+law user_queued_said_at_idle:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +name: String
+  for +q: List<&2, HM.Msg>
+  for +m: Bool
+  {HC.pump.run(o, HM.RIdle{}, cx, name, q, m) == HC.pump.batch(o, q, cx, name, False{}, m) : HX.Cx<o>}
+
+# ---- the composer rule (lead m_8777, architect m_8801) ----
+# An approval card takes one of its options, never typed words: the TUI's
+# /answer and the window share it. The words leave the card open and wake
+# nobody (the window sends them to the agent as a message).
+
+# LAW: typed words on a confirm card (not 1, 2, 3 nor the TUI's explicit
+# `deny: <why>`) are refused: no verdict, the card stays open.
+law card_confirm_words_refused:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +c: HM.Card
+  for +text: String
+  for e: {HC.confirm_ok(text) == False{} : Bool}
+  {HC.answer.kind(o, HC.KConfirm{}, cx, c, text) == HC.words_refused(o, cx, c, HC.confirm_opts()) : HX.Cx<o>}
+
+# LAW: `no` and `no: <why>` (any case, lead m_10900) are deny aliases: the
+# card gets the same verdict path as its option 3, with his words as the
+# note (the gate reads them as no, never allow: gate::answer_of).
+law card_confirm_no_alias:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +c: HM.Card
+  for +text: String
+  for e: {HC.is_no(String.to_lower(String.trim(text))) == True{} : Bool}
+  {HC.answer.kind(o, HC.KConfirm{}, cx, c, text) == HC.answer.confirm(o, True{}, cx, c, text) : HX.Cx<o>}
+
+# LAW: only `no` itself or its `no:` prefix: words that start like it stay
+# words.
+law card_confirm_nope_is_words:
+  {HC.confirm_ok("nope") == False{} : Bool}
+
+law card_confirm_now_is_words:
+  {HC.confirm_ok("now") == False{} : Bool}
+
+law card_confirm_no_thanks_is_words:
+  {HC.confirm_ok("No thanks") == False{} : Bool}
+
+# LAW: a hub item (merge, feature_*, update, signin) takes only one of its
+# options' numbers: other words are refused, the item stays open, main is
+# not woken.
+law card_choice_words_refused:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +c: HM.Card
+  for +text: String
+  for e: {HC.is_option(HM.Card.text(c), text) == False{} : Bool}
+  {HC.answer.kind(o, HC.KChoice{}, cx, c, text) == HC.words_refused(o, cx, c, "one of its numbers") : HX.Cx<o>}
+
+# ---- bise's cross-hub messages (desktop S2, hub/xhub.bend) ----
+# Local laws on xhub.bend's decisions and xhub-model.bend's state: the
+# core's `cross-hub` section only wires them (it decides nothing).
+
+# LAW: only main forwards the user's words to a project.
+law xhub_only_main_forwards:
+  for +s: HM.St
+  for +from: String
+  for +id: Nat
+  for e: {String.eq(from, HM.MAIN()) == False{} : Bool}
+  {HXB.forward(s, from, id) == HXB.FwdErr{"only main forwards to the projects"} : HXB.Fwd}
+
+# LAW: a message of his is forwarded once: with an outbox entry for it,
+# main's forward is refused.
+law xhub_forward_once:
+  for +s: HM.St
+  for +id: Nat
+  for +ob: HXH.Out
+  for e: {HXH.out_by_msg(HXH.Xs.outbox(HM.St.x(s)), id) == Some{ob} : Maybe<&2, HXH.Out>}
+  {HXB.forward(s, HM.MAIN(), id) == HXB.FwdErr{String.append(String.append(HXB.mid(id), " was already forwarded to "), HXH.Out.project(ob))} : HXB.Fwd}
+
+# LAW: only his own words go by reference (architect's B): a message not
+# from the user is refused, whatever it says (bise's own question goes by
+# `sb project ask`, from @bise, with no authority).
+law xhub_forward_needs_his_message:
+  for +m: HM.Msg
+  for +id: Nat
+  for e: {String.eq(HM.Msg.from(m), HM.USER()) == False{} : Bool}
+  {HXB.his.go(Some{m}, id) == HXB.FwdErr{String.append(HXB.mid(id), " is not a message the user sent you: forward his own words only (your own question: sb project ask)")} : HXB.Fwd}
+
+# LAW: bise's own question needs words: a blank one is refused, any other
+# may go (architect m_8864: the core's section validates nothing itself).
+law xhub_ask_needs_words:
+  for +text: String
+  for b: Bool
+  for e: {HM.trim_is_empty(text) == b : Bool}
+  {HXB.ask_ok(text) == Bool.pick(Maybe<&2, String>, b, Some{"empty question"}, None{}) : Maybe<&2, String>}
+
+# LAW: a send settles once: after its settle, no answer opens it again
+# (a second x_reply for it changes nothing: core's xanswer on None).
+law xhub_outbox_settles_once:
+  for +x: HXH.Xs
+  for +xid: Nat
+  {HXB.open(HXH.x_op(x, xid, HXH.OpSettled{}), xid) == None{} : Maybe<&2, HXH.Out>}
+
+# LAW: a delivery is said once: once received, the same origin (hub, xid)
+# is seen (core's xin acks it and says nothing).
+law xhub_xin_delivered_once:
+  for +x: HXH.Xs
+  for +i: HXH.XIn
+  {HXB.seen(HXH.x_in(x, i), HXH.XIn.hub(i), HXH.XIn.xid(i)) == True{} : Bool}
+
+# LAW: an answered record is never due again (core's xreplied journals
+# x_replied with each answer it sends back).
+law xhub_xin_replied_once:
+  for +i: HXH.XIn
+  {HXB.reply.of(Some{HXH.XIn.done(i)}) == None{} : Maybe<&2, HXH.XIn>}
+
+# ---- the routing hold (desktop S2 step 2, xhub.bend + core's `routing
+# hold` section) ----
+
+# LAW: a route has one outcome: once it ended (sent or cancelled), it is
+# never held again, so no fire, correction or cancel acts on it twice.
+law route_one_outcome:
+  for +r: HXH.Route
+  for s: HXH.RSt
+  for e: {HXB.is_held(s) == False{} : Bool}
+  {HXB.held.of(Some{HXH.route_op(HXH.REnd{s}, r)}) == None{} : Maybe<&2, HXH.Route>}
+
+# LAW: a correction acts only on a held route: one that went or was
+# cancelled gets a notice, nothing else.
+law route_correct_only_held:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +rid: Nat
+  for +to: String
+  for +name: String
+  {HC.route_correct.go(o, None{}, cx, rid, to, name) == HC.route_gone(o, cx, rid) : HX.Cx<o>}
+
+# LAW: a correction changes the project only: its due time stays (his 2 s
+# don't start again).
+law route_correct_keeps_due:
+  for +r: HXH.Route
+  for +to: String
+  for +name: String
+  {HXH.Route.due(HXH.route_op(HXH.RTo{to, name}, r)) == HXH.Route.due(r) : Nat}
+
+# LAW: a held route's act is due HOLD_MS (2 s) after the hold, so with
+# act_due_only it fires at that tick or later, never before.
+law route_fires_at_due_only:
+  for +x: HXH.Xs
+  for +tm: HTM.Tms
+  for +text: String
+  for +via: String
+  for +to: String
+  for +name: String
+  for +why: String
+  for +now: Nat
+  for +context: String
+  {HTM.Act.due(HXB.route_act(HXB.new_route(x, tm, text, via, to, name, why, now, context))) == Nat.add(now, 2000n) : Nat}
+
+# LAW (architect m_8883): a fire makes no turn: his message is journaled
+# (an id for the history and `--input`) by route_said, never by a send
+# (which pumps main), then delivered, settled and forwarded; main reads
+# it in a note at its next turn.
+law route_fire_makes_no_turn:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +r: HXH.Route
+  {HC.route_fire(o, Some{r}, cx) == HC.route_fire.sent(o, HC.route_said(o, cx, r), r, HM.St.next_msg(HC.st(o, cx))) : HX.Cx<o>}
+
+# ---- unclear routes (desktop S2 step 5, architect m_9321: his words the
+# guess can't place wait PICK_MS for BISE_ROUTE_MODEL's pick in sb-core's
+# hold, never in the shell) ----
+
+# LAW: an unclear route (held, no target) whose act fires goes plain to
+# bise's main (the cancel path), never to a project's outbox.
+law route_unclear_goes_plain:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +r: HXH.Route
+  for e: {HXB.is_unclear(r) == True{} : Bool}
+  {HC.route_go(o, Some{r}, cx) == HC.route_plain(o, cx, r) : HX.Cx<o>}
+
+# LAW: an unclear route's act is due PICK_MS (1.5 s) after the hold: the
+# model's time, after which his words stay with bise.
+law route_unclear_waits_pick_ms:
+  for +x: HXH.Xs
+  for +tm: HTM.Tms
+  for +text: String
+  for +via: String
+  for +now: Nat
+  for +context: String
+  {HTM.Act.due(HXB.route_act(HXB.new_route_at(x, tm, text, via, "", "", "", Nat.add(now, HXB.PICK_MS()), context))) == Nat.add(now, 1500n) : Nat}
+
+# LAW: a pick acts only on a route still held: one that went (its due
+# passed, plain to main) or got a target changes nothing.
+law route_pick_only_unclear:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +to: String
+  for +name: String
+  for +why: String
+  {HC.route_pick.go(o, None{}, cx, to, name, why) == cx : HX.Cx<o>}
+
+# LAW: a plain input to bise's main while an unclear route of his waits is
+# held behind it (no send now), due at the latest unclear due ...
+law route_plain_waits_behind_unclear:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +d: Nat
+  for +to: String
+  for +text: String
+  for +queued: Bool
+  {HC.user_input.behind(o, Some{d}, cx, to, text, queued) == HC.route_behind(o, cx, text, d) : HX.Cx<o>}
+
+# LAW: ... which is no earlier than any unclear route's due, so the
+# unclear one fires first (acts_due keeps the acts' order) and both reach
+# main in order.
+law route_behind_is_latest:
+  for +r: HXH.Route
+  for +t: List<&2, HXH.Route>
+  for e: {HXB.is_unclear(r) == True{} : Bool}
+  {Nat.is_ge(Maybe.default(&2, Nat, HXB.unclear_due(r <> t), 0n), HXH.Route.due(r)) == True{} : Bool}
+
+# ---- followed jobs (desktop S10, core.bend's `followed jobs`) ----
+
+# LAW: before its end a followed task's progress makes no job_end: a
+# progress report changes nothing but the report itself.
+law follow_quiet_before_end:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +from: String
+  for +summary: String
+  {HC.req_report.kind(o, cx, from, "progress", summary) == cx : HX.Cx<o>}
+
+# LAW: its done ends the job in the same step (job_end when followed).
+law follow_done_at_its_report:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +from: String
+  for +summary: String
+  {HC.req_report.kind(o, cx, from, "done", summary) == HC.job_end(o, HC.report_done(o, cx, from), from, "done", summary) : HX.Cx<o>}
+
+# LAW: a failure ends it at once, in the same step as the failure.
+law follow_failed_at_once:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +from: String
+  for +summary: String
+  {HC.req_report.kind(o, cx, from, "failed", summary) == HC.job_end(o, HC.report_failed(o, cx, from, summary), from, "failed", summary) : HX.Cx<o>}
+
+# LAW: an agent not followed has no job_end (so a second end of the same
+# job, after the first turned follow off, says nothing).
+law follow_done_once:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +name: String
+  for +state: String
+  for +summary: String
+  for +label: String
+  for +hub: String
+  {HC.job_end.go(o, False{}, cx, name, state, summary, label, hub) == cx : HX.Cx<o>}
+
+# LAW (architect m_9154): one job per follow: job_end turns follow off.
+law follow_one_shot:
+  for +a: HM.Agent
+  {HM.Agent.follow(HM.agent_op(a, HM.OFollow{None{}})) == False{} : Bool}
+
+# LAW (J, architect m_10223): the hub that asked for a follow is kept
+# with it (journaled by EFollow), so its end can go back there.
+law follow_hub_journaled:
+  for +a: HM.Agent
+  for +hub: String
+  {HM.Agent.follow_hub(HM.agent_op(a, HM.OFollow{Some{hub}})) == hub : String}
+
+# LAW (J): the job's end clears it with the follow: a later end of the
+# same agent goes back nowhere.
+law follow_hub_cleared:
+  for +a: HM.Agent
+  {HM.Agent.follow_hub(HM.agent_op(a, HM.OFollow{None{}})) == "" : String}
+
+# LAW (J): an end goes back only to a hub that asked: a follow of this
+# hub's own main or window ("") puts nothing in the outbox.
+law follow_end_back_only_to_who_asked:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +hub: String
+  for +j: J.Json
+  {HC.job_end.back(o, True{}, cx, hub, j) == cx : HX.Cx<o>}
+
+# LAW (one clock): an act fires once: after its act_done, it is gone.
+law act_fires_once:
+  for +tm: HTM.Tms
+  for +id: Nat
+  {HTM.act_find(HTM.Tms.acts(HTM.act_done(tm, id)), id) == None{} : Maybe<&2, HTM.Act>}
+
+def all_due(xs: List<&2, HTM.Act>, +now: Nat) -> Bool:
+  match xs:
+    case Nil{}:
+      True{}
+    case Con{+h, +t}:
+      Nat.is_le(HTM.Act.due(h), now) && all_due(t, now)
+
+# LAW (one clock): a tick fires only acts due by its now.
+law act_due_only:
+  for +xs: List<&2, HTM.Act>
+  for +now: Nat
+  {all_due(HTM.acts_due(xs, now), now) == True{} : Bool}
+
+# LAW (old-core replay, architect m_8524 c.): a journal line of a kind
+# this sb-core doesn't know decodes to nothing, so it is skipped, never
+# misread; the script test replays a fixture journal with the base's
+# sb-core for the other direction.
+law unknown_kind_skipped:
+  for +j: J.Json
+  for +n: String
+  {HCo.ev_of.kind(HCo.KUnknown{}, j, n) == None{} : Maybe<&2, HM.Ev>}
+
 # LAW (L12): stopping or dropping a task, in any state where no two open
 # cards share an id (every state the hub reaches: cards_unique), leaves no
 # open card of it.
@@ -5014,6 +5373,103 @@ law image_why_checks:
     Con{Im.img_why(4, "QUJD"), Nil{}}}}}
     == Con{"empty file", Con{"invalid base64", Con{"invalid base64", Con{"", Nil{}}}}}
     : List<&2, String>}
+
+# ---- a stopped turn is a typed fact (desktop reset, architect m_9650 D,
+# m_9693): sb-core, where the interrupt is decided, writes one 'stopped'
+# line in that agent's feed in the same step as fx interrupt ----
+
+# LAW: the window's or the TUI's interrupt of a running turn emits fx
+# interrupt and then exactly one 'stopped' line for that agent.
+law interrupt_says_stopped_once:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +n: String
+  for e: {HC.is_busy(HX.Rt.run(HC.rt(o, cx, n))) == True{} : Bool}
+  {HC.interrupt.go(o, Some{n}, cx) == HC.line(o, HC.interrupt.fx(o, cx, n), n, "stopped", "stopped") : HX.Cx<o>}
+
+# LAW: with no turn running, the interrupt is only a notice: no fx
+# interrupt, no 'stopped' line.
+law interrupt_idle_says_nothing:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +n: String
+  for e: {HC.is_busy(HX.Rt.run(HC.rt(o, cx, n))) == False{} : Bool}
+  {HC.interrupt.go(o, Some{n}, cx) == HC.notice(o, cx, "no turn in progress to interrupt") : HX.Cx<o>}
+
+# LAW: an agent's `sb interrupt` of a running turn says it the same way
+# (one 'stopped' line after fx interrupt), then answers ok.
+law req_interrupt_says_stopped_once:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +token: Nat
+  for +agent: String
+  for +n: String
+  for e: {HC.is_busy(HX.Rt.run(HC.rt(o, cx, n))) == True{} : Bool}
+  {HC.req_interrupt(o, Some{n}, cx, token, agent) == HC.reply(o, HC.line(o, HC.interrupt.fx(o, cx, n), n, "stopped", "stopped"), token, HC.ok_body(Nil{})) : HX.Cx<o>}
+
+# ---- what a task sent is a fact of its own thread (desktop bar A.3 and
+# S16, architect m_10203): sb-core writes one 'sent' line in the sender's
+# own feed for a task's message to another agent; main's feed keeps its
+# 'msg' lines, a message to the user stays 'msg-you'. A card main opens
+# for a task's message shows in that task's feed too. Views only ----
+
+# LAW: a task's message to another agent writes exactly one 'sent' line
+# in the task's feed: to, the message id, 1 if it waits for a reply, text.
+law task_send_says_sent_once:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +m: HM.Msg
+  for e: {HC.is_task_send(o, cx, HM.Msg.from(m), HM.Msg.to(m)) == True{} : Bool}
+  {HC.feed_sender(o, cx, m) == HC.line_fields(o, cx, HM.Msg.from(m), "sent", [HM.Msg.to(m), HC.mid(HM.Msg.id(m)), Bool.pick(String, HM.Msg.expect(m), "1", "0"), HM.Msg.text(m)]) : HX.Cx<o>}
+
+# LAW: main's messages, the user's, a message to the user, and a message
+# from a name that isn't an agent of this hub write no 'sent' line.
+law other_send_says_no_sent:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +m: HM.Msg
+  for e: {HC.is_task_send(o, cx, HM.Msg.from(m), HM.Msg.to(m)) == False{} : Bool}
+  {HC.feed_sender(o, cx, m) == cx : HX.Cx<o>}
+
+# LAW: a sender this hub has no agent of ('@bise', a cross-hub
+# delegation, or any unknown name) is never a task's send.
+law unknown_sender_is_no_task_send:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +from: String
+  for +to: String
+  for e: {HC.has_agent(o, cx, from) == False{} : Bool}
+  {HC.is_task_send(o, cx, from, to) == False{} : Bool}
+
+# LAW: a card opened for a task's message also writes its 'card' line in
+# that task's feed (main's own cards stay in main's feed only).
+law task_card_shows_in_its_feed:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +id: Nat
+  for +agent: String
+  for +text: String
+  for e: {HC.is_task_of(o, cx, agent) == True{} : Bool}
+  {HC.card_to_asker(o, cx, id, agent, text) == HC.line(o, cx, agent, "card", HC.cat(["#", HC.ns(id), " question @", agent, " : ", text])) : HX.Cx<o>}
+
+# LAW: a card whose agent isn't an agent of this hub (or is main) writes
+# no extra line.
+law other_card_no_extra_line:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +id: Nat
+  for +agent: String
+  for +text: String
+  for e: {HC.is_task_of(o, cx, agent) == False{} : Bool}
+  {HC.card_to_asker(o, cx, id, agent, text) == cx : HX.Cx<o>}
+
+# LAW: an agent this hub doesn't have is never a task of it.
+law unknown_agent_is_no_task:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +agent: String
+  for e: {HC.has_agent(o, cx, agent) == False{} : Bool}
+  {HC.is_task_of(o, cx, agent) == False{} : Bool}
 
 # ---- MCP calls that fail (runtime/mcp-pure.bend) ----
 

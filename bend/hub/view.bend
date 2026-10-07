@@ -50,6 +50,7 @@ def agent_json(+a: M.Agent, +x: X.Rt, +wo: J.Json) -> J.Json:
     J.kv("last_report", M.Agent.report(a)),
     J.kv("aliases", J.JArr{H.jstrs(M.Agent.aliases(a))}), J.kv("files", J.JArr{H.jstrs(M.Agent.files(a))}),
     J.kv("snapshot_ref", C.jmaybe_str(M.Agent.snap(a))),
+    J.kv("follow", J.JBool{M.Agent.follow(a)}),
     J.kv("run", J.JStr{H.run_str(X.Rt.run(x))}), J.kv("waiting", J.JBool{X.Rt.waiting(x)}),
     J.kv("waiting_on", wo),
     J.kv("turn_ms", H.jturn(X.Rt.turn(x)))])
@@ -161,6 +162,11 @@ def ev_names(e: M.Ev) -> List<&2, String>:
       [name]
     case M.ERenamed{+name, +nn}:
       [name, nn]
+    # S10: following and a job's end change the agent's row
+    case M.EFollow{+name, _, _}:
+      [name]
+    case M.EJobEnd{+name, _}:
+      [name]
     case _:
       Nil{}
 

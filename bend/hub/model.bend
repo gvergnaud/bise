@@ -8,6 +8,8 @@ import ../vendor/json.bend as J
 
 import ./timers.bend as TM
 
+import ./xhub-model.bend as XH
+
 type Life is Data:
   LActive{}
   LStopped{}
@@ -52,12 +54,12 @@ type Agent is Data:
     declared: Maybe<&2, Decl>, aliases: List<&2, String>,
     files: List<&2, String>, ws: J.Json, dir: String, brief: J.Json,
     created: Nat, failure: Maybe<&2, String>, note: String, report: J.Json,
-    snap: Maybe<&2, String>}
+    snap: Maybe<&2, String>, follow: Maybe<&2, String>}
 
 type St is Data:
   St{agents: List<&2, Agent>, order: List<&2, String>, msgs: List<&2, MRec>,
     cards: List<&2, Card>, notes: List<&2, String>, next_msg: Nat,
-    next_card: Nat, tm: TM.Tms}
+    next_card: Nat, tm: TM.Tms, x: XH.Xs}
 
 type Ev is Data:
   ETaskCreated{name: String, parent: String, brief: J.Json, ws: J.Json, at: Nat}
@@ -81,6 +83,17 @@ type Ev is Data:
   ETimerFired{id: Nat, fired: Nat, next: Nat, at: Nat, undelivered: Bool}
   ETimerRun{id: Nat, at: Nat}
   ETimerStop{id: Nat, why: String, at: Nat}
+  # bise desktop S2: the cross-hub state's lines (xhub-model.bend) and
+  # the acts' (timers.bend): one constructor each, their kinds inside
+  EX{e: XH.XEv}
+  EAct{e: TM.ActEv}
+  # bise desktop S10: someone follows the agent (or stops), and the end of
+  # a followed job (done or failed), journaled once: it turns follow off
+  # (one job per follow, law follow_one_shot). `hub`: the hub that asked
+  # (bise's home hub, through `sb follow <p>/<agent>`; "" this hub's own
+  # main or window): its end goes back there (J, law follow_hub_journaled)
+  EFollow{name: String, on: Bool, hub: String}
+  EJobEnd{name: String, state: String}
 
 type AgentOp is Data:
   OLife{life: Life, reason: Maybe<&2, String>}
@@ -90,6 +103,7 @@ type AgentOp is Data:
   ODeclared{d: Maybe<&2, Decl>, note: String}
   OFile{path: String}
   ORename{new_name: String}
+  OFollow{f: Maybe<&2, String>}
 
 type MsgOp is Data:
   OSt{st: MSt}
@@ -152,43 +166,48 @@ def Card.pr(x: Card) -> Maybe<&2, Nat>:
 
 def St.agents(x: St) -> List<&2, Agent>:
   match x:
-    case St{+agents, _, _, _, _, _, _, _}:
+    case St{+agents, _, _, _, _, _, _, _, _}:
       agents
 
 def St.order(x: St) -> List<&2, String>:
   match x:
-    case St{_, +order, _, _, _, _, _, _}:
+    case St{_, +order, _, _, _, _, _, _, _}:
       order
 
 def St.msgs(x: St) -> List<&2, MRec>:
   match x:
-    case St{_, _, +msgs, _, _, _, _, _}:
+    case St{_, _, +msgs, _, _, _, _, _, _}:
       msgs
 
 def St.cards(x: St) -> List<&2, Card>:
   match x:
-    case St{_, _, _, +cards, _, _, _, _}:
+    case St{_, _, _, +cards, _, _, _, _, _}:
       cards
 
 def St.notes(x: St) -> List<&2, String>:
   match x:
-    case St{_, _, _, _, +notes, _, _, _}:
+    case St{_, _, _, _, +notes, _, _, _, _}:
       notes
 
 def St.next_msg(x: St) -> Nat:
   match x:
-    case St{_, _, _, _, _, +next_msg, _, _}:
+    case St{_, _, _, _, _, +next_msg, _, _, _}:
       next_msg
 
 def St.next_card(x: St) -> Nat:
   match x:
-    case St{_, _, _, _, _, _, +next_card, _}:
+    case St{_, _, _, _, _, _, +next_card, _, _}:
       next_card
 
 def St.tm(x: St) -> TM.Tms:
   match x:
-    case St{_, _, _, _, _, _, _, +tm}:
+    case St{_, _, _, _, _, _, _, +tm, _}:
       tm
+
+def St.x(x: St) -> XH.Xs:
+  match x:
+    case St{_, _, _, _, _, _, _, _, +xs}:
+      xs
 
 def Msg.id(x: Msg) -> Nat:
   match x:
@@ -207,11 +226,11 @@ def rec_of(xs: List<&2, MRec>, +id: Nat) -> Maybe<&2, MRec>:
   find(~MRec, ~Nat, ~(r => Msg.id(MRec.msg(r))), ~(a => b => Nat.is_eq(a, b)), xs, id)
 
 def new_agent(+name: String, +is_main: Bool, +parent: Maybe<&2, String>, +ws: J.Json, +brief: J.Json, +created: Nat) -> Agent:
-  Agent{name, is_main, parent, LActive{}, None{}, Nil{}, Nil{}, ws, name, brief, created, None{}, "", J.JNull{}, None{}}
+  Agent{name, is_main, parent, LActive{}, None{}, Nil{}, Nil{}, ws, name, brief, created, None{}, "", J.JNull{}, None{}, None{}}
 
 def Agent.name(x: Agent) -> String:
   match x:
-    case Agent{+name, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
+    case Agent{+name, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
       name
 
 # replace (or add) the agent named `n`
@@ -334,7 +353,7 @@ def agent_named(xs: List<&2, Agent>, +n: String) -> Maybe<&2, Agent>:
 
 def Agent.aliases(x: Agent) -> List<&2, String>:
   match x:
-    case Agent{_, _, _, _, _, +aliases, _, _, _, _, _, _, _, _, _}:
+    case Agent{_, _, _, _, _, +aliases, _, _, _, _, _, _, _, _, _, _}:
       aliases
 
 def agent_alias(xs: List<&2, Agent>, +n: String) -> Maybe<&2, String>:
@@ -381,22 +400,24 @@ def agent_op.file(known: Bool, +files: List<&2, String>, +p: String) -> List<&2,
 
 def agent_op(+a: Agent, op: AgentOp) -> Agent:
   match a:
-    case Agent{+name, +is_main, +parent, +life, +declared, +aliases, +files, +ws, +dir, +brief, +created, +failure, +note, +report, +snap}:
+    case Agent{+name, +is_main, +parent, +life, +declared, +aliases, +files, +ws, +dir, +brief, +created, +failure, +note, +report, +snap, +follow}:
       match op:
         case OLife{+l, +why}:
-          Agent{name, is_main, parent, l, agent_op.decl(l, declared), aliases, files, ws, dir, brief, created, why, note, report, snap}
+          Agent{name, is_main, parent, l, agent_op.decl(l, declared), aliases, files, ws, dir, brief, created, why, note, report, snap, follow}
         case OWs{+w}:
-          Agent{name, is_main, parent, life, declared, aliases, files, w, dir, brief, created, failure, note, report, snap}
+          Agent{name, is_main, parent, life, declared, aliases, files, w, dir, brief, created, failure, note, report, snap, follow}
         case ODeclared{+d, +n}:
-          Agent{name, is_main, parent, life, d, aliases, files, ws, dir, brief, created, failure, n, report, snap}
+          Agent{name, is_main, parent, life, d, aliases, files, ws, dir, brief, created, failure, n, report, snap, follow}
         case OFile{+p}:
-          Agent{name, is_main, parent, life, declared, aliases, agent_op.file(str_in(files, p), files, p), ws, dir, brief, created, failure, note, report, snap}
+          Agent{name, is_main, parent, life, declared, aliases, agent_op.file(str_in(files, p), files, p), ws, dir, brief, created, failure, note, report, snap, follow}
         case ORename{+nn}:
-          Agent{nn, is_main, parent, life, declared, snoc(String, aliases, name), files, ws, dir, brief, created, failure, note, report, snap}
+          Agent{nn, is_main, parent, life, declared, snoc(String, aliases, name), files, ws, dir, brief, created, failure, note, report, snap, follow}
         case OSnap{+sn}:
-          Agent{name, is_main, parent, life, declared, aliases, files, ws, dir, brief, created, failure, note, report, sn}
+          Agent{name, is_main, parent, life, declared, aliases, files, ws, dir, brief, created, failure, note, report, sn, follow}
         case OReport{+rp}:
-          Agent{name, is_main, parent, life, declared, aliases, files, ws, dir, brief, created, failure, note, rp, snap}
+          Agent{name, is_main, parent, life, declared, aliases, files, ws, dir, brief, created, failure, note, rp, snap, follow}
+        case OFollow{+f}:
+          Agent{name, is_main, parent, life, declared, aliases, files, ws, dir, brief, created, failure, note, report, snap, f}
 
 # apply an operation to the agent named `n` (no agent: nothing changes)
 def map_agent(xs: List<&2, Agent>, +n: String, +op: AgentOp) -> List<&2, Agent>:
@@ -509,50 +530,58 @@ def Msg.thread(x: Msg) -> Nat:
 
 def apply(+st: St, e: Ev) -> St:
   match st:
-    case St{+agents, +order, +msgs, +cards, +notes, +nm, +nc, +tm}:
+    case St{+agents, +order, +msgs, +cards, +notes, +nm, +nc, +tm, +xs}:
       match e:
         case ETaskCreated{+name, +parent, +brief, +ws, +at}:
           St{put_agent(agents, name, new_agent(name, False{}, Some{parent}, ws, brief, at)),
             Bool.pick(List<&2, String>, str_in(order, name), order, snoc(String, order, name)),
-            msgs, cards, notes, nm, nc, tm}
+            msgs, cards, notes, nm, nc, tm, xs}
         case ELifecycle{+name, +life, +reason}:
-          St{map_agent(agents, name, OLife{life, reason}), order, msgs, cards, notes, nm, nc, tm}
+          St{map_agent(agents, name, OLife{life, reason}), order, msgs, cards, notes, nm, nc, tm, xs}
         case EWorkspace{+name, +ws}:
-          St{map_agent(agents, name, OWs{ws}), order, msgs, cards, notes, nm, nc, tm}
+          St{map_agent(agents, name, OWs{ws}), order, msgs, cards, notes, nm, nc, tm, xs}
         case ESnapshot{+name, +snap}:
-          St{map_agent(agents, name, OSnap{snap}), order, msgs, cards, notes, nm, nc, tm}
+          St{map_agent(agents, name, OSnap{snap}), order, msgs, cards, notes, nm, nc, tm, xs}
         case EDeclared{+name, +status, +note}:
-          St{map_agent(agents, name, ODeclared{status, note}), order, msgs, cards, notes, nm, nc, tm}
+          St{map_agent(agents, name, ODeclared{status, note}), order, msgs, cards, notes, nm, nc, tm, xs}
         case EReported{+name, +report}:
-          St{map_agent(agents, name, OReport{report}), order, msgs, cards, notes, nm, nc, tm}
+          St{map_agent(agents, name, OReport{report}), order, msgs, cards, notes, nm, nc, tm, xs}
         case EFileTouched{+name, +path}:
-          St{map_agent(agents, name, OFile{path}), order, msgs, cards, notes, nm, nc, tm}
+          St{map_agent(agents, name, OFile{path}), order, msgs, cards, notes, nm, nc, tm, xs}
         case ERenamed{+name, +nn}:
-          St{map_agent(agents, name, ORename{nn}), rename_in(order, name, nn), msgs, cards, notes, nm, nc, tm}
+          St{map_agent(agents, name, ORename{nn}), rename_in(order, name, nn), msgs, cards, notes, nm, nc, tm, xs}
         case EMsgSent{+m}:
           St{agents, order,
             apply.settle(Msg.reply_to(m), snoc(MRec, msgs, MRec{m, Queued{"new"}, False{}}), Msg.from(m)),
-            cards, notes, Nat.max(Nat.max(nm, 1n+Msg.id(m)), 1n+Msg.thread(m)), nc, tm}
+            cards, notes, Nat.max(Nat.max(nm, 1n+Msg.id(m)), 1n+Msg.thread(m)), nc, tm, xs}
         case EMsgState{+id, +s}:
-          St{agents, order, map_msg(msgs, id, OSt{s}), cards, notes, nm, nc, tm}
+          St{agents, order, map_msg(msgs, id, OSt{s}), cards, notes, nm, nc, tm, xs}
         case ESettled{+id}:
-          St{agents, order, map_msg(msgs, id, OSettle{}), cards, notes, nm, nc, tm}
+          St{agents, order, map_msg(msgs, id, OSettle{}), cards, notes, nm, nc, tm, xs}
         case ECardOpened{+c}:
-          St{agents, order, msgs, put_card(cards, c), notes, nm, Nat.max(nc, 1n+Card.id(c)), tm}
+          St{agents, order, msgs, put_card(cards, c), notes, nm, Nat.max(nc, 1n+Card.id(c)), tm, xs}
         case ECardClosed{+id, _}:
-          St{agents, order, msgs, drop_card(cards, id), notes, nm, nc, tm}
+          St{agents, order, msgs, drop_card(cards, id), notes, nm, nc, tm, xs}
         case EMainNote{+text, _}:
-          St{agents, order, msgs, cards, snoc(String, notes, text), nm, nc, tm}
+          St{agents, order, msgs, cards, snoc(String, notes, text), nm, nc, tm, xs}
         case ENotesFlushed{}:
-          St{agents, order, msgs, cards, Nil{}, nm, nc, tm}
+          St{agents, order, msgs, cards, Nil{}, nm, nc, tm, xs}
         case ETimerSet{+t, _}:
-          St{agents, order, msgs, cards, notes, nm, nc, TM.set(tm, t)}
+          St{agents, order, msgs, cards, notes, nm, nc, TM.set(tm, t), xs}
         case ETimerFired{+id, +fired, +next, +at, +undelivered}:
-          St{agents, order, msgs, cards, notes, nm, nc, TM.fired(tm, id, fired, next, at, undelivered)}
+          St{agents, order, msgs, cards, notes, nm, nc, TM.fired(tm, id, fired, next, at, undelivered), xs}
         case ETimerRun{+id, +at}:
-          St{agents, order, msgs, cards, notes, nm, nc, TM.run(tm, id, at)}
+          St{agents, order, msgs, cards, notes, nm, nc, TM.run(tm, id, at), xs}
         case ETimerStop{+id, +why, +at}:
-          St{agents, order, msgs, cards, notes, nm, nc, TM.stop(tm, id, why, at)}
+          St{agents, order, msgs, cards, notes, nm, nc, TM.stop(tm, id, why, at), xs}
+        case EX{+xe}:
+          St{agents, order, msgs, cards, notes, nm, nc, tm, XH.apply(xs, xe)}
+        case EAct{+ae}:
+          St{agents, order, msgs, cards, notes, nm, nc, TM.act_apply(tm, ae), xs}
+        case EFollow{+name, +on, +hub}:
+          St{map_agent(agents, name, OFollow{Bool.pick(Maybe<&2, String>, on, Some{hub}, None{})}), order, msgs, cards, notes, nm, nc, tm, xs}
+        case EJobEnd{+name, _}:
+          St{map_agent(agents, name, OFollow{None{}}), order, msgs, cards, notes, nm, nc, tm, xs}
 
 # the state after a journal: the replay of a list of events
 def apply_all(evs: List<&2, Ev>, +st: St) -> St:
@@ -629,15 +658,15 @@ def apply_rev.settle(r: Maybe<&2, Nat>, +msgs: List<&2, MRec>, +from: String) ->
 
 def apply_rev.op(+st: St, +id: Nat, +op: MsgOp) -> St:
   match st:
-    case St{+agents, +order, +msgs, +cards, +notes, +nm, +nc, +tm}:
-      St{agents, order, map_msg.rev(msgs, id, op), cards, notes, nm, nc, tm}
+    case St{+agents, +order, +msgs, +cards, +notes, +nm, +nc, +tm, +xs}:
+      St{agents, order, map_msg.rev(msgs, id, op), cards, notes, nm, nc, tm, xs}
 
 def apply_rev.sent(+st: St, +m: Msg) -> St:
   match st:
-    case St{+agents, +order, +msgs, +cards, +notes, +nm, +nc, +tm}:
+    case St{+agents, +order, +msgs, +cards, +notes, +nm, +nc, +tm, +xs}:
       St{agents, order,
         apply_rev.settle(Msg.reply_to(m), MRec{m, Queued{"new"}, False{}} <> msgs, Msg.from(m)),
-        cards, notes, Nat.max(Nat.max(nm, 1n+Msg.id(m)), 1n+Msg.thread(m)), nc, tm}
+        cards, notes, Nat.max(Nat.max(nm, 1n+Msg.id(m)), 1n+Msg.thread(m)), nc, tm, xs}
 
 # `apply` on a state whose messages are newest first
 def apply_rev(+e: Ev, +st: St) -> St:
@@ -654,8 +683,8 @@ def apply_rev(+e: Ev, +st: St) -> St:
 # the messages turned around: oldest first <-> newest first
 def msgs_rev(+st: St) -> St:
   match st:
-    case St{+agents, +order, +msgs, +cards, +notes, +nm, +nc, +tm}:
-      St{agents, order, List.reverse(&2, MRec, msgs), cards, notes, nm, nc, tm}
+    case St{+agents, +order, +msgs, +cards, +notes, +nm, +nc, +tm, +xs}:
+      St{agents, order, List.reverse(&2, MRec, msgs), cards, notes, nm, nc, tm, xs}
 
 def card_of(xs: List<&2, Card>, +id: Nat) -> Maybe<&2, Card>:
   find(~Card, ~Nat, ~Card.id, ~(a => b => Nat.is_eq(a, b)), xs, id)
@@ -760,7 +789,7 @@ def init(+workspace: String) -> St:
     J.kv("branch", J.JNull{}), J.kv("base_commit", J.JNull{}), J.kv("dropped", J.JBool{False{}})])
   +brief = J.obj([J.kv("objective", J.str("")), J.kv("context", J.str("")), J.kv("constraints", J.JArr{Nil{}}),
     J.kv("done_when", J.JNull{}), J.kv("report_format", J.JNull{})])
-  St{[new_agent(MAIN(), True{}, None{}, ws, brief, 0n)], [MAIN()], Nil{}, Nil{}, Nil{}, 1n, 1n, TM.empty()}
+  St{[new_agent(MAIN(), True{}, None{}, ws, brief, 0n)], [MAIN()], Nil{}, Nil{}, Nil{}, 1n, 1n, TM.empty(), XH.empty()}
 
 def Msg.auto(x: Msg) -> Bool:
   match x:
@@ -805,68 +834,89 @@ def clip_tail(+s: String, +max: Nat) -> String:
 
 def Agent.is_main(x: Agent) -> Bool:
   match x:
-    case Agent{_, +is_main, _, _, _, _, _, _, _, _, _, _, _, _, _}:
+    case Agent{_, +is_main, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
       is_main
 
 def Agent.parent(x: Agent) -> Maybe<&2, String>:
   match x:
-    case Agent{_, _, +parent, _, _, _, _, _, _, _, _, _, _, _, _}:
+    case Agent{_, _, +parent, _, _, _, _, _, _, _, _, _, _, _, _, _}:
       parent
 
 def Agent.life(x: Agent) -> Life:
   match x:
-    case Agent{_, _, _, +life, _, _, _, _, _, _, _, _, _, _, _}:
+    case Agent{_, _, _, +life, _, _, _, _, _, _, _, _, _, _, _, _}:
       life
 
 def Agent.declared(x: Agent) -> Maybe<&2, Decl>:
   match x:
-    case Agent{_, _, _, _, +declared, _, _, _, _, _, _, _, _, _, _}:
+    case Agent{_, _, _, _, +declared, _, _, _, _, _, _, _, _, _, _, _}:
       declared
 
 def Agent.files(x: Agent) -> List<&2, String>:
   match x:
-    case Agent{_, _, _, _, _, _, +files, _, _, _, _, _, _, _, _}:
+    case Agent{_, _, _, _, _, _, +files, _, _, _, _, _, _, _, _, _}:
       files
 
 def Agent.ws(x: Agent) -> J.Json:
   match x:
-    case Agent{_, _, _, _, _, _, _, +ws, _, _, _, _, _, _, _}:
+    case Agent{_, _, _, _, _, _, _, +ws, _, _, _, _, _, _, _, _}:
       ws
 
 def Agent.dir(x: Agent) -> String:
   match x:
-    case Agent{_, _, _, _, _, _, _, _, +dir, _, _, _, _, _, _}:
+    case Agent{_, _, _, _, _, _, _, _, +dir, _, _, _, _, _, _, _}:
       dir
 
 def Agent.brief(x: Agent) -> J.Json:
   match x:
-    case Agent{_, _, _, _, _, _, _, _, _, +brief, _, _, _, _, _}:
+    case Agent{_, _, _, _, _, _, _, _, _, +brief, _, _, _, _, _, _}:
       brief
 
 def Agent.created(x: Agent) -> Nat:
   match x:
-    case Agent{_, _, _, _, _, _, _, _, _, _, +created, _, _, _, _}:
+    case Agent{_, _, _, _, _, _, _, _, _, _, +created, _, _, _, _, _}:
       created
 
 def Agent.failure(x: Agent) -> Maybe<&2, String>:
   match x:
-    case Agent{_, _, _, _, _, _, _, _, _, _, _, +failure, _, _, _}:
+    case Agent{_, _, _, _, _, _, _, _, _, _, _, +failure, _, _, _, _}:
       failure
 
 def Agent.note(x: Agent) -> String:
   match x:
-    case Agent{_, _, _, _, _, _, _, _, _, _, _, _, +note, _, _}:
+    case Agent{_, _, _, _, _, _, _, _, _, _, _, _, +note, _, _, _}:
       note
 
 def Agent.report(x: Agent) -> J.Json:
   match x:
-    case Agent{_, _, _, _, _, _, _, _, _, _, _, _, _, +report, _}:
+    case Agent{_, _, _, _, _, _, _, _, _, _, _, _, _, +report, _, _}:
       report
 
 def Agent.snap(x: Agent) -> Maybe<&2, String>:
   match x:
-    case Agent{_, _, _, _, _, _, _, _, _, _, _, _, _, _, +snap}:
+    case Agent{_, _, _, _, _, _, _, _, _, _, _, _, _, _, +snap, _}:
       snap
+
+def Agent.follow.of(f: Maybe<&2, String>) -> Bool:
+  match f:
+    case None{}:
+      False{}
+    case Some{_}:
+      True{}
+
+# bise desktop S10: someone asked to hear when it ends (one job: off again
+# at its job_end)
+def Agent.follow(x: Agent) -> Bool:
+  match x:
+    case Agent{_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, +f}:
+      Agent.follow.of(f)
+
+# J: the hub its end goes back to ("" none: not followed, or followed by
+# this hub's own main or window)
+def Agent.follow_hub(x: Agent) -> String:
+  match x:
+    case Agent{_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, +f}:
+      Maybe.default(&2, String, f, "")
 
 # dev-flow §3.1: the place of a ws: "shared", or its worktree's id (the
 # Rust Workspace::place_id; an older journal's worktree has none: its
