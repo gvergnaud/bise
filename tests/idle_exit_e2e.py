@@ -31,7 +31,7 @@ GRACE = 4
 def repls(state):
     """The live processes started for this hub (their SB_SOCKET)."""
     out = subprocess.run(["ps", "-axww", "-E", "-o", "pid=,command="], capture_output=True, text=True).stdout
-    needle = "SB_SOCKET=%s/hub.sock" % state
+    needle = "SB_SOCKET=%s/agent.sock" % state
     got = []
     for l in out.splitlines():
         pid, _, rest = l.strip().partition(" ")

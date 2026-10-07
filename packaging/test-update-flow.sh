@@ -92,7 +92,8 @@ hub_up() { state="$(ls -d "$T"/.bise/hubs/pu-ws-* 2>/dev/null | head -n 1)"; [ -
 until_ok 150 hub_up && ok "hub started" || { ko "hub did not start"; tail -n 5 "$WORK/hub.err"; exit 1; }
 root_is() { [ "$(cat "$state/hub.root" 2>/dev/null)" = "$(cd "$P/versions/$1" && pwd -P)" ]; }
 check "hub runs versions/$ID1" root_is "$ID1"
-sbm() { E SB_SOCKET="$state/hub.sock" SB_AGENT=main "$state/bin/sb" "$@" 2>&1; }
+# the agents' socket (agent.sock); a hub older than docs/issues/16 has only hub.sock
+sbm() { s="$state/agent.sock"; [ -S "$s" ] || s="$state/hub.sock"; E SB_SOCKET="$s" SB_AGENT=main "$state/bin/sb" "$@" 2>&1; }
 sbm spawn t1 --objective "remember zorglub-1 {{bash: echo first-turn}}" | sed 's/^/     /'
 # the task's turns, as the fake provider saw them
 turns() { grep -c '"agent": *"t1"' "$WORK/fake.log" 2>/dev/null || echo 0; }

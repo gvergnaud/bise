@@ -100,7 +100,8 @@ hub_up() { state="$(ls -d "$T"/.bise/hubs/pr-ws-* 2>/dev/null | head -n 1)"; [ -
 if until_ok 150 hub_up; then ok "hub started"; else ko "hub did not start"; tail -n 5 "$WORK/hub.err"; fi
 root_is() { [ "$(cat "$state/hub.root" 2>/dev/null)" = "$(cd "$P/versions/$1" && pwd -P)" ]; }
 check "hub runs versions/$ID1" root_is "$ID1"
-sbm() { E SB_SOCKET="$state/hub.sock" SB_AGENT=main "$state/bin/sb" "$@" 2>&1; }
+# the agents' socket (agent.sock); a hub older than docs/issues/16 has only hub.sock
+sbm() { s="$state/agent.sock"; [ -S "$s" ] || s="$state/hub.sock"; E SB_SOCKET="$s" SB_AGENT=main "$state/bin/sb" "$@" 2>&1; }
 lst="$(sbm version)"
 echo "$lst" | grep -q "●★ $ID1" && ok "/version lists the installed version (●★ $ID1)" || { ko "/version list"; echo "$lst" | sed 's/^/     /'; }
 

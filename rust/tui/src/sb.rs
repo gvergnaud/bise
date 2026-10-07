@@ -48,7 +48,7 @@ pub(super) use keys::key;
 pub(crate) use keys::{scene, Scene};
 #[cfg(test)]
 use keys::{nav_key, Nav};
-pub use client::{run_switchboard, take_reexec};
+pub use client::{run_switchboard, take_reexec, take_refused};
 pub use tune::setup_main;
 use client::{follow_hub_exe, follow_reload, HUB_DOWN, HUB_UP};
 #[cfg(test)]
@@ -633,6 +633,12 @@ pub(super) fn dispatch(app: &mut App, raw: &str) {
             with_feed(app, &s("agent"), |app| prepend_page(app, before, lines));
         }
         "state" => apply_state(app, &v),
+        // the hub refused this client (it runs in an agent's process,
+        // docs/issues/16): say why once the terminal is back, and end
+        "refused" => {
+            client::set_refused(s("error"));
+            app.should_quit = true;
+        }
         // artifacts (site/m/artifacts, docs/artifacts.md): the whole list;
         // the feed's chips are built again with the new titles
         "artifacts" => {

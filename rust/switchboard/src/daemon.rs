@@ -4,12 +4,15 @@
 //!
 //! - one Bend REPL per live agent, spawned from the app root, with
 //!   BEND_WORKDIR / BEND_EXTRA_PROMPT / BEND_CONTEXT_FILE / SB_AGENT;
-//! - `hub.sock`: clients (`{"op":"hello"}` first, then JSON lines) and
-//!   the agents' `sb` CLI (`{"op":"agent", ...}`, one request, one reply);
+//! - `hub.sock`: clients (`{"op":"hello"}` first, then JSON lines), never
+//!   from an agent's process; `agent.sock`: the agents' `sb` CLI
+//!   (`{"op":"agent", ...}`, one request, one reply), their
+//!   `SB_SOCKET` (`daemon/accept`, `crate::peer`, docs/issues/16);
 //! - `journal.jsonl`: the durable state; `agents/<dir>/transcript.log`:
 //!   every line of each feed, for the views, `sb inspect` and
 //!   `sb history`.
 
+mod accept;
 mod art;
 mod boot;
 mod features;
@@ -35,7 +38,7 @@ use crate::util::{now_ms, wire_escape};
 use crate::worktree::{Config, GitEnv};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::io::{BufRead, BufReader, Write};
+use std::io::Write;
 use std::net::{TcpListener, TcpStream};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
@@ -1636,7 +1639,8 @@ impl Shell {
                 // the REPL starts its plugins bridge with this binary
                 // (`bise plugins serve`, docs/plugins.md)
                 ("BEND_HARNESS_BIN", self.opts.exe.clone().into()),
-                ("SB_SOCKET", self.opts.paths.socket().into()),
+                // the agents' socket, never hub.sock (docs/issues/16)
+                ("SB_SOCKET", self.opts.paths.agent_socket().into()),
                 ("BEND_WIRE_LOG", adir.join("wire.log").into()),
                 ("SB_AGENT", a.name.clone().into()),
                 // which model: config.toml `model`, or `agent_model` (BISE-142)
@@ -2027,69 +2031,6 @@ impl Shell {
     }
 }
 
-fn accept_loop(listener: UnixListener, tx: Sender<Msg>) {
-    let mut next: u64 = 1;
-    for conn in listener.incoming() {
-        let Ok(stream) = conn else { continue };
-        let id = next;
-        next += 1;
-        let tx = tx.clone();
-        std::thread::spawn(move || {
-            let Ok(read_half) = stream.try_clone() else {
-                return;
-            };
-            let mut r = BufReader::new(read_half);
-            let mut first = String::new();
-            if r.read_line(&mut first).unwrap_or(0) == 0 {
-                return;
-            }
-            let Ok(v) = serde_json::from_str::<Value>(first.trim()) else {
-                return;
-            };
-            match v.get("op").and_then(|x| x.as_str()) {
-                Some("hello") => {
-                    let _ = tx.send(Msg::ClientNew { id, stream });
-                    let mut line = String::new();
-                    loop {
-                        line.clear();
-                        match r.read_line(&mut line) {
-                            Ok(0) | Err(_) => break,
-                            Ok(_) => {
-                                if let Ok(v) = serde_json::from_str::<Value>(line.trim()) {
-                                    let _ = tx.send(Msg::ClientLine { id, v });
-                                }
-                            }
-                        }
-                    }
-                    let _ = tx.send(Msg::ClientGone { id });
-                }
-                Some("agent") => {
-                    let _ = tx.send(Msg::AgentNew {
-                        token: id,
-                        stream,
-                        v,
-                    });
-                }
-                Some("version") => {
-                    let _ = tx.send(Msg::Version { stream, v });
-                }
-                Some("notice") => {
-                    let s = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
-                    let _ = tx.send(Msg::Notice {
-                        kind: s("kind"),
-                        text: s("text"),
-                    });
-                }
-                Some("ping") => {
-                    let mut s = stream;
-                    let _ = write_json(&mut s, &json!({"ok": true, "pid": std::process::id()}));
-                }
-                _ => {}
-            }
-        });
-    }
-}
-
 /// A hub that died abruptly (killed, crashed) left its REPLs running:
 /// they still hold their sessions. Their pids are in `repl.pid`.
 /// The longest a role-line call may take.
@@ -2212,7 +2153,9 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         return Ok(());
     }
     let _ = std::fs::remove_file(paths.socket());
+    let _ = std::fs::remove_file(paths.agent_socket());
     let listener = UnixListener::bind(paths.socket())?;
+    let agent_listener = UnixListener::bind(paths.agent_socket())?;
     std::fs::write(paths.pid_file(), std::process::id().to_string())?;
     // a hub one of its own agents relaunched is not that agent's: its
     // sb-core, builds and REPLs do not carry that tag (BISE-243)
@@ -2220,6 +2163,8 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     if let Ok(l) = std::env::var(crate::procs::ENV) {
         std::env::set_var(crate::procs::ENV, crate::procs::without_hub(&l, &proc_hub));
     }
+    // who may say hello (docs/issues/16): the tags left are its owners'
+    let doors = accept::Doors::new(paths.clone(), proc_hub.clone(), &std::env::var(crate::procs::ENV).unwrap_or_default());
     write_sb_link(&paths.bin_dir(), &opts.exe)?;
     // the agents' mktemp reads their TMPDIR (macOS's does not)
     if let Err(e) = crate::tools_env::write_mktemp_shim(&paths.bin_dir()) {
@@ -2394,9 +2339,9 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     }
     boot.step(&format!("transcripts read ({} buffered lines)", sh.buffers.values().map(|b| b.len()).sum::<usize>()));
 
-    {
-        let tx = tx.clone();
-        std::thread::spawn(move || accept_loop(listener, tx));
+    for (l, sock) in [(listener, crate::peer::Sock::Client), (agent_listener, crate::peer::Sock::Agent)] {
+        let (tx, doors) = (tx.clone(), doors.clone());
+        std::thread::spawn(move || accept::accept_loop(l, tx, doors, sock));
     }
     // hub-lag: one tick in the queue at most. A loop slower than the
     // clock (a big state, a loaded machine) queued a tick every 500 ms
@@ -2711,6 +2656,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     // hub, which waits for this one to be gone (`wait_previous_hub`)
     if !keep_agents {
         let _ = std::fs::remove_file(paths.socket());
+        let _ = std::fs::remove_file(paths.agent_socket());
     }
     sh.flush_offsets();
     if keep_agents {
@@ -2754,6 +2700,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     if ours {
         if keep_agents {
             let _ = std::fs::remove_file(paths.socket());
+            let _ = std::fs::remove_file(paths.agent_socket());
         }
         let _ = std::fs::remove_file(paths.pid_file());
     }

@@ -81,14 +81,21 @@ pub struct Spec {
     /// (`~/.local/state/switchboard/…`, [`legacy_dev`]): Seatbelt checks
     /// the real path, so `~/.bise` alone does not open them.
     pub links: Vec<PathBuf>,
+    /// The hub's client socket (`hub.sock`, its natural and its short
+    /// path): an agent's command never connects to it (docs/issues/16).
+    /// Empty for a REPL adopted from an older hub, whose `sb` still
+    /// reaches the hub there.
+    pub client_socks: Vec<PathBuf>,
 }
 
 impl Spec {
     /// The spec of a gated call's agent, its paths resolved by `fs`, the
-    /// git common dir found from its folder.
-    pub fn of(call: &Call, run: &Path, fs: &dyn Fs) -> Spec {
+    /// git common dir found from its folder; `client_socks`: the hub.sock
+    /// paths it may not connect to.
+    pub fn of(call: &Call, run: &Path, client_socks: &[PathBuf], fs: &dyn Fs) -> Spec {
         let cwd = fs.real(&call.cwd);
         Spec {
+            client_socks: client_socks.iter().map(|p| fs.real(p)).collect(),
             git: git_common_dir(&cwd).map(|g| fs.real(&g)),
             cwd,
             bise: fs.real(&call.bise),
@@ -224,6 +231,11 @@ pub fn profile(s: &Spec, net: bool) -> String {
         o.push_str("(allow network* (local unix-socket) (remote unix-socket))\n");
         o.push_str("(allow network-bind network-inbound (local ip \"localhost:*\"))\n");
         o.push_str("(allow network-outbound (remote ip \"localhost:*\"))\n");
+    }
+    // the hub's client socket is the user's (docs/issues/16): the agent's
+    // `sb` uses agent.sock. Seatbelt matches the real path, link or not.
+    for c in &s.client_socks {
+        o.push_str(&format!("(deny network-outbound (remote unix-socket (path-literal {})))\n", lit(c)));
     }
     o
 }

@@ -42,6 +42,8 @@ pub mod land;
 pub mod land_pick;
 pub mod model;
 pub mod paths;
+pub mod peer;
+pub mod peer_os;
 pub mod place;
 pub mod procs;
 pub mod prompts;

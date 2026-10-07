@@ -276,11 +276,12 @@ pub(super) fn supervise(
         Ok(r) => r,
         Err(e) => return gone(e.to_string()),
     };
-    // what the next hub needs to adopt this REPL
+    // what the next hub needs to adopt this REPL; `sock`: its SB_SOCKET is
+    // agent.sock, so its sandbox may close hub.sock (docs/issues/16)
     let _ = std::fs::write(
         adir.join("repl.json"),
         json!({"pid": child.id(), "port": port, "steer": steer, "interrupt": interrupt,
-               "bin": bin.to_string_lossy()})
+               "bin": bin.to_string_lossy(), "sock": "agent"})
         .to_string(),
     );
     let _ = tx.send(Msg::ReplConnected {

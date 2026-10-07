@@ -1,6 +1,6 @@
 # 16 · an agent can connect to the hub's client socket and act as the user
 
-Status: open. Found by architect while reviewing amb-feed's typed approvals plan (m_10946). Read from the code, not exploited. Label: security.
+Status: done (socket-auth, architect's plan m_10984; see "What was done" at the end). Found by architect while reviewing amb-feed's typed approvals plan (m_10946). Read from the code, not exploited. Label: security.
 
 ## The problem
 
@@ -43,3 +43,12 @@ Likely answer: two sockets + the peer check now, and the sandbox deny wherever t
 - A new e2e: an agent runs the `printf … | nc -U` command above (through a script file too). Its `hello` is refused, approvals stay as they were, its card stays open, and hub.log names it.
 - `tests/e2e.py`, `tests/approvals_e2e.py`, `tests/proto_e2e.py`, the TUI tmux tests and the desktop's real-core checks stay green: every real client still connects.
 - One full gate.
+
+## What was done
+
+- **Two sockets.** `agent.sock` (`Paths::agent_socket`, same short-link folder as hub.sock) is every new REPL's `SB_SOCKET`; it serves `agent`, `version` and `ping`, and answers anything else with `agent.sock does not serve the op …`. `hub.sock` serves `hello`, `notice` and `ping` (`crate::peer::access`).
+- **Peer check** (`crate::peer::judge`, pure, with a law table; `peer_os.rs` reads the peer pid: macOS `LOCAL_PEERPID`, Linux `SO_PEERCRED`; `daemon/accept.rs` is the shell). On `hello` and `notice`, the hub reads the process table and refuses a peer whose parent chain, or the session of one of them, holds a process tagged (`BISE_OWNERS`) by this hub or by a sibling hub (another project in the same `hubs/` folder). A hub's own owners (the tags it inherited, the processes above it) are not refused, so a throwaway hub an agent starts in a test serves that agent's clients. A peer that is gone or unreadable is refused (fail closed). A refused connection gets `{"ev":"refused","ok":false,"error":"this connection comes from agent <name>'s process: clients must be started by the user"}`, the TUI prints it and exits 1, and hub.log gets `client refused on hub.sock (<op>): pid N (<program>): …`. A double fork that leaves the agent's session and drops `BISE_OWNERS` escapes this check; the sandbox below is the wall.
+- **Sandbox.** With the sandbox on, both profiles end with `(deny network-outbound (remote unix-socket (path-literal <hub.sock>)))`, for the natural path and the short one, for every agent whose REPL got agent.sock (`repl.json` `"sock": "agent"`).
+- **Transition shim (to remove).** REPLs adopted from an older hub still have `SB_SOCKET=hub.sock`, so hub.sock still serves `agent` and `version` and writes one hub.log line per request (`hub.sock shim: …`). **Remove it in the release after v2026.10.2-25**: `Access::Shim` in `crate::peer` becomes `Access::No`. Check hub.log for `hub.sock shim` lines first: when there are none, it is safe.
+- Tests: `peer::tests` (the law table), `peer_os::tests` (the real OS), `sandbox_tests` (the profile, and the real `sandbox-exec` closing hub.sock by path and through a link while agent.sock stays open), `tests/socket_auth_e2e.py` (the agent's `printf | nc`, its `SB_SOCKET`, a script it leaves behind trying to toggle approvals and `/answer` its card: all refused; `sb` and the test's client still work). That e2e was red before the change and is green after.
+- Not covered: `from` on agent.sock is still self-declared (issue 17).

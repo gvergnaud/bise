@@ -566,9 +566,29 @@ impl Shell {
     /// The agent's two profiles next to its gate file, rewritten when a
     /// root moved. A write that fails leaves the old ones, or none: then
     /// sandbox-exec fails and the command does not run.
+    /// The hub.sock paths the agent's commands may not connect to
+    /// (docs/issues/16): both when its REPL's `sb` uses agent.sock
+    /// (`repl.json` says `"sock": "agent"`), none for a REPL adopted from
+    /// an older hub, whose `SB_SOCKET` is still hub.sock.
+    fn client_socks(&self, dir: &str) -> Vec<std::path::PathBuf> {
+        let paths = &self.opts.paths;
+        let repl: serde_json::Value = std::fs::read_to_string(paths.agent_dir(dir).join("repl.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str(&t).ok())
+            .unwrap_or_default();
+        if repl.get("sock").and_then(|s| s.as_str()) != Some("agent") {
+            return vec![];
+        }
+        let mut out = vec![paths.natural_socket()];
+        if paths.socket() != paths.natural_socket() {
+            out.push(paths.socket());
+        }
+        out
+    }
+
     fn sandbox_ready(&self, dir: &str, call: &Call) {
         let run = self.opts.paths.agent_run(dir);
-        let spec = sandbox::Spec::of(call, &run, &approvals::RealFs);
+        let spec = sandbox::Spec::of(call, &run, &self.client_socks(dir), &approvals::RealFs);
         if let Err(e) = sandbox::ensure(&run, &spec) {
             log_line(&self.opts.paths, &format!("{}: sandbox profile: {e}", call.agent));
         }

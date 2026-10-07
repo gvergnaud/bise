@@ -163,7 +163,7 @@ pub const VARS: &[Var] = &[
     internal("SB_PORT_OFFSET", "an agent's dev-server port offset"),
     test("SB_SEARCH_BENCH", "a folder to bench search on (an ignored test)"),
     test("SB_SETUP", "off: no setup card (tests)"),
-    internal("SB_SOCKET", "the hub's socket, for an agent's sb"),
+    internal("SB_SOCKET", "the hub's agent.sock, for an agent's sb (never hub.sock, docs/issues/16)"),
     test("SB_STALL_START", "a file that stalls the hub's start once (tests)"),
     test("SB_STATE_DIR", "the hub's state folder (tests)"),
     test("SB_STT_WAV", "a WAV for the real speech-to-text test (ignored)"),

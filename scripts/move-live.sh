@@ -195,7 +195,7 @@ exe="$vdir/bise"   # BISE-165; a version built before: bend-harness
 [ -x "$exe" ] || die "no bise in $vdir"
 say "version: $(basename "$vdir")"
 
-sbc() { SB_SOCKET="$1/hub.sock" SB_AGENT=main "$exe" sb "${@:2}"; }
+sbc() { SB_SOCKET="$1/agent.sock" SB_AGENT=main "$exe" sb "${@:2}"; }
 hub_pid() {
   local p; p="$(cat "$1/hub.pid" 2>/dev/null || true)"
   if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then echo "$p"; fi

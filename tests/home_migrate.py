@@ -96,7 +96,7 @@ def main():
         wait.until(lambda: not busy(), 30, "the hub of %s gone after --stop" % w)
 
     def sb(env, sd, *args):
-        e = dict(env, SB_SOCKET=os.path.join(sd, "hub.sock"), SB_AGENT="main")
+        e = dict(env, SB_SOCKET=os.path.join(sd, "agent.sock"), SB_AGENT="main")
         return run(e, "sb", *args)
 
     def note_of(env, sd):

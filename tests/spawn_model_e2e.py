@@ -44,7 +44,7 @@ def main():
     ok = False
 
     def sb(*args):
-        env = {**E.env, "SB_SOCKET": os.path.join(E.state, "hub.sock"), "SB_AGENT": "main"}
+        env = {**E.env, "SB_SOCKET": os.path.join(E.state, "agent.sock"), "SB_AGENT": "main"}
         r = subprocess.run([EXE, "sb", *args], env=env, capture_output=True, text=True, timeout=60)
         check(r.returncode == 0, "sb %s: %s %s" % (" ".join(args), r.stdout, r.stderr))
         return r.stdout.strip()

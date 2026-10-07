@@ -57,7 +57,7 @@ def shot(t, name):
 
 
 def sb(E, agent, cwd, *args):
-    env = {**E.env, "SB_SOCKET": os.path.join(E.state, "hub.sock"), "SB_AGENT": agent}
+    env = {**E.env, "SB_SOCKET": os.path.join(E.state, "agent.sock"), "SB_AGENT": agent}
     r = subprocess.run([e2e.EXE, "sb", *args], env=env, cwd=cwd, capture_output=True, text=True, timeout=60)
     assert r.returncode == 0, "sb %s: %s %s" % (" ".join(args), r.stdout, r.stderr)
     return r.stdout.strip()

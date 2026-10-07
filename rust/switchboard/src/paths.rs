@@ -77,8 +77,20 @@ impl Paths {
     pub fn natural_socket(&self) -> PathBuf {
         self.state.join("hub.sock")
     }
-    /// Make [`Paths::socket`] bindable (the short link, when needed).
+    /// The agents' socket (their `SB_SOCKET`, `crate::peer`):
+    /// `<state>/agent.sock`, or its short path in the same short folder
+    /// as [`Paths::socket`].
+    pub fn agent_socket(&self) -> PathBuf {
+        bise_home::socket::socket_path(&self.natural_agent_socket())
+    }
+    /// Where the agents' socket file lives: `<state>/agent.sock`.
+    pub fn natural_agent_socket(&self) -> PathBuf {
+        self.state.join("agent.sock")
+    }
+    /// Make [`Paths::socket`] and [`Paths::agent_socket`] bindable (the
+    /// short link, when needed: one link, the folder's).
     pub fn prepare_socket(&self) -> std::io::Result<PathBuf> {
+        bise_home::socket::prepare_socket(&self.natural_agent_socket())?;
         bise_home::socket::prepare_socket(&self.natural_socket())
     }
     pub fn journal(&self) -> PathBuf {

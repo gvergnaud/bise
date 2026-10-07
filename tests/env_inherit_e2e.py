@@ -67,7 +67,8 @@ def test():
         c.say("[[bash: env > %s]]" % out)
         c.wait(lambda: os.path.exists(out) and "SB_AGENT=" in open(out).read(), 60, "main's env")
         env = env_of(out)
-        check(env.get("SB_SOCKET") == sock, "SB_SOCKET is the hub's: %s" % env.get("SB_SOCKET"))
+        # the agents' socket, never the clients' hub.sock (docs/issues/16)
+        check(env.get("SB_SOCKET") == os.path.join(E.state, "agent.sock"), "SB_SOCKET is the hub's agent.sock: %s" % env.get("SB_SOCKET"))
         check(env.get("SB_AGENT") == "main" and env.get("SB_TASK") == "main", "SB_AGENT/SB_TASK name main")
         check(env.get("BISE_ROLE") == "main", "BISE_ROLE=main: %s" % env.get("BISE_ROLE"))
         real = os.path.realpath

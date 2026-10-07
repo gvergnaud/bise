@@ -14,7 +14,20 @@ fn spec() -> Spec {
         user_tmp: Some("/private/var/folders/x/y/T".into()),
         run: Some("/h/.bise/hubs/hx/agents/a/run".into()),
         links: vec!["/h/.local/state/switchboard/build".into()],
+        client_socks: vec!["/h/.bise/hubs/hx/hub.sock".into()],
     }
+}
+
+#[test]
+fn the_hubs_client_socket_is_closed_in_both_profiles() {
+    let deny = "(deny network-outbound (remote unix-socket (path-literal \"/h/.bise/hubs/hx/hub.sock\")))";
+    for net in [false, true] {
+        let p = profile(&spec(), net);
+        // after the unix-socket allow: the last match wins
+        assert!(p.trim_end().ends_with(deny), "{p}");
+    }
+    let adopted = Spec { client_socks: vec![], ..spec() };
+    assert!(!profile(&adopted, false).contains("path-literal"));
 }
 
 #[test]
@@ -57,7 +70,9 @@ fn the_profile_denies_writes_then_allows_the_roots_in_order() {
 
 #[test]
 fn the_net_profile_is_the_same_writes_with_the_network_open() {
-    let (closed, open) = (profile(&spec(), false), profile(&spec(), true));
+    // hub.sock's deny ends both (the_hubs_client_socket_is_closed_in_both_profiles)
+    let s = Spec { client_socks: vec![], ..spec() };
+    let (closed, open) = (profile(&s, false), profile(&s, true));
     assert!(!open.contains("network"));
     assert!(closed.starts_with(&open));
 }
@@ -319,6 +334,7 @@ mod live {
             };
             git(&["init", "-q", "-b", "main"]);
             git(&["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "0"]);
+            let hub_sock = bise.join("hubs/hx/hub.sock");
             let s = Spec {
                 cwd: repo.clone(),
                 git: git_common_dir(&repo),
@@ -328,6 +344,7 @@ mod live {
                 user_tmp: darwin_user_temp(),
                 run: Some(run.clone()),
                 links: vec![],
+                client_socks: vec![hub_sock],
             };
             ensure(&run, &s).unwrap();
             Some(Box_ { base, s, run })
@@ -478,6 +495,33 @@ mod live {
         assert!(Denial::of(&text(&o)).is_some(), "{}", text(&o));
         let o = b.sh_in(&b.s.cwd, true, conn);
         assert!(!text(&o).to_lowercase().contains("operation not permitted"), "{}", text(&o));
+    }
+
+    /// docs/issues/16: a sandboxed command cannot connect to the hub's
+    /// client socket, by its path or through a link to its folder; the
+    /// agents' socket next to it stays open.
+    #[test]
+    fn the_hubs_client_socket_is_closed_and_agent_sock_open() {
+        let Some(b) = Box_::new("hubsock") else { return };
+        let hub = b.s.bise.join("hubs/hx");
+        let link = b.base.join("short");
+        std::os::unix::fs::symlink(&hub, &link).unwrap();
+        let _l = std::os::unix::net::UnixListener::bind(hub.join("hub.sock")).unwrap();
+        let _a = std::os::unix::net::UnixListener::bind(hub.join("agent.sock")).unwrap();
+        let conn = |p: &Path| {
+            b.sh(&format!(
+                "python3 -c \"import socket,sys; s=socket.socket(socket.AF_UNIX); s.connect(sys.argv[1]); print('in')\" '{}'",
+                p.display()
+            ))
+        };
+        for p in [hub.join("hub.sock"), link.join("hub.sock")] {
+            let o = conn(&p);
+            assert!(!ok(&o) && text(&o).contains("Operation not permitted"), "{}: {}", p.display(), text(&o));
+        }
+        for p in [hub.join("agent.sock"), link.join("agent.sock")] {
+            let o = conn(&p);
+            assert!(ok(&o), "{}: {}", p.display(), text(&o));
+        }
     }
 
     #[test]

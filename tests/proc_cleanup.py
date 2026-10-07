@@ -50,7 +50,7 @@ def main():
     if not os.path.exists(EXE):
         sys.exit("build first: cd rust && cargo build")
     # the hubs' sockets must keep their natural place (<state>/hub.sock):
-    # the REPLs are found by SB_SOCKET=<child-st>/hub.sock and the ghost by
+    # the REPLs are found by SB_SOCKET=<child-st>/agent.sock and the ghost by
     # the hash of that path. Under an agent's deep $TMPDIR the path does
     # not fit a unix socket, the hub reaches it through /tmp/bise-<uid>/...
     # and nothing matched: green in the gate (a short TMPDIR), a timeout
@@ -85,7 +85,7 @@ def main():
         c.say("/new t3: {{bash: nohup sleep 904%s </dev/null >/dev/null 2>&1 & echo ok}}" % tag)
         c.wait(lambda: c.agent("t1") and c.agent("t2") and c.agent("t3"), 60, "the tasks")
         c.wait_idle("t1", "t2", "t3", "main")
-        c.wait(lambda: alive("SB_SOCKET=%s/hub.sock" % child_st) and alive("sbd --workspace " + child_ws),
+        c.wait(lambda: alive("SB_SOCKET=%s/agent.sock" % child_st) and alive("sbd --workspace " + child_ws),
                60, "t1's hub and its REPL")
         for n in ("901", "902", "903", "904"):
             c.wait(lambda: alive("sleep " + n + tag), 20, "sleep " + n)
@@ -101,7 +101,7 @@ def main():
         c.wait_status("t1", "archived", 30)
         c.wait(lambda: not alive("sleep 901" + tag), 15, "t1's sleep killed")
         c.wait(lambda: not alive("sbd --workspace " + child_ws), 15, "t1's hub killed")
-        c.wait(lambda: not alive("SB_SOCKET=%s/hub.sock" % child_st), 15, "t1's hub's REPL killed")
+        c.wait(lambda: not alive("SB_SOCKET=%s/agent.sock" % child_st), 15, "t1's hub's REPL killed")
         c.wait(lambda: not alive("sleep 902" + tag), 15, "t1's tmux pane killed")
         check(subprocess.run(["tmux", "-L", tsock, "has-session"], stderr=subprocess.DEVNULL, env=t1_tmux).returncode != 0,
               "t1's tmux server gone")

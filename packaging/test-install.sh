@@ -186,7 +186,7 @@ if [ -n "$state" ] && [ -S "$state/hub.sock" ]; then
   root="$(cat "$state/hub.root" 2>/dev/null)"
   case "$root" in "$(cd "$T" && pwd -P)/.local/share/bise/versions/"*) ok "hub runs from the installed version ($root)" ;; *) ko "hub root: $root" ;; esac
   sleep 2
-  out="$(E SB_SOCKET="$state/hub.sock" SB_AGENT=main "$state/bin/sb" list 2>&1)"
+  out="$(E SB_SOCKET="$state/agent.sock" SB_AGENT=main "$state/bin/sb" list 2>&1)"
   echo "$out" | sed 's/^/     /' | head -n 5
   echo "$out" | grep -q main && ok "sb list (through the agents' link) answers" || ko "sb list"
   if [ -L "$state/bin/sb" ]; then ok "bin/sb is a link to bise"; else ko "bin/sb is not a link"; fi

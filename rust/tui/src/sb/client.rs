@@ -44,6 +44,22 @@ pub fn take_reexec() -> Option<String> {
     REEXEC.lock().ok().and_then(|mut r| r.take())
 }
 
+/// Why the hub refused this TUI's hello (`{"ev":"refused"}`: it runs in
+/// an agent's process, docs/issues/16): printed by the caller once the
+/// terminal is restored.
+static REFUSED: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+pub(super) fn set_refused(why: String) {
+    if let Ok(mut r) = REFUSED.lock() {
+        *r = Some(why);
+    }
+}
+
+/// After `run_switchboard` returned: the hub's refusal, if it refused.
+pub fn take_refused() -> Option<String> {
+    REFUSED.lock().ok().and_then(|mut r| r.take())
+}
+
 /// Markers of the reader thread (not JSON): the hub went away / is back.
 pub(super) const HUB_DOWN: &str = "\u{0}hub-down";
 pub(super) const HUB_UP: &str = "\u{0}hub-up";

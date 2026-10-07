@@ -387,6 +387,11 @@ fn run_switchboard(args: &[String], debug: bool) -> std::io::Result<()> {
         paths.workspace.to_string_lossy().to_string(),
         debug,
     )?;
+    // the hub refused this client: it runs in an agent's process (docs/issues/16)
+    if let Some(why) = bend_tui::take_refused() {
+        eprintln!("bise: the hub refused this connection: {why}");
+        std::process::exit(1);
+    }
     // the hub switched to another version: this TUI becomes that
     // version's TUI (the terminal is restored; the new one reconnects)
     if let Some(next) = bend_tui::take_reexec() {

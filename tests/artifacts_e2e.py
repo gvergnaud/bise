@@ -37,7 +37,7 @@ def main():
     ok = False
 
     def sb(agent, cwd, *args, fail=False):
-        env = {**E.env, "SB_SOCKET": os.path.join(E.state, "hub.sock"), "SB_AGENT": agent}
+        env = {**E.env, "SB_SOCKET": os.path.join(E.state, "agent.sock"), "SB_AGENT": agent}
         r = subprocess.run([EXE, "sb", *args], env=env, cwd=cwd, capture_output=True, text=True, timeout=60)
         check((r.returncode != 0) == fail, "sb %s: %s %s" % (" ".join(args), r.stdout, r.stderr))
         return (r.stderr if fail else r.stdout).strip()
