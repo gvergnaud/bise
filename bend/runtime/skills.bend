@@ -85,13 +85,17 @@ job() {
   printf '%s %s\\n' \"$id\" \"$!\" >> \"$t/pids\"
 }
 settle() {
-  i=0
-  while [ \"$i\" -lt $((lim * 20)) ]; do
+  n=$((n + 1))
+  ( sleep \"$lim\"; : > \"$t/late$n\" ) < /dev/null > /dev/null 2>&1 &
+  tp=$!
+  while :; do
     all=1
     for id in \"$@\"; do [ -e \"$t/$id.ok\" ] || { all=0; break; }; done
-    [ \"$all\" = 1 ] && return 0
-    sleep 0.05; i=$((i + 1))
+    [ \"$all\" = 1 ] && break
+    [ -e \"$t/late$n\" ] && break
+    sleep 0.05
   done
+  pkill -P \"$tp\" 2>/dev/null
 }
 ok() {
   [ -e \"$t/$1.ok\" ] && return 0
