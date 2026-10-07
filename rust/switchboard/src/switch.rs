@@ -12,7 +12,11 @@
 //!   version crashed, or could not start).
 //!
 //! Either one rolls back to the version it came from (same mechanism,
-//! backwards) and leaves a warning in main's thread. A probation without
+//! backwards) and leaves a warning in main's thread and its outcome in
+//! hub.log. A starting hub gets time while its boot moves (crate::boot:
+//! its steps and replay lines, never its heartbeats); a switch kills a
+//! hub that stops moving, a rollback leaves it booting (it stops itself
+//! when stuck). A probation without
 //! failure marks the version good. `versions.json` in the state dir holds
 //! `current`, `good` and `previous` (version dirs).
 
@@ -196,9 +200,21 @@ fn start_hub(paths: &Paths, root: &Path, same: bool) -> std::io::Result<std::pro
         .spawn()
 }
 
+/// What `replace_hub` does with a new hub still booting at the end of
+/// its wait.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Late {
+    /// A switch: stop it (the rollback starts the known good one).
+    Kill,
+    /// A rollback: leave it booting. Killing it left no hub at all for
+    /// 68 min (its journal replay was slow on a loaded machine), and it
+    /// stops itself when its boot is stuck (crate::boot).
+    Leave,
+}
+
 /// Stop the hub, agents kept; then start the hub of `root`. Err: why
 /// the new hub is not up.
-fn replace_hub(paths: &Paths, root: &Path, same: bool) -> Result<(), String> {
+fn replace_hub(paths: &Paths, root: &Path, same: bool, late: Late) -> Result<(), String> {
     let old = hub_pid(paths);
     let _ = client::stop(paths, true);
     if let Some(p) = old {
@@ -231,26 +247,35 @@ fn replace_hub(paths: &Paths, root: &Path, same: bool) -> Result<(), String> {
         if let Ok(Some(s)) = child.try_wait() {
             break Some(s);
         }
+        // progress: a new hub.log line, but a heartbeat (crate::boot)
         let len = file_len(&log_file);
         if len != seen {
-            (seen, moved) = (len, Instant::now());
+            if crate::boot::moved(&read_from(&log_file, seen)) {
+                moved = Instant::now();
+            }
+            seen = len;
         }
         if !start_waits(t0.elapsed(), moved.elapsed()) {
             break None;
         }
         std::thread::sleep(Duration::from_millis(100));
     };
-    let _ = child.kill();
     let err = last_line(&read_from(&err_file, err0), |_| true);
-    let step = last_line(&read_from(&log_file, log0), |l| !l.contains(" switch: "));
-    Err(start_failure(exited.map(|s| s.to_string()), t0.elapsed(), &step, &err))
+    let step = last_line(&read_from(&log_file, log0), |l| !l.contains(" switch: ") && !crate::boot::is_heartbeat(l));
+    let why = start_failure(exited.as_ref().map(|s| s.to_string()), t0.elapsed(), &step, &err);
+    if exited.is_none() && late == Late::Leave {
+        return Err(format!("{}; it is left booting", why));
+    }
+    let _ = child.kill();
+    Err(why)
 }
 
 /// Starting hub: wait while it boots. Up to START_MAX in all, and never
-/// START_STILL without a new line in hub.log (its boot steps, BISE: a
-/// hub whose journal replay took 17 s failed a flat 20 s wait).
-const START_MAX: Duration = Duration::from_secs(90);
-const START_STILL: Duration = Duration::from_secs(20);
+/// START_STILL without progress in hub.log: its boot steps and the
+/// journal replay's `n/N events` lines, every 5 s (a 37.6k-event replay
+/// took >25 s under a load of 40, and failed a 20 s wait for a new line).
+const START_MAX: Duration = Duration::from_secs(600);
+const START_STILL: Duration = Duration::from_secs(60);
 
 fn start_waits(total: Duration, since_progress: Duration) -> bool {
     total < START_MAX && since_progress < START_STILL
@@ -411,16 +436,21 @@ fn backup_in(state: &Path, dir: &Path, ms: u64, keep: usize) -> Result<PathBuf, 
 /// the e2e and tmux sockets under agents/*/tmp do. macOS's openrsync has
 /// no --no-specials, hence the explicit -rlptg. The agents' scratch
 /// folders (agents/*/tmp: sockets, FIFOs, GBs of test trees) are not
-/// state. rsync's stderr is kept for the error, never left in hub.err.
+/// state; nor are the live REPLs' side channels (agents/*/run: their
+/// bend-sh-*.sh, bend-prog-* come and go, one vanished mid-copy failed a
+/// switch's backup with exit 23), but `approvals-mode`, kept there, is.
+/// A file gone mid-copy anyway (exit 24) is not a failed backup. rsync's
+/// stderr is kept for the error, never left in hub.err.
 fn backup_to(src: &Path, dest: &Path) -> Result<(), String> {
     let out = std::process::Command::new("rsync")
         .args(["-rlptg", "--exclude", "/hub.sock", "--exclude", "/agents/*/tmp/"])
+        .args(["--include", "/agents/*/run/approvals-mode", "--exclude", "/agents/*/run/*"])
         .arg(format!("{}/", src.display()))
         .arg(format!("{}/", dest.display()))
         .stdin(std::process::Stdio::null())
         .output()
         .map_err(|e| format!("rsync: {}", e))?;
-    if out.status.success() {
+    if out.status.success() || out.status.code() == Some(24) {
         return Ok(());
     }
     let err = String::from_utf8_lossy(&out.stderr);
@@ -551,7 +581,7 @@ fn run_locked(paths: &Paths, to: &Path, period: Duration, restart: bool, reload:
         let _ = std::fs::write(reload_file(paths), now_ms().to_string());
     }
 
-    let outcome = replace_hub(paths, &to, from == to).and_then(|_| probation(paths, period));
+    let outcome = replace_hub(paths, &to, from == to, Late::Kill).and_then(|_| probation(paths, period));
     let mut st = read_state(paths);
     st["probation_until"] = json!(0);
     match outcome {
@@ -597,7 +627,12 @@ fn run_locked(paths: &Paths, to: &Path, period: Duration, restart: bool, reload:
                 json!({"version": to.to_string_lossy(), "reason": reason, "at": now_ms()});
             write_state(paths, &st);
             let _ = std::fs::remove_file(fail_file(paths));
-            let back = replace_hub(paths, &from, from == to);
+            let back = replace_hub(paths, &from, from == to, Late::Leave);
+            // in hub.log too: the notice reaches no hub while none is up
+            log(paths, &match &back {
+                Ok(()) => format!("rollback to {}: up", from_id),
+                Err(e) => format!("rollback to {} failed: {}", from_id, e),
+            });
             let text = format!(
                 "version {} failed ({}) — rollback to version {}{}",
                 to_id,
@@ -798,6 +833,9 @@ mod state_tests {
         std::fs::write(st.join("journal.jsonl"), "{}\n").unwrap();
         std::fs::write(st.join("agents/x/transcript.log"), "1\tsb you : fake\n").unwrap();
         std::fs::write(deep.join("big.bin"), "scratch").unwrap();
+        // a live REPL's side channels come and go; its approvals mode stays
+        std::fs::write(run.join("approvals-mode"), "auto").unwrap();
+        std::fs::write(run.join("bend-sh-59301-2714723221.sh"), "echo").unwrap();
         // made from inside the folder: a full path may pass the socket limit
         let mk = |d: &Path| {
             let ok = std::process::Command::new("python3")
@@ -824,6 +862,8 @@ mod state_tests {
         assert!(b.join("agents/x/transcript.log").is_file());
         assert!(b.join("agents/x/run").is_dir());
         assert!(!b.join("agents/x/run/hub.sock").exists() && !b.join("agents/x/run/0.in").exists());
+        assert_eq!(std::fs::read_to_string(b.join("agents/x/run/approvals-mode")).unwrap(), "auto");
+        assert!(!b.join("agents/x/run/bend-sh-59301-2714723221.sh").exists(), "a REPL's scratch is not state");
         assert!(!b.join("agents/x/tmp").exists(), "scratch is not state");
         let mut left: Vec<String> =
             std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
@@ -852,18 +892,19 @@ mod state_tests {
         use super::start_waits;
         use std::time::Duration;
         let s = Duration::from_secs;
-        assert!(start_waits(s(19), s(19)));
-        assert!(start_waits(s(60), s(3)), "a slow boot that moves");
-        assert!(!start_waits(s(25), s(20)), "no new step for 20 s");
-        assert!(!start_waits(s(90), s(1)), "90 s at most");
+        // the rolled-back hub of 1791355103: 28 s, no line for 22 s in its replay
+        assert!(start_waits(s(28), s(22)), "a replay on a loaded machine is not a failed start");
+        assert!(start_waits(s(300), s(3)), "a slow boot that moves");
+        assert!(!start_waits(s(65), s(60)), "no progress for 60 s");
+        assert!(!start_waits(s(600), s(1)), "600 s at most");
     }
 
     #[test]
     fn a_start_failure_names_the_new_hubs_last_step_and_error_only() {
         use super::{last_line, start_failure};
         use std::time::Duration;
-        let log = "1790975537485 hub start pid=1 workspace=/w\n1790975538124 boot: journal read (21056 events)\n1790975540000 switch: x -> y\n";
-        let step = last_line(log, |l| !l.contains(" switch: "));
+        let log = "1790975537485 hub start pid=1 workspace=/w\n1790975538124 boot: journal read (21056 events)\n1790975540000 switch: x -> y\n1790975568124 boot: still in journal read (21056 events): no progress for 30 s\n";
+        let step = last_line(log, |l| !l.contains(" switch: ") && !crate::boot::is_heartbeat(l));
         assert_eq!(step, "boot: journal read (21056 events)");
         assert_eq!(
             start_failure(None, Duration::from_secs(41), &step, ""),

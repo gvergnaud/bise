@@ -25,6 +25,7 @@ pub mod agents_md;
 pub mod approvals;
 pub mod artifacts;
 pub mod board;
+pub mod boot;
 pub mod cli;
 pub mod client;
 pub mod computer_use;

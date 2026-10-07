@@ -937,8 +937,10 @@ impl Revive {
 pub const PR_STALE_MS: u64 = 10 * 60 * 1000;
 
 const REVIVE_LIMIT: usize = 3;
-/// Journal events per `replay_many` line at boot (a few hundred KB).
-const REPLAY_BATCH: usize = 500;
+/// Journal events per `replay_many` line at boot (~50 KB). sb-core's
+/// parse of a line grows faster than its length: on a 37.7k-event
+/// journal, 500 per line replayed in 17 s, 5000 in 23 s, 100 in 12 s.
+const REPLAY_BATCH: usize = 100;
 const REVIVE_WINDOW_MS: u64 = 60_000;
 
 type Fx = Vec<Effect>;
@@ -1115,6 +1117,12 @@ impl Hub {
     /// was quadratic in the messages (a 20k-event journal took ~18 s at
     /// boot, past the switcher's wait).
     pub fn replay(&mut self, events: &[Value]) -> Vec<Value> {
+        self.replay_with(events, &mut |_, _| {})
+    }
+
+    /// `replay`, telling `progress(done, total)` after each batch (the
+    /// boot watch, daemon/boot.rs: a long replay is progress, not a hang).
+    pub fn replay_with(&mut self, events: &[Value], progress: &mut dyn FnMut(usize, usize)) -> Vec<Value> {
         let mut skipped = Vec::new();
         let mut core: Vec<&Value> = Vec::new();
         for ev in events {
@@ -1126,6 +1134,7 @@ impl Hub {
             }
             core.push(ev);
         }
+        let (mut done, total) = (0, core.len());
         for batch in core.chunks(REPLAY_BATCH) {
             let out = self.raw(&json!({"t": "replay_many", "evs": batch}));
             for i in out["skipped"].as_array().into_iter().flatten().filter_map(Value::as_u64) {
@@ -1133,6 +1142,8 @@ impl Hub {
                     skipped.push((*ev).clone());
                 }
             }
+            done += batch.len();
+            progress(done, total);
         }
         self.view_all();
         skipped
@@ -1142,6 +1153,11 @@ impl Hub {
         if let Some(out) = self.call(&json!({"t": "view_all"})) {
             self.load_view(&out["view"]);
         }
+    }
+
+    /// sb-core's pid (a stuck boot stops it with the hub).
+    pub fn core_pid(&self) -> u32 {
+        self.link.child.id()
     }
 
     /// Restart sb-core when it dies (see `Revive`); the daemon sets it
