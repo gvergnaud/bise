@@ -100,7 +100,7 @@ impl Mode {
             // the image key, then the default keys (BISE-108: the bar
             // once lost its keys with an image)
             Mode::Images => &[("ctrl+v", "paste image"), REST[0], REST[1], REST[2]],
-            Mode::Quote => &[ASK, ("cmd+c", "copy"), ("esc", "drop")],
+            Mode::Quote => &[ASK, ("tab", "quote"), ("cmd+c", "copy"), ("esc", "drop")],
             Mode::DropAsk => &[("y", "archive"), ("n or esc", "keep")],
             Mode::Confirm => &[("y", "yes"), ("n", "no"), ("esc", "cancel")],
             Mode::Find => &[("⏎", "older"), ("shift+⏎", "newer"), ("esc", "close")],
@@ -532,7 +532,7 @@ mod tests {
     #[test]
     fn a_selection_pops_type_ask_about_it_in_the_accent() {
         let l = render(Mode::Quote, 100, false, false, None);
-        assert_eq!(text(&l), "type to ask about it   cmd+c copy   esc drop");
+        assert_eq!(text(&l), "type to ask about it   tab quote   cmd+c copy   esc drop");
         let style = |c: &str| l.spans.iter().find(|s| s.content == c).unwrap().style;
         // the pair drawn with ask_styles (NO_COLOR read from the env)
         assert_eq!((style("type"), style(" to ask about it")), ask_styles(no_color()));

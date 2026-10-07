@@ -1097,15 +1097,6 @@ fn toggle_own(events: &mut [Ev], cache: &mut [Option<EventRows>], i: usize) -> b
     true
 }
 
-/// Toggle the item the feed selection is on (`space`; the key is bound
-/// in BISE-42). False when there is no selection or nothing to toggle.
-pub(crate) fn toggle_selected(app: &mut crate::app::App) -> bool {
-    let Some(i) = app.feed_sel.map(|s| s.head.0) else {
-        return false;
-    };
-    toggle_event(&mut app.events, &mut app.cache, i)
-}
-
 // ---- the history: runs of level 3, folds, time marks (book §10, BISE-14) ----
 
 /// A run of level-3 lines longer than this folds into one line.

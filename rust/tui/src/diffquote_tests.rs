@@ -131,7 +131,7 @@ fn a_drag_selects_lines_and_the_popup_names_who_gets_it() {
     t.draw(|f| crate::run::draw_frame(&mut app, f)).unwrap();
     let b = t.backend().buffer().clone();
     let screen: Vec<String> = (0..30).map(|y| (0..150).map(|x| b[(x, y)].symbol()).collect()).collect();
-    assert!(screen.iter().any(|r| r.contains(" type to ask pricing-page about it · cmd+c copy ")), "{screen:#?}");
+    assert!(screen.iter().any(|r| r.contains(" type to ask pricing-page about it · tab quote · cmd+c copy ")), "{screen:#?}");
     // a plain click: no selection
     let p = app.diff.as_ref().unwrap();
     let y = p.body.y + 3;
@@ -154,4 +154,41 @@ fn full_screen_a_letter_quotes_and_closes_the_panel() {
     let q = crate::quote::of(&app.attachments[0]).unwrap();
     assert_eq!(q.at.old, "41-42");
     assert_eq!(q.at.new, "");
+}
+
+/// Lines selected: tab (the pill's `tab quote`) quotes them at the
+/// composer's cursor with nothing typed, never the next file; the keys
+/// go back to the composer. Space too.
+#[test]
+fn tab_or_space_quote_the_lines_without_typing() {
+    for code in [KeyCode::Tab, KeyCode::Char(' ')] {
+        let mut app = app(true);
+        app.ed.set("why this", 4);
+        app.diff.as_mut().unwrap().focused = true;
+        app.diff.as_mut().unwrap().cursor = 5;
+        crate::diffview::on_key(&mut app, &key(KeyCode::Down, KeyModifiers::SHIFT));
+        assert!(crate::diffview::on_key(&mut app, &key(code, KeyModifiers::NONE)), "{code:?}: the panel takes it");
+        assert_eq!(app.ed.text, "why [Quote #1] this", "{code:?}");
+        let p = app.diff.as_ref().unwrap();
+        assert!(!p.focused && p.sel.is_none(), "{code:?}");
+    }
+}
+
+/// A press on the pill's ask words quotes the lines at the cursor; on
+/// `cmd+c copy`, it copies them, nothing quoted.
+#[test]
+fn a_click_on_the_pill_quotes_the_lines() {
+    let mut app = app(true);
+    app.ed.set("why this", 4);
+    app.diff.as_mut().unwrap().cursor = 5;
+    app.diff.as_mut().unwrap().focused = true;
+    crate::diffview::on_key(&mut app, &key(KeyCode::Down, KeyModifiers::SHIFT));
+    let (line, r) = hint_place(&app).unwrap();
+    let copy_x = r.x + line.width() as u16 - 4;
+    crate::diffview::mouse(&mut app, &MouseEvent { kind: MouseEventKind::Down(MouseButton::Left), column: copy_x, row: r.y, modifiers: KeyModifiers::NONE });
+    assert_eq!(app.ed.text, "why this");
+    assert!(selected(&app), "a copy keeps the selection");
+    crate::diffview::mouse(&mut app, &MouseEvent { kind: MouseEventKind::Down(MouseButton::Left), column: r.x + 3, row: r.y, modifiers: KeyModifiers::NONE });
+    assert_eq!(app.ed.text, "why [Quote #1] this");
+    assert!(!selected(&app));
 }

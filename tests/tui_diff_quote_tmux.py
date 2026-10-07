@@ -4,7 +4,7 @@ provider, tmux at 150 and 80 columns.
 
   t1 in its own worktree commits a 40-line file; in t1's view ctrl+g
       opens its diff on the right; a drag over 3 lines tints them and
-      puts ` type to ask t1 about it · cmd+c copy ` right above them;
+      puts ` type to ask t1 about it · tab quote · cmd+c copy ` right above them;
       typing puts `❝ 1` in t1's composer (the strip says
       `src/pricing.tsx:6-8 · 3 lines`), ⏎ sends: t1's model gets the
       `<selection from="t1 vs main" file="src/pricing.tsx" new="6-8">`
@@ -108,7 +108,7 @@ def wide(t):
     sc = t.wait("line 5")
     panel_x = sc.splitlines()[[i for i, r in enumerate(sc.splitlines()) if "line 5" in r][0]].find("line 5") - 12
     x, y0 = drag_rows(t, "line 5", "line 7", panel_x)
-    hint = " type to ask t1 about it · cmd+c copy "
+    hint = " type to ask t1 about it · tab quote · cmd+c copy "
     sc = t.wait(hint)
     rows = sc.splitlines()
     assert hint in rows[y0 - 1], "the popup right above the selection:\n" + sc
@@ -139,7 +139,7 @@ def wide(t):
     sc = t.screen()
     panel_x = sc.splitlines()[[i for i, r in enumerate(sc.splitlines()) if "line 2" in r][0]].find("line 2") - 12
     drag_rows(t, "line 2", "line 3", panel_x)
-    sc = t.wait(" type to ask main about it · cmd+c copy ")
+    sc = t.wait(" type to ask main about it · tab quote · cmd+c copy ")
     shot(t, "150-from-main")
     t.keys("Escape")
     t.keys("C-g")

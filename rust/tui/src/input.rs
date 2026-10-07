@@ -271,12 +271,13 @@ pub(crate) fn composer_key(app: &mut App, k: &crossterm::event::KeyEvent) {
         Action::Insert(t) => {
             // BISE-134: typing with a selection in the history quotes it
             // first (quote.rs); the key then types after the chip
-            // (not a `/` that starts a command)
+            // (not a `/` that starts a command). A space only quotes: the
+            // chip already ends with one, the cursor waits for the words.
             let command = t == "/" && app.ed.text.is_empty();
-            match crate::quote::take_selection(app).filter(|_| !command) {
-                Some(Ok(chip)) => flash(app, format!("quoted {chip} · backspace on it removes it")),
-                Some(Err(e)) => flash(app, e),
-                None => {}
+            let quoted = !command && crate::quote::quote_now(app);
+            if quoted && t == " " {
+                app.popup_sel = 0;
+                return;
             }
             app.ed.insert(&t);
             app.popup_sel = 0;
@@ -390,6 +391,18 @@ fn on_screen_mouse(app: &mut App, m: &crossterm::event::MouseEvent, term_h: u16)
         // extends), a drag selects, a double click selects
         // the word, a triple click the whole text; the
         // release copies the selection
+        // the popup over a selection in the history (drawn over all of
+        // it): its ask words and `tab quote` quote at the composer's
+        // cursor, `cmd+c copy` copies again (quote.rs)
+        MouseEventKind::Down(MouseButton::Left) if crate::quote::hint_click(app, m.column, m.row).is_some() => {
+            if crate::quote::hint_click(app, m.column, m.row) == Some(crate::quote::HintPart::Copy) {
+                if let Some(t) = feed_selection_text(app).filter(|t| !t.is_empty()) {
+                    copy_text(app, &t);
+                }
+            } else {
+                crate::quote::quote_now(app);
+            }
+        }
         // the copy icon of a code block (codeblock.rs)
         MouseEventKind::Down(MouseButton::Left) if crate::codeblock::click(app, m.column, m.row) => {}
         // the composer's scroll hints: a screenful that way
@@ -582,7 +595,7 @@ fn apply_md(app: &mut App, e: crate::mdlive::Edit) {
     app.ed.anchor = e.anchor.filter(|&a| a != e.cursor);
 }
 
-fn flash(app: &mut App, note: String) {
+pub(crate) fn flash(app: &mut App, note: String) {
     app.flash = Some((note, std::time::Instant::now()));
 }
 
@@ -688,11 +701,6 @@ pub(crate) fn on_key(app: &mut App, k: &crossterm::event::KeyEvent) -> bool {
             app.popup_sel = 0;
         }
         (KeyCode::Char('y'), KeyModifiers::CONTROL) => crate::codeblock::copy_key(app),
-        // space on the item selected in the feed (composer empty; an
-        // agent selected in the panel keeps space for its preview)
-        (KeyCode::Char(' '), KeyModifiers::NONE) if app.ed.text.is_empty() && app.feed_sel.is_some() => {
-            crate::feed::toggle_selected(app);
-        }
         // ctrl+l: clear the local feed
         (KeyCode::Char('l'), KeyModifiers::CONTROL) => sb::clear_display(app),
         // esc: close the popup, else drop the selection — it
@@ -743,6 +751,9 @@ pub(crate) fn on_key(app: &mut App, k: &crossterm::event::KeyEvent) -> bool {
             if let Some(c) = sel {
                 // popup completion
                 pick(app, c);
+            } else if !out && crate::quote::quote_now(app) {
+                // a selection in the history (or the diff): tab quotes
+                // it without typing (quote.rs; ⏎ keeps sending the draft)
             } else if out {
                 // approvals-design.md §8.1: in the composer shift+tab always
                 // switches yolo ↔ auto (a list item outdents with backspace)
@@ -963,23 +974,5 @@ mod keys_tests {
         // ctrl+t is gone (no alias): nothing changes
         press(&mut app, KeyCode::Char('t'), KeyModifiers::CONTROL);
         assert_eq!(opens(&app), vec![false, false, true, false]);
-    }
-
-    /// space on the item selected in the feed toggles it, only with an
-    /// empty composer; with text it is a space.
-    #[test]
-    fn space_toggles_the_selected_feed_item() {
-        let mut app = crate::sb::bench::test_app();
-        app.events = vec![thinking(false), report(false)];
-        app.cache = (0..2).map(|_| None).collect();
-        app.feed_sel = Some(crate::feedsel::FeedSel { anchor: (1, 0, 0), head: (1, 0, 2) });
-        press(&mut app, KeyCode::Char(' '), KeyModifiers::NONE);
-        assert_eq!(opens(&app), vec![false, true]);
-        assert_eq!(app.ed.text, "");
-        app.ed.text = "hi".into();
-        app.ed.cursor = 2;
-        press(&mut app, KeyCode::Char(' '), KeyModifiers::NONE);
-        assert_eq!(opens(&app), vec![false, true]);
-        assert_eq!(app.ed.text, "hi ");
     }
 }

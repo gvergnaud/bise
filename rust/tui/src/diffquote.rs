@@ -169,6 +169,21 @@ pub(crate) fn on_key(app: &mut App, k: &KeyEvent) -> bool {
             p.sel = None;
             false
         }
+        // tab (the pill's `tab quote`) and space quote without typing:
+        // the keys go back to the composer (full screen: the panel
+        // closes); tab is not the next file while lines are selected
+        KeyCode::Tab | KeyCode::Char(' ') if !shift && !other => {
+            let full = !p.side;
+            p.focused = false;
+            match take(app) {
+                Some(Err(e)) if !e.is_empty() => app.flash = Some((e, std::time::Instant::now())),
+                _ => {}
+            }
+            if full {
+                app.diff = None;
+            }
+            true
+        }
         // full screen: no composer in sight; a letter quotes, the panel
         // closes so you see the chip and your words
         KeyCode::Char(_) if !p.side && !other => {
@@ -248,15 +263,51 @@ const CODE_X: usize = 12;
 
 /// Draws the popup over the selection (last over the panel).
 pub(crate) fn draw_hint(app: &App, frame: &mut ratatui::Frame) {
-    let Some(p) = app.diff.as_ref() else { return };
+    let Some((line, r)) = hint_place(app) else { return };
+    let r = r.intersection(frame.area());
+    crate::pointer::region(r, crate::pointer::Shape::Pointer);
+    frame.render_widget(ratatui::widgets::Paragraph::new(line), r);
+}
+
+/// The popup's row and where it goes, when it is up.
+fn hint_place(app: &App) -> Option<(ratatui::text::Line<'static>, Rect)> {
+    let p = app.diff.as_ref()?;
     if p.list.is_some() || app.term.shown() {
-        return;
+        return None;
     }
     let no_color = std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty());
-    let Some(line) = crate::quote::hint_line(p.body.width as usize, no_color, app.sb.focus_name()) else { return };
-    let Some(r) = hint_rect(p, line.width() as u16).map(|r| r.intersection(frame.area())) else { return };
-    crate::pointer::region(r, crate::pointer::Shape::Default);
-    frame.render_widget(ratatui::widgets::Paragraph::new(line), r);
+    let line = crate::quote::hint_line(p.body.width as usize, no_color, app.sb.focus_name())?;
+    let r = hint_rect(p, line.width() as u16)?;
+    Some((line, r))
+}
+
+/// A press on the popup: its ask words and `tab quote` quote the lines
+/// in the composer, `cmd+c copy` copies them again. False: not on it.
+pub(crate) fn hint_press(app: &mut App, col: u16, row: u16) -> bool {
+    let Some((line, r)) = hint_place(app) else { return false };
+    if !r.contains((col, row).into()) {
+        return false;
+    }
+    match crate::quote::hint_part(&line, col - r.x) {
+        crate::quote::HintPart::Copy => {
+            if let Some(t) = text(app) {
+                crate::input::copy_text(app, &t);
+            }
+        }
+        crate::quote::HintPart::Quote => {
+            let full = app.diff.as_ref().is_some_and(|p| !p.side);
+            if let Some(p) = app.diff.as_mut() {
+                p.focused = false;
+            }
+            if let Some(Err(e)) = take(app).filter(|r| r.as_ref().is_err_and(|e| !e.is_empty())) {
+                crate::input::flash(app, e);
+            }
+            if full {
+                app.diff = None;
+            }
+        }
+    }
+    true
 }
 
 #[cfg(test)]

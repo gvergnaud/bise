@@ -1172,6 +1172,11 @@ pub(crate) fn mouse(app: &mut App, m: &crossterm::event::MouseEvent) -> bool {
         }
         return true;
     }
+    // the popup over selected lines: a press quotes or copies (diffquote.rs)
+    if matches!(m.kind, MouseEventKind::Down(MouseButton::Left)) && crate::diffquote::hint_press(app, m.column, m.row) {
+        return true;
+    }
+    let Some(p) = app.diff.as_mut() else { return true };
     let full = !p.side;
     let inside = full || (m.column >= p.area.x && m.column < p.area.right() && m.row >= p.area.y && m.row < p.area.bottom());
     if !inside {

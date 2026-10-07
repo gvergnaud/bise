@@ -4,7 +4,10 @@
 //! Select text in the history (the release copies it, as before), then
 //! type: the first typed key puts the selection in the composer as a
 //! quote chip `❝ 1` at the composer's cursor, like an image (BISE-207),
-//! and ends the selection; the key then types right after the chip. The strip above the composer lists
+//! and ends the selection; the key then types right after the chip.
+//! Space, tab (the popup's `tab quote`) or a click on the popup quote
+//! without typing anything (the chip already ends with a space; ⏎
+//! keeps sending the draft, so it is not the quote key). The strip above the composer lists
 //! it: `❝ 1 “first words of the selection…”  main · 3 lines`; a
 //! backspace on the chip removes it, like an image. Several selections,
 //! several quotes: at most [`MAX`].
@@ -269,15 +272,18 @@ pub(crate) fn take_selection(app: &mut App) -> Option<Result<String, String>> {
 // from the eyes that follow the selection (user: « mes yeux suivent la
 // sélection mais le hint est tout en bas »). So once a drag ends, a
 // one-row pill says it right above the selection's first row too:
-// ` type to ask about it · cmd+c copy ` on the pink pill, the words and
-// colors of the key bar. No room above (the first row is the feed's
-// top row, or scrolled out): under the last row. No room either (the
-// selection fills the feed): none, the key bar says it. It starts at
-// the selection's first column, pushed left to stay in the feed column
-// (never over the panel, the divider or the composer). Narrow: without
-// `· cmd+c copy`; narrower than the short pill: none. A press, a scroll,
-// typing (the quote chip takes over) or esc (the selection ends) puts it
-// away. `NO_COLOR`: `[ type to ask about it · cmd+c copy ]`, the ask pair
+// ` type to ask about it · tab quote · cmd+c copy ` on the pink pill, the
+// words and colors of the key bar. No room above (the first row is the
+// feed's top row, or scrolled out): under the last row. No room either
+// (the selection fills the feed): none, the key bar says it. It starts
+// at the selection's first column, pushed left to stay in the feed
+// column (never over the panel, the divider or the composer). Narrow:
+// without `· cmd+c copy`, then without `· tab quote` (designer
+// m_11973); narrower than the short pill: none. A click on it quotes
+// (the ask words, `tab quote`) at the composer's cursor or copies
+// (`cmd+c copy`); a press elsewhere, a scroll, typing (the quote chip
+// takes over) or esc (the selection ends) puts it away. `NO_COLOR`:
+// `[ type to ask about it · tab quote · cmd+c copy ]`, the ask pair
 // bold, no tint. It is drawn last over the history: no layout moves.
 
 /// The popup's row, in at most `width` columns: the long form, else the
@@ -307,17 +313,43 @@ fn hint_words(width: usize, no_color: bool, words: &str) -> Option<ratatui::text
         (a.add_modifier(Modifier::BOLD), a, d, bg.fg(crate::theme::text()), d)
     };
     let (open, close) = if no_color { ("[ ", " ]") } else { (" ", " ") };
-    let long = vec![
-        Span::styled(open, bg),
-        Span::styled("type", key),
-        Span::styled(words.to_string(), ask),
-        Span::styled(" · ", sep),
-        Span::styled("cmd+c", copy_key),
-        Span::styled(" copy", copy),
-        Span::styled(close, bg),
-    ];
-    let short: Vec<Span<'static>> = long[..3].iter().cloned().chain([Span::styled(close, bg)]).collect();
-    [long, short].into_iter().map(Line::from).find(|l| l.width() <= width)
+    let ask_pair = [Span::styled(open, bg), Span::styled("type", key), Span::styled(words.to_string(), ask)];
+    let tab_pair = [Span::styled(" · ", sep), Span::styled(TAB_KEY, copy_key), Span::styled(" quote", copy)];
+    let copy_pair = [Span::styled(" · ", sep), Span::styled(COPY_KEY, copy_key), Span::styled(" copy", copy)];
+    let end = [Span::styled(close, bg)];
+    // designer m_11973: narrower, `cmd+c copy` goes first, then `tab quote`
+    let long: Vec<Span<'static>> = ask_pair.iter().chain(&tab_pair).chain(&copy_pair).chain(&end).cloned().collect();
+    let mid: Vec<Span<'static>> = ask_pair.iter().chain(&tab_pair).chain(&end).cloned().collect();
+    let short: Vec<Span<'static>> = ask_pair.iter().chain(&end).cloned().collect();
+    [long, mid, short].into_iter().map(Line::from).find(|l| l.width() <= width)
+}
+
+/// The key that quotes without typing (the pill and the key bar say it).
+const TAB_KEY: &str = "tab";
+const COPY_KEY: &str = "cmd+c";
+
+/// What a click on the pill does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum HintPart {
+    /// the ask words and `tab quote`: the selection goes in the composer
+    Quote,
+    /// `cmd+c copy`: copies it again
+    Copy,
+}
+
+/// What a click `x` columns from the pill's left does: the copy pair
+/// copies, the rest of the pill quotes.
+pub(crate) fn hint_part(line: &ratatui::text::Line<'_>, x: u16) -> HintPart {
+    let mut at = 0usize;
+    for (i, s) in line.spans.iter().enumerate() {
+        let w = s.width();
+        if (x as usize) < at + w {
+            let copy = s.content == COPY_KEY || s.content == " copy" || line.spans.get(i + 1).is_some_and(|n| n.content == COPY_KEY);
+            return if copy { HintPart::Copy } else { HintPart::Quote };
+        }
+        at += w;
+    }
+    HintPart::Quote
 }
 
 /// Where the popup goes: `w` columns on the row above the selection's
@@ -340,22 +372,51 @@ pub(crate) fn hint_rect(sel: crate::feedsel::FeedSel, vis: &[(usize, usize)], ar
     Some(ratatui::layout::Rect { x: area.x + x, y: area.y + y as u16, width: w, height: 1 })
 }
 
+/// The popup over the history, when it is up: its row and where it goes
+/// (in `screen`, the frame's area).
+fn hint_place(app: &App, screen: ratatui::layout::Rect) -> Option<(ratatui::text::Line<'static>, ratatui::layout::Rect)> {
+    let sel = app.feed_sel?;
+    if !app.quote_hint || app.mouse.drag.is_some() || app.term.shown() {
+        return None;
+    }
+    let area = ratatui::layout::Rect { x: app.feed_x, y: app.feed_y, width: app.area_w.min(u16::MAX as usize) as u16, height: app.area_h.min(u16::MAX as usize) as u16 }
+        .intersection(screen);
+    let no_color = std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty());
+    let line = hint_line(area.width as usize, no_color, "")?;
+    let vis: Vec<(usize, usize)> = app.vis_events.iter().copied().zip(app.vis_rows.iter().copied()).collect();
+    let r = hint_rect(sel, &vis, area, line.width() as u16)?;
+    Some((line, r))
+}
+
 /// Draws the popup over the history when a selection is up and its drag
 /// ended (the last thing drawn over the history).
 pub(crate) fn draw_hint(app: &App, frame: &mut ratatui::Frame) {
-    let Some(sel) = app.feed_sel else { return };
-    if !app.quote_hint || app.mouse.drag.is_some() || app.term.shown() {
-        return;
-    }
-    let area = ratatui::layout::Rect { x: app.feed_x, y: app.feed_y, width: app.area_w.min(u16::MAX as usize) as u16, height: app.area_h.min(u16::MAX as usize) as u16 }
-        .intersection(frame.area());
-    let no_color = std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty());
-    let Some(line) = hint_line(area.width as usize, no_color, "") else { return };
-    let vis: Vec<(usize, usize)> = app.vis_events.iter().copied().zip(app.vis_rows.iter().copied()).collect();
-    let Some(r) = hint_rect(sel, &vis, area, line.width() as u16) else { return };
-    crate::pointer::region(r, crate::pointer::Shape::Default); // BISE-272: over what it covers
+    let Some((line, r)) = hint_place(app, frame.area()) else { return };
+    // BISE-272: a click quotes or copies. A button, not text: no
+    // textlayer area (BISE-290), whose press would take the click and
+    // drop the selection it quotes
+    crate::pointer::region(r, crate::pointer::Shape::Pointer);
     frame.render_widget(ratatui::widgets::Paragraph::new(line), r);
-    crate::textlayer::text(r); // BISE-290: its text selects and copies
+}
+
+/// What a click at (`col`, `row`) does on the popup over the history;
+/// none off it (or no popup).
+pub(crate) fn hint_click(app: &App, col: u16, row: u16) -> Option<HintPart> {
+    let screen = ratatui::layout::Rect { x: 0, y: 0, width: u16::MAX, height: u16::MAX };
+    let (line, r) = hint_place(app, screen)?;
+    r.contains((col, row).into()).then(|| hint_part(&line, col - r.x))
+}
+
+/// Quote the selection now (a key, a click on the popup): its chip at
+/// the composer's cursor, the flash says it. False: no selection.
+pub(crate) fn quote_now(app: &mut App) -> bool {
+    match take_selection(app) {
+        Some(Ok(chip)) => crate::input::flash(app, format!("quoted {chip} · backspace on it removes it")),
+        Some(Err(e)) => crate::input::flash(app, e),
+        None => return false,
+    }
+    app.quote_hint = false;
+    true
 }
 
 #[cfg(test)]
@@ -559,9 +620,13 @@ mod tests {
     fn the_hint_reads_like_the_key_bar() {
         use ratatui::style::Modifier;
         let l = hint_line(80, false, "").unwrap();
-        assert_eq!(row_text(&l), " type to ask about it · cmd+c copy ");
+        assert_eq!(row_text(&l), " type to ask about it · tab quote · cmd+c copy ");
+        // narrower: `cmd+c copy` goes first, then `tab quote` (designer m_11973)
+        assert_eq!(row_text(&hint_line(46, false, "").unwrap()), " type to ask about it · tab quote ");
+        assert_eq!(row_text(&hint_line(34, false, "").unwrap()), " type to ask about it · tab quote ");
+        assert_eq!(row_text(&hint_line(33, false, "").unwrap()), " type to ask about it ");
         // the diff's names who gets it, else the thread's words
-        assert_eq!(row_text(&hint_line(80, false, "t1").unwrap()), " type to ask t1 about it · cmd+c copy ");
+        assert_eq!(row_text(&hint_line(80, false, "t1").unwrap()), " type to ask t1 about it · tab quote · cmd+c copy ");
         assert_eq!(row_text(&hint_line(30, false, "t1").unwrap()), " type to ask t1 about it ");
         assert_eq!(row_text(&hint_line(22, false, "t1").unwrap()), " type to ask about it ");
         assert_eq!(l.spans[1].style.fg, Some(crate::theme::accent()));
@@ -574,7 +639,7 @@ mod tests {
         assert_eq!(row_text(&hint_line(22, false, "").unwrap()), " type to ask about it ");
         assert!(hint_line(21, false, "").is_none());
         let n = hint_line(80, true, "").unwrap();
-        assert_eq!(row_text(&n), "[ type to ask about it · cmd+c copy ]");
+        assert_eq!(row_text(&n), "[ type to ask about it · tab quote · cmd+c copy ]");
         assert!(n.spans.iter().all(|s| s.style.bg.is_none()), "NO_COLOR: no tint");
         assert!(n.spans[1].style.add_modifier.contains(Modifier::BOLD) && n.spans[2].style.add_modifier.contains(Modifier::BOLD));
         assert_eq!(row_text(&hint_line(33, true, "").unwrap()), "[ type to ask about it ]");
@@ -642,7 +707,7 @@ mod tests {
         assert!(!frame_text(&mut app, 100, 30).iter().any(|r| r.contains("ask about it ·")), "not while dragging");
         mouse(&mut app, MouseEventKind::Up(MouseButton::Left), x + 7);
         let after = frame_text(&mut app, 100, 30);
-        let hint = " type to ask about it · cmd+c copy ";
+        let hint = " type to ask about it · tab quote · cmd+c copy ";
         assert!(after[y as usize - 1].contains(hint), "{after:#?}");
         assert_eq!(col(&after[y as usize - 1], hint), Some(x as usize), "at the selection's first column");
         // only that row changes, and only under the pill
@@ -662,6 +727,77 @@ mod tests {
         let y = frame_text(&mut app, 100, 30).iter().position(|r| r.contains(hint));
         assert!(y.is_some());
         press(&mut app, KeyCode::Char('w'));
+        assert!(!frame_text(&mut app, 100, 30).iter().any(|r| r.contains("ask about it ·")));
+    }
+
+    /// Space starts the quote like a letter (it no longer opens the
+    /// item under the selection) and types nothing: the chip already
+    /// ends with a space. Tab quotes too, at the cursor. Without a
+    /// selection a space is a space.
+    #[test]
+    fn space_and_tab_quote_without_typing() {
+        for (code, name) in [(KeyCode::Char(' '), "space"), (KeyCode::Tab, "tab")] {
+            let mut app = selected();
+            app.ed.set("why does it", 4);
+            press(&mut app, code);
+            assert_eq!(app.ed.text, "why [Quote #1] does it", "{name}");
+            assert_eq!(app.ed.cursor, 15, "{name}: the cursor after the chip's space");
+            assert!(app.feed_sel.is_none(), "{name}");
+            assert!(app.flash.as_ref().is_some_and(|(f, _)| f.starts_with("quoted ❝ 1")), "{name}: {:?}", app.flash);
+        }
+        // empty composer: space quotes, nothing opens
+        let mut app = selected();
+        app.events = vec![Ev::Thinking { ms: 10, text: "hm".into(), open: false }];
+        press(&mut app, KeyCode::Char(' '));
+        assert!(matches!(app.events[0], Ev::Thinking { open: false, .. }));
+        assert_eq!(app.ed.text, "[Quote #1] ");
+        // no selection: a space is a space
+        press(&mut app, KeyCode::Char(' '));
+        assert_eq!(app.ed.text, "[Quote #1]  ");
+    }
+
+    /// A click on the popup's ask words or `tab quote` puts the quote at
+    /// the composer's cursor (text already there); on `cmd+c copy` it
+    /// copies and keeps the selection; off the popup it is a press in
+    /// the history as before.
+    #[test]
+    fn a_click_on_the_hint_quotes_at_the_cursor() {
+        use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+        let mut app = crate::sb::bench::test_app_drained();
+        app.sb.focus = "main".into();
+        app.events = (0..6).map(|i| Ev::Assistant(format!("answer number {i} about the login flow"))).collect();
+        app.cache = (0..6).map(|_| None).collect();
+        app.ed.set("so why is it slow", 7);
+        let screen = frame_text(&mut app, 100, 30);
+        let y = screen.iter().position(|r| r.contains("answer number 4")).unwrap() as u16;
+        let r = &screen[y as usize];
+        let x = unicode_width::UnicodeWidthStr::width(&r[..r.find("number 4").unwrap()]) as u16;
+        let mouse = |app: &mut App, kind, column, row| {
+            crate::input::on_mouse(app, &MouseEvent { kind, column, row, modifiers: KeyModifiers::NONE }, 30)
+        };
+        let click = |app: &mut App, column, row| {
+            mouse(app, MouseEventKind::Down(MouseButton::Left), column, row);
+            mouse(app, MouseEventKind::Up(MouseButton::Left), column, row);
+        };
+        mouse(&mut app, MouseEventKind::Down(MouseButton::Left), x, y);
+        mouse(&mut app, MouseEventKind::Drag(MouseButton::Left), x + 7, y);
+        mouse(&mut app, MouseEventKind::Up(MouseButton::Left), x + 7, y);
+        let row = frame_text(&mut app, 100, 30)[y as usize - 1].clone();
+        let at = |pat: &str| unicode_width::UnicodeWidthStr::width(&row[..row.find(pat).unwrap()]) as u16;
+        assert_eq!(hint_click(&app, at("cmd+c") + 2, y - 1), Some(HintPart::Copy));
+        assert_eq!(hint_click(&app, at("tab quote") + 1, y - 1), Some(HintPart::Quote));
+        assert_eq!(hint_click(&app, at("type") - 1, y - 1), Some(HintPart::Quote), "the pill's edge");
+        assert_eq!(hint_click(&app, at("type"), y), None, "the row under it");
+        // cmd+c copy: copies, the selection stays
+        click(&mut app, at("cmd+c") + 2, y - 1);
+        assert_eq!(app.ed.text, "so why is it slow");
+        assert!(app.feed_sel.is_some() && app.quote_hint);
+        // the ask words: the quote at the cursor, the popup gone
+        click(&mut app, at("ask"), y - 1);
+        assert_eq!(app.ed.text, "so why [Quote #1] is it slow");
+        assert_eq!(app.ed.cursor, 18);
+        assert!(app.feed_sel.is_none() && !app.quote_hint);
+        assert!(of(&app.attachments[0]).unwrap().text.contains("number"), "{:?}", app.attachments);
         assert!(!frame_text(&mut app, 100, 30).iter().any(|r| r.contains("ask about it ·")));
     }
 }

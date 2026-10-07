@@ -664,21 +664,16 @@ fn toggles_one_item() {
     let expanded = |app: &App| -> Vec<bool> {
         app.events.iter().filter_map(|e| match e { Ev::Tool(td) => Some(td.expanded), _ => None }).collect()
     };
-    // no selection: nothing to toggle
-    assert!(!toggle_selected(&mut app));
-    // the selection on the thinking section opens it
-    app.feed_sel = Some(crate::feedsel::FeedSel { anchor: (1, 0, 0), head: (1, 0, 3) });
-    assert!(toggle_selected(&mut app));
+    // the thinking section opens
+    assert!(toggle_event(&mut app.events, &mut app.cache, 1));
     assert!(matches!(app.events[1], Ev::Thinking { open: true, .. }));
-    // on an output
-    app.feed_sel = Some(crate::feedsel::FeedSel { anchor: (0, 0, 0), head: (0, 0, 0) });
+    // an output
     ensure_rows(&app.events, &mut app.cache, 0, false, 80, 0);
-    assert!(toggle_selected(&mut app));
+    assert!(toggle_event(&mut app.events, &mut app.cache, 0));
     assert_eq!(expanded(&app), vec![true, false, false]);
     assert!(app.cache[0].is_none(), "its rows rebuild");
     // nothing behind a notice or a tool without output
-    app.feed_sel = Some(crate::feedsel::FeedSel { anchor: (4, 0, 0), head: (4, 0, 0) });
-    assert!(!toggle_selected(&mut app));
+    assert!(!toggle_event(&mut app.events, &mut app.cache, 4));
     assert!(!toggle_event(&mut app.events, &mut app.cache, 3));
     // thinking is ctrl+o's, untouched
     assert!(matches!(app.events[1], Ev::Thinking { open: true, .. }));
