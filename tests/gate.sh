@@ -341,6 +341,9 @@ if [ "$mode" = full ]; then
   export FUZZ_RUNS="${FUZZ_RUNS:-2000}"
   tests/run_all.sh & wait $!; rc=$?
   [ $rc = 0 ] || sbcore_gone "$root/sb-core"
+  # apps/desktop/src/proto matches bise-proto every time (a generated file
+  # changed by a merge or a rebase can't slip through; quick runs it on a change)
+  if [ $rc = 0 ]; then (cd rust && cargo test --offline -q -p bise-proto --features ts --test ts) || { echo "FAIL proto_ts"; rc=1; }; fi
   # every binary built runs on the macOS target (BISE-164): the Bend ones,
   # bise, and the engine when this tree has one
   bins=(./repl-live ./repl-scripted ./sb-core "${CARGO_TARGET_DIR:-rust/target}/debug/bise")
@@ -435,6 +438,8 @@ for f in $changed; do
     rust/harness/*) add bend-harness ;;
     rust/session/*) add bise-session; add switchboard; add bend-harness ;;
     bend/hub/*|bend/vendor/*) add switchboard ;;
+    rust/proto/*) add bise-proto; add bend-tui; add switchboard; add bend-harness; proto_ts=1 ;;
+    apps/desktop/src/proto/*) proto_ts=1 ;;
   esac
 done
 step() {  # <name> <cmd...>: one line when green, the failures and the log when red
@@ -467,6 +472,9 @@ if [ -n "$pkgs" ]; then
 else
   echo "no Rust or hub change vs $base: no Rust tests run"
 fi
+# bise desktop's TS types (apps/desktop/src/proto) are bise-proto's, generated:
+# a stale or hand-edited file is red (BISE_PROTO_BLESS=1 on that test rewrites them)
+[ "${proto_ts:-0}" = 1 ] && step proto_ts bash -c "cd rust && cargo test --offline -q -p bise-proto --features ts --test ts"
 wait "$clippy_pid"
 [ "$(cat "$out/clippy.rc")" = 0 ] || fail clippy "$out/clippy.log"
 cat "$out/clippy.res"

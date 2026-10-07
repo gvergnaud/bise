@@ -125,7 +125,7 @@ def main():
         c.say("/new t8: {{bash: npm run build; echo one > t8a.txt}} {{bash: npm run build; echo two > t8b.txt}}")
         card = card_of(c, "t8")
         check("always: npm run build *" in card["text"], "the pattern it saves: %r" % card["text"])
-        c.say("/answer %d always" % card["id"])
+        c.say("/answer %d 2" % card["id"])  # 2 always: approving words are refused (the composer rule)
         c.wait(lambda: os.path.exists(os.path.join(E.ws, "t8b.txt")), 90, "the second npm run build ran")
         c.wait_idle("t8")
         rules = open(os.path.join(bise, "approvals.toml")).read()
@@ -143,7 +143,7 @@ def main():
         c.say("/new t10c: {{bash: echo c > t10c.txt}}")
         c.wait(lambda: os.path.exists(os.path.join(E.ws, "t10c.txt")), 90, "t10c works meanwhile")
         check(c.agent("t10a")["waiting_on"] == "you", "t10a still waits")
-        c.say("/answer %d allow" % card["id"])
+        c.say("/answer %d 1" % card["id"])  # 1 allow
         c.wait_idle("t10a", "t10b")
         check(open(out10).read() == "y\ny\n", "one answer ran both calls")
         c.wait_line("main", "sb approval : allowed : t10a, t10b : " + cmd, 10)

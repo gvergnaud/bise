@@ -19,8 +19,16 @@ import e2e
 ROOT = e2e.ROOT
 FULL = open(os.path.join(ROOT, "prompts", "tool-desc-run-typescript.txt")).read().strip()
 # chars, the skills catalog aside: measured 25.4k for the task, 36.2k for main
-TASK_BUDGET = 27000
-MAIN_BUDGET = 38500
+# (budgets 27000 and 38500), then raised by exactly what the desktop's six
+# command rows add to every prompt (architect m_12475; release notes: every
+# agent reads sb page, sb taste and sb people, main also sb follow, and
+# sb report gains --step/--result, sb every --page): +2044 chars for a task
+# (page 1135, taste 324, people 279, report +209, every +97) and +2184 for
+# main (the same plus follow 140), measured row by row between main
+# 28cd0f46's rendered main role and today's (rust/switchboard/src/testdata/
+# prompts), each row with its newline
+TASK_BUDGET = 27000 + 2044
+MAIN_BUDGET = 38500 + 2184
 fails = []
 
 

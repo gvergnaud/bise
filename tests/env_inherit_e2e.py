@@ -74,8 +74,14 @@ def test():
         real = os.path.realpath
         check(real(env.get("BEND_WORKDIR", "")) == real(E.ws), "BEND_WORKDIR is main's: %s" % env.get("BEND_WORKDIR"))
         check(real(env.get("BISE_SESSION_CHOICE", "")).startswith(real(E.state)), "its own choice file")
-        for k in ("SB_CORE_BIN", "BISE_APP_ROOT", "BISE_HOME_WORKSPACE", "BEND_WIRE_LOG"):
+        for k in ("SB_CORE_BIN", "BISE_APP_ROOT", "BEND_WIRE_LOG"):
             check(k not in env or env[k] != junk[k], "%s not inherited: %s" % (k, env.get(k)))
+        # BISE_HOME_WORKSPACE is the hub's own home workspace, handed to
+        # every agent on purpose (3572ac59, amb-tools m_6141: a QA hub's
+        # ~/bise is not the agent's shell HOME's); the hub honors it as a
+        # test setting, so here it is the value the hub was started with
+        check(env.get("BISE_HOME_WORKSPACE") == junk["BISE_HOME_WORKSPACE"],
+              "BISE_HOME_WORKSPACE is the hub's own home workspace: %s" % env.get("BISE_HOME_WORKSPACE"))
         check("SB_CORE_BIN" not in env and "BISE_APP_ROOT" not in env, "no SB_CORE_BIN, no BISE_APP_ROOT")
         # every internal variable main has, the hub set (none is the junk)
         for k in bise_env.INTERNAL:

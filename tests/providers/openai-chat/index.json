@@ -90,5 +90,11 @@
     }
    ]
   }
+ },
+ "qa-long-answer.sse": {
+  "source": "hand-written for qa-flows' thread/answers (bar ⛔4): a 40-line markdown answer with a list, a code block, inline code and a link, replayed by [[fixture: qa-long-answer]]",
+  "expect": {
+   "text": true
+  }
  }
 }

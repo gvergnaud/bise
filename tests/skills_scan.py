@@ -21,6 +21,8 @@ temp HOME holding one skill:
 6. main (BISE_ROLE=main, the hub sets it) gets bise's built-in skills,
    the app root's prompts/skills (bise-demo), after the others; a task
    (BISE_ROLE=agent) or a solo session does not.
+7. every agent, main and tasks, gets the app root's prompts/skills-all
+   (bise-pages: a task that makes a page loads it with the skill tool).
 """
 import os, socket, subprocess, sys, tempfile, time
 
@@ -49,6 +51,13 @@ def main():
     tmp = tempfile.mkdtemp(prefix="sb-skills-scan-")
     os.makedirs(os.path.join(tmp, ".agents", "skills", "alpha"))
     open(os.path.join(tmp, ".agents", "skills", "alpha", "SKILL.md"), "w").write(SKILL)
+    # 8. a skill file whose open never answers (a FIFO, the stand-in for a
+    # link into ~/Documents that a launchd parent has no macOS privacy
+    # grant for): the scan skips it at its 3 s deadline and names it on
+    # stderr
+    os.makedirs(os.path.join(tmp, ".agents", "skills", "gamma"))
+    stuck = os.path.join(tmp, ".agents", "skills", "gamma", "SKILL.md")
+    os.mkfifo(stuck)
     os.makedirs(os.path.join(tmp, "agent-run"))
     cache = os.path.join(tmp, "cache")
     index = os.path.join(cache, "skills-index.txt")
@@ -85,10 +94,11 @@ def main():
             fails.append("%s %s" % (name, detail))
 
     try:
-        def banner():
+        def banner_on():
             assert repl.poll() is None, "FAIL the REPL exited: %s" % open(err).read()[-500:]
             return "REPL on" in open(log).read()
-        wait.until(banner, 60, "the REPL banner")
+        wait.until(banner_on, 60, "the REPL banner")
+        banner = time.time()
         # the scan may end after the banner; the check below says what is missing
         try:
             wait.until(lambda: os.path.exists(index), 30, "the shared index %s" % index)
@@ -104,6 +114,7 @@ def main():
             wait.until(lambda: os.path.exists(sidx), 30, "the session's index %s" % sidx)
         except AssertionError:
             pass
+        ready = time.time()  # the scan's end: the REPL serves its first turn next
         check("the session's index is under $BEND_RUN_DIR/<port>",
               os.path.exists(sidx) and not os.path.exists(os.path.join(tmp, ".bend-harness")),
               repr((os.listdir(tmp), os.listdir(os.path.dirname(sidx))
@@ -121,11 +132,31 @@ def main():
         # the harness's own files: the agent's run/ folder, never /tmp
         script = os.path.join(tmp, "agent-run", "bend-skills-scan-%s.sh" % port)
         a1, a2 = os.path.join(tmp, "a-shared.txt"), os.path.join(tmp, "a-session.txt")
-        subprocess.run(["/bin/sh", script, a1, a2, os.path.join(tmp, "none.txt")], cwd=ROOT,
-                       env={**env, "BISE_ROLE": "agent"}, check=True)
+        t1 = time.time()
+        scan = subprocess.run(["/bin/sh", script, a1, a2, os.path.join(tmp, "none.txt")], cwd=ROOT,
+                              env={**env, "BISE_ROLE": "agent"}, check=True, capture_output=True, text=True,
+                              timeout=30)
+        took = time.time() - t1
+        # 3 s deadline + the scan's own process starts, seconds under a
+        # gate's load (6 s at load 24): never forever
+        check("a skill file that never opens holds the scan 3 s, not forever (%.1f s)" % took, took < 8, repr(took))
+        check("the scan names it once on its output",
+              scan.stdout == "skills scan: skipped %s (no answer in 3 s)\n" % stuck, repr(scan.stdout))
+        shared = open(a1).read() if os.path.exists(a1) else "<none>"
+        check("the index still builds without it", shared.startswith("alpha\t") and "gamma" not in shared,
+              repr(shared))
+        check("the REPL logs the skipped file on stderr",
+              open(err).read().count("skills scan: skipped %s (no answer in 3 s)" % stuck) == 1,
+              repr(open(err).read()[-400:]))
+        check("the REPL's scan ended within 8 s of its banner, so main's first turn can start (%.1f s)"
+              % (ready - banner), ready - banner < 8, repr(ready - banner))
         adata = open(a2).read() if os.path.exists(a2) else "<none>"
-        check("a task's index has no built-in skill", adata.startswith("beta\t") and "bise-demo" not in adata,
+        check("a task's index has no main-only built-in skill", adata.startswith("beta\t") and "bise-demo" not in adata,
               repr(adata))
+        pages = os.path.join(ROOT, "prompts", "skills-all", "bise-pages", "SKILL.md")
+        for who, data in (("main", sdata), ("a task", adata)):
+            check("%s's index has every agent's built-ins (bise-pages)" % who,
+                  ("\nbise-pages\t" in data) and ("\t%s\n" % pages) in data, repr(data))
         sock = socket.create_connection(("127.0.0.1", port), timeout=120)
         sock.sendall(b"run [[skill: alpha]] [[skill: nope]] [[skill: bise-demo]]\n")
         f = sock.makefile("rb")

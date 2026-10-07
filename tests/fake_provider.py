@@ -90,7 +90,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 FIXTURES = os.path.join(HERE, "providers")
 LOG = os.environ.get("FAKE_LOG", "/tmp/sb-fake.log")
 FAMILIES = ("anthropic", "openai-chat", "openai-responses", "gemini")
-MARK = re.compile(r"\[\[(bash|skill|edit|write_file|apply_patch|ts): (.*?)\]\]", re.S)
+MARK = re.compile(r"\[\[(bash|skill|edit|write_file|apply_patch|run_typescript|ts): (.*?)\]\]", re.S)
 INNER = re.compile(r"\{\{(bash): (.*?)\}\}", re.S)
 THINK = re.compile(r"\[\[think: (.*?)\]\]", re.S)
 ERROR = re.compile(r"\[\[error: (\w+)(?: x(\d+))?(?: retry=(\d+))?\]\]")
@@ -243,6 +243,9 @@ def agent_of(conv):
             # auto mode's checker as a chat model (approvals, design §4.2)
             if m["text"].startswith("# bise checker"):
                 return "(checker)"
+            # bise's route model (desktop S2 step 5, daemon/routing.rs)
+            if m["text"].startswith("# bise route pick"):
+                return "(route pick)"
             g = re.search(r"# Your role: task `([^`]+)`", m["text"])
             if g:
                 return g.group(1)
@@ -291,6 +294,14 @@ def reply_for(conv, seen=0):
         risky = "--force" in state or "rm -rf" in state
         turn["text"] = json.dumps({"contained": not risky, "serves_task": True, "secrets": False})
         return turn
+    if agent_of(conv) == "(route pick)":
+        # `[[route: N]]` in his words: the N-th project listed; else none
+        text = " ".join(m["text"] for m in conv if m["role"] == "user")
+        n = re.search(r"\[\[route: (\d+)\]\]", text)
+        names = re.findall(r"project: ([^\n]+)", text.replace("\\n", "\n"))
+        k = int(n.group(1)) - 1 if n else -1
+        turn["text"] = names[k].strip() if 0 <= k < len(names) else "none"
+        return turn
     idx = last_user(conv)
     if idx is None:
         turn["text"] = "ack: (nothing)"
@@ -312,6 +323,10 @@ def reply_for(conv, seen=0):
     if calls_done < len(marks):
         tool, arg = marks[calls_done]
         args = {"name": arg.strip()} if tool == "skill" else {"arg": arg.strip()}
+        # `[[run_typescript: CODE]]`: a connector call from the sandbox
+        # (tools.gmail.create_draft: the approvals gate sees gmail.create_draft)
+        if tool == "run_typescript":
+            args = {"code": arg.strip(), "description": "a scripted call"}
         # `[[ts: CODE]]`: run_typescript with that program
         if tool == "ts":
             tool, args = "run_typescript", {"code": arg.strip(), "description": "a scripted program"}

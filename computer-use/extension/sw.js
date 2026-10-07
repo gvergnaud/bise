@@ -144,7 +144,7 @@ async function onHost(m) {
   if (m.drop) return dropAgent(m.drop);
   if (m.id === undefined || !m.op) return;
   try {
-    const result = await run(m.agent, m.op, m.args || {});
+    const result = m.op === "show" ? await show(m.args || {}) : await run(m.agent, m.op, m.args || {});
     post({ id: m.id, ok: true, result });
   } catch (e) {
     // stopped meanwhile (the bar's Cancel cut the debugger mid-call): that is what happened
@@ -258,6 +258,59 @@ async function open(agent, args) {
   const now = await chrome.tabs.get(tab.id);
   ensureOverlay(tab.id);
   return { target: `tab:${tab.id}`, url: now.url, title: now.title, summary: summary("open", null, {}, hostOf(now.url)) };
+}
+
+// ---------------------------------------------------------------- show (the user's own page)
+
+/** The user-facing group: titled exactly this, never "bise · <agent>" (agents' groups). */
+const SHOW_GROUP = "bise";
+
+/** `url` starts with `prefix` on a path boundary: equal, or the prefix ends with /, or the next char is / ? #. */
+function underPrefix(url, prefix) {
+  if (!url || !url.startsWith(prefix)) return false;
+  return url.length === prefix.length || prefix.endsWith("/") || "/?#".includes(url[prefix.length]);
+}
+
+/**
+ * C4 `show` (bise ambient, a page for the user, docs/ambient-pages.md §2.8):
+ * the tab under `url_prefix` in a "bise" group comes forward, else `url`
+ * opens active in that group (created in the last focused window, pink),
+ * and its window takes focus. No agent, no debugger, no overlay, no tab
+ * limit: the user asked to see it. Never in the agents' tools (the broker
+ * takes it on command connections only).
+ */
+async function show(args) {
+  const url = normalUrl(args.url);
+  if (!/^https?:/i.test(url)) fail("bad_args", "show takes an http or https url");
+  const prefix = String(args.url_prefix ?? "") || url;
+  const groups = (await chrome.tabGroups.query({})).filter((g) => g.title === SHOW_GROUP);
+  for (const g of groups) {
+    for (const tab of await chrome.tabs.query({ groupId: g.id })) {
+      if (!underPrefix(tab.url || tab.pendingUrl, prefix)) continue;
+      await chrome.tabs.update(tab.id, { active: true });
+      await chrome.windows.update(tab.windowId, { focused: true });
+      return { tab_id: tab.id, created: false, url: tab.url || tab.pendingUrl };
+    }
+  }
+  let windowId = groups[0]?.windowId ?? null;
+  if (windowId === null) {
+    try {
+      windowId = (await chrome.windows.getLastFocused({ windowTypes: ["normal"] })).id;
+    } catch {
+      windowId = null;
+    }
+  }
+  let tab;
+  if (windowId === null) tab = (await chrome.windows.create({ url, focused: true })).tabs[0];
+  else tab = await chrome.tabs.create({ url, active: true, windowId });
+  const mine = groups.find((g) => g.windowId === tab.windowId);
+  if (mine) await chrome.tabs.group({ tabIds: [tab.id], groupId: mine.id });
+  else {
+    const groupId = await chrome.tabs.group({ tabIds: [tab.id], createProperties: { windowId: tab.windowId } });
+    await chrome.tabGroups.update(groupId, { title: SHOW_GROUP, color: "pink", collapsed: false });
+  }
+  await chrome.windows.update(tab.windowId, { focused: true });
+  return { tab_id: tab.id, created: true, url };
 }
 
 async function waitLoaded(tabId, ms) {

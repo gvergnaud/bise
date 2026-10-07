@@ -1,0 +1,14 @@
+data: {"id":"chatcmpl-fake","object":"chat.completion.chunk","created":0,"model":"fake-model","system_fingerprint":"fp_fake","choices":[{"index":0,"delta":{"role":"assistant","content":"","refusal":null},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-fake","object":"chat.completion.chunk","created":0,"model":"fake-model","system_fingerprint":"fp_fake","choices":[{"index":0,"delta":{"content":"## the release plan (line 1)\n\nhere is the plan for friday, step by step (line 3).\n\n1. freeze main at 14:00 (line 5)\n2. run the full test suite on the release branch (line 6)\n3. tag the release candidate as v2.4.0-rc1 (line 7)\n4. deploy the candidate to staging (line 8)\n5. watch the p99 dashboard for 30 minutes (line 9)\n6. ask the on-call to sign off (line 10)\n7. deploy to production in three waves (line 11)\n8. keep the old build warm for one hour (line 12)\n\n"},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-fake","object":"chat.completion.chunk","created":0,"model":"fake-model","system_fingerprint":"fp_fake","choices":[{"index":0,"delta":{"content":"the deploy command, as the runbook has it (line 14):\n\n```sh\n# line 16: build and tag\nmake release VERSION=2.4.0\ngit tag -a v2.4.0 -m 'release 2.4.0'\n# line 19: the three waves\nfor wave in 1 2 3; do\n    ./deploy.sh --wave \"$wave\" --wait 600\ndone\n```\n\n"},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-fake","object":"chat.completion.chunk","created":0,"model":"fake-model","system_fingerprint":"fp_fake","choices":[{"index":0,"delta":{"content":"what to watch during each wave (line 25):\n\n- the error rate stays under 0.1% (line 27)\n- the p99 stays under 800 ms (line 28)\n- no new alert pages the on-call (line 29)\n- the queue depth goes back to zero within 5 min (line 30)\n\nif one of these breaks, roll back with `./deploy.sh --rollback` (line 32).\n\nthe full runbook is at [the release runbook](https://example.com/runbook/release) (line 34).\n\nwho does what (line 36):\n\n- you: the go at 14:00 and the sign-off (line 38)\n- me: every step above, and a note after each wave (line 39)\n\nend of the plan: line 40 of 40."},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-fake","object":"chat.completion.chunk","created":0,"model":"fake-model","system_fingerprint":"fp_fake","choices":[{"index":0,"delta":{},"logprobs":null,"finish_reason":"stop"}],"usage":null}
+
+data: {"id":"chatcmpl-fake","object":"chat.completion.chunk","created":0,"model":"fake-model","system_fingerprint":"fp_fake","choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15,"prompt_tokens_details":{"cached_tokens":2},"completion_tokens_details":{"reasoning_tokens":0}}}
+
+data: [DONE]
+

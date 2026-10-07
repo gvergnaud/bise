@@ -185,6 +185,9 @@ place() {  # <src> <name>
     if [ -x "$out" ]; then say "compiling $name failed: the existing $out is kept"; return 0; fi
     say "compiling $name failed"; return 1
   fi
+  # <out>.key: the sources' key it was built from (the Rust tests refuse a
+  # stale sb-core: switchboard/src/core_fresh.rs)
+  printf '%s\n' "${f##*/"$name"-}" > "$out.key"
   cmp -s "$f" "$out" && return 0
   cp "$f" "$out.tmp.$$" && mv -f "$out.tmp.$$" "$out"
 }

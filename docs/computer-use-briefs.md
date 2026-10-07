@@ -187,6 +187,15 @@ or `{"id":n,"ok":false,"error":{…C1}}`. One connection per agent session
 (the MCP server `bise computer-use mcp`). The broker routes `tab:` to the
 extension of the browser that owns the tab, `app:` to the helper.
 
+Commands (`bise computer-use stop …`, setup-check, bise ambient) say
+`{"op":"hello","role":"ctl"}` instead (no ack, no agent session) and send
+the same request lines. `show` is a command op only, never an agent tool
+(bise ambient, docs/ambient-pages.md §2.8): `{"op":"show","args":{"url":
+"http(s)://…","url_prefix"?,"browser"?}}` → `{"tab_id","created","url",
+"browser"}`; the first connected browser unless `browser`; no wait for a
+browser (`no_browser`/`not_set_up` at once: the caller opens the page
+itself).
+
 ### C4. Broker ↔ extension (native messaging)
 
 Host name `dev.bise.computer_use`; manifest written by the broker into
@@ -200,6 +209,13 @@ pair and commits the public key; the Web Store keeps the same id).
   → ext → host `{"id":n,"ok":…,"result"|"error":…}` (C1 shapes;
   `screenshot` returns `{"data":"<base64 jpeg>",…}`, the broker writes
   the file).
+- host → ext: `{"id":n,"op":"show","args":{"url","url_prefix"?}}`, no
+  agent: the tab whose URL is under `url_prefix` (default `url`; equal, or
+  the next char is `/ ? #`) in a group titled exactly `bise` comes
+  forward as is, else `url` opens active in that group (created pink in
+  the last focused window); its window takes focus → `{"tab_id",
+  "created","url"}`. No debugger, no overlay, not an agent's tab, no
+  5-tab limit: the user asked to see the page.
 - host → ext: `{"stop":"<agent>"}`, `{"resume":"<agent>"}`,
   `{"release":"<agent>"}` (end of turn: detach, keep the tabs),
   `{"drop":"<agent>"}` (close the group unless `user_touched`).

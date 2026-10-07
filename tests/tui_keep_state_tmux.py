@@ -23,6 +23,9 @@ from tui_tmux import tui_session, run, wait_until, pane_rows, MAIN_IDLE  # noqa:
 COLS, ROWS = 120, 30
 CTRL = "\x1b[%d;5u"   # ctrl+digit, the kitty keyboard protocol's form
 WAIT_NOTE = "bise restarts when you stop typing"
+# the held reload's keys: at most this many (or 12 s), fewer than the
+# composer's 11 visible rows hold (419 ' k' at 150x42)
+KEYS = 300
 
 
 def composer(sc):
@@ -126,12 +129,17 @@ def main():
             t0 = time.time()
             noted = False
             i = 0
-            while time.time() - t0 < 12:
+            # at most KEYS keys: the composer shows 11 rows, 419 ' k' at
+            # 150x42, and past that the visible count can't reach i (a fast
+            # moment typed more than that in 12 s: a red in the full gate)
+            while time.time() - t0 < 12 and i < KEYS:
                 # a key, then the next once it is drawn: a typist's pace
                 i += 1
                 t.typed(" k")
                 sc = t.wait_any([lambda s, i=i: composer(s).count(" k") >= i], 10)[1]
                 noted = noted or WAIT_NOTE in sc
+            # the cap never lets it pass with almost no keys during the hold
+            assert i >= 100, "only %d keys went in while the reload waited" % i
             assert tui_starts() == n, "reloaded while keys were arriving"
             assert noted, "never said: %s\n%s" % (WAIT_NOTE, t.screen())
             # the keys stop: the reload goes within a few seconds

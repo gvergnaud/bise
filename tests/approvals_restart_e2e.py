@@ -81,7 +81,7 @@ def main():
         check("tr: waits in gate" in log, "the new hub read the open gate again")
 
         # 2. the journaled card's answer reaches the waiting REPL
-        c.say("/answer %d always" % card["id"])
+        c.say("/answer %d 2" % card["id"])  # 2 always: approving words are refused (the composer rule)
         c.wait(lambda: os.path.exists(out), 60, "the call ran after the restart")
         c.wait_idle("tr")
         check(open(out).read() == "r\n", "it ran once")

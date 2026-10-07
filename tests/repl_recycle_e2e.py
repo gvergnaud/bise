@@ -70,7 +70,17 @@ def main():
         c.wait_line("main", "ack: after the recycle", 60)
         c.wait_idle("main")
         pid1 = pid()
-        info = json.load(open(os.path.join(adir, "repl.json")))
+
+        # the new process's repl.json: spawn_fresh removes the old one and
+        # the new REPL writes it once it serves, so wait for it (it was read
+        # at once and raced the write under load: a known red on main too)
+        def repl_info():
+            try:
+                return json.load(open(os.path.join(adir, "repl.json")))
+            except (FileNotFoundError, ValueError):
+                return None
+        c.wait(lambda: (repl_info() or {}).get("pid") == pid1, 30, "repl.json names main's new REPL")
+        info = repl_info()
         check(info["pid"] == pid1 and info["port"] == port0,
               "repl.json names the new process on the same port: %r (old pid %d port %d)" % (info, pid0, port0))
         check(subprocess.run(["kill", "-0", str(pid0)], capture_output=True).returncode != 0, "the old process is gone")
