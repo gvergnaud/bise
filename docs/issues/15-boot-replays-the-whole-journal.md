@@ -33,7 +33,11 @@ Most of it is not `apply`. The same lines sent as `{"t":"ping","evs":[..]}`
 same 5k events sent 7 times also get slower: 0.32 s, then up to 2.04 s
 per 5k. So the slowdown grows with the work the sb-core process has
 already done, not with the state. It looks like something in the runtime
-(heap, GC, the socket line reader). Not found yet.
+(heap, GC, the socket line reader). Not found yet. Architect (m_10760):
+it looks like the Bend allocator aging that repl-cpu-3 found in
+repl-live (m_9899, the age.bend repro). sb-core is a long-lived Bend
+process too, so the allocator fix would help both the boot and sb-core's
+steady CPU. A snapshot alone does not cure the aging.
 
 ## What to do (not in hub-boot-hang)
 
