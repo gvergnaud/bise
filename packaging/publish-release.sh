@@ -285,7 +285,8 @@ if [ "$publish" = 1 ] && [ "$st" = draft ]; then
   root="$(git rev-parse --show-toplevel)"
   if [ -f "$work/nix-sources.json" ] && ! cmp -s "$work/nix-sources.json" "$root/nix/sources.json"; then
     mkdir -p "$root/nix" && cp "$work/nix-sources.json" "$root/nix/sources.json"
-    git -C "$root" commit -q -m "nix: sources for ${tag#v}" -- nix/sources.json \\n      && say "committed nix/sources.json for ${tag#v}: push main so 'nix profile install github:$repo' gets it"
+    git -C "$root" commit -q -m "nix: sources for ${tag#v}" -- nix/sources.json \
+      && say "committed nix/sources.json for ${tag#v}: push main so 'nix profile install github:$repo' gets it"
   fi
 else
   say "not published: try it (gh release download $tag -R $repo), then: $0 $tag --publish"
