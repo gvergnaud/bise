@@ -1191,6 +1191,8 @@ pub(crate) fn status_state(app: &App) -> Vec<Line<'static>> {
             notes.push(d(format!("{} {} on trial", G_BUILDING, i.rev)));
         }
     }
+    // a feature's trial (dev-flow §7) is a place's `trying`, not a version mark
+    notes.extend(super::places::trial_notes(&sb.places).into_iter().map(d));
     if !sb.version.is_empty() {
         notes.push(d(format!("v {}", sb.version.chars().take(24).collect::<String>())));
     }

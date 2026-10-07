@@ -378,6 +378,18 @@ pub(crate) fn folder_of(path: &str) -> String {
 }
 
 /// The header's held count: the worktrees with an open PR (`↑ 2 PRs`).
+/// The panel's notes for features whose try build builds or is on trial
+/// (dev-flow §7): `Δ <branch> on trial`. A feature trial reaches the TUI
+/// as its place's `trying`, never as a version's `trial` mark (that one
+/// is the hub's own version on probation).
+pub(crate) fn trial_notes(places: &[Place]) -> Vec<String> {
+    places
+        .iter()
+        .filter(|p| p.feature && p.trying)
+        .map(|p| format!("{} {} on trial", G_BUILDING, p.branch.as_deref().unwrap_or(&p.id)))
+        .collect()
+}
+
 pub(crate) fn open_prs(places: &[Place]) -> usize {
     places.iter().filter(|p| p.live_pr().is_some()).count()
 }
@@ -438,6 +450,18 @@ mod tests {
         // an older hub: no feature key
         let old = parse(&serde_json::json!({"places": [{"id": "wt:x", "agents": []}]}));
         assert!(!old[0].feature && !old[0].trying);
+    }
+
+    /// A feature on trial gives the panel its `on trial` note; a plain
+    /// worktree or a feature not trying gives none.
+    #[test]
+    fn a_feature_on_trial_gives_the_panel_note() {
+        let v = serde_json::json!({"places": [
+            {"id": "feature:gift-cards", "branch": "gift-cards", "agents": ["g"], "feature": true, "trying": true},
+            {"id": "feature:idle", "branch": "idle", "agents": [], "feature": true, "trying": false},
+            {"id": "wt:a", "branch": "sb/a", "agents": ["a"], "trying": true}
+        ]});
+        assert_eq!(trial_notes(&parse(&v)), vec!["Δ gift-cards on trial".to_string()]);
     }
 
     /// The contract's JSON (switchboard place.rs, `the_contract_json`)
