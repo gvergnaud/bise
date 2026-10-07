@@ -821,3 +821,21 @@ fn an_answer_carries_its_paste_and_its_image() {
     assert!(!a.replace("<image name=\"[Image #2]\"", "").contains("[Image #"), "{a}");
     assert!(app.attachments.is_empty(), "sent with the answer");
 }
+
+/// `/close 999`'s card argument: a typed number is the start of a hub
+/// card's number, never a setup card's (2^50 + n holds "999": the TUI
+/// had sent `/close 1125899906842624`, the hub said no such card).
+#[test]
+fn a_typed_card_number_never_picks_a_setup_card() {
+    let (mut app, _hub) = app_with_hub();
+    let local = super::setup::LOCAL + 3;
+    assert!(local.to_string().contains("999"));
+    app.sb.cards = vec![card(994, "question", "docs", "v1?"), card(1999, "question", "api", "v2?"), card(local, "setup", "main", "can i set bise up?")];
+    let values = |q: &str| card_choices(&app, q).into_iter().map(|c| c.value).collect::<Vec<_>>();
+    assert!(values("999").is_empty(), "{:?}", values("999"));
+    assert_eq!(values("99"), vec!["994".to_string()]);
+    assert_eq!(values("#99"), vec!["994".to_string()]);
+    assert_eq!(values("setup"), vec![local.to_string()]);
+    assert_eq!(values("docs"), vec!["994".to_string()]);
+    assert_eq!(values("").len(), 3);
+}
