@@ -15,13 +15,20 @@
 //! The aging follows the bytes a process churned, so the budget counts
 //! the context each call read (`in=` of the usage line, cached tokens
 //! included: bise_session::usage_line), not the calls: a small-context
-//! agent recycles rarely. Pure: the hub (daemon/recycle.rs) feeds it its
-//! REPLs' lines and asks it which idle REPL is due.
+//! agent recycles rarely. Pure: the hub (daemon/recycling.rs) feeds it
+//! its REPLs' lines and asks it which idle REPL is due.
+//!
+//! The budget: a call's extra CPU grows like a·n (n calls since the
+//! start, a ~ c², c the context: 0.048 s a call at 340k tokens) and a
+//! restart costs R (~2.4 cpu-s: 1.2 to load a 1.37 MB session, 1.1 for
+//! the plugin servers the new REPL starts, 0.1 for the connectors
+//! bootstrap), so the cheapest restart period is n = sqrt(2R/a) calls,
+//! i.e. n·c = c·sqrt(2R/a) ~ 3.4M tokens whatever c is.
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The default budget, in context tokens read since the REPL started:
-/// ~6 calls of a 340k-token session, ~100 of a 20k one.
-pub const DEFAULT_BUDGET: u64 = 2_000_000;
+/// ~9 calls of a 340k-token session, ~150 of a 20k one.
+pub const DEFAULT_BUDGET: u64 = 3_000_000;
 
 /// The budget of `BISE_RECYCLE_TOKENS`: unset or not a number = the
 /// default, 0 = never recycle.
