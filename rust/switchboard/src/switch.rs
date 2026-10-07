@@ -669,21 +669,28 @@ fn run_locked(paths: &Paths, to: &Path, period: Duration, restart: bool, reload:
 /// A `bise` launch (BISE-255): the hub of the workspace runs `hub`, the
 /// launched bise is `me`. True when the hub should move to `me`: `me` is
 /// the installed `current` (what `bise update` or the daily check
-/// installed), `hub` an older build of the same install, and a switch to
-/// `me` did not fail in this workspace (its probation rolled back: the
+/// installed), `hub` an older build of the same install, or both are Nix
+/// store paths and `me` is a later build (`nix profile upgrade`), and a
+/// switch to `me` did not fail in this workspace (its probation rolled back: the
 /// hub stays where it is, `/restart` tries again).
 pub fn should_follow_install(me: &Path, hub: &Path, failed: Option<&Path>) -> bool {
-    use bise_home::release::{read_version, Install};
+    use bise_home::release::{read_version, root_kind, RootKind};
     let canon = |p: &Path| p.canonicalize().ok();
     let (Some(me), Some(hub)) = (canon(me), canon(hub)) else { return false };
     if me == hub || failed.and_then(canon).as_ref() == Some(&me) {
         return false;
     }
-    let (Some(mine), Some(theirs)) = (Install::of_root(&me), Install::of_root(&hub)) else {
-        return false;
-    };
-    if mine.prefix != theirs.prefix || mine.current().as_ref() != Some(&me) {
-        return false;
+    match (root_kind(&me), root_kind(&hub)) {
+        // install.sh: the launched bise is its prefix's current
+        (RootKind::Install(mine), RootKind::Install(theirs)) => {
+            if mine.prefix != theirs.prefix || mine.current().as_ref() != Some(&me) {
+                return false;
+            }
+        }
+        // Nix: `nix profile upgrade` made a new store path; the launched
+        // one is what the profile runs now
+        (RootKind::Nix, RootKind::Nix) => {}
+        _ => return false,
     }
     let built = |r: &Path| read_version(r).get("built").cloned().unwrap_or_default();
     let (b_me, b_hub) = (built(&me), built(&hub));

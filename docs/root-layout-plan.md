@@ -51,7 +51,7 @@ app root (see "Later").
 | harness-demo | no | delete locally | built on demand by the QA skill (`bend bend/runtime/demo.bend -o harness-demo`) |
 | repl | no | delete locally | a 2023 binary of the old name, nothing builds or runs it |
 | dist/ | no | delete locally | the old release.sh bundle (27 Sep); build-dist.sh writes to /tmp |
-| logs/ | no | keep ignored, or later move | the harness writes `<app root>/logs/harness-<pid>.log` (main.rs `log_dir`): 287 files. Later: the state dir |
+| logs/ | no | keep ignored | the harness wrote `<app root>/logs/harness-<pid>.log`; since linux-nix it writes `~/.bise/logs/` (`Home::logs_dir`: a Nix store app root is read-only), so old files here can go |
 | \_\_pycache\_\_/ | no | delete locally | bytecode of the root bend_client.py; it goes to scripts/\_\_pycache\_\_ (ignored) |
 
 ## Risks and how the plan handles them

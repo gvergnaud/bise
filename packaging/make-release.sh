@@ -14,6 +14,8 @@
 #   --whats-new what's new, for the users: 3-5 plain lines (blank lines
 #               and # comments dropped), latest.json's "notes"; an
 #               installed bise shows them in its new-release item
+#   --nix-url   where the tarballs stay for good (a tag's download URL),
+#               for nix-sources.json; default --url
 #
 # Output in <out> (existing tarballs of other versions are kept, so an
 # update can still find its version; latest.json names only these):
@@ -23,13 +25,17 @@
 #                                  targets: {<os-arch>: {url, file, sha256,
 #                                  size, macos, id, commit, built}}}
 #   bise-<id>-<os-arch>.tar.gz    + .sha256
+#   nix-sources.json              {version, id, built, <nix system>: {url,
+#                                  sha256}} for the linux targets: what the
+#                                  flake's nix/sources.json becomes once
+#                                  the release is published
 # The tarball URLs are relative to the channel (bise_home::release
 # resolves them), so the same folder works at any URL. Nothing is
 # uploaded: publishing is copying <out> to the host.
 
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-out="" url="" version="" whats_new=""
+out="" url="" version="" whats_new="" nix_url=""
 tarballs=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -37,7 +43,8 @@ while [ $# -gt 0 ]; do
     --url) url="$2"; shift ;;
     --version) version="$2"; shift ;;
     --whats-new) whats_new="$2"; shift ;;
-    -h|--help) sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --nix-url) nix_url="$2"; shift ;;
+    -h|--help) sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) echo "make-release: unknown argument $1" >&2; exit 2 ;;
     *) tarballs+=("$1") ;;
   esac
@@ -96,6 +103,21 @@ cat > "$out/latest.json.tmp" <<EOF
 EOF
 plutil -lint -s "$out/latest.json.tmp" 2>/dev/null || python3 -m json.tool "$out/latest.json.tmp" >/dev/null
 mv "$out/latest.json.tmp" "$out/latest.json"
+# nix-sources.json: the same release for the Nix flake (nix/package.nix),
+# from latest.json, never by hand; its URLs must not move (--nix-url: the
+# tag's download URL), the systems are Nix's names
+python3 - "$out/latest.json" "${nix_url:-$url}" > "$out/nix-sources.json.tmp" <<'PY'
+import json, sys
+m = json.load(open(sys.argv[1]))
+base = sys.argv[2].rstrip("/")
+nix = {"linux-x86_64": "x86_64-linux", "linux-arm64": "aarch64-linux"}
+out = {"version": m["version"], "id": m["id"], "built": m["built"]}
+for t, e in sorted(m["targets"].items()):
+    if t in nix:
+        out[nix[t]] = {"url": f"{base}/{e['file']}", "sha256": e["sha256"]}
+print(json.dumps(out, indent=2))
+PY
+mv "$out/nix-sources.json.tmp" "$out/nix-sources.json"
 # the installer, with this channel as its default
 q="$(printf '%s' "$url" | sed "s/'/'\\\\''/g; s/[&|]/\\\\&/g")"
 sed "s|^DIST_URL_DEFAULT=''|DIST_URL_DEFAULT='$q'|" "$HERE/install.sh" > "$out/install.sh.tmp"

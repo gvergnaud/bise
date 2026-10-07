@@ -282,6 +282,13 @@ impl Home {
         self.root.join("crashes")
     }
 
+    /// `<root>/logs`: the single-session REPL's log (`harness-<pid>.log`),
+    /// the ChatGPT sign-in and voice debug logs. Never the app root: an
+    /// install in the Nix store is read-only.
+    pub fn logs_dir(&self) -> PathBuf {
+        self.root.join("logs")
+    }
+
     /// `<root>/cache`: rebuildable files (indexes, the providers' models).
     pub fn cache_dir(&self) -> PathBuf {
         self.root.join("cache")

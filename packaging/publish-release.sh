@@ -268,10 +268,10 @@ say "the draft:"
 gh release view "$tag" -R "$repo" >&2
 rm -rf "$work"; mkdir -p "$work"
 [ -z "$whats_new" ] || put_whats_new "$tag"
-gh release download "$tag" -R "$repo" -p latest.json -p install.sh -D "$work" \
+gh release download "$tag" -R "$repo" -p latest.json -p install.sh -p nix-sources.json -D "$work" \
   || die "cannot download the draft's latest.json and install.sh"
 # shellcheck disable=SC2046
-"$HERE/check-release.py" "$work" --url "$channel" --version "$version" --targets "darwin-arm64 darwin-x86_64" \
+"$HERE/check-release.py" "$work" --url "$channel" --version "$version" --targets "darwin-arm64 darwin-x86_64 linux-x86_64 linux-arm64" \
   --assets $(gh release view "$tag" -R "$repo" --json assets --jq '.assets[].name') >&2 \
   || die "the draft is not what install.sh and bise update read: fix before publishing"
 site_check "$work/install.sh"
@@ -280,6 +280,13 @@ site_check "$work/install.sh"
 if [ "$publish" = 1 ] && [ "$st" = draft ]; then
   gh release edit "$tag" -R "$repo" --draft=false --latest >/dev/null
   say "published $tag: the latest release, every install reads $channel/latest.json"
+  # the flake (nix/sources.json) installs this release from now on: the
+  # release's nix-sources.json (make-release.sh), committed here, never by hand
+  root="$(git rev-parse --show-toplevel)"
+  if [ -f "$work/nix-sources.json" ] && ! cmp -s "$work/nix-sources.json" "$root/nix/sources.json"; then
+    mkdir -p "$root/nix" && cp "$work/nix-sources.json" "$root/nix/sources.json"
+    git -C "$root" commit -q -m "nix: sources for ${tag#v}" -- nix/sources.json \\n      && say "committed nix/sources.json for ${tag#v}: push main so 'nix profile install github:$repo' gets it"
+  fi
 else
   say "not published: try it (gh release download $tag -R $repo), then: $0 $tag --publish"
 fi

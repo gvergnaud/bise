@@ -314,9 +314,9 @@ pub const SANDBOX_EXEC: &str = "/usr/bin/sandbox-exec";
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Availability {
     On,
-    /// Not macOS (Linux: `sb/ports`), or turned off: the parser path.
+    /// Turned off (`BISE_SANDBOX=0`): the parser path, nothing said.
     Off,
-    /// macOS without `sandbox-exec`: the parser path, said once in main's
+    /// No `sandbox-exec` (Linux, or a Mac without it): the parser path, said once in main's
     /// feed ([`MISSING_NOTICE`]).
     Missing,
     /// This hub runs inside a sandbox already (another one cannot apply):
@@ -333,7 +333,9 @@ impl Availability {
 
 pub fn availability(macos: bool, exists: bool, env: Option<&str>) -> Availability {
     match (macos, env) {
-        (false, _) | (true, Some("0" | "off" | "false")) => Availability::Off,
+        (_, Some("0" | "off" | "false")) => Availability::Off,
+        // Linux: no sandbox-exec; the parser path, said like a Mac without it
+        (false, _) => Availability::Missing,
         (true, _) if !exists => Availability::Missing,
         _ => Availability::On,
     }
@@ -343,6 +345,19 @@ pub fn availability(macos: bool, exists: bool, env: Option<&str>) -> Availabilit
 /// missing.
 pub const MISSING_NOTICE: &str =
     "no sandbox on this Mac (sandbox-exec is missing), so auto checks each command instead.";
+
+/// The same on Linux: bise's sandbox is macOS's sandbox-exec.
+pub const LINUX_NOTICE: &str =
+    "no sandbox on Linux yet (bise's sandbox is macOS's sandbox-exec), so auto checks each command instead.";
+
+/// The notice of a missing sandbox on this OS.
+pub fn missing_notice(macos: bool) -> &'static str {
+    if macos {
+        MISSING_NOTICE
+    } else {
+        LINUX_NOTICE
+    }
+}
 
 /// Main's feed, once per hub, when `auto` is on and bise itself runs in a
 /// sandbox.

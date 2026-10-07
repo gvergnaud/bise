@@ -145,6 +145,58 @@ impl Install {
     }
 }
 
+/// What kind of app root a bise runs from: the one answer to "who
+/// updates it" (`bise update`, the hub's `/restart`, a launch that
+/// moves the hub along).
+#[derive(Clone, Debug, PartialEq)]
+pub enum RootKind {
+    /// install.sh's prefix: `bise update` and the hub switch versions.
+    Install(Install),
+    /// a Homebrew keg: `brew upgrade bise`.
+    Homebrew,
+    /// a Nix store path (the flake, nix/package.nix): read-only, `nix
+    /// profile upgrade bise` makes a new store path.
+    Nix,
+    /// a dev build (versions.sh, cargo): the source tree updates it.
+    Dev,
+}
+
+impl RootKind {
+    /// The line that says who updates a root that is not an install.
+    pub fn update_hint(&self) -> Option<&'static str> {
+        match self {
+            RootKind::Homebrew => Some("installed by Homebrew: run 'brew upgrade bise'"),
+            RootKind::Nix => Some("installed with Nix: run 'nix profile upgrade bise' (or update your flake input)"),
+            RootKind::Install(_) | RootKind::Dev => None,
+        }
+    }
+}
+
+/// The kind of the app root `root` (resolved first).
+pub fn root_kind(root: &Path) -> RootKind {
+    if let Some(i) = Install::of_root(root) {
+        return RootKind::Install(i);
+    }
+    let canon = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let release = {
+        let v = read_version(&canon);
+        !v.is_empty() && !v.contains_key("repo")
+    };
+    kind_of_path(&canon.to_string_lossy(), release)
+}
+
+/// The kind from a resolved path that is not an install.sh prefix;
+/// `release`: its VERSION is a release build's (no `repo=`).
+fn kind_of_path(path: &str, release: bool) -> RootKind {
+    if path.contains("/Cellar/") {
+        RootKind::Homebrew
+    } else if path.starts_with("/nix/store/") && release {
+        RootKind::Nix
+    } else {
+        RootKind::Dev
+    }
+}
+
 /// A release, as `latest.json` gives it for one target.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Release {
@@ -311,6 +363,27 @@ mod tests {
             r#"{{"version":"0.2.0","id":"top","targets":{{"{}":{{"url":"{}","sha256":"{}","id":"abc1234","built":"2026-10-02T10:00:00Z"}}}}}}"#,
             target, url, SHA
         )
+    }
+
+    #[test]
+    fn a_root_kind_names_who_updates_it() {
+        assert_eq!(kind_of_path("/opt/homebrew/Cellar/bise/1.0/libexec", true), RootKind::Homebrew);
+        assert_eq!(kind_of_path("/nix/store/abc-bise-2026.10.2-25/lib/bise", true), RootKind::Nix);
+        // a store path of a dev build (repo= in VERSION) is no release
+        assert_eq!(kind_of_path("/nix/store/abc-bise/lib/bise", false), RootKind::Dev);
+        assert_eq!(kind_of_path("/home/me/src/bise", true), RootKind::Dev);
+        assert!(RootKind::Nix.update_hint().unwrap().contains("nix profile upgrade bise"));
+        assert_eq!(RootKind::Dev.update_hint(), None);
+        // an install.sh prefix wins over the path
+        let t = std::env::temp_dir().join(format!("bise-rootkind-{}", std::process::id()));
+        let v = t.join("versions").join("abc");
+        std::fs::create_dir_all(&v).unwrap();
+        std::fs::write(v.join("VERSION"), "id=abc
+").unwrap();
+        std::os::unix::fs::symlink("versions/abc", t.join("current")).unwrap();
+        let canon = t.canonicalize().unwrap();
+        assert_eq!(root_kind(&v), RootKind::Install(Install { prefix: canon }));
+        let _ = std::fs::remove_dir_all(&t);
     }
 
     #[test]

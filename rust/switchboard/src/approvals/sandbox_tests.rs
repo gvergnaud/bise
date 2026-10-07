@@ -95,7 +95,12 @@ fn the_hub_sandboxes_on_macos_with_sandbox_exec_unless_turned_off() {
     assert_eq!(availability(true, true, Some("1")), Availability::On);
     assert_eq!(availability(true, true, Some("0")), Availability::Off);
     assert_eq!(availability(true, false, None), Availability::Missing);
-    assert_eq!(availability(false, true, Some("1")), Availability::Off);
+    // Linux: no sandbox-exec, the parser path, said once (never silent)
+    assert_eq!(availability(false, true, Some("1")), Availability::Missing);
+    assert_eq!(availability(false, false, None), Availability::Missing);
+    assert_eq!(availability(false, false, Some("0")), Availability::Off);
+    assert!(missing_notice(false).contains("Linux"));
+    assert_eq!(missing_notice(true), MISSING_NOTICE);
 }
 
 #[test]

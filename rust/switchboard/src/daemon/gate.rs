@@ -555,7 +555,7 @@ impl Shell {
             sandbox::Availability::Off => false,
             a @ (sandbox::Availability::Missing | sandbox::Availability::Nested) => {
                 if !std::mem::replace(&mut self.gates.sandbox_said, true) {
-                    let text = if a == sandbox::Availability::Nested { sandbox::NESTED_NOTICE } else { sandbox::MISSING_NOTICE };
+                    let text = if a == sandbox::Availability::Nested { sandbox::NESTED_NOTICE } else { sandbox::missing_notice(cfg!(target_os = "macos")) };
                     let _ = self.tx.send(Msg::Notice { kind: "approvals".into(), text: text.into() });
                 }
                 false

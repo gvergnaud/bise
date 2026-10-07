@@ -767,7 +767,9 @@ fn run_main() -> std::io::Result<()> {
 
     // child REPL log, out of the client's way. Recreated per spawn, so
     // the reload-exit marker of one generation never leaks to the next.
-    let log_dir = std::env::current_dir()?.join("logs");
+    // In bise's home, never the app root (the cwd here): a Nix store
+    // install is read-only
+    let log_dir = home.logs_dir();
     let _ = std::fs::create_dir_all(&log_dir);
     let log_path = log_dir.join(format!("harness-{}.log", std::process::id()));
 

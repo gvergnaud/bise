@@ -20,11 +20,19 @@ use crate::paths::Paths;
 use crate::{browsers, nm};
 
 /// The browser's executable path of `pid` (the host's parent), macOS.
+#[cfg(target_os = "macos")]
 pub fn exe_of(pid: i32) -> Option<String> {
     let mut buf = vec![0u8; 4096];
     // SAFETY: proc_pidpath writes at most buf.len() bytes into buf
     let n = unsafe { libc::proc_pidpath(pid, buf.as_mut_ptr() as *mut libc::c_void, buf.len() as u32) };
     (n > 0).then(|| String::from_utf8_lossy(&buf[..n as usize]).into_owned())
+}
+
+/// The browser's executable path of `pid`: /proc on Linux (computer use
+/// is macOS-only; this keeps the crate building there).
+#[cfg(not(target_os = "macos"))]
+pub fn exe_of(pid: i32) -> Option<String> {
+    std::fs::read_link(format!("/proc/{}/exe", pid)).ok().map(|p| p.to_string_lossy().into_owned())
 }
 
 /// The extension's hello, refined: Vivaldi and Arc say `chrome` (C4); the

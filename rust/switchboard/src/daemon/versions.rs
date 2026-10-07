@@ -4,7 +4,7 @@
 
 use super::{log_line, Msg, Shell};
 use crate::core::{ClientId, Input};
-use bise_home::release::Install;
+use bise_home::release::{root_kind, Install, RootKind};
 use crate::model::MAIN;
 use crate::paths::Paths;
 use crate::util::{clip, wire_escape};
@@ -55,20 +55,28 @@ enum RestartPlan {
     InstalledLatest,
     /// an installed bise, an id: switch to that installed version.
     InstalledSwitch(String),
+    /// a package manager's bise (Nix, Homebrew), any argument but
+    /// none/`current`: its line (who updates it); never a build or a
+    /// switch: a launch of the upgraded bise moves the hub.
+    Packaged(&'static str),
 }
 
-/// `installed`: the running version is an install (install.sh; its
-/// VERSION has no `repo=`): that decides, whatever the workspace. A dev
-/// version (`repo=`): as before BISE-172.
-fn restart_plan(dev: bool, installed: bool, arg: &str) -> RestartPlan {
-    match (installed, dev, arg.trim()) {
-        (true, _, "") => RestartPlan::InstalledCurrent,
-        (true, _, "current") => RestartPlan::Reload,
-        (true, _, "latest") => RestartPlan::InstalledLatest,
-        (true, _, id) => RestartPlan::InstalledSwitch(id.to_string()),
-        (false, true, a) => RestartPlan::Dev(restart_target(a)),
-        (false, false, "" | "current") => RestartPlan::Reload,
-        (false, false, _) => RestartPlan::Refuse,
+/// `kind`: what the running version is. An install (install.sh; its
+/// VERSION has no `repo=`) decides, whatever the workspace; a package
+/// manager's says who updates it; a dev version (`repo=`): as before
+/// BISE-172.
+fn restart_plan(dev: bool, kind: &RootKind, arg: &str) -> RestartPlan {
+    let installed = matches!(kind, RootKind::Install(_));
+    match (installed, dev, arg.trim(), kind.update_hint()) {
+        (true, _, "", _) => RestartPlan::InstalledCurrent,
+        (true, _, "current", _) => RestartPlan::Reload,
+        (true, _, "latest", _) => RestartPlan::InstalledLatest,
+        (true, _, id, _) => RestartPlan::InstalledSwitch(id.to_string()),
+        (false, _, "" | "current", Some(_)) => RestartPlan::Reload,
+        (false, _, _, Some(hint)) => RestartPlan::Packaged(hint),
+        (false, true, a, None) => RestartPlan::Dev(restart_target(a)),
+        (false, false, "" | "current", None) => RestartPlan::Reload,
+        (false, false, _, None) => RestartPlan::Refuse,
     }
 }
 
@@ -369,12 +377,12 @@ impl Shell {
             "restart" => {
                 // not bise's source tree: a reload, like VS Code's
                 // "Reload Window" (BISE-131); nothing to build
-                let installed = Install::of_root(root);
-                let target = match restart_plan(
-                    switch::dev_workspace(&self.opts.paths.workspace),
-                    installed.is_some(),
-                    &s("to"),
-                ) {
+                let kind = root_kind(root);
+                let installed = match &kind {
+                    RootKind::Install(i) => Some(i.clone()),
+                    _ => None,
+                };
+                let target = match restart_plan(switch::dev_workspace(&self.opts.paths.workspace), &kind, &s("to")) {
                     RestartPlan::Reload => return self.reload(),
                     RestartPlan::InstalledCurrent => {
                         let running = root.canonicalize().ok();
@@ -399,6 +407,9 @@ impl Shell {
                     }
                     RestartPlan::Refuse => {
                         return "/restart reloads bise on the version running now (this workspace is not bise's source tree): nothing to build; /version switches versions".into()
+                    }
+                    RestartPlan::Packaged(hint) => {
+                        return format!("{}, then run bise in this folder: the hub moves to it (the agents keep running). /restart alone reloads this version", hint)
                     }
                     RestartPlan::Dev(t) => t,
                 };
@@ -1136,25 +1147,36 @@ mod tests {
     #[test]
     fn restart_is_unchanged_in_dev_and_a_reload_elsewhere() {
         use super::{restart_plan, RestartPlan::*, RestartTarget::*};
+        use bise_home::release::{Install, RootKind};
+        let (dev_root, inst) = (RootKind::Dev, RootKind::Install(Install { prefix: "/p".into() }));
         // bise's source tree: exactly as before (build + switch, or the hub
         // again on the running version); never a reload
-        assert_eq!(restart_plan(true, false, ""), Dev(Latest));
-        assert_eq!(restart_plan(true, false, "latest"), Dev(Latest));
-        assert_eq!(restart_plan(true, false, "current"), Dev(Current));
-        assert_eq!(restart_plan(true, false, "021b8a1"), Dev(Rev("021b8a1".into())));
+        assert_eq!(restart_plan(true, &dev_root, ""), Dev(Latest));
+        assert_eq!(restart_plan(true, &dev_root, "latest"), Dev(Latest));
+        assert_eq!(restart_plan(true, &dev_root, "current"), Dev(Current));
+        assert_eq!(restart_plan(true, &dev_root, "021b8a1"), Dev(Rev("021b8a1".into())));
         // anywhere else: a reload, nothing built
-        assert_eq!(restart_plan(false, false, ""), Reload);
-        assert_eq!(restart_plan(false, false, " current "), Reload);
-        assert_eq!(restart_plan(false, false, "latest"), Refuse);
-        assert_eq!(restart_plan(false, false, "021b8a1"), Refuse);
+        assert_eq!(restart_plan(false, &dev_root, ""), Reload);
+        assert_eq!(restart_plan(false, &dev_root, " current "), Reload);
+        assert_eq!(restart_plan(false, &dev_root, "latest"), Refuse);
+        assert_eq!(restart_plan(false, &dev_root, "021b8a1"), Refuse);
         // an installed bise (BISE-172), in any workspace (the dev repo too):
         // latest = the newest release; an id = an installed version
         for dev in [true, false] {
             // no argument: the installed current (BISE-255), else a reload
-            assert_eq!(restart_plan(dev, true, ""), InstalledCurrent);
-            assert_eq!(restart_plan(dev, true, "current"), Reload);
-            assert_eq!(restart_plan(dev, true, "latest"), InstalledLatest);
-            assert_eq!(restart_plan(dev, true, "abc1234"), InstalledSwitch("abc1234".into()));
+            assert_eq!(restart_plan(dev, &inst, ""), InstalledCurrent);
+            assert_eq!(restart_plan(dev, &inst, "current"), Reload);
+            assert_eq!(restart_plan(dev, &inst, "latest"), InstalledLatest);
+            assert_eq!(restart_plan(dev, &inst, "abc1234"), InstalledSwitch("abc1234".into()));
+        }
+        // a Nix (or Homebrew) bise, in any workspace: never a build or a
+        // switch; latest or an id says who updates it
+        for dev in [true, false] {
+            assert_eq!(restart_plan(dev, &RootKind::Nix, ""), Reload);
+            assert_eq!(restart_plan(dev, &RootKind::Nix, "current"), Reload);
+            let Packaged(h) = restart_plan(dev, &RootKind::Nix, "latest") else { panic!("nix latest") };
+            assert!(h.contains("nix profile upgrade bise"), "{h}");
+            assert!(matches!(restart_plan(dev, &RootKind::Homebrew, "abc1234"), Packaged(_)));
         }
     }
 

@@ -193,10 +193,11 @@ CI=$W/ci; mkdir -p "$CI/dist"
 HEADC="$(git -C "$REPO" rev-parse HEAD)"
 pack r5 2026-01-05T00:00:00Z darwin-arm64 "$HEADC" "$CI/dist" >/dev/null
 pack r5 2026-01-05T00:00:00Z darwin-x86_64 "$HEADC" "$CI/dist" >/dev/null
+for tg in linux-x86_64 linux-arm64; do pack r5 2026-01-05T00:00:00Z $tg "$HEADC" "$CI/dist" >/dev/null; done
 out="$("$HERE/ci-release.sh" v0.0.5 "$CI/dist" "$CI/out" --repo o/r --url "$CH" --commit "$HEADC" 2>"$CI/err")" \
   && ok "ci-release.sh: both arches, checked" || { ko "ci-release.sh"; sed 's/^/     /' "$CI/err"; }
 check "the files install.sh and bise update read, and only them" test "$(ls "$CI/out" | tr '\n' ' ')" = \
-  "bise-r5-darwin-arm64.tar.gz bise-r5-darwin-arm64.tar.gz.sha256 bise-r5-darwin-x86_64.tar.gz bise-r5-darwin-x86_64.tar.gz.sha256 install.sh latest.json "
+  "bise-r5-darwin-arm64.tar.gz bise-r5-darwin-arm64.tar.gz.sha256 bise-r5-darwin-x86_64.tar.gz bise-r5-darwin-x86_64.tar.gz.sha256 bise-r5-linux-arm64.tar.gz bise-r5-linux-arm64.tar.gz.sha256 bise-r5-linux-x86_64.tar.gz bise-r5-linux-x86_64.tar.gz.sha256 install.sh latest.json nix-sources.json "
 check "latest.json: version 0.0.5, id r5, this commit" python3 -c "import json,sys; m=json.load(open('$CI/out/latest.json')); sys.exit(not (m['version'], m['id'], m['commit']) == ('0.0.5', 'r5', '$HEADC'))"
 chk() { "$HERE/check-release.py" "$1" --url "$CH" "${@:2}"; }
 cp -R "$CI/out" "$CI/bad"; sed -i '' 's/"sha256": "\(.\)/"sha256": "0\1/' "$CI/bad/latest.json" 2>/dev/null || sed -i 's/"sha256": "\(.\)/"sha256": "0\1/' "$CI/bad/latest.json"
@@ -224,6 +225,7 @@ gitq commit -q --allow-empty -m "not pushed"; C2="$(git -C "$G" rev-parse HEAD)"
 mkdir -p "$W/cidist"
 pack r6 2026-01-06T00:00:00Z darwin-arm64 "$C1" "$W/cidist" >/dev/null
 pack r6 2026-01-06T00:00:00Z darwin-x86_64 "$C1" "$W/cidist" >/dev/null
+for tg in linux-x86_64 linux-arm64; do pack r6 2026-01-06T00:00:00Z $tg "$C1" "$W/cidist" >/dev/null; done
 # GitHub for o/r: releases in $GS/rel/<tag>/ (a `draft` flag file), tags
 # and commits from the bare repo; `run watch` is CI: it runs ci-release.sh
 cat > "$STUB2/gh" <<EOF
@@ -315,14 +317,17 @@ out="$(P v0.0.6 --rev "$C1")"; printf '%s\n' "$out" | tail -n 3 | sed 's/^/     
 check "the tag is pushed, on the commit" test "$(git -C "$BARE" rev-parse 'refs/tags/v0.0.6^{commit}' 2>/dev/null)" = "$C1"
 check "the run was watched" grep -q '^run watch 42 ' "$GS/log"
 check "CI made a draft of the release" test -f "$GS/rel/v0.0.6/draft"
-has "$out" "check-release: ok, 0.0.6 (r6): darwin-arm64 darwin-x86_64" && ok "the draft is checked (latest.json, install.sh, files)" || ko "draft check: $out"
+has "$out" "check-release: ok, 0.0.6 (r6): darwin-arm64 darwin-x86_64 linux-arm64 linux-x86_64" && ok "the draft is checked (latest.json, install.sh, files)" || ko "draft check: $out"
 has "$out" "not published" && ok "not published without --publish" || ko "publish hint: $out"
 check "the draft's files" test "$(ls "$GS/rel/v0.0.6" | tr '\n' ' ')" = \
-  "bise-r6-darwin-arm64.tar.gz bise-r6-darwin-arm64.tar.gz.sha256 bise-r6-darwin-x86_64.tar.gz bise-r6-darwin-x86_64.tar.gz.sha256 draft install.sh latest.json "
+  "bise-r6-darwin-arm64.tar.gz bise-r6-darwin-arm64.tar.gz.sha256 bise-r6-darwin-x86_64.tar.gz bise-r6-darwin-x86_64.tar.gz.sha256 bise-r6-linux-arm64.tar.gz bise-r6-linux-arm64.tar.gz.sha256 bise-r6-linux-x86_64.tar.gz bise-r6-linux-x86_64.tar.gz.sha256 draft install.sh latest.json nix-sources.json "
 n="$(grep -c '^run watch' "$GS/log")"
 out="$(P v0.0.6 --publish)"; has "$out" "published v0.0.6" && ok "--publish: the draft is the latest release" || ko "publish: $out"
 check "... gh release edit --draft=false" sh -c "grep -q '^release edit v0.0.6 -R o/r --draft=false --latest' '$GS/log' && [ ! -e '$GS/rel/v0.0.6/draft' ]"
 check "... no second run watched" test "$(grep -c '^run watch' "$GS/log")" = "$n"
+check "... the flake's nix/sources.json committed: r6, linux, the tag's URLs" sh -c "
+  [ \"\$(git -C '$G' log -1 --format=%s)\" = 'nix: sources for 0.0.6' ] &&
+  python3 -c \"import json,sys; n=json.load(open('$G/nix/sources.json')); sys.exit(not (n['id'] == 'r6' and n['aarch64-linux']['url'] == 'https://github.com/o/r/releases/download/v0.0.6/bise-r6-linux-arm64.tar.gz' and 'x86_64-linux' in n and 'darwin-arm64' not in n))\""
 out="$(P v0.0.6 --publish)"; has "$out" "published already" && ok "again: already published, nothing done" || ko "again: $out"
 touch "$GS/rel/v0.0.6/stale"
 out="$(PATH="$STUB2:$PATH" "$HERE/ci-release.sh" v0.0.6 "$W/cidist" "$W/ci2" --repo o/r --url "$CH" --draft 2>&1)"

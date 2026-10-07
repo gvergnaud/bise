@@ -63,17 +63,15 @@ fn rosetta_target(target: &str, rosetta: bool) -> String {
 /// else why there is nothing to update.
 fn this_install() -> Result<Install, String> {
     let root = crate::approot::locate("repl-live").map(|(r, _)| r)?;
-    if let Some(i) = Install::of_root(&root) {
-        return Ok(i);
+    let kind = release::root_kind(&root);
+    match kind {
+        release::RootKind::Install(i) => Ok(i),
+        release::RootKind::Dev => Err(format!(
+            "this bise is a dev build ({}), not an install: pull the repo, then /restart latest in its hub",
+            root.display()
+        )),
+        k => Err(k.update_hint().unwrap_or_default().into()),
     }
-    let r = root.display().to_string();
-    if r.contains("/Cellar/") {
-        return Err("installed by Homebrew: run 'brew upgrade bise'".into());
-    }
-    Err(format!(
-        "this bise is a dev build ({}), not an install: pull the repo, then /restart latest in its hub",
-        r
-    ))
 }
 
 /// curl `url` into `to`; `headers`: curl config lines given on stdin

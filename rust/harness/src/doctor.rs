@@ -126,6 +126,28 @@ pub(crate) fn macos_check(version: Option<&str>, min: &str, arch: &str, rosetta:
     }
 }
 
+/// The OS line on Linux: the distro (`/etc/os-release`), the arch, and
+/// what bise does not have there (macOS-only), so nobody looks for it.
+pub(crate) fn linux_check(pretty_name: Option<&str>, arch: &str, nixos: bool) -> Check {
+    let name = pretty_name.unwrap_or("Linux");
+    let how = if nixos { " (the Nix flake)" } else { "" };
+    ok(
+        "Linux",
+        format!(
+            "{} {}{} · macOS-only, off here: the sandbox (auto checks each command), voice, computer use, the desktop app",
+            name, arch, how
+        ),
+    )
+}
+
+/// `PRETTY_NAME` of an os-release file.
+pub(crate) fn os_release_name(text: &str) -> Option<String> {
+    text.lines()
+        .find_map(|l| l.strip_prefix("PRETTY_NAME="))
+        .map(|v| v.trim().trim_matches('"').to_string())
+        .filter(|v| !v.is_empty())
+}
+
 /// The Unix socket path limit (sun_path, macOS: 104 bytes with the NUL).
 pub(crate) const SOCKET_MAX: usize = 103;
 
@@ -269,6 +291,17 @@ fn run(cmd: &str, args: &[&str]) -> Option<String> {
     o.status.success().then(|| String::from_utf8_lossy(&o.stdout).trim().to_string())
 }
 
+/// The OS line: macOS's version check, or Linux's.
+fn os() -> Check {
+    if !cfg!(target_os = "macos") {
+        let arch = crate::version::build_target();
+        let arch = arch.split_once('-').map_or(arch.as_str(), |(_, a)| a).to_string();
+        let name = std::fs::read_to_string("/etc/os-release").ok().and_then(|t| os_release_name(&t));
+        return linux_check(name.as_deref(), &arch, Path::new("/etc/NIXOS").exists());
+    }
+    macos()
+}
+
 fn macos() -> Check {
     let version = run("/usr/bin/sw_vers", &["-productVersion"]);
     let rosetta = run("/usr/sbin/sysctl", &["-n", "sysctl.proc_translated"]).as_deref() == Some("1");
@@ -391,7 +424,7 @@ fn migration(home: &bise_home::Home) -> Check {
 /// The PATH the agents' tools are looked up on (the hub's, plus the usual
 /// dirs; the hub also adds the login shell's, BISE-166).
 fn tools_path() -> String {
-    tools_env::join_path(&[&std::env::var("PATH").unwrap_or_default(), &tools_env::STD_DIRS.join(":")])
+    tools_env::join_path(&[&std::env::var("PATH").unwrap_or_default(), &tools_env::host_std_dirs()])
 }
 
 fn git() -> Check {
@@ -802,10 +835,12 @@ pub(crate) fn main(args: &[String]) -> i32 {
     let setup = bise_catalog::Setup::load(&home.config_file());
     let config = config_check(&home.config_file(), &setup.catalog.warnings);
     let compaction = compaction_check(&setup, std::env::var("BEND_THRESHOLD").ok().as_deref());
-    let checks = vec![
-        macos(),
-        bise(verbose),
-        signature(),
+    let mut checks = vec![os(), bise(verbose)];
+    // a code signature is a macOS thing
+    if cfg!(target_os = "macos") {
+        checks.push(signature());
+    }
+    checks.extend([
         on_path(),
         home_check(&home),
         migration(&home),
@@ -814,8 +849,7 @@ pub(crate) fn main(args: &[String]) -> i32 {
         github(),
         config,
         keys,
-    ];
-    let mut checks = checks;
+    ]);
     // the ChatGPT sign-in, then the other tools' logins (presence only)
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     if let Ok(store) = Store::read(&home.auth_file()) {
@@ -842,6 +876,22 @@ pub(crate) fn main(args: &[String]) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn linux_says_its_distro_and_what_is_macos_only() {
+        let t = "NAME=NixOS
+PRETTY_NAME=\"NixOS 25.11 (Xantusia)\"
+ID=nixos
+";
+        assert_eq!(os_release_name(t).as_deref(), Some("NixOS 25.11 (Xantusia)"));
+        assert_eq!(os_release_name("ID=x
+"), None);
+        let c = linux_check(Some("NixOS 25.11 (Xantusia)"), "arm64", true);
+        assert_eq!(c.mark, Mark::Ok);
+        assert!(c.detail.starts_with("NixOS 25.11 (Xantusia) arm64 (the Nix flake) · macOS-only"), "{}", c.detail);
+        assert!(c.detail.contains("the sandbox (auto checks each command)"), "{}", c.detail);
+        assert_eq!(linux_check(None, "x86_64", false).detail.split(" · ").next(), Some("Linux x86_64"));
+    }
 
     #[test]
     fn macos_versions() {

@@ -16,7 +16,7 @@
 #   --url       the channel stamped into install.sh; default
 #               https://github.com/<repo>/releases/latest/download
 #   --commit    the commit the archives must name (CI: $GITHUB_SHA)
-#   --targets   default "darwin-arm64 darwin-x86_64"
+#   --targets   default "darwin-arm64 darwin-x86_64 linux-x86_64 linux-arm64"
 #   --draft     upload: create the draft (gh), or replace the files of
 #               the tag's draft (a rerun); a PUBLISHED release is never
 #               touched (the run fails). Without it: lay out and check.
@@ -24,7 +24,7 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 repo="${GITHUB_REPOSITORY:-gvergnaud/bise}" url="" commit="" draft=0
-targets="darwin-arm64 darwin-x86_64"
+targets="darwin-arm64 darwin-x86_64 linux-x86_64 linux-arm64"
 pos=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -57,14 +57,14 @@ for t in "${tarballs[@]}"; do
 done
 
 rm -rf "$out"
-"$HERE/make-release.sh" --out "$out" --url "$url" --version "$version" "${tarballs[@]}" >/dev/null
+"$HERE/make-release.sh" --out "$out" --url "$url" --nix-url "https://github.com/$repo/releases/download/$tag" --version "$version" "${tarballs[@]}" >/dev/null
 "$HERE/check-release.py" "$out" --url "$url" --version "$version" --targets "$targets" \
   ${commit:+--commit "$commit"} >&2
 cat "$out/latest.json" >&2
 [ "$draft" = 1 ] || { echo "$out"; exit 0; }
 
 rel_commit="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["commit"])' "$out/latest.json")"
-notes="bise $version (commit ${rel_commit:0:12}), macOS 14+: ${targets}. Built by CI (ad-hoc signed).
+notes="bise $version (commit ${rel_commit:0:12}), macOS 14+ and Linux (glibc 2.34+; NixOS: the flake): ${targets}. Built by CI (ad-hoc signed).
 Install: curl -fsSL https://bise.dev/install | sh   (private repo: gh auth login first).
 Update: bise update, or /restart latest in Switchboard."
 if state="$(gh release view "$tag" -R "$repo" --json isDraft --jq .isDraft 2>/dev/null)"; then

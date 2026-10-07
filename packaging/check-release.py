@@ -81,6 +81,28 @@ def main():
                 s = None
             if s != f"{h}  {name}\n":
                 bad.append(f"{name}.sha256 is {s!r}, not '{h}  {name}'")
+    # nix-sources.json (the flake's nix/sources.json once published): the
+    # same version, id and built, and each linux target's file and sha256
+    files.add("nix-sources.json")
+    try:
+        n = json.load(open(os.path.join(d, "nix-sources.json")))
+        for k in ("version", "id", "built"):
+            if n.get(k) != m.get(k):
+                bad.append(f"nix-sources.json {k} {n.get(k)!r}, not latest.json's {m.get(k)!r}")
+        nix = {"linux-x86_64": "x86_64-linux", "linux-arm64": "aarch64-linux"}
+        want_sys = {nix[t] for t in targets if t in nix}
+        got_sys = {k for k in n if k not in ("version", "id", "built")}
+        if got_sys != want_sys:
+            bad.append(f"nix-sources.json systems {sorted(got_sys)}, not {sorted(want_sys)}")
+        for t, s in nix.items():
+            e, ns = targets.get(t), n.get(s)
+            if e and isinstance(ns, dict):
+                if not str(ns.get("url", "")).endswith("/" + str(e.get("file"))):
+                    bad.append(f"nix-sources.json {s}: url {ns.get('url')!r} is not {e.get('file')!r}")
+                if ns.get("sha256") != e.get("sha256"):
+                    bad.append(f"nix-sources.json {s}: sha256 {ns.get('sha256')!r}, latest.json says {e.get('sha256')!r}")
+    except Exception as e:  # noqa: BLE001 - any read/parse error is the answer
+        bad.append(f"nix-sources.json: {e}")
     try:
         got = open(os.path.join(d, "install.sh")).read()
         src = open(os.path.join(HERE, "install.sh")).read()

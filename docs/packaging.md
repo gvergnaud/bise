@@ -359,6 +359,14 @@ repo stays private for now (friends are collaborators), public later.
   3. `publish-release.sh vX.Y.Z --publish` (or `gh release edit vX.Y.Z
      -R gvergnaud/bise --draft=false`): the draft becomes the latest
      release. A draft is not "latest": no install or update sees it before.
+  4. Linux (linux-nix): release.yml also builds `linux-x86_64` and
+     `linux-arm64` on Ubuntu 22.04 (glibc 2.34 floor), so latest.json
+     has 4 targets and install.sh picks `<os>-<arch>`. NixOS takes the
+     same tarballs through the flake (`flake.nix`, `nix/package.nix`,
+     docs/nixos.md): make-release.sh writes `nix-sources.json` (the
+     tag's URLs + sha256, from latest.json; check-release.py checks they
+     agree), and `--publish` commits it as `nix/sources.json` ("nix:
+     sources for <version>"): the one writer, never by hand.
   Private repo: macOS minutes cost 10x, so the workflow runs on tags and
   by hand, not on every push. `--local` is the emergency path (CI down):
   today's local build (this Mac's arch only, `--add` another archive),

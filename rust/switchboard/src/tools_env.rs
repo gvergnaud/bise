@@ -20,7 +20,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 /// Appended to every agent PATH (after the user's own dirs).
-pub const STD_DIRS: [&str; 6] = [
+const STD_DIRS: [&str; 6] = [
     "/opt/homebrew/bin",
     "/usr/local/bin",
     "/usr/bin",
@@ -28,6 +28,49 @@ pub const STD_DIRS: [&str; 6] = [
     "/usr/sbin",
     "/sbin",
 ];
+
+/// The standard dirs of an OS, joined: [`STD_DIRS`], and on Linux the
+/// NixOS ones too (the system profile, the user's profile, nix-env's):
+/// a dir that does not exist costs nothing in a PATH.
+pub fn std_dirs(macos: bool, home: &str, user: &str) -> String {
+    let mut d: Vec<String> = STD_DIRS.iter().map(|s| s.to_string()).collect();
+    if !macos {
+        d.push("/run/current-system/sw/bin".into());
+        if !user.is_empty() {
+            d.push(format!("/etc/profiles/per-user/{}/bin", user));
+        }
+        if !home.is_empty() {
+            d.push(format!("{}/.nix-profile/bin", home));
+        }
+    }
+    d.join(":")
+}
+
+/// [`std_dirs`] of this host.
+pub fn host_std_dirs() -> String {
+    let var = |k: &str| std::env::var(k).unwrap_or_default();
+    std_dirs(cfg!(target_os = "macos"), &var("HOME"), &var("USER"))
+}
+
+/// The login shell when `$SHELL` is unset: the OS's default.
+pub fn default_shell(macos: bool) -> &'static str {
+    if macos {
+        "/bin/zsh"
+    } else {
+        "/bin/sh"
+    }
+}
+
+/// How the login shell prints its PATH: `/usr/bin/printenv` when it
+/// exists (macOS, most Linux), else `printenv` from the login PATH
+/// (NixOS has no /usr/bin/printenv).
+pub fn printenv_cmd(usr_bin_has_it: bool) -> &'static str {
+    if usr_bin_has_it {
+        "/usr/bin/printenv"
+    } else {
+        "printenv"
+    }
+}
 
 /// The macOS git shim (xcrun): real git only with a developer dir.
 pub const MACOS_GIT_SHIM: &str = "/usr/bin/git";
@@ -48,8 +91,7 @@ pub fn join_path(parts: &[&str]) -> String {
 /// shell's PATH : the standard dirs.
 pub fn agent_path(bin_dir: &Path, inherited: &str, login: Option<&str>) -> String {
     let bin = bin_dir.to_string_lossy();
-    let std_dirs = STD_DIRS.join(":");
-    join_path(&[&bin, inherited, login.unwrap_or(""), &std_dirs])
+    join_path(&[&bin, inherited, login.unwrap_or(""), &host_std_dirs()])
 }
 
 /// The agents' PATH for this hub process (the login shell is asked
@@ -61,11 +103,11 @@ pub fn hub_agent_path(bin_dir: &Path) -> String {
 /// The PATH the hub itself finds git on: its own PATH + the standard
 /// dirs (no login shell: git lives in a standard dir).
 fn hub_tools_path() -> String {
-    join_path(&[&std::env::var("PATH").unwrap_or_default(), &STD_DIRS.join(":")])
+    join_path(&[&std::env::var("PATH").unwrap_or_default(), &host_std_dirs()])
 }
 
 /// The user's login-shell PATH, asked once per process ($SHELL, else
-/// /bin/zsh; 3 s at most); None when the shell fails or is too slow.
+/// /bin/zsh on macOS, /bin/sh on Linux; 3 s at most); None when the shell fails or is too slow.
 /// The whole ask is bounded, the start of the shell included: a spawn
 /// that never returned held every REPL start of the hub (BISE-291).
 pub fn login_path() -> Option<&'static str> {
@@ -73,7 +115,7 @@ pub fn login_path() -> Option<&'static str> {
     LOGIN
         .get_or_init(|| {
             let shell = std::env::var("SHELL").ok().filter(|s| !s.is_empty());
-            let shell = shell.unwrap_or_else(|| "/bin/zsh".into());
+            let shell = shell.unwrap_or_else(|| default_shell(cfg!(target_os = "macos")).into());
             bounded(Duration::from_secs(4), move || shell_path(&shell, Duration::from_secs(3))).flatten()
         })
         .as_deref()
@@ -98,8 +140,9 @@ const MARK: &str = "__BISE_PATH__";
 /// the line after a marker (rc files may print banners). Works for
 /// sh, bash, zsh and fish (printenv prints the joined form).
 pub fn shell_path(shell: &str, timeout: Duration) -> Option<String> {
+    let printenv = printenv_cmd(Path::new("/usr/bin/printenv").exists());
     let mut cmd = Command::new(shell);
-    cmd.args(["-i", "-l", "-c", &format!("echo {}; /usr/bin/printenv PATH", MARK)])
+    cmd.args(["-i", "-l", "-c", &format!("echo {}; {} PATH", MARK, printenv)])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
@@ -544,6 +587,22 @@ mod tests {
             agent_path(Path::new("/s/bin"), "", None),
             "/s/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
         );
+    }
+
+    #[test]
+    fn linux_std_dirs_add_the_nixos_profiles_and_macos_is_unchanged() {
+        let mac = std_dirs(true, "/Users/u", "u");
+        assert_eq!(mac, "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin");
+        assert_eq!(
+            std_dirs(false, "/home/u", "u"),
+            format!("{}:/run/current-system/sw/bin:/etc/profiles/per-user/u/bin:/home/u/.nix-profile/bin", mac)
+        );
+        // no HOME, no USER (env -i): the system profile only
+        assert_eq!(std_dirs(false, "", ""), format!("{}:/run/current-system/sw/bin", mac));
+        assert_eq!(default_shell(true), "/bin/zsh");
+        assert_eq!(default_shell(false), "/bin/sh");
+        assert_eq!(printenv_cmd(true), "/usr/bin/printenv");
+        assert_eq!(printenv_cmd(false), "printenv");
     }
 
     #[test]

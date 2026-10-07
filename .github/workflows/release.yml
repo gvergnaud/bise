@@ -1,4 +1,5 @@
-# BISE-168: build the installable archive on both Mac arches, install it
+# BISE-168: build the installable archive on both Mac arches and both
+# Linux arches (linux-nix), install it
 # in a clean fake HOME and run it (packaging/test-install.sh), and on a
 # v* tag publish a DRAFT GitHub Release (BISE-220: CI is the one
 # publisher; packaging/ci-release.sh): both archives + .sha256,
@@ -38,6 +39,9 @@ env:
   BEND_VERSION: "2.0.35"
   BEND_SHA256_ARM64: 2582f25057a519c330e6875798b784b727d4201f1c1f6944a105348f0eb8972e
   BEND_SHA256_X64: 7e59da4513e32ea7526464b342344a992a56372cdf62e0c55a30e9ce26baaeef
+  # the linux archives of the same Bend (docs/ports-plan.md)
+  BEND_SHA256_LINUX_ARM64: 09b813073241628f590f2c2fe420299ec25e4dddd6cf3fdc49c9486339989564
+  BEND_SHA256_LINUX_X64: 63039d1a119f716767ac5a7d8fe0717cfacf219c6c253c35192148e0dade722f
   RUST_VERSION: "1.97.1"
   CARGO_TERM_COLOR: never
   # bend asks bend-lang.com for a newer version once a day: not on CI
@@ -57,6 +61,15 @@ jobs:
           - target: darwin-x86_64
             runner: macos-15-intel
             bend_arch: x64
+          # Linux (docs/ports-plan.md): built on Ubuntu 22.04, so every
+          # binary needs glibc 2.34 at most (the floor). NixOS takes the
+          # same archives through the flake (nix/package.nix patches them)
+          - target: linux-x86_64
+            runner: ubuntu-22.04
+            bend_arch: x64
+          - target: linux-arm64
+            runner: ubuntu-22.04-arm
+            bend_arch: arm64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     steps:
@@ -71,7 +84,18 @@ jobs:
             echo "BISE_CHANNEL=${{ startsWith(github.ref, 'refs/tags/v') && 'stable' || 'dev' }}"
           } >> "$GITHUB_ENV"
           echo "$HOME/.bend/bin" >> "$GITHUB_PATH"
-          uname -a; sw_vers
+          uname -a; sw_vers 2>/dev/null || { cat /etc/os-release; ldd --version | head -n 1; }
+
+      # Linux: clang >= 15 (Ubuntu 22.04's clang 14 crashes on sb-core on
+      # arm64), zsh (test-install.sh's shell). bend -o calls `clang`.
+      - name: Linux packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends clang-15 zsh
+          mkdir -p "$HOME/.local/clang/bin"
+          ln -sf /usr/bin/clang-15 "$HOME/.local/clang/bin/clang"
+          echo "$HOME/.local/clang/bin" >> "$GITHUB_PATH"
 
       - name: Rust ${{ env.RUST_VERSION }}
         run: |
@@ -94,8 +118,13 @@ jobs:
         env:
           BEND_ARCH: ${{ matrix.bend_arch }}
         run: |
-          name="bend-$BEND_VERSION-darwin-$BEND_ARCH.tar.gz"
-          if [ "$BEND_ARCH" = arm64 ]; then sum="$BEND_SHA256_ARM64"; else sum="$BEND_SHA256_X64"; fi
+          case "${{ runner.os }}-$BEND_ARCH" in
+            macOS-arm64) os=darwin sum="$BEND_SHA256_ARM64" ;;
+            macOS-x64) os=darwin sum="$BEND_SHA256_X64" ;;
+            Linux-arm64) os=linux sum="$BEND_SHA256_LINUX_ARM64" ;;
+            Linux-x64) os=linux sum="$BEND_SHA256_LINUX_X64" ;;
+          esac
+          name="bend-$BEND_VERSION-$os-$BEND_ARCH.tar.gz"
           curl --proto '=https' --tlsv1.2 -fsSL -o "$RUNNER_TEMP/$name" \
             "https://github.com/bendlang/bend/releases/download/v$BEND_VERSION/$name"
           echo "$sum  $RUNNER_TEMP/$name" | shasum -a 256 -c -
