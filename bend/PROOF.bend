@@ -739,6 +739,12 @@ def Laws.skills_catalog_dedupes():
 def Laws.skills_catalog_empty_is_empty():
   {==}
 
+def Laws.skills_scan_note_quiet():
+  {==}
+
+def Laws.skills_scan_note_names_the_skipped():
+  {==}
+
 def Laws.skills_malformed_lines_skipped():
   {==}
 

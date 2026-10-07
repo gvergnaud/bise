@@ -22,9 +22,10 @@ def main():
     st = os.path.join(tmp, "st")
     os.makedirs(ws)
     e2e.sh(ws, "git init -q && git config user.email t@t && git config user.name t && git config commit.gpgsign false && echo '# demo' > README.md && git add . && git commit -qm init")
-    env = {**e2e.clean_env(own_paths=True), **e2e.own_side_channels(tmp),
+    env = {**e2e.clean_env(), **e2e.own_side_channels(tmp),
            "SB_STATE_DIR": st, "BEND_BG_ROOT": os.path.join(tmp, "bg"), **e2e.no_real_accounts(tmp)}
     e2e.refuse_real_run_dir(env, tmp)
+    e2e.refuse_real_home(env)
     for k in ["BEND_PROVIDER_URL", "BEND_MODEL"]:
         env.pop(k, None)
     err = open(os.path.join(tmp, "hub.stderr"), "a")

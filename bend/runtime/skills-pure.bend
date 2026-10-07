@@ -192,6 +192,22 @@ def skills_catalog.pick(empty: Bool, +content: String) -> String:
         String.append(catalog_go(String.split(content, Tx.newline()), Nil{}, ""),
           "</available-skills>"))
 
+# ---- the startup scan's note ----
+# The scan's answer (Proc: its status line, then what it printed) less
+# the status line: its "skills scan: skipped <path> ..." lines, one per
+# file or folder that gave no answer in time, or a timeout's reason;
+# "" when it printed nothing
+def scan_note.after(m: Maybe<&2, Nat>, +out: String) -> String:
+  match m:
+    case None{}:
+      ""
+    case Some{i}:
+      String.drop(out, Nat.add(i, 1n))
+
+def scan_note(+out: String) -> String:
+  scan_note.after(Tx.find(out, "
+", 0n), out)
+
 def skills_catalog(+content: String) -> String:
   skills_catalog.pick(
     String.is_empty(catalog_go(String.split(content, Tx.newline()), Nil{}, "")),

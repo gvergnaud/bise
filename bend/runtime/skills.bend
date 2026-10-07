@@ -60,24 +60,98 @@ def index_path() -> IO(String):
 # every local skill. Tabs and quotes are stripped from the fields so the
 # tab-separated line stays unambiguous; folded multi-line YAML
 # descriptions are out of scope (the Agent Skills format is one line).
+# The scan never blocks the REPL's start (the first model call waits on
+# it): a SKILL.md that links into ~/Documents made `sed` wait ~40 min on
+# macOS's privacy check, and main never made its first call. So no
+# command reads a user path in the foreground: each folder's listing,
+# then each SKILL.md (its first 64 KiB, `head`), is read by a background
+# job of its own into a temp folder, all at once; the script waits at
+# most $BEND_SKILLS_SCAN_SECS (default 3) for the listings, then as long
+# for the files, kills what is left (its children: the job of a file
+# stuck in the kernel just stays, with no hold on our output), parses the
+# copies, and prints one line per skipped path ("skills scan: skipped
+# <path> (no answer in 3 s)"), which the REPL puts on its stderr
+# (repl.err). A SKILL.md that is not a regular file (a FIFO) is read the
+# same way: a writer-less FIFO is skipped at the deadline. Proc.run_for
+# kills the script itself after 20 s (a shell that hangs anyway).
 
 def scan_script() -> String:
-  "scan() {
-  [ -d \"$1\" ] || return 0
-  for f in \"$1\"/*/SKILL.md; do
-    [ -f \"$f\" ] || continue
-    n=$(sed -n 's/^name:[[:space:]]*//p' \"$f\" | head -n 1)
-    s=$(sed -n 's/^description:[[:space:]]*//p' \"$f\" | head -n 1)
-    n=$(printf '%s' \"$n\" | tr -d '\\t\\r\"')
-    s=$(printf '%s' \"$s\" | tr -d '\\t\\r\"')
-    [ -n \"$n\" ] && [ -n \"$s\" ] && printf '%s\\t%s\\t%s\\n' \"$n\" \"$s\" \"$f\"
+  "lim=\"${BEND_SKILLS_SCAN_SECS:-3}\"
+t=$(mktemp -d \"${TMPDIR:-/tmp}/bend-skills.XXXXXX\") || exit 0
+trap 'rm -rf \"$t\"' EXIT
+job() {
+  id=\"$1\"; shift
+  ( \"$@\" > \"$t/$id\" 2>/dev/null; : > \"$t/$id.ok\" ) < /dev/null > /dev/null 2>&1 &
+  printf '%s %s\\n' \"$id\" \"$!\" >> \"$t/pids\"
+}
+settle() {
+  i=0
+  while [ \"$i\" -lt $((lim * 20)) ]; do
+    all=1
+    for id in \"$@\"; do [ -e \"$t/$id.ok\" ] || { all=0; break; }; done
+    [ \"$all\" = 1 ] && return 0
+    sleep 0.05; i=$((i + 1))
   done
 }
-mkdir -p \"$(dirname \"$1\")\" \"$(dirname \"$2\")\"
-{ scan \"$HOME/.agents/skills\"; scan \"$HOME/.vibe/skills\"; true; } > \"$1.$$\" && mv -f \"$1.$$\" \"$1\"
+ok() {
+  [ -e \"$t/$1.ok\" ] && return 0
+  p=$(sed -n \"s/^$1 //p\" \"$t/pids\")
+  [ -n \"$p\" ] && pkill -9 -P \"$p\" 2>/dev/null
+  printf 'skills scan: skipped %s (no answer in %s s)\\n' \"$2\" \"$lim\"
+  return 1
+}
+entries() {
+  [ -d \"$1\" ] || return 0
+  for d in \"$1\"/*; do [ -e \"$d\" ] && printf '%s\\n' \"$d\"; done
+}
+line() {
+  n=$(sed -n 's/^name:[[:space:]]*//p' \"$t/$1\" | head -n 1)
+  s=$(sed -n 's/^description:[[:space:]]*//p' \"$t/$1\" | head -n 1)
+  n=$(printf '%s' \"$n\" | tr -d '\\t\\r\"')
+  s=$(printf '%s' \"$s\" | tr -d '\\t\\r\"')
+  [ -n \"$n\" ] && [ -n \"$s\" ] && printf '%s\\t%s\\t%s\\n' \"$n\" \"$s\" \"$2\"
+}
+index() {
+  for r in \"$@\"; do
+    [ -f \"$t/r$r.files\" ] || continue
+    while IFS=' ' read -r id f; do
+      [ -e \"$t/$id.ok\" ] && line \"$id\" \"$f\"
+    done < \"$t/r$r.files\"
+  done
+}
 w=\"${BEND_WORKDIR:-$PWD}\"
 b=\"\"; [ \"${BISE_ROLE:-}\" = main ] && b=\"$PWD/prompts/skills\"
-{ scan \"$w/.agents/skills\"; cat \"$3\" 2>/dev/null; [ -n \"$b\" ] && scan \"$b\"; true; } > \"$2.$$\" && mv -f \"$2.$$\" \"$2\""
+set -- \"$1\" \"$2\" \"$3\" \"$HOME/.agents/skills\" \"$HOME/.vibe/skills\" \"$w/.agents/skills\" \"$b\"
+r=0; rs=\"\"
+for root in \"$4\" \"$5\" \"$6\" \"$7\"; do
+  r=$((r + 1)); [ -n \"$root\" ] && { job \"r$r\" entries \"$root\"; rs=\"$rs r$r\"; }
+done
+settle $rs
+k=0; fs=\"\"; r=0
+for root in \"$4\" \"$5\" \"$6\" \"$7\"; do
+  r=$((r + 1)); [ -n \"$root\" ] || continue
+  ok \"r$r\" \"$root\" || continue
+  while IFS= read -r d; do
+    k=$((k + 1)); f=\"$d/SKILL.md\"
+    job \"f$k\" head -c 65536 \"$f\"
+    printf 'f%s %s\\n' \"$k\" \"$f\" >> \"$t/r$r.files\"
+    fs=\"$fs f$k\"
+  done < \"$t/r$r\"
+done
+settle $fs
+for r in 1 2 3 4; do
+  [ -f \"$t/r$r.files\" ] || continue
+  while IFS=' ' read -r id f; do ok \"$id\" \"$f\" || true; done < \"$t/r$r.files\"
+done
+mkdir -p \"$(dirname \"$1\")\" \"$(dirname \"$2\")\"
+{ index 1 2; true; } > \"$1.$$\" && mv -f \"$1.$$\" \"$1\"
+{ index 3; cat \"$3\" 2>/dev/null; index 4; true; } > \"$2.$$\" && mv -f \"$2.$$\" \"$2\""
+
+# the backstop: the script bounds itself (two waits of $lim s), so this
+# only fires if the shell itself hangs; the REPL then starts on the
+# indexes of its last start
+def scan_timeout_ms() -> U32:
+  20000
 
 def scan_path(+dir: String, +port: String) -> String:
   String.append(dir, String.append("/bend-skills-scan-", String.append(port, ".sh")))
@@ -86,6 +160,15 @@ def session_index_path() -> IO(String):
   do IO<String>:
     +r : String <- Pl.run_dir()
     IO.pure(String, String.append(r, "/skills-index.txt"))
+
+# the scan's skipped paths, on the REPL's stderr (repl.err); nothing
+# when it skipped none
+def scan_note(quiet: Bool, +note: String) -> IO(Unit):
+  match quiet:
+    case True{}:
+      IO.pure(Unit, Unit{})
+    case False{}:
+      IO.print_err(note)
 
 def skills_scan() -> IO(Unit):
   do IO<Unit>:
@@ -97,8 +180,10 @@ def skills_scan() -> IO(Unit):
     +side : String <- P.side_dir()
     +path : String <- IO.pure(String, scan_path(side, port))
     u : Unit <- P.write_file(path, scan_script())
-    out : String <- Proc.run(Con{"/bin/sh", Con{path, Con{idx, Con{sidx, Con{psk, Nil{}}}}}})
-    IO.pure(Unit, Unit{})
+    +out : String <- Proc.run_for(Con{"/bin/sh", Con{path, Con{idx, Con{sidx, Con{psk, Nil{}}}}}},
+      scan_timeout_ms())
+    +note : String <- IO.pure(String, Skp.scan_note(out))
+    scan_note(String.is_empty(note), note)
 
 # the index the catalog and the skill tool read: this session's index
 # first (workspace and plugin skills win a name clash: the first

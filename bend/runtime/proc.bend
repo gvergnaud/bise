@@ -53,10 +53,15 @@ def args1(xs: List<&2, String>) -> List<&1, String>:
     case Con{+h, rest}:
       Con{h, args1(rest)}
 
-# argv[0] is the program (looked up in PATH), the rest its arguments
-def run(+argv: List<&2, String>) -> IO(String):
+# run, killed after `ms` (the answer then starts with 127): for a step
+# that must never hold the REPL, e.g. the startup skills scan
+def run_for(+argv: List<&2, String>, ms: U32) -> IO(String):
   do IO<String>:
     r : Result<&1, &1, U32 & String, U32 & (String & String)> <- Process.run(
       "/bin/sh", Con{"-c", Con{"exec 2>&1; exec \"$0\" \"$@\"", args1(argv)}}, "",
-      max_output(), timeout_ms())
+      max_output(), ms)
     IO.pure(String, answer(r))
+
+# argv[0] is the program (looked up in PATH), the rest its arguments
+def run(+argv: List<&2, String>) -> IO(String):
+  run_for(argv, timeout_ms())

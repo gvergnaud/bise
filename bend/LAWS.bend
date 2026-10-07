@@ -699,6 +699,19 @@ law skills_catalog_dedupes:
 law skills_catalog_empty_is_empty:
   {Sk.skills_catalog("") == "" : String}
 
+# LAW: the startup scan's note is what it printed, its status line
+# dropped: a clean scan says nothing, a skipped file is named once.
+law skills_scan_note_quiet:
+  {Sk.scan_note("0
+") == "" : String}
+
+law skills_scan_note_names_the_skipped:
+  {Sk.scan_note("0
+skills scan: skipped /h/.vibe/skills/x/SKILL.md (no answer in 3 s)
+")
+    == "skills scan: skipped /h/.vibe/skills/x/SKILL.md (no answer in 3 s)
+" : String}
+
 # LAW: blank or malformed lines never become skills.
 law skills_malformed_lines_skipped:
   {Sk.skill_ok_line("") == False{} : Bool}

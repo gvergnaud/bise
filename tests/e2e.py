@@ -18,7 +18,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import wait  # noqa: E402
-from bise_env import clean_env, refuse_real_run_dir  # noqa: E402
+from bise_env import clean_env, refuse_real_home, refuse_real_run_dir, refuse_real_skills  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
@@ -81,9 +81,10 @@ class Env:
             stdout=subprocess.PIPE, text=True, env=clean_env(FAKE_LOG=self.fake_log, **(fake_env or {})))
         port = self.fake.stdout.readline().split()[1]
         self.env = {
-            # none of the caller's path overrides (his ~/.bise paths): the
-            # ones below are this test's
-            **clean_env(own_paths=True),
+            # a throwaway HOME (bise_env.test_home), none of the caller's
+            # path overrides (his ~/.bise paths): the ones below are this
+            # test's
+            **clean_env(),
             **own_side_channels(self.tmp),
             "SB_STATE_DIR": self.state,
             "BEND_PROVIDER_URL": "http://127.0.0.1:%s/v1/chat/completions" % port,
@@ -109,6 +110,7 @@ class Env:
 
     def start_hub(self):
         refuse_real_run_dir(self.env, self.tmp)
+        refuse_real_home(self.env)
         err = open(os.path.join(self.tmp, "hub.stderr"), "a")
         self.hub = subprocess.Popen([EXE, "sbd", "--workspace", self.ws], cwd=ROOT, env=self.env,
                                     stdin=subprocess.DEVNULL, stdout=err, stderr=err)
@@ -129,6 +131,10 @@ class Env:
             except Exception:
                 self.hub.kill()
         self.fake.kill()
+        # the HOME law, after the fact: its REPLs indexed none of his skills
+        # (raised only when the test itself passed: never hides its failure)
+        if sys.exc_info()[0] is None:
+            refuse_real_skills(self.env["BEND_SKILLS_INDEX"])
         if os.environ.get("SB_KEEP") != "1":
             shutil.rmtree(self.tmp, ignore_errors=True)
         else:
