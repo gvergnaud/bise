@@ -250,17 +250,18 @@ pub fn parse(line: &str, focus: &str) -> UserCmd {
         },
         "/answer" | "/reply" => {
             let (n, text) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
-            match n.trim_start_matches('#').parse::<u64>() {
+            match crate::core_num::card_arg(n) {
                 Ok(card) if !text.trim().is_empty() => UserCmd::Answer {
                     card,
                     text: text.trim().to_string(),
                 },
-                _ => UserCmd::Invalid("usage: /answer <card> <answer>".into()),
+                Ok(_) => UserCmd::Invalid("usage: /answer <card> <answer>".into()),
+                Err(e) => UserCmd::Invalid(format!("{} (usage: /answer <card> <answer>)", e)),
             }
         }
-        "/close" => match rest.trim().trim_start_matches('#').parse::<u64>() {
+        "/close" => match crate::core_num::card_arg(rest) {
             Ok(card) => UserCmd::Close { card },
-            _ => UserCmd::Invalid("usage: /close <card>".into()),
+            Err(e) => UserCmd::Invalid(format!("{} (usage: /close <card>)", e)),
         },
         "/cancel" | "/undo" => UserCmd::Invalid(NO_UNDO.into()),
         // `/agents`, the board of every agent (`/tasks`: the old name)

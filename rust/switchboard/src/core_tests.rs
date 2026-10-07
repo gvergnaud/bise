@@ -3424,3 +3424,7 @@ fn a_batched_replay_builds_the_same_state_as_one_event_at_a_time() {
 /// `sb every`'s timers on sb-core (every_tests.rs).
 #[path = "every_tests.rs"]
 mod every_tests;
+
+/// No number a client sends panics the hub (core_num.rs).
+#[path = "core_num_tests.rs"]
+mod core_num_tests;

@@ -30,6 +30,7 @@ pub mod cli;
 pub mod client;
 pub mod computer_use;
 pub mod core;
+pub mod core_num;
 pub mod daemon;
 pub mod devflow;
 pub mod diff;

@@ -2159,6 +2159,17 @@ impl Hub {
     /// replayed with the answers), then apply the effects it returns.
     fn core(&mut self, fx: &mut Fx, env: &mut dyn Env, client: Option<ClientId>, input: Value) {
         let mut input = input;
+        // a number sb-core cannot read fails its whole input: refuse it
+        // here, naming it, to whoever sent it (crate::core_num)
+        if let Some(n) = crate::core_num::too_big(&input) {
+            let e = format!("refused: {} is too large a number (at most {})", n, crate::core_num::MAX);
+            match (input["t"].as_str(), input["token"].as_u64(), client) {
+                (Some("req"), Some(token), _) => fx.push(Effect::Reply { token, body: json!({"ok": false, "error": e}) }),
+                (_, _, Some(c)) => fx.push(notice(c, &e)),
+                _ => fx.push(line(MAIN, "warn", &e)),
+            }
+            return;
+        }
         // one now for the input and its re-sends (a need replays the step)
         let now = env.now();
         input["now"] = json!(now);
