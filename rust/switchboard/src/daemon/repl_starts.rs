@@ -54,7 +54,7 @@ impl Shell {
         name == crate::model::MAIN
             || self.hub.focused().contains(name)
             || crate::board::queued_count(&self.hub.st, name) > 0
-            || self.restart_first.contains(dir)
+            || self.starts.goes_first(dir)
     }
 
     /// A fresh spawn of `name` waits for a slot (generation `gen`).
@@ -80,7 +80,6 @@ impl Shell {
             if self.gens.get(&c.dir) != Some(&q.gen) {
                 continue;
             }
-            self.restart_first.remove(&c.dir);
             self.starts.begin(&c.dir, Kind::Start, now_ms());
             self.spawn_fresh(&q.name, q.gen, q.resume, q.crash_note, q.port);
         }
@@ -117,6 +116,12 @@ impl Shell {
         }
     }
 
+    /// `dir`'s new process connected: its start is done, its slot free.
+    pub(super) fn start_connected(&mut self, dir: &str) {
+        self.switch_spawned.remove(dir);
+        self.starts.connected(dir);
+    }
+
     /// `dir`'s live REPL is gone: the old process of a switch exits as
     /// asked (its slot stays for the new one: progress); any other end
     /// frees the slot.
@@ -141,7 +146,6 @@ impl Shell {
             if let Some((_, pid)) = self.pids.get(&s.dir) {
                 kill_pid(*pid);
             }
-            self.restart_first.insert(s.dir.clone());
             if let Some(gen) = self.gens.get(&s.dir).copied() {
                 let _ = self.tx.send(Msg::ReplGone { dir: s.dir, gen, reason, cause: Gone::Stalled { reports: s.reports } });
             }

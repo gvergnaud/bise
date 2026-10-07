@@ -212,9 +212,8 @@ struct Shell {
     /// without progress is a failed start (daemon/repl_starts.rs;
     /// BISE-291: it stayed `starting` forever, with no line anywhere).
     starts: crate::repl_start::Starts,
-    /// fresh spawns waiting for a slot, and the stalled ones that go first
+    /// fresh spawns waiting for a slot
     start_queue: BTreeMap<String, repl_starts::Queued>,
-    restart_first: BTreeSet<String>,
     clients: BTreeMap<ClientId, UnixStream>,
     replies: BTreeMap<Token, UnixStream>,
     /// The last lines of each feed, with their transcript positions and
@@ -2046,7 +2045,6 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         pids: BTreeMap::new(),
         starts: Default::default(),
         start_queue: BTreeMap::new(),
-        restart_first: BTreeSet::new(),
         clients: BTreeMap::new(),
         replies: BTreeMap::new(),
         buffers: BTreeMap::new(),
@@ -2255,8 +2253,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
                         interrupt,
                     },
                 );
-                sh.switch_spawned.remove(&dir);
-                sh.starts.connected(&dir);
+                sh.start_connected(&dir);
                 sh.recycle_started(&dir);
                 crate::util::timing(&format!("repl connected {} (adopted {})", dir, adopted));
                 if let Some(q) = sh.switching.remove(&dir) {

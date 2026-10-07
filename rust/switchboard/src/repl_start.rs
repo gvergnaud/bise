@@ -77,6 +77,8 @@ pub struct Starts {
     row: BTreeMap<String, u32>,
     started: BTreeSet<String>,
     stalled: BTreeSet<String>,
+    /// stalled ones restarted: they go first (until their next start)
+    first: BTreeSet<String>,
 }
 
 /// A stall reports to probation (see the module header).
@@ -94,6 +96,11 @@ impl Starts {
         self.flight.contains_key(dir)
     }
 
+    /// It stalled and waits for its restart: it goes first.
+    pub fn goes_first(&self, dir: &str) -> bool {
+        self.first.contains(dir)
+    }
+
     pub fn len(&self) -> usize {
         self.flight.len()
     }
@@ -104,6 +111,7 @@ impl Starts {
 
     /// A start takes a slot (admitted by [`order`] and [`Starts::free`]).
     pub fn begin(&mut self, dir: &str, kind: Kind, now_ms: u64) {
+        self.first.remove(dir);
         self.started.insert(dir.to_string());
         self.flight.insert(dir.to_string(), (kind, Watch::new(now_ms, START_STILL_MS)));
     }
@@ -138,6 +146,7 @@ impl Starts {
         let mut out = Vec::new();
         for (dir, kind, secs) in late {
             self.flight.remove(&dir);
+            self.first.insert(dir.clone());
             self.stalled.insert(dir.clone());
             let n = self.row.entry(dir.clone()).or_insert(0);
             *n += 1;
@@ -211,8 +220,10 @@ mod tests {
         let st = s.stalled(45_000);
         assert_eq!(st, [Stall { dir: "a".into(), kind: Kind::Switch, secs: 45, reports: false }]);
         assert!(!s.in_flight("a"), "a stalled start leaves its slot");
+        assert!(s.goes_first("a") && !s.goes_first("b"), "its restart goes first");
         // restarted, it stalls again: a reason to roll back
         s.begin("a", Kind::Start, 50_000);
+        assert!(!s.goes_first("a"), "started: no longer first");
         for d in ["b", "c", "d"] {
             s.progress(d, 90_000);
         }
