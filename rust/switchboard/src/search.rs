@@ -246,12 +246,23 @@ pub struct Query {
     pub limit: usize,
     /// from 1
     pub page: usize,
+    /// stream C (S2 step 3): only the threads of this project (their
+    /// keys are `<project>/<dir>`: `Index::refresh_as`)
+    pub scope: Option<String>,
+    /// `--all`: home and every project, ranked together (for the flags)
+    pub all: bool,
 }
 
 impl Query {
     /// The flags that reproduce this query, for the "next page" line.
     fn flags(&self) -> String {
         let mut f = String::new();
+        if let Some(p) = &self.scope {
+            f.push_str(&format!(" --project {}", p));
+        }
+        if self.all {
+            f.push_str(" --all");
+        }
         for a in &self.agents {
             f.push_str(&format!(" --agent {}", a));
         }
@@ -326,6 +337,28 @@ impl Index {
         }
     }
 
+    /// The same as `refresh` for another hub's `agents_dir` (stream C, S2
+    /// step 3): its threads are keyed `<prefix>/<dir>`, so one index holds
+    /// several projects and one query ranks them together. Called only
+    /// when a query runs (never on a tick: core-idle-cpu's burn).
+    pub fn refresh_as(&mut self, agents_dir: &Path, prefix: &str) {
+        let Ok(rd) = std::fs::read_dir(agents_dir) else { return };
+        for e in rd.flatten() {
+            let path = e.path().join("transcript.log");
+            if !path.is_file() {
+                continue;
+            }
+            let dir = format!("{}/{}", prefix, e.file_name().to_string_lossy());
+            self.threads.entry(dir).or_insert_with(|| Thread::new(path)).refresh();
+        }
+    }
+
+    /// Drops the threads whose `<prefix>/` is not in `keep` (a project
+    /// that left the registry).
+    pub fn retain_prefixes(&mut self, keep: &[String]) {
+        self.threads.retain(|k, _| k.split_once('/').is_some_and(|(p, _)| keep.iter().any(|x| x == p)));
+    }
+
     pub fn stats(&self) -> Stats {
         let mut s = Stats { threads: self.threads.len(), ..Stats::default() };
         for t in self.threads.values() {
@@ -356,6 +389,9 @@ impl Index {
         let mut hits: Vec<(&str, &Thread, &Doc)> = Vec::new();
         for (dir, t) in &self.threads {
             if only.as_ref().is_some_and(|o| !o.contains(dir.as_str())) {
+                continue;
+            }
+            if q.scope.as_ref().is_some_and(|p| dir.split_once('/').map(|x| x.0) != Some(p.as_str())) {
                 continue;
             }
             let archived = label_of(who, dir).1;

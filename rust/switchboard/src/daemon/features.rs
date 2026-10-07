@@ -4,12 +4,15 @@
 //! and the try build run in a thread, in line on the land queue (the
 //! feature's lands wait meanwhile; a merge waits for main's line too);
 //! the registry and the facts are shared with those threads; the end
-//! comes back to the hub as `Input::Feature`.
+//! comes back to the hub as `Input::Feature`. The typed `features` rows
+//! (bar A.6, `proto_view::features`) read the same registry and facts,
+//! never git, on the loop (`daemon/proto.rs` sends them).
 
 use super::{log_line, write_json, Msg, Shell};
 use crate::core::{FeatureDone, Input, Token};
 use crate::feature::{self, Facts, Registry};
 use crate::flow::{FlowConfig, FlowMode};
+use crate::proto_view;
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -23,6 +26,8 @@ struct Inner {
     building: BTreeSet<String>,
     /// A step running, by feature: one at a time per feature.
     busy: BTreeSet<String>,
+    /// The trunk's short name at the last refresh ("" before it).
+    main: String,
 }
 
 /// The registry, the facts and the builds, shared with the threads.
@@ -48,7 +53,16 @@ impl Features {
         let Ok(main) = crate::trunk::trunk_ref(shared) else { return };
         let facts: BTreeMap<String, Facts> =
             names.into_iter().filter_map(|n| feature::facts(shared, &main, &n).ok().map(|f| (n, f))).collect();
-        self.lock().facts = facts;
+        let mut g = self.lock();
+        g.facts = facts;
+        g.main = crate::land::short(&main).to_string();
+    }
+
+    /// The typed rows (bar A.6), from what the threads last read: no git.
+    fn rows(&self, agents: &dyn Fn(&str) -> Vec<String>, cards: &[proto_view::PlaceCard]) -> Vec<bise_proto::rows::Feature> {
+        let g = self.lock();
+        let main = if g.main.is_empty() { "main" } else { g.main.as_str() };
+        proto_view::features(&g.reg.features, &g.facts, &g.building, main, agents, cards)
     }
 
     /// The views' part (`Hub::feature_lids`, `Hub::trying`), by place id.
@@ -195,6 +209,15 @@ impl Shell {
             };
             let _ = job.tx.send(Msg::In(Input::Feature(done)));
         });
+    }
+
+    /// The typed `features` event (bar A.6): the registry's rows with each
+    /// feature's live agents and its open card.
+    pub(super) fn features_ev(&self) -> bise_proto::hub::HubEv {
+        let hub = &self.hub;
+        let cards: Vec<proto_view::PlaceCard> = hub.st.open_cards().map(|c| (c.id, c.kind.as_str(), c.place.as_deref())).collect();
+        let agents = |f: &str| hub.feature_agents(f).into_iter().map(|(a, _)| a).collect();
+        bise_proto::hub::HubEv::Features { project: self.project(), items: self.features.rows(&agents, &cards) }
     }
 
     /// The views' part, before a snapshot (`Shell::snapshot`).

@@ -1788,15 +1788,18 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 name = "switchboard"
 version = "0.1.0"
 dependencies = [
+ "bend-images",
  "bend-plugins",
  "bise-catalog",
  "bise-home",
+ "bise-proto",
  "bise-session",
  "brush-parser",
  "libc",
  "serde",
  "serde_json",
  "toml",
+ "unicode-width 0.2.0",
 ]
 
 [[package]]

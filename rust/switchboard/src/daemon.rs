@@ -15,15 +15,29 @@
 mod accept;
 mod art;
 mod boot;
+mod capsule;
+mod choose;
 mod features;
-mod gate;
+mod fn_context;
+pub(crate) mod gate;
 mod history;
+mod lines;
+mod page_cards;
+mod pages;
+mod projects;
+mod proto;
 mod repl;
 mod repl_starts;
 mod recycling;
+mod routing;
 mod release;
 mod session_log;
 mod versions;
+mod dev_servers;
+mod merged;
+mod worktrees;
+mod xhub;
+mod xread;
 
 use history::{history_line, transcript_page};
 use repl::{adopt, adoptable, busy_at, kill_pid, supervise};
@@ -51,6 +65,10 @@ use std::time::Duration;
 /// ones stay in the transcript: the client pages them with the
 /// `history` op when the user scrolls up).
 const BUFFER_LINES: usize = 1000;
+/// The line a page's input to main ends with (ambient-lead m_5724):
+/// ambient-core keys on "[from the page:" to keep that turn off the
+/// capsule; main's rule (prompts.rs, amb-kit 83c1a8af) reads it.
+const PAGE_HINT: &str = "[from the page: answer on the page; one short line at most]";
 /// Lines one `history` page may carry.
 const PAGE_LINES: usize = 2000;
 
@@ -133,6 +151,12 @@ enum Msg {
         stream: UnixStream,
         v: Value,
     },
+    /// bise's cross-hub `xin` / `xreply` (daemon/xhub.rs).
+    XHub {
+        token: Token,
+        stream: UnixStream,
+        v: Value,
+    },
     /// `sb version …` (one request, one answer).
     Version {
         stream: UnixStream,
@@ -172,6 +196,9 @@ enum Msg {
     Land {
         line: Option<(String, String)>,
     },
+    /// The page server (docs/ambient-pages.md §2.4): notes sent from a
+    /// page, or its drafts changed.
+    Page(crate::pages::PageMsg),
     /// An agent's changes, computed off the loop (`daemon/art.rs`).
     Changes {
         name: String,
@@ -182,6 +209,12 @@ enum Msg {
     ToClient {
         id: ClientId,
         v: Value,
+    },
+    /// S2 step 5: BISE_ROUTE_MODEL's answer for the unclear route `rid`
+    /// (a project name, or None), from its thread (`daemon/routing.rs`).
+    RoutePick {
+        rid: u64,
+        pick: Option<String>,
     },
     /// `keep`: leave the REPLs running for the next hub to adopt.
     Shutdown {
@@ -223,6 +256,9 @@ struct Shell {
     positions: BTreeMap<String, usize>,
     /// Every thread, indexed for `sb history` (built at the first search).
     search: search::Index,
+    /// The other projects' threads (and bise's under `bise/`), for `sb
+    /// history --project|--all` (xread.rs; refreshed only by a query).
+    xsearch: search::Index,
     /// Wire-log offsets processed since the last flush to `wire.offset`.
     offsets: BTreeMap<String, u64>,
     /// True while `Input::Boot` runs: its spawns may adopt a REPL.
@@ -312,6 +348,19 @@ struct Shell {
     prs: Option<crate::forge::poll::Poller>,
     /// computer use's events.jsonl: each stop, one line in main's feed
     cu: crate::computer_use::Watch,
+    /// the pages: their server and what the hub keeps about them (daemon/pages.rs)
+    pg: pages::PageState,
+    /// the typed protocol's connections (bise desktop S3a, daemon/proto.rs)
+    proto: proto::Proto,
+    /// view.json's writer (bise desktop S1, daemon/projects.rs)
+    projects: projects::Projects,
+    /// bise's home hub: the projects its routing guesses from (daemon/routing.rs)
+    routing: routing::Routing,
+    /// S9: the fn context of the input being stepped: (agent, its JSON).
+    /// Its 'you' line goes to the transcript without the rendered block,
+    /// with an `sb context : <json>` line after it in the same append
+    /// (feed). Set and cleared around one `step`.
+    fn_ctx: Option<(String, String)>,
     /// idle-exit (`idle.rs`): no UI for the grace and nothing runs, the
     /// hub stops for good
     idle: crate::idle::Watch,
@@ -578,7 +627,7 @@ impl Shell {
         self.refresh_models();
         // main hears it as a report of the task (its spawn answer named the
         // model it asked), and the task's turn starts again on the default
-        let report = AgentReq::Report { kind: "progress".into(), summary: text.clone(), decisions: Vec::new() };
+        let report = AgentReq::Report { kind: "progress".into(), summary: text.clone(), decisions: Vec::new(), step: None, result: None };
         self.step(Input::Agent { token: 0, from: agent.to_string(), req: report });
         self.step(Input::Agent {
             token: 0,
@@ -681,8 +730,13 @@ impl Shell {
         // the features' lids and Δ (dev-flow §5.1)
         self.feature_views();
         let mut snap = self.hub.snapshot(now_ms());
-        // sb every's timers, running then a week of ended ones (/scheduled)
+        // sb every's timers, running then a week of ended ones (/scheduled);
+        // an ended one has `ended_ms` (amb-mac's menu and the capsule's
+        // watched pages skip those)
         snap["timers"] = json!(self.hub.timers().state(now_ms()));
+        // the pages (docs/ambient-pages.md §2.3), newest first, and the
+        // cards' page links (daemon/page_cards.rs)
+        self.snapshot_pages(&mut snap);
         // one gate card for several agents' identical calls: it names them all
         self.gate_card_agents(&mut snap);
         let who: Vec<(String, String, bool)> =
@@ -705,127 +759,45 @@ impl Shell {
         snap
     }
 
-    /// `/model`, `/reasoning` for `agent`: check, write its choice (and
-    /// config.toml for `default`), and say what it runs with now. A
-    /// model with another context window: its REPL reloads at its next
-    /// idle (same session), so the compaction threshold follows.
-    fn choose(&mut self, agent: &str, model: Option<String>, effort: Option<String>, default: bool) -> String {
-        let Some(a) = self.hub.st.agents.get(agent) else {
-            return format!("no agent {}", agent);
-        };
-        let (dir, is_main) = (a.dir.clone(), a.is_main);
-        let before = self.in_use(&dir, is_main);
-        let short = |u: &bise_catalog::InUse| match u.effort.as_str() {
-            "" => u.model.name.clone(),
-            e => format!("{} · {}", u.model.name, e),
-        };
-        if model.is_none() && effort.is_none() {
-            let words = before.model.efforts();
-            let takes = if words.is_empty() {
-                "no reasoning setting".to_string()
-            } else {
-                format!("efforts: {}", words.join(", "))
-            };
-            return format!(
-                "{} runs {} (model from {}, {}) · /model <model>, /reasoning <effort>",
-                agent,
-                short(&before),
-                before.model_from,
-                takes
-            );
-        }
-        let path = self.choice_path(&dir);
-        let mut choice = bise_catalog::Choice::read(&path);
-        if let Some(m) = &model {
-            let setup = self.setup();
-            let r = setup.catalog.resolve(m);
-            if r.known == bise_catalog::Known::NoProvider {
-                return format!(
-                    "unknown provider for {}: pick a listed model, or add [providers.{}] to config.toml",
-                    m, r.provider
-                );
-            }
-            if !r.needs.is_empty() {
-                return format!("{} is not usable yet (needs {})", r.name, r.needs);
-            }
-            choice.model = r.name.clone();
-            // the user's pick: no longer the spawn's ask nor its fallback
-            choice = bise_catalog::Choice { model: choice.model, effort: choice.effort, ..Default::default() };
-        }
-        if let Some(e) = &effort {
-            let target = match &model {
-                Some(_) => self.setup().catalog.resolve(&choice.model),
-                None => before.model.clone(),
-            };
-            let words = target.efforts();
-            if words.is_empty() {
-                return format!("{} has no reasoning setting", target.name);
-            }
-            if !words.iter().any(|w| w == e) {
-                return format!("{} takes: {}", target.name, words.join(", "));
-            }
-            choice.effort = e.clone();
-        }
-        if let Err(e) = choice.write(&path) {
-            return format!("could not save the choice of {}: {}", agent, e);
-        }
-        let mut said = String::new();
-        if default {
-            // BISE-298: the role's line of [roles], its old key dropped
-            let role = if is_main { bise_catalog::roles::MAIN } else { bise_catalog::roles::AGENTS };
-            let cfg = bise_home::Home::from_env().config_file();
-            let text = std::fs::read_to_string(&cfg).unwrap_or_default();
-            let new = bise_catalog::roles::with_role(&text, role, &choice.model);
-            let tmp = cfg.with_extension("toml.tmp");
-            match std::fs::write(&tmp, new).and_then(|_| std::fs::rename(&tmp, &cfg)) {
-                Ok(()) => said = format!(" · config.toml [roles] {} = {}", role, choice.model),
-                Err(e) => said = format!(" · config.toml not written: {}", e),
-            }
-        }
-        let after = self.in_use(&dir, is_main);
-        if after.model.caps.context != before.model.caps.context && self.repls.contains_key(&dir) {
-            // the compaction threshold is 80 % of the window: a reload
-            // at the next idle takes the new one (nothing lost)
-            self.reload_repls.insert(dir.clone());
-        }
-        log_line(&self.opts.paths, &format!("{}: now on {} (was {})", agent, short(&after), short(&before)));
-        format!("✓ {} now on {} from its next call{}", agent, short(&after), said)
-    }
-
     fn transcript(&self, dir: &str) -> PathBuf {
         self.opts.paths.agent_dir(dir).join("transcript.log")
     }
 
     /// A line enters a feed: memory, transcript, every client.
     fn feed(&mut self, name: &str, line: &str) {
+        if self.pg.page_waits.contains_key(name) && crate::pages::took_input(line) {
+            self.pg.page_waits.remove(name);
+        }
+        self.page_turn(name, line);
+        self.page_agent_line(name, line);
         let Some(dir) = self.dir_of(name) else { return };
         let path = self.transcript(&dir);
-        let pos = match self.positions.get(name) {
-            Some(p) => p + 1,
-            None => transcript_len(&path) + 1,
-        };
-        self.positions.insert(name.to_string(), pos);
-        let ts = now_ms();
-        let b = self.buffers.entry(name.to_string()).or_default();
-        b.push_back((pos, ts, line.to_string()));
-        while b.len() > BUFFER_LINES {
-            b.pop_front();
-        }
+        let lines = self.fn_ctx_lines(name, line);
+        // positions, the memory buffer, the transcript text, the events
+        // (daemon/lines.rs)
+        let (out, events) = self.buffer_lines(name, &path, lines, now_ms());
+        // one append: a 'you' line and its context line never part
         if let Ok(mut f) = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(&path)
         {
-            let _ = writeln!(f, "{}\t{}", ts, line);
+            let _ = f.write_all(out.as_bytes());
         }
-        self.broadcast(&line_event(name, pos, ts, line));
+        for e in events {
+            self.broadcast(&e);
+        }
     }
 
     /// One event to every client (serialized once).
     fn broadcast(&mut self, v: &Value) {
+        self.proto_on(v);
         let line = v.to_string();
         let mut dead: Vec<ClientId> = Vec::new();
         for (id, s) in self.clients.iter_mut() {
+            if self.proto.typed_only(*id) {
+                continue;
+            }
             if !write_line(s, &line) {
                 dead.push(*id);
             }
@@ -1051,7 +1023,10 @@ impl Shell {
                     }
                 }
             }
-            Effect::Line { agent, line } => self.feed(&agent, &line),
+            Effect::Line { agent, line } => {
+                self.typed_line(&line);
+                self.feed(&agent, &line)
+            }
             Effect::Reply { token, body } => {
                 if let Some(mut s) = self.replies.remove(&token) {
                     write_json(&mut s, &body);
@@ -1059,6 +1034,9 @@ impl Shell {
             }
             Effect::Land { token, job } => self.land(token, *job),
             Effect::ToClient { client, body } => {
+                if self.typed_notice(client, &body) || self.typed_confirm(client, &body) {
+                    return;
+                }
                 if let Some(s) = self.clients.get_mut(&client) {
                     write_json(s, &body);
                 }
@@ -1073,8 +1051,12 @@ impl Shell {
                 self.broadcast(&json!({"ev": "renamed", "old": old, "new": new}));
             }
             Effect::State => {
+                self.page_answers();
+                self.page_agent_push();
+                self.page_watch_push();
                 let snap = self.snapshot();
                 self.broadcast(&snap);
+                self.view_changed(&snap);
             }
             Effect::AskRole { dir, key, request } => self.ask_role(dir, key, request),
             Effect::Confirm { card, agent: _, text } => self.on_confirm(card, &text),
@@ -1097,9 +1079,14 @@ impl Shell {
                 }
             }
             Effect::Choose { client, agent, model, effort, default } => {
-                let text = self.choose(&agent, model, effort, default);
-                if let Some(s) = self.clients.get_mut(&client) {
-                    write_json(s, &json!({"ev": "notice", "text": text}));
+                let r = self.choose(&agent, model, effort, default);
+                // a typed `model`/`effort`: an error only when refused, the
+                // change shows in `agents` (architect m_10331)
+                if !self.typed_outcome(client, &r) {
+                    let text = r.unwrap_or_else(|e| e);
+                    if let Some(s) = self.clients.get_mut(&client) {
+                        write_json(s, &json!({"ev": "notice", "text": text}));
+                    }
                 }
                 let snap = self.snapshot();
                 self.broadcast(&snap);
@@ -1131,6 +1118,20 @@ impl Shell {
             Effect::Feature { token, op, name, agents } => self.feature(token, op, name, agents),
             Effect::Update { card, id, version } => self.update_to(card, id, version),
             Effect::UpdateLater { id } => versions::update_later(&id),
+            Effect::XDeliver { xid, project, kind, text, context } => self.xdeliver(xid, project, kind, text, context),
+            Effect::XReply { hub, xid, text } => self.xreply_back(hub, xid, text),
+            Effect::Route { rid, to, name, text, due_ms, why } => {
+                let project = self.project();
+                self.proto_route(bise_proto::hub::HubEv::Route { project, rid, to, name, text, correct_until_ms: due_ms, why })
+            }
+            Effect::JobEnd { agent, state, label, summary, key } => self.job_end(agent, &state, label, summary, key),
+            Effect::FollowedEnd { project, agent, key, state, label, summary } => self.followed_end(project, agent, key, &state, label, summary),
+            Effect::MergedChanged => self.merged_all(),
+            Effect::RouteAsk { rid, text } => self.route_ask(rid, text),
+            Effect::RouteDone { rid, state, to, xid } => {
+                let project = self.project();
+                self.proto_route(bise_proto::hub::HubEv::RouteDone { project, rid, state, to, xid })
+            }
         }
     }
 
@@ -1269,11 +1270,21 @@ impl Shell {
     /// The role of `a` (its system prompt's end), with the repo's flow
     /// (dev-flow §6).
     fn role_of(&self, a: &Agent, tmp: &str) -> String {
-        let flow = self.flow_now();
+        // the home workspace (docs/ambient-pages.md §5.1): no git, no flow
+        let git = crate::worktree::is_git_dir(&self.opts.paths.workspace);
+        let flow = self.flow_now().filter(|_| git);
         let style = self.commit_style();
+        let ws = &self.opts.paths.workspace;
+        let desktop = prompts::desktop_on(crate::paths::is_home(ws), crate::paths::is_registered(ws));
+        if a.is_main && crate::paths::is_home(ws) {
+            return prompts::bise_role(&self.hub.workspace, tmp);
+        }
+        if a.is_main && !git {
+            return prompts::main_role(&self.hub.workspace, tmp, devflow::NO_GIT_SECTION, desktop);
+        }
         if a.is_main {
             let section = devflow::main_section(flow.as_ref(), style.as_deref());
-            return prompts::main_role(&self.hub.workspace, tmp, &section);
+            return prompts::main_role(&self.hub.workspace, tmp, &section, desktop);
         }
         // a feature's agent: the feature's other agents (dev-flow §5.1)
         let id = crate::place::view_id(a);
@@ -1289,7 +1300,7 @@ impl Shell {
             others: &others,
             feature: a.ws.feature(),
         };
-        prompts::task_role(a, tmp, &devflow::task_place(flow.as_ref(), &place, style.as_deref()))
+        prompts::task_role(a, tmp, &devflow::task_place(flow.as_ref(), &place, style.as_deref()), desktop)
     }
 
     /// One role-line call in a thread (BISE-126): never waits in the
@@ -1535,12 +1546,16 @@ impl Shell {
         if self.release.is_some() {
             v.push("/release-bise".into());
         }
+        // a standing order (`sb every`) fires only while the hub runs
+        v.extend(crate::idle::timers_busy(self.hub.timers().map.len()));
         v
     }
 
     /// idle-exit, at each tick: no UI for the grace and nothing runs,
     /// the hub stops for good (the stop of `bise --stop`).
     fn idle_check(&mut self) {
+        // view.json's debounced write rides the same tick (daemon/projects.rs)
+        self.view_tick();
         let uis = self.clients.len() + self.holds.count();
         // the look reads self: the watch is taken out for it
         let mut w = std::mem::replace(&mut self.idle, crate::idle::Watch::new(None, std::time::Instant::now()));
@@ -1551,6 +1566,7 @@ impl Shell {
             crate::idle::Step::Say(s) => log_line(&self.opts.paths, &s),
             crate::idle::Step::Stop(s) => {
                 log_line(&self.opts.paths, &s);
+                self.view_stopped();
                 let _ = self.tx.send(Msg::Shutdown { keep: false });
             }
         }
@@ -1630,6 +1646,7 @@ impl Shell {
             "exe": self.opts.exe.to_string_lossy(),
             "version": crate::switch::version_info(&self.opts.app_root),
             "reload": self.reload_id,
+            "pages_url": self.pg.pages.as_ref().map(|p| p.base()),
         }));
         push(&self.snapshot());
         for name in &self.hub.st.order {
@@ -1657,6 +1674,9 @@ impl Shell {
     }
 
     fn client_line(&mut self, id: ClientId, v: Value) {
+        if v.get("cmd").is_some() {
+            return self.proto_cmd(id, v);
+        }
         let s = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
         match s("op").as_str() {
             "version" if s("do") == "items" => {
@@ -1676,12 +1696,12 @@ impl Shell {
                 // BISE-266: a key saved since a REPL started reaches it
                 // before this message does
                 self.keys_changed();
-                self.step(Input::ClientInput {
-                    client: id,
-                    focus: s("focus"),
-                    text: s("text"),
-                })
+                // a page's answer, a step, a route or a plain input
+                // (daemon/capsule.rs)
+                self.input(id, &v);
             }
+            // a note talk's words (§4.1): to the page's frame, never an input
+            "page_voice" => self.page_voice(&v),
             // older lines of a feed, before a position (the TUI scrolled
             // to the top of what it holds)
             "history" => {
@@ -1751,7 +1771,8 @@ impl Shell {
                 client: id,
                 agent: s("agent"),
             }),
-            // `/scheduled`'s x (stop) and r (run now)
+            // the menu bar's 'stop watching' (amb-mac m_5435), `/scheduled`'s
+            // x (stop) and r (run now)
             "every_stop" => self.step(Input::EveryStop {
                 id: v.get("id").and_then(|x| x.as_u64()).unwrap_or(0),
                 why: String::new(),
@@ -1764,6 +1785,7 @@ impl Shell {
                     .get("keep_agents")
                     .and_then(|x| x.as_bool())
                     .unwrap_or(false);
+                self.view_stopped();
                 let _ = self.tx.send(Msg::Shutdown { keep });
             }
             other => {
@@ -1786,6 +1808,17 @@ impl Shell {
             .to_string();
         let cmd = v.get("cmd").and_then(|x| x.as_str()).unwrap_or("");
         match cmd {
+            // another project's thread (S2 C, xread.rs): `<p>/<agent>`
+            "inspect" if xread::wanted(cmd, &v) => {
+                write_json(&mut stream, &self.xinspect(&v));
+            }
+            // S10: bise's `sb follow <p>/<agent>`: on that project's hub
+            "follow" if self.wants_follow(&v) => {
+                self.xfollow(stream, &v);
+            }
+            "history" | "show" if xread::wanted(cmd, &v) => {
+                write_json(&mut stream, &self.xsearch(cmd, &v));
+            }
             "inspect" => {
                 let body = self.inspect(&from, &v);
                 write_json(&mut stream, &body);
@@ -1794,14 +1827,38 @@ impl Shell {
                 let body = self.search(cmd, &v);
                 write_json(&mut stream, &body);
             }
+            "page_publish" | "page_start" | "page_tick" | "page_waiting" | "page_list" | "page_notes" => {
+                let body = self.page_op(cmd, &from, &v);
+                write_json(&mut stream, &body);
+            }
+            "taste" | "people" => {
+                let body = self.keeps_op(cmd, &v);
+                write_json(&mut stream, &body);
+            }
             "artifact" => {
                 let body = self.artifact_cmd(&from, &v);
                 write_json(&mut stream, &body);
             }
+            "project_list" => {
+                write_json(&mut stream, &xhub::list_body());
+            }
             _ => match AgentReq::from_json(&v) {
                 Ok(req) => {
+                    // `sb card --page`'s link, checked before the card opens
+                    // (daemon/page_cards.rs)
+                    let link = match self.card_page_link(cmd, &v) {
+                        Ok(l) => l,
+                        Err(e) => {
+                            write_json(&mut stream, &json!({"ok": false, "error": e}));
+                            return;
+                        }
+                    };
+                    let before: Vec<u64> = self.hub.st.cards.keys().copied().collect();
                     self.replies.insert(token, stream);
                     self.step(Input::Agent { token, from, req });
+                    if let Some(l) = link {
+                        self.link_new_card(&before, l);
+                    }
                 }
                 Err(e) => {
                     write_json(&mut stream, &json!({"ok": false, "error": e}));
@@ -1920,6 +1977,8 @@ pub fn drop_sb_link(bin_dir: &Path) {
 pub fn run(opts: Opts) -> std::io::Result<()> {
     let paths = opts.paths.clone();
     std::fs::create_dir_all(&paths.state)?;
+    // under a test run's jail (BISE_TEST_HOME), a hub outside it stops here
+    crate::client::jailed(&paths)?;
     // a state path too long for a unix socket: the short link first
     paths.prepare_socket()?;
     // one hub per workspace
@@ -1976,6 +2035,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     crate::util::timing("start (socket bound)");
     let workspace = paths.workspace.to_string_lossy().to_string();
     let mut hub = Hub::with_core(&workspace, opts.core_bin.clone());
+    hub.user_ids = xhub::is_home(&paths.workspace);
     boot.core(hub.core_pid());
     let (mut events, unreadable) = read_journal(&std::fs::read_to_string(paths.journal()).unwrap_or_default());
     // BISE-230: the task worktrees of the old place (<state>/worktrees/)
@@ -2049,7 +2109,11 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         replies: BTreeMap::new(),
         buffers: BTreeMap::new(),
         positions: BTreeMap::new(),
+        proto: proto::Proto::default(),
+        projects: projects::Projects::boot(&paths),
+        routing: routing::Routing::default(),
         search: search::Index::default(),
+        xsearch: search::Index::default(),
         offsets: BTreeMap::new(),
         booting: false,
         bins: BTreeMap::new(),
@@ -2085,6 +2149,8 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         features: features::Features::load(&paths.state),
         prs: None,
         cu: crate::computer_use::Watch::new(),
+        pg: pages::PageState::load(&paths.state),
+        fn_ctx: None,
         idle: crate::idle::Watch::new(
             crate::idle::grace(
                 std::env::var(crate::idle::ENV).ok().as_deref(),
@@ -2095,6 +2161,8 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         holds: crate::idle::Holds::default(),
         art: art::Art::default(),
     };
+    sh.start_pages(&paths, &tx);
+    sh.start_here(&paths);
     match sh.idle.grace() {
         Some(g) => log_line(&paths, &format!("idle exit: after {} s without a UI, once nothing runs", g.as_secs())),
         None => log_line(&paths, "idle exit: off (the hub runs until stopped)"),
@@ -2213,6 +2281,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
                 }
                 sh.step(i);
                 if tick {
+                    sh.page_waits_check();
                     sh.check_starts();
                     sh.plugins_changed(false);
                     sh.switch_idle_repls();
@@ -2376,6 +2445,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
                     });
                 }
             }
+            Msg::Page(m) => sh.page_msg(m),
             Msg::ClientNew { id, stream } => sh.client_hello(id, stream),
             Msg::ClientLine { id, v } => sh.client_line(id, v),
             Msg::ClientGone { id } => {
@@ -2384,6 +2454,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
                 }
             }
             Msg::AgentNew { token, stream, v } => sh.agent_request(token, stream, v),
+            Msg::XHub { token, stream, v } => sh.xhub_op(token, stream, v),
             Msg::Version { mut stream, v } => {
                 let from = v.get("from").and_then(|x| x.as_str()).unwrap_or("");
                 let what = v.get("do").and_then(|x| x.as_str()).unwrap_or("");
@@ -2405,6 +2476,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
             Msg::Release { client, v } => sh.release_event(client, v),
             Msg::Update(v) => sh.update_event(v),
             Msg::Changes { name, v } => sh.on_changes(name, v),
+            Msg::RoutePick { rid, pick } => sh.route_picked(rid, pick),
             Msg::ToClient { id, v } => {
                 if let Some(c) = sh.clients.get_mut(&id) {
                     write_json(c, &v);
@@ -2421,6 +2493,9 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
                     sh.feed(MAIN, &format!("sb {} : {}", kind, wire_escape(&text)));
                     // a land moved main or a feature: the features' facts again
                     sh.refresh_features();
+                    if kind == "landed" {
+                        sh.merged_all();
+                    }
                 }
                 let snap = sh.snapshot();
                 sh.broadcast(&snap);
@@ -2558,8 +2633,10 @@ fn plugins_fingerprint(ws: &Path) -> u64 {
 
 /// The skill folders a REPL's startup scan reads (runtime/skills.bend
 /// `scan_script`): `~/.agents/skills`, `~/.vibe/skills`,
-/// `<ws>/.agents/skills` and, for main, the app root's `prompts/skills`
-/// (the plugins' skills are in the plugins fingerprint).
+/// `<ws>/.agents/skills`, the app root's `prompts/skills-all` (every
+/// agent's built-ins, bise-pages) and, for main, the app root's
+/// `prompts/skills` (main's own, bise-demo; the plugins' skills are in the
+/// plugins fingerprint).
 fn skill_roots(ws: &Path, app_root: &Path, is_main: bool) -> Vec<PathBuf> {
     let mut roots = Vec::new();
     if let Some(home) = std::env::var_os("HOME").filter(|h| !h.is_empty()) {
@@ -2568,6 +2645,7 @@ fn skill_roots(ws: &Path, app_root: &Path, is_main: bool) -> Vec<PathBuf> {
         roots.push(home.join(".vibe/skills"));
     }
     roots.push(ws.join(".agents/skills"));
+    roots.push(app_root.join("prompts/skills-all"));
     if is_main {
         roots.push(app_root.join("prompts/skills"));
     }
@@ -2640,6 +2718,10 @@ mod tests {
         let ws = d.join("ws");
         assert!(skill_roots(&ws, &d, true).contains(&d.join("prompts/skills")));
         assert!(!skill_roots(&ws, &d, false).contains(&d.join("prompts/skills")));
+        // every agent reads prompts/skills-all (bise-pages)
+        for main in [true, false] {
+            assert!(skill_roots(&ws, &d, main).contains(&d.join("prompts/skills-all")));
+        }
         let _ = std::fs::remove_dir_all(&d);
     }
 

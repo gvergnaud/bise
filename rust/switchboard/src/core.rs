@@ -74,6 +74,11 @@ pub trait Env {
     fn worktree_feature(&mut self, _name: &str, feature: &str) -> Result<Workspace, String> {
         Err(format!("no feature {}", feature))
     }
+    /// bise desktop S2 (bise's home hub): the hub id of the registered
+    /// project `name` (its name or its id), never this hub's own.
+    fn project_hub(&self, name: &str) -> Result<String, String> {
+        Err(format!("no project {}", name))
+    }
 }
 
 /// A request of the `sb` CLI (RFC 0003 §4, RFC 0001 §7.2, §7.5).
@@ -125,6 +130,18 @@ pub enum AgentReq {
         kind: String,
         summary: String,
         decisions: Vec<String>,
+        /// S10: `--step n/m` (n, m)
+        step: Option<(u32, u32)>,
+        /// emitter 5: `--result` (proto's DiffResult, checked by the CLI)
+        result: Option<Value>,
+    },
+    /// S10: `sb follow <agent> [--off]` (main only, sb-core decides).
+    Follow {
+        agent: String,
+        on: bool,
+        /// J: the hub that asked (bise's home hub, through its xfollow op;
+        /// "" this hub's own main): the job's end goes back there
+        hub: String,
     },
     Spawn {
         name: String,
@@ -208,6 +225,17 @@ pub enum AgentReq {
     /// `sb every` (docs/ambient-roadmap.md B): the hub's timers (every.rs);
     /// the Rust side's, never sent to sb-core.
     Every(EveryReq),
+    /// `sb project send <project> --input m_<n>` (bise's main, desktop S2):
+    /// the user's message `msg` to main, forwarded by reference.
+    ProjectSend {
+        project: String,
+        msg: u64,
+    },
+    /// `sb project ask <project> "<question>"`: bise's own question.
+    ProjectAsk {
+        project: String,
+        text: String,
+    },
 }
 
 /// `sb every`'s three forms.
@@ -305,12 +333,20 @@ impl AgentReq {
                         kind
                     ));
                 }
+                let n = |k: &str| v.get(k).and_then(Value::as_u64).and_then(|x| u32::try_from(x).ok());
                 AgentReq::Report {
                     kind,
                     summary: jstr(v, "summary"),
                     decisions: jstrs(v, "decisions"),
+                    step: n("step").zip(n("of")),
+                    result: v.get("result").filter(|r| r.is_object()).cloned(),
                 }
             }
+            "follow" => AgentReq::Follow {
+                agent: jstr(v, "agent").trim_start_matches('@').to_string(),
+                on: !v.get("off").and_then(Value::as_bool).unwrap_or(false),
+                hub: String::new(),
+            },
             "spawn" => AgentReq::Spawn {
                 name: jstr(v, "name"),
                 brief: Brief {
@@ -410,6 +446,14 @@ impl AgentReq {
                 },
                 o => return Err(format!("sb every: unknown step {}", o)),
             }),
+            "project_send" => AgentReq::ProjectSend {
+                project: jstr(v, "project"),
+                msg: parse_msg_id(&jstr(v, "msg")).ok_or("usage: sb project send <project> --input m_<n>")?,
+            },
+            "project_ask" => AgentReq::ProjectAsk {
+                project: jstr(v, "project"),
+                text: jstr(v, "text"),
+            },
             other => return Err(format!("unknown command: {}", other)),
         };
         Ok(req)
@@ -446,6 +490,9 @@ pub enum Input {
         client: ClientId,
         focus: String,
         text: String,
+        /// The window's "send queued": a plain text or `@agent` text waits
+        /// for the end of the agent's turn (sb-core's queued-mode path).
+        queued: bool,
     },
     ClientFocus {
         client: ClientId,
@@ -518,6 +565,84 @@ pub enum Input {
     SignedIn,
     /// update-card: the end of `1` on an update item (`Effect::Update`):
     /// Ok, the switch started; Err, why it failed (nothing changed).
+    /// desktop S2, a project hub: bise's message (`xin` on hub.sock) from
+    /// bise's hub `hub`; `token` answers the caller (ack or error).
+    XIn {
+        token: Token,
+        hub: String,
+        xid: u64,
+        kind: String,
+        text: String,
+        /// the sender's project name (J: a followed task's end, kind
+        /// job_end, is said from `@<name>`; "" from bise's home hub)
+        name: String,
+    },
+    /// desktop S2, bise's home hub: the project hub has outbox entry `xid`.
+    XAck {
+        xid: u64,
+    },
+    /// Its delivery failed (the hub away, a refusal): a retry later.
+    XFail {
+        xid: u64,
+    },
+    /// The project `name` answered it (`xreply` on hub.sock).
+    XReply {
+        xid: u64,
+        name: String,
+        text: String,
+    },
+    /// desktop S2 step 2, bise's home hub: his words to bise's main that
+    /// route.rs sends to project `to` (a hub id, `name` its name, `why`
+    /// the guess's reason, `via` his view): held 2 s, then forwarded.
+    RouteHold {
+        text: String,
+        via: String,
+        to: String,
+        name: String,
+        why: String,
+        /// his fn context (FnContext JSON), as the input op had it: sb-core
+        /// carries it as text to the project, which renders it there
+        /// (fn_context::with_context); never on the home hub
+        context: Option<Value>,
+    },
+    /// A held route goes to `to` instead (the shell checked it in the
+    /// registry; `bise`: a cancel). `client`: the typed connection that
+    /// asked, which gets sb-core's notice when the route ended already.
+    RouteCorrect {
+        client: Option<ClientId>,
+        rid: u64,
+        to: String,
+        name: String,
+    },
+    /// A held route doesn't go: his words reach main as today.
+    RouteCancel {
+        client: Option<ClientId>,
+        rid: u64,
+    },
+    /// S2 step 5: BISE_ROUTE_MODEL picked project `to` (checked in the
+    /// registry by the shell, `name` its name) for the unclear route
+    /// `rid`; sb-core holds it 2 s for `to` if it still waits, else
+    /// nothing.
+    RoutePick {
+        rid: u64,
+        to: String,
+        name: String,
+        why: String,
+    },
+    /// S10: follow a task (the typed `follow`; `client` gets the refusal).
+    Follow {
+        client: Option<ClientId>,
+        agent: String,
+        on: bool,
+    },
+    /// A typed command of a window (bise-proto `new`, `rename`, `model`,
+    /// `effort`): the same handlers as the TUI's line, its fields never
+    /// parsed again (core_user.rs `user_cmd`); `focus` the agent it's for.
+    UserCmd {
+        client: ClientId,
+        focus: String,
+        cmd: UserCmd,
+    },
     Updated {
         card: u64,
         version: String,
@@ -693,6 +818,73 @@ pub enum Effect {
     UpdateLater {
         id: String,
     },
+    /// desktop S2, bise's home hub: deliver outbox entry `xid` to the
+    /// project hub `project` (a hub id; started when stopped), on a
+    /// thread; it comes back as `Input::XAck` or `Input::XFail`.
+    XDeliver {
+        xid: u64,
+        project: String,
+        kind: String,
+        text: String,
+        /// a routed message's fn context (FnContext JSON text, "" none)
+        context: String,
+    },
+    /// desktop S2, a project hub: main's answer to bise's message `xid`
+    /// goes back to bise's hub `hub` (`xreply` on its hub.sock).
+    XReply {
+        hub: String,
+        xid: u64,
+        text: String,
+    },
+    /// desktop S2 step 2: a route held (or corrected: same `rid`), for
+    /// the typed clients (`route`).
+    Route {
+        rid: u64,
+        to: String,
+        name: String,
+        text: String,
+        due_ms: u64,
+        why: String,
+    },
+    /// S2 step 5: his unclear words, held as route `rid` with no target
+    /// (1.5 s), wait for BISE_ROUTE_MODEL's pick (`route_ask`): the shell
+    /// asks it and steps `Input::RoutePick`, or nothing (then they go
+    /// plain to bise's main).
+    RouteAsk {
+        rid: u64,
+        text: String,
+    },
+    /// Its end: `state` "sent" (`xid` its delivery) or "cancelled".
+    RouteDone {
+        rid: u64,
+        state: String,
+        to: String,
+        xid: Option<u64>,
+    },
+    /// A feature merged into the trunk (T1 run 5 step 9): today's merged
+    /// list goes again to the typed connections, as after a land (a
+    /// feature merge writes no `landed` line).
+    MergedChanged,
+    /// S10: a followed task ended (done or failed), once: his notification.
+    /// `key`: the job's (its end's time here), the same in what goes back
+    /// to a hub that asked (J), so a window hearing both shows one line.
+    JobEnd {
+        agent: String,
+        state: String,
+        label: String,
+        summary: String,
+        key: u64,
+    },
+    /// J, bise's home hub: a task it follows in another project ended
+    /// (`project`: that hub's id); bise's main has its line already.
+    FollowedEnd {
+        project: String,
+        agent: String,
+        key: u64,
+        state: String,
+        label: String,
+        summary: String,
+    },
 }
 
 /// What a feature step did (dev-flow §5.1), for the hub: a card to open
@@ -865,6 +1057,9 @@ pub struct Hub {
     /// build builds or is on trial (the `Δ`). Runtime only.
     pub feature_lids: BTreeMap<String, String>,
     pub trying: BTreeSet<String>,
+    /// desktop S2, set by the daemon: this is bise's home hub, so main
+    /// reads every user message with its id (`prompts::user_message`).
+    pub user_ids: bool,
     /// pr-hub (pr-design §7-§10), runtime but `known`: what the journal
     /// says of each place's PR (its number; `pr_*` lines, read back by
     /// `replay`); `pr_lids`: the held line of a worktree with no PR yet
@@ -1043,6 +1238,8 @@ impl Hub {
     #[cfg(test)]
     pub fn new(workspace: &str) -> Hub {
         let bin = bise_home::env::test_setting("SB_CORE_BIN").map(PathBuf::from).unwrap_or_else(default_core_bin);
+        // a test on an sb-core of other sources lies both ways (core_fresh.rs)
+        crate::core_fresh::check(&bin);
         Hub::with_core(workspace, bin)
     }
 
@@ -1070,6 +1267,7 @@ impl Hub {
             flow: None,
             feature_lids: BTreeMap::new(),
             trying: BTreeSet::new(),
+            user_ids: false,
             pr_known: BTreeMap::new(),
             pr_lids: BTreeMap::new(),
             pr_ok_ms: BTreeMap::new(),
@@ -1273,6 +1471,7 @@ impl Hub {
                 aliases: parse(&a["aliases"]).unwrap_or_default(),
                 files: parse(&a["files"]).unwrap_or_default(),
                 snapshot_ref: a["snapshot_ref"].as_str().map(|x| x.to_string()),
+                follow: a["follow"].as_bool().unwrap_or(false),
                 run: run_of(&jstr(a, "run")),
                 waiting: a["waiting"].as_bool().unwrap_or(false),
                 waiting_on: a["waiting_on"].as_str().map(|x| x.to_string()),
@@ -1423,6 +1622,10 @@ impl Hub {
         if let Some((kind, text)) = &d.line {
             fx.push(line(MAIN, kind, text));
         }
+        // the merge reached the trunk: the changes tab's merged today again
+        if d.close.as_deref() == Some("merged") {
+            fx.push(Effect::MergedChanged);
+        }
         self.dirty = true;
     }
 
@@ -1504,7 +1707,7 @@ impl Hub {
         })
     }
 
-    /// `sb every`'s timers (the state's `timers`).
+    /// `sb every`'s timers (the state's `timers`, the pages' `watch`).
     pub fn timers(&self) -> &crate::every::Timers {
         &self.st.timers
     }
@@ -1610,7 +1813,7 @@ impl Hub {
     /// from bise once in the same sb-core step, the ◷ line says so.
     fn timer_stop_by_user(&mut self, fx: &mut Fx, env: &mut dyn Env, id: u64, why: &str) {
         let Some(t) = self.st.timers.map.get(&id) else { return };
-        let wake = format!("the user stopped timer #{} ({}){}: don't set it again unless they ask", id, t.text, why);
+        let wake = crate::every::stop_note(id, &t.text, why);
         self.core(fx, env, None, json!({"t": "every_stop", "id": id, "why": "stopped by the user", "wake": wake}));
     }
 
@@ -1929,11 +2132,23 @@ impl Hub {
                     // feature's agent: its feature's, dev-flow §5.1)
                     "place_id": crate::place::view_id(a),
                     "created_ms": a.created_ms,
+                    // its folder under agents/ and its former names (S2 C:
+                    // view.json carries them for sb history --project)
+                    "dir": a.dir,
+                    "aliases": a.aliases,
                     "note": a.declared.as_ref().map(|(_, n)| n.clone()).unwrap_or_default(),
                     "report": a.last_report.as_ref().map(|r| clip(&one_line(&r.summary), 200)),
                     // when it last reported (an archived task: about when it stopped)
                     "report_ms": a.last_report.as_ref().map(|r| r.at_ms),
+                    // S10: followed, and its progress step (`--step n/m`)
+                    "follow": a.follow,
+                    "report_kind": a.last_report.as_ref().map(|r| r.kind.clone()),
+                    "step": a.last_report.as_ref().and_then(|r| r.step),
+                    "of": a.last_report.as_ref().and_then(|r| r.of),
                     "queued": board::queued_count(&self.st, &a.name),
+                    // the user's queued inputs waiting for the turn's end
+                    // (the window's "send queued"): [{id, text, created_ms}]
+                    "queued_inputs": board::queued_inputs(&self.st, &a.name),
                     // BISE-299: main's inbox, the agents' questions waiting
                     // for main (the user sees a quiet count, never asked)
                     "inbox": if a.is_main { self.st.unanswered_for(&a.name).len() } else { 0 },
@@ -2125,7 +2340,12 @@ impl Hub {
                 client,
                 focus,
                 text,
-            } => self.user_input(&mut fx, env, client, &focus, &text),
+                queued,
+            } => self.user_input(&mut fx, env, client, &focus, &text, queued),
+            Input::UserCmd { client, focus, cmd } => {
+                let focus = self.focus_of(client, &focus);
+                self.user_cmd(&mut fx, env, client, focus, cmd, false)
+            }
             Input::ClientFocus { client, focus } => self.set_focus(&mut fx, env, client, &focus),
             Input::ClientGone { client } => {
                 self.set_focus(&mut fx, env, client, MAIN);
@@ -2152,6 +2372,28 @@ impl Hub {
             Input::Release(c) => self.release_in(&mut fx, env, c),
             Input::SignedIn => self.signed_in(&mut fx, env),
             Input::Updated { card, version, res } => self.updated(&mut fx, env, card, &version, res),
+            Input::XIn { token, hub, xid, kind, text, name } => {
+                let i = json!({"t": "x_in", "token": token, "hub": hub, "xid": xid, "kind": kind, "text": text, "name": name});
+                self.core(&mut fx, env, None, i)
+            }
+            Input::XAck { xid } => self.core(&mut fx, env, None, json!({"t": "x_ack", "xid": xid})),
+            Input::XFail { xid } => self.core(&mut fx, env, None, json!({"t": "x_fail", "xid": xid})),
+            Input::XReply { xid, name, text } => {
+                self.core(&mut fx, env, None, json!({"t": "x_reply", "xid": xid, "name": name, "text": text}))
+            }
+            Input::RouteHold { text, via, to, name, why, context } => {
+                let context = context.filter(|c| !c.is_null()).map_or(String::new(), |c| c.to_string());
+                let i = json!({"t": "route_hold", "text": text, "via": via, "to": to, "name": name, "why": why, "context": context});
+                self.core(&mut fx, env, None, i)
+            }
+            Input::RouteCorrect { client, rid, to, name } => {
+                self.core(&mut fx, env, client, json!({"t": "route_correct", "rid": rid, "to": to, "name": name}))
+            }
+            Input::RouteCancel { client, rid } => self.core(&mut fx, env, client, json!({"t": "route_cancel", "rid": rid})),
+            Input::RoutePick { rid, to, name, why } => {
+                self.core(&mut fx, env, None, json!({"t": "route_pick", "rid": rid, "to": to, "name": name, "why": why}))
+            }
+            Input::Follow { client, agent, on } => self.core(&mut fx, env, client, json!({"t": "follow", "agent": agent, "on": on})),
         }
         self.refresh_contexts(&mut fx, env.now());
         if self.dirty {
@@ -2304,6 +2546,44 @@ impl Hub {
                 }
             }
             "deliver" => self.deliver(fx, env, f),
+            "xdeliver" => fx.push(Effect::XDeliver {
+                xid: f["xid"].as_u64().unwrap_or(0),
+                project: jstr(f, "project"),
+                kind: jstr(f, "kind"),
+                text: jstr(f, "text"),
+                context: jstr(f, "context"),
+            }),
+            "xreply" => fx.push(Effect::XReply { hub: jstr(f, "hub"), xid: f["xid"].as_u64().unwrap_or(0), text: jstr(f, "text") }),
+            "route" => fx.push(Effect::Route {
+                rid: f["rid"].as_u64().unwrap_or(0),
+                to: jstr(f, "to"),
+                name: jstr(f, "name"),
+                text: jstr(f, "text"),
+                due_ms: f["due_ms"].as_u64().unwrap_or(0),
+                why: jstr(f, "why"),
+            }),
+            "route_ask" => fx.push(Effect::RouteAsk { rid: f["rid"].as_u64().unwrap_or(0), text: jstr(f, "text") }),
+            "job_end" => fx.push(Effect::JobEnd {
+                agent: jstr(f, "agent"),
+                state: jstr(f, "state"),
+                label: jstr(f, "label"),
+                summary: jstr(f, "summary"),
+                key: f["key"].as_u64().unwrap_or(0),
+            }),
+            "followed_end" => fx.push(Effect::FollowedEnd {
+                project: jstr(f, "project"),
+                agent: jstr(f, "agent"),
+                key: f["key"].as_u64().unwrap_or(0),
+                state: jstr(f, "state"),
+                label: jstr(f, "label"),
+                summary: jstr(f, "summary"),
+            }),
+            "route_done" => fx.push(Effect::RouteDone {
+                rid: f["rid"].as_u64().unwrap_or(0),
+                state: jstr(f, "state"),
+                to: jstr(f, "to"),
+                xid: f["xid"].as_u64(),
+            }),
             // not the client's `confirm` (a yes/no in the status row): a card's
             // the user's digit on a hub item (merge.rs)
             "card_choice" => self.card_choice(fx, env, f),
@@ -2390,7 +2670,7 @@ impl Hub {
         for m in f["msgs"].as_array().into_iter().flatten() {
             let id = m["id"].as_u64().unwrap_or(0);
             if let Some(msg) = self.st.msgs.get(&id) {
-                parts.push(prompts::tagged(msg, &jstr(m, "rel")));
+                parts.push(prompts::tagged(msg, &jstr(m, "rel"), self.user_ids && agent == MAIN));
             }
         }
         let text = parts.join("\n\n");
@@ -2504,145 +2784,6 @@ impl Hub {
         }
     }
 
-    fn user_input(
-        &mut self,
-        fx: &mut Fx,
-        env: &mut dyn Env,
-        client: ClientId,
-        focus: &str,
-        text: &str,
-    ) {
-        let focus = self.st.resolve(focus).unwrap_or_else(|| MAIN.to_string());
-        if let Some(v) = self.clients.get_mut(&client) {
-            if v.focus != focus {
-                v.focus = focus.clone();
-            }
-        }
-        let c = Some(client);
-        match router::parse(text, &focus) {
-            UserCmd::Say(t) => {
-                if !t.is_empty() {
-                    self.core(fx, env, c, json!({"t": "say", "focus": focus, "text": t}));
-                }
-            }
-            UserCmd::To { target, text } => self.core(
-                fx,
-                env,
-                c,
-                json!({"t": "route", "target": target, "text": text, "focus": focus}),
-            ),
-            UserCmd::New {
-                name,
-                brief,
-                worktree,
-                with_changes,
-            } => {
-                let b = Brief {
-                    objective: brief,
-                    ..Brief::default()
-                };
-                match new_task(name.as_deref(), &b, worktree, with_changes) {
-                    Ok(mut v) => {
-                        v["t"] = json!("new");
-                        self.core(fx, env, c, v)
-                    }
-                    Err(e) => fx.push(notice(client, &e)),
-                }
-            }
-            UserCmd::Drop { name, force } => match name {
-                None => fx.push(notice(
-                    client,
-                    "usage: /archive <agent> (or /archive from the agent's view)",
-                )),
-                Some(name) => self.core(
-                    fx,
-                    env,
-                    c,
-                    json!({"t": "drop", "name": name, "force": force}),
-                ),
-            },
-            UserCmd::Restore { name } => {
-                self.core(fx, env, c, json!({"t": "restore", "name": name}))
-            }
-            UserCmd::Isolate { name } => {
-                self.core(fx, env, c, json!({"t": "isolate", "name": name}))
-            }
-            UserCmd::Rename { name, new_name } => {
-                let valid = router::valid_name(&new_name);
-                self.core(
-                    fx,
-                    env,
-                    c,
-                    json!({"t": "rename", "name": name, "new_name": new_name, "valid": valid}),
-                )
-            }
-            UserCmd::Answer { card, text } => {
-                self.core(fx, env, c, json!({"t": "answer", "card": card, "text": text}))
-            }
-            UserCmd::Close { card } => {
-                self.core(fx, env, c, json!({"t": "close", "card": card}))
-            }
-            UserCmd::Tasks => fx.push(notice(client, &board::user_board(&self.st, env.now()))),
-            UserCmd::Prs => {
-                // `prs`: rows drawn like the PR lines; `text` for a client
-                // that does not know them (sb's CLI prints it)
-                let places = crate::place::places(&self.st, &self.prs);
-                let text = crate::forge::news::prs_list(&places);
-                match crate::forge::news::prs_rows(&places) {
-                    None => fx.push(notice(client, &text)),
-                    Some((head, rows)) => {
-                        let rows: Vec<Value> = rows
-                            .iter()
-                            .map(|r| json!({"tone": r.tone.as_str(), "number": r.number, "url": r.url, "text": r.text}))
-                            .collect();
-                        fx.push(Effect::ToClient {
-                            client,
-                            body: json!({"ev": "prs", "head": head, "rows": rows, "text": text}),
-                        })
-                    }
-                }
-            }
-            UserCmd::Interrupt => {
-                self.interrupt_by = Some("user".into());
-                self.core(fx, env, c, json!({"t": "interrupt", "agent": focus}));
-                self.interrupt_by = None;
-            }
-            UserCmd::Passthrough(l) => {
-                let first = l.split_whitespace().next().unwrap_or("");
-                if first != "/compact" {
-                    fx.push(notice(
-                        client,
-                        &format!("unknown command: {} (see /help)", first),
-                    ));
-                    return;
-                }
-                self.core(
-                    fx,
-                    env,
-                    c,
-                    json!({"t": "passthrough", "focus": focus, "line": l}),
-                )
-            }
-            UserCmd::Model { model, default } => fx.push(Effect::Choose {
-                client,
-                agent: focus,
-                model,
-                effort: None,
-                default,
-            }),
-            UserCmd::Reasoning { effort } => fx.push(Effect::Choose {
-                client,
-                agent: focus,
-                model: None,
-                effort,
-                default: false,
-            }),
-            UserCmd::Flow { set } => fx.push(Effect::Flow { client: Some(client), token: None, set }),
-            UserCmd::Help => fx.push(notice(client, HELP)),
-            UserCmd::Invalid(e) => fx.push(notice(client, &e)),
-        }
-    }
-
     fn set_focus(&mut self, fx: &mut Fx, env: &mut dyn Env, client: ClientId, focus: &str) {
         let now = env.now();
         let Some(view) = self.clients.get_mut(&client) else {
@@ -2726,6 +2867,12 @@ impl Hub {
 
     fn agent_req(&mut self, fx: &mut Fx, env: &mut dyn Env, token: Token, from: &str, req: AgentReq) {
         let reply = |fx: &mut Fx, body: Value| fx.push(Effect::Reply { token, body });
+        // the home workspace (docs/ambient-pages.md §5.1): no git, so no
+        // land, feature or flow; one line that says why, never a git error
+        if let Some(cmd) = git_only(&req).filter(|_| !env.is_git()) {
+            reply(fx, json!({"ok": false, "error": not_in_a_repo(cmd)}));
+            return;
+        }
         let q = match req {
             AgentReq::List | AgentReq::Tasks => {
                 let Some(from) = self.st.resolve(from) else {
@@ -2823,7 +2970,20 @@ impl Hub {
                 kind,
                 summary,
                 decisions,
-            } => json!({"cmd": "report", "kind": kind, "summary": summary, "decisions": decisions}),
+                step,
+                result,
+            } => {
+                let mut q = json!({"cmd": "report", "kind": kind, "summary": summary, "decisions": decisions});
+                if let Some((n, of)) = step {
+                    q["step"] = json!(n);
+                    q["of"] = json!(of);
+                }
+                if let Some(r) = result {
+                    q["result"] = r;
+                }
+                q
+            }
+            AgentReq::Follow { agent, on, hub } => json!({"cmd": "follow", "agent": agent, "off": !on, "hub": hub}),
             AgentReq::Spawn {
                 name,
                 brief,
@@ -2882,7 +3042,19 @@ impl Hub {
             AgentReq::Stop { agent, reason } => {
                 json!({"cmd": "stop", "agent": agent, "reason": reason})
             }
-            AgentReq::Drop { agent } => json!({"cmd": "drop", "agent": agent}),
+            AgentReq::Drop { agent } => {
+                // a drop the user was asked to confirm waits for his
+                // answer: a second drop never acts in his place (pm's C
+                // fail 36: main dropped @proxy-fix again once it was idle,
+                // while its card still asked him)
+                let name = self.st.resolve(&agent).unwrap_or_else(|| agent.clone());
+                if let Some(c) = self.st.open_cards().find(|c| c.kind == "drop" && c.agent == name) {
+                    let error = format!("@{name}: the user has not answered card #{} (archive it?) yet: wait for his answer", c.id);
+                    reply(fx, json!({"ok": false, "error": error}));
+                    return;
+                }
+                json!({"cmd": "drop", "agent": agent})
+            }
             AgentReq::Card { text, for_msg } => {
                 json!({"cmd": "card", "text": text, "for": for_msg})
             }
@@ -2899,6 +3071,15 @@ impl Hub {
                 reply(fx, body);
                 return;
             }
+            // desktop S2: the project's hub id (sb-core never reads the registry)
+            AgentReq::ProjectSend { project, msg } => match env.project_hub(&project) {
+                Ok(hub) => json!({"cmd": "project_send", "project": hub, "msg": msg}),
+                Err(e) => json!({"cmd": "project_send", "pre_err": e}),
+            },
+            AgentReq::ProjectAsk { project, text } => match env.project_hub(&project) {
+                Ok(hub) => json!({"cmd": "project_ask", "project": hub, "text": text}),
+                Err(e) => json!({"cmd": "project_ask", "pre_err": e}),
+            },
         };
         self.core(
             fx,
@@ -2989,6 +3170,22 @@ fn unique_name(st: &State, base: &str) -> String {
         .unwrap_or_else(|| base.to_string())
 }
 
+/// The `sb` commands that need git: off in a workspace without it (the
+/// home workspace, docs/ambient-pages.md §5.1). Their name, else None.
+fn git_only(req: &AgentReq) -> Option<&'static str> {
+    match req {
+        AgentReq::Land { .. } => Some("land"),
+        AgentReq::Feature { .. } => Some("feature"),
+        AgentReq::Flow { .. } => Some("flow"),
+        _ => None,
+    }
+}
+
+/// The one line `sb <cmd>` answers in a workspace without git.
+pub(crate) fn not_in_a_repo(cmd: &str) -> String {
+    format!("sb {}: not in a repo (this workspace has no git): files stay as you saved them, nothing to land", cmd)
+}
+
 fn new_task(name: Option<&str>, brief: &Brief, worktree: bool, with_changes: bool) -> Result<Value, String> {
     if brief.objective.trim().is_empty() {
         return Err("empty objective".into());
@@ -3022,6 +3219,9 @@ plain text        message to the agent in view (main by default)
 /model [m] [default]  the model of the agent in view (default: also config.toml's)
 /flow [pr|trunk]  how this repo ships code (PRs or straight to main), why, and switch it
 /reasoning [effort]   its reasoning effort (none, low, medium, high, max...)";
+
+#[path = "core_user.rs"]
+mod user;
 
 #[path = "merge.rs"]
 mod merge;

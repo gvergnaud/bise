@@ -174,6 +174,7 @@ fn call(cmd: &str) -> Call {
         bise: "/h/.bise".into(),
         edit_tool: "edit".into(),
         flow: None,
+        pending_review: None,
     }
 }
 

@@ -1,0 +1,40 @@
+/* bise kit · the site (pages-ui): the page server's `/`. A sidebar with every page and site
+   artifact (site.rs writes it, site.js groups, filters and opens), "for you" next to it; an open
+   page fills the rest of the window in a frame, with its own frame and notes. Tokens only. */
+body:has(#bise-site) { padding-left: 280px; }
+#bise-site {
+  position: fixed; left: 0; top: 0; bottom: 0; width: 280px; overflow-y: auto; z-index: 10;
+  padding: var(--space-4) var(--space-3) var(--space-6); background: var(--surface-card);
+  box-shadow: 1px 0 0 var(--line); font: var(--text-ui)/1.4 var(--font-ui); color: var(--dim);
+}
+#bise-site .home { display: block; font: 600 var(--text-small) var(--font-ui); color: var(--ink); text-decoration: none; padding: 6px 8px; border-radius: var(--radius-small); margin-bottom: var(--space-2); }
+#bise-site .home:hover { background: var(--hover); }
+#bise-site input[type=search] {
+  width: 100%; font: var(--text-ui) var(--font-ui); color: var(--ink); background: var(--surface-made);
+  border: 0; border-radius: var(--radius-small); padding: 7px 10px; outline: none; box-shadow: inset 0 0 0 1px var(--line);
+}
+#bise-site input[type=search]:focus-visible { box-shadow: inset 0 0 0 1.5px var(--ink); }
+#bise-site .by { display: inline-flex; gap: 2px; margin: var(--space-2) 0 var(--space-1); padding: 2px; border-radius: 8px; background: var(--hover); }
+#bise-site .by button { font: var(--text-kicker) var(--font-ui); color: var(--dim); background: none; border: 0; border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+#bise-site .by button:hover { color: var(--ink); }
+#bise-site .by button[aria-pressed="true"] { background: var(--surface-made); color: var(--ink); box-shadow: 0 1px 0 var(--line); }
+#bise-site :is(button, a):focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+#bise-site ul { list-style: none; padding: 0; margin: 0; }
+#bise-site li.grp { font: var(--text-kicker) var(--font-mono); color: var(--kick); margin: var(--space-3) 8px var(--space-1); }
+#bise-site li[hidden] { display: none; }
+#bise-site li > a { display: flex; align-items: baseline; gap: var(--space-2); padding: 5px 8px; border-radius: var(--radius-small); color: var(--dim); text-decoration: none; }
+#bise-site li > a:hover { background: var(--hover); color: var(--ink); }
+#bise-site li[aria-current] > a { background: var(--hover); color: var(--ink); box-shadow: inset 2px 0 0 var(--ink); }
+#bise-site li > a .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#bise-site li > a .v { font: var(--text-kicker) var(--font-mono); color: var(--faint); }
+#bise-site li > a::before { content: "¶"; font: var(--text-kicker) var(--font-mono); color: var(--faint); width: 1.2ch; }
+#bise-site li[data-kind="site"] > a::before { content: "↗"; }
+/* a page open: it fills the window right of the list; "for you" waits under it */
+#bise-view { position: fixed; left: 280px; top: 0; width: calc(100% - 280px); height: 100%; border: 0; background: var(--surface-made); z-index: 5; display: none; }
+body[data-viewing] #bise-view { display: block; }
+body[data-viewing] > .bise-frame { visibility: hidden; }
+@media (max-width: 760px) {
+  body:has(#bise-site) { padding-left: 0; }
+  #bise-site { position: static; width: auto; box-shadow: 0 1px 0 var(--line); }
+  #bise-view { left: 0; width: 100%; }
+}

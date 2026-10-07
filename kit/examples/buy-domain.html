@@ -1,0 +1,40 @@
+<section data-kit="heading" data-id="title">
+  <h1>buying acme.app</h1>
+  <p>7 steps · 3 done or drafted by bise · 4 need you</p>
+</section>
+
+<section data-kit="checklist" data-id="steps" data-plan>
+  <ol>
+    <li data-id="s1" data-who="bise" data-draft="mail-legal" data-question="who-legal">ask legal to check the name isn't taken as a trademark</li>
+    <li data-id="s2" data-who="yours">sign in to the registrar and pass the 2FA</li>
+    <li data-id="s3" data-who="yours">pay for acme.app, 2 years, €38</li>
+    <li data-id="s4" data-who="Lucas" data-did="drafted" data-draft="msg-lucas">point the DNS at the new site</li>
+    <li data-id="s5" data-who="bise" data-did="checked · it loads">check that https://acme.app loads, after Lucas</li>
+    <li data-id="s6" data-who="yours">say it's live</li>
+    <li data-id="s7" data-who="bise" data-did="drafted" data-draft="msg-marc">tell Marc it's done</li>
+  </ol>
+</section>
+
+<section data-kit="question" data-id="who-legal">
+  <p>Marc says to ask legal first, and i found no address for them. who is legal?</p>
+  <ol>
+    <li>i'll leave a note with the address</li>
+    <li>ask Marc who it is</li>
+    <li>skip this step</li>
+  </ol>
+</section>
+
+<section data-kit="email" data-id="mail-legal" data-to="Gmail · to legal" data-verb="send">
+  <p data-field="to">legal (address missing)</p>
+  <p data-field="subject">trademark check: acme.app</p>
+  <p>hi, we'd like to buy acme.app for the new site. can you check nothing stops us using the name? a yes by thursday would be great.</p>
+  <p>Gabriel</p>
+</section>
+
+<section data-kit="message" data-id="msg-lucas" data-to="Slack · to Lucas Petit" data-open="https://acme.slack.com/archives/D0LUCAS">
+  <p>once i've bought acme.app, can you point its DNS at the new site? i'll ping you right after the payment.</p>
+</section>
+
+<section data-kit="message" data-id="msg-marc" data-to="Slack · to Marc Dubois" data-open="https://acme.slack.com/archives/D0MARC">
+  <p>acme.app is ours and live. the old domain redirects to it.</p>
+</section>

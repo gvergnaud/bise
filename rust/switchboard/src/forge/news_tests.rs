@@ -243,3 +243,65 @@ fn a_long_body_is_cut() {
     assert!(t[0].1.len() < 2500);
     assert!(t[0].1.contains("x…"));
 }
+
+/// bar A.7 (architect m_10314): `/prs`'s typed rows say what each PR
+/// means (state, checks, review) with the hub's words; the text list and
+/// the typed event are made from them.
+#[test]
+fn prs_are_typed_rows_and_the_text_is_made_from_them() {
+    use crate::place::{Place, PlaceKind};
+    use bise_proto::rows::{PrChecks, PrReview, PrState as S};
+    let place = |id: &str, ag: &[&str], pr: Option<PrSnapshot>| Place {
+        id: id.into(),
+        kind: PlaceKind::Worktree,
+        path: String::new(),
+        branch: None,
+        base: None,
+        agents: agents(ag),
+        pr,
+    };
+    let mut draft = pr("b", Review::None, Checks::Running);
+    (draft.number, draft.state, draft.branch) = (415, PrState::Draft, "sb/perf".into());
+    let mut merged = pr("c", Review::Approved, Checks::Pass);
+    (merged.number, merged.state) = (400, PrState::Merged);
+    let places = [
+        place("wt:perf", &[], Some(draft)),
+        place("wt:dark-mode", &["dark-mode"], Some(pr("a", Review::ChangesRequested, Checks::Fail { failing: vec!["e2e".into()] }))),
+        place("wt:old", &["old"], Some(merged)),
+        place("wt:none", &["x"], None),
+    ];
+    let rows = pr_rows(&places);
+    assert_eq!(rows.iter().map(|r| r.number).collect::<Vec<_>>(), [412, 415], "open and draft ones, by number");
+    let r = &rows[0];
+    assert_eq!((r.state, r.checks, r.review, r.failing.clone()), (S::Open, PrChecks::Fail, PrReview::Changes, vec!["e2e".to_string()]));
+    assert_eq!((r.words.as_str(), r.text.as_str()), ("changes asked · checks fail: e2e", "sb/dark-mode · dark-mode · changes asked · checks fail: e2e"));
+    assert_eq!((rows[1].state, rows[1].checks, rows[1].text.as_str()), (S::Draft, PrChecks::Running, "sb/perf · no agent · draft · checks running"));
+    assert_eq!(prs_head(&rows), "2 PRs open");
+    assert_eq!(
+        prs_list(&rows),
+        "2 PRs open\n↑ #412 sb/dark-mode · dark-mode · changes asked · checks fail: e2e\n  https://github.com/o/r/pull/412\n↑ #415 sb/perf · no agent · draft · checks running\n  https://github.com/o/r/pull/412"
+    );
+    match prs_ev("p".into(), &places) {
+        bise_proto::hub::HubEv::Prs { head, items, none, .. } => assert_eq!((head.as_str(), items, none), ("2 PRs open", rows, None)),
+        e => panic!("{e:?}"),
+    }
+    // none: the hub's words, no head
+    assert_eq!(prs_list(&[]), NO_PR);
+    match prs_ev("p".into(), &places[2..]) {
+        bise_proto::hub::HubEv::Prs { head, items, none, .. } => assert_eq!((head.as_str(), items.len(), none.as_deref()), ("", 0, Some(NO_PR))),
+        e => panic!("{e:?}"),
+    }
+}
+
+/// Law (architect m_11122): every tone the hub writes on a `pr` line reads
+/// as what it means in bise_proto (no color on the wire): plain is news,
+/// dim done, red failing; none is Unknown.
+#[test]
+fn every_pr_tone_reads_as_its_state() {
+    use bise_proto::thread::{lines, PrNewsState};
+    let want = [(Tone::Plain, PrNewsState::News), (Tone::Dim, PrNewsState::Done), (Tone::Red, PrNewsState::Failing)];
+    for (tone, state) in want {
+        let line = format!("sb pr : {} : 7 : https://x/7 : hi", tone.as_str());
+        assert!(matches!(lines::read(&line), lines::Rec::Hub(lines::Hub::Pr { state: s, number: 7, .. }) if s == state), "{line}");
+    }
+}

@@ -27,6 +27,8 @@ fn cases() -> Vec<Vec<&'static str>> {
         vec!["wait", "m_1", "--timeout", "1"],
         vec!["status", "working", "--note", "a note"],
         vec!["report", "done", "all good", "--decision", "d1"],
+        vec!["follow", "perf"],
+        vec!["follow", "perf", "--off"],
         vec!["inspect", "main", "--query", "x", "--around", "#3", "--limit", "2"],
         vec!["inspect", "main", "--origin"],
         vec!["spawn", "t1", "--objective", "do it"],
@@ -57,13 +59,31 @@ fn cases() -> Vec<Vec<&'static str>> {
         vec!["feature", "merge"],
         vec!["spawn", "cu-a", "--feature", "computer-use", "--objective", "do it"],
         vec!["spawn", "cu-b", "--feature", "computer-use", "--place", "new", "--objective", "do it"],
-        // standing orders (sb every)
+        // agent-made pages (docs/ambient-pages.md §2.2)
+        vec!["page"],
+        vec!["page", "list"],
+        vec!["page", "notes", "weekly-update"],
+        vec!["page", "publish", "/nonexistent/page.html", "--id", "w", "--notes-done", "n1,n2", "--note-answer", "n3=kept"],
+        // standing orders (docs/ambient-roadmap.md B)
         vec!["every"],
         // an absolute --until: a relative one differs by the ms between two runs
         vec!["every", "10m", "check HN", "--until", "2030-01-01 18:00", "--times", "3", "--to", "t1"],
         vec!["every", "day", "07:30", "make the morning page"],
         vec!["every", "--stop", "2"],
         vec!["every", "soon", "x"],
+        // what bise keeps about the user (keeps.rs)
+        vec!["taste"],
+        vec!["taste", "add", "no emoji", "--from", "the launch post"],
+        vec!["taste", "remove", "2"],
+        vec!["taste", "fix"],
+        vec!["people"],
+        vec!["people", "set", "Nina", "support lead"],
+        vec!["people", "remove", "Nina"],
+        vec!["people", "set", "Nina"],
+        // followed jobs (S10): the user hears once when one ends
+        vec!["follow", "t1"],
+        vec!["follow", "acme/t1", "--off"],
+        vec!["follow"],
         vec!["version"],
         vec!["version", "switch", "HEAD"],
         vec!["restart", "current"],

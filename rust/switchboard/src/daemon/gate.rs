@@ -239,13 +239,13 @@ pub(super) fn fold_line(how: Fold, agents: &[String], summary: &str, note: &str)
 
 /// What the user's answer says: allow, allow always, or no with a note.
 #[derive(Debug, PartialEq, Eq)]
-pub(super) enum Answer {
+pub(crate) enum Answer {
     Allow,
     Always,
     No(String),
 }
 
-pub(super) fn answer_of(text: &str) -> Answer {
+pub(crate) fn answer_of(text: &str) -> Answer {
     let t = text.trim();
     let low = t.to_lowercase();
     match low.as_str() {
@@ -718,6 +718,7 @@ impl Shell {
         Call {
             edit_tool: edit_tool.into(),
             flow,
+            pending_review: self.pending_review_of(name),
             tool,
             args,
             agent: name.to_string(),
@@ -1076,6 +1077,7 @@ mod tests {
             bise: "/u/.bise".into(),
             edit_tool: "edit".into(),
             flow: None,
+            pending_review: None,
         }
     }
 
@@ -1101,6 +1103,18 @@ mod tests {
 
     #[test]
     fn what_the_answer_says() {
+        // the composer rule: what sb-core lets through to the gate, the
+        // options' digits and the TUI's explicit deny, each one answer
+        assert_eq!(answer_of("1"), Answer::Allow);
+        assert_eq!(answer_of(" 2 "), Answer::Always);
+        assert_eq!(answer_of("3"), Answer::No(String::new()));
+        assert_eq!(answer_of("deny: not on friday"), Answer::No("not on friday".into()));
+        assert_eq!(answer_of("DENY: later"), Answer::No("later".into()));
+        // the deny aliases sb-core lets through (lead m_10900): `no` and
+        // `no: <why>`, any case, refuse with his words as the note
+        assert_eq!(answer_of("no"), Answer::No(String::new()));
+        assert_eq!(answer_of("  NO  "), Answer::No(String::new()));
+        assert_eq!(answer_of("No: use a branch"), Answer::No("use a branch".into()));
         assert_eq!(answer_of("allow"), Answer::Allow);
         assert_eq!(answer_of(sandbox::CARD_YES), Answer::Allow);
         assert_eq!(answer_of("run again"), Answer::Allow);

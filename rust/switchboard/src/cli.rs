@@ -6,6 +6,11 @@ use serde_json::{json, Map, Value};
 use std::io::Read;
 use std::time::Duration;
 
+mod keeps;
+mod pages;
+use keeps::keeps_req;
+use pages::{page_req, render_page};
+
 /// Who may run a command (and whose system prompt lists it).
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Who {
@@ -30,6 +35,11 @@ const fn cmd(syntax: &'static str, who: Who, doc: &'static str) -> CmdDoc {
 
 pub const COMMANDS: &[CmdDoc] = &[
     cmd("sb list", Who::Everyone, "every agent of the group, its status and what it is for."),
+    cmd(
+        "sb page publish <file> [--id <id>] [--title <t>] [--notes-done n1,n3] [--note-answer n2=\"<answer>\"]... [--went <kind>:<ref>[@<block>]=<url>]... [--taste] [--public|--private] | sb page start <id> [--title <t>] [--agent <name>] [--ask <words>] | sb page tick <page> <item> [words] | sb page waiting | sb page list | sb page notes <id>",
+        Who::Everyone,
+        "publish a page for the user (a fragment of bise kit blocks; the kit's lint checks it): its URL comes back. `sb page start` shows the page at once, empty, while you (or --agent) write it; your first publish is v1. `sb page tick` ticks a step of the user's (a checklist row with data-who=\"yours\") when he says it's done; other words go as a note on that row. `sb page waiting` lists what waits on him across every page, one line each: `<page>#<item> · step|draft|question|notes · <text>`, his overdue promises first (a row of his past its `data-due`: `<page>#<item> · overdue 2 days · <text>`; never a card). A new version of your page answers the user's notes: `--notes-done` the ones you did, `--note-answer` one line for the others. `--taste`: you followed ~/bise/taste.md (the frame says so).",
+    ),
     cmd("sb tasks", Who::Everyone, "every task in detail: what it is doing now, its last report, its open questions."),
     cmd(
         "sb send <agent> \"<text>\" [--expect-reply] [--reply-to <id>] [--mode steer|queued]",
@@ -48,9 +58,14 @@ pub const COMMANDS: &[CmdDoc] = &[
         "declare your state (shown to everyone).",
     ),
     cmd(
-        "sb report progress|done|failed|blocked \"<summary>\" [--decision \"<text>\"]...",
+        "sb report progress|done|failed|blocked \"<summary>\" [--decision \"<text>\"]... [--step <n>/<m>] [--result '<json>']",
         Who::Everyone,
-        "tell main.",
+        "tell main. `--step 3/7`: where a long job is (shown live when someone follows you); `--result`: what your change measured, as {\"label\",\"before\",\"after\",\"unit\"} (the review shows it).",
+    ),
+    cmd(
+        "sb follow <agent> [--off]",
+        Who::Main,
+        "tell the user when that task ends (done or failed), once: he asked \"tell me when it's done\". `--off`: stop.",
     ),
     cmd(
         "sb inspect <agent> [--query <text>] [--before|--after|--around|--at #<pos>] [--limit <n>]",
@@ -68,9 +83,19 @@ pub const COMMANDS: &[CmdDoc] = &[
         "open a hit: the entry with its neighbors, the commands to move earlier/later, and the agents, messages and commits it mentions.",
     ),
     cmd(
-        "sb every <10m|1h|day 07:30> \"<message>\" [--until <18:00|tomorrow 18:00|2h>] [--times <n>] [--to <agent>] | sb every | sb every --stop <id>",
+        "sb every <10m|1h|day 07:30> \"<message>\" [--until <18:00|tomorrow 18:00|2h>] [--times <n>] [--to <agent>] [--page <id>] | sb every | sb every --stop <id>",
         Who::Everyone,
-        "a standing order: the hub wakes you (or `--to` that agent) with the message every N (at least 1m) or every day at that time, until a time or for n times. Never sleep or loop in a turn to wait: set a timer and end your turn. A wake while busy waits for the end of the turn (one, never stacked). No argument: the timers; `--stop` ends one.",
+        "a standing order: the hub wakes you (or `--to` that agent) with the message every N (at least 1m) or every day at that time, until a time or for n times. Never sleep or loop in a turn to wait: set a timer and end your turn. A wake while busy waits for the end of the turn (one, never stacked). `--page <id>`: the page it keeps fresh (its frame says `watching` and has `stop`). No argument: the timers; `--stop` ends one.",
+    ),
+    cmd(
+        "sb taste [add \"<rule>\" [--from \"<where>\"] | remove <n|words>]",
+        Who::Everyone,
+        "the user's taste rules (~/bise/taste.md, one line each): no argument lists them numbered; `add` keeps a rule he gave (`--from`: where he said it), `remove` drops one by its number or its words. The only way to change that file; the about-you page follows.",
+    ),
+    cmd(
+        "sb people [set <name> \"<who>\" | remove <name>]",
+        Who::Everyone,
+        "who is who for the user (~/bise/people.md, one line each): no argument lists them; `set` adds a person or replaces what is known about them, `remove` forgets them. The only way to change that file; the about-you page follows.",
     ),
     cmd(
         "sb land [--here] [--add <path>]... \"<message>\"",
@@ -292,6 +317,24 @@ fn agent_arg(pos: &[String], usage: impl Into<String>) -> Result<String, String>
         .ok_or_else(|| usage.into())
 }
 
+/// `--step 3/7`: (3, 7), 1 <= n <= m.
+fn step_of(s: &str) -> Result<(u32, u32), String> {
+    let bad = || format!("--step expects <n>/<m>, like 3/7 (not {s})");
+    let (n, m) = s.trim().split_once('/').ok_or_else(bad)?;
+    let (n, m): (u32, u32) = (n.trim().parse().map_err(|_| bad())?, m.trim().parse().map_err(|_| bad())?);
+    if n == 0 || m == 0 || n > m {
+        return Err(bad());
+    }
+    Ok((n, m))
+}
+
+/// `--result '<json>'`: proto's DiffResult, one shape for the review.
+fn result_of(s: &str) -> Result<Value, String> {
+    let ex = r#"--result '{"label":"p99","before":420,"after":290,"unit":"ms"}'"#;
+    let r: bise_proto::diff::DiffResult = serde_json::from_str(s).map_err(|e| format!("--result: {e}; like {ex}"))?;
+    serde_json::to_value(r).map_err(|e| e.to_string())
+}
+
 /// `--timeout <s>`, 20 s by default.
 fn timeout_of(opts: &Map<String, Value>) -> u64 {
     str_of(opts, "timeout").parse::<u64>().unwrap_or(20)
@@ -305,12 +348,12 @@ fn str_of(opts: &Map<String, Value>, k: &str) -> String {
     }
 }
 
-const EVERY_USAGE: &str = "usage: sb every <10m|1h|day 07:30> \"<message>\" [--until <18:00|tomorrow 18:00|2h>] [--times <n>] [--to <agent>] | sb every | sb every --stop <id>";
+const EVERY_USAGE: &str = "usage: sb every <10m|1h|day 07:30> \"<message>\" [--until <18:00|tomorrow 18:00|2h>] [--times <n>] [--to <agent>] [--page <id>] | sb every | sb every --stop <id>";
 
 /// `sb every` (docs/ambient-roadmap.md B): the durations and times are
 /// read here, with the agent's own clock and time zone (every.rs).
 fn every_req(rest: &[String], req: &mut Map<String, Value>) -> Result<(), String> {
-    let (pos, o) = parse_args(rest, &["until", "times", "to", "stop"], &[])?;
+    let (pos, o) = parse_args(rest, &["until", "times", "to", "stop", "page"], &[])?;
     if o.contains_key("stop") {
         let id = str_of(&o, "stop").trim_start_matches('#').parse::<u64>().map_err(|_| EVERY_USAGE.to_string())?;
         req.insert("step".into(), json!("stop"));
@@ -347,6 +390,10 @@ fn every_req(rest: &[String], req: &mut Map<String, Value>) -> Result<(), String
         req.insert("times".into(), json!(n));
     }
     req.insert("to".into(), json!(str_of(&o, "to")));
+    let page = str_of(&o, "page");
+    if !page.is_empty() {
+        req.insert("page".into(), json!(page));
+    }
     Ok(())
 }
 
@@ -365,10 +412,21 @@ pub fn build(args: &[String]) -> Result<Value, String> {
         "history" => {
             let (pos, o) = parse_args(
                 rest,
-                &["agent", "role", "since", "until", "limit", "page"],
-                &["archived", "live"],
+                &["agent", "role", "since", "until", "limit", "page", "project"],
+                &["archived", "live", "all"],
             )?;
             req.insert("query".into(), json!(text_of(&pos)?));
+            // S2 C: another project's threads, or every project's (bise's
+            // home hub only)
+            if o.contains_key("project") && o.contains_key("all") {
+                return Err("--project and --all exclude each other".into());
+            }
+            if o.contains_key("project") {
+                req.insert("project".into(), json!(str_of(&o, "project")));
+            }
+            if o.contains_key("all") {
+                req.insert("all".into(), json!(true));
+            }
             let list = |k: &str| -> Vec<String> {
                 match o.get(k) {
                     Some(Value::String(s)) => vec![s.clone()],
@@ -422,6 +480,9 @@ pub fn build(args: &[String]) -> Result<Value, String> {
         "send" => {
             let (pos, o) = parse_args(rest, &["reply-to", "mode", "why", "model", "effort"], &["expect-reply"])?;
             let to = agent_arg(&pos, "usage: sb send <agent> \"<text>\"")?;
+            // desktop S2: `@bise` (bise's question in a project hub) is
+            // a sender of its own, not the agent `bise`
+            let to = if pos.first().map(String::as_str) == Some("@bise") { "@bise".to_string() } else { to };
             req.insert("to".into(), json!(to));
             // issue #4: `--model`/`--effort` move the task from its next
             // turn; the text is optional then (a switch alone)
@@ -451,6 +512,30 @@ pub fn build(args: &[String]) -> Result<Value, String> {
             // the user in main's feed (C2 `answered`)
             if o.contains_key("why") {
                 req.insert("why".into(), json!(str_of(&o, "why")));
+            }
+        }
+        // desktop S2 (bise's main): the projects, his words forwarded by
+        // reference, bise's own question
+        "project" => {
+            let (pos, o) = parse_args(rest, &["input"], &[])?;
+            let usage = "usage: sb project list | send <project> --input m_<n> | ask <project> \"<question>\"";
+            match pos.first().map(String::as_str) {
+                None | Some("list") => {
+                    req.insert("cmd".into(), json!("project_list"));
+                }
+                Some("send") => {
+                    let input = str_of(&o, "input");
+                    let msg = crate::core::parse_msg_id(&input).ok_or(usage)?;
+                    req.insert("cmd".into(), json!("project_send"));
+                    req.insert("project".into(), json!(pos.get(1).ok_or(usage)?));
+                    req.insert("msg".into(), json!(format!("{}{msg}", crate::prompts::USER_ID_PREFIX)));
+                }
+                Some("ask") => {
+                    req.insert("cmd".into(), json!("project_ask"));
+                    req.insert("project".into(), json!(pos.get(1).ok_or(usage)?));
+                    req.insert("text".into(), json!(text_of(pos.get(2..).unwrap_or(&[]))?));
+                }
+                Some(_) => return Err(usage.into()),
             }
         }
         "ask" => {
@@ -496,8 +581,22 @@ pub fn build(args: &[String]) -> Result<Value, String> {
             worktree_exists(p)?;
             req.insert("path".into(), json!(p));
         }
+        "follow" => {
+            let (pos, o) = parse_args(rest, &[], &["off"])?;
+            req.insert("agent".into(), json!(agent_arg(&pos, "usage: sb follow <agent> [--off]")?));
+            req.insert("off".into(), json!(o.contains_key("off")));
+        }
         "report" => {
-            let (pos, o) = parse_args(rest, &["decision"], &[])?;
+            let (pos, o) = parse_args(rest, &["decision", "step", "result"], &[])?;
+            // S10: --step n/m; emitter 5: --result, proto's DiffResult
+            if o.contains_key("step") {
+                let (n, m) = step_of(&str_of(&o, "step"))?;
+                req.insert("step".into(), json!(n));
+                req.insert("of".into(), json!(m));
+            }
+            if o.contains_key("result") {
+                req.insert("result".into(), result_of(&str_of(&o, "result"))?);
+            }
             req.insert(
                 "kind".into(),
                 json!(pos.first().ok_or("usage: sb report <kind> \"<summary>\"")?),
@@ -582,6 +681,7 @@ pub fn build(args: &[String]) -> Result<Value, String> {
             }
         }
         "every" => every_req(rest, &mut req)?,
+        "taste" | "people" => keeps_req(cmd, rest, &mut req)?,
         "land" => {
             let (pos, o) = parse_args(rest, &["add"], &["here"])?;
             req.insert("here".into(), json!(o.contains_key("here")));
@@ -639,10 +739,19 @@ pub fn build(args: &[String]) -> Result<Value, String> {
             req.insert("why".into(), json!(pos.join(" ")));
         }
         "card" => {
-            let (pos, o) = parse_args(rest, &["for"], &[])?;
+            let (pos, o) = parse_args(rest, &["for", "page"], &[])?;
             req.insert("text".into(), json!(text_of(&pos)?));
             if o.contains_key("for") {
                 req.insert("for".into(), json!(str_of(&o, "for")));
+            }
+            // `--page <id>[#<item>]`: the card opens that page at the item
+            // (fn + o in the capsule), pm's B m_6008
+            if o.contains_key("page") {
+                let page = str_of(&o, "page");
+                if page.trim().trim_start_matches('#').is_empty() || page.trim().starts_with('#') {
+                    return Err("usage: sb card [--for <msg>] [--page <id>[#<item>]] \"<question>\"".into());
+                }
+                req.insert("page".into(), json!(page.trim()));
             }
         }
         "inspect" => {
@@ -670,6 +779,8 @@ pub fn build(args: &[String]) -> Result<Value, String> {
             }
             req.insert("origin".into(), json!(o.contains_key("origin")));
         }
+        // agent-made pages (docs/ambient-pages.md §2.2)
+        "page" => page_req(rest, &mut req)?,
         "artifact" => {
             let usage = "usage: sb artifact add <path or link> [--title \"<t>\"] [--kind <k>] | sb artifact list [<words>] [--agent <a>]";
             let (pos, o) = parse_args(rest, &["title", "kind", "agent"], &[])?;
@@ -717,6 +828,11 @@ pub fn render(cmd: &str, v: &Value) -> (bool, String) {
     }
     let text = match cmd {
         "list" | "tasks" | "inspect" | "history" | "show" | "artifact" => s("text"),
+        // `sb project list` answers its text; send and ask, their outbox id
+        "project" => match v.get("xid").and_then(|x| x.as_u64()) {
+            Some(xid) => format!("sent to {} as x_{} (its answer comes to you from @<project>)", s("project"), xid),
+            None => s("text"),
+        },
         // issue #4: `sb send <task> --model <id>` alone: the hub's line
         "send" if s("cmd") == "switch" => s("text"),
         "send" => format!("sent {} to {} ({}, thread {})", s("message_id"), s("to"), s("delivery"), s("thread")),
@@ -757,6 +873,8 @@ pub fn render(cmd: &str, v: &Value) -> (bool, String) {
         }
         "card" => format!("card #{} opened for the user", v.get("card").and_then(|c| c.as_u64()).unwrap_or(0)),
         "report" => format!("reported ({})", s("message_id")),
+        "follow" if v.get("on") == Some(&json!(false)) => format!("@{} no longer followed", s("agent")),
+        "follow" => format!("following @{}: the user hears once when it ends", s("agent")),
         "close" => format!("card #{} closed", v.get("card").and_then(|c| c.as_u64()).unwrap_or(0)),
         "withdraw" => format!("card #{} withdrawn: the user sees why; the question is yours again", v.get("card").and_then(|c| c.as_u64()).unwrap_or(0)),
         "rename" => format!("renamed: now @{} (the old name still works)", s("name")),
@@ -766,10 +884,12 @@ pub fn render(cmd: &str, v: &Value) -> (bool, String) {
         // the hub's line: `✓ x landed 1 commit on main (abc1234)`
         "land" => s("text"),
         "every" => s("text"),
+        "taste" | "people" => s("text"),
         "flow" => s("text"),
         "feature" => s("text"),
         "worktree" if s("path").is_empty() => "the hub knows you work in your own workspace again".to_string(),
         "worktree" => format!("the hub knows you work in {}", s("path")),
+        "page" => render_page(v),
         _ => "ok".to_string(),
     };
     (true, text)
@@ -882,182 +1002,4 @@ pub fn main(args: &[String]) -> i32 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn a(s: &[&str]) -> Vec<String> {
-        s.iter().map(|x| x.to_string()).collect()
-    }
-
-    /// Every command of the table (usage, prompts) is one `build` knows.
-    #[test]
-    fn every_documented_command_is_known() {
-        for c in COMMANDS {
-            for alt in c.syntax.split(" | sb ") {
-                let name = alt.trim_start_matches("sb ").split(' ').next().unwrap();
-                if matches!(name, "version" | "restart") {
-                    continue; // main() runs them, not a hub request
-                }
-                let r = build(&a(&[name]));
-                assert!(
-                    !matches!(&r, Err(e) if e.starts_with("unknown command")),
-                    "{}: {:?}",
-                    c.syntax,
-                    r
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn inspect_cursors() {
-        let r = build(&a(&[
-            "inspect",
-            "@main",
-            "--query",
-            "mode sombre",
-            "--before",
-            "#120",
-            "--limit",
-            "5",
-        ]))
-        .unwrap();
-        assert_eq!(r["agent"], "main");
-        assert_eq!(r["query"], "mode sombre");
-        assert_eq!(r["before"], "#120");
-        assert_eq!(r["last"], 5);
-        assert_eq!(r["origin"], false);
-        let o = build(&a(&["inspect", "main", "--origin"])).unwrap();
-        assert_eq!(o["origin"], true);
-        assert!(build(&a(&["inspect", "main", "--around", "abc"])).is_err());
-    }
-
-    #[test]
-    fn send_flags() {
-        let r = build(&a(&[
-            "send",
-            "@docs",
-            "v2",
-            "please",
-            "--expect-reply",
-            "--reply-to",
-            "m_4",
-        ]))
-        .unwrap();
-        assert_eq!(r["to"], "docs");
-        assert_eq!(r["text"], "v2 please");
-        assert_eq!(r["expect_reply"], true);
-        assert_eq!(r["reply_to"], "m_4");
-        assert!(r.get("mode").is_none());
-        assert!(r.get("why").is_none());
-        let w = build(&a(&["send", "docs", "v2", "--reply-to", "m_4", "--why", "the brief says v2"])).unwrap();
-        assert_eq!(w["why"], "the brief says v2");
-        assert_eq!(w["text"], "v2");
-        let q = build(&a(&["send", "docs", "later", "--mode", "queued"])).unwrap();
-        assert_eq!(q["mode"], "queued");
-        assert!(build(&a(&["send", "docs", "x", "--mode", "soon"])).is_err());
-    }
-
-    /// qa-explore L: `sb <cmd> --help` shows its usage; `sb` lists worktree.
-    #[test]
-    fn help_is_per_command_and_complete() {
-        assert!(usage().contains("sb worktree <path>|none"));
-        let h = help_for("spawn");
-        assert!(h.starts_with("sb spawn <name> --objective") && !h.contains("sb send"), "{h}");
-        assert!(help_for("restore").starts_with("sb restore <task>"));
-        assert!(help_for("move").starts_with("sb move <agent> new|shared|<agent>|<branch>"));
-        assert!(help_for("land").starts_with("sb land [--here]"));
-        assert!(help_for("worktree").starts_with("sb worktree"));
-        assert_eq!(help_for("nosuch"), usage());
-        assert_eq!(main(&a(&["spawn", "--help"])), 0);
-        assert_eq!(main(&a(&["spawn", "-h"])), 0);
-    }
-
-    /// qa-explore B: `sb worktree` refused a relative path only.
-    #[test]
-    fn worktree_must_exist() {
-        let e = build(&a(&["worktree", "/does/not/exist"])).unwrap_err();
-        assert!(e.contains("not a git worktree"), "{}", e);
-        let d = std::env::temp_dir().join(format!("sb-cli-wt-{}", std::process::id()));
-        std::fs::create_dir_all(d.join(".git")).unwrap();
-        let p = d.to_string_lossy().into_owned();
-        assert_eq!(build(&a(&["worktree", &p])).unwrap()["path"], p.as_str());
-        assert_eq!(build(&a(&["worktree", "none"])).unwrap()["path"], "none");
-        let _ = std::fs::remove_dir_all(&d);
-    }
-
-    #[test]
-    fn spawn_repeats_constraints() {
-        let r = build(&a(&[
-            "spawn",
-            "fix",
-            "--objective",
-            "fix it",
-            "--constraint",
-            "no push",
-            "--constraint",
-            "tests",
-            "--worktree",
-        ]))
-        .unwrap();
-        assert_eq!(r["constraints"], json!(["no push", "tests"]));
-        assert_eq!(r["worktree"], true);
-        assert!(build(&a(&["spawn", "fix"])).is_err());
-    }
-
-    #[test]
-    fn requests_parse_in_the_core() {
-        for args in [
-            vec!["list"],
-            vec!["ask", "main", "why?"],
-            vec!["wait", "m_3"],
-            vec!["status", "blocked", "--note", "need key"],
-            vec!["report", "done", "all good", "--decision", "v2"],
-            vec!["card", "--for", "m_2", "v1 or v2?"],
-            vec!["stop", "x", "no", "longer", "needed"],
-            vec!["close", "#3", "handled"],
-            vec!["close", "4"],
-            vec!["rename", "@a", "b"],
-            vec!["restore", "a"],
-            vec!["isolate", "a"],
-        ] {
-            let r = build(&a(&args)).unwrap();
-            crate::core::AgentReq::from_json(&r).unwrap_or_else(|e| panic!("{:?}: {}", args, e));
-        }
-    }
-
-    #[test]
-    fn main_controls_parse() {
-        let r = build(&a(&["close", "#3", "handled", "by", "docs"])).unwrap();
-        assert_eq!(r["card"], 3);
-        assert_eq!(r["note"], "handled by docs");
-        assert_eq!(build(&a(&["close", "3"])).unwrap()["note"], "");
-        assert!(build(&a(&["close", "x"])).is_err());
-        assert!(build(&a(&["close"])).is_err());
-        let r = build(&a(&["rename", "@old", "new"])).unwrap();
-        assert_eq!((r["agent"].as_str(), r["new_name"].as_str()), (Some("old"), Some("new")));
-        assert!(build(&a(&["rename", "old"])).is_err());
-        assert_eq!(build(&a(&["restore", "@x"])).unwrap()["agent"], "x");
-        assert_eq!(build(&a(&["isolate", "x"])).unwrap()["agent"], "x");
-        assert!(build(&a(&["isolate"])).is_err());
-    }
-
-    #[test]
-    fn rendering() {
-        let (ok, t) = render(
-            "ask",
-            &json!({"ok": true, "type": "reply", "from": "main", "message_id": "m_3", "message": "v2", "auto": false}),
-        );
-        assert!(ok && t.starts_with("reply from main (m_3):\nv2"), "{}", t);
-        let (_, t) = render(
-            "ask",
-            &json!({"ok": true, "type": "reply", "from": "docs", "message_id": "m_9", "asked": "m_8", "message": "v2", "auto": true}),
-        );
-        assert!(t.starts_with("reply from docs (m_9, answers m_8, automatic: the end of its turn):\nv2"), "{}", t);
-        let (ok, t) = render(
-            "wait",
-            &json!({"ok": false, "error": "timeout", "hint": "end your turn"}),
-        );
-        assert!(!ok && t.contains("timeout") && t.contains("end your turn"));
-    }
-}
+mod tests;

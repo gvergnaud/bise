@@ -159,6 +159,16 @@ impl Watch {
     }
 }
 
+/// Live `sb every` timers keep the hub up (a standing order fires only
+/// while the hub runs): the reason, or None.
+pub fn timers_busy(live: usize) -> Option<String> {
+    match live {
+        0 => None,
+        1 => Some("a standing order (sb every)".into()),
+        n => Some(format!("{} standing orders (sb every)", n)),
+    }
+}
+
 /// The background jobs of an agent's bash tool still running in `bg`
 /// (its `BEND_BG_DIR`): a `<n>.slot` folder whose `<n>.pid` is alive and
 /// younger than `JOB_MAX`. Their numbers.
@@ -257,6 +267,19 @@ mod tests {
         assert_eq!(h.count(), 1);
         drop(b);
         assert_eq!(h.count(), 0);
+    }
+
+    #[test]
+    fn a_standing_order_keeps_the_hub_up() {
+        assert_eq!(timers_busy(0), None);
+        assert_eq!(timers_busy(1).as_deref(), Some("a standing order (sb every)"));
+        let t0 = Instant::now();
+        let mut w = Watch::new(Some(S(60)), t0);
+        let busy = || timers_busy(2).into_iter().collect::<Vec<_>>();
+        assert!(matches!(w.step(t0 + S(61), 0, busy), Step::Say(s) if s.contains("2 standing orders")));
+        assert_eq!(w.step(t0 + S(600), 0, busy), Step::Stay);
+        // the last one stopped: the hub goes
+        assert!(matches!(w.step(t0 + S(601), 0, || timers_busy(0).into_iter().collect()), Step::Stop(_)));
     }
 
     #[test]

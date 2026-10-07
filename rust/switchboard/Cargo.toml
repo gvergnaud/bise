@@ -8,8 +8,14 @@ description = "Switchboard: one main agent that routes to task sub-agents (hub, 
 [dependencies]
 bend-plugins = { path = "../plugins" }
 bise-catalog = { path = "../catalog" }
+# his attached images into the image store (attached.rs, daemon/fn_context.rs)
+bend-images = { path = "../images" }
 bise-home = { path = "../home" }
+# the typed client protocol (bise desktop S3a, daemon/proto.rs)
+bise-proto = { path = "../proto" }
 bise-session = { path = "../session" }
+# a string's display width for the thread fold's words (bise-proto's Ctx.width, as the TUI's)
+unicode-width = "0.2"
 # `sb every day 07:30`: local time (localtime_r/mktime)
 libc = "0.2"
 serde = { version = "1", features = ["derive"] }

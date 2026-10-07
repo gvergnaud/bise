@@ -1,0 +1,430 @@
+/* bise kit v0 · the page (docs/ambient-pages.md §2.5, vision §4, §6). Two surfaces: the frame is
+   surface-talk (glass, thin, sticky), what the agent wrote is surface-made (paper). Agents write
+   blocks, never styles: every look here hangs on data-kit and the kit's own data- attributes
+   (data-tone, data-answer; data-num, data-picked, data-changed, data-by set by kit.js). Values come
+   from tokens.css only. Reference: ambient's kit v0 mock (site/content/ambient/page.html). */
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--surface-made); color: var(--ink);
+  font: 400 var(--text-read)/1.55 var(--font-read);
+  /* the layout: the frame on top, the page, the notes' side (notes.js puts its list in grid-area side) */
+  display: grid; grid-template-columns: minmax(var(--space-5), 1fr) minmax(0, var(--measure)) 36px 300px minmax(var(--space-5), 1fr);
+  grid-template-rows: auto 1fr; grid-template-areas: "frame frame frame frame frame" ". page . side .";
+  min-height: 100vh;
+}
+@media (max-width: 1080px) {
+  body { grid-template-columns: var(--space-5) minmax(0, 1fr) var(--space-5); grid-template-areas: "frame frame frame" ". page ." ". side ."; }
+}
+
+/* ---- the frame (surface-talk): whose page, version and age, state, what changed, notes, send */
+.bise-frame {
+  grid-area: frame; position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; gap: 12px;
+  height: 46px; margin: 10px 12px 0; padding: 0 10px 0 6px; border-radius: 14px;
+  background: var(--surface-talk); -webkit-backdrop-filter: var(--talk-blur); backdrop-filter: var(--talk-blur);
+  box-shadow: var(--talk-stroke);
+  color: var(--talk-ink); font: var(--text-ui)/1.2 var(--font-ui); white-space: nowrap;
+}
+/* the pearl at 36 px (amb-web's pearl.js draws into it); ':*' in the accent until it does */
+.bise-frame .k { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; font: 700 14px var(--font-mono); color: var(--talk-accent); }
+.bise-frame .t { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.bise-frame .m { color: var(--talk-meta); font: 12px var(--font-mono); }
+.bise-frame .st { display: none; align-items: center; gap: var(--space-2); color: var(--talk-dim); font-size: 12.5px; }
+.bise-frame .st::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--talk-working); animation: bise-pulse 1.4s ease-in-out infinite; }
+.bise-frame[data-state="updating"] .st { display: flex; }
+.bise-frame .st .p { color: var(--talk-faint); overflow: hidden; text-overflow: ellipsis; max-width: 32ch; }
+/* writing (no version yet, ambient m_5095): 'by <agent> · writing · 12 s' with the working dot; no
+   send, no count, no versions, nothing changed yet */
+.bise-frame[data-state="writing"] .m::after { content: ""; display: inline-block; width: 7px; height: 7px; margin-left: 8px; border-radius: 50%; background: var(--talk-working); vertical-align: .05em; animation: bise-breathe 2.4s ease-in-out infinite; }
+.bise-frame:is([data-state="writing"], [data-empty]) :is(.send, .n, .v, button:not(.send)) { display: none; }
+@keyframes bise-breathe { 50% { opacity: .35; transform: scale(.8); } }
+
+/* a page with no version yet (sb page start): its title, what you asked, then the agent's intents,
+   newest at the bottom (the current one ink with the breathing dot, done ones dim with a ✓) */
+#bise-page > .bise-writing { display: block; padding: 6px 0 0; }
+#bise-page > .bise-writing h1 { margin-bottom: var(--space-2); }
+#bise-page > .bise-writing .ask { font: 17px/1.5 var(--font-read); color: var(--kick); margin: 0 0 var(--space-5); }
+#bise-page > .bise-writing .more { font: 13px var(--font-mono); color: var(--faint); margin: 0 0 6px; }
+#bise-page > .bise-writing .intents { list-style: none; padding: 0; margin: 0; font: var(--text-small)/1.5 var(--font-read); }
+#bise-page > .bise-writing .intents li { color: var(--dim); margin: 0 0 6px; padding-left: 22px; position: relative; }
+#bise-page > .bise-writing .intents li::before { content: "✓"; position: absolute; left: 0; font: 12px/1.9 var(--font-mono); color: var(--faint); }
+#bise-page > .bise-writing .intents li[data-current] { color: var(--ink); }
+#bise-page > .bise-writing .intents li[data-current]::before { content: ""; top: .6em; left: 2px; width: 8px; height: 8px; border-radius: 50%; background: var(--working); animation: bise-breathe 2.4s ease-in-out infinite; }
+#bise-page > .bise-writing .fail { font: var(--text-small)/1.5 var(--font-ui); color: var(--ink); margin: var(--space-3) 0 0; }
+#bise-page > .bise-writing .fail::first-letter { color: var(--risk); }
+@media (prefers-reduced-motion: reduce) { .bise-frame .m::after, #bise-page > .bise-writing .intents li::before, .bise-frame .st::before { animation: none; } }
+@keyframes bise-pulse { 50% { opacity: .3; } }
+.bise-frame .sp { flex: 1; }
+.bise-frame button, .bise-frame a.b {
+  font: 500 12.5px var(--font-ui); color: var(--talk-ink); background: var(--talk-raised); border: 0; border-radius: 8px;
+  padding: 5px 11px; cursor: pointer; text-decoration: none;
+}
+.bise-frame button:hover, .bise-frame a.b:hover, .bise-frame button.on { background: var(--talk-raised-on); }
+.bise-frame button[disabled] { opacity: .4; cursor: default; background: var(--talk-raised); }
+.bise-frame [hidden] { display: none; }
+/* a watching page (roadmap B): 'watching · checked 3 min ago · until tomorrow 18:00' and 'stop' */
+.bise-frame .w { display: flex; align-items: center; gap: 8px; min-width: 0; font: 12px var(--font-mono); color: var(--talk-meta); overflow: hidden; }
+.bise-frame .w > span { overflow: hidden; text-overflow: ellipsis; }
+.bise-frame .w[hidden] { display: none; }
+/* the agent followed his taste file (roadmap §3, 4): a quiet link to the rules (about-you) */
+.bise-frame a.taste { font: 12px var(--font-mono); color: var(--talk-meta); text-decoration: none; }
+.bise-frame a.taste:hover { color: var(--talk-ink); text-decoration: underline; text-underline-offset: 2px; }
+.bise-frame a.taste::before { content: "· "; }
+.bise-frame a.taste[hidden] { display: none; }
+/* a page published with --public (pages-ui): it goes to his public mirror, he sees it before */
+.bise-frame .pub { font: 12px var(--font-mono); color: var(--talk-ink); padding: 1px 8px; border-radius: 6px; box-shadow: inset 0 0 0 1px var(--talk-line), inset 0 0 0 1px var(--talk-dim); }
+.bise-frame .pub[hidden] { display: none; }
+/* the version menu: "v3 ▾", a small list of versions under it */
+.bise-frame .v { position: relative; }
+.bise-frame .v > button { font-family: var(--font-mono); font-size: 12px; }
+.bise-frame .v > button[disabled] { opacity: 1; cursor: default; background: none; color: var(--talk-dim); }
+.bise-frame .vmenu { position: absolute; top: calc(100% + 8px); right: 0; min-width: 160px; display: flex; flex-direction: column; padding: 6px; border-radius: var(--radius-small);
+  background: var(--surface-talk); -webkit-backdrop-filter: var(--talk-blur); backdrop-filter: var(--talk-blur); box-shadow: var(--talk-stroke), var(--talk-shadow); }
+.bise-frame .vmenu[hidden] { display: none; }
+.bise-frame .vmenu a { font: 12px/1.2 var(--font-mono); color: var(--talk-ink); text-decoration: none; padding: 7px 10px; border-radius: 6px; }
+.bise-frame .vmenu a:hover, .bise-frame .vmenu a:focus { background: var(--talk-raised-on); outline: none; }
+.bise-frame .vmenu a:focus-visible { box-shadow: inset 0 0 0 1.5px var(--talk-ink); }
+.bise-frame .vmenu a[aria-current] { color: var(--talk-dim); }
+.bise-frame .vmenu a[aria-current]::after { content: " ·  shown"; }
+.bise-frame .n { font: 12px var(--font-mono); color: var(--talk-dim); }
+.bise-frame .n:empty { display: none; }
+.bise-frame button.send { background: var(--talk-accent); color: var(--talk-on-accent); font-weight: 600; }
+.bise-frame button.send[disabled] { background: var(--talk-raised); color: var(--talk-dim); opacity: 1; }
+@media (max-width: 720px) { .bise-frame .m, .bise-frame .n { display: none; } }
+
+/* ---- the page (surface-made): the agent's blocks */
+#bise-page, #bise-home { grid-area: page; padding: var(--space-6) 0 120px; min-width: 0; }
+[data-kit] { position: relative; border-radius: 6px; margin: 0 0 var(--space-3); transition: background var(--time-arrive) var(--ease-arrive), box-shadow var(--time-arrive) var(--ease-arrive); }
+[data-kit] > :last-child { margin-bottom: 0; }
+
+#bise-page p, #bise-page ul, #bise-page ol, #bise-page blockquote, #bise-page pre { margin: 0 0 var(--space-3); }
+#bise-page ul, #bise-page ol { padding-left: 1.3em; }
+#bise-page li { margin: 0 0 var(--space-1); }
+#bise-page h1, #bise-page h2, #bise-page h3 { font-family: var(--font-read); font-weight: 600; color: var(--ink); }
+/* the serif lives only in the page's title (ambient m_7009); h2, h3 are the reading sans */
+#bise-page h1 { font-family: var(--font-display); font-size: var(--text-h1); line-height: 1.1; letter-spacing: -.01em; margin: 6px 0 var(--space-4); }
+#bise-page h2 { font-size: var(--text-h2); line-height: 1.25; letter-spacing: -.01em; margin: 0 0 10px; }
+#bise-page h3 { font-size: var(--text-h3); line-height: 1.3; margin: 0 0 var(--space-2); }
+#bise-page strong, #bise-page b { font-weight: 600; }
+#bise-page a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--rule); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+#bise-page a:hover { text-decoration-color: var(--ink); }
+#bise-page code, #bise-page kbd { font: 15.5px var(--font-mono); }
+/* pre wraps and never clips (a draft in a pre is read whole, ambient m_4918) */
+#bise-page pre { font: 14.5px/1.55 var(--font-mono); background: var(--surface-card); border-radius: 10px; padding: var(--space-3) var(--space-4); white-space: pre-wrap; overflow-wrap: anywhere; box-shadow: 3px 3px 0 var(--drop); }
+#bise-page pre code { font: inherit; }
+#bise-page blockquote { color: var(--dim); padding-left: var(--space-3); border-left: 2px solid var(--rule); }
+#bise-page mark { background: var(--accent-soft); color: inherit; }
+#bise-page small { font-size: var(--text-small); color: var(--dim); }
+#bise-page img { max-width: 100%; height: auto; border-radius: 6px; }
+/* source refs in the text: a numbered sup, links to the sources block (kit.js) */
+#bise-page sup { font: 600 11px var(--font-mono); color: var(--accent); margin-left: 1px; cursor: pointer; vertical-align: super; line-height: 0; }
+
+/* heading: the page's title (h1, with an optional meta line, shown above it) or a section's (h2, h3) */
+[data-kit="heading"] { display: flex; flex-direction: column; }
+[data-kit="heading"] > p { order: -1; font: 16px/1.5 var(--font-read); color: var(--kick); margin: 0; }
+[data-kit="heading"]:has(> h2) { margin-top: 38px; }
+[data-kit="heading"]:has(> h3) { margin-top: var(--space-5); }
+
+/* table: numbers in mono, right-aligned (kit.js marks numeric columns data-num); a p after it is the caption */
+[data-kit="table"] { overflow-x: auto; }
+[data-kit="table"] table { width: 100%; border-collapse: collapse; margin: 10px 0 6px; font-size: 17px; }
+[data-kit="table"] caption { caption-side: bottom; text-align: left; font: 15px var(--font-read); color: var(--kick); padding-top: 6px; }
+[data-kit="table"] th { font: 400 var(--text-kicker) var(--font-mono); color: var(--kick); text-align: left; padding: 6px 10px; border-bottom: 1.5px solid var(--rule-strong); vertical-align: bottom; }
+[data-kit="table"] td { padding: 9px 10px; border-bottom: 1px solid var(--rule); vertical-align: baseline; line-height: 1.5; }
+[data-kit="table"] [data-num] { text-align: right; }
+[data-kit="table"] td[data-num] { font-family: var(--font-mono); font-size: 15px; line-height: 1.5; white-space: nowrap; }
+[data-kit="table"] > p { font: 15px var(--font-read); color: var(--kick); }
+
+/* callout: a card off the page with a mono kicker (its first h2/h3); the tone colors the kicker only */
+[data-kit="callout"] { background: var(--surface-card); border-radius: 10px; padding: var(--space-3) var(--space-4); margin: var(--space-4) 0; box-shadow: 3px 3px 0 var(--drop); }
+#bise-page [data-kit="callout"] > :is(h2, h3):first-child { font: 400 var(--text-kicker)/1.4 var(--font-mono); letter-spacing: 0; color: var(--kick); margin: 0 0 var(--space-1); }
+#bise-page [data-kit="callout"][data-tone="good"] > :is(h2, h3):first-child { color: var(--ok); }
+#bise-page [data-kit="callout"][data-tone="risk"] > :is(h2, h3):first-child { color: var(--risk); }
+
+/* question: the one filled accent on the page; options as cards with their digit */
+[data-kit="question"] { counter-reset: bise-opt; background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); border-radius: var(--radius); padding: 16px var(--space-4); margin: var(--space-5) 0; }
+[data-kit="question"]::before { content: "? needs you"; display: block; font: var(--text-kicker)/1.4 var(--font-mono); color: var(--accent); margin-bottom: var(--space-1); }
+[data-kit="question"][data-by]::before { content: "? " attr(data-by) " needs you"; }
+[data-kit="question"][data-answer]::before { content: "✓ answered"; color: var(--kick); }
+#bise-page [data-kit="question"] > p { font: 600 var(--text-h3)/1.3 var(--font-read); margin: 0; }
+#bise-page [data-kit="question"] > :is(ol, ul) { display: flex; flex-wrap: wrap; gap: 10px; list-style: none; padding: 0; margin: 12px 0 0; }
+#bise-page [data-kit="question"] li {
+  counter-increment: bise-opt; margin: 0;
+  font: 15px/1.35 var(--font-ui); background: var(--surface-card); color: var(--ink); border-radius: var(--radius-small);
+  padding: 7px 14px; cursor: pointer; box-shadow: 3px 3px 0 var(--drop);
+  transition: box-shadow .2s var(--ease-arrive), transform .5s var(--ease-pop);
+}
+#bise-page [data-kit="question"] li::before { content: counter(bise-opt); font: var(--text-kicker) var(--font-mono); color: var(--accent); margin-right: 6px; }
+#bise-page [data-kit="question"] li:hover { box-shadow: 3px 3px 0 var(--drop), inset 0 0 0 1px var(--rule); }
+#bise-page [data-kit="question"] li[data-picked] { box-shadow: inset 0 0 0 1.5px var(--accent), 3px 3px 0 var(--drop); transform: translateY(-1px); }
+#bise-page [data-kit="question"] li[data-picked]::before { content: "✓"; }
+#bise-page [data-kit="question"][data-answer] li { cursor: default; }
+#bise-page [data-kit="question"][data-answer] li:not([data-picked]) { opacity: .55; }
+[data-kit="question"]::after { content: "or say it: hold fn · this answers the card in your inbox too"; display: block; font: var(--text-ui)/1.4 var(--font-ui); color: var(--kick); margin-top: var(--space-2); }
+[data-kit="question"][data-answer]::after { content: none; }
+
+/* sources: every claim numbered, links to where it comes from */
+[data-kit="sources"] { counter-reset: bise-src; margin-top: 40px; border-top: 1px solid var(--rule); border-radius: 0; padding-top: var(--space-3); font-size: var(--text-small); }
+[data-kit="sources"]::before { content: "sources"; display: block; font: var(--text-kicker)/1.4 var(--font-mono); color: var(--kick); margin-bottom: 6px; }
+#bise-page [data-kit="sources"] > :is(ol, ul) { list-style: none; padding: 0; }
+#bise-page [data-kit="sources"] li { counter-increment: bise-src; position: relative; padding-left: 32px; margin: 0 0 var(--space-1); color: var(--dim); border-radius: 4px; transition: background .6s var(--ease-arrive); }
+#bise-page [data-kit="sources"] li::before { content: counter(bise-src); position: absolute; left: 0; top: 0; font: 600 var(--text-kicker)/2.1 var(--font-mono); color: var(--accent); }
+#bise-page [data-kit="sources"] li[data-lit] { background: var(--accent-soft); }
+/* a link to an item or a block (`/p/<id>#<item>`): it opens there, washed a moment */
+#bise-page :is(li[data-id], [data-kit][data-id])[data-lit] { background: var(--changed); box-shadow: -10px 0 0 var(--changed), 10px 0 0 var(--changed); transition: background .6s var(--ease-arrive); }
+
+/* the kit's buttons on the page (review, email): cards like a question's options; approve is ink */
+#bise-page [data-kit-ui]:not(.bise-writing) { display: flex; gap: var(--space-2); margin: 0; font: 14px/1.3 var(--font-ui); }
+#bise-page [data-kit-ui] button, #bise-page [data-kit-ui] a[data-act-link] {
+  font: inherit; color: var(--ink); background: var(--surface-card); border: 0; border-radius: var(--radius-small);
+  padding: 5px 12px; cursor: pointer; box-shadow: 3px 3px 0 var(--drop); transition: transform .5s var(--ease-pop);
+  text-decoration: none;
+}
+#bise-page [data-kit-ui] button[data-act="approve"], #bise-page [data-kit-ui] button[data-act="approve-all"] { background: var(--ink); color: var(--surface-made); }
+#bise-page [data-kit-ui] button[disabled] { opacity: .4; cursor: default; }
+#bise-page [data-verdict="approve"] > [data-kit-ui] button[data-act="approve"],
+#bise-page [data-verdict="skip"] > [data-kit-ui] button[data-act="skip"] { box-shadow: inset 0 0 0 1.5px var(--ink); transform: translateY(-1px); }
+#bise-page [data-verdict="approve"] > [data-kit-ui] button[data-act="approve"]::before { content: "✓ "; }
+
+/* a reply item (slice B): who · where · when, the comment quoted, then the drafted reply */
+#bise-page [data-kit="review"] li[data-reply] > blockquote { margin: 4px 0 6px; font-size: var(--text-small); color: var(--dim); border-left: 2px solid var(--line); padding-left: var(--space-3); }
+
+/* checklist who and when (slice D): the kit's tag at the row's end; late in the risk color */
+#bise-page [data-kit="checklist"] li[data-id] > [data-when] { display: inline; margin-left: auto; padding-left: var(--space-3); font: 12px var(--font-mono); color: var(--kick); white-space: nowrap; }
+#bise-page [data-kit="checklist"] li[data-late] > [data-when] { color: var(--risk); }
+
+/* an item's agent (slice C): '∿ fix login · working · reading the logs', live from SSE 'agent';
+   working breathes (motion, not a color), blocked asks in the accent, failed in risk, done in ok */
+#bise-page li[data-id] > [data-agent-line] { display: block; grid-column: 1 / -1; flex-basis: 100%; margin-top: 2px; font: 12px var(--font-mono); color: var(--kick); }
+#bise-page li[data-id] > [data-agent-line][data-status="working"] { color: var(--dim); animation: bise-breathe 2.4s var(--ease-arrive) infinite alternate; }
+#bise-page li[data-id] > [data-agent-line][data-status="blocked"] { color: var(--accent); }
+#bise-page li[data-id] > [data-agent-line][data-status="failed"] { color: var(--risk); }
+#bise-page li[data-id] > [data-agent-line][data-status="done"] { color: var(--ok); }
+@media (prefers-reduced-motion: reduce) { #bise-page li[data-id] > [data-agent-line] { animation: none; } }
+
+/* review: a list of items, each with its approve / skip; "approve N" at the end */
+#bise-page [data-kit="review"] > :is(ol, ul) { list-style: none; padding: 0; margin: 0 0 var(--space-3); border-top: 1.5px solid var(--rule-strong); }
+#bise-page [data-kit="review"] li[data-id] { display: grid; grid-template-columns: 1fr auto; gap: 4px var(--space-4); align-items: start; padding: var(--space-3) 0; margin: 0; border-bottom: 1px solid var(--rule); transition: opacity .3s var(--ease-arrive); }
+#bise-page [data-kit="review"] li[data-id] > :not([data-kit-ui]) { grid-column: 1; margin: 0; }
+#bise-page [data-kit="review"] li[data-id] > p:first-child { font-size: var(--text-small); color: var(--dim); }
+#bise-page [data-kit="review"] li[data-id] > [data-kit-ui] { grid-column: 2; grid-row: 1 / span 4; }
+/* the item's lines from the kit (its agent, where the reply went) read under its text, not over the buttons */
+#bise-page [data-kit="review"] li[data-id] > :is([data-agent-line], [data-went]) { grid-column: 1; grid-row: auto; }
+#bise-page [data-kit="review"] li[data-verdict="skip"] > :not([data-kit-ui]) { opacity: .45; }
+/* what bise keeps (data-verb="keep"): a struck rule is struck through; no 'approve N' bar */
+#bise-page [data-kit="review"][data-verb="keep"] li[data-verdict="skip"] > :not([data-kit-ui]) { text-decoration: line-through; text-decoration-color: var(--rule-strong); }
+#bise-page [data-kit="review"][data-verb="keep"] > p[data-kit-ui] { display: none; }
+#bise-page [data-kit="review"] li[data-verdict="approve"] { box-shadow: inset 3px 0 0 var(--ok); padding-left: var(--space-3); }
+
+/* email: a draft ready to leave, its header lines labeled, approve / skip under it */
+[data-kit="email"] { background: var(--surface-card); border-radius: 10px; padding: var(--space-4) 22px; margin: var(--space-4) 0; box-shadow: 3px 3px 0 var(--drop); }
+#bise-page [data-kit="email"] > p[data-field] { display: grid; grid-template-columns: 72px 1fr; margin: 0; padding: 4px 0; border-bottom: 1px solid var(--rule); font: var(--text-small)/1.5 var(--font-ui); }
+#bise-page [data-kit="email"] > p[data-field]::before { content: attr(data-field); font: var(--text-kicker)/2 var(--font-mono); color: var(--kick); }
+#bise-page [data-kit="email"] > p[data-field="subject"] { font-weight: 600; }
+#bise-page [data-kit="email"] > p[data-field] + p:not([data-field]) { margin-top: var(--space-4); }
+/* action: a write his word triggers (close OPS-12): a small card, its own buttons; skipped: dim */
+[data-kit="action"] { background: var(--surface-card); border-radius: 10px; padding: var(--space-3) 22px; margin: var(--space-3) 0; box-shadow: 3px 3px 0 var(--drop); }
+#bise-page [data-kit="action"] > p:not([data-kit-ui]) { margin: 0; font: var(--text-small)/1.5 var(--font-ui); }
+#bise-page [data-kit="action"][data-verdict="skip"] > :not([data-kit-ui]) { opacity: .45; }
+#bise-page [data-kit="email"] > [data-kit-ui] { margin-top: var(--space-4); }
+#bise-page [data-kit="email"][data-verdict="skip"] > :not([data-kit-ui]) { opacity: .45; }
+
+/* compare: 2 to 4 variants side by side, each a card with its facts and its why; ♡ ✗ pick under it */
+#bise-page [data-kit="compare"] > :is(ol, ul) { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-3); }
+#bise-page [data-kit="compare"] li[data-id] { display: flex; flex-direction: column; margin: 0; background: var(--surface-card); border-radius: 10px; padding: var(--space-3) var(--space-4); box-shadow: 3px 3px 0 var(--drop); font-size: var(--text-small); transition: opacity .3s var(--ease-arrive), box-shadow .3s var(--ease-arrive); }
+#bise-page [data-kit="compare"] li[data-id] > h3 { font-size: 19px; margin: 0 0 6px; }
+#bise-page [data-kit="compare"] li[data-id] ul { padding-left: 1.1em; margin: 0 0 var(--space-2); }
+#bise-page [data-kit="compare"] li[data-id] li { margin: 0 0 2px; }
+#bise-page [data-kit="compare"] li[data-id] > p { margin: 0 0 var(--space-2); color: var(--dim); }
+#bise-page [data-kit="compare"] li[data-id] > [data-kit-ui] { margin-top: auto; padding-top: var(--space-2); }
+#bise-page [data-kit="compare"] li[data-id] > [data-kit-ui] button[data-act="pick"] { margin-left: auto; }
+#bise-page [data-kit="compare"] li[data-verdict="pick"] { box-shadow: inset 0 0 0 1.5px var(--ink), 3px 3px 0 var(--drop); }
+#bise-page [data-kit="compare"] li[data-verdict="drop"] > :not([data-kit-ui]) { opacity: .45; }
+/* the cards line up: name, facts, why and buttons share rows across the cards (subgrid), so a
+   name that wraps on two lines moves every card's facts down together */
+@supports (grid-template-rows: subgrid) {
+  #bise-page [data-kit="compare"] li[data-id] { display: grid; grid-row: span 4; grid-template-rows: subgrid; row-gap: 0; align-content: start; }
+  #bise-page [data-kit="compare"] li[data-id] > h3 { align-self: end; }
+  #bise-page [data-kit="compare"] li[data-id] > [data-kit-ui] { align-self: end; }
+}
+#bise-page [data-verdict="keep"] > [data-kit-ui] button[data-act="keep"], #bise-page [data-verdict="drop"] > [data-kit-ui] button[data-act="drop"],
+#bise-page [data-verdict="pick"] > [data-kit-ui] button[data-act="pick"] { box-shadow: inset 0 0 0 1.5px var(--ink); }
+#bise-page [data-verdict="pick"] > [data-kit-ui] button[data-act="pick"]::before { content: "✓ "; }
+
+/* checklist: a box per item (the kit's), who · when in small; ticked items are struck through */
+#bise-page [data-kit="checklist"] > :is(ol, ul) { list-style: none; padding: 0; margin: 0; }
+/* a flow row (not flex): the box inline-block, the who/when tag and the agent line floats, so a
+   done item's strike crosses its words only (floats and inline-blocks take no strike) */
+#bise-page [data-kit="checklist"] li[data-id] { display: flow-root; margin: 0; padding: 7px 0; border-bottom: 1px solid var(--rule); }
+#bise-page [data-kit="checklist"] li[data-id] small { float: right; padding-left: var(--space-3); font: 12px var(--font-mono); color: var(--kick); white-space: nowrap; }
+#bise-page [data-kit="checklist"] li[data-id] > [data-kit-ui]:not([data-when]):not([data-agent-line]) { display: inline-block; vertical-align: -3px; margin-right: var(--space-3); }
+#bise-page [data-kit="checklist"] li[data-id] > [data-when] { float: right; margin-left: 0; }
+#bise-page [data-kit="checklist"] li[data-id] > [data-agent-line] { float: left; clear: both; width: 100%; padding-left: calc(18px + var(--space-3)); }
+#bise-page [data-kit="checklist"] [data-kit-ui] button[data-act="tick"] { width: 18px; height: 18px; padding: 0; border-radius: 4px; font-size: 0; background: var(--surface-card); box-shadow: inset 0 0 0 1.5px var(--rule-strong); }
+#bise-page [data-kit="checklist"] li[data-verdict="tick"] [data-kit-ui] button[data-act="tick"] { background: var(--ink); }
+#bise-page [data-kit="checklist"] li[data-verdict="tick"] [data-kit-ui] button[data-act="tick"]::before { content: "✓"; font: 600 12px/18px var(--font-ui); color: var(--surface-made); }
+#bise-page [data-kit="checklist"] li[data-verdict="tick"] { color: var(--dim); text-decoration: line-through; text-decoration-color: var(--rule-strong); }
+#bise-page [data-kit="checklist"] li[data-verdict="tick"] > [data-when] { color: var(--faint); }
+/* bise's step with its draft on the page (pm's 26): the tag takes you there */
+#bise-page [data-kit="checklist"] li[data-id] > [data-when][data-goto] { cursor: pointer; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+/* a step only the user can do (data-who="yours", roadmap D): 'you · friday' in the accent, it waits for him */
+#bise-page [data-kit="checklist"] li[data-who="yours"]:not([data-verdict="tick"]) > [data-when] { color: var(--accent); }
+
+/* message: a draft that leaves (Slack, a post), in the reading font, editable, its channel above */
+[data-kit="message"] { background: var(--surface-card); border-radius: 10px; padding: var(--space-3) var(--space-4) var(--space-4); margin: var(--space-4) 0; box-shadow: 3px 3px 0 var(--drop); }
+[data-kit="message"]::before { content: attr(data-to); display: block; font: var(--text-kicker)/1.4 var(--font-mono); color: var(--kick); margin-bottom: var(--space-2); }
+#bise-page [data-kit="message"] > p { margin: 0 0 10px; }
+#bise-page [data-kit="message"] > [data-kit-ui] { margin-top: var(--space-3); justify-content: flex-end; }
+/* an email says where it goes the same way, when it has data-to ('Gmail · reply to Camille Roux') */
+[data-kit="email"][data-to]::before { content: attr(data-to); display: block; font: var(--text-kicker)/1.4 var(--font-mono); color: var(--kick); margin-bottom: var(--space-2); }
+
+/* where a draft went (slice A): 'in your Gmail drafts · open', 'copied · open #launch' */
+#bise-page [data-kit] > p[data-went] { display: block; margin: var(--space-3) 0 0; font: 12px/1.5 var(--font-mono); color: var(--ok); }
+#bise-page [data-kit] > p[data-went] > a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+#bise-page [data-kit] > p[data-went] > a::before { content: " · "; display: inline-block; white-space: pre; text-decoration: none; }
+/* a reply opened from its item (roadmap B): 'opened on X', 'copied · open the thread' */
+#bise-page li[data-id] > [data-went] { display: block; grid-column: 1 / -1; font: 12px/1.5 var(--font-mono); color: var(--ok); }
+/* a handled review item (its answer went): dim, its went line stays readable (mentions' 'earlier') */
+#bise-page [data-kit="review"] li[data-id]:has(> [data-went]) > :not([data-kit-ui]):not([data-went]) { opacity: .55; }
+#bise-page li[data-id] > [data-went] > a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+#bise-page li[data-id] > [data-went] > a::before { content: " · "; display: inline-block; white-space: pre; text-decoration: none; }
+/* read-only places: no bulk 'open 5' (one thread at a time) */
+#bise-page [data-kit="review"][data-verb="open-reply"] > p[data-kit-ui] { display: none; }
+/* feedback into work (roadmap C): one decision per report, no bulk; 'start an agent' first */
+#bise-page [data-kit="review"][data-verb="start"] > p[data-kit-ui] { display: none; }
+#bise-page [data-kit="review"][data-verb="start"] [data-kit-ui] button[hidden] { display: none; }
+
+/* what changed: a soft wash on the blocks that differ from the version before */
+body.bise-changes [data-changed] { background: var(--changed); box-shadow: -10px 0 0 var(--changed), 10px 0 0 var(--changed); }
+body.bise-changes [data-kit="question"][data-changed], body.bise-changes [data-kit="callout"][data-changed] { box-shadow: 0 0 0 10px var(--changed); }
+body.bise-changes [data-changed]::after { content: "changed"; position: absolute; left: -74px; top: 4px; font: 11px var(--font-mono); color: var(--dim); background: none; margin: 0; }
+@media (max-width: 1080px) { body.bise-changes [data-changed]::after { left: auto; right: 0; top: -16px; } }
+/* a block that just came in with a new version */
+[data-arrived] { animation: bise-arrive var(--time-arrive) var(--ease-arrive); }
+@keyframes bise-arrive { from { opacity: 0; transform: translateY(6px); } }
+
+/* ---- for you: the list of pages (the server's page at /) */
+[data-kit="pages"] > ul { list-style: none; padding: 0; margin: 0; }
+[data-kit="pages"] li { display: grid; grid-template-columns: 1fr auto; gap: 2px var(--space-3); padding: var(--space-3) 0; border-bottom: 1px solid var(--rule); }
+[data-kit="pages"] li > a { font: 600 22px/1.25 var(--font-read); color: var(--ink); text-decoration: none; letter-spacing: -.01em; }
+[data-kit="pages"] li > a:hover { text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 4px; }
+[data-kit="pages"] .bise-kicker { grid-column: 1; font: 16px/1.4 var(--font-read); color: var(--dim); }
+[data-kit="pages"] .bise-meta { grid-column: 1; font: 12px var(--font-mono); color: var(--kick); }
+/* a page that holds an open question: the asking dot after its title */
+[data-kit="pages"] li[data-asking] > a::after { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-left: 10px; vertical-align: .2em; box-shadow: 0 0 0 3px var(--accent-soft); }
+/* pink only for what waits for him (round 8): updating and 'open' are not */
+[data-kit="pages"] li[data-state="updating"] .bise-meta { color: var(--dim); }
+[data-kit="pages"] .bise-open { grid-column: 2; grid-row: 1 / span 2; align-self: center; font: 12px var(--font-mono); color: var(--kick); }
+[data-kit="pages"]:empty::before, [data-kit="pages"] > ul:empty::before { content: "nothing here yet. when an agent makes a page for you, it shows here."; font: 17px var(--font-read); color: var(--kick); }
+#bise-home::before { content: "for you"; display: block; font: 600 var(--text-h1)/1.1 var(--font-display); letter-spacing: -.01em; margin: 6px 0 var(--space-4); }
+
+/* ---- ui: what a page draws beyond text (pages-ui; designer's site/m mocks). A page with a ui block
+   takes more room: its column widens to --page-wide, its text blocks keep the reading measure. The
+   gallery below is the main road (k-term, k-ba, k-states, k-pick, k-timeline); a ui block's own
+   <style> comes as the version's page.css, scoped to the block by the server. */
+body:has(#bise-page > [data-kit="ui"]) { grid-template-columns: minmax(var(--space-5), 1fr) minmax(0, var(--page-wide)) 36px 300px minmax(var(--space-5), 1fr); }
+@media (max-width: 1500px) {
+  body:has(#bise-page > [data-kit="ui"]) { grid-template-columns: minmax(var(--space-5), 1fr) minmax(0, var(--page-wide)) minmax(var(--space-5), 1fr); grid-template-areas: "frame frame frame" ". page ." ". side ."; }
+}
+body:has(#bise-page > [data-kit="ui"]) #bise-page > [data-kit]:not([data-kit="ui"], [data-kit="compare"], [data-kit="table"]) { max-width: var(--measure); }
+[data-kit="ui"] { margin: var(--space-5) 0; font-size: var(--text-small); }
+#bise-page [data-kit="ui"] :is(button, [data-pick]) { font: inherit; color: inherit; }
+
+/* k-term: a terminal frame with real cells (one character per cell, the TUI's palette); tabs over
+   widths or states (data-ui="tabs"), its own light/dark switch (data-ui="term", kit.js adds it) */
+.k-term { margin: 0 0 var(--space-3); border-radius: 10px; overflow: hidden; background: var(--term-bg); color: var(--term-text); box-shadow: 0 0 0 1px var(--term-frame), 3px 3px 0 var(--drop); }
+.k-term > .k-bar, .k-term > .k-tabs { display: flex; align-items: center; gap: 2px; padding: 6px 10px 0; border-bottom: 1px solid var(--term-frame); }
+.k-term > .k-bar > .k-tabs { display: flex; gap: 2px; flex: 1; }
+/* the left of the bar: the tabs (widths, steps); its right end: the frame's dark | light toggle */
+#bise-page .k-tabs > button { font: var(--text-ui) var(--font-ui); color: var(--term-dim); background: none; border: 0; border-radius: 0; box-shadow: none; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 5px 10px 7px; cursor: pointer; transition: color .2s; }
+#bise-page .k-tabs > button:hover, #bise-page .k-term [data-kit-ui] > button:hover { color: var(--term-text); }
+#bise-page .k-term [data-kit-ui] > button { font: var(--text-ui) var(--font-ui); color: var(--term-dim); background: none; border: 0; border-radius: 6px; box-shadow: none; padding: 2px 10px; cursor: pointer; transform: none; transition: color .2s, background .2s; }
+.k-term [data-kit-ui] { margin: 0 0 6px auto; display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--term-raised); box-shadow: inset 0 0 0 1px var(--term-frame); align-self: center; }
+.k-tabs { display: flex; align-items: center; gap: 2px; }
+.k-term .k-tabs { padding: 6px 10px 0; border-bottom: 1px solid var(--term-frame); }
+.k-tabs > button:focus-visible, .k-term [data-kit-ui] > button:focus-visible, .k-option:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 4px; }
+#bise-page .k-tabs > button[aria-selected="true"] { color: var(--term-text); border-bottom-color: var(--term-text); }
+#bise-page .k-term [data-kit-ui] > button[aria-pressed="true"] { color: var(--term-text); background: var(--term-bg); box-shadow: 0 1px 0 var(--term-frame); }
+/* the cells: each line keeps its spaces (one character per cell); the newlines between lines don't count */
+.k-cells { font: 13px/1.5 var(--font-mono); white-space: normal; overflow-x: auto; padding: var(--space-3) var(--space-4); color: var(--term-text); tab-size: 4; }
+.k-cells .k-ln { min-height: 1.5em; white-space: pre; width: max-content; min-width: 100%; }
+.k-term > figcaption, .k-term figcaption { padding: var(--space-2) var(--space-4); border-top: 1px solid var(--term-frame); font: var(--text-kicker)/1.5 var(--font-ui); color: var(--term-dim); white-space: normal; }
+.t-dim { color: var(--term-dim); } .t-faint { color: var(--term-faint); } .t-rule { color: var(--term-rule); }
+.t-acc { color: var(--term-accent); } .t-b { font-weight: 700; } .t-ok { color: var(--term-ok); } .t-err { color: var(--term-err); }
+.t-sel { background: var(--term-sel); } .t-raised { background: var(--term-raised); } .t-chip { background: var(--term-chip); color: var(--term-accent); border-radius: 3px; }
+.t-hl { background: var(--term-accent); color: var(--term-bg); } .t-u { text-decoration: underline; text-decoration-color: var(--term-accent); text-underline-offset: 3px; }
+/* tabs: without kit.js every pane shows, one under the other (readable without JS) */
+[data-ui="tabs"][data-ready] .k-pane:not([data-on]) { display: none; }
+.k-pane + .k-pane { border-top: 1px dashed var(--term-frame); }
+[data-ui="tabs"][data-ready] .k-pane + .k-pane { border-top: 0; }
+
+/* k-ba: before and after, side by side (stacked when narrow) */
+.k-ba { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); margin: 0 0 var(--space-3); }
+.k-ba > figure, .k-states > figure { margin: 0; min-width: 0; }
+.k-ba > figure > figcaption:first-child, .k-states > figure > figcaption:first-child { font: var(--text-kicker)/1.4 var(--font-mono); color: var(--kick); margin: 0 0 var(--space-2); }
+.k-ba > figure > figcaption:first-child b, .k-ba > figure > figcaption:first-child strong { color: var(--ink); font-weight: 600; }
+.k-ba .k-cells, .k-states .k-cells { font-size: 12px; }
+
+/* k-states: one thing in each of its states, a grid of small frames */
+.k-states { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: var(--space-3); margin: 0 0 var(--space-3); }
+.k-states .k-cells { padding: var(--space-2) var(--space-3); }
+
+/* k-pick (data-ui="pick"): rich options, one pick per block, the pick is a note (compare's pick);
+   the picked one is drawn in ink, never the accent (the accent is what waits on him) */
+.k-pick { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-3); margin: 0 0 var(--space-3); }
+.k-option { position: relative; display: flex; flex-direction: column; gap: var(--space-1); background: var(--surface-card); border-radius: 10px; padding: var(--space-3) var(--space-4); box-shadow: 0 0 0 1px var(--line), 3px 3px 0 var(--drop); color: var(--dim); }
+#bise-page .k-option > h3 { font-size: var(--text-read); margin: 0; color: var(--ink); }
+#bise-page .k-option ul { margin: var(--space-1) 0 0; }
+[data-ui="pick"][data-ready] .k-option { cursor: pointer; transition: box-shadow .2s var(--ease-arrive); }
+[data-ui="pick"][data-ready] .k-option:hover { box-shadow: 0 0 0 1px var(--faint), 3px 3px 0 var(--drop); }
+.k-option[data-verdict="pick"] { box-shadow: inset 0 0 0 1.5px var(--ink), 3px 3px 0 var(--drop); color: var(--ink); }
+/* 'my pick': a small ink label at the card's top right, read at a glance (never the accent) */
+.k-option > .k-mark { position: absolute; top: var(--space-3); right: var(--space-3); font: 600 var(--text-kicker)/1.5 var(--font-ui); color: var(--ink); padding: 0 7px; border-radius: 5px; box-shadow: inset 0 0 0 1px var(--ink); }
+#bise-page .k-option:has(> .k-mark) > h3 { padding-right: 8ch; }
+.k-mine { font: var(--text-kicker) var(--font-mono); color: var(--kick); }
+
+/* k-timeline: steps in order; data-state done, now, next */
+.k-timeline { list-style: none; padding: 0 0 0 26px !important; margin: 0 0 var(--space-3); position: relative; }
+.k-timeline::before { content: ""; position: absolute; left: 7px; top: 8px; bottom: 8px; width: 2px; background: var(--line); }
+.k-timeline > li { position: relative; margin: 0 0 var(--space-3) !important; color: var(--dim); }
+.k-timeline > li::before { content: ""; position: absolute; left: -24px; top: .45em; width: 12px; height: 12px; border-radius: 50%; background: var(--surface-made); box-shadow: inset 0 0 0 2px var(--faint); }
+.k-timeline > li[data-state="done"]::before { background: var(--faint); }
+.k-timeline > li[data-state="now"]::before { background: var(--ink); box-shadow: 0 0 0 3px var(--surface-made), 0 0 0 4px var(--ink); animation: bise-breathe 2.4s ease-in-out infinite; }
+/* a step that waits on him (data-who="yours") takes the accent, like his checklist steps */
+.k-timeline > li[data-who="yours"]::before { box-shadow: inset 0 0 0 2px var(--accent); }
+.k-timeline > li[data-who="yours"][data-state="now"]::before { background: var(--accent); box-shadow: 0 0 0 3px var(--surface-made), 0 0 0 4px var(--accent); }
+.k-timeline > li[data-who="yours"] .k-who { color: var(--accent); }
+.k-timeline > li > b, .k-timeline > li > strong { color: var(--ink); font-weight: 600; }
+.k-timeline .k-who { font: var(--text-kicker) var(--font-mono); color: var(--kick); margin-left: 1ch; }
+
+/* k-diff (page-notes): a diff the kit draws, like a review on GitHub. Rows .k-dl carry their line
+   numbers as data-old / data-new and the kit writes them (and the − / + mark) in the gutter, so a
+   number is never in a quote: a row with only data-old went, only data-new came, both is unchanged.
+   .k-hunk a hunk's head, details.k-fold a folded run. A click on a row's numbers picks it for a
+   note, shift-click or a drag a run (notelines.js); notes.css marks the picked rows. */
+.k-diff { margin: 0 0 var(--space-3); font: 12.5px/1.6 var(--font-mono); color: var(--ink); background: var(--surface-card); border-radius: 10px; overflow: hidden; box-shadow: 0 0 0 1px var(--line), 3px 3px 0 var(--drop); }
+.k-diff .k-hunk, .k-diff .k-fold > summary { color: var(--dim); background: var(--hover); padding: 2px var(--space-3); border-block: 1px solid var(--line); margin-top: -1px; overflow-wrap: anywhere; }
+.k-diff .k-fold > summary { cursor: pointer; list-style: none; }
+.k-diff .k-fold > summary::-webkit-details-marker { display: none; }
+.k-diff .k-fold > summary::before { content: "▸ "; color: var(--faint); }
+.k-diff .k-fold[open] > summary::before { content: "▾ "; }
+.k-dl { position: relative; min-height: 1.6em; padding: 0 var(--space-3) 0 13ch; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; }
+.k-dl::before, .k-dl::after { position: absolute; top: 0; white-space: pre; text-align: right; color: var(--faint); user-select: none; cursor: pointer; }
+.k-dl::before { left: 0; width: 5ch; content: attr(data-old); }
+.k-dl::after { left: 5ch; width: 7ch; content: attr(data-new) "   "; }
+.k-dl[data-old]:not([data-new]) { background: color-mix(in srgb, var(--term-err) 9%, transparent); box-shadow: inset 3px 0 0 var(--term-err); }
+.k-dl[data-old]:not([data-new])::after { content: " − "; color: var(--term-err); }
+.k-dl[data-new]:not([data-old]) { background: color-mix(in srgb, var(--term-ok) 11%, transparent); box-shadow: inset 3px 0 0 var(--term-ok); }
+.k-dl[data-new]:not([data-old])::after { content: attr(data-new) " + "; color: var(--term-ok); }
+.k-dl:hover::before, .k-dl:hover::after { color: var(--ink); }
+
+/* small parts: a grid of cards, a card, a kicker, a tag */
+.k-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-3); margin: 0 0 var(--space-3); }
+.k-card { background: var(--surface-card); border-radius: 10px; padding: var(--space-3) var(--space-4); box-shadow: 3px 3px 0 var(--drop); min-width: 0; }
+.k-kicker { font: var(--text-kicker)/1.4 var(--font-mono); color: var(--kick); }
+.k-tag { display: inline-block; font: var(--text-kicker)/1.6 var(--font-mono); color: var(--dim); background: var(--hover); box-shadow: inset 0 0 0 1px var(--line); border-radius: 4px; padding: 0 6px; margin: 0 4px 4px 0; }
+.k-big { font: 600 30px/1.1 var(--font-mono); color: var(--ink); }
+@media (max-width: 760px) { .k-ba { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .k-timeline > li[data-state="now"]::before { animation: none; } [data-ui="pick"] .k-option { transition: none; } }

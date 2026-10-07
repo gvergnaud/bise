@@ -2,7 +2,8 @@
 //! one thread per connection; the first line's op decides what the
 //! connection becomes (`crate::peer::access`). On `hub.sock`, a `hello`
 //! or a `notice` from an agent's process (`crate::peer::judge`, on the
-//! peer's pid and the process table) gets one `{"ev":"refused"}` line,
+//! peer's pid and the process table) gets one `{"ev":"refused","error"}`
+//! line (bise_proto's HubEv::Refused),
 //! is closed, and leaves one hub.log line naming the agent.
 
 use super::{log_line, write_json, Msg};
@@ -108,7 +109,9 @@ fn serve(stream: UnixStream, pid: Option<u32>, id: u64, tx: &Sender<Msg>, doors:
             let (who, peer) = doors.who(pid);
             if let Some(why) = who.refusal_of(&op) {
                 log_line(&doors.paths, &format!("client refused on hub.sock ({op}): {peer}: {why}"));
-                write_json(&mut stream, &json!({"ev": "refused", "ok": false, "error": why}));
+                // the typed refusal (bise_proto HubEv::Refused): one shape
+                // for this writer and the TUI's and the desktop core's readers
+                write_json(&mut stream, &bise_proto::hub::HubEv::Refused { error: why.to_string() }.to_value());
                 return;
             }
         }
@@ -135,6 +138,9 @@ fn serve(stream: UnixStream, pid: Option<u32>, id: u64, tx: &Sender<Msg>, doors:
         }
         "version" => {
             let _ = tx.send(Msg::Version { stream, v });
+        }
+        "xin" | "xreply" | "xfollow" => {
+            let _ = tx.send(Msg::XHub { token: id, stream, v });
         }
         "notice" => {
             let s = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();

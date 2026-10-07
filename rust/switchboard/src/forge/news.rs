@@ -446,11 +446,65 @@ pub fn pr_words(pr: &PrSnapshot) -> String {
     w.join(" · ")
 }
 
-/// `/prs` (pr-design §4): every open PR of this repo's places, one per
-/// line with its branch, its agents and its state, the link under it.
-pub fn prs_list(places: &[crate::place::Place]) -> String {
-    let Some((head, rows)) = prs_rows(places) else { return NO_PR.into() };
-    let mut out = vec![head];
+/// `/prs` (pr-design §4): the open PRs of this repo's places, by number,
+/// typed (bise-proto `rows::Pr`, what each means and the hub's words for
+/// it). The TUI's `/prs` and the window's `prs` event both read these
+/// rows; the TUI's tone comes from `state` and `checks` (red when checks
+/// fail, dim for a draft), never from the wire.
+pub fn pr_rows(places: &[crate::place::Place]) -> Vec<bise_proto::rows::Pr> {
+    use bise_proto::rows::{Pr, PrChecks, PrReview, PrState as S};
+    let mut prs: Vec<(&PrSnapshot, &[String])> = places
+        .iter()
+        .filter_map(|p| p.pr.as_ref().map(|pr| (pr, p.agents.as_slice())))
+        .filter(|(pr, _)| matches!(pr.state, PrState::Open | PrState::Draft))
+        .collect();
+    prs.sort_by_key(|(pr, _)| pr.number);
+    prs.into_iter()
+        .map(|(pr, agents)| {
+            let who = if agents.is_empty() { "no agent".to_string() } else { agents.join(", ") };
+            let (checks, failing) = match &pr.checks {
+                Checks::Pass => (PrChecks::Pass, Vec::new()),
+                Checks::Fail { failing } => (PrChecks::Fail, failing.clone()),
+                Checks::Running => (PrChecks::Running, Vec::new()),
+                Checks::None => (PrChecks::None, Vec::new()),
+            };
+            let review = match pr.review {
+                Review::Approved => PrReview::Approved,
+                Review::ChangesRequested => PrReview::Changes,
+                Review::None | Review::Pending => PrReview::None,
+            };
+            let words = pr_words(pr);
+            Pr {
+                number: pr.number,
+                url: pr.url.clone(),
+                branch: pr.branch.clone(),
+                agents: agents.to_vec(),
+                state: if pr.state == PrState::Draft { S::Draft } else { S::Open },
+                checks,
+                failing,
+                review,
+                text: format!("{} · {} · {}", pr.branch, who, words),
+                words,
+            }
+        })
+        .collect()
+}
+
+/// `/prs`'s head line: `2 PRs open`, "" when none.
+pub fn prs_head(rows: &[bise_proto::rows::Pr]) -> String {
+    if rows.is_empty() {
+        return String::new();
+    }
+    format!("{} open", plural(rows.len(), "PR", "PRs"))
+}
+
+/// `/prs` as text (sb's CLI prints it): the head, each PR's line with
+/// its link under it; [`NO_PR`] when none.
+pub fn prs_list(rows: &[bise_proto::rows::Pr]) -> String {
+    if rows.is_empty() {
+        return NO_PR.into();
+    }
+    let mut out = vec![prs_head(rows)];
     for r in rows {
         out.push(format!("↑ #{} {}", r.number, r.text));
         out.push(format!("  {}", r.url));
@@ -461,42 +515,11 @@ pub fn prs_list(places: &[crate::place::Place]) -> String {
 /// `/prs` with no open PR.
 pub const NO_PR: &str = "no open PR. in PR flow, an agent in a worktree opens one when its work is done (/flow).";
 
-/// One row of `/prs`, drawn like a PR line (designer): `↑ #412 sb/x ·
-/// x, y · changes asked · checks pass`, red when checks fail, dim for a
-/// draft; the TUI puts the URL under it, dim.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PrRow {
-    pub tone: Tone,
-    pub number: u64,
-    pub url: String,
-    pub text: String,
-}
-
-/// `/prs`'s head (`2 PRs open`) and rows, by number; None: no open PR.
-pub fn prs_rows(places: &[crate::place::Place]) -> Option<(String, Vec<PrRow>)> {
-    let mut prs: Vec<(&PrSnapshot, &[String])> = places
-        .iter()
-        .filter_map(|p| p.pr.as_ref().map(|pr| (pr, p.agents.as_slice())))
-        .filter(|(pr, _)| matches!(pr.state, PrState::Open | PrState::Draft))
-        .collect();
-    if prs.is_empty() {
-        return None;
-    }
-    prs.sort_by_key(|(pr, _)| pr.number);
-    let head = format!("{} open", plural(prs.len(), "PR", "PRs"));
-    let rows = prs
-        .into_iter()
-        .map(|(pr, agents)| {
-            let who = if agents.is_empty() { "no agent".to_string() } else { agents.join(", ") };
-            let tone = match (&pr.checks, pr.state) {
-                (Checks::Fail { .. }, _) => Tone::Red,
-                (_, PrState::Draft) => Tone::Dim,
-                _ => Tone::Plain,
-            };
-            PrRow { tone, number: pr.number, url: pr.url.clone(), text: format!("{} · {} · {}", pr.branch, who, pr_words(pr)) }
-        })
-        .collect();
-    Some((head, rows))
+/// The typed `prs` event of these places (bar A.7).
+pub fn prs_ev(project: String, places: &[crate::place::Place]) -> bise_proto::hub::HubEv {
+    let items = pr_rows(places);
+    let none = items.is_empty().then(|| NO_PR.to_string());
+    bise_proto::hub::HubEv::Prs { project, head: prs_head(&items), items, none }
 }
 
 #[cfg(test)]

@@ -34,7 +34,7 @@
 //! too, and [`thread::words`] makes the words both show.
 //!
 //! The fixtures (`fixtures/*.jsonl`) are the one source for the Rust
-//! tests, the web's fake core (apps/ambient/web) and the Python e2e.
+//! tests, the native helper's laws and the Python e2e.
 
 pub mod approvals;
 pub mod context;

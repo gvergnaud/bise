@@ -1,0 +1,48 @@
+<section data-kit="heading" data-id="title"><p>issue #9 · prompt diet · v1</p><h1>what the prompt diet cuts</h1></section>
+
+<section data-kit="callout" data-id="short"><h3>in short</h3><p>Main's prompt loses 112 lines and gains 27. Red lines go, green lines come. Click a line's number to leave a note on it, shift-click for a run.</p></section>
+
+<section data-kit="heading" data-id="h-diff"><h2>the diff</h2></section>
+
+<section data-kit="ui" data-id="diff">
+<div data-ui="tabs">
+<div class="k-tabs"><button type="button" data-tab="main">main</button><button type="button" data-tab="task">a task</button></div>
+<div class="k-pane" data-tab="main">
+<div class="k-diff">
+<div class="k-hunk">@@ -1,40 +1,36 @@ main's system prompt</div>
+<details class="k-fold"><summary>3 unchanged lines</summary>
+<div class="k-dl" data-old="1" data-new="1">You are a precise assistant in bise.</div>
+<div class="k-dl" data-old="2" data-new="2"></div>
+<div class="k-dl" data-old="3" data-new="3">## What bise is</div>
+</details>
+<div class="k-dl" data-old="4" data-new="4"></div>
+<div class="k-dl" data-old="5">Skills contain task-specific instructions. When a request matches a skill description, proactively call the `skill` tool before starting the task.</div>
+<div class="k-dl" data-old="6"></div>
+<div class="k-dl" data-old="7">Call `skill` only with a name listed in `&lt;available-skills&gt;`.</div>
+<div class="k-dl" data-new="5">Skills contain task-specific instructions: call the `skill` tool with a name listed below before the task.</div>
+<div class="k-dl" data-old="8" data-new="6"></div>
+<div class="k-dl" data-old="9" data-new="7">&lt;available-skills&gt;</div>
+</div>
+</div>
+<div class="k-pane" data-tab="task">
+<div class="k-diff">
+<div class="k-hunk">@@ -12,3 +12,2 @@ a task's system prompt</div>
+<div class="k-dl" data-old="12" data-new="12">Your working directory: the task's worktree.</div>
+<div class="k-dl" data-old="13">Your temp folder is the task's tmp: use it for scratch files.</div>
+<div class="k-dl" data-old="14" data-new="13">The `sb` command is how you reach the group.</div>
+</div>
+</div>
+</div>
+</section>
+
+<section data-kit="heading" data-id="h-screen"><h2>what the task sees</h2></section>
+
+<section data-kit="ui" data-id="screen">
+<figure class="k-term" data-ui="term">
+<div class="k-cells"><div class="k-ln"><span class="t-acc t-b">prompt-diet</span>  <span class="t-dim">working · 4 min</span></div>
+<div class="k-ln">  ✓ skills listed once         <span class="t-dim">-112 lines</span></div>
+<div class="k-ln">  ◷ tools described once       <span class="t-dim">next</span></div>
+<div class="k-ln t-dim">⏎ open   x stop   esc back</div></div>
+<figcaption>the task's row after the cut, 80 columns</figcaption>
+</figure>
+</section>

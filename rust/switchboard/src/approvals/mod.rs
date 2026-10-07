@@ -76,6 +76,11 @@ pub struct Call {
     /// The repo's flow (dev-flow §6's approvals rows); None: unknown,
     /// only the flow-free tiers.
     pub flow: Option<FlowRules>,
+    /// A page of this agent waits for the user's review (its latest
+    /// version has a review item or a question he hasn't answered, and no
+    /// word of his since: approve, send, "put it in my drafts"): the
+    /// page's title. A draft-making call is then a card, not free.
+    pub pending_review: Option<String>,
 }
 
 /// The repo's flow as the approvals read it (dev-flow §6, "Approvals").
@@ -191,6 +196,35 @@ pub fn hint_for(edit_tool: &str) -> String {
     )
 }
 
+/// A connector call that only makes or changes a draft (`gmail.create_draft`,
+/// `outlook.update_draft`, `kit.create_draft_broadcast`): nothing leaves,
+/// the user sends it himself, so no card and no checker
+/// (docs/ambient-roadmap.md A). A send, a delete or a publish of a draft
+/// (`gmail.send_draft`) stays gated.
+pub fn makes_a_draft(tool: &str) -> bool {
+    let Some((_, f)) = tool.rsplit_once('.') else { return false };
+    let f = f.to_ascii_lowercase();
+    let words: Vec<&str> = f.split(|c: char| !c.is_ascii_alphanumeric()).filter(|w| !w.is_empty()).collect();
+    let draft = words.iter().any(|w| matches!(*w, "draft" | "drafts"));
+    let makes = words.iter().any(|w| matches!(*w, "create" | "save" | "update" | "edit" | "new" | "make" | "write" | "draft"));
+    let leaves = words.iter().any(|w| {
+        matches!(*w, "send" | "sends" | "delete" | "remove" | "trash" | "publish" | "post" | "schedule" | "share" | "forward" | "reply" | "submit")
+    });
+    draft && makes && !leaves
+}
+
+/// Where a draft tool puts it, for the card: `gmail.create_draft` → Gmail.
+fn draft_place(tool: &str) -> String {
+    let svc = tool.split('.').next().unwrap_or(tool);
+    match svc.to_ascii_lowercase().as_str() {
+        "gmail" => "Gmail".into(),
+        "outlook" | "outlook_mail" => "Outlook".into(),
+        "kit" => "Kit".into(),
+        "slack" => "Slack".into(),
+        s => s.to_string(),
+    }
+}
+
 /// The checker is off: an open part is a card (design §3).
 pub const CHECKER_OFF: &str = "the checker is off, so commands ask first.";
 
@@ -209,6 +243,17 @@ pub fn judge_with(
     fs: &dyn Fs,
 ) -> Verdict {
     let tool = call.tool.as_str();
+    if makes_a_draft(tool) {
+        // a draft leaves nothing, but not before his word on the page
+        // that has it (ambient-lead m_5423, after pm's 7 early drafts)
+        return match &call.pending_review {
+            None => Verdict::Allow { tier: 1 },
+            Some(page) => Verdict::Card {
+                reason: format!("{} wants to put drafts in {} before you reviewed {page}", call.agent, draft_place(tool)),
+                always: None,
+            },
+        };
+    }
     if NEVER_GATED.contains(&tool) || tool.starts_with("self.") {
         return Verdict::Allow { tier: 1 };
     }

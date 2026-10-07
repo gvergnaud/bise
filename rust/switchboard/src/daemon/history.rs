@@ -58,10 +58,11 @@ impl Shell {
         let Some(dir) = self.dir_of(&name) else {
             return json!({"ok": false, "error": format!("no agent named {}", target)});
         };
-        let raw = transcript::read(&self.transcript(&dir));
-        let all = transcript::entries(&raw);
+        let path = self.transcript(&dir);
         let now = now_ms();
         if v.get("origin") == Some(&json!(true)) {
+            let raw = transcript::read(&path);
+            let all = transcript::entries(&raw);
             let Some(me) = self.hub.st.agents.get(from) else {
                 return json!({"ok": false, "error": "--origin: unknown calling agent"});
             };
@@ -74,27 +75,7 @@ impl Shell {
                 }
             };
         }
-        let pos = |k: &str| transcript::parse_pos(&s(k));
-        let anchor = if let Some(p) = pos("at") {
-            Anchor::At(p)
-        } else if let Some(p) = pos("around") {
-            Anchor::Around(p)
-        } else if let Some(p) = pos("before") {
-            Anchor::Before(p)
-        } else if let Some(p) = pos("after") {
-            Anchor::After(p)
-        } else {
-            Anchor::Tail
-        };
-        let limit = v
-            .get("last")
-            .and_then(|x| x.as_u64())
-            .map(|n| n as usize)
-            .unwrap_or(transcript::DEFAULT_LIMIT);
-        let query = s("query");
-        let words = transcript::words_of(&query);
-        let page = transcript::window(&all, &words, anchor, limit, transcript::BUDGET);
-        json!({"ok": true, "text": transcript::render_page(&name, &query, &page, now)})
+        inspect_page(&name, &path, v, now)
     }
 
     /// `sb history` and `sb show` (BISE-233): the index reads what the
@@ -116,6 +97,38 @@ impl Shell {
     }
 }
 
+/// `sb inspect`'s page of the thread at `path` (agent `name`): the
+/// anchor and limit of request `v` (stream C reads another hub's the same
+/// way).
+pub(super) fn inspect_page(name: &str, path: &Path, v: &Value, now: u64) -> Value {
+    let s = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
+    let raw = transcript::read(path);
+    let all = transcript::entries(&raw);
+    {
+        let pos = |k: &str| transcript::parse_pos(&s(k));
+        let anchor = if let Some(p) = pos("at") {
+            Anchor::At(p)
+        } else if let Some(p) = pos("around") {
+            Anchor::Around(p)
+        } else if let Some(p) = pos("before") {
+            Anchor::Before(p)
+        } else if let Some(p) = pos("after") {
+            Anchor::After(p)
+        } else {
+            Anchor::Tail
+        };
+        let limit = v
+            .get("last")
+            .and_then(|x| x.as_u64())
+            .map(|n| n as usize)
+            .unwrap_or(transcript::DEFAULT_LIMIT);
+        let query = s("query");
+        let words = transcript::words_of(&query);
+        let page = transcript::window(&all, &words, anchor, limit, transcript::BUDGET);
+        json!({"ok": true, "text": transcript::render_page(name, &query, &page, now)})
+    }
+}
+
 /// `sb history` and `sb show` over the threads of `agents_dir` (a hub's
 /// `<state>/agents`) and its agents `who`: `index` reads what the
 /// transcripts got since its last refresh, then answers `cmd` ("show",
@@ -123,6 +136,12 @@ impl Shell {
 pub(super) fn answer(index: &mut search::Index, agents_dir: &Path, who: &[search::Who], cmd: &str, v: &Value, now: u64) -> Value {
     let t0 = std::time::Instant::now();
     index.refresh(agents_dir);
+    respond(index, who, cmd, v, now, t0)
+}
+
+/// `answer` on an index already refreshed (stream C refreshes its own,
+/// prefixed: xread.rs).
+pub(super) fn respond(index: &search::Index, who: &[search::Who], cmd: &str, v: &Value, now: u64, t0: std::time::Instant) -> Value {
     let s = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
     let n = |k: &str, d: usize| v.get(k).and_then(|x| x.as_u64()).map_or(d, |x| x as usize);
     let strs = |k: &str| -> Vec<String> {
@@ -147,6 +166,8 @@ pub(super) fn answer(index: &mut search::Index, agents_dir: &Path, who: &[search
             },
             limit: n("limit", search::DEFAULT_HITS),
             page: n("page", 1),
+            scope: Some(s("scope")).filter(|p| !p.is_empty()),
+            all: v.get("all") == Some(&json!(true)),
         };
         index.search(who, &q, now)
     };

@@ -1,0 +1,119 @@
+/* bise kit · the note layer's looks (notes.js). Role tokens only (docs/ambient-pages.md §3.1,
+   amb-kit's tokens.css): bise's own chrome is on --surface-talk with its --talk-ink, --talk-dim
+   and --talk-accent; your marks in --pen. The
+   fallbacks after each var() only keep the layer readable before tokens.css loads. */
+
+.bn-ui { font-family: var(--font-ui, -apple-system, BlinkMacSystemFont, sans-serif); color: var(--ink, #1d1a19); box-sizing: border-box; }
+.bn-ui *, .bn-ui *::before { box-sizing: border-box; }
+.bn-ui button { font: inherit; color: inherit; cursor: pointer; }
+
+/* your marks on the page: a highlight (CSS Custom Highlight API), the blocks you noted or edited */
+::highlight(bise-note) { background-color: color-mix(in srgb, var(--pen, #c8264a) 18%, transparent); }
+::highlight(bise-note-sent) { background-color: color-mix(in srgb, var(--pen, #c8264a) 8%, transparent); }
+#bise-page [data-kit][data-id].bn-has { box-shadow: -3px 0 0 color-mix(in srgb, var(--pen, #c8264a) 55%, transparent); }
+/* edit in place: prose, a message, an email, a review's item */
+#bise-page .bn-editing { outline: 1.5px dashed var(--pen, #c8264a); outline-offset: 6px; border-radius: 2px; }
+#bise-page .bn-edited { box-shadow: -3px 0 0 var(--pen, #c8264a); }
+html.bn-pinning #bise-page [data-kit][data-id] { cursor: crosshair; }
+/* a diff's rows picked by their numbers (notelines.js), while the toolbar or the note is open */
+/* each row keeps its own diff tint (red −, green +): the pick is the pen's rail, a 1 px pen outline
+   around the run (data-bn-line="first" / "last" on its ends) and the numbers in the pen (designer
+   m_7870, ambient m_7871: a pen veil turned the + row grey) */
+#bise-page .k-dl[data-bn-line] { box-shadow: inset 3px 0 0 var(--pen, #c8264a), inset -1px 0 0 var(--pen, #c8264a); }
+#bise-page .k-dl[data-bn-line~="first"] { box-shadow: inset 3px 0 0 var(--pen, #c8264a), inset -1px 0 0 var(--pen, #c8264a), inset 0 1px 0 var(--pen, #c8264a); }
+#bise-page .k-dl[data-bn-line~="last"] { box-shadow: inset 3px 0 0 var(--pen, #c8264a), inset -1px 0 0 var(--pen, #c8264a), inset 0 -1px 0 var(--pen, #c8264a); }
+#bise-page .k-dl[data-bn-line="first last"] { box-shadow: inset 3px 0 0 var(--pen, #c8264a), inset 0 0 0 1px var(--pen, #c8264a); }
+#bise-page .k-dl[data-bn-line]::before, #bise-page .k-dl[data-bn-line]::after { color: var(--pen, #c8264a); }
+
+/* the side list: `notes for weekly update · 3` */
+.bn-list {
+  /* as tall as its notes, never more than the window (ambient, m_4919 (5)): the keys right under the last note */
+  position: fixed; right: 16px; top: 72px; max-height: calc(100vh - 72px - 84px); width: 300px; display: none; flex-direction: column;
+  background: var(--surface-talk, #1d1a19ee); color: var(--talk-ink, var(--ink, #fff));
+  border-radius: var(--radius, 16px); box-shadow: inset 0 0 0 1px var(--rule, #ffffff22), 0 14px 34px -10px #0006;
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); z-index: 2147483000; overflow: hidden;
+}
+.bn-list.bn-on { display: flex; }
+.bn-head { padding: 14px 16px 8px; font: 12px var(--font-mono, ui-monospace, monospace); color: var(--talk-dim, #ffffffa0); }
+.bn-items { list-style: none; margin: 0; padding: 0 8px; overflow-y: auto; flex: 0 1 auto; min-height: 0; }
+.bn-item { position: relative; padding: 9px 30px 9px 10px; border-radius: var(--radius-small, 10px); cursor: pointer; }
+.bn-item:hover { background: color-mix(in srgb, var(--talk-ink, #fff) 7%, transparent); }
+.bn-where { font: 11.5px var(--font-mono, ui-monospace, monospace); color: var(--talk-dim, #ffffff70); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bn-what { font-size: 14px; line-height: 1.35; margin-top: 2px; }
+.bn-draft .bn-what { color: var(--pen, #c8264a); }
+.bn-tag { font: 11px var(--font-mono, ui-monospace, monospace); color: var(--talk-dim, #ffffffa0); margin-top: 3px; }
+/* rose is only for what needs you: done is dim, its ✓ olive (ambient, m_4919 (4)); a drawing's ✎ is the pen (m_4926) */
+.bn-tag-done { color: var(--talk-dim, #ffffffa0); }
+.bn-tag-done .bn-glyph { color: var(--ok, #b9d99a); }
+.bn-what .bn-glyph { color: var(--pen, #c8264a); }
+/* the agent's answer is a reply: its name dim, its words, then a field for yours; the note stays open */
+.bn-reply { margin-top: 6px; font-size: 13.5px; line-height: 1.4; color: var(--talk-ink, var(--ink, #fff)); }
+.bn-reply-by { color: var(--talk-dim, #ffffffa0); }
+.bn-reply-field { display: block; width: 100%; margin-top: 6px; padding: 5px 8px; border: 0; outline: 0; border-radius: var(--radius-small, 10px); background: color-mix(in srgb, var(--talk-ink, #fff) 8%, transparent); color: var(--talk-ink, #fff); font: 13px var(--font-ui, sans-serif); caret-color: var(--pen, #c8264a); }
+/* taste: `keep this for next time?  yes  no`, once, under a note that states a preference */
+.bn-taste { margin-top: 5px; font-size: 12.5px; color: var(--talk-dim, #ffffffa0); }
+.bn-taste-btn { border: 0; background: none; padding: 1px 6px; margin-left: 2px; border-radius: var(--radius-small, 10px); font-size: 12.5px; color: var(--talk-ink, #fff); }
+.bn-taste-btn:hover { background: color-mix(in srgb, var(--talk-ink, #fff) 10%, transparent); }
+.bn-reply-field::placeholder, .bn-input::placeholder { color: var(--talk-dim, #ffffff70); }
+.bn-tag-moved, .bn-moved .bn-where { color: var(--talk-dim, #ffffff70); font-style: italic; }
+.bn-x { position: absolute; right: 6px; top: 7px; width: 22px; height: 22px; border: 0; background: none; color: var(--talk-dim, #ffffff70); border-radius: 50%; }
+.bn-x:hover { color: var(--talk-ink, #fff); background: color-mix(in srgb, var(--talk-ink, #fff) 10%, transparent); }
+.bn-empty { padding: 10px; color: var(--talk-dim, #ffffffa0); font-size: 13px; }
+.bn-keys { padding: 8px 16px 12px; font: 11px var(--font-mono, ui-monospace, monospace); color: var(--talk-dim, #ffffff70); }
+/* a row of keys wraps between pairs, a pair never breaks (ambient m_7871: it was clipped) */
+.bn-keyrow { display: flex; flex-wrap: wrap; column-gap: 3ch; }
+.bn-key { white-space: pre; }
+
+/* the send bar: `3 notes for weekly update · or just say "send"` */
+.bn-bar {
+  position: fixed; right: 16px; bottom: 16px; display: none; align-items: center; gap: 12px; padding: 9px 9px 9px 18px;
+  background: var(--surface-talk, #1d1a19ee); color: var(--talk-ink, var(--ink, #fff)); border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--rule, #ffffff22), 0 14px 34px -10px #0006; font-size: 13.5px;
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); z-index: 2147483001;
+}
+.bn-bar.bn-on { display: flex; animation: bn-rise .5s var(--ease-arrive, cubic-bezier(.16, 1, .3, 1)) both; }
+.bn-send { border: 0; border-radius: 999px; padding: 6px 16px; font-weight: 600; background: var(--talk-accent, #f4a6b0); color: var(--on-accent, #141211); }
+.bn-send:disabled { opacity: .45; cursor: default; }
+.bn-bar.bn-error .bn-bar-text { color: var(--pen, #c8264a); }
+
+/* without a mouse: the block or item tab reached, and the layer's own buttons, get a visible ring
+   in the page's ink (never the accent: rose is for what waits for him) */
+#bise-page [data-kit][data-id]:focus-visible, #bise-page li[data-id][tabindex]:focus-visible { outline: 2px solid var(--ink, #1d1a19); outline-offset: 6px; border-radius: var(--radius-small, 6px); }
+.bn-ui button:focus-visible, .bn-ui input:focus-visible, .bn-ui textarea:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+/* the toolbar over a selection or a block, and the composer */
+.bn-tools { position: absolute; display: none; gap: 2px; padding: 4px; border-radius: 999px; background: var(--surface-talk, #1d1a19ee); color: var(--talk-ink, #fff); box-shadow: 0 8px 24px -8px #0008; z-index: 2147483002; }
+.bn-tools.bn-on { display: flex; animation: bn-pop .3s var(--ease-pop, cubic-bezier(.34, 1.56, .5, 1)) both; }
+.bn-tool { border: 0; background: none; padding: 4px 10px; border-radius: 999px; font-size: 13px; }
+.bn-tool:hover { background: color-mix(in srgb, var(--talk-ink, #fff) 12%, transparent); }
+/* the composer: the list's last row, so a note you type never covers the page */
+.bn-composer { display: none; margin: 4px 8px 0; padding: 9px 10px; border-radius: var(--radius-small, 10px); background: color-mix(in srgb, var(--talk-ink, #fff) 7%, transparent); }
+.bn-composer.bn-on { display: block; animation: bn-rise .4s var(--ease-arrive, cubic-bezier(.16, 1, .3, 1)) both; }
+.bn-composer .bn-input { margin-top: 3px; }
+.bn-input { width: 100%; resize: none; border: 0; outline: 0; background: transparent; color: var(--talk-ink, #fff); font: 14px/1.4 var(--font-ui, sans-serif); caret-color: var(--pen, #c8264a); }
+
+/* pins: your numbered marks, in pen */
+.bn-pins { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 2147482999; }
+.bn-pin { position: absolute; width: 24px; height: 24px; margin: -24px 0 0 -2px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: var(--pen, #c8264a); color: #fff; display: grid; place-items: center; font: 600 11px var(--font-ui, sans-serif); box-shadow: 0 6px 14px -4px #0008; }
+.bn-pin.bn-sent, .bn-pin.bn-done, .bn-pin.bn-answered { opacity: .5; }
+/* a voice note while you talk: the pin breathes, your words land beside it */
+.bn-pin.bn-listening { animation: bn-breathe 1.2s ease-in-out infinite; }
+@keyframes bn-breathe { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--pen, #c8264a) 25%, transparent), 0 6px 14px -4px #0008; } }
+.bn-bubble { position: absolute; width: 260px; padding: 9px 12px; border-radius: var(--radius-small, 10px); background: var(--surface-talk, #1d1a19ee); color: var(--talk-ink, #fff); box-shadow: 0 14px 34px -10px #0008; font-size: 14px; line-height: 1.4; animation: bn-rise .4s var(--ease-arrive, cubic-bezier(.16, 1, .3, 1)) both; }
+.bn-by { font: 11px var(--font-mono, ui-monospace, monospace); color: var(--pen, #c8264a); margin-bottom: 2px; }
+
+/* drawing: d, then the mouse or the pen; your strokes in pen, over the page */
+.bn-ink { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; z-index: 2147482998; }
+.bn-stroke { fill: none; stroke: var(--pen, #c8264a); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.bn-stroke.bn-sent, .bn-stroke.bn-done, .bn-stroke.bn-answered { opacity: .45; }
+.bn-drawpad { position: fixed; inset: 0; display: none; cursor: crosshair; touch-action: none; z-index: 2147482997; }
+html.bn-drawing .bn-drawpad { display: block; }
+.bn-drawhint { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); display: none; padding: 7px 14px; border-radius: 999px; background: var(--surface-talk, #1d1a19ee); color: var(--talk-dim, #ffffffa0); font: 12px var(--font-mono, ui-monospace, monospace); white-space: pre; z-index: 2147483001; }
+html.bn-drawing .bn-drawhint { display: block; }
+
+@keyframes bn-rise { from { opacity: 0; transform: translateY(8px); } }
+@keyframes bn-pop { from { opacity: 0; transform: scale(.85); } }
+@media (prefers-reduced-motion: reduce) { .bn-ui, .bn-ui * { animation: none !important; transition: none !important; } }
+
+/* the frame's pearl (round 8): bise's body in the page's bar, drawn by notes.js with /kit/pearl.js */
+.bn-pearl { display: block; }

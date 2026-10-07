@@ -8,6 +8,7 @@
 //! - `hub.sock` (clients: the TUI, the desktop's core, tests): `hello`
 //!   only from a process that is not an agent's ([`judge`]; a peer whose
 //!   process is gone is refused), `notice` unless it is proven an agent's;
+//!   `xin`/`xreply`/`xfollow` (hub to hub, judged like `hello`);
 //!   `ping`; and, until the release after v2026.10.2-25, agent requests
 //!   from REPLs adopted from an older hub, whose `SB_SOCKET` is still
 //!   hub.sock (a shim, logged per request).
@@ -55,6 +56,9 @@ pub fn access(sock: Sock, op: &str) -> Access {
         (Sock::Agent, "agent" | "version") => Access::Agent,
         (Sock::Client, "agent" | "version") => Access::Shim,
         (Sock::Client, "hello" | "notice") => Access::User,
+        // hub to hub (desktop S2, `daemon/xhub.rs`): bise's hub and a
+        // project's hub talk on each other's hub.sock, as the user's
+        (Sock::Client, "xin" | "xreply" | "xfollow") => Access::User,
         _ => Access::No,
     }
 }
@@ -190,11 +194,14 @@ mod tests {
         assert_eq!(access(Sock::Agent, "agent"), Access::Agent);
         assert_eq!(access(Sock::Agent, "version"), Access::Agent);
         assert_eq!(access(Sock::Agent, "ping"), Access::Open);
-        for op in ["hello", "notice", "stop_hub", ""] {
+        for op in ["hello", "notice", "stop_hub", "xin", "xreply", "xfollow", ""] {
             assert_eq!(access(Sock::Agent, op), Access::No, "{op}");
         }
         assert_eq!(access(Sock::Client, "hello"), Access::User);
         assert_eq!(access(Sock::Client, "notice"), Access::User);
+        for op in ["xin", "xreply", "xfollow"] {
+            assert_eq!(access(Sock::Client, op), Access::User, "{op}");
+        }
         assert_eq!(access(Sock::Client, "ping"), Access::Open);
         assert_eq!(access(Sock::Client, "agent"), Access::Shim);
         assert_eq!(access(Sock::Client, "version"), Access::Shim);

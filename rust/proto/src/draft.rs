@@ -452,12 +452,27 @@ pub enum CoreEv {
     /// sent on `index`, then on change at most every 5 s (a held project
     /// is never in it: its live events say the same)
     Index { projects: Vec<IndexRow> },
+    /// R8 (the TUI's sb.rs /model): his `/model <model>` in `agent`'s
+    /// view needs `provider`'s key: the line is held, not sent; the window
+    /// opens that provider's setup (`name` for people). It runs once the
+    /// provider works (its `cid` answered as any slash), or is dropped by
+    /// `setup_first_cancel`, the window that sent it closing, the project
+    /// removed, or the core restarting
+    SetupFirst {
+        project: Project,
+        agent: String,
+        provider: String,
+        name: String,
+        model: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cid: Option<u64>,
+    },
     #[serde(skip)]
     Unknown { tag: String, raw: Value },
 }
 
 impl CoreEv {
-    pub const TAGS: &'static [&'static str] = &["projects", "open", "prefs", "accounts", "signing", "found", "away_summary", "plugins", "computer_use", "level", "heard", "dictation", "voice_mode", "voice_answer", "commands", "skills", "files", "roles", "app_update", "hub_refused", "index"];
+    pub const TAGS: &'static [&'static str] = &["projects", "open", "prefs", "accounts", "signing", "found", "away_summary", "plugins", "computer_use", "level", "heard", "dictation", "voice_mode", "voice_answer", "commands", "skills", "files", "roles", "app_update", "hub_refused", "index", "setup_first"];
 
     pub fn decode(line: &str) -> Result<CoreEv, String> {
         decode(parse(line)?, "ev", Self::TAGS, |tag, raw| CoreEv::Unknown { tag, raw })
@@ -630,6 +645,14 @@ pub enum AppCmd {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         limit: Option<u32>,
     },
+    /// R14: he took `path` (as `files` answered it) from a workspace's
+    /// `@` list: it ranks first in that list's next answers (the TUI's
+    /// memory, per workspace, in the core's memory). A folder is browsed,
+    /// never picked
+    FilePicked { project: Project, path: String },
+    /// R8: the setup a `setup_first` opened closed without the provider
+    /// working: the held `/model` line is dropped
+    SetupFirstCancel,
     #[serde(skip)]
     Unknown { tag: String, raw: Value },
 }
@@ -681,6 +704,8 @@ impl AppCmd {
         "index",
         "skills",
         "files",
+        "file_picked",
+        "setup_first_cancel",
         "setup_check",
         "role_set",
     ];

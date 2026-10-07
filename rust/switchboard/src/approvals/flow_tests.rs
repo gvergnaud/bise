@@ -17,6 +17,7 @@ fn call(cmd: &str, flow: Option<FlowRules>) -> Call {
         bise: "/h/.bise".into(),
         edit_tool: "edit".into(),
         flow,
+        pending_review: None,
     }
 }
 

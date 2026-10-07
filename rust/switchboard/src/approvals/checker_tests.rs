@@ -26,6 +26,7 @@ fn call(tool: &str, args: Value) -> Call {
         bise: "/h/.bise".into(),
         edit_tool: "edit".into(),
         flow: None,
+        pending_review: None,
     }
 }
 

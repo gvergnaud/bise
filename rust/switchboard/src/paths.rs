@@ -17,37 +17,42 @@ pub struct Paths {
     pub worktrees: PathBuf,
 }
 
-/// FNV-1a, 64 bits: a stable id for a workspace path.
-fn fnv1a(s: &str) -> u64 {
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in s.bytes() {
-        h ^= b as u64;
-        h = h.wrapping_mul(0x0100_0000_01b3);
-    }
-    h
+/// The hub id of a workspace: `bise_home::hub_id` (one owner).
+pub fn workspace_id(workspace: &Path) -> String {
+    bise_home::hub_id(workspace)
 }
 
-pub fn workspace_id(workspace: &Path) -> String {
-    let base = workspace
-        .file_name()
-        .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_else(|| "root".to_string());
-    let base: String = base
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
-                c
-            } else {
-                '-'
-            }
-        })
-        .take(32)
-        .collect();
-    format!(
-        "{}-{:08x}",
-        base,
-        fnv1a(&workspace.to_string_lossy()) as u32
-    )
+/// The home workspace (docs/ambient-pages.md §5.1): `~/bise`, a plain
+/// folder without git for non-code work; `$BISE_HOME_WORKSPACE` when set
+/// (the tests: a throwaway folder, never the user's).
+pub fn home_workspace() -> PathBuf {
+    if let Some(d) = bise_home::env::test_setting("BISE_HOME_WORKSPACE") {
+        return PathBuf::from(d);
+    }
+    let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
+    home.join("bise")
+}
+
+/// `ws` is the home workspace: its hub's main is bise (bise desktop S2,
+/// architect m_8474: the one flag, nothing written, nothing in sb-core).
+pub fn is_home(ws: &Path) -> bool {
+    let canon = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    canon(ws) == canon(&home_workspace())
+}
+
+/// Whether `ws` is in bise's projects registry (bise_home::projects, which
+/// the desktop app writes when it shows a project): one of the two facts
+/// of prompts::desktop_on, read once when a prompt is built.
+pub fn is_registered(ws: &Path) -> bool {
+    let ws = bise_home::projects::canonical(ws);
+    bise_home::projects::read(&bise_home::Home::from_env()).iter().any(|p| bise_home::projects::canonical(&p.path) == ws)
+}
+
+/// The home workspace, created on first use (never git-initialised).
+pub fn ensure_home_workspace() -> std::io::Result<PathBuf> {
+    let d = home_workspace();
+    std::fs::create_dir_all(&d)?;
+    Ok(d)
 }
 
 impl Paths {
@@ -142,6 +147,17 @@ mod tests {
         assert_eq!(workspace_id(Path::new("/Users/me/lab/harness")), "harness-af1b2326");
         assert_eq!(workspace_id(Path::new("/tmp/my repo")), "my-repo-b50e38fe");
         assert_eq!(workspace_id(Path::new("/")), "root-860189fe");
+    }
+
+    /// The one flag of bise's role (architect m_8474): the home workspace,
+    /// by its canonical path (a trailing slash or a symlink to it counts),
+    /// never another folder.
+    #[test]
+    fn only_the_home_workspace_is_home() {
+        let home = home_workspace();
+        assert!(is_home(&home));
+        assert!(is_home(&home.join(".")));
+        assert!(!is_home(&home.join("projects")) && !is_home(Path::new("/")));
     }
 
     #[test]

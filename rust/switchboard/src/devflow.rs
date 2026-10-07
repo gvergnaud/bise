@@ -390,6 +390,15 @@ fn check_line(f: &Flow) -> String {
     }
 }
 
+/// main's Flow section in a workspace without git (the home workspace,
+/// docs/ambient-pages.md §5.1, where bise's own section comes first:
+/// prompts::bise_role): one place, nothing to ship.
+pub const NO_GIT_SECTION: &str = "## Workspace
+
+- This workspace is a plain folder without git. Every task works here, in the shared folder: no worktrees, branches, PRs, `sb land`, `sb feature` or `sb flow` (they answer \"not in a repo\"). Files stay as the agents save them.
+- Don't use the words repo, branch, worktree or PR with the user here.
+- Two tasks that would write the same file: give them different files, or one after the other.";
+
 /// The Flow section of main's prompt (dev-flow §6 "Main's prompt");
 /// None: the flow is not known yet.
 pub fn main_section(f: Option<&Flow>, style: Option<&str>) -> String {

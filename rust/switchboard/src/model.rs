@@ -5,6 +5,7 @@
 //! the core from REPL activity and are never journaled.
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The name of the orchestrator agent. Never a task name.
@@ -163,6 +164,8 @@ pub struct Agent {
     pub files: BTreeSet<String>,
     /// A drop saved work here (RFC 0002 §5.2).
     pub snapshot_ref: Option<String>,
+    /// bise desktop S10: someone follows it (one job: off at its job_end)
+    pub follow: bool,
     // ---- runtime only ----
     pub run: Run,
     /// Inside `sb wait` (its bash call is blocked on the hub).
@@ -221,6 +224,14 @@ pub struct Report {
     /// Built by the hub at the end of a turn, not sent by the agent.
     #[serde(default)]
     pub auto: bool,
+    /// S10: `sb report progress --step n/m`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub of: Option<u32>,
+    /// emitter 5: `--result`, proto's DiffResult as JSON
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result: Option<Value>,
 }
 
 /// A message between two parties of the group (RFC 0003). The sender or
@@ -353,6 +364,7 @@ impl State {
                 last_report: None,
                 aliases: Vec::new(),
                 files: BTreeSet::new(),
+                follow: false,
                 snapshot_ref: None,
                 run: Run::Down,
                 waiting: false,

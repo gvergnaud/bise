@@ -96,36 +96,9 @@ impl Shell {
                 self.artifacts_refresh(true);
             }
             "add" => {
-                let agent = match s("agent") {
-                    a if a.is_empty() => MAIN.to_string(),
-                    a => a,
-                };
-                let cwd = self
-                    .hub
-                    .st
-                    .agents
-                    .get(&agent)
-                    .map(|a| self.art_where(a))
-                    .map(|w| match w {
-                        Where::Checkout { dir, .. } | Where::Shared { dir, .. } => dir.to_string_lossy().to_string(),
-                    })
-                    .unwrap_or_else(|| self.hub.workspace.clone());
-                let add = Add {
-                    target: s("target"),
-                    title: Some(s("title")).filter(|t| !t.trim().is_empty()),
-                    kind: None,
-                    agent,
-                    by: "you".into(),
-                    cwd,
-                };
-                let ev = match self.art_store().add(&add, now_ms()) {
-                    Ok(a) => {
-                        let text = format!("↗ added: {}", a.meta.title);
-                        if a.new_version {
-                            self.art_lines(&a);
-                        }
-                        json!({"ev": "notice", "text": text})
-                    }
+                let title = Some(s("title")).filter(|t| !t.trim().is_empty());
+                let ev = match self.art_add(&s("agent"), &s("target"), title) {
+                    Ok(text) => json!({"ev": "notice", "text": text}),
                     Err(e) => json!({"ev": "warn", "text": format!("▲ {}", e)}),
                 };
                 if let Some(c) = self.clients.get_mut(&id) {
@@ -141,6 +114,34 @@ impl Shell {
                 }
             }
         }
+    }
+
+    /// `/artifacts add <path or link>` by the user in `agent`'s view (the
+    /// TUI's `artifacts` op and the window's `slash`): the store's add,
+    /// its thread lines, and the words for the one who asked (`↗ added:
+    /// <title>`) or the store's refusal. The caller sends them and then
+    /// `artifacts_refresh(true)`.
+    pub(super) fn art_add(&mut self, agent: &str, target: &str, title: Option<String>) -> Result<String, String> {
+        let agent = match agent {
+            "" => MAIN.to_string(),
+            a => a.to_string(),
+        };
+        let cwd = self
+            .hub
+            .st
+            .agents
+            .get(&agent)
+            .map(|a| self.art_where(a))
+            .map(|w| match w {
+                Where::Checkout { dir, .. } | Where::Shared { dir, .. } => dir.to_string_lossy().to_string(),
+            })
+            .unwrap_or_else(|| self.hub.workspace.clone());
+        let add = Add { target: target.to_string(), title, kind: None, agent, by: "you".into(), cwd };
+        let a = self.art_store().add(&add, now_ms())?;
+        if a.new_version {
+            self.art_lines(&a);
+        }
+        Ok(format!("↗ added: {}", a.meta.title))
     }
 
     /// `sb artifact add|list` (an agent's request).
@@ -256,13 +257,60 @@ impl Shell {
     /// The `diff` op: an agent's changes, a branch, a range or a PR,
     /// answered with a `diff` event to that client.
     pub(super) fn diff_op(&mut self, id: ClientId, v: &Value) {
-        let s = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
         let req = v.get("req").cloned().unwrap_or(Value::Null);
+        let shared = PathBuf::from(&self.hub.workspace);
+        let ask = self.diff_ask(v);
+        let tx = self.tx.clone();
+        std::thread::spawn(move || {
+            let ev = diff_answer(ask, &shared, req);
+            let _ = tx.send(Msg::ToClient { id, v: ev });
+        });
+    }
+
+    /// The typed `diff {project, agent}` (desktop S7): the same answer as
+    /// the op, in bise-proto's shape (`proto_view::diff`), to that client.
+    pub(super) fn diff_typed(&mut self, id: ClientId, project: String, agent: String, commit: Option<String>) {
+        let shared = PathBuf::from(&self.hub.workspace);
+        // one commit: the range ask the TUI's door under a land uses
+        let ask = match &commit {
+            Some(c) => self.diff_ask(&json!({"agent": agent, "range": format!("{c}^..{c}")})),
+            None => self.diff_ask(&json!({"agent": agent})),
+        };
+        // emitter 5: what its change measured (`sb report --result`), from
+        // its latest report
+        let result = self.hub.st.agents.get(&agent).and_then(|a| a.last_report.as_ref()).and_then(|r| r.result.clone());
+        let tx = self.tx.clone();
+        std::thread::spawn(move || {
+            let mut ev = diff_answer(ask, &shared, Value::Null);
+            // a binary file's size, read here (the mapper stays pure):
+            // its file in the agent's checkout, when it is still there
+            for f in ev.get_mut("files").and_then(Value::as_array_mut).into_iter().flatten() {
+                let abs = f.get("abs").and_then(Value::as_str).map(PathBuf::from);
+                if f["binary"] == true {
+                    if let Some(m) = abs.and_then(|p| std::fs::metadata(p).ok()).filter(|m| m.is_file()) {
+                        f["size"] = json!(m.len());
+                    }
+                }
+            }
+            let mut typed = crate::proto_view::diff(&ev, &project, &agent);
+            // the answer says which commit it is (not the live change)
+            if let bise_proto::hub::HubEv::Diff { commit: c, result: r, .. } = &mut typed {
+                *c = commit;
+                *r = result.and_then(|v| serde_json::from_value(v).ok()).map(Box::new);
+            }
+            let _ = tx.send(Msg::ToClient { id, v: typed.to_value() });
+        });
+    }
+
+    /// What a diff request asks: an agent's changes, a branch, a range or
+    /// a PR.
+    fn diff_ask(&self, v: &Value) -> Ask {
+        let s = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
         let shared = PathBuf::from(&self.hub.workspace);
         // a range first: the door under a landed line names its agent
         // too (for the title), and must show that land, never the
         // agent's branch vs today's main (empty once landed)
-        let ask = if !s("range").is_empty() {
+        if !s("range").is_empty() {
             Ask::Range(s("range"), s("agent"))
         } else if !s("agent").is_empty() {
             match self.hub.st.agents.get(&s("agent")).or_else(|| {
@@ -288,12 +336,7 @@ impl Shell {
             Ask::Pr(n)
         } else {
             Ask::Bad("diff: agent, branch, range or pr".into())
-        };
-        let tx = self.tx.clone();
-        std::thread::spawn(move || {
-            let ev = diff_answer(ask, &shared, req);
-            let _ = tx.send(Msg::ToClient { id, v: ev });
-        });
+        }
     }
 
     /// The `branches` op: the /diff picker's rows.

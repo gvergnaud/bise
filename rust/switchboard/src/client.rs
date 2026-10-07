@@ -14,6 +14,8 @@ use std::time::{Duration, Instant};
 pub fn start_hub(paths: &Paths, exe: &Path, app_root: &Path) -> std::io::Result<()> {
     use std::os::unix::process::CommandExt;
     std::fs::create_dir_all(&paths.state)?;
+    // a whole test run's jail (BISE_TEST_HOME): never a hub outside it
+    jailed(paths)?;
     let err = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -31,6 +33,16 @@ pub fn start_hub(paths: &Paths, exe: &Path, app_root: &Path) -> std::io::Result<
         .stderr(Stdio::from(err))
         .process_group(0)
         .spawn()?;
+    Ok(())
+}
+
+/// Under BISE_TEST_HOME (bise_home::test_home::jail): the hub's workspace
+/// and state dir must be inside it, else an error and no hub. Used by every
+/// path that starts a hub (here, switch.rs, xhub through here) and by sbd.
+pub fn jailed(paths: &Paths) -> std::io::Result<()> {
+    for p in [&paths.workspace, &paths.state] {
+        bise_home::test_home::jail(p).map_err(std::io::Error::other)?;
+    }
     Ok(())
 }
 

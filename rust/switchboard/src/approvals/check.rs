@@ -381,16 +381,23 @@ impl Net for Wire {
             return Err(CheckErr::Transport("no REPL for a chat checker".into()));
         };
         let dir = self.run_dir.clone().unwrap_or_else(std::env::temp_dir);
-        let file = dir.join(format!("checker-{}-{}.txt", std::process::id(), now_ms() % 1_000_000_007));
-        let written = std::fs::create_dir_all(&dir).and_then(|_| write_private(&file, request));
-        if let Err(e) = written {
-            return Err(CheckErr::Transport(format!("cannot write the request: {}", e)));
-        }
         let keys = self.spawn_env.map(|f| f()).unwrap_or_default();
-        let got = oneshot(repl, root, &file, model, &keys, timeout);
-        let _ = std::fs::remove_file(&file);
-        got
+        ask_once(repl, root, &dir, request, model, &keys, timeout)
     }
+}
+
+/// One request to `model` through the one-shot REPL, killed after
+/// `timeout`: the request in a private file of `dir` (removed after).
+/// The checker's chat call, and the route model's (daemon/routing.rs).
+pub(crate) fn ask_once(repl: &Path, root: &Path, dir: &Path, request: &str, model: &str, keys: &[(String, Option<String>)], timeout: Duration) -> Result<String, CheckErr> {
+    let file = dir.join(format!("checker-{}-{}.txt", std::process::id(), now_ms() % 1_000_000_007));
+    let written = std::fs::create_dir_all(dir).and_then(|_| write_private(&file, request));
+    if let Err(e) = written {
+        return Err(CheckErr::Transport(format!("cannot write the request: {}", e)));
+    }
+    let got = oneshot(repl, root, &file, model, keys, timeout);
+    let _ = std::fs::remove_file(&file);
+    got
 }
 
 fn write_private(file: &Path, text: &str) -> std::io::Result<()> {

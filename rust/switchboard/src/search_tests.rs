@@ -273,3 +273,37 @@ fn bench_real() {
         println!("{:>16}: {:?}, {} bytes, {}", query, t.elapsed(), out.len(), out.lines().next().unwrap_or(""));
     }
 }
+
+// stream C (S2 step 3): other projects' threads in one index, keyed
+// `<p>/<dir>`; --project scopes it, --all ranks everything together, hits
+// read `<p>/<agent>#<pos>` and the page line keeps the flag
+#[test]
+fn other_projects_share_one_index_and_one_ranking() {
+    let shop = tmp("xshop");
+    let docs = tmp("xdocs");
+    append(&shop, "perf", &[(NOW - 2000, "sb you : why does p99 rise")]);
+    append(&shop, "perf", &[(NOW - 1500, "  obs: assistant: p99 rises from the cold cache")]);
+    append(&docs, "main", &[(NOW - 1000, "sb you : p99 docs page")]);
+    let mut ix = Index::default();
+    ix.refresh_as(&shop, "shop");
+    ix.refresh_as(&docs, "docs");
+    let who = vec![
+        Who { name: "shop/perf".into(), dir: "shop/perf".into(), aliases: vec!["shop/speed".into()], archived: false },
+        Who { name: "docs/main".into(), dir: "docs/main".into(), aliases: vec![], archived: false },
+    ];
+    let all = ix.search(&who, &Query { all: true, ..q("p99") }, NOW).unwrap();
+    assert!(all.starts_with("3 hits") && all.contains("--all"), "{all}");
+    assert!(all.contains("docs/main#1") && all.contains("shop/perf#1") && all.contains("shop/perf#2"), "{all}");
+    let one = ix.search(&who, &Query { scope: Some("shop".into()), limit: 1, ..q("p99") }, NOW).unwrap();
+    assert!(one.starts_with("2 hits") && !one.contains("docs/"), "{one}");
+    assert!(one.contains("--project shop --limit 1 --page 2"), "{one}");
+    // an old name of a project's agent finds its thread
+    let by = ix.search(&who, &Query { agents: vec!["shop/speed".into()], ..q("p99") }, NOW).unwrap();
+    assert!(by.starts_with("2 hits"), "{by}");
+    assert!(ix.show(&who, "shop/perf", 2, 1, NOW).unwrap().contains("cold cache"));
+    // a project that left the registry: its threads go
+    ix.retain_prefixes(&["shop".into()]);
+    assert!(ix.search(&who, &Query { all: true, ..q("p99") }, NOW).unwrap().starts_with("2 hits"));
+    let _ = std::fs::remove_dir_all(&shop);
+    let _ = std::fs::remove_dir_all(&docs);
+}

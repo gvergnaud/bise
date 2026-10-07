@@ -93,6 +93,12 @@ impl Config {
     }
 }
 
+/// Whether `dir` is inside a git work tree (false: the home workspace,
+/// docs/ambient-pages.md §5.1, or no git at all).
+pub fn is_git_dir(dir: &Path) -> bool {
+    git(dir, &["rev-parse", "--is-inside-work-tree"]).is_ok_and(|s| s == "true")
+}
+
 /// Run git in `dir`; stdout trimmed, or the error with stderr.
 pub fn git(dir: &Path, args: &[&str]) -> Result<String, String> {
     git_env(dir, args, &[])
@@ -267,8 +273,14 @@ impl Env for GitEnv {
         self.merged.insert(branch.to_string(), head.to_string());
     }
 
+    fn project_hub(&self, name: &str) -> Result<String, String> {
+        let home = bise_home::Home::from_env();
+        let rows = bise_home::projects::list(&home, &crate::paths::home_workspace());
+        bise_home::projects::target(&rows, name, &crate::paths::workspace_id(self.ws()))
+    }
+
     fn is_git(&self) -> bool {
-        git(self.ws(), &["rev-parse", "--is-inside-work-tree"]).is_ok_and(|s| s == "true")
+        is_git_dir(self.ws())
     }
 
     fn worktree_create(&mut self, name: &str, with_changes: bool) -> Result<Workspace, String> {

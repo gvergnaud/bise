@@ -284,14 +284,27 @@ pub fn branch(dir: &Path, base: &str, br: &str) -> Result<(Vec<File>, usize), St
     Ok((files, commits))
 }
 
-/// A range `from..to` (a land).
+/// git's empty tree (what a root commit is compared with).
+const EMPTY_TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+
+/// A range `from..to` (a land), or `<sha>^..<sha>` (one commit: the
+/// window's "merged · e0f3df5"; a merge commit against its first parent,
+/// a root commit against the empty tree).
 pub fn range(dir: &Path, r: &str) -> Result<(Vec<File>, usize), String> {
     let ok = r.split_once("..").is_some_and(|(a, b)| {
-        let w = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || "/-_.".contains(c));
-        w(a) && w(b.trim_start_matches('.'))
+        let w = |s: &str| !s.is_empty() && !s.starts_with('-') && s.chars().all(|c| c.is_ascii_alphanumeric() || "/-_.".contains(c));
+        w(a.strip_suffix('^').unwrap_or(a)) && w(b.trim_start_matches('.'))
     });
     if !ok {
         return Err(format!("not a range: {}", r));
+    }
+    // a root commit has no parent: against the empty tree, one commit
+    if let Some((a, b)) = r.split_once("..").filter(|(a, _)| a.ends_with('^')) {
+        // `<sha>^^{commit}`: its first parent, as a commit
+        if git(dir, &["rev-parse", "--verify", "-q", &format!("{a}^{{commit}}")]).is_err() {
+            let files = parse(&git(dir, &diff_args(&[EMPTY_TREE, b]))?);
+            return Ok((files, 1));
+        }
     }
     let files = parse(&git(dir, &diff_args(&[r]))?);
     let commits = git(dir, &["rev-list", "--count", r])?.trim().parse().unwrap_or(0);

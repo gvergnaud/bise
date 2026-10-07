@@ -1,0 +1,61 @@
+<section data-kit="heading" data-id="title"><p>feature proposal · the TUI · v1 · for you and main</p><h1>/scheduled: every scheduled task in one screen</h1></section>
+<section data-kit="callout" data-id="summary" data-tone="note"><h3>in short</h3><p>Scheduled tasks (<code>sb every</code>) are only lines in the thread today: you can't see what runs next, or stop one without asking. I propose one screen, <code>/scheduled</code>, drawn below at 150 and 80 columns, in its four states. One choice for you at the end.</p></section>
+
+<section data-kit="heading" data-id="h-screen"><h2>the screen</h2></section>
+<section data-kit="ui" data-id="screen">
+<figure class="k-term" data-ui="term">
+<div data-ui="tabs">
+<div class="k-tabs"><button type="button" data-tab="w150">150 cols</button><button type="button" data-tab="w80">80 cols</button></div>
+<div class="k-pane" data-tab="w150"><div class="k-cells"><div class="k-ln"><span class="t-acc t-b">/scheduled</span>  <span class="t-dim">3 scheduled tasks · next run in 4 min</span>                                 <span class="t-faint">/ search   esc back</span></div>
+<div class="k-ln"> </div>
+<div class="k-ln t-sel"><span class="t-acc">›</span> <span class="t-b">launch-watch   </span>every 10 min · until 18:00    <span class="t-dim">checks HN, Reddit, X for bise.dev       </span><span class="t-faint">next 14:20</span></div>
+<div class="k-ln">  <span class="t-b">morning        </span>every day 07:30               <span class="t-dim">the morning page                        </span><span class="t-faint">tomorrow 07:30</span></div>
+<div class="k-ln">  <span class="t-b">release18      </span>every 1 h · 3 left            <span class="t-dim">ships a release after each batch        </span><span class="t-faint">next 15:00</span></div>
+<div class="k-ln"> </div>
+<div class="k-ln t-raised">  <span class="t-dim">⏎ open its agent   x stop   esc back</span></div></div></div>
+<div class="k-pane" data-tab="w80"><div class="k-cells"><div class="k-ln"><span class="t-acc t-b">/scheduled</span> <span class="t-dim">· 3 · next run in 4 min</span></div>
+<div class="k-ln t-sel"><span class="t-acc">›</span> <span class="t-b">launch-watch  </span>10 min · until 18:00  <span class="t-faint">14:20</span></div>
+<div class="k-ln">  <span class="t-b">morning       </span>day 07:30             <span class="t-faint">tmrw 07:30</span></div>
+<div class="k-ln">  <span class="t-b">release18     </span>1 h · 3 left          <span class="t-faint">15:00</span></div>
+<div class="k-ln t-raised">  <span class="t-dim">⏎ open   x stop   esc back</span></div></div></div>
+</div>
+<figcaption>the same afternoon at 150 and 80 columns; the toggle at the right of the tabs shows it in dark and light.</figcaption>
+</figure>
+</section>
+
+<section data-kit="heading" data-id="h-states"><h2>its states</h2></section>
+<section data-kit="ui" data-id="states">
+<div class="k-states">
+<figure><figcaption>none yet</figcaption><div class="k-term"><div class="k-cells"><div class="k-ln"><span class="t-dim">nothing scheduled.</span></div><div class="k-ln"><span class="t-faint">sb every 10m "…" makes one</span></div></div></div></figure>
+<figure><figcaption>running now</figcaption><div class="k-term"><div class="k-cells"><div class="k-ln"><span class="t-b">●</span> <span class="t-b">launch-watch</span></div><div class="k-ln"><span class="t-dim">  running · 2 s</span></div></div></div></figure>
+<figure><figcaption>agent busy</figcaption><div class="k-term"><div class="k-cells"><div class="k-ln">  <span class="t-b">release18</span></div><div class="k-ln"><span class="t-dim">  waits for its turn</span></div></div></div></figure>
+<figure><figcaption>stopped</figcaption><div class="k-term"><div class="k-cells"><div class="k-ln">  <span class="t-dim">morning</span></div><div class="k-ln"><span class="t-dim">– stopped 14:02</span></div></div></div></figure>
+</div>
+</section>
+
+<section data-kit="heading" data-id="h-before"><h2>in the thread, before and after</h2></section>
+<section data-kit="ui" data-id="thread">
+<div class="k-ba">
+<figure><figcaption><b>today</b> · a run is a message like any other</figcaption><div class="k-term"><div class="k-cells"><div class="k-ln"><span class="t-dim">✉ switchboard → launch-watch</span></div><div class="k-ln">  check HN, Reddit, X for bise.dev</div><div class="k-ln"><span class="t-dim">✉ switchboard → launch-watch</span></div><div class="k-ln">  check HN, Reddit, X for bise.dev</div></div></div></figure>
+<figure><figcaption><b>proposed</b> · one quiet line, the screen one key away</figcaption><div class="k-term"><div class="k-cells"><div class="k-ln"><span class="t-faint">◷ launch-watch ran · 3rd of 24 · /scheduled</span></div><div class="k-ln"> </div><div class="k-ln"> </div><div class="k-ln"> </div></div></div></figure>
+</div>
+</section>
+
+<section data-kit="heading" data-id="h-pick"><h2>one choice: where it lives</h2></section>
+<section data-kit="ui" data-id="where">
+<div class="k-pick" data-ui="pick">
+<div class="k-option" data-pick="a"><span class="k-mark">my pick</span><h3>A · its own screen</h3><p>/scheduled, like /artifacts.</p><ul><li>room for 20 scheduled tasks</li><li>one more screen to learn</li></ul></div>
+<div class="k-option" data-pick="b"><h3>B · a tab of the side panel</h3><p>next to agents and artifacts.</p><ul><li>always in sight</li><li>tight at 80 columns</li></ul></div>
+<div class="k-option" data-pick="c"><h3>C · in each agent's header</h3><p>a ◷ with its next run.</p><ul><li>where you already look</li><li>no list of all of them</li></ul></div>
+</div>
+</section>
+
+<section data-kit="heading" data-id="h-plan"><h2>the plan</h2></section>
+<section data-kit="ui" data-id="plan">
+<ol class="k-timeline">
+<li data-state="done"><b>this proposal</b><span class="k-who">designer</span><p>the screen, its states, the thread line.</p></li>
+<li data-state="now" data-who="yours"><b>your pick</b><span class="k-who">you</span><p>A, B or C above.</p></li>
+<li><b>build it</b><span class="k-who">an agent</span><p>the screen, the keys, tmux captures at 150 and 80 cols, dark and light.</p></li>
+</ol>
+</section>
+<section data-kit="sources" data-id="src"><ol><li><a href="https://bise.dev/m/timers">scheduled tasks mock · bise.dev</a>, 3 oct</li></ol></section>

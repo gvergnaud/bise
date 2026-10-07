@@ -448,6 +448,22 @@ pub fn queued_count(st: &State, name: &str) -> usize {
         .count()
 }
 
+/// The user's queued inputs still waiting for `name`'s turn to end (the
+/// window's "send queued"), oldest first: `{id, text, created_ms}` each,
+/// the snapshot's `queued_inputs` (bise-proto's `Agent.queued`).
+pub fn queued_inputs(st: &State, name: &str) -> Vec<serde_json::Value> {
+    st.msgs
+        .values()
+        .filter(|m| {
+            m.to == name
+                && m.queued
+                && m.from == crate::model::USER
+                && matches!(st.msg_state.get(&m.id), Some(MsgState::Queued { .. }))
+        })
+        .map(|m| serde_json::json!({"id": m.id, "text": m.text, "created_ms": m.created_ms}))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

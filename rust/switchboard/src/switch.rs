@@ -179,6 +179,7 @@ pub fn exe_of(root: &Path) -> Option<PathBuf> {
 fn start_hub(paths: &Paths, root: &Path, same: bool) -> std::io::Result<std::process::Child> {
     use std::os::unix::process::CommandExt;
     use std::process::{Command, Stdio};
+    crate::client::jailed(paths)?;
     let err = std::fs::OpenOptions::new()
         .create(true)
         .append(true)

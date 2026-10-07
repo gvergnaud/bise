@@ -340,6 +340,14 @@ fn wake_text(t: &Timer, wake: Wake, now: u64) -> String {
     format!("timer #{} ({}, set by {}): {}\n(stop it: sb every --stop {})", t.id, how, t.by, t.text, t.id)
 }
 
+/// The note bise sends an agent when the user stops its timer from
+/// `/scheduled` (core.rs `timer_stop_by_user`). Its head is
+/// bise_proto's `lines::STOP_NOTE`, which the thread fold reads
+/// (`lines::is_stop_note`) to keep it out of the feed.
+pub fn stop_note(id: u64, text: &str, why: &str) -> String {
+    format!("{}{} ({}){}: don't set it again unless they ask", bise_proto::thread::lines::STOP_NOTE, id, text, why)
+}
+
 fn clip(s: &str, n: usize) -> String {
     let one = s.split_whitespace().collect::<Vec<_>>().join(" ");
     if one.chars().count() <= n {
@@ -439,11 +447,9 @@ pub fn parse_until(s: &str, now: u64) -> Result<u64, String> {
 
 // ---- local time (libc) ----
 
+/// The local time at `ms` (bise_home's one localtime reader).
 fn tm_of(ms: u64) -> Option<libc::tm> {
-    let t = (ms / 1000) as libc::time_t;
-    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
-    let r = unsafe { libc::localtime_r(&t, &mut tm) };
-    (!r.is_null()).then_some(tm)
+    bise_home::clock::local_tm(ms)
 }
 
 /// Days since 1970-01-01 of a civil date (the proleptic Gregorian
@@ -545,6 +551,49 @@ mod tests {
         assert_eq!(dur_label(90 * MIN_MS), "1h30m");
         assert_eq!(parse_hhmm("07:30").unwrap(), 450);
         assert!(parse_hhmm("24:00").is_err());
+    }
+
+    /// Law (architect m_11299): the thread fold reads the timer wakes and
+    /// the stop note bise writes here. wake_text's output gives back its
+    /// id, how and words through lines::timer_wake, for every / daily,
+    /// n of m, until, waited and run now; the stop note is a stop note.
+    #[test]
+    fn the_fold_reads_the_timer_texts_bise_writes() {
+        use bise_proto::thread::lines::{is_stop_note, timer_wake};
+        let timer = |id: u64, sched: Sched, until_ms: Option<u64>, times: Option<u64>, text: &str| Timer {
+            id,
+            agent: "perf".into(),
+            by: "main".into(),
+            text: text.into(),
+            sched,
+            next_ms: NOW,
+            until_ms,
+            times,
+            fired: 0,
+            page: None,
+            last_ms: 0,
+            runs: vec![],
+        };
+        let cases = [
+            (timer(7, Sched::Every(10 * MIN_MS), None, None, "check HN"), Wake::Due { fired: 1, waited_ms: 0 }),
+            (timer(8, Sched::Every(90 * MIN_MS), None, Some(12), "read c13.rc (a): b + c"), Wake::Due { fired: 3, waited_ms: 0 }),
+            (timer(9, Sched::Daily(450), Some(NOW + 3 * DAY_MS), Some(5), "the standup"), Wake::Due { fired: 2, waited_ms: 4 * MIN_MS }),
+            (timer(10, Sched::Every(MIN_MS), Some(NOW + 2 * 60 * MIN_MS), None, "two\nlines: x"), Wake::Now),
+        ];
+        for (t, wake) in cases {
+            let text = wake_text(&t, wake, NOW);
+            let (id, how, words) = timer_wake(&text).unwrap_or_else(|| panic!("not a wake: {text}"));
+            assert_eq!(id, t.id, "{text}");
+            assert!(how.starts_with(&t.sched.label()), "{how} / {text}");
+            assert!(how.ends_with(&format!(", set by {}", t.by)), "{how} / {text}");
+            assert_eq!(words, t.text, "{text}");
+            assert!(!is_stop_note(&text), "{text}");
+        }
+        for why in ["", " (from /scheduled)"] {
+            let note = stop_note(7, "check HN", why);
+            assert!(is_stop_note(&note), "{note}");
+            assert_eq!(timer_wake(&note), None, "{note}");
+        }
     }
 
     /// How a timer ended, from its `why` (the views' `end`).

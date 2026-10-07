@@ -36,6 +36,7 @@ use std::time::{Duration, Instant};
 mod approot;
 mod debuglog;
 mod doctor;
+mod project_cli;
 mod session_cli;
 mod info;
 mod update;
@@ -459,6 +460,7 @@ const HELP: &[(&str, &[(&str, &str)])] = &[
         ("{cmd} setup ghostty", "the Ghostty lines for cmd+v/f/k/a (--dry-run: show only)"),
         ("{cmd} plugins [list]", "agent plugins; enable, disable, import-mcp"),
         ("{cmd} doctor", "check this Mac, the install, keys, model, hubs"),
+        ("{cmd} project [list]", "the projects bise works in; add, remove, rename, move"),
     ]),
     ("the install", &[
         ("{cmd} update [--check]", "install the latest release"),
@@ -601,6 +603,8 @@ fn run_main() -> std::io::Result<()> {
             Some("doctor") => std::process::exit(doctor::main(&args[1..])),
             // the session logs (BISE-199)
             Some("session") => std::process::exit(session_cli::main(&args[1..])),
+            // the projects registry (bise desktop): never starts a hub
+            Some("project" | "projects") => std::process::exit(project_cli::main(&args[1..])),
             // an installed bise (install.sh, BISE-170/171)
             Some("update") => std::process::exit(update::main(&args[1..])),
             Some("uninstall") => std::process::exit(update::uninstall(&args[1..])),

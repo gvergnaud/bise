@@ -1,0 +1,48 @@
+<section data-kit="heading" data-id="title">
+  <h1>Benjamin's reports, 3</h1>
+  <p>Slack #bise-feedback · since monday · 1 fixed, 1 in progress, 1 to decide</p>
+</section>
+
+<section data-kit="heading" data-id="h-fixed">
+  <h2>fixed</h2>
+</section>
+
+<section data-kit="review" data-id="fixed" data-verb="start">
+  <ol>
+    <li data-id="s-101" data-agent="fix-install-path">
+      <p>Benjamin Roy · #bise-feedback · monday 9:12</p>
+      <blockquote>the install script finishes but `bise` isn't found on fish<sup>1</sup>.</blockquote>
+      <p>the installer only wrote the PATH line to .zshrc and .bashrc. fixed in 0.4.2: it now writes fish's config too (PR #214).</p>
+    </li>
+  </ol>
+</section>
+
+<section data-kit="message" data-id="reply-s-101" data-to="Slack · reply to Benjamin in #bise-feedback" data-open="https://acme.slack.com/archives/C0FEEDBACK/p101">
+  <p>fixed in 0.4.2: the installer now sets the PATH for fish too. try again?</p>
+</section>
+
+<section data-kit="heading" data-id="h-open">
+  <h2>still open</h2>
+</section>
+
+<section data-kit="review" data-id="open" data-verb="start">
+  <ol>
+    <li data-id="s-102" data-agent="fix-proxy-auth">
+      <p>Benjamin Roy · #bise-feedback · monday 11:40</p>
+      <blockquote>behind the office proxy the model calls time out after 30 s<sup>2</sup>.</blockquote>
+      <p>i think the HTTPS_PROXY variable isn't passed to the model client. an agent is checking.</p>
+    </li>
+    <li data-id="s-103">
+      <p>Benjamin Roy · #bise-feedback · today 8:55</p>
+      <blockquote>can the capsule speak French? half the team would use it in French.</blockquote>
+      <p>a feature request, not a bug: the voice already hears French, the answers don't follow yet.</p>
+    </li>
+  </ol>
+</section>
+
+<section data-kit="sources" data-id="src">
+  <ol>
+    <li><a href="https://acme.slack.com/archives/C0FEEDBACK/p101">#bise-feedback · Slack</a>, monday 9:12</li>
+    <li><a href="https://acme.slack.com/archives/C0FEEDBACK/p102">#bise-feedback · Slack</a>, monday 11:40</li>
+  </ol>
+</section>

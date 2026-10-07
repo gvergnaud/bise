@@ -25,6 +25,13 @@ impl Env for FakeEnv {
     fn now(&self) -> u64 {
         self.now
     }
+    // desktop S2: one registered project, `shop`
+    fn project_hub(&self, name: &str) -> Result<String, String> {
+        match name {
+            "shop" => Ok("shop-1".into()),
+            _ => Err(format!("no project named {}", name)),
+        }
+    }
     fn is_git(&self) -> bool {
         self.git
     }
@@ -119,6 +126,17 @@ impl T {
             client: 1,
             focus: focus.into(),
             text: text.into(),
+            queued: false,
+        })
+    }
+
+    /// The window's "send queued".
+    fn user_queued(&mut self, focus: &str, text: &str) -> Vec<Effect> {
+        self.go(Input::ClientInput {
+            client: 1,
+            focus: focus.into(),
+            text: text.into(),
+            queued: true,
         })
     }
 
@@ -650,6 +668,31 @@ fn main_cannot_drop_work_away() {
     assert_eq!(t.status("fix"), Status::Archived);
 }
 
+/// Law (pm's C fail 36): an archive the user was asked to confirm never
+/// happens without his answer: while its card is open, another drop of
+/// that agent by main (once nothing would ask any more) is refused.
+#[test]
+fn an_unanswered_drop_card_never_acts() {
+    let mut t = T::new();
+    t.user(MAIN, "/new -w fix: x");
+    t.go(Input::ReplReady { agent: "fix".into() });
+    t.go(Input::ReplIdle { agent: "fix".into(), leftover: false });
+    t.env.loss = Loss { dirty: 1, unpushed: 0 };
+    let (tok, fx) = t.req(MAIN, AgentReq::Drop { agent: "fix".into() });
+    assert_eq!(reply(&fx, tok).unwrap()["dropped"], false);
+    let card = t.hub.st.cards.values().find(|c| c.kind == "drop").unwrap().id;
+    // nothing to ask about any more: main drops again
+    t.env.loss = Loss { dirty: 0, unpushed: 0 };
+    let (tok, fx) = t.req(MAIN, AgentReq::Drop { agent: "fix".into() });
+    let r = reply(&fx, tok).unwrap();
+    assert_eq!(r["ok"], false, "{r}");
+    assert!(r["error"].as_str().unwrap().contains(&format!("card #{card}")), "{r}");
+    assert_ne!(t.status("fix"), Status::Archived);
+    // his yes archives it
+    t.user(MAIN, &format!("/answer {} oui", card));
+    assert_eq!(t.status("fix"), Status::Archived);
+}
+
 #[test]
 fn an_escalated_question_is_answered_by_the_user() {
     let mut t = T::new();
@@ -819,6 +862,32 @@ fn worktrees_need_git() {
     assert!(!t.hub.st.agents.contains_key("x"));
 }
 
+/// The home workspace (docs/ambient-pages.md §5.1): land, feature and
+/// flow say "not in a repo" in one line, nothing goes to git.
+#[test]
+fn land_feature_and_flow_say_not_in_a_repo_without_git() {
+    let mut t = T::new();
+    t.env.git = false;
+    let reqs = [
+        ("land", AgentReq::Land { here: true, message: "x".into(), add: Vec::new() }),
+        ("feature", AgentReq::Feature { op: "new".into(), name: "foo".into() }),
+        ("feature", AgentReq::Feature { op: "list".into(), name: String::new() }),
+        ("flow", AgentReq::Flow { set: None }),
+    ];
+    for (cmd, req) in reqs {
+        let (tok, fx) = t.req(MAIN, req);
+        let r = reply(&fx, tok).unwrap();
+        assert_eq!(r["ok"], false);
+        let e = r["error"].as_str().unwrap();
+        assert!(e.starts_with(&format!("sb {}: not in a repo", cmd)) && !e.contains('\n'), "{}", e);
+        assert!(!fx.iter().any(|e| matches!(e, Effect::Land { .. } | Effect::Feature { .. } | Effect::Flow { .. })));
+    }
+    // with git: the land goes on to the daemon
+    t.env.git = true;
+    let (_, fx) = t.req(MAIN, AgentReq::Land { here: true, message: "x".into(), add: Vec::new() });
+    assert!(fx.iter().any(|e| matches!(e, Effect::Land { .. })));
+}
+
 /// `sb every` (every.rs): at least a minute, an active agent, a message;
 /// set, listed in `sb tasks`, stopped, each change in the journal.
 #[test]
@@ -882,6 +951,8 @@ fn a_done_report_updates_the_board_and_wakes_main() {
             kind: "done".into(),
             summary: "fini".into(),
             decisions: vec!["API v2".into()],
+            step: None,
+            result: None,
         },
     );
     assert_eq!(reply(&fx, tok).unwrap()["ok"], true);
@@ -985,6 +1056,8 @@ fn a_report_answers_the_parent_and_no_auto_reply_repeats_it() {
             kind: "done".into(),
             summary: "fait".into(),
             decisions: vec![],
+            step: None,
+            result: None,
         },
     );
     assert_eq!(reply(&fx, tok).unwrap()["ok"], true);
@@ -1290,6 +1363,45 @@ fn a_queued_message_waits_for_the_end_of_the_turn() {
     assert_eq!(t.hub.st.msg_state[&id], MsgState::Delivered);
 }
 
+/// The window's "send queued": the user's queued inputs wait for the end of
+/// the turn (laws user_queued_*); a plain input meanwhile goes first; the
+/// snapshot lists the pending ones for the window.
+#[test]
+fn the_users_queued_inputs_wait_for_the_end_of_the_turn() {
+    let mut t = T::new();
+    t.spawn_task("a");
+    // `a` is busy: neither steered nor said, in the snapshot's agent row
+    let fx = t.user_queued("a", "first later");
+    assert!(steer_to(&fx, "a").is_none() && say_to(&fx, "a").is_none(), "{:?}", fx);
+    t.user_queued("a", "@a second later");
+    let ids: Vec<u64> = ["first later", "second later"]
+        .iter()
+        .map(|x| t.hub.st.msgs.values().find(|m| m.text == *x).unwrap().id)
+        .collect();
+    assert!(ids.iter().all(|i| t.hub.st.msgs[i].queued && t.hub.st.msgs[i].from == USER));
+    let rows = crate::board::queued_inputs(&t.hub.st, "a");
+    assert_eq!(rows.iter().map(|r| r["text"].as_str().unwrap()).collect::<Vec<_>>(), ["first later", "second later"]);
+    // a plain input meanwhile is steered in at once, alone
+    let fx = t.user("a", "now");
+    let s = steer_to(&fx, "a").expect("steered");
+    assert!(s.contains("now") && !s.contains("later"), "{}", s);
+    // a command is never queued
+    let fx = t.user_queued("a", "/tasks");
+    assert!(fx.iter().any(|e| matches!(e, Effect::ToClient { body, .. } if body["text"] == "commands run now, not queued")), "{:?}", fx);
+    // the turn ends: both in one new turn, in order, once
+    let fx = t.go(Input::ReplIdle { agent: "a".into(), leftover: false });
+    let s = say_to(&fx, "a").expect("a new turn");
+    let (i1, i2) = (s.find("first later").expect("first"), s.find("second later").expect("second"));
+    assert!(i1 < i2, "{}", s);
+    assert!(ids.iter().all(|i| t.hub.st.msg_state[i] == MsgState::Delivered));
+    assert!(crate::board::queued_inputs(&t.hub.st, "a").is_empty());
+    let fx = t.turn("a", "done");
+    assert!(say_to(&fx, "a").is_none(), "delivered once: {:?}", fx);
+    // an idle agent gets a queued input at once
+    let fx = t.user_queued("a", "right away");
+    assert!(say_to(&fx, "a").is_some_and(|s| s.contains("right away")), "{:?}", fx);
+}
+
 #[test]
 fn a_queued_message_to_an_idle_agent_is_delivered_at_once() {
     let mut t = T::new();
@@ -1475,7 +1587,7 @@ fn agent_traffic_never_reaches_the_user_inbox() {
     ask(&mut t, "a", "b");
     t.req("a", AgentReq::Status { status: Declared::Blocked, note: "need a key".into() });
     for kind in ["blocked", "done", "failed"] {
-        t.req("b", AgentReq::Report { kind: kind.into(), summary: format!("{} summary", kind), decisions: vec![] });
+        t.req("b", AgentReq::Report { kind: kind.into(), summary: format!("{} summary", kind), decisions: vec![], step: None, result: None });
     }
     assert!(t.hub.st.cards.is_empty(), "{:?}", t.hub.st.cards);
     assert_eq!(t.hub.snapshot(t.env.now)["cards"].as_array().unwrap().len(), 0);
@@ -1872,6 +1984,8 @@ fn a_restored_idle_task_gets_its_queued_mail() {
             kind: "failed".into(),
             summary: "bloqué".into(),
             decisions: vec![],
+            step: None,
+            result: None,
         },
     );
     let fx = t.go(Input::ReplIdle {
@@ -2011,6 +2125,27 @@ fn an_interrupt_names_who_asked() {
     assert_eq!(by_of(&fx).as_deref(), Some("main"), "{:?}", fx);
     let fx = t.go(Input::ClientInterrupt { client: 1, agent: "net".into() });
     assert_eq!(by_of(&fx).as_deref(), Some("user"), "{:?}", fx);
+}
+
+// desktop reset (architect m_9650 D): an interrupt of a running turn writes,
+// in the same step, one 'stopped' line in that agent's feed (the thread's
+// typed 'stopped' entry); an interrupt with no turn running writes none
+#[test]
+fn an_interrupt_writes_a_stopped_line_in_the_same_step() {
+    let mut t = T::new();
+    t.spawn_task("net"); // its first turn is running
+    let stopped = |fx: &[Effect]| {
+        fx.iter()
+            .filter(|e| matches!(e, Effect::Line { agent, line } if agent == "net" && line == "sb stopped : stopped"))
+            .count()
+    };
+    let fx = t.go(Input::ClientInterrupt { client: 1, agent: "net".into() });
+    assert!(fx.iter().any(|e| matches!(e, Effect::Interrupt { agent, .. } if agent == "net")), "{:?}", fx);
+    assert_eq!(stopped(&fx), 1, "{:?}", fx);
+    let (_, fx) = t.req(MAIN, AgentReq::Interrupt { agent: "net".into() });
+    assert_eq!(stopped(&fx), 1, "sb interrupt from main too: {:?}", fx);
+    let fx = t.go(Input::ClientInterrupt { client: 1, agent: "nobody".into() });
+    assert_eq!(fx.iter().filter(|e| matches!(e, Effect::Line { line, .. } if line.starts_with("sb stopped"))).count(), 0, "{:?}", fx);
 }
 
 // ---- BISE-04: hub line protocol v2 (contract C2) ----
@@ -2482,6 +2617,7 @@ fn bench_step() {
         client: 1,
         focus: MAIN.into(),
         text: "hello".into(),
+        queued: false,
     });
     let t0 = std::time::Instant::now();
     for _ in 0..10 {
@@ -3429,6 +3565,735 @@ fn a_batched_replay_builds_the_same_state_as_one_event_at_a_time() {
 /// `sb every`'s timers on sb-core (every_tests.rs).
 #[path = "every_tests.rs"]
 mod every_tests;
+
+// ---- desktop S2: bise's cross-hub messages (hub/xhub.bend) ----
+
+fn xdelivers(fx: &[Effect]) -> Vec<(u64, String, String, String)> {
+    fx.iter()
+        .filter_map(|e| match e {
+            Effect::XDeliver { xid, project, kind, text, .. } => Some((*xid, project.clone(), kind.clone(), text.clone())),
+            _ => None,
+        })
+        .collect()
+}
+
+fn xreplies(fx: &[Effect]) -> Vec<(String, u64, String)> {
+    fx.iter()
+        .filter_map(|e| match e {
+            Effect::XReply { hub, xid, text } => Some((hub.clone(), *xid, text.clone())),
+            _ => None,
+        })
+        .collect()
+}
+
+fn last_msg(t: &T) -> u64 {
+    *t.hub.st.msgs.keys().max().unwrap()
+}
+
+// home side: only main forwards, only his own message, once; the outbox
+// entry is delivered, retried on the timers' clock after a failure, and
+// settled once by the project's answer, which reaches main from @<project>
+#[test]
+fn bise_forwards_his_message_once_and_settles_on_the_answer() {
+    let mut t = T::new();
+    t.user(MAIN, "the shop's login is broken, fix it");
+    let his = last_msg(&t);
+    let (tok, fx) = t.req(MAIN, AgentReq::ProjectSend { project: "shop".into(), msg: his });
+    assert_eq!(reply(&fx, tok).unwrap()["ok"], true, "{:?}", fx);
+    assert_eq!(xdelivers(&fx), vec![(1, "shop-1".into(), "input".into(), "the shop's login is broken, fix it".into())]);
+    // once per message
+    let (tok, fx) = t.req(MAIN, AgentReq::ProjectSend { project: "shop".into(), msg: his });
+    assert!(reply(&fx, tok).unwrap()["error"].as_str().unwrap().contains("already forwarded"), "{:?}", fx);
+    assert!(xdelivers(&fx).is_empty());
+    // an unknown project, a task, a message that isn't his
+    let (tok, fx) = t.req(MAIN, AgentReq::ProjectSend { project: "nope".into(), msg: his });
+    assert!(reply(&fx, tok).unwrap()["error"].as_str().unwrap().contains("no project named nope"));
+    t.spawn_task("docs");
+    let (tok, fx) = t.req("docs", AgentReq::ProjectSend { project: "shop".into(), msg: his });
+    assert_eq!(reply(&fx, tok).unwrap()["ok"], false);
+    let (_, _) = t.req("docs", AgentReq::Send { to: MAIN.into(), text: "fyi".into(), expect_reply: false, reply_to: None, queued: false, why: String::new(), switch: None });
+    let theirs = last_msg(&t);
+    let (tok, fx) = t.req(MAIN, AgentReq::ProjectSend { project: "shop".into(), msg: theirs });
+    assert!(reply(&fx, tok).unwrap()["error"].as_str().unwrap().contains("not a message the user sent you"), "{:?}", fx);
+    // a failure: the next try is a timer, due in 1 s; not before
+    t.go(Input::XFail { xid: 1 });
+    t.env.now += 500;
+    assert!(xdelivers(&t.go(Input::Tick)).is_empty());
+    t.env.now += 600;
+    assert_eq!(xdelivers(&t.go(Input::Tick)).len(), 1);
+    // fired once
+    t.env.now += 5_000;
+    assert!(xdelivers(&t.go(Input::Tick)).is_empty());
+    // acked: no retry after a late failure's tick either
+    t.go(Input::XAck { xid: 1 });
+    t.go(Input::XFail { xid: 1 });
+    t.env.now += 60_000;
+    assert!(xdelivers(&t.go(Input::Tick)).is_empty());
+    // the answer: main hears it from @shop, once
+    t.go(Input::XReply { xid: 1, name: "shop".into(), text: "fixed on sb/login".into() });
+    let ans = t.hub.st.msgs.values().find(|m| m.from == "@shop").expect("an answer from @shop");
+    assert_eq!(ans.to, MAIN);
+    assert!(ans.text.contains("fixed on sb/login") && ans.text.contains(&format!("m_{}", his)), "{}", ans.text);
+    let n = t.hub.st.msgs.len();
+    t.go(Input::XReply { xid: 1, name: "shop".into(), text: "again".into() });
+    assert_eq!(t.hub.st.msgs.len(), n);
+    // bise's own question: no message of his needed
+    let (tok, fx) = t.req(MAIN, AgentReq::ProjectAsk { project: "shop".into(), text: "is the login fixed?".into() });
+    assert_eq!(reply(&fx, tok).unwrap()["ok"], true);
+    assert_eq!(xdelivers(&fx), vec![(2, "shop-1".into(), "ask".into(), "is the login fixed?".into())]);
+}
+
+// a pending send goes again at boot (the project drops the copy)
+#[test]
+fn a_pending_send_goes_again_after_a_restart() {
+    let mut t = T::new();
+    t.user(MAIN, "tell the shop hello");
+    let his = last_msg(&t);
+    t.req(MAIN, AgentReq::ProjectSend { project: "shop".into(), msg: his });
+    let journal = t.journal.borrow().clone();
+    let mut h = Hub::new("/w");
+    h.replay(&journal);
+    let fx = h.handle(Input::Boot, &mut FakeEnv::new());
+    assert_eq!(xdelivers(&fx).len(), 1, "{:?}", fx);
+}
+
+// project side: bise's message reaches main once per origin, as his words
+// via bise or as @bise's question; main's answer goes back once
+#[test]
+fn a_project_says_bise_message_once_and_answers_it_once() {
+    let mut t = T::new();
+    let fx = t.go(Input::XIn { token: 900, hub: "home-1".into(), xid: 7, kind: "input".into(), text: "fix the login".into(), name: String::new() });
+    assert_eq!(reply(&fx, 900).unwrap()["ok"], true, "{:?}", fx);
+    let said = say_to(&fx, MAIN).expect("main hears it");
+    assert!(said.contains("<user_message via=\"bise\">") && said.contains("fix the login"), "{}", said);
+    // the same origin again: acked, not said again
+    let fx = t.go(Input::XIn { token: 901, hub: "home-1".into(), xid: 7, kind: "input".into(), text: "fix the login".into(), name: String::new() });
+    assert_eq!(reply(&fx, 901).unwrap()["seen"], true);
+    assert!(say_to(&fx, MAIN).is_none() && steer_to(&fx, MAIN).is_none());
+    // main's turn ends: its answer goes back to bise's hub
+    let fx = t.turn(MAIN, "on it: sb/login");
+    assert_eq!(xreplies(&fx), vec![("home-1".into(), 7, "on it: sb/login".into())]);
+    // bise's own question, answered with sb send @bise --reply-to, once
+    let fx = t.go(Input::XIn { token: 902, hub: "home-1".into(), xid: 8, kind: "ask".into(), text: "status?".into(), name: String::new() });
+    let said = say_to(&fx, MAIN).or_else(|| steer_to(&fx, MAIN)).expect("main hears it");
+    assert!(said.contains("from=\"@bise\""), "{}", said);
+    let q = last_msg(&t);
+    let send = |t: &mut T| {
+        t.req(MAIN, AgentReq::Send { to: "@bise".into(), text: "green".into(), expect_reply: false, reply_to: Some(q), queued: false, why: String::new(), switch: None })
+    };
+    let (tok, fx) = send(&mut t);
+    assert_eq!(reply(&fx, tok).unwrap()["ok"], true, "{:?}", fx);
+    assert_eq!(xreplies(&fx), vec![("home-1".into(), 8, "green".into())]);
+    let (tok, fx) = send(&mut t);
+    assert_eq!(reply(&fx, tok).unwrap()["ok"], false);
+    assert!(xreplies(&fx).is_empty());
+    // and its end of turn sends nothing more
+    assert!(xreplies(&t.turn(MAIN, "done")).is_empty());
+}
+
+// ---- desktop S2 step 2: the routing hold (core.bend's `routing hold`) ----
+
+fn routes(fx: &[Effect]) -> Vec<(u64, String, String, u64)> {
+    fx.iter()
+        .filter_map(|e| match e {
+            Effect::Route { rid, to, name, due_ms, .. } => Some((*rid, to.clone(), name.clone(), *due_ms)),
+            _ => None,
+        })
+        .collect()
+}
+
+fn route_dones(fx: &[Effect]) -> Vec<(u64, String, String, Option<u64>)> {
+    fx.iter()
+        .filter_map(|e| match e {
+            Effect::RouteDone { rid, state, to, xid } => Some((*rid, state.clone(), to.clone(), *xid)),
+            _ => None,
+        })
+        .collect()
+}
+
+fn hold(t: &mut T, text: &str) -> Vec<Effect> {
+    t.go(Input::RouteHold { text: text.into(), via: String::new(), to: "shop-1".into(), name: "shop".into(), why: "Safari: shop.test".into(), context: None })
+}
+
+// his words wait 2 s on the timers' clock, then go once: his message to
+// main is recorded (an id, never a turn: law route_fire_makes_no_turn),
+// forwarded by the outbox, and main gets a note with the id
+#[test]
+fn a_held_route_goes_at_two_seconds_once_with_no_turn() {
+    let mut t = T::new();
+    let now = t.env.now;
+    let n = t.hub.st.msgs.len();
+    let fx = hold(&mut t, "why does p99 rise");
+    assert_eq!(routes(&fx), vec![(1, "shop-1".into(), "shop".into(), now + 2000)]);
+    assert!(xdelivers(&fx).is_empty() && say_to(&fx, MAIN).is_none() && steer_to(&fx, MAIN).is_none());
+    assert_eq!(t.hub.st.msgs.len(), n, "no message while held");
+    t.env.now += 1_500;
+    assert!(xdelivers(&t.go(Input::Tick)).is_empty());
+    t.env.now += 600;
+    let fx = t.go(Input::Tick);
+    assert_eq!(xdelivers(&fx), vec![(1, "shop-1".into(), "input".into(), "why does p99 rise".into())]);
+    assert_eq!(route_dones(&fx), vec![(1, "sent".into(), "shop-1".into(), Some(1))]);
+    assert!(say_to(&fx, MAIN).is_none() && steer_to(&fx, MAIN).is_none(), "no turn: {:?}", fx);
+    let his = last_msg(&t);
+    let m = &t.hub.st.msgs[&his];
+    assert_eq!((m.from.as_str(), m.to.as_str(), m.text.as_str()), (crate::model::USER, MAIN, "why does p99 rise"));
+    let note = t.hub.st.main_notes.last().expect("a note for main");
+    assert!(note.contains(&format!("m_{his}")) && note.contains("shop"), "{note}");
+    // forwarded already: main can't send it a second time
+    let (tok, fx) = t.req(MAIN, AgentReq::ProjectSend { project: "shop".into(), msg: his });
+    assert!(reply(&fx, tok).unwrap()["error"].as_str().unwrap().contains("already forwarded"), "{:?}", fx);
+    // once: no second fire, and a late correction or cancel changes nothing
+    t.env.now += 10_000;
+    assert!(xdelivers(&t.go(Input::Tick)).is_empty());
+    let fx = t.go(Input::RouteCorrect { client: None, rid: 1, to: "docs-2".into(), name: "docs".into() });
+    assert!(routes(&fx).is_empty() && xdelivers(&fx).is_empty());
+    let fx = t.go(Input::RouteCancel { client: None, rid: 1 });
+    assert!(route_dones(&fx).is_empty() && say_to(&fx, MAIN).is_none());
+    // the typed connection that asked hears why nothing happened
+    for input in [Input::RouteCancel { client: Some(5), rid: 1 }, Input::RouteCorrect { client: Some(5), rid: 1, to: "docs-2".into(), name: "docs".into() }] {
+        let fx = t.go(input);
+        assert!(fx.iter().any(|e| matches!(e, Effect::ToClient { client: 5, body } if body["ev"] == "notice"
+            && body["text"].as_str().unwrap_or("").contains("route 1 already went or was cancelled"))), "{:?}", fx);
+    }
+}
+
+// a correction changes the project, not the time; `bise` is a cancel
+#[test]
+fn a_corrected_route_goes_to_the_new_project_at_the_same_time() {
+    let mut t = T::new();
+    let now = t.env.now;
+    hold(&mut t, "update the docs");
+    t.env.now += 1_000;
+    let fx = t.go(Input::RouteCorrect { client: None, rid: 1, to: "docs-2".into(), name: "docs".into() });
+    assert_eq!(routes(&fx), vec![(1, "docs-2".into(), "docs".into(), now + 2000)]);
+    t.env.now += 1_100;
+    let fx = t.go(Input::Tick);
+    assert_eq!(xdelivers(&fx), vec![(1, "docs-2".into(), "input".into(), "update the docs".into())]);
+    assert_eq!(route_dones(&fx), vec![(1, "sent".into(), "docs-2".into(), Some(1))]);
+}
+
+// a cancel: no delivery ever, his words reach bise's main as today
+#[test]
+fn a_cancelled_route_is_said_to_main_and_never_sent() {
+    for how in ["cancel", "correct to bise"] {
+        let mut t = T::new();
+        hold(&mut t, "never mind, for you");
+        let fx = match how {
+            "cancel" => t.go(Input::RouteCancel { client: None, rid: 1 }),
+            _ => t.go(Input::RouteCorrect { client: None, rid: 1, to: "bise".into(), name: "bise".into() }),
+        };
+        assert_eq!(route_dones(&fx), vec![(1, "cancelled".into(), "shop-1".into(), None)], "{how}");
+        let said = say_to(&fx, MAIN).or_else(|| steer_to(&fx, MAIN)).expect("main hears his words");
+        assert!(said.contains("never mind, for you"), "{how}: {said}");
+        t.env.now += 5_000;
+        assert!(xdelivers(&t.go(Input::Tick)).is_empty(), "{how}");
+    }
+}
+
+// his fn context rides the route to the project's delivery, kept across a
+// restart; the routed message on the home hub keeps his words alone
+#[test]
+fn a_routed_message_carries_his_context_to_the_project() {
+    let mut t = T::new();
+    let ctx = json!({"app": "Safari", "url": "https://grafana.shop.test/d/p99"});
+    t.go(Input::RouteHold { text: "why does p99 rise".into(), via: String::new(), to: "shop-1".into(), name: "shop".into(), why: "the front page".into(), context: Some(ctx.clone()) });
+    let journal = t.journal.borrow().clone();
+    let mut h = Hub::new("/w");
+    h.replay(&journal);
+    let mut env = FakeEnv::new();
+    env.now = t.env.now + 2_500;
+    let fx = h.handle(Input::Tick, &mut env);
+    let sent: Vec<(String, String)> = fx
+        .iter()
+        .filter_map(|e| match e {
+            Effect::XDeliver { text, context, .. } => Some((text.clone(), context.clone())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(sent.len(), 1, "{:?}", fx);
+    assert_eq!(sent[0].0, "why does p99 rise");
+    assert_eq!(serde_json::from_str::<Value>(&sent[0].1).unwrap(), ctx);
+    let his = *h.st.msgs.keys().max().unwrap();
+    assert_eq!(h.st.msgs[&his].text, "why does p99 rise", "no context on the home hub");
+    // a forward or an ask carries none
+    let (_, fx) = t.req(MAIN, AgentReq::ProjectAsk { project: "shop".into(), text: "status?".into() });
+    assert!(fx.iter().any(|e| matches!(e, Effect::XDeliver { context, .. } if context.is_empty())), "{:?}", fx);
+}
+
+// a restart mid-hold: the act is in the journal, it fires once after
+#[test]
+fn a_route_held_across_a_restart_goes_once() {
+    let mut t = T::new();
+    hold(&mut t, "after the restart");
+    let journal = t.journal.borrow().clone();
+    let mut h = Hub::new("/w");
+    h.replay(&journal);
+    let mut env = FakeEnv::new();
+    env.now = t.env.now;
+    assert!(xdelivers(&h.handle(Input::Boot, &mut env)).is_empty());
+    env.now += 2_500;
+    assert_eq!(xdelivers(&h.handle(Input::Tick, &mut env)).len(), 1);
+    env.now += 2_500;
+    assert!(xdelivers(&h.handle(Input::Tick, &mut env)).is_empty());
+}
+
+// ---- desktop S10: followed jobs (core.bend's `followed jobs`) ----
+
+fn job_ends(fx: &[Effect]) -> Vec<(String, String)> {
+    fx.iter()
+        .filter_map(|e| match e {
+            Effect::JobEnd { agent, state, .. } => Some((agent.clone(), state.clone())),
+            _ => None,
+        })
+        .collect()
+}
+
+fn report(t: &mut T, from: &str, kind: &str, summary: &str, step: Option<(u32, u32)>) -> Vec<Effect> {
+    t.req(from, AgentReq::Report { kind: kind.into(), summary: summary.into(), decisions: vec![], step, result: None }).1
+}
+
+// main follows a task: its progress says nothing, its done ends the job
+// once and the follow with it (one job per follow)
+#[test]
+fn a_followed_task_ends_once_and_the_follow_with_it() {
+    let mut t = T::new();
+    t.spawn_task("perf");
+    let (tok, fx) = t.req(MAIN, AgentReq::Follow { agent: "perf".into(), on: true, hub: String::new() });
+    assert_eq!(reply(&fx, tok).unwrap()["ok"], true, "{:?}", fx);
+    assert!(t.hub.st.agents["perf"].follow);
+    let fx = report(&mut t, "perf", "progress", "bench 3 of 7", Some((3, 7)));
+    assert!(job_ends(&fx).is_empty());
+    let r = t.hub.st.agents["perf"].last_report.clone().unwrap();
+    assert_eq!((r.step, r.of), (Some(3), Some(7)));
+    let fx = report(&mut t, "perf", "done", "p99 down 31%", None);
+    assert_eq!(job_ends(&fx), vec![("perf".into(), "done".into())]);
+    assert!(!t.hub.st.agents["perf"].follow, "one job per follow");
+    assert!(job_ends(&report(&mut t, "perf", "done", "again", None)).is_empty());
+    // a replay of the journal never says it again
+    let journal = t.journal.borrow().clone();
+    let mut h = Hub::new("/w");
+    h.replay(&journal);
+    assert!(!h.st.agents["perf"].follow);
+}
+
+// a failure ends the job at once, in the same step; unfollowed: nothing
+#[test]
+fn a_followed_task_that_fails_ends_at_once() {
+    let mut t = T::new();
+    t.spawn_task("perf");
+    t.go(Input::Follow { client: None, agent: "perf".into(), on: true });
+    let fx = report(&mut t, "perf", "failed", "oom", None);
+    assert_eq!(job_ends(&fx), vec![("perf".into(), "failed".into())]);
+    t.spawn_task("docs");
+    t.go(Input::Follow { client: None, agent: "docs".into(), on: true });
+    t.go(Input::Follow { client: None, agent: "docs".into(), on: false });
+    assert!(job_ends(&report(&mut t, "docs", "done", "done", None)).is_empty());
+}
+
+// J (architect m_10223), project side: a task followed for bise's home
+// hub ends once, its end (with the job's key) goes back to that hub
+// through the persisted outbox, and the follow's hub is cleared with it;
+// a follow of this hub's own main sends nothing back
+#[test]
+fn a_task_followed_for_bise_sends_its_end_back_once_through_the_outbox() {
+    let mut t = T::new();
+    t.spawn_task("perf");
+    let (tok, fx) = t.req(MAIN, AgentReq::Follow { agent: "perf".into(), on: true, hub: "home-1".into() });
+    assert_eq!(reply(&fx, tok).unwrap()["ok"], true, "{:?}", fx);
+    let fx = report(&mut t, "perf", "progress", "bench 3 of 7", Some((3, 7)));
+    assert!(job_ends(&fx).is_empty() && xdelivers(&fx).is_empty(), "progress stays quiet: {:?}", fx);
+    let fx = report(&mut t, "perf", "done", "p99 down 31%", None);
+    let key = fx
+        .iter()
+        .find_map(|e| match e {
+            Effect::JobEnd { key, .. } => Some(*key),
+            _ => None,
+        })
+        .expect("its job_end");
+    assert!(key > 0);
+    let back: Vec<(String, String, Value)> = fx
+        .iter()
+        .filter_map(|e| match e {
+            Effect::XDeliver { project, kind, text, .. } => Some((project.clone(), kind.clone(), serde_json::from_str(text).unwrap())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(back.len(), 1, "{:?}", fx);
+    let (to, kind, j) = &back[0];
+    assert_eq!((to.as_str(), kind.as_str()), ("home-1", "job_end"));
+    assert_eq!((j["agent"].as_str(), j["state"].as_str(), j["summary"].as_str(), j["key"].as_u64()), (Some("perf"), Some("done"), Some("p99 down 31%"), Some(key)));
+    // cleared with the follow: a second end goes nowhere
+    let fx = report(&mut t, "perf", "done", "again", None);
+    assert!(job_ends(&fx).is_empty() && xdelivers(&fx).is_empty(), "{:?}", fx);
+    // the entry is journaled: a restart before the home hub had it sends it again
+    let journal = t.journal.borrow().clone();
+    let mut h = Hub::new("/w");
+    h.replay(&journal);
+    let fx = h.handle(Input::Boot, &mut FakeEnv::new());
+    assert_eq!(xdelivers(&fx).len(), 1, "{:?}", fx);
+    // this hub's own main's follow: its end stays here
+    t.spawn_task("docs");
+    t.req(MAIN, AgentReq::Follow { agent: "docs".into(), on: true, hub: String::new() });
+    let fx = report(&mut t, "docs", "done", "guide rewritten", None);
+    assert_eq!(job_ends(&fx).len(), 1);
+    assert!(xdelivers(&fx).is_empty(), "{:?}", fx);
+}
+
+// J, bise's home hub: a followed task's end from a project says one line
+// in bise's main from @<project> (a message, so main wakes and tells him,
+// like a local task's end report) and fx followed_end once; a second
+// delivery of the same entry (a retry, a restart) adds nothing
+#[test]
+fn bise_hears_a_followed_task_end_once() {
+    let mut t = T::new();
+    let end = r#"{"agent":"perf","key":1791100500000,"state":"done","label":"make the e2e fast","summary":"p99 down 31%"}"#;
+    let fx = t.go(Input::XIn { token: 910, hub: "shop-5e6f7a8b".into(), xid: 4, kind: "job_end".into(), text: end.into(), name: "shop".into() });
+    assert_eq!(reply(&fx, 910).unwrap()["ok"], true, "{:?}", fx);
+    let said = say_to(&fx, MAIN).or_else(|| steer_to(&fx, MAIN)).expect("bise's main hears it");
+    assert!(said.contains("from=\"@shop\"") && said.contains("[report: done] @perf (followed): p99 down 31%"), "{}", said);
+    let ends: Vec<_> = fx
+        .iter()
+        .filter_map(|e| match e {
+            Effect::FollowedEnd { project, agent, key, state, .. } => Some((project.clone(), agent.clone(), *key, state.clone())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(ends, vec![("shop-5e6f7a8b".to_string(), "perf".to_string(), 1791100500000, "done".to_string())]);
+    let fx = t.go(Input::XIn { token: 911, hub: "shop-5e6f7a8b".into(), xid: 4, kind: "job_end".into(), text: end.into(), name: "shop".into() });
+    assert_eq!(reply(&fx, 911).unwrap()["seen"], true);
+    assert!(say_to(&fx, MAIN).is_none() && steer_to(&fx, MAIN).is_none());
+    assert!(!fx.iter().any(|e| matches!(e, Effect::FollowedEnd { .. })), "{:?}", fx);
+}
+
+// who may follow what: main only, a task of this hub, not archived
+#[test]
+fn only_main_follows_a_live_task() {
+    let mut t = T::new();
+    t.spawn_task("perf");
+    let err = |fx: &[Effect], tok| reply(fx, tok).unwrap()["error"].as_str().unwrap_or("").to_string();
+    let (tok, fx) = t.req("perf", AgentReq::Follow { agent: "perf".into(), on: true, hub: String::new() });
+    assert!(err(&fx, tok).contains("only main follows"), "{:?}", fx);
+    let (tok, fx) = t.req(MAIN, AgentReq::Follow { agent: MAIN.into(), on: true, hub: String::new() });
+    assert!(err(&fx, tok).contains("main isn't a job"), "{:?}", fx);
+    let (tok, fx) = t.req(MAIN, AgentReq::Follow { agent: "nope".into(), on: true, hub: String::new() });
+    assert!(err(&fx, tok).contains("no agent named @nope"), "{:?}", fx);
+    // the typed command's refusal is a notice to the connection that asked
+    let fx = t.go(Input::Follow { client: Some(7), agent: "nope".into(), on: true });
+    assert!(fx.iter().any(|e| matches!(e, Effect::ToClient { client: 7, body } if body["ev"] == "notice")), "{:?}", fx);
+}
+
+// emitter 5: --result rides the report, as proto's DiffResult
+#[test]
+fn a_reports_result_is_kept_with_it() {
+    let mut t = T::new();
+    t.spawn_task("perf");
+    let res = json!({"label": "p99", "before": 420.0, "after": 290.0, "unit": "ms"});
+    t.req("perf", AgentReq::Report { kind: "done".into(), summary: "faster".into(), decisions: vec![], step: None, result: Some(res.clone()) });
+    assert_eq!(t.hub.st.agents["perf"].last_report.clone().unwrap().result, Some(res));
+}
+
+// ---- the composer rule (lead m_8777, architect m_8801) ----
+
+fn open_card(t: &mut T, kind: &str, text: &str) -> u64 {
+    match kind {
+        "question" => {
+            t.req(MAIN, AgentReq::Card { text: text.into(), for_msg: None });
+        }
+        "confirm" => {
+            t.go(Input::ConfirmOpen { agent: MAIN.into(), text: text.into() });
+        }
+        // main drops a worktree agent with work: the hub asks him first
+        "drop" => {
+            t.user(MAIN, "/new -w fix: x");
+            t.go(Input::ReplReady { agent: "fix".into() });
+            t.go(Input::ReplIdle { agent: "fix".into(), leftover: false });
+            t.env.loss = Loss { dirty: 1, unpushed: 0 };
+            t.req(MAIN, AgentReq::Drop { agent: "fix".into() });
+        }
+        _ => {
+            let mut fx = Vec::new();
+            t.hub.core(&mut fx, &mut t.env, None, json!({"t": "card_open", "kind": kind, "agent": MAIN, "text": text}));
+            t.hub.view_all();
+        }
+    }
+    *t.hub.st.cards.keys().max().unwrap_or_else(|| panic!("a {kind} card"))
+}
+
+// an approval card takes one of its options, never typed words: they leave
+// it open and wake nobody; the TUI's explicit deny (`deny: <why>`) refuses
+#[test]
+fn an_approval_card_takes_its_options_never_words() {
+    let mut t = T::new();
+    t.go(Input::ConfirmOpen { agent: MAIN.into(), text: "main wants to run rm -rf build".into() });
+    let id = *t.hub.st.cards.keys().max().unwrap();
+    for words in ["yes", "allow", "ok go", "4", "1 please"] {
+        let fx = t.user(MAIN, &format!("/answer {} {}", id, words));
+        assert!(t.hub.st.cards.contains_key(&id), "open after {words:?}");
+        assert!(!fx.iter().any(|e| matches!(e, Effect::Confirm { .. })), "no verdict for {words:?}: {:?}", fx);
+        assert!(format!("{:?}", fx).contains("waits for 1 allow · 2 always · 3 no · or no: <why> — typed words don't answer it"), "{:?}", fx);
+    }
+    let fx = t.user(MAIN, &format!("/answer {} 1", id));
+    assert!(fx.iter().any(|e| matches!(e, Effect::Confirm { text, .. } if text == "1")), "{:?}", fx);
+    assert!(!t.hub.st.cards.contains_key(&id));
+    // the TUI's deny with its note
+    t.go(Input::ConfirmOpen { agent: MAIN.into(), text: "main wants to push".into() });
+    let id = *t.hub.st.cards.keys().max().unwrap();
+    let fx = t.user(MAIN, &format!("/answer {} deny: not on friday", id));
+    assert!(fx.iter().any(|e| matches!(e, Effect::Confirm { text, .. } if text == "deny: not on friday")), "{:?}", fx);
+}
+
+// the deny aliases (lead m_10900): `no` and `no: <why>` close a confirm
+// card with his words, which the gate reads as no with the note
+#[test]
+fn an_approval_card_takes_no_with_its_reason() {
+    use crate::daemon::gate::{answer_of, Answer};
+    let mut t = T::new();
+    t.go(Input::ConfirmOpen { agent: MAIN.into(), text: "main wants to push to main".into() });
+    let id = *t.hub.st.cards.keys().max().unwrap();
+    let fx = t.user(MAIN, &format!("/answer {} no: use a branch", id));
+    let text = fx.iter().find_map(|e| match e { Effect::Confirm { text, .. } => Some(text.clone()), _ => None });
+    assert_eq!(text.as_deref(), Some("no: use a branch"), "{:?}", fx);
+    assert_eq!(answer_of("no: use a branch"), Answer::No("use a branch".into()));
+    assert!(!t.hub.st.cards.contains_key(&id));
+}
+
+// the rule has two homes, sb-core (confirm_ok) and the gate (answer_of):
+// over one table, what sb-core lets through is the decision the gate
+// reads, and nothing sb-core refuses would be an allow at the gate
+#[test]
+fn sb_core_and_the_gate_agree_on_a_confirm_answer() {
+    use crate::daemon::gate::{answer_of, Answer};
+    #[derive(Debug, PartialEq)]
+    enum Want {
+        Allow,
+        Always,
+        No(String),
+        Refused,
+    }
+    let no = |n: &str| Want::No(n.into());
+    let table = [
+        ("1", Want::Allow),
+        ("2", Want::Always),
+        ("3", no("")),
+        ("no", no("")),
+        ("No", no("")),
+        ("  NO  ", no("")),
+        ("no: use a branch", no("use a branch")),
+        ("deny: x", no("x")),
+        ("nope", Want::Refused),
+        ("now", Want::Refused),
+        ("no thanks", Want::Refused),
+        ("non", Want::Refused),
+        ("", Want::Refused),
+        ("3 no", Want::Refused),
+    ];
+    let mut t = T::new();
+    for (input, want) in table {
+        t.go(Input::ConfirmOpen { agent: MAIN.into(), text: "main wants to run make".into() });
+        let id = *t.hub.st.cards.keys().max().unwrap();
+        let fx = t.user(MAIN, &format!("/answer {} {}", id, input));
+        let sent = fx.iter().find_map(|e| match e { Effect::Confirm { text, .. } => Some(text.clone()), _ => None });
+        let got = match sent.as_deref().map(answer_of) {
+            None => Want::Refused,
+            Some(Answer::Allow) => Want::Allow,
+            Some(Answer::Always) => Want::Always,
+            Some(Answer::No(note)) => Want::No(note),
+        };
+        assert_eq!(got, want, "{input:?}: {:?}", fx);
+        assert_eq!(t.hub.st.cards.contains_key(&id), want == Want::Refused, "{input:?}: the card");
+        if want == Want::Refused {
+            assert_ne!(answer_of(input), Answer::Allow, "{input:?}: refused by sb-core, an allow at the gate");
+            t.user(MAIN, &format!("/answer {} 3", id));
+        }
+    }
+}
+
+// one answer on both sides: the kinds whose card refuses typed words are
+// the ones bise-proto calls approvals (the window and the capsule show
+// them with options only). drop: approval_kind becomes false with
+// amb-core's next commit (sb-core keeps yes/no words there); add it then.
+#[test]
+fn approval_kinds_agree_with_proto() {
+    for kind in ["question", "drop", "confirm", "merge", "feature_try", "feature_merge", "update", "signin"] {
+        let mut t = T::new();
+        let id = open_card(&mut t, kind, "go on?\n\n1. yes\n2. no");
+        t.user(MAIN, &format!("/answer {} some typed words", id));
+        let refused = t.hub.st.cards.contains_key(&id);
+        assert_eq!(refused, bise_proto::rows::Card::approval_kind(kind), "{kind}");
+    }
+}
+
+// T1 run 5 step 9: a feature merge writes no `landed` line, so the typed
+// connections' merged-today list is sent again on its own effect; any
+// other feature step (dropped, replaced, a plain line) sends nothing.
+#[test]
+fn a_feature_merge_refreshes_merged_today() {
+    let mut t = T::new();
+    let done = |close: Option<&str>| FeatureDone {
+        name: "cu".into(),
+        close: close.map(String::from),
+        line: Some(("info".into(), "✓ cu merged into main".into())),
+        ..FeatureDone::default()
+    };
+    let fx = t.go(Input::Feature(done(Some("merged"))));
+    assert_eq!(fx.iter().filter(|e| **e == Effect::MergedChanged).count(), 1, "{:?}", fx);
+    for close in [None, Some("dropped"), Some("replaced")] {
+        let fx = t.go(Input::Feature(done(close)));
+        assert!(!fx.contains(&Effect::MergedChanged), "{close:?}: {:?}", fx);
+    }
+}
+
+// ---- desktop S2 step 5: unclear routes (BISE_ROUTE_MODEL's pick) ----
+
+fn asks(fx: &[Effect]) -> Vec<(u64, String)> {
+    fx.iter()
+        .filter_map(|e| match e {
+            Effect::RouteAsk { rid, text } => Some((*rid, text.clone())),
+            _ => None,
+        })
+        .collect()
+}
+
+fn unclear(t: &mut T, text: &str) -> Vec<Effect> {
+    t.go(Input::RouteHold { text: text.into(), via: String::new(), to: String::new(), name: String::new(), why: String::new(), context: None })
+}
+
+// held 1.5 s with no target, the shell asked; the window sees nothing;
+// with no pick his words reach bise's main as a plain message at the due
+#[test]
+fn an_unclear_route_with_no_pick_goes_plain_to_main_at_its_due() {
+    let mut t = T::new();
+    let fx = unclear(&mut t, "fix it please");
+    assert_eq!(asks(&fx), vec![(1, "fix it please".into())]);
+    assert!(routes(&fx).is_empty() && say_to(&fx, MAIN).is_none() && steer_to(&fx, MAIN).is_none(), "{:?}", fx);
+    t.env.now += 1_400;
+    let fx = t.go(Input::Tick);
+    assert!(say_to(&fx, MAIN).is_none() && steer_to(&fx, MAIN).is_none());
+    t.env.now += 200;
+    let fx = t.go(Input::Tick);
+    let said = say_to(&fx, MAIN).or_else(|| steer_to(&fx, MAIN)).expect("main hears his words");
+    assert!(said.contains("fix it please"), "{said}");
+    assert!(xdelivers(&fx).is_empty() && route_dones(&fx).is_empty(), "{:?}", fx);
+    // once: a late pick changes nothing
+    let fx = t.go(Input::RoutePick { rid: 1, to: "shop-1".into(), name: "shop".into(), why: "bise's model picked shop".into() });
+    assert!(routes(&fx).is_empty() && xdelivers(&fx).is_empty(), "{:?}", fx);
+}
+
+// a pick in time: a held route to that project, his 2 s from the pick,
+// then forwarded like any route; the unclear one never goes plain
+#[test]
+fn a_picked_route_is_held_two_seconds_for_that_project() {
+    let mut t = T::new();
+    unclear(&mut t, "is the checkout still slow");
+    t.env.now += 900;
+    let picked = t.env.now;
+    let fx = t.go(Input::RoutePick { rid: 1, to: "shop-1".into(), name: "shop".into(), why: "bise's model picked shop".into() });
+    assert_eq!(routes(&fx), vec![(2, "shop-1".into(), "shop".into(), picked + 2000)]);
+    t.env.now += 1_000;
+    let fx = t.go(Input::Tick);
+    assert!(say_to(&fx, MAIN).is_none() && steer_to(&fx, MAIN).is_none() && xdelivers(&fx).is_empty(), "the unclear act is gone: {:?}", fx);
+    t.env.now += 1_100;
+    let fx = t.go(Input::Tick);
+    assert_eq!(xdelivers(&fx), vec![(1, "shop-1".into(), "input".into(), "is the checkout still slow".into())]);
+    assert!(say_to(&fx, MAIN).is_none() && steer_to(&fx, MAIN).is_none());
+    // a second pick for it: nothing
+    assert!(routes(&t.go(Input::RoutePick { rid: 1, to: "docs-2".into(), name: "docs".into(), why: String::new() })).is_empty());
+}
+
+// law route_plain_waits_behind_unclear: a plain input to bise's main
+// while an unclear route waits is held behind it, and both reach main
+// in order; a queued input isn't held (it waits for the turn end)
+#[test]
+fn a_plain_input_waits_behind_an_unclear_route() {
+    let mut t = T::new();
+    unclear(&mut t, "first words");
+    t.env.now += 500;
+    let fx = t.user(MAIN, "second words");
+    assert!(say_to(&fx, MAIN).is_none() && steer_to(&fx, MAIN).is_none() && asks(&fx).is_empty(), "held behind: {:?}", fx);
+    t.env.now += 1_100;
+    let fx = t.go(Input::Tick);
+    let said: Vec<String> = fx
+        .iter()
+        .filter_map(|e| match e {
+            Effect::Say { agent, text } | Effect::Steer { agent, text } if agent == MAIN => Some(text.clone()),
+            _ => None,
+        })
+        .collect();
+    let all = said.join("
+");
+    let (a, b) = (all.find("first words"), all.find("second words"));
+    assert!(a.is_some() && b.is_some() && a < b, "both, in order: {:?}", fx);
+    // nothing waits now: the next input goes at once
+    let fx = t.user(MAIN, "third words");
+    assert!(say_to(&fx, MAIN).or_else(|| steer_to(&fx, MAIN)).is_some_and(|s| s.contains("third words")), "{:?}", fx);
+}
+
+/// bar A.1 / A.5 (architect m_10331): a window's typed `new` reaches the
+/// same handler as the TUI's /new with its fields, never parsed again: a
+/// brief that starts with `-w ` or `x: ` stays the objective, word for
+/// word, and makes no worktree and no name of it.
+#[test]
+fn a_typed_new_takes_its_brief_as_written() {
+    let mut t = T::new();
+    let new = |name: Option<&str>, brief: &str, worktree: bool| Input::UserCmd {
+        client: 1,
+        focus: MAIN.into(),
+        cmd: UserCmd::New { name: name.map(str::to_string), brief: brief.into(), worktree, with_changes: false },
+    };
+    t.go(new(Some("flags"), "-w do the thing", false));
+    let a = &t.hub.st.agents["flags"];
+    assert_eq!(a.brief.objective, "-w do the thing", "the brief as written");
+    assert_eq!(a.ws.mode, crate::model::Mode::Shared, "no worktree read from the brief");
+    t.go(new(None, "x: fix the login", false));
+    let named_x = t.hub.st.agents.contains_key("x");
+    assert!(!named_x, "no name read from the brief");
+    assert!(t.hub.st.agents.values().any(|a| a.brief.objective == "x: fix the login"), "{:?}", t.hub.st.agents.keys());
+    // with_changes without a worktree: refused, as the TUI's /new
+    let fx = t.go(Input::UserCmd {
+        client: 1,
+        focus: MAIN.into(),
+        cmd: UserCmd::New { name: Some("wc".into()), brief: "y".into(), worktree: false, with_changes: true },
+    });
+    assert!(fx.iter().any(|e| matches!(e, Effect::ToClient { body, .. } if body["text"] == "--with-changes only works with -w")), "{fx:?}");
+    assert!(!t.hub.st.agents.contains_key("wc"));
+}
+
+/// A typed rename, model and effort: the TUI's handlers. An invalid name
+/// is sb-core's refusal (a notice to that client, an error for a typed
+/// one); model and effort go to the agent named, never main.
+#[test]
+fn a_typed_rename_model_and_effort_take_the_tuis_paths() {
+    let mut t = T::new();
+    t.user(MAIN, "/new fix: corrige le bug");
+    let cmd = |focus: &str, cmd: UserCmd| Input::UserCmd { client: 1, focus: focus.into(), cmd };
+    let fx = t.go(cmd(MAIN, UserCmd::Rename { name: "fix".into(), new_name: "Not Valid".into() }));
+    assert!(fx.iter().any(|e| matches!(e, Effect::ToClient { body, .. } if body["text"].as_str().unwrap_or("").contains("invalid or taken name"))), "{fx:?}");
+    t.go(cmd(MAIN, UserCmd::Rename { name: "fix".into(), new_name: "login".into() }));
+    assert!(t.hub.st.agents.contains_key("login") && !t.hub.st.agents.contains_key("fix"));
+    let fx = t.go(cmd("login", UserCmd::Model { model: Some("mistral/devstral".into()), default: false }));
+    assert!(fx.contains(&Effect::Choose { client: 1, agent: "login".into(), model: Some("mistral/devstral".into()), effort: None, default: false }), "{fx:?}");
+    let fx = t.go(cmd("login", UserCmd::Reasoning { effort: Some("high".into()) }));
+    assert!(fx.contains(&Effect::Choose { client: 1, agent: "login".into(), model: None, effort: Some("high".into()), default: false }), "{fx:?}");
+}
+
+/// qa-flows 28a5419b (ambient-lead m_11512): '/close N' closes a hub item
+/// (feature_merge, merge, ...) like a question, through the TUI's line
+/// and through a typed client's step (the window's slash).
+#[test]
+fn close_closes_every_kind_of_card() {
+    for kind in ["question", "merge", "feature_try", "feature_merge", "update", "signin"] {
+        for typed in [false, true] {
+            let mut t = T::new();
+            let id = open_card(&mut t, kind, "merge checkout into main?\n\n1. merge\n2. keep working\n3. drop the branch");
+            let fx = if typed {
+                t.go(Input::UserCmd { client: 1, focus: MAIN.into(), cmd: UserCmd::Close { card: id } })
+            } else {
+                t.user(MAIN, &format!("/close {id}"))
+            };
+            assert!(!t.hub.st.cards.contains_key(&id), "{kind} typed={typed}: still open, {fx:?}");
+        }
+    }
+}
 
 /// No number a client sends panics the hub (core_num.rs).
 #[path = "core_num_tests.rs"]

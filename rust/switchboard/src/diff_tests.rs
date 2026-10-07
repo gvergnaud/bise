@@ -146,4 +146,38 @@ fn a_land_range_has_its_stat_and_a_bad_range_is_refused() {
     assert_eq!((files.len(), commits), (1, 1));
     assert!(range(&d, "a; rm -rf /..b").is_err());
     assert!(range(&d, "--output=x..y").is_err());
+    assert!(range(&d, "x^^..y").is_err() && range(&d, "^..y").is_err());
+}
+
+/// T1 run 6 step 9 (amb-tools m_9325): one commit is `<sha>^..<sha>`
+/// (the window's "merged · 7f5be63"); a feature's merge commit shows the
+/// feature's whole change against main's first parent.
+#[test]
+fn one_commit_and_a_merge_commit_are_ranges() {
+    let d = repo("merge");
+    let head = |d: &Path| String::from_utf8(std::process::Command::new("git").arg("-C").arg(d).args(["rev-parse", "HEAD"]).output().unwrap().stdout).unwrap().trim().to_string();
+    // the root commit: against the empty tree
+    let root = head(&d);
+    let (files, commits) = range(&d, &format!("{root}^..{root}")).unwrap();
+    assert_eq!((files.iter().map(|f| (f.path.as_str(), f.status)).collect::<Vec<_>>(), commits), (vec![("a.txt", 'A')], 1));
+    sh(&d, &["checkout", "-q", "-b", "feat"]);
+    std::fs::write(d.join("f.txt"), "f\n").unwrap();
+    sh(&d, &["add", "."]);
+    sh(&d, &["commit", "-q", "-m", "f1"]);
+    std::fs::write(d.join("g.txt"), "g\n").unwrap();
+    sh(&d, &["add", "."]);
+    sh(&d, &["commit", "-q", "-m", "f2"]);
+    sh(&d, &["checkout", "-q", "main"]);
+    std::fs::write(d.join("m.txt"), "m\n").unwrap();
+    sh(&d, &["add", "."]);
+    sh(&d, &["commit", "-q", "-m", "on main"]);
+    let plain = head(&d);
+    let (files, commits) = range(&d, &format!("{plain}^..{plain}")).unwrap();
+    assert_eq!((files.iter().map(|f| f.path.as_str()).collect::<Vec<_>>(), commits), (vec!["m.txt"], 1));
+    sh(&d, &["merge", "-q", "--no-ff", "-m", "merge feat", "feat"]);
+    let merge = head(&d);
+    let (files, commits) = range(&d, &format!("{merge}^..{merge}")).unwrap();
+    let mut paths: Vec<_> = files.iter().map(|f| f.path.as_str()).collect();
+    paths.sort();
+    assert_eq!((paths, commits), (vec!["f.txt", "g.txt"], 3), "the feature against main's first parent");
 }
