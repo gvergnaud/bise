@@ -104,6 +104,10 @@ def main():
         gone = r.call("turn/send", {"project": project, "agent": "nobody", "text": "hi", "mode": "now"})
         check(gone["error"]["code"] == HUB_REFUSED and "nobody" in gone["error"]["message"], "no such agent: %r" % gone)
 
+        cmds = r.call("commands/list")["result"]["commands"]
+        check(len(cmds) == 34 and any(c["name"] == "/new" and not c["client"] for c in cmds), "commands/list: %d" % len(cmds))
+        helped = r.call("command/run", {"project": project, "agent": "main", "line": "/help"})["result"]
+        check(helped.get("notice"), "command/run /help: %r" % helped)
         read = r.call("hub/read")["result"]
         check(read["watermark"]["epoch"] == wm["epoch"] and read["watermark"]["seq"] >= wm["seq"], "hub/read: %r" % read["watermark"])
 

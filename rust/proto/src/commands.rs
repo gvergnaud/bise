@@ -12,7 +12,7 @@
 //! and `dev_version`) or `{"kind": "task"}` for the others.
 
 use serde::ser::{SerializeSeq, Serializer};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize)]
 pub struct Cmd {
@@ -204,6 +204,79 @@ pub const COMMANDS: &[Cmd] = &[
     Cmd { name: "/quit", desc: "quit (the agents keep running)", args: &[], client: true },
 ];
 
+/// One command as `commands/list` sends it: an owned wire type (architect
+/// m_13138), so a client reads a hub older or newer than itself. Built
+/// from [`COMMANDS`] by [`rows`]; the same JSON as a [`Cmd`] (law).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct CommandRow {
+    pub name: String,
+    pub desc: String,
+    pub args: Vec<ArgRow>,
+    pub client: bool,
+}
+
+/// One word of an argument (the window's `PickChoice` shape).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct WordRow {
+    pub value: String,
+    pub desc: String,
+}
+
+/// [`Arg`] on the wire; a kind this version doesn't know: `Unknown`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(tag = "kind", content = "words", rename_all = "snake_case")]
+pub enum ArgRow {
+    Words(Vec<WordRow>),
+    Task,
+    Archived,
+    Card,
+    Version(Vec<WordRow>),
+    DevVersion(Vec<WordRow>),
+    Plugin,
+    Model,
+    Effort,
+    ComputerUse,
+    Branch,
+    Keychain,
+    Text,
+    Note,
+    #[serde(other)]
+    Unknown,
+}
+
+fn word_rows(ws: &[(&str, &str)]) -> Vec<WordRow> {
+    ws.iter().map(|(value, desc)| WordRow { value: value.to_string(), desc: desc.to_string() }).collect()
+}
+
+impl From<&Arg> for ArgRow {
+    fn from(a: &Arg) -> ArgRow {
+        match a {
+            Arg::Words(ws) => ArgRow::Words(word_rows(ws)),
+            Arg::Task => ArgRow::Task,
+            Arg::Archived => ArgRow::Archived,
+            Arg::Card => ArgRow::Card,
+            Arg::Version(ws) => ArgRow::Version(word_rows(ws)),
+            Arg::DevVersion(ws) => ArgRow::DevVersion(word_rows(ws)),
+            Arg::Plugin => ArgRow::Plugin,
+            Arg::Model => ArgRow::Model,
+            Arg::Effort => ArgRow::Effort,
+            Arg::ComputerUse => ArgRow::ComputerUse,
+            Arg::Branch => ArgRow::Branch,
+            Arg::Keychain => ArgRow::Keychain,
+            Arg::Text => ArgRow::Text,
+            Arg::Note => ArgRow::Note,
+        }
+    }
+}
+
+/// The catalog as `commands/list` sends it.
+pub fn rows() -> Vec<CommandRow> {
+    COMMANDS.iter().map(|c| CommandRow { name: c.name.into(), desc: c.desc.into(), args: c.args.iter().map(ArgRow::from).collect(), client: c.client }).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -246,5 +319,18 @@ mod tests {
         assert_eq!(args("/computer-use"), json!([{"kind": "computer_use"}]));
         assert_eq!(args("/restore"), json!([{"kind": "archived"}]));
         assert_eq!(serde_json::to_value(find("/inbox")).unwrap()["client"], true);
+    }
+
+    /// Law (architect m_13138): the owned rows are the static table's JSON,
+    /// and read back as themselves; an unknown kind of argument reads as
+    /// Unknown (a newer hub).
+    #[test]
+    fn the_rows_are_the_tables_json_and_round_trip() {
+        let rows = rows();
+        assert_eq!(serde_json::to_value(&rows).unwrap(), serde_json::to_value(COMMANDS).unwrap());
+        let back: Vec<CommandRow> = serde_json::from_value(serde_json::to_value(&rows).unwrap()).unwrap();
+        assert_eq!(back, rows);
+        let newer: ArgRow = serde_json::from_value(json!({"kind": "colour"})).unwrap();
+        assert_eq!(newer, ArgRow::Unknown);
     }
 }

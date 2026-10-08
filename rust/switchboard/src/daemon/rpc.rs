@@ -125,6 +125,9 @@ impl Shell {
             }
             return self.rpc_initialize(id, rid, params);
         }
+        if method == rpc::COMMANDS_LIST {
+            return self.rpc_respond(id, Response::ok(rid, serde_json::to_value(rpc::CommandsList::now()).unwrap_or_default()));
+        }
         if method == rpc::HUB_READ {
             let state = self.hub_state();
             return self.rpc_respond(id, Response::ok(rid, serde_json::to_value(state).unwrap_or_default()));
@@ -251,6 +254,15 @@ impl Shell {
                 if let Some(p) = self.rpc_pending(id, |p| p.cmd == cmd) {
                     let e = RpcError::refused(text.clone(), reason.as_deref());
                     self.rpc_respond(id, Response::err(Some(p.id), e));
+                    return true;
+                }
+            }
+            // command/run's words (`/help`, `/flow`, `/artifacts add`):
+            // its typed result
+            if let HubEv::Notice { cmd: Some(c), text, .. } = ev {
+                if let Some(p) = self.rpc_pending(id, |p| p.cmd == c.as_str() && p.cmd == "slash") {
+                    let r = rpc::CommandRunResult { notice: Some(text.clone()) };
+                    self.rpc_respond(id, Response::ok(p.id, serde_json::to_value(r).unwrap_or_default()));
                     return true;
                 }
             }

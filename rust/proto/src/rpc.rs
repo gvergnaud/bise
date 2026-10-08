@@ -262,9 +262,9 @@ pub const METHODS: &[MethodRow] = &[
     m("route/correct", "route_correct", None),
     m("route/cancel", "route_cancel", None),
     // the line he typed (say, @route, a hub command): the hub's one
-    // parser, then the same handlers as the typed methods; the hub's
-    // words when it answers some (`/help`, `/flow`, `/artifacts add`)
-    m("command/run", "slash", Some("notice")),
+    // parser, then the same handlers as the typed methods; its result is
+    // a [`CommandRunResult`] (OWN_RESULTS)
+    m("command/run", "slash", None),
 ];
 
 /// The protocol's own methods (no [`HubCmd`]).
@@ -273,7 +273,14 @@ pub const INITIALIZE: &str = "initialize";
 pub const INITIALIZED: &str = "initialized";
 /// the hub-wide state and its watermark again (a gap, a new epoch)
 pub const HUB_READ: &str = "hub/read";
-pub const OWN_METHODS: &[&str] = &[INITIALIZE, HUB_READ];
+/// the slash commands' catalog ([`CommandsList`])
+pub const COMMANDS_LIST: &str = "commands/list";
+pub const OWN_METHODS: &[&str] = &[INITIALIZE, HUB_READ, COMMANDS_LIST];
+pub const COMMAND_RUN: &str = "command/run";
+
+/// The methods whose result is a type of this module, not a [`HubEv`]'s
+/// fields: method -> its result's type name (for the TypeScript map).
+pub const OWN_RESULTS: &[(&str, &str)] = &[(INITIALIZE, "InitializeResult"), (HUB_READ, "HubState"), (COMMANDS_LIST, "CommandsList"), (COMMAND_RUN, "CommandRunResult")];
 
 /// Who gets a notification, and so how it is numbered.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -477,6 +484,29 @@ pub fn ev_of_result(method: &str, result: Value) -> Result<Option<HubEv>, String
         return Ok(None);
     }
     HubEv::from_value(tagged(result, "ev", tag)?).map(Some)
+}
+
+/// `commands/list`'s result: every slash command, owned rows.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct CommandsList {
+    pub commands: Vec<crate::commands::CommandRow>,
+}
+
+impl CommandsList {
+    pub fn now() -> CommandsList {
+        CommandsList { commands: crate::commands::rows() }
+    }
+}
+
+/// `command/run`'s result (architect m_13277): `notice` the hub's words
+/// when it answers some (`/help`, `/flow`, `/artifacts add`); none: what
+/// the line did shows in the notifications.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct CommandRunResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notice: Option<String>,
 }
 
 // ---- initialize ----

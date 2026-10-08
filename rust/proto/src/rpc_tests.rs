@@ -213,6 +213,28 @@ fn a_reducer_that_follows_the_watermark_ends_equal_to_hub_read() {
 }
 
 #[test]
+fn every_own_method_and_command_run_has_a_result_type() {
+    for m in OWN_METHODS {
+        assert!(OWN_RESULTS.iter().any(|(r, _)| r == m), "{m}: no result type");
+    }
+    for (m, _) in OWN_RESULTS {
+        let row = method_row(m);
+        assert!(OWN_METHODS.contains(m) || row.is_some_and(|r| r.result.is_none()), "{m}: two result types");
+    }
+}
+
+/// The fixtures of command/run's result read back as themselves.
+#[test]
+fn command_run_results_round_trip() {
+    for v in fixture("command_run_result.jsonl") {
+        let r: CommandRunResult = serde_json::from_value(v.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&r).unwrap(), v);
+    }
+    let list = serde_json::to_value(CommandsList::now()).unwrap();
+    assert_eq!(serde_json::from_value::<CommandsList>(list).unwrap(), CommandsList::now());
+}
+
+#[test]
 fn initialize_lists_every_method_and_notification() {
     let ms = methods();
     assert!(ms.iter().any(|m| m == INITIALIZE) && ms.iter().any(|m| m == HUB_READ));
