@@ -1,13 +1,13 @@
-"""The terminal's tab title (term-title, designer's pick) in a real
-terminal (tmux, its `#{pane_title}`) on a throwaway hub and the fake
-provider: `#N` the inbox's cards, `↗N` the new artifacts, `●N` the agents
-at work, then the repo's folder, each count left out at 0.
+"""The terminal's tab title (title-bise, designer's pick m_13176) in a
+real terminal (tmux, its `#{pane_title}`) on a throwaway hub and the fake
+provider: `?N` the inbox's cards, `↻N` the agents at work, then `bise`
+and the repo's folder, each count left out at 0.
 
   the pane's title before bise: `before-bise`
-  the TUI starts: the folder alone (`ws`)
-  a card arrives: `#1 · ws`
-  main adds an artifact: `#1 ↗1 · ws`
-  t1 starts (its brief is slow): `#1 ↗1 ●1 · ws`; it stops: `#1 ↗1 · ws`
+  the TUI starts: `bise · ws`
+  a card arrives: `?1 bise · ws`
+  main adds an artifact: still `?1 bise · ws` (the title does not count them)
+  t1 starts (its brief is slow): `?1 ↻1 bise · ws`; it stops: `?1 bise · ws`
   /quit: the title bise found is back (`before-bise`, CSI 23 t)
   BISE_TERM_TITLE=0: the title is never touched
 
@@ -69,22 +69,24 @@ def live(t):
     start(t)
     t.wait("bise :*")
     t.wait_re(MAIN_IDLE)
-    title_is(t, folder)
-    print("ok: the folder alone (%r)" % folder)
+    title_is(t, "bise · " + folder)
+    print("ok: bise and the folder (%r)" % title(t))
     # a card arrives
     t.typed("[[bash: sb card \"$(printf 'pick one\\n1. alpha\\n2. beta')\"]]")
     t.keys("Enter")
-    title_is(t, "#1 · " + folder)
+    title_is(t, "?1 bise · " + folder)
     print("ok: a card: %r" % title(t))
-    # main adds an artifact
+    # main adds an artifact: the title does not count them
     sb(E, "main", "artifact", "add", "https://example.com/plan", "--title", "plan")
-    title_is(t, "#1 ↗1 · " + folder)
-    print("ok: an artifact: %r" % title(t))
+    t.wait("↗")   # the header says it
+    wait.holds(lambda: title(t) == "?1 bise · " + folder, 1.0,
+               lambda: "an artifact changed the title: %r" % title(t))
+    print("ok: an artifact leaves it: %r" % title(t))
     # an agent starts (its brief keeps it at work 6 s), then stops
     sb(E, "main", "spawn", "t1", "--objective", "[[slow: 6]] say hi")
-    title_is(t, "#1 ↗1 ●1 · " + folder)
+    title_is(t, "?1 ↻1 bise · " + folder)
     print("ok: t1 at work: %r" % title(t))
-    title_is(t, "#1 ↗1 · " + folder, timeout=60)
+    title_is(t, "?1 bise · " + folder, timeout=60)
     print("ok: t1 stopped: %r" % title(t))
     quit_tui(t)
     title_is(t, BEFORE, timeout=10)

@@ -1,12 +1,14 @@
-//! The terminal's tab title while bise runs (term-title, designer's
-//! pick): what waits for you, then the project, e.g. `#2 ↗1 ●3 · harness`.
-//! `#N` the inbox's cards, `↗N` the new artifacts, `●N` the agents at
-//! work (working, or waiting on another agent; main left out), then the
-//! repo's folder name. A count at 0 is left out; all at 0: `harness`.
-//! The counts come first: a narrow tab cuts the end, and the folder is
-//! the part you can guess. `●` and not the TUI's `∿`: the tab's system
-//! font draws `∿` as a tick. `BISE_ASCII=1`: the TUI's own ASCII forms
-//! (`*` for `●`, `.` for `·`), `+` for `↗` (it has none): `#2 +1 *3 . harness`.
+//! The terminal's tab title while bise runs (title-bise, designer's pick
+//! m_13176): what waits for you, then `bise`, then the project, e.g.
+//! `?2 ↻3 bise · harness`. `?N` the inbox's cards (bise's "waits for
+//! you" sign), `↻N` the agents at work (working, or waiting on another
+//! agent; main left out), then the word `bise` and the repo's folder
+//! name. A count at 0 is left out; all at 0: `bise · harness`. No dot
+//! between the counts and `bise`: they read as its badge. The counts
+//! come first: a narrow tab cuts the end (`?2 ↻3 bise · h…`). `↻` and
+//! not the TUI's `∿`: the tab's system font draws `∿` as a tick. The new
+//! artifacts are not in it: they need no action and the header says
+//! them. `BISE_ASCII=1`: `?2 *3 bise - harness`.
 //!
 //! Written with OSC 0 (the tab and the window title: iTerm's tab reads
 //! the icon name) when the text holds still for [`DEBOUNCE`]; the title
@@ -34,31 +36,28 @@ pub(crate) struct Status {
     pub(crate) repo: String,
     /// The inbox's cards.
     pub(crate) inbox: usize,
-    /// The artifacts added since you last looked.
-    pub(crate) new: u64,
     /// The agents at work (working or waiting), main left out.
     pub(crate) running: usize,
 }
 
-/// The title's text; "" when there is nothing to say yet.
+/// The title's text; "" when there is nothing to say yet (no folder and
+/// no count: the hub has not spoken).
 pub(crate) fn text(s: &Status, ascii: bool) -> String {
-    let (artifact, agent, dot) = if ascii { ("+", "*", ".") } else { ("↗", "●", "·") };
+    let (agent, dot) = if ascii { ("*", "-") } else { ("↻", "·") };
     let mut parts: Vec<String> = Vec::new();
     if s.inbox > 0 {
-        parts.push(format!("#{}", s.inbox));
-    }
-    if s.new > 0 {
-        parts.push(format!("{artifact}{}", s.new));
+        parts.push(format!("?{}", s.inbox));
     }
     if s.running > 0 {
         parts.push(format!("{agent}{}", s.running));
     }
     let repo = clean(&s.repo);
-    match (parts.is_empty(), repo.is_empty()) {
-        (true, _) => repo,
-        (false, true) => parts.join(" "),
-        (false, false) => format!("{} {dot} {repo}", parts.join(" ")),
+    if parts.is_empty() && repo.is_empty() {
+        return String::new();
     }
+    parts.push("bise".to_string());
+    let head = parts.join(" ");
+    if repo.is_empty() { head } else { format!("{head} {dot} {repo}") }
 }
 
 /// The folder name as a title can carry it: no control characters (an
@@ -176,46 +175,45 @@ pub(crate) fn restore() {
 mod tests {
     use super::*;
 
-    fn st(repo: &str, inbox: usize, new: u64, running: usize) -> Status {
-        Status { repo: repo.into(), inbox, new, running }
+    fn st(repo: &str, inbox: usize, running: usize) -> Status {
+        Status { repo: repo.into(), inbox, running }
     }
 
     #[test]
-    fn the_counts_come_first_then_the_folder() {
-        assert_eq!(text(&st("harness", 2, 1, 3), false), "#2 ↗1 ●3 · harness");
-        assert_eq!(text(&st("harness", 12, 140, 9), false), "#12 ↗140 ●9 · harness");
+    fn the_counts_then_bise_then_the_folder() {
+        assert_eq!(text(&st("harness", 2, 3), false), "?2 ↻3 bise · harness");
+        assert_eq!(text(&st("harness", 12, 9), false), "?12 ↻9 bise · harness");
     }
 
     #[test]
     fn a_count_at_zero_is_left_out() {
-        assert_eq!(text(&st("harness", 0, 0, 0), false), "harness");
-        assert_eq!(text(&st("harness", 2, 0, 0), false), "#2 · harness");
-        assert_eq!(text(&st("harness", 0, 1, 0), false), "↗1 · harness");
-        assert_eq!(text(&st("harness", 0, 0, 3), false), "●3 · harness");
-        assert_eq!(text(&st("harness", 2, 0, 3), false), "#2 ●3 · harness");
-        assert_eq!(text(&st("harness", 0, 1, 3), false), "↗1 ●3 · harness");
+        assert_eq!(text(&st("harness", 0, 0), false), "bise · harness");
+        assert_eq!(text(&st("harness", 2, 0), false), "?2 bise · harness");
+        assert_eq!(text(&st("harness", 0, 3), false), "↻3 bise · harness");
     }
 
     #[test]
-    fn ascii_takes_the_tuis_forms() {
-        assert_eq!(text(&st("harness", 2, 1, 3), true), "#2 +1 *3 . harness");
-        assert_eq!(text(&st("harness", 0, 0, 0), true), "harness");
-        assert!(text(&st("harness", 2, 1, 3), true).is_ascii());
+    fn ascii_forms() {
+        assert_eq!(text(&st("harness", 0, 0), true), "bise - harness");
+        assert_eq!(text(&st("harness", 2, 0), true), "?2 bise - harness");
+        assert_eq!(text(&st("harness", 0, 3), true), "*3 bise - harness");
+        assert_eq!(text(&st("harness", 2, 3), true), "?2 *3 bise - harness");
+        assert!(text(&st("harness", 2, 3), true).is_ascii());
     }
 
     #[test]
     fn no_folder_yet() {
-        assert_eq!(text(&st("", 0, 0, 0), false), "");
-        assert_eq!(text(&st("", 1, 0, 2), false), "#1 ●2");
+        assert_eq!(text(&st("", 0, 0), false), "");
+        assert_eq!(text(&st("", 1, 2), false), "?1 ↻2 bise");
     }
 
     #[test]
     fn the_folder_is_cleaned_and_cut() {
-        assert_eq!(text(&st("evil\x1b]0;x\x07name", 0, 0, 0), false), "evil]0;xname");
+        assert_eq!(text(&st("evil\x1b]0;x\x07name", 0, 0), false), "bise · evil]0;xname");
         let long = "a".repeat(50);
-        let t = text(&st(&long, 1, 0, 0), false);
-        assert_eq!(t, format!("#1 · {}…", "a".repeat(REPO_MAX - 1)));
-        assert_eq!(text(&st("café-ü", 0, 0, 0), false), "café-ü");
+        let t = text(&st(&long, 1, 0), false);
+        assert_eq!(t, format!("?1 bise · {}…", "a".repeat(REPO_MAX - 1)));
+        assert_eq!(text(&st("café-ü", 0, 0), false), "bise · café-ü");
     }
 
     #[test]
@@ -241,11 +239,11 @@ mod tests {
         let t0 = Instant::now();
         let mut t = Title::default();
         let ms = |n| t0 + Duration::from_millis(n);
-        assert_eq!(t.next("●1 · harness".into(), ms(0)), None);
-        assert_eq!(t.next("●2 · harness".into(), ms(100)), None);
-        assert_eq!(t.next("●3 · harness".into(), ms(200)), None);
-        assert_eq!(t.next("●3 · harness".into(), ms(400)), None);
-        assert_eq!(t.next("●3 · harness".into(), ms(500)), Some("●3 · harness".into()));
+        assert_eq!(t.next("↻1 bise · harness".into(), ms(0)), None);
+        assert_eq!(t.next("↻2 bise · harness".into(), ms(100)), None);
+        assert_eq!(t.next("↻3 bise · harness".into(), ms(200)), None);
+        assert_eq!(t.next("↻3 bise · harness".into(), ms(400)), None);
+        assert_eq!(t.next("↻3 bise · harness".into(), ms(500)), Some("↻3 bise · harness".into()));
     }
 
     #[test]
@@ -254,7 +252,7 @@ mod tests {
         let mut t = Title::default();
         t.next("harness".into(), t0);
         assert_eq!(t.next("harness".into(), t0 + DEBOUNCE), Some("harness".into()));
-        assert_eq!(t.next("●1 · harness".into(), t0 + DEBOUNCE * 2), None);
+        assert_eq!(t.next("↻1 bise · harness".into(), t0 + DEBOUNCE * 2), None);
         assert_eq!(t.next("harness".into(), t0 + DEBOUNCE * 3), None);
         assert_eq!(t.next("harness".into(), t0 + DEBOUNCE * 9), None);
     }
@@ -270,7 +268,7 @@ mod tests {
     #[test]
     fn the_bytes_push_once_and_restore_pops() {
         assert_eq!(set_bytes("harness", true), "\x1b[22;0t\x1b]0;harness\x07");
-        assert_eq!(set_bytes("#1 · harness", false), "\x1b]0;#1 · harness\x07");
+        assert_eq!(set_bytes("?1 bise · harness", false), "\x1b]0;?1 bise · harness\x07");
         assert!(RESTORE.ends_with("\x1b[23;0t"));
         assert!(RESTORE.starts_with("\x1b]0;\x07"));
     }

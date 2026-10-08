@@ -81,7 +81,6 @@ pub(crate) fn title_status(app: &App) -> crate::termtitle::Status {
     crate::termtitle::Status {
         repo: crate::termtitle::repo_name(&sb.workspace),
         inbox: sb.sorted_cards().len(),
-        new: crate::artifacts::new_count(),
         running: sb.agents.iter().filter(|a| !a.main && a.busy()).count(),
     }
 }

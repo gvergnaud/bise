@@ -600,17 +600,19 @@ The same three levels everywhere, in main and inside an agent.
   kitty, outside tmux (it does not pass OSC 22); `BISE_POINTER=0` off,
   `=1` on in another terminal that has it (WezTerm, iTerm2 and
   Terminal.app do not: nothing is written there).
-- **The terminal's tab title (term-title, designer's pick):** while bise
-  runs, the tab says what waits for you, then the project:
-  `#2 ↗1 ●3 · harness`. `#N` the inbox's cards (the header's `#`), `↗N`
-  the new artifacts (the header's `↗`), `●N` the agents at work (working
-  or waiting on another agent; main left out), then the repo's folder
-  name (cut at 32 with `…`). A count at 0 is left out; all at 0: the
-  folder alone (`harness`). No `bise` word, no `:*`: the tab is the
-  user's. The counts come first: a narrow tab (`#2 ↗1 ●3 · h… ⌘1`) cuts
-  the end, and the folder is the part you can guess. `●`, not the TUI's
-  `∿`: the tab's system font draws `∿` as a tick. `BISE_ASCII=1`: the
-  TUI's ASCII forms, `#2 +1 *3 . harness` (`↗` has none: `+`). Written
+- **The terminal's tab title (title-bise, designer's pick m_13176; the
+  user: « on pourrait quand même écrire bise »):** while bise runs, the
+  tab says what waits for you, then `bise`, then the project:
+  `?2 ↻3 bise · harness`. `?N` the inbox's cards (bise's "waits for you"
+  sign), `↻N` the agents at work (working or waiting on another agent;
+  main left out), then the word `bise` and the repo's folder name (cut
+  at 32 with `…`). A count at 0 is left out; all at 0: `bise · harness`.
+  No dot between the counts and `bise`: they read as its badge. The
+  counts come first: a narrow tab (`?2 ↻3 bise · h… ⌘1`) cuts the end.
+  `↻` reads "running" in the tab's system font (`●` only said
+  "something"; the TUI's `∿` draws as a tick). The new artifacts are
+  not in it (term-title had `↗108`): they need no action, only grow, and
+  the header says them. `BISE_ASCII=1`: `?2 *3 bise - harness`. Written
   with OSC 0 once the text held still 300 ms; the title you had is
   pushed first (`CSI 22;0 t`) and popped on exit or crash (`CSI 23;0 t`,
   after an empty title for the terminals without the stack). Never when
