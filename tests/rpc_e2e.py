@@ -133,6 +133,36 @@ def main():
         check(all(n["method"] != "thread/entry" or "seq" not in n["params"] for n in r.notes()), "thread entries carry their pos, not a seq")
         check(i_resp >= 0, "the response came")
 
+        # step 3: the terminal's ops as methods (architect m_13313)
+        said = r.request("command/run", {"project": project, "agent": "main", "line": "plain words through command/run", "mode": "now", "via": "rpc_e2e"})
+        check(r.response(said).get("result") == {}, "command/run with plain words: {}")
+        r_wait(lambda: any("plain words through command/run" in json.dumps(n["params"]) for n in r.notes("thread/entry")), "command/run's words in main's thread")
+        c.wait_status("main", ["idle", "done"], 120)
+        q = r.call("command/run", {"project": project, "agent": "main", "line": "/help", "mode": "queued"})
+        check(q["error"]["code"] == HUB_REFUSED and "queue" in q["error"]["message"], "a queued command: %r" % q)
+        check(r.call("scheduled/run", {"project": project, "id": 999})["error"]["code"] == HUB_REFUSED, "scheduled/run of no task")
+        check(r.call("client/focus", {"project": project, "focus": "main"}).get("result") == {}, "client/focus")
+        none = r.call("diff/read", {"project": project})
+        check(none["error"]["code"] == HUB_REFUSED and "one of" in none["error"]["message"], "diff/read without a target: %r" % none)
+        opt = r.call("diff/read", {"project": project, "branch": "--output=x"})
+        check(opt["error"]["code"] == HUB_REFUSED, "diff/read of an option: %r" % opt)
+        d = r.call("diff/read", {"project": project, "branch": "main", "req": 4}, 60)["result"]
+        check(d.get("req") == 4 and isinstance(d.get("files"), list), "diff/read of a branch: %r" % {k: d[k] for k in d if k != "files"})
+        b = r.call("branches/list", {"project": project}, 60)["result"]
+        check(isinstance(b.get("rows"), list) and "base" in b, "branches/list: %r" % b)
+        v = r.call("versions/list", {"project": project})["result"]
+        check(isinstance(v.get("items"), list) and "current" in v, "versions/list: %r" % {k: v[k] for k in v if k != "items"})
+        info = r.call("version/info", {"project": project})["result"]
+        check("current version" in info.get("notice", ""), "version/info: %r" % info)
+        with open(os.path.join(E.ws, "rpc-note.md"), "w") as f:
+            f.write("# a note\n")
+        added = r.call("artifacts/add", {"project": project, "agent": "main", "target": "rpc-note.md", "title": "rpc note"})
+        check("rpc note" in added.get("result", {}).get("notice", ""), "artifacts/add: %r" % added)
+        rel = r.call("release/plan", {"project": project, "dry": True})
+        check(rel["error"]["code"] == HUB_REFUSED and "dev build" in rel["error"]["message"], "release/plan outside bise's tree: %r" % rel)
+        with r.lock:
+            check(not any("ev" in v or "op" in v for v in r.lines), "an older event after step 3's methods: %r" % [v for v in r.lines if "ev" in v][:3])
+
         # an older hello connection (the terminal): requests answered by id,
         # no notification
         c.send({"jsonrpc": "2.0", "id": "s1", "method": "scheduled/list", "params": {"project": project}})

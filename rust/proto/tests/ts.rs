@@ -2,8 +2,8 @@
 //! from the Rust types with ts-rs (feature `ts`, so bise and sb never
 //! compile ts-rs), never hand-edited (architect m_9476).
 //!
-//! - one `.ts` per wire module (hub, draft, thread, rows, diff, context,
-//!   helper, pty) + `json.ts` (serde_json's Value) + `index.ts`;
+//! - one `.ts` per wire module (hub, draft, thread, rows, diff, ops,
+//!   context, helper, pty) + `json.ts` (serde_json's Value) + `index.ts`;
 //! - `fixtures.gen.ts`: every fixture line as a typed constant, so
 //!   `pnpm typecheck` fails when a fixture doesn't fit its generated type;
 //! - u64/i64 come out as `number` (ids, positions, `*_ms`: safe below 2^53),
@@ -15,7 +15,7 @@
 //! stale; `BISE_PROTO_BLESS=1` writes them.
 #![cfg(feature = "ts")]
 
-use bise_proto::{commands, context, diff, draft, helper, hub, pty, rows, rpc, thread};
+use bise_proto::{commands, context, diff, draft, helper, hub, ops, pty, rows, rpc, thread};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
@@ -60,7 +60,8 @@ fn modules(cfg: &Config) -> Vec<(&'static str, Vec<Decl>)> {
         module!(cfg, "diff": diff::LineKind, diff::DiffLine, diff::Hunk, diff::DiffFile, diff::DiffResult, diff::Series),
         module!(cfg, "rows": rows::Status, rows::ReportKind, rows::Report, rows::Agent, rows::Opt, rows::CardPage, rows::Card, rows::Merged, rows::DevServer, rows::Worktree, rows::FeatureTry, rows::Feature, rows::PrState, rows::PrChecks, rows::PrReview, rows::Pr, rows::ModelRole, rows::Model, rows::Artifact, rows::ArtifactVersion, rows::ScheduledTask, rows::AgentUsage, rows::WaitingOn, rows::ApprovalMode, rows::CheckerKind, rows::ApprovalRule),
         module!(cfg, "thread": thread::EntryKind, thread::ToolKind, thread::ToolState, thread::FileCount, thread::ToolItem, thread::Tools, thread::EntryCard, thread::PageRef, thread::ReportRef, thread::Thinking, thread::NoticeLevel, thread::Notice, thread::NotDelivered, thread::Landed, thread::PrNewsState, thread::PrNews, thread::Made, thread::ImageRef, thread::Answered, thread::ApprovalFold, thread::Scheduled, thread::TurnFailed, thread::Entry),
-        module!(cfg, "hub": hub::JobState, hub::Job, hub::HubEv, hub::Mode, hub::HubCmd, hub::ErrorKind),
+        module!(cfg, "ops": ops::BranchRow, ops::VersionItem),
+        module!(cfg, "hub": hub::JobState, hub::Job, hub::HubEv, hub::Mode, hub::SendOpts, hub::HubCmd, hub::ErrorKind),
         module!(cfg, "rpc": rpc::Id, rpc::Request, rpc::Notification, rpc::Response, rpc::ErrorData, rpc::RpcError, rpc::Watermark, rpc::ClientInfo, rpc::InitializeParams, rpc::HubState, rpc::InitializeResult, rpc::CommandsList, rpc::CommandRunResult),
         module!(cfg, "commands": commands::WordRow, commands::ArgRow, commands::CommandRow),
         module!(cfg, "draft": draft::Quote, draft::Queued, draft::DraftHubCmd, draft::ProjectRow, draft::OpenWhat, draft::Account, draft::Found, draft::AwayProject, draft::Plugin, draft::PluginLogin, draft::CuRow, draft::RoleRow, draft::Runs, draft::PickChoice, draft::PickArg, draft::PickCommand, draft::PickSkill, draft::PickFile, draft::PickFolder, draft::CoreEv, draft::AppCmd, draft::TalkPage, draft::ProjectView, draft::IndexRow),

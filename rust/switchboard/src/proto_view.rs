@@ -17,12 +17,14 @@ use std::path::Path;
 
 pub mod approvals;
 mod dev_servers;
+mod diff_ask;
 mod features;
 mod merged;
 mod models;
 pub mod slash;
 mod worktrees;
 pub use dev_servers::{dev_servers, lsof_ports, server_name, Job};
+pub use diff_ask::DiffAsk;
 pub use features::{features, PlaceCard};
 pub use models::models;
 pub use merged::{landed_line, merged, LOG_FORMAT as MERGED_LOG_FORMAT};
@@ -284,6 +286,7 @@ pub fn diff(ev: &Value, project: &str, agent: &str) -> HubEv {
                 size: f.get("size").and_then(Value::as_u64),
                 hunks,
                 note: None,
+                abs: Some(s(f, "abs")).filter(|a| !a.is_empty()),
             }
         })
         .collect();
@@ -297,6 +300,13 @@ pub fn diff(ev: &Value, project: &str, agent: &str) -> HubEv {
         merged: None,
         commit: None,
         note: Some(s(ev, "note")).filter(|n| !n.is_empty()),
+        title: Some(s(ev, "title")).filter(|t| !t.is_empty()),
+        req: ev.get("req").and_then(Value::as_u64),
+        commits: ev.get("commits").and_then(Value::as_u64),
+        working: flag(ev, "working"),
+        uncommitted: flag(ev, "uncommitted"),
+        landed_ms: ev.get("landed_ms").and_then(Value::as_u64),
+        gone: flag(ev, "gone"),
     }
 }
 

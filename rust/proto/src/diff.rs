@@ -60,6 +60,10 @@ pub struct DiffFile {
     /// the agent's word on this file ("new: 4 workers"), from its summary
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// its absolute path in the checkout the diff was read in (the
+    /// terminal's /diff opens it), none when that folder is gone
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub abs: Option<String>,
 }
 
 /// What a change measured, before and after (the review's result line,

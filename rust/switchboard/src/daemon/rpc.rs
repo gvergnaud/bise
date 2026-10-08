@@ -10,8 +10,11 @@
 //!   terminal moves its actions over one zone at a time) becomes its
 //!   `HubCmd` and runs the typed arm (`proto/cmds.rs`); its answer is
 //!   the event the arm sends that connection (a read's), the arm's error,
-//!   or `{}` once the arm is done (an action). The thread answers (git,
-//!   lsof: [`LATER`]) stay pending until their event comes. Lines for that
+//!   or `{}` once the arm is done (an action); a method that answers the
+//!   hub's words (`rpc::says`: command/run, artifacts/add, version/info...)
+//!   gets the arm's `notice` as its `CommandRunResult`. The thread answers
+//!   (git, lsof, the release plan: [`LATER`]) stay pending until their
+//!   event comes. Lines for that
 //!   connection made while its request runs are held, then sent after its
 //!   response (Vibe's order: the response first);
 //! - hub-wide notifications are numbered: [`Shell::proto_note`] moves the
@@ -27,7 +30,7 @@ use bise_proto::rpc::{self, code, HubState, Id, InitializeParams, InitializeResu
 use bise_proto::PROTO;
 
 /// The methods answered from a thread (git, lsof), after the arm returns.
-const LATER: &[&str] = &["diff/read", "worktrees/list", "devServers/list", "merged/list"];
+const LATER: &[&str] = &["diff/read", "worktrees/list", "devServers/list", "merged/list", "branches/list", "release/plan"];
 
 /// The hub-wide kinds sent from a thread: `hub/read` gives their last.
 const SCANNED: &[&str] = &["worktrees", "dev_servers", "merged"];
@@ -221,6 +224,12 @@ impl Shell {
         HubState { watermark: self.rpc.now(), state }
     }
 
+    /// Connection `id` waits for the answer to a request of command `cmd`
+    /// (a thread's answer that has an older line too: `release_plan`).
+    pub(super) fn rpc_waits(&self, id: ClientId, cmd: &str) -> bool {
+        self.rpc.conns.get(&id).is_some_and(|c| c.pending.iter().any(|p| p.cmd == cmd))
+    }
+
     /// Removes and returns the first pending request of `id` that `f` picks.
     fn rpc_pending(&mut self, id: ClientId, f: impl Fn(&Pending) -> bool) -> Option<Pending> {
         let c = self.rpc.conns.get_mut(&id)?;
@@ -257,10 +266,11 @@ impl Shell {
                     return true;
                 }
             }
-            // command/run's words (`/help`, `/flow`, `/artifacts add`):
-            // its typed result
+            // the hub's words for a method that answers them (command/run's
+            // `/help`, `/flow`; artifacts/add; version/info...): its typed
+            // result
             if let HubEv::Notice { cmd: Some(c), text, .. } = ev {
-                if let Some(p) = self.rpc_pending(id, |p| p.cmd == c.as_str() && p.cmd == "slash") {
+                if let Some(p) = self.rpc_pending(id, |p| p.cmd == c.as_str() && rpc::says(p.cmd)) {
                     let r = rpc::CommandRunResult { notice: Some(text.clone()) };
                     self.rpc_respond(id, Response::ok(p.id, serde_json::to_value(r).unwrap_or_default()));
                     return true;

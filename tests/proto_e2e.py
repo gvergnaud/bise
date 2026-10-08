@@ -608,8 +608,12 @@ def main():
         slash("/rename main", 92)
         c.wait(lambda: by_cid(92), 20, "a slash the router refuses")
         check(by_cid(92)[0]["text"].startswith("usage: /rename"), "the router's words: %r" % by_cid(92))
-        slash("just words", 93)
-        c.wait(lambda: by_cid(93), 20, "plain text refused")
+        # client-protocol step 3 (architect m_13089 change 3): a line that
+        # isn't a command takes send's path, never an error
+        slash("just words through slash", 93)
+        c.wait_line("main", "just words through slash", 30)
+        check(not by_cid(93), "plain words are sent, not refused: %r" % by_cid(93))
+        c.wait_idle("main")
         n = len(typed(c, "notice"))
         slash("/flow", 94)
         c.wait(lambda: len(typed(c, "notice")) > n, 20, "/flow's answer as a notice")

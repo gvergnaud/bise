@@ -269,21 +269,24 @@ impl Shell {
         });
     }
 
-    /// The typed `diff {project, agent}` (desktop S7): the same answer as
-    /// the op, in bise-proto's shape (`proto_view::diff`), to that client.
-    pub(super) fn diff_typed(&mut self, id: ClientId, project: String, agent: String, commit: Option<String>) {
+    /// The typed `diff` (desktop S7; a branch, a PR or a range since
+    /// client-protocol step 3): the same answer as the op, in bise-proto's
+    /// shape (`proto_view::diff`), to that client. `d` is checked
+    /// (`DiffAsk::check`).
+    pub(super) fn diff_typed(&mut self, id: ClientId, project: String, d: crate::proto_view::DiffAsk) {
         let shared = PathBuf::from(&self.hub.workspace);
         // one commit: the range ask the TUI's door under a land uses
-        let ask = match &commit {
-            Some(c) => self.diff_ask(&json!({"agent": agent, "range": format!("{c}^..{c}")})),
-            None => self.diff_ask(&json!({"agent": agent})),
-        };
+        let ask = self.diff_ask(&d.op());
+        let agent = d.agent.clone().unwrap_or_default();
+        let commit = d.commit.clone();
         // emitter 5: what its change measured (`sb report --result`), from
-        // its latest report
-        let result = self.hub.st.agents.get(&agent).and_then(|a| a.last_report.as_ref()).and_then(|r| r.result.clone());
+        // its latest report (an agent's own change only)
+        let mine = d.range.is_none() && d.commit.is_none();
+        let result = self.hub.st.agents.get(&agent).filter(|_| mine).and_then(|a| a.last_report.as_ref()).and_then(|r| r.result.clone());
+        let req = d.req.map_or(Value::Null, |r| json!(r));
         let tx = self.tx.clone();
         std::thread::spawn(move || {
-            let mut ev = diff_answer(ask, &shared, Value::Null);
+            let mut ev = diff_answer(ask, &shared, req);
             // a binary file's size, read here (the mapper stays pure):
             // its file in the agent's checkout, when it is still there
             for f in ev.get_mut("files").and_then(Value::as_array_mut).into_iter().flatten() {
@@ -341,8 +344,15 @@ impl Shell {
         }
     }
 
-    /// The `branches` op: the /diff picker's rows.
+    /// The `branches` op: the /diff picker's rows, as the older line.
     pub(super) fn branches_op(&mut self, id: ClientId) {
+        self.branches_scan(id, false);
+    }
+
+    /// The /diff picker's rows to client `id`: `typed`, as the typed
+    /// `branches` (`branches/list`'s answer), else the older line.
+    pub(super) fn branches_scan(&mut self, id: ClientId, typed: bool) {
+        let project = self.project();
         let shared = PathBuf::from(&self.hub.workspace);
         // who works on which branch, and the PRs the poller knows
         let mut on: BTreeMap<String, Vec<String>> = BTreeMap::new();
@@ -364,7 +374,14 @@ impl Shell {
                            "uncommitted": false, "pr": null, "landed_ms": null, "add": add, "del": del})
                 })
                 .collect();
-            let _ = tx.send(Msg::ToClient { id, v: json!({"ev": "branches", "base": base, "rows": rows}) });
+            let mut v = json!({"ev": "branches", "base": base, "rows": rows});
+            let _ = match typed {
+                true => {
+                    v["project"] = json!(project);
+                    tx.send(Msg::Typed { to: super::rpc::Typed::Answer(id), v })
+                }
+                false => tx.send(Msg::ToClient { id, v }),
+            };
         });
     }
 }

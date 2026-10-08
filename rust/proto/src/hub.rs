@@ -6,6 +6,7 @@
 
 use crate::context::FnContext;
 use crate::diff::{DiffFile, DiffResult};
+use crate::ops::{BranchRow, VersionItem};
 use crate::rows::{Agent, ApprovalMode, ApprovalRule, Artifact, Card, CheckerKind, DevServer, Feature, Merged, Model, Pr, ScheduledTask, Worktree};
 use crate::thread::Entry;
 use crate::{decode, parse, Pos, Project};
@@ -142,6 +143,72 @@ pub enum HubEv {
         /// why there are no files to show (its folder is gone...)
         #[serde(default, skip_serializing_if = "Option::is_none")]
         note: Option<String>,
+        /// the terminal's `/diff` (client-protocol step 3): its title
+        /// ("perf vs main", "range a..b"), the `req` it answers, the
+        /// commits ahead of the base, the agent still working, edits not
+        /// committed yet, when it landed, its folder gone
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        req: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        commits: Option<u64>,
+        #[serde(default, skip_serializing_if = "crate::is_false")]
+        working: bool,
+        #[serde(default, skip_serializing_if = "crate::is_false")]
+        uncommitted: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        landed_ms: Option<u64>,
+        #[serde(default, skip_serializing_if = "crate::is_false")]
+        gone: bool,
+    },
+    /// `/diff`'s branch picker (the answer to `branches`): the local
+    /// branches ahead of `base`, the trunk
+    Branches { project: Project, base: String, rows: Vec<BranchRow> },
+    /// `/version`'s picker (the answer to `versions`): `current` the
+    /// running version's id, `dev` this is bise's source tree (commits
+    /// can be built), `installed` an installed bise (releases listed)
+    Versions {
+        project: Project,
+        current: String,
+        #[serde(default, skip_serializing_if = "crate::is_false")]
+        dev: bool,
+        #[serde(default, skip_serializing_if = "crate::is_false")]
+        installed: bool,
+        items: Vec<VersionItem>,
+    },
+    /// `/release-bise` (dev build only): `state` "plan" (the answer to
+    /// `release_plan`: `tag`, `commit`, `short`, `subject`, `since` the
+    /// last tag, `count` and the first `commits` as [sha, subject]),
+    /// "error" (no plan: `text`), then a run's "running", "step", "done"
+    /// or "failed" (`text`, `elapsed` s; a failure's `tail` and `log`)
+    Release {
+        project: Project,
+        state: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tag: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        commit: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        short: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        subject: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        since: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        count: Option<u64>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        commits: Vec<(String, String)>,
+        #[serde(default, skip_serializing_if = "crate::is_false")]
+        dry: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        text: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        elapsed: Option<u64>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        tail: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        log: Option<String>,
     },
     /// bise's home hub holds his words for a project's main (desktop S2,
     /// decision B): `to` the project picked (its hub id), `name` its name,
@@ -253,7 +320,7 @@ pub enum HubEv {
 }
 
 impl HubEv {
-    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "entry", "typing", "artifacts", "scheduled", "worktrees", "dev_servers", "merged", "features", "prs", "models", "tool_out", "diff", "route", "route_done", "jobs", "job_end", "followed_end", "confirm", "approvals", "notice", "refused", "error"];
+    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "entry", "typing", "artifacts", "scheduled", "worktrees", "dev_servers", "merged", "features", "prs", "models", "tool_out", "diff", "branches", "versions", "release", "route", "route_done", "jobs", "job_end", "followed_end", "confirm", "approvals", "notice", "refused", "error"];
 
     pub fn decode(line: &str) -> Result<HubEv, String> {
         Self::from_value(parse(line)?)
@@ -296,6 +363,38 @@ pub enum Mode {
     Queued,
 }
 
+/// How his words go, the same for `send` and `slash` (architect m_13313:
+/// one struct, flattened, so the wire keeps `send`'s names): `mode` none
+/// is now; `context` what was on his screen at fn (S9): the hub frames it
+/// after his words for the model (switchboard's fn_context::render) and
+/// keeps it on his thread entry; `files` what he attached or dropped
+/// (absolute paths): the hub renders them once after his words
+/// (switchboard's attached::render), an image as an image-store marker
+/// the model sees, any other file by its path, a path that isn't absolute
+/// or doesn't exist left out, never on a slash command; `voice` said in
+/// voice mode; `via` the client part that sent it (`capsule`,
+/// `capsule-start`, `ambient`: the capsule's hint for main).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct SendOpts {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<Mode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<FnContext>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<String>,
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub voice: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub via: Option<String>,
+}
+
+impl SendOpts {
+    pub fn queued(&self) -> bool {
+        self.mode == Some(Mode::Queued)
+    }
+}
+
 /// What a client asks a hub.
 // one command is decoded at a time and never stored in bulk: the size of
 // its largest variant (Send, with its context and files) costs nothing
@@ -333,24 +432,14 @@ pub enum HubCmd {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         limit: Option<u32>,
     },
-    /// his words to an agent (main included), as the TUI sends them;
-    /// `context`: what was on his screen at fn (S9): the hub frames it
-    /// after his words for the model (switchboard's fn_context::render)
-    /// and keeps it on his thread entry
+    /// his words to an agent (main included), as the TUI sends them, with
+    /// how they go ([`SendOpts`]: mode, context, files, voice, via)
     Send {
         project: Project,
         agent: String,
         text: String,
-        mode: Mode,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        context: Option<FnContext>,
-        /// files he attached or dropped (absolute paths): the hub renders
-        /// them once after his words (switchboard's attached::render): an
-        /// image as an image-store marker the model sees, any other file
-        /// listed by its path; a path that isn't absolute or doesn't exist
-        /// is left out. Never on a slash command
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        files: Vec<String>,
+        #[serde(flatten)]
+        opts: SendOpts,
         /// draft (G): the window's id for this send, echoed on its error
         /// to this connection only (never journaled: view state)
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -397,17 +486,33 @@ pub enum HubCmd {
     /// he opened the artifacts screen: their `new` clears, `artifacts`
     /// comes again
     ArtifactsSeen { project: Project },
-    /// an agent's change, once (`diff` answers); `commit`: one commit of
-    /// it instead (a landed one: the review's "merged · e0f3df5")
+    /// a change, once (`diff` answers): exactly one of `agent` (its
+    /// change; `commit`: one commit of it instead, a landed one: the
+    /// review's "merged · e0f3df5"), `branch` (a local branch vs the
+    /// trunk), `pr` (an open pull request) or `range` (`a..b`, with
+    /// `agent` naming it in the title); `req` the client's number for
+    /// this ask, echoed in the answer (the terminal's /diff drops older
+    /// answers). Anything else is an `error`
     Diff {
         project: Project,
-        agent: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        agent: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         commit: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        branch: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pr: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        range: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        req: Option<u64>,
     },
     /// he opened a tool row: its whole output (`tool_out` answers this
     /// connection), the tool item's `pos` in `agent`'s thread
     ToolOut { project: Project, agent: String, pos: Pos },
+    /// `/diff`'s picker opened: `branches` answers
+    Branches { project: Project },
     /// the environments screen opened: `worktrees` comes again
     Worktrees { project: Project },
     /// the environments screen opened: `dev_servers` comes again
@@ -482,6 +587,61 @@ pub enum HubCmd {
         line: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         cid: Option<u64>,
+        /// client-protocol step 3 (architect m_13089 change 3): any line
+        /// he typed, with how it goes; a line that isn't a slash command
+        /// (his words, an `@route`) takes `send`'s path, a queued slash
+        /// command is refused (a command never waits)
+        #[serde(flatten)]
+        opts: SendOpts,
+    },
+    /// run scheduled task `id` now (the TUI's /scheduled `r`); an unknown
+    /// or ended id is an `error`
+    ScheduledRun { project: Project, id: u64 },
+    /// `/artifacts add <path or link>` in `agent`'s view (`title` his):
+    /// the hub's words come back as the result, a refusal as an `error`
+    ArtifactsAdd {
+        project: Project,
+        agent: String,
+        target: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+    },
+    /// the TUI's focus moved to `focus` (an agent's name): the hub's
+    /// "who is he looking at" (sb-core's ClientFocus)
+    Focus { project: Project, focus: String },
+    /// `/version`'s picker opened: `versions` answers
+    Versions { project: Project },
+    /// `/version` or `/version list`: the hub's words on its versions
+    VersionInfo { project: Project },
+    /// `/version <v>`: switch to it (built first when needed)
+    VersionSwitch { project: Project, to: String },
+    /// `/version back`: the version before
+    VersionRollback { project: Project },
+    /// `/restart [<v>]`: hub, REPLs and clients restart (on `to`, else on
+    /// the running version)
+    VersionRestart {
+        project: Project,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        to: Option<String>,
+    },
+    /// `/update`: look for a new release now (bise's source tree: build
+    /// its HEAD); its words come as a `notice`
+    VersionUpdate { project: Project },
+    /// `/release-bise` (dev build only): what it would release (`release`
+    /// answers, state "plan" or "error"); `dry`: a dry run's plan
+    ReleasePlan {
+        project: Project,
+        #[serde(default, skip_serializing_if = "crate::is_false")]
+        dry: bool,
+    },
+    /// the plan's go: release `tag` at `commit`; its steps come as
+    /// `release` to every client; one at a time, a refusal is an `error`
+    ReleaseRun {
+        project: Project,
+        tag: String,
+        commit: String,
+        #[serde(default, skip_serializing_if = "crate::is_false")]
+        dry: bool,
     },
     /// a tag this version doesn't know: answered with `error`
     #[serde(skip)]
@@ -489,7 +649,7 @@ pub enum HubCmd {
 }
 
 impl HubCmd {
-    pub const TAGS: &'static [&'static str] = &["hello", "subscribe", "unsubscribe", "page", "send", "answer", "close", "confirm", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "diff", "worktrees", "dev_servers", "merged", "features", "prs", "scheduled", "scheduled_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash"];
+    pub const TAGS: &'static [&'static str] = &["hello", "subscribe", "unsubscribe", "page", "send", "answer", "close", "confirm", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "diff", "worktrees", "dev_servers", "merged", "features", "prs", "scheduled", "scheduled_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "branches", "scheduled_run", "artifacts_add", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "release_plan", "release_run"];
 
     pub fn decode(line: &str) -> Result<HubCmd, String> {
         Self::from_value(parse(line)?)
@@ -542,6 +702,18 @@ impl HubCmd {
             | HubCmd::RouteCancel { project, .. }
             | HubCmd::Follow { project, .. }
             | HubCmd::Slash { project, .. }
+            | HubCmd::Branches { project }
+            | HubCmd::ScheduledRun { project, .. }
+            | HubCmd::ArtifactsAdd { project, .. }
+            | HubCmd::Focus { project, .. }
+            | HubCmd::Versions { project }
+            | HubCmd::VersionInfo { project }
+            | HubCmd::VersionSwitch { project, .. }
+            | HubCmd::VersionRollback { project }
+            | HubCmd::VersionRestart { project, .. }
+            | HubCmd::VersionUpdate { project }
+            | HubCmd::ReleasePlan { project, .. }
+            | HubCmd::ReleaseRun { project, .. }
             | HubCmd::Diff { project, .. } => project,
             HubCmd::Hello { .. } | HubCmd::Unknown { .. } => return None,
         };

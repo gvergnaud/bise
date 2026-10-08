@@ -265,6 +265,21 @@ pub const METHODS: &[MethodRow] = &[
     // parser, then the same handlers as the typed methods; its result is
     // a [`CommandRunResult`] (OWN_RESULTS)
     m("command/run", "slash", None),
+    // client-protocol step 3: the terminal's ops, typed (architect m_13313)
+    m("scheduled/run", "scheduled_run", None),
+    m("artifacts/add", "artifacts_add", None),
+    m("branches/list", "branches", Some("branches")),
+    m("client/focus", "focus", None),
+    m("versions/list", "versions", Some("versions")),
+    m("version/info", "version_info", None),
+    m("version/switch", "version_switch", None),
+    m("version/rollback", "version_rollback", None),
+    m("version/restart", "version_restart", None),
+    // its words come as hub/notice (the release check answers later)
+    m("version/update", "version_update", None),
+    m("release/plan", "release_plan", Some("release")),
+    // its steps go to every client as the hub's older `release` lines
+    m("release/run", "release_run", None),
 ];
 
 /// The protocol's own methods (no [`HubCmd`]).
@@ -280,7 +295,24 @@ pub const COMMAND_RUN: &str = "command/run";
 
 /// The methods whose result is a type of this module, not a [`HubEv`]'s
 /// fields: method -> its result's type name (for the TypeScript map).
-pub const OWN_RESULTS: &[(&str, &str)] = &[(INITIALIZE, "InitializeResult"), (HUB_READ, "HubState"), (COMMANDS_LIST, "CommandsList"), (COMMAND_RUN, "CommandRunResult")];
+pub const OWN_RESULTS: &[(&str, &str)] = &[
+    (INITIALIZE, "InitializeResult"),
+    (HUB_READ, "HubState"),
+    (COMMANDS_LIST, "CommandsList"),
+    (COMMAND_RUN, "CommandRunResult"),
+    // the hub's words (architect m_13313: one owned type for them)
+    ("artifacts/add", "CommandRunResult"),
+    ("version/info", "CommandRunResult"),
+    ("version/switch", "CommandRunResult"),
+    ("version/rollback", "CommandRunResult"),
+    ("version/restart", "CommandRunResult"),
+];
+
+/// A command whose method answers the hub's words ([`CommandRunResult`]):
+/// its arm's `notice` is its result.
+pub fn says(cmd: &str) -> bool {
+    method_of_cmd(cmd).is_some_and(|r| OWN_RESULTS.iter().any(|(m, t)| *m == r.method && *t == "CommandRunResult"))
+}
 
 /// Who gets a notification, and so how it is numbered.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -499,9 +531,11 @@ impl CommandsList {
     }
 }
 
-/// `command/run`'s result (architect m_13277): `notice` the hub's words
-/// when it answers some (`/help`, `/flow`, `/artifacts add`); none: what
-/// the line did shows in the notifications.
+/// `command/run`'s result (architect m_13277), and the result of every
+/// method that answers the hub's words (`artifacts/add`, `version/info`,
+/// ... : OWN_RESULTS): `notice` those words (`/help`, `/flow`,
+/// `/artifacts add`, the versions); none: what it did shows in the
+/// notifications.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct CommandRunResult {

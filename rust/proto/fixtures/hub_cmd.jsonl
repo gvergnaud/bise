@@ -46,3 +46,23 @@
 {"cmd":"follow","project":"acme-1a2b3c4d","agent":"perf","on":false}
 {"cmd":"slash","project":"acme-1a2b3c4d","agent":"perf","line":"/rename perf perf2","cid":31}
 {"cmd":"slash","project":"acme-1a2b3c4d","agent":"main","line":"/flow"}
+{"cmd":"slash","project":"acme-1a2b3c4d","agent":"main","line":"@fix encore","mode":"now","voice":true,"via":"capsule"}
+{"cmd":"slash","project":"acme-1a2b3c4d","agent":"perf","line":"why is this slow?","mode":"queued","context":{"app":"Safari","url":"https://grafana.acme.test/d/p99","title":"p99 latency"},"files":["/Users/ana/Desktop/shot.png"]}
+{"cmd":"send","project":"acme-1a2b3c4d","agent":"main","text":"what's running?","mode":"now","via":"capsule","voice":true}
+{"cmd":"diff","project":"acme-1a2b3c4d","branch":"sb/perf","req":4}
+{"cmd":"diff","project":"acme-1a2b3c4d","pr":31,"req":5}
+{"cmd":"diff","project":"acme-1a2b3c4d","agent":"perf","range":"e0f3df5^..e0f3df5","req":6}
+{"cmd":"branches","project":"acme-1a2b3c4d"}
+{"cmd":"scheduled_run","project":"acme-1a2b3c4d","id":48}
+{"cmd":"artifacts_add","project":"acme-1a2b3c4d","agent":"perf","target":"bench/report.html"}
+{"cmd":"artifacts_add","project":"acme-1a2b3c4d","agent":"main","target":"https://acme.test/deck","title":"Q3 deck"}
+{"cmd":"focus","project":"acme-1a2b3c4d","focus":"perf"}
+{"cmd":"versions","project":"acme-1a2b3c4d"}
+{"cmd":"version_info","project":"acme-1a2b3c4d"}
+{"cmd":"version_switch","project":"acme-1a2b3c4d","to":"v2026.10.2-27"}
+{"cmd":"version_rollback","project":"acme-1a2b3c4d"}
+{"cmd":"version_restart","project":"acme-1a2b3c4d"}
+{"cmd":"version_restart","project":"acme-1a2b3c4d","to":"latest"}
+{"cmd":"version_update","project":"acme-1a2b3c4d"}
+{"cmd":"release_plan","project":"acme-1a2b3c4d","dry":true}
+{"cmd":"release_run","project":"acme-1a2b3c4d","tag":"v2026.10.3","commit":"e0f3df5a9c1b2d3e4f5a6b7c8d9e0f1a2b3c4d5e"}

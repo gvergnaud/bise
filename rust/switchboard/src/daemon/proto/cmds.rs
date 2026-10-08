@@ -1,12 +1,19 @@
 //! The typed commands' arms (architect review 10: moved out of
 //! `daemon/proto.rs`, no behavior change): what each `HubCmd` does once
 //! `proto_cmd` decoded it, checked hello and its project. Each reaches
-//! the same paths as the TUI's ops; a refusal is its `error`.
+//! the same paths as the TUI's ops; a refusal is its `error`. Since
+//! client-protocol step 3 every op the terminal sends has its command
+//! here (scheduled_run, artifacts_add, branches, focus, the version
+//! actions, release_plan/run, diff by branch/pr/range), each calling the
+//! op's own handler, and `slash` takes any line he typed: his words and
+//! `@route`s go `send`'s path (`proto_input`).
 
 use super::*;
-use bise_proto::hub::Mode;
+use bise_proto::hub::SendOpts;
+use bise_proto::slash::Version;
 use bise_proto::thread::Line;
 use crate::proto_view::slash::Slash;
+use crate::proto_view::DiffAsk;
 use crate::router::UserCmd;
 
 /// Entries in a `thread` page when the client gives no limit, and at most.
@@ -15,6 +22,8 @@ const MAX_LIMIT: usize = 200;
 /// Transcript lines read for one page (a long tools run folds into one
 /// entry: the page may hold fewer entries than asked).
 const LINES: usize = 600;
+/// A queued line that is a command (core.rs user_input's rule).
+const QUEUED_COMMAND: &str = "a command can't wait in the queue: send it now";
 
 fn lines_of(raw: Vec<(usize, Option<u64>, String)>) -> Vec<Line> {
     raw.into_iter().map(|(pos, ts, l)| (pos as u64, ts.unwrap_or(0), l)).collect()
@@ -71,27 +80,7 @@ impl Shell {
                 let (entries, before, more) = pthread::page(&lines, &ctx, limit.map_or(LIMIT, |l| (l as usize).clamp(1, MAX_LIMIT)));
                 self.proto_send(id, &HubEv::Thread { project, agent, entries, before, more });
             }
-            HubCmd::Send { agent, text, mode, context, files, cid, .. } => {
-                if !known(self, &agent) {
-                    return self.proto_error_cid(id, &tag, &format!("no agent {agent}"), cid, cid.map(|_| "refused"));
-                }
-                // queued: sb-core holds it until the agent's turn ends
-                // (amb-hub 7dcb56ab), never the client. A command never
-                // waits: the same rule as core.rs user_input's notice
-                // ("commands run now, not queued"), early and typed here;
-                // change both together
-                let queued = mode == Mode::Queued;
-                if queued && text.trim_start().starts_with('/') {
-                    return self.proto_error_cid(id, &tag, "a command can't wait in the queue: send it now", cid, cid.map(|_| "refused"));
-                }
-                // S9: the fn context as a field of the input op, never
-                // rendered here (the input arm's one render)
-                // item H: his files as a field too, rendered by the same input arm
-                // G: its notices (an agent gone: BISE-86's undelivered
-                // line) come back with its cid
-                let op = json!({"op": "input", "focus": agent, "text": text, "queued": queued, "context": context, "files": files});
-                self.stepping(id, &tag, cid, |sh| sh.client_line(id, op));
-            }
+            HubCmd::Send { agent, text, opts, cid, .. } => self.proto_input(id, &tag, agent, text, opts, cid),
             HubCmd::Answer { card, reply, files, .. } => {
                 if !self.hub.st.open_cards().any(|c| c.id == card) {
                     return self.proto_error(id, &tag, &format!("card {card} isn't open"));
@@ -175,14 +164,18 @@ impl Shell {
             // the TUI's own `seen`: the clock moves, the list comes again
             HubCmd::ArtifactsSeen { .. } => self.artifacts_op(id, &json!({"do": "seen"})),
             // git in a thread (art.rs), the typed answer to this client
-            HubCmd::Diff { project, agent, commit } => {
-                if !known(self, &agent) {
-                    return self.proto_error(id, &tag, &format!("no agent {agent}"));
+            // the `diff` op's asks (agent, branch, pr, range), checked here
+            HubCmd::Diff { project, agent, commit, branch, pr, range, req } => {
+                let ask = DiffAsk { agent, commit, branch, pr, range, req };
+                if let Err(e) = ask.check() {
+                    return self.proto_error(id, &tag, &e);
                 }
-                if commit.as_deref().is_some_and(|c| !crate::proto_view::is_sha(c)) {
-                    return self.proto_error(id, &tag, "a commit is its sha (4 to 40 hex digits)");
+                if let (Some(a), None) = (&ask.agent, &ask.range) {
+                    if !known(self, a) {
+                        return self.proto_error(id, &tag, &format!("no agent {a}"));
+                    }
                 }
-                self.diff_typed(id, project, agent, commit);
+                self.diff_typed(id, project, ask);
             }
             // a tool row opened: its whole output from the session log
             // (tool_out.rs), files read on a thread, to this client
@@ -200,6 +193,8 @@ impl Shell {
                     let _ = tx.send(Msg::ToClient { id, v });
                 });
             }
+            // git in a thread (art.rs, the `branches` op's scan), to this client
+            HubCmd::Branches { .. } => self.branches_scan(id, true),
             // git in a thread (worktrees.rs), to this client
             HubCmd::Worktrees { .. } => self.worktrees_typed(Typed::Answer(id)),
             // jobs and lsof in a thread (dev_servers.rs), to this client
@@ -228,6 +223,51 @@ impl Shell {
                     return self.proto_error(id, &tag, &format!("no scheduled task #{timer}"));
                 }
                 self.step_typed(id, &tag, Input::EveryStop { id: timer, why: String::new() });
+            }
+            // his run now, the TUI's /scheduled r (its `every_run` op)
+            HubCmd::ScheduledRun { id: timer, .. } => {
+                if !self.hub.timers().map.contains_key(&timer) {
+                    return self.proto_error(id, &tag, &format!("no scheduled task #{timer}"));
+                }
+                self.step_typed(id, &tag, Input::EveryRun { id: timer });
+            }
+            // the `artifacts` op's add (art_add): its words are the result
+            HubCmd::ArtifactsAdd { agent, target, title, .. } => {
+                let title = title.filter(|t| !t.trim().is_empty());
+                match self.art_add(&agent, &target, title) {
+                    Ok(text) => self.proto_send(id, &HubEv::Notice { project, cmd: Some(tag.clone()), text, cid: None }),
+                    Err(e) => self.proto_error(id, &tag, &e),
+                }
+                self.artifacts_refresh(true);
+            }
+            // the `focus` op's step: who he is looking at
+            HubCmd::Focus { focus, .. } => self.step(Input::ClientFocus { client: id, focus }),
+            // the `version` op's picker (do: items)
+            HubCmd::Versions { .. } => {
+                let mut v = self.version_items();
+                v["project"] = json!(project);
+                match HubEv::from_value(v) {
+                    Ok(ev) => self.proto_send(id, &ev),
+                    Err(e) => self.proto_error(id, &tag, &e),
+                }
+            }
+            // `/version`, `/restart`, `/update`: the `slash` arm's path
+            HubCmd::VersionInfo { .. } => self.proto_version(id, &tag, Version::List, None),
+            HubCmd::VersionSwitch { to, .. } => self.proto_version(id, &tag, Version::Switch(to), None),
+            HubCmd::VersionRollback { .. } => self.proto_version(id, &tag, Version::Rollback, None),
+            HubCmd::VersionRestart { to, .. } => self.proto_version(id, &tag, Version::Restart(to.unwrap_or_default()), None),
+            HubCmd::VersionUpdate { .. } => self.proto_version(id, &tag, Version::Update, None),
+            // the `release` op's start (release.rs): a plan's answer comes
+            // from its thread (release_event), a run's steps go to all
+            HubCmd::ReleasePlan { dry, .. } => {
+                if let Err(e) = self.release_start(id, "plan", "", "", dry) {
+                    self.proto_error(id, &tag, &e);
+                }
+            }
+            HubCmd::ReleaseRun { tag: rtag, commit, dry, .. } => {
+                if let Err(e) = self.release_start(id, "run", &rtag, &commit, dry) {
+                    self.proto_error(id, &tag, &e);
+                }
             }
             // the keys and config read again (a login made elsewhere)
             HubCmd::Models { .. } => {
@@ -275,9 +315,64 @@ impl Shell {
             // S10: sb-core refuses main, an archived or unknown agent: the
             // notice comes back as the error (step_typed)
             HubCmd::Follow { agent, on, .. } => self.step_typed(id, &tag, Input::Follow { client: Some(id), agent, on }),
-            HubCmd::Slash { agent, line, cid, .. } => self.proto_slash(id, &tag, agent, &line, cid),
+            // a command: the router's parse; his words or an @route:
+            // `send`'s path (architect m_13089 change 3)
+            HubCmd::Slash { agent, line, cid, opts, .. } => {
+                if !line.trim_start().starts_with('/') {
+                    return self.proto_input(id, &tag, agent, line, opts, cid);
+                }
+                if opts.queued() {
+                    return self.proto_error_cid(id, &tag, QUEUED_COMMAND, cid, cid.map(|_| "refused"));
+                }
+                self.proto_slash(id, &tag, agent, &line, cid)
+            }
             HubCmd::Hello { .. } | HubCmd::Unknown { .. } => {}
         }
+    }
+
+    /// His words to `agent` (`send`, and `slash`'s line that isn't a
+    /// command): the `input` op's path with its fields, its notices back
+    /// as errors with `cid`.
+    fn proto_input(&mut self, id: ClientId, tag: &str, agent: String, text: String, opts: SendOpts, cid: Option<u64>) {
+        if !self.hub.st.agents.contains_key(&agent) {
+            return self.proto_error_cid(id, tag, &format!("no agent {agent}"), cid, cid.map(|_| "refused"));
+        }
+        // queued: sb-core holds it until the agent's turn ends
+        // (amb-hub 7dcb56ab), never the client. A command never
+        // waits: the same rule as core.rs user_input's notice
+        // ("commands run now, not queued"), early and typed here;
+        // change both together
+        let queued = opts.queued();
+        if queued && text.trim_start().starts_with('/') {
+            return self.proto_error_cid(id, tag, QUEUED_COMMAND, cid, cid.map(|_| "refused"));
+        }
+        // S9: the fn context as a field of the input op, never
+        // rendered here (the input arm's one render)
+        // item H: his files as a field too, rendered by the same input arm
+        // G: its notices (an agent gone: BISE-86's undelivered
+        // line) come back with its cid
+        let mut op = json!({"op": "input", "focus": agent, "text": text, "queued": queued, "context": opts.context, "files": opts.files});
+        if opts.voice {
+            op["voice"] = json!(true);
+        }
+        if let Some(via) = opts.via {
+            op["via"] = json!(via);
+        }
+        self.stepping(id, tag, cid, |sh| sh.client_line(id, op));
+    }
+
+    /// `/version`, `/restart`, `/update` (a `slash` line or their own
+    /// methods): the daemon's `version` op, the TUI's (his authority: this
+    /// is the client socket, docs/issues/16); its words as a `notice` (the
+    /// method's result), `/update`'s from `update_op`.
+    fn proto_version(&mut self, id: ClientId, tag: &str, v: Version, cid: Option<u64>) {
+        if v == Version::Update {
+            return self.update_op(id);
+        }
+        let (what, to) = v.op();
+        let text = self.version_op(&json!({"op": "version", "do": what, "to": to}));
+        let project = self.project();
+        self.proto_send(id, &HubEv::Notice { project, cmd: Some(tag.to_string()), text, cid });
     }
 
     /// A typed `slash` line typed in `agent`'s view: the TUI's router
@@ -341,12 +436,7 @@ impl Shell {
             }
             // the daemon's `version` op, the TUI's (his authority: this is
             // the client socket, docs/issues/16)
-            Slash::Version(bise_proto::slash::Version::Update) => self.update_op(id),
-            Slash::Version(v) => {
-                let (what, to) = v.op();
-                let text = self.version_op(&json!({"op": "version", "do": what, "to": to}));
-                self.proto_send(id, &HubEv::Notice { project, cmd: Some(tag.to_string()), text, cid });
-            }
+            Slash::Version(v) => self.proto_version(id, tag, v, cid),
             // the `approvals` command's path (show, or switch and tell all)
             Slash::Approvals(None) => {
                 let ev = self.approvals_ev(false);

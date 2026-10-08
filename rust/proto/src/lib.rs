@@ -38,6 +38,10 @@
 //! one parser of each line kind, which the TUI's `wire.rs`/`sb.rs` call
 //! too, and [`thread::words`] makes the words both show.
 //!
+//! [`ops`] holds the rows of the answers that were the terminal's older
+//! untyped events (`/diff`'s branches, `/version`'s picker), typed for
+//! their methods (client-protocol step 3).
+//!
 //! [`commands`] is the slash commands' catalog (name, usage, arguments,
 //! `client` for the screen ones): the TUI's popup and `/help` read it, a
 //! client over the wire gets it serialized.
@@ -52,6 +56,7 @@ pub mod diff;
 pub mod draft;
 pub mod helper;
 pub mod hub;
+pub mod ops;
 pub mod pty;
 pub mod rows;
 pub mod rpc;

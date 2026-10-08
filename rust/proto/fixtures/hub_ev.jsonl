@@ -55,3 +55,11 @@
 {"ev":"followed_end","project":"acme-1a2b3c4d","agent":"perf","key":1791100500000,"state":"done","label":"make the e2e fast","summary":"p99 down 31%"}
 {"ev":"job_end","project":"acme-1a2b3c4d","agent":"docs","state":"failed","label":"rewrite the guide","summary":"the REPL crashed 3 times: oom"}
 {"ev":"refused","error":"a client in an agent's process (perf) can't act as you on hub.sock"}
+{"ev":"diff","project":"acme-1a2b3c4d","agent":"","base":"main","head":"sb/perf","files":[{"path":"src/query.rs","status":"added","add":2,"del":0,"hunks":[],"abs":"/w/src/query.rs"}],"title":"sb/perf vs main","req":4,"commits":3,"uncommitted":true,"working":true}
+{"ev":"diff","project":"acme-1a2b3c4d","agent":"old","base":"main","files":[],"title":"old vs main","req":7,"landed_ms":1760000000000,"gone":true}
+{"ev":"branches","project":"acme-1a2b3c4d","base":"main","rows":[{"branch":"sb/perf","agents":["perf"],"commits":3,"uncommitted":false,"add":40,"del":12},{"branch":"spike","agents":[],"commits":1,"uncommitted":false,"pr":31,"add":2,"del":0}]}
+{"ev":"versions","project":"acme-1a2b3c4d","current":"v2026.10.2-27","installed":true,"items":[{"rev":"back","subject":"roll back to v2026.10.2-26","marks":[]},{"rev":"v2026.10.2-27","subject":"the tab title says bise","marks":["current","good","latest"]}]}
+{"ev":"versions","project":"acme-1a2b3c4d","current":"e0f3df5","dev":true,"items":[{"rev":"tree","subject":"the working tree, uncommitted changes included","marks":["building"]},{"rev":"e0f3df5","subject":"fix the cold bench","marks":["current","built"]}]}
+{"ev":"release","project":"acme-1a2b3c4d","state":"plan","tag":"v2026.10.3","commit":"e0f3df5a9c1b2d3e4f5a6b7c8d9e0f1a2b3c4d5e","short":"e0f3df5","subject":"fix the cold bench","since":"v2026.10.2","count":2,"commits":[["e0f3df5","fix the cold bench"],["a1b2c3d","the tab title says bise"]],"dry":true}
+{"ev":"release","project":"acme-1a2b3c4d","state":"error","text":"no tag: the tree is dirty"}
+{"ev":"release","project":"acme-1a2b3c4d","state":"failed","tag":"v2026.10.3","text":"release v2026.10.3 failed · CI failed","elapsed":312,"tail":["publish-release: error: CI failed"],"log":"/s/release.log"}
