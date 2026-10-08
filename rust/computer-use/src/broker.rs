@@ -882,7 +882,8 @@ fn on_target(sh: &Arc<Shared>, agent: &str, tmpdir: &std::path::Path, op: &str, 
     if op == "act" && action.is_empty() {
         return Err(err("bad_args", "act needs an action: click, fill, type, press, select, check, hover, scroll, goto, close, wait or read"));
     }
-    if lock(&sh.inner).agents.get(agent).is_some_and(|a| a.paused.iter().any(|p| p == ts)) {
+    // one target the user took over, or all of them ("*": ctl `pause`)
+    if lock(&sh.inner).agents.get(agent).is_some_and(|a| a.paused.iter().any(|p| p == ts || p == "*")) {
         return Err(err("paused", "the user took over this tab or app; wait until he gives it back, or ask him"));
     }
     let seen = lock(&sh.inner).seen.get(ts).cloned();

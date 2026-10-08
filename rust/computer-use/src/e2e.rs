@@ -793,11 +793,14 @@ fn who_connects_decides() {
     assert_eq!(e["code"], "refused");
 
     // two projects' perf, each saying it is "main": keyed by their tags
+    // (each one's first call is answered before the next tag is queued:
+    // the broker judges each connection on its own thread, so two agents
+    // connected back to back could take each other's tag)
     next_peer(&p, tag(&format!("{aa}.perf.1")));
     let mut a = agent(&p, "main", &d);
+    ok(&mut a, "open", json!({"url": "https://a.org"}));
     next_peer(&p, tag(&format!("{bb}.perf.7")));
     let mut b = agent(&p, "main", &d);
-    ok(&mut a, "open", json!({"url": "https://a.org"}));
     ok(&mut b, "open", json!({"url": "https://b.org"}));
     let st = state::read(&p);
     let ka = format!("{aa}.perf");
@@ -821,6 +824,33 @@ fn who_connects_decides() {
     let mut line = String::new();
     assert_eq!(BufReader::new(s).read_line(&mut line).unwrap(), 0, "closed at once");
     connected(&p, 1);
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// docs/issues/18 step 4: ctl `pause` takes over from the window without
+/// touching a tab: the agent's acts get `paused`, the browser lets go of it,
+/// the event says paused by you; `resume` hands it back; an idle agent
+/// can't be paused.
+#[test]
+fn the_user_takes_over_from_the_window() {
+    let (d, p) = paths();
+    let o = opts(&p);
+    let brokers: Brokers = Default::default();
+    brokers.lock().unwrap().push(broker::start(o.clone()).unwrap());
+    let ext = FakeExt::start(&p, starter(o, brokers.clone()), "chrome", jpeg(&d));
+    connected(&p, 1);
+    let ctl = |op: &str| Conn::ctl(&p).unwrap().call(op, &json!({"agent": "api-v2"})).unwrap();
+    assert_eq!(ctl("pause").unwrap_err()["code"], "not_found", "it drives nothing yet");
+    let mut a = agent(&p, "api-v2", &d);
+    let t = ok(&mut a, "open", json!({"url": "https://github.com/"}))["target"].as_str().unwrap().to_string();
+    assert_eq!(ctl("pause").unwrap(), json!({"paused": "api-v2"}));
+    assert!(ext.control().contains(&json!({"pause": "api-v2"})));
+    assert_eq!(state::read(&p)["agents"]["api-v2"]["paused"], true);
+    assert_eq!(state::events(&p).last().unwrap()["event"], "paused");
+    let e = code(&mut a, "act", json!({"target": t, "action": "click"}));
+    assert_eq!(e["code"], "paused");
+    ctl("resume").unwrap();
+    ok(&mut a, "act", json!({"target": t, "action": "click"}));
     let _ = std::fs::remove_dir_all(&d);
 }
 

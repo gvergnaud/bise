@@ -229,7 +229,9 @@ pair and commits the public key; the Web Store keeps the same id).
   5-tab limit: the user asked to see the page.
 - host → ext: `{"stop":"<agent>"}`, `{"resume":"<agent>"}`,
   `{"release":"<agent>"}` (end of turn: detach, keep the tabs),
-  `{"drop":"<agent>"}` (close the group unless `user_touched`).
+  `{"drop":"<agent>"}` (close the group unless `user_touched`),
+  `{"pause":"<agent>"}` (the user took over from the window: its tabs
+  count as touched and the debugger detaches, until `resume`).
 - `hello.browser`: unbranded Chromium (Vivaldi, Arc) looks like
   `chrome` from the service worker; the extension says `chrome` unless
   the brand says `edge`/`brave`/`opera`, and the broker refines it from
@@ -261,7 +263,8 @@ The helper (`dev.bise.computer-use`) is started by the broker with
   Settings pane).
 - Control lines, no reply: `{"stop":agent}`, `{"resume":agent}`,
   `{"release":agent}` (end of turn: hide the cursor, keep the refs),
-  `{"drop":agent}`.
+  `{"drop":agent}`, `{"pause":agent}` (the user took over: its driven
+  app counts as paused, the cursor hides).
 - Events as in C4 (`paused` when the user types or clicks in the driven
   app).
 - The helper refuses the targets of design §5.2 too (`refused`); the
@@ -286,7 +289,9 @@ The helper (`dev.bise.computer-use`) is started by the broker with
 - Events `~/.bise/run/computer-use/events.jsonl`, appended: `{"t":…,
   "agent","event":"stopped|paused|resumed","by":"you|cancel_bar|group_closed"}`;
   the hub turns `stopped` into main's feed line.
-- Commands: `bise computer-use stop <agent>|--all`, `resume <agent>`,
+- Commands: `bise computer-use stop <agent>|--all`, `pause <agent>`
+  (docs/issues/18 step 4: take over; `not_found` if it drives nothing),
+  `resume <agent>`,
   `drop <agent>` (the hub calls it at `/drop`), `setup-check --json`
   (the `/computer-use` rows), `repair` (rewrites manifests and shim),
   `live-test --json`, `request accessibility|screen_recording` (C5

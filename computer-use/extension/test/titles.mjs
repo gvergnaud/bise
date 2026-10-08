@@ -28,6 +28,11 @@ try {
   check("two agents, keyed by hub", JSON.stringify(keys) === JSON.stringify(["00000000000000aa.perf", "00000000000000bb.perf"]), keys);
   const owners = await ext.ev(`chrome.storage.session.get(null).then(o => Object.values(o).sort())`);
   check("groups mapped to keys in session storage", JSON.stringify(owners) === JSON.stringify(keys), owners);
+  // step 4: {"pause": key} takes one agent's tabs over, not the other's
+  broker.send({ pause: "00000000000000aa.perf" });
+  await sleep(300);
+  const paused = await ext.ev(`[...bise.tabs.values()].map(t => [t.agent, t.paused, t.attached]).sort()`);
+  check("pause: that key's tabs paused and detached, the other's not", JSON.stringify(paused) === JSON.stringify([["00000000000000aa.perf", true, false], ["00000000000000bb.perf", false, paused[1]?.[2]]]), paused);
   // site's group goes: harness's perf is alone again
   await ext.ev(`chrome.tabGroups.query({}).then(gs => gs.find(g => g.title.endsWith("site"))).then(g => chrome.tabs.query({ groupId: g.id })).then(ts => chrome.tabs.remove(ts.map(t => t.id))).then(() => 1)`);
   await sleep(600);

@@ -1,11 +1,11 @@
 # 18 · an agent can stop or watch another agent through computer use's control socket
 
-Status: fixed by step 2 (points 1 and 2 below); `pause` and `peek` follow. Found by architect while reviewing amb-core's plan for computer use live in the desktop window (m_12177, answer m_12179). Read from the code, not exploited. Label: security. The plan, signed by architect (m_12219), in five steps:
+Status: fixed by step 2 (points 1 and 2 below); step 3 (names) and step 4 (`pause`) done; `peek` follows. Found by architect while reviewing amb-core's plan for computer use live in the desktop window (m_12177, answer m_12179). Read from the code, not exploited. Label: security. The plan, signed by architect (m_12219), in five steps:
 
 1. `rust/peer` (bise-peer): the process table, the peer's pid, `judge` and the new `judge_any`, moved out of switchboard with no copy (9534a310). Done.
 2. The broker judges every connection (`computer-use/src/who.rs`): commands move to their own socket, `computer-use-ctl.sock` (its name in `bise_home::socket`), served to the user's processes only and denied in the agents' sandbox; an agent is keyed `<hub id>.<dir>` by its process's tag, never by its hello; a browser link must come from outside; `state.json` v2 and `events.jsonl` carry the key, the name and the hub id, and the TUI and the hub's feed show their own hub's agents only; the broker starts with no `BISE_OWNERS`; the extension maps its groups to keys in session storage. Done (before it, 40a8de09 split broker.rs).
-3. The names at the edges: a group title that two live agents share names its project; the helper's cursor pill shows the name.
-4. `pause` (take over from the window).
+3. The names at the edges: a group title that two live agents share names its project; the helper's cursor pill shows the name (9e05ca4d). Done.
+4. `pause` (take over from the window): ctl `{"op":"pause","args":{"agent":<key>}}` on an agent that drives something marks all its targets paused, sends `{"pause":<key>}` to the browsers and the helper (the debugger detaches, the tabs count as the user's, the cursor hides), fails its waiting calls with `paused` and writes the event `paused` by `you`; `resume` hands it back. An agent that drives nothing: `not_found`. Done.
 5. `peek` (a still on demand, inline, never stored, only while the agent drives).
 
 ## The problem

@@ -23,6 +23,7 @@ pub const USAGE: &str = "usage:
                                            the helper shows the macOS prompt and opens the pane
                                            (screen_recording: relaunching:true when macOS reopens it)
   bise computer-use stop <agent>|--all     the agent lets go of the browser and apps until resume
+  bise computer-use pause <agent>          take over: its tabs and app let go, its acts get paused until resume
   bise computer-use resume <agent>
   bise computer-use release <agent>        end of turn: detach, keep the tabs
   bise computer-use drop <agent>           close its tab group (unless the user touched a tab)
@@ -116,7 +117,7 @@ pub fn main(args: &[String]) -> i32 {
                 }
             }
         }
-        cmd @ ("stop" | "resume" | "release" | "drop") => {
+        cmd @ ("stop" | "resume" | "release" | "drop" | "pause") => {
             let all = a.get(1) == Some(&"--all");
             let agent = a.get(1).filter(|_| !all).map(|s| s.to_string());
             if agent.is_none() && !(all && cmd == "stop") {

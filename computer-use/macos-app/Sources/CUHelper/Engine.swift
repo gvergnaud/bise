@@ -74,6 +74,10 @@ final class Engine {
                 resumed = stopped.remove(agent) != nil || !(paused[agent]?.isEmpty ?? true)
                 paused[agent] = nil
             case "release": driving[agent] = nil
+            // ctl `pause` (docs/issues/18): the user took over the app it drove
+            case "pause":
+                if let d = driving[agent] { paused[agent, default: []].insert(d.0) }
+                driving[agent] = nil
             case "drop": driving[agent] = nil; paused[agent] = nil; stopped.remove(agent)
             default: break
             }

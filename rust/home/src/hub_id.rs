@@ -29,9 +29,31 @@ pub fn hub_id(workspace: &Path) -> String {
     format!("{}-{:08x}", base, fnv1a(&workspace.to_string_lossy()) as u32)
 }
 
+/// The project a hub id names: its folder part, without the `-<8 hex>`
+/// [`hub_id`] adds (`harness-af1b2326` → `harness`); a name that is no hub
+/// id comes back whole. The computer-use broker titles a tab group with it
+/// when two projects' agents share a name (docs/issues/18).
+pub fn project_of_id(id: &str) -> &str {
+    match id.rsplit_once('-') {
+        Some((name, h)) if h.len() == 8 && h.bytes().all(|b| b.is_ascii_hexdigit()) && !name.is_empty() => name,
+        _ => id,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The round trip: the project of a workspace's hub id is its sanitized
+    /// folder name.
+    #[test]
+    fn the_project_of_an_id_is_its_folder() {
+        for (p, name) in [("/Users/me/lab/harness", "harness"), ("/tmp/my repo", "my-repo"), ("/", "root"), ("/a/x-1", "x-1")] {
+            assert_eq!(project_of_id(&hub_id(Path::new(p))), name, "{p}");
+        }
+        assert_eq!(project_of_id("odd"), "odd");
+        assert_eq!(project_of_id("my-repo"), "my-repo");
+    }
 
     #[test]
     fn ids_are_the_folder_and_a_hash_of_the_path() {

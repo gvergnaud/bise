@@ -73,22 +73,14 @@ pub fn split(key: &str) -> (Option<&str>, &str) {
     }
 }
 
-/// The project of a hub id (what a group title that two projects' agents
-/// share adds): the hub folder whose socket hashes to it, its name without
-/// the `-<8 hex>` of its id (`harness-af1b2326` → `harness`).
+/// The project of a tag's hub id (what a group title that two projects'
+/// agents share adds): the hub folder whose socket hashes to it, named by
+/// `bise_home::hub_id::project_of_id` (`harness-af1b2326` → `harness`).
 pub fn project_of(hubs: &std::path::Path, hub: &str) -> Option<String> {
     std::fs::read_dir(hubs).ok()?.flatten().find_map(|e| {
         let sock = bise_home::socket::socket_path(&e.path().join("hub.sock"));
-        (bise_peer::tags::hub_id(&sock) == hub).then(|| project_name(&e.file_name().to_string_lossy()).to_string())
+        (bise_peer::tags::hub_id(&sock) == hub).then(|| bise_home::hub_id::project_of_id(&e.file_name().to_string_lossy()).to_string())
     })
-}
-
-/// A hub folder's name without its id's hash.
-pub fn project_name(folder: &str) -> &str {
-    match folder.rsplit_once('-') {
-        Some((name, h)) if h.len() == 8 && h.bytes().all(|b| b.is_ascii_hexdigit()) && !name.is_empty() => name,
-        _ => folder,
-    }
 }
 
 #[cfg(test)]
@@ -98,9 +90,6 @@ mod tests {
 
     #[test]
     fn a_hub_id_names_its_project() {
-        assert_eq!(project_name("harness-af1b2326"), "harness");
-        assert_eq!(project_name("my-repo-b50e38fe"), "my-repo");
-        assert_eq!(project_name("odd"), "odd");
         let d = std::env::temp_dir().join(format!("cu-hubs-{}", std::process::id()));
         std::fs::create_dir_all(d.join("site-0123abcd")).unwrap();
         let id = bise_peer::tags::hub_id(&bise_home::socket::socket_path(&d.join("site-0123abcd").join("hub.sock")));

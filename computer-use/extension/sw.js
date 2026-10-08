@@ -172,6 +172,7 @@ async function onHost(m) {
   if (m.resume) return resumeAgent(m.resume);
   if (m.release) return releaseAgent(m.release);
   if (m.drop) return dropAgent(m.drop);
+  if (m.pause) return pauseAgent(m.pause);
   if (m.id === undefined || !m.op) return;
   try {
     if (typeof m.agent === "string" && m.agent && m.name) agentOf(m.agent, m.name, m.project);
@@ -1145,6 +1146,21 @@ async function releaseAgent(name) {
     await detach(id, t);
     chrome.tabs.sendMessage(id, { bise: "cursor", hide: true }).catch(() => {});
   }
+}
+
+/**
+ * C4 `{"pause": agent}` (ctl `pause`, docs/issues/18 step 4): the user takes
+ * over from bise's window. Its tabs let go (the debugger detaches, the
+ * cursor hides) and count as touched (a drop leaves them to the user); no
+ * event: the broker wrote it. `resume` hands them back.
+ */
+async function pauseAgent(name) {
+  for (const id of tabsOf(name)) {
+    const t = tabs.get(id);
+    t.paused = true;
+    t.userTouched = true;
+  }
+  await releaseAgent(name);
 }
 
 async function dropAgent(name) {

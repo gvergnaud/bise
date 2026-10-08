@@ -33,6 +33,30 @@ fn resume_agent(sh: &Arc<Shared>, agent: &str) {
     write_state(sh);
 }
 
+/// ctl `pause` (docs/issues/18 step 4: the user takes over from the
+/// window, without touching the agent's tab): every target of the agent
+/// is paused (`"*"`, so its acts get `paused`), the browsers and the
+/// helper let go of it (`{"pause": agent}`: the debugger detaches, the
+/// cursor hides), and the event says `paused` by you. `resume` hands it
+/// back. An agent that drives nothing now: `not_found`.
+pub(super) fn pause_agent(sh: &Arc<Shared>, agent: &str) -> Reply {
+    let driving = {
+        let mut inner = lock(&sh.inner);
+        let Some(a) = inner.agents.get_mut(agent).filter(|a| a.driving.is_some()) else {
+            return Err(err("not_found", format!("{} drives nothing now", crate::who::split(agent).1)));
+        };
+        if !a.paused.iter().any(|p| p == "*") {
+            a.paused.push("*".to_string());
+        }
+        a.driving.clone()
+    };
+    let _ = state::event_driving(&sh.opts.paths, agent, "paused", "you", driving.as_deref());
+    broadcast(sh, &json!({"pause": agent}));
+    fail_where(sh, |p| p.agent == agent, || err("paused", "the user took over; wait until they give it back, or ask them"));
+    write_state(sh);
+    Ok(json!({"paused": agent}))
+}
+
 pub(super) fn release(sh: &Arc<Shared>, agent: &str) {
     let was = {
         let mut inner = lock(&sh.inner);
@@ -173,7 +197,8 @@ pub(super) fn ctl_loop(sh: &Arc<Shared>, w: Writer, lines: Lines) {
                 }
                 Ok(json!({"stopped": names}))
             }
-            "stop" | "resume" | "drop" | "release" if agent.is_empty() => Err(err("bad_args", "name an agent")),
+            "stop" | "resume" | "drop" | "release" | "pause" if agent.is_empty() => Err(err("bad_args", "name an agent")),
+            "pause" => pause_agent(sh, &agent),
             "stop" => {
                 stop_agent(sh, &agent, "you");
                 Ok(json!({"stopped": [agent]}))

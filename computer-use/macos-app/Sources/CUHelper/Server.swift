@@ -118,7 +118,7 @@ final class Server {
         guard let obj = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else {
             c.send(["ok": false, "error": CUError("bad_args", "a line that is not a JSON object").json]); return
         }
-        for kind in ["stop", "resume", "release", "drop"] {
+        for kind in ["stop", "resume", "release", "drop", "pause"] {
             if let agent = obj[kind] as? String { engine.control(kind, agent: agent); return }
         }
         let args = obj["args"] as? [String: Any] ?? [:]
