@@ -5,6 +5,16 @@
 
 use super::*;
 
+/// What a page's path did with a line he sent ([`Shell::page_first`]).
+pub(super) enum Page {
+    /// taken there (a step ticked, a drafts or replaced batch card)
+    Done,
+    /// a page question's answer: the line to step, its digit as words
+    Reply(String),
+    /// not a page's card
+    Not,
+}
+
 impl Shell {
     /// The snapshot's pages (docs/ambient-pages.md §2.3), newest first, and
     /// each card's page link. Moved out of Shell::snapshot unchanged
@@ -560,10 +570,27 @@ impl Shell {
         true
     }
 
+    /// A line he sent that may answer a page's card, the page's path
+    /// first, in its one order for every door (the input handler,
+    /// card/answer, command/run's `/answer`; architect m_13688): a step
+    /// ticked or a drafts or replaced batch card answered there
+    /// ([`Page::Done`]); a question's digit as its option's words
+    /// ([`Page::Reply`], the line to step); else [`Page::Not`]. The
+    /// caller ends with [`Self::page_answers`] (the page hears it).
+    pub(super) fn page_first(&mut self, client: ClientId, line: &str) -> Page {
+        if self.page_step_answer(client, line) {
+            return Page::Done;
+        }
+        match self.page_reply_text(line) {
+            Some(l) => Page::Reply(l),
+            None => Page::Not,
+        }
+    }
+
     /// `/answer N reply` on a step's card: the step ticked (or the words
     /// as a note on its row), never the hub's question path. False: not
     /// a step's card.
-    pub(super) fn page_step_answer(&mut self, client: ClientId, text: &str) -> bool {
+    fn page_step_answer(&mut self, client: ClientId, text: &str) -> bool {
         let Some(rest) = text.trim().strip_prefix("/answer ") else { return false };
         let Some((n, reply)) = rest.trim().split_once(' ') else { return false };
         let Ok(card) = n.trim_start_matches('#').parse::<u64>() else { return false };
@@ -610,7 +637,7 @@ impl Shell {
     /// `/answer N reply` on a page question's card (from the TUI, the
     /// capsule or the page): an option's number becomes its words (the
     /// agent reads words), kept until the card closes.
-    pub(super) fn page_reply_text(&mut self, text: &str) -> Option<String> {
+    fn page_reply_text(&mut self, text: &str) -> Option<String> {
         let rest = text.trim().strip_prefix("/answer ")?;
         let (n, reply) = rest.trim().split_once(' ')?;
         let card: u64 = n.trim_start_matches('#').parse().ok()?;

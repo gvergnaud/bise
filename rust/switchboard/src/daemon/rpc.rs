@@ -289,7 +289,9 @@ impl Shell {
             // the hub's words past the request's one answer (a step's
             // second notice) to an older hello connection (the terminal,
             // until step 4): its older notice, never a typed line it
-            // doesn't read
+            // doesn't read.
+            // TODO(client-protocol step 4, architect m_13688): goes when
+            // the terminal reads notifications (the older notice with it)
             if !self.proto.has(id) {
                 if let HubEv::Notice { text, .. } | HubEv::Error { text, .. } = ev {
                     if let Some(c) = self.clients.get_mut(&id) {

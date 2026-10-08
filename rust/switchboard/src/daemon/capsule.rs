@@ -3,6 +3,7 @@
 //! open steps (steps_hint, read from the page cards). Moved out of
 //! daemon.rs unchanged (architect m_12143).
 
+use super::page_cards::Page;
 use super::*;
 
 impl Shell {
@@ -20,11 +21,12 @@ impl Shell {
         // back); never on an answer or a slash command
         // a step of his answered on its card (roadmap D): ticked
         // on its page, the page's agent told there
-        if !self.page_step_answer(id, &s("text")) {
+        let page = self.page_first(id, &s("text"));
+        if !matches!(page, Page::Done) {
             let queued = v.get("queued").and_then(|x| x.as_bool()).unwrap_or(false);
-            let text = match self.page_reply_text(&s("text")) {
-                Some(reply) => reply,
-                None => {
+            let text = match page {
+                Page::Reply(reply) => reply,
+                _ => {
                     // his attached files, rendered once (item H)
                     let said = fn_context::with_files(v, s("text"));
                     // bise's home hub: words about a project go there (daemon/routing.rs)

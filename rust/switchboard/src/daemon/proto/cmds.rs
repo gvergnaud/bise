@@ -8,6 +8,7 @@
 //! op's own handler, and `slash` takes any line he typed: his words and
 //! `@route`s go `send`'s path (`proto_input`).
 
+use super::super::page_cards::Page;
 use super::*;
 use bise_proto::hub::SendOpts;
 use bise_proto::slash::Version;
@@ -86,13 +87,10 @@ impl Shell {
                 // op had it): a step ticked, a drafts or replaced batch
                 // card answered there; a question's digit becomes its
                 // option's words, and the page hears it (P3b)
-                let line = format!("/answer {card} {}", reply.trim());
-                if self.page_step_answer(id, &line) {
-                    return self.page_answers();
-                }
-                let reply = match self.page_reply_text(&line) {
-                    Some(l) => l.splitn(3, ' ').nth(2).unwrap_or_default().to_string(),
-                    None => reply,
+                let reply = match self.page_first(id, &format!("/answer {card} {}", reply.trim())) {
+                    Page::Done => return self.page_answers(),
+                    Page::Reply(l) => l.splitn(3, ' ').nth(2).unwrap_or_default().to_string(),
+                    Page::Not => reply,
                 };
                 if !self.hub.st.open_cards().any(|c| c.id == card) {
                     return self.proto_error(id, &tag, &format!("card {card} isn't open"));
@@ -486,12 +484,10 @@ impl Shell {
             // (the input op's, P3b): a step ticked there, a question's
             // digit as its option's words, and the page hears it
             Slash::Step(cmd) => {
-                if self.page_step_answer(id, line) {
-                    return self.page_answers();
-                }
-                let cmd = match self.page_reply_text(line) {
-                    Some(l) => crate::router::parse(&l, &agent),
-                    None => cmd,
+                let cmd = match self.page_first(id, line) {
+                    Page::Done => return self.page_answers(),
+                    Page::Reply(l) => crate::router::parse(&l, &agent),
+                    Page::Not => cmd,
                 };
                 self.stepping(id, tag, cid, |sh| sh.step(Input::UserCmd { client: id, focus: agent, cmd }));
                 self.page_answers();
