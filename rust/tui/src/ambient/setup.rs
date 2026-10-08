@@ -492,12 +492,9 @@ pub fn live(flow: FlowFn) -> SetupPorts {
 }
 
 /// The home workspace (`~/bise`, `$BISE_HOME_WORKSPACE` in the tests):
-/// switchboard::paths::home_workspace's rule, read here without it.
+/// bise_home's one rule, the hub's too.
 fn home_workspace() -> PathBuf {
-    if let Some(d) = bise_home::env::test_setting("BISE_HOME_WORKSPACE") {
-        return PathBuf::from(d);
-    }
-    bise_home::Home::from_env().user_home().join("bise")
+    bise_home::projects::home_workspace()
 }
 
 #[cfg(test)]

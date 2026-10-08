@@ -66,7 +66,9 @@ impl Places {
     fn standard(workspace: &Path) -> Places {
         Places {
             home: std::env::var_os("HOME").filter(|h| !h.is_empty()).map(PathBuf::from),
-            prompts: builtin_prompts(),
+            // bise-pages only where the desktop's rules are on (the hub's
+            // agents get it under the same flag, architect m_12576)
+            prompts: builtin_prompts(bise_home::projects::desktop_for(workspace)),
             plugins: bend_plugins::resolve::Roots::standard(Some(workspace)),
         }
     }
@@ -88,12 +90,14 @@ fn skill_dirs(workspace: &Path, places: &Places) -> Vec<PathBuf> {
 }
 
 /// The app root's built-in skill folders: `prompts/skills-all` (every
-/// agent's, bise-pages) and `prompts/skills` (main's, bise-demo).
-fn builtin_prompts() -> Vec<PathBuf> {
+/// agent's, bise-pages, only when `desktop`: bise_home's desktop_on for
+/// this workspace) and `prompts/skills` (main's, bise-demo).
+fn builtin_prompts(desktop: bool) -> Vec<PathBuf> {
     let Some(app) = bend_plugins::resolve::builtin_root().and_then(|r| r.parent().map(Path::to_path_buf)) else {
         return Vec::new();
     };
-    ["prompts/skills-all", "prompts/skills"].iter().map(|d| app.join(d)).filter(|p| p.is_dir()).collect()
+    let dirs: &[&str] = if desktop { &["prompts/skills-all", "prompts/skills"] } else { &["prompts/skills"] };
+    dirs.iter().map(|d| app.join(d)).filter(|p| p.is_dir()).collect()
 }
 
 /// A SKILL.md's `name:` and `description:` lines, as the scan reads them

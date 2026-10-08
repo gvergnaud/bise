@@ -362,6 +362,8 @@ python3 "$root/tests/sleep_check.py" --self-test >/dev/null && python3 "$root/te
 # a test's env never keeps the caller's path overrides with an own HOME, and
 # its hub's BEND_RUN_DIR is under its tmp (tests/bise_env.py's self-test)
 python3 "$root/tests/bise_env.py" >/dev/null || { python3 "$root/tests/bise_env.py"; echo "GATE quick FAILED"; exit 1; }
+# no merge or stash conflict marker in a tracked file (2393001f landed stash markers)
+python3 "$root/tests/conflict_markers.py" >/dev/null || { python3 "$root/tests/conflict_markers.py"; echo "GATE quick FAILED"; exit 1; }
 cache="${CARGO_TARGET_DIR:-$root/rust/target}/gate-cache"
 # the PROOF shards sit in a copy of bend/ in it and import it relatively
 # (bend refuses an absolute import path with a dot, like ~/.bise/gate/...)

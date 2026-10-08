@@ -71,6 +71,45 @@ pub fn canonical(p: &Path) -> PathBuf {
     std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
 }
 
+/// The home workspace (docs/ambient-pages.md §5.1): `~/bise`, a plain
+/// folder without git for non-code work; `$BISE_HOME_WORKSPACE` when set
+/// (the tests: a throwaway folder, never the user's). The one rule: the
+/// hub (switchboard::paths), the TUI and the ambient core call it.
+pub fn home_workspace() -> PathBuf {
+    if let Some(d) = crate::env::test_setting("BISE_HOME_WORKSPACE") {
+        return PathBuf::from(d);
+    }
+    let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
+    home.join("bise")
+}
+
+/// `ws` is the home workspace: its hub's main is bise (bise desktop S2).
+pub fn is_home(ws: &Path) -> bool {
+    canonical(ws) == canonical(&home_workspace())
+}
+
+/// Whether `ws` is in the projects registry (the desktop app writes it
+/// when it shows a project).
+pub fn is_registered(ws: &Path) -> bool {
+    let ws = canonical(ws);
+    read(&Home::from_env()).iter().any(|p| canonical(&p.path) == ws)
+}
+
+/// Whether the desktop's rules are on for a workspace (architect m_12156,
+/// m_12576): its main prompt's page rules and the bise-pages skill
+/// (prompts/skills-all) for its agents and its TUI's `$` popup. A fact
+/// read once when a prompt is built or a REPL starts, never whether a
+/// window is attached now. On: bise's home hub, or a registered project.
+/// Off: a plain project, which behaves as before the desktop.
+pub fn desktop_on(home: bool, registered: bool) -> bool {
+    home || registered
+}
+
+/// [`desktop_on`] for `ws`, its two facts read now.
+pub fn desktop_for(ws: &Path) -> bool {
+    desktop_on(is_home(ws), is_registered(ws))
+}
+
 /// The main repo of a git worktree at `path` (its `.git` is a file
 /// `gitdir: <repo>/.git/worktrees/<name>`), None for anything else.
 pub fn worktree_main(path: &Path) -> Option<PathBuf> {

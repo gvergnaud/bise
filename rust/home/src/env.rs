@@ -112,6 +112,7 @@ pub const VARS: &[Var] = &[
     test("BISE_CU_EXTENSION", "the computer-use extension's folder (tests)"),
     test("BISE_CU_HELPER", "the computer-use helper app (tests)"),
     user("BISE_DEBUG_REQUESTS", "the hub's REPLs dump each request body"),
+    internal("BISE_DESKTOP", "1 when the desktop's rules are on for an agent (projects::desktop_on at its start): its skills scan reads prompts/skills-all"),
     test("BISE_DETECT_KEYCHAIN", "the keychain probe's knob (tests)"),
     user("BISE_DEV", "/log outside the dev build"),
     user("BISE_DIST_URL", "the release channel's download URL"),

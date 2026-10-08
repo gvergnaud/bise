@@ -295,11 +295,18 @@ impl Shell {
         let keys = self.opts.spawn_env.map(|f| f()).unwrap_or_default();
         self.spawn_keys.insert(dir.clone(), hash_keys(&keys));
         let ws = PathBuf::from(&a.ws.path);
+        // the desktop's rules, read once at this start like the prompt's
+        // (role_of): bise-pages (prompts/skills-all) only where they're on
+        let desktop = bise_home::projects::desktop_for(&self.opts.paths.workspace);
+        if desktop {
+            env.set("BISE_DESKTOP", "1");
+        }
         let spawned = PromptInputs {
             plugins: plugins_fingerprint(&ws),
-            skills: skills_fingerprint(&skill_roots(&ws, &self.opts.app_root, a.is_main)),
+            skills: skills_fingerprint(&skill_roots(&ws, &self.opts.app_root, a.is_main, desktop)),
             ws,
             main: a.is_main,
+            desktop,
         };
         let fp = spawned.combined();
         self.spawn_plugins.insert(dir.clone(), spawned);

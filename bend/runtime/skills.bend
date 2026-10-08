@@ -47,6 +47,8 @@ def index_path() -> IO(String):
 #      $PWD/.agents/skills), then the plugin skills ($3, written by the
 #      plugins bridge, runtime/plugins.bend), then every agent's
 #      built-in skills, the app root's prompts/skills-all (bise-pages),
+#      only where the desktop is on (BISE_DESKTOP=1, set by the hub with
+#      the prompt's own flag),
 #      then, for main only (BISE_ROLE=main, set by the hub), main's
 #      built-in skills: the app
 #      root's prompts/skills (the hub runs the REPL in the app root, and
@@ -125,7 +127,8 @@ index() {
 }
 w=\"${BEND_WORKDIR:-$PWD}\"
 b=\"\"; [ \"${BISE_ROLE:-}\" = main ] && b=\"$PWD/prompts/skills\"
-set -- \"$1\" \"$2\" \"$3\" \"$HOME/.agents/skills\" \"$HOME/.vibe/skills\" \"$w/.agents/skills\" \"$PWD/prompts/skills-all\" \"$b\"
+a=\"\"; [ \"${BISE_DESKTOP:-}\" = 1 ] && a=\"$PWD/prompts/skills-all\"
+set -- \"$1\" \"$2\" \"$3\" \"$HOME/.agents/skills\" \"$HOME/.vibe/skills\" \"$w/.agents/skills\" \"$a\" \"$b\"
 r=0; rs=\"\"
 for root in \"$4\" \"$5\" \"$6\" \"$7\" \"$8\"; do
   r=$((r + 1)); [ -n \"$root\" ] && { job \"r$r\" entries \"$root\"; rs=\"$rs r$r\"; }

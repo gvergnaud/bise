@@ -50,7 +50,6 @@ fn tui_words(ls: &[&str]) -> Vec<(EntryKind, String, String)> {
             Some(Ev::AgentMsg { from, to, text, level: 3, .. }) if from.is_empty() => out.push((EntryKind::ToAgent, text, to)),
             Some(Ev::AgentMsg { from, text, level: 3, .. }) => out.push((EntryKind::FromAgent, text, from)),
             Some(Ev::AgentMsg { text, level: 2, .. }) => out.push((EntryKind::Agent, text, String::new())),
-            Some(Ev::Info(t)) if l.starts_with("sb stopped") => out.push((EntryKind::Stopped, t, String::new())),
             Some(Ev::Info(t) | Ev::Warn(t) | Ev::Err(t)) => out.push((EntryKind::Notice, t, String::new())),
             Some(Ev::Undelivered { name, text, .. }) => out.push((EntryKind::NotDelivered, text, name)),
             _ => {}
@@ -67,14 +66,18 @@ fn the_tui_and_the_fold_say_the_same_words_for_the_same_lines() {
     let entries = fold(&numbered, &Ctx { open_cards: &[], page: &none, provider: &crate::models::provider_name, width: &unicode_width::UnicodeWidthStr::width, offset: &|_| 0 });
     let folded: Vec<(EntryKind, String, String)> = entries
         .iter()
-        .filter(|e| e.kind != EntryKind::Tools)
+        // the Stopped entry is the window's only: the TUI says it in its
+        // own interrupt lines and draws nothing for sb-core's `stopped`
+        .filter(|e| e.kind != EntryKind::Tools && e.kind != EntryKind::Stopped)
         .map(|e| {
             let who = e.from.clone().or_else(|| e.to.clone()).or_else(|| e.not_delivered.as_ref().map(|d| d.to.clone()));
             (e.kind, e.text.clone(), who.unwrap_or_default())
         })
         .collect();
     assert_eq!(folded, tui_words(&ls));
-    assert_eq!(folded.len(), 14, "{folded:?}");
+    assert_eq!(folded.len(), 13, "{folded:?}");
+    // and the TUI draws nothing for sb-core's `stopped` line
+    assert!(parse_line("sb stopped : stopped by you").is_none());
 }
 
 /// Item 5 batch 3a (architect m_11122): for the hub's news lines, the

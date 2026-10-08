@@ -44,9 +44,9 @@ fn messages(desktop: bool) -> String {
 /// registry (the desktop app writes it when it shows a project). Off: a
 /// plain project, whose main prompt stays what it was before the desktop
 /// except the new command rows (sb page, taste, people, follow, project).
-pub fn desktop_on(home: bool, registered: bool) -> bool {
-    home || registered
-}
+/// The same flag gates the bise-pages skill (prompts/skills-all) for its
+/// agents and the TUI's `$` popup (architect m_12576): bise_home's rule.
+pub use bise_home::projects::desktop_on;
 
 /// How every agent talks to the user: tasks and main (their roles below)
 /// and solo sessions (runtime/repl-live.bend reads the same file when it

@@ -1401,7 +1401,7 @@ impl Shell {
         }
         self.plugins_checked = Some(std::time::Instant::now());
         let mut plugins_by_ws: BTreeMap<PathBuf, u64> = BTreeMap::new();
-        let mut skills_by_ws: BTreeMap<(PathBuf, bool), u64> = BTreeMap::new();
+        let mut skills_by_ws: BTreeMap<(PathBuf, bool, bool), u64> = BTreeMap::new();
         let mut stale = Vec::new();
         for (d, fp) in &self.spawn_plugins {
             if !self.repls.contains_key(d) || self.switching.contains_key(d) || self.reload_repls.contains(d) {
@@ -1410,8 +1410,8 @@ impl Shell {
             let plugins = *plugins_by_ws.entry(fp.ws.clone()).or_insert_with(|| plugins_fingerprint(&fp.ws));
             let skills_moved = now && {
                 let cur = *skills_by_ws
-                    .entry((fp.ws.clone(), fp.main))
-                    .or_insert_with(|| skills_fingerprint(&skill_roots(&fp.ws, &self.opts.app_root, fp.main)));
+                    .entry((fp.ws.clone(), fp.main, fp.desktop))
+                    .or_insert_with(|| skills_fingerprint(&skill_roots(&fp.ws, &self.opts.app_root, fp.main, fp.desktop)));
                 cur != fp.skills
             };
             if plugins != fp.plugins || skills_moved {
@@ -1446,7 +1446,7 @@ impl Shell {
         let Some(fp) = self.spawn_plugins.get(&dir) else {
             return;
         };
-        let cur = skills_fingerprint(&skill_roots(&fp.ws, &self.opts.app_root, fp.main));
+        let cur = skills_fingerprint(&skill_roots(&fp.ws, &self.opts.app_root, fp.main, fp.desktop));
         if cur == fp.skills && !self.reload_repls.contains(&dir) {
             return;
         }
@@ -2612,6 +2612,8 @@ fn prompt_is_stale(adir: &Path, fp: u64) -> bool {
 struct PromptInputs {
     ws: PathBuf,
     main: bool,
+    /// prompts::desktop_on at its start: bise-pages (prompts/skills-all)
+    desktop: bool,
     plugins: u64,
     skills: u64,
 }
@@ -2634,10 +2636,11 @@ fn plugins_fingerprint(ws: &Path) -> u64 {
 /// The skill folders a REPL's startup scan reads (runtime/skills.bend
 /// `scan_script`): `~/.agents/skills`, `~/.vibe/skills`,
 /// `<ws>/.agents/skills`, the app root's `prompts/skills-all` (every
-/// agent's built-ins, bise-pages) and, for main, the app root's
+/// agent's built-ins, bise-pages: only where the desktop is on, the same
+/// flag as the prompt's page rules, architect m_12576) and, for main, the app root's
 /// `prompts/skills` (main's own, bise-demo; the plugins' skills are in the
 /// plugins fingerprint).
-fn skill_roots(ws: &Path, app_root: &Path, is_main: bool) -> Vec<PathBuf> {
+fn skill_roots(ws: &Path, app_root: &Path, is_main: bool, desktop: bool) -> Vec<PathBuf> {
     let mut roots = Vec::new();
     if let Some(home) = std::env::var_os("HOME").filter(|h| !h.is_empty()) {
         let home = PathBuf::from(home);
@@ -2645,7 +2648,9 @@ fn skill_roots(ws: &Path, app_root: &Path, is_main: bool) -> Vec<PathBuf> {
         roots.push(home.join(".vibe/skills"));
     }
     roots.push(ws.join(".agents/skills"));
-    roots.push(app_root.join("prompts/skills-all"));
+    if desktop {
+        roots.push(app_root.join("prompts/skills-all"));
+    }
     if is_main {
         roots.push(app_root.join("prompts/skills"));
     }
@@ -2716,11 +2721,14 @@ mod tests {
         assert_eq!(skills_fingerprint(&roots), empty);
         // main reads the app root's prompts/skills too, a task does not
         let ws = d.join("ws");
-        assert!(skill_roots(&ws, &d, true).contains(&d.join("prompts/skills")));
-        assert!(!skill_roots(&ws, &d, false).contains(&d.join("prompts/skills")));
-        // every agent reads prompts/skills-all (bise-pages)
+        assert!(skill_roots(&ws, &d, true, false).contains(&d.join("prompts/skills")));
+        assert!(!skill_roots(&ws, &d, false, false).contains(&d.join("prompts/skills")));
+        // law (architect m_12576): prompts/skills-all (bise-pages) only
+        // where the desktop is on, the prompt's own flag; a plain
+        // project's agents read none of it, main or task
         for main in [true, false] {
-            assert!(skill_roots(&ws, &d, main).contains(&d.join("prompts/skills-all")));
+            assert!(skill_roots(&ws, &d, main, true).contains(&d.join("prompts/skills-all")));
+            assert!(!skill_roots(&ws, &d, main, false).contains(&d.join("prompts/skills-all")));
         }
         let _ = std::fs::remove_dir_all(&d);
     }

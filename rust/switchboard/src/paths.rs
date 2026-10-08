@@ -25,27 +25,22 @@ pub fn workspace_id(workspace: &Path) -> String {
 /// The home workspace (docs/ambient-pages.md §5.1): `~/bise`, a plain
 /// folder without git for non-code work; `$BISE_HOME_WORKSPACE` when set
 /// (the tests: a throwaway folder, never the user's).
+/// bise_home's rule (one owner: the TUI and the ambient core read it too).
 pub fn home_workspace() -> PathBuf {
-    if let Some(d) = bise_home::env::test_setting("BISE_HOME_WORKSPACE") {
-        return PathBuf::from(d);
-    }
-    let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
-    home.join("bise")
+    bise_home::projects::home_workspace()
 }
 
 /// `ws` is the home workspace: its hub's main is bise (bise desktop S2,
 /// architect m_8474: the one flag, nothing written, nothing in sb-core).
 pub fn is_home(ws: &Path) -> bool {
-    let canon = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
-    canon(ws) == canon(&home_workspace())
+    bise_home::projects::is_home(ws)
 }
 
 /// Whether `ws` is in bise's projects registry (bise_home::projects, which
 /// the desktop app writes when it shows a project): one of the two facts
 /// of prompts::desktop_on, read once when a prompt is built.
 pub fn is_registered(ws: &Path) -> bool {
-    let ws = bise_home::projects::canonical(ws);
-    bise_home::projects::read(&bise_home::Home::from_env()).iter().any(|p| bise_home::projects::canonical(&p.path) == ws)
+    bise_home::projects::is_registered(ws)
 }
 
 /// The home workspace, created on first use (never git-initialised).

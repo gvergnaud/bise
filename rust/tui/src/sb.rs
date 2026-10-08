@@ -1455,7 +1455,12 @@ pub(crate) fn hub_ev(h: Hub) -> Option<Ev> {
         }
         // site/m/timers: a scheduled task set or ended
         Hub::Scheduled(json) => return crate::scheduled::hub_line(&json),
-        Hub::Stopped(text) => Ev::Info(text),
+        // sb-core's `stopped` line (an interrupted turn): the TUI already
+        // says it in its own lines ('interrupted — …', '▲ turn
+        // interrupted', 'in-flight response dropped'), so it draws nothing
+        // more and an interrupt reads as on main (architect m_12576); the
+        // desktop thread keeps its Stopped entry (bise-proto's fold)
+        Hub::Stopped(_) => return None,
         // a known kind's line that doesn't parse, as before
         Hub::Other { kind, text } => match kind.as_str() {
             "card-closed" => Ev::Info(format!("card {} ", text)),

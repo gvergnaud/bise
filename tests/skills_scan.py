@@ -21,8 +21,11 @@ temp HOME holding one skill:
 6. main (BISE_ROLE=main, the hub sets it) gets bise's built-in skills,
    the app root's prompts/skills (bise-demo), after the others; a task
    (BISE_ROLE=agent) or a solo session does not.
-7. every agent, main and tasks, gets the app root's prompts/skills-all
-   (bise-pages: a task that makes a page loads it with the skill tool).
+7. where the desktop is on (BISE_DESKTOP=1: the hub sets it with the
+   prompt's own flag, projects::desktop_on), every agent, main and tasks,
+   gets the app root's prompts/skills-all (bise-pages: a task that makes
+   a page loads it with the skill tool); a plain project's agents do not
+   (architect m_12576).
 """
 import os, socket, subprocess, sys, tempfile, time
 
@@ -154,9 +157,20 @@ def main():
         check("a task's index has no main-only built-in skill", adata.startswith("beta\t") and "bise-demo" not in adata,
               repr(adata))
         pages = os.path.join(ROOT, "prompts", "skills-all", "bise-pages", "SKILL.md")
+
+        def has_pages(data):
+            return ("\nbise-pages\t" in data) and ("\t%s\n" % pages) in data
+        # desktop off (no BISE_DESKTOP: a plain project): nobody gets it
         for who, data in (("main", sdata), ("a task", adata)):
-            check("%s's index has every agent's built-ins (bise-pages)" % who,
-                  ("\nbise-pages\t" in data) and ("\t%s\n" % pages) in data, repr(data))
+            check("%s's index has no bise-pages where the desktop is off" % who, "bise-pages" not in data, repr(data))
+        # desktop on: the same scan as a task with BISE_DESKTOP=1 has it
+        d1, d2 = os.path.join(tmp, "d-shared.txt"), os.path.join(tmp, "d-session.txt")
+        subprocess.run(["/bin/sh", script, d1, d2, os.path.join(tmp, "none.txt")], cwd=ROOT,
+                       env={**env, "BISE_ROLE": "agent", "BISE_DESKTOP": "1"}, check=True, capture_output=True,
+                       text=True, timeout=30)
+        ddata = open(d2).read() if os.path.exists(d2) else "<none>"
+        check("a task's index has every agent's built-ins (bise-pages) where the desktop is on",
+              has_pages(ddata) and "bise-demo" not in ddata, repr(ddata))
         sock = socket.create_connection(("127.0.0.1", port), timeout=120)
         sock.sendall(b"run [[skill: alpha]] [[skill: nope]] [[skill: bise-demo]]\n")
         f = sock.makefile("rb")

@@ -22,6 +22,8 @@ the injected <bise_state> block is not one):
   call's description too (BISE-223);
 - once every marker ran (or there is none), the agent answers
   "done: <last tool result>" or "ack: <the message>";
+- `[[reply: PATH]]`: once every marker ran, the answer is PATH's text,
+  verbatim (markdown kept), instead of "done: …" / "ack: …";
 - `[[ts: CODE]]`: a run_typescript call with that program (CODE without
   `]]`);
 - `[[think: TEXT]]`: every reply to that message starts with reasoning
@@ -85,6 +87,7 @@ import sys
 import threading
 import time
 import urllib.request
+import zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FIXTURES = os.path.join(HERE, "providers")
@@ -93,6 +96,7 @@ FAMILIES = ("anthropic", "openai-chat", "openai-responses", "gemini")
 MARK = re.compile(r"\[\[(bash|skill|edit|write_file|apply_patch|run_typescript|ts): (.*?)\]\]", re.S)
 INNER = re.compile(r"\{\{(bash): (.*?)\}\}", re.S)
 THINK = re.compile(r"\[\[think: (.*?)\]\]", re.S)
+REPLY = re.compile(r"\[\[reply: ([^\]\n]+)\]\]")
 ERROR = re.compile(r"\[\[error: (\w+)(?: x(\d+))?(?: retry=(\d+))?\]\]")
 FIXTURE = re.compile(r"\[\[fixture: ([\w.-]+)\]\]")
 SLOW = re.compile(r"\[\[slow: ([\d.]+)\]\]")
@@ -271,6 +275,57 @@ def script_of(user):
     return re.sub(r"<task_status>.*?</task_status>", "", user, flags=re.S).strip()
 
 
+# $FAKE_SCRIPTS: a folder of *.json files, each {"match": PHRASE, "calls": [{"tool", "arg"}],
+# "reply": TEXT, "slow": S}. A user message holding PHRASE (the longest one wins) makes those
+# calls one by one (`arg` a string, or a JSON object for edit/write_file), then answers TEXT
+# verbatim; `slow`: every request for that message waits S seconds first. ambient-qa's rich
+# world: his messages and the agents' briefs read as real ones, with no marker in them.
+_SCRIPTS = {"key": None, "list": [], "lock": threading.Lock()}
+
+
+def scripts():
+    d = os.environ.get("FAKE_SCRIPTS")
+    if not d:
+        return []
+    try:
+        names = sorted(n for n in os.listdir(d) if n.endswith(".json"))
+        key = (os.stat(d).st_mtime_ns, tuple(names))
+    except OSError:
+        return []
+    with _SCRIPTS["lock"]:
+        if key != _SCRIPTS["key"]:
+            out = []
+            for n in names:
+                try:
+                    with open(os.path.join(d, n), encoding="utf-8") as f:
+                        s = json.load(f)
+                except (OSError, ValueError):
+                    continue
+                if s.get("match"):
+                    out.append(s)
+            _SCRIPTS.update(key=key, list=sorted(out, key=lambda s: -len(s["match"])))
+        return _SCRIPTS["list"]
+
+
+def scripted(user):
+    """the script whose phrase is in this message (the longest), or None"""
+    return next((s for s in scripts() if s["match"] in user), None)
+
+
+# $FAKE_PLAIN=1: an answer with no script reads as a model's short answer, never an echo of
+# the message ('ack: …') or of the tool's output ('done: …').
+PLAIN_USER = ["On it.", "Sure, looking at it now.", "Ok, give me a minute on this one.", "Got it, I'll take a look.",
+              "Makes sense. I'll start there."]
+PLAIN_AGENT = ["Noted, thanks.", "Good, that's what I needed.", "Thanks. Nothing more needed on this one for now.",
+               "Ok, I'll keep that in mind for the next step.", "Thanks, I'll tell you if anything changes."]
+PLAIN_DONE = ["Done.", "That ran clean.", "Done, nothing surprising in the output.", "Ok, that worked."]
+PLAIN_FAIL = ["That failed; I'll read the error before trying again.", "It didn't go through. Looking at why."]
+
+
+def plain(choices, text):
+    return choices[zlib.crc32(text.encode()) % len(choices)]
+
+
 def errors_of(user):
     out = []
     for kind, n, retry in ERROR.findall(user):
@@ -284,8 +339,14 @@ def reply_for(conv, seen=0):
     requests for the same user message came before this one."""
     turn = {"text": "", "reasoning": "", "calls": [], "error": None, "fixture": None}
     if agent_of(conv) == "(role line)":
-        # a fixed line (the tests read it in the snapshot), never a script
+        # a fixed line (the tests read it in the snapshot), never a script; FAKE_PLAIN: the line a
+        # model would write, from what the agent was asked
         turn["text"] = "Fake Role Line."
+        if os.environ.get("FAKE_PLAIN") == "1":
+            asked = re.search(r"What it was asked: ([^\n]+)", " ".join(m["text"] for m in conv if m["role"] == "user"))
+            if asked:
+                line = asked.group(1).split(":")[0].strip().lower().rstrip(".")
+                turn["text"] = line[:60].rsplit(" ", 1)[0] if len(line) > 60 else line
         return turn
     if agent_of(conv) == "(checker)":
         # strict JSON: contained unless the state names a force push or
@@ -319,7 +380,11 @@ def reply_for(conv, seen=0):
     turn["reasoning"] = think.group(1).strip() if think else ""
     after = conv[idx + 1:]
     calls_done = sum(m["calls"] for m in after if m["role"] == "assistant")
-    marks = MARK.findall(user) or INNER.findall(user)
+    sc = scripted(user)
+    if sc:
+        marks = [(c["tool"], c["arg"] if isinstance(c["arg"], str) else json.dumps(c["arg"])) for c in sc.get("calls", [])]
+    else:
+        marks = MARK.findall(user) or INNER.findall(user)
     if calls_done < len(marks):
         tool, arg = marks[calls_done]
         args = {"name": arg.strip()} if tool == "skill" else {"arg": arg.strip()}
@@ -340,9 +405,29 @@ def reply_for(conv, seen=0):
             args = {"arg": cmd.strip(), "description": desc.strip()}
         turn["calls"] = [{"id": "call_%d_%d" % (idx, calls_done), "name": tool, "args": args}]
         return turn
+    if sc:
+        turn["text"] = sc.get("reply") or plain(PLAIN_DONE, user)
+        return turn
+    # `[[reply: PATH]]`: once every call ran, the answer is that file's text verbatim (long
+    # markdown, code blocks, tables: ambient-qa's rich world)
+    rep = REPLY.search(user)
+    if rep:
+        try:
+            turn["text"] = open(rep.group(1).strip(), encoding="utf-8").read()
+        except OSError as e:
+            turn["text"] = "ack: no reply file (%s)" % e
+        return turn
     results = [m["text"] for m in after if m["role"] == "tool"]
+    is_plain = os.environ.get("FAKE_PLAIN") == "1"
     if results:
-        turn["text"] = "done: " + results[-1].strip()[:400]
+        if is_plain:
+            failed = re.match(r"\s*(tool \w+ failed|error)", results[-1])
+            turn["text"] = plain(PLAIN_FAIL if failed else PLAIN_DONE, results[-1])
+        else:
+            turn["text"] = "done: " + results[-1].strip()[:400]
+        return turn
+    if is_plain:
+        turn["text"] = plain(PLAIN_AGENT if user.lstrip().startswith(("<agent_message", "[bise]")) else PLAIN_USER, user)
         return turn
     # an image comes framed as text `<image name=[Image #1] path="…">`, the
     # image, text `</image>` (docs/images.md): a model says `[Image #1]`,
@@ -893,6 +978,9 @@ class H(http.server.BaseHTTPRequestHandler):
         slow = SLOW.search(script_of(conv[idx]["text"])) if idx is not None else None
         if slow:
             time.sleep(float(slow.group(1)))
+        sc = scripted(script_of(conv[idx]["text"])) if idx is not None else None
+        if sc and sc.get("slow"):
+            time.sleep(float(sc["slow"]))
         drip = DRIP.search(script_of(conv[idx]["text"])) if idx is not None else None
         self.drip = None
         split = SPLIT.search(script_of(conv[idx]["text"])) if idx is not None else None
