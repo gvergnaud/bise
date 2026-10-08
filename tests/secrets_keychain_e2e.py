@@ -43,7 +43,7 @@ def security(*args):
 
 def stub(path):
     t = open(path).read()
-    return t if t.startswith("bise-secret keychain ") else None
+    return t if t.startswith("bise-secret bise-keychain ") else None
 
 
 def scenario(W):
@@ -76,7 +76,7 @@ def scenario(W):
     # 2. on
     code, out, err = W.run("secrets", "keychain", "on")
     lines = out.strip().splitlines()
-    check(code == 0 and lines[0] == "moved 3 secrets to the macOS keychain: your API key, your ChatGPT sign-in, 1 MCP login.",
+    check(code == 0 and lines[0] == "moved 3 secrets to bise's own macOS keychain, which agents can't read: your API key, your ChatGPT sign-in, 1 MCP login.",
           "on: one line says what moved: %r %r" % (out, err))
     check(len(lines) == 2 and "bise secrets keychain off" in lines[1], "on: the rollback line: %r" % out)
     for p in (auth_file, mcp):
@@ -84,8 +84,13 @@ def scenario(W):
         check(s is not None and signed["refresh"] not in s and signed["access"] not in s and "m-e2e-secret" not in s and "mcp-e2e-token" not in s,
               "%s is a stub with no secret" % os.path.basename(p))
     check('store = "keychain"' in open(os.path.join(W.bise, "config.toml")).read(), "config.toml says keychain")
+    # issue 19 step B: the items are in bise's own keychain file (closed to
+    # the agents' sandbox), its password in the login one (the throwaway)
+    own = os.path.join(W.bise, "secrets", "bise.keychain-db")
     for p in (auth_file, mcp):
-        check(security("find-generic-password", "-s", "bise", "-a", p, kc).returncode == 0, "an item for %s" % os.path.basename(p))
+        check(security("find-generic-password", "-s", "bise", "-a", p, own).returncode == 0, "an item for %s in bise's keychain" % os.path.basename(p))
+        check(security("find-generic-password", "-s", "bise", "-a", p, kc).returncode == 44, "none in the login keychain for %s" % os.path.basename(p))
+    check(security("find-generic-password", "-s", "bise", "-a", "bise keychain password", kc).returncode == 0, "its password in the login keychain")
     code, out, err = W.run("secrets", "keychain", "on")
     check(out.strip() == "your secrets are already in the macOS keychain.", "on again: %r" % out)
 
@@ -132,6 +137,8 @@ def scenario(W):
     check(a["chatgpt"]["access"] == tok.strip() and a["mistral"]["key"] == "m-e2e-secret-key-0123456789", "auth.json is back, current")
     check(json.load(open(mcp))["access_token"] == "mcp-e2e-token", "the MCP login is back")
     check(oct(os.stat(auth_file).st_mode & 0o777) == "0o600", "auth.json 0600")
+    check(not os.path.exists(own), "off: bise's keychain file is gone")
+    check(security("find-generic-password", "-s", "bise", "-a", "bise keychain password", kc).returncode == 44, "off: its password item is gone")
     for p in (auth_file, mcp):
         check(security("find-generic-password", "-s", "bise", "-a", p, kc).returncode == 44, "no item left for %s" % os.path.basename(p))
     check('store = "file"' in open(os.path.join(W.bise, "config.toml")).read(), "config.toml says file")

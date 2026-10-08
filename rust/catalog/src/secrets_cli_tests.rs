@@ -8,7 +8,7 @@ fn the_lines_say_what_moved_by_kind() {
     assert_eq!(
         moved_lines(Store::Keychain, &[ApiKey, ApiKey, ChatGpt, Mcp], "~/.bise"),
         [
-            "moved 4 secrets to the macOS keychain: 2 API keys, your ChatGPT sign-in, 1 MCP login.",
+            "moved 4 secrets to bise's own macOS keychain, which agents can't read: 2 API keys, your ChatGPT sign-in, 1 MCP login.",
             "before you go back to an older bise, run bise secrets keychain off: it can't read the keychain."
         ]
     );
@@ -68,10 +68,11 @@ fn on_then_off_moves_every_secret_and_back() {
 
     let on = switch(&paths, &d.join("mcp"), Some(Store::Keychain), true);
     assert!(!on.failed, "{on:?}");
-    assert!(on.lines[0].starts_with("moved 3 secrets to the macOS keychain: 2 API keys, 1 MCP login."), "{on:?}");
+    assert!(on.lines[0].starts_with("moved 3 secrets to bise's own macOS keychain, which agents can't read: 2 API keys, 1 MCP login."), "{on:?}");
+    assert_eq!(moved_from_login(&[Kind::ChatGpt, Kind::Mcp]), "moved 2 secrets from your login keychain to bise's own keychain, which agents can't read: your ChatGPT sign-in, 1 MCP login.");
     for f in [&paths.auth_file, &mcp] {
         let t = std::fs::read_to_string(f).unwrap();
-        assert!(t.starts_with("bise-secret keychain") && !t.contains("secret-1234") && !t.contains("tok-secret"), "{t}");
+        assert!(t.starts_with("bise-secret bise-keychain ") && !t.contains("secret-1234") && !t.contains("tok-secret"), "{t}");
     }
     assert!(std::fs::read_to_string(&paths.config).unwrap().contains("store = \"keychain\""));
     assert_eq!(AuthStore::read(&paths.auth_file).unwrap().key("anthropic"), Some("sk-ant-secret-1234567890"));
@@ -85,6 +86,9 @@ fn on_then_off_moves_every_secret_and_back() {
     assert!(std::fs::read_to_string(&mcp).unwrap().contains("tok-secret"));
     assert_eq!(std::fs::read_to_string(&paths.auth_file).unwrap(), auth_text, "the same bytes as before");
     assert!(std::fs::read_to_string(&paths.config).unwrap().contains("store = \"file\""));
-    let gone = std::process::Command::new("/usr/bin/security").args(["find-generic-password", "-s", "bise", "-a", mcp.to_str().unwrap(), k]).output().unwrap();
-    assert_eq!(gone.status.code(), Some(44), "the items went with the move back");
+    // issue 19 step B: off forgets bise's keychain, its file and its password item
+    let kcs = bise_secrets::Keychains::here().unwrap();
+    assert!(!kcs.bise.file().unwrap().exists(), "bise's keychain file went with the move back");
+    let pw = std::process::Command::new("/usr/bin/security").args(["find-generic-password", "-s", "bise", "-a", bise_secrets::keychain::PASSWORD_ACCOUNT, k]).output().unwrap();
+    assert_eq!(pw.status.code(), Some(44), "its password item went too");
 }

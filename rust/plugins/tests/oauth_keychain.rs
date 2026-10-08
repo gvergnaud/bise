@@ -136,11 +136,14 @@ fn an_mcp_login_lives_and_refreshes_in_the_keychain_and_a_lock_never_forgets_it(
     let resource = oauth::resource_of(&Url::parse(&f.url("/mcp")).unwrap());
     let file = oauth::file_of(&secrets, &resource);
     let stub = std::fs::read_to_string(&file).unwrap();
-    assert!(stub.starts_with("bise-secret keychain") && !stub.contains("token"), "the file is a stub: {stub}");
+    assert!(stub.starts_with("bise-secret bise-keychain ") && !stub.contains("token"), "the file is a stub: {stub}");
     let first = oauth::load(&secrets, &resource).unwrap();
     let tok = first.access_token.clone().unwrap();
-    let found = security(&["find-generic-password", "-s", "bise", "-a", file.to_str().unwrap(), "-w", k]);
-    assert!(found.status.success(), "the item is in the throwaway keychain");
+    // bise's own keychain in its home (issue 19 step B), its password in the throwaway
+    let own = home.join("secrets").join(bise_secrets::keychain::FILE);
+    let found = security(&["find-generic-password", "-s", "bise", "-a", file.to_str().unwrap(), "-w", own.to_str().unwrap()]);
+    assert!(found.status.success(), "the item is in bise's keychain");
+    assert!(!security(&["find-generic-password", "-s", "bise", "-a", file.to_str().unwrap(), k]).status.success(), "not in the login one");
 
     // connected; the server drops every token: a 401, a refresh, stored in the keychain
     let c = Remote::start_with(&t.server, &env, Some(&secrets), none(), T).unwrap();
@@ -153,7 +156,7 @@ fn an_mcp_login_lives_and_refreshes_in_the_keychain_and_a_lock_never_forgets_it(
     let after = oauth::load(&secrets, &resource).unwrap();
     assert_ne!(after.access_token.as_deref(), Some(tok.as_str()));
     assert_ne!(after.refresh_token, first.refresh_token, "the refresh token rotates");
-    assert!(std::fs::read_to_string(&file).unwrap().starts_with("bise-secret keychain"));
+    assert!(std::fs::read_to_string(&file).unwrap().starts_with("bise-secret bise-keychain "));
 
     // locked (simulated: BISE_TEST_KEYCHAIN_LOCKED answers as a locked
     // keychain without running security; a real locked keychain would make

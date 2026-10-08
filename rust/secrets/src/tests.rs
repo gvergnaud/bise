@@ -65,7 +65,8 @@ fn a_test_home_never_reaches_the_users_keychain() {
 #[cfg(target_os = "macos")]
 #[test]
 fn the_keychain_holds_a_big_secret_and_the_file_none() {
-    let kc = Keychain { file: Some(throwaway().to_path_buf()), locked: false };
+    throwaway();
+    let kc = Keychains::here().unwrap().bise;
     let d = tmp("kc-big");
     let f = d.join("auth.json");
     let secret = format!("{{\"chatgpt\": {{\"type\": \"oauth\", \"access\": \"{}\", \"email\": \"ana@exemple.fr é\"}}}}\n", "tok".repeat(2000));
@@ -84,7 +85,7 @@ fn the_keychain_holds_a_big_secret_and_the_file_none() {
     assert!(t.elapsed() < Duration::from_millis(15), "{:?}", t.elapsed());
     // a smaller secret: the old parts beyond it are deleted
     write_to(Store::Keychain, &f, "{}\n", &|| panic!("not a file")).unwrap();
-    assert_eq!(place(&f).unwrap(), Place::Keychain(Stub { gen: Stub::parse(&std::fs::read_to_string(&f).unwrap()).unwrap().gen, parts: 1 }));
+    assert_eq!(place(&f).unwrap(), Place::Keychain(Stub { gen: Stub::parse(&std::fs::read_to_string(&f).unwrap()).unwrap().gen, parts: 1, at: At::Bise }));
     assert_eq!(kc.find(&security::account(&f, 1)).unwrap(), None);
     forget_cache();
     assert_eq!(read(&f).unwrap().as_deref(), Some("{}\n"));
@@ -97,7 +98,7 @@ fn the_keychain_holds_a_big_secret_and_the_file_none() {
 #[cfg(target_os = "macos")]
 #[test]
 fn another_processs_write_is_seen_and_a_deleted_item_is_no_secret() {
-    let kc = Keychain { file: Some(throwaway().to_path_buf()), locked: false };
+    throwaway();
     let d = tmp("kc-other");
     let f = d.join("x.json");
     write_to(Store::Keychain, &f, "one", &|| panic!()).unwrap();
@@ -108,7 +109,7 @@ fn another_processs_write_is_seen_and_a_deleted_item_is_no_secret() {
     CACHE.lock().unwrap().insert(f.clone(), ("0000".into(), "one".into()));
     assert_eq!(read(&f).unwrap().as_deref(), Some("two"));
     // the item deleted by hand (Keychain Access): no secret, not an error
-    kc.delete(&security::account(&f, 0));
+    Keychains::here().unwrap().bise.delete(&security::account(&f, 0));
     forget_cache();
     assert_eq!(read(&f).unwrap(), None);
     remove(&f).unwrap();
@@ -205,4 +206,96 @@ fn a_simulated_lock_never_runs_security() {
     let kc = Keychain { file: Some(PathBuf::from("/nonexistent/never.keychain-db")), locked: true };
     assert!(matches!(kc.find("x"), Err(ReadError::Locked)));
     assert!(matches!(kc.run(&["add-generic-password".into()]), Err(ReadError::Locked)));
+}
+
+/// Step B (issue 19): the items go to bise's own keychain file in
+/// `secrets/`, made on the first write with its password in the login
+/// keychain (here the throwaway); the throwaway gets no item of the
+/// secret itself, and the file is unlocked (probed with no window).
+#[cfg(target_os = "macos")]
+#[test]
+fn the_items_go_to_bises_own_keychain_file() {
+    let login = throwaway();
+    let kcs = Keychains::here().unwrap();
+    let file = kcs.bise.file().unwrap().to_path_buf();
+    assert!(file.ends_with("secrets/bise.keychain-db"), "{}", file.display());
+    let d = tmp("kc-own");
+    let f = d.join("auth.json");
+    write_to(Store::Keychain, &f, "mine", &|| panic!()).unwrap();
+    assert!(file.exists());
+    assert_eq!(status::status(Some(&file)), status::Status::Unlocked);
+    assert_eq!(status::status(Some(login)), status::Status::Unlocked);
+    assert_eq!(status::status(Some(&d.join("none.keychain-db"))), status::Status::Missing);
+    let Place::Keychain(stub) = place(&f).unwrap() else { panic!("a stub") };
+    assert_eq!(stub.at, At::Bise);
+    assert!(kcs.bise.find(&security::account(&f, 0)).unwrap().is_some());
+    assert_eq!(kcs.login.find(&security::account(&f, 0)).unwrap(), None, "nothing of the secret in the login keychain");
+    assert!(kcs.login.find(keychain::PASSWORD_ACCOUNT).unwrap().is_some_and(|p| p.len() == 64));
+    forget_cache();
+    assert_eq!(read(&f).unwrap().as_deref(), Some("mine"));
+    remove(&f).unwrap();
+}
+
+/// Under the agents' sandbox (a read deny on bise's keychain file, as
+/// step A's profile has on `secrets/`), `security` can't read its items;
+/// outside, it can.
+#[cfg(target_os = "macos")]
+#[test]
+fn the_sandbox_cant_read_bises_keychain() {
+    throwaway();
+    let kcs = Keychains::here().unwrap();
+    let d = tmp("kc-sbx");
+    let f = d.join("x.json");
+    write_to(Store::Keychain, &f, "hidden-1234", &|| panic!()).unwrap();
+    let file = std::fs::canonicalize(kcs.bise.file().unwrap()).unwrap();
+    let applies = std::process::Command::new("/usr/bin/sandbox-exec").args(["-p", "(version 1)(allow default)", "/usr/bin/true"]).status().is_ok_and(|s| s.success());
+    if !applies {
+        eprintln!("in a sandbox already: skipped");
+        return;
+    }
+    let deny = format!("(version 1)(allow default)(deny file-read-data (literal \"{}\"))", file.display());
+    let acct = security::account(&f, 0);
+    let args = ["find-generic-password", "-s", security::SERVICE, "-a", &acct, "-w", file.to_str().unwrap()];
+    let inside = std::process::Command::new("/usr/bin/sandbox-exec").arg("-p").arg(&deny).arg(security::PROGRAM).args(args).output().unwrap();
+    assert!(!inside.status.success() && !String::from_utf8_lossy(&inside.stdout).contains("hidden"), "{inside:?}");
+    let outside = std::process::Command::new(security::PROGRAM).args(args).output().unwrap();
+    assert!(outside.status.success(), "{outside:?}");
+    // and the no-window probe says it can't be read there
+    let probe = std::process::Command::new("/usr/bin/sandbox-exec").arg("-p").arg(&deny).arg("/bin/test").arg("-r").arg(&file).status().unwrap();
+    assert!(!probe.success());
+    remove(&f).unwrap();
+}
+
+/// A stub of v2026.10.2-28 (its items in the login keychain) is still
+/// read there, and its next write, or a move (`on` again), takes it to
+/// bise's keychain and deletes the login items (architect m_13735 Q2).
+#[cfg(target_os = "macos")]
+#[test]
+fn a_stub_of_before_is_read_then_moved_on_write() {
+    throwaway();
+    let kcs = Keychains::here().unwrap();
+    let d = tmp("kc-old");
+    for (name, by_move) in [("a.json", false), ("b.json", true)] {
+        let f = d.join(name);
+        // as -28 wrote it: items in the login keychain, the old head
+        to_keychain(&kcs.login, &f, "old", 0).unwrap();
+        let s = Stub::parse(&std::fs::read_to_string(&f).unwrap()).unwrap();
+        std::fs::write(&f, Stub { at: At::Login, ..s }.to_text()).unwrap();
+        assert!(std::fs::read_to_string(&f).unwrap().starts_with("bise-secret keychain gen="));
+        forget_cache();
+        assert_eq!(read(&f).unwrap().as_deref(), Some("old"));
+        if by_move {
+            assert!(move_to(Store::Keychain, &f).unwrap());
+        } else {
+            write_to(Store::Keychain, &f, "new", &|| panic!()).unwrap();
+        }
+        let Place::Keychain(now) = place(&f).unwrap() else { panic!("a stub") };
+        assert_eq!(now.at, At::Bise);
+        assert_eq!(kcs.login.find(&security::account(&f, 0)).unwrap(), None, "the login item went");
+        forget_cache();
+        assert_eq!(read(&f).unwrap().as_deref(), Some(if by_move { "old" } else { "new" }));
+        // moved already: a second move does nothing
+        assert!(!move_to(Store::Keychain, &f).unwrap());
+        remove(&f).unwrap();
+    }
 }

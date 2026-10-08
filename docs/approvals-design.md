@@ -900,12 +900,17 @@ and fold the card.
   (the login keychain, `~/.config/gh`, `~/.gitconfig`), git over ssh when
   the key is in ssh-agent (a key only on disk needs `ssh-add`), and
   everything bise runs outside an agent's bash (the REPL, the hub, `bise
-  auth token chatgpt`, MCP servers). Known, out of scope: other tools'
+  auth token chatgpt`, MCP servers). Keychain mode keeps its items in
+  bise's own keychain file, `~/.bise/secrets/bise.keychain-db` (inside the
+  read deny: a sandboxed `security` answers "not found" there), never in
+  the login keychain, which stays open for gh and git; its password is one
+  login-keychain item, useless without the file. It has no lock timeout:
+  what can read it is what can read `auth.json` in files mode (the user's
+  own unsandboxed processes, yolo agents). Known, out of scope: other tools'
   credentials stay readable (`~/.aws`, `~/.netrc`, `~/.docker/config.json`,
   gh's `hosts.yml` when its token is not in the keychain, the login
-  keychain through `/usr/bin/security`); keychain mode's items in the login
-  keychain too, until they move to bise's own keychain file (issue 19's
-  second step); `yolo` runs nothing in the sandbox, and /approvals says so;
+  keychain through `/usr/bin/security`); `yolo` runs nothing in the
+  sandbox, and /approvals says so;
   and a sandboxed command can drive a process outside the sandbox
   (docs/issues/20).
 - **Edits run at once, and edits can change what runs later** (`Makefile`,

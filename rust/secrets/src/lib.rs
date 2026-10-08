@@ -17,6 +17,17 @@
 //!   `<path> #2`...), label "bise: <file name>"; the secret in base64, cut
 //!   into parts ([`parts`]), written with `security -i` on standard input
 //!   in hex, never in an argument ([`security`], [`keychain`]).
+//! - **Which keychain** (issue 19 step B): bise's own file,
+//!   `~/.bise/secrets/bise.keychain-db`, inside the agents' sandbox read
+//!   deny (so an agent's `security` can't read its items), its password one
+//!   item of the login keychain ([`keychain::Keychains`]). The stub's head
+//!   says which ([`stub::At`]): a stub of v2026.10.2-28 (the login
+//!   keychain) is read there and moves on its next write, or on `bise
+//!   secrets keychain on` again.
+//! - **Never a dialog**: before any `security` call, both keychains' states
+//!   are read with no window ([`status`], Security.framework) and
+//!   [`ready::next_step`] decides: a locked keychain is
+//!   [`ReadError::Locked`], never a call that would make macOS ask.
 //! - **Cache**: each process keeps the last secret it read or wrote with
 //!   its generation; a read whose stub has that generation costs one small
 //!   file read and no `security` call. Every write, by any process, makes a
@@ -37,13 +48,16 @@ use std::time::Duration;
 
 pub mod keychain;
 pub mod parts;
+pub mod ready;
 pub mod security;
 pub mod setting;
+pub mod status;
 pub mod stub;
 
-pub use keychain::Keychain;
+pub use keychain::{Keychain, Keychains};
 pub use setting::Store;
-use stub::Stub;
+use ready::Intent;
+use stub::{At, Stub};
 
 bise_home::test_home!();
 
@@ -125,20 +139,22 @@ pub fn place(path: &Path) -> Result<Place, ReadError> {
 /// file is a stub. `Ok(None)`: no secret (no file, or the keychain has no
 /// item for the stub: deleted by hand). A locked keychain is an `Err`.
 pub fn read(path: &Path) -> Result<Option<String>, ReadError> {
-    read_with(path, &|| Keychain::here().map_err(ReadError::Keychain))
-}
-
-fn read_with(path: &Path, kc: &dyn Fn() -> Result<Keychain, ReadError>) -> Result<Option<String>, ReadError> {
     let Some(text) = read_file(path)? else { return Ok(None) };
     let Some(mut stub) = Stub::parse(&text) else { return Ok(Some(text)) };
     if let Some(s) = cached(path, &stub.gen) {
         return Ok(Some(s));
     }
-    let kc = kc()?;
+    let kcs = Keychains::here().map_err(ReadError::Keychain)?;
+    // the stub says which keychain; never a call on a locked one
+    let ready = match stub.at {
+        At::Bise => kcs.ready(Intent::Read)?,
+        At::Login => kcs.login_ready()?,
+    };
+    let Some(kc) = ready else { return Ok(None) };
     // a write under way: its parts carry the next generation until its
     // stub lands (a write takes ~50-100 ms)
     for _ in 0..20 {
-        let datas = find_parts(&kc, path, stub.parts)?;
+        let datas = find_parts(kc, path, stub.parts)?;
         match datas {
             None => {}
             Some(d) => match parts::join(&stub.gen, &d) {
@@ -158,7 +174,11 @@ fn read_with(path: &Path, kc: &dyn Fn() -> Result<Keychain, ReadError>) -> Resul
                 Some(s) => s,
             },
         };
-        if again == stub && datas_absent(&kc, path)? {
+        if again.at != stub.at {
+            // moved to bise's keychain meanwhile: read it there
+            return read(path);
+        }
+        if again == stub && datas_absent(kc, path)? {
             // the stub didn't change and its first item is gone
             return Ok(None);
         }
@@ -195,9 +215,11 @@ pub fn write(path: &Path, secret: &str, to_file: &dyn Fn() -> std::io::Result<()
     write_to(setting::current(), path, secret, to_file)
 }
 
-/// Write the secret at `path` to `store`. The keychain: its parts, then
-/// the stub (atomic), then the old parts beyond the new count deleted. A
-/// file: `to_file`, then the keychain items of the stub it replaced.
+/// Write the secret at `path` to `store`. The keychain (always bise's
+/// own): its parts, read back, then the stub (atomic), then the old parts
+/// deleted (beyond the new count, or all of them in the login keychain:
+/// a stub of before moves on its next write). A file: `to_file`, then the
+/// keychain items of the stub it replaced.
 pub fn write_to(store: Store, path: &Path, secret: &str, to_file: &dyn Fn() -> std::io::Result<()>) -> std::io::Result<()> {
     let old = match place(path) {
         Ok(Place::Keychain(s)) => Some(s),
@@ -207,16 +229,35 @@ pub fn write_to(store: Store, path: &Path, secret: &str, to_file: &dyn Fn() -> s
         Store::File => {
             to_file()?;
             if let Some(s) = old {
-                if let Ok(kc) = Keychain::here() {
-                    delete_parts(&kc, path, 0, s.parts);
-                }
+                forget_items(path, &s);
             }
             Ok(())
         }
         Store::Keychain => {
-            let kc = Keychain::here().map_err(std::io::Error::other)?;
-            to_keychain(&kc, path, secret, old.map_or(0, |s| s.parts))
+            let kcs = Keychains::here().map_err(std::io::Error::other)?;
+            let kc = kcs.ready(Intent::Write)?.ok_or_else(|| std::io::Error::other("bise's keychain is missing"))?;
+            let on_bise = old.as_ref().filter(|s| s.at == At::Bise).map_or(0, |s| s.parts);
+            to_keychain(kc, path, secret, on_bise)?;
+            if let Some(s) = old.filter(|s| s.at == At::Login) {
+                if let Ok(Some(login)) = kcs.login_ready() {
+                    delete_parts(login, path, 0, s.parts);
+                }
+            }
+            Ok(())
         }
+    }
+}
+
+/// Delete the items of the stub `s` of `path`, in its keychain; best
+/// effort, never on a locked one.
+fn forget_items(path: &Path, s: &Stub) {
+    let Ok(kcs) = Keychains::here() else { return };
+    let kc = match s.at {
+        At::Bise => kcs.ready(Intent::Read),
+        At::Login => kcs.login_ready(),
+    };
+    if let Ok(Some(kc)) = kc {
+        delete_parts(kc, path, 0, s.parts);
     }
 }
 
@@ -243,7 +284,7 @@ fn to_keychain(kc: &Keychain, path: &Path, secret: &str, old_parts: usize) -> st
         Some(d) if parts::join(&gen, &d).as_deref() == Ok(secret) => {}
         _ => return Err(std::io::Error::other("the keychain didn't keep the secret")),
     }
-    write_stub(path, &Stub { gen: gen.clone(), parts: pieces.len() })?;
+    write_stub(path, &Stub { gen: gen.clone(), parts: pieces.len(), at: At::Bise })?;
     delete_parts(kc, path, pieces.len(), old_parts);
     keep(path, &gen, secret);
     Ok(())
@@ -283,7 +324,12 @@ fn write_stub(path: &Path, s: &Stub) -> std::io::Result<()> {
 /// secret).
 pub fn move_to(store: Store, path: &Path) -> Result<bool, ReadError> {
     let here = place(path)?;
-    let moves = matches!((&here, store), (Place::File, Store::Keychain) | (Place::Keychain(_), Store::File));
+    // a stub of before (the login keychain) moves to bise's keychain too
+    let moves = match (&here, store) {
+        (Place::File, Store::Keychain) | (Place::Keychain(_), Store::File) => true,
+        (Place::Keychain(s), Store::Keychain) => s.at == At::Login,
+        _ => false,
+    };
     if !moves {
         return Ok(false);
     }
@@ -318,9 +364,7 @@ pub fn write_private(path: &Path, text: &str) -> std::io::Result<()> {
 /// then its file.
 pub fn remove(path: &Path) -> std::io::Result<()> {
     if let Ok(Place::Keychain(s)) = place(path) {
-        if let Ok(kc) = Keychain::here() {
-            delete_parts(&kc, path, 0, s.parts);
-        }
+        forget_items(path, &s);
     }
     CACHE.lock().unwrap_or_else(|e| e.into_inner()).remove(path);
     match std::fs::remove_file(path) {
@@ -337,6 +381,17 @@ fn new_gen() -> String {
     if !ok {
         let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0) as u64;
         b = (t ^ ((std::process::id() as u64) << 32)).to_le_bytes();
+    }
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+/// `n` random bytes from /dev/urandom, in hex (bise's keychain password:
+/// never made without it).
+pub(crate) fn random_hex(n: usize) -> String {
+    let mut b = vec![0u8; n];
+    if std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut b)).is_err() {
+        b = (0..n).map(|_| new_gen()).collect::<String>().into_bytes();
+        b.truncate(n);
     }
     b.iter().map(|x| format!("{x:02x}")).collect()
 }

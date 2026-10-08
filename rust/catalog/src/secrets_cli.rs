@@ -74,11 +74,11 @@ fn count(n: usize) -> String {
     }
 }
 
-/// The lines of a move (designer, m_13193). `files`: "~/.bise".
+/// The lines of a move (designer, m_13193; "bise's own", m_13754). `files`: "~/.bise".
 pub fn moved_lines(to: Store, moved: &[Kind], files: &str) -> Vec<String> {
     match to {
         Store::Keychain => vec![
-            format!("moved {} to the macOS keychain: {}.", count(moved.len()), summary(moved)),
+            format!("moved {} to bise's own macOS keychain, which agents can't read: {}.", count(moved.len()), summary(moved)),
             format!("before you go back to an older bise, run {CLI} secrets keychain off: it can't read the keychain."),
         ],
         Store::File => vec![format!("moved {} back to files in {files}: {}.", count(moved.len()), summary(moved))],
@@ -166,18 +166,28 @@ pub fn switch(paths: &Paths, mcp_dir: &Path, to: Option<Store>, macos: bool) -> 
     let Some(to) = to else { return ok(vec![state_line(setting, n, &files)]) };
     let elsewhere: Vec<&Secret> = all
         .iter()
-        .filter(|s| matches!((bise_secrets::place(&s.path), to), (Ok(Place::File), Store::Keychain) | (Ok(Place::Keychain(_)), Store::File) | (Err(_), _)))
+        .filter(|s| match (bise_secrets::place(&s.path), to) {
+            (Ok(Place::File), Store::Keychain) | (Ok(Place::Keychain(_)), Store::File) | (Err(_), _) => true,
+            // a stub of v2026.10.2-28: its items move from the login keychain to bise's
+            (Ok(Place::Keychain(st)), Store::Keychain) => st.at == bise_secrets::stub::At::Login,
+            _ => false,
+        })
         .collect();
     if let Err(e) = set_setting(&paths.config, to) {
         return fail(e);
     }
     if elsewhere.is_empty() {
+        if to == Store::File {
+            forget_keychain();
+        }
         return ok(vec![match (to, setting == to, all.is_empty()) {
             (Store::Keychain, false, true) => "new secrets go to the macOS keychain from now on. none to move yet.".into(),
             (Store::Keychain, _, _) => "your secrets are already in the macOS keychain.".into(),
             (Store::File, _, _) => format!("your secrets are already in files in {files}."),
         }]);
     }
+    // every one is a stub of v2026.10.2-28: they only change keychains
+    let from_login = to == Store::Keychain && elsewhere.iter().all(|s| matches!(bise_secrets::place(&s.path), Ok(Place::Keychain(st)) if st.at == bise_secrets::stub::At::Login));
     let mut moved: Vec<Kind> = vec![];
     let total = elsewhere.len();
     for (i, s) in elsewhere.iter().enumerate() {
@@ -190,7 +200,26 @@ pub fn switch(paths: &Paths, mcp_dir: &Path, to: Option<Store>, macos: bool) -> 
             Err(e) => return fail(format!("moved {i} of {total} secrets, then: {e}. run it again to move the rest.")),
         }
     }
+    if to == Store::File {
+        forget_keychain();
+    }
+    if from_login {
+        return ok(vec![moved_from_login(&moved)]);
+    }
     ok(moved_lines(to, &moved, &files))
+}
+
+/// `on` again over v2026.10.2-28's stubs (issue 19 step B, designer m_13754).
+pub fn moved_from_login(moved: &[Kind]) -> String {
+    format!("moved {} from your login keychain to bise's own keychain, which agents can't read: {}.", count(moved.len()), summary(moved))
+}
+
+/// Off, every secret back in files: bise's keychain file and its
+/// password item go (issue 19 step B).
+fn forget_keychain() {
+    if let Ok(k) = bise_secrets::Keychains::here() {
+        k.forget();
+    }
 }
 
 fn usage() -> String {
