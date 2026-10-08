@@ -208,8 +208,8 @@ impl Shell {
         true
     }
 
-    /// A daemon handler's plain words for `client` (the `version` op's
-    /// `/update` answers): the typed `notice` on a typed connection (its
+    /// A daemon handler's plain words for `client` (`/update`'s answers,
+    /// `version/update` or a `slash` line): the typed `notice` on a typed connection (its
     /// `/update` came as a `slash`), the older line to the TUI.
     pub(super) fn notice_to(&mut self, client: ClientId, text: &str) {
         if self.proto.conns.contains_key(&client) {

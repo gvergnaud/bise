@@ -60,7 +60,7 @@ def main():
             assert tui_starts() == 1, tui_starts()
             # /restart from the hub's side (the composer keeps the draft)
             c = e2e.Client(os.path.join(E.state, "hub.sock"))
-            c.send({"op": "version", "do": "restart"})
+            c.restart()
             # the TUI re-executes itself, the REPL restarts on its session
             wait_until(lambda: tui_starts() >= 2, 30, lambda: "the TUI did not re-exec: %d starts" % tui_starts())
             wait_until(lambda: repl_pid() not in ("", pid0), 30, lambda: "the REPL was not relaunched: pid %s" % repl_pid())

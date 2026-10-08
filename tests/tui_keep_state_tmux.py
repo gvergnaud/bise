@@ -61,7 +61,7 @@ def main():
         """The hub's restart (a reload): the TUI re-executes itself."""
         n = tui_starts()
         stop_switcher()
-        e2e.Client(os.path.join(E.state, "hub.sock")).send({"op": "version", "do": "restart"})
+        e2e.Client(os.path.join(E.state, "hub.sock")).restart()
         wait_until(lambda: tui_starts() > n, 40, lambda: "the TUI did not re-exec: %d starts" % tui_starts())
         t.wait_re(MAIN_IDLE)
 
@@ -125,7 +125,7 @@ def main():
             # 3. keys arriving hold the reload; it goes once they stop
             n = tui_starts()
             stop_switcher()
-            e2e.Client(os.path.join(E.state, "hub.sock")).send({"op": "version", "do": "restart"})
+            e2e.Client(os.path.join(E.state, "hub.sock")).restart()
             t0 = time.time()
             noted = False
             i = 0

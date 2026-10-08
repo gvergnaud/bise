@@ -107,6 +107,8 @@ fn hub_pid(paths: &Paths) -> Option<u32> {
 
 use crate::procs::alive;
 
+mod ask;
+
 fn ping(paths: &Paths) -> bool {
     client::request(
         &paths.socket(),
@@ -706,7 +708,6 @@ pub fn should_follow_install(me: &Path, hub: &Path, failed: Option<&Path>) -> bo
 /// one. Every hub since BISE-131 takes the request. `say`: one line for
 /// the user each (the terminal is not the TUI's yet).
 pub fn follow_install(paths: &Paths, me: &Path, say: &dyn Fn(&str)) {
-    use std::io::{BufRead, BufReader};
     if switch_running(paths) {
         return;
     }
@@ -721,21 +722,8 @@ pub fn follow_install(paths: &Paths, me: &Path, say: &dyn Fn(&str)) {
     let me = me.canonicalize().unwrap_or_else(|_| me.to_path_buf());
     let (from_id, to_id) = (id_of(&hub), id_of(&me));
     say(&format!("this folder's hub runs bise {}: moving it to {} (the agents keep running)…", from_id, to_id));
-    let answer = (|| -> std::io::Result<String> {
-        let mut s = UnixStream::connect(paths.socket())?;
-        let req = json!({"op": "version", "do": "switch", "to": me.to_string_lossy()});
-        s.write_all(format!("{{\"op\":\"hello\"}}\n{}\n", req).as_bytes())?;
-        s.set_read_timeout(Some(Duration::from_secs(5)))?;
-        // the hub's hello first (tens of KB), then the answer: a notice
-        for line in BufReader::new(s).lines() {
-            let v: Value = serde_json::from_str(&line?).unwrap_or(Value::Null);
-            if v.get("ev").and_then(|x| x.as_str()) == Some("notice") {
-                return Ok(v.get("text").and_then(|x| x.as_str()).unwrap_or("").to_string());
-            }
-        }
-        Ok(String::new())
-    })()
-    .unwrap_or_default();
+    // version/switch, or the older op to an older hub (switch/ask.rs)
+    let answer = ask::ask_switch(&paths.socket(), &me.to_string_lossy()).unwrap_or_default();
     if !answer.starts_with("switching to version") {
         say(&format!("the hub did not switch ({}): /restart in it switches to {}", clip_answer(&answer), to_id));
         return;

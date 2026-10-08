@@ -1196,15 +1196,12 @@ pub(crate) fn handle_input(app: &mut App, v: &str) -> Vec<Ev> {
     match first {
         "/quit" | "/exit" => app.should_quit = true,
         "/release-bise" => release::command(sb, &typed),
-        // the hub's version op; one parse with the hub's slash
+        // the hub's version/* methods; one parse with the hub's slash
         // (bise_proto::slash::version). /update: the release channel now
         // (update-card's new-release item)
         "/restart" | "/update" | "/version" => {
-            if let Some(v) = bise_proto::slash::version(&typed) {
-                sb.send(match v.op() {
-                    ("list", _) | ("rollback", _) | ("update", _) => json!({"op": "version", "do": v.op().0}),
-                    (what, to) => json!({"op": "version", "do": what, "to": to}),
-                });
+            if let Some((method, params, then)) = bise_proto::slash::version(&typed).as_ref().map(versions::method) {
+                sb.call(method, params, then);
             }
         }
         "/plugins" => {

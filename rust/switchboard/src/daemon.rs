@@ -1730,19 +1730,6 @@ impl Shell {
         }
         let s = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
         match s("op").as_str() {
-            "version" if s("do") == "items" => {
-                let items = self.version_items();
-                if let Some(c) = self.clients.get_mut(&id) {
-                    write_json(c, &items);
-                }
-            }
-            "version" if s("do") == "update" => self.update_op(id),
-            "version" => {
-                let text = self.version_op(&v);
-                if let Some(c) = self.clients.get_mut(&id) {
-                    write_json(c, &json!({"ev": "notice", "text": text}));
-                }
-            }
             "input" => {
                 // BISE-266: a key saved since a REPL started reaches it
                 // before this message does
@@ -1780,7 +1767,6 @@ impl Shell {
                 client: id,
                 focus: s("focus"),
             }),
-            "release" => self.release_op(id, &v),
             // artifacts and diffs (docs/artifacts.md)
             "diff" => self.diff_op(id, &v),
             "branches" => self.branches_op(id),

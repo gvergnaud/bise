@@ -31,9 +31,8 @@ def refused_elsewhere():
     E = e2e.Env()
     try:
         c = E.start_hub()
-        c.send({"op": "release", "do": "plan", "dry": True})
-        wait_until(lambda: any("runs only in bise's dev build" in n.get("text", "") for n in c.notices()), 10,
-                   lambda: "no refusal: %r" % c.notices())
+        r = c.rpc("release/plan", {"project": c.project(), "dry": True}, timeout=10)
+        assert "runs only in bise's dev build" in r.get("error", {}).get("message", ""), "no refusal: %r" % r
     finally:
         E.close()
 

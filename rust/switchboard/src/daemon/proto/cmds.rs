@@ -242,7 +242,7 @@ impl Shell {
             }
             // the `focus` op's step: who he is looking at
             HubCmd::Focus { focus, .. } => self.step(Input::ClientFocus { client: id, focus }),
-            // the `version` op's picker (do: items)
+            // `/version`'s picker
             HubCmd::Versions { .. } => {
                 let mut v = self.version_items();
                 v["project"] = json!(project);
@@ -257,7 +257,7 @@ impl Shell {
             HubCmd::VersionRollback { .. } => self.proto_version(id, &tag, Version::Rollback, None),
             HubCmd::VersionRestart { to, .. } => self.proto_version(id, &tag, Version::Restart(to.unwrap_or_default()), None),
             HubCmd::VersionUpdate { .. } => self.proto_version(id, &tag, Version::Update, None),
-            // the `release` op's start (release.rs): a plan's answer comes
+            // `/release-bise`'s start (release.rs): a plan's answer comes
             // from its thread (release_event), a run's steps go to all
             HubCmd::ReleasePlan { dry, .. } => {
                 if let Err(e) = self.release_start(id, "plan", "", "", dry) {
@@ -362,7 +362,7 @@ impl Shell {
     }
 
     /// `/version`, `/restart`, `/update` (a `slash` line or their own
-    /// methods): the daemon's `version` op, the TUI's (his authority: this
+    /// methods): the daemon's `version_op` (his authority: this
     /// is the client socket, docs/issues/16); its words as a `notice` (the
     /// method's result), `/update`'s from `update_op`.
     fn proto_version(&mut self, id: ClientId, tag: &str, v: Version, cid: Option<u64>) {

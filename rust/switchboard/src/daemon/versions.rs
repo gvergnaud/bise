@@ -311,7 +311,8 @@ fn clip_lines(log: &str) -> String {
 }
 
 impl Shell {
-    /// `version` op (`/version` in the TUI, `sb version`): list the
+    /// `/version` (the `version/*` methods, a `slash` line, `sb version`'s
+    /// op): list the
     /// versions, switch to one (built first when needed), roll back.
     /// Answers a text for the user.
     pub(super) fn version_op(&mut self, v: &Value) -> String {

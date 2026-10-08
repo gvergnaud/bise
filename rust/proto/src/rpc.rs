@@ -610,6 +610,45 @@ pub struct InitializeResult {
     pub hub: HubState,
 }
 
+/// What a hub's line says to a connection's `initialize` (its request
+/// id `init`): the one reading of an older hub's door, for every client
+/// that may meet one (the desktop core, `bise`'s install follow).
+#[derive(Clone, Debug, PartialEq)]
+pub enum Init {
+    /// the hub serves JSON-RPC: who it is, what it serves
+    Ready(Box<InitializeResult>),
+    /// the hub refused this client (REFUSED, docs/issues/16)
+    Refused(String),
+    /// an older hub (one release, architect m_13089 Q2): it doesn't
+    /// serve `initialize` (accept.rs's `does not serve the op` before
+    /// client-protocol, or an error to the request); speak the older
+    /// door on a new connection
+    Older,
+    /// another line: not the answer to `initialize`
+    Other,
+}
+
+/// [`Init`] of one line, `init` the `initialize` request's id.
+// TODO(client-protocol, the plan's 'after the release' step): Older goes
+// with the older door it detects, the release after client-protocol's.
+pub fn init_answer(v: &Value, init: &Id) -> Init {
+    if !is_rpc(v) {
+        let older = v.get("ok") == Some(&Value::Bool(false)) && v.get("error").and_then(Value::as_str).is_some_and(|e| e.contains("does not serve"));
+        return if older { Init::Older } else { Init::Other };
+    }
+    let Ok(Message::Response(r)) = Message::from_value(v.clone()) else { return Init::Other };
+    if r.id.as_ref() != Some(init) {
+        return Init::Other;
+    }
+    if let Some(e) = r.error {
+        return if e.code == code::REFUSED { Init::Refused(e.message) } else { Init::Older };
+    }
+    match r.result.and_then(|v| serde_json::from_value::<InitializeResult>(v).ok()) {
+        Some(res) => Init::Ready(Box::new(res)),
+        None => Init::Older,
+    }
+}
+
 #[cfg(test)]
 #[path = "rpc_tests.rs"]
 mod tests;

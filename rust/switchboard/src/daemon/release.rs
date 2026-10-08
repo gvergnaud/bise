@@ -9,9 +9,10 @@
 //! Events: `plan` (to the client that asked), `step` (done), `running`
 //! (replaced in place by the next one), `done`, `failed`, `error` (no
 //! plan). `BISE_RELEASE_SCRIPT` replaces the script (tests: a fake one).
-//! The typed `release_plan`/`release_run` (client-protocol step 3) start
-//! through the same `release_start`; a plan a typed request waits for is
-//! its typed `release` result.
+//! A client asks with the typed `release/plan`/`release/run` (client-
+//! protocol step 3; the older `release` op is gone): both start through
+//! `release_start`, a refusal is the request's error, and the plan is the
+//! request's typed `release` result.
 
 use super::{Msg, Shell};
 use crate::core::ClientId;
@@ -265,16 +266,6 @@ impl Shell {
     fn send_client(&mut self, id: ClientId, v: &Value) {
         if let Some(c) = self.clients.get_mut(&id) {
             super::write_json(c, v);
-        }
-    }
-
-    /// `{"op": "release", "do": "plan"|"run", ...}` from a TUI: a refusal
-    /// is its notice.
-    pub(super) fn release_op(&mut self, id: ClientId, v: &Value) {
-        let s = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
-        let dry = v.get("dry").and_then(|x| x.as_bool()).unwrap_or(false);
-        if let Err(text) = self.release_start(id, &s("do"), &s("tag"), &s("commit"), dry) {
-            self.send_client(id, &json!({"ev": "notice", "text": text}));
         }
     }
 

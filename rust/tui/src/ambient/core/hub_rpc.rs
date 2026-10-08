@@ -18,7 +18,7 @@
 //!   closes: the connection says hello the older way from then on.
 
 use bise_proto::hub::{ErrorKind, HubCmd, HubEv};
-use bise_proto::rpc::{self, code, CommandRunResult, HubState, Id, InitializeParams, InitializeResult, Message, Request, Take, Watermark};
+use bise_proto::rpc::{self, CommandRunResult, HubState, Id, Init, InitializeParams, InitializeResult, Message, Request, Take, Watermark};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
@@ -90,10 +90,18 @@ impl RpcConn {
 
     /// One line of the hub.
     pub fn read(&mut self, project: &str, v: Value) -> Read {
+        if !self.ready {
+            // initialize's answer, or an older hub's refusal of its line
+            // (bise_proto::rpc::init_answer, the one reading)
+            match rpc::init_answer(&v, &Id::Num(INIT)) {
+                Init::Ready(res) => return self.welcome(*res),
+                Init::Refused(e) => return Read::Refused(e),
+                Init::Older => return Read::Older,
+                Init::Other => {}
+            }
+        }
         if !rpc::is_rpc(&v) {
-            // an older hub's refusal of the `initialize` line (accept.rs)
-            let older = v.get("ok") == Some(&Value::Bool(false)) && v.get("error").and_then(Value::as_str).is_some_and(|e| e.contains("does not serve"));
-            return if older && !self.ready { Read::Older } else { Read::Nothing };
+            return Read::Nothing;
         }
         match Message::from_value(v) {
             Ok(Message::Response(r)) => self.response(project, r),
@@ -110,20 +118,18 @@ impl RpcConn {
         }
     }
 
+    /// `initialize` answered: the window's welcome and the hub's state.
+    fn welcome(&mut self, res: InitializeResult) -> Read {
+        self.ready = true;
+        self.wm = res.hub.watermark;
+        let mut cmds: Vec<String> = res.methods.iter().filter_map(|m| rpc::method_row(m)).map(|r| r.cmd.to_string()).collect();
+        cmds.insert(0, "hello".into());
+        let welcome = HubEv::Welcome { project: res.project, proto: res.proto, workspace: res.workspace, name: res.name, cmds };
+        Read::Welcome(welcome, state(&res.hub))
+    }
+
     fn response(&mut self, project: &str, r: rpc::Response) -> Read {
         let Some(Id::Num(id)) = r.id else { return Read::Nothing };
-        if id == INIT && !self.ready {
-            if let Some(e) = r.error {
-                return if e.code == code::REFUSED { Read::Refused(e.message) } else { Read::Older };
-            }
-            let Some(res) = r.result.and_then(|v| serde_json::from_value::<InitializeResult>(v).ok()) else { return Read::Older };
-            self.ready = true;
-            self.wm = res.hub.watermark;
-            let mut cmds: Vec<String> = res.methods.iter().filter_map(|m| rpc::method_row(m)).map(|r| r.cmd.to_string()).collect();
-            cmds.insert(0, "hello".into());
-            let welcome = HubEv::Welcome { project: res.project, proto: res.proto, workspace: res.workspace, name: res.name, cmds };
-            return Read::Welcome(welcome, state(&res.hub));
-        }
         let Some(w) = self.waiting.remove(&id) else { return Read::Nothing };
         if let Some(e) = r.error {
             let data = e.data.unwrap_or_default();
@@ -243,7 +249,7 @@ mod tests {
         let mut c = RpcConn::default();
         c.initialize("v1");
         assert_eq!(c.read("shop", json!({"ok": false, "error": "hub.sock does not serve the op \"\""})), Read::Older);
-        let refused = serde_json::to_value(Response::err(Some(Id::Num(0)), RpcError::new(code::REFUSED, "an agent's process"))).unwrap();
+        let refused = serde_json::to_value(Response::err(Some(Id::Num(0)), RpcError::new(rpc::code::REFUSED, "an agent's process"))).unwrap();
         assert_eq!(c.read("shop", refused), Read::Refused("an agent's process".into()));
     }
 }

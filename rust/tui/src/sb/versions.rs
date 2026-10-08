@@ -1,5 +1,7 @@
-//! The `/version` picker: the versions the hub offers (its `versions`
-//! event), filtered by what follows `/version ` in the composer.
+//! The `/version` picker: the versions the hub offers (`versions/list`'s
+//! answer, and its `versions` event at hello or while one builds),
+//! filtered by what follows `/version ` in the composer; and the
+//! `version/*` method a `/version`, `/restart` or `/update` line sends.
 
 use super::*;
 
@@ -29,6 +31,29 @@ pub(super) fn parse_versions(v: &Value) -> Vec<VersionItem> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// `versions/list`'s answer (the typed `versions`: `dev` left out when
+/// false, so an answer without it is not bise's source tree).
+pub(super) fn answered(app: &mut App, result: &Value) {
+    let sb = &mut app.sb;
+    sb.versions = parse_versions(result);
+    sb.versions_dev = Some(result.get("dev").and_then(Value::as_bool).unwrap_or(false));
+}
+
+/// A `/version`, `/restart` or `/update` line read by
+/// `bise_proto::slash::version`: its `version/*` method and params.
+pub(super) fn method(v: &bise_proto::slash::Version) -> (&'static str, Value, rpc::Then) {
+    use bise_proto::slash::Version;
+    match v {
+        Version::List => ("version/info", json!({}), rpc::Then::Said),
+        Version::Rollback => ("version/rollback", json!({}), rpc::Then::Said),
+        Version::Switch(to) => ("version/switch", json!({"to": to}), rpc::Then::Said),
+        Version::Restart(to) if to.is_empty() => ("version/restart", json!({}), rpc::Then::Said),
+        Version::Restart(to) => ("version/restart", json!({"to": to}), rpc::Then::Said),
+        // its words come as the hub's notice (update_op's notice_to)
+        Version::Update => ("version/update", json!({}), rpc::Then::Shown),
+    }
 }
 
 /// The items matching `q` (in the revision or the subject).
@@ -89,9 +114,7 @@ pub(crate) fn version_choices(app: &App, q: &str) -> Vec<Choice> {
         .is_none_or(|t| t.elapsed() > std::time::Duration::from_secs(3));
     if stale {
         sb.versions_asked.set(Some(std::time::Instant::now()));
-        if let Ok(mut w) = sb.writer.lock() {
-            let _ = w.write_all(b"{\"op\":\"version\",\"do\":\"items\"}\n");
-        }
+        sb.call_shared("versions/list", json!({}), rpc::Then::Versions);
     }
     if sb.versions.is_empty() {
         return vec![Choice { value: String::new(), label: "…".into(), desc: "loading the versions".into(), mark: None }];
@@ -185,23 +208,26 @@ mod tests {
             }
             s.lines()
                 .filter_map(|l| serde_json::from_str::<Value>(l).ok())
-                .filter(|v| v["op"] == "version" && v["do"] != "items")
+                // the version/* requests (versions/list: the popup's list)
+                .filter(|v| v["method"].as_str().is_some_and(|m| m.starts_with("version/")))
                 .collect()
         };
         for (line, want) in [
-            ("/version list", "list"),
-            ("/version back", "rollback"),
-            ("/version rollback", "rollback"),
-            ("/version restart", "restart"),
-            ("/version update", "update"),
+            ("/version list", "version/info"),
+            ("/version back", "version/rollback"),
+            ("/version rollback", "version/rollback"),
+            ("/version restart", "version/restart"),
+            ("/version update", "version/update"),
         ] {
             let got = ops(line);
             assert_eq!(got.len(), 1, "{line}: {got:?}");
-            assert_eq!(got[0]["do"], want, "{line}: {got:?}");
-            assert!(got[0].get("to").is_none_or(|t| t == ""), "{line}: no version picked: {got:?}");
+            assert_eq!(got[0]["method"], want, "{line}: {got:?}");
+            assert!(got[0]["params"].get("to").is_none(), "{line}: no version picked: {got:?}");
         }
         // any other word still filters and ⏎ runs the top version
-        assert_eq!(ops("/version view"), vec![json!({"op": "version", "do": "switch", "to": "abc1234"})]);
+        let got = ops("/version view");
+        assert_eq!(got.len(), 1, "{got:?}");
+        assert_eq!((&got[0]["method"], &got[0]["params"]["to"]), (&json!("version/switch"), &json!("abc1234")), "{got:?}");
     }
 
     #[test]

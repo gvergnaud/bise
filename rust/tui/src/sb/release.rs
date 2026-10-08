@@ -44,7 +44,7 @@ pub(super) struct Ask {
 /// outside the dev build).
 pub(super) fn command(sb: &mut Sb, typed: &str) {
     let dry = matches!(typed.split_whitespace().nth(1), Some("dry-run" | "--dry-run" | "dry"));
-    sb.send(json!({"op": "release", "do": "plan", "dry": dry}));
+    sb.call("release/plan", json!({"dry": dry}), rpc::Then::Release);
 }
 
 /// Your line while a plan waits: `y` runs it, anything else cancels it
@@ -56,7 +56,7 @@ pub(super) fn answer(app: &mut App, typed: &str) -> bool {
     };
     let t = typed.trim().to_lowercase();
     if matches!(t.as_str(), "y" | "yes" | "o" | "oui") {
-        app.sb.send(json!({"op": "release", "do": "run", "tag": ask.tag, "commit": ask.commit, "dry": ask.dry}));
+        app.sb.call("release/run", json!({"tag": ask.tag, "commit": ask.commit, "dry": ask.dry}), rpc::Then::Shown);
         return true;
     }
     push_event(&mut app.events, &mut app.cache, Ev::Info(format!("release {} cancelled", ask.tag)));
@@ -274,7 +274,7 @@ mod tests {
         assert!(answer(&mut app, "y"));
         assert!(app.sb.release_ask.is_none());
         let sent = sent(&mut hub);
-        assert!(sent.iter().any(|v| v["op"] == "release" && v["do"] == "run" && v["tag"] == "v2026.10.3" && v["commit"] == "abcdef1234" && v["dry"] == true), "{sent:?}");
+        assert!(sent.iter().any(|v| v["method"] == "release/run" && v["params"]["tag"] == "v2026.10.3" && v["params"]["commit"] == "abcdef1234" && v["params"]["dry"] == true), "{sent:?}");
         let ev = |state: &str, text: &str| json!({"ev": "release", "state": state, "tag": "v2026.10.3", "text": text, "elapsed": 90}).to_string();
         dispatch(&mut app, &ev("running", "CI building · 0s"));
         assert!(app.sb.release.is_some());

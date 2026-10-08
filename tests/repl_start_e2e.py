@@ -97,7 +97,7 @@ def main():
         # 1. a slow but healthy reload
         open(slow, "w").write("8000")
         pid0 = hub_pid(E)
-        c.send({"op": "version", "do": "restart"})
+        c.restart()
         c = follow(E, c, pid0)
         c.wait(lambda: any(re.search(r"switch: \S+ (good|failed)", l) for l in log_lines(E)[n0:]), 300,
                "the reload's probation ends")
@@ -113,7 +113,7 @@ def main():
         n1 = len(log_lines(E))
         open(slow, "w").write("100000000")
         pid1 = hub_pid(E)
-        c.send({"op": "version", "do": "restart"})
+        c.restart()
         c = follow(E, c, pid1)
         c.wait(lambda: any(re.search(r"switch: \S+ failed: .*no progress", l) for l in log_lines(E)[n1:]), 240,
                "the stalled reload rolls back")

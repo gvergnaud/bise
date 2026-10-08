@@ -13,11 +13,20 @@
 
 use super::*;
 use bise_proto::rpc::{Id, Message, Request, Response};
+use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 
 /// What to do with one request's answer.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Then {
+    /// the hub's words (a `CommandRunResult`'s notice: version/info,
+    /// switch, rollback, restart), shown as its notice was
+    Said,
+    /// `versions/list`: the `/version` picker's rows (sb/versions.rs)
+    Versions,
+    /// `release/plan`: the plan and its y/n, or why there is none
+    /// (sb/release.rs)
+    Release,
     /// nothing but its refusal, shown like a notice (an action whose
     /// change comes in the hub's events)
     Shown,
@@ -33,25 +42,27 @@ pub(crate) enum Then {
     Said,
 }
 
-/// The requests waiting for their answer, by id.
+/// The requests waiting for their answer, by id (cells: a popup asks
+/// for its list while it draws, from a shared borrow).
 #[derive(Default)]
 pub(crate) struct Calls {
-    next: u64,
-    waiting: BTreeMap<u64, (&'static str, Then)>,
+    next: Cell<u64>,
+    waiting: RefCell<BTreeMap<u64, (&'static str, Then)>>,
 }
 
 impl Calls {
     /// The next id, and `then` kept for it.
-    fn start(&mut self, method: &'static str, then: Then) -> u64 {
-        self.next += 1;
-        self.waiting.insert(self.next, (method, then));
-        self.next
+    fn start(&self, method: &'static str, then: Then) -> u64 {
+        let id = self.next.get() + 1;
+        self.next.set(id);
+        self.waiting.borrow_mut().insert(id, (method, then));
+        id
     }
 
     /// A reconnection: the requests sent on the lost connection get no
     /// answer (the hub's events tell what happened).
     pub(crate) fn forget(&mut self) {
-        self.waiting.clear();
+        self.waiting.get_mut().clear();
     }
 }
 
@@ -64,11 +75,17 @@ impl Sb {
     /// One request: `method` (a row of `bise_proto::rpc::METHODS`) with
     /// `params` (an object; `project` is added), its answer to `then`.
     pub(crate) fn call(&mut self, method: &'static str, params: Value, then: Then) {
+        self.call_shared(method, params, then);
+    }
+
+    /// [`Sb::call`] from a shared borrow (a popup asking the hub for its
+    /// list while it draws: `/version`'s, `/diff`'s branches).
+    pub(crate) fn call_shared(&self, method: &'static str, params: Value, then: Then) {
         let mut params = if params.is_object() { params } else { json!({}) };
         params["project"] = json!(self.project());
         let id = self.rpc.start(method, then);
         let req = Message::Request(Request::new(Id::Num(id), method, params));
-        self.send(req.to_value());
+        self.send_shared(req.to_value());
     }
 }
 
@@ -77,7 +94,7 @@ impl Sb {
 pub(super) fn answered(app: &mut App, v: Value) {
     let Ok(Message::Response(r)) = Message::from_value(v) else { return };
     let Some(Id::Num(id)) = r.id.clone() else { return };
-    let Some((_method, then)) = app.sb.rpc.waiting.remove(&id) else { return };
+    let Some((_method, then)) = app.sb.rpc.waiting.get_mut().remove(&id) else { return };
     run(app, then, r);
 }
 
@@ -87,6 +104,9 @@ fn run(app: &mut App, then: Then, r: Response) {
         None => Ok(r.result.unwrap_or(Value::Null)),
     };
     match (then, result) {
+        (Then::Said, Ok(v)) => said(app, &v),
+        (Then::Versions, Ok(v)) => versions::answered(app, &v),
+        (Then::Release, Ok(v)) => release::event(app, &v),
         (Then::RuleRemoved, Err(e)) => rule_refused(app, &e),
         (_, Err(e)) => refused(app, &e),
         (Then::Shown | Then::RuleRemoved, Ok(_)) => {}
@@ -100,6 +120,14 @@ fn run(app: &mut App, then: Then, r: Response) {
             approvals_event(app, &v);
         }
     }
+}
+
+/// A `CommandRunResult`'s words, as the hub's `notice` event showed
+/// them (sb.rs's `notice` arm, the queue's mark included).
+fn said(app: &mut App, result: &Value) {
+    let Some(text) = result.get("notice").and_then(Value::as_str) else { return };
+    crate::queue::seen(app);
+    refused(app, text);
 }
 
 /// The hub's refusal, as its notice showed it.
@@ -134,12 +162,12 @@ mod tests {
         let mut app = crate::sb::bench::test_app();
         app.sb.workspace = "/tmp/acme".into();
         app.sb.call("card/close", json!({"card": 3}), Then::Shown);
-        assert_eq!(app.sb.rpc.waiting.len(), 1);
-        let (id, (method, _)) = app.sb.rpc.waiting.iter().next().map(|(k, v)| (*k, v.clone())).unwrap();
+        assert_eq!(app.sb.rpc.waiting.borrow().len(), 1);
+        let (id, (method, _)) = app.sb.rpc.waiting.borrow().iter().next().map(|(k, v)| (*k, v.clone())).unwrap();
         assert_eq!(method, "card/close");
         let n = app.events.len();
         answered(&mut app, json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32011, "message": "card 3 isn't open"}}));
-        assert!(app.sb.rpc.waiting.is_empty());
+        assert!(app.sb.rpc.waiting.borrow().is_empty());
         assert_eq!(app.events.len(), n + 1, "the refusal shows like the hub's notice");
         // a second answer to the same id, or another id: nothing
         answered(&mut app, json!({"jsonrpc": "2.0", "id": id, "result": {}}));
@@ -149,7 +177,7 @@ mod tests {
 
     /// The id of the one waiting request.
     fn waiting(app: &App) -> u64 {
-        *app.sb.rpc.waiting.keys().next().unwrap()
+        *app.sb.rpc.waiting.borrow().keys().next().unwrap()
     }
 
     #[test]

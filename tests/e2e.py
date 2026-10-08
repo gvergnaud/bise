@@ -232,15 +232,26 @@ class Client:
     def say(self, text, focus="main"):
         self.send({"op": "input", "focus": focus, "text": text})
 
-    def rpc(self, method, params=None, timeout=30):
-        """A JSON-RPC request on this hello connection (client-protocol):
-        its response, once it comes."""
+    def call(self, method, params=None):
+        """A JSON-RPC request on this hello connection, sent: its id (a
+        request whose answer may never come, as a restart's)."""
         self._rid = getattr(self, "_rid", 0) + 1
         rid = "e2e-%d" % self._rid
         msg = {"jsonrpc": "2.0", "id": rid, "method": method}
         if params is not None:
             msg["params"] = params
         self.send(msg)
+        return rid
+
+    def restart(self):
+        """/restart from the hub's side (version/restart), not waited for:
+        the hub goes away."""
+        self.call("version/restart", {"project": self.project()})
+
+    def rpc(self, method, params=None, timeout=30):
+        """A JSON-RPC request on this hello connection (client-protocol):
+        its response, once it comes."""
+        rid = self.call(method, params)
 
         def got():
             with self.lock:
