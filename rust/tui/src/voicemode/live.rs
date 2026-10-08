@@ -264,7 +264,7 @@ fn apply(app: &mut App, acts: Vec<Act>) {
                 }
             }
             Act::Interrupt { agent } => {
-                app.sb.send(serde_json::json!({"op": "interrupt", "agent": agent}));
+                app.sb.call("turn/interrupt", serde_json::json!({"agent": agent}), crate::sb::rpc::Then::Shown);
                 app.interrupt_requested = true;
             }
             Act::Note(t) => note(app, t),

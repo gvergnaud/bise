@@ -49,6 +49,7 @@ mod keep;
 mod keep_tests;
 pub(crate) mod reload_wait;
 mod keys;
+pub(crate) mod rpc;
 pub(crate) mod release;
 pub(super) use keys::key;
 pub(crate) use keys::{scene, Scene};
@@ -238,6 +239,8 @@ pub(super) struct Sb {
     /// The scheduled tasks (sb every), active then a week of ended ones
     /// (the state's `timers`): /scheduled and the panel's ◷ next run.
     pub(crate) timers: Vec<crate::scheduled::Task>,
+    /// The JSON-RPC requests waiting for their answer (sb/rpc.rs).
+    rpc: rpc::Calls,
 }
 
 /// What the hub says of approvals: the global mode (`yolo` / `auto`),
@@ -634,6 +637,7 @@ fn hub_reconnected(app: &mut App) {
     sb.confirm = None;
     sb.release_ask = None;
     sb.release = None;
+    sb.rpc.forget();
     sb.send_focus();
 }
 
@@ -650,6 +654,10 @@ pub(super) fn dispatch(app: &mut App, raw: &str) {
     let Ok(v) = serde_json::from_str::<Value>(raw) else {
         return;
     };
+    // a JSON-RPC response (client-protocol step 3): its request's answer
+    if v.get("jsonrpc").is_some() && v.get("method").is_none() {
+        return rpc::answered(app, v);
+    }
     let s = |k: &str| str_of(&v, k);
     match s("ev").as_str() {
         "line" => {
@@ -1254,7 +1262,7 @@ pub(crate) fn handle_input(app: &mut App, v: &str) -> Vec<Ev> {
         "/stop" => match bise_proto::slash::stop(&typed).unwrap_or_else(|| Err(bise_proto::slash::STOP_USAGE.into())) {
             Ok(name) if sb.agent(&name).is_some() => {
                 if sb.agent(&name).is_some_and(|a| a.status == "working") {
-                    sb.send(json!({"op": "interrupt", "agent": name}));
+                    sb.call("turn/interrupt", json!({"agent": name}), rpc::Then::Shown);
                 }
                 // main's feed says it once, from the hub (m_3904)
                 crate::computer_use::stop(&sb.dir_of(&name));
