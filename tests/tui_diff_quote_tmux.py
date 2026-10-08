@@ -126,9 +126,12 @@ def wide(t):
     sc = t.wait_re(r"❝ line 5 line 6 line 7 · src/pricing.tsx:6-8 · 3 lines")
     shot(t, "150-thread")
 
-    # t1's turn runs meanwhile: give the close the time of a busy frame
+    # t1's turn runs meanwhile: give the close the time of a busy frame.
+    # Wait on the panel's head row ('t1 vs main · 1 file +3'), not on
+    # 't1 vs main' alone: the fake model echoes the message, so t1's
+    # 'ack: <selection from="t1 vs main" ...>' stays in the thread.
     t.keys("C-g")
-    t.wait_gone("t1 vs main", 30)
+    t.wait_gone("t1 vs main · ", 30)
 
     # from main's view, the same branch: the popup names main
     x, y = row_of(t.screen(), "main", 150 - 40)
@@ -143,7 +146,7 @@ def wide(t):
     shot(t, "150-from-main")
     t.keys("Escape")
     t.keys("C-g")
-    t.wait_gone(" vs main")
+    t.wait_gone(" vs main · ")
 
 
 def removed(t):
