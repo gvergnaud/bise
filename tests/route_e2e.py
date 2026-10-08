@@ -58,16 +58,7 @@ def repo(path, remote):
            " && git remote add origin %s && echo base > README && git add README && git commit -qm init" % remote)
 
 
-def tiny_png():
-    """A 1x1 PNG (the image store sniffs it)."""
-    import struct
-    import zlib
-
-    def chunk(kind, data):
-        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
-
-    ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
-    return b"\x89PNG\r" + bytes([10, 26, 10]) + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(bytes([0, 255, 0, 0]))) + chunk(b"IEND", b"")
+tiny_png = e2e.tiny_png
 
 
 def main():

@@ -92,16 +92,20 @@ impl Shell {
                 let op = json!({"op": "input", "focus": agent, "text": text, "queued": queued, "context": context, "files": files});
                 self.stepping(id, &tag, cid, |sh| sh.client_line(id, op));
             }
-            HubCmd::Answer { card, reply, .. } => {
+            HubCmd::Answer { card, reply, files, .. } => {
                 if !self.hub.st.open_cards().any(|c| c.id == card) {
                     return self.proto_error(id, &tag, &format!("card {card} isn't open"));
                 }
                 // the reply as he wrote it, never read as a command (architect
                 // m_8366): the TUI's /answer handler with its fields
                 let text = reply.trim().to_string();
-                if text.is_empty() {
+                if text.is_empty() && files.is_empty() {
                     return self.proto_error(id, &tag, "an answer needs words or an option's number");
                 }
+                // R41 (architect m_13737): what he pasted with it, rendered
+                // after his words by the send path's one render, so an
+                // image reaches the asking agent's model as an image
+                let text = if files.is_empty() { text } else { super::fn_context::render_files(&text, &files) };
                 self.step_typed(id, &tag, Input::UserCmd { client: id, focus: MAIN.into(), cmd: UserCmd::Answer { card, text } });
             }
             // the TUI's /close handler with its field (Input::UserCmd, no

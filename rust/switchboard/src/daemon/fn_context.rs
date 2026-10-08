@@ -31,10 +31,17 @@ pub(super) fn with_files(v: &Value, text: String) -> String {
     match v.get("files").and_then(Value::as_array).filter(|_| !text.trim_start().starts_with('/')) {
         Some(files) => {
             let files: Vec<String> = files.iter().filter_map(Value::as_str).map(str::to_string).collect();
-            crate::attached::render(&text, &files, &mut look_file)
+            render_files(&text, &files)
         }
         None => text,
     }
+}
+
+/// `text` with `files` rendered after it by the one render
+/// (`crate::attached::render` with the image store): a send's input
+/// ([`with_files`]) and a card's answer (`HubCmd::Answer.files`, R41).
+pub(super) fn render_files(text: &str, files: &[String]) -> String {
+    crate::attached::render(text, files, &mut look_file)
 }
 
 impl Shell {

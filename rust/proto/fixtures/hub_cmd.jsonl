@@ -11,6 +11,7 @@
 {"cmd":"send","project":"acme-1a2b3c4d","agent":"main","text":"what stands out here","mode":"now","files":["/Users/ana/notes/q3-notes.md","/Users/ana/Desktop/shot.png"]}
 {"cmd":"answer","project":"acme-1a2b3c4d","card":9,"reply":"1"}
 {"cmd":"answer","project":"acme-1a2b3c4d","card":10,"reply":"yes"}
+{"cmd":"answer","project":"acme-1a2b3c4d","card":11,"reply":"this one","files":["/Users/ana/Desktop/shot.png"]}
 {"cmd":"close","project":"acme-1a2b3c4d","card":9}
 {"cmd":"confirm","project":"acme-1a2b3c4d","id":3,"yes":true}
 {"cmd":"confirm","project":"acme-1a2b3c4d","id":4,"yes":false}

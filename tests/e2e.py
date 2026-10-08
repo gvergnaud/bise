@@ -61,6 +61,19 @@ def short_sock(natural):
     return "/tmp/bise-%d/%016x/%s" % (os.getuid(), fnv1a64(d.encode()), name)
 
 
+def tiny_png():
+    """A 1x1 PNG (the image store sniffs it): a file he attached or
+    pasted (route_e2e, proto_e2e)."""
+    import struct
+    import zlib
+
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+
+    ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
+    return b"\x89PNG\r" + bytes([10, 26, 10]) + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(bytes([0, 255, 0, 0]))) + chunk(b"IEND", b"")
+
+
 def short_tmp():
     """A temp folder short enough for the unix sockets under it: $TMPDIR
     when short (the gate's ~/.bise/gate/<pid>, writable in auto's

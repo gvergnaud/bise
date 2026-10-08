@@ -340,8 +340,17 @@ pub enum HubCmd {
         cid: Option<u64>,
     },
     /// a card's answer: an option's number or words (approvals and merges
-    /// included: the hub's one /answer path)
-    Answer { project: Project, card: u64, reply: String },
+    /// included: the hub's one /answer path). `files`: what he pasted or
+    /// dropped with it, the same field as `Send.files`, rendered after his
+    /// reply by the same `attached::render` (an image as its image-store
+    /// marker, so the asking agent's model sees it; R41, architect m_13737)
+    Answer {
+        project: Project,
+        card: u64,
+        reply: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        files: Vec<String>,
+    },
     /// close a card without answering it (the TUI's `/close N`): the
     /// hub's one close path (sb-core's `close`), a refusal as `error`
     Close { project: Project, card: u64 },

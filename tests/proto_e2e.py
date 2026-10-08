@@ -253,6 +253,33 @@ def main():
         check(c.agent("t3")["status"] != "archived", "the reply archived nothing: %r" % c.agent("t3"))
         check(typed(c, "cards")[-1]["cards"] == [], "the typed cards are empty again")
 
+        # R41 (architect m_13737): an answer with an image he pasted
+        # (HubCmd::Answer.files, rendered like Send.files) reaches the asking
+        # agent's MODEL as an image part, through the sb card --for path
+        png = os.path.join(E.tmp, "pick.png")
+        with open(png, "wb") as f:
+            f.write(e2e.tiny_png())
+        c.say('[[bash: sb send main --expect-reply "which screenshot?"]]', focus="t3")
+        c.wait(lambda: any(l.startswith("sb msg-in : t3 m_") and "which screenshot" in l for l in c.lines("main")), 120, "t3 asks main again")
+        c.wait_idle("main", "t3", timeout=120)
+        msg2 = [l.split()[4] for l in c.lines("main") if l.startswith("sb msg-in : t3 m_") and "which screenshot" in l][0]
+        c.say('[[bash: sb card --for %s "which screenshot?"]]' % msg2)
+        c.wait(lambda: any(x["kind"] == "question" for x in c.cards()), 60, "the screenshot card")
+        card2 = [x for x in c.cards() if x["kind"] == "question"][0]
+        c.wait_idle("main")
+        n_t3 = len([r for r in E.fake_requests() if r.get("agent") == "t3"])
+        c.send({"cmd": "answer", "project": project, "card": card2["id"], "reply": "this one", "files": [png]})
+        c.wait(lambda: not c.cards(), 30, "the screenshot card closed by the answer")
+        c.wait(lambda: len([r for r in E.fake_requests() if r.get("agent") == "t3"]) > n_t3, 90, "t3's model called after the answer")
+        c.wait_idle("t3", timeout=90)
+        t3_reqs = [r for r in E.fake_requests() if r.get("agent") == "t3"]
+        before, got = t3_reqs[:n_t3], t3_reqs[n_t3:]
+        check(not any(r.get("images") for r in before), "t3 saw no image before the answer")
+        # the answer is one of its user texts (the last one is the hub's
+        # state block), the image a part of that request
+        check(got and any(i.startswith("data:image/png;base64,") for i in got[0].get("images", [])) and "this one" in json.dumps(got[0].get("users", [])),
+              "t3's request after the answer carries the pasted png as an image part: %r" % [(r.get("users", [])[-3:], [i[:40] for i in r.get("images", [])]) for r in got[:1]])
+
         # close without answering (the inbox's close): an open card goes,
         # no error, and the typed cards event no longer has it
         c.say('[[bash: sb card "close me from the window?"]]')
