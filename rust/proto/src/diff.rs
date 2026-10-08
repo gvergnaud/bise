@@ -87,3 +87,27 @@ pub struct Series {
     pub before: Vec<f64>,
     pub after: Vec<f64>,
 }
+
+/// The terminal's `/diff` fields of a `diff` (client-protocol step 3),
+/// next to the review's on the wire: its title ("perf vs main", "range
+/// a..b"), the `req` it answers, the commits ahead of the base, the agent
+/// still working, edits not committed yet, when it landed, its folder
+/// gone.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct DiffView {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub req: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commits: Option<u64>,
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub working: bool,
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub uncommitted: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub landed_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub gone: bool,
+}

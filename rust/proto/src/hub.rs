@@ -5,8 +5,8 @@
 //! they can't reach a hub or come from one.
 
 use crate::context::FnContext;
-use crate::diff::{DiffFile, DiffResult};
-use crate::ops::{BranchRow, VersionItem};
+use crate::diff::{DiffFile, DiffResult, DiffView};
+use crate::ops::{BranchRow, ReleaseEv, VersionItem};
 use crate::rows::{Agent, ApprovalMode, ApprovalRule, Artifact, Card, CheckerKind, DevServer, Feature, Merged, Model, Pr, ScheduledTask, Worktree};
 use crate::thread::Entry;
 use crate::{decode, parse, Pos, Project};
@@ -143,24 +143,10 @@ pub enum HubEv {
         /// why there are no files to show (its folder is gone...)
         #[serde(default, skip_serializing_if = "Option::is_none")]
         note: Option<String>,
-        /// the terminal's `/diff` (client-protocol step 3): its title
-        /// ("perf vs main", "range a..b"), the `req` it answers, the
-        /// commits ahead of the base, the agent still working, edits not
-        /// committed yet, when it landed, its folder gone
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        title: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        req: Option<u64>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        commits: Option<u64>,
-        #[serde(default, skip_serializing_if = "crate::is_false")]
-        working: bool,
-        #[serde(default, skip_serializing_if = "crate::is_false")]
-        uncommitted: bool,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        landed_ms: Option<u64>,
-        #[serde(default, skip_serializing_if = "crate::is_false")]
-        gone: bool,
+        /// the terminal's `/diff` (client-protocol step 3): its fields
+        /// next to these on the wire, boxed (the enum stays small)
+        #[serde(flatten)]
+        view: Box<DiffView>,
     },
     /// `/diff`'s branch picker (the answer to `branches`): the local
     /// branches ahead of `base`, the trunk
@@ -177,39 +163,10 @@ pub enum HubEv {
         installed: bool,
         items: Vec<VersionItem>,
     },
-    /// `/release-bise` (dev build only): `state` "plan" (the answer to
-    /// `release_plan`: `tag`, `commit`, `short`, `subject`, `since` the
-    /// last tag, `count` and the first `commits` as [sha, subject]),
-    /// "error" (no plan: `text`), then a run's "running", "step", "done"
-    /// or "failed" (`text`, `elapsed` s; a failure's `tail` and `log`)
-    Release {
-        project: Project,
-        state: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        tag: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        commit: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        short: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        subject: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        since: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        count: Option<u64>,
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        commits: Vec<(String, String)>,
-        #[serde(default, skip_serializing_if = "crate::is_false")]
-        dry: bool,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        text: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        elapsed: Option<u64>,
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        tail: Vec<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        log: Option<String>,
-    },
+    /// `/release-bise` (dev build only): a plan or a run's step
+    /// ([`ReleaseEv`], boxed: the enum stays small, the wire is its
+    /// fields next to the tag)
+    Release(Box<ReleaseEv>),
     /// bise's home hub holds his words for a project's main (desktop S2,
     /// decision B): `to` the project picked (its hub id), `name` its name,
     /// `why` the guess's reason; until `correct_until_ms` (2 s after) a
@@ -769,4 +726,16 @@ pub enum ErrorKind {
     HubRefused,
     #[serde(other)]
     Unknown,
+}
+
+#[cfg(test)]
+mod size {
+    /// A client keeps events in enums of its own (the core's `Read`):
+    /// one big variant would weigh on all of them (clippy's
+    /// large_enum_variant); box the rare big ones.
+    #[test]
+    fn a_hub_event_stays_small() {
+        let n = std::mem::size_of::<super::HubEv>();
+        assert!(n <= 264, "HubEv is {n} bytes");
+    }
 }

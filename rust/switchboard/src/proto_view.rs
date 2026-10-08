@@ -5,7 +5,7 @@
 //! the entries that changed go out).
 
 use bise_proto::rows::{question, Agent, Artifact, ArtifactVersion, Card, CardPage, Report, ReportKind, Status};
-use bise_proto::diff::{DiffFile, DiffLine, Hunk, LineKind};
+use bise_proto::diff::{DiffFile, DiffLine, DiffView, Hunk, LineKind};
 use bise_proto::hub::{HubEv, Job as Followed, JobState};
 use bise_proto::thread::lines::unescape;
 use bise_proto::thread::words::one_line;
@@ -300,13 +300,15 @@ pub fn diff(ev: &Value, project: &str, agent: &str) -> HubEv {
         merged: None,
         commit: None,
         note: Some(s(ev, "note")).filter(|n| !n.is_empty()),
-        title: Some(s(ev, "title")).filter(|t| !t.is_empty()),
-        req: ev.get("req").and_then(Value::as_u64),
-        commits: ev.get("commits").and_then(Value::as_u64),
-        working: flag(ev, "working"),
-        uncommitted: flag(ev, "uncommitted"),
-        landed_ms: ev.get("landed_ms").and_then(Value::as_u64),
-        gone: flag(ev, "gone"),
+        view: Box::new(DiffView {
+            title: Some(s(ev, "title")).filter(|t| !t.is_empty()),
+            req: ev.get("req").and_then(Value::as_u64),
+            commits: ev.get("commits").and_then(Value::as_u64),
+            working: flag(ev, "working"),
+            uncommitted: flag(ev, "uncommitted"),
+            landed_ms: ev.get("landed_ms").and_then(Value::as_u64),
+            gone: flag(ev, "gone"),
+        }),
     }
 }
 
