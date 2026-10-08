@@ -104,6 +104,14 @@ impl Proto {
     pub(super) fn typed(&mut self, id: ClientId) {
         self.conns.entry(id).or_default().only = true;
     }
+
+    /// The terminal's hello connection that reads some notifications
+    /// (client-protocol step 4's glue, `daemon/rpc.rs`): the typed events
+    /// reach it, its older events too (`rpc_out` keeps the ones it reads).
+    // TODO(client-protocol step 4's end, P4e): goes with the hello's reads
+    pub(super) fn older(&mut self, id: ClientId) {
+        self.conns.entry(id).or_default();
+    }
 }
 
 /// What the fold needs from the hub, owned (taken before the conns are
@@ -215,7 +223,9 @@ impl Shell {
         if self.proto.conns.contains_key(&client) {
             let project = self.project();
             self.proto_send(client, &HubEv::Notice { project, cmd: Some("slash".into()), text: text.to_string(), cid: None });
-            if self.proto.typed_only(client) {
+            // a hello connection with reads (step 4's glue): rpc_out sent
+            // it the notice its way
+            if self.proto.typed_only(client) || self.rpc.reads_some(client) {
                 return;
             }
         }

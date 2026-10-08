@@ -25,6 +25,7 @@ use crate::hub::{ErrorKind, HubCmd, HubEv};
 use crate::{Project, PROTO};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use std::collections::BTreeSet;
 
 /// JSON-RPC's version, in every message.
 pub const JSONRPC: &str = "2.0";
@@ -393,6 +394,44 @@ pub fn methods() -> Vec<String> {
 /// Every notification this version sends.
 pub fn notifications() -> Vec<String> {
     NOTIFICATIONS.iter().map(|r| r.method.to_string()).collect()
+}
+
+// ---- client-protocol step 4's glue (architect m_13977) ----
+// TODO(client-protocol step 4's end, P4e): this table, its functions and
+// the hello's `reads` go when the terminal connects with `initialize`.
+
+/// An older event of the terminal's hello connection and the
+/// notifications that replace it. A hello that lists every one of them in
+/// its `reads` gets them as notifications, never the older event: the
+/// terminal swaps one kind at a time and reads each kind once.
+#[derive(Clone, Copy, Debug)]
+pub struct Older {
+    pub ev: &'static str,
+    pub methods: &'static [&'static str],
+}
+
+/// The kinds the terminal can read typed so far. A row is added (or
+/// grows) in the chunk that sends its notifications on every path the
+/// older event took (P4b: `state` gets its `flow`). Never in the TS
+/// generation: the window has no older events.
+// TODO(client-protocol step 4's end, P4e): delete this table with the
+// glue (Older, reads_of, older_sent, the hello's reads, the law).
+pub const OLDER: &[Older] = &[
+    Older { ev: "state", methods: &["hub/agents", "hub/cards", "hub/scheduled"] },
+    Older { ev: "artifacts", methods: &["hub/artifacts"] },
+    Older { ev: "approvals", methods: &["hub/approvals"] },
+    Older { ev: "confirm", methods: &["confirm/ask"] },
+];
+
+/// What a hello's `reads` stands for: the methods of the [`OLDER`] rows
+/// it lists whole (a row half listed is read the older way).
+pub fn reads_of(listed: &[String]) -> BTreeSet<&'static str> {
+    OLDER.iter().filter(|o| o.methods.iter().all(|m| listed.iter().any(|l| l == m))).flat_map(|o| o.methods.iter().copied()).collect()
+}
+
+/// Older event `ev` still goes to a hello connection that reads `reads`.
+pub fn older_sent(ev: &str, reads: &BTreeSet<&'static str>) -> bool {
+    OLDER.iter().find(|o| o.ev == ev).is_none_or(|o| !o.methods.iter().all(|m| reads.contains(m)))
 }
 
 // ---- messages <-> the typed commands and events ----

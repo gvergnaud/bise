@@ -225,7 +225,7 @@ impl Shell {
                 }
             }
             Msg::Page(m) => self.page_msg(m),
-            Msg::ClientNew { id, stream } => self.client_hello(id, stream),
+            Msg::ClientNew { id, stream, reads } => self.client_hello(id, stream, &reads),
             Msg::RpcNew { id, stream, v } => self.rpc_new(id, stream, v),
             Msg::Typed { to, v } => self.typed_msg(to, v),
             Msg::ClientLine { id, v } => self.client_line(id, v),

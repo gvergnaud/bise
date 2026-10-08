@@ -245,3 +245,33 @@ fn initialize_lists_every_method_and_notification() {
     assert_eq!(v, serde_json::json!({"proto": PROTO, "client": {"name": "bise-tui", "version": "v2026.10.8"}, "capabilities": {}}));
     assert_eq!(serde_json::from_value::<InitializeParams>(serde_json::json!({"proto": 1, "client": {"name": "x"}})).unwrap().capabilities, Value::Null);
 }
+
+/// Step 4's glue (architect m_13977): every older event in [`OLDER`] goes
+/// to a hello connection xor all of its notifications do, for every
+/// `reads` a terminal can send (each subset of the rows, half rows too),
+/// and its methods are notifications this hub sends.
+#[test]
+fn an_older_event_goes_xor_its_notifications() {
+    let all: Vec<&str> = OLDER.iter().flat_map(|o| o.methods.iter().copied()).collect::<BTreeSet<_>>().into_iter().collect();
+    for o in OLDER {
+        for m in o.methods {
+            assert!(note_row(m).is_some(), "{}: {m} is no notification", o.ev);
+        }
+        assert!(OLDER.iter().filter(|x| x.ev == o.ev).count() == 1, "{} twice", o.ev);
+    }
+    assert!(all.len() < 16, "the subsets below grow as 2^n");
+    for bits in 0u32..(1 << all.len()) {
+        let listed: Vec<String> = all.iter().enumerate().filter(|(i, _)| bits & (1 << i) != 0).map(|(_, m)| m.to_string()).collect();
+        let reads = reads_of(&listed);
+        for o in OLDER {
+            let notes = o.methods.iter().all(|m| reads.contains(m));
+            assert!(older_sent(o.ev, &reads) != notes, "{} with reads {listed:?}", o.ev);
+        }
+        // a method read is one the terminal listed, in a row it listed whole
+        for m in &reads {
+            assert!(listed.iter().any(|l| l == m), "{m} read but not listed");
+        }
+    }
+    // an event outside the table always goes the older way
+    assert!(older_sent("line", &reads_of(&all.iter().map(|m| m.to_string()).collect::<Vec<_>>())));
+}

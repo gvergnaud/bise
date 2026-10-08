@@ -68,6 +68,35 @@ class Rpc:
             return [v for v in self.lines if "id" not in v and "method" in v and (method is None or v["method"] == method)]
 
 
+class Older:
+    """The terminal's hello connection with step 4's `reads` (the
+    notifications it reads already; its other kinds the older way)."""
+
+    def __init__(self, sock_path, reads):
+        self.s = socket.socket(socket.AF_UNIX)
+        self.s.connect(sock_path)
+        self.lines = []
+        self.lock = threading.Lock()
+        self.s.sendall((json.dumps({"op": "hello", "reads": reads}) + "\n").encode())
+        threading.Thread(target=self._read, daemon=True).start()
+
+    def _read(self):
+        for line in self.s.makefile("r"):
+            try:
+                v = json.loads(line)
+            except ValueError:
+                continue
+            with self.lock:
+                self.lines.append(v)
+
+    def got(self):
+        with self.lock:
+            return list(self.lines)
+
+    def wait(self, f, what, timeout=30):
+        return wait.until(lambda: f() or None, timeout, what)
+
+
 def main():
     if not os.path.exists(EXE):
         sys.exit("build first: scripts/bins.sh")
@@ -173,6 +202,36 @@ def main():
         c.send({"jsonrpc": "2.0", "id": 9, "method": "agent/archive", "params": {"project": project, "agent": "ghost", "force": False}})
         bad = c.wait(lambda: next((v for v in list(c.events) if v.get("id") == 9), None), 20, "agent/archive's error")
         check(bad["error"]["code"] == HUB_REFUSED, "archive a ghost: %r" % bad)
+
+        # step 4's glue (architect m_13977): a hello that lists `reads`
+        # gets those kinds as notifications (their state in its burst,
+        # before `ready`) and never their older events; a half-listed
+        # row (state without hub/scheduled) is read the older way
+        typed = ["hub/agents", "hub/cards", "hub/scheduled", "hub/artifacts", "hub/approvals", "confirm/ask"]
+        h = Older(sock, typed)
+        half = Older(sock, ["hub/agents", "hub/cards", "hub/artifacts"])
+        h.wait(lambda: any(v.get("ev") == "ready" for v in h.got()), "ready, with reads")
+        half.wait(lambda: any(v.get("ev") == "ready" for v in half.got()), "ready, half listed")
+        burst = h.got()
+        ready = next(i for i, v in enumerate(burst) if v.get("ev") == "ready")
+        for m in ["hub/agents", "hub/cards", "hub/scheduled", "hub/artifacts", "hub/approvals"]:
+            check(any(v.get("method") == m for v in burst[:ready]), "%s in the burst before ready" % m)
+        check(any(v.get("ev") == "hello" for v in burst) and any(v.get("ev") == "line" for v in burst), "hello and lines still the older way")
+        hb = half.got()
+        check(any(v.get("ev") == "state" for v in hb) and any(v.get("method") == "hub/artifacts" for v in hb), "half listed: state the older way, artifacts typed")
+        check(not any(v.get("method") in ("hub/agents", "hub/cards") for v in hb), "half listed: no hub/agents")
+        # a change after the burst: hub/agents, numbered, never a state line
+        before = len(h.got())
+        r.call("turn/send", {"project": project, "agent": "main", "text": "older reads", "mode": "now"})
+        h.wait(lambda: any(v.get("method") == "hub/agents" for v in h.got()[before:]), "hub/agents live")
+        live = [v for v in h.got()[before:] if v.get("method") == "hub/agents"]
+        check(all("seq" in v["params"] and "epoch" in v["params"] for v in live), "numbered: %r" % live[:1])
+        c.wait_status("main", "idle", 60)
+        allh = h.got()
+        older = sorted({v["ev"] for v in allh if v.get("ev") in ("state", "artifacts", "approvals", "confirm")})
+        check(not older, "older events it reads typed: %r" % older)
+        check(not any(v.get("ev") in ("agents", "cards", "scheduled") for v in allh), "a typed line it doesn't read")
+        check(any(v.get("ev") == "line" for v in allh[before:]), "its lines the older way")
 
         ok = True
         print("rpc_e2e: ok")

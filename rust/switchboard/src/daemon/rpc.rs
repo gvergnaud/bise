@@ -49,6 +49,10 @@ struct Conn {
     /// said `initialize`: notifications go to it. False: an older hello
     /// connection that sends requests (only their answers go to it)
     init: bool,
+    /// an older hello connection's notifications it reads already
+    /// (step 4's glue, `bise_proto::rpc::OLDER`), the rest the older way
+    // TODO(client-protocol step 4's end, P4e): goes with the hello's reads
+    reads: BTreeSet<&'static str>,
     pending: Vec<Pending>,
     /// its lines held while one of its requests runs
     hold: Option<Vec<String>>,
@@ -94,6 +98,19 @@ impl Rpcs {
     pub(super) fn init(&self, id: ClientId) -> bool {
         self.conns.get(&id).is_some_and(|c| c.init)
     }
+
+    /// Older event line `v` goes to connection `id`: false when it is an
+    /// older hello connection that reads that kind as notifications.
+    // TODO(client-protocol step 4's end, P4e): goes with the hello's reads
+    pub(super) fn reads_some(&self, id: ClientId) -> bool {
+        self.conns.get(&id).is_some_and(|c| !c.reads.is_empty())
+    }
+
+    /// (step 4's glue, see `reads_some`)
+    pub(super) fn older_ok(&self, id: ClientId, v: &Value) -> bool {
+        let Some(c) = self.conns.get(&id).filter(|c| !c.reads.is_empty()) else { return true };
+        rpc::older_sent(v.get("ev").and_then(Value::as_str).unwrap_or(""), &c.reads)
+    }
 }
 
 impl Shell {
@@ -104,6 +121,30 @@ impl Shell {
         self.clients.insert(id, stream);
         self.step(Input::ClientHello { client: id });
         self.rpc_line(id, v);
+    }
+
+    /// The hello's `reads` (client-protocol step 4's glue): the methods it
+    /// reads typed (`rpc::reads_of`, whole [`rpc::OLDER`] rows) and their
+    /// hub-wide state now as notifications, for its hello burst.
+    // TODO(client-protocol step 4's end, P4e): goes with the hello's reads
+    pub(super) fn rpc_reads(&mut self, listed: &[String]) -> (BTreeSet<&'static str>, Vec<Value>) {
+        let reads = rpc::reads_of(listed);
+        if reads.is_empty() {
+            return (reads, Vec::new());
+        }
+        let notes = self.hub_state().state.into_iter().filter(|n| reads.contains(n.method.as_str())).map(|n| Message::Notification(n).to_value()).collect();
+        (reads, notes)
+    }
+
+    /// Hello connection `id` reads `reads` as notifications: the typed
+    /// events reach it (`rpc_out` keeps those), its older events of those
+    /// kinds don't (`Rpcs::older_ok`).
+    pub(super) fn rpc_older(&mut self, id: ClientId, reads: BTreeSet<&'static str>) {
+        if reads.is_empty() {
+            return;
+        }
+        self.rpc.conns.entry(id).or_default().reads = reads;
+        self.proto.older(id);
     }
 
     /// One JSON-RPC line from client `id`.
@@ -284,6 +325,27 @@ impl Shell {
                 self.rpc_respond(id, Response::ok(p.id, rpc::result(ev)));
                 return true;
             }
+        }
+        // step 4's glue: an older hello connection that reads some kinds
+        // as notifications gets those, never a typed line it doesn't read
+        // (its older events come their own way, `Rpcs::older_ok`)
+        // TODO(client-protocol step 4's end, P4e): goes with the hello's reads
+        let reads = self.rpc.conns.get(&id).map(|c| c.reads.clone()).unwrap_or_default();
+        if !init && !reads.is_empty() {
+            let read = rpc::note_of_ev(ev.tag()).is_some_and(|r| reads.contains(r.method));
+            if read {
+                let hub = rpc::note_of_ev(ev.tag()).is_some_and(|r| r.scope == Scope::Hub);
+                let w = hub.then(|| self.rpc.now());
+                if let Some(n) = rpc::note(ev, w) {
+                    self.rpc_write(id, &Message::Notification(n).encode(), false);
+                }
+            } else if let HubEv::Notice { text, .. } | HubEv::Error { text, .. } = ev {
+                // its words past a request's answer: the older notice, as below
+                if let Some(c) = self.clients.get_mut(&id) {
+                    write_json(c, &json!({"ev": "notice", "text": text}));
+                }
+            }
+            return true;
         }
         if !init {
             // the hub's words past the request's one answer (a step's

@@ -151,6 +151,7 @@ enum Msg {
     ClientNew {
         id: ClientId,
         stream: UnixStream,
+        reads: Vec<String>,
     },
     ClientLine {
         id: ClientId,
@@ -851,7 +852,7 @@ impl Shell {
         let line = v.to_string();
         let mut dead: Vec<ClientId> = Vec::new();
         for (id, s) in self.clients.iter_mut() {
-            if self.proto.typed_only(*id) {
+            if self.proto.typed_only(*id) || !self.rpc.older_ok(*id, v) {
                 continue;
             }
             if !write_line(s, &line) {
@@ -1090,7 +1091,8 @@ impl Shell {
             }
             Effect::Land { token, job } => self.land(token, *job),
             Effect::ToClient { client, body } => {
-                if self.typed_notice(client, &body) || self.typed_confirm(client, &body) || self.rpc_effect(client, &body) {
+                let older = self.rpc.older_ok(client, &body);
+                if self.typed_notice(client, &body) || self.typed_confirm(client, &body) || self.rpc_effect(client, &body) || !older {
                     return;
                 }
                 if let Some(s) = self.clients.get_mut(&client) {
@@ -1674,10 +1676,15 @@ impl Shell {
     /// A new client: hello, snapshot, the buffered lines of every feed,
     /// `ready`, the versions, in one write (thousands of lines: one
     /// syscall, not one per line).
-    fn client_hello(&mut self, id: ClientId, mut stream: UnixStream) {
+    fn client_hello(&mut self, id: ClientId, mut stream: UnixStream, listed: &[String]) {
         let art_ev = self.artifacts_ev();
+        // client-protocol step 4's glue (daemon/rpc.rs): what it reads typed
+        let (reads, notes) = self.rpc_reads(listed);
         let mut out = String::new();
         let mut push = |v: &Value| {
+            if !bise_proto::rpc::older_sent(v.get("ev").and_then(Value::as_str).unwrap_or(""), &reads) {
+                return;
+            }
             out.push_str(&v.to_string());
             out.push('\n');
         };
@@ -1691,6 +1698,7 @@ impl Shell {
             "pages_url": self.pg.pages.as_ref().map(|p| p.base()),
         }));
         push(&self.snapshot());
+        notes.iter().for_each(&mut push);
         for name in &self.hub.st.order {
             for (pos, ts, l) in self.buffers.get(name).into_iter().flatten() {
                 push(&line_event(name, *pos, *ts, l));
@@ -1712,6 +1720,7 @@ impl Shell {
         }
         crate::util::timing("client hello written");
         self.clients.insert(id, stream);
+        self.rpc_older(id, reads);
         self.step(Input::ClientHello { client: id });
     }
 

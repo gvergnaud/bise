@@ -133,7 +133,10 @@ fn serve(stream: UnixStream, pid: Option<u32>, id: u64, tx: &Sender<Msg>, doors:
     }
     match op.as_str() {
         "hello" => {
-            let _ = tx.send(if init { Msg::RpcNew { id, stream, v } } else { Msg::ClientNew { id, stream } });
+            // TODO(client-protocol step 4's end, P4e): `reads` goes with
+            // the hello (the notifications the terminal reads already)
+            let reads = || v.get("reads").and_then(|r| serde_json::from_value(r.clone()).ok()).unwrap_or_default();
+            let _ = tx.send(if init { Msg::RpcNew { id, stream, v } } else { Msg::ClientNew { id, stream, reads: reads() } });
             let mut line = String::new();
             loop {
                 line.clear();
