@@ -1746,7 +1746,7 @@ mod nav_key_tests {
         app.attachments.push(crate::attach::Attachment {
             label: "[Image #1]".into(),
             marker: "<image name=\"[Image #1]\" b64=\"/x.b64\">".into(),
-            info: Default::default(),
+            info: crate::attach::Info { width: 2, height: 3, ..Default::default() },
         });
         app.ed.insert("look at [Image #1]");
         let n = app.events.len();

@@ -602,7 +602,7 @@ pub(crate) fn set_model(model: &str) {
 /// list: None (the provider decides).
 pub(crate) fn refused_images(app: &App) -> Option<String> {
     let text = app.ed.text.trim_start();
-    if text.starts_with('/') || !app.attachments.iter().any(|a| text.contains(&a.label)) {
+    if text.starts_with('/') || !app.attachments.iter().any(|a| a.info.width > 0 && text.contains(&a.label)) {
         return None;
     }
     let model = crate::sb::focus_model(app);
@@ -938,7 +938,7 @@ mod tests {
     use super::*;
 
     fn att(n: usize, m: &str) -> Attachment {
-        Attachment { label: label(n), marker: m.into(), info: Info::default() }
+        Attachment { label: label(n), marker: m.into(), info: Info { width: 1, ..Default::default() } }
     }
 
     /// The clipboard holds an image until the next read.
@@ -1294,6 +1294,44 @@ mod tests {
         let gone = t.replace("abc.b64", "zzz.b64");
         assert_eq!(sizes_line(&gone).as_deref(), Some("▣ login-mobile.png · ▣ y.png"));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A quote, a paste and an artifact chip are attachments but not
+    /// images: none of them ever had a width, so a model the catalog
+    /// lists without vision must not refuse the message.
+    #[test]
+    fn quotes_pastes_and_artifacts_are_not_images() {
+        let mut app = composer("", 0);
+        let usage = |m: &str| {
+            crate::Ev::Usage(crate::usage::Usage { model: m.into(), input: 10, ..Default::default() })
+        };
+        app.events.push(usage("mistral/codestral-latest"));
+        app.attachments.push(Attachment {
+            label: crate::quote::label(1),
+            marker: "<selection from=\"main\">q</selection>".into(),
+            info: Default::default(),
+        });
+        app.attachments.push(Attachment {
+            label: crate::pasted::label(2),
+            marker: "<pasted n=\"2\" lines=\"12\">p</pasted>".into(),
+            info: Default::default(),
+        });
+        app.attachments.push(Attachment {
+            label: format!("{ARTIFACT_OPEN}3]"),
+            marker: "[deck](artifact:d)".into(),
+            info: Default::default(),
+        });
+        app.ed.insert(&format!(
+            "{} fix this {} and {}",
+            crate::quote::label(1),
+            crate::pasted::label(2),
+            format!("{ARTIFACT_OPEN}3]")
+        ));
+        assert_eq!(refused_images(&app), None, "a quote, a paste and an artifact are not images");
+        // a real image chip still refuses
+        app.attachments.push(att(1, "<image name=\"[Image #1]\" b64=\"/x.b64\">"));
+        app.ed.insert(" look at [Image #1]");
+        assert_eq!(refused_images(&app), Some("mistral/codestral-latest".into()));
     }
 
     #[test]
