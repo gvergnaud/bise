@@ -182,7 +182,9 @@ fn only_mains_words_after_its_last_tool_call_are_its_answer() {
 fn stop_watching_goes_to_the_hub_and_timers_ride_the_state() {
     let mut t = T::new();
     t.cmd(Cmd::parse(r#"{"cmd":"every_stop","id":3}"#).unwrap());
-    assert_eq!(t.hub.next(), json!({"op": "every_stop", "id": 3}));
+    // scheduled/stop (the fake end gives a request back as its HubCmd)
+    let stop = t.hub.next();
+    assert_eq!((stop["cmd"].as_str(), stop["id"].as_u64()), (Some("scheduled_stop"), Some(3)), "{stop}");
     assert!(Cmd::parse(r#"{"cmd":"every_stop"}"#).is_err());
     let timers = json!([{"id": 3, "what": "the launch", "every": "15m"}]);
     t.hub.say(json!({"ev": "state", "agents": [], "cards": [], "pages": [{"id": "w", "opened_version": 2}], "timers": timers}));

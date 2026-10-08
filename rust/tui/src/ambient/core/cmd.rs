@@ -54,7 +54,7 @@ pub enum Cmd {
     /// are text only; on (the default), as usual.
     Voice { on: bool },
     /// The menu bar's "stop watching" (roadmap B, amb-mac m_5475): the
-    /// standing order `id` stops (the hub's `every_stop`).
+    /// standing order `id` stops (the hub's scheduled/stop).
     EveryStop { id: u64 },
     /// Round 10 (identity10 #data): an agent's preview (now, its last
     /// actions, what waits on him, its last report, its pages), re-sent

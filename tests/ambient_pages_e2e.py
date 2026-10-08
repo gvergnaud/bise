@@ -363,7 +363,7 @@ def main():
 
         # (amb-home) roadmap B: a watched page. sb every --page puts the
         # timer in the state, meta.watch and SSE 'watch'; the page's stop
-        # note ends it with no model turn; the menu's every_stop op too
+        # note ends it with no model turn; the menu's scheduled/stop too
         settle(c)
         c.say('[[bash: sb page publish %s --id launch-watch --title "the launch" && sb every 1h "check HN and republish" --page launch-watch --until 2h]]' % v1)
         c.wait_line("main", "timer set", 90)
@@ -396,7 +396,7 @@ def main():
         settle(c)
         t2 = lwt()[0]["id"]
         c.wait(lambda: ws.seen("watch", lambda d: d and d["timer"] == t2), 15, "watching again")
-        c.send({"op": "every_stop", "id": t2})
+        check(c.rpc("scheduled/stop", {"project": c.project(), "id": t2}).get("result") == {}, "the menu's stop answered")
         live = lambda: [t for t in (c.state or {}).get("timers", []) if t.get("ended_ms") is None]
         c.wait(lambda: ws.seen("watch", lambda d: d is None) and not live(), 15, "the menu's stop")
 

@@ -481,7 +481,7 @@ fn note(app: &mut App, words: String) {
 /// `r`: one run at once, outside its count.
 fn run_now(app: &mut App) {
     let Some(t) = selected(app).filter(Task::active) else { return };
-    app.sb.send(serde_json::json!({"op": "every_run", "id": t.id}));
+    app.sb.call("scheduled/run", serde_json::json!({"id": t.id}), crate::sb::rpc::Then::Shown);
     let now = crate::when::now_ms();
     note(app, format!("{} · ran now: {} is on it. the next run stays at {}.", t.title(), t.agent, ahead(t.next_ms, now)));
 }
@@ -489,7 +489,7 @@ fn run_now(app: &mut App) {
 /// `y` after `x`: the hub stops it (its agent hears it from bise).
 fn stop(app: &mut App, id: u64) {
     let (agent, title) = app.sb.timers.iter().find(|t| t.id == id).map(|t| (t.agent.clone(), t.title())).unwrap_or_default();
-    app.sb.send(serde_json::json!({"op": "every_stop", "id": id}));
+    app.sb.call("scheduled/stop", serde_json::json!({"id": id}), crate::sb::rpc::Then::Shown);
     if let Some(sc) = app.scheduled.as_mut() {
         sc.confirm = None;
         sc.opened = None;

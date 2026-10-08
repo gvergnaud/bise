@@ -1785,15 +1785,6 @@ impl Shell {
             "artifacts" => self.artifacts_op(id, &v),
             "diff" => self.diff_op(id, &v),
             "branches" => self.branches_op(id),
-            // the menu bar's 'stop watching' (amb-mac m_5435), `/scheduled`'s
-            // x (stop) and r (run now)
-            "every_stop" => self.step(Input::EveryStop {
-                id: v.get("id").and_then(|x| x.as_u64()).unwrap_or(0),
-                why: String::new(),
-            }),
-            "every_run" => self.step(Input::EveryRun {
-                id: v.get("id").and_then(|x| x.as_u64()).unwrap_or(0),
-            }),
             "stop_hub" => {
                 let keep = v
                     .get("keep_agents")

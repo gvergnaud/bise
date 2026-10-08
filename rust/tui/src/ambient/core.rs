@@ -413,8 +413,12 @@ impl Core {
                     self.set_phase(Phase::Done, None);
                 }
             }
+            // JSON-RPC's scheduled/stop on the home connection (the
+            // untyped every_stop op is gone); its answer is not read
             Cmd::EveryStop { id } => {
-                if !self.hub.send(&json!({"op": "every_stop", "id": id})) {
+                let project = bise_home::hub_id(Path::new(&self.workspace));
+                let req = json!({"jsonrpc": "2.0", "id": "every_stop", "method": "scheduled/stop", "params": {"project": project, "id": id}});
+                if !self.hub.send(&req) {
                     self.error("bise isn't reachable: it keeps watching. try again in a moment.");
                 }
             }
