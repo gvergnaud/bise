@@ -62,6 +62,8 @@ pub(super) fn release(sh: &Arc<Shared>, agent: &str) {
     let was = {
         let mut inner = lock(&sh.inner);
         inner.last_action.remove(agent);
+        inner.last_target.remove(agent);
+        inner.peeks.remove(agent);
         match inner.agents.get_mut(agent) {
             Some(a) if a.driving.is_some() => {
                 a.driving = None;
