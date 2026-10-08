@@ -240,7 +240,7 @@ impl Shell {
                 }
                 self.artifacts_refresh(true);
             }
-            // the `focus` op's step: who he is looking at
+            // client/focus: who he is looking at (the TUI's feed in view)
             HubCmd::Focus { focus, .. } => self.step(Input::ClientFocus { client: id, focus }),
             // `/version`'s picker
             HubCmd::Versions { .. } => {

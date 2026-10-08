@@ -1763,10 +1763,6 @@ impl Shell {
                     );
                 }
             }
-            "focus" => self.step(Input::ClientFocus {
-                client: id,
-                focus: s("focus"),
-            }),
             // artifacts and diffs (docs/artifacts.md)
             "diff" => self.diff_op(id, &v),
             "branches" => self.branches_op(id),

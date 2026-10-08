@@ -528,7 +528,7 @@ impl Sb {
     /// Tell the hub which feed is in focus.
     fn send_focus(&mut self) {
         let focus = self.focus.clone();
-        self.send(json!({"op": "focus", "focus": focus}));
+        self.call("client/focus", json!({"focus": focus}), rpc::Then::Shown);
     }
 
     /// A line typed to the agent in focus (the hub interprets it).

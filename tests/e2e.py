@@ -371,12 +371,12 @@ def t_spawn_and_auto_reply(E, c):
 
 def t_direct_message_and_note(E, c):
     c.wait_idle("main", "t1")
-    c.send({"op": "focus", "focus": "t1"})
+    check(c.rpc("client/focus", {"project": c.project(), "focus": "t1"}).get("result") == {}, "focus answered")
     c.say("parle-moi directement", focus="t1")
     c.wait_line("t1", "sb you : parle-moi directement")
     c.wait_line("t1", "ack: parle-moi directement")
     c.wait_idle("t1")
-    c.send({"op": "focus", "focus": "main"})
+    check(c.rpc("client/focus", {"project": c.project(), "focus": "main"}).get("result") == {}, "focus answered")
     c.wait_line("main", "sb direct : You talked to @t1 (1 message)")
     c.say("et alors ?")
     c.wait(lambda: any(r["agent"] == "main" and r["user"].endswith("et alors ?") for r in E.fake_requests()), 60,

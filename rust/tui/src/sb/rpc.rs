@@ -20,7 +20,8 @@ use std::collections::BTreeMap;
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Then {
     /// the hub's words (a `CommandRunResult`'s notice: version/info,
-    /// switch, rollback, restart), shown as its notice was
+    /// switch, rollback, restart; `/artifacts add`'s artifacts/add),
+    /// shown as its notice was
     Said,
     /// `versions/list`: the `/version` picker's rows (sb/versions.rs)
     Versions,
@@ -37,9 +38,6 @@ pub(crate) enum Then {
     /// comes in the hub's `approvals` event; a refusal is said on the
     /// screen, or as `/approvals: <why>` when it closed
     RuleRemoved,
-    /// the hub's words for one action (`/artifacts add`'s artifacts/add,
-    /// a `CommandRunResult`): shown as its notice was
-    Said,
 }
 
 /// The requests waiting for their answer, by id (cells: a popup asks
@@ -110,11 +108,6 @@ fn run(app: &mut App, then: Then, r: Response) {
         (Then::RuleRemoved, Err(e)) => rule_refused(app, &e),
         (_, Err(e)) => refused(app, &e),
         (Then::Shown | Then::RuleRemoved, Ok(_)) => {}
-        (Then::Said, Ok(v)) => {
-            if let Some(text) = v.get("notice").and_then(Value::as_str) {
-                notice(app, text);
-            }
-        }
         (Then::Approvals, Ok(mut v)) => {
             v["show"] = json!(true);
             approvals_event(app, &v);
@@ -135,12 +128,6 @@ fn refused(app: &mut App, text: &str) {
     for l in text.lines() {
         push_event(&mut app.events, &mut app.cache, Ev::Info(l.to_string()));
     }
-}
-
-/// The hub's words, as its `notice` event shows them.
-fn notice(app: &mut App, text: &str) {
-    crate::queue::seen(app);
-    refused(app, text);
 }
 
 /// A rule the hub could not remove: why, on the screen when it is open.
