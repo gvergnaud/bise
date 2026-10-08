@@ -153,6 +153,57 @@ mod tests {
         assert_eq!(version_marks(&[]).1 .0, "○");
     }
 
+    /// tui-parity m_13350: '/version list' ⏎ with a version whose subject
+    /// holds 'list' asks the hub for the list and switches to nothing
+    /// (the popup's top row was that version, and ⏎ ran it); so do the
+    /// other subcommand words.
+    #[test]
+    fn a_subcommand_word_typed_then_enter_runs_it_never_a_switch() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        use std::io::Read;
+        let ops = |line: &str| -> Vec<Value> {
+            let (a, mut b) = UnixStream::pair().unwrap();
+            b.set_nonblocking(true).unwrap();
+            let (tx, rx) = std::sync::mpsc::channel::<String>();
+            std::mem::forget(tx);
+            let sb = new_sb(std::sync::Arc::new(std::sync::Mutex::new(a)), "bench".into());
+            let mut app = sb_app(sb, rx, false, 100, crate::voice::Voice::live(false));
+            app.sb.versions = vec![
+                item("abc1234", "tui: the version list view", &["built"]),
+                item("def5678", "hub: rollback restart update words", &["built"]),
+            ];
+            for c in line.chars() {
+                crate::input::on_key(&mut app, &KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+            }
+            crate::input::on_key(&mut app, &KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+            let (mut s, mut buf) = (String::new(), [0u8; 4096]);
+            while let Ok(n) = b.read(&mut buf) {
+                if n == 0 {
+                    break;
+                }
+                s.push_str(&String::from_utf8_lossy(&buf[..n]));
+            }
+            s.lines()
+                .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+                .filter(|v| v["op"] == "version" && v["do"] != "items")
+                .collect()
+        };
+        for (line, want) in [
+            ("/version list", "list"),
+            ("/version back", "rollback"),
+            ("/version rollback", "rollback"),
+            ("/version restart", "restart"),
+            ("/version update", "update"),
+        ] {
+            let got = ops(line);
+            assert_eq!(got.len(), 1, "{line}: {got:?}");
+            assert_eq!(got[0]["do"], want, "{line}: {got:?}");
+            assert!(got[0].get("to").is_none_or(|t| t == ""), "{line}: no version picked: {got:?}");
+        }
+        // any other word still filters and ⏎ runs the top version
+        assert_eq!(ops("/version view"), vec![json!({"op": "version", "do": "switch", "to": "abc1234"})]);
+    }
+
     #[test]
     fn the_hub_event_parses() {
         let v = json!({"ev": "versions", "items": [

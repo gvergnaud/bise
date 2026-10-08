@@ -256,6 +256,12 @@ fn choices(app: &App, arg: Arg, q: &str) -> Vec<Choice> {
     match arg {
         Arg::Words(ws) => words(ws),
         Arg::Version(ws) => {
+            // tui-parity m_13350: a subcommand word is that subcommand,
+            // never a filter: '/version list' ⏎ ran the top version whose
+            // subject held 'list', a switch
+            if let Some(c) = version_word(q) {
+                return vec![c];
+            }
             let mut out = words(ws);
             out.extend(sb::version_choices(app, q));
             out
@@ -290,6 +296,24 @@ fn choices(app: &App, arg: Arg, q: &str) -> Vec<Choice> {
         Arg::Effort => effort_choices(app, q),
         Arg::ComputerUse => computer_use_choices(crate::computer_use::is_on(), q),
         Arg::Text | Arg::Note => Vec::new(),
+    }
+}
+
+/// `/version <q>` where `q` is a subcommand word, as its one row: `list`,
+/// `back` and `rollback` (bise_proto::slash::version reads them) run
+/// `/version <q>`; `restart` and `update` run `/restart` and `/update`.
+/// None for any other word (a version to filter by).
+fn version_word(q: &str) -> Option<Choice> {
+    use bise_proto::slash::{version, Version};
+    match q.trim().to_lowercase().as_str() {
+        "restart" => Some(Choice::word("/restart", "reload bise, nothing lost")),
+        "update" => Some(Choice::word("/update", "look for a new bise release now")),
+        "" => None, // the bare '/version ': every version is offered
+        w => match version(&format!("/version {w}"))? {
+            Version::List => Some(Choice::word(w, "the installed versions")),
+            Version::Rollback => Some(Choice::word(w, "back to the version before")),
+            _ => None,
+        },
     }
 }
 
