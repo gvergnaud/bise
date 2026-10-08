@@ -148,7 +148,10 @@ pub(super) struct Hubs {
     older: BTreeSet<String>,
     /// the projects whose hub doesn't serve JSON-RPC's `initialize` (one
     /// release, architect m_13089 Q2): their connection says the older
-    /// hellos, for this core's life
+    /// hellos, for this core's life.
+    /// TODO(client-protocol plan, "after the release": remove older_door,
+    /// its Read::Older and the core's typed hello in the release after the
+    /// one client-protocol ships in)
     older_door: BTreeSet<String>,
     /// the projects whose hub refused this core's connection, with its
     /// words (HubEv::Refused, docs/issues/16): never connected again until
