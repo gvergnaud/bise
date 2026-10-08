@@ -1,6 +1,6 @@
-//! The OS side of [`crate::peer`]: the pid of the process at the other
+//! The OS side of [`crate::judge`]: the pid of the process at the other
 //! end of a unix socket (macOS `LOCAL_PEERPID`, Linux `SO_PEERCRED`),
-//! read when it connected. The process table is `procs::snapshot`.
+//! read when it connected. The process table is [`crate::table::snapshot`].
 
 use std::os::unix::io::AsRawFd;
 use std::os::unix::net::UnixStream;
@@ -62,7 +62,7 @@ mod tests {
             .unwrap();
         let (s, _) = l.accept().unwrap();
         let pid = peer_pid(&s);
-        let table = crate::procs::snapshot();
+        let table = crate::table::snapshot();
         let _ = child.kill();
         let _ = child.wait();
         let _ = std::fs::remove_dir_all(&dir);

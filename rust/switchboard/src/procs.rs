@@ -29,44 +29,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-/// The variable every process started by an agent carries.
-pub const ENV: &str = "BISE_OWNERS";
-
-/// One hub's id in the tags: FNV-1a of its socket path, 16 hex digits.
-pub fn hub_id(socket: &Path) -> String {
-    let mut h: u64 = 0xcbf29ce484222325;
-    for b in socket.to_string_lossy().bytes() {
-        h = (h ^ b as u64).wrapping_mul(0x100000001b3);
-    }
-    format!("{:016x}", h)
-}
-
-/// An agent's tag: `<hub>.<dir>.<ms>`, the dir kept to `[A-Za-z0-9_-]`
-/// (the list is one word in `ps -E`).
-pub fn tag(hub: &str, dir: &str, ms: u64) -> String {
-    let d: String = dir
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
-        .collect();
-    format!("{}.{}.{}", hub, d, ms)
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Tag {
-    pub hub: String,
-    pub dir: String,
-    pub ms: u64,
-}
-
-pub fn parse_tag(s: &str) -> Option<Tag> {
-    let (hub, rest) = s.split_once('.')?;
-    let (dir, ms) = rest.rsplit_once('.')?;
-    Some(Tag {
-        hub: hub.to_string(),
-        dir: dir.to_string(),
-        ms: ms.parse().ok()?,
-    })
-}
+// The tags, the process table and its reading live in `bise-peer` (one
+// home with the computer-use broker, docs/issues/18).
+pub use bise_peer::table::{parse_ps, snapshot, Proc};
+pub use bise_peer::tags::{hub_id, parse_tag, tag, Tag, ENV};
 
 fn split(list: &str) -> impl Iterator<Item = &str> {
     list.split(',').map(str::trim).filter(|t| !t.is_empty())
@@ -89,21 +55,6 @@ pub fn for_repl(inherited: Option<&str>, hub: &str, dir: &str, ms: u64) -> Strin
     }
     l.push_str(&tag(hub, dir, ms));
     l
-}
-
-/// One process of the table.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Proc {
-    pub pid: u32,
-    pub ppid: u32,
-    /// its start time, as the system says it: with the pid, who it is
-    pub start: String,
-    pub zombie: bool,
-    /// its session id (`getsid`)
-    pub sid: u32,
-    /// `BISE_OWNERS`: None when it has no such variable
-    pub owners: Option<String>,
-    pub command: String,
 }
 
 /// Which agents' processes to kill: this hub's tags whose dir is in
@@ -180,97 +131,8 @@ pub fn select(procs: &[Proc], hub: &str, want: &Want, sessions: &BTreeSet<u32>, 
     out.iter().filter_map(|p| by_pid.get(p).map(|x| (*x).clone())).collect()
 }
 
-/// `ps -axww -E -o pid=,ppid=,stat=,lstart=,command=` (macOS): the
-/// environment comes after the command, one `K=V` word each; the last
-/// ` BISE_OWNERS=` word is the variable (a command naming it comes first).
-pub fn parse_ps(text: &str) -> Vec<Proc> {
-    let key = format!(" {}=", ENV);
-    text.lines()
-        .filter_map(|l| {
-            let mut w = l.split_whitespace();
-            let pid = w.next()?.parse().ok()?;
-            let ppid = w.next()?.parse().ok()?;
-            let stat = w.next()?;
-            let start: Vec<&str> = w.by_ref().take(5).collect();
-            if start.len() < 5 {
-                return None;
-            }
-            let command = w.next().unwrap_or("").to_string();
-            let owners = l.rfind(&key).map(|i| {
-                l[i + key.len()..].split_whitespace().next().filter(|v| !v.contains('=')).unwrap_or("").to_string()
-            });
-            Some(Proc {
-                pid,
-                ppid,
-                start: start.join(" "),
-                zombie: stat.starts_with('Z'),
-                sid: 0,
-                owners,
-                command,
-            })
-        })
-        .collect()
-}
-
-/// The process table of this user, with each process's `BISE_OWNERS`.
-pub fn snapshot() -> Vec<Proc> {
-    #[cfg(target_os = "linux")]
-    {
-        linux_snapshot()
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        std::process::Command::new("ps")
-            .args(["-axww", "-E", "-o", "pid=,ppid=,stat=,lstart=,command="])
-            .stdin(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .output()
-            .map(|o| parse_ps(&String::from_utf8_lossy(&o.stdout)))
-            .unwrap_or_default()
-            .into_iter()
-            .map(|mut p| {
-                // SAFETY: getsid(2) on a pid; a stale one returns -1
-                p.sid = unsafe { getsid(p.pid as i32) }.max(0) as u32;
-                p
-            })
-            .collect()
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn linux_snapshot() -> Vec<Proc> {
-    let Ok(rd) = std::fs::read_dir("/proc") else {
-        return vec![];
-    };
-    rd.flatten()
-        .filter_map(|e| {
-            let pid: u32 = e.file_name().to_str()?.parse().ok()?;
-            let stat = std::fs::read_to_string(e.path().join("stat")).ok()?;
-            let (head, rest) = stat.rsplit_once(')')?;
-            let f: Vec<&str> = rest.split_whitespace().collect();
-            let env = std::fs::read(e.path().join("environ")).ok()?;
-            let key = format!("{}=", ENV);
-            let owners = env
-                .split(|b| *b == 0)
-                .filter_map(|kv| std::str::from_utf8(kv).ok())
-                .find_map(|kv| kv.strip_prefix(&key).map(str::to_string));
-            Some(Proc {
-                pid,
-                ppid: f.get(1)?.parse().ok()?,
-                start: f.get(19)?.to_string(),
-                zombie: f.first() == Some(&"Z"),
-                sid: f.get(3)?.parse().ok()?,
-                owners,
-                command: head.split_once('(').map(|(_, c)| c.to_string()).unwrap_or_default(),
-            })
-        })
-        .collect()
-}
-
 extern "C" {
     fn kill(pid: i32, sig: i32) -> i32;
-    #[cfg(not(target_os = "linux"))]
-    fn getsid(pid: i32) -> i32;
     fn setsid() -> i32;
     fn fcntl(fd: i32, cmd: i32, ...) -> i32;
     fn close(fd: i32) -> i32;
@@ -506,9 +368,6 @@ mod tests {
             for_repl(Some("bb.x.1,00000000000000aa.main.2"), h, "t 1.b", 5),
             "bb.x.1,00000000000000aa.t_1_b.5"
         );
-        assert_eq!(parse_tag("aa.t_1.b.7"), Some(Tag { hub: "aa".into(), dir: "t_1.b".into(), ms: 7 }));
-        assert_eq!(hub_id(Path::new("/a/hub.sock")).len(), 16);
-        assert_ne!(hub_id(Path::new("/a/hub.sock")), hub_id(Path::new("/b/hub.sock")));
     }
 
     /// The tagged processes of the dropped agent go, with their children
@@ -570,19 +429,4 @@ mod tests {
         assert_eq!(pids(select(&procs, h, &want, &sids, 100)), vec![201, 204]);
     }
 
-    #[test]
-    fn ps_lines_give_the_list() {
-        let text = "  101   100 S    Tue Oct  7 00:48:12 2026 /x/repl-live A=1 BISE_OWNERS=aa.t1.3 B=2\n\
-                    102 101 Z+ Tue Oct  7 00:48:13 2026 rg BISE_OWNERS=aa.t9.1 x HOME=/h BISE_OWNERS=aa.t1.3\n\
-                    103 1 S Tue Oct  7 00:48:13 2026 sleep 5 HOME=/h BISE_OWNERS= TERM=x\n\
-                    104 1 S Tue Oct  7 00:48:13 2026 sleep 5 HOME=/h\n";
-        let v = parse_ps(text);
-        assert_eq!(v.len(), 4);
-        assert_eq!(v[0].owners.as_deref(), Some("aa.t1.3"));
-        assert_eq!(v[0].start, "Tue Oct 7 00:48:12 2026");
-        assert_eq!(v[0].command, "/x/repl-live");
-        assert!(v[1].zombie && v[1].owners.as_deref() == Some("aa.t1.3"));
-        assert_eq!(v[2].owners.as_deref(), Some(""));
-        assert_eq!(v[3].owners, None);
-    }
 }

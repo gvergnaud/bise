@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["harness", "tui", "switchboard", "plugins", "images", "catalog", "home", "session", "computer-use", "proto"]
+members = ["harness", "tui", "switchboard", "plugins", "images", "catalog", "home", "session", "computer-use", "proto", "peer"]
 # vendor/crossterm: crossterm 0.28.1 with a patch (see its README), not a member
 exclude = ["vendor/crossterm"]
 

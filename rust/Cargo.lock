@@ -186,6 +186,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "bise-peer"
+version = "0.1.0"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "bise-proto"
 version = "0.1.0"
 dependencies = [
@@ -1793,6 +1800,7 @@ dependencies = [
  "bend-plugins",
  "bise-catalog",
  "bise-home",
+ "bise-peer",
  "bise-proto",
  "bise-session",
  "brush-parser",

@@ -52,7 +52,7 @@ pub mod model;
 pub mod pages;
 pub mod paths;
 pub mod peer;
-pub mod peer_os;
+pub use bise_peer::os as peer_os;
 pub mod place;
 pub mod procs;
 pub mod proto_view;

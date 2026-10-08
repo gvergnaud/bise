@@ -1,0 +1,9 @@
+[package]
+name = "bise-peer"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "Who is at the other end of a socket: the process table with each process's BISE_OWNERS tags, the peer's pid, and the judge (an agent's process or the user's). Shared by the hub's sockets and the computer-use broker (docs/issues/16, 18)."
+
+[dependencies]
+libc = "0.2"

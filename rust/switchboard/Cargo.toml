@@ -11,6 +11,8 @@ bise-catalog = { path = "../catalog" }
 # his attached images into the image store (attached.rs, daemon/fn_context.rs)
 bend-images = { path = "../images" }
 bise-home = { path = "../home" }
+# the process table, the peer's pid and the judge (procs, peer, docs/issues/16)
+bise-peer = { path = "../peer" }
 # the typed client protocol (bise desktop S3a, daemon/proto.rs)
 bise-proto = { path = "../proto" }
 bise-session = { path = "../session" }

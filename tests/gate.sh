@@ -428,7 +428,7 @@ pkgs=""
 add() { case " $pkgs " in *" $1 "*) ;; *) pkgs="$pkgs $1" ;; esac; }
 for f in $changed; do
   case "$f" in
-    rust/Cargo.toml|rust/Cargo.lock|rust/.cargo/*) add bise-session; add bise-home; add bise-catalog; add bend-plugins; add bend-images; add bend-tui; add switchboard; add bend-harness ;;
+    rust/Cargo.toml|rust/Cargo.lock|rust/.cargo/*) add bise-session; add bise-home; add bise-peer; add bise-catalog; add bend-plugins; add bend-images; add bend-tui; add switchboard; add bend-harness ;;
     rust/home/*) add bise-home; add bend-plugins; add bend-images; add bend-tui; add switchboard; add bise-catalog; add bend-harness ;;
     rust/catalog/*) add bise-catalog; add bend-harness ;;
     rust/computer-use/*) add bise-computer-use; add bend-harness ;;
@@ -437,6 +437,7 @@ for f in $changed; do
     rust/tui/*) add bend-tui; add bend-harness ;;
     rust/vendor/crossterm/*) add bend-tui; add bend-harness; crossterm_changed=1 ;;
     rust/switchboard/*) add switchboard; add bend-harness ;;
+    rust/peer/*) add bise-peer; add switchboard; add bend-harness ;;
     rust/harness/*) add bend-harness ;;
     rust/session/*) add bise-session; add switchboard; add bend-harness ;;
     bend/hub/*|bend/vendor/*) add switchboard ;;
