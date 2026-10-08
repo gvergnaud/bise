@@ -1,7 +1,8 @@
 //! The hub's two sockets (docs/issues/16): one accept loop per socket,
 //! one thread per connection; the first line's op decides what the
-//! connection becomes (`crate::peer::access`). On `hub.sock`, a `hello`
-//! or a `notice` from an agent's process (`crate::peer::judge`, on the
+//! connection becomes (`crate::peer::access`; JSON-RPC's `initialize` is
+//! judged as a `hello` and refused with its error response, REFUSED).
+//! On `hub.sock`, a `hello` or a `notice` from an agent's process (`crate::peer::judge`, on the
 //! peer's pid and the process table) gets one `{"ev":"refused","error"}`
 //! line (bise_proto's HubEv::Refused),
 //! is closed, and leaves one hub.log line naming the agent.
@@ -65,6 +66,13 @@ impl Doors {
     }
 }
 
+/// `initialize`'s refusal (docs/issues/16): its error response, REFUSED.
+fn rpc_refusal(v: &Value, why: &str) -> Value {
+    use bise_proto::rpc::{code, Id, Response, RpcError};
+    let id = v.get("id").and_then(|i| serde_json::from_value::<Id>(i.clone()).ok());
+    serde_json::to_value(Response::err(id, RpcError::new(code::REFUSED, why))).unwrap_or_default()
+}
+
 pub(super) fn accept_loop(listener: UnixListener, tx: Sender<Msg>, doors: Arc<Doors>, sock: Sock) {
     for conn in listener.incoming() {
         let Ok(stream) = conn else { continue };
@@ -89,7 +97,10 @@ fn serve(stream: UnixStream, pid: Option<u32>, id: u64, tx: &Sender<Msg>, doors:
     let Ok(v) = serde_json::from_str::<Value>(first.trim()) else {
         return;
     };
-    let op = v.get("op").and_then(|x| x.as_str()).unwrap_or("").to_string();
+    // JSON-RPC's `initialize` is judged like `hello` (client-protocol
+    // step 1, daemon/rpc.rs): the same door, the same refusals
+    let init = bise_proto::rpc::is_rpc(&v) && v.get("method").and_then(|x| x.as_str()) == Some(bise_proto::rpc::INITIALIZE);
+    let op = if init { "hello".to_string() } else { v.get("op").and_then(|x| x.as_str()).unwrap_or("").to_string() };
     let mut stream = stream;
     match access(sock, &op) {
         Access::No => {
@@ -111,14 +122,18 @@ fn serve(stream: UnixStream, pid: Option<u32>, id: u64, tx: &Sender<Msg>, doors:
                 log_line(&doors.paths, &format!("client refused on hub.sock ({op}): {peer}: {why}"));
                 // the typed refusal (bise_proto HubEv::Refused): one shape
                 // for this writer and the TUI's and the desktop core's readers
-                write_json(&mut stream, &bise_proto::hub::HubEv::Refused { error: why.to_string() }.to_value());
+                if init {
+                    write_json(&mut stream, &rpc_refusal(&v, &why));
+                } else {
+                    write_json(&mut stream, &bise_proto::hub::HubEv::Refused { error: why.to_string() }.to_value());
+                }
                 return;
             }
         }
     }
     match op.as_str() {
         "hello" => {
-            let _ = tx.send(Msg::ClientNew { id, stream });
+            let _ = tx.send(if init { Msg::RpcNew { id, stream, v } } else { Msg::ClientNew { id, stream } });
             let mut line = String::new();
             loop {
                 line.clear();

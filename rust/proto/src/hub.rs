@@ -509,6 +509,44 @@ impl HubCmd {
     pub fn encode(&self) -> String {
         self.to_value().to_string()
     }
+
+    /// The project it is for (none: `hello`, an unknown tag).
+    pub fn project(&self) -> Option<&str> {
+        let v = match self {
+            HubCmd::Subscribe { project, .. }
+            | HubCmd::Unsubscribe { project, .. }
+            | HubCmd::Page { project, .. }
+            | HubCmd::Send { project, .. }
+            | HubCmd::Answer { project, .. }
+            | HubCmd::Close { project, .. }
+            | HubCmd::Confirm { project, .. }
+            | HubCmd::Approvals { project, .. }
+            | HubCmd::RemoveRule { project, .. }
+            | HubCmd::Stop { project, .. }
+            | HubCmd::Archive { project, .. }
+            | HubCmd::Unarchive { project, .. }
+            | HubCmd::ArtifactsSeen { project }
+            | HubCmd::Worktrees { project }
+            | HubCmd::DevServers { project }
+            | HubCmd::Merged { project }
+            | HubCmd::Features { project }
+            | HubCmd::Prs { project }
+            | HubCmd::Scheduled { project }
+            | HubCmd::ScheduledStop { project, .. }
+            | HubCmd::Models { project }
+            | HubCmd::New { project, .. }
+            | HubCmd::Rename { project, .. }
+            | HubCmd::Model { project, .. }
+            | HubCmd::Effort { project, .. }
+            | HubCmd::RouteCorrect { project, .. }
+            | HubCmd::RouteCancel { project, .. }
+            | HubCmd::Follow { project, .. }
+            | HubCmd::Slash { project, .. }
+            | HubCmd::Diff { project, .. } => project,
+            HubCmd::Hello { .. } | HubCmd::Unknown { .. } => return None,
+        };
+        Some(v)
+    }
 }
 
 #[cfg(test)]

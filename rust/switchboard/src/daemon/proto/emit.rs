@@ -5,6 +5,7 @@
 //! it changed, the subscribed threads' new entries, an agent's usage).
 
 use super::*;
+use crate::daemon::rpc::Typed;
 use bise_proto::hub::JobState;
 use bise_proto::rows::AgentUsage;
 use bise_proto::thread::words;
@@ -14,9 +15,7 @@ impl Shell {
     /// typed connection (the window and the capsule show the held route).
     pub(in crate::daemon) fn proto_route(&mut self, ev: HubEv) {
         let ids: Vec<ClientId> = self.proto.conns.keys().copied().collect();
-        for id in ids {
-            self.proto_send(id, &ev);
-        }
+        self.proto_note(&ids, &ev);
     }
 
     /// S10: a followed task ended: `job_end` to every typed connection.
@@ -34,7 +33,7 @@ impl Shell {
     }
 
     /// The rows of the snapshot: `agents`, `cards`.
-    pub(super) fn proto_rows(&mut self, snap: &Value) -> (HubEv, HubEv) {
+    pub(in crate::daemon) fn proto_rows(&mut self, snap: &Value) -> (HubEv, HubEv) {
         let project = self.project();
         let now = now_ms();
         self.seed_usage(snap);
@@ -87,11 +86,11 @@ impl Shell {
     /// rows the TUI's `/prs` draws (forge::news::pr_rows).
     /// ⌘K and the scheduled screen: the live timers as rows, built from
     /// the hub's typed timer state (proto_view::scheduled, the one builder).
-    pub(super) fn scheduled_ev(&self) -> HubEv {
+    pub(in crate::daemon) fn scheduled_ev(&self) -> HubEv {
         HubEv::Scheduled { project: self.project(), items: proto_view::scheduled(self.hub.timers()) }
     }
 
-    pub(super) fn prs_ev(&self) -> HubEv {
+    pub(in crate::daemon) fn prs_ev(&self) -> HubEv {
         let places = crate::place::places(&self.hub.st, &self.hub.prs);
         crate::forge::news::prs_ev(self.project(), &places)
     }
@@ -99,7 +98,7 @@ impl Shell {
     /// The typed `models` (bar A.5): the TUI's `/model` list on this hub
     /// (bise_catalog::picks), with the providers ready for this hub's own
     /// environment: what its REPLs will have (architect m_10427).
-    pub(super) fn models_ev(&mut self) -> HubEv {
+    pub(in crate::daemon) fn models_ev(&mut self) -> HubEv {
         self.proto.models_at = Some(models_mtimes());
         let env = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
         let home = bise_home::Home::from_env();
@@ -119,13 +118,13 @@ impl Shell {
 
     /// The hub's `approvals` event (gate.rs `approvals_ev`, the TUI's) as
     /// the typed one (bar V8/W21); paths in the words as the TUI says them.
-    pub(super) fn proto_approvals(&self, ev: &Value) -> HubEv {
+    pub(in crate::daemon) fn proto_approvals(&self, ev: &Value) -> HubEv {
         let home = std::env::var("HOME").ok();
         proto_view::approvals::approvals(&self.project(), ev, home.as_deref())
     }
 
     /// The art store's event as the typed `artifacts`.
-    pub(super) fn proto_artifacts(&self, ev: &Value) -> HubEv {
+    pub(in crate::daemon) fn proto_artifacts(&self, ev: &Value) -> HubEv {
         HubEv::Artifacts { project: self.project(), items: self.artifact_rows(ev) }
     }
 
@@ -155,13 +154,11 @@ impl Shell {
                 let (a, c) = (agents.encode(), cards.encode());
                 let new = (a != self.proto.last.0, c != self.proto.last.1);
                 self.proto.last = (a, c);
-                for id in &ids {
-                    if new.0 {
-                        self.proto_send(*id, &agents);
-                    }
-                    if new.1 {
-                        self.proto_send(*id, &cards);
-                    }
+                if new.0 {
+                    self.proto_note(&ids, &agents);
+                }
+                if new.1 {
+                    self.proto_note(&ids, &cards);
                 }
                 if new.1 {
                     self.proto_live(|l, ctx| l.refold(ctx));
@@ -171,9 +168,7 @@ impl Shell {
                 let j = jobs.encode();
                 if j != self.proto.jobs {
                     self.proto.jobs = j;
-                    for id in &ids {
-                        self.proto_send(*id, &jobs);
-                    }
+                    self.proto_note(&ids, &jobs);
                 }
                 // bar A.6: a feature made, synced, built, merged or
                 // dropped, its card or its agents (the steps' ends and
@@ -182,9 +177,7 @@ impl Shell {
                 let f = feats.encode();
                 if f != self.proto.features {
                     self.proto.features = f;
-                    for id in &ids {
-                        self.proto_send(*id, &feats);
-                    }
+                    self.proto_note(&ids, &feats);
                 }
                 // bar A.7: a PR opened, closed, reviewed or checked (the
                 // forge poll's report lands as a state change)
@@ -192,9 +185,7 @@ impl Shell {
                 let p = prs.encode();
                 if p != self.proto.prs {
                     self.proto.prs = p;
-                    for id in &ids {
-                        self.proto_send(*id, &prs);
-                    }
+                    self.proto_note(&ids, &prs);
                 }
                 // ⌘K: a timer set, run, stopped or ended (each comes back
                 // as a state change)
@@ -202,9 +193,7 @@ impl Shell {
                 let s = sched.encode();
                 if s != self.proto.scheduled {
                     self.proto.scheduled = s;
-                    for id in &ids {
-                        self.proto_send(*id, &sched);
-                    }
+                    self.proto_note(&ids, &sched);
                 }
                 // bar A.5: config.toml or auth.json moved (a stat): the
                 // models again when their rows changed
@@ -213,9 +202,7 @@ impl Shell {
                     let m = models.encode();
                     if m != self.proto.models {
                         self.proto.models = m;
-                        for id in &ids {
-                            self.proto_send(*id, &models);
-                        }
+                        self.proto_note(&ids, &models);
                     }
                 }
                 // an agent came, went, started or ended a turn: its
@@ -223,24 +210,20 @@ impl Shell {
                 let key = self.worktrees_key();
                 if key != self.proto.worktrees {
                     self.proto.worktrees = key;
-                    self.worktrees_typed(ids.clone());
-                    self.dev_servers_typed(ids.clone());
+                    self.worktrees_typed(Typed::All(ids.clone()));
+                    self.dev_servers_typed(Typed::All(ids.clone()));
                 }
             }
             // bar V8/W21: the mode switched or a rule left (set_mode,
             // remove_rule broadcast the TUI's event): the typed one to all
             Some("approvals") => {
                 let ev = self.proto_approvals(v);
-                for id in &ids {
-                    self.proto_send(*id, &ev);
-                }
+                self.proto_note(&ids, &ev);
             }
             // the art store changed (artifacts_refresh broadcasts it)
             Some("artifacts") => {
                 let arts = self.proto_artifacts(v);
-                for id in &ids {
-                    self.proto_send(*id, &arts);
-                }
+                self.proto_note(&ids, &arts);
             }
             Some("line") => {
                 let s = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or("").to_string();
@@ -291,9 +274,7 @@ impl Shell {
             return;
         }
         self.proto.last.0 = a;
-        for id in ids {
-            self.proto_send(*id, &agents);
-        }
+        self.proto_note(ids, &agents);
     }
 
     /// Every subscription refolded: the entries that changed go out.

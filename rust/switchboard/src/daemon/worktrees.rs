@@ -7,6 +7,7 @@
 //! when an agent comes, goes, starts or ends a turn (`proto_on`): never on
 //! a timer.
 
+use super::rpc::Typed;
 use super::*;
 use crate::diff;
 use crate::model::Mode;
@@ -21,9 +22,10 @@ impl Shell {
         st.agents.iter().map(|(n, a)| format!("{n}:{:?}:{}:{}", a.status(), a.ws.path, a.ws.dropped)).collect::<Vec<_>>().join("|")
     }
 
-    /// Scan the worktrees in a thread; `worktrees` goes to each of `ids`.
-    pub(super) fn worktrees_typed(&mut self, ids: Vec<ClientId>) {
-        if ids.is_empty() {
+    /// Scan the worktrees in a thread; `worktrees` goes `to` (an answer,
+    /// or a hub-wide notification).
+    pub(super) fn worktrees_typed(&mut self, to: Typed) {
+        if to.is_empty() {
             return;
         }
         let shared = PathBuf::from(&self.hub.workspace);
@@ -39,9 +41,7 @@ impl Shell {
         let tx = self.tx.clone();
         std::thread::spawn(move || {
             let v = HubEv::Worktrees { project, items: scan(&shared, &agents) }.to_value();
-            for id in ids {
-                let _ = tx.send(Msg::ToClient { id, v: v.clone() });
-            }
+            let _ = tx.send(Msg::Typed { to, v });
         });
     }
 }

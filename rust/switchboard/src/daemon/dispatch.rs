@@ -226,8 +226,11 @@ impl Shell {
             }
             Msg::Page(m) => self.page_msg(m),
             Msg::ClientNew { id, stream } => self.client_hello(id, stream),
+            Msg::RpcNew { id, stream, v } => self.rpc_new(id, stream, v),
+            Msg::Typed { to, v } => self.typed_msg(to, v),
             Msg::ClientLine { id, v } => self.client_line(id, v),
             Msg::ClientGone { id } => {
+                self.rpc_gone(id);
                 if self.clients.remove(&id).is_some() {
                     self.step(Input::ClientGone { client: id });
                 }

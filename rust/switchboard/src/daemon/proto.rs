@@ -16,11 +16,16 @@
 //! connections, hello, the dispatch and a step's errors. Each command's
 //! arm is in `proto/cmds.rs`, the events the hub sends on its own in
 //! `proto/emit.rs` (architect review 10).
+//!
+//! JSON-RPC (`daemon/rpc.rs`, client-protocol step 1) runs the same arms:
+//! `proto_send` gives a JSON-RPC connection its answer or notification,
+//! `proto_note` numbers a hub-wide event once for every connection.
 
 mod cmds;
 mod emit;
 mod tool_out;
 
+use super::rpc::Typed;
 use super::*;
 use crate::proto_view::{self, Live, Since};
 use bise_proto::hub::{HubCmd, HubEv};
@@ -89,6 +94,16 @@ impl Proto {
     pub(super) fn typed_only(&self, id: ClientId) -> bool {
         self.conns.get(&id).is_some_and(|c| c.only)
     }
+
+    /// The connection said a typed hello (or `initialize`).
+    pub(super) fn has(&self, id: ClientId) -> bool {
+        self.conns.contains_key(&id)
+    }
+
+    /// A JSON-RPC connection after `initialize`: typed events only.
+    pub(super) fn typed(&mut self, id: ClientId) {
+        self.conns.entry(id).or_default().only = true;
+    }
 }
 
 /// What the fold needs from the hub, owned (taken before the conns are
@@ -136,7 +151,18 @@ impl Shell {
         Facts { open: self.hub.st.open_cards().map(|c| c.id).collect(), pages: self.pg.pages.clone() }
     }
 
-    fn proto_send(&mut self, id: ClientId, ev: &HubEv) {
+    /// A typed event for connection `id` (a command's answer, an event
+    /// for it alone): a JSON-RPC connection's answer or notification
+    /// (`daemon/rpc.rs`), else the event's line.
+    pub(super) fn proto_send(&mut self, id: ClientId, ev: &HubEv) {
+        if self.rpc_out(id, ev, true) {
+            return;
+        }
+        self.proto_send_old(id, ev);
+    }
+
+    /// The event's line, as an older typed connection reads it.
+    pub(super) fn proto_send_old(&mut self, id: ClientId, ev: &HubEv) {
         if let Some(c) = self.clients.get_mut(&id) {
             write_line(c, &ev.encode());
         }
@@ -281,9 +307,9 @@ impl Shell {
             let arts = self.artifacts_ev();
             let arts = self.proto_artifacts(&arts);
             self.proto_send(id, &arts);
-            self.worktrees_typed(vec![id]);
-            self.dev_servers_typed(vec![id]);
-            self.merged_typed(vec![id]);
+            self.worktrees_typed(Typed::Answer(id));
+            self.dev_servers_typed(Typed::Answer(id));
+            self.merged_typed(Typed::Answer(id));
             let feats = self.features_ev();
             self.proto_send(id, &feats);
             let prs = self.prs_ev();
@@ -300,40 +326,9 @@ impl Shell {
         if !self.proto.conns.contains_key(&id) {
             return self.proto_error(id, &tag, "say hello {proto: 1} first");
         }
-        let project = match &cmd {
-            HubCmd::Subscribe { project, .. }
-            | HubCmd::Unsubscribe { project, .. }
-            | HubCmd::Page { project, .. }
-            | HubCmd::Send { project, .. }
-            | HubCmd::Answer { project, .. }
-            | HubCmd::Close { project, .. }
-            | HubCmd::Confirm { project, .. }
-            | HubCmd::Approvals { project, .. }
-            | HubCmd::RemoveRule { project, .. }
-            | HubCmd::Stop { project, .. }
-            | HubCmd::Archive { project, .. }
-            | HubCmd::Unarchive { project, .. }
-            | HubCmd::ArtifactsSeen { project }
-            | HubCmd::Worktrees { project }
-            | HubCmd::DevServers { project }
-            | HubCmd::Merged { project }
-            | HubCmd::Features { project }
-            | HubCmd::Prs { project }
-            | HubCmd::Scheduled { project }
-            | HubCmd::ScheduledStop { project, .. }
-            | HubCmd::Models { project }
-            | HubCmd::New { project, .. }
-            | HubCmd::Rename { project, .. }
-            | HubCmd::Model { project, .. }
-            | HubCmd::Effort { project, .. }
-            | HubCmd::RouteCorrect { project, .. }
-            | HubCmd::RouteCancel { project, .. }
-            | HubCmd::Follow { project, .. }
-            | HubCmd::Slash { project, .. }
-            | HubCmd::Diff { project, .. }
-            | HubCmd::ToolOut { project, .. } => project.clone(),
-            HubCmd::Hello { .. } => unreachable!(),
-            HubCmd::Unknown { tag, .. } => return self.proto_error(id, tag, &format!("unknown command: {tag}")),
+        let project = match cmd.project() {
+            Some(p) => p.to_string(),
+            None => return self.proto_error(id, &tag, &format!("unknown command: {tag}")),
         };
         if project != self.project() {
             return self.proto_error(id, &tag, &format!("this hub is {}, not {project}", self.project()));

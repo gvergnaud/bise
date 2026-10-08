@@ -4,8 +4,9 @@
 //!
 //! - one Bend REPL per live agent, spawned from the app root, with
 //!   BEND_WORKDIR / BEND_EXTRA_PROMPT / BEND_CONTEXT_FILE / SB_AGENT;
-//! - `hub.sock`: clients (`{"op":"hello"}` first, then JSON lines), never
-//!   from an agent's process; `agent.sock`: the agents' `sb` CLI
+//! - `hub.sock`: clients (`{"op":"hello"}` or JSON-RPC's `initialize`
+//!   first, then JSON lines: `daemon/rpc.rs`), never from an agent's
+//!   process; `agent.sock`: the agents' `sb` CLI
 //!   (`{"op":"agent", ...}`, one request, one reply), their
 //!   `SB_SOCKET` (`daemon/accept`, `crate::peer`, docs/issues/16);
 //! - `journal.jsonl`: the durable state; `agents/<dir>/transcript.log`:
@@ -33,6 +34,7 @@ mod projects;
 mod proto;
 mod repl;
 mod repl_starts;
+mod rpc;
 mod recycling;
 mod routing;
 mod release;
@@ -226,6 +228,17 @@ enum Msg {
         id: ClientId,
         v: Value,
     },
+    /// a thread's typed event: an answer or a hub-wide notification
+    Typed {
+        to: rpc::Typed,
+        v: Value,
+    },
+    /// a connection whose first line is JSON-RPC's `initialize`
+    RpcNew {
+        id: ClientId,
+        stream: UnixStream,
+        v: Value,
+    },
     /// S2 step 5: BISE_ROUTE_MODEL's answer for the unclear route `rid`
     /// (a project name, or None), from its thread (`daemon/routing.rs`).
     RoutePick {
@@ -378,6 +391,8 @@ struct Shell {
     pg: pages::PageState,
     /// the typed protocol's connections (bise desktop S3a, daemon/proto.rs)
     proto: proto::Proto,
+    /// the JSON-RPC connections and the hub-wide watermark (daemon/rpc.rs)
+    rpc: rpc::Rpcs,
     /// view.json's writer (bise desktop S1, daemon/projects.rs)
     projects: projects::Projects,
     /// when the state goes to the clients (daemon/state_gate.rs)
@@ -1081,7 +1096,7 @@ impl Shell {
             }
             Effect::Land { token, job } => self.land(token, *job),
             Effect::ToClient { client, body } => {
-                if self.typed_notice(client, &body) || self.typed_confirm(client, &body) {
+                if self.typed_notice(client, &body) || self.typed_confirm(client, &body) || self.rpc_effect(client, &body) {
                     return;
                 }
                 if let Some(s) = self.clients.get_mut(&client) {
@@ -1710,6 +1725,9 @@ impl Shell {
         if v.get("cmd").is_some() {
             return self.proto_cmd(id, v);
         }
+        if bise_proto::rpc::is_rpc(&v) {
+            return self.rpc_line(id, v);
+        }
         let s = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
         match s("op").as_str() {
             "version" if s("do") == "items" => {
@@ -2143,6 +2161,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         buffers: BTreeMap::new(),
         positions: BTreeMap::new(),
         proto: proto::Proto::default(),
+        rpc: rpc::Rpcs::default(),
         projects: projects::Projects::boot(&paths),
         state_gate: state_gate::StateGate::default(),
         routing: routing::Routing::default(),

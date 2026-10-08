@@ -10,6 +10,11 @@
 //! - [`hub::HubCmd`], tagged `"cmd"`: what a client asks a hub (subscribe
 //!   to a thread, an older page, send, answer, stop, archive, unarchive).
 //!
+//! [`rpc`] is the same protocol as JSON-RPC 2.0 (client-protocol, step 1):
+//! `initialize`, one method per `HubCmd`, one notification per `HubEv`
+//! (tables over their tags), numbered hub-wide notifications; the `cmd`
+//! door above goes when every client speaks it.
+//!
 //! The crate holds every JSON-line contract bise has, each in its own
 //! module (one TS generator, one fixtures convention): the hub protocol
 //! ([`hub`]), the core ↔ app lines (the draft `CoreEv`/`AppCmd`), and
@@ -49,6 +54,7 @@ pub mod helper;
 pub mod hub;
 pub mod pty;
 pub mod rows;
+pub mod rpc;
 pub mod slash;
 pub mod thread;
 

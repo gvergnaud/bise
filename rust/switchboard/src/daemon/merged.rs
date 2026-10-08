@@ -13,6 +13,7 @@
 //! record the hub writes through sb-core when it lands (agent, from, to,
 //! at), which this file then reads instead.
 
+use super::rpc::Typed;
 use super::*;
 use crate::proto_view;
 use bise_proto::hub::HubEv;
@@ -25,11 +26,11 @@ impl Shell {
     /// `Effect::MergedChanged`).
     pub(super) fn merged_all(&mut self) {
         let ids = self.typed_ids();
-        self.merged_typed(ids);
+        self.merged_typed(Typed::All(ids));
     }
 
-    pub(super) fn merged_typed(&mut self, ids: Vec<ClientId>) {
-        if ids.is_empty() {
+    pub(super) fn merged_typed(&mut self, to: Typed) {
+        if to.is_empty() {
             return;
         }
         let shared = PathBuf::from(&self.hub.workspace);
@@ -38,9 +39,7 @@ impl Shell {
         let tx = self.tx.clone();
         std::thread::spawn(move || {
             let v = HubEv::Merged { project, items: scan(&shared, transcript.as_deref()) }.to_value();
-            for id in ids {
-                let _ = tx.send(Msg::ToClient { id, v: v.clone() });
-            }
+            let _ = tx.send(Msg::Typed { to, v });
         });
     }
 }

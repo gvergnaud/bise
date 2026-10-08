@@ -7,6 +7,7 @@
 //! keeps its port; one not listening yet is asked again next time). Sent
 //! with `worktrees` (same moments) and on `dev_servers`.
 
+use super::rpc::Typed;
 use super::*;
 use crate::proto_view::{self, Job};
 use bise_proto::hub::HubEv;
@@ -18,8 +19,8 @@ pub(super) type Ports = Arc<Mutex<BTreeMap<u32, Vec<u16>>>>;
 impl Shell {
     /// Read the jobs and their ports in a thread; `dev_servers` goes to
     /// each of `ids`.
-    pub(super) fn dev_servers_typed(&mut self, ids: Vec<ClientId>) {
-        if ids.is_empty() {
+    pub(super) fn dev_servers_typed(&mut self, to: Typed) {
+        if to.is_empty() {
             return;
         }
         let bgs: Vec<(String, PathBuf)> = self
@@ -37,9 +38,7 @@ impl Shell {
         std::thread::spawn(move || {
             let jobs: Vec<Job> = bgs.iter().flat_map(|(agent, bg)| jobs_of(agent, bg, &cache)).collect();
             let v = HubEv::DevServers { project, items: proto_view::dev_servers(&jobs) }.to_value();
-            for id in ids {
-                let _ = tx.send(Msg::ToClient { id, v: v.clone() });
-            }
+            let _ = tx.send(Msg::Typed { to, v });
         });
     }
 }

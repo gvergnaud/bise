@@ -37,7 +37,7 @@ impl Shell {
 
     /// One typed command of connection `id` (said hello, this hub's
     /// `project`): its arm.
-    pub(super) fn proto_run(&mut self, id: ClientId, tag: &str, project: String, cmd: HubCmd) {
+    pub(in crate::daemon) fn proto_run(&mut self, id: ClientId, tag: &str, project: String, cmd: HubCmd) {
         let tag = tag.to_string();
         let known = |sh: &Shell, a: &str| sh.hub.st.agents.contains_key(a);
         match cmd {
@@ -201,11 +201,11 @@ impl Shell {
                 });
             }
             // git in a thread (worktrees.rs), to this client
-            HubCmd::Worktrees { .. } => self.worktrees_typed(vec![id]),
+            HubCmd::Worktrees { .. } => self.worktrees_typed(Typed::Answer(id)),
             // jobs and lsof in a thread (dev_servers.rs), to this client
-            HubCmd::DevServers { .. } => self.dev_servers_typed(vec![id]),
+            HubCmd::DevServers { .. } => self.dev_servers_typed(Typed::Answer(id)),
             // git and main's transcript in a thread (merged.rs)
-            HubCmd::Merged { .. } => self.merged_typed(vec![id]),
+            HubCmd::Merged { .. } => self.merged_typed(Typed::Answer(id)),
             // the registry and the facts the threads read: no git here
             HubCmd::Features { .. } => {
                 let feats = self.features_ev();

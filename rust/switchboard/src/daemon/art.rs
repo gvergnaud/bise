@@ -300,7 +300,7 @@ impl Shell {
                 *c = commit;
                 *r = result.and_then(|v| serde_json::from_value(v).ok()).map(Box::new);
             }
-            let _ = tx.send(Msg::ToClient { id, v: typed.to_value() });
+            let _ = tx.send(Msg::Typed { to: super::rpc::Typed::Answer(id), v: typed.to_value() });
         });
     }
 
