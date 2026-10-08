@@ -136,18 +136,14 @@ pub(crate) type Drivers = BTreeMap<String, Driver>;
 
 /// `hub`: this TUI's hub id; the file is the machine's (docs/issues/18),
 /// so only that hub's agents, by name (two projects can each have a perf).
+/// The file's one reader is `bise_computer_use::state::agents`; this is
+/// its filter.
 pub(crate) fn parse_state(v: &Value, hub: &str) -> Drivers {
-    let s = |x: &Value, k: &str| x.get(k).and_then(Value::as_str).filter(|t| !t.is_empty()).map(String::from);
-    let b = |x: &Value, k: &str| x.get(k).and_then(Value::as_bool).unwrap_or(false);
-    v.get("agents")
-        .and_then(Value::as_object)
-        .map(|m| {
-            m.values()
-                .filter(|a| a["hub"] == hub)
-                .filter_map(|a| Some((s(a, "name")?, Driver { driving: s(a, "driving"), place: s(a, "where"), paused: b(a, "paused"), stopped: b(a, "stopped") })))
-                .collect()
-        })
-        .unwrap_or_default()
+    bise_computer_use::state::agents(v)
+        .into_iter()
+        .filter(|a| a.hub.as_deref() == Some(hub))
+        .map(|a| (a.name, Driver { driving: a.driving, place: a.place, paused: a.paused, stopped: a.stopped }))
+        .collect()
 }
 
 /// This TUI's hub id in the tags (`bise_peer::tags::hub_id` of the socket

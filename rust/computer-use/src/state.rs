@@ -62,6 +62,46 @@ pub fn render(agents: &BTreeMap<String, Agent>, browsers: Value, apps: Value) ->
     json!({"v": 2, "agents": a, "browsers": browsers, "apps": apps})
 }
 
+/// One agent of state.json as its readers see it (the TUI's marks, the
+/// desktop core's live rows): the file's one reader, next to its writer.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Live {
+    /// `<hub>.<dir>` (docs/issues/18): what the ctl ops take
+    pub key: String,
+    /// its hub's tag id (`bise_peer::tags::hub_id` of its socket); None
+    /// for an untagged agent
+    pub hub: Option<String>,
+    /// what the user sees
+    pub name: String,
+    pub driving: Option<String>,
+    pub place: Option<String>,
+    pub since_ms: Option<u64>,
+    pub paused: bool,
+    pub stopped: bool,
+}
+
+/// state.json's agents ([`render`]'s `agents`), in key order; an entry
+/// without a name is skipped (a v1 file's, keyed by bare name, has none).
+pub fn agents(v: &Value) -> Vec<Live> {
+    let s = |x: &Value, k: &str| x.get(k).and_then(Value::as_str).filter(|t| !t.is_empty()).map(String::from);
+    let b = |x: &Value, k: &str| x.get(k).and_then(Value::as_bool).unwrap_or(false);
+    let Some(m) = v.get("agents").and_then(Value::as_object) else { return Vec::new() };
+    m.iter()
+        .filter_map(|(key, a)| {
+            Some(Live {
+                key: key.clone(),
+                hub: s(a, "hub"),
+                name: s(a, "name")?,
+                driving: s(a, "driving"),
+                place: s(a, "where"),
+                since_ms: a.get("since_ms").and_then(Value::as_u64),
+                paused: b(a, "paused"),
+                stopped: b(a, "stopped"),
+            })
+        })
+        .collect()
+}
+
 /// Write state.json atomically (0600).
 pub fn write(paths: &Paths, v: &Value) -> std::io::Result<()> {
     paths.ensure()?;
@@ -171,5 +211,32 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         assert_eq!(std::fs::metadata(p.state_file()).unwrap().permissions().mode() & 0o777, 0o600);
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// What `render` writes, `agents` reads back: the key, its hub and
+    /// name, every field; idle agents absent, untagged ones with no hub,
+    /// a v1 file's nameless entries skipped.
+    #[test]
+    fn render_then_agents_round_trips() {
+        let mut m = BTreeMap::new();
+        m.insert("idle".to_string(), Agent::default());
+        m.insert(
+            "00000000000000aa.perf".to_string(),
+            Agent { driving: Some("Chrome".into()), place: Some("amazon.fr".into()), since_ms: Some(5), ..Agent::default() },
+        );
+        m.insert("00000000000000bb.perf".to_string(), Agent { paused: vec!["*".into()], ..Agent::default() });
+        m.insert("loose".to_string(), Agent { stopped: true, ..Agent::default() });
+        let got = agents(&render(&m, json!([]), json!({})));
+        let live = |key: &str, hub: Option<&str>, name: &str| Live { key: key.into(), hub: hub.map(String::from), name: name.into(), ..Live::default() };
+        assert_eq!(
+            got,
+            [
+                Live { driving: Some("Chrome".into()), place: Some("amazon.fr".into()), since_ms: Some(5), ..live("00000000000000aa.perf", Some("00000000000000aa"), "perf") },
+                Live { paused: true, ..live("00000000000000bb.perf", Some("00000000000000bb"), "perf") },
+                Live { stopped: true, ..live("loose", None, "loose") },
+            ]
+        );
+        assert!(agents(&json!({"agents": {"perf": {"stopped": true}}})).is_empty());
+        assert!(agents(&json!({})).is_empty());
     }
 }
