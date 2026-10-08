@@ -30,9 +30,14 @@ fn lines() -> Vec<&'static str> {
 
 /// (kind, text, who) of each TUI event the fold also makes an entry of.
 fn tui_words(ls: &[&str]) -> Vec<(EntryKind, String, String)> {
+    use bise_proto::thread::lines::{read, Obs, Rec, TurnEnd};
     let mut out = Vec::new();
     for l in ls {
+        // R12: the TUI's error line for a failed turn is the fold's
+        // turn_failed entry, with the same words
+        let failed = matches!(read(l), Rec::Obs(Obs::TurnDone(TurnEnd::Failed(_))));
         match parse_line(l) {
+            Some(Ev::Err(t) | Ev::Warn(t)) if failed => out.push((EntryKind::TurnFailed, t, String::new())),
             Some(Ev::You(t, ..)) => out.push((EntryKind::You, t, String::new())),
             Some(Ev::Assistant(t)) => {
                 // run.rs makes its thinking a section, its head the shared

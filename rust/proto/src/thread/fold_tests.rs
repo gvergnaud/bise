@@ -176,7 +176,8 @@ fn the_turns_facts_are_entries_of_their_kind() {
     let e = fold(&ls, &ctx_with(&[], &none));
     let kinds: Vec<EntryKind> = e.iter().map(|e| e.kind).collect();
     use EntryKind::*;
-    assert_eq!(kinds, [You, Thinking, Agent, Compacting, Compacted, Notice, Notice, Notice, Notice, Notice, NotDelivered, Agent]);
+    // R12: the two failed turns are turn_failed entries, not notices
+    assert_eq!(kinds, [You, Thinking, Agent, Compacting, Compacted, Notice, TurnFailed, Notice, TurnFailed, Notice, NotDelivered, Agent]);
     let t = e[1].thinking.as_ref().unwrap();
     assert_eq!((t.ms, t.text.as_str(), e[1].text.as_str()), (3_200, "cold\nor warm", "thought for 3.2s"), "the time since the line before");
     assert_eq!(e[2].text, "on it");
@@ -184,9 +185,10 @@ fn the_turns_facts_are_entries_of_their_kind() {
     let n = |i: usize| e[i].notice.clone().map(|n| (n.level, n.text)).unwrap();
     use crate::thread::NoticeLevel::*;
     assert_eq!(n(5), (Warn, "model call failed (attempt 2/10): provider 529 (transient) · retry 3/10 in 4s".into()));
-    assert_eq!(n(6), (Err, "turn failed: provider 500".into()));
+    let f = |i: usize| (e[i].turn_failed.clone().map(|t| t.why).unwrap(), e[i].text.clone());
+    assert_eq!(f(6), ("provider 500".into(), "turn failed: provider 500".into()));
     assert_eq!(n(7), (Warn, "turn interrupted by main".into()), "a stop someone asked for, not a failure");
-    assert_eq!(n(8), (Err, "turn stopped: no OPENROUTER key yet. /provider sets it up.".into()), "the provider's name from the ctx");
+    assert_eq!(f(8).1, "turn stopped: no OPENROUTER key yet. /provider sets it up.", "the provider's name from the ctx");
     assert_eq!(n(9), (Warn, "the inbox is full".into()));
     let d = e[10].not_delivered.as_ref().unwrap();
     assert_eq!((d.to.as_str(), d.text.as_str(), e[10].text.as_str()), ("perf", "then : the warm run", "then : the warm run"));
@@ -355,4 +357,26 @@ fn a_tool_text_is_capped_on_a_char_boundary() {
         let c = cap(&s);
         assert!(c.trim_end_matches('…').chars().all(|ch| ch == '€'));
     }
+}
+
+/// R12 (architect m_13028 option A): a failed turn is a turn_failed
+/// entry (why, as the runtime said it; the TUI's words as its text); an
+/// interrupt is not one; an item without a state reads as Unknown, never
+/// as running (architect m_13326).
+#[test]
+fn a_failed_turn_is_its_own_entry() {
+    let none = |_: &str| None;
+    let ls = vec![
+        (1, 1_000, "  obs: turn_done: failed: provider 500".to_string()),
+        (2, 2_000, "  obs: turn_done: failed: interrupted by main".to_string()),
+        (3, 3_000, "  obs: turn_done: completed".to_string()),
+    ];
+    let e = fold(&ls, &ctx_with(&[], &none));
+    assert_eq!(e[0].kind, EntryKind::TurnFailed);
+    assert_eq!(e[0].text, "turn failed: provider 500");
+    assert_eq!(e[0].turn_failed, Some(TurnFailed { why: "provider 500".into() }));
+    assert!(e[0].payload_matches_kind());
+    assert!(e.iter().skip(1).all(|x| x.kind != EntryKind::TurnFailed), "an interrupt is not a failed turn: {e:?}");
+    let old: ToolItem = serde_json::from_value(serde_json::json!({"pos": 1, "at_ms": 0, "text": "ls", "kind": "run"})).unwrap();
+    assert_eq!(old.state, ToolState::Unknown);
 }

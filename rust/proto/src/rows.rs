@@ -113,6 +113,36 @@ pub struct Agent {
     /// call, and after a compaction)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub usage: Option<AgentUsage>,
+    /// R9/S3: whom it waits on, the hub's own fact (the TUI's panel reads
+    /// the same field): you (its card or question), or another agent's
+    /// reply; none when it waits on nobody
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub waiting_on: Option<WaitingOn>,
+}
+
+/// Whom an agent waits on (R9/S3).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(tag = "who", rename_all = "snake_case")]
+pub enum WaitingOn {
+    /// the user: its card or question
+    You,
+    /// another agent's reply
+    Agent { name: String },
+    /// a kind this version doesn't know (a newer hub)
+    #[serde(other)]
+    Unknown,
+}
+
+impl WaitingOn {
+    /// The hub model's word (`"you"` or an agent's name), typed.
+    pub fn of_word(w: &str) -> Option<WaitingOn> {
+        match w {
+            "" => None,
+            "you" => Some(WaitingOn::You),
+            name => Some(WaitingOn::Agent { name: name.to_string() }),
+        }
+    }
 }
 
 /// An agent's context after its last model call (bar S13, the divider's
@@ -696,6 +726,18 @@ mod tests {
         let (q, o) = question("how should agents ship?\n1 a PR per task\n2 straight to main");
         assert_eq!((q.as_str(), o[0].label.as_str()), ("how should agents ship?", "a PR per task"));
         assert_eq!(question("plain"), ("plain".to_string(), vec![]));
+    }
+
+    /// R9/S3: the hub model's waiting_on word, typed: 'you', an agent's
+    /// name, none; a newer kind reads as Unknown.
+    #[test]
+    fn whom_an_agent_waits_on_is_typed() {
+        assert_eq!(WaitingOn::of_word("you"), Some(WaitingOn::You));
+        assert_eq!(WaitingOn::of_word("docs"), Some(WaitingOn::Agent { name: "docs".into() }));
+        assert_eq!(WaitingOn::of_word(""), None);
+        assert_eq!(serde_json::to_value(WaitingOn::You).unwrap(), serde_json::json!({"who": "you"}));
+        assert_eq!(serde_json::to_value(WaitingOn::Agent { name: "docs".into() }).unwrap(), serde_json::json!({"who": "agent", "name": "docs"}));
+        assert_eq!(serde_json::from_value::<WaitingOn>(serde_json::json!({"who": "a_review"})).unwrap(), WaitingOn::Unknown);
     }
 
     #[test]

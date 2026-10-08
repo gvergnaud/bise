@@ -66,9 +66,21 @@ pub enum EntryKind {
     /// a scheduled task set, ended, or one of its runs (`scheduled`: its
     /// id, the line's head, the task's words)
     Scheduled,
+    /// R12: its turn failed (`turn_failed`: why, as the runtime said it);
+    /// the text the TUI's words for it. An interrupt is not one (a
+    /// `stopped` entry or a notice, as before)
+    TurnFailed,
     /// a kind this reader doesn't know (a newer hub)
     #[serde(other)]
     Unknown,
+}
+
+/// A `turn_failed` entry (R12): why the turn failed, the runtime's words
+/// (a provider's error, a missing key, a budget).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct TurnFailed {
+    pub why: String,
 }
 
 /// A `thinking` entry: how long the model thought (ms, 0 unknown: a
@@ -205,11 +217,12 @@ pub struct Scheduled {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum ToolState {
-    #[default]
     Run,
     Ok,
     Err,
-    /// a state this version doesn't know (a newer hub)
+    /// a state this version doesn't know (a newer hub), or none sent (an
+    /// older hub: never drawn as running forever, architect m_13326)
+    #[default]
     #[serde(other)]
     Unknown,
 }
@@ -389,6 +402,8 @@ pub struct Entry {
     pub approval: Option<ApprovalFold>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scheduled: Option<Scheduled>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn_failed: Option<TurnFailed>,
 }
 
 impl Entry {
@@ -416,6 +431,7 @@ impl Entry {
             answered: None,
             approval: None,
             scheduled: None,
+            turn_failed: None,
         }
     }
 
@@ -437,6 +453,7 @@ impl Entry {
             (EntryKind::Answered, self.answered.is_some()),
             (EntryKind::Approval, self.approval.is_some()),
             (EntryKind::Scheduled, self.scheduled.is_some()),
+            (EntryKind::TurnFailed, self.turn_failed.is_some()),
         ];
         let thinking = match self.kind {
             EntryKind::Thinking => self.thinking.is_some(),

@@ -160,6 +160,7 @@ mod tests {
             vision: None,
             effort: None,
             usage: None,
+            waiting_on: None,
         }
     }
 

@@ -577,6 +577,18 @@ def main():
         good = [i for i in tool_items() if i.get("state") == "ok" and "tool-item-ok" in (i.get("code") or "")][-1]
         check("boom-line" in (bad.get("err") or "") and "boom-line" in (bad.get("out") or "") and isinstance(good.get("ms"), int) and "tool-item-ok" in (good.get("out") or ""), "tool item facts: %r %r" % (good, bad))
         c.wait_idle("main", timeout=90)
+
+        # R12: a failed turn is a turn_failed entry with its why (a final
+        # 400 the provider refuses: no retries)
+        def failed_entries():
+            return [x["entry"] for x in typed(c, "entry") if x["agent"] == "main" and x["entry"]["kind"] == "turn_failed"]
+
+        nf = len(failed_entries())
+        c.say("[[error: badname]]")
+        c.wait(lambda: len(failed_entries()) > nf, 90, "a turn_failed entry")
+        f = failed_entries()[-1]
+        check(f["turn_failed"]["why"] and f["text"] and "notice" not in f, "the turn_failed entry: %r" % f)
+        c.wait_idle("main", timeout=90)
         c.send({"cmd": "unsubscribe", "project": project, "agent": "main"})
 
         # every typed event has the frozen keys of the fixtures

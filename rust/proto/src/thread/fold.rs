@@ -6,7 +6,7 @@ use super::lines::{self, Hub, Obs, Rec};
 use super::scheduled;
 use super::words::{self, one_line, summary};
 use super::{Answered, ApprovalFold, Ctx, Entry, EntryCard, EntryKind, Landed, Line, Made, NotDelivered, Notice, PageRef, PrNews, ReportRef, Scheduled, Thinking, ToolItem, ToolKind, Tools};
-use super::{cap, FileCount, ToolState};
+use super::{cap, FileCount, ToolState, TurnFailed};
 use crate::context::FnContext;
 use crate::rows::question;
 
@@ -183,6 +183,14 @@ impl Fold<'_> {
             }
             Obs::CompactionDone(t) => {
                 self.push(Entry::new(pos, ms, EntryKind::Compacted, lines::unescape(&t)));
+            }
+            // R12: a failed turn is its own entry (why, as the runtime
+            // said it), its text the TUI's words for it
+            Obs::TurnDone(lines::TurnEnd::Failed(why)) => {
+                let text = words::turn_failed(&why, self.ctx.provider).text;
+                let mut e = Entry::new(pos, ms, EntryKind::TurnFailed, text);
+                e.turn_failed = Some(TurnFailed { why });
+                self.push(e);
             }
             o => {
                 if let Some(n) = words::obs_notice(&o, self.ctx.provider) {

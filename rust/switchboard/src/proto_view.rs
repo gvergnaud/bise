@@ -107,6 +107,8 @@ pub fn agents(
             effort: Some(s(&a, "effort")).filter(|e| !e.is_empty()),
             // S13: its context after its last call (the hub's live usage)
             usage: usage(&name),
+            // R9/S3: model.rs's waiting_on, the field the TUI's panel reads
+            waiting_on: bise_proto::rows::WaitingOn::of_word(&s(&a, "waiting_on")),
             name,
         });
     }
