@@ -64,6 +64,19 @@ final class Engine {
     }
     func isStopped(_ agent: String) -> Bool { locked { stopped.contains(agent) } }
 
+    /// C5 `peek` (ctl `peek`, docs/issues/18 step 5): a still of the app
+    /// window the agent drives, for the user's window. Only while it drives
+    /// that app (not released, paused or stopped); quiet: the same capture
+    /// as `screenshot`, no cursor, no event, nothing counted as its action.
+    func peek(agent: String, args: [String: Any]) throws -> [String: Any] {
+        let target = args["target"] as? String ?? ""
+        let drives = locked {
+            driving[agent]?.target == target && !stopped.contains(agent) && !(paused[agent]?.contains(target) ?? false)
+        }
+        guard drives else { throw CUError("not_found", "this agent drives no app now") }
+        return try Shot.take(engine: self, agent: agent, args: ["target": target, "max_width": args["max_width"] ?? 1280])
+    }
+
     /// {"stop"|"resume"|"release"|"drop": agent} (C4/C5 control lines).
     func control(_ kind: String, agent: String) {
         var resumed = false
@@ -131,9 +144,10 @@ final class Engine {
             case "apps": result = try apps()
             case "snapshot": result = try snapshot(agent: agent, args: args)
             case "screenshot": result = try Shot.take(engine: self, agent: agent, args: args)
+            case "peek": result = try peek(agent: agent, args: args)
             case "act": result = try act(agent: agent, args: args)
             case "status": result = ["helper": "running", "version": helperVersion].merging(permissions()) { a, _ in a }
-            default: throw CUError("bad_args", "unknown op \"\(op)\"; the helper knows apps, snapshot, screenshot, act, permissions, request")
+            default: throw CUError("bad_args", "unknown op \"\(op)\"; the helper knows apps, snapshot, screenshot, peek, act, permissions, request")
             }
             return ["id": id, "ok": true, "result": result]
         } catch let e as CUError {

@@ -1,7 +1,7 @@
 // Driving a tab: finding an element, the overlay (cursor, takeover), the
 // actions, the screenshot.
 
-import { ACTIONS, LOCATOR_KEYS, CuError, fail, sleep, tabs, note, agentOf, tabsOf } from "./state.js";
+import { ACTIONS, LOCATOR_KEYS, CuError, fail, sleep, agents, tabs, note, agentOf, tabsOf } from "./state.js";
 import { post, toError } from "./host.js";
 import { refuseUrl, normalUrl, waitLoaded, owned, serial } from "./tabs.js";
 import { cdp, attach, detach, lostTab, evaluate, callOn, takeSnapshot, onTab, PDF_NOTE, isPdf } from "./cdp.js";
@@ -516,10 +516,7 @@ async function screenshotOp(agent, args) {
   const { tabId, t } = await owned(agent, args.target);
   return onTab(agent, tabId, t, async () => {
     await attach(tabId, t);
-    const maxW = Math.min(Math.max(Number.isFinite(args.max_width) ? args.max_width : 1280, 64), 4096);
-    const { cssVisualViewport: vv } = await cdp(tabId, "Page.getLayoutMetrics");
-    const dpr = (await evaluate(tabId, "devicePixelRatio")) || 1;
-    let clip = { x: vv.pageX, y: vv.pageY, width: vv.clientWidth, height: vv.clientHeight };
+    let clip = null;
     if (args.ref || args.locator) {
       const r = await resolve(tabId, t, args, Date.now() + (args.timeout_ms ?? 5000), { visible: true });
       const b = r.point.box;
@@ -528,11 +525,41 @@ async function screenshotOp(agent, args) {
       const x1 = Math.min(b.x + b.width, after.clientWidth), y1 = Math.min(b.y + b.height, after.clientHeight);
       clip = { x: x0 + after.pageX, y: y0 + after.pageY, width: x1 - x0, height: y1 - y0 };
     }
-    const scale = Math.min(1, maxW / (clip.width * dpr)) * 1;
-    const shot = await cdp(tabId, "Page.captureScreenshot", { format: "jpeg", quality: 80, clip: { ...clip, scale }, captureBeyondViewport: false });
-    const { width, height } = jpegSize(shot.data);
-    return { data: shot.data, mime: "image/jpeg", width, height };
+    return capture(tabId, clip, args.max_width);
   });
 }
 
-export { ensureOverlay, pause, act, screenshotOp };
+/** The capture both screenshot and peek use: `clip` (page CSS px) or the viewport, at most `maxWidth` px wide. */
+async function capture(tabId, clip, maxWidth) {
+  const maxW = Math.min(Math.max(Number.isFinite(maxWidth) ? maxWidth : 1280, 64), 4096);
+  const dpr = (await evaluate(tabId, "devicePixelRatio")) || 1;
+  if (!clip) {
+    const { cssVisualViewport: vv } = await cdp(tabId, "Page.getLayoutMetrics");
+    clip = { x: vv.pageX, y: vv.pageY, width: vv.clientWidth, height: vv.clientHeight };
+  }
+  const scale = Math.min(1, maxW / (clip.width * dpr)) * 1;
+  const shot = await cdp(tabId, "Page.captureScreenshot", { format: "jpeg", quality: 80, clip: { ...clip, scale }, captureBeyondViewport: false });
+  const { width, height } = jpegSize(shot.data);
+  return { data: shot.data, mime: "image/jpeg", width, height };
+}
+
+/**
+ * C4 `peek` (ctl `peek`, docs/issues/18 step 5): a still of the agent's
+ * tab for the user's window. Only while its debugger is attached (it
+ * never attaches to look); quiet: no cursor, no overlay, not in the tab's
+ * queue of actions, nothing the agent's next diff or the user's touch
+ * marks see.
+ */
+async function peekOp(agent, args) {
+  const m = /^tab:(\d+)$/.exec(String(args.target ?? ""));
+  const tabId = m ? Number(m[1]) : NaN;
+  const t = tabs.get(tabId);
+  if (!t || t.agent !== agent || !t.attached || t.paused || agents.get(agent)?.stopped) fail("not_found", "this agent drives no tab now");
+  try {
+    return await capture(tabId, null, args.max_width);
+  } catch {
+    fail("not_found", "the tab let go meanwhile");
+  }
+}
+
+export { ensureOverlay, pause, act, screenshotOp, peekOp };

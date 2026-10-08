@@ -1,7 +1,8 @@
 //! The broker's agent controls (stop, resume, release, drop) and its
 //! command connection (`{"op":"hello","role":"ctl"}`): the user's
-//! `bise computer-use stop|resume|drop|release|status|show|quit`, and
-//! setup-check's `request` / `permissions` (C6).
+//! `bise computer-use stop|resume|drop|release|pause|status|show|quit`,
+//! the desktop core's `peek` (`peek.rs`), and setup-check's `request` /
+//! `permissions` (C6).
 
 use super::*;
 
@@ -81,6 +82,8 @@ fn drop_agent(sh: &Arc<Shared>, agent: &str) {
         let mut inner = lock(&sh.inner);
         inner.agents.remove(agent);
         inner.last_action.remove(agent);
+        inner.last_target.remove(agent);
+        inner.peeks.remove(agent);
         inner.owners.retain(|(a, _), _| a != agent);
     }
     broadcast(sh, &json!({"drop": agent}));
@@ -197,8 +200,9 @@ pub(super) fn ctl_loop(sh: &Arc<Shared>, w: Writer, lines: Lines) {
                 }
                 Ok(json!({"stopped": names}))
             }
-            "stop" | "resume" | "drop" | "release" | "pause" if agent.is_empty() => Err(err("bad_args", "name an agent")),
+            "stop" | "resume" | "drop" | "release" | "pause" | "peek" if agent.is_empty() => Err(err("bad_args", "name an agent")),
             "pause" => pause_agent(sh, &agent),
+            "peek" => super::peek::peek(sh, &agent, &args),
             "stop" => {
                 stop_agent(sh, &agent, "you");
                 Ok(json!({"stopped": [agent]}))

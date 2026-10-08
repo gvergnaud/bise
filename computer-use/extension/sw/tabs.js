@@ -3,7 +3,7 @@
 
 import { MAX_TABS, fail, sleep, agents, tabs, agentOf, titleOf, retitle, ownerKey, register, tabsOf } from "./state.js";
 import { snapshotOp } from "./cdp.js";
-import { ensureOverlay, act, screenshotOp } from "./act.js";
+import { ensureOverlay, act, screenshotOp, peekOp } from "./act.js";
 import { summary, failure, hostOf, refused } from "../lib/text.js";
 
 // ---------------------------------------------------------------- ops
@@ -11,6 +11,7 @@ import { summary, failure, hostOf, refused } from "../lib/text.js";
 async function run(agent, op, args) {
   if (!agent || typeof agent !== "string") fail("bad_args", "no agent name in the request");
   if (op === "tabs") return listTabs(agent);
+  if (op === "peek") return peekOp(agent, args);
   if (agents.get(agent)?.stopped) fail("stopped", "the user stopped you in the browser; ask before you start again", { summary: "you stopped it" });
   switch (op) {
     case "open": return open(agent, args);

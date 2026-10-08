@@ -220,6 +220,12 @@ pair and commits the public key; the Web Store keeps the same id).
   → ext → host `{"id":n,"ok":…,"result"|"error":…}` (C1 shapes;
   `screenshot` returns `{"data":"<base64 jpeg>",…}`, the broker writes
   the file).
+- host → ext: `{"id":n,"agent":"…","op":"peek","args":{"target",
+  "max_width"}}` (ctl `peek`, docs/issues/18 step 5) → the screenshot's
+  shape for the user's window, only while that agent's debugger is
+  attached to the tab (never attaches to look; else `not_found`), quiet:
+  no cursor, no touch mark, not queued as an action. The broker returns
+  it inline and writes no file.
 - host → ext: `{"id":n,"op":"show","args":{"url","url_prefix"?}}`, no
   agent: the tab whose URL is under `url_prefix` (default `url`; equal, or
   the next char is `/ ? #`) in a group titled exactly `bise` comes
@@ -257,6 +263,10 @@ The helper (`dev.bise.computer-use`) is started by the broker with
   → `{"id":n,"ok":…,"result"|"error":…}` (C1 shapes, `window` included).
 - `screenshot` returns `{"data":"<base64 jpeg>","mime":"image/jpeg",
   "width","height"}`; the broker writes the file, as in C4.
+- `peek` (ctl `peek`, docs/issues/18 step 5): `{"target","max_width"}`
+  → the same shape, only while the helper drives that app for that agent
+  (not released, paused or stopped; else `not_found`); no event, no
+  cursor; the broker returns it inline and writes no file.
 - No agent: `{"id":n,"op":"permissions"}` → `{accessibility,
   screen_recording}`; `{"id":n,"op":"request","what":"accessibility|
   screen_recording"}` (shows the macOS prompt, opens the right System
@@ -291,7 +301,10 @@ The helper (`dev.bise.computer-use`) is started by the broker with
   the hub turns `stopped` into main's feed line.
 - Commands: `bise computer-use stop <agent>|--all`, `pause <agent>`
   (docs/issues/18 step 4: take over; `not_found` if it drives nothing),
-  `resume <agent>`,
+  `resume <agent>`; ctl `peek` (step 5, no CLI: the desktop core's) →
+  `{data,mime,width,height,target,url|title,at_ms}` inline, never
+  stored, `not_found` unless it drives, `too_soon` (`retry_ms`) past one
+  per second per agent;
   `drop <agent>` (the hub calls it at `/drop`), `setup-check --json`
   (the `/computer-use` rows), `repair` (rewrites manifests and shim),
   `live-test --json`, `request accessibility|screen_recording` (C5

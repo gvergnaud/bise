@@ -193,14 +193,14 @@ fn ext_reply(st: &Mutex<ExtState>, msg: &Value, jpeg: &[u8]) -> Value {
             }).collect();
             ok(json!(list))
         }
-        op @ ("snapshot" | "screenshot" | "act") => {
+        op @ ("snapshot" | "screenshot" | "peek" | "act") => {
             let Some(url) = tab.and_then(url_of) else {
                 return fail("not_found", "no such tab", json!({}));
             };
             match op {
                 "snapshot" => ok(json!({"target": args["target"], "url": url, "title": "Test page",
                     "text": "# Test page · 127.0.0.1\n- button \"Click me\" [e1]\n- textbox \"Your name\" [e2]", "refs": 2, "truncated": false})),
-                "screenshot" => ok(json!({"data": b64::encode(jpeg), "mime": "image/jpeg", "width": 1600, "height": 90})),
+                "screenshot" | "peek" => ok(json!({"data": b64::encode(jpeg), "mime": "image/jpeg", "width": 1600, "height": 90})),
                 _ => {
                     let name = args["locator"]["name"].as_str().unwrap_or("");
                     let action = args["action"].as_str().unwrap_or("");
@@ -884,6 +884,53 @@ fn the_user_takes_over_from_the_window() {
     assert_eq!(e["code"], "paused");
     ctl("resume").unwrap();
     ok(&mut a, "act", json!({"target": t, "action": "click"}));
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// docs/issues/18 step 5: ctl `peek` shows the user a still of what an
+/// agent drives: inline, never written, only while it drives, one per
+/// second, not counted as its action, and never an agent's tool.
+#[test]
+fn the_window_peeks_at_what_an_agent_drives() {
+    let (d, p) = paths();
+    let o = opts(&p);
+    let brokers: Brokers = Default::default();
+    brokers.lock().unwrap().push(broker::start(o.clone()).unwrap());
+    let ext = FakeExt::start(&p, starter(o, brokers.clone()), "chrome", jpeg(&d));
+    connected(&p, 1);
+    let peek = || Conn::ctl(&p).unwrap().call("peek", &json!({"agent": "api-v2", "max_width": 640})).unwrap();
+    assert_eq!(peek().unwrap_err()["code"], "not_found", "it drives nothing yet");
+    let tmp = d.join("agent-tmp");
+    let mut a = agent(&p, "api-v2", &tmp);
+    let t = ok(&mut a, "open", json!({"url": "https://github.com/"}))["target"].as_str().unwrap().to_string();
+    let before = state::read(&p)["agents"]["api-v2"].clone();
+
+    let r = peek().unwrap();
+    assert_eq!((r["target"].as_str(), r["url"].as_str(), r["mime"].as_str()), (Some(t.as_str()), Some("https://github.com/"), Some("image/jpeg")));
+    assert!(!r["data"].as_str().unwrap().is_empty() && r["at_ms"].as_u64().is_some() && r.get("path").is_none());
+    // the extension got a C4 peek on that tab, with the asked width
+    let req = ext.st.lock().unwrap().requests.iter().rev().find(|m| m["op"] == "peek").cloned().unwrap();
+    assert_eq!((req["args"]["target"].as_str(), req["args"]["max_width"].as_u64()), (Some(t.as_str()), Some(640)));
+    // never stored: no file in the agent's TMPDIR, nor in the broker's run dir
+    let files = |dir: &std::path::Path| std::fs::read_dir(dir).map(|r| r.flatten().filter(|e| e.path().extension().is_some_and(|x| x == "jpg")).count()).unwrap_or(0);
+    assert_eq!((files(&tmp), files(&p.run)), (0, 0));
+    // not the agent's action: its state line is as it was
+    assert_eq!(state::read(&p)["agents"]["api-v2"], before);
+    // one per second
+    let e = peek().unwrap_err();
+    assert_eq!(e["code"], "too_soon");
+    assert!(e["retry_ms"].as_u64().unwrap() <= 1000);
+    // an agent can't peek (not one of its tools)
+    assert_eq!(code(&mut a, "peek", json!({"agent": "api-v2"}))["code"], "bad_args");
+    // paused, or released at the end of its turn: nothing to show
+    std::thread::sleep(Duration::from_millis(1050));
+    Conn::ctl(&p).unwrap().call("pause", &json!({"agent": "api-v2"})).unwrap().unwrap();
+    assert_eq!(peek().unwrap_err()["code"], "not_found");
+    Conn::ctl(&p).unwrap().call("resume", &json!({"agent": "api-v2"})).unwrap().unwrap();
+    ok(&mut a, "act", json!({"target": t, "action": "click"}));
+    Conn::ctl(&p).unwrap().call("release", &json!({"agent": "api-v2"})).unwrap().unwrap();
+    std::thread::sleep(Duration::from_millis(1050));
+    assert_eq!(peek().unwrap_err()["code"], "not_found");
     let _ = std::fs::remove_dir_all(&d);
 }
 

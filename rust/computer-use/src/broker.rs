@@ -30,6 +30,7 @@ use crate::proto::{err, short_host, str_of, Target, TOOLS};
 use crate::{image, refuse, state};
 
 mod ctl;
+mod peek;
 mod status;
 use ctl::{ctl_loop, release, stop_agent};
 use status::{full_status, status, write_state};
@@ -149,6 +150,10 @@ struct Inner {
     seen: HashMap<String, (String, String)>,
     /// app target -> its name (from `apps`)
     app_names: HashMap<String, String>,
+    /// agent -> the target it drove last (what ctl `peek` shows)
+    last_target: HashMap<String, String>,
+    /// agent -> its last ctl `peek` (one per `peek::PEEK_EVERY`)
+    peeks: HashMap<String, Instant>,
     /// live agent connections per agent
     sessions: HashMap<String, usize>,
     conns: usize,
@@ -840,6 +845,7 @@ fn handle(sh: &Arc<Shared>, agent: &str, tmpdir: &std::path::Path, op: &str, arg
             if let Some(t) = str_of(&r, "target") {
                 lock(&sh.inner).owners.insert((agent.to_string(), t.to_string()), link);
                 remember(sh, t, &r);
+                lock(&sh.inner).last_target.insert(agent.to_string(), t.to_string());
             }
             driving(sh, agent, b.name, &short_host(str_of(&r, "url").unwrap_or(url)));
             Ok(r)
@@ -934,6 +940,9 @@ fn on_target(sh: &Arc<Shared>, agent: &str, tmpdir: &std::path::Path, op: &str, 
     };
     if action == "close" {
         lock(&sh.inner).owners.remove(&(agent.to_string(), ts.to_string()));
+        lock(&sh.inner).last_target.retain(|a, t| !(a == agent && t == ts));
+    } else {
+        lock(&sh.inner).last_target.insert(agent.to_string(), ts.to_string());
     }
     let place = if place.is_empty() {
         lock(&sh.inner).seen.get(ts).map(|(u, _)| short_host(u)).unwrap_or_default()
