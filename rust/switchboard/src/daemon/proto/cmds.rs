@@ -311,14 +311,15 @@ impl Shell {
             // TUI's /stop: idle, nothing to stop; the computer-use stop
             // waits for issue 18's ctl ops)
             Slash::Stop(name) => {
-                if self.dir_of(&name).is_none() {
+                let Some(dir) = self.dir_of(&name) else {
                     return self.proto_error_cid(id, tag, &format!("/stop: no agent named {name}"), cid, refused);
-                }
+                };
                 let working = self.hub.st.agents.get(&name).is_some_and(|a| a.status() == crate::model::Status::Working);
                 if working {
                     // TODO(client-protocol P3): the old untyped op door, replaced by P3's typed interrupt
                     self.client_line(id, json!({"op": "interrupt", "agent": name}));
                 }
+                self.computer_use_stop(&dir);
             }
             // the daemon's `version` op, the TUI's (his authority: this is
             // the client socket, docs/issues/16)
@@ -347,5 +348,21 @@ impl Shell {
             }
             Slash::Step(cmd) => self.stepping(id, tag, cid, |sh| sh.step(Input::UserCmd { client: id, focus: agent, cmd })),
         }
+    }
+
+    /// /stop's computer-use half (computer-use-design §7.3): the agent in
+    /// `dir` lets go of Chrome and its apps, through the one call the
+    /// TUI's /stop makes (`bise_computer_use::cli::stop_agent`, by its key:
+    /// this hub's tag id, the hash of its own socket path, and `dir`), on a
+    /// thread, never on the hub's loop. The window hears nothing of it; a
+    /// refusal (a hub that is an agent's process) is one log line.
+    pub(super) fn computer_use_stop(&self, dir: &str) {
+        let key = bise_computer_use::who::key(&self.opts.paths.proc_hub(), dir);
+        let paths = self.opts.paths.clone();
+        std::thread::spawn(move || {
+            if let bise_computer_use::cli::StopOutcome::Refused(why) = bise_computer_use::cli::stop_agent(&bise_computer_use::paths::Paths::from_env(), &key) {
+                super::super::log_line(&paths, &format!("/stop {key}: computer use refused: {why}"));
+            }
+        });
     }
 }

@@ -106,7 +106,7 @@ pub(crate) fn key(app: &mut App, k: &crossterm::event::KeyEvent, popup_open: boo
             sb.send(json!({"op": "interrupt", "agent": f}));
             // computer-use-design.md §7.3: it lets go of Chrome and its apps too
             if crate::computer_use::driving(&f).is_some() {
-                crate::computer_use::stop(&f);
+                crate::computer_use::stop(&sb.dir_of(&f));
             }
             app.interrupt_requested = true;
             push_event(

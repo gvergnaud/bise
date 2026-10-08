@@ -22,8 +22,10 @@ python3 -u tests/tui_computer_use_tmux.py
 import json
 import os
 import shutil
+import socket
 import sys
 import tempfile
+import threading
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
@@ -106,6 +108,38 @@ def main():
 
     check([row("browser", "waits", "Chrome isn't open", "open_browser"), row("extension", "not_yet"), row("live_test", "not_yet")] + NO_HELPER)
     state({})
+    # computer use's commands socket (docs/issues/18): /stop stops by the
+    # agent's key there (bise_computer_use::cli::stop_agent), not through
+    # the fake binary; a fake broker logs each command as 'ctl <op> <key>'
+    ctl = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    ctl.bind(os.path.join(run_dir, "computer-use-ctl.sock"))
+    ctl.listen(8)
+
+    def ctl_serve(conn):
+        f = conn.makefile("rwb")
+        for line in f:
+            try:
+                m = json.loads(line)
+            except ValueError:
+                continue
+            if "id" not in m:
+                continue
+            agent = (m.get("args") or {}).get("agent", "")
+            with open(os.path.join(d, "calls.log"), "a") as log:
+                log.write("ctl %s %s\n" % (m.get("op"), agent))
+            res = {"agents": {}} if m.get("op") == "status" else {"stopped": [agent]}
+            f.write((json.dumps({"id": m["id"], "ok": True, "result": res}) + "\n").encode())
+            f.flush()
+
+    def ctl_accept():
+        while True:
+            try:
+                c, _ = ctl.accept()
+            except OSError:
+                return
+            threading.Thread(target=ctl_serve, args=(c,), daemon=True).start()
+
+    threading.Thread(target=ctl_accept, daemon=True).start()
     # BISE_EXPORTS_FOR empty: an inherited stamp (the agent's shell, tmux's
     # server) would make bise_home drop BEND_RUN_DIR as stale
     env = "BISE_EXPORTS_FOR= BISE_COMPUTER_USE=%s CU_FAKE_DIR=%s BEND_CLIPBOARD_FILE=%s" % (fake, d, clip)
@@ -210,7 +244,9 @@ def main():
             t.wait_gone("you took the wheel")
             t.typed("/stop main")
             t.keys("Enter")
-            called("stop main")
+            # by main's key (<this hub's tag id>.main) on the commands socket
+            called("ctl stop ")
+            assert any(l.startswith("ctl stop ") and l.endswith(".main") and len(l.split(" ")[2].split(".")[0]) == 16 for l in calls().splitlines()), calls()
             with open(os.path.join(cu, "events.jsonl"), "a") as f:
                 f.write(json.dumps({"t": 1, "agent": "main", "event": "stopped", "by": "you", "driving": "Chrome"}) + "\n")
             state({"main": {"driving": None, "where": None, "paused": False, "stopped": True}})
@@ -220,6 +256,7 @@ def main():
             assert "stopped main:" not in sc and "no turn in progress" not in sc, sc
             shot(t, "stopped-feed-line", sc)
     finally:
+        ctl.close()
         shutil.rmtree(d, ignore_errors=True)
 
 

@@ -13,6 +13,8 @@ bend-images = { path = "../images" }
 bise-home = { path = "../home" }
 # the process table, the peer's pid and the judge (procs, peer, docs/issues/16)
 bise-peer = { path = "../peer" }
+# a window's /stop of an agent's computer use, by its key (cli::stop_agent)
+bise-computer-use = { path = "../computer-use" }
 # the typed client protocol (bise desktop S3a, daemon/proto.rs)
 bise-proto = { path = "../proto" }
 bise-session = { path = "../session" }

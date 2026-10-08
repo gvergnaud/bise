@@ -222,6 +222,47 @@ fn run_broker(paths: &Paths, a: &[&str]) -> i32 {
     }
 }
 
+/// What the user's /stop did to an agent's computer use (architect
+/// m_13415). The window and the TUI show none of them; the hub logs a
+/// refusal.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum StopOutcome {
+    /// it drove an app or a tab: it let go
+    Stopped,
+    /// it drove nothing (it is marked stopped all the same, as `bise
+    /// computer-use stop` does: it asks before it starts again)
+    NotDriving,
+    /// no broker runs: nothing to stop
+    NoBroker,
+    /// the broker refused or failed (a caller that is an agent's process)
+    Refused(String),
+}
+
+/// How long /stop waits on the broker's commands' socket.
+pub const STOP_WAIT: Duration = Duration::from_secs(2);
+
+/// The user's /stop of an agent's computer use, by its key
+/// ([`crate::who::key`]): the one call the TUI's /stop and the hub's
+/// (a window's /stop) make, on the commands' socket, each read and write
+/// within [`STOP_WAIT`]. Call it off any event loop.
+pub fn stop_agent(paths: &Paths, key: &str) -> StopOutcome {
+    let Ok(mut c) = Conn::ctl_within(paths, STOP_WAIT) else { return StopOutcome::NoBroker };
+    let call = |c: &mut Conn, op: &str, args: &Value| match c.call(op, args) {
+        Ok(Ok(v)) => Ok(v),
+        Ok(Err(e)) => Err(e["message"].as_str().unwrap_or("failed").to_string()),
+        Err(e) => Err(e.to_string()),
+    };
+    let driving = match call(&mut c, "status", &json!({})) {
+        Ok(v) => v["agents"][key]["driving"].as_str().is_some_and(|d| !d.is_empty()),
+        Err(e) => return StopOutcome::Refused(e),
+    };
+    match call(&mut c, "stop", &json!({"agent": key})) {
+        Ok(_) if driving => StopOutcome::Stopped,
+        Ok(_) => StopOutcome::NotDriving,
+        Err(e) => StopOutcome::Refused(e),
+    }
+}
+
 /// stop / resume / release / drop: through the broker, or on the files
 /// when none runs (a later broker reads state.json).
 pub fn control(paths: &Paths, cmd: &str, args: &Value) -> Result<Value, String> {

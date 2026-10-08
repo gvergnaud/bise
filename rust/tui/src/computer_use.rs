@@ -226,10 +226,16 @@ pub(crate) fn short_app(app: &str) -> String {
     cut(app, 8)
 }
 
-/// Stop `agent` (ctrl+c in its view, a click on `↖`, `/stop`): it lets
-/// go until [`resume_if_stopped`].
-pub(crate) fn stop(agent: &str) {
-    fire(&["stop", agent]);
+/// Stop the agent whose folder is `dir` (ctrl+c in its view, a click on
+/// `↖`, `/stop`): it lets go until [`resume_if_stopped`]. By its key on
+/// the commands' socket, the one call the hub's /stop makes too
+/// (`bise_computer_use::cli::stop_agent`, architect m_13415), on a thread:
+/// the TUI shows nothing of the outcome (the hub's line says it).
+pub(crate) fn stop(dir: &str) {
+    let key = bise_computer_use::who::key(HUB.get().map(String::as_str).unwrap_or(""), dir);
+    std::thread::spawn(move || {
+        let _ = bise_computer_use::cli::stop_agent(&bise_computer_use::paths::Paths::from_env(), &key);
+    });
 }
 
 /// The user writes to `agent` again: a stopped one may start again

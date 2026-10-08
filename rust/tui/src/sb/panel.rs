@@ -1047,7 +1047,7 @@ pub(crate) fn panel_mouse(app: &mut App, m: &crossterm::event::MouseEvent) -> bo
         // computer use (design §7.3): a click on `↖` stops it, from anywhere
         Some(Hit::Agent(name)) if right && crate::computer_use::driving(&name).is_some() => {
             app.sb.send(serde_json::json!({"op": "interrupt", "agent": name}));
-            crate::computer_use::stop(&name);
+            crate::computer_use::stop(&app.sb.dir_of(&name));
         }
         // site/m/artifacts D: a click on an agent's ψ opens its diff
         Some(Hit::Agent(name)) if right && sb.agent(&name).is_some_and(|a| !a.archived() && place_label(a).is_some()) => {

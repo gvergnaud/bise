@@ -124,6 +124,9 @@ pub(super) struct Agent {
     created_ms: u64,
     /// Who it waits on (`sb wait` / `sb ask`), "" when no one.
     waiting_on: String,
+    /// Its folder under the hub's `agents/` (its name but after a rename):
+    /// its computer-use key's second half (docs/issues/18)
+    dir: String,
     /// BISE-136: the private git worktree it works in (`gate.sh new`),
     /// "" when it works in its own workspace.
     place: String,
@@ -495,6 +498,12 @@ impl Sb {
 
     fn agent(&self, name: &str) -> Option<&Agent> {
         self.agents.iter().find(|a| a.name == name)
+    }
+
+    /// `name`'s folder (its name but after a rename; its name when the
+    /// hub didn't say): its computer-use key's second half.
+    pub(super) fn dir_of(&self, name: &str) -> String {
+        self.agent(name).map(|a| a.dir.clone()).filter(|d| !d.is_empty()).unwrap_or_else(|| name.to_string())
     }
 
     /// `name` works in the shared folder (no branch, no worktree of its
@@ -930,6 +939,7 @@ fn apply_state(app: &mut App, v: &Value) {
                     report_ms: x.get("report_ms").and_then(|q| q.as_u64()),
                     created_ms: x.get("created_ms").and_then(|q| q.as_u64()).unwrap_or(0),
                     waiting_on: s(x, "waiting_on"),
+                    dir: s(x, "dir"),
                     place: s(x, "place"),
                     place_id: s(x, "place_id"),
                     model: s(x, "model"),
@@ -1247,7 +1257,7 @@ pub(crate) fn handle_input(app: &mut App, v: &str) -> Vec<Ev> {
                     sb.send(json!({"op": "interrupt", "agent": name}));
                 }
                 // main's feed says it once, from the hub (m_3904)
-                crate::computer_use::stop(&name);
+                crate::computer_use::stop(&sb.dir_of(&name));
             }
             Ok(name) => out.push(Ev::Warn(format!("/stop: no agent named {name}"))),
             Err(usage) => out.push(Ev::Warn(usage)),
@@ -1688,6 +1698,20 @@ mod nav_key_tests {
             turn_ms: None,
             ..Agent::default()
         }
+    }
+
+    /// /stop's computer-use key (architect m_13415): an agent's folder from
+    /// the snapshot's `dir` (a renamed agent keeps its old folder), its name
+    /// when the hub didn't say, and the key is `<hub>.<dir>`.
+    #[test]
+    fn stop_keys_an_agent_by_its_folder() {
+        let mut app = bench::test_app();
+        app.sb.agents = vec![Agent { dir: "t1".into(), ..agent("api") }, agent("main")];
+        assert_eq!(app.sb.dir_of("api"), "t1");
+        assert_eq!(app.sb.dir_of("main"), "main");
+        assert_eq!(app.sb.dir_of("gone"), "gone");
+        let key = bise_computer_use::who::key("0123456789abcdef", &app.sb.dir_of("api"));
+        assert_eq!(bise_computer_use::who::split(&key), (Some("0123456789abcdef"), "t1"));
     }
 
     fn press(app: &mut App, code: KeyCode, m: KeyModifiers) -> bool {

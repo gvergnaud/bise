@@ -1194,6 +1194,22 @@ mod tests {
         assert_ne!(switchboard::procs::hub_id(&paths.natural_socket()), paths.proc_hub());
     }
 
+    /// /stop's computer-use key (architect m_13415): on a relocated socket
+    /// the hub (`proc_hub`) and the TUI (the hash of the socket it talks
+    /// to) make the same key for an agent's folder, and its hub half is the
+    /// tag hub id, never the hub folder's name.
+    #[test]
+    fn the_hub_and_the_tui_stop_the_same_key() {
+        use bise_computer_use::who::{key, split};
+        let state = std::path::PathBuf::from(format!("/var/folders/xy/{}/T/.bise/hubs/tmp-x-ee85d2ab", "a".repeat(80)));
+        let paths = switchboard::paths::Paths { workspace: "/w".into(), state: state.clone(), worktrees: state.join("worktrees") };
+        let hub = paths.proc_hub();
+        let tui = switchboard::procs::hub_id(&tui_socket(&paths));
+        assert_eq!(key(&tui, "docs"), key(&hub, "docs"));
+        assert_eq!(split(&key(&hub, "docs")), (Some(hub.as_str()), "docs"));
+        assert_ne!(hub, "tmp-x-ee85d2ab", "the tag id, not the folder's");
+    }
+
     #[test]
     fn called_as_sb_is_bise_sb() {
         use std::ffi::OsStr;

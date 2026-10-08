@@ -80,7 +80,19 @@ impl Conn {
     /// A command connection, on the commands' socket (docs/issues/18):
     /// the broker serves it to the user's processes only.
     pub fn ctl(paths: &Paths) -> std::io::Result<Conn> {
+        Conn::ctl_on(UnixStream::connect(paths.ctl_socket())?)
+    }
+
+    /// [`Conn::ctl`] whose every read and write waits at most `wait` (a
+    /// caller that must not hang: the hub's and the TUI's /stop).
+    pub fn ctl_within(paths: &Paths, wait: std::time::Duration) -> std::io::Result<Conn> {
         let s = UnixStream::connect(paths.ctl_socket())?;
+        s.set_read_timeout(Some(wait))?;
+        s.set_write_timeout(Some(wait))?;
+        Conn::ctl_on(s)
+    }
+
+    fn ctl_on(s: UnixStream) -> std::io::Result<Conn> {
         let mut c = Conn { r: BufReader::new(s.try_clone()?), w: s, next: 0 };
         c.send(&json!({"op": "hello", "role": "ctl"}))?;
         Ok(c)

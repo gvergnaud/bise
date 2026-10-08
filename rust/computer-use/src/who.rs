@@ -56,10 +56,18 @@ pub fn ctl_refusal(peer: &Peer) -> Option<&'static str> {
     }
 }
 
+/// An agent's key from its hub's tag id (the hash of its hub's socket
+/// path, never the hub folder's id) and its folder: the one form every
+/// caller makes it with (an agent's connection, the hub's and the TUI's
+/// /stop), `split`'s inverse.
+pub fn key(hub: &str, dir: &str) -> String {
+    bise_peer::tags::agent_key(hub, dir)
+}
+
 /// An agent connection's key, or None (refused: the peer is gone).
 pub fn agent_key(peer: &Peer, hello_name: &str) -> Option<String> {
     match peer {
-        Peer::Agent(t) => Some(bise_peer::tags::agent_key(&t.hub, &t.dir)),
+        Peer::Agent(t) => Some(key(&t.hub, &t.dir)),
         Peer::Outside if !hello_name.is_empty() => Some(hello_name.to_string()),
         _ => None,
     }
@@ -105,6 +113,17 @@ mod tests {
         assert_eq!(ctl_refusal(&Peer::Outside), None);
         assert_eq!(ctl_refusal(&Peer::Gone), Some(CTL_REFUSED));
         assert_eq!(ctl_refusal(&Peer::Agent(parse_tag(&format!("{HUB}.perf.1")).unwrap())), Some(CTL_REFUSED));
+    }
+
+    /// Law (architect m_13415): key is the one form of an agent's key and
+    /// split its inverse; an agent connection's key is the same string.
+    #[test]
+    fn a_key_splits_back_into_its_hub_and_dir() {
+        for dir in ["perf", "api-v2", "docs_2"] {
+            assert_eq!(split(&key(HUB, dir)), (Some(HUB), dir));
+            let tag = Peer::Agent(parse_tag(&format!("{HUB}.{dir}.1")).unwrap());
+            assert_eq!(agent_key(&tag, "").as_deref(), Some(key(HUB, dir).as_str()));
+        }
     }
 
     #[test]

@@ -827,6 +827,39 @@ fn who_connects_decides() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
+/// /stop by key (architect m_13415): the one call the hub's and the TUI's
+/// /stop make. A driving agent lets go (the extension gets the stop); an
+/// agent that drives nothing is NotDriving; a caller that is an agent's
+/// process is Refused; no broker is NoBroker. Never an error to the user.
+#[test]
+fn stop_agent_by_key() {
+    use crate::who::{key, Peer};
+    let (d, p) = paths();
+    let o = opts(&p);
+    let brokers: Brokers = Default::default();
+    brokers.lock().unwrap().push(broker::start(o.clone()).unwrap());
+    let ext = FakeExt::start(&p, starter(o, brokers.clone()), "chrome", jpeg(&d));
+    connected(&p, 1);
+    let aa = "00000000000000aa";
+    next_peer(&p, Peer::Agent(bise_peer::tags::parse_tag(&format!("{aa}.perf.1")).unwrap()));
+    let mut a = agent(&p, "main", &d);
+    ok(&mut a, "open", json!({"url": "https://a.org"}));
+    let k = key(aa, "perf");
+    assert_eq!(cli::stop_agent(&p, &k), cli::StopOutcome::Stopped);
+    wait_until("the stop reaches the extension", || ext.control().contains(&json!({"stop": k})));
+    assert_eq!(code(&mut a, "open", json!({"url": "https://a.org"}))["code"], "stopped");
+    assert_eq!(cli::stop_agent(&p, &key(aa, "docs")), cli::StopOutcome::NotDriving);
+    next_peer(&p, Peer::Agent(bise_peer::tags::parse_tag(&format!("{aa}.perf.1")).unwrap()));
+    assert_eq!(cli::stop_agent(&p, &k), cli::StopOutcome::Refused(crate::who::CTL_REFUSED.into()));
+    for h in brokers.lock().unwrap().drain(..) {
+        h.shutdown();
+    }
+    let (d2, p2) = paths();
+    assert_eq!(cli::stop_agent(&p2, &k), cli::StopOutcome::NoBroker);
+    let _ = std::fs::remove_dir_all(&d);
+    let _ = std::fs::remove_dir_all(&d2);
+}
+
 /// docs/issues/18 step 4: ctl `pause` takes over from the window without
 /// touching a tab: the agent's acts get `paused`, the browser lets go of it,
 /// the event says paused by you; `resume` hands it back; an idle agent
