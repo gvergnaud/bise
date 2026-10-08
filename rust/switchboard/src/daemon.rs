@@ -1785,39 +1785,6 @@ impl Shell {
             "artifacts" => self.artifacts_op(id, &v),
             "diff" => self.diff_op(id, &v),
             "branches" => self.branches_op(id),
-            // shift+tab, `/approvals [yolo|auto]` (approvals-design.md §8)
-            "approvals" => {
-                let m = match s("mode").as_str() {
-                    "toggle" => Some(self.gates.mode.other()),
-                    w => crate::approvals::Mode::parse(w),
-                };
-                if let Some(m) = m {
-                    self.set_mode(m);
-                    let ev = self.approvals_ev(true);
-                    self.broadcast(&ev);
-                } else {
-                    let mut ev = self.approvals_ev(false);
-                    ev["show"] = json!(true);
-                    if let Some(c) = self.clients.get_mut(&id) {
-                        write_json(c, &ev);
-                    }
-                }
-            }
-            // `/approvals`, backspace on a rule: the user removes it
-            "remove_rule" => {
-                if let Err(e) = self.remove_rule(v.get("rule").unwrap_or(&Value::Null)) {
-                    let mut ev = self.approvals_ev(false);
-                    ev["error"] = json!(e);
-                    if let Some(c) = self.clients.get_mut(&id) {
-                        write_json(c, &ev);
-                    }
-                }
-            }
-            "confirm" => self.step(Input::ClientConfirm {
-                client: id,
-                id: v.get("id").and_then(|x| x.as_u64()).unwrap_or(0),
-                yes: v.get("yes").and_then(|x| x.as_bool()).unwrap_or(false),
-            }),
             // the menu bar's 'stop watching' (amb-mac m_5435), `/scheduled`'s
             // x (stop) and r (run now)
             "every_stop" => self.step(Input::EveryStop {

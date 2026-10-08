@@ -135,7 +135,7 @@ fn rule_json(r: &rules::Rule) -> Value {
     })
 }
 
-/// The rule a `remove_rule` op names (the fields `rule_json` gave).
+/// The rule approvals/removeRule names (the fields `rule_json` gave).
 pub(super) fn rule_of_json(v: &Value) -> Option<rules::Rule> {
     let s = |k: &str| v.get(k).and_then(|x| x.as_str()).map(str::to_string);
     Some(rules::Rule {

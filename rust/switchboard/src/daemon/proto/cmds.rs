@@ -116,7 +116,7 @@ impl Shell {
                     sh.step(Input::ClientConfirm { client: id, id: cid, yes });
                 });
             }
-            // bar V8/W21: the TUI's `approvals` op, typed (his command:
+            // bar V8/W21: shift+tab and `/approvals [yolo|auto]` (his command:
             // docs/issues/16 keeps agents' connections from it). A mode
             // sets it and every connection hears it (with flash); none
             // answers this connection; another word is refused

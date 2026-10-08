@@ -21,6 +21,13 @@ pub(crate) enum Then {
     /// nothing but its refusal, shown like a notice (an action whose
     /// change comes in the hub's events)
     Shown,
+    /// `/approvals`' read (approvals/set without a mode): the mode, the
+    /// checker and the rules, and its screen opens
+    Approvals,
+    /// a rule out of approvals.toml (approvals/removeRule): the new list
+    /// comes in the hub's `approvals` event; a refusal is said on the
+    /// screen, or as `/approvals: <why>` when it closed
+    RuleRemoved,
 }
 
 /// The requests waiting for their answer, by id.
@@ -72,12 +79,18 @@ pub(super) fn answered(app: &mut App, v: Value) {
 }
 
 fn run(app: &mut App, then: Then, r: Response) {
-    if let Some(e) = r.error {
-        refused(app, &e.message);
-        return;
-    }
-    match then {
-        Then::Shown => {}
+    let result = match r.error {
+        Some(e) => Err(e.message),
+        None => Ok(r.result.unwrap_or(Value::Null)),
+    };
+    match (then, result) {
+        (Then::RuleRemoved, Err(e)) => rule_refused(app, &e),
+        (_, Err(e)) => refused(app, &e),
+        (Then::Shown | Then::RuleRemoved, Ok(_)) => {}
+        (Then::Approvals, Ok(mut v)) => {
+            v["show"] = json!(true);
+            approvals_event(app, &v);
+        }
     }
 }
 
@@ -85,6 +98,16 @@ fn run(app: &mut App, then: Then, r: Response) {
 fn refused(app: &mut App, text: &str) {
     for l in text.lines() {
         push_event(&mut app.events, &mut app.cache, Ev::Info(l.to_string()));
+    }
+}
+
+/// A rule the hub could not remove: why, on the screen when it is open.
+fn rule_refused(app: &mut App, why: &str) {
+    match app.approvals.as_mut() {
+        Some(s) => s.said = Some(why.to_string()),
+        None => {
+            push_event(&mut app.events, &mut app.cache, Ev::Warn(format!("/approvals: {why}")));
+        }
     }
 }
 
@@ -108,5 +131,38 @@ mod tests {
         answered(&mut app, json!({"jsonrpc": "2.0", "id": id, "result": {}}));
         answered(&mut app, json!({"jsonrpc": "2.0", "id": 999, "result": {}}));
         assert_eq!(app.events.len(), n + 1);
+    }
+
+    /// The id of the one waiting request.
+    fn waiting(app: &App) -> u64 {
+        *app.sb.rpc.waiting.keys().next().unwrap()
+    }
+
+    #[test]
+    fn approvals_read_opens_its_screen_and_a_refused_removal_says_why_as_before() {
+        let mut app = crate::sb::bench::test_app();
+        app.sb.call("approvals/set", json!({}), Then::Approvals);
+        let id = waiting(&app);
+        answered(&mut app, json!({"jsonrpc": "2.0", "id": id, "result": {"mode": "auto", "env": false, "checker": "off",
+            "checker_who": "", "repo": "/r", "rules": [{"tool": "bash", "pattern": "cargo test *", "what": "cargo test *"}]}}));
+        assert!(app.approvals.is_some(), "the read opens /approvals");
+        assert_eq!((app.sb.approvals.mode.as_str(), app.sb.approvals.rules.len()), ("auto", 1));
+        // the screen open: the refusal is said there
+        app.sb.call("approvals/removeRule", json!({"rule": {"tool": "bash"}}), Then::RuleRemoved);
+        let (id, n) = (waiting(&app), app.events.len());
+        answered(&mut app, json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32011, "message": "gone already"}}));
+        assert_eq!(app.approvals.as_ref().unwrap().said.as_deref(), Some("gone already"));
+        assert_eq!(app.events.len(), n);
+        // closed: a warning, as the approvals event with an error showed it
+        app.approvals = None;
+        app.sb.call("approvals/removeRule", json!({"rule": {"tool": "bash"}}), Then::RuleRemoved);
+        let id = waiting(&app);
+        answered(&mut app, json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32011, "message": "gone already"}}));
+        assert!(matches!(app.events.last(), Some(Ev::Warn(w)) if w == "/approvals: gone already"));
+        // done: nothing here (the hub's approvals event has the new list)
+        app.sb.call("approvals/removeRule", json!({"rule": {"tool": "bash"}}), Then::RuleRemoved);
+        let (id, n) = (waiting(&app), app.events.len());
+        answered(&mut app, json!({"jsonrpc": "2.0", "id": id, "result": {}}));
+        assert_eq!(app.events.len(), n);
     }
 }

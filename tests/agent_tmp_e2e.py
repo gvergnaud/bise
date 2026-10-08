@@ -95,7 +95,7 @@ def main():
                or any(n.get("ev") == "confirm" for n in c.notices()), 30, "tt dropped or a confirmation")
         conf = [n for n in c.notices() if n.get("ev") == "confirm"]
         if conf:
-            c.send({"op": "confirm", "id": conf[-1]["id"], "yes": True})
+            c.confirm(conf[-1]["id"], True)
         c.wait_status("tt", "archived", 30)
         c.wait(lambda: not os.path.exists(tmp), 10, "the dropped task's tmp/ removed")
         check(os.path.isdir(run), "its run/ stays")

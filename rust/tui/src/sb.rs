@@ -916,7 +916,7 @@ fn approvals_event(app: &mut App, v: &Value) {
 pub(crate) fn toggle_approvals(app: &mut App) {
     // an older hub never said a mode: it has no switch
     if !app.sb.approvals.mode.is_empty() {
-        app.sb.send(serde_json::json!({"op": "approvals", "mode": "toggle"}));
+        app.sb.call("approvals/set", json!({"mode": "toggle"}), rpc::Then::Shown);
     }
 }
 
@@ -1143,7 +1143,7 @@ pub(crate) fn handle_input(app: &mut App, v: &str) -> Vec<Ev> {
         let no = matches!(t.as_str(), "n" | "no" | "non");
         if yes || no {
             sb.confirm = None;
-            sb.send(json!({"op": "confirm", "id": id, "yes": yes}));
+            sb.call("confirm/answer", json!({"id": id, "yes": yes}), rpc::Then::Shown);
             return out;
         }
     }
@@ -1238,9 +1238,9 @@ pub(crate) fn handle_input(app: &mut App, v: &str) -> Vec<Ev> {
         // approvals-design.md §8: the mode, the checker, the rules; or a switch
         // one parse with the hub's slash (bise_proto::slash::approvals)
         "/approvals" => match bise_proto::slash::approvals(&typed) {
-            Some(Ok(Some(bise_proto::rows::ApprovalMode::Yolo))) => sb.send(serde_json::json!({"op": "approvals", "mode": "yolo"})),
-            Some(Ok(Some(bise_proto::rows::ApprovalMode::Auto))) => sb.send(serde_json::json!({"op": "approvals", "mode": "auto"})),
-            Some(Ok(_)) => sb.send(serde_json::json!({"op": "approvals", "mode": ""})),
+            Some(Ok(Some(bise_proto::rows::ApprovalMode::Yolo))) => sb.call("approvals/set", json!({"mode": "yolo"}), rpc::Then::Shown),
+            Some(Ok(Some(bise_proto::rows::ApprovalMode::Auto))) => sb.call("approvals/set", json!({"mode": "auto"}), rpc::Then::Shown),
+            Some(Ok(_)) => sb.call("approvals/set", json!({}), rpc::Then::Approvals),
             Some(Err(words)) => out.push(Ev::Warn(words)),
             None => {}
         },

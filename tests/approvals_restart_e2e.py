@@ -90,23 +90,21 @@ def main():
         check('from = "card #%d, tr"' % card["id"] in rules, "the rule says where it came from: %r" % rules)
 
         # 3. /approvals: the rule listed, then removed
-        c.send({"op": "approvals", "mode": ""})
-        c.wait(lambda: approvals(c).get("show"), 10, "the /approvals answer")
-        ev = approvals(c)
+        ev = c.approvals_set()["result"]
         mine = [r for r in ev["rules"] if r["tool"] == "bash"]
         check(len(mine) == 1 and mine[0]["from"] == "card #%d, tr" % card["id"], "the rule is listed: %r" % ev["rules"])
-        check(any(r["tool"] == "gmail.send_email" and r["project"] is None for r in ev["rules"]),
+        check(any(r["tool"] == "gmail.send_email" and r.get("project") is None for r in ev["rules"]),
               "a rule of every project is listed: %r" % ev["rules"])
         check(ev["repo"] and ev["checker"] == "off", "the repo and the checker: %r" % ev)
         n = len(c.events)
-        c.send({"op": "remove_rule", "rule": mine[0]})
+        gone = c.rpc("approvals/removeRule", {"project": c.project(), "rule": mine[0]})
+        check(gone.get("result") == {}, "the removal answered: %r" % gone)
         c.wait(lambda: any(e.get("ev") == "approvals" and not any(r["tool"] == "bash" for r in e["rules"])
                            for e in c.events[n:]), 10, "the new list without it")
         rules = open(os.path.join(bise, "approvals.toml")).read()
         check(rules == '# mine\n[[allow]]\ntool = "gmail.send_email"\n', "only it left the file: %r" % rules)
-        n = len(c.events)
-        c.send({"op": "remove_rule", "rule": mine[0]})
-        c.wait(lambda: any(e.get("error") for e in c.events[n:]), 10, "a second remove says why")
+        again = c.rpc("approvals/removeRule", {"project": c.project(), "rule": mine[0]})
+        check("no longer" in again.get("error", {}).get("message", ""), "a second remove says why: %r" % again)
 
         # 4. a card whose REPL died with the hub: it closes
         out4 = os.path.join(home, "outside4.txt")

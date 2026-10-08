@@ -258,6 +258,18 @@ class Client:
         """ctrl+c on `agent` (turn/interrupt): its response."""
         return self.rpc("turn/interrupt", {"project": self.project(), "agent": agent})
 
+    def confirm(self, cid, yes):
+        """y or n to the hub's question `cid` (confirm/answer): its response."""
+        return self.rpc("confirm/answer", {"project": self.project(), "id": cid, "yes": yes})
+
+    def approvals_set(self, mode=None):
+        """shift+tab (`toggle`), `/approvals yolo|auto`, or with no mode
+        `/approvals`' read (approvals/set): its response."""
+        params = {"project": self.project()}
+        if mode is not None:
+            params["mode"] = mode
+        return self.rpc("approvals/set", params)
+
     def lines(self, agent=None):
         with self.lock:
             return [e["line"] for e in self.events if e.get("ev") == "line" and (agent is None or e["agent"] == agent)]
@@ -442,7 +454,7 @@ def t_worktree_drop_restore(E, c):
     c.wait(lambda: any(n.get("ev") == "confirm" for n in c.notices()), 30, "a confirmation")
     conf = [n for n in c.notices() if n.get("ev") == "confirm"][-1]
     check("1 unpushed commit" in conf["text"], conf["text"])
-    c.send({"op": "confirm", "id": conf["id"], "yes": True})
+    check("error" not in c.confirm(conf["id"], True), "the confirm is answered")
     c.wait_status("t4", "archived", 30)
     check(not os.path.exists(wt), "worktree removed")
     check(not os.path.exists(os.path.dirname(wt)), "and its folder")

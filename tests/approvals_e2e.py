@@ -84,7 +84,7 @@ def main():
         check(not any(l.startswith("sb gate") for l in c.lines("ty")), "no gate line in yolo")
 
         # 2. shift+tab: auto, in config.toml, the mode files, after a restart
-        c.send({"op": "approvals", "mode": "toggle"})
+        check(c.approvals_set("toggle").get("result") == {}, "shift+tab answered")
         c.wait(lambda: approvals(c)["mode"] == "auto" and approvals(c)["flash"], 10, "the switch to auto")
         cfg = open(os.path.join(bise, "config.toml")).read()
         check('approvals = "auto"' in cfg and '[roles]' in cfg, "config.toml remembers it: %r" % cfg)

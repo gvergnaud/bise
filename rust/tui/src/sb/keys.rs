@@ -158,7 +158,7 @@ pub(crate) fn key(app: &mut App, k: &crossterm::event::KeyEvent, popup_open: boo
         }
         (KeyCode::Esc, _) if !popup_open => {
             if let Some((id, _)) = sb.confirm.take() {
-                sb.send(json!({"op": "confirm", "id": id, "yes": false}));
+                sb.call("confirm/answer", json!({"id": id, "yes": false}), super::rpc::Then::Shown);
                 return true;
             }
             if sb.selected.is_some() || sb.preview {

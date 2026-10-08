@@ -1,7 +1,7 @@
 //! `/approvals` (approvals-design.md §8, designer's mock A, 17): one
 //! screen for the mode, the checker and the saved rules of this repo.
 //! ↑↓ choose a rule, backspace asks once, inline ("remove cargo test *?
-//! enter yes · esc no"), enter removes it (the hub's `remove_rule`),
+//! enter yes · esc no"), enter removes it (the hub's approvals/removeRule),
 //! shift+tab switches the mode, esc closes. The rules come live from the
 //! hub's `approvals` event (`app.sb.approvals`).
 
@@ -45,7 +45,7 @@ pub(crate) fn on_key(app: &mut App, k: &KeyEvent) -> bool {
             s.said = None;
             if let Some(r) = app.sb.approvals.rules.get(s.sel) {
                 let rule = r.raw.clone();
-                app.sb.send(serde_json::json!({"op": "remove_rule", "rule": rule}));
+                app.sb.call("approvals/removeRule", serde_json::json!({"rule": rule}), crate::sb::rpc::Then::RuleRemoved);
             }
         }
         KeyCode::Backspace | KeyCode::Delete if n > 0 => {

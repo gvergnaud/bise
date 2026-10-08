@@ -26,9 +26,9 @@ from e2e import Env, check  # noqa: E402
 
 ATTACKER = r'''
 import json, os, socket, sys, time
-sock, go, out = sys.argv[1:4]
+sock, go, out, project = sys.argv[1:5]
 open(go).read()  # a fifo: blocks until the test says go
-lines = [{"op": "approvals", "mode": "toggle"}]
+lines = [{"jsonrpc": "2.0", "id": 1, "method": "approvals/set", "params": {"project": project, "mode": "toggle"}}]
 lines += [{"op": "input", "focus": "main", "text": "/answer %d allow" % n} for n in range(1, 40)]
 got = b""
 try:
@@ -102,11 +102,12 @@ def main():
 
         # 1-3. a1: the script left behind, the issue's command, SB_SOCKET, sb
         c.say(
-            "/new a1: {{bash: nohup python3 %s %s %s %s </dev/null >/dev/null 2>&1 & echo started}} "
-            "{{bash: printf '{\"op\":\"hello\"}\\n{\"op\":\"approvals\",\"mode\":\"toggle\"}\\n' | nc -U -w 3 %s > %s 2>&1; echo a}} "
+            "/new a1: {{bash: nohup python3 %s %s %s %s %s </dev/null >/dev/null 2>&1 & echo started}} "
+            "{{bash: printf '{\"op\":\"hello\"}\\n{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"approvals/set\","
+            "\"params\":{\"project\":\"%s\",\"mode\":\"toggle\"} }\\n' | nc -U -w 3 %s > %s 2>&1; echo a}} "
             "{{bash: printf '{\"op\":\"hello\"}\\n' | nc -U -w 3 \"$SB_SOCKET\" > %s 2>&1; echo b}} "
             "{{bash: sb list > %s 2>&1; echo d}}"
-            % (att, hub_sock, go, out_c, hub_sock, out_a, out_b, out_d)
+            % (att, hub_sock, go, out_c, c.project(), c.project(), hub_sock, out_a, out_b, out_d)
         )
         c.wait(lambda: c.agent("a1") is not None, 60, "a1")
         c.wait(lambda: "main" in read(out_d), 120, "a1's sb list answered: %r" % read(out_d))
@@ -119,7 +120,7 @@ def main():
               "hub.log names a1: %r" % read(log)[-2000:])
 
         # 4. auto, a card for a2; then the script left behind tries its luck
-        c.send({"op": "approvals", "mode": "toggle"})
+        c.approvals_set("toggle")
         c.wait(lambda: approvals(c)["mode"] == "auto", 10, "the switch to auto")
         outside = os.path.join(home, "outside.txt")
         c.say("/new a2: {{bash: echo x > %s}}" % outside)
