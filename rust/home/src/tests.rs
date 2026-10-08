@@ -53,6 +53,7 @@ fn bise_home_moves_everything() {
     assert_eq!(h.user_home(), p("/h"));
     assert_eq!(h.config_file(), p("/b/config.toml"));
     assert_eq!(h.auth_file(), p("/b/auth.json"));
+    assert_eq!(h.secrets_dir(), p("/b/secrets"));
     assert_eq!(h.env_files(), vec![p("/b/.env"), p("/h/.bend-harness/.env"), p("/h/.vibe/.env")]);
     assert_eq!(h.sessions_dir(), p("/b/sessions"));
     assert_eq!(h.hub_dir("ws-1"), p("/b/hubs/ws-1"));

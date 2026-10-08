@@ -17,7 +17,7 @@ pub fn store_dir() -> PathBuf {
         .ok()
         .filter(|s| !s.is_empty())
         .map(PathBuf::from)
-        .unwrap_or_else(|| bise_home::Home::from_env().root().join("secrets").join("mcp-oauth"))
+        .unwrap_or_else(|| bise_home::Home::from_env().secrets_dir().join("mcp-oauth"))
 }
 
 /// The canonical server URL: the resource the tokens are for (no

@@ -140,6 +140,10 @@ fn s(t: impl Into<String>, c: ratatui::style::Color) -> Span<'static> {
     Span::styled(t.into(), Style::default().fg(c))
 }
 
+/// Under `mode yolo` (designer m_13494): the sandbox, and its read deny of
+/// the secrets (docs/issues/19), holds in auto only.
+const YOLO_SECRETS: &str = "in yolo, commands run without the sandbox: agents can read your keys, sign-ins and ssh keys.";
+
 fn pad(t: &str, w: usize) -> String {
     format!("{t}{}", " ".repeat(w.saturating_sub(t.width())))
 }
@@ -219,6 +223,23 @@ pub(crate) fn lines(a: &Approvals, sc: &Screen, days: &[Option<i64>], w: usize, 
     };
     let st = if ascii { "shift+tab" } else { "⇧⇥" };
     v.push(row("mode", &mode, &format!("{st} switches")));
+    if a.word() == "yolo" {
+        // docs/issues/19: the sandbox's read deny holds in auto only (designer m_13494)
+        // under the value, wrapped at the screen's width
+        let (indent, room) = (pad("", 13), w.saturating_sub(13).max(20));
+        let mut row = String::new();
+        for word in YOLO_SECRETS.split(' ') {
+            if !row.is_empty() && row.width() + 1 + word.width() > room {
+                v.push(Line::from(s(format!("{indent}{row}"), theme::dim())));
+                row.clear();
+            }
+            if !row.is_empty() {
+                row.push(' ');
+            }
+            row.push_str(word);
+        }
+        v.push(Line::from(s(format!("{indent}{row}"), theme::dim())));
+    }
     v.push(row("checker", &checker, "/models changes it"));
     v.push(Line::raw(""));
     v.push(Line::from(s("  always allowed here", theme::dim())));
@@ -356,6 +377,23 @@ what runs without asking you in /w/acme.
 
 ↑↓ choose · backspace remove · esc back"
         );
+    }
+
+    /// docs/issues/19 (designer m_13494): yolo says its agents can read
+    /// the secrets the sandbox closes in auto; auto says nothing.
+    #[test]
+    fn yolo_says_the_secrets_are_open() {
+        let mut a = state();
+        a.mode = "yolo".into();
+        let t = text(&lines(&a, &Screen::default(), &[], 110, 40));
+        assert!(t.contains("  mode       yolo") && t.contains(&format!("\n             {YOLO_SECRETS}\n")), "{t}");
+        // narrower: wrapped under the value, every word kept
+        let t = text(&lines(&a, &Screen::default(), &[], 80, 40));
+        assert!(
+            t.contains("\n             in yolo, commands run without the sandbox: agents can read your\n             keys, sign-ins and ssh keys.\n"),
+            "{t}"
+        );
+        assert!(!text(&lines(&state(), &Screen::default(), &[], 100, 40)).contains("without the sandbox"));
     }
 
     #[test]

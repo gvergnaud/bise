@@ -1,6 +1,9 @@
 # 19 · a sandboxed agent can read every secret bise keeps
 
-Status: open. Found by architect while reviewing keychain-secrets' plan (m_13191, correction m_13201). Read from the code, not exploited. Label: security.
+Status: files mode and ~/.ssh fixed (step A, sandbox-secrets, architect's plan m_13469); keychain mode follows (step B: bise's items in their own keychain file under `~/.bise/secrets/`, which the read deny closes). Found by architect while reviewing keychain-secrets' plan (m_13191, correction m_13201). Read from the code, not exploited. Label: security.
+
+- **Step A (done):** `approvals/secrets.rs` is the one list (`auth.json` and `secrets/` from `bise_home`, `~/.ssh` but `config*`, `known_hosts*`, `authorized_keys*`, `*.pub`, `agent/`), read by the profile's `(deny file-read-data …)` and write deny, by `Denial::Secret` (a stopped read: one line, no card, no checker, no rerun without the sandbox) and by `allow_flags` (a command that names a secret never skips the sandbox). /approvals says in yolo that agents can read them. Measured under the real `sandbox-exec`: `cat`, `cp`, python, `ls`, `base64 <`, a link: refused; ssh with the key in ssh-agent works with the key file closed (a key only on disk: the line names `ssh-add`); gh's credential helper, `security` on a keychain, `~/.gitconfig`, `~/.ssh/config`, `known_hosts`, `*.pub`, `~/.config/gh` still read. Found on the way: docs/issues/20 (a sandboxed command can drive a process outside the sandbox, tmux measured).
+- **Step B (next):** measured that a read deny on a keychain FILE blocks its items (`security find-generic-password` = 44 under the deny), so gh and git keep the login keychain and `/usr/bin/security` stays open.
 
 ## The problem
 

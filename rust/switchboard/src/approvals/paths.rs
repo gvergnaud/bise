@@ -115,12 +115,9 @@ impl Roots {
         if p.starts_with(&self.tmp) {
             return None;
         }
-        let bise_files = [
-            self.bise.join("hubs"),
-            self.bise.join("approvals.toml"),
-            self.bise.join("auth.json"),
-        ];
-        if bise_files.iter().any(|f| p.starts_with(f)) {
+        let bise_files = [self.bise.join("hubs"), self.bise.join("approvals.toml")];
+        let secrets = super::secrets::Secrets::of(&self.bise, &self.home);
+        if bise_files.iter().any(|f| p.starts_with(f)) || secrets.held(p) == Some(super::secrets::Held::Bise) {
             return Some(Protected::File);
         }
         let home_files = [

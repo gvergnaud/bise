@@ -16,6 +16,7 @@
 use std::path::{Path, PathBuf};
 
 use super::paths::{fold, Fs, Roots};
+use super::secrets::{Held, Secrets};
 use super::{parse, tiers, CacheKey, Call};
 
 /// The profile with the network closed (loopback and unix sockets kept).
@@ -207,7 +208,8 @@ pub fn profile(s: &Spec, net: bool) -> String {
     }
     denied.push(format!("(subpath {})", lit(&s.bise.join("hubs"))));
     denied.push(format!("(literal {})", lit(&s.bise.join("approvals.toml"))));
-    denied.push(format!("(literal {})", lit(&s.bise.join("auth.json"))));
+    let secrets = Secrets::of(&s.bise, &s.home);
+    denied.extend(secrets.write_rules(&|p| lit(p)));
     denied.push(format!("(literal {})", lit(&s.cwd.join(".envrc"))));
     for h in HOME_PROTECTED {
         denied.push(format!("(subpath {})", lit(&s.home.join(h))));
@@ -223,6 +225,8 @@ pub fn profile(s: &Spec, net: bool) -> String {
             regex_escape(r)
         ));
     }
+    // bise's secrets and the ssh private keys: never read (docs/issues/19)
+    o.push_str(&secrets.profile_rules(&|p| lit(p)));
     // a sandboxed process may not exec a setuid program ("Operation not
     // permitted"): `ps` is one on macOS, and it only reads
     o.push_str("(allow process-exec (literal \"/bin/ps\") (with no-sandbox))\n");
@@ -397,6 +401,9 @@ pub enum Denial {
     Network,
     /// Both.
     Both(Option<String>),
+    /// A read of one of [`Secrets`] (docs/issues/19), the path as shown:
+    /// never a card, never run again without the sandbox.
+    Secret(String, Held),
 }
 
 /// Output that says a write was refused by the OS.
@@ -432,7 +439,22 @@ impl Denial {
     fn path(&self) -> Option<&str> {
         match self {
             Denial::Write(p) | Denial::Both(p) => p.as_deref(),
+            Denial::Secret(p, _) => Some(p),
             Denial::Network => None,
+        }
+    }
+
+    /// A secret's refusal, one line (designer m_13494: the agent reads
+    /// it, the user reads it in the agent's thread).
+    pub fn secret_line(p: &str, held: Held) -> String {
+        match held {
+            Held::Bise => format!("stopped by the sandbox: {p} holds bise's keys and sign-ins, and agents can't read it."),
+            Held::Ssh => {
+                let add = if cfg!(target_os = "macos") { "ssh-add --apple-use-keychain" } else { "ssh-add" };
+                format!(
+                    "stopped by the sandbox: {p} is an ssh private key, and agents can't read it. git over ssh still works once the key is in ssh-agent: {add} {p}"
+                )
+            }
         }
     }
 
@@ -446,6 +468,7 @@ impl Denial {
                 .unwrap_or_else(|| p.to_string())
         });
         match (self, shown) {
+            (Denial::Secret(p, h), _) => Denial::secret_line(p, *h),
             (Denial::Network, _) => "the sandbox stopped it from using the network.".into(),
             (Denial::Both(_), _) => {
                 "the sandbox stopped a write outside the repo and the network.".into()
@@ -466,6 +489,7 @@ impl Denial {
         };
         let what = match self {
             Denial::Write(_) => write,
+            Denial::Secret(p, _) => format!("a read of {p}, a secret"),
             Denial::Network => "a network call".to_string(),
             Denial::Both(_) => format!("{write}, and a network call"),
         };
@@ -477,12 +501,18 @@ impl Denial {
     /// The agent's result when the rerun is refused: the first run's
     /// output, then why it stopped.
     pub fn result(&self, output: &str, why: &str) -> String {
+        if let Denial::Secret(p, h) = self {
+            let line = Denial::secret_line(p, *h);
+            let output = output.trim_end();
+            return if output.is_empty() { line } else { format!("{output}\n\n{line}") };
+        }
         let write = match self.path() {
             Some(p) => format!("it tried to write to {p}, outside the repo, ~/.bise and $TMPDIR"),
             None => "it tried to write outside the repo, ~/.bise and $TMPDIR".to_string(),
         };
         let what = match self {
             Denial::Write(_) => write,
+            Denial::Secret(..) => unreachable!("said by secret_line"),
             Denial::Network => "it needs the network, which is closed for this command".into(),
             Denial::Both(_) => format!("{write}, and it needs the network"),
         };
@@ -520,11 +550,15 @@ pub const CARD_YES: &str = "run it again without the sandbox";
 /// else [`run_flags`].
 pub fn allow_flags(call: &Call, rules: &super::Rules, cache: &super::Cache, fs: &dyn Fs) -> String {
     let cmd = bash_cmd(&call.args);
+    let roots = call.roots();
+    // a command that names a secret never skips the sandbox (docs/issues/19)
+    if Secrets::of(&call.bise, &call.home).named_by(cmd, &roots, fs).is_some() {
+        return run_flags(cmd).to_string();
+    }
     if cache.allows(&rerun_key(cmd)) {
         return String::new();
     }
     let parsed = parse::parse(cmd);
-    let roots = call.roots();
     let mut w = tiers::Walk {
         roots: &roots,
         fs,
@@ -574,11 +608,19 @@ impl Rerun {
     /// `None` when the gate line is not a rerun (no `denied`). An output
     /// the heuristic cannot read is still a write denial with no path: the
     /// runtime saw one.
-    pub fn of(call: &Call, gate: &serde_json::Value) -> Option<Rerun> {
+    /// A read of a secret ([`Secrets`]: the output or the command names
+    /// one) is [`Denial::Secret`], whatever else the output says.
+    pub fn of(call: &Call, gate: &serde_json::Value, fs: &dyn Fs) -> Option<Rerun> {
         let out = gate.get("denied")?.as_str()?;
         let cmd = bash_cmd(&call.args);
+        let roots = call.roots();
+        let secrets = Secrets::of(&call.bise, &call.home);
+        let secret = secrets.named_in(out, &roots, fs).or_else(|| secrets.named_by(cmd, &roots, fs));
         Some(Rerun {
-            denial: Denial::of(out).unwrap_or(Denial::Write(None)),
+            denial: match secret {
+                Some((p, h)) => Denial::Secret(p, h),
+                None => Denial::of(out).unwrap_or(Denial::Write(None)),
+            },
             parts: parse::parse(cmd).parts,
             key: rerun_key(cmd),
         })

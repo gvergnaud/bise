@@ -19,6 +19,7 @@ pub mod parse;
 pub mod paths;
 pub mod rules;
 pub mod sandbox;
+pub mod secrets;
 #[cfg(test)]
 mod tests;
 pub mod tiers;

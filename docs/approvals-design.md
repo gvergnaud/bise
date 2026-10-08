@@ -887,8 +887,27 @@ and fold the card.
 - **`~/.bise` as a root.** It holds the hub state, the saved rules and the
   keys. If an agent could edit them without a card, it could forge a card's
   answer, grant itself "always allow *", or read and send the keys. So
-  `hubs/`, `approvals.toml` and `auth.json` stay protected (§4), even though
-  the rest of `~/.bise` is a root.
+  `hubs/`, `approvals.toml`, `auth.json` and `secrets/` stay protected (§4),
+  even though the rest of `~/.bise` is a root.
+- **Secrets are never read under the sandbox** (docs/issues/19). The
+  profile denies reading `~/.bise/auth.json`, `~/.bise/secrets/` (the MCP
+  logins) and every file of `~/.ssh` but `config*`, `known_hosts*`,
+  `authorized_keys*`, `*.pub` and `agent/` (`approvals/secrets.rs`, one
+  list for the profile, the denial reader and the command check). A
+  stopped read is one line for the agent, never a card and never a rerun
+  without the sandbox; a command that names a secret never skips the
+  sandbox, whatever a rule or the cache says. Still working: git and gh
+  (the login keychain, `~/.config/gh`, `~/.gitconfig`), git over ssh when
+  the key is in ssh-agent (a key only on disk needs `ssh-add`), and
+  everything bise runs outside an agent's bash (the REPL, the hub, `bise
+  auth token chatgpt`, MCP servers). Known, out of scope: other tools'
+  credentials stay readable (`~/.aws`, `~/.netrc`, `~/.docker/config.json`,
+  gh's `hosts.yml` when its token is not in the keychain, the login
+  keychain through `/usr/bin/security`); keychain mode's items in the login
+  keychain too, until they move to bise's own keychain file (issue 19's
+  second step); `yolo` runs nothing in the sandbox, and /approvals says so;
+  and a sandboxed command can drive a process outside the sandbox
+  (docs/issues/20).
 - **Edits run at once, and edits can change what runs later** (`Makefile`,
   `package.json` scripts, a test). A saved rule or a cached `make *` then
   runs the new content unchecked. A script file run by name is keyed with

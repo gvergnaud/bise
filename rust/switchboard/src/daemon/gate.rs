@@ -531,7 +531,7 @@ impl Shell {
         let rules = self.rules_now();
         let sandboxed = call.tool == "bash" && self.sandbox_on();
         if sandboxed {
-            if let Some(rerun) = Rerun::of(&call, &v) {
+            if let Some(rerun) = Rerun::of(&call, &v, &approvals::RealFs) {
                 return self.on_rerun(dir, call, rerun);
             }
             self.sandbox_ready(dir, &call);
@@ -606,7 +606,12 @@ impl Shell {
     /// The runtime's second gate line: the sandbox stopped the command;
     /// its rerun without the sandbox goes to the checker, then a card
     /// (brief 1e §3). An allow runs it plain.
+    /// A read of a secret (docs/issues/19) never runs again: no checker,
+    /// no card, the agent gets one line.
     fn on_rerun(&mut self, dir: &str, call: Call, rerun: Rerun) {
+        if matches!(rerun.denial, Denial::Secret(..)) {
+            return self.resolve(dir, false, &rerun.denial.result("", ""));
+        }
         let Some(w) = self.gates.waiting.get_mut(dir) else { return };
         w.rerun = Some(rerun.denial.clone());
         let cache = self.gates.caches.entry(call.repo.clone()).or_default();
@@ -1003,7 +1008,7 @@ impl Shell {
         let call = self.call_of(dir, name, tool, args);
         let rules = self.rules_now();
         let sandboxed = call.tool == "bash" && self.sandbox_on();
-        let rerun = if sandboxed { Rerun::of(&call, &v) } else { None };
+        let rerun = if sandboxed { Rerun::of(&call, &v, &approvals::RealFs) } else { None };
         let (always, keys) = match &rerun {
             Some(r) => (Some(r.always()), vec![r.key.clone()]),
             None => {

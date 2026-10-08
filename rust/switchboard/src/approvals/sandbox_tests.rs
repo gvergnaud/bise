@@ -215,17 +215,18 @@ fn an_allowed_rerun_or_a_sandbox_rule_runs_outside_the_sandbox() {
 #[test]
 fn the_rerun_gate_line_carries_the_first_output() {
     let c = call("cp r.pdf ~/Desktop/x.txt");
-    assert_eq!(Rerun::of(&c, &serde_json::json!({"tool": "bash"})), None);
+    assert_eq!(Rerun::of(&c, &serde_json::json!({"tool": "bash"}), &super::super::LexicalFs), None);
     let r = Rerun::of(
         &c,
         &serde_json::json!({"denied": "cp: /h/Desktop/x.txt: Operation not permitted"}),
+        &super::super::LexicalFs,
     )
     .unwrap();
     assert_eq!(r.denial, Denial::Write(Some("/h/Desktop/x.txt".into())));
     assert_eq!(r.key, rerun_key("cp r.pdf ~/Desktop/x.txt"));
     assert_eq!(r.always(), super::super::always_rules(&r.parts));
     assert_eq!(r.always().len(), 1);
-    let r = Rerun::of(&c, &serde_json::json!({"denied": "exit 1: ???"})).unwrap();
+    let r = Rerun::of(&c, &serde_json::json!({"denied": "exit 1: ???"}), &super::super::LexicalFs).unwrap();
     assert_eq!(r.denial, Denial::Write(None));
 }
 
@@ -528,6 +529,171 @@ mod live {
             let o = conn(&p);
             assert!(ok(&o), "{}: {}", p.display(), text(&o));
         }
+    }
+
+    /// docs/issues/19: bise's secrets and the ssh private keys are never
+    /// read, by any program, by name or through a link; what ssh, git and
+    /// gh read next to them stays open; the refusal is one line.
+    #[test]
+    fn the_secrets_are_never_read_and_what_tools_need_still_is() {
+        let Some(b) = Box_::new("secrets") else { return };
+        let (home, bise) = (&b.s.home, &b.s.bise);
+        let write = |p: &Path, t: &str| {
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, t).unwrap();
+        };
+        let auth = bise.join("auth.json");
+        let mcp = bise.join("secrets/mcp-oauth/x.json");
+        let (key, other) = (home.join(".ssh/id_ed25519"), home.join(".ssh/work_key"));
+        for p in [&auth, &mcp, &key, &other] {
+            write(p, "SECRET-1234");
+        }
+        for (p, t) in [
+            (".ssh/id_ed25519.pub", "ssh-ed25519 AAAA x"),
+            (".ssh/config", "Host *\n"),
+            (".ssh/known_hosts", "x ssh-ed25519 AAAA\n"),
+            (".gitconfig", "[user]\n\tname = t\n"),
+            (".config/gh/hosts.yml", "github.com:\n    user: t\n"),
+        ] {
+            write(&home.join(p), t);
+        }
+        let roots = Roots { cwd: b.s.cwd.clone(), home: home.clone(), bise: bise.clone(), tmp: b.s.tmp.clone() };
+        let secrets = Secrets::of(bise, home);
+        let link = b.s.tmp.join("k");
+        std::os::unix::fs::symlink(&auth, &link).unwrap();
+        for (p, cmd) in [
+            (&auth, format!("cat '{}'", auth.display())),
+            (&mcp, format!("python3 -c \"print(open('{}').read())\"", mcp.display())),
+            (&mcp, format!("ls '{}'", mcp.parent().unwrap().display())),
+            (&key, format!("cp '{}' \"$TMPDIR/c\" && cat \"$TMPDIR/c\"", key.display())),
+            (&other, format!("base64 < '{}'", other.display())),
+            (&auth, format!("cat '{}'", link.display())),
+        ] {
+            let o = b.sh(&cmd);
+            assert!(!ok(&o) && !text(&o).contains("SECRET-1234"), "{cmd}: {}", text(&o));
+            let named = secrets.named_in(&text(&o), &roots, &super::super::super::RealFs);
+            assert!(named.is_some(), "{} not found in: {}", p.display(), text(&o));
+            let (shown, held) = named.unwrap();
+            let line = Denial::Secret(shown, held).result("", "");
+            assert_eq!(line.lines().count(), 1, "{line}");
+        }
+        // nor written, replaced or deleted
+        for p in [&auth, &mcp] {
+            assert!(!ok(&b.sh(&format!("rm -f '{}'", p.display()))) && p.exists(), "{}", p.display());
+        }
+        let o = b.sh(&format!(
+            "cat '{h}/.ssh/id_ed25519.pub' '{h}/.ssh/config' '{h}/.ssh/known_hosts' '{h}/.config/gh/hosts.yml' && ls '{h}/.ssh' | wc -l && test -e '{a}' && HOME='{h}' python3 -c \"import os; print(open(os.path.expanduser('~/.gitconfig')).read())\"",
+            h = home.display(),
+            a = auth.display()
+        ));
+        assert!(ok(&o) && text(&o).contains("name = t"), "{}", text(&o));
+        // gh's credential helper for git over https (a fake token, no
+        // network; its config in $TMPDIR: gh writes it, and ~/.config is
+        // not a root, before issue 19 too)
+        if Command::new("gh").arg("--version").output().is_ok_and(|o| o.status.success()) {
+            let o = b.sh("printf 'protocol=https\\nhost=github.com\\n\\n' | GH_TOKEN=fake-gh GH_CONFIG_DIR=\"$TMPDIR/gh\" git -c credential.helper= -c 'credential.helper=!gh auth git-credential' credential fill && GH_TOKEN=fake-gh GH_CONFIG_DIR=\"$TMPDIR/gh\" gh auth token");
+            assert!(ok(&o) && text(&o).contains("password=fake-gh"), "{}", text(&o));
+        }
+        // the keychain (gh's token, git's osxkeychain) stays open: a throwaway one
+        let kc = b.base.join("t.keychain-db");
+        let sec = |args: &[&str]| Command::new("/usr/bin/security").args(args).output().unwrap();
+        let k = kc.to_str().unwrap();
+        if sec(&["create-keychain", "-p", "pw", k]).status.success() {
+            sec(&["unlock-keychain", "-p", "pw", k]);
+            sec(&["add-generic-password", "-s", "sbx-probe", "-a", "t", "-w", "gh-token", k]);
+            let o = b.sh(&format!("/usr/bin/security find-generic-password -s sbx-probe -w '{k}'"));
+            sec(&["delete-keychain", k]);
+            assert!(ok(&o) && text(&o).contains("gh-token"), "{}", text(&o));
+        }
+    }
+
+    /// Law (architect m_13613): `Secrets::held` and the profile agree,
+    /// name by name under the real `sandbox-exec`: what held calls a
+    /// secret is refused, the rest of `~/.ssh` reads.
+    #[test]
+    fn law_held_and_the_profile_agree_on_ssh_names() {
+        let Some(b) = Box_::new("sshnames") else { return };
+        let ssh = b.s.home.join(".ssh");
+        let secrets = Secrets::of(&b.s.bise, &b.s.home);
+        let table = [
+            ("config", true),
+            ("config.d/x", true),
+            ("known_hosts", true),
+            ("known_hosts.old", true),
+            ("authorized_keys", true),
+            ("authorized_keys2", true),
+            ("id_ed25519.pub", true),
+            ("agent/s", true),
+            ("config-work", false),
+            ("configs/id_x", false),
+            ("known_hosts_key", false),
+            ("config.d.key", false),
+            ("id_ed25519", false),
+            ("work_key", false),
+        ];
+        for (name, readable) in table {
+            let p = ssh.join(name);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(&p, "x").unwrap();
+            assert_eq!(secrets.held(&p).is_none(), readable, "held({name})");
+            let o = b.sh(&format!("cat '{}'", p.display()));
+            assert_eq!(ok(&o), readable, "{name} under the profile: {}", text(&o));
+        }
+    }
+
+    /// git over ssh: the key in ssh-agent works with its file closed (a
+    /// throwaway sshd on loopback, a throwaway agent); not in the agent,
+    /// the refusal names `ssh-add`.
+    #[test]
+    fn ssh_works_through_the_agent_with_the_key_file_closed() {
+        let Some(b) = Box_::new("ssh") else { return };
+        if !Path::new("/usr/sbin/sshd").exists() {
+            return;
+        }
+        let d = b.base.join("sshd");
+        std::fs::create_dir_all(&d).unwrap();
+        let key = b.s.home.join(".ssh/id_ed25519");
+        std::fs::create_dir_all(key.parent().unwrap()).unwrap();
+        let keygen = |f: &Path| {
+            let o = Command::new("ssh-keygen").args(["-q", "-t", "ed25519", "-N", ""]).arg("-f").arg(f).output().unwrap();
+            assert!(o.status.success(), "{}", text(&o));
+        };
+        keygen(&key);
+        keygen(&d.join("host"));
+        std::fs::copy(key.with_extension("pub"), d.join("authorized_keys")).unwrap();
+        let port = {
+            let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            l.local_addr().unwrap().port()
+        };
+        let conf = format!(
+            "Port {port}\nListenAddress 127.0.0.1\nHostKey {d}/host\nAuthorizedKeysFile {d}/authorized_keys\nPidFile {d}/pid\nUsePAM no\nStrictModes no\nPasswordAuthentication no\nKbdInteractiveAuthentication no\n",
+            d = d.display()
+        );
+        std::fs::write(d.join("config"), conf).unwrap();
+        let mut sshd = Command::new("/usr/sbin/sshd").arg("-D").arg("-f").arg(d.join("config")).arg("-E").arg(d.join("log")).spawn().unwrap();
+        let sock = d.join("agent.sock");
+        let mut agent = Command::new("ssh-agent").arg("-D").arg("-a").arg(&sock).stdout(std::process::Stdio::null()).spawn().unwrap();
+        for _ in 0..50 {
+            if sock.exists() && std::net::TcpStream::connect(("127.0.0.1", port)).is_ok() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        let ssh = format!(
+            "SSH_AUTH_SOCK='{}' ssh -F /dev/null -p {port} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o IdentityFile='{}' 127.0.0.1 echo in-ssh",
+            sock.display(),
+            key.display()
+        );
+        let before = b.sh(&ssh);
+        let add = Command::new("ssh-add").arg("-q").arg(&key).env("SSH_AUTH_SOCK", &sock).output().unwrap();
+        let after = b.sh(&ssh);
+        let _ = (sshd.kill(), agent.kill(), sshd.wait(), agent.wait());
+        assert!(add.status.success(), "{}", text(&add));
+        assert!(!ok(&before), "{}", text(&before));
+        let roots = Roots { cwd: b.s.cwd.clone(), home: b.s.home.clone(), bise: b.s.bise.clone(), tmp: b.s.tmp.clone() };
+        let named = Secrets::of(&b.s.bise, &b.s.home).named_in(&text(&before), &roots, &super::super::super::RealFs);
+        assert_eq!(named.map(|n| n.1), Some(Held::Ssh), "{}", text(&before));
+        assert!(ok(&after) && text(&after).contains("in-ssh"), "{}", text(&after));
     }
 
     #[test]

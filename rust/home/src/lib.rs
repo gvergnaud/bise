@@ -199,6 +199,11 @@ impl Home {
         self.root.join("auth.json")
     }
 
+    /// `secrets/`: the MCP logins (`mcp-oauth/`), kept by bise_secrets.
+    pub fn secrets_dir(&self) -> PathBuf {
+        self.root.join("secrets")
+    }
+
     /// Where a key the user pastes goes: `<root>/.env`.
     pub fn key_file(&self) -> PathBuf {
         self.root.join(".env")
