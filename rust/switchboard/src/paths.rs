@@ -73,6 +73,13 @@ impl Paths {
     pub fn socket(&self) -> PathBuf {
         bise_home::socket::socket_path(&self.natural_socket())
     }
+    /// This hub's id in its agents' tags (`BISE_OWNERS`, `procs`): the
+    /// hash of [`Paths::socket`], the path it is reached by (the short one
+    /// when relocated). The TUI hashes the same path (`bise`'s
+    /// `tui_socket`) to show this hub's agents in computer use's state.
+    pub fn proc_hub(&self) -> String {
+        crate::procs::hub_id(&self.socket())
+    }
     /// Where the socket file lives: `<state>/hub.sock`.
     pub fn natural_socket(&self) -> PathBuf {
         self.state.join("hub.sock")

@@ -33,6 +33,16 @@ fn fnv1a(b: &[u8]) -> u64 {
     h
 }
 
+/// Computer use's command socket in the run dir (docs/issues/18): the
+/// user's `bise computer-use ...`, the TUI, the desktop core; the agents'
+/// sandbox denies it, the broker serves it to the user's processes only.
+pub const COMPUTER_USE_CTL: &str = "computer-use-ctl.sock";
+
+/// Where computer use's command socket is bound and reached, for a run dir.
+pub fn computer_use_ctl(run: &Path) -> PathBuf {
+    socket_path(&run.join(COMPUTER_USE_CTL))
+}
+
 /// The private folder of the short links: `/tmp/bise-<uid>`.
 pub fn short_root() -> PathBuf {
     // SAFETY: getuid has no preconditions and cannot fail.

@@ -224,6 +224,11 @@ fn run_broker(paths: &Paths, a: &[&str]) -> i32 {
 /// stop / resume / release / drop: through the broker, or on the files
 /// when none runs (a later broker reads state.json).
 pub fn control(paths: &Paths, cmd: &str, args: &Value) -> Result<Value, String> {
+    let mut args = args.clone();
+    if let Some(a) = args["agent"].as_str().filter(|a| !a.is_empty()) {
+        args["agent"] = json!(resolve(&state::read(paths), a)?);
+    }
+    let args = &args;
     if let Ok(mut c) = Conn::ctl(paths) {
         return match c.call(cmd, args) {
             Ok(Ok(v)) => Ok(v),
@@ -241,7 +246,8 @@ pub fn control(paths: &Paths, cmd: &str, args: &Value) -> Result<Value, String> 
     let out = match cmd {
         "stop" => {
             for n in &names {
-                st["agents"][n] = json!({"driving": null, "where": null, "since_ms": null, "paused": false, "stopped": true});
+                let (hub, name) = crate::who::split(n);
+                st["agents"][n] = json!({"driving": null, "where": null, "since_ms": null, "paused": false, "stopped": true, "name": name, "hub": hub});
                 state::event(paths, n, "stopped", "you").map_err(|e| e.to_string())?;
             }
             json!({"stopped": names})
@@ -264,8 +270,30 @@ pub fn control(paths: &Paths, cmd: &str, args: &Value) -> Result<Value, String> 
     if st.get("agents").is_none_or(|a| !a.is_object()) {
         st["agents"] = json!({});
     }
+    st["v"] = json!(2);
     state::write(paths, &st).map_err(|e| e.to_string())?;
     Ok(out)
+}
+
+/// The key a command names (docs/issues/18): a key of state.json as is;
+/// else the agent of that name, refused when two projects' agents share
+/// it; else the word itself (an untagged agent's key is its name).
+fn resolve(st: &Value, word: &str) -> Result<String, String> {
+    let agents = st["agents"].as_object();
+    if agents.is_some_and(|m| m.contains_key(word)) {
+        return Ok(word.to_string());
+    }
+    let hits: Vec<&String> = agents.into_iter().flatten().filter(|(_, a)| a["name"] == word).map(|(k, _)| k).collect();
+    match hits.as_slice() {
+        [] => Ok(word.to_string()),
+        [k] => Ok(k.to_string()),
+        _ => Err(format!(
+            "{} agents are named {}, in different projects: name one by its key ({})",
+            hits.len(),
+            word,
+            hits.iter().map(|k| k.as_str()).collect::<Vec<_>>().join(", ")
+        )),
+    }
 }
 
 // ---- setup-check ----
@@ -282,7 +310,10 @@ pub fn control(paths: &Paths, cmd: &str, args: &Value) -> Result<Value, String> 
 pub fn setup_check(paths: &Paths, helper: Option<&std::path::Path>, start: Option<&client::Starter>) -> Value {
     let mut v = browser_rows(paths);
     let perms: Option<Value> = helper.and_then(|_| {
-        let mut c = Conn::open(paths, start, &json!({"op": "hello", "role": "ctl"})).ok()?;
+        // started when none runs (a plain connect to the agents' socket),
+        // then asked on the commands' socket
+        drop(client::connect(paths, start).ok()?);
+        let mut c = Conn::ctl(paths).ok()?;
         c.call("permissions", &json!({})).ok()?.ok()
     });
     let row = |id: &str, st: &str, detail: &str, fix: Option<&str>| json!({"id": id, "state": st, "detail": detail, "fix": fix});

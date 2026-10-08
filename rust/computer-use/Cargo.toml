@@ -7,5 +7,7 @@ description = "Computer use for bise: the broker between the agents, the browser
 
 [dependencies]
 bise-home = { path = "../home" }
+# who opened a connection: the peer's pid, the process table, judge_any (who.rs, docs/issues/18)
+bise-peer = { path = "../peer" }
 serde_json = "1"
 libc = "0.2"

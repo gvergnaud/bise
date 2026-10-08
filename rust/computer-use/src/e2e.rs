@@ -48,7 +48,29 @@ fn opts(p: &Paths) -> Opts {
         helper_app: None,
         slack: Duration::from_secs(2),
         helper_wait: Duration::from_millis(300),
+        judge: fake_judge(p),
     }
+}
+
+/// The peers the next connections to `p`'s broker are judged as
+/// ([`next_peer`]); the user's (`Outside`) when none. A test runs inside an
+/// agent: the real judge would see every connection as that agent's.
+static NEXT_PEERS: Mutex<Vec<(PathBuf, crate::who::Peer)>> = Mutex::new(Vec::new());
+
+fn fake_judge(p: &Paths) -> crate::who::JudgeFn {
+    let run = p.run.clone();
+    crate::who::JudgeFn(Arc::new(move |_| {
+        let mut q = NEXT_PEERS.lock().unwrap();
+        match q.iter().position(|(r, _)| *r == run) {
+            Some(i) => q.remove(i).1,
+            None => crate::who::Peer::Outside,
+        }
+    }))
+}
+
+/// The next connection to `p`'s broker comes from `peer`.
+fn next_peer(p: &Paths, peer: crate::who::Peer) {
+    NEXT_PEERS.lock().unwrap().push((p.run.clone(), peer));
 }
 
 /// The brokers a test started (to shut one down: a restart).
@@ -741,6 +763,64 @@ fn show_for_the_user_on_command_connections_only() {
     let mut a = agent(&p, "api-v2", &d);
     assert_eq!(code(&mut a, "show", json!({"url": "https://x.org"}))["code"], "bad_args");
     assert!(state::read(&p)["agents"].get("ambient").is_none());
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// docs/issues/18: the commands' socket is the user's only; an agent's MCP
+/// server is keyed by its process's tag, not its hello; two projects'
+/// "perf" are two agents, and a stop by key reaches one; a browser link
+/// from an agent's process is refused; the agents' socket takes no command.
+#[test]
+fn who_connects_decides() {
+    use crate::who::Peer;
+    let (d, p) = paths();
+    let o = opts(&p);
+    let brokers: Brokers = Default::default();
+    brokers.lock().unwrap().push(broker::start(o.clone()).unwrap());
+    let _ext = FakeExt::start(&p, starter(o, brokers.clone()), "chrome", jpeg(&d));
+    connected(&p, 1);
+    let tag = |t: &str| Peer::Agent(bise_peer::tags::parse_tag(t).unwrap());
+    let (aa, bb) = ("00000000000000aa", "00000000000000bb");
+
+    // an agent's process can't run the user's commands
+    for peer in [tag(&format!("{aa}.perf.1")), Peer::Gone] {
+        next_peer(&p, peer);
+        let e = Conn::ctl(&p).unwrap().call("status", &json!({})).unwrap().unwrap_err();
+        assert_eq!((e["code"].as_str(), e["message"].as_str()), (Some("refused"), Some(crate::who::CTL_REFUSED)));
+    }
+    // the agents' socket takes no command
+    let e = Conn::open(&p, None, &json!({"op": "hello", "role": "ctl"})).unwrap().call("status", &json!({})).unwrap().unwrap_err();
+    assert_eq!(e["code"], "refused");
+
+    // two projects' perf, each saying it is "main": keyed by their tags
+    next_peer(&p, tag(&format!("{aa}.perf.1")));
+    let mut a = agent(&p, "main", &d);
+    next_peer(&p, tag(&format!("{bb}.perf.7")));
+    let mut b = agent(&p, "main", &d);
+    ok(&mut a, "open", json!({"url": "https://a.org"}));
+    ok(&mut b, "open", json!({"url": "https://b.org"}));
+    let st = state::read(&p);
+    let ka = format!("{aa}.perf");
+    let kb = format!("{bb}.perf");
+    assert_eq!((&st["agents"][&ka]["name"], &st["agents"][&ka]["hub"]), (&json!("perf"), &json!(aa)));
+    assert_eq!(st["agents"][&kb]["where"], "b.org");
+    assert!(st["agents"].get("main").is_none());
+    // the extension got the key to route and the name to show
+    let req = _ext.st.lock().unwrap().requests.iter().find(|m| m["op"] == "open").cloned().unwrap();
+    assert_eq!((req["agent"].as_str(), req["name"].as_str()), (Some(ka.as_str()), Some("perf")));
+    // a bare name two projects share is refused; the key stops one
+    assert!(cli::control(&p, "stop", &json!({"agent": "perf"})).unwrap_err().contains("2 agents are named perf"));
+    cli::control(&p, "stop", &json!({"agent": ka})).unwrap();
+    assert_eq!(code(&mut a, "open", json!({"url": "https://a.org"}))["code"], "stopped");
+    ok(&mut b, "tabs", json!({}));
+
+    // a browser link from an agent's process is not a browser
+    next_peer(&p, tag(&format!("{aa}.perf.1")));
+    let mut s = UnixStream::connect(p.socket()).unwrap();
+    writeln!(s, "{}", json!({"op": "hello", "role": "browser"})).unwrap();
+    let mut line = String::new();
+    assert_eq!(BufReader::new(s).read_line(&mut line).unwrap(), 0, "closed at once");
+    connected(&p, 1);
     let _ = std::fs::remove_dir_all(&d);
 }
 

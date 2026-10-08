@@ -160,12 +160,26 @@ fn who_drives_in_words() {
 /// state.json (C6) as the marks read it
 #[test]
 fn state_json_reads_who_drives() {
-    let v = json!({"agents": {
-        "api-v2": {"driving": "Chrome", "where": "amazon.fr", "since_ms": 5, "paused": false, "stopped": false},
-        "held": {"driving": null, "where": null, "paused": false, "stopped": true},
-        "mail": {"driving": "Mail", "where": "Mail", "paused": true, "stopped": false}
+    let v = json!({"v": 2, "agents": {
+        "aa.api-v2": {"name": "api-v2", "hub": "aa", "driving": "Chrome", "where": "amazon.fr", "since_ms": 5, "paused": false, "stopped": false},
+        "aa.held": {"name": "held", "hub": "aa", "driving": null, "where": null, "paused": false, "stopped": true},
+        "aa.mail": {"name": "mail", "hub": "aa", "driving": "Mail", "where": "Mail", "paused": true, "stopped": false},
+        // another project's perf, and an agent of no hub: not this TUI's
+        "bb.perf": {"name": "perf", "hub": "bb", "driving": "Chrome", "where": "x.org", "paused": false, "stopped": false},
+        "bench": {"name": "bench", "hub": null, "driving": "Chrome", "where": "x.org", "paused": false, "stopped": false}
     }});
-    let d = parse_state(&v);
+    let d = parse_state(&v, "aa");
+    assert_eq!(d.keys().collect::<Vec<_>>(), ["api-v2", "held", "mail"]);
+    // a hub whose state dir is too long for a unix socket (an agent's deep
+    // TMPDIR): it and the TUI both hash the short path it is reached by,
+    // so its agent stays shown (harness's tui_socket test: same input)
+    let natural = std::path::PathBuf::from(format!("/var/folders/xy/{}/T/.bise/hubs/tmp-x-ee85d2ab/hub.sock", "a".repeat(80)));
+    let short = bise_home::socket::socket_path(&natural);
+    assert_ne!(short, natural, "relocated");
+    let hub = hub_of(&short);
+    let v = json!({"v": 2, "agents": {format!("{hub}.perf"): {"name": "perf", "hub": hub, "driving": "Chrome", "paused": false, "stopped": false}}});
+    assert_eq!(parse_state(&v, &hub_of(&short)).keys().collect::<Vec<_>>(), ["perf"]);
+    assert!(parse_state(&v, &hub_of(&natural)).is_empty(), "the natural path would blank the driving line");
     assert_eq!(d["api-v2"], Driver { driving: Some("Chrome".into()), place: Some("amazon.fr".into()), paused: false, stopped: false });
     assert!(d["held"].stopped && d["held"].driving.is_none());
     assert!(d["mail"].paused);

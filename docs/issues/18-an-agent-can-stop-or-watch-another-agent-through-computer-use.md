@@ -1,6 +1,12 @@
 # 18 · an agent can stop or watch another agent through computer use's control socket
 
-Status: open. Found by architect while reviewing amb-core's plan for computer use live in the desktop window (m_12177, answer m_12179). Read from the code, not exploited. Label: security.
+Status: fixed by step 2 (points 1 and 2 below); `pause` and `peek` follow. Found by architect while reviewing amb-core's plan for computer use live in the desktop window (m_12177, answer m_12179). Read from the code, not exploited. Label: security. The plan, signed by architect (m_12219), in five steps:
+
+1. `rust/peer` (bise-peer): the process table, the peer's pid, `judge` and the new `judge_any`, moved out of switchboard with no copy (9534a310). Done.
+2. The broker judges every connection (`computer-use/src/who.rs`): commands move to their own socket, `computer-use-ctl.sock` (its name in `bise_home::socket`), served to the user's processes only and denied in the agents' sandbox; an agent is keyed `<hub id>.<dir>` by its process's tag, never by its hello; a browser link must come from outside; `state.json` v2 and `events.jsonl` carry the key, the name and the hub id, and the TUI and the hub's feed show their own hub's agents only; the broker starts with no `BISE_OWNERS`; the extension maps its groups to keys in session storage. Done (before it, 40a8de09 split broker.rs).
+3. The names at the edges: a group title that two live agents share names its project; the helper's cursor pill shows the name.
+4. `pause` (take over from the window).
+5. `peek` (a still on demand, inline, never stored, only while the agent drives).
 
 ## The problem
 
@@ -18,6 +24,11 @@ bise computer-use status         # what every agent drives, and where
 ```
 
 There's a second problem. The broker keys its agents by the name their MCP hello gives. Two projects can each have a `main` or a `perf`: they share one key in `state.json`, one overwrites the other, and a `stop perf` can reach the wrong project's agent. The TUI's driving line (`tui/src/computer_use.rs` `parse_state`) reads the same key and can show another project's agent.
+
+Two more, found while planning the fix (computer-use, m_12216):
+
+- **The agent role is not checked either.** Any process can say `{"op":"hello","agent":"perf"}` and drive perf's tabs, or read them (snapshot, screenshot): the broker takes the name from the hello.
+- **The broker inherits the first agent's tags.** `client::spawn_broker` starts it from that agent's MCP server, so it carries the agent's `BISE_OWNERS`: the hub's process cleanup kills it when that agent is archived, and a judge that skips its own owners' tags would let that agent through.
 
 This is the same hole as issue 16, one socket further. It gets worse with what the desktop app wants next: a take-over op (`pause`) and a live picture of what an agent drives (`peek`), both on `ctl`.
 

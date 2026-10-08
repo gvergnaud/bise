@@ -23,6 +23,10 @@ pub fn spawn_broker(exe: PathBuf) -> Box<Starter> {
         let log = std::fs::OpenOptions::new().create(true).append(true).open(paths.log_file())?;
         let mut cmd = std::process::Command::new(&exe);
         cmd.args(["computer-use", "broker"])
+            // the broker is no agent's (docs/issues/18): the hub's
+            // cleanup must not kill it with the agent that started it,
+            // and its own chain carries no tag
+            .env(bise_peer::tags::ENV, "")
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(log);
@@ -73,8 +77,13 @@ impl Conn {
         Ok(c)
     }
 
+    /// A command connection, on the commands' socket (docs/issues/18):
+    /// the broker serves it to the user's processes only.
     pub fn ctl(paths: &Paths) -> std::io::Result<Conn> {
-        Conn::open(paths, None, &json!({"op": "hello", "role": "ctl"}))
+        let s = UnixStream::connect(paths.ctl_socket())?;
+        let mut c = Conn { r: BufReader::new(s.try_clone()?), w: s, next: 0 };
+        c.send(&json!({"op": "hello", "role": "ctl"}))?;
+        Ok(c)
     }
 
     pub fn send(&mut self, v: &Value) -> std::io::Result<()> {

@@ -7,6 +7,8 @@ description = "Ratatui terminal UI for the Bend Unified Harness (Rust port of re
 
 [dependencies]
 bise-home = { path = "../home" }
+# its hub's id in the tags: computer use's state.json shows that hub's agents only (docs/issues/18)
+bise-peer = { path = "../peer" }
 # the typed client protocol (bise desktop S3a/S3b): the ambient core's
 # projects rows (ambient/projects.rs) and the agents view's typed threads
 bise-proto = { path = "../proto" }

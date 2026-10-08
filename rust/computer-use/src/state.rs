@@ -39,10 +39,27 @@ impl Agent {
     }
 }
 
-/// The whole state.json.
+/// An agent's key's fields (docs/issues/18): `name` (what the user sees)
+/// and `hub` (its hub's id, null for an untagged agent). A reader shows
+/// only its own hub's agents, or names the project.
+fn who(key: &str) -> (Value, Value) {
+    let (hub, name) = crate::who::split(key);
+    (json!(name), json!(hub))
+}
+
+/// The whole state.json (v2: `agents` keyed by the agent's key, each with
+/// its `name` and `hub`).
 pub fn render(agents: &BTreeMap<String, Agent>, browsers: Value, apps: Value) -> Value {
-    let a: Map<String, Value> = agents.iter().filter(|(_, a)| !a.idle()).map(|(n, a)| (n.clone(), a.json())).collect();
-    json!({"agents": a, "browsers": browsers, "apps": apps})
+    let a: Map<String, Value> = agents
+        .iter()
+        .filter(|(_, a)| !a.idle())
+        .map(|(k, a)| {
+            let mut v = a.json();
+            (v["name"], v["hub"]) = who(k);
+            (k.clone(), v)
+        })
+        .collect();
+    json!({"v": 2, "agents": a, "browsers": browsers, "apps": apps})
 }
 
 /// Write state.json atomically (0600).
@@ -64,9 +81,14 @@ pub fn read(paths: &Paths) -> Value {
 
 /// The agents a new broker starts with: the stopped ones stay stopped
 /// (a restart must not hand the wheel back), and the paused stay paused.
+/// A v1 file (agents keyed by bare name, before docs/issues/18) gives
+/// none: its names are no agent's key.
 pub fn restore(paths: &Paths) -> BTreeMap<String, Agent> {
     let v = read(paths);
     let mut out = BTreeMap::new();
+    if v["v"] != 2 {
+        return out;
+    }
     if let Some(m) = v.get("agents").and_then(Value::as_object) {
         for (name, a) in m {
             let stopped = a.get("stopped").and_then(Value::as_bool).unwrap_or(false);
@@ -90,7 +112,8 @@ pub fn event(paths: &Paths, agent: &str, event: &str, by: &str) -> std::io::Resu
 /// `driving: null` by then (C6, m_3897).
 pub fn event_driving(paths: &Paths, agent: &str, event: &str, by: &str, driving: Option<&str>) -> std::io::Result<()> {
     paths.ensure()?;
-    let mut v = json!({"t": crate::now_ms(), "agent": agent, "event": event, "by": by});
+    let (name, hub) = who(agent);
+    let mut v = json!({"t": crate::now_ms(), "agent": agent, "name": name, "hub": hub, "event": event, "by": by});
     if matches!(event, "stopped" | "paused") {
         v["driving"] = json!(driving);
     }
@@ -129,15 +152,22 @@ mod tests {
         let v = render(&agents, json!([]), json!({"helper": "absent"}));
         write(&p, &v).unwrap();
         let back = read(&p);
-        assert_eq!(back["agents"]["api-v2"], json!({"driving": "Chrome", "where": "amazon.fr", "since_ms": 5, "paused": false, "stopped": false}));
+        assert_eq!(
+            back["agents"]["api-v2"],
+            json!({"driving": "Chrome", "where": "amazon.fr", "since_ms": 5, "paused": false, "stopped": false, "name": "api-v2", "hub": null})
+        );
         assert!(back["agents"].get("idle").is_none());
         let r = restore(&p);
         assert_eq!(r.keys().collect::<Vec<_>>(), ["held"]);
         event(&p, "api-v2", "stopped", "you").unwrap();
-        event(&p, "api-v2", "resumed", "you").unwrap();
+        event(&p, "00000000000000aa.perf", "resumed", "you").unwrap();
         let ev = events(&p);
         assert_eq!(ev.len(), 2);
         assert_eq!(ev[0]["event"], "stopped");
+        assert_eq!((&ev[1]["agent"], &ev[1]["name"], &ev[1]["hub"]), (&json!("00000000000000aa.perf"), &json!("perf"), &json!("00000000000000aa")));
+        // a v1 file (keyed by bare names) restores nothing
+        write(&p, &json!({"agents": {"perf": {"stopped": true}}})).unwrap();
+        assert!(restore(&p).is_empty());
         use std::os::unix::fs::PermissionsExt;
         assert_eq!(std::fs::metadata(p.state_file()).unwrap().permissions().mode() & 0o777, 0o600);
         let _ = std::fs::remove_dir_all(&d);

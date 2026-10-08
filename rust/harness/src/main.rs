@@ -358,6 +358,12 @@ fn core_bin_of(root: &std::path::Path) -> std::path::PathBuf {
     }
 }
 
+/// The hub socket the TUI is given: it reaches the hub by it, and hashes
+/// it for the hub's id (`Paths::proc_hub`, computer use's state.json).
+fn tui_socket(paths: &switchboard::paths::Paths) -> std::path::PathBuf {
+    paths.socket()
+}
+
 fn run_switchboard(args: &[String], debug: bool) -> std::io::Result<()> {
     let paths = switchboard::paths::Paths::for_workspace(&sb_workspace(args));
     // the live scripts (relaunch-live.sh, move-live.sh) ask for it
@@ -385,7 +391,7 @@ fn run_switchboard(args: &[String], debug: bool) -> std::io::Result<()> {
     bend_tui::timing::mark("connected, hello sent");
     bend_tui::run_switchboard(
         stream,
-        paths.socket(),
+        tui_socket(&paths),
         paths.workspace.to_string_lossy().to_string(),
         debug,
     )?;
@@ -1171,6 +1177,19 @@ mod tests {
 
     fn argv(xs: &[&str]) -> Vec<String> {
         xs.iter().map(|x| x.to_string()).collect()
+    }
+
+    /// docs/issues/18 (architect m_13103): a hub whose state dir is too
+    /// long for a unix socket is reached by a short path; the TUI is given
+    /// that path, so its hash is the hub's own id (else computer use's
+    /// driving line would go blank).
+    #[test]
+    fn the_tui_hashes_the_hubs_own_socket() {
+        let state = std::path::PathBuf::from(format!("/var/folders/xy/{}/T/.bise/hubs/tmp-x-ee85d2ab", "a".repeat(80)));
+        let paths = switchboard::paths::Paths { workspace: "/w".into(), state: state.clone(), worktrees: state.join("worktrees") };
+        assert_ne!(paths.socket(), paths.natural_socket(), "relocated");
+        assert_eq!(switchboard::procs::hub_id(&tui_socket(&paths)), paths.proc_hub());
+        assert_ne!(switchboard::procs::hub_id(&paths.natural_socket()), paths.proc_hub());
     }
 
     #[test]

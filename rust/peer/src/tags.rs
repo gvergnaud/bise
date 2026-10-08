@@ -20,11 +20,17 @@ pub fn hub_id(socket: &Path) -> String {
 /// An agent's tag: `<hub>.<dir>.<ms>`, the dir kept to `[A-Za-z0-9_-]`
 /// (the list is one word in `ps -E`).
 pub fn tag(hub: &str, dir: &str, ms: u64) -> String {
+    format!("{}.{}", agent_key(hub, dir), ms)
+}
+
+/// An agent's key across hubs, `<hub>.<dir>`: its tag without the spawn
+/// time (the computer-use broker's key, docs/issues/18).
+pub fn agent_key(hub: &str, dir: &str) -> String {
     let d: String = dir
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
         .collect();
-    format!("{}.{}.{}", hub, d, ms)
+    format!("{}.{}", hub, d)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

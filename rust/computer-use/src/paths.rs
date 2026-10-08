@@ -36,10 +36,17 @@ impl Paths {
         bise_home::socket::socket_path(&self.run.join("computer-use.sock"))
     }
 
-    /// Make [`Paths::socket`] and the default `app_socket` bindable (the
-    /// short link to `run`, when needed).
+    /// The commands' socket (docs/issues/18): the user's processes only;
+    /// the agents' sandbox denies it (`bise_home::socket::computer_use_ctl`).
+    pub fn ctl_socket(&self) -> PathBuf {
+        bise_home::socket::computer_use_ctl(&self.run)
+    }
+
+    /// Make [`Paths::socket`], [`Paths::ctl_socket`] and the default
+    /// `app_socket` bindable (the short link to `run`, when needed).
     pub fn prepare_sockets(&self) -> std::io::Result<()> {
         bise_home::socket::prepare_socket(&self.run.join("computer-use.sock"))?;
+        bise_home::socket::prepare_socket(&self.run.join(bise_home::socket::COMPUTER_USE_CTL))?;
         bise_home::socket::prepare_socket(&self.run.join("computer-use-app.sock"))?;
         Ok(())
     }

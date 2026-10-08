@@ -44,11 +44,20 @@ const note = (x) => {
   if (log.length > 200) log.shift();
 };
 
-function agentOf(name) {
-  let a = agents.get(name);
-  if (!a) agents.set(name, (a = { name, groupId: null, stopped: false, closing: false, closingGroup: null }));
+/**
+ * An agent by its key (C4 `agent`: `<hub id>.<dir>`, docs/issues/18); `label`
+ * (C4 `name`) is what its group's title shows. Two projects' "perf" are two
+ * agents with one label.
+ */
+function agentOf(key, label) {
+  let a = agents.get(key);
+  if (!a) agents.set(key, (a = { name: key, label: label || key, groupId: null, stopped: false, closing: false, closingGroup: null }));
+  else if (label) a.label = label;
   return a;
 }
+
+/** Which agent owns which group, for a restarted worker: `g<group id>` → key (session storage: gone with the browser). */
+const ownerKey = (groupId) => `g${groupId}`;
 
 function register(tabId, agent) {
   const t = { agent, attached: false, paused: false, userTouched: false, refs: new Map(), byRef: new Map(), nextRef: 1, navs: 0, acting: false, actingUntil: 0, queue: Promise.resolve(), overlayNavs: -1 };
@@ -60,10 +69,16 @@ const tabsOf = (agent) => [...tabs.entries()].filter(([, t]) => t.agent === agen
 
 // After a service worker restart, the groups say who owns what.
 async function recover() {
+  // by the owners this browser session wrote (groupTab), never by a
+  // title: two projects' agents can share one (docs/issues/18). After a
+  // browser restart the groups have new ids and no owner: they stay the
+  // user's, and an agent opens a new one.
   try {
+    const owners = await chrome.storage.session.get(null);
     for (const g of await chrome.tabGroups.query({})) {
-      if (!g.title?.startsWith(GROUP_PREFIX)) continue;
-      const a = agentOf(g.title.slice(GROUP_PREFIX.length));
+      const key = owners[ownerKey(g.id)];
+      if (!key) continue;
+      const a = agentOf(key, g.title?.startsWith(GROUP_PREFIX) ? g.title.slice(GROUP_PREFIX.length) : undefined);
       a.groupId = g.id;
       for (const tab of await chrome.tabs.query({ groupId: g.id })) if (!tabs.has(tab.id)) register(tab.id, a.name);
     }
@@ -144,6 +159,7 @@ async function onHost(m) {
   if (m.drop) return dropAgent(m.drop);
   if (m.id === undefined || !m.op) return;
   try {
+    if (typeof m.agent === "string" && m.agent && m.name) agentOf(m.agent, m.name);
     const result = m.op === "show" ? await show(m.args || {}) : await run(m.agent, m.op, m.args || {});
     post({ id: m.id, ok: true, result });
   } catch (e) {
@@ -219,7 +235,8 @@ async function groupTab(a, tab) {
     }
   }
   a.groupId = await chrome.tabs.group({ tabIds: [tab.id], createProperties: { windowId: tab.windowId } });
-  await chrome.tabGroups.update(a.groupId, { title: GROUP_PREFIX + a.name, color: "pink", collapsed: false });
+  await chrome.tabGroups.update(a.groupId, { title: GROUP_PREFIX + a.label, color: "pink", collapsed: false });
+  await chrome.storage.session.set({ [ownerKey(a.groupId)]: a.name });
 }
 
 /** A refused page (design §5.1): `refused`, a message that says why, a summary that names the page. */
@@ -1158,6 +1175,7 @@ chrome.tabs.onUpdated.addListener((tabId, info) => {
 });
 
 chrome.tabGroups.onRemoved.addListener((group) => {
+  chrome.storage.session.remove(ownerKey(group.id)).catch(() => {});
   for (const a of agents.values()) {
     if (a.groupId !== group.id) continue;
     a.groupId = null;

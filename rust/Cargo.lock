@@ -118,6 +118,7 @@ dependencies = [
  "bend-plugins",
  "bise-catalog",
  "bise-home",
+ "bise-peer",
  "bise-proto",
  "bise-session",
  "cpal",
@@ -173,6 +174,7 @@ name = "bise-computer-use"
 version = "0.1.0"
 dependencies = [
  "bise-home",
+ "bise-peer",
  "libc",
  "serde_json",
 ]

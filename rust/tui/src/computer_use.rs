@@ -134,17 +134,36 @@ pub(crate) struct Driver {
 /// The agents of state.json, by name.
 pub(crate) type Drivers = BTreeMap<String, Driver>;
 
-pub(crate) fn parse_state(v: &Value) -> Drivers {
+/// `hub`: this TUI's hub id; the file is the machine's (docs/issues/18),
+/// so only that hub's agents, by name (two projects can each have a perf).
+pub(crate) fn parse_state(v: &Value, hub: &str) -> Drivers {
     let s = |x: &Value, k: &str| x.get(k).and_then(Value::as_str).filter(|t| !t.is_empty()).map(String::from);
     let b = |x: &Value, k: &str| x.get(k).and_then(Value::as_bool).unwrap_or(false);
     v.get("agents")
         .and_then(Value::as_object)
         .map(|m| {
-            m.iter()
-                .map(|(n, a)| (n.clone(), Driver { driving: s(a, "driving"), place: s(a, "where"), paused: b(a, "paused"), stopped: b(a, "stopped") }))
+            m.values()
+                .filter(|a| a["hub"] == hub)
+                .filter_map(|a| Some((s(a, "name")?, Driver { driving: s(a, "driving"), place: s(a, "where"), paused: b(a, "paused"), stopped: b(a, "stopped") })))
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// This TUI's hub id in the tags (`bise_peer::tags::hub_id` of the socket
+/// it talks to, as the hub computes it): whose agents it shows.
+static HUB: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// Called once the hub's socket is known: the path the TUI connects to,
+/// `switchboard::paths::Paths::socket` (the short `/tmp/bise-<uid>/...`
+/// form when the natural one is too long), as the hub's `proc_hub`.
+pub(crate) fn set_hub(socket: &std::path::Path) {
+    let _ = HUB.set(hub_of(socket));
+}
+
+/// The hub id of the socket the TUI talks to.
+pub(crate) fn hub_of(socket: &std::path::Path) -> String {
+    bise_peer::tags::hub_id(socket)
 }
 
 fn state_file() -> PathBuf {
@@ -175,7 +194,7 @@ pub(crate) fn drivers() -> Drivers {
                 c.drivers = std::fs::read_to_string(&f)
                     .ok()
                     .and_then(|t| serde_json::from_str::<Value>(&t).ok())
-                    .map(|v| parse_state(&v))
+                    .map(|v| parse_state(&v, HUB.get().map(String::as_str).unwrap_or("")))
                     .unwrap_or_default();
             }
         }

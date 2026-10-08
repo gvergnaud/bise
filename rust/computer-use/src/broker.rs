@@ -56,6 +56,9 @@ pub struct Opts {
     pub slack: Duration,
     /// after `open -g` of the helper, how long its socket may take
     pub helper_wait: Duration,
+    /// who opened a connection (docs/issues/18): the process table in the
+    /// commands, a fake in tests
+    pub judge: crate::who::JudgeFn,
 }
 
 impl Opts {
@@ -69,6 +72,7 @@ impl Opts {
             helper_app,
             slack: Duration::from_secs(15),
             helper_wait: Duration::from_secs(8),
+            judge: crate::who::JudgeFn::real(),
         }
     }
 }
@@ -179,7 +183,7 @@ const PERMISSIONS_LAUNCH_EVERY: Duration = Duration::from_secs(20);
 /// A running broker (tests stop it to restart it).
 pub struct Handle {
     shared: Arc<Shared>,
-    accept: Option<std::thread::JoinHandle<()>>,
+    accept: Vec<std::thread::JoinHandle<()>>,
     _lock: std::fs::File,
 }
 
@@ -197,7 +201,8 @@ impl Handle {
     fn close(&mut self) {
         self.shared.stop.store(true, Ordering::SeqCst);
         let _ = UnixStream::connect(self.shared.opts.paths.socket());
-        if let Some(t) = self.accept.take() {
+        let _ = UnixStream::connect(self.shared.opts.paths.ctl_socket());
+        for t in self.accept.drain(..) {
             let _ = t.join();
         }
         let inner = lock(&self.shared.inner);
@@ -206,6 +211,7 @@ impl Handle {
         }
         drop(inner);
         let _ = std::fs::remove_file(self.shared.opts.paths.socket());
+        let _ = std::fs::remove_file(self.shared.opts.paths.ctl_socket());
     }
 
     /// Block until the broker stops (idle exit).
@@ -258,6 +264,10 @@ pub fn start(opts: Opts) -> Result<Handle, StartError> {
     let _ = std::fs::remove_file(&sock);
     let listener = UnixListener::bind(&sock).map_err(StartError::Io)?;
     crate::paths::private(&sock, 0o600).map_err(StartError::Io)?;
+    let ctl_sock = opts.paths.ctl_socket();
+    let _ = std::fs::remove_file(&ctl_sock);
+    let ctl_listener = UnixListener::bind(&ctl_sock).map_err(StartError::Io)?;
+    crate::paths::private(&ctl_sock, 0o600).map_err(StartError::Io)?;
     let inner = Inner { agents: state::restore(&opts.paths), quiet_since: Some(Instant::now()), ..Inner::default() };
     let shared = Arc::new(Shared { opts, inner: Mutex::new(inner), stop: AtomicBool::new(false), started: Instant::now(), helper_gate: Mutex::new(()), last_launch: Mutex::new(None), launches: AtomicUsize::new(0) });
     write_state(&shared);
@@ -265,18 +275,21 @@ pub fn start(opts: Opts) -> Result<Handle, StartError> {
         let sh = shared.clone();
         std::thread::spawn(move || ticker(sh));
     }
-    let sh = shared.clone();
-    let accept = std::thread::spawn(move || {
-        for s in listener.incoming() {
-            if sh.stop.load(Ordering::SeqCst) {
-                break;
+    let accept = |l: UnixListener, ctl: bool| {
+        let sh = shared.clone();
+        std::thread::spawn(move || {
+            for s in l.incoming() {
+                if sh.stop.load(Ordering::SeqCst) {
+                    break;
+                }
+                let Ok(s) = s else { continue };
+                let sh = sh.clone();
+                std::thread::spawn(move || serve(sh, s, ctl));
             }
-            let Ok(s) = s else { continue };
-            let sh = sh.clone();
-            std::thread::spawn(move || serve(sh, s));
-        }
-    });
-    Ok(Handle { shared, accept: Some(accept), _lock: lockf })
+        })
+    };
+    let threads = vec![accept(listener, false), accept(ctl_listener, true)];
+    Ok(Handle { shared, accept: threads, _lock: lockf })
 }
 
 fn log(msg: &str) {
@@ -285,9 +298,15 @@ fn log(msg: &str) {
 
 // ---- connections ----
 
-fn serve(sh: Arc<Shared>, s: UnixStream) {
+/// One connection: judged first (docs/issues/18, `who.rs`), then served
+/// by what its hello says. `ctl`: it came in on the commands' socket.
+fn serve(sh: Arc<Shared>, s: UnixStream, ctl: bool) {
+    let peer = (sh.opts.judge.0)(&s);
     let Ok(rd) = s.try_clone() else { return };
     let Ok(w) = s.try_clone() else { return };
+    // the end of this connection: closed here, also when it was refused
+    // (`streams` keeps a handle for the broker's own shutdown)
+    let Ok(end) = s.try_clone() else { return };
     {
         let mut inner = lock(&sh.inner);
         inner.conns += 1;
@@ -301,16 +320,30 @@ fn serve(sh: Arc<Shared>, s: UnixStream) {
         _ => Value::Null,
     };
     if hello.get("op").and_then(Value::as_str) == Some("hello") {
-        match (str_of(&hello, "role"), str_of(&hello, "agent")) {
-            (Some("browser"), _) => browser_loop(&sh, w, lines),
-            (Some("ctl"), _) => ctl_loop(&sh, w, lines),
-            (_, Some(agent)) if !agent.is_empty() => {
-                let tmpdir = str_of(&hello, "tmpdir").map(PathBuf::from).unwrap_or_else(std::env::temp_dir);
-                agent_loop(&sh, agent.to_string(), tmpdir, w, lines)
-            }
+        let outside = peer == crate::who::Peer::Outside;
+        match (ctl, str_of(&hello, "role"), str_of(&hello, "agent")) {
+            (true, Some("ctl"), _) => match crate::who::ctl_refusal(&peer) {
+                None => ctl_loop(&sh, w, lines),
+                Some(why) => {
+                    log(&format!("command refused: {:?}", peer));
+                    refuse(&w, lines, why)
+                }
+            },
+            (true, _, _) => refuse(&w, lines, "this socket takes commands only: {\"op\":\"hello\",\"role\":\"ctl\"}"),
+            (false, Some("ctl"), _) => refuse(&w, lines, "commands go to computer-use-ctl.sock"),
+            (false, Some("browser"), _) if outside => browser_loop(&sh, w, lines),
+            (false, Some("browser"), _) => log(&format!("browser link refused: {:?}", peer)),
+            (false, _, Some(name)) => match crate::who::agent_key(&peer, name) {
+                Some(key) => {
+                    let tmpdir = str_of(&hello, "tmpdir").map(PathBuf::from).unwrap_or_else(std::env::temp_dir);
+                    agent_loop(&sh, key, tmpdir, w, lines)
+                }
+                None => refuse(&w, lines, "the broker could not read which process opened this connection"),
+            },
             _ => {}
         }
     }
+    let _ = end.shutdown(std::net::Shutdown::Both);
     let mut inner = lock(&sh.inner);
     inner.conns -= 1;
     if inner.conns == 0 {
@@ -319,6 +352,13 @@ fn serve(sh: Arc<Shared>, s: UnixStream) {
 }
 
 type Lines = std::io::Lines<BufReader<UnixStream>>;
+
+/// A refused connection: its first request gets `refused` with `why`
+/// (the line the caller prints), then the connection ends.
+fn refuse(w: &Writer, mut lines: Lines, why: &str) {
+    let id = lines.next().and_then(Result::ok).and_then(|l| serde_json::from_str::<Value>(&l).ok()).and_then(|r| r.get("id").cloned());
+    send_line(w, &json!({"id": id, "ok": false, "error": err("refused", why)}));
+}
 
 fn agent_loop(sh: &Arc<Shared>, agent: String, tmpdir: PathBuf, w: Writer, lines: Lines) {
     *lock(&sh.inner).sessions.entry(agent.clone()).or_default() += 1;
@@ -630,7 +670,9 @@ fn forward(sh: &Arc<Shared>, link: u64, agent: Option<&str>, target: Option<&str
     };
     let mut msg = json!({"id": id, "op": op, "args": args});
     if let Some(a) = agent {
+        // the key routes, the name shows (a group's title, the cursor's pill)
         msg["agent"] = json!(a);
+        msg["name"] = json!(crate::who::split(a).1);
     }
     if !send_line(&w, &msg) {
         lock(&sh.inner).pending.remove(&id);

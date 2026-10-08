@@ -957,7 +957,7 @@ impl Shell {
                 let _ = self.journal.flush();
                 // /drop (design §7.3): its tab group closes too
                 if let Some(name) = crate::computer_use::archived(&ev) {
-                    crate::computer_use::drop_agent(name);
+                    crate::computer_use::drop_agent(&self.proc_hub, name);
                 }
             }
             Effect::Spawn {
@@ -1998,7 +1998,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     std::fs::write(paths.pid_file(), std::process::id().to_string())?;
     // a hub one of its own agents relaunched is not that agent's: its
     // sb-core, builds and REPLs do not carry that tag (BISE-243)
-    let proc_hub = crate::procs::hub_id(&paths.socket());
+    let proc_hub = paths.proc_hub();
     if let Ok(l) = std::env::var(crate::procs::ENV) {
         std::env::set_var(crate::procs::ENV, crate::procs::without_hub(&l, &proc_hub));
     }
@@ -2138,7 +2138,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         small_broken: Default::default(),
         setup: None,
         archived: BTreeSet::new(),
-        proc_hub,
+        proc_hub: proc_hub.clone(),
         down: BTreeSet::new(),
         gates: gate::Gates::new(
             &std::fs::read_to_string(bise_home::Home::from_env().config_file()).unwrap_or_default(),
@@ -2148,7 +2148,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         lands: crate::land::Queue::default(),
         features: features::Features::load(&paths.state),
         prs: None,
-        cu: crate::computer_use::Watch::new(),
+        cu: crate::computer_use::Watch::new(&proc_hub),
         pg: pages::PageState::load(&paths.state),
         fn_ctx: None,
         idle: crate::idle::Watch::new(

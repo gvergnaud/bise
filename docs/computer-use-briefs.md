@@ -187,9 +187,20 @@ or `{"id":n,"ok":false,"error":{…C1}}`. One connection per agent session
 (the MCP server `bise computer-use mcp`). The broker routes `tab:` to the
 extension of the browser that owns the tab, `app:` to the helper.
 
-Commands (`bise computer-use stop …`, setup-check, bise ambient) say
-`{"op":"hello","role":"ctl"}` instead (no ack, no agent session) and send
-the same request lines. `show` is a command op only, never an agent tool
+Who connects (docs/issues/18, `computer-use/src/who.rs`): the broker reads
+each peer's process (`bise_peer::judge::judge_any`). An agent is keyed
+`<hub id>.<dir>` by the tag of its process (the last tag of the nearest
+tagged process), never by the hello's `agent`, which only names an
+untagged one (`bise --headless`); `state.json` (v2) and `events.jsonl`
+carry the key with its `name` and `hub`. A browser relay must come from
+outside any agent; the agents' socket takes no command.
+
+Commands (`bise computer-use stop …`, setup-check, the TUI, bise ambient)
+go to their own socket, `~/.bise/run/computer-use-ctl.sock`
+(`bise_home::socket::COMPUTER_USE_CTL`, denied in the agents' sandbox),
+served to the user's processes only (else `refused`): they say
+`{"op":"hello","role":"ctl"}` (no ack, no agent session) and send the same
+request lines; an agent names another by its key. `show` is a command op only, never an agent tool
 (bise ambient, docs/ambient-pages.md §2.8): `{"op":"show","args":{"url":
 "http(s)://…","url_prefix"?,"browser"?}}` → `{"tab_id","created","url",
 "browser"}`; the first connected browser unless `browser`; no wait for a

@@ -17,7 +17,8 @@
     "debugger",
     "nativeMessaging",
     "scripting",
-    "alarms"
+    "alarms",
+    "storage"
   ],
   "host_permissions": [
     "<all_urls>"

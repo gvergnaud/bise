@@ -570,16 +570,25 @@ impl Shell {
     /// (docs/issues/16): both when its REPL's `sb` uses agent.sock
     /// (`repl.json` says `"sock": "agent"`), none for a REPL adopted from
     /// an older hub, whose `SB_SOCKET` is still hub.sock.
+    /// Computer use's command socket too, always (docs/issues/18): an
+    /// agent drives its own tabs on computer-use.sock, never the user's
+    /// stop/resume/status.
     fn client_socks(&self, dir: &str) -> Vec<std::path::PathBuf> {
         let paths = &self.opts.paths;
+        let run = bise_home::Home::from_env().run_dir();
+        let ctl = run.join(bise_home::socket::COMPUTER_USE_CTL);
+        let mut out = vec![ctl.clone()];
+        if bise_home::socket::computer_use_ctl(&run) != ctl {
+            out.push(bise_home::socket::computer_use_ctl(&run));
+        }
         let repl: serde_json::Value = std::fs::read_to_string(paths.agent_dir(dir).join("repl.json"))
             .ok()
             .and_then(|t| serde_json::from_str(&t).ok())
             .unwrap_or_default();
         if repl.get("sock").and_then(|s| s.as_str()) != Some("agent") {
-            return vec![];
+            return out;
         }
-        let mut out = vec![paths.natural_socket()];
+        out.push(paths.natural_socket());
         if paths.socket() != paths.natural_socket() {
             out.push(paths.socket());
         }
