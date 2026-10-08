@@ -18,7 +18,7 @@ pub fn core(args: &[String]) -> std::io::Result<i32> {
     let exe = std::env::current_exe()?;
     let workspace = paths.workspace.to_string_lossy().to_string();
     let projects = ambient_projects(exe.clone(), root.clone());
-    let connect = ambient_connector(paths, exe, root);
+    let connect = ambient_connector(paths, exe, root, true);
     Ok(bend_tui::ambient::core_main(workspace, connect, switchboard::model::user_kind, Some(projects), Some(ambient_setup())))
 }
 
@@ -54,20 +54,26 @@ fn ambient_workspace(args: &[String], core: bool) -> std::path::PathBuf {
 }
 
 /// bise ambient's hub connection: the first call starts the hub when
-/// none runs (`client::connect`, like the TUI); later calls (after a
-/// loss) only connect and say hello: the user may have stopped bise.
+/// none runs (`client::open`, like the TUI); later calls (after a loss)
+/// only connect: the user may have stopped bise. `hello`: it says the
+/// older hello (the home hub's feed connection); a project's connection
+/// says nothing, the core's first line is JSON-RPC's `initialize`.
 fn ambient_connector(
     paths: switchboard::paths::Paths,
     exe: std::path::PathBuf,
     root: std::path::PathBuf,
+    hello: bool,
 ) -> bend_tui::ambient::Connect {
     let mut first = true;
     Box::new(move || {
-        if std::mem::take(&mut first) {
-            return switchboard::client::connect(&paths, &exe, &root);
+        let mut s = if std::mem::take(&mut first) {
+            switchboard::client::open(&paths, &exe, &root)?
+        } else {
+            std::os::unix::net::UnixStream::connect(paths.socket())?
+        };
+        if hello {
+            s.write_all(b"{\"op\":\"hello\"}\n")?;
         }
-        let mut s = std::os::unix::net::UnixStream::connect(paths.socket())?;
-        s.write_all(b"{\"op\":\"hello\"}\n")?;
         Ok(s)
     })
 }
@@ -78,7 +84,7 @@ fn ambient_connector(
 /// checkout's branch. Read-only but the connection.
 fn ambient_projects(exe: std::path::PathBuf, root: std::path::PathBuf) -> (bend_tui::ambient::ConnectFor, bend_tui::ambient::ProjectFacts) {
     let connect_for: bend_tui::ambient::ConnectFor = Box::new(move |path| {
-        ambient_connector(switchboard::paths::Paths::for_workspace(path), exe.clone(), root.clone())
+        ambient_connector(switchboard::paths::Paths::for_workspace(path), exe.clone(), root.clone(), false)
     });
     let facts = bend_tui::ambient::ProjectFacts {
         rows: Box::new(|| bise_home::projects::list(&bise_home::Home::from_env(), &switchboard::paths::home_workspace())),

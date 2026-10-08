@@ -115,7 +115,7 @@ def main():
         c.say("/new t7: {{bash: echo x > %s}}" % out7)
         card = card_of(c, "t7")
         check("always:" in card["text"], "a checker-off card offers always: %r" % card["text"])
-        c.send({"op": "interrupt", "focus": "t7", "agent": "t7"})
+        c.interrupt("t7")
         c.wait(lambda: not confirm_cards(c), 30, "the card closed by the interrupt")
         c.wait_idle("t7")
         check(not os.path.exists(out7), "the interrupted call did not run")

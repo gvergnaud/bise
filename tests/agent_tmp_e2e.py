@@ -66,7 +66,7 @@ def main():
         c.say("keep going", focus="tt")
         c.wait(lambda: glob.glob(os.path.join(run, "bend-steer-*.txt")), 30, "the steer file in run/")
         c.wait_idle("tt")
-        c.send({"op": "interrupt", "focus": "tt", "agent": "tt"})
+        c.interrupt("tt")
         c.wait(lambda: glob.glob(os.path.join(run, "bend-interrupt-*.txt")), 30, "the interrupt file in run/")
         lines = open(probe).read().split("\n")
         # TMUX_TMPDIR only when a socket fits under it (tools_env::tmux_fits)

@@ -11,8 +11,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-/// Opens a connection to the hub, `{"op":"hello"}` already sent. Called
-/// again after each loss (the first call may start the hub).
+/// Opens a connection to the hub, its first line already sent when the
+/// connector says one (`{"op":"hello"}`; a project's connection says
+/// none: the core's first line is JSON-RPC's `initialize`). Called again
+/// after each loss (the first call may start the hub).
 pub type Connect = Box<dyn FnMut() -> io::Result<UnixStream> + Send>;
 
 /// What the reader thread tells the core.
@@ -28,6 +30,22 @@ pub enum HubIn {
     /// words): the thread has ended, it never connects again (the hub's
     /// verdict is about this process: retrying alone wouldn't change it)
     Refused(String),
+}
+
+/// The hub's refusal of this connection (docs/issues/16): the older
+/// typed `refused`, or JSON-RPC's REFUSED error to `initialize`.
+fn refusal(l: &str) -> Option<String> {
+    if l.contains("\"refused\"") {
+        if let Ok(bise_proto::hub::HubEv::Refused { error }) = bise_proto::hub::HubEv::decode(l) {
+            return Some(error);
+        }
+    }
+    if l.contains(&bise_proto::rpc::code::REFUSED.to_string()) {
+        if let Ok(bise_proto::rpc::Message::Response(r)) = bise_proto::rpc::Message::read(l) {
+            return r.error.filter(|e| e.code == bise_proto::rpc::code::REFUSED).map(|e| e.message);
+        }
+    }
+    None
 }
 
 /// The writer half: None while the hub is away.
@@ -93,8 +111,7 @@ impl Hub {
                             let l = line.trim_end();
                             // the typed refusal (docs/issues/16): said once,
                             // then this reader ends without reconnecting
-                            let refused = l.contains("\"refused\"").then(|| bise_proto::hub::HubEv::decode(l));
-                            if let Some(Ok(bise_proto::hub::HubEv::Refused { error })) = refused {
+                            if let Some(error) = refusal(l) {
                                 if let Ok(mut slot) = writer.lock() {
                                     *slot = None;
                                 }

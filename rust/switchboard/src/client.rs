@@ -68,7 +68,15 @@ fn not_started(cause: &str, err_file: &Path) -> String {
 
 /// A client connection (the TUI, a test): `hello` already sent.
 pub fn connect(paths: &Paths, exe: &Path, app_root: &Path) -> std::io::Result<UnixStream> {
-    let mut s = match UnixStream::connect(paths.socket()) {
+    let mut s = open(paths, exe, app_root)?;
+    s.write_all(b"{\"op\":\"hello\"}\n")?;
+    Ok(s)
+}
+
+/// [`connect`] without the hello: the caller says its first line (the
+/// desktop core's JSON-RPC `initialize`).
+pub fn open(paths: &Paths, exe: &Path, app_root: &Path) -> std::io::Result<UnixStream> {
+    let s = match UnixStream::connect(paths.socket()) {
         Ok(s) => s,
         Err(_) => {
             let err_file = paths.state.join("hub.err");
@@ -87,7 +95,6 @@ pub fn connect(paths: &Paths, exe: &Path, app_root: &Path) -> std::io::Result<Un
             }
         }
     };
-    s.write_all(b"{\"op\":\"hello\"}\n")?;
     Ok(s)
 }
 

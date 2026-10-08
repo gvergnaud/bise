@@ -158,7 +158,7 @@ impl Shell {
                 if !known(self, &agent) {
                     return self.proto_error(id, &tag, &format!("no agent {agent}"));
                 }
-                self.client_line(id, json!({"op": "interrupt", "agent": agent}));
+                self.step(Input::ClientInterrupt { client: id, agent });
             }
             HubCmd::Archive { agent, force, .. } => {
                 if !known(self, &agent) {
@@ -335,8 +335,7 @@ impl Shell {
                 };
                 let working = self.hub.st.agents.get(&name).is_some_and(|a| a.status() == crate::model::Status::Working);
                 if working {
-                    // TODO(client-protocol P3): the old untyped op door, replaced by P3's typed interrupt
-                    self.client_line(id, json!({"op": "interrupt", "agent": name}));
+                    self.step(Input::ClientInterrupt { client: id, agent: name });
                 }
                 self.computer_use_stop(&dir);
             }

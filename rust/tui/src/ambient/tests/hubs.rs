@@ -36,11 +36,12 @@ pub(super) fn world(t: &mut T) -> World {
         let (etx, id) = (etx.clone(), id.to_string());
         let tag = id.clone();
         let connect: super::super::hub::Connect = Box::new(move || {
-            let (mut core_end, hub_end) = UnixStream::pair()?;
-            core_end.write_all(b"{\"op\":\"hello\"}\n")?;
+            // a project's connector says nothing: the core's first line
+            // is JSON-RPC's initialize (P1c)
+            let (core_end, hub_end) = UnixStream::pair()?;
             let r = BufReader::new(hub_end.try_clone()?);
             r.get_ref().set_read_timeout(Some(Duration::from_secs(3)))?;
-            etx.send((id.clone(), HubEnd { w: hub_end, r })).map_err(std::io::Error::other)?;
+            etx.send((id.clone(), HubEnd::new(hub_end, r))).map_err(std::io::Error::other)?;
             Ok(core_end)
         });
         Hub::start(connect, ptx.clone(), move |h| (tag.clone(), h), Duration::from_millis(20))
@@ -127,31 +128,57 @@ impl World {
         self.open.get_mut(id).unwrap_or_else(|| panic!("no connection to {id}"))
     }
 
-    /// The hub of `id` says welcome (after the core's typed hello).
+    /// The hub of `id` answers the core's `initialize` (its welcome).
     pub(super) fn welcome(&mut self, t: &mut T, id: &str) {
         self.welcome_as(t, id, json!({}));
     }
 
-    /// [`welcome`] with `extra` fields on it (hub-skew: `cmds`, `proto`).
+    /// [`welcome`] as a hub of another kind (hub-skew): `cmds` the
+    /// HubCmd tags it serves (its methods), or `proto` an older hub that
+    /// doesn't serve JSON-RPC: it refuses the `initialize` line and closes,
+    /// the core connects again with the hellos and gets this welcome.
     pub(super) fn welcome_as(&mut self, t: &mut T, id: &str, extra: Value) {
         self.until(t, |_| true);
-        // next() skips the hellos: read the raw lines up to the typed one
-        let e = self.end(id);
-        loop {
+        if extra.get("proto").is_some() {
+            // a core that knows it already says the hellos; else it
+            // tries initialize first, refused here as an older hub does
+            let e = self.end(id);
             let mut l = String::new();
-            e.r.read_line(&mut l).expect("the typed hello");
-            let v: Value = serde_json::from_str(l.trim()).unwrap();
-            if v["cmd"] == "hello" {
-                assert_eq!(v, json!({"cmd": "hello", "proto": 1, "typed_only": true}), "a window's connection: typed only");
-                break;
+            e.r.read_line(&mut l).expect("the core's first line");
+            if l.contains("\"initialize\"") {
+                writeln!(e.w, "{}", json!({"ok": false, "error": "hub.sock does not serve the op \"\""})).unwrap();
+                e.w.shutdown(std::net::Shutdown::Both).unwrap();
+                self.open.remove(id);
+                self.opened(t, &[id]);
+                l.clear();
+                self.end(id).r.read_line(&mut l).expect("the hello");
             }
-            assert_eq!(v["op"], "hello", "only the connector's hello before it: {v}");
+            assert!(l.contains("\"op\":\"hello\""), "the older hello first: {l}");
+            // then the typed hello, then its welcome
+            let e = self.end(id);
+            e.rpc = Some(false);
+            loop {
+                let mut l = String::new();
+                e.r.read_line(&mut l).expect("the typed hello");
+                let v: Value = serde_json::from_str(l.trim()).unwrap();
+                if v["cmd"] == "hello" {
+                    assert_eq!(v, json!({"cmd": "hello", "proto": 1, "typed_only": true}), "a window's connection: typed only");
+                    break;
+                }
+                assert_eq!(v["op"], "hello", "only the hello before it: {v}");
+            }
+            let mut welcome = json!({"ev": "welcome", "project": id, "proto": 1, "workspace": format!("/p/{id}"), "name": id});
+            for (k, v) in extra.as_object().into_iter().flatten() {
+                welcome[k] = v.clone();
+            }
+            self.end(id).say(welcome);
+        } else {
+            let methods = extra.get("cmds").and_then(Value::as_array).map(|tags| {
+                let tags: Vec<&str> = tags.iter().filter_map(Value::as_str).collect();
+                bise_proto::rpc::METHODS.iter().filter(|r| tags.contains(&r.cmd)).map(|r| r.method.to_string()).collect()
+            });
+            self.end(id).initialized(id, methods);
         }
-        let mut welcome = json!({"ev": "welcome", "project": id, "proto": 1, "workspace": format!("/p/{id}"), "name": id});
-        for (k, v) in extra.as_object().into_iter().flatten() {
-            welcome[k] = v.clone();
-        }
-        self.end(id).say(welcome);
         self.until(t, |o| o.iter().any(|v| v["ev"] == "welcome" && v["project"] == id));
     }
 }
@@ -321,7 +348,7 @@ fn the_window_reaches_every_projects_hub_through_the_core() {
     assert_eq!(shop.len(), 1, "its unsubscribe, then closed: {shop:?}");
     assert!(shop[0].contains("unsubscribe"));
     let mail = closed(w.end("mail"));
-    assert!(mail.iter().all(|l| l.contains("\"hello\"")), "mail never welcomed: only the hellos went: {mail:?}");
+    assert!(mail.iter().all(|l| l.contains("\"initialize\"")), "mail never welcomed: only its initialize went: {mail:?}");
     assert!(!w.open.contains_key("docs"), "a folder gone: never a connection");
 }
 

@@ -1818,10 +1818,6 @@ impl Shell {
                 id: v.get("id").and_then(|x| x.as_u64()).unwrap_or(0),
                 yes: v.get("yes").and_then(|x| x.as_bool()).unwrap_or(false),
             }),
-            "interrupt" => self.step(Input::ClientInterrupt {
-                client: id,
-                agent: s("agent"),
-            }),
             // the menu bar's 'stop watching' (amb-mac m_5435), `/scheduled`'s
             // x (stop) and r (run now)
             "every_stop" => self.step(Input::EveryStop {

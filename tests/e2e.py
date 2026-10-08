@@ -232,6 +232,32 @@ class Client:
     def say(self, text, focus="main"):
         self.send({"op": "input", "focus": focus, "text": text})
 
+    def rpc(self, method, params=None, timeout=30):
+        """A JSON-RPC request on this hello connection (client-protocol):
+        its response, once it comes."""
+        self._rid = getattr(self, "_rid", 0) + 1
+        rid = "e2e-%d" % self._rid
+        msg = {"jsonrpc": "2.0", "id": rid, "method": method}
+        if params is not None:
+            msg["params"] = params
+        self.send(msg)
+
+        def got():
+            with self.lock:
+                return next((e for e in self.events if e.get("id") == rid and "method" not in e), None)
+        return wait.until(got, timeout, "the response to %s" % method)
+
+    def project(self):
+        """The hub's id, read from hub/read's state (no copy of hub_id)."""
+        if not getattr(self, "_project", None):
+            st = self.rpc("hub/read")["result"]["state"]
+            self._project = st[0]["params"]["project"]
+        return self._project
+
+    def interrupt(self, agent):
+        """ctrl+c on `agent` (turn/interrupt): its response."""
+        return self.rpc("turn/interrupt", {"project": self.project(), "agent": agent})
+
     def lines(self, agent=None):
         with self.lock:
             return [e["line"] for e in self.events if e.get("ev") == "line" and (agent is None or e["agent"] == agent)]

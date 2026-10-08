@@ -1,5 +1,7 @@
 //! The core as a client of every project's hub (bise desktop S3b step 2):
-//! one typed connection (`{cmd: hello, proto: 1}`) per held project, the
+//! one JSON-RPC connection (`initialize` first, client-protocol P1c,
+//! `hub_rpc.rs`; an older hub: `{cmd: hello, proto: 1}` after the older
+//! hello, one release) per held project, the
 //! window's commands with a `project` routed to it, its typed events out
 //! to the app as they are (they carry `project`), and `projects` (the
 //! sidebar's rows) from the registry, the held hubs' own `agents`/`cards`
@@ -28,6 +30,7 @@
 //! connected yet gets `error {project, cmd, text}`; only subscriptions
 //! are kept (state, not commands) and sent again at each `welcome`.
 
+use super::hub_rpc::{Read, RpcConn};
 use super::*;
 use crate::ambient::projects::{self, Checkout, Facts};
 use bise_home::projects::Row;
@@ -89,11 +92,26 @@ struct Conn {
     /// hub-skew: the commands its welcome listed (empty: a hub older
     /// than the list, or not welcomed yet)
     cmds: Vec<String>,
+    /// its JSON-RPC side (P1c, `hub_rpc.rs`)
+    rpc: RpcConn,
 }
 
 impl Conn {
     fn new(hub: Hub, until: Option<Instant>) -> Conn {
-        Conn { hub, welcomed: false, rows: None, pending: Vec::new(), until, cmds: Vec::new() }
+        Conn { hub, welcomed: false, rows: None, pending: Vec::new(), until, cmds: Vec::new(), rpc: RpcConn::default() }
+    }
+
+    /// One window command (a `HubCmd`'s JSON) to its hub: a request once
+    /// `initialize` answered, else the typed line (an older hub); false
+    /// when nothing was written.
+    fn send(&mut self, v: &Value) -> bool {
+        if !self.rpc.ready {
+            return self.hub.send(v);
+        }
+        match self.rpc.request(v) {
+            Some(req) => self.hub.send(&req),
+            None => false,
+        }
     }
 
     /// Kept though no rule holds it: a command waits or was just sent.
@@ -128,6 +146,10 @@ pub(super) struct Hubs {
     voice: Option<(String, String)>,
     /// hub-skew: the projects already told their hub is older (once each)
     older: BTreeSet<String>,
+    /// the projects whose hub doesn't serve JSON-RPC's `initialize` (one
+    /// release, architect m_13089 Q2): their connection says the older
+    /// hellos, for this core's life
+    older_door: BTreeSet<String>,
     /// the projects whose hub refused this core's connection, with its
     /// words (HubEv::Refused, docs/issues/16): never connected again until
     /// he retries (`hub_retry`) or a new core starts. The hub's verdict is
@@ -323,7 +345,7 @@ impl Core {
                 }
                 // the write failed: its hub just went (its Down is on its
                 // way); the reader connects again, the command waits
-                if !c.hub.send(&v) {
+                if !c.send(&v) {
                     c.welcomed = false;
                     c.pending.push((v, Instant::now() + START));
                 }
@@ -397,14 +419,14 @@ impl Core {
         if let Some((p, a)) = &old {
             if !window(self, p, a) {
                 if let Some(c) = self.hubs.conns.get_mut(p).filter(|c| c.welcomed) {
-                    c.hub.send(&json!({"cmd": "unsubscribe", "project": p, "agent": a}));
+                    c.send(&json!({"cmd": "unsubscribe", "project": p, "agent": a}));
                 }
             }
         }
         if let Some((p, a)) = &want {
             if !window(self, p, a) {
                 if let Some(c) = self.hubs.conns.get_mut(p).filter(|c| c.welcomed) {
-                    c.hub.send(&json!({"cmd": "subscribe", "project": p, "agent": a}));
+                    c.send(&json!({"cmd": "subscribe", "project": p, "agent": a}));
                 }
             }
         }
@@ -450,102 +472,165 @@ impl Core {
 
     /// A project hub's connection said something.
     pub fn project_hub(&mut self, id: &str, h: HubIn) {
+        let older = self.hubs.older_door.contains(id);
         let Some(c) = self.hubs.conns.get_mut(id) else { return };
         match h {
+            // JSON-RPC's `initialize` first (P1c); an older hub (one
+            // release): the older hello, then the typed one
             HubIn::Up => {
                 c.welcomed = false;
-                c.hub.send(&json!({"cmd": "hello", "proto": bise_proto::PROTO, "typed_only": true}));
+                if older {
+                    c.hub.send(&json!({"op": "hello"}));
+                    c.hub.send(&json!({"cmd": "hello", "proto": bise_proto::PROTO, "typed_only": true}));
+                } else {
+                    let init = c.rpc.initialize(env!("CARGO_PKG_VERSION"));
+                    c.hub.send(&init);
+                }
             }
             HubIn::Down => {
                 c.welcomed = false;
+                c.rpc.ready = false;
                 c.rows = None;
                 self.emit_projects();
             }
-            // its reader has ended: no reconnect, its waiting commands
-            // fail with the hub's words, nothing more goes until he retries
-            HubIn::Refused(why) => {
-                let Some(c) = self.hubs.conns.remove(id) else { return };
-                c.hub.close();
-                let name = self.hubs.rows.iter().find(|r| r.id == id).map(|r| r.name.clone()).unwrap_or_else(|| id.to_string());
-                self.hubs.refused.insert(id.to_string(), why.clone());
-                for (cmd, _) in c.pending {
-                    let tag = cmd.get("cmd").and_then(Value::as_str).unwrap_or("").to_string();
-                    let cid = cmd.get("cid").and_then(Value::as_u64);
-                    self.project_error(id, &tag, &refused_text(&name, &why), cid, Some(bise_proto::hub::ErrorKind::HubRefused));
-                }
-                self.emit(json!({"ev": "hub_refused", "project": id, "error": why}));
-                self.emit_projects();
-            }
+            HubIn::Refused(why) => self.project_refused(id, why),
             HubIn::Line(l) => {
                 let Ok(v) = serde_json::from_str::<Value>(&l) else { return };
-                let ev = v.get("ev").and_then(Value::as_str).unwrap_or("").to_string();
-                if !HubEv::TAGS.contains(&ev.as_str()) {
-                    return;
+                if older {
+                    return self.project_line(id, v);
                 }
-                // a typed tag that doesn't decode is the hub's older event
-                // of the same name (`artifacts` {rows, new, seen_ms} from a
-                // hub that doesn't know typed_only): never the window's
-                // (amb-win m_8886)
-                let Ok(typed) = HubEv::from_value(v.clone()) else { return };
-                if !first_end(&mut self.hubs.ends, &typed) {
-                    return;
-                }
-                // voice mode hears its agent's turn and messages
-                let for_voice = (self.voice_on.is_some() && matches!(typed, HubEv::Agents { .. } | HubEv::Entry { .. })).then(|| typed.clone());
-                match typed {
-                    HubEv::Welcome { cmds, proto, .. } => {
-                        c.welcomed = true;
-                        let older = older_proto(&cmds, proto) && self.hubs.older.insert(id.to_string());
-                        c.cmds = cmds;
-                        let voice = self.hubs.voice.as_ref().filter(|(p, _)| p == id).map(|(_, a)| a);
-                        let subs = self.hubs.subs.get(id);
-                        for agent in subs.into_iter().flatten().chain(voice.filter(|a| !subs.is_some_and(|s| s.contains(*a)))) {
-                            c.hub.send(&json!({"cmd": "subscribe", "project": id, "agent": agent}));
-                        }
-                        // the commands that waited for it, in order; a hub
-                        // held for them only stays a while for their answers
-                        let mut failed = Vec::new();
-                        let mut lacked = Vec::new();
-                        for (cmd, _) in std::mem::take(&mut c.pending) {
-                            let tag = cmd.get("cmd").and_then(Value::as_str).unwrap_or("").to_string();
-                            let cid = cmd.get("cid").and_then(Value::as_u64);
-                            if lacks(&c.cmds, &tag) {
-                                lacked.push((tag, cid));
-                            } else if !c.hub.send(&cmd) {
-                                failed.push((tag, cid));
-                            }
-                        }
-                        if let Some(u) = c.until.as_mut() {
-                            *u = Instant::now() + LINGER;
-                        }
-                        for (cmd, cid) in failed {
-                            self.project_error(id, &cmd, "its hub went away: nothing sent. try again in a moment.", cid, None);
-                        }
-                        for (cmd, cid) in lacked {
-                            self.project_error(id, &cmd, HUB_OLDER, cid, Some(bise_proto::hub::ErrorKind::HubOlder));
-                        }
-                        if older {
-                            self.emit(json!({"ev": "notice", "project": id, "text": HUB_OLDER}));
+                match c.rpc.read(id, v) {
+                    Read::Welcome(welcome, state) => {
+                        self.project_ev(id, welcome);
+                        for ev in state {
+                            self.project_ev(id, ev);
                         }
                     }
-                    HubEv::Agents { agents, .. } => {
-                        let cards = c.rows.take().map(|r| r.1).unwrap_or_default();
-                        c.rows = Some((agents, cards));
+                    Read::Evs(evs) => {
+                        for ev in evs {
+                            self.project_ev(id, ev);
+                        }
                     }
-                    HubEv::Cards { cards, .. } => {
-                        let agents = c.rows.take().map(|r| r.0).unwrap_or_default();
-                        c.rows = Some((agents, cards));
+                    Read::Error { tag, text, cid, reason, kind } => {
+                        let mut ev = json!({"ev": "error", "project": id, "cmd": tag, "text": text});
+                        if let Some(cid) = cid {
+                            ev["cid"] = json!(cid);
+                        }
+                        if let Some(r) = reason {
+                            ev["reason"] = json!(r);
+                        }
+                        if let Some(k) = kind {
+                            ev["kind"] = json!(k);
+                        }
+                        self.emit(ev);
                     }
-                    _ => {}
-                }
-                if let Some(t) = for_voice {
-                    self.voice_mode_hub(&t);
-                }
-                self.emit(v);
-                if matches!(ev.as_str(), "welcome" | "agents" | "cards") {
-                    self.emit_projects();
+                    Read::Resync => {
+                        let req = c.rpc.read_again();
+                        c.hub.send(&req);
+                    }
+                    Read::Refused(why) => self.project_refused(id, why),
+                    // its connection closes: the next one says hello the older way
+                    Read::Older => {
+                        self.hubs.older_door.insert(id.to_string());
+                    }
+                    Read::Nothing => {}
                 }
             }
+        }
+    }
+
+    /// Its reader has ended: no reconnect, its waiting commands fail with
+    /// the hub's words, nothing more goes until he retries.
+    fn project_refused(&mut self, id: &str, why: String) {
+        let Some(c) = self.hubs.conns.remove(id) else { return };
+        c.hub.close();
+        let name = self.hubs.rows.iter().find(|r| r.id == id).map(|r| r.name.clone()).unwrap_or_else(|| id.to_string());
+        self.hubs.refused.insert(id.to_string(), why.clone());
+        for (cmd, _) in c.pending {
+            let tag = cmd.get("cmd").and_then(Value::as_str).unwrap_or("").to_string();
+            let cid = cmd.get("cid").and_then(Value::as_u64);
+            self.project_error(id, &tag, &refused_text(&name, &why), cid, Some(bise_proto::hub::ErrorKind::HubRefused));
+        }
+        self.emit(json!({"ev": "hub_refused", "project": id, "error": why}));
+        self.emit_projects();
+    }
+
+    /// An older hub's typed line (its typed hello's connection).
+    fn project_line(&mut self, id: &str, v: Value) {
+        let ev = v.get("ev").and_then(Value::as_str).unwrap_or("");
+        if !HubEv::TAGS.contains(&ev) {
+            return;
+        }
+        // a typed tag that doesn't decode is the hub's older event of the
+        // same name (`artifacts` {rows, new, seen_ms} from a hub that
+        // doesn't know typed_only): never the window's (amb-win m_8886)
+        let Ok(typed) = HubEv::from_value(v) else { return };
+        self.project_ev(id, typed);
+    }
+
+    /// One typed event of a project's hub, for the window.
+    fn project_ev(&mut self, id: &str, typed: HubEv) {
+        if !first_end(&mut self.hubs.ends, &typed) {
+            return;
+        }
+        let Some(c) = self.hubs.conns.get_mut(id) else { return };
+        let v = typed.to_value();
+        let tag = typed.tag().to_string();
+        // voice mode hears its agent's turn and messages
+        let for_voice = (self.voice_on.is_some() && matches!(typed, HubEv::Agents { .. } | HubEv::Entry { .. })).then(|| typed.clone());
+        match typed {
+            HubEv::Welcome { cmds, proto, .. } => {
+                c.welcomed = true;
+                let older = older_proto(&cmds, proto) && self.hubs.older.insert(id.to_string());
+                c.cmds = cmds;
+                let voice = self.hubs.voice.as_ref().filter(|(p, _)| p == id).map(|(_, a)| a);
+                let subs = self.hubs.subs.get(id);
+                let agents: Vec<String> = subs.into_iter().flatten().chain(voice.filter(|a| !subs.is_some_and(|s| s.contains(*a)))).cloned().collect();
+                for agent in agents {
+                    c.send(&json!({"cmd": "subscribe", "project": id, "agent": agent}));
+                }
+                // the commands that waited for it, in order; a hub
+                // held for them only stays a while for their answers
+                let mut failed = Vec::new();
+                let mut lacked = Vec::new();
+                for (cmd, _) in std::mem::take(&mut c.pending) {
+                    let tag = cmd.get("cmd").and_then(Value::as_str).unwrap_or("").to_string();
+                    let cid = cmd.get("cid").and_then(Value::as_u64);
+                    if lacks(&c.cmds, &tag) {
+                        lacked.push((tag, cid));
+                    } else if !c.send(&cmd) {
+                        failed.push((tag, cid));
+                    }
+                }
+                if let Some(u) = c.until.as_mut() {
+                    *u = Instant::now() + LINGER;
+                }
+                for (cmd, cid) in failed {
+                    self.project_error(id, &cmd, "its hub went away: nothing sent. try again in a moment.", cid, None);
+                }
+                for (cmd, cid) in lacked {
+                    self.project_error(id, &cmd, HUB_OLDER, cid, Some(bise_proto::hub::ErrorKind::HubOlder));
+                }
+                if older {
+                    self.emit(json!({"ev": "notice", "project": id, "text": HUB_OLDER}));
+                }
+            }
+            HubEv::Agents { agents, .. } => {
+                let cards = c.rows.take().map(|r| r.1).unwrap_or_default();
+                c.rows = Some((agents, cards));
+            }
+            HubEv::Cards { cards, .. } => {
+                let agents = c.rows.take().map(|r| r.0).unwrap_or_default();
+                c.rows = Some((agents, cards));
+            }
+            _ => {}
+        }
+        if let Some(t) = for_voice {
+            self.voice_mode_hub(&t);
+        }
+        self.emit(v);
+        if matches!(tag.as_str(), "welcome" | "agents" | "cards") {
+            self.emit_projects();
         }
     }
 

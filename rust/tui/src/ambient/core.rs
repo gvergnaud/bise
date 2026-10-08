@@ -9,6 +9,7 @@ mod app_update;
 mod away;
 mod cmd;
 mod dictate;
+mod hub_rpc;
 mod hubs;
 mod index;
 mod picks;
@@ -436,8 +437,12 @@ impl Core {
                     self.state(&st);
                 }
             }
+            // JSON-RPC's turn/interrupt on the home connection (P1c: the
+            // untyped interrupt op is gone); its answer is not read
             Cmd::Stop { agent } => {
-                if !self.hub.send(&json!({"op": "interrupt", "agent": agent})) {
+                let project = bise_home::hub_id(Path::new(&self.workspace));
+                let req = json!({"jsonrpc": "2.0", "id": "stop", "method": "turn/interrupt", "params": {"project": project, "agent": agent}});
+                if !self.hub.send(&req) {
                     self.error("bise isn't reachable: it keeps going. try again in a moment.");
                 }
             }
