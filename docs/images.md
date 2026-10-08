@@ -240,7 +240,12 @@ Done: `rust/images/src/tests.rs` (6), `attach.rs` test,
 `image_*` and `api_body_image_*` (7 laws), `tests/tui_images_tmux.py`
 (in run_all.sh: @ pick, dropped path, plain paste, Ctrl+V, 3 image_url
 parts with the PNG data at the fake provider, the feed shows
-`[Image #1 shots/red-blue.png]`).
+`[Image #1 shots/red-blue.png]`), `tests/tui_card_image_tmux.py`
+(in run_all.sh, Anthropic family like the user's foundry provider:
+Cmd+V on an image in main's thread, then an image pasted in the
+answer to a `sb card --for` card of task t3; each time the request of
+the right agent carries an `image` block with the PNG's base64 next to
+its `[Image #1]` name, never only a path or the bare marker).
 
 ## Not done / later
 
