@@ -7,6 +7,8 @@ description = "Agent Plugins 1.0 for the Bend harness: resolver, diagnostics, st
 
 [dependencies]
 bise-home = { path = "../home" }
+# where auth.json and the MCP logins live: files or the macOS keychain
+bise-secrets = { path = "../secrets" }
 serde_json = "1"
 # kill(2) for the parent watch (src/bridge.rs Parent)
 libc = "0.2"

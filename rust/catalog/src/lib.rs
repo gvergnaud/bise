@@ -28,6 +28,7 @@ pub mod openrouter_login;
 pub mod names;
 pub mod picks;
 pub mod roles;
+pub mod secrets_cli;
 pub mod spawn;
 pub mod voice;
 

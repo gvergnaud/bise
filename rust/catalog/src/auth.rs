@@ -17,7 +17,12 @@
 //!
 //! `auth.json`, the OpenCode layout: `{"<provider>": {"type": "api",
 //! "key": "..."}}`. Other entries (a future OAuth type) are kept as they
-//! are. The file is 0600 in a 0700 directory, replaced atomically.
+//! are. The file is 0600 in a 0700 directory, replaced atomically; with
+//! `[secrets] store = "keychain"` (macOS, `bise secrets keychain on`:
+//! [`crate::secrets_cli`]) its text is in the keychain and the file is a
+//! stub (`bise_secrets` reads and writes it; a locked keychain is
+//! [`Unreadable::Locked`], never an empty store). Its lock,
+//! `auth.json.lock`, is here too ([`lock`]).
 
 use std::collections::BTreeMap;
 use std::io::Write;
@@ -43,6 +48,15 @@ pub fn env_names(key_env: &str) -> Vec<&str> {
 
 // ---- auth.json ----
 
+/// Why auth.json can't be read now.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Unreadable {
+    /// it is in the macOS keychain, and the keychain is locked
+    Locked,
+    /// one line saying why (no content of the file)
+    Other(String),
+}
+
 /// The key store. Reading never fails on a missing file (no keys);
 /// a file that is not a JSON object is an error (never overwritten).
 #[derive(Clone, Debug, Default)]
@@ -64,12 +78,23 @@ impl Store {
         }
     }
 
-    /// Read `path`; a missing file is an empty store.
+    /// Read `path` (through [`bise_secrets`]: its file, or the macOS
+    /// keychain when the file is a stub); a missing file is an empty
+    /// store. A locked keychain is an error, never an empty store.
     pub fn read(path: &Path) -> Result<Store, String> {
-        match std::fs::read_to_string(path) {
-            Ok(text) => Store::parse(&text).map_err(|e| format!("{}: {}", path.display(), e)),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Store::default()),
-            Err(e) => Err(format!("{}: {}", path.display(), e)),
+        Store::read_or_locked(path).map_err(|e| match e {
+            Unreadable::Locked => format!("{}: {}", path.display(), bise_secrets::ReadError::Locked),
+            Unreadable::Other(e) => e,
+        })
+    }
+
+    /// [`Store::read`], a locked keychain told apart.
+    pub fn read_or_locked(path: &Path) -> Result<Store, Unreadable> {
+        match bise_secrets::read(path) {
+            Ok(Some(text)) => Store::parse(&text).map_err(|e| Unreadable::Other(format!("{}: {}", path.display(), e))),
+            Ok(None) => Ok(Store::default()),
+            Err(bise_secrets::ReadError::Locked) => Err(Unreadable::Locked),
+            Err(e) => Err(Unreadable::Other(format!("{}: {}", path.display(), e))),
         }
     }
 
@@ -80,6 +105,12 @@ impl Store {
             return None;
         }
         e.get("key").and_then(|k| k.as_str()).filter(|k| !k.trim().is_empty())
+    }
+
+    /// The `via` of `provider`'s API key (`openrouter-login`: a sign-in
+    /// made it).
+    pub fn via(&self, provider: &str) -> Option<&str> {
+        self.entries.get(provider)?.get("via")?.as_str()
     }
 
     /// The providers with an entry, sorted.
@@ -155,7 +186,13 @@ impl Store {
     /// Write to `path`: its directory created 0700 when missing (an
     /// existing one is left as it is), the file 0600, atomic (a temp file
     /// in the same directory, renamed over it).
+    /// Where it goes follows `[secrets] store` ([`bise_secrets::write`]):
+    /// the keychain, else this file.
     pub fn write(&self, path: &Path) -> std::io::Result<()> {
+        bise_secrets::write(path, &self.to_json(), &|| self.write_file(path))
+    }
+
+    fn write_file(&self, path: &Path) -> std::io::Result<()> {
         let dir = path
             .parent()
             .filter(|d| !d.as_os_str().is_empty())
@@ -174,6 +211,32 @@ impl Store {
             let _ = std::fs::remove_file(&tmp);
         }
         res
+    }
+}
+
+// ---- the lock (moved from chatgpt.rs) ----
+
+/// `auth.json.lock`, held while the tokens change (a refresh, a sign-in's
+/// save, a sign-out): every bise process shares it.
+pub(crate) struct Lock(std::fs::File);
+
+pub(crate) fn lock(path: &Path) -> Result<Lock, String> {
+    if let Some(d) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+        create_private_dir(d).map_err(|e| format!("cannot create {}: {}", d.display(), e))?;
+    }
+    let f = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(path)
+        .map_err(|e| format!("cannot open {}: {}", path.display(), e))?;
+    f.lock().map_err(|e| format!("cannot lock {}: {}", path.display(), e))?;
+    Ok(Lock(f))
+}
+
+impl Drop for Lock {
+    fn drop(&mut self) {
+        let _ = self.0.unlock();
     }
 }
 

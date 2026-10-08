@@ -439,31 +439,9 @@ pub fn check_id_token(tok: &str, jwks: &Value, issuer: &str, client_id: &str, no
     Ok(Claims { sub, email: s("email"), plan })
 }
 
-// ---- the lock ----
+// ---- the lock: auth.json.lock (crate::auth::lock) ----
 
-/// `auth.json.lock`, held while the tokens change (a refresh, a sign-in's
-/// save, a sign-out): every bise process shares it.
-pub(crate) struct Lock(std::fs::File);
-
-pub(crate) fn lock(path: &Path) -> Result<Lock, String> {
-    if let Some(d) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
-        crate::auth::create_private_dir(d).map_err(|e| format!("cannot create {}: {}", d.display(), e))?;
-    }
-    let f = std::fs::OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .write(true)
-        .open(path)
-        .map_err(|e| format!("cannot open {}: {}", path.display(), e))?;
-    f.lock().map_err(|e| format!("cannot lock {}: {}", path.display(), e))?;
-    Ok(Lock(f))
-}
-
-impl Drop for Lock {
-    fn drop(&mut self) {
-        let _ = self.0.unlock();
-    }
-}
+use crate::auth::lock;
 
 fn write_store(ctx: &Ctx, store: &Store) -> Result<(), String> {
     store.write(&ctx.auth_file).map_err(|e| format!("cannot write {}: {}", ctx.auth_file.display(), e))
@@ -493,6 +471,9 @@ pub enum TokenError {
     Expired,
     /// the refresh could not be made now (network, the server's trouble)
     Failed(String),
+    /// the sign-in is in the macOS keychain, and it is locked: never
+    /// signed out
+    Locked,
 }
 
 impl std::fmt::Display for TokenError {
@@ -501,6 +482,8 @@ impl std::fmt::Display for TokenError {
             TokenError::SignedOut => write!(f, "bise isn't signed in to ChatGPT: run bise login chatgpt"),
             TokenError::Expired => write!(f, "your ChatGPT sign-in expired: run bise login chatgpt"),
             TokenError::Failed(e) => write!(f, "couldn't renew the ChatGPT sign-in: {}", e),
+            // designer, m_13193
+            TokenError::Locked => write!(f, "the keychain is locked, so bise can't read your keys. unlock your Mac and send again."),
         }
     }
 }
@@ -522,7 +505,12 @@ fn refused_for_good(status: u16, v: &Value) -> bool {
 /// written together, atomically. A refused refresh signs out, the client
 /// kept, `expired` set.
 pub fn access_token_ctx(ctx: &Ctx) -> Result<String, TokenError> {
-    let read = || Store::read(&ctx.auth_file).map_err(TokenError::Failed);
+    let read = || {
+        Store::read_or_locked(&ctx.auth_file).map_err(|e| match e {
+            crate::auth::Unreadable::Locked => TokenError::Locked,
+            crate::auth::Unreadable::Other(e) => TokenError::Failed(e),
+        })
+    };
     let o = read()?.oauth(ID).filter(|o| o.signed_in()).ok_or(TokenError::SignedOut)?;
     if fresh(&o, now_ms()) {
         return Ok(o.access);

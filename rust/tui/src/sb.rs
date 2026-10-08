@@ -561,7 +561,6 @@ fn theme_command(
     }
 }
 
-
 /// Ctrl+L in the switchboard: the feed in focus is cleared, its lines
 /// stay reachable by scrolling up (`feed::clear_feed`).
 pub(super) fn clear_display(app: &mut App) {
@@ -1217,6 +1216,7 @@ pub(crate) fn handle_input(app: &mut App, v: &str) -> Vec<Ev> {
             }
         }
         "/theme" => out.push(theme_command(typed.split_whitespace().nth(1), crate::theme_detect::choose)),
+        "/keychain" => out.extend(crate::keychain::command(&typed)),
         // approvals-design.md §8: the mode, the checker, the rules; or a switch
         // one parse with the hub's slash (bise_proto::slash::approvals)
         "/approvals" => match bise_proto::slash::approvals(&typed) {

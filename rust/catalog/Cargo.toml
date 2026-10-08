@@ -10,6 +10,8 @@ toml = { version = "1", features = ["preserve_order"] }
 serde_json = "1"
 libc = "0.2"
 bise-home = { path = "../home" }
+# where auth.json and the MCP logins live: files or the macOS keychain
+bise-secrets = { path = "../secrets" }
 # the ChatGPT and OpenRouter sign-ins (src/chatgpt.rs, src/openrouter_login.rs):
 # the MCP OAuth helpers and HTTP client (rust/plugins/src/{oauth,http}.rs),
 # ring for the ID token's RS256 signature, base64url; all in the lock

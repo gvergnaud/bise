@@ -44,6 +44,8 @@ pub(crate) enum Arg {
     /// a branch to diff against main (the hub's `branches`: agents'
     /// branches, shared worktrees, PRs, branches with no agent)
     Branch,
+    /// `/keychain`'s on and off, the setting now marked `· now`
+    Keychain,
     /// free text, required: the rest of the line (nothing to complete)
     Text,
     /// free text, optional: the value before it can already run
@@ -117,6 +119,8 @@ pub(crate) const COMMANDS: &[Cmd] = &[
     },
     Cmd { name: "/models", desc: "which model does what: main, agents, small jobs (titles, summaries), voice", args: &[] },
     Cmd { name: "/provider", desc: "set up a provider's key, or change it", args: &[] },
+    // designer m_13193: macOS only (the popup hides it elsewhere)
+    Cmd { name: "/keychain", desc: "keep your keys and sign-ins in the macOS keychain: /keychain [on|off]", args: &[Arg::Keychain] },
     Cmd { name: "/reasoning", desc: "its reasoning effort: /reasoning [<effort>]", args: &[Arg::Effort] },
     Cmd { name: "/interrupt", desc: "interrupt the turn of the agent in view", args: &[] },
     Cmd {
@@ -146,7 +150,12 @@ pub(crate) fn popup_matches(input: &str) -> Vec<&'static Cmd> {
     if !input.starts_with('/') || input.contains(' ') {
         return Vec::new();
     }
-    COMMANDS.iter().filter(|c| c.name.starts_with(input)).collect()
+    COMMANDS.iter().filter(|c| c.name.starts_with(input) && shown_here(c)).collect()
+}
+
+/// `/keychain` only on macOS (designer: not on Linux, no keychain there).
+fn shown_here(c: &Cmd) -> bool {
+    c.name != "/keychain" || cfg!(target_os = "macos")
 }
 
 /// One entry of the composer popup: a slash command, or an agent name
@@ -295,6 +304,7 @@ fn choices(app: &App, arg: Arg, q: &str) -> Vec<Choice> {
         Arg::Model => model_choices(app, q),
         Arg::Effort => effort_choices(app, q),
         Arg::ComputerUse => computer_use_choices(crate::computer_use::is_on(), q),
+        Arg::Keychain => keychain_choices(crate::keychain::now(), q),
         Arg::Text | Arg::Note => Vec::new(),
     }
 }
@@ -334,6 +344,19 @@ fn computer_use_choices(on: bool, q: &str) -> Vec<Choice> {
         vec![bare("on", "turn computer use on and set it up")]
     };
     rows.into_iter().filter(|c| matches(q, &[&c.label])).collect()
+}
+
+/// `/keychain`'s rows (designer m_13193): on, off, the setting now
+/// marked `· now`.
+fn keychain_choices(now: bise_secrets::Store, q: &str) -> Vec<Choice> {
+    let rows = [
+        ("on", "move them to the macOS keychain", bise_secrets::Store::Keychain),
+        ("off", "move them back to files in ~/.bise", bise_secrets::Store::File),
+    ];
+    rows.iter()
+        .filter(|(w, _, _)| matches(q, &[w]))
+        .map(|(w, d, s)| Choice::word(w, &if *s == now { format!("{d} · now") } else { d.to_string() }))
+        .collect()
 }
 
 /// The note that heads `/model` and `/reasoning`: which agent they are

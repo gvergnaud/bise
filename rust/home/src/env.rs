@@ -152,6 +152,7 @@ pub const VARS: &[Var] = &[
     user("BISE_TERM_BG", "the terminal's background, over what is detected"),
     user("BISE_TERM_TITLE", "the terminal title on or off"),
     test("BISE_TEST_HOME", "a whole test run's jail (the desktop harness): every bise of the run refuses a workspace, state dir or BISE_HOME outside it, and his real home (test_home::jail)"),
+    test("BISE_TEST_KEYCHAIN", "the throwaway keychain file every /usr/bin/security call of bise_secrets goes to; without it a test home never reaches the user's keychain"),
     user("BISE_THEME", "the theme"),
     user("BISE_UPDATE_INTERVAL", "seconds between update checks"),
     user("BISE_VOICE_AEC", "0: voice without echo cancelling"),

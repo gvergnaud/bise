@@ -205,6 +205,7 @@ impl Entry {
         let id = self.spec.id().to_string();
         let said = |e: Fail| match e {
             Fail::Auth { .. } => login_error(&id),
+            Fail::Locked { .. } => crate::remote::locked_line(&id),
             // a step-up: the login again, with more scopes (kept in the
             // store); /plugins says it needs a login
             Fail::Scope { .. } => {
@@ -304,7 +305,8 @@ fn start_all(res: &Resolution, dir: &Path, changed: &Sender<String>, secrets: Op
                 let result = start_conn(&spec, &root, &data, &log, on_change.clone(), secrets.as_deref())
                     .map_err(|e| {
                         let login = matches!(e, Fail::Auth { .. } | Fail::Scope { .. }) && login_file(&spec, secrets.as_deref()).is_some();
-                        (e.to_string(), login)
+                        let why = if matches!(e, Fail::Locked { .. }) { crate::remote::locked_line(spec.id()) } else { e.to_string() };
+                        (why, login)
                     })
                     .and_then(|c| match c.list_tools(timeout) {
                         Ok(ts) => Ok((c, ts)),

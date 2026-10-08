@@ -102,6 +102,7 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "bise-home",
+ "bise-secrets",
  "libc",
  "ring",
  "rustls",
@@ -120,6 +121,7 @@ dependencies = [
  "bise-home",
  "bise-peer",
  "bise-proto",
+ "bise-secrets",
  "bise-session",
  "cpal",
  "crossterm",
@@ -163,6 +165,7 @@ dependencies = [
  "base64",
  "bend-plugins",
  "bise-home",
+ "bise-secrets",
  "libc",
  "ring",
  "serde_json",
@@ -204,9 +207,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "bise-secrets"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "bise-home",
+ "toml",
+]
+
+[[package]]
 name = "bise-session"
 version = "0.1.0"
 dependencies = [
+ "bise-secrets",
  "libc",
  "ring",
  "serde",

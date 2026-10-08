@@ -19,7 +19,10 @@
 //!   finish, the code exchanged.
 //! - **Store.** One file per server URL in `<bise home>/secrets/mcp-oauth/`
 //!   (`$BEND_MCP_SECRETS`), the folder 0700, the files 0600, written by
-//!   rename. Never printed, never in a session, a report or /log.
+//!   rename; or, with `[secrets] store = "keychain"`, in the macOS
+//!   keychain with a stub at the file's path (`bise_secrets`, which reads
+//!   and writes it). Never printed, never in a session, a report or /log.
+//!   A locked keychain is never "no login": the token last sent is kept.
 //! - **Refresh.** A token that expires within a minute, or a 401 with a
 //!   token, is refreshed under the file's lock (every agent's bridge
 //!   shares the store: one refreshes, the others read its result; the
@@ -34,7 +37,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use base64::Engine;
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 
 use crate::http::{self, Url};
 
@@ -90,202 +93,11 @@ impl Config {
     }
 }
 
-// ---- the store ----
+// ---- the store (oauth/store.rs) ----
 
-/// `$BEND_MCP_SECRETS`, else `<bise home>/secrets/mcp-oauth`.
-pub fn store_dir() -> PathBuf {
-    std::env::var("BEND_MCP_SECRETS")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| bise_home::Home::from_env().root().join("secrets").join("mcp-oauth"))
-}
-
-/// The canonical server URL: the resource the tokens are for (no
-/// fragment, lowercase scheme and host, no default port).
-pub fn resource_of(u: &Url) -> String {
-    let mut c = u.clone();
-    c.host = c.host.to_ascii_lowercase();
-    c.to_url()
-}
-
-fn fnv(s: &str) -> u64 {
-    s.bytes().fold(0xcbf29ce484222325u64, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3))
-}
-
-/// The file of one server's tokens.
-pub fn file_of(dir: &Path, resource: &str) -> PathBuf {
-    let host: String = resource
-        .split("://")
-        .nth(1)
-        .unwrap_or("")
-        .split(['/', '?'])
-        .next()
-        .unwrap_or("")
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '-' { c } else { '_' })
-        .collect();
-    dir.join(format!("{}-{:016x}.json", host, fnv(resource)))
-}
-
-/// What the store keeps for one server.
-#[derive(Clone, Default, PartialEq, Eq)]
-pub struct Saved {
-    pub resource: String,
-    pub issuer: String,
-    pub token_endpoint: String,
-    pub client_id: String,
-    pub client_secret: Option<String>,
-    /// the loopback port the client was registered with
-    pub redirect_port: Option<u16>,
-    pub access_token: Option<String>,
-    pub refresh_token: Option<String>,
-    /// unix seconds
-    pub expires_at: Option<u64>,
-    pub scope: Option<String>,
-    /// a 403 `insufficient_scope` asked for these: the next login asks
-    /// for them too (step-up)
-    pub wanted_scope: Option<String>,
-    /// RFC 7009: where a logout revokes the tokens
-    pub revocation_endpoint: Option<String>,
-}
-
-impl std::fmt::Debug for Saved {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Saved {{ resource: {:?}, issuer: {:?}, token: {} }}", self.resource, self.issuer, self.access_token.is_some())
-    }
-}
-
-fn now() -> u64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
-}
-
-impl Saved {
-    fn to_json(&self) -> Value {
-        let mut o = Map::new();
-        let mut put = |k: &str, v: Value| {
-            if !v.is_null() {
-                o.insert(k.into(), v);
-            }
-        };
-        put("resource", json!(self.resource));
-        put("issuer", json!(self.issuer));
-        put("token_endpoint", json!(self.token_endpoint));
-        put("client_id", json!(self.client_id));
-        put("client_secret", json!(self.client_secret));
-        put("redirect_port", json!(self.redirect_port));
-        put("access_token", json!(self.access_token));
-        put("refresh_token", json!(self.refresh_token));
-        put("expires_at", json!(self.expires_at));
-        put("scope", json!(self.scope));
-        put("wanted_scope", json!(self.wanted_scope));
-        put("revocation_endpoint", json!(self.revocation_endpoint));
-        Value::Object(o)
-    }
-
-    fn from_json(v: &Value) -> Option<Saved> {
-        let s = |k: &str| v.get(k).and_then(Value::as_str).map(String::from);
-        Some(Saved {
-            resource: s("resource")?,
-            issuer: s("issuer").unwrap_or_default(),
-            token_endpoint: s("token_endpoint").unwrap_or_default(),
-            client_id: s("client_id").unwrap_or_default(),
-            client_secret: s("client_secret"),
-            redirect_port: v.get("redirect_port").and_then(Value::as_u64).map(|p| p as u16),
-            access_token: s("access_token"),
-            refresh_token: s("refresh_token"),
-            expires_at: v.get("expires_at").and_then(Value::as_u64),
-            scope: s("scope"),
-            wanted_scope: s("wanted_scope"),
-            revocation_endpoint: s("revocation_endpoint"),
-        })
-    }
-
-    /// A token that is still good for a minute.
-    pub fn fresh(&self) -> bool {
-        self.access_token.is_some() && self.expires_at.is_none_or(|e| e > now() + 60)
-    }
-}
-
-pub fn load(dir: &Path, resource: &str) -> Option<Saved> {
-    let v: Value = serde_json::from_str(&std::fs::read_to_string(file_of(dir, resource)).ok()?).ok()?;
-    Saved::from_json(&v).filter(|s| s.resource == resource)
-}
-
-/// Write by rename, 0600, in a 0700 folder.
-pub fn save(dir: &Path, s: &Saved) -> Result<(), String> {
-    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-    std::fs::create_dir_all(dir).map_err(|e| format!("cannot create bise's secrets folder: {}", e))?;
-    let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700));
-    let f = file_of(dir, &s.resource);
-    let tmp = f.with_extension(format!("tmp{}", std::process::id()));
-    let res = (|| {
-        let mut w = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&tmp)?;
-        w.write_all(s.to_json().to_string().as_bytes())?;
-        w.sync_all()?;
-        std::fs::rename(&tmp, &f)
-    })();
-    res.map_err(|e| {
-        let _ = std::fs::remove_file(&tmp);
-        format!("cannot save the login: {}", e)
-    })
-}
-
-/// Forget a server's tokens (`keep_client`: its registration stays).
-pub fn forget(dir: &Path, resource: &str, keep_client: bool) {
-    match load(dir, resource) {
-        Some(mut s) if keep_client => {
-            s.access_token = None;
-            s.refresh_token = None;
-            s.expires_at = None;
-            let _ = save(dir, &s);
-        }
-        _ => {
-            let _ = std::fs::remove_file(file_of(dir, resource));
-        }
-    }
-}
-
-/// Log out: revoke the tokens at the login server when it has an RFC
-/// 7009 endpoint (the refresh token, then the access token; best effort,
-/// 5 s each), then forget them, the client kept. Returns whether the
-/// server confirmed the revocation (None: it has no endpoint).
-pub fn logout(dir: &Path, resource: &str, config: &Config) -> Option<bool> {
-    let s = load(dir, resource)?;
-    let endpoint = s.revocation_endpoint.clone().filter(|e| Url::parse(e).is_ok_and(|u| u.tls || loopback(&u.host)));
-    let mut confirmed = None;
-    if let Some(ep) = endpoint {
-        let secret = config.client_secret.clone().or_else(|| s.client_secret.clone());
-        for (tok, hint) in [(&s.refresh_token, "refresh_token"), (&s.access_token, "access_token")] {
-            let Some(t) = tok else { continue };
-            let mut pairs = vec![("token", t.as_str()), ("token_type_hint", hint), ("client_id", s.client_id.as_str())];
-            if let Some(x) = &secret {
-                pairs.push(("client_secret", x.as_str()));
-            }
-            let ok = matches!(post(&ep, "application/x-www-form-urlencoded", &form(&pairs)), Ok((200, _)));
-            confirmed = Some(confirmed.unwrap_or(true) && ok);
-        }
-    }
-    forget(dir, resource, true);
-    confirmed
-}
-
-/// The store's lock for one server (every bridge of every agent shares
-/// it): held while a token is refreshed.
-struct Lock(std::fs::File);
-
-fn lock(dir: &Path, resource: &str) -> Option<Lock> {
-    std::fs::create_dir_all(dir).ok()?;
-    let f = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(file_of(dir, resource).with_extension("lock")).ok()?;
-    f.lock().ok()?;
-    Some(Lock(f))
-}
-
-impl Drop for Lock {
-    fn drop(&mut self) {
-        let _ = self.0.unlock();
-    }
-}
+mod store;
+pub use store::*;
+use store::{lock, now};
 
 // ---- small HTTP helpers ----
 
@@ -973,17 +785,23 @@ pub struct Auth {
     config: Config,
     /// the token last sent
     used: Mutex<Option<String>>,
+    /// the last read of the store hit a locked keychain
+    locked: std::sync::atomic::AtomicBool,
 }
 
 impl Auth {
     pub fn new(dir: PathBuf, server: &Url, config: Config) -> Auth {
-        Auth { dir, resource: resource_of(server), config, used: Mutex::new(None) }
+        Auth { dir, resource: resource_of(server), config, used: Mutex::new(None), locked: Default::default() }
     }
 
     /// The bearer token to send now (refreshed when it is about to
     /// expire); None: no login yet.
     pub fn bearer(&self) -> Option<String> {
-        let s = load(&self.dir, &self.resource)?;
+        let s = match self.load() {
+            Ok(s) => s?,
+            // a locked keychain: the token last sent, never "no login"
+            Err(_) => return self.used.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+        };
         let tok = if s.fresh() || s.refresh_token.is_none() {
             s.access_token.clone()
         } else {
@@ -1009,7 +827,10 @@ impl Auth {
     /// replaced `stale`, else a refresh.
     fn refreshed(&self, stale: Option<&str>) -> Result<Option<String>, String> {
         let _l = lock(&self.dir, &self.resource);
-        let Some(s) = load(&self.dir, &self.resource) else { return Ok(None) };
+        // read under the lock, from the keychain too: a refresh token is
+        // only spent when its store answered right before (a locked
+        // keychain is an Err, never a forgotten login)
+        let Some(s) = self.load()? else { return Ok(None) };
         if s.access_token.is_some() && s.access_token.as_deref() != stale && s.fresh() {
             return Ok(s.access_token);
         }
@@ -1024,6 +845,19 @@ impl Auth {
             }
             Err((false, e)) => Err(e),
         }
+    }
+
+    /// The store's login, noting whether the keychain was locked.
+    fn load(&self) -> Result<Option<Saved>, String> {
+        let r = load_now(&self.dir, &self.resource);
+        self.locked.store(r.is_err(), std::sync::atomic::Ordering::SeqCst);
+        r
+    }
+
+    /// The last read hit a locked keychain (a 401 then is not "needs a
+    /// login").
+    pub fn locked(&self) -> bool {
+        self.locked.load(std::sync::atomic::Ordering::SeqCst)
     }
 
     /// A 403 `insufficient_scope` asked for `scope`: kept for the next

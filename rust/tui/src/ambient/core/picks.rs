@@ -45,6 +45,7 @@ fn arg(a: Arg) -> PickArg {
     match a {
         Arg::Words(w) | Arg::Version(w) | Arg::DevVersion(w) => words(w),
         Arg::ComputerUse => words(&[("off", "turn computer use off"), ("uninstall", "turn it off and remove its setup")]),
+        Arg::Keychain => words(&[("on", "move them to the macOS keychain"), ("off", "move them back to files in ~/.bise")]),
         Arg::Task => PickArg::Agent,
         Arg::Archived => PickArg::Archived,
         Arg::Card => PickArg::Card,

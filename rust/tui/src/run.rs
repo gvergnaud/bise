@@ -573,9 +573,9 @@ fn ui_loop(app: &mut App, terminal: &mut crate::links::Tui) -> io::Result<()> {
             app.should_quit = true;
         }
         sb::setup::pump(app);
-        // remote MCP logins' lines (`/plugins login`) and the quiet
-        // "needs a login" ones
+        // background lines: /plugins login's, "needs a login", /keychain's
         crate::plugins::pump(app);
+        crate::keychain::pump(app);
     }
     Ok(())
 }

@@ -100,7 +100,7 @@ fn exchange(ctx: &Ctx, code: &str, verifier: &str) -> Result<(), String> {
     }
     let key = v.get("key").and_then(Value::as_str).ok_or("OpenRouter sent no key. try again.")?;
     let key = crate::auth_cli::clean_key(key).map_err(|_| "OpenRouter sent a key bise can't use. try again.".to_string())?;
-    let _l = crate::chatgpt::lock(&lock_file(&ctx.auth_file))?;
+    let _l = crate::auth::lock(&lock_file(&ctx.auth_file))?;
     let mut store = Store::read(&ctx.auth_file)?;
     store.set_via(ID, &key, VIA);
     store.write(&ctx.auth_file).map_err(|e| format!("cannot write {}: {}", ctx.auth_file.display(), e))

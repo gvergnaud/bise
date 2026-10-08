@@ -16,6 +16,8 @@ bise-proto = { path = "../proto" }
 bise-session = { path = "../session" }
 bise-catalog = { path = "../catalog" }
 bend-plugins = { path = "../plugins" }
+# /keychain (src/keychain.rs): where the secrets live
+bise-secrets = { path = "../secrets" }
 bend-images = { path = "../images" }
 ratatui = "0.29"
 # the embedded terminal (term.rs): a PTY, a vt100 parser, its ratatui widget

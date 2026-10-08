@@ -701,6 +701,12 @@ pub(super) fn lines(o: &Onb, w: u16, gap: usize) -> Option<Vec<Line<'static>>> {
                 v.push(dim(format!("  ↓ {} more", rows.len() - from - LIST_ROWS)));
             }
             said(&mut v);
+            // designer m_13193: where the keys are, and the one step to the
+            // keychain (macOS, while they are in files)
+            if cfg!(target_os = "macos") && crate::keychain::now() == bise_secrets::Store::File {
+                blanks(&mut v, 1);
+                v.push(dim("keys are kept in files in ~/.bise · /keychain keeps them in the macOS keychain".into()));
+            }
             blanks(&mut v, gap);
             v.push(keybar("↑↓ choose   ⏎ open   esc back"));
             v

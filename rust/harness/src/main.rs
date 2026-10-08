@@ -461,6 +461,7 @@ const HELP: &[(&str, &[(&str, &str)])] = &[
         ("{cmd} auth check [provider]", "one tiny call with the key bise finds"),
         ("{cmd} models [filter]", "the models bise knows, and which have a key"),
         ("{cmd} config get|set KEY [V]", "main, agents, small (small jobs: titles, summaries), voice, project_doc_fallback_filenames"),
+        ("{cmd} secrets keychain [on|off]", "keep your keys and sign-ins in the macOS keychain, or back in files"),
     ]),
     ("setup", &[
         ("{cmd} setup scan", "what this Mac has for bise: keys' places, tools, repos"),
@@ -647,6 +648,7 @@ fn run_main() -> std::io::Result<()> {
             // config.toml's top-level choices and the /setup changes, for
             // a script or the install prompt (BISE-273)
             Some("config") => std::process::exit(bise_catalog::config_cli::main(&args[1..], &auth_paths())),
+            Some("secrets") => std::process::exit(bise_catalog::secrets_cli::main(&args[1..], &auth_paths())),
             Some("setup") => std::process::exit(bend_tui::setup_main(&args[1..])),
             Some("switchboard") => {
                 let debug = args.iter().any(|a| a == "--debug");

@@ -49,6 +49,9 @@ pub enum Fail {
     /// 403 `insufficient_scope`: the login must be done again with the
     /// scope the challenge names (step-up, MCP authorization 2025-11-25)
     Scope { host: String, challenge: String },
+    /// a 401 while the login is in the macOS keychain and it is locked:
+    /// never "needs a login" (the login is kept, it comes back unlocked)
+    Locked { host: String },
     Other(String),
 }
 
@@ -59,6 +62,7 @@ impl std::fmt::Display for Fail {
             Fail::SessionGone => f.write_str("the server ended the session"),
             Fail::Auth { host, .. } => write!(f, "{} answered 401: it needs a login or a token in \"headers\"", host),
             Fail::Scope { host, .. } => write!(f, "{} answered 403: the login needs more access (insufficient_scope)", host),
+            Fail::Locked { host } => f.write_str(&locked_line(host)),
         }
     }
 }
@@ -70,6 +74,12 @@ impl From<http::Error> for Fail {
             http::Error::Io(s) => Fail::Other(s),
         }
     }
+}
+
+/// A server whose login is in a locked keychain (designer, m_13340):
+/// `name` is its name, else its host.
+pub fn locked_line(name: &str) -> String {
+    format!("the keychain is locked, so {} can't log in. unlock your Mac and it comes back.", name)
 }
 
 /// The server's URL and headers with `${VAR}` filled from `env`. Errors
@@ -109,7 +119,11 @@ fn with_auth(headers: &[(String, String)], auth: &Option<Arc<Auth>>) -> Vec<(Str
 /// next login asks for it with the ones granted before.
 fn retry_401<T>(auth: &Option<Arc<Auth>>, f: impl Fn() -> Result<T, Fail>) -> Result<T, Fail> {
     match f() {
-        Err(Fail::Auth { .. }) if auth.as_ref().is_some_and(|a| a.after_401()) => f(),
+        Err(Fail::Auth { host, challenge }) => match auth {
+            Some(a) if a.after_401() => f(),
+            Some(a) if a.locked() => Err(Fail::Locked { host }),
+            _ => Err(Fail::Auth { host, challenge }),
+        },
         Err(Fail::Scope { host, challenge }) => {
             if let (Some(a), Some(scope)) = (auth, crate::oauth::challenge_param(&challenge, "scope")) {
                 a.want_scope(&scope);

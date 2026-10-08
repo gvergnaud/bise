@@ -52,7 +52,9 @@ impl Redactor {
     /// `*_API_KEY` / `*_TOKEN` / `*_SECRET` variables.
     pub fn from_home(auth: &Path, env_files: &[PathBuf]) -> Redactor {
         let mut pairs = Vec::new();
-        if let Ok(Value::Object(o)) = std::fs::read_to_string(auth).map(|t| serde_json::from_str(&t).unwrap_or(Value::Null)) {
+        // through bise_secrets: in keychain mode the file is a stub and
+        // the keys to hide are in the keychain
+        if let Ok(Some(Value::Object(o))) = bise_secrets::read(auth).map(|t| t.map(|t| serde_json::from_str(&t).unwrap_or(Value::Null))) {
             for (name, v) in o {
                 let key = match &v {
                     Value::String(s) => Some(s.clone()),
