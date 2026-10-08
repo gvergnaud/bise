@@ -149,6 +149,11 @@ mod tests {
         assert_eq!(workspace_id(Path::new("/Users/me/lab/harness")), "harness-af1b2326");
         assert_eq!(workspace_id(Path::new("/tmp/my repo")), "my-repo-b50e38fe");
         assert_eq!(workspace_id(Path::new("/")), "root-860189fe");
+        // the hub tag (bise_peer::tags::hub_id): tests/e2e.py hub_tag, the
+        // one Python copy (proc_cleanup, long_socket_e2e, worktree_home,
+        // tui_computer_use_tmux read it; architect m_13639)
+        assert_eq!(crate::procs::hub_id(Path::new("/Users/me/.bise/hubs/harness-af1b2326/hub.sock")), "5d6d31bf066b5443");
+        assert_eq!(crate::procs::hub_id(Path::new("/tmp/bise-501/0123456789abcdef/hub.sock")), "5bee91326dd20541");
     }
 
     /// The one flag of bise's role (architect m_8474): the home workspace,

@@ -31,6 +31,36 @@ EXE = os.path.join(os.path.abspath(os.environ.get("CARGO_TARGET_DIR") or os.path
 # from an agent's shell, never its hub's identity, sb-core or folders.
 
 
+# The one Python copy of bise's path hashes (architect m_13639), pinned by
+# rust/switchboard/src/paths.rs ids_match_the_python_copies.
+SOCKET_PATH_MAX = 103  # bise_home::socket::SOCKET_PATH_MAX
+
+
+def fnv1a64(b):
+    """FNV-1a, 64 bits, of bytes (bise_home::socket::fnv1a, the hub tag's
+    and workspace_id's hash)."""
+    h = 0xcbf29ce484222325
+    for x in b:
+        h = ((h ^ x) * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF
+    return h
+
+
+def hub_tag(sock):
+    """bise_peer::tags::hub_id (= switchboard::procs::hub_id): a hub's id
+    in its agents' tags and in computer use's keys, the hash of the socket
+    path it is reached by (short_sock of its natural one)."""
+    return "%016x" % fnv1a64(sock.encode())
+
+
+def short_sock(natural):
+    """bise_home::socket::socket_path: `natural` when it fits a unix
+    socket, else its short path under /tmp/bise-<uid>/<hash of its folder>."""
+    if len(natural.encode()) <= SOCKET_PATH_MAX:
+        return natural
+    d, name = os.path.split(natural)
+    return "/tmp/bise-%d/%016x/%s" % (os.getuid(), fnv1a64(d.encode()), name)
+
+
 def short_tmp():
     """A temp folder short enough for the unix sockets under it: $TMPDIR
     when short (the gate's ~/.bise/gate/<pid>, writable in auto's

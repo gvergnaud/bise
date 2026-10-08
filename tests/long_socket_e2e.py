@@ -17,23 +17,8 @@ import e2e  # noqa: E402
 import wait  # noqa: E402
 from e2e import EXE, check  # noqa: E402
 
-MAX = 103
-
-
-def fnv1a64(b):
-    h = 0xcbf29ce484222325
-    for x in b:
-        h ^= x
-        h = (h * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF
-    return h
-
-
-def short_path(natural):
-    """The Python copy of bise_home::socket::socket_path."""
-    if len(natural.encode()) <= MAX:
-        return natural
-    d, name = os.path.split(natural)
-    return "/tmp/bise-%d/%016x/%s" % (os.getuid(), fnv1a64(d.encode()), name)
+MAX = e2e.SOCKET_PATH_MAX
+short_path = e2e.short_sock
 
 
 def find_sock(home):

@@ -24,9 +24,7 @@ def project_id(path):
     """switchboard::paths::workspace_id, as gate.sh computes it (pinned by
     paths::tests::ids_match_the_python_copies)."""
     p = os.path.realpath(path)
-    h = 0xcbf29ce484222325
-    for b in p.encode():
-        h = ((h ^ b) * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF
+    h = e2e.fnv1a64(p.encode())
     base = "".join(c if c.isascii() and (c.isalnum() or c in "-_") else "-" for c in os.path.basename(p))[:32]
     return "%s-%08x" % (base, h & 0xFFFFFFFF)
 

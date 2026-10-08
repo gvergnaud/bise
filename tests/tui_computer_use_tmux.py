@@ -52,17 +52,6 @@ else:
 '''
 
 
-def hub_id(sock):
-    """bise_peer::tags::hub_id: FNV-1a 64 of the hub's socket path, the
-    TUI's filter in computer use's state. The test's state dir is short,
-    so the socket keeps its natural place (bise_home::socket::fits)."""
-    assert len(sock.encode()) <= 103, sock
-    h = 0xcbf29ce484222325
-    for b in sock.encode():
-        h = ((h ^ b) * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF
-    return "%016x" % h
-
-
 def row(id, state, detail="", fix=None):
     return {"id": id, "state": state, "detail": detail, "fix": fix}
 
@@ -170,7 +159,8 @@ def main():
     # BEND_ vars come after extra_env on the TUI's command line)
     E = e2e.Env()
     E.env["BEND_RUN_DIR"] = run_dir
-    hub[0] = hub_id(os.path.join(E.state, "hub.sock"))
+    # the hash of the socket the TUI talks to (its short path if relocated)
+    hub[0] = e2e.hub_tag(e2e.short_sock(os.path.join(E.state, "hub.sock")))
     try:
         with tui_session(COLS, ROWS, env=env, E=E) as t:
             t.wait("bise :*")

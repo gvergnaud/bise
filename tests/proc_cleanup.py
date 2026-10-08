@@ -38,14 +38,6 @@ def alive(needle):
     return [p for p, t in table().items() if needle in t and p != me and not t.startswith("ps ")]
 
 
-def hub_id(sock):
-    """switchboard::procs::hub_id: FNV-1a of the socket path."""
-    h = 0xcbf29ce484222325
-    for b in sock.encode():
-        h = ((h ^ b) * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF
-    return "%016x" % h
-
-
 def main():
     if not os.path.exists(EXE):
         sys.exit("build first: cd rust && cargo build")
@@ -122,7 +114,7 @@ def main():
         # (a tmux server: macOS hides the environment of its own binaries)
         gsock = tsock + "-ghost"
         subprocess.run(["tmux", "-L", gsock, "new-session", "-d", "-s", "g", "sleep 905" + tag], check=True,
-                       env={**bise_env.clean_env(), "BISE_OWNERS": "%s.ghost.1" % hub_id(sock)})
+                       env={**bise_env.clean_env(), "BISE_OWNERS": "%s.ghost.1" % e2e.hub_tag(sock)})
         c = E.start_hub()
         c.wait(lambda: not alive("sleep 905" + tag), 20, "the ghost's tmux killed at the start")
         check(user.poll() is None, "the user's sleep survives the start")
