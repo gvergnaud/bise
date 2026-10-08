@@ -82,6 +82,18 @@ impl Shell {
             }
             HubCmd::Send { agent, text, opts, cid, .. } => self.proto_input(id, &tag, agent, text, opts, cid),
             HubCmd::Answer { card, reply, files, .. } => {
+                // a page's card first (daemon/page_cards.rs, as the input
+                // op had it): a step ticked, a drafts or replaced batch
+                // card answered there; a question's digit becomes its
+                // option's words, and the page hears it (P3b)
+                let line = format!("/answer {card} {}", reply.trim());
+                if self.page_step_answer(id, &line) {
+                    return self.page_answers();
+                }
+                let reply = match self.page_reply_text(&line) {
+                    Some(l) => l.splitn(3, ' ').nth(2).unwrap_or_default().to_string(),
+                    None => reply,
+                };
                 if !self.hub.st.open_cards().any(|c| c.id == card) {
                     return self.proto_error(id, &tag, &format!("card {card} isn't open"));
                 }
@@ -96,6 +108,7 @@ impl Shell {
                 // image reaches the asking agent's model as an image
                 let text = if files.is_empty() { text } else { super::fn_context::render_files(&text, &files) };
                 self.step_typed(id, &tag, Input::UserCmd { client: id, focus: MAIN.into(), cmd: UserCmd::Answer { card, text } });
+                self.page_answers();
             }
             // the TUI's /close handler with its field (Input::UserCmd, no
             // text; step_typed: a card already gone comes back as error)
@@ -358,7 +371,14 @@ impl Shell {
         if let Some(via) = opts.via {
             op["via"] = json!(via);
         }
-        self.stepping(id, tag, cid, |sh| sh.client_line(id, op));
+        // BISE-266: a key saved since a REPL started reaches it before
+        // this message does; then the input handler (daemon/capsule.rs:
+        // a page's answer, a step, a route or a plain input). The wire's
+        // `input` op is gone (client-protocol P3b): this is its one door
+        self.stepping(id, tag, cid, |sh| {
+            sh.keys_changed();
+            sh.input(id, &op);
+        });
     }
 
     /// `/version`, `/restart`, `/update` (a `slash` line or their own
@@ -387,15 +407,23 @@ impl Shell {
         let project = self.project();
         match proto_view::slash::route(crate::router::parse(line, &agent)) {
             Slash::Refuse(text) => self.proto_error_cid(id, tag, &text, cid, refused),
+            // the board's words as the result (sb-core's own fn, architect
+            // m_13450), the rows to a connection that reads them
             Slash::Agents => {
-                let snap = self.snapshot();
-                let (agents, _) = self.proto_rows(&snap);
-                self.proto_send(id, &agents);
+                if self.rpc.init(id) || self.proto.has(id) {
+                    let snap = self.snapshot();
+                    let (agents, _) = self.proto_rows(&snap);
+                    self.proto_send(id, &agents);
+                }
+                let text = crate::board::user_board(&self.hub.st, now_ms());
+                self.proto_send(id, &HubEv::Notice { project, cmd: Some(tag.to_string()), text, cid });
             }
-            Slash::Prs => {
-                let prs = self.prs_ev();
-                self.proto_send(id, &prs);
-            }
+            // no PR: its words as the result; else the rows as the prs
+            // event to this connection (the terminal's prs arm reads it)
+            Slash::Prs => match self.prs_ev() {
+                HubEv::Prs { none: Some(text), .. } => self.proto_send(id, &HubEv::Notice { project, cmd: Some(tag.to_string()), text, cid }),
+                prs => self.proto_send(id, &prs),
+            },
             Slash::Help => self.proto_send(id, &HubEv::Notice { project, cmd: Some(tag.to_string()), text: crate::core::HELP.to_string(), cid }),
             // the TUI's /flow writer (Effect::Flow's), not a copy
             Slash::Flow(set) => {
@@ -454,7 +482,20 @@ impl Shell {
                 let ev = self.approvals_ev(true);
                 self.broadcast(&ev);
             }
-            Slash::Step(cmd) => self.stepping(id, tag, cid, |sh| sh.step(Input::UserCmd { client: id, focus: agent, cmd })),
+            // `/answer N …` on a page's card takes the page's path first
+            // (the input op's, P3b): a step ticked there, a question's
+            // digit as its option's words, and the page hears it
+            Slash::Step(cmd) => {
+                if self.page_step_answer(id, line) {
+                    return self.page_answers();
+                }
+                let cmd = match self.page_reply_text(line) {
+                    Some(l) => crate::router::parse(&l, &agent),
+                    None => cmd,
+                };
+                self.stepping(id, tag, cid, |sh| sh.step(Input::UserCmd { client: id, focus: agent, cmd }));
+                self.page_answers();
+            }
         }
     }
 

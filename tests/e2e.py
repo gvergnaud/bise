@@ -225,12 +225,23 @@ class Client:
                 self.events.append(v)
                 if v.get("ev") == "state":
                     self.state = v
+                # a response's words (command/run's notice, a refusal)
+                # read as the hub's notice, as the terminal shows them
+                if "jsonrpc" in v and "method" not in v:
+                    said = (v.get("result") or {}).get("notice") or (v.get("error") or {}).get("message")
+                    if said:
+                        self.events.append({"ev": "notice", "text": said, "rpc": v.get("id")})
 
     def send(self, v):
         self.s.sendall((json.dumps(v) + "\n").encode())
 
-    def say(self, text, focus="main"):
-        self.send({"op": "input", "focus": focus, "text": text})
+    def say(self, text, focus="main", **opts):
+        """What he types to `focus` (command/run: the hub's one parser);
+        its answer is not waited for. `opts`: turn/send's (files, via...)
+        through command/run's flattened SendOpts."""
+        self._rid = getattr(self, "_rid", 0) + 1
+        params = dict(opts, project=self.project(), agent=focus, line=text)
+        self.send({"jsonrpc": "2.0", "id": "e2e-%d" % self._rid, "method": "command/run", "params": params})
 
     def call(self, method, params=None):
         """A JSON-RPC request on this hello connection, sent: its id (a

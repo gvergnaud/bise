@@ -17,7 +17,8 @@ fn app_with_hub() -> (App, UnixStream) {
     (sb_app(sb, rx, false, 100, crate::voice::Voice::live(false)), b)
 }
 
-/// What the TUI typed to the hub since the last call (`input` ops).
+/// What the TUI sent the hub since the last call: card/answer and
+/// card/close as the lines they replaced, command/run's line.
 fn sent(b: &mut UnixStream) -> Vec<String> {
     let mut s = String::new();
     let mut buf = [0u8; 4096];
@@ -29,8 +30,12 @@ fn sent(b: &mut UnixStream) -> Vec<String> {
     }
     s.lines()
         .filter_map(|l| serde_json::from_str::<Value>(l).ok())
-        .filter(|v| v["op"] == "input")
-        .map(|v| v["text"].as_str().unwrap_or("").to_string())
+        .filter_map(|v| match v["method"].as_str()? {
+            "card/answer" => Some(format!("/answer {} {}", v["params"]["card"], v["params"]["reply"].as_str()?)),
+            "card/close" => Some(format!("/close {}", v["params"]["card"])),
+            "command/run" => v["params"]["line"].as_str().map(str::to_string),
+            _ => None,
+        })
         .collect()
 }
 

@@ -65,7 +65,7 @@ pub(crate) fn key(app: &mut App, k: &crossterm::event::KeyEvent, popup_open: boo
         let plain = !k.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER);
         match k.code {
             KeyCode::Char('y') | KeyCode::Char('Y') if plain => {
-                sb.send_input(format!("/archive {}", name));
+                sb.call("agent/archive", serde_json::json!({"agent": name, "force": false}), super::rpc::Then::Line);
                 return true;
             }
             KeyCode::Char('n') | KeyCode::Char('N') if plain => return true,

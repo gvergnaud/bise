@@ -259,7 +259,7 @@ fn apply(app: &mut App, acts: Vec<Act>) {
             Act::Send { agent, text } => {
                 if !answer_by_voice(app, &text) {
                     SAID.with(|s| s.borrow_mut().insert(text.trim().to_string()));
-                    app.sb.send(serde_json::json!({"op": "input", "focus": agent, "text": text, "voice": true}));
+                    app.sb.call("turn/send", serde_json::json!({"agent": agent, "text": text, "voice": true}), crate::sb::rpc::Then::Line);
                     app.pending = true;
                 }
             }

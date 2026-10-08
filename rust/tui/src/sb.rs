@@ -545,7 +545,7 @@ impl Sb {
             let to = text.split_whitespace().next().and_then(|w| w.strip_prefix('@')).filter(|n| self.agent(n).is_some());
             crate::computer_use::resume_if_stopped(to.unwrap_or(agent));
         }
-        self.send(json!({"op": "input", "focus": agent, "text": text}));
+        self.call("command/run", json!({"agent": agent, "line": text}), rpc::Then::Line);
     }
 }
 
@@ -1332,14 +1332,14 @@ pub(super) fn draw_sb(app: &mut App, frame: &mut Frame) {
 }
 
 
-/// The feed rows of the hub's `prs` answer to `/prs`:
-/// `{head, rows: [bise-proto rows::Pr]}`; each row's tone is the TUI's
+/// The feed rows of the hub's `prs` event, its answer to `/prs`
+/// (`HubEv::Prs`: `{head, items: [bise-proto rows::Pr]}`); each row's tone is the TUI's
 /// look of what it means ([`pr_tone`]), never a color from the wire.
 pub(super) fn prs_events(v: &serde_json::Value) -> Vec<Ev> {
     // the head at col 1, like every feed row's glyph column (designer)
     let head = format!(" {}", v["head"].as_str().unwrap_or_default());
     let mut out = vec![Ev::Fold { head, text: String::new(), open: false }];
-    for r in v["rows"].as_array().into_iter().flatten() {
+    for r in v["items"].as_array().into_iter().flatten() {
         let Ok(pr) = serde_json::from_value::<bise_proto::rows::Pr>(r.clone()) else { continue };
         out.push(Ev::Pr { tone: pr_tone(&pr).into(), number: pr.number, url: pr.url, text: pr.text, url_row: true });
     }
@@ -1531,7 +1531,7 @@ mod hub_line_tests {
         // no number: an info line, never lost
         assert_eq!(p("pr : plain : x : u : hi"), Some("info hi".into()));
         // `/prs`: a dim head at col 1, each row a PR line with its URL under it
-        let evs = prs_events(&serde_json::json!({"head": "1 PR open", "rows": [
+        let evs = prs_events(&serde_json::json!({"head": "1 PR open", "items": [
             {"number": 415, "url": "https://github.com/o/r/pull/415", "branch": "sb/x", "agents": ["x"], "state": "open", "checks": "fail",
              "failing": ["e2e"], "review": "none", "words": "checks fail: e2e", "text": "sb/x · x · checks fail: e2e"}]}));
         assert!(matches!(&evs[1], Ev::Pr { tone, number: 415, .. } if tone == "red"), "failing checks: red");
@@ -1829,7 +1829,7 @@ mod nav_key_tests {
         press(&mut app, KeyCode::Char('D'), KeyModifiers::SHIFT);
         assert!(press(&mut app, KeyCode::Char('y'), KeyModifiers::NONE));
         let out = sent();
-        assert!(out.contains(r#""op":"input""#) && out.contains("/archive docs"), "{out}");
+        assert!(out.contains(r#""method":"agent/archive""#) && out.contains(r#""agent":"docs""#), "{out}");
         assert_eq!(app.ed.text, "");
         // main is never asked about
         app.sb.selected = Some(0);
@@ -1881,7 +1881,7 @@ mod nav_key_tests {
         push_event(&mut app.events, &mut app.cache, parse_hub_line("undelivered : fix : encore").unwrap());
         assert!(press(&mut app, KeyCode::Enter, KeyModifiers::NONE));
         let out = sent();
-        assert!(out.contains(r#""op":"input""#) && out.contains("@fix encore"), "{out}");
+        assert!(out.contains(r#""method":"command/run""#) && out.contains("@fix encore"), "{out}");
         assert!(matches!(app.events.last(), Some(Ev::You(t, Mark::Sent, ..)) if t == "@fix encore"));
         // `@fix encore` is the line the user wrote in main's view: marked
         push_event(&mut app.events, &mut app.cache, parse_hub_line("undelivered : fix : encore").unwrap());

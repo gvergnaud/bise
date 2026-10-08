@@ -1724,14 +1724,6 @@ impl Shell {
         }
         let s = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
         match s("op").as_str() {
-            "input" => {
-                // BISE-266: a key saved since a REPL started reaches it
-                // before this message does
-                self.keys_changed();
-                // a page's answer, a step, a route or a plain input
-                // (daemon/capsule.rs)
-                self.input(id, &v);
-            }
             // a note talk's words (§4.1): to the page's frame, never an input
             "page_voice" => self.page_voice(&v),
             // older lines of a feed, before a position (the TUI scrolled

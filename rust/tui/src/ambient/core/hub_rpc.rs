@@ -155,6 +155,16 @@ impl RpcConn {
     }
 }
 
+/// A request on the home connection (an older hello one: its answers
+/// are not read, the hub's events tell what happened): `method` with
+/// `params` (an object) and this hub's `project`; the id is the method's
+/// name (P3b: his words, a command line, a card's answer, a stop).
+pub fn home(project: &str, method: &str, params: Value) -> Value {
+    let mut params = if params.is_object() { params } else { Value::Object(Default::default()) };
+    params["project"] = Value::String(project.to_string());
+    Message::Request(Request::new(Id::Str(method.to_string()), method, params)).to_value()
+}
+
 /// The hub-wide state's notifications as the window's events.
 fn state(st: &HubState) -> Vec<HubEv> {
     st.state.iter().filter_map(|n| rpc::ev(n).ok()).map(|(e, _)| e).filter(|e| !matches!(e, HubEv::Unknown { .. })).collect()

@@ -441,7 +441,7 @@ def main():
         publish_plan(["t1", "t3", "t4"], 3)
         c.wait(lambda: step_card("t5"), 30, "t5's card")
         settle(c)
-        c.send({"op": "input", "focus": "main", "text": "done with the payment", "via": "capsule"})
+        c.say("done with the payment", via="capsule")
         c.wait(lambda: any("his open steps: plan t5" in l for l in c.lines("main")), 30, "the open step in main's input")
         settle(c)
         c.say("[[bash: sb page tick plan t5]]")

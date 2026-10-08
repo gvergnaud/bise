@@ -43,6 +43,11 @@ pub(crate) enum Then {
     /// comes in the hub's `approvals` event; a refusal is said on the
     /// screen, or as `/approvals: <why>` when it closed
     RuleRemoved,
+    /// what he typed or sent (command/run, turn/send, card/*): the
+    /// hub's words (its refusal, or a CommandRunResult's notice) show
+    /// as its notice did, and the queue moves on as on a notice (a
+    /// refused queued message starts no turn: the 766a28a6 guard)
+    Line,
 }
 
 /// The requests waiting for their answer, by id (cells: a popup asks
@@ -87,6 +92,11 @@ impl Sb {
         let mut params = if params.is_object() { params } else { json!({}) };
         params["project"] = json!(self.project());
         let id = self.rpc.start(method, then);
+        // G: a send's own id, echoed on its error with why (undelivered:
+        // the hub wrote its line in the thread), as the window's cid
+        if matches!(method, "command/run" | "turn/send") {
+            params["cid"] = json!(id);
+        }
         let req = Message::Request(Request::new(Id::Num(id), method, params));
         self.send_shared(req.to_value());
     }
@@ -102,6 +112,9 @@ pub(super) fn answered(app: &mut App, v: Value) {
 }
 
 fn run(app: &mut App, then: Then, r: Response) {
+    // BISE-86: refused because the hub wrote its undelivered line: its
+    // words go above his line ([`above_undelivered`])
+    let undelivered = r.error.as_ref().and_then(|e| e.data.as_ref()).and_then(|d| d.reason.as_deref()) == Some("undelivered");
     let result = match r.error {
         Some(e) => Err(e.message),
         None => Ok(r.result.unwrap_or(Value::Null)),
@@ -114,11 +127,30 @@ fn run(app: &mut App, then: Then, r: Response) {
         (Then::Diff(req), Err(e)) => crate::diffview::answered(app, req, crate::diffwire::refused(&e)),
         (Then::Branches, Ok(v)) => crate::diffbranches::branches_event(&v),
         (Then::RuleRemoved, Err(e)) => rule_refused(app, &e),
+        (Then::Line, Err(e)) => {
+            crate::queue::seen(app);
+            match undelivered.then(|| above_undelivered(app)).flatten() {
+                Some(at) => {
+                    for (k, l) in e.lines().enumerate() {
+                        app.events.insert(at + k, Ev::Info(l.to_string()));
+                        app.cache.insert(at + k, None);
+                    }
+                }
+                None => refused(app, &e),
+            }
+        }
         (_, Err(e)) => refused(app, &e),
         (Then::Shown | Then::RuleRemoved, Ok(_)) => {}
         (Then::Approvals, Ok(mut v)) => {
             v["show"] = json!(true);
             approvals_event(app, &v);
+        }
+        (Then::Line, Ok(v)) => {
+            let said = serde_json::from_value::<bise_proto::rpc::CommandRunResult>(v).ok().and_then(|c| c.notice);
+            if let Some(text) = said {
+                crate::queue::seen(app);
+                refused(app, &text);
+            }
         }
     }
 }
@@ -129,6 +161,15 @@ fn said(app: &mut App, result: &Value) {
     let Some(text) = result.get("notice").and_then(Value::as_str) else { return };
     crate::queue::seen(app);
     refused(app, text);
+}
+
+/// Where an undelivered send's refusal goes (BISE-86): above his line
+/// that the open `not delivered` question is about, where the hub's
+/// notice showed before (it came before the undelivered line; ⏎ sends
+/// again only while the question is the last row). None: no question.
+fn above_undelivered(app: &App) -> Option<usize> {
+    let ask = app.events.iter().rposition(|x| matches!(x, Ev::Undelivered { open: true, .. }))?;
+    Some(app.events[..ask].iter().rposition(|x| matches!(x, Ev::You(..))).unwrap_or(ask))
 }
 
 /// The hub's refusal, as its notice showed it.
@@ -215,5 +256,33 @@ mod tests {
         let (id, n) = (waiting(&app), app.events.len());
         answered(&mut app, json!({"jsonrpc": "2.0", "id": id, "result": {}}));
         assert_eq!(app.events.len(), n);
+    }
+
+    /// Law (architect m_13450, the 766a28a6 queue guard): a queued
+    /// message's command/run refused by the hub, through the real
+    /// dispatch, lets the queue move on as the hub's notice did; its
+    /// words show; a bare `{}` keeps the mark (the turn will start).
+    #[test]
+    fn a_refused_queued_line_moves_the_queue_on() {
+        let mut app = crate::sb::bench::test_app();
+        app.sb.workspace = "/tmp/acme".into();
+        let send = |app: &mut App| {
+            app.queue_out = Some(std::time::Instant::now());
+            app.sb.call("command/run", json!({"agent": "main", "line": "/stop x"}), Then::Line);
+            *app.sb.rpc.waiting.borrow().keys().last().unwrap()
+        };
+        let id = send(&mut app);
+        let n = app.events.len();
+        dispatch(&mut app, &json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32010, "message": "commands run now, not queued"}}).to_string());
+        assert_eq!(app.queue_out, None, "refused: the queue moves on");
+        assert!(matches!(app.events.get(n), Some(Ev::Info(t)) if t == "commands run now, not queued"));
+        // the hub's words as the result: shown, and the queue moves on
+        let id = send(&mut app);
+        dispatch(&mut app, &json!({"jsonrpc": "2.0", "id": id, "result": {"notice": "no agent x"}}).to_string());
+        assert_eq!(app.queue_out, None);
+        // done, nothing said: the turn it starts clears the mark
+        let id = send(&mut app);
+        dispatch(&mut app, &json!({"jsonrpc": "2.0", "id": id, "result": {}}).to_string());
+        assert!(app.queue_out.is_some());
     }
 }

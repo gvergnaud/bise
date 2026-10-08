@@ -241,15 +241,22 @@ impl Shell {
     }
 
     /// A handler's typed result for `client` when it is the typed
-    /// command being stepped: its `error` when refused, nothing when done
-    /// (the change shows in the events). False: not a typed command.
+    /// command being stepped: its `error` when refused; done, the change
+    /// shows in the events, and a command that answers the hub's words
+    /// (command/run's `/model`: `✓ main now on …`, P3b) gets them as its
+    /// result. False: not a typed command.
     pub(super) fn typed_outcome(&mut self, client: ClientId, r: &Result<String, String>) -> bool {
         let Some((id, cmd)) = self.proto.stepping.as_ref().map(|s| (s.id, s.cmd.clone())) else { return false };
         if id != client {
             return false;
         }
-        if let Err(e) = r {
-            self.proto_error(client, &cmd, e);
+        match r {
+            Err(e) => self.proto_error(client, &cmd, e),
+            Ok(text) if !text.is_empty() && bise_proto::rpc::says(&cmd) => {
+                let project = self.project();
+                self.proto_send(client, &HubEv::Notice { project, cmd: Some(cmd), text: text.clone(), cid: None });
+            }
+            Ok(_) => {}
         }
         true
     }

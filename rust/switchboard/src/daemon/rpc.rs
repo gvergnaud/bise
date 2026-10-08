@@ -286,6 +286,18 @@ impl Shell {
             }
         }
         if !init {
+            // the hub's words past the request's one answer (a step's
+            // second notice) to an older hello connection (the terminal,
+            // until step 4): its older notice, never a typed line it
+            // doesn't read
+            if !self.proto.has(id) {
+                if let HubEv::Notice { text, .. } | HubEv::Error { text, .. } = ev {
+                    if let Some(c) = self.clients.get_mut(&id) {
+                        write_json(c, &json!({"ev": "notice", "text": text}));
+                    }
+                    return true;
+                }
+            }
             return false;
         }
         let ev = match ev {

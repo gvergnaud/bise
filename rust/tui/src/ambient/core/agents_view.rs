@@ -84,11 +84,11 @@ impl Core {
         if self.hub_agent(&agent).is_none() {
             return self.error(&format!("there's no agent named {agent}."));
         }
-        let mut v = json!({"op": "input", "focus": agent, "text": text, "via": "ambient"});
+        let mut v = json!({"agent": agent, "text": text, "via": "ambient"});
         if queued {
-            v["queued"] = json!(true);
+            v["mode"] = json!("queued");
         }
-        if !self.hub.send(&v) {
+        if !self.home_call("turn/send", v) {
             return self.error(&format!("{agent} didn't get it: bise isn't reachable. try again in a moment."));
         }
         let mode = if queued { "queued" } else { "now" };

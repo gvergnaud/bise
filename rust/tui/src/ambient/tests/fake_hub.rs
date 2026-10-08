@@ -145,6 +145,16 @@ impl HubEnd {
         }
     }
 
+    /// [`next`](Self::next) without its `project` (the home connection's
+    /// requests carry the test workspace's hub id).
+    pub(super) fn sent(&mut self) -> Value {
+        let mut v = self.next();
+        if let Some(o) = v.as_object_mut() {
+            o.remove("project");
+        }
+        v
+    }
+
     /// `initialize` answered (a JSON-RPC connection): `methods` the
     /// hub's (none: all of this version's).
     pub(super) fn initialized(&mut self, project: &str, methods: Option<Vec<String>>) {

@@ -6,7 +6,9 @@
 use super::*;
 
 impl Shell {
-    /// A client's `input` (after its keys are reloaded): a step of his
+    /// His words (turn/send, command/run's non-command line: proto/cmds.rs
+    /// proto_input, the one caller since the wire's `input` op went in
+    /// client-protocol P3b; its keys reloaded first): a step of his
     /// answered on its card, an answer to a page's question, words bise's
     /// home hub routes to a project, else an input with its files, the
     /// capsule's hint and his open steps. Moved out of daemon.rs's input

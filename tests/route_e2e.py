@@ -153,7 +153,7 @@ def main():
         notes = os.path.join(E.tmp, "q3-notes.md")
         with open(notes, "w") as f:
             f.write("q3")
-        c.send({"op": "input", "focus": "main", "text": "look at the cart on shop", "files": [png, notes, png]})
+        c.say("look at the cart on shop", files=[png, notes, png])
         wait.until(lambda: [e for e in of_type(hstate, "x_out") if "look at the cart" in e["out"]["text"]], 15, "the files' route sent")
         sent = [e["out"]["text"] for e in of_type(hstate, "x_out") if "look at the cart" in e["out"]["text"]][0]
         nl = chr(10)

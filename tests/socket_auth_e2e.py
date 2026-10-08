@@ -29,7 +29,7 @@ import json, os, socket, sys, time
 sock, go, out, project = sys.argv[1:5]
 open(go).read()  # a fifo: blocks until the test says go
 lines = [{"jsonrpc": "2.0", "id": 1, "method": "approvals/set", "params": {"project": project, "mode": "toggle"}}]
-lines += [{"op": "input", "focus": "main", "text": "/answer %d allow" % n} for n in range(1, 40)]
+lines += [{"jsonrpc": "2.0", "id": n, "method": "card/answer", "params": {"project": project, "card": n, "reply": "allow"}} for n in range(2, 41)]
 got = b""
 try:
     s = socket.socket(socket.AF_UNIX)

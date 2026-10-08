@@ -444,17 +444,12 @@ impl Core {
             // JSON-RPC's turn/interrupt on the home connection (P1c: the
             // untyped interrupt op is gone); its answer is not read
             Cmd::Stop { agent } => {
-                let project = bise_home::hub_id(Path::new(&self.workspace));
-                let req = json!({"jsonrpc": "2.0", "id": "stop", "method": "turn/interrupt", "params": {"project": project, "agent": agent}});
-                if !self.hub.send(&req) {
+                if !self.home_call("turn/interrupt", json!({"agent": agent})) {
                     self.error("bise isn't reachable: it keeps going. try again in a moment.");
                 }
             }
-            Cmd::Archive { agent, stop_first } => {
-                let force = if stop_first { " --force" } else { "" };
-                self.slash(&format!("/archive {agent}{force}"));
-            }
-            Cmd::Unarchive { agent } => self.slash(&format!("/restore {agent}")),
+            Cmd::Archive { agent, stop_first } => self.home_act("agent/archive", json!({"agent": agent, "force": stop_first})),
+            Cmd::Unarchive { agent } => self.home_act("agent/unarchive", json!({"agent": agent})),
             Cmd::Shown { projects } => {
                 self.shown(projects);
                 self.app_start();
@@ -468,9 +463,9 @@ impl Core {
         }
     }
 
-    /// A slash command of his, through main's input (the TUI's way).
-    fn slash(&mut self, text: &str) {
-        if !self.hub.send(&json!({"op": "input", "focus": "main", "text": text})) {
+    /// An action of his on the home connection: unreachable, he hears it.
+    fn home_act(&mut self, method: &str, params: Value) {
+        if !self.home_call(method, params) {
             self.error("bise isn't reachable: nothing changed. try again in a moment.");
         }
     }
@@ -503,14 +498,14 @@ impl Core {
             c
         });
         // via: the hub tells main it came from the capsule (one short line back)
-        let mut input = json!({"op": "input", "focus": "main", "text": text, "via": via});
+        let mut input = json!({"agent": "main", "text": text, "via": via});
         if let Some(c) = ctx {
             input["context"] = json!(c);
         }
         if !files.is_empty() {
             input["files"] = json!(files);
         }
-        if !self.hub.send(&input) {
+        if !self.home_call("turn/send", input) {
             if let Some(s) = shot {
                 self.forget(vec![s]);
             }
@@ -554,7 +549,7 @@ impl Core {
             (Some(_), None) if reply.is_empty() => return,
             (Some(_), None) => reply.to_string(),
         };
-        if !self.hub.send(&json!({"op": "input", "focus": "main", "text": format!("/answer {id} {reply}")})) {
+        if !self.home_call("card/answer", json!({"card": id, "reply": reply})) {
             self.error("main didn't get it: bise isn't reachable. try again in a moment.");
         }
     }

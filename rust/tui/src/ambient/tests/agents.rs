@@ -245,11 +245,11 @@ fn acts_send_now_queued_stop_archive_unarchive() {
     t.until(|o| has(o, "state"));
     t.take();
     t.cmd(Cmd::AgentSend { agent: "perf".into(), text: " look at the cold bench ".into(), queued: false });
-    assert_eq!(t.hub.next(), json!({"op": "input", "focus": "perf", "text": "look at the cold bench", "via": "ambient"}));
+    assert_eq!(t.hub.sent(), json!({"cmd": "send", "agent": "perf", "text": "look at the cold bench", "via": "ambient"}));
     assert!(t.take().contains(&json!({"ev": "sent", "agent": "perf", "mode": "now"})));
     // queued while it works: the hub holds it (sb-core), never the core
     t.cmd(Cmd::AgentSend { agent: "perf".into(), text: "then the warm one".into(), queued: true });
-    assert_eq!(t.hub.next(), json!({"op": "input", "focus": "perf", "text": "then the warm one", "via": "ambient", "queued": true}));
+    assert_eq!(t.hub.sent(), json!({"cmd": "send", "agent": "perf", "text": "then the warm one", "via": "ambient", "mode": "queued"}));
     let out = t.take();
     assert!(out.contains(&json!({"ev": "agent_queued", "agent": "perf", "text": "then the warm one"})));
     assert!(!out.iter().any(|v| v["ev"] == "phase"), "never main's orb");
@@ -260,11 +260,11 @@ fn acts_send_now_queued_stop_archive_unarchive() {
     let stop = t.hub.next();
     assert_eq!((stop["cmd"].as_str(), stop["agent"].as_str()), (Some("stop"), Some("perf")), "nothing resent at idle: {stop}");
     t.cmd(Cmd::Archive { agent: "perf".into(), stop_first: true });
-    assert_eq!(t.hub.next(), json!({"op": "input", "focus": "main", "text": "/archive perf --force"}));
+    assert_eq!(t.hub.sent(), json!({"cmd": "archive", "agent": "perf", "force": true}));
     t.cmd(Cmd::Archive { agent: "perf".into(), stop_first: false });
-    assert_eq!(t.hub.next()["text"], "/archive perf");
+    assert_eq!(t.hub.sent(), json!({"cmd": "archive", "agent": "perf", "force": false}));
     t.cmd(Cmd::Unarchive { agent: "old".into() });
-    assert_eq!(t.hub.next(), json!({"op": "input", "focus": "main", "text": "/restore old"}));
+    assert_eq!(t.hub.sent(), json!({"cmd": "unarchive", "agent": "old"}));
     t.cmd(Cmd::AgentSend { agent: "nobody".into(), text: "hi".into(), queued: false });
     assert!(has(&t.take(), "error"));
 }

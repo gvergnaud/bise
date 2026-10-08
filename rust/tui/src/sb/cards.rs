@@ -869,7 +869,7 @@ fn answer(app: &mut App, id: u64, reply: &str, picked: Option<&str>) {
         return;
     }
     let Some(c) = app.sb.card_by_id(id).cloned() else { return };
-    app.sb.send_input(format!("/answer {} {}", id, reply));
+    app.sb.call("card/answer", json!({"card": id, "reply": reply}), super::rpc::Then::Line);
     // the thread says the box's fold line (designer: one sentence); a
     // gate's card folds with the hub's own (`✓ you allowed …`)
     let fold = fold_of(&c, reply, picked);
@@ -1069,7 +1069,7 @@ fn close_card(app: &mut App, id: u64) {
         super::setup::close(app, id);
         return;
     }
-    app.sb.send_input(format!("/close {}", id));
+    app.sb.call("card/close", json!({"card": id}), super::rpc::Then::Line);
     retire(app, id);
 }
 

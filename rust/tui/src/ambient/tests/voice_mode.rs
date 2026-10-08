@@ -113,7 +113,7 @@ fn his_turn_goes_to_the_agent_in_view_and_its_answer_is_said() {
     let mut l = String::new();
     while t.hub.r.read_line(&mut l).is_ok_and(|n| n > 0) {
         let v: Value = serde_json::from_str(l.trim()).unwrap();
-        assert!(v["op"] != "input", "nothing reached main: {v}");
+        assert!(v["method"] != "turn/send" && v["method"] != "command/run", "nothing reached main: {v}");
         l.clear();
     }
 }

@@ -237,10 +237,10 @@ fn hub_state_becomes_state_with_agents_and_cards_with_options() {
     );
     // fn + 1 answers with the option's words, as the TUI's box does
     t.cmd(Cmd::Answer { card: 3, reply: "1".into() });
-    assert_eq!(t.hub.next(), json!({"op": "input", "focus": "main", "text": "/answer 3 yes"}));
+    assert_eq!(t.hub.sent(), json!({"cmd": "answer", "card": 3, "reply": "yes"}));
     // words go as they are
     t.cmd(Cmd::Answer { card: 3, reply: "only on desktop".into() });
-    assert_eq!(t.hub.next()["text"], "/answer 3 only on desktop");
+    assert_eq!(t.hub.sent(), json!({"cmd": "answer", "card": 3, "reply": "only on desktop"}));
     // a closed card
     t.cmd(Cmd::Answer { card: 9, reply: "1".into() });
     assert!(has(&t.take(), "error"));
@@ -261,7 +261,7 @@ fn a_page_cards_digit_goes_to_the_page_path() {
     let st = t.take().into_iter().find(|v| v["ev"] == "state").unwrap();
     assert_eq!(st["cards"][0]["options"], json!([{"n": 1, "label": "done"}]));
     t.cmd(Cmd::Answer { card: 3, reply: "1".into() });
-    assert_eq!(t.hub.next(), json!({"op": "input", "focus": "main", "text": "/answer 3 1"}));
+    assert_eq!(t.hub.sent(), json!({"cmd": "answer", "card": 3, "reply": "1"}));
 }
 
 /// Law (pm's C fail 41): fn + digit is never refused on a card that
@@ -291,10 +291,10 @@ b: straight to main"})])
     for i in 0..forms.len() {
         assert_eq!(st["cards"][i]["options"][1]["label"], "straight to main", "{}", forms[i]);
         t.cmd(Cmd::Answer { card: i as u64 + 1, reply: "2".into() });
-        assert_eq!(t.hub.next()["text"], format!("/answer {} straight to main", i + 1), "{}", forms[i]);
+        assert_eq!(t.hub.sent(), json!({"cmd": "answer", "card": i + 1, "reply": "straight to main"}), "{}", forms[i]);
     }
     t.cmd(Cmd::Answer { card: 9, reply: "2".into() });
-    assert_eq!(t.hub.next()["text"], "/answer 9 2");
+    assert_eq!(t.hub.sent(), json!({"cmd": "answer", "card": 9, "reply": "2"}));
     assert!(!has(&t.take(), "error"));
 }
 
@@ -317,7 +317,7 @@ fn an_answer_on_a_replaced_batch_card_reaches_the_hub() {
     t.until(|o| has(o, "state"));
     t.take();
     t.cmd(Cmd::Answer { card: 1, reply: "2".into() });
-    assert_eq!(t.hub.next(), json!({"op": "input", "focus": "main", "text": "/answer 1 2"}));
+    assert_eq!(t.hub.sent(), json!({"cmd": "answer", "card": 1, "reply": "2"}));
     assert!(!has(&t.take(), "error"));
     t.cmd(Cmd::Answer { card: 5, reply: "2".into() });
     assert!(has(&t.take(), "error"));
@@ -347,7 +347,7 @@ fn a_cards_body_does_not_repeat_its_options() {
     assert_eq!(c[2]["text"], "keep the banner on mobile?");
     // fn + 2 still answers with the option's words
     t.cmd(Cmd::Answer { card: 1, reply: "2".into() });
-    assert_eq!(t.hub.next()["text"], "/answer 1 arrête-le");
+    assert_eq!(t.hub.sent(), json!({"cmd": "answer", "card": 1, "reply": "arrête-le"}));
 }
 
 /// Law (pm's C fail 36): bise's own bookkeeping (main's archive
@@ -377,7 +377,7 @@ fn a_hub_item_digit_goes_as_the_digit() {
         {"id": 7, "kind": "feature_try", "agent": "main", "text": "ambient-app is ready to try\n1. try it\n2. later"}]}));
     t.until(|o| has(o, "state"));
     t.cmd(Cmd::Answer { card: 7, reply: "1".into() });
-    assert_eq!(t.hub.next()["text"], "/answer 7 1");
+    assert_eq!(t.hub.sent(), json!({"cmd": "answer", "card": 7, "reply": "1"}));
 }
 
 #[test]
@@ -390,8 +390,8 @@ fn send_goes_to_main_with_the_shot_marker_and_the_png_is_deleted() {
     assert!(!png.exists(), "the app's PNG goes at once");
     t.cmd(Cmd::Send { text: "  why is this red?  ".into() });
     let req = t.hub.next();
-    assert_eq!(req["op"], "input");
-    assert_eq!(req["focus"], "main");
+    assert_eq!(req["cmd"], "send");
+    assert_eq!(req["agent"], "main");
     let text = req["text"].as_str().unwrap();
     assert!(text.starts_with("why is this red?\n\n<image name=\"[Screen]\" path=\"Chrome · localhost:4801/settings\" mime=\"image/png\" b64=\""), "{text}");
     let ms = bend_images::markers(text);
@@ -849,8 +849,8 @@ fn what_the_capsule_sends_main_says_it_came_from_the_capsule() {
     t.ready();
     t.cmd(Cmd::Send { text: "what's running?".into() });
     assert_eq!(
-        t.hub.next(),
-        json!({"op": "input", "focus": "main", "text": "what's running?", "via": "capsule"})
+        t.hub.sent(),
+        json!({"cmd": "send", "agent": "main", "text": "what's running?", "via": "capsule"})
     );
     // an answer is an /answer command: no via, the hub adds no hint to it
     t.hub.say(json!({"ev": "state", "agents": [], "cards": [
@@ -878,7 +878,7 @@ fn the_fake_voice_talks_to_main_through_the_real_talk_path() {
     let out = t.take();
     assert!(out.iter().any(|v| v["ev"] == "heard" && v["final"] == true && v["text"] == "what is running now"), "{out:?}");
     assert!(out.iter().any(|v| v["ev"] == "sent" && v["voice"] == true));
-    assert_eq!(t.hub.next(), json!({"op": "input", "focus": "main", "text": "what is running now", "via": "capsule"}));
+    assert_eq!(t.hub.sent(), json!({"cmd": "send", "agent": "main", "text": "what is running now", "via": "capsule"}));
     // main answers: said through the silent speaker, word by word, done
     t.main_turn("two agents work.");
     t.until(|o| phase_is(o, "speaking"));

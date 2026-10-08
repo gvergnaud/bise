@@ -245,6 +245,14 @@ fn live_view(project: &str, agents: &[Agent], cards: &[Card]) -> ProjectView {
 }
 
 impl Core {
+    /// One JSON-RPC request on the home connection (P3b: his words,
+    /// his command line, a card's answer, a stop, an archive); false:
+    /// bise isn't reachable.
+    pub(super) fn home_call(&self, method: &str, params: Value) -> bool {
+        let project = bise_home::hub_id(std::path::Path::new(&self.workspace));
+        self.hub.send(&super::hub_rpc::home(&project, method, params))
+    }
+
     /// The projects' ports (`bise ambient-core`, a test): without them a
     /// command with a project is refused.
     /// For a window: the registry read once and bise's home hub held now

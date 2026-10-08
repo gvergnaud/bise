@@ -97,11 +97,11 @@ fn tab_asks_main_to_start_an_agent() {
     let mut t = T::new();
     t.ready();
     t.cmd(Cmd::Start { text: "  fix the login loop on Safari ".into() });
-    assert_eq!(t.hub.next(), json!({"op": "input", "focus": "main", "text": "start an agent for: fix the login loop on Safari", "via": "capsule-start"}));
+    assert_eq!(t.hub.sent(), json!({"cmd": "send", "agent": "main", "text": "start an agent for: fix the login loop on Safari", "via": "capsule-start"}));
     assert!(has(&t.take(), "sent"));
     t.cmd(Cmd::Start { text: "   ".into() });
     t.cmd(Cmd::Send { text: "what's running?".into() });
-    assert_eq!(t.hub.next(), json!({"op": "input", "focus": "main", "text": "what's running?", "via": "capsule"}));
+    assert_eq!(t.hub.sent(), json!({"cmd": "send", "agent": "main", "text": "what's running?", "via": "capsule"}));
     // its parse from the app's line
     assert!(matches!(Cmd::parse(r#"{"cmd":"start","text":"x"}"#), Ok(Cmd::Start { .. })));
 }
