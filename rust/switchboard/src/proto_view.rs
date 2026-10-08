@@ -4,7 +4,7 @@
 //! to `bise_proto` rows, and the live fold of a subscribed thread (only
 //! the entries that changed go out).
 
-use bise_proto::rows::{question, Agent, Artifact, ArtifactVersion, Card, CardPage, Report, ReportKind, Status};
+use bise_proto::rows::{question, Agent, Artifact, ArtifactVersion, Card, CardPage, AgentMode, Report, ReportKind, Status};
 use bise_proto::diff::{DiffFile, DiffLine, DiffView, Hunk, LineKind};
 use bise_proto::hub::{HubEv, Job as Followed, JobState};
 use bise_proto::thread::lines::unescape;
@@ -19,6 +19,7 @@ pub mod approvals;
 mod dev_servers;
 mod diff_ask;
 mod features;
+pub mod heads;
 mod merged;
 mod models;
 pub mod slash;
@@ -57,6 +58,7 @@ pub fn agents(
     user_kind: fn(&str) -> bool,
     vision: &dyn Fn(&str) -> Option<bool>,
     usage: &dyn Fn(&str) -> Option<bise_proto::rows::AgentUsage>,
+    last_pos: &dyn Fn(&str) -> Option<bise_proto::Pos>,
 ) -> Vec<Agent> {
     let list = |k: &str| snap.get(k).and_then(Value::as_array).cloned().unwrap_or_default();
     let cards = list("cards");
@@ -64,7 +66,8 @@ pub fn agents(
     for a in list("agents") {
         let name = s(&a, "name");
         let (status, archived) = Status::of_hub(&s(&a, "status"));
-        let first = ms(&a, "report_ms").filter(|_| status != Status::Working).or(ms(&a, "created_ms")).unwrap_or(now);
+        let working = matches!(status, Status::Working | Status::Starting);
+        let first = ms(&a, "report_ms").filter(|_| !working).or(ms(&a, "created_ms")).unwrap_or(now);
         let at = match since.get(&name) {
             Some((st, at)) if *st == status => *at,
             Some(_) => now,
@@ -72,7 +75,13 @@ pub fn agents(
         };
         since.insert(name.clone(), (status, at));
         let title = [s(&a, "note"), s(&a, "role"), s(&a, "report"), s(&a, "objective")].into_iter().find(|t| !t.is_empty()).unwrap_or_default();
-        let worktree = s(&a, "mode") == "worktree";
+        let mode = match s(&a, "mode").as_str() {
+            "worktree" => Some(AgentMode::Worktree),
+            "shared" => Some(AgentMode::Shared),
+            "" => None,
+            _ => Some(AgentMode::Unknown),
+        };
+        let worktree = mode == Some(AgentMode::Worktree);
         let report = Some(s(&a, "report")).filter(|r| !r.is_empty()).map(|text| Report {
             kind: match status {
                 Status::Done => ReportKind::Done,
@@ -93,14 +102,15 @@ pub fn agents(
             since_ms: at,
             waits,
             parent: Some(s(&a, "parent")).filter(|p| !p.is_empty()),
-            branch: Some(s(&a, "branch")).filter(|b| worktree && !b.is_empty()),
+            // the branch checked out, in either mode (`mode` says which)
+            branch: Some(s(&a, "branch")).filter(|b| !b.is_empty()),
             worktree: Some(s(&a, "path")).filter(|p| worktree && !p.is_empty()),
-            turn_ms: a.get("turn_ms").and_then(Value::as_u64).filter(|_| status == Status::Working),
+            turn_ms: a.get("turn_ms").and_then(Value::as_u64).filter(|_| working),
             report,
             // his queued inputs (sb-core holds them, amb-hub 7dcb56ab)
             queued: a.get("queued_inputs").cloned().and_then(|q| serde_json::from_value(q).ok()).unwrap_or_default(),
             // where its thread is on disk, for stream C's readers (S2 step 3)
-            dir: Some(s(&a, "dir")).filter(|d| !d.is_empty()),
+            dir: Some(s(&a, "dir")).filter(|d| !d.is_empty()).unwrap_or_else(|| name.clone()),
             aliases: a.get("aliases").cloned().and_then(|x| serde_json::from_value(x).ok()).unwrap_or_default(),
             // K4: its model and whether it reads images (the composer
             // refuses an image when false)
@@ -111,6 +121,20 @@ pub fn agents(
             usage: usage(&name),
             // R9/S3: model.rs's waiting_on, the field the TUI's panel reads
             waiting_on: bise_proto::rows::WaitingOn::of_word(&s(&a, "waiting_on")),
+            // P4b: the terminal's facts, each the snapshot's own field
+            mode,
+            path: s(&a, "path"),
+            objective: s(&a, "objective"),
+            note: s(&a, "note"),
+            role: s(&a, "role"),
+            msgs_queued: a.get("queued").and_then(Value::as_u64).unwrap_or(0) as u32,
+            inbox: a.get("inbox").and_then(Value::as_u64).unwrap_or(0) as u32,
+            created_ms: ms(&a, "created_ms"),
+            place: Some(s(&a, "place")).filter(|p| !p.is_empty()),
+            place_id: s(&a, "place_id"),
+            efforts: a.get("efforts").cloned().and_then(|e| serde_json::from_value(e).ok()).unwrap_or_default(),
+            changes: a.get("changes").cloned().and_then(|c| serde_json::from_value(c).ok()),
+            last_pos: last_pos(&name),
             name,
         });
     }
@@ -383,6 +407,12 @@ impl Live {
         self.refold(ctx)
     }
 
+    /// Its newest entry's pos (the last one sent): `hub/agents`'
+    /// `last_pos` without a second fold (heads.rs).
+    pub fn last_pos(&self) -> Option<Pos> {
+        self.sent.keys().next_back().copied()
+    }
+
     /// The fold again (a card answered, a page published): what changed.
     pub fn refold(&mut self, ctx: &Ctx) -> Vec<Entry> {
         let entries = thread::fold(&self.lines, ctx);
@@ -499,33 +529,38 @@ mod tests {
         let mut s = snap();
         s["agents"][1]["model"] = json!("mistral/codestral-latest");
         s["agents"][2]["model"] = json!("ollama/llava");
-        let a = agents(&s, &mut since, 100, uk, &vision, &|_| None);
+        let a = agents(&s, &mut since, 100, uk, &vision, &|_| None, &|_| None);
         assert_eq!((a[1].model.as_deref(), a[1].vision), (Some("mistral/codestral-latest"), Some(false)), "listed, no vision");
         assert_eq!((a[2].model.as_deref(), a[2].vision), (Some("ollama/llava"), None), "unlisted: never a guess");
         assert_eq!((a[0].model.as_deref(), a[0].vision), (None, None), "no model in the snapshot");
         // his /model switch: the next rows follow
         s["agents"][1]["model"] = json!("anthropic/claude-haiku-4-5");
-        assert_eq!(agents(&s, &mut since, 200, uk, &vision, &|_| None)[1].vision, Some(true));
+        assert_eq!(agents(&s, &mut since, 200, uk, &vision, &|_| None, &|_| None)[1].vision, Some(true));
     }
 
     #[test]
     fn the_snapshot_becomes_rows() {
         let mut since = Since::new();
-        let a = agents(&snap(), &mut since, 100, uk, &|_| None, &|_| None);
+        let a = agents(&snap(), &mut since, 100, uk, &|_| None, &|_| None, &|_| None);
         assert_eq!(a.len(), 3);
         let p = &a[1];
         assert_eq!((p.status, p.title.as_str(), p.purpose.as_str(), p.waits), (Status::Working, "profiling the hub", "make the e2e fast", 2));
         assert_eq!((p.branch.as_deref(), p.worktree.as_deref(), p.turn_ms, p.since_ms), (Some("sb/perf"), Some("/w/perf"), Some(4200), 7));
         let o = &a[2];
-        assert_eq!((o.archived, o.status, o.branch.as_deref(), o.since_ms), (true, Status::Done, None, 9));
+        // the branch checked out in either mode; `mode` says which (P4b)
+        assert_eq!((o.archived, o.status, o.branch.as_deref(), o.since_ms), (true, Status::Done, Some("main"), 9));
+        assert_eq!((o.mode, o.worktree.as_deref(), o.path.as_str()), (Some(AgentMode::Shared), None, "/w"));
+        assert_eq!((p.mode, p.path.as_str(), p.objective.as_str(), p.role.as_str(), p.msgs_queued, p.created_ms), (Some(AgentMode::Worktree), "/w/perf", "make the e2e fast\nmore", "profiling the hub", 1, Some(7)));
+        assert_eq!((a[0].dir.as_str(), p.dir.as_str()), ("main", "perf"), "no dir in the snapshot: its name");
+        assert_eq!(p.last_pos, None, "no head given");
         assert_eq!(o.report.as_ref().map(|r| r.kind), Some(ReportKind::Done));
         assert_eq!(p.queued.iter().map(|q| (q.id, q.text.as_str())).collect::<Vec<_>>(), [(3, "then the cold run")]);
         assert!(o.queued.is_empty());
         // a status change moves since; the same keeps it
         let mut s2 = snap();
         s2["agents"][1]["status"] = json!("idle");
-        assert_eq!(agents(&s2, &mut since, 200, uk, &|_| None, &|_| None)[1].since_ms, 200);
-        assert_eq!(agents(&s2, &mut since, 300, uk, &|_| None, &|_| None)[1].since_ms, 200);
+        assert_eq!(agents(&s2, &mut since, 200, uk, &|_| None, &|_| None, &|_| None)[1].since_ms, 200);
+        assert_eq!(agents(&s2, &mut since, 300, uk, &|_| None, &|_| None, &|_| None)[1].since_ms, 200);
         let c = cards(&snap(), "acme", 5_000, uk);
         assert_eq!(c.iter().map(|c| c.id).collect::<Vec<_>>(), [9, 10], "his kinds, no drop");
         assert_eq!((c[0].question.as_str(), c[0].options.len(), c[0].since_ms, c[0].urgent), ("which bench?", 2, 4_000, false));

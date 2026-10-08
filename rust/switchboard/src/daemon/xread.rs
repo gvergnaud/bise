@@ -92,7 +92,8 @@ pub(super) fn who_of(name: &str, state: &Path) -> Vec<Who> {
     v.agents
         .iter()
         .filter_map(|a| {
-            let dir = a.dir.clone().unwrap_or_else(|| a.name.clone());
+            // a view written before `dir`: its name
+            let dir = if a.dir.is_empty() { a.name.clone() } else { a.dir.clone() };
             plain(&dir).then(|| Who {
                 name: format!("{name}/{}", a.name),
                 dir: format!("{name}/{dir}"),

@@ -31,7 +31,6 @@ use crate::voicemode::turn::{self, Act, Jobs, SpaceKey, VoiceMode};
 use crate::voicemode::{Phase as Pane, Who};
 use bise_proto::draft::AppCmd;
 use bise_proto::hub::HubEv;
-use bise_proto::rows::Status;
 use bise_proto::thread::EntryKind;
 
 /// Opens voice mode's ports, jobs and settings (live: the default mic and
@@ -187,7 +186,7 @@ impl Core {
             HubEv::Agents { project: p, agents } if *p == project => {
                 let Some(v) = self.voice_on.as_mut() else { return };
                 let agent = v.vm.agent().to_string();
-                let running = agents.iter().any(|a| a.name == agent && a.status == Status::Working);
+                let running = agents.iter().any(|a| a.name == agent && a.status.working());
                 v.vm.on_turn(&agent, running);
             }
             HubEv::Entry { project: p, agent, entry } if *p == project && entry.kind == EntryKind::Agent => {
@@ -209,7 +208,7 @@ impl Core {
     }
 
     fn agent_working(&self, project: &str, agent: &str) -> bool {
-        self.project_rows().into_iter().filter(|(p, _, _)| p == project).flat_map(|(_, agents, _)| agents).any(|a| a.name == agent && a.status == Status::Working)
+        self.project_rows().into_iter().filter(|(p, _, _)| p == project).flat_map(|(_, agents, _)| agents).any(|a| a.name == agent && a.status.working())
     }
 
     /// The clock: the controller's step, its acts, its state on change.

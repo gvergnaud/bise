@@ -1106,6 +1106,7 @@ impl Shell {
                 if let Some(p) = self.positions.remove(&old) {
                     self.positions.insert(new.clone(), p);
                 }
+                self.proto_renamed(&old, &new);
                 self.broadcast(&json!({"ev": "renamed", "old": old, "new": new}));
             }
             // sent by the loop when the gate allows (daemon/state_gate.rs)

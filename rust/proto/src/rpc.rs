@@ -354,6 +354,7 @@ pub const NOTIFICATIONS: &[NoteRow] = &[
     n("hub/prs", "prs", Scope::Hub),
     n("hub/models", "models", Scope::Hub),
     n("hub/approvals", "approvals", Scope::Hub),
+    n("hub/flow", "flow", Scope::Hub),
     n("job/end", "job_end", Scope::Hub),
     n("job/followedEnd", "followed_end", Scope::Hub),
     n("thread/entry", "entry", Scope::Thread),
@@ -361,6 +362,8 @@ pub const NOTIFICATIONS: &[NoteRow] = &[
     n("route/held", "route", Scope::Hub),
     n("route/done", "route_done", Scope::Hub),
     n("confirm/ask", "confirm", Scope::One),
+    n("card/open", "card_open", Scope::One),
+    n("client/focused", "focused", Scope::One),
     n("hub/notice", "notice", Scope::One),
 ];
 
@@ -417,7 +420,7 @@ pub struct Older {
 // TODO(client-protocol step 4's end, P4e): delete this table with the
 // glue (Older, reads_of, older_sent, the hello's reads, the law).
 pub const OLDER: &[Older] = &[
-    Older { ev: "state", methods: &["hub/agents", "hub/cards", "hub/scheduled"] },
+    Older { ev: "state", methods: &["hub/agents", "hub/cards", "hub/scheduled", "hub/flow"] },
     Older { ev: "artifacts", methods: &["hub/artifacts"] },
     Older { ev: "approvals", methods: &["hub/approvals"] },
     Older { ev: "confirm", methods: &["confirm/ask"] },

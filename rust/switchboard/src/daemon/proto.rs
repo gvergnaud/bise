@@ -64,6 +64,10 @@ pub(super) struct Proto {
     /// the agents whose usage was seeded from their transcript's tail
     /// (once each, architect m_10999)
     seeded: BTreeSet<String>,
+    /// P4b: each agent's newest entry (`hub/agents`' `last_pos`)
+    heads: proto_view::heads::Heads,
+    /// P4b: the last `flow` sent (sent again only when changed)
+    flow: String,
 }
 
 /// G: the typed command being stepped (its connection, its tag, a send's
@@ -338,6 +342,8 @@ impl Shell {
             let appr = self.approvals_ev(false);
             let appr = self.proto_approvals(&appr);
             self.proto_send(id, &appr);
+            let flow = self.flow_ev();
+            self.proto_send(id, &flow);
             return;
         }
         if !self.proto.conns.contains_key(&id) {

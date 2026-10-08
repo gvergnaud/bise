@@ -120,6 +120,12 @@ def main():
         state = {n["method"]: n["params"] for n in res["hub"]["state"]}
         check({"hub/agents", "hub/cards", "hub/jobs", "hub/approvals", "hub/models"} <= set(state), "state: %r" % sorted(state))
         check(any(a["name"] == "main" for a in state["hub/agents"]["agents"]), "main in the state's agents")
+        # P4b: every live agent has its dir and where it works; the flow
+        # is its own hub-wide kind; the one-client facts are notifications
+        main_row = [a for a in state["hub/agents"]["agents"] if a["name"] == "main"][0]
+        check(main_row.get("dir") == "main" and main_row.get("mode") in ("shared", "worktree") and main_row.get("path"), "main's row: %r" % main_row)
+        check("hub/flow" in state, "the flow in the state: %r" % sorted(state))
+        check({"card/open", "client/focused", "hub/flow"} <= set(res["notifications"]), "notifications: %r" % res["notifications"])
         # no hello burst, no older event, ever, on this connection
         with r.lock:
             check(not any("ev" in v or "op" in v for v in r.lines), "an older event on a JSON-RPC connection: %r" % [v for v in r.lines if "ev" in v][:3])
@@ -207,14 +213,14 @@ def main():
         # gets those kinds as notifications (their state in its burst,
         # before `ready`) and never their older events; a half-listed
         # row (state without hub/scheduled) is read the older way
-        typed = ["hub/agents", "hub/cards", "hub/scheduled", "hub/artifacts", "hub/approvals", "confirm/ask"]
+        typed = ["hub/agents", "hub/cards", "hub/scheduled", "hub/flow", "hub/artifacts", "hub/approvals", "confirm/ask"]
         h = Older(sock, typed)
         half = Older(sock, ["hub/agents", "hub/cards", "hub/artifacts"])
         h.wait(lambda: any(v.get("ev") == "ready" for v in h.got()), "ready, with reads")
         half.wait(lambda: any(v.get("ev") == "ready" for v in half.got()), "ready, half listed")
         burst = h.got()
         ready = next(i for i, v in enumerate(burst) if v.get("ev") == "ready")
-        for m in ["hub/agents", "hub/cards", "hub/scheduled", "hub/artifacts", "hub/approvals"]:
+        for m in ["hub/agents", "hub/cards", "hub/scheduled", "hub/flow", "hub/artifacts", "hub/approvals"]:
             check(any(v.get("method") == m for v in burst[:ready]), "%s in the burst before ready" % m)
         check(any(v.get("ev") == "hello" for v in burst) and any(v.get("ev") == "line" for v in burst), "hello and lines still the older way")
         hb = half.got()

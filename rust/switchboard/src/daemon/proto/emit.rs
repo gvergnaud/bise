@@ -2,12 +2,15 @@
 //! out of `daemon/proto.rs`, no behavior change): the rows (`agents`,
 //! `cards`), `prs`, `models`, `artifacts`, the routes and followed ends,
 //! and what a broadcast changes (`proto_on`: each event again only when
-//! it changed, the subscribed threads' new entries, an agent's usage).
+//! it changed, the subscribed threads' new entries, an agent's usage);
+//! P4b: the repo's `flow`, and each agent's newest entry (`last_pos`,
+//! proto_view/heads.rs: a live line that starts an entry sends the rows
+//! again).
 
 use super::*;
 use crate::daemon::rpc::Typed;
 use bise_proto::hub::JobState;
-use bise_proto::rows::AgentUsage;
+use bise_proto::rows::{AgentUsage, FlowMode};
 use bise_proto::thread::words;
 
 impl Shell {
@@ -37,6 +40,7 @@ impl Shell {
         let project = self.project();
         let now = now_ms();
         self.seed_usage(snap);
+        self.seed_heads(snap);
         // K4: each agent's model read against the hub's catalog (his
         // config.toml merged, re-read when it changes), fresh each time
         self.setup();
@@ -51,7 +55,9 @@ impl Shell {
             let window = cat.map(|c| c.context_window(&u.model)).filter(|w| *w > 0);
             Some(AgentUsage { model: u.model.clone(), context, window, words: words::context_words(context, window), short: words::short_words(context, window) })
         };
-        let agents = proto_view::agents(snap, &mut self.proto.since, now, crate::model::user_kind, &vision, &usage);
+        let heads = &self.proto.heads;
+        let last_pos = |name: &str| heads.last(name);
+        let agents = proto_view::agents(snap, &mut self.proto.since, now, crate::model::user_kind, &vision, &usage, &last_pos);
         let cards = proto_view::cards(snap, &project, now, crate::model::user_kind);
         (HubEv::Agents { project: project.clone(), agents }, HubEv::Cards { project, cards })
     }
@@ -163,6 +169,13 @@ impl Shell {
                 if new.1 {
                     self.proto_live(|l, ctx| l.refold(ctx));
                 }
+                // P4b: the repo's flow, when it changed
+                let flow = self.flow_ev();
+                let f = flow.encode();
+                if f != self.proto.flow {
+                    self.proto.flow = f;
+                    self.proto_note(&ids, &flow);
+                }
                 // S10: the followed jobs, when they changed
                 let jobs = HubEv::Jobs { project: self.project(), items: proto_view::jobs(v) };
                 let j = jobs.encode();
@@ -232,7 +245,8 @@ impl Shell {
                 let ts = v.get("ts").and_then(Value::as_u64).unwrap_or(0);
                 let step = proto_view::step_of(&line);
                 let sent = self.proto_live_of(&agent, |l, ctx| l.push((pos, ts, line.clone()), ctx));
-                if self.proto_usage_line(&agent, &line) {
+                let moved = self.proto_head_line(&agent, (pos, ts, line.clone()));
+                if self.proto_usage_line(&agent, &line) || moved {
                     self.proto_agents_again(&ids);
                 }
                 if let Some(text) = step {
@@ -262,6 +276,49 @@ impl Shell {
             pthread::lines::Rec::Obs(pthread::lines::Obs::CompactionDone(_)) => self.proto.usage.remove(agent).is_some(),
             _ => false,
         }
+    }
+
+    /// P4b: the repo's flow as the typed `flow` (`hub/flow`).
+    pub(in crate::daemon) fn flow_ev(&self) -> HubEv {
+        let flow = self.hub.flow.map(|f| match f {
+            crate::flow::FlowMode::Pr => FlowMode::Pr,
+            crate::flow::FlowMode::Trunk => FlowMode::Trunk,
+        });
+        HubEv::Flow { project: self.project(), flow }
+    }
+
+    /// P4b: an agent's live line for its head (`last_pos`, heads.rs): a
+    /// subscribed thread's live fold gives its newest pos, else the
+    /// head's tail is folded. True when its newest entry moved.
+    fn proto_head_line(&mut self, agent: &str, line: pthread::Line) -> bool {
+        let known = self.proto.conns.values().filter_map(|c| c.subs.get(agent)).filter_map(|l| l.last_pos()).max();
+        let facts = self.facts();
+        self.setup();
+        let setup = &self.setup;
+        let ctx = Ctx { open_cards: &facts.open, page: &|p: &str| facts.page(p), provider: &|i: &str, k: &str| provider_name(setup, i, k), width: &width, offset: &offset };
+        self.proto.heads.push(agent, line, known, &ctx)
+    }
+
+    /// P4b: each agent the heads don't know yet, from the lines the hub
+    /// buffered of it (its transcript's tail at start), folded once.
+    fn seed_heads(&mut self, snap: &Value) {
+        let names: Vec<String> = snap["agents"].as_array().into_iter().flatten().filter_map(|a| a["name"].as_str().map(String::from)).filter(|n| !self.proto.heads.has(n)).collect();
+        if names.is_empty() {
+            return;
+        }
+        let facts = self.facts();
+        self.setup();
+        let setup = &self.setup;
+        let ctx = Ctx { open_cards: &facts.open, page: &|p: &str| facts.page(p), provider: &|i: &str, k: &str| provider_name(setup, i, k), width: &width, offset: &offset };
+        for n in names {
+            let lines: Vec<pthread::Line> = self.buffers.get(&n).into_iter().flatten().map(|(p, ts, l)| (*p as u64, *ts, l.clone())).collect();
+            self.proto.heads.seed(&n, lines, &ctx);
+        }
+    }
+
+    /// P4b: an agent renamed: its head follows it.
+    pub(in crate::daemon) fn proto_renamed(&mut self, old: &str, new: &str) {
+        self.proto.heads.rename(old, new);
     }
 
     /// The `agents` rows again, to `ids` when they changed (an agent's

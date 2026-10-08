@@ -5,8 +5,9 @@
 use crate::Project;
 use serde::{Deserialize, Serialize};
 
-/// An agent's status as every view shows it (the hub's words mapped:
-/// starting is working, stopped is done; archived is a flag).
+/// An agent's status, the hub's word exactly (archived is a flag): a
+/// view that draws starting like working, or stopped like done, says so
+/// itself (architect m_13999).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
@@ -17,18 +18,32 @@ pub enum Status {
     Blocked,
     Done,
     Failed,
+    /// its REPL is starting (its first turn not begun)
+    Starting,
+    /// stopped by the user (`sb stop`, a drop on its way)
+    Stopped,
+    /// a status this version doesn't know (a newer hub)
+    #[serde(other)]
+    Unknown,
 }
 
 impl Status {
+    /// In a turn, or about to be (starting): what a view draws as working.
+    pub fn working(self) -> bool {
+        matches!(self, Status::Working | Status::Starting)
+    }
+
     /// The hub's status word (`model::Status::as_str`): the status and
     /// whether the agent is archived (an archived one shows done).
     pub fn of_hub(word: &str) -> (Status, bool) {
         match word {
-            "starting" | "working" => (Status::Working, false),
+            "working" => (Status::Working, false),
+            "starting" => (Status::Starting, false),
             "waiting" => (Status::Waiting, false),
             "blocked" => (Status::Blocked, false),
             "failed" => (Status::Failed, false),
-            "done" | "stopped" => (Status::Done, false),
+            "done" => (Status::Done, false),
+            "stopped" => (Status::Stopped, false),
             "archived" => (Status::Done, true),
             _ => (Status::Idle, false),
         }
@@ -87,10 +102,12 @@ pub struct Agent {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub queued: Vec<crate::draft::Queued>,
     /// its folder in the hub's `agents/` (its name but after a rename):
-    /// where `sb history --project` reads its thread on disk (S2 C);
-    /// none in a view written before this field (read as the name)
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub dir: Option<String>,
+    /// where `sb history --project` reads its thread on disk (S2 C), and
+    /// the agent's identity across a rename (a client keys agents by it:
+    /// same dir, new name = renamed). Always set by a live hub; '' only
+    /// in a view written before this field (read as the name)
+    #[serde(default)]
+    pub dir: String,
     /// its former names (a rename), which `sb history --agent` takes too
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub aliases: Vec<String>,
@@ -118,6 +135,91 @@ pub struct Agent {
     /// reply; none when it waits on nobody
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub waiting_on: Option<WaitingOn>,
+    /// client-protocol step 4 (P4b, architect m_13999): the facts the
+    /// terminal reads, each from the hub's one source. Where it works:
+    /// the shared checkout or its own worktree (`branch` is the branch
+    /// checked out in either; `worktree` the worktree's path)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<AgentMode>,
+    /// its folder (the shared checkout's or its worktree's)
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub path: String,
+    /// its whole objective (`purpose` is its first line)
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub objective: String,
+    /// what it says it does now (`sb status --note`)
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub note: String,
+    /// what it is doing now, one line (BISE-126; none for main)
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub role: String,
+    /// the agents' messages waiting for its turn to end (`queued` is his)
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub msgs_queued: u32,
+    /// main's inbox: the agents' questions waiting for main (BISE-299)
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub inbox: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_ms: Option<u64>,
+    /// its private worktree (BISE-136), none in the shared checkout
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub place: Option<String>,
+    /// the id of the place it is in (dev-flow §3.1, the `places` rows)
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub place_id: String,
+    /// the reasoning efforts its model takes (the catalog's words)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub efforts: Vec<String>,
+    /// its changes against its base (the `± 9 files so far` door), none
+    /// when nothing changed or not measured yet
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub changes: Option<Changes>,
+    /// the pos of its thread's newest entry (`bise_proto::thread::fold`,
+    /// the hub's one fold): a client lights an agent out of view when it
+    /// moves, without subscribing its thread
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_pos: Option<crate::Pos>,
+}
+
+/// Where an agent works (named apart from `hub::Mode`, a send's).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum AgentMode {
+    /// the workspace's checkout, shared with main
+    Shared,
+    /// its own git worktree
+    Worktree,
+    /// a mode this version doesn't know (a newer hub)
+    #[serde(other)]
+    Unknown,
+}
+
+/// An agent's changes against its base: files, lines added, removed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Changes {
+    pub files: u64,
+    pub add: u64,
+    pub del: u64,
+}
+
+/// How a repo's agents land their work (`config.toml`'s `[flow] mode`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum FlowMode {
+    /// every change through a branch and a pull request
+    Pr,
+    /// tested commits straight on the default branch
+    Trunk,
+    /// a flow this version doesn't know (a newer hub)
+    #[serde(other)]
+    Unknown,
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }
 
 /// Whom an agent waits on (R9/S3).
@@ -716,8 +818,8 @@ mod tests {
 
     #[test]
     fn hub_words_map_to_statuses() {
-        assert_eq!(Status::of_hub("starting"), (Status::Working, false));
-        assert_eq!(Status::of_hub("stopped"), (Status::Done, false));
+        assert_eq!(Status::of_hub("starting"), (Status::Starting, false));
+        assert_eq!(Status::of_hub("stopped"), (Status::Stopped, false));
         assert_eq!(Status::of_hub("archived"), (Status::Done, true));
         assert_eq!(Status::of_hub("idle"), (Status::Idle, false));
     }

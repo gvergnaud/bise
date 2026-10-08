@@ -13,7 +13,6 @@
 
 use bise_home::projects::Row;
 use bise_proto::draft::{ProjectRow, ProjectView};
-use bise_proto::rows::Status;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
@@ -113,7 +112,7 @@ pub fn row(f: &Facts, order: u32, c: &Checkout) -> ProjectRow {
         home: f.row.home,
         order,
         agents: agents.len() as u32,
-        working: agents.iter().filter(|a| a.status == Status::Working).count() as u32,
+        working: agents.iter().filter(|a| a.status.working()).count() as u32,
         waits: f.view.as_ref().map_or(0, |v| v.cards.len() as u32),
         running: f.running,
         missing: f.missing,
@@ -132,6 +131,7 @@ pub fn read_view(hub_dir: &Path) -> Option<ProjectView> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bise_proto::rows::Status;
     use bise_proto::rows::Agent;
 
     fn r(name: &str, path: &str, home: bool) -> Row {
@@ -154,13 +154,26 @@ mod tests {
             turn_ms: None,
             report: None,
             queued: vec![],
-            dir: None,
+            dir: name.into(),
             aliases: vec![],
             model: None,
             vision: None,
             effort: None,
             usage: None,
             waiting_on: None,
+            mode: None,
+            path: String::new(),
+            objective: String::new(),
+            note: String::new(),
+            role: String::new(),
+            msgs_queued: 0,
+            inbox: 0,
+            created_ms: None,
+            place: None,
+            place_id: String::new(),
+            efforts: vec![],
+            changes: None,
+            last_pos: None,
         }
     }
 

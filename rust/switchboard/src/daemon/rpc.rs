@@ -22,12 +22,30 @@
 //!   The counter is transport state, never journaled; `epoch` is this
 //!   hub run's start (ms), so a restart or a reload is a new epoch.
 //!
+//! - sb-core's lines for one client become its One notifications
+//!   (`hub/notice`, update-card's `card/open`, the hub's `client/focused`:
+//!   `one_ev`); `hub/flow` is a hub-wide kind of the state (P4b).
+//!
 //! agent.sock is out of scope (agents' `sb` ops, unchanged).
 
 use super::*;
 use bise_proto::hub::HubEv;
 use bise_proto::rpc::{self, code, HubState, Id, InitializeParams, InitializeResult, Message, Response, RpcError, Scope, Watermark};
 use bise_proto::PROTO;
+
+/// sb-core's line for one client (`Effect::ToClient`) as its typed One
+/// notification: `notice`, `open_card`, `focus`; none: an older event
+/// with no typed form for one client.
+fn one_ev(project: &str, body: &Value) -> Option<HubEv> {
+    let s = |k: &str| body.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+    let project = project.to_string();
+    match body.get("ev").and_then(Value::as_str)? {
+        "notice" => Some(HubEv::Notice { project, cmd: None, text: s("text"), cid: None }),
+        "open_card" => Some(HubEv::CardOpen { project, id: body.get("id").and_then(Value::as_u64)? }),
+        "focus" => Some(HubEv::Focused { project, focus: s("focus") }),
+        _ => None,
+    }
+}
 
 /// The methods answered from a thread (git, lsof), after the arm returns.
 const LATER: &[&str] = &["diff/read", "worktrees/list", "devServers/list", "merged/list", "branches/list", "release/plan"];
@@ -245,7 +263,7 @@ impl Shell {
         let arts = self.proto_artifacts(&arts);
         let appr = self.approvals_ev(false);
         let appr = self.proto_approvals(&appr);
-        let mut evs = vec![agents, cards, jobs, arts, self.features_ev(), self.prs_ev(), self.scheduled_ev(), self.models_ev(), appr];
+        let mut evs = vec![agents, cards, jobs, arts, self.features_ev(), self.prs_ev(), self.scheduled_ev(), self.models_ev(), appr, self.flow_ev()];
         let mut missing = Vec::new();
         for kind in SCANNED {
             match self.rpc.scanned.get(*kind) {
@@ -403,14 +421,14 @@ impl Shell {
 
     /// sb-core's line for client `id` (`Effect::ToClient`) when it is an
     /// initialized JSON-RPC connection: a notice goes as `hub/notice`,
-    /// the rest (the terminal's older events) not at all. False: not one.
+    /// update-card's `open_card` as `card/open`, the hub's `focus` as
+    /// `client/focused` (P4b), the rest (the terminal's older events) not
+    /// at all. False: not one.
     pub(super) fn rpc_effect(&mut self, id: ClientId, body: &Value) -> bool {
         if !self.rpc.init(id) {
             return false;
         }
-        if body.get("ev").and_then(Value::as_str) == Some("notice") {
-            let text = body.get("text").and_then(Value::as_str).unwrap_or("").to_string();
-            let ev = HubEv::Notice { project: self.project(), cmd: None, text, cid: None };
+        if let Some(ev) = one_ev(&self.project(), body) {
             self.rpc_out(id, &ev, false);
         }
         true

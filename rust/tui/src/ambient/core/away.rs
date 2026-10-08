@@ -17,16 +17,17 @@ use bise_proto::rows::{Agent, Card, Status};
 /// The summary since `since_ms` of each project's (id, agents, cards), in
 /// his projects' order; a project where nothing happened is left out.
 pub fn summary(since_ms: u64, projects: &[(String, Vec<Agent>, Vec<Card>)]) -> CoreEv {
-    let turned = |agents: &[Agent], s: Status| {
-        agents.iter().filter(|a| !a.main && !a.archived && a.status == s && a.since_ms >= since_ms).count() as u32
+    let turned = |agents: &[Agent], s: &[Status]| {
+        agents.iter().filter(|a| !a.main && !a.archived && s.contains(&a.status) && a.since_ms >= since_ms).count() as u32
     };
     let rows: Vec<AwayProject> = projects
         .iter()
         .map(|(id, agents, cards)| AwayProject {
             project: id.clone(),
-            done: turned(agents, Status::Done),
+            // stopped by him counts as done, as before Status said it exactly
+            done: turned(agents, &[Status::Done, Status::Stopped]),
             questions: cards.iter().filter(|c| c.since_ms >= since_ms).count() as u32,
-            failed: turned(agents, Status::Failed),
+            failed: turned(agents, &[Status::Failed]),
         })
         .filter(|p| p.done + p.questions + p.failed > 0)
         .collect();

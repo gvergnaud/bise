@@ -210,6 +210,19 @@ pub enum HubEv {
     /// `id`; only that connection gets it. Left unanswered it holds
     /// nothing in the hub: a later command just asks again
     Confirm { project: Project, id: u64, text: String },
+    /// the repo's flow (`config.toml`'s `[flow] mode`), on change; none:
+    /// not set
+    Flow {
+        project: Project,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        flow: Option<crate::rows::FlowMode>,
+    },
+    /// update-card's new release: open its item (to the connection whose
+    /// `/update` found it)
+    CardOpen { project: Project, id: u64 },
+    /// the hub moved this connection's focus (an agent it was on is
+    /// gone: back to main)
+    Focused { project: Project, focus: String },
     /// how tool calls are approved on this machine and the saved rules of
     /// this repo (bar V8/W21: the TUI's `/approvals`, from the same JSON):
     /// at hello, to every connection when the mode or the rules change,
@@ -277,7 +290,7 @@ pub enum HubEv {
 }
 
 impl HubEv {
-    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "entry", "typing", "artifacts", "scheduled", "worktrees", "dev_servers", "merged", "features", "prs", "models", "tool_out", "diff", "branches", "versions", "release", "route", "route_done", "jobs", "job_end", "followed_end", "confirm", "approvals", "notice", "refused", "error"];
+    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "entry", "typing", "artifacts", "scheduled", "worktrees", "dev_servers", "merged", "features", "prs", "models", "tool_out", "diff", "branches", "versions", "release", "route", "route_done", "jobs", "job_end", "followed_end", "confirm", "flow", "card_open", "focused", "approvals", "notice", "refused", "error"];
 
     pub fn decode(line: &str) -> Result<HubEv, String> {
         Self::from_value(parse(line)?)
