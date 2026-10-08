@@ -237,7 +237,7 @@ pub struct PickChoice {
     pub desc: String,
 }
 
-/// What completes one argument of a command (the TUI's commands.rs
+/// What completes one argument of a command (the catalog's commands.rs
 /// `Arg`): fixed words, a list the window has (live agents, archived ones,
 /// open cards, branches, models, efforts, plugins), or free text (`text`
 /// required, `note` optional).
@@ -258,7 +258,7 @@ pub enum PickArg {
 }
 
 /// A slash command, as the TUI's `/` popup lists it (commands.rs
-/// COMMANDS: same name, desc, order, args). `runnable`: for `hub` and
+/// COMMANDS, the catalog: same name, desc, order, args). `runnable`: for `hub` and
 /// `core`, a typed path exists today; for `window`, always false here
 /// (the window owns its screens' readiness and combines the two).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

@@ -14,6 +14,7 @@ pub(crate) const DEV_COMMANDS: &[Cmd] = &[Cmd {
     name: "/release-bise",
     desc: "release bise: tag HEAD, CI builds it, publish (asks first): /release-bise [dry-run]",
     args: &[Arg::Words(&[("dry-run", "say what it would do, push and publish nothing")])],
+    client: true,
 }];
 
 /// The dev build: the hub said its workspace is bise's source tree.

@@ -33,10 +33,15 @@
 //! one parser of each line kind, which the TUI's `wire.rs`/`sb.rs` call
 //! too, and [`thread::words`] makes the words both show.
 //!
+//! [`commands`] is the slash commands' catalog (name, usage, arguments,
+//! `client` for the screen ones): the TUI's popup and `/help` read it, a
+//! client over the wire gets it serialized.
+//!
 //! The fixtures (`fixtures/*.jsonl`) are the one source for the Rust
 //! tests, the native helper's laws and the Python e2e.
 
 pub mod approvals;
+pub mod commands;
 pub mod context;
 pub mod diff;
 pub mod draft;

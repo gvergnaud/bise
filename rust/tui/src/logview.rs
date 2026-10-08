@@ -57,6 +57,7 @@ pub(crate) const COMMAND: crate::commands::Cmd = crate::commands::Cmd {
     name: "/log",
     desc: "the raw session of the agent in view: every entry, and what the model got: /log [<request>]",
     args: &[],
+    client: true,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

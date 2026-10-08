@@ -4,8 +4,9 @@
 //! same crate), so the window lists and ranks exactly what the TUI does,
 //! with no copy in TypeScript.
 //!
-//! - `commands`: COMMANDS as data, each with how it runs (`hub`: his
-//!   line goes to the hub's parser; `window`: a screen of the window) and
+//! - `commands`: COMMANDS (bise_proto's catalog) as data, each with how
+//!   it runs (`hub`: his line goes to the hub's parser; `window`: a
+//!   screen of the window, the catalog's `client`) and
 //!   `runnable`: every hub command runs (his typed line goes as amb-feed's
 //!   HubCmd slash, the hub's router parses it; architect m_11011); the
 //!   window owns its screens' readiness.
@@ -27,15 +28,6 @@ const FILE_ROWS: usize = 50;
 /// How long a worker waits for a workspace's first walk before it stops
 /// answering (the partial answer stands).
 const WALK_WAIT: Duration = Duration::from_secs(20);
-
-/// How each command runs: the hub's (the TUI sends them to the hub, or
-/// the hub's router parses them) and the window's own (a screen or a
-/// state of the TUI). The law `every_command_is_listed_once_with_how_it_runs`
-/// keeps this table and COMMANDS together.
-const HUB: &[&str] = &[
-    "/restart", "/update", "/version", "/new", "/archive", "/restore", "/isolate", "/rename", "/answer", "/close", "/model", "/reasoning",
-    "/interrupt", "/stop", "/compact",
-];
 
 fn words(w: &[(&str, &str)]) -> PickArg {
     PickArg::Words { words: w.iter().map(|(value, desc)| PickChoice { value: value.to_string(), desc: desc.to_string() }).collect() }
@@ -63,7 +55,8 @@ pub fn commands() -> Vec<PickCommand> {
     COMMANDS
         .iter()
         .map(|c| {
-            let hub = HUB.contains(&c.name);
+            // the catalog's `client`: a screen of the window's own
+            let hub = !c.client;
             PickCommand {
                 name: c.name.to_string(),
                 desc: c.desc.to_string(),
@@ -194,10 +187,8 @@ mod tests {
         for (c, t) in list.iter().zip(COMMANDS) {
             assert_eq!((c.desc.as_str(), c.args.len()), (t.desc, t.args.len()), "{}", c.name);
         }
-        for n in HUB {
-            assert!(names.contains(n), "{n} is not a TUI command");
-        }
-        for c in &list {
+        for (c, t) in list.iter().zip(COMMANDS) {
+            assert_eq!(c.runs == Runs::Hub, !t.client, "{}: runs as the catalog says", c.name);
             assert_eq!(c.runnable, c.runs == Runs::Hub, "{}: every hub command runs (slash), no window one is the hub's", c.name);
         }
         let new = list.iter().find(|c| c.name == "/new").unwrap();
