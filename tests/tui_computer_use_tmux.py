@@ -52,6 +52,17 @@ else:
 '''
 
 
+def hub_id(sock):
+    """bise_peer::tags::hub_id: FNV-1a 64 of the hub's socket path, the
+    TUI's filter in computer use's state. The test's state dir is short,
+    so the socket keeps its natural place (bise_home::socket::fits)."""
+    assert len(sock.encode()) <= 103, sock
+    h = 0xcbf29ce484222325
+    for b in sock.encode():
+        h = ((h ^ b) * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF
+    return "%016x" % h
+
+
 def row(id, state, detail="", fix=None):
     return {"id": id, "state": state, "detail": detail, "fix": fix}
 
@@ -79,10 +90,17 @@ def main():
             json.dump(v, f)
         os.replace(tmp, os.path.join(d, "check.json"))
 
+    # computer use's state.json v2 (issue 18 step 2, b00f93b1): agents
+    # keyed <hub tag id>.<dir> with their name and hub; the TUI shows only
+    # its own hub's (computer_use::parse_state), the hash of the socket it
+    # talks to (set once the hub is up, below)
+    hub = [None]
+
     def state(agents):
+        rows = {"%s.%s" % (hub[0], name): dict(a, name=name, hub=hub[0]) for name, a in agents.items()}
         tmp = os.path.join(cu, "state.json.tmp")
         with open(tmp, "w") as f:
-            json.dump({"agents": agents, "browsers": [], "apps": {}}, f)
+            json.dump({"v": 2, "agents": rows, "browsers": [], "apps": {}}, f)
         os.replace(tmp, os.path.join(cu, "state.json"))
 
     def calls():
@@ -127,7 +145,12 @@ def main():
             agent = (m.get("args") or {}).get("agent", "")
             with open(os.path.join(d, "calls.log"), "a") as log:
                 log.write("ctl %s %s\n" % (m.get("op"), agent))
-            res = {"agents": {}} if m.get("op") == "status" else {"stopped": [agent]}
+            if m.get("op") == "status":
+                # the broker's status: who drives, by key (the state file)
+                with open(os.path.join(cu, "state.json")) as sf:
+                    res = {"agents": json.load(sf).get("agents", {})}
+            else:
+                res = {"stopped": [agent]}
             f.write((json.dumps({"id": m["id"], "ok": True, "result": res}) + "\n").encode())
             f.flush()
 
@@ -147,11 +170,17 @@ def main():
     # BEND_ vars come after extra_env on the TUI's command line)
     E = e2e.Env()
     E.env["BEND_RUN_DIR"] = run_dir
+    hub[0] = hub_id(os.path.join(E.state, "hub.sock"))
     try:
         with tui_session(COLS, ROWS, env=env, E=E) as t:
             t.wait("bise :*")
             # ---- the setup screen ----
+            # /computer-use takes a word (6865115c): ⏎ on the command's row
+            # fills '/computer-use ' and opens its rows (plugin off: one
+            # 'on' row), a second ⏎ runs the bare command
             t.typed("/computer-use")
+            t.keys("Enter")
+            t.wait("turn computer use on and set it up")
             t.keys("Enter")
             sc = t.wait("Chrome isn't open. open it, i'll wait")
             assert "computer use · agents can drive Chrome" in sc, sc
@@ -248,7 +277,9 @@ def main():
             called("ctl stop ")
             assert any(l.startswith("ctl stop ") and l.endswith(".main") and len(l.split(" ")[2].split(".")[0]) == 16 for l in calls().splitlines()), calls()
             with open(os.path.join(cu, "events.jsonl"), "a") as f:
-                f.write(json.dumps({"t": 1, "agent": "main", "event": "stopped", "by": "you", "driving": "Chrome"}) + "\n")
+                # events v2: by key, with its name and hub (the hub's Watch
+                # feeds main only its own hub's)
+                f.write(json.dumps({"t": 1, "agent": "%s.main" % hub[0], "name": "main", "hub": hub[0], "event": "stopped", "by": "you", "driving": "Chrome"}) + "\n")
             state({"main": {"driving": None, "where": None, "paused": False, "stopped": True}})
             sc = t.wait("↖ main stopped driving Chrome · you stopped it", timeout=15)
             assert " · ↖ Chrome" not in sc, sc
