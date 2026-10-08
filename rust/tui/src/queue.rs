@@ -52,10 +52,21 @@ pub(crate) fn pop_last(app: &mut App) -> bool {
     true
 }
 
+/// How long a queued message that went may wait for its turn to start
+/// before the next one may go anyway: the mark never stalls the queue.
+pub(crate) const TURN_WAIT: std::time::Duration = std::time::Duration::from_secs(15);
+
 /// The turn ended: the oldest queued message, ready to send (its image
-/// labels expanded). None during a turn or with nothing queued.
+/// labels expanded). None during a turn, with nothing queued, or while
+/// the one sent before has not started its turn yet: an idle state the
+/// hub sent before it took that input must not release the next one
+/// (it went in the same turn, as steering).
 pub(crate) fn next(app: &mut App) -> Option<String> {
-    if app.pending || app.queued.is_empty() {
+    next_at(app, std::time::Instant::now())
+}
+
+pub(crate) fn next_at(app: &mut App, now: std::time::Instant) -> Option<String> {
+    if app.pending || app.queued.is_empty() || waits(app, now) {
         return None;
     }
     let q = app.queued.remove(0);
@@ -63,8 +74,42 @@ pub(crate) fn next(app: &mut App) -> Option<String> {
     let mine = std::mem::replace(&mut app.attachments, q.attachments);
     let text = crate::attach::expand(app, &q.text);
     app.attachments = mine;
+    app.queue_out = Some(now);
     Some(text)
 }
+
+/// The queued message that went has its turn (it started or ended), or
+/// the hub refused it: the next one goes at that turn's end.
+pub(crate) fn seen(app: &mut App) {
+    app.queue_out = None;
+}
+
+/// A queued message went and its turn has not started; past
+/// [`TURN_WAIT`] the mark goes (one log line) and the queue moves on.
+fn waits(app: &mut App, now: std::time::Instant) -> bool {
+    let Some(t) = app.queue_out else { return false };
+    if now.saturating_duration_since(t) < TURN_WAIT {
+        return true;
+    }
+    app.queue_out = None;
+    log_line(&format!("queue: no turn started {} s after a queued message: the next one may go", TURN_WAIT.as_secs()));
+    false
+}
+
+/// One line in `<bise home>/logs/tui.log` (none from the unit tests: they
+/// never write the real home).
+#[cfg(not(test))]
+fn log_line(line: &str) {
+    use std::io::Write;
+    let dir = bise_home::Home::from_env().logs_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(dir.join("tui.log")) {
+        let _ = writeln!(f, "{} {}", crate::when::now_ms(), line);
+    }
+}
+
+#[cfg(test)]
+fn log_line(_line: &str) {}
 
 /// Rows the queue takes above the composer (0 when empty).
 pub(crate) fn height(app: &App) -> u16 {
@@ -166,10 +211,81 @@ mod tests {
         assert_eq!(next(&mut app).as_deref(), Some("one"));
         // the next one waits for the turn that one starts
         app.pending = true;
+        seen(&mut app);
         assert_eq!(next(&mut app), None);
         app.pending = false;
         assert_eq!(next(&mut app).as_deref(), Some("two"));
         assert_eq!(next(&mut app), None);
+    }
+
+    fn two_queued() -> App {
+        let mut app = crate::sb::bench::test_app();
+        app.pending = true;
+        for t in ["one", "two"] {
+            app.ed.insert(t);
+            push(&mut app);
+        }
+        app.pending = false;
+        app
+    }
+
+    /// Law (architect m_12881): an idle state the hub sent before it took
+    /// the queued input (the state's main=idle after the send, before
+    /// turn_started) does not release the next one: it would go in the
+    /// same turn, as steering.
+    #[test]
+    fn a_stale_idle_after_the_send_does_not_release_the_next_one() {
+        let mut app = two_queued();
+        let t0 = std::time::Instant::now();
+        assert_eq!(next_at(&mut app, t0).as_deref(), Some("one"));
+        app.pending = true;
+        // the stale idle state
+        app.pending = false;
+        assert_eq!(next_at(&mut app, t0 + std::time::Duration::from_millis(60)), None);
+        assert_eq!(app.queued.len(), 1);
+    }
+
+    /// Law: its turn starting clears the mark (the feed's turn_started line).
+    #[test]
+    fn the_turn_starting_clears_the_mark() {
+        let mut app = two_queued();
+        assert_eq!(next(&mut app).as_deref(), Some("one"));
+        crate::run::ingest_line(&mut app, "  obs: turn_started".into(), None);
+        assert_eq!(app.queue_out, None);
+        crate::run::ingest_line(&mut app, "--- idle".into(), None);
+        assert_eq!(next(&mut app).as_deref(), Some("two"));
+    }
+
+    /// Law: its turn ending clears it too (a turn_started line missed).
+    #[test]
+    fn the_turn_ending_clears_the_mark() {
+        let mut app = two_queued();
+        assert_eq!(next(&mut app).as_deref(), Some("one"));
+        crate::run::ingest_line(&mut app, "  obs: turn_done: completed".into(), None);
+        crate::run::ingest_line(&mut app, "--- idle".into(), None);
+        assert_eq!(next(&mut app).as_deref(), Some("two"));
+    }
+
+    /// Law: a refusal of that input (the hub's notice) clears it: no turn
+    /// will start for it.
+    #[test]
+    fn a_refusal_clears_the_mark() {
+        let mut app = two_queued();
+        assert_eq!(next(&mut app).as_deref(), Some("one"));
+        crate::sb::dispatch(&mut app, r#"{"ev": "notice", "text": "no agent named x"}"#);
+        assert_eq!(app.queue_out, None);
+        assert_eq!(next(&mut app).as_deref(), Some("two"));
+    }
+
+    /// Law: the mark never stalls the queue: past TURN_WAIT with no turn,
+    /// the next one goes.
+    #[test]
+    fn the_mark_goes_after_its_bound() {
+        let mut app = two_queued();
+        let t0 = std::time::Instant::now();
+        assert_eq!(next_at(&mut app, t0).as_deref(), Some("one"));
+        assert_eq!(next_at(&mut app, t0 + TURN_WAIT - std::time::Duration::from_millis(1)), None);
+        assert_eq!(next_at(&mut app, t0 + TURN_WAIT).as_deref(), Some("two"));
     }
 
     #[test]

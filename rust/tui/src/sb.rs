@@ -664,6 +664,9 @@ pub(super) fn dispatch(app: &mut App, raw: &str) {
             }
         }
         "notice" => {
+            // the hub refused an input (it says so in a notice): a queued
+            // message that went will start no turn, so the queue moves on
+            crate::queue::seen(app);
             for l in s("text").lines() {
                 push_event(&mut app.events, &mut app.cache, Ev::Info(l.to_string()));
             }

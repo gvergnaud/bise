@@ -168,6 +168,9 @@ pub(crate) struct App {
     pub(crate) attachments: Vec<crate::attach::Attachment>,
     /// messages queued for after the turn (BISE-89), this feed's
     pub(crate) queued: Vec<crate::queue::Queued>,
+    /// a queued message went and its turn has not started yet (queue.rs):
+    /// the next one waits, whatever a stale idle state says
+    pub(crate) queue_out: Option<std::time::Instant>,
 }
 
 /// The composer's text area in the last frame: its screen origin, its
@@ -360,6 +363,7 @@ impl App {
             sb,
             attachments: Vec::new(),
             queued: Vec::new(),
+            queue_out: None,
         }
     }
 }

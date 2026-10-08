@@ -15,6 +15,11 @@ pub(crate) fn ingest_line(app: &mut App, line: String, ts: Option<u64>) {
         app.pending = false;
         app.interrupt_requested = false;
     }
+    // a turn of this feed started or ended: the queued message that went
+    // has its turn, so the next one may go at a turn's end (queue.rs)
+    if line.starts_with("  obs: turn_started") || line.starts_with("  obs: turn_done:") {
+        crate::queue::seen(app);
+    }
     // thinking duration: the model's reply arrives one
     // batch after the previous wire line
     let now = std::time::Instant::now();

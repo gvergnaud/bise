@@ -56,6 +56,8 @@ pub(super) struct View {
     pub(super) ed: crate::editor::Editor,
     /// its queued messages (BISE-89)
     pub(super) queued: Vec<crate::queue::Queued>,
+    /// its queued message sent, its turn not started (queue.rs)
+    pub(super) queue_out: Option<std::time::Instant>,
 }
 
 impl View {
@@ -75,6 +77,7 @@ impl View {
             last_ts: None,
             ed: crate::editor::Editor::default(),
             queued: Vec::new(),
+            queue_out: None,
         }
     }
 }
@@ -93,6 +96,7 @@ pub(super) fn swap_feed(app: &mut App, v: &mut View) {
     std::mem::swap(&mut app.last_line_at, &mut v.last_line_at);
     std::mem::swap(&mut app.last_ts, &mut v.last_ts);
     std::mem::swap(&mut app.queued, &mut v.queued);
+    std::mem::swap(&mut app.queue_out, &mut v.queue_out);
 }
 
 pub(super) fn swap_draft(app: &mut App, v: &mut View) {
