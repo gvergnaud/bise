@@ -162,6 +162,19 @@ impl Hub {
             UserCmd::Flow { set } => fx.push(Effect::Flow { client: Some(client), token: None, set }),
             UserCmd::Help => fx.push(notice(client, HELP)),
             UserCmd::Invalid(e) => fx.push(notice(client, &e)),
+            // the daemon runs these (proto_view::slash routes them before
+            // the core; the TUI runs its own arms): a line that still
+            // reaches the core gets today's words
+            UserCmd::Stop { .. } => fx.push(notice(client, "unknown command: /stop (see /help)")),
+            UserCmd::Approvals { .. } => fx.push(notice(client, "unknown command: /approvals (see /help)")),
+            UserCmd::Version(v) => {
+                let first = match v {
+                    bise_proto::slash::Version::Restart(_) => "/restart",
+                    bise_proto::slash::Version::Update => "/update",
+                    _ => "/version",
+                };
+                fx.push(notice(client, &format!("unknown command: {} (see /help)", first)));
+            }
         }
     }
 }

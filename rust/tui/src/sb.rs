@@ -1179,20 +1179,16 @@ pub(crate) fn handle_input(app: &mut App, v: &str) -> Vec<Ev> {
     match first {
         "/quit" | "/exit" => app.should_quit = true,
         "/release-bise" => release::command(sb, &typed),
-        "/restart" => {
-            let arg = typed.split_whitespace().nth(1).unwrap_or("");
-            sb.send(json!({"op": "version", "do": "restart", "to": arg}));
-        }
-        // update-card: the release channel now (the new-release item)
-        "/update" => sb.send(json!({"op": "version", "do": "update"})),
-        "/version" => {
-            let arg = typed.split_whitespace().nth(1).unwrap_or("");
-            let req = match arg {
-                "" | "list" => json!({"op": "version", "do": "list"}),
-                "back" | "rollback" => json!({"op": "version", "do": "rollback"}),
-                to => json!({"op": "version", "do": "switch", "to": to}),
-            };
-            sb.send(req);
+        // the hub's version op; one parse with the hub's slash
+        // (bise_proto::slash::version). /update: the release channel now
+        // (update-card's new-release item)
+        "/restart" | "/update" | "/version" => {
+            if let Some(v) = bise_proto::slash::version(&typed) {
+                sb.send(match v.op() {
+                    ("list", _) | ("rollback", _) | ("update", _) => json!({"op": "version", "do": v.op().0}),
+                    (what, to) => json!({"op": "version", "do": what, "to": to}),
+                });
+            }
         }
         "/plugins" => {
             let ws = std::path::PathBuf::from(&sb.workspace);
@@ -1222,10 +1218,13 @@ pub(crate) fn handle_input(app: &mut App, v: &str) -> Vec<Ev> {
         }
         "/theme" => out.push(theme_command(typed.split_whitespace().nth(1), crate::theme_detect::choose)),
         // approvals-design.md §8: the mode, the checker, the rules; or a switch
-        "/approvals" => match typed.split_whitespace().nth(1).map(str::to_lowercase).as_deref() {
-            Some(m @ ("yolo" | "auto")) => sb.send(serde_json::json!({"op": "approvals", "mode": m})),
-            Some(other) => out.push(Ev::Warn(format!("/approvals {other}: yolo or auto"))),
-            None => sb.send(serde_json::json!({"op": "approvals", "mode": ""})),
+        // one parse with the hub's slash (bise_proto::slash::approvals)
+        "/approvals" => match bise_proto::slash::approvals(&typed) {
+            Some(Ok(Some(bise_proto::rows::ApprovalMode::Yolo))) => sb.send(serde_json::json!({"op": "approvals", "mode": "yolo"})),
+            Some(Ok(Some(bise_proto::rows::ApprovalMode::Auto))) => sb.send(serde_json::json!({"op": "approvals", "mode": "auto"})),
+            Some(Ok(_)) => sb.send(serde_json::json!({"op": "approvals", "mode": ""})),
+            Some(Err(words)) => out.push(Ev::Warn(words)),
+            None => {}
         },
         "/welcome" => crate::onboarding::run(app),
         // computer-use-design.md §8: the setup steps, polled live
@@ -1241,16 +1240,17 @@ pub(crate) fn handle_input(app: &mut App, v: &str) -> Vec<Ev> {
         },
         // §7.3: the turn stops and the agent lets go of Chrome and its apps
         // until you write to it again
-        "/stop" => match typed.split_whitespace().nth(1).map(|n| n.trim_start_matches('@').to_string()) {
-            Some(name) if sb.agent(&name).is_some() => {
+        // one parse with the hub's slash (bise_proto::slash::stop)
+        "/stop" => match bise_proto::slash::stop(&typed).unwrap_or_else(|| Err(bise_proto::slash::STOP_USAGE.into())) {
+            Ok(name) if sb.agent(&name).is_some() => {
                 if sb.agent(&name).is_some_and(|a| a.status == "working") {
                     sb.send(json!({"op": "interrupt", "agent": name}));
                 }
                 // main's feed says it once, from the hub (m_3904)
                 crate::computer_use::stop(&name);
             }
-            Some(name) => out.push(Ev::Warn(format!("/stop: no agent named {name}"))),
-            None => out.push(Ev::Warn("/stop <agent>".into())),
+            Ok(name) => out.push(Ev::Warn(format!("/stop: no agent named {name}"))),
+            Err(usage) => out.push(Ev::Warn(usage)),
         },
         // BISE-298: which model does what
         "/models" | "/roles" => {

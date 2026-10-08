@@ -72,6 +72,21 @@ pub enum UserCmd {
         set: Option<crate::flow::FlowMode>,
     },
     Help,
+    /// `/stop <agent>` (computer-use-design §7.3): that agent's turn
+    /// stops. The hub's daemon runs it (the TUI runs its own arm with the
+    /// same parse); the core never gets it from a client.
+    Stop {
+        name: String,
+    },
+    /// `/version [list|back|<v>]`, `/restart [<v>]`, `/update`: the hub's
+    /// versions (the daemon's `version` op, his authority, client socket
+    /// only: docs/issues/16).
+    Version(bise_proto::slash::Version),
+    /// `/approvals [yolo|auto]`: show the approvals or switch the mode
+    /// (the daemon's approvals, his authority, client socket only).
+    Approvals {
+        mode: Option<bise_proto::rows::ApprovalMode>,
+    },
     Invalid(String),
 }
 
@@ -292,6 +307,21 @@ pub fn parse(line: &str, focus: &str) -> UserCmd {
             _ => UserCmd::Invalid("usage: /flow [pr|trunk]".into()),
         },
         "/help" => UserCmd::Help,
+        // one parse with the TUI's own arms (bise_proto::slash)
+        "/stop" => match bise_proto::slash::stop(line) {
+            Some(Ok(name)) => UserCmd::Stop { name },
+            Some(Err(usage)) => UserCmd::Invalid(usage),
+            None => UserCmd::Passthrough(line.to_string()),
+        },
+        "/version" | "/restart" | "/update" => match bise_proto::slash::version(line) {
+            Some(v) => UserCmd::Version(v),
+            None => UserCmd::Passthrough(line.to_string()),
+        },
+        "/approvals" => match bise_proto::slash::approvals(line) {
+            Some(Ok(mode)) => UserCmd::Approvals { mode },
+            Some(Err(words)) => UserCmd::Invalid(words),
+            None => UserCmd::Passthrough(line.to_string()),
+        },
         _ => UserCmd::Passthrough(line.to_string()),
     }
 }

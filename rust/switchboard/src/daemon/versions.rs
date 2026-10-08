@@ -763,9 +763,8 @@ impl Shell {
     pub(super) fn release_check(&mut self, asked: Option<ClientId>) {
         let root = &self.opts.app_root;
         let Some(inst) = Install::of_root(root) else {
-            if let Some(c) = asked.and_then(|c| self.clients.get_mut(&c)) {
-                let text = "/update updates an installed bise, or bise's source tree: this workspace is neither";
-                super::write_json(c, &json!({"ev": "notice", "text": text}));
+            if let Some(c) = asked {
+                self.notice_to(c, "/update updates an installed bise, or bise's source tree: this workspace is neither");
             }
             return;
         };
@@ -817,9 +816,7 @@ impl Shell {
             UpdateRoute::Release | UpdateRoute::Nothing => self.release_check(Some(client)),
             UpdateRoute::DevHead => {
                 let text = self.dev_update();
-                if let Some(c) = self.clients.get_mut(&client) {
-                    super::write_json(c, &json!({"ev": "notice", "text": text}));
-                }
+                self.notice_to(client, &text);
             }
         }
     }

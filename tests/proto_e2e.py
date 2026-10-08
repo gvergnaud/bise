@@ -534,6 +534,31 @@ def main():
         check(not by_cid(100), "no error for /close of an open card: %r" % by_cid(100))
         c.wait_idle("main", timeout=90)
 
+        # R1/R6 (ambient-lead m_12190): the TUI's own /version, /stop and
+        # /approvals typed in the window run on the hub (one parse,
+        # bise_proto::slash), never 'unknown command'
+        n = len(typed(c, "notice"))
+        slash("/version", 101)
+        c.wait(lambda: any(e.get("cid") == 101 for e in typed(c, "notice")[n:]) or by_cid(101), 20, "/version answered")
+        check(not by_cid(101) and "unknown command" not in typed(c, "notice")[-1]["text"], "/version's list as a notice: %r %r" % (by_cid(101), typed(c, "notice")[n:]))
+        slash("/stop main", 102)
+        slash("/stop nobody", 103)
+        c.wait(lambda: by_cid(103), 20, "/stop of an unknown agent refused")
+        check(not by_cid(102) and "nobody" in by_cid(103)[0]["text"], "/stop of an idle agent is no error, an unknown one is: %r" % (by_cid(102) + by_cid(103)))
+        na = len(typed(c, "approvals"))
+        slash("/approvals", 104)
+        c.wait(lambda: len(typed(c, "approvals")) > na, 20, "/approvals answered with the approvals event")
+        was = typed(c, "approvals")[-1]["mode"]
+        other = "auto" if was == "yolo" else "yolo"
+        na = len(typed(c, "approvals"))
+        slash("/approvals " + other, 105)
+        c.wait(lambda: any(e["mode"] == other for e in typed(c, "approvals")[na:]), 20, "/approvals %s switched the mode" % other)
+        slash("/approvals " + was, 106)
+        c.wait(lambda: typed(c, "approvals")[-1]["mode"] == was, 20, "the mode back to %s" % was)
+        slash("/approvals maybe", 107)
+        c.wait(lambda: by_cid(107), 20, "/approvals maybe refused")
+        check(not any(by_cid(i) for i in (104, 105, 106)) and by_cid(107)[0]["text"] == "/approvals maybe: yolo or auto", "approvals words: %r" % by_cid(107))
+
         # every typed event has the frozen keys of the fixtures
         need = required_keys()
         for ev in typed(c):

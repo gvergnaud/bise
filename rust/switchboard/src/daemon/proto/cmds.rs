@@ -307,6 +307,44 @@ impl Shell {
                 }
                 self.artifacts_refresh(true);
             }
+            // the `stop` command's path: a working agent's turn stops (the
+            // TUI's /stop: idle, nothing to stop; the computer-use stop
+            // waits for issue 18's ctl ops)
+            Slash::Stop(name) => {
+                if self.dir_of(&name).is_none() {
+                    return self.proto_error_cid(id, tag, &format!("/stop: no agent named {name}"), cid, refused);
+                }
+                let working = self.hub.st.agents.get(&name).is_some_and(|a| a.status() == crate::model::Status::Working);
+                if working {
+                    // TODO(client-protocol P3): the old untyped op door, replaced by P3's typed interrupt
+                    self.client_line(id, json!({"op": "interrupt", "agent": name}));
+                }
+            }
+            // the daemon's `version` op, the TUI's (his authority: this is
+            // the client socket, docs/issues/16)
+            Slash::Version(bise_proto::slash::Version::Update) => self.update_op(id),
+            Slash::Version(v) => {
+                let (what, to) = v.op();
+                let text = self.version_op(&json!({"op": "version", "do": what, "to": to}));
+                self.proto_send(id, &HubEv::Notice { project, cmd: Some(tag.to_string()), text, cid });
+            }
+            // the `approvals` command's path (show, or switch and tell all)
+            Slash::Approvals(None) => {
+                let ev = self.approvals_ev(false);
+                let ev = self.proto_approvals(&ev);
+                self.proto_send(id, &ev);
+            }
+            Slash::Approvals(Some(mode)) => {
+                use bise_proto::rows::ApprovalMode;
+                let m = match mode {
+                    ApprovalMode::Yolo => crate::approvals::Mode::Yolo,
+                    ApprovalMode::Auto => crate::approvals::Mode::Auto,
+                    ApprovalMode::Unknown => return self.proto_error_cid(id, tag, "/approvals: yolo or auto", cid, refused),
+                };
+                self.set_mode(m);
+                let ev = self.approvals_ev(true);
+                self.broadcast(&ev);
+            }
             Slash::Step(cmd) => self.stepping(id, tag, cid, |sh| sh.step(Input::UserCmd { client: id, focus: agent, cmd })),
         }
     }

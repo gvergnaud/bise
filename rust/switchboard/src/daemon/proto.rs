@@ -181,6 +181,22 @@ impl Shell {
         true
     }
 
+    /// A daemon handler's plain words for `client` (the `version` op's
+    /// `/update` answers): the typed `notice` on a typed connection (its
+    /// `/update` came as a `slash`), the older line to the TUI.
+    pub(super) fn notice_to(&mut self, client: ClientId, text: &str) {
+        if self.proto.conns.contains_key(&client) {
+            let project = self.project();
+            self.proto_send(client, &HubEv::Notice { project, cmd: Some("slash".into()), text: text.to_string(), cid: None });
+            if self.proto.typed_only(client) {
+                return;
+            }
+        }
+        if let Some(c) = self.clients.get_mut(&client) {
+            super::write_json(c, &json!({"ev": "notice", "text": text}));
+        }
+    }
+
     /// `Effect::ToClient`'s body for `client` when it is sb-core's yes/no
     /// question (`confirm`, bar I9) and `client` is a typed connection:
     /// sent as the typed `confirm`, to that connection only. True: a

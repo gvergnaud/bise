@@ -29,6 +29,15 @@ pub enum Slash {
     /// hub's add, the one the TUI's client asks with its `artifacts` op
     /// (the TUI runs `/artifacts` itself: the router never sees it)
     Artifacts(Option<String>),
+    /// `/stop <agent>`: the `stop` command's path (its turn stops when it
+    /// works; idle, nothing to stop). The computer-use stop the TUI also
+    /// fires waits for issue 18's ctl ops (architect m_13028).
+    Stop(String),
+    /// `/version …`, `/restart …`, `/update`: the daemon's `version` op,
+    /// its words as a `notice` (his authority: client socket only)
+    Version(bise_proto::slash::Version),
+    /// `/approvals [yolo|auto]`: the `approvals` command's path
+    Approvals(Option<bise_proto::rows::ApprovalMode>),
     /// everything else: one step of the TUI's own handler
     /// (`Input::UserCmd`), its refusals as `error`s with the cid
     Step(UserCmd),
@@ -43,6 +52,9 @@ pub fn route(cmd: UserCmd) -> Slash {
         UserCmd::Prs => Slash::Prs,
         UserCmd::Help => Slash::Help,
         UserCmd::Flow { set } => Slash::Flow(set),
+        UserCmd::Stop { name } => Slash::Stop(name),
+        UserCmd::Version(v) => Slash::Version(v),
+        UserCmd::Approvals { mode } => Slash::Approvals(mode),
         UserCmd::Passthrough(l) => match bise_proto::slash::artifacts(&l) {
             Some(Artifacts::List) => Slash::Artifacts(None),
             Some(Artifacts::Add(target)) => Slash::Artifacts(Some(target)),
@@ -89,5 +101,15 @@ mod tests {
         assert!(matches!(r("/artifacts add  "), Slash::Refuse(e) if e == ARTIFACTS_ADD));
         assert!(matches!(r("/artifacts addx"), Slash::Artifacts(None)));
         assert!(matches!(r("/bogus"), Slash::Step(UserCmd::Passthrough(_))));
+        // R1/R6 (ambient-lead m_12190): the TUI's own commands the window
+        // types run on the hub, never 'unknown command'
+        assert!(matches!(r("/stop docs"), Slash::Stop(n) if n == "docs"));
+        assert!(matches!(r("/stop"), Slash::Refuse(e) if e == bise_proto::slash::STOP_USAGE));
+        assert!(matches!(r("/version"), Slash::Version(bise_proto::slash::Version::List)));
+        assert!(matches!(r("/restart"), Slash::Version(bise_proto::slash::Version::Restart(_))));
+        assert!(matches!(r("/update"), Slash::Version(bise_proto::slash::Version::Update)));
+        assert!(matches!(r("/approvals"), Slash::Approvals(None)));
+        assert!(matches!(r("/approvals yolo"), Slash::Approvals(Some(bise_proto::rows::ApprovalMode::Yolo))));
+        assert!(matches!(r("/approvals x"), Slash::Refuse(e) if e == "/approvals x: yolo or auto"));
     }
 }
