@@ -12,12 +12,19 @@ use crate::ReadError;
 
 /// The test setting naming the throwaway keychain every call goes to.
 pub const TEST_KEYCHAIN: &str = "BISE_TEST_KEYCHAIN";
+/// The test setting that makes the throwaway keychain answer as a locked
+/// one, without running `security`. Tests never lock a real keychain: a
+/// locked keychain read from a process in his GUI session makes macOS
+/// show an unlock dialog on his screen (it did, main m_13693).
+pub const TEST_LOCKED: &str = "BISE_TEST_KEYCHAIN_LOCKED";
 
 /// The keychain bise talks to.
 #[derive(Clone, Debug)]
 pub struct Keychain {
     /// None: the user's default keychain
     pub file: Option<PathBuf>,
+    /// tests: every call answers "locked", `security` never runs
+    pub locked: bool,
 }
 
 impl Keychain {
@@ -26,7 +33,8 @@ impl Keychain {
     /// jail is set (a test never reaches his login keychain).
     pub fn here() -> Result<Keychain, String> {
         if let Some(f) = bise_home::env::test_setting(TEST_KEYCHAIN) {
-            return Ok(Keychain { file: Some(PathBuf::from(f)) });
+            let locked = bise_home::env::test_setting(TEST_LOCKED).is_some();
+            return Ok(Keychain { file: Some(PathBuf::from(f)), locked });
         }
         let real = bise_home::test_home::real_home();
         let home = std::env::var_os("HOME").map(PathBuf::from);
@@ -34,7 +42,7 @@ impl Keychain {
         if jailed || real.is_none() || home != real {
             return Err(format!("a test home without {TEST_KEYCHAIN}: bise won't touch the user's keychain"));
         }
-        Ok(Keychain { file: None })
+        Ok(Keychain { file: None, locked: false })
     }
 
     fn command(&self) -> Command {
@@ -51,6 +59,9 @@ impl Keychain {
 
     /// One item's data; None: no such item. Arguments hold names only.
     pub fn find(&self, account: &str) -> Result<Option<String>, ReadError> {
+        if self.locked {
+            return Err(ReadError::Locked);
+        }
         let mut c = self.command();
         c.args(["find-generic-password", "-s", security::SERVICE, "-a", account, "-w"]);
         self.with_file(&mut c);
@@ -66,6 +77,9 @@ impl Keychain {
     /// Run `lines` in one `security -i`, on its standard input: the only
     /// way a secret reaches it.
     pub fn run(&self, lines: &[String]) -> Result<(), ReadError> {
+        if self.locked {
+            return Err(ReadError::Locked);
+        }
         let mut c = self.command();
         c.arg("-i").stdin(Stdio::piped());
         let mut child = c.spawn().map_err(|e| ReadError::Keychain(format!("cannot run {}: {e}", security::PROGRAM)))?;
@@ -85,6 +99,9 @@ impl Keychain {
 
     /// Delete one item; best effort (none is fine).
     pub fn delete(&self, account: &str) {
+        if self.locked {
+            return;
+        }
         let mut c = self.command();
         c.args(["delete-generic-password", "-s", security::SERVICE, "-a", account]);
         self.with_file(&mut c);

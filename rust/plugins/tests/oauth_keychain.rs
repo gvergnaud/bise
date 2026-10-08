@@ -2,7 +2,8 @@
 //! store = "keychain"`), against tests/fake_mcp_http.py --oauth, on a
 //! throwaway keychain (never the user's): the login lands in the keychain
 //! with a stub at the file's path, a 401 refreshes it there (the refresh
-//! token rotates), a locked keychain keeps the login (never forgotten),
+//! token rotates), a locked keychain (simulated: never a real lock, it
+//! prompts on his screen) keeps the login (never forgotten),
 //! and the token comes back once it is unlocked. Its own test binary: it
 //! sets BISE_HOME and BISE_TEST_KEYCHAIN for the whole process.
 
@@ -154,9 +155,12 @@ fn an_mcp_login_lives_and_refreshes_in_the_keychain_and_a_lock_never_forgets_it(
     assert_ne!(after.refresh_token, first.refresh_token, "the refresh token rotates");
     assert!(std::fs::read_to_string(&file).unwrap().starts_with("bise-secret keychain"));
 
-    // locked: the login stays (a new reader gets an error, never "no login")
+    // locked (simulated: BISE_TEST_KEYCHAIN_LOCKED answers as a locked
+    // keychain without running security; a real locked keychain would make
+    // macOS prompt on his screen): the login stays, a new reader gets an
+    // error, never "no login"
     let stub_before = std::fs::read_to_string(&file).unwrap();
-    assert!(security(&["lock-keychain", k]).status.success());
+    std::env::set_var("BISE_TEST_KEYCHAIN_LOCKED", "1");
     // another process's view: no cache (a fresh generation in the stub would
     // make this one read too); load_now says it can't read, not "none"
     std::fs::write(&file, stub_before.replacen("gen=", "gen=0", 1)).unwrap();
@@ -169,7 +173,7 @@ fn an_mcp_login_lives_and_refreshes_in_the_keychain_and_a_lock_never_forgets_it(
         other => panic!("a 401 while locked is Fail::Locked: {:?}", other.map(|_| ())),
     }
     std::fs::write(&file, &stub_before).unwrap();
-    assert!(security(&["unlock-keychain", "-p", "pw", k]).status.success());
+    std::env::remove_var("BISE_TEST_KEYCHAIN_LOCKED");
     let back = oauth::load(&secrets, &resource).unwrap();
     assert_eq!(back.refresh_token, after.refresh_token, "the login is still there, unchanged");
     assert!(call().unwrap()["result"].is_object());

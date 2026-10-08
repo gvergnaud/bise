@@ -65,7 +65,7 @@ fn a_test_home_never_reaches_the_users_keychain() {
 #[cfg(target_os = "macos")]
 #[test]
 fn the_keychain_holds_a_big_secret_and_the_file_none() {
-    let kc = Keychain { file: Some(throwaway().to_path_buf()) };
+    let kc = Keychain { file: Some(throwaway().to_path_buf()), locked: false };
     let d = tmp("kc-big");
     let f = d.join("auth.json");
     let secret = format!("{{\"chatgpt\": {{\"type\": \"oauth\", \"access\": \"{}\", \"email\": \"ana@exemple.fr é\"}}}}\n", "tok".repeat(2000));
@@ -97,7 +97,7 @@ fn the_keychain_holds_a_big_secret_and_the_file_none() {
 #[cfg(target_os = "macos")]
 #[test]
 fn another_processs_write_is_seen_and_a_deleted_item_is_no_secret() {
-    let kc = Keychain { file: Some(throwaway().to_path_buf()) };
+    let kc = Keychain { file: Some(throwaway().to_path_buf()), locked: false };
     let d = tmp("kc-other");
     let f = d.join("x.json");
     write_to(Store::Keychain, &f, "one", &|| panic!()).unwrap();
@@ -154,4 +154,55 @@ fn law_only_bise_secrets_opens_the_secrets() {
         }
     }
     assert!(bad.is_empty(), "open these through bise_secrets::read / write:\n{}", bad.join("\n"));
+}
+
+/// Law (main m_13693): no test can make macOS show a keychain dialog on
+/// his screen. A test keychain is made unlocked and never locks by itself
+/// (`set-keychain-settings` with no -l/-t/-u: no sleep lock, no timeout),
+/// and no test locks one: the locked cases use BISE_TEST_KEYCHAIN_LOCKED
+/// (security never runs). Scans every Rust and Python source of the repo.
+#[test]
+fn law_no_test_can_prompt_for_a_keychain() {
+    fn files(dir: &Path, out: &mut Vec<PathBuf>) {
+        for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+            let p = e.path();
+            let n = e.file_name().to_string_lossy().into_owned();
+            if p.is_dir() {
+                if !["target", "vendor", "node_modules"].contains(&n.as_str()) && !n.starts_with('.') {
+                    files(&p, out);
+                }
+            } else if n.ends_with(".rs") || n.ends_with(".py") || n.ends_with(".sh") {
+                out.push(p);
+            }
+        }
+    }
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut all = vec![];
+    files(&repo.join("rust"), &mut all);
+    files(&repo.join("tests"), &mut all);
+    assert!(all.len() > 100, "the scan sees the repo: {}", all.len());
+    let me = Path::new(file!()).file_name().unwrap();
+    let mut bad = vec![];
+    for f in &all {
+        if f.file_name() == Some(me) && f.to_string_lossy().contains("secrets/src") {
+            continue;
+        }
+        let text = std::fs::read_to_string(f).unwrap_or_default();
+        for (i, l) in text.lines().enumerate() {
+            let locks = l.replace("unlock-keychain", "").contains("lock-keychain");
+            let settings = l.contains("set-keychain-settings") && ["\"-l\"", "\"-t\"", "\"-u\"", " -l ", " -t ", " -u "].iter().any(|x| l.contains(x));
+            if locks || settings {
+                bad.push(format!("{}:{}: {}", f.display(), i + 1, l.trim()));
+            }
+        }
+    }
+    assert!(bad.is_empty(), "a test that locks a keychain makes macOS prompt on his screen: use BISE_TEST_KEYCHAIN_LOCKED\n{}", bad.join("\n"));
+}
+
+/// The simulated lock answers "locked" without running security.
+#[test]
+fn a_simulated_lock_never_runs_security() {
+    let kc = Keychain { file: Some(PathBuf::from("/nonexistent/never.keychain-db")), locked: true };
+    assert!(matches!(kc.find("x"), Err(ReadError::Locked)));
+    assert!(matches!(kc.run(&["add-generic-password".into()]), Err(ReadError::Locked)));
 }

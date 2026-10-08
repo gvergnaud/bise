@@ -11,7 +11,8 @@ BISE_TEST_KEYCHAIN: never the user's), the fake ChatGPT sign-in server.
    no secret in it, config.toml says keychain;
 3. `bise auth token chatgpt` reads the token from the keychain (its cost
    measured), and a refresh writes the new tokens back there;
-4. the keychain locked: `bise auth token chatgpt` fails with the
+4. the keychain locked (simulated, BISE_TEST_KEYCHAIN_LOCKED: a real
+   lock prompts on his screen): `bise auth token chatgpt` fails with the
    designer's line, nothing is signed out, the stub is untouched; unlocked,
    the same sign-in works;
 5. `bise secrets keychain off`: the files come back, the items go;
@@ -105,8 +106,10 @@ def scenario(W):
     code, out, err = W.run("auth", "status")
     check(code == 0 and "signed in" in out, "auth status reads the keychain: %r %r" % (out, err))
 
-    # 4. locked: an error, never signed out
-    check(security("lock-keychain", kc).returncode == 0, "locked the throwaway keychain")
+    # 4. locked: an error, never signed out. Simulated (BISE_TEST_KEYCHAIN_LOCKED:
+    # the keychain answers as a locked one, security never runs): a really
+    # locked keychain makes macOS ask for its password on his screen
+    W.env["BISE_TEST_KEYCHAIN_LOCKED"] = "1"
     t0 = time.time()
     code, out, err = W.run("auth", "token", "chatgpt")
     print("a locked read: %.1f s" % (time.time() - t0))
@@ -117,7 +120,7 @@ def scenario(W):
     check(code != 0 and "the keychain is locked: unlock your Mac, then run it again. nothing moved." in err,
           "off while locked: nothing moved: %r" % err)
     check(stub(auth_file) == after and stub(mcp) is not None, "off while locked: still in the keychain")
-    check(security("unlock-keychain", "-p", "pw", kc).returncode == 0, "unlocked")
+    del W.env["BISE_TEST_KEYCHAIN_LOCKED"]
     code, tok3, err = W.run("auth", "token", "chatgpt")
     check(code == 0 and tok3 == tok, "unlocked: the same sign-in: %r" % err)
 
