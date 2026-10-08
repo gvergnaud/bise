@@ -28,6 +28,9 @@ pub struct DiffLine {
 pub struct Hunk {
     pub header: String,
     pub lines: Vec<DiffLine>,
+    /// git's function context after the `@@` (the terminal's `@@ head @@`)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -39,7 +42,7 @@ pub struct DiffFile {
     pub add: u32,
     pub del: u32,
     pub hunks: Vec<Hunk>,
-    /// its hunks were cut (too long, generated, binary): the review says
+    /// its hunks were cut (past the size cap, or binary): the review says
     /// so, never shows it as complete
     #[serde(default, skip_serializing_if = "crate::is_false")]
     pub truncated: bool,
@@ -49,10 +52,13 @@ pub struct DiffFile {
     /// a binary file: no lines (`truncated` too), its words are its own
     #[serde(default, skip_serializing_if = "crate::is_false")]
     pub binary: bool,
-    /// a generated file (a lock file, a build output): its lines are
-    /// left out (`truncated` too when it had some)
+    /// a generated file (a lock file, a build output): a display flag,
+    /// the client folds it (its lines are sent, under the same size cap)
     #[serde(default, skip_serializing_if = "crate::is_false")]
     pub generated: bool,
+    /// an image (by its extension): the terminal says so and opens it
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub image: bool,
     /// its size in bytes after the change, for a binary file still there
     /// ("a binary file, 2.1 MB")
     #[serde(default, skip_serializing_if = "Option::is_none")]

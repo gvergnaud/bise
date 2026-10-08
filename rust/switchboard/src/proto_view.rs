@@ -247,9 +247,11 @@ pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>) -> Vec<A
 }
 
 /// The hub's `diff` answer (daemon/art.rs `diff_answer`: files of
-/// `diff::file_json`) as the typed `diff`, or its error. A generated
-/// file's hunks are left out and a file cut for its length keeps what it
-/// has: both say `truncated`, as a binary file (no text to show).
+/// `diff::file_json`) as the typed `diff`, or its error. A file cut for
+/// its length keeps what it has and says `truncated`, as a binary file
+/// (no text to show); a generated file keeps its lines under the same cap
+/// (`generated` is a display flag: the client folds it, architect
+/// m_13436); `image` and each hunk's `head` as `file_json` says them.
 /// A commit's sha as a client may name one: 4 to 40 hex digits (never an
 /// option or a range for git).
 pub fn is_sha(c: &str) -> bool {
@@ -265,9 +267,7 @@ pub fn diff(ev: &Value, project: &str, agent: &str) -> HubEv {
     let files = files
         .iter()
         .map(|f| {
-            let generated = flag(f, "generated");
-            let hunks: Vec<Hunk> = if generated { Vec::new() } else { f.get("hunks").and_then(Value::as_array).into_iter().flatten().map(hunk).collect() };
-            let had = f.get("hunks").and_then(Value::as_array).is_some_and(|h| !h.is_empty());
+            let hunks: Vec<Hunk> = f.get("hunks").and_then(Value::as_array).into_iter().flatten().map(hunk).collect();
             DiffFile {
                 path: s(f, "path"),
                 status: match s(f, "status").as_str() {
@@ -279,10 +279,11 @@ pub fn diff(ev: &Value, project: &str, agent: &str) -> HubEv {
                 .into(),
                 add: f.get("add").and_then(Value::as_u64).unwrap_or(0) as u32,
                 del: f.get("del").and_then(Value::as_u64).unwrap_or(0) as u32,
-                truncated: flag(f, "cut") || flag(f, "binary") || (generated && had),
+                truncated: flag(f, "cut") || flag(f, "binary"),
                 from: Some(s(f, "old_path")).filter(|p| !p.is_empty() && *p != s(f, "path")),
                 binary: flag(f, "binary"),
-                generated,
+                generated: flag(f, "generated"),
+                image: flag(f, "image"),
                 size: f.get("size").and_then(Value::as_u64),
                 hunks,
                 note: None,
@@ -340,7 +341,7 @@ fn hunk(h: &Value) -> Hunk {
         };
         lines.push(line);
     }
-    Hunk { header, lines }
+    Hunk { header, lines, head: Some(head).filter(|h| !h.is_empty()) }
 }
 
 /// An agent's current step from one feed line: its tool intent, "" at
@@ -565,12 +566,12 @@ mod tests {
             {"path": "Cargo.lock", "status": "M", "add": 9, "del": 9, "binary": false, "generated": true, "cut": false,
              "hunks": [{"old": 1, "new": 1, "head": "", "lines": ["-a", "+b"]}]},
             {"path": "big.rs", "status": "A", "add": 9000, "del": 0, "binary": false, "generated": false, "cut": true, "hunks": []},
-            {"path": "logo.png", "status": "A", "add": 0, "del": 0, "binary": true, "generated": false, "cut": false, "hunks": [], "size": 2100000},
+            {"path": "logo.png", "status": "A", "add": 0, "del": 0, "binary": true, "image": true, "generated": false, "cut": false, "hunks": [], "size": 2100000},
             {"path": "src/codec.rs", "old_path": "src/decode.rs", "status": "R", "add": 0, "del": 0, "binary": false, "generated": false, "cut": false, "hunks": []}]});
         let HubEv::Diff { files, head, base, .. } = diff(&ev, "acme", "perf") else { panic!("a diff") };
         assert_eq!((base.as_str(), head.as_deref()), ("main", Some("sb/perf")));
         let h = &files[0].hunks[0];
-        assert_eq!(h.header, "@@ -10 +10 @@ fn slow()");
+        assert_eq!((h.header.as_str(), h.head.as_deref()), ("@@ -10 +10 @@ fn slow()", Some("fn slow()")));
         let l = |i: usize| (h.lines[i].kind, h.lines[i].old, h.lines[i].new, h.lines[i].text.as_str());
         assert_eq!(l(0), (LineKind::Ctx, Some(10), Some(10), "let r = q();"));
         assert_eq!(l(1), (LineKind::Del, Some(11), None, "r.sort();"));
@@ -578,12 +579,14 @@ mod tests {
         assert_eq!(l(3), (LineKind::Add, None, Some(12), "r.dedup();"));
         assert_eq!(h.lines.len(), 4, "no-newline markers dropped");
         assert_eq!((files[0].status.as_str(), files[0].truncated), ("modified", false));
-        assert!(files[1].truncated && files[1].hunks.is_empty(), "a generated file: counts only, said cut");
+        assert!(!files[1].truncated && files[1].hunks.len() == 1, "a generated file: its lines, the client folds it");
+        assert_eq!(files[1].hunks[0].head, None, "no function context: no head");
         assert!(files[2].truncated && files[2].status == "added", "too long: said cut");
         assert!(files[3].truncated, "binary: nothing to show, said so");
         // amb-web m_8827: each cut says why, a rename its old path
         assert_eq!((files[1].generated, files[1].binary, files[2].generated, files[2].binary), (true, false, false, false), "a plain cut is neither");
-        assert_eq!((files[3].binary, files[3].size), (true, Some(2_100_000)));
+        assert_eq!((files[3].binary, files[3].image, files[3].size), (true, true, Some(2_100_000)));
+        assert!(!files[0].image);
         assert_eq!((files[4].status.as_str(), files[4].from.as_deref()), ("renamed", Some("src/decode.rs")));
         assert_eq!(files[0].from, None, "not renamed: no from");
         assert!(is_sha("e0f3df5") && is_sha(&"a".repeat(40)));

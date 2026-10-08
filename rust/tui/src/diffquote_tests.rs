@@ -1,17 +1,18 @@
 use super::*;
-use crate::diffview::{lines, Ask, Diff};
+use crate::diffview::{lines, Ask};
 use crossterm::event::{KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use serde_json::json;
 
 /// pricing.tsx: its head, its hunk head, then 7 lines: 38 39 40 (both),
 /// old 41 42 removed, new 41 added, 43/42 (both).
 fn one_file() -> serde_json::Value {
-    json!({"ev": "diff", "req": 1, "title": "pricing-page vs main", "branch": "pricing-page",
-        "files": [{"path": "src/pages/pricing.tsx", "status": "M", "add": 1, "del": 2, "abs": "/w/src/pages/pricing.tsx", "hunks": [
-            {"old": 38, "new": 38, "head": "export function Pricing()", "lines": [
-                " export function Pricing() {", "   return (", "     <section className=\"plans\">",
-                "-      <Banner text=\"save 20% this week\" />", "-      <Plan name=\"free\" />",
-                "+      <Plan name=\"free\" note=\"for side projects\" />", "       <Plan name=\"team\" highlight />"]}]}]})
+    let lines = [
+        " export function Pricing() {", "   return (", "     <section className=\"plans\">",
+        "-      <Banner text=\"save 20% this week\" />", "-      <Plan name=\"free\" />",
+        "+      <Plan name=\"free\" note=\"for side projects\" />", "       <Plan name=\"team\" highlight />"];
+    let hunk = crate::diffview::tests::typed_hunk(38, 38, "export function Pricing()", &lines.map(String::from));
+    json!({"req": 1, "title": "pricing-page vs main", "head": "pricing-page",
+        "files": [{"path": "src/pages/pricing.tsx", "status": "modified", "add": 1, "del": 2, "abs": "/w/src/pages/pricing.tsx", "hunks": [hunk]}]})
 }
 
 /// The app on `focus`'s view with the panel open on the right (or full
@@ -21,7 +22,7 @@ fn app(side: bool) -> App {
     app.sb.focus = "pricing-page".into();
     crate::diffview::request(&mut app, Ask::Agent("pricing-page".into()), crate::diffview::By::Key);
     let p = app.diff.as_mut().unwrap();
-    p.diff = Some(Diff::of(&one_file()));
+    p.diff = Some(crate::diffwire::of(&one_file()));
     p.side = side;
     let _ = lines(p, 78, 30, 0);
     p.area = Rect { x: 70, y: 0, width: 80, height: 30 };

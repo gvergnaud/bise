@@ -28,6 +28,11 @@ pub(crate) enum Then {
     /// `release/plan`: the plan and its y/n, or why there is none
     /// (sb/release.rs)
     Release,
+    /// `diff/read` for the panel's ask `req`: its diff, or its refusal
+    /// as the panel's failure line (diffwire.rs)
+    Diff(u64),
+    /// `branches/list`: the `/diff` picker's rows (diffbranches.rs)
+    Branches,
     /// nothing but its refusal, shown like a notice (an action whose
     /// change comes in the hub's events)
     Shown,
@@ -105,6 +110,9 @@ fn run(app: &mut App, then: Then, r: Response) {
         (Then::Said, Ok(v)) => said(app, &v),
         (Then::Versions, Ok(v)) => versions::answered(app, &v),
         (Then::Release, Ok(v)) => release::event(app, &v),
+        (Then::Diff(req), Ok(v)) => crate::diffview::answered(app, req, crate::diffwire::of(&v)),
+        (Then::Diff(req), Err(e)) => crate::diffview::answered(app, req, crate::diffwire::refused(&e)),
+        (Then::Branches, Ok(v)) => crate::diffbranches::branches_event(&v),
         (Then::RuleRemoved, Err(e)) => rule_refused(app, &e),
         (_, Err(e)) => refused(app, &e),
         (Then::Shown | Then::RuleRemoved, Ok(_)) => {}

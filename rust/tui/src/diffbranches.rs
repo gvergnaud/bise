@@ -1,5 +1,5 @@
-//! `/diff`'s branches (split out of diffview.rs): the hub's `branches`
-//! event, kept per thread for the picker, and the picker's words for a
+//! `/diff`'s branches (split out of diffview.rs): `branches/list`'s
+//! answer, kept per thread for the picker, and the picker's words for a
 //! branch. The panel itself is diffview.rs.
 
 use crate::app::App;
@@ -29,6 +29,7 @@ thread_local! {
     static BRANCHES: std::cell::RefCell<(Vec<Branch>, Option<std::time::Instant>)> = const { std::cell::RefCell::new((Vec::new(), None)) };
 }
 
+/// `branches/list`'s answer (`{base, rows}`).
 pub(crate) fn branches_event(v: &Value) {
     let rows = v
         .get("rows")
@@ -58,7 +59,7 @@ pub(crate) fn branches(app: &App) -> Vec<Branch> {
     let stale = BRANCHES.with(|c| c.borrow().1.is_none_or(|t| t.elapsed() > std::time::Duration::from_secs(5)));
     if stale {
         BRANCHES.with(|c| c.borrow_mut().1 = Some(std::time::Instant::now()));
-        app.sb.send_shared(serde_json::json!({"op": "branches"}));
+        app.sb.call_shared("branches/list", serde_json::json!({}), crate::sb::rpc::Then::Branches);
     }
     BRANCHES.with(|c| c.borrow().0.clone())
 }

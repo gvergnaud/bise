@@ -104,6 +104,7 @@ mod scheduled_screen;
 mod diffbranches;
 mod diffquote;
 mod diffview;
+mod diffwire;
 mod computer_use;
 mod keybar;
 mod keycheck;

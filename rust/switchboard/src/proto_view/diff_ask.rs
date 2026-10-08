@@ -1,6 +1,6 @@
 //! A typed `diff`'s ask (client-protocol step 3, architect m_13313):
 //! exactly one target, each checked before git sees it, then the same
-//! JSON the TUI's `diff` op carries (art.rs's `diff_ask` reads it).
+//! JSON art.rs's `diff_ask` reads.
 
 use serde_json::{json, Value};
 
@@ -63,7 +63,7 @@ impl DiffAsk {
         Ok(())
     }
 
-    /// The `diff` op's fields for it (a commit is the range of that one
+    /// `diff_ask`'s fields for it (a commit is the range of that one
     /// commit, as the TUI's door under a land asks it).
     pub fn op(&self) -> Value {
         let mut v = json!({});

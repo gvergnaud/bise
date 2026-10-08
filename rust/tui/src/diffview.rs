@@ -5,7 +5,7 @@
 //! panel's place (80 columns wide at 150), and closes back to it. Under
 //! [`SIDE_FROM`] columns there is no right side: it takes the screen.
 //!
-//! What it shows comes from the hub (`{"op":"diff"}` → `ev diff`,
+//! What it shows comes from the hub (`diff/read`, read by diffwire.rs;
 //! docs/artifacts.md): the branch vs main, commits and changes not
 //! committed yet together. A header with the files and the +/− counts,
 //! then each file with its hunks, old and new line numbers, added lines
@@ -118,74 +118,7 @@ pub(crate) struct Diff {
     pub(crate) gone: bool,
 }
 
-fn s(v: &Value, k: &str) -> String {
-    v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string()
-}
-fn n(v: &Value, k: &str) -> u64 {
-    v.get(k).and_then(|x| x.as_u64()).unwrap_or(0)
-}
-fn b(v: &Value, k: &str) -> bool {
-    v.get(k).and_then(|x| x.as_bool()).unwrap_or(false)
-}
-
 impl Diff {
-    /// The hub's `diff` event.
-    pub(crate) fn of(v: &Value) -> Diff {
-        let files = v
-            .get("files")
-            .and_then(|x| x.as_array())
-            .map(|a| {
-                a.iter()
-                    .map(|f| File {
-                        path: s(f, "path"),
-                        old_path: f.get("old_path").and_then(|x| x.as_str()).filter(|x| !x.is_empty()).map(String::from),
-                        status: {
-                            let st = s(f, "status");
-                            if st.is_empty() { "M".into() } else { st }
-                        },
-                        add: n(f, "add") as usize,
-                        del: n(f, "del") as usize,
-                        binary: b(f, "binary"),
-                        image: b(f, "image"),
-                        generated: b(f, "generated"),
-                        abs: s(f, "abs"),
-                        cut: b(f, "cut"),
-                        hunks: f
-                            .get("hunks")
-                            .and_then(|x| x.as_array())
-                            .map(|hs| {
-                                hs.iter()
-                                    .map(|h| Hunk {
-                                        old: n(h, "old") as u32,
-                                        new: n(h, "new") as u32,
-                                        head: s(h, "head"),
-                                        lines: h
-                                            .get("lines")
-                                            .and_then(|x| x.as_array())
-                                            .map(|ls| ls.iter().filter_map(|l| l.as_str().map(String::from)).collect())
-                                            .unwrap_or_default(),
-                                    })
-                                    .collect()
-                            })
-                            .unwrap_or_default(),
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        Diff {
-            title: s(v, "title"),
-            branch: s(v, "branch"),
-            commits: n(v, "commits"),
-            uncommitted: b(v, "uncommitted"),
-            landed_ms: v.get("landed_ms").and_then(|x| x.as_u64()),
-            working: b(v, "working"),
-            files,
-            error: s(v, "error"),
-            note: s(v, "note"),
-            gone: b(v, "gone"),
-        }
-    }
-
     pub(crate) fn add(&self) -> usize {
         self.files.iter().map(|f| f.add).sum()
     }
@@ -256,13 +189,19 @@ pub(crate) struct Panel {
 
 static REQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
+/// `diff/read`'s params for `ask` (its answer read by diffwire.rs).
 fn ask_json(ask: &Ask, req: u64) -> Value {
     match ask {
-        Ask::Agent(a) => serde_json::json!({"op": "diff", "req": req, "agent": a}),
-        Ask::Branch(br) => serde_json::json!({"op": "diff", "req": req, "branch": br}),
-        Ask::Pr(n) => serde_json::json!({"op": "diff", "req": req, "pr": n}),
-        Ask::Range(r, a) => serde_json::json!({"op": "diff", "req": req, "range": r, "agent": a}),
+        Ask::Agent(a) => serde_json::json!({"req": req, "agent": a}),
+        Ask::Branch(br) => serde_json::json!({"req": req, "branch": br}),
+        Ask::Pr(n) => serde_json::json!({"req": req, "pr": n}),
+        Ask::Range(r, a) => serde_json::json!({"req": req, "range": r, "agent": a}),
     }
+}
+
+/// Asks the hub for `ask`'s diff, its answer for the panel's `req`.
+fn ask_hub(app: &mut App, ask: &Ask, req: u64) {
+    app.sb.call("diff/read", ask_json(ask, req), crate::sb::rpc::Then::Diff(req));
 }
 
 /// How the panel was opened: by a key (ctrl+g, `/diff`, ⏎ in
@@ -278,7 +217,7 @@ pub(crate) enum By {
 /// takes the keys.
 pub(crate) fn request(app: &mut App, ask: Ask, by: By) {
     let req = REQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    app.sb.send(ask_json(&ask, req));
+    ask_hub(app, &ask, req);
     // the shared folder isn't only main's (designer m_7354)
     let what = match &ask {
         Ask::Agent(a) if app.sb.in_shared_folder(a) => "your folder vs main".to_string(),
@@ -343,17 +282,15 @@ pub(crate) fn refresh(app: &mut App) {
     let Some(p) = app.diff.as_mut() else { return };
     let req = REQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     p.req = req;
-    let v = ask_json(&p.ask, req);
-    app.sb.send(v);
+    let ask = p.ask.clone();
+    ask_hub(app, &ask, req);
 }
 
-/// The hub's `diff` event: the panel's, when it answers its last ask.
-pub(crate) fn event(app: &mut App, v: &Value) {
-    let Some(p) = app.diff.as_mut() else { return };
-    if v.get("req").and_then(|x| x.as_u64()) != Some(p.req) {
-        return;
-    }
-    p.diff = Some(Diff::of(v));
+/// `diff/read`'s answer to the ask `req` (diffwire.rs read it): the
+/// panel's, when it answers its last ask.
+pub(crate) fn answered(app: &mut App, req: u64, d: Diff) {
+    let Some(p) = app.diff.as_mut().filter(|p| p.req == req) else { return };
+    p.diff = Some(d);
 }
 
 /// The agent's changes moved (the hub's state): an open panel on that
@@ -1251,4 +1188,4 @@ pub(crate) fn url_of(ask: &Ask) -> String {
 
 #[cfg(test)]
 #[path = "diffview_tests.rs"]
-mod tests;
+pub(crate) mod tests;

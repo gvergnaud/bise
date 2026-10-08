@@ -130,26 +130,23 @@ def main():
         except AssertionError:
             check(False, "t1's changes: %r" % (c.agent("t1") or {}).get("changes"))
 
-        c.send({"op": "diff", "req": 7, "agent": "t1"})
-        c.wait(lambda: any(e.get("req") == 7 for e in evs(c, "diff")), 30, "the diff")
-        d = [e for e in evs(c, "diff") if e.get("req") == 7][0]
-        check("error" not in d and d["commits"] == 1 and d["uncommitted"] and d["base"] == "main", d)
+        r = c.rpc("diff/read", {"project": c.project(), "req": 7, "agent": "t1"})
+        d = r.get("result") or {}
+        check("error" not in r and d.get("req") == 7 and d.get("commits") == 1 and d.get("uncommitted") and d.get("base") == "main", r)
         paths = sorted(f["path"] for f in d["files"])
         check(paths == ["README", "out/pricing-plans.csv"], paths)
         csv = [f for f in d["files"] if f["path"] == "out/pricing-plans.csv"][0]
-        check(csv["status"] == "A" and csv["abs"] == os.path.join(wt, "out/pricing-plans.csv"), csv)
-        check(csv["hunks"][0]["lines"][0] == "+plan,price", csv["hunks"])
+        check(csv["status"] == "added" and csv["abs"] == os.path.join(wt, "out/pricing-plans.csv"), csv)
+        check(csv["hunks"][0]["lines"][0] == {"kind": "add", "new": 1, "text": "plan,price"}, csv["hunks"])
 
-        c.send({"op": "branches"})
-        c.wait(lambda: evs(c, "branches"), 30, "the branches")
-        rows = evs(c, "branches")[-1]["rows"]
-        check(len(rows) == 1 and rows[0]["commits"] == 1 and rows[0]["agents"] == ["t1"], rows)
+        r = c.rpc("branches/list", {"project": c.project()})
+        rows = (r.get("result") or {}).get("rows", [])
+        check(len(rows) == 1 and rows[0]["commits"] == 1 and rows[0]["agents"] == ["t1"], r)
 
-        c.send({"op": "diff", "req": 8, "branch": "no-such-branch"})
-        c.wait(lambda: any(e.get("req") == 8 for e in evs(c, "diff")), 30, "the bad diff")
-        bad = [e for e in evs(c, "diff") if e.get("req") == 8][0]
-        check(bad.get("note") == "there's no branch named no-such-branch." and "error" not in bad
-              and bad["files"] == [], bad)
+        r = c.rpc("diff/read", {"project": c.project(), "req": 8, "branch": "no-such-branch"})
+        bad = r.get("result") or {}
+        check(bad.get("note") == "there's no branch named no-such-branch." and "error" not in r
+              and bad.get("files") == [] and bad.get("req") == 8, r)
 
         ok = True
         print("artifacts_e2e: PASS")

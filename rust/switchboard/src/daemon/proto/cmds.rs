@@ -164,7 +164,7 @@ impl Shell {
             // the TUI's own `seen`: the clock moves, the list comes again
             HubCmd::ArtifactsSeen { at_ms, .. } => self.artifacts_seen(at_ms),
             // git in a thread (art.rs), the typed answer to this client
-            // the `diff` op's asks (agent, branch, pr, range), checked here
+            // diff/read's asks (agent, branch, pr, range), checked here
             HubCmd::Diff { project, agent, commit, branch, pr, range, req } => {
                 let ask = DiffAsk { agent, commit, branch, pr, range, req };
                 if let Err(e) = ask.check() {
@@ -194,7 +194,7 @@ impl Shell {
                 });
             }
             // git in a thread (art.rs, the `branches` op's scan), to this client
-            HubCmd::Branches { .. } => self.branches_scan(id, true),
+            HubCmd::Branches { .. } => self.branches_scan(id),
             // git in a thread (worktrees.rs), to this client
             HubCmd::Worktrees { .. } => self.worktrees_typed(Typed::Answer(id)),
             // jobs and lsof in a thread (dev_servers.rs), to this client

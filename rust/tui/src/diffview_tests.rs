@@ -24,30 +24,61 @@ fn panel(d: Diff) -> Panel {
     }
 }
 
+/// A typed hunk (`diff/read`'s, `bise_proto::diff::Hunk`) from its
+/// first lines and its lines marked ` `, `-`, `+`, each numbered on its
+/// side as the hub numbers them.
+pub(crate) fn typed_hunk(old: u32, new: u32, head: &str, lines: &[String]) -> Value {
+    let (mut o, mut n) = (old, new);
+    let lines: Vec<Value> = lines
+        .iter()
+        .map(|l| {
+            let text = l.get(1..).unwrap_or("");
+            match l.chars().next() {
+                Some('+') => {
+                    n += 1;
+                    json!({"kind": "add", "new": n - 1, "text": text})
+                }
+                Some('-') => {
+                    o += 1;
+                    json!({"kind": "del", "old": o - 1, "text": text})
+                }
+                _ => {
+                    o += 1;
+                    n += 1;
+                    json!({"kind": "ctx", "old": o - 1, "new": n - 1, "text": text})
+                }
+            }
+        })
+        .collect();
+    json!({"header": format!("@@ -{old} +{new} @@ {head}"), "head": head, "lines": lines})
+}
+
 fn hunk_json() -> Value {
-    json!({"old": 38, "new": 38, "head": "export function Pricing()", "lines": [
+    let lines = [
         " export function Pricing() {", "   return (", "     <section className=\"plans\">",
         "-      <Banner text=\"save 20% this week\" />", "-      <Plan name=\"free\" />",
-        "+      <Plan name=\"free\" note=\"for side projects\" />", "       <Plan name=\"team\" highlight />"]})
+        "+      <Plan name=\"free\" note=\"for side projects\" />", "       <Plan name=\"team\" highlight />"];
+    typed_hunk(38, 38, "export function Pricing()", &lines.map(String::from))
 }
 
 pub(crate) fn one_file() -> Value {
-    json!({"ev": "diff", "req": 1, "title": "pricing-page vs main", "branch": "pricing-page", "commits": 2, "uncommitted": false,
-        "files": [{"path": "src/pages/pricing.tsx", "status": "M", "add": 1, "del": 2, "abs": "/w/src/pages/pricing.tsx", "hunks": [hunk_json()]}]})
+    json!({"req": 1, "title": "pricing-page vs main", "head": "pricing-page", "commits": 2, "uncommitted": false,
+        "files": [{"path": "src/pages/pricing.tsx", "status": "modified", "add": 1, "del": 2, "abs": "/w/src/pages/pricing.tsx", "hunks": [hunk_json()]}]})
 }
 
 pub(crate) fn many_files() -> Value {
     let f = |p: &str, st: &str, a: u64, d: u64| json!({"path": p, "status": st, "add": a, "del": d, "abs": format!("/w/{p}"), "hunks": [hunk_json()]});
     let big_lines: Vec<String> = (0..260).map(|i| if i % 2 == 0 { format!("+line {i}") } else { format!("-old {i}") }).collect();
-    let big_hunks: Vec<Value> = big_lines.chunks(20).enumerate().map(|(k, c)| json!({"old": 100 + k * 30, "new": 100 + k * 30, "head": ".plan", "lines": c})).collect();
-    json!({"ev": "diff", "req": 1, "title": "pricing-page vs main", "branch": "pricing-page", "commits": 6, "uncommitted": true, "working": true,
+    let big_hunks: Vec<Value> = big_lines.chunks(20).enumerate().map(|(k, c)| typed_hunk(100 + k as u32 * 30, 100 + k as u32 * 30, ".plan", c)).collect();
+    json!({"req": 1, "title": "pricing-page vs main", "head": "pricing-page", "commits": 6, "uncommitted": true, "working": true,
         "files": [
-            f("src/pages/pricing.tsx", "M", 30, 12), f("src/data/plans.ts", "A", 41, 0), f("src/components/Plan.tsx", "M", 9, 4),
-            f("src/components/Banner.tsx", "D", 0, 26),
-            {"path": "src/styles/pricing.css", "status": "M", "add": 130, "del": 130, "abs": "/w/src/styles/pricing.css", "hunks": big_hunks},
-            f("tests/pricing.test.tsx", "M", 22, 3), f("package.json", "M", 1, 1),
-            {"path": "package-lock.json", "status": "M", "add": 312, "del": 290, "hunks": [hunk_json()]},
-            {"path": "public/plans/company.svg", "status": "A", "image": true, "binary": true, "abs": "/w/public/plans/company.svg"},
+            f("src/pages/pricing.tsx", "modified", 30, 12), f("src/data/plans.ts", "added", 41, 0), f("src/components/Plan.tsx", "modified", 9, 4),
+            f("src/components/Banner.tsx", "deleted", 0, 26),
+            {"path": "src/styles/pricing.css", "status": "modified", "add": 130, "del": 130, "abs": "/w/src/styles/pricing.css", "hunks": big_hunks},
+            f("tests/pricing.test.tsx", "modified", 22, 3), f("package.json", "modified", 1, 1),
+            {"path": "package-lock.json", "status": "modified", "add": 312, "del": 290, "hunks": [hunk_json()]},
+            {"path": "public/plans/company.svg", "status": "added", "add": 0, "del": 0, "image": true, "binary": true, "truncated": true,
+             "abs": "/w/public/plans/company.svg", "hunks": []},
         ]})
 }
 
@@ -57,7 +88,7 @@ fn text(lines: &[Line]) -> String {
 
 #[test]
 fn one_file_shows_its_hunk_with_both_line_numbers() {
-    let mut p = panel(Diff::of(&one_file()));
+    let mut p = panel(crate::diffwire::of(&one_file()));
     let out = text(&lines(&mut p, 78, 30, 0));
     let (title, rest) = out.split_once('\n').unwrap();
     assert!(title.starts_with("pricing-page vs main · 1 file +1 −2   ") && title.ends_with("ctrl+g close"), "{out}");
@@ -73,7 +104,7 @@ fn one_file_shows_its_hunk_with_both_line_numbers() {
 
 #[test]
 fn many_files_list_the_first_six_fold_the_big_and_the_generated() {
-    let mut p = panel(Diff::of(&many_files()));
+    let mut p = panel(crate::diffwire::of(&many_files()));
     let rows = body_rows(&p, p.diff.as_ref().unwrap(), 78);
     let out = text(&rows.iter().map(|(l, _)| l.clone()).collect::<Vec<_>>());
     let head = text(&head_rows(&p, p.diff.as_ref().unwrap(), 78, None, 0));
@@ -100,7 +131,7 @@ fn many_files_list_the_first_six_fold_the_big_and_the_generated() {
 
 #[test]
 fn scrolled_the_head_says_which_file() {
-    let mut p = panel(Diff::of(&many_files()));
+    let mut p = panel(crate::diffwire::of(&many_files()));
     let _ = lines(&mut p, 78, 20, 0);
     p.cursor = 60;
     let out = text(&lines(&mut p, 78, 20, 0));
@@ -110,7 +141,7 @@ fn scrolled_the_head_says_which_file() {
 
 #[test]
 fn the_file_list_filters() {
-    let mut p = panel(Diff::of(&many_files()));
+    let mut p = panel(crate::diffwire::of(&many_files()));
     p.list = Some(List { filter: String::new(), sel: 0 });
     let out = text(&lines(&mut p, 78, 24, 0));
     assert!(out.contains("› type to filter the files"), "{out}");
@@ -140,7 +171,7 @@ fn the_doors_name_what_they_open() {
 #[test]
 fn an_answer_to_an_older_ask_is_dropped() {
     let v = json!({"req": 99});
-    let d = Diff::of(&v);
+    let d = crate::diffwire::of(&v);
     assert!(d.files.is_empty());
 }
 
@@ -158,7 +189,7 @@ fn ch(c: char) -> KeyEvent {
 /// keys, its rows built.
 fn app_with_panel(side: bool) -> App {
     let mut app = crate::sb::bench::test_app();
-    let mut p = panel(Diff::of(&many_files()));
+    let mut p = panel(crate::diffwire::of(&many_files()));
     p.side = side;
     let _ = lines(&mut p, 78, 30, 0);
     app.diff = Some(p);
@@ -281,7 +312,7 @@ fn a_click_door_leaves_the_keys_to_the_composer() {
 
 #[test]
 fn the_title_row_says_ctrl_g_close_and_the_list_its_count() {
-    let mut p = panel(Diff::of(&many_files()));
+    let mut p = panel(crate::diffwire::of(&many_files()));
     p.focused = false;
     let out = text(&lines(&mut p, 78, 30, 0));
     let first = out.lines().next().unwrap();
@@ -324,8 +355,8 @@ fn the_last_land_of_an_agent_is_its_newest_landed_line() {
 
 #[test]
 fn an_empty_diff_of_an_agent_that_landed_offers_its_last_land() {
-    let empty = json!({"ev": "diff", "req": 1, "title": "pricing-page vs main", "branch": "pricing-page", "files": []});
-    let mut p = panel(Diff::of(&empty));
+    let empty = json!({"req": 1, "title": "pricing-page vs main", "head": "pricing-page", "files": []});
+    let mut p = panel(crate::diffwire::of(&empty));
     let out = text(&lines(&mut p, 78, 20, 0));
     assert!(out.contains("no changes against main"), "never landed: {out}");
     p.last_land = Some(Ask::Range("aaa..bbb".into(), "pricing-page".into()));
@@ -347,9 +378,9 @@ fn an_empty_diff_of_an_agent_that_landed_offers_its_last_land() {
 
 #[test]
 fn a_gone_folder_is_one_dim_line_that_offers_the_last_land() {
-    let gone = json!({"ev": "diff", "req": 1, "title": "diff-focus vs main", "files": [], "gone": true,
+    let gone = json!({"req": 1, "title": "diff-focus vs main", "files": [], "gone": true,
                       "note": "diff-focus is archived and its folder is gone"});
-    let mut p = panel(Diff::of(&gone));
+    let mut p = panel(crate::diffwire::of(&gone));
     let out = text(&lines(&mut p, 78, 20, 0));
     assert!(out.contains("diff-focus is archived and its folder is gone"), "{out}");
     assert!(!out.contains("show what") && !out.contains("▲") && !out.contains("no changes"), "no land: {out}");
@@ -368,8 +399,8 @@ fn a_gone_folder_is_one_dim_line_that_offers_the_last_land() {
 
 #[test]
 fn a_git_failure_is_marked_and_dim() {
-    let bad = json!({"ev": "diff", "req": 1, "title": "abc..def", "files": [], "error": "git couldn't read this diff: bad revision 'abc..def'"});
-    let mut p = panel(Diff::of(&bad));
+    // the hub's refusal of the ask (diff/read's error)
+    let mut p = panel(crate::diffwire::refused("git couldn't read this diff: bad revision 'abc..def'"));
     let out = text(&lines(&mut p, 78, 20, 0));
     assert!(out.contains("▲ git couldn't read this diff: bad revision 'abc..def'"), "{out}");
     assert!(text(&lines(&mut p, 78, 20, 0)[..1]).trim_end().ends_with("ctrl+g close"), "{out}");

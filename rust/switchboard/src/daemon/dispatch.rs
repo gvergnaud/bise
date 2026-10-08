@@ -259,11 +259,6 @@ impl Shell {
             Msg::Update(v) => self.update_event(v),
             Msg::Changes { name, v } => self.on_changes(name, v),
             Msg::RoutePick { rid, pick } => self.route_picked(rid, pick),
-            Msg::ToClient { id, v } => {
-                if let Some(c) = self.clients.get_mut(&id) {
-                    write_json(c, &v);
-                }
-            }
             Msg::RoleLine { dir, key, line } => self.step(Input::RoleLine { dir, key, line }),
             Msg::TimerName { id, reply } => self.step(Input::TimerName { id, reply }),
             Msg::GateChecked { dir, n, req, out } => self.on_checked(&dir, &n, *req, out),

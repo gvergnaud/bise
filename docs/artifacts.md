@@ -158,7 +158,7 @@ rest; `gone` opens `copy`.
   in main's thread, right after the land's own line (`sb info : ✓ x
   landed 2 commits on main (a1b2c3d)`, unchanged). `from`: the target's
   tip before the land (short). The TUI draws the `± 3 files +42 −18
-  a1b2c3d` door from it; a click asks `{"op":"diff","range":"<from>..<sha>"}`.
+  a1b2c3d` door from it; a click asks `diff/read {range:"<from>..<sha>"}`.
   Never opened by itself.
 
 ### `changes` in the state
@@ -175,27 +175,35 @@ together; an agent in the shared folder: its own files (the hub's
 
 ### `diff`
 
-The answer to the `diff` op, to that client only:
+`diff/read`'s result (JSON-RPC, client-protocol step 3; `bise_proto::hub::
+HubEv::Diff`, to that client only): the review's files and hunks
+(`bise_proto::diff`: `status` added|modified|deleted|renamed, `from` a
+renamed file's old path, each hunk's `header`, `head` git's function
+context, its lines `{kind: ctx|add|del, old?, new?, text}`) and the
+terminal's view fields:
 
 ```
-{"ev":"diff","req":<echo>,"title":"pricing-page vs main","branch":"sb/pricing-page"|null,
- "base":"main","commits":2,"uncommitted":true,"working":true,"landed_ms":null,
- "stat":{"files":9,"add":429,"del":367},
- "files":[{"path":"src/a.tsx","old_path":null,"status":"M|A|D|R","add":4,"del":6,
-           "binary":false,"image":false,"generated":false,"cut":false,
-           "abs":"<abs path, for ⏎ in the editor>" | null,
-           "hunks":[{"old":38,"new":38,"head":"export function Pricing()","lines":[" ctx","-old","+new"]}]}],
- "error":"…"}            // only when it failed; files is then []
+{"project":"…","agent":"pricing-page","base":"main","head":"sb/pricing-page",
+ "req":<echo>,"title":"pricing-page vs main","commits":2,"uncommitted":true,"working":true,
+ "landed_ms":null,"gone":false,"note":"…",
+ "files":[{"path":"src/a.tsx","status":"modified","add":4,"del":6,
+           "binary":false,"image":false,"generated":false,"truncated":false,
+           "abs":"<abs path, for ⏎ in the editor>",
+           "hunks":[{"header":"@@ -38 +38 @@ export function Pricing()","head":"export function Pricing()",
+                     "lines":[{"kind":"ctx","old":38,"new":38,"text":"…"}]}]}]}
 ```
 
-`generated`: lock files and generated files (the TUI folds them); `cut`:
-the file passed 5000 lines (its counts stay whole); `image` by extension.
-The TUI folds over 200 changed lines itself. Untracked files show as `A`.
-A PR (`pr`) comes from `gh pr diff`; its `abs` is null.
+A failure (git couldn't read it, a ref it won't pass to git) is the
+request's error; the TUI draws it with ▲ in the panel. `generated`: lock
+files and generated files, a display flag (their lines come, the client
+folds them); `truncated`: the file passed 5000 lines (its counts stay
+whole) or is binary; `image` by extension. The TUI folds over 200
+changed lines itself. Untracked files show as added. A PR (`pr`) comes
+from `gh pr diff`; it has no `abs`.
 
 ### `branches`
 
-`{"ev":"branches","base":"main","rows":[{"branch":"sb/x","agents":["s1"],"commits":4,"uncommitted":false,"pr":null,"landed_ms":null,"add":310,"del":96}]}`:
+`branches/list`'s result: `{"base":"main","rows":[{"branch":"sb/x","agents":["s1"],"commits":4,"uncommitted":false,"add":310,"del":96}]}`:
 the local branches ahead of main (the /diff picker); `agents`: the live
 agents on it.
 
@@ -210,10 +218,10 @@ agents on it.
   result is the hub's words, `{"notice":"↗ added: pricing-plans.xlsx"}`,
   or its error says why (`no file or link at notes/plan.md.`); then the
   list to every client.
-- `{"op":"diff","req":n,"agent":"x"}` | `{"op":"diff","req":n,"branch":"sculpt"}` |
-  `{"op":"diff","req":n,"range":"<from>..<to>"}` | `{"op":"diff","req":n,"pr":7}`:
-  a `diff`. No push: the TUI asks again while its panel is open.
-- `{"op":"branches"}`: a `branches`.
+- JSON-RPC `diff/read {project, req?, agent | branch | pr | range (+agent
+  naming it) | agent + commit}`: a `diff`. No push: the TUI asks again
+  while its panel is open.
+- JSON-RPC `branches/list {project}`: a `branches`.
 
 ## Laws (tests)
 

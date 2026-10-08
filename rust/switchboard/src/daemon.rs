@@ -222,12 +222,6 @@ enum Msg {
         name: String,
         v: Value,
     },
-    /// An answer computed off the loop (a `diff`, the `branches`) for
-    /// one client.
-    ToClient {
-        id: ClientId,
-        v: Value,
-    },
     /// a thread's typed event: an answer or a hub-wide notification
     Typed {
         to: rpc::Typed,
@@ -1764,8 +1758,6 @@ impl Shell {
                 }
             }
             // artifacts and diffs (docs/artifacts.md)
-            "diff" => self.diff_op(id, &v),
-            "branches" => self.branches_op(id),
             "stop_hub" => {
                 let keep = v
                     .get("keep_agents")

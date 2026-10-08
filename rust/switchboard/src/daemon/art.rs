@@ -1,6 +1,7 @@
 //! Artifacts and diffs on the hub's side (docs/artifacts.md): the
 //! `artifacts` event (artifacts/seen, artifacts/add's words), `sb
-//! artifact`, the thread lines, the `diff` and `branches` ops (computed off the hub's loop), each agent's
+//! artifact`, the thread lines, `diff/read` and `branches/list`'s answers
+//! (computed off the hub's loop), each agent's
 //! `changes` in the state, and the `landed` line after a land.
 
 use super::*;
@@ -234,19 +235,6 @@ impl Shell {
         }
     }
 
-    /// The `diff` op: an agent's changes, a branch, a range or a PR,
-    /// answered with a `diff` event to that client.
-    pub(super) fn diff_op(&mut self, id: ClientId, v: &Value) {
-        let req = v.get("req").cloned().unwrap_or(Value::Null);
-        let shared = PathBuf::from(&self.hub.workspace);
-        let ask = self.diff_ask(v);
-        let tx = self.tx.clone();
-        std::thread::spawn(move || {
-            let ev = diff_answer(ask, &shared, req);
-            let _ = tx.send(Msg::ToClient { id, v: ev });
-        });
-    }
-
     /// The typed `diff` (desktop S7; a branch, a PR or a range since
     /// client-protocol step 3): the same answer as the op, in bise-proto's
     /// shape (`proto_view::diff`), to that client. `d` is checked
@@ -322,14 +310,8 @@ impl Shell {
         }
     }
 
-    /// The `branches` op: the /diff picker's rows, as the older line.
-    pub(super) fn branches_op(&mut self, id: ClientId) {
-        self.branches_scan(id, false);
-    }
-
-    /// The /diff picker's rows to client `id`: `typed`, as the typed
-    /// `branches` (`branches/list`'s answer), else the older line.
-    pub(super) fn branches_scan(&mut self, id: ClientId, typed: bool) {
+    /// The /diff picker's rows to client `id`: `branches/list`'s answer.
+    pub(super) fn branches_scan(&mut self, id: ClientId) {
         let project = self.project();
         let shared = PathBuf::from(&self.hub.workspace);
         // who works on which branch, and the PRs the poller knows
@@ -352,14 +334,8 @@ impl Shell {
                            "uncommitted": false, "pr": null, "landed_ms": null, "add": add, "del": del})
                 })
                 .collect();
-            let mut v = json!({"ev": "branches", "base": base, "rows": rows});
-            let _ = match typed {
-                true => {
-                    v["project"] = json!(project);
-                    tx.send(Msg::Typed { to: super::rpc::Typed::Answer(id), v })
-                }
-                false => tx.send(Msg::ToClient { id, v }),
-            };
+            let v = json!({"ev": "branches", "project": project, "base": base, "rows": rows});
+            let _ = tx.send(Msg::Typed { to: super::rpc::Typed::Answer(id), v });
         });
     }
 }
@@ -386,7 +362,7 @@ fn changes_of(place: &Where) -> Value {
     }
 }
 
-/// What the `diff` op asks for.
+/// What a `diff/read` asks for.
 #[derive(Clone, Debug)]
 enum Ask {
     /// name, where, branch, archived
