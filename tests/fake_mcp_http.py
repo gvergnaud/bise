@@ -44,6 +44,13 @@ Control (no auth): POST /control {"action": ...}
   deny_next         (oauth) the next /authorize answers access_denied
   token_down        (oauth) /token answers 503 from now on
   token_up          (oauth) /token works again
+  fail_init         {"count": N, "how": "drop"|"503"}: the next N
+                    initialize requests get no answer (the connection
+                    closes) or a 503
+  lose_session      {"count": N}: the next N tools/call find their
+                    session forgotten (404 unknown session)
+  drop_call         {"count": N}: the next N tools/call run, then the
+                    connection closes with no answer
 """
 
 import argparse
@@ -91,6 +98,16 @@ GRANTED = {}   # access or refresh token -> its scope
 REFRESH = {}   # refresh token -> client_id
 DENY = [False]
 TOKEN_DOWN = [False]
+# failures to come (control: fail_init, lose_session, drop_call)
+FAULTS = {"fail_init": 0, "fail_init_how": "drop", "lose_session": 0, "drop_call": 0}
+
+
+def take_fault(name):
+    with LOCK:
+        if FAULTS[name] > 0:
+            FAULTS[name] -= 1
+            return True
+        return False
 
 
 def required_ok(headers):
@@ -381,6 +398,11 @@ class H(BaseHTTPRequestHandler):
             DENY[0] = True
         elif act in ("token_down", "token_up"):
             TOKEN_DOWN[0] = act == "token_down"
+        elif act in ("fail_init", "lose_session", "drop_call"):
+            with LOCK:
+                FAULTS[act] = int(req.get("count", 1))
+                if act == "fail_init":
+                    FAULTS["fail_init_how"] = req.get("how", "drop")
         elif act == "log":
             with LOCK:
                 return self.send(200, json.dumps(LOG).encode())
@@ -463,6 +485,14 @@ class H(BaseHTTPRequestHandler):
             return self.send(406, b'{"error":"Accept must list application/json and text/event-stream"}')
         extra = []
         sid = self.headers.get("Mcp-Session-Id")
+        if msg.get("method") == "initialize" and take_fault("fail_init"):
+            if FAULTS["fail_init_how"] == "503":
+                return self.send(503, b'{"error":"server is starting"}')
+            self.close_connection = True
+            return
+        if msg.get("method") == "tools/call" and take_fault("lose_session"):
+            with LOCK:
+                SESSIONS.discard(sid)
         if msg.get("method") == "initialize":
             sid = uuid.uuid4().hex
             with LOCK:
@@ -488,6 +518,9 @@ class H(BaseHTTPRequestHandler):
         reply = answer(msg, self.headers, sid)
         if reply is None:
             return self.send(202, extra=extra)
+        if msg.get("method") == "tools/call" and take_fault("drop_call"):
+            self.close_connection = True
+            return
         if args.sse_answers and msg.get("method") != "initialize":
             note = frame({"jsonrpc": "2.0", "method": "notifications/message", "params": {"level": "info", "data": "x"}})
             body = (note + frame(reply)).encode()

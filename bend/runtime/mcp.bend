@@ -13,7 +13,14 @@
 # A call speaks MCP Streamable HTTP against
 # /v1/connectors-gateway/<connector_id>/mcp: initialize,
 # notifications/initialized, tools/call — three requests on ONE pooled
-# connection, because the gateway state is per-connection.
+# connection, because the gateway state is per-connection (a server's
+# Mcp-Session-Id and protocol version go back on the later two). A try
+# that never reached the tool (initialize failed, no connection, the
+# session lost) is tried again on a fresh connection, 3 tries in all; a
+# tools/call that may have run is never sent twice. A failure for good
+# names the server, the phase, the cause, the retries and whether
+# calling again is safe (the policy and words: mcp-pure.bend; the
+# retries and failures go to the debug log's events.jsonl).
 #
 # Defs are ordered bottom-up: a def only calls defs defined ABOVE it.
 # Recursive loops pass their recursive result to a pure "put" helper
@@ -34,6 +41,10 @@ import ../vendor/json.bend as J
 import 0x16458a2db4f36577294543ec2a6d420c/json.bend as Jv
 import ./mcp-pure.bend as Mcp
 import ./plugins.bend as Pl
+import ./provider.bend as Pv
+import ./provider-pure.bend as Pvp
+import ./debug.bend as Dbg
+import ./debug-pure.bend as Dp
 
 # what an MCP tool call answers (converted to ExecRes by the runtime)
 type MR is Data:
@@ -386,44 +397,58 @@ def call_res(+j: Jv.Val) -> String & Bool:
   (content_texts(jarr(jdone(Jv.get(j, "result")), "content")),
     jbool(jdone(Jv.get(j, "result")), "isError", False{}))
 
-def call_done.res(sp: String & Bool) -> MR:
+def call_ok(sp: String & Bool) -> Mcp.Try:
   (out, is_err) = sp
-  MR{Bool.not(is_err), out}
+  Mcp.TOk{Bool.not(is_err), out}
 
-def call_done(p3: Http.Pool, +body: String) -> IO(MR):
-  do IO<MR>:
-    u : Unit <- Http.pool.close(p3)
-    IO.pure(MR, call_done.res(call_res(jdone(Jv.parse(body)))))
+# a JSON-RPC error the server answered instead of a result
+def rpc_err.of(m: Maybe<&2, Jv.Val>) -> Maybe<&2, String>:
+  match m:
+    case None{}:
+      None{}
+    case Some{+e}:
+      Some{jstr(e, "message", Jv.encode(e))}
 
-def call_fail(p3: Http.Pool, +why: String) -> IO(MR):
-  do IO<MR>:
-    u : Unit <- Http.pool.close(p3)
-    IO.pure(MR, MR{False{}, String.append("mcp call failed: ", why)})
+def rpc_err(+j: Jv.Val) -> Maybe<&2, String>:
+  rpc_err.of(Jv.get(j, "error"))
 
-def step3.ok(p3: Http.Pool, is_ok: Bool, +res: Http.Res) -> IO(MR):
-  match is_ok:
+# a 200 body (JSON, or an event stream whose last data line is the answer)
+def rpc_json(+body: String) -> Jv.Val:
+  jdone(Jv.parse(Mcp.rpc_text(body)))
+
+def call_rpc(m: Maybe<&2, String>, +j: Jv.Val) -> Mcp.Try:
+  match m:
+    case Some{+said}:
+      Mcp.TFail{Mcp.SCall{}, Mcp.WRpc{said}}
+    case None{}:
+      call_ok(call_res(j))
+
+def call_status(ok: Bool, +status: U32, +body: String) -> Mcp.Try:
+  match ok:
     case True{}:
-      call_done(p3, Http.text(res))
+      call_rpc(rpc_err(rpc_json(body)), rpc_json(body))
     case False{}:
-      call_fail(p3, "non-200 http status")
+      Mcp.TFail{Mcp.SCall{}, Mcp.WStatus{status, body}}
 
-def step3.status(p3: Http.Pool, status: U32, +res: Http.Res) -> IO(MR):
-  step3.ok(p3, U32.is_eq(status, 200), res)
-
-def step3.res(p3: Http.Pool, +res: Http.Res) -> IO(MR):
-  match res:
-    case Http.Res{+status, _, _}:
-      step3.status(p3, status, res)
-
-def step3.run2(pr3: Http.Pool & Result<&2, &2, Http.Err, Http.Res>,
-    +url: String, +h: Map<&2, List<&2, String>>, +tool: String,
-    +args: String) -> IO(MR):
-  (p3, r3) = pr3
-  match r3:
+def call_got(r: Result<&2, &2, Http.Err, Http.Res>) -> Mcp.Try:
+  match r:
     case Fail{+e}:
-      call_fail(p3, "transport")
+      Mcp.TFail{Mcp.SCall{}, Mcp.WNet{Pv.net_of(e)}}
     case Done{+res}:
-      step3.res(p3, res)
+      match res:
+        case Http.Res{+status, _, _}:
+          call_status(U32.is_eq(status, 200), status, Http.text(res))
+
+# close the try's connection, hand back its outcome
+def try_end(p: Http.Pool, +t: Mcp.Try) -> IO(Mcp.Try):
+  do IO<Mcp.Try>:
+    u : Unit <- Http.pool.close(p)
+    IO.pure(Mcp.Try, t)
+
+def try_called(pr3: Http.Pool & Result<&2, &2, Http.Err, Http.Res>)
+    -> IO(Mcp.Try):
+  (p3, r3) = pr3
+  try_end(p3, call_got(r3))
 
 # a call's wait: a connector's 60 s; a plugin tool's bridge bounds its
 # own calls (mcp.json's tool_timeout_sec, 300 s by default), so the
@@ -431,46 +456,168 @@ def step3.run2(pr3: Http.Pool & Result<&2, &2, Http.Err, Http.Res>,
 def call_ms(+url: String) -> U32:
   Bool.pick(U32, is_local(url), 3600000, 60000)
 
-def step3(pr2: Http.Pool & Result<&2, &2, Http.Err, Http.Res>, +url: String,
-    +h: Map<&2, List<&2, String>>, +tool: String, +args: String) -> IO(MR):
-  (p2, _) = pr2
-  do IO<MR>:
+def try_call(p2: Http.Pool, +url: String, +h: Map<&2, List<&2, String>>,
+    +tool: String, +args: String) -> IO(Mcp.Try):
+  do IO<Mcp.Try>:
     pr3 : Http.Pool & Result<&2, &2, Http.Err, Http.Res> <- Http.pool.how(p2,
       "POST", url, h, call_body(tool, args), call_ms(url), Http.ModeFollow{})
-    step3.run2(pr3, url, h, tool, args)
+    try_called(pr3)
 
-def step2(pr1: Http.Pool & Result<&2, &2, Http.Err, Http.Res>, +url: String,
-    +h: Map<&2, List<&2, String>>, +tool: String, +args: String) -> IO(MR):
-  (p1, _) = pr1
-  do IO<MR>:
+# the notification's answer does not matter: tools/call says the rest
+def try_notified(pr2: Http.Pool & Result<&2, &2, Http.Err, Http.Res>,
+    +url: String, +h: Map<&2, List<&2, String>>, +tool: String,
+    +args: String) -> IO(Mcp.Try):
+  (p2, _) = pr2
+  try_call(p2, url, h, tool, args)
+
+def try_open(p1: Http.Pool, +url: String, +h: Map<&2, List<&2, String>>,
+    +tool: String, +args: String) -> IO(Mcp.Try):
+  do IO<Mcp.Try>:
     pr2 : Http.Pool & Result<&2, &2, Http.Err, Http.Res> <- Http.pool.how(p1,
       "POST", url, h, notif_body(), 20000, Http.ModeFollow{})
-    step3(pr2, url, h, tool, args)
+    try_notified(pr2, url, h, tool, args)
 
-def step1(r1: Result<&2, &2, Http.Err, Http.Res>, p1: Http.Pool, +url: String,
-    +h: Map<&2, List<&2, String>>, +tool: String, +args: String) -> IO(MR):
+def hdr_if(empty: Bool, +h: Map<&2, List<&2, String>>, +k: String,
+    +v: String) -> Map<&2, List<&2, String>>:
+  match empty:
+    case True{}:
+      h
+    case False{}:
+      Http.set(h, k, v)
+
+# MCP Streamable HTTP: the session the server gave at initialize, and
+# the protocol version it chose, go on every later request (a server
+# that keeps sessions answers 400/404 without them; the gateway gives
+# none, and nothing changes there)
+def with_session(+h: Map<&2, List<&2, String>>, +sid: String, +ver: String)
+    -> Map<&2, List<&2, String>>:
+  hdr_if(String.is_empty(ver),
+    hdr_if(String.is_empty(sid), h, "Mcp-Session-Id", sid),
+    "MCP-Protocol-Version", ver)
+
+def try_init_rpc(m: Maybe<&2, String>, p1: Http.Pool, +url: String,
+    +h: Map<&2, List<&2, String>>, +tool: String, +args: String)
+    -> IO(Mcp.Try):
+  match m:
+    case Some{+said}:
+      try_end(p1, Mcp.TFail{Mcp.SInit{}, Mcp.WRpc{said}})
+    case None{}:
+      try_open(p1, url, h, tool, args)
+
+def try_init_ok(p1: Http.Pool, +j: Jv.Val, +sid: String, +url: String,
+    +h: Map<&2, List<&2, String>>, +tool: String, +args: String)
+    -> IO(Mcp.Try):
+  try_init_rpc(rpc_err(j), p1, url,
+    with_session(h, sid, jstr(jdone(Jv.get(j, "result")), "protocolVersion",
+      "")), tool, args)
+
+def try_init_status(ok: Bool, p1: Http.Pool, +status: U32,
+    +hs: Map<&2, List<&2, String>>, +body: String, +url: String,
+    +h: Map<&2, List<&2, String>>, +tool: String, +args: String)
+    -> IO(Mcp.Try):
+  match ok:
+    case True{}:
+      try_init_ok(p1, rpc_json(body), Http.header(hs, "mcp-session-id"), url,
+        h, tool, args)
+    case False{}:
+      try_end(p1, Mcp.TFail{Mcp.SInit{}, Mcp.WStatus{status, body}})
+
+def try_init(r1: Result<&2, &2, Http.Err, Http.Res>, p1: Http.Pool,
+    +url: String, +h: Map<&2, List<&2, String>>, +tool: String,
+    +args: String) -> IO(Mcp.Try):
   match r1:
     case Fail{+e}:
-      call_fail(p1, "initialize failed")
+      try_end(p1, Mcp.TFail{Mcp.SInit{}, Mcp.WNet{Pv.net_of(e)}})
     case Done{+res}:
-      step2((p1, r1), url, h, tool, args)
+      match res:
+        case Http.Res{+status, +hs, _}:
+          try_init_status(U32.is_eq(status, 200), p1, status, hs,
+            Http.text(res), url, h, tool, args)
 
-def mcp_call.found2(cid: String, +tool: String, +args: String, +key: String,
-    pr1: Http.Pool & Result<&2, &2, Http.Err, Http.Res>, +url: String,
-    +h: Map<&2, List<&2, String>>) -> IO(MR):
+def try_started(pr1: Http.Pool & Result<&2, &2, Http.Err, Http.Res>,
+    +url: String, +h: Map<&2, List<&2, String>>, +tool: String,
+    +args: String) -> IO(Mcp.Try):
   (p1, r1) = pr1
-  step1(r1, p1, url, h, tool, args)
+  try_init(r1, p1, url, h, tool, args)
 
-def mcp_call.found(+cid: String, +tool: String, +args: String, +key: String)
-    -> IO(MR):
-  do IO<MR>:
-    +url : String <- IO.pure(String, gateway_url(cid))
-    +h : Map<&2, List<&2, String>> <- IO.pure(Map<&2, List<&2, String>>,
-      mcp_hdrs(Bool.pick(String, is_local(cid), "", key)))
+# one try on a fresh connection: initialize, notification, tools/call
+def attempt(+url: String, +h: Map<&2, List<&2, String>>, +tool: String,
+    +args: String) -> IO(Mcp.Try):
+  do IO<Mcp.Try>:
     pr1 : Http.Pool & Result<&2, &2, Http.Err, Http.Res> <- Http.pool.how(
-      Http.pool.new(), "POST", url, h, init_body(), 20000,
-      Http.ModeFollow{})
-    mcp_call.found2(cid, tool, args, key, pr1, url, h)
+      Http.pool.new(), "POST", url, h, init_body(), 20000, Http.ModeFollow{})
+    try_started(pr1, url, h, tool, args)
+
+# ---- the tries of one call (the policy: runtime/mcp-pure.bend) ----
+
+# one line in the session's debug log (events.jsonl; nothing without
+# BEND_DEBUG_DIR): every retry and every call that failed for good
+def log_ev(+kind: String, +fields: List<&2, Dp.Field>) -> IO(Unit):
+  do IO<Unit>:
+    +d : String <- Dbg.dir()
+    +ts : Nat <- Dbg.now(d)
+    Dbg.append(d, String.append(Dp.ev_line(ts, kind, fields), "\n"))
+
+def try_why(+host: String, t: Mcp.Try) -> String:
+  match t:
+    case Mcp.TOk{_, _}:
+      ""
+    case Mcp.TFail{+st, +w}:
+      Mcp.why_line(host, st, w)
+
+def try_mr(t: Mcp.Try, +name: String, +host: String, +n: Nat) -> MR:
+  match t:
+    case Mcp.TOk{+ok, +out}:
+      MR{ok, out}
+    case Mcp.TFail{+st, +w}:
+      MR{False{}, Mcp.fail_text(name, host, st, w, n)}
+
+def try_done.log(ok: Bool, +name: String, +text: String, +n: Nat) -> IO(Unit):
+  match ok:
+    case True{}:
+      IO.pure(Unit, Unit{})
+    case False{}:
+      log_ev("mcp_failed", Con{Dp.FStr{"tool", name}, Con{Dp.FNat{"retries",
+        n}, Con{Dp.FStr{"error", text}, Nil{}}}})
+
+def try_done(+m: MR, +name: String, +n: Nat) -> IO(MR):
+  match m:
+    case MR{+ok, +out}:
+      do IO<MR>:
+        u : Unit <- try_done.log(ok, name, out, n)
+        IO.pure(MR, m)
+
+# go again (after a pause, with a fresh initialize) or answer; `more`
+# is the next try, built lazily and run only when chosen
+def try_next(go: Bool, +t: Mcp.Try, +name: String, +host: String, +n: Nat,
+    more: IO(MR)) -> IO(MR):
+  match go:
+    case True{}:
+      do IO<MR>:
+        u : Unit <- log_ev("mcp_retry", Con{Dp.FStr{"tool", name},
+          Con{Dp.FNat{"retry", Nat.add(n, 1n)}, Con{Dp.FStr{"why",
+            try_why(host, t)}, Nil{}}}})
+        w : Unit <- IO.sleep(Mcp.pause_ms(n))
+        more
+    case False{}:
+      try_done(try_mr(t, name, host, n), name, n)
+
+def tries(+fuel: Nat, +n: Nat, +name: String, +host: String, +url: String,
+    +h: Map<&2, List<&2, String>>, +tool: String, +args: String) -> IO(MR):
+  match fuel:
+    case 0n:
+      IO.pure(MR, MR{False{}, "mcp call failed: no try left"})
+    case 1n+p:
+      do IO<MR>:
+        +t : Mcp.Try <- attempt(url, h, tool, args)
+        try_next(Bool.and(Mcp.again(t), Bool.not(Nat.is_eq(p, 0n))), t, name,
+          host, n, tries(p, Nat.add(n, 1n), name, host, url, h, tool, args))
+
+def mcp_call.found(+name: String, +cid: String, +tool: String, +args: String,
+    +key: String) -> IO(MR):
+  tries(Mcp.max_tries(), 0n, name, Pvp.url_host(gateway_url(cid)),
+    gateway_url(cid), mcp_hdrs(Bool.pick(String, is_local(cid), "", key)),
+    tool, args)
 
 # a call with no arguments still needs a JSON object body
 def call_args.of(is_empty: Bool, +args: String) -> String:
@@ -483,10 +630,11 @@ def call_args.of(is_empty: Bool, +args: String) -> String:
 def call_args(+args: String) -> String:
   call_args.of(String.is_empty(args), args)
 
-def mcp_call.mt(mt: McpTool, +args: String, +key: String) -> IO(MR):
+def mcp_call.mt(mt: McpTool, +name: String, +args: String, +key: String)
+    -> IO(MR):
   match mt:
     case MT{+cid, +tool}:
-      mcp_call.found(cid, tool, call_args(args), key)
+      mcp_call.found(name, cid, tool, call_args(args), key)
 
 def index_missing() -> MR:
   MR{False{}, "tool index not found — remote MCP tools are unavailable in this session"}
@@ -499,7 +647,7 @@ def mcp_call.resolved(m: Maybe<&2, McpTool>, +name: String, +args: String,
         String.append("unknown tool: ", String.append(name,
           " — discover tools with search_tool_functions"))})
     case Some{+mt}:
-      mcp_call.mt(mt, args, key)
+      mcp_call.mt(mt, name, args, key)
 
 def mcp_call.read(m: Maybe<&2, String>, +name: String, +args: String,
     +key: String) -> IO(MR):

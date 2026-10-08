@@ -5014,3 +5014,31 @@ law image_why_checks:
     Con{Im.img_why(4, "QUJD"), Nil{}}}}}
     == Con{"empty file", Con{"invalid base64", Con{"invalid base64", Con{"", Nil{}}}}}
     : List<&2, String>}
+
+# ---- MCP calls that fail (runtime/mcp-pure.bend) ----
+
+# LAW: a call is tried again (fresh initialize) only when it never
+# reached the tool and a new try may work: initialize got no answer or a
+# 5xx, the call could not connect, or the server lost the session. Once
+# tools/call may have run (no answer read, a timeout, a 5xx, an error it
+# answered) it is never sent again; an auth refusal is not retried.
+law mcp_retry_only_unsent:
+  {Bool.and(Mc.retry(Mc.SInit{}, Mc.WNet{Pv.NConnect{61, "refused"}}),
+    Bool.and(Mc.retry(Mc.SInit{}, Mc.WStatus{503, ""}),
+    Bool.and(Bool.not(Mc.retry(Mc.SInit{}, Mc.WStatus{401, ""})),
+    Bool.and(Mc.retry(Mc.SCall{}, Mc.WStatus{404, "unknown session"}),
+    Bool.and(Mc.retry(Mc.SCall{}, Mc.WNet{Pv.NConnect{61, "refused"}}),
+    Bool.and(Bool.not(Mc.retry(Mc.SCall{}, Mc.WNet{Pv.NRead{54, "reset"}})),
+    Bool.and(Bool.not(Mc.retry(Mc.SCall{}, Mc.WNet{Pv.NTimeout{}})),
+    Bool.and(Bool.not(Mc.retry(Mc.SCall{}, Mc.WStatus{502, ""})),
+      Bool.not(Mc.retry(Mc.SCall{}, Mc.WRpc{"no such tool"})))))))))) == True{} : Bool}
+
+# LAW: the model reads the server, the phase, the cause, what bise
+# tried, and whether calling again is safe - never just "initialize
+# failed".
+law mcp_fail_text_says_why_and_safety:
+  {Bool.and(String.eq(Mc.fail_text("web_search.web_search", "api.mistral.ai",
+      Mc.SInit{}, Mc.WNet{Pv.NDns{}}, 2n),
+      "mcp call failed: web_search.web_search (api.mistral.ai), initialize: cannot resolve api.mistral.ai (dns) — check your network or VPN. bise reconnected and retried 2 times. the call never reached the server: safe to call again."),
+    String.eq(Mc.fail_text("x.y", "h", Mc.SCall{}, Mc.WStatus{502, "{\"message\":\"bad gateway\"}"}, 0n),
+      "mcp call failed: x.y (h), tools/call: h answered HTTP 502: bad gateway. not retried: the call may have run on the server, check before calling it again (safe if the tool only reads).")) == True{} : Bool}

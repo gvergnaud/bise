@@ -4,6 +4,8 @@
 import Base
 import ../core/types.bend as T
 import ../core/text.bend as Tx
+import ../core/wire.bend as W
+import ./provider-pure.bend as Pvp
 
 # ---- the published alias: a valid identifier (vibe_sdk requires it) ----
 # vibe's _normalize_name: anything outside [a-zA-Z0-9_-] flattens to
@@ -330,3 +332,237 @@ def groups_section.pick(empty: Bool, +lines: String) -> String:
 def groups_section(+tools: List<&2, T.ToolDef>) -> String:
   groups_section.pick(String.is_empty(group_lines(groups_of(tools), tools)),
     group_lines(groups_of(tools), tools))
+
+# ---- a call that failed: where, why, what bise did, is it safe ----
+# A call is initialize, the initialized notification and tools/call on
+# one connection (runtime/mcp.bend). It is tried again, on a fresh
+# connection with a fresh initialize, only when it never reached the
+# tool and a new try may work: initialize got no answer, a 5xx or a 429
+# (the network right after the Mac wakes, a gateway hiccup), or
+# tools/call could not go out (dns, connect, tls, write) or the server
+# forgot the session (a 404, or a refusal that names the session). A
+# tools/call the server may have run (no answer read, a timeout, a 5xx,
+# an error it answered) is never sent twice: the model gets the cause
+# and is told to check first. Every failure says, in one or two lines,
+# the server and the phase, the cause, what bise tried, and whether
+# calling again is safe (fail_text).
+
+type Stage is Data:
+  SInit{}
+  SCall{}
+
+# why a try stopped: no answer at all, an HTTP status (with its raw
+# body), or a JSON-RPC error the server answered
+type Why is Data:
+  WNet{e: Pvp.NetErr}
+  WStatus{code: U32, body: String}
+  WRpc{said: String}
+
+# one try: the tool's answer, or where and why it stopped
+type Try is Data:
+  TOk{ok: Bool, out: String}
+  TFail{stage: Stage, why: Why}
+
+# tries in total for one call (so at most 2 retries)
+def max_tries() -> Nat:
+  3n
+
+# the pause before retry n (0-based): 1 s, then 2 s
+def pause_ms(n: Nat) -> U32:
+  Pvp.backoff_ms(n)
+
+def session_words(+s: String) -> Bool:
+  String.contains(String.to_lower(s), "session")
+
+def is_call(st: Stage) -> Bool:
+  match st:
+    case SInit{}:
+      False{}
+    case SCall{}:
+      True{}
+
+# the server forgot the session between initialize and tools/call
+def session_gone(w: Why, +st: Stage) -> Bool:
+  match w:
+    case WNet{_}:
+      False{}
+    case WStatus{+code, +body}:
+      Bool.and(is_call(st), Bool.or(U32.is_eq(code, 404),
+        Bool.and(U32.is_eq(code, 400), session_words(body))))
+    case WRpc{+said}:
+      session_words(said)
+
+# a transport failure of tools/call: could the request have reached the
+# server whole? not when the name, the connection, the handshake or the
+# send failed
+def net_sent(e: Pvp.NetErr) -> Bool:
+  match e:
+    case Pvp.NUrl{}:
+      False{}
+    case Pvp.NDns{}:
+      False{}
+    case Pvp.NConnect{_, _}:
+      False{}
+    case Pvp.NTls{_, _}:
+      False{}
+    case Pvp.NWrite{_, _}:
+      False{}
+    case _:
+      True{}
+
+def reached.call(w: Why) -> Bool:
+  match w:
+    case WNet{e}:
+      net_sent(e)
+    case WStatus{+code, _}:
+      U32.is_le(500, code)
+    case WRpc{+said}:
+      Bool.not(session_words(said))
+
+# may the tool have run? never when initialize is what failed
+def reached(st: Stage, w: Why) -> Bool:
+  match st:
+    case SInit{}:
+      False{}
+    case SCall{}:
+      reached.call(w)
+
+def net_transient(e: Pvp.NetErr) -> Bool:
+  match e:
+    case Pvp.NUrl{}:
+      False{}
+    case Pvp.NRedirect{}:
+      False{}
+    case _:
+      True{}
+
+# may a fresh try work? (an auth refusal or a bad URL will not)
+def transient(w: Why, +st: Stage) -> Bool:
+  match w:
+    case WNet{e}:
+      net_transient(e)
+    case WStatus{+code, +body}:
+      Bool.or(Pvp.retryable_status(code), session_gone(WStatus{code, body}, st))
+    case WRpc{+said}:
+      session_words(said)
+
+def retry(+st: Stage, +w: Why) -> Bool:
+  Bool.and(Bool.not(reached(st, w)), transient(w, st))
+
+# the verdict on a try: go again (with a fresh initialize) or not
+def again(t: Try) -> Bool:
+  match t:
+    case TOk{_, _}:
+      False{}
+    case TFail{+st, +w}:
+      retry(st, w)
+
+# ---- the words ----
+
+def said_max() -> Nat:
+  200n
+
+def clip(+s: String) -> String:
+  Bool.pick(String, Nat.is_lt(said_max(), String.length(s)),
+    String.append(String.take(s, said_max()), "…"), s)
+
+def said_part(+said: String) -> String:
+  Bool.pick(String, String.is_empty(said), "", String.append(": ", clip(said)))
+
+def is_url_err(e: Pvp.NetErr) -> Bool:
+  match e:
+    case Pvp.NUrl{}:
+      True{}
+    case _:
+      False{}
+
+def net_text.pick(bad_url: Bool, +host: String, +e: Pvp.NetErr) -> String:
+  match bad_url:
+    case True{}:
+      String.concat(["bad server URL (", host, ")"])
+    case False{}:
+      Pvp.net_cause(host, e)
+
+def net_text(+host: String, +e: Pvp.NetErr) -> String:
+  net_text.pick(is_url_err(e), host, e)
+
+# the cause: the transport error, the status with the server's own
+# words, or its JSON-RPC error
+def why_text(+host: String, w: Why) -> String:
+  match w:
+    case WNet{+e}:
+      net_text(host, e)
+    case WStatus{+code, +body}:
+      String.concat([host, " answered HTTP ", U32.show(code),
+        said_part(W.err_said(body))])
+    case WRpc{+said}:
+      String.concat([host, " answered an error",
+        said_part(W.squeeze(said))])
+
+def phase.pick(st: Stage, gone: Bool) -> String:
+  match st:
+    case SInit{}:
+      "initialize"
+    case SCall{}:
+      Bool.pick(String, gone, "tools/call (the server lost the session)",
+        "tools/call")
+
+def phase(+st: Stage, +w: Why) -> String:
+  phase.pick(st, session_gone(w, st))
+
+def retried_text(+n: Nat) -> String:
+  Bool.pick(String, Nat.is_eq(n, 0n), "",
+    String.concat([" bise reconnected and retried ", Nat.show(n),
+      Bool.pick(String, Nat.is_eq(n, 1n), " time.", " times.")]))
+
+def safety.pick(sent: Bool, fresh: Bool) -> String:
+  match sent:
+    case True{}:
+      " not retried: the call may have run on the server, check before calling it again (safe if the tool only reads)."
+    case False{}:
+      Bool.pick(String, fresh,
+        " the call never reached the server: safe to call again.",
+        " the call never reached the server, but calling again will fail the same way until that is fixed.")
+
+def safety(+st: Stage, +w: Why) -> String:
+  safety.pick(reached(st, w), transient(w, st))
+
+# where and why, for the debug log: "initialize: cannot reach …"
+def why_line(+host: String, +st: Stage, +w: Why) -> String:
+  String.concat([phase(st, w), ": ", why_text(host, w)])
+
+# what the model reads when a call fails for good: the tool and its
+# server, the phase, the cause, the retries, and whether it is safe to
+# call again. n = the retries already made.
+def fail_text(+name: String, +host: String, +st: Stage, +w: Why, +n: Nat)
+    -> String:
+  String.concat(["mcp call failed: ", name, " (", host, "), ",
+    why_line(host, st, w), ".", retried_text(n), safety(st, w)])
+
+# a JSON-RPC answer may come as an event stream (Accept lists both):
+# then its last "data:" line is the answer
+def rpc_text.keep(is_data: Bool, +l: String, +acc: Maybe<&2, String>)
+    -> Maybe<&2, String>:
+  match is_data:
+    case True{}:
+      Some{String.trim(String.drop(l, 5n))}
+    case False{}:
+      acc
+
+def rpc_text.go(ls: List<&2, String>, +acc: Maybe<&2, String>)
+    -> Maybe<&2, String>:
+  match ls:
+    case Nil{}:
+      acc
+    case Con{+l, rest}:
+      rpc_text.go(rest, rpc_text.keep(String.starts_with(l, "data:"), l, acc))
+
+def rpc_text.pick(m: Maybe<&2, String>, +body: String) -> String:
+  match m:
+    case None{}:
+      body
+    case Some{+d}:
+      d
+
+def rpc_text(+body: String) -> String:
+  rpc_text.pick(rpc_text.go(String.split(body, Tx.newline()), None{}), body)

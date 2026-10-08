@@ -5059,3 +5059,9 @@ def Laws.stop_leaves_no_timer(o, cx, n, why):
   hub_tnone_tr(HTM.Tms.live(HM.St.tm(HX.d(o, st))), HTM.keep_out(xs, ids), n,
     Equal.trans(List<&2, HTM.Timer>, HTM.Tms.live(HM.St.tm(HX.d(o, st))), HTM.Tms.live(HM.St.tm(HX.d(o, tg))), HTM.keep_out(xs, ids), e1, e2),
     hub_none_keep(xs, ids, ns, n, hub_all_self(ids), hub_str_in_head(n, HM.names_of.go(HM.get_agent(HX.d(o, g), n)))))
+
+def Laws.mcp_retry_only_unsent():
+  {==}
+
+def Laws.mcp_fail_text_says_why_and_safety():
+  {==}
