@@ -106,6 +106,9 @@ final class Engine {
         let id = req["id"] ?? NSNull()
         let op = req["op"] as? String ?? ""
         let agent = req["agent"] as? String ?? "agent"
+        if let name = req["name"] as? String, !name.isEmpty {
+            DispatchQueue.main.async { Overlay.shared.label(agent, name) }
+        }
         let args = req["args"] as? [String: Any] ?? [:]
         do {
             let result: Any

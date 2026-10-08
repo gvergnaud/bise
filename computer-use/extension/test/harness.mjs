@@ -66,13 +66,13 @@ export async function fakeBroker() {
     connected: () => !!sock,
     send,
     /** One C4 request; resolves to {ok, result|error} plus ms. */
-    request(agent, op, args = {}, timeout = 30_000) {
+    request(agent, op, args = {}, timeout = 30_000, extra = {}) {
       const n = ++id;
       const t0 = Date.now();
       return new Promise((res, rej) => {
         const timer = setTimeout(() => { pending.delete(n); rej(new Error(`no answer to ${op} in ${timeout} ms`)); }, timeout);
         pending.set(n, (m) => { clearTimeout(timer); res({ ...m, ms: Date.now() - t0 }); });
-        send({ id: n, agent, op, args });
+        send({ id: n, agent, op, args, ...extra });
       });
     },
     /** Wait until test() is true (re-checked on every message). */

@@ -88,6 +88,15 @@ final class Overlay {
         return NSRect(x: r.minX, y: h - r.maxY, width: r.width, height: r.height)
     }
 
+    /// What each agent's pill shows: C5 `name` (its key is `<hub id>.<dir>`,
+    /// docs/issues/18); the key itself until a request named it.
+    private var labels: [String: String] = [:]
+
+    func label(_ agent: String, _ name: String) {
+        labels[agent] = name
+        entries[agent]?.view.name = name
+    }
+
     func entry(_ agent: String) -> Entry {
         if let e = entries[agent] { return e }
         let panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
@@ -100,7 +109,7 @@ final class Overlay {
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.ignoresCycle, .fullScreenAuxiliary, .transient]
         let view = CursorView(frame: .zero)
-        view.name = agent
+        view.name = labels[agent] ?? agent
         panel.contentView = view
         let e = Entry(panel: panel, view: view)
         entries[agent] = e

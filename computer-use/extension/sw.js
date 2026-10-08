@@ -49,11 +49,26 @@ const note = (x) => {
  * (C4 `name`) is what its group's title shows. Two projects' "perf" are two
  * agents with one label.
  */
-function agentOf(key, label) {
+function agentOf(key, label, project) {
   let a = agents.get(key);
-  if (!a) agents.set(key, (a = { name: key, label: label || key, groupId: null, stopped: false, closing: false, closingGroup: null }));
+  if (!a) agents.set(key, (a = { name: key, label: label || key, project: project || "", groupId: null, stopped: false, closing: false, closingGroup: null }));
   else if (label) a.label = label;
+  if (project) a.project = project;
   return a;
+}
+
+/** A group's title: its agent's name, and its project (C4 `project`) when another live group shows that name. */
+function titleOf(a) {
+  const shared = [...agents.values()].some((b) => b !== a && b.groupId !== null && b.label === a.label);
+  return GROUP_PREFIX + a.label + (shared && a.project ? ` · ${a.project}` : "");
+}
+
+/** Set the titles of every group that shows `label` (one more or one fewer agent shares it). */
+async function retitle(label) {
+  for (const b of agents.values()) {
+    if (b.groupId === null || b.label !== label) continue;
+    await chrome.tabGroups.update(b.groupId, { title: titleOf(b) }).catch(() => {});
+  }
 }
 
 /** Which agent owns which group, for a restarted worker: `g<group id>` → key (session storage: gone with the browser). */
@@ -159,7 +174,7 @@ async function onHost(m) {
   if (m.drop) return dropAgent(m.drop);
   if (m.id === undefined || !m.op) return;
   try {
-    if (typeof m.agent === "string" && m.agent && m.name) agentOf(m.agent, m.name);
+    if (typeof m.agent === "string" && m.agent && m.name) agentOf(m.agent, m.name, m.project);
     const result = m.op === "show" ? await show(m.args || {}) : await run(m.agent, m.op, m.args || {});
     post({ id: m.id, ok: true, result });
   } catch (e) {
@@ -235,8 +250,9 @@ async function groupTab(a, tab) {
     }
   }
   a.groupId = await chrome.tabs.group({ tabIds: [tab.id], createProperties: { windowId: tab.windowId } });
-  await chrome.tabGroups.update(a.groupId, { title: GROUP_PREFIX + a.label, color: "pink", collapsed: false });
+  await chrome.tabGroups.update(a.groupId, { title: titleOf(a), color: "pink", collapsed: false });
   await chrome.storage.session.set({ [ownerKey(a.groupId)]: a.name });
+  await retitle(a.label);
 }
 
 /** A refused page (design §5.1): `refused`, a message that says why, a summary that names the page. */
@@ -1181,6 +1197,7 @@ chrome.tabGroups.onRemoved.addListener((group) => {
     a.groupId = null;
     if (a.closingGroup === group.id) a.closingGroup = null;
     else if (!a.closing) stopAgent(a.name, "group_closed");
+    retitle(a.label); // one fewer shares its name
   }
 });
 

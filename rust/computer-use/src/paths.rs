@@ -13,12 +13,15 @@ pub struct Paths {
     pub home: PathBuf,
     /// the helper's socket (C5), `<run>/computer-use-app.sock` unless set
     pub app_socket: PathBuf,
+    /// the hubs' folders (`bise_home::Home::hubs_dir`): an agent's
+    /// project, from its key's hub id (`who::project_of`)
+    pub hubs: PathBuf,
 }
 
 impl Paths {
     pub fn from_env() -> Paths {
         let h = bise_home::Home::from_env();
-        Paths::new(h.run_dir(), h.root(), h.user_home())
+        Paths { hubs: h.hubs_dir(), ..Paths::new(h.run_dir(), h.root(), h.user_home()) }
     }
 
     pub fn new(run: impl Into<PathBuf>, root: impl Into<PathBuf>, home: impl Into<PathBuf>) -> Paths {
@@ -27,7 +30,8 @@ impl Paths {
         // through one short link to it (`bise_home::socket`; the broker
         // makes it at its start, before the helper binds)
         let app_socket = bise_home::socket::socket_path(&run.join("computer-use-app.sock"));
-        Paths { app_socket, run, root: root.into(), home: home.into() }
+        let root = root.into();
+        Paths { app_socket, run, hubs: root.join("hubs"), root, home: home.into() }
     }
 
     /// C3: the agents' (and the relays') socket: `<run>/computer-use.sock`,

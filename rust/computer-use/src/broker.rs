@@ -672,7 +672,12 @@ fn forward(sh: &Arc<Shared>, link: u64, agent: Option<&str>, target: Option<&str
     if let Some(a) = agent {
         // the key routes, the name shows (a group's title, the cursor's pill)
         msg["agent"] = json!(a);
-        msg["name"] = json!(crate::who::split(a).1);
+        let (hub, name) = crate::who::split(a);
+        msg["name"] = json!(name);
+        // a group title two projects' agents share names it (step 3)
+        if let Some(p) = hub.and_then(|h| crate::who::project_of(&sh.opts.paths.hubs, h)) {
+            msg["project"] = json!(p);
+        }
     }
     if !send_line(&w, &msg) {
         lock(&sh.inner).pending.remove(&id);
