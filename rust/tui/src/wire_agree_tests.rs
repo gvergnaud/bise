@@ -194,3 +194,53 @@ fn the_tui_and_the_fold_agree_on_scheduled_lines() {
     assert_eq!(folded, tui);
     assert_eq!(folded.len(), 3, "the stop note is the agent's: {folded:?}");
 }
+
+/// R11 (architect m_13028): the TUI's tool rows and the fold's tool items
+/// read a call's result the same way through bise-proto: ok or failed,
+/// a failed bash's exit code and first error line, an edit's files with
+/// their counts.
+#[test]
+fn the_tui_and_the_fold_agree_on_tool_results() {
+    use bise_proto::thread::ToolState as S;
+    let ls = [
+        "  obs: tool_started #1",
+        "tool #1 bash : cargo test -q",
+        "tool_code #1 : cargo test -q",
+        "  obs: tool_finished #1 fail",
+        "tool_result #1 fail : exit 101: thread 'x' panicked at src/a.rs:3",
+        "  obs: tool_started #2",
+        "tool #2 apply_patch : {}",
+        "tool_code #2 : *** Begin Patch\\N*** Update File: src/a.rs\\N+one\\N+two\\N-old\\N*** End Patch",
+        "  obs: tool_finished #2 ok",
+        "tool_result #2 ok : done",
+        "  obs: tool_started #3",
+        "tool #3 read_file : {\"path\":\"b.rs\"}",
+        "  obs: tool_finished #3 fail",
+        "tool_result #3 fail : no such file b.rs",
+    ];
+    let mut app = crate::sb::bench::test_app();
+    for l in ls {
+        crate::run::ingest_line(&mut app, l.to_string(), None);
+    }
+    let tui: Vec<&ToolData> = app.events.iter().filter_map(|e| if let Ev::Tool(td) = e { Some(td) } else { None }).collect();
+    let page = |_: &str| None;
+    let ctx = Ctx { open_cards: &[], page: &page, provider: &|_: &str, k: &str| k.to_string(), width: &|s: &str| s.chars().count(), offset: &|_| 0 };
+    let lines: Vec<(u64, u64, String)> = ls.iter().enumerate().map(|(i, l)| (i as u64 + 1, 1_000 + i as u64, l.to_string())).collect();
+    let entries = fold(&lines, &ctx);
+    let items = &entries.iter().find_map(|e| e.tools.as_ref()).expect("a tools entry").items;
+    assert_eq!(tui.len(), items.len());
+    for (td, it) in tui.iter().zip(items) {
+        let state = match td.state {
+            ToolState::Run => S::Run,
+            ToolState::Ok => S::Ok,
+            ToolState::Fail => S::Err,
+        };
+        assert_eq!(state, it.state, "{:?}", it.text);
+        let exit = crate::toolrow::exit_code(td);
+        assert_eq!(exit, it.exit.map(|c| format!("exit {c}")), "{:?}", it.text);
+        assert_eq!(crate::toolrow::error_line(td), it.err, "{:?}", it.text);
+        let patches: Vec<String> = td.code.iter().filter(|_| it.kind == bise_proto::thread::ToolKind::Edit).map(|c| wire_decode(c)).collect();
+        let files: Vec<(String, u32, u32)> = crate::toolrow::edit_files(&patches).into_iter().map(|(p, a, d)| (p, a as u32, d as u32)).collect();
+        assert_eq!(files, it.files.iter().map(|f| (f.path.clone(), f.add, f.del)).collect::<Vec<_>>(), "{:?}", it.text);
+    }
+}

@@ -438,34 +438,8 @@ pub(crate) fn refusal_parts(t: &str) -> Option<(&str, &str)> {
 // decode the tool_code wire encoding: "\N" newline, "\R" CR, backslash
 // doubled (the same reversible encoding the provider wire uses)
 pub(crate) fn wire_decode(s: &str) -> String {
-    let cs: Vec<char> = s.chars().collect();
-    let mut out = String::new();
-    let mut i = 0usize;
-    while i < cs.len() {
-        if cs[i] == '\\' && i + 1 < cs.len() {
-            match cs[i + 1] {
-                'N' => {
-                    out.push('\n');
-                    i += 2;
-                    continue;
-                }
-                'R' => {
-                    out.push('\r');
-                    i += 2;
-                    continue;
-                }
-                '\\' => {
-                    out.push('\\');
-                    i += 2;
-                    continue;
-                }
-                _ => {}
-            }
-        }
-        out.push(cs[i]);
-        i += 1;
-    }
-    out
+    // bise_proto's, the one the hub's typed tool items read with
+    bise_proto::thread::lines::wire_decode(s)
 }
 
 // switchboard (C2 `history`, amended): one line of a page of older feed

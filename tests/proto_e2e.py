@@ -559,6 +559,26 @@ def main():
         c.wait(lambda: by_cid(107), 20, "/approvals maybe refused")
         check(not any(by_cid(i) for i in (104, 105, 106)) and by_cid(107)[0]["text"] == "/approvals maybe: yolo or auto", "approvals words: %r" % by_cid(107))
 
+        # R11 (amb-win S9): a tool item carries its state, its duration,
+        # its code and output, a failed bash's exit code and error line
+        def tool_items():
+            evs = [e for x in typed(c, "thread") if x["agent"] == "main" for e in x["entries"]] + [x["entry"] for x in typed(c, "entry") if x["agent"] == "main"]
+            return [i for e in evs if e.get("tools") for i in e["tools"]["items"]]
+
+        n = len(typed(c, "thread"))
+        c.send({"cmd": "subscribe", "project": project, "agent": "main"})
+        c.wait(lambda: len(typed(c, "thread")) > n, 20, "main's thread for its tool items")
+        c.say("[[bash: echo tool-item-ok]]")
+        c.wait(lambda: any(i.get("state") == "ok" and "tool-item-ok" in (i.get("code") or "") for i in tool_items()), 60, "a done bash call's item")
+        c.wait_idle("main", timeout=90)
+        c.say("[[bash: echo boom-line >&2; exit 3]]")
+        c.wait(lambda: any(i.get("state") == "err" and i.get("exit") == 3 for i in tool_items()), 60, "a failed bash call's item")
+        bad = [i for i in tool_items() if i.get("state") == "err" and i.get("exit") == 3][-1]
+        good = [i for i in tool_items() if i.get("state") == "ok" and "tool-item-ok" in (i.get("code") or "")][-1]
+        check("boom-line" in (bad.get("err") or "") and "boom-line" in (bad.get("out") or "") and isinstance(good.get("ms"), int) and "tool-item-ok" in (good.get("out") or ""), "tool item facts: %r %r" % (good, bad))
+        c.wait_idle("main", timeout=90)
+        c.send({"cmd": "unsubscribe", "project": project, "agent": "main"})
+
         # every typed event has the frozen keys of the fixtures
         need = required_keys()
         for ev in typed(c):

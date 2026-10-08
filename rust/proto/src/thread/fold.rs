@@ -6,6 +6,7 @@ use super::lines::{self, Hub, Obs, Rec};
 use super::scheduled;
 use super::words::{self, one_line, summary};
 use super::{Answered, ApprovalFold, Ctx, Entry, EntryCard, EntryKind, Landed, Line, Made, NotDelivered, Notice, PageRef, PrNews, ReportRef, Scheduled, Thinking, ToolItem, ToolKind, Tools};
+use super::{cap, FileCount, ToolState};
 use crate::context::FnContext;
 use crate::rows::question;
 
@@ -61,12 +62,53 @@ impl Fold<'_> {
             text: format!("{name}: {}", one_line(&args.replace("\\N", "\n"), 100)),
             kind: ToolKind::of(name),
             land: name == "bash" && args.contains("sb land"),
+            state: ToolState::Run,
+            ms: None,
+            exit: None,
+            err: None,
+            code: None,
+            out: None,
+            files: Vec::new(),
         };
         let items = &mut self.out[e].tools.as_mut().expect("a tools entry").items;
         items.push(item);
         let i = items.len() - 1;
         self.tools.push((id, e, i));
         self.sum(e);
+    }
+
+    /// The call's item, by its tool id (the last one with that id).
+    fn item(&mut self, id: u32) -> Option<&mut ToolItem> {
+        let &(_, e, i) = self.tools.iter().rev().find(|(t, _, _)| *t == id)?;
+        self.out[e].tools.as_mut().map(|t| &mut t.items[i])
+    }
+
+    /// `tool_code`: the call's full command or args, capped; an edit's
+    /// files with their line counts (its code is the patch).
+    fn code(&mut self, id: u32, raw: &str) {
+        let Some(item) = self.item(id) else { return };
+        let code = lines::wire_decode(raw);
+        if item.kind == ToolKind::Edit {
+            item.files = lines::patch_files(&code)
+                .into_iter()
+                .map(|(path, add, del)| FileCount { path, add: add as u32, del: del as u32 })
+                .collect();
+        }
+        item.code = Some(cap(&code));
+    }
+
+    /// `tool_result`: ok or err, its duration (`ms` 0: a replay, none), a
+    /// failed bash's exit code and its first error line, its output.
+    fn result(&mut self, id: u32, ok: bool, preview: &str, ms: u64) {
+        let Some(item) = self.item(id) else { return };
+        let out = lines::wire_decode(preview);
+        item.state = if ok { ToolState::Ok } else { ToolState::Err };
+        item.ms = words::tool_ms(item.at_ms, ms);
+        if !ok {
+            item.exit = lines::exit_code(&out);
+            item.err = lines::error_line(&out);
+        }
+        item.out = Some(cap(&out)).filter(|o| !o.is_empty());
     }
 
     fn intent(&mut self, id: u32, text: &str) {
@@ -104,6 +146,8 @@ impl Fold<'_> {
             Rec::Obs(o) => self.obs(pos, ms, o, if replayed { 0 } else { prev }),
             Rec::Tool { id, name, args } => self.tool(pos, ms, id, &name, &args),
             Rec::ToolIntent { id, text } => self.intent(id, &text),
+            Rec::ToolCode { id, code } => self.code(id, &code),
+            Rec::ToolResult { id, ok, preview } => self.result(id, ok, &preview, if replayed { 0 } else { ms }),
             Rec::Rejected(r) => self.notice(pos, ms, words::rejected(&r)),
             Rec::Hub(h) => self.hub(pos, ms, h, you),
             // a message's next line

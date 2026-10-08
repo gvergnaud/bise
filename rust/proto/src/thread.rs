@@ -200,6 +200,46 @@ pub struct Scheduled {
     pub words: String,
 }
 
+/// Where a tool call is: running, done, failed (R11, amb-win S9).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum ToolState {
+    #[default]
+    Run,
+    Ok,
+    Err,
+    /// a state this version doesn't know (a newer hub)
+    #[serde(other)]
+    Unknown,
+}
+
+/// A file an edit touched, with its lines added and removed (the TUI's
+/// `± file +18 −6`; a move reads `old → new`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct FileCount {
+    pub path: String,
+    pub add: u32,
+    pub del: u32,
+}
+
+/// At most this many bytes of a tool call's `code` and `out` go in an
+/// entry (a write_file's args can be a whole file, in every event).
+pub const TOOL_TEXT_CAP: usize = 4096;
+
+/// `s` cut to [`TOOL_TEXT_CAP`] bytes on a char boundary, `…` after a cut.
+pub fn cap(s: &str) -> String {
+    if s.len() <= TOOL_TEXT_CAP {
+        return s.to_string();
+    }
+    let mut end = TOOL_TEXT_CAP;
+    while !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}…", &s[..end])
+}
+
 /// What a tool call did, for the counted summary.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -235,6 +275,29 @@ pub struct ToolItem {
     /// a `sb land`
     #[serde(default, skip_serializing_if = "is_false")]
     pub land: bool,
+    /// running until its result line, then ok or err
+    #[serde(default)]
+    pub state: ToolState,
+    /// its duration: the result line's time minus the call line's
+    /// ([`words::tool_ms`]); none while it runs or on a replay
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ms: Option<u64>,
+    /// a failed bash call's exit code (`exit 1: …`)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit: Option<i32>,
+    /// a failed call's first error line, the TUI's row under it
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub err: Option<String>,
+    /// the full command or args (the runtime's tool_code), [`cap`]ped
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    /// its output as the result line gives it, [`cap`]ped
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub out: Option<String>,
+    /// an edit's files with their line counts (the window formats
+    /// `+18 −6` from them: counts, like the folds)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<FileCount>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

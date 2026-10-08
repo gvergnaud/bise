@@ -21,6 +21,98 @@ pub fn unescape(s: &str) -> String {
     out
 }
 
+/// A tool line's wire encoding undone (`\N` newline, `\R` return, `\\`
+/// a backslash): the runtime's tool_code and tool lines.
+pub fn wire_decode(s: &str) -> String {
+    let mut out = String::new();
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            match chars.peek() {
+                Some('N') => {
+                    chars.next();
+                    out.push('\n');
+                    continue;
+                }
+                Some('R') => {
+                    chars.next();
+                    out.push('\r');
+                    continue;
+                }
+                Some('\\') => {
+                    chars.next();
+                    out.push('\\');
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// A failed bash result's exit code (`exit 1: <output>`).
+pub fn exit_code(result: &str) -> Option<i32> {
+    let rest = result.strip_prefix("exit ")?;
+    let (code, _) = rest.split_once(':')?;
+    if code.is_empty() || !code.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    code.parse().ok()
+}
+
+/// A failed call's first error line: its output (after `exit N:`) as one
+/// line, from the first word that reads like an error
+/// (`UnicodeDecodeError: …`), else all of it; None when empty.
+pub fn error_line(result: &str) -> Option<String> {
+    let r = match exit_code(result) {
+        Some(x) => result.strip_prefix(&format!("exit {x}:")).unwrap_or(result),
+        None => result,
+    };
+    let text = r.split_whitespace().collect::<Vec<_>>().join(" ");
+    if text.is_empty() {
+        return None;
+    }
+    // ASCII lowercase keeps the byte offsets
+    let low = text.to_ascii_lowercase();
+    let marks = ["error", "fail", "panic", "fatal", "not found", "denied", "cannot", "can't", "no such", "invalid", "exception"];
+    let hit = marks.iter().filter_map(|m| low.find(m)).min();
+    let from = hit.map_or(0, |p| text[..p].rfind(' ').map_or(0, |s| s + 1));
+    Some(text[from..].to_string())
+}
+
+/// The files a patch touches (apply_patch, edit and write_file's
+/// tool_code), each with its added and removed lines (a move reads
+/// `old → new`).
+pub fn patch_files(src: &str) -> Vec<(String, usize, usize)> {
+    let mut files: Vec<(String, usize, usize)> = Vec::new();
+    for l in src.split('\n') {
+        let path = l
+            .strip_prefix("*** Update File: ")
+            .or_else(|| l.strip_prefix("*** Add File: "))
+            .or_else(|| l.strip_prefix("*** Delete File: "));
+        if let Some(p) = path {
+            files.push((p.trim().to_string(), 0, 0));
+            continue;
+        }
+        if let Some(p) = l.strip_prefix("*** Move to: ") {
+            if let Some(f) = files.last_mut() {
+                f.0 = format!("{} → {}", f.0, p.trim());
+            }
+            continue;
+        }
+        if let Some(f) = files.last_mut() {
+            if l.starts_with('+') {
+                f.1 += 1;
+            } else if l.starts_with('-') {
+                f.2 += 1;
+            }
+        }
+    }
+    files
+}
+
 /// A field of a hub line: its own `" : "` is escaped as `" \: "`
 /// (sb-core's `line_fields`, core.rs `field_escape`), undone here, then
 /// the newlines.

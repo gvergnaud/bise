@@ -87,11 +87,9 @@ pub(crate) fn kind_glyph(td: &ToolData) -> &'static str {
 }
 
 /// `exit 1` from a failed bash result (`exit 1: <output>`).
-fn exit_code(td: &ToolData) -> Option<String> {
+pub(crate) fn exit_code(td: &ToolData) -> Option<String> {
     let (_, r) = td.result.as_ref()?;
-    let rest = r.strip_prefix("exit ")?;
-    let (code, _) = rest.split_once(':')?;
-    code.chars().all(|c| c.is_ascii_digit()).then(|| format!("exit {}", code))
+    bise_proto::thread::lines::exit_code(r).map(|code| format!("exit {}", code))
 }
 
 /// The state on the right of a row, and its style.
@@ -229,22 +227,9 @@ pub(crate) fn error_line(td: &ToolData) -> Option<String> {
     if !matches!(td.state, ToolState::Fail) {
         return None;
     }
+    // bise_proto's reading, the one the hub's typed tool items carry
     let (_, r) = td.result.as_ref()?;
-    // a bash failure starts `exit 1: `; the output follows
-    let r = match exit_code(td) {
-        Some(x) => r.strip_prefix(&format!("{}:", x)).unwrap_or(r),
-        None => r.as_str(),
-    };
-    let text = r.split_whitespace().collect::<Vec<_>>().join(" ");
-    if text.is_empty() {
-        return None;
-    }
-    // ASCII lowercase keeps the byte offsets
-    let low = text.to_ascii_lowercase();
-    let marks = ["error", "fail", "panic", "fatal", "not found", "denied", "cannot", "can't", "no such", "invalid", "exception"];
-    let hit = marks.iter().filter_map(|m| low.find(m)).min();
-    let from = hit.map_or(0, |p| text[..p].rfind(' ').map_or(0, |s| s + 1));
-    Some(text[from..].to_string())
+    bise_proto::thread::lines::error_line(r)
 }
 
 /// The row under a failed call: its first error line, in the error

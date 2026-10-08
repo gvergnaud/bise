@@ -302,3 +302,57 @@ fn every_fixture_entry_carries_its_kinds_payload() {
     }
     assert!(n >= 14, "{n} entries");
 }
+
+/// R11 (amb-win S9, architect m_13028): a tool item carries its state
+/// (run until its result, then ok or err), its duration from the two
+/// lines' times, a failed bash's exit code and first error line, its
+/// full code and output capped, and an edit's files with their counts.
+#[test]
+fn a_tool_item_carries_its_state_time_exit_error_code_output_and_files() {
+    let none = |_: &str| None;
+    let ls = vec![
+        (1, 1_000, "tool #1 bash : cargo test -q".to_string()),
+        (2, 1_001, "tool_code #1 : cargo test -q\\N  --lib".to_string()),
+        (3, 1_400, "tool_result #1 fail : exit 101: thread 'x' panicked at src/a.rs:3".to_string()),
+        (4, 2_000, "tool #2 apply_patch : {}".to_string()),
+        (5, 2_001, "tool_code #2 : *** Begin Patch\\N*** Update File: src/a.rs\\N+one\\N+two\\N-old\\N*** End Patch".to_string()),
+        (6, 2_050, "tool_result #2 ok : done".to_string()),
+        (7, 3_000, "tool #3 read_file : {\"path\":\"b.rs\"}".to_string()),
+        (8, 3_500, "history tool_result #3 ok : fn b() {}".to_string()),
+        (9, 4_000, "tool #4 bash : ls".to_string()),
+    ];
+    let e = fold(&ls, &ctx_with(&[], &none));
+    let items = &e[0].tools.as_ref().expect("one tools entry").items;
+    let bash = &items[0];
+    assert_eq!((bash.state, bash.ms, bash.exit), (ToolState::Err, Some(400), Some(101)));
+    assert_eq!(bash.err.as_deref(), Some("panicked at src/a.rs:3"));
+    assert_eq!(bash.code.as_deref(), Some("cargo test -q\n  --lib"));
+    assert_eq!(bash.out.as_deref(), Some("exit 101: thread 'x' panicked at src/a.rs:3"));
+    let patch = &items[1];
+    assert_eq!((patch.state, patch.ms, patch.exit, patch.err.as_deref()), (ToolState::Ok, Some(50), None, None));
+    assert_eq!(patch.files, vec![FileCount { path: "src/a.rs".into(), add: 2, del: 1 }]);
+    // a replayed result has no duration
+    assert_eq!((items[2].state, items[2].ms), (ToolState::Ok, None));
+    assert!(items[2].files.is_empty(), "only an edit counts files");
+    // no result yet: running
+    assert_eq!((items[3].state, items[3].ms, items[3].out.as_deref()), (ToolState::Run, None, None));
+}
+
+/// Law (architect m_13242): code and out are capped at TOOL_TEXT_CAP
+/// bytes, cut on a char boundary, with '…' after a cut.
+#[test]
+fn a_tool_text_is_capped_on_a_char_boundary() {
+    use crate::thread::{cap, TOOL_TEXT_CAP};
+    assert_eq!(cap("short"), "short");
+    let exact = "a".repeat(TOOL_TEXT_CAP);
+    assert_eq!(cap(&exact), exact);
+    let long = format!("{}é tail", "a".repeat(TOOL_TEXT_CAP - 1));
+    let c = cap(&long);
+    assert!(c.ends_with('…') && c.len() <= TOOL_TEXT_CAP + '…'.len_utf8(), "{}", c.len());
+    assert_eq!(c.trim_end_matches('…'), "a".repeat(TOOL_TEXT_CAP - 1), "é straddles the cap: cut before it");
+    for n in [1usize, 2, 3, 4, 5] {
+        let s = "€".repeat(TOOL_TEXT_CAP / 3 + n);
+        let c = cap(&s);
+        assert!(c.trim_end_matches('…').chars().all(|ch| ch == '€'));
+    }
+}

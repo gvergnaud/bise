@@ -100,3 +100,20 @@ fn the_current_usage_is_the_last_one_unless_compacted_after() {
     assert_eq!(cur(&[u1, done, u2]), Some("model=m in=30 out=1".into()));
     assert_eq!(usage_mark("tool #3 bash : ls"), UsageMark::Other);
 }
+
+/// The tool readings the TUI's rows and the hub's tool items share
+/// (R11): wire decoding, a failed bash's exit code, its first error
+/// line, a patch's files.
+#[test]
+fn tool_results_and_patches_read_once() {
+    assert_eq!(wire_decode("a\\Nb\\Rc\\\\Nd"), "a\nb\rc\\Nd");
+    assert_eq!(exit_code("exit 1: boom"), Some(1));
+    assert_eq!(exit_code("exit x: boom"), None);
+    assert_eq!(exit_code("exit : boom"), None);
+    assert_eq!(exit_code("all good"), None);
+    assert_eq!(error_line("exit 2: building\nerror[E0425]: cannot find x"), Some("error[E0425]: cannot find x".into()));
+    assert_eq!(error_line("no marks here"), Some("no marks here".into()));
+    assert_eq!(error_line("exit 1:   "), None);
+    let p = "*** Begin Patch\n*** Update File: a.rs\n+x\n-y\n-z\n*** Add File: b.rs\n+1\n*** Update File: c.rs\n*** Move to: d.rs\n+k\n*** End Patch";
+    assert_eq!(patch_files(p), vec![("a.rs".into(), 1, 2), ("b.rs".into(), 1, 0), ("c.rs → d.rs".into(), 1, 0)]);
+}

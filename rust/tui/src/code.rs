@@ -461,33 +461,10 @@ pub(crate) fn highlight_patch(src: &str) -> Vec<Vec<Span<'static>>> {
 }
 
 /// The files a patch touches, each with its added and removed lines
-/// (a move reads `old → new`).
+/// (a move reads `old → new`): bise_proto's, the one the hub's typed
+/// tool items count with.
 pub(crate) fn patch_files(src: &str) -> Vec<(String, usize, usize)> {
-    let mut files: Vec<(String, usize, usize)> = Vec::new();
-    for l in src.split('\n') {
-        let path = l
-            .strip_prefix("*** Update File: ")
-            .or_else(|| l.strip_prefix("*** Add File: "))
-            .or_else(|| l.strip_prefix("*** Delete File: "));
-        if let Some(p) = path {
-            files.push((p.trim().to_string(), 0, 0));
-            continue;
-        }
-        if let Some(p) = l.strip_prefix("*** Move to: ") {
-            if let Some(f) = files.last_mut() {
-                f.0 = format!("{} → {}", f.0, p.trim());
-            }
-            continue;
-        }
-        if let Some(f) = files.last_mut() {
-            if l.starts_with('+') {
-                f.1 += 1;
-            } else if l.starts_with('-') {
-                f.2 += 1;
-            }
-        }
-    }
-    files
+    bise_proto::thread::lines::patch_files(src)
 }
 
 // the one-line summary of a patch: each file with its line counts,

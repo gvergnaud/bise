@@ -16,6 +16,12 @@ pub fn thought_ms(prev_ms: u64, at_ms: u64) -> u64 {
     at_ms.saturating_sub(prev_ms)
 }
 
+/// A tool call's duration: its result line's time minus its call line's;
+/// None when either is unknown (0: a replay), as for a thinking.
+pub fn tool_ms(call_ms: u64, result_ms: u64) -> Option<u64> {
+    (call_ms != 0 && result_ms != 0).then(|| result_ms.saturating_sub(call_ms))
+}
+
 /// 3200 -> "3.2s", 42_000 -> "42s", 125_000 -> "2m5s"; 0 -> "".
 pub fn think_time(ms: u64) -> String {
     if ms == 0 {
