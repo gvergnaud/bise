@@ -425,6 +425,11 @@ pub fn run(job: &Job, queue: &Queue, joined: &mut dyn FnMut()) -> Result<Outcome
         return Err("this repo ships through pull requests: commit with `sb land --here`, then open a PR".into());
     }
     let Picked { mine, left_out } = own_changes(job)?;
+    let texts: Vec<(String, String)> =
+        mine.iter().filter_map(|p| std::fs::read_to_string(job.dir.join(p)).ok().map(|t| (p.clone(), t))).collect();
+    if let Some(e) = crate::land_pick::conflict_refusal(&texts) {
+        return Err(e);
+    }
     if !job.here && job.worktree {
         // a feature's agent lands on the feature (dev-flow §5.1)
         let onto = job.onto.clone().unwrap_or_else(|| main.clone());

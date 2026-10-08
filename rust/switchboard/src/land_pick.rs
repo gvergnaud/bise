@@ -119,6 +119,55 @@ pub(crate) fn pick(changes: &[Change], claims: &Claims, alone: bool) -> Result<P
     Ok(Picked { mine, left_out })
 }
 
+/// The 1-based line numbers of git conflict blocks in `text`: a line
+/// starting with `<<<<<<< `, then a line exactly `=======`, then a line
+/// starting with `>>>>>>> `, in that order, outside a ``` fence. A lone
+/// marker (a setext heading, a doc that quotes one line) or a block shown
+/// in a markdown code fence is not a conflict. Each hit: the `<<<<<<<`
+/// line and its `>>>>>>>` line.
+pub(crate) fn conflict_blocks(text: &str) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    let (mut fence, mut open, mut mid) = (false, None::<usize>, false);
+    for (i, raw) in text.lines().enumerate() {
+        let line = raw.strip_suffix('\r').unwrap_or(raw);
+        if line.trim_start().starts_with("```") {
+            fence = !fence;
+            open = None;
+            continue;
+        }
+        if fence {
+            continue;
+        }
+        if line.starts_with("<<<<<<< ") {
+            (open, mid) = (Some(i + 1), false);
+        } else if line == "=======" && open.is_some() {
+            mid = true;
+        } else if line.starts_with(">>>>>>> ") {
+            if let (Some(o), true) = (open, mid) {
+                out.push((o, i + 1));
+            }
+            (open, mid) = (None, false);
+        }
+    }
+    out
+}
+
+/// The land's refusal for files with conflict blocks ([`conflict_blocks`]):
+/// `files` are (path, its text); None when no file has one.
+pub(crate) fn conflict_refusal(files: &[(String, String)]) -> Option<String> {
+    let hits: Vec<String> = files
+        .iter()
+        .flat_map(|(p, t)| conflict_blocks(t).into_iter().map(move |(a, b)| format!("{}:{}-{}", p, a, b)))
+        .collect();
+    if hits.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "not landed: git conflict markers (<<<<<<< … ======= … >>>>>>>) in {}. resolve them, then land again",
+        hits.join(", ")
+    ))
+}
+
 /// The land's word on what it left out: the changes no agent claimed
 /// (which, and how to land them), the nested repos. "" when none.
 pub fn left_out_note(left_out: &[String]) -> String {
@@ -150,6 +199,27 @@ pub fn left_out_note(left_out: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn conflict_blocks_only_full_blocks_outside_fences() {
+        let text = |ls: &[&str], end: &str| -> String { ls.iter().map(|l| format!("{l}{end}")).collect() };
+        let lf = char::from(10).to_string();
+        let crlf = format!("{}{}", char::from(13), lf);
+        let block = ["a", "<<<<<<< Updated upstream", "x", "=======", "y", ">>>>>>> Stashed changes", "b"];
+        let real = text(&block, &lf);
+        assert_eq!(conflict_blocks(&real), vec![(2, 6)]);
+        assert_eq!(conflict_blocks(&text(&block, &crlf)), vec![(2, 6)]);
+        // lone markers: a setext heading, one quoted line, an unordered block
+        assert!(conflict_blocks(&text(&["Title", "======="], &lf)).is_empty());
+        assert!(conflict_blocks(&text(&["<<<<<<< HEAD", "only"], &lf)).is_empty());
+        assert!(conflict_blocks(&text(&[">>>>>>> x", "=======", "<<<<<<< y"], &lf)).is_empty());
+        assert!(conflict_blocks(&text(&["<<<<<<< a", ">>>>>>> b"], &lf)).is_empty());
+        // a block shown in a markdown fence
+        assert!(conflict_blocks(&text(&["```", "<<<<<<< a", "=======", ">>>>>>> b", "```"], &lf)).is_empty());
+        let r = conflict_refusal(&[("ok.md".into(), "fine".into()), ("src/a.rs".into(), real.clone())]).unwrap();
+        assert!(r.contains("src/a.rs:2-6") && !r.contains("ok.md"), "{r}");
+        assert_eq!(conflict_refusal(&[("ok.md".into(), "fine".into())]), None);
+    }
 
     fn ch(path: &str, recent: bool) -> Change {
         Change { path: path.into(), from: None, recent }
