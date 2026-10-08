@@ -119,6 +119,8 @@ fn the_list_says_which_providers_are_set_up_and_from_where() {
     assert!(line_of(&sc, "more providers…").contains(" more"), "{sc}");
     assert!(!sc.contains("Groq "), "{sc}");
     assert!(sc.contains("↑↓ choose   ⏎ open   esc back"), "{sc}");
+    // designer m_13381: the one step to the keychain (macOS, keys in files)
+    assert_eq!(flat(&sc).contains("keys are kept in files in ~/.bise · /keychain keeps them in the macOS keychain"), cfg!(target_os = "macos"), "{sc}");
     assert!(!sc.contains("sk-"), "never a key: {sc}");
 }
 
