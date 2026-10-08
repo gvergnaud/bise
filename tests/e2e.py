@@ -113,7 +113,7 @@ def own_side_channels(tmp):
 
 class Env:
     def __init__(self, fake_env=None):
-        self.tmp = tempfile.mkdtemp(prefix="sb-e2e-")
+        self.tmp = tempfile.mkdtemp(prefix="sb-e2e-", dir=short_tmp())
         self.ws = os.path.join(self.tmp, "ws")
         self.state = os.path.join(self.tmp, "st")
         os.makedirs(self.ws)
