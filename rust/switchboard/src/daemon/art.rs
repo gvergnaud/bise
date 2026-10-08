@@ -1,6 +1,6 @@
 //! Artifacts and diffs on the hub's side (docs/artifacts.md): the
-//! `artifacts` event and ops, `sb artifact`, the thread lines, the
-//! `diff` and `branches` ops (computed off the hub's loop), each agent's
+//! `artifacts` event (artifacts/seen, artifacts/add's words), `sb
+//! artifact`, the thread lines, the `diff` and `branches` ops (computed off the hub's loop), each agent's
 //! `changes` in the state, and the `landed` line after a land.
 
 use super::*;
@@ -87,40 +87,18 @@ impl Shell {
         }
     }
 
-    /// The TUI's `artifacts` op: the list again, `seen`, `add`.
-    pub(super) fn artifacts_op(&mut self, id: ClientId, v: &Value) {
-        let s = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
-        match s("do").as_str() {
-            "seen" => {
-                // `at_ms`: when the user looked (an older client: now)
-                let now = now_ms();
-                let at = v.get("at_ms").and_then(|x| x.as_u64()).unwrap_or(now);
-                let _ = self.art_store().saw(at, now);
-                self.artifacts_refresh(true);
-            }
-            "add" => {
-                let title = Some(s("title")).filter(|t| !t.trim().is_empty());
-                let ev = match self.art_add(&s("agent"), &s("target"), title) {
-                    Ok(text) => json!({"ev": "notice", "text": text}),
-                    Err(e) => json!({"ev": "warn", "text": format!("▲ {}", e)}),
-                };
-                if let Some(c) = self.clients.get_mut(&id) {
-                    write_json(c, &ev);
-                }
-                self.artifacts_refresh(true);
-            }
-            _ => {
-                let ev = self.artifacts_ev();
-                self.art.last = ev.to_string();
-                if let Some(c) = self.clients.get_mut(&id) {
-                    write_json(c, &ev);
-                }
-            }
-        }
+    /// artifacts/seen (the TUI's `/artifacts` screen opened): `new` = 0,
+    /// the list to every client.
+    /// `at_ms`: when he looked (none: now); seen moves to it, never past
+    /// now, never back (art-seen 1cfbc07d)
+    pub(super) fn artifacts_seen(&mut self, at_ms: Option<u64>) {
+        let now = now_ms();
+        let _ = self.art_store().saw(at_ms.unwrap_or(now), now);
+        self.artifacts_refresh(true);
     }
 
-    /// `/artifacts add <path or link>` by the user in `agent`'s view (the
-    /// TUI's `artifacts` op and the window's `slash`): the store's add,
+    /// `/artifacts add <path or link>` by the user in `agent`'s view
+    /// (artifacts/add and command/run): the store's add,
     /// its thread lines, and the words for the one who asked (`↗ added:
     /// <title>`) or the store's refusal. The caller sends them and then
     /// `artifacts_refresh(true)`.

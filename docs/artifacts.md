@@ -201,15 +201,15 @@ agents on it.
 
 ## TUI -> hub ops
 
-- `{"op":"artifacts"}`: the list again (to this client).
-- `{"op":"artifacts","do":"seen","at_ms":T}`: seen moves to `T`, when the
-  user looked (never past now, never back; no `at_ms`: now), the list to
+- JSON-RPC `artifacts/seen {project, at_ms?}`: seen moves to `at_ms`, when
+  the user looked (never past now, never back; none: now), the list to
   every client. What the hub served between the look and this request
   (it waited in the socket while the hub booted) stays new.
-- `{"op":"artifacts","do":"add","target":"<path or link>","title":"…"?,"agent":"<agent in view>"}`:
-  a relative path resolves from that agent's folder. Answer: `{"ev":"notice","text":"↗ added: pricing-plans.xlsx"}`
-  or `{"ev":"warn","text":"▲ no file or link at notes/plan.md."}`, then
-  the list to every client.
+- JSON-RPC `artifacts/add {project, agent, target, title?}` (`agent`: the
+  agent in view): a relative path resolves from that agent's folder. Its
+  result is the hub's words, `{"notice":"↗ added: pricing-plans.xlsx"}`,
+  or its error says why (`no file or link at notes/plan.md.`); then the
+  list to every client.
 - `{"op":"diff","req":n,"agent":"x"}` | `{"op":"diff","req":n,"branch":"sculpt"}` |
   `{"op":"diff","req":n,"range":"<from>..<to>"}` | `{"op":"diff","req":n,"pr":7}`:
   a `diff`. No push: the TUI asks again while its panel is open.

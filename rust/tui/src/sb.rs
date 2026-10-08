@@ -1172,7 +1172,7 @@ pub(crate) fn handle_input(app: &mut App, v: &str) -> Vec<Ev> {
                 Some(Artifacts::Usage) => out.push(Ev::Warn(ARTIFACTS_ADD.into())),
                 Some(Artifacts::Add(target)) => {
                     let agent = app.sb.focus.clone();
-                    app.sb.send(json!({"op": "artifacts", "do": "add", "target": target, "agent": agent}));
+                    app.sb.call("artifacts/add", json!({"target": target, "agent": agent}), rpc::Then::Said);
                 }
                 Some(Artifacts::List) | None => crate::artifacts_screen::open(app),
             }

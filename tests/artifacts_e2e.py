@@ -96,13 +96,13 @@ def main():
         check(out.startswith("[pricing plans](artifact:pricing-plans) · sheet · v2 · t1 · "), out)
 
         # the user adds a link from the TUI, then looks
-        c.send({"op": "artifacts", "do": "add", "target": "https://github.com/acme/web/pull/6", "agent": "t1"})
-        c.wait(lambda: any(e.get("text") == "↗ added: PR #6" for e in evs(c, "notice")), 10, "the add's notice")
-        c.send({"op": "artifacts", "do": "add", "target": "notes/nothing.md"})
-        c.wait(lambda: any(e.get("text") == "▲ no file or link at notes/nothing.md." for e in evs(c, "warn")), 10, "the warn")
+        r = c.rpc("artifacts/add", {"project": c.project(), "target": "https://github.com/acme/web/pull/6", "agent": "t1"})
+        check(r.get("result") == {"notice": "↗ added: PR #6"}, "the add's words: %r" % r)
+        r = c.rpc("artifacts/add", {"project": c.project(), "target": "notes/nothing.md", "agent": "main"})
+        check(r.get("error", {}).get("message") == "no file or link at notes/nothing.md.", "the refusal: %r" % r)
         c.wait(lambda: any(r["id"] == "pr-6" and r["by"] == "you" and r["pr"]["number"] == 6
                            for r in last_art(c)["rows"]), 10, "the PR row")
-        c.send({"op": "artifacts", "do": "seen"})
+        check(c.rpc("artifacts/seen", {"project": c.project()}).get("result") == {}, "seen answered")
         c.wait(lambda: last_art(c)["new"] == 0, 10, "new 0 after seen")
 
         # a bise page, as the page store writes it, comes in at an idle

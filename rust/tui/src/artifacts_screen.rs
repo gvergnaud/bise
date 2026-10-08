@@ -135,7 +135,7 @@ pub(crate) fn open(app: &mut App) {
     app.artifacts = Some(Screen { agent, sel, fresh, ..Default::default() });
     // you looked: the header's `↗ N new` goes
     artifacts::mark_seen();
-    app.sb.send(artifacts::seen_op());
+    app.sb.call("artifacts/seen", artifacts::seen_params(), crate::sb::rpc::Then::Shown);
 }
 
 /// The hub's list came while the screen is open: what came new is
@@ -147,7 +147,7 @@ pub(crate) fn on_list(app: &mut App) {
     }
     sc.fresh.take(&artifacts::new_rows(), None);
     artifacts::mark_seen();
-    app.sb.send(artifacts::seen_op());
+    app.sb.call("artifacts/seen", artifacts::seen_params(), crate::sb::rpc::Then::Shown);
 }
 
 // ---- the list (pure) ----

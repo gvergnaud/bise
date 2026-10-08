@@ -28,6 +28,9 @@ pub(crate) enum Then {
     /// comes in the hub's `approvals` event; a refusal is said on the
     /// screen, or as `/approvals: <why>` when it closed
     RuleRemoved,
+    /// the hub's words for one action (`/artifacts add`'s artifacts/add,
+    /// a `CommandRunResult`): shown as its notice was
+    Said,
 }
 
 /// The requests waiting for their answer, by id.
@@ -87,6 +90,11 @@ fn run(app: &mut App, then: Then, r: Response) {
         (Then::RuleRemoved, Err(e)) => rule_refused(app, &e),
         (_, Err(e)) => refused(app, &e),
         (Then::Shown | Then::RuleRemoved, Ok(_)) => {}
+        (Then::Said, Ok(v)) => {
+            if let Some(text) = v.get("notice").and_then(Value::as_str) {
+                notice(app, text);
+            }
+        }
         (Then::Approvals, Ok(mut v)) => {
             v["show"] = json!(true);
             approvals_event(app, &v);
@@ -99,6 +107,12 @@ fn refused(app: &mut App, text: &str) {
     for l in text.lines() {
         push_event(&mut app.events, &mut app.cache, Ev::Info(l.to_string()));
     }
+}
+
+/// The hub's words, as its `notice` event shows them.
+fn notice(app: &mut App, text: &str) {
+    crate::queue::seen(app);
+    refused(app, text);
 }
 
 /// A rule the hub could not remove: why, on the screen when it is open.
@@ -136,6 +150,20 @@ mod tests {
     /// The id of the one waiting request.
     fn waiting(app: &App) -> u64 {
         *app.sb.rpc.waiting.keys().next().unwrap()
+    }
+
+    #[test]
+    fn the_hubs_words_show_as_its_notice_did() {
+        let mut app = crate::sb::bench::test_app();
+        app.sb.call("artifacts/add", json!({"agent": "main", "target": "https://x.dev/6"}), Then::Said);
+        let (id, n) = (waiting(&app), app.events.len());
+        answered(&mut app, json!({"jsonrpc": "2.0", "id": id, "result": {"notice": "↗ added: PR #6"}}));
+        assert_eq!(app.events.len(), n + 1);
+        assert!(matches!(app.events.last(), Some(Ev::Info(t)) if t == "↗ added: PR #6"));
+        app.sb.call("artifacts/add", json!({"agent": "main", "target": "nothing.md"}), Then::Said);
+        let id = waiting(&app);
+        answered(&mut app, json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32011, "message": "no file or link at nothing.md."}}));
+        assert!(matches!(app.events.last(), Some(Ev::Info(t)) if t == "no file or link at nothing.md."));
     }
 
     #[test]

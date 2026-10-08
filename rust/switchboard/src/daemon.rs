@@ -1782,7 +1782,6 @@ impl Shell {
             }),
             "release" => self.release_op(id, &v),
             // artifacts and diffs (docs/artifacts.md)
-            "artifacts" => self.artifacts_op(id, &v),
             "diff" => self.diff_op(id, &v),
             "branches" => self.branches_op(id),
             "stop_hub" => {

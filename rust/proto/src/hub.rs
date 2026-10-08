@@ -441,8 +441,14 @@ pub enum HubCmd {
     Archive { project: Project, agent: String, force: bool },
     Unarchive { project: Project, agent: String },
     /// he opened the artifacts screen: their `new` clears, `artifacts`
-    /// comes again
-    ArtifactsSeen { project: Project },
+    /// comes again. `at_ms`: when he looked (a request that waited in
+    /// the socket while the hub booted never swallows what came after;
+    /// none: now)
+    ArtifactsSeen {
+        project: Project,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        at_ms: Option<u64>,
+    },
     /// a change, once (`diff` answers): exactly one of `agent` (its
     /// change; `commit`: one commit of it instead, a landed one: the
     /// review's "merged · e0f3df5"), `branch` (a local branch vs the
@@ -642,7 +648,7 @@ impl HubCmd {
             | HubCmd::Stop { project, .. }
             | HubCmd::Archive { project, .. }
             | HubCmd::Unarchive { project, .. }
-            | HubCmd::ArtifactsSeen { project }
+            | HubCmd::ArtifactsSeen { project, .. }
             | HubCmd::Worktrees { project }
             | HubCmd::DevServers { project }
             | HubCmd::Merged { project }

@@ -162,7 +162,7 @@ impl Shell {
                 self.step_typed(id, &tag, Input::UserCmd { client: id, focus: MAIN.into(), cmd: UserCmd::Restore { name: agent } });
             }
             // the TUI's own `seen`: the clock moves, the list comes again
-            HubCmd::ArtifactsSeen { .. } => self.artifacts_op(id, &json!({"do": "seen"})),
+            HubCmd::ArtifactsSeen { at_ms, .. } => self.artifacts_seen(at_ms),
             // git in a thread (art.rs), the typed answer to this client
             // the `diff` op's asks (agent, branch, pr, range), checked here
             HubCmd::Diff { project, agent, commit, branch, pr, range, req } => {
