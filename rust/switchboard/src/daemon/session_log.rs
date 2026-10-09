@@ -24,6 +24,13 @@ fn writer_name() -> String {
     format!("bise {}", env!("CARGO_PKG_VERSION"))
 }
 
+/// The session id an agent's folder names (its `session` file), trimmed;
+/// None when there is none yet. The one reader of that file (architect
+/// m_14498): the session log here and the window's `tool_out`.
+pub(super) fn session_of(adir: &Path) -> Option<String> {
+    std::fs::read_to_string(adir.join("session")).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+}
+
 fn write_small(path: &Path, text: &str) {
     let tmp = path.with_extension("tmp");
     if std::fs::write(&tmp, text).is_ok() {
@@ -69,7 +76,7 @@ impl Shell {
         let resume_file = adir.join(RESUME_FILE);
         let legacy = adir.join("session.txt");
         write_small(&adir.join(EV_OFFSET), "0");
-        let id = std::fs::read_to_string(&idf).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+        let id = session_of(adir);
         let log = |sh: &Self, s: String| log_line(&sh.opts.paths, &format!("session log of {}: {}", a.name, s));
         // a session.txt newer than the id: an older REPL (adopted by this
         // hub) went on saving it after the move: move it again
@@ -195,9 +202,9 @@ impl Shell {
 
     /// An adopted REPL (a hub restart): its log goes on, no repair.
     pub(super) fn attach_session(&mut self, a: &Agent, dir: &str, adir: &Path) {
-        let Ok(id) = std::fs::read_to_string(adir.join("session")) else { return };
+        let Some(id) = session_of(adir) else { return };
         let home = bise_home::Home::from_env();
-        match Recorder::attach(&home.sessions_dir().join(id.trim()), &home.blobs_dir()) {
+        match Recorder::attach(&home.sessions_dir().join(&id), &home.blobs_dir()) {
             Ok(r) => self.keep(dir, r),
             Err(e) => log_line(&self.opts.paths, &format!("session log of {}: {e}", a.name)),
         }

@@ -34,8 +34,8 @@ pub(super) fn answer(transcript: &Path, adir: &Path, pos: u64, logs: &Logs) -> R
     });
     let Some((ts, ok, preview)) = found else { return Err("the call has no result yet".into()) };
     let preview = lines::wire_decode(&preview);
-    let session = std::fs::read_to_string(adir.join("session")).unwrap_or_default();
-    let q = Query { session: session.trim(), n: u64::from(n), name: &name, ok, at_ms: ts.unwrap_or(0) };
+    let session = super::super::session_log::session_of(adir).unwrap_or_default();
+    let q = Query { session: &session, n: u64::from(n), name: &name, ok, at_ms: ts.unwrap_or(0) };
     Ok(match tool_output(logs.sessions, logs.blobs, &q, TOOL_TEXT_CAP, &|full| starts_alike(full, &preview)) {
         Some(o) => (o.text, o.cut),
         None => (cap(&preview), true),

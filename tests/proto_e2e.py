@@ -299,7 +299,13 @@ def main():
         # the transcript keeps a 200-char preview; tool_out answers with the
         # whole result from the session log, capped at 4 KB (cut)
         c.say("[[bash: seq 1 2000]]")
-        c.wait(lambda: any(l.startswith("tool_result #") for l in c.lines("main")[-40:]) and any("seq 1 2000" in l for l in c.lines("main")), 90, "main ran seq")
+        def seq_done():
+            """the seq call's own result is in (not an earlier tool's, nor
+            the user's line that names it)"""
+            ls = c.lines("main")
+            calls = [m.group(1) for m in (re.match(r"tool #(\d+) bash : seq 1 2000", l) for l in ls) if m]
+            return bool(calls) and any(l.startswith("tool_result #%s " % calls[-1]) for l in ls)
+        c.wait(seq_done, 90, "main ran seq")
         c.wait_idle("main", timeout=90)
         n = len(typed(c, "thread"))
         c.send({"cmd": "subscribe", "project": project, "agent": "main"})
