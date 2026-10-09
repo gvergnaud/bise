@@ -11,6 +11,11 @@
 //! - `journal.jsonl`: the durable state; `agents/<dir>/transcript.log`:
 //!   every line of each feed, for the views, `sb inspect` and
 //!   `sb history`.
+//!
+//! The loop (`run`): every thread sends a `Msg` on one channel; the
+//! loop reads it through `daemon/inbox` (the clients' messages ahead of
+//! the rest, so a hello is served while REPL lines wait) and runs each
+//! one with `daemon/dispatch`.
 
 mod accept;
 mod art;
@@ -36,6 +41,7 @@ mod skills;
 mod versions;
 mod dev_servers;
 mod dispatch;
+mod inbox;
 mod merged;
 mod worktrees;
 mod xhub;
@@ -223,6 +229,16 @@ enum Msg {
     Shutdown {
         keep: bool,
     },
+}
+
+impl Msg {
+    /// A client's own message (its hello, a line, its end): the inbox's
+    /// urgent lane (daemon/inbox.rs), one lane so its order holds.
+    /// TODO(client-protocol): its RpcNew and Typed answers join this lane
+    /// when that branch merges (architect m_14659).
+    fn is_client(m: &Msg) -> bool {
+        matches!(m, Msg::ClientNew { .. } | Msg::ClientLine { .. } | Msg::ClientGone { .. })
+    }
 }
 
 struct Repl {
@@ -2273,7 +2289,10 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     boot.done();
 
     let mut keep_agents = false;
-    while let Ok(m) = rx.recv() {
+    // the clients' lane first (daemon/inbox.rs): a hello never waits
+    // behind the REPLs' lines
+    let mut inbox = inbox::Inbox::new(rx, Msg::is_client);
+    while let inbox::Next::Msg(m) = inbox.next(None) {
         if let dispatch::Flow::Stop { keep } = sh.dispatch(m, &tick_queued) {
             keep_agents = keep;
             break;
