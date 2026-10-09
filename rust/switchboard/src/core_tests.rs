@@ -3621,6 +3621,10 @@ fn a_batched_replay_builds_the_same_state_as_one_event_at_a_time() {
 #[path = "every_tests.rs"]
 mod every_tests;
 
+/// P4c-4a: the typed state rows carry the older state (state_rows_tests.rs).
+#[path = "state_rows_tests.rs"]
+mod state_rows_tests;
+
 // ---- desktop S2: bise's cross-hub messages (hub/xhub.bend) ----
 
 fn xdelivers(fx: &[Effect]) -> Vec<(u64, String, String, String)> {

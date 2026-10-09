@@ -58,8 +58,9 @@ impl Shell {
         let heads = &self.proto.heads;
         let last_pos = |name: &str| heads.last(name);
         let agents = proto_view::agents(snap, &mut self.proto.since, now, crate::model::user_kind, &vision, &usage, &last_pos);
-        let cards = proto_view::cards(snap, &project, now, crate::model::user_kind);
-        (HubEv::Agents { project: project.clone(), agents }, HubEv::Cards { project, cards })
+        let (cards, others) = proto_view::cards(snap, &project, now, crate::model::user_kind);
+        let places = proto_view::places(snap);
+        (HubEv::Agents { project: project.clone(), agents, places }, HubEv::Cards { project, cards, others })
     }
 
     /// S13 (amb-win m_10985, architect m_10999): an agent the hub has no
@@ -91,9 +92,11 @@ impl Shell {
     /// The typed `prs` (bar A.7): the open PRs of this hub's places, the
     /// rows the TUI's `/prs` draws (forge::news::pr_rows).
     /// ⌘K and the scheduled screen: the live timers as rows, built from
-    /// the hub's typed timer state (proto_view::scheduled, the one builder).
+    /// the hub's typed timer state (proto_view::scheduled, the one builder),
+    /// and the ones that ended this week (P4c-4a: the screen's tab).
     pub(in crate::daemon) fn scheduled_ev(&self) -> HubEv {
-        HubEv::Scheduled { project: self.project(), items: proto_view::scheduled(self.hub.timers()) }
+        let timers = self.hub.timers();
+        HubEv::Scheduled { project: self.project(), items: proto_view::scheduled(timers), ended: proto_view::scheduled_ended(timers, now_ms()) }
     }
 
     pub(in crate::daemon) fn prs_ev(&self) -> HubEv {

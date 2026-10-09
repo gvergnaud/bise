@@ -1474,6 +1474,7 @@ mod hub_line_tests {
         let row = |state, checks| Pr {
             number: 1, url: String::new(), branch: String::new(), agents: vec![], state, checks,
             failing: vec![], review: PrReview::None, words: String::new(), text: String::new(),
+            in_review: false, stale_ms: None,
         };
         for state in [PrState::Open, PrState::Draft, PrState::Unknown] {
             for checks in [PrChecks::Pass, PrChecks::Fail, PrChecks::Running, PrChecks::None, PrChecks::Unknown] {

@@ -183,7 +183,7 @@ impl Core {
     pub(super) fn voice_mode_hub(&mut self, ev: &HubEv) {
         let Some(project) = self.voice_on.as_ref().map(|v| v.project.clone()) else { return };
         match ev {
-            HubEv::Agents { project: p, agents } if *p == project => {
+            HubEv::Agents { project: p, agents, .. } if *p == project => {
                 let Some(v) = self.voice_on.as_mut() else { return };
                 let agent = v.vm.agent().to_string();
                 let running = agents.iter().any(|a| a.name == agent && a.status.working());

@@ -205,10 +205,28 @@ pub struct PlaceView {
 pub struct PrView {
     pub number: u64,
     pub url: String,
+    /// its head branch (P4c-4a: the typed row's, `rows::Pr.branch`)
+    #[serde(default)]
+    pub branch: String,
     pub state: PrState,
     pub review: Review,
     pub checks: Checks,
     pub stale_ms: Option<u64>,
+}
+
+impl PrView {
+    /// The forge's PR as the views carry it, `stale_ms` its age when late.
+    pub fn of(pr: &PrSnapshot, stale_ms: Option<u64>) -> PrView {
+        PrView {
+            number: pr.number,
+            url: pr.url.clone(),
+            branch: pr.branch.clone(),
+            state: pr.state,
+            review: pr.review,
+            checks: pr.checks.clone(),
+            stale_ms,
+        }
+    }
 }
 
 /// The places of a state: the shared folder first (always), then each
@@ -365,14 +383,7 @@ pub fn views(
             id: p.id.clone(),
             branch: p.branch.clone(),
             agents: p.agents.clone(),
-            pr: p.pr.as_ref().map(|pr| PrView {
-                number: pr.number,
-                url: pr.url.clone(),
-                state: pr.state,
-                review: pr.review,
-                checks: pr.checks.clone(),
-                stale_ms: stale.get(&p.id).copied(),
-            }),
+            pr: p.pr.as_ref().map(|pr| PrView::of(pr, stale.get(&p.id).copied())),
             lid: lids.get(&p.id).cloned(),
             feature: p.kind == PlaceKind::Feature,
             trying: trying.contains(&p.id),
@@ -531,14 +542,7 @@ mod tests {
             id: "wt:a".into(),
             branch: Some("sb/a".into()),
             agents: vec!["a".into()],
-            pr: Some(PrView {
-                number: pr.number,
-                url: pr.url.clone(),
-                state: pr.state,
-                review: pr.review,
-                checks: pr.checks.clone(),
-                stale_ms: None,
-            }),
+            pr: Some(PrView::of(&pr, None)),
             lid: None,
             feature: false,
             trying: false,
@@ -548,7 +552,7 @@ mod tests {
             j,
             serde_json::json!({"id": "wt:a", "branch": "sb/a", "agents": ["a"], "lid": null,
                 "feature": false, "trying": false,
-                "pr": {"number": 412, "url": "https://github.com/o/r/pull/412", "state": "draft",
+                "pr": {"number": 412, "url": "https://github.com/o/r/pull/412", "branch": pr.branch, "state": "draft",
                        "review": "changes_requested", "checks": {"state": "fail", "failing": ["ci/test"]},
                        "stale_ms": null}})
         );

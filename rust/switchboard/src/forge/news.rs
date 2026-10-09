@@ -18,7 +18,7 @@
 //! picks (the news goes to main).
 
 use super::{Activity, FailedCheck, Note, NoteKind, PrEvent};
-use crate::place::{Checks, PrSnapshot, PrState, Review};
+use crate::place::{Checks, PrSnapshot, PrState, PrView, Review};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -420,7 +420,7 @@ pub fn checks_text(at: &At, pr: &PrSnapshot, failed: &[(&FailedCheck, usize)], o
 
 /// A PR's state in words, as the held lid says it (pr-tui): `draft ·
 /// checks running`, `changes asked · checks pass`, `checks fail: e2e`.
-pub fn pr_words(pr: &PrSnapshot) -> String {
+pub fn pr_words(pr: &PrView) -> String {
     let mut w: Vec<String> = Vec::new();
     match pr.state {
         PrState::Draft => w.push("draft".into()),
@@ -452,42 +452,53 @@ pub fn pr_words(pr: &PrSnapshot) -> String {
 /// rows; the TUI's tone comes from `state` and `checks` (red when checks
 /// fail, dim for a draft), never from the wire.
 pub fn pr_rows(places: &[crate::place::Place]) -> Vec<bise_proto::rows::Pr> {
-    use bise_proto::rows::{Pr, PrChecks, PrReview, PrState as S};
     let mut prs: Vec<(&PrSnapshot, &[String])> = places
         .iter()
         .filter_map(|p| p.pr.as_ref().map(|pr| (pr, p.agents.as_slice())))
         .filter(|(pr, _)| matches!(pr.state, PrState::Open | PrState::Draft))
         .collect();
     prs.sort_by_key(|(pr, _)| pr.number);
-    prs.into_iter()
-        .map(|(pr, agents)| {
-            let who = if agents.is_empty() { "no agent".to_string() } else { agents.join(", ") };
-            let (checks, failing) = match &pr.checks {
-                Checks::Pass => (PrChecks::Pass, Vec::new()),
-                Checks::Fail { failing } => (PrChecks::Fail, failing.clone()),
-                Checks::Running => (PrChecks::Running, Vec::new()),
-                Checks::None => (PrChecks::None, Vec::new()),
-            };
-            let review = match pr.review {
-                Review::Approved => PrReview::Approved,
-                Review::ChangesRequested => PrReview::Changes,
-                Review::None | Review::Pending => PrReview::None,
-            };
-            let words = pr_words(pr);
-            Pr {
-                number: pr.number,
-                url: pr.url.clone(),
-                branch: pr.branch.clone(),
-                agents: agents.to_vec(),
-                state: if pr.state == PrState::Draft { S::Draft } else { S::Open },
-                checks,
-                failing,
-                review,
-                text: format!("{} · {} · {}", pr.branch, who, words),
-                words,
-            }
-        })
-        .collect()
+    prs.into_iter().map(|(pr, agents)| pr_row(&PrView::of(pr, None), agents)).collect()
+}
+
+/// A PR as a typed row (P4c-4a: the one builder, `/prs`'s rows and a
+/// place's PR in `HubEv::Agents.places`): what it means, the hub's words
+/// for it, `agents` its place's. A pending review stays `review: none`
+/// (what `/prs` always said) and sets `in_review`.
+pub fn pr_row(pr: &PrView, agents: &[String]) -> bise_proto::rows::Pr {
+    use bise_proto::rows::{Pr, PrChecks, PrReview, PrState as S};
+    let who = if agents.is_empty() { "no agent".to_string() } else { agents.join(", ") };
+    let (checks, failing) = match &pr.checks {
+        Checks::Pass => (PrChecks::Pass, Vec::new()),
+        Checks::Fail { failing } => (PrChecks::Fail, failing.clone()),
+        Checks::Running => (PrChecks::Running, Vec::new()),
+        Checks::None => (PrChecks::None, Vec::new()),
+    };
+    let review = match pr.review {
+        Review::Approved => PrReview::Approved,
+        Review::ChangesRequested => PrReview::Changes,
+        Review::None | Review::Pending => PrReview::None,
+    };
+    let words = pr_words(pr);
+    Pr {
+        number: pr.number,
+        url: pr.url.clone(),
+        branch: pr.branch.clone(),
+        agents: agents.to_vec(),
+        state: match pr.state {
+            PrState::Draft => S::Draft,
+            PrState::Open => S::Open,
+            PrState::Merged => S::Merged,
+            PrState::Closed => S::Closed,
+        },
+        checks,
+        failing,
+        review,
+        text: format!("{} · {} · {}", pr.branch, who, words),
+        words,
+        in_review: pr.review == Review::Pending,
+        stale_ms: pr.stale_ms,
+    }
 }
 
 /// `/prs`'s head line: `2 PRs open`, "" when none.

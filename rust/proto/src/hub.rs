@@ -7,7 +7,7 @@
 use crate::context::FnContext;
 use crate::diff::{DiffFile, DiffResult, DiffView};
 use crate::ops::{BranchRow, ReleaseEv, VersionItem};
-use crate::rows::{Agent, ApprovalMode, ApprovalRule, Artifact, Card, CheckerKind, DevServer, Feature, Merged, Model, Pr, ScheduledTask, Worktree};
+use crate::rows::{Agent, ApprovalMode, ApprovalRule, Artifact, Card, CheckerKind, DevServer, Feature, Merged, Model, Place, Pr, ScheduledTask, Worktree};
 use crate::thread::Entry;
 use crate::{decode, parse, Pos, Project};
 use serde::{Deserialize, Serialize};
@@ -56,10 +56,25 @@ pub enum HubEv {
         #[serde(default)]
         cmds: Vec<String>,
     },
-    /// every agent of the hub, on change
-    Agents { project: Project, agents: Vec<Agent> },
-    /// every open card of the hub, on change
-    Cards { project: Project, cards: Vec<Card> },
+    /// every agent of the hub, on change; `places` (P4c-4a, none from an
+    /// older hub): the project's worktrees as the terminal's panel draws
+    /// them, from the same snapshot (an agent's `place_id` is one's id)
+    Agents {
+        project: Project,
+        agents: Vec<Agent>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        places: Vec<Place>,
+    },
+    /// every open card of the hub that is his, on change; `others`
+    /// (P4c-4a, none from an older hub): the rest, bise's own (a drop, a
+    /// done, a blocked...), which the terminal's inbox draws too: both in
+    /// the hub's order (merged by id: the snapshot's order)
+    Cards {
+        project: Project,
+        cards: Vec<Card>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        others: Vec<Card>,
+    },
     /// one page of a thread, newest last: the answer to `subscribe` and
     /// `page`; `before` the oldest entry's pos when there is more
     Thread { project: Project, agent: String, entries: Vec<Entry>, before: Option<Pos>, more: bool },
@@ -80,7 +95,14 @@ pub enum HubEv {
     },
     /// the live scheduled tasks (`sb every`) of the project, at hello, on
     /// `scheduled` and whenever one is set, runs, stops or ends
-    Scheduled { project: Project, items: Vec<ScheduledTask> },
+    /// `ended` (P4c-4a, none from an older hub): the ones that ended in
+    /// the last 7 days, oldest first (the scheduled screen's tab)
+    Scheduled {
+        project: Project,
+        items: Vec<ScheduledTask>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        ended: Vec<ScheduledTask>,
+    },
     /// the repo's worktrees (the agents' and his others), at hello, when
     /// the agents change (a turn ends, one comes or goes) and on
     /// `worktrees`

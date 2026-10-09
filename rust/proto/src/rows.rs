@@ -420,6 +420,27 @@ pub struct Card {
     /// sign-in stopped, which go on once he signs in
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub waiting: Option<Vec<String>>,
+    /// client-protocol step 4 (P4c-4a): the card's words as the hub wrote
+    /// them, options included (`question` and `options` are parsed from
+    /// them); "" from an older hub
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub text: String,
+    /// the hub's second line under it (a merge's `approved · checks
+    /// pass`, a question answered another way...)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// the place it is about (a `places` row's id: a merge, a feature)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub place: Option<String>,
+    /// the number of the PR it is about
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pr: Option<u64>,
+    /// the page its link opens (the update card's release page)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link: Option<String>,
+    /// the message it answers (`sb card --for`)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub for_msg: Option<u64>,
 }
 
 /// A card kind's rank in reading order, what blocks an agent first: an
@@ -574,6 +595,10 @@ pub struct Feature {
 pub enum PrState {
     Open,
     Draft,
+    /// P4c-4a: a place's PR only (`/prs` lists open and draft ones): a
+    /// merged place goes a tick later, a closed one keeps its box
+    Merged,
+    Closed,
     /// a state this version doesn't know (a newer hub)
     #[serde(other)]
     Unknown,
@@ -626,6 +651,45 @@ pub struct Pr {
     pub words: String,
     /// its `/prs` line after `#<number>`: `sb/x · x, y · <words>`
     pub text: String,
+    /// P4c-4a: a review was asked and none came yet (`review` stays
+    /// `none` then, as it always was: the wire rule)
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub in_review: bool,
+    /// a place's PR (`HubEv::Agents.places`): how old the forge's last
+    /// answer is, when it is late (offline, rate limit); none when fresh,
+    /// and always none in `/prs`'s rows
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stale_ms: Option<u64>,
+}
+
+/// A worktree of the project as the terminal's panel draws it (dev-flow
+/// §3.1, the `places` of the hub's snapshot, P4c-4a): a worktree its
+/// agents share, a feature branch, a solo agent's own worktree. Never
+/// the shared checkout. In its first agent's order; an agent's
+/// `place_id` is its `id`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Place {
+    /// `wt:<branch>`, `pt:<path>` (a private worktree), `feature:<name>`
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+    /// its agents, not archived, in the hub's order
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub agents: Vec<String>,
+    /// the PR of its branch (merged and closed ones too, until it goes)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pr: Option<Pr>,
+    /// the held line the hub writes (`waits to land · 2nd`, `no PR yet ·
+    /// 2 commits`): it wins over the PR's words
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lid: Option<String>,
+    /// a feature branch's place (dev-flow §5.1): never a PR
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub feature: bool,
+    /// its try build builds or is on trial
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub trying: bool,
 }
 
 /// The role a model is config.toml's default for.
@@ -884,6 +948,68 @@ pub struct ScheduledTask {
     /// the page it keeps fresh (`--page`)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub page: Option<String>,
+    /// P4c-4a: the hub's how-often label (`every 2m`, `every day
+    /// 07:30`), before `every`'s `once` and times words
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub label: String,
+    /// when it last woke its agent
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_ms: Option<u64>,
+    /// its last runs, oldest first
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub runs: Vec<u64>,
+    /// an ended one (`HubEv::Scheduled.ended` only): when, how, by whom
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ended_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end: Option<ScheduledEnd>,
+    /// who stopped it (`end` is `stopped`): you, or an agent
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stopped_by: Option<WaitingOn>,
+}
+
+/// How a scheduled task ended (the hub's `every::end_of`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum ScheduledEnd {
+    /// it ran its times
+    Times,
+    /// its end time passed
+    Until,
+    /// its agent is gone
+    Gone,
+    /// someone stopped it (`stopped_by`), or an older line said nothing
+    Stopped,
+    /// an end this version doesn't know (a newer hub)
+    #[serde(other)]
+    Unknown,
+}
+
+impl ScheduledEnd {
+    /// The hub's word (`times`, `until`, `gone`, `stopped`), typed; none
+    /// for "" (a live one).
+    pub fn of_word(w: &str) -> Option<ScheduledEnd> {
+        match w {
+            "" => None,
+            "times" => Some(ScheduledEnd::Times),
+            "until" => Some(ScheduledEnd::Until),
+            "gone" => Some(ScheduledEnd::Gone),
+            "stopped" => Some(ScheduledEnd::Stopped),
+            _ => Some(ScheduledEnd::Unknown),
+        }
+    }
+
+    /// Its word, the one `of_word` reads ("" for an unknown one).
+    pub fn word(self) -> &'static str {
+        match self {
+            ScheduledEnd::Times => "times",
+            ScheduledEnd::Until => "until",
+            ScheduledEnd::Gone => "gone",
+            ScheduledEnd::Stopped => "stopped",
+            ScheduledEnd::Unknown => "",
+        }
+    }
 }
 
 #[cfg(test)]

@@ -177,7 +177,7 @@ mod tests {
     use serde_json::json;
 
     fn init_result(seq: u64) -> Value {
-        let agents = rpc::note(&HubEv::Agents { project: "shop".into(), agents: vec![] }, None).unwrap();
+        let agents = rpc::note(&HubEv::Agents { project: "shop".into(), agents: vec![], places: vec![] }, None).unwrap();
         let r = InitializeResult {
             project: "shop".into(),
             proto: 1,
@@ -196,7 +196,7 @@ mod tests {
     }
 
     fn note(seq: u64) -> Value {
-        let n = rpc::note(&HubEv::Cards { project: "shop".into(), cards: vec![] }, Some(Watermark { epoch: 9, seq })).unwrap();
+        let n = rpc::note(&HubEv::Cards { project: "shop".into(), cards: vec![], others: vec![] }, Some(Watermark { epoch: 9, seq })).unwrap();
         serde_json::to_value(n).unwrap()
     }
 
@@ -250,7 +250,7 @@ mod tests {
         assert_eq!(c.read("shop", resp), Read::Evs(vec![HubEv::Notice { project: "shop".into(), cmd: Some("slash".into()), text: "the help".into(), cid: Some(3) }]));
         let req = c.request(&json!({"cmd": "scheduled", "project": "shop"})).unwrap();
         let resp = serde_json::to_value(Response::ok(Id::Num(req["id"].as_u64().unwrap()), json!({"project": "shop", "items": []}))).unwrap();
-        assert_eq!(c.read("shop", resp), Read::Evs(vec![HubEv::Scheduled { project: "shop".into(), items: vec![] }]));
+        assert_eq!(c.read("shop", resp), Read::Evs(vec![HubEv::Scheduled { project: "shop".into(), items: vec![], ended: vec![] }]));
         assert_eq!(c.request(&json!({"cmd": "hello", "proto": 1})), None);
     }
 

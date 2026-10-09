@@ -150,21 +150,67 @@ pub fn agents(
 /// how-often words are bise-proto's, the TUI's (`every_words`). The one
 /// builder: the `scheduled` event and view.json's index both call it.
 pub fn scheduled(timers: &crate::every::Timers) -> Vec<bise_proto::rows::ScheduledTask> {
+    timers.map.values().map(task_row).collect()
+}
+
+/// P4c-4a: the timers that ended in the last week, oldest first, as rows
+/// (the scheduled screen's tab; `HubEv::Scheduled.ended`): the hub's
+/// state's (`Timers::state`) with how they ended (`every::end_of`).
+pub fn scheduled_ended(timers: &crate::every::Timers, now: u64) -> Vec<bise_proto::rows::ScheduledTask> {
+    use bise_proto::rows::{ScheduledEnd, WaitingOn};
     timers
-        .map
-        .values()
-        .map(|t| bise_proto::rows::ScheduledTask {
-            id: t.id,
-            agent: t.agent.clone(),
-            by: t.by.clone(),
-            words: t.text.clone(),
-            name: t.title(),
-            every: bise_proto::thread::scheduled::every_words(&t.sched.label(), t.times),
-            times: t.times,
-            done: t.fired,
-            next_ms: Some(t.next_ms).filter(|ms| *ms > 0),
-            until_ms: t.until_ms,
-            page: t.page.clone().filter(|p| !p.is_empty()),
+        .ended
+        .iter()
+        .filter(|e| e.ended_ms + crate::every::ENDED_SHOWN_MS > now)
+        .map(|e| {
+            let (end, by) = crate::every::end_of(&e.why);
+            let stopped_by = match by.as_str() {
+                "" => None,
+                "user" => Some(WaitingOn::You),
+                name => Some(WaitingOn::Agent { name: name.to_string() }),
+            };
+            bise_proto::rows::ScheduledTask { ended_ms: Some(e.ended_ms), end: ScheduledEnd::of_word(end), stopped_by, ..task_row(&e.timer) }
+        })
+        .collect()
+}
+
+fn task_row(t: &crate::every::Timer) -> bise_proto::rows::ScheduledTask {
+    bise_proto::rows::ScheduledTask {
+        id: t.id,
+        agent: t.agent.clone(),
+        by: t.by.clone(),
+        words: t.text.clone(),
+        name: t.title(),
+        every: bise_proto::thread::scheduled::every_words(&t.sched.label(), t.times),
+        times: t.times,
+        done: t.fired,
+        next_ms: Some(t.next_ms).filter(|ms| *ms > 0),
+        until_ms: t.until_ms,
+        page: t.page.clone().filter(|p| !p.is_empty()),
+        label: t.sched.label(),
+        last_ms: Some(t.last_ms).filter(|ms| *ms > 0),
+        runs: t.runs.clone(),
+        ended_ms: None,
+        end: None,
+        stopped_by: None,
+    }
+}
+
+/// P4c-4a: the snapshot's `places` (`place::views`, the worktrees the
+/// terminal's panel draws) as rows, each PR by the one builder
+/// (`forge::news::pr_row`, `/prs`'s) with its place's agents.
+pub fn places(snap: &Value) -> Vec<bise_proto::rows::Place> {
+    let views: Vec<crate::place::PlaceView> = snap.get("places").cloned().and_then(|p| serde_json::from_value(p).ok()).unwrap_or_default();
+    views
+        .into_iter()
+        .map(|p| bise_proto::rows::Place {
+            pr: p.pr.as_ref().map(|pr| crate::forge::news::pr_row(pr, &p.agents)),
+            id: p.id,
+            branch: p.branch,
+            agents: p.agents,
+            lid: p.lid,
+            feature: p.feature,
+            trying: p.trying,
         })
         .collect()
 }
@@ -198,14 +244,20 @@ fn his(kind: &str, user_kind: fn(&str) -> bool) -> bool {
     user_kind(kind) && kind != "drop"
 }
 
-/// The snapshot's open cards that are his, as rows.
-pub fn cards(snap: &Value, project: &str, now: u64, user_kind: fn(&str) -> bool) -> Vec<Card> {
+/// The snapshot's open cards as rows, in its order: his (`HubEv::Cards`'
+/// `cards`), then the others (`others`, P4c-4a: bise's own, a drop, a
+/// done, a blocked..., which the terminal's inbox draws too). Each with
+/// the snapshot's words (`text`, its `question` and `options` parsed
+/// from them), note, place, PR, link and the message it answers.
+pub fn cards(snap: &Value, project: &str, now: u64, user_kind: fn(&str) -> bool) -> (Vec<Card>, Vec<Card>) {
     let list = snap.get("cards").and_then(Value::as_array).cloned().unwrap_or_default();
+    let opt = |c: &Value, k: &str| Some(s(c, k)).filter(|x| !x.is_empty());
+    let n = |c: &Value, k: &str| c.get(k).and_then(Value::as_u64);
     list.iter()
-        .filter(|c| his(&s(c, "kind"), user_kind))
         .map(|c| {
             let kind = s(c, "kind");
-            let (q, options) = question(c.get("text").and_then(Value::as_str).unwrap_or(""));
+            let text = c.get("text").and_then(Value::as_str).unwrap_or("").to_string();
+            let (q, options) = question(&text);
             let page = c.get("page").filter(|p| p.is_object()).map(|p| CardPage {
                 id: s(p, "id"),
                 url: s(p, "url"),
@@ -213,22 +265,28 @@ pub fn cards(snap: &Value, project: &str, now: u64, user_kind: fn(&str) -> bool)
                 item: Some(s(p, "item")).filter(|i| !i.is_empty()),
             });
             Card {
-                id: c.get("id").and_then(Value::as_u64).unwrap_or(0),
+                id: n(c, "id").unwrap_or(0),
                 project: project.to_string(),
                 urgent: kind == "confirm",
                 approval: Card::approval_kind(&kind),
                 rank: Some(bise_proto::rows::card_rank(&kind)),
-                kind,
                 agent: s(c, "agent"),
                 question: q,
                 options,
-                since_ms: now.saturating_sub(c.get("age_ms").and_then(Value::as_u64).unwrap_or(0)),
+                since_ms: now.saturating_sub(n(c, "age_ms").unwrap_or(0)),
                 page,
                 // V14: the signin card's stopped agents (core.rs signin_waiting)
                 waiting: c.get("waiting").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect()),
+                note: opt(c, "note"),
+                place: opt(c, "place"),
+                pr: n(c, "pr"),
+                link: opt(c, "link"),
+                for_msg: n(c, "for_msg"),
+                text,
+                kind,
             }
         })
-        .collect()
+        .partition(|c| his(&c.kind, user_kind))
 }
 
 /// The art store's `artifacts` event (daemon/art.rs `artifacts_ev`:
@@ -579,8 +637,11 @@ mod tests {
         s2["agents"][1]["status"] = json!("idle");
         assert_eq!(agents(&s2, &mut since, 200, uk, &|_| None, &|_| None, &|_| None)[1].since_ms, 200);
         assert_eq!(agents(&s2, &mut since, 300, uk, &|_| None, &|_| None, &|_| None)[1].since_ms, 200);
-        let c = cards(&snap(), "acme", 5_000, uk);
+        let (c, others) = cards(&snap(), "acme", 5_000, uk);
         assert_eq!(c.iter().map(|c| c.id).collect::<Vec<_>>(), [9, 10], "his kinds, no drop");
+        // P4c-4a: bise's own (a drop, a done) are the others, in order
+        assert_eq!(others.iter().map(|c| (c.id, c.kind.as_str())).collect::<Vec<_>>(), [(11, "drop"), (12, "done")]);
+        assert_eq!(c[0].text, "which bench?\n1. cold\n2. warm");
         assert_eq!((c[0].question.as_str(), c[0].options.len(), c[0].since_ms, c[0].urgent), ("which bench?", 2, 4_000, false));
         assert!(c[1].urgent && c[1].page.as_ref().is_some_and(|p| p.block.as_deref() == Some("q1")));
     }
