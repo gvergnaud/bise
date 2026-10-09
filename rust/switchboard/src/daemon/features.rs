@@ -181,8 +181,7 @@ impl Shell {
         };
         log_line(&self.opts.paths, &format!("feature {} {}", job.op, job.name));
         // the Δ at once when a try starts
-        let snap = self.snapshot();
-        self.broadcast(&snap);
+        self.state_now();
         std::thread::spawn(move || {
             let res = step(&job);
             {

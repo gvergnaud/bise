@@ -310,8 +310,7 @@ impl Shell {
                 }
                 self.proto_send(id, &HubEv::Notice { project, cmd: Some(tag.to_string()), text, cid });
                 if set.is_some() {
-                    let snap = self.snapshot();
-                    self.broadcast(&snap);
+                    self.state_now();
                 }
             }
             Slash::Artifacts(None) => {

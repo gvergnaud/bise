@@ -275,6 +275,19 @@ def check(cond, msg):
         raise AssertionError(msg)
 
 
+def seed_tasks(state, ws, names):
+    """A throwaway hub's journal before its start: main's tasks `names`,
+    active, working in `ws` (shared). The one place a test writes a
+    journal (architect m_14659): a change of sb-core's task_created shape
+    breaks here, loudly."""
+    os.makedirs(state, exist_ok=True)
+    space = {"mode": "shared", "path": ws, "branch": None, "base_commit": None, "dropped": False}
+    with open(os.path.join(state, "journal.jsonl"), "a") as f:
+        for i, name in enumerate(names):
+            f.write(json.dumps({"type": "task_created", "name": name, "parent": "main", "ws": space, "at_ms": i + 1,
+                                "brief": {"objective": "fake objective of %s" % name, "context": ""}}) + "\n")
+
+
 # ---- scenarios ----
 
 def t_spawn_and_auto_reply(E, c):

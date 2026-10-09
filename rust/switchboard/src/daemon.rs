@@ -43,6 +43,7 @@ mod dev_servers;
 mod dispatch;
 mod inbox;
 mod merged;
+mod state_gate;
 mod worktrees;
 mod xhub;
 mod xread;
@@ -373,6 +374,8 @@ struct Shell {
     proto: proto::Proto,
     /// view.json's writer (bise desktop S1, daemon/projects.rs)
     projects: projects::Projects,
+    /// when the state goes to the clients (daemon/state_gate.rs)
+    state_gate: state_gate::StateGate,
     /// bise's home hub: the projects its routing guesses from (daemon/routing.rs)
     routing: routing::Routing,
     /// S9: the fn context of the input being stepped: (agent, its JSON).
@@ -661,8 +664,7 @@ impl Shell {
                 switch: None,
             },
         });
-        let snap = self.snapshot();
-        self.broadcast(&snap);
+        self.state_now();
     }
 
     /// Each agent's model for `sb list`, `sb tasks` and the roster
@@ -775,6 +777,27 @@ impl Shell {
             }
         }
         snap
+    }
+
+    /// The state to the clients, with its page hooks and view.json: what
+    /// sb-core's `state` effect did at once, now when the loop's gate
+    /// allows (daemon/state_gate.rs).
+    fn push_state(&mut self) {
+        self.page_answers();
+        self.page_agent_push();
+        self.page_watch_push();
+        let snap = self.snapshot();
+        self.broadcast(&snap);
+        self.view_changed(&snap);
+        self.state_gate.sent(now_ms());
+    }
+
+    /// A user action's snapshot, to every client at once; a throttled
+    /// push still pending waits its period from now (state_gate `shown`).
+    fn state_now(&mut self) {
+        let snap = self.snapshot();
+        self.broadcast(&snap);
+        self.state_gate.shown(now_ms());
     }
 
     fn transcript(&self, dir: &str) -> PathBuf {
@@ -1068,14 +1091,8 @@ impl Shell {
                 }
                 self.broadcast(&json!({"ev": "renamed", "old": old, "new": new}));
             }
-            Effect::State => {
-                self.page_answers();
-                self.page_agent_push();
-                self.page_watch_push();
-                let snap = self.snapshot();
-                self.broadcast(&snap);
-                self.view_changed(&snap);
-            }
+            // sent by the loop when the gate allows (daemon/state_gate.rs)
+            Effect::State => self.state_gate.changed(),
             Effect::AskRole { dir, key, request } => self.ask_role(dir, key, request),
             Effect::Confirm { card, agent: _, text } => self.on_confirm(card, &text),
             Effect::Flow { client, token, set } => {
@@ -1092,8 +1109,7 @@ impl Shell {
                     write_json(&mut s, &body);
                 }
                 if ok && set.is_some() {
-                    let snap = self.snapshot();
-                    self.broadcast(&snap);
+                    self.state_now();
                 }
             }
             Effect::Choose { client, agent, model, effort, default } => {
@@ -1106,8 +1122,7 @@ impl Shell {
                         write_json(s, &json!({"ev": "notice", "text": text}));
                     }
                 }
-                let snap = self.snapshot();
-                self.broadcast(&snap);
+                self.state_now();
                 self.switch_idle_repls();
             }
             Effect::SpawnModel { token, agent, ask, mut body } => {
@@ -1115,8 +1130,7 @@ impl Shell {
                 if let Some(mut s) = self.replies.remove(&token) {
                     write_json(&mut s, &body);
                 }
-                let snap = self.snapshot();
-                self.broadcast(&snap);
+                self.state_now();
             }
             Effect::Switch { token, from, to, model, effort } => {
                 let res = self.switch_model(&from, &to, &model, &effort);
@@ -1127,8 +1141,7 @@ impl Shell {
                     };
                     write_json(&mut s, &body);
                 }
-                let snap = self.snapshot();
-                self.broadcast(&snap);
+                self.state_now();
             }
             Effect::ModelRefused { agent, why } => self.model_refused(&agent, &why),
             Effect::Pr(e) => log_line(&self.opts.paths, &crate::forge::log_line(&e)),
@@ -2129,6 +2142,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         positions: BTreeMap::new(),
         proto: proto::Proto::default(),
         projects: projects::Projects::boot(&paths),
+        state_gate: state_gate::StateGate::default(),
         routing: routing::Routing::default(),
         search: search::Index::default(),
         xsearch: search::Index::default(),
@@ -2288,16 +2302,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     boot.step("boot done (REPLs spawned)");
     boot.done();
 
-    let mut keep_agents = false;
-    // the clients' lane first (daemon/inbox.rs): a hello never waits
-    // behind the REPLs' lines
-    let mut inbox = inbox::Inbox::new(rx, Msg::is_client);
-    while let inbox::Next::Msg(m) = inbox.next(None) {
-        if let dispatch::Flow::Stop { keep } = sh.dispatch(m, &tick_queued) {
-            keep_agents = keep;
-            break;
-        }
-    }
+    let keep_agents = sh.serve(rx, &tick_queued);
     // for good: no new client reaches a hub that is going (it would wait
     // for a hello that never comes); a `bise` meanwhile starts the next
     // hub, which waits for this one to be gone (`wait_previous_hub`)

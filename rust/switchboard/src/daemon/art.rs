@@ -249,8 +249,7 @@ impl Shell {
         let moved = self.art.changes.get(&name) != Some(&v);
         self.art.changes.insert(name.clone(), v);
         if moved {
-            let snap = self.snapshot();
-            self.broadcast(&snap);
+            self.state_now();
         }
         if self.art.stale.contains(&name) {
             self.changes_ask(&name, false);

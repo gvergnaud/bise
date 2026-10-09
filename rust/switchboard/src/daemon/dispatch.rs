@@ -1,14 +1,17 @@
-//! One message of the hub's loop (`daemon::run`), executed on the shell:
-//! the match that was `run`'s loop body, moved out so `run` stays short.
+//! The hub's loop (`Shell::serve`, called by `daemon::run`) and one
+//! message of it executed on the shell (`Shell::dispatch`, the match that
+//! was `run`'s loop body, moved out so `run` stays short).
 
+use super::inbox::{Inbox, Next};
 use super::repl::kill_pid;
 use super::{log_line, version_allowed, write_json, Msg, Repl, Shell, RESUME_TEXT};
 use crate::core::Input;
 use crate::model::MAIN;
-use crate::util::wire_escape;
+use crate::util::{now_ms, wire_escape};
 use serde_json::json;
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::Receiver;
 
 /// What the loop does after a message.
 pub(super) enum Flow {
@@ -19,6 +22,32 @@ pub(super) enum Flow {
 }
 
 impl Shell {
+    /// The hub's loop, until a stop (its `keep`) or every sender gone:
+    /// the clients' lane first (daemon/inbox.rs: a hello never waits
+    /// behind the REPLs' lines), the state to the clients when its gate
+    /// allows (daemon/state_gate.rs: at most once per 100 ms, the last
+    /// change always sent, a pending one flushed at the stop).
+    pub(super) fn serve(&mut self, rx: Receiver<Msg>, tick_queued: &AtomicBool) -> bool {
+        let mut inbox = Inbox::new(rx, Msg::is_client);
+        let keep = loop {
+            if self.state_gate.due(now_ms()) {
+                self.push_state();
+            }
+            let m = match inbox.next(self.state_gate.wait(now_ms())) {
+                Next::Msg(m) => m,
+                Next::Idle => continue,
+                Next::Closed => break false,
+            };
+            if let Flow::Stop { keep } = self.dispatch(m, tick_queued) {
+                break keep;
+            }
+        };
+        if self.state_gate.pending() {
+            self.push_state();
+        }
+        keep
+    }
+
     /// Run one message. `tick_queued`: the ticker's flag (one tick in the
     /// queue at most), cleared when a tick is taken.
     pub(super) fn dispatch(&mut self, m: Msg, tick_queued: &AtomicBool) -> Flow {
@@ -247,8 +276,7 @@ impl Shell {
                         self.merged_all();
                     }
                 }
-                let snap = self.snapshot();
-                self.broadcast(&snap);
+                self.state_now();
             }
             Msg::Shutdown { keep } => return Flow::Stop { keep },
         }

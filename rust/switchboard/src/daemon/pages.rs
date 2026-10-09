@@ -180,8 +180,7 @@ impl Shell {
         match pages.publish(&p, now_ms(), &is_gone) {
             Ok((meta, _)) => {
                 self.broadcast(&pages.page_ev(&meta));
-                let snap = self.snapshot();
-                self.broadcast(&snap);
+                self.state_now();
                 Some(meta.version())
             }
             Err(lines) => {
@@ -246,8 +245,7 @@ impl Shell {
                             e.1 = true;
                         }
                         self.broadcast(&pages.page_ev(&meta));
-                        let snap = self.snapshot();
-                        self.broadcast(&snap);
+                        self.state_now();
                         json!({"ok": true, "id": meta.id, "version": 0, "url": pages.url(&meta.id), "state": "writing", "agent": agent})
                     }
                     Err(e) => json!({"ok": false, "error": e}),
@@ -321,8 +319,7 @@ impl Shell {
                         self.page_questions(&meta.id, &meta.agent, &p.html);
                         // its checklists: the step of his whose turn came
                         self.page_steps(&meta.id);
-                        let snap = self.snapshot();
-                        self.broadcast(&snap);
+                        self.state_now();
                         let url = pages.url(&meta.id);
                         json!({"ok": true, "id": meta.id, "version": meta.version(), "url": url, "unknown_notes": unknown})
                     }
@@ -339,12 +336,10 @@ impl Shell {
             crate::pages::PageMsg::Notes { id } => {
                 // a tick on the page (a draft too) closes its step's card
                 self.page_steps(&id);
-                let snap = self.snapshot();
-                self.broadcast(&snap);
+                self.state_now();
             }
             crate::pages::PageMsg::Opened { .. } => {
-                let snap = self.snapshot();
-                self.broadcast(&snap);
+                self.state_now();
             }
             crate::pages::PageMsg::Mirror { id, error } => {
                 // the last good public copy stays up; main hears it once (designer m_7509)
@@ -386,8 +381,7 @@ impl Shell {
                     let text = Self::page_hint(&to, text);
                     self.step(Input::ClientInput { client: 0, focus: to, text, queued: false });
                 }
-                let snap = self.snapshot();
-                self.broadcast(&snap);
+                self.state_now();
             }
             crate::pages::PageMsg::Answer { id, block, reply } => {
                 // the same path as the capsule's and the TUI's answer
@@ -619,7 +613,6 @@ impl Shell {
                 self.broadcast(&pages.page_ev(&meta));
             }
         }
-        let snap = self.snapshot();
-        self.broadcast(&snap);
+        self.state_now();
     }
 }

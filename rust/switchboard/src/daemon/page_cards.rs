@@ -76,8 +76,7 @@ impl Shell {
         if let Some(card) = new {
             self.pg.card_links.insert(card, l);
             self.save_card_links();
-            let snap = self.snapshot();
-            self.broadcast(&snap);
+            self.state_now();
         }
     }
 

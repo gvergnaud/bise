@@ -15,3 +15,5 @@ tui_text_layer_tmux.py | time.sleep(DOUBLE_CLICK_GAP) | two presses on one cell 
 fake_provider.py | time.sleep(float(slow.group(1))) | the fake model's [[slow: N]] reply: a slow provider is the input of the tests that use it
 fake_provider.py | time.sleep(float(sc["slow"])) | a $FAKE_SCRIPTS script's "slow": the same slow provider, for a message with no marker in it (ambient-qa's rich world)
 fake_provider.py | time.sleep(gap) | the fake model's [[drip: N S]] and [[split: S]] streams (issue 13): a stream that generates slowly, or pauses inside an event, is the input
+fake_repl_flood.py | time.sleep(0.02) | the flooding fake REPL's pace: a batch of lines every 20 ms (FLOOD_RATE per second) is the input of hub_flood_e2e
+hub_flood_e2e.py | time.sleep(STATE_WINDOW_S) | the window the state events are counted in: at most ~10 per second while the REPLs flood is the behavior under test

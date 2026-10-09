@@ -498,8 +498,7 @@ impl Shell {
         }
         if w.card.is_some() {
             self.hub.set_on_you(&w.agent, false);
-            let snap = self.snapshot();
-            self.broadcast(&snap);
+            self.state_now();
         }
     }
 
@@ -816,8 +815,7 @@ impl Shell {
         }
         self.hub.set_on_you(&w.agent, true);
         self.feed(&w.agent, &gate_line("card", &w.n, Some(id)));
-        let snap = self.snapshot();
-        self.broadcast(&snap);
+        self.state_now();
     }
 
     /// The user answered card `id` (the `confirm` effect of sb-core, which
@@ -899,8 +897,7 @@ impl Shell {
                     self.gates.cards.remove(&id);
                     self.step(Input::ConfirmClose { card: id, res: "interrupted".into() });
                 }
-                let snap = self.snapshot();
-                self.broadcast(&snap);
+                self.state_now();
             }
         }
         let _ = how;
@@ -1066,8 +1063,7 @@ impl Shell {
             },
         );
         self.hub.set_on_you(name, true);
-        let snap = self.snapshot();
-        self.broadcast(&snap);
+        self.state_now();
     }
 }
 
