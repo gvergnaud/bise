@@ -68,6 +68,7 @@ pub mod hub;
 pub mod ops;
 pub mod pty;
 pub mod rows;
+pub mod jsonrpc;
 pub mod rpc;
 pub mod slash;
 pub mod thread;

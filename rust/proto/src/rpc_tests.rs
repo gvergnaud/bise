@@ -4,6 +4,7 @@
 //! follows `Watermark::take` ends equal to `hub/read` whatever it lost.
 
 use super::*;
+use crate::hub::ErrorKind;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
