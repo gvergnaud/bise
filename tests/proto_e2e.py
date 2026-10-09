@@ -187,6 +187,9 @@ def main():
         c.send({"cmd": "new", "project": project, "name": "t9", "brief": "-w {{bash: echo t9 ok}}"})
         c.wait(lambda: agent_row("t9") is not None, 60, "the typed new's agent in agents")
         check(agent_row("t9").get("worktree") is None, "no worktree read from the brief: %r" % agent_row("t9"))
+        # one broadcast writes the typed agents before the older state
+        # line: wait for the state's row too, not just the typed one
+        c.wait(lambda: c.agent("t9"), 30, "t9 in the state")
         check(c.agent("t9")["objective"].startswith("-w "), "the brief as written: %r" % c.agent("t9"))
         c.wait_idle("t9", timeout=90)
         n_err = len(typed(c, "error"))
