@@ -503,11 +503,11 @@ fn a_tool_row_starts_with_tool_started() {
     assert_eq!(e[2].tools.as_ref().unwrap().count, 2);
 }
 
-/// G4/G5 (architect m_14145): a message in carries its id; one written
-/// to him (msg-you, or an old direct reply from `@name`) is a to_you
-/// entry with who wrote it.
+/// G4/G5 (architect m_14145, m_14424): a message in carries its id; one
+/// written to him keeps the kind it always folded to (msg-you: agent, an
+/// old direct reply from `@name`: from_agent), says to_you and who.
 #[test]
-fn a_message_to_him_is_a_to_you_entry() {
+fn a_message_to_him_says_to_you() {
     let none = |_: &str| None;
     let l = |pos: u64, line: &str| (pos, 1_000 + pos, line.to_string());
     let ls = vec![
@@ -517,8 +517,10 @@ fn a_message_to_him_is_a_to_you_entry() {
         l(4, "next line"),
     ];
     let e = fold(&ls, &ctx_with(&[], &none));
-    let got: Vec<_> = e.iter().map(|x| (x.kind, x.from.as_deref(), x.msg, x.text.as_str())).collect();
+    let got: Vec<_> = e.iter().map(|x| (x.kind, x.to_you, x.from.as_deref(), x.msg, x.text.as_str())).collect();
     use EntryKind::*;
-    assert_eq!(got, [(FromAgent, Some("ambient-lead"), Some(3), "nice"), (ToYou, Some("docs"), Some(4), "done here"), (ToYou, Some("bise"), None, "your keys\nnext line")]);
+    assert_eq!(got, [(FromAgent, false, Some("ambient-lead"), Some(3), "nice"), (FromAgent, true, Some("docs"), Some(4), "done here"), (Agent, true, Some("bise"), None, "your keys\nnext line")]);
+    let j = serde_json::to_value(&e[0]).unwrap();
+    assert!(j.get("to_you").is_none(), "false is left out: {j}");
     assert!(e.iter().all(|x| x.payload_matches_kind() && x.to.is_none()), "{e:?}");
 }

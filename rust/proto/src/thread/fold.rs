@@ -339,12 +339,9 @@ impl Fold<'_> {
             // G4: its message id; G5: an old direct reply (`@from`) was
             // written to him
             Hub::MsgIn { from, id, body } => {
-                let (kind, from) = match from.strip_prefix('@') {
-                    Some(f) => (EntryKind::ToYou, f.to_string()),
-                    None => (EntryKind::FromAgent, lines::shown_name(&from)),
-                };
-                let mut e = Entry::new(pos, ms, kind, body);
-                e.from = Some(from);
+                let mut e = Entry::new(pos, ms, EntryKind::FromAgent, body);
+                e.to_you = from.starts_with('@');
+                e.from = Some(from.trim_start_matches('@').to_string());
                 e.msg = id.strip_prefix("m_").and_then(|n| n.parse().ok());
                 self.cont = Some(self.push(e));
             }
@@ -367,9 +364,11 @@ impl Fold<'_> {
                 e.not_delivered = Some(NotDelivered { to, text });
                 self.push(e);
             }
-            // G5: an agent writing to him (level 2 in the TUI)
+            // G5: an agent writing to him (level 2 in the TUI): the agent
+            // entry it always was, now saying who and to him
             Hub::MsgYou { from, body } => {
-                let mut e = Entry::new(pos, ms, EntryKind::ToYou, body);
+                let mut e = Entry::new(pos, ms, EntryKind::Agent, body);
+                e.to_you = true;
                 e.from = Some(lines::shown_name(&from));
                 self.cont = Some(self.push(e));
             }

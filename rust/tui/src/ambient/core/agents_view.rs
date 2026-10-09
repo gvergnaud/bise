@@ -47,12 +47,10 @@ pub(super) struct Pending {
 const KEEP: usize = 8;
 
 /// An entry as the panel shows it (its `from-agent` kind is the panel's
-/// older word for bise-proto's `from_agent`; an agent writing to him,
-/// `to_you`, shows there too, with who wrote it, until the panel draws
-/// it apart).
+/// older word for bise-proto's `from_agent`).
 fn panel_entry(e: &Entry) -> Value {
     let mut v = serde_json::to_value(e).unwrap_or(Value::Null);
-    if v["kind"] == "from_agent" || v["kind"] == "to_you" {
+    if v["kind"] == "from_agent" {
         v["kind"] = json!("from-agent");
     }
     v

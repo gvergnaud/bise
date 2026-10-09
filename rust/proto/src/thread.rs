@@ -23,12 +23,9 @@ pub enum EntryKind {
     You,
     /// the agent's own words
     Agent,
-    /// a message from another agent (`from`; `msg`: its id)
+    /// a message from another agent (`from`; `msg`: its id; `to_you`:
+    /// an old direct reply to him, `msg-in` from `@name`)
     FromAgent,
-    /// an agent writing to him (`from`; `msg`: its id when the line has
-    /// one): the hub's `msg-you`, or an old direct reply (`msg-in` from
-    /// `@name`). The TUI draws it at level 2, above agent-to-agent talk
-    ToYou,
     /// its tool calls in a row
     Tools,
     Card,
@@ -451,6 +448,12 @@ pub struct Entry {
     /// rule ([`lines::deliver`], the TUI's too)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delivery: Option<Delivery>,
+    /// an agent wrote this to him (G5, the TUI's level 2): an `agent`
+    /// entry from the hub's `msg-you` (`from`: who), or a `from_agent`
+    /// one that is an old direct reply. A superset: those lines fold to
+    /// the kinds they always did (architect m_14424)
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub to_you: bool,
     /// a `to_agent` entry: who it went to
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub to: Option<String>,
@@ -499,6 +502,7 @@ impl Entry {
             report: None,
             context: None,
             delivery: (kind == EntryKind::You).then_some(Delivery::Sent),
+            to_you: false,
             to: None,
             asks: false,
             msg: None,
@@ -520,7 +524,8 @@ impl Entry {
     /// `pr: None`. The kinds without a payload carry none, but for an
     /// `agent` reply's own thinking (one line, one entry: pos is the key).
     /// A `you` entry has its mark; a message from an agent (to another
-    /// one, or to him) says who wrote it, and no other entry does.
+    /// one, or to him) says who wrote it, and no other entry does; only
+    /// an `agent` or a `from_agent` entry is written to him.
     pub fn payload_matches_kind(&self) -> bool {
         let has = [
             (EntryKind::You, self.delivery.is_some()),
@@ -543,7 +548,8 @@ impl Entry {
             EntryKind::Agent => true,
             _ => self.thinking.is_none(),
         };
-        let from = self.from.is_some() == matches!(self.kind, EntryKind::FromAgent | EntryKind::ToYou);
+        let from = self.from.is_some() == (self.kind == EntryKind::FromAgent || self.to_you);
+        let from = from && (!self.to_you || matches!(self.kind, EntryKind::Agent | EntryKind::FromAgent));
         thinking && from && has.iter().all(|(k, set)| *set == (self.kind == *k))
     }
 }

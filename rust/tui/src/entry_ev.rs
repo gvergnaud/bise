@@ -7,7 +7,7 @@
 //! (`wire.rs` rec_ev); its named gaps are the work of P4d, and the feed
 //! switches to entries only when that list is empty.
 
-use crate::sb::pr_look;
+use crate::sb::{pr_look, shown_name};
 use crate::wire::{notice_ev, Ev, Mark, ToolData, ToolState};
 use bise_proto::thread::{self as pthread, Entry, EntryKind, NoticeLevel};
 
@@ -27,6 +27,8 @@ pub(crate) fn ev_of(e: &Entry) -> Vec<Ev> {
     match e.kind {
         // G1: the mark the fold moved, by the TUI's own rule
         EntryKind::You => vec![Ev::You(text, e.delivery.unwrap_or(Mark::Sent), false)],
+        // G5: an agent writing to him, level 2
+        EntryKind::Agent | EntryKind::FromAgent if e.to_you => vec![msg(e.from.clone().unwrap_or_default(), "you".into(), 2)],
         EntryKind::Agent => {
             let mut v = Vec::new();
             if let Some(t) = &e.thinking {
@@ -38,9 +40,7 @@ pub(crate) fn ev_of(e: &Entry) -> Vec<Ev> {
             v
         }
         EntryKind::Thinking => e.thinking.iter().map(|t| Ev::Thinking { ms: u128::from(t.ms), text: t.text.clone(), open: false }).collect(),
-        EntryKind::FromAgent => vec![msg(e.from.clone().unwrap_or_default(), e.to.clone().unwrap_or_default(), 3)],
-        // G5: an agent writing to him, level 2
-        EntryKind::ToYou => vec![msg(e.from.clone().unwrap_or_default(), "you".into(), 2)],
+        EntryKind::FromAgent => vec![msg(shown_name(e.from.as_deref().unwrap_or_default()), e.to.clone().unwrap_or_default(), 3)],
         EntryKind::ToAgent => vec![msg(String::new(), e.to.clone().unwrap_or_default(), 3)],
         EntryKind::Tools => e.tools.iter().flat_map(|t| t.items.iter().enumerate().map(|(i, it)| tool(i, it))).collect(),
         EntryKind::Notice => e.notice.iter().map(|n| notice_ev(n.clone())).collect(),

@@ -54,8 +54,9 @@ fn tui_words(ls: &[&str]) -> Vec<(EntryKind, String, String)> {
             }
             Some(Ev::AgentMsg { from, to, text, level: 3, .. }) if from.is_empty() => out.push((EntryKind::ToAgent, text, to)),
             Some(Ev::AgentMsg { from, text, level: 3, .. }) => out.push((EntryKind::FromAgent, text, from)),
-            // G5: an agent writing to him is the fold's to_you entry
-            Some(Ev::AgentMsg { from, text, level: 2, .. }) => out.push((EntryKind::ToYou, text, from)),
+            // G5: an agent writing to him is the fold's agent entry with
+            // to_you and who
+            Some(Ev::AgentMsg { from, text, level: 2, .. }) => out.push((EntryKind::Agent, text, from)),
             Some(Ev::Info(t) | Ev::Warn(t) | Ev::Err(t)) => out.push((EntryKind::Notice, t, String::new())),
             Some(Ev::Undelivered { name, text, .. }) => out.push((EntryKind::NotDelivered, text, name)),
             _ => {}
