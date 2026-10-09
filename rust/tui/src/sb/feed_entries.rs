@@ -256,20 +256,18 @@ pub(crate) fn agent_row(app: &mut App, agent: &str, working: bool, turns: u64) {
 }
 
 /// An agent's turn started or ended, as its agents row says (its status
-/// turned working, or stopped being): the feed's turn rows (the tools a
-/// turn left running freeze, its end's time for the hover), then the
-/// reads of a turn's edge.
+/// turned working, or stopped being): an end clears the feed's wait for
+/// a turn and its interrupt ask, then the reads of a turn's edge. The
+/// turn's rows and its end's time come with the entries
+/// (`Entry.turn_start`, `Entry.turn_end_ms`: one source for the edges
+/// drawn, proto-lead m_14961).
 pub(crate) fn turn_edge(app: &mut App, agent: &str, working: bool) {
-    with_feed(app, agent, |app| {
-        if working {
-            push_event(&mut app.events, &mut app.cache, Ev::Turn);
-        } else {
-            push_event(&mut app.events, &mut app.cache, Ev::TurnDone);
-            push_event(&mut app.events, &mut app.cache, Ev::Ended(crate::when::now_ms()));
+    if !working {
+        with_feed(app, agent, |app| {
             app.pending = false;
             app.interrupt_requested = false;
-        }
-    });
+        });
+    }
     // voice mode's turn, the queue's next message (outside with_feed)
     crate::entry_reads::on_turn(app, agent, working);
 }

@@ -499,6 +499,16 @@ pub struct Entry {
     pub scheduled: Option<Scheduled>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub turn_failed: Option<TurnFailed>,
+    /// the first entry after a `turn_started` line: a turn starts here
+    /// (the TUI's turn row; a reply's turn ends before the next start)
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub turn_start: bool,
+    /// the newest entry when its turn ended (any end: completed,
+    /// interrupted, failed), with the `turn_done` line's time (BISE-271:
+    /// the hover of the turn's replies); none for a replayed end (no
+    /// time) or one with no entry of its own to carry it
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn_end_ms: Option<u64>,
 }
 
 impl Entry {
@@ -529,6 +539,8 @@ impl Entry {
             approval: None,
             scheduled: None,
             turn_failed: None,
+            turn_start: false,
+            turn_end_ms: None,
         }
     }
 

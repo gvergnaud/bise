@@ -559,3 +559,59 @@ fn a_card_entry_says_its_rows_kind_and_asker() {
         }
     }
 }
+
+/// BISE-271 from entries (proto-lead m_14961, architect m_14963): a
+/// turn's first entry says it starts one, its newest entry at its end
+/// keeps the end's time, whatever the end (completed, interrupted, failed:
+/// the turn_failed entry itself); a replayed end has no time and sets
+/// nothing; a turn with no entry of its own never puts its end on an
+/// earlier turn's entry, so a reply's turn end is always its own.
+#[test]
+fn a_turns_start_and_end_time_ride_on_its_entries() {
+    let none = |_: &str| None;
+    let l = |pos: u64, ms: u64, line: &str| (pos, ms, line.to_string());
+    let ls = vec![
+        l(1, 1_000, "sb you : go"),
+        l(2, 1_100, "  obs: turn_started"),
+        l(3, 1_200, "  obs: assistant: done"),
+        l(4, 1_300, "  obs: turn_done: completed"),
+        // interrupted: the notice is the newest entry
+        l(5, 2_100, "  obs: turn_started"),
+        l(6, 2_200, "  obs: assistant: half"),
+        l(7, 2_300, "  obs: turn_done: failed: interrupted by main"),
+        // failed: its own entry carries the end
+        l(8, 3_100, "  obs: turn_started"),
+        l(9, 3_200, "  obs: turn_done: failed: provider 500"),
+        // replayed: no time, no end
+        l(10, 4_100, "  obs: turn_started"),
+        l(11, 4_200, "  obs: assistant: old"),
+        l(12, 4_300, "history   obs: turn_done: completed"),
+        // a turn with no entry of its own: 'old' keeps no end of it
+        l(13, 5_100, "  obs: turn_started"),
+        l(14, 5_300, "  obs: turn_done: completed"),
+        // and the next turn's end stays on the next turn's entry
+        l(15, 6_100, "  obs: turn_started"),
+        l(16, 6_200, "  obs: assistant: new"),
+        l(17, 6_300, "  obs: turn_done: completed"),
+    ];
+    let e = fold(&ls, &ctx_with(&[], &none));
+    let got: Vec<_> = e.iter().map(|x| (x.pos, x.kind, x.turn_start, x.turn_end_ms)).collect();
+    use EntryKind::*;
+    assert_eq!(
+        got,
+        [
+            (1, You, false, None),
+            (3, Agent, true, Some(1_300)),
+            (6, Agent, true, None),
+            (7, Notice, false, Some(2_300)),
+            (9, TurnFailed, true, Some(3_200)),
+            (11, Agent, true, None),
+            (16, Agent, true, Some(6_300)),
+        ]
+    );
+    let j = serde_json::to_value(&e[0]).unwrap();
+    assert!(j.get("turn_start").is_none() && j.get("turn_end_ms").is_none(), "false and none are left out: {j}");
+    // a page that starts mid-turn: its end still lands, no start drawn
+    let mid = fold(&ls[2..4], &ctx_with(&[], &none));
+    assert_eq!(mid.iter().map(|x| (x.turn_start, x.turn_end_ms)).collect::<Vec<_>>(), [(false, Some(1_300))]);
+}

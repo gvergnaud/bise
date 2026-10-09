@@ -12,8 +12,23 @@ use crate::wire::{notice_ev, Ev, Mark, ToolData, ToolState};
 use bise_proto::thread::{self as pthread, Entry, EntryKind, NoticeLevel};
 
 /// The feed events of entry `e`, in order (none: an entry the TUI
-/// doesn't draw, as an interrupt's `stopped`).
+/// doesn't draw, as an interrupt's `stopped`): a turn's start before
+/// its first entry, its end (and the end's time, BISE-271) after its
+/// last, as the lines' `turn_started` / `turn_done` drew them.
 pub(crate) fn ev_of(e: &Entry) -> Vec<Ev> {
+    let mut v = Vec::new();
+    if e.turn_start {
+        v.push(Ev::Turn);
+    }
+    v.extend(kind_evs(e));
+    if let Some(t) = e.turn_end_ms {
+        v.extend([Ev::TurnDone, Ev::Ended(t)]);
+    }
+    v
+}
+
+/// The events of entry `e`'s kind and payload.
+fn kind_evs(e: &Entry) -> Vec<Ev> {
     let text = e.text.clone();
     let msg = |from: String, to: String, level: u8| Ev::AgentMsg {
         from,

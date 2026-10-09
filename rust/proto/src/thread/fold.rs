@@ -23,11 +23,14 @@ struct Fold<'a> {
     last_ms: u64,
     /// the first entry of the current turn (its `turn_started`'s marks)
     turn: usize,
+    /// a `turn_started` line came: the next entry pushed starts a turn
+    starting: bool,
     ctx: &'a Ctx<'a>,
 }
 
 impl Fold<'_> {
-    fn push(&mut self, e: Entry) -> usize {
+    fn push(&mut self, mut e: Entry) -> usize {
+        e.turn_start = std::mem::take(&mut self.starting);
         self.out.push(e);
         self.out.len() - 1
     }
@@ -128,7 +131,17 @@ impl Fold<'_> {
             self.sum(e);
             return;
         }
-        self.out.remove(e);
+        let gone = self.out.remove(e);
+        // its turn's start and end stay on the entries around it
+        if gone.turn_start {
+            match self.out.get_mut(e) {
+                Some(next) => next.turn_start = true,
+                None => self.starting = true,
+            }
+        }
+        if let (Some(t), Some(before)) = (gone.turn_end_ms, e.checked_sub(1).and_then(|b| self.out.get_mut(b))) {
+            before.turn_end_ms.get_or_insert(t);
+        }
         self.tools.retain(|r| r.1 != e);
         let shift = |x: usize| if x > e { x - 1 } else { x };
         for r in self.tools.iter_mut() {
@@ -232,6 +245,7 @@ impl Fold<'_> {
                 let turn = self.turn.min(self.out.len());
                 lines::deliver(&mut self.out[turn..], &m);
                 self.turn = self.out.len();
+                self.starting = true;
             }
             Some(m) => {
                 lines::deliver(&mut self.out, &m);
@@ -241,6 +255,8 @@ impl Fold<'_> {
         if let Some(m) = lines::tool_move(&rec) {
             return self.tool_move(pos, if replayed { 0 } else { ms }, m);
         }
+        // BISE-271: a turn's end keeps its time (a replay's has none)
+        let ended = matches!(rec, Rec::Obs(Obs::TurnDone(_))) && !replayed && ms > 0;
         match rec {
             Rec::Obs(o) => self.obs(pos, ms, o, if replayed { 0 } else { prev }),
             Rec::Rejected(r) => self.notice(pos, ms, words::rejected(&r)),
@@ -248,6 +264,22 @@ impl Fold<'_> {
             // a message's next line
             Rec::Raw(line) => self.more(&line),
             _ => {}
+        }
+        if ended {
+            self.end_turn(ms);
+        }
+    }
+
+    /// The turn ended at `ms`: on the newest entry, unless it carries an
+    /// earlier turn's end (this turn drew nothing of its own) or a turn
+    /// starts after it (a start with no entry yet).
+    fn end_turn(&mut self, ms: u64) {
+        if self.starting {
+            self.starting = false;
+            return;
+        }
+        if let Some(e) = self.out.last_mut().filter(|e| e.turn_end_ms.is_none()) {
+            e.turn_end_ms = Some(ms);
         }
     }
 
@@ -491,7 +523,7 @@ impl Delivered for Entry {
 
 /// An agent's transcript lines as entries, oldest first.
 pub fn fold(lines: &[Line], ctx: &Ctx) -> Vec<Entry> {
-    let mut f = Fold { out: Vec::new(), cont: None, tools: Vec::new(), you: None, last_ms: 0, turn: 0, ctx };
+    let mut f = Fold { out: Vec::new(), cont: None, tools: Vec::new(), you: None, last_ms: 0, turn: 0, starting: false, ctx };
     for (pos, ms, l) in lines {
         f.line(*pos, *ms, l);
     }
