@@ -81,6 +81,14 @@ impl Hub {
         if !app.sb.subscribed.contains(agent) {
             self.subscribe(app, agent, false);
         }
+        for e in &self.changes(agent, pos, ts, line) {
+            feed_entries::entry(app, agent, e);
+        }
+    }
+
+    /// The entries line `pos` of `agent`'s thread makes or changes, as the
+    /// hub would send them (no terminal: the bench folds before it times).
+    pub(crate) fn changes(&mut self, agent: &str, pos: u64, ts: u64, line: &str) -> Vec<Entry> {
         let t = self.threads.entry(agent.to_string()).or_default();
         t.lines.push((pos, ts, line.to_string()));
         // fold again from an entry start TAIL lines back
@@ -92,9 +100,7 @@ impl Hub {
         let changed: Vec<Entry> = tail.iter().filter(|e| !t.sent[kept..].contains(e)).cloned().collect();
         t.sent.truncate(kept);
         t.sent.extend(tail);
-        for e in &changed {
-            feed_entries::entry(app, agent, e);
-        }
+        changed
     }
 
     /// `thread/page`'s answer: the entries of `lines` (older than
@@ -110,6 +116,13 @@ pub(crate) fn lines(app: &mut App, agent: &str, lines: &[&str]) -> Hub {
     let mut hub = Hub::new();
     hub.lines(app, agent, lines);
     hub
+}
+
+/// `agent`'s first page placed as `thread/subscribe`'s answer, its
+/// entries already folded (the bench times the terminal's work alone).
+pub(crate) fn place_page(app: &mut App, agent: &str, entries: Vec<Entry>, more: bool) {
+    app.sb.subscribed.insert(agent.to_string());
+    feed_entries::page(app, agent, None, entries, more);
 }
 
 /// `agents`' threads count as subscribed (their entries are placed), with
