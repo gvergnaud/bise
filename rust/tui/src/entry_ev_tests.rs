@@ -1,7 +1,7 @@
 //! The parity law of client-protocol step 4 (architect m_13977 Q1): for
 //! the same thread lines, the feed drawn from the hub's fold
 //! (`bise_proto::thread::fold` then [`ev_of`]) is the feed the TUI draws
-//! from the lines today (`sb::dispatch` of each `line` event). Compared
+//! from the lines (its own fold, `run::ingest_line` of each line). Compared
 //! row by row as text at one width. A corpus that differs must be in
 //! [`GAPS`] with its first differing row; a gap that closes must leave
 //! the list (it only shrinks). The feed switches to entries (P4d) when it
@@ -75,12 +75,13 @@ fn rows(events: &[Ev]) -> Vec<String> {
         .collect()
 }
 
-/// Today's feed of `lines` in agent main's view.
+/// The feed the TUI's own fold of `lines` draws (`run::ingest_line`,
+/// wire.rs rec_ev: the line path, without the hub's `line` arm the
+/// switch deleted).
 fn from_lines(lines: &[Line]) -> Vec<String> {
     let mut app = test_app();
-    for (pos, ts, l) in lines {
-        let j = serde_json::json!({"ev": "line", "agent": "main", "line": l, "pos": pos, "ts": ts}).to_string();
-        crate::sb::dispatch(&mut app, &j);
+    for (_, ts, l) in lines {
+        crate::run::ingest_line(&mut app, l.clone(), Some(*ts));
     }
     rows(&app.events)
 }

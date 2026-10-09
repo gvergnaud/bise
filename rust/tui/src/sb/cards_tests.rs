@@ -669,18 +669,17 @@ fn the_last_answer_clears_the_inbox() {
 #[test]
 fn an_answer_says_one_line_in_the_thread() {
     let (mut app, mut hub) = app_with_hub();
+    // the thread in view, subscribed before he answers (its first page
+    // replaces the feed), then its entries as the hub sends them
+    let mut thread = super::entries_for_tests::Hub::new();
+    let focus = app.sb.focus.clone();
+    thread.subscribe(&mut app, &focus, false);
     app.sb.cards = cast();
     open(&mut app);
     ctrl(&mut app, 'n');
     assert!(key(&mut app, KeyCode::Char('2'), KeyModifiers::NONE));
     assert_eq!(sent(&mut hub), vec!["/answer 12 both: compress, and lazy-load below the fold"]);
-    // TODO(client-protocol P4d, proto-zone-b): through
-    // super::entries_for_tests (its thread subscribed before he answers:
-    // a first page replaces the feed) once feed_entries calls
-    // entry_reads::skip before it places an entry
-    let line = |agent: &str, l: &str| {
-        serde_json::json!({"ev": "line", "agent": agent, "line": format!("sb route : {l}")}).to_string()
-    };
+
     let folds = |evs: &[Ev]| -> Vec<String> {
         evs.iter()
             .filter_map(|e| match e {
@@ -691,14 +690,13 @@ fn an_answer_says_one_line_in_the_thread() {
             .collect()
     };
     // the hub's line for it comes back to main's feed: nothing more
-    let focus = app.sb.focus.clone();
-    super::super::dispatch(&mut app, &line(&focus, "you → @perf (answer to card #12) : both: compress, and lazy-load below the fold"));
+    thread.line(&mut app, &focus, "sb route : you → @perf (answer to card #12) : both: compress, and lazy-load below the fold");
     assert_eq!(folds(&app.events), vec!["you answered perf: both"]);
     // an answer given elsewhere: the hub's line, as a fold
-    super::super::dispatch(&mut app, &line(&focus, "you → @docs (answer to card #40) : v2"));
+    thread.line(&mut app, &focus, "sb route : you → @docs (answer to card #40) : v2");
     assert_eq!(folds(&app.events), vec!["you answered perf: both", "you answered docs: v2"]);
     // a message routed by hand stays as it was
-    super::super::dispatch(&mut app, &line(&focus, "you → @docs : thanks"));
+    thread.line(&mut app, &focus, "sb route : you → @docs : thanks");
     assert!(matches!(app.events.last(), Some(Ev::Info(t)) if t == "→ you → @docs : thanks"));
 }
 

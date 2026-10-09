@@ -881,11 +881,7 @@ mod zen_tests {
         calls(&mut app);
         assert!(app.zen.active(t));
         // a message to you, in a feed out of view
-        // TODO(client-protocol P4d, proto-zone-b): through
-        // crate::sb::entries_for_tests once feed_entries calls entry_reads
-        // (zen reads the entry, not the line)
-        let l = json!({"ev": "line", "agent": "docs", "line": "sb msg-you : docs : la v2 est prête"});
-        sb::dispatch(&mut app, &l.to_string());
+        crate::sb::entries_for_tests::lines(&mut app, "docs", &["sb msg-you : docs : la v2 est prête"]);
         calls(&mut app);
         assert!(!app.zen.active(t));
     }
