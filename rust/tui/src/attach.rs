@@ -45,6 +45,13 @@ pub(crate) fn label(n: usize) -> String {
     format!("[Image #{n}]")
 }
 
+/// An image chip, the only attachment that sends an image: quotes,
+/// pastes and artifact chips are text. Its label says it, not its size:
+/// the store keeps an image whose header it cannot read with a 0x0 size.
+pub(crate) fn is_image(a: &Attachment) -> bool {
+    a.label.starts_with("[Image #")
+}
+
 /// The number of a chip label: 3 for `[Image #3]`, `[Quote #3]`,
 /// `[Paste #3]`.
 fn label_number(label: &str) -> Option<usize> {
@@ -602,7 +609,7 @@ pub(crate) fn set_model(model: &str) {
 /// list: None (the provider decides).
 pub(crate) fn refused_images(app: &App) -> Option<String> {
     let text = app.ed.text.trim_start();
-    if text.starts_with('/') || !app.attachments.iter().any(|a| a.info.width > 0 && text.contains(&a.label)) {
+    if text.starts_with('/') || !app.attachments.iter().any(|a| is_image(a) && text.contains(&a.label)) {
         return None;
     }
     let model = crate::sb::focus_model(app);
@@ -1331,6 +1338,22 @@ mod tests {
         // a real image chip still refuses
         app.attachments.push(att(1, "<image name=\"[Image #1]\" b64=\"/x.b64\">"));
         app.ed.insert(" look at [Image #1]");
+        assert_eq!(refused_images(&app), Some("mistral/codestral-latest".into()));
+    }
+
+    /// An image whose header the store could not read is kept with a
+    /// 0x0 size (bend_images::store_bytes): it is still an image, and a
+    /// model the catalog lists without vision still refuses it.
+    #[test]
+    fn an_image_of_unknown_size_is_still_an_image() {
+        let mut app = composer("", 0);
+        app.events.push(crate::Ev::Usage(crate::usage::Usage {
+            model: "mistral/codestral-latest".into(),
+            input: 10,
+            ..Default::default()
+        }));
+        app.attachments.push(Attachment { info: Info::default(), ..att(1, "<image name=\"[Image #1]\" b64=\"/x.b64\">") });
+        app.ed.insert("look at [Image #1]");
         assert_eq!(refused_images(&app), Some("mistral/codestral-latest".into()));
     }
 
