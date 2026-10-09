@@ -25,7 +25,8 @@ pub(crate) fn ev_of(e: &Entry) -> Vec<Ev> {
         fold: false,
     };
     match e.kind {
-        EntryKind::You => vec![Ev::You(text, Mark::Sent, false)],
+        // G1: the mark the fold moved, by the TUI's own rule
+        EntryKind::You => vec![Ev::You(text, e.delivery.unwrap_or(Mark::Sent), false)],
         EntryKind::Agent => {
             let mut v = Vec::new();
             if let Some(t) = &e.thinking {
@@ -37,7 +38,9 @@ pub(crate) fn ev_of(e: &Entry) -> Vec<Ev> {
             v
         }
         EntryKind::Thinking => e.thinking.iter().map(|t| Ev::Thinking { ms: u128::from(t.ms), text: t.text.clone(), open: false }).collect(),
-        EntryKind::FromAgent => vec![msg(e.from.clone().unwrap_or_default(), String::new(), 3)],
+        EntryKind::FromAgent => vec![msg(e.from.clone().unwrap_or_default(), e.to.clone().unwrap_or_default(), 3)],
+        // G5: an agent writing to him, level 2
+        EntryKind::ToYou => vec![msg(e.from.clone().unwrap_or_default(), "you".into(), 2)],
         EntryKind::ToAgent => vec![msg(String::new(), e.to.clone().unwrap_or_default(), 3)],
         EntryKind::Tools => e.tools.iter().flat_map(|t| t.items.iter().enumerate().map(|(i, it)| tool(i, it))).collect(),
         EntryKind::Notice => e.notice.iter().map(|n| notice_ev(n.clone())).collect(),
@@ -57,7 +60,9 @@ pub(crate) fn ev_of(e: &Entry) -> Vec<Ev> {
     }
 }
 
-/// One tool call of a `tools` entry as the TUI's tool row.
+/// One tool call of a `tools` entry as the TUI's tool row (G3: its name,
+/// args and intent, as the row's annotations give them; the call's id
+/// comes with amb-feed's ToolItem.id on main, architect m_14219).
 fn tool(i: usize, it: &pthread::ToolItem) -> Ev {
     let state = match it.state {
         pthread::ToolState::Run | pthread::ToolState::Unknown => ToolState::Run,
@@ -65,7 +70,9 @@ fn tool(i: usize, it: &pthread::ToolItem) -> Ev {
         pthread::ToolState::Err => ToolState::Fail,
     };
     let mut t = ToolData::bare(u32::try_from(i + 1).unwrap_or(u32::MAX), state);
-    t.intent = Some(it.text.clone());
+    t.name = Some(it.name.clone()).filter(|n| !n.is_empty());
+    t.args = Some(it.args.clone()).filter(|a| !a.is_empty());
+    t.intent = it.intent.clone();
     t.code = it.code.clone();
     Ev::Tool(t)
 }

@@ -10,16 +10,21 @@ fn lines() -> Vec<Line> {
         l(1, "sb you : make it fast"),
         l(2, "  obs: turn_started"),
         l(3, "  obs: assistant: <think>hmm</think>on it"),
+        l(4, "  obs: tool_started #1"),
         l(4, "tool #1 bash : cargo test -q"),
         l(5, "tool_intent #1 : running the tests"),
         l(6, "tool_result #1 ok : 3 failed"),
+        l(7, "  obs: tool_started #2"),
         l(7, "tool #2 read_file : {\"path\":\"a.rs\"}"),
+        l(8, "  obs: tool_started #3"),
         l(8, "tool #3 bash : sb land \"fast\""),
         l(9, "tool_intent #3 : landing the fix"),
         l(10, "sb msg-in : ambient-lead m_3 : nice"),
         l(11, "second line"),
+        l(12, "  obs: tool_started #4"),
         l(12, "tool #4 bash : sb report done \"the e2e takes 40 s\""),
         l(13, "sb card : #9 question @perf : which bench?\\n1. cold\\n2. warm"),
+        l(14, "  obs: tool_started #5"),
         l(14, "tool #5 bash : sb page publish $TMPDIR/n.html --id perf-notes"),
         l(15, "  obs: turn_done: completed"),
     ]
@@ -115,6 +120,7 @@ fn a_stopped_line_is_a_stopped_entry() {
 fn a_sent_line_is_the_tasks_own_message() {
     let page = |_: &str| None;
     let ls = vec![
+        (1, 1001, "  obs: tool_started #1".to_string()),
         (1, 1001, "tool #1 bash : sb send main --expect-reply \"cart or checkout?\"".to_string()),
         (2, 1002, "sb sent : main : m_9 : 1 : gift cards: cart \\: or checkout?\\n1. on the cart page\\n2. only at checkout".to_string()),
         (3, 1003, "sb card : #2 question @gift-ui : gift cards: cart or checkout?\\n1. on the cart page\\n2. only at checkout".to_string()),
@@ -169,7 +175,7 @@ fn a_page_keeps_the_newest_and_says_what_is_before() {
     let (e, before, more) = page(&lines(), &ctx, 2);
     assert_eq!((e.len(), before, more), (2, Some(13), true));
     // a page that doesn't start the thread: its first entry may be cut
-    let (e, before, more) = page(&lines()[3..10], &ctx, 60);
+    let (e, before, more) = page(&lines()[3..13], &ctx, 60);
     assert_eq!(e[0].kind, EntryKind::FromAgent);
     assert_eq!((before, more), (Some(10), true));
 }
@@ -254,6 +260,7 @@ fn the_hubs_news_lines_are_entries_of_their_kind() {
         l(1, "sb landed : api : main : sb/api : a1b2c3d : 3 : 42 : 18"),
         l(2, "sb pr : red : 412 : https://x/412 : checks fail \\: e2e"),
         l(3, "sb pr : dim : 413 : https://x/413 : merged"),
+        l(4, "  obs: tool_started #1"),
         l(4, "tool #1 bash : sb page publish n.html --id q3"),
         l(5, "sb artifact : q3 : designer : Q3 plan : page : 2"),
         l(6, "sb artifact : logo : designer : the logo : image : 1"),
@@ -352,15 +359,22 @@ fn every_fixture_entry_carries_its_kinds_payload() {
 fn a_tool_item_carries_its_state_time_exit_error_code_output_and_files() {
     let none = |_: &str| None;
     let ls = vec![
-        (1, 1_000, "tool #1 bash : cargo test -q".to_string()),
-        (2, 1_001, "tool_code #1 : cargo test -q\\N  --lib".to_string()),
-        (3, 1_400, "tool_result #1 fail : exit 101: thread 'x' panicked at src/a.rs:3".to_string()),
-        (4, 2_000, "tool #2 apply_patch : {}".to_string()),
-        (5, 2_001, "tool_code #2 : *** Begin Patch\\N*** Update File: src/a.rs\\N+one\\N+two\\N-old\\N*** End Patch".to_string()),
-        (6, 2_050, "tool_result #2 ok : done".to_string()),
-        (7, 3_000, "tool #3 read_file : {\"path\":\"b.rs\"}".to_string()),
-        (8, 3_500, "history tool_result #3 ok : fn b() {}".to_string()),
-        (9, 4_000, "tool #4 bash : ls".to_string()),
+        (1, 1_000, "  obs: tool_started #1".to_string()),
+        (2, 1_000, "tool #1 bash : cargo test -q".to_string()),
+        (3, 1_001, "tool_code #1 : cargo test -q\\N  --lib".to_string()),
+        (4, 1_400, "  obs: tool_finished #1 fail".to_string()),
+        (5, 1_400, "tool_result #1 fail : exit 101: thread 'x' panicked at src/a.rs:3".to_string()),
+        (6, 2_000, "  obs: tool_started #2".to_string()),
+        (7, 2_000, "tool #2 apply_patch : {}".to_string()),
+        (8, 2_001, "tool_code #2 : *** Begin Patch\\N*** Update File: src/a.rs\\N+one\\N+two\\N-old\\N*** End Patch".to_string()),
+        (9, 2_050, "  obs: tool_finished #2 ok".to_string()),
+        (10, 2_050, "tool_result #2 ok : done".to_string()),
+        (11, 3_000, "history   obs: tool_started #3".to_string()),
+        (12, 3_000, "history tool #3 read_file : {\"path\":\"b.rs\"}".to_string()),
+        (13, 3_500, "history   obs: tool_finished #3 ok".to_string()),
+        (14, 3_500, "history tool_result #3 ok : fn b() {}".to_string()),
+        (15, 4_000, "  obs: tool_started #4".to_string()),
+        (16, 4_000, "tool #4 bash : ls".to_string()),
     ];
     let e = fold(&ls, &ctx_with(&[], &none));
     let items = &e[0].tools.as_ref().expect("one tools entry").items;
@@ -418,4 +432,93 @@ fn a_failed_turn_is_its_own_entry() {
     assert!(e.iter().skip(1).all(|x| x.kind != EntryKind::TurnFailed), "an interrupt is not a failed turn: {e:?}");
     let old: ToolItem = serde_json::from_value(serde_json::json!({"pos": 1, "at_ms": 0, "text": "ls", "kind": "run"})).unwrap();
     assert_eq!(old.state, ToolState::Unknown);
+}
+
+/// G1 (architect m_14145): his message's mark by the TUI's one rule
+/// (lines::deliver): sent, received on steering, read when steered or
+/// when a turn starts after it, failed when the hub couldn't deliver it;
+/// only ever up.
+#[test]
+fn his_messages_carry_their_delivery_mark() {
+    use crate::thread::Delivery::*;
+    let none = |_: &str| None;
+    let l = |pos: u64, line: &str| (pos, 1_000 + pos, line.to_string());
+    let marks = |ls: &[(u64, u64, String)]| -> Vec<_> { fold(ls, &ctx_with(&[], &none)).iter().filter(|e| e.kind == EntryKind::You).map(|e| e.delivery).collect() };
+    let ls = vec![
+        l(1, "sb you : first"),
+        l(2, "  obs: turn_started"),
+        l(3, "  obs: assistant: on it"),
+        l(4, "sb you : and the   logs"),
+        l(5, "  obs: steering_received: and the logs"),
+        l(6, "sb you : third"),
+        l(7, "sb you : lost one"),
+        l(8, "sb undelivered : perf : lost one"),
+    ];
+    assert_eq!(marks(&ls[..1]), [Some(Sent)]);
+    assert_eq!(marks(&ls), [Some(Read), Some(Received), Some(Sent), Some(Failed)]);
+    // steered: read; a turn that starts reads what was sent since the last
+    let mut more = ls.clone();
+    more.push(l(9, "  obs: steered: and the logs"));
+    assert_eq!(marks(&more), [Some(Read), Some(Read), Some(Sent), Some(Failed)]);
+    more.push(l(10, "  obs: turn_started"));
+    assert_eq!(marks(&more), [Some(Read), Some(Read), Some(Read), Some(Failed)], "failed stays");
+    // BISE-90: a steered block with other words raises this turn's
+    let ls = vec![l(1, "sb you : a"), l(2, "  obs: turn_started"), l(3, "sb you : b"), l(4, "  obs: steering_received: <agent_message from=x>")];
+    assert_eq!(marks(&ls), [Some(Read), Some(Received)]);
+    let e = fold(&ls, &ctx_with(&[], &none));
+    assert!(e.iter().all(|x| x.payload_matches_kind()), "{e:?}");
+}
+
+/// G3 (architect m_14145): a tool row exists from its tool_started (the
+/// TUI's rule); a call line without one adds nothing; the item keeps its
+/// name, args and intent apart from its text; a report's call
+/// leaves no item; a finish with no running row is an ended row.
+#[test]
+fn a_tool_row_starts_with_tool_started() {
+    let none = |_: &str| None;
+    let l = |pos: u64, line: &str| (pos, 1_000 + pos, line.to_string());
+    let ls = vec![
+        l(1, "tool #9 bash : ls"),
+        l(2, "  obs: tool_started #1"),
+        l(3, "tool #1 bash : cargo test -q"),
+        l(4, "tool_intent #1 : running the tests"),
+        l(5, "  obs: tool_finished #1 ok"),
+        l(6, "  obs: tool_started #2"),
+        l(7, "tool #2 bash : sb report done \"ok\""),
+        l(8, "  obs: tool_started #3"),
+        l(9, "  obs: tool_finished #4 fail"),
+    ];
+    let e = fold(&ls, &ctx_with(&[], &none));
+    let kinds: Vec<EntryKind> = e.iter().map(|x| x.kind).collect();
+    assert_eq!(kinds, [EntryKind::Tools, EntryKind::Report, EntryKind::Tools], "{e:?}");
+    let items = &e[0].tools.as_ref().unwrap().items;
+    assert_eq!(items.len(), 1, "no row for #9, none left for the report's #2");
+    let it = &items[0];
+    assert_eq!((e[0].pos, it.name.as_str(), it.args.as_str(), it.intent.as_deref(), it.text.as_str()), (2, "bash", "cargo test -q", Some("running the tests"), "running the tests"));
+    assert_eq!((it.state, it.ms), (ToolState::Ok, Some(3)));
+    let later = &e[2].tools.as_ref().unwrap().items;
+    assert_eq!(later.iter().map(|i| (i.state, i.name.as_str())).collect::<Vec<_>>(), [(ToolState::Run, ""), (ToolState::Err, "")]);
+    let j = serde_json::to_value(&later[0]).unwrap();
+    assert!(j.get("name").is_none() && j.get("args").is_none() && j.get("intent").is_none(), "empty left out: {j}");
+    assert_eq!(e[2].tools.as_ref().unwrap().count, 2);
+}
+
+/// G4/G5 (architect m_14145): a message in carries its id; one written
+/// to him (msg-you, or an old direct reply from `@name`) is a to_you
+/// entry with who wrote it.
+#[test]
+fn a_message_to_him_is_a_to_you_entry() {
+    let none = |_: &str| None;
+    let l = |pos: u64, line: &str| (pos, 1_000 + pos, line.to_string());
+    let ls = vec![
+        l(1, "sb msg-in : ambient-lead m_3 : nice"),
+        l(2, "sb msg-in : @docs m_4 : done here"),
+        l(3, "sb msg-you : switchboard : your keys"),
+        l(4, "next line"),
+    ];
+    let e = fold(&ls, &ctx_with(&[], &none));
+    let got: Vec<_> = e.iter().map(|x| (x.kind, x.from.as_deref(), x.msg, x.text.as_str())).collect();
+    use EntryKind::*;
+    assert_eq!(got, [(FromAgent, Some("ambient-lead"), Some(3), "nice"), (ToYou, Some("docs"), Some(4), "done here"), (ToYou, Some("bise"), None, "your keys\nnext line")]);
+    assert!(e.iter().all(|x| x.payload_matches_kind() && x.to.is_none()), "{e:?}");
 }

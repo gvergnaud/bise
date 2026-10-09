@@ -89,15 +89,11 @@ impl ToolData {
 
 /// Your message's mark (contract C3, book §13): `·` sent, `✓` the agent
 /// got it (`steering_received`), `✓✓` the model read it (`steered`, or
-/// its turn started). Only ever moves up.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum Mark {
-    Sent,
-    Received,
-    Read,
-    // the hub could not deliver it (C2 `undelivered`, BISE-86): `✗`
-    Failed,
-}
+/// its turn started), `✗` the hub could not deliver it (C2
+/// `undelivered`, BISE-86). Only ever moves up. bise-proto's
+/// `Delivery`: the hub's fold moves it by the same rule
+/// (`thread::lines::deliver`, G1).
+pub(crate) use bise_proto::thread::Delivery as Mark;
 
 /// Where a call waits in the approvals gate (the hub's `sb gate` lines).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -287,12 +283,12 @@ pub(crate) enum Ev {
         id: u64,
         res: String,
     },
-    // in memory only (C3): a wire line that moves the mark of your last
-    // message with this text (push_event applies it, never appended);
-    // `or` shows instead when there is none (an injected notification)
+    // in memory only (C3): a wire line that moves the marks of your
+    // messages (bise-proto's `lines::mark_of`, G1; push_event applies it
+    // by `lines::deliver`, never appended); `or` shows instead when none
+    // of yours matched (an injected notification)
     MarkYou {
-        text: String,
-        mark: Mark,
+        mark: lines::Mark,
         or: Option<Box<Ev>>,
     },
     // switchboard (C2 `undelivered`, BISE-86): your message `text` did not
@@ -339,18 +335,20 @@ pub(crate) fn parse_line(line: &str) -> Option<Ev> {
 /// A transcript line, read by bise-proto's one parser
 /// (`thread::lines`, architect m_10476), as the TUI's feed event.
 fn rec_ev(rec: Rec) -> Option<Ev> {
+    // the tool rows: bise-proto's rule (G3, the hub's fold reads the same
+    // moves): a row from tool_started, its annotations merged by id
+    if let Some(m) = lines::tool_move(&rec) {
+        return Some(tool_ev(m));
+    }
     Some(match rec {
         // the session-log facts (BISE-195) are for the hub's writer
         Rec::Empty | Rec::Fact | Rec::Dropped => return None,
         Rec::Idle => Ev::Idle,
         // switchboard: the hub's own lines in a feed
         Rec::Hub(h) => return sb::hub_ev(h),
-        // runtime annotations, merged into the matching Tool by id
-        Rec::Tool { id, name, args } => Ev::ToolInfo { id, name, args },
-        Rec::ToolIntent { id, text } => Ev::ToolIntent { id, text },
-        Rec::ToolCode { id, code } => Ev::ToolCode { id, code },
-        Rec::ToolResult { id, ok, preview } => Ev::ToolResult { id, ok, preview },
         Rec::Sub { name, ok, preview } => Ev::Sub { name, ok, preview },
+        // tool_move read these above
+        Rec::Tool { .. } | Rec::ToolIntent { .. } | Rec::ToolCode { .. } | Rec::ToolResult { .. } => return None,
         // BR-003: right after an interrupt, an info; else an error
         Rec::Rejected(r) => notice_ev(words::rejected(&r)),
         // a replayed message was committed: the model read it
@@ -360,11 +358,27 @@ fn rec_ev(rec: Rec) -> Option<Ev> {
         Rec::Injected(text) => {
             let flat = text.replace('\n', " ");
             let info = Ev::Info(format!("injected · {}", truncate_chars(flat.trim(), 110)));
-            Ev::MarkYou { text, mark: Mark::Read, or: Some(Box::new(info)) }
+            let Some(mark) = lines::mark_of(&Rec::Injected(text)) else { return Some(info) };
+            Ev::MarkYou { mark, or: Some(Box::new(info)) }
         }
         Rec::Raw(l) => Ev::Raw(l),
         Rec::Obs(o) => return obs_ev(o),
     })
+}
+
+/// A tool move as the feed's event: a row (started; finished, which
+/// push_event merges into the running row with its id, else its own),
+/// or an annotation push_event merges into the newest row with its id.
+fn tool_ev(m: lines::ToolMove) -> Ev {
+    use lines::ToolMove as M;
+    match m {
+        M::Start(id) => Ev::Tool(ToolData::bare(id, ToolState::Run)),
+        M::Finish { id, ok } => Ev::Tool(ToolData::bare(id, if ok { ToolState::Ok } else { ToolState::Fail })),
+        M::Info { id, name, args } => Ev::ToolInfo { id, name, args },
+        M::Intent { id, text } => Ev::ToolIntent { id, text },
+        M::Code { id, code } => Ev::ToolCode { id, code },
+        M::Result { id, ok, preview } => Ev::ToolResult { id, ok, preview },
+    }
 }
 
 fn obs_ev(o: Obs) -> Option<Ev> {
@@ -373,12 +387,9 @@ fn obs_ev(o: Obs) -> Option<Ev> {
         // tool-call-only replies carry no text
         Obs::Assistant(t) if t.is_empty() => return None,
         Obs::Assistant(t) => Ev::Assistant(t),
-        Obs::ToolStarted(id) => Ev::Tool(ToolData::bare(id, ToolState::Run)),
-        Obs::ToolFinished { id, ok } => Ev::Tool(ToolData::bare(id, if ok { ToolState::Ok } else { ToolState::Fail })),
         Obs::Plumbing => return None,
         // C3: steering moves the mark of your message, no info line
-        Obs::SteeringReceived(text) => Ev::MarkYou { text, mark: Mark::Received, or: None },
-        Obs::Steered(text) => Ev::MarkYou { text, mark: Mark::Read, or: None },
+        o @ (Obs::SteeringReceived(_) | Obs::Steered(_)) => Ev::MarkYou { mark: lines::mark_of(&Rec::Obs(o))?, or: None },
         Obs::CompactionStarted => Ev::Compact,
         Obs::CompactionDone(text) => Ev::Compacted { text, open: false },
         Obs::Usage(t) => return usage::Usage::parse(&t).map(Ev::Usage),

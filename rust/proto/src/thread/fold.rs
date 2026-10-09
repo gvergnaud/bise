@@ -2,11 +2,11 @@
 //! entries (consecutive tool calls are one `tools` entry at the first
 //! call's pos; a message on several lines is one entry).
 
-use super::lines::{self, Hub, Obs, Rec};
+use super::lines::{self, Delivered, Hub, Mark, Obs, Rec, ToolMove};
 use super::scheduled;
 use super::words::{self, one_line, summary};
 use super::{Answered, ApprovalFold, Ctx, Entry, EntryCard, EntryKind, Landed, Line, Made, NotDelivered, Notice, PageRef, PrNews, ReportRef, Scheduled, Thinking, ToolItem, ToolKind, Tools};
-use super::{cap, FileCount, ToolState, TurnFailed};
+use super::{cap, Delivery, FileCount, ToolState, TurnFailed};
 use crate::context::FnContext;
 use crate::rows::question;
 
@@ -21,6 +21,8 @@ struct Fold<'a> {
     you: Option<usize>,
     /// the previous line's time (0: a replay), for a thinking's duration
     last_ms: u64,
+    /// the first entry of the current turn (its `turn_started`'s marks)
+    turn: usize,
     ctx: &'a Ctx<'a>,
 }
 
@@ -30,24 +32,22 @@ impl Fold<'_> {
         self.out.len() - 1
     }
 
-    fn tool(&mut self, pos: u64, ms: u64, id: u32, name: &str, args: &str) {
-        let args = lines::unescape(args);
-        if name == "bash" {
-            if let Some((kind, text)) = lines::report_in(&args) {
-                let mut e = Entry::new(pos, ms, EntryKind::Report, text);
-                e.report = Some(ReportRef { kind });
-                self.push(e);
-                return;
-            }
-            if let Some(id) = lines::publish_in(&args) {
-                let page = (self.ctx.page)(&id).unwrap_or(PageRef { id: id.clone(), title: id.replace('-', " "), v: None, url: String::new() });
-                let v = page.v.map(|v| format!(" v{v}")).unwrap_or_default();
-                let mut e = Entry::new(pos, ms, EntryKind::Page, format!("{}{v}", page.title));
-                e.page = Some(page);
-                self.push(e);
-                return;
-            }
+    /// One line's tool move (G3, [`lines::tool_move`]: the TUI's rule, a
+    /// row exists from `tool_started`).
+    fn tool_move(&mut self, pos: u64, ms: u64, m: ToolMove) {
+        match m {
+            ToolMove::Start(id) => self.start(pos, ms, id, ToolState::Run),
+            ToolMove::Info { id, name, args } => self.info(pos, ms, id, &name, &args),
+            ToolMove::Intent { id, text } => self.intent(id, &text),
+            ToolMove::Code { id, code } => self.code(id, &code),
+            ToolMove::Result { id, ok, preview } => self.result(id, ok, &preview, ms),
+            ToolMove::Finish { id, ok } => self.finish(pos, ms, id, ok),
         }
+    }
+
+    /// `tool_started`: a running item, in the tools entry it continues
+    /// (or a new one at this line).
+    fn start(&mut self, pos: u64, ms: u64, id: u32, state: ToolState) {
         let e = match self.out.last() {
             Some(e) if e.kind == EntryKind::Tools => self.out.len() - 1,
             _ => {
@@ -60,10 +60,13 @@ impl Fold<'_> {
             pos,
             id: u64::from(id),
             at_ms: ms,
-            text: format!("{name}: {}", one_line(&args.replace("\\N", "\n"), 100)),
-            kind: ToolKind::of(name),
-            land: name == "bash" && args.contains("sb land"),
-            state: ToolState::Run,
+            name: String::new(),
+            args: String::new(),
+            intent: None,
+            text: String::new(),
+            kind: ToolKind::Other,
+            land: false,
+            state,
             ms: None,
             exit: None,
             err: None,
@@ -76,6 +79,79 @@ impl Fold<'_> {
         let i = items.len() - 1;
         self.tools.push((id, e, i));
         self.sum(e);
+    }
+
+    /// `tool #<id> <name> : <args>`: the call's name and args on its
+    /// item; a bash `sb report` or `sb page publish` is a report or a page
+    /// entry instead (its item leaves).
+    fn info(&mut self, pos: u64, ms: u64, id: u32, name: &str, args: &str) {
+        let args = lines::unescape(args);
+        if name == "bash" {
+            if let Some((kind, text)) = lines::report_in(&args) {
+                self.unstart(id);
+                let mut e = Entry::new(pos, ms, EntryKind::Report, text);
+                e.report = Some(ReportRef { kind });
+                self.push(e);
+                return;
+            }
+            if let Some(id_) = lines::publish_in(&args) {
+                self.unstart(id);
+                let page = (self.ctx.page)(&id_).unwrap_or(PageRef { id: id_.clone(), title: id_.replace('-', " "), v: None, url: String::new() });
+                let v = page.v.map(|v| format!(" v{v}")).unwrap_or_default();
+                let mut e = Entry::new(pos, ms, EntryKind::Page, format!("{}{v}", page.title));
+                e.page = Some(page);
+                self.push(e);
+                return;
+            }
+        }
+        let Some(&(_, e, _)) = self.tools.iter().rev().find(|(t, _, _)| *t == id) else { return };
+        let Some(item) = self.item(id) else { return };
+        item.text = item.intent.clone().unwrap_or_else(|| format!("{name}: {}", one_line(&args.replace("\\N", "\n"), 100)));
+        item.kind = ToolKind::of(name);
+        item.land = name == "bash" && args.contains("sb land");
+        item.name = name.to_string();
+        item.args = cap(&args);
+        self.sum(e);
+    }
+
+    /// The item of call `id` leaves (a report's or a page's call): its
+    /// tools entry too when it was its only one.
+    fn unstart(&mut self, id: u32) {
+        let Some(k) = self.tools.iter().rposition(|(t, _, _)| *t == id) else { return };
+        let (_, e, i) = self.tools.remove(k);
+        let Some(t) = self.out[e].tools.as_mut() else { return };
+        t.items.remove(i);
+        for r in self.tools.iter_mut().filter(|r| r.1 == e && r.2 > i) {
+            r.2 -= 1;
+        }
+        if !t.items.is_empty() {
+            self.sum(e);
+            return;
+        }
+        self.out.remove(e);
+        self.tools.retain(|r| r.1 != e);
+        let shift = |x: usize| if x > e { x - 1 } else { x };
+        for r in self.tools.iter_mut() {
+            r.1 = shift(r.1);
+        }
+        self.cont = self.cont.filter(|&c| c != e).map(shift);
+        self.you = self.you.filter(|&c| c != e).map(shift);
+        self.turn = shift(self.turn);
+    }
+
+    /// `tool_finished`: the running item of call `id` ends, its duration
+    /// from its start ([`words::tool_ms`]); none running: an ended item
+    /// of its own (the TUI's row).
+    fn finish(&mut self, pos: u64, ms: u64, id: u32, ok: bool) {
+        let state = if ok { ToolState::Ok } else { ToolState::Err };
+        let running = self.tools.iter().rev().find(|(t, _, _)| *t == id).map(|&(_, e, i)| (e, i));
+        match running.and_then(|(e, i)| self.out[e].tools.as_mut().map(|t| &mut t.items[i])) {
+            Some(item) if item.state == ToolState::Run => {
+                item.state = state;
+                item.ms = words::tool_ms(item.at_ms, ms);
+            }
+            _ => self.start(pos, ms, id, state),
+        }
     }
 
     /// The call's item, by its tool id (the last one with that id).
@@ -98,13 +174,17 @@ impl Fold<'_> {
         item.code = Some(cap(&code));
     }
 
-    /// `tool_result`: ok or err, its duration (`ms` 0: a replay, none), a
-    /// failed bash's exit code and its first error line, its output.
+    /// `tool_result`: a failed bash's exit code and its first error line,
+    /// its output. Its state and duration are `tool_finished`'s, the line
+    /// before it; a call still running without one (an older transcript)
+    /// ends here (`ms` 0: a replay, no duration).
     fn result(&mut self, id: u32, ok: bool, preview: &str, ms: u64) {
         let Some(item) = self.item(id) else { return };
         let out = lines::wire_decode(preview);
-        item.state = if ok { ToolState::Ok } else { ToolState::Err };
-        item.ms = words::tool_ms(item.at_ms, ms);
+        if item.state == ToolState::Run {
+            item.state = if ok { ToolState::Ok } else { ToolState::Err };
+            item.ms = words::tool_ms(item.at_ms, ms);
+        }
         if !ok {
             item.exit = lines::exit_code(&out);
             item.err = lines::error_line(&out);
@@ -114,8 +194,10 @@ impl Fold<'_> {
 
     fn intent(&mut self, id: u32, text: &str) {
         let Some(&(_, e, i)) = self.tools.iter().rev().find(|(t, _, _)| *t == id) else { return };
-        if let Some(t) = self.out[e].tools.as_mut() {
-            t.items[i].text = one_line(&lines::unescape(text), 120);
+        let intent = one_line(&lines::unescape(text), 120);
+        if let (Some(t), false) = (self.out[e].tools.as_mut(), intent.is_empty()) {
+            t.items[i].text = intent.clone();
+            t.items[i].intent = Some(intent);
         }
         self.sum(e);
     }
@@ -143,12 +225,24 @@ impl Fold<'_> {
             Rec::Raw(_) => {}
             _ => self.cont = None,
         }
+        // his messages' marks (G1, the TUI's rule): a turn's start reads
+        // what he sent since the last one
+        match lines::mark_of(&rec) {
+            Some(m @ Mark::Turn) => {
+                let turn = self.turn.min(self.out.len());
+                lines::deliver(&mut self.out[turn..], &m);
+                self.turn = self.out.len();
+            }
+            Some(m) => {
+                lines::deliver(&mut self.out, &m);
+            }
+            None => {}
+        }
+        if let Some(m) = lines::tool_move(&rec) {
+            return self.tool_move(pos, if replayed { 0 } else { ms }, m);
+        }
         match rec {
             Rec::Obs(o) => self.obs(pos, ms, o, if replayed { 0 } else { prev }),
-            Rec::Tool { id, name, args } => self.tool(pos, ms, id, &name, &args),
-            Rec::ToolIntent { id, text } => self.intent(id, &text),
-            Rec::ToolCode { id, code } => self.code(id, &code),
-            Rec::ToolResult { id, ok, preview } => self.result(id, ok, &preview, if replayed { 0 } else { ms }),
             Rec::Rejected(r) => self.notice(pos, ms, words::rejected(&r)),
             Rec::Hub(h) => self.hub(pos, ms, h, you),
             // a message's next line
@@ -242,9 +336,16 @@ impl Fold<'_> {
                     self.scheduled(pos, ms, s);
                 }
             }
-            Hub::MsgIn { from, body, .. } => {
-                let mut e = Entry::new(pos, ms, EntryKind::FromAgent, body);
-                e.from = Some(from.trim_start_matches('@').to_string());
+            // G4: its message id; G5: an old direct reply (`@from`) was
+            // written to him
+            Hub::MsgIn { from, id, body } => {
+                let (kind, from) = match from.strip_prefix('@') {
+                    Some(f) => (EntryKind::ToYou, f.to_string()),
+                    None => (EntryKind::FromAgent, lines::shown_name(&from)),
+                };
+                let mut e = Entry::new(pos, ms, kind, body);
+                e.from = Some(from);
+                e.msg = id.strip_prefix("m_").and_then(|n| n.parse().ok());
                 self.cont = Some(self.push(e));
             }
             // what this task sent (sb-core's `sent` line)
@@ -266,8 +367,11 @@ impl Fold<'_> {
                 e.not_delivered = Some(NotDelivered { to, text });
                 self.push(e);
             }
-            Hub::MsgYou { body, .. } => {
-                self.cont = Some(self.push(Entry::new(pos, ms, EntryKind::Agent, body)));
+            // G5: an agent writing to him (level 2 in the TUI)
+            Hub::MsgYou { from, body } => {
+                let mut e = Entry::new(pos, ms, EntryKind::ToYou, body);
+                e.from = Some(lines::shown_name(&from));
+                self.cont = Some(self.push(e));
             }
             // `#3 question @docs : text`; a gate's confirm is the tool row's
             Hub::Card { id: Some(id), kind, body, .. } if kind != "confirm" => {
@@ -367,9 +471,23 @@ impl Fold<'_> {
     }
 }
 
+/// His messages' marks, by [`lines::deliver`] (G1).
+impl Delivered for Entry {
+    fn yours(&self) -> Option<(&str, Delivery)> {
+        (self.kind == EntryKind::You).then_some(())?;
+        Some((self.text.as_str(), self.delivery?))
+    }
+
+    fn set_mark(&mut self, to: Delivery) {
+        if self.kind == EntryKind::You {
+            self.delivery = Some(to);
+        }
+    }
+}
+
 /// An agent's transcript lines as entries, oldest first.
 pub fn fold(lines: &[Line], ctx: &Ctx) -> Vec<Entry> {
-    let mut f = Fold { out: Vec::new(), cont: None, tools: Vec::new(), you: None, last_ms: 0, ctx };
+    let mut f = Fold { out: Vec::new(), cont: None, tools: Vec::new(), you: None, last_ms: 0, turn: 0, ctx };
     for (pos, ms, l) in lines {
         f.line(*pos, *ms, l);
     }

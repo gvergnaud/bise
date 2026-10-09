@@ -23,8 +23,12 @@ pub enum EntryKind {
     You,
     /// the agent's own words
     Agent,
-    /// a message from another agent (`from`)
+    /// a message from another agent (`from`; `msg`: its id)
     FromAgent,
+    /// an agent writing to him (`from`; `msg`: its id when the line has
+    /// one): the hub's `msg-you`, or an old direct reply (`msg-in` from
+    /// `@name`). The TUI draws it at level 2, above agent-to-agent talk
+    ToYou,
     /// its tool calls in a row
     Tools,
     Card,
@@ -90,6 +94,23 @@ pub struct TurnFailed {
 pub struct Thinking {
     pub ms: u64,
     pub text: String,
+}
+
+/// Where his message is (contract C3, BISE-86): `sent` (·), `received`
+/// by the agent (✓, steering), `read` by the model (✓✓: steered, or its
+/// turn started), `failed`: the hub could not deliver it (✗). Only ever
+/// moves up, in that order ([`lines::deliver`], the one rule).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum Delivery {
+    Sent,
+    Received,
+    Read,
+    Failed,
+    /// a mark this reader doesn't know (a newer hub): never moved
+    #[serde(other)]
+    Unknown,
 }
 
 /// How a notice reads: info (dim), warn (▲, what to do), err (✗).
@@ -326,6 +347,16 @@ pub struct ToolItem {
     #[serde(default)]
     pub id: u64,
     pub at_ms: u64,
+    /// the tool's name (`bash`); "" until the call's `tool` line
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub name: String,
+    /// its args as the call line gives them, unescaped, [`cap`]ped
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub args: String,
+    /// the model's one line for it (`tool_intent`, bash and TypeScript
+    /// calls: "running the tests")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intent: Option<String>,
     /// its intent ("running the tests"), else `name: first line of args`
     pub text: String,
     pub kind: ToolKind,
@@ -416,6 +447,10 @@ pub struct Entry {
     /// line (the window draws the shot and the app on his message)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<FnContext>,
+    /// a `you` entry's mark (G1): where his message is, by the fold's one
+    /// rule ([`lines::deliver`], the TUI's too)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivery: Option<Delivery>,
     /// a `to_agent` entry: who it went to
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub to: Option<String>,
@@ -463,6 +498,7 @@ impl Entry {
             page: None,
             report: None,
             context: None,
+            delivery: (kind == EntryKind::You).then_some(Delivery::Sent),
             to: None,
             asks: false,
             msg: None,
@@ -483,8 +519,11 @@ impl Entry {
     /// exactly that payload, and no other kind's: `pr` never comes with
     /// `pr: None`. The kinds without a payload carry none, but for an
     /// `agent` reply's own thinking (one line, one entry: pos is the key).
+    /// A `you` entry has its mark; a message from an agent (to another
+    /// one, or to him) says who wrote it, and no other entry does.
     pub fn payload_matches_kind(&self) -> bool {
         let has = [
+            (EntryKind::You, self.delivery.is_some()),
             (EntryKind::Tools, self.tools.is_some()),
             (EntryKind::Card, self.card.is_some()),
             (EntryKind::Page, self.page.is_some()),
@@ -504,7 +543,8 @@ impl Entry {
             EntryKind::Agent => true,
             _ => self.thinking.is_none(),
         };
-        thinking && has.iter().all(|(k, set)| *set == (self.kind == *k))
+        let from = self.from.is_some() == matches!(self.kind, EntryKind::FromAgent | EntryKind::ToYou);
+        thinking && from && has.iter().all(|(k, set)| *set == (self.kind == *k))
     }
 }
 

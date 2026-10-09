@@ -67,13 +67,17 @@ fn perf_lines() -> Vec<Line> {
         l(1, "sb you : make it fast"),
         l(2, "  obs: turn_started"),
         l(3, "  obs: assistant: <think>hmm</think>on it"),
+        l(4, "  obs: tool_started #1"),
         l(4, "tool #1 bash : cargo test -q"),
         l(5, "tool_intent #1 : running the tests"),
         l(6, "tool_result #1 ok : 3 failed"),
+        l(7, "  obs: tool_started #2"),
         l(7, "tool #2 read_file : {\"path\":\"a.rs\"}"),
+        l(8, "  obs: tool_started #3"),
         l(8, "tool #3 bash : sb land \"fast\""),
         l(9, "tool_intent #3 : landing the fix"),
         l(10, "sb msg-in : ambient-lead m_3 : nice\\nsecond line"),
+        l(11, "  obs: tool_started #4"),
         l(11, "tool #4 bash : sb report done \"the e2e takes 40 s\""),
         l(12, "  obs: turn_done: completed"),
     ]
@@ -163,7 +167,9 @@ fn a_history_shows_the_hubs_entries_older_and_follows_live() {
     assert_eq!(e[6]["card"], json!({"id": 9, "question": "which bench?", "options": [{"n": 1, "label": "cold"}, {"n": 2, "label": "warm"}], "answered": false}));
     assert_eq!((h["before"].clone(), h["more"].clone()), (Value::Null, json!(false)));
     // live: the hub's changed entries and the step pass to the panel
+    lines.push((14, 1_014, "  obs: tool_started #6".into()));
     lines.push((14, 1_014, "tool #6 bash : sb page publish notes.html --id perf-notes".into()));
+    lines.push((15, 1_015, "  obs: tool_started #7".into()));
     lines.push((15, 1_015, "tool #7 bash : ls".into()));
     lines.push((16, 1_016, "tool_intent #7 : listing".into()));
     for e in hub_fold(&lines).iter().filter(|e| e.pos >= 14) {
@@ -187,7 +193,7 @@ fn a_history_shows_the_hubs_entries_older_and_follows_live() {
     assert_eq!(t.take().into_iter().find(|v| v["ev"] == "agent_history").unwrap()["entries"], json!([]));
     t.cmd(Cmd::AgentHistory { agent: "perf".into(), before: Some(11), limit: 2 });
     assert_eq!(t.hub.next(), json!({"cmd": "page", "agent": "perf", "before": 11, "limit": 2, "project": PROJECT}));
-    let older: Vec<Line> = perf_lines().into_iter().take(10).skip(2).collect();
+    let older: Vec<Line> = perf_lines().into_iter().take(13).skip(2).collect();
     let (entries, before, more) = thread::page(&older, &Ctx { open_cards: &[], page: &|_: &str| None, provider: &crate::models::provider_name, width: &unicode_width::UnicodeWidthStr::width, offset: &|_| 0, attached: &bise_proto::thread::Attached::plain }, 2);
     t.hub.say(thread_ev("perf", &entries, before, more));
     t.until(|o| has(o, "agent_history"));

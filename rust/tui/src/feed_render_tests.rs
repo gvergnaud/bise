@@ -1408,7 +1408,7 @@ fn a_combined_steer_moves_the_marks_of_this_turn() {
     push_event(&mut events, &mut cache, Ev::Turn);
     push_event(&mut events, &mut cache, Ev::You("also check the logs".into(), Mark::Sent, false));
     let block = "<agent_message from=\"noisy\" relation=\"child\" id=\"m_4\">";
-    let mark = |m| Ev::MarkYou { text: block.into(), mark: m, or: None };
+    let mark = |to| Ev::MarkYou { mark: bise_proto::thread::lines::Mark::Text { text: block.into(), to, or_turn: true }, or: None };
     assert!(!push_event(&mut events, &mut cache, mark(Mark::Received)));
     assert!(matches!(&events[2], Ev::You(_, Mark::Received, ..)));
     assert!(!push_event(&mut events, &mut cache, mark(Mark::Read)));

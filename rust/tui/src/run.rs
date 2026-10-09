@@ -20,13 +20,21 @@ pub(crate) fn ingest_line(app: &mut App, line: String, ts: Option<u64>) {
     if line.starts_with("  obs: turn_started") || line.starts_with("  obs: turn_done:") {
         crate::queue::seen(app);
     }
-    // thinking duration: the model's reply arrives one batch after the
-    // previous wire line (bise-proto's words::thought_ms, the hub's fold
-    // makes the same; ms since the epoch, when each line arrived)
+    // the gap since the previous wire line arrived (ms since the epoch):
+    // a hub that doesn't give the line's time marks a pause by it
     let now = crate::when::now_ms();
-    let ms = u128::from(bise_proto::thread::words::thought_ms(app.last_line_at, now));
+    let arrived = u128::from(bise_proto::thread::words::thought_ms(app.last_line_at, now));
     app.last_line_at = now;
     let (line, replayed) = strip_history(&line);
+    // thinking duration: the model's reply comes one batch after the
+    // previous line (G2: bise-proto's words::thought_ms over the lines'
+    // own times, the ms the hub wrote them, as the hub's fold; a hub
+    // that doesn't say: when they arrived)
+    let ms = match (ts, app.last_ts) {
+        (Some(t), Some(prev)) if !replayed => u128::from(bise_proto::thread::words::thought_ms(prev, t)),
+        (Some(_), None) => 0,
+        _ => arrived,
+    };
     // a line after a pause: a time mark first (BISE-14, book §10). The
     // hub's time says the pause, replayed feeds included (BISE-271); a
     // hub without it, the time the line arrived. A line the REPL
@@ -41,7 +49,7 @@ pub(crate) fn ingest_line(app: &mut App, line: String, ts: Option<u64>) {
             app.last_ts = Some(t);
         }
         None if !replayed => {
-            crate::feed::pause_mark(&mut app.events, &mut app.cache, ms, crate::feed::local_hhmm);
+            crate::feed::pause_mark(&mut app.events, &mut app.cache, arrived, crate::feed::local_hhmm);
         }
         None => {}
     }

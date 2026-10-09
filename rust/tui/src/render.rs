@@ -1183,6 +1183,8 @@ fn mark_span(mark: Mark) -> Option<Span<'static>> {
         Mark::Received => (G_RECEIVED, faint()),
         Mark::Read => (G_READ, accent()),
         Mark::Failed => (G_FAILED, error()),
+        // a newer hub's mark: as sent
+        Mark::Unknown => (G_SENDING, dim()),
     };
     Some(Span::styled(format!(" {}", glyph(g)), Style::default().fg(c)))
 }

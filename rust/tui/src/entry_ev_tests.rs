@@ -15,8 +15,9 @@ use bise_proto::thread::{fold, Ctx, Line};
 const WIDTH: usize = 100;
 
 /// The corpora that still differ (P4d's work), by name.
-// TODO(client-protocol P4d): empty this list, then switch the feed
-const GAPS: &[&str] = &["agree", "turn", "words"];
+// TODO(client-protocol P4d): the feed switches to entries (P4d0 closed
+// the three first gaps: delivery marks, tool rows, messages to him)
+const GAPS: &[&str] = &[];
 
 /// The corpora: a name and its lines (`(pos, ts, line)`).
 fn corpora() -> Vec<(&'static str, Vec<Line>)> {
@@ -51,10 +52,10 @@ fn corpora() -> Vec<(&'static str, Vec<Line>)> {
             mk(&[
                 "sb you : run the tests",
                 "  obs: turn_started",
-                "  obs: tool_started: 1",
+                "  obs: tool_started #1",
                 "tool #1 bash : cargo test -q",
                 "tool_intent #1 : running the tests",
-                "  obs: tool_finished: 1 ok",
+                "  obs: tool_finished #1 ok",
                 "tool_result #1 ok : 12 passed",
                 "  obs: assistant: all 12 pass.",
                 "  obs: turn_done: completed",

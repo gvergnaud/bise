@@ -653,11 +653,15 @@ mod tests {
         let page = thread::fold(&first, &ctx);
         let mut live = Live::start(first, &page);
         assert!(live.push(l(2, "  obs: assistant: on it"), &ctx).is_empty(), "a replay");
-        let e = live.push(l(3, "tool #1 bash : ls"), &ctx);
+        // a tool row exists from its tool_started (G3)
+        let e = live.push(l(3, "  obs: tool_started #1"), &ctx);
         assert_eq!((e.len(), e[0].pos), (1, 3));
-        let e = live.push(l(4, "tool_intent #1 : listing"), &ctx);
+        let e = live.push(l(4, "tool #1 bash : ls"), &ctx);
+        assert_eq!((e.len(), e[0].pos), (1, 3));
+        let e = live.push(l(5, "tool_intent #1 : listing"), &ctx);
         assert_eq!((e.len(), e[0].pos, e[0].tools.as_ref().unwrap().items[0].text.as_str()), (1, 3, "listing"));
-        let e = live.push(l(5, "tool #2 read_file : a"), &ctx);
+        live.push(l(6, "  obs: tool_started #2"), &ctx);
+        let e = live.push(l(7, "tool #2 read_file : a"), &ctx);
         assert_eq!((e[0].pos, e[0].tools.as_ref().unwrap().count), (3, 2), "the same entry grows");
         assert_eq!(step_of("tool_intent #2 : reading a"), Some("reading a".into()));
         assert_eq!(step_of("  obs: turn_done: completed"), Some(String::new()));

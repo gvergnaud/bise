@@ -710,6 +710,146 @@ pub fn usage_mark(line: &str) -> UsageMark<String> {
     }
 }
 
+// ---- his message's mark (G1, contract C3, BISE-86): the one rule ----
+
+use crate::thread::Delivery;
+
+/// What a line does to the marks of his messages.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Mark {
+    /// steering (`steering_received`, `steered`) or a message the core
+    /// committed (`history injected`): his newest message with these
+    /// words goes up to `to`. None with these words: `or_turn` (steering,
+    /// BISE-90: the hub steered his words in a block with other words)
+    /// raises his messages of this turn instead; else nothing moves (an
+    /// injected notification: the TUI shows its info line)
+    Text { text: String, to: Delivery, or_turn: bool },
+    /// a turn started: the model reads what he sent since the last one
+    /// (a message at idle goes straight to read)
+    Turn,
+    /// BISE-86: his message `text` didn't reach `to` (his line is the
+    /// text, or `@to text` from another view)
+    Failed { to: String, text: String },
+}
+
+/// The mark a line moves, if any.
+pub fn mark_of(rec: &Rec) -> Option<Mark> {
+    let text = |text: &str, to, or_turn| Some(Mark::Text { text: text.to_string(), to, or_turn });
+    match rec {
+        Rec::Obs(Obs::SteeringReceived(t)) => text(t, Delivery::Received, true),
+        Rec::Obs(Obs::Steered(t)) => text(t, Delivery::Read, true),
+        Rec::Injected(t) => text(t, Delivery::Read, false),
+        Rec::Obs(Obs::TurnStarted) => Some(Mark::Turn),
+        Rec::Hub(Hub::Undelivered { to, text }) => Some(Mark::Failed { to: to.clone(), text: text.clone() }),
+        _ => None,
+    }
+}
+
+/// A thread's item as [`deliver`] reads it: the TUI's feed events, the
+/// fold's entries.
+pub trait Delivered {
+    /// his message: its text and its mark
+    fn yours(&self) -> Option<(&str, Delivery)>;
+    fn set_mark(&mut self, to: Delivery);
+    /// a turn started here (the TUI keeps one in its feed; the fold's
+    /// turns are no entries: it passes the items since its last one)
+    fn turn_start(&self) -> bool {
+        false
+    }
+}
+
+/// How far back a steering line looks for his message.
+pub const MARK_LOOKBACK: usize = 500;
+
+/// The words of a text, for matching a steering line to his message
+/// (the wire flattens its line breaks).
+fn same_words(a: &str, b: &str) -> bool {
+    a.split_whitespace().eq(b.split_whitespace())
+}
+
+/// Mark `m` on `items` (oldest first; a turn mark: the items since the
+/// turn's start, or a feed where [`Delivered::turn_start`] says it): the
+/// indices whose mark moved, or None when no message of his matched
+/// (an injected notification; an undelivered line from another view).
+/// Marks only move up ([`Delivery`]'s order); `failed` stays.
+pub fn deliver<T: Delivered>(items: &mut [T], m: &Mark) -> Option<Vec<usize>> {
+    let mut moved = Vec::new();
+    let mut raise = |items: &mut [T], i: usize, to: Delivery| {
+        if items[i].yours().is_some_and(|(_, d)| to > d) {
+            items[i].set_mark(to);
+            moved.push(i);
+        }
+    };
+    match m {
+        Mark::Text { text, to, or_turn } => {
+            let plain = unescape(text);
+            let from = items.len().saturating_sub(MARK_LOOKBACK);
+            if let Some(i) = (from..items.len()).rev().find(|&i| items[i].yours().is_some_and(|(t, _)| same_words(t, &plain))) {
+                raise(items, i, *to);
+            } else if *or_turn {
+                this_turn(items, |items, i| raise(items, i, *to));
+            } else {
+                return None;
+            }
+        }
+        Mark::Turn => this_turn(items, |items, i| raise(items, i, Delivery::Read)),
+        Mark::Failed { to, text } => {
+            let mine = |t: &str| t == text || t.strip_prefix('@').and_then(|r| r.split_once(' ')).is_some_and(|(n, r)| n == to && r.trim() == text);
+            let i = (0..items.len()).rev().find(|&i| items[i].yours().is_some_and(|(t, d)| d != Delivery::Failed && mine(t)))?;
+            items[i].set_mark(Delivery::Failed);
+            moved.push(i);
+        }
+    }
+    Some(moved)
+}
+
+/// His messages since the turn started, newest first, still sent or
+/// received.
+fn this_turn<T: Delivered>(items: &mut [T], mut f: impl FnMut(&mut [T], usize)) {
+    for i in (0..items.len()).rev() {
+        if items[i].turn_start() {
+            break;
+        }
+        if items[i].yours().is_some_and(|(_, d)| matches!(d, Delivery::Sent | Delivery::Received)) {
+            f(items, i);
+        }
+    }
+}
+
+// ---- tool rows (G3): the TUI's rule, the fold's too ----
+
+/// What a line does to a thread's tool rows.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ToolMove {
+    /// `tool_started`: a running row of its own; a row exists from here
+    Start(u32),
+    /// `tool #<id> <name> : <args>`: its name and args (as on the wire)
+    /// go on the newest row with that id; none: nothing
+    Info { id: u32, name: String, args: String },
+    /// `tool_intent`: on the newest row with that id
+    Intent { id: u32, text: String },
+    /// `tool_code`: on the newest row with that id
+    Code { id: u32, code: String },
+    /// `tool_result`: its output on the newest row with that id
+    Result { id: u32, ok: bool, preview: String },
+    /// `tool_finished`: the running row with that id ends, ok or not;
+    /// none running: an ended row of its own
+    Finish { id: u32, ok: bool },
+}
+
+/// The tool move of a line, if any.
+pub fn tool_move(rec: &Rec) -> Option<ToolMove> {
+    Some(match rec.clone() {
+        Rec::Obs(Obs::ToolStarted(id)) => ToolMove::Start(id),
+        Rec::Obs(Obs::ToolFinished { id, ok }) => ToolMove::Finish { id, ok },
+        Rec::Tool { id, name, args } => ToolMove::Info { id, name, args },
+        Rec::ToolIntent { id, text } => ToolMove::Intent { id, text },
+        Rec::ToolCode { id, code } => ToolMove::Code { id, code },
+        Rec::ToolResult { id, ok, preview } => ToolMove::Result { id, ok, preview },
+        _ => return None,
+    })
+}
+
 #[cfg(test)]
 #[path = "lines_tests.rs"]
 mod tests;
