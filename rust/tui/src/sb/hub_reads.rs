@@ -294,6 +294,7 @@ pub(crate) mod rows_for_tests {
             pr: None,
             link: None,
             for_msg: None,
+            batch: None,
         }
     }
 

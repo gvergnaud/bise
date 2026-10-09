@@ -452,6 +452,34 @@ pub struct Card {
     /// the message it answers (`sb card --for`)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub for_msg: Option<u64>,
+    /// a page's drafts batched in one card (docs/ambient-pages.md): its
+    /// fields for the capsule's words; none on any other card
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub batch: Option<CardBatch>,
+}
+
+/// A drafts-batch card's fields (the hub's pages/drafts.rs `info`, amb-web
+/// m_6061): `count` drafts titled `title`, `what` they are (`replies`,
+/// `actions`...), `names` each recipient once, `topics` one per draft (or
+/// none), `line` the card's second line as is, `actions` the words of its
+/// actions to close (none when it has none).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct CardBatch {
+    #[serde(default)]
+    pub count: u32,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub what: String,
+    #[serde(default)]
+    pub names: Vec<String>,
+    #[serde(default)]
+    pub topics: Vec<String>,
+    #[serde(default)]
+    pub line: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actions: Option<String>,
 }
 
 /// A card kind's rank in reading order, what blocks an agent first: an

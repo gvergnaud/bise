@@ -284,6 +284,8 @@ pub fn cards(snap: &Value, project: &str, now: u64, user_kind: fn(&str) -> bool)
                 pr: n(c, "pr"),
                 link: opt(c, "link"),
                 for_msg: n(c, "for_msg"),
+                // a drafts batch's fields (daemon/page_cards.rs snapshot_pages)
+                batch: c.get("batch").filter(|b| b.is_object()).and_then(|b| serde_json::from_value(b.clone()).ok()),
                 text,
                 kind,
             }
@@ -524,6 +526,29 @@ mod tests {
 
     fn uk(k: &str) -> bool {
         matches!(k, "question" | "drop" | "confirm")
+    }
+
+    /// Law (proto-tests m_15071): a drafts-batch card's `batch` (the
+    /// snapshot's, daemon/page_cards.rs) is hub/cards' `Card.batch` with
+    /// every key and value; any other card has none.
+    #[test]
+    fn a_drafts_batch_card_carries_its_batch() {
+        let batch = json!({"count": 3, "title": "inbox replies", "what": "replies", "names": ["legal", "Lucas", "Marc"],
+            "topics": ["the contract", "the dates", "the invoice"], "line": "replies to legal, Lucas and Marc", "actions": "1 to close"});
+        let snap = json!({"cards": [
+            {"id": 7, "kind": "question", "agent": "main", "text": "send the 3 replies?\n1. send\n2. open the page", "age_ms": 0,
+             "page": {"id": "replies", "block": "drafts", "item": "d1", "drafts": true, "url": "http://p/replies#d1"}, "batch": batch},
+            {"id": 8, "kind": "question", "agent": "main", "text": "ok?", "age_ms": 0}]});
+        let (his, _) = cards(&snap, "p", 10, uk);
+        let typed = serde_json::to_value(his[0].batch.as_ref().expect("its batch")).unwrap();
+        assert_eq!(typed, batch, "every key of the older batch, the same value");
+        assert_eq!(his[1].batch, None);
+        // no actions: left out, as the older null
+        let mut none = batch.clone();
+        none["actions"] = Value::Null;
+        let snap = json!({"cards": [{"id": 7, "kind": "question", "agent": "main", "text": "x", "age_ms": 0, "batch": none}]});
+        let (his, _) = cards(&snap, "p", 10, uk);
+        assert_eq!(his[0].batch.as_ref().map(|b| b.actions.clone()), Some(None));
     }
 
     /// Law (architect m_11874): the `scheduled` row the hub builds from a

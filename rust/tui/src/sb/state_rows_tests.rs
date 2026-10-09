@@ -105,6 +105,7 @@ fn card(id: u64, kind: &str, text: &str) -> RowCard {
         pr: None,
         link: None,
         for_msg: None,
+        batch: None,
     }
 }
 

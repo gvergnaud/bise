@@ -739,6 +739,9 @@ impl Core {
                 agent: s(c, "agent"),
                 text: s(c, "text"),
                 page: c.get("page").filter(|p| p.is_object()).cloned(),
+                // TODO(client-protocol step 5): the core still reads the
+                // older state's cards; hub/cards' rows carry the same
+                // batch now (rows::Card.batch, proto_view::cards)
                 batch: c.get("batch").filter(|b| b.is_object()).cloned(),
             })
             .collect();
