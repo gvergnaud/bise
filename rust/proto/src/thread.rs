@@ -321,6 +321,10 @@ impl ToolKind {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ToolItem {
     pub pos: Pos,
+    /// the call's number in its transcript (`tool #N`, the runtime's
+    /// per-process count: not unique in a thread, `pos` is)
+    #[serde(default)]
+    pub id: u64,
     pub at_ms: u64,
     /// its intent ("running the tests"), else `name: first line of args`
     pub text: String,

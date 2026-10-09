@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e  # noqa: E402
 from e2e import EXE, check  # noqa: E402
 
-TYPED = ("welcome", "agents", "cards", "thread", "entry", "typing", "artifacts", "scheduled", "worktrees", "dev_servers", "merged", "features", "prs", "models", "diff", "jobs", "job_end", "error", "notice", "approvals")
+TYPED = ("welcome", "agents", "cards", "thread", "entry", "typing", "artifacts", "scheduled", "worktrees", "dev_servers", "merged", "features", "prs", "models", "tool_out", "diff", "jobs", "job_end", "error", "notice", "approvals")
 FIXTURES = os.path.join(e2e.ROOT, "rust", "proto", "fixtures", "hub_ev.jsonl")
 
 
@@ -294,6 +294,43 @@ def main():
         check("<image" not in json.dumps(mthread) and ".b64" not in json.dumps(mthread),
               "no image marker or store path in main's thread: %r" % [x for x in mthread if "<image" in json.dumps(x)][:2])
         c.send({"cmd": "unsubscribe", "project": project, "agent": "main"})
+
+        # a tool row's detail (ambient-lead m_14200, architect m_14218/m_14228):
+        # the transcript keeps a 200-char preview; tool_out answers with the
+        # whole result from the session log, capped at 4 KB (cut)
+        c.say("[[bash: seq 1 2000]]")
+        c.wait(lambda: any(l.startswith("tool_result #") for l in c.lines("main")[-40:]) and any("seq 1 2000" in l for l in c.lines("main")), 90, "main ran seq")
+        c.wait_idle("main", timeout=90)
+        n = len(typed(c, "thread"))
+        c.send({"cmd": "subscribe", "project": project, "agent": "main"})
+        c.wait(lambda: len(typed(c, "thread")) > n, 20, "main's thread")
+        mt = typed(c, "thread")[-1]["entries"]
+        items = [i for x in mt if x["kind"] == "tools" for i in x["tools"]["items"] if "seq 1 2000" in json.dumps(i)]
+        check(items and items[-1]["id"] > 0 and len(items[-1].get("out", "")) < 400,
+              "the seq row: an id and the short preview: %r" % (items[-1:] or [json.dumps(x)[:300] for x in mt[-4:]]))
+        c.send({"cmd": "unsubscribe", "project": project, "agent": "main"})
+        c.send({"cmd": "tool_out", "project": project, "agent": "main", "pos": items[-1]["pos"]})
+        c.wait(lambda: typed(c, "tool_out"), 20, "the tool_out answer")
+        got = typed(c, "tool_out")[-1]
+        lines_out = got["out"].split("\n")
+
+        def why_preview():
+            """what the hub had to join: the transcript lines, the log's results"""
+            adir = os.path.join(E.state, "agents", "main")
+            sid = open(os.path.join(adir, "session")).read().strip() if os.path.exists(os.path.join(adir, "session")) else "?"
+            tr = open(os.path.join(adir, "transcript.log")).read().splitlines()
+            near = [l[:160] for l in tr[items[-1]["pos"] - 1:items[-1]["pos"] + 12] if "#%d" % items[-1]["id"] in l]
+            log = os.path.join(E.env["BEND_SESSIONS_DIR"], sid, "events.jsonl")
+            res = [(e.get("at"), e["data"].get("call"), e["data"].get("ok"), json.dumps(e["data"].get("content"))[:80])
+                   for e in map(json.loads, open(log).read().splitlines() if os.path.exists(log) else [])
+                   if e.get("type") == "tool_result" and e["data"].get("call") == "call_%d" % items[-1]["id"]]
+            return {"session": sid, "log": os.path.exists(log), "transcript": near, "results": res}
+        check(got["pos"] == items[-1]["pos"] and got["cut"] and 3800 <= len(got["out"]) <= 4096
+              and lines_out[:3] == ["1", "2", "3"] and len(lines_out) > 800,
+              "tool_out gives the real lines up to the cap: %r\n%r" % ({k: (v[:60] + "…" + v[-30:] if k == "out" else v) for k, v in got.items()}, why_preview()))
+        # not a tool call: an error with its cmd
+        c.send({"cmd": "tool_out", "project": project, "agent": "main", "pos": 1})
+        c.wait(lambda: any(e.get("cmd") == "tool_out" for e in typed(c, "error")), 20, "tool_out's error")
 
         # close without answering (the inbox's close): an open card goes,
         # no error, and the typed cards event no longer has it

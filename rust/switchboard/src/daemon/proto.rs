@@ -19,6 +19,7 @@
 
 mod cmds;
 mod emit;
+mod tool_out;
 
 use super::*;
 use crate::proto_view::{self, Live, Since};
@@ -329,7 +330,8 @@ impl Shell {
             | HubCmd::RouteCancel { project, .. }
             | HubCmd::Follow { project, .. }
             | HubCmd::Slash { project, .. }
-            | HubCmd::Diff { project, .. } => project.clone(),
+            | HubCmd::Diff { project, .. }
+            | HubCmd::ToolOut { project, .. } => project.clone(),
             HubCmd::Hello { .. } => unreachable!(),
             HubCmd::Unknown { tag, .. } => return self.proto_error(id, tag, &format!("unknown command: {tag}")),
         };

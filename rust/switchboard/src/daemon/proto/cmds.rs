@@ -184,6 +184,22 @@ impl Shell {
                 }
                 self.diff_typed(id, project, agent, commit);
             }
+            // a tool row opened: its whole output from the session log
+            // (tool_out.rs), files read on a thread, to this client
+            HubCmd::ToolOut { project, agent, pos } => {
+                let Some(dir) = self.dir_of(&agent) else { return self.proto_error(id, &tag, &format!("no agent {agent}")) };
+                let (transcript, adir) = (self.transcript(&dir), self.opts.paths.agent_dir(&dir));
+                let tx = self.tx.clone();
+                std::thread::spawn(move || {
+                    let home = bise_home::Home::from_env();
+                    let (sessions, blobs) = (home.sessions_dir(), home.blobs_dir());
+                    let v = match super::tool_out::answer(&transcript, &adir, pos, &super::tool_out::Logs { sessions: &sessions, blobs: &blobs }) {
+                        Ok((out, cut)) => HubEv::ToolOut { project, agent, pos, out, cut }.to_value(),
+                        Err(text) => HubEv::Error { project: Some(project), cmd: Some(tag), text, cid: None, reason: None, kind: None }.to_value(),
+                    };
+                    let _ = tx.send(Msg::ToClient { id, v });
+                });
+            }
             // git in a thread (worktrees.rs), to this client
             HubCmd::Worktrees { .. } => self.worktrees_typed(vec![id]),
             // jobs and lsof in a thread (dev_servers.rs), to this client

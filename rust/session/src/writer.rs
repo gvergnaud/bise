@@ -89,6 +89,26 @@ pub fn iso(t: std::time::SystemTime) -> String {
     )
 }
 
+/// [`iso`]'s inverse: `2026-10-01T09:14:03.120Z` as ms since the epoch
+/// (a tool result's event time joined to its transcript line).
+pub fn ms_of_iso(s: &str) -> Option<u64> {
+    let b = s.as_bytes();
+    if b.len() != 24 || b[4] != b'-' || b[7] != b'-' || b[10] != b'T' || b[13] != b':' || b[16] != b':' || b[19] != b'.' || b[23] != b'Z' {
+        return None;
+    }
+    let n = |a: usize, z: usize| s.get(a..z)?.parse::<i64>().ok();
+    let (y, m, d) = (n(0, 4)?, n(5, 7)?, n(8, 10)?);
+    let (hh, mm, ss, ms) = (n(11, 13)?, n(14, 16)?, n(17, 19)?, n(20, 23)?);
+    // days from civil (Howard Hinnant), the inverse of iso's
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    u64::try_from(((days * 86400 + hh * 3600 + mm * 60 + ss) * 1000) + ms).ok()
+}
+
 /// `s-<utc yyyymmdd-hhmmss>-<6 hex>` (§12 decision 2).
 pub fn new_session_id() -> String {
     session_id_at(std::time::SystemTime::now())

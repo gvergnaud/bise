@@ -21,3 +21,4 @@ pub mod show;
 pub mod recorder;
 pub mod pairing;
 pub mod usage_line;
+pub mod tool_output;

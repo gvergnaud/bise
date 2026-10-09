@@ -101,6 +101,11 @@ pub enum HubEv {
     /// the models the TUI's `/model` offers on this hub (bar A.5): at
     /// hello, on `models`, and when config.toml or auth.json changed
     Models { project: Project, items: Vec<Model> },
+    /// a tool row's output (the answer to `tool_out`): the call's whole
+    /// result from the agent's session log, capped at
+    /// `thread::TOOL_TEXT_CAP`; when the log hasn't it (an older REPL's
+    /// call, no log) the transcript's preview with `cut`
+    ToolOut { project: Project, agent: String, pos: Pos, out: String, cut: bool },
     /// an agent's change (the answer to `diff`): its checkout or branch
     /// vs `base`; `head` its branch (none: the shared folder)
     Diff {
@@ -236,7 +241,7 @@ pub enum HubEv {
 }
 
 impl HubEv {
-    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "entry", "typing", "artifacts", "scheduled", "worktrees", "dev_servers", "merged", "features", "prs", "models", "diff", "route", "route_done", "jobs", "job_end", "followed_end", "confirm", "approvals", "notice", "refused", "error"];
+    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "entry", "typing", "artifacts", "scheduled", "worktrees", "dev_servers", "merged", "features", "prs", "models", "tool_out", "diff", "route", "route_done", "jobs", "job_end", "followed_end", "confirm", "approvals", "notice", "refused", "error"];
 
     pub fn decode(line: &str) -> Result<HubEv, String> {
         Self::from_value(parse(line)?)
@@ -388,6 +393,9 @@ pub enum HubCmd {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         commit: Option<String>,
     },
+    /// he opened a tool row: its whole output (`tool_out` answers this
+    /// connection), the tool item's `pos` in `agent`'s thread
+    ToolOut { project: Project, agent: String, pos: Pos },
     /// the environments screen opened: `worktrees` comes again
     Worktrees { project: Project },
     /// the environments screen opened: `dev_servers` comes again
@@ -469,7 +477,7 @@ pub enum HubCmd {
 }
 
 impl HubCmd {
-    pub const TAGS: &'static [&'static str] = &["hello", "subscribe", "unsubscribe", "page", "send", "answer", "close", "confirm", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "diff", "worktrees", "dev_servers", "merged", "features", "prs", "scheduled", "scheduled_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash"];
+    pub const TAGS: &'static [&'static str] = &["hello", "subscribe", "unsubscribe", "page", "send", "answer", "close", "confirm", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "diff", "worktrees", "dev_servers", "merged", "features", "prs", "scheduled", "scheduled_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash"];
 
     pub fn decode(line: &str) -> Result<HubCmd, String> {
         Self::from_value(parse(line)?)

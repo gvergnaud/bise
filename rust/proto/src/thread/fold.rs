@@ -58,6 +58,7 @@ impl Fold<'_> {
         };
         let item = ToolItem {
             pos,
+            id: u64::from(id),
             at_ms: ms,
             text: format!("{name}: {}", one_line(&args.replace("\\N", "\n"), 100)),
             kind: ToolKind::of(name),
