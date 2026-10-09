@@ -4,7 +4,7 @@
 //! to `bise_proto` rows, and the live fold of a subscribed thread (only
 //! the entries that changed go out).
 
-use bise_proto::rows::{question, Agent, Artifact, ArtifactVersion, Card, CardPage, AgentMode, Report, ReportKind, Status};
+use bise_proto::rows::{question, Agent, Artifact, ArtifactPr, ArtifactVersion, Card, CardPage, AgentMode, Report, ReportKind, Status};
 use bise_proto::diff::{DiffFile, DiffLine, DiffView, Hunk, LineKind};
 use bise_proto::hub::{HubEv, Job as Followed, JobState};
 use bise_proto::thread::lines::unescape;
@@ -231,7 +231,8 @@ pub fn cards(snap: &Value, project: &str, now: u64, user_kind: fn(&str) -> bool)
 /// The art store's `artifacts` event (daemon/art.rs `artifacts_ev`:
 /// rows + `seen_ms`) as rows. `url`: a page's the page server gives
 /// (`page_url`), else its link or its file (its kept copy first); `new`:
-/// not his own, changed since he last looked.
+/// not his own, changed since he last looked; the rest of each row as
+/// the store gave it (the terminal's /artifacts reads it all).
 pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>) -> Vec<Artifact> {
     let seen = ev.get("seen_ms").and_then(Value::as_u64).unwrap_or(0);
     let rows = ev.get("rows").and_then(Value::as_array).cloned().unwrap_or_default();
@@ -251,9 +252,12 @@ pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>) -> Vec<A
                         v: v.get("v").and_then(Value::as_u64).unwrap_or(0) as u32,
                         at_ms: v.get("ts_ms").and_then(Value::as_u64).unwrap_or(0),
                         note: Some(s(v, "note")).filter(|n| !n.is_empty()),
+                        target: s(v, "target"),
+                        copy: Some(s(v, "copy")).filter(|c| !c.is_empty()),
                     })
                     .collect()
             });
+            let pr = r.get("pr").filter(|p| p.is_object()).map(|p| ArtifactPr { repo: s(p, "repo"), number: p.get("number").and_then(Value::as_u64).unwrap_or(0) });
             Artifact {
                 path,
                 versions,
@@ -265,6 +269,15 @@ pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>) -> Vec<A
                 url,
                 kind,
                 id,
+                by: s(r, "by"),
+                archived: r.get("archived").and_then(Value::as_bool).unwrap_or(false),
+                created_ms: r.get("created_ms").and_then(Value::as_u64),
+                copy: Some(s(r, "copy")).filter(|c| !c.is_empty()),
+                gone: r.get("gone").and_then(Value::as_bool).unwrap_or(false),
+                detail: s(r, "detail"),
+                pr,
+                keys: r.get("keys").and_then(Value::as_array).map_or_else(Vec::new, |k| k.iter().filter_map(|x| x.as_str().map(String::from)).collect()),
+                target,
             }
         })
         .collect()
@@ -588,8 +601,8 @@ mod tests {
         assert_eq!(row(3), ("mine", "/w/m.txt", 1, false), "his own is never new");
         let paths: Vec<Option<&str>> = a.iter().map(|x| x.path.as_deref()).collect();
         assert_eq!(paths, [None, Some("/w/deck.pdf"), None, Some("/w/m.txt")], "a path for a file only, never a page or a link");
-        let v = |v: u32, at_ms: u64, note: Option<&str>| ArtifactVersion { v, at_ms, note: note.map(Into::into) };
-        assert_eq!(a[1].versions, [v(1, 80, None), v(2, 90, Some("no copy: too big"))], "the store's versions, oldest first, its words");
+        let notes: Vec<(u32, u64, Option<&str>)> = a[1].versions.iter().map(|x| (x.v, x.at_ms, x.note.as_deref())).collect();
+        assert_eq!(notes, [(1, 80, None), (2, 90, Some("no copy: too big"))], "the store's versions, oldest first, its words");
         assert!(a[0].versions.is_empty(), "a row without versions has none");
     }
 

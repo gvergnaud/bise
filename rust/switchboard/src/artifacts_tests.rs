@@ -313,3 +313,57 @@ fn list_text_filters_by_words_and_agent() {
     assert_eq!(s.list_text("deck", None, 20), "nothing matches.");
     assert_eq!(s.list_text("", Some("launch"), 20), "nothing matches.");
 }
+
+/// The typed `artifacts` (proto_view::artifacts, the window's and, from
+/// client-protocol step 4, the terminal's) carries every field of the
+/// store's rows (the older `artifacts` event): each key of a row is a
+/// typed field with the same value (`ts_ms` is `at_ms`, `v` `version`;
+/// an empty one may be left out), each version's too, and the items it
+/// marks `new` are the event's `new` count.
+#[test]
+fn the_typed_artifacts_carry_everything_the_older_rows_did() {
+    let root = tmp("typed");
+    let (state, work) = (root.join("state"), root.join("work"));
+    std::fs::create_dir_all(&work).unwrap();
+    std::fs::write(work.join("plan.md"), b"v1").unwrap();
+    std::fs::write(work.join("gone.md"), b"x").unwrap();
+    let s = Store::new(&state);
+    add(&s, &work, "plan.md", Some("q3 plan"), 10).unwrap();
+    std::fs::write(work.join("plan.md"), b"v2, longer").unwrap();
+    add(&s, &work, "plan.md", None, 20).unwrap();
+    add(&s, &work, "gone.md", None, 30).unwrap();
+    std::fs::remove_file(work.join("gone.md")).unwrap();
+    add(&s, &root, "https://github.com/acme/web/pull/6", None, 40).unwrap();
+    add(&s, &root, "bise.dev/m/artifacts", Some("the artifacts mock"), 50).unwrap();
+    let rows = s.rows(&|a: &str| Some((a.to_string(), a == "pricing-page")), work.to_str().unwrap());
+    let ev = json!({"ev": "artifacts", "rows": rows, "new": s.new_count(25), "seen_ms": 25});
+    let items = crate::proto_view::artifacts(&ev, |_| None);
+    assert_eq!(items.len(), rows.len());
+    // absent, null, "", false and [] are the same: nothing to say
+    let some = |v: Option<&Value>| v.filter(|v| !(v.is_null() || *v == "" || *v == false || v.as_array().is_some_and(Vec::is_empty))).cloned();
+    fn typed_key(k: &str) -> &str {
+        match k {
+            "ts_ms" => "at_ms",
+            "v" => "version",
+            k => k,
+        }
+    }
+    for (row, item) in rows.iter().zip(&items) {
+        let t = serde_json::to_value(item).unwrap();
+        for (k, v) in row.as_object().unwrap() {
+            if k == "versions" {
+                for (rv, tv) in v.as_array().unwrap().iter().zip(t["versions"].as_array().unwrap()) {
+                    for (vk, vv) in rv.as_object().unwrap() {
+                        let tk = if vk == "ts_ms" { "at_ms" } else { vk.as_str() };
+                        assert_eq!(some(Some(vv)), some(tv.get(tk)), "{} version {vk}", row["id"]);
+                    }
+                }
+                continue;
+            }
+            assert_eq!(some(Some(v)), some(t.get(typed_key(k))), "{}: {k}", row["id"]);
+        }
+    }
+    assert!(items.iter().any(|a| a.gone && a.archived), "a gone file, its agent archived");
+    assert!(items.iter().any(|a| a.pr.as_ref().is_some_and(|p| p.number == 6)), "a PR's number");
+    assert_eq!(items.iter().filter(|a| a.new).count() as u64, ev["new"].as_u64().unwrap(), "the new count");
+}

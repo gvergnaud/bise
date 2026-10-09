@@ -765,11 +765,52 @@ pub struct Artifact {
     /// from before it, an older hub)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub versions: Vec<ArtifactVersion>,
+    // the rest of the art store's row, as the terminal's /artifacts reads
+    // it (client-protocol step 4, P4c): left out when empty, so an older
+    // hub's row or an older client still reads
+    /// who added it: `you`, `page` (a bise page), else the agent
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub by: String,
+    /// its agent is archived
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub archived: bool,
+    /// when it was first added (ms)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_ms: Option<u64>,
+    /// the current version's target as the store keeps it: a path or a
+    /// link (a page's: its file)
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub target: String,
+    /// the store's copy of the current version (absolute), when it kept one
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copy: Option<String>,
+    /// its target is a file that is no longer there
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub gone: bool,
+    /// the row's dim words: a page's notes (`2 notes open`), a site's bare
+    /// link
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub detail: String,
+    /// a pull request's link
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pr: Option<ArtifactPr>,
+    /// the words a search matches (its links, bare and full; its paths,
+    /// absolute and from the workspace)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub keys: Vec<String>,
+}
+
+/// An artifact that is a pull request: its repo (`owner/name`) and number.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct ArtifactPr {
+    pub repo: String,
+    pub number: u64,
 }
 
 /// One version of an artifact: its number, when it was made, and the
 /// TUI's /artifacts words for it (a page's 'n notes open', 'no copy: …'),
-/// printed as they are.
+/// printed as they are; its target and the store's copy of it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ArtifactVersion {
@@ -777,6 +818,10 @@ pub struct ArtifactVersion {
     pub at_ms: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub target: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copy: Option<String>,
 }
 
 /// A live scheduled task of a project (`sb every`), the `scheduled`

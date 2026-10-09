@@ -1683,11 +1683,8 @@ impl Shell {
         let (reads, notes) = self.rpc_reads(listed);
         let mut out = String::new();
         let mut push = |v: &Value| {
-            // a kind it reads typed: its notifications where the older
-            // event went (the terminal's order: approvals before ready...)
-            let ev = v.get("ev").and_then(Value::as_str).unwrap_or("");
-            let lines = if bise_proto::rpc::older_sent(ev, &reads) { vec![v] } else { rpc::in_place(&notes, ev) };
-            for l in lines {
+            // step 4's glue: a kind it reads typed goes as its notifications
+            for l in rpc::burst_lines(v, &reads, &notes) {
                 out.push_str(&l.to_string());
                 out.push('\n');
             }

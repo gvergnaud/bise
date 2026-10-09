@@ -70,7 +70,14 @@ pub enum HubEv {
     Typing { project: Project, agent: String, text: String },
     /// every artifact of the project, at hello and on change; `new`: made
     /// or changed since he last looked (`artifacts_seen` clears it)
-    Artifacts { project: Project, items: Vec<Artifact> },
+    /// `seen_ms`: when he last looked (an item's `new` is after it, not
+    /// his own); none from an older hub
+    Artifacts {
+        project: Project,
+        items: Vec<Artifact>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        seen_ms: Option<u64>,
+    },
     /// the live scheduled tasks (`sb every`) of the project, at hello, on
     /// `scheduled` and whenever one is set, runs, stops or ends
     Scheduled { project: Project, items: Vec<ScheduledTask> },

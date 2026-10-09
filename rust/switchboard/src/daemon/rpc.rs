@@ -131,11 +131,23 @@ impl Rpcs {
     }
 }
 
-/// The hello burst's notifications that stand for older event `ev`
-/// (its [`rpc::OLDER`] row's methods), sent where `ev` went so the
-/// terminal reads the kinds in the same order (step 4's glue).
+/// What the hello burst writes for line `v` (step 4's glue): the line
+/// itself, or for an older event of a kind the connection reads typed
+/// (`reads`) its notifications from `notes`, in its place, so the
+/// terminal reads the kinds in the same order (approvals before ready,
+/// artifacts after it).
 // TODO(client-protocol step 4's end, P4e): goes with the hello's reads
-pub(super) fn in_place<'a>(notes: &'a [Value], ev: &str) -> Vec<&'a Value> {
+pub(super) fn burst_lines<'a>(v: &'a Value, reads: &BTreeSet<&'static str>, notes: &'a [Value]) -> Vec<&'a Value> {
+    let ev = v.get("ev").and_then(Value::as_str).unwrap_or("");
+    if rpc::older_sent(ev, reads) {
+        return vec![v];
+    }
+    in_place(notes, ev)
+}
+
+/// The notifications of `notes` that stand for older event `ev` (its
+/// [`rpc::OLDER`] row's methods).
+fn in_place<'a>(notes: &'a [Value], ev: &str) -> Vec<&'a Value> {
     let Some(row) = rpc::OLDER.iter().find(|o| o.ev == ev) else { return Vec::new() };
     notes.iter().filter(|n| n.get("method").and_then(Value::as_str).is_some_and(|m| row.methods.contains(&m))).collect()
 }
