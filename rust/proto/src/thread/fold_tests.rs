@@ -288,6 +288,8 @@ fn the_hubs_news_lines_are_entries_of_their_kind() {
     assert_eq!((ap(6).ok, ap(6).text.as_str(), ap(6).note.as_str()), (false, "you said no to api: rm -rf target", "not that"));
     assert_eq!((ap(7).ok, ap(7).text.as_str()), (true, "you allowed api: cargo test"));
     assert_eq!((ap(8).text.as_str(), ap(8).note.as_str()), ("you answered perf: both", ""));
+    // an answer to an item says which one (a client that folded it itself skips it); a gate's fold says none
+    assert_eq!((ap(6).card, ap(7).card, ap(8).card), (None, None, Some(4)));
     assert_eq!((e[9].from.as_deref(), e[9].to.as_deref(), e[9].msg), (Some("perf"), Some("docs"), Some(7)));
 }
 

@@ -52,6 +52,12 @@ mod keys;
 pub(crate) mod rpc;
 pub(crate) mod hub_reads;
 mod state_rows;
+mod reads;
+pub(crate) use reads::{ask_answer, queue_next};
+#[cfg(test)]
+pub(crate) use client::{hub_event_lines, Printed};
+#[cfg(test)]
+pub(crate) use reads::test_view;
 pub(crate) mod release;
 pub(super) use keys::key;
 pub(crate) use keys::{scene, Scene};
@@ -207,6 +213,9 @@ pub(super) struct Sb {
     drop_ask: Option<String>,
     /// The feeds out of view where lines arrived since their last visit.
     activity: std::collections::HashSet<String>,
+    /// What the live reads of entries remember of each thread
+    /// (`crate::entry_reads`).
+    seen: HashMap<String, crate::entry_reads::Seen>,
     ready: bool,
     /// The version the hub runs (its VERSION id), for the status row.
     version: String,
@@ -622,6 +631,7 @@ fn hub_reconnected(app: &mut App) {
         v.ed = draft;
     }
     sb.activity.clear();
+    sb.seen.clear();
     sb.ready = false;
     sb.confirm = None;
     sb.release_ask = None;
@@ -776,7 +786,8 @@ fn ingest_for(app: &mut App, agent: &str, line: String, pos: Option<usize>, ts: 
                 );
             }
             if let Some(id) = answer_id {
-                ask_of(app, n0, id, asked);
+                let n1 = app.events.len();
+                ask_of(app, n0..n1, id, asked);
             }
         }
         trim_window(app);
@@ -801,20 +812,21 @@ fn ingest_for(app: &mut App, agent: &str, line: String, pos: Option<usize>, ts: 
     }
 }
 
-/// The answer to card `id` just read (events from `n0`): what the item
+/// The answer to card `id` just read (its events: `at`): what the item
 /// asked, from the inbox (`asked`), else from the card's own line in
 /// this feed (`#12 question @main : …`); unknown, the line opens on the
 /// answer alone (BISE-307).
-fn ask_of(app: &mut App, n0: usize, id: u64, asked: Option<String>) {
+fn ask_of(app: &mut App, at: std::ops::Range<usize>, id: u64, asked: Option<String>) {
     let head = format!("#{id} ");
+    let n0 = at.start.min(app.events.len());
     let found = asked.or_else(|| {
-        app.events[..n0.min(app.events.len())].iter().rev().find_map(|e| match e {
+        app.events[..n0].iter().rev().find_map(|e| match e {
             Ev::Card { text, .. } if text.starts_with(&head) => Some(crate::render::card_parts(text).map_or("", |p| p.2).trim().to_string()),
             _ => None,
         })
     });
     let Some(q) = found.filter(|q| !q.is_empty()) else { return };
-    for i in n0..app.events.len() {
+    for i in n0..at.end.min(app.events.len()) {
         if let Ev::Approval { asked, .. } = &mut app.events[i] {
             *asked = q.clone();
             if let Some(c) = app.cache.get_mut(i) {

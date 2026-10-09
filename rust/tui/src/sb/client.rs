@@ -130,6 +130,7 @@ pub(super) fn new_sb(writer: std::sync::Arc<std::sync::Mutex<UnixStream>>, works
         updating: None,
         drop_ask: None,
         activity: Default::default(),
+        seen: Default::default(),
         ready: false,
         version: String::new(),
         versions: Vec::new(),
@@ -210,9 +211,11 @@ fn line_mode(app: &mut App) -> io::Result<()> {
     });
     let mut stdin_open = true;
     let mut quiet_since: Option<std::time::Instant> = None;
+    // per thread, its newest entry's lines printed (an entry changes)
+    let mut printed = Printed::new();
     loop {
         while let Ok(raw) = app.rx.try_recv() {
-            print_hub_event(&raw);
+            print_hub_event(&raw, &mut printed);
             dispatch(app, &raw);
         }
         while let Ok(l) = irx.try_recv() {
@@ -244,36 +247,56 @@ fn line_mode(app: &mut App) -> io::Result<()> {
     }
 }
 
-fn print_hub_event(raw: &str) {
+fn print_hub_event(raw: &str, printed: &mut Printed) {
+    hub_event_lines(raw, printed).iter().for_each(|l| println!("{l}"));
+}
+
+/// Line mode's memory: per thread, its newest entry's lines printed (an
+/// entry comes again as it changes).
+pub(crate) type Printed = HashMap<String, (bise_proto::Pos, Vec<String>)>;
+
+/// What line mode prints for one hub event.
+pub(crate) fn hub_event_lines(raw: &str, printed: &mut Printed) -> Vec<String> {
     let Ok(v) = serde_json::from_str::<Value>(raw) else {
-        return;
+        return Vec::new();
     };
+    // a thread's entry (client-protocol step 4): its lines not printed yet
+    if v.get("jsonrpc").is_some() {
+        let Some((agent, e)) = entry_of(v) else { return Vec::new() };
+        let lines = crate::entry_reads::line_of(&agent, &e);
+        let new = crate::entry_reads::fresh(printed.get(&agent), e.pos, &lines);
+        if printed.get(&agent).is_none_or(|(p, _)| *p <= e.pos) {
+            let mut had = printed.remove(&agent).filter(|(p, _)| *p == e.pos).map(|(_, h)| h).unwrap_or_default();
+            had.extend(new.iter().cloned());
+            printed.insert(agent, (e.pos, had));
+        }
+        return new;
+    }
     let s = |k: &str| str_of(&v, k);
     match s("ev").as_str() {
         "line" => {
             let line = s("line");
             let shown = if let Some(r) = line.strip_prefix("sb ") {
-                Some(format!(
-                    "[{}] {}",
-                    s("agent"),
-                    unescape_md(r).replace('\n', " ⏎ ")
-                ))
+                Some(format!("[{}] {}", s("agent"), unescape_md(r).replace('\n', " ⏎ ")))
             } else if let Some(r) = line.trim_start().strip_prefix("obs: assistant: ") {
                 let (_, vis) = split_thinking(r).unwrap_or((String::new(), r.to_string()));
-                Some(format!(
-                    "[{}] assistant: {}",
-                    s("agent"),
-                    unescape_md(&vis).replace('\n', " ⏎ ")
-                ))
+                Some(format!("[{}] assistant: {}", s("agent"), unescape_md(&vis).replace('\n', " ⏎ ")))
             } else {
-                line.strip_prefix("tool #")
-                    .map(|r| format!("[{}] tool {}", s("agent"), truncate_chars(r, 200)))
+                line.strip_prefix("tool #").map(|r| format!("[{}] tool {}", s("agent"), truncate_chars(r, 200)))
             };
-            if let Some(t) = shown {
-                println!("{}", t);
-            }
+            shown.into_iter().collect()
         }
-        "notice" | "confirm" => println!("[hub] {}", s("text")),
-        _ => {}
+        "notice" | "confirm" => vec![format!("[hub] {}", s("text"))],
+        _ => Vec::new(),
+    }
+}
+
+/// A `thread/entry` notification's agent and entry (another one: None).
+fn entry_of(v: Value) -> Option<(String, bise_proto::thread::Entry)> {
+    use bise_proto::{hub::HubEv, rpc};
+    let Ok(rpc::Message::Notification(n)) = rpc::Message::from_value(v) else { return None };
+    match rpc::ev(&n).ok()?.0 {
+        HubEv::Entry { agent, entry, .. } => Some((agent, *entry)),
+        _ => None,
     }
 }

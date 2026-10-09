@@ -295,9 +295,9 @@ impl Fold<'_> {
         }
     }
 
-    fn approval(&mut self, pos: u64, ms: u64, ok: bool, text: String, note: String) {
+    fn approval(&mut self, pos: u64, ms: u64, ok: bool, text: String, note: String, card: Option<u64>) {
         let mut e = Entry::new(pos, ms, EntryKind::Approval, text.clone());
-        e.approval = Some(ApprovalFold { ok, text, note, images: Vec::new(), files: Vec::new() });
+        e.approval = Some(ApprovalFold { ok, text, note, images: Vec::new(), files: Vec::new(), card });
         self.push(e);
     }
 
@@ -422,16 +422,17 @@ impl Fold<'_> {
             // a gate's card answered, folded (approvals-design.md §9)
             Hub::Approval { how, who, what, note } => {
                 let (ok, text, note) = words::approval(&how, &who, &what, &note);
-                self.approval(pos, ms, ok, text, note);
+                self.approval(pos, ms, ok, text, note, None);
             }
-            // an answer to an item, its fold line (BISE-305/307)
+            // an answer to an item, its fold line (BISE-305/307); the item
+            // it answers, so a client that folded it itself skips it.
             // His answer as written, with his pasted files rendered in (R41,
             // designer m_14030 red a): the words fold, the images and files
             // ride apart, never a marker in the row
-            Hub::Route { who, said, .. } => {
+            Hub::Route { who, card, said } => {
                 let a = (self.ctx.attached)(&said);
                 let (text, note) = words::answered_split(&who, &a.words, self.ctx.width);
-                self.approval(pos, ms, true, text, note);
+                self.approval(pos, ms, true, text, note, Some(card));
                 if let Some(f) = self.out.last_mut().and_then(|e| e.approval.as_mut()) {
                     (f.images, f.files) = (a.images, a.files);
                 }

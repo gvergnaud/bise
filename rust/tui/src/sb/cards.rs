@@ -720,6 +720,12 @@ impl Sb {
         self.card.folded.iter().any(|(i, a)| *i == id && a == agent)
     }
 
+    /// Tests: he answered item `id` here, in `agent`'s feed.
+    #[cfg(test)]
+    pub(crate) fn fold_here(&mut self, id: u64, agent: &str) {
+        self.card.folded.push((id, agent.to_string()));
+    }
+
     pub(super) fn card_ids(&self) -> Vec<u64> {
         self.sorted_cards().iter().map(|c| c.id).collect()
     }
