@@ -12,6 +12,8 @@
 //! - a path that isn't absolute, or that isn't a file: left out (the shell
 //!   logs it).
 
+use bise_proto::thread::Attached;
+
 /// What a path turned out to be.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Look {
@@ -58,9 +60,67 @@ pub fn render(text: &str, files: &[String], look: &mut dyn FnMut(&str) -> Look) 
     parts.join("\n\n")
 }
 
+/// [`render`]'s inverse (a [`bise_proto::thread::Attached`], the fold's
+/// `Ctx.attached`): `split(render(t, files, look)) == (t, its images,
+/// its other files)`, and a text with no marker and no list is its words.
+/// Why it exists (R41, architect m_14049): sb-core's `answered` line carries
+/// the rendered answer (his words with the markers and the list), so the
+/// thread fold reads the words and the files back here, through the one
+/// marker parser (`bend_images::markers`) and the one [`HEADER`]. The
+/// cleaner fix is a typed answered record from sb-core (words and files
+/// apart): on the list if that line is ever touched. An image is its name
+/// and his source path only, never the store's b64 path.
+pub fn split(text: &str) -> Attached {
+    // the list: render's last part, `HEADER` then one path per line
+    let (head, files) = match text.rfind(HEADER).filter(|&i| i == 0 || text[..i].ends_with("\n\n")) {
+        Some(i) => {
+            let list: Vec<String> = text[i + HEADER.len()..].lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_string).collect();
+            if list.iter().all(|p| p.starts_with('/')) { (&text[..i], list) } else { (text, Vec::new()) }
+        }
+        None => (text, Vec::new()),
+    };
+    let ms = bend_images::markers(head);
+    let mut words = String::with_capacity(head.len());
+    let mut last = 0usize;
+    for m in &ms {
+        words.push_str(&head[last..m.start]);
+        last = m.end;
+    }
+    words.push_str(&head[last..]);
+    let images = ms.into_iter().map(|m| bise_proto::thread::ImageRef { name: m.name, path: m.path }).collect();
+    let words = if words.trim().is_empty() { String::new() } else { words.trim_end().to_string() };
+    Attached { words, images, files }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Law (architect m_14049): split reads render's text back.
+    #[test]
+    fn split_reads_render_back() {
+        use bise_proto::thread::ImageRef;
+        let stored = bend_images::Stored { kind: bend_images::Kind::Png, width: 1, height: 1, file: "/store/ab.png".into(), b64: "/store/ab.b64".into() };
+        let shot = bend_images::marker("[Image #1]", "/Users/ana/Desktop/shot.png", &stored);
+        let mut look = |p: &str| match p {
+            "/Users/ana/Desktop/shot.png" => Look::Image(shot.clone()),
+            "/w/notes.md" => Look::File,
+            _ => Look::Skip,
+        };
+        let img = ImageRef { name: "[Image #1]".into(), path: "/Users/ana/Desktop/shot.png".into() };
+        for words in ["the balance on the cart page", "two lines\nof words", ""] {
+            let files = ["/Users/ana/Desktop/shot.png", "/w/notes.md"].map(String::from);
+            let s = split(&render(words, &files, &mut look));
+            assert_eq!(s, Attached { words: words.into(), images: vec![img.clone()], files: vec!["/w/notes.md".into()] }, "{words:?}");
+            let s = split(&render(words, &files[..1], &mut look));
+            assert_eq!(s, Attached { words: words.into(), images: vec![img.clone()], files: vec![] }, "{words:?}");
+            assert!(!s.words.contains("<image") && !s.words.contains("b64"));
+        }
+        // no files: the words unchanged
+        for t in ["v2", "see [files he attached:] below", "a\n\nb"] {
+            assert_eq!(split(&render(t, &[], &mut look)), Attached::plain(t), "{t:?}");
+        }
+    }
 
     fn look(p: &str) -> Look {
         match p {

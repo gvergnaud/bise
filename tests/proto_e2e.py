@@ -279,6 +279,21 @@ def main():
         # state block), the image a part of that request
         check(got and any(i.startswith("data:image/png;base64,") for i in got[0].get("images", [])) and "this one" in json.dumps(got[0].get("users", [])),
               "t3's request after the answer carries the pasted png as an image part: %r" % [(r.get("users", [])[-3:], [i[:40] for i in r.get("images", [])]) for r in got[:1]])
+        # ...and main's thread shows that answer as his words with the image
+        # apart (designer m_14030 red a): never the marker, its b64 or path
+        # in the words
+        n = len(typed(c, "thread"))
+        c.send({"cmd": "subscribe", "project": project, "agent": "main"})
+        c.wait(lambda: len(typed(c, "thread")) > n, 20, "main's thread")
+        mthread = typed(c, "thread")[-1]["entries"]
+        # his answer's row: 'you answered t3: this one' (the route fold)
+        ans = [x for x in mthread if x["kind"] == "approval" and "you answered t3" in x["text"] and "this one" in x["text"] + x["approval"].get("note", "")]
+        a = ans[-1]["approval"] if ans else {}
+        check(ans and [i["path"] for i in a.get("images", [])] == [png],
+              "main's row for his answer has the image apart: %r" % ans[-1:])
+        check("<image" not in json.dumps(mthread) and ".b64" not in json.dumps(mthread),
+              "no image marker or store path in main's thread: %r" % [x for x in mthread if "<image" in json.dumps(x)][:2])
+        c.send({"cmd": "unsubscribe", "project": project, "agent": "main"})
 
         # close without answering (the inbox's close): an open card goes,
         # no error, and the typed cards event no longer has it

@@ -309,7 +309,7 @@ impl Shell {
         let facts = self.facts();
         self.setup();
         let setup = &self.setup;
-        let ctx = Ctx { open_cards: &facts.open, page: &|p: &str| facts.page(p), provider: &|i: &str, k: &str| provider_name(setup, i, k), width: &width, offset: &offset };
+        let ctx = Ctx { open_cards: &facts.open, page: &|p: &str| facts.page(p), provider: &|i: &str, k: &str| provider_name(setup, i, k), width: &width, offset: &offset, attached: &crate::attached::split };
         let mut out: Vec<(ClientId, Vec<pthread::Entry>)> = Vec::new();
         for (id, c) in self.proto.conns.iter_mut() {
             if let Some(l) = c.subs.get_mut(agent) {

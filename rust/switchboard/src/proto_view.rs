@@ -578,7 +578,7 @@ mod tests {
     fn a_live_thread_sends_only_what_changed() {
         let none = |_: &str| None;
         let open: [u64; 0] = [];
-        let ctx = Ctx { open_cards: &open, page: &none, provider: &|i: &str, _: &str| i.to_string(), width: &unicode_width::UnicodeWidthStr::width, offset: &|_| 0 };
+        let ctx = Ctx { open_cards: &open, page: &none, provider: &|i: &str, _: &str| i.to_string(), width: &unicode_width::UnicodeWidthStr::width, offset: &|_| 0, attached: &crate::attached::split };
         let l = |pos: u64, line: &str| (pos, pos, line.to_string());
         let first = vec![l(1, "sb you : go"), l(2, "  obs: assistant: on it")];
         let page = thread::fold(&first, &ctx);

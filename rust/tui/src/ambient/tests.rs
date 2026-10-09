@@ -1304,7 +1304,7 @@ fn hub_fold(lines: &[Line]) -> Vec<Entry> {
     let pages = |id: &str| {
         (id == "perf-notes").then(|| PageRef { id: id.into(), title: "Perf notes".into(), v: Some(2), url: "http://p/perf-notes".into() })
     };
-    thread::fold(lines, &Ctx { open_cards: &[9], page: &pages, provider: &crate::models::provider_name, width: &unicode_width::UnicodeWidthStr::width, offset: &|_| 0 })
+    thread::fold(lines, &Ctx { open_cards: &[9], page: &pages, provider: &crate::models::provider_name, width: &unicode_width::UnicodeWidthStr::width, offset: &|_| 0, attached: &bise_proto::thread::Attached::plain })
 }
 
 /// The hub's typed hello answered (the target's project).
@@ -1405,7 +1405,7 @@ fn a_history_shows_the_hubs_entries_older_and_follows_live() {
     t.cmd(Cmd::AgentHistory { agent: "perf".into(), before: Some(11), limit: 2 });
     assert_eq!(t.hub.next(), json!({"cmd": "page", "agent": "perf", "before": 11, "limit": 2, "project": PROJECT}));
     let older: Vec<Line> = perf_lines().into_iter().take(10).skip(2).collect();
-    let (entries, before, more) = thread::page(&older, &Ctx { open_cards: &[], page: &|_: &str| None, provider: &crate::models::provider_name, width: &unicode_width::UnicodeWidthStr::width, offset: &|_| 0 }, 2);
+    let (entries, before, more) = thread::page(&older, &Ctx { open_cards: &[], page: &|_: &str| None, provider: &crate::models::provider_name, width: &unicode_width::UnicodeWidthStr::width, offset: &|_| 0, attached: &bise_proto::thread::Attached::plain }, 2);
     t.hub.say(thread_ev("perf", &entries, before, more));
     t.until(|o| has(o, "agent_history"));
     let h = t.take().into_iter().find(|v| v["ev"] == "agent_history").unwrap();

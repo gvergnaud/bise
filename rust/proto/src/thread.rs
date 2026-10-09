@@ -182,8 +182,41 @@ pub struct Made {
 pub struct Answered {
     pub agent: String,
     pub question: String,
+    /// his words only, never an image marker or the file list (R41)
     pub answer: String,
     pub why: String,
+    /// the images he pasted with it: the window shows each as its chip
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<ImageRef>,
+    /// his other files (absolute paths)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<String>,
+}
+
+/// An image he attached: its label (`[Image #1]`, or its file name) and
+/// his source path (the chip's thumbnail). Never the store's b64 path.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct ImageRef {
+    pub name: String,
+    pub path: String,
+}
+
+/// A text with his attached files rendered in it, read back (the hub's
+/// `attached::split`, given to the fold as [`Ctx::attached`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Attached {
+    pub words: String,
+    pub images: Vec<ImageRef>,
+    pub files: Vec<String>,
+}
+
+impl Attached {
+    /// A text with nothing attached: its words (tests, a client with no
+    /// image store).
+    pub fn plain(text: &str) -> Attached {
+        Attached { words: text.to_string(), ..Attached::default() }
+    }
 }
 
 /// An `approval` entry: his answer, folded (`you allowed api: rm -rf
@@ -195,6 +228,13 @@ pub struct ApprovalFold {
     pub text: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub note: String,
+    /// an answer's pasted images (`you answered gift-ui` + his words,
+    /// R41): each the window's chip, never a marker in `text`/`note`
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<ImageRef>,
+    /// an answer's other files (absolute paths)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<String>,
 }
 
 /// A `scheduled` entry (batch 3b): a task set or ended (the hub's
@@ -482,6 +522,10 @@ pub struct Ctx<'a> {
     /// the local UTC offset (seconds east) at a moment: a scheduled
     /// task's clock times (`thread::when`; this crate has no time zone)
     pub offset: &'a dyn Fn(u64) -> i32,
+    /// a text with his attached files rendered in it read back (the hub's
+    /// `attached::split` over the image markers; this crate has no image
+    /// parser): an answer's words, images and files (R41)
+    pub attached: &'a dyn Fn(&str) -> Attached,
 }
 
 /// A page of a thread: the newest `limit` entries of `lines`. `more`: the

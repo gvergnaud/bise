@@ -48,7 +48,7 @@ impl Shell {
                 let facts = self.facts();
                 self.setup();
                 let setup = &self.setup;
-                let ctx = Ctx { open_cards: &facts.open, page: &|p: &str| facts.page(p), provider: &|i: &str, k: &str| provider_name(setup, i, k), width: &width, offset: &offset };
+                let ctx = Ctx { open_cards: &facts.open, page: &|p: &str| facts.page(p), provider: &|i: &str, k: &str| provider_name(setup, i, k), width: &width, offset: &offset, attached: &crate::attached::split };
                 let (entries, before, more) = pthread::page(&lines, &ctx, limit.map_or(LIMIT, |l| (l as usize).clamp(1, MAX_LIMIT)));
                 let live = Live::start(lines, &entries);
                 if let Some(c) = self.proto.conns.get_mut(&id) {
@@ -67,7 +67,7 @@ impl Shell {
                 let facts = self.facts();
                 self.setup();
                 let setup = &self.setup;
-                let ctx = Ctx { open_cards: &facts.open, page: &|p: &str| facts.page(p), provider: &|i: &str, k: &str| provider_name(setup, i, k), width: &width, offset: &offset };
+                let ctx = Ctx { open_cards: &facts.open, page: &|p: &str| facts.page(p), provider: &|i: &str, k: &str| provider_name(setup, i, k), width: &width, offset: &offset, attached: &crate::attached::split };
                 let (entries, before, more) = pthread::page(&lines, &ctx, limit.map_or(LIMIT, |l| (l as usize).clamp(1, MAX_LIMIT)));
                 self.proto_send(id, &HubEv::Thread { project, agent, entries, before, more });
             }

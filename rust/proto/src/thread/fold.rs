@@ -202,7 +202,7 @@ impl Fold<'_> {
 
     fn approval(&mut self, pos: u64, ms: u64, ok: bool, text: String, note: String) {
         let mut e = Entry::new(pos, ms, EntryKind::Approval, text.clone());
-        e.approval = Some(ApprovalFold { ok, text, note });
+        e.approval = Some(ApprovalFold { ok, text, note, images: Vec::new(), files: Vec::new() });
         self.push(e);
     }
 
@@ -297,9 +297,12 @@ impl Fold<'_> {
                 self.push(e);
             }
             // main answered an agent for him
+            // his answer as sb-core wrote it (his words with his pasted
+            // files rendered in, R41): the words, images and files apart
             Hub::Answered { agent, question, answer, why } => {
-                let mut e = Entry::new(pos, ms, EntryKind::Answered, answer.clone());
-                e.answered = Some(Answered { agent, question, answer, why });
+                let a = (self.ctx.attached)(&answer);
+                let mut e = Entry::new(pos, ms, EntryKind::Answered, a.words.clone());
+                e.answered = Some(Answered { agent, question, answer: a.words, why, images: a.images, files: a.files });
                 self.push(e);
             }
             // a task set or ended, read at the line's own time (a replay
@@ -315,9 +318,16 @@ impl Fold<'_> {
                 self.approval(pos, ms, ok, text, note);
             }
             // an answer to an item, its fold line (BISE-305/307)
+            // His answer as written, with his pasted files rendered in (R41,
+            // designer m_14030 red a): the words fold, the images and files
+            // ride apart, never a marker in the row
             Hub::Route { who, said, .. } => {
-                let (text, note) = words::answered_split(&who, &said, self.ctx.width);
+                let a = (self.ctx.attached)(&said);
+                let (text, note) = words::answered_split(&who, &a.words, self.ctx.width);
                 self.approval(pos, ms, true, text, note);
+                if let Some(f) = self.out.last_mut().and_then(|e| e.approval.as_mut()) {
+                    (f.images, f.files) = (a.images, a.files);
+                }
             }
             // agent to agent in main's thread (the window groups the run);
             // the hub's own timer wakes and stop notes are the agents'

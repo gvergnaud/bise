@@ -26,7 +26,44 @@ fn lines() -> Vec<Line> {
 }
 
 fn ctx_with<'a>(open: &'a [u64], page: &'a dyn Fn(&str) -> Option<PageRef>) -> Ctx<'a> {
-    Ctx { open_cards: open, page, provider: &|id: &str, key: &str| if id.is_empty() { key.to_string() } else { id.to_uppercase() }, width: &|s: &str| s.chars().count(), offset: &|_| 0 }
+    Ctx { open_cards: open, page, provider: &|id: &str, key: &str| if id.is_empty() { key.to_string() } else { id.to_uppercase() }, width: &|s: &str| s.chars().count(), offset: &|_| 0, attached: &crate::thread::Attached::plain }
+}
+
+/// R41 (architect m_14049): an answered line whose answer has his pasted
+/// files rendered in (the hub's attached::split reads them back, given as
+/// Ctx.attached; a stand-in here) is his words, the images and the files
+/// apart: no marker or file list in any text the window shows.
+#[test]
+fn an_answer_with_pasted_files_is_its_words_images_and_files() {
+    use crate::thread::{Attached, ImageRef};
+    let split = |t: &str| match t.split_once("\n\n") {
+        Some((w, _)) => Attached { words: w.into(), images: vec![ImageRef { name: "[Image #1]".into(), path: "/Users/ana/shot.png".into() }], files: vec!["/w/notes.md".into()] },
+        None => Attached::plain(t),
+    };
+    let ls = vec![
+        (1, 1000, "sb answered : gift-ui : which balance? : the cart page\\n\\n<image name=\"[Image #1]\" path=\"/Users/ana/shot.png\" mime=\"image/png\" b64=\"/s/a.b64\"> : he picked".to_string()),
+        (2, 2000, "sb answered : docs : v1 or v2? : v2 : the brief".to_string()),
+        // his answer to an item (designer m_14030's red row: 'you answered
+        // gift-ui' then the marker)
+        (3, 3000, "sb route : you → @gift-ui (answer to card #7) : the cart page\\n\\n<image name=\"[Image #1]\" path=\"/Users/ana/shot.png\" mime=\"image/png\" b64=\"/s/a.b64\">".to_string()),
+    ];
+    let ctx = Ctx { attached: &split, ..ctx_with(&[], &|_| None) };
+    let e = fold(&ls, &ctx);
+    let a = e[0].answered.as_ref().unwrap();
+    assert_eq!((e[0].text.as_str(), a.answer.as_str(), a.why.as_str()), ("the cart page", "the cart page", "he picked"));
+    assert_eq!(a.images, [ImageRef { name: "[Image #1]".into(), path: "/Users/ana/shot.png".into() }]);
+    assert_eq!(a.files, ["/w/notes.md"]);
+    let json = serde_json::to_string(&e[0]).unwrap();
+    assert!(!json.contains("<image") && !json.contains("b64"), "{json}");
+    // a plain answer: no images or files on the wire
+    let b = e[1].answered.as_ref().unwrap();
+    assert_eq!((b.answer.as_str(), b.images.len(), b.files.len()), ("v2", 0, 0));
+    assert!(!serde_json::to_string(b).unwrap().contains("images"));
+    let r = e[2].approval.as_ref().unwrap();
+    assert_eq!((r.text.as_str(), r.note.as_str()), ("you answered gift-ui: the cart page", ""));
+    assert_eq!((r.images.len(), r.files.as_slice()), (1, ["/w/notes.md".to_string()].as_slice()));
+    let json = serde_json::to_string(&e[2]).unwrap();
+    assert!(!json.contains("<image") && !json.contains("b64"), "{json}");
 }
 
 #[test]

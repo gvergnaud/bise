@@ -68,7 +68,7 @@ fn the_tui_and_the_fold_say_the_same_words_for_the_same_lines() {
     let ls = lines();
     let numbered: Vec<bise_proto::thread::Line> = ls.iter().enumerate().map(|(i, l)| (i as u64 + 1, 0, l.to_string())).collect();
     let none = |_: &str| None;
-    let entries = fold(&numbered, &Ctx { open_cards: &[], page: &none, provider: &crate::models::provider_name, width: &unicode_width::UnicodeWidthStr::width, offset: &|_| 0 });
+    let entries = fold(&numbered, &Ctx { open_cards: &[], page: &none, provider: &crate::models::provider_name, width: &unicode_width::UnicodeWidthStr::width, offset: &|_| 0, attached: &bise_proto::thread::Attached::plain });
     let folded: Vec<(EntryKind, String, String)> = entries
         .iter()
         // the Stopped entry is the window's only: the TUI says it in its
@@ -104,7 +104,7 @@ fn the_tui_and_the_fold_agree_on_the_hubs_news() {
     ];
     let numbered: Vec<_> = ls.iter().enumerate().map(|(i, l)| (i as u64 + 1, 0, l.to_string())).collect();
     let none = |_: &str| None;
-    let entries = fold(&numbered, &Ctx { open_cards: &[], page: &none, provider: &crate::models::provider_name, width: &unicode_width::UnicodeWidthStr::width, offset: &|_| 0 });
+    let entries = fold(&numbered, &Ctx { open_cards: &[], page: &none, provider: &crate::models::provider_name, width: &unicode_width::UnicodeWidthStr::width, offset: &|_| 0, attached: &bise_proto::thread::Attached::plain });
     let evs: Vec<Ev> = ls.iter().filter_map(|l| parse_line(l)).collect();
     assert_eq!(entries.len(), evs.len(), "{entries:?}");
     for (e, ev) in entries.iter().zip(&evs) {
@@ -176,7 +176,7 @@ fn the_tui_and_the_fold_agree_on_scheduled_lines() {
         (4, 1_790_000_500_000, format!("sb scheduled : {end}")),
     ];
     let none = |_: &str| None;
-    let entries = fold(&ls, &Ctx { open_cards: &[], page: &none, provider: &crate::models::provider_name, width: &unicode_width::UnicodeWidthStr::width, offset: &crate::when::offset_at });
+    let entries = fold(&ls, &Ctx { open_cards: &[], page: &none, provider: &crate::models::provider_name, width: &unicode_width::UnicodeWidthStr::width, offset: &crate::when::offset_at, attached: &bise_proto::thread::Attached::plain });
     let tui: Vec<(String, String)> = ls
         .iter()
         .filter_map(|(_, at, l)| match bise_proto::thread::lines::read(l) {
@@ -229,7 +229,7 @@ fn the_tui_and_the_fold_agree_on_tool_results() {
     }
     let tui: Vec<&ToolData> = app.events.iter().filter_map(|e| if let Ev::Tool(td) = e { Some(td) } else { None }).collect();
     let page = |_: &str| None;
-    let ctx = Ctx { open_cards: &[], page: &page, provider: &|_: &str, k: &str| k.to_string(), width: &|s: &str| s.chars().count(), offset: &|_| 0 };
+    let ctx = Ctx { open_cards: &[], page: &page, provider: &|_: &str, k: &str| k.to_string(), width: &|s: &str| s.chars().count(), offset: &|_| 0, attached: &bise_proto::thread::Attached::plain };
     let lines: Vec<(u64, u64, String)> = ls.iter().enumerate().map(|(i, l)| (i as u64 + 1, 1_000 + i as u64, l.to_string())).collect();
     let entries = fold(&lines, &ctx);
     let items = &entries.iter().find_map(|e| e.tools.as_ref()).expect("a tools entry").items;
