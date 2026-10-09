@@ -416,6 +416,16 @@ impl Store {
         write_atomic(&self.dir().join("seen.json"), json!({"seen_ms": now}).to_string().as_bytes())
     }
 
+    /// The user looked at `at` (the client's clock, when the screen
+    /// opened); the hub reads it at `now`. What came between the two
+    /// (an add served before this request, which waited in the
+    /// client's socket) stays new: seen moves to `at`, never past
+    /// `now`, never back.
+    pub fn saw(&self, at: u64, now: u64) -> Result<(), String> {
+        let before = self.seen_ms(0);
+        self.set_seen(at.min(now).max(before))
+    }
+
     /// Register a file, a folder or a link; the same one again is its next
     /// version (unchanged: the same version). Err: the words for the user
     /// or the agent.

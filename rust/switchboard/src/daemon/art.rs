@@ -92,7 +92,10 @@ impl Shell {
         let s = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
         match s("do").as_str() {
             "seen" => {
-                let _ = self.art_store().set_seen(now_ms());
+                // `at_ms`: when the user looked (an older client: now)
+                let now = now_ms();
+                let at = v.get("at_ms").and_then(|x| x.as_u64()).unwrap_or(now);
+                let _ = self.art_store().saw(at, now);
                 self.artifacts_refresh(true);
             }
             "add" => {

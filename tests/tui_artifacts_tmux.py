@@ -98,6 +98,9 @@ def wide(t, E):
         shot(t, "150-empty")
         t.keys("Escape")
         t.wait_gone("what your agents made")
+        # the TUI draws main and this screen before the hub's boot ends:
+        # its `seen` waits in the socket and the adds below may be served
+        # first. It says when you looked (at_ms), so they stay new.
 
         # main makes two
         os.makedirs(os.path.join(E.ws, "docs"))
@@ -285,12 +288,14 @@ def narrow(t, branch):
         t.wait_gone("all agents · 2")
         command(t, "/diff " + branch, "src/pricing.tsx")
         sc = t.wait("esc close")
-        assert "bise :* · ws ── diff" in sc, sc
+        # the workspace as the header has room for it: `ws` when its path
+        # is long, the whole path when it fits (a short TMPDIR, /tmp)
+        assert re.search(r"bise :\* · (\S*/)?ws ── diff", sc), sc
         assert "↑↓ scroll   tab next file   f files   ⏎ editor   esc close" in sc, sc
         assert "ctrl+g close" not in sc and "the diff has the keys" not in sc, sc
         shot(t, "80-diff")
         t.keys("Escape")
-        t.wait_gone("bise :* · ws ── diff")
+        t.wait_gone("ws ── diff")
         light(t, "80", branch)
 
 

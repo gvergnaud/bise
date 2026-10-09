@@ -240,6 +240,31 @@ fn the_list_is_newest_first_and_new_counts_after_seen() {
 }
 
 #[test]
+fn a_late_seen_keeps_what_came_after_the_look() {
+    // the TUI looked at 50; its `seen` waited in the socket (a hub
+    // still booting) and the hub reads it at 120, after two adds
+    let root = tmp("late-seen");
+    let (state, work) = (root.join("state"), root.join("work"));
+    std::fs::create_dir_all(&work).unwrap();
+    let s = Store::new(&state);
+    s.set_seen(40).unwrap();
+    for (i, n) in ["a.md", "b.md"].iter().enumerate() {
+        std::fs::write(work.join(n), n.as_bytes()).unwrap();
+        add(&s, &work, n, None, 100 + i as u64 * 10).unwrap();
+    }
+    s.saw(50, 120).unwrap();
+    assert_eq!(s.seen_ms(0), 50);
+    assert_eq!(s.new_count(120), 2, "both came after the look");
+    // never back: an older look changes nothing
+    s.saw(30, 130).unwrap();
+    assert_eq!(s.seen_ms(0), 50);
+    // never past now: a client clock ahead is cut to the hub's
+    s.saw(500, 140).unwrap();
+    assert_eq!(s.seen_ms(0), 140);
+    assert_eq!(s.new_count(140), 0);
+}
+
+#[test]
 fn keys_name_a_path_every_way_a_reply_may() {
     let root = tmp("keys");
     let ws = root.join("ws");

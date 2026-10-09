@@ -308,6 +308,13 @@ pub(crate) fn mark_seen() {
     STORE.with(|st| st.borrow_mut().new = 0);
 }
 
+/// The hub's `seen` op, with when you looked: a request that waits in
+/// the socket (a hub still booting) never swallows what came after.
+pub(crate) fn seen_op() -> serde_json::Value {
+    let at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
+    serde_json::json!({"op": "artifacts", "do": "seen", "at_ms": at})
+}
+
 
 
 #[cfg(test)]

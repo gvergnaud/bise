@@ -202,7 +202,10 @@ agents on it.
 ## TUI -> hub ops
 
 - `{"op":"artifacts"}`: the list again (to this client).
-- `{"op":"artifacts","do":"seen"}`: `new` = 0, the list to every client.
+- `{"op":"artifacts","do":"seen","at_ms":T}`: seen moves to `T`, when the
+  user looked (never past now, never back; no `at_ms`: now), the list to
+  every client. What the hub served between the look and this request
+  (it waited in the socket while the hub booted) stays new.
 - `{"op":"artifacts","do":"add","target":"<path or link>","title":"…"?,"agent":"<agent in view>"}`:
   a relative path resolves from that agent's folder. Answer: `{"ev":"notice","text":"↗ added: pricing-plans.xlsx"}`
   or `{"ev":"warn","text":"▲ no file or link at notes/plan.md."}`, then
