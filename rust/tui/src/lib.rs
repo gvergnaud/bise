@@ -41,6 +41,13 @@ use theme::*;
 mod theme_detect;
 mod when;
 mod wire;
+// the hub's entries as feed events (client-protocol step 4): only its
+// parity law reads it until P4d switches the feed to entries
+#[cfg(test)]
+mod entry_ev;
+// client-protocol step 4's before/after numbers (architect m_13977 Q4)
+#[cfg(test)]
+mod bench_first;
 use wire::*;
 mod markdown;
 use markdown::*;
