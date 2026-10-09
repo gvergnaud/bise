@@ -91,7 +91,7 @@ fn from_entries(lines: &[Line]) -> Vec<String> {
     let name = |id: &str, _: &str| id.to_string();
     let width = |s: &str| unicode_width::UnicodeWidthStr::width(s);
     let offset = |_: u64| 0;
-    let ctx = Ctx { open_cards: &[], page: &none, provider: &name, width: &width, offset: &offset };
+    let ctx = Ctx { open_cards: &[], page: &none, provider: &name, width: &width, offset: &offset, attached: &bise_proto::thread::Attached::plain };
     let (mut events, mut cache) = (Vec::new(), Vec::new());
     for e in fold(lines, &ctx) {
         for ev in ev_of(&e) {

@@ -295,7 +295,7 @@ impl Shell {
         let facts = self.facts();
         self.setup();
         let setup = &self.setup;
-        let ctx = Ctx { open_cards: &facts.open, page: &|p: &str| facts.page(p), provider: &|i: &str, k: &str| provider_name(setup, i, k), width: &width, offset: &offset };
+        let ctx = Ctx { open_cards: &facts.open, page: &|p: &str| facts.page(p), provider: &|i: &str, k: &str| provider_name(setup, i, k), width: &width, offset: &offset, attached: &crate::attached::split };
         self.proto.heads.push(agent, line, known, &ctx)
     }
 
@@ -309,7 +309,7 @@ impl Shell {
         let facts = self.facts();
         self.setup();
         let setup = &self.setup;
-        let ctx = Ctx { open_cards: &facts.open, page: &|p: &str| facts.page(p), provider: &|i: &str, k: &str| provider_name(setup, i, k), width: &width, offset: &offset };
+        let ctx = Ctx { open_cards: &facts.open, page: &|p: &str| facts.page(p), provider: &|i: &str, k: &str| provider_name(setup, i, k), width: &width, offset: &offset, attached: &crate::attached::split };
         for n in names {
             let lines: Vec<pthread::Line> = self.buffers.get(&n).into_iter().flatten().map(|(p, ts, l)| (*p as u64, *ts, l.clone())).collect();
             self.proto.heads.seed(&n, lines, &ctx);

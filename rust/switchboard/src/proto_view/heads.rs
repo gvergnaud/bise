@@ -93,7 +93,7 @@ mod tests {
     #[test]
     fn the_head_moves_on_a_new_entry_only_and_its_tail_stays_one_entry() {
         let page = |_: &str| -> Option<thread::PageRef> { None };
-        let c = Ctx { open_cards: &[], page: &page, provider: &|_: &str, k: &str| k.to_string(), width: &|s: &str| s.chars().count(), offset: &|_| 0 };
+        let c = Ctx { open_cards: &[], page: &page, provider: &|_: &str, k: &str| k.to_string(), width: &|s: &str| s.chars().count(), offset: &|_| 0, attached: &crate::attached::split };
         let mut h = Heads::default();
         let you = |p: Pos, t: &str| (p, p * 10, format!("sb you : {t}"));
         assert!(h.push("perf", you(1, "first"), None, &c), "a first entry");

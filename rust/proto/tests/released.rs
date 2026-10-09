@@ -66,7 +66,7 @@ fn released_core_events_keep_their_meaning() {
 #[test]
 fn released_message_lines_fold_to_the_same_entries() {
     let none = |_: &str| None;
-    let ctx = Ctx { open_cards: &[], page: &none, provider: &|_: &str, k: &str| k.to_string(), width: &|s: &str| s.chars().count(), offset: &|_| 0 };
+    let ctx = Ctx { open_cards: &[], page: &none, provider: &|_: &str, k: &str| k.to_string(), width: &|s: &str| s.chars().count(), offset: &|_| 0, attached: &bise_proto::thread::Attached::plain };
     for l in lines("fold.jsonl") {
         let v: Value = serde_json::from_str(&l).unwrap();
         let line = v["line"].as_str().unwrap();
