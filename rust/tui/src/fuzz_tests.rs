@@ -157,7 +157,7 @@ fn hub_line(rng: &mut Rng) -> String {
         4 => json!({"ev": "release", "state": *rng.pick(&["plan", "step", "running", "done", "failed", "error"]),
             "tag": t, "text": t, "commits": [[t, t]], "count": rng.below(30), "tail": [t], "elapsed": rng.below(5000)})
         .to_string(),
-        1 => json!({"ev": "confirm", "id": rng.below(3), "text": t}).to_string(),
+        1 => json!({"jsonrpc": "2.0", "method": "confirm/ask", "params": {"project": "p", "id": rng.below(3), "text": t}}).to_string(),
         2 => json!({"ev": "focus", "focus": agent}).to_string(),
         3 => json!({"ev": "state", "agents": [
             {"name": "main", "status": "idle", "objective": t},

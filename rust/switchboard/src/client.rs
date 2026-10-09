@@ -74,7 +74,8 @@ pub fn connect(paths: &Paths, exe: &Path, app_root: &Path) -> std::io::Result<Un
 }
 
 /// [`connect`] without the hello: the caller says its first line (the
-/// desktop core's JSON-RPC `initialize`).
+/// desktop core's JSON-RPC `initialize`, the terminal's hello with its
+/// `reads`).
 pub fn open(paths: &Paths, exe: &Path, app_root: &Path) -> std::io::Result<UnixStream> {
     let s = match UnixStream::connect(paths.socket()) {
         Ok(s) => s,

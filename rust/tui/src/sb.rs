@@ -50,12 +50,14 @@ mod keep_tests;
 pub(crate) mod reload_wait;
 mod keys;
 pub(crate) mod rpc;
+pub(crate) mod hub_reads;
 pub(crate) mod release;
 pub(super) use keys::key;
 pub(crate) use keys::{scene, Scene};
 #[cfg(test)]
 use keys::{nav_key, Nav};
 pub use client::{run_switchboard, take_reexec, take_refused};
+pub use hub_reads::hello_line;
 pub use tune::setup_main;
 use client::{follow_hub_exe, follow_reload, HUB_DOWN, HUB_UP};
 #[cfg(test)]
@@ -282,20 +284,6 @@ pub(crate) struct Rule {
 }
 
 impl Rule {
-    fn of(v: &Value) -> Rule {
-        Rule {
-            raw: v.clone(),
-            tool: str_of(v, "tool"),
-            pattern: str_of(v, "pattern"),
-            path: str_of(v, "path"),
-            every: str_of(v, "project").is_empty(),
-            // the hub writes ms; a hand-written date is not read
-            added: str_of(v, "added").parse().ok(),
-            from: str_of(v, "from"),
-            outside: v.get("sandbox").and_then(|x| x.as_bool()) == Some(false),
-        }
-    }
-
     /// Its facts for the words (bise_proto::approvals).
     pub(crate) fn facts(&self) -> bise_proto::approvals::RuleFacts<'_> {
         bise_proto::approvals::RuleFacts {
@@ -654,9 +642,10 @@ pub(super) fn dispatch(app: &mut App, raw: &str) {
     let Ok(v) = serde_json::from_str::<Value>(raw) else {
         return;
     };
-    // a JSON-RPC response (client-protocol step 3): its request's answer
-    if v.get("jsonrpc").is_some() && v.get("method").is_none() {
-        return rpc::answered(app, v);
+    // a JSON-RPC response (client-protocol step 3): its request's answer;
+    // a notification (step 4): its typed reader
+    if v.get("jsonrpc").is_some() {
+        return if v.get("method").is_none() { rpc::answered(app, v) } else { hub_reads::read(app, v) };
     }
     let s = |k: &str| str_of(&v, k);
     match s("ev").as_str() {
@@ -705,22 +694,8 @@ pub(super) fn dispatch(app: &mut App, raw: &str) {
                 push_event(&mut app.events, &mut app.cache, e);
             }
         }
-        "confirm" => {
-            let id = v.get("id").and_then(|x| x.as_u64()).unwrap_or(0);
-            let text = s("text");
-            push_event(&mut app.events, &mut app.cache, Ev::Warn(text.clone()));
-            push_event(
-                &mut app.events,
-                &mut app.cache,
-                Ev::Info("answer y (yes) or n (no), then ⏎".into()),
-            );
-            let sb = &mut app.sb;
-            sb.confirm = Some((id, text));
-            sb.calls += 1;
-        }
         "release" => release::event(app, &v),
         "update" => release::update_event(app, &v),
-        "approvals" => approvals_event(app, &v),
         "focus" => focus(app, &s("focus")),
         "renamed" => {
             let (old, new) = (s("old"), s("new"));
@@ -861,49 +836,6 @@ fn ask_of(app: &mut App, n0: usize, id: u64, asked: Option<String>) {
             *asked = q.clone();
             if let Some(c) = app.cache.get_mut(i) {
                 *c = None;
-            }
-        }
-    }
-}
-
-/// The hub's `approvals` event (approvals-design.md §8): the mode for the
-/// key bar; `flash`: a switch (the 3-second flash, the first switch to
-/// auto's tip); `show`: `/approvals` asked (its screen opens).
-fn approvals_event(app: &mut App, v: &Value) {
-    let rules: Vec<Rule> = v
-        .get("rules")
-        .and_then(|r| r.as_array())
-        .map(|a| a.iter().map(Rule::of).collect())
-        .unwrap_or_default();
-    let a = &mut app.sb.approvals;
-    let was = a.mode.clone();
-    if was.is_empty() && str_of(v, "mode") == "yolo" {
-        crate::hints::once(app, crate::hints::Hint::FirstYolo);
-    }
-    let a = &mut app.sb.approvals;
-    a.mode = str_of(v, "mode");
-    a.env = v.get("env").and_then(|x| x.as_bool()).unwrap_or(false);
-    a.checker = str_of(v, "checker");
-    a.checker_who = str_of(v, "checker_who");
-    a.checker_model = str_of(v, "checker_model");
-    a.repo = str_of(v, "repo");
-    a.rules = rules;
-    if v.get("flash").and_then(|x| x.as_bool()) == Some(true) {
-        a.flash = Some(std::time::Instant::now());
-        if a.mode == "auto" && was != "auto" && a.checker != "off" {
-            crate::hints::set_auto_text(&a.checker, &str_of(v, "checker_who"));
-            crate::hints::once(app, crate::hints::Hint::FirstAuto);
-        }
-    }
-    // `/approvals`: its screen; a removal the hub refused: why
-    if v.get("show").and_then(|x| x.as_bool()) == Some(true) {
-        app.approvals = Some(crate::approvals_screen::Screen::default());
-    }
-    if let Some(e) = v.get("error").and_then(|x| x.as_str()) {
-        match app.approvals.as_mut() {
-            Some(s) => s.said = Some(e.to_string()),
-            None => {
-                push_event(&mut app.events, &mut app.cache, Ev::Warn(format!("/approvals: {e}")));
             }
         }
     }

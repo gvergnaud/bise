@@ -95,7 +95,7 @@ fn hub_reader(
             thread::sleep(std::time::Duration::from_millis(250));
             let Ok(mut s) = UnixStream::connect(&socket) else { continue };
             let Ok(w) = s.try_clone() else { continue };
-            if s.write_all(b"{\"op\":\"hello\"}\n").is_err() {
+            if s.write_all(super::hub_reads::hello_line().as_bytes()).is_err() {
                 continue;
             }
             if let Ok(mut slot) = writer.lock() {

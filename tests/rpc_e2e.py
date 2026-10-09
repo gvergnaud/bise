@@ -211,7 +211,7 @@ def main():
 
         # step 4's glue (architect m_13977): a hello that lists `reads`
         # gets those kinds as notifications (their state in its burst,
-        # before `ready`) and never their older events; a half-listed
+        # where the older events went) and never their older events; a half-listed
         # row (state without hub/scheduled) is read the older way
         typed = ["hub/agents", "hub/cards", "hub/scheduled", "hub/flow", "hub/artifacts", "hub/approvals", "confirm/ask"]
         h = Older(sock, typed)
@@ -220,8 +220,11 @@ def main():
         half.wait(lambda: any(v.get("ev") == "ready" for v in half.got()), "ready, half listed")
         burst = h.got()
         ready = next(i for i, v in enumerate(burst) if v.get("ev") == "ready")
-        for m in ["hub/agents", "hub/cards", "hub/scheduled", "hub/flow", "hub/artifacts", "hub/approvals"]:
+        # each where its older event went (the terminal's order): the
+        # state's and approvals before ready, artifacts right after it
+        for m in ["hub/agents", "hub/cards", "hub/scheduled", "hub/flow", "hub/approvals"]:
             check(any(v.get("method") == m for v in burst[:ready]), "%s in the burst before ready" % m)
+        check(burst[ready + 1].get("method") == "hub/artifacts", "hub/artifacts right after ready: %r" % burst[ready + 1:ready + 2])
         check(any(v.get("ev") == "hello" for v in burst) and any(v.get("ev") == "line" for v in burst), "hello and lines still the older way")
         hb = half.got()
         check(any(v.get("ev") == "state" for v in hb) and any(v.get("method") == "hub/artifacts" for v in hb), "half listed: state the older way, artifacts typed")

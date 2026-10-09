@@ -141,9 +141,10 @@ fn run(app: &mut App, then: Then, r: Response) {
         }
         (_, Err(e)) => refused(app, &e),
         (Then::Shown | Then::RuleRemoved, Ok(_)) => {}
-        (Then::Approvals, Ok(mut v)) => {
-            v["show"] = json!(true);
-            approvals_event(app, &v);
+        (Then::Approvals, Ok(v)) => {
+            if let Ok(Some(ev)) = bise_proto::rpc::ev_of_result("approvals/set", v) {
+                hub_reads::approvals(app, &ev, true);
+            }
         }
         (Then::Line, Ok(v)) => {
             let said = serde_json::from_value::<bise_proto::rpc::CommandRunResult>(v).ok().and_then(|c| c.notice);
@@ -235,7 +236,7 @@ mod tests {
         let mut app = crate::sb::bench::test_app();
         app.sb.call("approvals/set", json!({}), Then::Approvals);
         let id = waiting(&app);
-        answered(&mut app, json!({"jsonrpc": "2.0", "id": id, "result": {"mode": "auto", "env": false, "checker": "off",
+        answered(&mut app, json!({"jsonrpc": "2.0", "id": id, "result": {"project": "p", "mode": "auto", "env": false, "checker": "off",
             "checker_who": "", "repo": "/r", "rules": [{"tool": "bash", "pattern": "cargo test *", "what": "cargo test *"}]}}));
         assert!(app.approvals.is_some(), "the read opens /approvals");
         assert_eq!((app.sb.approvals.mode.as_str(), app.sb.approvals.rules.len()), ("auto", 1));

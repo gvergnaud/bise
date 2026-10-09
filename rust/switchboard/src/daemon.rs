@@ -1683,11 +1683,14 @@ impl Shell {
         let (reads, notes) = self.rpc_reads(listed);
         let mut out = String::new();
         let mut push = |v: &Value| {
-            if !bise_proto::rpc::older_sent(v.get("ev").and_then(Value::as_str).unwrap_or(""), &reads) {
-                return;
+            // a kind it reads typed: its notifications where the older
+            // event went (the terminal's order: approvals before ready...)
+            let ev = v.get("ev").and_then(Value::as_str).unwrap_or("");
+            let lines = if bise_proto::rpc::older_sent(ev, &reads) { vec![v] } else { rpc::in_place(&notes, ev) };
+            for l in lines {
+                out.push_str(&l.to_string());
+                out.push('\n');
             }
-            out.push_str(&v.to_string());
-            out.push('\n');
         };
         push(&json!({
             "ev": "hello",
@@ -1699,7 +1702,6 @@ impl Shell {
             "pages_url": self.pg.pages.as_ref().map(|p| p.base()),
         }));
         push(&self.snapshot());
-        notes.iter().for_each(&mut push);
         for name in &self.hub.st.order {
             for (pos, ts, l) in self.buffers.get(name).into_iter().flatten() {
                 push(&line_event(name, *pos, *ts, l));
