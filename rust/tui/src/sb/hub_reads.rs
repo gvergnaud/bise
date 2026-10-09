@@ -58,6 +58,7 @@ pub(super) fn read(app: &mut App, v: Value) {
         HubEv::CardOpen { id, .. } => cards::open_view(app, Some(*id)),
         // the hub moved his focus (the agent he was on is gone)
         HubEv::Focused { focus, .. } => super::focus(app, focus),
+        HubEv::Entry { agent, entry, .. } => feed_entries::entry(app, agent, entry),
         _ => {}
     }
 }
@@ -67,9 +68,11 @@ pub(super) fn read(app: &mut App, v: Value) {
 /// follows its agent, the first agent's hint, the tour.
 fn agents(app: &mut App, rows: &[bise_proto::rows::Agent], places: &[bise_proto::rows::Place]) {
     let new: Vec<Agent> = rows.iter().map(Agent::of_row).collect();
-    // TODO(proto-zone-b, m_14782: its P4d-feed f-a sha): each row's turn
-    // edges, `for a in rows { feed_entries::agent_row(app, &a.name,
-    // a.status.working(), a.turns) }`, once feed_entries.rs is in
+    // each row's turn edges (P4d-feed, proto-lead m_14731): a working
+    // flip or an ended turn, never missed
+    for a in rows {
+        feed_entries::agent_row(app, &a.name, a.status.working(), a.turns);
+    }
     for (old, name) in super::state_rows::renamed(&app.sb.agents, &new) {
         let sb = &mut app.sb;
         if let Some(view) = sb.views.remove(&old) {

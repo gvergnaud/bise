@@ -28,6 +28,9 @@ pub(crate) struct FeedWindow {
     pub(super) loading: bool,
     /// The position of the newest line taken in.
     pub(super) last_pos: Option<usize>,
+    /// Each entry's pos and how many events it drew (sb/feed_entries.rs:
+    /// a changed entry replaces them).
+    pub(super) spans: std::collections::BTreeMap<usize, usize>,
 }
 
 impl FeedWindow {
@@ -166,6 +169,7 @@ pub(super) fn trim_window(app: &mut App) {
         m.0 -= k;
     }
     app.win.first_pos = Some(pos);
+    app.win.spans = app.win.spans.split_off(&pos);
     app.anchor.0 = app.anchor.0.saturating_sub(k);
 }
 
@@ -177,6 +181,7 @@ pub(super) fn trim_window(app: &mut App) {
 pub(super) fn clear_feed(app: &mut App) {
     empty_feed(app);
     app.win.marks.clear();
+    app.win.spans.clear();
     app.win.loading = false;
     if let Some(p) = app.win.last_pos {
         app.win.first_pos = Some(p + 1);

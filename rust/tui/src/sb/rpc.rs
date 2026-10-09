@@ -51,6 +51,12 @@ pub(crate) enum Then {
     /// as its notice did, and the queue moves on as on a notice (a
     /// refused queued message starts no turn: the 766a28a6 guard)
     Line,
+    /// `thread/subscribe` (None: the first page, it replaces the feed)
+    /// or `thread/page` (the `before` asked) for this agent: entries
+    /// placed by pos (sb/feed_entries.rs)
+    // TODO(client-protocol P4d switch): sent once the switch subscribes
+    #[allow(dead_code)]
+    Thread(String, Option<usize>),
 }
 
 /// The requests waiting for their answer, by id (cells: a popup asks
@@ -148,6 +154,12 @@ fn run(app: &mut App, then: Then, r: Response) {
         (Then::Approvals, Ok(v)) => {
             if let Ok(Some(ev)) = bise_proto::rpc::ev_of_result("approvals/set", v) {
                 hub_reads::approvals(app, &ev, true);
+            }
+        }
+        (Then::Thread(agent, older), Ok(v)) => {
+            let method = if older.is_some() { "thread/page" } else { "thread/subscribe" };
+            if let Ok(Some(bise_proto::hub::HubEv::Thread { entries, more, .. })) = bise_proto::rpc::ev_of_result(method, v) {
+                feed_entries::page(app, &agent, older, entries, more);
             }
         }
         (Then::Line, Ok(v)) => {

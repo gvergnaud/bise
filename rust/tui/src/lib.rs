@@ -41,9 +41,8 @@ use theme::*;
 mod theme_detect;
 mod when;
 mod wire;
-// the hub's entries as feed events (client-protocol step 4): only its
-// parity law reads it until P4d switches the feed to entries
-#[cfg(test)]
+// the hub's entries as feed events (client-protocol step 4): the feed
+// from entries (sb/feed_entries.rs) and its parity law
 mod entry_ev;
 // the live reads of a thread's entries (P4d-reads): the feed calls them
 mod entry_reads;

@@ -40,6 +40,7 @@ pub(crate) use panel::{demo_ready, fill_demo, prefill_demo, short_age, DEMO, DEM
 use panel::glyph;
 mod feed;
 pub(super) use feed::FeedWindow;
+pub(crate) mod feed_entries;
 mod client;
 pub(crate) mod setup;
 mod tune;
@@ -216,6 +217,14 @@ pub(super) struct Sb {
     /// What the live reads of entries remember of each thread
     /// (`crate::entry_reads`).
     seen: HashMap<String, crate::entry_reads::Seen>,
+    /// The threads subscribed on this connection (sb/feed_entries.rs).
+    subscribed: std::collections::HashSet<String>,
+    /// Each agent's last row as the turn edges read it: working, its
+    /// ended turns (feed_entries::agent_row).
+    turns_seen: HashMap<String, (bool, u64)>,
+    /// `ready` came before the focus's first page: keep::apply waits for
+    /// it (the scroll it restores needs the feed).
+    keep_after_page: bool,
     ready: bool,
     /// The version the hub runs (its VERSION id), for the status row.
     version: String,
