@@ -366,25 +366,40 @@ impl Shell {
             }
         }
         // step 4's glue: an older hello connection that reads some kinds
-        // as notifications gets those, never a typed line it doesn't read
-        // (its older events come their own way, `Rpcs::older_ok`)
+        // as notifications gets those; an event for it alone that it
+        // doesn't read goes as its older line (never swallowed); a
+        // hub-wide one it doesn't read reaches it the older way
+        // (`Rpcs::older_ok`, the burst)
         // TODO(client-protocol step 4's end, P4e): goes with the hello's reads
         let reads = self.rpc.conns.get(&id).map(|c| c.reads.clone()).unwrap_or_default();
         if !init && !reads.is_empty() {
-            let read = rpc::note_of_ev(ev.tag()).is_some_and(|r| reads.contains(r.method));
-            if read {
-                let hub = rpc::note_of_ev(ev.tag()).is_some_and(|r| r.scope == Scope::Hub);
-                let w = hub.then(|| self.rpc.now());
-                if let Some(n) = rpc::note(ev, w) {
-                    self.rpc_write(id, &Message::Notification(n).encode(), false);
+            // a refusal past its request's answer: a notice, as below
+            let as_notice = match ev {
+                HubEv::Error { project, text, .. } if reads.contains("hub/notice") => {
+                    Some(HubEv::Notice { project: project.clone().unwrap_or_else(|| self.project()), cmd: None, text: text.clone(), cid: None })
                 }
-            } else if let HubEv::Notice { text, .. } | HubEv::Error { text, .. } = ev {
-                // its words past a request's answer: the older notice, as below
-                if let Some(c) = self.clients.get_mut(&id) {
-                    write_json(c, &json!({"ev": "notice", "text": text}));
+                _ => None,
+            };
+            let ev = as_notice.as_ref().unwrap_or(ev);
+            return match rpc::hello_way(ev.tag(), answer, &reads) {
+                rpc::HelloWay::Note => {
+                    let hub = rpc::note_of_ev(ev.tag()).is_some_and(|r| r.scope == Scope::Hub);
+                    let w = hub.then(|| self.rpc.now());
+                    if let Some(n) = rpc::note(ev, w) {
+                        self.rpc_write(id, &Message::Notification(n).encode(), false);
+                    }
+                    true
                 }
-            }
-            return true;
+                rpc::HelloWay::Older => match ev {
+                    HubEv::Notice { text, .. } | HubEv::Error { text, .. } => {
+                        self.older_notice(id, text);
+                        true
+                    }
+                    // the caller writes its older typed line
+                    _ => false,
+                },
+                rpc::HelloWay::Elsewhere => true,
+            };
         }
         if !init {
             // the hub's words past the request's one answer (a step's
@@ -395,9 +410,7 @@ impl Shell {
             // the terminal reads notifications (the older notice with it)
             if !self.proto.has(id) {
                 if let HubEv::Notice { text, .. } | HubEv::Error { text, .. } = ev {
-                    if let Some(c) = self.clients.get_mut(&id) {
-                        write_json(c, &json!({"ev": "notice", "text": text}));
-                    }
+                    self.older_notice(id, text);
                     return true;
                 }
             }
@@ -444,9 +457,11 @@ impl Shell {
     /// initialized JSON-RPC connection: a notice goes as `hub/notice`,
     /// update-card's `open_card` as `card/open`, the hub's `focus` as
     /// `client/focused` (P4b), the rest (the terminal's older events) not
-    /// at all. False: not one.
+    /// at all. The same for an older hello connection that reads that
+    /// kind typed (step 4's glue, P4c-5). False: not one.
     pub(super) fn rpc_effect(&mut self, id: ClientId, body: &Value) -> bool {
-        if !self.rpc.init(id) {
+        // TODO(client-protocol step 4's end, P4e): the hello's reads go
+        if !self.rpc.init(id) && self.rpc.older_ok(id, body) {
             return false;
         }
         if let Some(ev) = one_ev(&self.project(), body) {
@@ -458,5 +473,44 @@ impl Shell {
     /// A connection gone.
     pub(super) fn rpc_gone(&mut self, id: ClientId) {
         self.rpc.conns.remove(&id);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// Architect m_14727: one notice writer. The older notice line is
+    /// written in `Shell::older_notice` only (every other site calls
+    /// `notice_out`), so a hello connection that reads `hub/notice` never
+    /// gets the older line from a path the glue missed.
+    // TODO(client-protocol step 4's end, P4e): goes with the older line
+    #[test]
+    fn the_older_notice_line_has_one_writer() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut files = vec![root.join("daemon.rs")];
+        let mut dirs = vec![root.join("daemon")];
+        while let Some(d) = dirs.pop() {
+            for e in std::fs::read_dir(&d).unwrap().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    dirs.push(p);
+                } else if p.extension().is_some_and(|x| x == "rs") && !p.to_string_lossy().ends_with("_tests.rs") {
+                    files.push(p);
+                }
+            }
+        }
+        let needle = concat!("\"ev\": ", "\"notice\"");
+        let mut at = Vec::new();
+        for f in &files {
+            let text = std::fs::read_to_string(f).unwrap();
+            // the shell's code, not its tests
+            let code = text.split("#[cfg(test)]").next().unwrap_or("");
+            for (i, l) in code.lines().enumerate() {
+                if l.contains(needle) {
+                    at.push(format!("{}:{}", f.strip_prefix(&root).unwrap().display(), i + 1));
+                }
+            }
+        }
+        assert_eq!(at.len(), 1, "the older notice is written outside Shell::older_notice: {at:?}");
+        assert!(at[0].starts_with("daemon/proto.rs"), "{at:?}");
     }
 }

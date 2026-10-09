@@ -676,30 +676,8 @@ pub(super) fn dispatch(app: &mut App, raw: &str) {
             client::set_refused(s("error"));
             app.should_quit = true;
         }
-        // update-card: `/update` with a newer release opens its item here
-        "open_card" => {
-            if let Some(id) = v.get("id").and_then(|x| x.as_u64()) {
-                cards::open_view(app, Some(id));
-            }
-        }
-        "notice" => {
-            // the hub refused an input (it says so in a notice): a queued
-            // message that went will start no turn, so the queue moves on
-            crate::queue::seen(app);
-            for l in s("text").lines() {
-                push_event(&mut app.events, &mut app.cache, Ev::Info(l.to_string()));
-            }
-        }
-        // `/prs` (pr-news, designer): one dim head row, then each PR like
-        // a PR line, its URL dim under it
-        "prs" => {
-            for e in prs_events(&v) {
-                push_event(&mut app.events, &mut app.cache, e);
-            }
-        }
         "release" => release::event(app, &v),
         "update" => release::update_event(app, &v),
-        "focus" => focus(app, &s("focus")),
         "versions" => {
             let sb = &mut app.sb;
             sb.versions = parse_versions(&v);
@@ -999,6 +977,8 @@ pub(crate) fn handle_input(app: &mut App, v: &str) -> Vec<Ev> {
     match first {
         "/quit" | "/exit" => app.should_quit = true,
         "/release-bise" => release::command(sb, &typed),
+        // the open PRs (pr-news): prs/list's rows (rpc.rs's Then::Prs)
+        "/prs" => sb.call("prs/list", json!({}), rpc::Then::Prs),
         // the hub's version/* methods; one parse with the hub's slash
         // (bise_proto::slash::version). /update: the release channel now
         // (update-card's new-release item)

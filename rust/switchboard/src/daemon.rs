@@ -1116,8 +1116,8 @@ impl Shell {
             Effect::Confirm { card, agent: _, text } => self.on_confirm(card, &text),
             Effect::Flow { client, token, set } => {
                 let (ok, text) = self.flow_cmd(set);
-                if let Some(s) = client.and_then(|c| self.clients.get_mut(&c)) {
-                    write_json(s, &json!({"ev": "notice", "text": text}));
+                if let Some(c) = client {
+                    self.notice_out(c, None, &text);
                 }
                 if let Some(mut s) = token.and_then(|t| self.replies.remove(&t)) {
                     let body = if ok {
@@ -1137,9 +1137,7 @@ impl Shell {
                 // change shows in `agents` (architect m_10331)
                 if !self.typed_outcome(client, &r) {
                     let text = r.unwrap_or_else(|e| e);
-                    if let Some(s) = self.clients.get_mut(&client) {
-                        write_json(s, &json!({"ev": "notice", "text": text}));
-                    }
+                    self.notice_out(client, None, &text);
                 }
                 self.state_now();
                 self.switch_idle_repls();
@@ -1767,14 +1765,7 @@ impl Shell {
                 self.view_stopped();
                 let _ = self.tx.send(Msg::Shutdown { keep });
             }
-            other => {
-                if let Some(c) = self.clients.get_mut(&id) {
-                    write_json(
-                        c,
-                        &json!({"ev": "notice", "text": format!("unknown op: {}", other)}),
-                    );
-                }
-            }
+            other => self.notice_out(id, None, &format!("unknown op: {}", other)),
         }
     }
 

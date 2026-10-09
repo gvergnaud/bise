@@ -18,7 +18,10 @@
 //!   agents and the worktrees they sit in (a rename is the same `dir`
 //!   with a new name, architect Q3), the inbox (his cards and bise's
 //!   own), the scheduled tasks (live, then the week's ended ones), the
-//!   repo's flow.
+//!   repo's flow;
+//! - `hub/notice`: the hub's words, info lines (the queue moves on);
+//! - `card/open`: update-card's item opens (`/update` found a release);
+//! - `client/focused`: the hub moved his focus (its agent is gone).
 
 use super::*;
 use bise_proto::hub::HubEv;
@@ -29,7 +32,7 @@ use bise_proto::rpc::{self, Message};
 /// `bise_proto::rpc::OLDER` (a half-listed row comes the older way).
 // TODO(client-protocol step 4's end, P4e): the hello's `reads` goes when
 // the terminal connects with `initialize`
-pub(crate) const READS: &[&str] = &["hub/approvals", "confirm/ask", "hub/artifacts", "hub/agents", "hub/cards", "hub/scheduled", "hub/flow"];
+pub(crate) const READS: &[&str] = &["hub/approvals", "confirm/ask", "hub/artifacts", "hub/agents", "hub/cards", "hub/scheduled", "hub/flow", "hub/notice", "card/open", "client/focused"];
 
 /// The terminal's first line on the hub's socket: `hello` with [`READS`].
 pub fn hello_line() -> String {
@@ -50,6 +53,11 @@ pub(super) fn read(app: &mut App, v: Value) {
         HubEv::Cards { cards: his, others, .. } => cards(app, his, others),
         HubEv::Scheduled { items, ended, .. } => app.sb.timers = items.iter().chain(ended).map(super::state_rows::task_of_row).collect(),
         HubEv::Flow { flow, .. } => app.sb.flow = super::state_rows::flow_word(*flow),
+        HubEv::Notice { text, .. } => notice(app, text),
+        // update-card: `/update` with a newer release opens its item here
+        HubEv::CardOpen { id, .. } => cards::open_view(app, Some(*id)),
+        // the hub moved his focus (the agent he was on is gone)
+        HubEv::Focused { focus, .. } => super::focus(app, focus),
         _ => {}
     }
 }
@@ -128,6 +136,16 @@ fn keep_selection(app: &mut App) {
     if sb.selected.is_some_and(|sel| sel >= sb.nav().len()) {
         sb.selected = None;
         sb.preview = false;
+    }
+}
+
+/// The hub's words (`hub/notice`): one info line per line. The hub
+/// refused an input (it says so in a notice): a queued message that went
+/// starts no turn, so the queue moves on.
+fn notice(app: &mut App, text: &str) {
+    crate::queue::seen(app);
+    for l in text.lines() {
+        push_event(&mut app.events, &mut app.cache, Ev::Info(l.to_string()));
     }
 }
 

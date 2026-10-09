@@ -765,7 +765,7 @@ impl Shell {
         let root = &self.opts.app_root;
         let Some(inst) = Install::of_root(root) else {
             if let Some(c) = asked {
-                self.notice_to(c, "/update updates an installed bise, or bise's source tree: this workspace is neither");
+                self.notice_out(c, Some("slash"), "/update updates an installed bise, or bise's source tree: this workspace is neither");
             }
             return;
         };
@@ -817,7 +817,7 @@ impl Shell {
             UpdateRoute::Release | UpdateRoute::Nothing => self.release_check(Some(client)),
             UpdateRoute::DevHead => {
                 let text = self.dev_update();
-                self.notice_to(client, &text);
+                self.notice_out(client, Some("slash"), &text);
             }
         }
     }

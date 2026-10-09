@@ -28,6 +28,9 @@ pub(crate) enum Then {
     /// `release/plan`: the plan and its y/n, or why there is none
     /// (sb/release.rs)
     Release,
+    /// `prs/list` (`/prs`): its head and rows in the feed, or its words
+    /// when no PR is open
+    Prs,
     /// `diff/read` for the panel's ask `req`: its diff, or its refusal
     /// as the panel's failure line (diffwire.rs)
     Diff(u64),
@@ -123,6 +126,7 @@ fn run(app: &mut App, then: Then, r: Response) {
         (Then::Said, Ok(v)) => said(app, &v),
         (Then::Versions, Ok(v)) => versions::answered(app, &v),
         (Then::Release, Ok(v)) => release::event(app, &v),
+        (Then::Prs, Ok(v)) => prs(app, &v),
         (Then::Diff(req), Ok(v)) => crate::diffview::answered(app, req, crate::diffwire::of(&v)),
         (Then::Diff(req), Err(e)) => crate::diffview::answered(app, req, crate::diffwire::refused(&e)),
         (Then::Branches, Ok(v)) => crate::diffbranches::branches_event(&v),
@@ -153,6 +157,18 @@ fn run(app: &mut App, then: Then, r: Response) {
                 refused(app, &text);
             }
         }
+    }
+}
+
+/// `prs/list`'s answer (`HubEv::Prs`'s fields): no PR, its words as the
+/// hub's notice showed them; else the dim head and a PR line per row.
+fn prs(app: &mut App, result: &Value) {
+    if let Some(none) = result.get("none").and_then(Value::as_str) {
+        crate::queue::seen(app);
+        return refused(app, none);
+    }
+    for e in prs_events(result) {
+        push_event(&mut app.events, &mut app.cache, e);
     }
 }
 
@@ -229,6 +245,28 @@ mod tests {
         let id = waiting(&app);
         answered(&mut app, json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32011, "message": "no file or link at nothing.md."}}));
         assert!(matches!(app.events.last(), Some(Ev::Info(t)) if t == "no file or link at nothing.md."));
+    }
+
+    /// `/prs` asks prs/list (it was a command/run whose One `prs` event a
+    /// hello with reads swallowed, P4c-1): its head and a PR line per row
+    /// as the older prs event drew them; no PR, its words.
+    #[test]
+    fn prs_shows_its_rows_or_its_words() {
+        let mut app = crate::sb::bench::test_app();
+        app.sb.workspace = "/tmp/acme".into();
+        let _ = handle_input(&mut app, "/prs");
+        let (id, (method, then)) = app.sb.rpc.waiting.borrow().iter().next().map(|(k, v)| (*k, v.clone())).unwrap();
+        assert_eq!((method, then), ("prs/list", Then::Prs));
+        let n = app.events.len();
+        answered(&mut app, json!({"jsonrpc": "2.0", "id": id, "result": {"project": "acme", "head": "1 PR open", "items": [
+            {"number": 12, "url": "https://github.com/a/b/pull/12", "branch": "sb/login", "agents": ["login"], "state": "open",
+             "checks": "fail", "review": "none", "words": "checks fail", "text": "sb/login · login · checks fail"}]}}));
+        assert!(matches!(app.events.get(n), Some(Ev::Fold { head, .. }) if head == " 1 PR open"));
+        assert!(matches!(app.events.get(n + 1), Some(Ev::Pr { number: 12, tone, .. }) if tone == "red"));
+        let _ = handle_input(&mut app, "/prs");
+        let id = waiting(&app);
+        answered(&mut app, json!({"jsonrpc": "2.0", "id": id, "result": {"project": "acme", "head": "", "items": [], "none": "no open PR."}}));
+        assert!(matches!(app.events.last(), Some(Ev::Info(t)) if t == "no open PR."));
     }
 
     #[test]

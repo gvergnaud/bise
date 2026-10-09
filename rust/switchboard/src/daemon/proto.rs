@@ -220,19 +220,29 @@ impl Shell {
         true
     }
 
-    /// A daemon handler's plain words for `client` (`/update`'s answers,
-    /// `version/update` or a `slash` line): the typed `notice` on a typed connection (its
-    /// `/update` came as a `slash`), the older line to the TUI.
-    pub(super) fn notice_to(&mut self, client: ClientId, text: &str) {
+    /// The hub's plain words for `client` outside a typed command's step
+    /// (`/update`'s answers, a `/flow` or `/model` answer, a page card's,
+    /// an unknown op): the typed `notice` on a typed connection (`cmd`:
+    /// the command it answers, `slash` for `/update`), `hub/notice` to a
+    /// hello connection that reads it, else the older line. The one
+    /// notice writer (with [`Shell::older_notice`]).
+    pub(super) fn notice_out(&mut self, client: ClientId, cmd: Option<&str>, text: &str) {
         if self.proto.conns.contains_key(&client) {
             let project = self.project();
-            self.proto_send(client, &HubEv::Notice { project, cmd: Some("slash".into()), text: text.to_string(), cid: None });
+            self.proto_send(client, &HubEv::Notice { project, cmd: cmd.map(str::to_string), text: text.to_string(), cid: None });
             // a hello connection with reads (step 4's glue): rpc_out sent
             // it the notice its way
             if self.proto.typed_only(client) || self.rpc.reads_some(client) {
                 return;
             }
         }
+        self.older_notice(client, text);
+    }
+
+    /// The older notice line (the terminal until step 4's end): the only
+    /// place that writes it.
+    // TODO(client-protocol step 4's end, P4e): goes with the older events
+    pub(super) fn older_notice(&mut self, client: ClientId, text: &str) {
         if let Some(c) = self.clients.get_mut(&client) {
             super::write_json(c, &json!({"ev": "notice", "text": text}));
         }

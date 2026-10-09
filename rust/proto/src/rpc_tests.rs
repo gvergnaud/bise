@@ -272,6 +272,15 @@ fn an_older_event_goes_xor_its_notifications() {
         for m in &reads {
             assert!(listed.iter().any(|l| l == m), "{m} read but not listed");
         }
+        // architect m_14727: every event reaches the connection exactly
+        // one way; one for it alone never vanishes (the /prs drop)
+        for tag in crate::hub::HubEv::TAGS {
+            let read = note_of_ev(tag).is_some_and(|r| reads.contains(r.method));
+            let alone = hello_way(tag, true, &reads);
+            assert_eq!(alone, if read { HelloWay::Note } else { HelloWay::Older }, "{tag} with reads {listed:?}");
+            let hub = hello_way(tag, false, &reads);
+            assert_eq!(hub, if read { HelloWay::Note } else { HelloWay::Elsewhere }, "{tag} with reads {listed:?}");
+        }
     }
     // an event outside the table always goes the older way
     assert!(older_sent("line", &reads_of(&all.iter().map(|m| m.to_string()).collect::<Vec<_>>())));

@@ -512,8 +512,8 @@ impl Shell {
             (None, false) => Some(format!("that card is closed: nothing waits on {} now.", meta.title)),
         };
         log_line(&self.opts.paths, &format!("page {id}: an answer on old batch card #{card}: {reply:?} → {}", say.as_deref().unwrap_or("sent the current drafts")));
-        if let (Some(text), Some(c)) = (say, self.clients.get_mut(&client)) {
-            write_json(c, &json!({"ev": "notice", "text": text}));
+        if let Some(text) = say {
+            self.notice_out(client, None, &text);
         }
         true
     }

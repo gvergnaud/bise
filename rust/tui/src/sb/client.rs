@@ -262,6 +262,10 @@ pub(crate) fn hub_event_lines(raw: &str, printed: &mut Printed) -> Vec<String> {
     };
     // a thread's entry (client-protocol step 4): its lines not printed yet
     if v.get("jsonrpc").is_some() {
+        // the hub's words and its yes/no (hub_reads.rs's READS)
+        if let Some(text) = said(&v) {
+            return vec![format!("[hub] {text}")];
+        }
         let Some((agent, e)) = entry_of(v) else { return Vec::new() };
         let lines = crate::entry_reads::line_of(&agent, &e);
         let new = crate::entry_reads::fresh(printed.get(&agent), e.pos, &lines);
@@ -286,8 +290,18 @@ pub(crate) fn hub_event_lines(raw: &str, printed: &mut Printed) -> Vec<String> {
             };
             shown.into_iter().collect()
         }
-        "notice" | "confirm" => vec![format!("[hub] {}", s("text"))],
         _ => Vec::new(),
+    }
+}
+
+/// A `hub/notice` or `confirm/ask` notification's words (another one:
+/// None).
+fn said(v: &Value) -> Option<String> {
+    use bise_proto::{hub::HubEv, rpc};
+    let Ok(rpc::Message::Notification(n)) = rpc::Message::from_value(v.clone()) else { return None };
+    match rpc::ev(&n).ok()?.0 {
+        HubEv::Notice { text, .. } | HubEv::Confirm { text, .. } => Some(text),
+        _ => None,
     }
 }
 
@@ -299,4 +313,5 @@ fn entry_of(v: Value) -> Option<(String, bise_proto::thread::Entry)> {
         HubEv::Entry { agent, entry, .. } => Some((agent, *entry)),
         _ => None,
     }
+
 }

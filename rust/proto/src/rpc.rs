@@ -242,12 +242,43 @@ pub const OLDER: &[Older] = &[
     Older { ev: "artifacts", methods: &["hub/artifacts"] },
     Older { ev: "approvals", methods: &["hub/approvals"] },
     Older { ev: "confirm", methods: &["confirm/ask"] },
+    // P4c-5: the hub's words, update-card's item, the focus it moved
+    Older { ev: "notice", methods: &["hub/notice"] },
+    Older { ev: "open_card", methods: &["card/open"] },
+    Older { ev: "focus", methods: &["client/focused"] },
 ];
 
 /// What a hello's `reads` stands for: the methods of the [`OLDER`] rows
 /// it lists whole (a row half listed is read the older way).
 pub fn reads_of(listed: &[String]) -> BTreeSet<&'static str> {
     OLDER.iter().filter(|o| o.methods.iter().all(|m| listed.iter().any(|l| l == m))).flat_map(|o| o.methods.iter().copied()).collect()
+}
+
+/// How a typed event reaches an older hello connection that reads some
+/// kinds typed ([`hello_way`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HelloWay {
+    /// its notification (the connection reads that kind)
+    Note,
+    /// its older line (the connection reads that kind the older way)
+    Older,
+    /// not typed: a hub-wide event's older line reaches it on its own
+    /// path (the broadcast, the hello burst)
+    Elsewhere,
+}
+
+/// How typed event `tag` reaches a hello connection that reads `reads`;
+/// `alone`: it is for that connection only (a request's answer, a
+/// notice, a One event), so it never vanishes (architect m_14727: every
+/// event reaches the connection exactly one way).
+pub fn hello_way(tag: &str, alone: bool, reads: &BTreeSet<&'static str>) -> HelloWay {
+    if note_of_ev(tag).is_some_and(|r| reads.contains(r.method)) {
+        HelloWay::Note
+    } else if alone {
+        HelloWay::Older
+    } else {
+        HelloWay::Elsewhere
+    }
 }
 
 /// Older event `ev` still goes to a hello connection that reads `reads`.
