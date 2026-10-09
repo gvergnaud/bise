@@ -6,7 +6,8 @@ and every agent REPL, each with its plugins bridge and MCP servers
 
 ## What stops when
 
-The hub counts its UIs: the clients that said `hello` on `hub.sock` (the
+The hub counts its UIs: the clients that said `initialize` on `hub.sock`
+(docs/client-protocol.md; the
 TUI, the ambient app's core) plus the holds others take on it
 (`idle::Holds`: a page's open event stream). When the count is 0:
 

@@ -113,12 +113,13 @@ may be written in is in the row's `keys`. The prompts:
 - main: link what an agent made as `[<title>](artifact:<id>)` (the ids:
   `sb artifact list`), and add what it makes itself.
 
-## Hub -> TUI (hub.sock, JSON lines)
+## Hub -> TUI (hub.sock, JSON-RPC: docs/client-protocol.md)
 
-### `artifacts`
+### `hub/artifacts`
 
-`{"ev":"artifacts","rows":[A…],"new":N,"seen_ms":T}`: the whole list, newest first
-(the current version's time). Sent in the hello right after `ready`,
+The notification `hub/artifacts {rows:[A…], new:N, seen_ms:T}` (`HubEv::
+Artifacts`, hub-wide, numbered): the whole list, newest first
+(the current version's time). In `initialize`'s hub state,
 after every add, after `seen`, and at an agent's idle when the list
 changed (a page published). `new`: rows whose current version came after
 `seen_ms`, the user's own adds left out. `seen_ms`: when the user last
@@ -245,6 +246,6 @@ agents on it.
   branch from elsewhere, the branch list, a shared-folder agent's own
   files; a land range's stat; a bad range is refused.
 - `tests/artifacts_e2e.py`: a throwaway hub on the fake provider: `sb
-  artifact add` from a task, the thread lines, the `artifacts` event in
-  the hello and after an add, `/artifacts add` and `seen`, a fake page,
+  artifact add` from a task, the thread lines, `hub/artifacts` in
+  `initialize`'s state and after an add, `/artifacts add` and `seen`, a fake page,
   the `diff` and `branches` ops, `changes` in the state.

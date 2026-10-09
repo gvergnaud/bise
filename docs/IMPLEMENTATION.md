@@ -211,7 +211,7 @@ commandes.
     le nouveau hub le prend au boot (`switch::take_reload`), relance
     chaque REPL adopté à son prochain idle (`reload_repls` →
     `switch_idle_repls` : `reload`, checkpoint, même session, même port)
-    et met l'id dans son `hello` ; une TUI qui a connu un autre id
+    et met l'id dans le résultat d'`initialize` (`reload`) ; une TUI qui a connu un autre id
     s'exec à nouveau (`follow_reload`, même binaire, même app root).
   - **rien de perdu** : le journal (agents, cartes, messages en attente
     côté hub, rôles), les transcripts (les fils), la session de chaque

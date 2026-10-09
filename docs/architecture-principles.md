@@ -33,7 +33,9 @@ Crates: `home` (every path) ← `session`, `plugins`, `images` ← `catalog` ←
   events come back through `wire.log` + `wire.offset`; `repl.json` lets a new
   hub adopt a running REPL.
 - **clients ↔ hub**: `hub.sock` (its path from `bise_home::socket`),
-  `{op: hello}` then JSON lines; the agents' `sb` uses the same socket.
+  JSON-RPC 2.0 (`initialize`, one method per action, numbered
+  notifications: `docs/client-protocol.md`, types in `bise_proto::rpc`);
+  the agents' `sb` speaks to `agent.sock`, not this socket.
 - **Rust ↔ Bend runtime**: environment variables (`BEND_WORKDIR`,
   `BEND_EXTRA_PROMPT`, `BEND_CONTEXT_FILE`, `BISE_MODELS_FILE`,
   `Home::exports`) and the plugins' loopback HTTP bridge
