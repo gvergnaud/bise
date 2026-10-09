@@ -283,5 +283,5 @@ fn an_older_event_goes_xor_its_notifications() {
         }
     }
     // an event outside the table always goes the older way
-    assert!(older_sent("line", &reads_of(&all.iter().map(|m| m.to_string()).collect::<Vec<_>>())));
+    assert!(older_sent("history", &reads_of(&all.iter().map(|m| m.to_string()).collect::<Vec<_>>())));
 }

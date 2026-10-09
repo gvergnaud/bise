@@ -258,6 +258,9 @@ pub const OLDER: &[Older] = &[
     Older { ev: "versions", methods: &["hub/versions"] },
     Older { ev: "release", methods: &["release/progress"] },
     Older { ev: "update", methods: &["update/progress"] },
+    // P4d-feed f-c: a subscribed thread's entries and step (line mode
+    // first; the terminal's feed with zone-b's switch)
+    Older { ev: "line", methods: &["thread/entry", "thread/typing"] },
 ];
 
 /// What a hello's `reads` stands for: the methods of the [`OLDER`] rows

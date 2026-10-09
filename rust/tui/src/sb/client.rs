@@ -186,8 +186,7 @@ pub fn run_switchboard(
         .max(40);
     let voice = super::voice::Voice::live(super::voice::load_voice_enabled());
     let mut app = sb_app(sb, rx, debug, area_w, voice);
-    let interactive = io::stdout().is_terminal() && io::stdin().is_terminal();
-    if interactive {
+    if !line_mode_now() {
         // BISE-120a: the drafts and the sent prompts come back
         super::drafts::restore(&mut app);
         let r = run_tui(&mut app);
@@ -196,6 +195,12 @@ pub fn run_switchboard(
     } else {
         line_mode(&mut app)
     }
+}
+
+/// No terminal on stdin or stdout: `bise` runs in line mode (its hello
+/// reads the threads' entries, hub_reads.rs's LINE_READS).
+pub(crate) fn line_mode_now() -> bool {
+    !(io::stdout().is_terminal() && io::stdin().is_terminal())
 }
 
 /// Without a terminal: stdin lines go to the agent in focus (`:focus
@@ -216,11 +221,17 @@ fn line_mode(app: &mut App) -> io::Result<()> {
     let mut quiet_since: Option<std::time::Instant> = None;
     // per thread, its newest entry's lines printed (an entry changes)
     let mut printed = Printed::new();
+    // the threads it subscribed on this connection (P4d-feed f-c)
+    let mut subscribed = std::collections::HashSet::<String>::new();
     loop {
         while let Ok(raw) = app.rx.try_recv() {
+            if raw == HUB_UP {
+                subscribed.clear();
+            }
             print_hub_event(&raw, &mut printed);
             dispatch(app, &raw);
         }
+        subscribe_new(app, &mut subscribed);
         while let Ok(l) = irx.try_recv() {
             match l {
                 Some(l) => {
@@ -250,6 +261,17 @@ fn line_mode(app: &mut App) -> io::Result<()> {
     }
 }
 
+/// Every agent of the hub prints (as its `line` events did): each new
+/// one's thread is subscribed once per connection; its answer (the last
+/// page of entries) and its live entries print (`hub_event_lines`).
+fn subscribe_new(app: &mut App, subscribed: &mut std::collections::HashSet<String>) {
+    let new: Vec<String> = app.sb.agents.iter().map(|a| a.name.clone()).filter(|n| !subscribed.contains(n)).collect();
+    for name in new {
+        app.sb.call("thread/subscribe", json!({"agent": name}), super::rpc::Then::Shown);
+        subscribed.insert(name);
+    }
+}
+
 fn print_hub_event(raw: &str, printed: &mut Printed) {
     hub_event_lines(raw, printed).iter().for_each(|l| println!("{l}"));
 }
@@ -269,31 +291,37 @@ pub(crate) fn hub_event_lines(raw: &str, printed: &mut Printed) -> Vec<String> {
         if let Some(text) = said(&v) {
             return vec![format!("[hub] {text}")];
         }
+        // a subscribed thread's last page (thread/subscribe's answer)
+        if let Some((agent, entries)) = thread_of(&v) {
+            return entries.iter().flat_map(|e| print_entry(printed, &agent, e)).collect();
+        }
         let Some((agent, e)) = entry_of(v) else { return Vec::new() };
-        let lines = crate::entry_reads::line_of(&agent, &e);
-        let new = crate::entry_reads::fresh(printed.get(&agent), e.pos, &lines);
-        if printed.get(&agent).is_none_or(|(p, _)| *p <= e.pos) {
-            let mut had = printed.remove(&agent).filter(|(p, _)| *p == e.pos).map(|(_, h)| h).unwrap_or_default();
-            had.extend(new.iter().cloned());
-            printed.insert(agent, (e.pos, had));
-        }
-        return new;
+        return print_entry(printed, &agent, &e);
     }
-    let s = |k: &str| str_of(&v, k);
-    match s("ev").as_str() {
-        "line" => {
-            let line = s("line");
-            let shown = if let Some(r) = line.strip_prefix("sb ") {
-                Some(format!("[{}] {}", s("agent"), unescape_md(r).replace('\n', " ⏎ ")))
-            } else if let Some(r) = line.trim_start().strip_prefix("obs: assistant: ") {
-                let (_, vis) = split_thinking(r).unwrap_or((String::new(), r.to_string()));
-                Some(format!("[{}] assistant: {}", s("agent"), unescape_md(&vis).replace('\n', " ⏎ ")))
-            } else {
-                line.strip_prefix("tool #").map(|r| format!("[{}] tool {}", s("agent"), truncate_chars(r, 200)))
-            };
-            shown.into_iter().collect()
-        }
-        _ => Vec::new(),
+    // P4d-feed f-c: no older `line` comes (LINE_READS); the rest prints nothing
+    Vec::new()
+}
+
+/// Entry `e` of `agent`'s thread: its lines not printed yet (an entry
+/// comes again as it changes: only what it gained).
+fn print_entry(printed: &mut Printed, agent: &str, e: &bise_proto::thread::Entry) -> Vec<String> {
+    let lines = crate::entry_reads::line_of(agent, e);
+    let new = crate::entry_reads::fresh(printed.get(agent), e.pos, &lines);
+    if printed.get(agent).is_none_or(|(p, _)| *p <= e.pos) {
+        let mut had = printed.remove(agent).filter(|(p, _)| *p == e.pos).map(|(_, h)| h).unwrap_or_default();
+        had.extend(new.iter().cloned());
+        printed.insert(agent.to_string(), (e.pos, had));
+    }
+    new
+}
+
+/// A `thread/subscribe` answer's agent and entries (another line: None).
+fn thread_of(v: &Value) -> Option<(String, Vec<bise_proto::thread::Entry>)> {
+    let r = v.get("result")?;
+    r.get("entries")?;
+    match bise_proto::rpc::ev_of_result("thread/subscribe", r.clone()).ok()?? {
+        bise_proto::hub::HubEv::Thread { agent, entries, .. } => Some((agent, entries)),
+        _ => None,
     }
 }
 

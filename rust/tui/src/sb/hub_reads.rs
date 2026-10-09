@@ -37,9 +37,18 @@ use bise_proto::rpc::{self, Message};
 // the terminal connects with `initialize`
 pub(crate) const READS: &[&str] = &["hub/approvals", "confirm/ask", "hub/artifacts", "hub/agents", "hub/cards", "hub/scheduled", "hub/flow", "hub/notice", "card/open", "client/focused", "hub/versions", "release/progress", "update/progress"];
 
-/// The terminal's first line on the hub's socket: `hello` with [`READS`].
+/// What line mode reads typed besides [`READS`]: the entries and steps
+/// of the threads it subscribes (P4d-feed f-c), never an older `line`.
+pub(crate) const LINE_READS: &[&str] = &["thread/entry", "thread/typing"];
+
+/// The terminal's first line on the hub's socket: `hello` with [`READS`]
+/// (and [`LINE_READS`] in line mode, without a terminal).
 pub fn hello_line() -> String {
-    format!("{}\n", json!({"op": "hello", "reads": READS}))
+    let mut reads = READS.to_vec();
+    if super::client::line_mode_now() {
+        reads.extend_from_slice(LINE_READS);
+    }
+    format!("{}\n", json!({"op": "hello", "reads": reads}))
 }
 
 /// A JSON-RPC notification from the hub (a line with `jsonrpc` and a
@@ -320,8 +329,12 @@ mod tests {
         let listed: Vec<String> = READS.iter().map(|s| s.to_string()).collect();
         let reads = rpc::reads_of(&listed);
         assert_eq!(reads.len(), READS.len(), "every method listed is part of a whole OLDER row");
+        // line mode's (the tests run without a terminal): its rows whole too
+        let lines: Vec<String> = READS.iter().chain(LINE_READS).map(|s| s.to_string()).collect();
+        assert_eq!(rpc::reads_of(&lines).len(), lines.len(), "line mode's reads are whole OLDER rows");
         let hello: Value = serde_json::from_str(hello_line().trim()).unwrap();
-        assert_eq!((hello["op"].as_str(), hello["reads"].as_array().map(Vec::len)), (Some("hello"), Some(READS.len())));
+        let n = if super::super::client::line_mode_now() { lines.len() } else { READS.len() };
+        assert_eq!((hello["op"].as_str(), hello["reads"].as_array().map(Vec::len)), (Some("hello"), Some(n)));
     }
 
     #[test]
