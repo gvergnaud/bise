@@ -560,6 +560,30 @@ fn a_card_entry_says_its_rows_kind_and_asker() {
     }
 }
 
+/// The hub's plain lines ('sb info : @t1 archived · its worktree
+/// removed', any kind this reader doesn't know) are info notices with
+/// their words, as the TUI's line path drew them (Ev::Info); a landed
+/// line that doesn't parse says nothing.
+#[test]
+fn a_hub_info_line_is_an_info_notice() {
+    let none = |_: &str| None;
+    let ls = vec![
+        (1, 1_000, "sb info : @t1 archived · its worktree removed".to_string()),
+        (2, 2_000, "sb something-new : a newer hub's words".to_string()),
+        (3, 3_000, "sb landed : garbled".to_string()),
+    ];
+    let e = fold(&ls, &ctx_with(&[], &none));
+    let got: Vec<_> = e.iter().map(|x| (x.pos, x.kind, x.notice.clone().map(|n| (n.level, n.text)))).collect();
+    use crate::thread::NoticeLevel::Info;
+    assert_eq!(
+        got,
+        [
+            (1, EntryKind::Notice, Some((Info, "@t1 archived · its worktree removed".to_string()))),
+            (2, EntryKind::Notice, Some((Info, "a newer hub's words".to_string()))),
+        ]
+    );
+}
+
 /// BISE-271 from entries (proto-lead m_14961, architect m_14963): a
 /// turn's first entry says it starts one, its newest entry at its end
 /// keeps the end's time, whatever the end (completed, interrupted, failed:

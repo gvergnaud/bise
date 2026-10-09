@@ -111,6 +111,13 @@ pub fn hub_notice(h: &Hub) -> Option<Notice> {
         // a message he routed by hand (`you → @docs : thanks`, no item):
         // the TUI's `→ …` info line
         Hub::Other { kind, text } if kind == "route" => notice(NoticeLevel::Info, format!("→ {text}")),
+        // any other kind (`info`: '@t1 archived · its worktree removed',
+        // or a known kind's line that doesn't parse): its words, the
+        // TUI's info line (sb.rs hub_ev); a landed line that doesn't
+        // parse says nothing
+        Hub::Other { kind, .. } if kind == "landed" => None,
+        Hub::Other { kind, text } if kind == "card-closed" => notice(NoticeLevel::Info, format!("card {text} ")),
+        Hub::Other { text, .. } => notice(NoticeLevel::Info, text.clone()),
         _ => None,
     }
 }
