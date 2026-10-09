@@ -10,7 +10,10 @@
 //! - the server sends [`Notification`]s (`method`, `params`);
 //! - `initialize` first, then `initialized`; nothing else before.
 //!
-//! Pure; the same bytes on every branch that has it.
+//! Pure. One file, the same bytes on every branch that has it
+//! (client-protocol, ambient-app): a change goes on client-protocol first
+//! and is copied here unchanged, so a merge sees one file (architect
+//! m_15060).
 
 use crate::hub::ErrorKind;
 use serde::{Deserialize, Serialize};
