@@ -49,8 +49,8 @@ pub(super) fn on_connect(app: &mut App) {
 /// the feed) or `thread/page`'s (`older`: the `before` it asked).
 pub(super) fn page(app: &mut App, agent: &str, older: Option<usize>, entries: Vec<Entry>, more: bool) {
     with_feed(app, agent, |app| match older {
-        None => first_page(app, &entries, more),
-        Some(before) => older_page(app, before, &entries, more),
+        None => first_page(app, agent, &entries, more),
+        Some(before) => older_page(app, agent, before, &entries, more),
     });
     let live = false;
     for e in &entries {
@@ -61,13 +61,13 @@ pub(super) fn page(app: &mut App, agent: &str, older: Option<usize>, entries: Ve
     }
 }
 
-fn first_page(app: &mut App, entries: &[Entry], more: bool) {
+fn first_page(app: &mut App, agent: &str, entries: &[Entry], more: bool) {
     let keep = (app.ed.clone(), app.queued.clone());
     empty_feed(app);
     app.win = FeedWindow::default();
     app.last_ts = None;
     for e in entries {
-        place(app, e);
+        place(app, agent, e);
     }
     app.win.first_pos = Some(first_pos(entries, more));
     (app.ed, app.queued) = keep;
@@ -84,7 +84,7 @@ fn first_pos(entries: &[Entry], more: bool) -> usize {
 
 /// A page of older entries: its events go in front of the feed, the view
 /// stays on the rows it shows (as `feed::prepend_page` did for lines).
-fn older_page(app: &mut App, before: usize, entries: &[Entry], more: bool) {
+fn older_page(app: &mut App, agent: &str, before: usize, entries: &[Entry], more: bool) {
     if app.win.first_pos != Some(before) {
         // the feed changed since the ask (cut, reconnection): stale
         app.win.loading = false;
@@ -97,7 +97,7 @@ fn older_page(app: &mut App, before: usize, entries: &[Entry], more: bool) {
     app.follow = true;
     app.last_ts = None;
     for e in entries {
-        place(app, e);
+        place(app, agent, e);
     }
     let k = app.events.len();
     app.cache.resize_with(k, || None);
@@ -126,7 +126,7 @@ pub(super) fn entry(app: &mut App, agent: &str, e: &Entry) {
     }
     with_feed(app, agent, |app| {
         let n0 = app.events.len();
-        place(app, e);
+        place(app, agent, e);
         if app.events.len() > n0 && !app.follow {
             app.unseen += 1;
         }
@@ -137,9 +137,19 @@ pub(super) fn entry(app: &mut App, agent: &str, e: &Entry) {
 
 /// Entry `e` in the feed at its pos: a known pos's events are replaced in
 /// place, a new one's appended (after a time mark when its time follows a
-/// pause, as for lines).
-fn place(app: &mut App, e: &Entry) {
+/// pause, as for lines). His answer to an item he gave here draws
+/// nothing (`entry_reads::skip`: its fold is in this feed already), only
+/// its pos's mark.
+fn place(app: &mut App, agent: &str, e: &Entry) {
     let pos = e.pos as usize;
+    if crate::entry_reads::skip(app, agent, e) {
+        if !app.win.spans.contains_key(&pos) {
+            let n0 = app.events.len();
+            app.win.spans.insert(pos, 0);
+            seen_at(app, Some(pos), n0);
+        }
+        return;
+    }
     let mut evs = ev_of(e);
     for ev in evs.iter_mut() {
         if let Ev::Thinking { open, .. } = ev {
@@ -260,18 +270,17 @@ pub(crate) fn turn_edge(app: &mut App, agent: &str, working: bool) {
             app.interrupt_requested = false;
         }
     });
-    // TODO(client-protocol P4d-reads, proto-reads): its
-    // crate::entry_reads::on_turn(app, agent, working) here, outside
-    // with_feed (voice, queue::next)
+    // voice mode's turn, the queue's next message (outside with_feed)
+    crate::entry_reads::on_turn(app, agent, working);
 }
 
 /// The text reads of an entry placed (level 3, steered, zen, activity,
-/// answer fold, queue, voice: proto-reads' `entry_reads::on_entry`, its
-/// contract m_14707: outside `with_feed`, once per entry new or changed).
-// TODO(client-protocol P4d-reads, proto-reads): call
-// crate::entry_reads::on_entry(app, agent, e, live) once it lands (and
-// entry_reads::skip before `place`)
-fn reads(_app: &mut App, _agent: &str, _e: &Entry, _live: bool) {}
+/// answer fold, queue, voice: `entry_reads::on_entry`, contract m_14707:
+/// outside `with_feed`, once per entry new or changed; `live`: a
+/// `thread/entry`, not a page).
+fn reads(app: &mut App, agent: &str, e: &Entry, live: bool) {
+    crate::entry_reads::on_entry(app, agent, e, live);
+}
 
 #[cfg(test)]
 #[path = "feed_entries_tests.rs"]
