@@ -82,7 +82,7 @@ def main():
         wait.until(lambda: (view(state) or {}).get("written_ms", 0) > first, 20, "a change is written again (debounced)")
         check(view(state)["last_activity_ms"] > first, "last_activity_ms moves with the change")
 
-        c.send({"op": "stop_hub"})
+        e2e.stop_hub(os.path.join(state, "hub.sock"))
         hub.wait(timeout=30)
         hub = None
         v = view(state)
@@ -99,7 +99,7 @@ def main():
         wait.until(lambda: os.path.exists(os.path.join(test_state, "hub.sock")), 30, "the test hub's socket", poll=0.05)
         wait.until(lambda: view(test_state) is not None, 20, "the test hub writes its view too")
         check(len(projects(E.env)) == 2, "a test hub never registers: %r" % projects(E.env))
-        e2e.Client(os.path.join(test_state, "hub.sock")).send({"op": "stop_hub"})
+        e2e.stop_hub(os.path.join(test_state, "hub.sock"))
         hub.wait(timeout=30)
         hub = None
     except AssertionError as e:

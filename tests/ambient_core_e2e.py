@@ -145,7 +145,7 @@ def main():
         c.wait_idle("main")
         c.say('''[[bash: sb card "Que fais-tu ? 1. regarde le diff 2. arrête-le 3. laisse-le finir"]]''')
         # the hub's card first (main's turn under load is the slow part), then the core's view of it
-        c.wait(lambda: any("Que fais-tu" in (cd.get("text") or "") for cd in c.cards()), 120, "main's inline card in the hub")
+        c.wait(lambda: any("Que fais-tu" in cd["question"] for cd in c.cards()), 120, "main's inline card in the hub")
         core.wait(lambda e: e.get("ev") == "state" and any(cd["text"] == "Que fais-tu ?" for cd in e["cards"]), 60, "main's inline card, its body alone")
         q = [cd for cd in core.last("state")["cards"] if cd["text"] == "Que fais-tu ?"][0]
         check([o["label"] for o in q["options"]] == ["regarde le diff", "arrête-le", "laisse-le finir"] and q.get("label") == "? main needs you", "its options and label: %r" % q)
@@ -169,15 +169,19 @@ def main():
         c.say('/new -w t2: {{bash: echo wip > wip.txt}}')
         c.wait_idle("t2")
         c.say("[[bash: sb drop t2]]")
-        c.wait(lambda: any(x.get("kind") == "drop" and x.get("agent") == "t2" for x in c.cards()), 60, "the drop card in the TUI")
-        drop = next(x for x in c.cards() if x.get("kind") == "drop")
+        # the TUI draws hub/cards' `others` too (not his: items stays his)
+        def others():
+            with c.lock:
+                return list((c.hub.get("hub/cards") or {}).get("others", []))
+        c.wait(lambda: any(x.get("kind") == "drop" and x.get("agent") == "t2" for x in others()), 60, "the drop card in the TUI")
+        drop = next(x for x in others() if x.get("kind") == "drop")
         core.wait(lambda e: e.get("ev") == "state" and any(a["name"] == "t2" for a in e["agents"]), 30, "t2 in the core's list")
         wait.holds(lambda: not any(cd["id"] == drop["id"] for cd in core.last("state")["cards"]), 1,
                    lambda: "no drop card in the capsule: %r" % core.last("state")["cards"])
         c.wait_idle("main")
         c.say("[[bash: sb drop t2]]")
         c.wait_line("main", "has not answered card #%d" % drop["id"], 60)
-        check(any(x["id"] == drop["id"] for x in c.cards()), "the card still asks him")
+        check(any(x["id"] == drop["id"] for x in others()), "the card still asks him")
 
         # round 10 (identity10 #data): t1's preview and history through the
         # hub's history op, his words to it, live in its open panel

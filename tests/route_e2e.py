@@ -174,7 +174,7 @@ def main():
             sock = os.path.join(hubs_dir, d, "hub.sock")
             if os.path.exists(sock):
                 try:
-                    e2e.Client(sock).send({"op": "stop_hub"})
+                    e2e.stop_hub(sock)
                 except Exception:
                     pass
         for h in hubs:

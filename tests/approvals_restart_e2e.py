@@ -21,12 +21,14 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import e2e  # noqa: E402
 from e2e import Env, Client, check  # noqa: E402
 
 
 def approvals(c):
-    evs = [e for e in c.events if e.get("ev") == "approvals"]
-    return evs[-1] if evs else None
+    """The latest hub/approvals (initialize's state, then each change)."""
+    with c.lock:
+        return c.hub.get("hub/approvals")
 
 
 def confirm_cards(c):
@@ -39,7 +41,7 @@ def card_of(c, agent):
 
 
 def stop_keeping_repls(E):
-    Client(os.path.join(E.state, "hub.sock")).send({"op": "stop_hub", "keep_agents": True})
+    e2e.stop_hub(os.path.join(E.state, "hub.sock"), keep_agents=True)
     E.hub.wait(timeout=20)
     E.hub = None
 
@@ -67,7 +69,7 @@ def main():
         out = os.path.join(home, "outside.txt")
         c.say("/new tr: {{bash: echo r >> %s}}" % out)
         card = card_of(c, "tr")
-        check("always: echo r >> " in card["text"] or "always:" in card["text"], card["text"])
+        check("always: echo r >> " in card["question"] or "always:" in card["question"], card["question"])
         c.wait(lambda: c.agent("tr")["waiting_on"] == "you", 30, "tr waits on you")
         # the old hub saved how far it read: the gate line is behind it
         stop_keeping_repls(E)
@@ -96,11 +98,11 @@ def main():
         check(any(r["tool"] == "gmail.send_email" and r.get("project") is None for r in ev["rules"]),
               "a rule of every project is listed: %r" % ev["rules"])
         check(ev["repo"] and ev["checker"] == "off", "the repo and the checker: %r" % ev)
-        n = len(c.events)
+        n = len(c.notes("hub/approvals"))
         gone = c.rpc("approvals/removeRule", {"project": c.project(), "rule": mine[0]})
         check(gone.get("result") == {}, "the removal answered: %r" % gone)
-        c.wait(lambda: any(e.get("ev") == "approvals" and not any(r["tool"] == "bash" for r in e["rules"])
-                           for e in c.events[n:]), 10, "the new list without it")
+        c.wait(lambda: any(not any(r["tool"] == "bash" for r in e["rules"])
+                           for e in c.notes("hub/approvals")[n:]), 10, "the new list without it")
         rules = open(os.path.join(bise, "approvals.toml")).read()
         check(rules == '# mine\n[[allow]]\ntool = "gmail.send_email"\n', "only it left the file: %r" % rules)
         again = c.rpc("approvals/removeRule", {"project": c.project(), "rule": mine[0]})

@@ -38,6 +38,30 @@ PAGE_V3 = PAGE_V2 + (
 )
 
 
+def pages(c):
+    """hub/pages' rows, newest first (the older state's `pages`)."""
+    with c.lock:
+        return list((c.hub.get("hub/pages") or {}).get("items", []))
+
+
+def timers(c):
+    """hub/scheduled's live tasks then its ended ones (a week of them:
+    the older state's `timers`)."""
+    with c.lock:
+        s = c.hub.get("hub/scheduled") or {}
+    return list(s.get("items", [])) + list(s.get("ended", []))
+
+
+def batch_of(o, card_id):
+    """A drafts-batch card's `batch` (what the desktop core's capsule
+    reads), from the older state's card.
+    TODO(client-protocol, proto-zone-c): hub/cards' Card.batch, then
+    read it from the Client's cards."""
+    with o.lock:
+        cards = [x for x in (o.state or {}).get("cards", []) if x["id"] == card_id]
+    return (cards[0].get("batch") if cards else None) or {}
+
+
 def settle(c, timeout=120):
     """main is idle, no turn of its runs, and its lines have not moved for
     2 s: a message the hub sent main (a notes message, a tick) has had its
@@ -110,6 +134,9 @@ def main():
     try:
         c = E.start_hub()
         c.wait_status("main", "idle", 60)
+        # page_voice is the desktop core's own op (no method until the
+        # core moves to JSON-RPC, step 6): an older connection sends it
+        o = e2e.Older(os.path.join(E.state, "hub.sock"))
         v1 = os.path.join(E.tmp, "page-v1.html")
         v2 = os.path.join(E.tmp, "page-v2.html")
         open(v1, "w").write(PAGE_V1)
@@ -129,8 +156,8 @@ def main():
         settle(c)
         port = int(open(os.path.join(E.state, "pages.port")).read().strip())
         check(47100 <= port < 47900, "the port is in the pages range: %d" % port)
-        c.wait(lambda: any(p["id"] == "weekly-update" for p in (c.state or {}).get("pages", [])), 30, "state.pages")
-        check(any(e.get("ev") == "page" and e.get("id") == "weekly-update" for e in c.events), "a page event")
+        c.wait(lambda: any(p["id"] == "weekly-update" for p in pages(c)), 30, "state.pages")
+        check(any(e.get("id") == "weekly-update" for e in c.notes("page/changed")), "a page/changed")
 
         # the page in its shell, with the CSP
         st, h, body = request(port, "GET", "/p/weekly-update")
@@ -189,7 +216,7 @@ def main():
         # the page's agent is gone: its notes go to main, main takes the page over
         settle(c)
         c.say('/new t1: {{bash: sb page publish %s --id t1-page --title "t1 page"}}' % v1)
-        c.wait(lambda: any(p["id"] == "t1-page" for p in (c.state or {}).get("pages", [])), 120, "t1's page")
+        c.wait(lambda: any(p["id"] == "t1-page" for p in pages(c)), 120, "t1's page")
         check(json.loads(request(port, "GET", "/p/t1-page/meta")[2])["agent"] == "t1", "t1 owns its page")
         c.wait_idle("main", "t1")
         c.say("/archive t1 --force")
@@ -208,9 +235,9 @@ def main():
 
         # §4.1 a note talk's words: the page_voice op reaches the page's
         # SSE as `voice`, never main's input
-        c.send({"op": "page_voice", "page": "weekly-update", "phase": "heard", "text": "make it shorter"})
+        o.send({"op": "page_voice", "page": "weekly-update", "phase": "heard", "text": "make it shorter"})
         c.wait(lambda: sse.seen("voice", lambda d: d == {"phase": "heard", "text": "make it shorter"}), 10, "SSE voice")
-        c.send({"op": "page_voice", "page": "weekly-update", "phase": "end", "text": "make it shorter"})
+        o.send({"op": "page_voice", "page": "weekly-update", "phase": "end", "text": "make it shorter"})
         c.wait(lambda: sse.seen("voice", lambda d: d["phase"] == "end"), 10, "SSE voice end")
         check(not any("make it shorter" in l for l in c.lines("main")), "a note talk never reaches main")
 
@@ -269,7 +296,7 @@ def main():
         plan = Sse(port, "/p/the-plan/events")
         c.say('[[bash: sb page start the-plan --title "the plan" --ask "plan my week"]]')
         c.wait_line("main", "started the-plan", 90)
-        c.wait(lambda: any(e.get("ev") == "page" and e.get("id") == "the-plan" and e.get("state") == "writing" for e in c.events), 10, "a writing page event")
+        c.wait(lambda: any(e.get("id") == "the-plan" and e.get("state") == "writing" for e in c.notes("page/changed")), 10, "a writing page/changed")
         st, _, body = request(port, "GET", "/p/the-plan")
         check(st == 200 and 'data-version="0"' in body and 'data-agent="main"' in body, "the placeholder: %d %s" % (st, body[-400:]))
         check('data-ask="plan my week"' in body and 'data-started="' in body, "the ask and the start: %s" % body[-400:])
@@ -368,9 +395,9 @@ def main():
         c.say('[[bash: sb page publish %s --id launch-watch --title "the launch" && sb every 1h "check HN and republish" --page launch-watch --until 2h]]' % v1)
         c.wait_line("main", "timer set", 90)
         settle(c)
-        timers = (c.state or {}).get("timers", [])
-        lw = [t for t in timers if t.get("page") == "launch-watch"]
-        check(len(lw) == 1 and lw[0]["label"] == "every 1h" and lw[0]["agent"] == "main" and "until_ms" in lw[0], "the timer in the state: %r" % timers)
+        ts = timers(c)
+        lw = [t for t in ts if t.get("page") == "launch-watch"]
+        check(len(lw) == 1 and lw[0]["label"] == "every 1h" and lw[0]["agent"] == "main" and "until_ms" in lw[0], "the timer in hub/scheduled: %r" % ts)
         tid = lw[0]["id"]
         m = json.loads(request(port, "GET", "/p/launch-watch/meta")[2])
         check(m.get("watch", {}).get("timer") == tid and m["watch"]["every"] == "every 1h" and m["watch"]["checked_ms"] > 0 and m["watch"]["until_ms"], "meta.watch: %r" % m.get("watch"))
@@ -385,19 +412,19 @@ def main():
         c.wait(lambda: any("the user stopped timer #%d" % tid in l for l in c.lines("main")[n_main:]), 30, "main hears the stop from bise")
         check(not any("you sent 1 note" in l for l in c.lines("main")[n_main:]), "no notes message for a stop")
         # the state keeps a week of ended timers (/scheduled): stopped = it has ended_ms
-        c.wait(lambda: not any(t["id"] == tid and t.get("ended_ms") is None for t in (c.state or {}).get("timers", [])), 15, "the timer stopped in the state")
+        c.wait(lambda: not any(t["id"] == tid and t.get("ended_ms") is None for t in timers(c)), 15, "the timer stopped in the state")
         m = json.loads(request(port, "GET", "/p/launch-watch/meta")[2])
         check("watch" not in m and [n["status"] for n in m["notes"]] == ["done"], "no watch, the stop note done: %r" % m)
         settle(c)
         c.say('[[bash: sb every 1h "later" --page launch-watch]]')
         # live ones only: the first (stopped) stays in the state as ended
-        lwt = lambda: [t for t in (c.state or {}).get("timers", []) if t.get("page") == "launch-watch" and t.get("ended_ms") is None]
+        lwt = lambda: [t for t in timers(c) if t.get("page") == "launch-watch" and t.get("ended_ms") is None]
         c.wait(lambda: lwt(), 90, "a second watch timer")
         settle(c)
         t2 = lwt()[0]["id"]
         c.wait(lambda: ws.seen("watch", lambda d: d and d["timer"] == t2), 15, "watching again")
         check(c.rpc("scheduled/stop", {"project": c.project(), "id": t2}).get("result") == {}, "the menu's stop answered")
-        live = lambda: [t for t in (c.state or {}).get("timers", []) if t.get("ended_ms") is None]
+        live = lambda: [t for t in timers(c) if t.get("ended_ms") is None]
         c.wait(lambda: ws.seen("watch", lambda d: d is None) and not live(), 15, "the menu's stop")
 
         # roadmap D: a 6-step plan, bise does 4 and asks for 2, all
@@ -626,8 +653,10 @@ def main():
         on_page = [x for x in c.cards() if (x.get("page") or {}).get("id") == "batch-plan"]
         # ambient's words (m_6055 via ambient-lead m_6058): review first
         check(len(on_page) == 1 and on_page[0]["text"].startswith("2 drafts wait for you · batch plan\nemails to lucas and marc\n1. review\n2. send both"), "one card for both drafts: %r" % on_page)
-        check(on_page[0]["page"].get("drafts") is True and on_page[0]["page"].get("item") == "b1", "it opens the page at the first: %r" % on_page[0]["page"])
-        check(on_page[0].get("batch") == {"count": 2, "title": "batch plan", "what": "emails", "names": ["lucas", "marc"],
+        # hub/cards' CardPage has no `drafts` flag (the older state's): the
+        # batch is its block, the first draft's
+        check(on_page[0]["page"].get("block") == "mail-dns" and on_page[0]["page"].get("item") == "b1", "it opens the page at the first: %r" % on_page[0]["page"])
+        check(batch_of(o, on_page[0]["id"]) == {"count": 2, "title": "batch plan", "what": "emails", "names": ["lucas", "marc"],
                                           "topics": [], "line": "emails to lucas and marc", "actions": None}, "its fields for the capsule: %r" % on_page[0])
         settle(c)
         # 1 = review: nothing sent, the card stays
@@ -677,8 +706,9 @@ def main():
         c.wait(lambda: fb() and fb()[0]["text"].startswith("3 drafts wait for you · benjamin's reports\n3 replies to Benjamin: fish, proxy and French\n"), 90,
                "republished after the fix: the 3 replies in one card")
         check(fb()[0]["text"].endswith("2. send all 3"), "send all 3: %r" % fb())
-        check((fb()[0].get("batch") or {}).get("what") == "replies" and fb()[0]["page"].get("item") == "reply-s212", "its fields: %r" % fb()[0])
-        check((fb()[0].get("batch") or {}).get("names") == ["Benjamin"] and fb()[0]["batch"].get("topics") == ["fish", "proxy", "French"], "names, topics: %r" % fb()[0])
+        b = batch_of(o, fb()[0]["id"])
+        check(b.get("what") == "replies" and fb()[0]["page"].get("item") == "reply-s212", "its fields: %r %r" % (fb()[0], b))
+        check(b.get("names") == ["Benjamin"] and b.get("topics") == ["fish", "proxy", "French"], "names, topics: %r" % b)
         # one batch card per page: the 2-card closed when the 3-card came;
         # his 'send both' on the old one acts on the current 3 (pm's C
         # fail 43: it did nothing)
@@ -702,7 +732,7 @@ def main():
         c.wait(oc, 90, "the ops page's batch card")
         wait.stable(lambda: [x["text"] for x in oc()], 30, "the ops page's cards", quiet=1)
         check(len(oc()) == 1 and oc()[0]["text"] == "3 drafts wait for you · ops\nmessages to Nina · 2 to close\n1. review\n2. send all 3", "actions counted apart: %r" % oc())
-        check((oc()[0].get("batch") or {}).get("actions") == "2 to close", "batch.actions: %r" % oc()[0])
+        check(batch_of(o, oc()[0]["id"]).get("actions") == "2 to close", "batch.actions: %r" % batch_of(o, oc()[0]["id"]))
         settle(c)
         c.say("/answer %d 2" % oc()[0]["id"])
         c.wait(lambda: not oc(), 30, "the ops batch closes on send all")

@@ -23,8 +23,9 @@ from e2e import Env, check  # noqa: E402
 
 
 def approvals(c):
-    evs = [e for e in c.events if e.get("ev") == "approvals"]
-    return evs[-1] if evs else None
+    """The latest hub/approvals (initialize's state, then each change)."""
+    with c.lock:
+        return c.hub.get("hub/approvals")
 
 
 def main():

@@ -62,7 +62,7 @@ def main():
         # the agents get the short path (SB_SOCKET), and hub.pid next to it
         # (the REPLs' idle watch reads $(dirname $SB_SOCKET)/hub.pid)
         check(os.path.exists(os.path.join(link, "hub.pid")), "hub.pid next to the short socket")
-        c.send({"op": "stop_hub"})
+        e2e.stop_hub(short)
         hub.wait(timeout=30)
         hub = None
         print("ok: long HOME (%d-byte socket) reached as %s" % (len(natural), short))

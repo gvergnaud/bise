@@ -93,6 +93,9 @@ class Older:
         with self.lock:
             return list(self.lines)
 
+    def send(self, v):
+        self.s.sendall((json.dumps(v) + "\n").encode())
+
     def wait(self, f, what, timeout=30):
         return wait.until(lambda: f() or None, timeout, what)
 
@@ -200,13 +203,14 @@ def main():
 
         # an older hello connection (the terminal): requests answered by id,
         # no notification
-        c.send({"jsonrpc": "2.0", "id": "s1", "method": "scheduled/list", "params": {"project": project}})
-        got = c.wait(lambda: next((v for v in list(c.events) if v.get("id") == "s1"), None), 20, "scheduled/list on a hello connection")
+        o = Older(sock, [])
+        o.wait(lambda: any(v.get("ev") == "ready" for v in o.got()), "ready on a hello connection")
+        o.send({"jsonrpc": "2.0", "id": "s1", "method": "scheduled/list", "params": {"project": project}})
+        got = o.wait(lambda: next((v for v in o.got() if v.get("id") == "s1"), None), "scheduled/list on a hello connection", 20)
         check(got.get("result", {}).get("items") == [], "scheduled/list: %r" % got)
-        with c.lock:
-            check(not any(v.get("jsonrpc") and "method" in v for v in c.events), "a notification on a hello connection")
-        c.send({"jsonrpc": "2.0", "id": 9, "method": "agent/archive", "params": {"project": project, "agent": "ghost", "force": False}})
-        bad = c.wait(lambda: next((v for v in list(c.events) if v.get("id") == 9), None), 20, "agent/archive's error")
+        check(not any(v.get("jsonrpc") and "method" in v for v in o.got()), "a notification on a hello connection")
+        o.send({"jsonrpc": "2.0", "id": 9, "method": "agent/archive", "params": {"project": project, "agent": "ghost", "force": False}})
+        bad = o.wait(lambda: next((v for v in o.got() if v.get("id") == 9), None), "agent/archive's error", 20)
         check(bad["error"]["code"] == HUB_REFUSED, "archive a ghost: %r" % bad)
 
         # step 4's glue (architect m_13977): a hello that lists `reads`

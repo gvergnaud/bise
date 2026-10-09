@@ -94,9 +94,9 @@ def main():
         cmd = "echo hi > ~/Desktop/x.txt"
         c.say("/new t5: {{bash: %s}}" % cmd)
         card = card_of(c, "t5")
-        check(card["text"].startswith("wants to run it outside the sandbox"), card["text"])
-        check("reason: the sandbox stopped a write outside the repo: ~/Desktop/x.txt." in card["text"], card["text"])
-        check("always:" in card["text"], "the card offers always: %r" % card["text"])
+        check(card["question"].startswith("wants to run it outside the sandbox"), card["question"])
+        check("reason: the sandbox stopped a write outside the repo: ~/Desktop/x.txt." in card["question"], card["question"])
+        check("always:" in card["question"], "the card offers always: %r" % card["question"])
         check(not os.path.exists(out), "the sandbox stopped the write")
         c.say("/answer %d no: keep it in the repo" % card["id"])
         c.wait_idle("t5")

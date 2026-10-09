@@ -64,7 +64,7 @@ def hub_core(E):
         c = e2e.Client(sock)
         c.wait_status("main", "idle", 60)
         check(os.path.samefile(c.agent("main")["path"], home), "main works in the home workspace: %r" % c.agent("main"))
-        c.send({"op": "stop_hub"})
+        e2e.stop_hub(sock)
     finally:
         core.stdin.close()
         try:
@@ -215,7 +215,7 @@ def main():
         first = w.split(":", 1)[1].strip()
         check(first.startswith("promises-w1#p1 · overdue"), "the overdue promise comes first: %r" % w)
         check("p3" not in w and "p2 · overdue" not in w, "not his, or due today: not overdue: %r" % w)
-        c.wait(lambda: (c.state or {}).get("overdue") == 1, 30, "state.overdue = 1")
+        c.wait(lambda: (c.hub.get("hub/pages") or {}).get("overdue") == 1, 30, "hub/pages' overdue = 1")
         check(len(c.cards()) == cards0 and not any("pricing sheet" in json.dumps(k) for k in c.cards()), "no card for it")
 
         # a worktree task: refused in words, nothing crashes

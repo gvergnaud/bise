@@ -180,7 +180,7 @@ def main():
         check(r.returncode == 0, "perf's progress: %s %s" % (r.stdout, r.stderr))
         check(not [x for x in of_type(pstate, "x_out") if x.get("out", {}).get("kind") == "job_end"], "progress stays quiet")
         # bise's hub goes away before the end
-        e2e.Client(hsock).send({"op": "stop_hub"})
+        e2e.stop_hub(hsock)
         hubs[0].wait(timeout=30)
         wait.until(lambda: not os.path.exists(os.path.join(hstate, "hub.pid")), 30, "bise's hub stopped", poll=0.2)
         r = bise(perf, "sb", "report", "done", "p99 down 31%")
@@ -218,7 +218,7 @@ def main():
         check(r.returncode != 0 and "only bise reads other projects" in (r.stdout + r.stderr), "a project hub refuses: %s %s" % (r.stdout, r.stderr))
         # the project's hub stopped: bise reads its threads on disk, never
         # starting it
-        e2e.Client(psock).send({"op": "stop_hub"})
+        e2e.stop_hub(psock)
         wait.until(lambda: not os.path.exists(os.path.join(pstate, "hub.pid")), 30, "the project's hub stopped", poll=0.2)
         r = sb_as_main(E.env, hsock, "history", "the login is broken", "--project", name)
         check(r.returncode == 0 and ("%s/main#" % name) in r.stdout and "--project " + name in r.stdout, "history --project: %s %s" % (r.stdout, r.stderr))
@@ -242,7 +242,7 @@ def main():
             sock = os.path.join(st, "hub.sock")
             if os.path.exists(sock):
                 try:
-                    e2e.Client(sock).send({"op": "stop_hub"})
+                    e2e.stop_hub(sock)
                 except Exception:
                     pass
         for h in hubs:

@@ -57,7 +57,7 @@ def main():
         print("PASS live" if ok else "FAIL live", flush=True)
     finally:
         try:
-            e2e.Client(os.path.join(st, "hub.sock")).send({"op": "stop_hub"})
+            e2e.stop_hub(os.path.join(st, "hub.sock"))
             hub.wait(timeout=20)
         except Exception:
             hub.kill()

@@ -16,6 +16,7 @@ approvals/sandbox_tests.rs under the real sandbox-exec).
      tries `/answer N allow` for every N: refused, approvals stay auto, the
      card stays open, a2's command does not run.
 """
+import json
 import os
 import sys
 
@@ -28,13 +29,14 @@ ATTACKER = r'''
 import json, os, socket, sys, time
 sock, go, out, project = sys.argv[1:5]
 open(go).read()  # a fifo: blocks until the test says go
-lines = [{"jsonrpc": "2.0", "id": 1, "method": "approvals/set", "params": {"project": project, "mode": "toggle"}}]
+lines = [{"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {"proto": 1, "client": {"name": "left-behind"}}}]
+lines += [{"jsonrpc": "2.0", "id": 1, "method": "approvals/set", "params": {"project": project, "mode": "toggle"}}]
 lines += [{"jsonrpc": "2.0", "id": n, "method": "card/answer", "params": {"project": project, "card": n, "reply": "allow"}} for n in range(2, 41)]
 got = b""
 try:
     s = socket.socket(socket.AF_UNIX)
     s.connect(sock)
-    s.sendall(b'{"op":"hello"}\n' + b"".join((json.dumps(l) + "\n").encode() for l in lines))
+    s.sendall(b"".join((json.dumps(l) + "\n").encode() for l in lines))
     s.settimeout(2)
     t1 = time.time()
     while time.time() - t1 < 8:
@@ -53,12 +55,25 @@ os.rename(out + ".tmp", out)
 
 
 def approvals(c):
-    evs = [e for e in c.events if e.get("ev") == "approvals"]
-    return evs[-1] if evs else None
+    """The latest hub/approvals (initialize's state, then each change)."""
+    with c.lock:
+        return c.hub.get("hub/approvals")
 
 
 def confirm_cards(c):
     return [cd for cd in c.cards() if cd["kind"] == "confirm"]
+
+
+def refused(out):
+    """The hub's answer to an initialize it refuses: one JSON-RPC error,
+    code REFUSED (-32010), and nothing after it (the connection closed:
+    none of the requests behind it answered)."""
+    lines = [l for l in out.splitlines() if l.strip()]
+    try:
+        v = json.loads(lines[0]) if len(lines) == 1 else {}
+    except ValueError:
+        return False
+    return v.get("id") == 0 and (v.get("error") or {}).get("code") == -32010
 
 
 def read(p):
@@ -103,18 +118,18 @@ def main():
         # 1-3. a1: the script left behind, the issue's command, SB_SOCKET, sb
         c.say(
             "/new a1: {{bash: nohup python3 %s %s %s %s %s </dev/null >/dev/null 2>&1 & echo started}} "
-            "{{bash: printf '{\"op\":\"hello\"}\\n{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"approvals/set\","
+            "{{bash: printf '{\"jsonrpc\":\"2.0\",\"id\":0,\"method\":\"initialize\",\"params\":{\"proto\":1,\"client\":{\"name\":\"a1\"} } }\\n{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"approvals/set\","
             "\"params\":{\"project\":\"%s\",\"mode\":\"toggle\"} }\\n' | nc -U -w 3 %s > %s 2>&1; echo a}} "
-            "{{bash: printf '{\"op\":\"hello\"}\\n' | nc -U -w 3 \"$SB_SOCKET\" > %s 2>&1; echo b}} "
+            "{{bash: printf '{\"jsonrpc\":\"2.0\",\"id\":0,\"method\":\"initialize\",\"params\":{\"proto\":1,\"client\":{\"name\":\"a1\"} } }\\n' | nc -U -w 3 \"$SB_SOCKET\" > %s 2>&1; echo b}} "
             "{{bash: sb list > %s 2>&1; echo d}}"
             % (att, hub_sock, go, out_c, c.project(), c.project(), hub_sock, out_a, out_b, out_d)
         )
         c.wait(lambda: c.agent("a1") is not None, 60, "a1")
         c.wait(lambda: "main" in read(out_d), 120, "a1's sb list answered: %r" % read(out_d))
         c.wait_idle("a1")
-        check("refused" in read(out_a) and "agent a1's process" in read(out_a),
-              "the hello on hub.sock is refused, naming a1: %r" % read(out_a))
-        check("does not serve" in read(out_b), "agent.sock does not serve hello: %r" % read(out_b))
+        check(refused(read(out_a)) and "agent a1's process" in read(out_a),
+              "initialize on hub.sock is refused, naming a1: %r" % read(out_a))
+        check("does not serve" in read(out_b), "agent.sock does not serve initialize: %r" % read(out_b))
         check(approvals(c)["mode"] == "yolo", "approvals unchanged by a1: %r" % approvals(c))
         check("client refused on hub.sock (hello)" in read(log) and "agent a1's process" in read(log),
               "hub.log names a1: %r" % read(log)[-2000:])
@@ -130,7 +145,7 @@ def main():
         os.write(fd, b"go")
         os.close(fd)
         c.wait(lambda: os.path.exists(out_c), 60, "the script's try")
-        check("refused" in read(out_c), "the script's hello is refused: %r" % read(out_c)[:500])
+        check(refused(read(out_c)), "the script's initialize is refused: %r" % read(out_c)[:500])
         check(approvals(c)["mode"] == "auto", "approvals stay auto: %r" % approvals(c))
         check(any(cd["id"] == card["id"] for cd in confirm_cards(c)), "a2's card stays open")
         check(not os.path.exists(outside), "a2's command did not run")

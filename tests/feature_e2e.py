@@ -52,22 +52,20 @@ def main():
 
         # a window's typed connection: its merged today follows each land
         # and the feature merge, unasked (T1 run 5 step 9)
-        w = e2e.Client(os.path.join(E.state, "hub.sock"))
-        w.wait(lambda: w.state is not None, 20, "the window's replay")
-        w.send({"cmd": "hello", "proto": 1, "typed_only": True})
-        w.wait(lambda: any(e.get("ev") == "merged" for e in w.events), 20, "merged at hello")
+        w = e2e.Client(os.path.join(E.state, "hub.sock"), "window")
+        w.wait(lambda: w.state is not None, 20, "the window's state")
+        check("hub/merged" in w.hub, "merged in initialize's state: %r" % sorted(w.hub))
 
         def merged_events():
-            with w.lock:
-                return [e for e in w.events if e.get("ev") == "merged"]
+            return w.notes("hub/merged")
         before_lands = len(merged_events())
 
-        # bar A.6: the typed features rows, at hello and on change
+        # bar A.6: the typed features rows, at initialize and on change
         def feat(name):
             with w.lock:
-                fs = [e for e in w.events if e.get("ev") == "features"]
-            return next((x for x in fs[-1]["items"] if x["name"] == name), None) if fs else None
-        w.wait(lambda: feat("cu") is not None, 20, "features at hello")
+                fs = w.hub.get("hub/features")
+            return next((x for x in fs["items"] if x["name"] == name), None) if fs else None
+        w.wait(lambda: feat("cu") is not None, 20, "features at initialize")
         f0 = feat("cu")
         check(f0["branch"] == "cu" and f0["base"] == "main" and f0["agents"] == [] and f0.get("card") is None, "cu's typed row: %r" % f0)
 
@@ -85,12 +83,11 @@ def main():
         w.wait(lambda: len(merged_events()) >= before_lands + 2, 30, "merged again after each land, unasked")
         check(out(E.ws, "git log --format=%s cu") == "cu-b\ncu-a\nignore\ninit", "both on cu: " + out(E.ws, "git log --format=%s cu"))
         check(out(E.ws, "git rev-parse main") == base, "main never moved")
-        p = place(c, "feature:cu")
-        check(p and p["feature"] and p["agents"] == ["cu-a", "cu-b"] and p["branch"] == "cu", "the feature's place: %r" % p)
-        c.wait(lambda: "feature · 2 commits · not tried" == (place(c, "feature:cu") or {}).get("lid"), 30, "the lid")
+        check([x["name"] for x in (w.state or {}).get("agents", []) if x.get("place_id") == "feature:cu"] == ["cu-a", "cu-b"],
+              "the feature's place holds its agents: %r" % w.state["agents"])
         w.wait(lambda: (feat("cu") or {}).get("ahead") == 2 and feat("cu")["agents"] == ["cu-a", "cu-b"], 30, "the typed row: its agents and 2 commits, unasked")
+        check(feat("cu")["branch"] == "cu" and feat("cu").get("tried") is None, "on cu, not tried: %r" % feat("cu"))
         check(feat("cu")["checked"] is False and not feat("cu")["trial"], "not checked, not on trial: %r" % feat("cu"))
-        check(not p["trying"], "ψ before a try")
         # /flow lists it
         c.say("/flow")
         c.wait(lambda: any("1 feature branch: cu (2 agents, 2 commits, not tried)" in n.get("text", "") for n in c.notices()), 30, "/flow")
@@ -99,7 +96,7 @@ def main():
         c.say("[[bash: sb feature ready cu]]")
         c.wait(lambda: card(c, "feature_try") is not None, 60, "the try item")
         t = card(c, "feature_try")
-        check(t["text"].startswith("cu is ready to try\n2 commits on cu · +2 −0\nthe check passes."), t["text"])
+        check(t["question"].startswith("cu is ready to try\n2 commits on cu · +2 −0\nthe check passes."), t["question"])
         check(t.get("place") == "feature:cu", "the item names its place: %r" % t)
         w.wait(lambda: (feat("cu") or {}).get("card") == t["id"] and feat("cu")["checked"], 30, "the typed row names its try card, checked")
         c.wait_idle("main")
@@ -114,17 +111,14 @@ def main():
         c.wait(lambda: card(c, "feature_merge") is not None, 60, "the merge item")
         m = card(c, "feature_merge")
         check(card(c, "feature_try") is None, "the try item is replaced")
-        check("you tried " in m["text"] and "/v/cu/bise" in m["text"], m["text"])
+        check("you tried " in m["question"] and "/v/cu/bise" in m["question"], m["question"])
         c.wait_line("main", "cu is built to try", 30)
-        c.wait(lambda: (place(c, "feature:cu") or {}).get("trying"), 30, "Δ on trial")
         reg = json.load(open(os.path.join(E.state, "features.json")))
         check(reg["features"][0]["trial"], "the registry: %r" % reg)
         w.wait(lambda: (feat("cu") or {}).get("card") == m["id"] and feat("cu")["trial"] and not feat("cu")["building"], 30, "the typed row: on trial, its merge card")
         check("/v/cu/bise" in feat("cu")["tried"]["run"], "its try: %r" % feat("cu"))
-        with w.lock:
-            fevs = [e for e in w.events if e.get("ev") == "features"]
-        w.send({"cmd": "features", "project": fevs[-1]["project"]})
-        w.wait(lambda: len([e for e in w.events if e.get("ev") == "features"]) > len(fevs), 20, "features again on its command")
+        listed = w.rpc("features/list", {"project": w.project()}, 20)
+        check(any(x["name"] == "cu" for x in listed["result"]["items"]), "features/list: %r" % listed)
 
         # 1 merge: main fast-forwarded, agents archived, branch trashed
         # (a feature merge writes no landed line: its own effect)
@@ -145,7 +139,7 @@ def main():
         check(out(E.ws, "git branch --list cu") == "", "the branch is gone")
         check("refs/switchboard/trash/feature-cu/" in out(E.ws, "git for-each-ref --format='%(refname)' refs/switchboard"), "its tip kept")
         c.wait(lambda: card(c, "feature_merge") is None, 30, "the merge item closed")
-        c.wait(lambda: place(c, "feature:cu") is None, 30, "no feature place left")
+        w.wait(lambda: feat("cu") is None, 30, "no feature row left")
         c.wait_idle("main")
 
         # a feature dropped (main runs it on the user's word)

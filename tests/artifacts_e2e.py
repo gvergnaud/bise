@@ -42,21 +42,21 @@ def main():
         check((r.returncode != 0) == fail, "sb %s: %s %s" % (" ".join(args), r.stdout, r.stderr))
         return (r.stderr if fail else r.stdout).strip()
 
-    def evs(c, name):
-        with c.lock:
-            return [e for e in c.events if e.get("ev") == name]
+    def arts(c):
+        """Every hub/artifacts so far (after initialize's state)."""
+        return c.notes("hub/artifacts")
 
     def last_art(c):
-        a = evs(c, "artifacts")
-        return a[-1] if a else None
+        """The latest hub/artifacts: its rows and how many are new."""
+        with c.lock:
+            a = c.hub.get("hub/artifacts")
+        return a and {"rows": a["items"], "new": sum(1 for r in a["items"] if r["new"])}
 
     try:
         c = E.start_hub()
         c.wait_status("main", "idle", 60)
-        with c.lock:
-            kinds = [e.get("ev") for e in c.events]
-        check("artifacts" in kinds and kinds.index("artifacts") == kinds.index("ready") + 1,
-              "artifacts right after ready in the hello: %r" % kinds[:12])
+        check("hub/artifacts" in [n["method"] for n in c.init["hub"]["state"]],
+              "artifacts in initialize's state: %r" % [n["method"] for n in c.init["hub"]["state"]])
         check(last_art(c)["rows"] == [] and last_art(c)["new"] == 0, last_art(c))
 
         out = sb("main", E.ws, "spawn", "t1", "--place", "new", "--objective", "hello t1")
@@ -68,14 +68,14 @@ def main():
         os.makedirs(os.path.join(wt, "out"))
         plan = os.path.join(wt, "out", "pricing-plans.csv")
         open(plan, "w").write("plan,price\nfree,0\n")
-        n0 = len(evs(c, "artifacts"))
+        n0 = len(arts(c))
         out = sb("t1", wt, "artifact", "add", "out/pricing-plans.csv", "--title", "pricing plans")
         check(out == "added pricing plans (sheet) · v1 · link it as [pricing plans](artifact:pricing-plans)", out)
         c.wait_line("t1", "sb artifact : pricing-plans : t1 : pricing plans : sheet : 1", 10)
         c.wait_line("main", "sb artifact : pricing-plans : t1 : pricing plans : sheet : 1", 10)
-        c.wait(lambda: len(evs(c, "artifacts")) > n0, 10, "a fresh artifacts event")
+        c.wait(lambda: len(arts(c)) > n0, 10, "a fresh hub/artifacts")
         row = last_art(c)["rows"][0]
-        check(row["id"] == "pricing-plans" and row["agent"] == "t1" and row["by"] == "t1" and row["v"] == 1, row)
+        check(row["id"] == "pricing-plans" and row["agent"] == "t1" and row["by"] == "t1" and row["version"] == 1, row)
         check(row["copy"] and open(row["copy"]).read() == "plan,price\nfree,0\n", row)
         check("out/pricing-plans.csv" in row["keys"], row["keys"])
         check(last_art(c)["new"] == 1, last_art(c)["new"])

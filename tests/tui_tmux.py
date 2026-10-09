@@ -151,7 +151,7 @@ class Tui:
             refuse_other_root(self.E.state)
         sock = os.path.join(self.E.state, "hub.sock")
         try:
-            e2e.Client(sock).send({"op": "stop_hub"})
+            e2e.stop_hub(sock)
             wait.until(lambda: not os.path.exists(sock), 1, "the hub's socket gone", poll=0.05)
         except Exception:
             pass

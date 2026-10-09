@@ -27,8 +27,9 @@ from e2e import Env, check  # noqa: E402
 
 
 def approvals(c):
-    evs = [e for e in c.events if e.get("ev") == "approvals"]
-    return evs[-1] if evs else None
+    """The latest hub/approvals (initialize's state, then each change)."""
+    with c.lock:
+        return c.hub.get("hub/approvals")
 
 
 def confirm_cards(c):
@@ -98,8 +99,8 @@ def main():
         # 6. a force push to main: a card with no "always"; no with a note
         c.say("/new t6: {{bash: git push origin main --force}}")
         card = card_of(c, "t6")
-        check("wants to run" in card["text"] and "| git push origin main --force" in card["text"], card["text"])
-        check("always:" not in card["text"], "a hard rule offers no always: %r" % card["text"])
+        check("wants to run" in card["question"] and "| git push origin main --force" in card["question"], card["question"])
+        check("always:" not in card["question"], "a hard rule offers no always: %r" % card["question"])
         c.wait(lambda: c.agent("t6")["status"] == "waiting" and c.agent("t6")["waiting_on"] == "you", 30,
                "t6 waits on you: %r" % c.agent("t6"))
         c.wait(lambda: any(l.startswith("sb gate : card ") for l in c.lines("t6")), 10, "the gate line in t6's feed")
@@ -114,7 +115,7 @@ def main():
         out7 = os.path.join(home, "outside7.txt")
         c.say("/new t7: {{bash: echo x > %s}}" % out7)
         card = card_of(c, "t7")
-        check("always:" in card["text"], "a checker-off card offers always: %r" % card["text"])
+        check("always:" in card["question"], "a checker-off card offers always: %r" % card["question"])
         c.interrupt("t7")
         c.wait(lambda: not confirm_cards(c), 30, "the card closed by the interrupt")
         c.wait_idle("t7")
@@ -124,7 +125,7 @@ def main():
         # 8. always allow npm run build here: saved; the next one asks nothing
         c.say("/new t8: {{bash: npm run build; echo one > t8a.txt}} {{bash: npm run build; echo two > t8b.txt}}")
         card = card_of(c, "t8")
-        check("always: npm run build *" in card["text"], "the pattern it saves: %r" % card["text"])
+        check("always: npm run build *" in card["question"], "the pattern it saves: %r" % card["question"])
         c.say("/answer %d 2" % card["id"])  # 2 always: approving words are refused (the composer rule)
         c.wait(lambda: os.path.exists(os.path.join(E.ws, "t8b.txt")), 90, "the second npm run build ran")
         c.wait_idle("t8")
