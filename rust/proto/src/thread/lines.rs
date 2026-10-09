@@ -838,6 +838,12 @@ pub enum ToolMove {
 }
 
 /// The tool move of a line, if any.
+///
+/// Outside the wire rule on purpose (lib.rs; architect m_14688): since
+/// P4d0 a call line with no `tool_started` before it makes no tool row, in
+/// the hub's fold as in the TUI. That drops a phantom row ('0.0s', never
+/// run) for every reader alike: a fix, not a field changing meaning, so
+/// tests/released.rs's fold law covers message lines only.
 pub fn tool_move(rec: &Rec) -> Option<ToolMove> {
     Some(match rec.clone() {
         Rec::Obs(Obs::ToolStarted(id)) => ToolMove::Start(id),
