@@ -1142,7 +1142,7 @@ pub(crate) fn handle_input(app: &mut App, v: &str) -> Vec<Ev> {
     if release::answer(app, &typed) {
         return out;
     }
-    // the raw session of the agent in view (logview.rs; dev only)
+    // the raw session of the agent in view (logview.rs)
     if typed.split_whitespace().next() == Some("/log") && crate::logview::enabled(app) {
         if let Err(e) = crate::logview::open(app, &typed) {
             out.push(Ev::Warn(format!("/log: {e}")));

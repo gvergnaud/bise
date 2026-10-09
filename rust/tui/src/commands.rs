@@ -187,6 +187,10 @@ pub(crate) fn popup_items(app: &App) -> Vec<PopItem> {
     if app.ed.text.starts_with('/') && !app.ed.text.contains(' ') {
         cmds.extend(sb::release::dev_commands(app).iter().filter(|c| c.name.starts_with(app.ed.text.as_str())));
     }
+    // `/log` (logview.rs): its usage has no completer, so not in COMMANDS
+    if app.ed.text.starts_with('/') && !app.ed.text.contains(' ') && crate::logview::enabled(app) && crate::logview::COMMAND.name.starts_with(app.ed.text.as_str()) {
+        cmds.push(&crate::logview::COMMAND);
+    }
     if !cmds.is_empty() {
         return cmds
             .into_iter()

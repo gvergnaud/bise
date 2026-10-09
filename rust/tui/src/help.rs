@@ -556,6 +556,7 @@ pub(crate) fn page_lines(
 /// The overlay, over the whole frame, when open.
 pub(crate) fn draw(app: &mut App, frame: &mut Frame) {
     let dev_cmds = crate::sb::release::dev_commands(app);
+    let log_on = crate::logview::enabled(app);
     let (cmd, digits) = (app.cmd_keys, app.ctrl_digits);
     let Some(o) = app.help.as_mut() else { return };
     let full = frame.area();
@@ -569,6 +570,7 @@ pub(crate) fn draw(app: &mut App, frame: &mut Frame) {
     let area = Rect { x: full.x + (full.width - w) / 2, y: full.y + 1, width: w, height: h };
     let commands: Vec<(&'static str, &'static str)> = crate::commands::COMMANDS
         .iter()
+        .chain(log_on.then_some(&crate::logview::COMMAND))
         .chain(dev_cmds)
         .map(|c| (c.name, c.desc))
         .collect();

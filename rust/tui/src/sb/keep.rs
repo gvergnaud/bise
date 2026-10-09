@@ -27,7 +27,7 @@
 //!
 //! Not kept: a selection (in the history or a field), the palette's and
 //! the screens' selected row, the help's scroll, a popup's typing mode in
-//! the log view (`/log`, dev only), the terminal pane, voice mode.
+//! the log view (`/log`), the terminal pane, voice mode.
 
 use super::{focus, App};
 use serde_json::{json, Value};

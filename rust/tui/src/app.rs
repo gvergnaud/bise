@@ -14,7 +14,7 @@ pub(crate) struct App {
     pub(crate) help: Option<help::Overlay>,
     // the /approvals screen, when open
     pub(crate) approvals: Option<approvals_screen::Screen>,
-    /// `/log`, the raw session of the agent in view, when open (dev only)
+    /// `/log`, the raw session of the agent in view, when open
     pub(crate) logview: Option<crate::logview::View>,
     /// `/artifacts`, the full screen of what your agents made, when open
     pub(crate) artifacts: Option<crate::artifacts_screen::Screen>,

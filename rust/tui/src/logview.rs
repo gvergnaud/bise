@@ -1,4 +1,4 @@
-//! `/log` (dev only for now): the raw session of the agent in view, read
+//! `/log`: the raw session of the agent in view, read
 //! from its session log (`~/.bise/sessions/<id>/`, rust/session), in a
 //! full screen. Two views: the full history (every entry in order, the
 //! turns and the compactions as rules) and what the model got for one
@@ -10,8 +10,8 @@
 //! opens them all, / searches (n/N), f filters roles and tools, tab
 //! switches views, [ ] change the request, g/G top/bottom, esc closes.
 //!
-//! Shipping it is one switch: [`SHIPPED`] (today: the dev build, or
-//! `BISE_DEV=1`). Later: an "export for a bug report" action (the
+//! Shipped to everyone ([`SHIPPED`]; false would bring back the dev
+//! build or `BISE_DEV=1` only). Later: an "export for a bug report" action (the
 //! redacted entries to a file) fits here; not built yet.
 
 mod model;
@@ -34,7 +34,7 @@ use std::sync::OnceLock;
 use unicode_width::UnicodeWidthStr;
 
 /// `/log` for everyone (false: the dev build or `BISE_DEV=1` only).
-pub(crate) const SHIPPED: bool = false;
+pub(crate) const SHIPPED: bool = true;
 
 /// The hub's state folder (`~/.bise/hubs/<hub>`): the TUI's socket's
 /// folder, set once at connect.

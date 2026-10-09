@@ -14,23 +14,18 @@ pub(crate) const DEV_COMMANDS: &[Cmd] = &[Cmd {
     name: "/release-bise",
     desc: "release bise: tag HEAD, CI builds it, publish (asks first): /release-bise [dry-run]",
     args: &[Arg::Words(&[("dry-run", "say what it would do, push and publish nothing")])],
-}, crate::logview::COMMAND];
-
-/// `/log` alone: `BISE_DEV=1` outside the dev build (logview.rs).
-const LOG_ONLY: &[Cmd] = &[crate::logview::COMMAND];
+}];
 
 /// The dev build: the hub said its workspace is bise's source tree.
 pub(crate) fn dev(app: &App) -> bool {
     app.sb.versions_dev == Some(true)
 }
 
-/// The dev commands when this is the dev build, else none (`/log`
-/// with `BISE_DEV=1`, or once shipped).
+/// The dev commands when this is the dev build, else none (`/log` is
+/// not one: shipped to everyone, logview.rs).
 pub(crate) fn dev_commands(app: &App) -> &'static [Cmd] {
     if dev(app) {
         DEV_COMMANDS
-    } else if crate::logview::enabled(app) {
-        LOG_ONLY
     } else {
         &[]
     }
@@ -243,6 +238,21 @@ mod tests {
         assert!(dev_commands(&app).is_empty());
         set_versions_dev(&mut app, true);
         assert_eq!(dev_commands(&app)[0].name, "/release-bise");
+        assert!(!dev_commands(&app).iter().any(|c| c.name == "/log"), "/log is shipped, not a dev command");
+    }
+
+    /// `/log` is shipped: an installed bise (not the dev build, no
+    /// `BISE_DEV`) offers it in the popup.
+    #[test]
+    fn a_release_build_offers_log() {
+        let mut app = test_app();
+        set_versions_dev(&mut app, false);
+        if std::env::var("BISE_DEV").is_ok_and(|v| !v.is_empty() && v != "0") {
+            return; // the env says dev: this test proves nothing here
+        }
+        assert!(crate::logview::enabled(&app));
+        app.ed.text = "/lo".into();
+        assert!(crate::commands::popup_items(&app).iter().any(|i| i.label == "/log"));
     }
 
     fn plan(dry: bool) -> String {
