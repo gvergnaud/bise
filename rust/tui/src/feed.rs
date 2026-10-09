@@ -12,6 +12,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
 // a replayed tool has no meaningful duration (the timing is the replay's)
+#[cfg(test)]
 pub(crate) fn hide_replayed_elapsed(events: &mut [Ev], cache: &mut [Option<EventRows>], id: u32) {
     if let Some((i, td)) = last_tool_mut(events, |td| td.id == id) {
         td.elapsed = Some(String::new());
@@ -1408,6 +1409,7 @@ pub(crate) fn turn_end_of(events: &[Ev], i: usize) -> Option<u64> {
 /// The local time, `14:31`: the zone from `when::offset_at` (one `date`
 /// per hour, cached; UTC when it fails), not a `date` process per call
 /// (BISE-292).
+#[cfg(test)]
 pub(crate) fn local_hhmm() -> String {
     let ms = crate::when::now_ms();
     let s = (ms / 1000) as i64 + i64::from(crate::when::offset_at(ms));

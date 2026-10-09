@@ -8,7 +8,7 @@
 //! `Sb::views` and are swapped in on focus change.
 
 use super::*;
-use bise_proto::thread::lines::{self, GateStep, Hub};
+use bise_proto::thread::lines::{GateStep, Hub};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::os::unix::net::UnixStream;
@@ -107,7 +107,7 @@ pub(crate) fn ctrl_view(app: &App) -> CtrlView {
     }
 }
 use feed::{
-    clear_feed, ingest_at, prepend_page, swap_draft, swap_feed, trim_window, want_older, with_feed, View,
+    clear_feed, swap_draft, swap_feed, trim_window, want_older, with_feed, View,
 };
 
 #[derive(Clone, Default)]
@@ -224,9 +224,9 @@ pub(super) struct Sb {
     /// Each agent's last row as the turn edges read it: working, its
     /// ended turns (feed_entries::agent_row).
     turns_seen: HashMap<String, (bool, u64)>,
-    /// `ready` came before the focus's first page: keep::apply waits for
-    /// it (the scroll it restores needs the feed).
-    keep_after_page: bool,
+    /// The agent whose first page `ready` waits for (the focus at the
+    /// connection, sb/feed_entries.rs `on_ready`): none, it came.
+    ready_page: Option<String>,
     ready: bool,
     /// The version the hub runs (its VERSION id), for the status row.
     version: String,
@@ -352,14 +352,6 @@ impl Sb {
     /// [`Sb::send`] from a shared borrow (a popup asking the hub for
     /// its list while it draws).
     pub(crate) fn send_shared(&self, v: Value) {
-        let mut s = v.to_string();
-        s.push('\n');
-        if let Ok(mut w) = self.writer.lock() {
-            let _ = w.write_all(s.as_bytes());
-        }
-    }
-
-    pub(crate) fn send(&mut self, v: Value) {
         let mut s = v.to_string();
         s.push('\n');
         if let Ok(mut w) = self.writer.lock() {
@@ -671,16 +663,6 @@ pub(super) fn dispatch(app: &mut App, raw: &str) {
     }
     let s = |k: &str| str_of(&v, k);
     match s("ev").as_str() {
-        "line" => {
-            let pos = v.get("pos").and_then(|x| x.as_u64()).map(|p| p as usize);
-            let ts = v.get("ts").and_then(|x| x.as_u64());
-            ingest_for(app, &s("agent"), s("line"), pos, ts)
-        }
-        "history" => {
-            let before = v.get("before").and_then(|x| x.as_u64()).unwrap_or(0) as usize;
-            let lines = crate::wire::parse_history(&v);
-            with_feed(app, &s("agent"), |app| prepend_page(app, before, lines));
-        }
         // the hub refused this client (it runs in an agent's process,
         // docs/issues/16): say why once the terminal is back, and end
         "refused" => {
@@ -710,6 +692,8 @@ pub(super) fn dispatch(app: &mut App, raw: &str) {
             if (!exe.is_empty() && follow_hub_exe(&exe)) || (reloaded && follow_reload()) {
                 app.sb.reload_wait.ask(std::time::Instant::now());
             }
+            // P4d-feed: the threads it shows, from the hub's entries
+            feed_entries::on_connect(app);
         }
         "ready" => {
             let sb = &mut app.sb;
@@ -717,80 +701,11 @@ pub(super) fn dispatch(app: &mut App, raw: &str) {
             // the queues saved by the TUI before this one (a reload, a
             // restart): back now that the feeds say who is busy
             drafts::requeue(app);
-            // the inbox answers and what was open (a reload)
-            keep::apply(app);
+            // the inbox answers and what was open (a reload), once the
+            // focus's feed is in (its first page)
+            feed_entries::on_ready(app);
         }
         _ => {}
-    }
-}
-
-fn ingest_for(app: &mut App, agent: &str, line: String, pos: Option<usize>, ts: Option<u64>) {
-    let sb = &mut app.sb;
-    // BISE-61: the first live message between agents in view
-    let level3 = sb.ready
-        && sb.focus == agent
-        && (line.starts_with("sb msg : ") || line.starts_with("sb msg-in : "));
-    // BISE-15: the first steering the model read (its line turns ✓✓)
-    let steered = sb.ready && sb.focus == agent && line.contains("obs: steered: ");
-    // zen (BISE-121): a live card or message to you, in any feed
-    if sb.ready && (line.starts_with("sb card : ") || line.starts_with("sb msg-you : ") || line.starts_with("sb msg-in : @")) {
-        sb.calls += 1;
-    }
-    if sb.focus != agent {
-        let visible = line.contains("obs: assistant:") || line.starts_with("sb ");
-        if visible && sb.ready {
-            sb.activity.insert(agent.to_string());
-        }
-    }
-    // an answer given here: its fold line is in this feed already
-    let answer_id = line.strip_prefix("sb route : ").and_then(|r| lines::answer_route(&unescape_md(r)).map(|(_, id, _)| id));
-    let folded = answer_id.is_some_and(|id| sb.folded_in(id, agent));
-    // BISE-307: what the item asked, for its line to open on (the
-    // inbox's card while the hub still holds it)
-    let asked = answer_id.and_then(|id| sb.card_by_id(id)).map(|c| c.text.trim().to_string());
-    let mut queued = None;
-    // voice mode: the live messages and turns of this agent (never a replay)
-    let voice = app.voice_mode.is_some() && app.sb.ready;
-    let mut said = Vec::new();
-    with_feed(app, agent, |app| {
-        if folded {
-            let n0 = app.events.len();
-            feed::seen_at(app, pos, n0);
-        } else {
-            let n0 = app.events.len();
-            ingest_at(app, line, pos, ts);
-            if voice {
-                said.extend(
-                    app.events[n0.min(app.events.len())..]
-                        .iter()
-                        .filter(|e| matches!(e, Ev::Assistant(_) | Ev::Turn | Ev::TurnDone | Ev::Idle))
-                        .cloned(),
-                );
-            }
-            if let Some(id) = answer_id {
-                let n1 = app.events.len();
-                ask_of(app, n0..n1, id, asked);
-            }
-        }
-        trim_window(app);
-        // BISE-89: its turn ended, the oldest queued message goes (and
-        // the next one waits for the turn it starts)
-        queued = crate::queue::next(app);
-        if queued.is_some() {
-            app.pending = true;
-        }
-    });
-    if !said.is_empty() {
-        crate::voicemode::live::on_events(app, agent, &said);
-    }
-    if let Some(m) = queued {
-        app.sb.send_input_to(agent, m);
-    }
-    if level3 {
-        crate::hints::once(app, crate::hints::Hint::FirstLevel3);
-    }
-    if steered {
-        crate::hints::once(app, crate::hints::Hint::FirstSteer);
     }
 }
 
@@ -868,6 +783,8 @@ pub(super) fn focus(app: &mut App, name: &str) {
     sb.send_focus();
     swap_feed(app, &mut incoming);
     swap_draft(app, &mut incoming);
+    // its feed from the hub's entries (once per connection)
+    feed_entries::subscribe(app, name);
     // a feed selection belongs to the feed we left
     app.feed_sel = None;
     // `incoming` now holds the feed we left
@@ -1169,7 +1086,7 @@ pub(crate) fn shown_name(name: &str) -> String {
 /// (the tests' entry: `wire::parse_line` calls [`hub_ev`] itself).
 #[cfg(test)]
 pub(super) fn parse_hub_line(rest: &str) -> Option<Ev> {
-    hub_ev(lines::hub(rest))
+    hub_ev(bise_proto::thread::lines::hub(rest))
 }
 
 /// The hub's own lines in a feed as feed events. v1 kinds keep working

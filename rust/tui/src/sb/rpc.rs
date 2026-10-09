@@ -54,8 +54,6 @@ pub(crate) enum Then {
     /// `thread/subscribe` (None: the first page, it replaces the feed)
     /// or `thread/page` (the `before` asked) for this agent: entries
     /// placed by pos (sb/feed_entries.rs)
-    // TODO(client-protocol P4d switch): sent once the switch subscribes
-    #[allow(dead_code)]
     Thread(String, Option<usize>),
 }
 
@@ -137,6 +135,12 @@ fn run(app: &mut App, then: Then, r: Response) {
         (Then::Diff(req), Err(e)) => crate::diffview::answered(app, req, crate::diffwire::refused(&e)),
         (Then::Branches, Ok(v)) => crate::diffbranches::branches_event(&v),
         (Then::RuleRemoved, Err(e)) => rule_refused(app, &e),
+        // a thread refused (no agent of that name any more): ready waits
+        // for no page of it, an older page asks no more
+        (Then::Thread(agent, older), Err(_)) => match older {
+            None => feed_entries::first_page_in(app, &agent),
+            Some(_) => with_feed(app, &agent, |app| app.win.loading = false),
+        },
         (Then::Line, Err(e)) => {
             crate::queue::seen(app);
             match undelivered.then(|| above_undelivered(app)).flatten() {

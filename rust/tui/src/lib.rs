@@ -51,6 +51,8 @@ mod entry_reads;
 mod bench_first;
 use wire::*;
 mod markdown;
+// the tests' names for markdown's helpers (the code says crate::markdown::)
+#[cfg(test)]
 use markdown::*;
 mod code;
 mod codeblock;

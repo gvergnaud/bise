@@ -133,7 +133,7 @@ pub(super) fn new_sb(writer: std::sync::Arc<std::sync::Mutex<UnixStream>>, works
         seen: Default::default(),
         subscribed: Default::default(),
         turns_seen: HashMap::new(),
-        keep_after_page: false,
+        ready_page: None,
         ready: false,
         version: String::new(),
         versions: Vec::new(),
@@ -198,7 +198,7 @@ pub fn run_switchboard(
 }
 
 /// No terminal on stdin or stdout: `bise` runs in line mode (its hello
-/// reads the threads' entries, hub_reads.rs's LINE_READS).
+/// reads the threads' entries, hub_reads.rs's READS).
 pub(crate) fn line_mode_now() -> bool {
     !(io::stdout().is_terminal() && io::stdin().is_terminal())
 }
@@ -298,7 +298,7 @@ pub(crate) fn hub_event_lines(raw: &str, printed: &mut Printed) -> Vec<String> {
         let Some((agent, e)) = entry_of(v) else { return Vec::new() };
         return print_entry(printed, &agent, &e);
     }
-    // P4d-feed f-c: no older `line` comes (LINE_READS); the rest prints nothing
+    // P4d-feed f-c: no older `line` comes (READS); the rest prints nothing
     Vec::new()
 }
 

@@ -10,8 +10,6 @@ use super::*;
 /// the user scrolls up to them.
 pub(super) const MAX_EVENTS: usize = 3000;
 pub(super) const KEEP_EVENTS: usize = 2000;
-/// Lines asked per page of older history.
-pub(super) const PAGE_LINES: usize = 1000;
 /// A page is asked when the view gets this close to its first event.
 pub(super) const PAGE_AHEAD: usize = 100;
 
@@ -123,7 +121,9 @@ pub(super) fn with_feed(app: &mut App, agent: &str, f: impl FnOnce(&mut App)) {
 }
 
 /// One line of the feed, at transcript position `pos`, written at `ts`
-/// (ms since the epoch; None: a hub that does not say).
+/// (ms since the epoch; None: a hub that does not say). Tests only since
+/// P4d-feed: the feeds come from the hub's entries (sb/feed_entries.rs).
+#[cfg(test)]
 pub(super) fn ingest_at(app: &mut App, line: String, pos: Option<usize>, ts: Option<u64>) {
     let n0 = app.events.len();
     ingest_line(app, line, ts);
@@ -213,67 +213,6 @@ pub(super) fn want_older(app: &mut App) {
         return;
     }
     let Some(before) = app.win.first_pos.filter(|p| *p > 1) else { return };
-    let sb = &mut app.sb;
-    let agent = sb.focus.clone();
-    sb.send(json!({"op": "history", "agent": agent, "before": before, "count": PAGE_LINES}));
-    app.win.loading = true;
+    super::feed_entries::want_older(app, before);
 }
 
-/// A page of older lines arrived: its events go in front of the feed,
-/// the view stays on the rows it shows.
-pub(super) fn prepend_page(app: &mut App, before: usize, lines: Vec<crate::wire::HistLine>) {
-    if app.win.first_pos != Some(before) {
-        // the feed changed since the ask (cut, reconnection): stale
-        app.win.loading = false;
-        return;
-    }
-    let first = lines.first().map_or(1, |l| l.pos);
-    // the page renders through the same path as live lines, on an empty
-    // feed; what the live feed holds is set aside meanwhile
-    let events = std::mem::take(&mut app.events);
-    let cache = std::mem::take(&mut app.cache);
-    let marks = std::mem::take(&mut app.win.marks);
-    let kept = (
-        app.follow,
-        app.unseen,
-        app.pending,
-        app.interrupt_requested,
-        app.last_line_at,
-        app.last_ts,
-    );
-    app.follow = true;
-    // a pause of 5 minutes between two replayed lines gets its time
-    // mark, as live (ingest_line; the first line of a page gets none:
-    // the gap with the older page is not known here)
-    app.last_ts = None;
-    for l in lines {
-        ingest_at(app, l.line, Some(l.pos), l.ts);
-    }
-    let k = app.events.len();
-    app.cache.resize_with(k, || None);
-    app.events.extend(events);
-    app.cache.extend(cache);
-    // the old first event may gain its breathing gap: the view keeps
-    // showing the same rows
-    let mut shift = 0;
-    if let Some(Some(old)) = app.cache.get(k) {
-        let rows = event_rows(&app.events, k, app.debug, old.width as usize, app.tick);
-        shift = rows.rows.len().saturating_sub(old.rows.len());
-        app.cache[k] = Some(rows);
-    }
-    app.win.marks.extend(marks.into_iter().map(|(i, p)| (i + k, p)));
-    (
-        app.follow,
-        app.unseen,
-        app.pending,
-        app.interrupt_requested,
-        app.last_line_at,
-        app.last_ts,
-    ) = kept;
-    if app.anchor.0 == 0 {
-        app.anchor.1 += shift;
-    }
-    app.anchor.0 += k;
-    app.win.first_pos = Some(first);
-    app.win.loading = false;
-}

@@ -3,9 +3,6 @@
 //! things of `Sb` and of a feed those reads touch, so the reads stay
 //! pure there and `Sb` keeps its fields to itself.
 
-// TODO(client-protocol P4d-feed, proto-zone-b): read once the feed calls
-// crate::entry_reads (see its header)
-#![cfg_attr(not(test), allow(dead_code))]
 
 use super::*;
 use crate::entry_reads::Seen;

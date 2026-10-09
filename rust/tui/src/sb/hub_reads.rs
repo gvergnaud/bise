@@ -35,19 +35,13 @@ use bise_proto::rpc::{self, Message};
 /// `bise_proto::rpc::OLDER` (a half-listed row comes the older way).
 // TODO(client-protocol step 4's end, P4e): the hello's `reads` goes when
 // the terminal connects with `initialize`
-pub(crate) const READS: &[&str] = &["hub/approvals", "confirm/ask", "hub/artifacts", "hub/agents", "hub/cards", "hub/scheduled", "hub/flow", "hub/notice", "card/open", "client/focused", "hub/versions", "release/progress", "update/progress"];
-
-/// What line mode reads typed besides [`READS`]: the entries and steps
-/// of the threads it subscribes (P4d-feed f-c), never an older `line`.
-pub(crate) const LINE_READS: &[&str] = &["thread/entry", "thread/typing"];
+pub(crate) const READS: &[&str] = &["hub/approvals", "confirm/ask", "hub/artifacts", "hub/agents", "hub/cards", "hub/scheduled", "hub/flow", "hub/notice", "card/open", "client/focused", "hub/versions", "release/progress", "update/progress", "thread/entry", "thread/typing"];
 
 /// The terminal's first line on the hub's socket: `hello` with [`READS`]
-/// (and [`LINE_READS`] in line mode, without a terminal).
+/// (the screen and line mode alike read the threads' entries and steps
+/// they subscribe, P4d-feed: never an older `line`).
 pub fn hello_line() -> String {
-    let mut reads = READS.to_vec();
-    if super::client::line_mode_now() {
-        reads.extend_from_slice(LINE_READS);
-    }
+    let reads = READS.to_vec();
     format!("{}\n", json!({"op": "hello", "reads": reads}))
 }
 
@@ -88,6 +82,15 @@ fn agents(app: &mut App, rows: &[bise_proto::rows::Agent], places: &[bise_proto:
     // flip or an ended turn, never missed
     for a in rows {
         feed_entries::agent_row(app, &a.name, a.status.working(), a.turns);
+        // every live agent's feed is kept as the lines kept it (its
+        // preview, its cards, its dot by kind): subscribed once per
+        // connection; an archived one lights by its newest entry
+        // (plan v2 read 4)
+        if !a.archived {
+            feed_entries::subscribe(app, &a.name);
+        } else if !app.sb.subscribed.contains(&a.name) {
+            crate::entry_reads::on_head(app, &a.name, a.last_pos);
+        }
     }
     for (old, name) in super::state_rows::renamed(&app.sb.agents, &new) {
         let sb = &mut app.sb;
@@ -330,12 +333,9 @@ mod tests {
         let listed: Vec<String> = READS.iter().map(|s| s.to_string()).collect();
         let reads = rpc::reads_of(&listed);
         assert_eq!(reads.len(), READS.len(), "every method listed is part of a whole OLDER row");
-        // line mode's (the tests run without a terminal): its rows whole too
-        let lines: Vec<String> = READS.iter().chain(LINE_READS).map(|s| s.to_string()).collect();
-        assert_eq!(rpc::reads_of(&lines).len(), lines.len(), "line mode's reads are whole OLDER rows");
+        assert!(reads.contains("thread/entry") && reads.contains("thread/typing"), "the feeds read entries, never an older line");
         let hello: Value = serde_json::from_str(hello_line().trim()).unwrap();
-        let n = if super::super::client::line_mode_now() { lines.len() } else { READS.len() };
-        assert_eq!((hello["op"].as_str(), hello["reads"].as_array().map(Vec::len)), (Some("hello"), Some(n)));
+        assert_eq!((hello["op"].as_str(), hello["reads"].as_array().map(Vec::len)), (Some("hello"), Some(READS.len())));
     }
 
     #[test]

@@ -26,11 +26,6 @@
 //! once per pos ([`Seen`]); the answer fold and BISE-307 hold every time
 //! the entry is placed (the feed draws it afresh).
 
-// TODO(client-protocol P4d-feed, proto-zone-b): the feed calls skip,
-// on_entry and on_turn when it switches to entries (the same sha
-// deletes sb.rs's ingest_for and its line reads); until then only line
-// mode and the laws read this module.
-#![cfg_attr(not(test), allow(dead_code))]
 
 use crate::app::App;
 use crate::wire::Ev;

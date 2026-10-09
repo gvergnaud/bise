@@ -9,7 +9,11 @@ use crossterm::event::{
 use std::io;
 use std::time::Duration;
 
-// one wire line into the feed of the app (the focused view)
+// one wire line into the feed of the app (the focused view): the TUI's
+// own fold of a thread's lines, the reference the parity law
+// (entry_ev_tests.rs) and the line-fed tests read since P4d-feed's
+// switch (the feeds come from the hub's entries, sb/feed_entries.rs)
+#[cfg(test)]
 pub(crate) fn ingest_line(app: &mut App, line: String, ts: Option<u64>) {
     if line == "--- idle" {
         app.pending = false;

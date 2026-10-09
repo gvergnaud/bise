@@ -318,6 +318,7 @@ pub(crate) use bise_proto::thread::lines::split_thinking;
 // lines exist only there: "you : <text>" (a user message: live, the
 // client echoes what it sends) and "injected : <text>" (steering and
 // notifications the Core committed). Everything else is a live line.
+#[cfg(test)]
 pub(crate) fn strip_history(line: &str) -> (&str, bool) {
     match line.strip_prefix("history ") {
         Some(rest) => (rest, true),
@@ -325,6 +326,7 @@ pub(crate) fn strip_history(line: &str) -> (&str, bool) {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn parse_history_line(line: &str) -> Option<Ev> {
     rec_ev(lines::read_history(line))
 }
@@ -454,9 +456,6 @@ pub(crate) fn wire_decode(s: &str) -> String {
     bise_proto::thread::lines::wire_decode(s)
 }
 
-// switchboard (C2 `history`, amended): one line of a page of older feed
-// lines, `{pos, line, ts?}`. `ts` is when the hub's transcript wrote the
-// line (ms since the epoch); a hub before the amendment sends no `ts`.
 /// A card in the feed: its item id, its kind (the hub's word:
 /// `question`, `blocked`, `done`, …), who asked, its question and its
 /// options' labels (drawn `n. label` under it).
@@ -497,30 +496,6 @@ impl CardParts {
             b => format!("{head} : {b}"),
         }
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct HistLine {
-    pub(crate) pos: usize,
-    pub(crate) line: String,
-    pub(crate) ts: Option<u64>,
-}
-
-// the `lines` of a `history` event; a line without `pos` or `line` is
-// skipped
-pub(crate) fn parse_history(v: &serde_json::Value) -> Vec<HistLine> {
-    let Some(a) = v.get("lines").and_then(|l| l.as_array()) else {
-        return Vec::new();
-    };
-    a.iter()
-        .filter_map(|x| {
-            Some(HistLine {
-                pos: x.get("pos")?.as_u64()? as usize,
-                line: x.get("line")?.as_str()?.to_string(),
-                ts: x.get("ts").and_then(|t| t.as_u64()),
-            })
-        })
-        .collect()
 }
 
 /// The runtime's words for a model whose provider has no key (BISE-294,

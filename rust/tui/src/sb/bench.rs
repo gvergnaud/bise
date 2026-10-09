@@ -3,7 +3,8 @@
 
 use super::*;
 use super::entries_for_tests::Hub;
-use super::feed::{MAX_EVENTS, PAGE_LINES};
+use super::feed::MAX_EVENTS;
+use super::feed_entries::PAGE_ENTRIES;
 use bise_proto::thread::Line;
 use ratatui::backend::TestBackend;
 use ratatui::Terminal;
@@ -315,7 +316,7 @@ fn a_following_feed_keeps_its_last_events_then_pages_back() {
     };
     let before = shown(&term);
     let n0 = app.events.len();
-    let from = first.saturating_sub(PAGE_LINES).max(1);
+    let from = first.saturating_sub(PAGE_ENTRIES as usize).max(1);
     let page: Vec<Line> = (from..first).map(older).collect();
     let got = page.len();
     hub.page(&mut app, "main", first, page, from > 1);
@@ -404,32 +405,25 @@ fn ctrl_l_clears_like_clear() {
     assert!(app.follow);
 }
 
-/// A page of replayed history carries each line's time (`ts`, C2
-/// amendment): a pause of 5 minutes between two replayed lines gets its
-/// `· hh:mm ·` mark, as live; a line without `ts` (an older hub) still
-/// reads, and gets no mark.
+/// A page of older entries carries each entry's time (`at_ms`, C2
+/// amendment): a pause of 5 minutes between two of them gets its
+/// `· hh:mm ·` mark, as live; an entry without a time (an older hub's
+/// line) still reads, and gets no mark.
 #[test]
 fn replayed_history_gets_its_time_marks() {
-    use crate::wire::{parse_history, HistLine};
     let t0: u64 = 1_700_000_000_000;
-    let v = json!({"ev": "history", "agent": "main", "before": 10, "lines": [
-        {"pos": 1, "line": "  obs: assistant: one", "ts": t0},
-        {"pos": 2, "line": "  obs: assistant: two", "ts": t0 + 60_000},
-        {"pos": 3, "line": "  obs: assistant: three", "ts": t0 + 60_000 + 5 * 60_000},
-        {"pos": 4, "line": "  obs: assistant: old hub"},
-    ]});
-    let lines = parse_history(&v);
-    assert_eq!(lines[3], HistLine { pos: 4, line: "  obs: assistant: old hub".into(), ts: None });
-    assert_eq!(lines[2].ts, Some(t0 + 360_000));
+    let page: Vec<Line> = vec![
+        (1, t0, "  obs: assistant: one".into()),
+        (2, t0 + 60_000, "  obs: assistant: two".into()),
+        (3, t0 + 60_000 + 5 * 60_000, "  obs: assistant: three".into()),
+        (4, 0, "  obs: assistant: old hub".into()),
+    ];
     let mut app = test_app();
     let mut hub = Hub::new();
     for p in 10..=12 {
         hub.line_at(&mut app, "main", p, 0, &format!("  obs: assistant: live {}", p));
     }
     app.win.first_pos = Some(10);
-    // the same page as entries (`thread/page`): their times, the old
-    // hub's line untimed
-    let page = lines.iter().map(|l| (l.pos as u64, l.ts.unwrap_or(0), l.line.clone())).collect();
     hub.page(&mut app, "main", 10, page, false);
     let marks: Vec<(usize, String)> = app
         .events
@@ -445,9 +439,6 @@ fn replayed_history_gets_its_time_marks() {
     // the mark sits right before the line after the pause
     assert!(matches!(&app.events[marks[0].0 + 1], Ev::Assistant(t) if t.contains("three")));
     assert_eq!(app.win.first_pos, Some(1));
-    // an old page (no `ts` at all) reads as before, without marks
-    let old = json!({"lines": [{"pos": 1, "line": "x"}, {"pos": 2, "line": "y"}]});
-    assert_eq!(parse_history(&old).iter().map(|l| l.ts).collect::<Vec<_>>(), vec![None, None]);
 }
 
 /// Find searches the whole thread (user QA 2026-10-04): once what the

@@ -10,14 +10,11 @@
 //! before. Turn edges are no entries: the agents rows say them
 //! ([`turn_edge`]).
 //!
-//! Staged: this sha brings the module and its typed readers (the
-//! `thread/entry` notification, `Then::Thread`); the switch (the hello's
-//! `reads` lists `thread/entry`, the `line`/`history` arms and
-//! `ingest_for` go, focus and reconnection subscribe) comes with
-//! proto-reads' `entry_reads` (the text reads `ingest_for` still does).
-// TODO(client-protocol P4d switch): drop this allow when the switch calls
-// subscribe/on_connect/want_older and the state reader calls turn_edge
-#![allow(dead_code)]
+//! Which threads: the focus when he goes to it ([`subscribe`] from
+//! `sb::focus`), and after each connection the focus and every agent
+//! whose feed this terminal keeps (a `View`: the agents he visited,
+//! voice mode's among them). The others light their dot from the agents
+//! rows' `last_pos` (`entry_reads::on_head`).
 
 use super::*;
 use super::feed::{empty_feed, seen_at};
@@ -37,12 +34,42 @@ pub(super) fn subscribe(app: &mut App, agent: &str) {
     sb.call("thread/subscribe", json!({"agent": agent, "limit": PAGE_ENTRIES}), rpc::Then::Thread(agent.to_string(), None));
 }
 
-/// The threads to subscribe after a (re)connection: the focus, and voice
-/// mode's agent.
+/// The threads to subscribe after a (re)connection (the hub's `hello`):
+/// the focus, then every agent whose feed this terminal keeps (voice
+/// mode's agent is one: it was the focus when voice mode started). The
+/// terminal is ready once `ready` came and the focus's first page is in
+/// ([`on_ready`], [`first_page_in`]).
 pub(super) fn on_connect(app: &mut App) {
     app.sb.subscribed.clear();
     let focus = app.sb.focus.clone();
     subscribe(app, &focus);
+    app.sb.ready_page = app.sb.subscribed.contains(&focus).then_some(focus);
+    let mut kept: Vec<String> = app.sb.views.keys().cloned().collect();
+    kept.sort();
+    for agent in kept {
+        subscribe(app, &agent);
+    }
+}
+
+/// The hub's `ready`: what was open (a reload) and the inbox answers come
+/// back now, or once the focus's first page is in (the scroll they
+/// restore needs the feed).
+pub(super) fn on_ready(app: &mut App) {
+    if app.sb.ready_page.is_none() {
+        keep::apply(app);
+    }
+}
+
+/// `agent`'s first page came (or its subscribe failed): when it is the
+/// one `ready` waits for, what `ready` restores comes back.
+pub(super) fn first_page_in(app: &mut App, agent: &str) {
+    if app.sb.ready_page.as_deref() != Some(agent) {
+        return;
+    }
+    app.sb.ready_page = None;
+    if app.sb.ready {
+        keep::apply(app);
+    }
 }
 
 /// `thread/subscribe`'s answer (`older` None: the first page, it replaces
@@ -56,8 +83,8 @@ pub(super) fn page(app: &mut App, agent: &str, older: Option<usize>, entries: Ve
     for e in &entries {
         reads(app, agent, e, live);
     }
-    if older.is_none() && app.sb.focus == agent && std::mem::take(&mut app.sb.keep_after_page) {
-        keep::apply(app);
+    if older.is_none() {
+        first_page_in(app, agent);
     }
 }
 
@@ -262,12 +289,15 @@ pub(crate) fn agent_row(app: &mut App, agent: &str, working: bool, turns: u64) {
 /// (`Entry.turn_start`, `Entry.turn_end_ms`: one source for the edges
 /// drawn, proto-lead m_14961).
 pub(crate) fn turn_edge(app: &mut App, agent: &str, working: bool) {
-    if !working {
-        with_feed(app, agent, |app| {
+    with_feed(app, agent, |app| {
+        // the queued message that went has its turn: the next one may go
+        // at a turn's end (queue.rs, as the lines' turn_started/turn_done)
+        crate::queue::seen(app);
+        if !working {
             app.pending = false;
             app.interrupt_requested = false;
-        });
-    }
+        }
+    });
     // voice mode's turn, the queue's next message (outside with_feed)
     crate::entry_reads::on_turn(app, agent, working);
 }
