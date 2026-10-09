@@ -33,7 +33,9 @@ def typed(c, ev=None):
 def required_keys():
     """Each frozen event's keys as the fixtures show them, minus the
     optional ones (skipped when empty on the wire)."""
-    optional = {"before", "project", "cmd"}
+    # P4c-4a's new lists (agents' places, cards' others, scheduled's
+    # ended) are skipped when empty, as the wire rule allows
+    optional = {"before", "project", "cmd", "places", "others", "ended"}
     keys = {}
     for line in open(FIXTURES):
         if line.strip():
