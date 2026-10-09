@@ -2107,6 +2107,7 @@ impl Hub {
 
     /// The client snapshot (agents, cards) for the views.
     pub fn snapshot(&self, now: u64) -> Value {
+        let waiting = board::Waiting::of(&self.st);
         let agents: Vec<Value> = self
             .st
             .order
@@ -2145,13 +2146,13 @@ impl Hub {
                     "report_kind": a.last_report.as_ref().map(|r| r.kind.clone()),
                     "step": a.last_report.as_ref().and_then(|r| r.step),
                     "of": a.last_report.as_ref().and_then(|r| r.of),
-                    "queued": board::queued_count(&self.st, &a.name),
+                    "queued": waiting.queued_count(&a.name),
                     // the user's queued inputs waiting for the turn's end
                     // (the window's "send queued"): [{id, text, created_ms}]
-                    "queued_inputs": board::queued_inputs(&self.st, &a.name),
+                    "queued_inputs": waiting.queued_inputs(&a.name),
                     // BISE-299: main's inbox, the agents' questions waiting
                     // for main (the user sees a quiet count, never asked)
-                    "inbox": if a.is_main { self.st.unanswered_for(&a.name).len() } else { 0 },
+                    "inbox": if a.is_main { waiting.unanswered(&a.name).len() } else { 0 },
                     "turn_ms": a.turn_started_ms.map(|t| now.saturating_sub(t)),
                     // who it waits on (`sb wait` / `sb ask`), for `waits {name}`
                     "waiting_on": a.waiting_on.as_ref().filter(|_| a.waiting),
@@ -2837,11 +2838,14 @@ impl Hub {
             .filter(|a| a.lifecycle == Lifecycle::Active)
             .map(|a| a.name.clone())
             .collect();
+        // at every input: what the contexts share is built once (board.rs)
+        let waiting = board::Waiting::of(&self.st);
+        let group = board::Group::of(&self.st, now, &self.models);
         for name in names {
             let text = if name == MAIN {
-                board::main_context(&self.st, now)
+                board::main_context(&self.st, now, &waiting)
             } else {
-                board::task_context(&self.st, &name, now, &self.models)
+                board::task_context(&name, &group, &waiting)
             };
             if self.contexts.get(&name) != Some(&text) {
                 self.contexts.insert(name.clone(), text.clone());

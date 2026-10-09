@@ -2,8 +2,15 @@
 //! §8.2), the agent threads summary (RFC 0003 §9), the group roster of a
 //! task, and the `sb list` answer. All built without an LLM, from the
 //! state alone.
+//!
+//! The hub rebuilds every agent's context at each input, and the
+//! snapshot at each change: what they share is built once per input
+//! ([`Waiting`]: one pass over the messages; [`Group`]: the roster's
+//! rows), never once per agent. Per agent, a long-lived hub (470 agents,
+//! 14,500 messages) spent its whole loop there and a client's hello
+//! never got its turn.
 
-use crate::model::{Agent, Mode, MsgState, State, Status, MAIN, USER};
+use crate::model::{Agent, Mode, Msg, State, Status, MAIN, USER};
 use crate::prompts::relation;
 use crate::util::{age, clip, one_line};
 use std::collections::BTreeMap;
@@ -129,7 +136,7 @@ fn parties_of<'a>(ms: &[&'a crate::model::Msg]) -> Vec<&'a str> {
 }
 
 /// The block appended to every model request of main.
-pub fn main_context(st: &State, now: u64) -> String {
+pub fn main_context(st: &State, now: u64, waiting: &Waiting) -> String {
     let mut s = String::from(
         "<bise_state>\nLive state injected by bise before this call (not a user message).\n<task_board>\n",
     );
@@ -175,7 +182,7 @@ pub fn main_context(st: &State, now: u64) -> String {
         })
         .collect();
     push_block(&mut s, "open_cards", &cards);
-    push_block(&mut s, "questions_for_you", &questions_for(st, MAIN));
+    push_block(&mut s, "questions_for_you", &questions_for(waiting.unanswered(MAIN)));
     s.push_str("</bise_state>");
     s
 }
@@ -357,62 +364,84 @@ pub fn tasks_detail(st: &State, now: u64, models: &Models) -> String {
 /// The group roster, as `name` sees it (`sb list`, and the context of a
 /// task).
 pub fn roster(st: &State, viewer: &str, now: u64, models: &Models) -> Vec<String> {
-    let viewer_parent = st.agents.get(viewer).and_then(|a| a.parent.clone());
-    let width = models.values().map(|(t, _)| t.chars().count().min(18)).max().unwrap_or(0);
-    st.order
-        .iter()
-        .filter_map(|n| st.agents.get(n))
-        .filter(|a| a.status() != Status::Archived)
-        .map(|a| {
-            let rel = if a.name == viewer {
-                "self"
-            } else {
-                match relation(
-                    &a.name,
-                    viewer,
-                    a.parent.as_deref(),
-                    viewer_parent.as_deref(),
-                ) {
-                    "parent" => "parent",
-                    "child" => "child",
-                    _ => "peer",
-                }
-            };
-            let note = a
-                .declared
-                .as_ref()
-                .filter(|(_, n)| !n.is_empty())
-                .map(|(_, n)| format!(" — {}", clip(&one_line(n), 60)))
-                .unwrap_or_default();
-            // its model's tag, a column of its own (issue #4): as wide as
-            // the longest tag (at most 18), a name never cut mid-word
-            let model = models.get(&a.name).map(|(t, _)| format!("{:<w$} ", clip(t, 18), w = width)).unwrap_or_default();
-            format!(
-                "{:<24} {:<6} {:<9} {:>4}  {}{}{}",
-                a.name,
-                rel,
-                a.status().as_str(),
-                age(if a.is_main { now } else { a.created_ms }, now),
-                model,
-                clip(&a.description(), 70),
-                note
-            )
-        })
-        .collect()
+    Group::of(st, now, models).seen_by(viewer)
+}
+
+/// The roster's rows but the viewer's column, built once for all the
+/// agents that read it (each task's context has the whole roster).
+pub struct Group<'a> {
+    st: &'a State,
+    /// Each agent the roster lists, in order, and its row after the
+    /// relation column.
+    rows: Vec<(&'a Agent, String)>,
+}
+
+impl<'a> Group<'a> {
+    pub fn of(st: &'a State, now: u64, models: &Models) -> Group<'a> {
+        let width = models.values().map(|(t, _)| t.chars().count().min(18)).max().unwrap_or(0);
+        let rows = st
+            .order
+            .iter()
+            .filter_map(|n| st.agents.get(n))
+            .filter(|a| a.status() != Status::Archived)
+            .map(|a| {
+                let note = a
+                    .declared
+                    .as_ref()
+                    .filter(|(_, n)| !n.is_empty())
+                    .map(|(_, n)| format!(" — {}", clip(&one_line(n), 60)))
+                    .unwrap_or_default();
+                // its model's tag, a column of its own (issue #4): as wide as
+                // the longest tag (at most 18), a name never cut mid-word
+                let model = models.get(&a.name).map(|(t, _)| format!("{:<w$} ", clip(t, 18), w = width)).unwrap_or_default();
+                let rest = format!(
+                    "{:<9} {:>4}  {}{}{}",
+                    a.status().as_str(),
+                    age(if a.is_main { now } else { a.created_ms }, now),
+                    model,
+                    clip(&a.description(), 70),
+                    note
+                );
+                (a, rest)
+            })
+            .collect();
+        Group { st, rows }
+    }
+
+    /// The roster as `viewer` sees it: who is itself, its parent, its
+    /// children, its peers.
+    pub fn seen_by(&self, viewer: &str) -> Vec<String> {
+        let viewer_parent = self.st.agents.get(viewer).and_then(|a| a.parent.as_deref());
+        self.rows
+            .iter()
+            .map(|(a, rest)| {
+                let rel = if a.name == viewer {
+                    "self"
+                } else {
+                    match relation(&a.name, viewer, a.parent.as_deref(), viewer_parent) {
+                        "parent" => "parent",
+                        "child" => "child",
+                        _ => "peer",
+                    }
+                };
+                format!("{:<24} {:<6} {}", a.name, rel, rest)
+            })
+            .collect()
+    }
 }
 
 /// The block appended to every model request of a task.
-pub fn task_context(st: &State, name: &str, now: u64, models: &Models) -> String {
+pub fn task_context(name: &str, group: &Group, waiting: &Waiting) -> String {
     let mut s = format!(
         "<bise_state>\nLive state injected by bise before this call (not a user message). You are `{}`.\n<group>\n",
         name
     );
-    for l in roster(st, name, now, models) {
+    for l in group.seen_by(name) {
         s.push_str(&l);
         s.push('\n');
     }
     s.push_str("</group>\n");
-    push_block(&mut s, "questions_for_you", &questions_for(st, name));
+    push_block(&mut s, "questions_for_you", &questions_for(waiting.unanswered(name)));
     s.push_str("</bise_state>");
     s
 }
@@ -430,9 +459,9 @@ fn push_block(s: &mut String, tag: &str, lines: &[String]) {
     s.push_str(&format!("</{}>\n", tag));
 }
 
-/// The delivered messages to `name` still waiting for its reply.
-fn questions_for(st: &State, name: &str) -> Vec<String> {
-    st.unanswered_for(name)
+/// The delivered messages still waiting for their recipient's reply.
+fn questions_for(unanswered: &[&Msg]) -> Vec<String> {
+    unanswered
         .iter()
         .map(|m| format!("m_{} from {}: \"{}\"", m.id, m.from, clip(&one_line(&m.text), 80)))
         .collect()
@@ -440,28 +469,55 @@ fn questions_for(st: &State, name: &str) -> Vec<String> {
 
 /// Queued messages, for the board shown to the user.
 pub fn queued_count(st: &State, name: &str) -> usize {
-    st.msgs
-        .values()
-        .filter(|m| {
-            m.to == name && matches!(st.msg_state.get(&m.id), Some(MsgState::Queued { .. }))
-        })
-        .count()
+    st.msgs.values().filter(|m| m.to == name && st.is_queued(m)).count()
 }
 
-/// The user's queued inputs still waiting for `name`'s turn to end (the
-/// window's "send queued"), oldest first: `{id, text, created_ms}` each,
-/// the snapshot's `queued_inputs` (bise-proto's `Agent.queued`).
-pub fn queued_inputs(st: &State, name: &str) -> Vec<serde_json::Value> {
-    st.msgs
-        .values()
-        .filter(|m| {
-            m.to == name
-                && m.queued
-                && m.from == crate::model::USER
-                && matches!(st.msg_state.get(&m.id), Some(MsgState::Queued { .. }))
-        })
-        .map(|m| serde_json::json!({"id": m.id, "text": m.text, "created_ms": m.created_ms}))
-        .collect()
+/// What waits for each agent, from one pass over the messages: those
+/// queued for it, and the delivered ones it owes a reply to. Oldest
+/// first, as in `st.msgs`.
+pub struct Waiting<'a> {
+    queued: BTreeMap<&'a str, Vec<&'a Msg>>,
+    unanswered: BTreeMap<&'a str, Vec<&'a Msg>>,
+}
+
+impl<'a> Waiting<'a> {
+    pub fn of(st: &'a State) -> Waiting<'a> {
+        let mut w = Waiting { queued: BTreeMap::new(), unanswered: BTreeMap::new() };
+        for m in st.msgs.values() {
+            if st.is_queued(m) {
+                w.queued.entry(m.to.as_str()).or_default().push(m);
+            }
+            if st.owes_reply(m) {
+                w.unanswered.entry(m.to.as_str()).or_default().push(m);
+            }
+        }
+        w
+    }
+
+    /// How many messages wait for delivery to `name` ([`queued_count`]).
+    pub fn queued_count(&self, name: &str) -> usize {
+        self.queued.get(name).map_or(0, Vec::len)
+    }
+
+    /// The user's queued inputs still waiting for `name`'s turn to end
+    /// (the window's "send queued"), oldest first: `{id, text,
+    /// created_ms}` each, the snapshot's `queued_inputs` (bise-proto's
+    /// `Agent.queued`).
+    pub fn queued_inputs(&self, name: &str) -> Vec<serde_json::Value> {
+        self.queued
+            .get(name)
+            .into_iter()
+            .flatten()
+            .filter(|m| m.queued && m.from == USER)
+            .map(|m| serde_json::json!({"id": m.id, "text": m.text, "created_ms": m.created_ms}))
+            .collect()
+    }
+
+    /// The delivered messages to `name` that expect a reply it has not
+    /// given (`State::unanswered_for`).
+    pub fn unanswered(&self, name: &str) -> &[&'a Msg] {
+        self.unanswered.get(name).map_or(&[], Vec::as_slice)
+    }
 }
 
 #[cfg(test)]
@@ -483,7 +539,7 @@ mod tests {
     #[test]
     fn the_board_lists_every_live_task() {
         let st = state();
-        let c = main_context(&st, 12 * 60_000);
+        let c = main_context(&st, 12 * 60_000, &Waiting::of(&st));
         assert!(c.contains("auth-fix"), "{}", c);
         assert!(c.contains("\"Doc API v2\""), "{}", c);
         assert!(c.contains("12m"), "{}", c);
@@ -523,6 +579,74 @@ mod tests {
             "{}",
             t[0]
         );
+    }
+
+    fn msg(id: u64, from: &str, to: &str, expect_reply: bool, queued: bool) -> Msg {
+        Msg {
+            id,
+            thread: id,
+            from: from.into(),
+            to: to.into(),
+            reply_to: None,
+            expect_reply,
+            auto: false,
+            text: format!("m{id}"),
+            created_ms: id,
+            plain: false,
+            queued,
+            via: None,
+        }
+    }
+
+    #[test]
+    fn waiting_is_the_per_agent_scans_in_one_pass() {
+        let mut st = state();
+        let states = [
+            MsgState::Delivered,
+            MsgState::Queued { reason: "busy".into() },
+            MsgState::Delivered,
+        ];
+        let names = [MAIN, "auth-fix", "docs", USER];
+        for id in 1..=60u64 {
+            let (from, to) = (names[(id % 4) as usize], names[((id + 1) % 4) as usize]);
+            st.msgs.insert(id, msg(id, from, to, id % 2 == 0, id % 5 == 0));
+            st.msg_state.insert(id, states[(id % 3) as usize].clone());
+        }
+        st.settled.insert(4);
+        let w = Waiting::of(&st);
+        for n in names {
+            assert_eq!(w.queued_count(n), queued_count(&st, n), "{n}");
+            let ids = |ms: &[&Msg]| ms.iter().map(|m| m.id).collect::<Vec<_>>();
+            assert_eq!(ids(w.unanswered(n)), ids(&st.unanswered_for(n)), "{n}");
+            let inputs: Vec<serde_json::Value> = st
+                .msgs
+                .values()
+                .filter(|m| m.to == n && m.queued && m.from == USER && st.is_queued(m))
+                .map(|m| serde_json::json!({"id": m.id, "text": m.text, "created_ms": m.created_ms}))
+                .collect();
+            assert_eq!(w.queued_inputs(n), inputs, "{n}");
+        }
+        // none of the three lists is empty everywhere
+        assert!(names.iter().map(|n| w.queued_count(n)).sum::<usize>() > 0);
+        assert!(names.iter().any(|n| !w.unanswered(n).is_empty()));
+        assert!(names.iter().any(|n| !w.queued_inputs(n).is_empty()));
+    }
+
+    #[test]
+    fn a_task_context_has_the_roster_it_sees_and_its_questions() {
+        let mut st = state();
+        st.msgs.insert(1, msg(1, "auth-fix", "docs", true, false));
+        st.msg_state.insert(1, MsgState::Delivered);
+        let c = task_context("docs", &Group::of(&st, 0, &Models::new()), &Waiting::of(&st));
+        let mut want = String::from("<group>\n");
+        for l in roster(&st, "docs", 0, &Models::new()) {
+            want.push_str(&l);
+            want.push('\n');
+        }
+        assert!(c.contains(&want), "{c}");
+        assert!(c.contains("<questions_for_you>\nm_1 from auth-fix: \"m1\"\n</questions_for_you>"), "{c}");
+        let r = roster(&st, "docs", 0, &Models::new());
+        assert_eq!(r[0], format!("{:<24} {:<6} {:<9} {:>4}  {}", MAIN, "parent", st.agents[MAIN].status().as_str(), "0s", st.agents[MAIN].description()));
     }
 
     #[test]

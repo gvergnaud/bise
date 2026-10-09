@@ -1379,7 +1379,7 @@ fn the_users_queued_inputs_wait_for_the_end_of_the_turn() {
         .map(|x| t.hub.st.msgs.values().find(|m| m.text == *x).unwrap().id)
         .collect();
     assert!(ids.iter().all(|i| t.hub.st.msgs[i].queued && t.hub.st.msgs[i].from == USER));
-    let rows = crate::board::queued_inputs(&t.hub.st, "a");
+    let rows = crate::board::Waiting::of(&t.hub.st).queued_inputs("a");
     assert_eq!(rows.iter().map(|r| r["text"].as_str().unwrap()).collect::<Vec<_>>(), ["first later", "second later"]);
     // a plain input meanwhile is steered in at once, alone
     let fx = t.user("a", "now");
@@ -1394,7 +1394,7 @@ fn the_users_queued_inputs_wait_for_the_end_of_the_turn() {
     let (i1, i2) = (s.find("first later").expect("first"), s.find("second later").expect("second"));
     assert!(i1 < i2, "{}", s);
     assert!(ids.iter().all(|i| t.hub.st.msg_state[i] == MsgState::Delivered));
-    assert!(crate::board::queued_inputs(&t.hub.st, "a").is_empty());
+    assert!(crate::board::Waiting::of(&t.hub.st).queued_inputs("a").is_empty());
     let fx = t.turn("a", "done");
     assert!(say_to(&fx, "a").is_none(), "delivered once: {:?}", fx);
     // an idle agent gets a queued input at once
@@ -2621,8 +2621,9 @@ fn bench_step() {
     });
     let t0 = std::time::Instant::now();
     for _ in 0..10 {
+        let (w, g) = (board::Waiting::of(&h.st), board::Group::of(&h.st, env.now, &h.models));
         for n in &active {
-            let _ = if n == MAIN { board::main_context(&h.st, env.now) } else { board::task_context(&h.st, n, env.now, &h.models) };
+            let _ = if n == MAIN { board::main_context(&h.st, env.now, &w) } else { board::task_context(n, &g, &w) };
         }
     }
     eprintln!("refresh_contexts alone: {:?}", t0.elapsed() / 10);

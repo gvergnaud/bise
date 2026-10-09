@@ -423,11 +423,20 @@ impl State {
 
     /// Delivered messages to `name` that expect a reply it has not given.
     pub fn unanswered_for(&self, name: &str) -> Vec<&Msg> {
-        self.msgs
-            .values()
-            .filter(|m| m.to == name && m.expect_reply && !self.settled.contains(&m.id))
-            .filter(|m| matches!(self.msg_state.get(&m.id), Some(MsgState::Delivered)))
-            .collect()
+        self.msgs.values().filter(|m| m.to == name && self.owes_reply(m)).collect()
+    }
+
+    /// `m` was delivered, expects a reply, and its recipient has not
+    /// given it.
+    pub fn owes_reply(&self, m: &Msg) -> bool {
+        m.expect_reply
+            && !self.settled.contains(&m.id)
+            && matches!(self.msg_state.get(&m.id), Some(MsgState::Delivered))
+    }
+
+    /// `m` waits for delivery.
+    pub fn is_queued(&self, m: &Msg) -> bool {
+        matches!(self.msg_state.get(&m.id), Some(MsgState::Queued { .. }))
     }
 
 }

@@ -650,7 +650,8 @@ impl Shell {
 
     /// Each agent's model for `sb list`, `sb tasks` and the roster
     /// (issue #4): its tag and its `model:` line, from its choice file.
-    fn refresh_models(&mut self) {
+    /// What each agent runs with, by name (the snapshot's model fields).
+    fn refresh_models(&mut self) -> BTreeMap<String, bise_catalog::InUse> {
         let who: Vec<(String, String, bool)> =
             self.hub.st.agents.values().map(|a| (a.name.clone(), a.dir.clone(), a.is_main)).collect();
         self.setup(); // re-read when config.toml changed
@@ -672,6 +673,7 @@ impl Shell {
             })
             .collect();
         self.hub.models = models;
+        used.into_iter().map(|(n, u, _)| (n, u)).collect()
     }
 
     /// The client snapshot with each agent's model and effort: its full
@@ -721,7 +723,7 @@ impl Shell {
 
     fn snapshot(&mut self) -> Value {
         // issue #4: each agent's model, for sb list / sb tasks too
-        self.refresh_models();
+        let used = self.refresh_models();
         // the repo's flow, as config.toml says now (flow-prompts saves it)
         self.hub.flow = crate::flow::FlowConfig::load(&self.opts.paths).mode;
         // pr-news: whose bots' comments reach the agents (`[pr] trusted_bots`)
@@ -741,20 +743,17 @@ impl Shell {
         self.snapshot_pages(&mut snap);
         // one gate card for several agents' identical calls: it names them all
         self.gate_card_agents(&mut snap);
-        let who: Vec<(String, String, bool)> =
-            self.hub.st.agents.values().map(|a| (a.name.clone(), a.dir.clone(), a.is_main)).collect();
         if let Some(list) = snap["agents"].as_array_mut() {
             for v in list {
-                let Some((_, dir, main)) = who.iter().find(|(n, _, _)| v["name"] == n.as_str()) else {
+                let name = v["name"].as_str().unwrap_or("").to_string();
+                let Some(u) = used.get(&name) else {
                     continue;
                 };
-                let u = self.in_use(dir, *main);
                 v["model"] = json!(u.model.name);
                 v["effort"] = json!(u.effort);
                 v["efforts"] = json!(u.model.efforts());
                 v["model_from"] = json!(u.model_from);
                 // the "± 9 files so far" door (docs/artifacts.md)
-                let name = v["name"].as_str().unwrap_or("").to_string();
                 v["changes"] = self.art.changes.get(&name).cloned().unwrap_or(Value::Null);
             }
         }
