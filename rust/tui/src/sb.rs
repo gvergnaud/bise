@@ -666,13 +666,6 @@ pub(super) fn dispatch(app: &mut App, raw: &str) {
             client::set_refused(s("error"));
             app.should_quit = true;
         }
-        // artifacts (site/m/artifacts, docs/artifacts.md): the whole list;
-        // the feed's chips are built again with the new titles
-        "artifacts" => {
-            crate::artifacts::set_from(&v);
-            crate::artifacts_screen::on_list(app);
-            app.cache.iter_mut().for_each(|c| *c = None);
-        }
         // update-card: `/update` with a newer release opens its item here
         "open_card" => {
             if let Some(id) = v.get("id").and_then(|x| x.as_u64()) {

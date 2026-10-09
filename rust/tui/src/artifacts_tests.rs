@@ -1,5 +1,5 @@
 use super::*;
-use serde_json::json;
+use serde_json::{json, Value};
 
 // 2025-09-30 12:41:00 UTC, a tuesday
 const T: u64 = 1_759_236_060_000;
@@ -7,23 +7,33 @@ const PARIS: i32 = 2 * 3600;
 const MIN: u64 = 60_000;
 
 fn row(id: &str, title: &str, kind: &str, agent: &str, ago_min: u64) -> Value {
-    json!({"id": id, "title": title, "kind": kind, "agent": agent, "ts_ms": T - ago_min * MIN, "v": 1, "target": format!("/w/{id}")})
+    json!({"id": id, "title": title, "kind": kind, "agent": agent, "at_ms": T - ago_min * MIN, "version": 1, "url": "", "new": false,
+           "target": format!("/w/{id}")})
+}
+
+/// The hub's typed rows (`hub/artifacts`) from their JSON.
+fn rows_of(v: Value) -> Vec<bise_proto::rows::Artifact> {
+    serde_json::from_value(v).unwrap()
 }
 
 #[test]
 fn the_hub_list_is_read_newest_first_with_its_versions() {
-    let v = json!({"ev": "artifacts", "new": 3, "rows": [
+    let items = rows_of(json!([
         row("deck", "onboarding deck", "slides", "launch", 180),
-        {"id": "pricing-page", "title": "pricing page", "kind": "page", "agent": "pricing-page", "ts_ms": T - 12 * MIN, "v": 3,
+        {"id": "pricing-page", "title": "pricing page", "kind": "page", "agent": "pricing-page", "at_ms": T - 12 * MIN, "version": 3,
+         "url": "http://127.0.0.1:47438/p/pricing-page", "new": true,
          "target": "http://127.0.0.1:47438/p/pricing-page", "detail": "2 notes open",
-         "versions": [{"v": 3, "ts_ms": T - 12 * MIN, "target": "http://127.0.0.1:47438/p/pricing-page", "note": "2 notes open"},
-                      {"v": 1, "ts_ms": T - 60 * MIN, "target": "x"}, {"v": 2, "ts_ms": T - 40 * MIN, "target": "x", "note": "3 notes done"}]},
-        {"title": "no id"},
-    ]});
-    set_from(&v);
+         "versions": [{"v": 3, "at_ms": T - 12 * MIN, "target": "http://127.0.0.1:47438/p/pricing-page", "note": "2 notes open"},
+                      {"v": 1, "at_ms": T - 60 * MIN, "target": "x"}, {"v": 2, "at_ms": T - 40 * MIN, "target": "x", "note": "3 notes done"}]},
+        {"id": "", "kind": "doc", "title": "no id", "agent": "", "version": 1, "at_ms": 0, "url": "", "new": true},
+        {"id": "mine", "kind": "doc", "title": "", "agent": "", "by": "you", "version": 1, "at_ms": T - 200 * MIN, "url": "", "new": false},
+    ]));
+    set_rows(&items, Some(T - 30 * MIN));
     let rows = all();
-    assert_eq!(rows.iter().map(|a| a.id.as_str()).collect::<Vec<_>>(), ["pricing-page", "deck"]);
-    assert_eq!(new_count(), 3);
+    assert_eq!(rows.iter().map(|a| a.id.as_str()).collect::<Vec<_>>(), ["pricing-page", "deck", "mine"], "an item without an id is left out");
+    assert_eq!(new_count(), 2, "the items the hub marks new");
+    assert_eq!(seen_ms(), Some(T - 30 * MIN));
+    assert_eq!(rows[2].title, "mine", "no title: its id");
     let p = &rows[0];
     assert_eq!(p.versions.iter().map(|x| x.v).collect::<Vec<_>>(), [1, 2, 3]);
     assert_eq!(p.last_words(), "v3 · 2 notes open");

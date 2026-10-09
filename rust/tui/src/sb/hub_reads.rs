@@ -10,7 +10,9 @@
 //! - `hub/approvals`: the mode for the key bar, the checker and the rules
 //!   (`/approvals`' read, approvals/set without a mode, opens the screen
 //!   on the same fields: sb/rpc.rs's `Then::Approvals`);
-//! - `confirm/ask`: the hub's yes/no question (`y`/`n`, esc: no).
+//! - `confirm/ask`: the hub's yes/no question (`y`/`n`, esc: no);
+//! - `hub/artifacts`: the list, its new ones and when he last looked
+//!   (`artifacts.rs`'s store, the header's `↗ N new`, /artifacts).
 
 use super::*;
 use bise_proto::hub::HubEv;
@@ -21,7 +23,7 @@ use bise_proto::rpc::{self, Message};
 /// `bise_proto::rpc::OLDER` (a half-listed row comes the older way).
 // TODO(client-protocol step 4's end, P4e): the hello's `reads` goes when
 // the terminal connects with `initialize`
-pub(crate) const READS: &[&str] = &["hub/approvals", "confirm/ask"];
+pub(crate) const READS: &[&str] = &["hub/approvals", "confirm/ask", "hub/artifacts"];
 
 /// The terminal's first line on the hub's socket: `hello` with [`READS`].
 pub fn hello_line() -> String {
@@ -37,6 +39,7 @@ pub(super) fn read(app: &mut App, v: Value) {
     match &ev {
         HubEv::Approvals { .. } => approvals(app, &ev, false),
         HubEv::Confirm { id, text, .. } => confirm(app, *id, text),
+        HubEv::Artifacts { items, seen_ms, .. } => artifacts(app, items, *seen_ms),
         _ => {}
     }
 }
@@ -105,6 +108,15 @@ pub(super) fn approvals(app: &mut App, ev: &HubEv, show: bool) {
     if show {
         app.approvals = Some(crate::approvals_screen::Screen::default());
     }
+}
+
+/// The artifacts (site/m/artifacts, docs/artifacts.md): the whole list;
+/// an open /artifacts marks what came new; the feed's chips are built
+/// again with the new titles.
+fn artifacts(app: &mut App, items: &[bise_proto::rows::Artifact], seen_ms: Option<u64>) {
+    crate::artifacts::set_rows(items, seen_ms);
+    crate::artifacts_screen::on_list(app);
+    app.cache.iter_mut().for_each(|c| *c = None);
 }
 
 /// The hub asks yes or no (`/archive` of a task with unpushed work...):

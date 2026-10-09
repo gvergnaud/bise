@@ -10,7 +10,6 @@
 //! feed's rows are built without the app, and a chip needs the title of
 //! the artifact a link names.
 
-use serde_json::Value;
 use std::cell::RefCell;
 
 /// One version of an artifact: a bise page's own, or a file added again.
@@ -65,70 +64,7 @@ pub(crate) struct Artifact {
     pub(crate) versions: Vec<Version>,
 }
 
-fn s(v: &Value, k: &str) -> String {
-    v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string()
-}
-
-fn n(v: &Value, k: &str) -> u64 {
-    v.get(k).and_then(|x| x.as_u64()).unwrap_or(0)
-}
-
-fn opt(v: &Value, k: &str) -> Option<String> {
-    v.get(k).and_then(|x| x.as_str()).filter(|s| !s.is_empty()).map(String::from)
-}
-
 impl Artifact {
-    /// One row of the hub's `artifacts` event; None without an id.
-    pub(crate) fn of(v: &Value) -> Option<Artifact> {
-        let id = s(v, "id");
-        if id.is_empty() {
-            return None;
-        }
-        let mut versions: Vec<Version> = v
-            .get("versions")
-            .and_then(|x| x.as_array())
-            .map(|a| {
-                a.iter()
-                    .map(|x| Version {
-                        v: n(x, "v") as u32,
-                        ts_ms: n(x, "ts_ms"),
-                        target: s(x, "target"),
-                        copy: opt(x, "copy"),
-                        note: s(x, "note"),
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        versions.sort_by_key(|x| x.v);
-        let pr = v.get("pr").filter(|p| p.is_object()).map(|p| Pr {
-            repo: s(p, "repo"),
-            number: n(p, "number"),
-            branch: s(p, "branch"),
-        });
-        let title = s(v, "title");
-        Some(Artifact {
-            title: if title.is_empty() { id.clone() } else { title },
-            id,
-            kind: s(v, "kind"),
-            agent: s(v, "agent"),
-            by: s(v, "by"),
-            archived: v.get("archived").and_then(|x| x.as_bool()).unwrap_or(false),
-            ts_ms: n(v, "ts_ms"),
-            v: (n(v, "v") as u32).max(1),
-            target: s(v, "target"),
-            copy: opt(v, "copy"),
-            gone: v.get("gone").and_then(|x| x.as_bool()).unwrap_or(false),
-            detail: s(v, "detail"),
-            pr,
-            keys: v
-                .get("keys")
-                .and_then(|x| x.as_array())
-                .map(|a| a.iter().filter_map(|k| k.as_str().map(String::from)).collect())
-                .unwrap_or_default(),
-            versions,
-        })
-    }
-
     /// The kind as a row says it: `PR` in capitals, the rest as is.
     pub(crate) fn kind_word(&self) -> String {
         kind_word(&self.kind)
@@ -258,13 +194,42 @@ pub(crate) fn workspace() -> String {
     WORKSPACE.with(|w| w.borrow().clone())
 }
 
-/// The hub's `artifacts` event: the whole list, newest first.
-pub(crate) fn set_from(v: &Value) {
-    let mut rows: Vec<Artifact> =
-        v.get("rows").and_then(|x| x.as_array()).map(|a| a.iter().filter_map(Artifact::of).collect()).unwrap_or_default();
+impl Artifact {
+    /// The hub's typed row (`hub/artifacts`, bise_proto::rows::Artifact).
+    pub(crate) fn of_row(r: &bise_proto::rows::Artifact) -> Artifact {
+        let mut versions: Vec<Version> = r
+            .versions
+            .iter()
+            .map(|x| Version { v: x.v, ts_ms: x.at_ms, target: x.target.clone(), copy: x.copy.clone(), note: x.note.clone().unwrap_or_default() })
+            .collect();
+        versions.sort_by_key(|x| x.v);
+        Artifact {
+            title: if r.title.is_empty() { r.id.clone() } else { r.title.clone() },
+            id: r.id.clone(),
+            kind: r.kind.clone(),
+            agent: r.agent.clone(),
+            by: r.by.clone(),
+            archived: r.archived,
+            ts_ms: r.at_ms,
+            v: r.version.max(1),
+            target: r.target.clone(),
+            copy: r.copy.clone(),
+            gone: r.gone,
+            detail: r.detail.clone(),
+            pr: r.pr.as_ref().map(|p| Pr { repo: p.repo.clone(), number: p.number, branch: String::new() }),
+            keys: r.keys.clone(),
+            versions,
+        }
+    }
+}
+
+/// The hub's list (`hub/artifacts`): the whole list, newest first; `new`
+/// the ones it marks new (made or changed since he last looked, not his
+/// own: the header's count), `seen_ms` when he last looked.
+pub(crate) fn set_rows(items: &[bise_proto::rows::Artifact], seen_ms: Option<u64>) {
+    let mut rows: Vec<Artifact> = items.iter().filter(|r| !r.id.is_empty()).map(Artifact::of_row).collect();
     rows.sort_by_key(|a| std::cmp::Reverse(a.ts_ms));
-    let new = n(v, "new");
-    let seen_ms = v.get("seen_ms").and_then(|x| x.as_u64());
+    let new = items.iter().filter(|r| r.new).count() as u64;
     STORE.with(|st| {
         let mut st = st.borrow_mut();
         st.rows = rows;
