@@ -51,6 +51,7 @@ pub(crate) mod reload_wait;
 mod keys;
 pub(crate) mod rpc;
 pub(crate) mod hub_reads;
+mod state_rows;
 pub(crate) mod release;
 pub(super) use keys::key;
 pub(crate) use keys::{scene, Scene};
@@ -659,7 +660,6 @@ pub(super) fn dispatch(app: &mut App, raw: &str) {
             let lines = crate::wire::parse_history(&v);
             with_feed(app, &s("agent"), |app| prepend_page(app, before, lines));
         }
-        "state" => apply_state(app, &v),
         // the hub refused this client (it runs in an agent's process,
         // docs/issues/16): say why once the terminal is back, and end
         "refused" => {
@@ -690,16 +690,6 @@ pub(super) fn dispatch(app: &mut App, raw: &str) {
         "release" => release::event(app, &v),
         "update" => release::update_event(app, &v),
         "focus" => focus(app, &s("focus")),
-        "renamed" => {
-            let (old, new) = (s("old"), s("new"));
-            let sb = &mut app.sb;
-            if let Some(view) = sb.views.remove(&old) {
-                sb.views.insert(new.clone(), view);
-            }
-            if sb.focus == old {
-                sb.focus = new;
-            }
-        }
         "versions" => {
             let sb = &mut app.sb;
             sb.versions = parse_versions(&v);
@@ -841,128 +831,6 @@ pub(crate) fn toggle_approvals(app: &mut App) {
     if !app.sb.approvals.mode.is_empty() {
         app.sb.call("approvals/set", json!({"mode": "toggle"}), rpc::Then::Shown);
     }
-}
-
-fn apply_state(app: &mut App, v: &Value) {
-    let sb = &mut app.sb;
-    let s = str_of;
-    let known: Vec<u64> = sb.cards.iter().map(|c| c.id).collect();
-    sb.agents = v
-        .get("agents")
-        .and_then(|a| a.as_array())
-        .map(|a| {
-            a.iter()
-                .map(|x| Agent {
-                    name: s(x, "name"),
-                    main: x.get("main").and_then(|m| m.as_bool()).unwrap_or(false),
-                    status: s(x, "status"),
-                    objective: s(x, "objective"),
-                    mode: s(x, "mode"),
-                    branch: x.get("branch").and_then(|b| b.as_str()).map(String::from),
-                    path: s(x, "path"),
-                    note: s(x, "note"),
-                    queued: x.get("queued").and_then(|q| q.as_u64()).unwrap_or(0),
-                    inbox: x.get("inbox").and_then(|q| q.as_u64()).unwrap_or(0),
-                    turn_ms: x.get("turn_ms").and_then(|q| q.as_u64()),
-                    turn_seen: Some(std::time::Instant::now()),
-                    report: s(x, "report"),
-                    role: s(x, "role"),
-                    report_ms: x.get("report_ms").and_then(|q| q.as_u64()),
-                    created_ms: x.get("created_ms").and_then(|q| q.as_u64()).unwrap_or(0),
-                    waiting_on: s(x, "waiting_on"),
-                    dir: s(x, "dir"),
-                    place: s(x, "place"),
-                    place_id: s(x, "place_id"),
-                    model: s(x, "model"),
-                    effort: s(x, "effort"),
-                    efforts: x
-                        .get("efforts")
-                        .and_then(|e| e.as_array())
-                        .map(|e| e.iter().filter_map(|w| w.as_str().map(String::from)).collect())
-                        .unwrap_or_default(),
-                    changes: x.get("changes").filter(|c| c.is_object()).map(|c| {
-                        let n = |k: &str| c.get(k).and_then(|x| x.as_u64()).unwrap_or(0);
-                        (n("files"), n("add"), n("del"))
-                    }),
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    sb.places = places::parse(v);
-    // an open diff panel on an agent follows its changes (site/m/artifacts D)
-    if let Some(crate::diffview::Ask::Agent(name)) = app.diff.as_ref().map(|p| p.ask.clone()) {
-        let changes = app.sb.agents.iter().find(|a| a.name == name).and_then(|a| a.changes);
-        crate::diffview::on_changes(app, &name, changes);
-    }
-    let sb = &mut app.sb;
-    // an older hub has no `timers`: keep none
-    sb.timers = crate::scheduled::from_state(v);
-    sb.flow = s(v, "flow");
-    sb.cards = v
-        .get("cards")
-        .and_then(|a| a.as_array())
-        .map(|a| {
-            a.iter()
-                .map(|x| Card {
-                    id: x.get("id").and_then(|i| i.as_u64()).unwrap_or(0),
-                    kind: s(x, "kind"),
-                    agent: s(x, "agent"),
-                    text: s(x, "text"),
-                    age_ms: x.get("age_ms").and_then(|i| i.as_u64()).unwrap_or(0),
-                    seen_at: std::time::Instant::now(),
-                    note: s(x, "note"),
-                    look: None,
-                    place: x.get("place").and_then(|p| p.as_str()).map(String::from),
-                    pr: x.get("pr").and_then(|n| n.as_u64()),
-                    link: x.get("link").and_then(|p| p.as_str()).map(String::from),
-                    // the drop's second ask stays across snapshots
-                    asking: sb.feature_drop_ask == x.get("id").and_then(|i| i.as_u64()),
-                    waiting: x
-                        .get("waiting")
-                        .and_then(|w| w.as_array())
-                        .map(|w| w.iter().filter_map(|a| a.as_str().map(String::from)).collect())
-                        .unwrap_or_default(),
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    // the setup cards are the TUI's own: not in the hub's snapshot
-    setup::put_back(sb);
-    // zen (BISE-121): a card that was not there
-    if sb.cards.iter().any(|c| !known.contains(&c.id)) {
-        sb.calls += 1;
-    }
-    cards::sync(app);
-    let sb = &mut app.sb;
-    // the spinner of every feed follows the agent, whoever started the turn
-    let busy: HashMap<String, bool> = sb.agents.iter().map(|a| (a.name.clone(), a.busy())).collect();
-    for (name, view) in sb.views.iter_mut() {
-        view.pending = busy.get(name).copied().unwrap_or(false);
-    }
-    let focus_busy = busy.get(&sb.focus).copied().unwrap_or(false);
-    if let Some(sel) = sb.selected {
-        if sel >= sb.nav().len() {
-            sb.selected = None;
-            sb.preview = false;
-        }
-    }
-    app.pending = focus_busy;
-    if !focus_busy {
-        app.interrupt_requested = false;
-    }
-    // BISE-61: the first agent, the first card (one-time hints)
-    let sb = &app.sb;
-    let (agent, card) = (sb.agents.iter().any(|a| !a.main && !a.archived()), !sb.cards.is_empty());
-    if agent {
-        crate::hints::once(app, crate::hints::Hint::FirstAgent);
-    }
-    if card {
-        crate::hints::once(app, crate::hints::Hint::FirstCard);
-    } else {
-        crate::hints::used(crate::hints::Hint::FirstCard);
-    }
-    // the demo's guided tips (tour.rs)
-    crate::tour::on_state(app);
 }
 
 /// What the demo's tour looks at (tour.rs): the demo agents with their

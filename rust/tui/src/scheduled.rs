@@ -1,6 +1,6 @@
 //! Scheduled tasks (site/m/timers): what `sb every` sets, as the user
-//! reads it. The hub's state carries them (`timers`: the active ones,
-//! then a week of ended ones); the feeds carry their ◷ lines (the hub's
+//! reads it. hub/scheduled carries them (its items, the active ones, then
+//! its ended ones of the week: sb/state_rows.rs, P4c-4b); the feeds carry their ◷ lines (the hub's
 //! `scheduled : <json>` when one is set or ends, and each run, a
 //! `msg-in` from bise whose text is the wake the agent reads). The words
 //! are designer's (site/m/timers 'v1 and the words'): "scheduled task"
@@ -8,16 +8,10 @@
 //! The full screen is `scheduled_screen.rs`.
 
 use crate::wire::Ev;
-use serde_json::Value;
 
 // one parser and one set of words with the hub's thread fold (batch 3b):
 // bise_proto::thread::scheduled; the TUI passes its own clock
 pub(crate) use bise_proto::thread::scheduled::{clip, Task};
-
-/// The state's `timers` (none from an older hub).
-pub(crate) fn from_state(v: &Value) -> Vec<Task> {
-    v["timers"].as_array().map(|a| a.iter().filter_map(Task::of).collect()).unwrap_or_default()
-}
 
 /// A time to come on the real clock: `14:22`, `tomorrow 07:30`.
 pub(crate) fn ahead(ms: u64, now: u64) -> String {

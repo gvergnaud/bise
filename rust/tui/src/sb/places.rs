@@ -4,8 +4,9 @@
 //! agent alone in one carries its mark in its row's last column.
 //!
 //! The hub sends `places` (the worktrees only, in their first agent's
-//! order, the frozen contract of switchboard's `place.rs`) and each
-//! agent's `place_id`; this module reads them and draws what is git's:
+//! order, the frozen contract of switchboard's `place.rs`) on hub/agents
+//! and each agent's `place_id` (state_rows.rs maps the typed rows,
+//! P4c-4b); this module draws what is git's:
 //! the section's title (` ψ sb/dark-mode      ↑ `), the held lid line
 //! (`changes asked · checks pass`), a solo row's mark, the PR's words
 //! for the divider and the header.
@@ -13,7 +14,7 @@
 use super::*;
 use unicode_width::UnicodeWidthStr;
 
-/// A worktree as the hub sends it (`PlaceView`).
+/// A worktree as the hub sends it (`rows::Place`, state_rows.rs).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct Place {
     pub(crate) id: String,
@@ -46,44 +47,6 @@ pub(crate) struct Pr {
     pub(crate) failing: Vec<String>,
     /// how old the forge's last answer is, when it is late
     pub(crate) stale_ms: Option<u64>,
-}
-
-/// The snapshot's `places` (absent from an older hub: none).
-pub(super) fn parse(v: &Value) -> Vec<Place> {
-    let s = |x: &Value, k: &str| x.get(k).and_then(|b| b.as_str()).map(String::from);
-    let Some(all) = v.get("places").and_then(|p| p.as_array()) else {
-        return Vec::new();
-    };
-    all.iter()
-        .map(|p| Place {
-            id: s(p, "id").unwrap_or_default(),
-            branch: s(p, "branch"),
-            agents: p
-                .get("agents")
-                .and_then(|a| a.as_array())
-                .map(|a| a.iter().filter_map(|n| n.as_str().map(String::from)).collect())
-                .unwrap_or_default(),
-            pr: p.get("pr").filter(|x| x.is_object()).map(|x| {
-                let checks = x.get("checks");
-                Pr {
-                    number: x.get("number").and_then(|n| n.as_u64()).unwrap_or(0),
-                    url: s(x, "url").unwrap_or_default(),
-                    state: s(x, "state").unwrap_or_default(),
-                    review: s(x, "review").unwrap_or_default(),
-                    checks: checks.and_then(|c| s(c, "state")).unwrap_or_default(),
-                    failing: checks
-                        .and_then(|c| c.get("failing"))
-                        .and_then(|f| f.as_array())
-                        .map(|f| f.iter().filter_map(|n| n.as_str().map(String::from)).collect())
-                        .unwrap_or_default(),
-                    stale_ms: x.get("stale_ms").and_then(|n| n.as_u64()),
-                }
-            }),
-            lid: s(p, "lid").filter(|l| !l.is_empty()),
-            feature: p.get("feature").and_then(|b| b.as_bool()).unwrap_or(false),
-            trying: p.get("trying").and_then(|b| b.as_bool()).unwrap_or(false),
-        })
-        .collect()
 }
 
 impl Pr {
@@ -408,6 +371,12 @@ pub(crate) fn flow_words(flow: &str) -> &'static str {
 mod tests {
     use super::*;
 
+    /// hub/agents' typed `places` as the panel's (state_rows.rs).
+    fn parse(v: &serde_json::Value) -> Vec<Place> {
+        let rows: Vec<bise_proto::rows::Place> = serde_json::from_value(v["places"].clone()).unwrap_or_default();
+        rows.iter().map(Place::of_row).collect()
+    }
+
     fn text(l: &Line) -> String {
         l.spans.iter().map(|s| s.content.as_ref()).collect()
     }
@@ -464,14 +433,14 @@ mod tests {
         assert_eq!(trial_notes(&parse(&v)), vec!["Δ gift-cards on trial".to_string()]);
     }
 
-    /// The contract's JSON (switchboard place.rs, `the_contract_json`)
-    /// read back: the tagged checks, the snake_case words.
+    /// hub/agents' typed places read back (P4c-4b): the review and
+    /// checks as the words the panel draws.
     #[test]
     fn reads_the_hubs_places() {
         let v = serde_json::json!({"places": [
             {"id": "wt:dark", "branch": "sb/dark", "agents": ["dark", "i18n"], "lid": null,
-             "pr": {"number": 412, "url": "u", "state": "open", "review": "changes_requested",
-                    "checks": {"state": "fail", "failing": ["ci/test"]}, "stale_ms": null}},
+             "pr": {"number": 412, "url": "u", "branch": "sb/dark", "agents": ["dark", "i18n"], "state": "open",
+                    "review": "changes", "checks": "fail", "failing": ["ci/test"], "words": "", "text": ""}},
             {"id": "wt:csv", "branch": null, "agents": [], "pr": null, "lid": "waits to land · 2nd"}
         ]});
         let ps = parse(&v);

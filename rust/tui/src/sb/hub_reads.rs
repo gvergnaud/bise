@@ -12,7 +12,13 @@
 //!   on the same fields: sb/rpc.rs's `Then::Approvals`);
 //! - `confirm/ask`: the hub's yes/no question (`y`/`n`, esc: no);
 //! - `hub/artifacts`: the list, its new ones and when he last looked
-//!   (`artifacts.rs`'s store, the header's `↗ N new`, /artifacts).
+//!   (`artifacts.rs`'s store, the header's `↗ N new`, /artifacts);
+//! - `hub/agents`, `hub/cards`, `hub/scheduled`, `hub/flow` (P4c-4b, the
+//!   older `state` event split by kind; state_rows.rs maps the rows): the
+//!   agents and the worktrees they sit in (a rename is the same `dir`
+//!   with a new name, architect Q3), the inbox (his cards and bise's
+//!   own), the scheduled tasks (live, then the week's ended ones), the
+//!   repo's flow.
 
 use super::*;
 use bise_proto::hub::HubEv;
@@ -23,7 +29,7 @@ use bise_proto::rpc::{self, Message};
 /// `bise_proto::rpc::OLDER` (a half-listed row comes the older way).
 // TODO(client-protocol step 4's end, P4e): the hello's `reads` goes when
 // the terminal connects with `initialize`
-pub(crate) const READS: &[&str] = &["hub/approvals", "confirm/ask", "hub/artifacts"];
+pub(crate) const READS: &[&str] = &["hub/approvals", "confirm/ask", "hub/artifacts", "hub/agents", "hub/cards", "hub/scheduled", "hub/flow"];
 
 /// The terminal's first line on the hub's socket: `hello` with [`READS`].
 pub fn hello_line() -> String {
@@ -40,7 +46,88 @@ pub(super) fn read(app: &mut App, v: Value) {
         HubEv::Approvals { .. } => approvals(app, &ev, false),
         HubEv::Confirm { id, text, .. } => confirm(app, *id, text),
         HubEv::Artifacts { items, seen_ms, .. } => artifacts(app, items, *seen_ms),
+        HubEv::Agents { agents: rows, places, .. } => agents(app, rows, places),
+        HubEv::Cards { cards: his, others, .. } => cards(app, his, others),
+        HubEv::Scheduled { items, ended, .. } => app.sb.timers = items.iter().chain(ended).map(super::state_rows::task_of_row).collect(),
+        HubEv::Flow { flow, .. } => app.sb.flow = super::state_rows::flow_word(*flow),
         _ => {}
+    }
+}
+
+/// The agents and their places: renames move their feed and the focus,
+/// an open diff panel on one follows its changes, every feed's spinner
+/// follows its agent, the first agent's hint, the tour.
+fn agents(app: &mut App, rows: &[bise_proto::rows::Agent], places: &[bise_proto::rows::Place]) {
+    let new: Vec<Agent> = rows.iter().map(Agent::of_row).collect();
+    // TODO(proto-zone-b, m_14782: its P4d-feed f-a sha): each row's turn
+    // edges, `for a in rows { feed_entries::agent_row(app, &a.name,
+    // a.status.working(), a.turns) }`, once feed_entries.rs is in
+    for (old, name) in super::state_rows::renamed(&app.sb.agents, &new) {
+        let sb = &mut app.sb;
+        if let Some(view) = sb.views.remove(&old) {
+            sb.views.insert(name.clone(), view);
+        }
+        if sb.focus == old {
+            sb.focus = name;
+        }
+    }
+    app.sb.agents = new;
+    app.sb.places = places.iter().map(super::places::Place::of_row).collect();
+    // an open diff panel on an agent follows its changes (site/m/artifacts D)
+    if let Some(crate::diffview::Ask::Agent(name)) = app.diff.as_ref().map(|p| p.ask.clone()) {
+        let changes = app.sb.agents.iter().find(|a| a.name == name).and_then(|a| a.changes);
+        crate::diffview::on_changes(app, &name, changes);
+    }
+    // the spinner of every feed follows the agent, whoever started the turn
+    let sb = &mut app.sb;
+    let busy: HashMap<String, bool> = sb.agents.iter().map(|a| (a.name.clone(), a.busy())).collect();
+    for (name, view) in sb.views.iter_mut() {
+        view.pending = busy.get(name).copied().unwrap_or(false);
+    }
+    let focus_busy = busy.get(&sb.focus).copied().unwrap_or(false);
+    app.pending = focus_busy;
+    if !focus_busy {
+        app.interrupt_requested = false;
+    }
+    keep_selection(app);
+    // BISE-61: the first agent (a one-time hint)
+    if app.sb.agents.iter().any(|a| !a.main && !a.archived()) {
+        crate::hints::once(app, crate::hints::Hint::FirstAgent);
+    }
+    crate::tour::on_state(app);
+}
+
+/// The inbox: his cards and bise's own in one list (the drop asking once
+/// more stays), the TUI's setup items put back, a new card wakes zen, the
+/// cards view follows, the first card's hint, the tour.
+fn cards(app: &mut App, his: &[bise_proto::rows::Card], others: &[bise_proto::rows::Card]) {
+    let sb = &mut app.sb;
+    let known: Vec<u64> = sb.cards.iter().map(|c| c.id).collect();
+    sb.cards = super::state_rows::cards_of_rows(his, others, sb.feature_drop_ask, crate::when::now_ms());
+    // the setup cards are the TUI's own: not in the hub's rows
+    super::setup::put_back(sb);
+    // zen (BISE-121): a card that was not there
+    if sb.cards.iter().any(|c| !known.contains(&c.id)) {
+        sb.calls += 1;
+    }
+    super::cards::sync(app);
+    keep_selection(app);
+    // BISE-61: the first card (a one-time hint)
+    if app.sb.cards.is_empty() {
+        crate::hints::used(crate::hints::Hint::FirstCard);
+    } else {
+        crate::hints::once(app, crate::hints::Hint::FirstCard);
+    }
+    crate::tour::on_state(app);
+}
+
+/// A panel row selected past the end of the list (an agent or a card
+/// went): none.
+fn keep_selection(app: &mut App) {
+    let sb = &mut app.sb;
+    if sb.selected.is_some_and(|sel| sel >= sb.nav().len()) {
+        sb.selected = None;
+        sb.preview = false;
     }
 }
 
@@ -127,6 +214,69 @@ fn confirm(app: &mut App, id: u64, text: &str) {
     let sb = &mut app.sb;
     sb.confirm = Some((id, text.to_string()));
     sb.calls += 1;
+}
+
+/// The hub's typed state rows for tests (what the hub sends after a
+/// hello that lists [`READS`]): an agent by its status word, a card by
+/// its words, their notifications as the lines `dispatch` reads.
+#[cfg(test)]
+pub(crate) mod rows_for_tests {
+    use bise_proto::hub::HubEv;
+    use bise_proto::rows::{Agent, Card, Phase, Status};
+    use bise_proto::rpc::{self, Message};
+
+    pub(crate) fn agent(name: &str, status: &str, objective: &str) -> Agent {
+        let (st, archived) = Status::of_hub(status);
+        let mut a: Agent = serde_json::from_value(serde_json::json!({
+            "name": name, "main": name == "main", "status": st, "archived": archived,
+            "title": "", "purpose": "", "since_ms": 0, "waits": 0, "dir": name, "objective": objective,
+        }))
+        .unwrap();
+        a.phase = Phase::of_hub(status);
+        a
+    }
+
+    pub(crate) fn card(id: u64, kind: &str, agent: &str, text: &str) -> Card {
+        let (question, options) = bise_proto::rows::question(text);
+        Card {
+            id,
+            project: "p".into(),
+            kind: kind.into(),
+            agent: agent.into(),
+            question,
+            options,
+            urgent: false,
+            since_ms: crate::when::now_ms(),
+            page: None,
+            approval: false,
+            rank: None,
+            waiting: None,
+            text: text.into(),
+            note: None,
+            place: None,
+            pr: None,
+            link: None,
+            for_msg: None,
+        }
+    }
+
+    /// hub/agents then hub/cards (a question is his, any other kind
+    /// bise's own), as JSON-RPC lines.
+    pub(crate) fn lines(agents: Vec<Agent>, cards: Vec<Card>) -> [String; 2] {
+        let (his, others) = cards.into_iter().partition(|c| c.kind == "question" || c.kind == "confirm");
+        let line = |ev: &HubEv| Message::Notification(rpc::note(ev, None).unwrap()).to_value().to_string();
+        [
+            line(&HubEv::Agents { project: "p".into(), agents, places: vec![] }),
+            line(&HubEv::Cards { project: "p".into(), cards: his, others }),
+        ]
+    }
+
+    /// Both lines through `dispatch`, as the hub's socket gives them.
+    pub(crate) fn apply(app: &mut crate::app::App, agents: Vec<Agent>, cards: Vec<Card>) {
+        for l in lines(agents, cards) {
+            crate::sb::dispatch(app, &l);
+        }
+    }
 }
 
 #[cfg(test)]

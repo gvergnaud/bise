@@ -177,11 +177,7 @@ fn the_composer_has_the_text_cursor() {
 #[test]
 fn the_panel_rows_have_the_hand() {
     let mut app = crate::sb::bench::test_app();
-    let state = serde_json::json!({"ev": "state", "agents": [
-        {"name": "main", "main": true, "status": "idle"},
-        {"name": "docs", "status": "working", "objective": "write the docs"},
-    ], "cards": []});
-    crate::sb::dispatch(&mut app, &state.to_string());
+    crate::sb::hub_reads::rows_for_tests::apply(&mut app, vec![crate::sb::hub_reads::rows_for_tests::agent("main", "idle", ""), crate::sb::hub_reads::rows_for_tests::agent("docs", "working", "write the docs")], vec![]);
     let mut s = Screen::new(app);
     let (x, y) = s.find("docs");
     assert_eq!(s.hover(x, y), POINTER);

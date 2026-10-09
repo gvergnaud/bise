@@ -630,11 +630,7 @@ mod zen_tests {
 
     fn app_with_agents() -> App {
         let mut app = crate::sb::bench::test_app();
-        let state = json!({"ev": "state", "agents": [
-            {"name": "main", "main": true, "status": "idle"},
-            {"name": "docs", "status": "working", "objective": "write the docs"},
-        ], "cards": []});
-        sb::dispatch(&mut app, &state.to_string());
+        crate::sb::hub_reads::rows_for_tests::apply(&mut app, vec![crate::sb::hub_reads::rows_for_tests::agent("main", "idle", ""), crate::sb::hub_reads::rows_for_tests::agent("docs", "working", "write the docs")], vec![]);
         sb::dispatch(&mut app, &json!({"ev": "ready"}).to_string());
         sb::dispatch(&mut app, &json!({"ev": "line", "agent": "main", "line": "sb you : ship it"}).to_string());
         app
@@ -774,13 +770,10 @@ mod zen_tests {
     fn enter_and_every_ui_shortcut_leave_zen() {
         let t = Instant::now();
         let (n, s, a, c) = (KeyModifiers::NONE, KeyModifiers::SHIFT, KeyModifiers::ALT, KeyModifiers::CONTROL);
-        let card = json!({"ev": "state", "agents": [
-            {"name": "main", "main": true, "status": "idle"},
-            {"name": "docs", "status": "working", "objective": "write the docs"},
-        ], "cards": [
-            {"id": 7, "kind": "question", "agent": "docs", "text": "v1 or v2?", "age_ms": 0},
-            {"id": 8, "kind": "question", "agent": "docs", "text": "ship?", "age_ms": 0},
-        ]});
+        let card = crate::sb::hub_reads::rows_for_tests::lines(
+            vec![crate::sb::hub_reads::rows_for_tests::agent("main", "idle", ""), crate::sb::hub_reads::rows_for_tests::agent("docs", "working", "write the docs")],
+            vec![crate::sb::hub_reads::rows_for_tests::card(7, "question", "docs", "v1 or v2?"), crate::sb::hub_reads::rows_for_tests::card(8, "question", "docs", "ship?")],
+        );
         // (what, the key, set up the app once in zen, composer empty or not)
         type Setup = fn(&mut App);
         let none: Setup = |_| {};
@@ -833,7 +826,9 @@ mod zen_tests {
         for (what, code, m, cards, text, setup) in cases {
             let mut app = app_with_agents();
             if cards {
-                sb::dispatch(&mut app, &card.to_string());
+                for l in &card {
+                    sb::dispatch(&mut app, l);
+                }
                 let calls = app.sb.calls();
                 app.zen.calls(calls, t);
                 on_key(&mut app, &KeyEvent::new(KeyCode::Char('1'), c));
@@ -872,14 +867,17 @@ mod zen_tests {
         calls(&mut app);
         assert!(app.zen.active(t), "nothing new");
         // a new card
-        let state = json!({"ev": "state", "agents": [{"name": "main", "main": true, "status": "idle"}],
-            "cards": [{"id": 7, "kind": "question", "agent": "docs", "text": "v1 or v2?", "age_ms": 0}]});
-        sb::dispatch(&mut app, &state.to_string());
+        let state = crate::sb::hub_reads::rows_for_tests::lines(vec![crate::sb::hub_reads::rows_for_tests::agent("main", "idle", "")], vec![crate::sb::hub_reads::rows_for_tests::card(7, "question", "docs", "v1 or v2?")]);
+        for l in &state {
+            sb::dispatch(&mut app, l);
+        }
         calls(&mut app);
         assert!(!app.zen.active(t));
         // the same card again: zen holds
         event(&mut app, key(KeyCode::Char('e')), t);
-        sb::dispatch(&mut app, &state.to_string());
+        for l in &state {
+            sb::dispatch(&mut app, l);
+        }
         calls(&mut app);
         assert!(app.zen.active(t));
         // a message to you, in a feed out of view
@@ -982,13 +980,11 @@ mod paint_tests {
     }
 
     fn with_agents_and_a_card(app: &mut App) {
-        let state = json!({"ev": "state", "agents": [
-            {"name": "main", "main": true, "status": "idle"},
-            {"name": "docs", "status": "working", "objective": "write the docs"},
-        ], "cards": [
-            {"id": 1, "kind": "question", "agent": "docs", "text": "v1 or v2 for the api docs?", "age_ms": 0},
-        ]});
-        sb::dispatch(app, &state.to_string());
+        crate::sb::hub_reads::rows_for_tests::apply(
+            app,
+            vec![crate::sb::hub_reads::rows_for_tests::agent("main", "idle", ""), crate::sb::hub_reads::rows_for_tests::agent("docs", "working", "write the docs")],
+            vec![crate::sb::hub_reads::rows_for_tests::card(1, "question", "docs", "v1 or v2 for the api docs?")],
+        );
         for l in ["sb you : ship it", "sb msg : docs → main : found it", "sb card : #1 question @docs : v1 or v2?"] {
             sb::dispatch(app, &json!({"ev": "line", "agent": "main", "line": l}).to_string());
         }

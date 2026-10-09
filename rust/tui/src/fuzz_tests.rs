@@ -159,13 +159,16 @@ fn hub_line(rng: &mut Rng) -> String {
         .to_string(),
         1 => json!({"jsonrpc": "2.0", "method": "confirm/ask", "params": {"project": "p", "id": rng.below(3), "text": t}}).to_string(),
         2 => json!({"ev": "focus", "focus": agent}).to_string(),
-        3 => json!({"ev": "state", "agents": [
-            {"name": "main", "status": "idle", "objective": t},
-            {"name": "t1", "status": "working", "objective": t, "note": t},
-        ], "cards": [
-            {"id": 1, "agent": "t1", "kind": "question", "text": t}, {"id": 2, "agent": "main", "kind": "report", "text": t},
-        ]})
-        .to_string(),
+        // hub/agents or hub/cards, as the hub sends them typed (P4c-4b)
+        3 => {
+            let mut t1 = crate::sb::hub_reads::rows_for_tests::agent("t1", "working", &t);
+            t1.note = t.clone();
+            let [agents, cards] = crate::sb::hub_reads::rows_for_tests::lines(
+                vec![crate::sb::hub_reads::rows_for_tests::agent("main", "idle", &t), t1],
+                vec![crate::sb::hub_reads::rows_for_tests::card(1, "question", "t1", &t), crate::sb::hub_reads::rows_for_tests::card(2, "report", "main", &t)],
+            );
+            if rng.below(2) == 0 { agents } else { cards }
+        }
         _ => json!({"ev": "line", "agent": agent, "line": line}).to_string(),
     }
 }

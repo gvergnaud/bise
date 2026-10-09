@@ -35,9 +35,10 @@ fn lines(n: usize) -> Vec<String> {
     (0..).flat_map(turn).take(n).collect()
 }
 
-fn agent(name: &str, main: bool) -> serde_json::Value {
-    json!({"name": name, "main": main, "status": "idle", "objective": format!("{name}'s job"), "mode": "worktree",
-           "dir": name, "path": format!("/ws/{name}"), "created_ms": 1_700_000_000_000u64})
+fn agent(name: &str) -> bise_proto::rows::Agent {
+    let mut a = crate::sb::hub_reads::rows_for_tests::agent(name, "idle", &format!("{name}'s job"));
+    (a.mode, a.path, a.created_ms) = (Some(bise_proto::rows::AgentMode::Worktree), format!("/ws/{name}"), Some(1_700_000_000_000));
+    a
 }
 
 /// The hello burst of a hub with `agents` agents (main first) of `each`
@@ -45,8 +46,8 @@ fn agent(name: &str, main: bool) -> serde_json::Value {
 fn burst(agents: usize, each: usize) -> Vec<String> {
     let names: Vec<String> = (0..agents).map(|i| if i == 0 { "main".to_string() } else { format!("t{i}") }).collect();
     let mut out = vec![json!({"ev": "hello", "workspace": "/ws", "exe": "", "version": {"id": "bench"}, "reload": ""}).to_string()];
-    let rows: Vec<_> = names.iter().map(|n| agent(n, n == "main")).collect();
-    out.push(json!({"ev": "state", "agents": rows, "cards": [], "flow": "auto"}).to_string());
+    // hub/agents and hub/cards, typed (P4c-4b: the older state line split by kind)
+    out.extend(crate::sb::hub_reads::rows_for_tests::lines(names.iter().map(|n| agent(n)).collect(), vec![]));
     for n in &names {
         for (i, l) in lines(each).iter().enumerate() {
             out.push(json!({"ev": "line", "agent": n, "line": l, "pos": i + 1, "ts": 1_700_000_000_000u64 + i as u64}).to_string());

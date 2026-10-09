@@ -2,6 +2,7 @@
 //! your keys, the drawn frame.
 
 use super::*;
+use super::hub_reads::rows_for_tests;
 use crate::tour::{self, Tip};
 use ratatui::backend::TestBackend;
 use ratatui::Terminal;
@@ -10,14 +11,22 @@ use serde_json::json;
 
 const OBJ: &str = "bise demo (role-play, not real work): you are";
 
-fn agent(name: &str, status: &str) -> Value {
+fn agent(name: &str, status: &str) -> bise_proto::rows::Agent {
     let objective = if name == "main" { String::new() } else { format!("{OBJ} {name}") };
-    json!({"name": name, "main": name == "main", "status": status, "objective": objective})
+    rows_for_tests::agent(name, status, &objective)
 }
 
+/// hub/agents and hub/cards as the hub sends them; `cards`: the older
+/// rows' id, kind, agent and text.
 fn state(app: &mut App, agents: &[(&str, &str)], cards: Value) {
-    let agents: Vec<Value> = agents.iter().map(|(n, s)| agent(n, s)).collect();
-    apply_state(app, &json!({"agents": agents, "cards": cards}));
+    let agents = agents.iter().map(|(n, s)| agent(n, s)).collect();
+    let cards = cards
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|c| rows_for_tests::card(c["id"].as_u64().unwrap(), c["kind"].as_str().unwrap(), c["agent"].as_str().unwrap(), c["text"].as_str().unwrap_or("")))
+        .collect();
+    rows_for_tests::apply(app, agents, cards);
 }
 
 fn screen(app: &mut App) -> String {
@@ -85,6 +94,6 @@ fn no_tips_for_other_agents() {
     tour::reset();
     let mut app = bench::test_app_drained();
     state(&mut app, &[("main", "idle")], json!([]));
-    apply_state(&mut app, &json!({"agents": [agent("main", "idle"), {"name": "fix-login", "status": "working", "objective": "fix the login"}], "cards": []}));
+    rows_for_tests::apply(&mut app, vec![agent("main", "idle"), rows_for_tests::agent("fix-login", "working", "fix the login")], vec![]);
     assert_eq!(tour::current(&app), None);
 }
