@@ -132,6 +132,29 @@ impl Shell {
         proto_view::approvals::approvals(&self.project(), ev, home.as_deref())
     }
 
+    /// The typed `pages` of a snapshot (its `pages` rows and `overdue`,
+    /// `snapshot_pages`): one builder, the older state's own rows.
+    pub(in crate::daemon) fn pages_ev(&self, snap: &Value) -> HubEv {
+        let items = snap.get("pages").and_then(Value::as_array).map_or_else(Vec::new, |a| a.iter().filter_map(|p| serde_json::from_value(p.clone()).ok()).collect());
+        let overdue = snap.get("overdue").and_then(Value::as_u64).map_or(0, |n| u32::try_from(n).unwrap_or(u32::MAX));
+        HubEv::Pages { project: self.project(), items, overdue }
+    }
+
+    /// A hub line whose fields are its typed event's (`versions`,
+    /// `release`, `update`): that event, with this hub's project.
+    pub(in crate::daemon) fn typed_of(&self, v: &Value) -> Option<HubEv> {
+        let mut v = v.clone();
+        v["project"] = json!(self.project());
+        match HubEv::from_value(v) {
+            Ok(HubEv::Unknown { .. }) => None,
+            Ok(ev) => Some(ev),
+            Err(e) => {
+                crate::daemon::log_line(&self.opts.paths, &format!("not typed: {e}"));
+                None
+            }
+        }
+    }
+
     /// The art store's event as the typed `artifacts`.
     pub(in crate::daemon) fn proto_artifacts(&self, ev: &Value) -> HubEv {
         HubEv::Artifacts { project: self.project(), items: self.artifact_rows(ev), seen_ms: ev.get("seen_ms").and_then(Value::as_u64) }
@@ -203,6 +226,13 @@ impl Shell {
                     self.proto.prs = p;
                     self.proto_note(&ids, &prs);
                 }
+                // P4c-5: the pages and his late promises (the snapshot's)
+                let pages = self.pages_ev(v);
+                let p = pages.encode();
+                if p != self.proto.pages {
+                    self.proto.pages = p;
+                    self.proto_note(&ids, &pages);
+                }
                 // ⌘K: a timer set, run, stopped or ended (each comes back
                 // as a state change)
                 let sched = self.scheduled_ev();
@@ -235,6 +265,24 @@ impl Shell {
             Some("approvals") => {
                 let ev = self.proto_approvals(v);
                 self.proto_note(&ids, &ev);
+            }
+            // P4c-5: `/version`'s picker (at a build's start and end, a
+            // switch), a release run's steps, `/update`'s build: the
+            // older line's fields are the typed event's
+            // and one page that changed (before the state that lists it)
+            Some("versions" | "release" | "update") => {
+                if let Some(ev) = self.typed_of(v) {
+                    self.proto_note(&ids, &ev);
+                }
+            }
+            // its typed tag is page_changed (the older `page` line keeps
+            // its own meaning)
+            Some("page") => {
+                let mut changed = v.clone();
+                changed["ev"] = json!("page_changed");
+                if let Some(ev) = self.typed_of(&changed) {
+                    self.proto_note(&ids, &ev);
+                }
             }
             // the art store changed (artifacts_refresh broadcasts it)
             Some("artifacts") => {

@@ -7,6 +7,8 @@
 use super::*;
 use crate::commands::{Arg, Cmd};
 use crate::release_row::Row;
+use bise_proto::hub::HubEv;
+use bise_proto::ops::{ReleaseEv, UpdateEv};
 
 /// The commands of the dev build only: never in the popup or `/help`
 /// of another workspace or an installed bise.
@@ -63,51 +65,34 @@ pub(super) fn answer(app: &mut App, typed: &str) -> bool {
     matches!(t.as_str(), "n" | "no" | "non")
 }
 
-fn row_of(v: &Value) -> Option<Row> {
-    let s = |k: &str| str_of(v, k);
-    Some(match s("state").as_str() {
+fn row_of(r: &ReleaseEv) -> Option<Row> {
+    let text = || r.text.clone().unwrap_or_default();
+    Some(match r.state.as_str() {
         "plan" => Row::Plan {
-            tag: s("tag"),
-            short: s("short"),
-            subject: s("subject"),
-            since: s("since"),
-            count: v.get("count").and_then(|x| x.as_u64()).unwrap_or(0) as usize,
-            commits: v
-                .get("commits")
-                .and_then(|x| x.as_array())
-                .map(|a| {
-                    a.iter()
-                        .map(|c| {
-                            let f = |i: usize| c.get(i).and_then(|x| x.as_str()).unwrap_or("").to_string();
-                            (f(0), f(1))
-                        })
-                        .collect()
-                })
-                .unwrap_or_default(),
-            dry: v.get("dry").and_then(|x| x.as_bool()).unwrap_or(false),
+            tag: r.tag.clone().unwrap_or_default(),
+            short: r.short.clone().unwrap_or_default(),
+            subject: r.subject.clone().unwrap_or_default(),
+            since: r.since.clone().unwrap_or_default(),
+            count: r.count.unwrap_or(0) as usize,
+            commits: r.commits.clone(),
+            dry: r.dry,
         },
-        "step" => Row::Step(s("text")),
-        "running" => Row::Running(s("text")),
-        "done" => Row::Done(s("text")),
-        "failed" => Row::Failed {
-            text: s("text"),
-            tail: v
-                .get("tail")
-                .and_then(|x| x.as_array())
-                .map(|a| a.iter().filter_map(|l| l.as_str().map(str::to_string)).collect())
-                .unwrap_or_default(),
-            open: false,
-        },
-        "error" => Row::Failed { text: format!("no release · {}", s("text")), tail: Vec::new(), open: false },
+        "step" => Row::Step(text()),
+        "running" => Row::Running(text()),
+        "done" => Row::Done(text()),
+        "failed" => Row::Failed { text: text(), tail: r.tail.clone(), open: false },
+        "error" => Row::Failed { text: format!("no release · {}", text()), tail: Vec::new(), open: false },
         _ => return None,
     })
 }
 
-/// A `release` event of the hub.
-pub(super) fn event(app: &mut App, v: &Value) {
-    let Some(row) = row_of(v) else { return };
-    let s = |k: &str| str_of(v, k);
-    let elapsed = v.get("elapsed").and_then(|x| x.as_u64()).unwrap_or(0);
+/// The hub's release step (`release/progress`, or `release/plan`'s
+/// answer): a plan and its y/n where you asked, a run's rows in main's
+/// feed and the header's `releasing …`.
+pub(super) fn event(app: &mut App, r: &ReleaseEv) {
+    let Some(row) = row_of(r) else { return };
+    let tag = r.tag.clone().unwrap_or_default();
+    let elapsed = r.elapsed.unwrap_or(0);
     match &row {
         Row::Plan { tag, dry, .. } => {
             // the plan and its question where you typed the command
@@ -120,13 +105,13 @@ pub(super) fn event(app: &mut App, v: &Value) {
                 push_event(&mut app.events, &mut app.cache, ev);
             }
             let sb = &mut app.sb;
-            sb.release_ask = Some(Ask { tag: tag.clone(), commit: s("commit"), dry: *dry });
+            sb.release_ask = Some(Ask { tag: tag.clone(), commit: r.commit.clone().unwrap_or_default(), dry: *dry });
             sb.calls += 1;
             return;
         }
         Row::Step(_) | Row::Running(_) => {
             let since = std::time::Instant::now().checked_sub(std::time::Duration::from_secs(elapsed));
-            app.sb.release = Some((s("tag"), since.unwrap_or_else(std::time::Instant::now)));
+            app.sb.release = Some((tag, since.unwrap_or_else(std::time::Instant::now)));
         }
         Row::Done(_) | Row::Failed { .. } | Row::Warned { .. } => {
             app.sb.release = None;
@@ -134,7 +119,7 @@ pub(super) fn event(app: &mut App, v: &Value) {
         }
     }
     // a plan that failed shows where you asked; a run's rows in main's feed
-    if s("state") == "error" {
+    if r.state == "error" {
         push_event(&mut app.events, &mut app.cache, Ev::Release(row));
         return;
     }
@@ -143,18 +128,23 @@ pub(super) fn event(app: &mut App, v: &Value) {
     });
 }
 
-/// An `update` event of the hub (dev-update: `/update` in bise's source
-/// tree builds HEAD): `building` puts `∿ building <sha> · 2m` in the
-/// header; `built` clears it (the switch says the rest in main's
-/// thread); `failed` clears it and puts `▲ couldn't build …` in main's
-/// feed, the build's last lines folded under it.
-pub(super) fn update_event(app: &mut App, v: &Value) {
-    let s = |k: &str| str_of(v, k);
-    match s("state").as_str() {
+/// `release/plan`'s answer (the plan, or why there is none).
+pub(super) fn answered(app: &mut App, result: Value) {
+    if let Ok(Some(HubEv::Release(r))) = bise_proto::rpc::ev_of_result("release/plan", result) {
+        event(app, &r);
+    }
+}
+
+/// The hub's `/update` build (`update/progress`, dev-update: `/update`
+/// in bise's source tree builds HEAD): `building` puts `∿ building <sha>
+/// · 2m` in the header; `built` clears it (the switch says the rest in
+/// main's thread); `failed` clears it and puts `▲ couldn't build …` in
+/// main's feed, the build's last lines folded under it.
+pub(super) fn update_event(app: &mut App, u: &UpdateEv) {
+    match u.state.as_str() {
         "building" => {
-            let elapsed = v.get("elapsed").and_then(|x| x.as_u64()).unwrap_or(0);
-            let since = std::time::Instant::now().checked_sub(std::time::Duration::from_secs(elapsed));
-            app.sb.updating = Some((s("rev"), since.unwrap_or_else(std::time::Instant::now)));
+            let since = std::time::Instant::now().checked_sub(std::time::Duration::from_secs(u.elapsed.unwrap_or(0)));
+            app.sb.updating = Some((u.rev.clone(), since.unwrap_or_else(std::time::Instant::now)));
         }
         "built" => {
             app.sb.updating = None;
@@ -163,12 +153,7 @@ pub(super) fn update_event(app: &mut App, v: &Value) {
         "failed" => {
             app.sb.updating = None;
             app.sb.calls += 1;
-            let tail = v
-                .get("tail")
-                .and_then(|x| x.as_array())
-                .map(|a| a.iter().filter_map(|l| l.as_str().map(str::to_string)).collect())
-                .unwrap_or_default();
-            let row = Row::Warned { text: s("text"), tail, open: false };
+            let row = Row::Warned { text: u.text.clone().unwrap_or_default(), tail: u.tail.clone(), open: false };
             feed::with_feed(app, "main", |app| {
                 push_event(&mut app.events, &mut app.cache, Ev::Release(row));
             });
@@ -256,18 +241,26 @@ mod tests {
         assert!(crate::commands::popup_items(&app).iter().any(|i| i.label == "/log"));
     }
 
-    fn plan(dry: bool) -> String {
-        json!({"ev": "release", "state": "plan", "tag": "v2026.10.3", "commit": "abcdef1234", "short": "abcdef1",
+    /// `release/plan`'s answer (its result: the event's fields).
+    fn plan(dry: bool) -> Value {
+        json!({"project": "bench", "state": "plan", "tag": "v2026.10.3", "commit": "abcdef1234", "short": "abcdef1",
             "subject": "fix the voice chip", "since": "v2026.10.1", "count": 2,
             "commits": [["abcdef1", "fix the voice chip"], ["1234567", "more room"]], "dry": dry})
-        .to_string()
+    }
+
+    /// The hub's line `v` as the notification the terminal reads
+    /// (`release/progress`, `update/progress`).
+    fn typed(mut v: Value) -> String {
+        v["project"] = json!("bench");
+        let ev = HubEv::from_value(v).unwrap();
+        bise_proto::rpc::Message::Notification(bise_proto::rpc::note(&ev, None).unwrap()).to_value().to_string()
     }
 
     #[test]
     fn a_plan_asks_then_y_runs_it_and_the_steps_land_in_mains_feed() {
         let (mut app, mut hub) = app_and_hub();
         set_versions_dev(&mut app, true);
-        dispatch(&mut app, &plan(true));
+        answered(&mut app, plan(true));
         let t = feed_text(&app);
         assert!(t.iter().any(|l| l == " · release v2026.10.3 · abcdef1 fix the voice chip · 2 commits since v2026.10.1 · dry run"), "{t:#?}");
         assert!(t.iter().any(|l| l.contains("dry run of v2026.10.3: nothing is pushed or published. go?")), "{t:#?}");
@@ -275,7 +268,7 @@ mod tests {
         assert!(app.sb.release_ask.is_none());
         let sent = sent(&mut hub);
         assert!(sent.iter().any(|v| v["method"] == "release/run" && v["params"]["tag"] == "v2026.10.3" && v["params"]["commit"] == "abcdef1234" && v["params"]["dry"] == true), "{sent:?}");
-        let ev = |state: &str, text: &str| json!({"ev": "release", "state": state, "tag": "v2026.10.3", "text": text, "elapsed": 90}).to_string();
+        let ev = |state: &str, text: &str| typed(json!({"ev": "release", "state": state, "tag": "v2026.10.3", "text": text, "elapsed": 90}));
         dispatch(&mut app, &ev("running", "CI building · 0s"));
         assert!(app.sb.release.is_some());
         let head: String = header_item(&app.sb, &[]).iter().map(|s| s.content.to_string()).collect();
@@ -293,7 +286,7 @@ mod tests {
     #[test]
     fn dev_update_shows_its_build_in_the_header_then_a_failure_in_mains_feed() {
         let (mut app, _hub) = app_and_hub();
-        dispatch(&mut app, &json!({"ev": "update", "state": "building", "rev": "1152b33", "elapsed": 130}).to_string());
+        dispatch(&mut app, &typed(json!({"ev": "update", "state": "building", "rev": "1152b33", "elapsed": 130})));
         let head: String = header_item(&app.sb, &[]).iter().map(|s| s.content.to_string()).collect();
         assert_eq!(head, " building 1152b33 · 2m");
         // a release running wins the header
@@ -305,9 +298,8 @@ mod tests {
         let mut app2 = app;
         dispatch(
             &mut app2,
-            &json!({"ev": "update", "state": "failed", "rev": "1152b33", "tail": tail,
-                "text": "couldn't build 1152b33, you're still on 9f0e2aa: error: could not compile `bise`"})
-            .to_string(),
+            &typed(json!({"ev": "update", "state": "failed", "rev": "1152b33", "tail": tail,
+                "text": "couldn't build 1152b33, you're still on 9f0e2aa: error: could not compile `bise`"})),
         );
         assert!(app2.sb.updating.is_none() && header_item(&app2.sb, &[]).is_empty());
         let t = feed_text(&app2);
@@ -317,16 +309,16 @@ mod tests {
             .unwrap_or_else(|| panic!("{t:#?}"));
         assert_eq!(t[at + 1], "   ▸ 20 more lines");
         // built: the header clears, the switch speaks in main's thread
-        dispatch(&mut app2, &json!({"ev": "update", "state": "building", "rev": "1152b33"}).to_string());
+        dispatch(&mut app2, &typed(json!({"ev": "update", "state": "building", "rev": "1152b33"})));
         assert!(app2.sb.updating.is_some());
-        dispatch(&mut app2, &json!({"ev": "update", "state": "built", "rev": "1152b33"}).to_string());
+        dispatch(&mut app2, &typed(json!({"ev": "update", "state": "built", "rev": "1152b33"})));
         assert!(app2.sb.updating.is_none());
     }
 
     #[test]
     fn anything_but_y_cancels_the_plan() {
         let (mut app, mut hub) = app_and_hub();
-        dispatch(&mut app, &plan(false));
+        answered(&mut app, plan(false));
         assert!(feed_text(&app).iter().any(|l| l.contains("push tag v2026.10.3 and publish it?")));
         assert!(!answer(&mut app, "what does it do?"), "the line still goes to main");
         assert!(app.sb.release_ask.is_none());

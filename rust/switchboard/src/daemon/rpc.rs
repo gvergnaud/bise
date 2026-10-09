@@ -32,6 +32,7 @@ use super::*;
 use bise_proto::hub::HubEv;
 use bise_proto::rpc::{self, code, HubState, Id, InitializeParams, InitializeResult, Message, Response, RpcError, Scope, Watermark};
 use bise_proto::PROTO;
+use std::borrow::Cow;
 
 /// sb-core's line for one client (`Effect::ToClient`) as its typed One
 /// notification: `notice`, `open_card`, `focus`; none: an older event
@@ -135,14 +136,25 @@ impl Rpcs {
 /// itself, or for an older event of a kind the connection reads typed
 /// (`reads`) its notifications from `notes`, in its place, so the
 /// terminal reads the kinds in the same order (approvals before ready,
-/// artifacts after it).
+/// artifacts after it); a kind the hub-wide state doesn't hold (a
+/// release run's step, `/update`'s build, the versions) as the line's
+/// own notification (`project` added).
 // TODO(client-protocol step 4's end, P4e): goes with the hello's reads
-pub(super) fn burst_lines<'a>(v: &'a Value, reads: &BTreeSet<&'static str>, notes: &'a [Value]) -> Vec<&'a Value> {
+pub(super) fn burst_lines<'a>(v: &'a Value, reads: &BTreeSet<&'static str>, notes: &'a [Value], project: &str) -> Vec<Cow<'a, Value>> {
     let ev = v.get("ev").and_then(Value::as_str).unwrap_or("");
     if rpc::older_sent(ev, reads) {
-        return vec![v];
+        return vec![Cow::Borrowed(v)];
     }
-    in_place(notes, ev)
+    let held = in_place(notes, ev);
+    if !held.is_empty() {
+        return held.into_iter().map(Cow::Borrowed).collect();
+    }
+    let mut own = v.clone();
+    own["project"] = json!(project);
+    match HubEv::from_value(own) {
+        Ok(e) => rpc::note(&e, None).map(|n| Cow::Owned(Message::Notification(n).to_value())).into_iter().collect(),
+        Err(_) => Vec::new(),
+    }
 }
 
 /// The notifications of `notes` that stand for older event `ev` (its
@@ -284,7 +296,8 @@ impl Shell {
         let arts = self.proto_artifacts(&arts);
         let appr = self.approvals_ev(false);
         let appr = self.proto_approvals(&appr);
-        let mut evs = vec![agents, cards, jobs, arts, self.features_ev(), self.prs_ev(), self.scheduled_ev(), self.models_ev(), appr, self.flow_ev()];
+        let pages = self.pages_ev(&snap);
+        let mut evs = vec![agents, cards, jobs, arts, self.features_ev(), self.prs_ev(), self.scheduled_ev(), self.models_ev(), appr, self.flow_ev(), pages];
         let mut missing = Vec::new();
         for kind in SCANNED {
             match self.rpc.scanned.get(*kind) {
@@ -478,6 +491,33 @@ impl Shell {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    /// P4c-5: a kind the hub-wide state doesn't hold (a release run's
+    /// step, `/update`'s build, the versions) goes in the hello burst as
+    /// its own notification when the terminal reads it, else as its line.
+    #[test]
+    fn the_burst_sends_a_read_kind_as_its_own_notification() {
+        let reads = rpc::reads_of(&["release/progress".to_string(), "update/progress".to_string(), "hub/versions".to_string()]);
+        let none = BTreeSet::new();
+        let lines = [
+            json!({"ev": "release", "state": "running", "tag": "v2026.10.3", "text": "starting", "elapsed": 12}),
+            json!({"ev": "update", "state": "building", "rev": "1152b33", "elapsed": 3}),
+            json!({"ev": "versions", "current": "abc1234", "dev": true, "items": [{"rev": "abc1234", "subject": "s", "marks": ["current"]}]}),
+        ];
+        for (v, method) in lines.iter().zip(["release/progress", "update/progress", "hub/versions"]) {
+            let out = burst_lines(v, &reads, &[], "acme");
+            assert_eq!(out.len(), 1, "{v}");
+            assert_eq!(out[0]["method"], method, "{}", out[0]);
+            assert_eq!(out[0]["params"]["project"], "acme");
+            let Ok(Message::Notification(n)) = Message::from_value(out[0].clone().into_owned()) else { panic!("{}", out[0]) };
+            let (ev, _) = rpc::ev(&n).unwrap();
+            assert_eq!(ev.tag(), v["ev"].as_str().unwrap());
+            // not read: the line itself
+            assert_eq!(burst_lines(v, &none, &[], "acme").iter().map(|l| l.as_ref()).collect::<Vec<_>>(), vec![v]);
+        }
+    }
+
     /// Architect m_14727: one notice writer. The older notice line is
     /// written in `Shell::older_notice` only (every other site calls
     /// `notice_out`), so a hello connection that reads `hub/notice` never

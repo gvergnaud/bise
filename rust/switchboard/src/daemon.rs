@@ -1679,10 +1679,11 @@ impl Shell {
         let art_ev = self.artifacts_ev();
         // client-protocol step 4's glue (daemon/rpc.rs): what it reads typed
         let (reads, notes) = self.rpc_reads(listed);
+        let project = self.project();
         let mut out = String::new();
         let mut push = |v: &Value| {
             // step 4's glue: a kind it reads typed goes as its notifications
-            for l in rpc::burst_lines(v, &reads, &notes) {
+            for l in rpc::burst_lines(v, &reads, &notes, &project) {
                 out.push_str(&l.to_string());
                 out.push('\n');
             }

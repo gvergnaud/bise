@@ -97,7 +97,7 @@ pub const METHODS: &[MethodRow] = &[
     // its words come as hub/notice (the release check answers later)
     m("version/update", "version_update", None),
     m("release/plan", "release_plan", Some("release")),
-    // its steps go to every client as the hub's older `release` lines
+    // its steps go to every client as `release/progress`
     m("release/run", "release_run", None),
 ];
 
@@ -183,6 +183,15 @@ pub const NOTIFICATIONS: &[NoteRow] = &[
     n("card/open", "card_open", Scope::One),
     n("client/focused", "focused", Scope::One),
     n("hub/notice", "notice", Scope::One),
+    // P4c-5: `/version`'s picker at hello and while one builds, a
+    // `/release-bise` run's steps, `/update`'s build in the source tree
+    n("hub/versions", "versions", Scope::Hub),
+    n("release/progress", "release", Scope::Hub),
+    n("update/progress", "update", Scope::Hub),
+    // the pages and his late promises (the older state's pages,
+    // overdue), one page that changed (the older `page` line)
+    n("hub/pages", "pages", Scope::Hub),
+    n("page/changed", "page_changed", Scope::Hub),
 ];
 
 /// The [`HubCmd`] tags the envelope replaces (`initialize`).
@@ -246,6 +255,9 @@ pub const OLDER: &[Older] = &[
     Older { ev: "notice", methods: &["hub/notice"] },
     Older { ev: "open_card", methods: &["card/open"] },
     Older { ev: "focus", methods: &["client/focused"] },
+    Older { ev: "versions", methods: &["hub/versions"] },
+    Older { ev: "release", methods: &["release/progress"] },
+    Older { ev: "update", methods: &["update/progress"] },
 ];
 
 /// What a hello's `reads` stands for: the methods of the [`OLDER`] rows

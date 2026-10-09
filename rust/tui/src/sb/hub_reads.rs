@@ -21,7 +21,10 @@
 //!   repo's flow;
 //! - `hub/notice`: the hub's words, info lines (the queue moves on);
 //! - `card/open`: update-card's item opens (`/update` found a release);
-//! - `client/focused`: the hub moved his focus (its agent is gone).
+//! - `client/focused`: the hub moved his focus (its agent is gone);
+//! - `hub/versions`: `/version`'s picker and the dev build (sb/versions.rs);
+//! - `release/progress`, `update/progress`: a `/release-bise` run's steps
+//!   and `/update`'s build in bise's source tree (sb/release.rs).
 
 use super::*;
 use bise_proto::hub::HubEv;
@@ -32,7 +35,7 @@ use bise_proto::rpc::{self, Message};
 /// `bise_proto::rpc::OLDER` (a half-listed row comes the older way).
 // TODO(client-protocol step 4's end, P4e): the hello's `reads` goes when
 // the terminal connects with `initialize`
-pub(crate) const READS: &[&str] = &["hub/approvals", "confirm/ask", "hub/artifacts", "hub/agents", "hub/cards", "hub/scheduled", "hub/flow", "hub/notice", "card/open", "client/focused"];
+pub(crate) const READS: &[&str] = &["hub/approvals", "confirm/ask", "hub/artifacts", "hub/agents", "hub/cards", "hub/scheduled", "hub/flow", "hub/notice", "card/open", "client/focused", "hub/versions", "release/progress", "update/progress"];
 
 /// The terminal's first line on the hub's socket: `hello` with [`READS`].
 pub fn hello_line() -> String {
@@ -59,6 +62,10 @@ pub(super) fn read(app: &mut App, v: Value) {
         // the hub moved his focus (the agent he was on is gone)
         HubEv::Focused { focus, .. } => super::focus(app, focus),
         HubEv::Entry { agent, entry, .. } => feed_entries::entry(app, agent, entry),
+        // P4c-5: `/version`'s picker, a release run's steps, `/update`'s build
+        HubEv::Versions { dev, items, .. } => versions::set(app, *dev, items),
+        HubEv::Release(r) => release::event(app, r),
+        HubEv::Update(u) => release::update_event(app, u),
         _ => {}
     }
 }

@@ -51,6 +51,8 @@ pub(super) struct Proto {
     prs: String,
     /// the last `scheduled` sent (⌘K: sent again only when changed)
     scheduled: String,
+    /// the last `pages` sent (P4c-5: sent again only when changed)
+    pages: String,
     /// bar A.5: config.toml's and auth.json's mtimes at the last `models`
     /// (a stat on each state broadcast, never a read), and its JSON
     models_at: Option<(Option<std::time::SystemTime>, Option<std::time::SystemTime>)>,

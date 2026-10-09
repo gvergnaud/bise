@@ -6,7 +6,7 @@
 
 use crate::context::FnContext;
 use crate::diff::{DiffFile, DiffResult, DiffView};
-use crate::ops::{BranchRow, ReleaseEv, VersionItem};
+use crate::ops::{BranchRow, ReleaseEv, UpdateEv, VersionItem};
 use crate::rows::{Agent, ApprovalMode, ApprovalRule, Artifact, Card, CheckerKind, DevServer, Feature, Merged, Model, Place, Pr, ScheduledTask, Worktree};
 use crate::thread::Entry;
 use crate::{decode, parse, Pos, Project};
@@ -196,6 +196,9 @@ pub enum HubEv {
     /// ([`ReleaseEv`], boxed: the enum stays small, the wire is its
     /// fields next to the tag)
     Release(Box<ReleaseEv>),
+    /// `/update`'s build in bise's source tree (dev-update): its start,
+    /// its end ([`UpdateEv`], boxed as `Release`), to every client
+    Update(Box<UpdateEv>),
     /// bise's home hub holds his words for a project's main (desktop S2,
     /// decision B): `to` the project picked (its hub id), `name` its name,
     /// `why` the guess's reason; until `correct_until_ms` (2 s after) a
@@ -245,6 +248,21 @@ pub enum HubEv {
         project: Project,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         flow: Option<crate::rows::FlowMode>,
+    },
+    /// the hub's bise pages, newest first (docs/ambient-pages.md §2.3),
+    /// and `overdue` his late promises across them (checklist rows of his
+    /// past their data-due: the morning page's and the menu bar's count,
+    /// never a card): at hello and when either changed
+    Pages { project: Project, items: Vec<crate::rows::Page>, overdue: u32 },
+    /// one page published, updated or answered (its new version, its
+    /// state): to every client, before `pages` (boxed: the enum stays
+    /// small, the wire is its fields next to the tag). Not `page`: the
+    /// hub's older `page` line keeps its meaning for the readers that
+    /// take it raw (the desktop core's `page`)
+    PageChanged {
+        project: Project,
+        #[serde(flatten)]
+        page: Box<crate::rows::Page>,
     },
     /// update-card's new release: open its item (to the connection whose
     /// `/update` found it)
@@ -319,7 +337,7 @@ pub enum HubEv {
 }
 
 impl HubEv {
-    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "entry", "typing", "artifacts", "scheduled", "worktrees", "dev_servers", "merged", "features", "prs", "models", "tool_out", "diff", "branches", "versions", "release", "route", "route_done", "jobs", "job_end", "followed_end", "confirm", "flow", "card_open", "focused", "approvals", "notice", "refused", "error"];
+    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "entry", "typing", "artifacts", "scheduled", "worktrees", "dev_servers", "merged", "features", "prs", "models", "tool_out", "diff", "branches", "versions", "release", "update", "route", "route_done", "jobs", "job_end", "followed_end", "confirm", "flow", "pages", "page_changed", "card_open", "focused", "approvals", "notice", "refused", "error"];
 
     pub fn decode(line: &str) -> Result<HubEv, String> {
         Self::from_value(parse(line)?)

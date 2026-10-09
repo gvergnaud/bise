@@ -15,7 +15,7 @@ use std::os::unix::net::UnixStream;
 
 mod versions;
 pub(super) use versions::{version_choices, versions_dev};
-use versions::{parse_versions, VersionItem};
+use versions::VersionItem;
 mod mention;
 pub(crate) mod palette;
 pub(super) use mention::mentions;
@@ -684,13 +684,6 @@ pub(super) fn dispatch(app: &mut App, raw: &str) {
         "refused" => {
             client::set_refused(s("error"));
             app.should_quit = true;
-        }
-        "release" => release::event(app, &v),
-        "update" => release::update_event(app, &v),
-        "versions" => {
-            let sb = &mut app.sb;
-            sb.versions = parse_versions(&v);
-            sb.versions_dev = v.get("dev").and_then(|x| x.as_bool());
         }
         "hello" => {
             let sb = &mut app.sb;

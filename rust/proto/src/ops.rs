@@ -78,3 +78,21 @@ pub struct ReleaseEv {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub log: Option<String>,
 }
+
+/// `/update` in bise's source tree (dev-update), [`crate::hub::HubEv::Update`]:
+/// `state` "building" (`rev` the commit, `elapsed` s since it started),
+/// "built" (the switch says the rest in main's thread) or "failed"
+/// (`text`, the build's last lines in `tail`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct UpdateEv {
+    pub project: Project,
+    pub state: String,
+    pub rev: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub elapsed: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tail: Vec<String>,
+}

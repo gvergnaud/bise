@@ -327,6 +327,13 @@ impl Shell {
                     Err(e) => super::log_line(&self.opts.paths, &format!("release plan not typed: {e}")),
                 }
             }
+            // a terminal that reads release/progress (step 4's glue): its
+            // notification, never the older line
+            Some(id) if !self.rpc.older_ok(id, &v) => {
+                if let Some(ev) = self.typed_of(&v) {
+                    self.proto_send(id, &ev);
+                }
+            }
             Some(id) => self.send_client(id, &v),
             None => self.broadcast(&v),
         }

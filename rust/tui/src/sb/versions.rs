@@ -1,5 +1,5 @@
 //! The `/version` picker: the versions the hub offers (`versions/list`'s
-//! answer, and its `versions` event at hello or while one builds),
+//! answer, and its `hub/versions` notification at hello or while one builds),
 //! filtered by what follows `/version ` in the composer; and the
 //! `version/*` method a `/version`, `/restart` or `/update` line sends.
 
@@ -13,32 +13,20 @@ pub(crate) struct VersionItem {
     pub(super) marks: Vec<String>,
 }
 
-pub(super) fn parse_versions(v: &Value) -> Vec<VersionItem> {
-    let s = str_of;
-    v.get("items")
-        .and_then(|a| a.as_array())
-        .map(|a| {
-            a.iter()
-                .map(|x| VersionItem {
-                    rev: s(x, "rev"),
-                    subject: s(x, "subject"),
-                    marks: x
-                        .get("marks")
-                        .and_then(|m| m.as_array())
-                        .map(|m| m.iter().filter_map(|y| y.as_str().map(String::from)).collect())
-                        .unwrap_or_default(),
-                })
-                .collect()
-        })
-        .unwrap_or_default()
+/// The hub's versions (`hub/versions`, or `versions/list`'s answer):
+/// the `/version` picker's rows, and whether this is bise's source tree
+/// (`dev` left out when false, so an older answer without it is not).
+pub(super) fn set(app: &mut App, dev: bool, items: &[bise_proto::ops::VersionItem]) {
+    let sb = &mut app.sb;
+    sb.versions = items.iter().map(|x| VersionItem { rev: x.rev.clone(), subject: x.subject.clone(), marks: x.marks.clone() }).collect();
+    sb.versions_dev = Some(dev);
 }
 
-/// `versions/list`'s answer (the typed `versions`: `dev` left out when
-/// false, so an answer without it is not bise's source tree).
-pub(super) fn answered(app: &mut App, result: &Value) {
-    let sb = &mut app.sb;
-    sb.versions = parse_versions(result);
-    sb.versions_dev = Some(result.get("dev").and_then(Value::as_bool).unwrap_or(false));
+/// `versions/list`'s answer (the typed `versions`).
+pub(super) fn answered(app: &mut App, result: Value) {
+    if let Ok(Some(bise_proto::hub::HubEv::Versions { dev, items, .. })) = bise_proto::rpc::ev_of_result("versions/list", result) {
+        set(app, dev, &items);
+    }
 }
 
 /// A `/version`, `/restart` or `/update` line read by
@@ -231,11 +219,16 @@ mod tests {
     }
 
     #[test]
-    fn the_hub_event_parses() {
-        let v = json!({"ev": "versions", "items": [
-            {"rev": "abc1234", "subject": "s", "marks": ["built", "good"]}]});
-        let items = parse_versions(&v);
-        assert_eq!(items.len(), 1);
-        assert_eq!(items[0].marks, vec!["built", "good"]);
+    fn the_hubs_versions_set_the_picker_and_the_dev_build() {
+        let mut app = crate::sb::bench::test_app();
+        let note = json!({"jsonrpc": "2.0", "method": "hub/versions", "params": {"project": "bench", "current": "abc1234", "dev": true,
+            "items": [{"rev": "abc1234", "subject": "s", "marks": ["built", "good"]}], "epoch": 1, "seq": 2}});
+        dispatch(&mut app, &note.to_string());
+        assert_eq!(app.sb.versions.len(), 1);
+        assert_eq!(app.sb.versions[0].marks, vec!["built", "good"]);
+        assert_eq!(app.sb.versions_dev, Some(true));
+        // versions/list's answer: `dev` left out is not the source tree
+        answered(&mut app, json!({"project": "bench", "current": "v1", "items": []}));
+        assert_eq!((app.sb.versions.len(), app.sb.versions_dev), (0, Some(false)));
     }
 }

@@ -130,8 +130,8 @@ fn run(app: &mut App, then: Then, r: Response) {
     };
     match (then, result) {
         (Then::Said, Ok(v)) => said(app, &v),
-        (Then::Versions, Ok(v)) => versions::answered(app, &v),
-        (Then::Release, Ok(v)) => release::event(app, &v),
+        (Then::Versions, Ok(v)) => versions::answered(app, v),
+        (Then::Release, Ok(v)) => release::answered(app, v),
         (Then::Prs, Ok(v)) => prs(app, &v),
         (Then::Diff(req), Ok(v)) => crate::diffview::answered(app, req, crate::diffwire::of(&v)),
         (Then::Diff(req), Err(e)) => crate::diffview::answered(app, req, crate::diffwire::refused(&e)),
