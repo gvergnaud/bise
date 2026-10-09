@@ -176,6 +176,7 @@ mod tests {
             efforts: vec![],
             changes: None,
             last_pos: None,
+            turns: 0,
         }
     }
 

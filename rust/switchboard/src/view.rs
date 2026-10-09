@@ -63,7 +63,7 @@ pub fn of(
         last_activity_ms,
         // the window's project view: no live usage (the hub's typed agents
         // event carries it)
-        agents: proto_view::agents(snap, since, now, crate::model::user_kind, vision, &|_| None, &|_| None),
+        agents: proto_view::agents(snap, since, now, crate::model::user_kind, vision, &|_| None, &|_| (None, 0)),
         // his cards only, as always (bise's own are the terminal's)
         cards: proto_view::cards(snap, project, now, crate::model::user_kind).0,
         artifacts,

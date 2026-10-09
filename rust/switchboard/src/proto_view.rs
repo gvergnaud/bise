@@ -58,7 +58,8 @@ pub fn agents(
     user_kind: fn(&str) -> bool,
     vision: &dyn Fn(&str) -> Option<bool>,
     usage: &dyn Fn(&str) -> Option<bise_proto::rows::AgentUsage>,
-    last_pos: &dyn Fn(&str) -> Option<bise_proto::Pos>,
+    // its head (heads.rs): its newest entry's pos and its ended turns
+    head: &dyn Fn(&str) -> (Option<bise_proto::Pos>, u64),
 ) -> Vec<Agent> {
     let list = |k: &str| snap.get(k).and_then(Value::as_array).cloned().unwrap_or_default();
     let cards = list("cards");
@@ -137,7 +138,8 @@ pub fn agents(
             place_id: s(&a, "place_id"),
             efforts: a.get("efforts").cloned().and_then(|e| serde_json::from_value(e).ok()).unwrap_or_default(),
             changes: a.get("changes").cloned().and_then(|c| serde_json::from_value(c).ok()),
-            last_pos: last_pos(&name),
+            last_pos: head(&name).0,
+            turns: head(&name).1,
             name,
         });
     }
@@ -603,19 +605,19 @@ mod tests {
         let mut s = snap();
         s["agents"][1]["model"] = json!("mistral/codestral-latest");
         s["agents"][2]["model"] = json!("ollama/llava");
-        let a = agents(&s, &mut since, 100, uk, &vision, &|_| None, &|_| None);
+        let a = agents(&s, &mut since, 100, uk, &vision, &|_| None, &|_| (None, 0));
         assert_eq!((a[1].model.as_deref(), a[1].vision), (Some("mistral/codestral-latest"), Some(false)), "listed, no vision");
         assert_eq!((a[2].model.as_deref(), a[2].vision), (Some("ollama/llava"), None), "unlisted: never a guess");
         assert_eq!((a[0].model.as_deref(), a[0].vision), (None, None), "no model in the snapshot");
         // his /model switch: the next rows follow
         s["agents"][1]["model"] = json!("anthropic/claude-haiku-4-5");
-        assert_eq!(agents(&s, &mut since, 200, uk, &vision, &|_| None, &|_| None)[1].vision, Some(true));
+        assert_eq!(agents(&s, &mut since, 200, uk, &vision, &|_| None, &|_| (None, 0))[1].vision, Some(true));
     }
 
     #[test]
     fn the_snapshot_becomes_rows() {
         let mut since = Since::new();
-        let a = agents(&snap(), &mut since, 100, uk, &|_| None, &|_| None, &|_| None);
+        let a = agents(&snap(), &mut since, 100, uk, &|_| None, &|_| None, &|_| (None, 0));
         assert_eq!(a.len(), 3);
         let p = &a[1];
         assert_eq!((p.status, p.title.as_str(), p.purpose.as_str(), p.waits), (Status::Working, "profiling the hub", "make the e2e fast", 2));
@@ -635,8 +637,8 @@ mod tests {
         // a status change moves since; the same keeps it
         let mut s2 = snap();
         s2["agents"][1]["status"] = json!("idle");
-        assert_eq!(agents(&s2, &mut since, 200, uk, &|_| None, &|_| None, &|_| None)[1].since_ms, 200);
-        assert_eq!(agents(&s2, &mut since, 300, uk, &|_| None, &|_| None, &|_| None)[1].since_ms, 200);
+        assert_eq!(agents(&s2, &mut since, 200, uk, &|_| None, &|_| None, &|_| (None, 0))[1].since_ms, 200);
+        assert_eq!(agents(&s2, &mut since, 300, uk, &|_| None, &|_| None, &|_| (None, 0))[1].since_ms, 200);
         let (c, others) = cards(&snap(), "acme", 5_000, uk);
         assert_eq!(c.iter().map(|c| c.id).collect::<Vec<_>>(), [9, 10], "his kinds, no drop");
         // P4c-4a: bise's own (a drop, a done) are the others, in order

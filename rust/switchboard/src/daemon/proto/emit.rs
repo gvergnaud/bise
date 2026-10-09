@@ -56,8 +56,8 @@ impl Shell {
             Some(AgentUsage { model: u.model.clone(), context, window, words: words::context_words(context, window), short: words::short_words(context, window) })
         };
         let heads = &self.proto.heads;
-        let last_pos = |name: &str| heads.last(name);
-        let agents = proto_view::agents(snap, &mut self.proto.since, now, crate::model::user_kind, &vision, &usage, &last_pos);
+        let head = |name: &str| (heads.last(name), heads.turns(name));
+        let agents = proto_view::agents(snap, &mut self.proto.since, now, crate::model::user_kind, &vision, &usage, &head);
         let (cards, others) = proto_view::cards(snap, &project, now, crate::model::user_kind);
         let places = proto_view::places(snap);
         (HubEv::Agents { project: project.clone(), agents, places }, HubEv::Cards { project, cards, others })

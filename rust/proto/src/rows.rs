@@ -208,6 +208,13 @@ pub struct Agent {
     /// moves, without subscribing its thread
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_pos: Option<crate::Pos>,
+    /// how many of its turns ended since the hub started (its
+    /// `turn_done` lines, counted live), so a client never misses a turn
+    /// that started and ended between two rows (the queue's next message
+    /// goes at a turn's end): it compares it with what it saw
+    /// (proto-lead m_14731)
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub turns: u64,
 }
 
 /// Where an agent works (named apart from `hub::Mode`, a send's).
@@ -245,6 +252,10 @@ pub enum FlowMode {
     /// a flow this version doesn't know (a newer hub)
     #[serde(other)]
     Unknown,
+}
+
+fn is_zero_u64(n: &u64) -> bool {
+    *n == 0
 }
 
 fn is_zero(n: &u32) -> bool {
