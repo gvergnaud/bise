@@ -49,16 +49,24 @@ pub struct Var {
     pub kind: Kind,
     /// What it is, in one line.
     pub what: &'static str,
+    /// A test setting that is an input of the cargo test run itself (a
+    /// bench file, the sb-core the tests run), never a place: the test
+    /// home (`test_home::enter`) keeps it, where it unsets the others.
+    pub kept_in_tests: bool,
 }
 
 const fn user(name: &'static str, what: &'static str) -> Var {
-    Var { name, kind: Kind::User, what }
+    Var { name, kind: Kind::User, what, kept_in_tests: false }
 }
 const fn internal(name: &'static str, what: &'static str) -> Var {
-    Var { name, kind: Kind::Internal, what }
+    Var { name, kind: Kind::Internal, what, kept_in_tests: false }
 }
 const fn test(name: &'static str, what: &'static str) -> Var {
-    Var { name, kind: Kind::Test, what }
+    Var { name, kind: Kind::Test, what, kept_in_tests: false }
+}
+/// A test setting the test home keeps ([`Var::kept_in_tests`]).
+const fn test_input(name: &'static str, what: &'static str) -> Var {
+    Var { name, kind: Kind::Test, what, kept_in_tests: true }
 }
 
 /// Every bise variable, sorted by name.
@@ -163,23 +171,23 @@ pub const VARS: &[Var] = &[
     test("BISE_VOICE_FAKE_HEARD", "what the voice fake hears (tests)"),
     user("BISE_VOICE_MODEL", "the voice model"),
     internal("SB_AGENT", "an agent's name, for its sb"),
-    test("SB_BENCH_JOURNAL", "a journal to bench (an ignored test)"),
-    test("SB_BENCH_LINES", "the transcript bench's line count"),
-    test("SB_BENCH_TRANSCRIPT", "a transcript to bench (an ignored test)"),
+    test_input("SB_BENCH_JOURNAL", "a journal to bench (an ignored test)"),
+    test_input("SB_BENCH_LINES", "the transcript bench's line count"),
+    test_input("SB_BENCH_TRANSCRIPT", "a transcript to bench (an ignored test)"),
     user("SB_BUILD_DIR", "the versions' build dir (a Home path)"),
-    test("SB_CORE_BIN", "the sb-core of the cargo tests (the gate's cache file)"),
+    test_input("SB_CORE_BIN", "the sb-core of the cargo tests (the gate's cache file)"),
     internal("SB_CORE_PORT", "sb-core's TCP port"),
     test("SB_EVERY_MIN_MS", "the shortest sb every period (tests)"),
     internal("SB_LAUNCH_DIR", "the folder bise was launched from, for the version it re-execs"),
     test("SB_ONBOARDING", "off/on: the onboarding (tests)"),
     internal("SB_PORT_OFFSET", "an agent's dev-server port offset"),
-    test("SB_SEARCH_BENCH", "a folder to bench search on (an ignored test)"),
+    test_input("SB_SEARCH_BENCH", "a folder to bench search on (an ignored test)"),
     test("SB_SETUP", "off: no setup card (tests)"),
     test("SB_SLOW_SPAWN", "a file holding the ms each REPL start waits before its spawn (tests)"),
     internal("SB_SOCKET", "the hub's agent.sock, for an agent's sb (never hub.sock, docs/issues/16)"),
     test("SB_STALL_START", "a file that stalls the hub's start once (tests)"),
     test("SB_STATE_DIR", "the hub's state folder (tests)"),
-    test("SB_STT_WAV", "a WAV for the real speech-to-text test (ignored)"),
+    test_input("SB_STT_WAV", "a WAV for the real speech-to-text test (ignored)"),
     internal("SB_TASK", "an agent's name, for its dev servers"),
     user("SB_TIMING", "a file for start-up timing marks"),
     user("SB_VERSIONS_DIR", "the built versions (a Home path)"),
@@ -190,6 +198,11 @@ pub const VARS: &[Var] = &[
 /// The kind of a registered name, None for another name.
 pub fn kind(name: &str) -> Option<Kind> {
     VARS.iter().find(|v| v.name == name).map(|v| v.kind)
+}
+
+/// Whether the test home keeps `name` ([`Var::kept_in_tests`]).
+pub fn kept_in_tests(name: &str) -> bool {
+    VARS.iter().any(|v| v.name == name && v.kept_in_tests)
 }
 
 /// A test setting from this process's environment (empty = unset): the

@@ -165,3 +165,17 @@ fn a_set_value_wins_and_unset_removes() {
     env.unset("MISTRAL_API_KEY");
     assert_eq!(env.get("MISTRAL_API_KEY"), None);
 }
+
+/// hub-fifo: the test home keeps a test run's own inputs (a bench's
+/// journal, the gate's sb-core) and still unsets every other place
+/// variable; only test settings carry the flag.
+#[test]
+fn the_test_home_keeps_only_the_test_runs_inputs() {
+    for n in ["SB_BENCH_JOURNAL", "SB_CORE_BIN", "SB_SEARCH_BENCH"] {
+        assert!(kept_in_tests(n), "{n}");
+    }
+    for n in ["SB_STATE_DIR", "SB_SOCKET", "BISE_HOME", "SB_EVERY_MIN_MS", "NOT_A_BISE_VAR"] {
+        assert!(!kept_in_tests(n), "{n}");
+    }
+    assert!(VARS.iter().filter(|v| v.kept_in_tests).all(|v| v.kind == Kind::Test));
+}

@@ -127,8 +127,10 @@ pub fn enter() {
             }
         }
     }
+    // a test run's own inputs stay (a bench's journal, the gate's
+    // sb-core: env::Var::kept_in_tests)
     let place: Vec<_> = std::env::vars_os()
-        .filter_map(|(k, _)| k.to_str().filter(|k| is_place_var(k)).map(String::from))
+        .filter_map(|(k, _)| k.to_str().filter(|k| is_place_var(k) && !crate::env::kept_in_tests(k)).map(String::from))
         .collect();
     for k in place {
         std::env::remove_var(k);

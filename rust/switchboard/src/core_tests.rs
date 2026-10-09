@@ -2631,7 +2631,28 @@ fn bench_step() {
     for _ in 0..10 {
         let _ = h.snapshot(env.now);
     }
-    eprintln!("snapshot alone: {:?}", t0.elapsed() / 10);
+    let snap = t0.elapsed() / 10;
+    eprintln!("snapshot alone: {:?}", snap);
+    // hub-fifo: a flood of tool lines over the active agents, 1 ms apart.
+    // Each one dirties the view (Effect::State): before the state gate
+    // the shell built a snapshot for each; now at most one per 100 ms.
+    let n = 1000u32;
+    let (mut states, t0) = (0u32, std::time::Instant::now());
+    for i in 0..n {
+        env.now += 1;
+        let agent = active[i as usize % active.len()].clone();
+        let fx = h.handle(Input::ReplLine { agent, line: format!("tool #{} bash : echo flood {}", i, i) }, &mut env);
+        states += fx.iter().filter(|e| matches!(e, Effect::State)).count() as u32;
+    }
+    let per_line = t0.elapsed() / n;
+    eprintln!("flood: {} tool lines over {} agents: handle {:?} per line, {} state effects", n, active.len(), per_line, states);
+    eprintln!(
+        "flood: per line with a snapshot per state effect {:?}; with at most one per 100 ms ({} for {} ms of flood) {:?}",
+        per_line + snap * states / n,
+        n / 100,
+        n,
+        per_line + snap * (n / 100) / n
+    );
 }
 
 /// hub-lag: a step's view carries the archived agents only when the step
