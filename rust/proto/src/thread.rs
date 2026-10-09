@@ -406,6 +406,14 @@ pub struct EntryCard {
     pub question: String,
     pub options: Vec<Opt>,
     pub answered: bool,
+    /// its kind, the same word as the hub's card row (`rows::Card.kind`:
+    /// `question`, `blocked`, `done`, …, an open set; `rows::card_rank`
+    /// reads it); none from an older hub
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// who asked (`rows::Card.agent`, the line's `@name`)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

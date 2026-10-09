@@ -89,6 +89,7 @@ fn a_thread_folds_into_entries() {
     assert_eq!(e[4].report, Some(ReportRef { kind: ReportKind::Done }));
     let c = e[5].card.as_ref().unwrap();
     assert_eq!((c.id, c.question.as_str(), c.options.len(), c.answered), (9, "which bench?", 2, false));
+    assert_eq!((c.kind.as_deref(), c.agent.as_deref()), (Some("question"), Some("perf")));
     assert_eq!(e[6].page.as_ref().unwrap().v, Some(2));
     assert_eq!(e[6].text, "Perf notes v2");
     // closed card: answered
@@ -133,6 +134,7 @@ fn a_sent_line_is_the_tasks_own_message() {
     assert_eq!(e[1].text, "gift cards: cart : or checkout?\n1. on the cart page\n2. only at checkout", "its fields unescaped");
     let c = e[2].card.as_ref().unwrap();
     assert_eq!((c.id, c.options.len(), c.answered), (2, 2, false));
+    assert_eq!((c.kind.as_deref(), c.agent.as_deref()), (Some("question"), Some("gift-ui")));
     assert_eq!((e[3].to.as_deref(), e[3].msg, e[3].asks, e[3].text.as_str()), (Some("docs"), Some(11), false, "fyi"));
     let j = serde_json::to_value(&e[3]).unwrap();
     assert_eq!((j["kind"].as_str(), j.get("asks")), (Some("to_agent"), None), "asks: false is left out");
@@ -288,6 +290,9 @@ fn the_hubs_news_lines_are_entries_of_their_kind() {
     assert_eq!((ap(6).ok, ap(6).text.as_str(), ap(6).note.as_str()), (false, "you said no to api: rm -rf target", "not that"));
     assert_eq!((ap(7).ok, ap(7).text.as_str()), (true, "you allowed api: cargo test"));
     assert_eq!((ap(8).text.as_str(), ap(8).note.as_str()), ("you answered perf: both", ""));
+    // a message he routed by hand (no item) is the TUI's info line
+    let hand = fold(&[l(1, "sb route : you → @docs : thanks")], &ctx_with(&[], &page));
+    assert_eq!(hand.iter().map(|e| (e.kind, e.text.as_str())).collect::<Vec<_>>(), [(EntryKind::Notice, "→ you → @docs : thanks")]);
     // an answer to an item says which one (a client that folded it itself skips it); a gate's fold says none
     assert_eq!((ap(6).card, ap(7).card, ap(8).card), (None, None, Some(4)));
     assert_eq!((e[9].from.as_deref(), e[9].to.as_deref(), e[9].msg), (Some("perf"), Some("docs"), Some(7)));
@@ -525,4 +530,32 @@ fn a_message_to_him_says_to_you() {
     let j = serde_json::to_value(&e[0]).unwrap();
     assert!(j.get("to_you").is_none(), "false is left out: {j}");
     assert!(e.iter().all(|x| x.payload_matches_kind() && x.to.is_none()), "{e:?}");
+}
+
+/// Law (architect m_15013): a card entry says the kind and the asker the
+/// hub's card row says, for every card of the hub's fixtures: the line
+/// is core.bend's `#{id} {kind} @{agent} : {text}` written from that
+/// card, and `rows::card_rank` reads the entry's kind as the row's.
+#[test]
+fn a_card_entry_says_its_rows_kind_and_asker() {
+    let cards: Vec<crate::rows::Card> = include_str!("../../fixtures/hub_ev.jsonl")
+        .lines()
+        .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+        .filter(|v| v["ev"] == "cards")
+        .flat_map(|v| serde_json::from_value::<Vec<crate::rows::Card>>(v["cards"].clone()).unwrap_or_default())
+        .collect();
+    assert!(cards.len() >= 3, "{cards:?}");
+    let none = |_: &str| None;
+    for c in cards.iter().filter(|c| c.kind != "confirm") {
+        let opts: String = c.options.iter().map(|o| format!("\\n{}. {}", o.n, o.label)).collect();
+        let line = format!("sb card : #{} {} @{} : {}{opts}", c.id, c.kind, c.agent, c.question);
+        let e = fold(&[(1, 1001, line)], &ctx_with(&[c.id], &none));
+        let got = e[0].card.as_ref().expect("a card entry");
+        assert_eq!((got.kind.as_deref(), got.agent.as_deref()), (Some(c.kind.as_str()), Some(c.agent.as_str())), "{c:?}");
+        assert_eq!(crate::rows::card_rank(got.kind.as_deref().unwrap_or_default()), crate::rows::card_rank(&c.kind));
+        // a list of one is no choice (rows::split_choices): its line stays in the words
+        if c.options.len() > 1 {
+            assert_eq!((got.question.as_str(), got.options.len()), (c.question.as_str(), c.options.len()), "{c:?}");
+        }
+    }
 }

@@ -373,9 +373,13 @@ impl Fold<'_> {
                 self.cont = Some(self.push(e));
             }
             // `#3 question @docs : text`; a gate's confirm is the tool row's
-            Hub::Card { id: Some(id), kind, body, .. } if kind != "confirm" => {
+            Hub::Card { id: Some(id), kind, body, text } if kind != "confirm" => {
                 let (q, options) = question(&body);
-                let card = EntryCard { id, question: q.clone(), options, answered: !self.ctx.open_cards.contains(&id) };
+                // `#3 question @docs : …`: who asked, the head's third word
+                let head = text.split_once(" : ").map_or(text.as_str(), |(h, _)| h);
+                let agent = head.split_whitespace().nth(2).and_then(|w| w.strip_prefix('@')).map(str::to_string);
+                let answered = !self.ctx.open_cards.contains(&id);
+                let card = EntryCard { id, question: q.clone(), options, answered, kind: Some(kind), agent };
                 let mut e = Entry::new(pos, ms, EntryKind::Card, q);
                 e.card = Some(card);
                 self.cont = Some(self.push(e));

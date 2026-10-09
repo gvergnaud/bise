@@ -108,6 +108,9 @@ pub fn hub_notice(h: &Hub) -> Option<Notice> {
         Hub::Spawn(t) => notice(NoticeLevel::Info, format!("✚ {t}")),
         Hub::Computer(t) => notice(NoticeLevel::Info, t.clone()),
         Hub::Direct(t) => notice(NoticeLevel::Info, format!("⇄ {t}")),
+        // a message he routed by hand (`you → @docs : thanks`, no item):
+        // the TUI's `→ …` info line
+        Hub::Other { kind, text } if kind == "route" => notice(NoticeLevel::Info, format!("→ {text}")),
         _ => None,
     }
 }
