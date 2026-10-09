@@ -251,6 +251,12 @@ impl Shell {
                 }
                 self.artifacts_refresh(true);
             }
+            // `bise stop` (client::stop): the `stop_hub` op's path; its
+            // `{}` goes out before the loop ends
+            HubCmd::StopHub { keep_agents, .. } => {
+                self.view_stopped();
+                let _ = self.tx.send(Msg::Shutdown { keep: keep_agents });
+            }
             // client/focus: who he is looking at (the TUI's feed in view)
             HubCmd::Focus { focus, .. } => self.step(Input::ClientFocus { client: id, focus }),
             // `/version`'s picker

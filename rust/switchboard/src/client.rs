@@ -66,16 +66,9 @@ fn not_started(cause: &str, err_file: &Path) -> String {
     }
 }
 
-/// A client connection (the TUI, a test): `hello` already sent.
-pub fn connect(paths: &Paths, exe: &Path, app_root: &Path) -> std::io::Result<UnixStream> {
-    let mut s = open(paths, exe, app_root)?;
-    s.write_all(b"{\"op\":\"hello\"}\n")?;
-    Ok(s)
-}
-
-/// [`connect`] without the hello: the caller says its first line (the
-/// desktop core's JSON-RPC `initialize`, the terminal's hello with its
-/// `reads`).
+/// A client connection to the hub (started when none runs): the caller
+/// says its first line, JSON-RPC's `initialize` (the terminal, the
+/// desktop core).
 pub fn open(paths: &Paths, exe: &Path, app_root: &Path) -> std::io::Result<UnixStream> {
     let s = match UnixStream::connect(paths.socket()) {
         Ok(s) => s,
@@ -101,30 +94,63 @@ pub fn open(paths: &Paths, exe: &Path, app_root: &Path) -> std::io::Result<UnixS
 
 /// Stop the hub of a workspace and every agent REPL. `keep_agents`:
 /// the REPLs keep running (their turns too) for the next hub to adopt -
-/// a version switch, a hub restart.
+/// a version switch, a hub restart. `initialize`, then `hub/stop`; an
+/// older hub (before client-protocol) gets its hello and the `stop_hub`
+/// op instead.
 pub fn stop(paths: &Paths, keep_agents: bool) -> std::io::Result<bool> {
-    match UnixStream::connect(paths.socket()) {
-        Ok(mut s) => {
-            let req = json!({"op": "stop_hub", "keep_agents": keep_agents});
-            s.write_all(format!("{{\"op\":\"hello\"}}\n{}\n", req).as_bytes())?;
-            // wait for the socket to go away, reading what the hub
-            // writes: its hello (the versions list alone is tens of KB
-            // with long commit subjects) must not fill the socket
-            // buffer, or the hub blocks on it and never stops
-            let _ = s.set_read_timeout(Some(Duration::from_millis(100)));
-            let mut sink = [0u8; 65536];
-            let t0 = Instant::now();
-            while paths.socket().exists() && t0.elapsed() < Duration::from_secs(5) {
-                match std::io::Read::read(&mut s, &mut sink) {
-                    Ok(0) => std::thread::sleep(Duration::from_millis(50)),
-                    Ok(_) => {}
-                    Err(_) => {}
-                }
-            }
-            Ok(true)
+    stop_at(&paths.socket(), keep_agents)
+}
+
+fn stop_at(socket: &Path, keep_agents: bool) -> std::io::Result<bool> {
+    use bise_proto::hub::HubCmd;
+    use bise_proto::rpc::{self, Id, Init, InitializeParams, Message, Request};
+    let Ok(mut s) = UnixStream::connect(socket) else { return Ok(false) };
+    let params = serde_json::to_value(InitializeParams::new("bise", env!("CARGO_PKG_VERSION"))).unwrap_or_default();
+    writeln!(s, "{}", Message::Request(Request::new(Id::Num(0), rpc::INITIALIZE, params)).to_value())?;
+    s.set_read_timeout(Some(Duration::from_secs(5)))?;
+    let mut lines = BufReader::new(s.try_clone()?).lines();
+    let project = loop {
+        let Some(Ok(line)) = lines.next() else { return Ok(true) };
+        match rpc::init_answer(&serde_json::from_str(&line).unwrap_or(Value::Null), &Id::Num(0)) {
+            Init::Ready(res) => break Some(res.project),
+            // refused (it runs in an agent's process): the hub stays
+            Init::Refused(_) => return Ok(true),
+            Init::Older => break None,
+            Init::Other => {}
         }
-        Err(_) => Ok(false),
+    };
+    drop(lines);
+    let mut s = match project {
+        Some(project) => {
+            if let Some(req) = rpc::request(Id::Num(1), &HubCmd::StopHub { project, keep_agents }) {
+                writeln!(s, "{}", Message::Request(req).to_value())?;
+            }
+            s
+        }
+        None => older_stop(socket, keep_agents)?,
+    };
+    // wait for the socket to go away, reading what the hub writes
+    // (notifications; an older hub's hello is tens of KB): a full socket
+    // buffer would block the hub, which would never stop
+    let _ = s.set_read_timeout(Some(Duration::from_millis(100)));
+    let mut sink = [0u8; 65536];
+    let t0 = Instant::now();
+    while socket.exists() && t0.elapsed() < Duration::from_secs(5) {
+        if let Ok(0) = std::io::Read::read(&mut s, &mut sink) {
+            std::thread::sleep(Duration::from_millis(50));
+        }
     }
+    Ok(true)
+}
+
+/// An older hub (before client-protocol): its hello, then the op.
+// TODO(client-protocol, the plan's 'after the release' step, with
+// switch/ask.rs older_switch): goes the release after client-protocol's.
+fn older_stop(socket: &Path, keep_agents: bool) -> std::io::Result<UnixStream> {
+    let mut s = UnixStream::connect(socket)?;
+    let req = json!({"op": "stop_hub", "keep_agents": keep_agents});
+    s.write_all(format!("{{\"op\":\"hello\"}}\n{req}\n").as_bytes())?;
+    Ok(s)
 }
 
 /// The start of `request`'s error when the hub did not answer in time.
@@ -202,5 +228,61 @@ mod tests {
         assert_eq!(not_started("bise: disk full", log), "the hub did not start: bise: disk full (its log: /h/.bise/hubs/x-0123abcd/hub.err)");
         assert_eq!(not_started("", log), "the hub did not start in 15 s (its log: /h/.bise/hubs/x-0123abcd/hub.err)");
         assert!(!not_started(raw, log).contains('\n'));
+    }
+
+    fn read(r: &mut impl BufRead) -> Value {
+        let mut l = String::new();
+        r.read_line(&mut l).unwrap();
+        serde_json::from_str(&l).unwrap_or(Value::Null)
+    }
+
+    /// A fake hub's socket (short: ~100 bytes at most), its path.
+    fn sock(n: u32) -> (std::path::PathBuf, std::os::unix::net::UnixListener) {
+        let p = std::env::temp_dir().join(format!("stop{}-{n}.sock", std::process::id()));
+        let _ = std::fs::remove_file(&p);
+        (p.clone(), std::os::unix::net::UnixListener::bind(&p).unwrap())
+    }
+
+    /// `bise stop`: `initialize`, then `hub/stop` with `keep_agents`;
+    /// it returns once the socket is gone.
+    #[test]
+    fn stop_says_initialize_then_hub_stop() {
+        let (p, l) = sock(1);
+        let path = p.clone();
+        let hub = std::thread::spawn(move || {
+            let (mut w, _) = l.accept().unwrap();
+            let mut r = BufReader::new(w.try_clone().unwrap());
+            assert_eq!(read(&mut r)["method"], "initialize");
+            let res = json!({"project": "p1", "proto": bise_proto::PROTO, "workspace": "/w", "name": "w", "methods": ["hub/stop"],
+                "notifications": [], "hub": {"watermark": {"epoch": 1, "seq": 0}, "state": []}});
+            writeln!(w, "{}", json!({"jsonrpc": "2.0", "id": 0, "result": res})).unwrap();
+            let req = read(&mut r);
+            std::fs::remove_file(&path).unwrap();
+            req
+        });
+        assert!(stop_at(&p, true).unwrap());
+        let req = hub.join().unwrap();
+        assert_eq!((req["method"].as_str(), req["params"]["project"].as_str(), req["params"]["keep_agents"].as_bool()), (Some("hub/stop"), Some("p1"), Some(true)));
+    }
+
+    /// An older hub (before client-protocol): its hello and the op.
+    #[test]
+    fn an_older_hub_gets_hello_and_stop_hub() {
+        let (p, l) = sock(2);
+        let path = p.clone();
+        let hub = std::thread::spawn(move || {
+            let (mut w, _) = l.accept().unwrap();
+            let _ = read(&mut BufReader::new(w.try_clone().unwrap()));
+            writeln!(w, "{}", json!({"ok": false, "error": "hub.sock does not serve the op \"\""})).unwrap();
+            drop(w);
+            let (w, _) = l.accept().unwrap();
+            let mut r = BufReader::new(w);
+            assert_eq!(read(&mut r)["op"], "hello");
+            let op = read(&mut r);
+            std::fs::remove_file(&path).unwrap();
+            op
+        });
+        assert!(stop_at(&p, false).unwrap());
+        assert_eq!(hub.join().unwrap(), json!({"op": "stop_hub", "keep_agents": false}));
     }
 }

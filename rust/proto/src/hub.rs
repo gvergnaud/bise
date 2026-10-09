@@ -666,13 +666,21 @@ pub enum HubCmd {
         #[serde(default, skip_serializing_if = "crate::is_false")]
         dry: bool,
     },
+    /// `bise stop`: the hub stops (its clients' connections end);
+    /// `keep_agents`: the REPLs keep running (their turns too) for the
+    /// next hub to adopt (a version switch, a hub restart)
+    StopHub {
+        project: Project,
+        #[serde(default, skip_serializing_if = "crate::is_false")]
+        keep_agents: bool,
+    },
     /// a tag this version doesn't know: answered with `error`
     #[serde(skip)]
     Unknown { tag: String, raw: Value },
 }
 
 impl HubCmd {
-    pub const TAGS: &'static [&'static str] = &["hello", "subscribe", "unsubscribe", "page", "send", "answer", "close", "confirm", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "diff", "worktrees", "dev_servers", "merged", "features", "prs", "scheduled", "scheduled_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "branches", "scheduled_run", "artifacts_add", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "release_plan", "release_run"];
+    pub const TAGS: &'static [&'static str] = &["hello", "subscribe", "unsubscribe", "page", "send", "answer", "close", "confirm", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "diff", "worktrees", "dev_servers", "merged", "features", "prs", "scheduled", "scheduled_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "branches", "scheduled_run", "artifacts_add", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "release_plan", "release_run", "stop_hub"];
 
     pub fn decode(line: &str) -> Result<HubCmd, String> {
         Self::from_value(parse(line)?)
@@ -737,6 +745,7 @@ impl HubCmd {
             | HubCmd::VersionUpdate { project }
             | HubCmd::ReleasePlan { project, .. }
             | HubCmd::ReleaseRun { project, .. }
+            | HubCmd::StopHub { project, .. }
             | HubCmd::Diff { project, .. } => project,
             HubCmd::Hello { .. } | HubCmd::Unknown { .. } => return None,
         };

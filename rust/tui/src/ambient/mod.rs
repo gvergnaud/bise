@@ -154,7 +154,7 @@ pub fn run(core: &mut Core, rx: mpsc::Receiver<In>, out: &mut impl Write) {
 /// `bise ambient-core --workspace <ws>`: `connect` reaches the
 /// workspace's hub (the binary's: the first call may start it),
 /// `user_kind` is the hub's (`switchboard::model::user_kind`).
-/// A connection to the hub of a workspace (`switchboard::client::connect`
+/// A connection to the hub of a workspace (`switchboard::client::open`
 /// in `bise ambient-core`: it may start that hub).
 pub type ConnectFor = Box<dyn Fn(&std::path::Path) -> Connect>;
 

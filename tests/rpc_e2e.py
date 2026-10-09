@@ -246,6 +246,12 @@ def main():
         check(not any(v.get("ev") in ("agents", "cards", "scheduled") for v in allh), "a typed line it doesn't read")
         check(any(v.get("ev") == "line" for v in allh[before:]), "its lines the older way")
 
+        # hub/stop (`bise stop`, switchboard client::stop): the hub ends
+        r.request("hub/stop", {"project": project})
+        E.hub.wait(timeout=20)
+        E.hub = None
+        wait.until(lambda: not os.path.exists(sock), 10, "the hub's socket gone")
+
         ok = True
         print("rpc_e2e: ok")
     finally:

@@ -99,6 +99,9 @@ pub const METHODS: &[MethodRow] = &[
     m("release/plan", "release_plan", Some("release")),
     // its steps go to every client as `release/progress`
     m("release/run", "release_run", None),
+    // `bise stop` (switchboard client::stop): its `{}` may not come, the
+    // hub ends
+    m("hub/stop", "stop_hub", None),
 ];
 
 /// The protocol's own methods (no [`HubCmd`]).
