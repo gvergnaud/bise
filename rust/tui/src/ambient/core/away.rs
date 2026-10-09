@@ -24,8 +24,9 @@ pub fn summary(since_ms: u64, projects: &[(String, Vec<Agent>, Vec<Card>)]) -> C
         .iter()
         .map(|(id, agents, cards)| AwayProject {
             project: id.clone(),
-            // stopped by him counts as done, as before Status said it exactly
-            done: turned(agents, &[Status::Done, Status::Stopped]),
+            // stopped by him counts as done (Status says done, its phase
+            // stopped)
+            done: turned(agents, &[Status::Done]),
             questions: cards.iter().filter(|c| c.since_ms >= since_ms).count() as u32,
             failed: turned(agents, &[Status::Failed]),
         })

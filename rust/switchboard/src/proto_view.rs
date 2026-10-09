@@ -4,7 +4,7 @@
 //! to `bise_proto` rows, and the live fold of a subscribed thread (only
 //! the entries that changed go out).
 
-use bise_proto::rows::{question, Agent, Artifact, ArtifactPr, ArtifactVersion, Card, CardPage, AgentMode, Report, ReportKind, Status};
+use bise_proto::rows::{question, Phase, Agent, Artifact, ArtifactPr, ArtifactVersion, Card, CardPage, AgentMode, Report, ReportKind, Status};
 use bise_proto::diff::{DiffFile, DiffLine, DiffView, Hunk, LineKind};
 use bise_proto::hub::{HubEv, Job as Followed, JobState};
 use bise_proto::thread::lines::unescape;
@@ -66,7 +66,7 @@ pub fn agents(
     for a in list("agents") {
         let name = s(&a, "name");
         let (status, archived) = Status::of_hub(&s(&a, "status"));
-        let working = matches!(status, Status::Working | Status::Starting);
+        let working = status.working();
         let first = ms(&a, "report_ms").filter(|_| !working).or(ms(&a, "created_ms")).unwrap_or(now);
         let at = match since.get(&name) {
             Some((st, at)) if *st == status => *at,
@@ -96,14 +96,17 @@ pub fn agents(
         out.push(Agent {
             main: a.get("main").and_then(Value::as_bool).unwrap_or(false),
             status,
+            phase: Phase::of_hub(&s(&a, "status")),
             archived,
             title: one_line(&title, 120),
             purpose: one_line(&s(&a, "objective"), 200),
             since_ms: at,
             waits,
             parent: Some(s(&a, "parent")).filter(|p| !p.is_empty()),
-            // the branch checked out, in either mode (`mode` says which)
-            branch: Some(s(&a, "branch")).filter(|b| !b.is_empty()),
+            // its worktree's branch as released; the shared checkout's
+            // branch apart (P4b-fix, the wire rule)
+            branch: Some(s(&a, "branch")).filter(|b| worktree && !b.is_empty()),
+            checkout_branch: Some(s(&a, "branch")).filter(|b| !worktree && !b.is_empty()),
             worktree: Some(s(&a, "path")).filter(|p| worktree && !p.is_empty()),
             turn_ms: a.get("turn_ms").and_then(Value::as_u64).filter(|_| working),
             report,
@@ -560,8 +563,10 @@ mod tests {
         assert_eq!((p.status, p.title.as_str(), p.purpose.as_str(), p.waits), (Status::Working, "profiling the hub", "make the e2e fast", 2));
         assert_eq!((p.branch.as_deref(), p.worktree.as_deref(), p.turn_ms, p.since_ms), (Some("sb/perf"), Some("/w/perf"), Some(4200), 7));
         let o = &a[2];
-        // the branch checked out in either mode; `mode` says which (P4b)
-        assert_eq!((o.archived, o.status, o.branch.as_deref(), o.since_ms), (true, Status::Done, Some("main"), 9));
+        // branch keeps its released meaning (a worktree's); the shared
+        // checkout's branch is checkout_branch (P4b-fix, the wire rule)
+        assert_eq!((o.archived, o.status, o.branch.as_deref(), o.checkout_branch.as_deref(), o.since_ms), (true, Status::Done, None, Some("main"), 9));
+        assert_eq!((p.checkout_branch.as_deref(), p.phase), (None, None));
         assert_eq!((o.mode, o.worktree.as_deref(), o.path.as_str()), (Some(AgentMode::Shared), None, "/w"));
         assert_eq!((p.mode, p.path.as_str(), p.objective.as_str(), p.role.as_str(), p.msgs_queued, p.created_ms), (Some(AgentMode::Worktree), "/w/perf", "make the e2e fast\nmore", "profiling the hub", 1, Some(7)));
         assert_eq!((a[0].dir.as_str(), p.dir.as_str()), ("main", "perf"), "no dir in the snapshot: its name");

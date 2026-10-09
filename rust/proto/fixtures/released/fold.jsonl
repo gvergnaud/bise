@@ -1,0 +1,6 @@
+{"line": "sb you : make it fast", "entry": {"pos": 1, "at_ms": 1001, "kind": "you", "text": "make it fast"}}
+{"line": "sb msg-in : ambient-lead m_3 : nice", "entry": {"pos": 1, "at_ms": 1001, "kind": "from_agent", "text": "nice", "from": "ambient-lead"}}
+{"line": "sb msg-in : switchboard m_5 : your keys", "entry": {"pos": 1, "at_ms": 1001, "kind": "from_agent", "text": "your keys", "from": "switchboard"}}
+{"line": "sb msg-in : @docs m_4 : done here", "entry": {"pos": 1, "at_ms": 1001, "kind": "from_agent", "text": "done here", "from": "docs"}}
+{"line": "sb msg-you : docs : the v2 docs are up", "entry": {"pos": 1, "at_ms": 1001, "kind": "agent", "text": "the v2 docs are up"}}
+{"line": "sb sent : main : m_9 : 1 : cart or checkout?", "entry": {"pos": 1, "at_ms": 1001, "kind": "to_agent", "text": "cart or checkout?", "to": "main", "asks": true, "msg": 9}}

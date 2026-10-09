@@ -5,9 +5,11 @@
 use crate::Project;
 use serde::{Deserialize, Serialize};
 
-/// An agent's status, the hub's word exactly (archived is a flag): a
-/// view that draws starting like working, or stopped like done, says so
-/// itself (architect m_13999).
+/// An agent's status as released (v2026.10.2-28, the wire rule in
+/// lib.rs: its six values and their meanings never change): starting is
+/// working, stopped is done; archived is a flag. The hub's exact word
+/// when it is one of those is [`Agent::phase`] (P4b-fix, architect
+/// m_14382).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
@@ -18,34 +20,52 @@ pub enum Status {
     Blocked,
     Done,
     Failed,
-    /// its REPL is starting (its first turn not begun)
-    Starting,
-    /// stopped by the user (`sb stop`, a drop on its way)
-    Stopped,
-    /// a status this version doesn't know (a newer hub)
-    #[serde(other)]
-    Unknown,
 }
 
 impl Status {
-    /// In a turn, or about to be (starting): what a view draws as working.
+    /// In a turn (or starting one): what a view draws as working.
     pub fn working(self) -> bool {
-        matches!(self, Status::Working | Status::Starting)
+        self == Status::Working
     }
 
     /// The hub's status word (`model::Status::as_str`): the status and
     /// whether the agent is archived (an archived one shows done).
     pub fn of_hub(word: &str) -> (Status, bool) {
         match word {
-            "working" => (Status::Working, false),
-            "starting" => (Status::Starting, false),
+            "starting" | "working" => (Status::Working, false),
             "waiting" => (Status::Waiting, false),
             "blocked" => (Status::Blocked, false),
             "failed" => (Status::Failed, false),
-            "done" => (Status::Done, false),
-            "stopped" => (Status::Stopped, false),
+            "done" | "stopped" => (Status::Done, false),
             "archived" => (Status::Done, true),
             _ => (Status::Idle, false),
+        }
+    }
+}
+
+/// The hub's word when [`Status`] folds it into a released value: its
+/// REPL is starting (status working), or the user stopped it (status
+/// done). New in P4b-fix, with `Unknown` from the start so it may grow.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum Phase {
+    /// its REPL is starting (its first turn not begun)
+    Starting,
+    /// stopped by the user (`sb stop`, a drop on its way)
+    Stopped,
+    /// a phase this version doesn't know (a newer hub)
+    #[serde(other)]
+    Unknown,
+}
+
+impl Phase {
+    /// The phase the hub's status word says, if any.
+    pub fn of_hub(word: &str) -> Option<Phase> {
+        match word {
+            "starting" => Some(Phase::Starting),
+            "stopped" => Some(Phase::Stopped),
+            _ => None,
         }
     }
 }
@@ -75,6 +95,10 @@ pub struct Agent {
     pub name: String,
     pub main: bool,
     pub status: Status,
+    /// the hub's exact word when `status` folds it (starting: working,
+    /// stopped: done)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase: Option<Phase>,
     pub archived: bool,
     /// what it says it does now, else its last report, else its
     /// objective: one line (the TUI's title)
@@ -87,9 +111,14 @@ pub struct Agent {
     pub waits: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent: Option<String>,
-    /// its worktree's branch (none: it works in the shared checkout)
+    /// its worktree's branch (none: it works in the shared checkout), as
+    /// released; the shared checkout's branch is `checkout_branch`
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub branch: Option<String>,
+    /// the branch checked out in the shared checkout it works in (none in
+    /// a worktree: that is `branch`), P4b-fix
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checkout_branch: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worktree: Option<String>,
     /// how long its turn has run (working only)
@@ -137,8 +166,8 @@ pub struct Agent {
     pub waiting_on: Option<WaitingOn>,
     /// client-protocol step 4 (P4b, architect m_13999): the facts the
     /// terminal reads, each from the hub's one source. Where it works:
-    /// the shared checkout or its own worktree (`branch` is the branch
-    /// checked out in either; `worktree` the worktree's path)
+    /// the shared checkout (`checkout_branch`) or its own worktree
+    /// (`branch`, `worktree` its path)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<AgentMode>,
     /// its folder (the shared checkout's or its worktree's)
@@ -863,8 +892,10 @@ mod tests {
 
     #[test]
     fn hub_words_map_to_statuses() {
-        assert_eq!(Status::of_hub("starting"), (Status::Starting, false));
-        assert_eq!(Status::of_hub("stopped"), (Status::Stopped, false));
+        // the released meanings (the wire rule); the exact word is the phase
+        assert_eq!(Status::of_hub("starting"), (Status::Working, false));
+        assert_eq!(Status::of_hub("stopped"), (Status::Done, false));
+        assert_eq!((Phase::of_hub("starting"), Phase::of_hub("stopped"), Phase::of_hub("working")), (Some(Phase::Starting), Some(Phase::Stopped), None));
         assert_eq!(Status::of_hub("archived"), (Status::Done, true));
         assert_eq!(Status::of_hub("idle"), (Status::Idle, false));
     }

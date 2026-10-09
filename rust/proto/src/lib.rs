@@ -29,7 +29,16 @@
 //! v1's rule: a name is added, never renamed or retyped. A reader ignores
 //! unknown fields, and an unknown tag decodes to `Unknown { tag, raw }`,
 //! never an error, so an older client survives a newer hub and the
-//! reverse. What has no producer yet lives in [`draft`]: its fixtures
+//! reverse.
+//!
+//! THE WIRE RULE (architect m_14382): on the wire an existing field, list
+//! or enum value never changes meaning, and a line that made an entry of
+//! one kind still makes one of that kind. A new fact goes in a new
+//! optional field or list; a new enum value only in an enum whose
+//! released version already has `Unknown` (an older reader of one without
+//! it fails on the whole event). Its law: `tests/released.rs` reads what
+//! v2026.10.2-28 wrote (`fixtures/released/`) with today's types and
+//! writes it back with every released key and value unchanged. What has no producer yet lives in [`draft`]: its fixtures
 //! are there for the window's fake core, its names may still move until
 //! its stream emits it.
 //!
