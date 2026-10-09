@@ -272,7 +272,7 @@ mod tests {
     fn a_refusal_clears_the_mark() {
         let mut app = two_queued();
         assert_eq!(next(&mut app).as_deref(), Some("one"));
-        crate::sb::dispatch(&mut app, r#"{"ev": "notice", "text": "no agent named x"}"#);
+        crate::sb::dispatch(&mut app, r#"{"jsonrpc": "2.0", "method": "hub/notice", "params": {"project": "p", "text": "no agent named x"}}"#);
         assert_eq!(app.queue_out, None);
         assert_eq!(next(&mut app).as_deref(), Some("two"));
     }
