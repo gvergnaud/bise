@@ -102,6 +102,8 @@ pub const METHODS: &[MethodRow] = &[
     // `bise stop` (switchboard client::stop): its `{}` may not come, the
     // hub ends
     m("hub/stop", "stop_hub", None),
+    // a note talk's words to its page (the desktop core's voice)
+    m("page/voice", "page_voice", None),
 ];
 
 /// The protocol's own methods (no [`HubCmd`]).

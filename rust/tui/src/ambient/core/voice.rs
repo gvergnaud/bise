@@ -94,7 +94,7 @@ impl Core {
         // a note talk's words so far, live on the page
         if let (Some(p), true, None) = (&page, words, &failed) {
             let text = t.text.trim().to_string();
-            self.hub.send(&json!({"op": "page_voice", "page": p, "phase": "heard", "text": text}));
+            self.home_call("page/voice", json!({"page": p, "phase": "heard", "text": text}));
         }
         self.out.extend(evs);
         if let Some(e) = failed {
@@ -200,7 +200,7 @@ impl Core {
         let Some(id) = page else { return self.set_phase(Phase::Listening, None) };
         // a note talk: the page shows the words at its mouse, the
         // capsule says where they go
-        self.hub.send(&json!({"op": "page_voice", "page": id, "phase": "start", "text": ""}));
+        self.home_call("page/voice", json!({"page": id, "phase": "start", "text": ""}));
         let title = match self.page_titles.iter().find(|(i, _)| *i == id) {
             Some((_, t)) if !t.trim().is_empty() => t.clone(),
             _ => id.replace('-', " "),
@@ -212,7 +212,7 @@ impl Core {
     /// A note talk is over: its last words to the page, the capsule idle
     /// (no `sent`, no main phases: main never hears a note talk).
     pub(super) fn page_voice_over(&mut self, page: &str, phase: &str, text: &str) {
-        self.hub.send(&json!({"op": "page_voice", "page": page, "phase": phase, "text": text}));
+        self.home_call("page/voice", json!({"page": page, "phase": phase, "text": text}));
         self.emit(json!({"ev": "level", "who": "you", "v": 0.0}));
         self.set_phase(Phase::Idle, None);
     }

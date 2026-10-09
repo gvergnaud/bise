@@ -68,3 +68,5 @@
 {"cmd":"release_run","project":"acme-1a2b3c4d","tag":"v2026.10.3","commit":"e0f3df5a9c1b2d3e4f5a6b7c8d9e0f1a2b3c4d5e"}
 {"cmd":"stop_hub","project":"acme-1a2b3c4d"}
 {"cmd":"stop_hub","project":"acme-1a2b3c4d","keep_agents":true}
+{"cmd":"page_voice","project":"acme-1a2b3c4d","page":"weekly-update","phase":"start"}
+{"cmd":"page_voice","project":"acme-1a2b3c4d","page":"weekly-update","phase":"heard","text":"make the intro shorter"}

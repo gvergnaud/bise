@@ -674,13 +674,24 @@ pub enum HubCmd {
         #[serde(default, skip_serializing_if = "crate::is_false")]
         keep_agents: bool,
     },
+    /// a note talk on page `page` (the desktop core's voice): `phase`
+    /// start, heard (his words so far), end, send, cancel; `text` the
+    /// words; the page shows them at its mouse (pages' `voice` push). A
+    /// page the hub doesn't hold: nothing
+    PageVoice {
+        project: Project,
+        page: String,
+        phase: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        text: String,
+    },
     /// a tag this version doesn't know: answered with `error`
     #[serde(skip)]
     Unknown { tag: String, raw: Value },
 }
 
 impl HubCmd {
-    pub const TAGS: &'static [&'static str] = &["hello", "subscribe", "unsubscribe", "page", "send", "answer", "close", "confirm", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "diff", "worktrees", "dev_servers", "merged", "features", "prs", "scheduled", "scheduled_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "branches", "scheduled_run", "artifacts_add", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "release_plan", "release_run", "stop_hub"];
+    pub const TAGS: &'static [&'static str] = &["hello", "subscribe", "unsubscribe", "page", "send", "answer", "close", "confirm", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "diff", "worktrees", "dev_servers", "merged", "features", "prs", "scheduled", "scheduled_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "branches", "scheduled_run", "artifacts_add", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "release_plan", "release_run", "stop_hub", "page_voice"];
 
     pub fn decode(line: &str) -> Result<HubCmd, String> {
         Self::from_value(parse(line)?)
@@ -746,6 +757,7 @@ impl HubCmd {
             | HubCmd::ReleasePlan { project, .. }
             | HubCmd::ReleaseRun { project, .. }
             | HubCmd::StopHub { project, .. }
+            | HubCmd::PageVoice { project, .. }
             | HubCmd::Diff { project, .. } => project,
             HubCmd::Hello { .. } | HubCmd::Unknown { .. } => return None,
         };

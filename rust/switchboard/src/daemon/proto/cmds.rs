@@ -257,6 +257,8 @@ impl Shell {
                 self.view_stopped();
                 let _ = self.tx.send(Msg::Shutdown { keep: keep_agents });
             }
+            // a note talk's words to its page (the `page_voice` op's path)
+            HubCmd::PageVoice { page, phase, text, .. } => self.page_voice(&page, &phase, &text),
             // client/focus: who he is looking at (the TUI's feed in view)
             HubCmd::Focus { focus, .. } => self.step(Input::ClientFocus { client: id, focus }),
             // `/version`'s picker

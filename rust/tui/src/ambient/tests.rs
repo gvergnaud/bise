@@ -760,22 +760,31 @@ fn pages_ride_the_state_and_a_waited_page_comes_in_front() {
     assert!(!front(&mut t));
 }
 
-/// A note talk on page `id`: its words, then fn up; the hub's
-/// page_voice requests, in order.
+/// A page/voice request on the home connection, as the fake hub gives it
+/// (its HubCmd), without its project (the test workspace's hub id).
+fn voice_req(mut v: Value) -> Value {
+    if let Some(o) = v.as_object_mut() {
+        o.remove("project");
+    }
+    v
+}
+
+/// A note talk on page `id`: its words, then fn up; the hub's page/voice
+/// requests, in order.
 fn note_talk(t: &mut T, id: &str, words: &[&str]) -> Vec<Value> {
     t.cmd(Cmd::PageTalk { page: id.into() });
     let heard = t.fakes.listen.lock().unwrap().last().unwrap().heard.clone();
-    let mut reqs = vec![t.hub.next()];
+    let mut reqs = vec![voice_req(t.hub.next())];
     for w in words {
         heard.send(Heard::Text(format!(" {w}"))).unwrap();
         t.until(|o| o.iter().any(|v| v["ev"] == "heard" && v["final"] == false));
-        reqs.push(t.hub.next());
+        reqs.push(voice_req(t.hub.next()));
         t.out.retain(|v| v["ev"] != "heard");
     }
     t.cmd(Cmd::TalkEnd);
     heard.send(Heard::Flushed).unwrap();
     t.until(|o| o.iter().any(|v| v["ev"] == "heard" && v["final"] == true));
-    reqs.push(t.hub.next());
+    reqs.push(voice_req(t.hub.next()));
     reqs
 }
 
@@ -787,7 +796,13 @@ fn a_note_talk_goes_to_the_page_never_to_main() {
     t.until(|o| has(o, "state"));
     t.ready();
     let reqs = note_talk(&mut t, "weekly-update", &["make the intro", "shorter"]);
-    let pv = |phase: &str, text: &str| json!({"op": "page_voice", "page": "weekly-update", "phase": phase, "text": text});
+    let pv = |phase: &str, text: &str| {
+        let mut v = json!({"cmd": "page_voice", "page": "weekly-update", "phase": phase});
+        if !text.is_empty() {
+            v["text"] = json!(text);
+        }
+        v
+    };
     assert_eq!(reqs, vec![pv("start", ""), pv("heard", "make the intro"), pv("heard", "make the intro shorter"), pv("end", "make the intro shorter")]);
     let out = t.take();
     // the capsule says where the words go, then idle: no sent, no main phases
@@ -807,9 +822,9 @@ fn a_note_talk_goes_to_the_page_never_to_main() {
     let reqs = note_talk(&mut t, "weekly-update", &[]);
     assert_eq!(reqs.last().unwrap(), &pv("cancel", ""));
     t.cmd(Cmd::PageTalk { page: "weekly-update".into() });
-    assert_eq!(t.hub.next(), pv("start", ""));
+    assert_eq!(voice_req(t.hub.next()), pv("start", ""));
     t.cmd(Cmd::TalkCancel);
-    assert_eq!(t.hub.next(), pv("cancel", ""));
+    assert_eq!(voice_req(t.hub.next()), pv("cancel", ""));
     assert!(phase_is(&t.take(), "idle"));
 
     // never an input to main
@@ -817,6 +832,38 @@ fn a_note_talk_goes_to_the_page_never_to_main() {
     t.hub.r.get_ref().set_read_timeout(Some(Duration::from_millis(100))).unwrap();
     let mut more = String::new();
     assert!(t.hub.r.read_line(&mut more).is_err() || more.is_empty(), "more: {more}");
+}
+
+/// After `initialize` the core writes JSON-RPC only (architect m_15183):
+/// no `"op"` line in the core's code but the older door's hello to a hub
+/// before client-protocol (hubs.rs, HubIn::Up), the one release it stays.
+#[test]
+fn the_core_writes_no_op_line_but_the_older_doors_hello() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ambient");
+    let mut files = vec![root.join("core.rs")];
+    let mut dirs = vec![root.join("core")];
+    while let Some(d) = dirs.pop() {
+        for e in std::fs::read_dir(&d).unwrap().flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                dirs.push(p);
+            } else if p.extension().is_some_and(|x| x == "rs") {
+                files.push(p);
+            }
+        }
+    }
+    let needle = concat!("\"", "op", "\"");
+    let mut at = Vec::new();
+    for f in &files {
+        let text = std::fs::read_to_string(f).unwrap();
+        let code = text.split("#[cfg(test)]").next().unwrap_or("");
+        for l in code.lines().filter(|l| l.contains(needle) && !l.trim_start().starts_with("//")) {
+            at.push(format!("{}: {}", f.strip_prefix(&root).unwrap().display(), l.trim()));
+        }
+    }
+    // TODO(client-protocol, the plan's 'after the release' step, with
+    // Hubs.older_door): none at all
+    assert_eq!(at, vec![r#"core/hubs.rs: c.hub.send(&json!({"op": "hello"}));"#.to_string()]);
 }
 
 #[test]

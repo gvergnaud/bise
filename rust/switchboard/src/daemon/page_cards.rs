@@ -93,12 +93,10 @@ impl Shell {
     /// A note talk's words (docs/ambient-pages.md §4.1): to the page's
     /// frame, never an input. Moved out of daemon.rs's page_voice arm
     /// unchanged (architect m_12280).
-    pub(super) fn page_voice(&self, v: &Value) {
-        let s = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
+    pub(super) fn page_voice(&self, page: &str, phase: &str, text: &str) {
         if let Some(p) = &self.pg.pages {
-            let page = s("page");
-            if p.store.meta(&page).is_some() {
-                p.push(&page, "voice", &json!({"phase": s("phase"), "text": s("text")}));
+            if p.store.meta(page).is_some() {
+                p.push(page, "voice", &json!({"phase": phase, "text": text}));
             }
         }
     }

@@ -1733,7 +1733,7 @@ impl Shell {
         let s = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
         match s("op").as_str() {
             // a note talk's words (§4.1): to the page's frame, never an input
-            "page_voice" => self.page_voice(&v),
+            "page_voice" => self.page_voice(&s("page"), &s("phase"), &s("text")),
             // older lines of a feed, before a position (the TUI scrolled
             // to the top of what it holds)
             "history" => {
