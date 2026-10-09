@@ -522,7 +522,7 @@ pub(crate) fn ev_lines(ev: &Ev, width: usize) -> Vec<Line<'static>> {
             crate::answered::answered_lines(agent, question, answer, why, *open, width)
         }
         Ev::TimeMark(t) => vec![Line::from(Span::styled(format!(" {} {} {}", G_NOTE, t, G_NOTE), Style::default().fg(faint())))],
-        Ev::Card { text, closed } => card_lines(text, closed, width),
+        Ev::Card { card, closed } => card_lines(card, closed, width),
         Ev::CardClosed { .. } | Ev::Ended(_) => vec![],
         Ev::Release(r) => crate::release_row::lines(r, width),
     }
@@ -848,7 +848,7 @@ pub(crate) fn fold_line(n: usize, agents: usize, open: bool, live: bool, tick: u
 }
 
 /// A card line of the hub (`#3 question @docs : v1 or v2?`): its kind,
-/// the agent, the text.
+/// the agent, the text (the line path's parser: `wire::CardParts::of_line`).
 pub(crate) fn card_parts(t: &str) -> Option<(&str, &str, &str)> {
     let rest = t.strip_prefix('#')?;
     let (_, rest) = rest.split_once(' ')?;
@@ -864,9 +864,10 @@ pub(crate) fn card_parts(t: &str) -> Option<(&str, &str, &str)> {
 // Answered (`closed`: the hub's word, book §10, §12), a level-1 card
 // fades in place: dim bar, dim title with ` · answered`, dim body; the
 // answer follows as its own line.
-fn card_lines(t: &str, closed: &str, width: usize) -> Vec<Line<'static>> {
+fn card_lines(card: &crate::wire::CardParts, closed: &str, width: usize) -> Vec<Line<'static>> {
     let text_st = Style::default().fg(text());
-    let (kind, name, body) = card_parts(t).unwrap_or(("question", "", t));
+    let body = card.body();
+    let (kind, name, body) = (card.kind.as_str(), card.agent.as_str(), body.as_str());
     // bise's own items (opened for main): bise asks, not main
     let name = if matches!(kind, "signin" | "update") { "bise" } else { name };
     match kind {

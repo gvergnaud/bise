@@ -799,11 +799,10 @@ fn ingest_for(app: &mut App, agent: &str, line: String, pos: Option<usize>, ts: 
 /// this feed (`#12 question @main : …`); unknown, the line opens on the
 /// answer alone (BISE-307).
 fn ask_of(app: &mut App, at: std::ops::Range<usize>, id: u64, asked: Option<String>) {
-    let head = format!("#{id} ");
     let n0 = at.start.min(app.events.len());
     let found = asked.or_else(|| {
         app.events[..n0].iter().rev().find_map(|e| match e {
-            Ev::Card { text, .. } if text.starts_with(&head) => Some(crate::render::card_parts(text).map_or("", |p| p.2).trim().to_string()),
+            Ev::Card { card, .. } if card.id == Some(id) => Some(card.question.trim().to_string()),
             _ => None,
         })
     });
@@ -1227,7 +1226,7 @@ pub(crate) fn hub_ev(h: Hub) -> Option<Ev> {
         // a gate's card (approvals-design.md §9): the tool row says it
         // waits and the inbox holds it; its fold comes with the answer
         Hub::Card { id: Some(_), kind, .. } if kind == "confirm" => return None,
-        Hub::Card { text, .. } => Ev::Card { text, closed: String::new() },
+        Hub::Card { text, .. } => Ev::Card { card: crate::wire::CardParts::of_line(&text), closed: String::new() },
         // the approvals gate (approvals-design.md §3.1, §10)
         Hub::Gate(GateStep::Check) => Ev::Gate(crate::wire::Gate::Check),
         Hub::Gate(GateStep::Card) => Ev::Gate(crate::wire::Gate::Card),
@@ -1301,7 +1300,7 @@ mod hub_line_tests {
             Ev::AgentMsg { from, to, text, level, id, .. } => format!("msg {from}|{to}|{text}|{level}|{id}"),
             Ev::Answered { agent, question, answer, why, .. } => format!("answered {agent}|{question}|{answer}|{why}"),
             Ev::You(t, ..) => format!("you {t}"),
-            Ev::Card { text, .. } => format!("card {text}"),
+            Ev::Card { card, .. } => format!("card {}", card.text()),
             Ev::CardClosed { id, res } => format!("card-closed {id}|{res}"),
             Ev::Info(t) => format!("info {t}"),
             Ev::Warn(t) => format!("warn {t}"),

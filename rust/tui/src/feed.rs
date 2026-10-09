@@ -461,10 +461,7 @@ fn merge_report_and_card(events: &mut [Ev], cache: &mut [Option<EventRows>], ev:
                 let (k, _) = report_parts(text)?;
                 Some((from.clone(), kind_of(k)?, false))
             }
-            Ev::Card { text, .. } => {
-                let (k, name, _) = card_parts(text)?;
-                Some((name.to_string(), kind_of(k)?, true))
-            }
+            Ev::Card { card, .. } => Some((card.agent.clone(), kind_of(&card.kind)?, true)),
             _ => None,
         }
     }
@@ -640,9 +637,8 @@ pub(crate) fn push_event(events: &mut Vec<Ev>, cache: &mut Vec<Option<EventRows>
         // BISE-31: a closed card fades in place (its last line in this
         // feed); not in the feed (an older page): an info line as before
         Ev::CardClosed { id, res } => {
-            let head = format!("#{} ", id);
             let found = events.iter_mut().enumerate().rev().find_map(|(i, e)| match e {
-                Ev::Card { text, closed } if text.starts_with(&head) => Some((i, closed)),
+                Ev::Card { card, closed } if card.id == Some(*id) => Some((i, closed)),
                 _ => None,
             });
             match found {

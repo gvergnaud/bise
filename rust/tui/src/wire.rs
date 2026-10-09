@@ -269,11 +269,12 @@ pub(crate) enum Ev {
     // in memory only (BISE-14, book §10): a faint `· 14:31 ·` after a
     // pause of 5 minutes without a line; the text is the time
     TimeMark(String),
-    // switchboard: an attention card (`#3 question @docs : text`);
-    // `closed`, in memory only (BISE-31, book §12): how it was closed,
-    // the hub's word (empty: open)
+    // switchboard: an attention card, typed (architect m_15013): from
+    // the hub's line (`#3 question @docs : text`, [`CardParts::of_line`])
+    // or its entry (entry_ev.rs); `closed`, in memory only (BISE-31, book
+    // §12): how it was closed, the hub's word (empty: open)
     Card {
-        text: String,
+        card: CardParts,
         closed: String,
     },
     // in memory only (BISE-31): the hub closed card `id` (`card-closed :
@@ -456,6 +457,48 @@ pub(crate) fn wire_decode(s: &str) -> String {
 // switchboard (C2 `history`, amended): one line of a page of older feed
 // lines, `{pos, line, ts?}`. `ts` is when the hub's transcript wrote the
 // line (ms since the epoch); a hub before the amendment sends no `ts`.
+/// A card in the feed: its item id, its kind (the hub's word:
+/// `question`, `blocked`, `done`, …), who asked, its question and its
+/// options' labels (drawn `n. label` under it).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct CardParts {
+    pub(crate) id: Option<u64>,
+    pub(crate) kind: String,
+    pub(crate) agent: String,
+    pub(crate) question: String,
+    pub(crate) options: Vec<String>,
+}
+
+impl CardParts {
+    /// The hub's card line (`#3 question @docs : v1 or v2?\n1. …`), read
+    /// once: its body stays whole as the question (its options lines in
+    /// it, drawn as written). Not a card head: all of it is a question.
+    pub(crate) fn of_line(t: &str) -> CardParts {
+        let id = t.strip_prefix('#').and_then(|r| r.split(' ').next()).and_then(|n| n.parse().ok());
+        match crate::render::card_parts(t) {
+            Some((kind, agent, body)) => CardParts { id, kind: kind.into(), agent: agent.into(), question: body.into(), options: Vec::new() },
+            None => CardParts { id, kind: "question".into(), question: t.into(), ..CardParts::default() },
+        }
+    }
+
+    /// Its body as drawn: the question's lines, then `n. label` each.
+    pub(crate) fn body(&self) -> String {
+        let opts = self.options.iter().enumerate().map(|(i, l)| format!("\n{}. {}", i + 1, l));
+        std::iter::once(self.question.clone()).chain(opts).collect()
+    }
+
+    /// What find searches: its head and its body, as the line said it
+    /// (a card without words: its head alone).
+    pub(crate) fn text(&self) -> String {
+        let id = self.id.map(|i| format!("#{i} ")).unwrap_or_default();
+        let head = format!("{id}{} @{}", self.kind, self.agent);
+        match self.body() {
+            b if b.is_empty() => head,
+            b => format!("{head} : {b}"),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct HistLine {
     pub(crate) pos: usize,

@@ -63,6 +63,28 @@ fn corpora() -> Vec<(&'static str, Vec<Line>)> {
         ),
         // words only
         ("words", mk(&["sb you : hi", "  obs: turn_started", "  obs: assistant: hello.", "  obs: turn_done: completed"])),
+        // cards (architect m_15013): a question with its options, a blocker,
+        // a done and a failed one (one line each), all still open on the hub
+        (
+            "cards",
+            mk(&[
+                "sb card : #9 question @perf : which bench?\\n1. cold\\n2. warm",
+                "sb card : #4 blocked @api-v2 : the schema file isn't in the repo",
+                "sb card : #3 done @bench : p95 at 180 ms",
+                "sb card : #5 failed @ci : the e2e run",
+            ]),
+        ),
+        // a retried turn: the provider's retry notice, then the reply
+        (
+            "retry",
+            mk(&[
+                "sb you : again",
+                "  obs: turn_started",
+                "  obs: provider_retry: 1/10 · provider 529 (transient) · retry in 2s",
+                "  obs: assistant: done this time.",
+                "  obs: turn_done: completed",
+            ]),
+        ),
     ]
 }
 
@@ -92,7 +114,8 @@ fn from_entries(lines: &[Line]) -> Vec<String> {
     let name = |id: &str, _: &str| id.to_string();
     let width = |s: &str| unicode_width::UnicodeWidthStr::width(s);
     let offset = |_: u64| 0;
-    let ctx = Ctx { open_cards: &[], page: &none, provider: &name, width: &width, offset: &offset, attached: &bise_proto::thread::Attached::plain };
+    // the corpora's cards are open on the hub (the line path draws them open)
+    let ctx = Ctx { open_cards: &[9, 4, 3, 5], page: &none, provider: &name, width: &width, offset: &offset, attached: &bise_proto::thread::Attached::plain };
     let (mut events, mut cache) = (Vec::new(), Vec::new());
     for e in fold(lines, &ctx) {
         for ev in ev_of(&e) {

@@ -783,7 +783,7 @@ fn everything_disclosed_matches_the_mockup() {
 // bold accent `? {name} needs you`, the body in text); done is one line
 #[test]
 fn a_card_is_level_one() {
-    let lines = ev_rows(&Ev::Card { text: "#2 question @docs : v1 or v2 for the api docs?".into(), closed: String::new() }, 0, 100);
+    let lines = ev_rows(&Ev::Card { card: crate::wire::CardParts::of_line("#2 question @docs : v1 or v2 for the api docs?"), closed: String::new() }, 0, 100);
     let rows = rows_text(&lines);
     assert_eq!(rows, vec![" ┃ ? docs needs you".to_string(), " ┃ v1 or v2 for the api docs?".to_string()]);
     let accent = Some(crate::theme::accent());
@@ -791,9 +791,9 @@ fn a_card_is_level_one() {
     assert_eq!(lines[0].spans[1].style.fg, accent);
     assert!(lines[0].spans[1].style.add_modifier.contains(Modifier::BOLD));
     assert_eq!(lines[1].spans[1].style.fg, Some(crate::theme::text()));
-    let blocked = rows_text(&ev_rows(&Ev::Card { text: "#4 blocked @api-v2 : the schema file isn't in the repo".into(), closed: String::new() }, 0, 100));
+    let blocked = rows_text(&ev_rows(&Ev::Card { card: crate::wire::CardParts::of_line("#4 blocked @api-v2 : the schema file isn't in the repo"), closed: String::new() }, 0, 100));
     assert_eq!(blocked[0], " ┃ ? api-v2 needs you");
-    let done = rows_text(&ev_rows(&Ev::Card { text: "#3 done @bench : p95 at 180 ms".into(), closed: String::new() }, 0, 100));
+    let done = rows_text(&ev_rows(&Ev::Card { card: crate::wire::CardParts::of_line("#3 done @bench : p95 at 180 ms"), closed: String::new() }, 0, 100));
     assert_eq!(done, vec![" ✓ bench is done: p95 at 180 ms".to_string()]);
 }
 
@@ -805,7 +805,7 @@ fn a_card_is_level_one() {
 fn an_answered_card_fades_in_place() {
     let mut events: Vec<Ev> = Vec::new();
     let mut cache: Vec<Option<EventRows>> = Vec::new();
-    let card = |t: &str| Ev::Card { text: t.into(), closed: String::new() };
+    let card = |t: &str| Ev::Card { card: crate::wire::CardParts::of_line(t), closed: String::new() };
     push_event(&mut events, &mut cache, card("#2 question @docs : v1 or v2 for the api docs?"));
     push_event(&mut events, &mut cache, card("#3 blocked @api : the schema file"));
     push_event(&mut events, &mut cache, Ev::Info("→ you → @docs (answer to card #2) : v2".into()));
@@ -832,7 +832,7 @@ fn an_answered_card_fades_in_place() {
         ("refused", "kept"),
         ("task stopped", "agent stopped"),
     ] {
-        let ev = Ev::Card { text: "#5 drop @x : y".into(), closed: res.into() };
+        let ev = Ev::Card { card: crate::wire::CardParts::of_line("#5 drop @x : y"), closed: res.into() };
         assert_eq!(rows_text(&ev_rows(&ev, 0, 100))[0], format!(" ┃ ? x needs you · {}", word));
     }
     // a done card is a line for you: it does not fade
@@ -1002,7 +1002,7 @@ fn a_level_two_line_closes_the_run() {
     assert_eq!(rows[4], format!("▸ 4 messages between 3 agents {}", pulse));
     assert_eq!(rows.len(), 5, "{rows:#?}");
     // a main line (level 2) and a card (level 1) close it too
-    for closer in [Ev::Assistant("done.".into()), Ev::Card { text: "#1 question @docs : v1 or v2?".into(), closed: String::new() }] {
+    for closer in [Ev::Assistant("done.".into()), Ev::Card { card: crate::wire::CardParts::of_line("#1 question @docs : v1 or v2?"), closed: String::new() }] {
         let mut evs = traffic(4, 3, 0);
         evs.push(closer);
         let (events, mut cache) = arrive(evs);
@@ -1161,7 +1161,7 @@ fn whats_for_you_matches_the_mockup() {
         l3("bench", "main", "✓ done. p95 180 ms, 3 runs."),
         Ev::AgentMsg { from: "bench".into(), to: String::new(), text: "[report: done] p95 at 180 ms, nothing to fix.\nran it 3 times".into(), level: 3, id: String::new(), open: false, fold: false },
         l3("api-v2", "main", "? i need the v2 schema file, it isn't in the repo."),
-        Ev::Card { text: "#4 question @api-v2 : the v2 schema file isn't in the repo. where is it?".into(), closed: String::new() },
+        Ev::Card { card: crate::wire::CardParts::of_line("#4 question @api-v2 : the v2 schema file isn't in the repo. where is it?"), closed: String::new() },
     ];
     let (events, mut cache) = arrive(evs);
     let rows = cached_text(&events, &mut cache, 100);
@@ -1215,7 +1215,7 @@ fn a_busy_hour_matches_the_mockup() {
         l3("docs-auth", "ep-keys", "heads-up, i'm quoting your error codes."),
     ]);
     let opened = evs.len() - 5;
-    evs.push(Ev::Card { text: "#7 question @mig-db : drop the v1 tables now, or keep them one release?".into(), closed: String::new() });
+    evs.push(Ev::Card { card: crate::wire::CardParts::of_line("#7 question @mig-db : drop the v1 tables now, or keep them one release?"), closed: String::new() });
     evs.push(Ev::TimeMark("14:31".into()));
     evs.extend(traffic(12, 6, 200));
     let (mut events, mut cache) = arrive(evs);
