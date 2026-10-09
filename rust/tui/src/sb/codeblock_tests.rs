@@ -7,10 +7,6 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent,
 use ratatui::backend::TestBackend;
 use ratatui::Terminal;
 
-fn line(l: &str, pos: usize) -> String {
-    json!({"ev": "line", "agent": "main", "line": l, "pos": pos}).to_string()
-}
-
 fn screen(term: &Terminal<TestBackend>) -> Vec<String> {
     let buf = term.backend().buffer();
     let w = buf.area.width as usize;
@@ -32,7 +28,7 @@ const REPLY: &str = "  obs: assistant: run this:\\n```ts\\nconst answer = 42 // 
 fn a_reply_draws_its_code_blocks_boxed_and_colored() {
     let mut app = test_app();
     let mut term = Terminal::new(TestBackend::new(80, 30)).unwrap();
-    dispatch(&mut app, &line(REPLY, 1));
+    super::entries_for_tests::lines(&mut app, "main", &[REPLY]);
     term.draw(|f| draw_sb(&mut app, f)).unwrap();
     let s = screen(&term);
     let top = row_of(&term, "╭─ ts ─") as usize;
@@ -59,7 +55,7 @@ fn a_reply_draws_its_code_blocks_boxed_and_colored() {
 fn the_mouse_over_a_block_shows_the_copy_icon_and_a_click_copies_its_code() {
     let mut app = test_app();
     let mut term = Terminal::new(TestBackend::new(80, 30)).unwrap();
-    dispatch(&mut app, &line(REPLY, 1));
+    super::entries_for_tests::lines(&mut app, "main", &[REPLY]);
     term.draw(|f| draw_sb(&mut app, f)).unwrap();
     let before = screen(&term);
     let top = row_of(&term, "╭─ ts ─");
@@ -95,7 +91,7 @@ fn the_mouse_over_a_block_shows_the_copy_icon_and_a_click_copies_its_code() {
 fn ctrl_y_copies_the_block_under_the_mouse_else_the_newest_on_screen() {
     let mut app = test_app();
     let mut term = Terminal::new(TestBackend::new(80, 30)).unwrap();
-    dispatch(&mut app, &line(REPLY, 1));
+    super::entries_for_tests::lines(&mut app, "main", &[REPLY]);
     term.draw(|f| draw_sb(&mut app, f)).unwrap();
     let ctrl_y = KeyEvent::new(KeyCode::Char('y'), KeyModifiers::CONTROL);
     crate::input::on_key(&mut app, &ctrl_y);
@@ -114,7 +110,7 @@ fn a_copy_gives_a_wrapped_line_whole_without_marks_fence_or_tag() {
     let long = "export async function load(id: string) { const res = await fetch(url + id); return res.json() } // long";
     let code = format!("\tindented();\n{long}");
     let msg = format!("  obs: assistant: see:\\n```ts\\n{}\\n```", code.replace('\n', "\\n"));
-    dispatch(&mut app, &line(&msg, 1));
+    super::entries_for_tests::lines(&mut app, "main", &[&msg]);
     term.draw(|f| draw_sb(&mut app, f)).unwrap();
     assert!(screen(&term).iter().any(|l| l.contains("│ » ")), "{:#?}", screen(&term));
     crate::input::on_key(&mut app, &KeyEvent::new(KeyCode::Char('y'), KeyModifiers::CONTROL));
@@ -125,7 +121,7 @@ fn a_copy_gives_a_wrapped_line_whole_without_marks_fence_or_tag() {
 fn no_code_on_screen_ctrl_y_says_so() {
     let mut app = test_app();
     let mut term = Terminal::new(TestBackend::new(80, 30)).unwrap();
-    dispatch(&mut app, &line("  obs: assistant: plain words", 1));
+    super::entries_for_tests::lines(&mut app, "main", &["  obs: assistant: plain words"]);
     term.draw(|f| draw_sb(&mut app, f)).unwrap();
     crate::input::on_key(&mut app, &KeyEvent::new(KeyCode::Char('y'), KeyModifiers::CONTROL));
     assert_eq!(app.flash.as_ref().map(|(t, _)| t.as_str()), Some("no code block on screen"));

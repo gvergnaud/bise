@@ -674,6 +674,10 @@ fn an_answer_says_one_line_in_the_thread() {
     ctrl(&mut app, 'n');
     assert!(key(&mut app, KeyCode::Char('2'), KeyModifiers::NONE));
     assert_eq!(sent(&mut hub), vec!["/answer 12 both: compress, and lazy-load below the fold"]);
+    // TODO(client-protocol P4d, proto-zone-b): through
+    // super::entries_for_tests (its thread subscribed before he answers:
+    // a first page replaces the feed) once feed_entries calls
+    // entry_reads::skip before it places an entry
     let line = |agent: &str, l: &str| {
         serde_json::json!({"ev": "line", "agent": agent, "line": format!("sb route : {l}")}).to_string()
     };

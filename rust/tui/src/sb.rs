@@ -41,6 +41,8 @@ use panel::glyph;
 mod feed;
 pub(super) use feed::FeedWindow;
 pub(crate) mod feed_entries;
+#[cfg(test)]
+pub(crate) mod entries_for_tests;
 mod client;
 pub(crate) mod setup;
 mod tune;

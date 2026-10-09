@@ -44,16 +44,13 @@ fn corpus() -> Vec<Line> {
     ])
 }
 
-/// (zen's count, perf's dot) after `lines` of perf's thread, `focus` in
-/// view: today's way (the lines), and from the entries.
-fn by_lines(lines: &[Line], focus: &str) -> (u64, bool) {
-    let mut app = test_app();
-    test_view(&mut app, focus);
-    for (pos, ts, l) in lines {
-        let j = serde_json::json!({"ev": "line", "agent": "perf", "line": l, "pos": pos, "ts": ts}).to_string();
-        crate::sb::dispatch(&mut app, &j);
-    }
-    (app.sb.calls(), app.sb.lit("perf"))
+/// (zen's count, perf's dot) after each prefix of [`corpus`], as the
+/// terminal read them from the lines (frozen from the line path on
+/// 20950432 before the switch deleted it): a card and two messages to
+/// him count, his first line lights the dot out of view.
+fn by_lines(n: usize, focus: &str) -> (u64, bool) {
+    const CALLS: [u64; 13] = [0, 0, 0, 0, 0, 0, 1, 2, 3, 3, 3, 3, 3];
+    (CALLS[n - 1], focus == "main")
 }
 
 fn by_entries(lines: &[Line], focus: &str) -> (u64, bool) {
@@ -67,8 +64,8 @@ fn by_entries(lines: &[Line], focus: &str) -> (u64, bool) {
     (app.sb.calls(), app.sb.lit("perf"))
 }
 
-/// Parity: the zen count and the dot are the same from entries as from
-/// the lines, in view and out of view, for the whole corpus and for
+/// Parity: the zen count and the dot are the same from entries as the
+/// lines gave, in view and out of view, for the whole corpus and for
 /// each of its prefixes (a dot lit by a line is lit by its entry).
 #[test]
 fn zen_and_the_dot_read_the_same_from_entries() {
@@ -76,7 +73,7 @@ fn zen_and_the_dot_read_the_same_from_entries() {
     for focus in ["perf", "main"] {
         for n in 1..=lines.len() {
             let part = &lines[..n];
-            assert_eq!(by_entries(part, focus), by_lines(part, focus), "focus {focus}, up to {:?}", part.last());
+            assert_eq!(by_entries(part, focus), by_lines(n, focus), "focus {focus}, up to {:?}", part.last());
         }
     }
     assert_eq!(by_entries(&lines, "main"), (3, true), "a card and two messages to him");
@@ -243,21 +240,23 @@ fn voice_says_a_live_reply_once() {
     assert_eq!(reads_of(&mut Seen::default(), v, &to_you).said, None);
 }
 
-/// What line mode prints for `lines` of perf's thread: today's way (a
-/// `line` event each), and from the hub's fold (a `thread/entry`
-/// notification each, sent twice: a changed entry prints only what it
-/// gained).
-fn printed_by_lines(lines: &[Line]) -> Vec<String> {
-    let mut printed = crate::sb::Printed::new();
-    lines
-        .iter()
-        .flat_map(|(pos, ts, l)| {
-            let j = serde_json::json!({"ev": "line", "agent": "perf", "line": l, "pos": pos, "ts": ts}).to_string();
-            crate::sb::hub_event_lines(&j, &mut printed)
-        })
-        .collect()
-}
+/// What line mode printed for [`line_mode_prints_the_same_from_entries`]'s
+/// lines from `line` events (frozen from the line path on 20950432
+/// before the switch deleted it).
+const PRINTED_BY_LINES: &[&str] = &[
+    "[perf] you : run the tests ⏎ please",
+    "[perf] tool 1 bash : cargo test -q",
+    "[perf] assistant: all 12 pass.",
+    "[perf] msg-in : ambient-lead m_3 : nice",
+    "[perf] msg-in : @docs m_4 : the numbers",
+    "[perf] msg : perf → docs m_7 : the numbers are in",
+    "[perf] msg-you : docs : done here",
+    "[perf] sent : main : m_9 : 1 : cart or checkout?",
+];
 
+/// What line mode prints for `lines` of perf's thread from the hub's fold
+/// (a `thread/entry` notification each, sent twice: a changed entry
+/// prints only what it gained).
 fn printed_by_entries(lines: &[Line]) -> Vec<String> {
     use bise_proto::{hub::HubEv, rpc};
     let mut printed = crate::sb::Printed::new();
@@ -272,7 +271,7 @@ fn printed_by_entries(lines: &[Line]) -> Vec<String> {
 }
 
 /// Read 8: Line mode, in the parity law: his words, the replies, the tool
-/// calls and the messages print the same from entries as from lines.
+/// calls and the messages print from entries what the lines printed.
 #[test]
 fn line_mode_prints_the_same_from_entries() {
     let lines = mk(&[
@@ -289,24 +288,17 @@ fn line_mode_prints_the_same_from_entries() {
         "sb sent : main : m_9 : 1 : cart or checkout?",
         "  obs: turn_done: completed",
     ]);
-    let (a, b) = (printed_by_lines(&lines), printed_by_entries(&lines));
-    assert_eq!(b, a);
-    assert!(a.len() >= 8, "{a:?}");
+    assert_eq!(printed_by_entries(&lines), PRINTED_BY_LINES);
 }
 
-/// Line mode: every entry whose lines printed something still prints
-/// something (its words may be the entry's: a card's question, a hub
+/// Line mode: every entry whose lines printed something (all of
+/// [`corpus`]'s) still prints something (its words may be the entry's: a card's question, a hub
 /// line's text); a changed entry prints only what it gained.
 #[test]
 fn line_mode_drops_no_entry() {
-    let lines = corpus();
-    let es = folded(&lines);
-    for (i, e) in es.iter().enumerate() {
-        let end = es.get(i + 1).map_or(u64::MAX, |n| n.pos);
-        let had: Vec<Line> = lines.iter().filter(|(p, ..)| *p >= e.pos && *p < end).cloned().collect();
-        if !printed_by_lines(&had).is_empty() {
-            assert!(!line_of("perf", e).is_empty(), "{e:?} printed nothing");
-        }
+    // every entry of the corpus came from lines line mode printed
+    for e in folded(&corpus()) {
+        assert!(!line_of("perf", &e).is_empty(), "{e:?} printed nothing");
     }
     let a = vec!["[perf] tool a".to_string()];
     let ab = vec!["[perf] tool a".to_string(), "[perf] tool b".to_string()];
@@ -317,8 +309,8 @@ fn line_mode_drops_no_entry() {
 }
 
 /// Read 7: Voice mode, in the parity law: the replies said from entries are
-/// the replies the lines drew in his agent's feed, in order, for every
-/// prefix (each once, though the hub sends a changed entry again).
+/// the replies the lines drew in his agent's feed (frozen from the line
+/// path on 20950432), in order, for every prefix (each once, though the hub sends a changed entry again).
 #[test]
 fn voice_says_the_replies_the_lines_drew() {
     let lines = mk(&[
@@ -334,13 +326,8 @@ fn voice_says_the_replies_the_lines_drew() {
     ]);
     for n in 1..=lines.len() {
         let part = &lines[..n];
-        let mut app = test_app();
-        test_view(&mut app, "perf");
-        for (pos, ts, l) in part {
-            let j = serde_json::json!({"ev": "line", "agent": "perf", "line": l, "pos": pos, "ts": ts}).to_string();
-            crate::sb::dispatch(&mut app, &j);
-        }
-        let drew: Vec<String> = app.events.iter().filter_map(|e| if let Ev::Assistant(t) = e { Some(t.clone()) } else { None }).collect();
+        // the replies the lines drew (frozen from the line path)
+        let drew: Vec<String> = [(3, "on it."), (7, "all 12 pass.")].iter().filter(|(at, _)| n >= *at).map(|(_, t)| t.to_string()).collect();
         let mut s = Seen::default();
         let v = At { voice: true, ..LIVE };
         let said: Vec<String> = folded(part).iter().flat_map(|e| [reads_of(&mut s, v, e).said, reads_of(&mut s, v, e).said]).flatten().collect();
@@ -366,3 +353,4 @@ fn a_head_that_moves_lights_an_unfollowed_thread() {
     on_head(&mut app, "perf", Some(6));
     assert!(!app.sb.lit("perf"), "in view");
 }
+

@@ -632,7 +632,7 @@ mod zen_tests {
         let mut app = crate::sb::bench::test_app();
         crate::sb::hub_reads::rows_for_tests::apply(&mut app, vec![crate::sb::hub_reads::rows_for_tests::agent("main", "idle", ""), crate::sb::hub_reads::rows_for_tests::agent("docs", "working", "write the docs")], vec![]);
         sb::dispatch(&mut app, &json!({"ev": "ready"}).to_string());
-        sb::dispatch(&mut app, &json!({"ev": "line", "agent": "main", "line": "sb you : ship it"}).to_string());
+        crate::sb::entries_for_tests::lines(&mut app, "main", &["sb you : ship it"]);
         app
     }
 
@@ -881,6 +881,9 @@ mod zen_tests {
         calls(&mut app);
         assert!(app.zen.active(t));
         // a message to you, in a feed out of view
+        // TODO(client-protocol P4d, proto-zone-b): through
+        // crate::sb::entries_for_tests once feed_entries calls entry_reads
+        // (zen reads the entry, not the line)
         let l = json!({"ev": "line", "agent": "docs", "line": "sb msg-you : docs : la v2 est prête"});
         sb::dispatch(&mut app, &l.to_string());
         calls(&mut app);
@@ -961,7 +964,6 @@ mod paint_tests {
     use ratatui::backend::TestBackend;
     use ratatui::style::Color;
     use ratatui::Terminal;
-    use serde_json::json;
 
     fn resets(app: &mut App) -> Vec<(u16, u16)> {
         let mut t = Terminal::new(TestBackend::new(120, 36)).unwrap();
@@ -985,9 +987,7 @@ mod paint_tests {
             vec![crate::sb::hub_reads::rows_for_tests::agent("main", "idle", ""), crate::sb::hub_reads::rows_for_tests::agent("docs", "working", "write the docs")],
             vec![crate::sb::hub_reads::rows_for_tests::card(1, "question", "docs", "v1 or v2 for the api docs?")],
         );
-        for l in ["sb you : ship it", "sb msg : docs → main : found it", "sb card : #1 question @docs : v1 or v2?"] {
-            sb::dispatch(app, &json!({"ev": "line", "agent": "main", "line": l}).to_string());
-        }
+        crate::sb::entries_for_tests::lines(app, "main", &["sb you : ship it", "sb msg : docs → main : found it", "sb card : #1 question @docs : v1 or v2?"]);
     }
 
     #[test]

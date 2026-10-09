@@ -670,10 +670,6 @@ mod frame_tests {
     use ratatui::Terminal;
     use serde_json::json;
 
-    fn line(app: &mut App, l: &str) {
-        crate::sb::dispatch(app, &json!({"ev": "line", "agent": "main", "line": l}).to_string());
-    }
-
     /// main working, a long bash call (a closed box), two agents, a card.
     pub(super) fn busy_app() -> App {
         let mut app = crate::sb::bench::test_app();
@@ -683,12 +679,9 @@ mod frame_tests {
             vec![crate::sb::hub_reads::rows_for_tests::card(7, "question", "docs", "v1 or v2?")],
         );
         crate::sb::dispatch(&mut app, &json!({"ev": "ready"}).to_string());
-        line(&mut app, "sb you : ship it");
         let cmd: String = (1..=60).map(|i| format!("echo {i}")).collect::<Vec<_>>().join("\n");
-        line(&mut app, "  obs: tool_started #4");
-        line(&mut app, "tool #4 bash : echo");
-        line(&mut app, &format!("tool_code #4 : {}", cmd.replace('\\', "\\\\").replace('\n', "\\N")));
-        line(&mut app, "  obs: tool_finished #4 ok");
+        let code = &format!("tool_code #4 : {}", cmd.replace('\\', "\\\\").replace('\n', "\\N"));
+        crate::sb::entries_for_tests::lines(&mut app, "main", &["sb you : ship it", "  obs: tool_started #4", "tool #4 bash : echo", code, "  obs: tool_finished #4 ok"]);
         // BISE-223: a call is one row; opened, its box (and its
         // `▸ n more lines`) is what the hints cover
         for e in app.events.iter_mut() {

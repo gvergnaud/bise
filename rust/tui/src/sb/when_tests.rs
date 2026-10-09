@@ -30,6 +30,10 @@ fn ended(app: &App) -> Vec<u64> {
 
 const HOUR: u64 = 3_600_000;
 
+// TODO(client-protocol P4d switch, proto-zone-b): the three turn-end
+// tests below still feed `line` events: from entries a turn's end is an
+// agents row's edge (feed_entries::turn_edge, the TUI's clock) and a page
+// has none; the switch decides their typed fact (proto-reads m_14950)
 #[test]
 fn a_turn_end_keeps_the_hubs_time() {
     let mut app = test_app();
@@ -122,11 +126,15 @@ fn the_mouse_over_a_reply_shows_when_its_turn_ended() {
 fn a_replayed_feed_marks_its_pauses_with_the_hubs_time() {
     let mut app = test_app();
     let t = crate::when::now_ms() - 3 * HOUR;
-    // the hub's buffered lines at hello: they arrive at once, the
-    // pause is in their `ts`
-    dispatch(&mut app, &line("  obs: assistant: before the pause", 1, Some(t)));
-    dispatch(&mut app, &line("  obs: assistant: after the pause", 2, Some(t + 2 * HOUR)));
-    dispatch(&mut app, &line("  obs: assistant: right after", 3, Some(t + 2 * HOUR + 1_000)));
+    // the thread's first page: its entries arrive at once, the pause is
+    // in their times
+    let mut hub = super::entries_for_tests::Hub::new();
+    hub.had("main", [
+        (1, t, "  obs: assistant: before the pause".to_string()),
+        (2, t + 2 * HOUR, "  obs: assistant: after the pause".to_string()),
+        (3, t + 2 * HOUR + 1_000, "  obs: assistant: right after".to_string()),
+    ]);
+    hub.subscribe(&mut app, "main", false);
     let marks: Vec<String> = app.events.iter().filter_map(|e| if let Ev::TimeMark(m) = e { Some(m.clone()) } else { None }).collect();
     assert_eq!(marks, vec![crate::when::mark_now(t + 2 * HOUR)]);
 }
