@@ -615,3 +615,27 @@ fn a_turns_start_and_end_time_ride_on_its_entries() {
     let mid = fold(&ls[2..4], &ctx_with(&[], &none));
     assert_eq!(mid.iter().map(|x| (x.turn_start, x.turn_end_ms)).collect::<Vec<_>>(), [(false, Some(1_300))]);
 }
+
+/// Law (proto-lead m_15137, BISE-31): a card's closing line gives its
+/// entry the hub's word (and answered), the entry it changes is the
+/// newest card with that id, and a closing line for a card this thread
+/// never showed changes nothing and makes no entry, as the TUI's line
+/// path (the card fades with the word, `closed_word` reads it).
+#[test]
+fn a_closed_card_says_the_hubs_word() {
+    let l = |pos: u64, line: &str| (pos, 1_000 + pos, line.to_string());
+    let none = |_: &str| None;
+    let ls = vec![
+        l(1, "sb card : #9 question @perf : which bench?\\n1. cold\\n2. warm"),
+        l(2, "sb card : #4 drop @mig-db : drop the v1 tables now?"),
+        l(3, "sb card-closed : #4 accepted"),
+        l(4, "sb card-closed : #77 closed"),
+    ];
+    let e = fold(&ls, &ctx_with(&[9, 4], &none));
+    assert_eq!(e.len(), 2, "a closing line is no entry: {e:?}");
+    let c = |i: usize| e[i].card.clone().unwrap();
+    assert_eq!((c(0).closed, c(0).answered), (None, false), "still open");
+    assert_eq!((c(1).closed.as_deref(), c(1).answered), (Some("accepted"), true));
+    let j = serde_json::to_value(&e[0]).unwrap();
+    assert!(j["card"].get("closed").is_none(), "none is left out: {j}");
+}

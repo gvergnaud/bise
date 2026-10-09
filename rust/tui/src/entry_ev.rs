@@ -69,8 +69,7 @@ fn kind_evs(e: &Entry) -> Vec<Ev> {
         EntryKind::Answered => e.answered.iter().map(|a| Ev::Answered { agent: a.agent.clone(), question: a.question.clone(), answer: a.answer.clone(), why: a.why.clone(), open: false }).collect(),
         EntryKind::Approval => e.approval.iter().map(|a| Ev::Approval { ok: a.ok, text: a.text.clone(), note: a.note.clone(), asked: String::new(), open: false }).collect(),
         EntryKind::Scheduled => e.scheduled.iter().map(|s| Ev::Scheduled { head: s.head.clone(), words: s.words.clone(), open: false }).collect(),
-        // its typed parts (architect m_15013); answered (no longer open on
-        // the hub): faded as the line path fades it at its card-closed
+        // its typed parts (architect m_15013), faded by its closing word
         EntryKind::Card => e.card.iter().map(card).collect(),
         // P4a: no event yet (the parity law names them)
         EntryKind::Stopped | EntryKind::Page | EntryKind::Report | EntryKind::Unknown => Vec::new(),
@@ -104,7 +103,8 @@ fn card(c: &pthread::EntryCard) -> Ev {
         question: c.question.clone(),
         options: c.options.iter().map(|o| o.label.clone()).collect(),
     };
-    Ev::Card { card, closed: if c.answered { "answered".into() } else { String::new() } }
+    // faded with the hub's closing word, as the line path's card-closed
+    Ev::Card { card, closed: c.closed.clone().unwrap_or_default() }
 }
 
 #[cfg(test)]

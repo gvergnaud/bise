@@ -411,7 +411,7 @@ impl Fold<'_> {
                 let head = text.split_once(" : ").map_or(text.as_str(), |(h, _)| h);
                 let agent = head.split_whitespace().nth(2).and_then(|w| w.strip_prefix('@')).map(str::to_string);
                 let answered = !self.ctx.open_cards.contains(&id);
-                let card = EntryCard { id, question: q.clone(), options, answered, kind: Some(kind), agent };
+                let card = EntryCard { id, question: q.clone(), options, answered, kind: Some(kind), agent, closed: None };
                 let mut e = Entry::new(pos, ms, EntryKind::Card, q);
                 e.card = Some(card);
                 self.cont = Some(self.push(e));
@@ -484,6 +484,17 @@ impl Fold<'_> {
                 e.to = Some(lines::shown_name(&to)).filter(|t| !t.is_empty());
                 e.msg = id.strip_prefix("m_").and_then(|n| n.parse().ok());
                 self.cont = Some(self.push(e));
+            }
+            // BISE-31: the hub closed a card (`card-closed : #3 answered`):
+            // its entry (the newest card with that id) carries the word and
+            // is sent again; a card this thread never showed: nothing, as
+            // the TUI's line path
+            Hub::CardClosed { id, res } => {
+                let card = self.out.iter_mut().rev().filter_map(|e| e.card.as_mut()).find(|c| c.id == id);
+                if let Some(c) = card {
+                    c.closed = Some(res);
+                    c.answered = true;
+                }
             }
             // a warning, a spawn, computer use, a direct message
             h => {

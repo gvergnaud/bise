@@ -414,6 +414,11 @@ pub struct EntryCard {
     /// who asked (`rows::Card.agent`, the line's `@name`)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
+    /// how it was closed, the hub's word on its `card-closed` line
+    /// (`answered`, `answered via @docs`, `accepted`, `refused`, …, BISE-31):
+    /// the card fades with it; none while that line hasn't come
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closed: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
