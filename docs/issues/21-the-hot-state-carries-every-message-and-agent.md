@@ -68,6 +68,25 @@ rows). PROOF.bend checks it on generated histories.
 
 ### Rust mirror (`core.rs`, `board.rs`, `model.rs`)
 
+The first measure (hub-fifo, bench_step on his journal copy: 475 agents,
+25 active, cargo test build, load ~8): per REPL tool line, Hub::handle
+32.0 ms, of which `refresh_contexts` 23.8 ms; Hub::snapshot 53.0 ms (the
+state gate already caps it at 10 a second). So the Rust side dominates,
+and inside it the contexts (architect m_15341):
+
+5b. **Contexts when their inputs change, not at every input.**
+   `Hub::refresh_contexts` rebuilds every active agent's context (main's
+   and each task's, board.rs) on every input, while a context is only
+   read when that agent's REPL calls its model. The REPL re-reads
+   `BEND_CONTEXT_FILE` before every model call (bend/runtime/main.bend,
+   near line 899) and the hub writes that file (`Effect::Context`,
+   context.txt, atomic rename), so the context must be pushed, and the
+   pick is: rebuild an agent's context only when its inputs change, a
+   fingerprint of the roster rows it sees and of its waiting messages
+   (main's: its own inputs), not per line. If the read path turns out
+   lazier than this, build it at the next request instead, at most once
+   per change. Byte-equal check: the context a model call SEES is the same
+   as today's at the moment of the call (not at every input).
 6. `State.msgs` holds the hot messages only (the view sends nothing
    else); `Waiting::of` and `unanswered_for` are then O(hot).
 7. The archived agents' rows: built once when the view sends them
@@ -87,7 +106,8 @@ the same fields; archived rows still come when asked).
    the Rust side, for a tick, a REPL line and a user line, and how it grows
    with the history (half the journal vs all of it). If sb-core's share is
    small, steps 3-4 wait and 2 goes first.
-2. Rust mirror (6, 7): no Bend change.
+2. Rust mirror: 5b (the contexts) first, then 6, 7; then the snapshot's
+   53 ms is the next target. No Bend change.
 3. sb-core messages (1-3, 5) with `cold_is_inert`.
 4. sb-core archived agents (4, 5).
 
