@@ -1495,6 +1495,7 @@ impl Hub {
                 waiting: a["waiting"].as_bool().unwrap_or(false),
                 waiting_on: a["waiting_on"].as_str().map(|x| x.to_string()),
                 turn_started_ms: a["turn_ms"].as_u64(),
+                turns_ended: a["turns"].as_u64().unwrap_or(0),
                 activity: self.activity.get(&name).cloned(),
                 place: None,
                 place_branch: None,
@@ -2177,6 +2178,9 @@ impl Hub {
                     // for main (the user sees a quiet count, never asked)
                     "inbox": if a.is_main { waiting.unanswered(&a.name).len() } else { 0 },
                     "turn_ms": a.turn_started_ms.map(|t| now.saturating_sub(t)),
+                    // issue 22: its ended turns, from the same sb-core
+                    // view as its status (the agents row's `turns`)
+                    "turns": a.turns_ended,
                     // who it waits on (`sb wait` / `sb ask`), for `waits {name}`
                     "waiting_on": a.waiting_on.as_ref().filter(|_| a.waiting),
                 })

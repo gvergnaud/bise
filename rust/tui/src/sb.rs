@@ -225,9 +225,9 @@ pub(super) struct Sb {
     seen: HashMap<String, crate::entry_reads::Seen>,
     /// The threads subscribed on this connection (sb/feed_entries.rs).
     subscribed: std::collections::HashSet<String>,
-    /// Each agent's last row as the turn edges read it: working, its
-    /// ended turns, what its edges owe (feed_entries::agent_row).
-    turns_seen: HashMap<String, (bool, u64, crate::queue::Owed)>,
+    /// Each agent's last row as the turn edges read it: its turn runs,
+    /// its ended turns (feed_entries::agent_row).
+    turns_seen: HashMap<String, (bool, u64)>,
     /// The agent whose first page `ready` waits for (the focus at the
     /// connection, sb/feed_entries.rs `on_ready`): none, it came.
     ready_page: Option<String>,

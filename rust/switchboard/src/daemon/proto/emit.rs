@@ -54,7 +54,7 @@ impl Shell {
             Some(AgentUsage::of(&u.model, u.input, u.output, window))
         };
         let heads = &self.proto.heads;
-        let head = |name: &str| (heads.last(name), heads.turns(name));
+        let head = |name: &str| heads.last(name);
         let agents = proto_view::agents(snap, &mut self.proto.since, now, crate::model::user_kind, &vision, &usage, &head);
         let (cards, others) = proto_view::cards(snap, &project, now, crate::model::user_kind);
         let places = proto_view::places(snap);

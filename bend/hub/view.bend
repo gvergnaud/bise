@@ -53,7 +53,7 @@ def agent_json(+a: M.Agent, +x: X.Rt, +wo: J.Json) -> J.Json:
     J.kv("follow", J.JBool{M.Agent.follow(a)}),
     J.kv("run", J.JStr{H.run_str(X.Rt.run(x))}), J.kv("waiting", J.JBool{X.Rt.waiting(x)}),
     J.kv("waiting_on", wo),
-    J.kv("turn_ms", H.jturn(X.Rt.turn(x)))])
+    J.kv("turn_ms", H.jturn(X.Rt.turn(x))), J.kv("turns", J.JNum{X.Rt.turns(x)})])
 
 def is_archived(l: M.Life) -> Bool:
   match l:
@@ -177,12 +177,16 @@ def names_of(evs: List<&2, M.Ev>) -> List<&2, String>:
     case Con{+e, +t}:
       List.append(&2, String, ev_names(e), names_of(t))
 
-# a runtime at rest: no REPL, no wait, no turn (what rt_find answers
-# for an agent it does not know)
-def rt_rest(turn: Maybe<&2, Nat>, down: Bool, waiting: Bool) -> Bool:
+# a runtime at rest: no REPL, no wait, no turn, no turn ended (what
+# rt_find answers for an agent it does not know)
+def rt_rest(turn: Maybe<&2, Nat>, down: Bool, waiting: Bool, turns: Nat) -> Bool:
   match turn:
     case None{}:
-      down && Bool.not(waiting)
+      match turns:
+        case 0n:
+          down && Bool.not(waiting)
+        case 1n+_:
+          False{}
     case Some{_}:
       False{}
 
@@ -215,7 +219,7 @@ def turn_key(m: Maybe<&2, Nat>) -> String:
       Nat.show(t)
 
 def rt_key(+x: X.Rt) -> String:
-  H.cat([H.run_str(X.Rt.run(x)), " ", Bool.pick(String, X.Rt.waiting(x), "w", "-"), " ", turn_key(X.Rt.turn(x))])
+  H.cat([H.run_str(X.Rt.run(x)), " ", Bool.pick(String, X.Rt.waiting(x), "w", "-"), " ", turn_key(X.Rt.turn(x)), " ", Nat.show(X.Rt.turns(x))])
 
 def rt_marks.keep(rest: Bool, +x: X.Rt, +acc: List<&2, Mark>) -> List<&2, Mark>:
   match rest:
@@ -229,7 +233,7 @@ def rt_marks(rts: List<&2, X.Rt>) -> List<&2, Mark>:
     case Nil{}:
       Nil{}
     case Con{+x, +t}:
-      rt_marks.keep(rt_rest(X.Rt.turn(x), H.is_down(X.Rt.run(x)), X.Rt.waiting(x)), x, rt_marks(t))
+      rt_marks.keep(rt_rest(X.Rt.turn(x), H.is_down(X.Rt.run(x)), X.Rt.waiting(x), X.Rt.turns(x)), x, rt_marks(t))
 
 def waiter_marks(ws: List<&2, X.Waiter>) -> List<&2, Mark>:
   match ws:

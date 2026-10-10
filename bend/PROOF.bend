@@ -3003,28 +3003,28 @@ def hub_str_eq_refl(+s: String) -> {String.eq(s, s) == True{} : Bool}:
 
 # ---- L4 support: a delivery attempt never leaves its agent stuck ----
 
-def hub_rt_put_find.pick(c: Bool, +h: HX.Rt, +t: List<&2, HX.Rt>, +n: String, +run: HM.Run, +w: Bool, +tm: Maybe<&2, Nat>,
-    +e: {String.eq(HX.Rt.name(h), n) == c : Bool}, ih: {HC.rt_find(HC.rt_put(t, HX.Rt{n, run, w, tm}), n) == HX.Rt{n, run, w, tm} : HX.Rt})
-    -> {HC.rt_find(Bool.pick(List<&2, HX.Rt>, String.eq(HX.Rt.name(h), n), HX.Rt{n, run, w, tm} <> t, h <> HC.rt_put(t, HX.Rt{n, run, w, tm})), n) == HX.Rt{n, run, w, tm} : HX.Rt}:
+def hub_rt_put_find.pick(c: Bool, +h: HX.Rt, +t: List<&2, HX.Rt>, +n: String, +run: HM.Run, +w: Bool, +tm: Maybe<&2, Nat>, +k: Nat,
+    +e: {String.eq(HX.Rt.name(h), n) == c : Bool}, ih: {HC.rt_find(HC.rt_put(t, HX.Rt{n, run, w, tm, k}), n) == HX.Rt{n, run, w, tm, k} : HX.Rt})
+    -> {HC.rt_find(Bool.pick(List<&2, HX.Rt>, String.eq(HX.Rt.name(h), n), HX.Rt{n, run, w, tm, k} <> t, h <> HC.rt_put(t, HX.Rt{n, run, w, tm, k})), n) == HX.Rt{n, run, w, tm, k} : HX.Rt}:
   match c:
     case True{}:
-      %Equal.sym(Bool, String.eq(HX.Rt.name(h), n), True{}, e) : {HC.rt_find(Bool.pick(List<&2, HX.Rt>, _, HX.Rt{n, run, w, tm} <> t, h <> HC.rt_put(t, HX.Rt{n, run, w, tm})), n) == HX.Rt{n, run, w, tm} : HX.Rt}
-      %Equal.sym(Bool, String.eq(n, n), True{}, hub_str_eq_refl(n)) : {Bool.pick(HX.Rt, _, HX.Rt{n, run, w, tm}, HC.rt_find(t, n)) == HX.Rt{n, run, w, tm} : HX.Rt}
+      %Equal.sym(Bool, String.eq(HX.Rt.name(h), n), True{}, e) : {HC.rt_find(Bool.pick(List<&2, HX.Rt>, _, HX.Rt{n, run, w, tm, k} <> t, h <> HC.rt_put(t, HX.Rt{n, run, w, tm, k})), n) == HX.Rt{n, run, w, tm, k} : HX.Rt}
+      %Equal.sym(Bool, String.eq(n, n), True{}, hub_str_eq_refl(n)) : {Bool.pick(HX.Rt, _, HX.Rt{n, run, w, tm, k}, HC.rt_find(t, n)) == HX.Rt{n, run, w, tm, k} : HX.Rt}
       {==}
     case False{}:
-      %Equal.sym(Bool, String.eq(HX.Rt.name(h), n), False{}, e) : {HC.rt_find(Bool.pick(List<&2, HX.Rt>, _, HX.Rt{n, run, w, tm} <> t, h <> HC.rt_put(t, HX.Rt{n, run, w, tm})), n) == HX.Rt{n, run, w, tm} : HX.Rt}
-      %Equal.sym(Bool, String.eq(HX.Rt.name(h), n), False{}, e) : {Bool.pick(HX.Rt, _, h, HC.rt_find(HC.rt_put(t, HX.Rt{n, run, w, tm}), n)) == HX.Rt{n, run, w, tm} : HX.Rt}
+      %Equal.sym(Bool, String.eq(HX.Rt.name(h), n), False{}, e) : {HC.rt_find(Bool.pick(List<&2, HX.Rt>, _, HX.Rt{n, run, w, tm, k} <> t, h <> HC.rt_put(t, HX.Rt{n, run, w, tm, k})), n) == HX.Rt{n, run, w, tm, k} : HX.Rt}
+      %Equal.sym(Bool, String.eq(HX.Rt.name(h), n), False{}, e) : {Bool.pick(HX.Rt, _, h, HC.rt_find(HC.rt_put(t, HX.Rt{n, run, w, tm, k}), n)) == HX.Rt{n, run, w, tm, k} : HX.Rt}
       ih
 
 # putting an agent's runtime state and reading it back gives it
-def hub_rt_put_find(+xs: List<&2, HX.Rt>, +n: String, +run: HM.Run, +w: Bool, +tm: Maybe<&2, Nat>)
-    -> {HC.rt_find(HC.rt_put(xs, HX.Rt{n, run, w, tm}), n) == HX.Rt{n, run, w, tm} : HX.Rt}:
+def hub_rt_put_find(+xs: List<&2, HX.Rt>, +n: String, +run: HM.Run, +w: Bool, +tm: Maybe<&2, Nat>, +k: Nat)
+    -> {HC.rt_find(HC.rt_put(xs, HX.Rt{n, run, w, tm, k}), n) == HX.Rt{n, run, w, tm, k} : HX.Rt}:
   match xs:
     case Nil{}:
-      %Equal.sym(Bool, String.eq(n, n), True{}, hub_str_eq_refl(n)) : {Bool.pick(HX.Rt, _, HX.Rt{n, run, w, tm}, HC.rt_find(Nil{}, n)) == HX.Rt{n, run, w, tm} : HX.Rt}
+      %Equal.sym(Bool, String.eq(n, n), True{}, hub_str_eq_refl(n)) : {Bool.pick(HX.Rt, _, HX.Rt{n, run, w, tm, k}, HC.rt_find(Nil{}, n)) == HX.Rt{n, run, w, tm, k} : HX.Rt}
       {==}
     case Con{h, t}:
-      hub_rt_put_find.pick(String.eq(HX.Rt.name(h), n), h, t, n, run, w, tm, {==}, hub_rt_put_find(t, n, run, w, tm))
+      hub_rt_put_find.pick(String.eq(HX.Rt.name(h), n), h, t, n, run, w, tm, k, {==}, hub_rt_put_find(t, n, run, w, tm, k))
 
 def hub_p1(-o: HM.St, p: HX.Cx<o> & List<&2, J.Json>) -> HX.Cx<o>:
   match p:
@@ -3105,24 +3105,29 @@ def hub_rts_dirty_out(-o: HM.St, cx: HX.Cx<o>, +kvs: List<&2, Sigma<&2, &2, Stri
         case HX.R{a, b, c2, d, e, f, g, h, i, j, k, l}:
           {==}
 
-def hub_rts_set_rt(-o: HM.St, cx: HX.Cx<o>, +x: HX.Rt) -> {hub_rts(o, HC.set_rt(o, cx, x)) == HC.rt_put(hub_rts(o, cx), x) : List<&2, HX.Rt>}:
+def hub_rts_set_rt(-o: HM.St, cx: HX.Cx<o>, +x: HX.Rt) -> {hub_rts(o, HC.set_rt(o, cx, x)) == HC.rt_put(hub_rts(o, cx), HC.rt_next(HC.rt(o, cx, HX.Rt.name(x)), x)) : List<&2, HX.Rt>}:
   match cx:
     case HX.Cx{c, r}:
       match r:
         case HX.R{a, b, c2, d, e, f, g, h, i, j, k, l}:
           {==}
 
-def hub_run_if_agent(-o: HM.St, known: Bool, +cx: HX.Cx<o>, +n: String, +w: Bool, +tm: Maybe<&2, Nat>, +e: {known == True{} : Bool})
-    -> {HX.Rt.run(HC.rt_find(hub_rts(o, HC.if_agent(o, known, cx, HX.Rt{n, HM.RBusy{}, w, tm})), n)) == HM.RBusy{} : HM.Run}:
+# the ended turns set_rt gives agent n's new runtime state when its run
+# becomes busy (rt_next over its runtime before)
+def hub_busy_turns(-o: HM.St, +cx: HX.Cx<o>, +n: String) -> Nat:
+  HC.turns_after(HX.Rt.run(HC.rt(o, cx, n)), HM.RBusy{}, HX.Rt.turns(HC.rt(o, cx, n)))
+
+def hub_run_if_agent(-o: HM.St, known: Bool, +cx: HX.Cx<o>, +n: String, +w: Bool, +tm: Maybe<&2, Nat>, +k: Nat, +e: {known == True{} : Bool})
+    -> {HX.Rt.run(HC.rt_find(hub_rts(o, HC.if_agent(o, known, cx, HX.Rt{n, HM.RBusy{}, w, tm, k})), n)) == HM.RBusy{} : HM.Run}:
   match known:
     case True{}:
-      %Equal.sym(List<&2, HX.Rt>, hub_rts(o, HC.set_rt(o, cx, HX.Rt{n, HM.RBusy{}, w, tm})), HC.rt_put(hub_rts(o, cx), HX.Rt{n, HM.RBusy{}, w, tm}),
-          hub_rts_set_rt(o, cx, HX.Rt{n, HM.RBusy{}, w, tm})) : {HX.Rt.run(HC.rt_find(_, n)) == HM.RBusy{} : HM.Run}
-      %Equal.sym(HX.Rt, HC.rt_find(HC.rt_put(hub_rts(o, cx), HX.Rt{n, HM.RBusy{}, w, tm}), n), HX.Rt{n, HM.RBusy{}, w, tm},
-          hub_rt_put_find(hub_rts(o, cx), n, HM.RBusy{}, w, tm)) : {HX.Rt.run(_) == HM.RBusy{} : HM.Run}
+      %Equal.sym(List<&2, HX.Rt>, hub_rts(o, HC.set_rt(o, cx, HX.Rt{n, HM.RBusy{}, w, tm, k})), HC.rt_put(hub_rts(o, cx), HX.Rt{n, HM.RBusy{}, w, tm, hub_busy_turns(o, cx, n)}),
+          hub_rts_set_rt(o, cx, HX.Rt{n, HM.RBusy{}, w, tm, k})) : {HX.Rt.run(HC.rt_find(_, n)) == HM.RBusy{} : HM.Run}
+      %Equal.sym(HX.Rt, HC.rt_find(HC.rt_put(hub_rts(o, cx), HX.Rt{n, HM.RBusy{}, w, tm, hub_busy_turns(o, cx, n)}), n), HX.Rt{n, HM.RBusy{}, w, tm, hub_busy_turns(o, cx, n)},
+          hub_rt_put_find(hub_rts(o, cx), n, HM.RBusy{}, w, tm, hub_busy_turns(o, cx, n))) : {HX.Rt.run(_) == HM.RBusy{} : HM.Run}
       {==}
     case False{}:
-      hub_absurd_eq(hub_ft_absurd(e), HM.Run, HX.Rt.run(HC.rt_find(hub_rts(o, HC.if_agent(o, False{}, cx, HX.Rt{n, HM.RBusy{}, w, tm})), n)), HM.RBusy{})
+      hub_absurd_eq(hub_ft_absurd(e), HM.Run, HX.Rt.run(HC.rt_find(hub_rts(o, HC.if_agent(o, False{}, cx, HX.Rt{n, HM.RBusy{}, w, tm, k})), n)), HM.RBusy{})
 
 # a new turn marks its agent busy
 def hub_send_busy(-o: HM.St, p: HX.Cx<o> & List<&2, J.Json>, +n: String, +ids: List<&2, Nat>, +kvs0: List<&2, Sigma<&2, &2, String, _ => J.Json>>,
@@ -3130,12 +3135,12 @@ def hub_send_busy(-o: HM.St, p: HX.Cx<o> & List<&2, J.Json>, +n: String, +ids: L
     -> {HX.Rt.run(HC.rt_find(hub_rts(o, HC.pump.send(o, False{}, p, n, ids, kvs0)), n)) == HM.RBusy{} : HM.Run}:
   match p:
     case (+cx, +msgs):
-      +x = {HX.Rt{n, HM.RBusy{}, HX.Rt.waiting(HC.rt(o, cx, n)), Some{HC.now(o, cx)}} : HX.Rt}
+      +x = {HX.Rt{n, HM.RBusy{}, HX.Rt.waiting(HC.rt(o, cx, n)), Some{HC.now(o, cx)}, 0n} : HX.Rt}
       +cx2 = HC.upd_rt(o, cx, x)
       +kvs = HM.snoc(Sigma<&2, &2, String, _ => J.Json>, kvs0, J.kv("msgs", J.JArr{msgs}))
       %Equal.sym(List<&2, HX.Rt>, hub_rts(o, HC.dirty(o, HC.out(o, cx2, J.kv("fx", J.JStr{"deliver"}) <> J.kv("mode", J.JStr{"say"}) <> kvs))), hub_rts(o, cx2),
           hub_rts_dirty_out(o, cx2, J.kv("fx", J.JStr{"deliver"}) <> J.kv("mode", J.JStr{"say"}) <> kvs)) : {HX.Rt.run(HC.rt_find(_, n)) == HM.RBusy{} : HM.Run}
-      hub_run_if_agent(o, HC.has_agent(o, cx, n), cx, n, HX.Rt.waiting(HC.rt(o, cx, n)), Some{HC.now(o, cx)}, h)
+      hub_run_if_agent(o, HC.has_agent(o, cx, n), cx, n, HX.Rt.waiting(HC.rt(o, cx, n)), Some{HC.now(o, cx)}, 0n, h)
 
 def hub_has_tr(-o: HM.St, -a: HX.Cx<o>, -b: HX.Cx<o>, -n: String, e: {hub_ag(o, a) == hub_ag(o, b) : List<&2, HM.Agent>},
     h: {HC.has_agent(o, b, n) == True{} : Bool}) -> {HC.has_agent(o, a, n) == True{} : Bool}:
@@ -3511,31 +3516,31 @@ def hub_str_eq_sound(+a: String, +b: String, e: {String.eq(a, b) == True{} : Boo
 def hub_is_q_deliv(st: HM.MSt) -> {HM.is_queued(HM.MRec.st(HM.rec_op(HM.MRec{HM.Msg{0n, 0n, "", "", None{}, False{}, False{}, "", 0n, False{}, False{}, None{}}, st, False{}}, HM.OSt{HM.Delivered{}}))) == False{} : Bool}:
   {==}
 
-def hub_rt_put_other.pick(c: Bool, +h: HX.Rt, +t: List<&2, HX.Rt>, +a: String, +n: String, +run: HM.Run, +w: Bool, +tm: Maybe<&2, Nat>,
+def hub_rt_put_other.pick(c: Bool, +h: HX.Rt, +t: List<&2, HX.Rt>, +a: String, +n: String, +run: HM.Run, +w: Bool, +tm: Maybe<&2, Nat>, +k: Nat,
     +e: {String.eq(HX.Rt.name(h), a) == c : Bool}, +ne: {String.eq(a, n) == False{} : Bool},
-    ih: {HC.rt_find(HC.rt_put(t, HX.Rt{a, run, w, tm}), n) == HC.rt_find(t, n) : HX.Rt})
-    -> {HC.rt_find(Bool.pick(List<&2, HX.Rt>, String.eq(HX.Rt.name(h), a), HX.Rt{a, run, w, tm} <> t, h <> HC.rt_put(t, HX.Rt{a, run, w, tm})), n) == HC.rt_find(h <> t, n) : HX.Rt}:
+    ih: {HC.rt_find(HC.rt_put(t, HX.Rt{a, run, w, tm, k}), n) == HC.rt_find(t, n) : HX.Rt})
+    -> {HC.rt_find(Bool.pick(List<&2, HX.Rt>, String.eq(HX.Rt.name(h), a), HX.Rt{a, run, w, tm, k} <> t, h <> HC.rt_put(t, HX.Rt{a, run, w, tm, k})), n) == HC.rt_find(h <> t, n) : HX.Rt}:
   match c:
     case True{}:
       +hn = hub_str_eq_sound(HX.Rt.name(h), a, e)
-      %Equal.sym(Bool, String.eq(HX.Rt.name(h), a), True{}, e) : {HC.rt_find(Bool.pick(List<&2, HX.Rt>, _, HX.Rt{a, run, w, tm} <> t, h <> HC.rt_put(t, HX.Rt{a, run, w, tm})), n) == HC.rt_find(h <> t, n) : HX.Rt}
-      %Equal.sym(Bool, String.eq(a, n), False{}, ne) : {Bool.pick(HX.Rt, _, HX.Rt{a, run, w, tm}, HC.rt_find(t, n)) == HC.rt_find(h <> t, n) : HX.Rt}
+      %Equal.sym(Bool, String.eq(HX.Rt.name(h), a), True{}, e) : {HC.rt_find(Bool.pick(List<&2, HX.Rt>, _, HX.Rt{a, run, w, tm, k} <> t, h <> HC.rt_put(t, HX.Rt{a, run, w, tm, k})), n) == HC.rt_find(h <> t, n) : HX.Rt}
+      %Equal.sym(Bool, String.eq(a, n), False{}, ne) : {Bool.pick(HX.Rt, _, HX.Rt{a, run, w, tm, k}, HC.rt_find(t, n)) == HC.rt_find(h <> t, n) : HX.Rt}
       %Equal.sym(String, HX.Rt.name(h), a, hn) : {HC.rt_find(t, n) == Bool.pick(HX.Rt, String.eq(_, n), h, HC.rt_find(t, n)) : HX.Rt}
       %Equal.sym(Bool, String.eq(a, n), False{}, ne) : {HC.rt_find(t, n) == Bool.pick(HX.Rt, _, h, HC.rt_find(t, n)) : HX.Rt}
       {==}
     case False{}:
-      %Equal.sym(Bool, String.eq(HX.Rt.name(h), a), False{}, e) : {HC.rt_find(Bool.pick(List<&2, HX.Rt>, _, HX.Rt{a, run, w, tm} <> t, h <> HC.rt_put(t, HX.Rt{a, run, w, tm})), n) == HC.rt_find(h <> t, n) : HX.Rt}
-      Equal.cong(HX.Rt, HX.Rt, y => Bool.pick(HX.Rt, String.eq(HX.Rt.name(h), n), h, y), HC.rt_find(HC.rt_put(t, HX.Rt{a, run, w, tm}), n), HC.rt_find(t, n), ih)
+      %Equal.sym(Bool, String.eq(HX.Rt.name(h), a), False{}, e) : {HC.rt_find(Bool.pick(List<&2, HX.Rt>, _, HX.Rt{a, run, w, tm, k} <> t, h <> HC.rt_put(t, HX.Rt{a, run, w, tm, k})), n) == HC.rt_find(h <> t, n) : HX.Rt}
+      Equal.cong(HX.Rt, HX.Rt, y => Bool.pick(HX.Rt, String.eq(HX.Rt.name(h), n), h, y), HC.rt_find(HC.rt_put(t, HX.Rt{a, run, w, tm, k}), n), HC.rt_find(t, n), ih)
 
 # writing A's runtime state leaves every other agent's as it was
-def hub_rt_put_other(+xs: List<&2, HX.Rt>, +a: String, +n: String, +run: HM.Run, +w: Bool, +tm: Maybe<&2, Nat>, +ne: {String.eq(a, n) == False{} : Bool})
-    -> {HC.rt_find(HC.rt_put(xs, HX.Rt{a, run, w, tm}), n) == HC.rt_find(xs, n) : HX.Rt}:
+def hub_rt_put_other(+xs: List<&2, HX.Rt>, +a: String, +n: String, +run: HM.Run, +w: Bool, +tm: Maybe<&2, Nat>, +k: Nat, +ne: {String.eq(a, n) == False{} : Bool})
+    -> {HC.rt_find(HC.rt_put(xs, HX.Rt{a, run, w, tm, k}), n) == HC.rt_find(xs, n) : HX.Rt}:
   match xs:
     case Nil{}:
-      %Equal.sym(Bool, String.eq(a, n), False{}, ne) : {Bool.pick(HX.Rt, _, HX.Rt{a, run, w, tm}, HC.rt_find(Nil{}, n)) == HC.rt_find(Nil{}, n) : HX.Rt}
+      %Equal.sym(Bool, String.eq(a, n), False{}, ne) : {Bool.pick(HX.Rt, _, HX.Rt{a, run, w, tm, k}, HC.rt_find(Nil{}, n)) == HC.rt_find(Nil{}, n) : HX.Rt}
       {==}
     case Con{h, t}:
-      hub_rt_put_other.pick(String.eq(HX.Rt.name(h), a), h, t, a, n, run, w, tm, {==}, ne, hub_rt_put_other(t, a, n, run, w, tm, ne))
+      hub_rt_put_other.pick(String.eq(HX.Rt.name(h), a), h, t, a, n, run, w, tm, k, {==}, ne, hub_rt_put_other(t, a, n, run, w, tm, k, ne))
 
 
 # ---- L4: the frame of an agent (what makes it stuck) ----
@@ -3723,7 +3728,7 @@ def hub_d_send.go(-o: HM.St, b: Bool, +cx: HX.Cx<o>, +a: String, +ids: List<&2, 
     case True{}:
       hub_d_steer(o, cx, a, ids, kvs)
     case False{}:
-      +x = {HX.Rt{a, HM.RBusy{}, HX.Rt.waiting(HC.rt(o, cx, a)), Some{HC.now(o, cx)}} : HX.Rt}
+      +x = {HX.Rt{a, HM.RBusy{}, HX.Rt.waiting(HC.rt(o, cx, a)), Some{HC.now(o, cx)}, 0n} : HX.Rt}
       Equal.trans(HM.St, HX.d(o, HC.pump.send.go(o, False{}, cx, a, ids, kvs)), HX.d(o, HC.upd_rt(o, cx, x)), HX.d(o, cx),
         hub_d_dirty_out(o, HC.upd_rt(o, cx, x), J.kv("fx", J.JStr{"deliver"}) <> J.kv("mode", J.JStr{"say"}) <> kvs),
         hub_d_upd_rt(o, cx, x))
@@ -3787,12 +3792,12 @@ def hub_qimp_flush_cx(-o: HM.St, f: Bool, +cx: HX.Cx<o>, +n: String) -> {hub_qim
     case False{}:
       hub_qimp_refl(HX.d(o, cx), n)
 
-def hub_rts_if_other(-o: HM.St, known: Bool, +cx: HX.Cx<o>, +a: String, +w: Bool, +tm: Maybe<&2, Nat>, +n: String, +ne: {String.eq(a, n) == False{} : Bool})
-    -> {HC.rt_find(hub_rts(o, HC.if_agent(o, known, cx, HX.Rt{a, HM.RBusy{}, w, tm})), n) == HC.rt_find(hub_rts(o, cx), n) : HX.Rt}:
+def hub_rts_if_other(-o: HM.St, known: Bool, +cx: HX.Cx<o>, +a: String, +w: Bool, +tm: Maybe<&2, Nat>, +k: Nat, +n: String, +ne: {String.eq(a, n) == False{} : Bool})
+    -> {HC.rt_find(hub_rts(o, HC.if_agent(o, known, cx, HX.Rt{a, HM.RBusy{}, w, tm, k})), n) == HC.rt_find(hub_rts(o, cx), n) : HX.Rt}:
   match known:
     case True{}:
-      %Equal.sym(List<&2, HX.Rt>, hub_rts(o, HC.set_rt(o, cx, HX.Rt{a, HM.RBusy{}, w, tm})), HC.rt_put(hub_rts(o, cx), HX.Rt{a, HM.RBusy{}, w, tm}), hub_rts_set_rt(o, cx, HX.Rt{a, HM.RBusy{}, w, tm})) : {HC.rt_find(_, n) == HC.rt_find(hub_rts(o, cx), n) : HX.Rt}
-      hub_rt_put_other(hub_rts(o, cx), a, n, HM.RBusy{}, w, tm, ne)
+      %Equal.sym(List<&2, HX.Rt>, hub_rts(o, HC.set_rt(o, cx, HX.Rt{a, HM.RBusy{}, w, tm, k})), HC.rt_put(hub_rts(o, cx), HX.Rt{a, HM.RBusy{}, w, tm, hub_busy_turns(o, cx, a)}), hub_rts_set_rt(o, cx, HX.Rt{a, HM.RBusy{}, w, tm, k})) : {HC.rt_find(_, n) == HC.rt_find(hub_rts(o, cx), n) : HX.Rt}
+      hub_rt_put_other(hub_rts(o, cx), a, n, HM.RBusy{}, w, tm, hub_busy_turns(o, cx, a), ne)
     case False{}:
       {==}
 
@@ -3801,12 +3806,12 @@ def hub_rts_send_other(-o: HM.St, p: HX.Cx<o> & List<&2, J.Json>, +a: String, +i
     -> {HC.rt_find(hub_rts(o, HC.pump.send(o, False{}, p, a, ids, kvs0)), n) == HC.rt_find(hub_rts(o, hub_p1(o, p)), n) : HX.Rt}:
   match p:
     case (+cx, +msgs):
-      +x = {HX.Rt{a, HM.RBusy{}, HX.Rt.waiting(HC.rt(o, cx, a)), Some{HC.now(o, cx)}} : HX.Rt}
+      +x = {HX.Rt{a, HM.RBusy{}, HX.Rt.waiting(HC.rt(o, cx, a)), Some{HC.now(o, cx)}, 0n} : HX.Rt}
       +cx2 = HC.upd_rt(o, cx, x)
       +kvs = HM.snoc(Sigma<&2, &2, String, _ => J.Json>, kvs0, J.kv("msgs", J.JArr{msgs}))
       %Equal.sym(List<&2, HX.Rt>, hub_rts(o, HC.dirty(o, HC.out(o, cx2, J.kv("fx", J.JStr{"deliver"}) <> J.kv("mode", J.JStr{"say"}) <> kvs))), hub_rts(o, cx2),
           hub_rts_dirty_out(o, cx2, J.kv("fx", J.JStr{"deliver"}) <> J.kv("mode", J.JStr{"say"}) <> kvs)) : {HC.rt_find(_, n) == HC.rt_find(hub_rts(o, cx), n) : HX.Rt}
-      hub_rts_if_other(o, HC.has_agent(o, cx, a), cx, a, HX.Rt.waiting(HC.rt(o, cx, a)), Some{HC.now(o, cx)}, n, ne)
+      hub_rts_if_other(o, HC.has_agent(o, cx, a), cx, a, HX.Rt.waiting(HC.rt(o, cx, a)), Some{HC.now(o, cx)}, 0n, n, ne)
 
 def hub_rt_run_eq(+x: List<&2, HX.Rt>, +y: List<&2, HX.Rt>, +n: String, e: {HC.rt_find(x, n) == HC.rt_find(y, n) : HX.Rt})
     -> {HX.Rt.run(HC.rt_find(x, n)) == HX.Rt.run(HC.rt_find(y, n)) : HM.Run}:
@@ -5424,3 +5429,45 @@ def Laws.mcp_retry_only_unsent():
 
 def Laws.mcp_fail_text_says_why_and_safety():
   {==}
+
+# ---- issue 22: ended turns counted by set_rt ----
+
+def Laws.hub_turns_counts_every_busy_exit(now, n, e):
+  match now:
+    case HM.RBusy{}:
+      hub_absurd_eq(hub_ft_absurd(Equal.sym(Bool, True{}, False{}, e)), Nat, HC.turns_after(HM.RBusy{}, HM.RBusy{}, n), 1n+n)
+    case HM.RIdle{}:
+      {==}
+    case HM.RDown{}:
+      {==}
+    case HM.RStarting{}:
+      {==}
+
+def Laws.hub_turns_never_moves_otherwise(was, now, n, e):
+  match was:
+    case HM.RBusy{}:
+      match now:
+        case HM.RBusy{}:
+          {==}
+        case HM.RIdle{}:
+          hub_absurd_eq(hub_ft_absurd(Equal.sym(Bool, True{}, False{}, e)), Nat, HC.turns_after(HM.RBusy{}, HM.RIdle{}, n), n)
+        case HM.RDown{}:
+          hub_absurd_eq(hub_ft_absurd(Equal.sym(Bool, True{}, False{}, e)), Nat, HC.turns_after(HM.RBusy{}, HM.RDown{}, n), n)
+        case HM.RStarting{}:
+          hub_absurd_eq(hub_ft_absurd(Equal.sym(Bool, True{}, False{}, e)), Nat, HC.turns_after(HM.RBusy{}, HM.RStarting{}, n), n)
+    case HM.RIdle{}:
+      {==}
+    case HM.RDown{}:
+      {==}
+    case HM.RStarting{}:
+      {==}
+
+def Laws.hub_set_rt_counts_turns(o, cx, x):
+  match x:
+    case HX.Rt{+n, +run, +w, +tm, +k}:
+      +t = {HC.turns_after(HX.Rt.run(HC.rt(o, cx, n)), run, HX.Rt.turns(HC.rt(o, cx, n))) : Nat}
+      %Equal.sym(List<&2, HX.Rt>, hub_rts(o, HC.set_rt(o, cx, HX.Rt{n, run, w, tm, k})), HC.rt_put(hub_rts(o, cx), HX.Rt{n, run, w, tm, t}),
+          hub_rts_set_rt(o, cx, HX.Rt{n, run, w, tm, k})) : {HX.Rt.turns(HC.rt_find(_, n)) == t : Nat}
+      %Equal.sym(HX.Rt, HC.rt_find(HC.rt_put(hub_rts(o, cx), HX.Rt{n, run, w, tm, t}), n), HX.Rt{n, run, w, tm, t},
+          hub_rt_put_find(hub_rts(o, cx), n, run, w, tm, t)) : {HX.Rt.turns(_) == t : Nat}
+      {==}

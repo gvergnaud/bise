@@ -9,11 +9,9 @@
 //! knows its newest pos ([`super::Live::last_pos`]): it is given, never
 //! folded twice. The pos moves on a new entry only, never on a line
 //! inside one (a tool's result) nor on one the fold hides (usage, obs).
-//! Each head also counts the agent's ended turns (`turns`, its live
-//! `turn_done` lines): a client fires a turn's edges from it, never
-//! missing a turn that began and ended between two rows (m_14731).
+//! An agent's ended turns are not counted here: the row's `turns` is
+//! sb-core's (set_rt), from the same view as its status (issue 22).
 
-use bise_proto::thread::lines::{self, Obs, Rec};
 use bise_proto::thread::{self, Ctx, Line};
 use bise_proto::Pos;
 use std::collections::BTreeMap;
@@ -27,8 +25,6 @@ pub struct Heads {
 struct Head {
     lines: Vec<Line>,
     last: Option<Pos>,
-    /// its turns ended since the hub started (live `turn_done` lines)
-    turns: u64,
 }
 
 impl Heads {
@@ -38,7 +34,7 @@ impl Heads {
         if self.by.contains_key(agent) {
             return;
         }
-        let mut h = Head { lines, last: None, turns: 0 };
+        let mut h = Head { lines, last: None };
         h.fold(ctx);
         self.by.insert(agent.to_string(), h);
     }
@@ -50,26 +46,19 @@ impl Heads {
 
     /// One live line of `agent`; `known`: its newest entry's pos from a
     /// subscription's live fold (then not folded here). True when its
-    /// newest entry moved or a turn of it ended.
+    /// newest entry moved.
     pub fn push(&mut self, agent: &str, line: Line, known: Option<Pos>, ctx: &Ctx) -> bool {
         let h = self.by.entry(agent.to_string()).or_default();
         if h.lines.last().is_some_and(|l| l.0 >= line.0) {
             return false;
         }
         let before = h.last;
-        let ended = matches!(lines::read(&line.2), Rec::Obs(Obs::TurnDone(_)));
-        h.turns += u64::from(ended);
         h.lines.push(line);
         match known {
             Some(p) => h.keep(p),
             None => h.fold(ctx),
         }
-        h.last != before || ended
-    }
-
-    /// How many turns of `agent` ended since the hub started.
-    pub fn turns(&self, agent: &str) -> u64 {
-        self.by.get(agent).map_or(0, |h| h.turns)
+        h.last != before
     }
 
     /// `agent`'s newest entry's pos (none: no entry seen yet).
@@ -126,23 +115,5 @@ mod tests {
         h.seed("docs", vec![you(5, "a"), you(6, "b")], &c);
         h.seed("docs", vec![], &c);
         assert_eq!(h.last("docs"), Some(6));
-    }
-
-    /// proto-lead m_14731: two quick turns in one burst of lines count two
-    /// ended turns, each a move of the row (never deduped away).
-    #[test]
-    fn every_ended_turn_counts() {
-        let page = |_: &str| -> Option<thread::PageRef> { None };
-        let c = Ctx { open_cards: &[], page: &page, provider: &|_: &str, k: &str| k.to_string(), width: &|s: &str| s.chars().count(), offset: &|_| 0, attached: &crate::attached::split };
-        let mut h = Heads::default();
-        let l = |p: Pos, t: &str| (p, p * 10, t.to_string());
-        h.push("perf", l(1, "sb you : go"), None, &c);
-        assert!(!h.push("perf", l(2, "  obs: turn_started"), None, &c));
-        assert!(h.push("perf", l(3, "  obs: turn_done: completed"), None, &c), "an ended turn moves the row");
-        h.push("perf", l(4, "  obs: turn_started"), None, &c);
-        assert!(h.push("perf", l(5, "  obs: turn_done: failed: 500"), None, &c));
-        assert_eq!((h.turns("perf"), h.turns("docs")), (2, 0));
-        assert!(!h.push("perf", l(5, "  obs: turn_done: completed"), None, &c), "a line seen: not twice");
-        assert_eq!(h.turns("perf"), 2);
     }
 }

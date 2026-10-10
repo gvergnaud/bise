@@ -14,7 +14,7 @@ type Fx is Data:
   FO{o: J.Json}
 
 type Rt is Data:
-  Rt{name: String, run: M.Run, waiting: Bool, turn: Maybe<&2, Nat>}
+  Rt{name: String, run: M.Run, waiting: Bool, turn: Maybe<&2, Nat>, turns: Nat}
 
 type Waiter is Data:
   Waiter{token: Nat, agent: String, msg: Nat, deadline: Nat}
@@ -50,43 +50,56 @@ type Both<-A: Data, -B: Data> is Data:
 
 def Rt.name(x: Rt) -> String:
   match x:
-    case Rt{+name, _, _, _}:
+    case Rt{+name, _, _, _, _}:
       name
 
 def Rt.with_name(x: Rt, +v: String) -> Rt:
   match x:
-    case Rt{_, +run, +waiting, +turn}:
-      Rt{v, run, waiting, turn}
+    case Rt{_, +run, +waiting, +turn, +turns}:
+      Rt{v, run, waiting, turn, turns}
 
 def Rt.run(x: Rt) -> M.Run:
   match x:
-    case Rt{_, +run, _, _}:
+    case Rt{_, +run, _, _, _}:
       run
 
 def Rt.with_run(x: Rt, +v: M.Run) -> Rt:
   match x:
-    case Rt{+name, _, +waiting, +turn}:
-      Rt{name, v, waiting, turn}
+    case Rt{+name, _, +waiting, +turn, +turns}:
+      Rt{name, v, waiting, turn, turns}
 
 def Rt.waiting(x: Rt) -> Bool:
   match x:
-    case Rt{_, _, +waiting, _}:
+    case Rt{_, _, +waiting, _, _}:
       waiting
 
 def Rt.with_waiting(x: Rt, +v: Bool) -> Rt:
   match x:
-    case Rt{+name, +run, _, +turn}:
-      Rt{name, run, v, turn}
+    case Rt{+name, +run, _, +turn, +turns}:
+      Rt{name, run, v, turn, turns}
 
 def Rt.turn(x: Rt) -> Maybe<&2, Nat>:
   match x:
-    case Rt{_, _, _, +turn}:
+    case Rt{_, _, _, +turn, _}:
       turn
 
 def Rt.with_turn(x: Rt, +v: Maybe<&2, Nat>) -> Rt:
   match x:
-    case Rt{+name, +run, +waiting, _}:
-      Rt{name, run, waiting, v}
+    case Rt{+name, +run, +waiting, _, +turns}:
+      Rt{name, run, waiting, v, turns}
+
+# its turns ended since sb-core started (issue 22): set only by set_rt
+# (core.bend), the one writer of a runtime state, +1 each time its run
+# leaves RBusy
+def Rt.turns(x: Rt) -> Nat:
+  match x:
+    case Rt{_, _, _, _, +turns}:
+      turns
+
+def Rt.with_turns(x: Rt, +v: Nat) -> Rt:
+  match x:
+    case Rt{+name, +run, +waiting, +turn, _}:
+      Rt{name, run, waiting, turn, v}
 
 def Waiter.token(x: Waiter) -> Nat:
   match x:

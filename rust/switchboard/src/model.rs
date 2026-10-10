@@ -174,6 +174,11 @@ pub struct Agent {
     /// `sb ask` waits for the reply to (sb-core's view).
     pub waiting_on: Option<String>,
     pub turn_started_ms: Option<u64>,
+    /// Its turns ended since sb-core started (issue 22): sb-core's
+    /// runtime count, +1 each time its run leaves busy (set_rt), so the
+    /// agents row's working and turns come from the same view. Back to 0
+    /// when sb-core restarts.
+    pub turns_ended: u64,
     /// The last thing it did: (time, "bash `cargo test`", "wrote: ...").
     pub activity: Option<(u64, String)>,
     /// BISE-136: the private git worktree it works in (`gate.sh new`,
@@ -370,6 +375,7 @@ impl State {
                 waiting: false,
                 waiting_on: None,
                 turn_started_ms: None,
+                turns_ended: 0,
                 activity: None,
                 place: None,
                 place_branch: None,

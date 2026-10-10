@@ -5538,3 +5538,36 @@ law mcp_fail_text_says_why_and_safety:
       "mcp call failed: web_search.web_search (api.mistral.ai), initialize: cannot resolve api.mistral.ai (dns) — check your network or VPN. bise reconnected and retried 2 times. the call never reached the server: safe to call again."),
     String.eq(Mc.fail_text("x.y", "h", Mc.SCall{}, Mc.WStatus{502, "{\"message\":\"bad gateway\"}"}, 0n),
       "mcp call failed: x.y (h), tools/call: h answered HTTP 502: bad gateway. not retried: the call may have run on the server, check before calling it again (safe if the tool only reads).")) == True{} : Bool}
+
+# ---- an agent's ended turns, counted where its run changes (issue 22,
+# architect m_16521): the agents row carries working and turns from one
+# source, sb-core's runtime state, so no row has one half without the
+# other. set_rt is the one writer of a runtime state ----
+
+# LAW: a run that leaves RBusy (to idle, down or starting) counts one
+# more ended turn.
+law hub_turns_counts_every_busy_exit:
+  for now: HM.Run
+  for +n: Nat
+  for e: {HC.is_busy(now) == False{} : Bool}
+  {HC.turns_after(HM.RBusy{}, now, n) == 1n+n : Nat}
+
+# LAW: any other run change (busy to busy, or from a run that was not
+# busy) leaves the count as it was.
+law hub_turns_never_moves_otherwise:
+  for was: HM.Run
+  for now: HM.Run
+  for +n: Nat
+  for e: {Bool.and(HC.is_busy(was), Bool.not(HC.is_busy(now))) == False{} : Bool}
+  {HC.turns_after(was, now, n) == n : Nat}
+
+# LAW: set_rt, every runtime change, stores the agent's ended turns as
+# its runtime before them moved by turns_after (whatever count the new
+# state carried): a step that ends a turn and starts the next one (the
+# idle's pump) goes through it twice, Busy -> Idle (+1), Idle -> Busy.
+law hub_set_rt_counts_turns:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +x: HX.Rt
+  {HX.Rt.turns(HC.rt(o, HC.set_rt(o, cx, x), HX.Rt.name(x)))
+    == HC.turns_after(HX.Rt.run(HC.rt(o, cx, HX.Rt.name(x))), HX.Rt.run(x), HX.Rt.turns(HC.rt(o, cx, HX.Rt.name(x)))) : Nat}

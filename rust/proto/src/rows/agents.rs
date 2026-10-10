@@ -207,13 +207,28 @@ pub struct Agent {
     /// moves, without subscribing its thread
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_pos: Option<crate::Pos>,
-    /// how many of its turns ended since the hub started (its
-    /// `turn_done` lines, counted live), so a client never misses a turn
-    /// that started and ended between two rows (the queue's next message
-    /// goes at a turn's end): it compares it with what it saw
-    /// (proto-lead m_14731)
+    /// how many of its turns ended since sb-core started (sb-core's own
+    /// count: +1 each time its run leaves busy, in the same view as its
+    /// status, issue 22), so a client never misses a turn that started
+    /// and ended between two rows (the queue's next message goes at a
+    /// turn's end): it compares it with what it saw (proto-lead m_14731).
+    /// Back to 0 when sb-core restarts: a lower count is a new baseline
     #[serde(default, skip_serializing_if = "is_zero_u64")]
     pub turns: u64,
+}
+
+impl Agent {
+    /// Its turn runs: sb-core's run is busy (status working past its
+    /// start, or waiting on a reply inside the turn). The half of the row
+    /// `turns` agrees with (issue 22): false iff `turns` counts the turn
+    /// that just ended.
+    pub fn turn_running(&self) -> bool {
+        match self.status {
+            Status::Working => self.phase != Some(Phase::Starting),
+            Status::Waiting => true,
+            _ => false,
+        }
+    }
 }
 
 /// Where an agent works (named apart from `hub::Mode`, a send's).

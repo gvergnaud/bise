@@ -192,6 +192,22 @@ def is_down(r: M.Run) -> Bool:
     case _:
       False{}
 
+# issue 22: an agent's ended turns after its run goes from `was` to
+# `now`: one more when it leaves RBusy (to idle, down or starting), the
+# same otherwise. set_rt, the one writer of a runtime state, applies it,
+# so a turn that ends and a next one that starts in the same step (the
+# idle's pump) still counts.
+def turns_after(was: M.Run, now: M.Run, +n: Nat) -> Nat:
+  match was:
+    case M.RBusy{}:
+      match now:
+        case M.RBusy{}:
+          n
+        case _:
+          1n+n
+    case _:
+      n
+
 def is_active(l: M.Life) -> Bool:
   match l:
     case M.LActive{}:
@@ -204,7 +220,7 @@ def is_active(l: M.Life) -> Bool:
 def rt_find(xs: List<&2, X.Rt>, +n: String) -> X.Rt:
   match xs:
     case Nil{}:
-      X.Rt{n, M.RDown{}, False{}, None{}}
+      X.Rt{n, M.RDown{}, False{}, None{}, 0n}
     case Con{+h, +t}:
       Bool.pick(X.Rt, String.eq(X.Rt.name(h), n), h, rt_find(t, n))
 
@@ -388,12 +404,20 @@ def jturn(m: Maybe<&2, Nat>) -> J.Json:
     case Some{+t}:
       J.JNum{t}
 
-# set the runtime state of an agent (the Rust mirror follows)
-def set_rt(-o: M.St, +cx: X.Cx<o>, +x: X.Rt) -> X.Cx<o>:
+# the runtime state `x` as set_rt stores it over `was`, the agent's
+# runtime before: its ended turns are was's, one more when the run
+# leaves RBusy (turns_after); x's own count is never read
+def rt_next(+was: X.Rt, +x: X.Rt) -> X.Rt:
+  X.Rt.with_turns(x, turns_after(X.Rt.run(was), X.Rt.run(x), X.Rt.turns(was)))
+
+# set the runtime state of an agent (the Rust mirror follows): every
+# runtime change goes through here, so its ended turns count here
+def set_rt(-o: M.St, +cx: X.Cx<o>, +x0: X.Rt) -> X.Cx<o>:
+  +x = rt_next(rt(o, cx, X.Rt.name(x0)), x0)
   +cx2 = set_r(o, cx, X.R.with_rts(rr(o, cx), rt_put(X.R.rts(rr(o, cx)), x)))
   out(o, cx2, [J.kv("fx", J.JStr{"rt"}), J.kv("agent", J.JStr{X.Rt.name(x)}),
     J.kv("run", J.JStr{run_str(X.Rt.run(x))}), J.kv("waiting", J.JBool{X.Rt.waiting(x)}),
-    J.kv("turn_ms", jturn(X.Rt.turn(x)))])
+    J.kv("turn_ms", jturn(X.Rt.turn(x))), J.kv("turns", J.JNum{X.Rt.turns(x)})])
 
 def set_run(-o: M.St, +cx: X.Cx<o>, +n: String, +run: M.Run) -> X.Cx<o>:
   set_rt(o, cx, X.Rt.with_run(rt(o, cx, n), run))
@@ -451,7 +475,7 @@ def status_of_decl(d: Maybe<&2, M.Decl>) -> String:
 
 def status_of_run(+a: M.Agent, x: X.Rt) -> String:
   match x:
-    case X.Rt{_, run, +w, _}:
+    case X.Rt{_, run, +w, _, _}:
       match run:
         case M.RDown{}:
           "starting"
@@ -669,7 +693,7 @@ def pump.send.go(-o: M.St, busy: Bool, +cx: X.Cx<o>, +name: String, +ids: List<&
       dirty(o, out(o, cx2, J.kv("fx", J.JStr{"deliver"}) <> J.kv("mode", J.JStr{"steer"}) <> kvs))
     case False{}:
       # the turn starts now: nothing else may `say` meanwhile
-      +cx2 = upd_rt(o, cx, X.Rt{name, M.RBusy{}, X.Rt.waiting(rt(o, cx, name)), Some{now(o, cx)}})
+      +cx2 = upd_rt(o, cx, X.Rt{name, M.RBusy{}, X.Rt.waiting(rt(o, cx, name)), Some{now(o, cx)}, 0n})
       dirty(o, out(o, cx2, J.kv("fx", J.JStr{"deliver"}) <> J.kv("mode", J.JStr{"say"}) <> kvs))
 
 def pump.send(-o: M.St, busy: Bool, p: X.Cx<o> & List<&2, J.Json>, +name: String, +ids: List<&2, Nat>, +kvs0: List<&2, Sigma<&2, &2, String, _ => J.Json>>) -> X.Cx<o>:
@@ -3407,7 +3431,7 @@ def idle.agent(-o: M.St, m: Maybe<&2, M.Agent>, +cx: X.Cx<o>, +agent: String, +l
     case None{}:
       cx
     case Some{+a}:
-      +cx2 = dirty(o, set_rt(o, cx, X.Rt{agent, M.RIdle{}, False{}, None{}}))
+      +cx2 = dirty(o, set_rt(o, cx, X.Rt{agent, M.RIdle{}, False{}, None{}, 0n}))
       +r = rr(o, cx2)
       +text = kv_get(X.R.last(r), agent)
       +cx3 = set_r(o, cx2, X.R.with_last(r, kv_del(X.R.last(r), agent)))

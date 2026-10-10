@@ -200,10 +200,11 @@ fn apply(app: &mut App, n: &Notification) {
 /// follows its agent, the first agent's hint, the tour.
 fn agents(app: &mut App, rows: &[bise_proto::rows::Agent], places: &[bise_proto::rows::Place]) {
     let new: Vec<Agent> = rows.iter().map(Agent::of_row).collect();
-    // each row's turn edges (P4d-feed, proto-lead m_14731): a working
-    // flip or an ended turn, never missed
+    // each row's turn edges (P4d-feed, proto-lead m_14731): a run flip
+    // or an ended turn, never missed; both halves from sb-core's one
+    // view (issue 22)
     for a in rows {
-        feed_entries::agent_row(app, &a.name, a.status.working(), a.turns);
+        feed_entries::agent_row(app, &a.name, a.turn_running(), a.turns);
         // every live agent's feed is kept as the lines kept it (its
         // preview, its cards, its dot by kind): subscribed once per
         // connection; an archived one lights by its newest entry

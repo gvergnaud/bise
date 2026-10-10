@@ -256,16 +256,16 @@ pub(super) fn want_older(app: &mut App, before: usize) {
 }
 
 /// An agent's row as the state reader applies it (zone-a's 4b): its turn
-/// edges since the row before (`queue::turn_edges`, with what they owe:
-/// a turn's end is drawn once though its row's two halves come apart) go
-/// to its feed; the first row of an agent fires none.
-pub(crate) fn agent_row(app: &mut App, agent: &str, working: bool, turns: u64) {
-    let Some((w, t, owed)) = app.sb.turns_seen.get(agent).copied() else {
-        app.sb.turns_seen.insert(agent.to_string(), (working, turns, crate::queue::Owed::Nothing));
+/// edges since the row before (`queue::turn_edges`: its turn runs and its
+/// ended turns, both from sb-core's one view, issue 22) go to its feed;
+/// the first row of an agent fires none.
+pub(crate) fn agent_row(app: &mut App, agent: &str, running: bool, turns: u64) {
+    let Some((w, t)) = app.sb.turns_seen.get(agent).copied() else {
+        app.sb.turns_seen.insert(agent.to_string(), (running, turns));
         return;
     };
-    let (edges, owed) = crate::queue::turn_edges((w, t), (working, turns), owed);
-    app.sb.turns_seen.insert(agent.to_string(), (working, turns, owed));
+    let edges = crate::queue::turn_edges((w, t), (running, turns));
+    app.sb.turns_seen.insert(agent.to_string(), (running, turns));
     for started in edges {
         turn_edge(app, agent, started);
     }

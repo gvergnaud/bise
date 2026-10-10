@@ -163,48 +163,24 @@ fn cut(s: &str, room: usize) -> String {
     out
 }
 
-/// What an agent's turn edges still owe between two of its rows: its
-/// agents row's `working` (sb-core's status) and `turns` (the thread's
-/// ended turns, its heads) come from two sources and move in different
-/// rows, so one turn's end can show twice: from the flip, then from its
-/// count (or the other way round). Drawing it twice released the next
-/// queued message at once, in the same turn (tui_queue_tmux 3/7 red,
-/// proto-lead m_16051, architect m_16053).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum Owed {
-    #[default]
-    Nothing,
-    /// an end drawn from `working` turning false: its count is to come
-    Count,
-    /// an end drawn from its count while the row still said working: its
-    /// flip to false is to come
-    Flip,
-}
-
-/// The turn edges between an agent's row before (`was`: working, its
-/// ended turns) and its row now, and what they owe after: one end per
-/// ended turn, a start before it when the row didn't say working (a turn
-/// that started and ended between two rows, no entry of it seen, is a
-/// start then an end), then a start when it works now; a working flip
-/// alone is that edge. An end already drawn from the other half of the
-/// row ([`Owed`]) is never drawn again. True: a start, false: an end,
-/// in order (proto-lead m_14731).
-pub(crate) fn turn_edges(was: (bool, u64), now: (bool, u64), owed: Owed) -> (Vec<bool>, Owed) {
-    let (mut owed, mut out) = (owed, Vec::new());
-    let mut ended = now.1.saturating_sub(was.1);
-    // the flip drew this turn's end: its count settles it
-    if ended > 0 && owed == Owed::Count {
-        ended -= 1;
-        owed = Owed::Nothing;
+/// The turn edges between an agent's row before (`was`: its turn runs,
+/// its ended turns) and its row now. Both halves come from one source,
+/// sb-core's runtime state in one view (issue 22: `rows::Agent::turn_running`
+/// and `turns`), so a turn's end is the count moving with the run no
+/// longer busy, never two rows apart. One end per ended turn, a start
+/// before it when the row didn't say running (a turn that started and
+/// ended between two rows, no entry of it seen, is a start then an end),
+/// then a start when it runs now; a flip alone is that edge. A lower
+/// count is sb-core restarted (its count is back to 0): a new baseline,
+/// nothing drawn. True: a start, false: an end, in order (proto-lead
+/// m_14731).
+pub(crate) fn turn_edges(was: (bool, u64), now: (bool, u64)) -> Vec<bool> {
+    let mut out = Vec::new();
+    if now.1 < was.1 {
+        return out;
     }
-    // a count while its flip is owed: the row's working was the ended
-    // turn's; this one ran since (its start not drawn yet)
-    let flip_counted = ended > 0 && owed == Owed::Flip;
-    if flip_counted {
-        owed = Owed::Nothing;
-    }
-    let mut running = was.0 && !flip_counted;
-    for _ in 0..ended {
+    let mut running = was.0;
+    for _ in 0..now.1 - was.1 {
         if !running {
             out.push(true);
         }
@@ -212,21 +188,11 @@ pub(crate) fn turn_edges(was: (bool, u64), now: (bool, u64), owed: Owed) -> (Vec
         running = false;
     }
     match (running, now.0) {
-        // counted while the row still says working: its flip is to come
-        (false, true) if ended > 0 && was.0 => owed = Owed::Flip,
         (false, true) => out.push(true),
-        // the count drew this end: the flip settles it
-        (true, false) if owed == Owed::Flip => owed = Owed::Nothing,
-        (true, false) => {
-            out.push(false);
-            owed = Owed::Count;
-        }
+        (true, false) => out.push(false),
         _ => {}
     }
-    if !now.0 && owed == Owed::Flip {
-        owed = Owed::Nothing;
-    }
-    (out, owed)
+    out
 }
 
 #[cfg(test)]
@@ -400,14 +366,7 @@ mod tests {
     /// The agent's rows in order from its first, through
     /// [`turn_edges`]: every edge drawn.
     fn edges(rows: &[(bool, u64)]) -> Vec<bool> {
-        let mut owed = Owed::Nothing;
-        let mut out = Vec::new();
-        for w in rows.windows(2) {
-            let (e, o) = turn_edges(w[0], w[1], owed);
-            out.extend(e);
-            owed = o;
-        }
-        out
+        rows.windows(2).flat_map(|w| turn_edges(w[0], w[1])).collect()
     }
 
     /// Law (proto-lead m_14731): a turn is never missed. A flip alone is
@@ -415,43 +374,46 @@ mod tests {
     /// are two start/end pairs; an end and a start together come end first.
     #[test]
     fn every_turn_gets_its_edges() {
-        let one = |was, now| turn_edges(was, now, Owed::Nothing).0;
-        assert_eq!(one((false, 0), (true, 0)), [true]);
-        assert_eq!(one((true, 0), (false, 1)), [false]);
-        assert_eq!(one((false, 3), (false, 5)), [true, false, true, false], "two quick turns");
-        assert_eq!(one((true, 3), (true, 3)), Vec::<bool>::new());
-        assert_eq!(edges(&[(false, 3), (true, 3), (true, 4), (true, 5), (false, 5)]), [true, false, true, false], "one ended, the next one ran and ended");
+        assert_eq!(turn_edges((false, 0), (true, 0)), [true]);
+        assert_eq!(turn_edges((true, 0), (false, 1)), [false]);
+        assert_eq!(turn_edges((false, 3), (false, 5)), [true, false, true, false], "two quick turns");
+        assert_eq!(turn_edges((true, 3), (true, 3)), Vec::<bool>::new());
+        assert_eq!(edges(&[(false, 3), (true, 3), (true, 4), (true, 5), (false, 5)]), [true, false, true, false, true, false], "two turns ended, each the next one started in its step, then the last flipped");
         assert_eq!(edges(&[(false, 2), (false, 3), (false, 4)]), [true, false, true, false], "a turn with no entry and no working row: a pair each");
     }
 
-    /// Law (proto-lead m_16051, architect m_16053, tui_queue_tmux's run):
-    /// the status first, then the count of the same turn: one end. The
-    /// count first, then the status: one end. Either way the next turn's
-    /// edges still come.
+    /// Law (issue 22): the row's two halves come from one view, so one
+    /// turn's end is one row: running with n, then not running with n+1,
+    /// one end; a turn that ends and the next that starts in the same
+    /// sb-core step (the idle's pump sends the queued message) is the
+    /// count moving while the row stays running: an end, then a start.
     #[test]
-    fn a_turns_end_is_drawn_once_whichever_half_of_the_row_comes_first() {
-        assert_eq!(edges(&[(true, 1), (false, 1), (false, 2)]), [false], "status, then turns");
-        assert_eq!(edges(&[(true, 1), (true, 2), (false, 2)]), [false], "turns, then status");
-        // the next turn after each: its start and its one end
-        assert_eq!(edges(&[(true, 1), (false, 1), (false, 2), (true, 2), (false, 2), (false, 3)]), [false, true, false]);
-        assert_eq!(edges(&[(true, 1), (true, 2), (false, 2), (true, 2), (true, 3), (false, 3)]), [false, true, false]);
-        // the late count after the next turn started: nothing more
-        assert_eq!(edges(&[(true, 1), (false, 1), (true, 1), (true, 2), (false, 2), (false, 3)]), [false, true, false]);
+    fn a_turns_end_is_one_row() {
+        assert_eq!(edges(&[(true, 1), (false, 2)]), [false]);
+        assert_eq!(edges(&[(true, 1), (true, 2)]), [false, true], "ended and the next one started in one step");
+        assert_eq!(edges(&[(true, 1), (false, 2), (true, 2), (false, 3)]), [false, true, false]);
     }
 
-    /// Law: the race tui_queue_tmux caught. The sleep turn ends by its
-    /// status (queued-one goes), then its count comes: queued-two waits
-    /// for queued-one's own turn to end.
+    /// Law (architect m_16521): sb-core restarted, its counts are back to
+    /// 0: a lower count is a new baseline, nothing drawn, and the next
+    /// ended turn draws its one end (no start/end burst).
     #[test]
-    fn a_late_count_does_not_release_the_next_queued_one() {
+    fn a_lower_count_is_a_new_baseline() {
+        assert_eq!(edges(&[(true, 5), (true, 0), (false, 1)]), [false]);
+        assert_eq!(turn_edges((false, 5), (false, 0)), Vec::<bool>::new());
+        assert_eq!(turn_edges((true, 5), (false, 0)), Vec::<bool>::new());
+    }
+
+    /// Law: the race tui_queue_tmux caught, on one-source rows. The sleep
+    /// turn ends (queued-one goes and starts its turn in the same step):
+    /// queued-two waits for queued-one's own turn to end.
+    #[test]
+    fn the_next_queued_one_waits_for_the_turn_the_first_one_started() {
         let mut app = two_queued();
         app.pending = true;
-        let mut owed = Owed::Nothing;
         let mut sent = Vec::new();
         let mut row = |app: &mut App, was, now| {
-            let (e, o) = turn_edges(was, now, owed);
-            owed = o;
-            for started in e {
+            for started in turn_edges(was, now) {
                 seen(app);
                 if !started {
                     app.pending = false;
@@ -462,12 +424,11 @@ mod tests {
                 }
             }
         };
-        row(&mut app, (true, 1), (false, 1));
-        row(&mut app, (false, 1), (false, 2));
+        row(&mut app, (true, 1), (true, 2));
         assert_eq!(app.queued.len(), 1, "two waits");
-        row(&mut app, (false, 2), (true, 2));
-        row(&mut app, (true, 2), (false, 2));
-        row(&mut app, (false, 2), (false, 3));
+        row(&mut app, (true, 2), (true, 2));
+        assert_eq!(app.queued.len(), 1, "a row with nothing new: two still waits");
+        row(&mut app, (true, 2), (false, 3));
         assert!(app.queued.is_empty());
         assert_eq!(sent, ["one", "two"]);
     }

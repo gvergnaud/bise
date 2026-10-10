@@ -4354,6 +4354,70 @@ fn close_closes_every_kind_of_card() {
     }
 }
 
+/// Issue 22's law (architect m_16521): over a corpus of turns through
+/// the real sb-core (a quick turn, a turn with no entry, an interrupted
+/// one, a failed one, one whose queued message starts the next turn in
+/// the idle's own step, a crash mid-turn), every agents row the hub
+/// builds after a step has its turn running iff no turn of it is
+/// pending an end, and `turns` counts every turn that ended so far: no
+/// row ever has the new status with the old count, or the reverse.
+#[test]
+fn an_agents_row_says_running_and_turns_from_one_source() {
+    let mut t = T::new();
+    t.spawn_task("a");
+    let row = |t: &T| -> (bool, u64) {
+        let snap = t.hub.snapshot(t.env.now);
+        let mut since = crate::proto_view::Since::new();
+        let rows = crate::proto_view::agents(&snap, &mut since, t.env.now, crate::model::user_kind, &|_| None, &|_| None, &|_| None);
+        let a = rows.iter().find(|r| r.name == "a").expect("a's row");
+        (a.turn_running(), a.turns)
+    };
+    let line = |t: &mut T, l: &str| {
+        t.go(Input::ReplLine { agent: "a".into(), line: l.into() });
+    };
+    let idle = |t: &mut T| {
+        t.go(Input::ReplIdle { agent: "a".into(), leftover: false });
+    };
+    // the brief's turn runs (spawn_task started it)
+    let base = row(&t).1;
+    assert_eq!(row(&t), (true, base));
+    // it ends: one step, both halves
+    idle(&mut t);
+    assert_eq!(row(&t), (false, base + 1), "a quick turn ends");
+    // a turn with no entry
+    t.user("a", "go");
+    line(&mut t, "  obs: turn_started");
+    assert_eq!(row(&t), (true, base + 1));
+    idle(&mut t);
+    assert_eq!(row(&t), (false, base + 2), "a turn with no entry");
+    // an interrupted one: its turn_done line moves nothing, its idle does
+    t.user("a", "long job");
+    line(&mut t, "  obs: turn_started");
+    line(&mut t, "  obs: turn_done: interrupted");
+    assert_eq!(row(&t), (true, base + 2), "the line alone never moves the count");
+    idle(&mut t);
+    assert_eq!(row(&t), (false, base + 3), "an interrupted turn");
+    // a failed one
+    t.user("a", "try");
+    line(&mut t, "  obs: turn_started");
+    line(&mut t, "  obs: turn_done: failed: 500");
+    idle(&mut t);
+    assert_eq!(row(&t), (false, base + 4), "a failed turn");
+    // a queued message: the idle's pump starts its turn in the same step
+    t.user("a", "first");
+    line(&mut t, "  obs: turn_started");
+    t.user_queued("a", "then this");
+    idle(&mut t);
+    assert_eq!(row(&t), (true, base + 5), "ended and the next one started in one step");
+    idle(&mut t);
+    assert_eq!(row(&t), (false, base + 6));
+    // a crash mid-turn ends it too
+    t.user("a", "crash");
+    line(&mut t, "  obs: turn_started");
+    t.go(Input::ReplExited { agent: "a".into(), crashed: true, reason: "test".into() });
+    assert_eq!(row(&t), (false, base + 7), "a crash mid-turn");
+}
+
 /// No number a client sends panics the hub (core_num.rs).
 #[path = "core_num_tests.rs"]
 mod core_num_tests;
