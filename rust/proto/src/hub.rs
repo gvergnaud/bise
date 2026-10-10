@@ -105,7 +105,19 @@ pub enum HubEv {
     /// result from the agent's session log, capped at
     /// `thread::TOOL_TEXT_CAP`; when the log hasn't it (an older REPL's
     /// call, no log) the transcript's preview with `cut`
-    ToolOut { project: Project, agent: String, pos: Pos, out: String, cut: bool },
+    ToolOut {
+        project: Project,
+        agent: String,
+        pos: Pos,
+        out: String,
+        cut: bool,
+        /// the whole output's size in bytes (the unit of the cap: '4 KB
+        /// of 18 KB shown'), when the session log answered; none for the
+        /// preview (the size isn't known)
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts", ts(optional))]
+        total: Option<u64>,
+    },
     /// an agent's change (the answer to `diff`): its checkout or branch
     /// vs `base`; `head` its branch (none: the shared folder)
     Diff {

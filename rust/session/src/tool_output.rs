@@ -20,23 +20,27 @@ use crate::reader::read_dir;
 use crate::types::{Part, Payload};
 use std::path::Path;
 
-/// A result's text, cut to the caller's `max` bytes (`cut` then).
+/// A result's text, cut to the caller's `max` bytes (`cut` then), and the
+/// whole text's length in bytes (`total`, the unit of `max`: designer's
+/// '4 KB of 18 KB shown', ambient-lead m_15631).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Out {
     pub text: String,
     pub cut: bool,
+    pub total: usize,
 }
 
 /// `text` cut to `max` bytes on a char boundary.
 pub fn cut_to(text: &str, max: usize) -> Out {
-    if text.len() <= max {
-        return Out { text: text.to_string(), cut: false };
+    let total = text.len();
+    if total <= max {
+        return Out { text: text.to_string(), cut: false, total };
     }
     let mut end = max;
     while !text.is_char_boundary(end) {
         end -= 1;
     }
-    Out { text: text[..end].to_string(), cut: true }
+    Out { text: text[..end].to_string(), cut: true, total }
 }
 
 /// The text of a result's parts: inline text and text blobs, in order

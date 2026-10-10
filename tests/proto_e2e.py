@@ -334,6 +334,10 @@ def main():
         check(got["pos"] == items[-1]["pos"] and got["cut"] and 3800 <= len(got["out"]) <= 4096
               and lines_out[:3] == ["1", "2", "3"] and len(lines_out) > 800,
               "tool_out gives the real lines up to the cap: %r\n%r" % ({k: (v[:60] + "…" + v[-30:] if k == "out" else v) for k, v in got.items()}, why_preview()))
+        # the whole output's size rides along ('4 KB of 9 KB shown', m_15631):
+        # seq 1 2000 is 8893 bytes with its last newline
+        check(got.get("total") in (8892, 8893) and got["total"] > len(got["out"].encode()),
+              "tool_out carries the whole output's bytes: %r" % got.get("total"))
         # not a tool call: an error with its cmd
         c.send({"cmd": "tool_out", "project": project, "agent": "main", "pos": 1})
         c.wait(lambda: any(e.get("cmd") == "tool_out" for e in typed(c, "error")), 20, "tool_out's error")

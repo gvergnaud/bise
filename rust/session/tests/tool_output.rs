@@ -50,12 +50,13 @@ fn a_result_is_found_by_call_ok_and_time_and_cut_on_a_char_boundary() {
     let yes = |_: &str| true;
     let q = |n: u64, ok: bool, at_ms: u64| Query { session: "s", n, name: "bash", ok, at_ms };
     let got = tool_output(&t, &blobs, &q(1, true, at(&t, a)), 4096, &yes).unwrap();
-    assert_eq!(got, Out { text: lines.clone(), cut: false });
+    assert_eq!(got, Out { text: lines.clone(), cut: false, total: lines.len() });
+    // cut: the whole text's bytes ride along ('4 KB of 18 KB shown')
     let got = tool_output(&t, &blobs, &q(1, true, at(&t, a)), 100, &yes).unwrap();
-    assert_eq!((got.text.as_str(), got.cut), (&lines[..100], true));
+    assert_eq!((got.text.as_str(), got.cut, got.total), (&lines[..100], true, lines.len()));
     // the blob reads back, cut
     let got = tool_output(&t, &blobs, &q(2, false, at(&t, b)), 4096, &yes).unwrap();
-    assert_eq!((got.text.len(), got.cut), (4096, true));
+    assert_eq!((got.text.len(), got.cut, got.total), (4096, true, big.len()));
     // a missing call, the other ok, too far in time, a refused check, a bad session
     assert_eq!(tool_output(&t, &blobs, &q(3, true, at(&t, a)), 4096, &yes), None);
     assert_eq!(tool_output(&t, &blobs, &q(1, false, at(&t, a)), 4096, &yes), None);
@@ -64,8 +65,8 @@ fn a_result_is_found_by_call_ok_and_time_and_cut_on_a_char_boundary() {
     assert_eq!(tool_output(&t, &blobs, &Query { session: "../x", ..q(1, true, at(&t, a)) }, 4096, &yes), None);
     // a 3-byte char across the cap: cut before it
     let s = format!("{}€tail", "a".repeat(9));
-    assert_eq!(cut_to(&s, 10), Out { text: "a".repeat(9), cut: true });
-    assert_eq!(cut_to(&s, 12), Out { text: format!("{}€", "a".repeat(9)), cut: true });
+    assert_eq!(cut_to(&s, 10), Out { text: "a".repeat(9), cut: true, total: s.len() });
+    assert_eq!(cut_to(&s, 12), Out { text: format!("{}€", "a".repeat(9)), cut: true, total: s.len() });
 }
 
 /// The log keeps the message the model reads, `tool <name> ok: <out>`
@@ -87,7 +88,7 @@ fn the_runtimes_header_is_not_part_of_the_output() {
     let a = w.append("tool_result", result("call_3", true, "tool bash ok: 1\n2\n3\n"), Some(1)).unwrap();
     let q = Query { session: "s", n: 3, name: "bash", ok: true, at_ms: at(&t, a) };
     let got = tool_output(&t, &blobs, &q, 4096, &|full| full.starts_with("1\n2")).unwrap();
-    assert_eq!(got, Out { text: "1\n2\n3\n".into(), cut: false });
+    assert_eq!(got, Out { text: "1\n2\n3\n".into(), cut: false, total: 6 });
 }
 
 /// The same command run twice, same preview, different outputs (a test
