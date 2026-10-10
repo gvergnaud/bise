@@ -59,6 +59,8 @@ pub struct RpcConn {
     wm: Watermark,
     /// `initialize` answered on this connection
     pub ready: bool,
+    /// the hub's page server (`initialize`'s), if it serves pages
+    pub pages_url: Option<String>,
 }
 
 impl RpcConn {
@@ -122,6 +124,7 @@ impl RpcConn {
     fn welcome(&mut self, res: InitializeResult) -> Read {
         self.ready = true;
         self.wm = res.hub.watermark;
+        self.pages_url = res.pages_url.clone();
         let mut cmds: Vec<String> = res.methods.iter().filter_map(|m| rpc::method_row(m)).map(|r| r.cmd.to_string()).collect();
         cmds.insert(0, "hello".into());
         let welcome = HubEv::Welcome { project: res.project, proto: res.proto, workspace: res.workspace, name: res.name, cmds };

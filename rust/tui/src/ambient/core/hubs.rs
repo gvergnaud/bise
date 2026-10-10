@@ -281,8 +281,8 @@ impl Core {
     /// `shown {projects}`: the projects the window shows now.
     /// J: whether bise's home hub's typed line goes on (not the second
     /// copy of a job end the window already has, [`first_end`]).
-    pub(super) fn end_once(&mut self, v: &Value) -> bool {
-        HubEv::from_value(v.clone()).map(|ev| first_end(&mut self.hubs.ends, &ev)).unwrap_or(true)
+    pub(super) fn end_once(&mut self, ev: &HubEv) -> bool {
+        first_end(&mut self.hubs.ends, ev)
     }
 
     pub(super) fn shown(&mut self, projects: Vec<String>) {

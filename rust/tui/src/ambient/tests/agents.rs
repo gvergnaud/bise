@@ -83,7 +83,7 @@ fn perf_lines() -> Vec<Line> {
     ]
 }
 
-const PROJECT: &str = "ws-0000beef";
+const PROJECT: &str = super::fake_hub::HOME;
 
 /// The hub's fold of perf's lines (bise_proto::thread, what the hub
 /// sends): card 9 open, perf-notes published.
@@ -129,10 +129,10 @@ fn a_preview_shows_now_the_last_actions_what_waits_the_report_and_pages() {
     // its next step re-sends the preview: now is that step
     t.hub.say(json!({"ev": "typing", "project": PROJECT, "agent": "perf", "text": "listing the bench files"}));
     t.until(|o| o.iter().any(|v| v["ev"] == "agent_preview" && v["now"] == "listing the bench files"));
-    // another agent selected: perf's thread is left, its entries send nothing
+    // another agent selected: its entries send nothing; perf's thread
+    // stays subscribed, the capsule's (its words to him, core/home.rs)
     t.cmd(Cmd::AgentPreview { agent: "old".into() });
-    assert_eq!(t.hub.next(), json!({"cmd": "unsubscribe", "agent": "perf", "project": PROJECT}));
-    assert_eq!(t.hub.next()["agent"], "old");
+    assert_eq!(t.hub.next(), json!({"cmd": "subscribe", "agent": "old", "limit": 8, "project": PROJECT}));
     t.take();
     let mut lines = perf_lines();
     lines.push((13, 1_013, "  obs: assistant: done".into()));
@@ -201,9 +201,8 @@ fn a_history_shows_the_hubs_entries_older_and_follows_live() {
     let kinds: Vec<&str> = h["entries"].as_array().unwrap().iter().map(|e| e["kind"].as_str().unwrap()).collect();
     assert_eq!(kinds, ["tools", "from-agent"], "the hub's page, as the panel's");
     assert_eq!((h["before"].as_u64(), h["more"].as_bool()), (Some(4), Some(true)));
-    // the panel closes: the thread is left, no more entries
+    // the panel closes: no more entries (its thread stays the capsule's)
     t.cmd(Cmd::AgentUnwatch { agent: "perf".into() });
-    assert_eq!(t.hub.next(), json!({"cmd": "unsubscribe", "agent": "perf", "project": PROJECT}));
     lines.push((17, 1_017, "  obs: assistant: bye".into()));
     t.hub.say(entry_ev("perf", hub_fold(&lines).last().unwrap()));
     t.sync();

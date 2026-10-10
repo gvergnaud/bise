@@ -45,12 +45,14 @@ fn talk_start_heard_talk_end_is_one_input_and_main_answers_aloud() {
 
     // main's lines: working (with its tool line), main's text, then aloud
     t.hub.line("main", "  obs: turn_started");
+    t.hub.line("main", "  obs: tool_started #1");
+    t.hub.line("main", "tool #1 bash : cargo test");
     t.hub.line("main", "tool_intent #1 : runs the tests");
     t.hub.line("main", "  obs: assistant: <think>check ci</think>Yes, the build is green.\\nAll 412 tests pass.");
     t.hub.line("main", "  obs: turn_done: completed");
     t.until(|o| phase_is(o, "speaking"));
     let out = t.take();
-    assert_eq!(phases(&out), vec!["working", "working", "speaking"]);
+    assert_eq!(phases(&out), vec!["working", "working", "working", "speaking"], "its start, its tool, the tool's intent");
     assert!(out.iter().any(|v| v["ev"] == "phase" && v["line"] == "runs the tests"));
     assert!(out.contains(&json!({"ev": "main", "text": "Yes, the build is green.\nAll 412 tests pass.", "turn": 1})));
     // the voice: sentence by sentence; the speaker's clock lights the words
@@ -172,6 +174,7 @@ fn only_mains_words_after_its_last_tool_call_are_its_answer() {
     t.hub.next();
     t.hub.line("main", "  obs: turn_started");
     t.hub.line("main", "  obs: assistant: Let me check.");
+    t.hub.line("main", "  obs: tool_started #2");
     t.hub.line("main", "tool #2 bash : ls");
     t.hub.line("main", "  obs: turn_done: completed");
     t.until(|o| phase_is(o, "done"));
@@ -186,7 +189,7 @@ fn stop_watching_goes_to_the_hub_and_timers_ride_the_state() {
     let stop = t.hub.next();
     assert_eq!((stop["cmd"].as_str(), stop["id"].as_u64()), (Some("scheduled_stop"), Some(3)), "{stop}");
     assert!(Cmd::parse(r#"{"cmd":"every_stop"}"#).is_err());
-    let timers = json!([{"id": 3, "what": "the launch", "every": "15m"}]);
+    let timers = json!([{"id": 3, "agent": "main", "by": "main", "words": "the launch", "every": "15m", "done": 0}]);
     t.hub.say(json!({"ev": "state", "agents": [], "cards": [], "pages": [{"id": "w", "opened_version": 2}], "timers": timers}));
     t.until(|o| has(o, "state"));
     let st = t.take().into_iter().find(|v| v["ev"] == "state").unwrap();
@@ -247,6 +250,8 @@ fn shown_is_the_proto_app_cmd() {
 #[test]
 fn the_state_carries_pages_url_and_urgent_cards() {
     let mut t = T::new();
+    // the page server's base: `initialize`'s
+    t.hub.pages_url = Some("http://127.0.0.1:47123".into());
     t.hub.say(json!({"ev": "state", "agents": [], "pages": [], "pages_url": "http://127.0.0.1:47123",
         "cards": [{"id": 1, "kind": "confirm", "agent": "a", "text": "run rm?"}, {"id": 2, "kind": "question", "agent": "a", "text": "which?"}]}));
     t.until(|o| has(o, "state"));
@@ -260,7 +265,7 @@ fn the_state_carries_pages_url_and_urgent_cards() {
 #[test]
 fn a_batch_card_carries_its_fields() {
     let mut t = T::new();
-    let batch = json!({"count": 3, "title": "inbox", "what": "replies", "names": ["legal", "Lucas", "Marc"]});
+    let batch = json!({"count": 3, "title": "inbox", "what": "replies", "names": ["legal", "Lucas", "Marc"], "topics": [], "line": ""});
     t.hub.say(json!({"ev": "state", "agents": [], "pages": [],
         "cards": [{"id": 4, "kind": "question", "agent": "main", "text": "3 drafts wait for you · inbox
 replies to legal, Lucas and Marc

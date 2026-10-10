@@ -310,7 +310,9 @@ pub(crate) enum Ev {
 // the assistant text (the transport the API re-send depends on); the TUI
 // never shows the markers: it splits them into a Thinking section (one
 // reply can carry several blocks; the text around them stays visible).
-// The one parser of the line is bise-proto's (thread::lines).
+// The one parser of the line is bise-proto's (thread::lines); the tests'
+// (the desktop core reads entries since client-protocol step 5).
+#[cfg(test)]
 pub(crate) use bise_proto::thread::lines::split_thinking;
 
 // --resume / reload: the REPL replays the restored history as the live
@@ -331,6 +333,10 @@ pub(crate) fn parse_history_line(line: &str) -> Option<Ev> {
     rec_ev(lines::read_history(line))
 }
 
+/// One feed line as the TUI's event: the tests' and the parity laws'
+/// reader since the desktop core reads entries too (client-protocol
+/// step 5): no reader outside the tests is left.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn parse_line(line: &str) -> Option<Ev> {
     rec_ev(lines::read(line))
 }

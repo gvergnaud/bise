@@ -79,8 +79,7 @@ impl T {
     fn make(fake: Option<super::fake::Words>) -> T {
         let (etx, ends) = mpsc::channel::<HubEnd>();
         let connect: super::hub::Connect = Box::new(move || {
-            let (mut core_end, hub_end) = UnixStream::pair()?;
-            core_end.write_all(b"{\"op\":\"hello\"}\n")?;
+            let (core_end, hub_end) = UnixStream::pair()?;
             let r = BufReader::new(hub_end.try_clone()?);
             r.get_ref().set_read_timeout(Some(Duration::from_secs(3)))?;
             etx.send(HubEnd::new(hub_end, r)).map_err(std::io::Error::other)?;
@@ -135,10 +134,13 @@ impl T {
 
     /// Hub events in, a tick, events out, until `done` holds on what
     /// came out since the last `take` (3 s at most).
+    #[track_caller]
     fn until(&mut self, done: impl Fn(&[Value]) -> bool) {
         let t0 = Instant::now();
         loop {
-            while let Ok(h) = self.rx.try_recv() {
+            // the hub's lines until none comes for a moment: the kinds the
+            // fake hub writes at once are read in one batch (one `state`)
+            while let Ok(h) = self.rx.recv_timeout(Duration::from_millis(2)) {
                 self.core.hub(h);
             }
             self.core.tick(Instant::now());
@@ -160,16 +162,32 @@ impl T {
         self.out.extend(self.core.take_out());
     }
 
-    /// The hello replay is over: main's lines are live.
+    /// main's first page answered (what it said before is a replay):
+    /// main's entries are live.
     fn ready(&mut self) {
-        self.hub.say(json!({"ev": "ready"}));
+        self.replay_over();
         self.until(|o| has(o, "phase"));
         self.take();
     }
 
+    /// `initialize` answered, main's thread subscribed, then its first
+    /// page (what main said so far): main's entries are live after it.
+    fn replay_over(&mut self) {
+        self.hub.answer_init();
+        let t0 = Instant::now();
+        while !self.hub.main_subscribed() {
+            assert!(t0.elapsed() < Duration::from_secs(3), "main's thread never subscribed; out: {:#?}", self.out);
+            while let Ok(h) = self.rx.try_recv() {
+                self.core.hub(h);
+            }
+            self.out.extend(self.core.take_out());
+        }
+        self.hub.say(json!({"ev": "ready"}));
+    }
+
     /// Everything the hub said so far is handled (a state round trip).
     fn sync(&mut self) {
-        self.hub.say(json!({"ev": "state", "agents": [], "cards": []}));
+        self.hub.say(json!({"ev": "agents", "project": fake_hub::HOME, "agents": []}));
         self.until(|o| has(o, "state"));
         self.out.retain(|v| v["ev"] != "state");
     }
@@ -309,7 +327,8 @@ fn an_answer_on_a_replaced_batch_card_reaches_the_hub() {
 {n} replies to Benjamin
 1. review
 2. send all {n}"),
-        "page": {"id": "bugs", "block": "r", "item": "r1", "drafts": true, "url": "http://x/p/bugs#r1"}});
+        "page": {"id": "bugs", "block": "r", "item": "r1", "drafts": true, "url": "http://x/p/bugs#r1"},
+        "batch": {"count": n, "title": "bugs", "what": "replies", "names": ["Benjamin"]}});
     t.hub.say(json!({"ev": "state", "agents": [], "pages": [], "cards": [batch(1, 6)]}));
     t.until(|o| has(o, "state"));
     t.take();
@@ -408,6 +427,7 @@ fn send_goes_to_main_with_the_shot_marker_and_the_png_is_deleted() {
     t.hub.line("main", "  obs: turn_started");
     t.until(|o| phase_is(o, "working"));
     assert!(b64.exists());
+    t.hub.line("main", "  obs: assistant: it's the CSS.");
     t.hub.line("main", "  obs: turn_done: completed");
     t.until(|o| phase_is(o, "done"));
     assert!(!b64.exists(), "the stored shot is not kept after main's turn");
@@ -489,6 +509,7 @@ fn a_dropped_file_reaches_main_with_his_words() {
 #[test]
 fn a_shot_steered_into_a_running_turn_is_forgotten_at_its_end() {
     let mut t = T::new();
+    t.hub.say(json!({"ev": "state", "agents": [{"name": "main", "main": true, "status": "working"}], "cards": []}));
     t.hub.line("main", "  obs: turn_started");
     t.ready();
     let png = t.dir.join("a.png");
@@ -514,6 +535,8 @@ fn a_shot_steered_into_a_running_turn_is_forgotten_at_its_end() {
 #[test]
 fn a_message_sent_during_an_agents_turn_waits_for_the_next_one() {
     let mut t = T::new();
+    // main's turn runs with no entry of its own yet: its row says so
+    t.hub.say(json!({"ev": "state", "agents": [{"name": "main", "main": true, "status": "working"}], "cards": []}));
     t.hub.line("main", "  obs: turn_started");
     t.ready();
     t.cmd(Cmd::Send { text: "after this".into() });
@@ -559,6 +582,8 @@ fn a_failed_turn_is_phase_failed_with_its_line() {
 #[test]
 fn the_hello_replay_says_where_main_is_but_not_its_old_words() {
     let mut t = T::new();
+    t.hub.say(json!({"ev": "state", "agents": [{"name": "main", "main": true, "status": "working"}], "cards": []}));
+    t.until(|o| has(o, "state"));
     t.take();
     t.hub.line("main", "sb you : an old question");
     t.hub.line("main", "  obs: turn_started");
@@ -567,14 +592,16 @@ fn the_hello_replay_says_where_main_is_but_not_its_old_words() {
     t.hub.line("main", "sb msg-you : docs : an old note");
     t.hub.line("main", "sb you : the question main is on");
     t.hub.line("main", "  obs: turn_started");
-    t.hub.say(json!({"ev": "ready"}));
+    t.replay_over();
     t.until(|o| has(o, "phase"));
     let out = t.take();
     assert_eq!(phases(&out), vec!["working"]);
     assert!(!has(&out, "main"), "nothing of the replay is sent: {out:?}");
     // other agents' lines never move main's phase
     t.hub.line("cookies", "  obs: turn_done: completed");
+    // a turn with no entry of its own ends when main's row stops running
     t.hub.line("main", "  obs: turn_done: completed");
+    t.hub.say(json!({"ev": "state", "agents": [{"name": "main", "main": true, "status": "idle"}], "cards": []}));
     t.until(|o| has(o, "phase"));
     assert_eq!(phases(&t.take()), vec!["done"]);
 }
@@ -716,6 +743,8 @@ fn a_tui_user_turn_sends_main_words_as_plain_text() {
 #[test]
 fn msg_you_lines_are_main_words_with_who_wrote_them() {
     let mut t = T::new();
+    // every live agent's thread is the capsule's (its words to him)
+    t.hub.say(json!({"ev": "state", "agents": [{"name": "main", "main": true, "status": "idle"}, {"name": "docs", "status": "working"}], "cards": []}));
     t.ready();
     t.hub.line("docs", "sb msg-you : docs : the **v2** page is up");
     t.until(|o| has(o, "main"));
@@ -864,6 +893,40 @@ fn the_core_writes_no_op_line_but_the_older_doors_hello() {
     // TODO(client-protocol, the plan's 'after the release' step, with
     // Hubs.older_door): none at all
     assert_eq!(at, vec![r#"core/hubs.rs: c.hub.send(&json!({"op": "hello"}));"#.to_string()]);
+}
+
+/// Law (client-protocol step 5, proto-lead m_15443): an initialized
+/// connection is read as typed events only. The core's code never parses
+/// a feed line (`parse_line`) and never reads an event's `"ev"` tag but in
+/// the older door's typed line of a project hub before client-protocol
+/// (hubs.rs project_line, the one release it stays); its home connection
+/// has no older `state`, `ready`, `page` or `line` arm.
+#[test]
+fn an_initialized_connection_reads_no_older_event() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ambient");
+    let mut files = vec![root.join("core.rs")];
+    for e in std::fs::read_dir(root.join("core")).unwrap().flatten() {
+        if e.path().extension().is_some_and(|x| x == "rs") {
+            files.push(e.path());
+        }
+    }
+    let tag = concat!("\"", "ev", "\")");
+    let parse = concat!("parse", "_line(");
+    // a match arm on an older event's tag (`"state" => ...`)
+    let arms = ["state", "ready", "page", "line"].map(|k| format!("\"{k}\""));
+    let mut at = Vec::new();
+    for f in &files {
+        let text = std::fs::read_to_string(f).unwrap();
+        let code = text.split("#[cfg(test)]").next().unwrap_or("");
+        let arm = |l: &str| arms.iter().any(|a| l.trim_start().starts_with(a.as_str()) && l.contains("=>"));
+        let older = |l: &str| l.contains(tag) || l.contains(parse) || arm(l);
+        for l in code.lines().filter(|l| older(l) && !l.trim_start().starts_with("//")) {
+            at.push(format!("{}: {}", f.strip_prefix(&root).unwrap().display(), l.trim()));
+        }
+    }
+    // TODO(client-protocol, the plan's 'after the release' step, with
+    // Hubs.older_door): none at all
+    assert_eq!(at, vec![r#"core/hubs.rs: let ev = v.get("ev").and_then(Value::as_str).unwrap_or("");"#.to_string()]);
 }
 
 #[test]

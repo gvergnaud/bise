@@ -14,9 +14,8 @@ use bise_proto::thread::{fold, Ctx, Line};
 
 const WIDTH: usize = 100;
 
-/// The corpora that still differ (P4d's work), by name.
-// TODO(client-protocol P4d): the feed switches to entries (P4d0 closed
-// the three first gaps: delivery marks, tool rows, messages to him)
+/// The corpora that still differ, by name (none since the feed switched
+/// to entries, P4d)
 const GAPS: &[&str] = &[];
 
 /// The corpora: a name and its lines (`(pos, ts, line)`).

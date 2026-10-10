@@ -22,11 +22,102 @@ pub(super) struct HubEnd {
     /// the requests read and not answered: (id, method, cmd tag, cid)
     pending: Vec<(Value, String, String, Option<u64>)>,
     seq: u64,
+    /// `initialize` answered
+    answered: bool,
+    /// each agent's thread as this hub holds it (the home connection)
+    threads: std::collections::HashMap<String, Thread>,
+    /// main's subscribe from the capsule (core/home.rs MAIN_PAGE),
+    /// answered when the test says `ready`
+    main_sub: Option<Value>,
+    /// `initialize`'s page server, if the test sets one
+    pub(super) pages_url: Option<String>,
+}
+
+/// One thread: its lines, the entries sent, subscribed.
+#[derive(Default)]
+struct Thread {
+    lines: Vec<bise_proto::thread::Line>,
+    sent: Vec<Entry>,
+    live: bool,
+}
+
+/// The tests' home hub's project (the agents tests' target).
+pub(super) const HOME: &str = "ws-0000beef";
+
+/// The hub's fold of `lines`: no card open, no page known.
+fn fold_lines(lines: &[bise_proto::thread::Line]) -> Vec<Entry> {
+    let none = |_: &str| None;
+    let ctx = Ctx {
+        open_cards: &[],
+        page: &none,
+        provider: &|_: &str, k: &str| k.to_string(),
+        width: &unicode_width::UnicodeWidthStr::width,
+        offset: &|_| 0,
+        attached: &bise_proto::thread::Attached::plain,
+    };
+    thread::fold(lines, &ctx)
+}
+
+/// An older state's agent as the hub's row (client-protocol step 5:
+/// the tests keep the older state's words, the hub sends rows).
+fn agent_row(a: &Value) -> Value {
+    let s = |k: &str| a[k].as_str().unwrap_or("").to_string();
+    let word = s("status");
+    let status = match word.as_str() {
+        "starting" | "working" => "working",
+        "waiting" => "waiting",
+        "blocked" => "blocked",
+        "failed" => "failed",
+        "done" | "stopped" => "done",
+        "archived" => "done",
+        _ => "idle",
+    };
+    let mut r = json!({"name": s("name"), "main": a["main"].as_bool().unwrap_or(false), "status": status,
+        "archived": word == "archived", "title": "", "purpose": "", "since_ms": 0, "waits": 0,
+        "objective": s("objective"), "note": s("note")});
+    if !s("report").is_empty() {
+        let kind = if matches!(status, "done" | "failed" | "blocked") { status } else { "progress" };
+        r["report"] = json!({"kind": kind, "text": s("report"), "at_ms": a["report_ms"].as_u64().unwrap_or(0)});
+    }
+    for k in ["created_ms", "turn_ms"] {
+        if a[k].is_u64() {
+            r[k] = a[k].clone();
+        }
+    }
+    r
+}
+
+/// An older state's card as the hub's row.
+fn card_row(c: &Value) -> Value {
+    let text = c["text"].as_str().unwrap_or("");
+    let (question, _) = crate::sb::split_choices(text);
+    let mut r = json!({"id": c["id"], "project": HOME, "kind": c["kind"], "agent": c["agent"], "question": question,
+        "options": [], "urgent": false, "since_ms": 0, "text": text});
+    for k in ["page", "batch"] {
+        if c[k].is_object() {
+            r[k] = c[k].clone();
+        }
+    }
+    r
+}
+
+/// An older page as the hub's row.
+fn page_row(p: &Value) -> Value {
+    let mut r = json!({"id": p["id"], "title": p["title"].as_str().unwrap_or(""), "agent": p["agent"].as_str().unwrap_or(""), "version": p["version"].as_u64().unwrap_or(1),
+        "url": p["url"].as_str().unwrap_or(""), "at_ms": p["at_ms"].as_u64().unwrap_or(0), "state": p["state"].as_str().unwrap_or("ready")});
+    if let Some(o) = p.as_object() {
+        for (k, v) in o {
+            if r.get(k).is_none() && k != "ev" && !v.is_null() {
+                r[k] = v.clone();
+            }
+        }
+    }
+    r
 }
 
 impl HubEnd {
     pub(super) fn new(w: UnixStream, r: BufReader<UnixStream>) -> HubEnd {
-        HubEnd { w, r, rpc: None, ahead: Default::default(), init: None, pending: Vec::new(), seq: 0 }
+        HubEnd { w, r, rpc: None, ahead: Default::default(), init: None, pending: Vec::new(), seq: 0, answered: false, threads: Default::default(), main_sub: None, pages_url: None }
     }
 
     pub(super) fn write(&mut self, v: Value) {
@@ -41,6 +132,25 @@ impl HubEnd {
             return self.write(v);
         }
         let tag = v["ev"].as_str().unwrap_or("").to_string();
+        // the home connection: `initialize` answered before anything else
+        if self.init.is_some() && !self.answered && tag != "refused" {
+            let project = if tag == "welcome" { v["project"].as_str().unwrap_or(HOME).to_string() } else { HOME.into() };
+            self.initialized(&project, None);
+        }
+        // the older home events the tests still say, as the hub sends them now
+        match tag.as_str() {
+            "welcome" => return,
+            "ready" => return self.ready(),
+            "line" => return self.feed(v["agent"].as_str().unwrap_or(""), v["line"].as_str().unwrap_or("")),
+            "state" => return self.state(&v),
+            "page" => {
+                let mut p = page_row(&v);
+                p["ev"] = json!("page_changed");
+                p["project"] = json!(HOME);
+                return self.say(p);
+            }
+            _ => {}
+        }
         if tag == "refused" {
             let id = self.init.clone().unwrap_or(Value::Null);
             let msg = v["error"].as_str().unwrap_or("").to_string();
@@ -83,8 +193,76 @@ impl HubEnd {
         }
     }
 
+    /// One line of `agent`'s thread: what it makes or changes goes as
+    /// `thread/entry` when the core subscribed it.
     pub(super) fn line(&mut self, agent: &str, line: &str) {
-        self.say(json!({"ev": "line", "agent": agent, "line": line, "pos": 1}));
+        self.say(json!({"ev": "line", "agent": agent, "line": line}));
+    }
+
+    fn feed(&mut self, agent: &str, line: &str) {
+        let t = self.threads.entry(agent.to_string()).or_default();
+        let pos = t.lines.last().map_or(1, |l| l.0 + 1);
+        t.lines.push((pos, 1_000 + pos, line.to_string()));
+        let now = fold_lines(&t.lines);
+        let changed: Vec<Entry> = now.iter().filter(|e| !t.sent.contains(e)).cloned().collect();
+        let live = t.live;
+        if live {
+            t.sent = now;
+            for e in changed {
+                self.say(json!({"ev": "entry", "project": HOME, "agent": agent, "entry": e}));
+            }
+        }
+    }
+
+    /// `agent`'s thread as the hub answers `thread/subscribe` (its last
+    /// `limit` entries), live from now.
+    fn page_of(&mut self, agent: &str, limit: usize) -> Value {
+        let t = self.threads.entry(agent.to_string()).or_default();
+        t.sent = fold_lines(&t.lines);
+        t.live = true;
+        let skip = t.sent.len().saturating_sub(limit);
+        let entries: Vec<Entry> = t.sent[skip..].to_vec();
+        json!({"project": HOME, "agent": agent, "entries": entries, "before": null, "more": skip > 0})
+    }
+
+    /// `initialize` answered when the core sent it and nothing answered
+    /// it yet (bise's home hub: [`HOME`]).
+    pub(super) fn answer_init(&mut self) {
+        self.read_ahead();
+        if self.init.is_some() && !self.answered {
+            self.initialized(HOME, None);
+        }
+    }
+
+    /// The core subscribed main's thread (its `initialize` read).
+    pub(super) fn main_subscribed(&mut self) -> bool {
+        self.read_ahead();
+        self.main_sub.is_some()
+    }
+
+    /// main's first page (the old `ready`: what main said before is a
+    /// replay).
+    fn ready(&mut self) {
+        self.read_ahead();
+        let Some(id) = self.main_sub.take() else { return };
+        let page = self.page_of("main", super::super::core::MAIN_PAGE);
+        self.write(json!({"jsonrpc": "2.0", "id": id, "result": page}));
+    }
+
+    /// An older state as the hub's rows, each kind as its notification.
+    fn state(&mut self, v: &Value) {
+        let list = |k: &str| v[k].as_array().cloned().unwrap_or_default();
+        let agents: Vec<Value> = list("agents").iter().map(agent_row).collect();
+        let cards: Vec<Value> = list("cards").iter().map(card_row).collect();
+        self.say(json!({"ev": "agents", "project": HOME, "agents": agents}));
+        self.say(json!({"ev": "cards", "project": HOME, "cards": cards}));
+        if v.get("pages").is_some() {
+            let pages: Vec<Value> = list("pages").iter().map(page_row).collect();
+            self.say(json!({"ev": "pages", "project": HOME, "items": pages, "overdue": 0}));
+        }
+        if let Some(t) = v.get("timers") {
+            self.say(json!({"ev": "scheduled", "project": HOME, "items": t}));
+        }
     }
 
     /// One raw line of the core (`timeout`: none read meanwhile).
@@ -117,6 +295,19 @@ impl HubEnd {
             self.init = Some(v["id"].clone());
             return;
         }
+        // the capsule's threads (core/home.rs): main's answered at
+        // `ready`, another's at once; never a window command
+        if v["method"] == "thread/subscribe" {
+            let agent = v["params"]["agent"].as_str().unwrap_or("").to_string();
+            match v["params"]["limit"].as_u64().map(|l| l as usize) {
+                Some(super::super::core::MAIN_PAGE) if agent == "main" => return self.main_sub = Some(v["id"].clone()),
+                Some(super::super::core::QUIET_PAGE) => {
+                    let page = self.page_of(&agent, super::super::core::QUIET_PAGE);
+                    return self.write(json!({"jsonrpc": "2.0", "id": v["id"], "result": page}));
+                }
+                _ => {}
+            }
+        }
         // the connector's hello, then the core's typed hello (S3b), and
         // JSON-RPC's own (initialized, hub/read): never a window command
         if v["op"] == "hello" || v["cmd"] == "hello" || v["method"] == "initialized" || v["method"] == "hub/read" {
@@ -126,7 +317,13 @@ impl HubEnd {
             let Ok(cmd) = bise_proto::rpc::cmd(m, v["params"].clone()) else { return self.ahead.push_back(v) };
             let tag = bise_proto::rpc::method_row(m).map(|r| r.cmd.to_string()).unwrap_or_default();
             self.pending.push((id.clone(), m.to_string(), tag, v["params"]["cid"].as_u64()));
-            return self.ahead.push_back(cmd.to_value());
+            self.ahead.push_back(cmd.to_value());
+            // his words in main's thread, as the hub writes them
+            if m == "turn/send" && v["params"]["agent"] == "main" {
+                let text = v["params"]["text"].as_str().unwrap_or("").replace('\n', "\\n");
+                self.feed("main", &format!("sb you : {text}"));
+            }
+            return;
         }
         self.ahead.push_back(v);
     }
@@ -165,6 +362,7 @@ impl HubEnd {
             self.take(v);
         }
         let id = self.init.clone().unwrap();
+        self.answered = true;
         let result = bise_proto::rpc::InitializeResult {
             project: project.into(),
             proto: bise_proto::PROTO,
@@ -174,7 +372,7 @@ impl HubEnd {
             state_dir: String::new(),
             version: Value::Null,
             reload: String::new(),
-            pages_url: None,
+            pages_url: self.pages_url.clone(),
             methods: methods.unwrap_or_else(bise_proto::rpc::methods),
             notifications: bise_proto::rpc::notifications(),
             hub: bise_proto::rpc::HubState { watermark: bise_proto::rpc::Watermark { epoch: 1, seq: 0 }, state: vec![] },

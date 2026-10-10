@@ -10,6 +10,8 @@ mod away;
 mod cmd;
 mod dictate;
 mod hub_rpc;
+mod home;
+mod home_switch;
 mod hubs;
 mod index;
 mod picks;
@@ -25,10 +27,11 @@ pub use self::voice_mode::OpenVoiceMode;
 pub use self::hubs::{HUB_OLDER, LINGER, START};
 #[cfg(test)]
 pub use self::dictate::DICTATE_MAX;
+#[cfg(test)]
+pub use self::home::{MAIN_PAGE, QUIET_PAGE};
 use super::hub::{Hub, HubIn};
 use super::speech::{Speech, Step};
 use crate::voicemode::{Heard, ListenJob, ListenMsg, Listener, Mic, MicBlock, MicStream, SayJob, Speaker, Synthesizer, UttId};
-use crate::wire::{parse_line, Ev};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -256,7 +259,7 @@ pub struct Core {
     followed: Vec<String>,
     /// the hub's agents as last seen (round 10's preview: status,
     /// objective, report)
-    hub_agents: Vec<Value>,
+    hub_agents: Vec<bise_proto::rows::Agent>,
     /// the hub's pages as last seen
     hub_pages: Vec<Value>,
     /// every project's typed connection, for the window (core/hubs.rs)
@@ -271,8 +274,8 @@ pub struct Core {
     /// capsule talks to and the agents view reads, `--workspace`'s until
     /// S2 makes it bise's home hub (one value, architect m_8433)
     target: Option<String>,
-    /// the hub's last state, for a row change of the core's (follow)
-    last_state: Option<Value>,
+    /// the home hub's connection (core/home.rs)
+    home: home::Home,
     /// each agent's current step (its last tool intent) for `agent_typing`
     typing: std::collections::HashMap<String, String>,
     /// the page server's base URL, from the hub's state
@@ -325,7 +328,7 @@ impl Core {
             setup: None,
             pending: std::collections::VecDeque::new(),
             target: None,
-            last_state: None,
+            home: home::Home::default(),
             typing: std::collections::HashMap::new(),
             pages_url: None,
             quiet: false,
@@ -335,6 +338,10 @@ impl Core {
 
     /// The events since the last call, in order.
     pub fn take_out(&mut self) -> Vec<Value> {
+        // the hub's state kinds that came since: one `state`
+        if std::mem::take(&mut self.home.state_due) {
+            self.emit_state();
+        }
         std::mem::take(&mut self.out)
     }
 
@@ -437,9 +444,7 @@ impl Core {
                 if on {
                     self.followed.push(agent);
                 }
-                if let Some(st) = self.last_state.clone() {
-                    self.state(&st);
-                }
+                self.emit_state();
             }
             // JSON-RPC's turn/interrupt on the home connection (P1c: the
             // untyped interrupt op is gone); its answer is not read
@@ -599,18 +604,8 @@ impl Core {
 
     pub fn hub(&mut self, h: HubIn) {
         match h {
-            HubIn::Up => {
-                self.ready = false;
-                // the typed protocol on the same connection (S3b): its
-                // `welcome` names the target; the feed lines stay the
-                // capsule's until S8
-                self.target = None;
-                self.pending.clear();
-                self.hub.send(&json!({"cmd": "hello", "proto": bise_proto::PROTO}));
-                self.hub_up = Some(true);
-                let ws = self.workspace.clone();
-                self.emit(json!({"ev": "hub", "up": true, "workspace": ws}));
-            }
+            // JSON-RPC's `initialize`, then typed events only (core/home.rs)
+            HubIn::Up => self.home_up(),
             HubIn::Down => {
                 if self.hub_up != Some(false) {
                     self.hub_up = Some(false);
@@ -618,7 +613,7 @@ impl Core {
                     self.emit(json!({"ev": "hub", "up": false, "workspace": ws}));
                 }
             }
-            HubIn::Line(l) => self.hub_line(&l),
+            HubIn::Line(l) => self.home_line(&l),
             // the hub refused this core (docs/issues/16): never again until
             // a new core starts; the window says why
             HubIn::Refused(why) => {
@@ -626,278 +621,6 @@ impl Core {
                 let project = bise_home::hub_id(Path::new(&self.workspace));
                 self.emit(json!({"ev": "hub_refused", "project": project, "error": why}));
             }
-        }
-    }
-
-    fn hub_line(&mut self, raw: &str) {
-        let Ok(v) = serde_json::from_str::<Value>(raw) else { return };
-        let s = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or("").to_string();
-        let ev = s("ev");
-        if bise_proto::hub::HubEv::TAGS.contains(&ev.as_str()) {
-            // J: a job's end once, from whichever hub said it first
-            if !self.end_once(&v) {
-                return;
-            }
-            return self.typed_ev(v);
-        }
-        match ev.as_str() {
-            "state" => self.state(&v),
-            "ready" => {
-                self.ready = true;
-                // the replay told where main's turn is (working only on
-                // a turn that answers the user)
-                let p = if self.in_turn && self.for_user { Phase::Working } else { Phase::Idle };
-                if self.talk.is_none() && self.speech.is_none() {
-                    self.set_phase(p, None);
-                }
-            }
-            "page" if self.ready => self.page(v),
-            "line" => {
-                let line = s("line");
-                if self.ready && line.starts_with("sb msg-you : ") {
-                    self.msg_you(&line);
-                } else if s("agent") == "main" {
-                    self.main_line(&line);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    /// The hub's `page` event, relayed with `front`: the user is waiting
-    /// for it (main's page in the user's turn, or a page of an agent born
-    /// since the user's last turn started), so the app opens it without
-    /// fn + o (docs/ambient-pages.md §2.8).
-    fn page(&mut self, mut v: Value) {
-        let agent = v.get("agent").and_then(Value::as_str).unwrap_or("").to_string();
-        let ready = v.get("state").and_then(Value::as_str) == Some("ready");
-        let waited = match &self.user_turn_agents {
-            None => false,
-            Some(_) if agent == "main" => self.for_user && self.in_turn,
-            Some(known) => !known.contains(&agent),
-        };
-        v["front"] = json!(ready && waited);
-        self.emit(v);
-    }
-
-    fn state(&mut self, v: &Value) {
-        let s = |x: &Value, k: &str| x.get(k).and_then(Value::as_str).unwrap_or("").to_string();
-        let list = |k: &str| v.get(k).and_then(Value::as_array).cloned().unwrap_or_default();
-        self.last_state = Some(v.clone());
-        self.agent_names = list("agents").iter().map(|a| s(a, "name")).collect();
-        self.hub_agents = list("agents");
-        self.hub_pages = list("pages");
-        let now = now_ms();
-        let user_kind = self.ports.user_kind;
-        let waits = |name: &str| {
-            list("cards")
-                .iter()
-                .filter(|c| s(c, "agent") == name && user_kind(&s(c, "kind")) && s(c, "kind") != "drop")
-                .count()
-        };
-        let mut rows = Vec::new();
-        for a in list("agents").iter().filter(|a| !a.get("main").and_then(Value::as_bool).unwrap_or(false)) {
-            let (name, hub_status) = (s(a, "name"), s(a, "status"));
-            let (status, archived) = super::agents::status(&hub_status);
-            // since: when the core saw the status change; at first sight
-            // its last report's time, else its birth, else now
-            let first = || {
-                let ms = |k: &str| a.get(k).and_then(Value::as_u64).filter(|m| *m > 0);
-                ms("report_ms").filter(|_| status != "working").or(ms("created_ms")).unwrap_or(now)
-            };
-            let since = match self.since.get(&name) {
-                Some((st, ms)) if st == status => *ms,
-                Some(_) => now,
-                None => first(),
-            };
-            self.since.insert(name.clone(), (status.to_string(), since));
-            rows.push(json!({
-                "name": name,
-                "status": status,
-                "title": super::agents::title(a),
-                "purpose": super::agents::one_line(&s(a, "objective"), 200),
-                "since_ms": since,
-                "waits": waits(&name),
-                "followed": self.followed.contains(&name),
-                "archived": archived,
-                "note": s(a, "note"),
-                "report": s(a, "report"),
-                "working": !archived && matches!(hub_status.as_str(), "working" | "waiting" | "starting"),
-                "turn_ms": a.get("turn_ms").and_then(Value::as_u64),
-            }));
-        }
-        let agents = rows;
-        self.cards = list("cards")
-            .iter()
-            // bise's own bookkeeping (main's archive suggestion, a
-            // `drop` card) stays in the TUI: never on the glass, in the
-            // count or in needs-you (pm's C fail 36)
-            .filter(|c| (self.ports.user_kind)(&s(c, "kind")) && s(c, "kind") != "drop")
-            .map(|c| CardInfo {
-                id: c.get("id").and_then(Value::as_u64).unwrap_or(0),
-                kind: s(c, "kind"),
-                agent: s(c, "agent"),
-                text: s(c, "text"),
-                page: c.get("page").filter(|p| p.is_object()).cloned(),
-                // TODO(client-protocol step 5): the core still reads the
-                // older state's cards; hub/cards' rows carry the same
-                // batch now (rows::Card.batch, proto_view::cards)
-                batch: c.get("batch").filter(|b| b.is_object()).cloned(),
-            })
-            .collect();
-        for c in self.cards.iter().filter(|c| c.page.as_ref().is_some_and(|p| p["drafts"] == true)) {
-            if !self.batches_seen.contains(&c.id) {
-                self.batches_seen.push(c.id);
-            }
-        }
-        let cards: Vec<Value> = self
-            .cards
-            .iter()
-            .map(|c| {
-                let mut options = crate::sb::ambient_options(&c.kind, &c.agent, &c.text);
-                if options.is_empty() && c.page.is_some() {
-                    options = page_options(&c.text);
-                }
-                // the body does not repeat the options (ambient m_6476):
-                // a numbered list at the end of the text that is the
-                // card's options goes, the question stays
-                let (body, listed) = crate::sb::split_choices(&c.text);
-                let text = if !listed.is_empty() && listed.iter().eq(options.iter().map(|(_, l)| l)) { body } else { c.text.clone() };
-                let options: Vec<Value> = options.into_iter().map(|(n, label)| json!({"n": n, "label": label})).collect();
-                // urgent: it asks even on a call or in a meeting. A
-                // tool call waiting for a yes holds an agent's work now
-                // (best guess, told to ambient-lead)
-                let urgent = c.kind == "confirm";
-                let mut v = json!({"id": c.id, "kind": c.kind, "agent": c.agent, "text": text, "options": options, "urgent": urgent});
-                // main's own question (no page): its label (ambient m_6476)
-                if c.agent == "main" && c.kind == "question" && c.page.is_none() {
-                    v["label"] = json!("? main needs you");
-                }
-                if let Some(p) = &c.page {
-                    v["page"] = p.clone();
-                }
-                if let Some(b) = &c.batch {
-                    v["batch"] = b.clone();
-                }
-                v
-            })
-            .collect();
-        let pages = list("pages");
-        self.page_titles = pages.iter().map(|p| (s(p, "id"), s(p, "title"))).collect();
-        if let Some(u) = v.get("pages_url").and_then(Value::as_str).filter(|u| !u.is_empty()) {
-            self.pages_url = Some(u.to_string());
-        }
-        let mut st = json!({"ev": "state", "agents": agents, "cards": cards, "pages": pages});
-        if let Some(u) = &self.pages_url {
-            st["pages_url"] = json!(u);
-        }
-        // the standing orders (roadmap B), as the hub has them
-        if let Some(t) = v.get("timers").filter(|t| !t.is_null()) {
-            st["timers"] = t.clone();
-        }
-        self.emit(st);
-        // round 10: what is shown of an agent follows its status, its
-        // cards, its pages
-        self.refresh_shown();
-    }
-
-    /// One line of main's feed (ambient's review, m_4672: only main's
-    /// words FOR THE USER reach the capsule). A turn answers the user when
-    /// a user message reached it: `sb you` (the TUI's, or this core's
-    /// echoed) before it started, or steered into it. Main's other turns
-    /// (an agent's report, a message between agents) send nothing: no
-    /// `main`, no phase. Before `ready` (the hello replay) the lines only
-    /// say where main is; nothing of them is sent.
-    fn main_line(&mut self, line: &str) {
-        let obs = line.strip_prefix("  obs: ");
-        if let Some(t) = line.strip_prefix("sb you : ") {
-            // a slash command (`/answer`) is the hub's, never a turn; what
-            // comes from a page (notes, starts, picks, ticks: the hub's
-            // marker) is answered on the page, never in the capsule
-            // (ambient-lead m_5724, pm's 27)
-            if !t.trim_start().starts_with('/') && !t.contains(PAGE_MARK) {
-                self.user_waiting = true;
-            }
-            return;
-        }
-        if obs == Some("turn_started") {
-            self.in_turn = true;
-            self.turn += 1;
-            self.main_text.clear();
-            self.for_user = std::mem::take(&mut self.user_waiting);
-            if self.for_user {
-                self.user_turn_agents = Some(self.agent_names.clone());
-            }
-            if self.ready {
-                self.reached();
-                if self.for_user && self.speech.is_none() {
-                    self.set_phase(Phase::Working, None);
-                }
-            }
-            return;
-        }
-        if let Some(how) = obs.and_then(|o| o.strip_prefix("turn_done: ")) {
-            self.in_turn = false;
-            let for_user = std::mem::take(&mut self.for_user);
-            if self.ready {
-                self.turn_done(how, line, for_user);
-            }
-            return;
-        }
-        if obs.is_some_and(|o| o.starts_with("steering_received: ") || o.starts_with("steered: ")) {
-            // the user's message went into the running turn
-            if self.in_turn && self.user_waiting {
-                self.user_waiting = false;
-                if !self.for_user {
-                    self.for_user = true;
-                    self.user_turn_agents = Some(self.agent_names.clone());
-                    if self.ready && self.speech.is_none() {
-                        self.set_phase(Phase::Working, None);
-                    }
-                }
-            }
-            if self.ready {
-                self.reached();
-            }
-            return;
-        }
-        if !self.ready || !self.for_user {
-            return;
-        }
-        match parse_line(line) {
-            Some(Ev::Assistant(t)) => {
-                // kept until the turn ends: words followed by a tool call
-                // are main planning, not its answer (pm's 22)
-                let vis = crate::wire::split_thinking(&t).map(|(_, v)| v).unwrap_or(t);
-                let text = super::plain::plain(&crate::markdown::unescape_md(&vis));
-                if !text.is_empty() {
-                    self.main_text = text;
-                }
-            }
-            Some(Ev::ToolIntent { text, .. }) => {
-                self.main_text.clear();
-                if self.speech.is_none() {
-                    self.set_phase(Phase::Working, Some(crate::render::truncate_chars(&text, 80)));
-                }
-            }
-            Some(Ev::ToolInfo { name, .. }) => {
-                self.main_text.clear();
-                if self.speech.is_none() {
-                    self.set_phase(Phase::Working, Some(name));
-                }
-            }
-            _ => {}
-        }
-    }
-
-    /// `sb msg-you : {from} : {text}` in any feed: an agent (or main)
-    /// writing to the user, shown as main's words, with who wrote it.
-    fn msg_you(&mut self, line: &str) {
-        let Some(Ev::AgentMsg { from, text, level: 2, .. }) = parse_line(line) else { return };
-        let text = super::plain::plain(&text);
-        if !text.is_empty() {
-            let turn = self.turn;
-            self.emit(json!({"ev": "main", "text": text, "turn": turn, "from": from}));
         }
     }
 
@@ -911,7 +634,8 @@ impl Core {
         }
     }
 
-    fn turn_done(&mut self, how: &str, line: &str, for_user: bool) {
+    /// Main's turn ended (`fail`: why, when it didn't complete).
+    fn turn_done(&mut self, fail: Option<String>, for_user: bool) {
         // the shots main's turn had are forgotten now
         let (done, keep): (Vec<Shot>, Vec<Shot>) = self.sent_shots.drain(..).partition(|s| s.reached);
         self.sent_shots = keep;
@@ -928,11 +652,7 @@ impl Core {
             let (text, turn) = (self.main_text.clone(), self.turn);
             self.emit(json!({"ev": "main", "text": text, "turn": turn}));
         }
-        if how != "completed" {
-            let why = match parse_line(line) {
-                Some(Ev::Err(t) | Ev::Warn(t)) => t,
-                _ => how.to_string(),
-            };
+        if let Some(why) = fail {
             if self.voice_out == Some(true) {
                 self.voice_out = None;
             }

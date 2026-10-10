@@ -3,8 +3,6 @@
 //! its hub connections (the voice target's and every project's, S3b) and
 //! what it reads of the projects. main.rs keeps the dispatch lines.
 
-use std::io::Write;
-
 /// `bise ambient-core`: the macOS app's core, its child on stdio JSON, a
 /// client of the workspace's hub and of every project's hub.
 pub fn core(args: &[String]) -> std::io::Result<i32> {
@@ -18,7 +16,7 @@ pub fn core(args: &[String]) -> std::io::Result<i32> {
     let exe = std::env::current_exe()?;
     let workspace = paths.workspace.to_string_lossy().to_string();
     let projects = ambient_projects(exe.clone(), root.clone());
-    let connect = ambient_connector(paths, exe, root, true);
+    let connect = ambient_connector(paths, exe, root);
     Ok(bend_tui::ambient::core_main(workspace, connect, switchboard::model::user_kind, Some(projects), Some(ambient_setup())))
 }
 
@@ -55,25 +53,17 @@ fn ambient_workspace(args: &[String], core: bool) -> std::path::PathBuf {
 
 /// bise ambient's hub connection: the first call starts the hub when
 /// none runs (`client::open`, like the TUI); later calls (after a loss)
-/// only connect: the user may have stopped bise. `hello`: it says the
-/// older hello (the home hub's feed connection); a project's connection
-/// says nothing, the core's first line is JSON-RPC's `initialize`.
-fn ambient_connector(
-    paths: switchboard::paths::Paths,
-    exe: std::path::PathBuf,
-    root: std::path::PathBuf,
-    hello: bool,
-) -> bend_tui::ambient::Connect {
+/// only connect: the user may have stopped bise. It says nothing: the
+/// core's first line is JSON-RPC's `initialize` (the home hub's
+/// connection since client-protocol step 5, a project's since P1c).
+fn ambient_connector(paths: switchboard::paths::Paths, exe: std::path::PathBuf, root: std::path::PathBuf) -> bend_tui::ambient::Connect {
     let mut first = true;
     Box::new(move || {
-        let mut s = if std::mem::take(&mut first) {
+        let s = if std::mem::take(&mut first) {
             switchboard::client::open(&paths, &exe, &root)?
         } else {
             std::os::unix::net::UnixStream::connect(paths.socket())?
         };
-        if hello {
-            s.write_all(b"{\"op\":\"hello\"}\n")?;
-        }
         Ok(s)
     })
 }
@@ -84,7 +74,7 @@ fn ambient_connector(
 /// checkout's branch. Read-only but the connection.
 fn ambient_projects(exe: std::path::PathBuf, root: std::path::PathBuf) -> (bend_tui::ambient::ConnectFor, bend_tui::ambient::ProjectFacts) {
     let connect_for: bend_tui::ambient::ConnectFor = Box::new(move |path| {
-        ambient_connector(switchboard::paths::Paths::for_workspace(path), exe.clone(), root.clone(), false)
+        ambient_connector(switchboard::paths::Paths::for_workspace(path), exe.clone(), root.clone())
     });
     let facts = bend_tui::ambient::ProjectFacts {
         rows: Box::new(|| bise_home::projects::list(&bise_home::Home::from_env(), &switchboard::paths::home_workspace())),

@@ -14,7 +14,7 @@ use std::collections::{BTreeMap, HashMap};
 /// An agent shown on the app: its history panel open, its preview, or
 /// both. Holds its newest entries (live ones replace by pos).
 pub(super) struct Feed {
-    agent: String,
+    pub(super) agent: String,
     history: bool,
     preview: bool,
     /// its first page came (or nothing can come: the hub away)
@@ -34,12 +34,15 @@ pub(super) struct Feed {
 pub(super) enum Ask {
     First { resync: bool },
     Older,
+    /// the capsule's: main's first page (core/home.rs), another agent's
+    Main,
+    Quiet,
 }
 
 /// A `subscribe` or `page` sent; the hub answers them in order.
 pub(super) struct Pending {
-    agent: String,
-    ask: Ask,
+    pub(super) agent: String,
+    pub(super) ask: Ask,
 }
 
 /// The entries a feed keeps (the preview's last actions, a live entry
@@ -61,16 +64,14 @@ fn pos_of(e: &Value) -> u64 {
 }
 
 impl Core {
-    fn hub_agent(&self, name: &str) -> Option<&Value> {
-        self.hub_agents.iter().find(|a| a.get("name").and_then(Value::as_str) == Some(name))
+    fn hub_agent(&self, name: &str) -> Option<&bise_proto::rows::Agent> {
+        self.hub_agents.iter().find(|a| a.name == name)
     }
 
     /// The agent is in a turn (or starting one): a queued message waits
     /// in the hub until it ends.
     fn busy(&self, name: &str) -> bool {
-        self.hub_agent(name)
-            .and_then(|a| a.get("status").and_then(Value::as_str))
-            .is_some_and(|s| matches!(s, "working" | "starting" | "waiting"))
+        self.hub_agent(name).is_some_and(|a| matches!(a.status, bise_proto::rows::Status::Working | bise_proto::rows::Status::Waiting))
     }
 
     /// His message into the agent's thread, as the TUI sends it: now (a
@@ -115,13 +116,15 @@ impl Core {
         self.feeds.last_mut().expect("pushed")
     }
 
-    /// A typed command to the voice target's hub (its project added);
-    /// false: not sent (no `welcome` yet, the hub away). Never held for
-    /// later: a feed is subscribed again at the next `welcome`.
-    fn typed(&mut self, mut v: Value, p: Option<Pending>) -> bool {
+    /// A typed command to the voice target's hub (its project added), as
+    /// its JSON-RPC request; false: not sent (`initialize` not answered
+    /// yet, the hub away). Never held for later: a feed is subscribed
+    /// again at the next `initialize`.
+    pub(super) fn typed(&mut self, mut v: Value, p: Option<Pending>) -> bool {
         let Some(project) = self.target.clone() else { return false };
         v["project"] = json!(project);
-        let ok = self.hub.send(&v);
+        let Some(req) = self.home.rpc.request(&v) else { return false };
+        let ok = self.hub.send(&req);
         if let (true, Some(p)) = (ok, p) {
             self.pending.push_back(p);
         }
@@ -145,7 +148,12 @@ impl Core {
         }
     }
 
+    /// A panel's thread left (never one the capsule reads: its words to
+    /// him, core/home.rs).
     fn unsubscribe(&mut self, agent: &str) {
+        if self.home.subs.contains(agent) {
+            return;
+        }
         self.typed(json!({"cmd": "unsubscribe", "agent": agent}), None);
     }
 
@@ -200,8 +208,7 @@ impl Core {
     }
 
     /// A typed event of the voice target's hub.
-    pub(super) fn typed_ev(&mut self, v: Value) {
-        let Ok(ev) = HubEv::from_value(v) else { return };
+    pub(super) fn typed_ev(&mut self, ev: HubEv) {
         match ev {
             HubEv::Welcome { project, .. } => {
                 self.target = Some(project);
@@ -215,8 +222,12 @@ impl Core {
             HubEv::Thread { agent, entries, before, more, .. } => {
                 let Some(i) = self.pending.iter().position(|p| p.agent == agent) else { return };
                 let p = self.pending.remove(i).expect("found");
+                if matches!(p.ask, Ask::Main | Ask::Quiet) {
+                    return self.capsule_page(&agent, &entries, matches!(p.ask, Ask::Main));
+                }
                 let entries: Vec<Value> = entries.iter().map(panel_entry).collect();
                 match p.ask {
+                    Ask::Main | Ask::Quiet => {}
                     Ask::Older => self.emit(json!({"ev": "agent_history", "agent": agent, "entries": entries, "before": before, "more": more})),
                     Ask::First { resync, .. } => {
                         let Some(f) = self.feeds.iter_mut().find(|f| f.agent == agent) else { return };
@@ -250,6 +261,8 @@ impl Core {
             HubEv::Error { cmd: Some(c), .. } if c == "subscribe" || c == "page" => {
                 let Some(p) = self.pending.pop_front() else { return };
                 match p.ask {
+                    Ask::Main => self.home_ready(),
+                    Ask::Quiet => {}
                     Ask::Older => self.emit(json!({"ev": "agent_history", "agent": p.agent, "entries": [], "before": null, "more": false})),
                     Ask::First { resync, .. } => {
                         if let Some(f) = self.feeds.iter_mut().find(|f| f.agent == p.agent) {
@@ -360,13 +373,13 @@ impl Core {
     /// actions, what waits on him, its last report, its pages.
     fn preview(&self, agent: &str, entries: &[Value]) -> Value {
         use super::super::agents;
-        let a = self.hub_agent(agent).cloned().unwrap_or(Value::Null);
-        let s = |k: &str| a.get(k).and_then(Value::as_str).unwrap_or("").to_string();
-        let (status, _) = agents::status(&s("status"));
+        let a = self.hub_agent(agent);
+        let status = a.map_or("idle", |a| super::home::row_status(a).0);
         let now = match self.typing.get(agent) {
             Some(t) if status == "working" && !t.is_empty() => t.clone(),
-            _ => agents::title(&a),
+            _ => a.map(super::home::row_title).unwrap_or_default(),
         };
+        let report = a.and_then(|a| a.report.as_ref()).filter(|r| !r.text.is_empty());
         let waiting: Vec<Value> = self
             .cards
             .iter()
@@ -375,12 +388,13 @@ impl Core {
             .collect();
         let last_report = match entries.iter().rev().find(|e| e["kind"] == "report") {
             Some(e) => json!({"kind": e["report"]["kind"], "text": e["text"], "at_ms": e["at_ms"]}),
-            None if !s("report").is_empty() => {
+            None if report.is_some() => {
                 let kind = match status {
                     "done" | "failed" | "blocked" => status,
                     _ => "progress",
                 };
-                json!({"kind": kind, "text": s("report"), "at_ms": a.get("report_ms")})
+                let r = report.expect("some");
+                json!({"kind": kind, "text": r.text, "at_ms": r.at_ms})
             }
             None => Value::Null,
         };
