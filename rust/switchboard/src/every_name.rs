@@ -6,9 +6,10 @@
 //!
 //! Pure. The name itself is sb-core's state (hub/timers.bend: `name`,
 //! the `every_name` journal line); here, which timer to ask about next
-//! ([`Asker::next`]), the request, the reply's [`clean`]ing, and the set
-//! line a fresh timer waits to write until it has its name. core.rs only
-//! calls these; the daemon runs the call (daemon/small_ask.rs).
+//! ([`Asker::next`]), the request and the reply's [`clean`]ing. When the
+//! ◷ set line goes is sb-core's (a timer set without a name is `held`,
+//! its every_name `announce`s it: architect m_15603). core.rs only calls
+//! these; the daemon runs the call (daemon/small_ask.rs).
 
 use crate::every::Timers;
 use std::collections::BTreeSet;
@@ -19,20 +20,20 @@ pub const MARK: &str = "# bise timer name";
 
 const SYSTEM: &str = "# bise timer name\nYou name a scheduled task in a list of an AI agents app. \
 The task is a message sent to an agent at a fixed time; its name says the job in 2 to 5 words. \
-Rules: lowercase, a verb or a noun phrase, plain words, no paths, no ids, no quotes, no final period, \
-at most 32 characters. Examples: check the nightly build / streaming bench / desktop drive review. \
+Rules: lowercase, a verb or a noun phrase, plain words, no paths, no ids, no quotes, no question mark, \
+no final period, at most 32 characters. Name the job; never quote the message's first line. \
+The agent's name is shown beside it: never put it in the name. \
+Examples: check the nightly build / streaming bench / desktop drive review. \
 Answer with the name only.";
 
-/// The calls in flight and done, and the set lines that wait for a name.
-/// Runtime only (a restarted hub asks again for a timer still unnamed).
+/// The calls in flight and done. Runtime only (a restarted hub asks
+/// again for a timer still unnamed).
 #[derive(Debug, Default)]
 pub struct Asker {
     /// the timer whose call is in flight
     asking: Option<u64>,
     /// timers already asked about (answered or failed): never twice
     asked: BTreeSet<u64>,
-    /// timers set in this run without a name: their ◷ set line waits for it
-    fresh: BTreeSet<u64>,
 }
 
 impl Asker {
@@ -45,7 +46,7 @@ impl Asker {
         let t = timers.map.values().find(|t| t.name.is_empty() && !self.asked.contains(&t.id))?;
         self.asking = Some(t.id);
         self.asked.insert(t.id);
-        Some((t.id, request(&t.text)))
+        Some((t.id, request(&t.text, &t.agent)))
     }
 
     /// The call of `id` ended.
@@ -54,22 +55,29 @@ impl Asker {
             self.asking = None;
         }
     }
+}
 
-    /// A timer set now without a name: its set line waits.
-    pub fn hold(&mut self, id: u64) {
-        self.fresh.insert(id);
-    }
-
-    /// A timer got its name: whether its set line was waiting for it.
-    pub fn release(&mut self, id: u64) -> bool {
-        self.fresh.remove(&id)
+/// Whether this journal line writes the timer's ◷ set line now. sb-core
+/// decides it (architect m_15603): a timer set without a name is `held`
+/// and its every_name says `announce`, once, whatever restarts come
+/// between (law named_announces_once); the line carries its name
+/// (designer m_14531). An older hub's every_set (no `held`) goes at once.
+pub fn set_line_now(ev: &serde_json::Value) -> bool {
+    match ev["type"].as_str() {
+        Some("every_set") => ev["held"] != true,
+        Some("every_name") => ev["announce"] == true,
+        _ => false,
     }
 }
 
 /// The wire request (runtime/remote.bend's format, like role.rs) of one
 /// call: the instruction, one line, clipped.
-pub fn request(text: &str) -> String {
-    let user = format!("The message: {}", crate::util::clip(&crate::util::one_line(text), 1200));
+pub fn request(text: &str, agent: &str) -> String {
+    let user = format!(
+        "The agent (shown beside the name): {}\nThe message: {}",
+        agent,
+        crate::util::clip(&crate::util::one_line(text), 1200)
+    );
     format!("MODEL default\nMSG system : {}\nMSG user : {}\nEND\n", escape(SYSTEM), escape(&user))
 }
 
@@ -87,22 +95,27 @@ pub fn clean(reply: &str) -> Option<String> {
     if l.to_lowercase().starts_with("name:") {
         l = l[5..].trim().to_string();
     }
-    let l = l
-        .trim_matches(|c: char| matches!(c, '"' | '\'' | '`' | '«' | '»' | '“' | '”' | '*' | '_'))
-        .trim()
-        .trim_end_matches('.')
-        .trim()
-        .to_lowercase();
+    let l = l.trim_matches(|c: char| matches!(c, '"' | '\'' | '`' | '«' | '»' | '“' | '”' | '*' | '_')).trim();
+    // a label (designer m_15602): 2-5 words, no path, no question
+    if l.contains('?') {
+        return None;
+    }
+    let l = l.trim_end_matches(['.', '!']).trim().to_lowercase();
     let words = l.split_whitespace().count();
-    if words == 0 || words > 6 || l.contains('/') || l.chars().any(|c| c.is_control()) {
+    if words == 0 || words > 5 || l.contains(['/', '…']) || l.chars().any(|c| c.is_control()) {
         return None;
     }
     Some(bise_proto::thread::words::name_fit(&l))
 }
 
-/// The name a call's end gives: the model's, else the plain fallback.
-pub fn name_of(reply: Option<&str>, text: &str) -> String {
-    reply.and_then(clean).unwrap_or_else(|| bise_proto::thread::words::timer_fallback(text))
+/// The name a call's end gives: the model's, else the plain fallback;
+/// never with its agent's name in front (the row shows it).
+pub fn name_of(reply: Option<&str>, text: &str, agent: &str) -> String {
+    use bise_proto::thread::words::{name_without_agent, timer_fallback};
+    match reply.and_then(clean) {
+        Some(n) => name_without_agent(&n, agent),
+        None => timer_fallback(text, agent),
+    }
 }
 
 #[cfg(test)]
@@ -138,21 +151,12 @@ mod tests {
         let mut a = Asker::default();
         let (id, req) = a.next(&ts).unwrap();
         assert_eq!(id, 1);
-        assert!(req.contains(MARK) && req.contains("check build 1"), "{req}");
+        assert!(req.contains(MARK) && req.contains("check build 1") && req.contains("The agent (shown beside the name): perf"), "{req}");
         assert!(a.next(&ts).is_none(), "one in flight");
         a.done(1);
         assert_eq!(a.next(&ts).map(|x| x.0), Some(3), "2 has a name");
         a.done(3);
         assert!(a.next(&ts).is_none(), "each once, even unnamed still");
-    }
-
-    #[test]
-    fn a_held_set_line_is_released_once() {
-        let mut a = Asker::default();
-        a.hold(4);
-        assert!(a.release(4));
-        assert!(!a.release(4));
-        assert!(!a.release(5));
     }
 
     #[test]
@@ -162,7 +166,10 @@ mod tests {
         assert_eq!(clean("read /tmp/x.out"), None);
         assert_eq!(clean(""), None);
         assert_eq!(clean("this is a whole sentence about what the task does"), None);
-        assert_eq!(name_of(None, "amb-core: read $TMPDIR/s4.log (S29 bench)"), "read S29 bench");
-        assert_eq!(name_of(Some("desktop drive review"), "x"), "desktop drive review");
+        assert_eq!(clean("is the queue empty?"), None, "a label, not the question");
+        assert_eq!(clean("Streaming Bench!").as_deref(), Some("streaming bench"));
+        assert_eq!(name_of(None, "amb-core: streaming bench: queue empty? (pgrep", "amb-core"), "streaming bench");
+        assert_eq!(name_of(Some("desktop drive review"), "x", "main"), "desktop drive review");
+        assert_eq!(name_of(Some("amb-core streaming bench"), "x", "amb-core"), "streaming bench", "never its agent's name");
     }
 }

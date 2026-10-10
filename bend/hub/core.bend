@@ -1271,7 +1271,7 @@ def timer_set.new(-o: M.St, s: Maybe<&2, TM.Sched>, +cx: X.Cx<o>, +agent: String
     case Some{+sc}:
       +t = {TM.Timer{1n+TM.Tms.last_id(tms(o, cx)), agent, C.get_s(i, "by"), C.get_s(i, "text"), sc,
         C.get_nat(i, "next_ms"), C.opt_nat(J.get(i, "until_ms")), C.opt_nat(J.get(i, "times")), 0n,
-        C.opt_str(J.get(i, "page")), 0n, Nil{}, C.get_s(i, "name")} : TM.Timer}
+        C.opt_str(J.get(i, "page")), 0n, Nil{}, C.get_s(i, "name"), String.is_empty(C.get_s(i, "name"))} : TM.Timer}
       emit(o, cx, M.ETimerSet{t, now(o, cx)}, Unit{}, Unit{}, Unit{})
 
 def timer_set.active(-o: M.St, ok: Bool, +cx: X.Cx<o>, +agent: String, +i: J.Json) -> X.Cx<o>:
@@ -1317,14 +1317,17 @@ def timer_run(-o: M.St, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
   timer_run.found(o, TM.find(live(o, cx), C.get_nat(i, "id")), cx, C.get_s(i, "text"))
 
 # {"t":"every_name"}: the hub's name for a live timer (its small model's,
-# else its plain fallback); an ended or unknown one, or no name: nothing
+# else its plain fallback); an ended or unknown one, or no name: nothing.
+# A timer set without a name is held: its ◷ set line waits for this step,
+# which announces it (architect m_15603: in sb-core, so a restart between
+# set and name still writes it, once; law named_announces_once)
 def timer_name.found(-o: M.St, m: Maybe<&2, TM.Timer>, +cx: X.Cx<o>, +id: Nat, +name: String) -> X.Cx<o>:
   match m:
     case None{}:
       cx
-    case Some{_}:
+    case Some{+t}:
       pick_lazy(X.Cx<o>, String.is_empty(name), u => cx,
-        u => emit(o, cx, M.ETimerName{id, name, now(o, cx)}, Unit{}, Unit{}, Unit{}))
+        u => emit(o, cx, M.ETimerName{id, name, TM.Timer.held(t), now(o, cx)}, Unit{}, Unit{}, Unit{}))
 
 def timer_name(-o: M.St, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
   timer_name.found(o, TM.find(live(o, cx), C.get_nat(i, "id")), cx, C.get_nat(i, "id"), C.get_s(i, "name"))

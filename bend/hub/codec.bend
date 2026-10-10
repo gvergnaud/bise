@@ -166,7 +166,7 @@ def ev_json(e: M.Ev) -> J.Json:
         [ty("every_set"), J.kv("id", J.JNum{TM.Timer.id(t)}), J.kv("agent", J.JStr{TM.Timer.agent(t)}),
           J.kv("by", J.JStr{TM.Timer.by(t)}), J.kv("text", J.JStr{TM.Timer.text(t)}),
           J.kv("next_ms", J.JNum{TM.Timer.next(t)}), J.kv("at", J.JNum{at}), TM.sched_kv(TM.Timer.sched(t))],
-        TM.opt_kvs(t)))
+        List.append(&2, Sigma<&2, &2, String, _ => J.Json>, TM.opt_kvs(t), TM.flag_kv("held", TM.Timer.held(t)))))
     case M.ETimerFired{+id, +fired, +next, +at, +undelivered}:
       J.obj(List.append(&2, Sigma<&2, &2, String, _ => J.Json>,
         [ty("every_fired"), J.kv("id", J.JNum{id}), J.kv("fired", J.JNum{fired}), J.kv("next_ms", J.JNum{next}),
@@ -177,8 +177,10 @@ def ev_json(e: M.Ev) -> J.Json:
     case M.ETimerStop{+id, +why, +at}:
       J.obj([ty("every_stop"), J.kv("id", J.JNum{id}), J.kv("why", J.JStr{why}), J.kv("at", J.JNum{at})])
     # an older sb-core reads every_name as unknown: skipped
-    case M.ETimerName{+id, +name, +at}:
-      J.obj([ty("every_name"), J.kv("id", J.JNum{id}), J.kv("name", J.JStr{name}), J.kv("at", J.JNum{at})])
+    case M.ETimerName{+id, +name, +announce, +at}:
+      J.obj(List.append(&2, Sigma<&2, &2, String, _ => J.Json>,
+        [ty("every_name"), J.kv("id", J.JNum{id}), J.kv("name", J.JStr{name}), J.kv("at", J.JNum{at})],
+        TM.flag_kv("announce", announce)))
     # bise desktop S2 (an older sb-core reads these as unknown: skipped)
     case M.EX{+xe}:
       x_json(xe)
@@ -361,7 +363,7 @@ def timer_set_of(s: Maybe<&2, TM.Sched>, +j: J.Json) -> Maybe<&2, M.Ev>:
     case Some{+sc}:
       Some{M.ETimerSet{TM.Timer{get_nat(j, "id"), get_s(j, "agent"), get_s(j, "by"), get_s(j, "text"), sc,
         get_nat(j, "next_ms"), opt_nat(J.get(j, "until_ms")), opt_nat(J.get(j, "times")), 0n,
-        opt_str(J.get(j, "page")), 0n, Nil{}, get_s(j, "name")}, get_nat(j, "at")}}
+        opt_str(J.get(j, "page")), 0n, Nil{}, get_s(j, "name"), get_b(j, "held")}, get_nat(j, "at")}}
 
 # a match on the kind, not a Bool.pick chain: the chain decoded the event
 # as every kind, then kept one
@@ -406,7 +408,7 @@ def ev_of.kind(k: EvK, +j: J.Json, +n: String) -> Maybe<&2, M.Ev>:
     case KEveryStop{}:
       Some{M.ETimerStop{get_nat(j, "id"), get_s(j, "why"), get_nat(j, "at")}}
     case KEveryName{}:
-      Some{M.ETimerName{get_nat(j, "id"), get_s(j, "name"), get_nat(j, "at")}}
+      Some{M.ETimerName{get_nat(j, "id"), get_s(j, "name"), get_b(j, "announce"), get_nat(j, "at")}}
     case KXOut{}:
       Some{M.EX{XH.XOut{out_of(get_j(j, "out"))}}}
     case KXAcked{}:

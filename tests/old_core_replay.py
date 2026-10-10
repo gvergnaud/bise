@@ -52,8 +52,8 @@ FIXTURE = [
     {"type": "every_set", "id": 1, "agent": "main", "by": "main", "text": "check the build", "next_ms": 9000,
      "at": 1000, "every_ms": 600000, "name": "build check"},
     {"type": "every_set", "id": 2, "agent": "main", "by": "main", "text": "read the log", "next_ms": 9000,
-     "at": 1000, "every_ms": 600000},
-    {"type": "every_name", "id": 2, "name": "log read", "at": 1100},
+     "at": 1000, "every_ms": 600000, "held": True},
+    {"type": "every_name", "id": 2, "name": "log read", "announce": True, "at": 1100},
 ]
 NEW = [i for i, e in enumerate(FIXTURE)
        if e["type"].startswith(("x_", "act_")) or e["type"] in ("follow", "job_end", "every_name")]

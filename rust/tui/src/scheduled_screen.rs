@@ -97,10 +97,12 @@ fn cut(s: &str, w: usize) -> String {
     out
 }
 
-/// One task's row: `› #48  ◷ answer-line   every 2m   next 14:32 · in 1m
-/// 2 of 6   by answer-line   check the build…` (wide), `› #48 ◷
-/// answer-line  2m  in 1m  2 of 6` (narrow); an ended one is dim and
-/// says when and why.
+/// One task's row (designer m_15602: its name first, never its id):
+/// `› ◷ answer-line   build check   every 2m   next 14:32 · in 1m   2 of
+/// 6   by answer-line` (wide), `› ◷ answer-line  build check   in 1m   2
+/// of 6` (narrow: who it wakes, its name and its next run stay; the
+/// rhythm and who set it go first); an ended one is dim and says when
+/// and why (narrow: `ended 15:43 · 3 runs`, `stopped 15:13`).
 fn row(t: &Task, selected: bool, width: usize, now: u64) -> Line<'static> {
     let wide = width >= WIDE_FROM;
     let base = if t.active() { text() } else { dim() };
@@ -108,12 +110,28 @@ fn row(t: &Task, selected: bool, width: usize, now: u64) -> Line<'static> {
     let soft = Style::default().fg(if t.active() { dim() } else { faint() });
     let mut spans = vec![
         Span::styled(if selected { format!("{} ", theme::glyph("›")) } else { "  ".into() }, Style::default().fg(accent())),
-        Span::styled(format!("#{:<4}", t.id), soft),
         Span::styled(format!("{} ", theme::glyph(theme::G_SCHEDULED)), Style::default().fg(faint())),
     ];
-    let (agent_w, when_w, next_w, far_w) = if wide { (14, 18, 26, 17) } else { (13, 13, 12, 12) };
+    let (agent_w, when_w, next_w, far_w) = if wide { (14, 17, 26, 17) } else { (13, 0, 12, 12) };
+    let name_w = if wide { 34 } else { width.saturating_sub(4 + agent_w + next_w + far_w + 1).clamp(10, 34) };
     spans.push(Span::styled(pad(&t.agent, agent_w), st));
-    spans.push(Span::styled(pad(&if wide { t.when() } else { t.when_short() }, when_w), soft));
+    spans.push(Span::styled(pad(&t.title(), name_w), st));
+    if wide {
+        spans.push(Span::styled(pad(&t.when(), when_w), soft));
+    }
+    if let (Some(e), false) = (t.ended_ms, wide) {
+        // narrow: one short form in the two last columns
+        let at = ahead(e, now);
+        let s = if t.end == "stopped" {
+            format!("stopped {at}")
+        } else {
+            // ran its times: that many runs (what the wide row says)
+            let n = if t.end == "times" { t.times.unwrap_or(t.fired) } else { t.fired };
+            format!("ended {at} · {n} run{}", if n == 1 { "" } else { "s" })
+        };
+        spans.push(Span::styled(pad(&s, next_w + far_w), soft));
+        return Line::from(spans);
+    }
     let (next, far) = match t.ended_ms {
         Some(e) => (format!("ended {}", ahead(e, now)), t.ended_words()),
         None if wide => {
@@ -138,10 +156,8 @@ fn row(t: &Task, selected: bool, width: usize, now: u64) -> Line<'static> {
         spans.push(Span::styled(pad(&format!("by {}", t.by), 17), soft));
         let used: usize = spans.iter().map(|s| s.content.width()).sum();
         let room = width.saturating_sub(used + 1);
-        match &t.page {
-            Some(p) => spans.push(Span::styled(format!("↗ {}", cut(p, room.saturating_sub(2))), Style::default().fg(accent()))),
-            // its name (sched-names, designer m_14531); its words open below
-            None => spans.push(Span::styled(cut(&t.title(), room), st)),
+        if let Some(p) = &t.page {
+            spans.push(Span::styled(format!("↗ {}", cut(p, room.saturating_sub(2))), Style::default().fg(accent())));
         }
     }
     Line::from(spans)
@@ -151,9 +167,8 @@ fn row(t: &Task, selected: bool, width: usize, now: u64) -> Line<'static> {
 fn confirm_row(t: &Task) -> Line<'static> {
     Line::from(vec![
         Span::styled(format!("{} ", theme::glyph("›")), Style::default().fg(accent())),
-        Span::styled(format!("#{:<4}", t.id), Style::default().fg(dim())),
         Span::styled(format!("{} ", theme::glyph(theme::G_SCHEDULED)), Style::default().fg(faint())),
-        Span::styled(format!("stop this scheduled task? it won't wake {} again.", t.agent), Style::default().fg(text())),
+        Span::styled(format!("stop “{}”? it won't wake {} again.", t.title(), t.agent), Style::default().fg(text())),
         Span::raw("   "),
         Span::styled("y", Style::default().fg(text())),
         Span::styled(" stop   ", Style::default().fg(dim())),
@@ -214,7 +229,7 @@ fn detail_line(sc: &Screen, sel: Option<&Task>, width: usize) -> Line<'static> {
         }
     }
     let Some(t) = sel else { return Line::default() };
-    let mut s = format!("#{} {} · wakes {} {} · set by {}", t.id, t.title(), t.agent, t.when(), t.by);
+    let mut s = format!("{} · wakes {} {} · set by {}", t.title(), t.agent, t.when(), t.by);
     s.push_str(&format!(" · its words: {}", clip(&t.text, 200)));
     Line::from(Span::styled(cut(&s, width), dim_st))
 }
@@ -305,7 +320,8 @@ pub(crate) fn opened_lines(sc: &Screen, t: &Task, width: usize, height: usize, n
         Line::from(vec![Span::styled(format!("{k:<12}"), Style::default().fg(dim())), Span::styled(v, Style::default().fg(text()))])
     };
     let mut out = Vec::new();
-    let left = format!("scheduled task #{} · {}", t.id, t.agent);
+    // designer m_15602: its name, never its id (the id is sb every's)
+    let left = format!("{} · {}", t.title(), t.agent);
     let right = format!("{} {}", theme::glyph(theme::G_SCHEDULED), if t.active() { "active" } else { "ended" });
     let gap = width.saturating_sub(left.width() + right.width() + 2).max(2);
     out.push(Line::from(vec![
@@ -467,18 +483,18 @@ fn run_now(app: &mut App) {
     let Some(t) = selected(app).filter(Task::active) else { return };
     app.sb.send(serde_json::json!({"op": "every_run", "id": t.id}));
     let now = crate::when::now_ms();
-    note(app, format!("#{} · ran now: {} is on it. the next run stays at {}.", t.id, t.agent, ahead(t.next_ms, now)));
+    note(app, format!("{} · ran now: {} is on it. the next run stays at {}.", t.title(), t.agent, ahead(t.next_ms, now)));
 }
 
 /// `y` after `x`: the hub stops it (its agent hears it from bise).
 fn stop(app: &mut App, id: u64) {
-    let agent = app.sb.timers.iter().find(|t| t.id == id).map(|t| t.agent.clone()).unwrap_or_default();
+    let (agent, title) = app.sb.timers.iter().find(|t| t.id == id).map(|t| (t.agent.clone(), t.title())).unwrap_or_default();
     app.sb.send(serde_json::json!({"op": "every_stop", "id": id}));
     if let Some(sc) = app.scheduled.as_mut() {
         sc.confirm = None;
         sc.opened = None;
     }
-    note(app, format!("#{id} · stopped: it won't wake {agent} again."));
+    note(app, format!("{title} · stopped: it won't wake {agent} again."));
 }
 
 pub(crate) fn on_key(app: &mut App, k: &KeyEvent) -> bool {

@@ -61,16 +61,18 @@ def setup(t, E):
         sb(E, "main", E.ws, "spawn", name, "--objective", what)
         t.wait(name)
     out = sb(E, "t1", E.ws, "every", "2m", "check the build and tell me what failed", "--times", "6")
-    assert "timer set: #1 @t1 every 2m" in out, out
+    # sched-names: the list's line, its name (the fallback until the model's) after its agent
+    assert "timer set: #1 @t1  " in out and " · every 2m · " in out, out
     out = sb(E, "main", E.ws, "every", "day", "07:30", "ship a release if main landed something", "--to", "t2")
-    assert "timer set: #2 @t2 every day 07:30" in out, out
+    assert "timer set: #2 @t2  " in out and " · every day 07:30 · " in out, out
 
 
 def wide(t, E):
     setup(t, E)
     # main's thread: main's own, never t1's; the panel's ◷ and its legend
-    sc = t.wait("main scheduled #2 for t2 · every day 07:30")
-    assert "t1 scheduled #1" not in sc, sc
+    # sched-names: its name (the fake model's), never its id (designer m_14531)
+    sc = t.wait("main scheduled fake timer name for t2 · every day 07:30")
+    assert "t1 scheduled" not in sc and "scheduled #" not in sc, sc
     sc = t.wait("◷ 07:30")
     assert "◷ 2m" in sc and "◷ 07:30" in sc, sc
     assert "= its next run" not in sc, sc
@@ -79,16 +81,18 @@ def wide(t, E):
     # /scheduled: the list, soonest first
     command(t, "/scheduled", "scheduled · what wakes your agents, and when")
     sc = t.wait("2 active   tab ended too")
-    assert "/ find: an agent, the words" in sc, sc
+    assert "/ find: an agent, a name, the words" in sc, sc
     rows = [l for l in sc.splitlines() if "◷ t1" in l or "◷ t2" in l]
-    assert len(rows) == 2 and "#1" in rows[0] and "› " in rows[0], sc
+    # designer m_15602: its name right after its agent, no id on the screen
+    assert len(rows) == 2 and "◷ t1" in rows[0] and "fake timer name" in rows[0] and "› " in rows[0], sc
+    assert "#" not in "\n".join(rows), sc
     assert "every 2m" in rows[0] and "0 of 6" in rows[0] and "by t1" in rows[0], rows[0]
     assert "every day 07:30" in rows[1] and "by main" in rows[1], rows[1]
     assert "⏎ open   r run now   x stop   / find   tab ended too   esc close" in sc, sc
     shot(t, "150-list")
     # one opened
     t.keys("Enter")
-    sc = t.wait("scheduled task #1 · t1")
+    sc = t.wait("fake timer name · t1")
     for want in ("wakes       t1", "set by      t1", "when        every 2m · 6 times", "ends        after its 6th run",
                  "the words it sends", "check the build and tell me what failed", "r run now   x stop   esc back to the list"):
         assert want in sc, want + "\n" + sc
@@ -101,12 +105,12 @@ def wide(t, E):
     t.wait("2 active   tab ended too")
     # x asks on the row: n keeps
     t.keys("x")
-    sc = t.wait("stop this scheduled task? it won't wake t1 again.   y stop   n or esc keep")
+    sc = t.wait("stop “fake timer name”? it won't wake t1 again.   y stop   n or esc keep")
     shot(t, "150-stop-ask")
     t.keys("n")
-    t.wait_gone("stop this scheduled task?")
+    t.wait_gone("stop “fake timer name”?")
     t.keys("x")
-    t.wait("stop this scheduled task?")
+    t.wait("stop “fake timer name”?")
     t.keys("y")
     sc = t.wait("1 active   tab ended too")
     t.keys("Tab")
@@ -117,9 +121,9 @@ def wide(t, E):
     t.wait_gone("what wakes your agents")
     # t1's thread: set, the run now, ended; never `switchboard`, never the stop's note
     t.keys("M-1")
-    sc = t.wait("scheduled #1 ended · stopped by you")
-    assert "t1 scheduled #1 · every 2m · 6 times · next" in sc, sc
-    assert "scheduled #1 · ran now, by you · check the build" in sc, sc
+    sc = t.wait("fake timer name ended · stopped by you")
+    assert "t1 scheduled fake timer name · every 2m · 6 times · next" in sc, sc
+    assert "fake timer name · ran now, by you" in sc, sc
     # the fake model's `ack: <its input>` replies quote what the agent read:
     # only the thread's lines before them are bise's
     lines = sc.split(" ack: ")[0]
@@ -137,7 +141,7 @@ def light(t, width):
     command(t, "/scheduled", "1 active")
     shot(t, width + "-list-light")
     t.keys("Enter")
-    t.wait("scheduled task #2 · t2")
+    t.wait("fake timer name · t2")
     shot(t, width + "-opened-light")
     t.keys("Escape")
     t.keys("Escape")
@@ -153,12 +157,13 @@ def narrow(t):
     sc = t.wait("1 active")
     assert "what wakes your agents" not in sc, sc
     assert "⏎ open   r run now   x stop   esc close" in sc, sc
-    assert "daily 07:30" in sc, sc
+    # 80 columns (designer m_15602): who it wakes, its name, its next run; no rhythm
+    assert "◷ t2" in sc and "fake timer name" in sc and "daily 07:30" not in sc, sc
     for line in sc.splitlines():
         assert len(line) <= 80, line
     shot(t, "80-list")
     t.keys("Enter")
-    t.wait("scheduled task #2 · t2")
+    t.wait("fake timer name · t2")
     shot(t, "80-opened")
     t.keys("Escape")
     t.keys("Escape")

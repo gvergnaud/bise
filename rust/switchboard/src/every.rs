@@ -123,13 +123,15 @@ pub struct Timer {
 }
 
 impl Timer {
-    /// What the lists show: its name, else the plain words of its
-    /// instruction (bise_proto's `timer_fallback`, the one fallback).
+    /// What the lists show: its name, else the plain label of its
+    /// instruction (bise_proto's `timer_fallback`, the one fallback),
+    /// never with its agent's name in front (designer m_15602).
     pub fn title(&self) -> String {
+        use bise_proto::thread::words::{name_fit, name_without_agent, timer_fallback};
         if self.name.is_empty() {
-            bise_proto::thread::words::timer_fallback(&self.text)
+            timer_fallback(&self.text, &self.agent)
         } else {
-            self.name.clone()
+            name_fit(&name_without_agent(&self.name, &self.agent))
         }
     }
 

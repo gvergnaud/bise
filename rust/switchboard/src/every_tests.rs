@@ -304,6 +304,8 @@ fn a_timer_gets_a_name_from_the_model_or_the_fallback() {
     let fx = t.go(Input::TimerName { id, reply: Some("\"S29 Bench.\"".into()) });
     let named = journal(&fx, "every_name");
     assert_eq!((named[0]["id"].as_u64(), named[0]["name"].as_str()), (Some(id), Some("s29 bench")));
+    // sb-core says the set line goes now (architect m_15603)
+    assert_eq!(named[0]["announce"], true, "{}", named[0]);
     let set = scheduled_lines(&fx);
     // its agent's line, and main's copy (main set it for w)
     assert!(set.len() == 2 && set.iter().all(|l| l.contains("\"name\":\"s29 bench\"")), "{set:?}");
@@ -333,6 +335,37 @@ fn a_timer_gets_a_name_from_the_model_or_the_fallback() {
     assert!(back.replay(&events).is_empty(), "every line read");
     let names: Vec<String> = back.timers().map.values().map(|x| x.name.clone()).collect();
     assert_eq!(names, ["s29 bench", "check the nightly build", "my own name"]);
+}
+
+/// architect m_15603: a hub restarted between a timer's set and its name
+/// still writes its ◷ set line, once: the every_set is `held` in the
+/// journal (sb-core's state, not the Asker's), the new hub asks at its
+/// first step and its every_name `announce`s; a second name does not.
+#[test]
+fn a_restart_before_the_name_still_announces_the_timer_once() {
+    let mut t = hub();
+    let req = EveryReq::Add { to: "w".into(), text: "check the nightly build".into(), sched: Sched::Every(10 * MIN_MS), until_ms: None, times: None, page: None, name: None };
+    let (_, fx) = t.req(MAIN, AgentReq::Every(req));
+    assert!(asked_name(&fx).is_some() && scheduled_lines(&fx).is_empty());
+    let set = journal(&fx, "every_set");
+    assert_eq!(set[0]["held"], true, "{}", set[0]);
+    // the hub restarts before the answer: a new hub from the journal
+    let events = t.journal.borrow().clone();
+    let mut back = Hub::new("/w");
+    assert!(back.replay(&events).is_empty(), "every line read");
+    std::mem::swap(&mut t.hub, &mut back);
+    let fx = t.go(Input::Tick);
+    let (id, _) = asked_name(&fx).expect("the new hub asks at its first step");
+    let fx = t.go(Input::TimerName { id, reply: Some("nightly build check".into()) });
+    let named = journal(&fx, "every_name");
+    assert_eq!((named[0]["name"].as_str(), &named[0]["announce"]), (Some("nightly build check"), &json!(true)));
+    let set = scheduled_lines(&fx);
+    // its agent's line and main's copy: one each
+    assert!(set.len() == 2 && set.iter().all(|l| l.contains("nightly build check")), "{set:?}");
+    // a later name (an old hub asking again) announces nothing
+    let fx = t.go(Input::TimerName { id, reply: Some("other name".into()) });
+    assert!(scheduled_lines(&fx).is_empty(), "once");
+    assert!(journal(&fx, "every_name").iter().all(|j| j["announce"] != true));
 }
 
 /// A hub that starts with unnamed timers (an older hub's) names them, one

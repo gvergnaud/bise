@@ -449,7 +449,8 @@ mod tests {
             // the name: the row's and the TUI's title say the same (sched-names)
             assert_eq!(r.name, task.title(), "#{}", r.id);
         }
-        assert_eq!((rows[0].name.as_str(), rows[1].name.as_str()), ("perf check", "check #2"), "a name, else the fallback");
+        // a name never repeats its agent (designer m_15602): perf's "perf check" reads "check"
+        assert_eq!((rows[0].name.as_str(), rows[1].name.as_str()), ("check", "check #2"), "a name, else the fallback");
         let every: Vec<&str> = rows.iter().map(|r| r.every.as_str()).collect();
         assert_eq!(every, ["every 2m", "every day 07:30", "once", "every 1m", "every 5m"]);
     }

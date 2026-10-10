@@ -224,40 +224,75 @@ pub fn one_line(s: &str, max: usize) -> String {
     out
 }
 
-/// The longest a scheduled task's name shows (designer m_14531): past it,
-/// [`name_fit`] ends it with `…` at a word.
+/// The longest a scheduled task's name is (designer m_14531): past it,
+/// [`name_fit`] keeps the words that fit.
 pub const NAME_MAX: usize = 32;
 
 /// A scheduled task's plain name when no model named it (designer
-/// m_14531, architect m_14532: the one fallback, for the hub's every_name,
-/// its rows and an old hub's lines): the first 5 words of its
-/// instruction, without a leading `agent-name:` tag, paths (`/`, `~`,
-/// `$`), flags (`-x`) or quotes, cut at a word past [`NAME_MAX`].
-pub fn timer_fallback(text: &str) -> String {
+/// m_15602, architect m_14532: the one fallback, for the hub's every_name,
+/// its rows and an old hub's lines). A label, not the question: the
+/// first words of its instruction up to its first `:`, `?`, `;`, `.`,
+/// `,` or `(` (at most 5), without a leading `tag:` or its agent's own
+/// name (the row shows it beside), paths (`/`, `~`, `$`), flags (`-x`)
+/// or quotes, cut at a word past [`NAME_MAX`], never with `…`.
+pub fn timer_fallback(text: &str, agent: &str) -> String {
     let mut words = text.split_whitespace().peekable();
-    // `amb-core: read …`: the tag repeats who it wakes
-    if words.peek().is_some_and(|w| w.len() > 1 && w.ends_with(':') && !w[..w.len() - 1].contains(':')) {
+    // `amb-core: read …` or `amb-core read …`: who it wakes, said again
+    let is_tag = |w: &str| w.len() > 1 && w.ends_with(':') && !w[..w.len() - 1].contains(':');
+    if words.peek().is_some_and(|w| is_tag(w) || (!agent.is_empty() && w.eq_ignore_ascii_case(agent))) {
         words.next();
     }
-    let quote = |c: char| matches!(c, '"' | '\'' | '`' | '«' | '»' | '“' | '”' | '(' | ')' | '[' | ']');
-    let kept: Vec<String> = words
-        .filter(|w| !(w.contains('/') || w.starts_with('~') || w.starts_with('$') || w.starts_with('-')))
-        .map(|w| w.chars().filter(|c| !quote(*c)).collect::<String>())
-        .map(|w| w.trim_end_matches([',', ';', ':', '.']).to_string())
-        .filter(|w| !w.is_empty())
-        .take(5)
-        .collect();
+    let quote = |c: char| matches!(c, '"' | '\'' | '`' | '«' | '»' | '“' | '”' | ')' | ']');
+    let mut kept: Vec<String> = Vec::new();
+    for w in words {
+        if w.starts_with(['(', '[']) {
+            break;
+        }
+        if w.contains('/') || w.starts_with(['~', '$', '-']) {
+            continue;
+        }
+        let w: String = w.chars().filter(|c| !quote(*c)).collect();
+        let bare = w.trim_end_matches([',', ';', ':', '.', '?', '!']);
+        if !agent.is_empty() && bare.eq_ignore_ascii_case(agent) {
+            // its agent's name, wherever it sits (designer m_15921), and a
+            // `for` / `on` it leaves dangling: `check the build`
+            if kept.last().is_some_and(|k| k == "for" || k == "on") {
+                kept.pop();
+            }
+        } else if !bare.is_empty() {
+            kept.push(bare.to_string());
+        }
+        if bare.len() < w.len() || kept.len() == 5 {
+            break;
+        }
+    }
     let name = name_fit(&kept.join(" "));
     if name.is_empty() {
-        one_line(text, NAME_MAX)
+        name_fit(&one_line(text, 200))
     } else {
         name
     }
 }
 
+/// A name without its agent's name in front (designer m_15602: the row
+/// already shows it): `answer-line build check` on answer-line's row is
+/// `build check`; a name that is only the agent's name stays.
+pub fn name_without_agent(name: &str, agent: &str) -> String {
+    let rest = (!agent.is_empty())
+        .then(|| name.strip_prefix(agent))
+        .flatten()
+        .filter(|r| r.starts_with([' ', ':']))
+        .map(|r| r.trim_start_matches([' ', ':']).trim());
+    match rest {
+        Some(r) if !r.is_empty() => r.to_string(),
+        _ => name.to_string(),
+    }
+}
+
 /// A name on one line, at most [`NAME_MAX`] characters, never cut inside
-/// a word: past it, the words that fit then `…` (a first word longer
-/// than that is cut, the only way to show it).
+/// a word and never with `…` (designer m_15602: a label): past it, the
+/// words that fit (a first word longer than that is cut, the only way to
+/// show it).
 pub fn name_fit(name: &str) -> String {
     let one = name.split_whitespace().collect::<Vec<_>>().join(" ");
     if one.chars().count() <= NAME_MAX {
@@ -266,7 +301,7 @@ pub fn name_fit(name: &str) -> String {
     let mut out = String::new();
     for w in one.split(' ') {
         let n = out.chars().count() + usize::from(!out.is_empty()) + w.chars().count();
-        if n + 1 > NAME_MAX {
+        if n > NAME_MAX {
             break;
         }
         if !out.is_empty() {
@@ -275,9 +310,8 @@ pub fn name_fit(name: &str) -> String {
         out.push_str(w);
     }
     if out.is_empty() {
-        out = one.chars().take(NAME_MAX - 1).collect();
+        out = one.chars().take(NAME_MAX).collect();
     }
-    out.push('…');
     out
 }
 
@@ -381,27 +415,47 @@ mod tests {
         assert!(is_plan_line("your ChatGPT sign-in expired. run /provider") && is_expired_line("your ChatGPT sign-in expired."));
     }
 
-    /// designer m_14531: the first 5 words, no tag, path, flag or quote,
-    /// never cut mid-word (the user's screenshot's instructions).
+    /// designer m_15602: a label, not the question: the first words up to
+    /// the first `:`, `?`, `(`…, no tag, no agent name, path, flag or
+    /// quote, never `…` (the user's screenshot's instructions).
     #[test]
-    fn a_timer_without_a_name_gets_its_first_words() {
+    fn a_timer_without_a_name_gets_a_label_from_its_words() {
         let f = timer_fallback;
-        assert_eq!(f("check /Users/g/.bise/hubs/h/agents/art-seen/tmp/res and rc (tui_artifacts repro)"), "check and rc tui_artifacts repro");
-        assert_eq!(f("amb-win: read /Users/g/tmp/b1land.out (test:land f..."), "read test:land f");
-        assert_eq!(f("P4c-4a: read $TMPDIR/s4a.rc/s4a.out (cargo check of the shared-type change)"), "read cargo check of the");
-        assert_eq!(f("amb-core: streaming bench: queue empty? (pgrep -fl 'heavy-run|lockf'; uptime"), "streaming bench queue empty?…", "cut at a word past 32");
-        assert_eq!(f("standing rule (main m_7436, m_9222), battery mode"), "standing rule main m_7436 m_9222");
-        assert_eq!(f("/a/b /c"), "/a/b /c", "nothing left: the instruction's own first line");
-        assert_eq!(f("supercalifragilisticexpialidocious-and-more-words-here"), "supercalifragilisticexpialidoci…");
+        assert_eq!(f("check /Users/g/.bise/hubs/h/agents/art-seen/tmp/res and rc (tui_artifacts repro)", "art-seen"), "check and rc");
+        assert_eq!(f("amb-win: read /Users/g/tmp/b1land.out (test:land f...", "amb-win"), "read");
+        assert_eq!(f("amb-core: streaming bench: queue empty? (pgrep -fl 'heavy-run|lockf'; uptime", "amb-core"), "streaming bench");
+        assert_eq!(f("standing rule (main m_7436, m_9222), battery mode", "ambient-lead"), "standing rule");
+        assert_eq!(f("bise desktop drive: check designer (desktop-ds), ambient-lead's plan", "main"), "bise desktop drive");
+        assert_eq!(f("answer-line build check every run", "answer-line"), "build check every run", "its agent's name goes");
+        // designer m_15921: wherever it sits, with the `for` / `on` before it
+        assert_eq!(f("check the build for answer-line", "answer-line"), "check the build");
+        assert_eq!(f("run the bench on amb-core then report", "amb-core"), "run the bench then report");
+        assert_eq!(f("check the build for answer-line", ""), "check the build for answer-line", "no agent: kept");
+        assert_eq!(f("is the queue empty? then run it", ""), "is the queue empty");
+        assert_eq!(f("/a/b /c", ""), "/a/b /c", "nothing left: the instruction's own first line");
+        assert_eq!(f("supercalifragilisticexpialidocious-and-more-words-here", ""), "supercalifragilisticexpialidocio", "a first word past 32: cut, the only way");
         for s in ["ship it", "x"] {
-            assert_eq!(f(s), s);
+            assert_eq!(f(s, "w"), s);
         }
+        for s in ["check /Users/g/x and rc (repro)", "amb-core: streaming bench: queue empty? (pgrep"] {
+            let n = f(s, "amb-core");
+            assert!(!n.contains(['…', '?', '(', ':']) && n.split(' ').count() <= 5, "{n}");
+        }
+    }
+
+    #[test]
+    fn a_name_never_repeats_its_agent() {
+        assert_eq!(name_without_agent("answer-line build check", "answer-line"), "build check");
+        assert_eq!(name_without_agent("amb-core: streaming bench", "amb-core"), "streaming bench");
+        assert_eq!(name_without_agent("amb-core", "amb-core"), "amb-core", "only its name: kept");
+        assert_eq!(name_without_agent("amb-corebench", "amb-core"), "amb-corebench", "a word that starts the same: kept");
+        assert_eq!(name_without_agent("build check", ""), "build check");
     }
 
     #[test]
     fn a_name_is_cut_at_a_word() {
         assert_eq!(name_fit("amb-core streaming bench"), "amb-core streaming bench");
-        assert_eq!(name_fit("check the desktop drive and the plan of ambient-lead"), "check the desktop drive and the…");
+        assert_eq!(name_fit("check the desktop drive and the plan of ambient-lead"), "check the desktop drive and the");
         assert!(name_fit("check the desktop drive and the plan of ambient-lead").chars().count() <= NAME_MAX);
         assert_eq!(name_fit("  two\n words "), "two words");
     }

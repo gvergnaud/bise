@@ -66,13 +66,14 @@ impl Task {
         })
     }
 
-    /// What the lists show (designer m_14531): its name, else the plain
-    /// words of its instruction (`words::timer_fallback`, the hub's too).
+    /// What the lists show (designer m_14531, m_15602): its name, else the
+    /// plain label of its instruction (`words::timer_fallback`, the hub's
+    /// too), never with its agent's name in front (the row shows it).
     pub fn title(&self) -> String {
         if self.name.is_empty() {
-            super::words::timer_fallback(&self.text)
+            super::words::timer_fallback(&self.text, &self.agent)
         } else {
-            super::words::name_fit(&self.name)
+            super::words::name_fit(&super::words::name_without_agent(&self.name, &self.agent))
         }
     }
 
@@ -193,7 +194,7 @@ pub fn hub_line(raw: &str, now: u64, off: Offset) -> Option<Scheduled> {
 pub fn run_line(text: &str) -> Option<Scheduled> {
     // the one parser of a wake (lines.rs)
     let (id, name, how, words) = super::lines::timer_wake(text)?;
-    let mut head = if name.is_empty() { super::words::timer_fallback(words) } else { name.to_string() };
+    let mut head = if name.is_empty() { super::words::timer_fallback(words, "") } else { name.to_string() };
     let mut waited = None;
     let mut now = false;
     for part in how.split(", ") {

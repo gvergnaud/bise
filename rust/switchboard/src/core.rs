@@ -1807,21 +1807,10 @@ impl Hub {
 
     /// The ◷ line of a timer sb-core just set or ended (its `every_set` or
     /// `every_stop`; the step's view, loaded first, has the timer).
-    fn timer_journal_lines(&mut self, fx: &mut Fx, ev: &Value) {
+    fn timer_journal_lines(&self, fx: &mut Fx, ev: &Value) {
         let id = ev["id"].as_u64().unwrap_or(0);
-        // a timer set without a name says so once it has it (designer
-        // m_14531: its set line carries its name; every_name.rs)
-        let set_now = match ev["type"].as_str() {
-            Some("every_set") if ev["name"].as_str().unwrap_or_default().is_empty() => {
-                self.timer_names.hold(id);
-                false
-            }
-            Some("every_set") => true,
-            Some("every_name") => self.timer_names.release(id),
-            _ => false,
-        };
         let (t, mut v, what) = match ev["type"].as_str() {
-            Some("every_set" | "every_name") if set_now => match self.st.timers.map.get(&id) {
+            Some("every_set" | "every_name") if crate::every_name::set_line_now(ev) => match self.st.timers.map.get(&id) {
                 Some(t) => (t, t.json(), "set"),
                 None => return,
             },
@@ -2352,7 +2341,7 @@ impl Hub {
             Input::TimerName { id, reply } => {
                 self.timer_names.done(id);
                 if let Some(t) = self.st.timers.map.get(&id) {
-                    let name = crate::every_name::name_of(reply.as_deref(), &t.text);
+                    let name = crate::every_name::name_of(reply.as_deref(), &t.text, &t.agent);
                     self.core(&mut fx, env, None, json!({"t": "every_name", "id": id, "name": name}));
                 }
             }

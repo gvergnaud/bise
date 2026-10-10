@@ -4387,6 +4387,15 @@ law named_is_the_name:
   for +name: String
   {HTM.Timer.name(HTM.Timer.named(t, name)) == name : String}
 
+# LAW (sched-names, architect m_15603): a timer is announced once. The
+# every_name step announces it when it is held (core.bend timer_name:
+# announce = Timer.held), and its line, replayed or live, leaves it not
+# held: a second every_name, after any restart, never announces again.
+law named_announces_once:
+  for +t: HTM.Timer
+  for +name: String
+  {HTM.Timer.held(HTM.Timer.name_line(t, name)) == False{} : Bool}
+
 # LAW: dropping (archiving) a task leaves no live timer of it, in the same
 # step (beside stop_leaves_no_waiter). A stop (`sb stop`) keeps them: they
 # wait, as before.

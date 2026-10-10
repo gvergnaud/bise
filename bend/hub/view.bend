@@ -299,7 +299,7 @@ def timer_ev(+ended: Bool, e: M.Ev) -> Bool:
       Bool.not(ended)
     case M.ETimerStop{_, _, _}:
       True{}
-    case M.ETimerName{_, _, _}:
+    case M.ETimerName{_, _, _, _}:
       Bool.not(ended)
     case _:
       False{}
