@@ -201,6 +201,8 @@ pub struct Core {
     workspace: String,
     hub: Hub,
     ports: Ports,
+    /// the move of an older home hub to this core's version (core/home_switch.rs)
+    home_move: Option<home_switch::HomeMoveState>,
     out: Vec<Value>,
     /// the last `hub` said (None: nothing said yet)
     hub_up: Option<bool>,
@@ -292,6 +294,7 @@ impl Core {
             workspace,
             hub,
             ports,
+            home_move: None,
             out: Vec::new(),
             hub_up: None,
             ready: false,

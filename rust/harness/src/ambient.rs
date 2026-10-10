@@ -16,8 +16,26 @@ pub fn core(args: &[String]) -> std::io::Result<i32> {
     let exe = std::env::current_exe()?;
     let workspace = paths.workspace.to_string_lossy().to_string();
     let projects = ambient_projects(exe.clone(), root.clone());
+    let home_move = home_move(paths.clone(), root.clone());
     let connect = ambient_connector(paths, exe, root);
-    Ok(bend_tui::ambient::core_main(workspace, connect, switchboard::model::user_kind, Some(projects), Some(ambient_setup())))
+    Ok(bend_tui::ambient::core_main(workspace, connect, switchboard::model::user_kind, Some(projects), Some(ambient_setup()), Some(home_move)))
+}
+
+/// The core's move of an older home hub to its own version (architect
+/// m_15476): the binary's one move, `switch::move_hub` (`bise`'s launch
+/// makes it too), to this core's app root.
+fn home_move(paths: switchboard::paths::Paths, root: std::path::PathBuf) -> bend_tui::ambient::HomeMove {
+    use bend_tui::ambient::MoveEnd;
+    use switchboard::switch::{id_of, move_hub, running_root, Moved, MOVE_BOUND};
+    let (p, r) = (paths.clone(), root.clone());
+    bend_tui::ambient::HomeMove {
+        ids: Box::new(move || (running_root(&p).map(|h| id_of(&h)).unwrap_or_default(), id_of(&r))),
+        run: std::sync::Arc::new(move || match move_hub(&paths, &root, MOVE_BOUND) {
+            Moved::There => MoveEnd::There,
+            Moved::Refused(words) => MoveEnd::Refused(words),
+            Moved::Late => MoveEnd::Late,
+        }),
+    }
 }
 
 /// `bise ambient`: open the app on this workspace (scripts/desktop.sh).

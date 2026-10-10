@@ -22,6 +22,7 @@ mod agents;
 mod capsule;
 mod dictate;
 mod fake_hub;
+mod home_switch;
 mod hubs;
 mod setup;
 mod voice_mode;

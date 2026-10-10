@@ -722,22 +722,52 @@ pub fn follow_install(paths: &Paths, me: &Path, say: &dyn Fn(&str)) {
     let me = me.canonicalize().unwrap_or_else(|_| me.to_path_buf());
     let (from_id, to_id) = (id_of(&hub), id_of(&me));
     say(&format!("this folder's hub runs bise {}: moving it to {} (the agents keep running)…", from_id, to_id));
-    // version/switch, or the older op to an older hub (switch/ask.rs)
+    match move_hub(paths, &me, MOVE_BOUND) {
+        Moved::There => say(&format!("the hub runs bise {} now", to_id)),
+        Moved::Refused(answer) => say(&format!("the hub did not switch ({}): /restart in it switches to {}", clip_answer(&answer), to_id)),
+        Moved::Late => say(&format!("the hub is still switching to {} (probation): the TUI follows it once it is up", to_id)),
+    }
+}
+
+/// How long a client waits for a moved hub to listen again (the
+/// switcher's start, then the new hub's).
+pub const MOVE_BOUND: Duration = Duration::from_secs(30);
+
+/// What [`move_hub`] got.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Moved {
+    /// the hub listens again, as `me`'s version
+    There,
+    /// the hub didn't take the switch: its words (a refusal, `""` when it
+    /// said nothing in time)
+    Refused(String),
+    /// it took the switch but isn't up as `me` within the bound
+    Late,
+}
+
+/// Move the folder's running hub to the app root `me` (the hub's own
+/// `/version <me>`: the switcher, probation, agents kept), then wait up
+/// to `bound` for it to listen again as `me`. The one move a client
+/// makes of its hub: `bise` at launch (`follow_install`, BISE-255) and
+/// the desktop core when its home hub is older than it (an older hub's
+/// `initialize` refusal, architect m_15476). A hub that serves JSON-RPC
+/// gets `initialize` then `version/switch`, an older one the older hello
+/// and `version` op (switch/ask.rs).
+pub fn move_hub(paths: &Paths, me: &Path, bound: Duration) -> Moved {
+    let me = me.canonicalize().unwrap_or_else(|_| me.to_path_buf());
     let answer = ask::ask_switch(&paths.socket(), &me.to_string_lossy()).unwrap_or_default();
     if !answer.starts_with("switching to version") {
-        say(&format!("the hub did not switch ({}): /restart in it switches to {}", clip_answer(&answer), to_id));
-        return;
+        return Moved::Refused(answer);
     }
     let t0 = Instant::now();
-    while t0.elapsed() < Duration::from_secs(30) {
+    while t0.elapsed() < bound {
         std::thread::sleep(Duration::from_millis(200));
         let there = running_root(paths).and_then(|r| r.canonicalize().ok()).as_ref() == Some(&me);
         if there && ping(paths) {
-            say(&format!("the hub runs bise {} now", to_id));
-            return;
+            return Moved::There;
         }
     }
-    say(&format!("the hub is still switching to {} (probation): the TUI follows it once it is up", to_id));
+    Moved::Late
 }
 
 fn clip_answer(a: &str) -> String {

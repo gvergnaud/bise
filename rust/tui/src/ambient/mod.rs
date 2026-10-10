@@ -40,8 +40,35 @@ pub enum In {
     Hub(HubIn),
     /// a project hub's connection (the window's, core/hubs.rs), by id
     Project(String, HubIn),
+    /// the home hub's move to this core's version ended (core/home_switch.rs)
+    HomeMoved(MoveEnd),
     /// stdin closed: the app is gone
     Eof,
+}
+
+/// The home hub's move to this core's version (architect m_15476): an
+/// older home hub (it refuses `initialize`) is moved by the core itself,
+/// through the binary's one move (`switchboard::switch::move_hub`, which
+/// `bise` runs at launch too). bend-tui doesn't depend on switchboard:
+/// `bise ambient-core` hands it in.
+pub struct HomeMove {
+    /// the versions as `/version` shows them: the running hub's, this
+    /// core's
+    pub ids: Box<dyn Fn() -> (String, String)>,
+    /// the move, blocking until the hub listens again as this core's
+    /// version or the bound (`switch::MOVE_BOUND`) passes
+    pub run: std::sync::Arc<dyn Fn() -> MoveEnd + Send + Sync>,
+}
+
+/// How the home hub's move ended (`switch::Moved`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum MoveEnd {
+    /// the hub listens again, as this core's version
+    There,
+    /// the hub didn't take the switch: its words ("" when none)
+    Refused(String),
+    /// it took the switch but wasn't up within the bound
+    Late,
 }
 
 /// The real ports: the default mic (opened per talk, never by a test),
@@ -136,6 +163,7 @@ pub fn run(core: &mut Core, rx: mpsc::Receiver<In>, out: &mut impl Write) {
             }
             Ok(In::Hub(h)) => core.hub(h),
             Ok(In::Project(id, h)) => core.project_hub(&id, h),
+            Ok(In::HomeMoved(end)) => core.home_moved(end),
             Ok(In::Eof) | Err(RecvTimeoutError::Disconnected) => break,
             Err(RecvTimeoutError::Timeout) => {}
         }
@@ -166,6 +194,7 @@ pub fn core_main(
     user_kind: fn(&str) -> bool,
     projects: Option<(ConnectFor, ProjectFacts)>,
     setup: Option<setup::SetupPorts>,
+    home_move: Option<HomeMove>,
 ) -> i32 {
     let (tx, rx) = mpsc::channel::<In>();
     let hub = Hub::start(connect, tx.clone(), In::Hub, RETRY);
@@ -177,6 +206,8 @@ pub fn core_main(
         });
         ProjectPorts { spawn, facts }
     });
+    // the home hub's move answers through the loop too
+    let move_tx = tx.clone();
     std::thread::spawn(move || {
         for l in io::stdin().lock().lines().map_while(Result::ok) {
             if tx.send(In::Line(l)).is_err() {
@@ -198,6 +229,18 @@ pub fn core_main(
     let mut core = Core::new(workspace, hub, ports);
     if let Some(p) = projects {
         core.set_projects(p);
+    }
+    if let Some(m) = home_move {
+        // the move runs on its own thread; its end comes back as an In
+        let tx = move_tx;
+        let run = m.run;
+        let start: Box<dyn Fn()> = Box::new(move || {
+            let (tx, run) = (tx.clone(), run.clone());
+            std::thread::spawn(move || {
+                let _ = tx.send(In::HomeMoved(run()));
+            });
+        });
+        core.set_home_move(m.ids, start);
     }
     if let Some(s) = setup {
         core.set_setup(s);

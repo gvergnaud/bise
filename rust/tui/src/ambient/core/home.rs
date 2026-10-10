@@ -100,6 +100,11 @@ impl Core {
         self.home.subs.clear();
         let init = self.home.rpc.initialize(env!("CARGO_PKG_VERSION"));
         self.hub.send(&init);
+        // an older hub being moved (or whose move failed): the window keeps
+        // its note or its refusal until the new hub answers (home_switch.rs)
+        if self.home_conn_up() {
+            return;
+        }
         self.hub_up = Some(true);
         let ws = self.workspace.clone();
         self.emit(json!({"ev": "hub", "up": true, "workspace": ws}));

@@ -294,6 +294,10 @@ impl Core {
     /// held again (a new refusal says hub_refused again); a project that
     /// isn't refused: nothing.
     pub(super) fn hub_retry(&mut self, project: &str) {
+        // the home hub's failed move to this version: move it again
+        if self.home_move_retry(project) {
+            return;
+        }
         if self.hubs.refused.remove(project).is_some() {
             self.hold();
             self.emit_projects();
