@@ -35,6 +35,10 @@ pub struct Artifact {
     /// its agent is archived
     #[serde(default, skip_serializing_if = "crate::is_false")]
     pub archived: bool,
+    /// the artifact itself was archived at (ms; `sb artifact archive`):
+    /// out of the default list, behind its `N archived` row
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub archived_at: Option<u64>,
     /// when it was first added (ms)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_ms: Option<u64>,

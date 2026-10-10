@@ -338,6 +338,7 @@ pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>) -> Vec<A
                 id,
                 by: s(r, "by"),
                 archived: r.get("archived").and_then(Value::as_bool).unwrap_or(false),
+                archived_at: r.get("archived_at").and_then(Value::as_u64),
                 created_ms: r.get("created_ms").and_then(Value::as_u64),
                 copy: Some(s(r, "copy")).filter(|c| !c.is_empty()),
                 gone: r.get("gone").and_then(Value::as_bool).unwrap_or(false),

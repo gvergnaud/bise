@@ -103,9 +103,9 @@ pub const COMMANDS: &[CmdDoc] = &[
         "commit the files you changed (only yours, never another agent's) with that message. `--here`: on your place's branch. Without it, from a worktree: rebased on main, checked, and main moves to it (pushed when the repo says so). A file another agent also changed is refused: main decides. In a worktree you have alone, every change lands (changed, deleted, renamed or new files, however made: sed, a script, cargo); elsewhere, files you changed with bash land only with `--add <file or folder>`, and the land names every change it left out.",
     ),
     cmd(
-        "sb artifact add <path or link> [--title \"<t>\"] [--kind <k>] | sb artifact list [<words>] [--agent <a>]",
+        "sb artifact add <path or link> [--title \"<t>\"] [--kind <k>] | sb artifact list [<words>] [--agent <a>] [--archived] | sb artifact archive|unarchive <id>... | --agent <a> | --before <date> | --kind <k>",
         Who::Everyone,
-        "what you made for the user to look at, in the user's /artifacts (a copy of each version of a file, 50 MB at most). `add` registers it, or its next version for the same path or link, and prints its id; bise pages get in by themselves. Not code changes (the commit), not scratch files. `list`: the ids, to link them.",
+        "what you made for the user to look at, in the user's /artifacts (a copy of each version of a file, 50 MB at most). `add` registers it, or its next version for the same path or link, and prints its id; bise pages get in by themselves. Not code changes (the commit), not scratch files. `list`: the ids, to link them. `archive`: out of the list, and the old versions' copies deleted (the newest stays); `unarchive` brings the row back.",
     ),
     cmd(
         "sb inspect main --origin",
@@ -788,8 +788,8 @@ pub fn build(args: &[String]) -> Result<Value, String> {
         // agent-made pages (docs/ambient-pages.md §2.2)
         "page" => page_req(rest, &mut req)?,
         "artifact" => {
-            let usage = "usage: sb artifact add <path or link> [--title \"<t>\"] [--kind <k>] | sb artifact list [<words>] [--agent <a>]";
-            let (pos, o) = parse_args(rest, &["title", "kind", "agent"], &[])?;
+            let usage = "usage: sb artifact add <path or link> [--title \"<t>\"] [--kind <k>] | sb artifact list [<words>] [--agent <a>] [--archived] | sb artifact archive|unarchive <id>... | --agent <a> | --before <YYYY-MM-DD[THH:MM]> | --kind <k>";
+            let (pos, o) = parse_args(rest, &["title", "kind", "agent", "before"], &["archived"])?;
             match pos.first().map(String::as_str) {
                 Some("add") => {
                     let target = match &pos[1..] {
@@ -811,6 +811,25 @@ pub fn build(args: &[String]) -> Result<Value, String> {
                     req.insert("words".into(), json!(pos[1..].join(" ")));
                     if o.contains_key("agent") {
                         req.insert("agent".into(), json!(str_of(&o, "agent").trim_start_matches('@')));
+                    }
+                    req.insert("archived".into(), json!(o.contains_key("archived")));
+                }
+                Some(d @ ("archive" | "unarchive")) => {
+                    req.insert("do".into(), json!(d));
+                    req.insert("ids".into(), json!(pos[1..].iter().map(|i| i.trim_start_matches("artifact:")).collect::<Vec<_>>()));
+                    if o.contains_key("agent") {
+                        req.insert("agent".into(), json!(str_of(&o, "agent").trim_start_matches('@')));
+                    }
+                    if o.contains_key("kind") {
+                        req.insert("kind".into(), json!(str_of(&o, "kind")));
+                    }
+                    if o.contains_key("before") {
+                        let b = str_of(&o, "before");
+                        let ms = crate::artifacts::parse_before(&b).ok_or(format!("--before expects a date: YYYY-MM-DD or YYYY-MM-DDTHH:MM (UTC), not {}", b))?;
+                        req.insert("before_ms".into(), json!(ms));
+                    }
+                    if pos.len() == 1 && !["agent", "kind", "before"].iter().any(|k| o.contains_key(*k)) {
+                        return Err(usage.into());
                     }
                 }
                 _ => return Err(usage.into()),

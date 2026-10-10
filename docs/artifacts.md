@@ -61,6 +61,33 @@ only writer):
   says `no copy kept (over 50 MB)`.
 - `seen.json`: `{seen_ms}`, when the user last looked (the header's
   `↗ N new`). Missing: written as now.
+- `archived.json`: `{"<id>": <archived at ms>}`, the archived artifacts
+  (stored ones and pages alike; `artifacts_archive.rs`).
+
+### Archive
+
+`sb artifact archive <id>... | --agent <a> | --before <YYYY-MM-DD[THH:MM]>
+| --kind <k>` (the filters together; `--before` is UTC, against the
+current version's time; no id and no filter is refused): the artifact
+leaves the default list (`hub/artifacts` still sends it, with
+`archived_at`; `/artifacts` shows a faint `N archived` row, `a` or a
+click opens them; `sb artifact list` ends with `N archived · sb artifact
+list --archived`), never counts as new, and every stored copy but the
+newest version's is deleted (that version still opens; an older one's
+versions-box note is `not kept`, `no_copy: "archived"` in meta.json), so
+the space comes back. A page's store is never touched. `sb artifact
+unarchive …` (same picks) brings the row back; deleted copies stay gone.
+Words signed by designer (m_16873):
+
+```
+archived 312 artifacts · 41.2 MB freed · sb artifact list --archived shows them
+archived old-shot · 1 KB freed · sb artifact unarchive old-shot brings it back
+old-shot is back in the list
+```
+
+QA practice: screenshots of a check or a gate go in as one artifact (its
+index page or a contact sheet), never one per image (the task prompt says
+so).
 
 An id is the title's slug (`[a-z0-9-]`, at most 40), never one a stored
 artifact or a page already has (`-2`, `-3`…). Archived agents keep their
@@ -95,7 +122,8 @@ sb artifact add <path or link> [--title "<t>"] [--kind <k>]
   -> the plan is unchanged: still v1 · link it as [the plan](artifact:the-plan)
   -> added launch film (video) · v1 · no copy kept (over 50 MB) · link it as [launch film](artifact:launch-film)
   -> error: no file or link at notes/plan.md.
-sb artifact list [<words>] [--agent <a>]
+sb artifact list [<words>] [--agent <a>] [--archived]
+sb artifact archive|unarchive <id>... | --agent <a> | --before <date> | --kind <k>
   -> [pricing page](artifact:pricing-page) · page · v3 · pricing-page · 12 min ago · http://127.0.0.1:47438/p/pricing-page
      (one per line, newest first, 50 at most; "▲ gone from disk · bise kept a copy" at the end of a gone one)
 ```
@@ -135,7 +163,9 @@ A row:
 {"id":"pricing-page","title":"pricing page","kind":"page",
  "agent":"pricing-page",          // its name now (a renamed agent's new name)
  "by":"page" | "you" | "<agent>",
- "archived":false, "ts_ms":<current version's>, "created_ms":…, "v":3,
+ "archived":false,                // its agent is archived
+ "archived_at":null | <ms>,       // the artifact itself (sb artifact archive)
+ "ts_ms":<current version's>, "created_ms":…, "v":3,
  "target":"<abs path or url of the current version>",
  "copy":"<abs path of bise's copy>" | null,
  "gone":false,                    // a path not on disk (links never)
@@ -238,7 +268,12 @@ agents on it.
   port gives `page:<id>`; newest first, `new` counts after `seen` and
   never the user's own adds; `keys` names a path every way a reply may;
   the reply link form parses; the thread line escapes its fields; `sb
-  artifact list` filters by words and agent.
+  artifact list` filters by words and agent; archive leaves the list
+  and `new`, keeps only the newest copy (freed bytes counted, older
+  versions `not kept`), picks by id, agent, before and kind (an empty
+  pick archives nothing), archives a page without touching its store,
+  keeps its first time when archived again; unarchive brings the row
+  back, the copies stay gone.
 - `diff_tests.rs`: the parse of `git diff` (statuses M A D R, binary,
   renames with spaces, `\ No newline`, hunk heads and starts); a huge
   file is cut with whole counts; numstat; a real throwaway repo: a

@@ -102,7 +102,7 @@ fn a_gone_file_still_opens_the_copy() {
     assert_eq!(rows[0]["agent"], "subs-lead");
     let copy = rows[0]["copy"].as_str().unwrap();
     assert_eq!(std::fs::read(copy).unwrap(), b"doc");
-    assert!(s.list_text("", None, 20).contains("▲ gone from disk · bise kept a copy"));
+    assert!(s.list_text("", None, false, 20).contains("▲ gone from disk · bise kept a copy"));
 }
 
 #[test]
@@ -306,12 +306,12 @@ fn the_thread_line_escapes_its_fields() {
 fn list_text_filters_by_words_and_agent() {
     let root = tmp("listtext");
     let s = Store::new(&root.join("state"));
-    assert!(s.list_text("", None, 1).starts_with("no artifacts yet."));
+    assert!(s.list_text("", None, false, 1).starts_with("no artifacts yet."));
     add(&s, &root, "https://github.com/acme/web/pull/6", Some("gateway head checks"), 10).unwrap();
-    let t = s.list_text("gateway", None, 20);
+    let t = s.list_text("gateway", None, false, 20);
     assert!(t.starts_with("[gateway head checks](artifact:gateway-head-checks) · pr · v1 · pricing-page"), "{t}");
-    assert_eq!(s.list_text("deck", None, 20), "nothing matches.");
-    assert_eq!(s.list_text("", Some("launch"), 20), "nothing matches.");
+    assert_eq!(s.list_text("deck", None, false, 20), "nothing matches.");
+    assert_eq!(s.list_text("", Some("launch"), false, 20), "nothing matches.");
 }
 
 /// The typed `artifacts` (proto_view::artifacts, the window's and, from
@@ -366,4 +366,104 @@ fn the_typed_artifacts_carry_everything_the_older_rows_did() {
     assert!(items.iter().any(|a| a.gone && a.archived), "a gone file, its agent archived");
     assert!(items.iter().any(|a| a.pr.as_ref().is_some_and(|p| p.number == 6)), "a PR's number");
     assert_eq!(items.iter().filter(|a| a.new).count() as u64, ev["new"].as_u64().unwrap(), "the new count");
+}
+
+/// Two versions of a file, a link, and a bise page: the archive's world.
+fn archive_world(name: &str) -> (PathBuf, Store) {
+    let root = tmp(name);
+    let (state, work) = (root.join("state"), root.join("work"));
+    std::fs::create_dir_all(&work).unwrap();
+    let f = work.join("shot.png");
+    std::fs::write(&f, b"old build").unwrap();
+    let s = Store::new(&state);
+    add(&s, &work, "shot.png", Some("old shot"), 10).unwrap();
+    std::fs::write(&f, b"newest build, longer").unwrap();
+    add(&s, &work, "shot.png", None, 20).unwrap();
+    add(&s, &work, "https://bise.dev/docs", None, 30).unwrap();
+    page(&state, "gate-index", "gate index", &[(1, 40)], json!([]));
+    (state, s)
+}
+
+#[test]
+fn archive_takes_it_out_of_the_list_and_keeps_only_the_newest_copy() {
+    let (state, s) = archive_world("archive");
+    let done = s.archive(&Pick { ids: vec!["old-shot".into(), "nope".into()], ..Default::default() }, 50).unwrap();
+    assert_eq!(done.ids, vec!["old-shot".to_string()]);
+    assert_eq!(done.unknown, vec!["nope".to_string()]);
+    // the old version's copy is gone and counted; the newest still opens
+    assert_eq!(done.freed, b"old build".len() as u64);
+    let dir = state.join("artifacts/old-shot");
+    assert!(!dir.join("v1").exists());
+    let m = s.get("old-shot").unwrap();
+    assert_eq!(m.versions[0].copy, None);
+    assert_eq!(m.versions[0].no_copy.as_deref(), Some("archived"));
+    assert_eq!(std::fs::read(dir.join(m.versions[1].copy.as_ref().unwrap())).unwrap(), b"newest build, longer");
+    // the row says when; the list and the new count leave it out
+    let rows = s.rows(&nobody, "/w");
+    let row = rows.iter().find(|r| r["id"] == "old-shot").unwrap();
+    assert_eq!(row["archived_at"], 50);
+    assert_eq!(rows.iter().find(|r| r["id"] == "bise-dev-docs").unwrap()["archived_at"], Value::Null);
+    let t = s.list_text("", None, false, 60);
+    assert!(!t.contains("artifact:old-shot"), "{}", t);
+    assert!(t.ends_with("1 archived · sb artifact list --archived"), "{}", t);
+    assert!(s.list_text("", None, true, 60).contains("artifact:old-shot"));
+    s.set_seen(0).unwrap();
+    assert_eq!(s.new_count(60), 2);
+    assert!(archived_text(&done).starts_with("archived old-shot · 1 KB freed"));
+}
+
+#[test]
+fn unarchive_brings_the_row_back_and_archiving_again_keeps_its_time() {
+    let (_state, s) = archive_world("unarchive");
+    let pick = Pick { ids: vec!["old-shot".into()], ..Default::default() };
+    s.archive(&pick, 50).unwrap();
+    let again = s.archive(&pick, 70).unwrap();
+    assert_eq!(again.freed, 0);
+    assert_eq!(s.archived().get("old-shot"), Some(&50));
+    let (back, not) = s.unarchive(&Pick { ids: vec!["old-shot".into(), "bise-dev-docs".into()], ..Default::default() }).unwrap();
+    assert_eq!(back, vec!["old-shot".to_string()]);
+    assert_eq!(not, vec!["bise-dev-docs".to_string()]);
+    assert!(s.archived().is_empty());
+    assert!(s.list_text("", None, false, 60).contains("artifact:old-shot"));
+    // the old copy stays gone: only the row comes back
+    assert_eq!(s.get("old-shot").unwrap().versions[0].no_copy.as_deref(), Some("archived"));
+    assert_eq!(unarchived_text(&back, &not), "old-shot is back in the list\nnot archived: bise-dev-docs.");
+}
+
+#[test]
+fn archive_picks_by_agent_before_and_kind_and_a_page_archives_too() {
+    let (_state, s) = archive_world("pick");
+    // an empty pick never archives everything
+    assert!(!Pick::default().fits(&s.get("old-shot").unwrap()));
+    assert!(s.archive(&Pick::default(), 50).unwrap().ids.is_empty());
+    let before = |ms| Pick { before_ms: Some(ms), ..Default::default() };
+    let ids = |p: &Pick| s.picked(p).into_iter().map(|m| m.id).collect::<Vec<_>>();
+    assert_eq!(ids(&before(25)), vec!["old-shot".to_string()]);
+    assert_eq!(ids(&Pick { kind: Some("link".into()), ..before(35) }), vec!["bise-dev-docs".to_string()]);
+    assert_eq!(ids(&Pick { agent: Some("ambient-pm".into()), ..Default::default() }), vec!["gate-index".to_string()]);
+    // a bise page: out of the list, its store untouched
+    let done = s.archive(&Pick { ids: vec!["gate-index".into()], ..Default::default() }, 50).unwrap();
+    assert_eq!(done.ids, vec!["gate-index".to_string()]);
+    assert!(!s.list_text("", None, false, 60).contains("gate-index"));
+    assert!(s.get("gate-index").is_some());
+}
+
+#[test]
+fn before_reads_a_day_or_a_day_and_time_in_utc() {
+    assert_eq!(parse_before("1970-01-02"), Some(86_400_000));
+    assert_eq!(parse_before("1970-01-01T01:30"), Some(5_400_000));
+    assert_eq!(parse_before("2026-10-10T14:00"), Some(1_791_640_800_000));
+    assert_eq!(parse_before("yesterday"), None);
+    assert_eq!(parse_before("2026-10-10T25:00"), None);
+}
+
+#[test]
+fn an_archived_older_version_says_not_kept() {
+    let (_state, s) = archive_world("notkept");
+    s.archive(&Pick { ids: vec!["old-shot".into()], ..Default::default() }, 50).unwrap();
+    let rows = s.rows(&nobody, "/w");
+    let row = rows.iter().find(|r| r["id"] == "old-shot").unwrap();
+    assert_eq!(row["versions"][0]["note"], "not kept");
+    assert_eq!(row["versions"][0]["copy"], Value::Null);
+    assert_eq!(row["versions"][1]["note"], "");
 }

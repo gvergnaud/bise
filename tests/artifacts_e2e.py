@@ -95,6 +95,19 @@ def main():
         out = sb("t1", wt, "artifact", "list", "pricing")
         check(out.startswith("[pricing plans](artifact:pricing-plans) · sheet · v2 · t1 · "), out)
 
+        # archive: out of the list (a last line counts it), v1's copy deleted,
+        # the row says archived_at; unarchive brings it back
+        out = sb("t1", wt, "artifact", "archive", "pricing-plans")
+        check(out.startswith("archived pricing-plans · ") and out.endswith(" freed · sb artifact unarchive pricing-plans brings it back"), out)
+        out = sb("t1", wt, "artifact", "list")
+        check("artifact:pricing-plans)" not in out and out.endswith("1 archived · sb artifact list --archived"), out)
+        check("artifact:pricing-plans)" in sb("t1", wt, "artifact", "list", "--archived"), "the archived list")
+        c.wait(lambda: any(r["id"] == "pricing-plans" and r.get("archived_at") for r in last_art(c)["rows"]), 10, "archived_at in the row")
+        out = sb("t1", wt, "artifact", "unarchive", "pricing-plans")
+        check(out == "pricing-plans is back in the list", out)
+        err = sb("t1", wt, "artifact", "archive", fail=True)
+        check(err.startswith("usage: sb artifact add") and "sb artifact archive|unarchive" in err, err)
+
         # the user adds a link from the TUI, then looks
         r = c.rpc("artifacts/add", {"project": c.project(), "target": "https://github.com/acme/web/pull/6", "agent": "t1"})
         check(r.get("result") == {"notice": "↗ added: PR #6"}, "the add's words: %r" % r)

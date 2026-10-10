@@ -46,6 +46,9 @@ pub(crate) struct Artifact {
     /// who added it: `you` or the agent
     pub(crate) by: String,
     pub(crate) archived: bool,
+    /// the artifact itself was archived then (`sb artifact archive`): out
+    /// of the list, behind its `N archived` row
+    pub(crate) archived_at: Option<u64>,
     /// its last version's time
     pub(crate) ts_ms: u64,
     /// the current version
@@ -210,6 +213,7 @@ impl Artifact {
             agent: r.agent.clone(),
             by: r.by.clone(),
             archived: r.archived,
+            archived_at: r.archived_at,
             ts_ms: r.at_ms,
             v: r.version.max(1),
             target: r.target.clone(),
@@ -264,7 +268,7 @@ pub(crate) fn new_count() -> u64 {
 pub(crate) fn new_rows() -> Vec<Artifact> {
     STORE.with(|st| {
         let st = st.borrow();
-        st.rows.iter().filter(|a| a.by != "you").take(st.new as usize).cloned().collect()
+        st.rows.iter().filter(|a| a.by != "you" && a.archived_at.is_none()).take(st.new as usize).cloned().collect()
     })
 }
 

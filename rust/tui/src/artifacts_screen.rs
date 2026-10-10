@@ -46,6 +46,8 @@ pub(crate) struct Screen {
     pub(crate) this_agent: bool,
     /// the agent in view when it opened
     pub(crate) agent: String,
+    /// the archived ones are shown instead (the `N archived` row, `a`)
+    pub(crate) archived: bool,
     /// the selected artifact, by id (stays on it when the list changes)
     pub(crate) sel: Option<String>,
     /// the first body row shown
@@ -106,6 +108,8 @@ pub(crate) enum Hit {
     Row(String, Option<(u16, u16)>),
     /// a version's row in the versions box
     Version(usize),
+    /// the quiet `N archived` row (a click opens them)
+    Archived,
 }
 
 /// Quick Look's process and the file it shows.
@@ -156,6 +160,7 @@ pub(crate) fn on_list(app: &mut App) {
 /// title's letters that match.
 pub(crate) fn shown(sc: &Screen, all: &[Artifact]) -> Vec<(Artifact, Vec<usize>)> {
     all.iter()
+        .filter(|a| a.archived_at.is_some() == sc.archived)
         .filter(|a| !sc.this_agent || a.agent == sc.agent || (a.agent.is_empty() && a.by == sc.agent))
         .filter_map(|a| artifacts::find(a, &sc.query).map(|h| (a.clone(), h)))
         .collect()
@@ -412,14 +417,19 @@ fn keys(pairs: &[(&str, &str)]) -> Line<'static> {
 }
 
 /// The key bar for the state the screen is in.
-pub(crate) fn key_bar(sc: &Screen, sel: Option<&Artifact>, empty_list: bool, wide: bool) -> Line<'static> {
+/// `put_away`: there are archived ones (the bar says `a archived`).
+pub(crate) fn key_bar(sc: &Screen, sel: Option<&Artifact>, empty_list: bool, wide: bool, put_away: bool) -> Line<'static> {
     if sc.typing {
         return keys(&[("⏎", "done"), ("↑↓", "choose"), ("esc", "clear the search")]);
     }
     if sc.versions.is_some() {
         return keys(&[("⏎", "open this version"), ("↑↓", "choose"), ("esc", "back to the list")]);
     }
-    let esc = if sc.query.is_empty() { "close" } else { "clear the search" };
+    let esc = match (sc.query.is_empty(), sc.archived) {
+        (false, _) => "clear the search",
+        (true, true) => "back to the list",
+        (true, false) => "close",
+    };
     if empty_list || sel.is_none() {
         return keys(&[("esc", esc)]);
     }
@@ -438,7 +448,11 @@ pub(crate) fn key_bar(sc: &Screen, sel: Option<&Artifact>, empty_list: bool, wid
     } else if !a.is_link() {
         pairs.push(("r", "show in Finder"));
     }
-    pairs.extend([("c", c), ("@", "put it in a message"), ("esc", esc)]);
+    pairs.extend([("c", c), ("@", "put it in a message")]);
+    if !sc.archived && put_away {
+        pairs.push(("a", "archived"));
+    }
+    pairs.push(("esc", esc));
     keys(&pairs)
 }
 
@@ -481,8 +495,9 @@ pub(crate) fn lines(sc: &mut Screen, all: &[Artifact], width: usize, height: usi
     let mut hits: Vec<(usize, Hit)> = Vec::new();
     // the head: blank, title and scope, search, blank
     out.push(Line::from(""));
-    let total = all.len();
-    let in_scope = shown(&Screen { this_agent: sc.this_agent, agent: sc.agent.clone(), ..Default::default() }, all).len();
+    let total = shown(&Screen { archived: sc.archived, ..Default::default() }, all).len();
+    let put_away = all.iter().filter(|a| a.archived_at.is_some()).count();
+    let in_scope = shown(&Screen { this_agent: sc.this_agent, agent: sc.agent.clone(), archived: sc.archived, ..Default::default() }, all).len();
     let scope: Vec<Span<'static>> = if sc.this_agent {
         let mut v = vec![Span::styled(format!("{} · {}", sc.agent, in_scope), Style::default().fg(text()))];
         if c.wide {
@@ -500,7 +515,11 @@ pub(crate) fn lines(sc: &mut Screen, all: &[Artifact], width: usize, height: usi
         }
         v
     };
-    let title = if c.wide { "artifacts · what your agents made" } else { "artifacts" };
+    let title = match (sc.archived, c.wide) {
+        (true, _) => "artifacts · archived",
+        (false, true) => "artifacts · what your agents made",
+        (false, false) => "artifacts",
+    };
     let scope_w: usize = scope.iter().map(|s| s.content.width()).sum();
     let gap = width.saturating_sub(title.width() + scope_w + 4).max(1);
     let mut head = vec![Span::styled(title.to_string(), Style::default().fg(text()).add_modifier(Modifier::BOLD)), Span::raw(" ".repeat(gap))];
@@ -572,7 +591,9 @@ pub(crate) fn lines(sc: &mut Screen, all: &[Artifact], width: usize, height: usi
     let mut shown_rows = 0;
     if list.is_empty() {
         out.push(Line::from(""));
-        if all.is_empty() {
+        if total == 0 && sc.archived {
+            out.push(Line::from(Span::styled("  nothing archived. esc goes back.", Style::default().fg(text()))));
+        } else if all.is_empty() {
             out.push(Line::from(Span::styled(
                 "  nothing yet. when an agent makes a page, a doc or a file for you, it lands here.",
                 Style::default().fg(text()),
@@ -619,6 +640,12 @@ pub(crate) fn lines(sc: &mut Screen, all: &[Artifact], width: usize, height: usi
         }
     }
     let _ = shown_rows;
+    // the quiet row that opens the archived ones, under the list
+    if !sc.archived && put_away > 0 && out.len() + 1 < height.saturating_sub(foot) {
+        out.push(Line::from(""));
+        hits.push((out.len(), Hit::Archived));
+        out.push(Line::from(Span::styled(format!("  {} archived", put_away), Style::default().fg(faint()))));
+    }
     while out.len() < height.saturating_sub(foot) {
         out.push(Line::from(""));
     }
@@ -626,7 +653,7 @@ pub(crate) fn lines(sc: &mut Screen, all: &[Artifact], width: usize, height: usi
     out.push(Line::from(""));
     out.push(sel.map(|a| detail_line(a, clock, c.wide)).unwrap_or_default());
     out.push(Line::from(""));
-    out.push(key_bar(sc, sel, list.is_empty(), c.wide));
+    out.push(key_bar(sc, sel, list.is_empty(), c.wide, put_away > 0));
     (out, hits, list.len())
 }
 
@@ -861,7 +888,9 @@ pub(crate) fn on_key(app: &mut App, k: &KeyEvent) -> bool {
     match k.code {
         KeyCode::Esc if sc.versions.is_some() => sc.versions = None,
         KeyCode::Esc if !sc.query.is_empty() => sc.query.clear(),
+        KeyCode::Esc if sc.archived => show_archived(sc, false),
         KeyCode::Esc => app.artifacts = None,
+        KeyCode::Char('a') if !ctrl => show_archived(sc, !sc.archived),
         KeyCode::Up | KeyCode::Char('k') if !ctrl => step(sc, -1),
         KeyCode::Down | KeyCode::Char('j') if !ctrl => step(sc, 1),
         KeyCode::PageUp => step(sc, -10),
@@ -896,6 +925,14 @@ pub(crate) fn on_key(app: &mut App, k: &KeyEvent) -> bool {
     true
 }
 
+/// The archived ones instead of the list (or back).
+fn show_archived(sc: &mut Screen, on: bool) {
+    sc.archived = on;
+    sc.sel = None;
+    sc.versions = None;
+    sc.top = 0;
+}
+
 /// The mouse while open: the wheel scrolls, a click opens, a click on
 /// `v3` opens the versions, a click on the search focuses it, on the
 /// scope switches it.
@@ -928,6 +965,7 @@ pub(crate) fn mouse(app: &mut App, m: &crossterm::event::MouseEvent) -> bool {
                     sc.versions = Some(k);
                     open_selected(app);
                 }
+                Some(Hit::Archived) => show_archived(sc, true),
                 None => {}
             }
         }

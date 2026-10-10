@@ -1,6 +1,6 @@
 //! Artifacts and diffs on the hub's side (docs/artifacts.md): the
 //! `artifacts` event (artifacts/seen, artifacts/add's words), `sb
-//! artifact`, the thread lines, `diff/read` and `branches/list`'s answers
+//! artifact` (add, list, archive, unarchive), the thread lines, `diff/read` and `branches/list`'s answers
 //! (computed off the hub's loop), each agent's
 //! `changes` in the state, and the `landed` line after a land.
 
@@ -153,9 +153,31 @@ impl Shell {
             }
             "list" => {
                 let agent = Some(s("agent")).filter(|a| !a.is_empty());
-                json!({"ok": true, "text": store.list_text(&s("words"), agent.as_deref(), now_ms())})
+                let archived = v.get("archived") == Some(&json!(true));
+                json!({"ok": true, "text": store.list_text(&s("words"), agent.as_deref(), archived, now_ms())})
             }
-            _ => json!({"ok": false, "error": "usage: sb artifact add <path or link> | sb artifact list"}),
+            "archive" | "unarchive" => {
+                let opt = |k: &str| Some(s(k)).filter(|x| !x.is_empty());
+                let pick = artifacts::Pick {
+                    ids: v.get("ids").and_then(Value::as_array).into_iter().flatten().filter_map(|x| x.as_str().map(String::from)).collect(),
+                    agent: opt("agent"),
+                    before_ms: v.get("before_ms").and_then(Value::as_u64),
+                    kind: opt("kind"),
+                };
+                let text = if s("do") == "archive" {
+                    store.archive(&pick, now_ms()).map(|a| artifacts::archived_text(&a))
+                } else {
+                    store.unarchive(&pick).map(|(back, not)| artifacts::unarchived_text(&back, &not))
+                };
+                match text {
+                    Ok(text) => {
+                        self.artifacts_refresh(false);
+                        json!({"ok": true, "text": text})
+                    }
+                    Err(e) => json!({"ok": false, "error": e}),
+                }
+            }
+            _ => json!({"ok": false, "error": "usage: sb artifact add <path or link> | list | archive | unarchive"}),
         }
     }
 

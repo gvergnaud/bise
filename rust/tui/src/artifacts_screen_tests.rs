@@ -265,3 +265,27 @@ fn without_the_hubs_seen_only_the_current_version_is_new() {
     assert_eq!(new, [3]);
     assert!(!fresh.version(&all[1], &p.versions[0]), "a row not new has no new version");
 }
+
+#[test]
+fn archived_ones_leave_the_list_behind_a_faint_row_and_a_opens_them() {
+    let mut all = afternoon();
+    for a in all.iter_mut().filter(|a| a.id == "providers" || a.id == "investor") {
+        a.archived_at = Some(T);
+    }
+    let mut sc = screen();
+    let out = render(&mut sc, &all, 144, 30);
+    assert!(out.contains("all agents · 7"), "{out}");
+    assert!(!out.contains("docs: providers") && !out.contains("investor deck"), "{out}");
+    assert!(out.contains("\n  2 archived\n"), "{out}");
+    assert!(out.ends_with("@ put it in a message   a archived   esc close"), "{out}");
+    let narrow = render(&mut screen(), &all, 74, 30);
+    assert!(narrow.contains("\n  2 archived\n"), "{narrow}");
+    sc.archived = true;
+    let out = render(&mut sc, &all, 144, 30);
+    assert!(out.contains("artifacts · archived") && out.contains("all agents · 2"), "{out}");
+    assert!(out.contains("docs: providers") && out.contains("investor deck, draft") && !out.contains("pricing page "), "{out}");
+    assert!(!out.contains("2 archived") && out.ends_with("@ put it in a message   esc back to the list"), "{out}");
+    let none: Vec<Artifact> = afternoon();
+    let out = render(&mut sc, &none, 144, 30);
+    assert!(out.contains("nothing archived. esc goes back."), "{out}");
+}

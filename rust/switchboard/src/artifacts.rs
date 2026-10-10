@@ -586,10 +586,13 @@ impl Store {
 
     /// The `artifacts` event's rows (docs/artifacts.md, "the row").
     pub fn rows(&self, who: Who, workspace: &str) -> Vec<Value> {
-        self.all().iter().map(|m| self.row(m, who, workspace)).collect()
+        let put_away = self.archived();
+        self.all().iter().map(|m| self.row(m, who, workspace, put_away.get(&m.id).copied())).collect()
     }
 
-    pub fn row(&self, m: &Meta, who: Who, workspace: &str) -> Value {
+    /// `archived_at`: when the artifact itself was archived (`sb artifact
+    /// archive`), or None; `archived` is its agent's.
+    pub fn row(&self, m: &Meta, who: Who, workspace: &str, archived_at: Option<u64>) -> Value {
         let (agent, archived) = who(&m.agent).unwrap_or_else(|| (m.agent.clone(), false));
         let page = m.by == "page";
         let notes = |v: u64| -> String {
@@ -609,7 +612,12 @@ impl Store {
             json!({
                 "v": v.v, "ts_ms": v.at_ms, "target": v.target,
                 "copy": v.copy.as_ref().map(|c| dir.join(c).to_string_lossy().to_string()),
-                "note": if page { notes(v.v) } else { v.no_copy.clone().map(|w| format!("no copy: {}", w)).unwrap_or_default() },
+                "note": if page {
+                    notes(v.v)
+                } else {
+                    // an archived artifact's older copy is simply gone (designer m_16873)
+                    v.no_copy.clone().map(|w| if w == "archived" { "not kept".to_string() } else { format!("no copy: {}", w) }).unwrap_or_default()
+                },
             })
         };
         let cur = m.current().cloned().unwrap_or_default();
@@ -623,7 +631,7 @@ impl Store {
         };
         json!({
             "id": m.id, "title": m.title, "kind": m.kind, "agent": agent, "by": m.by,
-            "archived": archived, "ts_ms": cur.at_ms, "created_ms": m.created_ms, "v": cur.v,
+            "archived": archived, "archived_at": archived_at, "ts_ms": cur.at_ms, "created_ms": m.created_ms, "v": cur.v,
             "target": cur.target,
             "copy": cur.copy.as_ref().map(|c| dir.join(c).to_string_lossy().to_string()),
             "gone": gone,
@@ -634,26 +642,41 @@ impl Store {
         })
     }
 
-    /// How many came after the user last looked.
+    /// How many came after the user last looked (the archived ones never).
     pub fn new_count(&self, now: u64) -> usize {
         let seen = self.seen_ms(now);
-        self.all().iter().filter(|m| m.by != "you" && m.current().is_some_and(|v| v.at_ms > seen)).count()
+        let put_away = self.archived();
+        self.all()
+            .iter()
+            .filter(|m| m.by != "you" && !put_away.contains_key(&m.id) && m.current().is_some_and(|v| v.at_ms > seen))
+            .count()
     }
 
     /// What `sb artifact list` prints: one line each, newest first,
-    /// filtered by words (title, agent, kind, id) and agent.
-    pub fn list_text(&self, words: &str, agent: Option<&str>, now: u64) -> String {
+    /// filtered by words (title, agent, kind, id) and agent; the archived
+    /// ones only with `archived` (else a last line counts them).
+    pub fn list_text(&self, words: &str, agent: Option<&str>, archived: bool, now: u64) -> String {
+        let put_away = self.archived();
         let all = self.all();
+        let hidden = all.iter().filter(|m| put_away.contains_key(&m.id) != archived).count();
+        let foot = if archived || hidden == 0 {
+            String::new()
+        } else {
+            format!("\n{} archived · sb artifact list --archived", hidden)
+        };
+        let all: Vec<Meta> = all.into_iter().filter(|m| put_away.contains_key(&m.id) == archived).collect();
         let hits: Vec<&Meta> = all
             .iter()
             .filter(|m| agent.is_none_or(|a| m.agent == a))
             .filter(|m| matches(m, words))
             .collect();
         if hits.is_empty() {
-            return if all.is_empty() {
+            return if archived {
+                "nothing archived.".into()
+            } else if all.is_empty() && hidden == 0 {
                 "no artifacts yet. add what you make for the user with sb artifact add <path or link>.".into()
             } else {
-                "nothing matches.".into()
+                format!("nothing matches.{}", foot)
             };
         }
         hits.iter()
@@ -675,6 +698,7 @@ impl Store {
             })
             .collect::<Vec<_>>()
             .join("\n")
+            + &foot
     }
 }
 
@@ -774,6 +798,10 @@ pub fn added_text(a: &Added) -> String {
     };
     format!("{}{} · link it as {}", what, copy, link)
 }
+
+#[path = "artifacts_archive.rs"]
+mod archive;
+pub use archive::{archived_text, parse_before, unarchived_text, Archived, Pick};
 
 #[cfg(test)]
 #[path = "artifacts_tests.rs"]
