@@ -17,12 +17,10 @@ pub fn one_line(s: &str, max: usize) -> String {
 }
 
 /// A page as an entry or a preview shows it, from the hub's pages.
-pub fn page_ref(id: &str, pages: &[Value]) -> Value {
-    let p = pages.iter().find(|p| p.get("id").and_then(Value::as_str) == Some(id));
-    let s = |k: &str| p.and_then(|p| p.get(k)).and_then(Value::as_str).unwrap_or("").to_string();
-    let title = Some(s("title")).filter(|t| !t.is_empty()).unwrap_or_else(|| id.replace('-', " "));
-    let v = p.and_then(|p| p.get("version")).and_then(Value::as_u64);
-    json!({"id": id, "title": title, "v": v, "url": s("url")})
+pub fn page_ref(id: &str, pages: &[bise_proto::rows::Page]) -> Value {
+    let p = pages.iter().find(|p| p.id == id);
+    let title = p.map(|p| p.title.clone()).filter(|t| !t.is_empty()).unwrap_or_else(|| id.replace('-', " "));
+    json!({"id": id, "title": title, "v": p.map(|p| p.version), "url": p.map_or("", |p| p.url.as_str())})
 }
 
 /// A card as an entry shows it: the question without its options, the

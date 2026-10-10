@@ -398,13 +398,9 @@ impl Core {
             }
             None => Value::Null,
         };
-        let mut pages: Vec<&Value> = self.hub_pages.iter().filter(|p| p.get("agent").and_then(Value::as_str) == Some(agent)).collect();
-        pages.sort_by_key(|p| std::cmp::Reverse(p.get("at_ms").and_then(Value::as_u64).unwrap_or(0)));
-        let pages: Vec<Value> = pages
-            .into_iter()
-            .take(3)
-            .map(|p| agents::page_ref(p.get("id").and_then(Value::as_str).unwrap_or(""), &self.hub_pages))
-            .collect();
+        let mut pages: Vec<&bise_proto::rows::Page> = self.hub_pages.iter().filter(|p| p.agent == agent).collect();
+        pages.sort_by_key(|p| std::cmp::Reverse(p.at_ms));
+        let pages: Vec<Value> = pages.into_iter().take(3).map(|p| agents::page_ref(&p.id, &self.hub_pages)).collect();
         json!({"ev": "agent_preview", "agent": agent, "now": now, "actions": agents::actions(entries, 5),
                "waiting": waiting, "last_report": last_report, "pages": pages})
     }

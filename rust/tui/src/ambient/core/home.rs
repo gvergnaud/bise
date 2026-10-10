@@ -154,7 +154,7 @@ impl Core {
                     state = true;
                 }
                 HubEv::Pages { items, .. } => {
-                    self.hub_pages = items.iter().filter_map(|p| serde_json::to_value(p).ok()).collect();
+                    self.hub_pages = items;
                     state = true;
                 }
                 HubEv::Scheduled { items, ended, .. } => {
@@ -465,9 +465,8 @@ impl Core {
             }));
         }
         let cards: Vec<Value> = self.cards.iter().map(card_ev).collect();
-        let pages = self.hub_pages.clone();
-        let s = |p: &Value, k: &str| p.get(k).and_then(Value::as_str).unwrap_or("").to_string();
-        self.page_titles = pages.iter().map(|p| (s(p, "id"), s(p, "title"))).collect();
+        self.page_titles = self.hub_pages.iter().map(|p| (p.id.clone(), p.title.clone())).collect();
+        let pages = serde_json::to_value(&self.hub_pages).unwrap_or(Value::Null);
         let mut st = json!({"ev": "state", "agents": rows, "cards": cards, "pages": pages});
         if let Some(u) = &self.pages_url {
             st["pages_url"] = json!(u);

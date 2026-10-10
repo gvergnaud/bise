@@ -263,7 +263,7 @@ pub struct Core {
     /// objective, report)
     hub_agents: Vec<bise_proto::rows::Agent>,
     /// the hub's pages as last seen
-    hub_pages: Vec<Value>,
+    hub_pages: Vec<bise_proto::rows::Page>,
     /// every project's typed connection, for the window (core/hubs.rs)
     hubs: hubs::Hubs,
     /// the window's setup commands (S11, core/setup.rs)
