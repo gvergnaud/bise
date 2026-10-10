@@ -68,9 +68,15 @@ def main():
             return [l for l in c.lines("t1") if l.startswith("sb msg-in") and "ONE-SHOT after the restart" in l]
         c.wait(lambda: wakes(), 60, "t1's wake after the restart")
         c.wait_idle("main", "t1")
-        journal = [json.loads(l) for l in open(os.path.join(E.state, "journal.jsonl"))]
-        fired = [j for j in journal if j.get("type") == "every_fired" and j.get("id") == 1]
-        stops = [j for j in journal if j.get("type") == "every_stop" and j.get("id") == 1]
+
+        # the fire's journal lines (sb-core writes them in the step that
+        # sent the wake: a client that reads the wake first may be ahead
+        # of the file, so wait for them, never read once)
+        def journal(kind):
+            js = [json.loads(l) for l in open(os.path.join(E.state, "journal.jsonl")) if l.strip()]
+            return [j for j in js if j.get("type") == kind and j.get("id") == 1]
+        c.wait(lambda: journal("every_fired") and journal("every_stop"), 30, "the fire and its stop in the journal")
+        fired, stops = journal("every_fired"), journal("every_stop")
         check(len(wakes()) == 1 and len(fired) == 1, "one wake, one fire: %r %r" % (wakes(), fired))
         check(len(stops) == 1 and stops[0]["why"] == "it ran its times", "then it ran its times: %r" % stops)
         log = open(os.path.join(E.state, "hub.log")).read()
