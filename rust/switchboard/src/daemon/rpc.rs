@@ -360,6 +360,13 @@ impl Shell {
         if let Some(v) = self.typed_of(&self.version_items()) {
             evs.push(v);
         }
+        // a release run or a `/update` build going on: where it is (the
+        // older hello's release_hello / update_hello)
+        for v in [self.release_now(), self.update_hello()].into_iter().flatten() {
+            if let Some(ev) = self.typed_of(&v) {
+                evs.push(ev);
+            }
+        }
         let mut missing = Vec::new();
         for kind in SCANNED {
             match self.rpc.scanned.get(*kind) {
@@ -537,6 +544,50 @@ mod tests {
             }
         }
         assert!(at.is_empty(), "an older notice line is written: {at:?}");
+    }
+
+    /// proto-lead m_16453 (b): every hub-wide notification is either a
+    /// kind of state, which `initialize`'s and `hub/read`'s state carry
+    /// (the older hello burst sent each), or an event of a moment, which
+    /// a client that connects later has no use for. A new Scope::Hub row
+    /// fails here until it is put on one side; a state kind names what
+    /// hub_state calls to make it, and hub_state's body calls it.
+    #[test]
+    fn hub_state_carries_every_hub_wide_kind_of_state() {
+        // what makes each kind in hub_state (`SCANNED`: the last scan's)
+        let state: BTreeMap<&str, &str> = [
+            ("agents", "proto_rows"),
+            ("cards", "proto_rows"),
+            ("jobs", "HubEv::Jobs"),
+            ("artifacts", "artifacts_ev"),
+            ("features", "features_ev"),
+            ("prs", "prs_ev"),
+            ("scheduled", "scheduled_ev"),
+            ("models", "models_ev"),
+            ("approvals", "approvals_ev"),
+            ("flow", "flow_ev"),
+            ("pages", "pages_ev"),
+            ("versions", "version_items"),
+            ("release", "release_now"),
+            ("update", "update_hello"),
+            ("worktrees", "SCANNED"),
+            ("dev_servers", "SCANNED"),
+            ("merged", "SCANNED"),
+        ]
+        .into_iter()
+        .collect();
+        let moments: BTreeSet<&str> = ["job_end", "followed_end", "route", "route_done", "page_changed"].into_iter().collect();
+        let src = include_str!("rpc.rs");
+        let body = src.split("fn hub_state(&mut self)").nth(1).and_then(|s| s.split("\n    }\n").next()).unwrap();
+        for row in rpc::NOTIFICATIONS.iter().filter(|r| r.scope == rpc::Scope::Hub) {
+            match state.get(row.ev) {
+                Some(maker) => assert!(body.contains(maker), "{}: hub_state never calls {maker}", row.method),
+                None => assert!(moments.contains(row.ev), "{} ({}): a kind of state (add it to hub_state) or a moment? put it on one side here", row.method, row.ev),
+            }
+        }
+        for kind in SCANNED {
+            assert!(state.get(kind) == Some(&"SCANNED"), "{kind}");
+        }
     }
 
     use bise_proto::hub::HubCmd;

@@ -331,6 +331,16 @@ impl Shell {
             None => self.broadcast(&v),
         }
     }
+
+    /// For a client that connects while a release runs (`initialize`'s
+    /// state, `hub/read`'s): where it is.
+    pub(super) fn release_now(&self) -> Option<Value> {
+        let r = self.release.as_ref()?;
+        let mut v = if r.last.is_null() { json!({"ev": "release", "state": "running", "text": "starting"}) } else { r.last.clone() };
+        v["tag"] = json!(r.tag);
+        v["elapsed"] = json!(r.started.elapsed().as_secs());
+        Some(v)
+    }
 }
 
 #[cfg(test)]
