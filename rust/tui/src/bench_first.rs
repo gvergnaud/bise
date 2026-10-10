@@ -11,6 +11,20 @@
 //! own work (JSON decode included).
 //!
 //! `cargo test --release -p bend-tui bench_first -- --ignored --nocapture`
+//!
+//! The honest before/after of (c) on this corpus (the real tool lines,
+//! `  obs: tool_started #k`), 2026-10-10, heavy-run --alone on AC,
+//! release, 4 runs each alternated, the median of the 4 runs:
+//! - before, main f0c1b04f (the older line path: cc0a1dd1's bench,
+//!   `{ev: line}` dispatched + a frame, its corpus switched to these
+//!   lines): 187, 188, 193, 192 us -> 190 us per line;
+//! - after, main 0c3be6b6 (client-protocol: the line's `thread/entry`
+//!   notes + a frame): 201, 197, 197, 205 us -> 199 us per line, +5 %
+//!   (under the 10 % bar: no issue).
+//!
+//! The same runs, the first frames: (a) 3.6-4.5 ms before (the hello
+//! burst, every thread's lines) vs 0.6-0.7 ms after (the focus's page;
+//! (a') every thread's page 1.7-2.2 ms); (b) 6.5-6.6 ms vs 5.7-5.9 ms.
 
 use crate::sb::bench::test_app;
 use crate::sb::entries_for_tests::{fold_lines, place_page, Hub};
