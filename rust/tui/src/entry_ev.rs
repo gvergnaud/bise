@@ -8,7 +8,8 @@
 //! switches to entries only when that list is empty.
 
 use crate::sb::{pr_look, shown_name};
-use crate::wire::{notice_ev, CardParts, Ev, Mark, ToolData, ToolState};
+use crate::render::fmt_duration;
+use crate::wire::{notice_ev, CardParts, Ev, Gate, Mark, ToolData, ToolState};
 use bise_proto::thread::{self as pthread, Entry, EntryKind, NoticeLevel};
 
 /// The feed events of entry `e`, in order (none: an entry the TUI
@@ -77,20 +78,50 @@ fn kind_evs(e: &Entry) -> Vec<Ev> {
 }
 
 /// One tool call of a `tools` entry as the TUI's tool row (G3: its name,
-/// args and intent, as the row's annotations give them; the call's id
-/// comes with amb-feed's ToolItem.id on main, architect m_14219).
+/// args and intent, as the row's annotations give them): its call id
+/// (ToolItem.id; an older hub's 0: its place), its duration (none: a
+/// replay, `0.0s` as the line path drew it), its result (the exit code and
+/// output line under a failed bash) and the gate holding it (`? waiting
+/// for you`), since their times.
 fn tool(i: usize, it: &pthread::ToolItem) -> Ev {
     let state = match it.state {
         pthread::ToolState::Run | pthread::ToolState::Unknown => ToolState::Run,
         pthread::ToolState::Ok => ToolState::Ok,
         pthread::ToolState::Err => ToolState::Fail,
     };
-    let mut t = ToolData::bare(u32::try_from(i + 1).unwrap_or(u32::MAX), state);
+    let id = u32::try_from(it.id).ok().filter(|&n| n > 0).unwrap_or_else(|| u32::try_from(i + 1).unwrap_or(u32::MAX));
+    let mut t = ToolData::bare(id, state.clone());
     t.name = Some(it.name.clone()).filter(|n| !n.is_empty());
     t.args = Some(it.args.clone()).filter(|a| !a.is_empty());
     t.intent = it.intent.clone();
     t.code = it.code.clone();
+    t.result = it.out.clone().map(|o| (it.state != pthread::ToolState::Err, crate::sanitize::clean(&o, crate::sanitize::TAB_OUTPUT).into_owned()));
+    match state {
+        // a running call's clock and its gate's run from their lines' times
+        ToolState::Run => {
+            t.started = since(it.at_ms);
+            t.gate = it.gate.and_then(|g| match g.wait {
+                pthread::GateWait::Check => Some((Gate::Check, since(g.at_ms))),
+                pthread::GateWait::Card => Some((Gate::Card, since(g.at_ms))),
+                pthread::GateWait::Unknown => None,
+            });
+        }
+        _ => {
+            let took = std::time::Duration::from_millis(it.ms.unwrap_or(0));
+            (t.elapsed, t.took) = (Some(fmt_duration(took)), Some(took));
+        }
+    }
     Ev::Tool(t)
+}
+
+/// The instant of `at_ms` on the hub's clock (now when unknown).
+fn since(at_ms: u64) -> std::time::Instant {
+    let now = std::time::Instant::now();
+    let ago = crate::when::now_ms().saturating_sub(at_ms);
+    match at_ms {
+        0 => now,
+        _ => now.checked_sub(std::time::Duration::from_millis(ago)).unwrap_or(now),
+    }
 }
 
 /// A card entry's feed event: its kind and asker as the hub's row says

@@ -22,6 +22,7 @@ const GAPS: &[&str] = &[];
 /// The corpora: a name and its lines (`(pos, ts, line)`).
 fn corpora() -> Vec<(&'static str, Vec<Line>)> {
     let mk = |ls: &[&str]| ls.iter().enumerate().map(|(i, l)| (i as u64 + 1, 1_700_000_000_000 + i as u64 * 1000, l.to_string())).collect::<Vec<Line>>();
+    let at_once = |ls: &[&str]| ls.iter().enumerate().map(|(i, l)| (i as u64 + 1, 1_700_000_000_000, l.to_string())).collect::<Vec<Line>>();
     vec![
         // the lines wire_agree_tests reads (every kind both readers know)
         (
@@ -46,10 +47,12 @@ fn corpora() -> Vec<(&'static str, Vec<Line>)> {
                 "sb undelivered : perf : then \\: the warm run",
             ]),
         ),
-        // a plain turn: his words, a tool call that ends, the reply
+        // a plain turn: his words, a tool call that ends, the reply (one
+        // time: the entries' durations are the lines' times, the line
+        // path's its own clock, 0.0s in a test)
         (
             "turn",
-            mk(&[
+            at_once(&[
                 "sb you : run the tests",
                 "  obs: turn_started",
                 "  obs: tool_started #1",
@@ -77,6 +80,73 @@ fn corpora() -> Vec<(&'static str, Vec<Line>)> {
                 "sb card-closed : #9 answered via @docs",
                 "sb card-closed : #7 accepted",
                 "sb card-closed : #77 closed",
+            ]),
+        ),
+        // F2 (tui-parity m_15345): the approvals gate holds a push, its
+        // card waits on him (the row says `? waiting for you`; the
+        // confirm card itself is the inbox's). One time for every line:
+        // the line path's durations are its own clock (0.0s in a test)
+        (
+            "approval-wait",
+            at_once(&[
+                "sb you : push it",
+                "  obs: turn_started",
+                "  obs: tool_started #1",
+                "tool #1 bash : git push origin main --force",
+                "sb gate : check 1",
+                "sb gate : card 12",
+                "sb card : #12 confirm @main : git push origin main --force",
+            ]),
+        ),
+        // … he allows it, the push fails: one row, its exit code and its
+        // output line, never a second `#1 ✗` row
+        (
+            "approval-done",
+            at_once(&[
+                "sb you : push it",
+                "  obs: turn_started",
+                "  obs: tool_started #1",
+                "tool #1 bash : git push origin main --force",
+                "sb gate : check 1",
+                "sb gate : card 12",
+                "sb card : #12 confirm @main : git push origin main --force",
+                "sb approval : allowed : main : git push origin main --force : ",
+                "sb gate : done 1",
+                "tool_result #1 fail : exit 128: fatal: 'origin' does not appear to be a git repository",
+                "  obs: tool_finished #1 fail",
+                "  obs: assistant: the push failed.",
+                "  obs: turn_done: completed",
+            ]),
+        ),
+        // `$ sb card …` rows: the result line comes before the finish
+        (
+            "sb-card-rows",
+            at_once(&[
+                "  obs: turn_started",
+                "  obs: tool_started #1",
+                "tool #1 bash : sb card \"which bench?\" --option cold --option warm",
+                "tool_result #1 ok : #4",
+                "  obs: tool_finished #1 ok",
+                "  obs: tool_started #2",
+                "tool #2 bash : sb card \"ship it?\"",
+                "tool_result #2 ok : #5",
+                "  obs: tool_finished #2 ok",
+                "  obs: turn_done: completed",
+            ]),
+        ),
+        // a reloaded transcript's call, its tool_code included
+        (
+            "reload",
+            at_once(&[
+                "sb you : bash ls",
+                "  obs: turn_started",
+                "  obs: tool_started #3",
+                "tool #3 bash : ls",
+                "tool_code #3 : ls",
+                "tool_result #3 ok : a.rs\\Nb.rs",
+                "  obs: tool_finished #3 ok",
+                "  obs: assistant: two files.",
+                "  obs: turn_done: completed",
             ]),
         ),
         // a retried turn: the provider's retry notice, then the reply
