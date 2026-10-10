@@ -131,9 +131,17 @@ def main():
         check(row(4, "main", "every day %s" % at).search(r), "the one-shot: %r" % r)
         c.wait(lambda: any(l.startswith("sb msg-in") and "ONE-SHOT brief" in l for l in c.lines("main")), 150, "main's wake")
         c.wait_idle("main")
-        journal = [json.loads(l) for l in open(os.path.join(E.state, "journal.jsonl"))]
-        sent = [k for k, j in enumerate(journal) if j.get("type") == "message_sent" and "ONE-SHOT" in j["msg"]["text"]]
-        stop = [k for k, j in enumerate(journal) if j.get("type") == "every_stop" and j.get("id") == 4]
+
+        # sb-core writes the stop in the step that sent the wake: a client
+        # that reads the wake first may be ahead of the file, so wait for
+        # both lines, never read once (as core_restart)
+        def spent():
+            journal = [json.loads(l) for l in open(os.path.join(E.state, "journal.jsonl")) if l.strip()]
+            sent = [k for k, j in enumerate(journal) if j.get("type") == "message_sent" and "ONE-SHOT" in j["msg"]["text"]]
+            stop = [k for k, j in enumerate(journal) if j.get("type") == "every_stop" and j.get("id") == 4]
+            return journal, sent, stop
+        wait.until(lambda: spent()[1] and spent()[2], 30, "the one-shot's wake and its stop in the journal")
+        journal, sent, stop = spent()
         check(sent and stop and sent[0] < stop[0] and journal[stop[0]]["why"] == "it ran its times",
               "sent, then spent: %r %r" % (sent, stop))
     except AssertionError as e:
