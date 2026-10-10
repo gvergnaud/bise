@@ -81,13 +81,18 @@ def main():
 
         call({"t": "init", "workspace": "/w"})
         out = call({"t": "replay_many", "evs": FIXTURE})
+        # the replay succeeds and no line it does not know fails it: a kind
+        # newer than the base is skipped, a kind the base knows is applied
+        # (a base that knows them all, e.g. main itself, skips none)
+        assert isinstance(out, dict) and "error" not in out and "err" not in out, "the replay failed: %r" % out
         skipped = out.get("skipped", [])
-        assert skipped == NEW, "the base's sb-core skips exactly the new kinds: %r (want %r)" % (skipped, NEW)
+        assert set(skipped) <= set(NEW), "the base's sb-core skips only the new kinds: %r (new: %r)" % (skipped, NEW)
+        print("     skipped kinds: %s" % (", ".join(sorted({FIXTURE[i]["type"] for i in skipped})) or "none"))
         view = call({"t": "view_all"})
         assert core.poll() is None, "the base's sb-core died on the journal"
         text = json.dumps(view)
         assert all(("m%d" % i) in text for i in (1, 2, 3)), "the messages are rebuilt: %s" % text[:500]
-        print("ok   old_core_replay: %s's sb-core skipped %d new lines, kept the messages" % (sha[:8], len(NEW)))
+        print("ok   old_core_replay: %s's sb-core skipped %d of %d new lines, kept the messages" % (sha[:8], len(skipped), len(NEW)))
     except AssertionError as e:
         print("FAIL old_core_replay:", e)
         ok = False
