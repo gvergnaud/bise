@@ -157,6 +157,10 @@ pub(super) struct Agent {
     /// None when the hub does not know (the `± 9 files` door, the live
     /// diff panel)
     changes: Option<(u64, u64, u64)>,
+    /// Its context after its last model call (the divider's gauge, the
+    /// panel row's fill): the hub's row, from its live usage lines; None
+    /// before its first call since the hub started and after a compaction.
+    usage: Option<bise_proto::rows::AgentUsage>,
 }
 
 impl Agent {
@@ -468,31 +472,25 @@ impl Sb {
         self.agent(&self.focus).is_some_and(|a| a.archived())
     }
 
-    /// The context usage of an agent's feed (the focused one lives in
-    /// the `App` fields).
-    fn usage_of<'a>(&'a self, app: &'a App, name: &str) -> Option<&'a crate::usage::Usage> {
-        if self.focus == name {
-            return crate::usage::current(&app.events);
-        }
-        crate::usage::current(&self.views.get(name)?.events)
+    /// The context usage of an agent (the hub/agents row's).
+    fn usage_of(&self, name: &str) -> Option<&bise_proto::rows::AgentUsage> {
+        self.agent(name)?.usage.as_ref()
     }
 
-    /// The model of the agent in focus (BISE-150): the one its last
-    /// usage line names, else the one its role starts with (main's or
-    /// the sub-agents', from the catalog's setup).
-    fn focus_model(&self, app: &App) -> String {
+    /// The model of the agent in focus (BISE-150): the one the hub says
+    /// it runs, else the one its last call ran (its usage), else the one
+    /// its role starts with (main's or the sub-agents', from the
+    /// catalog's setup).
+    fn focus_model(&self, _app: &App) -> String {
+        let a = self.agent(&self.focus);
         // the hub says what it runs now (BISE-135: a /model switch)
-        if let Some(m) = self.agent(&self.focus).map(|a| a.model.clone()).filter(|m| !m.is_empty()) {
+        if let Some(m) = a.map(|a| a.model.clone()).filter(|m| !m.is_empty()) {
             return m;
         }
-        let used = app.events.iter().rev().find_map(|e| match e {
-            crate::Ev::Usage(u) if !u.model.is_empty() => Some(u.model.clone()),
-            _ => None,
-        });
-        used.unwrap_or_else(|| {
-            let main = self.agent(&self.focus).is_none_or(|a| a.main);
-            crate::models::model_for(main)
-        })
+        if let Some(m) = a.and_then(|a| a.usage.as_ref()).map(|u| u.model.clone()).filter(|m| !m.is_empty()) {
+            return m;
+        }
+        crate::models::model_for(a.is_none_or(|a| a.main))
     }
 
     fn agent(&self, name: &str) -> Option<&Agent> {
@@ -1395,9 +1393,9 @@ mod nav_key_tests {
     fn images_to_a_model_without_vision_are_refused_before_sending() {
         let mut app = bench::test_app();
         app.sb.agents = vec![agent("main")];
-        let usage = |m: &str| Ev::Usage(crate::usage::Usage { model: m.into(), input: 10, ..Default::default() });
-        app.events.push(usage("mistral/codestral-latest"));
-        app.cache.push(None);
+        // the model its last call ran: the hub's row (its usage)
+        let usage = |m: &str| Some(bise_proto::rows::AgentUsage::of(m, 10, 0, None));
+        app.sb.agents[0].usage = usage("mistral/codestral-latest");
         app.attachments.push(crate::attach::Attachment {
             label: "[Image #1]".into(),
             marker: "<image name=\"[Image #1]\" b64=\"/x.b64\">".into(),
@@ -1416,8 +1414,7 @@ mod nav_key_tests {
             _ => panic!("no no-vision line"),
         }
         // a model that reads images: sent as before
-        app.events.push(usage("mistral/mistral-medium-latest"));
-        app.cache.push(None);
+        app.sb.agents[0].usage = usage("mistral/mistral-medium-latest");
         crate::input::on_key(&mut app, &KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         assert_eq!(app.ed.text, "");
         assert!(app.attachments.is_empty());

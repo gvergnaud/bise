@@ -147,6 +147,16 @@ pub fn percent(used: u64, window: u64) -> u64 {
     used.saturating_mul(100).saturating_add(window / 2) / window
 }
 
+/// The context gauge in full (the divider while a turn holds, the feed's
+/// usage line): "42k / 200k tokens · 21%", or "42k tokens" without a
+/// known window.
+pub fn context_label(used: u64, window: Option<u64>) -> String {
+    match window {
+        Some(w) => format!("{} / {} tokens · {}%", tokens(used), tokens(w), percent(used, w)),
+        None => format!("{} tokens", tokens(used)),
+    }
+}
+
 /// The context gauge at rest (BISE-303, the divider): "42k · 21%", or
 /// "42k" without a known window. `window`: the model's, from the catalog
 /// (the caller's).

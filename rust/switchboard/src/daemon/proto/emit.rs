@@ -11,7 +11,6 @@ use super::*;
 use crate::daemon::rpc::Typed;
 use bise_proto::hub::JobState;
 use bise_proto::rows::{AgentUsage, FlowMode};
-use bise_proto::thread::words;
 
 impl Shell {
     /// desktop S2 step 2: sb-core's `route`/`route_done` effects, to every
@@ -51,9 +50,8 @@ impl Shell {
         let calls = &self.proto.usage;
         let usage = |name: &str| {
             let u = calls.get(name)?;
-            let context = u.input + u.output;
             let window = cat.map(|c| c.context_window(&u.model)).filter(|w| *w > 0);
-            Some(AgentUsage { model: u.model.clone(), context, window, words: words::context_words(context, window), short: words::short_words(context, window) })
+            Some(AgentUsage::of(&u.model, u.input, u.output, window))
         };
         let heads = &self.proto.heads;
         let head = |name: &str| (heads.last(name), heads.turns(name));

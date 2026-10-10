@@ -309,6 +309,27 @@ pub struct AgentUsage {
     pub short: String,
 }
 
+impl AgentUsage {
+    /// The row of a call's usage (`input`/`output` its tokens), `window`
+    /// from the reader's catalog: the hub's one way to fill it.
+    pub fn of(model: &str, input: u64, output: u64, window: Option<u64>) -> AgentUsage {
+        let context = input.saturating_add(output);
+        AgentUsage {
+            model: model.to_string(),
+            context,
+            window,
+            words: crate::thread::words::context_words(context, window),
+            short: crate::thread::words::short_words(context, window),
+        }
+    }
+
+    /// The gauge in full, "42k / 200k tokens · 21%" (the TUI's divider
+    /// while a turn holds; `words::context_label`).
+    pub fn label(&self) -> String {
+        crate::thread::words::context_label(self.context, self.window)
+    }
+}
+
 /// How tool calls are approved on this machine (bar V8/W21,
 /// approvals-design.md §8): `yolo` runs everything, `auto` asks the
 /// checker first.

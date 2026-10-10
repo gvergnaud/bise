@@ -12,7 +12,6 @@
 //! from bise's catalog (models.rs, BISE-150).
 
 use crate::models::context_window;
-use crate::Ev;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Usage {
@@ -41,26 +40,10 @@ impl Usage {
         self.input + self.output
     }
 
-    /// "42k / 200k tokens · 21%"; a model with no known window: "42k tokens".
+    /// "42k / 200k tokens · 21%"; a model with no known window: "42k
+    /// tokens" (the hub's agent rows say the same: bise-proto's words).
     pub fn label(&self) -> String {
-        let used = self.context();
-        match context_window(&self.model) {
-            Some(w) => format!("{} / {} tokens · {}%", fmt_tokens(used), fmt_tokens(w), percent(used, w)),
-            None => format!("{} tokens", fmt_tokens(used)),
-        }
-    }
-
-    /// The divider's form at rest (BISE-303): "42k · 21%", or "42k"
-    /// without a known window.
-    pub fn compact(&self) -> String {
-        // the hub's agent rows say the same (bise-proto's words)
-        words::context_words(self.context(), context_window(&self.model))
-    }
-
-    /// The compact form for the task list: "21%", or "42k" without a
-    /// known window.
-    pub fn short(&self) -> String {
-        words::short_words(self.context(), context_window(&self.model))
+        words::context_label(self.context(), context_window(&self.model))
     }
 
     /// What the call cost in USD; None when the model's prices are not
@@ -77,23 +60,14 @@ impl Usage {
     }
 }
 
-use bise_proto::thread::words::{self, percent, tokens as fmt_tokens};
-
-/// The usage of the current context of a feed: the last usage event,
-/// unless a compaction came after it.
-/// The rule is bise_proto's `lines::current_usage`, the hub's too.
-pub fn current(events: &[Ev]) -> Option<&Usage> {
-    use bise_proto::thread::lines::{current_usage, UsageMark};
-    current_usage(events.iter().map(|e| match e {
-        Ev::Usage(u) => UsageMark::Usage(u),
-        Ev::Compacted { .. } => UsageMark::Compacted,
-        _ => UsageMark::Other,
-    }))
-}
+use bise_proto::thread::words;
+#[cfg(test)]
+use bise_proto::thread::words::tokens as fmt_tokens;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Ev;
 
     #[test]
     fn the_parsed_line_gives_the_context() {
@@ -107,8 +81,6 @@ mod tests {
     fn labels() {
         let u = Usage { model: "foundry/claude-opus-5-5".into(), input: 209_500, output: 500, ..Default::default() };
         assert_eq!(u.label(), "210k / 1M tokens · 21%");
-        assert_eq!(u.short(), "21%");
-        assert_eq!(u.compact(), "210k · 21%");
         // the window is the model's, not a guess from its name
         let s = Usage { model: "anthropic/claude-haiku-4-5".into(), input: 42_000, ..Default::default() };
         assert_eq!(s.label(), "42k / 200k tokens · 21%");
@@ -116,14 +88,12 @@ mod tests {
         assert_eq!(g.label(), "42k / 1M tokens · 4%");
         // an old bare id: the legacy rule
         let o = Usage { model: "claude-opus-5-5".into(), input: 209_500, output: 500, ..Default::default() };
-        assert_eq!(o.short(), "21%");
+        assert_eq!(o.label(), "210k / 1M tokens · 21%");
         // an unlisted model: its provider's default
         let x = Usage { model: "groq/some-model".into(), input: 13_107, output: 0, ..Default::default() };
         assert_eq!(x.label(), "13k / 131k tokens · 10%");
         let n = Usage { model: "nowhere/some-model".into(), input: 950, output: 0, ..Default::default() };
         assert_eq!(n.label(), "950 tokens");
-        assert_eq!(n.short(), "950");
-        assert_eq!(n.compact(), "950");
     }
 
     #[test]
@@ -149,17 +119,5 @@ mod tests {
         let ev = crate::parse_line("  obs: usage: model=claude-opus-5-5 in=100 out=5 cache_read=0 cache_write=0");
         assert!(matches!(&ev, Some(Ev::Usage(u)) if u.input == 100 && u.output == 5));
         assert!(!crate::ev_visible(&ev.unwrap(), false));
-    }
-
-    #[test]
-    fn compaction_resets_the_count() {
-        let u = |n| Ev::Usage(Usage { model: "claude-x".into(), input: n, ..Default::default() });
-        let evs = vec![u(10), Ev::Info("x".into()), u(20)];
-        assert_eq!(current(&evs).map(|u| u.input), Some(20));
-        let evs = vec![u(10), u(900), Ev::Compacted { text: "sum...".into(), open: false }];
-        assert_eq!(current(&evs), None);
-        let evs = vec![u(900), Ev::Compacted { text: "sum...".into(), open: false }, u(30)];
-        assert_eq!(current(&evs).map(|u| u.input), Some(30));
-        assert_eq!(current(&[]), None);
     }
 }

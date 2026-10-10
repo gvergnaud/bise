@@ -135,7 +135,7 @@ fn columns(app: &App, sb: &Sb, a: &Agent, boxed: bool, drop: usize) -> Vec<Span<
         vec![Span::styled(format!(" {:>STATE_W$}", w), Style::default().fg(c))]
     } else {
         let time = a.turn_ms.filter(|_| a.status == "working").map(short_age).unwrap_or_default();
-        let fill = sb.usage_of(app, &a.name).map(|u| u.short()).unwrap_or_default();
+        let fill = sb.usage_of(&a.name).map(|u| u.short.clone()).unwrap_or_default();
         // site/m/timers: a scheduled task's next run takes the time's
         // place, faint: `◷ 1m`, `◷ 07:30`
         let next = next_run(sb, &a.name, crate::when::now_ms());
@@ -1159,7 +1159,8 @@ pub(crate) fn status_state(app: &App) -> Vec<Line<'static>> {
     }
     let a = sb.agent(&sb.focus).cloned().unwrap_or_default();
     let d = |t: String| Span::styled(format!(" · {}", t), Style::default().fg(dim()));
-    let usage = crate::usage::current(&app.events);
+    // the hub's row (S13): the feed reads entries, which carry no usage
+    let usage = a.usage.as_ref();
     let mut held: Vec<Span<'static>> = Vec::new();
     if a.status != "working" {
         if !a.status.is_empty() {
@@ -1169,8 +1170,8 @@ pub(crate) fn status_state(app: &App) -> Vec<Line<'static>> {
             held.push(d(short_age(ms)));
         }
     }
-    held.extend(usage.as_ref().map(|u| d(u.label())));
-    let rest: Vec<Span<'static>> = usage.as_ref().map(|u| d(u.compact())).into_iter().collect();
+    held.extend(usage.map(|u| d(u.label())));
+    let rest: Vec<Span<'static>> = usage.map(|u| d(u.words.clone())).into_iter().collect();
     let mut notes: Vec<Span<'static>> = Vec::new();
     if a.archived() {
         // the placeholder says /restore: here only the state

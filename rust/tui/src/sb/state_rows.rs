@@ -72,6 +72,7 @@ impl Agent {
             effort: a.effort.clone().unwrap_or_default(),
             efforts: a.efforts.clone(),
             changes: a.changes.map(|c| (c.files, c.add, c.del)),
+            usage: a.usage.clone(),
         }
     }
 }

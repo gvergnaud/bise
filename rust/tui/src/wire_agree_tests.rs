@@ -137,22 +137,55 @@ fn the_tui_and_the_fold_agree_on_the_hubs_news() {
     }
 }
 
-/// architect m_10999: the TUI's gauge (usage::current over its events)
-/// and the hub's seed (lines::current_usage over the transcript's lines)
-/// read the same usage for the same lines, by the one rule.
+/// tui-parity F1 (proto-lead m_15352): the terminal's context meter
+/// comes from the hub's agent row since the feed reads entries (which
+/// carry no usage line). Law: over a corpus of usage lines, the meter the
+/// line path drew (the TUI's last `Ev::Usage` unless a compaction came
+/// after it: the divider's full label and resting words, the panel row's
+/// fill) equals the one the row gives (the hub's rule, `lines::
+/// current_usage` over the same lines, its `AgentUsage::of`, then the
+/// row's `label()`, `words`, `short`).
 #[test]
-fn the_tui_and_the_hub_read_the_same_current_usage() {
+fn the_meter_from_the_agent_row_is_the_meter_the_lines_gave() {
+    use bise_proto::thread::lines::{current_usage, usage_mark, UsageMark};
     let u1 = "  obs: usage: model=mistral/codestral-latest in=1200 out=30";
     let u2 = "  obs: usage: model=mistral/codestral-latest in=42000 out=310";
+    let big = "  obs: usage: model=anthropic/claude-haiku-4-5 in=209500 out=500 cache_read=0 cache_write=0";
+    let unknown = "  obs: usage: model=nowhere/some-model in=950 out=0";
     let done = "  obs: compaction_done: the summary";
-    for ls in [vec![u1], vec![u1, "sb you : hi", u2], vec![u1, done], vec![u1, done, u2], vec!["sb you : hi"]] {
+    let corpus: Vec<Vec<&str>> = vec![
+        vec![u1],
+        vec![u1, "sb you : hi", u2],
+        vec![u1, done],
+        vec![u1, done, u2],
+        vec![u2, big],
+        vec![unknown],
+        vec![big, "sb you : hi", unknown, done],
+        vec!["sb you : hi"],
+        vec![],
+    ];
+    let mut drawn = 0;
+    for ls in corpus {
+        // the line path: the TUI's events, as before the switch
         let evs: Vec<Ev> = ls.iter().filter_map(|l| parse_line(l)).collect();
-        let tui = crate::usage::current(&evs).map(|u| (u.model.clone(), u.input, u.output, u.short()));
-        let hub = bise_proto::thread::lines::current_usage(ls.iter().map(|l| bise_proto::thread::lines::usage_mark(l)))
+        let lines = current_usage(evs.iter().map(|e| match e {
+            Ev::Usage(u) => UsageMark::Usage(u),
+            Ev::Compacted { .. } => UsageMark::Compacted,
+            _ => UsageMark::Other,
+        }))
+        .map(|u| {
+            let w = crate::models::context_window(&u.model);
+            (u.label(), words::context_words(u.context(), w), words::short_words(u.context(), w))
+        });
+        // the row path: the hub's rule over the transcript's lines
+        let row = current_usage(ls.iter().map(|l| usage_mark(l)))
             .and_then(|t| bise_session::usage_line::parse(&t))
-            .map(|u| (u.model.clone(), u.input, u.output, words::short_words(u.input + u.output, crate::models::context_window(&u.model))));
-        assert_eq!(tui, hub, "{ls:?}");
+            .map(|u| bise_proto::rows::AgentUsage::of(&u.model, u.input, u.output, crate::models::context_window(&u.model)))
+            .map(|r| (r.label(), r.words.clone(), r.short.clone()));
+        assert_eq!(lines, row, "{ls:?}");
+        drawn += usize::from(row.is_some());
     }
+    assert_eq!(drawn, 5, "the corpus draws a meter in 5 of its cases");
 }
 
 /// A failed turn's words come from one place (`thread::words`), which the
