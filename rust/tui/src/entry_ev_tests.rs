@@ -148,6 +148,16 @@ fn corpora() -> Vec<(&'static str, Vec<Line>)> {
                 "  obs: turn_done: completed",
             ]),
         ),
+        // the ChatGPT sign-in expired mid-turn: the TUI's words (⏎ signs
+        // in again), from the line and from the entry alike
+        (
+            "expired",
+            mk(&[
+                "sb you : after it expired",
+                "  obs: turn_started",
+                "  obs: turn_done: failed: your ChatGPT sign-in expired. sign in again in /provider, or run bise login chatgpt.",
+            ]),
+        ),
         // a retried turn: the provider's retry notice, then the reply
         (
             "retry",

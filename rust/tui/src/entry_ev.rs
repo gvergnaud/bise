@@ -60,6 +60,9 @@ fn kind_evs(e: &Entry) -> Vec<Ev> {
         EntryKind::ToAgent => vec![msg(String::new(), e.to.clone().unwrap_or_default(), 3)],
         EntryKind::Tools => e.tools.iter().flat_map(|t| t.items.iter().enumerate().map(|(i, it)| tool(i, it))).collect(),
         EntryKind::Notice => e.notice.iter().map(|n| notice_ev(n.clone())).collect(),
+        // expired-ux (designer m_7456), as the line path's turn_done:
+        // the TUI signs in again on ⏎, not the runtime's /provider
+        EntryKind::TurnFailed if bise_proto::thread::words::is_expired_line(&text) => vec![Ev::Warn(crate::wire::EXPIRED_TUI.into())],
         EntryKind::TurnFailed => vec![notice_ev(pthread::Notice { level: NoticeLevel::Err, text })],
         EntryKind::NotDelivered => e.not_delivered.iter().map(|n| Ev::Undelivered { name: n.to.clone(), text: n.text.clone(), open: true }).collect(),
         EntryKind::Compacting => vec![Ev::Compact],
