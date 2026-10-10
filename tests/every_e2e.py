@@ -13,6 +13,7 @@ Run: python3 -u tests/every_e2e.py
 """
 import json
 import os
+import re
 import sys
 import time
 
@@ -22,6 +23,14 @@ import wait  # noqa: E402
 from e2e import EXE, check  # noqa: E402
 
 WAKE = "timer #1 "
+# since sched-names (0e5a18bb) a timer's set line and its `sb every` row
+# carry its name between the agent and the rhythm:
+# '#1 @t1  <name> · every 1s · next 12:16 · by main'
+def row(n, agent, rhythm):
+    return re.compile(r"#%d @%s  [^·]+ · %s" % (n, re.escape(agent), re.escape(rhythm)))
+
+
+SET_LINE = row(1, "t1", "every 1s · ")
 
 
 def wakes(c, agent="t1"):
@@ -65,7 +74,7 @@ def main():
         # every 1 s, each wake keeps t1 busy 4 s (the message's own script,
         # written with printf: main's command cannot hold the markers)
         r = main_says(c, "printf '\\133\\133bash: sleep 4\\135\\135 ping the board' | sb every 1s - --to t1", "timer set")
-        check("#1 @t1 every 1s" in r and "sb every --stop 1" in r, "the set line: %r" % r)
+        check(SET_LINE.search(r) is not None and "sb every --stop 1" in r, "the set line: %r" % r)
         c.wait(lambda: len(wakes(c)) >= 1, 30, "a first wake")
         t0 = time.time()
         # three wakes (about 8 s when each keeps t1 busy 4 s), then the
@@ -77,7 +86,7 @@ def main():
         check(not any("steer" in l and WAKE in l for l in c.lines("t1")), "no wake mid-turn")
 
         r = main_says(c, "sb every", "@t1")
-        check("#1 @t1 every 1s" in r and "ping the board" in r, "sb every lists it: %r" % r)
+        check(SET_LINE.search(r) is not None, "sb every lists it: %r" % r)
 
         # stop: no more wakes
         r = main_says(c, "sb every --stop 1", "stopped")
@@ -90,9 +99,9 @@ def main():
 
         # a daily timer, a short one; sb tasks shows them
         r = main_says(c, 'sb every day 07:30 "make the morning page"', "timer set")
-        check("#2 @main every day 07:30" in r, "a daily timer: %r" % r)
+        check(row(2, "main", "every day 07:30").search(r), "a daily timer: %r" % r)
         r = main_says(c, 'sb every 3s "pong" --to t1', "timer set")
-        check("#3 @t1 every 3s" in r, "a third timer: %r" % r)
+        check(row(3, "t1", "every 3s").search(r), "a third timer: %r" % r)
         r = main_says(c, "sb tasks", "#3 @t1")
         check("## timers (sb every)" in r and "#2 @main" in r, "sb tasks shows them: %r" % r)
 
@@ -101,7 +110,7 @@ def main():
         c = E.start_hub()
         c.wait_status("main", "idle", 60)
         r = main_says(c, "sb every", "#3")
-        check("#2 @main every day 07:30" in r and "#3 @t1 every 3s" in r, "both back after the restart: %r" % r)
+        check(row(2, "main", "every day 07:30").search(r) and row(3, "t1", "every 3s").search(r), "both back after the restart: %r" % r)
         c.wait(lambda: any(l.startswith("sb msg-in") and "timer #3 " in l for l in c.lines("t1")), 60, "a wake after the restart")
 
         # a dropped task's timers stop with it (busy or not: --force)
@@ -119,7 +128,7 @@ def main():
         # reaches main as a turn, and only then has it run its times
         at = time.strftime("%H:%M", time.localtime(time.time() + 60))
         r = main_says(c, 'sb every day %s "ONE-SHOT brief" --times 1 --until 23:59' % at, "timer set")
-        check("#4 @main every day %s" % at in r, "the one-shot: %r" % r)
+        check(row(4, "main", "every day %s" % at).search(r), "the one-shot: %r" % r)
         c.wait(lambda: any(l.startswith("sb msg-in") and "ONE-SHOT brief" in l for l in c.lines("main")), 150, "main's wake")
         c.wait_idle("main")
         journal = [json.loads(l) for l in open(os.path.join(E.state, "journal.jsonl"))]
