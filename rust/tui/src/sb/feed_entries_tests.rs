@@ -169,17 +169,10 @@ fn a_turns_edges_and_end_time_come_with_its_entries() {
     assert_eq!(end_of(&app, "third"), Some(6000));
 }
 
-/// proto-lead m_14731: a turn is never missed. A flip alone is its edge;
-/// two quick turns between two rows are two start/end pairs; an end and a
-/// start together come end first.
+/// The first row of an agent fires nothing, then its ends do (the edges'
+/// own laws: queue.rs turn_edges).
 #[test]
-fn every_turn_gets_its_edges() {
-    assert_eq!(turn_edges((false, 0), (true, 0)), [true]);
-    assert_eq!(turn_edges((true, 0), (false, 1)), [false]);
-    assert_eq!(turn_edges((false, 3), (false, 5)), [true, false, true, false], "two quick turns");
-    assert_eq!(turn_edges((true, 3), (true, 4)), [false, true], "one ended, the next one runs");
-    assert_eq!(turn_edges((true, 3), (true, 3)), Vec::<bool>::new());
-    // through the feed: the first row fires nothing, then its ends
+fn the_first_row_fires_nothing() {
     let mut app = subscribed("main");
     app.pending = true;
     agent_row(&mut app, "main", false, 2);

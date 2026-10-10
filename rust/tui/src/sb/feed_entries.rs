@@ -247,39 +247,18 @@ pub(super) fn want_older(app: &mut App, before: usize) {
     app.win.loading = true;
 }
 
-/// The turn edges between what an agent's row said (`was`: working, its
-/// ended turns) and what it says now: one end per ended turn (a turn that
-/// started and ended between two rows is a start then an end), then a
-/// start when it works now; a working flip alone is that edge. True: a
-/// start, false: an end, in order (proto-lead m_14731).
-pub(crate) fn turn_edges(was: (bool, u64), now: (bool, u64)) -> Vec<bool> {
-    let ended = now.1.saturating_sub(was.1);
-    let mut out = Vec::new();
-    if ended > 0 {
-        if was.0 {
-            out.push(false);
-        } else {
-            out.extend([true, false]);
-        }
-        for _ in 1..ended {
-            out.extend([true, false]);
-        }
-        if now.0 {
-            out.push(true);
-        }
-    } else if was.0 != now.0 {
-        out.push(now.0);
-    }
-    out
-}
-
 /// An agent's row as the state reader applies it (zone-a's 4b): its turn
-/// edges since the row before ([`turn_edges`]) go to its feed; the first
-/// row of an agent fires none.
+/// edges since the row before (`queue::turn_edges`, with what they owe:
+/// a turn's end is drawn once though its row's two halves come apart) go
+/// to its feed; the first row of an agent fires none.
 pub(crate) fn agent_row(app: &mut App, agent: &str, working: bool, turns: u64) {
-    let was = app.sb.turns_seen.insert(agent.to_string(), (working, turns));
-    let Some(was) = was else { return };
-    for started in turn_edges(was, (working, turns)) {
+    let Some((w, t, owed)) = app.sb.turns_seen.get(agent).copied() else {
+        app.sb.turns_seen.insert(agent.to_string(), (working, turns, crate::queue::Owed::Nothing));
+        return;
+    };
+    let (edges, owed) = crate::queue::turn_edges((w, t), (working, turns), owed);
+    app.sb.turns_seen.insert(agent.to_string(), (working, turns, owed));
+    for started in edges {
         turn_edge(app, agent, started);
     }
 }

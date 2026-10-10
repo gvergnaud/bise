@@ -163,6 +163,72 @@ fn cut(s: &str, room: usize) -> String {
     out
 }
 
+/// What an agent's turn edges still owe between two of its rows: its
+/// agents row's `working` (sb-core's status) and `turns` (the thread's
+/// ended turns, its heads) come from two sources and move in different
+/// rows, so one turn's end can show twice: from the flip, then from its
+/// count (or the other way round). Drawing it twice released the next
+/// queued message at once, in the same turn (tui_queue_tmux 3/7 red,
+/// proto-lead m_16051, architect m_16053).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum Owed {
+    #[default]
+    Nothing,
+    /// an end drawn from `working` turning false: its count is to come
+    Count,
+    /// an end drawn from its count while the row still said working: its
+    /// flip to false is to come
+    Flip,
+}
+
+/// The turn edges between an agent's row before (`was`: working, its
+/// ended turns) and its row now, and what they owe after: one end per
+/// ended turn, a start before it when the row didn't say working (a turn
+/// that started and ended between two rows, no entry of it seen, is a
+/// start then an end), then a start when it works now; a working flip
+/// alone is that edge. An end already drawn from the other half of the
+/// row ([`Owed`]) is never drawn again. True: a start, false: an end,
+/// in order (proto-lead m_14731).
+pub(crate) fn turn_edges(was: (bool, u64), now: (bool, u64), owed: Owed) -> (Vec<bool>, Owed) {
+    let (mut owed, mut out) = (owed, Vec::new());
+    let mut ended = now.1.saturating_sub(was.1);
+    // the flip drew this turn's end: its count settles it
+    if ended > 0 && owed == Owed::Count {
+        ended -= 1;
+        owed = Owed::Nothing;
+    }
+    // a count while its flip is owed: the row's working was the ended
+    // turn's; this one ran since (its start not drawn yet)
+    let flip_counted = ended > 0 && owed == Owed::Flip;
+    if flip_counted {
+        owed = Owed::Nothing;
+    }
+    let mut running = was.0 && !flip_counted;
+    for _ in 0..ended {
+        if !running {
+            out.push(true);
+        }
+        out.push(false);
+        running = false;
+    }
+    match (running, now.0) {
+        // counted while the row still says working: its flip is to come
+        (false, true) if ended > 0 && was.0 => owed = Owed::Flip,
+        (false, true) => out.push(true),
+        // the count drew this end: the flip settles it
+        (true, false) if owed == Owed::Flip => owed = Owed::Nothing,
+        (true, false) => {
+            out.push(false);
+            owed = Owed::Count;
+        }
+        _ => {}
+    }
+    if !now.0 && owed == Owed::Flip {
+        owed = Owed::Nothing;
+    }
+    (out, owed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -329,5 +395,80 @@ mod tests {
         app.pending = false;
         assert_eq!(next(&mut app).as_deref(), Some("look <image name=a.png b64=/x>"));
         assert_eq!(app.attachments, vec![mine]);
+    }
+
+    /// The agent's rows in order from its first, through
+    /// [`turn_edges`]: every edge drawn.
+    fn edges(rows: &[(bool, u64)]) -> Vec<bool> {
+        let mut owed = Owed::Nothing;
+        let mut out = Vec::new();
+        for w in rows.windows(2) {
+            let (e, o) = turn_edges(w[0], w[1], owed);
+            out.extend(e);
+            owed = o;
+        }
+        out
+    }
+
+    /// Law (proto-lead m_14731): a turn is never missed. A flip alone is
+    /// its edge; two quick turns between two rows (no entry of them seen)
+    /// are two start/end pairs; an end and a start together come end first.
+    #[test]
+    fn every_turn_gets_its_edges() {
+        let one = |was, now| turn_edges(was, now, Owed::Nothing).0;
+        assert_eq!(one((false, 0), (true, 0)), [true]);
+        assert_eq!(one((true, 0), (false, 1)), [false]);
+        assert_eq!(one((false, 3), (false, 5)), [true, false, true, false], "two quick turns");
+        assert_eq!(one((true, 3), (true, 3)), Vec::<bool>::new());
+        assert_eq!(edges(&[(false, 3), (true, 3), (true, 4), (true, 5), (false, 5)]), [true, false, true, false], "one ended, the next one ran and ended");
+        assert_eq!(edges(&[(false, 2), (false, 3), (false, 4)]), [true, false, true, false], "a turn with no entry and no working row: a pair each");
+    }
+
+    /// Law (proto-lead m_16051, architect m_16053, tui_queue_tmux's run):
+    /// the status first, then the count of the same turn: one end. The
+    /// count first, then the status: one end. Either way the next turn's
+    /// edges still come.
+    #[test]
+    fn a_turns_end_is_drawn_once_whichever_half_of_the_row_comes_first() {
+        assert_eq!(edges(&[(true, 1), (false, 1), (false, 2)]), [false], "status, then turns");
+        assert_eq!(edges(&[(true, 1), (true, 2), (false, 2)]), [false], "turns, then status");
+        // the next turn after each: its start and its one end
+        assert_eq!(edges(&[(true, 1), (false, 1), (false, 2), (true, 2), (false, 2), (false, 3)]), [false, true, false]);
+        assert_eq!(edges(&[(true, 1), (true, 2), (false, 2), (true, 2), (true, 3), (false, 3)]), [false, true, false]);
+        // the late count after the next turn started: nothing more
+        assert_eq!(edges(&[(true, 1), (false, 1), (true, 1), (true, 2), (false, 2), (false, 3)]), [false, true, false]);
+    }
+
+    /// Law: the race tui_queue_tmux caught. The sleep turn ends by its
+    /// status (queued-one goes), then its count comes: queued-two waits
+    /// for queued-one's own turn to end.
+    #[test]
+    fn a_late_count_does_not_release_the_next_queued_one() {
+        let mut app = two_queued();
+        app.pending = true;
+        let mut owed = Owed::Nothing;
+        let mut sent = Vec::new();
+        let mut row = |app: &mut App, was, now| {
+            let (e, o) = turn_edges(was, now, owed);
+            owed = o;
+            for started in e {
+                seen(app);
+                if !started {
+                    app.pending = false;
+                    if let Some(m) = next(app) {
+                        app.pending = true;
+                        sent.push(m);
+                    }
+                }
+            }
+        };
+        row(&mut app, (true, 1), (false, 1));
+        row(&mut app, (false, 1), (false, 2));
+        assert_eq!(app.queued.len(), 1, "two waits");
+        row(&mut app, (false, 2), (true, 2));
+        row(&mut app, (true, 2), (false, 2));
+        row(&mut app, (false, 2), (false, 3));
+        assert!(app.queued.is_empty());
+        assert_eq!(sent, ["one", "two"]);
     }
 }
