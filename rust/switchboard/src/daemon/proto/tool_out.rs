@@ -12,6 +12,9 @@ use std::path::Path;
 
 /// Transcript lines read after the call for its result.
 const AFTER: usize = 2000;
+/// Lines read after a `tool_started` for its call line (the runtime
+/// writes them together; other agents' lines never come between).
+const START_TO_CALL: usize = 8;
 
 /// Where the logs are: the session logs and their blobs.
 pub(super) struct Logs<'a> {
@@ -25,8 +28,15 @@ pub(super) struct Logs<'a> {
 pub(super) fn answer(transcript: &Path, adir: &Path, pos: u64, logs: &Logs) -> Result<(String, bool, Option<u64>), String> {
     let page = super::super::history::transcript_page(transcript, pos as usize + AFTER + 1, AFTER + 1);
     let mut after = page.into_iter().skip_while(|(p, _, _)| (*p as u64) < pos);
-    let call = after.next().filter(|(p, _, _)| *p as u64 == pos).map(|(_, _, l)| l);
-    let Some(Rec::Tool { id: n, name, .. }) = call.as_deref().map(lines::read) else {
+    let first = after.next().filter(|(p, _, _)| *p as u64 == pos).map(|(_, _, l)| lines::read(&l));
+    // a tool row's pos is its `tool_started` line since client-protocol's
+    // G3 (a row exists from its start, lines::tool_move): its call line
+    // follows; an older row's pos is the call line itself
+    let call = match first {
+        Some(Rec::Obs(lines::Obs::ToolStarted(n))) => after.by_ref().take(START_TO_CALL).map(|(_, _, l)| lines::read(&l)).find(|r| matches!(r, Rec::Tool { id, .. } if *id == n)),
+        r => r,
+    };
+    let Some(Rec::Tool { id: n, name, .. }) = call else {
         return Err(format!("line {pos} is no tool call"));
     };
     let found = after.find_map(|(_, ts, l)| match lines::read(&l) {

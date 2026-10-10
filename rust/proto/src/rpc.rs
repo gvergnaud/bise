@@ -70,6 +70,9 @@ pub const METHODS: &[MethodRow] = &[
     m("agent/follow", "follow", None),
     m("artifacts/seen", "artifacts_seen", None),
     m("diff/read", "diff", Some("diff")),
+    // a tool row opened: its whole output from the session log (main's
+    // 5a9cc5f2), answered later from a thread
+    m("tool/output", "tool_out", Some("tool_out")),
     m("worktrees/list", "worktrees", Some("worktrees")),
     m("devServers/list", "dev_servers", Some("dev_servers")),
     m("merged/list", "merged", Some("merged")),
@@ -162,8 +165,8 @@ const fn n(method: &'static str, ev: &'static str, scope: Scope) -> NoteRow {
     NoteRow { method, ev, scope }
 }
 
-/// Every notification that is a [`HubEv`]. `thread` and `diff` are only
-/// results (they answer a request, never pushed).
+/// Every notification that is a [`HubEv`]. `thread`, `diff` and
+/// `tool_out` are only results (they answer a request, never pushed).
 pub const NOTIFICATIONS: &[NoteRow] = &[
     n("hub/agents", "agents", Scope::Hub),
     n("hub/cards", "cards", Scope::Hub),

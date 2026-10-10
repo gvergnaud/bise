@@ -247,12 +247,11 @@ enum Msg {
 }
 
 impl Msg {
-    /// A client's own message (its hello, a line, its end): the inbox's
-    /// urgent lane (daemon/inbox.rs), one lane so its order holds.
-    /// TODO(client-protocol): its RpcNew and Typed answers join this lane
-    /// when that branch merges (architect m_14659).
+    /// A client's own message (its hello or `initialize`, a line, its end,
+    /// a thread's typed answer to its request): the inbox's urgent lane
+    /// (daemon/inbox.rs), one lane so its order holds (architect m_14659).
     fn is_client(m: &Msg) -> bool {
-        matches!(m, Msg::ClientNew { .. } | Msg::ClientLine { .. } | Msg::ClientGone { .. })
+        matches!(m, Msg::ClientNew { .. } | Msg::RpcNew { .. } | Msg::ClientLine { .. } | Msg::ClientGone { .. } | Msg::Typed { .. })
     }
 }
 
@@ -2387,6 +2386,18 @@ fn hash_keys(keys: &[(String, Option<String>)]) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// hub-fifo's urgent lane holds a client's own messages, client-protocol's
+    /// too: its `initialize` connection (RpcNew) and a thread's typed answer
+    /// to its request (Typed); the rest waits its turn.
+    #[test]
+    fn a_clients_own_messages_take_the_urgent_lane() {
+        let (a, _b) = UnixStream::pair().unwrap();
+        assert!(Msg::is_client(&Msg::RpcNew { id: 1, stream: a, v: Value::Null }));
+        assert!(Msg::is_client(&Msg::Typed { to: rpc::Typed::Answer(1), v: Value::Null }));
+        assert!(Msg::is_client(&Msg::ClientGone { id: 1 }));
+        assert!(!Msg::is_client(&Msg::In(Input::Tick)));
+    }
 
     /// one rename (no temp file left); only a link is dropped for an
     /// older version's hub.

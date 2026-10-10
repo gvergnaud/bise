@@ -338,7 +338,8 @@ def main():
               "no image marker or store path in main's thread: %r" % [x for x in mthread if "<image" in json.dumps(x)][:2])
         d.send({"cmd": "unsubscribe", "project": project, "agent": "main"})
 
-        # a tool row's detail (ambient-lead m_14200, architect m_14218/m_14228):
+        # a tool row's detail (ambient-lead m_14200, architect m_14218/m_14228),
+        # on the typed door d (c speaks JSON-RPC: rpc_e2e reads tool/output):
         # the transcript keeps a 200-char preview; tool_out answers with the
         # whole result from the session log, capped at 4 KB (cut)
         c.say("[[bash: seq 1 2000]]")
@@ -350,17 +351,18 @@ def main():
             return bool(calls) and any(l.startswith("tool_result #%s " % calls[-1]) for l in ls)
         c.wait(seq_done, 90, "main ran seq")
         c.wait_idle("main", timeout=90)
-        n = len(typed(c, "thread"))
-        c.send({"cmd": "subscribe", "project": project, "agent": "main"})
-        c.wait(lambda: len(typed(c, "thread")) > n, 20, "main's thread")
-        mt = typed(c, "thread")[-1]["entries"]
+        n = len(typed(d, "thread"))
+        d.send({"cmd": "subscribe", "project": project, "agent": "main"})
+        c.wait(lambda: len(typed(d, "thread")) > n, 20, "main's thread")
+        mt = typed(d, "thread")[-1]["entries"]
         items = [i for x in mt if x["kind"] == "tools" for i in x["tools"]["items"] if "seq 1 2000" in json.dumps(i)]
         check(items and items[-1]["id"] > 0 and len(items[-1].get("out", "")) < 400,
               "the seq row: an id and the short preview: %r" % (items[-1:] or [json.dumps(x)[:300] for x in mt[-4:]]))
-        c.send({"cmd": "unsubscribe", "project": project, "agent": "main"})
-        c.send({"cmd": "tool_out", "project": project, "agent": "main", "pos": items[-1]["pos"]})
-        c.wait(lambda: typed(c, "tool_out"), 20, "the tool_out answer")
-        got = typed(c, "tool_out")[-1]
+        d.send({"cmd": "unsubscribe", "project": project, "agent": "main"})
+        d.send({"cmd": "tool_out", "project": project, "agent": "main", "pos": items[-1]["pos"]})
+        c.wait(lambda: typed(d, "tool_out") or [e for e in typed(d, "error") if e.get("cmd") == "tool_out"], 20, "the tool_out answer")
+        check(typed(d, "tool_out"), "tool_out answered, not refused: %r" % [e for e in typed(d, "error") if e.get("cmd") == "tool_out"])
+        got = typed(d, "tool_out")[-1]
         lines_out = got["out"].split("\n")
 
         def why_preview():
@@ -382,8 +384,8 @@ def main():
         check(got.get("total") in (8892, 8893) and got["total"] > len(got["out"].encode()),
               "tool_out carries the whole output's bytes: %r" % got.get("total"))
         # not a tool call: an error with its cmd
-        c.send({"cmd": "tool_out", "project": project, "agent": "main", "pos": 1})
-        c.wait(lambda: any(e.get("cmd") == "tool_out" for e in typed(c, "error")), 20, "tool_out's error")
+        d.send({"cmd": "tool_out", "project": project, "agent": "main", "pos": 1})
+        c.wait(lambda: any(e.get("cmd") == "tool_out" for e in typed(d, "error")), 20, "tool_out's error")
 
         # an answer to MAIN's own card (designer's must-fix, architect
         # m_15205): main's thread has one 'you answered main' row with his

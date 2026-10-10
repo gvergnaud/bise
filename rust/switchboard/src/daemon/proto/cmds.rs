@@ -201,7 +201,7 @@ impl Shell {
                         Ok((out, cut, total)) => HubEv::ToolOut { project, agent, pos, out, cut, total }.to_value(),
                         Err(text) => HubEv::Error { project: Some(project), cmd: Some(tag), text, cid: None, reason: None, kind: None }.to_value(),
                     };
-                    let _ = tx.send(Msg::ToClient { id, v });
+                    let _ = tx.send(Msg::Typed { to: super::super::rpc::Typed::Answer(id), v });
                 });
             }
             // git in a thread (art.rs, the `branches` op's scan), to this client

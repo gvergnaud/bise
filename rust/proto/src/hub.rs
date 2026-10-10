@@ -758,7 +758,8 @@ impl HubCmd {
             | HubCmd::ReleaseRun { project, .. }
             | HubCmd::StopHub { project, .. }
             | HubCmd::PageVoice { project, .. }
-            | HubCmd::Diff { project, .. } => project,
+            | HubCmd::Diff { project, .. }
+            | HubCmd::ToolOut { project, .. } => project,
             HubCmd::Hello { .. } | HubCmd::Unknown { .. } => return None,
         };
         Some(v)
