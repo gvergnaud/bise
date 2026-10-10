@@ -1152,12 +1152,10 @@ pub(crate) fn status_state(app: &App) -> Vec<Line<'static>> {
     if let Some(name) = &sb.drop_ask {
         return vec![Line::from(Span::styled(drop_question(name), Style::default().fg(accent())))];
     }
-    // computer use (design §7.3): you touched its tab or app, it waits
-    if crate::computer_use::paused(&sb.focus) {
-        return vec![Line::from(vec![
-            Span::styled("? ", Style::default().fg(accent())),
-            Span::styled(format!("you took the wheel · {} give it back", if crate::theme::ascii_mode() { "enter" } else { "⏎" }), Style::default().fg(dim())),
-        ])];
+    // computer use (design §7.3, designer m_16125): it drives, you took
+    // the wheel (it waits), or it was stopped until you write to it
+    if let Some(line) = crate::computer_use::status_line(&sb.focus, crate::when::now_ms()) {
+        return vec![line];
     }
     let a = sb.agent(&sb.focus).cloned().unwrap_or_default();
     let d = |t: String| Span::styled(format!(" · {}", t), Style::default().fg(dim()));

@@ -180,7 +180,7 @@ fn state_json_reads_who_drives() {
     let v = json!({"v": 2, "agents": {format!("{hub}.perf"): {"name": "perf", "hub": hub, "driving": "Chrome", "paused": false, "stopped": false}}});
     assert_eq!(parse_state(&v, &hub_of(&short)).keys().collect::<Vec<_>>(), ["perf"]);
     assert!(parse_state(&v, &hub_of(&natural)).is_empty(), "the natural path would blank the driving line");
-    assert_eq!(d["api-v2"], Driver { driving: Some("Chrome".into()), place: Some("amazon.fr".into()), paused: false, stopped: false });
+    assert_eq!((d["api-v2"].driving.as_deref(), d["api-v2"].place.as_deref(), d["api-v2"].paused, d["api-v2"].stopped), (Some("Chrome"), Some("amazon.fr"), false, false));
     assert!(d["held"].stopped && d["held"].driving.is_none());
     assert!(d["mail"].paused);
     assert_eq!(short_app("Calculator"), "Calcula…");
@@ -201,4 +201,20 @@ fn an_action_row_reads_its_summary() {
     assert_eq!(sub_row("computer.snapshot", r##"{"refs":3,"target":"tab:1","text":"# x"##), None);
     assert_eq!(sub_row("github.search", r##"{"summary":"x"}"##), None);
     assert_eq!(sub_row("computer.act", r##"{"summary":"typed \u00e9t\u00e9 · Figma","ok":true}"##).map(|x| x.1), Some("typed été · Figma".into()));
+}
+
+/// S29/L19 (architect m_16121): the status row's words are
+/// `bise_computer_use::live::line`'s, the ones the window's row carries;
+/// the TUI adds its own age form (`2m`) and colours only
+#[test]
+fn the_status_row_says_the_shared_line() {
+    let at = |d: &Driver| status_line_of(d, 125_000).map(|l| text(&[l]));
+    let drives = Driver { name: "api-v2".into(), driving: Some("Chrome".into()), place: Some("amazon.fr".into()), since_ms: Some(5_000), ..Driver::default() };
+    assert_eq!(at(&drives).as_deref(), Some("↖ driving Chrome · amazon.fr · 2m"));
+    assert_eq!(at(&drives), bise_computer_use::live::line(&drives, Some("2m"), false).map(|l| l.text()));
+    let paused = Driver { paused: true, ..drives.clone() };
+    assert_eq!(at(&paused).as_deref(), Some("? you took the wheel · ⏎ give it back"));
+    let stopped = Driver { stopped: true, driving: None, was: Some("Chrome".into()), stopped_by: Some("you".into()), ..drives.clone() };
+    assert_eq!(at(&stopped).as_deref(), Some("↖ you stopped it driving Chrome · write to it to go on"));
+    assert_eq!(at(&Driver::default()), None);
 }

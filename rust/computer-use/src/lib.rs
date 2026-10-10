@@ -34,6 +34,7 @@ pub mod client;
 mod e2e;
 pub mod host;
 pub mod image;
+pub mod live;
 pub mod mcp;
 pub mod nm;
 pub mod paths;

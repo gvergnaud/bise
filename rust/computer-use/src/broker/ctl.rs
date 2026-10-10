@@ -12,7 +12,13 @@ pub(super) fn stop_agent(sh: &Arc<Shared>, agent: &str, by: &str) {
         let a = inner.agents.entry(agent.to_string()).or_default();
         a.stopped = true;
         a.since_ms = None;
-        a.driving.take()
+        let driving = a.driving.take();
+        // the stopped line's words (state::Agent::was): kept over a second stop
+        if driving.is_some() {
+            a.was.clone_from(&driving);
+        }
+        a.stopped_by = Some(by.to_string());
+        driving
     };
     let _ = state::event_driving(&sh.opts.paths, agent, "stopped", by, driving.as_deref());
     broadcast(sh, &json!({"stop": agent}));
@@ -27,6 +33,8 @@ fn resume_agent(sh: &Arc<Shared>, agent: &str) {
         if let Some(a) = inner.agents.get_mut(agent) {
             a.stopped = false;
             a.paused.clear();
+            a.was = None;
+            a.stopped_by = None;
         }
     }
     let _ = state::event(&sh.opts.paths, agent, "resumed", "you");

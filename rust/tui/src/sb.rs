@@ -36,7 +36,7 @@ pub(super) use panel::PANEL_TITLE;
 pub(super) use panel::{archived_refusal, archived_warn, draw_panel, focus_model, key_mode, panel_mouse, placeholder, split, status_state, viewed_model, viewed_who, viewed_working, workspace};
 #[cfg(test)]
 pub(super) use panel::status_text;
-pub(crate) use panel::{demo_ready, fill_demo, prefill_demo, DEMO, DEMO_READY};
+pub(crate) use panel::{demo_ready, fill_demo, prefill_demo, short_age, DEMO, DEMO_READY};
 use panel::glyph;
 mod feed;
 pub(super) use feed::FeedWindow;

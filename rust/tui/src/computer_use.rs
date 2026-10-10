@@ -120,16 +120,10 @@ fn open(args: &[String]) {
 
 // ---- the live state (C6 state.json) ----
 
-/// One agent in state.json.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub(crate) struct Driver {
-    /// "Chrome", "TextEdit"; None: it holds nothing now
-    pub(crate) driving: Option<String>,
-    /// "amazon.fr"
-    pub(crate) place: Option<String>,
-    pub(crate) paused: bool,
-    pub(crate) stopped: bool,
-}
+/// One agent in state.json, as the file's one reader gives it
+/// (`bise_computer_use::state::Live`: driving, place, since_ms, paused,
+/// stopped, what it drove when stopped and who stopped it).
+pub(crate) type Driver = bise_computer_use::state::Live;
 
 /// The agents of state.json, by name.
 pub(crate) type Drivers = BTreeMap<String, Driver>;
@@ -142,7 +136,7 @@ pub(crate) fn parse_state(v: &Value, hub: &str) -> Drivers {
     bise_computer_use::state::agents(v)
         .into_iter()
         .filter(|a| a.hub.as_deref() == Some(hub))
-        .map(|a| (a.name, Driver { driving: a.driving, place: a.place, paused: a.paused, stopped: a.stopped }))
+        .map(|a| (a.name.clone(), a))
         .collect()
 }
 
@@ -206,6 +200,30 @@ pub(crate) fn driving(agent: &str) -> Option<Driver> {
 /// `agent` waits for the user to give its tab or app back.
 pub(crate) fn paused(agent: &str) -> bool {
     drivers().get(agent).is_some_and(|d| d.paused && !d.stopped)
+}
+
+/// The status row of the agent you talk to while it uses a computer
+/// (designer m_16125): `↖ driving Chrome · amazon.fr · 2m` in the
+/// working colour, `? you took the wheel · ⏎ give it back` (the `?` in
+/// accent, the words dim), `↖ you stopped it driving Chrome · write to it
+/// to go on` dim. The words are `bise_computer_use::live::line`'s, the
+/// ones the desktop window draws too (architect m_16121); None: it holds
+/// nothing.
+pub(crate) fn status_line(agent: &str, now_ms: u64) -> Option<Line<'static>> {
+    status_line_of(drivers().get(agent)?, now_ms)
+}
+
+/// [`status_line`] for one agent of state.json (tests).
+pub(crate) fn status_line_of(d: &Driver, now_ms: u64) -> Option<Line<'static>> {
+    use bise_computer_use::live::{line, Kind};
+    let age = d.since_ms.map(|t| crate::sb::short_age(now_ms.saturating_sub(t)));
+    let l = line(d, age.as_deref(), theme::ascii_mode())?;
+    let (mark, words) = match l.kind {
+        Kind::Driving => (theme::text(), theme::text()),
+        Kind::Paused => (theme::accent(), theme::dim()),
+        Kind::Stopped => (theme::dim(), theme::dim()),
+    };
+    Some(Line::from(vec![s(format!("{} ", l.mark), mark), s(l.words, words)]))
 }
 
 /// The mark: `↖`, `C` in ASCII (designer m_3551).

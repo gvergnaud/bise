@@ -20,6 +20,12 @@ pub struct Agent {
     /// the targets the user took over (C4/C5 `paused`)
     pub paused: Vec<String>,
     pub stopped: bool,
+    /// what it drove when it was stopped (`driving` is None by then): the
+    /// stopped line says it ("↖ you stopped it driving Chrome")
+    pub was: Option<String>,
+    /// who stopped it (`you`, `cancel_bar`, `group_closed`, as in
+    /// events.jsonl)
+    pub stopped_by: Option<String>,
 }
 
 impl Agent {
@@ -29,13 +35,20 @@ impl Agent {
     }
 
     fn json(&self) -> Value {
-        json!({
+        let mut v = json!({
             "driving": self.driving,
             "where": self.place,
             "since_ms": self.since_ms,
             "paused": !self.paused.is_empty(),
             "stopped": self.stopped,
-        })
+        });
+        // only a stopped agent has them: absent, not null, otherwise
+        for (k, x) in [("was", &self.was), ("stopped_by", &self.stopped_by)] {
+            if let Some(x) = x {
+                v[k] = json!(x);
+            }
+        }
+        v
     }
 }
 
@@ -78,6 +91,9 @@ pub struct Live {
     pub since_ms: Option<u64>,
     pub paused: bool,
     pub stopped: bool,
+    /// a stopped agent: what it drove then, and who stopped it
+    pub was: Option<String>,
+    pub stopped_by: Option<String>,
 }
 
 /// state.json's agents ([`render`]'s `agents`), in key order; an entry
@@ -97,6 +113,8 @@ pub fn agents(v: &Value) -> Vec<Live> {
                 since_ms: a.get("since_ms").and_then(Value::as_u64),
                 paused: b(a, "paused"),
                 stopped: b(a, "stopped"),
+                was: s(a, "was"),
+                stopped_by: s(a, "stopped_by"),
             })
         })
         .collect()
@@ -133,7 +151,8 @@ pub fn restore(paths: &Paths) -> BTreeMap<String, Agent> {
         for (name, a) in m {
             let stopped = a.get("stopped").and_then(Value::as_bool).unwrap_or(false);
             if stopped {
-                out.insert(name.clone(), Agent { stopped, ..Agent::default() });
+                let s = |k: &str| a.get(k).and_then(Value::as_str).map(String::from);
+                out.insert(name.clone(), Agent { stopped, was: s("was"), stopped_by: s("stopped_by"), ..Agent::default() });
             }
         }
     }
