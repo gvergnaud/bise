@@ -6,7 +6,7 @@ use super::lines::{self, Delivered, Hub, Mark, Obs, Rec, ToolMove};
 use super::scheduled;
 use super::words::{self, one_line, summary};
 use super::{Answered, ApprovalFold, Ctx, Entry, EntryCard, EntryKind, Landed, Line, Made, NotDelivered, Notice, PageRef, PrNews, ReportRef, Scheduled, Thinking, ToolItem, ToolKind, Tools};
-use super::{cap, Delivery, FileCount, ToolState, TurnFailed};
+use super::{cap, Delivery, FileCount, GateWait, ToolGate, ToolState, TurnFailed};
 use crate::context::FnContext;
 use crate::rows::question;
 
@@ -25,6 +25,9 @@ struct Fold<'a> {
     turn: usize,
     /// a `turn_started` line came: the next entry pushed starts a turn
     starting: bool,
+    /// the calls its `tool_result` ended (no `tool_finished` yet): their
+    /// finish completes that item, never a row of its own
+    by_result: Vec<u32>,
     ctx: &'a Ctx<'a>,
 }
 
@@ -70,6 +73,7 @@ impl Fold<'_> {
             kind: ToolKind::Other,
             land: false,
             state,
+            gate: None,
             ms: None,
             exit: None,
             err: None,
@@ -81,6 +85,7 @@ impl Fold<'_> {
         items.push(item);
         let i = items.len() - 1;
         self.tools.push((id, e, i));
+        self.by_result.retain(|&t| t != id);
         self.sum(e);
     }
 
@@ -153,17 +158,37 @@ impl Fold<'_> {
     }
 
     /// `tool_finished`: the running item of call `id` ends, its duration
-    /// from its start ([`words::tool_ms`]); none running: an ended item
-    /// of its own (the TUI's row).
+    /// from its start ([`words::tool_ms`]), as does the item its
+    /// `tool_result` (the line before it) ended; none: an ended item of
+    /// its own (the TUI's row).
     fn finish(&mut self, pos: u64, ms: u64, id: u32, ok: bool) {
         let state = if ok { ToolState::Ok } else { ToolState::Err };
-        let running = self.tools.iter().rev().find(|(t, _, _)| *t == id).map(|&(_, e, i)| (e, i));
-        match running.and_then(|(e, i)| self.out[e].tools.as_mut().map(|t| &mut t.items[i])) {
-            Some(item) if item.state == ToolState::Run => {
+        let ended = self.by_result.contains(&id);
+        self.by_result.retain(|&t| t != id);
+        match self.item(id) {
+            Some(item) if item.state == ToolState::Run || ended => {
                 item.state = state;
+                item.gate = None;
                 item.ms = words::tool_ms(item.at_ms, ms);
             }
             _ => self.start(pos, ms, id, state),
+        }
+    }
+
+    /// `sb gate : check|card|done <n>`: the gate holds the running call
+    /// (the newest; the TUI's rule), or lets it go.
+    fn gate(&mut self, ms: u64, step: lines::GateStep) {
+        let gate = match step {
+            lines::GateStep::Check => Some(ToolGate { wait: GateWait::Check, at_ms: ms }),
+            lines::GateStep::Card => Some(ToolGate { wait: GateWait::Card, at_ms: ms }),
+            lines::GateStep::Done => None,
+        };
+        let out = &mut self.out;
+        let running = self.tools.iter().rev().filter_map(|&(_, e, i)| out[e].tools.as_ref().map(|t| (e, i, t.items[i].state)));
+        if let Some((e, i, _)) = running.into_iter().find(|&(_, _, s)| s == ToolState::Run) {
+            if let Some(t) = out[e].tools.as_mut() {
+                t.items[i].gate = gate;
+            }
         }
     }
 
@@ -194,8 +219,10 @@ impl Fold<'_> {
     fn result(&mut self, id: u32, ok: bool, preview: &str, ms: u64) {
         let Some(item) = self.item(id) else { return };
         let out = lines::wire_decode(preview);
-        if item.state == ToolState::Run {
+        let ends = item.state == ToolState::Run;
+        if ends {
             item.state = if ok { ToolState::Ok } else { ToolState::Err };
+            item.gate = None;
             item.ms = words::tool_ms(item.at_ms, ms);
         }
         if !ok {
@@ -203,6 +230,9 @@ impl Fold<'_> {
             item.err = lines::error_line(&out);
         }
         item.out = Some(cap(&out)).filter(|o| !o.is_empty());
+        if ends {
+            self.by_result.push(id);
+        }
     }
 
     fn intent(&mut self, id: u32, text: &str) {
@@ -230,9 +260,15 @@ impl Fold<'_> {
             Some(l) => (l, true),
             None => (line, false),
         };
-        let prev = std::mem::replace(&mut self.last_ms, if replayed { 0 } else { ms });
-        let you = self.you.take();
         let rec = lines::read(line);
+        // a thinking counts from the previous line the feed shows (his
+        // line, the turn's start, a tool's lines): a hidden one (the usage
+        // the runtime writes just before the reply, F3) moves nothing
+        let prev = match lines::is_hidden(&rec) {
+            true => self.last_ms,
+            false => std::mem::replace(&mut self.last_ms, if replayed { 0 } else { ms }),
+        };
+        let you = self.you.take();
         match rec {
             Rec::Empty | Rec::Idle | Rec::Fact => return,
             Rec::Raw(_) => {}
@@ -347,6 +383,8 @@ impl Fold<'_> {
 
     fn hub(&mut self, pos: u64, ms: u64, h: Hub, you: Option<usize>) {
         match h {
+            // the approvals gate holds the running call (§3.1)
+            Hub::Gate(step) => self.gate(ms, step),
             Hub::You(text) => {
                 let i = self.push(Entry::new(pos, ms, EntryKind::You, text));
                 (self.cont, self.you) = (Some(i), Some(i));
@@ -534,7 +572,7 @@ impl Delivered for Entry {
 
 /// An agent's transcript lines as entries, oldest first.
 pub fn fold(lines: &[Line], ctx: &Ctx) -> Vec<Entry> {
-    let mut f = Fold { out: Vec::new(), cont: None, tools: Vec::new(), you: None, last_ms: 0, turn: 0, starting: false, ctx };
+    let mut f = Fold { out: Vec::new(), cont: None, tools: Vec::new(), you: None, last_ms: 0, turn: 0, starting: false, by_result: Vec::new(), ctx };
     for (pos, ms, l) in lines {
         f.line(*pos, *ms, l);
     }

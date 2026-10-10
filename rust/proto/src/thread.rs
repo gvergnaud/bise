@@ -290,6 +290,29 @@ pub enum ToolState {
     Unknown,
 }
 
+/// What the approvals gate holds a running call for (the hub's `sb gate :
+/// check|card <n>` lines, approvals-design.md §3.1): the checker judges
+/// it (`checking…` after 250 ms), or a card waits on him (`? waiting for
+/// you`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum GateWait {
+    Check,
+    Card,
+    /// a wait this version doesn't know (a newer hub)
+    #[serde(other)]
+    Unknown,
+}
+
+/// A running call held by the gate, since `at_ms` (its gate line's time).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct ToolGate {
+    pub wait: GateWait,
+    pub at_ms: u64,
+}
+
 /// A file an edit touched, with its lines added and removed (the TUI's
 /// `± file +18 −6`; a move reads `old → new`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -368,6 +391,10 @@ pub struct ToolItem {
     /// running until its result line, then ok or err
     #[serde(default)]
     pub state: ToolState,
+    /// the approvals gate holds it (running only: the gate's `done` line
+    /// and the call's end clear it)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gate: Option<ToolGate>,
     /// its duration: the result line's time minus the call line's
     /// ([`words::tool_ms`]); none while it runs or on a replay
     #[serde(default, skip_serializing_if = "Option::is_none")]

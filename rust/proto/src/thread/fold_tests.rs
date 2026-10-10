@@ -663,3 +663,94 @@ fn a_closed_card_says_the_hubs_word() {
     let j = serde_json::to_value(&e[0]).unwrap();
     assert!(j["card"].get("closed").is_none(), "none is left out: {j}");
 }
+
+/// F2 (tui-parity m_15345, architect m_15394): a transcript writes a
+/// call's `tool_result` before its `tool_finished`: the finish completes
+/// the item the result ended (its state and duration), never a row of its
+/// own (the stray `#1 ✓ 0.0s`). A finish with no item of its id still is
+/// one.
+#[test]
+fn a_finish_after_its_result_completes_the_same_item() {
+    let none = |_: &str| None;
+    let ls = vec![
+        (1, 1_000, "  obs: tool_started #3".to_string()),
+        (2, 1_000, "tool #3 bash : ls".to_string()),
+        (3, 1_001, "tool_code #3 : ls".to_string()),
+        (4, 1_200, "tool_result #3 ok : a.rs".to_string()),
+        (5, 1_250, "  obs: tool_finished #3 ok".to_string()),
+        (6, 2_000, "  obs: tool_started #1".to_string()),
+        (7, 2_000, "tool #1 bash : git push origin main --force".to_string()),
+        (8, 4_100, "tool_result #1 fail : exit 128: fatal: 'origin' does not appear to be a git repository".to_string()),
+        (9, 4_150, "  obs: tool_finished #1 fail".to_string()),
+        (10, 5_000, "  obs: tool_finished #7 ok".to_string()),
+    ];
+    let e = fold(&ls, &ctx_with(&[], &none));
+    let items = &e[0].tools.as_ref().expect("one tools entry").items;
+    let rows: Vec<(u64, &str, ToolState, Option<u64>)> = items.iter().map(|i| (i.id, i.name.as_str(), i.state, i.ms)).collect();
+    assert_eq!(rows, [(3, "bash", ToolState::Ok, Some(250)), (1, "bash", ToolState::Err, Some(2_150)), (7, "", ToolState::Ok, None)], "{items:?}");
+    assert_eq!((items[1].exit, items[1].err.as_deref()), (Some(128), Some("fatal: 'origin' does not appear to be a git repository")));
+    assert_eq!(items[0].out.as_deref(), Some("a.rs"));
+}
+
+/// F2: the approvals gate's lines hold the running call (the newest, the
+/// TUI's rule) since the line's time; `done` and the call's end let it go.
+#[test]
+fn the_gate_holds_the_running_call_until_done_or_its_end() {
+    let none = |_: &str| None;
+    let at = |ls: &[Line]| {
+        let e = fold(ls, &ctx_with(&[], &none));
+        e.iter().flat_map(|x| x.tools.iter().flat_map(|t| t.items.iter().map(|i| (i.id, i.gate)))).collect::<Vec<_>>()
+    };
+    let mut ls: Vec<Line> = vec![
+        (1, 1_000, "  obs: tool_started #1".to_string()),
+        (2, 1_000, "tool #1 bash : ls".to_string()),
+        (3, 1_100, "  obs: tool_finished #1 ok".to_string()),
+        (4, 2_000, "  obs: tool_started #2".to_string()),
+        (5, 2_000, "tool #2 bash : git push origin main --force".to_string()),
+        (6, 2_010, "sb gate : check 2".to_string()),
+    ];
+    assert_eq!(at(&ls), [(1, None), (2, Some(ToolGate { wait: GateWait::Check, at_ms: 2_010 }))]);
+    ls.push((7, 2_300, "sb gate : card 5".to_string()));
+    assert_eq!(at(&ls)[1], (2, Some(ToolGate { wait: GateWait::Card, at_ms: 2_300 })));
+    let mut done = ls.clone();
+    done.push((8, 9_000, "sb gate : done 2".to_string()));
+    assert_eq!(at(&done)[1], (2, None));
+    ls.push((8, 9_000, "tool_result #2 fail : exit 128: fatal: no".to_string()));
+    ls.push((9, 9_001, "  obs: tool_finished #2 fail".to_string()));
+    assert_eq!(at(&ls)[1], (2, None), "an ended call waits on nothing");
+    let j = serde_json::to_value(ToolGate { wait: GateWait::Card, at_ms: 7 }).unwrap();
+    assert_eq!(j, serde_json::json!({"wait": "card", "at_ms": 7}));
+    let later: ToolGate = serde_json::from_value(serde_json::json!({"wait": "vote", "at_ms": 7})).unwrap();
+    assert_eq!(later.wait, GateWait::Unknown, "a newer hub's wait");
+}
+
+/// tui-parity m_15380, F3 (architect m_15394, proto-lead m_15384): a
+/// thinking counts from the previous line the feed shows (here the turn's
+/// start, a tool's finish), never from a hidden one: the usage line the
+/// runtime writes just before the reply, receipts, plumbing, facts.
+#[test]
+fn a_thinking_time_counts_from_the_last_shown_line() {
+    let none = |_: &str| None;
+    let think = |ls: &[(u64, u64, &str)]| {
+        let ls: Vec<Line> = ls.iter().map(|&(p, t, l)| (p, t, l.to_string())).collect();
+        fold(&ls, &ctx_with(&[], &none)).iter().find_map(|e| e.thinking.as_ref().map(|t| t.ms))
+    };
+    let reply = "  obs: assistant: <think>weighing the options</think>done";
+    // tui-parity's transcript: usage 152 ms before the reply
+    assert_eq!(think(&[(1, 104_443, "  obs: turn_started"), (2, 106_622, "  obs: usage: model=m in=1 out=2 cache_read=0 cache_write=0"), (3, 106_774, reply)]), Some(2_331));
+    for hidden in [
+        "  obs: usage: model=m in=1 out=2 cache_read=0 cache_write=0",
+        "  obs: tool_result_committed #1",
+        "  obs: steering_received: m_3",
+        "  obs: steered: m_3",
+        "  obs: notification_received: m_4",
+        "  obs: notification_delivered: m_4",
+        "  ev: anything",
+        "--- idle",
+    ] {
+        let ls = [(1, 1_000, "  obs: tool_started #1"), (2, 1_000, "tool #1 bash : ls"), (3, 1_500, "  obs: tool_finished #1 ok"), (4, 2_900, hidden), (5, 3_000, reply)];
+        assert_eq!(think(&ls), Some(1_500), "{hidden} moved the start");
+    }
+    // a shown line does move it: a provider retry's notice
+    assert_eq!(think(&[(1, 1_000, "  obs: turn_started"), (2, 2_500, "  obs: provider_retry: 1/10 · provider 529 (transient) · retry in 2s"), (3, 3_000, reply)]), Some(500));
+}

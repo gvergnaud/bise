@@ -374,6 +374,22 @@ fn sub(r: &str) -> Option<Rec> {
     Some(Rec::Sub { name: name.to_string(), ok: st.trim() == "ok", preview: preview.to_string() })
 }
 
+/// A line no feed shows as a step of the turn (F3, proto-lead m_15384): a
+/// model call's usage (written just before its reply), plumbing, a
+/// message's receipts (they move his marks, draw nothing), an empty model
+/// call, the runtime's facts, idle and blank lines. A thinking's time
+/// counts from the line before them.
+pub fn is_hidden(rec: &Rec) -> bool {
+    match rec {
+        Rec::Empty | Rec::Idle | Rec::Fact | Rec::Dropped => true,
+        Rec::Obs(o) => matches!(
+            o,
+            Obs::Usage(_) | Obs::Plumbing | Obs::SteeringReceived(_) | Obs::Steered(_) | Obs::NotificationReceived(_) | Obs::NotificationDelivered(_) | Obs::NullIteration
+        ),
+        _ => false,
+    }
+}
+
 /// An observation made of the text after its prefix.
 type ObsOf = fn(String) -> Obs;
 
