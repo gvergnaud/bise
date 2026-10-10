@@ -82,7 +82,7 @@ fn a_long_query_scrolls_to_its_cursor() {
 /// home/end go to the line's ends, typing replaces the selection.
 #[test]
 fn the_field_has_the_composers_editing_keys() {
-    let mut app = app_with(vec![Ev::You("the signup page works".into(), Mark::Sent, false)]);
+    let mut app = app_with(vec![Ev::You("the signup page works".into(), Mark::Sent, false, None)]);
     press(&mut app, KeyCode::Char('f'), KeyModifiers::CONTROL);
     typed(&mut app, "signup page");
     assert_eq!(query(&app), ("signup page".into(), 11, None));
@@ -115,7 +115,7 @@ fn the_field_has_the_composers_editing_keys() {
 /// ↑ / ↓ still go through the matches; shift+↑ selects in the field.
 #[test]
 fn up_and_down_go_through_the_matches() {
-    let mut app = app_with(vec![Ev::You("deploy one".into(), Mark::Sent, false), Ev::Assistant("deploy two".into())]);
+    let mut app = app_with(vec![Ev::You("deploy one".into(), Mark::Sent, false, None), Ev::Assistant("deploy two".into())]);
     draw(&mut app, 120, 30);
     press(&mut app, KeyCode::Char('f'), KeyModifiers::CONTROL);
     typed(&mut app, "deploy");
@@ -133,7 +133,7 @@ fn up_and_down_go_through_the_matches() {
 /// cursor, a drag selects.
 #[test]
 fn the_chevrons_and_the_cross_click() {
-    let mut app = app_with(vec![Ev::You("deploy one".into(), Mark::Sent, false), Ev::Assistant("deploy two".into())]);
+    let mut app = app_with(vec![Ev::You("deploy one".into(), Mark::Sent, false, None), Ev::Assistant("deploy two".into())]);
     draw(&mut app, 150, 40);
     press(&mut app, KeyCode::Char('f'), KeyModifiers::CONTROL);
     typed(&mut app, "deploy");

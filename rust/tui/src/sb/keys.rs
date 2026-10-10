@@ -92,7 +92,7 @@ pub(crate) fn key(app: &mut App, k: &crossterm::event::KeyEvent, popup_open: boo
                 if k.code == KeyCode::Enter {
                     let v = if sb.focus == name { text.clone() } else { format!("@{} {}", name, text) };
                     sb.send_input(v.clone());
-                    push_event(&mut app.events, &mut app.cache, Ev::You(v, Mark::Sent, false));
+                    push_event(&mut app.events, &mut app.cache, Ev::You(v, Mark::Sent, false, None));
                 }
                 return true;
             }

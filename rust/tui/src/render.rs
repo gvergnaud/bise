@@ -369,8 +369,8 @@ pub(crate) fn ev_lines(ev: &Ev, width: usize) -> Vec<Line<'static>> {
     let err_st = Style::default().fg(error());
     match ev {
         // an image marker is an accent chip `▣ login.png` (book §14)
-        Ev::You(t, mark, open) => user_block_lines(t, *mark, *open, width),
-        Ev::MarkYou { .. } => vec![],
+        Ev::You(t, mark, open, _) => user_block_lines(t, *mark, *open, width),
+        Ev::MarkYou { .. } | Ev::YouId(_) => vec![],
         // BISE-86 (book §13, §17): `✗ not delivered: {name} stopped.`, and
         // while it waits for an answer `⏎ send again · esc drop`
         Ev::Undelivered { name, open, .. } => {
@@ -1641,7 +1641,7 @@ mod multiline_tests {
     fn user_message_keeps_its_line_breaks() {
         let long = "word ".repeat(12);
         let text = format!("first line\nsecond line\n{}end", long);
-        let s = screen(Ev::You(text, crate::wire::Mark::Read, false), 30);
+        let s = screen(Ev::You(text, crate::wire::Mark::Read, false, None), 30);
         // the bar on every row (BISE-90), every row's text at column 3
         assert_eq!(s[0].as_str(), "│  first line", "{s:#?}");
         assert_eq!(s[1].as_str(), "│  second line", "{s:#?}");

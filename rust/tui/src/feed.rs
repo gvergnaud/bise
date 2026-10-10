@@ -529,6 +529,15 @@ pub(crate) fn push_event(events: &mut Vec<Ev>, cache: &mut Vec<Option<EventRows>
             }
         }
     }
+    // his message's id (`sb you-id`, written by sb-core right after his
+    // 'you' line; the context line between them shows nothing): on the
+    // newest event if it is his message without one, else nothing
+    if let Ev::YouId(id) = ev {
+        if let Some(Ev::You(_, _, _, slot @ None)) = events.last_mut() {
+            *slot = Some(id);
+        }
+        return false;
+    }
     // annotations enrich the matching tool event instead of stacking
     match &ev {
         Ev::ToolInfo { id, name, args } => {
@@ -620,7 +629,7 @@ pub(crate) fn push_event(events: &mut Vec<Ev>, cache: &mut Vec<Option<EventRows>
             let m = lines::Mark::Failed { to: name.clone(), text: text.clone() };
             if !deliver(events, cache, &m) {
                 let t = format!("@{} {}", name, text);
-                push_event(events, cache, Ev::You(t, Mark::Failed, false));
+                push_event(events, cache, Ev::You(t, Mark::Failed, false, None));
             }
         }
         // C3: a steering line moves the mark of your message (bise-proto's
@@ -986,7 +995,7 @@ pub(crate) fn toggle_at(events: &mut [Ev], cache: &mut [Option<EventRows>], i: u
 /// list that fits, several when a few screenshots wrap). Only its hint
 /// row (`▸ n more lines` / `▾`) and its long pastes' rows toggle.
 fn you_row_stays(events: &[Ev], cache: &[Option<EventRows>], i: usize, row: usize) -> bool {
-    let (Some(Ev::You(t, _, open)), Some(Some(c))) = (events.get(i), cache.get(i)) else { return false };
+    let (Some(Ev::You(t, _, open, _)), Some(Some(c))) = (events.get(i), cache.get(i)) else { return false };
     let width = usize::from(c.width);
     let sizes = crate::render::you_sizes_rows(t, width);
     let pastes = crate::render::you_paste_rows(t, *open, width);
@@ -1039,7 +1048,7 @@ fn toggle_own(events: &mut [Ev], cache: &mut [Option<EventRows>], i: usize) -> b
         | Ev::Fold { open, .. }
         | Ev::Scheduled { open, .. }
         | Ev::Approval { open, .. }
-        | Ev::You(_, _, open) => *open = !*open,
+        | Ev::You(_, _, open, _) => *open = !*open,
         Ev::Tool(td) if crate::toolbox::opens_as_box(td) => {
             // BISE-223: the row opens into its box (15 rows), a box that
             // hides lines opens whole, then back to the row
@@ -1433,7 +1442,7 @@ fn own_open(ev: &Ev) -> Option<bool> {
         | Ev::Fold { open, .. }
         | Ev::Scheduled { open, .. }
         | Ev::Approval { open, .. }
-        | Ev::You(_, _, open) => Some(*open),
+        | Ev::You(_, _, open, _) => Some(*open),
         // a row, or an open box that still hides lines, is closed
         Ev::Tool(td) if crate::toolbox::opens_as_box(td) => {
             Some(td.opened && (td.expanded || !crate::toolbox::box_folds(td)))
@@ -1523,6 +1532,13 @@ impl lines::Delivered for Ev {
     fn set_mark(&mut self, to: Mark) {
         if let Ev::You(_, m, ..) = self {
             *m = to;
+        }
+    }
+
+    fn msg_id(&self) -> Option<u64> {
+        match self {
+            Ev::You(_, _, _, id) => *id,
+            _ => None,
         }
     }
 

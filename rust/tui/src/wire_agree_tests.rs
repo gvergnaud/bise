@@ -284,3 +284,42 @@ fn the_tui_and_the_fold_agree_on_tool_results() {
         assert_eq!(files, it.files.iter().map(|f| (f.path.clone(), f.add, f.del)).collect::<Vec<_>>(), "{:?}", it.text);
     }
 }
+
+/// architect m_16963 (sha 2): for the same lines, the TUI's marks of his
+/// messages and the fold's deliveries are the same: ids from `sb you-id`,
+/// ✓/✓✓ from sb-core's receipts by id, the runtime's steering words only
+/// for an id-less message.
+#[test]
+fn the_tui_and_the_fold_agree_on_his_messages_marks() {
+    let ls = [
+        "sb you : go",
+        "sb you-id : m_1",
+        "  obs: turn_started",
+        "  obs: tool_started #1",
+        "tool #1 bash : sleep 8",
+        "sb you : again",
+        "sb you-id : m_2",
+        "sb you : again",
+        "sb you-id : m_3",
+        "  obs: steering_received: again",
+        "sb steer-rx : m_2 m_3",
+        "  obs: steered: again",
+        "sb steered : m_2",
+        "tool_result #1 ok : done",
+        "  obs: turn_done: completed",
+    ];
+    let numbered: Vec<bise_proto::thread::Line> = ls.iter().enumerate().map(|(i, l)| (i as u64 + 1, 0, l.to_string())).collect();
+    let none = |_: &str| None;
+    let entries = fold(&numbered, &Ctx { open_cards: &[], page: &none, provider: &crate::models::provider_name, width: &unicode_width::UnicodeWidthStr::width, offset: &|_| 0, attached: &bise_proto::thread::Attached::plain });
+    let folded: Vec<(String, Option<Mark>, Option<u64>)> = entries.iter().filter(|e| e.kind == EntryKind::You).map(|e| (e.text.clone(), e.delivery, e.msg_id)).collect();
+    let mut events = Vec::new();
+    let mut cache = Vec::new();
+    for l in ls {
+        if let Some(ev) = parse_line(l) {
+            crate::feed::push_event(&mut events, &mut cache, ev);
+        }
+    }
+    let tui: Vec<(String, Option<Mark>, Option<u64>)> = events.iter().filter_map(|e| if let Ev::You(t, m, _, id) = e { Some((t.clone(), Some(*m), *id)) } else { None }).collect();
+    assert_eq!(tui, folded);
+    assert_eq!(tui.iter().map(|y| y.1).collect::<Vec<_>>(), [Some(Mark::Read), Some(Mark::Read), Some(Mark::Received)], "{tui:?}");
+}

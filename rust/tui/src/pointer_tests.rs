@@ -153,7 +153,7 @@ fn a_row_a_click_opens_has_the_hand() {
     // your long message: only its `▸ n more lines` row folds it
     let mut app = crate::sb::bench::test_app();
     let long: Vec<String> = (0..40).map(|k| format!("line {k} of the spec")).collect();
-    app.events.push(Ev::You(long.join("\n"), crate::wire::Mark::Read, false));
+    app.events.push(Ev::You(long.join("\n"), crate::wire::Mark::Read, false, None));
     let mut s = Screen::new(app);
     let (fx, fy) = s.find("more lines");
     assert_eq!(s.hover(fx, fy), POINTER);

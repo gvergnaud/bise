@@ -42,7 +42,7 @@ fn kind_evs(e: &Entry) -> Vec<Ev> {
     };
     match e.kind {
         // G1: the mark the fold moved, by the TUI's own rule
-        EntryKind::You => vec![Ev::You(text, e.delivery.unwrap_or(Mark::Sent), false)],
+        EntryKind::You => vec![Ev::You(text, e.delivery.unwrap_or(Mark::Sent), false, e.msg_id)],
         // G5: an agent writing to him, level 2
         EntryKind::Agent | EntryKind::FromAgent if e.to_you => vec![msg(e.from.clone().unwrap_or_default(), "you".into(), 2)],
         EntryKind::Agent => {

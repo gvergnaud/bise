@@ -763,7 +763,10 @@ pub enum Mark {
     /// words goes up to `to`. None with these words: `or_turn` (steering,
     /// BISE-90: the hub steered his words in a block with other words)
     /// raises his messages of this turn instead; else nothing moves (an
-    /// injected notification: the TUI shows its info line)
+    /// injected notification: the TUI shows its info line). Steering
+    /// (`or_turn`) moves only his messages WITHOUT an id: transcripts
+    /// before 9633cd2a and older hubs; a message with an id gets its marks
+    /// from sb-core's receipts ([`Mark::Ids`]), never from words
     Text { text: String, to: Delivery, or_turn: bool },
     /// a turn started: the model reads what he sent since the last one
     /// (a message at idle goes straight to read)
@@ -835,10 +838,16 @@ pub fn deliver<T: Delivered>(items: &mut [T], m: &Mark) -> Option<Vec<usize>> {
         Mark::Text { text, to, or_turn } => {
             let plain = unescape(text);
             let from = items.len().saturating_sub(MARK_LOOKBACK);
-            if let Some(i) = (from..items.len()).rev().find(|&i| items[i].yours().is_some_and(|(t, _)| same_words(t, &plain))) {
+            // steering: id-less messages only (transcripts before 9633cd2a)
+            let open = |items: &[T], i: usize| !*or_turn || items[i].msg_id().is_none();
+            if let Some(i) = (from..items.len()).rev().find(|&i| open(items, i) && items[i].yours().is_some_and(|(t, _)| same_words(t, &plain))) {
                 raise(items, i, *to);
             } else if *or_turn {
-                this_turn(items, |items, i| raise(items, i, *to));
+                this_turn(items, |items, i| {
+                    if open(items, i) {
+                        raise(items, i, *to)
+                    }
+                });
             } else {
                 return None;
             }

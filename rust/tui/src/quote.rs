@@ -570,7 +570,7 @@ mod tests {
         let mut app = crate::sb::bench::test_app();
         app.sb.focus = "docs".into();
         app.events = vec![
-            Ev::You("hi".into(), crate::wire::Mark::Read, false),
+            Ev::You("hi".into(), crate::wire::Mark::Read, false, None),
             Ev::Assistant("a".into()),
             Ev::TimeMark("14:02".into()),
             Ev::Assistant("b".into()),

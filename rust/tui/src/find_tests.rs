@@ -64,7 +64,7 @@ fn lower_keeps_the_bytes_where_they_are() {
 
 #[test]
 fn ctrl_f_opens_the_field_and_esc_closes_it() {
-    let mut app = app_with(vec![Ev::You("ship the signup page".into(), Mark::Sent, false)]);
+    let mut app = app_with(vec![Ev::You("ship the signup page".into(), Mark::Sent, false, None)]);
     app.ed.insert("my draft");
     press(&mut app, KeyCode::Char('f'), KeyModifiers::CONTROL);
     assert!(app.find.is_some());
@@ -86,7 +86,7 @@ fn ctrl_f_opens_the_field_and_esc_closes_it() {
 #[test]
 fn messages_come_first_then_up_and_down_with_a_counter() {
     let mut app = app_with(vec![
-        Ev::You("deploy the site".into(), Mark::Sent, false),     // 0
+        Ev::You("deploy the site".into(), Mark::Sent, false, None),     // 0
         Ev::Assistant("deploy done, then deploy docs".into()), // 1: 2 matches
         tool(7, "run the deploy script", "ok"),               // 2
         Ev::Info("nothing here".into()),                      // 3
@@ -126,7 +126,7 @@ fn messages_come_first_then_up_and_down_with_a_counter() {
 
 #[test]
 fn the_matches_are_painted_the_current_one_on_the_accent() {
-    let mut app = app_with(vec![Ev::You("alpha signup beta signup".into(), Mark::Sent, false)]);
+    let mut app = app_with(vec![Ev::You("alpha signup beta signup".into(), Mark::Sent, false, None)]);
     draw(&mut app);
     press(&mut app, KeyCode::Char('f'), KeyModifiers::CONTROL);
     typed(&mut app, "signup");
@@ -151,7 +151,7 @@ fn the_matches_are_painted_the_current_one_on_the_accent() {
 fn a_match_in_a_closed_call_opens_it_and_moving_on_closes_it() {
     let out = (1..=40).map(|i| format!("line {i}")).collect::<Vec<_>>().join("\n") + "\nnpm publish done";
     let mut app = app_with(vec![
-        Ev::You("publish it".into(), Mark::Sent, false),
+        Ev::You("publish it".into(), Mark::Sent, false, None),
         tool(3, "release the package", &out),
         Ev::Assistant("released".into()),
     ]);
@@ -176,7 +176,7 @@ fn a_match_in_a_closed_call_opens_it_and_moving_on_closes_it() {
 
 #[test]
 fn the_view_moves_to_an_old_match_and_stays_there_on_esc() {
-    let mut events = vec![Ev::You("the needle is here".into(), Mark::Sent, false)];
+    let mut events = vec![Ev::You("the needle is here".into(), Mark::Sent, false, None)];
     for i in 0..200 {
         events.push(Ev::Assistant(format!("filler reply {i}")));
     }
@@ -196,7 +196,7 @@ fn the_view_moves_to_an_old_match_and_stays_there_on_esc() {
 
 #[test]
 fn a_paste_goes_to_the_query_and_new_lines_are_searched() {
-    let mut app = app_with(vec![Ev::You("one".into(), Mark::Sent, false)]);
+    let mut app = app_with(vec![Ev::You("one".into(), Mark::Sent, false, None)]);
     draw(&mut app);
     press(&mut app, KeyCode::Char('f'), KeyModifiers::CONTROL);
     // ctrl+w after a wide blank (fuzz): cut at a char boundary
@@ -223,12 +223,12 @@ fn find_is_fast_on_50k_events() {
     let mut events = Vec::with_capacity(50_000);
     for i in 0..50_000u32 {
         events.push(match i % 4 {
-            0 => Ev::You(format!("message {i}: please check the login flow and the signup page"), Mark::Sent, false),
+            0 => Ev::You(format!("message {i}: please check the login flow and the signup page"), Mark::Sent, false, None),
             1 => Ev::Assistant(format!("reply {i}: I checked the **login** flow; the signup page works. {}", "More words. ".repeat(20))),
             _ => tool(i, "run the build", &out),
         });
     }
-    events[10].clone_from(&Ev::You("the rare zebra word".into(), Mark::Sent, false));
+    events[10].clone_from(&Ev::You("the rare zebra word".into(), Mark::Sent, false, None));
     let mut f = Find::new("bench", events.len(), None);
     let budget = Duration::from_millis(6);
     let mut slow = Duration::ZERO;
@@ -278,7 +278,7 @@ fn a_match_in_the_folded_part_of_your_message_opens_it() {
     // BISE-239: your long message shows 20 rows (BISE-262); find opens it on a match
     // in the hidden lines, esc folds it back
     let text = (1..=30).map(|n| if n == 27 { "the hidden zebra".to_string() } else { format!("line {n}") }).collect::<Vec<_>>().join("\n");
-    let mut app = app_with(vec![Ev::You(text, Mark::Sent, false)]);
+    let mut app = app_with(vec![Ev::You(text, Mark::Sent, false, None)]);
     let s = screen(&draw(&mut app));
     assert!(!s.contains("zebra") && s.contains("more lines"), "{s}");
     press(&mut app, KeyCode::Char('f'), KeyModifiers::CONTROL);
@@ -295,7 +295,7 @@ fn a_match_in_the_folded_part_of_your_message_opens_it() {
 /// ctrl+f still works; cmd+shift+f and cmd alone do not open it.
 #[test]
 fn cmd_f_opens_the_field_like_ctrl_f() {
-    let mut app = app_with(vec![Ev::You("ship the signup page".into(), Mark::Sent, false)]);
+    let mut app = app_with(vec![Ev::You("ship the signup page".into(), Mark::Sent, false, None)]);
     press(&mut app, KeyCode::Modifier(crossterm::event::ModifierKeyCode::LeftSuper), KeyModifiers::SUPER);
     assert!(app.find.is_none());
     assert!(!app.cmd_keys, "cmd alone (cmd+tab) says nothing about cmd+f");
@@ -316,7 +316,7 @@ fn cmd_f_opens_the_field_like_ctrl_f() {
 #[test]
 fn the_hints_say_cmd_f_once_a_cmd_key_arrived() {
     use crate::ctrlhint::{Held, Hold};
-    let mut app = app_with(vec![Ev::You("ship the signup page".into(), Mark::Sent, false)]);
+    let mut app = app_with(vec![Ev::You("ship the signup page".into(), Mark::Sent, false, None)]);
     let held_long = |h| Hold::of(h, std::time::Instant::now() - std::time::Duration::from_secs(1));
     let find_key = |app: &mut App, h| {
         app.hold = held_long(h);
@@ -354,7 +354,7 @@ fn the_hints_say_cmd_f_once_a_cmd_key_arrived() {
 fn the_box_sits_in_the_corner_and_the_composer_stays() {
     // the match low on the screen: the box stays in its corner
     let mut events: Vec<Ev> = (0..40).map(|i| Ev::Assistant(format!("filler {i}"))).collect();
-    events.push(Ev::You("ship the signup page".into(), Mark::Sent, false));
+    events.push(Ev::You("ship the signup page".into(), Mark::Sent, false, None));
     let mut app = app_with(events);
     app.ed.insert("my draft");
     draw(&mut app);
@@ -398,7 +398,7 @@ fn the_box_sits_in_the_corner_and_the_composer_stays() {
 /// `no match` in the error red; the empty field names the feed.
 #[test]
 fn no_match_is_red() {
-    let mut app = app_with(vec![Ev::You("hello".into(), Mark::Sent, false)]);
+    let mut app = app_with(vec![Ev::You("hello".into(), Mark::Sent, false, None)]);
     draw(&mut app);
     press(&mut app, KeyCode::Char('f'), KeyModifiers::CONTROL);
     typed(&mut app, "zz");
@@ -445,7 +445,7 @@ fn the_current_match_is_never_under_the_box() {
 #[test]
 fn a_click_in_the_composer_closes_the_box() {
     use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
-    let mut app = app_with(vec![Ev::You("hello".into(), Mark::Sent, false)]);
+    let mut app = app_with(vec![Ev::You("hello".into(), Mark::Sent, false, None)]);
     app.ed.insert("my draft");
     press(&mut app, KeyCode::Char('f'), KeyModifiers::CONTROL);
     draw(&mut app);
@@ -460,7 +460,7 @@ fn a_click_in_the_composer_closes_the_box() {
 /// The hold hints while the box is open (BISE-277): its own ctrl keys.
 #[test]
 fn the_ctrl_hints_are_the_boxs_keys() {
-    let mut app = app_with(vec![Ev::You("hello".into(), Mark::Sent, false)]);
+    let mut app = app_with(vec![Ev::You("hello".into(), Mark::Sent, false, None)]);
     press(&mut app, KeyCode::Char('f'), KeyModifiers::CONTROL);
     app.hold = crate::ctrlhint::Hold::of(crate::ctrlhint::Held::Ctrl, Instant::now() - Duration::from_secs(2));
     let p = crate::ctrlhint::pairs(&app);

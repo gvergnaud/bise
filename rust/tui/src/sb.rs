@@ -1047,14 +1047,16 @@ pub(super) fn parse_hub_line(rest: &str) -> Option<Ev> {
 pub(crate) fn hub_ev(h: Hub) -> Option<Ev> {
     let msg = |from: String, to: String, text: String, level: u8, id: String| Ev::AgentMsg { from, to, text, level, id, open: false, fold: false };
     Some(match h {
-        Hub::You(text) => Ev::You(text, Mark::Sent, false),
+        Hub::You(text) => Ev::You(text, Mark::Sent, false, None),
         // S9: the fn context of the 'you' line before it (the window's
         // thread shows it on his message; the TUI doesn't)
         Hub::Context(_) => return None,
-        // his message's id and the steered receipt: the window's thread
-        // reads them (msg_id, steered_at); the TUI shows neither (its
-        // marks come from the runtime's steering lines)
-        Hub::YouId(_) | Hub::Steered(_) | Hub::SteerRx(_) => return None,
+        // his message's id: on his message right before it (no row)
+        Hub::YouId(id) => Ev::YouId(id),
+        // sb-core's receipts: ✓ (received) then ✓✓ (read) on the
+        // messages they name, by id (bise-proto's Mark::Ids, the fold's
+        // rule too); no row
+        h @ (Hub::Steered(_) | Hub::SteerRx(_)) => Ev::MarkYou { mark: bise_proto::thread::lines::mark_of(&bise_proto::thread::lines::Rec::Hub(h))?, or: None },
         // BISE-86
         Hub::Undelivered { to, text } => Ev::Undelivered { name: to, text, open: true },
         // v1: what this feed's owner received (`@{from}`: an old direct
@@ -1519,7 +1521,7 @@ mod nav_key_tests {
         };
         let ev = parse_hub_line("undelivered : fix : d'abord \\: les tests").unwrap();
         assert!(matches!(&ev, Ev::Undelivered { name, text, open: true } if name == "fix" && text == "d'abord : les tests"));
-        push_event(&mut app.events, &mut app.cache, Ev::You("d'abord : les tests".into(), Mark::Sent, false));
+        push_event(&mut app.events, &mut app.cache, Ev::You("d'abord : les tests".into(), Mark::Sent, false, None));
         push_event(&mut app.events, &mut app.cache, ev.clone());
         assert!(matches!(&app.events[0], Ev::You(_, Mark::Failed, ..)));
         let rows = |app: &App| -> Vec<String> {
@@ -1537,7 +1539,7 @@ mod nav_key_tests {
         assert_eq!(sent(), "");
         assert_eq!(rows(&app)[1].trim(), "✗ not delivered: fix stopped.");
         // a second one, from main's view: ⏎ sends it again to @fix
-        push_event(&mut app.events, &mut app.cache, Ev::You("encore".into(), Mark::Sent, false));
+        push_event(&mut app.events, &mut app.cache, Ev::You("encore".into(), Mark::Sent, false, None));
         push_event(&mut app.events, &mut app.cache, parse_hub_line("undelivered : fix : encore").unwrap());
         assert!(press(&mut app, KeyCode::Enter, KeyModifiers::NONE));
         let out = sent();

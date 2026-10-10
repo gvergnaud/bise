@@ -108,8 +108,13 @@ pub(crate) enum Gate {
 
 #[derive(Clone)]
 pub(crate) enum Ev {
-    // your message; the bool: opened whole (a long one folds, BISE-239)
-    You(String, Mark, bool),
+    // your message; the bool: opened whole (a long one folds, BISE-239);
+    // its id (sb-core's `sb you-id` line right after it; None: a
+    // transcript before 9633cd2a, or not yet read)
+    You(String, Mark, bool, Option<u64>),
+    // in memory only: the id of your message right before it (`sb you-id
+    // : m_N`); push_event sets it on that message, never appended
+    YouId(u64),
     // the approvals gate of the running call (`sb gate : check|card|done <n>`)
     Gate(Gate),
     // an inbox item answered (`sb approval`, an answer's `sb route`, or
@@ -364,7 +369,7 @@ fn rec_ev(rec: Rec) -> Option<Ev> {
         // BR-003: right after an interrupt, an info; else an error
         Rec::Rejected(r) => notice_ev(words::rejected(&r)),
         // a replayed message was committed: the model read it
-        Rec::HistYou(t) => Ev::You(t, Mark::Read, false),
+        Rec::HistYou(t) => Ev::You(t, Mark::Read, false, None),
         // steering the Core committed: your message with this text was
         // read; none (a notification): the old info line
         Rec::Injected(text) => {
@@ -400,7 +405,10 @@ fn obs_ev(o: Obs) -> Option<Ev> {
         Obs::Assistant(t) if t.is_empty() => return None,
         Obs::Assistant(t) => Ev::Assistant(t),
         Obs::Plumbing => return None,
-        // C3: steering moves the mark of your message, no info line
+        // C3: steering moves the mark of your message, no info line.
+        // id-less messages only: transcripts before 9633cd2a (and older
+        // hubs); a message with an id gets its marks from sb-core's
+        // receipts (`sb steer-rx`, `sb steered`, Mark::Ids)
         o @ (Obs::SteeringReceived(_) | Obs::Steered(_)) => Ev::MarkYou { mark: lines::mark_of(&Rec::Obs(o))?, or: None },
         Obs::CompactionStarted => Ev::Compact,
         Obs::CompactionDone(text) => Ev::Compacted { text, open: false },

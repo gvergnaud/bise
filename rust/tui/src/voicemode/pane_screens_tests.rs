@@ -27,7 +27,7 @@ fn app_in_voice_mode() -> (App, Fakes) {
     let now = Instant::now();
     let vm = VoiceMode::start(&agent, f.ports(Route::Headphones), f.jobs(true), VoiceModeConfig::default(), true, now).unwrap();
     for ev in [
-        Ev::You("morning. anything left from yesterday?".into(), Mark::Read, false),
+        Ev::You("morning. anything left from yesterday?".into(), Mark::Read, false, None),
         Ev::Assistant("the safari login. **auth-fix** finished it, it waits on your review: PR #412.".into()),
         Ev::Info("· voice mode · 14:02".into()),
     ] {

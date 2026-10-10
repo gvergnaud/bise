@@ -477,7 +477,7 @@ fn measure_feed() -> Vec<Ev> {
     let mut tool = tool;
     tool.opened = true;
     vec![
-        Ev::You(prose.clone(), Mark::Read, false),
+        Ev::You(prose.clone(), Mark::Read, false, None),
         Ev::Assistant(prose.clone()),
         Ev::AgentMsg { from: "docs".into(), to: "main".into(), text: prose.clone(), level: 3, id: String::new(), open: false, fold: false },
         Ev::Thinking { ms: 1200, text: prose.clone(), open: true },
@@ -887,7 +887,7 @@ fn feed_entities_use_the_book_glyphs() {
     assert_eq!(row(Ev::Warn("turn interrupted by main".into())), " ▲ turn interrupted by main");
     assert_eq!(row(Ev::Err("boom".into())), " ✗ boom");
     assert_eq!(row(Ev::Sub { name: "gh.x".into(), ok: false, preview: "404".into() }), "   ↳ gh.x ✗ 404");
-    assert!(row(Ev::You("hi".into(), Mark::Read, false)).starts_with("│  hi"));
+    assert!(row(Ev::You("hi".into(), Mark::Read, false, None)).starts_with("│  hi"));
     // a tool the turn abandoned says so in English
     let mut events = vec![Ev::Tool(ToolData::bare(9, ToolState::Run))];
     let mut cache = vec![None];
@@ -949,7 +949,7 @@ fn traffic(n: usize, k: usize, from: usize) -> Vec<Ev> {
 
 #[test]
 fn a_run_of_twelve_folds() {
-    let mut evs = vec![Ev::You("ship it".into(), Mark::Read, false)];
+    let mut evs = vec![Ev::You("ship it".into(), Mark::Read, false, None)];
     evs.extend(traffic(12, 5, 0));
     let (mut events, mut cache) = arrive(evs);
     let rows = cached_text(&events, &mut cache, 100);
@@ -1012,7 +1012,7 @@ fn a_level_two_line_closes_the_run() {
 
 #[test]
 fn a_closed_run_never_changes() {
-    let mut evs = vec![Ev::You("go".into(), Mark::Read, false)];
+    let mut evs = vec![Ev::You("go".into(), Mark::Read, false, None)];
     evs.extend(traffic(6, 4, 0));
     evs.push(Ev::Assistant("the agents agreed.".into()));
     let (mut events, mut cache) = arrive(evs);
@@ -1076,7 +1076,7 @@ fn time_marks_after_a_pause() {
     let at = || "14:31".to_string();
     // not at the top of a feed
     assert!(!pause_mark(&mut events, &mut cache, PAUSE_MS * 2, at));
-    push_event(&mut events, &mut cache, Ev::You("hi".into(), Mark::Read, false));
+    push_event(&mut events, &mut cache, Ev::You("hi".into(), Mark::Read, false, None));
     // a short pause: nothing
     assert!(!pause_mark(&mut events, &mut cache, PAUSE_MS - 1, at));
     assert!(pause_mark(&mut events, &mut cache, PAUSE_MS, at));
@@ -1134,7 +1134,7 @@ fn level_two_and_answered_lines() {
 #[test]
 fn the_first_line_of_an_open_fold_toggles_by_row() {
     let long = format!("heads-up: {}", "x ".repeat(40));
-    let mut evs = vec![Ev::You("go".into(), Mark::Read, false), l3("a", "b", &long)];
+    let mut evs = vec![Ev::You("go".into(), Mark::Read, false, None), l3("a", "b", &long)];
     evs.extend(traffic(4, 3, 0));
     let (mut events, mut cache) = arrive(evs);
     // row 1 (after the gap) is the fold line
@@ -1151,7 +1151,7 @@ fn the_first_line_of_an_open_fold_toggles_by_row() {
 #[test]
 fn whats_for_you_matches_the_mockup() {
     let evs = vec![
-        Ev::You("the login breaks on safari. and the api docs, v2 please.".into(), Mark::Read, false),
+        Ev::You("the login breaks on safari. and the api docs, v2 please.".into(), Mark::Read, false, None),
         Ev::Assistant("on it: auth-fix takes safari, docs takes the api docs.".into()),
         l3("docs", "main", "v1 or v2 for the examples?"),
         l3("main", "docs", "v2, the brief says so."),
@@ -1200,7 +1200,7 @@ fn whats_for_you_matches_the_mockup() {
 fn a_busy_hour_matches_the_mockup() {
     let mut evs = vec![
         Ev::TimeMark("14:02".into()),
-        Ev::You("ship the v2 api: endpoints, docs, sdk, migration, the lot.".into(), Mark::Read, false),
+        Ev::You("ship the v2 api: endpoints, docs, sdk, migration, the lot.".into(), Mark::Read, false, None),
         Ev::Assistant("that's 30 pieces. i split it: 12 endpoints, 8 sdk, 6 docs, 4 migration. starting them.".into()),
     ];
     evs.extend(traffic(47, 30, 0));
@@ -1306,7 +1306,7 @@ fn steering_moves_the_mark_of_your_line() {
         let rows = build_rows(evs, evs.len() - 1, false, 100, 0);
         rows.iter().flat_map(|r| r.spans.clone()).last().unwrap().style
     };
-    let one = |m| vec![Ev::You("x".into(), m, false)];
+    let one = |m| vec![Ev::You("x".into(), m, false, None)];
     assert_eq!(last(&one(Mark::Sent)).fg, Some(crate::theme::dim()));
     assert_eq!(last(&one(Mark::Received)).fg, Some(crate::theme::faint()));
     assert_eq!(last(&one(Mark::Read)).fg, Some(crate::theme::accent()));
@@ -1404,9 +1404,9 @@ fn mains_replies_carry_its_glyph_in_its_feed_only() {
 fn a_combined_steer_moves_the_marks_of_this_turn() {
     let mut events: Vec<Ev> = Vec::new();
     let mut cache: Vec<Option<EventRows>> = Vec::new();
-    push_event(&mut events, &mut cache, Ev::You("before".into(), Mark::Sent, false));
+    push_event(&mut events, &mut cache, Ev::You("before".into(), Mark::Sent, false, None));
     push_event(&mut events, &mut cache, Ev::Turn);
-    push_event(&mut events, &mut cache, Ev::You("also check the logs".into(), Mark::Sent, false));
+    push_event(&mut events, &mut cache, Ev::You("also check the logs".into(), Mark::Sent, false, None));
     let block = "<agent_message from=\"noisy\" relation=\"child\" id=\"m_4\">";
     let mark = |to| Ev::MarkYou { mark: bise_proto::thread::lines::Mark::Text { text: block.into(), to, or_turn: true }, or: None };
     assert!(!push_event(&mut events, &mut cache, mark(Mark::Received)));
@@ -1416,6 +1416,94 @@ fn a_combined_steer_moves_the_marks_of_this_turn() {
     // a message of an earlier turn keeps its own mark (Turn read it)
     assert!(matches!(&events[0], Ev::You(_, Mark::Read, ..)));
     assert_eq!(events.len(), 3);
+}
+
+// architect m_16963 (sha 2): his messages' ✓ and ✓✓ come from sb-core's
+// receipts by id (`sb steer-rx`, `sb steered`, after his `sb you-id`);
+// the runtime's steering lines move only id-less messages (transcripts
+// before 9633cd2a)
+fn fed(ls: &[&str]) -> (Vec<Ev>, Vec<Option<EventRows>>) {
+    let mut events: Vec<Ev> = Vec::new();
+    let mut cache: Vec<Option<EventRows>> = Vec::new();
+    for l in ls {
+        feed_line(&mut events, &mut cache, l);
+    }
+    (events, cache)
+}
+
+fn feed_line(events: &mut Vec<Ev>, cache: &mut Vec<Option<EventRows>>, l: &str) {
+    if let Some(ev) = parse_line(l) {
+        push_event(events, cache, ev);
+    }
+}
+
+fn yours(events: &[Ev]) -> Vec<(String, Mark, Option<u64>)> {
+    events.iter().filter_map(|e| if let Ev::You(t, m, _, id) = e { Some((t.clone(), *m, *id)) } else { None }).collect()
+}
+
+const STEER_START: [&str; 5] = ["sb you : go", "sb you-id : m_1", "  obs: turn_started", "  obs: tool_started #1", "tool #1 bash : sleep 8"];
+
+#[test]
+fn a_single_steer_is_marked_by_its_receipts() {
+    let mut ls = STEER_START.to_vec();
+    ls.extend(["sb you : steer one", "sb you-id : m_2"]);
+    let (mut events, mut cache) = fed(&ls);
+    assert_eq!(yours(&events)[1], ("steer one".into(), Mark::Sent, Some(2)), "its id from the line after it");
+    feed_line(&mut events, &mut cache, "  obs: steering_received: steer one");
+    assert_eq!(yours(&events)[1].1, Mark::Sent, "the runtime's words move no message with an id");
+    feed_line(&mut events, &mut cache, "sb steer-rx : m_2");
+    assert_eq!(yours(&events)[1].1, Mark::Received);
+    feed_line(&mut events, &mut cache, "  obs: steered: steer one");
+    assert_eq!(yours(&events)[1].1, Mark::Received);
+    feed_line(&mut events, &mut cache, "sb steered : m_2");
+    assert_eq!(yours(&events)[1].1, Mark::Read);
+    assert_eq!(events.iter().filter(|e| matches!(e, Ev::You(..))).count(), 2, "the id and receipt lines make no row");
+}
+
+#[test]
+fn a_bundled_steer_marks_each_message_it_names() {
+    let mut ls = STEER_START.to_vec();
+    ls.extend(["sb you : steer a", "sb you-id : m_2", "sb you : steer b", "sb you-id : m_3", "sb steer-rx : m_2 m_3"]);
+    let (mut events, mut cache) = fed(&ls);
+    assert_eq!(yours(&events)[1..].iter().map(|y| y.1).collect::<Vec<_>>(), [Mark::Received, Mark::Received]);
+    feed_line(&mut events, &mut cache, "sb steered : m_2 m_3");
+    assert_eq!(yours(&events)[1..].iter().map(|y| y.1).collect::<Vec<_>>(), [Mark::Read, Mark::Read]);
+}
+
+#[test]
+fn two_messages_with_the_same_words_move_by_id_only() {
+    let mut ls = STEER_START.to_vec();
+    ls.extend(["sb you : again", "sb you-id : m_2", "sb you : again", "sb you-id : m_3"]);
+    let (mut events, mut cache) = fed(&ls);
+    for l in ["  obs: steering_received: again", "sb steer-rx : m_2", "  obs: steered: again", "sb steered : m_2"] {
+        feed_line(&mut events, &mut cache, l);
+    }
+    let y = yours(&events);
+    assert_eq!((y[1].1, y[1].2), (Mark::Read, Some(2)), "{y:?}");
+    assert_eq!((y[2].1, y[2].2), (Mark::Sent, Some(3)), "the other 'again' stays: {y:?}");
+}
+
+#[test]
+fn an_old_transcript_without_ids_is_still_marked_by_its_words() {
+    let (events, _) = fed(&["sb you : go", "  obs: turn_started", "sb you : steer one", "  obs: steering_received: steer one"]);
+    assert_eq!(yours(&events)[1], ("steer one".into(), Mark::Received, None));
+    let (events, _) = fed(&["sb you : go", "  obs: turn_started", "sb you : steer one", "  obs: steering_received: steer one", "  obs: steered: steer one"]);
+    assert_eq!(yours(&events)[1].1, Mark::Read);
+}
+
+// a steer-rx receipt and its steered receipt in the same burst: ✓ then ✓✓,
+// never ✓✓ then ✓ (a late ✓ never lowers ✓✓)
+#[test]
+fn a_burst_of_both_receipts_goes_up_only() {
+    let mut ls = STEER_START.to_vec();
+    ls.extend(["sb you : steer one", "sb you-id : m_2"]);
+    let (mut events, mut cache) = fed(&ls);
+    let mut seen = Vec::new();
+    for l in ["sb steer-rx : m_2", "sb steered : m_2", "sb steer-rx : m_2"] {
+        feed_line(&mut events, &mut cache, l);
+        seen.push(yours(&events)[1].1);
+    }
+    assert_eq!(seen, [Mark::Received, Mark::Read, Mark::Read]);
 }
 
 // BISE-90: an opened report whose first line is longer than the row hangs
@@ -1776,7 +1864,7 @@ fn the_ascii_edits_fold() {
 #[test]
 fn a_long_message_of_yours_folds_to_twenty_rows_and_its_hint() {
     let text = (1..=30).map(|n| format!("line {n}")).collect::<Vec<_>>().join("\n");
-    let (mut events, mut cache) = arrive(vec![Ev::You(text, Mark::Read, false)]);
+    let (mut events, mut cache) = arrive(vec![Ev::You(text, Mark::Read, false, None)]);
     let rows = cached_text(&events, &mut cache, 60);
     let body: Vec<&String> = rows.iter().filter(|r| !r.trim().is_empty()).collect();
     // 20 rows of text (BISE-262; 12 before, 8 at first), then the hint
@@ -1804,7 +1892,7 @@ fn a_line_cut_to_fit_counts_as_hidden() {
     lines.push("word ".repeat(30));
     lines.push("a".into());
     lines.push("b".into());
-    let (events, mut cache) = arrive(vec![Ev::You(lines.join("\n"), Mark::Read, false)]);
+    let (events, mut cache) = arrive(vec![Ev::You(lines.join("\n"), Mark::Read, false, None)]);
     let rows = cached_text(&events, &mut cache, 60);
     let body: Vec<&String> = rows.iter().filter(|r| !r.trim().is_empty()).collect();
     assert_eq!(body.len(), YOU_ROWS + 1, "{rows:#?}");
@@ -1815,7 +1903,7 @@ fn a_line_cut_to_fit_counts_as_hidden() {
 #[test]
 fn a_short_message_of_yours_stays_whole() {
     let text = (1..=20).map(|n| format!("line {n}")).collect::<Vec<_>>().join("\n");
-    let (events, mut cache) = arrive(vec![Ev::You(text, Mark::Read, false)]);
+    let (events, mut cache) = arrive(vec![Ev::You(text, Mark::Read, false, None)]);
     let rows = cached_text(&events, &mut cache, 60);
     assert_eq!(rows.iter().filter(|r| r.starts_with("│  line")).count(), 20, "{rows:#?}");
     assert!(rows.iter().any(|r| r == "│  line 20 ✓✓") && !rows.iter().any(|r| r.contains("more line") || r.contains('▾')), "{rows:#?}");
@@ -1825,20 +1913,20 @@ fn a_short_message_of_yours_stays_whole() {
 #[test]
 fn a_click_on_the_hint_row_opens_just_that_message() {
     let long = (1..=24).map(|n| format!("line {n}")).collect::<Vec<_>>().join("\n");
-    let (mut events, mut cache) = arrive(vec![Ev::You(long.clone(), Mark::Read, false), Ev::You(long, Mark::Read, false)]);
+    let (mut events, mut cache) = arrive(vec![Ev::You(long.clone(), Mark::Read, false, None), Ev::You(long, Mark::Read, false, None)]);
     let rows = cached_text(&events, &mut cache, 60);
     let n = cache[1].as_ref().unwrap().rows.len();
     assert!(rows.iter().filter(|r| r.contains("▸ 4 more lines")).count() == 2, "{rows:#?}");
     // a click on a text row does nothing; on the hint row it opens
     assert!(!toggle_at(&mut events, &mut cache, 1, n - 3));
-    assert!(matches!(events[1], Ev::You(_, _, false)));
+    assert!(matches!(events[1], Ev::You(_, _, false, _)));
     assert!(toggle_at(&mut events, &mut cache, 1, n - 1));
-    assert!(matches!(events[1], Ev::You(_, _, true)) && matches!(events[0], Ev::You(_, _, false)));
+    assert!(matches!(events[1], Ev::You(_, _, true, _)) && matches!(events[0], Ev::You(_, _, false, _)));
     // open: its last row (the `▾` one) folds it again
     let _ = cached_text(&events, &mut cache, 60);
     let n = cache[1].as_ref().unwrap().rows.len();
     assert!(toggle_at(&mut events, &mut cache, 1, n - 1));
-    assert!(matches!(events[1], Ev::You(_, _, false)));
+    assert!(matches!(events[1], Ev::You(_, _, false, _)));
 }
 
 /// A long message of yours with a few screenshots: the sizes of its
@@ -1849,7 +1937,7 @@ fn a_click_on_the_hint_row_opens_just_that_message() {
 fn a_click_on_the_hint_opens_a_message_whose_image_sizes_wrap() {
     let shot = |n: u32| format!("<image name=\"[Image #{n}]\" path=\"/shots/Screenshot 2026-10-02 at 11.3{n}.59.png\" mime=\"image/png\" b64=\"/nowhere/{n}.b64\">");
     let long = (1..=24).map(|n| format!("{n}. {} line {n}", shot(n % 6))).collect::<Vec<_>>().join("\n");
-    let (mut events, mut cache) = arrive(vec![Ev::You(long, Mark::Read, false)]);
+    let (mut events, mut cache) = arrive(vec![Ev::You(long, Mark::Read, false, None)]);
     let rows = cached_text(&events, &mut cache, 60);
     let n = cache[0].as_ref().unwrap().rows.len();
     let hint = rows.iter().position(|r| r.contains("▸") && r.contains("more lines")).expect("a hint row");
@@ -1861,17 +1949,17 @@ fn a_click_on_the_hint_opens_a_message_whose_image_sizes_wrap() {
     for r in (hint + 1..n).chain([hint - 1]) {
         assert!(!crate::feed::toggles_at(&events, &cache, 0, r) && !toggle_at(&mut events, &mut cache, 0, r), "row {r}");
     }
-    assert!(matches!(events[0], Ev::You(_, _, false)));
+    assert!(matches!(events[0], Ev::You(_, _, false, _)));
     assert!(crate::feed::toggles_at(&events, &cache, 0, hint));
     assert!(toggle_at(&mut events, &mut cache, 0, hint));
-    assert!(matches!(events[0], Ev::You(_, _, true)));
+    assert!(matches!(events[0], Ev::You(_, _, true, _)));
     // open: the `▾` row (its last line, above the sizes) folds it again
     let rows = cached_text(&events, &mut cache, 60);
     let n = cache[0].as_ref().unwrap().rows.len();
     let open = rows.iter().position(|r| r.contains("line 24") && r.contains('▾')).expect("the ▾ row") - (rows.len() - n);
     assert!(!toggle_at(&mut events, &mut cache, 0, n - 1));
     assert!(toggle_at(&mut events, &mut cache, 0, open));
-    assert!(matches!(events[0], Ev::You(_, _, false)));
+    assert!(matches!(events[0], Ev::You(_, _, false, _)));
 }
 
 /// BISE-240: a long paste in your message is its chip in the line and
@@ -1881,7 +1969,7 @@ fn a_click_on_the_hint_opens_a_message_whose_image_sizes_wrap() {
 fn a_long_paste_in_your_message_is_a_chip_and_opens_like_a_fold() {
     let body: String = (1..=40).map(|n| format!("row {n}\n")).collect();
     let msg = format!("see {} ok", crate::pasted::tag(1, body.trim_end()));
-    let (mut events, mut cache) = arrive(vec![Ev::You(msg, Mark::Read, false)]);
+    let (mut events, mut cache) = arrive(vec![Ev::You(msg, Mark::Read, false, None)]);
     assert!(crate::feed::discloses(&events[0]) && crate::feed::anything_closed(&events));
     let rows = cached_text(&events, &mut cache, 80);
     let mine: Vec<&String> = rows.iter().filter(|r| r.starts_with('│')).collect();
@@ -1892,14 +1980,14 @@ fn a_long_paste_in_your_message_is_a_chip_and_opens_like_a_fold() {
     // a click on the paste row opens it: the full text under the line
     let n = cache[0].as_ref().unwrap().rows.len();
     assert!(toggle_at(&mut events, &mut cache, 0, n - 1));
-    assert!(matches!(events[0], Ev::You(_, _, true)));
+    assert!(matches!(events[0], Ev::You(_, _, true, _)));
     let rows = cached_text(&events, &mut cache, 80);
     assert!(rows.iter().any(|r| r == "│  ▤ 1 · 40 lines"), "{rows:#?}");
     assert!(rows.iter().any(|r| r == "│  row 40"), "{rows:#?}");
     // its last row closes it again
     let n = cache[0].as_ref().unwrap().rows.len();
     assert!(toggle_at(&mut events, &mut cache, 0, n - 1));
-    assert!(matches!(events[0], Ev::You(_, _, false)));
+    assert!(matches!(events[0], Ev::You(_, _, false, _)));
 }
 
 /// A skill call as the wire brings it: `{"name":"<skill>"}`, then its
