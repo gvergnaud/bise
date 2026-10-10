@@ -120,14 +120,50 @@ pub fn agents(v: &Value) -> Vec<Live> {
         .collect()
 }
 
-/// Write state.json atomically (0600).
-pub fn write(paths: &Paths, v: &Value) -> std::io::Result<()> {
+/// The one writer of state.json: `f` changes the file's value (read
+/// under the lock) and, when it returns Ok, the result is written. The
+/// whole read-change-write holds an exclusive flock on
+/// `state.json.lock`, so writers that race (the broker, `control` with
+/// no broker from the hub's resume threads, the CLI) lose no change. An
+/// Err from `f` writes nothing.
+pub fn update<T, E: From<std::io::Error>>(paths: &Paths, f: impl FnOnce(&mut Value) -> Result<T, E>) -> Result<T, E> {
     paths.ensure()?;
+    let _lock = lock(&paths.state_file().with_extension("json.lock"))?;
+    let mut v = read(paths);
+    let out = f(&mut v)?;
+    write(paths, &v)?;
+    Ok(out)
+}
+
+/// Each write's own tmp name in this process (with the pid: across them).
+static TMP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// An exclusive flock on `path`, held until the file is dropped.
+fn lock(path: &std::path::Path) -> std::io::Result<std::fs::File> {
+    use std::os::unix::io::AsRawFd;
+    let f = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(path)?;
+    // SAFETY: flock on a descriptor this function owns; blocks until free
+    if unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX) } != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(f)
+}
+
+/// Write state.json atomically (0600), through a tmp name only this call
+/// uses, removed when the rename fails. Only [`update`] calls it, under
+/// the lock.
+fn write(paths: &Paths, v: &Value) -> std::io::Result<()> {
     let f = paths.state_file();
-    let tmp = f.with_extension(format!("json.{}.tmp", std::process::id()));
-    std::fs::write(&tmp, serde_json::to_string_pretty(v).unwrap_or_default() + "\n")?;
-    crate::paths::private(&tmp, 0o600)?;
-    std::fs::rename(&tmp, &f)
+    let n = TMP.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let tmp = f.with_extension(format!("json.tmp-{}-{n}", std::process::id()));
+    write_tmp(&tmp, v).and_then(|()| std::fs::rename(&tmp, &f)).inspect_err(|_| {
+        let _ = std::fs::remove_file(&tmp);
+    })
+}
+
+fn write_tmp(tmp: &std::path::Path, v: &Value) -> std::io::Result<()> {
+    std::fs::write(tmp, serde_json::to_string_pretty(v).unwrap_or_default() + "\n")?;
+    crate::paths::private(tmp, 0o600)
 }
 
 pub fn read(paths: &Paths) -> Value {
@@ -196,6 +232,52 @@ pub fn events(paths: &Paths) -> Vec<Value> {
 mod tests {
     use super::*;
 
+    /// The one writer's law: 16 threads at once, no broker, each stops
+    /// its own agent through `control` (on the file) and every odd one
+    /// resumes it after: every change is in the file (evens stopped, odds
+    /// gone), and no tmp file is left.
+    #[test]
+    fn racing_writers_lose_no_change() {
+        let d = std::env::temp_dir().join(format!("cu-race-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        let p = Paths::new(d.join("run"), d.join("bise"), d.join("home"));
+        let keys: Vec<String> = (0..16).map(|i| format!("00000000000000aa.a{i}")).collect();
+        std::thread::scope(|s| {
+            for (i, k) in keys.iter().enumerate() {
+                let p = &p;
+                s.spawn(move || {
+                    crate::cli::control(p, "stop", &json!({"agent": k})).unwrap();
+                    if i % 2 == 1 {
+                        crate::cli::control(p, "resume", &json!({"agent": k})).unwrap();
+                    }
+                });
+            }
+        });
+        let v = read(&p);
+        for (i, k) in keys.iter().enumerate() {
+            match i % 2 {
+                0 => assert_eq!(v["agents"][k]["stopped"], true, "{k} lost its stop: {v}"),
+                _ => assert!(v["agents"].get(k).is_none(), "{k} lost its resume: {v}"),
+            }
+        }
+        let left: Vec<String> = std::fs::read_dir(p.state_file().parent().unwrap())
+            .unwrap()
+            .filter_map(|e| e.ok()?.file_name().into_string().ok())
+            .filter(|n| n.contains("tmp"))
+            .collect();
+        assert!(left.is_empty(), "tmp files left: {left:?}");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// The whole file replaced, through the one writer.
+    fn put(p: &Paths, v: Value) {
+        update(p, |f| -> std::io::Result<()> {
+            *f = v;
+            Ok(())
+        })
+        .unwrap();
+    }
+
     #[test]
     fn renders_restores_and_appends() {
         let d = std::env::temp_dir().join(format!("cu-state-{}", std::process::id()));
@@ -209,7 +291,7 @@ mod tests {
         );
         agents.insert("held".to_string(), Agent { stopped: true, ..Agent::default() });
         let v = render(&agents, json!([]), json!({"helper": "absent"}));
-        write(&p, &v).unwrap();
+        put(&p, v);
         let back = read(&p);
         assert_eq!(
             back["agents"]["api-v2"],
@@ -225,7 +307,7 @@ mod tests {
         assert_eq!(ev[0]["event"], "stopped");
         assert_eq!((&ev[1]["agent"], &ev[1]["name"], &ev[1]["hub"]), (&json!("00000000000000aa.perf"), &json!("perf"), &json!("00000000000000aa")));
         // a v1 file (keyed by bare names) restores nothing
-        write(&p, &json!({"agents": {"perf": {"stopped": true}}})).unwrap();
+        put(&p, json!({"agents": {"perf": {"stopped": true}}}));
         assert!(restore(&p).is_empty());
         use std::os::unix::fs::PermissionsExt;
         assert_eq!(std::fs::metadata(p.state_file()).unwrap().permissions().mode() & 0o777, 0o600);

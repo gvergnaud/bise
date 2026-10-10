@@ -159,7 +159,11 @@ mod tests {
         let d = std::env::temp_dir().join(format!("sb-cu-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         let p = bise_computer_use::paths::Paths::new(d.join("run"), d.join("root"), d.join("home"));
-        bise_computer_use::state::write(&p, &json!({"v": 2, "agents": agents, "browsers": [], "apps": {}})).unwrap();
+        bise_computer_use::state::update(&p, |v| -> std::io::Result<()> {
+            *v = json!({"v": 2, "agents": agents, "browsers": [], "apps": {}});
+            Ok(())
+        })
+        .unwrap();
         (d, p)
     }
 
@@ -187,19 +191,16 @@ mod tests {
         assert!(!resume_if_held(&p, &key("never")));
         assert_eq!(std::fs::read(p.state_file()).unwrap(), before);
         // stopped, then paused: resumed (no broker: on the files)
-        // not waited on: the resume lands on its thread, a moment later.
-        // One at a time: with no broker, `control` edits the file itself
-        // and two at once would race (the broker serializes them)
-        let settled = |k: &str| {
-            let t = std::time::Instant::now();
-            while held(&bise_computer_use::state::read(&p), &key(k)) && t.elapsed() < std::time::Duration::from_secs(5) {
-                std::thread::sleep(std::time::Duration::from_millis(10));
-            }
-        };
+        // both at once, not waited on: each lands on its thread a moment
+        // later, and with no broker `control` edits the file under its
+        // lock (state::update), so neither loses the other's change
         assert!(resume_if_held(&p, &key("halt")));
-        settled("halt");
         assert!(resume_if_held(&p, &key("held")));
-        settled("held");
+        let resumed = |v: &Value| !held(v, &key("halt")) && !held(v, &key("held"));
+        let t = std::time::Instant::now();
+        while !resumed(&bise_computer_use::state::read(&p)) && t.elapsed() < std::time::Duration::from_secs(5) {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
         let after = bise_computer_use::state::read(&p);
         assert!(!held(&after, &key("halt")) && !held(&after, &key("held")), "{after}");
         assert!(after["agents"].get(key("busy")).is_some(), "the driving agent is kept: {after}");
