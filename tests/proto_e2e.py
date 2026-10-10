@@ -371,7 +371,10 @@ def main():
         c.say('[[bash: sb every 10m "poll the build" --times 2]]')
         c.wait(lambda: entries("scheduled"), 60, "the scheduled task as a typed entry")
         s = entries("scheduled")[0]
-        check(s["scheduled"]["head"].startswith("main scheduled #") and " · every 10m · 2 times · next " in s["scheduled"]["head"]
+        # sched-names (designer m_14531): its name, never its id ('main
+        # scheduled fake timer name · every 10m · …', the fake model's name)
+        check(s["scheduled"]["head"].startswith("main scheduled ") and "#" not in s["scheduled"]["head"]
+              and " · every 10m · 2 times · next " in s["scheduled"]["head"]
               and s["scheduled"]["words"] == "poll the build" and s["text"] == s["scheduled"]["head"] and s["scheduled"]["id"] > 0, "scheduled: %r" % s)
         # ⌘K (architect m_11874): the live task in the scheduled event,
         # built from the hub's timers; his stop through scheduled_stop
