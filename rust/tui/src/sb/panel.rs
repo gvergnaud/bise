@@ -1631,7 +1631,7 @@ mod tests {
         use crate::ctrlhint::{Held, Hold};
         let mut app = bench::test_app_drained();
         let since = crate::when::now_ms().saturating_sub(125_000);
-        let w = bise_proto::rows::AgentWatch { id: 3, kind: bise_proto::rows::WatchKind::Bg, what: "cargo test".into(), since_ms: since };
+        let w = bise_proto::rows::AgentWatch { id: 3, kind: bise_proto::rows::WatchKind::Bg, what: "cargo test".into(), since_ms: since, noted: false };
         app.sb.agents = vec![Agent { main: true, ..agent("main", "idle") }, Agent { watching: vec![w], ..agent("perf", "idle") }];
         let t = trimmed(&panel_rows(&app, 40, 6));
         let row = t.iter().find(|r| r.contains("perf")).cloned().unwrap_or_default();

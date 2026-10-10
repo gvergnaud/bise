@@ -449,10 +449,11 @@ pub fn wake_dur(ms: u64) -> String {
 }
 
 /// What a watch waits for, as a sentence's object: `cargo test`, a
-/// file's `build.rc to appear`.
-pub fn watch_label(kind: crate::rows::WatchKind, what: &str) -> String {
+/// file's `build.rc to appear`; a note names the thing itself (`the
+/// reindex`, designer m_17730).
+pub fn watch_label(kind: crate::rows::WatchKind, what: &str, noted: bool) -> String {
     match kind {
-        crate::rows::WatchKind::File => format!("{} to appear", what),
+        crate::rows::WatchKind::File if !noted => format!("{} to appear", what),
         _ => what.to_string(),
     }
 }
@@ -466,7 +467,7 @@ pub fn waiting_for(watching: &[crate::rows::AgentWatch], now_ms: u64) -> Option<
         0 => String::new(),
         n => format!(" and {} more", n),
     };
-    Some(format!("waiting for {}{} · {}", watch_label(first.kind, &first.what), more, wait_age(now_ms.saturating_sub(first.since_ms))))
+    Some(format!("waiting for {}{} · {}", watch_label(first.kind, &first.what, first.noted), more, wait_age(now_ms.saturating_sub(first.since_ms))))
 }
 
 /// A wake entry's head, in parts (` · ` between them), each with whether
@@ -478,7 +479,7 @@ pub fn wake_head(f: &super::WakeFold) -> Vec<(String, bool)> {
     let after = wake_dur(f.after_ms);
     match f.ev {
         WakeEv::Ended => {
-            let verb = if f.kind == crate::rows::WatchKind::File { "appeared" } else { "ended" };
+            let verb = if f.kind == crate::rows::WatchKind::File && !f.noted { "appeared" } else { "ended" };
             let mut v = vec![(format!("{} {}", f.what, verb), false)];
             if let Some(rc) = f.rc {
                 v.push((format!("rc {}", rc), rc != 0));
@@ -487,8 +488,8 @@ pub fn wake_head(f: &super::WakeFold) -> Vec<(String, bool)> {
             v
         }
         WakeEv::Still => vec![(format!("{} still running after {}", f.what, after), false)],
-        WakeEv::Stopped => vec![(format!("stopped waiting for {}", watch_label(f.kind, &f.what)), false)],
-        WakeEv::Expired => vec![(format!("stopped waiting for {} after {}", watch_label(f.kind, &f.what), after), false)],
+        WakeEv::Stopped => vec![(format!("stopped waiting for {}", watch_label(f.kind, &f.what, f.noted)), false)],
+        WakeEv::Expired => vec![(format!("stopped waiting for {} after {}", watch_label(f.kind, &f.what, f.noted), after), false)],
         WakeEv::Unknown => vec![(f.what.clone(), false)],
     }
 }
@@ -510,14 +511,21 @@ mod tests {
         use super::*;
         use crate::rows::{AgentWatch, WatchKind};
         use crate::thread::{WakeEv, WakeFold};
-        let w = |id, kind, what: &str, since_ms| AgentWatch { id, kind, what: what.into(), since_ms };
+        let w = |id, kind, what: &str, since_ms| AgentWatch { id, kind, what: what.into(), since_ms, noted: false };
         assert_eq!(waiting_for(&[], 0), None);
         let one = [w(3, WatchKind::Bg, "cargo test", 1_000)];
         assert_eq!(waiting_for(&one, 121_000).as_deref(), Some("waiting for cargo test · 2m"));
         let two = [w(4, WatchKind::File, "build.rc", 50_000), w(3, WatchKind::Bg, "cargo test", 1_000)];
         assert_eq!(waiting_for(&two, 121_000).as_deref(), Some("waiting for cargo test and 1 more · 2m"));
         assert_eq!(waiting_for(&two[..1], 60_000).as_deref(), Some("waiting for build.rc to appear · 10s"));
-        let f = |ev, kind, what: &str, rc, after_ms| WakeFold { id: 1, ev, kind, what: what.into(), rc, after_ms, tail: Vec::new(), msg: None };
+        let f = |ev, kind, what: &str, rc, after_ms| WakeFold { id: 1, ev, kind, what: what.into(), noted: false, rc, after_ms, tail: Vec::new(), msg: None };
+        // a file watch with a note: the note names it (designer m_17730)
+        let noted = AgentWatch { noted: true, ..w(5, WatchKind::File, "the reindex", 60_000) };
+        assert_eq!(waiting_for(&[noted], 60_000).as_deref(), Some("waiting for the reindex · 0s"));
+        let n = |ev| WakeFold { noted: true, ..f(ev, WatchKind::File, "the reindex", Some(101), 0) };
+        let head_n = |x: &WakeFold| wake_head(x).into_iter().map(|(t, _)| t).collect::<Vec<_>>().join(" · ");
+        assert_eq!(head_n(&n(WakeEv::Ended)), "the reindex ended · rc 101 · after 0s");
+        assert_eq!(head_n(&n(WakeEv::Stopped)), "stopped waiting for the reindex");
         let head = |f: &WakeFold| wake_head(f).into_iter().map(|(t, _)| t).collect::<Vec<_>>().join(" · ");
         assert_eq!(head(&f(WakeEv::Ended, WatchKind::Bg, "cargo test", Some(0), 124_000)), "cargo test ended · rc 0 · after 2m04s");
         let red = f(WakeEv::Ended, WatchKind::Bg, "cargo test", Some(101), 190_000);

@@ -310,6 +310,9 @@ pub struct WakeFold {
     pub kind: crate::rows::WatchKind,
     /// its name (the agents row's `watching[].what`)
     pub what: String,
+    /// `what` is the agent's note (the row's `noted`)
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub noted: bool,
     /// its rc, when known (an ended bash command, a job, an rc file)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rc: Option<i64>,

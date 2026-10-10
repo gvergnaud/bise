@@ -256,6 +256,10 @@ pub struct AgentWatch {
     pub what: String,
     /// when it was set (ms)
     pub since_ms: u64,
+    /// `what` is the agent's note (`--note the reindex`): the note names
+    /// the thing, a file's words add no `to appear` (designer m_17730)
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub noted: bool,
 }
 
 impl Agent {

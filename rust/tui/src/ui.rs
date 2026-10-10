@@ -438,9 +438,10 @@ fn draw_feed(app: &mut App, frame: &mut Frame, area: Rect, bar: Option<Rect>) {
     let area_w = feed_w;
     // event-wake (designer's page): the agent in view waits for an event:
     // one live dim line under its last row, `… waiting for cargo test ·
-    // 2m` (its own row, kept off the feed's rows)
-    let waiting = app.sb.waiting_words(crate::when::now_ms()).filter(|_| area.height > 2);
-    let area_h = (area.height as usize).saturating_sub(usize::from(waiting.is_some()));
+    // 2m` (its own row, kept off the feed's rows), a blank row above it
+    // (designer m_17730)
+    let waiting = app.sb.waiting_words(crate::when::now_ms()).filter(|_| area.height > 3);
+    let area_h = (area.height as usize).saturating_sub(if waiting.is_some() { 2 } else { 0 });
     let text_area = Rect {
         x: area.x,
         y: area.y,
@@ -535,7 +536,7 @@ fn draw_feed(app: &mut App, frame: &mut Frame, area: Rect, bar: Option<Rect>) {
     let rows_shown = vis.len();
     frame.render_widget(Paragraph::new(Text::from(vis)), text_area);
     if let Some(w) = waiting.filter(|_| tail_visible) {
-        let y = text_area.y + rows_shown as u16;
+        let y = text_area.y + rows_shown as u16 + 1;
         let line = Line::from(Span::styled(format!("{} {}", theme::G_WAITING, w), Style::default().fg(theme::dim())));
         let r = Rect { y, height: 1, ..text_area }.intersection(area);
         frame.render_widget(Paragraph::new(line), r);

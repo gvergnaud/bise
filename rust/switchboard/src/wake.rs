@@ -131,8 +131,13 @@ impl Spec {
     /// command's first useful words (`cargo test`, `npm run dev`), `pid
     /// 4242`, a file's name (`build.rc`; the words add `to appear`),
     /// `launchd job dev.x`.
+    /// Its name is the agent's note (the words add no `to appear`).
+    pub fn noted(&self) -> bool {
+        !self.note.trim().is_empty()
+    }
+
     pub fn name(&self) -> String {
-        if !self.note.trim().is_empty() {
+        if self.noted() {
             return clip(&one_line(&self.note), 40);
         }
         match &self.what {
@@ -241,7 +246,7 @@ impl Wakes {
             .live
             .values()
             .filter(|w| w.agent == agent)
-            .map(|w| bise_proto::rows::AgentWatch { id: w.id, kind: w.spec.kind(), what: w.spec.name(), since_ms: w.set_at })
+            .map(|w| bise_proto::rows::AgentWatch { id: w.id, kind: w.spec.kind(), what: w.spec.name(), since_ms: w.set_at, noted: w.spec.noted() })
             .collect();
         v.sort_by_key(|w| (w.since_ms, w.id));
         v
@@ -508,6 +513,7 @@ pub fn end_line(w: &Watch, why: &str, at: u64, hit: Option<&Hit>, msg: Option<u6
         ev,
         kind: w.spec.kind(),
         what: w.spec.name(),
+        noted: w.spec.noted(),
         rc: hit.and_then(|h| h.rc),
         after_ms,
         tail: hit.map(|h| h.tail.clone()).unwrap_or_default(),

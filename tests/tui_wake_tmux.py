@@ -11,7 +11,8 @@ provider, tmux at 150 and 80 columns, dark and light.
       ended · rc 0 · after …  ▸ its last 3 lines`, never bise's message
       (`background 0 ended`); ctrl+o opens the lines
   `sb wake --on-file` with a note: `… waiting for the reindex`; a rc file
-      with 101: `the reindex appeared · rc 101` with the rc in red
+      with 101: `the reindex ended · rc 101` with the rc in red (a note
+      names the thing: no `to appear`, no `appeared`)
   `sb wake --stop`: `– stopped waiting for the reindex`, the row `○` again
   the same at 80 columns and in the light palette
 
@@ -94,11 +95,20 @@ def wide(t, E, bin_dir):
     sc = t.wait_re(WAITING.pattern, 30)
     # the top edge and the line under the thread
     assert len(WAITING.findall(sc)) >= 2, sc
+    # the live line under the thread has a blank row above it (designer
+    # m_17730): its row's left part, the feed's, is empty above it
+    rows = sc.splitlines()
+    k = max(i for i, r in enumerate(rows) if WAITING.search(r))
+    col = rows[k].index("…")
+    assert rows[k - 1][1:col + 20].strip("│ ") == "", rows[k - 1]
     shot(t, "150-waiting")
     # the command ends: the hub's line, the live line gone
     sc = t.wait("cargo test ended · rc 0 · after", SECS + 60)
     assert "its last 3 lines" in sc, sc
-    assert "background 0 ended" not in sc, "bise's wake folds into the line: " + sc
+    # bise's wake is no message row of its own (the fake model's reply
+    # echoes its words, `ack: <agent_message …> background 0 ended`)
+    assert "✉︎ bise" not in sc and "✉ bise" not in sc, "bise's wake folds into the line: " + sc
+    assert not any(r.strip("│ ").startswith("background 0 ended") for r in sc.splitlines()), sc
     t.wait_gone("waiting for cargo test", 20)
     shot(t, "150-ended")
     # a watch with a note, then its rc file with 101: red
@@ -109,7 +119,8 @@ def wide(t, E, bin_dir):
     shot(t, "150-waiting-note")
     with open(rc, "w") as f:
         f.write("101\n")
-    t.wait("the reindex appeared · rc 101", 30)
+    # a note names the thing (designer m_17730): `ended`, no `appeared`
+    t.wait("the reindex ended · rc 101", 30)
     ansi = t.screen(colors=True)
     assert re.search(r"\x1b\[[0-9;]*m\s*rc 101", ansi), "the rc in its own color"
     shot(t, "150-failed")
