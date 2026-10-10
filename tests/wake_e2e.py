@@ -101,7 +101,11 @@ def main():
         arrival(c, "t1", "FILE-NOTE", 30)
         w = wakes(c, "t1", "FILE-NOTE")[0]
         check("rc 3" in w, "the rc file's rc: %r" % w)
-        check(not any("steer" in l and "FILE-NOTE" in l for l in c.lines("t1")), "no wake mid-turn")
+        # never steered into the busy turn: the wake comes after that turn's end
+        ls = c.lines("t1")
+        k_sleep = max(i for i, l in enumerate(ls) if l.startswith("tool #") and l.endswith("bash : sleep 6"))
+        k_done = next(i for i in range(k_sleep, len(ls)) if ls[i].strip().startswith("obs: turn_done"))
+        check(ls.index(w) > k_done, "the wake after the busy turn's end (wake #%d, turn_done #%d)" % (ls.index(w), k_done))
 
         # 4. a restart keeps a watch
         rc2 = os.path.join(E.tmp, "rc2")

@@ -13,7 +13,9 @@ scripted provider (e2e.Env, 10 input tokens a call); budget 150 tokens:
   2. a message sent right at the turn's end (during the recycle) is
      answered exactly once;
   3. the background job started before the recycle is still readable by
-     the new process;
+     the new process; its end wakes main once, after the recycle (the job
+     lasts 20 s so its wake, queued for the end of a turn, never lands
+     before the message of 2.);
   4. the transcript has every step once, no reload line, no history
      replayed; the session log has no reload event;
   5. no second recycle while the new process reads less than the budget.
@@ -59,7 +61,7 @@ def main():
         pid0 = pid()
         port0 = json.load(open(os.path.join(adir, "repl.json")))["port"]
         # 1. 25 calls: a job past the 2 s window (its slot: tmp/bg/0), 23 echoes
-        steps = ["sleep 4; echo bg-job-done"] + ["echo step-%02d" % i for i in range(23)]
+        steps = ["sleep 20; echo bg-job-done"] + ["echo step-%02d" % i for i in range(23)]
         c.say(" ".join("[[bash: %s]]" % s for s in steps))
         c.wait_line("main", "done: tool bash ok: step-22", 120)
         rss0 = rss_kb(pid0)
@@ -94,6 +96,13 @@ def main():
         # 3. the job of the old process, read by the new one
         slot = os.path.join(adir, "tmp", "bg", "0.out")
         c.wait(lambda: os.path.exists(slot) and "bg-job-done" in open(slot).read(), 30, "the job's output in its slot")
+        # its end wakes main (one turn); wait for that turn before the next message
+        # (the answer, not the msg-in line: idle right after the msg-in is
+        # the turn not started yet)
+        c.wait_line("main", "ack: <agent_message", 60)
+        c.wait_idle("main")
+        woken = [r for r in E.fake_requests() if "background 0 ended" in (r.get("user") or "")]
+        check(len(woken) == 1, "the job's end woke main once: %d" % len(woken))
         c.say("[[bash: cat $TMPDIR/bg/0.out]]")
         c.wait_line("main", "done: tool bash ok: bg-job-done", 60)
         c.wait_idle("main")

@@ -1488,8 +1488,10 @@ def wks(-o: M.St, +cx: X.Cx<o>) -> WK.Wakes:
 def wake_end(-o: M.St, +cx: X.Cx<o>, +id: Nat, +why: String) -> X.Cx<o>:
   emit(o, cx, M.EWake{WK.WEnd{id, why, now(o, cx)}}, Unit{}, Unit{}, Unit{})
 
+# a wake waits for the end of a busy turn (queued mode, never steered in:
+# the turn's work is not cut by it), and starts the next turn at its idle
 def wake_say(-o: M.St, +cx: X.Cx<o>, +agent: String, +text: String) -> X.Cx<o>:
-  fst(o, send(o, cx, msg(M.HUB(), agent, text, False{}, None{}, False{}, False{})))
+  fst(o, send(o, cx, Snd{M.HUB(), agent, text, False{}, None{}, False{}, False{}, True{}, None{}}))
 
 def agent_active.go(m: Maybe<&2, M.Agent>) -> Bool:
   match m:
