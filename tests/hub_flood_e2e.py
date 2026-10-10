@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """hub-fifo: a hub with 30 busy agents flooding lines still answers a
-new client's hello at once, and sends its state at most ~10 times a
-second.
+new client's `initialize` at once, and sends its state (hub/agents) at
+most ~10 times a second.
 
 The outage it guards (2026-10-09): his hub's loop, at 100% CPU, rebuilt
 the whole snapshot for each REPL line and served messages in arrival
@@ -12,8 +12,8 @@ desktop app showed 'no agents yet'. Now the clients' messages go ahead
 A throwaway hub on a temp app root (BISE_APP_ROOT: links to this tree)
 whose `repl-live` is tests/fake_repl_flood.py; its journal is seeded with
 30 tasks (e2e.seed_tasks), so main and the 30 REPLs start at the boot and
-flood. Then, while they flood: three new clients, each hello -> ready
-under 1 s; one client counts the state events of 3 s.
+flood. Then, while they flood: three new clients, each initialize ->
+its answer under 1 s; one client counts the hub/agents of 3 s.
 
 Run: python3 -u tests/hub_flood_e2e.py  (needs a built bise)"""
 import json
@@ -71,18 +71,20 @@ def wire_lines(state):
 
 
 def hello_s(sock_path, timeout=60):
-    """A new client: seconds from its hello to the hub's `ready`."""
+    """A new client: seconds from its `initialize` to the hub's answer
+    (its hub-wide state)."""
     s = socket.socket(socket.AF_UNIX)
     s.settimeout(timeout)
     s.connect(sock_path)
     t0 = time.time()
-    s.sendall(b'{"op":"hello"}\n')
+    s.sendall((json.dumps({"jsonrpc": "2.0", "id": "flood", "method": "initialize",
+                           "params": {"proto": 1, "client": {"name": "hub_flood_e2e"}}}) + "\n").encode())
     f = s.makefile("r")
     try:
-        # a text match, not a parse of each line: the hello is ~600 KB of
-        # buffered lines and the clock is for the hub, not for this reader
+        # a text match on the line's head, not a parse: the clock is for
+        # the hub, not for this reader
         for line in f:
-            if line.startswith('{"ev":"ready"'):
+            if '"id":"flood"' in line[:120]:
                 return time.time() - t0
     except socket.timeout:
         pass
@@ -110,14 +112,13 @@ def main():
         wait.until(lambda: wire_lines(E.state) - start >= BACKLOG_LINES, 60, "%d more flood lines" % BACKLOG_LINES, poll=0.2)
         sock = os.path.join(E.state, "hub.sock")
         took = [hello_s(sock) for _ in range(3)]
-        print("hello -> ready while %d REPLs flood: %s" % (TASKS + 1, ", ".join("%.3f s" % t for t in took)))
-        check(max(took) < HELLO_MAX_S, "a hello is served in under %.1f s while the REPLs flood: %s" % (HELLO_MAX_S, took))
-        with c.lock:
-            before = sum(1 for v in c.events if v.get("ev") == "state")
+        print("initialize -> its answer while %d REPLs flood: %s" % (TASKS + 1, ", ".join("%.3f s" % t for t in took)))
+        check(max(took) < HELLO_MAX_S, "an initialize is answered in under %.1f s while the REPLs flood: %s" % (HELLO_MAX_S, took))
+        # a state broadcast sends hub/agents to every client: they count
+        before = len(c.notes("hub/agents"))
         time.sleep(STATE_WINDOW_S)
-        with c.lock:
-            states = sum(1 for v in c.events if v.get("ev") == "state") - before
-        print("state events in %.0f s of flood: %d" % (STATE_WINDOW_S, states))
+        states = len(c.notes("hub/agents")) - before
+        print("hub/agents in %.0f s of flood: %d" % (STATE_WINDOW_S, states))
         check(states <= STATE_WINDOW_S * 10 + 5, "the state goes at most ~10 times a second: %d in %.0f s" % (states, STATE_WINDOW_S))
         check(states >= 1, "the state still goes while the REPLs flood")
         print("PASS hub_flood_e2e")
