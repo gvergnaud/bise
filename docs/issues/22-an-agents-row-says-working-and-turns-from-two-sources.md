@@ -34,8 +34,9 @@ the second line at once, steered into the first one's turn.
 ## What client-protocol does about it (to delete when this is fixed)
 
 The terminal keeps an owed end: one pure fn next to `rust/tui/src/queue.rs`'s
-laws, `(previous row, new row, owed) -> edges` (proto-zone-b's queue-race
-sha on client-protocol). An end drawn from the `working` flip is owed to
+laws, `crate::queue::turn_edges(was, now, owed: queue::Owed) -> (edges, Owed)`
+(proto-zone-b's queue-race sha e5ffb2dd on client-protocol; `agent_row`
+keeps only the owed value per agent). An end drawn from the `working` flip is owed to
 the count: when the count arrives late, that end is settled and nothing is
 drawn. Its laws cover both orders (status first, count first) and a turn
 with no entry. This is a reader papering over a writer: **delete that fn
