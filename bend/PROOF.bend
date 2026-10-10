@@ -5411,6 +5411,9 @@ def Laws.unknown_agent_is_no_task(o, cx, agent, e):
   %Equal.sym(Bool, HC.has_agent(o, cx, agent), False{}, e) : {Bool.and(_, Bool.not(String.eq(agent, HM.MAIN()))) == False{} : Bool}
   {==}
 
+def Laws.main_card_answer_routes_once(o, cx, c, text):
+  {==}
+
 def Laws.mcp_retry_only_unsent():
   {==}
 

@@ -1826,10 +1826,21 @@ def answer.q.sent(-o: M.St, p: X.Cx<o> & SendR, +c: M.Card, +asker: String, +tex
 # main's own card: the answer wakes main with a turn that holds it, like
 # a card for an agent reaches that agent (a main note would wait for the
 # user's next message)
+
+# the head of main's note when the user answers one of main's own cards
+# (the clients match it to drop that note: lines.rs MAIN_ANSWER_HEAD)
+def MAIN_ANSWER_HEAD() -> String:
+  "the user answered card #"
+
+#
+# The same route line as an agent's card (answer.q.sent), his answer whole:
+# the clients fold that line into the "you answered" row and drop the
+# notify's twin (lines.rs is_main_answer_note, its head MAIN_ANSWER_HEAD)
 def answer.q.main(-o: M.St, +cx: X.Cx<o>, +c: M.Card, +text: String) -> X.Cx<o>:
   +id = M.Card.id(c)
-  +cx2 = notify_main(o, cx, cat(["the user answered card #", ns(id), " (\"", M.one_line(M.Card.text(c)), "\"): \"", M.one_line(text), "\""]))
-  close_card(o, cx2, id, "answered")
+  +cx2 = notify_main(o, cx, cat([MAIN_ANSWER_HEAD(), ns(id), " (\"", M.one_line(M.Card.text(c)), "\"): \"", M.one_line(text), "\""]))
+  +cx3 = line(o, cx2, M.MAIN(), "route", cat(["you → @", M.MAIN(), " (answer to card #", ns(id), ") : ", text]))
+  close_card(o, cx3, id, "answered")
 
 def answer.q(-o: M.St, m: Maybe<&2, M.Msg>, +cx: X.Cx<o>, +c: M.Card, +text: String) -> X.Cx<o>:
   match m:

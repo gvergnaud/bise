@@ -1664,6 +1664,39 @@ fn answering_a_main_card_starts_a_main_turn_holding_the_answer() {
     assert!(steered.contains("je l'écris"), "{steered}");
 }
 
+/// Answering main's own card (designer's must-fix, architect m_15205):
+/// the real sb-core writes the same route line an agent's card does, his
+/// answer whole, and main's note keeps the head the clients drop it by
+/// (bise_proto lines::MAIN_ANSWER_NOTE = core.bend MAIN_ANSWER_HEAD): a
+/// wording change in core.bend goes red here, not silently in the fold.
+#[test]
+fn answering_mains_card_routes_it_and_notes_main() {
+    use bise_proto::thread::lines::{self, Hub, Rec};
+    let mut t = T::new();
+    t.user(MAIN, "prépare la release");
+    t.req(MAIN, AgentReq::Card { text: "merge checkout into main?\n\n1. merge\n2. not yet".into(), for_msg: None });
+    let card = *t.hub.st.cards.keys().next().unwrap();
+    t.turn(MAIN, "J'ai demandé à l'utilisateur.");
+    let fx = t.go(Input::UserCmd { client: 1, focus: MAIN.into(), cmd: UserCmd::Answer { card, text: "this one\nand the second line".into() } });
+    let recs: Vec<Hub> = lines_of(&fx, MAIN)
+        .into_iter()
+        .filter_map(|l| match lines::read(l) {
+            Rec::Hub(h) => Some(h),
+            _ => None,
+        })
+        .collect();
+    let routes: Vec<_> = recs.iter().filter_map(|h| match h {
+        Hub::Route { who, card: c, said } => Some((who.clone(), *c, lines::unescape(said))),
+        _ => None,
+    }).collect();
+    assert_eq!(routes, vec![(MAIN.to_string(), card, "this one\nand the second line".to_string())], "{fx:?}");
+    let notes = recs.iter().filter(|h| matches!(h, Hub::MsgIn { from, body, .. } if lines::is_hub_sender(from) && lines::is_main_answer_note(body))).count();
+    assert_eq!(notes, 1, "main's note, with the head the clients drop: {fx:?}");
+    let said = say_to(&fx, MAIN).expect("the answer still starts a main turn");
+    assert!(said.contains("this one"), "{said}");
+    assert!(!t.hub.st.cards.contains_key(&card));
+}
+
 /// docs asks main (a plain send, not an ask), main answers, docs waits
 /// afterwards: (question id, reply id, the fx of main's reply).
 fn question_then_reply(t: &mut T, queued: bool) -> (u64, u64) {

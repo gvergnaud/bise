@@ -1406,6 +1406,11 @@ pub(crate) fn hub_ev(h: Hub) -> Option<Ev> {
                 if crate::scheduled::is_stop_note(&body) {
                     return None;
                 }
+                // main's note of an answer to its own card: the route
+                // line's row says it (bise_proto lines, the window's rule)
+                if bise_proto::thread::lines::is_main_answer_note(&body) {
+                    return None;
+                }
             }
             match from.strip_prefix('@') {
                 Some(f) => msg(f.to_string(), "you".into(), body, 2, id),

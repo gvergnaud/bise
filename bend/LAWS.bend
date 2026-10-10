@@ -5485,6 +5485,23 @@ law unknown_agent_is_no_task:
   for e: {HC.has_agent(o, cx, agent) == False{} : Bool}
   {HC.is_task_of(o, cx, agent) == False{} : Bool}
 
+# LAW: the user answering one of main's own cards does three things, once
+# each and in this order: main's note (it still wakes main; its fixed head
+# is what the clients match to drop it), the same route line an agent's
+# card writes ('you → @main (answer to card #N) : <his answer, whole>',
+# the "you answered" row), and the card closed as answered.
+law main_card_answer_routes_once:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +c: HM.Card
+  for +text: String
+  {HC.answer.q.main(o, cx, c, text)
+    == HC.close_card(o,
+      HC.line(o,
+        HC.notify_main(o, cx, HC.cat([HC.MAIN_ANSWER_HEAD(), HC.ns(HM.Card.id(c)), " (\"", HM.one_line(HM.Card.text(c)), "\"): \"", HM.one_line(text), "\""])),
+        HM.MAIN(), "route", HC.cat(["you → @", HM.MAIN(), " (answer to card #", HC.ns(HM.Card.id(c)), ") : ", text])),
+      HM.Card.id(c), "answered") : HX.Cx<o>}
+
 # ---- MCP calls that fail (runtime/mcp-pure.bend) ----
 
 # LAW: a call is tried again (fresh initialize) only when it never

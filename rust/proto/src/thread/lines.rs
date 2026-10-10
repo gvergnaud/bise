@@ -651,6 +651,19 @@ pub fn is_stop_note(text: &str) -> bool {
 /// [`is_stop_note`] reads it.
 pub const STOP_NOTE: &str = "the user stopped timer #";
 
+/// The note bise sends main when the user answers one of main's own
+/// cards (core.bend `answer.q.main`): for main's model only. The same
+/// step writes the route line the thread shows ("you answered", his
+/// answer whole), so a client drops this twin.
+pub fn is_main_answer_note(text: &str) -> bool {
+    text.starts_with(MAIN_ANSWER_NOTE)
+}
+
+/// The head of that note: core.bend's `MAIN_ANSWER_HEAD` (pinned by the
+/// switchboard core test `answering_mains_card_routes_it_and_notes_main`
+/// against the real sb-core, so a wording change there goes red).
+pub const MAIN_ANSWER_NOTE: &str = "the user answered card #";
+
 /// A `pr` line's tone word (forge::news::Tone, the hub's writer) as what
 /// it means (architect m_11122: no color on the wire): `plain` is news,
 /// `dim` nothing for him (done), `red` failing checks.

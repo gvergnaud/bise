@@ -234,6 +234,9 @@ impl Fold<'_> {
             }
             // a scheduled task's run reads as its line; the note of a
             // stop is for the agent only (site/m/timers, the TUI's rule)
+            // main's note of an answer to its own card: its route line
+            // (the "you answered" row) says it, his answer whole
+            Hub::MsgIn { from, body, .. } if lines::is_hub_sender(&from) && lines::is_main_answer_note(&body) => {}
             Hub::MsgIn { from, body, .. } if lines::is_hub_sender(&from) && (scheduled::run_line(&body).is_some() || lines::is_stop_note(&body)) => {
                 if let Some(s) = scheduled::run_line(&body) {
                     self.scheduled(pos, ms, s);

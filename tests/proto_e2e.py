@@ -338,6 +338,30 @@ def main():
         c.send({"cmd": "tool_out", "project": project, "agent": "main", "pos": 1})
         c.wait(lambda: any(e.get("cmd") == "tool_out" for e in typed(c, "error")), 20, "tool_out's error")
 
+        # an answer to MAIN's own card (designer's must-fix, architect
+        # m_15205): main's thread has one 'you answered main' row with his
+        # whole multi-line answer (sb-core's route line), and never the raw
+        # note to main ('the user answered card #N …', a 'bise' row)
+        c.say('[[bash: sb card "merge checkout into main?"]]')
+        c.wait(lambda: any(x["kind"] == "question" and "merge checkout" in x.get("text", json.dumps(x)) for x in c.cards()), 60, "main's own card")
+        own = [x for x in c.cards() if x["kind"] == "question" and "merge checkout" in x.get("text", json.dumps(x))][0]
+        c.wait_idle("main")
+        c.send({"cmd": "answer", "project": project, "card": own["id"], "reply": "merge it\nthen tag v2"})
+        c.wait(lambda: all(x["id"] != own["id"] for x in c.cards()), 30, "main's card answered")
+        c.wait_idle("main", timeout=90)
+        n = len(typed(c, "thread"))
+        c.send({"cmd": "subscribe", "project": project, "agent": "main"})
+        c.wait(lambda: len(typed(c, "thread")) > n, 20, "main's thread")
+        mthread = typed(c, "thread")[-1]["entries"]
+        mine = [x for x in mthread if x["kind"] == "approval" and x["text"].startswith("you answered main")]
+        check(len(mine) == 1 and "merge it\nthen tag v2" in mine[0]["text"] + "\n" + mine[0]["approval"].get("note", ""),
+              "one 'you answered main' row with his whole answer: %r" % mine)
+        # (the fake model's own 'ack: <agent_message …>' reply echoes the note
+        # it read: main's words, not the note's row)
+        raw = [x for x in mthread if x.get("text", "").startswith("the user answered card #")]
+        check(not raw, "no raw note to main in its thread: %r" % raw)
+        c.send({"cmd": "unsubscribe", "project": project, "agent": "main"})
+
         # close without answering (the inbox's close): an open card goes,
         # no error, and the typed cards event no longer has it
         c.say('[[bash: sb card "close me from the window?"]]')
