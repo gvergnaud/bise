@@ -73,6 +73,8 @@ fn kind_evs(e: &Entry) -> Vec<Ev> {
         EntryKind::Answered => e.answered.iter().map(|a| Ev::Answered { agent: a.agent.clone(), question: a.question.clone(), answer: a.answer.clone(), why: a.why.clone(), open: false }).collect(),
         EntryKind::Approval => e.approval.iter().map(|a| Ev::Approval { ok: a.ok, text: a.text.clone(), note: a.note.clone(), asked: String::new(), open: false }).collect(),
         EntryKind::Scheduled => e.scheduled.iter().map(|s| Ev::Scheduled { head: s.head.clone(), words: s.words.clone(), open: false }).collect(),
+        // event-wake: a watch's end, its words bise-proto's
+        EntryKind::Wake => e.wake.iter().map(wake_ev).collect(),
         // its typed parts (architect m_15013), faded by its closing word
         EntryKind::Card => e.card.iter().map(card).collect(),
         // P4a: no event yet (the parity law names them)
@@ -86,6 +88,17 @@ fn kind_evs(e: &Entry) -> Vec<Ev> {
 /// replay, `0.0s` as the line path drew it), its result (the exit code and
 /// output line under a failed bash) and the gate holding it (`? waiting
 /// for you`), since their times.
+/// event-wake: a watch's end as the TUI's row (the entry's and the line
+/// path's one mapping), its words bise-proto's.
+pub(crate) fn wake_ev(w: &pthread::WakeFold) -> Ev {
+    Ev::Wake {
+        head: bise_proto::thread::words::wake_head(w),
+        stopped: matches!(w.ev, pthread::WakeEv::Stopped | pthread::WakeEv::Expired),
+        tail: w.tail.clone(),
+        open: false,
+    }
+}
+
 fn tool(i: usize, it: &pthread::ToolItem) -> Ev {
     let state = match it.state {
         pthread::ToolState::Run | pthread::ToolState::Unknown => ToolState::Run,

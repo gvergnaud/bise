@@ -101,6 +101,10 @@ fn state_word(sb: &Sb, a: &Agent) -> (String, Color) {
     if needs_you(sb, a) {
         return ("asks you".into(), accent());
     }
+    // event-wake: what it waits for, cut to the column (`cargo t…`)
+    if let Some(w) = a.watching.first().filter(|_| a.waits_event()) {
+        return (fit(&w.what, STATE_W), dim());
+    }
     let w = if a.status.is_empty() { "idle" } else { a.status.as_str() };
     (fit(w, STATE_W), dim())
 }
@@ -134,7 +138,9 @@ fn columns(app: &App, sb: &Sb, a: &Agent, boxed: bool, drop: usize) -> Vec<Span<
         };
         vec![Span::styled(format!(" {:>STATE_W$}", w), Style::default().fg(c))]
     } else {
-        let time = a.turn_ms.filter(|_| a.status == "working").map(short_age).unwrap_or_default();
+        // event-wake: waiting, the time column says since when
+        let waited = a.wait_since().filter(|_| a.waits_event()).map(|s| short_age(crate::when::now_ms().saturating_sub(s)));
+        let time = a.turn_ms.filter(|_| a.status == "working").map(short_age).or(waited).unwrap_or_default();
         let fill = sb.usage_of(&a.name).map(|u| u.short.clone()).unwrap_or_default();
         // site/m/timers: a scheduled task's next run takes the time's
         // place, faint: `◷ 1m`, `◷ 07:30`
@@ -274,6 +280,10 @@ fn agent_row(app: &App, sb: &Sb, a: &Agent, i: usize, num: Option<usize>, w: usi
     // (the breathing gust while it works, `○` idle); its `:*` follows its name
     let g = if !a.main && needs_you(sb, a) {
         (G_NEEDS_YOU, accent())
+    } else if a.waits_event() {
+        // event-wake: `…` waits for something (an agent, an event), in
+        // text, never the accent
+        (G_WAITING, text())
     } else {
         glyph(&a.status, app.tick, app.motion_away)
     };
@@ -483,7 +493,32 @@ impl Sb {
         let paths = crate::topedge::paths(&self.workspace, flow);
         let link = |t: String, st: Style| crate::textlayer::link(t, crate::artifacts_screen::OPEN_URL, st);
         let notice = crate::topedge::notice(crate::artifacts::new_count(), &crate::artifacts::new_rows(), &link);
+        // event-wake: the agent in view waits for an event: `… waiting
+        // for cargo test · 2m`, dim, before the counts (when it fits)
+        let waiting = self.waiting_words(crate::when::now_ms());
+        let counts = |r: usize| {
+            let c = counts(r);
+            let Some(w) = &waiting else { return c };
+            let ww = w.width() + 2;
+            let cw: usize = c.iter().map(|s| s.content.width()).sum();
+            if r != usize::MAX && ww + 3 + cw > r {
+                return c;
+            }
+            let mut out = vec![Span::styled(format!("{} {}", G_WAITING, w), Style::default().fg(dim()))];
+            if !c.is_empty() {
+                out.push(Span::styled(" · ", Style::default().fg(dim())));
+            }
+            out.extend(c);
+            out
+        };
         crate::topedge::lay(room, &paths, self.role_spans(), counts, &notice)
+    }
+
+    /// event-wake: the live words of the agent in view when it waits for
+    /// an event (`waiting for cargo test · 2m`, bise-proto's words).
+    pub(crate) fn waiting_words(&self, now: u64) -> Option<String> {
+        let a = self.agent(&self.focus).filter(|a| a.waits_event())?;
+        bise_proto::thread::words::waiting_for(&a.watching, now)
     }
 
     /// The counts in at most `room` columns (book §8 "The frame"): not
@@ -1586,6 +1621,31 @@ mod tests {
         term.draw(|f| draw_panel(&app, f, f.area())).unwrap();
         let y = t.iter().position(|r| r.contains("docs")).unwrap();
         assert_eq!(term.backend().buffer()[(32, y as u16)].fg, accent(), "{:?}", t[y]);
+    }
+
+    /// event-wake (designer's page): an idle agent with a live watch
+    /// reads `…` in text, its wait in the time column; ctrl held, what it
+    /// waits for, cut to the column; no watch: `○` again.
+    #[test]
+    fn an_agent_waiting_on_an_event_is_not_idle() {
+        use crate::ctrlhint::{Held, Hold};
+        let mut app = bench::test_app_drained();
+        let since = crate::when::now_ms().saturating_sub(125_000);
+        let w = bise_proto::rows::AgentWatch { id: 3, kind: bise_proto::rows::WatchKind::Bg, what: "cargo test".into(), since_ms: since };
+        app.sb.agents = vec![Agent { main: true, ..agent("main", "idle") }, Agent { watching: vec![w], ..agent("perf", "idle") }];
+        let t = trimmed(&panel_rows(&app, 40, 6));
+        let row = t.iter().find(|r| r.contains("perf")).cloned().unwrap_or_default();
+        assert!(row.contains(&format!("{} perf", G_WAITING)) && row.contains("2m"), "{row:?}");
+        assert_eq!(crate::sb::title_status(&app).running, 1, "it counts in the tab title");
+        app.hold = Hold::of(Held::Ctrl, std::time::Instant::now() - std::time::Duration::from_secs(2));
+        let t = trimmed(&panel_rows(&app, 40, 6));
+        let row = t.iter().find(|r| r.contains("perf")).cloned().unwrap_or_default();
+        assert!(row.ends_with("cargo t…"), "{row:?}");
+        app.hold = Hold::default();
+        app.sb.agents[1].watching.clear();
+        let t = trimmed(&panel_rows(&app, 40, 6));
+        let row = t.iter().find(|r| r.contains("perf")).cloned().unwrap_or_default();
+        assert!(row.contains(&format!("{} perf", G_IDLE)), "{row:?}");
     }
 
     /// BISE-135: the model and effort are on the divider (no tag in the

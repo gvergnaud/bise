@@ -114,6 +114,35 @@ fn a_stopped_line_is_a_stopped_entry() {
     assert_eq!(e[1].text, "working on", "the line after the stop doesn't join the agent's message");
 }
 
+/// wake-ui: a watch's end is a `wake` entry; bise's message that woke
+/// the agent folds into it by its id, whichever line comes first (an
+/// idle agent reads it before the hub writes its line), at the
+/// message's pos; another message from bise stays one.
+#[test]
+fn a_wake_line_takes_its_message_in_by_id() {
+    let page = |_: &str| None;
+    let w = r#"{"id":1,"ev":"ended","kind":"bg","what":"cargo test","rc":0,"after_ms":124000,"tail":["a","b","c"],"msg":3}"#;
+    let ls = vec![
+        (1, 1001, "sb msg-in : switchboard m_3 : background 0 ended · rc 0".to_string()),
+        (2, 1001, "its last 3 lines (/x/0.out):".to_string()),
+        (3, 1002, format!("sb wake : {w}")),
+        (4, 1003, "  obs: assistant: all 212 tests pass".to_string()),
+        (5, 1004, "sb msg-in : switchboard m_4 : something else".to_string()),
+    ];
+    let e = fold(&ls, &ctx_with(&[], &page));
+    let kinds: Vec<EntryKind> = e.iter().map(|e| e.kind).collect();
+    assert_eq!(kinds, [EntryKind::Wake, EntryKind::Agent, EntryKind::FromAgent]);
+    assert_eq!((e[0].pos, e[0].text.as_str()), (1, "cargo test ended · rc 0 · after 2m04s"));
+    assert!(e.iter().all(|e| e.payload_matches_kind()));
+    // the hub's line first (a busy agent reads it after its turn)
+    let ls = vec![
+        (1, 1002, format!("sb wake : {w}")),
+        (2, 1003, "sb msg-in : switchboard m_3 : background 0 ended · rc 0".to_string()),
+    ];
+    let e = fold(&ls, &ctx_with(&[], &page));
+    assert_eq!(e.iter().map(|e| e.kind).collect::<Vec<_>>(), [EntryKind::Wake]);
+}
+
 /// What a task sent (sb-core's `sent` line, architect m_10203) is a
 /// `to_agent` entry: to whom, its id, whether it asks; the card main
 /// opens for it, written in the task's feed too, is its card entry.

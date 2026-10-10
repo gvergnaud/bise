@@ -17,10 +17,15 @@
 //! look over an injected [`Probe`] ([`look`]), the words (the hit line,
 //! the "still running" line given at set, `sb wake`'s list), the tail
 //! clip, and [`Wakes`], the read-only mirror of sb-core's view (`wakes`,
-//! `wakes_ended`). The probing itself (files, pids, launchctl) and its
+//! `wakes_ended`). For the person (wake-ui, designer's page event-wake):
+//! a watch's name ([`Spec::name`], one for the agents row's `watching`
+//! and the thread), and the typed `sb wake : <json>` line of its end
+//! ([`end_line`], bise-proto's `WakeFold`). The probing itself (files, pids, launchctl) and its
 //! cadence: daemon/wakes.rs.
 
 use crate::util::{clip, one_line};
+use bise_proto::rows::WatchKind;
+use bise_proto::thread::{WakeEv, WakeFold};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
@@ -110,6 +115,61 @@ impl Spec {
     }
 }
 
+impl Spec {
+    /// What it is, typed, for the clients (the agents row, the wake line).
+    pub fn kind(&self) -> WatchKind {
+        match &self.what {
+            What::Bg { .. } => WatchKind::Bg,
+            What::Pid { .. } => WatchKind::Pid,
+            What::File { .. } => WatchKind::File,
+            What::Job { .. } => WatchKind::Job,
+        }
+    }
+
+    /// Its name for the person (designer's page event-wake), one for the
+    /// row and the line: the agent's note when it gave one, else a bash
+    /// command's first useful words (`cargo test`, `npm run dev`), `pid
+    /// 4242`, a file's name (`build.rc`; the words add `to appear`),
+    /// `launchd job dev.x`.
+    pub fn name(&self) -> String {
+        if !self.note.trim().is_empty() {
+            return clip(&one_line(&self.note), 40);
+        }
+        match &self.what {
+            What::Bg { slot, cmd } => {
+                let w = cmd_words(cmd);
+                if w.is_empty() {
+                    format!("background {}", slot_id(slot))
+                } else {
+                    w
+                }
+            }
+            What::Pid { pid, .. } => format!("pid {}", pid),
+            What::File { path } => path.rsplit('/').find(|p| !p.is_empty()).unwrap_or(path).to_string(),
+            What::Job { label } => format!("launchd job {}", label),
+        }
+    }
+}
+
+/// A command's first useful words: its first command (before `&&`, `;`,
+/// `|`), without the `VAR=x` settings and a `cd x &&` before it, up to
+/// its first flag, at most 3 words, a path word as its file name:
+/// `cargo test -p x` → `cargo test`, `cd web && npm run dev` → `npm run
+/// dev`, `./scripts/gate.sh quick` → `gate.sh quick`.
+pub fn cmd_words(cmd: &str) -> String {
+    let parts: Vec<&str> = cmd.split(['&', ';', '|']).map(str::trim).filter(|p| !p.is_empty()).collect();
+    let first = parts.iter().find(|p| !p.starts_with("cd ") && **p != "cd").or(parts.first()).copied().unwrap_or_default();
+    let words: Vec<String> = first
+        .split_whitespace()
+        .skip_while(|w| w.contains('=') && !w.starts_with('-'))
+        .filter(|w| !matches!(*w, "nohup" | "exec" | "time"))
+        .take_while(|w| !w.starts_with('-') && !w.contains('>') && !w.starts_with('<'))
+        .take(3)
+        .map(|w| w.trim_matches(['"', '\'']).rsplit('/').find(|p| !p.is_empty()).unwrap_or(w).to_string())
+        .collect();
+    clip(&words.join(" "), 40)
+}
+
 /// The id of a bash slot (`<dir>/3` → `3`).
 fn slot_id(slot: &str) -> &str {
     slot.rsplit('/').next().unwrap_or(slot)
@@ -172,6 +232,19 @@ impl Wakes {
                 })
             })
             .collect();
+    }
+
+    /// What `agent` waits for now, oldest first (the agents row's
+    /// `watching`): its live watches, named for the person.
+    pub fn watching(&self, agent: &str) -> Vec<bise_proto::rows::AgentWatch> {
+        let mut v: Vec<_> = self
+            .live
+            .values()
+            .filter(|w| w.agent == agent)
+            .map(|w| bise_proto::rows::AgentWatch { id: w.id, kind: w.spec.kind(), what: w.spec.name(), since_ms: w.set_at })
+            .collect();
+        v.sort_by_key(|w| (w.since_ms, w.id));
+        v
     }
 
     /// The live watch of `agent`'s background command `slot` (its id in
@@ -394,6 +467,52 @@ fn tail_part(file: &str, tail: Option<&str>) -> String {
         1 => format!("its last line ({}):\n{}", file, t),
         n => format!("its last {} lines ({}):\n{}", n, file, t),
     }
+}
+
+/// What a look found at a watch's end, typed (the thread's `wake` line):
+/// its rc when a number, its output's last lines (clipped once, as the
+/// agent's words), how long it waited.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Hit {
+    pub rc: Option<i64>,
+    pub tail: Vec<String>,
+    pub after_ms: u64,
+}
+
+impl Hit {
+    pub fn of(rc: Option<&str>, tail: Option<&str>, after_ms: u64) -> Hit {
+        Hit {
+            rc: rc.and_then(|r| r.trim().parse().ok()),
+            tail: tail.map(tail_clip).unwrap_or_default().lines().map(String::from).collect(),
+            after_ms,
+        }
+    }
+}
+
+/// The thread's `sb wake : <json>` line of a watch that ended (wake-ui):
+/// `why` sb-core's (`hit`, `max`, `stopped by x`, `gone`), `quiet` a
+/// bash command's watch (its max is a day, no wake), `hit` the look's
+/// facts, `msg` bise's message that woke the agent in the same step.
+/// None: no line (an agent archived with it, `gone`).
+pub fn end_line(w: &Watch, why: &str, at: u64, hit: Option<&Hit>, msg: Option<u64>) -> Option<WakeFold> {
+    let after_ms = hit.map_or(at.saturating_sub(w.set_at), |h| h.after_ms);
+    let ev = match why {
+        "hit" => WakeEv::Ended,
+        "max" if w.quiet => WakeEv::Expired,
+        "max" => WakeEv::Still,
+        "gone" => return None,
+        _ => WakeEv::Stopped,
+    };
+    Some(WakeFold {
+        id: w.id,
+        ev,
+        kind: w.spec.kind(),
+        what: w.spec.name(),
+        rc: hit.and_then(|h| h.rc),
+        after_ms,
+        tail: hit.map(|h| h.tail.clone()).unwrap_or_default(),
+        msg,
+    })
 }
 
 /// The wake of a watch whose event happened (`waited`: since its set).

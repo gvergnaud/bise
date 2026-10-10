@@ -420,8 +420,120 @@ pub fn no_key(why: &str, name: &dyn Fn(&str, &str) -> String) -> Option<String> 
     Some(format!("turn stopped: no {} key yet. /provider sets it up.", name))
 }
 
+// ---- event-wake: an agent waiting on an event (designer's page
+// event-wake). Its live line, its row's age, and the line of a watch's
+// end; never the accent, only a non-zero rc in red.
+
+/// A wait's age, as the panel's time column and the live line say it:
+/// `40s`, `2m`, `3h`, `2d`.
+pub fn wait_age(ms: u64) -> String {
+    let s = ms / 1000;
+    match s {
+        0..=59 => format!("{}s", s),
+        60..=3599 => format!("{}m", s / 60),
+        3600..=86_399 => format!("{}h", s / 3600),
+        _ => format!("{}d", s / 86_400),
+    }
+}
+
+/// How long a watch waited, in its end's line: `45s`, `2m04s`, `1h00m`,
+/// `24h`, `30h15m`.
+pub fn wake_dur(ms: u64) -> String {
+    let s = ms / 1000;
+    match s {
+        0..=59 => format!("{}s", s),
+        60..=3599 => format!("{}m{:02}s", s / 60, s % 60),
+        _ if s % 3600 / 60 == 0 && s >= 86_400 => format!("{}h", s / 3600),
+        _ => format!("{}h{:02}m", s / 3600, s % 3600 / 60),
+    }
+}
+
+/// What a watch waits for, as a sentence's object: `cargo test`, a
+/// file's `build.rc to appear`.
+pub fn watch_label(kind: crate::rows::WatchKind, what: &str) -> String {
+    match kind {
+        crate::rows::WatchKind::File => format!("{} to appear", what),
+        _ => what.to_string(),
+    }
+}
+
+/// The live line of an agent that waits (without its `…`): `waiting for
+/// cargo test · 2m`, `waiting for cargo test and 1 more · 2m`; the age
+/// since the oldest watch. None: it waits for nothing.
+pub fn waiting_for(watching: &[crate::rows::AgentWatch], now_ms: u64) -> Option<String> {
+    let first = watching.iter().min_by_key(|w| (w.since_ms, w.id))?;
+    let more = match watching.len() - 1 {
+        0 => String::new(),
+        n => format!(" and {} more", n),
+    };
+    Some(format!("waiting for {}{} · {}", watch_label(first.kind, &first.what), more, wait_age(now_ms.saturating_sub(first.since_ms))))
+}
+
+/// A wake entry's head, in parts (` · ` between them), each with whether
+/// it is an error (only a non-zero rc): `cargo test ended`, `rc 0`,
+/// `after 2m04s`; `the reindex still running after 1h00m`; `stopped
+/// waiting for the reindex`; `stopped waiting for npm run dev after 24h`.
+pub fn wake_head(f: &super::WakeFold) -> Vec<(String, bool)> {
+    use super::WakeEv;
+    let after = wake_dur(f.after_ms);
+    match f.ev {
+        WakeEv::Ended => {
+            let verb = if f.kind == crate::rows::WatchKind::File { "appeared" } else { "ended" };
+            let mut v = vec![(format!("{} {}", f.what, verb), false)];
+            if let Some(rc) = f.rc {
+                v.push((format!("rc {}", rc), rc != 0));
+            }
+            v.push((format!("after {}", after), false));
+            v
+        }
+        WakeEv::Still => vec![(format!("{} still running after {}", f.what, after), false)],
+        WakeEv::Stopped => vec![(format!("stopped waiting for {}", watch_label(f.kind, &f.what)), false)],
+        WakeEv::Expired => vec![(format!("stopped waiting for {} after {}", watch_label(f.kind, &f.what), after), false)],
+        WakeEv::Unknown => vec![(f.what.clone(), false)],
+    }
+}
+
+/// A wake's folded output: `its last 3 lines`, `its last line`; None
+/// without one.
+pub fn wake_tail(f: &super::WakeFold) -> Option<String> {
+    match f.tail.len() {
+        0 => None,
+        1 => Some("its last line".into()),
+        n => Some(format!("its last {} lines", n)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_waiting_words_are_designers() {
+        use super::*;
+        use crate::rows::{AgentWatch, WatchKind};
+        use crate::thread::{WakeEv, WakeFold};
+        let w = |id, kind, what: &str, since_ms| AgentWatch { id, kind, what: what.into(), since_ms };
+        assert_eq!(waiting_for(&[], 0), None);
+        let one = [w(3, WatchKind::Bg, "cargo test", 1_000)];
+        assert_eq!(waiting_for(&one, 121_000).as_deref(), Some("waiting for cargo test · 2m"));
+        let two = [w(4, WatchKind::File, "build.rc", 50_000), w(3, WatchKind::Bg, "cargo test", 1_000)];
+        assert_eq!(waiting_for(&two, 121_000).as_deref(), Some("waiting for cargo test and 1 more · 2m"));
+        assert_eq!(waiting_for(&two[..1], 60_000).as_deref(), Some("waiting for build.rc to appear · 10s"));
+        let f = |ev, kind, what: &str, rc, after_ms| WakeFold { id: 1, ev, kind, what: what.into(), rc, after_ms, tail: Vec::new(), msg: None };
+        let head = |f: &WakeFold| wake_head(f).into_iter().map(|(t, _)| t).collect::<Vec<_>>().join(" · ");
+        assert_eq!(head(&f(WakeEv::Ended, WatchKind::Bg, "cargo test", Some(0), 124_000)), "cargo test ended · rc 0 · after 2m04s");
+        let red = f(WakeEv::Ended, WatchKind::Bg, "cargo test", Some(101), 190_000);
+        assert_eq!(wake_head(&red)[1], ("rc 101".to_string(), true), "only a non-zero rc is red");
+        assert!(!wake_head(&f(WakeEv::Ended, WatchKind::Bg, "x", Some(0), 1))[1].1);
+        assert_eq!(head(&f(WakeEv::Ended, WatchKind::File, "build.rc", Some(1), 5_000)), "build.rc appeared · rc 1 · after 5s");
+        assert_eq!(head(&f(WakeEv::Ended, WatchKind::Pid, "pid 4242", None, 5_000)), "pid 4242 ended · after 5s");
+        assert_eq!(head(&f(WakeEv::Still, WatchKind::Pid, "the reindex", None, 3_600_000)), "the reindex still running after 1h00m");
+        assert_eq!(head(&f(WakeEv::Stopped, WatchKind::Pid, "the reindex", None, 9)), "stopped waiting for the reindex");
+        assert_eq!(head(&f(WakeEv::Expired, WatchKind::Bg, "npm run dev", None, 86_400_000)), "stopped waiting for npm run dev after 24h");
+        let mut t = f(WakeEv::Ended, WatchKind::Bg, "x", Some(0), 1);
+        assert_eq!(wake_tail(&t), None);
+        t.tail = vec!["a".into(), "b".into(), "c".into()];
+        assert_eq!(wake_tail(&t).as_deref(), Some("its last 3 lines"));
+    }
+
     use super::*;
 
     #[test]

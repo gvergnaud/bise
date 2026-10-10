@@ -215,6 +215,47 @@ pub struct Agent {
     /// Back to 0 when sb-core restarts: a lower count is a new baseline
     #[serde(default, skip_serializing_if = "is_zero_u64")]
     pub turns: u64,
+    /// event-wake (designer's waiting state): the events it waits for
+    /// now (`sb wake`'s live watches, a backgrounded bash command's
+    /// included), oldest first. A list of the snapshot: always written,
+    /// empty included, so a client tells "no watch now" from an older
+    /// hub (none)
+    #[serde(default)]
+    pub watching: Vec<AgentWatch>,
+}
+
+/// What a watch looks at (event-wake).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum WatchKind {
+    /// a backgrounded bash command
+    Bg,
+    /// a process (`sb wake --on-exit`)
+    Pid,
+    /// a file that appears (`--on-file`)
+    File,
+    /// a launchd job (`--on-job`)
+    Job,
+    /// a kind this version doesn't know (a newer hub)
+    #[serde(other)]
+    Unknown,
+}
+
+/// One event an agent waits for (event-wake): the panel's `…`, the live
+/// line `… waiting for cargo test · 2m`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct AgentWatch {
+    /// its id (`sb wake --stop <id>`)
+    pub id: u64,
+    pub kind: WatchKind,
+    /// its name in designer's words (`cargo test`, `the build`, `pid
+    /// 4242`, `build.rc`, `launchd job dev.x`): the hub's
+    /// `wake::Spec::name`; [`crate::thread::words::waiting_for`] says it
+    pub what: String,
+    /// when it was set (ms)
+    pub since_ms: u64,
 }
 
 impl Agent {

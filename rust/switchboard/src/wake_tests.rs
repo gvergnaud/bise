@@ -178,3 +178,35 @@ fn the_list_shows_the_agents_own_watches() {
     let ids: BTreeSet<u64> = w.live.keys().copied().collect();
     assert_eq!(ids, BTreeSet::from([1, 2]));
 }
+
+#[test]
+fn a_watch_is_named_for_the_person() {
+    assert_eq!(cmd_words("cargo test -p storefront --release"), "cargo test");
+    assert_eq!(cmd_words("cd web && npm run dev"), "npm run dev");
+    assert_eq!(cmd_words("RUST_LOG=1 ./scripts/gate.sh quick > /tmp/x 2>&1"), "gate.sh quick");
+    assert_eq!(cmd_words("sleep 20"), "sleep 20");
+    assert_eq!(Spec::bg("/b/3", "cargo test -p x").name(), "cargo test");
+    assert_eq!(Spec::bg("/b/3", "").name(), "background 3");
+    let mut p = Spec { what: What::Pid { pid: 4242, start: String::new() }, tail: None, note: String::new() };
+    assert_eq!((p.name(), p.kind()), ("pid 4242".to_string(), WatchKind::Pid));
+    p.note = "the reindex".into();
+    assert_eq!(p.name(), "the reindex", "the agent's note first");
+    let f = Spec { what: What::File { path: "/w/out/build.rc".into() }, tail: None, note: String::new() };
+    assert_eq!((f.name(), f.kind()), ("build.rc".to_string(), WatchKind::File));
+    let j = Spec { what: What::Job { label: "dev.x".into() }, tail: None, note: String::new() };
+    assert_eq!(j.name(), "launchd job dev.x");
+}
+
+#[test]
+fn a_watch_end_is_one_typed_line_but_for_an_archived_agent() {
+    let w = Watch { id: 7, agent: "perf".into(), spec: Spec::bg("/b/3", "cargo test"), set_at: 1_000, max_at: 0, quiet: true };
+    let hit = Hit::of(Some("101\n"), Some("a\nb\nfailed\n"), 190_000);
+    assert_eq!((hit.rc, hit.tail.len()), (Some(101), 3));
+    let l = end_line(&w, "hit", 9, Some(&hit), Some(12)).unwrap();
+    assert_eq!((l.ev, l.what.as_str(), l.rc, l.after_ms, l.msg), (WakeEv::Ended, "cargo test", Some(101), 190_000, Some(12)));
+    assert_eq!(end_line(&w, "max", 86_401_000, None, None).unwrap().ev, WakeEv::Expired, "a bash command's day: no wake");
+    assert_eq!(end_line(&Watch { quiet: false, ..w.clone() }, "max", 9, None, Some(3)).unwrap().ev, WakeEv::Still);
+    let s = end_line(&w, "stopped by perf", 61_000, None, None).unwrap();
+    assert_eq!((s.ev, s.after_ms), (WakeEv::Stopped, 60_000));
+    assert_eq!(end_line(&w, "gone", 9, None, None), None);
+}

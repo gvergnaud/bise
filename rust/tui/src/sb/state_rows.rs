@@ -73,6 +73,7 @@ impl Agent {
             efforts: a.efforts.clone(),
             changes: a.changes.map(|c| (c.files, c.add, c.del)),
             usage: a.usage.clone(),
+            watching: a.watching.clone(),
         }
     }
 }

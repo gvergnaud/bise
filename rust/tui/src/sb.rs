@@ -88,13 +88,15 @@ pub(crate) fn strip_rows(app: &App) -> usize {
 
 /// What the terminal's tab title says (termtitle.rs): the workspace's
 /// folder, the inbox's cards, the new artifacts, the agents at work
-/// (working or waiting on another agent; main and archived left out).
+/// (working, waiting on another agent or on an event; main and archived
+/// left out).
 pub(crate) fn title_status(app: &App) -> crate::termtitle::Status {
     let sb = &app.sb;
     crate::termtitle::Status {
         repo: crate::termtitle::repo_name(&sb.workspace),
         inbox: sb.sorted_cards().len(),
-        running: sb.agents.iter().filter(|a| !a.main && a.busy()).count(),
+        // event-wake: an agent waiting on an event is not idle
+        running: sb.agents.iter().filter(|a| !a.main && (a.busy() || a.waits_event())).count(),
     }
 }
 
@@ -161,6 +163,9 @@ pub(super) struct Agent {
     /// panel row's fill): the hub's row, from its live usage lines; None
     /// before its first call since the hub started and after a compaction.
     usage: Option<bise_proto::rows::AgentUsage>,
+    /// event-wake: the events it waits for now (the hub's row,
+    /// `watching`), oldest first: the panel's `…`, the live line
+    watching: Vec<bise_proto::rows::AgentWatch>,
 }
 
 impl Agent {
@@ -183,6 +188,18 @@ impl Agent {
     /// In a turn (its feed shows the spinner).
     fn busy(&self) -> bool {
         self.status == "working" || self.status == "waiting"
+    }
+
+    /// event-wake (designer's page): its turn ended and it waits for an
+    /// event (a live watch): `…` instead of `○`, the live line. A turn
+    /// that runs, or a state of its own (blocked, failed...), says itself.
+    fn waits_event(&self) -> bool {
+        !self.watching.is_empty() && matches!(self.status.as_str(), "idle" | "")
+    }
+
+    /// Since when it waits (its oldest watch's set, ms).
+    fn wait_since(&self) -> Option<u64> {
+        self.watching.iter().map(|w| w.since_ms).min()
     }
 }
 
@@ -1140,6 +1157,8 @@ pub(crate) fn hub_ev(h: Hub) -> Option<Ev> {
         // more and an interrupt reads as on main (architect m_12576); the
         // desktop thread keeps its Stopped entry (bise-proto's fold)
         Hub::Stopped(_) => return None,
+        // event-wake: a watch ended (its JSON, the fold's WakeFold)
+        Hub::Wake(json) => return serde_json::from_str(&json).ok().map(|w| crate::entry_ev::wake_ev(&w)),
         // a known kind's line that doesn't parse, as before
         Hub::Other { kind, text } => match kind.as_str() {
             "card-closed" => Ev::Info(format!("card {} ", text)),

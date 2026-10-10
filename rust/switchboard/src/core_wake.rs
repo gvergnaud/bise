@@ -1,7 +1,9 @@
 //! `sb wake` (event-wake) on the link to sb-core: the request's checks
 //! and words (wake.rs), the watch a backgrounded bash command gets at its
 //! handoff (the runtime's `bg_handoff` wire line), and the look's hit
-//! (daemon/wakes.rs). The watch, its end and the wake are sb-core's
+//! (daemon/wakes.rs), and the thread's `sb wake` line of each watch that
+//! ended (`wake_lines`, an effect after sb-core's `wake_end`, like the
+//! timers' `scheduled` lines). The watch, its end and the wake are sb-core's
 //! (`wake_set`, `wake_stop`, `wake_hit` inputs; bend/hub/wakes.bend).
 
 use super::*;
@@ -69,7 +71,38 @@ impl Hub {
 
     /// The look saw watch `id`'s event (daemon/wakes.rs): sb-core ends it
     /// and wakes its agent, once.
-    pub(super) fn wake_hit(&mut self, fx: &mut Fx, env: &mut dyn Env, id: u64, text: &str) {
+    pub(super) fn wake_hit(&mut self, fx: &mut Fx, env: &mut dyn Env, id: u64, text: &str, hit: wake::Hit) {
+        let k = fx.len();
         self.core(fx, env, None, json!({"t": "wake_hit", "id": id, "text": text}));
+        self.wake_lines(fx, k, Some(&hit));
+    }
+
+    /// The thread's line of each watch that ended in `fx[k..]` (sb-core's
+    /// `wake_end` journal events), `sb wake : <json>` (wake.rs
+    /// `end_line`), in its agent's thread: a hit's only with `hit` (its
+    /// facts, from wake_hit), the others without; bise's message sent to
+    /// that agent in the same step is the one that woke it (its id rides
+    /// on the line, so the thread folds it in). Effects only: a replay
+    /// writes none.
+    pub(super) fn wake_lines(&self, fx: &mut Fx, k: usize, hit: Option<&wake::Hit>) {
+        let ends: Vec<(u64, String)> = fx[k..]
+            .iter()
+            .filter_map(|e| match e {
+                Effect::Journal(j) if j["type"] == "wake_end" => Some((j["id"].as_u64()?, j["why"].as_str().unwrap_or_default().to_string())),
+                _ => None,
+            })
+            .filter(|(_, why)| (why == "hit") == hit.is_some())
+            .collect();
+        for (id, why) in ends {
+            let Some(e) = self.st.wakes.ended.iter().rev().find(|e| e.watch.id == id) else { continue };
+            let agent = &e.watch.agent;
+            let msg = fx[k..].iter().find_map(|f| match f {
+                Effect::Journal(j) if j["type"] == "message_sent" && j["msg"]["to"] == agent.as_str() && j["msg"]["from"] == HUB => j["msg"]["id"].as_u64(),
+                _ => None,
+            });
+            if let Some(l) = wake::end_line(&e.watch, &why, e.at, hit, msg) {
+                fx.push(line(agent, "wake", &serde_json::to_string(&l).unwrap_or_default()));
+            }
+        }
     }
 }

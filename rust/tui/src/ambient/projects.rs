@@ -163,6 +163,7 @@ mod tests {
             effort: None,
             usage: None,
             waiting_on: None,
+            watching: vec![],
             mode: None,
             path: String::new(),
             objective: String::new(),

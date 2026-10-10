@@ -447,6 +447,7 @@ pub(crate) fn ev_lines(ev: &Ev, width: usize) -> Vec<Line<'static>> {
         Ev::Compacted { text, open } => summary_lines(text, *open, width),
         Ev::Fold { head, text, open } => fold_lines(head, text, *open, width),
         Ev::Scheduled { head, words, open } => scheduled_lines(head, words, *open, width),
+        Ev::Wake { head, stopped, tail, open } => wake_lines(head, *stopped, tail, *open, width),
         // an interrupted turn ("turn interrupted by main" too) is dim;
         // any other warning reads as text
         Ev::Warn(t) if t == "turn interrupted" || t.starts_with("turn interrupted by ") => glyph_line(G_INTERRUPTED, dim_st, t.clone(), dim_st, width),
@@ -1541,6 +1542,33 @@ pub(crate) fn scheduled_lines(head: &str, words: &str, open: bool, width: usize)
     if open && !words.is_empty() {
         let bar = Span::styled(RAIL, Style::default().fg(rule()));
         let rows: Vec<Line<'static>> = words.lines().map(|l| Line::from(Span::styled(l.to_string(), st))).collect();
+        ls.extend(barred_rows(&bar, rows, width));
+    }
+    ls
+}
+
+/// event-wake (designer's page): a watch's end, one row. `· cargo test
+/// ended · rc 0 · after 2m04s  ▸ its last 3 lines` dim, a non-zero rc in
+/// red; `– stopped waiting for …` faint; never the accent. Open, the
+/// output's last lines under the rail.
+pub(crate) fn wake_lines(head: &[(String, bool)], stopped: bool, tail: &[String], open: bool, width: usize) -> Vec<Line<'static>> {
+    let st = Style::default().fg(if stopped { faint() } else { dim() });
+    let mut row = vec![Span::styled(if stopped { "– " } else { "· " }, st)];
+    for (i, (part, err)) in head.iter().enumerate() {
+        if i > 0 {
+            row.push(Span::styled(" · ", st));
+        }
+        row.push(Span::styled(part.clone(), if *err { Style::default().fg(error()) } else { st }));
+    }
+    let n = tail.len();
+    if n > 0 {
+        let what = if n == 1 { "its last line".to_string() } else { format!("its last {} lines", n) };
+        row.push(Span::styled(format!("  {} {}", glyph(if open { G_OPEN } else { G_CLOSED }), what), st));
+    }
+    let mut ls = wrap_line(Line::from(row), width.max(1));
+    if open && n > 0 {
+        let bar = Span::styled(RAIL, Style::default().fg(rule()));
+        let rows: Vec<Line<'static>> = tail.iter().map(|l| Line::from(Span::styled(l.clone(), st))).collect();
         ls.extend(barred_rows(&bar, rows, width));
     }
     ls

@@ -71,6 +71,11 @@ pub enum EntryKind {
     /// the text the TUI's words for it. An interrupt is not one (a
     /// `stopped` entry or a notice, as before)
     TurnFailed,
+    /// event-wake: a watch of the agent ended (`wake`: the event happened,
+    /// still running at its max, or it stopped waiting), from the hub's
+    /// `sb wake : <json>` line; the wake's own message (bise's) folds
+    /// into it by its id
+    Wake,
     /// a kind this reader doesn't know (a newer hub)
     #[serde(other)]
     Unknown,
@@ -273,6 +278,51 @@ pub struct Scheduled {
     pub head: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub words: String,
+}
+
+/// How a watch ended, as its thread says it (event-wake).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum WakeEv {
+    /// its event happened: `cargo test ended · rc 0 · after 2m04s`
+    Ended,
+    /// past its max, still running: `the reindex still running after 1h00m`
+    Still,
+    /// the agent stopped it (`sb wake --stop`): `stopped waiting for …`
+    Stopped,
+    /// a bash command's day ran out, no wake: `stopped waiting for npm
+    /// run dev after 24h`
+    Expired,
+    /// a way this version doesn't know (a newer hub)
+    #[serde(other)]
+    Unknown,
+}
+
+/// A `wake` entry (event-wake): what ended and how; [`words::wake_head`]
+/// says it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct WakeFold {
+    /// the watch's id
+    pub id: u64,
+    pub ev: WakeEv,
+    pub kind: crate::rows::WatchKind,
+    /// its name (the agents row's `watching[].what`)
+    pub what: String,
+    /// its rc, when known (an ended bash command, a job, an rc file)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rc: Option<i64>,
+    /// how long it waited
+    pub after_ms: u64,
+    /// the last lines of its output (at most 20, folded: `▸ its last 3
+    /// lines`); empty: none or no output file
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tail: Vec<String>,
+    /// the id of bise's message that woke the agent (folded into this
+    /// entry); none when nothing woke it
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub msg: Option<u64>,
 }
 
 /// Where a tool call is: running, done, failed (R11, amb-win S9).
@@ -544,6 +594,8 @@ pub struct Entry {
     pub scheduled: Option<Scheduled>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub turn_failed: Option<TurnFailed>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wake: Option<WakeFold>,
     /// the first entry after a `turn_started` line: a turn starts here
     /// (the TUI's turn row; a reply's turn ends before the next start)
     #[serde(default, skip_serializing_if = "is_false")]
@@ -586,6 +638,7 @@ impl Entry {
             approval: None,
             scheduled: None,
             turn_failed: None,
+            wake: None,
             turn_start: false,
             turn_end_ms: None,
         }
@@ -614,6 +667,7 @@ impl Entry {
             (EntryKind::Approval, self.approval.is_some()),
             (EntryKind::Scheduled, self.scheduled.is_some()),
             (EntryKind::TurnFailed, self.turn_failed.is_some()),
+            (EntryKind::Wake, self.wake.is_some()),
         ];
         let thinking = match self.kind {
             EntryKind::Thinking => self.thinking.is_some(),

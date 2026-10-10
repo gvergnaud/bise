@@ -4475,3 +4475,50 @@ fn an_agents_row_says_running_and_turns_from_one_source() {
 /// No number a client sends panics the hub (core_num.rs).
 #[path = "core_num_tests.rs"]
 mod core_num_tests;
+
+/// wake-ui (architect m_17633): a watch's end is one `sb wake` line in
+/// its agent's thread, its wake's message id on it; a replay writes
+/// none; an archived agent's watch none; wake_set and wake_end each
+/// change the agent's row (`watching`).
+#[test]
+fn a_watch_end_is_one_wake_line_and_its_row_moves() {
+    let mut t = T::new();
+    t.spawn_task("perf");
+    t.go(Input::ReplIdle { agent: "perf".into(), leftover: false });
+    let watching = |t: &T| t.hub.snapshot(t.env.now)["agents"].as_array().unwrap().iter().find(|a| a["name"] == "perf").unwrap()["watching"].clone();
+    assert_eq!(watching(&t), json!([]));
+    let spec = crate::wake::Spec { what: crate::wake::What::Pid { pid: 4242, start: String::new() }, tail: None, note: "the build".into() };
+    let (tok, _) = t.req("perf", AgentReq::Wake(WakeReq::Add { spec: spec.clone(), max_ms: crate::wake::MAX_DEFAULT_MS }));
+    let _ = tok;
+    let w = watching(&t);
+    assert_eq!((w[0]["what"].as_str(), w[0]["kind"].as_str()), (Some("the build"), Some("pid")), "{w}");
+    let id = w[0]["id"].as_u64().unwrap();
+    let wakes = |fx: &[Effect]| lines_of(fx, "perf").into_iter().filter(|l| l.starts_with("sb wake : ")).map(String::from).collect::<Vec<_>>();
+    let fx = t.go(Input::WakeHit { id, text: "pid 4242 ended · after 5s · the build".into(), rc: None, tail: vec![], after_ms: 5_000 });
+    let ls = wakes(&fx);
+    assert_eq!(ls.len(), 1, "{fx:?}");
+    let l: bise_proto::thread::WakeFold = serde_json::from_str(ls[0].trim_start_matches("sb wake : ")).unwrap();
+    let sent = t.journal.borrow().iter().rev().find(|j| j["type"] == "message_sent" && j["msg"]["to"] == "perf").map(|j| j["msg"]["id"].as_u64()).unwrap();
+    assert_eq!((l.ev, l.what.as_str(), l.after_ms, l.msg), (bise_proto::thread::WakeEv::Ended, "the build", 5_000, sent));
+    assert_eq!(watching(&t), json!([]), "the hit ends it: the row moves");
+    // a stop: one line, no message
+    t.req("perf", AgentReq::Wake(WakeReq::Add { spec: spec.clone(), max_ms: crate::wake::MAX_DEFAULT_MS }));
+    let id = watching(&t)[0]["id"].as_u64().unwrap();
+    let (_, fx) = t.req("perf", AgentReq::Wake(WakeReq::Stop(id)));
+    let ls = wakes(&fx);
+    assert_eq!(ls.len(), 1, "{fx:?}");
+    assert!(ls[0].contains("\"ev\":\"stopped\"") && !ls[0].contains("\"msg\""), "{}", ls[0]);
+    // a replay of the journal makes no effect at all (so no line), and
+    // reads the same ended watches back
+    let mut h = Hub::new("/w");
+    let events = t.journal.borrow().clone();
+    assert!(h.replay(&events).is_empty());
+    assert!(h.wakes().live.is_empty() && h.wakes().ended.len() == 2, "{:?}", h.wakes());
+    // an archived agent's watch ends 'gone': no line (the wake started a
+    // turn: it ends first, so the drop needs no card)
+    t.go(Input::ReplIdle { agent: "perf".into(), leftover: false });
+    t.req("perf", AgentReq::Wake(WakeReq::Add { spec, max_ms: crate::wake::MAX_DEFAULT_MS }));
+    let (_, fx) = t.req(MAIN, AgentReq::Drop { agent: "perf".into() });
+    assert!(fx.iter().any(|e| matches!(e, Effect::Journal(j) if j["type"] == "wake_end" && j["why"] == "gone")), "{fx:?}");
+    assert!(wakes(&fx).is_empty(), "{fx:?}");
+}

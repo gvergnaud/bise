@@ -436,7 +436,11 @@ fn draw_feed(app: &mut App, frame: &mut Frame, area: Rect, bar: Option<Rect>) {
     // column is the scrollbar's
     let feed_w = (area.width as usize).saturating_sub(usize::from(bar.is_none())).max(1);
     let area_w = feed_w;
-    let area_h = area.height as usize;
+    // event-wake (designer's page): the agent in view waits for an event:
+    // one live dim line under its last row, `… waiting for cargo test ·
+    // 2m` (its own row, kept off the feed's rows)
+    let waiting = app.sb.waiting_words(crate::when::now_ms()).filter(|_| area.height > 2);
+    let area_h = (area.height as usize).saturating_sub(usize::from(waiting.is_some()));
     let text_area = Rect {
         x: area.x,
         y: area.y,
@@ -528,7 +532,14 @@ fn draw_feed(app: &mut App, frame: &mut Frame, area: Rect, bar: Option<Rect>) {
         app.follow = true;
         app.unseen = 0;
     }
+    let rows_shown = vis.len();
     frame.render_widget(Paragraph::new(Text::from(vis)), text_area);
+    if let Some(w) = waiting.filter(|_| tail_visible) {
+        let y = text_area.y + rows_shown as u16;
+        let line = Line::from(Span::styled(format!("{} {}", theme::G_WAITING, w), Style::default().fg(theme::dim())));
+        let r = Rect { y, height: 1, ..text_area }.intersection(area);
+        frame.render_widget(Paragraph::new(line), r);
+    }
     // the visible links, for the OSC 8 of the backend (links.rs)
     for (y, (&i, &ri)) in vis_events.iter().zip(&vis_rows).enumerate() {
         let Some(er) = app.cache.get(i).and_then(|c| c.as_ref()) else { continue };

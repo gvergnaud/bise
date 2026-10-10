@@ -236,6 +236,18 @@ pub(crate) enum Ev {
         words: String,
         open: bool,
     },
+    // event-wake (designer's page event-wake): a watch of the agent
+    // ended, one row from the hub's `wake` entry: `· cargo test ended ·
+    // rc 0 · after 2m04s  ▸ its last 3 lines` dim (an end, still running)
+    // or `– stopped waiting for …` faint (`stopped`); `head` its parts
+    // with whether each is an error (only a non-zero rc, red); `tail`
+    // the output's last lines, open under it (ctrl+o)
+    Wake {
+        head: Vec<(String, bool)>,
+        stopped: bool,
+        tail: Vec<String>,
+        open: bool,
+    },
     Idle,
     Raw(String),
     // switchboard (hub line protocol v2, contract C2): a message between

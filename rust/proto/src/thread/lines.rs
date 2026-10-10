@@ -302,6 +302,8 @@ pub enum Hub {
     Scheduled(String),
     /// an interrupt (sb-core writes it in the interrupt's step)
     Stopped(String),
+    /// event-wake: a watch ended, its JSON (`thread::WakeFold`)
+    Wake(String),
     /// a kind this reader doesn't know, or a known kind's line that
     /// doesn't parse: its kind and unescaped text
     Other { kind: String, text: String },
@@ -585,6 +587,7 @@ pub fn hub(rest: &str) -> Hub {
         "warn" => Hub::Warn(text),
         "scheduled" => Hub::Scheduled(text),
         "stopped" => Hub::Stopped(text),
+        "wake" => Hub::Wake(text),
         _ => other(text),
     }
 }

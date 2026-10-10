@@ -98,8 +98,10 @@ impl Shell {
             };
             if let Seen::Ended { rc } = seen {
                 let tail = w.spec.tail.as_deref().and_then(|t| Real.tail(t));
-                let text = wake::hit_text(&w.spec, rc.as_deref(), tail.as_deref(), now.saturating_sub(w.set_at));
-                self.step(Input::WakeHit { id: w.id, text });
+                let after_ms = now.saturating_sub(w.set_at);
+                let text = wake::hit_text(&w.spec, rc.as_deref(), tail.as_deref(), after_ms);
+                let hit = wake::Hit::of(rc.as_deref(), tail.as_deref(), after_ms);
+                self.step(Input::WakeHit { id: w.id, text, rc: hit.rc, tail: hit.tail, after_ms });
             }
         }
     }

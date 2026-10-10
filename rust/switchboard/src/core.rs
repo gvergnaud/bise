@@ -564,10 +564,15 @@ pub enum Input {
         id: u64,
     },
     /// event-wake: the look (daemon/wakes.rs) saw watch `id`'s event;
-    /// `text` is the wake (wake.rs `hit_text`).
+    /// `text` is the wake (wake.rs `hit_text`); `rc`, `tail` (clipped
+    /// once, wake.rs `tail_clip`) and `after_ms` the same facts, typed,
+    /// for its thread's `wake` line (wake-ui).
     WakeHit {
         id: u64,
         text: String,
+        rc: Option<i64>,
+        tail: Vec<String>,
+        after_ms: u64,
     },
     /// The approvals gate (approvals-design.md §9): a `confirm` card for
     /// `agent`'s waiting call, in the user's inbox.
@@ -2228,6 +2233,9 @@ impl Hub {
                     "turns": a.turns_ended,
                     // who it waits on (`sb wait` / `sb ask`), for `waits {name}`
                     "waiting_on": a.waiting_on.as_ref().filter(|_| a.waiting),
+                    // event-wake: the events it waits for (the agents
+                    // row's `watching`, wake-ui)
+                    "watching": self.st.wakes.watching(&a.name),
                 })
             })
             .collect();
@@ -2443,7 +2451,7 @@ impl Hub {
             Input::Tick => self.core(&mut fx, env, None, json!({"t": "tick"})),
             Input::EveryStop { id, why } => self.timer_stop_by_user(&mut fx, env, id, &why),
             Input::EveryRun { id } => self.timer_run_now(&mut fx, env, id),
-            Input::WakeHit { id, text } => self.wake_hit(&mut fx, env, id, &text),
+            Input::WakeHit { id, text, rc, tail, after_ms } => self.wake_hit(&mut fx, env, id, &text, crate::wake::Hit { rc, tail, after_ms }),
             Input::ConfirmOpen { agent, text } => {
                 self.core(&mut fx, env, None, json!({"t": "confirm_open", "agent": agent, "text": text}))
             }
@@ -2504,6 +2512,7 @@ impl Hub {
         let now = env.now();
         input["now"] = json!(now);
         input["git"] = json!(env.is_git());
+        let k0 = fx.len();
         let mut ans: Vec<Value> = Vec::new();
         loop {
             input["ans"] = Value::Array(ans.clone());
@@ -2533,6 +2542,9 @@ impl Hub {
             for f in out.get("fx").and_then(|x| x.as_array()).into_iter().flatten() {
                 self.effect(fx, env, client, f);
             }
+            // event-wake: a watch that ended (but by a hit, whose facts
+            // its input carries: core_wake.rs) gets its thread's line
+            self.wake_lines(fx, k0, None);
             // a timer without a name: its small-model call (every_name.rs)
             if let Some((id, request)) = self.timer_names.next(&self.st.timers) {
                 fx.push(Effect::AskTimerName { id, request });

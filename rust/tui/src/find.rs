@@ -463,6 +463,7 @@ fn tier_of(ev: &Ev) -> Option<Tier> {
         | Ev::Compacted { .. }
         | Ev::Fold { .. }
         | Ev::Scheduled { .. }
+        | Ev::Wake { .. }
         | Ev::Undelivered { .. } => Some(Tier::Other),
         _ => None,
     }
@@ -499,6 +500,7 @@ fn sig(ev: &Ev) -> u64 {
         Ev::Fold { head, text, open } => [6, head.len(), text.len(), *open as usize, 0],
         Ev::Scheduled { head, words, open } => [8, head.len(), words.len(), *open as usize, 0],
         Ev::Pr { text, .. } => [7, text.len(), 0, 0, 0],
+        Ev::Wake { head, tail, open, .. } => [9, head.len(), tail.len(), *open as usize, 0],
         _ => [0; 5],
     };
     lens.iter().fold(0xcbf2_9ce4_8422_2325, |h, &x| mix(h, x))
@@ -515,6 +517,10 @@ fn haystack(ev: &Ev) -> String {
         Ev::Compacted { text, .. } | Ev::Undelivered { text, .. } => vec![cap(text)],
         Ev::Fold { head, text, .. } | Ev::Scheduled { head, words: text, .. } => vec![cap(head), cap(text)],
         Ev::Pr { number, text, .. } => return format!("#{} {}", number, cap(text)),
+        Ev::Wake { head, tail, .. } => {
+            let h: Vec<&str> = head.iter().map(|(t, _)| t.as_str()).collect();
+            return std::iter::once(h.join(" · ")).chain(tail.iter().map(|t| cap(t).to_string())).collect::<Vec<_>>().join("\n");
+        }
         Ev::Tool(td) => return tool_text(td),
         _ => Vec::new(),
     };

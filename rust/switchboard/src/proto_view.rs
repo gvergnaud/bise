@@ -125,6 +125,8 @@ pub fn agents(
             usage: usage(&name),
             // R9/S3: model.rs's waiting_on, the field the TUI's panel reads
             waiting_on: bise_proto::rows::WaitingOn::of_word(&s(&a, "waiting_on")),
+            // event-wake: what it waits for (wake.rs `Wakes::watching`)
+            watching: a.get("watching").cloned().and_then(|w| serde_json::from_value(w).ok()).unwrap_or_default(),
             // P4b: the terminal's facts, each the snapshot's own field
             mode,
             path: s(&a, "path"),

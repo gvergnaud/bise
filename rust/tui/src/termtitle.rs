@@ -36,7 +36,8 @@ pub(crate) struct Status {
     pub(crate) repo: String,
     /// The inbox's cards.
     pub(crate) inbox: usize,
-    /// The agents at work (working or waiting), main left out.
+    /// The agents at work (working, waiting on an agent or an event),
+    /// main left out.
     pub(crate) running: usize,
 }
 

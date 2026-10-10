@@ -5,7 +5,7 @@
 use super::lines::{self, Delivered, Hub, Mark, Obs, Rec, ToolMove};
 use super::scheduled;
 use super::words::{self, one_line, summary};
-use super::{Answered, ApprovalFold, Ctx, Entry, EntryCard, EntryKind, Landed, Line, Made, NotDelivered, Notice, PageRef, PrNews, ReportRef, Scheduled, Thinking, ToolItem, ToolKind, Tools};
+use super::{Answered, ApprovalFold, Ctx, Entry, EntryCard, EntryKind, Landed, Line, Made, NotDelivered, Notice, PageRef, PrNews, ReportRef, Scheduled, Thinking, ToolItem, ToolKind, Tools, WakeFold};
 use super::{cap, Delivery, FileCount, GateWait, ToolGate, ToolState, TurnFailed};
 use crate::Pos;
 use crate::context::FnContext;
@@ -34,6 +34,9 @@ struct Fold<'a> {
     /// the calls its `tool_result` ended (no `tool_finished` yet): their
     /// finish completes that item, never a row of its own
     by_result: Vec<u32>,
+    /// event-wake: the ids of bise's messages a `wake` entry already
+    /// says (its `msg`): their msg-in line makes no entry
+    woke: Vec<u64>,
     ctx: &'a Ctx<'a>,
 }
 
@@ -432,6 +435,10 @@ impl Fold<'_> {
                     self.scheduled(pos, ms, s);
                 }
             }
+            // event-wake: the wake a `wake` entry says (by its id, never
+            // its words): the agent read it, the thread shows the entry
+            Hub::MsgIn { from, id, .. }
+                if lines::is_hub_sender(&from) && id.strip_prefix("m_").and_then(|n| n.parse().ok()).is_some_and(|n: u64| self.woke.contains(&n)) => {}
             // G4: its message id; G5: an old direct reply (`@from`) was
             // written to him
             Hub::MsgIn { from, id, body } => {
@@ -452,6 +459,39 @@ impl Fold<'_> {
             // an interrupt (sb-core writes it in the interrupt's step)
             Hub::Stopped(text) => {
                 self.push(Entry::new(pos, ms, EntryKind::Stopped, text));
+            }
+            // event-wake: a watch ended (the hub's line, in the step of
+            // its end); a line that doesn't read makes nothing
+            Hub::Wake(json) => {
+                if let Ok(w) = serde_json::from_str::<WakeFold>(&json) {
+                    if let Some(m) = w.msg {
+                        self.woke.push(m);
+                    }
+                    let text = words::wake_head(&w).into_iter().map(|(t, _)| t).collect::<Vec<_>>().join(" · ");
+                    // an idle agent reads the wake at once: its msg-in line
+                    // came first. That entry becomes this one, at its pos
+                    // (a client replaces it: same pos), the agent's turn
+                    // after it as before
+                    let read = w.msg.and_then(|m| {
+                        self.out.iter().rposition(|e| e.kind == EntryKind::FromAgent && e.msg == Some(m) && e.from.as_deref().is_some_and(lines::is_hub_sender))
+                    });
+                    match read {
+                        Some(i) => {
+                            let mut e = Entry::new(self.out[i].pos, self.out[i].at_ms, EntryKind::Wake, text);
+                            e.turn_start = self.out[i].turn_start;
+                            e.wake = Some(w);
+                            self.out[i] = e;
+                            if self.cont == Some(i) {
+                                self.cont = None;
+                            }
+                        }
+                        None => {
+                            let mut e = Entry::new(pos, ms, EntryKind::Wake, text);
+                            e.wake = Some(w);
+                            self.push(e);
+                        }
+                    }
+                }
             }
             // BISE-86: his message didn't reach `to`; no cid here (the
             // hub's error to his window carries it, architect m_10348)
@@ -602,7 +642,7 @@ impl Delivered for Entry {
 
 /// An agent's transcript lines as entries, oldest first.
 pub fn fold(lines: &[Line], ctx: &Ctx) -> Vec<Entry> {
-    let mut f = Fold { out: Vec::new(), cont: None, tools: Vec::new(), you: None, ctx_you: None, last_ms: 0, turn: 0, starting: false, by_result: Vec::new(), ctx };
+    let mut f = Fold { out: Vec::new(), cont: None, tools: Vec::new(), you: None, ctx_you: None, last_ms: 0, turn: 0, starting: false, by_result: Vec::new(), woke: Vec::new(), ctx };
     for (pos, ms, l) in lines {
         f.line(*pos, *ms, l);
     }
