@@ -177,3 +177,38 @@ fn a_rollback_after_a_good_move_is_refused_never_moved_again() {
     t.cmd(Cmd::HubRetry { project: home() });
     assert_eq!(starts.load(Ordering::SeqCst), 2);
 }
+
+/// architect m_16077: after a Late move the reader goes on, backing off
+/// (no attempt every 500 ms); a NEW connection that answers older means
+/// the slow switch went back: the rollback words once, the reader held,
+/// no second move. The old hub's answer on a connection made before Late
+/// changes nothing.
+#[test]
+fn a_late_move_that_went_back_is_refused_once_and_the_reader_holds() {
+    let (mut t, starts) = older_home();
+    t.take();
+    // the connection made while it moved, its initialize sent
+    let mut before = next_conn(&mut t);
+    t.core.home_moved(MoveEnd::Late);
+    t.out.extend(t.core.take_out());
+    assert_eq!(t.take().iter().filter(|v| v["ev"] == "hub_refused").count(), 1, "the timed-out words");
+    // the old hub's answer on it: stale, nothing
+    refuse_older(&mut before);
+    let lost = Instant::now();
+    // the next attempt backs off (1 s), never at 500 ms
+    let mut fresh = next_conn(&mut t);
+    assert!(lost.elapsed() >= Duration::from_millis(800), "backed off: {:?}", lost.elapsed());
+    assert!(t.out.iter().all(|v| v["ev"] != "hub_refused" && v["ev"] != "hub"), "{:#?}", t.out);
+    // a new connection answers older: it went back
+    refuse_older(&mut fresh);
+    t.until(|o| has(o, "hub_refused"));
+    let refused: Vec<Value> = t.take().into_iter().filter(|v| v["ev"] == "hub_refused").collect();
+    assert_eq!(
+        refused,
+        [json!({"ev": "hub_refused", "project": home(), "error": "the bise running in this folder switched to this one (v2026.10.2-30), but it didn't start right, so it went back to v2026.10.2-28.\nyour agents are still running on v2026.10.2-28."})]
+    );
+    assert_eq!(starts.load(Ordering::SeqCst), 1, "no second move by itself");
+    drain(&mut t);
+    assert!(no_conn(&mut t, 1500), "the reader holds");
+    assert!(t.out.iter().all(|v| v["ev"] != "hub_refused"), "once: {:#?}", t.out);
+}

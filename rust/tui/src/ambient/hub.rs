@@ -56,7 +56,13 @@ pub struct Hub {
     closed: Arc<AtomicBool>,
     /// [`Hub::hold`] said: the reader doesn't connect until released
     held: Arc<(Mutex<bool>, Condvar)>,
+    /// [`Hub::backoff`] said: the pauses between attempts grow
+    slow: Arc<AtomicBool>,
 }
+
+/// The pauses of a reader that backs off ([`Hub::backoff`]): 1 s, 2 s,
+/// 5 s, then every 10 s.
+const BACKOFF: [Duration; 4] = [Duration::from_secs(1), Duration::from_secs(2), Duration::from_secs(5), Duration::from_secs(10)];
 
 impl Hub {
     /// Start the reader thread; every [`HubIn`] goes through `wrap` into
@@ -71,9 +77,22 @@ impl Hub {
         let writer = hub.writer.clone();
         let closed = hub.closed.clone();
         let held = hub.held.clone();
+        let slow = hub.slow.clone();
         std::thread::spawn(move || {
             // Down is said once per loss, not at each failed attempt
             let mut down_said = false;
+            // the pause before the next attempt: `retry`, or the backoff's
+            // next step while it backs off (its count reset when it doesn't)
+            let mut misses = 0usize;
+            let mut pause = move || {
+                if slow.load(Ordering::SeqCst) {
+                    std::thread::sleep(BACKOFF[misses.min(BACKOFF.len() - 1)]);
+                    misses += 1;
+                } else {
+                    misses = 0;
+                    std::thread::sleep(retry);
+                }
+            };
             loop {
                 // held: no attempt (no reconnect loop) until released
                 {
@@ -95,12 +114,12 @@ impl Hub {
                                 return;
                             }
                         }
-                        std::thread::sleep(retry);
+                        pause();
                         continue;
                     }
                 };
                 let Ok(w) = stream.try_clone() else {
-                    std::thread::sleep(retry);
+                    pause();
                     continue;
                 };
                 if let Ok(mut slot) = writer.lock() {
@@ -145,7 +164,7 @@ impl Hub {
                 if tx.send(wrap(HubIn::Down)).is_err() {
                     return;
                 }
-                std::thread::sleep(retry);
+                pause();
             }
         });
         hub
@@ -161,6 +180,14 @@ impl Hub {
                 let _ = s.shutdown(std::net::Shutdown::Both);
             }
         }
+    }
+
+    /// Back off (`on`): the reader's pauses between attempts grow (1 s,
+    /// 2 s, 5 s, then every 10 s) instead of `retry` (the home hub whose
+    /// move said Late: it may still come up, it is not polled every
+    /// 500 ms; core/home_switch.rs). Off: `retry` again.
+    pub fn backoff(&self, on: bool) {
+        self.slow.store(on, Ordering::SeqCst);
     }
 
     /// Hold the connection (`on`): the one open closes and the reader

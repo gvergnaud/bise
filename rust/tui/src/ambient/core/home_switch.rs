@@ -38,6 +38,9 @@ pub(in crate::ambient) struct HomeMoveState {
     /// move ended well: an older answer on it is the old hub's, late
     conns: u64,
     stale_upto: Option<u64>,
+    /// the last connection made before a move said Late: an older answer
+    /// on a later one means it went back (architect m_16077)
+    late_upto: u64,
     /// how the last move failed: the refusal is shown, nothing moves
     /// until he says `try again`
     failed: Option<Failed>,
@@ -104,6 +107,7 @@ impl Core {
             answered: false,
             conns: 0,
             stale_upto: None,
+            late_upto: 0,
             failed: None,
         });
     }
@@ -125,16 +129,22 @@ impl Core {
             self.emit(json!({"ev": "hub_refused", "project": project, "error": why}));
             return;
         };
-        if m.moving || m.failed.is_some() || m.stale_upto.is_some_and(|s| m.conns <= s) {
+        // while it moves, after it was refused or went back, or the old
+        // hub's late answer on a connection made before the move ended
+        let late = m.failed == Some(Failed::Late);
+        if m.moving || (m.failed.is_some() && !late) || m.stale_upto.is_some_and(|s| m.conns <= s) || (late && m.conns <= m.late_upto) {
             return;
         }
         let (from, to) = (m.ids)();
-        if m.there || m.tried.contains(&(from.clone(), to.clone())) {
+        // after a Late move, a new connection that answers older: it went
+        // back (a slow switch whose probation rolled back)
+        if late || m.there || m.tried.contains(&(from.clone(), to.clone())) {
             // it went back (probation): never moved again by itself
             m.failed = Some(Failed::Back);
             let why = back_words(&from, &to);
             m.from = from;
             m.to = to;
+            self.hub.backoff(false);
             self.hub.hold(true);
             self.hub_up = Some(false);
             self.emit(json!({"ev": "hub_refused", "project": project, "error": why}));
@@ -174,7 +184,11 @@ impl Core {
         }
         let why = failed_words(&m.from, &m.to, &end);
         m.failed = Some(if end == MoveEnd::Late { Failed::Late } else { Failed::Refused });
-        if end != MoveEnd::Late {
+        if end == MoveEnd::Late {
+            // it may still come up: the reader goes on, backing off
+            m.late_upto = m.conns;
+            self.hub.backoff(true);
+        } else {
             self.hub.hold(true);
         }
         self.hub_up = Some(false);
@@ -203,6 +217,7 @@ impl Core {
         if m.failed.take().is_some() || m.moving {
             m.there = true;
         }
+        self.hub.backoff(false);
         if held && self.hub_up != Some(true) {
             self.hub_up = Some(true);
             let ws = self.workspace.clone();
@@ -221,6 +236,7 @@ impl Core {
         m.failed = None;
         let (from, to) = (m.ids)();
         self.home_move_start(from, to);
+        self.hub.backoff(false);
         self.hub.hold(false);
         true
     }
