@@ -61,6 +61,7 @@ impl Shell {
                 self.step(i);
                 if tick {
                     self.page_waits_check();
+                    self.wakes_look();
                     self.check_starts();
                     self.plugins_changed(false);
                     self.switch_idle_repls();

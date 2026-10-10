@@ -71,6 +71,7 @@ pub mod transcript;
 pub mod trunk;
 pub mod util;
 pub mod view;
+pub mod wake;
 pub mod watch;
 pub mod wire;
 pub mod worktree;

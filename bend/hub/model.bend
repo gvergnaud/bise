@@ -8,6 +8,8 @@ import ../vendor/json.bend as J
 
 import ./timers.bend as TM
 
+import ./wakes.bend as WK
+
 import ./xhub-model.bend as XH
 
 type Life is Data:
@@ -97,6 +99,9 @@ type Ev is Data:
   # main or window): its end goes back there (J, law follow_hub_journaled)
   EFollow{name: String, on: Bool, hub: String}
   EJobEnd{name: String, state: String}
+  # event-wake: the watches of `sb wake` (wakes.bend), wake_set and
+  # wake_end (an older sb-core reads them as unknown: skipped)
+  EWake{e: WK.WkEv}
 
 type AgentOp is Data:
   OLife{life: Life, reason: Maybe<&2, String>}
@@ -587,6 +592,8 @@ def apply(+st: St, e: Ev) -> St:
           St{map_agent(agents, name, OFollow{Bool.pick(Maybe<&2, String>, on, Some{hub}, None{})}), order, msgs, cards, notes, nm, nc, tm, xs}
         case EJobEnd{+name, _}:
           St{map_agent(agents, name, OFollow{None{}}), order, msgs, cards, notes, nm, nc, tm, xs}
+        case EWake{+we}:
+          St{agents, order, msgs, cards, notes, nm, nc, TM.wk_apply(tm, we), xs}
 
 # the state after a journal: the replay of a list of events
 def apply_all(evs: List<&2, Ev>, +st: St) -> St:

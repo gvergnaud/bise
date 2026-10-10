@@ -71,6 +71,12 @@ fn cases() -> Vec<Vec<&'static str>> {
         vec!["every", "day", "07:30", "make the morning page"],
         vec!["every", "--stop", "2"],
         vec!["every", "soon", "x"],
+        // event-wake: wake on an event (a pid's start time differs between
+        // two runs: only the refused pid)
+        vec!["wake"],
+        vec!["wake", "--on-file", "/nonexistent/rc", "--tail", "/nonexistent/log", "--note", "the gate", "--max", "2h"],
+        vec!["wake", "--stop", "3"],
+        vec!["wake", "--on-exit", "nope"],
         // what bise keeps about the user (keeps.rs)
         vec!["taste"],
         vec!["taste", "add", "no emoji", "--from", "the launch post"],

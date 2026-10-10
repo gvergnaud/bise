@@ -335,6 +335,8 @@ pub struct State {
     pub next_card: u64,
     /// `sb every`'s timers (sb-core's view `timers`, `timers_ended`)
     pub timers: crate::every::Timers,
+    /// `sb wake`'s watches (sb-core's view `wakes`, `wakes_ended`)
+    pub wakes: crate::wake::Wakes,
 }
 
 impl State {

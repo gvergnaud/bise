@@ -13,6 +13,8 @@ import ./codec.bend as C
 
 import ./timers.bend as TM
 
+import ./wakes.bend as WK
+
 import ./xhub-model.bend as XH
 
 import ./xhub.bend as XB
@@ -90,6 +92,9 @@ type In is Data:
   IRouteCancel{}
   IRoutePick{}
   IFollow{}
+  IWakeSet{}
+  IWakeStop{}
+  IWakeHit{}
   INone{}
 
 type CardK is Data:
@@ -1473,6 +1478,116 @@ def timers_tick.go(-o: M.St, work: Bool, +cx: X.Cx<o>) -> X.Cx<o>:
 def timers_tick(-o: M.St, +cx: X.Cx<o>) -> X.Cx<o>:
   timers_tick.go(o, TM.any_work(live(o, cx), now(o, cx)), cx)
 
+# ---- watches (`sb wake`, hub/wakes.bend) ----
+# Call lines only: the decisions are WK's (hit, due, ids_of), the words
+# Rust's (wake.rs: the hit text in the input, the max text in the watch).
+
+def wks(-o: M.St, +cx: X.Cx<o>) -> WK.Wakes:
+  TM.Tms.wk(tms(o, cx))
+
+def wake_end(-o: M.St, +cx: X.Cx<o>, +id: Nat, +why: String) -> X.Cx<o>:
+  emit(o, cx, M.EWake{WK.WEnd{id, why, now(o, cx)}}, Unit{}, Unit{}, Unit{})
+
+def wake_say(-o: M.St, +cx: X.Cx<o>, +agent: String, +text: String) -> X.Cx<o>:
+  fst(o, send(o, cx, msg(M.HUB(), agent, text, False{}, None{}, False{}, False{})))
+
+def agent_active.go(m: Maybe<&2, M.Agent>) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{+a}:
+      is_active(M.Agent.life(a))
+
+# known (by its name or an old one) and active
+def agent_active(+s: M.St, +n: String) -> Bool:
+  agent_active.go(timer_agent(s, n))
+
+# {"t":"wake_hit"}: the look saw it happen. A live watch of an active
+# agent ends and its agent gets ONE message from bise in the same step
+# (queued while it is busy: delivered at its idle). Ended or unknown:
+# nothing (laws wake_hit_once, wake_gone_never_hits); a stopped agent's
+# watch waits for it.
+def wake_hit.found(-o: M.St, m: Maybe<&2, WK.Watch>, +cx: X.Cx<o>, +text: String) -> X.Cx<o>:
+  match m:
+    case None{}:
+      cx
+    case Some{+w}:
+      pick_lazy(X.Cx<o>, agent_active(st(o, cx), WK.Watch.agent(w)),
+        u => wake_say(o, wake_end(o, cx, WK.Watch.id(w), "hit"), WK.Watch.agent(w), text),
+        u => cx)
+
+def wake_hit(-o: M.St, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
+  wake_hit.found(o, WK.hit(wks(o, cx), C.get_nat(i, "id")), cx, C.get_s(i, "text"))
+
+# {"t":"wake_set"}: the hub checked the request and wrote the words; a
+# watch only for an active agent, its id the next free one
+def wake_set.agent(-o: M.St, ok: Bool, +cx: X.Cx<o>, +agent: String, +i: J.Json) -> X.Cx<o>:
+  match ok:
+    case False{}:
+      cx
+    case True{}:
+      +w = {WK.Watch{1n+WK.Wakes.last_id(wks(o, cx)), agent, Maybe.default(&2, J.Json, J.get(i, "spec"), J.JNull{}),
+        C.get_s(i, "max_text"), now(o, cx), Nat.add(now(o, cx), C.get_nat(i, "max_ms")), C.get_b(i, "quiet")} : WK.Watch}
+      emit(o, cx, M.EWake{WK.WSet{w}}, Unit{}, Unit{}, Unit{})
+
+def wake_set.named(-o: M.St, m: Maybe<&2, String>, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
+  match m:
+    case None{}:
+      cx
+    case Some{+n}:
+      wake_set.agent(o, agent_active(st(o, cx), n), cx, n, i)
+
+def wake_set(-o: M.St, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
+  wake_set.named(o, M.resolve(st(o, cx), C.get_s(i, "agent")), cx, i)
+
+# {"t":"wake_stop"}: `sb wake --stop`; ended or unknown: nothing
+def wake_stop.found(-o: M.St, m: Maybe<&2, WK.Watch>, +cx: X.Cx<o>, +why: String) -> X.Cx<o>:
+  match m:
+    case None{}:
+      cx
+    case Some{+w}:
+      wake_end(o, cx, WK.Watch.id(w), why)
+
+def wake_stop(-o: M.St, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
+  wake_stop.found(o, WK.hit(wks(o, cx), C.get_nat(i, "id")), cx, C.get_s(i, "why"))
+
+# a watch past its max ends, with its "still running" wake unless quiet
+# (law wake_max_once: ended, it is never due again)
+def wakes_tick.each(-o: M.St, ws: List<&2, WK.Watch>, +cx: X.Cx<o>) -> X.Cx<o>:
+  match ws:
+    case Nil{}:
+      cx
+    case Con{+w, +rest}:
+      +cx2 = wake_end(o, cx, WK.Watch.id(w), "max")
+      +cx3 = pick_lazy(X.Cx<o>, WK.Watch.quiet(w) || Bool.not(agent_active(st(o, cx2), WK.Watch.agent(w))),
+        u => cx2, u => wake_say(o, cx2, WK.Watch.agent(w), WK.Watch.max_text(w)))
+      wakes_tick.each(o, rest, cx3)
+
+def wakes_tick.go(-o: M.St, work: Bool, +cx: X.Cx<o>) -> X.Cx<o>:
+  match work:
+    case False{}:
+      cx
+    case True{}:
+      wakes_tick.each(o, WK.due(WK.Wakes.live(wks(o, cx)), now(o, cx)), cx)
+
+# none past its max (the common case): nothing at all (idle-cpu)
+def wakes_tick(-o: M.St, +cx: X.Cx<o>) -> X.Cx<o>:
+  wakes_tick.go(o, WK.any_due(WK.Wakes.live(wks(o, cx)), now(o, cx)), cx)
+
+def wakes_gone.each(-o: M.St, ids: List<&2, Nat>, +cx: X.Cx<o>) -> X.Cx<o>:
+  match ids:
+    case Nil{}:
+      cx
+    case Con{+id, +rest}:
+      wakes_gone.each(o, rest, wake_end(o, cx, id, "gone"))
+
+# an archived (dropped) agent's watches end with it, in the same step
+# (law wake_drop_ends); a stopped one's wait, as its timers do
+def wakes_gone(-o: M.St, +life: M.Life, +cx: X.Cx<o>, +n: String) -> X.Cx<o>:
+  pick_lazy(X.Cx<o>, life_gone(life),
+    u => wakes_gone.each(o, WK.ids_of(WK.Wakes.live(wks(o, cx)), M.names_of(st(o, cx), n)), cx),
+    u => cx)
+
 def reject_ids(-o: M.St, ids: List<&2, Nat>, +cx: X.Cx<o>) -> X.Cx<o>:
   match ids:
     case Nil{}:
@@ -1495,7 +1610,7 @@ def stop_task.go(-o: M.St, +cx: X.Cx<o>, +name: String, +life: M.Life, +reason: 
 
 # no wait of the stopped task survives (law stop_leaves_no_waiter)
 def stop_task(-o: M.St, +cx: X.Cx<o>, +name: String, +life: M.Life, +reason: String) -> X.Cx<o>:
-  set_waiters(o, timers_gone(o, life, stop_task.go(o, cx, name, life, reason), name), waiters_not(X.R.waiters(rr(o, cx)), name))
+  set_waiters(o, wakes_gone(o, life, timers_gone(o, life, stop_task.go(o, cx, name, life, reason), name), name), waiters_not(X.R.waiters(rr(o, cx)), name))
 
 # stop_task, after saying which of the user's queued messages will never
 # arrive (BISE-86)
@@ -3639,7 +3754,12 @@ def in_tag(+t: String) -> In:
   Bool.pick(In, String.eq(t, "route_pick"), IRoutePick{},
   # S10: follow a task (the window's typed command, bise's sb follow)
   Bool.pick(In, String.eq(t, "follow"), IFollow{},
-  INone{}))))))))))))))))))))))))))))))))))))))))))))))
+  # event-wake: the watches of `sb wake` (hub/wakes.bend): set, stop, and
+  # the look's hit (daemon/wakes.rs)
+  Bool.pick(In, String.eq(t, "wake_set"), IWakeSet{},
+  Bool.pick(In, String.eq(t, "wake_stop"), IWakeStop{},
+  Bool.pick(In, String.eq(t, "wake_hit"), IWakeHit{},
+  INone{})))))))))))))))))))))))))))))))))))))))))))))))))
 
 # `/close N`: the user files a card without answering it
 def close_by_user(-o: M.St, m: Maybe<&2, M.Card>, +cx: X.Cx<o>, +id: Nat) -> X.Cx<o>:
@@ -3668,7 +3788,7 @@ def dispatch.go(-o: M.St, tag: In, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
     case IReq{}:
       agent_req(o, cx, C.get_nat(i, "token"), C.get_s(i, "from"), Maybe.default(&2, J.Json, J.get(i, "req"), J.JNull{}))
     case ITick{}:
-      acts_tick(o, timers_tick(o, tick(o, cx)))
+      wakes_tick(o, acts_tick(o, timers_tick(o, tick(o, cx))))
     case IIdle{}:
       repl_idle(o, cx, C.get_s(i, "agent"), C.get_b(i, "leftover"), C.get_b(i, "held"))
     case ITurnStarted{}:
@@ -3761,6 +3881,12 @@ def dispatch.go(-o: M.St, tag: In, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
       route_pick(o, cx, C.get_nat(i, "rid"), C.get_s(i, "to"), C.get_s(i, "name"), C.get_s(i, "why"))
     case IFollow{}:
       follow_in(o, follow_err(st(o, cx), C.get_s(i, "agent")), cx, C.get_s(i, "agent"), C.get_b(i, "on"))
+    case IWakeSet{}:
+      wake_set(o, cx, i)
+    case IWakeStop{}:
+      wake_stop(o, cx, i)
+    case IWakeHit{}:
+      wake_hit(o, cx, i)
     case INone{}:
       cx
 

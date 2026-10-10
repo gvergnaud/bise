@@ -24,6 +24,8 @@ import ./hub/inv.bend as HI
 
 import ./hub/timers.bend as HTM
 
+import ./hub/wakes.bend as HWK
+
 import ./hub/xhub-model.bend as HXH
 
 import ./hub/xhub.bend as HXB
@@ -1710,7 +1712,7 @@ def hub_not_none(+ws: List<&2, HX.Waiter>, +n: String) -> HC.NoneOf(HC.waiters_n
 
 def Laws.stop_leaves_no_waiter(o, cx, n, life, why):
   hub_none_tr(HC.waiters_of_cx(o, HC.stop_task(o, cx, n, life, why)), HC.waiters_not(HX.R.waiters(HX.Cx.r(o, cx)), n), n,
-    hub_set_waiters(o, HC.timers_gone(o, life, HC.stop_task.go(o, cx, n, life, why), n), HC.waiters_not(HX.R.waiters(HX.Cx.r(o, cx)), n)),
+    hub_set_waiters(o, HC.wakes_gone(o, life, HC.timers_gone(o, life, HC.stop_task.go(o, cx, n, life, why), n), n), HC.waiters_not(HX.R.waiters(HX.Cx.r(o, cx)), n)),
     hub_not_none(HX.R.waiters(HX.Cx.r(o, cx)), n))
 
 # ---- L2: each message is one record (msgs_unique) ----
@@ -1986,6 +1988,8 @@ def hub_apply_unique(s: HM.St, e: HM.Ev, u: HI.Unique(s), k: HX.FreshEv(s, e)) -
           u
         case HM.EJobEnd{a, b}:
           u
+        case HM.EWake{a}:
+          u
 
 def hub_apply_all_unique(+evs: List<&2, HM.Ev>, +s: HM.St, u: HI.Unique(s), f: HX.Fresh(evs, s)) -> HI.Unique(HM.apply_all(evs, s)):
   match evs:
@@ -2106,6 +2110,8 @@ def hub_apply_kept(s: HM.St, e: HM.Ev) -> HI.Kept(s, HM.apply(s, e)):
         case HM.EFollow{a, b, c}:
           hub_prefix_refl(HI.ids(ms))
         case HM.EJobEnd{a, b}:
+          hub_prefix_refl(HI.ids(ms))
+        case HM.EWake{a}:
           hub_prefix_refl(HI.ids(ms))
 
 def hub_apply_all_kept(+evs: List<&2, HM.Ev>, +s: HM.St) -> HI.Kept(s, HM.apply_all(evs, s)):
@@ -2443,6 +2449,101 @@ def hub_cards_gone_each(-o: HM.St, +ids: List<&2, Nat>, +cx: HX.Cx<o>, +why: Str
           Equal.cong(HM.St, List<&2, HM.Card>, s => HM.St.cards(s), HX.d(o, cx2), HM.apply(HX.d(o, cx), ev), hub_d_emit(o, cx, ev, Unit{}, Unit{}, Unit{})),
           hub_cards_tstop(HX.d(o, cx), id, why, HC.now(o, cx))))
 
+def hub_cards_wake(s: HM.St, +e: HWK.WkEv) -> {HM.St.cards(HM.apply(s, HM.EWake{e})) == HM.St.cards(s) : List<&2, HM.Card>}:
+  match s:
+    case HM.St{ag, od, ms, ca, no, nm, nc, tm, xs}:
+      {==}
+
+# a drop's watch ends leave the cards as they were
+def hub_cards_wakes_each(-o: HM.St, +ids: List<&2, Nat>, +cx: HX.Cx<o>)
+    -> {HM.St.cards(HX.d(o, HC.wakes_gone.each(o, ids, cx))) == HM.St.cards(HX.d(o, cx)) : List<&2, HM.Card>}:
+  match ids:
+    case Nil{}:
+      {==}
+    case Con{id, t}:
+      +ev = {HM.EWake{HWK.WEnd{id, "gone", HC.now(o, cx)}} : HM.Ev}
+      +cx2 = HC.emit(o, cx, ev, Unit{}, Unit{}, Unit{})
+      Equal.trans(List<&2, HM.Card>, HM.St.cards(HX.d(o, HC.wakes_gone.each(o, t, cx2))), HM.St.cards(HX.d(o, cx2)), HM.St.cards(HX.d(o, cx)),
+        hub_cards_wakes_each(o, t, cx2),
+        Equal.trans(List<&2, HM.Card>, HM.St.cards(HX.d(o, cx2)), HM.St.cards(HM.apply(HX.d(o, cx), ev)), HM.St.cards(HX.d(o, cx)),
+          Equal.cong(HM.St, List<&2, HM.Card>, s => HM.St.cards(s), HX.d(o, cx2), HM.apply(HX.d(o, cx), ev), hub_d_emit(o, cx, ev, Unit{}, Unit{}, Unit{})),
+          hub_cards_wake(HX.d(o, cx), HWK.WEnd{id, "gone", HC.now(o, cx)})))
+
+def hub_msgs_wake(s: HM.St, +e: HWK.WkEv) -> {HM.St.msgs(HM.apply(s, HM.EWake{e})) == HM.St.msgs(s) : List<&2, HM.MRec>}:
+  match s:
+    case HM.St{ag, od, ms, ca, no, nm, nc, tm, xs}:
+      {==}
+
+# a drop's watch ends leave the messages and the agents as they were
+def hub_msgs_wakes_each(-o: HM.St, +ids: List<&2, Nat>, +cx: HX.Cx<o>)
+    -> {HM.St.msgs(HX.d(o, HC.wakes_gone.each(o, ids, cx))) == HM.St.msgs(HX.d(o, cx)) : List<&2, HM.MRec>}:
+  match ids:
+    case Nil{}:
+      {==}
+    case Con{id, t}:
+      +ev = {HM.EWake{HWK.WEnd{id, "gone", HC.now(o, cx)}} : HM.Ev}
+      +cx2 = HC.emit(o, cx, ev, Unit{}, Unit{}, Unit{})
+      Equal.trans(List<&2, HM.MRec>, HM.St.msgs(HX.d(o, HC.wakes_gone.each(o, t, cx2))), HM.St.msgs(HX.d(o, cx2)), HM.St.msgs(HX.d(o, cx)),
+        hub_msgs_wakes_each(o, t, cx2),
+        Equal.trans(List<&2, HM.MRec>, HM.St.msgs(HX.d(o, cx2)), HM.St.msgs(HM.apply(HX.d(o, cx), ev)), HM.St.msgs(HX.d(o, cx)),
+          Equal.cong(HM.St, List<&2, HM.MRec>, s => HM.St.msgs(s), HX.d(o, cx2), HM.apply(HX.d(o, cx), ev), hub_d_emit(o, cx, ev, Unit{}, Unit{}, Unit{})),
+          hub_msgs_wake(HX.d(o, cx), HWK.WEnd{id, "gone", HC.now(o, cx)})))
+
+def hub_agents_wake(s: HM.St, +e: HWK.WkEv) -> {HM.St.agents(HM.apply(s, HM.EWake{e})) == HM.St.agents(s) : List<&2, HM.Agent>}:
+  match s:
+    case HM.St{ag, od, ms, ca, no, nm, nc, tm, xs}:
+      {==}
+
+def hub_agents_wakes_each(-o: HM.St, +ids: List<&2, Nat>, +cx: HX.Cx<o>)
+    -> {HM.St.agents(HX.d(o, HC.wakes_gone.each(o, ids, cx))) == HM.St.agents(HX.d(o, cx)) : List<&2, HM.Agent>}:
+  match ids:
+    case Nil{}:
+      {==}
+    case Con{id, t}:
+      +ev = {HM.EWake{HWK.WEnd{id, "gone", HC.now(o, cx)}} : HM.Ev}
+      +cx2 = HC.emit(o, cx, ev, Unit{}, Unit{}, Unit{})
+      Equal.trans(List<&2, HM.Agent>, HM.St.agents(HX.d(o, HC.wakes_gone.each(o, t, cx2))), HM.St.agents(HX.d(o, cx2)), HM.St.agents(HX.d(o, cx)),
+        hub_agents_wakes_each(o, t, cx2),
+        Equal.trans(List<&2, HM.Agent>, HM.St.agents(HX.d(o, cx2)), HM.St.agents(HM.apply(HX.d(o, cx), ev)), HM.St.agents(HX.d(o, cx)),
+          Equal.cong(HM.St, List<&2, HM.Agent>, s => HM.St.agents(s), HX.d(o, cx2), HM.apply(HX.d(o, cx), ev), hub_d_emit(o, cx, ev, Unit{}, Unit{}, Unit{})),
+          hub_agents_wake(HX.d(o, cx), HWK.WEnd{id, "gone", HC.now(o, cx)})))
+
+def hub_msgs_wakes(-o: HM.St, +life: HM.Life, +cx: HX.Cx<o>, +n: String)
+    -> {HM.St.msgs(HX.d(o, HC.wakes_gone(o, life, cx, n))) == HM.St.msgs(HX.d(o, cx)) : List<&2, HM.MRec>}:
+  match life:
+    case HM.LActive{}:
+      {==}
+    case HM.LStopped{}:
+      {==}
+    case HM.LFailed{}:
+      {==}
+    case HM.LArchived{}:
+      hub_msgs_wakes_each(o, HWK.ids_of(HWK.Wakes.live(HC.wks(o, cx)), HM.names_of(HX.d(o, cx), n)), cx)
+
+def hub_agents_wakes(-o: HM.St, +life: HM.Life, +cx: HX.Cx<o>, +n: String)
+    -> {HM.St.agents(HX.d(o, HC.wakes_gone(o, life, cx, n))) == HM.St.agents(HX.d(o, cx)) : List<&2, HM.Agent>}:
+  match life:
+    case HM.LActive{}:
+      {==}
+    case HM.LStopped{}:
+      {==}
+    case HM.LFailed{}:
+      {==}
+    case HM.LArchived{}:
+      hub_agents_wakes_each(o, HWK.ids_of(HWK.Wakes.live(HC.wks(o, cx)), HM.names_of(HX.d(o, cx), n)), cx)
+
+def hub_cards_wakes(-o: HM.St, +life: HM.Life, +cx: HX.Cx<o>, +n: String)
+    -> {HM.St.cards(HX.d(o, HC.wakes_gone(o, life, cx, n))) == HM.St.cards(HX.d(o, cx)) : List<&2, HM.Card>}:
+  match life:
+    case HM.LActive{}:
+      {==}
+    case HM.LStopped{}:
+      {==}
+    case HM.LFailed{}:
+      {==}
+    case HM.LArchived{}:
+      hub_cards_wakes_each(o, HWK.ids_of(HWK.Wakes.live(HC.wks(o, cx)), HM.names_of(HX.d(o, cx), n)), cx)
+
 def hub_msgs_gone(-o: HM.St, +g: Bool, +cx: HX.Cx<o>, +n: String, +ns: List<&2, String>)
     -> {HM.St.msgs(HX.d(o, HC.timers_gone.if(o, g, cx, n, ns))) == HM.St.msgs(HX.d(o, cx)) : List<&2, HM.MRec>}:
   match g:
@@ -2577,6 +2678,7 @@ def Laws.stop_leaves_no_queue(o, cx, n, life, why, u):
   +cx6 = HC.reject_ids(o, ids, cx5)
   +g = HC.stop_task.go(o, cx, n, life, why)
   +tg = HC.timers_gone(o, life, g, n)
+  +wg = HC.wakes_gone(o, life, tg, n)
   # d is unchanged up to cx4
   +e4 = Equal.trans(HM.St, HX.d(o, cx4), HX.d(o, cx3), HX.d(o, cx), hub_d_upd_rt(o, cx3, x4),
     Equal.trans(HM.St, HX.d(o, cx3), HX.d(o, cx2), HX.d(o, cx), hub_d_with_r(o, cx2, HX.R.with_steered(r, HC.steer_del(HX.R.steered(r), n))),
@@ -2591,7 +2693,9 @@ def Laws.stop_leaves_no_queue(o, cx, n, life, why, u):
   # the messages at the end: those of cx5 with the queued ones rejected
   +ef = Equal.trans(List<&2, HM.MRec>, HM.St.msgs(HX.d(o, HC.stop_task(o, cx, n, life, why))), HM.St.msgs(HX.d(o, g)), hub_rej(ids, m5),
     Equal.trans(List<&2, HM.MRec>, HM.St.msgs(HX.d(o, HC.stop_task(o, cx, n, life, why))), HM.St.msgs(HX.d(o, tg)), HM.St.msgs(HX.d(o, g)),
-      hub_msgs_eq(o, HC.stop_task(o, cx, n, life, why), tg, hub_d_with_r(o, tg, HX.R.with_waiters(HC.rr(o, tg), HC.waiters_not(HX.R.waiters(HC.rr(o, cx)), n)))),
+      Equal.trans(List<&2, HM.MRec>, HM.St.msgs(HX.d(o, HC.stop_task(o, cx, n, life, why))), HM.St.msgs(HX.d(o, wg)), HM.St.msgs(HX.d(o, tg)),
+        hub_msgs_eq(o, HC.stop_task(o, cx, n, life, why), wg, hub_d_with_r(o, wg, HX.R.with_waiters(HC.rr(o, wg), HC.waiters_not(HX.R.waiters(HC.rr(o, cx)), n)))),
+        hub_msgs_wakes(o, life, tg, n)),
       hub_msgs_gone(o, HC.life_gone(life), g, n, HM.names_of(HX.d(o, g), n))),
     Equal.trans(List<&2, HM.MRec>, HM.St.msgs(HX.d(o, g)), HM.St.msgs(HX.d(o, cx6)), hub_rej(ids, m5),
       hub_msgs_close_ids(o, HC.card_ids(HM.St.cards(HX.d(o, cx6)), n, Nil{}), cx6, "agent stopped"),
@@ -2601,7 +2705,9 @@ def Laws.stop_leaves_no_queue(o, cx, n, life, why, u):
     HM.St.agents(HX.d(o, HC.stop_task(o, cx, n, life, why))), HM.St.agents(HX.d(o, cx5)),
     Equal.trans(List<&2, HM.Agent>, HM.St.agents(HX.d(o, HC.stop_task(o, cx, n, life, why))), HM.St.agents(HX.d(o, g)), HM.St.agents(HX.d(o, cx5)),
       Equal.trans(List<&2, HM.Agent>, HM.St.agents(HX.d(o, HC.stop_task(o, cx, n, life, why))), HM.St.agents(HX.d(o, tg)), HM.St.agents(HX.d(o, g)),
-        hub_agents_eq(o, HC.stop_task(o, cx, n, life, why), tg, hub_d_with_r(o, tg, HX.R.with_waiters(HC.rr(o, tg), HC.waiters_not(HX.R.waiters(HC.rr(o, cx)), n)))),
+        Equal.trans(List<&2, HM.Agent>, HM.St.agents(HX.d(o, HC.stop_task(o, cx, n, life, why))), HM.St.agents(HX.d(o, wg)), HM.St.agents(HX.d(o, tg)),
+          hub_agents_eq(o, HC.stop_task(o, cx, n, life, why), wg, hub_d_with_r(o, wg, HX.R.with_waiters(HC.rr(o, wg), HC.waiters_not(HX.R.waiters(HC.rr(o, cx)), n)))),
+          hub_agents_wakes(o, life, tg, n)),
         hub_agents_gone(o, HC.life_gone(life), g, n, HM.names_of(HX.d(o, g), n))),
       Equal.trans(List<&2, HM.Agent>, HM.St.agents(HX.d(o, g)), HM.St.agents(HX.d(o, cx6)), HM.St.agents(HX.d(o, cx5)),
         hub_agents_close_ids(o, HC.card_ids(HM.St.cards(HX.d(o, cx6)), n, Nil{}), cx6, "agent stopped"),
@@ -2757,6 +2863,7 @@ def Laws.stop_leaves_no_card(o, cx, n, life, why, u):
   +c6 = HM.St.cards(HX.d(o, cx6))
   +g = HC.stop_task.go(o, cx, n, life, why)
   +tg = HC.timers_gone(o, life, g, n)
+  +wg = HC.wakes_gone(o, life, tg, n)
   +e4 = Equal.trans(HM.St, HX.d(o, cx4), HX.d(o, cx3), HX.d(o, cx), hub_d_upd_rt(o, cx3, x4),
     Equal.trans(HM.St, HX.d(o, cx3), HX.d(o, cx2), HX.d(o, cx), hub_d_with_r(o, cx2, HX.R.with_steered(r, HC.steer_del(HX.R.steered(r), n))),
       Equal.trans(HM.St, HX.d(o, cx2), HX.d(o, cx1), HX.d(o, cx), hub_d_fail_waiters(o, cx1, n, "stopped"),
@@ -2773,7 +2880,9 @@ def Laws.stop_leaves_no_card(o, cx, n, life, why, u):
   +ef = Equal.trans(List<&2, HM.Card>, HM.St.cards(HX.d(o, HC.stop_task(o, cx, n, life, why))), HM.St.cards(HX.d(o, g)),
     hub_dropc(HC.card_ids(c6, n, Nil{}), c6),
     Equal.trans(List<&2, HM.Card>, HM.St.cards(HX.d(o, HC.stop_task(o, cx, n, life, why))), HM.St.cards(HX.d(o, tg)), HM.St.cards(HX.d(o, g)),
-      hub_cards_eq(o, HC.stop_task(o, cx, n, life, why), tg, hub_d_with_r(o, tg, HX.R.with_waiters(HC.rr(o, tg), HC.waiters_not(HX.R.waiters(HC.rr(o, cx)), n)))),
+      Equal.trans(List<&2, HM.Card>, HM.St.cards(HX.d(o, HC.stop_task(o, cx, n, life, why))), HM.St.cards(HX.d(o, wg)), HM.St.cards(HX.d(o, tg)),
+        hub_cards_eq(o, HC.stop_task(o, cx, n, life, why), wg, hub_d_with_r(o, wg, HX.R.with_waiters(HC.rr(o, wg), HC.waiters_not(HX.R.waiters(HC.rr(o, cx)), n)))),
+        hub_cards_wakes(o, life, tg, n)),
       hub_cards_gone(o, HC.life_gone(life), g, n, HM.names_of(HX.d(o, g), n))),
     hub_cards_close_ids(o, HC.card_ids(c6, n, Nil{}), cx6, "agent stopped"))
   hub_cids_tr(HM.St.cards(HX.d(o, HC.stop_task(o, cx, n, life, why))), hub_dropc(HC.card_ids(c6, n, Nil{}), c6), n, ef,
@@ -2940,6 +3049,8 @@ def hub_apply_ucards(s: HM.St, e: HM.Ev, u: HI.UniqueCards(s), k: HX.FreshEv(s, 
         case HM.EFollow{a, b, c}:
           u
         case HM.EJobEnd{a, b}:
+          u
+        case HM.EWake{a}:
           u
 
 def hub_apply_all_ucards(+evs: List<&2, HM.Ev>, +s: HM.St, u: HI.UniqueCards(s), f: HX.Fresh(evs, s)) -> HI.UniqueCards(HM.apply_all(evs, s)):
@@ -4328,6 +4439,8 @@ def hub_apply_names(s: HM.St, e: HM.Ev, u: HI.NamesApart(s), +k: HX.FreshEv(s, e
           hub_nok_tr(HI.profile(HM.map_agent(ag, x, HM.OFollow{Bool.pick(Maybe<&2, String>, f, Some{h}, None{})})), HI.profile(ag), hub_prof_map(ag, x, HM.OFollow{Bool.pick(Maybe<&2, String>, f, Some{h}, None{})}, {==}), u)
         case HM.EJobEnd{+x, b}:
           hub_nok_tr(HI.profile(HM.map_agent(ag, x, HM.OFollow{None{}})), HI.profile(ag), hub_prof_map(ag, x, HM.OFollow{None{}}, {==}), u)
+        case HM.EWake{a}:
+          u
 
 def hub_apply_all_names(+evs: List<&2, HM.Ev>, +s: HM.St, u: HI.NamesApart(s), f: HX.Fresh(evs, s)) -> HI.NamesApart(HM.apply_all(evs, s)):
   match evs:
@@ -4977,7 +5090,7 @@ def hub_live_tstop(s: HM.St, +id: Nat, +why: String, +at: Nat)
   match s:
     case HM.St{ag, od, ms, ca, no, nm, nc, tm, xs}:
       match tm:
-        case HTM.Tms{l, e, li, ac, na}:
+        case HTM.Tms{l, e, li, ac, na, wk}:
           {==}
 
 # the live timers after a drop's stops: those of no stopped id
@@ -5120,19 +5233,280 @@ def hub_tnone_tr(-x: List<&2, HTM.Timer>, -y: List<&2, HTM.Timer>, -n: String, e
   %Equal.sym(List<&2, HTM.Timer>, x, y, e) : HI.TimerNoneOf(_, n)
   l
 
+# a watch's line leaves the timers as they were
+def hub_live_wake(s: HM.St, +e: HWK.WkEv)
+    -> {HTM.Tms.live(HM.St.tm(HM.apply(s, HM.EWake{e}))) == HTM.Tms.live(HM.St.tm(s)) : List<&2, HTM.Timer>}:
+  match s:
+    case HM.St{ag, od, ms, ca, no, nm, nc, tm, xs}:
+      match tm:
+        case HTM.Tms{l, en, li, ac, na, wk}:
+          {==}
+
+# a drop's watch ends leave the timers as they were
+def hub_live_wakes_each(-o: HM.St, +ids: List<&2, Nat>, +cx: HX.Cx<o>)
+    -> {HTM.Tms.live(HM.St.tm(HX.d(o, HC.wakes_gone.each(o, ids, cx)))) == HTM.Tms.live(HM.St.tm(HX.d(o, cx))) : List<&2, HTM.Timer>}:
+  match ids:
+    case Nil{}:
+      {==}
+    case Con{id, rest}:
+      +ev = {HM.EWake{HWK.WEnd{id, "gone", HC.now(o, cx)}} : HM.Ev}
+      +cx2 = HC.emit(o, cx, ev, Unit{}, Unit{}, Unit{})
+      +e2 = Equal.trans(List<&2, HTM.Timer>, HTM.Tms.live(HM.St.tm(HX.d(o, cx2))), HTM.Tms.live(HM.St.tm(HM.apply(HX.d(o, cx), ev))), HTM.Tms.live(HM.St.tm(HX.d(o, cx))),
+        Equal.cong(HM.St, List<&2, HTM.Timer>, s => HTM.Tms.live(HM.St.tm(s)), HX.d(o, cx2), HM.apply(HX.d(o, cx), ev), hub_d_emit(o, cx, ev, Unit{}, Unit{}, Unit{})),
+        hub_live_wake(HX.d(o, cx), HWK.WEnd{id, "gone", HC.now(o, cx)}))
+      Equal.trans(List<&2, HTM.Timer>, HTM.Tms.live(HM.St.tm(HX.d(o, HC.wakes_gone.each(o, rest, cx2)))), HTM.Tms.live(HM.St.tm(HX.d(o, cx2))), HTM.Tms.live(HM.St.tm(HX.d(o, cx))),
+        hub_live_wakes_each(o, rest, cx2), e2)
+
 def Laws.stop_leaves_no_timer(o, cx, n, why):
   +g = HC.stop_task.go(o, cx, n, HM.LArchived{}, why)
   +tg = HC.timers_gone(o, HM.LArchived{}, g, n)
+  +wids = HWK.ids_of(HWK.Wakes.live(HC.wks(o, tg)), HM.names_of(HX.d(o, tg), n))
+  +wg = HC.wakes_gone(o, HM.LArchived{}, tg, n)
   +st = HC.stop_task(o, cx, n, HM.LArchived{}, why)
   +ns = HM.names_of(HX.d(o, g), n)
   +xs = HTM.Tms.live(HM.St.tm(HX.d(o, g)))
   +ids = HTM.ids_in(xs, ns)
-  +e1 = Equal.cong(HM.St, List<&2, HTM.Timer>, s => HTM.Tms.live(HM.St.tm(s)), HX.d(o, st), HX.d(o, tg),
-    hub_d_with_r(o, tg, HX.R.with_waiters(HC.rr(o, tg), HC.waiters_not(HX.R.waiters(HC.rr(o, cx)), n))))
+  +e0 = Equal.cong(HM.St, List<&2, HTM.Timer>, s => HTM.Tms.live(HM.St.tm(s)), HX.d(o, st), HX.d(o, wg),
+    hub_d_with_r(o, wg, HX.R.with_waiters(HC.rr(o, wg), HC.waiters_not(HX.R.waiters(HC.rr(o, cx)), n))))
+  +e1 = Equal.trans(List<&2, HTM.Timer>, HTM.Tms.live(HM.St.tm(HX.d(o, st))), HTM.Tms.live(HM.St.tm(HX.d(o, wg))), HTM.Tms.live(HM.St.tm(HX.d(o, tg))),
+    e0, hub_live_wakes_each(o, wids, tg))
   +e2 = hub_live_gone_each(o, ids, g, HC.cat(["@", n, " is gone"]))
   hub_tnone_tr(HTM.Tms.live(HM.St.tm(HX.d(o, st))), HTM.keep_out(xs, ids), n,
     Equal.trans(List<&2, HTM.Timer>, HTM.Tms.live(HM.St.tm(HX.d(o, st))), HTM.Tms.live(HM.St.tm(HX.d(o, tg))), HTM.keep_out(xs, ids), e1, e2),
     hub_none_keep(xs, ids, ns, n, hub_all_self(ids), hub_str_in_head(n, HM.names_of.go(HM.get_agent(HX.d(o, g), n)))))
+
+# ---- the watches of `sb wake` (event-wake, hub/wakes.bend) ----
+
+def hub_wk_gone.go(c: Bool, +h: HWK.Watch, +t: List<&2, HWK.Watch>, +id: Nat, +e: {Nat.is_eq(HWK.Watch.id(h), id) == c : Bool},
+    ih: {HWK.find(HWK.drop(t, id), id) == None{} : Maybe<&2, HWK.Watch>})
+    -> {HWK.find(HWK.drop(h <> t, id), id) == None{} : Maybe<&2, HWK.Watch>}:
+  match c:
+    case True{}:
+      %Equal.sym(Bool, Nat.is_eq(HWK.Watch.id(h), id), True{}, e) : {HWK.find(Bool.pick(List<&2, HWK.Watch>, _, HWK.drop(t, id), h <> HWK.drop(t, id)), id) == None{} : Maybe<&2, HWK.Watch>}
+      ih
+    case False{}:
+      %Equal.sym(Bool, Nat.is_eq(HWK.Watch.id(h), id), False{}, e) : {HWK.find(Bool.pick(List<&2, HWK.Watch>, _, HWK.drop(t, id), h <> HWK.drop(t, id)), id) == None{} : Maybe<&2, HWK.Watch>}
+      %Equal.sym(Bool, Nat.is_eq(HWK.Watch.id(h), id), False{}, e) : {Bool.pick(Maybe<&2, HWK.Watch>, _, Some{h}, HWK.find(HWK.drop(t, id), id)) == None{} : Maybe<&2, HWK.Watch>}
+      ih
+
+# dropping an id leaves no watch of it
+def hub_wk_gone(+xs: List<&2, HWK.Watch>, +id: Nat) -> {HWK.find(HWK.drop(xs, id), id) == None{} : Maybe<&2, HWK.Watch>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{h, t}:
+      hub_wk_gone.go(Nat.is_eq(HWK.Watch.id(h), id), h, t, id, {==}, hub_wk_gone(t, id))
+
+def Laws.wake_hit_once(ws, id, why, at):
+  match ws:
+    case HWK.Wakes{l, e, li}:
+      hub_wk_gone(l, id)
+
+def Laws.wake_gone_never_hits(o, cx, text):
+  {==}
+
+def Laws.wake_replay_keeps(x):
+  match x:
+    case HWK.Watch{i, a, s, m, sa, ma, q}:
+      {==}
+
+# a watch kept in the due list is not the dropped id (its id differs)
+def hub_wk_due.keep(d: Bool, +h: HWK.Watch, +r: List<&2, HWK.Watch>, +id: Nat, +now: Nat,
+    +ed: {HWK.is_due(h, now) == d : Bool}, +ei: {Nat.is_eq(HWK.Watch.id(h), id) == False{} : Bool},
+    ih: {HWK.find(HWK.due(r, now), id) == None{} : Maybe<&2, HWK.Watch>})
+    -> {HWK.find(HWK.due(h <> r, now), id) == None{} : Maybe<&2, HWK.Watch>}:
+  match d:
+    case True{}:
+      %Equal.sym(Bool, HWK.is_due(h, now), True{}, ed) : {HWK.find(Bool.pick(List<&2, HWK.Watch>, _, h <> HWK.due(r, now), HWK.due(r, now)), id) == None{} : Maybe<&2, HWK.Watch>}
+      %Equal.sym(Bool, Nat.is_eq(HWK.Watch.id(h), id), False{}, ei) : {Bool.pick(Maybe<&2, HWK.Watch>, _, Some{h}, HWK.find(HWK.due(r, now), id)) == None{} : Maybe<&2, HWK.Watch>}
+      ih
+    case False{}:
+      %Equal.sym(Bool, HWK.is_due(h, now), False{}, ed) : {HWK.find(Bool.pick(List<&2, HWK.Watch>, _, h <> HWK.due(r, now), HWK.due(r, now)), id) == None{} : Maybe<&2, HWK.Watch>}
+      ih
+
+def hub_wk_due.go(c: Bool, +h: HWK.Watch, +t: List<&2, HWK.Watch>, +id: Nat, +now: Nat,
+    +e: {Nat.is_eq(HWK.Watch.id(h), id) == c : Bool},
+    ih: {HWK.find(HWK.due(HWK.drop(t, id), now), id) == None{} : Maybe<&2, HWK.Watch>})
+    -> {HWK.find(HWK.due(HWK.drop(h <> t, id), now), id) == None{} : Maybe<&2, HWK.Watch>}:
+  match c:
+    case True{}:
+      %Equal.sym(Bool, Nat.is_eq(HWK.Watch.id(h), id), True{}, e) : {HWK.find(HWK.due(Bool.pick(List<&2, HWK.Watch>, _, HWK.drop(t, id), h <> HWK.drop(t, id)), now), id) == None{} : Maybe<&2, HWK.Watch>}
+      ih
+    case False{}:
+      %Equal.sym(Bool, Nat.is_eq(HWK.Watch.id(h), id), False{}, e) : {HWK.find(HWK.due(Bool.pick(List<&2, HWK.Watch>, _, HWK.drop(t, id), h <> HWK.drop(t, id)), now), id) == None{} : Maybe<&2, HWK.Watch>}
+      hub_wk_due.keep(HWK.is_due(h, now), h, HWK.drop(t, id), id, now, {==}, e, ih)
+
+def Laws.wake_max_once(xs, id, now):
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{h, t}:
+      hub_wk_due.go(Nat.is_eq(HWK.Watch.id(h), id), h, t, id, now, {==}, Laws.wake_max_once(t, id, now))
+
+def hub_wk_keep_nil(+xs: List<&2, HWK.Watch>) -> {HWK.keep_out(xs, Nil{}) == xs : List<&2, HWK.Watch>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{h, t}:
+      Equal.cong(List<&2, HWK.Watch>, List<&2, HWK.Watch>, ys => h <> ys, HWK.keep_out(t, Nil{}), t, hub_wk_keep_nil(t))
+
+def hub_wk_keep_drop.pick(c: Bool, +h: HWK.Watch, +t: List<&2, HWK.Watch>, +id: Nat, +rest: List<&2, Nat>,
+    +e: {Nat.is_eq(HWK.Watch.id(h), id) == c : Bool},
+    ih: {HWK.keep_out(HWK.drop(t, id), rest) == HWK.keep_out(t, id <> rest) : List<&2, HWK.Watch>})
+    -> {HWK.keep_out(Bool.pick(List<&2, HWK.Watch>, Nat.is_eq(HWK.Watch.id(h), id), HWK.drop(t, id), h <> HWK.drop(t, id)), rest)
+        == Bool.pick(List<&2, HWK.Watch>, Nat.is_eq(HWK.Watch.id(h), id) || HWK.nat_in(rest, HWK.Watch.id(h)), HWK.keep_out(t, id <> rest), h <> HWK.keep_out(t, id <> rest)) : List<&2, HWK.Watch>}:
+  match c:
+    case True{}:
+      %Equal.sym(Bool, Nat.is_eq(HWK.Watch.id(h), id), True{}, e) : {HWK.keep_out(Bool.pick(List<&2, HWK.Watch>, _, HWK.drop(t, id), h <> HWK.drop(t, id)), rest)
+        == Bool.pick(List<&2, HWK.Watch>, _ || HWK.nat_in(rest, HWK.Watch.id(h)), HWK.keep_out(t, id <> rest), h <> HWK.keep_out(t, id <> rest)) : List<&2, HWK.Watch>}
+      ih
+    case False{}:
+      %Equal.sym(Bool, Nat.is_eq(HWK.Watch.id(h), id), False{}, e) : {HWK.keep_out(Bool.pick(List<&2, HWK.Watch>, _, HWK.drop(t, id), h <> HWK.drop(t, id)), rest)
+        == Bool.pick(List<&2, HWK.Watch>, _ || HWK.nat_in(rest, HWK.Watch.id(h)), HWK.keep_out(t, id <> rest), h <> HWK.keep_out(t, id <> rest)) : List<&2, HWK.Watch>}
+      Equal.cong(List<&2, HWK.Watch>, List<&2, HWK.Watch>, ys => Bool.pick(List<&2, HWK.Watch>, HWK.nat_in(rest, HWK.Watch.id(h)), ys, h <> ys),
+        HWK.keep_out(HWK.drop(t, id), rest), HWK.keep_out(t, id <> rest), ih)
+
+def hub_wk_keep_drop(+xs: List<&2, HWK.Watch>, +id: Nat, +rest: List<&2, Nat>)
+    -> {HWK.keep_out(HWK.drop(xs, id), rest) == HWK.keep_out(xs, id <> rest) : List<&2, HWK.Watch>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{h, t}:
+      hub_wk_keep_drop.pick(Nat.is_eq(HWK.Watch.id(h), id), h, t, id, rest, {==}, hub_wk_keep_drop(t, id, rest))
+
+def hub_wk_live_end(s: HM.St, +id: Nat, +why: String, +at: Nat)
+    -> {HWK.Wakes.live(HTM.Tms.wk(HM.St.tm(HM.apply(s, HM.EWake{HWK.WEnd{id, why, at}})))) == HWK.drop(HWK.Wakes.live(HTM.Tms.wk(HM.St.tm(s))), id) : List<&2, HWK.Watch>}:
+  match s:
+    case HM.St{ag, od, ms, ca, no, nm, nc, tm, xs}:
+      match tm:
+        case HTM.Tms{l, en, li, ac, na, wk}:
+          match wk:
+            case HWK.Wakes{wl, we, wi}:
+              {==}
+
+# the live watches after a drop's ends: those of no ended id
+def hub_wk_live_each(-o: HM.St, +ids: List<&2, Nat>, +cx: HX.Cx<o>)
+    -> {HWK.Wakes.live(HC.wks(o, HC.wakes_gone.each(o, ids, cx))) == HWK.keep_out(HWK.Wakes.live(HC.wks(o, cx)), ids) : List<&2, HWK.Watch>}:
+  match ids:
+    case Nil{}:
+      Equal.sym(List<&2, HWK.Watch>, HWK.keep_out(HWK.Wakes.live(HC.wks(o, cx)), Nil{}), HWK.Wakes.live(HC.wks(o, cx)),
+        hub_wk_keep_nil(HWK.Wakes.live(HC.wks(o, cx))))
+    case Con{id, rest}:
+      +ev = {HM.EWake{HWK.WEnd{id, "gone", HC.now(o, cx)}} : HM.Ev}
+      +cx2 = HC.emit(o, cx, ev, Unit{}, Unit{}, Unit{})
+      +l = HWK.Wakes.live(HC.wks(o, cx))
+      +l2 = HWK.Wakes.live(HC.wks(o, cx2))
+      +e2 = Equal.trans(List<&2, HWK.Watch>, l2, HWK.Wakes.live(HTM.Tms.wk(HM.St.tm(HM.apply(HX.d(o, cx), ev)))), HWK.drop(l, id),
+        Equal.cong(HM.St, List<&2, HWK.Watch>, s => HWK.Wakes.live(HTM.Tms.wk(HM.St.tm(s))), HX.d(o, cx2), HM.apply(HX.d(o, cx), ev), hub_d_emit(o, cx, ev, Unit{}, Unit{}, Unit{})),
+        hub_wk_live_end(HX.d(o, cx), id, "gone", HC.now(o, cx)))
+      Equal.trans(List<&2, HWK.Watch>, HWK.Wakes.live(HC.wks(o, HC.wakes_gone.each(o, rest, cx2))), HWK.keep_out(l2, rest), HWK.keep_out(l, id <> rest),
+        hub_wk_live_each(o, rest, cx2),
+        Equal.trans(List<&2, HWK.Watch>, HWK.keep_out(l2, rest), HWK.keep_out(HWK.drop(l, id), rest), HWK.keep_out(l, id <> rest),
+          Equal.cong(List<&2, HWK.Watch>, List<&2, HWK.Watch>, ys => HWK.keep_out(ys, rest), l2, HWK.drop(l, id), e2),
+          hub_wk_keep_drop(l, id, rest)))
+
+def hub_wk_all_weak(+xs: List<&2, Nat>, +h: Nat, +l: List<&2, Nat>, +e: {HWK.all_in(xs, l) == True{} : Bool}) -> {HWK.all_in(xs, h <> l) == True{} : Bool}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{x, r}:
+      +e1 = hub_and_true_l(HWK.nat_in(l, x), HWK.all_in(r, l), e)
+      +ih = hub_wk_all_weak(r, h, l, hub_and_true_r(HWK.nat_in(l, x), HWK.all_in(r, l), e))
+      %Equal.sym(Bool, HWK.nat_in(l, x), True{}, e1) : {Bool.and(Bool.or(Nat.is_eq(x, h), _), HWK.all_in(r, h <> l)) == True{} : Bool}
+      %Equal.sym(Bool, HWK.all_in(r, h <> l), True{}, ih) : {Bool.and(Bool.or(Nat.is_eq(x, h), True{}), _) == True{} : Bool}
+      hub_or_true_and(Nat.is_eq(x, h))
+
+def hub_wk_all_self(+xs: List<&2, Nat>) -> {HWK.all_in(xs, xs) == True{} : Bool}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{h, t}:
+      %Equal.sym(Bool, Nat.is_eq(h, h), True{}, hub_eq_refl(h)) : {Bool.and(Bool.or(_, HWK.nat_in(t, h)), HWK.all_in(t, h <> t)) == True{} : Bool}
+      hub_wk_all_weak(t, h, t, hub_wk_all_self(t))
+
+def hub_wk_all_tail(a: Bool, +h: HWK.Watch, +t: List<&2, HWK.Watch>, +ns: List<&2, String>, +l: List<&2, Nat>,
+    +ea: {HWK.str_in(ns, HWK.Watch.agent(h)) == a : Bool}, +hall: {HWK.all_in(HWK.ids_of(h <> t, ns), l) == True{} : Bool})
+    -> {HWK.all_in(HWK.ids_of(t, ns), l) == True{} : Bool}:
+  match a:
+    case True{}:
+      +e2 = Equal.cong(Bool, Bool, c => HWK.all_in(Bool.pick(List<&2, Nat>, c, HWK.Watch.id(h) <> HWK.ids_of(t, ns), HWK.ids_of(t, ns)), l),
+        HWK.str_in(ns, HWK.Watch.agent(h)), True{}, ea)
+      hub_and_true_r(HWK.nat_in(l, HWK.Watch.id(h)), HWK.all_in(HWK.ids_of(t, ns), l),
+        Equal.trans(Bool, HWK.all_in(HWK.Watch.id(h) <> HWK.ids_of(t, ns), l), HWK.all_in(HWK.ids_of(h <> t, ns), l), True{},
+          Equal.sym(Bool, HWK.all_in(HWK.ids_of(h <> t, ns), l), HWK.all_in(HWK.Watch.id(h) <> HWK.ids_of(t, ns), l), e2), hall))
+    case False{}:
+      +e2 = Equal.cong(Bool, Bool, c => HWK.all_in(Bool.pick(List<&2, Nat>, c, HWK.Watch.id(h) <> HWK.ids_of(t, ns), HWK.ids_of(t, ns)), l),
+        HWK.str_in(ns, HWK.Watch.agent(h)), False{}, ea)
+      Equal.trans(Bool, HWK.all_in(HWK.ids_of(t, ns), l), HWK.all_in(HWK.ids_of(h <> t, ns), l), True{},
+        Equal.sym(Bool, HWK.all_in(HWK.ids_of(h <> t, ns), l), HWK.all_in(HWK.ids_of(t, ns), l), e2), hall)
+
+def hub_wk_str_out(a: Bool, +h: HWK.Watch, +t: List<&2, HWK.Watch>, +ns: List<&2, String>, +l: List<&2, Nat>,
+    +ea: {HWK.str_in(ns, HWK.Watch.agent(h)) == a : Bool}, +eb: {HWK.nat_in(l, HWK.Watch.id(h)) == False{} : Bool},
+    +hall: {HWK.all_in(HWK.ids_of(h <> t, ns), l) == True{} : Bool})
+    -> {HWK.str_in(ns, HWK.Watch.agent(h)) == False{} : Bool}:
+  match a:
+    case False{}:
+      ea
+    case True{}:
+      +e2 = Equal.cong(Bool, Bool, c => HWK.all_in(Bool.pick(List<&2, Nat>, c, HWK.Watch.id(h) <> HWK.ids_of(t, ns), HWK.ids_of(t, ns)), l),
+        HWK.str_in(ns, HWK.Watch.agent(h)), True{}, ea)
+      +hin = hub_and_true_l(HWK.nat_in(l, HWK.Watch.id(h)), HWK.all_in(HWK.ids_of(t, ns), l),
+        Equal.trans(Bool, HWK.all_in(HWK.Watch.id(h) <> HWK.ids_of(t, ns), l), HWK.all_in(HWK.ids_of(h <> t, ns), l), True{},
+          Equal.sym(Bool, HWK.all_in(HWK.ids_of(h <> t, ns), l), HWK.all_in(HWK.Watch.id(h) <> HWK.ids_of(t, ns), l), e2), hall))
+      hub_absurd_eq(hub_ft_absurd(Equal.trans(Bool, False{}, HWK.nat_in(l, HWK.Watch.id(h)), True{},
+        Equal.sym(Bool, HWK.nat_in(l, HWK.Watch.id(h)), False{}, eb), hin)), Bool, HWK.str_in(ns, HWK.Watch.agent(h)), False{})
+
+def hub_wk_neq_of(c: Bool, +a: String, +n: String, +ns: List<&2, String>, +ec: {String.eq(a, n) == c : Bool},
+    ha: {HWK.str_in(ns, a) == False{} : Bool}, hn: {HWK.str_in(ns, n) == True{} : Bool}) -> {String.eq(a, n) == False{} : Bool}:
+  match c:
+    case False{}:
+      ec
+    case True{}:
+      +s = hub_str_eq_sound(a, n, ec)
+      +e3 = Equal.cong(String, Bool, x => HWK.str_in(ns, x), a, n, s)
+      hub_absurd_eq(hub_ft_absurd(Equal.trans(Bool, False{}, HWK.str_in(ns, a), True{},
+        Equal.sym(Bool, HWK.str_in(ns, a), False{}, ha), Equal.trans(Bool, HWK.str_in(ns, a), HWK.str_in(ns, n), True{}, e3, hn))), Bool, String.eq(a, n), False{})
+
+def hub_wk_none_keep.pick(b: Bool, +h: HWK.Watch, +t: List<&2, HWK.Watch>, +l: List<&2, Nat>, +ns: List<&2, String>, +n: String,
+    +eb: {HWK.nat_in(l, HWK.Watch.id(h)) == b : Bool}, +hall: {HWK.all_in(HWK.ids_of(h <> t, ns), l) == True{} : Bool},
+    +hn: {HWK.str_in(ns, n) == True{} : Bool}, ih: HI.WatchNoneOf(HWK.keep_out(t, l), n))
+    -> HI.WatchNoneOf(Bool.pick(List<&2, HWK.Watch>, HWK.nat_in(l, HWK.Watch.id(h)), HWK.keep_out(t, l), h <> HWK.keep_out(t, l)), n):
+  match b:
+    case True{}:
+      %Equal.sym(Bool, HWK.nat_in(l, HWK.Watch.id(h)), True{}, eb) : HI.WatchNoneOf(Bool.pick(List<&2, HWK.Watch>, _, HWK.keep_out(t, l), h <> HWK.keep_out(t, l)), n)
+      ih
+    case False{}:
+      +ha = hub_wk_str_out(HWK.str_in(ns, HWK.Watch.agent(h)), h, t, ns, l, {==}, eb, hall)
+      %Equal.sym(Bool, HWK.nat_in(l, HWK.Watch.id(h)), False{}, eb) : HI.WatchNoneOf(Bool.pick(List<&2, HWK.Watch>, _, HWK.keep_out(t, l), h <> HWK.keep_out(t, l)), n)
+      HX.Both{hub_wk_neq_of(String.eq(HWK.Watch.agent(h), n), HWK.Watch.agent(h), n, ns, {==}, ha, hn), ih}
+
+# keeping out every id of the agent's watches leaves none
+def hub_wk_none_keep(+xs: List<&2, HWK.Watch>, +l: List<&2, Nat>, +ns: List<&2, String>, +n: String,
+    +hall: {HWK.all_in(HWK.ids_of(xs, ns), l) == True{} : Bool}, +hn: {HWK.str_in(ns, n) == True{} : Bool})
+    -> HI.WatchNoneOf(HWK.keep_out(xs, l), n):
+  match xs:
+    case Nil{}:
+      Unit{}
+    case Con{h, t}:
+      +ht = hub_wk_all_tail(HWK.str_in(ns, HWK.Watch.agent(h)), h, t, ns, l, {==}, hall)
+      hub_wk_none_keep.pick(HWK.nat_in(l, HWK.Watch.id(h)), h, t, l, ns, n, {==}, hall, hn, hub_wk_none_keep(t, l, ns, n, ht, hn))
+
+def hub_wk_str_in_head(+n: String, +r: List<&2, String>) -> {HWK.str_in(n <> r, n) == True{} : Bool}:
+  %Equal.sym(Bool, String.eq(n, n), True{}, hub_str_eq_refl(n)) : {Bool.or(_, HWK.str_in(r, n)) == True{} : Bool}
+  {==}
+
+def hub_wnone_tr(-x: List<&2, HWK.Watch>, -y: List<&2, HWK.Watch>, -n: String, e: {x == y : List<&2, HWK.Watch>},
+    l: HI.WatchNoneOf(y, n)) -> HI.WatchNoneOf(x, n):
+  %Equal.sym(List<&2, HWK.Watch>, x, y, e) : HI.WatchNoneOf(_, n)
+  l
+
+def Laws.wake_drop_ends(o, cx, n):
+  +ns = HM.names_of(HX.d(o, cx), n)
+  +xs = HWK.Wakes.live(HC.wks(o, cx))
+  +ids = HWK.ids_of(xs, ns)
+  hub_wnone_tr(HWK.Wakes.live(HC.wks(o, HC.wakes_gone(o, HM.LArchived{}, cx, n))), HWK.keep_out(xs, ids), n,
+    hub_wk_live_each(o, ids, cx),
+    hub_wk_none_keep(xs, ids, ns, n, hub_wk_all_self(ids), hub_wk_str_in_head(n, HM.names_of.go(HM.get_agent(HX.d(o, cx), n)))))
 
 # ---- queued user input (the window's "send queued") ----
 
@@ -5339,7 +5713,7 @@ def hub_act_gone(+xs: List<&2, HTM.Act>, +id: Nat) -> {HTM.act_find(HTM.act_drop
 
 def Laws.act_fires_once(tm, id):
   match tm:
-    case HTM.Tms{l, e, li, ac, na}:
+    case HTM.Tms{l, e, li, ac, na, wk}:
       hub_act_gone(ac, id)
 
 def hub_due_all.go(c: Bool, +h: HTM.Act, +t: List<&2, HTM.Act>, +now: Nat, +e: {Nat.is_le(HTM.Act.due(h), now) == c : Bool},

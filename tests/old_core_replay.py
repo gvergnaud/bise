@@ -54,9 +54,16 @@ FIXTURE = [
     {"type": "every_set", "id": 2, "agent": "main", "by": "main", "text": "read the log", "next_ms": 9000,
      "at": 1000, "every_ms": 600000, "held": True},
     {"type": "every_name", "id": 2, "name": "log read", "announce": True, "at": 1100},
+    # event-wake: a watch of `sb wake` and its end (skipped: on a rollback
+    # the watches are lost, the rest of the state is not)
+    {"type": "wake_set", "watch": {"id": 1, "agent": "main", "spec": {"kind": "file", "path": "/t/rc"},
+                                   "max_text": "still running", "set_at": 1000, "max_at": 3601000, "quiet": False}},
+    {"type": "wake_set", "watch": {"id": 2, "agent": "main", "spec": {"kind": "bg", "slot": "/t/bg/0", "cmd": "make"},
+                                   "max_text": "", "set_at": 1000, "max_at": 86401000, "quiet": True}},
+    {"type": "wake_end", "id": 1, "why": "hit", "at": 1200},
 ]
 NEW = [i for i, e in enumerate(FIXTURE)
-       if e["type"].startswith(("x_", "act_")) or e["type"] in ("follow", "job_end", "every_name")]
+       if e["type"].startswith(("x_", "act_", "wake_")) or e["type"] in ("follow", "job_end", "every_name")]
 
 
 def main():

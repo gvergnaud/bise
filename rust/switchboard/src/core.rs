@@ -225,6 +225,9 @@ pub enum AgentReq {
     /// `sb every` (docs/ambient-roadmap.md B): the hub's timers (every.rs);
     /// the Rust side's, never sent to sb-core.
     Every(EveryReq),
+    /// `sb wake` (event-wake, wake.rs): the caller's watches; the watch
+    /// itself is sb-core's (`wake_set`, `wake_stop` inputs).
+    Wake(WakeReq),
     /// `sb project send <project> --input m_<n>` (bise's main, desktop S2):
     /// the user's message `msg` to main, forwarded by reference.
     ProjectSend {
@@ -247,6 +250,16 @@ pub enum EveryReq {
     Show(u64),
     /// `to` "": the caller; `name` None: the hub names it (every_name.rs)
     Add { to: String, text: String, sched: crate::every::Sched, until_ms: Option<u64>, times: Option<u64>, page: Option<String>, name: Option<String> },
+}
+
+/// `sb wake`'s three forms (only for the caller: waking another agent is
+/// a message).
+#[derive(Clone, Debug, PartialEq)]
+pub enum WakeReq {
+    List,
+    Stop(u64),
+    /// one watch, its max (ms)
+    Add { spec: crate::wake::Spec, max_ms: u64 },
 }
 
 /// `m_12` or `12`.
@@ -431,6 +444,15 @@ impl AgentReq {
             "isolate" => AgentReq::Isolate {
                 agent: jstr(v, "agent"),
             },
+            "wake" => AgentReq::Wake(match jstr(v, "step").as_str() {
+                "" | "list" => WakeReq::List,
+                "stop" => WakeReq::Stop(v["id"].as_u64().ok_or("usage: sb wake --stop <id>")?),
+                "add" => WakeReq::Add {
+                    spec: crate::wake::Spec::from_json(&v["spec"]).ok_or("sb wake: --on-exit, --on-file or --on-job")?,
+                    max_ms: v["max_ms"].as_u64().unwrap_or(crate::wake::MAX_DEFAULT_MS).min(crate::wake::MAX_MOST_MS),
+                },
+                other => return Err(format!("sb wake: unknown step {}", other)),
+            }),
             "every" => AgentReq::Every(match jstr(v, "step").as_str() {
                 "" | "list" => EveryReq::List,
                 "stop" => EveryReq::Stop(v["id"].as_u64().ok_or("usage: sb every --stop <id>")?),
@@ -537,6 +559,12 @@ pub enum Input {
     /// outside its count.
     EveryRun {
         id: u64,
+    },
+    /// event-wake: the look (daemon/wakes.rs) saw watch `id`'s event;
+    /// `text` is the wake (wake.rs `hit_text`).
+    WakeHit {
+        id: u64,
+        text: String,
     },
     /// The approvals gate (approvals-design.md §9): a `confirm` card for
     /// `agent`'s waiting call, in the user's inbox.
@@ -1569,6 +1597,13 @@ impl Hub {
         if let Some(t) = v.get("timers_ended") {
             self.st.timers.load_ended(t);
         }
+        // sb wake's watches: likewise
+        if let Some(w) = v.get("wakes") {
+            self.st.wakes.load_live(w);
+        }
+        if let Some(w) = v.get("wakes_ended") {
+            self.st.wakes.load_ended(w);
+        }
         self.st.next_msg = v["next_msg"].as_u64().unwrap_or(1);
         self.st.next_card = v["next_card"].as_u64().unwrap_or(1);
     }
@@ -2405,6 +2440,7 @@ impl Hub {
             Input::Tick => self.core(&mut fx, env, None, json!({"t": "tick"})),
             Input::EveryStop { id, why } => self.timer_stop_by_user(&mut fx, env, id, &why),
             Input::EveryRun { id } => self.timer_run_now(&mut fx, env, id),
+            Input::WakeHit { id, text } => self.wake_hit(&mut fx, env, id, &text),
             Input::ConfirmOpen { agent, text } => {
                 self.core(&mut fx, env, None, json!({"t": "confirm_open", "agent": agent, "text": text}))
             }
@@ -2771,6 +2807,7 @@ impl Hub {
                     }
                 }
             }
+            Wire::BgHandoff(args) => self.bg_handoff(fx, env, agent, &args),
             Wire::Intent(text) => {
                 if self.st.agents.contains_key(agent) {
                     self.set_activity(agent, now, clip(&text, 120));
@@ -3121,6 +3158,11 @@ impl Hub {
                 reply(fx, body);
                 return;
             }
+            AgentReq::Wake(r) => {
+                let body = self.wake_req(fx, env, from, r);
+                reply(fx, body);
+                return;
+            }
             // desktop S2: the project's hub id (sb-core never reads the registry)
             AgentReq::ProjectSend { project, msg } => match env.project_hub(&project) {
                 Ok(hub) => json!({"cmd": "project_send", "project": hub, "msg": msg}),
@@ -3272,6 +3314,9 @@ plain text        message to the agent in view (main by default)
 
 #[path = "core_user.rs"]
 mod user;
+
+#[path = "core_wake.rs"]
+mod wake_link;
 
 #[path = "merge.rs"]
 mod merge;

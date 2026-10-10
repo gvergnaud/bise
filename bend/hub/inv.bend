@@ -10,6 +10,8 @@ import ./core.bend as H
 
 import ./timers.bend as TM
 
+import ./wakes.bend as WK
+
 # the message ids, in the order of the state
 def ids(xs: List<&2, M.MRec>) -> List<&2, Nat>:
   match xs:
@@ -128,6 +130,14 @@ def NamesApart(+s: M.St) -> Data:
   NamesOK(profile(M.St.agents(s)))
 
 # ---- the timers (`sb every`, hub/timers.bend) ----
+
+# law wake_drop_ends: no watch of the list belongs to `n`
+def WatchNoneOf(xs: List<&2, WK.Watch>, +n: String) -> Data:
+  match xs:
+    case Nil{}:
+      Unit
+    case Con{+w, +r}:
+      X.Both<{String.eq(WK.Watch.agent(w), n) == False{} : Bool}, WatchNoneOf(r, n)>
 
 # law stop_leaves_no_timer: no timer of the list belongs to `n`
 def TimerNoneOf(xs: List<&2, TM.Timer>, +n: String) -> Data:

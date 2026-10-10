@@ -631,7 +631,7 @@ mod tests {
         let rows = |t: &str| t.lines().filter(|l| row_cmd(l).is_some()).map(String::from).collect::<std::collections::BTreeSet<_>>();
         let (old, new) = (rows(main), rows(&now));
         let changed: std::collections::BTreeSet<String> = old.symmetric_difference(&new).filter_map(|l| row_cmd(l)).collect();
-        let want: std::collections::BTreeSet<String> = ["every", "follow", "page", "people", "report", "taste"].into_iter().map(String::from).collect();
+        let want: std::collections::BTreeSet<String> = ["every", "follow", "page", "people", "report", "taste", "wake"].into_iter().map(String::from).collect();
         assert_eq!(changed, want, "the command rows that differ from main's");
         // a plain project's tasks never read the @bise paragraph either
         assert!(!messages(false).contains("@bise") && messages(true).contains("@bise"));

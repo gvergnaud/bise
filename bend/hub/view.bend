@@ -14,6 +14,7 @@ import ./cx.bend as X
 import ./core.bend as H
 
 import ./timers.bend as TM
+import ./wakes.bend as WK
 
 def jdecl(d: Maybe<&2, M.Decl>, +note: String) -> J.Json:
   match d:
@@ -335,6 +336,29 @@ def timers_kvs(+all: Bool, +evs: List<&2, M.Ev>, +s: M.St) -> List<&2, Sigma<&2,
   List.append(&2, Sigma<&2, &2, String, _ => J.Json>,
     timers_live(all || timer_evs(False{}, evs), s), timers_ended(all || timer_evs(True{}, evs), s))
 
+def wake_evs(evs: List<&2, M.Ev>) -> Bool:
+  match evs:
+    case Nil{}:
+      False{}
+    case Con{M.EWake{_}, _}:
+      True{}
+    case Con{_, +t}:
+      wake_evs(t)
+
+def wakes_go(go: Bool, +s: M.St) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  match go:
+    case True{}:
+      +wk = TM.Tms.wk(M.St.tm(s))
+      [J.kv("wakes", J.JArr{WK.live_json(WK.Wakes.live(wk))}),
+        J.kv("wakes_ended", J.JArr{WK.ended_list_json(WK.Wakes.ended(wk))})]
+    case False{}:
+      Nil{}
+
+# the watches (`sb wake`, wakes.bend) only when a step changed them, or
+# all: an idle tick carries none (idle-cpu)
+def wakes_kvs(+all: Bool, +evs: List<&2, M.Ev>, +s: M.St) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  wakes_go(all || wake_evs(evs), s)
+
 # the view: the agents in `names` (or all), the messages in `ids` (or
 # all); the order, cards and notes when `durable` (or all); the timers
 # when an event of `evs` (the step's journal) changed them (or all)
@@ -346,4 +370,4 @@ def view(+s: M.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +all: Bool, +i
       J.kv("all_msgs", J.JBool{all}),
       J.kv("next_msg", J.JNum{M.St.next_msg(s)}), J.kv("next_card", J.JNum{M.St.next_card(s)})],
     durable_kvs(all || Bool.not(List.is_empty(&2, M.Ev, evs)), s),
-    timers_kvs(all, evs, s)]))
+    timers_kvs(all, evs, s), wakes_kvs(all, evs, s)]))

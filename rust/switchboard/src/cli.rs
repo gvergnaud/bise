@@ -8,7 +8,9 @@ use std::time::Duration;
 
 mod keeps;
 mod pages;
+mod wake;
 use keeps::keeps_req;
+use wake::wake_req;
 use pages::{page_req, render_page};
 
 /// Who may run a command (and whose system prompt lists it).
@@ -86,6 +88,11 @@ pub const COMMANDS: &[CmdDoc] = &[
         "sb every <10m|1h|day 07:30> \"<message>\" [--until <18:00|tomorrow 18:00|2h>] [--times <n>] [--to <agent>] [--page <id>] | sb every | sb every --stop <id>",
         Who::Everyone,
         "a standing order: the hub wakes you (or `--to` that agent) with the message every N (at least 1m) or every day at that time, until a time or for n times. Never sleep or loop in a turn to wait: set a timer and end your turn. Estimate low and check often: a build you think takes 5 min, first check at 1-2 min, then short re-checks; never one long timer. Better, wake on the event: for a background bash command, read its .rc/.out when your turn resumes. A wake while busy waits for the end of the turn (one, never stacked). `--page <id>`: the page it keeps fresh (its frame says `watching` and has `stop`). No argument: the timers; `--stop` ends one.",
+    ),
+    cmd(
+        "sb wake --on-exit <pid> | --on-file <path> | --on-job <launchd label> [--tail <file>] [--note \"<text>\"] [--max 1h] | sb wake | sb wake --stop <id>",
+        Who::Everyone,
+        "wake on an event, not a timer: the hub wakes you once when that pid or launchd job ends or that file appears (an rc file), with its rc and the last lines of `--tail`; still running at `--max` (1h, at most 24h): one wake that says so. Your bash commands that go to the background are watched already: their end wakes you. Set it and end your turn. No argument: your watches; `--stop` ends one.",
     ),
     cmd(
         "sb taste [add \"<rule>\" [--from \"<where>\"] | remove <n|words>]",
@@ -687,6 +694,7 @@ pub fn build(args: &[String]) -> Result<Value, String> {
             }
         }
         "every" => every_req(rest, &mut req)?,
+        "wake" => wake_req(rest, &mut req)?,
         "taste" | "people" => keeps_req(cmd, rest, &mut req)?,
         "land" => {
             let (pos, o) = parse_args(rest, &["add"], &["here"])?;
@@ -908,7 +916,7 @@ pub fn render(cmd: &str, v: &Value) -> (bool, String) {
         "move" => format!("@{} moved", s("name")),
         // the hub's line: `✓ x landed 1 commit on main (abc1234)`
         "land" => s("text"),
-        "every" => s("text"),
+        "every" | "wake" => s("text"),
         "taste" | "people" => s("text"),
         "flow" => s("text"),
         "feature" => s("text"),

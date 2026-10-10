@@ -19,6 +19,8 @@ import Base
 
 import ../vendor/json.bend as J
 
+import ./wakes.bend as WK
+
 # when a timer fires: every `ms`, or every day at that minute (local time,
 # the hub's next_daily)
 type Sched is Data:
@@ -42,7 +44,8 @@ type Ended is Data:
   Ended{t: Timer, at: Nat, why: String}
 
 type Tms is Data:
-  Tms{live: List<&2, Timer>, ended: List<&2, Ended>, last_id: Nat, acts: List<&2, Act>, next_act: Nat}
+  Tms{live: List<&2, Timer>, ended: List<&2, Ended>, last_id: Nat, acts: List<&2, Act>, next_act: Nat,
+    wk: WK.Wakes}
 
 # an act (bise desktop S2): an internal step sb-core takes at a time, on
 # the same clock and the same due rule as the wake timers (the tick's
@@ -66,7 +69,7 @@ def MIN_MS() -> Nat:
   60000n
 
 def empty() -> Tms:
-  Tms{Nil{}, Nil{}, 0n, Nil{}, 1n}
+  Tms{Nil{}, Nil{}, 0n, Nil{}, 1n, WK.empty()}
 
 # ---- fields ----
 
@@ -142,27 +145,32 @@ def Timer.held(x: Timer) -> Bool:
 
 def Tms.live(x: Tms) -> List<&2, Timer>:
   match x:
-    case Tms{+live, _, _, _, _}:
+    case Tms{+live, _, _, _, _, _}:
       live
 
 def Tms.ended(x: Tms) -> List<&2, Ended>:
   match x:
-    case Tms{_, +ended, _, _, _}:
+    case Tms{_, +ended, _, _, _, _}:
       ended
 
 def Tms.last_id(x: Tms) -> Nat:
   match x:
-    case Tms{_, _, +last_id, _, _}:
+    case Tms{_, _, +last_id, _, _, _}:
       last_id
 
 def Tms.acts(x: Tms) -> List<&2, Act>:
   match x:
-    case Tms{_, _, _, +acts, _}:
+    case Tms{_, _, _, +acts, _, _}:
       acts
+
+def Tms.wk(x: Tms) -> WK.Wakes:
+  match x:
+    case Tms{_, _, _, _, _, +wk}:
+      wk
 
 def Tms.next_act(x: Tms) -> Nat:
   match x:
-    case Tms{_, _, _, _, +n}:
+    case Tms{_, _, _, _, +n, _}:
       n
 
 def Act.id(x: Act) -> Nat:
@@ -345,24 +353,24 @@ def all_in(xs: List<&2, Nat>, +ys: List<&2, Nat>) -> Bool:
 
 def set(+tm: Tms, +x: Timer) -> Tms:
   match tm:
-    case Tms{+live, +ended, +last, +acts, +na}:
-      Tms{put(live, x), ended, Nat.max(last, Timer.id(x)), acts, na}
+    case Tms{+live, +ended, +last, +acts, +na, +wk}:
+      Tms{put(live, x), ended, Nat.max(last, Timer.id(x)), acts, na, wk}
 
 def fired(+tm: Tms, +id: Nat, +fired: Nat, +next: Nat, +at: Nat, +undelivered: Bool) -> Tms:
   match tm:
-    case Tms{+live, +ended, +last, +acts, +na}:
-      Tms{fire_in(live, id, fired, next, at, undelivered), ended, last, acts, na}
+    case Tms{+live, +ended, +last, +acts, +na, +wk}:
+      Tms{fire_in(live, id, fired, next, at, undelivered), ended, last, acts, na, wk}
 
 def run(+tm: Tms, +id: Nat, +at: Nat) -> Tms:
   match tm:
-    case Tms{+live, +ended, +last, +acts, +na}:
-      Tms{run_in(live, id, at), ended, last, acts, na}
+    case Tms{+live, +ended, +last, +acts, +na, +wk}:
+      Tms{run_in(live, id, at), ended, last, acts, na, wk}
 
 # `every_name`: a live timer's name (an ended or unknown id: nothing)
 def named(+tm: Tms, +id: Nat, +name: String) -> Tms:
   match tm:
-    case Tms{+live, +ended, +last, +acts, +na}:
-      Tms{named_in(live, id, name), ended, last, acts, na}
+    case Tms{+live, +ended, +last, +acts, +na, +wk}:
+      Tms{named_in(live, id, name), ended, last, acts, na, wk}
 
 def cap(+xs: List<&2, Ended>) -> List<&2, Ended>:
   List.drop(&2, Ended, xs, Nat.sub(List.length(&2, Ended, xs), ENDED_KEPT()))
@@ -378,8 +386,8 @@ def ended_add(m: Maybe<&2, Timer>, +xs: List<&2, Ended>, +at: Nat, +why: String)
 # the ended ones when it was live
 def stop(+tm: Tms, +id: Nat, +why: String, +at: Nat) -> Tms:
   match tm:
-    case Tms{+live, +ended, +last, +acts, +na}:
-      Tms{drop(live, id), ended_add(find(live, id), ended, at, why), last, acts, na}
+    case Tms{+live, +ended, +last, +acts, +na, +wk}:
+      Tms{drop(live, id), ended_add(find(live, id), ended, at, why), last, acts, na, wk}
 
 # ---- the acts (bise desktop S2) ----
 
@@ -400,14 +408,14 @@ def act_find(xs: List<&2, Act>, +id: Nat) -> Maybe<&2, Act>:
 # act_set: one more act (its id the next free one)
 def act_set(+tm: Tms, +a: Act) -> Tms:
   match tm:
-    case Tms{+live, +ended, +last, +acts, +na}:
-      Tms{live, ended, last, List.append(&2, Act, acts, [a]), Nat.max(na, 1n+Act.id(a))}
+    case Tms{+live, +ended, +last, +acts, +na, +wk}:
+      Tms{live, ended, last, List.append(&2, Act, acts, [a]), Nat.max(na, 1n+Act.id(a)), wk}
 
 # act_done: it fired (or was dropped): gone, whatever it was
 def act_done(+tm: Tms, +id: Nat) -> Tms:
   match tm:
-    case Tms{+live, +ended, +last, +acts, +na}:
-      Tms{live, ended, last, act_drop(acts, id), na}
+    case Tms{+live, +ended, +last, +acts, +na, +wk}:
+      Tms{live, ended, last, act_drop(acts, id), na, wk}
 
 # the acts due at `now` (due <= now), in order
 def acts_due(xs: List<&2, Act>, +now: Nat) -> List<&2, Act>:
@@ -592,6 +600,13 @@ def ended_list_json(xs: List<&2, Ended>) -> List<&2, J.Json>:
 type ActEv is Data:
   ActSet{a: Act}
   ActDone{id: Nat}
+
+# the watches' lines (model.bend's Ev EWake, hub/wakes.bend): they live
+# beside the timers and the acts, the hub's other standing waits
+def wk_apply(+tm: Tms, e: WK.WkEv) -> Tms:
+  match tm:
+    case Tms{+live, +ended, +last, +acts, +na, +wk}:
+      Tms{live, ended, last, acts, na, WK.apply(wk, e)}
 
 def act_apply(+tm: Tms, e: ActEv) -> Tms:
   match e:

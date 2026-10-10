@@ -41,6 +41,7 @@ import ./hub/cx.bend as HX
 import ./hub/core.bend as HC
 import ./hub/inv.bend as HI
 import ./hub/timers.bend as HTM
+import ./hub/wakes.bend as HWK
 import ./hub/xhub-model.bend as HXH
 import ./hub/xhub.bend as HXB
 import ./hub/codec.bend as HCo
@@ -4405,6 +4406,52 @@ law stop_leaves_no_timer:
   for +n: String
   for +why: String
   HI.TimerNoneOf(HTM.Tms.live(HM.St.tm(HX.d(o, HC.stop_task(o, cx, n, HM.LArchived{}, why)))), n)
+
+# ---- the watches of `sb wake` (event-wake, hub/wakes.bend) ----
+# Their lines (wake_set, wake_end) are events like the others: the replay
+# laws (hub_run_replays, replay_reproduces) cover them as they are, so a
+# watch survives a restart and an ended one stays ended (wake_replay_keeps
+# below pins the line itself). Like the timers' laws, the wake laws are
+# LOCAL, on the steps of core.bend's watches section.
+
+# LAW: a watch wakes its agent once. Its hit ends it (wake_end, in the
+# same step as its message): after the end, no hit finds it.
+law wake_hit_once:
+  for +ws: HWK.Wakes
+  for +id: Nat
+  for +why: String
+  for +at: Nat
+  {HWK.hit(HWK.end(ws, id, why, at), id) == None{} : Maybe<&2, HWK.Watch>}
+
+# LAW: a hit that finds no live watch (ended: hit, max, stop, or its
+# agent dropped) changes nothing at all: no message, no line.
+law wake_gone_never_hits:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +text: String
+  {HC.wake_hit.found(o, None{}, cx, text) == cx : HX.Cx<o>}
+
+# LAW: dropping (archiving) a task leaves no live watch of it, in the
+# same step (beside stop_leaves_no_timer). A stop keeps them: they wait.
+law wake_drop_ends:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +n: String
+  HI.WatchNoneOf(HWK.Wakes.live(HC.wks(o, HC.wakes_gone(o, HM.LArchived{}, cx, n))), n)
+
+# LAW: a watch past its max wakes once: the tick ends it, and an ended
+# watch is never due again.
+law wake_max_once:
+  for +xs: List<&2, HWK.Watch>
+  for +id: Nat
+  for +now: Nat
+  {HWK.find(HWK.due(HWK.drop(xs, id), now), id) == None{} : Maybe<&2, HWK.Watch>}
+
+# LAW: a watch's line read back is the same watch (the journal keeps it
+# across a restart: its spec, words, times and agent).
+law wake_replay_keeps:
+  for +x: HWK.Watch
+  {HWK.watch_of(HWK.watch_json(x)) == x : HWK.Watch}
 
 # LAW (L2, no message lost or doubled): a new hub keeps each message as
 # ONE record — its text and its single delivery state; no state exists

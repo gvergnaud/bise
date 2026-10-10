@@ -9,6 +9,8 @@ import ./model.bend as M
 
 import ./timers.bend as TM
 
+import ./wakes.bend as WK
+
 import ./xhub-model.bend as XH
 
 def jmaybe_nat(m: Maybe<&2, Nat>) -> J.Json:
@@ -191,6 +193,9 @@ def ev_json(e: M.Ev) -> J.Json:
       J.obj([ty("follow"), J.kv("name", J.JStr{name}), J.kv("on", J.JBool{on}), J.kv("hub", J.JStr{hub})])
     case M.EJobEnd{+name, +state}:
       J.obj([ty("job_end"), J.kv("name", J.JStr{name}), J.kv("state", J.JStr{state})])
+    # event-wake (an older sb-core reads these as unknown: skipped)
+    case M.EWake{+we}:
+      WK.ev_json(we)
 
 # ---- decoding (the journal replayed at boot) ----
 
@@ -284,6 +289,8 @@ type EvK is Data:
   KRouteCancelled{}
   KFollow{}
   KJobEnd{}
+  KWakeSet{}
+  KWakeEnd{}
   KUnknown{}
 
 def ev_kind.x(+t: String) -> EvK:
@@ -301,7 +308,9 @@ def ev_kind.x(+t: String) -> EvK:
   Bool.pick(EvK, String.eq(t, "route_cancelled"), KRouteCancelled{},
   Bool.pick(EvK, String.eq(t, "follow"), KFollow{},
   Bool.pick(EvK, String.eq(t, "job_end"), KJobEnd{},
-  KUnknown{}))))))))))))))
+  Bool.pick(EvK, String.eq(t, "wake_set"), KWakeSet{},
+  Bool.pick(EvK, String.eq(t, "wake_end"), KWakeEnd{},
+  KUnknown{}))))))))))))))))
 
 def ev_kind(+t: String) -> EvK:
   Bool.pick(EvK, String.eq(t, "task_created"), KTaskCreated{},
@@ -430,6 +439,10 @@ def ev_of.kind(k: EvK, +j: J.Json, +n: String) -> Maybe<&2, M.Ev>:
       Some{M.EFollow{get_s(j, "name"), get_b(j, "on"), get_s(j, "hub")}}
     case KJobEnd{}:
       Some{M.EJobEnd{get_s(j, "name"), get_s(j, "state")}}
+    case KWakeSet{}:
+      Some{M.EWake{WK.WSet{WK.watch_of(get_j(j, "watch"))}}}
+    case KWakeEnd{}:
+      Some{M.EWake{WK.WEnd{get_nat(j, "id"), get_s(j, "why"), get_nat(j, "at")}}}
     case KRouteHeld{}:
       Some{M.EX{XH.XRouteHeld{route_of(get_j(j, "route"))}}}
     case KRouteSet{}:

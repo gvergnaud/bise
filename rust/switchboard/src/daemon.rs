@@ -47,6 +47,7 @@ mod dispatch;
 mod inbox;
 mod merged;
 mod state_gate;
+mod wakes;
 mod worktrees;
 mod xhub;
 mod xread;
@@ -404,6 +405,8 @@ struct Shell {
     holds: crate::idle::Holds,
     /// artifacts and diffs (`daemon/art.rs`, docs/artifacts.md)
     art: art::Art,
+    /// `sb wake`'s look (`daemon/wakes.rs`): its cadence
+    wake_look: wakes::Look,
 }
 
 /// What an agent whose turn was cut by a restart receives.
@@ -2067,6 +2070,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         ),
         holds: crate::idle::Holds::default(),
         art: art::Art::default(),
+        wake_look: wakes::Look::default(),
     };
     sh.start_pages(&paths, &tx);
     sh.start_here(&paths);

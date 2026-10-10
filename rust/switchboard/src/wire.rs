@@ -23,6 +23,9 @@ pub enum Wire {
     /// `tool_intent #<id> : <text>` (BISE-223): the model's one-line
     /// description of a bash or run_typescript call.
     Intent(String),
+    /// `bg_handoff : {"slot", "cmd"}` (event-wake): the bash tool handed a
+    /// command off to the background; the JSON, as written.
+    BgHandoff(String),
     /// A line replayed from a restored session.
     History,
     Other,
@@ -50,6 +53,9 @@ pub fn parse(line: &str) -> Wire {
     }
     if let Some(rest) = t.strip_prefix("obs: turn_done: ") {
         return Wire::TurnDone(rest.trim().to_string());
+    }
+    if let Some(rest) = line.strip_prefix("bg_handoff : ") {
+        return Wire::BgHandoff(rest.trim().to_string());
     }
     if let Some(rest) = line.strip_prefix("tool_intent #") {
         if let Some((_, text)) = rest.split_once(" : ") {
@@ -145,6 +151,13 @@ mod tests {
                 args: "{\"arg\":\"sb list\"}".into()
             }
         );
+    }
+
+    #[test]
+    fn bg_handoff_line() {
+        let l = "bg_handoff : {\"slot\":\"/t/bg/3\",\"cmd\":\"cargo test\"}";
+        assert_eq!(parse(l), Wire::BgHandoff("{\"slot\":\"/t/bg/3\",\"cmd\":\"cargo test\"}".into()));
+        assert_eq!(parse(&format!("history {}", l)), Wire::History);
     }
 
     #[test]

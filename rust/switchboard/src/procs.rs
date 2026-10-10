@@ -225,6 +225,19 @@ pub fn alive(pid: u32) -> bool {
     send(pid, 0)
 }
 
+/// When `pid` started (`ps -o lstart=`), to tell it from a later process
+/// with the same pid (`sb wake --on-exit`); None: no such process.
+pub fn start_time(pid: u32) -> Option<String> {
+    let out = std::process::Command::new("ps")
+        .args(["-o", "lstart=", "-p", &pid.to_string()])
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()?;
+    let s = String::from_utf8_lossy(&out.stdout).split_whitespace().collect::<Vec<_>>().join(" ");
+    (out.status.success() && !s.is_empty()).then_some(s)
+}
+
 /// SIGTERM to `pid` (`kill <pid>`).
 pub fn terminate(pid: u32) {
     send(pid, SIGTERM);

@@ -193,6 +193,60 @@ def bg_dir_pick(+dir: String, +root: String, +tmp: String, +port: String)
 # The wrapper prints exactly these (its $i slot variable expanded at
 # runtime), so what the laws pin is what the agent reads.
 
+# ---- event-wake: a handoff tells the hub (bash.bend bg_note) ----
+# The wrapper's raw output (`<code>\n<marker>\n<headline>...`) of a
+# handoff names its slot in the headline (`... - id <i> (dir <bg>)`);
+# None for a command that ended in its window.
+def handoff_id.close(q: Maybe<&2, Nat>, +rest: String) -> Maybe<&2, String>:
+  match q:
+    case None{}:
+      None{}
+    case Some{+n}:
+      Some{String.take(rest, n)}
+
+def handoff_id.at(p: Maybe<&2, Nat>, +body: String) -> Maybe<&2, String>:
+  match p:
+    case None{}:
+      None{}
+    case Some{+n}:
+      +rest = String.drop(body, Nat.add(n, 6n))
+      handoff_id.close(Tx.find(rest, " (dir ", 0n), rest)
+
+def handoff_id.body(hand: Bool, +body: String) -> Maybe<&2, String>:
+  match hand:
+    case False{}:
+      None{}
+    case True{}:
+      handoff_id.at(Tx.find(body, " - id ", 0n), body)
+
+def handoff_id.nl(sp: Maybe<&2, Nat>, +out: String) -> Maybe<&2, String>:
+  match sp:
+    case None{}:
+      None{}
+    case Some{+p}:
+      +body = String.drop(out, Nat.add(p, 1n))
+      handoff_id.body(String.starts_with(body, HANDOFF_MARKER()), body)
+
+def handoff_id(+out: String) -> Maybe<&2, String>:
+  handoff_id.nl(Tx.find(out, "
+", 0n), out)
+
+# the command's first line, for the hub's words (at most 200 chars)
+def first_line.at(sp: Maybe<&2, Nat>, +s: String) -> String:
+  match sp:
+    case None{}:
+      String.take(s, 200n)
+    case Some{+p}:
+      String.take(String.take(s, p), 200n)
+
+def first_line(+s: String) -> String:
+  first_line.at(Tx.find(s, "
+", 0n), String.trim(s))
+
+# the line under the contract, when a hub watches the slot
+def handoff_note() -> String:
+  "  wake: its end wakes you with its rc and last lines (no timer needed; `sb wake` lists it, `sb wake --stop <id>` to not be)"
+
 # one slot's file: <dir>/<id><ext>
 def bg_slot(+bg: String, +id: String, +ext: String) -> String:
   String.append(bg, String.append("/", String.append(id, ext)))
