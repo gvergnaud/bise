@@ -97,6 +97,10 @@ pub fn rejected(r: &str) -> Notice {
     if r == "no pending completion" || r == "no pending tool result" {
         return Notice { level: NoticeLevel::Info, text: "in-flight response dropped (turn interrupted)".into() };
     }
+    // his queued message, taken back before delivery (sb-core's unqueue)
+    if r == "taken_back" {
+        return Notice { level: NoticeLevel::Info, text: "taken back".into() };
+    }
     Notice { level: NoticeLevel::Err, text: r.to_string() }
 }
 

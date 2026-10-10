@@ -5469,6 +5469,104 @@ def hub_seen_snoc_del(+xs: List<&2, HX.Steer>, +n: String, +s: List<&2, Nat>, +k
 def Laws.steer_add_keeps_seen(xs, n, ids):
   hub_seen_snoc_del(xs, n, List.append(&2, Nat, HC.steer_get(xs, n), ids), HC.steer_seen(xs, n))
 
+# ---- his queued message taken back ----
+
+# a notice changes no state (an out effect only)
+def hub_d_notice(-o: HM.St, +cx: HX.Cx<o>, +t: String) -> {HX.d(o, HC.notice(o, cx, t)) == HX.d(o, cx) : HM.St}:
+  match cx:
+    case HX.Cx{c, r}:
+      match c:
+        case HX.Core{d, fx, p, f, q, v}:
+          {==}
+
+def Laws.unqueue_takes_back_a_queued_one(o, cx, q, id, to):
+  {==}
+
+def Laws.unqueue_leaves_a_delivered_one(o, cx, id, to):
+  hub_d_notice(o, cx, HC.cat([HC.mid(id), " already reached @", to, ": it can't be taken back"]))
+
+def Laws.unqueue_leaves_a_rejected_one(o, cx, r, id, to):
+  hub_d_notice(o, cx, HC.cat([HC.mid(id), " isn't waiting any more"]))
+
+def Laws.unqueue_leaves_an_unknown_id(o, cx, id):
+  hub_d_notice(o, cx, HC.cat(["no message ", HC.mid(id), " to take back"]))
+
+def Laws.unqueue_never_takes_anothers(o, cx, r, id, e):
+  %Equal.sym(Bool, String.eq(HM.Msg.from(HM.MRec.msg(r)), HM.USER()), False{}, e) : {HX.d(o, HC.pick_lazy(HX.Cx<o>, _, u => HC.unqueue.take(o, HM.MRec.st(r), cx, id, HM.Msg.to(HM.MRec.msg(r))), u => HC.notice(o, cx, HC.cat([HC.mid(id), " isn't one of your messages"])))) == HX.d(o, cx) : HM.St}
+  hub_d_notice(o, cx, HC.cat([HC.mid(id), " isn't one of your messages"]))
+
+# Nat.is_eq says equal: they are
+def hub_nat_eq_sound(+a: Nat, +b: Nat, e: {Nat.is_eq(a, b) == True{} : Bool}) -> {a == b : Nat}:
+  match a b:
+    case 0n 0n:
+      {==}
+    case 0n 1n+bp:
+      hub_absurd_eq(hub_ft_absurd(e), Nat, 0n, 1n+bp)
+    case 1n+ap 0n:
+      hub_absurd_eq(hub_ft_absurd(e), Nat, 1n+ap, 0n)
+    case 1n+ap 1n+bp:
+      Equal.cong(Nat, Nat, k => 1n+k, ap, bp, hub_nat_eq_sound(ap, bp, e))
+
+def hub_uq_own.pick(c: Bool, +m: HM.Msg, +s: HM.MSt, +se: Bool, +t: List<&2, HM.MRec>, +id: Nat, +x: HM.MSt,
+    +e: {Nat.is_eq(HM.Msg.id(m), id) == c : Bool},
+    ih: {HM.state_of.go(HM.rec_of(HM.map_msg(t, id, HM.OSt{x}), id)) == HC.st_after(HM.rec_of(t, id), x) : Maybe<&2, HM.MSt>})
+    -> {HM.state_of.go(HM.rec_of(Bool.pick(List<&2, HM.MRec>, Nat.is_eq(HM.Msg.id(m), id), HM.MRec{m, x, se} <> t, HM.MRec{m, s, se} <> HM.map_msg(t, id, HM.OSt{x})), id))
+        == HC.st_after(HM.rec_of(HM.MRec{m, s, se} <> t, id), x) : Maybe<&2, HM.MSt>}:
+  match c:
+    case True{}:
+      %Equal.sym(Bool, Nat.is_eq(HM.Msg.id(m), id), True{}, e) : {HM.state_of.go(HM.rec_of(Bool.pick(List<&2, HM.MRec>, _, HM.MRec{m, x, se} <> t, HM.MRec{m, s, se} <> HM.map_msg(t, id, HM.OSt{x})), id)) == HC.st_after(HM.rec_of(HM.MRec{m, s, se} <> t, id), x) : Maybe<&2, HM.MSt>}
+      %Equal.sym(Bool, Nat.is_eq(HM.Msg.id(m), id), True{}, e) : {HM.state_of.go(Bool.pick(Maybe<&2, HM.MRec>, _, Some{HM.MRec{m, x, se}}, HM.rec_of(t, id))) == HC.st_after(Bool.pick(Maybe<&2, HM.MRec>, _, Some{HM.MRec{m, s, se}}, HM.rec_of(t, id)), x) : Maybe<&2, HM.MSt>}
+      {==}
+    case False{}:
+      %Equal.sym(Bool, Nat.is_eq(HM.Msg.id(m), id), False{}, e) : {HM.state_of.go(HM.rec_of(Bool.pick(List<&2, HM.MRec>, _, HM.MRec{m, x, se} <> t, HM.MRec{m, s, se} <> HM.map_msg(t, id, HM.OSt{x})), id)) == HC.st_after(HM.rec_of(HM.MRec{m, s, se} <> t, id), x) : Maybe<&2, HM.MSt>}
+      %Equal.sym(Bool, Nat.is_eq(HM.Msg.id(m), id), False{}, e) : {HM.state_of.go(Bool.pick(Maybe<&2, HM.MRec>, _, Some{HM.MRec{m, s, se}}, HM.rec_of(HM.map_msg(t, id, HM.OSt{x}), id))) == HC.st_after(Bool.pick(Maybe<&2, HM.MRec>, _, Some{HM.MRec{m, s, se}}, HM.rec_of(t, id)), x) : Maybe<&2, HM.MSt>}
+      ih
+
+def hub_uq_own(+xs: List<&2, HM.MRec>, +id: Nat, +x: HM.MSt)
+    -> {HM.state_of.go(HM.rec_of(HM.map_msg(xs, id, HM.OSt{x}), id)) == HC.st_after(HM.rec_of(xs, id), x) : Maybe<&2, HM.MSt>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{h, t}:
+      match h:
+        case HM.MRec{m, s, se}:
+          hub_uq_own.pick(Nat.is_eq(HM.Msg.id(m), id), m, s, se, t, id, x, {==}, hub_uq_own(t, id, x))
+
+def Laws.unqueue_marks_its_own_record(xs, id, x):
+  hub_uq_own(xs, id, x)
+
+def hub_uq_other.pick(c: Bool, +m: HM.Msg, +s: HM.MSt, +se: Bool, +t: List<&2, HM.MRec>, +id: Nat, +x: HM.MSt, +y: Nat,
+    +e: {Nat.is_eq(HM.Msg.id(m), id) == c : Bool},
+    eo: {Nat.is_eq(id, y) == False{} : Bool},
+    ih: {HM.rec_of(HM.map_msg(t, id, HM.OSt{x}), y) == HM.rec_of(t, y) : Maybe<&2, HM.MRec>})
+    -> {HM.rec_of(Bool.pick(List<&2, HM.MRec>, Nat.is_eq(HM.Msg.id(m), id), HM.MRec{m, x, se} <> t, HM.MRec{m, s, se} <> HM.map_msg(t, id, HM.OSt{x})), y)
+        == HM.rec_of(HM.MRec{m, s, se} <> t, y) : Maybe<&2, HM.MRec>}:
+  match c:
+    case True{}:
+      +same = hub_nat_eq_sound(HM.Msg.id(m), id, e)
+      +ny = Equal.trans(Bool, Nat.is_eq(HM.Msg.id(m), y), Nat.is_eq(id, y), False{},
+        Equal.cong(Nat, Bool, a => Nat.is_eq(a, y), HM.Msg.id(m), id, same), eo)
+      %Equal.sym(Bool, Nat.is_eq(HM.Msg.id(m), id), True{}, e) : {HM.rec_of(Bool.pick(List<&2, HM.MRec>, _, HM.MRec{m, x, se} <> t, HM.MRec{m, s, se} <> HM.map_msg(t, id, HM.OSt{x})), y) == HM.rec_of(HM.MRec{m, s, se} <> t, y) : Maybe<&2, HM.MRec>}
+      %Equal.sym(Bool, Nat.is_eq(HM.Msg.id(m), y), False{}, ny) : {Bool.pick(Maybe<&2, HM.MRec>, _, Some{HM.MRec{m, x, se}}, HM.rec_of(t, y)) == Bool.pick(Maybe<&2, HM.MRec>, _, Some{HM.MRec{m, s, se}}, HM.rec_of(t, y)) : Maybe<&2, HM.MRec>}
+      {==}
+    case False{}:
+      %Equal.sym(Bool, Nat.is_eq(HM.Msg.id(m), id), False{}, e) : {HM.rec_of(Bool.pick(List<&2, HM.MRec>, _, HM.MRec{m, x, se} <> t, HM.MRec{m, s, se} <> HM.map_msg(t, id, HM.OSt{x})), y) == HM.rec_of(HM.MRec{m, s, se} <> t, y) : Maybe<&2, HM.MRec>}
+      Equal.cong(Maybe<&2, HM.MRec>, Maybe<&2, HM.MRec>, z => Bool.pick(Maybe<&2, HM.MRec>, Nat.is_eq(HM.Msg.id(m), y), Some{HM.MRec{m, s, se}}, z),
+        HM.rec_of(HM.map_msg(t, id, HM.OSt{x}), y), HM.rec_of(t, y), ih)
+
+def hub_uq_other(+xs: List<&2, HM.MRec>, +id: Nat, +x: HM.MSt, +y: Nat, +eo: {Nat.is_eq(id, y) == False{} : Bool})
+    -> {HM.rec_of(HM.map_msg(xs, id, HM.OSt{x}), y) == HM.rec_of(xs, y) : Maybe<&2, HM.MRec>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{h, t}:
+      match h:
+        case HM.MRec{m, s, se}:
+          hub_uq_other.pick(Nat.is_eq(HM.Msg.id(m), id), m, s, se, t, id, x, y, {==}, eo, hub_uq_other(t, id, x, y, eo))
+
+def Laws.unqueue_keeps_every_other_record(xs, id, x, y, e):
+  hub_uq_other(xs, id, x, y, e)
+
 def Laws.mcp_retry_only_unsent():
   {==}
 

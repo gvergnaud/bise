@@ -43,6 +43,7 @@
 {"ev":"worktrees","project":"acme-1a2b3c4d","items":[{"path":"/Users/camille/.bise/worktrees/acme-1a2b3c4d/perf/acme","branch":"sb/perf","agent":"perf","dirty":true,"ahead":2,"behind":0},{"path":"/Users/camille/acme","branch":"main","dirty":false,"ahead":0,"behind":0},{"path":"/Users/camille/acme-try","branch":"","head":"e0f3df5a9c1b2d3e4f5a6b7c8d9e0f1a2b3c4d5e","dirty":false,"ahead":0,"behind":3}]}
 {"ev":"tool_out","project":"acme-1a2b3c4d","agent":"perf","pos":4,"out":"running 40 tests\ntest query::slow ... FAILED\n\nfailures:\n    query::slow","cut":false}
 {"ev":"tool_out","project":"acme-1a2b3c4d","agent":"perf","pos":7,"out":"fn a() {}","cut":true,"total":18432}
+{"ev":"queued_taken","project":"acme-1a2b3c4d","agent":"perf","id":3,"text":"then the cold run"}
 {"ev":"diff","project":"acme-1a2b3c4d","agent":"old","base":"main","files":[],"merged":"e0f3df5a9c1b2d3e4f5a6b7c8d9e0f1a2b3c4d5e","note":"old is archived and its folder is gone"}
 {"ev":"route","project":"bise-home-00000000","rid":3,"to":"acme-1a2b3c4d","name":"acme","text":"why does p99 rise","correct_until_ms":1791100402000,"why":"Safari: grafana.acme.test"}
 {"ev":"route_done","project":"bise-home-00000000","rid":3,"state":"sent","to":"acme-1a2b3c4d","xid":7}

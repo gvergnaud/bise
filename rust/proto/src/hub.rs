@@ -148,6 +148,10 @@ pub enum HubEv {
         #[cfg_attr(feature = "ts", ts(optional))]
         total: Option<u64>,
     },
+    /// his queued message taken back (the answer to `queued_take`, this
+    /// connection only): it will never be delivered; `text` his words, for
+    /// the window's "edit" (put back in the composer)
+    QueuedTaken { project: Project, agent: String, id: u64, text: String },
     /// an agent's change (the answer to `diff`): its checkout or branch
     /// vs `base`; `head` its branch (none: the shared folder)
     Diff {
@@ -337,7 +341,7 @@ pub enum HubEv {
 }
 
 impl HubEv {
-    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "entry", "typing", "artifacts", "scheduled", "worktrees", "dev_servers", "merged", "features", "prs", "models", "tool_out", "diff", "branches", "versions", "release", "update", "route", "route_done", "jobs", "job_end", "followed_end", "confirm", "flow", "pages", "page_changed", "card_open", "focused", "approvals", "notice", "refused", "error"];
+    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "entry", "typing", "artifacts", "scheduled", "worktrees", "dev_servers", "merged", "features", "prs", "models", "tool_out", "queued_taken", "diff", "branches", "versions", "release", "update", "route", "route_done", "jobs", "job_end", "followed_end", "confirm", "flow", "pages", "page_changed", "card_open", "focused", "approvals", "notice", "refused", "error"];
 
     pub fn decode(line: &str) -> Result<HubEv, String> {
         Self::from_value(parse(line)?)
@@ -534,6 +538,11 @@ pub enum HubCmd {
     /// he opened a tool row: its whole output (`tool_out` answers this
     /// connection), the tool item's `pos` in `agent`'s thread
     ToolOut { project: Project, agent: String, pos: Pos },
+    /// his queued message `id` (an `Agent.queued` row) taken back before
+    /// its turn ends (the window's "edit · drop"): `queued_taken` answers
+    /// this connection with its words, or an error says why (delivered,
+    /// not his, unknown). The user's authority: a client's only (issue 16)
+    QueuedTake { project: Project, agent: String, id: u64 },
     /// `/diff`'s picker opened: `branches` answers
     Branches { project: Project },
     /// the environments screen opened: `worktrees` comes again
@@ -691,7 +700,7 @@ pub enum HubCmd {
 }
 
 impl HubCmd {
-    pub const TAGS: &'static [&'static str] = &["hello", "subscribe", "unsubscribe", "page", "send", "answer", "close", "confirm", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "diff", "worktrees", "dev_servers", "merged", "features", "prs", "scheduled", "scheduled_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "branches", "scheduled_run", "artifacts_add", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "release_plan", "release_run", "stop_hub", "page_voice"];
+    pub const TAGS: &'static [&'static str] = &["hello", "subscribe", "unsubscribe", "page", "send", "answer", "close", "confirm", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "queued_take", "diff", "worktrees", "dev_servers", "merged", "features", "prs", "scheduled", "scheduled_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "branches", "scheduled_run", "artifacts_add", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "release_plan", "release_run", "stop_hub", "page_voice"];
 
     pub fn decode(line: &str) -> Result<HubCmd, String> {
         Self::from_value(parse(line)?)
@@ -759,7 +768,8 @@ impl HubCmd {
             | HubCmd::StopHub { project, .. }
             | HubCmd::PageVoice { project, .. }
             | HubCmd::Diff { project, .. }
-            | HubCmd::ToolOut { project, .. } => project,
+            | HubCmd::ToolOut { project, .. }
+            | HubCmd::QueuedTake { project, .. } => project,
             HubCmd::Hello { .. } | HubCmd::Unknown { .. } => return None,
         };
         Some(v)

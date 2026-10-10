@@ -1402,6 +1402,60 @@ fn the_users_queued_inputs_wait_for_the_end_of_the_turn() {
     assert!(say_to(&fx, "a").is_some_and(|s| s.contains("right away")), "{:?}", fx);
 }
 
+/// The race of a take-back (architect m_16680), both orders through the real
+/// sb-core: unqueue then the turn's end: rejected (taken_back), never pumped,
+/// in no delivery; the turn's end then unqueue: delivered, and the take-back
+/// is refused with its words, the state unchanged. Exactly one of the two.
+#[test]
+fn a_take_back_and_the_turns_end_give_exactly_one_outcome_in_either_order() {
+    let notice = |fx: &[Effect]| {
+        fx.iter().find_map(|e| match e {
+            Effect::ToClient { body, .. } => body["text"].as_str().map(str::to_string),
+            _ => None,
+        })
+    };
+    let id_of = |t: &T, text: &str| t.hub.st.msgs.values().find(|m| m.text == text).unwrap().id;
+    let taken = MsgState::Rejected { error: "taken_back".into() };
+
+    // taken back first: the turn's end pumps nothing of it
+    let mut t = T::new();
+    t.spawn_task("a");
+    t.user_queued("a", "take me back");
+    let id = id_of(&t, "take me back");
+    let fx = t.go(Input::ClientUnqueue { client: 1, id });
+    assert_eq!(t.hub.st.msg_state[&id], taken, "{:?}", fx);
+    assert!(crate::board::Waiting::of(&t.hub.st).queued_inputs("a").is_empty());
+    let fx = t.go(Input::ReplIdle { agent: "a".into(), leftover: false });
+    assert!(say_to(&fx, "a").is_none_or(|s| !s.contains("take me back")), "never pumped: {:?}", fx);
+    assert!(steer_to(&fx, "a").is_none_or(|s| !s.contains("take me back")), "{:?}", fx);
+    assert_eq!(t.hub.st.msg_state[&id], taken);
+    let fx = t.turn("a", "done");
+    assert!(say_to(&fx, "a").is_none_or(|s| !s.contains("take me back")), "{:?}", fx);
+    assert_eq!(t.hub.st.msg_state[&id], taken, "still taken back after the next turn");
+
+    // delivered first: the take-back is refused, it stays delivered
+    let mut t = T::new();
+    t.spawn_task("a");
+    t.user_queued("a", "too late");
+    let id = id_of(&t, "too late");
+    let fx = t.go(Input::ReplIdle { agent: "a".into(), leftover: false });
+    assert!(say_to(&fx, "a").is_some_and(|s| s.contains("too late")), "{:?}", fx);
+    assert_eq!(t.hub.st.msg_state[&id], MsgState::Delivered);
+    let fx = t.go(Input::ClientUnqueue { client: 1, id });
+    assert_eq!(notice(&fx).as_deref(), Some(format!("m_{id} already reached @a: it can't be taken back").as_str()), "{:?}", fx);
+    assert_eq!(t.hub.st.msg_state[&id], MsgState::Delivered, "the take-back changed nothing");
+
+    // the other refusals say why and change nothing
+    let fx = t.go(Input::ClientUnqueue { client: 1, id: 9999 });
+    assert_eq!(notice(&fx).as_deref(), Some("no message m_9999 to take back"));
+    let (_, _) = send(&mut t, MAIN, "a", "from main", false);
+    let mid = id_of(&t, "from main");
+    let before = t.hub.st.msg_state.get(&mid).cloned();
+    let fx = t.go(Input::ClientUnqueue { client: 1, id: mid });
+    assert_eq!(notice(&fx).as_deref(), Some(format!("m_{mid} isn't one of your messages").as_str()));
+    assert_eq!(t.hub.st.msg_state.get(&mid).cloned(), before);
+}
+
 #[test]
 fn a_queued_message_to_an_idle_agent_is_delivered_at_once() {
     let mut t = T::new();

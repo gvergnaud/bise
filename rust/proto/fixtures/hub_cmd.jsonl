@@ -26,6 +26,7 @@
 {"cmd":"hello","proto":1,"typed_only":true}
 {"cmd":"diff","project":"acme-1a2b3c4d","agent":"perf"}
 {"cmd":"tool_out","project":"acme-1a2b3c4d","agent":"perf","pos":4}
+{"cmd":"queued_take","project":"acme-1a2b3c4d","agent":"perf","id":3}
 {"cmd":"diff","project":"acme-1a2b3c4d","agent":"perf","commit":"e0f3df5a9c1b2d3e4f5a6b7c8d9e0f1a2b3c4d5e"}
 {"cmd":"worktrees","project":"acme-1a2b3c4d"}
 {"cmd":"dev_servers","project":"acme-1a2b3c4d"}

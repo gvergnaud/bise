@@ -5553,6 +5553,78 @@ law steer_add_keeps_seen:
   for +ids: List<&2, Nat>
   {HC.steer_seen(HC.steer_add(xs, n, ids), n) == HC.steer_seen(xs, n) : Nat}
 
+# ---- his queued message taken back (HubCmd queued_take, issue 16) ----
+# No new state: a taken-back message is Rejected{"taken_back"}, the state
+# reject_ids already writes, so an older sb-core replays it as rejected and
+# never delivers it (no new journal kind, rollback-safe).
+
+# LAW: a queued message of his is taken back: one EMsgState, Rejected.
+law unqueue_takes_back_a_queued_one:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +q: String
+  for +id: Nat
+  for +to: String
+  {HC.unqueue.take(o, HM.Queued{q}, cx, id, to) == HC.emit(o, cx, HM.EMsgState{id, HM.Rejected{"taken_back"}}, Unit{}, Unit{}, Unit{}) : HX.Cx<o>}
+
+# LAW: a message already delivered is left as it is (a notice, the state
+# unchanged); so are one already rejected, one cancelled, an unknown id, and
+# a message that isn't his.
+law unqueue_leaves_a_delivered_one:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +id: Nat
+  for +to: String
+  {HX.d(o, HC.unqueue.take(o, HM.Delivered{}, cx, id, to)) == HX.d(o, cx) : HM.St}
+
+law unqueue_leaves_a_rejected_one:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +r: String
+  for +id: Nat
+  for +to: String
+  {HX.d(o, HC.unqueue.take(o, HM.Rejected{r}, cx, id, to)) == HX.d(o, cx) : HM.St}
+
+law unqueue_leaves_an_unknown_id:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +id: Nat
+  {HX.d(o, HC.unqueue.go(o, None{}, cx, id)) == HX.d(o, cx) : HM.St}
+
+law unqueue_never_takes_anothers:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +r: HM.MRec
+  for +id: Nat
+  for e: {String.eq(HM.Msg.from(HM.MRec.msg(r)), HM.USER()) == False{} : Bool}
+  {HX.d(o, HC.unqueue.go(o, Some{r}, cx, id)) == HX.d(o, cx) : HM.St}
+
+# LAW: the queue after a take-back is the queue before minus that message:
+# its own record becomes Rejected{"taken_back"} (no longer queued, so the
+# pump never delivers it: delivered_once), and every other record is the
+# same. Read on the records (the taking back is map_msg with OSt).
+law unqueue_marks_its_own_record:
+  for +xs: List<&2, HM.MRec>
+  for +id: Nat
+  for +x: HM.MSt
+  {HM.state_of.go(HM.rec_of(HM.map_msg(xs, id, HM.OSt{x}), id)) == HC.st_after(HM.rec_of(xs, id), x) : Maybe<&2, HM.MSt>}
+
+law unqueue_keeps_every_other_record:
+  for +xs: List<&2, HM.MRec>
+  for +id: Nat
+  for +x: HM.MSt
+  for +y: Nat
+  for e: {Nat.is_eq(id, y) == False{} : Bool}
+  {HM.rec_of(HM.map_msg(xs, id, HM.OSt{x}), y) == HM.rec_of(xs, y) : Maybe<&2, HM.MRec>}
+
+# LAW (the race, unqueue vs the turn-end pump, both orders): sb-core steps
+# one input at a time. Taken back first: the record is Rejected
+# (unqueue_takes_back_a_queued_one, unqueue_marks_its_own_record), not
+# queued, so the pump never delivers it (queued_in, delivered_once).
+# Delivered first: the take-back leaves it delivered
+# (unqueue_leaves_a_delivered_one). So exactly one of delivered or
+# taken_back.
+
 # ---- MCP calls that fail (runtime/mcp-pure.bend) ----
 
 # LAW: a call is tried again (fresh initialize) only when it never

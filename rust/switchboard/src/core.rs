@@ -514,6 +514,13 @@ pub enum Input {
         client: ClientId,
         agent: String,
     },
+    /// his queued message `id` taken back (HubCmd queued_take; a client's
+    /// only, issue 16): sb-core's unqueue, Rejected{"taken_back"} or a
+    /// notice saying why to that client
+    ClientUnqueue {
+        client: ClientId,
+        id: u64,
+    },
     Agent {
         token: Token,
         from: String,
@@ -2392,6 +2399,7 @@ impl Hub {
                 self.core(&mut fx, env, Some(client), json!({"t": "interrupt", "agent": agent}));
                 self.interrupt_by = None;
             }
+            Input::ClientUnqueue { client, id } => self.core(&mut fx, env, Some(client), json!({"t": "unqueue", "id": id})),
             Input::Agent { token, from, req } => self.agent_req(&mut fx, env, token, &from, req),
             // the waits' timeouts, then sb every's timers (sb-core decides)
             Input::Tick => self.core(&mut fx, env, None, json!({"t": "tick"})),

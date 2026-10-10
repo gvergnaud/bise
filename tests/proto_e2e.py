@@ -302,6 +302,41 @@ def main():
         c.wait_line("main", "queued from the window", 60)
         c.wait_idle("main", timeout=90)
 
+        # queued_take (the window's "edit · drop", architect m_16252): his
+        # queued message taken back before the turn ends never reaches the
+        # agent; queued_taken gives this connection its words. A take after
+        # delivery is an error saying so, and nothing changes.
+        def queued_row(text):
+            for ev in reversed(typed(d, "agents")):
+                for a in ev["agents"]:
+                    if a["name"] == "main":
+                        return next((q for q in a.get("queued") or [] if q["text"] == text), None)
+            return None
+
+        d.send({"cmd": "send", "project": project, "agent": "main", "text": "[[bash: sleep 6]] busy for the take", "mode": "now"})
+        c.wait_line("main", "sleep 6", 30)
+        c.wait_status("main", "working", 30)
+        d.send({"cmd": "send", "project": project, "agent": "main", "text": "take me back", "mode": "queued"})
+        row = c.wait(lambda: queued_row("take me back"), 20, "his queued row")
+        # a new method: JSON-RPC only (the released cores' door refuses it)
+        r = c.rpc("turn/unqueue", {"project": project, "agent": "main", "id": row["id"]})
+        check("error" not in r, "turn/unqueue answered, not refused: %r" % r)
+        got = r["result"]
+        check(got["id"] == row["id"] and got["agent"] == "main" and got["text"] == "take me back", "queued_taken: %r" % got)
+        c.wait(lambda: queued_row("take me back") is None, 20, "the row gone")
+        c.wait_idle("main", timeout=90)
+        check(not any(l == "sb you : take me back" for l in c.lines("main")), "a message taken back never reaches main")
+        check("take me back" not in json.dumps([r for r in E.fake_requests() if r.get("agent") == "main"]), "the model never got it")
+        # a take of a delivered one (his earlier queued send, by the
+        # 'sb you-id' line right after its 'you' line in main's feed)
+        ls = c.lines("main")
+        i = ls.index("sb you : queued from the window")
+        check(ls[i + 1].startswith("sb you-id : m_"), "its id line: %r" % ls[i : i + 2])
+        delivered_id = int(ls[i + 1][len("sb you-id : m_"):])
+        r = c.rpc("turn/unqueue", {"project": project, "agent": "main", "id": delivered_id})
+        check("result" not in r and "already reached @main" in r.get("error", {}).get("message", ""), "the refusal says why: %r" % r)
+        check(not any(l.startswith("sb ") and "taken" in l for l in c.lines("main")), "nothing taken: %r" % c.lines("main")[-5:])
+
         # an answer is only an answer (architect m_8366): a reply with a
         # newline, a leading '/' and ' --force' reaches the card's agent
         # whole, never another command

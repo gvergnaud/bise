@@ -66,6 +66,7 @@ type In is Data:
   IRename{}
   IAnswer{}
   IInterrupt{}
+  IUnqueue{}
   IPassthrough{}
   IFocus{}
   IClose{}
@@ -2198,6 +2199,45 @@ def interrupt.go(-o: M.St, m: Maybe<&2, String>, +cx: X.Cx<o>) -> X.Cx<o>:
     case None{}:
       notice(o, cx, "no turn in progress to interrupt")
 
+# his message `id`, still queued, taken back: Rejected{"taken_back"},
+# never delivered (an older sb-core replays it so); the queue loses it
+def unqueue.take(-o: M.St, s: M.MSt, +cx: X.Cx<o>, +id: Nat, +to: String) -> X.Cx<o>:
+  match s:
+    case M.Queued{_}:
+      emit(o, cx, M.EMsgState{id, M.Rejected{"taken_back"}}, Unit{}, Unit{}, Unit{})
+    case M.Delivered{}:
+      notice(o, cx, cat([mid(id), " already reached @", to, ": it can't be taken back"]))
+    case M.Rejected{_}:
+      notice(o, cx, cat([mid(id), " isn't waiting any more"]))
+    case M.Cancelled{}:
+      notice(o, cx, cat([mid(id), " isn't waiting any more"]))
+
+def unqueue.go(-o: M.St, m: Maybe<&2, M.MRec>, +cx: X.Cx<o>, +id: Nat) -> X.Cx<o>:
+  match m:
+    case None{}:
+      notice(o, cx, cat(["no message ", mid(id), " to take back"]))
+    case Some{+r}:
+      +msg = M.MRec.msg(r)
+      pick_lazy(X.Cx<o>, String.eq(M.Msg.from(msg), M.USER()),
+        u => unqueue.take(o, M.MRec.st(r), cx, id, M.Msg.to(msg)),
+        u => notice(o, cx, cat([mid(id), " isn't one of your messages"])))
+
+# a record's state once set to `x` (none stays none): the law of a
+# take-back's own record (unqueue_marks_its_own_record)
+def st_after(m: Maybe<&2, M.MRec>, +x: M.MSt) -> Maybe<&2, M.MSt>:
+  match m:
+    case None{}:
+      None{}
+    case Some{_}:
+      Some{x}
+
+# the user takes back a queued message of his (the window's "edit · drop":
+# HubCmd queued_take, the client socket only, issue 16): only a queued
+# message from the user changes (law unqueue_takes_back_only_his_queued);
+# anything else is a notice saying why, and nothing changes
+def unqueue(-o: M.St, +cx: X.Cx<o>, +id: Nat) -> X.Cx<o>:
+  unqueue.go(o, M.rec_of(M.St.msgs(st(o, cx)), id), cx, id)
+
 def passthrough(-o: M.St, +cx: X.Cx<o>, +focus: String, +l: String) -> X.Cx<o>:
   pick_lazy(X.Cx<o>, has_agent(o, cx, focus) && is_idle(X.Rt.run(rt(o, cx, focus))),
     u => out(o, dirty(o, set_run(o, cx, focus, M.RBusy{})), [J.kv("fx", J.JStr{"passthrough"}), J.kv("agent", J.JStr{focus}), J.kv("line", J.JStr{l})]),
@@ -3520,6 +3560,8 @@ def in_tag(+t: String) -> In:
   Bool.pick(In, String.eq(t, "rename"), IRename{},
   Bool.pick(In, String.eq(t, "answer"), IAnswer{},
   Bool.pick(In, String.eq(t, "interrupt"), IInterrupt{},
+  # his queued message taken back (HubCmd queued_take)
+  Bool.pick(In, String.eq(t, "unqueue"), IUnqueue{},
   Bool.pick(In, String.eq(t, "passthrough"), IPassthrough{},
   Bool.pick(In, String.eq(t, "focus"), IFocus{},
   Bool.pick(In, String.eq(t, "close"), IClose{},
@@ -3565,7 +3607,7 @@ def in_tag(+t: String) -> In:
   Bool.pick(In, String.eq(t, "route_pick"), IRoutePick{},
   # S10: follow a task (the window's typed command, bise's sb follow)
   Bool.pick(In, String.eq(t, "follow"), IFollow{},
-  INone{})))))))))))))))))))))))))))))))))))))))))))))
+  INone{}))))))))))))))))))))))))))))))))))))))))))))))
 
 # `/close N`: the user files a card without answering it
 def close_by_user(-o: M.St, m: Maybe<&2, M.Card>, +cx: X.Cx<o>, +id: Nat) -> X.Cx<o>:
@@ -3636,6 +3678,8 @@ def dispatch.go(-o: M.St, tag: In, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
       answer_card(o, cx, C.get_nat(i, "card"), C.get_s(i, "text"))
     case IInterrupt{}:
       interrupt.go(o, M.resolve(st(o, cx), C.get_s(i, "agent")), cx)
+    case IUnqueue{}:
+      unqueue(o, cx, C.get_nat(i, "id"))
     case IPassthrough{}:
       passthrough(o, cx, C.get_s(i, "focus"), C.get_s(i, "line"))
     case IFocus{}:
