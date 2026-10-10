@@ -69,6 +69,9 @@ pub struct New {
     pub until_ms: Option<u64>,
     pub times: Option<u64>,
     pub page: Option<String>,
+    /// `--name`: its name, no model asked (None: the hub names it,
+    /// every_name.rs)
+    pub name: Option<String>,
 }
 
 impl New {
@@ -77,6 +80,9 @@ impl New {
     pub fn input(&self, now: u64) -> Value {
         let mut v = json!({"t": "every_set", "agent": self.agent, "by": self.by, "text": self.text,
                            "next_ms": self.sched.first(now)});
+        if let Some(n) = self.name.as_deref().map(bise_proto::thread::words::name_fit).filter(|n| !n.is_empty()) {
+            v["name"] = json!(n);
+        }
         match self.sched {
             Sched::Every(p) => v["every_ms"] = json!(p),
             Sched::Daily(m) => v["daily_min"] = json!(m),
@@ -112,9 +118,21 @@ pub struct Timer {
     /// its last runs (at most [`RUNS_KEPT`], oldest first): each wake,
     /// a run now too
     pub runs: Vec<u64>,
+    /// its name ("" until `--name` or the hub's every_name: [`Timer::title`])
+    pub name: String,
 }
 
 impl Timer {
+    /// What the lists show: its name, else the plain words of its
+    /// instruction (bise_proto's `timer_fallback`, the one fallback).
+    pub fn title(&self) -> String {
+        if self.name.is_empty() {
+            bise_proto::thread::words::timer_fallback(&self.text)
+        } else {
+            self.name.clone()
+        }
+    }
+
     /// A timer of sb-core's view (timers.bend `timer_json`), None when it
     /// is not one.
     pub fn from_view(v: &Value) -> Option<Timer> {
@@ -136,6 +154,7 @@ impl Timer {
             page: v["page"].as_str().map(String::from),
             last_ms: v["last_ms"].as_u64().unwrap_or(0),
             runs: v["runs"].as_array().into_iter().flatten().filter_map(Value::as_u64).collect(),
+            name: v["name"].as_str().unwrap_or_default().to_string(),
         })
     }
 
@@ -151,6 +170,9 @@ impl Timer {
         }
         if let Some(p) = &self.page {
             v["page"] = json!(p);
+        }
+        if !self.name.is_empty() {
+            v["name"] = json!(self.name);
         }
         if let Sched::Every(ms) = self.sched {
             v["every_ms"] = json!(ms);
@@ -294,19 +316,27 @@ impl Timers {
 }
 
 /// One timer as `sb every` and `sb tasks` show it.
+/// designer m_14531: `#48 @amb-core  amb-core streaming bench · every 2m
+/// · next 12:08 · 2 of 6 · by main`: its name, never its instruction
+/// (`sb every --show 48` prints that).
 fn line(t: &Timer, now: u64) -> String {
-    let mut s = format!("#{} @{} {} · next {}", t.id, t.agent, t.sched.label(), when_label(t.next_ms, now));
+    let mut s = format!("#{} @{}  {} · {} · next {}", t.id, t.agent, t.title(), t.sched.label(), when_label(t.next_ms, now));
     if let Some(u) = t.until_ms {
         s.push_str(&format!(" · until {}", when_label(u, now)));
     }
     if let Some(n) = t.times {
-        s.push_str(&format!(" · {}/{} times", t.fired, n));
+        s.push_str(&format!(" · {} of {}", t.fired, n));
     }
     if let Some(p) = &t.page {
         s.push_str(&format!(" · page {p}"));
     }
-    s.push_str(&format!(" · \"{}\" (by {})", clip(&t.text, 80), t.by));
+    s.push_str(&format!(" · by {}", t.by));
     s
+}
+
+/// `sb every --show <id>`: its list line, then the words it sends.
+pub fn show(t: &Timer, now: u64) -> String {
+    format!("{}\n{}", line(t, now), t.text)
 }
 
 /// Which wake: a due one (its count, how long it waited for its busy
@@ -337,7 +367,10 @@ fn wake_text(t: &Timer, wake: Wake, now: u64) -> String {
         }
         Wake::Now => how.push_str(", run now by the user"),
     }
-    format!("timer #{} ({}, set by {}): {}\n(stop it: sb every --stop {})", t.id, how, t.by, t.text, t.id)
+    // its name quoted after the id (architect m_14532; lines::timer_wake
+    // reads both shapes): `timer #48 "amb-core bench" (every 2m, …): …`
+    let name = if t.name.is_empty() { String::new() } else { format!(" \"{}\"", t.name.replace('"', "'")) };
+    format!("timer #{}{} ({}, set by {}): {}\n(stop it: sb every --stop {})", t.id, name, how, t.by, t.text, t.id)
 }
 
 /// The note bise sends an agent when the user stops its timer from
@@ -346,15 +379,6 @@ fn wake_text(t: &Timer, wake: Wake, now: u64) -> String {
 /// (`lines::is_stop_note`) to keep it out of the feed.
 pub fn stop_note(id: u64, text: &str, why: &str) -> String {
     format!("{}{} ({}){}: don't set it again unless they ask", bise_proto::thread::lines::STOP_NOTE, id, text, why)
-}
-
-fn clip(s: &str, n: usize) -> String {
-    let one = s.split_whitespace().collect::<Vec<_>>().join(" ");
-    if one.chars().count() <= n {
-        one
-    } else {
-        format!("{}…", one.chars().take(n).collect::<String>())
-    }
 }
 
 // ---- parsing (the CLI's: the agent's own clock and time zone) ----
@@ -573,6 +597,7 @@ mod tests {
             page: None,
             last_ms: 0,
             runs: vec![],
+            name: if id.is_multiple_of(2) { format!("name \"{id}\"") } else { String::new() },
         };
         let cases = [
             (timer(7, Sched::Every(10 * MIN_MS), None, None, "check HN"), Wake::Due { fired: 1, waited_ms: 0 }),
@@ -582,8 +607,10 @@ mod tests {
         ];
         for (t, wake) in cases {
             let text = wake_text(&t, wake, NOW);
-            let (id, how, words) = timer_wake(&text).unwrap_or_else(|| panic!("not a wake: {text}"));
+            let (id, name, how, words) = timer_wake(&text).unwrap_or_else(|| panic!("not a wake: {text}"));
             assert_eq!(id, t.id, "{text}");
+            // its name, quoted (a quote in it reads as ')
+            assert_eq!(name, t.name.replace('"', "'"), "{text}");
             assert!(how.starts_with(&t.sched.label()), "{how} / {text}");
             assert!(how.ends_with(&format!(", set by {}", t.by)), "{how} / {text}");
             assert_eq!(words, t.text, "{text}");

@@ -38,6 +38,7 @@ mod routing;
 mod release;
 mod session_log;
 mod skills;
+mod small_ask;
 mod versions;
 mod dev_servers;
 mod dispatch;
@@ -193,6 +194,11 @@ enum Msg {
         dir: String,
         key: String,
         line: Option<String>,
+    },
+    /// A timer-name call is over (every_name.rs).
+    TimerName {
+        id: u64,
+        reply: Option<String>,
     },
     /// The checker answered a gated call (approvals-design.md §4).
     GateChecked {
@@ -1094,6 +1100,7 @@ impl Shell {
             // sent by the loop when the gate allows (daemon/state_gate.rs)
             Effect::State => self.state_gate.changed(),
             Effect::AskRole { dir, key, request } => self.ask_role(dir, key, request),
+            Effect::AskTimerName { id, request } => self.ask_timer_name(id, request),
             Effect::Confirm { card, agent: _, text } => self.on_confirm(card, &text),
             Effect::Flow { client, token, set } => {
                 let (ok, text) = self.flow_cmd(set);
@@ -1344,36 +1351,31 @@ impl Shell {
             let _ = self.tx.send(Msg::RoleLine { dir, key, line: None });
             return;
         }
-        let setup = bise_catalog::Setup::load(&bise_home::Home::from_env().config_file());
-        let broken = self.small_broken.clone();
-        let (repl, root) = (self.opts.repl_bin.clone(), self.opts.app_root.clone());
-        let (tx, paths, spawn_env) = (self.tx.clone(), self.opts.paths.clone(), self.opts.spawn_env);
+        let (small, tx) = (small_ask::Small::of(self), self.tx.clone());
         std::thread::spawn(move || {
-            use std::sync::atomic::Ordering;
-            let keys = spawn_env.map(|f| f()).unwrap_or_default();
-            let small = setup.small_model.clone();
-            let agent = setup.agent_model.clone();
-            let first = if broken.load(Ordering::Relaxed) { agent.clone() } else { small.clone() };
-            let mut got = oneshot(&repl, &root, &req_file, &first, &keys);
-            if let Err(e) = &got {
-                log_line(&paths, &format!("role line of {}: {} failed: {}", dir, first, e));
-                if first != agent {
-                    got = oneshot(&repl, &root, &req_file, &agent, &keys);
-                    match &got {
-                        Ok(_) => {
-                            broken.store(true, Ordering::Relaxed);
-                            log_line(&paths, &format!("role lines: {} failed, {} from now on", small, agent));
-                        }
-                        Err(e) => log_line(&paths, &format!("role line of {}: {} failed: {}", dir, agent, e)),
-                    }
-                }
-            }
-            let _ = std::fs::remove_file(&req_file);
+            let got = small.call(&req_file, &format!("role line of {}", dir));
             let line = got.ok().and_then(|t| crate::role::clean(&t));
             if let Some(l) = &line {
-                write_role(&paths, &paths.agent_dir(&dir), l, &key);
+                write_role(small.paths(), &small.paths().agent_dir(&dir), l, &key);
             }
             let _ = tx.send(Msg::RoleLine { dir, key, line });
+        });
+    }
+
+    /// One timer-name call in a thread (every_name.rs): the request goes
+    /// in main's agent dir; the answer comes back as `Msg::TimerName`
+    /// (None: no model, or it failed: the hub's plain fallback names it).
+    fn ask_timer_name(&mut self, id: u64, request: String) {
+        let adir = self.opts.paths.agent_dir(&self.dir_of(MAIN).unwrap_or_else(|| MAIN.to_string()));
+        let req_file = adir.join(format!("timer-name-{id}.txt"));
+        if std::fs::create_dir_all(&adir).and_then(|_| std::fs::write(&req_file, request)).is_err() {
+            let _ = self.tx.send(Msg::TimerName { id, reply: None });
+            return;
+        }
+        let (small, tx) = (small_ask::Small::of(self), self.tx.clone());
+        std::thread::spawn(move || {
+            let reply = small.call(&req_file, &format!("timer #{id}'s name")).ok();
+            let _ = tx.send(Msg::TimerName { id, reply });
         });
     }
 

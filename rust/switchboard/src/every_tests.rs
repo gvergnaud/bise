@@ -10,7 +10,7 @@ const N: u64 = 1_790_000_000_000;
 
 /// `sb every` from `from`: the new timer's id.
 fn every(t: &mut T, from: &str, to: &str, sched: Sched, until_ms: Option<u64>, times: Option<u64>) -> u64 {
-    let req = EveryReq::Add { to: to.into(), text: "check HN".into(), sched, until_ms, times, page: None };
+    let req = EveryReq::Add { to: to.into(), text: "check HN".into(), sched, until_ms, times, page: None, name: None };
     let (tok, fx) = t.req(from, AgentReq::Every(req));
     let r = reply(&fx, tok).unwrap();
     r["id"].as_u64().unwrap_or_else(|| panic!("{}", r))
@@ -233,7 +233,8 @@ fn a_journal_of_298407ff_replays_to_the_same_scheduled_list() {
     let now = 1_791_131_900_000;
     assert_eq!(Value::Array(hub.timers().state(now)), want);
     let list = hub.timers().list(now);
-    assert!(list.starts_with("#2 @main every day 07:30 · next ") && list.ends_with("\"make the morning page\" (by main)"), "{list}");
+    // sched-names: an old journal has no name: the list says its plain fallback
+    assert!(list.starts_with("#2 @main  make the morning page · every day 07:30 · next ") && list.ends_with(" · by main"), "{list}");
 }
 
 /// A refused wake (fire_is_a_message; unreachable from the tick today:
@@ -262,4 +263,103 @@ fn refused_wakes_are_retried_a_minute_apart_and_never_counted() {
     assert!(back.replay(&events).is_empty());
     let tm = &back.timers().map[&id];
     assert_eq!((tm.fired, tm.next_ms, tm.runs.len()), (0, due + 3 * MIN_MS, 0));
+}
+
+fn asked_name(fx: &[Effect]) -> Option<(u64, String)> {
+    fx.iter().find_map(|e| match e {
+        Effect::AskTimerName { id, request } => Some((*id, request.clone())),
+        _ => None,
+    })
+}
+
+fn scheduled_lines(fx: &[Effect]) -> Vec<String> {
+    fx.iter()
+        .filter_map(|e| match e {
+            Effect::Line { line, .. } if line.starts_with("sb scheduled : ") => Some(line.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// sched-names (main m_14458, architect m_14532): a timer set without
+/// --name asks the small model once, off the loop; its answer (or, with
+/// no model, the plain fallback) is sb-core's every_name, in the view,
+/// the list, the wake and the ◷ set line, which waits for it. --name asks
+/// nothing; one call at a time; the journal replays the name.
+#[test]
+fn a_timer_gets_a_name_from_the_model_or_the_fallback() {
+    let mut t = hub();
+    let req = |text: &str, name: Option<&str>| {
+        AgentReq::Every(EveryReq::Add { to: "w".into(), text: text.into(), sched: Sched::Every(10 * MIN_MS), until_ms: None, times: None, page: None, name: name.map(String::from) })
+    };
+    // no --name: one call, and the set line waits for its name
+    let (_, fx) = t.req(MAIN, req("amb-core: read $TMPDIR/s4.log (S29 bench) and report", None));
+    let (id, request) = asked_name(&fx).expect("a name call");
+    assert!(request.contains(crate::every_name::MARK), "{request}");
+    assert!(scheduled_lines(&fx).is_empty(), "the set line waits: {:?}", fx);
+    // a second unnamed timer: no call while the first is in flight
+    let (_, fx) = t.req(MAIN, req("check the nightly build", None));
+    assert!(asked_name(&fx).is_none(), "one at a time");
+    // the model answers: every_name, the set line with the name, the next call
+    let fx = t.go(Input::TimerName { id, reply: Some("\"S29 Bench.\"".into()) });
+    let named = journal(&fx, "every_name");
+    assert_eq!((named[0]["id"].as_u64(), named[0]["name"].as_str()), (Some(id), Some("s29 bench")));
+    let set = scheduled_lines(&fx);
+    // its agent's line, and main's copy (main set it for w)
+    assert!(set.len() == 2 && set.iter().all(|l| l.contains("\"name\":\"s29 bench\"")), "{set:?}");
+    assert_eq!(t.hub.timers().map[&id].name, "s29 bench");
+    let (id2, _) = asked_name(&fx).expect("the next unnamed timer");
+    // no model (or it failed): the plain fallback names it
+    t.go(Input::TimerName { id: id2, reply: None });
+    assert_eq!(t.hub.timers().map[&id2].name, "check the nightly build");
+    // --name: no call, the set line at once
+    let (tok, fx) = t.req(MAIN, req("x y z", Some("my own name")));
+    assert!(asked_name(&fx).is_none());
+    assert!(scheduled_lines(&fx).iter().any(|l| l.contains("my own name")));
+    let id3 = reply(&fx, tok).unwrap()["id"].as_u64().unwrap();
+    // the list shows names, never the words; --show prints them
+    let (tok, fx) = t.req(MAIN, AgentReq::Every(EveryReq::List));
+    let list = reply(&fx, tok).unwrap()["text"].as_str().unwrap().to_string();
+    assert!(list.contains(&format!("#{id} @w  s29 bench · every 10m · next ")) && !list.contains("$TMPDIR"), "{list}");
+    let (tok, fx) = t.req(MAIN, AgentReq::Every(EveryReq::Show(id3)));
+    assert!(reply(&fx, tok).unwrap()["text"].as_str().unwrap().ends_with("\nx y z"));
+    // the wake carries the name
+    let fx = tick(&mut t, N + 10 * MIN_MS);
+    let wake = say_to(&fx, "w").expect("a wake");
+    assert!(wake.contains(&format!("\ntimer #{id} \"s29 bench\" (every 10m")), "{wake}");
+    // the journal replays the names (every_set's and every_name's)
+    let events = t.journal.borrow().clone();
+    let mut back = Hub::new("/w");
+    assert!(back.replay(&events).is_empty(), "every line read");
+    let names: Vec<String> = back.timers().map.values().map(|x| x.name.clone()).collect();
+    assert_eq!(names, ["s29 bench", "check the nightly build", "my own name"]);
+}
+
+/// A hub that starts with unnamed timers (an older hub's) names them, one
+/// call at a time, each once; an every_name for an ended or unknown timer
+/// changes nothing.
+#[test]
+fn old_unnamed_timers_are_named_one_at_a_time() {
+    let mut t = hub();
+    let mut events = Vec::new();
+    for id in 1..=2u64 {
+        events.push(json!({"type": "every_set", "id": id, "agent": "w", "by": "main", "text": format!("old timer {id}"),
+                           "next_ms": N + 10 * MIN_MS, "at": N, "every_ms": 10 * MIN_MS}));
+    }
+    let mut back = Hub::new("/w");
+    assert!(back.replay(&events).is_empty());
+    assert!(back.timers().map.values().all(|x| x.name.is_empty()), "an old line has no name");
+    // the next step of this hub asks for the first, then the second
+    std::mem::swap(&mut t.hub, &mut back);
+    let fx = t.go(Input::Tick);
+    let (a, _) = asked_name(&fx).expect("asks at its first step");
+    let fx = t.go(Input::TimerName { id: a, reply: Some("first".into()) });
+    assert!(scheduled_lines(&fx).is_empty(), "an old timer gets no set line");
+    let (b, _) = asked_name(&fx).expect("then the next");
+    assert_ne!(a, b);
+    let fx = t.go(Input::TimerName { id: b, reply: Some("second".into()) });
+    assert!(asked_name(&fx).is_none(), "each once");
+    // unknown id: nothing
+    let fx = t.go(Input::TimerName { id: 99, reply: Some("ghost".into()) });
+    assert!(journal(&fx, "every_name").is_empty());
 }

@@ -117,3 +117,17 @@ fn tool_results_and_patches_read_once() {
     let p = "*** Begin Patch\n*** Update File: a.rs\n+x\n-y\n-z\n*** Add File: b.rs\n+1\n*** Update File: c.rs\n*** Move to: d.rs\n+k\n*** End Patch";
     assert_eq!(patch_files(p), vec![("a.rs".into(), 1, 2), ("b.rs".into(), 1, 0), ("c.rs → d.rs".into(), 1, 0)]);
 }
+
+/// Law (architect m_14532, sched-names): a wake from an older hub (no
+/// name) still reads, with an empty name; a named one gives its name; a
+/// name never eats the parenthesis.
+#[test]
+fn an_old_wake_still_reads() {
+    let old = "timer #48 (every 2m, 2/6, set by x): check the build\n(stop it: sb every --stop 48)";
+    assert_eq!(timer_wake(old), Some((48, "", "every 2m, 2/6, set by x", "check the build")));
+    let new = "timer #48 \"build check\" (every 2m, 2/6, set by x): check the build\n(stop it: sb every --stop 48)";
+    assert_eq!(timer_wake(new), Some((48, "build check", "every 2m, 2/6, set by x", "check the build")));
+    for not in ["timer #48 \"open (every 2m): x", "timer #x (every 2m): y", "timer set: #1 @main every 10m", "hello"] {
+        assert_eq!(timer_wake(not), None, "{not}");
+    }
+}

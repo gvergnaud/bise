@@ -176,6 +176,9 @@ def ev_json(e: M.Ev) -> J.Json:
       J.obj([ty("every_run"), J.kv("id", J.JNum{id}), J.kv("at", J.JNum{at})])
     case M.ETimerStop{+id, +why, +at}:
       J.obj([ty("every_stop"), J.kv("id", J.JNum{id}), J.kv("why", J.JStr{why}), J.kv("at", J.JNum{at})])
+    # an older sb-core reads every_name as unknown: skipped
+    case M.ETimerName{+id, +name, +at}:
+      J.obj([ty("every_name"), J.kv("id", J.JNum{id}), J.kv("name", J.JStr{name}), J.kv("at", J.JNum{at})])
     # bise desktop S2 (an older sb-core reads these as unknown: skipped)
     case M.EX{+xe}:
       x_json(xe)
@@ -264,6 +267,7 @@ type EvK is Data:
   KEveryFired{}
   KEveryRun{}
   KEveryStop{}
+  KEveryName{}
   KXOut{}
   KXAcked{}
   KXFailed{}
@@ -317,7 +321,8 @@ def ev_kind(+t: String) -> EvK:
   Bool.pick(EvK, String.eq(t, "every_fired"), KEveryFired{},
   Bool.pick(EvK, String.eq(t, "every_run"), KEveryRun{},
   Bool.pick(EvK, String.eq(t, "every_stop"), KEveryStop{},
-  ev_kind.x(t))))))))))))))))))))
+  Bool.pick(EvK, String.eq(t, "every_name"), KEveryName{},
+  ev_kind.x(t)))))))))))))))))))))
 
 # bise desktop S2's kinds (an older sb-core has none: KUnknown, skipped)
 def out_st_of(+s: String) -> XH.OutSt:
@@ -356,7 +361,7 @@ def timer_set_of(s: Maybe<&2, TM.Sched>, +j: J.Json) -> Maybe<&2, M.Ev>:
     case Some{+sc}:
       Some{M.ETimerSet{TM.Timer{get_nat(j, "id"), get_s(j, "agent"), get_s(j, "by"), get_s(j, "text"), sc,
         get_nat(j, "next_ms"), opt_nat(J.get(j, "until_ms")), opt_nat(J.get(j, "times")), 0n,
-        opt_str(J.get(j, "page")), 0n, Nil{}}, get_nat(j, "at")}}
+        opt_str(J.get(j, "page")), 0n, Nil{}, get_s(j, "name")}, get_nat(j, "at")}}
 
 # a match on the kind, not a Bool.pick chain: the chain decoded the event
 # as every kind, then kept one
@@ -400,6 +405,8 @@ def ev_of.kind(k: EvK, +j: J.Json, +n: String) -> Maybe<&2, M.Ev>:
       Some{M.ETimerRun{get_nat(j, "id"), get_nat(j, "at")}}
     case KEveryStop{}:
       Some{M.ETimerStop{get_nat(j, "id"), get_s(j, "why"), get_nat(j, "at")}}
+    case KEveryName{}:
+      Some{M.ETimerName{get_nat(j, "id"), get_s(j, "name"), get_nat(j, "at")}}
     case KXOut{}:
       Some{M.EX{XH.XOut{out_of(get_j(j, "out"))}}}
     case KXAcked{}:

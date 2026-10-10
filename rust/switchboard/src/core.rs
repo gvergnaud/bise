@@ -243,8 +243,10 @@ pub enum AgentReq {
 pub enum EveryReq {
     List,
     Stop(u64),
-    /// `to` "": the caller
-    Add { to: String, text: String, sched: crate::every::Sched, until_ms: Option<u64>, times: Option<u64>, page: Option<String> },
+    /// `--show <id>`: its line and the words it sends
+    Show(u64),
+    /// `to` "": the caller; `name` None: the hub names it (every_name.rs)
+    Add { to: String, text: String, sched: crate::every::Sched, until_ms: Option<u64>, times: Option<u64>, page: Option<String>, name: Option<String> },
 }
 
 /// `m_12` or `12`.
@@ -432,6 +434,7 @@ impl AgentReq {
             "every" => AgentReq::Every(match jstr(v, "step").as_str() {
                 "" | "list" => EveryReq::List,
                 "stop" => EveryReq::Stop(v["id"].as_u64().ok_or("usage: sb every --stop <id>")?),
+                "show" => EveryReq::Show(v["id"].as_u64().ok_or("usage: sb every --show <id>")?),
                 "add" => EveryReq::Add {
                     to: jstr(v, "to").trim_start_matches('@').to_string(),
                     text: jstr(v, "text"),
@@ -443,6 +446,7 @@ impl AgentReq {
                     until_ms: v["until_ms"].as_u64(),
                     times: v["times"].as_u64(),
                     page: v["page"].as_str().filter(|p| !p.is_empty()).map(String::from),
+                    name: v["name"].as_str().map(str::trim).filter(|n| !n.is_empty()).map(String::from),
                 },
                 o => return Err(format!("sb every: unknown step {}", o)),
             }),
@@ -544,6 +548,12 @@ pub enum Input {
         dir: String,
         key: String,
         line: Option<String>,
+    },
+    /// The end of a timer-name call (every_name.rs): the model's reply,
+    /// or None (no model, or it failed: the plain fallback names it).
+    TimerName {
+        id: u64,
+        reply: Option<String>,
     },
     /// An answer of the PR poller (`forge::poll`, its own thread).
     Prs(crate::forge::poll::Report),
@@ -723,6 +733,12 @@ pub enum Effect {
     AskRole {
         dir: String,
         key: String,
+        request: String,
+    },
+    /// Ask a small model for timer `id`'s name (every_name.rs), off the
+    /// hub's loop; the answer comes back as `Input::TimerName`.
+    AskTimerName {
+        id: u64,
         request: String,
     },
     /// The user answered a `confirm` card (approvals-design.md §9): the
@@ -1038,6 +1054,8 @@ pub struct Hub {
     activity: BTreeMap<String, (u64, String)>,
     /// The role line of each task, by dir (BISE-126).
     roles: BTreeMap<String, Role>,
+    /// The timers' name calls (every_name.rs); runtime only.
+    timer_names: crate::every_name::Asker,
     /// BISE-136: the private worktree each agent works in, by dir (a
     /// rename keeps it); runtime only, like `activity`.
     places: BTreeMap<String, Place>,
@@ -1260,6 +1278,7 @@ impl Hub {
             contexts: BTreeMap::new(),
             activity: BTreeMap::new(),
             roles: BTreeMap::new(),
+            timer_names: Default::default(),
             places: BTreeMap::new(),
             on_you: BTreeSet::new(),
             prs: BTreeMap::new(),
@@ -1722,6 +1741,10 @@ impl Hub {
         };
         match r {
             EveryReq::List => json!({"ok": true, "text": self.st.timers.list(now)}),
+            EveryReq::Show(id) => match self.st.timers.map.get(&id) {
+                Some(t) => json!({"ok": true, "text": crate::every::show(t, now)}),
+                None => json!({"ok": false, "error": format!("no timer #{} (`sb every` lists them)", id)}),
+            },
             EveryReq::Stop(id) => {
                 let no = json!({"ok": false, "error": format!("no timer #{} (`sb every` lists them)", id)});
                 if !self.st.timers.map.contains_key(&id) {
@@ -1733,7 +1756,7 @@ impl Hub {
                 }
                 json!({"ok": true, "text": format!("timer #{} stopped", id)})
             },
-            EveryReq::Add { to, text, sched, until_ms, times, page } => {
+            EveryReq::Add { to, text, sched, until_ms, times, page, name } => {
                 let to = if to.is_empty() { by.clone() } else { to };
                 let agent = match self.st.resolve(&to) {
                     Some(a) if self.st.agents[&a].lifecycle == Lifecycle::Active => a,
@@ -1751,7 +1774,7 @@ impl Hub {
                 if times == Some(0) {
                     return json!({"ok": false, "error": "sb every: --times is at least 1"});
                 }
-                let n = crate::every::New { agent, by, text: text.trim().to_string(), sched, until_ms, times, page };
+                let n = crate::every::New { agent, by, text: text.trim().to_string(), sched, until_ms, times, page, name };
                 // sb-core gives the id: its every_set journal line's
                 let k = fx.len();
                 self.core(fx, env, None, n.input(now));
@@ -1784,10 +1807,21 @@ impl Hub {
 
     /// The ◷ line of a timer sb-core just set or ended (its `every_set` or
     /// `every_stop`; the step's view, loaded first, has the timer).
-    fn timer_journal_lines(&self, fx: &mut Fx, ev: &Value) {
+    fn timer_journal_lines(&mut self, fx: &mut Fx, ev: &Value) {
         let id = ev["id"].as_u64().unwrap_or(0);
+        // a timer set without a name says so once it has it (designer
+        // m_14531: its set line carries its name; every_name.rs)
+        let set_now = match ev["type"].as_str() {
+            Some("every_set") if ev["name"].as_str().unwrap_or_default().is_empty() => {
+                self.timer_names.hold(id);
+                false
+            }
+            Some("every_set") => true,
+            Some("every_name") => self.timer_names.release(id),
+            _ => false,
+        };
         let (t, mut v, what) = match ev["type"].as_str() {
-            Some("every_set") => match self.st.timers.map.get(&id) {
+            Some("every_set" | "every_name") if set_now => match self.st.timers.map.get(&id) {
                 Some(t) => (t, t.json(), "set"),
                 None => return,
             },
@@ -2315,6 +2349,13 @@ impl Hub {
                 self.ask_role(&mut fx, env.now(), &agent);
             }
             Input::RoleLine { dir, key, line } => self.role_answer(&mut fx, env.now(), &dir, key, line),
+            Input::TimerName { id, reply } => {
+                self.timer_names.done(id);
+                if let Some(t) = self.st.timers.map.get(&id) {
+                    let name = crate::every_name::name_of(reply.as_deref(), &t.text);
+                    self.core(&mut fx, env, None, json!({"t": "every_name", "id": id, "name": name}));
+                }
+            }
             Input::Prs(r) => self.prs_in(&mut fx, env, r),
             Input::Feature(d) => self.feature_done(&mut fx, env, d),
             Input::ReplExited {
@@ -2451,6 +2492,10 @@ impl Hub {
             self.load_view(&out["view"]);
             for f in out.get("fx").and_then(|x| x.as_array()).into_iter().flatten() {
                 self.effect(fx, env, client, f);
+            }
+            // a timer without a name: its small-model call (every_name.rs)
+            if let Some((id, request)) = self.timer_names.next(&self.st.timers) {
+                fx.push(Effect::AskTimerName { id, request });
             }
             return;
         }

@@ -1976,6 +1976,8 @@ def hub_apply_unique(s: HM.St, e: HM.Ev, u: HI.Unique(s), k: HX.FreshEv(s, e)) -
           u
         case HM.ETimerStop{a, b, c}:
           u
+        case HM.ETimerName{a, b, c}:
+          u
         case HM.EX{a}:
           u
         case HM.EAct{a}:
@@ -2094,6 +2096,8 @@ def hub_apply_kept(s: HM.St, e: HM.Ev) -> HI.Kept(s, HM.apply(s, e)):
         case HM.ETimerRun{a, b}:
           hub_prefix_refl(HI.ids(ms))
         case HM.ETimerStop{a, b, c}:
+          hub_prefix_refl(HI.ids(ms))
+        case HM.ETimerName{a, b, c}:
           hub_prefix_refl(HI.ids(ms))
         case HM.EX{a}:
           hub_prefix_refl(HI.ids(ms))
@@ -2923,6 +2927,8 @@ def hub_apply_ucards(s: HM.St, e: HM.Ev, u: HI.UniqueCards(s), k: HX.FreshEv(s, 
         case HM.ETimerRun{a, b}:
           u
         case HM.ETimerStop{a, b, c}:
+          u
+        case HM.ETimerName{a, b, c}:
           u
         case HM.EX{a}:
           u
@@ -4301,6 +4307,8 @@ def hub_apply_names(s: HM.St, e: HM.Ev, u: HI.NamesApart(s), +k: HX.FreshEv(s, e
           u
         case HM.ETimerStop{a, b, c}:
           u
+        case HM.ETimerName{a, b, c}:
+          u
         case HM.EX{a}:
           u
         case HM.EAct{a}:
@@ -4897,12 +4905,22 @@ def hub_lt_not_le(+a: Nat, +b: Nat) -> {Nat.is_lt(a, b) == Bool.not(Nat.is_le(b,
 
 def Laws.times_bound(t, next, at):
   match t:
-    case HTM.Timer{id, ag, by, tx, sc, nx, un, tms, fd, pg, ls, rs}:
+    case HTM.Timer{id, ag, by, tx, sc, nx, un, tms, fd, pg, ls, rs, nm}:
       match tms:
         case None{}:
           {==}
         case Some{n}:
           hub_lt_not_le(1n+fd, n)
+
+def Laws.named_keeps_the_rest(t, name):
+  match t:
+    case HTM.Timer{id, ag, by, tx, sc, nx, un, tms, fd, pg, ls, rs, nm}:
+      {==}
+
+def Laws.named_is_the_name(t, name):
+  match t:
+    case HTM.Timer{id, ag, by, tx, sc, nx, un, tms, fd, pg, ls, rs, nm}:
+      {==}
 
 # ---- stop_leaves_no_timer: a drop's stops leave no timer of the agent ----
 

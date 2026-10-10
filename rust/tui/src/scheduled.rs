@@ -83,10 +83,10 @@ mod tests {
     /// there): a run and a set line come out as `Ev::Scheduled`.
     #[test]
     fn the_lines_are_the_shared_words() {
-        let run = "timer #48 (every 2m, 2/6, set by answer-line): check the build\n(stop it: sb every --stop 48)";
-        assert!(matches!(run_line(run), Some(Ev::Scheduled { head, words, open: false }) if head == "scheduled #48 · 2 of 6 · check the build" && words == "check the build"));
+        let run = "timer #48 \"build check\" (every 2m, 2/6, set by answer-line): check the build\n(stop it: sb every --stop 48)";
+        assert!(matches!(run_line(run), Some(Ev::Scheduled { head, words, open: false }) if head == "build check · 2 of 6" && words == "check the build"));
         let set = r#"{"ev":"set","id":3,"agent":"a","by":"a","label":"every 2m","text":"x","next_ms":1790000120000}"#;
-        assert!(matches!(hub_line_at(set, NOW), Some(Ev::Scheduled { head, .. }) if head.starts_with("a scheduled #3 · every 2m · next ")));
+        assert!(matches!(hub_line_at(set, NOW), Some(Ev::Scheduled { head, .. }) if head.starts_with("a scheduled x · every 2m · next ")));
         assert!(run_line("hello").is_none());
         assert!(is_stop_note("the user stopped timer #3 (x): don't set it again unless they ask"));
     }

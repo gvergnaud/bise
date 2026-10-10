@@ -26,11 +26,12 @@ type Sched is Data:
   Daily{min: Nat}
 
 # `next`: when it is due; `last`: when it last woke its agent (0: never);
-# `runs`: its last runs (at most RUNS_KEPT, oldest first)
+# `runs`: its last runs (at most RUNS_KEPT, oldest first); `name`: what
+# the lists show ("" until `sb every --name` or the hub's `every_name`)
 type Timer is Data:
   Timer{id: Nat, agent: String, by: String, text: String, sched: Sched,
     next: Nat, until: Maybe<&2, Nat>, times: Maybe<&2, Nat>, fired: Nat,
-    page: Maybe<&2, String>, last: Nat, runs: List<&2, Nat>}
+    page: Maybe<&2, String>, last: Nat, runs: List<&2, Nat>, name: String}
 
 # a timer that ended: when (0: an old line without it) and why
 type Ended is Data:
@@ -67,63 +68,68 @@ def empty() -> Tms:
 
 def Timer.id(x: Timer) -> Nat:
   match x:
-    case Timer{+id, _, _, _, _, _, _, _, _, _, _, _}:
+    case Timer{+id, _, _, _, _, _, _, _, _, _, _, _, _}:
       id
 
 def Timer.agent(x: Timer) -> String:
   match x:
-    case Timer{_, +agent, _, _, _, _, _, _, _, _, _, _}:
+    case Timer{_, +agent, _, _, _, _, _, _, _, _, _, _, _}:
       agent
 
 def Timer.by(x: Timer) -> String:
   match x:
-    case Timer{_, _, +by, _, _, _, _, _, _, _, _, _}:
+    case Timer{_, _, +by, _, _, _, _, _, _, _, _, _, _}:
       by
 
 def Timer.text(x: Timer) -> String:
   match x:
-    case Timer{_, _, _, +text, _, _, _, _, _, _, _, _}:
+    case Timer{_, _, _, +text, _, _, _, _, _, _, _, _, _}:
       text
 
 def Timer.sched(x: Timer) -> Sched:
   match x:
-    case Timer{_, _, _, _, +sched, _, _, _, _, _, _, _}:
+    case Timer{_, _, _, _, +sched, _, _, _, _, _, _, _, _}:
       sched
 
 def Timer.next(x: Timer) -> Nat:
   match x:
-    case Timer{_, _, _, _, _, +next, _, _, _, _, _, _}:
+    case Timer{_, _, _, _, _, +next, _, _, _, _, _, _, _}:
       next
 
 def Timer.until(x: Timer) -> Maybe<&2, Nat>:
   match x:
-    case Timer{_, _, _, _, _, _, +until, _, _, _, _, _}:
+    case Timer{_, _, _, _, _, _, +until, _, _, _, _, _, _}:
       until
 
 def Timer.times(x: Timer) -> Maybe<&2, Nat>:
   match x:
-    case Timer{_, _, _, _, _, _, _, +times, _, _, _, _}:
+    case Timer{_, _, _, _, _, _, _, +times, _, _, _, _, _}:
       times
 
 def Timer.fired(x: Timer) -> Nat:
   match x:
-    case Timer{_, _, _, _, _, _, _, _, +fired, _, _, _}:
+    case Timer{_, _, _, _, _, _, _, _, +fired, _, _, _, _}:
       fired
 
 def Timer.page(x: Timer) -> Maybe<&2, String>:
   match x:
-    case Timer{_, _, _, _, _, _, _, _, _, +page, _, _}:
+    case Timer{_, _, _, _, _, _, _, _, _, +page, _, _, _}:
       page
 
 def Timer.last(x: Timer) -> Nat:
   match x:
-    case Timer{_, _, _, _, _, _, _, _, _, _, +last, _}:
+    case Timer{_, _, _, _, _, _, _, _, _, _, +last, _, _}:
       last
 
 def Timer.runs(x: Timer) -> List<&2, Nat>:
   match x:
-    case Timer{_, _, _, _, _, _, _, _, _, _, _, +runs}:
+    case Timer{_, _, _, _, _, _, _, _, _, _, _, +runs, _}:
       runs
+
+def Timer.name(x: Timer) -> String:
+  match x:
+    case Timer{_, _, _, _, _, _, _, _, _, _, _, _, +name}:
+      name
 
 def Tms.live(x: Tms) -> List<&2, Timer>:
   match x:
@@ -193,17 +199,17 @@ def runs_unrun(+rs: List<&2, Nat>, +last: Nat) -> List<&2, Nat>:
 # `every_fired`: its count, its next time, when it ran
 def Timer.fire.ran(x: Timer, +fired: Nat, +next: Nat, +at: Nat) -> Timer:
   match x:
-    case Timer{+id, +agent, +by, +text, +sched, _, +until, +times, _, +page, _, +runs}:
-      Timer{id, agent, by, text, sched, next, until, times, fired, page, at, runs_add(runs, at)}
+    case Timer{+id, +agent, +by, +text, +sched, _, +until, +times, _, +page, _, +runs, +name}:
+      Timer{id, agent, by, text, sched, next, until, times, fired, page, at, runs_add(runs, at), name}
 
 # an `undelivered` line: sb-core's (its count unchanged, the wake was
 # refused) only moves the next time; an old hub's (count - 1) took back
 # the run it had counted
 def Timer.fire.lost(x: Timer, +fired: Nat, +next: Nat, +at: Nat) -> Timer:
   match x:
-    case Timer{+id, +agent, +by, +text, +sched, _, +until, +times, +fd, +page, +last, +runs}:
-      Bool.pick(Timer, Nat.is_eq(fired, fd), Timer{id, agent, by, text, sched, next, until, times, fd, page, last, runs},
-        Timer{id, agent, by, text, sched, next, until, times, fired, page, at, runs_unrun(runs, at)})
+    case Timer{+id, +agent, +by, +text, +sched, _, +until, +times, +fd, +page, +last, +runs, +name}:
+      Bool.pick(Timer, Nat.is_eq(fired, fd), Timer{id, agent, by, text, sched, next, until, times, fd, page, last, runs, name},
+        Timer{id, agent, by, text, sched, next, until, times, fired, page, at, runs_unrun(runs, at), name})
 
 def Timer.fire(x: Timer, +fired: Nat, +next: Nat, +at: Nat, +undelivered: Bool) -> Timer:
   match undelivered:
@@ -215,8 +221,15 @@ def Timer.fire(x: Timer, +fired: Nat, +next: Nat, +at: Nat, +undelivered: Bool) 
 # `every_run`: a run now, outside the count, the next wake unchanged
 def Timer.run(x: Timer, +at: Nat) -> Timer:
   match x:
-    case Timer{+id, +agent, +by, +text, +sched, +next, +until, +times, +fired, +page, _, +runs}:
-      Timer{id, agent, by, text, sched, next, until, times, fired, page, at, runs_add(runs, at)}
+    case Timer{+id, +agent, +by, +text, +sched, +next, +until, +times, +fired, +page, _, +runs, +name}:
+      Timer{id, agent, by, text, sched, next, until, times, fired, page, at, runs_add(runs, at), name}
+
+# `every_name`: its name (from `sb every --name` or the hub's small
+# model), every other field kept (law named_keeps_the_rest)
+def Timer.named(x: Timer, +name: String) -> Timer:
+  match x:
+    case Timer{+id, +agent, +by, +text, +sched, +next, +until, +times, +fired, +page, +last, +runs, _}:
+      Timer{id, agent, by, text, sched, next, until, times, fired, page, last, runs, name}
 
 # ---- the live list (sorted by id, like `sb every` lists them) ----
 
@@ -258,6 +271,13 @@ def run_in(xs: List<&2, Timer>, +id: Nat, +at: Nat) -> List<&2, Timer>:
       Nil{}
     case Con{+h, +t}:
       Bool.pick(Timer, Nat.is_eq(Timer.id(h), id), Timer.run(h, at), h) <> run_in(t, id, at)
+
+def named_in(xs: List<&2, Timer>, +id: Nat, +name: String) -> List<&2, Timer>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case Con{+h, +t}:
+      Bool.pick(Timer, Nat.is_eq(Timer.id(h), id), Timer.named(h, name), h) <> named_in(t, id, name)
 
 def str_in(xs: List<&2, String>, +s: String) -> Bool:
   match xs:
@@ -316,6 +336,12 @@ def run(+tm: Tms, +id: Nat, +at: Nat) -> Tms:
   match tm:
     case Tms{+live, +ended, +last, +acts, +na}:
       Tms{run_in(live, id, at), ended, last, acts, na}
+
+# `every_name`: a live timer's name (an ended or unknown id: nothing)
+def named(+tm: Tms, +id: Nat, +name: String) -> Tms:
+  match tm:
+    case Tms{+live, +ended, +last, +acts, +na}:
+      Tms{named_in(live, id, name), ended, last, acts, na}
 
 def cap(+xs: List<&2, Ended>) -> List<&2, Ended>:
   List.drop(&2, Ended, xs, Nat.sub(List.length(&2, Ended, xs), ENDED_KEPT()))
@@ -482,6 +508,10 @@ def opt_kv_s(+k: String, m: Maybe<&2, String>) -> List<&2, Sigma<&2, &2, String,
     case Some{+s}:
       [J.kv(k, J.JStr{s})]
 
+# its name, only when it has one (an old hub's every_set has none)
+def name_kv(+s: String) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  Bool.pick(List<&2, Sigma<&2, &2, String, _ => J.Json>>, String.is_empty(s), Nil{}, [J.kv("name", J.JStr{s})])
+
 def sched_kv(s: Sched) -> Sigma<&2, &2, String, _ => J.Json>:
   match s:
     case Every{+p}:
@@ -492,7 +522,8 @@ def sched_kv(s: Sched) -> Sigma<&2, &2, String, _ => J.Json>:
 # the optional fields of a timer (`every_set` and the view)
 def opt_kvs(+x: Timer) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   List.concat(&2, Sigma<&2, &2, String, _ => J.Json>,
-    [opt_kv("until_ms", Timer.until(x)), opt_kv("times", Timer.times(x)), opt_kv_s("page", Timer.page(x))])
+    [opt_kv("until_ms", Timer.until(x)), opt_kv("times", Timer.times(x)), opt_kv_s("page", Timer.page(x)),
+      name_kv(Timer.name(x))])
 
 def nums(xs: List<&2, Nat>) -> List<&2, J.Json>:
   match xs:

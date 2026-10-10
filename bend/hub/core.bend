@@ -79,6 +79,7 @@ type In is Data:
   IEverySet{}
   IEveryStop{}
   IEveryRun{}
+  IEveryName{}
   IXIn{}
   IXAck{}
   IXFail{}
@@ -1270,7 +1271,7 @@ def timer_set.new(-o: M.St, s: Maybe<&2, TM.Sched>, +cx: X.Cx<o>, +agent: String
     case Some{+sc}:
       +t = {TM.Timer{1n+TM.Tms.last_id(tms(o, cx)), agent, C.get_s(i, "by"), C.get_s(i, "text"), sc,
         C.get_nat(i, "next_ms"), C.opt_nat(J.get(i, "until_ms")), C.opt_nat(J.get(i, "times")), 0n,
-        C.opt_str(J.get(i, "page")), 0n, Nil{}} : TM.Timer}
+        C.opt_str(J.get(i, "page")), 0n, Nil{}, C.get_s(i, "name")} : TM.Timer}
       emit(o, cx, M.ETimerSet{t, now(o, cx)}, Unit{}, Unit{}, Unit{})
 
 def timer_set.active(-o: M.St, ok: Bool, +cx: X.Cx<o>, +agent: String, +i: J.Json) -> X.Cx<o>:
@@ -1314,6 +1315,19 @@ def timer_run.found(-o: M.St, m: Maybe<&2, TM.Timer>, +cx: X.Cx<o>, +text: Strin
 
 def timer_run(-o: M.St, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
   timer_run.found(o, TM.find(live(o, cx), C.get_nat(i, "id")), cx, C.get_s(i, "text"))
+
+# {"t":"every_name"}: the hub's name for a live timer (its small model's,
+# else its plain fallback); an ended or unknown one, or no name: nothing
+def timer_name.found(-o: M.St, m: Maybe<&2, TM.Timer>, +cx: X.Cx<o>, +id: Nat, +name: String) -> X.Cx<o>:
+  match m:
+    case None{}:
+      cx
+    case Some{_}:
+      pick_lazy(X.Cx<o>, String.is_empty(name), u => cx,
+        u => emit(o, cx, M.ETimerName{id, name, now(o, cx)}, Unit{}, Unit{}, Unit{}))
+
+def timer_name(-o: M.St, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
+  timer_name.found(o, TM.find(live(o, cx), C.get_nat(i, "id")), cx, C.get_nat(i, "id"), C.get_s(i, "name"))
 
 def timers_gone.each(-o: M.St, ids: List<&2, Nat>, +cx: X.Cx<o>, +why: String) -> X.Cx<o>:
   match ids:
@@ -3452,10 +3466,11 @@ def in_tag(+t: String) -> In:
   # `sb every` (docs/ambient-roadmap.md B) wake their agent with it, and
   # the agents an expired ChatGPT sign-in stopped go on (expired-ux)
   Bool.pick(In, String.eq(t, "hub_msg"), IHubMsg{},
-  # the timers of `sb every` (hub/timers.bend): set, stop, run now
+  # the timers of `sb every` (hub/timers.bend): set, stop, run now, name
   Bool.pick(In, String.eq(t, "every_set"), IEverySet{},
   Bool.pick(In, String.eq(t, "every_stop"), IEveryStop{},
   Bool.pick(In, String.eq(t, "every_run"), IEveryRun{},
+  Bool.pick(In, String.eq(t, "every_name"), IEveryName{},
   # bise's cross-hub messages (S2, the `cross-hub` section): a project
   # hub receives one (x_in); bise's home hub hears how its delivery went
   # (x_ack, x_fail) and the project's answer (x_reply)
@@ -3472,7 +3487,7 @@ def in_tag(+t: String) -> In:
   Bool.pick(In, String.eq(t, "route_pick"), IRoutePick{},
   # S10: follow a task (the window's typed command, bise's sb follow)
   Bool.pick(In, String.eq(t, "follow"), IFollow{},
-  INone{}))))))))))))))))))))))))))))))))))))))))))))
+  INone{})))))))))))))))))))))))))))))))))))))))))))))
 
 # `/close N`: the user files a card without answering it
 def close_by_user(-o: M.St, m: Maybe<&2, M.Card>, +cx: X.Cx<o>, +id: Nat) -> X.Cx<o>:
@@ -3570,6 +3585,8 @@ def dispatch.go(-o: M.St, tag: In, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
       timer_stop(o, cx, i)
     case IEveryRun{}:
       timer_run(o, cx, i)
+    case IEveryName{}:
+      timer_name(o, cx, i)
     case IXIn{}:
       xin(o, XB.seen(xst(o, cx), C.get_s(i, "hub"), C.get_nat(i, "xid")), cx, C.get_nat(i, "token"), C.get_s(i, "hub"), C.get_nat(i, "xid"), XH.kind_of(C.get_s(i, "kind")), C.get_s(i, "text"), C.get_s(i, "name"))
     case IXAck{}:

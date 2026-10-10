@@ -47,8 +47,16 @@ FIXTURE = [
     {"type": "job_end", "name": "perf", "state": "done"},
     {"type": "x_out", "out": {"xid": 2, "project": "home-1", "kind": "job_end", "msg": 0,
                               "text": "{\"agent\":\"perf\",\"key\":9000,\"state\":\"done\"}", "state": "pending", "tries": 0}},
+    # sched-names (architect m_14532): a timer's name, on its every_set (an
+    # older sb-core ignores the field) and by every_name (skipped)
+    {"type": "every_set", "id": 1, "agent": "main", "by": "main", "text": "check the build", "next_ms": 9000,
+     "at": 1000, "every_ms": 600000, "name": "build check"},
+    {"type": "every_set", "id": 2, "agent": "main", "by": "main", "text": "read the log", "next_ms": 9000,
+     "at": 1000, "every_ms": 600000},
+    {"type": "every_name", "id": 2, "name": "log read", "at": 1100},
 ]
-NEW = [i for i, e in enumerate(FIXTURE) if e["type"].startswith(("x_", "act_")) or e["type"] in ("follow", "job_end")]
+NEW = [i for i, e in enumerate(FIXTURE)
+       if e["type"].startswith(("x_", "act_")) or e["type"] in ("follow", "job_end", "every_name")]
 
 
 def main():
@@ -92,6 +100,9 @@ def main():
         assert core.poll() is None, "the base's sb-core died on the journal"
         text = json.dumps(view)
         assert all(("m%d" % i) in text for i in (1, 2, 3)), "the messages are rebuilt: %s" % text[:500]
+        # sched-names: a timer with a name is rebuilt (an older base drops the name)
+        timers = view.get("view", view).get("timers", [])
+        assert sorted(t["id"] for t in timers) == [1, 2], "the timers are rebuilt: %r" % timers
         print("ok   old_core_replay: %s's sb-core skipped %d of %d new lines, kept the messages" % (sha[:8], len(skipped), len(NEW)))
     except AssertionError as e:
         print("FAIL old_core_replay:", e)

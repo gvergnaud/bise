@@ -262,6 +262,7 @@ impl Shell {
                 }
             }
             Msg::RoleLine { dir, key, line } => self.step(Input::RoleLine { dir, key, line }),
+            Msg::TimerName { id, reply } => self.step(Input::TimerName { id, reply }),
             Msg::GateChecked { dir, n, req, out } => self.on_checked(&dir, &n, *req, out),
             Msg::BuildEnded { rev } => {
                 self.building.remove(&rev);

@@ -39,6 +39,7 @@ pub mod daemon;
 pub mod devflow;
 pub mod diff;
 pub mod every;
+pub mod every_name;
 pub mod feature;
 pub mod first_run;
 pub mod flow;

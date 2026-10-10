@@ -306,9 +306,11 @@ fn scheduled_lines_are_scheduled_entries() {
     let s: Vec<_> = e.iter().map(|x| x.scheduled.clone().unwrap()).collect();
     assert_eq!(s.len(), 3, "{s:?}");
     assert_eq!((s[0].id, s[0].words.as_str()), (48, "check the build"));
-    assert!(s[0].head.starts_with("main scheduled #48 for perf · every 2m · 6 times · next "), "{}", s[0].head);
-    assert_eq!(s[1].head, "scheduled #48 · 1 of 6 · check the build");
-    assert_eq!((s[2].head.as_str(), s[2].words.as_str()), ("scheduled #48 ended · stopped by you", ""));
+    // sched-names (designer m_14531): its name, never its id; these lines
+    // have none (an older hub's): the plain fallback of its words
+    assert!(s[0].head.starts_with("main scheduled check the build for perf · every 2m · 6 times · next "), "{}", s[0].head);
+    assert_eq!(s[1].head, "check the build · 1 of 6");
+    assert_eq!((s[2].head.as_str(), s[2].words.as_str()), ("check the build ended · stopped by you", ""));
     assert_eq!(e[0].text, s[0].head, "the text is the line's head");
     // a replay reads the same words: `now` is the line's own time
     assert_eq!(fold(&ls, &ctx_with(&[], &none)), e);

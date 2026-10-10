@@ -348,17 +348,19 @@ fn str_of(opts: &Map<String, Value>, k: &str) -> String {
     }
 }
 
-const EVERY_USAGE: &str = "usage: sb every <10m|1h|day 07:30> \"<message>\" [--until <18:00|tomorrow 18:00|2h>] [--times <n>] [--to <agent>] [--page <id>] | sb every | sb every --stop <id>";
+const EVERY_USAGE: &str = "usage: sb every <10m|1h|day 07:30> \"<message>\" [--until <18:00|tomorrow 18:00|2h>] [--times <n>] [--to <agent>] [--page <id>] [--name <2-5 words>] | sb every | sb every --show <id> | sb every --stop <id>";
 
 /// `sb every` (docs/ambient-roadmap.md B): the durations and times are
 /// read here, with the agent's own clock and time zone (every.rs).
 fn every_req(rest: &[String], req: &mut Map<String, Value>) -> Result<(), String> {
-    let (pos, o) = parse_args(rest, &["until", "times", "to", "stop", "page"], &[])?;
-    if o.contains_key("stop") {
-        let id = str_of(&o, "stop").trim_start_matches('#').parse::<u64>().map_err(|_| EVERY_USAGE.to_string())?;
-        req.insert("step".into(), json!("stop"));
-        req.insert("id".into(), json!(id));
-        return Ok(());
+    let (pos, o) = parse_args(rest, &["until", "times", "to", "stop", "page", "name", "show"], &[])?;
+    for step in ["stop", "show"] {
+        if o.contains_key(step) {
+            let id = str_of(&o, step).trim_start_matches('#').parse::<u64>().map_err(|_| EVERY_USAGE.to_string())?;
+            req.insert("step".into(), json!(step));
+            req.insert("id".into(), json!(id));
+            return Ok(());
+        }
     }
     if pos.is_empty() || pos == ["list"] {
         req.insert("step".into(), json!("list"));
@@ -393,6 +395,10 @@ fn every_req(rest: &[String], req: &mut Map<String, Value>) -> Result<(), String
     let page = str_of(&o, "page");
     if !page.is_empty() {
         req.insert("page".into(), json!(page));
+    }
+    let name = str_of(&o, "name");
+    if !name.trim().is_empty() {
+        req.insert("name".into(), json!(name.trim()));
     }
     Ok(())
 }

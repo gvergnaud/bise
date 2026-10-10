@@ -129,6 +129,7 @@ pub fn scheduled(timers: &crate::every::Timers) -> Vec<bise_proto::rows::Schedul
             agent: t.agent.clone(),
             by: t.by.clone(),
             words: t.text.clone(),
+            name: t.title(),
             every: bise_proto::thread::scheduled::every_words(&t.sched.label(), t.times),
             times: t.times,
             done: t.fired,
@@ -426,6 +427,7 @@ mod tests {
             page: None,
             last_ms: 0,
             runs: vec![],
+            name: if id == 1 { "perf check".into() } else { String::new() },
         };
         let mut timers = Timers::default();
         for x in [
@@ -444,7 +446,10 @@ mod tests {
             line["ev"] = json!("set");
             let task = Task::of(&line).unwrap();
             assert_eq!((r.id, &r.agent, &r.words, &r.every, r.times, r.done), (task.id, &task.agent, &task.text, &task.when(), task.times, task.fired), "#{}", r.id);
+            // the name: the row's and the TUI's title say the same (sched-names)
+            assert_eq!(r.name, task.title(), "#{}", r.id);
         }
+        assert_eq!((rows[0].name.as_str(), rows[1].name.as_str()), ("perf check", "check #2"), "a name, else the fallback");
         let every: Vec<&str> = rows.iter().map(|r| r.every.as_str()).collect();
         assert_eq!(every, ["every 2m", "every day 07:30", "once", "every 1m", "every 5m"]);
     }

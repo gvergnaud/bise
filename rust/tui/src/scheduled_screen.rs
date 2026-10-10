@@ -1,7 +1,8 @@
 //! `/scheduled` (site/m/timers): every scheduled task of every agent,
 //! full screen like /artifacts. The active ones, soonest first; tab shows
-//! the ended ones too (the last 7 days, dim). `/` finds by agent or
-//! words. ⏎ opens one: who it wakes, who set it, how often, the next run,
+//! the ended ones too (the last 7 days, dim). A row shows the task's
+//! name (sched-names), never its words; `/` finds by agent, name or
+//! words. ⏎ opens one: its name, who it wakes, who set it, how often, the next run,
 //! so far, when it ends, the words it sends, its runs. `r` runs it now
 //! (one run outside its count, the next run unchanged), `x` stops it
 //! after a question on the row (`y` stops, `n` or esc keeps). The same
@@ -62,6 +63,7 @@ pub(crate) fn shown(sc: &Screen, all: &[Task]) -> Vec<Task> {
             || t.agent.to_lowercase().contains(&q)
             || t.by.to_lowercase().contains(&q)
             || t.text.to_lowercase().contains(&q)
+            || t.title().to_lowercase().contains(&q)
             || format!("#{}", t.id) == q
     };
     let mut active: Vec<Task> = all.iter().filter(|t| t.active() && hit(t)).cloned().collect();
@@ -138,7 +140,8 @@ fn row(t: &Task, selected: bool, width: usize, now: u64) -> Line<'static> {
         let room = width.saturating_sub(used + 1);
         match &t.page {
             Some(p) => spans.push(Span::styled(format!("↗ {}", cut(p, room.saturating_sub(2))), Style::default().fg(accent()))),
-            None => spans.push(Span::styled(cut(&clip(&t.text, 200), room), st)),
+            // its name (sched-names, designer m_14531); its words open below
+            None => spans.push(Span::styled(cut(&t.title(), room), st)),
         }
     }
     Line::from(spans)
@@ -211,7 +214,7 @@ fn detail_line(sc: &Screen, sel: Option<&Task>, width: usize) -> Line<'static> {
         }
     }
     let Some(t) = sel else { return Line::default() };
-    let mut s = format!("#{} · wakes {} {} · set by {}", t.id, t.agent, t.when(), t.by);
+    let mut s = format!("#{} {} · wakes {} {} · set by {}", t.id, t.title(), t.agent, t.when(), t.by);
     s.push_str(&format!(" · its words: {}", clip(&t.text, 200)));
     Line::from(Span::styled(cut(&s, width), dim_st))
 }
@@ -240,7 +243,7 @@ pub(crate) fn lines(sc: &mut Screen, all: &[Task], width: usize, height: usize, 
     ]));
     // the search
     out.push(if sc.query.is_empty() && !sc.typing {
-        Line::from(Span::styled("/ find: an agent, the words", Style::default().fg(faint())))
+        Line::from(Span::styled("/ find: an agent, a name, the words", Style::default().fg(faint())))
     } else {
         Line::from(vec![
             Span::styled("/ ", Style::default().fg(dim())),
@@ -311,6 +314,7 @@ pub(crate) fn opened_lines(sc: &Screen, t: &Task, width: usize, height: usize, n
         Span::styled(right, Style::default().fg(if t.active() { accent() } else { dim() })),
     ]));
     out.push(Line::default());
+    out.push(label("name", t.title()));
     out.push(label("wakes", t.agent.clone()));
     out.push(label("set by", t.by.clone()));
     let mut when = t.when();

@@ -692,6 +692,11 @@ pub struct ScheduledTask {
     pub by: String,
     /// its words, what the agent reads at each run
     pub words: String,
+    /// its name, what the lists show (sched-names): the hub's model's or
+    /// `--name`, else the plain fallback of its words; always filled by
+    /// the hub (empty only from an older one)
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub name: String,
     pub every: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub times: Option<u64>,

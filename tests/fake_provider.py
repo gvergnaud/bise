@@ -244,6 +244,9 @@ def agent_of(conv):
             # the hub's one-shot call for a task's role line (BISE-126)
             if m["text"].startswith("# bise role line"):
                 return "(role line)"
+            # the hub's one-shot call for a timer's name (sched-names, every_name.rs)
+            if m["text"].startswith("# bise timer name"):
+                return "(timer name)"
             # auto mode's checker as a chat model (approvals, design §4.2)
             if m["text"].startswith("# bise checker"):
                 return "(checker)"
@@ -338,6 +341,10 @@ def reply_for(conv, seen=0):
     [{"id", "name", "args"}], "error", "fixture"}. `seen`: how many
     requests for the same user message came before this one."""
     turn = {"text": "", "reasoning": "", "calls": [], "error": None, "fixture": None}
+    if agent_of(conv) == "(timer name)":
+        # a fixed name, as a model would write it (the hub cleans it: "fake timer name")
+        turn["text"] = "\"Fake Timer Name.\""
+        return turn
     if agent_of(conv) == "(role line)":
         # a fixed line (the tests read it in the snapshot), never a script; FAKE_PLAIN: the line a
         # model would write, from what the agent was asked

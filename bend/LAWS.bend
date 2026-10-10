@@ -4373,6 +4373,20 @@ law times_bound:
   for +at: Nat
   {HTM.under(HTM.Timer.fire(t, 1n+HTM.Timer.fired(t), next, at, False{})) == Bool.not(HTM.spent(t)) : Bool}
 
+# LAW (sched-names, architect m_14532): a timer's name (`every_name`) is
+# its name and nothing else: naming it back gives the same timer, so its
+# schedule, count, next time, runs and words stay as they were.
+law named_keeps_the_rest:
+  for +t: HTM.Timer
+  for +name: String
+  {HTM.Timer.named(HTM.Timer.named(t, name), HTM.Timer.name(t)) == t : HTM.Timer}
+
+# LAW (sched-names): naming a timer gives it that name.
+law named_is_the_name:
+  for +t: HTM.Timer
+  for +name: String
+  {HTM.Timer.name(HTM.Timer.named(t, name)) == name : String}
+
 # LAW: dropping (archiving) a task leaves no live timer of it, in the same
 # step (beside stop_leaves_no_waiter). A stop (`sb stop`) keeps them: they
 # wait, as before.

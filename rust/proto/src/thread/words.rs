@@ -224,6 +224,63 @@ pub fn one_line(s: &str, max: usize) -> String {
     out
 }
 
+/// The longest a scheduled task's name shows (designer m_14531): past it,
+/// [`name_fit`] ends it with `…` at a word.
+pub const NAME_MAX: usize = 32;
+
+/// A scheduled task's plain name when no model named it (designer
+/// m_14531, architect m_14532: the one fallback, for the hub's every_name,
+/// its rows and an old hub's lines): the first 5 words of its
+/// instruction, without a leading `agent-name:` tag, paths (`/`, `~`,
+/// `$`), flags (`-x`) or quotes, cut at a word past [`NAME_MAX`].
+pub fn timer_fallback(text: &str) -> String {
+    let mut words = text.split_whitespace().peekable();
+    // `amb-core: read …`: the tag repeats who it wakes
+    if words.peek().is_some_and(|w| w.len() > 1 && w.ends_with(':') && !w[..w.len() - 1].contains(':')) {
+        words.next();
+    }
+    let quote = |c: char| matches!(c, '"' | '\'' | '`' | '«' | '»' | '“' | '”' | '(' | ')' | '[' | ']');
+    let kept: Vec<String> = words
+        .filter(|w| !(w.contains('/') || w.starts_with('~') || w.starts_with('$') || w.starts_with('-')))
+        .map(|w| w.chars().filter(|c| !quote(*c)).collect::<String>())
+        .map(|w| w.trim_end_matches([',', ';', ':', '.']).to_string())
+        .filter(|w| !w.is_empty())
+        .take(5)
+        .collect();
+    let name = name_fit(&kept.join(" "));
+    if name.is_empty() {
+        one_line(text, NAME_MAX)
+    } else {
+        name
+    }
+}
+
+/// A name on one line, at most [`NAME_MAX`] characters, never cut inside
+/// a word: past it, the words that fit then `…` (a first word longer
+/// than that is cut, the only way to show it).
+pub fn name_fit(name: &str) -> String {
+    let one = name.split_whitespace().collect::<Vec<_>>().join(" ");
+    if one.chars().count() <= NAME_MAX {
+        return one;
+    }
+    let mut out = String::new();
+    for w in one.split(' ') {
+        let n = out.chars().count() + usize::from(!out.is_empty()) + w.chars().count();
+        if n + 1 > NAME_MAX {
+            break;
+        }
+        if !out.is_empty() {
+            out.push(' ');
+        }
+        out.push_str(w);
+    }
+    if out.is_empty() {
+        out = one.chars().take(NAME_MAX - 1).collect();
+    }
+    out.push('…');
+    out
+}
+
 /// The tools entry's counted words: "read 6 files, ran 4 commands".
 pub fn summary(items: &[ToolItem]) -> String {
     let n = |k: ToolKind| items.iter().filter(|i| i.kind == k).count();
@@ -322,6 +379,31 @@ mod tests {
         assert_eq!(no_key("MISTRAL_API_KEY is not set", &name).as_deref(), Some("turn stopped: no <MISTRAL_API_KEY> key yet. /provider sets it up."));
         assert_eq!(no_key("the network is down", &name), None);
         assert!(is_plan_line("your ChatGPT sign-in expired. run /provider") && is_expired_line("your ChatGPT sign-in expired."));
+    }
+
+    /// designer m_14531: the first 5 words, no tag, path, flag or quote,
+    /// never cut mid-word (the user's screenshot's instructions).
+    #[test]
+    fn a_timer_without_a_name_gets_its_first_words() {
+        let f = timer_fallback;
+        assert_eq!(f("check /Users/g/.bise/hubs/h/agents/art-seen/tmp/res and rc (tui_artifacts repro)"), "check and rc tui_artifacts repro");
+        assert_eq!(f("amb-win: read /Users/g/tmp/b1land.out (test:land f..."), "read test:land f");
+        assert_eq!(f("P4c-4a: read $TMPDIR/s4a.rc/s4a.out (cargo check of the shared-type change)"), "read cargo check of the");
+        assert_eq!(f("amb-core: streaming bench: queue empty? (pgrep -fl 'heavy-run|lockf'; uptime"), "streaming bench queue empty?…", "cut at a word past 32");
+        assert_eq!(f("standing rule (main m_7436, m_9222), battery mode"), "standing rule main m_7436 m_9222");
+        assert_eq!(f("/a/b /c"), "/a/b /c", "nothing left: the instruction's own first line");
+        assert_eq!(f("supercalifragilisticexpialidocious-and-more-words-here"), "supercalifragilisticexpialidoci…");
+        for s in ["ship it", "x"] {
+            assert_eq!(f(s), s);
+        }
+    }
+
+    #[test]
+    fn a_name_is_cut_at_a_word() {
+        assert_eq!(name_fit("amb-core streaming bench"), "amb-core streaming bench");
+        assert_eq!(name_fit("check the desktop drive and the plan of ambient-lead"), "check the desktop drive and the…");
+        assert!(name_fit("check the desktop drive and the plan of ambient-lead").chars().count() <= NAME_MAX);
+        assert_eq!(name_fit("  two\n words "), "two words");
     }
 
     #[test]

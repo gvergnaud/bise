@@ -23,7 +23,8 @@ fn fixture() -> Vec<Task> {
     let mut a = task(48, "answer-line", MIN);
     a.times = Some(6);
     a.fired = 2;
-    let b = task(53, "designer", 10 * MIN);
+    let mut b = task(53, "designer", 10 * MIN);
+    b.name = "designer review".into();
     let mut gone = task(47, "sock-path", 0);
     gone.ended_ms = Some(NOW - 30 * MIN);
     gone.end = "times".into();
@@ -47,7 +48,7 @@ fn the_list_soonest_first_then_ended_on_tab_and_find() {
     let (ls, hits) = lines(&mut sc, &all, 150, 24, NOW);
     let t = texts(&ls);
     assert!(t[0].starts_with("scheduled · what wakes your agents, and when") && t[0].ends_with("2 active · 2 ended   tab active only"), "{}", t[0]);
-    assert_eq!(t[1], "/ find: an agent, the words");
+    assert_eq!(t[1], "/ find: an agent, a name, the words");
     assert!(t[3].starts_with("› #48  ◷ answer-line") && t[3].contains("every 2m") && t[3].contains("in 1m") && t[3].contains("2 of 6"), "{}", t[3]);
     assert!(t.iter().any(|l| l.trim() == "ended"));
     assert!(t.iter().any(|l| l.contains("#44") && l.contains("stopped by you")), "{t:?}");
@@ -55,6 +56,12 @@ fn the_list_soonest_first_then_ended_on_tab_and_find() {
     assert_eq!(hits.len(), 4);
     assert!(t[t.len() - 1].starts_with("⏎ open   r run now   x stop   / find   tab active only   esc close"), "{}", t[t.len() - 1]);
     sc.query = "designer".into();
+    assert_eq!(shown(&sc, &all).iter().map(|t| t.id).collect::<Vec<_>>(), vec![53]);
+    // sched-names: a row shows its name (else the plain fallback), never
+    // its words; / finds a name
+    assert!(t.iter().any(|l| l.contains("#53") && l.ends_with("designer review")), "{t:?}");
+    assert!(t[3].ends_with("check the build for answer-line"), "{}", t[3]);
+    sc.query = "review".into();
     assert_eq!(shown(&sc, &all).iter().map(|t| t.id).collect::<Vec<_>>(), vec![53]);
 }
 

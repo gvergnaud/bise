@@ -78,11 +78,13 @@ type Ev is Data:
   EMainNote{text: String, at: Nat}
   ENotesFlushed{}
   # the timers of `sb every` (timers.bend): every_set, every_fired (an
-  # old line may say `undelivered`), every_run, every_stop
+  # old line may say `undelivered`), every_run, every_stop, every_name
+  # (its name, from the hub's small model or its plain fallback)
   ETimerSet{t: TM.Timer, at: Nat}
   ETimerFired{id: Nat, fired: Nat, next: Nat, at: Nat, undelivered: Bool}
   ETimerRun{id: Nat, at: Nat}
   ETimerStop{id: Nat, why: String, at: Nat}
+  ETimerName{id: Nat, name: String, at: Nat}
   # bise desktop S2: the cross-hub state's lines (xhub-model.bend) and
   # the acts' (timers.bend): one constructor each, their kinds inside
   EX{e: XH.XEv}
@@ -574,6 +576,8 @@ def apply(+st: St, e: Ev) -> St:
           St{agents, order, msgs, cards, notes, nm, nc, TM.run(tm, id, at), xs}
         case ETimerStop{+id, +why, +at}:
           St{agents, order, msgs, cards, notes, nm, nc, TM.stop(tm, id, why, at), xs}
+        case ETimerName{+id, +name, _}:
+          St{agents, order, msgs, cards, notes, nm, nc, TM.named(tm, id, name), xs}
         case EX{+xe}:
           St{agents, order, msgs, cards, notes, nm, nc, tm, XH.apply(xs, xe)}
         case EAct{+ae}:

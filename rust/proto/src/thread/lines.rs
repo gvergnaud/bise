@@ -622,15 +622,22 @@ pub fn shown_name(name: &str) -> String {
 }
 
 /// A timer's wake an agent reads from bise (every.rs `wake_text`):
-/// `timer #48 (every 2m, 2/6, set by x): <words>` then the stop hint.
-/// Its id, the parenthesis's parts and its words; None: not a wake.
-pub fn timer_wake(text: &str) -> Option<(u64, &str, &str)> {
+/// `timer #48 "<name>" (every 2m, 2/6, set by x): <words>` then the stop
+/// hint; an older hub's has no name (`timer #48 (every 2m, …): …`, law
+/// an_old_wake_still_reads). Its id, its name ("" in the old shape), the
+/// parenthesis's parts and its words; None: not a wake.
+pub fn timer_wake(text: &str) -> Option<(u64, &str, &str, &str)> {
     let rest = text.strip_prefix("timer #")?;
-    let (id, rest) = rest.split_once(" (")?;
+    let (id, rest) = rest.split_once(" ")?;
     let id = id.parse().ok()?;
+    let (name, rest) = match rest.strip_prefix('"') {
+        Some(r) => r.split_once("\" ")?,
+        None => ("", rest),
+    };
+    let rest = rest.strip_prefix('(')?;
     let (how, words) = rest.split_once("): ")?;
     let words = words.rsplit_once("\n(stop it: sb every --stop ").map_or(words, |(w, _)| w);
-    Some((id, how, words))
+    Some((id, name, how, words))
 }
 
 /// The note bise sends an agent when he stops its scheduled task (for
