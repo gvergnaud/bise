@@ -49,9 +49,9 @@ fn agent(name: &str) -> bise_proto::rows::Agent {
     a
 }
 
-/// What a terminal reads before its first frame: the hub's lines (hello,
-/// hub/agents and hub/cards typed, then approvals and ready around the
-/// pages) and the first pages as JSON (`agent`, its entries).
+/// What a terminal reads before its first frame: the hub's lines
+/// (initialize's answer with hub/agents and hub/cards in its state, P4e-1)
+/// and the first pages as JSON (`agent`, its entries).
 struct Start {
     head: Vec<String>,
     pages: Vec<(String, String)>,
@@ -62,11 +62,16 @@ struct Start {
 /// first `paged` of them subscribed.
 fn start(agents: usize, each: usize, paged: usize) -> Start {
     let names: Vec<String> = (0..agents).map(|i| if i == 0 { "main".to_string() } else { format!("t{i}") }).collect();
-    let mut head = vec![json!({"ev": "hello", "workspace": "/ws", "exe": "", "version": {"id": "bench"}, "reload": ""}).to_string()];
-    head.extend(crate::sb::hub_reads::rows_for_tests::lines(names.iter().map(|n| agent(n)).collect(), vec![]));
+    let state: Vec<serde_json::Value> = crate::sb::hub_reads::rows_for_tests::lines(names.iter().map(|n| agent(n)).collect(), vec![])
+        .iter()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let res = json!({"project": "p", "proto": bise_proto::PROTO, "workspace": "/ws", "name": "ws", "exe": "", "version": {"id": "bench"},
+        "reload": "", "methods": [], "notifications": [], "hub": {"watermark": {"epoch": 1, "seq": 0}, "state": state}});
+    let head = vec![json!({"jsonrpc": "2.0", "id": 0, "result": res}).to_string()];
     let entries = serde_json::to_string(&fold_lines(&lines(each, 1, 1_700_000_000_000))).unwrap();
     let pages = names.iter().take(paged).map(|n| (n.clone(), entries.clone())).collect();
-    let tail = vec![json!({"ev": "approvals", "mode": "auto", "rules": []}).to_string(), json!({"ev": "ready"}).to_string()];
+    let tail = Vec::new();
     Start { head, pages, tail }
 }
 

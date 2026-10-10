@@ -1,7 +1,8 @@
 //! The terminal's JSON-RPC requests (client-protocol step 3, architect
 //! m_13089): its actions go to the hub as typed methods
-//! (`bise_proto::rpc`'s tables), on its hello connection, one zone at a
-//! time; it still reads the hub's older events until step 4.
+//! (`bise_proto::rpc`'s tables), on its connection opened with
+//! `initialize` (step 4, P4e-1: hub_reads.rs reads its answer and the
+//! hub's notifications).
 //!
 //! [`Sb::call`] sends one request (the hub's `project` added) and keeps
 //! what to do with its answer ([`Then`]); [`answered`] runs it when the
@@ -55,6 +56,9 @@ pub(crate) enum Then {
     /// or `thread/page` (the `before` asked) for this agent: entries
     /// placed by pos (sb/feed_entries.rs)
     Thread(String, Option<usize>),
+    /// `hub/read` (a gap or a new epoch in the hub-wide notifications):
+    /// its state replaces the terminal's (hub_reads.rs)
+    HubRead,
 }
 
 /// The requests waiting for their answer, by id (cells: a popup asks
@@ -63,6 +67,13 @@ pub(crate) enum Then {
 pub(crate) struct Calls {
     next: Cell<u64>,
     waiting: RefCell<BTreeMap<u64, (&'static str, Then)>>,
+    /// `initialize` answered on this connection (hub_reads.rs)
+    pub(crate) initialized: bool,
+    /// the hub-wide notifications taken so far (`rpc::Watermark::take`)
+    pub(crate) wm: bise_proto::rpc::Watermark,
+    /// a `hub/read` on its way: the hub-wide notifications before its
+    /// answer are in its state
+    pub(crate) reading: bool,
 }
 
 impl Calls {
@@ -75,9 +86,12 @@ impl Calls {
     }
 
     /// A reconnection: the requests sent on the lost connection get no
-    /// answer (the hub's events tell what happened).
+    /// answer (the hub's events tell what happened); the new one starts
+    /// with `initialize` again.
     pub(crate) fn forget(&mut self) {
         self.waiting.get_mut().clear();
+        self.initialized = false;
+        self.reading = false;
     }
 }
 
@@ -153,7 +167,9 @@ fn run(app: &mut App, then: Then, r: Response) {
                 None => refused(app, &e),
             }
         }
+        (Then::HubRead, Err(_)) => app.sb.rpc.reading = false,
         (_, Err(e)) => refused(app, &e),
+        (Then::HubRead, Ok(v)) => hub_reads::reread(app, v),
         (Then::Shown | Then::RuleRemoved, Ok(_)) => {}
         (Then::Approvals, Ok(v)) => {
             if let Ok(Some(ev)) = bise_proto::rpc::ev_of_result("approvals/set", v) {

@@ -67,7 +67,7 @@ pub(crate) use keys::{scene, Scene};
 #[cfg(test)]
 use keys::{nav_key, Nav};
 pub use client::{run_switchboard, take_reexec, take_refused};
-pub use hub_reads::hello_line;
+pub use hub_reads::init_line;
 pub use tune::setup_main;
 use client::{follow_hub_exe, follow_reload, HUB_DOWN, HUB_UP};
 #[cfg(test)]
@@ -323,11 +323,6 @@ impl Approvals {
     pub(crate) fn word(&self) -> &str {
         if self.mode.is_empty() { "yolo" } else { &self.mode }
     }
-}
-
-/// The string field `k` of `v` ("" when absent).
-fn str_of(v: &Value, k: &str) -> String {
-    v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string()
 }
 
 impl Sb {
@@ -659,54 +654,16 @@ pub(super) fn dispatch(app: &mut App, raw: &str) {
     // a JSON-RPC response (client-protocol step 3): its request's answer;
     // a notification (step 4): its typed reader
     if v.get("jsonrpc").is_some() {
-        return if v.get("method").is_none() { rpc::answered(app, v) } else { hub_reads::read(app, v) };
+        if hub_reads::init(app, &v) {
+            return;
+        }
+        if v.get("method").is_none() {
+            rpc::answered(app, v)
+        } else {
+            hub_reads::read(app, v)
+        }
     }
-    let s = |k: &str| str_of(&v, k);
-    match s("ev").as_str() {
-        // the hub refused this client (it runs in an agent's process,
-        // docs/issues/16): say why once the terminal is back, and end
-        "refused" => {
-            client::set_refused(s("error"));
-            app.should_quit = true;
-        }
-        "hello" => {
-            let sb = &mut app.sb;
-            sb.workspace = s("workspace");
-            crate::artifacts::set_workspace(&sb.workspace);
-            sb.version = v
-                .pointer("/version/id")
-                .and_then(|x| x.as_str())
-                .unwrap_or("")
-                .to_string();
-            // the hub runs another version: this TUI follows it
-            let exe = s("exe");
-            let reload = s("reload");
-            let first = sb.reload_seen.is_none();
-            let reloaded = !first && !reload.is_empty() && sb.reload_seen.as_deref() != Some(reload.as_str());
-            if first {
-                sb.reload_seen = Some(reload);
-            }
-            // a reload (BISE-131) starts the same binary again; both wait
-            // for the keys to stop (sb/reload_wait.rs, run.rs quits); the
-            // drafts, queues and view are written when the UI ends
-            if (!exe.is_empty() && follow_hub_exe(&exe)) || (reloaded && follow_reload()) {
-                app.sb.reload_wait.ask(std::time::Instant::now());
-            }
-            // P4d-feed: the threads it shows, from the hub's entries
-            feed_entries::on_connect(app);
-        }
-        "ready" => {
-            let sb = &mut app.sb;
-            sb.ready = true;
-            // the queues saved by the TUI before this one (a reload, a
-            // restart): back now that the feeds say who is busy
-            drafts::requeue(app);
-            // the inbox answers and what was open (a reload), once the
-            // focus's feed is in (its first page)
-            feed_entries::on_ready(app);
-        }
-        _ => {}
-    }
+    // an older event line: none comes on an initialized connection
 }
 
 /// The answer to card `id` just read (its events: `at`): what the item

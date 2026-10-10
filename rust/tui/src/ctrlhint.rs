@@ -668,7 +668,6 @@ mod frame_tests {
     use crate::run::draw_frame;
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
-    use serde_json::json;
 
     /// main working, a long bash call (a closed box), two agents, a card.
     pub(super) fn busy_app() -> App {
@@ -678,7 +677,7 @@ mod frame_tests {
             vec![crate::sb::hub_reads::rows_for_tests::agent("main", "working", ""), crate::sb::hub_reads::rows_for_tests::agent("docs", "working", "write the docs")],
             vec![crate::sb::hub_reads::rows_for_tests::card(7, "question", "docs", "v1 or v2?")],
         );
-        crate::sb::dispatch(&mut app, &json!({"ev": "ready"}).to_string());
+        crate::sb::hub_reads::ready(&mut app);
         let cmd: String = (1..=60).map(|i| format!("echo {i}")).collect::<Vec<_>>().join("\n");
         let code = &format!("tool_code #4 : {}", cmd.replace('\\', "\\\\").replace('\n', "\\N"));
         crate::sb::entries_for_tests::lines(&mut app, "main", &["sb you : ship it", "  obs: tool_started #4", "tool #4 bash : echo", code, "  obs: tool_finished #4 ok"]);

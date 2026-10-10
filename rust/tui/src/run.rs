@@ -603,7 +603,6 @@ mod zen_tests {
     use ratatui::backend::TestBackend;
     use ratatui::buffer::Buffer;
     use ratatui::Terminal;
-    use serde_json::json;
     use std::time::Instant;
 
     /// One event through the loop's handlers and zen, at `now`.
@@ -635,7 +634,7 @@ mod zen_tests {
     fn app_with_agents() -> App {
         let mut app = crate::sb::bench::test_app();
         crate::sb::hub_reads::rows_for_tests::apply(&mut app, vec![crate::sb::hub_reads::rows_for_tests::agent("main", "idle", ""), crate::sb::hub_reads::rows_for_tests::agent("docs", "working", "write the docs")], vec![]);
-        sb::dispatch(&mut app, &json!({"ev": "ready"}).to_string());
+        crate::sb::hub_reads::ready(&mut app);
         crate::sb::entries_for_tests::lines(&mut app, "main", &["sb you : ship it"]);
         app
     }

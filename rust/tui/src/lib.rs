@@ -146,7 +146,7 @@ mod feed_render_tests;
 #[cfg(test)]
 mod quiet_send_tests;
 pub use keyprobe::keyprobe;
-pub use sb::{hello_line, run_switchboard, setup_main, take_reexec, take_refused};
+pub use sb::{init_line, run_switchboard, setup_main, take_reexec, take_refused};
 pub use keycheck::check_model;
 pub use crash::install as install_crash_hook;
 

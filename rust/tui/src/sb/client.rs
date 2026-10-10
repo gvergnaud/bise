@@ -44,7 +44,7 @@ pub fn take_reexec() -> Option<String> {
     REEXEC.lock().ok().and_then(|mut r| r.take())
 }
 
-/// Why the hub refused this TUI's hello (`{"ev":"refused"}`: it runs in
+/// Why the hub refused this TUI's `initialize` (REFUSED: it runs in
 /// an agent's process, docs/issues/16): printed by the caller once the
 /// terminal is restored.
 static REFUSED: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
@@ -95,7 +95,7 @@ fn hub_reader(
             thread::sleep(std::time::Duration::from_millis(250));
             let Ok(mut s) = UnixStream::connect(&socket) else { continue };
             let Ok(w) = s.try_clone() else { continue };
-            if s.write_all(super::hub_reads::hello_line().as_bytes()).is_err() {
+            if s.write_all(super::hub_reads::init_line().as_bytes()).is_err() {
                 continue;
             }
             if let Ok(mut slot) = writer.lock() {
@@ -197,8 +197,8 @@ pub fn run_switchboard(
     }
 }
 
-/// No terminal on stdin or stdout: `bise` runs in line mode (its hello
-/// reads the threads' entries, hub_reads.rs's READS).
+/// No terminal on stdin or stdout: `bise` runs in line mode (it prints
+/// the entries of the threads it subscribes).
 pub(crate) fn line_mode_now() -> bool {
     !(io::stdout().is_terminal() && io::stdin().is_terminal())
 }
@@ -287,7 +287,7 @@ pub(crate) fn hub_event_lines(raw: &str, printed: &mut Printed) -> Vec<String> {
     };
     // a thread's entry (client-protocol step 4): its lines not printed yet
     if v.get("jsonrpc").is_some() {
-        // the hub's words and its yes/no (hub_reads.rs's READS)
+        // the hub's words and its yes/no (hub/notice, confirm/ask)
         if let Some(text) = said(&v) {
             return vec![format!("[hub] {text}")];
         }
@@ -298,7 +298,7 @@ pub(crate) fn hub_event_lines(raw: &str, printed: &mut Printed) -> Vec<String> {
         let Some((agent, e)) = entry_of(v) else { return Vec::new() };
         return print_entry(printed, &agent, &e);
     }
-    // P4d-feed f-c: no older `line` comes (READS); the rest prints nothing
+    // P4d-feed f-c: no older `line` comes (initialized: typed only); the rest prints nothing
     Vec::new()
 }
 

@@ -34,10 +34,11 @@ pub(super) fn subscribe(app: &mut App, agent: &str) {
     sb.call("thread/subscribe", json!({"agent": agent, "limit": PAGE_ENTRIES}), rpc::Then::Thread(agent.to_string(), None));
 }
 
-/// The threads to subscribe after a (re)connection (the hub's `hello`):
+/// The threads to subscribe after a (re)connection (`initialize`'s
+/// answer, sb/hub_reads.rs):
 /// the focus, then every agent whose feed this terminal keeps (voice
 /// mode's agent is one: it was the focus when voice mode started). The
-/// terminal is ready once `ready` came and the focus's first page is in
+/// terminal is ready once `initialize` answered and the focus's first page is in
 /// ([`on_ready`], [`first_page_in`]).
 pub(super) fn on_connect(app: &mut App) {
     app.sb.subscribed.clear();
@@ -51,7 +52,8 @@ pub(super) fn on_connect(app: &mut App) {
     }
 }
 
-/// The hub's `ready`: what was open (a reload) and the inbox answers come
+/// The terminal is ready (`initialize` answered, its state applied and
+/// the threads subscribed): what was open (a reload) and the inbox answers come
 /// back now, or once the focus's first page is in (the scroll they
 /// restore needs the feed).
 pub(super) fn on_ready(app: &mut App) {

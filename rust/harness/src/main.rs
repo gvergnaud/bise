@@ -387,10 +387,10 @@ fn run_switchboard(args: &[String], debug: bool) -> std::io::Result<()> {
     // daily check): the hub moves to it first (BISE-255), agents kept
     switchboard::switch::follow_install(&paths, &root, &|s| eprintln!("{}", s));
     bend_tui::timing::mark("start (connecting)");
-    // the terminal's hello lists the hub's notifications it reads typed
+    // the terminal's first line: initialize (its answer holds the hub's state)
     let mut stream = switchboard::client::open(&paths, &exe, &root)?;
-    std::io::Write::write_all(&mut stream, bend_tui::hello_line().as_bytes())?;
-    bend_tui::timing::mark("connected, hello sent");
+    std::io::Write::write_all(&mut stream, bend_tui::init_line().as_bytes())?;
+    bend_tui::timing::mark("connected, initialize sent");
     bend_tui::run_switchboard(
         stream,
         tui_socket(&paths),

@@ -1,11 +1,15 @@
 //! The hub's notifications the terminal reads typed (client-protocol
-//! step 4, P4c; plan v2 signed by architect m_13977): its hello lists
-//! them in `reads` ([`READS`]) and the hub sends them instead of their
-//! older events (`bise_proto::rpc::OLDER`, one kind at a time, never
-//! twice). Each reader takes the typed `HubEv` (`rpc::ev` of the
-//! notification), so the terminal and the window read one shape; the
-//! other kinds still come the older way (sb.rs's dispatch) until their
-//! chunk moves them.
+//! step 4; plan v2 signed by architect m_13977), on a connection opened
+//! with `initialize` (P4e-1: [`init_line`]): its answer says who the hub
+//! is (the workspace, the version it runs, a reload) and holds the
+//! hub-wide state at a watermark ([`initialized`]); then each hub-wide
+//! notification goes through the watermark (`rpc::Watermark::take`: the
+//! next one applies, a seen one is skipped, a gap or a new epoch reads
+//! `hub/read` again, whose state replaces it). The terminal is ready then
+//! ([`ready`]); what keep-state restores waits for the first page of the
+//! thread it shows (sb/feed_entries.rs `first_page_in`). Each
+//! reader takes the typed `HubEv` (`rpc::ev` of the notification), so the
+//! terminal and the window read one shape.
 //!
 //! - `hub/approvals`: the mode for the key bar, the checker and the rules
 //!   (`/approvals`' read, approvals/set without a mode, opens the screen
@@ -29,28 +33,146 @@
 use super::*;
 use bise_proto::hub::HubEv;
 use bise_proto::rows::{ApprovalMode, ApprovalRule, CheckerKind};
-use bise_proto::rpc::{self, Message};
+use bise_proto::rpc::{self, HubState, Id, Init, InitializeParams, InitializeResult, Message, Notification, Request, Take};
 
-/// The notifications this terminal reads typed: whole rows of
-/// `bise_proto::rpc::OLDER` (a half-listed row comes the older way).
-// TODO(client-protocol step 4's end, P4e): the hello's `reads` goes when
-// the terminal connects with `initialize`
-pub(crate) const READS: &[&str] = &["hub/approvals", "confirm/ask", "hub/artifacts", "hub/agents", "hub/cards", "hub/scheduled", "hub/flow", "hub/notice", "card/open", "client/focused", "hub/versions", "release/progress", "update/progress", "thread/entry", "thread/typing"];
+/// `initialize`'s id (the terminal's requests start at 1, sb/rpc.rs).
+const INIT: u64 = 0;
 
-/// The terminal's first line on the hub's socket: `hello` with [`READS`]
-/// (the screen and line mode alike read the threads' entries and steps
-/// they subscribe, P4d-feed: never an older `line`).
-pub fn hello_line() -> String {
-    let reads = READS.to_vec();
-    format!("{}\n", json!({"op": "hello", "reads": reads}))
+/// The terminal's first line on the hub's socket (at start and on every
+/// reconnection): `initialize`, this client's name and version.
+pub fn init_line() -> String {
+    let params = serde_json::to_value(InitializeParams::new("bise-tui", env!("CARGO_PKG_VERSION"))).unwrap_or_default();
+    format!("{}\n", Message::Request(Request::new(Id::Num(INIT), rpc::INITIALIZE, params)).to_value())
+}
+
+/// `initialize`'s answer (until it came on this connection): the hub's
+/// facts and state; the hub refused this client (it runs in an agent's
+/// process, docs/issues/16): why, and the terminal ends; an older hub
+/// that doesn't serve it: the same, with what to do. True: the line was
+/// that answer.
+pub(super) fn init(app: &mut App, v: &Value) -> bool {
+    if app.sb.rpc.initialized {
+        return false;
+    }
+    match rpc::init_answer(v, &Id::Num(INIT)) {
+        Init::Ready(res) => initialized(app, *res),
+        Init::Refused(why) => {
+            client::set_refused(why);
+            app.should_quit = true;
+        }
+        Init::Older => {
+            client::set_refused("the hub runs an older bise, which this terminal can't read: `bise stop`, then `bise` again".into());
+            app.should_quit = true;
+        }
+        Init::Other => return false,
+    }
+    true
+}
+
+/// `initialize` answered: who the hub is (the terminal follows its
+/// version: another binary, or a reload), its state at its watermark,
+/// then the thread in view subscribed (its first page makes the terminal
+/// ready).
+fn initialized(app: &mut App, res: InitializeResult) {
+    let sb = &mut app.sb;
+    sb.rpc.initialized = true;
+    sb.workspace = res.workspace;
+    crate::artifacts::set_workspace(&sb.workspace);
+    sb.version = res.version.pointer("/id").and_then(Value::as_str).unwrap_or("").to_string();
+    let first = sb.reload_seen.is_none();
+    let reloaded = !first && !res.reload.is_empty() && sb.reload_seen.as_deref() != Some(res.reload.as_str());
+    if first {
+        sb.reload_seen = Some(res.reload);
+    }
+    // a reload (BISE-131) starts the same binary again; both wait for the
+    // keys to stop (sb/reload_wait.rs, run.rs quits); the drafts, queues
+    // and view are written when the UI ends
+    if (!res.exe.is_empty() && follow_hub_exe(&res.exe)) || (reloaded && follow_reload()) {
+        app.sb.reload_wait.ask(std::time::Instant::now());
+    }
+    // the threads first (the older hello's place, before its burst): the
+    // agents rows then subscribe the other live agents, never the focus
+    // twice (a second first page would replace the restored scroll)
+    feed_entries::on_connect(app);
+    apply_state(app, res.hub);
+    ready(app);
+}
+
+/// The hub-wide state (`initialize`'s, `hub/read`'s): its watermark, and
+/// each kind's notification in the order the older hello burst had them
+/// (the agents, cards, scheduled tasks and flow first, the approvals,
+/// the artifacts last), so the readers' side effects come as before.
+fn apply_state(app: &mut App, st: HubState) {
+    app.sb.rpc.wm = st.watermark;
+    let mut notes = st.state;
+    notes.sort_by_key(|n| burst_rank(&n.method));
+    for n in &notes {
+        apply(app, n);
+    }
+}
+
+/// A kind's place in the state's order (stable: the hub's order inside
+/// one rank).
+fn burst_rank(method: &str) -> u8 {
+    match method {
+        "hub/agents" => 0,
+        "hub/cards" => 1,
+        "hub/scheduled" => 2,
+        "hub/flow" => 3,
+        "hub/approvals" => 5,
+        "hub/artifacts" => 6,
+        _ => 4,
+    }
+}
+
+/// `hub/read`'s answer (a gap or a new epoch): the state again.
+pub(super) fn reread(app: &mut App, v: Value) {
+    app.sb.rpc.reading = false;
+    if let Ok(st) = serde_json::from_value::<HubState>(v) {
+        apply_state(app, st);
+    }
+}
+
+/// The terminal is ready (what the older `ready` event did, once
+/// `initialize` answered): the queues saved by the terminal before this
+/// one (a reload, a restart) come back now that the agents rows say who
+/// is busy; what was open and the scroll (keep-state) once the focus's
+/// first page is in (feed_entries::on_ready, first_page_in).
+pub(crate) fn ready(app: &mut App) {
+    app.sb.ready = true;
+    drafts::requeue(app);
+    feed_entries::on_ready(app);
 }
 
 /// A JSON-RPC notification from the hub (a line with `jsonrpc` and a
-/// `method`): its typed reader. A method this terminal doesn't read
-/// (a newer hub's): nothing.
+/// `method`): a hub-wide one through the watermark, then its typed
+/// reader. A method this terminal doesn't read (a newer hub's): nothing.
 pub(super) fn read(app: &mut App, v: Value) {
     let Ok(Message::Notification(n)) = Message::from_value(v) else { return };
-    let Ok((ev, _watermark)) = rpc::ev(&n) else { return };
+    let Ok((_, Some(w))) = rpc::ev(&n) else { return apply(app, &n) };
+    let calls = &mut app.sb.rpc;
+    // no watermark before initialize's answer (its state replaces what
+    // came before it)
+    if !calls.initialized {
+        return apply(app, &n);
+    }
+    // a `hub/read` on its way: its state covers what comes before it
+    if calls.reading {
+        return;
+    }
+    match calls.wm.take(w) {
+        Take::Apply => apply(app, &n),
+        Take::Skip => {}
+        Take::Resync => {
+            app.sb.rpc.reading = true;
+            app.sb.call(rpc::HUB_READ, json!({}), super::rpc::Then::HubRead);
+        }
+    }
+}
+
+/// One notification's typed reader.
+fn apply(app: &mut App, n: &Notification) {
+    let Ok((ev, _)) = rpc::ev(n) else { return };
     match &ev {
         HubEv::Approvals { .. } => approvals(app, &ev, false),
         HubEv::Confirm { id, text, .. } => confirm(app, *id, text),
@@ -256,9 +378,9 @@ fn confirm(app: &mut App, id: u64, text: &str) {
     sb.calls += 1;
 }
 
-/// The hub's typed state rows for tests (what the hub sends after a
-/// hello that lists [`READS`]): an agent by its status word, a card by
-/// its words, their notifications as the lines `dispatch` reads.
+/// The hub's typed state rows for tests (what an initialized connection
+/// gets): an agent by its status word, a card by its words, their
+/// notifications as the lines `dispatch` reads.
 #[cfg(test)]
 pub(crate) mod rows_for_tests {
     use bise_proto::hub::HubEv;
@@ -323,19 +445,88 @@ pub(crate) mod rows_for_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bise_proto::rpc::Watermark;
 
     fn note(ev: &HubEv) -> Value {
         Message::Notification(rpc::note(ev, None).unwrap()).to_value()
     }
 
+    /// `initialize`'s answer with the hub-wide state `notes` at `wm`.
+    fn init_answer(notes: Vec<Notification>, wm: Watermark) -> String {
+        let res = json!({"project": "p", "proto": bise_proto::PROTO, "workspace": "/ws", "name": "ws", "exe": "",
+            "version": {"id": "v9"}, "reload": "", "methods": [], "notifications": [],
+            "hub": {"watermark": wm, "state": notes}});
+        Message::Response(rpc::Response::ok(Id::Num(INIT), res)).to_value().to_string()
+    }
+
+    fn numbered(ev: &HubEv, seq: u64) -> String {
+        Message::Notification(rpc::note(ev, Some(Watermark { epoch: 3, seq })).unwrap()).to_value().to_string()
+    }
+
+    fn flow(f: bise_proto::rows::FlowMode) -> HubEv {
+        HubEv::Flow { project: "p".into(), flow: Some(f) }
+    }
+
     #[test]
-    fn the_hello_lists_whole_older_rows_only() {
-        let listed: Vec<String> = READS.iter().map(|s| s.to_string()).collect();
-        let reads = rpc::reads_of(&listed);
-        assert_eq!(reads.len(), READS.len(), "every method listed is part of a whole OLDER row");
-        assert!(reads.contains("thread/entry") && reads.contains("thread/typing"), "the feeds read entries, never an older line");
-        let hello: Value = serde_json::from_str(hello_line().trim()).unwrap();
-        assert_eq!((hello["op"].as_str(), hello["reads"].as_array().map(Vec::len)), (Some("hello"), Some(READS.len())));
+    fn the_first_line_is_initialize() {
+        let v: Value = serde_json::from_str(init_line().trim()).unwrap();
+        assert_eq!((v["method"].as_str(), v["id"].as_u64(), v["params"]["client"]["name"].as_str()), (Some("initialize"), Some(INIT), Some("bise-tui")));
+        assert_eq!(v["params"]["proto"], bise_proto::PROTO);
+    }
+
+    #[test]
+    fn initialize_answered_gives_the_facts_and_the_state_in_the_bursts_order() {
+        let mut app = crate::sb::bench::test_app();
+        let agents = rows_for_tests::lines(vec![rows_for_tests::agent("main", "idle", ""), rows_for_tests::agent("docs", "working", "the docs")], vec![rows_for_tests::card(4, "question", "docs", "v1?")]);
+        let notes: Vec<Notification> = agents.iter().rev().map(|l| match Message::from_value(serde_json::from_str(l).unwrap()) {
+            Ok(Message::Notification(n)) => n,
+            _ => unreachable!(),
+        }).chain(rpc::note(&flow(bise_proto::rows::FlowMode::Trunk), None)).collect();
+        crate::sb::dispatch(&mut app, &init_answer(notes, Watermark { epoch: 3, seq: 10 }));
+        let sb = &app.sb;
+        assert!(sb.rpc.initialized);
+        assert_eq!((sb.workspace.as_str(), sb.version.as_str(), sb.flow.as_str()), ("/ws", "v9", "trunk"));
+        assert_eq!((sb.agents.len(), sb.cards.len()), (2, 1), "cards after agents, as the burst had them");
+        assert_eq!(sb.rpc.wm, Watermark { epoch: 3, seq: 10 });
+        assert!(sb.ready, "ready once initialize answered");
+        assert_eq!(sb.ready_page.as_deref(), Some("main"), "the focus is subscribed: keep-state waits for its first page");
+        // the answer only once per connection
+        assert!(!init(&mut app, &serde_json::from_str(&init_answer(vec![], Watermark::default())).unwrap()));
+    }
+
+    #[test]
+    fn the_watermark_applies_the_next_skips_the_seen_and_reads_again_on_a_gap() {
+        let mut app = crate::sb::bench::test_app();
+        crate::sb::dispatch(&mut app, &init_answer(vec![], Watermark { epoch: 3, seq: 10 }));
+        crate::sb::dispatch(&mut app, &numbered(&flow(bise_proto::rows::FlowMode::Pr), 11));
+        assert_eq!(app.sb.flow, "pr", "the next one applies");
+        crate::sb::dispatch(&mut app, &numbered(&flow(bise_proto::rows::FlowMode::Trunk), 11));
+        assert_eq!(app.sb.flow, "pr", "a seen one is skipped");
+        crate::sb::dispatch(&mut app, &numbered(&flow(bise_proto::rows::FlowMode::Trunk), 13));
+        assert!(app.sb.rpc.reading && app.sb.flow == "pr", "a gap: hub/read, nothing applied");
+        crate::sb::dispatch(&mut app, &numbered(&flow(bise_proto::rows::FlowMode::Trunk), 14));
+        assert_eq!(app.sb.flow, "pr", "while reading, its state covers what comes");
+        // hub/read's answer replaces the state and the watermark
+        let st = json!({"watermark": {"epoch": 4, "seq": 2}, "state": [rpc::note(&flow(bise_proto::rows::FlowMode::Trunk), None)]});
+        reread(&mut app, st);
+        assert_eq!((app.sb.flow.as_str(), app.sb.rpc.wm, app.sb.rpc.reading), ("trunk", Watermark { epoch: 4, seq: 2 }, false));
+        crate::sb::dispatch(&mut app, &numbered(&flow(bise_proto::rows::FlowMode::Pr), 3));
+        assert_eq!(app.sb.flow, "trunk", "another epoch: read again");
+    }
+
+    #[test]
+    fn a_refusal_ends_the_terminal_and_ready_comes_once() {
+        let mut app = crate::sb::bench::test_app();
+        let refused = json!({"jsonrpc": "2.0", "id": INIT, "error": {"code": rpc::code::REFUSED, "message": "runs in an agent"}});
+        crate::sb::dispatch(&mut app, &refused.to_string());
+        assert!(app.should_quit);
+        assert_eq!(client::take_refused().as_deref(), Some("runs in an agent"));
+        let mut app = crate::sb::bench::test_app();
+        app.sb.ready_page = Some("main".into());
+        ready(&mut app);
+        assert!(app.sb.ready && app.sb.ready_page.is_some(), "keep-state waits for the focus's page");
+        feed_entries::first_page_in(&mut app, "main");
+        assert!(app.sb.ready_page.is_none());
     }
 
     #[test]
