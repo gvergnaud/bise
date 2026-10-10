@@ -1,6 +1,16 @@
 # 22 · an agent's row says `working` and `turns` from two sources
 
-Status: agreed by architect (m_16053), not started. First item of
+Status: DONE in 45c82783 (proto-after, signed by architect m_16614).
+The count is sb-core's: Rt.turns, +1 in set_rt (the one writer of a
+runtime state) each time the run leaves RBusy, carried in the same view
+as the status (laws hub_turns_counts_every_busy_exit,
+hub_turns_never_moves_otherwise, hub_set_rt_counts_turns); heads.rs no
+longer counts; the terminal reads rows::Agent::turn_running() with
+turns, queue::Owed is deleted, a lower count (sb-core restarted) is a
+new baseline. Law: core_tests::an_agents_row_says_running_and_turns_from_one_source.
+tui_queue_tmux 7/7 PASS run outside the gate.
+
+Was: agreed by architect (m_16053). First item of
 client-protocol's after-the-release list. Found by proto-zone-b
 (m_16050, 2026-10-10) through tests/tui_queue_tmux.py, red 3 times in 7
 runs on client-protocol after the feed switch (4733e3ba). Label: hub,
