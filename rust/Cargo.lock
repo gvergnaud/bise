@@ -220,6 +220,7 @@ dependencies = [
 name = "bise-session"
 version = "0.1.0"
 dependencies = [
+ "bise-proto",
  "bise-secrets",
  "libc",
  "ring",

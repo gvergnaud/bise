@@ -5,16 +5,20 @@
 //! context the log's state held right before that request: compaction
 //! applied, the way `State` rebuilds it). Every text goes through the
 //! redactor: a key never reaches the screen.
-use bise_session::reader::{Event, Log};
-use bise_session::types::*;
-use bise_session::{Redactor, State};
+//!
+//! Moved from the TUI's logview (TP-N2, architect m_17272): the TUI's
+//! `/log` and the hub's typed `log` read (the window's /log) build their
+//! rows here, one builder, the redaction inside it.
+use crate::reader::{Event, Log};
+use crate::types::*;
+use crate::{Redactor, State};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::Path;
 
 /// What an entry is, as its role column says it.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Role {
+pub enum Role {
     /// the user's turn (a prompt or a steer)
     You,
     /// the model's text
@@ -41,7 +45,7 @@ pub(crate) enum Role {
 
 impl Role {
     /// The filter key of a role (the picker's rows).
-    pub(crate) fn key(&self) -> &'static str {
+    pub fn key(&self) -> &'static str {
         match self {
             Role::You => "you",
             Role::Assistant => "assistant",
@@ -59,12 +63,12 @@ impl Role {
 }
 
 /// The roles the filter picker lists, in its order.
-pub(crate) const ROLE_KEYS: &[&str] =
+pub const ROLE_KEYS: &[&str] =
     &["you", "assistant", "thinking", "call", "result", "message", "injected", "system", "summary", "error", "event"];
 
 /// How a body draws.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Body {
+pub enum Body {
     None,
     /// markdown (markdown.rs)
     Md(String),
@@ -75,7 +79,7 @@ pub(crate) enum Body {
 }
 
 impl Body {
-    pub(crate) fn text(&self) -> &str {
+    pub fn text(&self) -> &str {
         match self {
             Body::None => "",
             Body::Md(t) | Body::Plain(t) | Body::Code { text: t, .. } => t,
@@ -86,27 +90,27 @@ impl Body {
 /// One row group of the view: an entry (a header and its body), or a
 /// rule between turns or where a compaction cut.
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct Item {
+pub struct Item {
     /// the log's seq (0 for what is not an event: system, tools)
-    pub(crate) seq: u64,
+    pub seq: u64,
     /// the event's index in the log
-    pub(crate) idx: usize,
-    pub(crate) turn: Option<u64>,
+    pub idx: usize,
+    pub turn: Option<u64>,
     /// HH:MM:SS
-    pub(crate) time: String,
-    pub(crate) role: Role,
+    pub time: String,
+    pub role: Role,
     /// the tool of a call or a result
-    pub(crate) tool: String,
+    pub tool: String,
     /// the one-line summary of the header
-    pub(crate) head: String,
-    pub(crate) body: Body,
+    pub head: String,
+    pub body: Body,
     /// a rule (a turn, a compaction): its words; the rest is unused
-    pub(crate) rule: Option<String>,
+    pub rule: Option<String>,
     /// the tokens the model saw for it, when known (usage), else an
     /// estimate (bytes / 4) shown with a `~`
-    pub(crate) tokens: Option<(u64, bool)>,
+    pub tokens: Option<(u64, bool)>,
     /// a faint line above the body (a result's call id, exit, time)
-    pub(crate) meta: String,
+    pub meta: String,
 }
 
 impl Item {
@@ -143,12 +147,12 @@ impl Item {
     }
 
     /// The bytes of its body (the fold label, the token estimate).
-    pub(crate) fn bytes(&self) -> usize {
+    pub fn bytes(&self) -> usize {
         self.body.text().len()
     }
 
     /// The text a search looks in: the header and the body, lowercase.
-    pub(crate) fn hay(&self) -> String {
+    pub fn hay(&self) -> String {
         let mut s = String::new();
         if let Some(r) = &self.rule {
             s.push_str(r);
@@ -169,7 +173,7 @@ fn time_of(at: &str) -> String {
 }
 
 /// `1234` → `1.2k`, `182000` → `182k`, `999` → `999`.
-pub(crate) fn short_num(n: u64) -> String {
+pub fn short_num(n: u64) -> String {
     if n < 1000 {
         n.to_string()
     } else if n < 10_000 {
@@ -182,7 +186,7 @@ pub(crate) fn short_num(n: u64) -> String {
 }
 
 /// `2148` → `2.1 KB`.
-pub(crate) fn short_bytes(n: usize) -> String {
+pub fn short_bytes(n: usize) -> String {
     if n < 1024 {
         format!("{n} B")
     } else if n < 1024 * 1024 {
@@ -193,7 +197,7 @@ pub(crate) fn short_bytes(n: usize) -> String {
 }
 
 /// The first non-empty line, cut at `max` chars.
-pub(crate) fn first_line(s: &str, max: usize) -> String {
+pub fn first_line(s: &str, max: usize) -> String {
     let l = s.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("");
     if l.chars().count() > max {
         let mut t: String = l.chars().take(max.saturating_sub(1)).collect();
@@ -237,7 +241,7 @@ fn parts_text(parts: &[Part], blobs: &Path) -> String {
     for p in parts {
         match p {
             Part::Text { text } => o.push_str(&image_tags(text)),
-            Part::TextBlob { blob } => match bise_session::blob::get(blobs, blob) {
+            Part::TextBlob { blob } => match crate::blob::get(blobs, blob) {
                 Ok(b) => o.push_str(&image_tags(&String::from_utf8_lossy(&b))),
                 Err(e) => o.push_str(&format!("[blob {} unreadable: {e}]", short_sha(&blob.sha256))),
             },
@@ -263,7 +267,7 @@ fn attr<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
 /// The image tags of a text (`<image name=… path=… b64=…>`, what the
 /// model got for a pasted image) as one line: its name, its file and
 /// its size, never the base64.
-pub(crate) fn image_tags(text: &str) -> String {
+pub fn image_tags(text: &str) -> String {
     if !text.contains("<image ") {
         return text.to_string();
     }
@@ -319,7 +323,7 @@ fn str_field<'a>(m: &'a serde_json::Map<String, Value>, k: &str) -> Option<&'a s
 }
 
 /// A JSON text pretty-printed; None when it is not JSON.
-pub(crate) fn pretty_json(s: &str) -> Option<String> {
+pub fn pretty_json(s: &str) -> Option<String> {
     let t = s.trim();
     if !(t.starts_with('{') || t.starts_with('[')) {
         return None;
@@ -342,7 +346,7 @@ fn diff_text(path: &str, old: &str, new: &str) -> String {
 
 /// A call's header and body, by its tool: the code it runs, the diff
 /// it makes, the file it writes, or its arguments as JSON.
-pub(crate) fn call_view(name: &str, args: &str) -> (String, Body) {
+pub fn call_view(name: &str, args: &str) -> (String, Body) {
     let obj = json_obj(args);
     let field = |k: &str| obj.as_ref().and_then(|m| str_field(m, k)).map(str::to_string);
     match name {
@@ -460,10 +464,10 @@ names!(Cause, Outcome, Delivery, InjectedKind, Relation, DiscardCause, By, Durin
 
 /// What a session's items are made of: the log, its blobs, the
 /// redactor and the agent's name (the assistant's role word).
-pub(crate) struct Source<'a> {
-    pub(crate) log: &'a Log,
-    pub(crate) blobs: &'a Path,
-    pub(crate) redact: &'a Redactor,
+pub struct Source<'a> {
+    pub log: &'a Log,
+    pub blobs: &'a Path,
+    pub redact: &'a Redactor,
 }
 
 impl Source<'_> {
@@ -572,7 +576,7 @@ impl Source<'_> {
                 let reply = if m.expects_reply { " · expects a reply" } else { "" };
                 push(
                     Role::Message,
-                    format!("from {} ({}) {}{reply} · {}", crate::sb::shown_name(&m.from), name_of(&m.relation), m.hub_msg, first_line(&text, 60)),
+                    format!("from {} ({}) {}{reply} · {}", bise_proto::thread::lines::shown_name(&m.from), name_of(&m.relation), m.hub_msg, first_line(&text, 60)),
                     Body::Md(text),
                 );
             }
@@ -681,7 +685,7 @@ impl Source<'_> {
     fn text_of(&self, t: &Text) -> String {
         match t {
             Text::Inline { text } => text.clone(),
-            Text::Blob { blob } => match bise_session::blob::get(self.blobs, blob) {
+            Text::Blob { blob } => match crate::blob::get(self.blobs, blob) {
                 Ok(b) => String::from_utf8_lossy(&b).into_owned(),
                 Err(e) => format!("[blob {} unreadable: {e}]", short_sha(&blob.sha256)),
             },
@@ -711,7 +715,7 @@ fn usage_by_req(log: &Log) -> HashMap<u64, (u64, u64, u64)> {
 
 /// The full history: every entry in order, a rule at each turn's
 /// start (its usage on it) and where each compaction cut.
-pub(crate) fn history(src: &Source) -> Vec<Item> {
+pub fn history(src: &Source) -> Vec<Item> {
     let log = src.log;
     let tools = src.call_tools();
     // per turn: the context size of its last request and its output
@@ -749,6 +753,14 @@ pub(crate) fn history(src: &Source) -> Vec<Item> {
             _ => src.entries(i, &tools, &mut out),
         }
     }
+    // every text field through the redactor, not only head and body
+    // (architect m_17272): the TUI's /log and the hub's typed read both
+    // get their rows here, so neither can skip it
+    for it in &mut out {
+        it.tool = src.red(std::mem::take(&mut it.tool));
+        it.meta = src.red(std::mem::take(&mut it.meta));
+        it.rule = it.rule.take().map(|r| src.red(r));
+    }
     out
 }
 
@@ -762,21 +774,21 @@ fn next_input(log: &Log, i: usize) -> Option<u64> {
 
 /// One request to the model: the reply's event, its number, its turn.
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct Request {
+pub struct Request {
     /// the index of the event that answered it (an assistant message,
     /// a failed request): the context is the state right before it
-    pub(crate) idx: usize,
-    pub(crate) req: u64,
-    pub(crate) turn: Option<u64>,
-    pub(crate) time: String,
+    pub idx: usize,
+    pub req: u64,
+    pub turn: Option<u64>,
+    pub time: String,
     /// (input, output, cache read) when the log has its usage
-    pub(crate) usage: Option<(u64, u64, u64)>,
-    pub(crate) model: String,
+    pub usage: Option<(u64, u64, u64)>,
+    pub model: String,
 }
 
 /// Every request of the log, in order: one per assistant message, and
 /// one per failed request that no message answered.
-pub(crate) fn requests(log: &Log) -> Vec<Request> {
+pub fn requests(log: &Log) -> Vec<Request> {
     let usage = usage_by_req(log);
     let mut out: Vec<Request> = Vec::new();
     for (i, e) in log.events.iter().enumerate() {
@@ -791,7 +803,7 @@ pub(crate) fn requests(log: &Log) -> Vec<Request> {
 
 /// The state of the log right before event `idx` (from the last
 /// checkpoint before it).
-pub(crate) fn state_before(log: &Log, idx: usize) -> State {
+pub fn state_before(log: &Log, idx: usize) -> State {
     let idx = idx.min(log.events.len());
     let start = log.events[..idx]
         .iter()
@@ -808,7 +820,7 @@ pub(crate) fn state_before(log: &Log, idx: usize) -> State {
 /// then the context entries in the order the state holds them, a rule
 /// before a compaction's summary saying how many entries it replaced.
 /// The tokens of each entry are estimated (bytes / 4).
-pub(crate) fn model_view(src: &Source, r: &Request) -> Vec<Item> {
+pub fn model_view(src: &Source, r: &Request) -> Vec<Item> {
     let log = src.log;
     let st = state_before(log, r.idx);
     let tools = src.call_tools();
@@ -860,7 +872,7 @@ fn is_context(e: &Event) -> bool {
 }
 
 /// `2026-10-02T14:02:31.123Z` → ms since the epoch (UTC).
-pub(crate) fn iso_ms(at: &str) -> Option<u64> {
+pub fn iso_ms(at: &str) -> Option<u64> {
     let n = |r: std::ops::Range<usize>| at.get(r).and_then(|s| s.parse::<i64>().ok());
     let (y, mo, d) = (n(0..4)?, n(5..7)?, n(8..10)?);
     let (h, mi, s) = (n(11..13)?, n(14..16)?, n(17..19)?);
@@ -879,7 +891,7 @@ pub(crate) fn iso_ms(at: &str) -> Option<u64> {
 
 /// The request bodies the REPL wrote (`BISE_DEBUG_REQUESTS`): each
 /// file and when it was written (ms), oldest first.
-pub(crate) fn request_files(dir: &Path) -> Vec<(u64, std::path::PathBuf)> {
+pub fn request_files(dir: &Path) -> Vec<(u64, std::path::PathBuf)> {
     let Ok(rd) = std::fs::read_dir(dir) else { return Vec::new() };
     let mut v: Vec<(u64, std::path::PathBuf)> = rd
         .flatten()
@@ -896,7 +908,7 @@ pub(crate) fn request_files(dir: &Path) -> Vec<(u64, std::path::PathBuf)> {
 
 /// The body sent for a request answered at `reply_ms`: the last file
 /// written before the answer, and after `since_ms` (the answer before).
-pub(crate) fn dump_for(files: &[(u64, std::path::PathBuf)], since_ms: u64, reply_ms: u64) -> Option<&std::path::Path> {
+pub fn dump_for(files: &[(u64, std::path::PathBuf)], since_ms: u64, reply_ms: u64) -> Option<&std::path::Path> {
     files.iter().rev().find(|(t, _)| *t <= reply_ms && *t > since_ms).map(|(_, p)| p.as_path())
 }
 
@@ -914,7 +926,7 @@ fn shorten_blobs(v: &mut Value) {
 
 /// The exact body of a request, as an entry: JSON pretty, redacted,
 /// images shortened.
-pub(crate) fn exact_item(path: &Path, redact: &Redactor, like: &Item) -> Item {
+pub fn exact_item(path: &Path, redact: &Redactor, like: &Item) -> Item {
     let raw = std::fs::read_to_string(path).unwrap_or_default();
     let mut it = like.clone();
     it.role = Role::System;

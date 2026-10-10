@@ -22,3 +22,4 @@ pub mod recorder;
 pub mod pairing;
 pub mod usage_line;
 pub mod tool_output;
+pub mod history;

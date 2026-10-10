@@ -15,7 +15,7 @@
 //! stale; `BISE_PROTO_BLESS=1` writes them.
 #![cfg(feature = "ts")]
 
-use bise_proto::{commands, context, diff, draft, helper, hub, ops, pty, rows, rpc, thread};
+use bise_proto::{commands, context, diff, draft, helper, hub, log, ops, pty, rows, rpc, thread};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
@@ -60,6 +60,7 @@ fn modules(cfg: &Config) -> Vec<(&'static str, Vec<Decl>)> {
         module!(cfg, "diff": diff::LineKind, diff::DiffLine, diff::Hunk, diff::DiffFile, diff::DiffResult, diff::Series, diff::DiffView),
         module!(cfg, "rows": rows::Status, rows::Phase, rows::ReportKind, rows::Report, rows::Agent, rows::Opt, rows::CardPage, rows::Card, rows::CardBatch, rows::Merged, rows::DevServer, rows::Worktree, rows::FeatureTry, rows::Feature, rows::PrState, rows::PrChecks, rows::PrReview, rows::Pr, rows::Page, rows::Place, rows::ModelRole, rows::Model, rows::Artifact, rows::ArtifactPr, rows::ArtifactVersion, rows::ScheduledTask, rows::ScheduledEnd, rows::AgentUsage, rows::WaitingOn, rows::AgentMode, rows::Changes, rows::FlowMode, rows::ApprovalMode, rows::CheckerKind, rows::ApprovalRule),
         module!(cfg, "thread": thread::EntryKind, thread::ToolKind, thread::ToolState, thread::GateWait, thread::ToolGate, thread::FileCount, thread::ToolItem, thread::Tools, thread::EntryCard, thread::PageRef, thread::ReportRef, thread::Thinking, thread::Delivery, thread::NoticeLevel, thread::Notice, thread::NotDelivered, thread::Landed, thread::PrNewsState, thread::PrNews, thread::Made, thread::ImageRef, thread::Answered, thread::ApprovalFold, thread::Scheduled, thread::TurnFailed, thread::Entry),
+        module!(cfg, "log": log::LogRole, log::LogBodyKind, log::LogBody, log::LogItem),
         module!(cfg, "ops": ops::BranchRow, ops::VersionItem, ops::ReleaseEv, ops::UpdateEv),
         module!(cfg, "hub": hub::JobState, hub::Job, hub::HubEv, hub::Mode, hub::SendOpts, hub::HubCmd, hub::ErrorKind),
         module!(cfg, "rpc": rpc::Id, rpc::Request, rpc::Notification, rpc::Response, rpc::ErrorData, rpc::RpcError, rpc::Watermark, rpc::ClientInfo, rpc::InitializeParams, rpc::HubState, rpc::InitializeResult, rpc::CommandsList, rpc::CommandRunResult),

@@ -65,6 +65,7 @@ pub mod diff;
 pub mod draft;
 pub mod helper;
 pub mod hub;
+pub mod log;
 pub mod ops;
 pub mod pty;
 pub mod rows;

@@ -204,6 +204,16 @@ pub const COMMANDS: &[Cmd] = &[
     Cmd { name: "/quit", desc: "quit (the agents keep running)", args: &[], client: true },
 ];
 
+/// `/log` (the TUI's logview.rs, the window's TP-N2): a client screen, not
+/// in [`COMMANDS`] (the TUI offers it only in a dev build, its usage has
+/// no completer); `commands/list` sends it after them.
+pub const LOG: Cmd = Cmd {
+    name: "/log",
+    desc: "the raw session of the agent in view: every entry, and what the model got: /log [<request>]",
+    args: &[],
+    client: true,
+};
+
 /// One command as `commands/list` sends it: an owned wire type (architect
 /// m_13138), so a client reads a hub older or newer than itself. Built
 /// from [`COMMANDS`] by [`rows`]; the same JSON as a [`Cmd`] (law).
@@ -272,9 +282,9 @@ impl From<&Arg> for ArgRow {
     }
 }
 
-/// The catalog as `commands/list` sends it.
+/// The catalog as `commands/list` sends it: [`COMMANDS`], then [`LOG`].
 pub fn rows() -> Vec<CommandRow> {
-    COMMANDS.iter().map(|c| CommandRow { name: c.name.into(), desc: c.desc.into(), args: c.args.iter().map(ArgRow::from).collect(), client: c.client }).collect()
+    COMMANDS.iter().chain([&LOG]).map(|c| CommandRow { name: c.name.into(), desc: c.desc.into(), args: c.args.iter().map(ArgRow::from).collect(), client: c.client }).collect()
 }
 
 #[cfg(test)]
@@ -327,7 +337,9 @@ mod tests {
     #[test]
     fn the_rows_are_the_tables_json_and_round_trip() {
         let rows = rows();
-        assert_eq!(serde_json::to_value(&rows).unwrap(), serde_json::to_value(COMMANDS).unwrap());
+        let table: Vec<&Cmd> = COMMANDS.iter().chain([&LOG]).collect();
+        assert_eq!(serde_json::to_value(&rows).unwrap(), serde_json::to_value(table).unwrap());
+        assert_eq!(rows.last().map(|r| (r.name.as_str(), r.client)), Some(("/log", true)), "/log after the catalog");
         let back: Vec<CommandRow> = serde_json::from_value(serde_json::to_value(&rows).unwrap()).unwrap();
         assert_eq!(back, rows);
         let newer: ArgRow = serde_json::from_value(json!({"kind": "colour"})).unwrap();

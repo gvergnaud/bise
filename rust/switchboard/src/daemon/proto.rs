@@ -24,6 +24,7 @@
 mod cmds;
 mod emit;
 mod tool_out;
+mod log;
 
 use super::rpc::Typed;
 use super::*;

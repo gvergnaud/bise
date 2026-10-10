@@ -14,7 +14,8 @@
 //! build or `BISE_DEV=1` only). Later: an "export for a bug report" action (the
 //! redacted entries to a file) fits here; not built yet.
 
-mod model;
+// the rows: bise_session's builder, the hub's typed `log` read uses it too
+use bise_session::history as model;
 #[cfg(test)]
 mod tests;
 
@@ -52,13 +53,9 @@ pub(crate) fn enabled(app: &App) -> bool {
     SHIPPED || crate::sb::release::dev(app) || std::env::var("BISE_DEV").is_ok_and(|v| !v.is_empty() && v != "0")
 }
 
-/// The `/log` command, for the popup and `/help` when enabled.
-pub(crate) const COMMAND: crate::commands::Cmd = crate::commands::Cmd {
-    name: "/log",
-    desc: "the raw session of the agent in view: every entry, and what the model got: /log [<request>]",
-    args: &[],
-    client: true,
-};
+/// The `/log` command, for the popup and `/help` when enabled: the
+/// catalog's (bise_proto::commands::LOG, the window's too).
+pub(crate) const COMMAND: crate::commands::Cmd = bise_proto::commands::LOG;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Mode {

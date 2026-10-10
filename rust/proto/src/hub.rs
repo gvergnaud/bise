@@ -152,6 +152,11 @@ pub enum HubEv {
     /// connection only): it will never be delivered; `text` his words, for
     /// the window's "edit" (put back in the composer)
     QueuedTaken { project: Project, agent: String, id: u64, text: String },
+    /// a page of an agent's raw session (the answer to `log`, this
+    /// connection only; the window's `/log`): rows oldest first, every
+    /// text redacted; `more`: older rows remain (ask with `before` = the
+    /// first row's seq)
+    Log { project: Project, agent: String, items: Vec<crate::log::LogItem>, more: bool },
     /// an agent's change (the answer to `diff`): its checkout or branch
     /// vs `base`; `head` its branch (none: the shared folder)
     Diff {
@@ -341,7 +346,7 @@ pub enum HubEv {
 }
 
 impl HubEv {
-    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "entry", "typing", "artifacts", "scheduled", "worktrees", "dev_servers", "merged", "features", "prs", "models", "tool_out", "queued_taken", "diff", "branches", "versions", "release", "update", "route", "route_done", "jobs", "job_end", "followed_end", "confirm", "flow", "pages", "page_changed", "card_open", "focused", "approvals", "notice", "refused", "error"];
+    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "entry", "typing", "artifacts", "scheduled", "worktrees", "dev_servers", "merged", "features", "prs", "models", "tool_out", "queued_taken", "log", "diff", "branches", "versions", "release", "update", "route", "route_done", "jobs", "job_end", "followed_end", "confirm", "flow", "pages", "page_changed", "card_open", "focused", "approvals", "notice", "refused", "error"];
 
     pub fn decode(line: &str) -> Result<HubEv, String> {
         Self::from_value(parse(line)?)
@@ -538,6 +543,17 @@ pub enum HubCmd {
     /// he opened a tool row: its whole output (`tool_out` answers this
     /// connection), the tool item's `pos` in `agent`'s thread
     ToolOut { project: Project, agent: String, pos: Pos },
+    /// the window's `/log`: a page of `agent`'s raw session, the newest
+    /// rows with a seq under `before` (none: the newest page). The user's
+    /// authority: a client's only, never an agent's op (issue 16: it
+    /// reads his raw sessions)
+    Log {
+        project: Project,
+        agent: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts", ts(optional))]
+        before: Option<u64>,
+    },
     /// his queued message `id` (an `Agent.queued` row) taken back before
     /// its turn ends (the window's "edit · drop"): `queued_taken` answers
     /// this connection with its words, or an error says why (delivered,
@@ -700,7 +716,7 @@ pub enum HubCmd {
 }
 
 impl HubCmd {
-    pub const TAGS: &'static [&'static str] = &["hello", "subscribe", "unsubscribe", "page", "send", "answer", "close", "confirm", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "queued_take", "diff", "worktrees", "dev_servers", "merged", "features", "prs", "scheduled", "scheduled_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "branches", "scheduled_run", "artifacts_add", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "release_plan", "release_run", "stop_hub", "page_voice"];
+    pub const TAGS: &'static [&'static str] = &["hello", "subscribe", "unsubscribe", "page", "send", "answer", "close", "confirm", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "log", "queued_take", "diff", "worktrees", "dev_servers", "merged", "features", "prs", "scheduled", "scheduled_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "branches", "scheduled_run", "artifacts_add", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "release_plan", "release_run", "stop_hub", "page_voice"];
 
     pub fn decode(line: &str) -> Result<HubCmd, String> {
         Self::from_value(parse(line)?)
@@ -769,6 +785,7 @@ impl HubCmd {
             | HubCmd::PageVoice { project, .. }
             | HubCmd::Diff { project, .. }
             | HubCmd::ToolOut { project, .. }
+            | HubCmd::Log { project, .. }
             | HubCmd::QueuedTake { project, .. } => project,
             HubCmd::Hello { .. } | HubCmd::Unknown { .. } => return None,
         };

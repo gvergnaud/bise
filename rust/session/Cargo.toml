@@ -8,6 +8,8 @@ description = "The bise session log: typed events, reader, writer, resume (BISE-
 [dependencies]
 # where auth.json and the MCP logins live: files or the macOS keychain
 bise-secrets = { path = "../secrets" }
+# shown_name for /log's message rows (history.rs): one rule, the feed's
+bise-proto = { path = "../proto" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ring = "0.17"

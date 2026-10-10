@@ -129,7 +129,9 @@ def main():
         check(gone["error"]["code"] == HUB_REFUSED and "nobody" in gone["error"]["message"], "no such agent: %r" % gone)
 
         cmds = r.call("commands/list")["result"]["commands"]
-        check(len(cmds) == 34 and any(c["name"] == "/new" and not c["client"] for c in cmds), "commands/list: %d" % len(cmds))
+        # the 34 of the catalog, then /log (a client screen, TP-N2)
+        check(len(cmds) == 35 and any(c["name"] == "/new" and not c["client"] for c in cmds)
+              and cmds[-1]["name"] == "/log" and cmds[-1]["client"], "commands/list: %d" % len(cmds))
         helped = r.call("command/run", {"project": project, "agent": "main", "line": "/help"})["result"]
         check(helped.get("notice"), "command/run /help: %r" % helped)
         read = r.call("hub/read")["result"]

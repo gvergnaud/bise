@@ -72,6 +72,8 @@ pub const METHODS: &[MethodRow] = &[
     // a tool row opened: its whole output from the session log (main's
     // 5a9cc5f2), answered later from a thread
     m("tool/output", "tool_out", Some("tool_out")),
+    // the window's /log: a page of an agent's raw session (TP-N2)
+    m("log/read", "log", Some("log")),
     // his queued message taken back (the window's "edit · drop")
     m("turn/unqueue", "queued_take", Some("queued_taken")),
     m("worktrees/list", "worktrees", Some("worktrees")),

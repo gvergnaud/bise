@@ -71,3 +71,5 @@
 {"cmd":"stop_hub","project":"acme-1a2b3c4d","keep_agents":true}
 {"cmd":"page_voice","project":"acme-1a2b3c4d","page":"weekly-update","phase":"start"}
 {"cmd":"page_voice","project":"acme-1a2b3c4d","page":"weekly-update","phase":"heard","text":"make the intro shorter"}
+{"cmd":"log","project":"acme-1a2b3c4d","agent":"perf"}
+{"cmd":"log","project":"acme-1a2b3c4d","agent":"perf","before":212}

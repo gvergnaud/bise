@@ -506,6 +506,28 @@ def main():
               "its files: one, +3 or more, −0: %r (code %r)" % (files, wf[-1].get("code", "")[:200]))
         check(files == counts(wf[-1].get("code", "")), "the counts its own patch gives: %r vs %r" % (files, counts(wf[-1].get("code", ""))))
 
+        # the window's /log (TP-N2, architect m_17272): log/read gives a page
+        # of main's raw session, the TUI's rows: his message, the calls and
+        # their results (seq 1 2000's and the write_file's), oldest first;
+        # a page 'before' its first row's seq has only older rows
+        r = c.rpc("log/read", {"project": project, "agent": "main"})
+        check("error" not in r, "log/read answered: %r" % r)
+        lg = r["result"]
+        check(isinstance(lg, dict) and "items" in lg, "log/read's result has its rows: %r" % (json.dumps(r)[:600],))
+        items = lg["items"]
+        roles = {i["role"] for i in items}
+        check(items and {"you", "call", "result"} <= roles, "log rows: %r" % sorted(roles))
+        check([i["seq"] for i in items] == sorted(i["seq"] for i in items), "oldest first")
+        check(any(i["role"] == "call" and i.get("tool") == "write_file" for i in items), "the write_file call is a row")
+        check(any(i["role"] == "result" and i.get("ok") is True for i in items), "a result with its ok")
+        check(all(len(i.get("body", {}).get("text", "")) <= 4096 for i in items), "bodies capped")
+        if lg["more"]:
+            first = items[0]["seq"]
+            r2 = c.rpc("log/read", {"project": project, "agent": "main", "before": first})
+            check("error" not in r2 and all(i["seq"] < first for i in r2["result"]["items"]), "an older page: %r" % r2.get("error"))
+        r3 = c.rpc("log/read", {"project": project, "agent": "nobody"})
+        check("error" in r3, "an unknown agent is an error: %r" % r3)
+
         # an answer to MAIN's own card (designer's must-fix, architect
         # m_15205): main's thread has one 'you answered main' row with his
         # whole multi-line answer (sb-core's route line), and never the raw
