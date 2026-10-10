@@ -85,7 +85,7 @@ pub const COMMANDS: &[CmdDoc] = &[
     cmd(
         "sb every <10m|1h|day 07:30> \"<message>\" [--until <18:00|tomorrow 18:00|2h>] [--times <n>] [--to <agent>] [--page <id>] | sb every | sb every --stop <id>",
         Who::Everyone,
-        "a standing order: the hub wakes you (or `--to` that agent) with the message every N (at least 1m) or every day at that time, until a time or for n times. Never sleep or loop in a turn to wait: set a timer and end your turn. A wake while busy waits for the end of the turn (one, never stacked). `--page <id>`: the page it keeps fresh (its frame says `watching` and has `stop`). No argument: the timers; `--stop` ends one.",
+        "a standing order: the hub wakes you (or `--to` that agent) with the message every N (at least 1m) or every day at that time, until a time or for n times. Never sleep or loop in a turn to wait: set a timer and end your turn. Estimate low and check often: a build you think takes 5 min, first check at 1-2 min, then short re-checks; never one long timer. Better, wake on the event: for a background bash command, read its .rc/.out when your turn resumes. A wake while busy waits for the end of the turn (one, never stacked). `--page <id>`: the page it keeps fresh (its frame says `watching` and has `stop`). No argument: the timers; `--stop` ends one.",
     ),
     cmd(
         "sb taste [add \"<rule>\" [--from \"<where>\"] | remove <n|words>]",
