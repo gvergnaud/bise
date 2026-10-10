@@ -32,7 +32,6 @@ use super::*;
 use bise_proto::hub::HubEv;
 use bise_proto::rpc::{self, code, HubState, Id, InitializeParams, InitializeResult, Message, Response, RpcError, Scope, Watermark};
 use bise_proto::PROTO;
-use std::borrow::Cow;
 
 /// sb-core's line for one client (`Effect::ToClient`) as its typed One
 /// notification: `notice`, `open_card`, `focus`; none: an older event
@@ -54,6 +53,66 @@ const LATER: &[&str] = &["diff/read", "worktrees/list", "devServers/list", "merg
 /// The hub-wide kinds sent from a thread: `hub/read` gives their last.
 const SCANNED: &[&str] = &["worktrees", "dev_servers", "merged"];
 
+/// An op line of the released core's door and the typed command its
+/// arm takes (`renames`: the op's field -> the command's).
+struct DoorOp {
+    op: &'static str,
+    cmd: &'static str,
+    renames: &'static [(&'static str, &'static str)],
+}
+
+/// What an older client's hello connection may still send (the stub,
+/// architect m_15183): the released v2026.10.2-28 desktop core's door,
+/// one release. Its typed lines (`cmd`, as that core sends them) and its
+/// op lines, each as the command its typed arm takes (no second
+/// implementation). Step 3 had dropped input, interrupt and every_stop
+/// for that core; the table brings them back for one release. stop_hub:
+/// that release's `bise stop` (switchboard client::stop then).
+// TODO(client-protocol, the plan's 'after the release' step): the table
+// goes, the stub writes exe and reload then closes (with the core's
+// older door, Hubs.older_door)
+// The cmd tags: v2026.10.2-28's HubCmd::TAGS, every one (its core
+// forwards the window's typed commands, core/cmd.rs, Cmd::Typed).
+pub(super) const DOOR_CMDS: &[&str] = &[
+    "hello", "subscribe", "unsubscribe", "page", "send", "answer", "close", "confirm", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "diff", "worktrees", "dev_servers", "merged", "features", "prs", "scheduled", "scheduled_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash",
+];
+const DOOR_OPS: &[DoorOp] = &[
+    DoorOp { op: "input", cmd: "slash", renames: &[("focus", "agent"), ("text", "line")] },
+    DoorOp { op: "interrupt", cmd: "stop", renames: &[] },
+    DoorOp { op: "every_stop", cmd: "scheduled_stop", renames: &[] },
+    DoorOp { op: "page_voice", cmd: "page_voice", renames: &[] },
+    DoorOp { op: "stop_hub", cmd: "stop_hub", renames: &[] },
+];
+
+/// The older events the released v2026.10.2-28 core reads on its home
+/// connection (its hub_line: state, ready, page, line), nothing more:
+/// they go to that connection only ([`Shell::door_events`]), from
+/// today's writers (the snapshot, line_event, the pages' page line).
+/// Those writers live this one release more for it.
+// TODO(client-protocol, the plan's 'after the release' step): the table
+// goes with DOOR_OPS and DOOR_CMDS (no older event to anyone)
+pub(super) const DOOR_EVENTS: &[&str] = &["state", "ready", "page", "line"];
+
+/// Line `v` of the released door as its typed command (`project` this
+/// hub's); Err: what it was, refused.
+fn door_cmd(v: &Value, project: &str) -> Result<Value, String> {
+    if let Some(tag) = v.get("cmd").and_then(Value::as_str) {
+        return if DOOR_CMDS.contains(&tag) { Ok(v.clone()) } else { Err(format!("the cmd {tag:?}")) };
+    }
+    let Some(op) = v.get("op").and_then(Value::as_str) else { return Err("a line with no op".into()) };
+    let Some(row) = DOOR_OPS.iter().find(|r| r.op == op) else { return Err(format!("the op {op:?}")) };
+    let mut c = v.as_object().cloned().unwrap_or_default();
+    c.remove("op");
+    for (from, to) in row.renames {
+        if let Some(x) = c.remove(*from) {
+            c.insert(to.to_string(), x);
+        }
+    }
+    c.insert("cmd".into(), json!(row.cmd));
+    c.insert("project".into(), json!(project));
+    Ok(Value::Object(c))
+}
+
 /// The JSON-RPC side of every connection that used it.
 #[derive(Default)]
 pub(super) struct Rpcs {
@@ -65,13 +124,10 @@ pub(super) struct Rpcs {
 
 #[derive(Default)]
 struct Conn {
-    /// said `initialize`: notifications go to it. False: an older hello
-    /// connection that sends requests (only their answers go to it)
+    /// said `initialize`: notifications go to it
     init: bool,
-    /// an older hello connection's notifications it reads already
-    /// (step 4's glue, `bise_proto::rpc::OLDER`), the rest the older way
-    // TODO(client-protocol step 4's end, P4e): goes with the hello's reads
-    reads: BTreeSet<&'static str>,
+    /// an older client's hello (the stub): only [`DOOR`]'s lines
+    older: bool,
     pending: Vec<Pending>,
     /// its lines held while one of its requests runs
     hold: Option<Vec<String>>,
@@ -118,50 +174,6 @@ impl Rpcs {
         self.conns.get(&id).is_some_and(|c| c.init)
     }
 
-    /// Older event line `v` goes to connection `id`: false when it is an
-    /// older hello connection that reads that kind as notifications.
-    // TODO(client-protocol step 4's end, P4e): goes with the hello's reads
-    pub(super) fn reads_some(&self, id: ClientId) -> bool {
-        self.conns.get(&id).is_some_and(|c| !c.reads.is_empty())
-    }
-
-    /// (step 4's glue, see `reads_some`)
-    pub(super) fn older_ok(&self, id: ClientId, v: &Value) -> bool {
-        let Some(c) = self.conns.get(&id).filter(|c| !c.reads.is_empty()) else { return true };
-        rpc::older_sent(v.get("ev").and_then(Value::as_str).unwrap_or(""), &c.reads)
-    }
-}
-
-/// What the hello burst writes for line `v` (step 4's glue): the line
-/// itself, or for an older event of a kind the connection reads typed
-/// (`reads`) its notifications from `notes`, in its place, so the
-/// terminal reads the kinds in the same order (approvals before ready,
-/// artifacts after it); a kind the hub-wide state doesn't hold (a
-/// release run's step, `/update`'s build, the versions) as the line's
-/// own notification (`project` added).
-// TODO(client-protocol step 4's end, P4e): goes with the hello's reads
-pub(super) fn burst_lines<'a>(v: &'a Value, reads: &BTreeSet<&'static str>, notes: &'a [Value], project: &str) -> Vec<Cow<'a, Value>> {
-    let ev = v.get("ev").and_then(Value::as_str).unwrap_or("");
-    if rpc::older_sent(ev, reads) {
-        return vec![Cow::Borrowed(v)];
-    }
-    let held = in_place(notes, ev);
-    if !held.is_empty() {
-        return held.into_iter().map(Cow::Borrowed).collect();
-    }
-    let mut own = v.clone();
-    own["project"] = json!(project);
-    match HubEv::from_value(own) {
-        Ok(e) => rpc::note(&e, None).map(|n| Cow::Owned(Message::Notification(n).to_value())).into_iter().collect(),
-        Err(_) => Vec::new(),
-    }
-}
-
-/// The notifications of `notes` that stand for older event `ev` (its
-/// [`rpc::OLDER`] row's methods).
-fn in_place<'a>(notes: &'a [Value], ev: &str) -> Vec<&'a Value> {
-    let Some(row) = rpc::OLDER.iter().find(|o| o.ev == ev) else { return Vec::new() };
-    notes.iter().filter(|n| n.get("method").and_then(Value::as_str).is_some_and(|m| row.methods.contains(&m))).collect()
 }
 
 impl Shell {
@@ -174,28 +186,66 @@ impl Shell {
         self.rpc_line(id, v);
     }
 
-    /// The hello's `reads` (client-protocol step 4's glue): the methods it
-    /// reads typed (`rpc::reads_of`, whole [`rpc::OLDER`] rows) and their
-    /// hub-wide state now as notifications, for its hello burst.
-    // TODO(client-protocol step 4's end, P4e): goes with the hello's reads
-    pub(super) fn rpc_reads(&mut self, listed: &[String]) -> (BTreeSet<&'static str>, Vec<Value>) {
-        let reads = rpc::reads_of(listed);
-        if reads.is_empty() {
-            return (reads, Vec::new());
-        }
-        let notes = self.hub_state().state.into_iter().filter(|n| reads.contains(n.method.as_str())).map(|n| Message::Notification(n).to_value()).collect();
-        (reads, notes)
+    /// An older client's hello connection (the stub): [`DOOR_OPS`] and
+    /// [`DOOR_CMDS`] only.
+    pub(super) fn rpc_older(&mut self, id: ClientId) {
+        self.rpc.conns.insert(id, Conn { older: true, ..Default::default() });
     }
 
-    /// Hello connection `id` reads `reads` as notifications: the typed
-    /// events reach it (`rpc_out` keeps those), its older events of those
-    /// kinds don't (`Rpcs::older_ok`).
-    pub(super) fn rpc_older(&mut self, id: ClientId, reads: BTreeSet<&'static str>) {
-        if reads.is_empty() {
+    /// Line `v` (not JSON-RPC) of client `id` as its typed command: only
+    /// on an older hello's connection, only the released door's lines.
+    pub(super) fn rpc_door(&self, id: ClientId, v: &Value) -> Result<Value, String> {
+        let what = || v.get("op").or_else(|| v.get("cmd")).map_or_else(|| "a line".to_string(), |x| format!("the line {x}"));
+        if !self.rpc.conns.get(&id).is_some_and(|c| c.older) {
+            return Err(what());
+        }
+        door_cmd(v, &self.project())
+    }
+
+    /// The one test of the released core's home connection (architect
+    /// m_15390): an older hello (the stub, after the peer judge in
+    /// accept.rs), then a typed hello without typed_only. Nothing else
+    /// gets an older event.
+    pub(super) fn door_events(&self, id: ClientId) -> bool {
+        self.rpc.conns.get(&id).is_some_and(|c| c.older) && self.proto.has(id) && !self.proto.typed_only(id)
+    }
+
+    /// Older event `v` to the released core's home connections, when it
+    /// is a kind of [`DOOR_EVENTS`].
+    pub(super) fn door_write(&mut self, v: &Value) {
+        if !v.get("ev").and_then(Value::as_str).is_some_and(|e| DOOR_EVENTS.contains(&e)) {
             return;
         }
-        self.rpc.conns.entry(id).or_default().reads = reads;
-        self.proto.older(id);
+        let ids: Vec<ClientId> = self.clients.keys().copied().filter(|id| self.door_events(*id)).collect();
+        if ids.is_empty() {
+            return;
+        }
+        let line = v.to_string();
+        for id in ids {
+            let alive = self.clients.get_mut(&id).is_some_and(|c| write_line(c, &line));
+            if !alive {
+                self.clients.remove(&id);
+                let _ = self.tx.send(Msg::ClientGone { id });
+            }
+        }
+    }
+
+    /// What the released core's home connection read at its hello, of
+    /// [`DOOR_EVENTS`]' kinds: the state, each feed's buffered lines,
+    /// then ready (the older hello burst's own order and writers).
+    pub(super) fn door_burst(&mut self, id: ClientId) {
+        let mut out = format!("{}\n", self.snapshot());
+        for name in &self.hub.st.order {
+            for (pos, ts, l) in self.buffers.get(name).into_iter().flatten() {
+                out.push_str(&super::line_event(name, *pos, *ts, l).to_string());
+                out.push('\n');
+            }
+        }
+        out.push_str(&json!({"ev": "ready"}).to_string());
+        out.push('\n');
+        if let Some(c) = self.clients.get_mut(&id) {
+            let _ = std::io::Write::write_all(c, out.as_bytes());
+        }
     }
 
     /// One JSON-RPC line from client `id`.
@@ -378,55 +428,8 @@ impl Shell {
                 return true;
             }
         }
-        // step 4's glue: an older hello connection that reads some kinds
-        // as notifications gets those; an event for it alone that it
-        // doesn't read goes as its older line (never swallowed); a
-        // hub-wide one it doesn't read reaches it the older way
-        // (`Rpcs::older_ok`, the burst)
-        // TODO(client-protocol step 4's end, P4e): goes with the hello's reads
-        let reads = self.rpc.conns.get(&id).map(|c| c.reads.clone()).unwrap_or_default();
-        if !init && !reads.is_empty() {
-            // a refusal past its request's answer: a notice, as below
-            let as_notice = match ev {
-                HubEv::Error { project, text, .. } if reads.contains("hub/notice") => {
-                    Some(HubEv::Notice { project: project.clone().unwrap_or_else(|| self.project()), cmd: None, text: text.clone(), cid: None })
-                }
-                _ => None,
-            };
-            let ev = as_notice.as_ref().unwrap_or(ev);
-            return match rpc::hello_way(ev.tag(), answer, &reads) {
-                rpc::HelloWay::Note => {
-                    let hub = rpc::note_of_ev(ev.tag()).is_some_and(|r| r.scope == Scope::Hub);
-                    let w = hub.then(|| self.rpc.now());
-                    if let Some(n) = rpc::note(ev, w) {
-                        self.rpc_write(id, &Message::Notification(n).encode(), false);
-                    }
-                    true
-                }
-                rpc::HelloWay::Older => match ev {
-                    HubEv::Notice { text, .. } | HubEv::Error { text, .. } => {
-                        self.older_notice(id, text);
-                        true
-                    }
-                    // the caller writes its older typed line
-                    _ => false,
-                },
-                rpc::HelloWay::Elsewhere => true,
-            };
-        }
         if !init {
-            // the hub's words past the request's one answer (a step's
-            // second notice) to an older hello connection (the terminal,
-            // until step 4): its older notice, never a typed line it
-            // doesn't read.
-            // TODO(client-protocol step 4, architect m_13688): goes when
-            // the terminal reads notifications (the older notice with it)
-            if !self.proto.has(id) {
-                if let HubEv::Notice { text, .. } | HubEv::Error { text, .. } = ev {
-                    self.older_notice(id, text);
-                    return true;
-                }
-            }
+            // the released core's door (its typed line, proto_send_old)
             return false;
         }
         let ev = match ev {
@@ -470,11 +473,9 @@ impl Shell {
     /// initialized JSON-RPC connection: a notice goes as `hub/notice`,
     /// update-card's `open_card` as `card/open`, the hub's `focus` as
     /// `client/focused` (P4b), the rest (the terminal's older events) not
-    /// at all. The same for an older hello connection that reads that
-    /// kind typed (step 4's glue, P4c-5). False: not one.
+    /// at all. False: not one.
     pub(super) fn rpc_effect(&mut self, id: ClientId, body: &Value) -> bool {
-        // TODO(client-protocol step 4's end, P4e): the hello's reads go
-        if !self.rpc.init(id) && self.rpc.older_ok(id, body) {
+        if !self.rpc.init(id) {
             return false;
         }
         if let Some(ev) = one_ev(&self.project(), body) {
@@ -493,38 +494,11 @@ impl Shell {
 mod tests {
     use super::*;
 
-    /// P4c-5: a kind the hub-wide state doesn't hold (a release run's
-    /// step, `/update`'s build, the versions) goes in the hello burst as
-    /// its own notification when the terminal reads it, else as its line.
+    /// Client-protocol step 5: no older notice line is written at all
+    /// (architect m_14727's one writer is gone with it): a connection
+    /// gets the typed notice, or nothing.
     #[test]
-    fn the_burst_sends_a_read_kind_as_its_own_notification() {
-        let reads = rpc::reads_of(&["release/progress".to_string(), "update/progress".to_string(), "hub/versions".to_string()]);
-        let none = BTreeSet::new();
-        let lines = [
-            json!({"ev": "release", "state": "running", "tag": "v2026.10.3", "text": "starting", "elapsed": 12}),
-            json!({"ev": "update", "state": "building", "rev": "1152b33", "elapsed": 3}),
-            json!({"ev": "versions", "current": "abc1234", "dev": true, "items": [{"rev": "abc1234", "subject": "s", "marks": ["current"]}]}),
-        ];
-        for (v, method) in lines.iter().zip(["release/progress", "update/progress", "hub/versions"]) {
-            let out = burst_lines(v, &reads, &[], "acme");
-            assert_eq!(out.len(), 1, "{v}");
-            assert_eq!(out[0]["method"], method, "{}", out[0]);
-            assert_eq!(out[0]["params"]["project"], "acme");
-            let Ok(Message::Notification(n)) = Message::from_value(out[0].clone().into_owned()) else { panic!("{}", out[0]) };
-            let (ev, _) = rpc::ev(&n).unwrap();
-            assert_eq!(ev.tag(), v["ev"].as_str().unwrap());
-            // not read: the line itself
-            assert_eq!(burst_lines(v, &none, &[], "acme").iter().map(|l| l.as_ref()).collect::<Vec<_>>(), vec![v]);
-        }
-    }
-
-    /// Architect m_14727: one notice writer. The older notice line is
-    /// written in `Shell::older_notice` only (every other site calls
-    /// `notice_out`), so a hello connection that reads `hub/notice` never
-    /// gets the older line from a path the glue missed.
-    // TODO(client-protocol step 4's end, P4e): goes with the older line
-    #[test]
-    fn the_older_notice_line_has_one_writer() {
+    fn no_older_notice_line_is_written() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
         let mut files = vec![root.join("daemon.rs")];
         let mut dirs = vec![root.join("daemon")];
@@ -550,7 +524,47 @@ mod tests {
                 }
             }
         }
-        assert_eq!(at.len(), 1, "the older notice is written outside Shell::older_notice: {at:?}");
-        assert!(at[0].starts_with("daemon/proto.rs"), "{at:?}");
+        assert!(at.is_empty(), "an older notice line is written: {at:?}");
+    }
+
+    use bise_proto::hub::HubCmd;
+    use std::collections::{BTreeMap, BTreeSet};
+
+    fn door(v: Value) -> Result<Value, String> {
+        door_cmd(&v, "acme")
+    }
+
+    /// The released v2026.10.2-28 core's lines (rust/proto/fixtures/
+    /// released/core_door.jsonl, its source's own shapes) map to the
+    /// typed command its arm takes; its cmd lines pass as they are;
+    /// anything else is refused.
+    #[test]
+    fn the_released_doors_lines_map_to_their_typed_commands() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../proto/fixtures/released/core_door.jsonl");
+        let text = std::fs::read_to_string(&path).unwrap();
+        let mut ops = BTreeMap::new();
+        for l in text.lines().filter(|l| !l.trim().is_empty()) {
+            let v: Value = serde_json::from_str(l).unwrap();
+            if v.get("op") == Some(&json!("hello")) {
+                continue;
+            }
+            let c = door(v.clone()).unwrap_or_else(|e| panic!("{l}: {e}"));
+            let cmd = HubCmd::from_value(c.clone()).unwrap_or_else(|e| panic!("{l}: {e}"));
+            assert!(!matches!(cmd, HubCmd::Unknown { .. }), "{l}");
+            if let Some(op) = v.get("op").and_then(Value::as_str) {
+                ops.insert(op.to_string(), c);
+            }
+        }
+        // every op of the table is in the released lines
+        assert_eq!(ops.keys().map(String::as_str).collect::<Vec<_>>(), DOOR_OPS.iter().map(|o| o.op).collect::<BTreeSet<_>>().into_iter().collect::<Vec<_>>());
+        assert_eq!(ops["input"], json!({"cmd": "slash", "project": "acme", "agent": "docs", "line": "thanks", "via": "ambient"}));
+        assert_eq!(ops["stop_hub"], json!({"cmd": "stop_hub", "project": "acme", "keep_agents": true}));
+        assert_eq!(ops["interrupt"], json!({"cmd": "stop", "project": "acme", "agent": "docs"}));
+        assert_eq!(ops["every_stop"], json!({"cmd": "scheduled_stop", "project": "acme", "id": 3}));
+        assert_eq!(ops["page_voice"], json!({"cmd": "page_voice", "project": "acme", "page": "weekly-update", "phase": "heard", "text": "shorter"}));
+        // outside the table: refused, and what it was
+        assert_eq!(door(json!({"op": "history", "agent": "main"})), Err("the op \"history\"".to_string()));
+        assert_eq!(door(json!({"cmd": "release_run", "project": "acme"})), Err("the cmd \"release_run\"".to_string()));
+        assert_eq!(door(json!({"x": 1})), Err("a line with no op".to_string()));
     }
 }

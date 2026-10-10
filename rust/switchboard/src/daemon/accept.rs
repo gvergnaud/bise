@@ -132,11 +132,12 @@ fn serve(stream: UnixStream, pid: Option<u32>, id: u64, tx: &Sender<Msg>, doors:
         }
     }
     match op.as_str() {
+        // `initialize`; or an older client's hello (client-protocol step
+        // 5's stub, architect m_13089 Q2, m_15183): the hub's exe and
+        // reload id, then only the released core's door lines
+        // (daemon/rpc.rs DOOR)
         "hello" => {
-            // TODO(client-protocol step 4's end, P4e): `reads` goes with
-            // the hello (the notifications the terminal reads already)
-            let reads = || v.get("reads").and_then(|r| serde_json::from_value(r.clone()).ok()).unwrap_or_default();
-            let _ = tx.send(if init { Msg::RpcNew { id, stream, v } } else { Msg::ClientNew { id, stream, reads: reads() } });
+            let _ = tx.send(if init { Msg::RpcNew { id, stream, v } } else { Msg::OlderHello { id, stream } });
             let mut line = String::new();
             loop {
                 line.clear();

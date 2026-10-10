@@ -51,7 +51,7 @@ mod worktrees;
 mod xhub;
 mod xread;
 
-use history::{history_line, transcript_page};
+use history::transcript_page;
 use repl::{adopt, adoptable, busy_at, kill_pid, supervise};
 use skills::{skill_roots, skills_fingerprint};
 use versions::version_allowed;
@@ -82,8 +82,6 @@ const BUFFER_LINES: usize = 1000;
 /// ambient-core keys on "[from the page:" to keep that turn off the
 /// capsule; main's rule (prompts.rs, amb-kit 83c1a8af) reads it.
 const PAGE_HINT: &str = "[from the page: answer on the page; one short line at most]";
-/// Lines one `history` page may carry.
-const PAGE_LINES: usize = 2000;
 
 pub struct Opts {
     pub paths: Paths,
@@ -148,10 +146,10 @@ enum Msg {
         reason: String,
         cause: repl_starts::Gone,
     },
-    ClientNew {
+    /// an older client's `{"op":"hello"}` (accept.rs: the stub)
+    OlderHello {
         id: ClientId,
         stream: UnixStream,
-        reads: Vec<String>,
     },
     ClientLine {
         id: ClientId,
@@ -251,7 +249,7 @@ impl Msg {
     /// a thread's typed answer to its request): the inbox's urgent lane
     /// (daemon/inbox.rs), one lane so its order holds (architect m_14659).
     fn is_client(m: &Msg) -> bool {
-        matches!(m, Msg::ClientNew { .. } | Msg::RpcNew { .. } | Msg::ClientLine { .. } | Msg::ClientGone { .. } | Msg::Typed { .. })
+        matches!(m, Msg::OlderHello { .. } | Msg::RpcNew { .. } | Msg::ClientLine { .. } | Msg::ClientGone { .. } | Msg::Typed { .. })
     }
 }
 
@@ -845,23 +843,13 @@ impl Shell {
         }
     }
 
-    /// One event to every client (serialized once).
+    /// One hub event to every client: its typed form (`proto_on`); its
+    /// older line only to the released core's home connection, for the
+    /// kinds it reads (client-protocol step 5, daemon/rpc.rs DOOR_EVENTS).
     fn broadcast(&mut self, v: &Value) {
         self.proto_on(v);
-        let line = v.to_string();
-        let mut dead: Vec<ClientId> = Vec::new();
-        for (id, s) in self.clients.iter_mut() {
-            if self.proto.typed_only(*id) || !self.rpc.older_ok(*id, v) {
-                continue;
-            }
-            if !write_line(s, &line) {
-                dead.push(*id);
-            }
-        }
-        for id in dead {
-            self.clients.remove(&id);
-            let _ = self.tx.send(Msg::ClientGone { id });
-        }
+        // the released core's home connection, one release (rpc.rs DOOR_EVENTS)
+        self.door_write(v);
     }
 
     fn step(&mut self, input: Input) {
@@ -1090,13 +1078,8 @@ impl Shell {
             }
             Effect::Land { token, job } => self.land(token, *job),
             Effect::ToClient { client, body } => {
-                let older = self.rpc.older_ok(client, &body);
-                if self.typed_notice(client, &body) || self.typed_confirm(client, &body) || self.rpc_effect(client, &body) || !older {
-                    return;
-                }
-                if let Some(s) = self.clients.get_mut(&client) {
-                    write_json(s, &body);
-                }
+                // typed, or nothing: no client reads the older line
+                let _ = self.typed_notice(client, &body) || self.typed_confirm(client, &body) || self.rpc_effect(client, &body);
             }
             Effect::Renamed { old, new } => {
                 if let Some(b) = self.buffers.remove(&old) {
@@ -1671,101 +1654,53 @@ impl Shell {
         }
     }
 
-    /// A new client: hello, snapshot, the buffered lines of every feed,
-    /// `ready`, the versions, in one write (thousands of lines: one
-    /// syscall, not one per line).
-    fn client_hello(&mut self, id: ClientId, mut stream: UnixStream, listed: &[String]) {
-        let art_ev = self.artifacts_ev();
-        // client-protocol step 4's glue (daemon/rpc.rs): what it reads typed
-        let (reads, notes) = self.rpc_reads(listed);
-        let project = self.project();
-        let mut out = String::new();
-        let mut push = |v: &Value| {
-            // step 4's glue: a kind it reads typed goes as its notifications
-            for l in rpc::burst_lines(v, &reads, &notes, &project) {
-                out.push_str(&l.to_string());
-                out.push('\n');
-            }
-        };
-        push(&json!({
-            "ev": "hello",
-            "workspace": self.hub.workspace,
-            "state_dir": self.opts.paths.state.to_string_lossy(),
-            "exe": self.opts.exe.to_string_lossy(),
-            "version": crate::switch::version_info(&self.opts.app_root),
-            "reload": self.reload_id,
-            "pages_url": self.pg.pages.as_ref().map(|p| p.base()),
-        }));
-        push(&self.snapshot());
-        for name in &self.hub.st.order {
-            for (pos, ts, l) in self.buffers.get(name).into_iter().flatten() {
-                push(&line_event(name, *pos, *ts, l));
-            }
-        }
-        push(&self.approvals_ev(false));
-        push(&json!({"ev": "ready"}));
-        push(&art_ev);
-        push(&self.version_items());
-        if let Some(r) = self.release_hello() {
-            push(&r);
-        }
-        if let Some(u) = self.update_hello() {
-            push(&u);
-        }
-        crate::util::timing(&format!("client hello built ({} bytes)", out.len()));
-        if stream.write_all(out.as_bytes()).is_err() {
+    /// An older client's hello (client-protocol step 5, the stub): the
+    /// hub's exe and reload id, so an older terminal re-executes as this
+    /// version (its `hello` arm follows `exe`); no burst, no older event,
+    /// ever. The connection stays for the released desktop core's door
+    /// (its typed hello, then the lines of daemon/rpc.rs's DOOR table).
+    /// Every client of this version says `initialize` (daemon/rpc.rs).
+    // TODO(client-protocol, the release after the one that ships it): exe
+    // and reload, then the connection closes (the door goes with DOOR)
+    fn older_hello(&mut self, id: ClientId, mut stream: UnixStream) {
+        log_line(&self.opts.paths, "an older client said hello on hub.sock: exe and reload, then the released door only (client-protocol's stub)");
+        if !write_json(&mut stream, &json!({"ev": "hello", "exe": self.opts.exe.to_string_lossy(), "reload": self.reload_id})) {
             return;
         }
-        crate::util::timing("client hello written");
         self.clients.insert(id, stream);
-        self.rpc_older(id, reads);
+        self.rpc_older(id);
         self.step(Input::ClientHello { client: id });
     }
 
+    /// A line on a client connection: JSON-RPC (an initialized one), or
+    /// on an older hello's connection (the stub) a line of the released
+    /// door ([`rpc::DOOR`]) as its typed command; anything else is
+    /// refused (one hub.log line).
     fn client_line(&mut self, id: ClientId, v: Value) {
-        if v.get("cmd").is_some() {
-            return self.proto_cmd(id, v);
-        }
         if bise_proto::rpc::is_rpc(&v) {
             return self.rpc_line(id, v);
         }
-        let s = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
-        match s("op").as_str() {
-            // a note talk's words (§4.1): to the page's frame, never an input
-            "page_voice" => self.page_voice(&s("page"), &s("phase"), &s("text")),
-            // older lines of a feed, before a position (the TUI scrolled
-            // to the top of what it holds)
-            "history" => {
-                let agent = s("agent");
-                let before = v.get("before").and_then(|x| x.as_u64()).unwrap_or(0) as usize;
-                let count = v
-                    .get("count")
-                    .and_then(|x| x.as_u64())
-                    .map_or(PAGE_LINES, |c| (c as usize).min(PAGE_LINES));
-                let lines: Vec<Value> = match self.dir_of(&agent) {
-                    Some(dir) => transcript_page(&self.transcript(&dir), before, count)
-                        .into_iter()
-                        .map(|(pos, ts, line)| history_line(pos, ts, &line))
-                        .collect(),
-                    None => Vec::new(),
-                };
-                if let Some(c) = self.clients.get_mut(&id) {
-                    write_json(
-                        c,
-                        &json!({"ev": "history", "agent": agent, "before": before, "lines": lines}),
-                    );
+        match self.rpc_door(id, &v) {
+            // a typed line: as the typed door takes it (hello first)
+            Ok(cmd) if v.get("op").is_none() => self.proto_cmd(id, cmd),
+            // an op line: its typed arm, as that release took the op
+            // with no typed hello (that release's `bise stop`)
+            Ok(cmd) => {
+                let tag = cmd.get("cmd").and_then(Value::as_str).unwrap_or("").to_string();
+                match bise_proto::hub::HubCmd::from_value(cmd) {
+                    Ok(c) => self.proto_run(id, &tag, self.project(), c),
+                    Err(e) => log_line(&self.opts.paths, &format!("hub.sock: the released door's {tag} not typed: {e}")),
                 }
             }
-            // artifacts and diffs (docs/artifacts.md)
-            "stop_hub" => {
-                let keep = v
-                    .get("keep_agents")
-                    .and_then(|x| x.as_bool())
-                    .unwrap_or(false);
-                self.view_stopped();
-                let _ = self.tx.send(Msg::Shutdown { keep });
+            Err(what) => {
+                log_line(&self.opts.paths, &format!("hub.sock refused {what} (not the released door's: client-protocol step 5)"));
+                match v.get("cmd").and_then(Value::as_str) {
+                    // a typed line: its error, as that release's door
+                    // answered a tag it didn't know
+                    Some(tag) => self.proto_error(id, tag, &format!("unknown command: {tag}")),
+                    None => self.notice_out(id, None, &format!("unknown op: {what}")),
+                }
             }
-            other => self.notice_out(id, None, &format!("unknown op: {}", other)),
         }
     }
 

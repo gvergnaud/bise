@@ -338,8 +338,10 @@ def main():
               "no image marker or store path in main's thread: %r" % [x for x in mthread if "<image" in json.dumps(x)][:2])
         d.send({"cmd": "unsubscribe", "project": project, "agent": "main"})
 
-        # a tool row's detail (ambient-lead m_14200, architect m_14218/m_14228),
-        # on the typed door d (c speaks JSON-RPC: rpc_e2e reads tool/output):
+        # a tool row's detail (ambient-lead m_14200, architect m_14218/m_14228):
+        # the row from the typed door d, its detail by JSON-RPC tool/output
+        # (tool_out came after v2026.10.2-28: the stub's released door
+        # refuses it, daemon/rpc.rs DOOR_CMDS):
         # the transcript keeps a 200-char preview; tool_out answers with the
         # whole result from the session log, capped at 4 KB (cut)
         c.say("[[bash: seq 1 2000]]")
@@ -359,10 +361,9 @@ def main():
         check(items and items[-1]["id"] > 0 and len(items[-1].get("out", "")) < 400,
               "the seq row: an id and the short preview: %r" % (items[-1:] or [json.dumps(x)[:300] for x in mt[-4:]]))
         d.send({"cmd": "unsubscribe", "project": project, "agent": "main"})
-        d.send({"cmd": "tool_out", "project": project, "agent": "main", "pos": items[-1]["pos"]})
-        c.wait(lambda: typed(d, "tool_out") or [e for e in typed(d, "error") if e.get("cmd") == "tool_out"], 20, "the tool_out answer")
-        check(typed(d, "tool_out"), "tool_out answered, not refused: %r" % [e for e in typed(d, "error") if e.get("cmd") == "tool_out"])
-        got = typed(d, "tool_out")[-1]
+        r = c.rpc("tool/output", {"project": project, "agent": "main", "pos": items[-1]["pos"]})
+        check("error" not in r, "tool/output answered, not refused: %r" % r)
+        got = r["result"]
         lines_out = got["out"].split("\n")
 
         def why_preview():
@@ -474,7 +475,10 @@ def main():
         # a typed-only connection (a window's): after its hello, only typed
         # events, never the hub's older ones (state, line, artifacts rows)
         w = Door(sock)
-        w.wait(lambda: w.state is not None, 20, "the second client's replay")
+        # client-protocol step 5's stub: an older hello gets exe and reload
+        # only (no replay); its typed hello then opens the door
+        w.wait(lambda: any(e.get("ev") == "hello" and "exe" in e for e in w.events), 20, "the stub's hello")
+        check(w.state is None, "no older state before the typed hello: %r" % w.state)
         w.send({"cmd": "hello", "proto": 1, "typed_only": True})
         w.wait(lambda: typed(w, "artifacts"), 20, "its welcome, agents, cards, artifacts")
         with w.lock:

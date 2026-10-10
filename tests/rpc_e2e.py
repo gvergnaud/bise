@@ -4,8 +4,8 @@ line is `initialize` gets the hub's identity, methods, notifications and
 hub-wide state at a watermark, never the hello burst; a request is its
 HubCmd's arm, answered once by id (a read's event, an action's {}, a
 refusal's error with its code); hub-wide notifications are numbered with
-no gap; an older hello connection (the terminal, step 3) gets its
-requests' answers and none of the notifications.
+no gap; an older client's hello (client-protocol step 5's stub) gets the
+hub's exe and reload id, then the connection ends.
 
 Run: python3 -u tests/rpc_e2e.py (after scripts/bins.sh)
 """
@@ -68,36 +68,22 @@ class Rpc:
             return [v for v in self.lines if "id" not in v and "method" in v and (method is None or v["method"] == method)]
 
 
-class Older:
-    """The terminal's hello connection with step 4's `reads` (the
-    notifications it reads already; its other kinds the older way)."""
-
-    def __init__(self, sock_path, reads):
-        self.s = socket.socket(socket.AF_UNIX)
-        self.s.connect(sock_path)
-        self.lines = []
-        self.lock = threading.Lock()
-        self.s.sendall((json.dumps({"op": "hello", "reads": reads}) + "\n").encode())
-        threading.Thread(target=self._read, daemon=True).start()
-
-    def _read(self):
-        for line in self.s.makefile("r"):
-            try:
-                v = json.loads(line)
-            except ValueError:
-                continue
-            with self.lock:
-                self.lines.append(v)
-
-    def got(self):
-        with self.lock:
-            return list(self.lines)
-
-    def send(self, v):
-        self.s.sendall((json.dumps(v) + "\n").encode())
-
-    def wait(self, f, what, timeout=30):
-        return wait.until(lambda: f() or None, timeout, what)
+def older_hello(sock_path):
+    """An older client's hello (with step 4's `reads`): the hub's first
+    line, and what else it wrote in the next 2 s (the stub keeps the
+    connection for the released core's door: tests/older_door_e2e.py)."""
+    s = socket.socket(socket.AF_UNIX)
+    s.settimeout(2)
+    s.connect(sock_path)
+    s.sendall((json.dumps({"op": "hello", "reads": ["hub/agents"]}) + "\n").encode())
+    out = []
+    try:
+        for line in s.makefile("r"):
+            out.append(json.loads(line))
+    except socket.timeout:
+        pass
+    s.close()
+    return out
 
 
 def main():
@@ -201,50 +187,11 @@ def main():
         with r.lock:
             check(not any("ev" in v or "op" in v for v in r.lines), "an older event after step 3's methods: %r" % [v for v in r.lines if "ev" in v][:3])
 
-        # an older hello connection (the terminal): requests answered by id,
-        # no notification
-        o = Older(sock, [])
-        o.wait(lambda: any(v.get("ev") == "ready" for v in o.got()), "ready on a hello connection")
-        o.send({"jsonrpc": "2.0", "id": "s1", "method": "scheduled/list", "params": {"project": project}})
-        got = o.wait(lambda: next((v for v in o.got() if v.get("id") == "s1"), None), "scheduled/list on a hello connection", 20)
-        check(got.get("result", {}).get("items") == [], "scheduled/list: %r" % got)
-        check(not any(v.get("jsonrpc") and "method" in v for v in o.got()), "a notification on a hello connection")
-        o.send({"jsonrpc": "2.0", "id": 9, "method": "agent/archive", "params": {"project": project, "agent": "ghost", "force": False}})
-        bad = o.wait(lambda: next((v for v in o.got() if v.get("id") == 9), None), "agent/archive's error", 20)
-        check(bad["error"]["code"] == HUB_REFUSED, "archive a ghost: %r" % bad)
-
-        # step 4's glue (architect m_13977): a hello that lists `reads`
-        # gets those kinds as notifications (their state in its burst,
-        # where the older events went) and never their older events; a half-listed
-        # row (state without hub/scheduled) is read the older way
-        typed = ["hub/agents", "hub/cards", "hub/scheduled", "hub/flow", "hub/artifacts", "hub/approvals", "confirm/ask"]
-        h = Older(sock, typed)
-        half = Older(sock, ["hub/agents", "hub/cards", "hub/artifacts"])
-        h.wait(lambda: any(v.get("ev") == "ready" for v in h.got()), "ready, with reads")
-        half.wait(lambda: any(v.get("ev") == "ready" for v in half.got()), "ready, half listed")
-        burst = h.got()
-        ready = next(i for i, v in enumerate(burst) if v.get("ev") == "ready")
-        # each where its older event went (the terminal's order): the
-        # state's and approvals before ready, artifacts right after it
-        for m in ["hub/agents", "hub/cards", "hub/scheduled", "hub/flow", "hub/approvals"]:
-            check(any(v.get("method") == m for v in burst[:ready]), "%s in the burst before ready" % m)
-        check(burst[ready + 1].get("method") == "hub/artifacts", "hub/artifacts right after ready: %r" % burst[ready + 1:ready + 2])
-        check(any(v.get("ev") == "hello" for v in burst) and any(v.get("ev") == "line" for v in burst), "hello and lines still the older way")
-        hb = half.got()
-        check(any(v.get("ev") == "state" for v in hb) and any(v.get("method") == "hub/artifacts" for v in hb), "half listed: state the older way, artifacts typed")
-        check(not any(v.get("method") in ("hub/agents", "hub/cards") for v in hb), "half listed: no hub/agents")
-        # a change after the burst: hub/agents, numbered, never a state line
-        before = len(h.got())
-        r.call("turn/send", {"project": project, "agent": "main", "text": "older reads", "mode": "now"})
-        h.wait(lambda: any(v.get("method") == "hub/agents" for v in h.got()[before:]), "hub/agents live")
-        live = [v for v in h.got()[before:] if v.get("method") == "hub/agents"]
-        check(all("seq" in v["params"] and "epoch" in v["params"] for v in live), "numbered: %r" % live[:1])
-        c.wait_status("main", "idle", 60)
-        allh = h.got()
-        older = sorted({v["ev"] for v in allh if v.get("ev") in ("state", "artifacts", "approvals", "confirm")})
-        check(not older, "older events it reads typed: %r" % older)
-        check(not any(v.get("ev") in ("agents", "cards", "scheduled") for v in allh), "a typed line it doesn't read")
-        check(any(v.get("ev") == "line" for v in allh[before:]), "its lines the older way")
+        # client-protocol step 5's stub: an older client's hello gets the
+        # hub's exe and reload id only (an older terminal re-executes as
+        # this version): no burst, no line, no state
+        got = older_hello(sock)
+        check(len(got) == 1 and set(got[0]) == {"ev", "exe", "reload"} and got[0]["ev"] == "hello" and got[0]["exe"], "an older hello: %r" % got[:3])
 
         # hub/stop (`bise stop`, switchboard client::stop): the hub ends
         r.request("hub/stop", {"project": project})

@@ -110,14 +110,6 @@ impl Proto {
     pub(super) fn typed(&mut self, id: ClientId) {
         self.conns.entry(id).or_default().only = true;
     }
-
-    /// The terminal's hello connection that reads some notifications
-    /// (client-protocol step 4's glue, `daemon/rpc.rs`): the typed events
-    /// reach it, its older events too (`rpc_out` keeps the ones it reads).
-    // TODO(client-protocol step 4's end, P4e): goes with the hello's reads
-    pub(super) fn older(&mut self, id: ClientId) {
-        self.conns.entry(id).or_default();
-    }
 }
 
 /// What the fold needs from the hub, owned (taken before the conns are
@@ -175,7 +167,8 @@ impl Shell {
         self.proto_send_old(id, ev);
     }
 
-    /// The event's line, as an older typed connection reads it.
+    /// The event's line, as an older typed connection reads it (the
+    /// released core's door: an answer to a line it sent).
     pub(super) fn proto_send_old(&mut self, id: ClientId, ev: &HubEv) {
         if let Some(c) = self.clients.get_mut(&id) {
             write_line(c, &ev.encode());
@@ -225,36 +218,20 @@ impl Shell {
     /// The hub's plain words for `client` outside a typed command's step
     /// (`/update`'s answers, a `/flow` or `/model` answer, a page card's,
     /// an unknown op): the typed `notice` on a typed connection (`cmd`:
-    /// the command it answers, `slash` for `/update`), `hub/notice` to a
-    /// hello connection that reads it, else the older line. The one
-    /// notice writer (with [`Shell::older_notice`]).
+    /// the command it answers, `slash` for `/update`); nothing to a
+    /// connection that never said a typed hello or `initialize` (no older
+    /// line, client-protocol step 5).
     pub(super) fn notice_out(&mut self, client: ClientId, cmd: Option<&str>, text: &str) {
         if self.proto.conns.contains_key(&client) {
             let project = self.project();
             self.proto_send(client, &HubEv::Notice { project, cmd: cmd.map(str::to_string), text: text.to_string(), cid: None });
-            // a hello connection with reads (step 4's glue): rpc_out sent
-            // it the notice its way
-            if self.proto.typed_only(client) || self.rpc.reads_some(client) {
-                return;
-            }
-        }
-        self.older_notice(client, text);
-    }
-
-    /// The older notice line (the terminal until step 4's end): the only
-    /// place that writes it.
-    // TODO(client-protocol step 4's end, P4e): goes with the older events
-    pub(super) fn older_notice(&mut self, client: ClientId, text: &str) {
-        if let Some(c) = self.clients.get_mut(&client) {
-            super::write_json(c, &json!({"ev": "notice", "text": text}));
         }
     }
 
     /// `Effect::ToClient`'s body for `client` when it is sb-core's yes/no
     /// question (`confirm`, bar I9) and `client` is a typed connection:
     /// sent as the typed `confirm`, to that connection only. True: a
-    /// typed-only connection is done with it (another one also gets the
-    /// older line).
+    /// typed-only connection is done with it.
     pub(super) fn typed_confirm(&mut self, client: ClientId, body: &Value) -> bool {
         if body.get("ev").and_then(Value::as_str) != Some("confirm") || !self.proto.conns.contains_key(&client) {
             return false;
@@ -301,7 +278,7 @@ impl Shell {
         self.proto.conns.keys().copied().filter(|id| self.clients.contains_key(id)).collect()
     }
 
-    fn proto_error(&mut self, id: ClientId, cmd: &str, text: &str) {
+    pub(super) fn proto_error(&mut self, id: ClientId, cmd: &str, text: &str) {
         self.proto_error_cid(id, cmd, text, None, None);
     }
 
@@ -356,6 +333,11 @@ impl Shell {
             self.proto_send(id, &appr);
             let flow = self.flow_ev();
             self.proto_send(id, &flow);
+            // the released core's home connection (no typed_only): its
+            // older start, one release (daemon/rpc.rs DOOR_EVENTS)
+            if self.door_events(id) {
+                self.door_burst(id);
+            }
             return;
         }
         if !self.proto.conns.contains_key(&id) {

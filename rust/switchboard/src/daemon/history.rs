@@ -35,17 +35,6 @@ pub(super) fn transcript_page(path: &Path, before: usize, count: usize) -> Vec<(
     out
 }
 
-/// One line of a `history` page (C2): `{pos, line}`, plus `ts` (the
-/// time the transcript wrote it, ms since the epoch) when known. `ts` is
-/// optional: a client reads a line without it as before.
-pub(super) fn history_line(pos: usize, ts: Option<u64>, line: &str) -> Value {
-    let mut v = json!({"pos": pos, "line": line});
-    if let Some(ts) = ts {
-        v["ts"] = json!(ts);
-    }
-    v
-}
-
 impl Shell {
     /// `sb inspect`: a bounded page of an agent's thread, with positions
     /// and cursors, or the origin of the caller (RFC 0001 §7.5).
@@ -179,28 +168,5 @@ pub(super) fn respond(index: &search::Index, who: &[search::Who], cmd: &str, v: 
     match r {
         Ok(text) => json!({"ok": true, "text": text}),
         Err(e) => json!({"ok": false, "error": e}),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// A `history` page carries each line's transcript time as `ts`
-    /// (C2 amendment); a line whose stamp does not parse has no `ts`.
-    #[test]
-    fn history_lines_carry_their_time() {
-        let dir = std::env::temp_dir().join(format!("sb-hist-ts-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("transcript.log");
-        std::fs::write(&path, "1700000000000\tyou : hi\nx\tobs: turn_started\n1700000400000\t--- idle\n").unwrap();
-        let page: Vec<Value> = transcript_page(&path, 4, 10)
-            .into_iter()
-            .map(|(pos, ts, line)| history_line(pos, ts, &line))
-            .collect();
-        std::fs::remove_dir_all(&dir).unwrap();
-        assert_eq!(page[0], json!({"pos": 1, "line": "you : hi", "ts": 1700000000000u64}));
-        assert_eq!(page[1], json!({"pos": 2, "line": "obs: turn_started"}));
-        assert_eq!(page[2]["ts"], 1700000400000u64);
     }
 }

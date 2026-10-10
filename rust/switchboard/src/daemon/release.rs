@@ -263,12 +263,6 @@ impl Shell {
         )
     }
 
-    fn send_client(&mut self, id: ClientId, v: &Value) {
-        if let Some(c) = self.clients.get_mut(&id) {
-            super::write_json(c, v);
-        }
-    }
-
     /// A plan (its event to `id`, from a thread) or a run (its events to
     /// all) starts; `Err` the words why not (the op's notice, the typed
     /// `release_plan`/`release_run`'s error).
@@ -327,25 +321,15 @@ impl Shell {
                     Err(e) => super::log_line(&self.opts.paths, &format!("release plan not typed: {e}")),
                 }
             }
-            // a terminal that reads release/progress (step 4's glue): its
-            // notification, never the older line
-            Some(id) if !self.rpc.older_ok(id, &v) => {
+            // every client says `initialize` (the older hello is a stub):
+            // its typed event
+            Some(id) => {
                 if let Some(ev) = self.typed_of(&v) {
                     self.proto_send(id, &ev);
                 }
             }
-            Some(id) => self.send_client(id, &v),
             None => self.broadcast(&v),
         }
-    }
-
-    /// For a TUI that connects while a release runs: where it is.
-    pub(super) fn release_hello(&self) -> Option<Value> {
-        let r = self.release.as_ref()?;
-        let mut v = if r.last.is_null() { json!({"ev": "release", "state": "running", "text": "starting"}) } else { r.last.clone() };
-        v["tag"] = json!(r.tag);
-        v["elapsed"] = json!(r.started.elapsed().as_secs());
-        Some(v)
     }
 }
 

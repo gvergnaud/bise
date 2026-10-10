@@ -25,7 +25,6 @@ use crate::hub::{HubCmd, HubEv};
 use crate::{Project, PROTO};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use std::collections::BTreeSet;
 
 // the envelope (Id, Request, Notification, Response, RpcError, Message,
 // the codes): one file shared with the app <-> core wire (step 6)
@@ -102,8 +101,7 @@ pub const METHODS: &[MethodRow] = &[
     m("release/plan", "release_plan", Some("release")),
     // its steps go to every client as `release/progress`
     m("release/run", "release_run", None),
-    // `bise stop` (switchboard client::stop): its `{}` may not come, the
-    // hub ends
+    // `bise stop` (client::stop): its answer may never come, the hub ends
     m("hub/stop", "stop_hub", None),
     // a note talk's words to its page (the desktop core's voice)
     m("page/voice", "page_voice", None),
@@ -232,81 +230,6 @@ pub fn methods() -> Vec<String> {
 /// Every notification this version sends.
 pub fn notifications() -> Vec<String> {
     NOTIFICATIONS.iter().map(|r| r.method.to_string()).collect()
-}
-
-// ---- client-protocol step 4's glue (architect m_13977) ----
-// TODO(client-protocol step 4's end, P4e): this table, its functions and
-// the hello's `reads` go when the terminal connects with `initialize`.
-
-/// An older event of the terminal's hello connection and the
-/// notifications that replace it. A hello that lists every one of them in
-/// its `reads` gets them as notifications, never the older event: the
-/// terminal swaps one kind at a time and reads each kind once.
-#[derive(Clone, Copy, Debug)]
-pub struct Older {
-    pub ev: &'static str,
-    pub methods: &'static [&'static str],
-}
-
-/// The kinds the terminal can read typed so far. A row is added (or
-/// grows) in the chunk that sends its notifications on every path the
-/// older event took (P4b: `state` gets its `flow`). Never in the TS
-/// generation: the window has no older events.
-// TODO(client-protocol step 4's end, P4e): delete this table with the
-// glue (Older, reads_of, older_sent, the hello's reads, the law).
-pub const OLDER: &[Older] = &[
-    Older { ev: "state", methods: &["hub/agents", "hub/cards", "hub/scheduled", "hub/flow"] },
-    Older { ev: "artifacts", methods: &["hub/artifacts"] },
-    Older { ev: "approvals", methods: &["hub/approvals"] },
-    Older { ev: "confirm", methods: &["confirm/ask"] },
-    // P4c-5: the hub's words, update-card's item, the focus it moved
-    Older { ev: "notice", methods: &["hub/notice"] },
-    Older { ev: "open_card", methods: &["card/open"] },
-    Older { ev: "focus", methods: &["client/focused"] },
-    Older { ev: "versions", methods: &["hub/versions"] },
-    Older { ev: "release", methods: &["release/progress"] },
-    Older { ev: "update", methods: &["update/progress"] },
-    // P4d-feed f-c: a subscribed thread's entries and step (line mode
-    // first; the terminal's feed with zone-b's switch)
-    Older { ev: "line", methods: &["thread/entry", "thread/typing"] },
-];
-
-/// What a hello's `reads` stands for: the methods of the [`OLDER`] rows
-/// it lists whole (a row half listed is read the older way).
-pub fn reads_of(listed: &[String]) -> BTreeSet<&'static str> {
-    OLDER.iter().filter(|o| o.methods.iter().all(|m| listed.iter().any(|l| l == m))).flat_map(|o| o.methods.iter().copied()).collect()
-}
-
-/// How a typed event reaches an older hello connection that reads some
-/// kinds typed ([`hello_way`]).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum HelloWay {
-    /// its notification (the connection reads that kind)
-    Note,
-    /// its older line (the connection reads that kind the older way)
-    Older,
-    /// not typed: a hub-wide event's older line reaches it on its own
-    /// path (the broadcast, the hello burst)
-    Elsewhere,
-}
-
-/// How typed event `tag` reaches a hello connection that reads `reads`;
-/// `alone`: it is for that connection only (a request's answer, a
-/// notice, a One event), so it never vanishes (architect m_14727: every
-/// event reaches the connection exactly one way).
-pub fn hello_way(tag: &str, alone: bool, reads: &BTreeSet<&'static str>) -> HelloWay {
-    if note_of_ev(tag).is_some_and(|r| reads.contains(r.method)) {
-        HelloWay::Note
-    } else if alone {
-        HelloWay::Older
-    } else {
-        HelloWay::Elsewhere
-    }
-}
-
-/// Older event `ev` still goes to a hello connection that reads `reads`.
-pub fn older_sent(ev: &str, reads: &BTreeSet<&'static str>) -> bool {
-    OLDER.iter().find(|o| o.ev == ev).is_none_or(|o| !o.methods.iter().all(|m| reads.contains(m)))
 }
 
 // ---- messages <-> the typed commands and events ----
