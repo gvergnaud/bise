@@ -1303,16 +1303,23 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// The agent in view runs `model`, as the hub's agents row says it
+    /// (`focus_model` reads the row since client-protocol F1, not the
+    /// feed's usage events).
+    fn on_model(app: &mut App, model: &str) {
+        let mut main = crate::sb::hub_reads::rows_for_tests::agent("main", "idle", "");
+        main.model = Some(model.into());
+        crate::sb::hub_reads::rows_for_tests::apply(app, vec![main], vec![]);
+        crate::sb::test_view(app, "main");
+    }
+
     /// A quote, a paste and an artifact chip are attachments but not
     /// images: none of them ever had a width, so a model the catalog
     /// lists without vision must not refuse the message.
     #[test]
     fn quotes_pastes_and_artifacts_are_not_images() {
         let mut app = composer("", 0);
-        let usage = |m: &str| {
-            crate::Ev::Usage(crate::usage::Usage { model: m.into(), input: 10, ..Default::default() })
-        };
-        app.events.push(usage("mistral/codestral-latest"));
+        on_model(&mut app, "mistral/codestral-latest");
         app.attachments.push(Attachment {
             label: crate::quote::label(1),
             marker: "<selection from=\"main\">q</selection>".into(),
@@ -1347,11 +1354,7 @@ mod tests {
     #[test]
     fn an_image_of_unknown_size_is_still_an_image() {
         let mut app = composer("", 0);
-        app.events.push(crate::Ev::Usage(crate::usage::Usage {
-            model: "mistral/codestral-latest".into(),
-            input: 10,
-            ..Default::default()
-        }));
+        on_model(&mut app, "mistral/codestral-latest");
         app.attachments.push(Attachment { info: Info::default(), ..att(1, "<image name=\"[Image #1]\" b64=\"/x.b64\">") });
         app.ed.insert("look at [Image #1]");
         assert_eq!(refused_images(&app), Some("mistral/codestral-latest".into()));
