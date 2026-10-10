@@ -474,6 +474,38 @@ def main():
         d.send({"cmd": "tool_out", "project": project, "agent": "main", "pos": 1})
         c.wait(lambda: any(e.get("cmd") == "tool_out" for e in typed(d, "error")), 20, "tool_out's error")
 
+        # an edit's line counts on a live tool item (designer's '± file +18
+        # −6', ambient-lead m_17160): a real write_file on the fake-provider
+        # hub gives its item files [{path, add, del}], the counts its own
+        # code (the runtime's V4A patch) gives, as the TUI's row counts them
+        c.say('[[write_file: {"file_path": "tf_counts.txt", "content": "one\\ntwo\\nthree\\n"}]]')
+        c.wait(lambda: any(re.match(r"tool #\d+ write_file", l) for l in c.lines("main")), 90, "main ran write_file")
+        c.wait_idle("main", timeout=90)
+        n = len(typed(d, "thread"))
+        d.send({"cmd": "subscribe", "project": project, "agent": "main"})
+        c.wait(lambda: len(typed(d, "thread")) > n, 20, "main's thread")
+        mt = typed(d, "thread")[-1]["entries"]
+        d.send({"cmd": "unsubscribe", "project": project, "agent": "main"})
+        wf = [i for x in mt if x["kind"] == "tools" for i in x["tools"]["items"] if "tf_counts.txt" in json.dumps(i)]
+        check(wf and wf[-1]["kind"] == "edit" and wf[-1].get("state") == "ok", "the write_file item, an ok edit: %r" % wf[-1:])
+
+        def counts(code):
+            """the patch's files and +/- lines, counted here apart from the hub"""
+            out = []
+            for l in code.split("\n"):
+                m = re.match(r"\*\*\* (?:Add|Update|Delete) File: (.*)", l)
+                if m:
+                    out.append({"path": m.group(1).strip(), "add": 0, "del": 0})
+                elif out and l.startswith("+"):
+                    out[-1]["add"] += 1
+                elif out and l.startswith("-"):
+                    out[-1]["del"] += 1
+            return out
+        files = wf[-1].get("files") or []
+        check(len(files) == 1 and files[0]["path"].endswith("tf_counts.txt") and files[0]["add"] >= 3 and files[0]["del"] == 0,
+              "its files: one, +3 or more, −0: %r (code %r)" % (files, wf[-1].get("code", "")[:200]))
+        check(files == counts(wf[-1].get("code", "")), "the counts its own patch gives: %r vs %r" % (files, counts(wf[-1].get("code", ""))))
+
         # an answer to MAIN's own card (designer's must-fix, architect
         # m_15205): main's thread has one 'you answered main' row with his
         # whole multi-line answer (sb-core's route line), and never the raw
