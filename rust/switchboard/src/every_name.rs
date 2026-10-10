@@ -43,7 +43,7 @@ impl Asker {
         if self.asking.is_some() {
             return None;
         }
-        let t = timers.map.values().find(|t| t.name.is_empty() && !self.asked.contains(&t.id))?;
+        let t = timers.map.values().find(|t| needs_name(&t.name) && !self.asked.contains(&t.id))?;
         self.asking = Some(t.id);
         self.asked.insert(t.id);
         Some((t.id, request(&t.text, &t.agent)))
@@ -90,6 +90,7 @@ fn escape(s: &str) -> String {
 /// 32 characters. None: nothing usable (a path, empty, a sentence): the
 /// fallback names it.
 pub fn clean(reply: &str) -> Option<String> {
+    let reply = &without_think(reply);
     let first = reply.lines().map(str::trim).find(|l| !l.is_empty() && !l.starts_with("```"))?;
     let mut l = first.trim_start_matches(['-', '*', '#', '>', ' ']).trim().to_string();
     if l.to_lowercase().starts_with("name:") {
@@ -102,10 +103,33 @@ pub fn clean(reply: &str) -> Option<String> {
     }
     let l = l.trim_end_matches(['.', '!']).trim().to_lowercase();
     let words = l.split_whitespace().count();
-    if words == 0 || words > 5 || l.contains(['/', '…']) || l.chars().any(|c| c.is_control()) {
+    if words == 0 || words > 5 || l.contains(['/', '…', '<', '>']) || l.chars().any(|c| c.is_control()) {
         return None;
     }
     Some(bise_proto::thread::words::name_fit(&l))
+}
+
+/// The reply without the model's reasoning: every `<think>…</think>`
+/// block, and an unclosed `<think>` with all that follows it (timer #162
+/// was named '<think>').
+fn without_think(reply: &str) -> String {
+    let mut out = String::new();
+    let mut rest = reply;
+    while let Some(i) = rest.find("<think>") {
+        out.push_str(&rest[..i]);
+        match rest[i..].find("</think>") {
+            Some(j) => rest = &rest[i + j + "</think>".len()..],
+            None => return out,
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// A name the hub names again (like an unnamed one): empty, or a model's
+/// tag kept by an older hub ('<think>').
+pub fn needs_name(name: &str) -> bool {
+    name.is_empty() || name.starts_with('<')
 }
 
 /// The name a call's end gives: the model's, else the plain fallback;
@@ -157,6 +181,9 @@ mod tests {
         assert_eq!(a.next(&ts).map(|x| x.0), Some(3), "2 has a name");
         a.done(3);
         assert!(a.next(&ts).is_none(), "each once, even unnamed still");
+        // a '<think>' name from an older hub is named again
+        ts.map.insert(4, timer(4, "<think>"));
+        assert_eq!(a.next(&ts).map(|x| x.0), Some(4));
     }
 
     #[test]
@@ -168,6 +195,12 @@ mod tests {
         assert_eq!(clean("this is a whole sentence about what the task does"), None);
         assert_eq!(clean("is the queue empty?"), None, "a label, not the question");
         assert_eq!(clean("Streaming Bench!").as_deref(), Some("streaming bench"));
+        // the model's reasoning tag (timer #162): dropped, else the fallback
+        assert_eq!(clean("<think>the user wants a name</think>\nstreaming bench").as_deref(), Some("streaming bench"));
+        assert_eq!(clean("<think>"), None);
+        assert_eq!(clean("<think>\nhmm, a name for this"), None);
+        assert_eq!(clean("<b>bench</b>"), None);
+        assert_eq!(name_of(Some("<think>"), "check the nightly build", "perf"), "check the nightly build");
         assert_eq!(name_of(None, "amb-core: streaming bench: queue empty? (pgrep", "amb-core"), "streaming bench");
         assert_eq!(name_of(Some("desktop drive review"), "x", "main"), "desktop drive review");
         assert_eq!(name_of(Some("amb-core streaming bench"), "x", "amb-core"), "streaming bench", "never its agent's name");
