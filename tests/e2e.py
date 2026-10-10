@@ -227,16 +227,21 @@ def stop_hub(sock_path, keep_agents=False):
     stop = {"jsonrpc": "2.0", "id": 1, "method": "hub/stop", "params": {"project": project, "keep_agents": keep_agents}}
     s.sendall((json.dumps(stop) + "\n").encode())
     s.settimeout(0.1)
-    t0 = time.time()
-    try:
+
+    def gone():
         # what the hub writes is read away (a full socket buffer would
         # keep it from stopping), as the CLI does
-        while os.path.exists(sock_path) and time.time() - t0 < 5:
-            try:
-                if not s.recv(65536):
-                    time.sleep(0.05)
-            except (socket.timeout, OSError):
-                pass
+        try:
+            s.recv(65536)
+        except (socket.timeout, OSError):
+            pass
+        return not os.path.exists(sock_path)
+
+    try:
+        # as the CLI: a hub that doesn't go in 5 s is left to the caller
+        wait.until(gone, 5, "the hub's socket gone after hub/stop", poll=0.05)
+    except AssertionError:
+        pass
     finally:
         s.close()
 
