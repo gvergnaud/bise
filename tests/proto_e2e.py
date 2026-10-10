@@ -27,10 +27,10 @@ FIXTURES = os.path.join(e2e.ROOT, "rust", "proto", "fixtures", "hub_ev.jsonl")
 
 
 class Door:
-    """The cmd door as v2026.10.2-28's desktop core opens it (kept one
-    release for older cores, architect): `{"op":"hello"}`, then `cmd`
-    lines on the same connection. Its own socket: e2e.Client speaks
-    JSON-RPC (`initialize`)."""
+    """The skew test's connection: the cmd door as v2026.10.2-28's
+    desktop core opens it (kept one release for older cores, architect
+    m_15100): `{"op":"hello"}`, then `cmd` lines on the same connection.
+    Its own socket: e2e.Client speaks JSON-RPC (`initialize`)."""
 
     def __init__(self, sock_path):
         self.s = socket.socket(socket.AF_UNIX)

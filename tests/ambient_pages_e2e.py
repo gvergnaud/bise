@@ -52,14 +52,10 @@ def timers(c):
     return list(s.get("items", [])) + list(s.get("ended", []))
 
 
-def batch_of(o, card_id):
-    """A drafts-batch card's `batch` (what the desktop core's capsule
-    reads), from the older state's card.
-    TODO(client-protocol, proto-zone-c): hub/cards' Card.batch, then
-    read it from the Client's cards."""
-    with o.lock:
-        cards = [x for x in (o.state or {}).get("cards", []) if x["id"] == card_id]
-    return (cards[0].get("batch") if cards else None) or {}
+def batch_of(card):
+    """A drafts-batch card's `batch` (hub/cards' Card.batch, what the
+    desktop core's capsule reads); {} on any other card."""
+    return card.get("batch") or {}
 
 
 def settle(c, timeout=120):
@@ -134,9 +130,6 @@ def main():
     try:
         c = E.start_hub()
         c.wait_status("main", "idle", 60)
-        # page_voice is the desktop core's own op (no method until the
-        # core moves to JSON-RPC, step 6): an older connection sends it
-        o = e2e.Older(os.path.join(E.state, "hub.sock"))
         v1 = os.path.join(E.tmp, "page-v1.html")
         v2 = os.path.join(E.tmp, "page-v2.html")
         open(v1, "w").write(PAGE_V1)
@@ -233,11 +226,11 @@ def main():
         m = json.loads(request(port, "GET", "/p/t1-page/meta")[2])
         check(m["agent"] == "main" and m["notes"][0]["status"] == "done", "main took the page over: %r" % m)
 
-        # §4.1 a note talk's words: the page_voice op reaches the page's
+        # §4.1 a note talk's words: page/voice reaches the page's
         # SSE as `voice`, never main's input
-        o.send({"op": "page_voice", "page": "weekly-update", "phase": "heard", "text": "make it shorter"})
+        check(c.rpc("page/voice", {"project": c.project(), "page": "weekly-update", "phase": "heard", "text": "make it shorter"}).get("result") == {}, "page/voice heard")
         c.wait(lambda: sse.seen("voice", lambda d: d == {"phase": "heard", "text": "make it shorter"}), 10, "SSE voice")
-        o.send({"op": "page_voice", "page": "weekly-update", "phase": "end", "text": "make it shorter"})
+        check(c.rpc("page/voice", {"project": c.project(), "page": "weekly-update", "phase": "end", "text": "make it shorter"}).get("result") == {}, "page/voice end")
         c.wait(lambda: sse.seen("voice", lambda d: d["phase"] == "end"), 10, "SSE voice end")
         check(not any("make it shorter" in l for l in c.lines("main")), "a note talk never reaches main")
 
@@ -656,8 +649,8 @@ def main():
         # hub/cards' CardPage has no `drafts` flag (the older state's): the
         # batch is its block, the first draft's
         check(on_page[0]["page"].get("block") == "mail-dns" and on_page[0]["page"].get("item") == "b1", "it opens the page at the first: %r" % on_page[0]["page"])
-        check(batch_of(o, on_page[0]["id"]) == {"count": 2, "title": "batch plan", "what": "emails", "names": ["lucas", "marc"],
-                                          "topics": [], "line": "emails to lucas and marc", "actions": None}, "its fields for the capsule: %r" % on_page[0])
+        check(batch_of(on_page[0]) == {"count": 2, "title": "batch plan", "what": "emails", "names": ["lucas", "marc"],
+                                          "topics": [], "line": "emails to lucas and marc"}, "its fields for the capsule (no actions: left out): %r" % on_page[0])
         settle(c)
         # 1 = review: nothing sent, the card stays
         c.say("/answer %d 1" % on_page[0]["id"])
@@ -706,7 +699,7 @@ def main():
         c.wait(lambda: fb() and fb()[0]["text"].startswith("3 drafts wait for you · benjamin's reports\n3 replies to Benjamin: fish, proxy and French\n"), 90,
                "republished after the fix: the 3 replies in one card")
         check(fb()[0]["text"].endswith("2. send all 3"), "send all 3: %r" % fb())
-        b = batch_of(o, fb()[0]["id"])
+        b = batch_of(fb()[0])
         check(b.get("what") == "replies" and fb()[0]["page"].get("item") == "reply-s212", "its fields: %r %r" % (fb()[0], b))
         check(b.get("names") == ["Benjamin"] and b.get("topics") == ["fish", "proxy", "French"], "names, topics: %r" % b)
         # one batch card per page: the 2-card closed when the 3-card came;
@@ -732,7 +725,7 @@ def main():
         c.wait(oc, 90, "the ops page's batch card")
         wait.stable(lambda: [x["text"] for x in oc()], 30, "the ops page's cards", quiet=1)
         check(len(oc()) == 1 and oc()[0]["text"] == "3 drafts wait for you · ops\nmessages to Nina · 2 to close\n1. review\n2. send all 3", "actions counted apart: %r" % oc())
-        check(batch_of(o, oc()[0]["id"]).get("actions") == "2 to close", "batch.actions: %r" % batch_of(o, oc()[0]["id"]))
+        check(batch_of(oc()[0]).get("actions") == "2 to close", "batch.actions: %r" % batch_of(oc()[0]))
         settle(c)
         c.say("/answer %d 2" % oc()[0]["id"])
         c.wait(lambda: not oc(), 30, "the ops batch closes on send all")
@@ -836,7 +829,9 @@ def main():
         c.say('[[bash: sb card --page bugs-watch#b2 "reply to the CSV report?"]]')
         # (its 3 drafts, b1, b2 and reply-nina, are a batch card of their
         # own since pm's C fail 42: not the one looked for here)
-        linked = lambda: next((x for x in c.cards() if (x.get("page") or {}).get("id") == "bugs-watch" and not x["page"].get("drafts")), None)
+        # (hub/cards' CardPage has no `drafts`: a batch card is the one
+        # with a batch)
+        linked = lambda: next((x for x in c.cards() if (x.get("page") or {}).get("id") == "bugs-watch" and not batch_of(x)), None)
         c.wait(linked, 60, "the watch's card, linked to its page")
         want = {"id": "bugs-watch", "block": "bugs", "item": "b2", "url": "http://127.0.0.1:%d/p/bugs-watch#b2" % port}
         check(linked()["page"] == want, "the card's page: %r" % linked())

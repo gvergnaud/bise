@@ -203,12 +203,29 @@ def out(cwd, script):
 
 
 def stop_hub(sock_path, keep_agents=False):
-    """Stop the hub of `sock_path` the way `bise switchboard --stop` does
-    (switchboard::client::stop, its one sender: the same lines), then
-    wait for its socket to go. Not the terminal's: no JSON-RPC method."""
+    """Stop the hub of `sock_path` as `bise switchboard --stop` does
+    (switchboard::client::stop): `initialize`, then `hub/stop` with
+    `keep_agents`; then wait for its socket to go."""
     s = socket.socket(socket.AF_UNIX)
     s.connect(sock_path)
-    s.sendall(('{"op":"hello"}\n' + json.dumps({"op": "stop_hub", "keep_agents": keep_agents}) + "\n").encode())
+    init = {"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {"proto": PROTO, "client": {"name": "e2e-stop"}}}
+    s.sendall((json.dumps(init) + "\n").encode())
+    s.settimeout(10)
+    f = s.makefile("r")
+    project = None
+    for line in f:
+        try:
+            v = json.loads(line)
+        except ValueError:
+            continue
+        if v.get("id") == 0 and "method" not in v:
+            project = (v.get("result") or {}).get("project")
+            break
+    if not project:
+        s.close()
+        raise AssertionError("initialize refused before hub/stop")
+    stop = {"jsonrpc": "2.0", "id": 1, "method": "hub/stop", "params": {"project": project, "keep_agents": keep_agents}}
+    s.sendall((json.dumps(stop) + "\n").encode())
     s.settimeout(0.1)
     t0 = time.time()
     try:
@@ -222,35 +239,6 @@ def stop_hub(sock_path, keep_agents=False):
                 pass
     finally:
         s.close()
-
-
-class Older:
-    """An older `{"op":"hello"}` connection, for what has no JSON-RPC
-    method yet: the desktop core's own op `page_voice` (ambient_pages_e2e).
-    TODO(client-protocol step 6): gone when the core speaks JSON-RPC."""
-
-    def __init__(self, sock_path):
-        self.s = socket.socket(socket.AF_UNIX)
-        self.s.connect(sock_path)
-        self.events = []
-        self.state = None
-        self.lock = threading.Lock()
-        self.s.sendall(b'{"op":"hello"}\n')
-        threading.Thread(target=self._read, daemon=True).start()
-
-    def _read(self):
-        for line in self.s.makefile("r"):
-            try:
-                v = json.loads(line)
-            except ValueError:
-                continue
-            with self.lock:
-                self.events.append(v)
-                if v.get("ev") == "state":
-                    self.state = v
-
-    def send(self, v):
-        self.s.sendall((json.dumps(v) + "\n").encode())
 
 
 PROTO = 1
