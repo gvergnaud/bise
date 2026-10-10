@@ -656,4 +656,4 @@ pub mod lines;
 pub mod scheduled;
 pub mod when;
 pub mod words;
-pub use fold::fold;
+pub use fold::{fold, tail_start};

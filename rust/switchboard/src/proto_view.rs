@@ -506,9 +506,12 @@ impl Live {
         out
     }
 
+    /// The lines of the newest KEEP entries stay, and every line of a call
+    /// one of them has (its result and finish come after a card line
+    /// written while it runs: `thread::tail_start`).
     fn trim(&mut self, entries: &[Entry]) {
         if entries.len() > KEEP {
-            let cut = entries[entries.len() - KEEP].pos;
+            let cut = thread::tail_start(&self.lines, entries, entries.len() - KEEP);
             self.lines.retain(|l| l.0 >= cut);
             self.sent.retain(|p, _| *p >= cut);
         }
@@ -759,5 +762,37 @@ mod tests {
         assert_eq!(step_of("tool_intent #2 : reading a"), Some("reading a".into()));
         assert_eq!(step_of("  obs: turn_done: completed"), Some(String::new()));
         assert_eq!(step_of("tool #2 x : y"), None);
+    }
+
+    /// tui-parity R1 (proto-lead m_15643): a card line written while its
+    /// `sb card` call runs is an entry; once it is the oldest one kept,
+    /// the call's result and finish still fold into the call's row, never
+    /// a lone `#2 ✓` entry a turn later. Every line pushed one by one,
+    /// each change an entry the whole fold has.
+    #[test]
+    fn a_live_tail_never_cuts_a_call_from_its_finish() {
+        let none = |_: &str| None;
+        let open: [u64; 0] = [];
+        let ctx = Ctx { open_cards: &open, page: &none, provider: &|i: &str, _: &str| i.to_string(), width: &unicode_width::UnicodeWidthStr::width, offset: &|_| 0, attached: &crate::attached::split };
+        let mut lines = vec!["sb you : ask me", "  obs: turn_started", "  obs: tool_started #2", "tool #2 bash : sb card \"second?\"", "sb card : #2 question @main : second?"];
+        let filler: Vec<String> = (0..KEEP + 2).map(|i| format!("sb info : note {i}")).collect();
+        lines.extend(filler.iter().map(String::as_str));
+        lines.extend(["tool_result #2 ok : #2", "  obs: tool_finished #2 ok", "  obs: turn_done: completed"]);
+        lines.extend(["sb you : the user answered card #2", "  obs: turn_started", "  obs: assistant: ack", "  obs: turn_done: completed"]);
+        let after: Vec<String> = (0..KEEP).map(|i| format!("sb info : later {i}")).collect();
+        lines.extend(after.iter().map(String::as_str));
+        let all: Vec<Line> = lines.iter().enumerate().map(|(i, l)| (i as u64 + 1, 1_000 + i as u64, l.to_string())).collect();
+        let whole = thread::fold(&all, &ctx);
+        let mut live = Live::start(Vec::new(), &[]);
+        for l in &all {
+            for e in live.push(l.clone(), &ctx) {
+                assert!(whole.iter().any(|w| w.pos == e.pos), "an entry the whole fold hasn't: {e:?}");
+            }
+        }
+        let row = whole.iter().find_map(|e| e.tools.as_ref()).expect("the call's row");
+        assert_eq!((row.count, row.items[0].state), (1, bise_proto::thread::ToolState::Ok));
+        assert_eq!(whole.iter().filter(|e| e.kind == thread::EntryKind::Tools).count(), 1);
+        // KEEP entries past its finish, the call's lines go
+        assert!(live.lines.first().is_some_and(|l| l.0 > 3), "{:?}", live.lines.first());
     }
 }

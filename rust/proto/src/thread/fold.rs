@@ -7,6 +7,7 @@ use super::scheduled;
 use super::words::{self, one_line, summary};
 use super::{Answered, ApprovalFold, Ctx, Entry, EntryCard, EntryKind, Landed, Line, Made, NotDelivered, Notice, PageRef, PrNews, ReportRef, Scheduled, Thinking, ToolItem, ToolKind, Tools};
 use super::{cap, Delivery, FileCount, GateWait, ToolGate, ToolState, TurnFailed};
+use crate::Pos;
 use crate::context::FnContext;
 use crate::rows::question;
 
@@ -577,6 +578,52 @@ pub fn fold(lines: &[Line], ctx: &Ctx) -> Vec<Entry> {
         f.line(*pos, *ms, l);
     }
     f.out
+}
+
+/// Where a live tail of `lines` may start so it folds `entries` from
+/// `entries[want]` on as the whole did (the hub's live fold keeps a few
+/// entries' lines, `proto_view::Live`): that entry's pos, or an earlier
+/// entry's while a call started before the cut has a line at or after it,
+/// or may still get one (no `tool_finished` and no turn end yet). Folded
+/// without its start, such a line (its result, its finish) would be a
+/// row of its own (tui-parity R1: a lone `#2 ✓ 0.0s` a turn later).
+pub fn tail_start(lines: &[Line], entries: &[Entry], want: usize) -> Pos {
+    let Some(first) = entries.get(want) else { return entries.first().map_or(0, |e| e.pos) };
+    // each call: its start's pos and its last line's (MAX: still open)
+    let mut calls: Vec<(Pos, Pos)> = Vec::new();
+    let mut last: Vec<(u32, usize)> = Vec::new();
+    for (pos, _, l) in lines {
+        let rec = lines::read(l.strip_prefix("history ").unwrap_or(l));
+        if matches!(rec, Rec::Obs(Obs::TurnDone(_))) {
+            for c in calls.iter_mut().filter(|c| c.1 == Pos::MAX) {
+                c.1 = *pos;
+            }
+            last.clear();
+            continue;
+        }
+        let Some(m) = lines::tool_move(&rec) else { continue };
+        let id = match &m {
+            ToolMove::Start(id) | ToolMove::Info { id, .. } | ToolMove::Intent { id, .. } | ToolMove::Code { id, .. } | ToolMove::Result { id, .. } | ToolMove::Finish { id, .. } => *id,
+        };
+        if let ToolMove::Start(_) = m {
+            last.retain(|&(i, _)| i != id);
+            last.push((id, calls.len()));
+            calls.push((*pos, Pos::MAX));
+            continue;
+        }
+        let Some(&(_, k)) = last.iter().find(|&&(i, _)| i == id) else { continue };
+        calls[k].1 = match m {
+            ToolMove::Finish { .. } => *pos,
+            _ if calls[k].1 == Pos::MAX => Pos::MAX,
+            _ => calls[k].1.max(*pos),
+        };
+    }
+    let mut cut = first.pos;
+    while let Some(&(start, _)) = calls.iter().find(|&&(start, end)| start < cut && end >= cut) {
+        // the entry the call's row is in: the newest at or before its start
+        cut = entries.iter().rev().find(|e| e.pos <= start).map_or(start, |e| e.pos);
+    }
+    cut
 }
 
 #[cfg(test)]

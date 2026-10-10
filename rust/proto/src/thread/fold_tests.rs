@@ -754,3 +754,61 @@ fn a_thinking_time_counts_from_the_last_shown_line() {
     // a shown line does move it: a provider retry's notice
     assert_eq!(think(&[(1, 1_000, "  obs: turn_started"), (2, 2_500, "  obs: provider_retry: 1/10 · provider 529 (transient) · retry in 2s"), (3, 3_000, reply)]), Some(500));
 }
+
+/// tui-parity R1 (proto-lead m_15643): a live tail starts where it folds
+/// its entries as the whole did: never between a call's start and a line
+/// of it after the cut (a card line written while `sb card` runs), nor
+/// while the call is still open; a finish or the turn's end lets it go.
+#[test]
+fn a_tail_never_starts_between_a_call_and_its_lines() {
+    let none = |_: &str| None;
+    let l = |pos: u64, line: &str| (pos, 1_000 + pos, line.to_string());
+    let mut ls = vec![
+        l(1, "sb you : ask"),
+        l(2, "  obs: turn_started"),
+        l(3, "  obs: tool_started #2"),
+        l(4, "tool #2 bash : sb card \"second?\""),
+        l(5, "sb card : #2 question @main : second?"),
+        l(6, "sb info : one"),
+    ];
+    let at = |ls: &[Line]| {
+        let e = fold(ls, &ctx_with(&[], &none));
+        let card = e.iter().position(|x| x.kind == EntryKind::Card).unwrap();
+        tail_start(ls, &e, card)
+    };
+    assert_eq!(at(&ls), 3, "the call is open: its row's entry stays");
+    ls.push(l(7, "tool_result #2 ok : #2"));
+    assert_eq!(at(&ls), 3, "its result is after the cut");
+    ls.push(l(8, "  obs: tool_finished #2 ok"));
+    assert_eq!(at(&ls), 3, "its finish too");
+    let tail: Vec<Line> = ls.iter().filter(|x| x.0 >= 3).cloned().collect();
+    let kinds = |ls: &[Line]| fold(ls, &ctx_with(&[], &none)).iter().map(|e| (e.pos, e.kind)).collect::<Vec<_>>();
+    assert_eq!(kinds(&tail), kinds(&ls)[1..], "the tail folds as the whole did");
+    // the gate's card: its fold (`sb approval`) is an entry written while
+    // the push runs; the push's result and finish come after it
+    let push = vec![
+        l(1, "  obs: tool_started #5"),
+        l(2, "tool #5 bash : git push origin main --force"),
+        l(3, "sb gate : check 5"),
+        l(4, "sb gate : card 12"),
+        l(5, "sb card : #12 confirm @main : git push origin main --force"),
+        l(6, "sb approval : allowed : main : git push origin main --force : "),
+        l(7, "sb gate : done 5"),
+        l(8, "tool_result #5 fail : exit 128: fatal: no"),
+        l(9, "  obs: tool_finished #5 fail"),
+        l(10, "sb info : one"),
+    ];
+    let e = fold(&push, &ctx_with(&[], &none));
+    let approval = e.iter().position(|x| x.kind == EntryKind::Approval).unwrap();
+    assert_eq!(tail_start(&push, &e, approval), 1, "the approval entry doesn't cut the push from its finish");
+    assert_eq!(tail_start(&push, &e, approval + 1), 10, "past its finish it may go");
+    // a call that ended before the cut doesn't hold it
+    let mut done = vec![l(1, "  obs: tool_started #1"), l(2, "tool #1 bash : ls"), l(3, "tool_result #1 ok : a"), l(4, "  obs: tool_finished #1 ok"), l(5, "sb info : one")];
+    let e = fold(&done, &ctx_with(&[], &none));
+    assert_eq!(tail_start(&done, &e, 1), 5);
+    // a turn's end closes a call that never finished (a crash)
+    done = vec![l(1, "  obs: tool_started #1"), l(2, "tool #1 bash : ls"), l(3, "  obs: turn_done: failed: boom"), l(4, "sb info : one")];
+    let e = fold(&done, &ctx_with(&[], &none));
+    let info = e.iter().position(|x| x.pos == 4).unwrap();
+    assert_eq!(tail_start(&done, &e, info), 4);
+}
