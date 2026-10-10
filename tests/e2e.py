@@ -242,9 +242,8 @@ def stop_hub(sock_path, keep_agents=False):
 
 
 PROTO = 1
-# the notifications that are one-client facts in older events' shape:
-# notices() reads them (a response's words join them, as the terminal
-# shows them)
+# the one-client notifications notices() lists, by their `kind` (a
+# response's words join them as a notice, as the terminal shows them)
 SAID = {"hub/notice": "notice", "confirm/ask": "confirm"}
 
 
@@ -261,6 +260,8 @@ class Client:
         self.agents_dir = os.path.join(os.path.realpath(os.path.dirname(sock_path)), "agents")
         self.q = queue.Queue()
         self.events = []
+        # what the hub said to this client (notices())
+        self.said = []
         # the hub-wide notifications' latest params, by method
         self.hub = {}
         self.state = None
@@ -305,15 +306,15 @@ class Client:
                 elif "method" in v and "id" not in v:
                     params = v.get("params") or {}
                     if v["method"] in SAID:
-                        self.events.append(dict(params, ev=SAID[v["method"]]))
+                        self.said.append(dict(params, kind=SAID[v["method"]]))
                     elif v["method"].startswith("hub/"):
                         self._note(v["method"], params)
                 # a response's words (command/run's notice, a refusal)
                 # read as the hub's notice, as the terminal shows them
                 if "jsonrpc" in v and "method" not in v:
-                    said = (v.get("result") or {}).get("notice") or (v.get("error") or {}).get("message")
-                    if said:
-                        self.events.append({"ev": "notice", "text": said, "rpc": v.get("id")})
+                    words = (v.get("result") or {}).get("notice") or (v.get("error") or {}).get("message")
+                    if words:
+                        self.said.append({"kind": "notice", "text": words, "rpc": v.get("id")})
 
     def _response(self, rid):
         with self.lock:
@@ -406,8 +407,11 @@ class Client:
         return [l for n in names for l in self._tail(os.path.join(self.agents_dir, n, "transcript.log"))]
 
     def notices(self):
+        """What the hub said to this client, in order: hub/notice and
+        confirm/ask's params with their `kind` (notice, confirm), and a
+        response's notice or refusal words as a notice."""
         with self.lock:
-            return [e for e in self.events if e.get("ev") in ("notice", "confirm")]
+            return list(self.said)
 
     def agent(self, name):
         """`name`'s row of hub/agents with the hub's own words the tests
@@ -591,8 +595,8 @@ def t_worktree_drop_restore(E, c):
     check(out(wt, "git log -1 --format=%s") == "wt", "the commit is on the task's branch")
     check(not os.path.exists(os.path.join(E.ws, "wt.txt")), "the workspace is untouched")
     c.say("/archive t4")
-    c.wait(lambda: any(n.get("ev") == "confirm" for n in c.notices()), 30, "a confirmation")
-    conf = [n for n in c.notices() if n.get("ev") == "confirm"][-1]
+    c.wait(lambda: any(n["kind"] == "confirm" for n in c.notices()), 30, "a confirmation")
+    conf = [n for n in c.notices() if n["kind"] == "confirm"][-1]
     check("1 unpushed commit" in conf["text"], conf["text"])
     check("error" not in c.confirm(conf["id"], True), "the confirm is answered")
     c.wait_status("t4", "archived", 30)

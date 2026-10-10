@@ -92,8 +92,8 @@ def main():
         # /archive: tmp/ goes, run/ stays
         c.say("/archive tt")
         c.wait(lambda: c.agent("tt")["status"] == "archived"
-               or any(n.get("ev") == "confirm" for n in c.notices()), 30, "tt dropped or a confirmation")
-        conf = [n for n in c.notices() if n.get("ev") == "confirm"]
+               or any(n["kind"] == "confirm" for n in c.notices()), 30, "tt dropped or a confirmation")
+        conf = [n for n in c.notices() if n["kind"] == "confirm"]
         if conf:
             c.confirm(conf[-1]["id"], True)
         c.wait_status("tt", "archived", 30)
