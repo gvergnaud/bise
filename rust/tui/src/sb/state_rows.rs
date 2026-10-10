@@ -171,6 +171,7 @@ pub(super) fn task_of_row(t: &ScheduledTask) -> Task {
         by: t.by.clone(),
         label: t.label.clone(),
         text: t.words.clone(),
+        name: t.name.clone(),
         next_ms: t.next_ms.unwrap_or(0),
         last_ms: t.last_ms.unwrap_or(0),
         fired: t.done,

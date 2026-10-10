@@ -59,7 +59,7 @@ fn a_real_hub() -> (T, u64) {
     t.req(MAIN, AgentReq::Drop { agent: "fix".into() });
     // a live timer and a stopped one
     let add = |text: &str| {
-        AgentReq::Every(EveryReq::Add { to: String::new(), text: text.into(), sched: crate::every::Sched::Every(600_000), until_ms: None, times: Some(6), page: None })
+        AgentReq::Every(EveryReq::Add { to: String::new(), text: text.into(), sched: crate::every::Sched::Every(600_000), until_ms: None, times: Some(6), page: None, name: None })
     };
     t.req(MAIN, add("check HN"));
     t.req(MAIN, add("check reddit"));
