@@ -67,6 +67,12 @@ the part before the first `/` of a model name must be a provider bise knows, or 
 
 look for `?` in the panel: it may wait for you in the inbox (`ctrl+1`). `/interrupt` in its view stops its turn, and a message starts the next one. `/stop <agent>` also takes its hands off Chrome and your apps.
 
+### main keeps compacting or seems to hold stale context
+
+bise deliberately has no full-context reset for main: main keeps the continuity around ongoing agents, processes and unanswered questions. `/compact` compacts the conversation of the agent in view; it does not start a fresh thread or erase the canonical history. `/clear` only clears the visible feed, so it does not reset model context either.
+
+if main repeatedly reloads a large context and compacts again, capture `bise session show --context` and `bise doctor --verbose` before restarting, then include that evidence in an issue. this makes the context bise actually sent to the model inspectable without pretending a reset happened.
+
 ## logs
 
 ```sh
