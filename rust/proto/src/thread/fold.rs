@@ -20,6 +20,11 @@ struct Fold<'a> {
     /// the 'you' entry the previous line pushed: the only one a context
     /// line may attach to
     you: Option<usize>,
+    /// the 'you' entry whose context line the previous line was: its
+    /// you-id line may still come (the hub writes the context line right
+    /// after the 'you' line sb-core wrote, before its id); no second
+    /// context attaches through it
+    ctx_you: Option<usize>,
     /// the previous line's time (0: a replay), for a thinking's duration
     last_ms: u64,
     /// the first entry of the current turn (its `turn_started`'s marks)
@@ -155,6 +160,7 @@ impl Fold<'_> {
         }
         self.cont = self.cont.filter(|&c| c != e).map(shift);
         self.you = self.you.filter(|&c| c != e).map(shift);
+        self.ctx_you = self.ctx_you.filter(|&c| c != e).map(shift);
         self.turn = shift(self.turn);
     }
 
@@ -270,6 +276,7 @@ impl Fold<'_> {
             false => std::mem::replace(&mut self.last_ms, if replayed { 0 } else { ms }),
         };
         let you = self.you.take();
+        let ctx_you = self.ctx_you.take();
         match rec {
             Rec::Empty | Rec::Idle | Rec::Fact => return,
             Rec::Raw(_) => {}
@@ -297,7 +304,7 @@ impl Fold<'_> {
         match rec {
             Rec::Obs(o) => self.obs(pos, ms, o, if replayed { 0 } else { prev }),
             Rec::Rejected(r) => self.notice(pos, ms, words::rejected(&r)),
-            Rec::Hub(h) => self.hub(pos, ms, h, you),
+            Rec::Hub(h) => self.hub(pos, ms, h, you, ctx_you),
             // a message's next line
             Rec::Raw(line) => self.more(&line),
             _ => {}
@@ -382,7 +389,7 @@ impl Fold<'_> {
         self.push(e);
     }
 
-    fn hub(&mut self, pos: u64, ms: u64, h: Hub, you: Option<usize>) {
+    fn hub(&mut self, pos: u64, ms: u64, h: Hub, you: Option<usize>, ctx_you: Option<usize>) {
         match h {
             // the approvals gate holds the running call (§3.1)
             Hub::Gate(step) => self.gate(ms, step),
@@ -391,12 +398,27 @@ impl Fold<'_> {
                 (self.cont, self.you) = (Some(i), Some(i));
             }
             // his fn context: on the 'you' line right before it, else
-            // dropped (a stray one never lands on another entry)
+            // dropped (a stray one never lands on another entry); its
+            // you-id may still follow (the hub writes the context line
+            // right after the 'you' line sb-core wrote, before its id)
             Hub::Context(raw) => {
                 if let (Some(i), Ok(c)) = (you, serde_json::from_str::<FnContext>(&raw)) {
                     self.out[i].context = Some(c);
                 }
+                self.ctx_you = you;
             }
+            // his message's id: on the 'you' line right before it (sb-core
+            // writes both in one step; his context line may sit between),
+            // else nothing (no entry of its own)
+            Hub::YouId(id) => {
+                if let Some(i) = you.or(ctx_you) {
+                    self.out[i].msg_id = Some(id);
+                }
+            }
+            // the agent read these steered messages here, mid-turn: each
+            // entry they name (his by msg_id, an agent's by msg) gets this
+            // line's pos once; it makes no entry of its own
+            Hub::Steered(ids) => mark_steered(&mut self.out, &ids, pos),
             // a scheduled task's run reads as its line; the note of a
             // stop is for the agent only (site/m/timers, the TUI's rule)
             // main's note of an answer to its own card: its route line
@@ -573,7 +595,7 @@ impl Delivered for Entry {
 
 /// An agent's transcript lines as entries, oldest first.
 pub fn fold(lines: &[Line], ctx: &Ctx) -> Vec<Entry> {
-    let mut f = Fold { out: Vec::new(), cont: None, tools: Vec::new(), you: None, last_ms: 0, turn: 0, starting: false, by_result: Vec::new(), ctx };
+    let mut f = Fold { out: Vec::new(), cont: None, tools: Vec::new(), you: None, ctx_you: None, last_ms: 0, turn: 0, starting: false, by_result: Vec::new(), ctx };
     for (pos, ms, l) in lines {
         f.line(*pos, *ms, l);
     }
@@ -587,6 +609,36 @@ pub fn fold(lines: &[Line], ctx: &Ctx) -> Vec<Entry> {
 /// or may still get one (no `tool_finished` and no turn end yet). Folded
 /// without its start, such a line (its result, its finish) would be a
 /// row of its own (tui-parity R1: a lone `#2 ✓ 0.0s` a turn later).
+/// A steered receipt at `pos`: each entry it names that has no mark yet
+/// (his by msg_id, an agent's by msg) gets `steered_at = pos`.
+pub(super) fn mark_steered(out: &mut [Entry], ids: &[u64], pos: Pos) {
+    for e in out.iter_mut().filter(|e| e.steered_at.is_none()) {
+        let id = match e.kind {
+            EntryKind::You => e.msg_id,
+            EntryKind::FromAgent => e.msg,
+            _ => None,
+        };
+        if id.is_some_and(|id| ids.contains(&id)) {
+            e.steered_at = Some(pos);
+        }
+    }
+}
+
+/// The receipts after a page (architect m_16543): `ahead` is the
+/// transcript's lines after the page's last one. A message is read in the
+/// turn it was delivered in, so its receipt comes before that turn's end:
+/// the receipts up to the first turn end mark the page's entries, and
+/// nothing after it can name one of them.
+pub fn mark_ahead(entries: &mut [Entry], ahead: &[Line]) {
+    for (pos, _, l) in ahead {
+        match lines::read(l) {
+            Rec::Hub(Hub::Steered(ids)) => mark_steered(entries, &ids, *pos),
+            Rec::Obs(Obs::TurnDone(_)) => break,
+            _ => {}
+        }
+    }
+}
+
 pub fn tail_start(lines: &[Line], entries: &[Entry], want: usize) -> Pos {
     let Some(first) = entries.get(want) else { return entries.first().map_or(0, |e| e.pos) };
     // each call: its start's pos and its last line's (MAX: still open)

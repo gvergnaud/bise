@@ -168,18 +168,127 @@ fn a_context_line_belongs_to_the_you_line_right_before_it() {
     assert_eq!(e[2].text, "and this?");
 }
 
+/// Law (architect m_16499): a you-id line gives its id to the 'you' line
+/// right before it (his context line may sit between them, the hub writes
+/// it there); a stray one attaches to nothing and makes no entry; an
+/// older transcript (no you-id) gives None, nothing guessed.
+#[test]
+fn a_you_id_line_belongs_to_the_you_line_right_before_it() {
+    let none = |_: &str| None;
+    let ctx = ctx_with(&[], &none);
+    let l = |pos: u64, line: &str| (pos, pos, line.to_string());
+    let lines = vec![
+        l(1, "sb you : first"),
+        l(2, "sb you-id : m_3"),
+        l(3, "sb you : with his screen"),
+        l(4, r#"sb context : {"app":"Safari"}"#),
+        l(5, "sb you-id : m_4"),
+        l(6, "  obs: assistant: looking"),
+        l(7, "sb you-id : m_9"),
+        l(8, "sb you : an older one"),
+        l(9, "  obs: turn_started"),
+        l(10, "sb you-id : m_5"),
+        l(11, "sb you : bad id"),
+        l(12, "sb you-id : 7"),
+    ];
+    let e = fold(&lines, &ctx);
+    let got: Vec<(&str, Option<u64>)> = e.iter().map(|e| (e.text.as_str(), e.msg_id)).collect();
+    assert_eq!(got.len(), 6, "{got:?}");
+    assert_eq!(&got[..5], [("first", Some(3)), ("with his screen", Some(4)), ("looking", None), ("an older one", None), ("bad id", None)]);
+    assert_eq!(e[1].context.as_ref().and_then(|c| c.app.as_deref()), Some("Safari"));
+    // a malformed id line is an older kind's line: its words, as any other
+    assert_eq!(e[5].kind, EntryKind::Notice);
+    assert!(e.iter().all(|e| e.payload_matches_kind()), "{e:?}");
+}
+
+/// Laws (architect m_16497/m_16499): a steered receipt marks the entries
+/// whose message ids it names with its own pos (after theirs), all of a
+/// bundled receipt's the same; his by msg_id, an agent's by msg; an entry
+/// keeps its first mark; ids it never showed, nothing; no entry of its
+/// own. An older transcript (no receipt): steered_at None.
+#[test]
+fn a_steered_receipt_marks_the_messages_it_names() {
+    let none = |_: &str| None;
+    let ctx = ctx_with(&[], &none);
+    let l = |pos: u64, line: &str| (pos, pos, line.to_string());
+    let lines = vec![
+        l(1, "sb you : go"),
+        l(2, "sb you-id : m_1"),
+        l(3, "  obs: turn_started"),
+        l(4, "  obs: tool_started #1"),
+        l(4, "tool #1 bash : cargo test"),
+        l(5, "sb you : use nextest"),
+        l(6, "sb you-id : m_2"),
+        l(7, "sb you : and -q"),
+        l(8, "sb you-id : m_3"),
+        l(9, "sb msg-in : docs m_4 : ping"),
+        l(10, "tool_result #1 ok : done"),
+        l(11, "sb steered : m_2 m_3 m_4 m_77"),
+        l(12, "sb you : later"),
+        l(13, "sb you-id : m_5"),
+        l(14, "sb steered : m_5 m_2"),
+        l(15, "  obs: turn_done: completed"),
+    ];
+    let e = fold(&lines, &ctx);
+    let by = |t: &str| e.iter().find(|e| e.text == t).unwrap_or_else(|| panic!("{t}: {e:?}"));
+    assert_eq!(by("go").steered_at, None);
+    assert_eq!(by("use nextest").steered_at, Some(11), "bundled: one pos for all");
+    assert_eq!(by("and -q").steered_at, Some(11));
+    assert_eq!(by("ping").steered_at, Some(11));
+    assert_eq!(by("later").steered_at, Some(14));
+    assert!(e.iter().all(|e| e.steered_at.is_none_or(|s| s > e.pos)), "{e:?}");
+    assert!(e.iter().all(|e| e.kind != EntryKind::Notice), "the receipts make no entry: {e:?}");
+    assert!(e.iter().all(|e| e.payload_matches_kind()), "{e:?}");
+}
+
 #[test]
 fn a_page_keeps_the_newest_and_says_what_is_before() {
     let none = |_: &str| None;
     let ctx = ctx_with(&[], &none);
-    let (e, before, more) = page(&lines(), &ctx, 60);
+    let (e, before, more) = page(&lines(), &[], &ctx, 60);
     assert_eq!((e.len(), before, more), (7, None, false));
-    let (e, before, more) = page(&lines(), &ctx, 2);
+    let (e, before, more) = page(&lines(), &[], &ctx, 2);
     assert_eq!((e.len(), before, more), (2, Some(13), true));
     // a page that doesn't start the thread: its first entry may be cut
-    let (e, before, more) = page(&lines()[3..13], &ctx, 60);
+    let (e, before, more) = page(&lines()[3..13], &[], &ctx, 60);
     assert_eq!(e[0].kind, EntryKind::FromAgent);
     assert_eq!((before, more), (Some(10), true));
+}
+
+/// Law (architect m_16543): a page cut between a steered message and its
+/// receipt still shows steered_at: the page reads the lines after it up to
+/// its last turn's end; a receipt after that end marks nothing (it can't
+/// name a message of this page), and the page equals the whole fold.
+#[test]
+fn a_page_cut_before_the_receipt_still_shows_the_steer() {
+    let none = |_: &str| None;
+    let ctx = ctx_with(&[], &none);
+    let l = |pos: u64, line: &str| (pos, pos, line.to_string());
+    let all = vec![
+        l(1, "sb you : go"),
+        l(2, "sb you-id : m_1"),
+        l(3, "  obs: turn_started"),
+        l(4, "  obs: tool_started #1"),
+        l(4, "tool #1 bash : sleep 8"),
+        l(5, "sb you : and nextest"),
+        l(6, "sb you-id : m_2"),
+        // the page ends here: the receipt is in the next page
+        l(7, "tool_result #1 ok : done"),
+        l(8, "sb steered : m_2"),
+        l(9, "  obs: assistant: switching"),
+        l(10, "  obs: turn_done: completed"),
+        l(11, "sb steered : m_1"),
+    ];
+    let cut = all.iter().position(|x| x.0 == 7).unwrap();
+    let (e, _, _) = page(&all[..cut], &all[cut..], &ctx, 60);
+    let by = |t: &str| e.iter().find(|x| x.text == t).unwrap_or_else(|| panic!("{t}: {e:?}"));
+    assert_eq!(by("and nextest").steered_at, Some(8));
+    assert_eq!(by("go").steered_at, None, "a receipt after the turn's end marks nothing");
+    let whole = fold(&all[..10], &ctx);
+    assert_eq!(whole.iter().find(|x| x.text == "and nextest").and_then(|x| x.steered_at), Some(8), "the same as the whole fold");
+    // without the lines ahead (the old page): nothing guessed
+    let (e, _, _) = page(&all[..cut], &[], &ctx, 60);
+    assert!(e.iter().all(|x| x.steered_at.is_none()), "{e:?}");
 }
 
 #[test]

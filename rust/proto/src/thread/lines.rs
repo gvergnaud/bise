@@ -151,6 +151,11 @@ pub fn is_msg_id(s: &str) -> bool {
     s.strip_prefix("m_").is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
 }
 
+/// A message id's number: `m_12` is 12; anything else is none.
+pub fn msg_id(s: &str) -> Option<u64> {
+    s.strip_prefix("m_").filter(|_| is_msg_id(s)).and_then(|n| n.parse().ok())
+}
+
 /// One transcript line, read.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Rec {
@@ -245,6 +250,13 @@ pub enum GateStep {
 pub enum Hub {
     /// his message
     You(String),
+    /// `you-id : m_<n>`: the id of the 'you' line right before it
+    /// (sb-core writes it in the same step; the feed only)
+    YouId(u64),
+    /// `steered : m_<n> m_<n>`: the agent read these steered messages
+    /// here, mid-turn (sb-core's receipt, the steer-mode deliveries since
+    /// the last one)
+    Steered(Vec<u64>),
     /// his fn context, the raw JSON (S9)
     Context(String),
     /// BISE-86: `undelivered : {name} : {text}`
@@ -465,6 +477,14 @@ pub fn hub(rest: &str) -> Hub {
     let other = |text: String| Hub::Other { kind: kind.to_string(), text };
     match kind {
         "you" => Hub::You(text),
+        "you-id" => match msg_id(raw.trim()) {
+            Some(id) => Hub::YouId(id),
+            None => other(text),
+        },
+        "steered" => match raw.split_whitespace().map(msg_id).collect::<Option<Vec<u64>>>() {
+            Some(ids) if !ids.is_empty() => Hub::Steered(ids),
+            _ => other(text),
+        },
         "context" => Hub::Context(raw.to_string()),
         "undelivered" => {
             let (name, t) = raw.split_once(" : ").unwrap_or((raw, ""));

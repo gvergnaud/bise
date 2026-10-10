@@ -19,8 +19,11 @@ type Rt is Data:
 type Waiter is Data:
   Waiter{token: Nat, agent: String, msg: Nat, deadline: Nat}
 
+# an agent's steer-mode deliveries this turn; `seen`: how many of `ids`
+# a receipt (ISteered) already reported, so the next one reports only
+# the new ones (seen <= len ids)
 type Steer is Data:
-  Steer{agent: String, ids: List<&2, Nat>}
+  Steer{agent: String, ids: List<&2, Nat>, seen: Nat}
 
 type Cnt is Data:
   Cnt{agent: String, recv: Nat, inj: Nat}
@@ -128,13 +131,18 @@ def Waiter.deadline(x: Waiter) -> Nat:
 
 def Steer.agent(x: Steer) -> String:
   match x:
-    case Steer{+agent, _}:
+    case Steer{+agent, _, _}:
       agent
 
 def Steer.ids(x: Steer) -> List<&2, Nat>:
   match x:
-    case Steer{_, +ids}:
+    case Steer{_, +ids, _}:
       ids
+
+def Steer.seen(x: Steer) -> Nat:
+  match x:
+    case Steer{_, _, +seen}:
+      seen
 
 def Cnt.agent(x: Cnt) -> String:
   match x:

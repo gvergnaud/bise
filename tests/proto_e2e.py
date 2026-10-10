@@ -201,6 +201,49 @@ def main():
         check(tr[i + 1].startswith("sb context : ") and json.loads(tr[i + 1][len("sb context : "):]) == ctx, "the context line right after: %r" % tr[i : i + 2])
         check(not any("screen_context" in l for l in tr if l.startswith("sb you : ")), "no block on a 'you' line")
 
+        # steered (architect m_16497/m_16499): sb-core writes `sb you-id :
+        # m_N` right after every 'you' line (the entry's msg_id), and at the
+        # runtime's ISteered a `sb steered : m_N…` receipt naming the steer
+        # deliveries since the last one (their entries' steered_at: the
+        # receipt's pos, after theirs). A single steer, then a bundled one.
+        def last_you(text):
+            seen = [x for x in entries("you") if x["text"] == text]
+            return seen[-1] if seen else None
+
+        def transcript():
+            return [l.split("\t", 1)[1] for l in open(os.path.join(E.state, "agents", "main", "transcript.log")).read().splitlines() if "\t" in l]
+
+        def steer_round(base, steers):
+            d.send({"cmd": "send", "project": project, "agent": "main", "text": "[[bash: sleep 6]] " + base, "mode": "now"})
+            c.wait_line("main", "sleep 6", 30)
+            c.wait_status("main", "working", 30)
+            for s in steers:
+                d.send({"cmd": "send", "project": project, "agent": "main", "text": s, "mode": "now"})
+            c.wait(lambda: all((last_you(s) or {}).get("steered_at") for s in steers), 60, "steered_at on %r" % steers)
+            c.wait_idle("main", timeout=90)
+            b = last_you("[[bash: sleep 6]] " + base)
+            check(b and b.get("msg_id") and not b.get("steered_at"), "a message sent to an idle agent has its id, no steer: %r" % b)
+            got = [last_you(s) for s in steers]
+            check(all(g.get("msg_id") and g["steered_at"] > g["pos"] for g in got), "steered after its own line: %r" % got)
+            check(len({g["steered_at"] for g in got}) == 1, "one receipt, one pos: %r" % got)
+            check(len({g["msg_id"] for g in got} | {b["msg_id"]}) == len(got) + 1, "distinct ids: %r" % got)
+            tr = transcript()
+            for g in got:
+                i = tr.index("sb you : " + g["text"])
+                check(tr[i + 1] == "sb you-id : m_%d" % g["msg_id"], "the id line right after his: %r" % tr[i : i + 2])
+            receipt = [l for l in tr if l.startswith("sb steered : ")]
+            want = "sb steered : " + " ".join("m_%d" % g["msg_id"] for g in got)
+            check(want in receipt, "the receipt names them: %r not in %r" % (want, receipt))
+            # the receipt and the id lines make no entry of their own
+            check(not any(x["text"].startswith(("m_", "steered")) for x in entries("notice")), "no notice for them: %r" % entries("notice"))
+            return got
+
+        steer_round("single", ["steer one"])
+        two = steer_round("bundled", ["steer two a", "steer two b"])
+        # the model got his words as before: no id or receipt in what it read
+        reqs = json.dumps([r for r in E.fake_requests() if r.get("agent") == "main"])
+        check(two and "steer two a" in reqs and "you-id" not in reqs and "sb steered" not in reqs, "the model reads no id line")
+
         # a page before the live entry: older entries (or none), never an error
         n = len(typed(d, "thread"))
         d.send({"cmd": "page", "project": project, "agent": "main", "before": you["pos"]})

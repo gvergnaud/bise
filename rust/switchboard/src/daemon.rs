@@ -51,7 +51,7 @@ mod worktrees;
 mod xhub;
 mod xread;
 
-use history::transcript_page;
+use history::{transcript_ahead, transcript_page};
 use repl::{adopt, adoptable, busy_at, kill_pid, supervise};
 use skills::{skill_roots, skills_fingerprint};
 use versions::version_allowed;

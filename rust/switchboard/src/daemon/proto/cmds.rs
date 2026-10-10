@@ -59,7 +59,8 @@ impl Shell {
                 self.setup();
                 let setup = &self.setup;
                 let ctx = Ctx { open_cards: &facts.open, page: &|p: &str| facts.page(p), provider: &|i: &str, k: &str| provider_name(setup, i, k), width: &width, offset: &offset, attached: &crate::attached::split };
-                let (entries, before, more) = pthread::page(&lines, &ctx, limit.map_or(LIMIT, |l| (l as usize).clamp(1, MAX_LIMIT)));
+                // the newest page: nothing after it yet
+                let (entries, before, more) = pthread::page(&lines, &[], &ctx, limit.map_or(LIMIT, |l| (l as usize).clamp(1, MAX_LIMIT)));
                 let live = Live::start(lines, &entries);
                 if let Some(c) = self.proto.conns.get_mut(&id) {
                     c.subs.insert(agent.clone(), live);
@@ -73,12 +74,15 @@ impl Shell {
             }
             HubCmd::Page { agent, before, limit, .. } => {
                 let Some(dir) = self.dir_of(&agent) else { return self.proto_error(id, &tag, &format!("no agent {agent}")) };
-                let lines = lines_of(transcript_page(&self.transcript(&dir), before as usize, LINES));
+                let path = self.transcript(&dir);
+                let lines = lines_of(transcript_page(&path, before as usize, LINES));
+                // its last turn's steered receipts may sit after it
+                let ahead = lines_of(transcript_ahead(&path, before as usize, LINES));
                 let facts = self.facts();
                 self.setup();
                 let setup = &self.setup;
                 let ctx = Ctx { open_cards: &facts.open, page: &|p: &str| facts.page(p), provider: &|i: &str, k: &str| provider_name(setup, i, k), width: &width, offset: &offset, attached: &crate::attached::split };
-                let (entries, before, more) = pthread::page(&lines, &ctx, limit.map_or(LIMIT, |l| (l as usize).clamp(1, MAX_LIMIT)));
+                let (entries, before, more) = pthread::page(&lines, &ahead, &ctx, limit.map_or(LIMIT, |l| (l as usize).clamp(1, MAX_LIMIT)));
                 self.proto_send(id, &HubEv::Thread { project, agent, entries, before, more });
             }
             HubCmd::Send { agent, text, opts, cid, .. } => self.proto_input(id, &tag, agent, text, opts, cid),

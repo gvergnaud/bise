@@ -5511,6 +5511,48 @@ law main_card_answer_routes_once:
         HM.MAIN(), "route", HC.cat(["you → @", HM.MAIN(), " (answer to card #", HC.ns(HM.Card.id(c)), ") : ", text])),
       HM.Card.id(c), "answered") : HX.Cx<o>}
 
+# LAW: his message's feed line is followed, in the same step, by its id
+# ('sb you-id : m_N'): the clients key his entry by it (nothing else may
+# fall between them); the REPL and the model get the same delivery.
+law you_line_carries_its_id:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +name: String
+  for +m: HM.Msg
+  {HC.deliver.line(o, False{}, True{}, cx, name, m)
+    == HC.line(o, HC.line(o, cx, name, "you", HM.Msg.text(m)), name, "you-id", HC.mid(HM.Msg.id(m))) : HX.Cx<o>}
+
+# LAW: a steered receipt names the steer-mode deliveries since the last
+# one, on one feed line at this point of the turn, and marks them seen.
+law steered_receipt_names_the_new_ones:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +agent: String
+  for +h: Nat
+  for +t: List<&2, Nat>
+  for +total: Nat
+  {HC.steer_receipt.go(o, h <> t, cx, agent, total)
+    == HC.line(o, HC.set_r(o, cx, HX.R.with_steered(HC.rr(o, cx), HC.steer_mark(HX.R.steered(HC.rr(o, cx)), agent, total))),
+      agent, "steered", String.join(HC.mids(h <> t), " ")) : HX.Cx<o>}
+
+# LAW: a receipt once every steered id was seen (or with none) marks
+# nothing and writes nothing (a second receipt with no new steer).
+law steered_receipt_after_all_seen_is_nothing:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +agent: String
+  for +ids: List<&2, Nat>
+  for +total: Nat
+  {HC.steer_receipt.go(o, List.drop(&2, Nat, ids, List.length(&2, Nat, ids)), cx, agent, total) == cx : HX.Cx<o>}
+
+# LAW: a new steer keeps the cursor: the ids already reported stay
+# reported, the new ones come after them.
+law steer_add_keeps_seen:
+  for +xs: List<&2, HX.Steer>
+  for +n: String
+  for +ids: List<&2, Nat>
+  {HC.steer_seen(HC.steer_add(xs, n, ids), n) == HC.steer_seen(xs, n) : Nat}
+
 # ---- MCP calls that fail (runtime/mcp-pure.bend) ----
 
 # LAW: a call is tried again (fresh initialize) only when it never

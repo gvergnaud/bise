@@ -35,6 +35,13 @@ pub(super) fn transcript_page(path: &Path, before: usize, count: usize) -> Vec<(
     out
 }
 
+/// The lines of a transcript at positions [from, from + count), as
+/// [`transcript_page`]: what comes after a page (its last turn's steered
+/// receipts, `thread::mark_ahead`).
+pub(super) fn transcript_ahead(path: &Path, from: usize, count: usize) -> Vec<(usize, Option<u64>, String)> {
+    transcript_page(path, from + count, count).into_iter().filter(|l| l.0 >= from).collect()
+}
+
 impl Shell {
     /// `sb inspect`: a bounded page of an agent's thread, with positions
     /// and cursors, or the origin of the caller (RFC 0001 §7.5).

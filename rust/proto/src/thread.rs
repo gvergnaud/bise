@@ -493,6 +493,19 @@ pub struct Entry {
     /// rule ([`lines::deliver`], the TUI's too)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delivery: Option<Delivery>,
+    /// a `you` entry: his message's id (`m_12` is 12), from the
+    /// `sb you-id : m_12` line sb-core writes right after his 'you' line.
+    /// None for an older transcript (nothing guessed). A `from_agent`
+    /// entry's id is its `msg`, as before
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub msg_id: Option<u64>,
+    /// the message reached the agent mid-turn (steered): the transcript
+    /// position of the `sb steered` receipt that names it, i.e. where in
+    /// the turn the agent read it (always after this entry's `pos`; one
+    /// receipt gives all its ids the same). None: not steered, or an
+    /// older transcript
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub steered_at: Option<u64>,
     /// an agent wrote this to him (G5, the TUI's level 2): an `agent`
     /// entry from the hub's `msg-you` (`from`: who), or a `from_agent`
     /// one that is an old direct reply. A superset: those lines fold to
@@ -557,6 +570,8 @@ impl Entry {
             report: None,
             context: None,
             delivery: (kind == EntryKind::You).then_some(Delivery::Sent),
+            msg_id: None,
+            steered_at: None,
             to_you: false,
             to: None,
             asks: false,
@@ -607,7 +622,10 @@ impl Entry {
         };
         let from = self.from.is_some() == (self.kind == EntryKind::FromAgent || self.to_you);
         let from = from && (!self.to_you || matches!(self.kind, EntryKind::Agent | EntryKind::FromAgent));
-        thinking && from && has.iter().all(|(k, set)| *set == (self.kind == *k))
+        // his message's id is his entry's; steered: a message the agent got
+        let ids = (self.msg_id.is_none() || self.kind == EntryKind::You)
+            && (self.steered_at.is_none() || matches!(self.kind, EntryKind::You | EntryKind::FromAgent));
+        thinking && from && ids && has.iter().all(|(k, set)| *set == (self.kind == *k))
     }
 }
 
@@ -639,9 +657,12 @@ pub struct Ctx<'a> {
 /// lines don't start the transcript (the oldest entry, maybe cut, is
 /// dropped) or entries were left out; `before`: the oldest entry's pos
 /// when there is more (ask `page {before}` for the ones before it).
-pub fn page(lines: &[Line], ctx: &Ctx, limit: usize) -> (Vec<Entry>, Option<Pos>, bool) {
+/// `ahead`: the transcript's lines after `lines` (none for the newest
+/// page), read for the steered receipts of its last turn ([`mark_ahead`]).
+pub fn page(lines: &[Line], ahead: &[Line], ctx: &Ctx, limit: usize) -> (Vec<Entry>, Option<Pos>, bool) {
     let older = lines.first().is_some_and(|l| l.0 > 1);
     let mut entries = fold(lines, ctx);
+    mark_ahead(&mut entries, ahead);
     if older && entries.len() > 1 {
         entries.remove(0);
     }
@@ -656,4 +677,4 @@ pub mod lines;
 pub mod scheduled;
 pub mod when;
 pub mod words;
-pub use fold::{fold, tail_start};
+pub use fold::{fold, mark_ahead, tail_start};

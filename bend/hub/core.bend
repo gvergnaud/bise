@@ -325,6 +325,10 @@ def get_key(~A: Data, ~B: Data, ~key: A -> String, ~val: A -> B, xs: List<&2, A>
 def steer_get(xs: List<&2, X.Steer>, +n: String) -> List<&2, Nat>:
   get_key(~X.Steer, ~List<&2, Nat>, ~X.Steer.agent, ~X.Steer.ids, xs, n, Nil{})
 
+# how many of an agent's steered ids a receipt already reported
+def steer_seen(xs: List<&2, X.Steer>, +n: String) -> Nat:
+  get_key(~X.Steer, ~Nat, ~X.Steer.agent, ~X.Steer.seen, xs, n, 0n)
+
 def cnt_get(xs: List<&2, X.Cnt>, +n: String) -> X.Cnt:
   get_key(~X.Cnt, ~X.Cnt, ~X.Cnt.agent, ~(c => c), xs, n, X.Cnt{n, 0n, 0n})
 
@@ -352,14 +356,14 @@ def steer_del(xs: List<&2, X.Steer>, +n: String) -> List<&2, X.Steer>:
       Bool.pick(List<&2, X.Steer>, String.eq(X.Steer.agent(h), n), rest, h <> rest)
 
 def steer_add(+xs: List<&2, X.Steer>, +n: String, +ids: List<&2, Nat>) -> List<&2, X.Steer>:
-  M.snoc(X.Steer, steer_del(xs, n), X.Steer{n, List.append(&2, Nat, steer_get(xs, n), ids)})
+  M.snoc(X.Steer, steer_del(xs, n), X.Steer{n, List.append(&2, Nat, steer_get(xs, n), ids), steer_seen(xs, n)})
 
 def steer_rename(xs: List<&2, X.Steer>, +old: String, +new: String) -> List<&2, X.Steer>:
   match xs:
     case Nil{}:
       Nil{}
     case Con{+h, +t}:
-      Bool.pick(X.Steer, String.eq(X.Steer.agent(h), old), X.Steer{new, X.Steer.ids(h)}, h) <> steer_rename(t, old, new)
+      Bool.pick(X.Steer, String.eq(X.Steer.agent(h), old), X.Steer{new, X.Steer.ids(h), X.Steer.seen(h)}, h) <> steer_rename(t, old, new)
 
 def ids_of(xs: List<&2, M.Msg>) -> List<&2, Nat>:
   match xs:
@@ -662,8 +666,10 @@ def deliver.line(-o: M.St, again: Bool, you: Bool, +cx: X.Cx<o>, +name: String, 
   match again you:
     case True{} _:
       cx
+    # his line, then its message id on the next one (the feed only: the
+    # clients key his entry by it, the steered receipt names it)
     case False{} True{}:
-      line(o, cx, name, "you", M.Msg.text(m))
+      line(o, line(o, cx, name, "you", M.Msg.text(m)), name, "you-id", mid(M.Msg.id(m)))
     case False{} False{}:
       line(o, cx, name, "msg-in", cat([M.Msg.from(m), " ", mid(M.Msg.id(m)), " : ", M.Msg.text(m)]))
 
@@ -3195,6 +3201,40 @@ def steer_count(-o: M.St, +cx: X.Cx<o>, +agent: String, +injected: Bool) -> X.Cx
   +c2 = Bool.pick(X.Cnt, injected, X.Cnt{agent, X.Cnt.recv(c), 1n+X.Cnt.inj(c)}, X.Cnt{agent, 1n+X.Cnt.recv(c), X.Cnt.inj(c)})
   set_r(o, cx, X.R.with_counts(r, M.snoc(X.Cnt, cnt_del(X.R.counts(r), agent), c2)))
 
+# an agent's steered list with `seen` set to `k` (the list itself kept)
+def steer_mark(xs: List<&2, X.Steer>, +n: String, +k: Nat) -> List<&2, X.Steer>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case Con{+h, +t}:
+      Bool.pick(X.Steer, String.eq(X.Steer.agent(h), n), X.Steer{n, X.Steer.ids(h), k}, h) <> steer_mark(t, n, k)
+
+def mids(xs: List<&2, Nat>) -> List<&2, String>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case Con{+h, +t}:
+      mid(h) <> mids(t)
+
+# the receipt's ids: the steer-mode deliveries since the last receipt
+# (none: a second receipt with no new steer marks nothing)
+def steer_receipt.go(-o: M.St, new: List<&2, Nat>, +cx: X.Cx<o>, +agent: String, +total: Nat) -> X.Cx<o>:
+  match new:
+    case Nil{}:
+      cx
+    case Con{+h, +t}:
+      +r = rr(o, cx)
+      +cx2 = set_r(o, cx, X.R.with_steered(r, steer_mark(X.R.steered(r), agent, total)))
+      line(o, cx2, agent, "steered", String.join(mids(h <> t), " "))
+
+# the runtime read the steering (ISteered): the feed line naming the
+# messages it read, at this point of the turn ('sb steered : m_3 m_4');
+# R.steered stays whole for the turn's end (repl_idle reads it)
+def steer_receipt(-o: M.St, +cx: X.Cx<o>, +agent: String) -> X.Cx<o>:
+  +xs = X.R.steered(rr(o, cx))
+  +ids = steer_get(xs, agent)
+  steer_receipt.go(o, List.drop(&2, Nat, ids, steer_seen(xs, agent)), cx, agent, List.length(&2, Nat, ids))
+
 def assistant(-o: M.St, +cx: X.Cx<o>, +agent: String, +text: String) -> X.Cx<o>:
   +r = rr(o, cx)
   set_r(o, cx, X.R.with_last(r, M.snoc(X.Kv, kv_del(X.R.last(r), agent), X.Kv{agent, text})))
@@ -3562,7 +3602,8 @@ def dispatch.go(-o: M.St, tag: In, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
     case ISteerRx{}:
       steer_count(o, cx, C.get_s(i, "agent"), False{})
     case ISteered{}:
-      steer_count(o, cx, C.get_s(i, "agent"), True{})
+      +agent = C.get_s(i, "agent")
+      steer_receipt(o, steer_count(o, cx, agent, True{}), agent)
     case IAssistant{}:
       assistant(o, cx, C.get_s(i, "agent"), C.get_s(i, "text"))
     case ITouch{}:

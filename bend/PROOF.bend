@@ -2481,7 +2481,10 @@ def hub_d_dline(-o: HM.St, again: Bool, you: Bool, +cx: HX.Cx<o>, +name: String,
     case True{} _:
       {==}
     case False{} True{}:
-      hub_d_line(o, cx, name, "you", HM.Msg.text(m))
+      Equal.trans(HM.St, HX.d(o, HC.line(o, HC.line(o, cx, name, "you", HM.Msg.text(m)), name, "you-id", HC.mid(HM.Msg.id(m)))),
+        HX.d(o, HC.line(o, cx, name, "you", HM.Msg.text(m))), HX.d(o, cx),
+        hub_d_line(o, HC.line(o, cx, name, "you", HM.Msg.text(m)), name, "you-id", HC.mid(HM.Msg.id(m))),
+        hub_d_line(o, cx, name, "you", HM.Msg.text(m)))
     case False{} False{}:
       hub_d_line(o, cx, name, "msg-in", HC.cat([HM.Msg.from(m), " ", HC.mid(HM.Msg.id(m)), " : ", HM.Msg.text(m)]))
 
@@ -3179,7 +3182,10 @@ def hub_rts_dline(-o: HM.St, again: Bool, you: Bool, +cx: HX.Cx<o>, +name: Strin
     case True{} _:
       {==}
     case False{} True{}:
-      hub_rts_line(o, cx, name, "you", HM.Msg.text(m))
+      Equal.trans(List<&2, HX.Rt>, hub_rts(o, HC.line(o, HC.line(o, cx, name, "you", HM.Msg.text(m)), name, "you-id", HC.mid(HM.Msg.id(m)))),
+        hub_rts(o, HC.line(o, cx, name, "you", HM.Msg.text(m))), hub_rts(o, cx),
+        hub_rts_line(o, HC.line(o, cx, name, "you", HM.Msg.text(m)), name, "you-id", HC.mid(HM.Msg.id(m))),
+        hub_rts_line(o, cx, name, "you", HM.Msg.text(m)))
     case False{} False{}:
       hub_rts_line(o, cx, name, "msg-in", HC.cat([HM.Msg.from(m), " ", HC.mid(HM.Msg.id(m)), " : ", HM.Msg.text(m)]))
 
@@ -5423,6 +5429,45 @@ def Laws.unknown_agent_is_no_task(o, cx, agent, e):
 
 def Laws.main_card_answer_routes_once(o, cx, c, text):
   {==}
+
+def Laws.you_line_carries_its_id(o, cx, name, m):
+  {==}
+
+def Laws.steered_receipt_names_the_new_ones(o, cx, agent, h, t, total):
+  {==}
+
+def Laws.steered_receipt_after_all_seen_is_nothing(o, cx, agent, ids, total):
+  match ids:
+    case Nil{}:
+      {==}
+    case Con{h, t}:
+      Laws.steered_receipt_after_all_seen_is_nothing(o, cx, agent, t, total)
+
+# the cursor read back after the agent's entry was dropped and put last
+def hub_seen_snoc_del.pick(c: Bool, +h: HX.Steer, +t: List<&2, HX.Steer>, +n: String, +s: List<&2, Nat>, +k: Nat,
+    +e: {String.eq(HX.Steer.agent(h), n) == c : Bool},
+    ih: {HC.steer_seen(HM.snoc(HX.Steer, HC.steer_del(t, n), HX.Steer{n, s, k}), n) == k : Nat})
+    -> {HC.steer_seen(HM.snoc(HX.Steer, Bool.pick(List<&2, HX.Steer>, String.eq(HX.Steer.agent(h), n), HC.steer_del(t, n), h <> HC.steer_del(t, n)), HX.Steer{n, s, k}), n) == k : Nat}:
+  match c:
+    case True{}:
+      %Equal.sym(Bool, String.eq(HX.Steer.agent(h), n), True{}, e) : {HC.steer_seen(HM.snoc(HX.Steer, Bool.pick(List<&2, HX.Steer>, _, HC.steer_del(t, n), h <> HC.steer_del(t, n)), HX.Steer{n, s, k}), n) == k : Nat}
+      ih
+    case False{}:
+      %Equal.sym(Bool, String.eq(HX.Steer.agent(h), n), False{}, e) : {HC.steer_seen(HM.snoc(HX.Steer, Bool.pick(List<&2, HX.Steer>, _, HC.steer_del(t, n), h <> HC.steer_del(t, n)), HX.Steer{n, s, k}), n) == k : Nat}
+      %Equal.sym(Bool, String.eq(HX.Steer.agent(h), n), False{}, e) : {Bool.pick(Nat, _, HX.Steer.seen(h), HC.steer_seen(HM.snoc(HX.Steer, HC.steer_del(t, n), HX.Steer{n, s, k}), n)) == k : Nat}
+      ih
+
+def hub_seen_snoc_del(+xs: List<&2, HX.Steer>, +n: String, +s: List<&2, Nat>, +k: Nat)
+    -> {HC.steer_seen(HM.snoc(HX.Steer, HC.steer_del(xs, n), HX.Steer{n, s, k}), n) == k : Nat}:
+  match xs:
+    case Nil{}:
+      %Equal.sym(Bool, String.eq(n, n), True{}, hub_str_eq_refl(n)) : {Bool.pick(Nat, _, k, 0n) == k : Nat}
+      {==}
+    case Con{h, t}:
+      hub_seen_snoc_del.pick(String.eq(HX.Steer.agent(h), n), h, t, n, s, k, {==}, hub_seen_snoc_del(t, n, s, k))
+
+def Laws.steer_add_keeps_seen(xs, n, ids):
+  hub_seen_snoc_del(xs, n, List.append(&2, Nat, HC.steer_get(xs, n), ids), HC.steer_seen(xs, n))
 
 def Laws.mcp_retry_only_unsent():
   {==}

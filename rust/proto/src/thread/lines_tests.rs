@@ -74,6 +74,12 @@ fn hub_lines_read_their_fields() {
     assert_eq!(h("landed : api : main : sb/api :  : 3"), Hub::Other { kind: "landed".into(), text: "api : main : sb/api :  : 3".into() });
     assert_eq!(h("stopped : stopped"), Hub::Stopped("stopped".into()));
     assert_eq!(h("whatever : x"), Hub::Other { kind: "whatever".into(), text: "x".into() });
+    assert_eq!(h("you-id : m_12"), Hub::YouId(12));
+    assert_eq!(h("you-id : 12"), Hub::Other { kind: "you-id".into(), text: "12".into() });
+    assert_eq!(h("steered : m_3 m_4"), Hub::Steered(vec![3, 4]));
+    assert_eq!(h("steered : m_3"), Hub::Steered(vec![3]));
+    assert_eq!(h("steered : m_3 x"), Hub::Other { kind: "steered".into(), text: "m_3 x".into() });
+    assert_eq!(h("steered : "), Hub::Other { kind: "steered".into(), text: String::new() });
 }
 
 #[test]
