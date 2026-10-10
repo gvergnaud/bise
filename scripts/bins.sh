@@ -36,8 +36,13 @@ elif [ -e "$HOME/.bise/migrated.json" ]; then STATE="$HOME/.bise/dev"
 else STATE="$HOME/.local/state/switchboard"; fi
 BUILD="${SB_BUILD_DIR:-$STATE/build}"
 CACHE="$BUILD/cache"
-export PATH="$HOME/.cargo/bin:$PATH"
-export PATH="$HOME/.bend/bin:$PATH"
+# the toolchains of the user's REAL home (the user database, never $HOME):
+# the Rust tests run on a temp HOME (bise_home::test_home), where
+# $HOME/.bend/bin is missing, `bend version` failed and the key of the
+# same sources differed from a shell's (bins-key)
+u="$(id -un)"; case "$u" in *[!A-Za-z0-9._-]*|"") TOOLS="$HOME" ;; *) eval "TOOLS=~$u" ;; esac
+export PATH="$TOOLS/.cargo/bin:$PATH"
+export PATH="$TOOLS/.bend/bin:$PATH"
 
 say() { echo "bins: $*" >&2; }
 
@@ -105,7 +110,9 @@ key() {  # <src> <name>
   set -- "$1" $r
   # only the dirs <src> has (find exits 1 on a missing one: pipefail)
   local d dirs=(); for d in "${@:3}"; do if [ -e "$1/$d" ]; then dirs+=("$d"); fi; done
-  local v; v="$(BEND_NO_TELEMETRY=1 bend version 2>/dev/null || echo "bend ?")"
+  # no bend: no key (a key of "bend ?" was another key of the same sources)
+  local v; v="$(BEND_NO_TELEMETRY=1 bend version 2>/dev/null)" && [ -n "$v" ] \
+    || { say "no key: \`bend version\` failed (bend not in $TOOLS/.bend/bin nor PATH)"; return 1; }
   (cd "$1" && { find "${dirs[@]}" -type f \( -name '*.bend' -o -name '*.c' -o -name '*.js' \) -print0 | sort -z | xargs -0 cat
                 echo "MACOSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET"; echo "$v"; } | shasum | cut -c1-12)
 }
@@ -163,7 +170,8 @@ prune() {  # <name>
 # build <name> of <src> into the cache if absent; print the cache file
 cached() {  # <src> <name>
   local src="$1" name="$2" k f
-  k="$(key "$src" "$name")"; f="$CACHE/$name-$k"
+  # (|| return: under `if ! cached` set -e is off)
+  k="$(key "$src" "$name")" || return 1; f="$CACHE/$name-$k"
   if [ ! -x "$f" ]; then
     mkdir -p "$CACHE"
     say "$name: compiling (sb-core ~15 s, a REPL 1-2 min, bend-jsrt 1-5 min)..."

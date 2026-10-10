@@ -16,7 +16,9 @@ Checks, with SB_BUILD_DIR in a temp dir (never the shared cache):
   in the cache; the recent files are kept; a second call (a hit) prints
   the same path;
 - `key` of a source tree without some of the recipe's dirs (an old commit:
-  no core/, no rust/home): rc 0 and a 12-hex key.
+  no core/, no rust/home): rc 0 and a 12-hex key;
+- `key` on a temp HOME with PATH=/usr/bin:/bin (a Rust test's env) is the
+  shell's key (bins-key: bend was looked up in $HOME).
 
 python3 -u tests/bins_path.py
 """
@@ -100,6 +102,14 @@ def main():
         # and the path is the key of the tree it built
         k = run(e, "key", "--src", hub, "sb-core").stdout.strip()
         check(p.endswith("sb-core-" + k), "path is <name>-<key>")
+        # the key of the same sources on another HOME and a bare PATH (a
+        # Rust test's temp HOME): the same key (bins-key: it took "bend ?")
+        fake = os.path.join(tmp, "home")
+        os.makedirs(fake)
+        e2 = dict(e, HOME=fake, PATH="/usr/bin:/bin")
+        k2 = run(e2, "key", "--src", hub, "sb-core")
+        check(k2.returncode == 0 and k2.stdout.strip() == k,
+              f"the key on a temp HOME is the shell's: {k2.stdout.strip()!r} vs {k!r} {k2.stderr[-200:]!r}")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("bins_path: all ok", flush=True)

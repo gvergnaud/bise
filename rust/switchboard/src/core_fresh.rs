@@ -73,4 +73,26 @@ mod tests {
         assert!(!stale(None, Some("a")), "no key: no check");
         assert!(!stale(Some("a"), None), "no bins.sh: no check");
     }
+
+    /// The key a test computes (this process: a temp HOME, test_home) is
+    /// the key a shell computes for the same sources (the real HOME). It
+    /// was not: bins.sh found bend in $HOME/.bend/bin, the temp HOME had
+    /// none, and the key took "bend ?" (77210ad15920 vs 0b2ee3862d28).
+    #[test]
+    fn a_test_and_a_shell_compute_the_same_key() {
+        assert!(bise_home::test_home::active(), "this test runs on a temp HOME");
+        let Some(home) = bise_home::test_home::real_home() else { return };
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let out = std::process::Command::new("bash")
+            .arg(root.join("scripts/bins.sh"))
+            .args(["key", "sb-core"])
+            .env("HOME", &home)
+            .output()
+            .unwrap();
+        let shell = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if !out.status.success() {
+            return; // no bend on this machine: no key either way
+        }
+        assert_eq!(tree_key().as_deref(), Some(shell.as_str()), "the test's key is the shell's");
+    }
 }
