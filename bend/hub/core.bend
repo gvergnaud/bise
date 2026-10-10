@@ -330,6 +330,10 @@ def steer_get(xs: List<&2, X.Steer>, +n: String) -> List<&2, Nat>:
 def steer_seen(xs: List<&2, X.Steer>, +n: String) -> Nat:
   get_key(~X.Steer, ~Nat, ~X.Steer.agent, ~X.Steer.seen, xs, n, 0n)
 
+# how many of an agent's steered ids a received receipt already reported
+def steer_rx_seen(xs: List<&2, X.Steer>, +n: String) -> Nat:
+  get_key(~X.Steer, ~Nat, ~X.Steer.agent, ~X.Steer.rx_seen, xs, n, 0n)
+
 def cnt_get(xs: List<&2, X.Cnt>, +n: String) -> X.Cnt:
   get_key(~X.Cnt, ~X.Cnt, ~X.Cnt.agent, ~(c => c), xs, n, X.Cnt{n, 0n, 0n})
 
@@ -357,14 +361,14 @@ def steer_del(xs: List<&2, X.Steer>, +n: String) -> List<&2, X.Steer>:
       Bool.pick(List<&2, X.Steer>, String.eq(X.Steer.agent(h), n), rest, h <> rest)
 
 def steer_add(+xs: List<&2, X.Steer>, +n: String, +ids: List<&2, Nat>) -> List<&2, X.Steer>:
-  M.snoc(X.Steer, steer_del(xs, n), X.Steer{n, List.append(&2, Nat, steer_get(xs, n), ids), steer_seen(xs, n)})
+  M.snoc(X.Steer, steer_del(xs, n), X.Steer{n, List.append(&2, Nat, steer_get(xs, n), ids), steer_seen(xs, n), steer_rx_seen(xs, n)})
 
 def steer_rename(xs: List<&2, X.Steer>, +old: String, +new: String) -> List<&2, X.Steer>:
   match xs:
     case Nil{}:
       Nil{}
     case Con{+h, +t}:
-      Bool.pick(X.Steer, String.eq(X.Steer.agent(h), old), X.Steer{new, X.Steer.ids(h), X.Steer.seen(h)}, h) <> steer_rename(t, old, new)
+      Bool.pick(X.Steer, String.eq(X.Steer.agent(h), old), X.Steer{new, X.Steer.ids(h), X.Steer.seen(h), X.Steer.rx_seen(h)}, h) <> steer_rename(t, old, new)
 
 def ids_of(xs: List<&2, M.Msg>) -> List<&2, Nat>:
   match xs:
@@ -3247,7 +3251,16 @@ def steer_mark(xs: List<&2, X.Steer>, +n: String, +k: Nat) -> List<&2, X.Steer>:
     case Nil{}:
       Nil{}
     case Con{+h, +t}:
-      Bool.pick(X.Steer, String.eq(X.Steer.agent(h), n), X.Steer{n, X.Steer.ids(h), k}, h) <> steer_mark(t, n, k)
+      Bool.pick(X.Steer, String.eq(X.Steer.agent(h), n), X.Steer{n, X.Steer.ids(h), k, X.Steer.rx_seen(h)}, h) <> steer_mark(t, n, k)
+
+# an agent's steered list with `rx_seen` set to `k` (the list and `seen`
+# kept)
+def steer_rx_mark(xs: List<&2, X.Steer>, +n: String, +k: Nat) -> List<&2, X.Steer>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case Con{+h, +t}:
+      Bool.pick(X.Steer, String.eq(X.Steer.agent(h), n), X.Steer{n, X.Steer.ids(h), X.Steer.seen(h), k}, h) <> steer_rx_mark(t, n, k)
 
 def mids(xs: List<&2, Nat>) -> List<&2, String>:
   match xs:
@@ -3274,6 +3287,25 @@ def steer_receipt(-o: M.St, +cx: X.Cx<o>, +agent: String) -> X.Cx<o>:
   +xs = X.R.steered(rr(o, cx))
   +ids = steer_get(xs, agent)
   steer_receipt.go(o, List.drop(&2, Nat, ids, steer_seen(xs, agent)), cx, agent, List.length(&2, Nat, ids))
+
+# the received receipt's ids: the steer-mode deliveries since the last
+# received receipt (none: nothing marked, nothing written)
+def steer_rx_receipt.go(-o: M.St, new: List<&2, Nat>, +cx: X.Cx<o>, +agent: String, +total: Nat) -> X.Cx<o>:
+  match new:
+    case Nil{}:
+      cx
+    case Con{+h, +t}:
+      +r = rr(o, cx)
+      +cx2 = set_r(o, cx, X.R.with_steered(r, steer_rx_mark(X.R.steered(r), agent, total)))
+      line(o, cx2, agent, "steer-rx", String.join(mids(h <> t), " "))
+
+# the runtime received the steering (ISteerRx, before it reads it): the
+# feed line naming those messages ('sb steer-rx : m_3 m_4', the clients'
+# ✓); its own cursor, rx_seen, apart from steered's
+def steer_rx_receipt(-o: M.St, +cx: X.Cx<o>, +agent: String) -> X.Cx<o>:
+  +xs = X.R.steered(rr(o, cx))
+  +ids = steer_get(xs, agent)
+  steer_rx_receipt.go(o, List.drop(&2, Nat, ids, steer_rx_seen(xs, agent)), cx, agent, List.length(&2, Nat, ids))
 
 def assistant(-o: M.St, +cx: X.Cx<o>, +agent: String, +text: String) -> X.Cx<o>:
   +r = rr(o, cx)
@@ -3642,7 +3674,8 @@ def dispatch.go(-o: M.St, tag: In, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
     case ITurnStarted{}:
       turn_started(o, cx, C.get_s(i, "agent"))
     case ISteerRx{}:
-      steer_count(o, cx, C.get_s(i, "agent"), False{})
+      +agent = C.get_s(i, "agent")
+      steer_rx_receipt(o, steer_count(o, cx, agent, False{}), agent)
     case ISteered{}:
       +agent = C.get_s(i, "agent")
       steer_receipt(o, steer_count(o, cx, agent, True{}), agent)

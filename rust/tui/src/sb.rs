@@ -1054,7 +1054,7 @@ pub(crate) fn hub_ev(h: Hub) -> Option<Ev> {
         // his message's id and the steered receipt: the window's thread
         // reads them (msg_id, steered_at); the TUI shows neither (its
         // marks come from the runtime's steering lines)
-        Hub::YouId(_) | Hub::Steered(_) => return None,
+        Hub::YouId(_) | Hub::Steered(_) | Hub::SteerRx(_) => return None,
         // BISE-86
         Hub::Undelivered { to, text } => Ev::Undelivered { name: to, text, open: true },
         // v1: what this feed's owner received (`@{from}`: an old direct

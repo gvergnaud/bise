@@ -419,6 +419,9 @@ impl Fold<'_> {
             // entry they name (his by msg_id, an agent's by msg) gets this
             // line's pos once; it makes no entry of its own
             Hub::Steered(ids) => mark_steered(&mut self.out, &ids, pos),
+            // the runtime received these steered messages: their ✓ (the
+            // mark above, Mark::Ids), no entry of its own
+            Hub::SteerRx(_) => {}
             // a scheduled task's run reads as its line; the note of a
             // stop is for the agent only (site/m/timers, the TUI's rule)
             // main's note of an answer to its own card: its route line
@@ -591,6 +594,10 @@ impl Delivered for Entry {
             self.delivery = Some(to);
         }
     }
+
+    fn msg_id(&self) -> Option<u64> {
+        (self.kind == EntryKind::You).then_some(self.msg_id)?
+    }
 }
 
 /// An agent's transcript lines as entries, oldest first.
@@ -631,7 +638,12 @@ pub(super) fn mark_steered(out: &mut [Entry], ids: &[u64], pos: Pos) {
 /// nothing after it can name one of them.
 pub fn mark_ahead(entries: &mut [Entry], ahead: &[Line]) {
     for (pos, _, l) in ahead {
-        match lines::read(l) {
+        let rec = lines::read(l);
+        // the receipts' delivery marks too (✓ steer-rx, ✓✓ steered)
+        if let Some(m @ Mark::Ids { .. }) = lines::mark_of(&rec) {
+            lines::deliver(entries, &m);
+        }
+        match rec {
             Rec::Hub(Hub::Steered(ids)) => mark_steered(entries, &ids, *pos),
             Rec::Obs(Obs::TurnDone(_)) => break,
             _ => {}

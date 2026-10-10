@@ -234,6 +234,14 @@ def main():
             receipt = [l for l in tr if l.startswith("sb steered : ")]
             want = "sb steered : " + " ".join("m_%d" % g["msg_id"] for g in got)
             check(want in receipt, "the receipt names them: %r not in %r" % (want, receipt))
+            # the received receipt (architect m_16963): `sb steer-rx` names
+            # the same ids before `sb steered` does; the fold's delivery
+            # comes from the two receipts by id (✓ then ✓✓): read at the end
+            ids = {"m_%d" % g["msg_id"] for g in got}
+            rxs = [i for i, l in enumerate(tr) if l.startswith("sb steer-rx : ") and ids & set(l[len("sb steer-rx : "):].split())]
+            check(rxs and set().union(*(set(tr[i][len("sb steer-rx : "):].split()) for i in rxs)) >= ids, "steer-rx names them: %r" % [tr[i] for i in rxs])
+            check(rxs and max(rxs) < tr.index(want), "steer-rx before steered: %r, %r" % ([tr[i] for i in rxs], want))
+            check(all(last_you(s).get("delivery") == "read" for s in steers), "read by the receipts: %r" % [last_you(s) for s in steers])
             # the receipt and the id lines make no entry of their own
             check(not any(x["text"].startswith(("m_", "steered")) for x in entries("notice")), "no notice for them: %r" % entries("notice"))
             return got

@@ -241,6 +241,46 @@ fn a_steered_receipt_marks_the_messages_it_names() {
     assert!(e.iter().all(|e| e.payload_matches_kind()), "{e:?}");
 }
 
+/// Laws (architect m_16963): his message's delivery comes from sb-core's
+/// receipts by id: `sb steer-rx` received (✓), `sb steered` read (✓✓);
+/// a message with the same words but another id stays sent; steer-rx
+/// makes no entry; a page cut before the receipts reads them ahead.
+#[test]
+fn the_receipts_set_his_messages_delivery_by_id() {
+    let none = |_: &str| None;
+    let ctx = ctx_with(&[], &none);
+    let l = |pos: u64, line: &str| (pos, pos, line.to_string());
+    let all = vec![
+        l(1, "sb you : go"),
+        l(2, "sb you-id : m_1"),
+        l(3, "  obs: turn_started"),
+        l(4, "  obs: tool_started #1"),
+        l(4, "tool #1 bash : sleep 8"),
+        l(5, "sb you : again"),
+        l(6, "sb you-id : m_2"),
+        l(7, "sb you : again"),
+        l(8, "sb you-id : m_3"),
+        l(9, "sb steer-rx : m_2"),
+        l(10, "tool_result #1 ok : done"),
+    ];
+    let by_id = |e: &[Entry], id: u64| e.iter().find(|x| x.msg_id == Some(id)).map(|x| x.delivery).unwrap_or_else(|| panic!("m_{id}: {e:?}"));
+    let e = fold(&all, &ctx);
+    assert_eq!(by_id(&e, 2), Some(Delivery::Received), "steer-rx: ✓");
+    assert_eq!(by_id(&e, 3), Some(Delivery::Sent), "the same words, another id: still sent");
+    assert!(e.iter().all(|x| x.kind != EntryKind::Notice), "steer-rx makes no entry: {e:?}");
+    let mut more = all.clone();
+    more.push(l(11, "sb steered : m_2"));
+    let e = fold(&more, &ctx);
+    assert_eq!(by_id(&e, 2), Some(Delivery::Read), "steered: ✓✓");
+    assert_eq!(by_id(&e, 3), Some(Delivery::Sent));
+    // a page cut before both receipts: the same marks from the lines ahead
+    more.push(l(12, "  obs: turn_done: completed"));
+    let cut = more.iter().position(|x| x.0 == 9).unwrap();
+    let (p, _, _) = page(&more[..cut], &more[cut..], &ctx, 60);
+    assert_eq!(by_id(&p, 2), Some(Delivery::Read));
+    assert_eq!(by_id(&p, 3), Some(Delivery::Sent));
+}
+
 #[test]
 fn a_page_keeps_the_newest_and_says_what_is_before() {
     let none = |_: &str| None;

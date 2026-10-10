@@ -141,7 +141,7 @@ def main():
         # and tool rows; their fold's hub_notice gives no entry for an
         # unknown kind. So each such line must match none of those.
         homes = [v["line"] for v in home.got()[n:] if v.get("ev") == "line" and v.get("agent") == "main"]
-        ids = [l for l in homes if l.startswith(("sb you-id : ", "sb steered : "))]
+        ids = [l for l in homes if l.startswith(("sb you-id : ", "sb steered : ", "sb steer-rx : "))]
         check(ids and re.fullmatch(r"sb you-id : m_\d+", ids[0]), "main's id line on the home connection: %r" % homes[:8])
         check(not any(l.startswith(("sb you : ", "  obs: ", "tool", "  tool")) for l in ids), "an id line an older core would read: %r" % ids)
 

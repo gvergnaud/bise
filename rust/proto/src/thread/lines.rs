@@ -257,6 +257,10 @@ pub enum Hub {
     /// here, mid-turn (sb-core's receipt, the steer-mode deliveries since
     /// the last one)
     Steered(Vec<u64>),
+    /// `steer-rx : m_<n> m_<n>`: the agent's runtime received these
+    /// steered messages (before it reads them; sb-core's receipt at
+    /// ISteerRx, its own cursor apart from steered's)
+    SteerRx(Vec<u64>),
     /// his fn context, the raw JSON (S9)
     Context(String),
     /// BISE-86: `undelivered : {name} : {text}`
@@ -481,8 +485,9 @@ pub fn hub(rest: &str) -> Hub {
             Some(id) => Hub::YouId(id),
             None => other(text),
         },
-        "steered" => match raw.split_whitespace().map(msg_id).collect::<Option<Vec<u64>>>() {
-            Some(ids) if !ids.is_empty() => Hub::Steered(ids),
+        "steered" | "steer-rx" => match raw.split_whitespace().map(msg_id).collect::<Option<Vec<u64>>>() {
+            Some(ids) if !ids.is_empty() && kind == "steered" => Hub::Steered(ids),
+            Some(ids) if !ids.is_empty() => Hub::SteerRx(ids),
             _ => other(text),
         },
         "context" => Hub::Context(raw.to_string()),
@@ -766,6 +771,9 @@ pub enum Mark {
     /// BISE-86: his message `text` didn't reach `to` (his line is the
     /// text, or `@to text` from another view)
     Failed { to: String, text: String },
+    /// sb-core's receipts (`steer-rx`, `steered`): his messages with
+    /// these ids go up to `to` (no words matched)
+    Ids { ids: Vec<u64>, to: Delivery },
 }
 
 /// The mark a line moves, if any.
@@ -777,6 +785,8 @@ pub fn mark_of(rec: &Rec) -> Option<Mark> {
         Rec::Injected(t) => text(t, Delivery::Read, false),
         Rec::Obs(Obs::TurnStarted) => Some(Mark::Turn),
         Rec::Hub(Hub::Undelivered { to, text }) => Some(Mark::Failed { to: to.clone(), text: text.clone() }),
+        Rec::Hub(Hub::SteerRx(ids)) => Some(Mark::Ids { ids: ids.clone(), to: Delivery::Received }),
+        Rec::Hub(Hub::Steered(ids)) => Some(Mark::Ids { ids: ids.clone(), to: Delivery::Read }),
         _ => None,
     }
 }
@@ -787,6 +797,11 @@ pub trait Delivered {
     /// his message: its text and its mark
     fn yours(&self) -> Option<(&str, Delivery)>;
     fn set_mark(&mut self, to: Delivery);
+    /// his message's id (its `sb you-id` line), None when it has none
+    /// (an item that is not his; a transcript before 9633cd2a)
+    fn msg_id(&self) -> Option<u64> {
+        None
+    }
     /// a turn started here (the TUI keeps one in its feed; the fold's
     /// turns are no entries: it passes the items since its last one)
     fn turn_start(&self) -> bool {
@@ -834,6 +849,13 @@ pub fn deliver<T: Delivered>(items: &mut [T], m: &Mark) -> Option<Vec<usize>> {
             let i = (0..items.len()).rev().find(|&i| items[i].yours().is_some_and(|(t, d)| d != Delivery::Failed && mine(t)))?;
             items[i].set_mark(Delivery::Failed);
             moved.push(i);
+        }
+        Mark::Ids { ids, to } => {
+            for i in items.len().saturating_sub(MARK_LOOKBACK)..items.len() {
+                if items[i].msg_id().is_some_and(|id| ids.contains(&id)) {
+                    raise(items, i, *to);
+                }
+            }
         }
     }
     Some(moved)

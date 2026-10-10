@@ -5553,6 +5553,43 @@ law steer_add_keeps_seen:
   for +ids: List<&2, Nat>
   {HC.steer_seen(HC.steer_add(xs, n, ids), n) == HC.steer_seen(xs, n) : Nat}
 
+# ---- the received receipt (ISteerRx, the clients' ✓) ----
+# A second cursor, rx_seen, apart from steered's `seen`: the runtime
+# receives a steer before it reads it, but no order between the two
+# cursors is required (rx_seen <= seen is NOT a law: an older runtime may
+# send ISteered alone, and each receipt only names what it did not name).
+
+# LAW: a received receipt names the steer-mode deliveries since the last
+# one ('sb steer-rx : m_3 m_4') and moves rx_seen only (seen kept).
+law steer_rx_receipt_names_the_new_ones:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +agent: String
+  for +h: Nat
+  for +t: List<&2, Nat>
+  for +total: Nat
+  {HC.steer_rx_receipt.go(o, h <> t, cx, agent, total)
+    == HC.line(o, HC.set_r(o, cx, HX.R.with_steered(HC.rr(o, cx), HC.steer_rx_mark(HX.R.steered(HC.rr(o, cx)), agent, total))),
+      agent, "steer-rx", String.join(HC.mids(h <> t), " ")) : HX.Cx<o>}
+
+# LAW: a received receipt with nothing new marks nothing and writes
+# nothing.
+law steer_rx_receipt_after_all_seen_is_nothing:
+  for -o: HM.St
+  for +cx: HX.Cx<o>
+  for +agent: String
+  for +ids: List<&2, Nat>
+  for +total: Nat
+  {HC.steer_rx_receipt.go(o, List.drop(&2, Nat, ids, List.length(&2, Nat, ids)), cx, agent, total) == cx : HX.Cx<o>}
+
+# LAW: a new steer keeps the received cursor too (steer_rename keeps it by
+# construction, steer_del drops it with the agent's entry).
+law steer_add_keeps_rx_seen:
+  for +xs: List<&2, HX.Steer>
+  for +n: String
+  for +ids: List<&2, Nat>
+  {HC.steer_rx_seen(HC.steer_add(xs, n, ids), n) == HC.steer_rx_seen(xs, n) : Nat}
+
 # ---- his queued message taken back (HubCmd queued_take, issue 16) ----
 # No new state: a taken-back message is Rejected{"taken_back"}, the state
 # reject_ids already writes, so an older sb-core replays it as rejected and

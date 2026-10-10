@@ -80,6 +80,43 @@ fn hub_lines_read_their_fields() {
     assert_eq!(h("steered : m_3"), Hub::Steered(vec![3]));
     assert_eq!(h("steered : m_3 x"), Hub::Other { kind: "steered".into(), text: "m_3 x".into() });
     assert_eq!(h("steered : "), Hub::Other { kind: "steered".into(), text: String::new() });
+    assert_eq!(h("steer-rx : m_3 m_4"), Hub::SteerRx(vec![3, 4]));
+    assert_eq!(h("steer-rx : m_3"), Hub::SteerRx(vec![3]));
+    assert_eq!(h("steer-rx : 3"), Hub::Other { kind: "steer-rx".into(), text: "3".into() });
+    assert_eq!(h("steer-rx : "), Hub::Other { kind: "steer-rx".into(), text: String::new() });
+}
+
+/// Laws (architect m_16963): sb-core's receipts mark by id, never by
+/// words: steer-rx raises the messages it names to received, steered to
+/// read; a message with the same words but another id (or none) stays.
+#[test]
+fn receipts_mark_the_messages_by_id() {
+    use crate::thread::lines::{deliver, mark_of, Delivered, Mark};
+    use crate::thread::Delivery;
+    #[derive(Debug)]
+    struct M(&'static str, Option<u64>, Delivery);
+    impl Delivered for M {
+        fn yours(&self) -> Option<(&str, Delivery)> {
+            Some((self.0, self.2))
+        }
+        fn set_mark(&mut self, to: Delivery) {
+            self.2 = to;
+        }
+        fn msg_id(&self) -> Option<u64> {
+            self.1
+        }
+    }
+    let rx = mark_of(&Rec::Hub(Hub::SteerRx(vec![2, 9]))).unwrap();
+    let read = mark_of(&Rec::Hub(Hub::Steered(vec![2]))).unwrap();
+    assert_eq!(rx, Mark::Ids { ids: vec![2, 9], to: Delivery::Received });
+    assert_eq!(read, Mark::Ids { ids: vec![2], to: Delivery::Read });
+    let mut items = vec![M("again", Some(1), Delivery::Sent), M("again", Some(2), Delivery::Sent), M("again", None, Delivery::Sent)];
+    assert_eq!(deliver(&mut items, &rx), Some(vec![1]));
+    assert_eq!(items.iter().map(|m| m.2).collect::<Vec<_>>(), [Delivery::Sent, Delivery::Received, Delivery::Sent]);
+    assert_eq!(deliver(&mut items, &read), Some(vec![1]));
+    // marks only go up: a late steer-rx after steered leaves it read
+    assert_eq!(deliver(&mut items, &rx), Some(vec![]));
+    assert_eq!(items.iter().map(|m| m.2).collect::<Vec<_>>(), [Delivery::Sent, Delivery::Read, Delivery::Sent]);
 }
 
 #[test]

@@ -21,9 +21,11 @@ type Waiter is Data:
 
 # an agent's steer-mode deliveries this turn; `seen`: how many of `ids`
 # a receipt (ISteered) already reported, so the next one reports only
-# the new ones (seen <= len ids)
+# the new ones (seen <= len ids); `rx_seen`: the same for the received
+# receipt (ISteerRx), a second cursor of its own (no order between the
+# two is required)
 type Steer is Data:
-  Steer{agent: String, ids: List<&2, Nat>, seen: Nat}
+  Steer{agent: String, ids: List<&2, Nat>, seen: Nat, rx_seen: Nat}
 
 type Cnt is Data:
   Cnt{agent: String, recv: Nat, inj: Nat}
@@ -131,18 +133,23 @@ def Waiter.deadline(x: Waiter) -> Nat:
 
 def Steer.agent(x: Steer) -> String:
   match x:
-    case Steer{+agent, _, _}:
+    case Steer{+agent, _, _, _}:
       agent
 
 def Steer.ids(x: Steer) -> List<&2, Nat>:
   match x:
-    case Steer{_, +ids, _}:
+    case Steer{_, +ids, _, _}:
       ids
 
 def Steer.seen(x: Steer) -> Nat:
   match x:
-    case Steer{_, _, +seen}:
+    case Steer{_, _, +seen, _}:
       seen
+
+def Steer.rx_seen(x: Steer) -> Nat:
+  match x:
+    case Steer{_, _, _, +rx}:
+      rx
 
 def Cnt.agent(x: Cnt) -> String:
   match x:
