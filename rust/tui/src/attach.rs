@@ -1323,16 +1323,16 @@ mod tests {
             marker: "<pasted n=\"2\" lines=\"12\">p</pasted>".into(),
             info: Default::default(),
         });
+        let artifact = format!("{ARTIFACT_OPEN}3]");
         app.attachments.push(Attachment {
-            label: format!("{ARTIFACT_OPEN}3]"),
+            label: artifact.clone(),
             marker: "[deck](artifact:d)".into(),
             info: Default::default(),
         });
         app.ed.insert(&format!(
-            "{} fix this {} and {}",
+            "{} fix this {} and {artifact}",
             crate::quote::label(1),
             crate::pasted::label(2),
-            format!("{ARTIFACT_OPEN}3]")
         ));
         assert_eq!(refused_images(&app), None, "a quote, a paste and an artifact are not images");
         // a real image chip still refuses
