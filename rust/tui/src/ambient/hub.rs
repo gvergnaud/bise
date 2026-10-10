@@ -8,7 +8,7 @@ use std::io::{self, BufRead, Write};
 use std::os::unix::net::UnixStream;
 use std::sync::mpsc::Sender;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
 /// Opens a connection to the hub, its first line already sent when the
@@ -54,6 +54,8 @@ pub struct Hub {
     writer: Arc<Mutex<Option<UnixStream>>>,
     /// [`Hub::close`] said: the reader thread ends at its next turn
     closed: Arc<AtomicBool>,
+    /// [`Hub::hold`] said: the reader doesn't connect until released
+    held: Arc<(Mutex<bool>, Condvar)>,
 }
 
 impl Hub {
@@ -68,10 +70,19 @@ impl Hub {
         let hub = Hub::default();
         let writer = hub.writer.clone();
         let closed = hub.closed.clone();
+        let held = hub.held.clone();
         std::thread::spawn(move || {
             // Down is said once per loss, not at each failed attempt
             let mut down_said = false;
             loop {
+                // held: no attempt (no reconnect loop) until released
+                {
+                    let (on, cv) = &*held;
+                    let mut h = on.lock().unwrap_or_else(|e| e.into_inner());
+                    while *h && !closed.load(Ordering::SeqCst) {
+                        h = cv.wait(h).unwrap_or_else(|e| e.into_inner());
+                    }
+                }
                 if closed.load(Ordering::SeqCst) {
                     return;
                 }
@@ -144,9 +155,27 @@ impl Hub {
     /// counts one client less) and the reader thread ends, saying nothing.
     pub fn close(&self) {
         self.closed.store(true, Ordering::SeqCst);
+        self.held.1.notify_all();
         if let Ok(mut slot) = self.writer.lock() {
             if let Some(s) = slot.take() {
                 let _ = s.shutdown(std::net::Shutdown::Both);
+            }
+        }
+    }
+
+    /// Hold the connection (`on`): the one open closes and the reader
+    /// makes no attempt until released (the home hub whose move failed:
+    /// no reconnect every `retry`, core/home_switch.rs); released, it
+    /// connects again at once.
+    pub fn hold(&self, on: bool) {
+        let (flag, cv) = &*self.held;
+        *flag.lock().unwrap_or_else(|e| e.into_inner()) = on;
+        cv.notify_all();
+        if on {
+            if let Ok(slot) = self.writer.lock() {
+                if let Some(s) = slot.as_ref() {
+                    let _ = s.shutdown(std::net::Shutdown::Both);
+                }
             }
         }
     }

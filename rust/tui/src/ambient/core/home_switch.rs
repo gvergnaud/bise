@@ -25,18 +25,44 @@ pub(in crate::ambient) struct HomeMoveState {
     to: String,
     /// a move is under way
     moving: bool,
+    /// the moves made by themselves this core run, (from, to): one each
+    /// (architect m_15957: never a loop of moves)
+    tried: Vec<(String, String)>,
+    /// a move ended well (or the new hub answered): an older answer
+    /// after it is a rollback, never moved again by itself
+    there: bool,
+    /// the new hub answered `initialize` while this move ran (a move that
+    /// says Late afterwards came up all the same)
+    answered: bool,
     /// the home connections made so far, and the last one made before a
     /// move ended well: an older answer on it is the old hub's, late
     conns: u64,
     stale_upto: Option<u64>,
-    /// the last move failed: the refusal is shown, nothing moves until
-    /// he says `try again`
-    failed: bool,
+    /// how the last move failed: the refusal is shown, nothing moves
+    /// until he says `try again`
+    failed: Option<Failed>,
+}
+
+/// How a move failed (the refusal's words, and whether the reader holds).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::ambient) enum Failed {
+    /// the hub didn't take the switch: the reader holds (no reconnect)
+    Refused,
+    /// it took it but wasn't up within the bound: the reader goes on, so
+    /// the new hub's `initialize` clears it when it comes up after all
+    Late,
+    /// it switched, then went back to the older one: the reader holds
+    Back,
 }
 
 /// The quiet line while the move runs (designer m_15492, (a)).
 pub(super) fn moving_words(to: &str) -> String {
     format!("updating the bise running here to {to}… your agents keep running.")
+}
+
+/// The last line of every refusal: where his agents are.
+fn agents_line(from: &str) -> String {
+    if from.is_empty() { "your agents are still running on it.".to_string() } else { format!("your agents are still running on {from}.") }
 }
 
 /// The refusal of a move that failed or timed out (designer m_15492,
@@ -53,14 +79,33 @@ pub(super) fn failed_words(from: &str, to: &str, end: &MoveEnd) -> String {
             lines.push(why.to_string());
         }
     }
-    lines.push(if from.is_empty() { "your agents are still running on it.".to_string() } else { format!("your agents are still running on {from}.") });
+    lines.push(agents_line(from));
     lines.join("\n")
+}
+
+/// The refusal after a rollback: it switched, then went back (designer
+/// m_15974).
+pub(super) fn back_words(from: &str, to: &str) -> String {
+    let back = if from.is_empty() { "the older one".to_string() } else { from.to_string() };
+    [format!("the bise running in this folder switched to this one ({to}), but it didn't start right, so it went back to {back}."), agents_line(from)].join("\n")
 }
 
 impl Core {
     /// `bise ambient-core`'s move port (mod.rs core_main).
     pub fn set_home_move(&mut self, ids: Box<dyn Fn() -> (String, String)>, start: Box<dyn Fn()>) {
-        self.home_move = Some(HomeMoveState { ids, start, from: String::new(), to: String::new(), moving: false, failed: false, conns: 0, stale_upto: None });
+        self.home_move = Some(HomeMoveState {
+            ids,
+            start,
+            from: String::new(),
+            to: String::new(),
+            moving: false,
+            tried: Vec::new(),
+            there: false,
+            answered: false,
+            conns: 0,
+            stale_upto: None,
+            failed: None,
+        });
     }
 
     fn home_project(&self) -> String {
@@ -68,10 +113,11 @@ impl Core {
     }
 
     /// The home hub answered `initialize` the older way (core/home.rs's
-    /// seam, proto-zone-a): move it, once
-    /// (a reconnection to the same older hub while it moves, or after a
-    /// failed move, changes nothing). No port (a test core): the older
-    /// hub's refusal, as before.
+    /// seam, proto-zone-a): move it, once per (from, to) this core run.
+    /// While it moves, after it failed, or the old hub's late answer: no
+    /// change. After a move that ended well (a rollback) or one already
+    /// made: the refusal, the reader held, until `try again`. No port (a
+    /// test core): the older hub's refusal, as before.
     pub(super) fn home_older(&mut self) {
         let project = self.home_project();
         let Some(m) = self.home_move.as_mut() else {
@@ -79,55 +125,103 @@ impl Core {
             self.emit(json!({"ev": "hub_refused", "project": project, "error": why}));
             return;
         };
-        // while it moves, after it failed, or the old hub's late answer
-        // on a connection made before the move ended
-        if m.moving || m.failed || m.stale_upto.is_some_and(|s| m.conns <= s) {
+        if m.moving || m.failed.is_some() || m.stale_upto.is_some_and(|s| m.conns <= s) {
             return;
         }
         let (from, to) = (m.ids)();
+        if m.there || m.tried.contains(&(from.clone(), to.clone())) {
+            // it went back (probation): never moved again by itself
+            m.failed = Some(Failed::Back);
+            let why = back_words(&from, &to);
+            m.from = from;
+            m.to = to;
+            self.hub.hold(true);
+            self.hub_up = Some(false);
+            self.emit(json!({"ev": "hub_refused", "project": project, "error": why}));
+            return;
+        }
+        self.home_move_start(from, to);
+    }
+
+    /// The move starts: once more for this (from, to), its quiet note.
+    fn home_move_start(&mut self, from: String, to: String) {
+        let project = self.home_project();
+        let Some(m) = self.home_move.as_mut() else { return };
+        m.tried.push((from.clone(), to.clone()));
         m.from = from;
         m.to = to.clone();
         m.moving = true;
+        m.answered = false;
+        m.there = false;
         (m.start)();
         self.hub_up = Some(false);
         let ws = self.workspace.clone();
         self.emit(json!({"ev": "hub", "up": false, "workspace": ws, "project": project, "note": moving_words(&to)}));
     }
 
-    /// The move ended. There: the home connection says `initialize`
-    /// again when the new hub listens (its `hub` up clears the note);
-    /// else the refusal, once, until he says `try again`.
+    /// The move ended. There (or the new hub answered meanwhile): the
+    /// home connection says `initialize` to it; else the refusal, once:
+    /// Refused holds the reader, Late lets it go on (the new hub may still
+    /// come up, `home_answered` clears it then).
     pub fn home_moved(&mut self, end: MoveEnd) {
         let project = self.home_project();
         let Some(m) = self.home_move.as_mut() else { return };
         m.moving = false;
-        if end == MoveEnd::There {
+        if end == MoveEnd::There || m.answered {
+            m.there = true;
             m.stale_upto = Some(m.conns);
             return;
         }
-        m.failed = true;
         let why = failed_words(&m.from, &m.to, &end);
+        m.failed = Some(if end == MoveEnd::Late { Failed::Late } else { Failed::Refused });
+        if end != MoveEnd::Late {
+            self.hub.hold(true);
+        }
+        self.hub_up = Some(false);
         self.emit(json!({"ev": "hub_refused", "project": project, "error": why}));
     }
 
     /// A home connection is up (home.rs home_up): counted; true while a
     /// move is under way or failed, so a reconnection to the older hub
-    /// isn't news for the window.
+    /// isn't news for the window (`home_answered` says it is up).
     pub(super) fn home_conn_up(&mut self) -> bool {
         let Some(m) = self.home_move.as_mut() else { return false };
         m.conns += 1;
-        m.moving || m.failed
+        m.moving || m.failed.is_some()
+    }
+
+    /// The home hub answered `initialize` (home.rs): a hub of this
+    /// version. A move under way or failed (Late: it came up after all)
+    /// is over: the failure is cleared and the window hears it is up,
+    /// which clears its note or its refusal.
+    pub(super) fn home_answered(&mut self) {
+        let Some(m) = self.home_move.as_mut() else { return };
+        let held = m.moving || m.failed.is_some();
+        if m.moving {
+            m.answered = true;
+        }
+        if m.failed.take().is_some() || m.moving {
+            m.there = true;
+        }
+        if held && self.hub_up != Some(true) {
+            self.hub_up = Some(true);
+            let ws = self.workspace.clone();
+            self.emit(json!({"ev": "hub", "up": true, "workspace": ws}));
+        }
     }
 
     /// `hub_retry` on the home project after a failed move: move it
-    /// again. False: not that case (the projects' own retry).
+    /// again (the reader connects again). False: not that case (the
+    /// projects' own retry).
     pub(super) fn home_move_retry(&mut self, project: &str) -> bool {
         if project != self.home_project() {
             return false;
         }
-        let Some(m) = self.home_move.as_mut().filter(|m| m.failed) else { return false };
-        m.failed = false;
-        self.home_older();
+        let Some(m) = self.home_move.as_mut().filter(|m| m.failed.is_some()) else { return false };
+        m.failed = None;
+        let (from, to) = (m.ids)();
+        self.home_move_start(from, to);
+        self.hub.hold(false);
         true
     }
 }
@@ -152,8 +246,13 @@ mod tests {
             failed_words(from, to, &MoveEnd::Late),
             "the bise running in this folder is older (v2026.10.2-28) and didn't switch to this one (v2026.10.2-30) within 30 s.\nyour agents are still running on v2026.10.2-28."
         );
+        assert_eq!(
+            back_words(from, to),
+            "the bise running in this folder switched to this one (v2026.10.2-30), but it didn't start right, so it went back to v2026.10.2-28.
+your agents are still running on v2026.10.2-28."
+        );
         // no word of 'hub' anywhere he reads
-        for w in [moving_words(to), failed_words(from, to, &MoveEnd::Late), failed_words("", to, &MoveEnd::Refused("x".into()))] {
+        for w in [moving_words(to), failed_words(from, to, &MoveEnd::Late), failed_words("", to, &MoveEnd::Refused("x".into())), back_words(from, to)] {
             assert!(!w.contains("hub"), "{w}");
         }
     }

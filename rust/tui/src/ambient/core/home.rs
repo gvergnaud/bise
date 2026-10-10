@@ -116,6 +116,8 @@ impl Core {
         let project = self.target.clone().unwrap_or_default();
         match self.home.rpc.read(&project, v) {
             Read::Welcome(welcome, state) => {
+                // a hub of this version: a move of the older one is over
+                self.home_answered();
                 if let Some(u) = self.home.rpc.pages_url.clone().filter(|u| !u.is_empty()) {
                     self.pages_url = Some(u);
                 }
