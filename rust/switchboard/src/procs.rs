@@ -290,56 +290,68 @@ pub fn describe(hit: &[Proc]) -> String {
 mod tests {
     use super::*;
 
-    extern "C" {
-        fn pipe(fds: *mut i32) -> i32;
+    const F_SETFD: i32 = 2;
+    const EEXIST: i32 = 17;
+
+    /// Does a descriptor that is not close-on-exec in the child (as one
+    /// leaked by a concurrent spawn) reach exec, with `fix` applied?
+    ///
+    /// The test's descriptor is opened close-on-exec (Rust's `open` sets
+    /// it atomically), so no child another test thread spawns can
+    /// inherit it; only this child clears the flag, in a pre_exec run
+    /// before `fix`'s. A pre_exec after `fix` fails the spawn with
+    /// EEXIST if the descriptor is still open. No pipe, no timing: the
+    /// old test made a plain `pipe()` and waited 2 s for EOF, and any
+    /// child another test spawned in that window (the control below:
+    /// `sleep 5`) kept the write end open: 1 run in 3 failed.
+    fn leaks(fix: Option<fn(&mut std::process::Command)>) -> bool {
+        use std::os::fd::AsRawFd;
+        use std::os::unix::process::CommandExt;
+        let f = std::fs::File::open("/dev/null").unwrap();
+        let fd = f.as_raw_fd();
+        let mut cmd = std::process::Command::new("/usr/bin/true");
+        // SAFETY: fcntl only, async-signal-safe; the error carries no allocation
+        unsafe {
+            cmd.pre_exec(move || {
+                fcntl(fd, F_SETFD, 0);
+                Ok(())
+            });
+        }
+        if let Some(fix) = fix {
+            fix(&mut cmd);
+        }
+        unsafe {
+            cmd.pre_exec(move || match fcntl(fd, F_GETFD) {
+                -1 => Ok(()),
+                _ => Err(std::io::Error::from_raw_os_error(EEXIST)),
+            });
+        }
+        let leaked = match cmd.spawn() {
+            Ok(mut c) => {
+                let _ = c.wait();
+                false
+            }
+            Err(e) if e.raw_os_error() == Some(EEXIST) => true,
+            Err(e) => panic!("spawn: {}", e),
+        };
+        drop(f);
+        leaked
     }
 
-    /// Does the read end see EOF (every write end closed) within 2 s?
-    fn eof_soon(read_fd: i32) -> bool {
-        use std::io::Read;
-        use std::os::fd::FromRawFd;
-        let mut f = unsafe { std::fs::File::from_raw_fd(read_fd) };
-        let (tx, rx) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let mut s = Vec::new();
-            let _ = f.read_to_end(&mut s);
-            let _ = tx.send(());
-        });
-        rx.recv_timeout(Duration::from_secs(2)).is_ok()
-    }
-
-    /// BISE-291: a pipe another thread made (not yet close-on-exec, as
-    /// Rust's on macOS for a moment) does not stay open in a long-lived
-    /// child: its reader sees the end when the maker closes its side.
+    /// BISE-291: a descriptor another thread made (not yet close-on-exec,
+    /// as Rust's pipes on macOS for a moment) does not stay open in a
+    /// long-lived child.
     #[test]
     fn a_long_lived_child_does_not_keep_a_leaked_pipe_open() {
-        for (name, fix) in [("no_leaked_fds", no_leaked_fds as fn(&mut std::process::Command)), ("own_session", own_session)] {
-            let mut fds = [0i32; 2];
-            assert_eq!(unsafe { pipe(fds.as_mut_ptr()) }, 0);
-            let mut cmd = std::process::Command::new("/bin/sleep");
-            cmd.arg("5");
-            fix(&mut cmd);
-            let mut child = cmd.spawn().unwrap();
-            unsafe { close(fds[1]) };
-            let eof = eof_soon(fds[0]);
-            let _ = child.kill();
-            let _ = child.wait();
-            assert!(eof, "{}: the child kept the write end open", name);
-        }
+        assert!(!leaks(Some(no_leaked_fds)), "no_leaked_fds: the child kept the leaked descriptor");
+        assert!(!leaks(Some(own_session)), "own_session: the child kept the leaked descriptor");
     }
 
-    /// The control: without it, the child does keep the pipe (the test
-    /// above tests something).
+    /// The control: without it, the child does keep the descriptor (the
+    /// test above tests something).
     #[test]
     fn a_plain_child_inherits_a_pipe_that_is_not_close_on_exec() {
-        let mut fds = [0i32; 2];
-        assert_eq!(unsafe { pipe(fds.as_mut_ptr()) }, 0);
-        let mut child = std::process::Command::new("/bin/sleep").arg("5").spawn().unwrap();
-        unsafe { close(fds[1]) };
-        let eof = eof_soon(fds[0]);
-        let _ = child.kill();
-        let _ = child.wait();
-        assert!(!eof);
+        assert!(leaks(None));
     }
 
     fn p(pid: u32, ppid: u32, owners: Option<&str>) -> Proc {
