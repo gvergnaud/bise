@@ -1,8 +1,9 @@
 //! The wire rule's law (lib.rs, architect m_14382): what a released bise
 //! wrote still means the same. `fixtures/released/` holds the hub's and
 //! the core's events as v2026.10.2-28 wrote them (its own fixtures, never
-//! edited) and the entries its fold made of message lines; today's types
-//! read each one and write it back with every released key and value
+//! edited; v2026.10.2-29's hub events next to them, `_v2026.10.2-29`)
+//! and the entries its fold made of message lines; today's types read
+//! each one and write it back with every released key and value
 //! unchanged (new keys may come on top), so a field, list or enum value
 //! that changes meaning goes red here.
 
@@ -53,6 +54,10 @@ fn check<T>(file: &str, decode: impl Fn(&str) -> Result<T, String>, unknown: imp
 #[test]
 fn released_hub_events_keep_their_meaning() {
     check("hub_ev.jsonl", HubEv::decode, |m| matches!(m, HubEv::Unknown { .. }), HubEv::to_value);
+    // v2026.10.2-29 (cut from main before client-protocol merges, its own
+    // fixture as it wrote it): tool_out, a tool item's id, an answer's
+    // images and files, a scheduled task's name on top of -28's
+    check("hub_ev_v2026.10.2-29.jsonl", HubEv::decode, |m| matches!(m, HubEv::Unknown { .. }), HubEv::to_value);
 }
 
 #[test]

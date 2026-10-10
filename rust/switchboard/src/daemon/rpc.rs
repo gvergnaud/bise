@@ -62,19 +62,24 @@ struct DoorOp {
 }
 
 /// What an older client's hello connection may still send (the stub,
-/// architect m_15183): the released v2026.10.2-28 desktop core's door,
-/// one release. Its typed lines (`cmd`, as that core sends them) and its
+/// architect m_15183): the released desktop cores' door, one release:
+/// v2026.10.2-28's and the release cut from main before client-protocol
+/// merges (-29, proto-lead m_16089), the union of what both send. Its typed lines (`cmd`, as that core sends them) and its
 /// op lines, each as the command its typed arm takes (no second
 /// implementation). Step 3 had dropped input, interrupt and every_stop
 /// for that core; the table brings them back for one release. stop_hub:
 /// that release's `bise stop` (switchboard client::stop then).
-// TODO(client-protocol, the plan's 'after the release' step): the table
+// TODO(client-protocol, the plan's 'after the release' step): the door
+// closes in the first release after the one that ships client-protocol
+// (-28 and -29 desktops get exactly one release of overlap): the table
 // goes, the stub writes exe and reload then closes (with the core's
 // older door, Hubs.older_door)
-// The cmd tags: v2026.10.2-28's HubCmd::TAGS, every one (its core
-// forwards the window's typed commands, core/cmd.rs, Cmd::Typed).
+// The cmd tags: the released cores' HubCmd::TAGS, every one (a core
+// forwards the window's typed commands, core/cmd.rs, Cmd::Typed):
+// v2026.10.2-28's 31, and -29's one more, tool_out (a tool row's whole
+// output, HubCmd::ToolOut; -29's answer may carry files, the same arm).
 pub(super) const DOOR_CMDS: &[&str] = &[
-    "hello", "subscribe", "unsubscribe", "page", "send", "answer", "close", "confirm", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "diff", "worktrees", "dev_servers", "merged", "features", "prs", "scheduled", "scheduled_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash",
+    "hello", "subscribe", "unsubscribe", "page", "send", "answer", "close", "confirm", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "diff", "worktrees", "dev_servers", "merged", "features", "prs", "scheduled", "scheduled_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash",
 ];
 const DOOR_OPS: &[DoorOp] = &[
     DoorOp { op: "input", cmd: "slash", renames: &[("focus", "agent"), ("text", "line")] },
@@ -84,13 +89,15 @@ const DOOR_OPS: &[DoorOp] = &[
     DoorOp { op: "stop_hub", cmd: "stop_hub", renames: &[] },
 ];
 
-/// The older events the released v2026.10.2-28 core reads on its home
+/// The older events the released cores (v2026.10.2-28, -29: the same
+/// hub_line) read on their home
 /// connection (its hub_line: state, ready, page, line), nothing more:
 /// they go to that connection only ([`Shell::door_events`]), from
 /// today's writers (the snapshot, line_event, the pages' page line).
 /// Those writers live this one release more for it.
-// TODO(client-protocol, the plan's 'after the release' step): the table
-// goes with DOOR_OPS and DOOR_CMDS (no older event to anyone)
+// TODO(client-protocol, the plan's 'after the release' step): in the
+// first release after the one that ships client-protocol, the table goes
+// with DOOR_OPS and DOOR_CMDS (no older event to anyone)
 pub(super) const DOOR_EVENTS: &[&str] = &["state", "ready", "page", "line"];
 
 /// Line `v` of the released door as its typed command (`project` this
@@ -534,14 +541,27 @@ mod tests {
         door_cmd(&v, "acme")
     }
 
-    /// The released v2026.10.2-28 core's lines (rust/proto/fixtures/
-    /// released/core_door.jsonl, its source's own shapes) map to the
-    /// typed command its arm takes; its cmd lines pass as they are;
-    /// anything else is refused.
+    /// The released cores' lines (rust/proto/fixtures/released/
+    /// core_door.jsonl for v2026.10.2-28, core_door_v2026.10.2-29.jsonl for -29,
+    /// their sources' own shapes) map to the typed command its arm takes;
+    /// their cmd lines pass as they are; anything else is refused.
     #[test]
     fn the_released_doors_lines_map_to_their_typed_commands() {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../proto/fixtures/released/core_door.jsonl");
-        let text = std::fs::read_to_string(&path).unwrap();
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../proto/fixtures/released");
+        for f in ["core_door.jsonl", "core_door_v2026.10.2-29.jsonl"] {
+            door_lines(&std::fs::read_to_string(dir.join(f)).unwrap());
+        }
+        // -29's one more tag: a tool row's output, and its answer's files
+        assert_eq!(door(json!({"cmd": "tool_out", "project": "acme", "agent": "main", "pos": 12})), Ok(json!({"cmd": "tool_out", "project": "acme", "agent": "main", "pos": 12})));
+        // outside the table: refused, and what it was
+        assert_eq!(door(json!({"op": "history", "agent": "main"})), Err("the op \"history\"".to_string()));
+        assert_eq!(door(json!({"cmd": "release_run", "project": "acme"})), Err("the cmd \"release_run\"".to_string()));
+        assert_eq!(door(json!({"x": 1})), Err("a line with no op".to_string()));
+    }
+
+    /// One released core's lines: each maps to its typed command, every
+    /// op of the table is among them, with its exact command.
+    fn door_lines(text: &str) {
         let mut ops = BTreeMap::new();
         for l in text.lines().filter(|l| !l.trim().is_empty()) {
             let v: Value = serde_json::from_str(l).unwrap();
@@ -562,9 +582,5 @@ mod tests {
         assert_eq!(ops["interrupt"], json!({"cmd": "stop", "project": "acme", "agent": "docs"}));
         assert_eq!(ops["every_stop"], json!({"cmd": "scheduled_stop", "project": "acme", "id": 3}));
         assert_eq!(ops["page_voice"], json!({"cmd": "page_voice", "project": "acme", "page": "weekly-update", "phase": "heard", "text": "shorter"}));
-        // outside the table: refused, and what it was
-        assert_eq!(door(json!({"op": "history", "agent": "main"})), Err("the op \"history\"".to_string()));
-        assert_eq!(door(json!({"cmd": "release_run", "project": "acme"})), Err("the cmd \"release_run\"".to_string()));
-        assert_eq!(door(json!({"x": 1})), Err("a line with no op".to_string()));
     }
 }

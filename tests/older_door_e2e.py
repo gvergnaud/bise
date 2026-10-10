@@ -1,9 +1,11 @@
 """Client-protocol step 5's stub on a real hub (architect m_15183,
 proto-lead m_15200): an older client's `{"op":"hello"}` gets the hub's exe
 and reload id, then no burst and no older event, ever; the connection
-stays for the released v2026.10.2-28 desktop core's door, one release: its
-typed hello, its cmd lines, and its op lines replayed from
-rust/proto/fixtures/released/core_door.jsonl, each served by the typed arm
+stays for the released desktop cores' door (v2026.10.2-28's and -29's, the
+release cut from main before client-protocol merges), one release: their
+typed hello, their cmd lines, and their op lines replayed from
+rust/proto/fixtures/released/core_door.jsonl (-28) and core_door_v2026.10.2-29.jsonl
+(-29: one more cmd, tool_out, and an answer's files), each served by the typed arm
 it maps to (rust/switchboard/src/daemon/rpc.rs DOOR_OPS): his words reach
 the agent (input), the stop stops (interrupt), the timer ends
 (every_stop); a line outside the table is refused, with one hub.log line.
@@ -25,7 +27,7 @@ import e2e  # noqa: E402
 import wait  # noqa: E402
 
 EXE = e2e.EXE
-FIXTURE = os.path.join(e2e.ROOT, "rust", "proto", "fixtures", "released", "core_door.jsonl")
+FIXTURES = [os.path.join(e2e.ROOT, "rust", "proto", "fixtures", "released", f) for f in ("core_door.jsonl", "core_door_v2026.10.2-29.jsonl")]
 # the older events a terminal of before client-protocol read
 # (approvals, artifacts, versions: typed tags of the same name, not older)
 OLDER = ("state", "line", "history", "ready", "page")
@@ -38,10 +40,10 @@ def check(cond, what):
         raise AssertionError(what)
 
 
-def released():
-    """The -28 core's lines, by op (or cmd)."""
+def released(path):
+    """A released core's lines, by op (or cmd)."""
     out = {}
-    for l in open(FIXTURE):
+    for l in open(path):
         if l.strip():
             v = json.loads(l)
             out.setdefault(v.get("op") or "cmd:" + v["cmd"], []).append(v)
@@ -95,7 +97,8 @@ def main():
         c.wait_status("main", "idle", 60)
         sock = os.path.join(E.state, "hub.sock")
         project = c.project()
-        rel = released()
+        rel, rel29 = (released(f) for f in FIXTURES)
+        check(rel29["cmd:hello"] == rel["cmd:hello"] and rel29.keys() >= rel.keys(), "-29's lines are -28's and more: %r" % sorted(rel29.keys() - rel.keys()))
 
         # an older terminal: exe and reload, then nothing, ever
         term = Door(sock)
@@ -156,6 +159,14 @@ def main():
         # nothing (no refusal)
         for v in rel["page_voice"]:
             door.send(v)
+
+        # -29's lines -28 hadn't: each reaches its typed arm (an answer or
+        # its typed error, never 'unknown command')
+        for v in rel29["cmd:tool_out"] + [a for a in rel29["cmd:answer"] if a.get("files")]:
+            n = len(door.got())
+            door.send(dict(v, project=project))
+            got = door.wait(lambda g: next((x for x in g[n:] if x.get("ev") in ("tool_out", "error", "notice")), None), "%s answered" % v["cmd"])
+            check("unknown command" not in got.get("text", ""), "-29's %s refused as unknown: %r" % (v["cmd"], got))
 
         # a line outside the table: refused, logged, its notice typed
         door.send({"op": "history", "agent": "main", "before": 10})

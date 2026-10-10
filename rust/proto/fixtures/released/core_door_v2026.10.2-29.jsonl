@@ -1,0 +1,19 @@
+{"op":"hello"}
+{"cmd":"hello","proto":1}
+{"cmd":"hello","proto":1,"typed_only":true}
+{"cmd":"subscribe","project":"acme","agent":"main","limit":200}
+{"cmd":"page","project":"acme","agent":"main","before":120,"limit":100}
+{"cmd":"unsubscribe","project":"acme","agent":"main"}
+{"cmd":"send","project":"acme","agent":"docs","text":"go on","mode":"now"}
+{"cmd":"stop","project":"acme","agent":"docs"}
+{"cmd":"slash","project":"acme","agent":"main","line":"/archive t1"}
+{"cmd":"tool_out","project":"acme","agent":"main","pos":12}
+{"cmd":"answer","project":"acme","card":7,"reply":"yes","files":["/w/shot.png"]}
+{"op":"input","focus":"main","text":"what's next?"}
+{"op":"input","focus":"main","text":"look at this","via":"capsule"}
+{"op":"input","focus":"main","text":"/answer 7 yes"}
+{"op":"input","focus":"docs","text":"thanks","via":"ambient"}
+{"op":"interrupt","agent":"docs"}
+{"op":"every_stop","id":3}
+{"op":"page_voice","page":"weekly-update","phase":"heard","text":"shorter"}
+{"op":"stop_hub","keep_agents":true}
