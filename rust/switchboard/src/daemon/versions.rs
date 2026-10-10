@@ -132,6 +132,13 @@ fn update_failed(head: &str, running: &str, stderr: &str) -> (String, Vec<String
     (format!("couldn't build {}, you're still on {}: {}", head, running, clip(last.trim(), 200)), tail)
 }
 
+/// A `/update` build of `rev` started at `since`: its start, as every
+/// client gets it then and a client that connects later reads it in
+/// `initialize`'s state (`rpc::in_progress`).
+pub(super) fn update_now(rev: &str, since: std::time::Instant) -> Value {
+    json!({"ev": "update", "state": "building", "rev": rev, "elapsed": since.elapsed().as_secs()})
+}
+
 /// How often an installed hub looks at `current` (an update installed
 /// by `bise update` or the daily check).
 const UPDATE_LOOK: std::time::Duration = std::time::Duration::from_secs(30);
@@ -869,10 +876,7 @@ impl Shell {
         }
         let since = std::time::Instant::now();
         self.updating = Some((head.clone(), since));
-        let ev = self.update_hello();
-        if let Some(v) = ev {
-            self.broadcast(&v);
-        }
+        self.broadcast(&update_now(&head, since));
         self.broadcast_versions();
         let (exe, tx) = (self.opts.exe.clone(), self.tx.clone());
         let running_name = running_id.unwrap_or_else(|| "the dev tree".into());
@@ -917,12 +921,6 @@ impl Shell {
             log_line(&self.opts.paths, &format!("/update: {}", text));
         }
         self.broadcast(&v);
-    }
-
-    /// For a TUI that connects while `/update` builds: the build's start.
-    pub(super) fn update_hello(&self) -> Option<Value> {
-        let (rev, since) = self.updating.as_ref()?;
-        Some(json!({"ev": "update", "state": "building", "rev": rev, "elapsed": since.elapsed().as_secs()}))
     }
 
     /// update-card: the user's `1` on an update item: `bise update` when

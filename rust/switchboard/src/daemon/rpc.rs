@@ -53,6 +53,20 @@ const LATER: &[&str] = &["diff/read", "worktrees/list", "devServers/list", "merg
 /// The hub-wide kinds sent from a thread: `hub/read` gives their last.
 const SCANNED: &[&str] = &["worktrees", "dev_servers", "merged"];
 
+/// What runs now that a client connecting later must still see in
+/// `initialize`'s and `hub/read`'s state (the older hello's
+/// release_hello / update_hello): a release run, a `/update` build.
+fn in_progress(release: Option<&release::ReleaseRun>, updating: Option<&(String, std::time::Instant)>) -> Vec<Value> {
+    let mut out = Vec::new();
+    if let Some(r) = release {
+        out.push(release::now(r));
+    }
+    if let Some((rev, since)) = updating {
+        out.push(versions::update_now(rev, *since));
+    }
+    out
+}
+
 /// An op line of the released core's door and the typed command its
 /// arm takes (`renames`: the op's field -> the command's).
 struct DoorOp {
@@ -362,7 +376,7 @@ impl Shell {
         }
         // a release run or a `/update` build going on: where it is (the
         // older hello's release_hello / update_hello)
-        for v in [self.release_now(), self.update_hello()].into_iter().flatten() {
+        for v in in_progress(self.release.as_ref(), self.updating.as_ref()) {
             if let Some(ev) = self.typed_of(&v) {
                 evs.push(ev);
             }
@@ -568,8 +582,8 @@ mod tests {
             ("flow", "flow_ev"),
             ("pages", "pages_ev"),
             ("versions", "version_items"),
-            ("release", "release_now"),
-            ("update", "update_hello"),
+            ("release", "in_progress"),
+            ("update", "in_progress"),
             ("worktrees", "SCANNED"),
             ("dev_servers", "SCANNED"),
             ("merged", "SCANNED"),
@@ -588,6 +602,29 @@ mod tests {
         for kind in SCANNED {
             assert!(state.get(kind) == Some(&"SCANNED"), "{kind}");
         }
+    }
+
+    /// The behaviour next to the law above: a hub with a release running
+    /// and a `/update` build going on gives a later client the typed
+    /// release and update events (what hub_state pushes, as the
+    /// terminal's typed readers take them); nothing going on, nothing.
+    #[test]
+    fn a_release_run_and_an_update_build_reach_a_later_client_typed() {
+        let run = release::ReleaseRun::for_tests("v2026.10.3", json!({"ev": "release", "state": "running", "text": "building the apps"}));
+        let building = ("abc1234".to_string(), std::time::Instant::now());
+        let evs: Vec<HubEv> = in_progress(Some(&run), Some(&building))
+            .into_iter()
+            .map(|mut v| {
+                v["project"] = json!("acme");
+                HubEv::from_value(v).unwrap()
+            })
+            .collect();
+        assert!(matches!(evs.as_slice(), [HubEv::Release(_), HubEv::Update(_)]), "{evs:?}");
+        let [HubEv::Release(r), HubEv::Update(u)] = evs.as_slice() else { unreachable!() };
+        let (r, u) = (serde_json::to_value(r).unwrap(), serde_json::to_value(u).unwrap());
+        assert_eq!((r["tag"].as_str(), r["text"].as_str()), (Some("v2026.10.3"), Some("building the apps")));
+        assert_eq!((u["state"].as_str(), u["rev"].as_str()), (Some("building"), Some("abc1234")));
+        assert!(in_progress(None, None).is_empty());
     }
 
     use bise_proto::hub::HubCmd;

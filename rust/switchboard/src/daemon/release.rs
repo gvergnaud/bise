@@ -332,14 +332,22 @@ impl Shell {
         }
     }
 
-    /// For a client that connects while a release runs (`initialize`'s
-    /// state, `hub/read`'s): where it is.
-    pub(super) fn release_now(&self) -> Option<Value> {
-        let r = self.release.as_ref()?;
-        let mut v = if r.last.is_null() { json!({"ev": "release", "state": "running", "text": "starting"}) } else { r.last.clone() };
-        v["tag"] = json!(r.tag);
-        v["elapsed"] = json!(r.started.elapsed().as_secs());
-        Some(v)
+}
+
+/// For a client that connects while a release runs (`initialize`'s
+/// state, `hub/read`'s, through `rpc::in_progress`): where it is.
+pub(super) fn now(r: &ReleaseRun) -> Value {
+    let mut v = if r.last.is_null() { json!({"ev": "release", "state": "running", "text": "starting"}) } else { r.last.clone() };
+    v["tag"] = json!(r.tag);
+    v["elapsed"] = json!(r.started.elapsed().as_secs());
+    v
+}
+
+#[cfg(test)]
+impl ReleaseRun {
+    /// A release run of `tag` started now, its last step `last`.
+    pub(super) fn for_tests(tag: &str, last: Value) -> Self {
+        ReleaseRun { tag: tag.into(), started: Instant::now(), last }
     }
 }
 
