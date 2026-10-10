@@ -258,6 +258,8 @@ pub enum EveryReq {
 pub enum WakeReq {
     List,
     Stop(u64),
+    /// `--stop bg/<n>`: the watch of the caller's background command n
+    StopBg(String),
     /// one watch, its max (ms)
     Add { spec: crate::wake::Spec, max_ms: u64 },
 }
@@ -446,7 +448,8 @@ impl AgentReq {
             },
             "wake" => AgentReq::Wake(match jstr(v, "step").as_str() {
                 "" | "list" => WakeReq::List,
-                "stop" => WakeReq::Stop(v["id"].as_u64().ok_or("usage: sb wake --stop <id>")?),
+                "stop" if v["bg"].is_string() => WakeReq::StopBg(jstr(v, "bg")),
+                "stop" => WakeReq::Stop(v["id"].as_u64().ok_or("usage: sb wake --stop <id|bg/<n>>")?),
                 "add" => WakeReq::Add {
                     spec: crate::wake::Spec::from_json(&v["spec"]).ok_or("sb wake: --on-exit, --on-file or --on-job")?,
                     max_ms: v["max_ms"].as_u64().unwrap_or(crate::wake::MAX_DEFAULT_MS).min(crate::wake::MAX_MOST_MS),

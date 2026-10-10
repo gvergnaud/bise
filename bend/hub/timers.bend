@@ -43,6 +43,10 @@ type Timer is Data:
 type Ended is Data:
   Ended{t: Timer, at: Nat, why: String}
 
+# the agents' wake sources: the timers (and the acts, on the same clock)
+# and the watches of `sb wake` (`wk`, event-wake: what wakes an agent on
+# an event). The watches are wakes.bend's: WK owns every function over
+# `wk`; this module only holds it and applies its lines (wk_apply).
 type Tms is Data:
   Tms{live: List<&2, Timer>, ended: List<&2, Ended>, last_id: Nat, acts: List<&2, Act>, next_act: Nat,
     wk: WK.Wakes}

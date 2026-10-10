@@ -154,6 +154,16 @@ def apply(+ws: Wakes, e: WkEv) -> Wakes:
 
 # ---- the pure decisions (core.bend's watches section wires them) ----
 
+# a new watch (wake_set): its id the next free one, its deadline `max_ms`
+# from now
+def make(+ws: Wakes, +agent: String, +spec: J.Json, +max_text: String, +now: Nat, +max_ms: Nat, +quiet: Bool) -> Watch:
+  Watch{1n+Wakes.last_id(ws), agent, spec, max_text, now, Nat.add(now, max_ms), quiet}
+
+# a watch past its max says "still running" to its agent, unless quiet (a
+# bash slot's) or its agent is not active (stopped: nothing to wake)
+def max_says(+w: Watch, +active: Bool) -> Bool:
+  Bool.not(Watch.quiet(w)) && active
+
 # the live watch a hit is for (None: ended or unknown: the hit is nothing)
 def hit(+ws: Wakes, +id: Nat) -> Maybe<&2, Watch>:
   find(Wakes.live(ws), id)

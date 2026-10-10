@@ -64,17 +64,17 @@ def main():
         c.say("[[bash: sleep %d; %s > %s; echo LAST-LINE-OK]]" % (SECS, stamp, end1), focus="t1")
         c.wait(lambda: any(l.startswith("bg_handoff : ") for l in c.lines("t1")), 60, "the handoff's wire line")
         c.wait_idle("t1")
-        t = arrival(c, "t1", "background 0 (`sleep", SECS + 60)
+        t = arrival(c, "t1", "background 0 ended", SECS + 60)
         late = t - end_time(end1)
-        w = wakes(c, "t1", "background 0 (`sleep")[0]
-        check("ended: rc 0" in w, "the wake says what and its rc: %r" % w)
+        w = wakes(c, "t1", "background 0 ended")[0]
+        check("background 0 ended · rc 0 · after" in w and "· sleep %d" % SECS in w, "the wake says what and its rc: %r" % w)
         k = c.lines("t1").index(w)
         c.wait(lambda: any(l.strip() == "LAST-LINE-OK" for l in c.lines("t1")[k:]) or any("LAST-LINE-OK" in l for l in c.lines("t1")[k:k + 1]),
                10, "its last lines in the wake")
         check(late <= LATE, "woken %.2f s after the end (at most %.1f)" % (late, LATE))
         print("bg: woken %.2f s after the end of a %d s command" % (late, SECS))
         c.wait_idle("t1")
-        wait.holds(lambda: len(wakes(c, "t1", "background 0 (`sleep")) == 1, 4, "one wake for one end")
+        wait.holds(lambda: len(wakes(c, "t1", "background 0 ended")) == 1, 4, "one wake for one end")
 
         # 2. --on-exit: a process the agent names
         end2 = os.path.join(E.tmp, "end2")

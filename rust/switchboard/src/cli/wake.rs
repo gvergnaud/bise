@@ -7,7 +7,7 @@
 use super::*;
 use crate::wake::{Spec, What};
 
-pub(super) const WAKE_USAGE: &str = "usage: sb wake --on-exit <pid> | --on-file <path> | --on-job <launchd label> [--tail <file>] [--note \"<words>\"] [--max 1h] | sb wake | sb wake --stop <id>";
+pub(super) const WAKE_USAGE: &str = "usage: sb wake --on-exit <pid> | --on-file <path> | --on-job <launchd label> [--tail <file>] [--note \"<words>\"] [--max 1h] | sb wake | sb wake --stop <id|bg/<n>>";
 
 fn absolute(p: &str) -> String {
     let path = std::path::Path::new(p);
@@ -20,9 +20,13 @@ fn absolute(p: &str) -> String {
 pub(super) fn wake_req(rest: &[String], req: &mut Map<String, Value>) -> Result<(), String> {
     let (pos, o) = parse_args(rest, &["on-exit", "on-file", "on-job", "tail", "note", "max", "stop"], &[])?;
     if o.contains_key("stop") {
-        let id = str_of(&o, "stop").trim_start_matches('#').parse::<u64>().map_err(|_| WAKE_USAGE.to_string())?;
+        // `#3` or `3`: a watch; `bg/3`: the watch of background command 3
+        let which = str_of(&o, "stop");
         req.insert("step".into(), json!("stop"));
-        req.insert("id".into(), json!(id));
+        match which.strip_prefix("bg/") {
+            Some(slot) if !slot.is_empty() => req.insert("bg".into(), json!(slot)),
+            _ => req.insert("id".into(), json!(which.trim_start_matches('#').parse::<u64>().map_err(|_| WAKE_USAGE.to_string())?)),
+        };
         return Ok(());
     }
     let ons: Vec<&str> = ["on-exit", "on-file", "on-job"].into_iter().filter(|k| o.contains_key(*k)).collect();

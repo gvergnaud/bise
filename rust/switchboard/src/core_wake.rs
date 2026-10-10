@@ -36,6 +36,10 @@ impl Hub {
         };
         match r {
             WakeReq::List => json!({"ok": true, "text": self.st.wakes.list(&by, env.now())}),
+            WakeReq::StopBg(slot) => match self.st.wakes.of_bg(&by, &slot) {
+                Some(id) => self.wake_req(fx, env, from, WakeReq::Stop(id)),
+                None => json!({"ok": false, "error": format!("no watch on background {} (it ended, or `sb wake` lists yours)", slot)}),
+            },
             WakeReq::Stop(id) => {
                 if self.st.wakes.live.get(&id).is_none_or(|w| w.agent != by) {
                     return json!({"ok": false, "error": format!("no watch #{} of yours (`sb wake` lists them)", id)});

@@ -80,13 +80,13 @@ def bash_exec_as(+command: String, +flags: String) -> IO(Xp.ExecRes):
 # its end wakes the agent), and one line under the contract that says so.
 # No hub (no BEND_WIRE_LOG: a standalone harness, the scripted suites):
 # nothing written, the result as it was.
-def bg_note.said(r: Xp.ExecRes) -> Xp.ExecRes:
+def bg_note.said(r: Xp.ExecRes, +id: String) -> Xp.ExecRes:
   match r:
     case Xp.Ex{+ok, +o}:
-      Xp.Ex{ok, String.append(o, String.append(Shp.handoff_note(), "
+      Xp.Ex{ok, String.append(o, String.append(Shp.handoff_note(id), "
 "))}
 
-def bg_note.with(skip: Bool, +path: String, +line: String, +r: Xp.ExecRes) -> IO(Xp.ExecRes):
+def bg_note.with(skip: Bool, +path: String, +line: String, +r: Xp.ExecRes, +id: String) -> IO(Xp.ExecRes):
   match skip:
     case True{}:
       IO.pure(Xp.ExecRes, r)
@@ -94,7 +94,7 @@ def bg_note.with(skip: Bool, +path: String, +line: String, +r: Xp.ExecRes) -> IO
       do IO<Xp.ExecRes>:
         f : Result<&1, &1, U32 & String, File> <- File.open(path, "a")
         u : Unit <- P.write.opened(f, line)
-        IO.pure(Xp.ExecRes, bg_note.said(r))
+        IO.pure(Xp.ExecRes, bg_note.said(r, id))
 
 def bg_note(m: Maybe<&2, String>, +bg: String, +command: String, +r: Xp.ExecRes) -> IO(Xp.ExecRes):
   match m:
@@ -107,7 +107,7 @@ def bg_note(m: Maybe<&2, String>, +bg: String, +command: String, +r: Xp.ExecRes)
         +j : J.Json <- IO.pure(J.Json, J.obj([J.kv("slot", J.JStr{String.append(bg, String.append("/", id))}),
           J.kv("cmd", J.JStr{Shp.first_line(command)})]))
         bg_note.with(String.is_empty(wl), wl, String.append("bg_handoff : ", String.append(J.stringify(j), "
-")), r)
+")), r, id)
 
 # boot cleanup: the wrappers of a previous process on this port cannot be
 # running (the parent waits for the old REPL to die before respawning), so

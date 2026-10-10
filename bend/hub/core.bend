@@ -1526,8 +1526,8 @@ def wake_set.agent(-o: M.St, ok: Bool, +cx: X.Cx<o>, +agent: String, +i: J.Json)
     case False{}:
       cx
     case True{}:
-      +w = {WK.Watch{1n+WK.Wakes.last_id(wks(o, cx)), agent, Maybe.default(&2, J.Json, J.get(i, "spec"), J.JNull{}),
-        C.get_s(i, "max_text"), now(o, cx), Nat.add(now(o, cx), C.get_nat(i, "max_ms")), C.get_b(i, "quiet")} : WK.Watch}
+      +w = WK.make(wks(o, cx), agent, Maybe.default(&2, J.Json, J.get(i, "spec"), J.JNull{}),
+        C.get_s(i, "max_text"), now(o, cx), C.get_nat(i, "max_ms"), C.get_b(i, "quiet"))
       emit(o, cx, M.EWake{WK.WSet{w}}, Unit{}, Unit{}, Unit{})
 
 def wake_set.named(-o: M.St, m: Maybe<&2, String>, +cx: X.Cx<o>, +i: J.Json) -> X.Cx<o>:
@@ -1559,8 +1559,8 @@ def wakes_tick.each(-o: M.St, ws: List<&2, WK.Watch>, +cx: X.Cx<o>) -> X.Cx<o>:
       cx
     case Con{+w, +rest}:
       +cx2 = wake_end(o, cx, WK.Watch.id(w), "max")
-      +cx3 = pick_lazy(X.Cx<o>, WK.Watch.quiet(w) || Bool.not(agent_active(st(o, cx2), WK.Watch.agent(w))),
-        u => cx2, u => wake_say(o, cx2, WK.Watch.agent(w), WK.Watch.max_text(w)))
+      +cx3 = pick_lazy(X.Cx<o>, WK.max_says(w, agent_active(st(o, cx2), WK.Watch.agent(w))),
+        u => wake_say(o, cx2, WK.Watch.agent(w), WK.Watch.max_text(w)), u => cx2)
       wakes_tick.each(o, rest, cx3)
 
 def wakes_tick.go(-o: M.St, work: Bool, +cx: X.Cx<o>) -> X.Cx<o>:

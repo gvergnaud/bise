@@ -132,12 +132,20 @@ fn the_tail_is_clipped_by_lines_then_bytes_on_a_char_boundary() {
 fn the_wake_says_what_ended_its_rc_and_its_last_lines() {
     let s = Spec::bg("/t/bg/3", "cargo test");
     let w = hit_text(&s, Some("0"), Some("a\nb\nok: 12 passed\n"), 124_000);
-    assert_eq!(w, "background 3 (`cargo test`) ended: rc 0 after 2m04s\nlast lines of /t/bg/3.out:\na\nb\nok: 12 passed");
+    assert_eq!(w, "background 3 ended · rc 0 · after 2m04s · cargo test\nits last 3 lines (/t/bg/3.out):\na\nb\nok: 12 passed");
+    assert_eq!(hit_text(&s, None, Some(""), 1_000), "background 3 ended · after 1s · cargo test\nit printed nothing");
     let p = Spec { what: What::Pid { pid: 42, start: String::new() }, tail: None, note: "the build".into() };
-    assert_eq!(hit_text(&p, None, None, 5_000), "pid 42 ended after 5s · the build");
+    assert_eq!(hit_text(&p, None, None, 5_000), "pid 42 ended · after 5s · the build");
     let f = Spec { what: What::File { path: "/t/rc".into() }, tail: None, note: String::new() };
-    assert_eq!(hit_text(&f, Some("1"), None, 3_600_000), "/t/rc appeared after 1h00m: rc 1");
-    assert_eq!(max_text(&p, 3_600_000), "still running after 1h00m: pid 42 · the build. This watch ended: sb wake again to keep waiting");
+    assert_eq!(hit_text(&f, Some("1"), None, 3_600_000), "/t/rc appeared · after 1h00m · rc 1");
+    let j = Spec { what: What::Job { label: "dev.x".into() }, tail: Some("/t/lo".into()), note: String::new() };
+    assert_eq!(hit_text(&j, Some("0"), Some("ok\n"), 723_000), "launchd job dev.x ended · rc 0 · after 12m03s\nits last line (/t/lo):\nok");
+    assert_eq!(
+        max_text(&p, 3_600_000),
+        "pid 42 still running · after 1h00m · the build\nthis watch stopped at its --max (1h). to keep waiting: sb wake --on-exit 42 --note 'the build'"
+    );
+    let g = Spec { what: What::File { path: "/a b/rc".into() }, tail: Some("/t/log".into()), note: String::new() };
+    assert_eq!(again(&g, 90 * 60_000), "sb wake --on-file '/a b/rc' --tail /t/log --max 1h30m");
     assert_eq!(set_text(4, &p, 3_600_000), "watch #4 set: you'll be woken when pid 42 ends (at most 1h00m; sb wake --stop 4)");
 }
 

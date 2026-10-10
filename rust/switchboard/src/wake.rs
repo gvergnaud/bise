@@ -174,6 +174,12 @@ impl Wakes {
             .collect();
     }
 
+    /// The live watch of `agent`'s background command `slot` (its id in
+    /// the bash contract: `sb wake --stop bg/3`).
+    pub fn of_bg(&self, agent: &str, slot: &str) -> Option<u64> {
+        self.live.values().find(|w| w.agent == agent && matches!(&w.spec.what, What::Bg { slot: s, .. } if slot_id(s) == slot)).map(|w| w.id)
+    }
+
     /// `sb wake`: the agent's live watches, then its last ended ones.
     pub fn list(&self, agent: &str, now: u64) -> String {
         let mut out: Vec<String> = self
@@ -351,32 +357,111 @@ pub fn tail_clip(text: &str) -> String {
     out
 }
 
+// The words of the wakes (designer m_16533): one shape for all,
+// `<what> <ended|appeared> · rc N · after D · <note>`, each part only
+// when known, lowercase, no period; then the tail.
+
+/// What a wake names: `background 3`, `pid 4242`, a path, `launchd job x`.
+fn what(spec: &Spec) -> String {
+    match &spec.what {
+        What::Bg { slot, .. } => format!("background {}", slot_id(slot)),
+        What::Pid { pid, .. } => format!("pid {}", pid),
+        What::File { path } => path.clone(),
+        What::Job { label } => format!("launchd job {}", label),
+    }
+}
+
+/// The head's last parts: the agent's note, then a bash command's line.
+fn words_after(spec: &Spec) -> Vec<String> {
+    let mut v = Vec::new();
+    if !spec.note.trim().is_empty() {
+        v.push(clip(&one_line(&spec.note), 120));
+    }
+    if let What::Bg { cmd, .. } = &spec.what {
+        if !cmd.is_empty() {
+            v.push(cmd.clone());
+        }
+    }
+    v
+}
+
+/// The tail part: `its last N lines (<file>):` and the lines, or `it
+/// printed nothing`; no tail file, no part.
+fn tail_part(file: &str, tail: Option<&str>) -> String {
+    let t = tail.map(tail_clip).unwrap_or_default();
+    match t.lines().count() {
+        0 => "it printed nothing".to_string(),
+        1 => format!("its last line ({}):\n{}", file, t),
+        n => format!("its last {} lines ({}):\n{}", n, file, t),
+    }
+}
+
 /// The wake of a watch whose event happened (`waited`: since its set).
 pub fn hit_text(spec: &Spec, rc: Option<&str>, tail: Option<&str>, waited: u64) -> String {
-    let rc_words = |rc: Option<&str>| rc.map(|r| format!("rc {}", r)).unwrap_or_else(|| "rc unknown".into());
-    let head = match &spec.what {
-        What::Bg { .. } => format!("{} ended: {} after {}", spec.label(), rc_words(rc), dur(waited)),
-        What::Pid { .. } => format!("{} ended after {}", spec.label(), dur(waited)),
-        What::File { path } => match rc {
-            Some(r) => format!("{} appeared after {}: rc {}", path, dur(waited), r),
-            None => format!("{} appeared after {}", path, dur(waited)),
-        },
-        What::Job { .. } => format!("{} ended: {} after {}", spec.label(), rc_words(rc), dur(waited)),
+    let rc = rc.map(|r| format!("rc {}", r));
+    let after = format!("after {}", dur(waited));
+    let mut parts = match &spec.what {
+        What::File { .. } => vec![format!("{} appeared", what(spec)), after].into_iter().chain(rc).collect::<Vec<_>>(),
+        _ => std::iter::once(format!("{} ended", what(spec))).chain(rc).chain([after]).collect(),
     };
-    let mut out = format!("{}{}", head, note_part(&spec.note));
-    if let (Some(t), Some(file)) = (tail.map(tail_clip).filter(|t| !t.is_empty()), spec.tail.as_deref()) {
-        out.push_str(&format!("\nlast lines of {}:\n{}", file, t));
+    parts.extend(words_after(spec));
+    let mut out = parts.join(" · ");
+    if let Some(file) = spec.tail.as_deref() {
+        out.push('\n');
+        out.push_str(&tail_part(file, tail));
     }
     out
 }
 
+/// A duration as `--max` takes it: `1h`, `1h30m`, `45m` (at least 1m).
+fn dur_flag(ms: u64) -> String {
+    let m = (ms / 60_000).max(1);
+    match (m / 60, m % 60) {
+        (0, m) => format!("{}m", m),
+        (h, 0) => format!("{}h", h),
+        (h, m) => format!("{}h{}m", h, m),
+    }
+}
+
+/// A word for a shell line: as is when plain, else in single quotes.
+fn sh_word(s: &str) -> String {
+    if !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || "/._-:@+=,".contains(c)) {
+        s.to_string()
+    } else {
+        format!("'{}'", s.replace('\'', "'\\''"))
+    }
+}
+
+/// The `sb wake` line that sets the same watch again.
+pub fn again(spec: &Spec, max_ms: u64) -> String {
+    let mut v = vec!["sb wake".to_string()];
+    match &spec.what {
+        What::Pid { pid, .. } => v.push(format!("--on-exit {}", pid)),
+        What::File { path } => v.push(format!("--on-file {}", sh_word(path))),
+        What::Job { label } => v.push(format!("--on-job {}", sh_word(label))),
+        What::Bg { slot, .. } => v.push(format!("--on-file {}", sh_word(&format!("{}.rc", slot)))),
+    }
+    if let Some(t) = &spec.tail {
+        v.push(format!("--tail {}", sh_word(t)));
+    }
+    if !spec.note.is_empty() {
+        v.push(format!("--note {}", sh_word(&spec.note)));
+    }
+    if max_ms != MAX_DEFAULT_MS {
+        v.push(format!("--max {}", dur_flag(max_ms)));
+    }
+    v.join(" ")
+}
+
 /// The wake of a watch past its max (given to sb-core at the set).
 pub fn max_text(spec: &Spec, max_ms: u64) -> String {
+    let mut parts = vec![format!("{} still running", what(spec)), format!("after {}", dur(max_ms))];
+    parts.extend(words_after(spec));
     format!(
-        "still running after {}: {}{}. This watch ended: sb wake again to keep waiting",
-        dur(max_ms),
-        spec.label(),
-        note_part(&spec.note)
+        "{}\nthis watch stopped at its --max ({}). to keep waiting: {}",
+        parts.join(" · "),
+        dur_flag(max_ms),
+        again(spec, max_ms)
     )
 }
 

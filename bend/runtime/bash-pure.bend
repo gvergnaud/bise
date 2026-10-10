@@ -243,9 +243,11 @@ def first_line(+s: String) -> String:
   first_line.at(Tx.find(s, "
 ", 0n), String.trim(s))
 
-# the line under the contract, when a hub watches the slot
-def handoff_note() -> String:
-  "  wake: its end wakes you with its rc and last lines (no timer needed; `sb wake` lists it, `sb wake --stop <id>` to not be)"
+# the line under the contract, when a hub watches the slot `id`
+# (designer m_16533; `sb wake --stop bg/<id>` finds the slot's watch)
+def handoff_note(+id: String) -> String:
+  String.append("  its end wakes you with its rc and its last 20 lines, no timer needed. sb wake lists your watches; sb wake --stop bg/",
+    String.append(id, " cancels this one."))
 
 # one slot's file: <dir>/<id><ext>
 def bg_slot(+bg: String, +id: String, +ext: String) -> String:
