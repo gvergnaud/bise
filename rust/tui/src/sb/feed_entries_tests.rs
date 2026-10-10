@@ -50,6 +50,9 @@ const TURN: &[&str] = &[
 #[test]
 fn a_first_page_replaces_the_feed_and_marks_its_entries() {
     let mut app = subscribed("main");
+    // a feed that held a page before (what came before the connection's
+    // first one stays: the next law)
+    app.win.first_pos = Some(1);
     app.events.push(Ev::Info("stale".into()));
     app.cache.push(None);
     let es = entries(TURN);
@@ -61,6 +64,23 @@ fn a_first_page_replaces_the_feed_and_marks_its_entries() {
     assert_eq!(app.win.first_pos, Some(1), "nothing before it: no page to ask");
     page(&mut app, "main", None, es[1..].to_vec(), true);
     assert_eq!(app.win.first_pos, Some(3), "more before it: its first pos");
+}
+
+/// FINAL gate (tui_update_tmux): /update typed before `initialize`
+/// answered gets the hub's words before main's first page (asked at that
+/// answer); the page keeps them under its entries. A page again (a
+/// resubscribe) replaces the feed whole.
+#[test]
+fn what_came_before_the_connections_first_page_stays_under_it() {
+    let mut app = subscribed("main");
+    app.events.push(Ev::Info("building the latest commit, abc1234".into()));
+    app.cache.push(None);
+    page(&mut app, "main", None, entries(TURN), false);
+    assert_eq!(kinds(&app), ["you", "tool", "agent", "other"]);
+    assert!(matches!(app.events.last(), Some(Ev::Info(t)) if t.starts_with("building the latest commit")));
+    assert_eq!(app.events.len(), app.cache.len());
+    page(&mut app, "main", None, entries(TURN), false);
+    assert_eq!(kinds(&app), ["you", "tool", "agent"], "a second first page: the feed is its entries");
 }
 
 #[test]

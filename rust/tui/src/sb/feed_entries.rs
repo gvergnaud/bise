@@ -92,11 +92,19 @@ pub(super) fn page(app: &mut App, agent: &str, older: Option<usize>, entries: Ve
 
 fn first_page(app: &mut App, agent: &str, entries: &[Entry], more: bool) {
     let keep = (app.ed.clone(), app.queued.clone());
+    // the connection's first page: what the feed holds came after the
+    // connection emptied it and before any entry (a notice, a command's
+    // answer: /update typed before `initialize` answered), so it stays,
+    // under the page; a page again (a resubscribe) replaces it all
+    let early = if app.win.first_pos.is_none() && app.win.spans.is_empty() { std::mem::take(&mut app.events) } else { Vec::new() };
     empty_feed(app);
     app.win = FeedWindow::default();
     app.last_ts = None;
     for e in entries {
         place(app, agent, e);
+    }
+    for ev in early {
+        push_event(&mut app.events, &mut app.cache, ev);
     }
     app.win.first_pos = Some(first_pos(entries, more));
     (app.ed, app.queued) = keep;
