@@ -533,12 +533,8 @@ impl Sb {
 
     /// What the user typed, for `agent` (in view or not).
     fn send_input_to(&mut self, agent: &str, text: String) {
-        // computer use (C6, m_3893): a message to an agent you stopped is
-        // its go-ahead; `@name …` is for that agent
-        if !text.starts_with('/') {
-            let to = text.split_whitespace().next().and_then(|w| w.strip_prefix('@')).filter(|n| self.agent(n).is_some());
-            crate::computer_use::resume_if_stopped(to.unwrap_or(agent));
-        }
+        // computer use: the hub resumes a stopped or paused agent before
+        // his words reach it (Shell::resume_computer_use)
         self.call("command/run", json!({"agent": agent, "line": text}), rpc::Then::Line);
     }
 }

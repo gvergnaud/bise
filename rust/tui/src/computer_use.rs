@@ -73,8 +73,7 @@ pub(crate) fn is_on() -> bool {
 }
 
 pub(crate) fn on_in(state: &std::path::Path) -> bool {
-    let named = |l: Vec<String>| l.iter().any(|n| n == "computer");
-    named(bend_plugins::state::enabled(state)) && !named(bend_plugins::state::disabled(state))
+    bend_plugins::state::is_on(state, "computer")
 }
 
 /// /computer-use off|uninstall: the plugin off, then `bise computer-use
@@ -241,7 +240,8 @@ pub(crate) fn short_app(app: &str) -> String {
 }
 
 /// Stop the agent whose folder is `dir` (ctrl+c in its view, a click on
-/// `↖`, `/stop`): it lets go until [`resume_if_stopped`]. By its key on
+/// `↖`, `/stop`): it lets go until the user writes to it (the hub resumes it:
+/// `Shell::resume_computer_use`) or gives it back. By its key on
 /// the commands' socket, the one call the hub's /stop makes too
 /// (`bise_computer_use::cli::stop_agent`, architect m_13415), on a thread:
 /// the TUI shows nothing of the outcome (the hub's line says it).
@@ -250,14 +250,6 @@ pub(crate) fn stop(dir: &str) {
     std::thread::spawn(move || {
         let _ = bise_computer_use::cli::stop_agent(&bise_computer_use::paths::Paths::from_env(), &key);
     });
-}
-
-/// The user writes to `agent` again: a stopped one may start again
-/// (C6, m_3893: his message is the go-ahead the stop asked for).
-pub(crate) fn resume_if_stopped(agent: &str) {
-    if drivers().get(agent).is_some_and(|d| d.stopped || d.paused) {
-        fire(&["resume", agent]);
-    }
 }
 
 /// `? you took the wheel · ⏎ give it back`: the user gives it back.

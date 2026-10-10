@@ -116,11 +116,95 @@ pub fn drop_agent(hub: &str, dir_name: &str) {
     });
 }
 
+/// The agent of `key` waits on the user in state.json `v`: stopped (his
+/// next message is the go-ahead the stop asked for, C6 m_3893) or paused
+/// (he took the wheel; writing to it gives the wheel back).
+pub fn held(v: &Value, key: &str) -> bool {
+    bise_computer_use::state::agents(v).iter().any(|a| a.key == key && (a.stopped || a.paused))
+}
+
+/// Whether computer use is on (the `computer` plugin, what /computer-use
+/// sets): off, his words never read state.json.
+pub fn is_on() -> bool {
+    bend_plugins::state::is_on(&bend_plugins::state::state_path(), "computer")
+}
+
+/// His words to the agent of `key`: when state.json holds it (stopped or
+/// paused), the broker's `resume` (the call the TUI's ⏎ makes:
+/// `bise_computer_use::cli::control`, on the files when no broker runs)
+/// on a thread of its own, never waited on: the hub's loop goes on at
+/// once (architect m_16548). The model takes seconds before its first
+/// computer call, the resume milliseconds. A driving or unknown agent:
+/// nothing, no thread. True when it asked.
+pub fn resume_if_held(paths: &bise_computer_use::paths::Paths, key: &str) -> bool {
+    if !held(&bise_computer_use::state::read(paths), key) {
+        return false;
+    }
+    let (paths, agent) = (paths.clone(), key.to_string());
+    std::thread::spawn(move || {
+        let _ = bise_computer_use::cli::control(&paths, "resume", &serde_json::json!({"agent": agent}));
+    });
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
     use std::io::Write;
+
+    /// A computer-use world of its own on a temp folder (never the real
+    /// run dir), no broker: `control` works on its files.
+    fn world(name: &str, agents: Value) -> (std::path::PathBuf, bise_computer_use::paths::Paths) {
+        let d = std::env::temp_dir().join(format!("sb-cu-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        let p = bise_computer_use::paths::Paths::new(d.join("run"), d.join("root"), d.join("home"));
+        bise_computer_use::state::write(&p, &json!({"v": 2, "agents": agents, "browsers": [], "apps": {}})).unwrap();
+        (d, p)
+    }
+
+    const HUB: &str = "0123456789abcdef";
+
+    #[test]
+    fn writing_to_a_stopped_or_paused_agent_resumes_it() {
+        let a = |k: &str, driving: Option<&str>, paused: bool, stopped: bool| {
+            (format!("{HUB}.{k}"), json!({"name": k, "hub": HUB, "driving": driving, "paused": paused, "stopped": stopped}))
+        };
+        let agents: serde_json::Map<String, Value> = [
+            a("halt", None, false, true),
+            a("held", Some("Chrome"), true, false),
+            a("busy", Some("Chrome"), false, false),
+        ]
+        .into_iter()
+        .collect();
+        let (d, p) = world("resume", Value::Object(agents));
+        let key = |k: &str| bise_computer_use::who::key(HUB, k);
+        assert!(held(&bise_computer_use::state::read(&p), &key("halt")));
+        assert!(held(&bise_computer_use::state::read(&p), &key("held")));
+        // driving, or never drove: nothing to resume, the file untouched
+        let before = std::fs::read(p.state_file()).unwrap();
+        assert!(!resume_if_held(&p, &key("busy")));
+        assert!(!resume_if_held(&p, &key("never")));
+        assert_eq!(std::fs::read(p.state_file()).unwrap(), before);
+        // stopped, then paused: resumed (no broker: on the files)
+        // not waited on: the resume lands on its thread, a moment later.
+        // One at a time: with no broker, `control` edits the file itself
+        // and two at once would race (the broker serializes them)
+        let settled = |k: &str| {
+            let t = std::time::Instant::now();
+            while held(&bise_computer_use::state::read(&p), &key(k)) && t.elapsed() < std::time::Duration::from_secs(5) {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+        };
+        assert!(resume_if_held(&p, &key("halt")));
+        settled("halt");
+        assert!(resume_if_held(&p, &key("held")));
+        settled("held");
+        let after = bise_computer_use::state::read(&p);
+        assert!(!held(&after, &key("halt")) && !held(&after, &key("held")), "{after}");
+        assert!(after["agents"].get(key("busy")).is_some(), "the driving agent is kept: {after}");
+        let _ = std::fs::remove_dir_all(&d);
+    }
 
     #[test]
     fn a_stop_is_one_line_in_mains_feed() {

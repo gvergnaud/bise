@@ -37,6 +37,14 @@ pub fn enabled(path: &Path) -> Vec<String> {
     list(path, "enabled")
 }
 
+/// Whether the opt-in plugin `name` is on: named in `enabled` and not in
+/// `disabled` (what [`set_enabled`] writes). The TUI's /computer-use menu
+/// and the hub's computer-use resume both read it.
+pub fn is_on(path: &Path, name: &str) -> bool {
+    let named = |l: Vec<String>| l.iter().any(|n| n == name);
+    named(enabled(path)) && !named(disabled(path))
+}
+
 /// Enable (`on`) or disable a plugin by name: `on` drops it from
 /// `disabled` and adds it to `enabled` (an opt-in plugin needs it), off
 /// does the reverse. Returns whether the file changed. Other keys in the

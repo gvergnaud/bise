@@ -50,6 +50,8 @@ impl Shell {
     /// the model, the context kept for the 'you' line this step writes.
     /// `text` already has his attached files ([`with_files`]).
     pub(super) fn step_input(&mut self, client: ClientId, v: &Value, focus: String, text: String, queued: bool) {
+        // computer use: a stopped or paused agent goes on first
+        self.resume_computer_use(&focus, &text);
         let slash = text.trim_start().starts_with('/');
         let ctx = crate::fn_context::of(v.get("context")).filter(|_| !slash);
         let text = match &ctx {

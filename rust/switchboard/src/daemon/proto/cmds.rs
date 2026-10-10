@@ -518,4 +518,28 @@ impl Shell {
             }
         });
     }
+
+    /// /stop's other half (C6, m_3893): his words to an agent that
+    /// computer use holds (stopped, or paused because he took the wheel)
+    /// are its go-ahead, so it is resumed before they reach sb-core
+    /// (`crate::computer_use::resume_if_held`, on its own thread, never
+    /// waited on). The agent is the one the router sends his words to
+    /// (`router::parse`: `To` its target, `Say` the focus); a command
+    /// resumes nothing. Computer use off: state.json is not read. Called
+    /// from `step_input`, where both doors meet (turn/send and
+    /// command/run's line, proto_input → input): the clients no longer
+    /// do it.
+    pub(crate) fn resume_computer_use(&self, focus: &str, text: &str) {
+        if !crate::computer_use::is_on() {
+            return;
+        }
+        let to = match crate::router::parse(text, focus) {
+            UserCmd::To { target, .. } => target,
+            UserCmd::Say(_) => focus.to_string(),
+            _ => return,
+        };
+        let Some(dir) = self.hub.st.resolve(&to).and_then(|n| self.dir_of(&n)) else { return };
+        let key = bise_computer_use::who::key(&self.opts.paths.proc_hub(), &dir);
+        crate::computer_use::resume_if_held(&bise_computer_use::paths::Paths::from_env(), &key);
+    }
 }
