@@ -12,6 +12,10 @@ which entitlements a piece gets (one folder for both products: packaging/entitle
 executable's identifier, and the designated requirement a Developer ID gives (no cdhash: the same
 for every version, what TCC keys a grant on).
 
+The hardened runtime's library validation: a signed piece loads only libraries signed by Apple or
+its own team. The agent runtime dlopens Homebrew's libssl.3 for TLS, so it carries
+runtime.plist (disable-library-validation); packaging/test-install.sh's TLS turn is the check.
+
 Why a bundle: macOS keys a plain executable's grant (Files and Folders, App Management) on its
 path and signature, a bundle's on its id and signature (docs/issues/15-tcc-one-grant.md). Every
 version is a new dir, so the hub runs <version>/bise.app/Contents/MacOS/bise, through the link
@@ -39,6 +43,9 @@ DESKTOP_ENT = os.path.join(ENT_DIR, "desktop.plist")
 CLI_ENT = os.path.join(ENT_DIR, "bise.plist")
 # V8: the same file in both products
 JSRT_ENT = os.path.join(ENT_DIR, "bend-jsrt.plist")
+# the agent runtime, which dlopens Homebrew's libssl.3 for TLS: the same file in both products
+RUNTIME_ENT = os.path.join(ENT_DIR, "runtime.plist")
+RUNTIME_EXES = ("repl-live", "repl-scripted")
 CLI_ID = "dev.bise.cli"
 DEV_ID = "dev.bise.bise"
 BUNDLES = (".app", ".framework", ".xpc", ".appex", ".bundle")
@@ -149,14 +156,18 @@ def in_cli(rel, cli_bundles):
 def entitlements_for(rel, kind, default=None, bid=None, cli_bundles=()):
     """The entitlements file of one piece, or None. Pure.
       - bend-jsrt: JSRT_ENT, in both products;
+      - the agent runtime (repl-live, repl-scripted): RUNTIME_ENT, in both products (its TLS
+        loads Homebrew's libssl.3, which library validation refuses);
       - the CLI's bundle (id CLI_ID or DEV_ID) and its main executable: CLI_ENT;
       - a library or a framework: never;
       - else an executable or an app: the caller's default (the desktop's file; None for a
-        terminal release's other binaries, the Bend binaries need nothing)."""
+        terminal release's other binaries: sb-core needs nothing)."""
     if kind == "lib":
         return None
     if kind == "exec" and os.path.basename(rel) == "bend-jsrt":
         return JSRT_ENT
+    if kind == "exec" and os.path.basename(rel) in RUNTIME_EXES:
+        return RUNTIME_ENT
     if (kind == "bundle" and bid in (CLI_ID, DEV_ID)) or (kind == "exec" and in_cli(rel, cli_bundles)):
         return CLI_ENT
     if kind == "exec" or (kind == "bundle" and is_app(rel)):

@@ -107,13 +107,22 @@ def test_entitlements():
     check(E(".", "bundle", S.ENTITLEMENTS, "dev.bise.desktop") == S.ENTITLEMENTS, "the desktop app keeps its own")
     check(E("Contents/MacOS/bise", "exec", S.ENTITLEMENTS, None, ["Contents/Resources/bin/bise.app"]) == S.ENTITLEMENTS,
           "the desktop's own executable keeps its own")
-    check(E("sb-core", "exec", None) is None and E("repl-live", "exec", None) is None, "the Bend binaries need nothing")
+    check(E("sb-core", "exec", None) is None, "sb-core needs nothing")
+    # the agent runtime loads Homebrew's libssl.3 for TLS: one file in both pipelines (-41's bug)
+    for exe in ("repl-live", "repl-scripted"):
+        check(E(exe, "exec", None) == E("Contents/Resources/bin/" + exe, "exec", S.ENTITLEMENTS) == M.RUNTIME_ENT,
+              "%s: runtime.plist in both pipelines" % exe)
     check(E("bise Computer Use.app", "bundle", None, "dev.bise.computer-use") is None, "the helper: none in a release")
-    for f in (M.CLI_ENT, M.JSRT_ENT, M.DESKTOP_ENT):
+    for f in (M.CLI_ENT, M.JSRT_ENT, M.DESKTOP_ENT, M.RUNTIME_ENT):
         with open(f, "rb") as fh:
             e = plistlib.load(fh)
-        check(not any("get-task-allow" in k or "disable-library-validation" in k for k in e), "%s: nothing notarization refuses" % f)
+        check(not any("get-task-allow" in k for k in e), "%s: nothing notarization refuses" % f)
         check(not any("calendars" in k or "personal-information" in k for k in e), "%s: no calendar entitlement" % f)
+        check(("com.apple.security.cs.disable-library-validation" in e) == (f == M.RUNTIME_ENT),
+              "%s: library validation off only where libssl is loaded" % f)
+    with open(M.RUNTIME_ENT, "rb") as fh:
+        r = plistlib.load(fh)
+    check(r == {"com.apple.security.cs.disable-library-validation": True}, "the runtime: library validation off, nothing else")
     with open(M.JSRT_ENT, "rb") as fh:
         j = plistlib.load(fh)
     check(j.get("com.apple.security.cs.allow-jit") is True and j.get("com.apple.security.cs.allow-unsigned-executable-memory") is True, "V8's JIT")
@@ -220,7 +229,7 @@ def fake_root(t):
     subprocess.run(["codesign", "--remove-signature", exe], capture_output=True)
     M.bundle(os.path.join(root, "bise.app"), exe, M.CLI_ID, "v1", link=True)
     os.symlink("bise", os.path.join(root, "sb"))
-    for b in ("sb-core", "bend-jsrt"):
+    for b in ("sb-core", "bend-jsrt", "repl-live"):
         shutil.copy(exe, os.path.join(root, b))
     h = os.path.join(root, "bise Computer Use.app", "Contents")
     os.makedirs(os.path.join(h, "MacOS"))
@@ -243,11 +252,14 @@ def test_signs_a_fake_root():
         check(rels.index("bise.app/Contents/MacOS/bise") < rels.index("bise.app"), "inside out")
         check("bise" not in rels and "sb" not in rels, "links are never signed")
         ents = {r: e for r, _, e in steps}
-        check(ents["bise.app"] == M.CLI_ENT and ents["bend-jsrt"] == M.JSRT_ENT and ents["sb-core"] is None, ents)
+        check(ents["bise.app"] == M.CLI_ENT and ents["bend-jsrt"] == M.JSRT_ENT and ents["sb-core"] is None
+              and ents["repl-live"] == M.RUNTIME_ENT, ents)
         dv = subprocess.run(["codesign", "-dv", os.path.join(root, "bise.app")], capture_output=True, text=True).stderr
         check("Identifier=dev.bise.cli" in dv, dv)
         e = subprocess.run(["codesign", "-d", "--entitlements", ":-", os.path.join(root, "bend-jsrt")], capture_output=True, text=True).stdout
         check("allow-jit" in e, "bend-jsrt carries V8's entitlements")
+        e = subprocess.run(["codesign", "-d", "--entitlements", ":-", os.path.join(root, "repl-live")], capture_output=True, text=True).stdout
+        check("disable-library-validation" in e, "repl-live may load Homebrew's libssl")
         r = subprocess.run([os.path.join(root, "bise")], capture_output=True)
         check(r.returncode == 0, "the signed bise runs through its link")
 

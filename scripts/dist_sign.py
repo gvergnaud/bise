@@ -8,8 +8,8 @@ The app root holds bise.app (dev.bise.cli, made by scripts/mac_sign.py bundle) w
 into it, the bare binaries (repl-live, repl-scripted, sb-core, bend-jsrt), the computer-use
 helper 'bise Computer Use.app' and data. Every piece of code is signed on its own, inside out,
 never --deep, hardened runtime, with the entitlements of scripts/mac_sign.py entitlements_for
-(packaging/entitlements/: bise.plist on bise.app, bend-jsrt.plist on V8, none on the Bend
-binaries and the helper), then checked: codesign --verify --strict on each, and with a real
+(packaging/entitlements/: bise.plist on bise.app, bend-jsrt.plist on V8, runtime.plist on
+repl-live and repl-scripted (their TLS loads Homebrew's libssl.3), none on sb-core and the helper), then checked: codesign --verify --strict on each, and with a real
 identity the hardened flag and a Developer ID designated requirement on bise.app and every bare
 executable (identifier + team, no cdhash: the same for every version, what TCC keys a grant on).
 

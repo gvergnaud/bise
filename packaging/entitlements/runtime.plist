@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- The agent runtime (repl-live, repl-scripted): its hardened runtime entitlements, one file for
+     both products (the terminal release, scripts/dist_sign.py, and the desktop app's runtime,
+     scripts/desktop_sign.py: mac_sign.entitlements_for gives this path to both;
+     tests/mac_sign_test.py pins it). Its TLS (bend/vendor/http/effs/wire.c) dlopens OpenSSL 3
+     from Homebrew (/opt/homebrew/opt/openssl@3/lib/libssl.3.dylib), signed by neither Apple nor
+     our team: library validation refuses it under the hardened runtime ("different Team IDs"),
+     and every model call over HTTPS failed (v2026.10.2-41). Notarization accepts this key for
+     Developer ID. -->
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+</dict>
+</plist>
