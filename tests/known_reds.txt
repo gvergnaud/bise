@@ -3,7 +3,7 @@
 # and test:land say so; any other red is NEW. Remove the line in the commit that fixes it.
 history-perf	12c3d88dc	land-reds	test:land, 1 run in ~4 even at load 3-9: step 4's current match not marked (hitShown 0: rows 49494-49503 drawn around it, count 1/50, no row with data-hit, so the mark (findmark useIsCurrent) isn't 49500 there); never alone (12/12 with logs and without); at load 30+ also the 'zanzibar' jump once in 10 (jump.json on a red run)
 inbox-open	1da997a46	land-reds	test:land, 1 run in ~4 even at load 6: after ⌘⏎ to entry 50 the gap row 'newer messages…' is never drawn as the list scrolls down (thread.gap not found); green alone (5/5); the earlier flash red is fixed
-row-slide	80ebf9c4d	release-43	timing check red at load 46 on 80ebf9c4d, green alone x2 at load 30 (alone.log); review-gates m_32366
+row-slide	80ebf9c4d	row-slide	the check's recorder leak: the hover's rAF frames survive stop() and land in the leave's recording under load (red in 2 nightlies at load 12-46, red alone 2/3 on 8fab8b7bb); no product change since 80ebf9c4d; fix on sb/row-slide (row-slide m_33234, main m_33237)
 at-perf	80ebf9c4d	release-43	timing check red at load 46 on 80ebf9c4d, green alone x2 at load 30 (alone.log); review-gates m_32366
 as-he-does/quick: pinch (ctrl+wheel) on an image artifact in the hub's viewer (/a/<id>/view): fit at open, no chip; zooms around the pointer (±N px), a % chip, the window zoom ne	80ebf9c4d	desk-cut-15	flaky drift (dy 5.7 px in the nightly of 80ebf9c4d at load ~40), green alone on rows25 at load 20 (pinch-out); review-gates m_32399
 
