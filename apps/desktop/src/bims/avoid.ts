@@ -27,6 +27,13 @@ export const UPDATE_BUDGET = 3000;
 
 /** a search's graph, counted as this many states */
 const GRAPH_COST = 60;
+/**
+ * a search's graph has this many legs at most: rings round bims standing close together cut each
+ * other's arcs, and each ring past the first few multiplied the legs (17 bims coming in at once: 21,889
+ * nodes, 13 s for one walk, the page frozen). Past it, the remaining standing bims get no ring
+ * (the search still keeps clear of them). The walking law's graphs: 455 legs at most (california), so its walks are the same.
+ */
+const GRAPH_MAX = 500;
 
 /** what an update's searches may still expand (one per update, timeline.ts) */
 export interface Budget {
@@ -353,6 +360,7 @@ function graphOf(o: Office, from: Pt, to: Pt, rests: readonly Pt[]): Graph {
   const clear = (pts: readonly Pt[]): boolean =>
     pts.every((p) => p.x > floor.x0 && p.x < floor.x1 && p.z > floor.z0) && pts.every((p, j) => j === 0 || !o.furniture.some((w) => crosses(pts[j - 1] as Pt, p, w)));
   for (const c of rests) {
+    if (legs.length > GRAPH_MAX) break;
     // a straight way past a standing bim: a smooth swerve round it (bump), no corner where it leaves or joins the way
     const bumped: (readonly [Pt, Pt])[] = [];
     for (const raw of o.walks) {
