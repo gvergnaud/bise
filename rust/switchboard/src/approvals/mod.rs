@@ -26,6 +26,8 @@ pub mod rules;
 pub mod sandbox;
 pub mod secrets;
 #[cfg(test)]
+mod read_tests;
+#[cfg(test)]
 mod tests;
 pub mod tiers;
 
@@ -57,11 +59,12 @@ pub enum Checker {
 /// One gated call.
 #[derive(Clone, Debug)]
 pub struct Call {
-    /// `bash`, `edit`, `write_file`, `apply_patch`, or a connector tool
-    /// (`gmail.send_email`).
+    /// `bash`, `edit`, `write_file`, `read_file`, `apply_patch`, or a
+    /// connector tool (`gmail.send_email`).
     pub tool: String,
-    /// bash: `{"arg": cmd}`; `edit` / `write_file`: `{"file_path"}`;
-    /// `apply_patch`: the patch (a string, or `{"input"|"patch"|"arg"}`).
+    /// bash: `{"arg": cmd}`; `edit` / `write_file` / `read_file`:
+    /// `{"file_path"}`; `apply_patch`: the patch (a string, or
+    /// `{"input"|"patch"|"arg"}`).
     pub args: serde_json::Value,
     pub agent: String,
     /// The agent's folder: its workspace or worktree (a root). The paths
@@ -261,6 +264,27 @@ pub fn judge_with(
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
             judge_bash(cmd, call, &roots, rules, cache, sandboxed, fs)
+        }
+        // a read of the disk, judged like `cat <path>`: runs at once,
+        // a secret path is a card (never the checker: no words to judge)
+        "read_file" => {
+            let p = call
+                .args
+                .get("file_path")
+                .or_else(|| call.args.get("path"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if !p.is_empty() {
+                if let Some(abs) = roots.resolve(Some(&roots.cwd), p, fs) {
+                    if paths::secret(&abs) {
+                        return Verdict::Card {
+                            reason: Hard::Secret(roots.show(&abs)).reason(),
+                            always: None,
+                        };
+                    }
+                }
+            }
+            Verdict::Allow { tier: 1 }
         }
         t if rules::EDIT_TOOLS.contains(&t) => {
             judge_edit(call, &roots, rules, cache, sandboxed, fs)

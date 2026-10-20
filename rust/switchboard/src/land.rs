@@ -700,7 +700,7 @@ mod tests {
     fn trunk_pushes_main_after_a_land() {
         let ws = repo("push");
         let remote = ws.parent().unwrap().join("remote.git");
-        sh(&ws, &format!("git init -q --bare {} && git remote add origin {} && git push -q origin main", remote.display(), remote.display()));
+        sh(&ws, &format!("git init -q --bare -b main {} && git remote add origin {} && git push -q origin main", remote.display(), remote.display()));
         sh(&ws, "echo a2 > a");
         let mut j = job("x", &ws, &ws, &["a"], &[]);
         j.flow.mode = Some(FlowMode::Trunk);

@@ -292,7 +292,7 @@ fn agent_row(app: &App, sb: &Sb, a: &Agent, i: usize, num: Option<usize>, w: usi
     // cost-pause (designer m_18789): a paused project's glyphs go faint, a
     // working one reads ‖; a row waiting on him keeps its ?
     let g = match sb.paused {
-        Some(_) if !(!a.main && needs_you(sb, a)) => {
+        Some(_) if a.main || !needs_you(sb, a) => {
             let mark = if a.status == "working" { paused_mark() } else { g.0 };
             (mark, faint())
         }

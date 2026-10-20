@@ -152,9 +152,9 @@ def edit_tool_name(patch: Bool) -> String:
 def prompt_line(patch: Bool) -> String:
   match patch:
     case True{}:
-      "Edit and create files with `apply_patch`. Don't edit files through bash scripts (python or perl, `sed` on many files): in auto they need the user, and tool edits show as diffs."
+      "Read files with `read_file`, edit and create them with `apply_patch`. Don't edit files through bash scripts (python or perl, `sed` on many files): in auto they need the user, and tool edits show as diffs."
     case False{}:
-      "Edit files with `edit`, create them with `write_file`. Don't edit files through bash scripts (python or perl, `sed` on many files): in auto they need the user, and tool edits show as diffs."
+      "Read files with `read_file`, edit and create them with `edit` and `write_file`. Don't edit files through bash scripts (python or perl, `sed` on many files): in auto they need the user, and tool edits show as diffs."
 
 # the bash description's sentence
 def bash_line(patch: Bool) -> String:

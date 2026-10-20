@@ -36,6 +36,7 @@ import ./bash.bend as Sh
 import ./bash-pure.bend as Shp
 import ./patch-tool.bend as Ptl
 import ./edit-tool.bend as Edt
+import ./read-tool.bend as Rt
 import ./selftools.bend as Sf
 import ./selftools-pure.bend as Sfp
 import ./proc.bend as Proc
@@ -443,13 +444,21 @@ def exec_program.call.write(is_write: Bool, +name: String, +args: String,
       exec_program.call.search(String.eq(name, "search_tool_functions"),
         name, args, live)
 
+def exec_program.call.read(is_read: Bool, +name: String, +args: String,
+    +live: Bool) -> IO(Xp.ExecRes):
+  match is_read:
+    case True{}:
+      Rt.exec_read(args, live)
+    case False{}:
+      exec_program.call.write(String.eq(name, "write_file"), name, args, live)
+
 def exec_program.call.edit(is_edit: Bool, +name: String, +args: String,
     +live: Bool) -> IO(Xp.ExecRes):
   match is_edit:
     case True{}:
       Edt.exec_edit(args, live)
     case False{}:
-      exec_program.call.write(String.eq(name, "write_file"), name, args, live)
+      exec_program.call.read(String.eq(name, "read_file"), name, args, live)
 
 def exec_program.call.patch(is_patch: Bool, +name: String, +args: String,
     +live: Bool) -> IO(Xp.ExecRes):
@@ -669,6 +678,8 @@ def exec_tool.run(t: Rtp.Tool, out: Pv.Out, +name: String, +args: String,
       exec_tool.with(out, Edt.exec_edit(args, live))
     case Rtp.TWrite{}:
       exec_tool.with(out, Edt.exec_write(args, live))
+    case Rtp.TRead{}:
+      exec_tool.with(out, Rt.exec_read(args, live))
     case Rtp.TMcp{}:
       exec_tool.with(out, exec_tool.raced(Sh.exec_mcp(name, args, live),
         String.concat(["the call to ", name])))

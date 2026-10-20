@@ -381,7 +381,7 @@ fn key_read(k: &st::Key, f: &st::Field, shape: &str, look: &dyn Fn(&str) -> Stri
         Wire::Obj => match STATE.record(named(f.ty)) {
             Some(r) => {
                 let sh = inner_shape(r, shape);
-                assert!(sh.read && !hand_of(sh).is_some(), "{}.{}: a nested record read whole", r.name, sh.name);
+                assert!(sh.read && hand_of(sh).is_none(), "{}.{}: a nested record read whole", r.name, sh.name);
                 format!("{}.{}_of(rd.j({m}))", r.name, sh.name)
             }
             None => format!("{}.journal_of(rd.j({m}))", named(f.ty)),

@@ -284,10 +284,10 @@ def Laws.glm_thinking_signature_surfaces():
 def Laws.glm_signed_think_signature_replays():
   {==}
 
-def Laws.live_catalog_edit_toolset_has_six_tools():
+def Laws.live_catalog_edit_toolset_has_seven_tools():
   {==}
 
-def Laws.live_catalog_patch_toolset_has_five_tools():
+def Laws.live_catalog_patch_toolset_has_six_tools():
   {==}
 
 def Laws.parity_catalog_keeps_three():
@@ -420,4 +420,40 @@ def Laws.edit_schemas():
   {==}
 
 def Laws.edit_calls_ride_structured():
+  {==}
+
+def Laws.read_schema_is_vibes():
+  {==}
+
+def Laws.read_desc_is_vibes():
+  {==}
+
+def Laws.read_errors():
+  {==}
+
+def Laws.read_warnings():
+  {==}
+
+def Laws.read_numbers_like_vibe():
+  {==}
+
+def Laws.read_result_windows():
+  {==}
+
+def Laws.read_pages():
+  {==}
+
+def Laws.read_cap():
+  {==}
+
+def Laws.read_args_parse():
+  {==}
+
+def Laws.read_args_offset_zero_is_none():
+  {==}
+
+def Laws.read_empty_path_refused():
+  {==}
+
+def Laws.read_ann_names_the_window():
   {==}

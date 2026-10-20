@@ -7,14 +7,13 @@
 # ids, the tool schemas, the think-span markers of the history, and the
 # JSON / reply helpers. One module per family maps a WReq to its JSON
 # body and its reply back (core/oai-chat.bend, core/anthropic.bend);
-# core/api.bend dispatches on the family. All pure, pinned by bend/laws/.
-
-import Base
+# core/api.bend dispatches on the family. All pure, pinned by bend/laws/.import Base
 import ./compaction.bend as C
 import ./text.bend as Tx
 import ./image.bend as Im
 import ../vendor/json.bend as J
 import ./edit.bend as Ed
+import ./read.bend as Rd
 
 # ---- single-line flattening (every reply line is one line) ----
 
@@ -83,10 +82,9 @@ def unescape_nl(+s: String) -> String:
 # indistinguishable from an encoded newline after a round-trip. Tool
 # args are commands and JSON text full of backslashes, so the arg
 # encoding must decode to exactly what was encoded: LF becomes
-# backslash capital N, CR backslash capital R, backslash doubled.
-# A literal sentinel sequence encodes with a doubled backslash and
-# decodes back. The capital letters keep legacy wire content (which
-# never carries them) intact through the decode.
+# backslash capital N, CR backslash capital R, backslash doubled (a
+# literal sentinel decodes back; the capitals keep legacy wire
+# content, which never carries them, intact through the decode).
 
 type WEnc is Data:
   WEGo{s: String}
@@ -196,10 +194,9 @@ type WReq is Data:
   WReq{tools: List<&2, WTool>, msgs: List<&2, WMsg>, cur: Maybe<&2, WMsg>}
 
 # ---- wire request parsing (the mirror of remote.bend's serialization) ----
-
 # the role a family sends: the ephemeral context (`MSG context`, runtime/
-# remote.bend with_context) is a user message on every API; a family
-# that caches by breakpoints (Anthropic) knows it by its wire role
+# remote.bend with_context) is a user message on every API; a family that
+# caches by breakpoints (Anthropic) knows it by its wire role
 def role_out.pick(is_ctx: Bool, +role: String) -> String:
   match is_ctx:
     case True{}:
@@ -362,9 +359,9 @@ def bash_schema() -> J.Json:
       Con{J.kv("required", J.arr(Con{J.str("arg"), Nil{}})), Nil{}}}})
 
 # ---- per-tool parameter schemas (exact vibe_sdk schemas) ----
-# run_typescript: {"code": string} (deny_unknown_fields)
-# search_tool_functions: the SearchRequest schema (mode/query/
-# functions/functionNames/connectors)
+# run_typescript: {"code": string} (deny_unknown_fields);
+# search_tool_functions: the SearchRequest schema (mode/query/functions/
+# functionNames/connectors)
 
 def code_schema() -> J.Json:
   J.obj(
@@ -477,8 +474,8 @@ def search_schema() -> J.Json:
                         Nil{}}}}}})),
           Nil{}}}})
 
-# Vibe's edit and write_file (core/edit.bend); every other flat tool
-# (apply_patch) takes {"arg": string}
+# Vibe's edit, write_file and read_file (core/edit.bend, core/read.bend);
+# every other flat tool (apply_patch) takes {"arg": string}
 def tool_schema.write(is_write: Bool) -> J.Json:
   match is_write:
     case True{}:
@@ -493,12 +490,19 @@ def tool_schema.edit(is_edit: Bool, +name: String) -> J.Json:
     case False{}:
       tool_schema.write(String.eq(name, "write_file"))
 
+def tool_schema.read(is_read: Bool, +name: String) -> J.Json:
+  match is_read:
+    case True{}:
+      Rd.read_schema()
+    case False{}:
+      tool_schema.edit(String.eq(name, "edit"), name)
+
 def tool_schema.bash(is_bash: Bool, +name: String) -> J.Json:
   match is_bash:
     case True{}:
       bash_schema()
     case False{}:
-      tool_schema.edit(String.eq(name, "edit"), name)
+      tool_schema.read(String.eq(name, "read_file"), name)
 
 def tool_schema.rt(is_rt: Bool, +name: String) -> J.Json:
   match is_rt:
@@ -539,9 +543,9 @@ def img_content(+st: Im.IStyle, +content: String) -> J.Json:
   img_content.pick(Im.has_image(content), st, content)
 
 # where a marker is an image (docs/images.md): the user's own input
-# (user, context) and a run_typescript result (its image blocks). Never in
-# another tool's result (bash output, a file read, sb inspect: a marker
-# there is text the agent printed, 2026-10-02), the system or the assistant.
+# (user, context) and a run_typescript result (its image blocks), never in
+# another tool's result (a marker there is text the agent printed,
+# 2026-10-02), the system or the assistant.
 def img_scope(+role: String, +content: String) -> Bool:
   Bool.or(String.eq(role, "user"), Bool.or(String.eq(role, "context"),
     Bool.and(String.eq(role, "tool"),
@@ -557,13 +561,12 @@ def img_content_of(+role: String, +st: Im.IStyle, +content: String) -> J.Json:
 # last line, prefixed "BENDSIG::" - so the signature survives the wire,
 # the history, the checkpoint and the reload, and the request replays
 # the thinking block verbatim WITH its signature (the Messages API
-# rejects an unsigned thinking block: probed
-# "thinking.signature: Field required"). A span WITHOUT a signature
-# line (GLM, or an older session) is still STRIPPED on the way back -
-# the probed fallback; the model re-thinks only when the reasoning is
-# genuinely not replayable. The span readers below are shared; each
-# family builds its own block from them (oai-chat.bend asst_content_json,
-# anthropic.bend asst_blocks_signed).
+# rejects an unsigned one: probed "thinking.signature: Field
+# required"); a span WITHOUT a signature line (GLM, or an older
+# session) is still STRIPPED on the way back (the probed fallback). The
+# span readers below are shared; each family builds its own block from
+# them (oai-chat.bend asst_content_json, anthropic.bend
+# asst_blocks_signed).
 #
 # The vibe CLI sends the assistant's own reasoning back as a structured
 # thinking block ahead of the text block (mistral.py prepare_message ->
@@ -577,16 +580,14 @@ type ThinkSpan is Data:
 # the search ran on the tail past the start marker (C.find takes a
 # position accumulator, not an offset), so the hit is RELATIVE: rebase
 # it to the absolute end-marker position
-def asst_think.end(m: Maybe<&2, Nat>, +content: String, +n0: Nat)
-    -> Maybe<&2, ThinkSpan>:
+def asst_think.end(m: Maybe<&2, Nat>, +content: String, +n0: Nat) -> Maybe<&2, ThinkSpan>:
   match m:
     case Some{+r}:
       Some{TSpan{n0, Nat.add(Nat.add(n0, 7n), r)}}
     case None{}:
       None{}
 
-def asst_think.start(m: Maybe<&2, Nat>, +content: String)
-    -> Maybe<&2, ThinkSpan>:
+def asst_think.start(m: Maybe<&2, Nat>, +content: String) -> Maybe<&2, ThinkSpan>:
   match m:
     case Some{+n0}:
       asst_think.end(Tx.find(String.drop(content, Nat.add(n0, 7n)), "</think>", 0n), content, n0)
@@ -1001,8 +1002,7 @@ def call_line_in.id(sp: Maybe<&2, Nat>, +tools: List<&2, WTool>,
     case None{}:
       String.append("CALL ", rest)
 
-def call_line_in(is_call: Bool, +tools: List<&2, WTool>, +line: String)
-    -> String:
+def call_line_in(is_call: Bool, +tools: List<&2, WTool>, +line: String) -> String:
   match is_call:
     case True{}:
       call_line_in.id(Tx.find(String.drop(line, 5n), " ", 0n), tools,
@@ -1010,8 +1010,7 @@ def call_line_in(is_call: Bool, +tools: List<&2, WTool>, +line: String)
     case False{}:
       line
 
-def reply_lines_in(+tools: List<&2, WTool>, lines: List<&2, String>)
-    -> List<&2, String>:
+def reply_lines_in(+tools: List<&2, WTool>, lines: List<&2, String>) -> List<&2, String>:
   match lines:
     case Nil{}:
       Nil{}
@@ -1043,8 +1042,7 @@ def is_space(+c: U32) -> Bool:
   Bool.or(U32.is_eq(c, 32), Bool.or(U32.is_eq(c, 9),
     Bool.or(U32.is_eq(c, 10), U32.is_eq(c, 13))))
 
-def squeeze.pick(is_sp: Bool, prev_sp: Bool, c: U32, +rest: String)
-    -> String:
+def squeeze.pick(is_sp: Bool, prev_sp: Bool, c: U32, +rest: String) -> String:
   match is_sp:
     case True{}:
       Bool.pick(String, prev_sp, rest, SCon{Chr{32}, rest})
@@ -1103,7 +1101,9 @@ def reply_err(+status: U32, +body: String) -> String:
 def is_structured(+name: String) -> Bool:
   Bool.or(String.eq(name, "run_typescript"),
     Bool.or(String.eq(name, "search_tool_functions"),
-      Bool.or(String.eq(name, "edit"), String.eq(name, "write_file"))))
+      Bool.or(String.eq(name, "edit"),
+        Bool.or(String.eq(name, "write_file"),
+          String.eq(name, "read_file")))))
 # ---- the last guard before a provider request (BISE-242) ----
 # Every family (core/api.bend) builds its body from this WReq: a call
 # with no tool message right after its assistant message gets a failed

@@ -34,12 +34,12 @@ def check(ok, what):
         FAILS.append(what)
 
 
-# the request order (the wire lists the catalog reversed): the edit
+# the request order (the wire lists the catalog reversed): the file
 # tools first, before bash
-EDIT_ON = ["edit", "write_file", "skill", "run_typescript", "bash", "search_tool_functions"]
-PATCH_ON = ["apply_patch", "skill", "run_typescript", "bash", "search_tool_functions"]
-LINE_EDIT = "Edit files with `edit`, create them with `write_file`."
-LINE_PATCH = "Edit and create files with `apply_patch`."
+EDIT_ON = ["read_file", "edit", "write_file", "skill", "run_typescript", "bash", "search_tool_functions"]
+PATCH_ON = ["read_file", "apply_patch", "skill", "run_typescript", "bash", "search_tool_functions"]
+LINE_EDIT = "Read files with `read_file`, edit and create them with `edit` and `write_file`."
+LINE_PATCH = "Read files with `read_file`, edit and create them with `apply_patch`."
 MANY = ("Found %d matches of the string to replace, but replace_all is false. To replace all "
         "occurrences, set replace_all to true. To replace only one occurrence, please provide more "
         "context to uniquely identify the instance.\nAt %s.")
@@ -172,6 +172,7 @@ def main():
         open(crlf, "wb").write(b"one\r\ntwo\r\nthree\r\n")
         os.chmod(crlf, 0o751)
         open(os.path.join(work, "many.txt"), "w").write("a x a x a\n")
+        open(os.path.join(work, "read.txt"), "w").write("one\ntwo\nthree\n")
         open(os.path.join(work, "bad.bin"), "wb").write(b"ok\xffno\n")
         os.makedirs(os.path.join(work, "adir"))
         open(os.path.join(work, "exists.txt"), "w").write("here\n")
@@ -212,6 +213,18 @@ def main():
              "file: %s/echo.txt\nmessage: The file has been updated successfully.\nreplacements: 1\nlines: 2" % W),
             ("edit", {"file_path": "echo.txt", "old_string": "ECHO_CONTENT_1\nECHO_GONE", "new_string": "y"},
              "ERR String to replace not found in file.\nIts first line is at line 1."),
+            # Vibe's read_file (issue #21): the window, the paging, the errors
+            ("read_file", {"file_path": "read.txt"},
+             "file: %s/read.txt\nlines: 1-3 of 3\n\n        1→one\n        2→two\n        3→three" % W),
+            ("read_file", {"file_path": "read.txt", "offset": 2, "limit": 1},
+             "file: %s/read.txt\nlines: 2-2 of 3\n\n        2→two" % W),
+            ("read_file", {"file_path": "read.txt", "offset": 9},
+             "file: %s/read.txt\nlines: 0 of 3\n\n<vibe_warning>Warning: the file exists but is shorter than the provided offset (9). The file has 3 lines.</vibe_warning>" % W),
+            ("read_file", {"file_path": "nope.txt"}, "ERR File not found at: %s/nope.txt" % W),
+            ("read_file", {"file_path": "adir"}, "ERR Path is a directory, not a file: %s/adir" % W),
+            ("read_file", {"file_path": "bad.bin"},
+             "ERR Cannot read %s/bad.bin: file is not valid text (utf-8, byte 2)" % W),
+            ("read_file", {"file_path": "  "}, "ERR file_path cannot be empty"),
         ]
         marks = " ".join("[[%s: %s]]" % (n, json.dumps(a, ensure_ascii=False)) for n, a, _ in cases)
         n0 = len(recs())

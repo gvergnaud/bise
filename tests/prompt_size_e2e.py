@@ -41,9 +41,12 @@ FULL = open(os.path.join(ROOT, "prompts", "tool-desc-run-typescript.txt")).read(
 # sb page row) and +154 for main, measured on main_role_desktop.txt.
 # Then card-links (5bf91107c, sb notify --artifact): the bise-pages skill
 # and blocks.md lines a task reads, +119 for a task (29717, measured on
-# 645685421), rounded to +120; main stays under its budget
-TASK_BUDGET = 27000 + 2044 + 546 + 8 + 120
-MAIN_BUDGET = 38500 + 2184 + 229 + 34 + 216 + 548 + 327 + 154 + 546 + 154
+# 645685421), rounded to +120; main stays under its budget. Then
+# read_file (issue #21, Vibe's tool beside the edit toolset): its
+# description, schema and prompt line, +808 for a task and for main,
+# measured both on the baseline build.
+TASK_BUDGET = 27000 + 2044 + 546 + 8 + 120 + 808
+MAIN_BUDGET = 38500 + 2184 + 229 + 34 + 216 + 548 + 327 + 154 + 546 + 154 + 808
 fails = []
 
 
@@ -115,7 +118,7 @@ check(t1 is not None and main is not None, "a first call of main and of t1")
 if t1 and main:
     for who, b in (("t1", t1), ("main", main)):
         tools, s = tools_of(b), system_of(b)
-        check(sorted(tools) == ["bash", "edit", "run_typescript", "search_tool_functions", "skill", "write_file"],
+        check(sorted(tools) == ["bash", "edit", "read_file", "run_typescript", "search_tool_functions", "skill", "write_file"],
               "%s: every tool (%s)" % (who, sorted(tools)))
         check(flat(tools.get("run_typescript", "")) == flat(FULL), "%s: run_typescript's whole description" % who)
         check("## Using tool functions" in s and "search_tool_functions" in s, "%s: the tool-use section" % who)

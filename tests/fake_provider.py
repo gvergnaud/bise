@@ -106,7 +106,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 FIXTURES = os.path.join(HERE, "providers")
 LOG = os.environ.get("FAKE_LOG", "/tmp/sb-fake.log")
 FAMILIES = ("anthropic", "openai-chat", "openai-responses", "gemini")
-MARK = re.compile(r"\[\[(bash|skill|edit|write_file|apply_patch|run_typescript|ts): (.*?)\]\]", re.S)
+MARK = re.compile(r"\[\[(bash|skill|edit|write_file|read_file|apply_patch|run_typescript|ts): (.*?)\]\]", re.S)
 INNER = re.compile(r"\{\{(bash): (.*?)\}\}", re.S)
 THINK = re.compile(r"\[\[think: (.*?)\]\]", re.S)
 SAY = re.compile(r"\[\[say: (.*?)\]\]", re.S)
@@ -521,9 +521,9 @@ def reply_for(conv, seen=0):
         # `[[ts: CODE]]`: run_typescript with that program
         if tool == "ts":
             tool, args = "run_typescript", {"code": arg.strip(), "description": "a scripted program"}
-        # `[[edit: JSON]]`, `[[write_file: JSON]]`: Vibe's edit tools
-        # take JSON args (approvals-edit)
-        if tool in ("edit", "write_file"):
+        # `[[edit: JSON]]`, `[[write_file: JSON]]`, `[[read_file: JSON]]`:
+        # Vibe's file tools take JSON args (approvals-edit)
+        if tool in ("edit", "write_file", "read_file"):
             args = json.loads(arg, strict=False)
         # `[[bash: CMD @@ DESC]]`: the call carries a description (BISE-223)
         if tool == "bash" and " @@ " in arg:

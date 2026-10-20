@@ -235,20 +235,20 @@ impl Core {
                     }
                 }
             }
-            HubEv::Entry { agent, entry, .. } => {
-                if self.feeds.iter().any(|f| f.agent == agent && f.loaded) {
-                    self.entry(&agent, *entry);
-                    self.refresh(&agent);
-                }
+            HubEv::Entry { agent, entry, .. }
+                if self.feeds.iter().any(|f| f.agent == agent && f.loaded) =>
+            {
+                self.entry(&agent, *entry);
+                self.refresh(&agent);
             }
-            HubEv::Typing { agent, text, .. } => {
-                if self.typing.get(&agent) != Some(&text) {
-                    self.typing.insert(agent.clone(), text.clone());
-                    if self.feeds.iter().any(|f| f.agent == agent && f.history) {
-                        self.ev(CoreEv::AgentTyping { agent: agent.clone(), text });
-                    }
-                    self.refresh(&agent);
+            HubEv::Typing { agent, text, .. }
+                if self.typing.get(&agent) != Some(&text) =>
+            {
+                self.typing.insert(agent.clone(), text.clone());
+                if self.feeds.iter().any(|f| f.agent == agent && f.history) {
+                    self.ev(CoreEv::AgentTyping { agent: agent.clone(), text });
                 }
+                self.refresh(&agent);
             }
             // a refused subscribe or page: its pending ends, empty
             HubEv::Error { cmd: Some(c), .. } if c == "subscribe" || c == "page" => {

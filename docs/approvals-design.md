@@ -163,8 +163,13 @@ files. Prefer editing existing files over creating new ones. Do not
 proactively create documentation or README files.", with Vibe's errors and
 result strings as is. The gate reads `file_path` like `edit`'s.
 
-One gap stays, said plainly: `edit`'s description names `read_file`, and
-bise has none. The models read with `cat`/`rg` in bash: a safe read (§3).
+One gap closed (issue #21, `read_file` beside the edit toolset, both
+toolsets: Vibe 2.25.8's `read_file.py` copied like `edit` and
+`write_file`): `edit`'s description names `read_file`, and models obey
+it. Before it existed, a call landed in the remote-MCP branch and
+failed on the tool index, which read like an infra failure and stalled
+agents on migrations. The models can still read with `cat`/`rg` in
+bash: a safe read (§3).
 
 The toolset is picked when the tool catalog is built (`catalog_live` in
 `bend/runtime/tools-pure.bend`), from the agent's provider; a provider

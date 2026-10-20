@@ -145,7 +145,7 @@ class Env:
         self.ws = os.path.join(self.tmp, "ws")
         self.state = os.path.join(self.tmp, "st")
         os.makedirs(self.ws)
-        sh(self.ws, "git init -q && git config user.email t@t && git config user.name t && git config commit.gpgsign false && echo base > README && git add README && git commit -qm init")
+        sh(self.ws, "git init -q -b main && git config user.email t@t && git config user.name t && git config commit.gpgsign false && echo base > README && git add README && git commit -qm init")
         self.fake_log = os.path.join(self.tmp, "fake.log")
         self.fake = subprocess.Popen(
             [sys.executable, "-u", os.path.join(HERE, "fake_provider.py")],

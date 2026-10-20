@@ -94,8 +94,12 @@ fn eighty_columns() {
     assert_eq!(t[t.len() - 1], format!("⏎ {}   r {}   x {}   esc {}", w::key_open, w::key_run_now, w::key_stop, w::key_close));
     sc.ended_too = true;
     let t = texts(&lines(&mut sc, &all, 80, 20, NOW).0);
-    assert!(t.iter().any(|l| l.contains("◷ launch       check the build ") && l.contains(&w::stopped_at("15:"))), "{t:?}");
-    assert!(t.iter().any(|l| l.contains("◷ sock-path    check the build ") && l.contains(&w::ended_at("15:")) && l.contains(&format!("· {}", w::runs(3)))), "{t:?}");
+    // the clock time the words show, said the same way the screen says
+    // it (any timezone: ahead reads the local offset)
+    let stopped = ahead(NOW - 60 * MIN, NOW);
+    let ended = ahead(NOW - 30 * MIN, NOW);
+    assert!(t.iter().any(|l| l.contains("◷ launch       check the build ") && l.contains(&w::stopped_at(&stopped))), "{t:?}");
+    assert!(t.iter().any(|l| l.contains("◷ sock-path    check the build ") && l.contains(&w::ended_at(&ended)) && l.contains(&format!("· {}", w::runs(3)))), "{t:?}");
     // a name is a label, never cut with … (the detail line below may be)
     assert!(t.iter().filter(|l| l.contains('◷')).all(|l| !l.contains('…')), "{t:?}");
     assert!(t.iter().all(|l| !l.contains('#') && l.width() <= 80), "{t:?}");

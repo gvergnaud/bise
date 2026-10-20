@@ -41,10 +41,8 @@ pub fn keyprobe() -> io::Result<()> {
                     ctrl_c = 0;
                 }
             }
-            Event::Mouse(m) => {
-                if !matches!(m.kind, crossterm::event::MouseEventKind::Moved) {
-                    say(&mut out, &format!("mouse {:?} at {},{} {:?}", m.kind, m.column, m.row, m.modifiers));
-                }
+            Event::Mouse(m) if !matches!(m.kind, crossterm::event::MouseEventKind::Moved) => {
+                say(&mut out, &format!("mouse {:?} at {},{} {:?}", m.kind, m.column, m.row, m.modifiers));
             }
             Event::Paste(p) => say(&mut out, &format!("paste {:?}", p)),
             _ => {}

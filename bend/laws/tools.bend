@@ -1,13 +1,15 @@
-# bend/laws/tools.bend: skills, /reload, self.reload, edit and write_file, the API mapping, call ids, intents.
-# Open claims, each one closed by bend/proofs/tools.bend (moved from
-# LAWS.bend). The gate checks every bend/proofs/*.bend: a law here
-# with no proof there fails it.
+# bend/laws/tools.bend: skills, /reload, self.reload, edit, write_file and
+# read_file, the API mapping, call ids, intents. Open claims, each one
+# closed by bend/proofs/tools.bend (moved from LAWS.bend). The gate
+# checks every bend/proofs/*.bend: a law here with no proof there fails
+# it.
 import Base
 import ../core/types.bend as T
 import ../core/compaction.bend as C
 import ../core/checkpoint.bend as K
 import ../core/session.bend as S
 import ../core/edit.bend as Ed
+import ../core/read.bend as Rd
 import ../core/commands.bend as Cm
 import ../core/wire.bend as W
 import ../core/oai-chat.bend as Oai
@@ -284,11 +286,11 @@ law def_acks_suffix_carries_both:
 # bash (steering). Nothing after them: the self.* requests are
 # programmatic only (BISE-293). catalog_short (the scripted scenarios)
 # stays untouched.
-law live_catalog_edit_toolset_has_six_tools:
-  {Xt.catalog_len(Xt.catalog_live("s", "r", "b", "k", "p", False{})) == 6n : Nat}
+law live_catalog_edit_toolset_has_seven_tools:
+  {Xt.catalog_len(Xt.catalog_live("s", "r", "b", "k", "p", False{})) == 7n : Nat}
 
-law live_catalog_patch_toolset_has_five_tools:
-  {Xt.catalog_len(Xt.catalog_live("s", "r", "b", "k", "p", True{})) == 5n : Nat}
+law live_catalog_patch_toolset_has_six_tools:
+  {Xt.catalog_len(Xt.catalog_live("s", "r", "b", "k", "p", True{})) == 6n : Nat}
 
 law parity_catalog_keeps_three:
   {Xt.catalog_len(Xt.catalog_pure("s", "r", "b")) == 3n : Nat}
@@ -301,7 +303,7 @@ law live_catalog_edit_names:
      Xt.tool_name_at(4n, Xt.catalog_live("s", "r", "b", "k", "p", False{})),
      Xt.tool_name_at(5n, Xt.catalog_live("s", "r", "b", "k", "p", False{})),
      Xt.tool_name_at(6n, Xt.catalog_live("s", "r", "b", "k", "p", False{}))], ",")
-    == "search_tool_functions,bash,run_typescript,skill,write_file,edit," : String}
+    == "search_tool_functions,bash,run_typescript,skill,write_file,edit,read_file" : String}
 
 law live_catalog_patch_names:
   {String.join([Xt.tool_name_at(0n, Xt.catalog_live("s", "r", "b", "k", "p", True{})),
@@ -310,7 +312,7 @@ law live_catalog_patch_names:
      Xt.tool_name_at(3n, Xt.catalog_live("s", "r", "b", "k", "p", True{})),
      Xt.tool_name_at(4n, Xt.catalog_live("s", "r", "b", "k", "p", True{})),
      Xt.tool_name_at(5n, Xt.catalog_live("s", "r", "b", "k", "p", True{}))], ",")
-    == "search_tool_functions,bash,run_typescript,skill,apply_patch," : String}
+    == "search_tool_functions,bash,run_typescript,skill,apply_patch,read_file" : String}
 
 # LAW: apply_patch rides with its description argument, and the
 # fallback description names the format and the atomicity.
@@ -362,7 +364,7 @@ law patch_provider_is_openai_only:
 law edit_steering_lines:
   {String.join([Ed.prompt_line(False{}), Ed.prompt_line(True{}),
      Ed.deny_once_hint(False{}), Ed.deny_once_hint(True{})], "|")
-    == "Edit files with `edit`, create them with `write_file`. Don't edit files through bash scripts (python or perl, `sed` on many files): in auto they need the user, and tool edits show as diffs.|Edit and create files with `apply_patch`. Don't edit files through bash scripts (python or perl, `sed` on many files): in auto they need the user, and tool edits show as diffs.|auto: this bash call needs the user. Use `edit`: it runs without asking. If bash is really needed, repeat the call and the user will be asked.|auto: this bash call needs the user. Use `apply_patch`: it runs without asking. If bash is really needed, repeat the call and the user will be asked." : String}
+    == "Read files with `read_file`, edit and create them with `edit` and `write_file`. Don't edit files through bash scripts (python or perl, `sed` on many files): in auto they need the user, and tool edits show as diffs.|Read files with `read_file`, edit and create them with `apply_patch`. Don't edit files through bash scripts (python or perl, `sed` on many files): in auto they need the user, and tool edits show as diffs.|auto: this bash call needs the user. Use `edit`: it runs without asking. If bash is really needed, repeat the call and the user will be asked.|auto: this bash call needs the user. Use `apply_patch`: it runs without asking. If bash is really needed, repeat the call and the user will be asked." : String}
 
 # LAW: a provider switch re-tools the request: the tool lines and the
 # prompt's edit line swapped, the history untouched.
@@ -588,8 +590,89 @@ law edit_schemas:
     == (Ed.edit_schema(), (Ed.write_schema(), W.arg_schema())) : J.Json & (J.Json & J.Json)}
 
 law edit_calls_ride_structured:
-  {(W.is_structured("edit"), (W.is_structured("write_file"), W.is_structured("apply_patch")))
-    == (True{}, (True{}, False{})) : Bool & (Bool & Bool)}
+  {(W.is_structured("edit"), (W.is_structured("write_file"),
+    (W.is_structured("read_file"), W.is_structured("apply_patch"))))
+    == (True{}, (True{}, (True{}, False{}))) : Bool & (Bool & (Bool & Bool))}
+
+# LAW: the schema the providers get for read_file is Vibe's pydantic
+# shape (file_path, offset, limit).
+law read_schema_is_vibes:
+  {W.tool_schema("read_file") == Rd.read_schema() : J.Json}
+
+# ---- read_file (core/read.bend, Vibe 2.25.8's read_file.py) ----
+
+# LAW: the description is Vibe's prompts/read_file.md, byte for byte.
+law read_desc_is_vibes:
+  {Rd.read_desc()
+    == "Read a file. Use absolute paths. For large files, use `offset` and `limit` to page through sections. Use `grep` to find specific content instead of reading sequentially. Do not read binary or model weight files (.bin, .safetensors, .pt, .gguf)." : String}
+
+# LAW: Vibe's errors and warnings, byte for byte (its words, bise's
+# shown path).
+law read_errors:
+  {String.join([Rd.err_empty_path(), Rd.err_not_found("/w/a.txt"),
+    Rd.err_is_dir("/w"), Rd.err_not_text("/w/b.bin", 2n)], "|")
+    == "file_path cannot be empty|File not found at: /w/a.txt|Path is a directory, not a file: /w|Cannot read /w/b.bin: file is not valid text (utf-8, byte 2)" : String}
+
+law read_warnings:
+  {String.join([Rd.warn_empty(), Rd.warn_short(5n, 4n)], "|")
+    == "<vibe_warning>Warning: the file exists but the contents are empty.</vibe_warning>|<vibe_warning>Warning: the file exists but is shorter than the provided offset (5). The file has 4 lines.</vibe_warning>" : String}
+
+# LAW: the content is Vibe's numbered lines: the number right-justed
+# to 9, then U+2192; a window numbers from its start line.
+law read_numbers_like_vibe:
+  {(Rd.numbered(1n, Con{"one", Con{"two", Nil{}}}),
+    Rd.numbered(4n, Con{"four", Nil{}}))
+    == ("        1→one\n        2→two", "        4→four") : String & String}
+
+# LAW: the result: the file, the window (first-last of the total), a
+# blank line, then the content; a read past the end, of an empty file,
+# and the trailing-newline count (4 lines, not 5).
+law read_result_windows:
+  {(Rd.read_out("l1\nl2\nl3\n", "/w/a.txt", 1n, 2000n),
+    Rd.read_out("l1\nl2\nl3\nl4\n", "/w/a.txt", 5n, 2000n),
+    Rd.read_out("", "/w/e.txt", 1n, 2000n))
+    == (Rd.ROk{"file: /w/a.txt\nlines: 1-3 of 3\n\n        1→l1\n        2→l2\n        3→l3"},
+        Rd.ROk{"file: /w/a.txt\nlines: 0 of 4\n\n<vibe_warning>Warning: the file exists but is shorter than the provided offset (5). The file has 4 lines.</vibe_warning>"},
+        Rd.ROk{"file: /w/e.txt\nlines: 0 of 0\n\n<vibe_warning>Warning: the file exists but the contents are empty.</vibe_warning>"})
+    : Rd.ReadOut & Rd.ReadOut & Rd.ReadOut}
+
+# LAW: offset and limit page the read; a window starts at its offset.
+law read_pages:
+  {Rd.read_out("a\nb\nc\nd\n", "/w/a.txt", 3n, 1n)
+    == Rd.ROk{"file: /w/a.txt\nlines: 3-3 of 4\n\n        3→c"} : Rd.ReadOut}
+
+# LAW: a read over the result cap fails with the size and the way out;
+# the cap is the wire's (cap_out), so a read that passes is delivered
+# whole.
+law read_cap:
+  {(Rd.result_cap(), Rd.read_out(String.concat(["x", String.concat(["y", "z"])]), "/w/a.txt", 1n, 2000n))
+    == (20000n, Rd.ROk{"file: /w/a.txt\nlines: 1-1 of 1\n\n        1→xyz"}) : Nat & Rd.ReadOut}
+
+# LAW: the args: JSON (Vibe's schema), or a bare path; offset 0 is no
+# offset, limit 0 the default 2000; a file_path key wins over path and
+# arg.
+law read_args_parse:
+  {(Rd.read_path(Rd.read_args("{\"file_path\":\"/a\",\"offset\":3,\"limit\":2}")),
+    Rd.read_args("/bare"))
+    == ("/a", Rd.ReadArgs{"/bare", None{}, 2000n}) : String & Rd.ReadArgs}
+
+law read_args_offset_zero_is_none:
+  {(Rd.read_args("{\"file_path\":\"/a\",\"offset\":0}"),
+    Rd.read_args("{\"file_path\":\"/a\",\"limit\":0}"))
+    == (Rd.ReadArgs{"/a", None{}, 2000n}, Rd.ReadArgs{"/a", None{}, 2000n})
+    : Rd.ReadArgs & Rd.ReadArgs}
+
+# LAW: an empty path is refused before the disk is asked.
+law read_empty_path_refused:
+  {Rd.check_args(" ") == Some{"file_path cannot be empty"} : Maybe<&2, String>}
+
+# LAW: the call line the feed shows: the path, then the window when
+# one was asked (Vibe's display).
+law read_ann_names_the_window:
+  {String.join([Rd.ann_args("{\"file_path\":\"a.rs\"}"),
+    Rd.ann_args("{\"file_path\":\"a.rs\",\"offset\":4}"),
+    Rd.ann_args("{\"file_path\":\"a.rs\",\"offset\":4,\"limit\":9}")], "|")
+    == "a.rs|a.rs from line 4 limit 2000 lines|a.rs from line 4 limit 9 lines" : String}
 
 # ---- the provider API mapping (core/api.bend, formerly the Rust bridge) ----
 

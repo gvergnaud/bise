@@ -6,6 +6,7 @@ import ../core/discovery.bend as D
 import ../vendor/json.bend as J
 import ../core/types.bend as T
 import ../core/edit.bend as Ed
+import ../core/read.bend as Rd
 
 def patch_desc.read(m: Maybe<&2, String>) -> String:
   Maybe.default(&2, String, m, "Create, update or delete files with a patch in the Codex V4A format. The whole patch is validated before anything is written; every failure is loud.")
@@ -65,20 +66,23 @@ def tool_desc_at(n: Nat, tools: List<&2, T.ToolDef>) -> String:
 # the live catalog: the three parity tools, the skill loader, then ONE
 # edit toolset (the user's decision, design §2.2: the OpenAI provider
 # gets apply_patch, every other one Vibe's edit and write_file, never
-# both). The wire reverses the catalog (core/wire.bend add_tool pushes
-# each TOOL line on the front), so a request lists the edit tools
-# FIRST, before bash (steering): edit, write_file, skill,
-# run_typescript, bash, search_tool_functions. The OpenAI catalog is
-# today's, byte for byte (the prompt cache). bash's description names
-# the edit tool that is on (its {edit_line}). catalog_short keeps the
-# scripted scenarios byte-identical.
+# both) and Vibe's read_file beside it. The wire reverses the catalog
+# (core/wire.bend add_tool pushes each TOOL line on the front), so a
+# request lists the file tools FIRST, before bash (steering): read_file,
+# edit, write_file, skill, run_typescript, bash, search_tool_functions.
+# The OpenAI catalog is today's plus read_file (the prompt cache: one
+# miss). bash's description names the edit tool that is on (its
+# {edit_line}). catalog_short keeps the scripted scenarios
+# byte-identical.
 def edit_tools(patch: Bool, +pd: String) -> List<&2, T.ToolDef>:
   match patch:
     case True{}:
-      Con{T.ToolDef{"apply_patch", pd}, Nil{}}
+      Con{T.ToolDef{"apply_patch", pd},
+        Con{T.ToolDef{"read_file", Rd.read_desc()}, Nil{}}}
     case False{}:
       Con{T.ToolDef{"write_file", Ed.write_desc()},
-        Con{T.ToolDef{"edit", Ed.edit_desc()}, Nil{}}}
+        Con{T.ToolDef{"edit", Ed.edit_desc()},
+          Con{T.ToolDef{"read_file", Rd.read_desc()}, Nil{}}}}
 
 def bash_for(+bd: String, +patch: Bool) -> String:
   Ed.replace(bd, "{edit_line}", Ed.bash_line(patch), False{})

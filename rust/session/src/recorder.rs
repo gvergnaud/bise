@@ -225,10 +225,9 @@ impl Recorder {
                     return Ok(false);
                 }
             }
-            "limits_set" => {
-                if serde_json::to_value(&self.st.limits).ok().as_ref() == Some(data) {
+            "limits_set"
+                if serde_json::to_value(&self.st.limits).ok().as_ref() == Some(data) => {
                     return Ok(false);
-                }
             }
             "model_set" => {
                 let m = &self.st.model;
@@ -239,10 +238,8 @@ impl Recorder {
                     return Ok(false);
                 }
             }
-            "assistant_message" => {
-                if data.get("model").and_then(Value::as_str) == Some("") {
-                    data["model"] = json!(self.st.model.model);
-                }
+            "assistant_message" if data.get("model").and_then(Value::as_str) == Some("") => {
+                data["model"] = json!(self.st.model.model);
             }
             "compaction_done" => {
                 let ctx = &self.st.context;

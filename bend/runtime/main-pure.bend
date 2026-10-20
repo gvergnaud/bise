@@ -14,6 +14,7 @@ import ../core/types.bend as T
 import ../core/text.bend as Tx
 import ./tools-pure.bend as Xp
 import ../core/edit.bend as Ed
+import ../core/read.bend as Rd
 import ./selftools-pure.bend as Sfp
 
 # ---- runtime state and loop vocabulary ----
@@ -391,20 +392,28 @@ def ok_label(ok: Bool) -> String:
       "fail"
 
 # a bash call shows its command, not the JSON of its description; an
-# edit or write_file call its path first (the hub's activity line)
-def call_ann.edit(is_edit: Bool, +name: String, +args: String) -> String:
-  match is_edit:
+# edit or write_file call its path first (the hub's activity line); a
+# read_file call its path and its window (Rd.ann_args)
+def call_ann.read(is_read: Bool, +name: String, +args: String) -> String:
+  match is_read:
+    case True{}:
+      Rd.ann_args(args)
+    case False{}:
+      args
+
+def call_ann.file(is_file: Bool, +name: String, +args: String) -> String:
+  match is_file:
     case True{}:
       Ed.ann_args(name, args)
     case False{}:
-      args
+      call_ann.read(String.eq(name, "read_file"), name, args)
 
 def call_ann.pick(is_bash: Bool, +name: String, +args: String) -> String:
   match is_bash:
     case True{}:
       W.flat_cmd(args)
     case False{}:
-      call_ann.edit(is_edit_tool(name), name, args)
+      call_ann.file(is_edit_tool(name), name, args)
 
 def call_ann.args(+name: String, +args: String) -> String:
   call_ann.pick(String.eq(name, "bash"), name, args)
@@ -543,6 +552,7 @@ type Tool is Data:
   TPatch{}
   TEdit{}
   TWrite{}
+  TRead{}
   TMcp{}
 
 def tool_of(+name: String) -> Tool:
@@ -552,7 +562,8 @@ def tool_of(+name: String) -> Tool:
   Bool.pick(Tool, String.eq(name, "skill"), TSkill{},
   Bool.pick(Tool, String.eq(name, "apply_patch"), TPatch{},
   Bool.pick(Tool, String.eq(name, "edit"), TEdit{},
-  Bool.pick(Tool, String.eq(name, "write_file"), TWrite{}, TMcp{})))))))
+  Bool.pick(Tool, String.eq(name, "write_file"), TWrite{},
+  Bool.pick(Tool, String.eq(name, "read_file"), TRead{}, TMcp{}))))))))
 
 def call_name(c: T.Call) -> String:
   match c:

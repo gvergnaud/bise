@@ -7,7 +7,7 @@ use serde_json::json;
 const CWD: &str = "/w/repo";
 const TMP: &str = "/h/.bise/hubs/hx/agents/a/tmp";
 
-fn call(tool: &str, args: serde_json::Value) -> Call {
+pub(crate) fn call(tool: &str, args: serde_json::Value) -> Call {
     Call {
         tool: tool.into(),
         args,
@@ -34,14 +34,14 @@ fn bash(cmd: &str) -> Verdict {
 }
 
 #[derive(Debug, PartialEq)]
-enum V {
+pub(crate) enum V {
     Allow(u8),
     Deny,
     Check,
     Card,
 }
 
-fn short(v: &Verdict) -> V {
+pub(crate) fn short(v: &Verdict) -> V {
     match v {
         Verdict::Allow { tier } => V::Allow(*tier),
         Verdict::DenyOnce { .. } => V::Deny,
