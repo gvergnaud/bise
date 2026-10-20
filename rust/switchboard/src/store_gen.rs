@@ -67,10 +67,10 @@ mod tests {
     #[test]
     fn a_memo_builds_again_only_when_its_key_moves() {
         let mut m: Memo<u64, u32> = Memo::default();
-        let builds = std::cell::Cell::new(0);
-        let get = |m: &mut Memo<u64, u32>, k: u64| {
+        let mut builds = 0;
+        let mut get = |m: &mut Memo<u64, u32>, k: u64| {
             m.get(k, || {
-                builds.set(builds.get() + 1);
+                builds += 1;
                 k as u32 * 10
             })
         };
@@ -78,7 +78,8 @@ mod tests {
         assert_eq!(get(&mut m, 1), 10);
         assert_eq!(get(&mut m, 2), 20);
         assert_eq!(get(&mut m, 1), 10);
-        assert_eq!(builds.get(), 3);
+        drop(get);
+        assert_eq!(builds, 3);
     }
 
     /// Law (architect m_35024): every write of the two stores moves the
