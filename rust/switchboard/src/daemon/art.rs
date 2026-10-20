@@ -42,26 +42,7 @@ pub(super) struct Art {
     /// The live words' cache was filled at the first state push after the
     /// hub started (events::seed).
     seeded: bool,
-    /// The store's rows, its metas (for `live`), new and seen_ms, built
-    /// again only when a store write, the agents' names or the 10 s
-    /// backstop move them (crate::store_gen, send-fast): the state push
-    /// and the view ask for them up to 10 times a second.
-    memo: std::cell::RefCell<crate::store_gen::Memo<(u64, u64, u64), ArtView>>,
 }
-
-/// What the artifacts event is built from (the memo's value).
-#[derive(Clone, Debug, Default)]
-struct ArtView {
-    rows: Vec<Value>,
-    stored: BTreeMap<String, artifacts::Meta>,
-    new: usize,
-    seen_ms: u64,
-}
-
-/// The backstop of the artifacts memo: a row reads what changes outside
-/// the hub (its target's file there or `gone`), so the rows are built
-/// again at least this often.
-const ART_BACKSTOP_MS: u64 = 10_000;
 
 /// Where an agent works and what its changes are measured against.
 #[derive(Clone, Debug)]
@@ -104,7 +85,8 @@ impl Shell {
     }
 
     /// Each stored artifact's live words, by id (the rows' `live`).
-    fn art_live_rows(&self, metas: &BTreeMap<String, artifacts::Meta>, rows: &mut [Value]) {
+    fn art_live_rows(&self, store: &Store, rows: &mut [Value]) {
+        let metas: BTreeMap<String, artifacts::Meta> = store.stored().into_iter().map(|m| (m.id.clone(), m)).collect();
         for r in rows.iter_mut() {
             let Some(v) = r.get("id").and_then(Value::as_str).and_then(|id| metas.get(id)).and_then(|m| m.current()) else { continue };
             if let Some(live) = crate::artifacts_turns::live(v, self.art_maker_turn(v)) {
@@ -171,36 +153,17 @@ impl Shell {
 
     /// `{"ev":"artifacts","rows":[…],"new":N,"seen_ms":T}`.
     pub(super) fn artifacts_ev(&self) -> Value {
+        let store = self.art_store();
+        let who = self.art_who();
         let now = now_ms();
-        let key = (crate::store_gen::now(), self.art_who_key(), now / ART_BACKSTOP_MS);
-        let mut view = self.art.memo.borrow_mut().get(key, || {
-            let store = self.art_store();
-            let who = self.art_who();
-            ArtView {
-                rows: store.rows(&who, &self.hub.workspace),
-                stored: store.stored().into_iter().map(|m| (m.id.clone(), m)).collect(),
-                new: store.new_count(now),
-                seen_ms: store.seen_ms(now),
-            }
-        });
-        self.art_live_rows(&view.stored, &mut view.rows);
+        let mut rows = store.rows(&who, &self.hub.workspace);
+        self.art_live_rows(&store, &mut rows);
         json!({
             "ev": "artifacts",
-            "rows": view.rows,
-            "new": view.new,
-            "seen_ms": view.seen_ms,
+            "rows": rows,
+            "new": store.new_count(now),
+            "seen_ms": store.seen_ms(now),
         })
-    }
-
-    /// One number for what `art_who` answers: each agent's names and
-    /// whether it is archived (a rename or an /archive moves the rows).
-    fn art_who_key(&self) -> u64 {
-        use std::hash::{Hash, Hasher};
-        let mut h = std::collections::hash_map::DefaultHasher::new();
-        for a in self.hub.st.agents.values() {
-            (&a.name, &a.dir, &a.aliases, a.status() == crate::model::Status::Archived).hash(&mut h);
-        }
-        h.finish()
     }
 
     /// Send the list when it changed since the last one sent (`force`:

@@ -82,10 +82,6 @@ pub struct Pages {
     /// stream holds one while it is open, so a page open in a browser
     /// keeps the hub up
     pub holds: crate::idle::Holds,
-    /// the rows and the overdue count, built again only when a store
-    /// write or the day moves them (crate::store_gen, send-fast): the
-    /// state push asks for them up to 10 times a second
-    rows_memo: Mutex<crate::store_gen::Memo<(u64, i64), (Vec<bise_proto::rows::Page>, usize)>>,
 }
 
 /// The progress lines a new SSE stream replays.
@@ -151,7 +147,6 @@ impl Pages {
             busy: Mutex::new(std::collections::BTreeSet::new()),
             done_at: Mutex::new(HashMap::new()),
             holds: crate::idle::Holds::default(),
-            rows_memo: Mutex::default(),
         }
     }
 
@@ -166,8 +161,6 @@ impl Pages {
         }
         let left: Vec<String> = b.difference(&now).cloned().collect();
         *b = now;
-        // a page row's waiting count reads it (`held`): built again
-        crate::store_gen::bump();
         Some(left)
     }
 
@@ -176,7 +169,6 @@ impl Pages {
     /// one written after the fix; ambient-lead m_6187).
     pub fn mark_done(&self, id: &str, name: &str, version: u64) {
         self.done_at.lock().unwrap_or_else(|e| e.into_inner()).insert((id.to_string(), name.to_string()), version);
-        crate::store_gen::bump();
     }
 
     /// The replies of agent `name`'s items on page `id` (at `version`)
@@ -270,20 +262,6 @@ impl Pages {
     /// The pages as the typed rows (the hub's snapshot, `hub/pages`),
     /// newest first.
     pub fn list_rows(&self) -> Vec<bise_proto::rows::Page> {
-        self.rows_now().0
-    }
-
-    /// The rows and the overdue count, from the memo when no store write
-    /// (nor the day) moved them since its build.
-    fn rows_now(&self) -> (Vec<bise_proto::rows::Page>, usize) {
-        let today = crate::every::local_day(crate::util::now_ms()).unwrap_or(i64::MAX);
-        let key = (crate::store_gen::now(), today);
-        let mut memo = self.rows_memo.lock().unwrap_or_else(|e| e.into_inner());
-        memo.get(key, || (self.fresh_rows(), self.fresh_overdue()))
-    }
-
-    /// The rows built from the store (what the memo keeps).
-    fn fresh_rows(&self) -> Vec<bise_proto::rows::Page> {
         self.store.list().iter().filter_map(|m| serde_json::from_value(self.page_json(m)).ok()).collect()
     }
 
@@ -329,10 +307,6 @@ impl Pages {
     /// How many promises of his are overdue today, across every page (the
     /// hub's state: the morning page and the menu-bar count).
     pub fn overdue(&self) -> usize {
-        self.rows_now().1
-    }
-
-    fn fresh_overdue(&self) -> usize {
         let Some(today) = crate::every::local_day(crate::util::now_ms()) else { return 0 };
         self.store
             .list()

@@ -240,8 +240,6 @@ fn write_atomic(p: &Path, bytes: &[u8]) -> Result<(), String> {
         let _ = std::fs::remove_file(&tmp);
         return Err(format!("{}: {e}", tmp.display()));
     }
-    // the rows built from the store are built again (crate::store_gen)
-    crate::store_gen::bump();
     std::fs::rename(&tmp, p).map_err(|e| {
         let _ = std::fs::remove_file(&tmp);
         format!("{}: {e}", p.display())

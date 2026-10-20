@@ -127,7 +127,6 @@ impl Store {
                     let p = self.dir().join(&m.id).join(&top);
                     out.freed += size_of(&p);
                     std::fs::remove_dir_all(&p).or_else(|_| std::fs::remove_file(&p)).ok();
-                    crate::store_gen::bump();
                     v.no_copy = Some("archived".into());
                     changed = true;
                 }

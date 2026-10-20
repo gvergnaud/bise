@@ -199,8 +199,6 @@ fn write_atomic(p: &Path, bytes: &[u8]) -> Result<(), String> {
     }
     let tmp = p.with_extension("tmp");
     std::fs::write(&tmp, bytes).map_err(|e| e.to_string())?;
-    // the rows built from the store are built again (crate::store_gen)
-    crate::store_gen::bump();
     std::fs::rename(&tmp, p).map_err(|e| e.to_string())
 }
 
@@ -392,7 +390,6 @@ fn copy_whole(from: &Path, to: &Path) -> std::io::Result<()> {
     if to.is_dir() {
         std::fs::remove_dir_all(to)?;
     }
-    crate::store_gen::bump();
     std::fs::rename(&part, to)
 }
 
