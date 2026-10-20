@@ -38,8 +38,10 @@ def split(+content: String) -> History:
   split.go(Nat.add(String.length(content), 1n), W.asst_think.find(content),
     content, "", "")
 
-def content.pick(empty: Bool, +text: String) -> J.Json:
-  match empty:
+# Null is valid only with tool calls. A blank or reasoning-only assistant
+# without calls must send a string; keep that turn and its reasoning intact.
+def content.pick(null_ok: Bool, +text: String) -> J.Json:
+  match null_ok:
     case True{}:
       J.JNull{}
     case False{}:
@@ -47,14 +49,17 @@ def content.pick(empty: Bool, +text: String) -> J.Json:
 
 # Always include reasoning_content, including an empty string for foreign
 # or non-reasoning history. Never re-label another provider's signature.
-def fields.of(h: History) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+def fields.of(h: History, +has_calls: Bool)
+    -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   match h:
     case H{+visible, +reason}:
-      [J.kv("content", content.pick(String.is_empty(visible), visible)),
+      [J.kv("content", content.pick(
+          Bool.and(has_calls, String.is_empty(visible)), visible)),
         J.kv("reasoning_content", J.str(reason))]
 
-def fields(+content: String) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
-  fields.of(split(content))
+def fields(+content: String, +has_calls: Bool)
+    -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  fields.of(split(content), has_calls)
 
 def call_fields(calls: List<&2, W.WCall>)
     -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
@@ -72,7 +77,8 @@ def msg_json.pick(asst: Bool, +m: W.WMsg, ids: List<&2, String>)
         case W.WMsg{_, +text, +calls}:
           (J.obj(Con{J.kv("role", J.str("assistant")),
             List.append(&2, Sigma<&2, &2, String, _ => J.Json>,
-              fields(text), call_fields(calls))}),
+              fields(text, Bool.not(List.is_empty(&2, W.WCall, calls))),
+              call_fields(calls))}),
             List.append(&2, String, ids, W.ids_of(calls)))
     case False{}:
       Oai.msg_json(m, ids)

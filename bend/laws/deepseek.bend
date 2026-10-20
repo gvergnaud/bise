@@ -66,8 +66,25 @@ END
 "))
     == "{\"model\":\"deepseek-flash\",\"max_tokens\":64,\"thinking\":{\"type\":\"disabled\"},\"messages\":[{\"role\":\"assistant\",\"content\":\"answer\",\"reasoning_content\":\"old\"}]}" : String}
 
+# Empty assistant turns still need content when they have no tool calls.
+# Keep native reasoning, including whitespace; remove only foreign signatures.
+def empty_body(+effort: String) -> J.Json:
+  W.parse_json(Api.api_body_for(Api.DeepSeek{}, "deepseek-flash",
+    Api.MFacts{True{}, 64n, "max_tokens", "", "", effort, False{}},
+    W.WReq{Nil{}, [W.WMsg{"assistant", "", Nil{}},
+      W.WMsg{"assistant", "<think> native\n </think>", Nil{}},
+      W.WMsg{"assistant", "<think>foreign\nBENDSIG::sig</think>", Nil{}}], None{}}))
+
+law deepseek_empty_and_reasoning_only_turns_have_content:
+  {W.arr_field_or(empty_body("high"), "messages")
+    == W.arr_field_or(W.parse_json("{\"messages\":[{\"role\":\"assistant\",\"content\":\"\",\"reasoning_content\":\"\"},{\"role\":\"assistant\",\"content\":\"\",\"reasoning_content\":\" native\\n \"},{\"role\":\"assistant\",\"content\":\"\",\"reasoning_content\":\"\"}]}"), "messages") : List<&2, J.Json>}
+
+law deepseek_empty_turns_none_keeps_history:
+  {W.arr_field_or(empty_body("none"), "messages")
+    == W.arr_field_or(empty_body("high"), "messages") : List<&2, J.Json>}
+
 # Tool continuations need all previous reasoning, including non-tool
-# assistant turns. Empty visible content is null; ids pair FIFO unchanged.
+# assistant turns. Empty tool-call content is null; ids pair FIFO unchanged.
 def tool_req() -> W.WReq:
   W.parse_wire("MODEL default
 TOOL echo : Returns text.

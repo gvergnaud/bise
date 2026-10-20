@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Offline DeepSeek replay regression against a real, throwaway repl-live.
 
-The local fake rejects thinking content blocks and missing native reasoning.
+The local fake rejects thinking blocks, missing native reasoning, and
+assistant messages with neither content nor tool calls.
 No keys are inherited, and both provider URLs point to this loopback server.
 Pass --repl PATH to test an isolated build without installing it.
 """
@@ -40,6 +41,8 @@ def run(repl_path):
                         if message["role"] == "assistant":
                             assert message["content"] is None or isinstance(message["content"], str), \
                                 "assistant content contains an unsupported thinking block"
+                            assert message["content"] is not None or message.get("tool_calls"), (
+                                "Invalid assistant message: content or tool_calls must be set")
                             assert "reasoning_content" in message
                             assert "<think>" not in (message["content"] or "")
                     assistants = [m for m in body["messages"] if m["role"] == "assistant"]
@@ -49,14 +52,18 @@ def run(repl_path):
                     assert "foreign thought" not in json.dumps(body)
                     if index >= 2:
                         assert assistants[1]["reasoning_content"] == " native first\n "
-                    if index in (3, 5):
+                    if index >= 3:
+                        assert assistants[2]["content"] == ""
+                        assert assistants[2]["reasoning_content"] == " reasoning-only\n "
+                        assert not assistants[2].get("tool_calls")
+                    if index in (4, 6):
                         last_call = next(m for m in reversed(assistants) if m.get("tool_calls"))
                         result = body["messages"][-1]
                         assert result["role"] == "tool"
                         assert result["tool_call_id"] == last_call["tool_calls"][0]["id"]
                         assert "offline-fixture" in result["content"]
-                        assert last_call["reasoning_content"] == ("call reason" if index == 3 else "")
-                    if index >= 4:
+                        assert last_call["reasoning_content"] == ("call reason" if index == 4 else "")
+                    if index >= 5:
                         assert body["thinking"] == {"type": "disabled"}
                         assert "reasoning_effort" not in body
                     else:
@@ -70,22 +77,24 @@ def run(repl_path):
                     ]}
                 elif index == 1:
                     delta = {"reasoning_content": " native first\n ", "content": "native answer"}
-                elif index in (2, 4):
+                elif index == 2:
+                    delta = {"reasoning_content": " reasoning-only\n ", "content": None}
+                elif index in (3, 5):
                     delta = {"content": None, "tool_calls": [{
                         "index": 0, "id": "fake-call", "type": "function",
                         "function": {"name": "bash", "arguments": json.dumps({"arg": "printf offline-fixture"})},
                     }]}
-                    if index == 2:
+                    if index == 3:
                         delta["reasoning_content"] = "call reason"
-                elif index == 3:
+                elif index == 4:
                     delta = {"reasoning_content": "finish reason", "content": "finished high"}
-                elif index == 5:
+                elif index == 6:
                     delta = {"content": "finished none"}
                 else:
                     raise AssertionError("unexpected extra request")
             except AssertionError as error:
                 failures.append(str(error) or "invalid request at index %d" % index)
-                self.send_response(422)
+                self.send_response(400 if failures[-1].startswith("Invalid assistant message:") else 422)
                 self.end_headers()
                 self.wfile.write(json.dumps({"error": failures[-1]}).encode())
                 return
@@ -149,11 +158,12 @@ def run(repl_path):
 
                     turn("mistral/fake", "high", "seed a foreign signed answer")
                     turn("deepseek/deepseek-flash", "high", "native answer")
+                    turn("deepseek/deepseek-flash", "high", "retain a reasoning-only partial answer")
                     high = turn("deepseek/deepseek-flash", "high", "use a fake tool")
                     assert "finished high" in high, high
                     none = turn("deepseek/deepseek-flash", "none", "use a fake tool without thinking")
                     assert "finished none" in none, none
-                    assert len(requests) == 6, len(requests)
+                    assert len(requests) == 7, len(requests)
                 finally:
                     process.terminate()
                     process.wait(timeout=10)
@@ -161,7 +171,7 @@ def run(repl_path):
         server.shutdown()
         server.server_close()
         thread.join(timeout=10)
-    print("ok   DeepSeek history: 6 local requests; foreign signed, native reasoning, tool IDs, high/none")
+    print("ok   DeepSeek history: 7 local requests; foreign signed, native and reasoning-only history, tool IDs, high/none")
 
 
 if __name__ == "__main__":
