@@ -134,6 +134,8 @@ def of(fam: Api.Style, +e: J.Json) -> List<&2, Ex>:
       anth(e)
     case Api.OpenAI{}:
       chat(e)
+    case Api.DeepSeek{}:
+      chat(e)
     case Api.OpenAIResp{}:
       resp(e)
 

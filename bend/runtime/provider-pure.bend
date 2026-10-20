@@ -449,7 +449,7 @@ def resolve.needs(ok: Bool, +needs: String, +api: String, +prov: String,
     +url_env: String, +fs: Api.MFacts) -> Resolved:
   match ok:
     case True{}:
-      resolve.family(Api.style_of_api(api), api, prov, model, id, base,
+      resolve.family(Api.style_for_provider(prov, api), api, prov, model, id, base,
         key_env, url_env, fs)
     case False{}:
       RErr{id, String.concat(["model ", quoted(id), ": provider ", quoted(prov),

@@ -144,6 +144,8 @@ def Laws.family_name_roundtrip(st):
   match st:
     case Api.OpenAI{}:
       {==}
+    case Api.DeepSeek{}:
+      {==}
     case Api.Anthropic{}:
       {==}
     case Api.OpenAIResp{}:
