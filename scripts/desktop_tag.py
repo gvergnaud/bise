@@ -123,7 +123,9 @@ def read(path):
 def run_facts(run):
     """{name: state} and the red names a run left in its out dir (nightly_desktop.sh)."""
     steps = dict(l.split("\t", 1) for l in read(os.path.join(run["out"], "steps.tsv")).splitlines() if "\t" in l)
-    reds = [l for l in read(os.path.join(run["out"], "reds.txt")).splitlines() if l.strip()]
+    # stripped as tests/known_reds.py strips its names: a row name cut at a space ('… PR #N's ')
+    # otherwise never matches its own known_reds line
+    reds = [l.strip() for l in read(os.path.join(run["out"], "reds.txt")).splitlines() if l.strip()]
     return steps, reds
 
 
