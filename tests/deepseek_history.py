@@ -151,7 +151,8 @@ def run(repl_path):
                                 lines = []
                                 for line in stream:
                                     lines.append(line.decode(errors="replace"))
-                                    if line.startswith(b"  obs: turn_done"):
+                                    # Both legacy text and structured observations end here.
+                                    if line.strip() == b"--- idle":
                                         break
                         assert not failures, failures
                         return "".join(lines)
