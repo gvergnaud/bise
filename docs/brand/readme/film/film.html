@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>bise · readme film</title>
+<!--
+  The README's first film (readme-film): a take of the real bise desktop app (apps/desktop/tests/film,
+  recorded off screen on the scripted core), composed here as shots on paper: cards, a camera set by
+  the width of screen it shows, a drawn cursor on the boxes the take logged, keycaps, a 3D tilt in
+  and out. Every frame is a pure function of the film time: renderAt(t).
+    film.html?take=<take folder url>&frame=16x9|1x1[&t=<s>]
+  render.mts dumps it to frames and ffmpeg makes the MP4.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Newsreader:opsz,wght@6..72,600&display=swap" rel="stylesheet">
+<style>
+  :root { --paper:#f2ede2; --ink:#1d1a17; --pen:#c8264a; --cream:#ece6da; --pink:#f4a6b0; }
+  html, body { margin:0; background:#000; }
+  #frame { position:relative; overflow:hidden; background:var(--paper); }
+  #paper { position:absolute; inset:0; }
+  #grain { position:absolute; inset:0; opacity:.10; mix-blend-mode:multiply; pointer-events:none; }
+  #vig { position:absolute; inset:0; background:radial-gradient(120% 90% at 50% 45%, transparent 55%, rgba(29,26,23,.16)); pointer-events:none; }
+  #stage { position:absolute; inset:0; }
+  #win { position:absolute; left:0; top:0; width:1360px; height:850px; transform-origin:0 0; }
+  #tilt { position:absolute; inset:0; transform-origin:50% 50%; }
+  #screen { position:absolute; inset:0; border-radius:12px; overflow:hidden; background:#141211; }
+  #screen img { position:absolute; left:0; top:0; width:1360px; height:850px; }
+  #outline { position:absolute; inset:-3px; border:3px solid var(--ink); border-radius:15px; pointer-events:none; }
+  #shadow { position:absolute; inset:-3px; border-radius:15px; background:#1d1a1726; }
+  .light { position:absolute; top:20px; width:12px; height:12px; border-radius:50%; }
+  #cursor { position:absolute; left:0; top:0; width:22px; height:32px; transform-origin:0 0; pointer-events:none; }
+  #ring { position:absolute; width:34px; height:34px; margin:-17px 0 0 -17px; border:2px solid var(--ink); border-radius:50%; box-shadow:0 0 0 2px #ece6da55; opacity:0; }
+  #key { position:absolute; display:none; font:600 22px/1 -apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif; color:var(--ink); background:var(--cream);
+    border:2px solid var(--ink); border-radius:9px; padding:10px 13px 12px; box-shadow:4px 5px 0 #1d1a1740; white-space:nowrap; }
+  #card { position:absolute; inset:0; display:none; align-items:center; justify-content:center; text-align:center; }
+  #card .lines { font-family:Newsreader, Georgia, serif; font-weight:600; letter-spacing:-.01em; line-height:1.12; }
+  #card .ln { display:block; }
+  #card .w { display:inline-block; clip-path:inset(-1em -.6em -.28em -.6em); vertical-align:top; }
+  #card .w > span { display:inline-block; }
+  #card .mark { font-family:'JetBrains Mono', monospace; font-weight:700; letter-spacing:-.04em; }
+  #card .u { position:relative; }
+  #card .u svg { position:absolute; left:-4%; width:108%; bottom:-.16em; height:.32em; overflow:visible; }
+  #card .sub { font-family:'JetBrains Mono', monospace; font-weight:400; letter-spacing:0; }
+</style></head><body>
+<div id="frame">
+  <svg id="grain" width="100%" height="100%"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="7"/><feColorMatrix values="0 0 0 0 .1  0 0 0 0 .09  0 0 0 0 .08  0 0 0 .9 0"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>
+  <div id="stage">
+    <div id="win"><div id="tilt">
+      <div id="shadow"></div>
+      <div id="screen"><img id="shot" alt=""><img id="shot2" alt="" style="opacity:0">
+        <i class="light" style="left:20px;background:#ff5f57"></i><i class="light" style="left:40px;background:#febc2e"></i><i class="light" style="left:60px;background:#28c840"></i>
+        <div id="ring"></div>
+        <svg id="cursor" viewBox="0 0 22 32"><path d="M2 2 L2 25 L7.6 19.8 L11.4 28.6 L15 27 L11.3 18.4 L19 18.4 Z" fill="#1d1a17" stroke="#ece6da" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        <div id="key"></div>
+      </div>
+      <div id="outline"></div>
+    </div></div>
+  </div>
+  <div id="vig"></div>
+  <div id="card"><div class="lines"></div></div>
+</div>
+<script>
+'use strict';
+const Q = new URLSearchParams(location.search);
+const FRAME = Q.get('frame') === '1x1' ? { w: 1080, h: 1080 } : { w: 1920, h: 1080 };
+const SQ = FRAME.w === FRAME.h;
+const S = Math.min(FRAME.w, FRAME.h); // the short side: card type is in its units
+const TAKE = (Q.get('take') ?? 'take').replace(/\/$/, '');
+const WIN = { w: 1360, h: 850 };
+const $ = (id) => document.getElementById(id);
+$('frame').style.width = FRAME.w + 'px';
+$('frame').style.height = FRAME.h + 'px';
+
+// ---- easing ------------------------------------------------------------------------------------
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const expoOut = (x) => (x >= 1 ? 1 : 1 - Math.pow(2, -10 * x));
+const expoInOut = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x < .5 ? Math.pow(2, 20 * x - 10) / 2 : (2 - Math.pow(2, -20 * x + 10)) / 2);
+const cubicInOut = (x) => (x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const smooth = (x) => { x = clamp(x); return x * x * (3 - 2 * x); };
+const backOut = (x) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+const lerp = (a, b, k) => a + (b - a) * k;
+
+// ---- the take ----------------------------------------------------------------------------------
+let tape = null;
+const M = {}; // marks by name
+const frameAt = (t) => { // the newest frame drawn at take time t (binary search)
+  const fr = tape.frames; let lo = 0, hi = fr.length - 1;
+  if (t <= fr[0].t) return fr[0].f;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (fr[mid].t <= t) lo = mid; else hi = mid - 1; }
+  return fr[lo].f;
+};
+const centre = (b) => ({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
+
+// ---- cameras: a centre and the width of screen shown, in window css px ---------------------------
+// 16:9 and 1:1 get their own widths (never a crop of each other); text is read at w <= 900 (16:9)
+const CAM = SQ ? {
+  whole: { x: 680, y: 425, w: 1480 },
+  composer: { x: 676, y: 501, w: 700 },
+  thread: { x: 676, y: 501, w: 700 },
+  bar: { x: 1250, y: 306, w: 500 },
+  office: { x: 828, y: 418, w: 1060 }, officeIn: { x: 840, y: 410, w: 760 },
+  inbox: { x: 676, y: 501, w: 700 },
+  land: { x: 676, y: 501, w: 700 },
+  // the commit's diff, x 317-1020, y 60-781: whole in the square
+  diff: { x: 668, y: 420, w: 740 }, diffEnd: { x: 668, y: 420, w: 740 },
+} : {
+  whole: { x: 680, y: 425, w: 1700 },
+  // the thread's column is x 344-996, between the sidebar (to 296) and the bar (from 1056): 760 wide
+  // down to the composer's bottom edge (835) and 16 px of dark under it: never half a composer
+  composer: { x: 676, y: 637, w: 760 },
+  thread: { x: 676, y: 637, w: 760 },
+  // the bar from the divider on (paper past the window's edge, never half a word of the thread)
+  bar: { x: 1300, y: 212, w: 600 },
+  // the office panel is x 297-1360
+  office: { x: 828, y: 418, w: 1060 }, officeIn: { x: 840, y: 410, w: 860 },
+  inbox: { x: 676, y: 637, w: 760 },
+  land: { x: 676, y: 637, w: 760 },
+  // the commit's diff (x 317-1020, y 60-781): its top, then a pan down to its last line + 24 px
+  diff: { x: 680, y: 265, w: 760 }, diffEnd: { x: 680, y: 568, w: 760 },
+};
+/** a camera path: [[take time, cam], ...] glided between with smoothstep over `glide` s ending at each key */
+function camAt(keys, t, glide = .9) {
+  let cam = keys[0][1];
+  for (let i = 1; i < keys.length; i++) {
+    const [k, next] = keys[i];
+    const g = keys[i][2] ?? glide;
+    if (t >= k + g) { cam = next; continue; }
+    if (t > k) { const e = smooth((t - k) / g); cam = { x: lerp(cam.x, next.x, e), y: lerp(cam.y, next.y, e), w: lerp(cam.w, next.w, e) }; }
+    break;
+  }
+  return cam;
+}
+
+// ---- cards -------------------------------------------------------------------------------------
+// a card: lines of words; a word is {t:'text', u:true (drawn underline), mark:true (:* mono)}
+function cardHTML(c, lt) {
+  const size = c.size * S;
+  let i = 0;
+  const lines = c.lines.map((ln) => {
+    const words = ln.map((w) => {
+      const at = c.at?.[i] ?? (.12 + i * c.step);
+      i++;
+      const k = expoOut(clamp((lt - at) / .7));
+      const y = (1 - k) * .55;
+      const cls = (w.mark ? ' mark' : '') + (w.sub ? ' sub' : '');
+      let under = '';
+      if (w.u) {
+        const d = clamp((lt - at - .55) / .5);
+        under = d <= 0 ? '' : `<svg viewBox="0 0 100 10" preserveAspectRatio="none"><path d="M2 6 C 25 2, 55 9, 98 4" fill="none" stroke="${c.accent}" stroke-width="5" stroke-linecap="round" pathLength="100" stroke-dasharray="100 100" stroke-dashoffset="${100 * (1 - expoOut(d))}"/></svg>`;
+      }
+      const big = w.big ? ` style="font-size:${w.big}em"` : '';
+      return `<span class="w${cls}${w.u ? ' u' : ''}"${big}><span style="transform:translateY(${y}em);opacity:${k}">${w.t}</span>${under}</span>`;
+    }).join(' ');
+    return `<span class="ln">${words}</span>`;
+  }).join('');
+  return { html: lines, size };
+}
+const W = (t, o = {}) => ({ t, ...o });
+const words = (s) => s.split(' ').map((t) => W(t));
+
+// ---- the shots -----------------------------------------------------------------------------------
+// each: { d: duration s, kind: 'card' | 'ui', ... }; ui shots map film time to take time (from, speed)
+let SHOTS = [];
+function build() {
+  const ink = { bg: '#1d1a17', fg: '#ece6da', accent: '#f4a6b0' };
+  const paper = { bg: '#f2ede2', fg: '#1d1a17', accent: '#c8264a' };
+  const pen = { bg: '#c8264a', fg: '#f2ede2', accent: '#f2ede2' };
+  const card = (d, look, lines, o = {}) => ({ d, kind: 'card', look, lines, size: o.size ?? .078, step: o.step ?? .1, at: o.at, accent: look.accent, hit: o.hit });
+
+  // 3 · his ask, main's answer, the agents in the bar
+  const a0 = M.cursor.t - .7, a1 = M['whole-2'].t + .2;
+  const ask = { kind: 'ui', from: a0, d: a1 - a0, tiltIn: true,
+    cam: [[a0, CAM.whole], [M.cursor.t + .1, CAM.composer, 1.0], [M.enter.t + .15, CAM.thread, .8], [M.agents.t - .1, CAM.bar, .9], [M.agents.t + 1.25, CAM.whole, .8]],
+    cursor: [{ t: M.cursor.t - .5, at: { x: 980, y: 520 } }, { t: M.click.t - .05, at: { x: M.click.box.x + 130, y: centre(M.click.box).y }, click: true }, { t: M.type.t + .4, hide: true }] };
+  // 5 · the office: they walk to their desks
+  const o0 = M.office.t - .2, o1 = M.office.t + 5.6;
+  const office = { kind: 'ui', from: o0, d: o1 - o0, cam: [[o0, CAM.office], [o0 + .1, CAM.officeIn, 5.5]] };
+  // 7 · search's question, ⌃1, 1
+  const q0 = M.question.t - .5, q1 = M.answered.t + 1.5;
+  const question = { kind: 'ui', from: q0, d: q1 - q0, cam: [[q0, CAM.inbox]],
+    keys: [{ t: M['key-open'].t - .25, text: M['key-open'].text, box: M['key-open'].box }, { t: M['key-pick'].t - .25, text: M['key-pick'].text, box: M['key-pick'].box }] };
+  // 8 · perf lands; the change opens; the window leaves
+  const l0 = M.land.t - .4, l1 = M['land-click'].t + 4.6;
+  const sha = centre(M['land-click'].box);
+  const land = { kind: 'ui', from: l0, d: l1 - l0, tiltOut: true,
+    cam: [[l0, CAM.land], [M['land-click'].t + .15, CAM.diff, .9], [M['land-click'].t + 1.8, CAM.diffEnd, 1.3], [l1 - 1.3, CAM.whole, .9]],
+    cursor: [{ t: M['land-click'].t - 1.1, at: { x: sha.x + 160, y: sha.y + 120 } }, { t: M['land-click'].t - .05, at: sha, click: true }, { t: M['land-click'].t + .3, hide: true }] };
+
+  SHOTS = [
+    card(3.4, ink, [[W(':*', { mark: true, big: 2 })], [...words('a multi-agent harness,')], [W('made'), W('for'), W('humans.', { u: true })]], { size: .072, at: [.1, .8, .9, 1.0, 1.15, 1.25, 1.35] }),
+    card(1.5, paper, [words('you talk to one agent.')]),
+    ask,
+    card(1.6, paper, [[W('it'), W('runs'), W('the'), W('agents.', { u: true })]]),
+    office,
+    card(1.9, paper, [[W('only'), W('decisions'), W('reach'), W('you.', { u: true })]]),
+    question,
+    land,
+    card(2.2, ink, [[W('kiss'), W('your'), W('backlog')], [W('goodbye.', { u: true })]], { step: .12 }),
+    card(3.4, pen, [[W(':*', { mark: true }), W('bise')], [W('bise.dev', { sub: true })]], { size: .1, at: [.1, .25, .8] }),
+  ];
+  let t = 0;
+  for (const s of SHOTS) { s.start = t; t += s.d; }
+  window.FILM_LENGTH = t;
+  window.FILM_CUTS = SHOTS.map((s) => s.start);
+}
+
+// ---- drawing -------------------------------------------------------------------------------------
+const shot = $('shot');
+let shown = '';
+function setFrame(file) {
+  if (file === shown) return Promise.resolve();
+  shown = file;
+  shot.src = `${TAKE}/frames/${file}`;
+  return shot.decode().catch(() => undefined);
+}
+
+function drawCard(s, lt) {
+  $('stage').style.display = 'none';
+  const c = $('card');
+  c.style.display = 'flex';
+  c.style.background = s.look.bg;
+  c.style.color = s.look.fg;
+  const { html, size } = cardHTML(s, lt);
+  const lines = c.firstElementChild;
+  lines.innerHTML = html;
+  lines.style.fontSize = size + 'px';
+  // a hit on the cut: 0.1 s, scale 1.03 back to 1
+  const hit = lt < .12 ? 1 + .03 * (1 - lt / .12) : 1;
+  lines.style.transform = `scale(${hit})`;
+  $('vig').style.opacity = s.look.bg === '#f2ede2' ? 1 : .6;
+  $('grain').style.opacity = s.look.bg === '#f2ede2' ? .10 : .06;
+  return Promise.resolve();
+}
+
+function drawUI(s, lt) {
+  $('card').style.display = 'none';
+  $('stage').style.display = 'block';
+  $('vig').style.opacity = 1;
+  $('grain').style.opacity = .10;
+  const tt = s.from + lt; // take time (1x)
+  const cam = camAt(s.cam, tt);
+  const k = FRAME.w / cam.w; // output px per window css px
+  const win = $('win');
+  const tx = FRAME.w / 2 - cam.x * k, ty = FRAME.h / 2 - cam.y * k;
+  // the flat offset shadow and the outline stay the same in output px
+  $('shadow').style.transform = `translate(${16 / k}px, ${18 / k}px)`;
+  $('outline').style.borderWidth = (3 / k) + 'px';
+  $('outline').style.inset = (-3 / k) + 'px';
+  // 3D tilt: in once (expo out ~0.9 s to flat), out once; never while text is read
+  let rx = 0, ry = 0, rz = 0, sc = 1, op = 1;
+  if (s.tiltIn) { const e = expoOut(clamp(lt / .95)); rx = 16 * (1 - e); ry = -22 * (1 - e); rz = 3 * (1 - e); sc = lerp(.82, 1, e); op = clamp(lt / .15); }
+  if (s.tiltOut) { const u = clamp((lt - (s.d - .8)) / .8); const e = u * u * u; rx = -10 * e; ry = 24 * e; rz = -2 * e; sc = lerp(1, .78, e); op = 1 - clamp((u - .75) / .25); }
+  // the tilt turns the window about its centre, in output px (before the camera's scale)
+  const cx = (WIN.w / 2) * k, cy = (WIN.h / 2) * k;
+  win.style.transform = `translate(${tx + cx}px, ${ty + cy}px) perspective(${2.2 * FRAME.w}px) rotateX(${rx}deg) rotateY(${ry}deg) rotateZ(${rz}deg) scale(${sc}) translate(${-cx}px, ${-cy}px) scale(${k})`;
+  $('tilt').style.opacity = op;
+  // the cursor: cubic in-out moves between the logged boxes, a quiet ink ring on a click
+  const cur = $('cursor'), ring = $('ring');
+  cur.style.display = 'none'; ring.style.opacity = 0;
+  if (s.cursor) {
+    const ks = s.cursor;
+    if (tt >= ks[0].t - .2) {
+      let p = ks[0].at, vis = clamp((tt - (ks[0].t - .2)) / .2);
+      for (let i = 1; i < ks.length; i++) {
+        const a = ks[i - 1], b = ks[i];
+        if (b.hide) { if (tt > b.t) vis = 1 - clamp((tt - b.t) / .2); continue; }
+        const dur = Math.min(.9, b.t - a.t);
+        if (tt >= b.t) p = b.at;
+        else if (tt > b.t - dur) { const e = cubicInOut((tt - (b.t - dur)) / dur); p = { x: lerp(a.at?.x ?? p.x, b.at.x, e), y: lerp(a.at?.y ?? p.y, b.at.y, e) }; }
+        if (b.click && tt >= b.t && tt < b.t + .45) {
+          const r = (tt - b.t) / .45;
+          ring.style.left = b.at.x + 'px'; ring.style.top = b.at.y + 'px';
+          ring.style.opacity = .7 * (1 - r);
+          ring.style.transform = `scale(${lerp(.5, 1.25, expoOut(r))})`;
+        }
+      }
+      if (vis > 0) {
+        cur.style.display = 'block';
+        cur.style.opacity = vis;
+        const press = ks.some((b) => b.click && tt >= b.t && tt < b.t + .12) ? .88 : 1;
+        cur.style.transform = `translate(${p.x - 2}px, ${p.y - 2}px) scale(${press})`;
+      }
+    }
+  }
+  // a keycap near the composer for 0.6 s (pressed, then up)
+  const key = $('key');
+  key.style.display = 'none';
+  for (const kk of s.keys ?? []) {
+    if (tt >= kk.t && tt < kk.t + .75) {
+      const u = (tt - kk.t) / .75;
+      key.style.display = 'block';
+      key.textContent = kk.text;
+      // over the inbox's top right corner, inside the thread's column
+      key.style.left = (kk.box.x + kk.box.width - 66) + 'px';
+      key.style.top = (kk.box.y - 58) + 'px';
+      const pop = u < .2 ? backOut(u / .2) : 1;
+      const down = u > .25 && u < .42 ? 3 : 0;
+      key.style.opacity = u > .8 ? 1 - (u - .8) / .2 : 1;
+      key.style.transform = `translateY(${down}px) scale(${.6 + .4 * pop})`;
+      key.style.boxShadow = down ? '1px 2px 0 #1d1a1740' : '4px 5px 0 #1d1a1740';
+    }
+  }
+  return setFrame(frameAt(tt));
+}
+
+window.renderAt = (t) => {
+  t = clamp(t, 0, window.FILM_LENGTH - 1e-6);
+  let s = SHOTS[0];
+  for (const x of SHOTS) if (t >= x.start) s = x;
+  const lt = t - s.start;
+  return s.kind === 'card' ? drawCard(s, lt) : drawUI(s, lt);
+};
+
+window.ready = (async () => {
+  tape = await (await fetch(`${TAKE}/tape.json`)).json();
+  for (const m of tape.marks) M[m.name] = m;
+  build();
+  await document.fonts.ready;
+  await renderAt(Number(Q.get('t') ?? 0));
+  return { length: window.FILM_LENGTH, cuts: window.FILM_CUTS };
+})();
+</script>
+</body></html>
