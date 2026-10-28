@@ -59,6 +59,7 @@ pub(crate) mod rpc;
 pub(crate) mod inbox;
 pub(crate) mod hub_reads;
 mod state_rows;
+mod herdr_state;
 mod reads;
 pub(crate) mod queued;
 pub(crate) mod lead;
@@ -335,6 +336,10 @@ pub(super) struct Sb {
     pub(crate) archived: bise_proto::rows::Archived,
     /// The JSON-RPC requests waiting for their answer (sb/rpc.rs).
     rpc: rpc::Calls,
+    /// The herdr activity-state reporter, when bise runs in a herdr pane
+    /// (sb/herdr_state.rs). None everywhere else: a plain terminal, a
+    /// script, or a hub started outside herdr reports nothing.
+    herdr: Option<crate::herdr::Reporter>,
 }
 
 /// What the hub says of approvals: the global mode (`yolo` / `auto`),
@@ -695,6 +700,11 @@ fn hub_reconnected(app: &mut App) {
 
 /// Route one hub event.
 pub(super) fn dispatch(app: &mut App, raw: &str) {
+    dispatch_inner(app, raw);
+    app.sb.herdr_note();
+}
+
+fn dispatch_inner(app: &mut App, raw: &str) {
     if raw == HUB_DOWN {
         app.connected = false;
         return;
