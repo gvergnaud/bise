@@ -4,7 +4,7 @@
 //   FILM_OUT=<dir> playwright test -c tests/film/film.config.ts
 import { FakeCore, FakeHelper, expect, launchDesktop, test } from '../harness';
 import { Tape } from './tape';
-import { ASK, LAND_SHA, P, agents, projects, world, type Row } from './world';
+import { ASK, LAND_SHA, P, agents, perfLive, perfLive2, projects, world, type Row } from './world';
 
 const OUT = process.env['FILM_OUT'] ?? '';
 const W = 1360;
@@ -76,6 +76,28 @@ test('readme film take', async () => {
     await tape.mark('agents', page.getByTestId('app.outer.agents').or(page.getByTestId('app.outer.world')).first());
     await sleep(2200);
     await tape.mark('whole-2');
+
+    // 1b. perf's own thread (its row in the bar): what it does, live; then back to main's
+    await core.send(agents(rows({ title: 'profiling the product page', doing: 'edit' }, { title: 'adding the size filter', doing: 'think' }), Date.now()) as never);
+    const perfRow = page.getByTestId(`app.outer.agents.${P}.perf`).locator('[data-row]').first();
+    await tape.mark('perf-row', perfRow);
+    await sleep(900);
+    await perfRow.click();
+    await expect(page.getByTestId('thread.list')).toBeVisible();
+    await tape.mark('perf-thread', page.getByTestId('thread.list'));
+    await sleep(1600);
+    for (const e of perfLive(Date.now())) await core.send({ ev: 'entry', project: P, agent: 'perf', entry: e } as never);
+    await tape.mark('perf-edit');
+    await sleep(2200);
+    for (const e of perfLive2(Date.now())) await core.send({ ev: 'entry', project: P, agent: 'perf', entry: e } as never);
+    await tape.mark('perf-measure');
+    await sleep(2600);
+    const mainRow = page.getByTestId(`app.outer.agents.${P}.main`).locator('[data-row]').first();
+    await tape.mark('main-row', mainRow);
+    await sleep(700);
+    await mainRow.click();
+    await sleep(900);
+    await tape.mark('main-back');
 
     // 2. the office, full size (the tile's ⤢, then the panel full width, the whole office): they walk to their desks
     await page.getByTestId('app.outer.world').hover();

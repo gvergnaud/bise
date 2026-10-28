@@ -1,6 +1,6 @@
 // The README film's render (readme-film): docs/brand/readme/film/film.html on a take, frame by frame
 // in headless Chrome (never shown), then ffmpeg: H.264 High, yuv420p, faststart.
-//   node tests/film/render.mts <take dir> <out.mp4> [--frame 16x9|1x1] [--fps 30] [--at s,s,... --shots <dir>]
+//   node tests/film/render.mts <take dir> <out.mp4> [--frame 16x9|1x1] [--cut launch|plain|notes] [--fps 30] [--at s,s,... --shots <dir>]
 // --at: only those times, as PNGs in --shots (the frozen frames a review reads), no video.
 // Serves the film page and the take on a local port (fetch needs http). Heavy: run it through heavy-run.
 import { execFileSync } from 'node:child_process';
@@ -22,6 +22,7 @@ const flag = (name: string): string | undefined => {
   return v;
 };
 const frame = flag('--frame') ?? '16x9';
+const cut = flag('--cut') ?? 'launch';
 const fps = Number(flag('--fps') ?? 30);
 const at = flag('--at');
 const shots = flag('--shots');
@@ -47,7 +48,7 @@ const port = (server.address() as { port: number }).port;
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
 try {
   const page = await browser.newPage({ viewport: size, deviceScaleFactor: 1 });
-  await page.goto(`http://127.0.0.1:${port}/film.html?take=/take&frame=${frame}`);
+  await page.goto(`http://127.0.0.1:${port}/film.html?take=/take&frame=${frame}&cut=${cut}`);
   const info = await page.evaluate(() => (window as unknown as { ready: Promise<{ length: number; cuts: number[] }> }).ready);
   console.log(`film: ${info.length.toFixed(2)} s, cuts at ${info.cuts.map((c) => c.toFixed(2)).join(' ')}`);
   const shoot = async (t: number, file: string): Promise<void> => {
@@ -57,7 +58,7 @@ try {
   if (at !== undefined) {
     const dir = path.resolve(shots ?? '.');
     mkdirSync(dir, { recursive: true });
-    for (const t of at.split(',').map(Number)) await shoot(t, path.join(dir, `${frame}-${t.toFixed(2).padStart(6, '0')}.png`));
+    for (const t of at.split(',').map(Number)) await shoot(t, path.join(dir, `${cut}-${frame}-${t.toFixed(2).padStart(6, '0')}.png`));
     console.log(`shots: ${dir}`);
   } else {
     const dir = mkdtempSync(path.join(process.env['TMPDIR'] ?? os.tmpdir(), 'film-frames-'));

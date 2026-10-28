@@ -58,6 +58,35 @@ export function history(now: number): Ev[] {
   ];
 }
 
+/** perf's thread: its brief's work so far, then what comes while he looks (perfLive) */
+const tool = (pos: number, at: number, kind: string, text: string, more: Record<string, unknown> = {}) => ({ pos, id: pos, at_ms: at, text, kind, state: 'ok', ms: 400, ...more });
+export function perfThread(now: number): Ev[] {
+  return [
+    { pos: 1, at_ms: now - 9000, kind: 'tools', text: 'read 2 files, ran 1 command', tools: { count: 3, summary: 'read 2 files, ran 1 command', items: [
+      tool(1, now - 9000, 'read', 'reading src/pages/product.tsx'),
+      tool(2, now - 8800, 'read', 'reading src/lib/images.ts'),
+      tool(3, now - 8000, 'run', 'measuring the product page', { name: 'bash', code: JSON.stringify({ command: 'pnpm lighthouse /product/42', description: 'measuring the product page' }), out: 'LCP 2.9 s · TBT 410 ms' }),
+    ] } },
+    { pos: 2, at_ms: now - 6000, kind: 'agent', text: 'the page waits on a 1.8 MB hero image and on the reviews query. i resize the images and load the reviews after the first paint.' },
+  ];
+}
+export function perfLive(now: number): Ev[] {
+  return [
+    { pos: 3, at_ms: now, kind: 'tools', text: 'edited 2 files', tools: { count: 2, summary: 'edited 2 files', items: [
+      tool(3, now, 'edit', 'images through the CDN, 3 widths', { files: [{ path: 'src/lib/images.ts', add: 24, del: 3 }] }),
+      tool(4, now + 300, 'edit', 'reviews after the first paint', { files: [{ path: 'src/pages/product.tsx', add: 9, del: 4 }] }),
+    ] } },
+  ];
+}
+export function perfLive2(now: number): Ev[] {
+  return [
+    { pos: 5, at_ms: now, kind: 'tools', text: 'ran 1 command', tools: { count: 1, summary: 'ran 1 command', items: [
+      tool(5, now, 'run', 'measuring again', { name: 'bash', code: JSON.stringify({ command: 'pnpm lighthouse /product/42', description: 'measuring again' }), out: 'LCP 0.8 s · TBT 90 ms' }),
+    ] } },
+    { pos: 6, at_ms: now + 200, kind: 'agent', text: '0.8 s now, it was 2.9 s. i run the tests, then i land it.' },
+  ];
+}
+
 export const ASK = 'make the product page load under a second, and add search with size filters';
 
 export function world(now: number): Ev[] {
@@ -70,6 +99,7 @@ export function world(now: number): Ev[] {
     { ev: 'agents', project: HOME, agents: [{ name: 'main', main: true, status: 'idle', archived: false, title: '', purpose: '', since_ms: now, waits: 0, watching: [], dir: 'main' }] },
     { ev: 'cards', project: P, cards: [] },
     { ev: 'thread', project: P, agent: 'main', before: null, more: false, entries: history(now) },
+    { ev: 'thread', project: P, agent: 'perf', before: null, more: false, entries: perfThread(now + 12_000) },
     // perf's land, as the commit view asks for it (the stub answers `diff` with merged = the sha)
     { ev: 'diff', project: P, agent: 'main', base: 'main', merged: LAND_SHA, commit: LAND_SHA, files: LAND_FILES, note: 'the product page loads in 0.8 s' },
   ];
