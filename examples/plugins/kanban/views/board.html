@@ -139,7 +139,7 @@ const mcp = (() => {
 })();
 function why(err) {
   const reasons = { "-32031": "this view may not call that tool", "-32032": "the plugin is turned off", "-32033": "you declined it",
-    "-32034": "not supported in bise", "-32035": "too many calls, wait a moment", "-32036": "the server restarted, try again" };
+    "-32034": "not supported in bise", "-32035": "bise wants a click in the view first, or fewer calls: click again in a moment", "-32036": "the server restarted, try again" };
   return reasons[String(err && err.code)] || (err && err.message) || "it failed";
 }
 

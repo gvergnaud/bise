@@ -26,6 +26,10 @@
   .app { padding: 14px 16px; display: grid; grid-template-columns: 1fr; gap: 10px; }
   html[data-mode="fullscreen"] .app { height: 100vh; grid-template-columns: 1fr 300px; grid-template-rows: auto 1fr; }
   html[data-mode="fullscreen"] .head { grid-column: 1 / -1; }
+  /* a narrow panel (bise's is ~420 px): the map on top, the list under it */
+  @media (max-width: 720px) {
+    html[data-mode="fullscreen"] .app { grid-template-columns: 1fr; grid-template-rows: auto minmax(240px, 1fr) auto; }
+  }
   .head { display: flex; align-items: center; gap: 10px; }
   .titles { flex: 1; min-width: 0; }
   h1 { margin: 0; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -165,7 +169,7 @@ const mcp = (() => {
 })();
 function why(err) {
   const reasons = { "-32031": "this view may not call that tool", "-32032": "the plugin is turned off", "-32033": "you declined it",
-    "-32034": "not supported in bise", "-32035": "too many calls, wait a moment", "-32036": "the server restarted, try again" };
+    "-32034": "not supported in bise", "-32035": "bise wants a click in the view first, or fewer calls: click again in a moment", "-32036": "the server restarted, try again" };
   return reasons[String(err && err.code)] || (err && err.message) || "it failed";
 }
 
@@ -295,7 +299,8 @@ function zoomBy(d) {
 }
 $("zin").onclick = () => zoomBy(1);
 $("zout").onclick = () => zoomBy(-1);
-$("map").addEventListener("wheel", (e) => { e.preventDefault(); zoomBy(e.deltaY < 0 ? 1 : -1); }, { passive: false });
+// in a thread the wheel scrolls the thread: the map zooms only with ⌘ or ctrl held (or a pinch, which sends ctrl)
+$("map").addEventListener("wheel", (e) => { if (!e.ctrlKey && !e.metaKey) return; e.preventDefault(); zoomBy(e.deltaY < 0 ? 1 : -1); }, { passive: false });
 new ResizeObserver(() => { if (trip) drawMap(); }).observe($("map"));
 
 // ---- host: links, display mode, notifications
