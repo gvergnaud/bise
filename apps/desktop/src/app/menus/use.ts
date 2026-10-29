@@ -58,6 +58,7 @@ export function factsOf(e: Entity, r: FactReads): MenuFacts {
       return { e, inner: t.inner === undefined ? undefined : factsOf(t.inner, r), moveable: t.moveable, closable: t.closable, others: t.others };
     }
     case 'skill':
+    case 'view':
       return { e };
     default:
       return { e };

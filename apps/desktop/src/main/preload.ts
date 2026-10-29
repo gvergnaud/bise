@@ -5,7 +5,7 @@
 // ⌘V and the menu's clipboard items play on a private buffer, never his.
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import type { HelperEv } from '../proto';
-import { HOME_ARG, IPC, OFFSCREEN_ARG, SURFACE_ARG, TEST_ENV, type A11y, type AppSwapResult, type AppUpdate, type ArtifactLink, type BiseApi, type CrashReport, type CapsuleState, type FileFacts, type MenuAction, type NotifyAuth, type SaveResult, type SkillRead, type Surface, type ThumbAnswer, type TermOpened, type UpdateInfo, type UpdateState } from '../shared/api';
+import { HOME_ARG, IPC, OFFSCREEN_ARG, SURFACE_ARG, TEST_ENV, type A11y, type AppSwapResult, type AppUpdate, type ArtifactLink, type BiseApi, type CrashReport, type CapsuleState, type FileFacts, type MenuAction, type NotifyAuth, type SaveResult, type SkillRead, type Surface, type ThumbAnswer, type TermOpened, type UpdateInfo, type UpdateState, type ViewAnswerWire } from '../shared/api';
 import { argValue } from './args';
 import { installClipFence, type ClipOp, type ClipSeed, type WinLike } from './clipfence';
 import { coreBridge } from './core/bridge';
@@ -95,6 +95,12 @@ const api: BiseApi = {
     restartLog: () => ipcRenderer.invoke(IPC.appRestartLog) as Promise<CrashReport | null>,
   },
   openExternal: async (url) => (await ipcRenderer.invoke(IPC.openExternal, url)) === true,
+  views: {
+    call: (cmd) => ipcRenderer.invoke(IPC.viewsCall, cmd) as Promise<ViewAnswerWire>,
+    frames: (list) => {
+      ipcRenderer.send(IPC.viewsFrames, list);
+    },
+  },
   openPath: async (path, opts) => (await ipcRenderer.invoke(IPC.openPath, path, opts)) === true,
   quickLook: async (path) => (await ipcRenderer.invoke(IPC.quickLook, path)) === true,
   showInFinder: async (path) => (await ipcRenderer.invoke(IPC.showInFinder, path)) === true,

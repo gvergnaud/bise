@@ -1,0 +1,93 @@
+/* src/views · the view card under a tool row, the view tab, and the window's views layer
+   (docs/mcp-apps.md C7, risk 2). The layer has no z-index (no stacking context): its frames take
+   z 2 (thread) and 4 (tab) among the window's own layers. Owner: mcp-apps-host. */
+
+.vw-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.vw-frame {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border: 0;
+  pointer-events: auto;
+  background: transparent;
+  color-scheme: normal;
+}
+
+.vw-card {
+  margin: var(--gap-tight) 0;
+  font: var(--f-meta);
+  color: var(--c-text-2);
+}
+
+.vw-card[data-border] .vw-anchor {
+  border-radius: var(--r-2);
+  box-shadow: 0 0 0 1px var(--c-line);
+}
+
+.vw-anchor {
+  position: relative;
+  overflow: hidden;
+}
+
+.vw-anchor > .vw-line {
+  position: absolute;
+  inset: 0;
+  justify-content: center;
+}
+
+.vw-line {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-inline);
+}
+
+.vw-foot {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--gap-block);
+  margin-top: var(--s-1);
+}
+
+.vw-notes {
+  flex: 1;
+  min-width: 0;
+}
+
+.vw-note {
+  color: var(--c-text-3);
+}
+
+.vw-act {
+  color: var(--c-text-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  margin-left: auto;
+}
+
+.vw-act:hover {
+  color: var(--c-text);
+}
+
+.vw-tab {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.vw-tab-box {
+  flex: 1;
+  min-height: 0;
+}
+
+.vw-tab > .vw-line {
+  position: absolute;
+  inset: 0;
+  justify-content: center;
+}

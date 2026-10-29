@@ -27,6 +27,7 @@ import { useArtifactOpener } from './openArtifact';
 import { IntroRow } from '@/welcome/Welcome';
 import { introShows } from '@/welcome/rule';
 import { MAIN } from '@/app/route';
+import { ViewCards } from '@/views/Card';
 
 /** the lead's intro row's key (never an entry's: entry keys are numbers') */
 const INTRO = 'intro';
@@ -267,9 +268,15 @@ export const Rows = memo(function Rows({ tkey, project, agent, bise, listRef, on
             }}
           />
         );
-      return pos === undefined ? null : <EntryRow ctx={ctx} pos={pos} prev={prevOf.get(pos)} next={nextOf.get(pos)} still={still} named={heads.named.has(pos)} afterFold={afterFold.has(pos)} underFold={underFold.has(pos)} turnLine={turnLine} retries={retries.runs.get(pos)} />;
+      return pos === undefined ? null : (
+        <>
+          <EntryRow ctx={ctx} pos={pos} prev={prevOf.get(pos)} next={nextOf.get(pos)} still={still} named={heads.named.has(pos)} afterFold={afterFold.has(pos)} underFold={underFold.has(pos)} turnLine={turnLine} retries={retries.runs.get(pos)} />
+          {/* MCP Apps: a tool call's view card under its row (src/views, mcp-apps-host) */}
+          <ViewCards tkey={tkey} pos={pos} project={project} agent={agent} />
+        </>
+      );
     },
-    [ctx, prevOf, nextOf, runs, openRuns, setOpenRuns, turnsOpen, lineOn, toggleTurn, live.entry, lastPos, still, heads, afterFold, underFold, foldGap, retries, project, agent],
+    [ctx, prevOf, nextOf, runs, openRuns, setOpenRuns, turnsOpen, lineOn, toggleTurn, live.entry, lastPos, still, heads, afterFold, underFold, foldGap, retries, project, agent, tkey],
   );
   const onOlder = useCallback(() => {
     store.olderPage(project, agent);

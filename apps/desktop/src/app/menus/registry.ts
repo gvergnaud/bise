@@ -59,8 +59,8 @@ export type MenuFacts =
   | { readonly e: Of<'tab'>; readonly inner: MenuFacts | undefined; readonly moveable: boolean; readonly closable: boolean; readonly others: boolean }
   /** an office, a PR, a commit, a diff, a plugin: opened in a tab or a window */
   | { readonly e: Of<'office' | 'pr' | 'commit' | 'diff' | 'plugin'> }
-  /** a plugin's skill: its tab's own '…' holds its actions (plugins/SkillTab.tsx), its tab menu only the tab's */
-  | { readonly e: Of<'skill'> };
+  /** a plugin's skill: its tab's own '…' holds its actions (plugins/SkillTab.tsx), its tab menu only the tab's; an MCP App's view (src/views): its tab menu only the tab's */
+  | { readonly e: Of<'skill' | 'view'> };
 
 /** The menu bar's keys, as Electron's accelerators; the '…' and the right click show the same. */
 export const KEYS: Partial<Record<Act, string>> = {
@@ -264,6 +264,7 @@ export function menuOf(f: MenuFacts): PopupItem[] {
     case 'plugin':
       return [item('move-right', menus.move_right), item('new-window', menus.new_window)];
     case 'skill':
+    case 'view':
       return [];
   }
 }

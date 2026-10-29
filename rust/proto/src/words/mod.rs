@@ -50,6 +50,7 @@ pub mod scheduled;
 pub mod settings;
 pub mod side;
 pub mod thread;
+pub mod views;
 
 /// One word of the catalog.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -86,6 +87,7 @@ pub const ALL: &[(&str, &[Word])] = &[
     ("settings", settings::WORDS),
     ("side", side::WORDS),
     ("thread", thread::WORDS),
+    ("views", views::WORDS),
 ];
 
 /// The words of an area split into submodules, as one list (architect

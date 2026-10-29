@@ -18,6 +18,7 @@ import { thumbsDirOf } from '../thumbs/cache';
 import { startThumbs } from '../thumbs/make';
 import { DictationRoutes, type Route } from './dictation';
 import { SubRoutes } from './subs';
+import { installViewCalls, isViewCmd, viewAnswered, viewRefused, viewsCoreGone } from '../views';
 import { answeredEv, lateAnsweredEv, refusedEv, RESTARTED_WORDS, sendRefusedEv } from '../../shared/local';
 
 let core: CoreProcess | null = null;
@@ -113,6 +114,8 @@ export function startCore(env: Readonly<Record<string, string | undefined>> = pr
   // mic command gets its answer from there (architect m_22483)
   const quiet = noAsks(env, env[TEST_ENV] === '1');
   let state: CoreState = 'down';
+  // a view's commands go by window.bise.views.call only (main stamps their gesture: main/views.ts)
+  installViewCalls((c) => core?.send(c) ?? false);
   ipcMain.on(CORE_IPC.cmd, (e, cmd: unknown) => {
     const name = (cmd as { cmd?: unknown } | null)?.cmd;
     dictations.sent(e.sender.id, cmd);
@@ -123,7 +126,8 @@ export function startCore(env: Readonly<Record<string, string | undefined>> = pr
     // a window whose mic, voice mode or held /model (R8) must end with it
     if (name === 'dictate_start' || name === 'voice_mode' || name === 'slash' || name === 'subscribe') watch(e.sender);
     // an unsubscribe another window still needs stays here (R18)
-    for (const c of subs.sent(e.sender.id, cmd)) core?.send(c);
+    // a view's command never goes this way: window.bise.views.call only (main stamps its gesture)
+    for (const c of subs.sent(e.sender.id, cmd)) if (!isViewCmd(c)) core?.send(c);
   });
   ipcMain.handle(CORE_IPC.stateNow, (): CoreState => state);
   ipcMain.handle(CORE_IPC.snapshot, (): Record<string, unknown>[] => latest.snapshot());
@@ -213,6 +217,7 @@ export function startCore(env: Readonly<Record<string, string | undefined>> = pr
         startThumbs(thumbsDirOf(result));
       },
       onAnswer: (cmd, result) => {
+        if (viewAnswered(cmd, result)) return;
         const ak = answerKey(cmd);
         const by = ak === null ? undefined : answers.get(ak);
         if (ak !== null && by !== undefined) {
@@ -229,6 +234,7 @@ export function startCore(env: Readonly<Record<string, string | undefined>> = pr
         if (ev !== null) toWindow({ to: 'window', window: to, ev });
       },
       onRefused: (cmd, error) => {
+        if (viewRefused(cmd, error)) return;
         // his send answered with an error: its window hears why (typed); a late one stays in `sends`
         // for the core's 'send_answered' (its hub may still make it)
         const sk = sendKey(cmd);
@@ -251,6 +257,7 @@ export function startCore(env: Readonly<Record<string, string | undefined>> = pr
           latest.clear();
           subs.clear();
           sends.clear();
+          viewsCoreGone();
           // an answer or close the last core never answered: its card shows again (the hub's
           // rows hide it if the hub took it)
           for (const by of answers.values())

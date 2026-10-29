@@ -6,6 +6,7 @@
 
 import type { AppCmd, DraftHubCmd, HelperCmd, HelperEv, HubCmd } from '../proto';
 import type { Springing } from './springing';
+import type { ViewPerm } from './viewperms';
 
 export interface BiseApi {
   /** process.platform of the main process ('darwin', 'win32', 'linux'). */
@@ -60,6 +61,17 @@ export interface BiseApi {
    * opens: main prints `EXTERNAL_LINE <url>` on stdout instead.
    */
   readonly openExternal: (url: string) => Promise<boolean>;
+  /**
+   * MCP Apps views (docs/mcp-apps.md C5, C6; src/views): call() asks the hub one view command
+   * (view_resource, view_call, view_message, view_context) and gives its answer, result or
+   * error (main/views.ts; main stamps view_message's gesture_ms, never the window); frames()
+   * tells main the view frames that show now, the whole list each time (main/viewframes.ts:
+   * permissions and gestures by frame). Optional: a test's fake window may leave it out.
+   */
+  readonly views?: {
+    readonly call: (cmd: unknown) => Promise<ViewAnswerWire>;
+    readonly frames: (list: readonly ViewFrame[]) => void;
+  };
   /**
    * Opens a file or folder named in an answer (an absolute path) in his
    * editor, at `line` when given; with no editor bise knows, Finder shows it
@@ -470,6 +482,19 @@ export interface ViewSides {
   readonly sideCardCant?: boolean;
 }
 
+/** A view command's answer as the hub gave it (window.bise.views.call). */
+export type ViewAnswerWire = { readonly result: unknown } | { readonly error: { readonly code: number; readonly message: string; readonly data?: unknown } };
+
+/** A view frame that shows (window.bise.views.frames): its view, its origin, what shows of it in window css px, its granted permissions. */
+export interface ViewFrame {
+  readonly project: string;
+  readonly agent: string;
+  readonly call: string;
+  readonly origin: string;
+  readonly rect: { readonly x: number; readonly y: number; readonly w: number; readonly h: number };
+  readonly perms: readonly ViewPerm[];
+}
+
 /** window.bise.saveCopy's answer: where the copy went, why it failed, or null (he cancelled, or refused). */
 export type SaveResult = { readonly to: string } | { readonly error: string } | null;
 
@@ -512,6 +537,8 @@ export type SkillRead =
 /** The IPC channels between the preload and main (owner: amb-mac). */
 export const IPC = {
   openExternal: 'bise:open-external',
+  viewsCall: 'bise:views-call',
+  viewsFrames: 'bise:views-frames',
   openPath: 'bise:open-path',
   pickFolder: 'bise:pick-folder',
   pickFiles: 'bise:pick-files',
