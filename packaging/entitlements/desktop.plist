@@ -4,7 +4,8 @@
      helper apps and the bare executables it carries (sb-core, bise-mac-helper); never on a
      library. The runtime's bise.app gets bise.plist, bend-jsrt bend-jsrt.plist, repl-live
      runtime.plist, the terminal release's own files (scripts/mac_sign.py entitlements_for). JIT: V8 in Electron. audio-input:
-     the fn dictation. apple-events: the address of the tab in front. -->
+     the fn dictation, a view's microphone. camera: an MCP Apps view granted it (docs/mcp-apps.md
+     C6). apple-events: the address of the tab in front. -->
 <plist version="1.0">
 <dict>
   <key>com.apple.security.cs.allow-jit</key>
@@ -12,6 +13,8 @@
   <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
   <true/>
   <key>com.apple.security.device.audio-input</key>
+  <true/>
+  <key>com.apple.security.device.camera</key>
   <true/>
   <key>com.apple.security.automation.apple-events</key>
   <true/>

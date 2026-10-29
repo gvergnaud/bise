@@ -132,7 +132,7 @@ pub fn serve(pages: &Pages, id: &str, v: Option<u64>) -> Response {
         name: site::file_of(copy),
         token: &pages.token,
     };
-    Response { status: 200, ctype: "text/html; charset=utf-8", body: shell(&shown).into_bytes(), csp: VIEW_CSP, location: None }
+    Response { status: 200, ctype: "text/html; charset=utf-8", body: shell(&shown).into_bytes(), csp: VIEW_CSP.into(), location: None }
 }
 
 #[cfg(test)]

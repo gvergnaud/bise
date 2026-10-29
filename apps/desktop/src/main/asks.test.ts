@@ -83,7 +83,12 @@ describe('an off-screen run asks him nothing (static)', () => {
 
   it("a page's permission requests are answered by offscreenGrants under the knob", () => {
     const ipc = ALL.find((s) => s.file === 'ipc.ts')?.text ?? '';
-    expect(ipc).toMatch(/if \(noAsks\(process\.env, testMode\)\) \{[\s\S]*setPermissionCheckHandler\(\(_wc, permission\) => offscreenGrants\(permission\)\)[\s\S]*done\(offscreenGrants\(permission\)\)/);
+    // one composed handler (mcp-apps C6): a view's own rule first (viewrules.ts, it only ever
+    // denies more), then the app's, which under the knob is offscreenGrants
+    expect(ipc).toMatch(/const quiet = noAsks\(process\.env, testMode\);/);
+    expect(ipc).toMatch(/const base = \(permission: string\): boolean => \(quiet \? offscreenGrants\(permission\) :/);
+    expect(ipc).toMatch(/setPermissionCheckHandler\(\(wc, permission, requestingOrigin, d\) => viewPermissionIn\([^)]*\) \?\? base\(permission\)\)/);
+    expect(ipc).toMatch(/done\(viewPermissionIn\(wc, permission, d\) \?\? base\(permission\)\)/);
   });
 
   // architect m_22483: the core owns the off-screen mic rule; main forwards every command (a drop

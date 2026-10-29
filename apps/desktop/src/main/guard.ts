@@ -16,6 +16,10 @@
 //     (renderer/index.html): Chromium's CSP check failed it before the guard
 //     and left an error page in the panel (his blank page). The second wall:
 //     session.webRequest cancels any subframe request off the pages server;
+//   - an MCP Apps view (viewrules.ts, docs/mcp-apps.md C6): the app sets a frame to a view's proxy
+//     (v-<hash>.localhost:<port>/mcp-app), the proxy makes its blob view, a frame nested in the view
+//     goes where its CSP lets it; the view or its proxy leaving for any other url is dropped, never
+//     sent to his browser;
 //   - no <webview>;
 //   - an artifact's page gets two forwarders: its unused esc (ESC_FORWARD) and its pinch
 //     (pinch.ts PINCH_FORWARD: the window zooms the frame, as a browser's visual zoom; the
@@ -29,6 +33,7 @@ import { FRAME_KINDS } from '../shared/frame';
 import { frameLink, isPagesFrame, type FrameLink } from './framelink';
 import { openLink } from './ipc';
 import { PINCH_FORWARD } from './pinch';
+import { isViewOrigin, isViewProxy, viewNavigation, type NavFrame } from './viewrules';
 
 export interface OwnPage {
   /** the renderer's index.html as a file:// URL (the built app) */
@@ -87,18 +92,36 @@ function starter(initiator: WebFrameMain | null | undefined, own: OwnPage): stri
   return from === undefined || from === '' || isOwnPage(from, own) ? null : from;
 }
 
+/** A navigating frame as viewrules.ts reads it; null when electron no longer has it. */
+function navFrame(f: WebFrameMain | null | undefined): NavFrame | null {
+  if (f === null || f === undefined) return null;
+  try {
+    const p = f.parent;
+    return { url: f.url, origin: f.origin, parent: p === null ? null : { url: p.url, origin: p.origin } };
+  } catch {
+    return null;
+  }
+}
+
 function guardContents(wc: WebContents, own: OwnPage, testMode: boolean): void {
   // target=_blank, ⌘-click, a middle click, window.open: never a window (the app's own page opens none)
   wc.setWindowOpenHandler(({ url }) => {
     follow(wc, frameLink(url, null, true), testMode);
     return { action: 'deny' };
   });
-  type Nav = { preventDefault: () => void; url: string; isMainFrame: boolean; initiator?: WebFrameMain | null };
+  type Nav = { preventDefault: () => void; url: string; isMainFrame: boolean; initiator?: WebFrameMain | null; frame?: WebFrameMain | null };
   const stay = (e: Nav): void => {
     if (isOwnPage(e.url, own)) return;
     if (e.isMainFrame) {
       e.preventDefault();
       void openLink(e.url, testMode);
+      return;
+    }
+    // a view's frames (viewrules.ts): its proxy, its blob, the frames nested in it
+    const view = viewNavigation(e.url, navFrame(e.frame), starter(e.initiator, own) === null);
+    if (view === 'stay') return;
+    if (view === 'drop') {
+      e.preventDefault();
       return;
     }
     const link = frameLink(e.url, starter(e.initiator, own));
@@ -135,8 +158,18 @@ function guardContents(wc: WebContents, own: OwnPage, testMode: boolean): void {
  */
 function fenceFrames(): void {
   session.defaultSession.webRequest.onBeforeRequest((d, done) => {
-    done({ cancel: d.resourceType === 'subFrame' && !isPagesFrame(d.url) });
+    done({ cancel: d.resourceType === 'subFrame' && !isPagesFrame(d.url) && !viewSubframe(d.url, d.frame) });
   });
+}
+
+/** A view's proxy (the app sets it), or a frame nested in a view (its CSP's frame-src decided). */
+function viewSubframe(url: string, frame: WebFrameMain | null | undefined): boolean {
+  if (isViewProxy(url)) return true;
+  try {
+    return isViewOrigin(frame?.parent?.origin);
+  } catch {
+    return false;
+  }
 }
 
 function fenceWindow(win: BrowserWindow): void {

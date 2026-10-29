@@ -27,6 +27,7 @@ import { micHeld, onCoreEvent, sendToCore, startCore, stopCore } from './core/ip
 import { configOfPrefs } from './helper/config';
 import { Shots } from './helper/shot';
 import { installIpc, panelShown, sendClip, sendMenu, setProjectRoots } from './ipc';
+import { installViewFrames } from './viewframes';
 import { installKeepIpc } from './keep';
 import { projectRoots } from './reveal';
 import { hasTestNotify } from './menu';
@@ -126,6 +127,8 @@ const loginEnv = adoptLoginEnv(process.platform, testMode);
 
 void app.whenReady().then(() => {
   installIpc(testMode);
+  // MCP Apps views: each window's live frames, for their permissions and gestures (viewframes.ts)
+  installViewFrames();
   // what he typed or opened, on disk for a reload, a relaunch or a crash (src/main/keep.ts)
   installKeepIpc(app.getPath('userData'));
   const helper = startHelper(testMode);

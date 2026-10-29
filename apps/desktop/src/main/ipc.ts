@@ -24,6 +24,7 @@ import { readSkill, skillPaths } from './skillfile';
 import { onCoreEvent } from './core/ipc';
 import { thumbsDir } from './thumbs/cache';
 import { thumb, type ThumbEnv } from './thumbs/make';
+import { viewPermissionIn } from './viewframes';
 
 // the page's async clipboard API (navigator.clipboard): its permissions
 const CLIPBOARD_PERMS = new Set(['clipboard-read', 'clipboard-sanitized-write']);
@@ -111,22 +112,18 @@ export function installIpc(testMode: boolean): void {
   if (testMode) {
     ipcMain.handle(IPC.clipSeed, () => clipSeed());
     (globalThis as unknown as Record<string, unknown>)[TEST_CLIP_HOOK] = setClip;
-    // test mode: navigator.clipboard can never read or write his clipboard
-    const s = session.defaultSession;
-    s.setPermissionCheckHandler((_wc, permission) => !CLIPBOARD_PERMS.has(permission));
-    s.setPermissionRequestHandler((_wc, permission, done) => {
-      done(!CLIPBOARD_PERMS.has(permission));
-    });
   }
-  // an off-screen run: a page's permission (mic, camera, screen, notifications...) is denied before
-  // macOS can ask him; only the clipboard passes (offscreen.ts)
-  if (noAsks(process.env, testMode)) {
-    const s = session.defaultSession;
-    s.setPermissionCheckHandler((_wc, permission) => offscreenGrants(permission));
-    s.setPermissionRequestHandler((_wc, permission, done) => {
-      done(offscreenGrants(permission));
-    });
-  }
+  // the app's own pages: an off-screen run denies a page's permission (mic, camera, screen,
+  // notifications...) before macOS can ask him, only the clipboard passes (offscreen.ts); test mode:
+  // navigator.clipboard can never read or write his clipboard; his run: electron's default, granted
+  const quiet = noAsks(process.env, testMode);
+  const base = (permission: string): boolean => (quiet ? offscreenGrants(permission) : testMode ? !CLIPBOARD_PERMS.has(permission) : true);
+  // an MCP Apps view's (viewrules.ts): only what its frame was granted, before the rule above
+  const s = session.defaultSession;
+  s.setPermissionCheckHandler((wc, permission, requestingOrigin, d) => viewPermissionIn(wc, permission, { ...d, requestingOrigin }) ?? base(permission));
+  s.setPermissionRequestHandler((wc, permission, done, d) => {
+    done(viewPermissionIn(wc, permission, d) ?? base(permission));
+  });
   ipcMain.handle(IPC.openExternal, (_e, raw: unknown): Promise<boolean> => openLink(raw, testMode));
   // voice mode's failed line: System Settings › Privacy › Microphone, the one settings URL a window may open
   ipcMain.on(IPC.micSettings, () => {

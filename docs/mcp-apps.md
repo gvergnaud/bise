@@ -245,25 +245,45 @@ Signed by architect (m_50047), with these owners:
   it is cross-origin with its parent, sends
   `ui/notifications/sandbox-proxy-ready`, takes
   `ui/notifications/sandbox-resource-ready {html, csp, permissions}` from
-  its parent only, builds the inner iframe (`srcdoc`, `sandbox="allow-scripts
-  allow-same-origin allow-forms"`, `allow=` from the granted permissions)
-  and relays JSON-RPC both ways, checking `event.source` each way.
+  its parent only, builds the inner iframe (a `blob:` url of the html with
+  the CSP in a `<meta>`, `sandbox="allow-scripts allow-same-origin
+  allow-forms"`, `allow=` from the granted permissions) and relays
+  JSON-RPC both ways, checking `event.source` each way. A blob, not the
+  spec's `srcdoc`: both inherit the proxy's CSP header, but a srcdoc asks
+  Electron for MIDI or the clipboard as `about:srcdoc`, with no origin,
+  while a blob url carries the view's (checked in Electron 44). The host's
+  outer iframe has the same `sandbox` (no `allow-popups`, no
+  `allow-top-navigation`): Electron's window-open handler can't tell a
+  view's `window.open` from the app's.
 - The CSP is a pure function (`rust/switchboard/src/pages/view_csp.rs`):
   bise's floor (`default-src 'none'`, `script-src 'unsafe-inline'`,
   `style-src 'unsafe-inline'`, `img-src data: blob:`, `media-src data:
-  blob:`, `font-src data:`, `connect-src 'none'`, `frame-src 'none'`,
-  `base-uri 'none'`, `form-action 'none'`) plus the declared origins only,
+  blob:`, `font-src data:`, `connect-src 'none'`, `frame-src blob:` (the
+  view's own frame), `base-uri 'none'`, `form-action 'none'`,
+  `frame-ancestors 'self' file: http://127.0.0.1:<pages port>
+  http://localhost:<pages port>`, plus `http://localhost:5173` in a dev
+  build only (`BISE_DEV`): no other site and no other local server (agents
+  run dev servers all day) may frame a view's proxy and feed it html that
+  would read the view's storage, architect m_50106) plus the declared
+  origins only,
   each directive per the spec (`connectDomains` → connect-src,
   `resourceDomains` → img/script/style/font/media-src, `frameDomains` →
   frame-src, `baseUriDomains` → base-uri). An entry that is not an origin
-  (path, `*` alone, `data:`, a `'keyword'`) is dropped. `domain` is
-  ignored (said in the plugin's page): a stable origin on localhost is
-  not possible.
-- Desktop: `main/guard.ts` and the webRequest filter accept the view
-  hosts of the current pages port; `setPermissionRequestHandler` grants
-  `media` (audio, video), `midi`, `midiSysex: never`, `clipboard-sanitized-write`
-  to a view origin only when its resource declared it and the plugin's
-  grant (C8) has it; everything else denied. MIDI is not in the spec's
+  (path, `*` alone, `data:`, a `'keyword'`, a wildcard port or TLD, a
+  loopback host without a port or on the pages port) is dropped; 32 per
+  list at most. `domain` is ignored (said in the plugin's page): a stable
+  origin on localhost is not possible.
+- Desktop (`main/viewrules.ts` the pure rules, `main/viewframes.ts` the
+  wiring): `main/guard.ts` lets the app set a frame to a view's proxy,
+  the proxy make its blob view, a frame nested in a view go where its CSP
+  lets it; a view or its proxy leaving for any other url is dropped,
+  never sent to his browser. The webRequest filter lets through a view's
+  proxy and the subframes nested in a view. The session's permission
+  handlers grant `media` (audio, video), `midi` and `midiSysex` (Chromium
+  asks `midiSysex` for any `requestMIDIAccess`), `clipboard-sanitized-write`
+  to a view origin only when its live frame's `perms` has it (declared
+  and granted, C8); everything else denied, and denied to any subframe
+  whose origin can't be told (`about:srcdoc`, `about:blank`). MIDI is not in the spec's
   permissions: a view declares it in bise's own key next to `ui` on the
   resource, `_meta["dev.bise/ui"]: {"permissions": {"midi": {}}}` (other
   hosts ignore it; the spec's `_meta.ui.permissions` stays clean), and
@@ -272,7 +292,11 @@ Signed by architect (m_50047), with these owners:
   `ViewSandbox {csp, perms}` (`pages/views.rs`) when it answers
   `view/resource`, and serves `/mcp-app` with that CSP as its header
   (never from the query: a view can navigate its own frame); an unknown
-  hash is 404. The layer tells Electron main its live frames
+  hash is 404. The registry is in memory: after a hub restart the host
+  asks `view/resource` again before it loads the proxy. The origin's hash
+  is sha256, never a fast hash: with a 64-bit non-cryptographic one a
+  hostile plugin could craft a `uri` that lands on another plugin's
+  origin. The layer tells Electron main its live frames
   (`window.bise.views.frames([{origin, agent, call, rect, perms}])`, the
   whole list on each change); main grants a request from `origin` only
   within its `perms`. The camera needs

@@ -3,11 +3,14 @@
 //! (no crate). Every response carries the CSP (no inline, no outside);
 //! a Host other than the server's own is refused (DNS rebinding), and
 //! `/api/*` needs the session token (`X-Bise-Token`, in the shell's
-//! `<meta name="bise-token">`) and the server's own `Origin`.
+//! `<meta name="bise-token">`) and the server's own `Origin`. A view's
+//! own host (`v-<hash>.localhost:<port>`, views.rs, docs/mcp-apps.md C6)
+//! is the one other Host it answers: its sandbox proxy, nothing else.
 
 use super::store::{valid_id, Target};
 use super::{PageMsg, Pages};
 use serde_json::{json, Value};
+use std::borrow::Cow;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::mpsc;
@@ -89,8 +92,9 @@ pub struct Response {
     pub status: u16,
     pub ctype: &'static str,
     pub body: Vec<u8>,
-    /// the response's CSP: [`CSP`], or a site artifact's sandbox (site.rs)
-    pub csp: &'static str,
+    /// the response's CSP: [`CSP`], a site artifact's sandbox (site.rs),
+    /// or a view's (view_csp.rs, built per view)
+    pub csp: Cow<'static, str>,
     /// a redirect's `Location` (a local site's door, artifact/live.rs)
     pub location: Option<String>,
 }
@@ -113,10 +117,10 @@ fn reason(status: u16) -> &'static str {
 
 impl Response {
     pub(crate) fn json(status: u16, v: &Value) -> Response {
-        Response { status, ctype: "application/json", body: v.to_string().into_bytes(), csp: CSP, location: None }
+        Response { status, ctype: "application/json", body: v.to_string().into_bytes(), csp: CSP.into(), location: None }
     }
     fn html(body: String) -> Response {
-        Response { status: 200, ctype: "text/html; charset=utf-8", body: body.into_bytes(), csp: CSP, location: None }
+        Response { status: 200, ctype: "text/html; charset=utf-8", body: body.into_bytes(), csp: CSP.into(), location: None }
     }
     pub(crate) fn err(status: u16, why: &str) -> Response {
         Response::json(status, &json!({"error": why}))
@@ -125,16 +129,16 @@ impl Response {
     /// JSON, which a browser reports as a stylesheet of the wrong MIME type
     /// (Benjamin's -31: "MIME type ('application/json')", the kit missing).
     pub(crate) fn missing(why: &str) -> Response {
-        Response { status: 404, ctype: "text/plain; charset=utf-8", body: why.as_bytes().to_vec(), csp: CSP, location: None }
+        Response { status: 404, ctype: "text/plain; charset=utf-8", body: why.as_bytes().to_vec(), csp: CSP.into(), location: None }
     }
 
     /// A 302 to `to` (a local site's door: its server, or bise's copy).
     pub(crate) fn redirect(to: &str) -> Response {
-        Response { status: 302, ctype: "text/plain; charset=utf-8", body: Vec::new(), csp: CSP, location: Some(to.to_string()) }
+        Response { status: 302, ctype: "text/plain; charset=utf-8", body: Vec::new(), csp: CSP.into(), location: Some(to.to_string()) }
     }
     /// A page that says why (a local site's door when it could not open it).
     pub(crate) fn page(status: u16, html: String) -> Response {
-        Response { status, ctype: "text/html; charset=utf-8", body: html.into_bytes(), csp: CSP, location: None }
+        Response { status, ctype: "text/html; charset=utf-8", body: html.into_bytes(), csp: CSP.into(), location: None }
     }
 
     pub fn bytes(&self) -> Vec<u8> {
@@ -220,6 +224,10 @@ fn same(a: &str, b: &str) -> bool {
 
 /// Everything but the SSE streams.
 pub fn route(pages: &Pages, req: &Request) -> Response {
+    // a view's own origin (views.rs, docs/mcp-apps.md C6): its proxy page only
+    if let Some(hash) = req.header("host").and_then(|h| super::views::view_host(h, pages.port)) {
+        return super::views::route(pages, req, hash);
+    }
     if !host_ok(pages, req) {
         return Response::err(403, "not this server");
     }
@@ -401,9 +409,9 @@ fn artifact_file(pages: &Pages, id: &str, v: &str, rest: &[&str]) -> Response {
         Ok(body) if ctype.starts_with("text/html") => {
             // its kept localStorage, every version's (artifacts_storage, web-storage)
             let kept = crate::artifacts_storage::read(&super::artifact::notes::arts(pages), id);
-            Response { status: 200, ctype, body: super::site::tagged(&body, select, &kept), csp: super::site::ARTIFACT_CSP, location: None }
+            Response { status: 200, ctype, body: super::site::tagged(&body, select, &kept), csp: super::site::ARTIFACT_CSP.into(), location: None }
         }
-        Ok(body) => Response { status: 200, ctype, body, csp: super::site::ARTIFACT_CSP, location: None },
+        Ok(body) => Response { status: 200, ctype, body, csp: super::site::ARTIFACT_CSP.into(), location: None },
         Err(_) => Response::missing(&format!("no such file: {at}")),
     }
 }
@@ -473,7 +481,7 @@ fn page_css(pages: &Pages, id: &str, n: u64) -> Response {
         None if n == 0 && pages.store.meta(id).is_some() => String::new(),
         None => return Response::missing(&format!("no such version: p/{id}/v/{n}/page.css")),
     };
-    Response { status: 200, ctype: "text/css; charset=utf-8", body: super::ui::page_css(&html).into_bytes(), csp: CSP, location: None }
+    Response { status: 200, ctype: "text/css; charset=utf-8", body: super::ui::page_css(&html).into_bytes(), csp: CSP.into(), location: None }
 }
 
 fn kit_file(pages: &Pages, rel: &str) -> Response {
@@ -493,7 +501,7 @@ fn kit_file(pages: &Pages, rel: &str) -> Response {
         _ => return Response::missing(&format!("not served: kit/{rel}")),
     };
     match std::fs::read(pages.kit_dir.join(rel)) {
-        Ok(body) => Response { status: 200, ctype, body, csp: CSP, location: None },
+        Ok(body) => Response { status: 200, ctype, body, csp: CSP.into(), location: None },
         Err(_) => Response::missing(&format!("no such file: kit/{rel}")),
     }
 }

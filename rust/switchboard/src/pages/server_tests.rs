@@ -249,7 +249,7 @@ fn an_html_artifacts_files_are_served_from_its_version() {
     for (path, body) in [("img/shot%20one@2x.png", "PNG1"), ("img/bg.png", "BG"), ("css/site.css", ".x{background:url('../img/bg.png')}")] {
         for at in [format!("/a/menus/1/{path}"), format!("/a/menus/1/framed/{path}")] {
             let r = get(&p, &at);
-            assert_eq!((r.status, text(&r).as_str(), r.csp), (200, body, super::super::site::ARTIFACT_CSP), "{at}");
+            assert_eq!((r.status, text(&r).as_str(), &*r.csp), (200, body, super::super::site::ARTIFACT_CSP), "{at}");
         }
     }
     // architect m_25527: the plain copy gets the storage tag only, the framed both; the kept copy never changes
@@ -579,5 +579,37 @@ fn a_sites_storage_is_kept_by_the_hub_and_seeds_every_version() {
     let big = json!({ "local": {"x": "y".repeat(crate::artifacts_storage::MAX_BYTES + 1)} });
     assert_eq!(post(&p, "/api/a/budget/storage", Some(&tok), Some(o), big).status, 413, "over 5 MB");
     assert_eq!(seed("/a/budget/2/budget.html"), Some(want), "kept as it was");
+    let _ = std::fs::remove_dir_all(d);
+}
+
+/// A view's own origin (docs/mcp-apps.md C6): `v-<hash>.localhost:<port>`
+/// answers its proxy page, with the hub's CSP for that view, and refuses
+/// every other route; the main host has no `/mcp-app`.
+#[test]
+fn a_view_host_serves_its_proxy_and_nothing_else() {
+    let (p, d) = pages();
+    let hash = super::super::views::hash("fake-app", "fake-app", "ui://fake-app/counter");
+    let at = |host: &str, method: &str, path: &str| route(&p, &Request { method: method.into(), path: path.into(), headers: vec![("Host".into(), host.into())], body: vec![] });
+    let vh = format!("v-{hash}.localhost:{}", p.port);
+    assert_eq!(at(&vh, "GET", "/mcp-app").status, 404, "an origin the hub never registered");
+    let declared = json!({"connectDomains": ["https://api.open-meteo.com", "*"], "domain": "https://evil.example"});
+    p.view_sandbox(&hash, super::super::views::ViewSandbox { csp: declared.clone(), perms: vec!["microphone".into()] });
+    let r = at(&vh, "GET", "/mcp-app");
+    assert_eq!(r.status, 200);
+    assert_eq!(r.csp, super::super::view_csp::csp(&declared, p.port, p.view_dev), "the hub's policy, never the request's");
+    assert!(r.csp.contains("connect-src https://api.open-meteo.com;"), "{}", r.csp);
+    let t = text(&r);
+    assert!(t.contains("sandbox-proxy-ready") && t.contains(r#"const ALLOW = "microphone";"#), "{t}");
+    for path in ["/", "/api/p/w/notes", "/p/w", "/kit/kit.css", "/events", "/a/x/1/x.html", "/mcp-app/x", "/v/t1/1-2"] {
+        assert_eq!(at(&vh, "GET", path).status, 403, "{path} on a view host");
+    }
+    assert_eq!(at(&vh, "POST", "/api/p/w/notes").status, 403);
+    assert_eq!(at(&vh, "POST", "/mcp-app").status, 405);
+    // another port, a sub-subdomain, a bad hash: not this server
+    for host in [format!("v-{hash}.localhost:1"), format!("x.v-{hash}.localhost:{}", p.port), format!("v-{}.localhost:{}", &hash[..15], p.port)] {
+        assert_eq!(at(&host, "GET", "/mcp-app").status, 403, "{host}");
+    }
+    // the main host has no proxy
+    assert_eq!(get(&p, "/mcp-app").status, 404);
     let _ = std::fs::remove_dir_all(d);
 }

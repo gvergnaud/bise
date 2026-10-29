@@ -67,7 +67,7 @@ pub fn post(pages: &Pages, segs: &[&str], body: &[u8]) -> Option<Response> {
 
 fn bundle(pages: &Pages, f: &str) -> Response {
     match std::fs::read(pages.office_dir.join(f)) {
-        Ok(body) => Response { status: 200, ctype: "text/javascript; charset=utf-8", body, csp: super::server::CSP, location: None },
+        Ok(body) => Response { status: 200, ctype: "text/javascript; charset=utf-8", body, csp: super::server::CSP.into(), location: None },
         Err(_) => Response::missing(&format!("no such file: kit/office/{f} (office/dist in the app root)")),
     }
 }
@@ -141,7 +141,7 @@ mod tests {
         assert_eq!(text(&get(&p, &format!("/a/{}/1/r.html", html.id))), format!("{}<h1>r</h1>", crate::pages::site::STORAGE_TAG));
 
         let r = get(&p, &format!("/a/{}/view", xlsx.id));
-        assert_eq!((r.status, r.csp), (200, view::VIEW_CSP));
+        assert_eq!((r.status, &*r.csp), (200, view::VIEW_CSP));
         let shell = text(&r);
         assert!(shell.contains("data-version=\"2\" data-latest=\"2\" data-follows"), "{shell}");
         let file = format!("/a/{}/2/q3.xlsx", xlsx.id);

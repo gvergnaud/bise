@@ -186,7 +186,8 @@ export default {
     extraFiles: [{ from: helper, to: 'MacOS/bise-mac-helper' }],
     ...(version === null ? {} : bundleVersions(readFileSync(version, 'utf8'))),
     extendInfo: {
-      NSMicrophoneUsageDescription: 'bise listens while you hold fn, to hear what you ask.',
+      NSMicrophoneUsageDescription: 'bise listens while you hold fn, to hear what you ask, and when a plugin view you allowed records.',
+      NSCameraUsageDescription: 'A plugin view you allowed to use the camera shows or takes a picture.',
       NSAppleEventsUsageDescription: 'bise reads the address of the tab in front when you hold fn.',
     },
   },

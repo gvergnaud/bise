@@ -22,6 +22,8 @@ pub mod server;
 pub mod site;
 pub mod store;
 pub mod ui;
+pub mod view_csp;
+pub mod views;
 pub mod waiting;
 
 use serde_json::{json, Value};
@@ -93,6 +95,12 @@ pub struct Pages {
     /// write or the day moves them (crate::store_gen, send-fast): the
     /// state push asks for them up to 10 times a second
     rows_memo: Mutex<RowsMemo>,
+    /// each view origin's sandbox (views.rs): its hash → what
+    /// `view/resource` registered; lost on a restart (the app asks again)
+    views: Mutex<HashMap<String, views::ViewSandbox>>,
+    /// the app's dev server, who may also frame a view (view_csp.rs): a
+    /// hub run with `BISE_DEV` only
+    pub view_dev: Option<&'static str>,
 }
 
 /// The pages' rows and overdue count, keyed by (store generation, day,
@@ -163,6 +171,8 @@ impl Pages {
             done_at: Mutex::new(HashMap::new()),
             holds: crate::idle::Holds::default(),
             rows_memo: Mutex::default(),
+            views: Mutex::new(HashMap::new()),
+            view_dev: view_csp::dev_ancestor(std::env::var("BISE_DEV").ok().as_deref()),
         }
     }
 
