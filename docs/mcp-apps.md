@@ -93,9 +93,14 @@ an index line on the plugin's virtual server `<cid>` = the bridge's
   `{"v":1,"plugin","server","uri","tool","args":{…},"result":{…},"at_ms"}`,
   atomically, at most 4 MiB (bigger: `result` replaced by
   `{"truncated":true}` and the view shows "result too large").
-  The bridge learns the dir from its `--views-dir` (the REPL passes it
-  from `Paths`; a headless session without a hub: none, nothing written).
-- The daily images prune (`keep_days`) prunes `views/` too.
+  The REPL never builds that path: the hub gives it in an Internal
+  variable declared in `bise_home::env::VARS` (its row and
+  `bise_env.py`), filled from `Paths::agent_views_dir` when the REPL is
+  created; the REPL passes it to the bridge as is (`--views-dir`). A
+  headless session without a hub: none, nothing written.
+- The prune has one owner: the daily images prune
+  (`switchboard::image_care`, `keep_days`) takes `views/` too; no second
+  loop.
 - The model's text is unchanged (`res_text`).
 
 ### C3. The wire line (piece 3 emits, piece 4 reads)
@@ -104,6 +109,8 @@ an index line on the plugin's virtual server `<cid>` = the bridge's
 right after the `tool_result #<id>` line of the same call. A new `Rec`
 (`Rec::ToolView { id, view: ToolViewRef }`), published under the wire
 rule (`tests/released.rs`, fixtures): an older client drops the line.
+The fold attaches it by `#<id>`, never by adjacency (another line can
+come between the two; a test has one there).
 
 ### C4. The thread entry (piece 4)
 
@@ -131,7 +138,31 @@ decision q-vibe), `-32035 rate-limited`, `-32036 server-restarted` (the
 call ran, on a fresh server: in-memory state is gone; said once).
 
 Never an agent op: the views methods are on hub.sock only (an agent's
-`sb` cannot call them).
+`sb` cannot call them; issue 16, a test that an agent's `sb` is refused).
+
+`view/message` also carries `gesture_ms`: when Electron's main process
+last saw a pointer-down inside that view's frame rect (C7). The hub
+decides with it (risk 1); the renderer and the proxy never do.
+
+Signed by architect (m_50047), with these owners:
+
+- off-turn approval cards are sb-core cards: a kind declared in
+  `cardkind.bend` (or `approval` with a typed place `view:<agent>/<call>`),
+  opened and closed by the existing entries, with laws: never in the
+  agent's `waiting` slot, an answer touches only its card, both answer
+  orders give the same state (ALL PROOFS CHECK + `old_core_replay`);
+- the limits (30 `view/call` a minute, 1 `view/message` every 10 s, the
+  5 s gesture window) are a pure shell function per view with its tests,
+  like a throttle (`StateGate`): they decide no wake;
+- the "via <plugin>" author is the message's sender, so sb-core: a typed
+  sender (like the pseudo-senders bise and github, `Party`), never
+  `you`, never a phrase; delivered to that view's agent only, `queued`
+  (never steer). Laws: never `from = user`, one delivery, the right
+  recipient. The prompt wraps it like a page note, and the auto mode's
+  approval checker never counts it as his words (a test: "yes do it" in
+  a `ui/message` approves nothing);
+- `view/context` is the `Part` agreed in m_49840, kept by the hub, lost
+  on a hub restart and said so.
 
 ### C6. Origins and the pages server (piece 6)
 
@@ -219,14 +250,23 @@ the app (`app/open` with the entity `view:<agent>/<call>`).
    - Then approvals: tools the model also sees go through the agent's
      approval mode (q-calls), in an off-turn entry of the gate (risk 3);
      the card says "<plugin> view wants to run <tool>".
+   - **The proxy is not a security boundary; the origin is.** The proxy
+     page and the view share one origin (`srcdoc` + `allow-same-origin`):
+     the view can run code in the proxy and forge anything it reports.
+     Every rule is enforced in the hub (visibility, approvals, limits,
+     the gesture window) and in the host's origin check. Never add a
+     check to the proxy believing it protects anything.
    - Limits in the hub: at most 30 `view/call` a minute per view,
      `view/message` at most 1 every 10 s per view and only within 5 s of
-     a pointer-down inside that view's iframe (the host tracks it: a view
-     cannot send a message on its own); `-32035` past it.
-   - A view's message is never the user's: the entry's author is
-     `via <plugin>` (a typed field, not a phrase), and the model's prompt
-     wraps it as content from a view, the same way it wraps a page note.
-     In auto mode a view message cannot widen the agent's tools.
+     a pointer-down inside that view's frame, as seen by Electron's main
+     process (the webContents' input event, its position in the frame's
+     rect), sent typed as `gesture_ms`: a view cannot send a message on
+     its own, and a pointer-down it forges unlocks nothing (a hostile
+     test); `-32035` past it.
+   - A view's message is never the user's: its sender is `via <plugin>`
+     (a typed sb-core sender, not a phrase), queued to its agent only,
+     wrapped in the prompt like a page note, and never counted as his
+     words by the auto mode's approval checker.
    - The hostile view is the test: Rust and vitest parts before each
      land, its Playwright check on the `mcp-apps` tip after each sandbox
      land and before `sb feature ready`: a leak never reaches main.
