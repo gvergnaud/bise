@@ -49,9 +49,11 @@ async function probe(name, fn) {
 
 async function run() {
   await probe("read-top-location", () => { const h = window.top.location.href; return h !== undefined; });
-  await probe("read-parent-document", () => window.parent.document !== undefined);
+  // window.parent is the proxy page, same origin by design (it is not a
+  // boundary, docs/mcp-apps.md risk 1): the app above it is what must stay out
+  // of reach. The view's own storage persists by design (C6): no probe.
+  await probe("read-top-document", () => window.top.document !== undefined);
   await probe("read-cookie", () => document.cookie.length > 0);
-  await probe("local-storage", () => { localStorage.setItem("x", "1"); return localStorage.getItem("x") === "1"; });
   await probe("fetch-undeclared", async () => { await fetch("https://example.com/"); return true; });
   await probe("fetch-hub-api", async () => { await fetch(location.origin.replace(/\/\/v-[^.]+\./, "//") + "/api/agents", { method: "POST" }); return true; });
   await probe("fetch-declared", async () => { await fetch("https://api.open-meteo.com/v1/forecast?latitude=48.85&longitude=2.35&current=temperature_2m"); return false; });
@@ -59,10 +61,15 @@ async function run() {
     const img = new Image(); img.onload = () => res(true); img.onerror = () => res(false);
     img.src = "https://example.com/favicon.ico";
   }));
+  // a frame blocked by frame-src still loads chrome-error:// (cross-origin):
+  // blocked means the CSP fired its violation for frame-src
   await probe("nested-frame-undeclared", () => new Promise((res) => {
+    let violated = false;
+    const seen = (e) => { if (e.effectiveDirective === "frame-src" || e.violatedDirective.startsWith("frame-src")) violated = true; };
+    document.addEventListener("securitypolicyviolation", seen);
     const f = document.createElement("iframe"); f.src = "https://example.com/";
-    f.onload = () => { try { res(f.contentWindow.location.href !== "about:blank"); } catch { res(true); } };
-    document.body.appendChild(f); setTimeout(() => res(false), 3000);
+    document.body.appendChild(f);
+    setTimeout(() => { document.removeEventListener("securitypolicyviolation", seen); f.remove(); res(!violated); }, 2000);
   }));
   await probe("base-uri-honoured", () => document.baseURI.startsWith("https://evil.example"));
   await probe("open-popup", () => window.open("https://example.com/") !== null);

@@ -42,7 +42,8 @@ proxy page and the CSP are written from the public spec. The public SDK
   the UI extension in `initialize` it lists no `_meta.ui`.
   `$FAKE_APP_LOG` logs each method and tool called.
 - `fake-app/views/hostile.html`: every escape a view can try (top
-  window, cookie, storage, undeclared fetch/img/frame, `<base>`, popup,
+  window and its document, cookie, undeclared fetch/img/frame (a frame
+  counts as blocked when CSP fired its `frame-src` violation), `<base>`, popup,
   top navigation, spoofed host messages, model-only tool, other server's
   tool, `mistral/*`, undeclared mic/camera/MIDI/clipboard, a 200-message
   flood). Each probe is a `[data-probe][data-result=blocked|leaked]` row;
