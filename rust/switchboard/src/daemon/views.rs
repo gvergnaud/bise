@@ -142,6 +142,11 @@ fn server_error(e: &Value) -> RpcError {
     }
 }
 
+/// A request's server could not be reached ([`gone`]'s).
+fn is_gone(e: &RpcError) -> bool {
+    e.data.as_ref().and_then(|d| d.reason.as_deref()) == Some(REASON_SERVER_GONE)
+}
+
 fn gone(why: &str) -> RpcError {
     RpcError { code: -32000, message: format!("the view's server is not reachable: {why}"), data: Some(ErrorData { reason: Some(REASON_SERVER_GONE.into()), ..Default::default() }) }
 }
@@ -341,7 +346,7 @@ impl Shell {
         };
         let Some(dir) = self.dir_of(&p.agent) else { return done(Err(ViewError::Expired.rpc(method))) };
         match method {
-            "view/resource" => self.view_resource(p, dir, done),
+            "view/resource" => self.view_resource(p, dir, done, true),
             "view/call" => self.view_call(p, dir, params, done),
             "view/message" => self.view_message(p, dir, params, done),
             "view/context" => self.view_context(p, dir, params, done),
@@ -369,11 +374,12 @@ impl Shell {
     }
 
     /// The `bridge.json` a view's server is reached through: its agent's
-    /// own bridge while its REPL lives, else the hub's views bridge.
-    fn bridge_json(&mut self, dir: &str) -> Result<(PathBuf, bool), String> {
+    /// own bridge while its REPL lives (`own`: not tried yet), else the
+    /// hub's views bridge.
+    fn bridge_json(&mut self, dir: &str, own: bool) -> Result<(PathBuf, bool), String> {
         // its REPL alive, never only its port known: a REPL just killed
         // leaves a bridge that retires its servers ("turned off")
-        if let Some(port) = self.ports.get(dir).filter(|_| repl_alive(&self.opts.paths.agent_dir(dir).join("repl.pid"))) {
+        if let Some(port) = self.ports.get(dir).filter(|_| own && repl_alive(&self.opts.paths.agent_dir(dir).join("repl.pid"))) {
             let own = self.opts.paths.agent_bridge_json(*port);
             if own.exists() {
                 return Ok((own, false));
@@ -413,9 +419,12 @@ impl Shell {
 
     // ---- view/resource ----
 
-    fn view_resource(&mut self, p: ViewParams, dir: String, done: ViewDone) {
+    /// `own`: its agent's bridge may be tried (a REPL that just died
+    /// leaves one that resets: then once more on the views bridge).
+    fn view_resource(&mut self, p: ViewParams, dir: String, done: ViewDone, own: bool) {
         let file = self.view_file(&dir, &p.call);
-        let bridge = self.bridge_json(&dir);
+        let bridge = self.bridge_json(&dir, own);
+        let via_own = matches!(bridge, Ok((_, false)));
         let step = self.view_step();
         std::thread::spawn(move || {
             let read = || -> Result<(ViewFile, view_call::ResourceRead, Value, Vec<String>), RpcError> {
@@ -434,6 +443,7 @@ impl Shell {
                 Ok((f, r, tool, grant))
             };
             match read() {
+                Err(e) if via_own && is_gone(&e) => step(Box::new(move |sh: &mut Shell| sh.view_resource(p, dir, done, false))),
                 Err(e) => done(Err(e)),
                 Ok((f, r, tool, grant)) => step(Box::new(move |sh: &mut Shell| sh.view_resource_read(f, r, tool, grant, done))),
             }
@@ -478,13 +488,22 @@ impl Shell {
         if !self.views.limits.call(&key, now_ms()) {
             return done(Err(ViewError::RateLimited.rpc(&what)));
         }
-        let file = self.view_file(&dir, &p.call);
-        let bridge = self.bridge_json(&dir);
+        self.view_call_via(key, dir, method, inner, done, true);
+    }
+
+    /// A call judged through a bridge (`own`: its agent's may be tried;
+    /// it reset or refused the connection: once more on the views
+    /// bridge, judging read nothing but the tools).
+    fn view_call_via(&mut self, key: ViewKey, dir: String, method: String, inner: Value, done: ViewDone, own: bool) {
+        let file = self.view_file(&dir, &key.call);
+        let bridge = self.bridge_json(&dir, own);
+        let via_own = matches!(bridge, Ok((_, false)));
         let state_path = bend_plugins::state::state_path();
         let step = self.view_step();
         std::thread::spawn(move || {
             let state = bend_plugins::state::read(&state_path);
             match judge_call(&file, bridge, &method, &inner, &state) {
+                Err(e) if via_own && is_gone(&e) => step(Box::new(move |sh: &mut Shell| sh.view_call_via(key, dir, method, inner, done, false))),
                 Err(e) => done(Err(e)),
                 Ok((f, route, verdict)) => step(Box::new(move |sh: &mut Shell| sh.view_call_judged(key, dir, f, route, method, inner, verdict, done))),
             }
