@@ -72,6 +72,29 @@ def seed_carries_deps_only(tmp, senv):
     check(any(f.startswith("wsx-") for f in s), "the seed itself is left as it is (its own tree may still use it)")
 
 
+def proof_run_reaps_its_own(tmp):
+    """tests/proof_run.py (the PROOF step) reaps its bends with os.wait4(-1)
+    for their CPU time; a Popen it dropped while its bend ran was reaped by
+    subprocess behind its back (Popen.__del__, then the next Popen's cleanup),
+    so wait4 met no child: 'ChildProcessError: no child processes' under load
+    (mcp-apps-bridge, m_50209). A fake bend that ends at once makes that race
+    the rule: 200 proofs files, 4 at a time (40 met it 1 run in 3)."""
+    root, out, fbin = (os.path.join(tmp, "proof-" + d) for d in ("root", "out", "bin"))
+    os.makedirs(os.path.join(root, "bend", "proofs"))
+    os.makedirs(fbin)
+    for i in range(200):
+        open(os.path.join(root, "bend", "proofs", "p%02d.bend" % i), "w").write("x" * (i + 1))
+    with open(os.path.join(fbin, "bend"), "w") as f:
+        f.write("#!/bin/sh\necho ALL PROOFS CHECK\n")
+    os.chmod(os.path.join(fbin, "bend"), 0o755)
+    e = dict(os.environ, PATH=fbin + os.pathsep + os.environ["PATH"])
+    r = subprocess.run([sys.executable, os.path.join(HERE, "proof_run.py"), root, "4", out], env=e,
+                       capture_output=True, text=True, timeout=120)
+    check(r.returncode == 0 and "ok   PROOF" in r.stdout and r.stdout.count("ok   bend/proofs/") == 200,
+          "proof_run.py reaps each of its 200 bends itself, none taken by subprocess: %r"
+          % (r.stdout[-200:] + r.stderr[-300:]))
+
+
 def main():
     tmp = tempfile.mkdtemp(prefix="gate-queue-")
     rec = os.path.join(tmp, "heavy-run.args")
@@ -155,6 +178,7 @@ def main():
     toml = open(os.path.join(HERE, "..", "bise.toml")).read()
     check('setup = "tests/gate.sh seed"' in toml, "bise.toml: [worktree] setup runs gate.sh seed")
     seed_carries_deps_only(tmp, senv)
+    proof_run_reaps_its_own(tmp)
     # 4. the wiring a test can't run whole (a real gate): the nested gate and GATE_NO_HEAVY skip both
     src = open(GATE).read()
     check('if [ "$mode" != land ] && [ -z "$gate_outer" ] && [ -z "${GATE_NO_HEAVY:-}" ]; then' in src,

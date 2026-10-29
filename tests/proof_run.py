@@ -42,11 +42,16 @@ while pending or running:
         f = pending.pop(0)
         log = open(os.path.join(out, f + ".log"), "w")
         p = subprocess.Popen(["bend", os.path.join("proofs", f), "--check-only"], cwd=bend, stdout=log, stderr=subprocess.STDOUT)
-        running[p.pid] = (f, time.time(), log)
+        # the Popen is kept until wait4 reaps its bend: one dropped while its bend ran was
+        # reaped by subprocess itself (Popen.__del__, then the next Popen's cleanup), and
+        # wait4 then met no child, 'ChildProcessError: no child processes' under load (m_50209)
+        running[p.pid] = (f, time.time(), log, p)
     pid, status, ru = os.wait4(-1, 0)
     if pid not in running:
         continue
-    f, s, log = running.pop(pid)
+    f, s, log, p = running.pop(pid)
+    # reaped here: subprocess must never wait for that pid again (another child may reuse it)
+    p.returncode = os.waitstatus_to_exitcode(status)
     log.close()
     cpu = ru.ru_utime + ru.ru_stime
     cpu_total += cpu
