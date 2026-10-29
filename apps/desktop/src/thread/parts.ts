@@ -130,7 +130,8 @@ export function partsGist(parts: readonly Part[]): string {
       const file = p.source.split('/').at(-1) ?? '';
       words += `▣ ${p.name.startsWith('[') || file === '' ? p.name : file}`;
     } else if (p.kind === 'page') words += p.notes.map((n) => pageNoteWords(n, true)).join(' · ');
-    else if (p.kind === 'hint' || p.kind === 'forwarded') continue;
+    // a view's context rides his send for the model, never his words
+    else if (p.kind === 'hint' || p.kind === 'forwarded' || p.kind === 'view_context') continue;
     else if (p.name !== undefined && p.name !== '') words += `▯ ${p.path.split('/').at(-1) ?? p.path}`;
     else words += ` ${p.path}`;
   }
