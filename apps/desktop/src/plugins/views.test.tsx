@@ -2,7 +2,7 @@
 // A plugin's views (C8): the VIEWS group's switches send the view's whole grant; a permission off
 // says 'not granted'; the add screen's switches become one grant per view after the confirm.
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AppCmd, PluginPart } from '@/proto';
 import { grantsOf, partsOfList, ticked, ViewsGroup, ViewsStep } from './ViewsGroup';
 import type { PluginViewsCmd, ViewAnswer } from '@/views/port';
@@ -97,12 +97,34 @@ describe("the add's step 2: the server's views once it runs", () => {
     expect(closed).toBe(1);
   });
 
-  it('nothing found, or the hub can not tell: it closes at once, nothing granted', async () => {
+  it('nothing found, or the hub can not tell: asked again a few times, then it closes, nothing granted', async () => {
+    vi.useFakeTimers();
     const sent: AppCmd[] = [];
     let closed = 0;
-    render(<ViewsStep plugin="docs" project="home" skip={[]} ask={() => Promise.resolve({ error: { code: -32603, message: 'gone' } })} send={(c) => sent.push(c)} onClose={() => { closed += 1; }} />);
-    await act(async () => { await Promise.resolve(); });
-    expect(closed).toBe(1);
+    let asked = 0;
+    render(<ViewsStep plugin="docs" project="home" skip={[]} wait={{ every: 1000, upTo: 2000 }} ask={() => { asked += 1; return Promise.resolve({ error: { code: -32603, message: 'gone' } }); }} send={(c) => sent.push(c)} onClose={() => { closed += 1; }} />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect([asked, closed]).toEqual([1, 0]);
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    expect([asked, closed]).toEqual([3, 1]);
     expect(sent).toEqual([]);
+    vi.useRealTimers();
+  });
+
+  it("the bridge not ready yet (404, 404, then the list): still 'starting…', then its switches", async () => {
+    vi.useFakeTimers();
+    let n = 0;
+    let closed = 0;
+    const v = render(<ViewsStep plugin="piano" project="home" skip={[]} ask={() => Promise.resolve(n++ < 2 ? { error: { code: -32000, message: '404' } } : { result: LIST })} send={() => undefined} onClose={() => { closed += 1; }} />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(v.getByTestId('plugins.views_step.starting')).toBeTruthy();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(v.getByTestId('plugins.views_step.starting')).toBeTruthy();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(n).toBe(3);
+    expect(v.queryByTestId('plugins.views_step.starting')).toBeNull();
+    expect(v.getByTestId('plugins.preview.view.piano#view:ui%3A%2F%2Fpiano%2Fscore.perm.midi.toggle')).toBeTruthy();
+    expect(closed).toBe(0);
+    vi.useRealTimers();
   });
 });

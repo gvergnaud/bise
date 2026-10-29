@@ -164,25 +164,39 @@ export function partsOfList(plugin: string, result: unknown, skip: readonly stri
   return out;
 }
 
+/** How step 2 waits for a server's views: asked again `every` ms while none came, for `upTo` ms (the hub's views bridge rereads plugins every 2 s, its READY_WAIT is 12 s). */
+export const STEP_WAIT = { every: 1000, upTo: 15_000 } as const;
+
 /**
  * The add's step 2 (C8): once the plugin runs, its server's views with their ticks; 'done' grants
- * what he ticked; nothing found (or the hub can't tell) closes it at once.
+ * what he ticked. Nothing found yet (the views bridge may not have loaded the plugin: a 404, an
+ * empty list; examples m_50524) is asked again each second for 15 s, still 'starting…'; then it closes.
  */
-export function ViewsStep({ plugin, project, skip, ask, send, onClose }: { plugin: string; project: string; skip: readonly string[]; ask: PluginViewsAsk; send: (cmd: AppCmd) => void; onClose: () => void }) {
+export function ViewsStep({ plugin, project, skip, ask, send, onClose, wait = STEP_WAIT }: { plugin: string; project: string; skip: readonly string[]; ask: PluginViewsAsk; send: (cmd: AppCmd) => void; onClose: () => void; wait?: { readonly every: number; readonly upTo: number } }) {
   const [parts, setParts] = useState<PluginPart[] | null>(null);
   const [ticks, setTicks] = useState<Record<string, readonly string[]>>({});
   useEffect(() => {
     let live = true;
-    void ask({ cmd: 'plugin_views', project, plugin }).then((a) => {
-      if (!live) return;
-      const found = 'error' in a ? [] : partsOfList(plugin, a.result, skip);
-      if (found.length === 0) onClose();
-      else setParts(found);
-    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let left = wait.upTo;
+    const once = () => {
+      void ask({ cmd: 'plugin_views', project, plugin }).then((a) => {
+        if (!live) return;
+        const found = 'error' in a ? [] : partsOfList(plugin, a.result, skip);
+        if (found.length > 0) setParts(found);
+        else if (left <= 0) onClose();
+        else {
+          left -= wait.every;
+          timer = setTimeout(once, wait.every);
+        }
+      });
+    };
+    once();
     return () => {
       live = false;
+      if (timer !== undefined) clearTimeout(timer);
     };
-  }, [ask, project, plugin, skip, onClose]);
+  }, [ask, project, plugin, skip, onClose, wait.every, wait.upTo]);
   return (
     <Sheet open onClose={onClose} title={views.step_head({ name: plugin })} testId="plugins.views_step"
       foot={

@@ -67,11 +67,11 @@ function Foot({ state, view, agent, onPanel }: { state: Extract<ViewState, { kin
     <div className="vw-foot">
       {notes.map((n, i) => (
         <span key={n.key} className="vw-note" data-testid={`views.note.${n.key}`}>
-          {i > 0 && ' · '}
+          {i > 0 && '\u00a0·\u00a0'}
           {n.node}
         </span>
       ))}
-      {notes.length > 0 && ' · '}
+      {notes.length > 0 && <span className="vw-note">{'\u00a0·\u00a0'}</span>}
       <Press look="vw-act" {...quiet} onClick={onPanel} data-testid="views.fullscreen">
         {views.open_panel}
       </Press>
@@ -151,9 +151,7 @@ export const ViewCard = memo(function ViewCard({ project, agent, view, store = v
       <div className="vw-card vw-gone" data-testid={testId} data-state="expired">
         <div className="vw-line" data-testid="views.state.expired">
           <AppIcon name="plugins" size={14} />
-          {uriName(view.uri)}
-          {' · '}
-          {views.expired}
+          <span>{`${uriName(view.uri)} · ${views.expired}`}</span>
         </div>
       </div>
     );
@@ -168,10 +166,8 @@ export const ViewCard = memo(function ViewCard({ project, agent, view, store = v
       <div className="vw-card" data-testid={testId} data-state="panel">
         <div className="vw-line" data-testid="views.state.panel">
           <AppIcon name="plugins" size={14} />
-          {state.tool === '' ? uriName(view.uri) : humanName(state.tool)}
-          {' · '}
-          {views.in_panel}
-          {' · '}
+          {/* one text run, its separators kept as text (a flex item each lost its '·' in light, designer m_50534) */}
+          <span>{`${state.tool === '' ? uriName(view.uri) : humanName(state.tool)} · ${views.in_panel} ·`}</span>
           <Press
             look="vw-act"
             {...quiet}
