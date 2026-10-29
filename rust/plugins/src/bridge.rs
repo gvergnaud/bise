@@ -44,6 +44,7 @@ use crate::resolve::{self, Diagnostic, HttpServer, Plugin, Resolution, Severity,
 use crate::state;
 use crate::status;
 use crate::tools_cache::{self, Cache, Listed};
+use crate::views::{ResourceCache, Virtual};
 use crate::stdio::Client;
 
 /// A server's start, handshake and first tools/list when its mcp.json
@@ -130,6 +131,12 @@ impl Opts {
         }
     }
 }
+
+/// `D/bridge.json`: `{"v": 1, "base": "http://127.0.0.1:<port>/<token>",
+/// "pid"}`, written before `ready`: a server's route is
+/// `<base>/<plugin>/<server>`, a plugin's static views
+/// `<base>/<plugin>/~views` (the hub's view calls, docs/mcp-apps.md).
+pub const BRIDGE_FILE: &str = "bridge.json";
 
 /// At most this many tool names ride on an "unknown tool" answer.
 pub const NAMES_SHOWN: usize = 50;
@@ -333,6 +340,9 @@ struct Entry {
     init: Mutex<Option<Value>>,
     /// its last call's end (or start): the idle stop's clock
     last_call: Mutex<Instant>,
+    /// the `ui://` resources it answered since it started
+    /// ([`crate::views::ResourceCache`])
+    resources: ResourceCache,
 }
 
 impl Entry {
@@ -382,6 +392,7 @@ impl Entry {
             cache_key,
             init: Mutex::new(None),
             last_call: Mutex::new(Instant::now()),
+            resources: ResourceCache::default(),
         }
     }
 
@@ -541,6 +552,13 @@ impl Entry {
             e => e.to_string(),
         };
         *lock(&self.last_call) = Instant::now();
+        // a view's HTML: read once per start of its server
+        let ui_uri = crate::views::ui_read(method, &params);
+        if dead {
+            self.resources.clear();
+        } else if let Some(hit) = ui_uri.as_deref().and_then(|u| self.resources.get(u)) {
+            return Ok(hit);
+        }
         if dead {
             let c = self.start().map_err(said)?;
             *lock(&self.pid) = c.pid();
@@ -557,6 +575,9 @@ impl Entry {
         let c = guard.as_ref().ok_or("no server")?;
         let answer = c.request_raw(method, params, self.spec.call_timeout()).map_err(said);
         *lock(&self.last_call) = Instant::now();
+        if let (Some(u), Ok(a)) = (ui_uri.as_deref(), &answer) {
+            self.resources.put(u, a);
+        }
         match (answer, tool) {
             (Ok(a), Some(src)) if a.pointer("/error/code").and_then(Value::as_i64) == Some(tools_cache::UNKNOWN_TOOL) => Ok(self.unknown_tool(c, a, &src)),
             (answer, _) => answer,
@@ -663,17 +684,24 @@ fn flat(s: &str) -> String {
     s.chars().map(|c| if c == '\n' || c == '\r' { ' ' } else { c }).collect()
 }
 
-/// The connector index format: `<cid> <group> <tool> : #<desc> | input: <schema>`
-pub fn index_line(cid: &str, group: &str, tool: &str, desc: &str, schema: Option<&Value>) -> String {
+/// The connector index format: `<cid> <group> <tool> : #<desc> | input: <schema>`,
+/// then ` | ui: <uri>` for a tool with a view (docs/mcp-apps.md C1: the
+/// last field, [`crate::views::ui_field`]).
+pub fn index_line(cid: &str, group: &str, tool: &str, desc: &str, schema: Option<&Value>, ui: Option<&str>) -> String {
     let schema = schema.map(|s| format!(" | input: {}", flat(&s.to_string()))).unwrap_or_default();
-    format!("{} {} {} : #{}{}\n", cid, group, tool, flat(desc), schema)
+    let ui = ui.map(crate::views::ui_field).unwrap_or_default();
+    format!("{} {} {} : #{}{}{}\n", cid, group, tool, flat(desc), schema, ui)
 }
 
 /// The index lines of every entry's tools that are on in `state`, in
-/// order; sets each entry's published names (every allowed tool, on or
-/// off: a call to an off one is refused by its own name). Two tools of
-/// one plugin with one name: the later is dropped (a diagnostic).
-fn index_of(entries: &[Arc<Entry>], base: &str, state: &StateV2) -> (String, Vec<Diagnostic>, HashMap<String, usize>) {
+/// order, then each plugin's static views (its virtual server); sets
+/// each entry's published names (every allowed tool, on or off: a call
+/// to an off one is refused by its own name). Two tools of one plugin
+/// with one name: the later is dropped (a diagnostic). A tool only a
+/// view may call (`_meta.ui.visibility` without `model`) is published
+/// (callable) but never in the index; a tool with a view ends its line
+/// with ` | ui: <uri>`.
+fn index_of(entries: &[Arc<Entry>], virtuals: &[Arc<Virtual>], base: &str, state: &StateV2) -> (String, Vec<Diagnostic>, HashMap<String, usize>) {
     let mut index = String::new();
     let mut diags = Vec::new();
     let mut counts = HashMap::new();
@@ -699,15 +727,36 @@ fn index_of(entries: &[Arc<Entry>], base: &str, state: &StateV2) -> (String, Vec
                 continue;
             }
             used.push(published.clone());
-            if state.is_on(&e.tool_id(src), e.opt_in) {
+            let ui = crate::views::tool_ui(t);
+            if ui.model && state.is_on(&e.tool_id(src), e.opt_in) {
                 let desc = t.get("description").and_then(Value::as_str).unwrap_or("");
-                index.push_str(&index_line(&cid, &e.namespace, &published, desc, t.get("inputSchema")));
+                index.push_str(&index_line(&cid, &e.namespace, &published, desc, t.get("inputSchema"), ui.uri.as_deref()));
                 shown += 1;
             }
             names.insert(published, src.to_string());
         }
         counts.insert(e.key.clone(), shown);
         *lock(&e.names) = names;
+    }
+    for v in virtuals {
+        let cid = format!("{}/{}", base, v.key());
+        let used = taken.entry(v.plugin.as_str()).or_default();
+        let owner = PluginId::plugin(v.plugin.as_str());
+        for view in &v.views {
+            if used.contains(&view.tool) {
+                diags.push(Diagnostic {
+                    code: "plugin.tool.name_collision",
+                    severity: Severity::Warning,
+                    plugin: v.plugin.clone(),
+                    message: format!("view {}.{} is already a tool's name; dropped", v.namespace, view.tool),
+                });
+                continue;
+            }
+            used.push(view.tool.clone());
+            if state.is_on(&owner.part(PartKind::Tool, Some(crate::views::SERVER), view.tool.as_str()), v.opt_in) {
+                index.push_str(&index_line(&cid, &v.namespace, &view.tool, &view.description, Some(&view.input_schema), Some(&view.uri)));
+            }
+        }
     }
     (index, diags, counts)
 }
@@ -736,6 +785,8 @@ struct Live {
     /// login or a late start brought it up
     changed: Sender<String>,
     entries: RwLock<Vec<Arc<Entry>>>,
+    /// each loaded plugin's static views, its virtual server `~views`
+    virtuals: RwLock<Vec<Arc<Virtual>>>,
     state: RwLock<StateV2>,
     res: Mutex<Resolution>,
     catalog: Mutex<Catalog>,
@@ -751,6 +802,10 @@ struct Live {
 impl Live {
     fn entries(&self) -> Vec<Arc<Entry>> {
         self.entries.read().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+
+    fn virtuals(&self) -> Vec<Arc<Virtual>> {
+        self.virtuals.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     fn state(&self) -> StateV2 {
@@ -803,6 +858,12 @@ impl Live {
             }
         }
         *self.entries.write().unwrap_or_else(|e| e.into_inner()) = next;
+        let virtuals = res
+            .loaded()
+            .filter(|p| !p.views.is_empty())
+            .map(|p| Arc::new(Virtual { plugin: p.name.clone(), namespace: p.namespace.clone(), opt_in: p.opt_in, views: p.views.clone() }))
+            .collect();
+        *self.virtuals.write().unwrap_or_else(|e| e.into_inner()) = virtuals;
         *lock(&self.res) = res;
     }
 
@@ -810,7 +871,7 @@ impl Live {
     fn files(&self) -> (String, String) {
         let entries = self.entries();
         let state = self.state();
-        let (mut index, diags, counts) = index_of(&entries, &self.base, &state);
+        let (mut index, diags, counts) = index_of(&entries, &self.virtuals(), &self.base, &state);
         for l in connectors::index_lines(&lock(&self.catalog), &state) {
             index.push_str(&l);
             index.push('\n');
@@ -968,7 +1029,7 @@ fn launch(live: Arc<Live>, e: Arc<Entry>) {
         if live.ready.load(Ordering::SeqCst) {
             live.publish();
             if matches!(*lock(&e.outcome), Outcome::Up | Outcome::Listed) {
-                let counts = index_of(&live.entries(), &live.base, &live.state()).2;
+                let counts = index_of(&live.entries(), &live.virtuals(), &live.base, &live.state()).2;
                 e.status(Ok(counts.get(&e.key).copied().unwrap_or(0)));
             }
         }
@@ -1025,13 +1086,15 @@ fn refresh_loop(rx: Receiver<String>, live: Arc<Live>) {
                     if e.cache_key.is_some() {
                         *lock(&e.init) = Some(init);
                     }
+                    // its views may have changed with its tools
+                    e.resources.clear();
                     *lock(&e.tools) = ts;
                 }
                 Err(err) => e.status(Err(format!("tools/list: {}", err))),
             }
         }
         live.publish();
-        let counts = index_of(&live.entries(), &live.base, &live.state()).2;
+        let counts = index_of(&live.entries(), &live.virtuals(), &live.base, &live.state()).2;
         for e in live.entries().iter().filter(|e| lock(&e.client).is_some()) {
             e.status(Ok(counts.get(&e.key).copied().unwrap_or(0)));
         }
@@ -1159,8 +1222,30 @@ fn stamp(answer: Value, id: Value) -> String {
     }
 }
 
+/// One JSON-RPC message for a plugin's virtual server of static views:
+/// (HTTP status, body). A view turned off is refused like an off tool.
+fn handle_virtual(live: &Live, v: &Virtual, body: &[u8]) -> (&'static str, String) {
+    let Ok(msg) = serde_json::from_slice::<Value>(body) else {
+        return ("400 Bad Request", rpc_error(&Value::Null, -32700, "parse error"));
+    };
+    let Some(id) = msg.get("id").cloned() else {
+        return ("202 Accepted", String::new());
+    };
+    let method = msg.get("method").and_then(Value::as_str).unwrap_or("");
+    let params = msg.get("params").cloned().unwrap_or_else(|| json!({}));
+    if method == "tools/call" {
+        let tool = params.get("name").and_then(Value::as_str).unwrap_or("");
+        let part = PluginId::plugin(v.plugin.as_str()).part(PartKind::Tool, Some(crate::views::SERVER), tool);
+        if !live.state_now().is_on(&part, v.opt_in) {
+            return ("200 OK", rpc_error(&id, -32000, &off_error(&format!("{}.{}", v.namespace, tool))));
+        }
+    }
+    ("200 OK", stamp(v.answer(method, &params), id))
+}
+
 /// A server turned off keeps its URL until the REPL reads the new index:
 /// its entry (retired) answers, by the off words; one never known is a 404.
+/// `<plugin>/~views` is that plugin's virtual server of static views.
 fn connection(stream: TcpStream, token: String, live: Arc<Live>, retired: Arc<Mutex<Vec<Arc<Entry>>>>) {
     let Ok(mut w) = stream.try_clone() else { return };
     let mut r = BufReader::new(stream);
@@ -1168,10 +1253,12 @@ fn connection(stream: TcpStream, token: String, live: Arc<Live>, retired: Arc<Mu
         let prefix = format!("/{}/", token);
         let key = req.path.strip_prefix(&prefix).map(|k| k.trim_end_matches('/').to_string());
         let find = |k: &str| live.entries().into_iter().find(|e| e.key == k).or_else(|| lock(&retired).iter().rev().find(|e| e.key == k).cloned());
-        let out = match (req.method.as_str(), key.and_then(|k| find(&k))) {
-            ("POST", Some(e)) => handle_rpc(&live, &e, &req.body),
-            (_, Some(_)) => ("405 Method Not Allowed", String::new()),
-            (_, None) => ("404 Not Found", String::new()),
+        let virt = key.as_deref().and_then(|k| live.virtuals().into_iter().find(|v| v.key() == k));
+        let out = match (req.method.as_str(), key.and_then(|k| find(&k)), virt) {
+            ("POST", Some(e), _) => handle_rpc(&live, &e, &req.body),
+            ("POST", None, Some(v)) => handle_virtual(&live, &v, &req.body),
+            (_, Some(_), _) | (_, None, Some(_)) => ("405 Method Not Allowed", String::new()),
+            (_, None, None) => ("404 Not Found", String::new()),
         };
         if respond(&mut w, out.0, &out.1).is_err() || req.close {
             break;
@@ -1221,6 +1308,7 @@ pub fn serve(opts: Opts) -> std::io::Result<()> {
         idle_stop: opts.idle_stop,
         changed: changed_tx.clone(),
         entries: RwLock::new(Vec::new()),
+        virtuals: RwLock::new(Vec::new()),
         state: RwLock::new(roots.state.clone()),
         res: Mutex::new(Resolution::default()),
         catalog: Mutex::new(Catalog::default()),
@@ -1272,10 +1360,13 @@ pub fn serve(opts: Opts) -> std::io::Result<()> {
     live.publish();
     for e in live.entries() {
         if matches!(*lock(&e.outcome), Outcome::Up | Outcome::Listed) {
-            let counts = index_of(&live.entries(), &live.base, &live.state()).2;
+            let counts = index_of(&live.entries(), &live.virtuals(), &live.base, &live.state()).2;
             e.status(Ok(counts.get(&e.key).copied().unwrap_or(0)));
         }
     }
+    // where the hub reaches this bridge for a view's calls
+    // (docs/mcp-apps.md C5)
+    write_atomic(&opts.dir.join(BRIDGE_FILE), &json!({"v": 1, "base": live.base, "pid": std::process::id()}).to_string())?;
     write_atomic(&opts.dir.join("ready"), &format!("{}\n", std::process::id()))?;
     {
         let live = live.clone();
@@ -1347,7 +1438,7 @@ pub fn serve(opts: Opts) -> std::io::Result<()> {
         logins(&live.entries());
         let stopped: Vec<Arc<Entry>> = live.entries().into_iter().filter(|e| e.stop_if_idle(live.idle_stop)).collect();
         if !stopped.is_empty() {
-            let counts = index_of(&live.entries(), &live.base, &live.state()).2;
+            let counts = index_of(&live.entries(), &live.virtuals(), &live.base, &live.state()).2;
             for e in stopped {
                 e.status(Ok(counts.get(&e.key).copied().unwrap_or(0)));
             }

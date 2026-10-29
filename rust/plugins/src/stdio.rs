@@ -20,7 +20,7 @@ pub const PROTOCOL: &str = "2025-06-18";
 /// tools too), so the tools cache's key holds them
 /// (`crate::tools_cache::key`).
 pub fn init_params() -> Value {
-    json!({"protocolVersion": PROTOCOL, "capabilities": {},
+    json!({"protocolVersion": PROTOCOL, "capabilities": crate::views::client_capabilities(),
            "clientInfo": {"name": "bend-harness", "version": "1.0"}})
 }
 

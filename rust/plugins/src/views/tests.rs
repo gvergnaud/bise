@@ -1,0 +1,149 @@
+use super::*;
+
+fn fixtures() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/mcp-apps")
+}
+
+fn tmp(tag: &str) -> PathBuf {
+    let d = std::env::temp_dir().join(format!("bp-views-{}-{}", tag, std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).unwrap();
+    d.canonicalize().unwrap()
+}
+
+fn write(p: &Path, text: &str) {
+    std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+    std::fs::write(p, text).unwrap();
+}
+
+#[test]
+fn the_extension_is_announced_with_its_mime_type() {
+    let c = client_capabilities();
+    assert_eq!(c["extensions"][EXT]["mimeTypes"], json!([MIME]));
+    // the stdio and remote clients send it (and the tools cache's key holds it)
+    assert_eq!(crate::stdio::init_params()["capabilities"], c);
+}
+
+#[test]
+fn a_tools_meta_ui_is_read_with_the_specs_defaults() {
+    let plain = tool_ui(&json!({"name": "a"}));
+    assert_eq!(plain, ToolUi { uri: None, model: true, app: true });
+    let view = tool_ui(&json!({"name": "a", "_meta": {"ui": {"resourceUri": "ui://x/counter"}}}));
+    assert_eq!(view, ToolUi { uri: Some("ui://x/counter".into()), model: true, app: true });
+    let app = tool_ui(&json!({"name": "a", "_meta": {"ui": {"visibility": ["app"]}}}));
+    assert_eq!((app.model, app.app), (false, true));
+    let model = tool_ui(&json!({"name": "a", "_meta": {"ui": {"visibility": ["model"]}}}));
+    assert_eq!((model.model, model.app), (true, false));
+    let none = tool_ui(&json!({"name": "a", "_meta": {"ui": {"visibility": []}}}));
+    assert_eq!((none.model, none.app), (false, false));
+    // the older flat key
+    let flat = tool_ui(&json!({"name": "a", "_meta": {"ui/resourceUri": "ui://x/old"}}));
+    assert_eq!(flat.uri.as_deref(), Some("ui://x/old"));
+    // only ui:// URIs are views
+    for bad in [json!("https://x/y"), json!("ui://"), json!(3)] {
+        assert_eq!(tool_ui(&json!({"_meta": {"ui": {"resourceUri": bad}}})).uri, None);
+    }
+}
+
+#[test]
+fn the_ui_field_has_no_space_and_stays_one_line() {
+    assert_eq!(ui_field("ui://fake-app/counter"), " | ui: ui://fake-app/counter");
+    assert_eq!(ui_field("ui://a b/c|d\n%"), " | ui: ui://a%20b/c%7Cd%0A%25");
+    assert!(!ui_field("ui://x/é y").trim_start_matches(" | ui: ").contains(' '));
+}
+
+#[test]
+fn the_fixtures_static_view_loads_as_a_tool() {
+    let root = fixtures().join("fake-views");
+    let (views, diags) = load("fake-views", &root);
+    assert!(diags.is_empty(), "{:?}", diags);
+    assert_eq!(views.len(), 1);
+    let v = &views[0];
+    assert_eq!((v.name.as_str(), v.tool.as_str(), v.uri.as_str()), ("hello", "hello", "ui://fake-views/views/hello"));
+    assert!(v.description.starts_with("Greet someone"), "{}", v.description);
+    assert_eq!(v.input_schema["required"], json!(["name"]));
+    assert!(v.ui["csp"].is_object());
+    assert!(v.html.ends_with("hello/index.html"));
+}
+
+#[test]
+fn a_bad_view_is_dropped_with_a_warning() {
+    let root = tmp("bad");
+    let views = root.join(VIBE_EXTENSION).join("views");
+    // good, with a dash: its tool is an identifier
+    write(&views.join("my-view/view.json"), r#"{"name":"my-view","description":"d"}"#);
+    write(&views.join("my-view/index.html"), "<p>hi</p>");
+    // name differs from its folder
+    write(&views.join("other/view.json"), r#"{"name":"wrong"}"#);
+    write(&views.join("other/index.html"), "x");
+    // no index.html
+    write(&views.join("nohtml/view.json"), r#"{"name":"nohtml"}"#);
+    // not JSON
+    write(&views.join("broken/view.json"), "{");
+    write(&views.join("broken/index.html"), "x");
+    // a bad schema
+    write(&views.join("schema/view.json"), r#"{"name":"schema","inputSchema":3}"#);
+    write(&views.join("schema/index.html"), "x");
+    // a folder outside the plugin
+    #[cfg(unix)]
+    {
+        let out = tmp("bad-outside");
+        write(&out.join("view.json"), r#"{"name":"escape"}"#);
+        write(&out.join("index.html"), "x");
+        std::os::unix::fs::symlink(&out, views.join("escape")).unwrap();
+    }
+    let (got, diags) = load("p", &root);
+    assert_eq!(got.iter().map(|v| v.tool.as_str()).collect::<Vec<_>>(), vec!["my_view"]);
+    assert_eq!(got[0].input_schema, json!({"type": "object"}));
+    let n = if cfg!(unix) { 5 } else { 4 };
+    assert_eq!(diags.len(), n, "{:?}", diags);
+    assert!(diags.iter().all(|d| d.code == "plugin.view.invalid" && d.severity == Severity::Warning));
+    assert!(diags.iter().any(|d| d.message.contains("outside")) || !cfg!(unix));
+}
+
+#[test]
+fn the_virtual_server_answers_like_a_server() {
+    let (views, _) = load("fake-views", &fixtures().join("fake-views"));
+    let v = Virtual { plugin: "fake-views".into(), namespace: "fake_views".into(), opt_in: false, views };
+    assert_eq!(v.key(), "fake-views/~views");
+    let init = v.answer("initialize", &json!({}));
+    assert!(init["result"]["capabilities"]["resources"].is_object());
+    let list = v.answer("tools/list", &json!({}));
+    let t = &list["result"]["tools"][0];
+    assert_eq!(t["name"], "hello");
+    assert_eq!(t["_meta"]["ui"]["resourceUri"], "ui://fake-views/views/hello");
+    assert_eq!(tool_ui(t).uri.as_deref(), Some("ui://fake-views/views/hello"));
+    let call = v.answer("tools/call", &json!({"name": "hello", "arguments": {"name": "Ada"}}));
+    assert_eq!(call["result"]["structuredContent"], json!({"name": "Ada"}));
+    assert_eq!(call["result"]["content"][0]["type"], "text");
+    assert_eq!(v.answer("tools/call", &json!({"name": "nope"}))["error"]["code"], -32602);
+    let read = v.answer("resources/read", &json!({"uri": "ui://fake-views/views/hello"}));
+    let c = &read["result"]["contents"][0];
+    assert_eq!(c["mimeType"], MIME);
+    assert!(c["text"].as_str().unwrap().contains("<"));
+    assert!(c["_meta"]["ui"]["csp"].is_object());
+    assert_eq!(v.answer("resources/read", &json!({"uri": "ui://other"}))["error"]["code"], -32602);
+    assert_eq!(v.answer("resources/list", &json!({}))["result"]["resources"][0]["mimeType"], MIME);
+    assert_eq!(v.answer("sampling/createMessage", &json!({}))["error"]["code"], -32601);
+}
+
+#[test]
+fn the_resource_cache_keeps_ui_results_only() {
+    assert_eq!(ui_read("resources/read", &json!({"uri": "ui://a/b"})).as_deref(), Some("ui://a/b"));
+    assert_eq!(ui_read("resources/read", &json!({"uri": "file:///etc"})), None);
+    assert_eq!(ui_read("tools/call", &json!({"uri": "ui://a/b"})), None);
+    let c = ResourceCache::default();
+    c.put("ui://a/err", &json!({"error": {"code": 1}}));
+    assert!(c.is_empty());
+    c.put("ui://a/big", &json!({"result": {"text": "x".repeat(MAX_HTML as usize + 1)}}));
+    assert!(c.is_empty());
+    let ok = json!({"result": {"contents": []}});
+    c.put("ui://a/ok", &ok);
+    assert_eq!(c.get("ui://a/ok"), Some(ok));
+    for i in 0..MAX_CACHED + 5 {
+        c.put(&format!("ui://a/{}", i), &json!({"result": {}}));
+    }
+    assert_eq!(c.len(), MAX_CACHED);
+    c.clear();
+    assert!(c.is_empty());
+}

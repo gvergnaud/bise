@@ -32,6 +32,9 @@
 //!   keys; names only), the evidence the 'connect your tools' band ranks
 //!   and says why by;
 //! - `secrets`: the values of an MCP server's `${VAR}` he typed in;
+//! - `views`: MCP Apps on the bridge's side: the UI extension, a tool's
+//!   `_meta.ui`, the Vibe static views and their virtual server, the
+//!   `ui://` resource cache (docs/mcp-apps.md);
 //! - `visibility`: whether a view's call may run (its own server's
 //!   app-visible tools only; docs/mcp-apps.md, risk 1).
 
@@ -63,4 +66,5 @@ pub mod status;
 pub mod stdio;
 pub mod title;
 pub mod tools_cache;
+pub mod views;
 pub mod visibility;

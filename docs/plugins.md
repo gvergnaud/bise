@@ -33,10 +33,14 @@ Supported now (the portable base of the spec):
 Not supported yet, reported as `plugin.component.unsupported` in the
 diagnostics (the rest of the plugin still loads):
 
-- everything under `ai.mistral.vibe/` (hooks, agents, knowledge, views),
-  `connectors.json`, `libraries.json`;
-- the `ai.mistral.vibe` manifest extension (`toolNamespace`,
-  `toolOverrides`, `displayName`): read by no one, reported once.
+- everything under `ai.mistral.vibe/` but views (hooks, agents,
+  knowledge), `connectors.json`, `libraries.json`; views without the
+  `ai.mistral.vibe` extension in plugin.json;
+- the `ai.mistral.vibe` extension's fields (`toolNamespace`,
+  `toolOverrides`, `displayName`): read by no one. The extension itself
+  is known: it turns on the plugin's static views
+  (`ai.mistral.vibe/views/<name>/`, docs/mcp-apps.md), each one a tool of
+  the plugin's virtual server `~views` (`bend_plugins::views`).
 
 No Vibe compatibility layer: no `~/.vibe/plugins`, no Claude/Codex/Kimi
 foreign formats.
@@ -60,7 +64,8 @@ fixtures in `vibe_sdk/harness/plugins/`.
 | stdio transport | persistent clients in the Vibe MCP registry | persistent servers behind a per-session loopback bridge (below) |
 | HTTP transports | yes | Streamable HTTP and SSE, static headers, behind the same bridge (below) |
 | Enable / disable | none at plugin level (mounting = enabling); `disabled` per MCP server in config | `bend-harness plugins disable <name>`, stored in `~/.bend-harness/plugins.json` |
-| Hooks, knowledge, agents, views, connectors, libraries | loaded (some broken locally, see the plugin-creator skill) | listed as unsupported |
+| Hooks, knowledge, agents, connectors, libraries | loaded (some broken locally, see the plugin-creator skill) | listed as unsupported |
+| Views (MCP Apps, static views) | loaded | loaded: docs/mcp-apps.md |
 | Inspect | `/plugins`, `/reload-plugins` (behind `--experimental-harness`) | `/plugins` (TUI), `bend-harness plugins` (CLI), `/reload` re-resolves |
 
 ## Contract (the unified Plugins list)
@@ -281,9 +286,15 @@ live REPLs, so two sessions (or two Switchboard tasks) never share it.
    `plugin.mcp.server_off`).
    A bad server: `plugin.mcp.server_invalid`, skipped.
 8. **Unsupported components.** Present on disk and reported, never read:
-   `ai.mistral.vibe/{hooks.toml,agents,knowledge,views}`,
-   `connectors.json`, `libraries.json`, and the `ai.mistral.vibe`
-   manifest extension.
+   `ai.mistral.vibe/{hooks.toml,agents,knowledge}`, `connectors.json`,
+   `libraries.json`, `ai.mistral.vibe/views` when the manifest lacks the
+   `ai.mistral.vibe` extension, and any other manifest extension.
+9. **Static views.** With the `ai.mistral.vibe` extension, each
+   `ai.mistral.vibe/views/<name>/` (`view.json` + `index.html`, the
+   name its folder's, inside the plugin, at most 100) is a view
+   `ui://<plugin>/views/<name>`; a bad one: `plugin.view.invalid`, dropped.
+   An mcp.json server id may not start with `~` (`~views` is the static
+   views' route).
 
 Every diagnostic has a code, a severity (`error` drops the plugin,
 `warning` drops one component, `info`), the plugin name or root, and one
@@ -356,8 +367,11 @@ tests use temp dirs.
 - Writes, then touches `D/ready`:
   - `D/mcp-index.txt`: the session's one tool index (the REPL reads no
     other): one line per tool, `<cid> <namespace> <tool> : #<description>
-    | input: <schema>`, the plugins' tools first (`cid =
-    http://127.0.0.1:<port>/<token>/<plugin>/<server>`), then his Mistral
+    | input: <schema>` (` | ui: <uri>` last for a tool with a view; a
+    tool only a view may call, `_meta.ui.visibility: ["app"]`, is never
+    there: docs/mcp-apps.md C1), the plugins' tools first (`cid =
+    http://127.0.0.1:<port>/<token>/<plugin>/<server>`), each plugin's
+    static views (`cid = …/<plugin>/~views`), then his Mistral
     connectors' (`connectors::index_lines`, `cid` = the connector's id),
     minus every tool, server, connector or plugin turned off;
   - `D/skills-index.txt`: `name\tdescription\tpath` lines, every skill
@@ -365,7 +379,14 @@ tests use temp dirs.
     (`bend_plugins::skills`, scanned while the servers start) and the
     loaded plugins' skills, first name kept (workspace, plugins, bise,
     personal, vibe). The only skills index the REPL reads;
-  - `D/report.txt`: the human report (the same text as the CLI).
+  - `D/report.txt`: the human report (the same text as the CLI);
+  - `D/bridge.json` (`bridge::BRIDGE_FILE`): `{"v":1,"base","pid"}`,
+    where the hub reaches this bridge for a view's calls
+    (docs/mcp-apps.md C5).
+- Announces the MCP Apps extension at `initialize`
+  (`views::client_capabilities`), so a server lists its tools' `_meta.ui`;
+  a `resources/read` of a `ui://` URI is answered from the server once
+  per start (`views::ResourceCache`).
 - Serves HTTP/1.1 on `127.0.0.1:0`. The path carries a random token, so
   another local process cannot call the tools without reading `D`.
   JSON-RPC over POST: `initialize` answers with the server's cached
@@ -842,4 +863,4 @@ never stalls main's first call).
 - A `/plugins` picker with per-server toggles (mcp.json's `"enabled":
   false` works by hand).
 - Plugin descriptions in the system prompt (the spec's default guidance).
-- Hooks, agents, knowledge, views.
+- Hooks, agents, knowledge.

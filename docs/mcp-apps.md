@@ -79,10 +79,24 @@ hub ─ view/call ─▶ visibility (rust/plugins) ─▶ approvals (off-turn en
 
 Today: `<cid> <group> <tool> : #<desc> | input: <schema>`. A tool with a
 view gets ` | ui: <uri>` after the schema (the last field; `uri` has no
-space: percent-encoded if needed). An `app`-only tool is never in the
-index (the spec forbids showing it to the model). A Vibe static view is
-an index line on the plugin's virtual server `<cid>` = the bridge's
-`/<plugin>~views` route, tool name = the view's `name` with `-` → `_`.
+space: a space, a control character, `|` and `%` percent-encoded,
+`views::ui_field`; the views file (C2) keeps the server's own URI). An
+`app`-only tool (`_meta.ui.visibility` without `"model"`) is never in the
+index (the spec forbids showing it to the model) but stays callable on
+its server's route. A Vibe static view is an index line on the plugin's
+virtual server `~views`: `<cid>` = `<base>/<plugin>/~views`, tool name =
+the view's `name` with `-` → `_`, URI `ui://<plugin>/views/<name>`; its
+call answers its arguments as `structuredContent`, its `resources/read`
+the `index.html` with `view.json`'s `ui` as `_meta.ui`. No mcp.json
+server id may start with `~`.
+
+The bridge announces `capabilities.extensions["io.modelcontextprotocol/ui"]
+= {mimeTypes: ["text/html;profile=mcp-app"]}` at `initialize` (stdio and
+remote), keeps each server's `ui://` resources once per start, and
+writes `D/bridge.json` = `{"v":1,"base":"http://127.0.0.1:<port>/<token>","pid"}`
+before `ready` (`D` = `$BEND_RUN_DIR/<repl port>/plugins`): the hub
+reaches a server at `<base>/<plugin>/<server>` (a raw `tools/list` there
+keeps `_meta.ui` and the app-only tools). Code: `rust/plugins/src/views.rs`.
 
 ### C2. The full result (pieces 2 and 3)
 

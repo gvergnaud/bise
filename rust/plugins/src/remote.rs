@@ -225,7 +225,7 @@ fn result_of(raw: Value) -> Result<Value, Fail> {
 }
 
 fn init_params() -> Value {
-    json!({"protocolVersion": PROTOCOL, "capabilities": {},
+    json!({"protocolVersion": PROTOCOL, "capabilities": crate::views::client_capabilities(),
            "clientInfo": {"name": "bise", "version": "1.0"}})
 }
 

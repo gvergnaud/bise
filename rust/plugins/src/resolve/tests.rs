@@ -76,7 +76,10 @@ fn manifest_schema_is_closed() {
         PLUGIN_SCHEMA
     ))
     .unwrap();
-    assert_eq!(m.extensions, vec!["ai.mistral.vibe"]);
+    // Vibe's extension is known (its static views load); others are reported
+    assert!(m.extensions.is_empty() && m.vibe);
+    let m = parse_manifest(&format!("{{\"$schema\":\"{}\",\"name\":\"ok\",\"extensions\":{{\"x.y\":{{}}}}}}", PLUGIN_SCHEMA)).unwrap();
+    assert_eq!((m.extensions, m.vibe), (vec!["x.y".to_string()], false));
 }
 
 #[test]
@@ -251,10 +254,61 @@ fn bad_mcp_json_and_unsupported_components() {
     let res = resolve(&roots(&t));
     let pl = &res.plugins[0];
     assert_eq!(pl.state, State::Loaded);
-    assert_eq!(pl.unsupported.len(), 3, "{:?}", pl.unsupported);
+    assert_eq!(pl.unsupported, vec!["hooks (ai.mistral.vibe/hooks.toml)", "connectors (connectors.json)"]);
     let c = codes(&res);
     assert!(c.contains(&"plugin.mcp.invalid"));
-    assert!(c.contains(&"plugin.extension.unsupported"));
+    assert!(!c.contains(&"plugin.extension.unsupported"));
+}
+
+fn copy_fixture(name: &str, to: &Path) {
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/mcp-apps").join(name);
+    assert!(std::process::Command::new("cp").arg("-R").arg(&src).arg(to.join(name)).status().unwrap().success());
+}
+
+#[test]
+fn the_mcp_apps_fixtures_resolve_with_their_server_and_views() {
+    let t = tmp("mcp-apps");
+    let user = t.0.join("user");
+    std::fs::create_dir_all(&user).unwrap();
+    for f in ["fake-app", "fake-views", "fake-score"] {
+        copy_fixture(f, &user);
+    }
+    let res = resolve(&roots(&t));
+    let get = |n: &str| res.plugins.iter().find(|p| p.name == n).unwrap();
+    for n in ["fake-app", "fake-views", "fake-score"] {
+        assert_eq!(get(n).state, State::Loaded, "{}: {:?}", n, res.diagnostics);
+        assert!(get(n).unsupported.is_empty(), "{}: {:?}", n, get(n).unsupported);
+    }
+    assert_eq!(get("fake-app").servers.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(), vec!["fake-app"]);
+    assert!(get("fake-app").views.is_empty());
+    let v = &get("fake-views").views;
+    assert_eq!(v.iter().map(|v| v.uri.as_str()).collect::<Vec<_>>(), vec!["ui://fake-views/views/hello"]);
+    assert!(get("fake-views").servers.is_empty());
+    assert!(!res.diagnostics.iter().any(|d| d.severity != Severity::Info), "{:?}", res.diagnostics);
+}
+
+#[test]
+fn views_without_the_vibe_extension_are_reported_not_loaded() {
+    let t = tmp("views-no-ext");
+    let p = t.0.join("user/nv");
+    write(&p.join("plugin.json"), &manifest("nv"));
+    write(&p.join("ai.mistral.vibe/views/a/view.json"), r#"{"name":"a"}"#);
+    write(&p.join("ai.mistral.vibe/views/a/index.html"), "x");
+    let res = resolve(&roots(&t));
+    let pl = &res.plugins[0];
+    assert!(pl.views.is_empty());
+    assert_eq!(pl.unsupported, vec!["views (ai.mistral.vibe/views) without the ai.mistral.vibe extension"]);
+}
+
+#[test]
+fn a_server_id_may_not_take_the_views_route() {
+    let t = tmp("tilde");
+    let p = t.0.join("user/tl");
+    write(&p.join("plugin.json"), &manifest("tl"));
+    write(&p.join("mcp.json"), r#"{"mcpServers":{"~views":{"command":"true"},"ok":{"command":"true"}}}"#);
+    let res = resolve(&roots(&t));
+    assert_eq!(res.plugins[0].servers.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(), vec!["ok"]);
+    assert!(codes(&res).contains(&"plugin.mcp.server_invalid"));
 }
 
 #[cfg(unix)]

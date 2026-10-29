@@ -281,6 +281,9 @@ pub struct Plugin {
     pub servers: Vec<StdioServer>,
     /// remote servers (Streamable HTTP, SSE)
     pub remotes: Vec<HttpServer>,
+    /// its Vibe static views (`ai.mistral.vibe/views`), served by the
+    /// bridge's virtual server `~views` ([`crate::views`])
+    pub views: Vec<crate::views::StaticView>,
     /// its skills turned off in plugins.json (`<name>#skill:<skill>`):
     /// listed, never in `skills`, so never in a prompt
     pub off_skills: Vec<Skill>,
@@ -473,6 +476,9 @@ pub struct Manifest {
     pub description: Option<String>,
     /// the extensions bise does not know (reported, ignored)
     pub extensions: Vec<String>,
+    /// `"extensions": {"ai.mistral.vibe": {...}}`: its static views
+    /// (`ai.mistral.vibe/views`) load ([`crate::views::load`])
+    pub vibe: bool,
     /// `"extensions": {"dev.bise": {"default": "off"}}`: opt-in, loaded
     /// only once enabled (computer use: /computer-use turns it on)
     pub default_off: bool,
@@ -548,6 +554,7 @@ pub fn parse_manifest(text: &str) -> Result<Manifest, String> {
     }
     let mut extensions = Vec::new();
     let mut default_off = false;
+    let mut vibe = false;
     let mut prompts = Vec::new();
     if let Some(ex) = o.get("extensions") {
         let ex = ex.as_object().ok_or("/extensions must be an object")?;
@@ -571,6 +578,8 @@ pub fn parse_manifest(text: &str) -> Result<Manifest, String> {
                         _ => return Err(format!("unknown field /extensions/{}/{}", k, f)),
                     }
                 }
+            } else if k == crate::views::VIBE_EXTENSION {
+                vibe = true;
             } else {
                 extensions.push(k.clone());
             }
@@ -581,6 +590,7 @@ pub fn parse_manifest(text: &str) -> Result<Manifest, String> {
         version: opt_string(o, "version")?,
         description: opt_string(o, "description")?,
         extensions,
+        vibe,
         default_off,
         prompts,
     })
@@ -878,6 +888,12 @@ fn load_mcp(p: &mut Plugin, out: &mut Vec<Diagnostic>) {
     };
     let data = p.data_root.clone();
     for (id, sv) in servers {
+        // `~views` is the plugin's virtual server of static views
+        if id.starts_with('~') {
+            out.push(diag("plugin.mcp.server_invalid", Severity::Warning, &p.name,
+                format!("mcp.json server {:?}: an id may not start with ~; skipped", id)));
+            continue;
+        }
         match sv.get("enabled") {
             None | Some(Value::Bool(true)) => {}
             Some(Value::Bool(false)) => {
@@ -907,18 +923,30 @@ fn load_mcp(p: &mut Plugin, out: &mut Vec<Diagnostic>) {
     }
 }
 
-fn load_unsupported(p: &mut Plugin, extensions: &[String], out: &mut Vec<Diagnostic>) {
+/// Its static views (`ai.mistral.vibe/views`), when its manifest
+/// declares the `ai.mistral.vibe` extension (Vibe's rule); without it
+/// the folder is reported, not loaded ([`load_unsupported`]).
+fn load_views(p: &mut Plugin, vibe: bool, out: &mut Vec<Diagnostic>) {
+    if vibe {
+        let (views, diags) = crate::views::load(&p.name, &p.root);
+        p.views = views;
+        out.extend(diags);
+    }
+}
+
+fn load_unsupported(p: &mut Plugin, extensions: &[String], vibe_declared: bool, out: &mut Vec<Diagnostic>) {
     let vibe = p.root.join("ai.mistral.vibe");
     let found = [
-        (vibe.join("hooks.toml"), "hooks (ai.mistral.vibe/hooks.toml)"),
-        (vibe.join("agents"), "agents (ai.mistral.vibe/agents)"),
-        (vibe.join("knowledge"), "knowledge (ai.mistral.vibe/knowledge)"),
-        (vibe.join("views"), "views (ai.mistral.vibe/views)"),
-        (p.root.join("connectors.json"), "connectors (connectors.json)"),
-        (p.root.join("libraries.json"), "libraries (libraries.json)"),
+        (vibe.join("hooks.toml"), "hooks (ai.mistral.vibe/hooks.toml)", true),
+        (vibe.join("agents"), "agents (ai.mistral.vibe/agents)", true),
+        (vibe.join("knowledge"), "knowledge (ai.mistral.vibe/knowledge)", true),
+        // loaded when the manifest declares ai.mistral.vibe
+        (vibe.join("views"), "views (ai.mistral.vibe/views) without the ai.mistral.vibe extension", !vibe_declared),
+        (p.root.join("connectors.json"), "connectors (connectors.json)", true),
+        (p.root.join("libraries.json"), "libraries (libraries.json)", true),
     ];
-    for (path, what) in found {
-        if path.exists() {
+    for (path, what, unsupported) in found {
+        if unsupported && path.exists() {
             p.unsupported.push(what.to_string());
             out.push(diag("plugin.component.unsupported", Severity::Info, &p.name,
                 format!("{} is not supported yet; ignored", what)));
@@ -954,6 +982,8 @@ pub fn cut_prompts(list: &[String]) -> (Vec<String>, bool) {
 struct Candidate {
     plugin: Plugin,
     extensions: Vec<String>,
+    /// its manifest declares `ai.mistral.vibe`
+    vibe: bool,
     default_off: bool,
 }
 
@@ -996,6 +1026,7 @@ fn discover(root: &Path, scope: Scope, data: &Path, out: &mut Vec<Diagnostic>) -
             skills: Vec::new(),
             servers: Vec::new(),
             remotes: Vec::new(),
+            views: Vec::new(),
             off_skills: Vec::new(),
             off_servers: Vec::new(),
             prompts: Vec::new(),
@@ -1006,6 +1037,7 @@ fn discover(root: &Path, scope: Scope, data: &Path, out: &mut Vec<Diagnostic>) -
             .map_err(|e| format!("unreadable: {}", e))
             .and_then(|t| parse_manifest(&t));
         let mut extensions = Vec::new();
+        let mut vibe = false;
         let mut default_off = false;
         match parsed {
             Ok(m) => {
@@ -1016,6 +1048,7 @@ fn discover(root: &Path, scope: Scope, data: &Path, out: &mut Vec<Diagnostic>) -
                 p.description = m.description;
                 p.state = State::Loaded;
                 extensions = m.extensions;
+                vibe = m.vibe;
                 default_off = m.default_off;
                 p.opt_in = m.default_off;
                 let (kept, cut) = cut_prompts(&m.prompts);
@@ -1028,7 +1061,7 @@ fn discover(root: &Path, scope: Scope, data: &Path, out: &mut Vec<Diagnostic>) -
             Err(e) => out.push(diag("plugin.manifest.invalid", Severity::Error, &folder,
                 format!("{}: {}", manifest.display(), e))),
         }
-        found.push(Candidate { plugin: p, extensions, default_off });
+        found.push(Candidate { plugin: p, extensions, vibe, default_off });
     }
     found
 }
@@ -1142,7 +1175,8 @@ pub fn resolve(roots: &Roots) -> Resolution {
                     s.command = bise_exe();
                 }
             }
-            load_unsupported(&mut c.plugin, &c.extensions, &mut diags);
+            load_views(&mut c.plugin, c.vibe, &mut diags);
+            load_unsupported(&mut c.plugin, &c.extensions, c.vibe, &mut diags);
         }
     }
     Resolution {

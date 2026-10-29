@@ -808,3 +808,125 @@ fn a_bridge_and_its_servers_are_gone_within_a_second_or_two_of_its_repl() {
     }
     let _ = std::fs::remove_dir_all(&base);
 }
+
+/// The MCP Apps fixtures (tests/fixtures/mcp-apps) copied into a fresh
+/// workspace root; fake-app logs each request to `log`.
+fn mcp_apps_root(tag: &str, log: &Path) -> (PathBuf, PathBuf) {
+    own_skill_roots();
+    let base = std::env::temp_dir().join(format!("bp-bridge-{}-{}", tag, std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let plugins = base.join("ws/.agents/plugins");
+    std::fs::create_dir_all(&plugins).unwrap();
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/mcp-apps");
+    for f in ["fake-app", "fake-views"] {
+        assert!(std::process::Command::new("cp").arg("-R").arg(src.join(f)).arg(plugins.join(f)).status().unwrap().success());
+    }
+    let mcp = plugins.join("fake-app/mcp.json");
+    let mut v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&mcp).unwrap()).unwrap();
+    v["mcpServers"]["fake-app"]["env"] = serde_json::json!({"FAKE_APP_LOG": log.display().to_string()});
+    std::fs::write(&mcp, v.to_string()).unwrap();
+    (base.canonicalize().unwrap(), plugins)
+}
+
+/// docs/mcp-apps.md piece 1 (C1): the bridge announces the UI extension,
+/// so the server lists `_meta.ui`; the index ends a tool with a view by
+/// ` | ui: <uri>`, leaves the app-only tool out (still callable on its
+/// route) and keeps the model-only one; a view's HTML is read once from
+/// its server (the resource cache); a plugin's static view is a tool of
+/// its virtual server `<plugin>/~views`; bridge.json says where the
+/// bridge is.
+#[test]
+fn views_reach_the_index_and_their_servers_answer() {
+    let log = std::env::temp_dir().join(format!("bp-bridge-apps-log-{}", std::process::id()));
+    let _ = std::fs::remove_file(&log);
+    let (base, plugins) = mcp_apps_root("apps", &log);
+    let dir = base.join("run/plugins");
+    let mut parent = std::process::Command::new("sleep").arg("60").spawn().unwrap();
+    let opts = bridge::Opts::new(dir.clone(), Some(parent.id()), roots_of(&base, Some(plugins)));
+    let server = std::thread::spawn(move || bridge::serve(opts));
+    wait_until("ready", || dir.join("ready").exists());
+
+    let i = index(&dir);
+    let line = |tool: &str| i.lines().find(|l| l.split(' ').nth(2) == Some(tool)).map(String::from);
+    let counter = line("show_counter").unwrap_or_else(|| panic!("{i}"));
+    assert!(counter.ends_with(" | input: {\"properties\":{\"start\":{\"type\":\"integer\"}},\"type\":\"object\"} | ui: ui://fake-app/counter"), "{counter}");
+    assert!(line("show_hostile").unwrap().ends_with(" | ui: ui://fake-app/hostile"));
+    assert!(line("bump").is_none(), "an app-only tool is never in the index: {i}");
+    let whisper = line("whisper").unwrap();
+    assert!(!whisper.contains("| ui:"), "{whisper}");
+    assert!(!line("slow").unwrap().contains("| ui:"));
+    let hello = line("hello").unwrap_or_else(|| panic!("{i}"));
+    assert!(hello.split(' ').next().unwrap().ends_with("/fake-views/~views"), "{hello}");
+    assert!(hello.starts_with(&format!("{} fake_views hello : #Greet someone", hello.split(' ').next().unwrap())), "{hello}");
+    assert!(hello.ends_with(" | ui: ui://fake-views/views/hello"), "{hello}");
+
+    // where the hub finds this bridge
+    let b: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join(bridge::BRIDGE_FILE)).unwrap()).unwrap();
+    assert_eq!(b["v"], 1);
+    let cid = counter.split(' ').next().unwrap();
+    assert_eq!(format!("{}/fake-app/fake-app", b["base"].as_str().unwrap()), cid);
+
+    let (mut r, path) = route(&dir, "show_counter");
+    // the raw list keeps _meta.ui and the app-only tool (the hub's visibility reads it)
+    let (_, l) = post(&mut r, &path, r#"{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}"#);
+    let l: serde_json::Value = serde_json::from_str(&l).unwrap();
+    let bump = l["result"]["tools"].as_array().unwrap().iter().find(|t| t["name"] == "bump").cloned().unwrap();
+    assert_eq!(bump["_meta"]["ui"]["visibility"], serde_json::json!(["app"]));
+    // the app-only tool answers on its route
+    let (_, a) = post(&mut r, &path, r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"bump","arguments":{"by":2}}}"#);
+    assert!(a.contains("counter at 2"), "{a}");
+    // the view's HTML, twice: the server reads it once
+    let read = r#"{"jsonrpc":"2.0","id":3,"method":"resources/read","params":{"uri":"ui://fake-app/counter"}}"#;
+    let (_, h1) = post(&mut r, &path, read);
+    let (_, h2) = post(&mut r, &path, &read.replace("\"id\":3", "\"id\":4"));
+    let (h1, h2): (serde_json::Value, serde_json::Value) = (serde_json::from_str(&h1).unwrap(), serde_json::from_str(&h2).unwrap());
+    assert_eq!(h1["result"]["contents"][0]["mimeType"], "text/html;profile=mcp-app");
+    assert_eq!((h1["id"].clone(), h2["id"].clone()), (serde_json::json!(3), serde_json::json!(4)));
+    assert_eq!(h1["result"], h2["result"]);
+    let logged = std::fs::read_to_string(&log).unwrap();
+    assert_eq!(logged.lines().filter(|l| *l == "resources/read ui://fake-app/counter").count(), 1, "{logged}");
+    // an unknown ui:// resource is the server's error, never cached
+    let (_, e) = post(&mut r, &path, r#"{"jsonrpc":"2.0","id":5,"method":"resources/read","params":{"uri":"ui://fake-app/nope"}}"#);
+    assert!(e.contains("\"error\""), "{e}");
+
+    // the static view's virtual server
+    let (mut r, path) = route(&dir, "hello");
+    let (c, a) = post(&mut r, &path, r#"{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"hello","arguments":{"name":"Ada"}}}"#);
+    let a: serde_json::Value = serde_json::from_str(&a).unwrap();
+    assert_eq!((c, a["id"].clone(), a["result"]["structuredContent"]["name"].clone()), (200, serde_json::json!(6), serde_json::json!("Ada")));
+    let (_, h) = post(&mut r, &path, r#"{"jsonrpc":"2.0","id":7,"method":"resources/read","params":{"uri":"ui://fake-views/views/hello"}}"#);
+    assert!(h.contains("text/html;profile=mcp-app"), "{h}");
+
+    parent.kill().unwrap();
+    parent.wait().unwrap();
+    wait_until("the bridge's end", || server.is_finished());
+    server.join().unwrap().unwrap();
+    let _ = std::fs::remove_dir_all(&base);
+    let _ = std::fs::remove_file(&log);
+}
+
+/// A static view turned off leaves the index and its call is refused by
+/// the off words; the plugin off: its route is gone.
+#[test]
+fn a_static_view_turned_off_is_refused() {
+    let log = std::env::temp_dir().join(format!("bp-bridge-apps-off-log-{}", std::process::id()));
+    let (base, plugins) = mcp_apps_root("apps-off", &log);
+    let (dir, sp) = (base.join("run/plugins"), base.join("plugins.json"));
+    let mut parent = std::process::Command::new("sleep").arg("60").spawn().unwrap();
+    let mut opts = bridge::Opts::new(dir.clone(), Some(parent.id()), roots_of(&base, Some(plugins)));
+    opts.state_path = Some(sp.clone());
+    opts.poll = Duration::from_millis(100);
+    let server = std::thread::spawn(move || bridge::serve(opts));
+    wait_until("ready", || dir.join("ready").exists());
+    let (mut r, path) = route(&dir, "hello");
+    let id = PluginId::plugin("fake-views").part(PartKind::Tool, Some("~views"), "hello");
+    state::set(&sp, &id, false).unwrap();
+    wait_until("hello leaves the index", || !index(&dir).contains(" hello : "));
+    let (_, a) = post(&mut r, &path, r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hello","arguments":{}}}"#);
+    assert!(a.contains(&bridge::off_error("fake_views.hello")), "{a}");
+    parent.kill().unwrap();
+    parent.wait().unwrap();
+    wait_until("the bridge's end", || server.is_finished());
+    let _ = std::fs::remove_dir_all(&base);
+    let _ = std::fs::remove_file(&log);
+}
