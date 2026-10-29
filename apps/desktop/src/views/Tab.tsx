@@ -6,7 +6,8 @@ import { views } from '@/proto/words_views.gen';
 import type { Entity } from '@/shared/entity';
 import { viewKey, type ViewRef } from './port';
 import { humanName } from './names';
-import { useViewState, type ViewsStore } from './store';
+import type { ViewsStore } from './store';
+import { useViewState } from './hooks';
 import { StateLine } from './StateLine';
 
 /** A live view's name in a tab: its own title the server gave, else its tool's name humanised ('show board'); '' unknown. */

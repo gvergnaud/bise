@@ -6,11 +6,13 @@
 import { memo, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { AppIcon, Press } from '@/ds';
 import { views } from '@/proto/words_views.gen';
+import { quiet } from './names';
 import type { ToolItem, ToolView } from '@/proto';
 import { useEntry } from '@/store';
 import { openTab } from '@/app/panel/tabs';
 import type { ViewRef } from './port';
-import { useViewState, type ViewState, type ViewsStore } from './store';
+import type { ViewState, ViewsStore } from './store';
+import { useViewState } from './hooks';
 import { StateLine } from './StateLine';
 import { humanName, permsIn, uriName } from './names';
 import { viewsStore } from './window';
@@ -49,6 +51,7 @@ function Foot({ state, view, agent, onPanel }: { state: Extract<ViewState, { kin
           {' · '}
           <Press
             look="vw-act"
+            {...quiet}
             onClick={() => {
               openTab({ kind: 'plugin', id: view.plugin });
             }}
@@ -68,7 +71,8 @@ function Foot({ state, view, agent, onPanel }: { state: Extract<ViewState, { kin
           {n.node}
         </span>
       ))}
-      <Press look="vw-act vw-end" onClick={onPanel} data-testid="views.fullscreen">
+      {notes.length > 0 && ' · '}
+      <Press look="vw-act" {...quiet} onClick={onPanel} data-testid="views.fullscreen">
         {views.open_panel}
       </Press>
     </div>
@@ -83,6 +87,26 @@ export const ViewCard = memo(function ViewCard({ project, agent, view, store = v
   useEffect(() => {
     if (!expired) store.ensure(r, view.plugin);
   }, [store, r, expired, view.plugin]);
+  // a view torn down past MAX_LIVE (its state back to none) comes back from its stored result when
+  // its card shows again (C7; examples m_50439): asked again once the card is in view, never while
+  // it is only mounted off-screen (that would tear another one down at once)
+  const gone = useRef<HTMLDivElement>(null);
+  const none = !expired && state.kind === 'none';
+  useEffect(() => {
+    const el = gone.current;
+    if (!none || el === null) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      store.ensure(r, view.plugin);
+      return;
+    }
+    const io = new IntersectionObserver((es) => {
+      if (es.some((e) => e.isIntersecting)) store.ensure(r, view.plugin);
+    });
+    io.observe(el);
+    return () => {
+      io.disconnect();
+    };
+  }, [store, r, none, view.plugin]);
   const live = state.kind === 'live';
   const inline = live && state.mode === 'inline';
   useEffect(() => {
@@ -106,7 +130,7 @@ export const ViewCard = memo(function ViewCard({ project, agent, view, store = v
     );
   if (!live)
     return (
-      <div className="vw-card" data-testid={testId} data-state={state.kind}>
+      <div ref={gone} className="vw-card" data-testid={testId} data-state={state.kind}>
         <StateLine store={store} r={r} state={state} {...(state.kind === 'loading' ? { height: state.height } : {})} />
       </div>
     );
@@ -121,6 +145,7 @@ export const ViewCard = memo(function ViewCard({ project, agent, view, store = v
           {' · '}
           <Press
             look="vw-act"
+            {...quiet}
             onClick={() => {
               store.inline(r);
             }}

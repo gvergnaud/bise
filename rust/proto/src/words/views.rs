@@ -59,8 +59,8 @@ crate::words! { views:
     perm_clipboard = "copy to the clipboard";
     /// the add screen's label over its views
     preview_label = "views, and what each may use";
-    /// the add screen's line under its views: only what he ticks is granted
-    preview_ticks = "only what you tick is granted; you can change it on its page";
+    /// the add screen's line under its views: only what he turns on is granted
+    preview_ticks = "only what you turn on is granted; you can change it on its page";
     /// the add screen's 2nd step: the views its server showed once it ran
     step_head(name) = "{name}'s views";
     /// the 2nd step while its server starts

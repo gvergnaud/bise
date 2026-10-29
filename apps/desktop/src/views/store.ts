@@ -4,7 +4,6 @@
 // from that view's proxy window at that view's origin (C7). The panel owns the display mode: a
 // view is fullscreen while its tab is in the panel's tabs. One store per window (`views`); a test
 // makes its own with fakes. Owner: mcp-apps-host.
-import { useSyncExternalStore } from 'react';
 import { permsOf, type ViewPerm } from '@/shared/viewperms';
 import type { ContextIn } from './context';
 import { evict, MAX_LIVE } from './place';
@@ -426,15 +425,4 @@ export class ViewsStore {
       w.removeEventListener('message', on);
     };
   }
-}
-
-/** A view's state, live. */
-export function useViewState(store: ViewsStore, ref: ViewRef): ViewState {
-  useSyncExternalStore(store.subscribe, store.getVersion);
-  return store.state(ref);
-}
-
-/** The store's version, live (the layer redraws on it). */
-export function useViewsVersion(store: ViewsStore): number {
-  return useSyncExternalStore(store.subscribe, store.getVersion);
 }

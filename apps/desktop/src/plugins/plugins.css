@@ -172,8 +172,9 @@
 .plg-skill-file:hover { background: var(--c-hover); }
 .plg-skill-file:focus-visible, .plg-skill-back:focus-visible, .plg-kv-fold:focus-visible, .plg-skill-toggle:focus-visible { outline: 2px solid var(--c-focus); outline-offset: -2px; }
 
-/* a view's permission: a sub-row under the view, indented 16, its switch at the end (designer m_50385) */
+/* a view's permission: a sub-row under the view, its label on the view name's left edge (past the
+   row's lead and its gap, designer m_50425), its switch at the end (m_50385) */
 .plg-row.plg-perm {
   border-top: 0;
-  padding-left: calc(var(--pad-card-x) + var(--s-4));
+  padding-left: calc(var(--pad-card-x) + var(--s-6) + var(--gap-block));
 }

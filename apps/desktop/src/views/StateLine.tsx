@@ -4,6 +4,7 @@
 import type { ReactNode } from 'react';
 import { Press } from '@/ds';
 import { views } from '@/proto/words_views.gen';
+import { quiet } from './names';
 import type { ViewRef } from './port';
 import { DEFAULT_H, type ViewState, type ViewsStore } from './store';
 
@@ -28,6 +29,7 @@ export function StateLine({ store, r, state, height = DEFAULT_H }: { store: View
           {views.failed}
           <Press
             look="vw-act"
+            {...quiet}
             onClick={() => {
               store.retry(r);
             }}

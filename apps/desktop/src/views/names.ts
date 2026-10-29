@@ -1,6 +1,6 @@
 // src/views · a view's names in words (designer m_50385): a tool's name as he reads it
 // ('show_board' -> 'show board'), the permissions in a sentence ('the camera and the
-// microphone'). Pure; the card, the tab and the plugins page share them. Owner: mcp-apps-host.
+// microphone'), and the card's links keep the focus where it is. The card, the tab and the plugins page share them. Owner: mcp-apps-host.
 import { views } from '@/proto/words_views.gen';
 
 /** A tool's or a view's name humanised: '_' and '-' are spaces. Pure. */
@@ -35,3 +35,18 @@ export function permsIn(perms: readonly string[]): string {
   const last = ns.at(-1) ?? '';
   return ns.length <= 1 ? last : views.list_and({ head: ns.slice(0, -1).join(', '), last });
 }
+
+/**
+ * A card's link presses quietly: no focus (Tab still reaches it) and its press never reaches the
+ * thread list's own (which holds the pressed row's y, a row toggle's rule): with both, the list
+ * scrolled 169 px between his press and its release, the click landed on another row and the
+ * panel never opened (ui-review m_50430).
+ */
+export const quiet = {
+  onMouseDown: (e: { preventDefault: () => void }): void => {
+    e.preventDefault();
+  },
+  onPointerDown: (e: { stopPropagation: () => void }): void => {
+    e.stopPropagation();
+  },
+} as const;

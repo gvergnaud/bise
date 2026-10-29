@@ -79,11 +79,6 @@
   text-decoration: underline;
 }
 
-.vw-end {
-  margin-left: auto;
-  padding-left: var(--gap-block);
-}
-
 .vw-quiet {
   display: flex;
   align-items: center;

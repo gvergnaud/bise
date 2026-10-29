@@ -24,6 +24,8 @@ function banner(): Plugin {
 
 export default defineConfig({
   plugins: [banner()],
+  // no React here (the hooks live in src/views/hooks.ts): a library that still reads it is told production
+  define: { 'process.env.NODE_ENV': JSON.stringify('production') },
   resolve: { alias: { '@': resolve(__dirname, 'src') } },
   build: {
     outDir: resolve(__dirname, '../../kit/views'),

@@ -9,7 +9,8 @@
 import { memo, useEffect, useRef } from 'react';
 import { allowOf } from '@/shared/viewperms';
 import { pick, samePlace, type Anchors, type Place, type Rect } from './place';
-import { useViewsVersion, type Anchor, type ViewsStore } from './store';
+import type { Anchor, ViewsStore } from './store';
+import { useViewsVersion } from './hooks';
 import { viewsStore } from './window';
 import type { ViewFrame } from '@/shared/api';
 import './views.css';
