@@ -131,6 +131,25 @@ export function viewPermission(permission: string, ask: PermAsk, frames: readonl
   return need.every((p) => granted.has(p));
 }
 
+/**
+ * Pure: where a 'before-mouse-event' fell, in the window's CSS px, or null when the event has no
+ * screen position. Never its x/y: Chromium asks the delegate for every widget of the webContents,
+ * a view's proxy too (its own process, an OOPIF), and there x/y are relative to that frame's
+ * corner, not the window's (mcp-apps-lead m_50480). The screen position (DIP) minus the window's
+ * content corner (DIP, getContentBounds), over the zoom, is the same for every widget.
+ */
+export function pointInWindow(
+  m: { readonly globalX?: number; readonly globalY?: number },
+  content: { readonly x: number; readonly y: number },
+  zoom: number,
+): { x: number; y: number } | null {
+  const gx = m.globalX;
+  const gy = m.globalY;
+  if (typeof gx !== 'number' || typeof gy !== 'number' || !Number.isFinite(gx) || !Number.isFinite(gy)) return null;
+  const z = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  return { x: (gx - content.x) / z, y: (gy - content.y) / z };
+}
+
 /** Pure: the frame a pointer-down at (x, y) (window CSS px) fell in, the topmost (last) one. */
 export function frameAt(frames: readonly ViewFrame[], x: number, y: number): ViewFrame | null {
   for (let i = frames.length - 1; i >= 0; i -= 1) {

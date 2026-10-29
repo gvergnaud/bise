@@ -3,9 +3,9 @@
 // each change), the pointer-downs main sees inside them (webContents 'before-mouse-event': the
 // view, the proxy and the renderer can't make one), and the answers the session's permission
 // handler and the guard ask of them.
-import { ipcMain, type WebContents } from 'electron';
+import { BrowserWindow, ipcMain, type WebContents } from 'electron';
 import { IPC } from '../shared/api';
-import { frameAt, stampGesture, viewKey, viewPermission, type PermAsk, type ViewFrame } from './viewrules';
+import { frameAt, pointInWindow, stampGesture, viewKey, viewPermission, type PermAsk, type ViewFrame } from './viewrules';
 import { setGestureStamp } from './views';
 
 /** A window's view frames, by its webContents id. */
@@ -37,8 +37,10 @@ function watch(wc: WebContents): void {
   downsOf.set(id, downs);
   wc.on('before-mouse-event', (_e, m) => {
     if (m.type !== 'mouseDown') return;
-    const zoom = wc.getZoomFactor() || 1;
-    const f = frameAt(framesOf.get(id) ?? [], m.x / zoom, m.y / zoom);
+    const win = BrowserWindow.fromWebContents(wc);
+    if (win === null) return;
+    const p = pointInWindow(m, win.getContentBounds(), wc.getZoomFactor());
+    const f = p === null ? null : frameAt(framesOf.get(id) ?? [], p.x, p.y);
     if (f !== null) downs.set(viewKey(f.project, f.agent, f.call), Date.now());
   });
   wc.once('destroyed', () => {

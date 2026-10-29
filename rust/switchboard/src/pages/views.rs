@@ -145,7 +145,12 @@ const PROXY: &str = r#"<!doctype html>
     f.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms");
     if (ALLOW) f.setAttribute("allow", ALLOW);
     f.setAttribute("title", "view");
-    const doc = '<meta http-equiv="Content-Security-Policy" content="' + esc(CSP) + '">' + html;
+    // the meta goes after the view's own leading doctype: before it, the
+    // document is in quirks mode (tables at 16 px, box sizing); nothing of
+    // the view but that doctype comes before the meta
+    const meta = '<meta http-equiv="Content-Security-Policy" content="' + esc(CSP) + '">';
+    const dt = /^\uFEFF?\s*<!doctype[^>]*>/i.exec(html);
+    const doc = dt ? dt[0] + meta + html.slice(dt[0].length) : meta + html;
     f.src = URL.createObjectURL(new Blob([doc], { type: "text/html" }));
     document.body.appendChild(f);
     inner = f;

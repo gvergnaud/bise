@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { frameAt, isViewOrigin, isViewProxy, originOf, stampGesture, viewKey, viewNavigation, viewPermission, type ViewFrame } from './viewrules';
+import { frameAt, pointInWindow, isViewOrigin, isViewProxy, originOf, stampGesture, viewKey, viewNavigation, viewPermission, type ViewFrame } from './viewrules';
 
 const A = 'http://v-0123456789abcdef.localhost:47123';
 const B = 'http://v-fedcba9876543210.localhost:47123';
@@ -83,6 +83,21 @@ describe('the gesture', () => {
     expect(frameAt(frames, 60, 45)?.call, 'overlap: the later one is on top').toBe('1-2');
     expect(frameAt(frames, 5, 5)).toBe(null);
     expect(frameAt(frames, 110, 30), 'the right edge is out').toBe(null);
+  });
+
+  it("a click in a view's own frame is placed by its screen point, never its widget's x/y", () => {
+    // a window whose content starts at (100, 80) on screen; a card at (600, 400) in it, and
+    // another one at the window's corner, where the OOPIF's own x/y (2, 3) would land
+    const cards = [frame(A, [], { x: 0, y: 0, w: 50, h: 50 }, 'corner'), frame(B, [], { x: 600, y: 400, w: 300, h: 200 }, 'card')];
+    const content = { x: 100, y: 80 };
+    const click = { x: 2, y: 3, globalX: 100 + 602, globalY: 80 + 403 };
+    const p = pointInWindow(click, content, 1);
+    expect(p).toEqual({ x: 602, y: 403 });
+    expect(frameAt(cards, p?.x ?? -1, p?.y ?? -1)?.call, "the card's corner is the card").toBe('card');
+    // zoomed 125 %: DIP over the zoom is CSS px
+    expect(pointInWindow({ globalX: 100 + 750, globalY: 80 + 500 }, content, 1.25)).toEqual({ x: 600, y: 400 });
+    expect(pointInWindow({}, content, 1), 'no screen point: no gesture').toBe(null);
+    expect(pointInWindow({ globalX: 110, globalY: 90 }, content, 0), 'a zoom of 0 reads as 1').toEqual({ x: 10, y: 10 });
   });
 
   it("view_message carries main's time, never the window's", () => {
