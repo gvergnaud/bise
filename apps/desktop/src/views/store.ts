@@ -13,7 +13,7 @@ import { VIEW_ERR, viewKey, type ViewAsk, type ViewRef } from './port';
 import { ViewSession, type Note, type Phase, type ViewResource } from './session';
 
 /** A card's height before its view says its own (css px), and the bounds of what it may say. */
-export const DEFAULT_H = 160;
+export const DEFAULT_H = 96;
 export const MIN_H = 48;
 export const MAX_H = 800;
 /** How long a view may take to answer ui/resource-teardown before it goes anyway. */
@@ -35,6 +35,8 @@ export type ViewState =
       /** declared by the view, not granted at the plugin's add (C8): what it runs without */
       readonly ungranted: readonly ViewPerm[];
       readonly tool: string;
+      /** its plugin, when its card said it (the tab's title) */
+      readonly plugin: string;
       /** a ui/message went in (ms), for the card's footnote */
       readonly messageAt: number | null;
     };
@@ -88,6 +90,8 @@ interface Rec {
   sizes: { thread?: { w: number; h: number }; tab?: { w: number; h: number } };
   seenAt: number;
   messageAt: number | null;
+  /** its plugin (ToolView.plugin, from its card) */
+  plugin: string;
   phase: Phase;
   note: Note;
   /** asks in flight */
@@ -162,7 +166,7 @@ export class ViewsStore {
     const k = viewKey(ref);
     let r = this.recs.get(k);
     if (r === undefined) {
-      r = { ref, state: NONE, session: null, frame: null, height: DEFAULT_H, sizes: {}, seenAt: this.env.now(), messageAt: null, phase: 'proxy', note: 'none', asking: false };
+      r = { ref, state: NONE, session: null, frame: null, height: DEFAULT_H, sizes: {}, seenAt: this.env.now(), messageAt: null, plugin: '', phase: 'proxy', note: 'none', asking: false };
       this.recs.set(k, r);
     }
     return r;
@@ -193,10 +197,11 @@ export class ViewsStore {
     return this.env.panel.has(ref) ? 'fullscreen' : 'inline';
   }
 
-  /** An anchor shows: its view is asked of the hub once (again after a teardown or a retry). */
-  ensure(ref: ViewRef): void {
+  /** An anchor shows: its view is asked of the hub once (again after a teardown or a retry); `plugin` from its card. */
+  ensure(ref: ViewRef, plugin?: string): void {
     const r = this.rec(ref);
     r.seenAt = this.env.now();
+    if (plugin !== undefined && plugin !== '') r.plugin = plugin;
     if (r.asking || r.session !== null || r.state.kind === 'expired' || r.state.kind === 'failed') return;
     r.asking = true;
     r.state = { kind: 'loading', height: r.height };
@@ -291,6 +296,7 @@ export class ViewsStore {
       prefersBorder: res?.prefersBorder ?? true,
       ungranted: missing,
       tool: str(res?.tool ?? null, 'title') || str(res?.tool ?? null, 'name'),
+      plugin: r.plugin,
       messageAt: r.messageAt,
     };
   }

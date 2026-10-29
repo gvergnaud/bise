@@ -30,6 +30,11 @@
     "one": null,
     "text": "views"
   },
+  "views.in_panel": {
+    "args": [],
+    "one": null,
+    "text": "in the panel"
+  },
   "views.list_and": {
     "args": [
       "head",
@@ -152,6 +157,14 @@
     "one": null,
     "text": "starting its server…"
   },
+  "views.tab_of": {
+    "args": [
+      "plugin",
+      "name"
+    ],
+    "one": null,
+    "text": "{plugin} · {name}"
+  },
   "views.tab_view": {
     "args": [],
     "one": null,
@@ -161,5 +174,12 @@
     "args": [],
     "one": null,
     "text": "the result is too big for the view"
+  },
+  "views.uses": {
+    "args": [
+      "perms"
+    ],
+    "one": null,
+    "text": "uses {perms}"
   }
 }

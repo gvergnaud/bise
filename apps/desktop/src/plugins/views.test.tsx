@@ -1,12 +1,14 @@
 // @vitest-environment happy-dom
-// A plugin's views (C8): the VIEWS group's ticks send the view's whole grant; a view never asked
-// says 'not granted'; the add screen's ticks become one grant per view after the confirm.
+// A plugin's views (C8): the VIEWS group's switches send the view's whole grant; a permission off
+// says 'not granted'; the add screen's switches become one grant per view after the confirm.
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AppCmd, PluginPart } from '@/proto';
 import { grantsOf, partsOfList, ticked, ViewsGroup, ViewsStep } from './ViewsGroup';
 import type { PluginViewsCmd, ViewAnswer } from '@/views/port';
 import type { Json } from '@/views/protocol';
+import { views } from '@/proto/words_views.gen';
+import { permsIn } from '@/views/names';
 
 const part = (uri: string, declared: string[], granted: string[], asked: boolean): PluginPart => ({
   id: `piano#view:${encodeURIComponent(uri)}`,
@@ -29,13 +31,20 @@ describe('ticked', () => {
 });
 
 describe('the VIEWS group', () => {
-  it("a tick sends the view's whole grant; a view never asked says not granted", () => {
+  it("a view's row, then one switch row per permission; a switch sends the view's whole grant; off says not granted", () => {
     const sent: AppCmd[] = [];
-    const v = render(<ViewsGroup plugin="piano" parts={[part('ui://piano/score', ['microphone', 'midi'], ['midi'], true), part('ui://piano/late', ['camera'], [], false), { id: 'piano#skill:x', kind: 'skill', name: 'x', on: true }]} project="p" send={(c) => sent.push(c)} />);
-    expect(v.getByTestId('plugins.views').querySelectorAll('.plg-row')).toHaveLength(2);
-    expect(v.queryByTestId('plugins.view.piano#view:ui%3A%2F%2Fpiano%2Fscore.not_granted')).toBeNull();
-    expect(v.getByTestId('plugins.view.piano#view:ui%3A%2F%2Fpiano%2Flate.not_granted')).toBeTruthy();
-    fireEvent.click(v.getByTestId('plugins.view.piano#view:ui%3A%2F%2Fpiano%2Fscore.perm.microphone'));
+    const v = render(<ViewsGroup plugin="piano" parts={[part('ui://piano/score', ['microphone', 'midi'], ['midi'], true), part('ui://piano/late', ['camera'], [], false), part('ui://piano/help_page', [], [], true), { id: 'piano#skill:x', kind: 'skill', name: 'x', on: true }]} project="p" send={(c) => sent.push(c)} />);
+    const score = 'plugins.view.piano#view:ui%3A%2F%2Fpiano%2Fscore';
+    const help = 'plugins.view.piano#view:ui%3A%2F%2Fpiano%2Fhelp_page';
+    // 3 views, 3 permission rows
+    expect(v.getByTestId('plugins.views').querySelectorAll('.plg-row')).toHaveLength(6);
+    expect(v.getByTestId(help).textContent).toContain('help page');
+    expect(v.getByTestId(help).querySelector('[role="switch"]')).toBeNull();
+    expect(v.getByTestId(score).textContent).toContain(views.uses({ perms: permsIn(['microphone', 'midi']) }));
+    expect(v.queryByTestId(`${score}.perm.midi.off`)).toBeNull();
+    expect(v.getByTestId(`${score}.perm.microphone.off`).textContent).toBe(views.not_granted);
+    expect(v.getByTestId('plugins.view.piano#view:ui%3A%2F%2Fpiano%2Flate.perm.camera.off')).toBeTruthy();
+    fireEvent.click(v.getByTestId(`${score}.perm.microphone.toggle`));
     expect(sent).toEqual([{ cmd: 'plugin_grant', project: 'p', plugin: 'piano', uri: 'ui://piano/score', perms: ['microphone', 'midi'] }]);
   });
 
@@ -82,7 +91,7 @@ describe("the add's step 2: the server's views once it runs", () => {
     expect(v.getByTestId('plugins.views_step.starting')).toBeTruthy();
     expect(asked).toEqual([{ cmd: 'plugin_views', project: 'home', plugin: 'piano' }]);
     await act(async () => { answer({ result: LIST }); await Promise.resolve(); });
-    fireEvent.click(v.getByTestId('plugins.preview.view.piano#view:ui%3A%2F%2Fpiano%2Fscore.perm.midi'));
+    fireEvent.click(v.getByTestId('plugins.preview.view.piano#view:ui%3A%2F%2Fpiano%2Fscore.perm.midi.toggle'));
     fireEvent.click(v.getByTestId('plugins.views_step.done'));
     expect(sent).toEqual([{ cmd: 'plugin_grant', project: 'home', plugin: 'piano', uri: 'ui://piano/score', perms: ['midi'] }, { cmd: 'plugin_grant', project: 'home', plugin: 'piano', uri: 'ui://piano/views/palette', perms: [] }]);
     expect(closed).toBe(1);

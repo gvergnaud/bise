@@ -1,12 +1,13 @@
-// A plugin's views (MCP Apps, docs/mcp-apps.md C8): on its page, the VIEWS group (each view, the
-// origins it reaches, a tick per permission it declares, 'not granted' when he was never asked);
-// on the add screen, the views it shows before it runs, ticked there. A tick sends `plugin_grant`
-// with the view's whole grant; what he leaves unticked is not granted. Owner: mcp-apps-host.
+// A plugin's views (MCP Apps, docs/mcp-apps.md C8): on its page, the VIEWS group (each view, what
+// it uses and reaches, a switch per permission it declares, 'not granted' while off); on the add
+// screen, the views it shows before it runs, switched there. A switch sends `plugin_grant` with
+// the view's whole grant; what he leaves off is not granted. Owner: mcp-apps-host.
 import { useEffect, useState } from 'react';
-import { Button, Check, GroupLabel, sentenceCase, Sheet } from '@/ds';
+import { Button, GroupLabel, sentenceCase, Sheet, Toggle } from '@/ds';
 import type { AppCmd, PluginPart } from '@/proto';
 import { views } from '@/proto/words_views.gen';
 import { permsOf } from '@/shared/viewperms';
+import { humanName, permsIn } from '@/views/names';
 import type { PluginViewsAsk } from '@/views/port';
 
 /** A permission's words. */
@@ -30,32 +31,48 @@ export function ticked(declared: readonly string[], granted: readonly string[], 
   return declared.filter((p) => (p === perm ? on : granted.includes(p)));
 }
 
-/** A view's row: its name, the origins it reaches, its ticks (or that it asks for nothing). */
+/** A view's sub line: what it uses, the origins it reaches, or that it asks for nothing. Pure. */
+export function viewWhat(declared: readonly string[], domains: readonly string[]): string {
+  const parts = [
+    ...(declared.length > 0 ? [views.uses({ perms: permsIn(declared) })] : []),
+    ...(domains.length > 0 ? [views.reaches({ domains: domains.map((d) => d.replace(/^https?:\/\//, '')).join(', ') })] : []),
+  ];
+  return parts.length === 0 ? views.asks_nothing : parts.join(' · ');
+}
+
+/**
+ * A view's rows, like a server's (designer m_50385): its name and what it uses; then one row per
+ * permission it declares, its switch at the end ('not granted' before it when off). A view that
+ * asks nothing has no switch.
+ */
 function ViewRow({ x, granted, onTick, testId }: { x: PluginPart; granted: readonly string[]; onTick: (perm: string, on: boolean) => void; testId: string }) {
   const v = x.view;
   if (v == null) return null;
   const declared = v.declared ?? [];
-  const domains = v.domains ?? [];
   return (
-    <div className="plg-row part" data-testid={testId}>
-      <span className="plg-lead" aria-hidden="true" />
-      <span className="plg-row-words">
-        <span className="plg-row-name">
-          <span className="plg-title plg-mono">{x.name}</span>
-          {!v.asked && declared.length > 0 && <span className="plg-dim" data-testid={`${testId}.not_granted`}>{views.not_granted}</span>}
-        </span>
-        {domains.length > 0 && <span className="plg-row-what">{views.reaches({ domains: domains.map((d) => d.replace(/^https?:\/\//, '')).join(', ') })}</span>}
-        {declared.length === 0 ? (
-          <span className="plg-row-what">{views.asks_nothing}</span>
-        ) : (
-          <span className="plg-perms">
-            {declared.map((p) => (
-              <Check key={p} on={granted.includes(p)} label={permWords(p)} onChange={(on) => { onTick(p, on); }} testId={`${testId}.perm.${p}`} />
-            ))}
+    <>
+      <div className="plg-row part" data-testid={testId}>
+        <span className="plg-lead" aria-hidden="true" />
+        <span className="plg-row-words">
+          <span className="plg-row-name">
+            <span className="plg-title">{humanName(x.name)}</span>
           </span>
-        )}
-      </span>
-    </div>
+          <span className="plg-row-what plg-dim">{viewWhat(declared, v.domains ?? [])}</span>
+        </span>
+      </div>
+      {declared.map((p) => {
+        const on = granted.includes(p);
+        return (
+          <div key={p} className="plg-row part plg-perm" data-testid={`${testId}.perm.${p}`}>
+            <span className="plg-row-words">{permWords(p)}</span>
+            <span className="plg-row-end">
+              {!on && <span className="plg-dim" data-testid={`${testId}.perm.${p}.off`}>{views.not_granted}</span>}
+              <Toggle on={on} label={permWords(p)} onChange={(o) => { onTick(p, o); }} testId={`${testId}.perm.${p}.toggle`} />
+            </span>
+          </div>
+        );
+      })}
+    </>
   );
 }
 

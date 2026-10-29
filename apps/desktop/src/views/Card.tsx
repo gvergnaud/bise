@@ -4,7 +4,7 @@
 // too large, in the panel. Mounted by one line in thread/ThreadRows.tsx, after the entry's row: one
 // card per tool call of the entry that has a view (C4's ToolItem.view). Owner: mcp-apps-host.
 import { memo, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { Press } from '@/ds';
+import { AppIcon, Press } from '@/ds';
 import { views } from '@/proto/words_views.gen';
 import type { ToolItem, ToolView } from '@/proto';
 import { useEntry } from '@/store';
@@ -12,6 +12,7 @@ import { openTab } from '@/app/panel/tabs';
 import type { ViewRef } from './port';
 import { useViewState, type ViewState, type ViewsStore } from './store';
 import { StateLine } from './StateLine';
+import { humanName, permsIn, uriName } from './names';
 import { viewsStore } from './window';
 
 /** C4's view of a tool call (bise_proto::thread::ToolView): its plugin, server, ui:// uri, call id, live or expired. */
@@ -30,27 +31,6 @@ export function viewsOf(item: ToolItem): ToolView[] {
   });
 }
 
-/** What a view runs without, in words: 'the camera and the microphone'. Pure. */
-export function missingWords(perms: readonly string[]): string {
-  const name = (p: string): string => {
-    switch (p) {
-      case 'camera':
-        return views.missing_camera;
-      case 'microphone':
-        return views.missing_microphone;
-      case 'midi':
-        return views.missing_midi;
-      case 'clipboardWrite':
-        return views.missing_clipboard;
-      default:
-        return p;
-    }
-  };
-  const ns = perms.map(name);
-  const last = ns.at(-1) ?? '';
-  return ns.length <= 1 ? last : views.list_and({ head: ns.slice(0, -1).join(', '), last });
-}
-
 /**
  * The foot under a live view, one line (designer m_50319): its server stopped, the result too big,
  * what it runs without ('change it' opens its plugin's page), a message it sent; then 'open in
@@ -65,7 +45,7 @@ function Foot({ state, view, agent, onPanel }: { state: Extract<ViewState, { kin
       key: 'grant',
       node: (
         <>
-          {views.no_grant({ missing: missingWords(state.ungranted) })}
+          {views.no_grant({ missing: permsIn(state.ungranted) })}
           {' · '}
           <Press
             look="vw-act"
@@ -101,8 +81,8 @@ export const ViewCard = memo(function ViewCard({ project, agent, view, store = v
   const box = useRef<HTMLDivElement>(null);
   const expired = view.state === 'expired';
   useEffect(() => {
-    if (!expired) store.ensure(r);
-  }, [store, r, expired]);
+    if (!expired) store.ensure(r, view.plugin);
+  }, [store, r, expired, view.plugin]);
   const live = state.kind === 'live';
   const inline = live && state.mode === 'inline';
   useEffect(() => {
@@ -115,8 +95,13 @@ export const ViewCard = memo(function ViewCard({ project, agent, view, store = v
   const testId = `views.card.${view.call}`;
   if (expired)
     return (
-      <div className="vw-card" data-testid={testId} data-state="expired">
-        <StateLine store={store} r={r} state={{ kind: 'expired' }} />
+      <div className="vw-card vw-gone" data-testid={testId} data-state="expired">
+        <div className="vw-line" data-testid="views.state.expired">
+          <AppIcon name="plugins" size={14} />
+          {uriName(view.uri)}
+          {' · '}
+          {views.expired}
+        </div>
       </div>
     );
   if (!live)
@@ -128,8 +113,12 @@ export const ViewCard = memo(function ViewCard({ project, agent, view, store = v
   if (state.mode === 'fullscreen')
     return (
       <div className="vw-card" data-testid={testId} data-state="panel">
-        <div className="vw-line">
-          {views.open_panel}
+        <div className="vw-line" data-testid="views.state.panel">
+          <AppIcon name="plugins" size={14} />
+          {state.tool === '' ? uriName(view.uri) : humanName(state.tool)}
+          {' · '}
+          {views.in_panel}
+          {' · '}
           <Press
             look="vw-act"
             onClick={() => {

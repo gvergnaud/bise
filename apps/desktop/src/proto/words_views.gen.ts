@@ -28,8 +28,12 @@ export const views = {
   missing_clipboard: "the clipboard",
   /** two or more missing permissions: 'the camera and the microphone' */
   list_and: (a: { head: string | number; last: string | number }): string => String(a.head) + " and " + String(a.last),
-  /** the card's link that opens the view in the panel, and its line while it shows there (designer m_50319: one key) */
+  /** the card's link that opens the view in the panel */
   open_panel: "open in the panel",
+  /** the card's one line while its view shows in the panel: '⊞ show board · in the panel · show here' */
+  in_panel: "in the panel",
+  /** a view's sub line on the plugins page: 'uses the microphone' */
+  uses: (a: { perms: string | number }): string => "uses " + String(a.perms),
   /** the card's button that brings a panel view back under its tool row */
   back_inline: "show here",
   /** try again after a load that failed */
@@ -62,6 +66,8 @@ export const views = {
   step_done: "done",
   /** a view's panel tab title with no tool name yet */
   tab_view: "view",
+  /** a view's panel tab title: its plugin, then its view's name ('kanban · board') */
+  tab_of: (a: { plugin: string | number; name: string | number }): string => String(a.plugin) + " · " + String(a.name),
   /** the view wrote to its agent: 'sent to perf via kanban' */
   message_sent: (a: { agent: string | number; plugin: string | number }): string => "sent to " + String(a.agent) + " via " + String(a.plugin),
 } as const;

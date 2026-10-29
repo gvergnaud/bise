@@ -4,14 +4,31 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { views } from '@/proto/words_views.gen';
 import type { Entity } from '@/shared/entity';
-import type { ViewRef } from './port';
+import { viewKey, type ViewRef } from './port';
+import { humanName } from './names';
 import { useViewState, type ViewsStore } from './store';
 import { StateLine } from './StateLine';
 
-/** A view tab's title: its tool's name the store knows, else 'view'. */
+/** A live view's name in a tab: its own title the server gave, else its tool's name humanised ('show board'); '' unknown. */
+function nameOf(store: ViewsStore, ref: ViewRef): string {
+  const s = store.state(ref);
+  return s.kind === 'live' ? humanName(s.tool) : '';
+}
+
+/**
+ * A view tab's title (designer m_50385): the view's name ('show board'), its plugin before it
+ * ('kanban · show board') only when another view tab in the panel reads the same; 'view' unknown.
+ */
 export function viewTitle(e: Extract<Entity, { kind: 'view' }>, store: ViewsStore): string {
   const s = store.state(e);
-  return s.kind === 'live' && s.tool !== '' ? s.tool : views.tab_view;
+  const name = nameOf(store, e);
+  if (s.kind !== 'live' || name === '') return views.tab_view;
+  const key = viewKey(e);
+  const twin = store.live().some((k) => {
+    const o = store.liveOf(k);
+    return k !== key && o !== undefined && store.modeOf(o.ref) === 'fullscreen' && nameOf(store, o.ref) === name;
+  });
+  return twin && s.plugin !== '' ? views.tab_of({ plugin: s.plugin, name }) : name;
 }
 
 export function ViewTab({ project, agent, call, store }: ViewRef & { store: ViewsStore }) {

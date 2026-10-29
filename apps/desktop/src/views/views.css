@@ -91,6 +91,23 @@
   color: var(--c-text-3);
 }
 
+/* in the thread, a quiet state is a box at the view's height (designer m_50319, ui-review m_50383) */
+.vw-card .vw-quiet {
+  box-sizing: border-box;
+  border-radius: var(--r-2);
+  background: var(--c-sunken);
+  box-shadow: 0 0 0 1px var(--c-line);
+  font: var(--f-ui);
+}
+
+/* an expired view, or one in the panel: no box, one quiet line on the column's left edge, 8 px
+   under its tool row (designer m_50385) */
+.vw-card.vw-gone,
+.vw-card[data-state="panel"] {
+  margin-top: var(--s-2);
+  color: var(--c-text-3);
+}
+
 .vw-tab {
   position: relative;
   display: flex;

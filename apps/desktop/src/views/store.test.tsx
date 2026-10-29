@@ -118,7 +118,7 @@ describe('a view\'s states', () => {
     const { store, asked } = rig();
     store.ensure(REF);
     store.ensure(REF);
-    expect(store.state(REF)).toEqual({ kind: 'loading', height: 160 });
+    expect(store.state(REF)).toEqual({ kind: 'loading', height: 96 });
     await flush();
     expect(asked).toEqual([{ cmd: 'view_resource', ...REF }]);
     expect(store.state(REF)).toMatchObject({ kind: 'live', phase: 'proxy', mode: 'inline', ungranted: ['camera'], tool: 'show_counter' });
@@ -136,7 +136,7 @@ describe('a view\'s states', () => {
     await flush();
     expect(store.state(other)).toEqual({ kind: 'failed', message: 'plugin off' });
     store.retry(other);
-    expect(store.state(other)).toEqual({ kind: 'loading', height: 160 });
+    expect(store.state(other)).toEqual({ kind: 'loading', height: 96 });
   });
 
   it('a result that is not a view is a failure', async () => {
