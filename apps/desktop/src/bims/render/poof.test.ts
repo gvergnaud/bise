@@ -2,8 +2,9 @@
 // after; the puffs grow to stay seen when the camera is far (designer m_39015), never past BOOST.
 import { describe, expect, it } from 'vitest';
 import { APPEAR_S } from './office-scene';
-import { POOF_S, PUFF, PUFF_MIN_PX, PUFF_TOP, SPARK, SPARK_MIN_PX, poofAt, puffBoost, sparkBoost } from './poof';
-import { RIM_PX, sparkPx } from './poofs';
+import { RIGHT, UP } from './camera';
+import { POOF_S, PUFF, PUFF_MIN_PX, PUFF_TOP, SPARK, SPARK_FAR, SPARK_MIN_PX, poofAt, puffBoost, sparkBoost, sparkSpread } from './poof';
+import { RIM_FROM_PX, RIM_PX, sparkPx } from './poofs';
 
 const steps = (n: number): number[] => Array.from({ length: n + 1 }, (_, i) => (i / n) * POOF_S);
 const seen = (s: number, boost = 1): number => poofAt(7, s, boost).filter((b) => b.r > 1e-3).length;
@@ -78,12 +79,56 @@ describe('a newcomer\'s poof', () => {
       }
       expect(peak.size).toBe(SPARK.n);
       for (const r of peak.values()) {
-        expect(sparkPx(r, scale) - 2 * RIM_PX).toBeGreaterThanOrEqual(4);
-        expect(sparkPx(r, scale)).toBeLessThan(40);
+        expect(sparkPx(r, scale).fill).toBeGreaterThanOrEqual(4);
+        expect(sparkPx(r, scale).size).toBeLessThan(40);
       }
     }
     // the same star in office units is twice as many px with the camera twice as close
-    expect(sparkPx(0.3, 1 / 20) - 2 * RIM_PX).toBeCloseTo(2 * (sparkPx(0.3, 1 / 10) - 2 * RIM_PX));
+    expect(sparkPx(0.3, 1 / 20).fill).toBeCloseTo(2 * sparkPx(0.3, 1 / 10).fill);
+  });
+
+  it('gives a star under RIM_FROM_PX no rim (pure gold, a paper core), a bigger one its ink rim (designer m_49952)', () => {
+    const small = sparkPx(0.2, 1 / 6);
+    expect(small.fill).toBeLessThan(RIM_FROM_PX);
+    expect(small.rim).toBe(0);
+    expect(small.size).toBeCloseTo(small.fill);
+    const big = sparkPx(0.3, 1 / 60);
+    expect(big.fill).toBeGreaterThanOrEqual(RIM_FROM_PX);
+    expect(big.rim).toBe(RIM_PX);
+    expect(big.size).toBeCloseTo(big.fill + 2 * RIM_PX);
+  });
+
+  it("twinkles its stars one by one at the fit, at least 6 px apart on screen, round the head; close up as the hero's (designer m_49952)", () => {
+    const dot = (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }): number => a.x * b.x + a.y * b.y + a.z * b.z;
+    for (const scale of [1 / 6, 1 / 8, 1 / 4]) {
+      const args = [puffBoost(scale), sparkBoost(scale), sparkSpread(scale)] as const;
+      expect(args[2]).toBeGreaterThan(1);
+      for (const seed of [1, 2, 3, 21, 77, 123]) {
+        // one by one: star i comes in SPARK_FAR.gap after star i - 1
+        const firstAt = new Map<number, number>();
+        for (let s = 0; s < POOF_S; s += 0.005) {
+          poofAt(seed, s, ...args).forEach((b, i) => {
+            if (b.kind === 'spark' && b.r > 1e-3 && !firstAt.has(i)) firstAt.set(i, s);
+          });
+        }
+        const starts = [...firstAt.entries()].sort((a, b) => a[0] - b[0]).map(([, s]) => s);
+        expect(starts).toHaveLength(SPARK.n);
+        for (let i = 1; i < starts.length; i++) expect((starts[i] ?? 0) - (starts[i - 1] ?? 0)).toBeCloseTo(SPARK_FAR.gap, 1);
+        for (let s = 0; s < POOF_S; s += 0.01) {
+          const on = poofAt(seed, s, ...args).filter((b) => b.kind === 'spark' && b.r > 1e-3);
+          for (const a of on) for (const b of on) {
+            if (a === b) continue;
+            const d = { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
+            expect(Math.hypot(dot(d, RIGHT), dot(d, UP)) / scale).toBeGreaterThanOrEqual(6);
+          }
+        }
+      }
+      // each one SPARK_FAR.gap after the last: the first in at SPARK.from, the last out by SPARK.from + 3 gaps + its life
+      const last = SPARK.from + (SPARK.n - 1) * SPARK_FAR.gap + SPARK_FAR.life;
+      expect(poofAt(5, last + 0.01, ...args).filter((b) => b.kind === 'spark' && b.r > 1e-3)).toHaveLength(0);
+    }
+    // close up (the hero's camera): unchanged, spread ×1
+    expect(sparkSpread(1 / 60)).toBe(1);
   });
 
   it('is the same poof for the same bim, and another for another', () => {

@@ -7,7 +7,7 @@
 import {
   BufferAttribute, BufferGeometry, Color, type Group, InstancedMesh, type Material, Matrix4, Points, Quaternion, ShaderMaterial, Vector3,
 } from 'three';
-import { POOF_S, PUFF, SPARK, poofAt, puffBoost, sparkBoost } from './poof';
+import { POOF_S, PUFF, SPARK, poofAt, puffBoost, sparkBoost, sparkSpread } from './poof';
 import type { Style } from './style';
 
 /** the puffs' clay: warm paper, no glow, in both themes (designer m_39015); the sparkles' gold: the DAY gold (palette.ts), never the accent */
@@ -15,32 +15,52 @@ const PUFF_COLOR = '#f2ede2';
 const SPARK_COLOR = '#ffd166';
 /** the sparkles' rim: the palette's warm ink (DAY.ink), one css px */
 const SPARK_RIM = '#1d1a17';
+/** the paper-white core of a small star (no rim): the puffs' paper */
+const SPARK_CORE = '#fffaf0';
 /** the rim's width, css px, on each side of the star */
 export const RIM_PX = 1;
+/** designer m_49952: a star under this many css px of gold has no rim (the rims merged into a dark clump at the fit) */
+export const RIM_FROM_PX = 6;
 
-/** a sparkle's sprite on screen, css px across (its gold star plus its rim each side): `r` its half length, office units; `scale` units per css px. Pure. */
-export const sparkPx = (r: number, scale: number): number => (2 * r) / scale + 2 * RIM_PX;
+/**
+ * A sparkle on screen: `fill` its gold star's css px across, `rim` its rim's (RIM_PX from RIM_FROM_PX
+ * up, else 0 and a paper-white core), `size` the sprite (both). `r` its half length in office units,
+ * `scale` office units per css px. Pure.
+ */
+export function sparkPx(r: number, scale: number): { readonly fill: number; readonly rim: number; readonly size: number } {
+  const fill = (2 * r) / scale;
+  const rim = fill >= RIM_FROM_PX ? RIM_PX : 0;
+  return { fill, rim, size: fill + 2 * rim };
+}
 
 const SPARK_VERT = /* glsl */ `
 attribute float aSize;
+attribute float aRim;
 attribute float aSpin;
 uniform float uDpr;
 varying float vSpin;
 varying float vFill;
+varying float vRim;
+varying float vSize;
 void main() {
   vSpin = aSpin;
-  vFill = (aSize - ${(2 * RIM_PX).toFixed(1)}) / aSize;
+  vRim = aRim;
+  vSize = aSize;
+  vFill = (aSize - 2.0 * aRim) / aSize;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   gl_PointSize = aSize * uDpr;
 }`;
 
-// a 4-point star: |x|^k + |y|^k under 1 (k < 1 pulls its sides in), its tips at the fill's edge; the
-// band one pixel past it is the rim
+// a 4-point star: |x|^k + |y|^k under 1 (k < 1 pulls its sides in), its tips at the fill's edge; a
+// rimmed star: the band a pixel past it is the rim; a small one: no rim, a paper-white pixel at its middle
 const SPARK_FRAG = /* glsl */ `
 uniform vec3 uGold;
 uniform vec3 uRim;
+uniform vec3 uCore;
 varying float vSpin;
 varying float vFill;
+varying float vRim;
+varying float vSize;
 void main() {
   vec2 p = gl_PointCoord * 2.0 - 1.0;
   float c = cos(vSpin);
@@ -48,8 +68,15 @@ void main() {
   vec2 q = vec2(c * p.x - s * p.y, s * p.x + c * p.y) / max(vFill, 0.05);
   float f = pow(abs(q.x), 0.7) + pow(abs(q.y), 0.7);
   float w = fwidth(f);
-  if (f > 1.0 + 1.5 * w) discard;
-  gl_FragColor = vec4(f < 1.0 ? uGold : uRim, 1.0);
+  vec3 col = uGold;
+  if (vRim > 0.5) {
+    if (f > 1.0 + 1.5 * w) discard;
+    if (f >= 1.0) col = uRim;
+  } else {
+    if (f > 1.0) discard;
+    if (length(p) * vSize * 0.5 < 0.75) col = uCore;
+  }
+  gl_FragColor = vec4(col, 1.0);
   #include <colorspace_fragment>
 }`;
 /** at most this many poofs at once (a burst of newcomers: the oldest ones' last frames are dropped) */
@@ -71,7 +98,7 @@ export interface Poofs {
 }
 
 /** the sparkles' point cloud: SPARK.n × MAX points, their size (css px) and spin per point, drawn over everything */
-function sparkCloud(): { pts: Points; geo: BufferGeometry; mat: ShaderMaterial; pos: BufferAttribute; size: BufferAttribute; spin: BufferAttribute } {
+function sparkCloud(): { pts: Points; geo: BufferGeometry; mat: ShaderMaterial; pos: BufferAttribute; size: BufferAttribute; rim: BufferAttribute; spin: BufferAttribute } {
   const n = SPARK.n * MAX;
   const geo = new BufferGeometry();
   const pos = new BufferAttribute(new Float32Array(n * 3), 3);
@@ -80,9 +107,11 @@ function sparkCloud(): { pts: Points; geo: BufferGeometry; mat: ShaderMaterial; 
   geo.setAttribute('position', pos);
   geo.setAttribute('aSize', size);
   geo.setAttribute('aSpin', spin);
+  const rim = new BufferAttribute(new Float32Array(n), 1);
+  geo.setAttribute('aRim', rim);
   geo.setDrawRange(0, 0);
   const mat = new ShaderMaterial({
-    uniforms: { uDpr: { value: 1 }, uGold: { value: new Color(SPARK_COLOR) }, uRim: { value: new Color(SPARK_RIM) } },
+    uniforms: { uDpr: { value: 1 }, uGold: { value: new Color(SPARK_COLOR) }, uRim: { value: new Color(SPARK_RIM) }, uCore: { value: new Color(SPARK_CORE) } },
     vertexShader: SPARK_VERT,
     fragmentShader: SPARK_FRAG,
     // over everything, never tone mapped (designer m_49932)
@@ -99,7 +128,7 @@ function sparkCloud(): { pts: Points; geo: BufferGeometry; mat: ShaderMaterial; 
     const u = mat.uniforms.uDpr;
     if (u) u.value = r.getPixelRatio();
   };
-  return { pts, geo, mat, pos, size, spin };
+  return { pts, geo, mat, pos, size, rim, spin };
 }
 
 export function makePoofs(root: Group, style: Style): Poofs {
@@ -128,18 +157,21 @@ export function makePoofs(root: Group, style: Style): Poofs {
     draw(t, list, scale) {
       const boost = puffBoost(scale);
       const spark = sparkBoost(scale);
+      const spread = sparkSpread(scale);
       const live = list.filter((p) => t - p.t0 >= 0 && t - p.t0 < POOF_S).slice(-MAX);
       let ip = 0;
       let is = 0;
       for (const p of live) {
-        for (const b of poofAt(p.seed, t - p.t0, boost, spark)) {
+        for (const b of poofAt(p.seed, t - p.t0, boost, spark, spread)) {
           if (b.r <= 1e-3) continue;
           p3.set(p.x + b.x, p.y + b.y, p.z + b.z);
           s3.setScalar(b.r);
           if (b.kind === 'puff') puffs.setMatrixAt(ip++, m4.compose(p3, q0, s3));
           else {
             sparks.pos.setXYZ(is, p3.x, p3.y, p3.z);
-            sparks.size.setX(is, sparkPx(b.r, scale));
+            const px = sparkPx(b.r, scale);
+            sparks.size.setX(is, px.size);
+            sparks.rim.setX(is, px.rim);
             sparks.spin.setX(is, b.spin);
             is++;
           }
@@ -152,6 +184,7 @@ export function makePoofs(root: Group, style: Style): Poofs {
       sparks.pts.visible = is > 0;
       sparks.pos.needsUpdate = true;
       sparks.size.needsUpdate = true;
+      sparks.rim.needsUpdate = true;
       sparks.spin.needsUpdate = true;
       return live.length > 0;
     },

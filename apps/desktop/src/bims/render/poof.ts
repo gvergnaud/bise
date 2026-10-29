@@ -40,12 +40,26 @@ export const PUFF_TOP = 0.45;
  */
 export const SPARK_MIN_PX = 4;
 const SPARK_MAX = 4.5;
-/** designer m_49905: spread ×1 (the glitter round its head, as close up) */
-const SPREAD_MAX = 1;
+/**
+ * designer m_49952: at the fit the 4 stars sat on each other (one clump): their ring round its head
+ * grows so the nearest star is at least SPARK_RING_PX from it on screen, at most SPREAD_MAX times
+ * its close-up size (the hero's, ×1, unchanged)
+ */
+export const SPARK_RING_PX = 13;
+const SPREAD_MAX = 5;
+/** far out (spread past 1), one star after another: each in this long after the last, living this long (designer m_49952) */
+export const SPARK_FAR = { life: 0.3, gap: 0.08 } as const;
+/** the ring's nearest radius close up, office units (sparks: far) */
+const RING_IN = 0.45;
 
 /** How much the sparkles grow at this camera (`scale`: office units per css px): 1 close up, more far out. Pure. */
 export function sparkBoost(scale: number): number {
   return Math.min(SPARK_MAX, Math.max(1, (SPARK_MIN_PX * scale) / SPARK.size));
+}
+
+/** How much wider their ring round the head is at this camera: 1 close up, more far out (SPARK_RING_PX). Pure. */
+export function sparkSpread(scale: number): number {
+  return Math.min(SPREAD_MAX, Math.max(1, (SPARK_RING_PX * scale) / RING_IN));
 }
 
 const clamp01 = (x: number): number => Math.min(1, Math.max(0, x));
@@ -106,18 +120,21 @@ function puffs(rnd: () => number, s: number, boost: number): PoofBit[] {
 }
 
 /** the sparkles: out from the bim's middle, one after another, each twinkles once (in, a turn, out) */
-function sparks(rnd: () => number, s: number, boost = 1): PoofBit[] {
+function sparks(rnd: () => number, s: number, boost = 1, spread = 1): PoofBit[] {
   const out: PoofBit[] = [];
-  const spread = Math.min(SPREAD_MAX, boost);
+  // far out: one by one (SPARK_FAR), each already out on its ring as it twinkles in
+  const one = spread > 1;
+  const life = one ? SPARK_FAR.life : SPARK.life;
+  const gap = one ? SPARK_FAR.gap : SPARK.gap;
   const turn = rnd() * Math.PI * 2;
   for (let i = 0; i < SPARK.n; i++) {
     const a = turn + (i / SPARK.n) * Math.PI * 2 + (rnd() - 0.5) * 0.7;
-    const far = 0.45 + rnd() * 0.3;
+    const far = RING_IN + rnd() * 0.3;
     const up = 0.15 + rnd() * 0.45;
     const big = 0.7 + rnd() * 0.5;
-    const u = (s - SPARK.from - i * SPARK.gap) / SPARK.life;
+    const u = (s - SPARK.from - i * gap) / life;
     if (u < 0 || u >= 1) { out.push(GONE('spark')); continue; }
-    const go = expoOut(u);
+    const go = one ? 0.85 + 0.15 * expoOut(u) : expoOut(u);
     // a twinkle: quick in, a short hold, out
     const tw = Math.sin(Math.PI * clamp01(u) ** 0.7);
     // at its head's height (designer m_49905), a little over it as it twinkles out
@@ -128,9 +145,9 @@ function sparks(rnd: () => number, s: number, boost = 1): PoofBit[] {
 
 /**
  * A poof's pieces at s seconds from its start: PUFF.n puffs then SPARK.n sparkles, at any s (gone
- * ones r 0). `boost`: puffBoost of the camera; `spark`: sparkBoost's. Pure.
+ * ones r 0). `boost`: puffBoost of the camera; `spark`: sparkBoost's; `spread`: sparkSpread's. Pure.
  */
-export function poofAt(seed: number, s: number, boost = 1, spark = 1): PoofBit[] {
+export function poofAt(seed: number, s: number, boost = 1, spark = 1, spread = 1): PoofBit[] {
   const rnd = stream(seed);
-  return [...puffs(rnd, s, boost), ...sparks(rnd, s, spark)];
+  return [...puffs(rnd, s, boost), ...sparks(rnd, s, spark, spread)];
 }
