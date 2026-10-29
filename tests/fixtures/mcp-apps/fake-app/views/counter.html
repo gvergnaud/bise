@@ -1,0 +1,106 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>counter</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; padding: 12px; font: 13px/1.4 var(--font-sans, system-ui);
+         color: var(--color-text-primary, CanvasText); background: var(--color-background-primary, Canvas); }
+  #count { font-size: 32px; font-variant-numeric: tabular-nums; }
+  button { font: inherit; margin-right: 6px; }
+  #log { margin-top: 8px; color: var(--color-text-secondary, GrayText); white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div>count: <span id="count" data-testid="count">?</span></div>
+<div>
+  <button id="bump" data-testid="bump">bump</button>
+  <button id="whisper" data-testid="whisper">call whisper</button>
+  <button id="ask" data-testid="ask">ask the agent</button>
+  <button id="ctx" data-testid="ctx">add context</button>
+  <button id="full" data-testid="full">fullscreen</button>
+  <button id="link" data-testid="link">open link</button>
+</div>
+<div id="theme" data-testid="theme"></div>
+<div id="log" data-testid="log"></div>
+<script>
+// A hand-written MCP Apps view (no SDK, nothing external): JSON-RPC 2.0 over
+// postMessage to window.parent, the spec's ui/* methods (docs/mcp-apps.md).
+const pending = new Map();
+let nextId = 1;
+const $ = (id) => document.getElementById(id);
+const log = (t) => { $("log").textContent += t + "\n"; };
+
+function request(method, params) {
+  const id = nextId++;
+  window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*");
+  return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
+}
+function notify(method, params) {
+  window.parent.postMessage({ jsonrpc: "2.0", method, params }, "*");
+}
+function show(result) {
+  const c = result && result.structuredContent && result.structuredContent.count;
+  if (typeof c === "number") $("count").textContent = String(c);
+}
+function context(ctx) {
+  if (!ctx) return;
+  if (ctx.theme) { $("theme").textContent = "theme: " + ctx.theme; document.documentElement.style.colorScheme = ctx.theme; }
+  const vars = ctx.styles && ctx.styles.variables;
+  if (vars) for (const [k, v] of Object.entries(vars)) document.documentElement.style.setProperty(k, v);
+}
+
+window.addEventListener("message", (e) => {
+  if (e.source !== window.parent) return;
+  const m = e.data;
+  if (!m || m.jsonrpc !== "2.0") return;
+  if (m.id !== undefined && !m.method) {
+    const p = pending.get(m.id);
+    if (!p) return;
+    pending.delete(m.id);
+    m.error ? p.reject(m.error) : p.resolve(m.result);
+    return;
+  }
+  switch (m.method) {
+    case "ui/notifications/tool-input": log("input " + JSON.stringify(m.params.arguments || {})); break;
+    case "ui/notifications/tool-result": show(m.params); break;
+    case "ui/notifications/tool-cancelled": log("cancelled " + (m.params.reason || "")); break;
+    case "ui/notifications/host-context-changed": context(m.params); break;
+    case "ui/resource-teardown":
+      window.parent.postMessage({ jsonrpc: "2.0", id: m.id, result: {} }, "*");
+      break;
+  }
+});
+
+$("bump").onclick = async () => {
+  try { show(await request("tools/call", { name: "bump", arguments: { by: 1 } })); }
+  catch (err) { log("bump refused: " + (err.message || JSON.stringify(err))); }
+};
+$("whisper").onclick = async () => {
+  try { await request("tools/call", { name: "whisper", arguments: { word: "hi" } }); log("whisper ran (it must not)"); }
+  catch (err) { log("whisper refused: " + (err.message || JSON.stringify(err))); }
+};
+$("ask").onclick = () => request("ui/message", {
+  role: "user", content: [{ type: "text", text: "the counter is at " + $("count").textContent }],
+}).then(() => log("message sent"), (err) => log("message refused: " + err.message));
+$("ctx").onclick = () => request("ui/update-model-context", {
+  content: [{ type: "text", text: "counter=" + $("count").textContent }],
+}).then(() => log("context set"), (err) => log("context refused: " + err.message));
+$("full").onclick = () => request("ui/request-display-mode", { mode: "fullscreen" })
+  .then((r) => log("mode " + r.mode), (err) => log("mode refused: " + err.message));
+$("link").onclick = () => request("ui/open-link", { url: "https://modelcontextprotocol.io/extensions/apps/overview" })
+  .then(() => log("link opened"), (err) => log("link refused: " + err.message));
+
+new ResizeObserver(() => notify("ui/notifications/size-changed", {
+  width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight,
+})).observe(document.body);
+
+request("ui/initialize", {
+  appInfo: { name: "fake-app counter", version: "0.1.0" },
+  appCapabilities: { availableDisplayModes: ["inline", "fullscreen"] },
+  protocolVersion: "2026-01-26",
+}).then((r) => { context(r.hostContext); notify("ui/notifications/initialized", {}); });
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "hello",
+  "description": "Greet someone by name in a small card.",
+  "inputSchema": {
+    "type": "object",
+    "properties": { "name": { "type": "string" } },
+    "required": ["name"]
+  },
+  "ui": {
+    "csp": { "connectDomains": [], "resourceDomains": [], "frameDomains": [], "baseUriDomains": [] },
+    "permissions": {}
+  }
+}

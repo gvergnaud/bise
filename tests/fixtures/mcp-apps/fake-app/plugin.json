@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "fake-app",
+  "version": "0.1.0",
+  "description": "Test fixture for MCP Apps: a stdio MCP server with a counter view, an app-only tool, a model-only tool and a hostile view."
+}

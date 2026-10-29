@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "fake-views",
+  "version": "0.1.0",
+  "description": "Test fixture for MCP Apps: one static Vibe view (ai.mistral.vibe/views/hello), no MCP server.",
+  "extensions": {
+    "ai.mistral.vibe": { "schemaVersion": 1 }
+  }
+}

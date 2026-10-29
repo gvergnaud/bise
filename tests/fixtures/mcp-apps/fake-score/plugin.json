@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "fake-score",
+  "version": "0.1.0",
+  "description": "Test fixture for MCP Apps that imitates a piano composer: a score in structuredContent, app-only edit and export tools, a view that also tries an out-of-spec mistral/* call."
+}

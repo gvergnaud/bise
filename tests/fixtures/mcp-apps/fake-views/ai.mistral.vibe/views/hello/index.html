@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>hello</title>
+<style>
+  body { margin: 0; padding: 12px; font: 13px/1.4 var(--font-sans, system-ui);
+         color: var(--color-text-primary, CanvasText); background: var(--color-background-primary, Canvas); }
+</style>
+</head>
+<body>
+<p id="greet" data-testid="greet">waiting for the tool input…</p>
+<script>
+// A static Vibe view (ai.mistral.vibe/views/hello): its tool's arguments
+// come in as ui/notifications/tool-input (docs/mcp-apps.md, piece 1).
+let id = 1;
+window.addEventListener("message", (e) => {
+  if (e.source !== window.parent) return;
+  const m = e.data || {};
+  if (m.method === "ui/notifications/tool-input") {
+    const name = (m.params.arguments || {}).name || "nobody";
+    document.getElementById("greet").textContent = "hello, " + name;
+  }
+  if (m.id === 1 && m.result) window.parent.postMessage({ jsonrpc: "2.0", method: "ui/notifications/initialized" }, "*");
+});
+window.parent.postMessage({ jsonrpc: "2.0", id: id++, method: "ui/initialize", params: {
+  appInfo: { name: "fake-views hello", version: "0.1.0" }, appCapabilities: {}, protocolVersion: "2026-01-26",
+} }, "*");
+</script>
+</body>
+</html>
