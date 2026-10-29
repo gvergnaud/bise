@@ -1,6 +1,8 @@
 // What he pinned (bise fait mac, decision d5, architect m_42051; every kind his m_49100, architect
 // m_49104): an agent, an artifact, a scheduled task or a process, pinned from the right side's rows
-// (a hover pin in the row's end) or its menu, first in its list there and on its page. Desktop view
+// (a hover pin in the row's end) or its menu, or from the tab it is open in (its pin at the tab
+// row's end, panel/TabPin.tsx, and the tab's menu; tab-pin, his m_49983), first in its list there
+// and on its page. Desktop view
 // state that lasts across windows and restarts, kept in the app's prefs through prefs_set, one key
 // per kind and project hub id (pinKeyOf), each the pinned ids in the order he pinned them:
 // `pins.<project>` the agents' names (the left sidebar's Pinned reads them too), `pins_art.<project>`
@@ -15,6 +17,7 @@
 // `pin`) and the reader (`usePins`, `usePinned`). Owner: nm-frame.
 import { useMemo } from 'react';
 import type { Agent, JsonValue } from '@/proto';
+import type { Entity } from '@/shared/entity';
 import { getAppStore, usePrefs, type Store } from '@/store';
 import { getPref, type Prefs } from '@/settings/prefs';
 
@@ -41,6 +44,29 @@ export const procPinId = (agent: string, id: string): string => `${agent}/${id}`
 
 /** A watch's pin id (an agent's sb wake, listed with the timers): its wake id, apart from the timers' ids. */
 export const watchPinId = (id: number): string => `watch:${String(id)}`;
+
+/** One thing's pin: its kind, its project and its pin id. */
+export interface PinRef {
+  readonly kind: PinKind;
+  readonly project: string;
+  readonly id: string;
+}
+
+/** The pin of a thing he can open (a row's, a menu's, a tab's); none for what has no pin (a PR, a commit, a project). Pure. */
+export function pinRefOf(e: Entity): PinRef | undefined {
+  switch (e.kind) {
+    case 'agent':
+      return { kind: 'agent', project: e.project, id: e.agent };
+    case 'artifact':
+      return { kind: 'artifact', project: e.project, id: e.id };
+    case 'process':
+      return { kind: 'process', project: e.project, id: procPinId(e.agent, e.id) };
+    case 'scheduled':
+      return { kind: 'schedule', project: e.project, id: String(e.id) };
+    default:
+      return undefined;
+  }
+}
 
 /** A project's pinned ids from its prefs value: strings only, each once. Pure. */
 export function namesOf(v: JsonValue | undefined): string[] {

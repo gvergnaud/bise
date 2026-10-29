@@ -594,11 +594,18 @@ body:has(.app-shell) {
   height: 12px;
 }
 /* the hover pin (pinbutton.tsx PinButton): the fill is its state, no pressed square; a click pops
-   its glyph, 150 ms .8 -> 1 (none under reduced motion) */
-.s3-pin .b-ibtn.on:not(:hover) {
+   its glyph, 150 ms .8 -> 1 (none under reduced motion); the tab row's pin (panel/TabPin.tsx,
+   .pn-pin) the same, always shown */
+.s3-pin .b-ibtn.on:not(:hover),
+.pn-pin .b-ibtn.on:not(:hover) {
   background: none;
 }
-.s3-pin[data-pop] .b-app-icon {
+.pn-pin {
+  display: inline-flex;
+  flex: none;
+}
+.s3-pin[data-pop] .b-app-icon,
+.pn-pin[data-pop] .b-app-icon {
   animation: b-pin-pop 150ms var(--ease-out);
 }
 @keyframes b-pin-pop {
@@ -607,11 +614,13 @@ body:has(.app-shell) {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .s3-pin[data-pop] .b-app-icon {
+  .s3-pin[data-pop] .b-app-icon,
+  .pn-pin[data-pop] .b-app-icon {
     animation: none;
   }
 }
-:root[data-reduce-motion] .s3-pin[data-pop] .b-app-icon {
+:root[data-reduce-motion] .s3-pin[data-pop] .b-app-icon,
+:root[data-reduce-motion] .pn-pin[data-pop] .b-app-icon {
   animation: none;
 }
 .app-s-label {

@@ -1,7 +1,8 @@
 // src/app/panel · PanelHost: the tabbed panel in the shell's right column (App.tsx's <Win aside>),
 // so nm-panel never edits App.tsx (plan native-mac-plan v4 §3). Folded by default; ▯ and ⌥⌘0 unfold
 // it (state.ts, kept per window). Its column runs the window's height: its own top row in the
-// transparent 52 bar (the tabs, '+', and 'open in a window' for an artifact: mockups 3 and 4), then
+// transparent 52 bar (the tabs, '+', the front thing's pin (TabPin.tsx) and 'open in a window' for
+// an artifact: mockups 3 and 4), then
 // the body on --c-solid with its 1 px line. Its width is the one the tab in front asks (384 rows,
 // 480 a shell, 640 a page; 320-640 by its border); an artifact in front takes its kind's share of
 // the window instead, the thread keeping 400 (model.ts artFit, r3-escape item 2: 55%, a sheet and
@@ -31,6 +32,7 @@ import { Launcher } from './Launcher';
 import { ThingTab } from './Thing';
 import { BlankBrowser } from './Browser';
 import { PanelTabs } from './BarTabs';
+import { TabPin } from './TabPin';
 import './panel.css';
 
 /** The tabbed panel on the window's right (--w-panel 384, from --w-panel-min to --w-panel-max). */
@@ -48,7 +50,14 @@ export function PanelHost() {
   const artKind = useFrontArtKind();
   const full = usePanelFull();
   const snap = useScopeSnap();
-  const window_ = art === undefined ? undefined : <WindowButton project={art.project} id={art.id} />;
+  const thing = front?.what.kind === 'thing' ? front.what.e : undefined;
+  // the front thing's pin (TabPin.tsx), then an artifact's own window
+  const window_ = (
+    <>
+      {thing !== undefined && <TabPin key={front?.id} e={thing} />}
+      {art !== undefined && <WindowButton project={art.project} id={art.id} />}
+    </>
+  );
   return (
     <aside
       ref={box}

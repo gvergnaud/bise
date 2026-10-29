@@ -9,7 +9,7 @@ import type { WindowOpen } from '@/shared/api';
 import type { Entity } from '@/shared/entity';
 import { formatRoute, MAIN } from '../route';
 import { agentBranch, agentPath, procUrl, type Act, type MenuFacts } from './registry';
-import { procPinId, type PinKind } from '../pins';
+import { pinRefOf, type PinKind } from '../pins';
 
 /** The effects a pick may have. */
 export interface MenuFx {
@@ -110,12 +110,11 @@ export function runAct(act: Act, f: MenuFacts, fx: MenuFx): void {
       fx.changeModel(e);
       return;
     case 'pin':
-    case 'unpin':
-      if (e.kind === 'agent') fx.pin('agent', e.project, e.agent, act === 'pin');
-      else if (e.kind === 'artifact') fx.pin('artifact', e.project, e.id, act === 'pin');
-      else if (e.kind === 'process') fx.pin('process', e.project, procPinId(e.agent, e.id), act === 'pin');
-      else if (e.kind === 'scheduled') fx.pin('schedule', e.project, String(e.id), act === 'pin');
+    case 'unpin': {
+      const ref = pinRefOf(e);
+      if (ref !== undefined) fx.pin(ref.kind, ref.project, ref.id, act === 'pin');
       return;
+    }
     case 'changes':
       if (e.kind === 'agent') fx.openTab({ kind: 'diff', project: e.project, agent: e.agent });
       return;

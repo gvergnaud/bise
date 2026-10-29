@@ -40,7 +40,15 @@ export const pinTip = (on: boolean, failed: boolean | null): string =>
   failed === null ? (on ? menus.unpin : menus.pin) : failed ? menus.pin_failed : menus.unpin_failed;
 
 /** The hover pin: pins or unpins `pin`'s thing (module header). */
-export function PinButton({ pin, look, testId }: { pin: PinOf; look?: string; testId: string }) {
+export function PinButton({ pin, look, size = 'row', hold = true, testId }: {
+  pin: PinOf;
+  look?: string;
+  /** 'row' in a list row (16 wide), 'bar' in a bar (24: the tab row's end, panel/TabPin.tsx) */
+  size?: 'row' | 'bar';
+  /** a click holds its list's order under the pointer (pinhold.ts); a pin outside the lists holds nothing */
+  hold?: boolean;
+  testId: string;
+}) {
   const store = useStore();
   const [want, setWant] = useState<Want | null>(null);
   /** a click the hub refused: the state it asked for (its tip says so until the pointer leaves) */
@@ -67,7 +75,7 @@ export function PinButton({ pin, look, testId }: { pin: PinOf; look?: string; te
     setFailed(null);
     setPops((n) => n + 1);
     // a click with the pointer holds its list's order until the pointer leaves the card (pinhold.ts)
-    if (e.detail > 0) holdPin({ kind, project, id, was: on }, scopeOf(e.currentTarget));
+    if (hold && e.detail > 0) holdPin({ kind, project, id, was: on }, scopeOf(e.currentTarget));
     pinThing(kind, project, id, next, store);
   };
   return (
@@ -75,7 +83,7 @@ export function PinButton({ pin, look, testId }: { pin: PinOf; look?: string; te
       onPointerLeave={() => {
         setFailed(null);
       }}>
-      <IconButton size="row" label={pinTip(on, failed)} pressed={on} onClick={click} testId={testId}>
+      <IconButton size={size} label={pinTip(on, failed)} pressed={on} onClick={click} testId={testId}>
         <AppIcon key={pops} name={on ? 'pin-on' : 'pin'} size={14} />
       </IconButton>
     </span>
