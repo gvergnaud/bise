@@ -10,7 +10,7 @@ import type { Agent } from '@/proto';
 import type { BimFrame, Look, Motion, Office, Pt } from '../model';
 import { makeBim, nearAt, type Bim } from './bim';
 import { pillOf } from '../labels';
-import { siteOf, type Fit, type V3 } from './camera';
+import { siteOf, toScreen, type Fit, type V3 } from './camera';
 import { cameraStart, viewPoint, flightAt, glideAt, makePlane, planFlight, planGlide, shadowOf, sizeAt, startSize, type FlightFrame, type FlightPlan, type GlidePlan, type Plane } from './plane';
 import { DESK_SPOT, HELD_LEN, ON_DESK, PLANE_CATCH, POCKET_SINK, REACH_S, awayOf, heldAt } from './catch';
 import { PLANE_FLIGHT, louder, rigOf, type Rig } from './pose';
@@ -30,7 +30,7 @@ import { lookOf } from './maps';
 import type { MapLook } from './maps/look';
 import { makeUnlock } from './unlock';
 import { seatChair } from './furniture';
-import { POOF_S } from './poof';
+import { POOF_S, SPARK, sparkSpread } from './poof';
 import { makePoofs, type Poof } from './poofs';
 import type { Style } from './style';
 import type { ObjectsLayer } from './objects-layer';
@@ -374,6 +374,25 @@ export function makeOfficeScene(style: Style, o: { readonly ground?: boolean; re
    * a point of the view (world units) in this office's own (the plane flies in its root): in the town
    * the office stands at its place, and his button's point taken as the office's flew from that far off
    */
+  /**
+   * A check's probe (test mode only): each newcomer's pop, where it stands on the canvas (css px from
+   * its top left: its feet, its head, and the stars' ring round it), so a check finds it in any layout
+   * and sees what covers it (designer m_49975: window.__bisePoofs, the newest last, at most 20)
+   */
+  function probePoof(name: string, rig: Rig, fit: Fit): void {
+    const w = window as { bise?: { test?: boolean }; __bisePoofs?: unknown[] };
+    if (w.bise?.test !== true) return;
+    root.updateWorldMatrix(true, false);
+    const at = (y: number): { x: number; y: number } => {
+      const v = root.localToWorld(new Vector3(rig.x, y, rig.z));
+      const s = toScreen(fit, { x: v.x, y: v.y, z: v.z });
+      return { x: Math.round(s.x * 10) / 10, y: Math.round(s.y * 10) / 10 };
+    };
+    const list = (w.__bisePoofs ??= []);
+    list.push({ name, at: Date.now(), feet: at(0), head: at(1.1), stars: at(SPARK.y), ringPx: Math.round(sparkSpread(fit.scale) * 0.6 / fit.scale) });
+    if (list.length > 20) list.shift();
+  }
+
   const local = (w: V3): V3 => {
     root.updateWorldMatrix(true, false);
     const v = root.worldToLocal(new Vector3(w.x, w.y, w.z));
@@ -671,6 +690,7 @@ export function makeOfficeScene(style: Style, o: { readonly ground?: boolean; re
         if (primed && !look.reduced && !shownLast.has(f.name) && !appearing.has(f.name)) {
           appearing.set(f.name, t);
           poofList.push({ x: rig.x, y: 0, z: rig.z, t0: t, seed: hash(f.name) });
+          probePoof(f.name, rig, fit);
         }
         const since = appearing.get(f.name);
         if (since !== undefined) {
