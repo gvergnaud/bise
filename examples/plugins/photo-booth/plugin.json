@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "photo-booth",
+  "version": "1.0.0",
+  "description": "A camera photo booth under the conversation: live preview, filters, a 3-2-1 snapshot, copy to the clipboard, save or hand to the agent, in an MCP Apps view (camera)."
+}

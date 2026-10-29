@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "kanban",
+  "version": "1.0.0",
+  "description": "A kanban board (To do, Doing, Done) the user and the agent share: drag cards, ask the agent to split one, see its changes live, in an MCP Apps view."
+}

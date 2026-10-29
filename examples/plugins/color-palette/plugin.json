@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "color-palette",
+  "version": "1.0.0",
+  "description": "Show a color palette as swatches with their contrast, copy a color or the CSS: a static Vibe view (ai.mistral.vibe/views/palette), no server.",
+  "extensions": {
+    "ai.mistral.vibe": { "schemaVersion": 1 }
+  }
+}

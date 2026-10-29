@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "name": "palette",
+  "description": "Show a color palette as swatches the user can copy, with each color's contrast on white and black. colors: hex like #3b5bdb, 2 to 12, each optionally named.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "name": { "type": "string", "description": "the palette's name" },
+      "colors": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 12,
+        "items": {
+          "anyOf": [
+            { "type": "string", "description": "#rrggbb" },
+            { "type": "object", "properties": { "hex": { "type": "string" }, "name": { "type": "string" } }, "required": ["hex"] }
+          ]
+        }
+      }
+    },
+    "required": ["colors"]
+  },
+  "ui": {
+    "csp": { "connectDomains": [], "resourceDomains": [], "frameDomains": [], "baseUriDomains": [] },
+    "permissions": { "clipboardWrite": {} },
+    "prefersBorder": true
+  }
+}

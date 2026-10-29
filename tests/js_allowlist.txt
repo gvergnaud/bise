@@ -8,3 +8,4 @@ apps/desktop/eslint.config.mjs         # an eslint.config.ts needs jiti
 computer-use/extension/build.js        # a stamp bise computer-use rewrites on each sync (build.d.ts types it)
 docs/research/computer-use-spike/**    # a frozen record the design docs cite, never typechecked
 site/desktop/hero/*.js                 # generated: apps/desktop's vite hero bundle (hero.vite.config.ts), minified, no banner
+examples/plugins/*/server.mjs        # example MCP servers run by plain `node` from mcp.json, no build step (Node 18+): a plugin folder must run as copied

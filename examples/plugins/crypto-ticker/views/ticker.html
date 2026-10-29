@@ -1,0 +1,276 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Ticker</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: var(--color-background-primary, light-dark(#ffffff, #1c1c1f));
+    --bg2: var(--color-background-secondary, light-dark(#f6f6f5, #242428));
+    --bg3: var(--color-background-tertiary, light-dark(#ececea, #2f2f34));
+    --fg: var(--color-text-primary, light-dark(#1d1d1f, #ececef));
+    --fg2: var(--color-text-secondary, light-dark(#6c6c72, #a1a1aa));
+    --fg3: var(--color-text-tertiary, light-dark(#a0a0a6, #6f6f78));
+    --line: var(--color-border-primary, light-dark(#e4e4e2, #38383e));
+    --line2: var(--color-border-secondary, light-dark(#efefed, #2c2c31));
+    --accent: var(--color-text-info, light-dark(#3b5bdb, #8ea2ff));
+    --up: var(--color-text-success, light-dark(#2b8a3e, #69db7c));
+    --down: var(--color-text-danger, light-dark(#c92a2a, #ff8787));
+    --radius: var(--border-radius-md, 8px);
+    --sans: var(--font-sans, -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif);
+  }
+  html[data-theme="light"] { color-scheme: light; }
+  html[data-theme="dark"] { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 13px/1.45 var(--sans); color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  .app { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .head { display: flex; align-items: center; gap: 10px; }
+  h1 { margin: 0; font-size: 14px; font-weight: 600; flex: 1; }
+  .live { color: var(--fg2); font-size: 12px; display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--fg3); }
+  .dot.on { background: #2f9e44; animation: beat 2s ease-in-out infinite; }
+  @keyframes beat { 50% { opacity: .35; } }
+  button, select { font: inherit; font-size: 12px; color: var(--fg); }
+  button { height: 28px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; white-space: nowrap; }
+  button:hover:not(:disabled) { background: var(--bg2); }
+  button:disabled { opacity: .45; cursor: default; }
+  select { height: 28px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg); padding: 0 6px; }
+  .hero { display: flex; align-items: flex-end; gap: 14px; }
+  .hero .px { font-size: 30px; font-weight: 300; letter-spacing: -.6px; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .hero .px.tick-up { animation: up 1s ease-out; } .hero .px.tick-down { animation: down 1s ease-out; }
+  @keyframes up { from { color: var(--up); } } @keyframes down { from { color: var(--down); } }
+  .hero .nm { color: var(--fg2); font-size: 12px; }
+  .chg { font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .chg.up { color: var(--up); } .chg.down { color: var(--down); }
+  svg { display: block; width: 100%; }
+  .area { opacity: .12; }
+  .chart-l { fill: none; stroke-width: 1.75; }
+  .ax { font-size: 10px; fill: var(--fg3); font-variant-numeric: tabular-nums; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  tr { cursor: pointer; }
+  tr:hover td { background: var(--bg2); }
+  tr.sel td { background: var(--bg2); }
+  td { padding: 6px 6px; border-top: 1px solid var(--line2); }
+  td:first-child { border-radius: 6px 0 0 6px; } td:last-child { border-radius: 0 6px 6px 0; }
+  .badge { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; color: #fff; font-size: 9px; letter-spacing: -.3px; font-weight: 700; margin-right: 8px; vertical-align: middle; }
+  td.r { text-align: right; }
+  td.sp { width: 90px; }
+  .foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--fg3); font-size: 11px; }
+  .foot .spacer { flex: 1; }
+  .foot a { color: var(--fg2); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+  .warn { padding: 6px 9px; border-radius: 7px; background: var(--bg2); color: var(--fg2); font-size: 12px; }
+  .status { color: var(--fg2); font-size: 12px; }
+  .status:empty { display: none; }
+  .status.err { color: var(--down); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="head">
+    <h1>Crypto ticker</h1>
+    <span class="live" data-testid="live"><span class="dot" id="dot"></span><span id="liveText">waiting…</span></span>
+  </div>
+  <div class="hero" id="hero"></div>
+  <div id="chart" data-testid="chart"></div>
+  <table><tbody id="rows" data-testid="rows"></tbody></table>
+  <div id="warn"></div>
+  <div class="foot">
+    <select id="addCoin" data-testid="add-coin"><option value="">+ Add a coin</option></select>
+    <button id="check" data-testid="check" title="Calls get_price on the plugin's server: bise asks you first">Check with the server</button>
+    <span class="spacer"></span>
+    <span>Prices by <a id="cg" data-testid="coingecko">CoinGecko</a></span>
+  </div>
+  <div class="status" id="status" data-testid="status"></div>
+</div>
+<script>
+// ---- the MCP Apps bridge (SEP-1865): JSON-RPC 2.0 over postMessage to the host. No SDK, nothing external.
+const mcp = (() => {
+  const pending = new Map(), handlers = {};
+  let nextId = 1, ctx = {};
+  const post = (m) => window.parent.postMessage({ jsonrpc: "2.0", ...m }, "*");
+  const request = (method, params) => new Promise((resolve, reject) => {
+    const id = nextId++; pending.set(id, { resolve, reject }); post({ id, method, params });
+  });
+  const notify = (method, params) => post({ method, params });
+  function applyContext(c) {
+    if (!c) return;
+    ctx = { ...ctx, ...c };
+    const root = document.documentElement;
+    if (c.theme) root.dataset.theme = c.theme;
+    const vars = c.styles && c.styles.variables;
+    if (vars) for (const [k, v] of Object.entries(vars)) if (v) root.style.setProperty(k, v);
+    if (c.displayMode) root.dataset.mode = c.displayMode;
+    if (handlers.context) handlers.context(ctx);
+  }
+  window.addEventListener("message", (e) => {
+    if (e.source !== window.parent) return;
+    const m = e.data;
+    if (!m || m.jsonrpc !== "2.0") return;
+    if (m.method && m.id !== undefined) {
+      if (m.method === "ui/resource-teardown" && handlers.teardown) handlers.teardown();
+      if (m.method === "ui/resource-teardown" || m.method === "ping") post({ id: m.id, result: {} });
+      else post({ id: m.id, error: { code: -32601, message: "method not found" } });
+      return;
+    }
+    if (m.method) {
+      if (m.method === "ui/notifications/host-context-changed") applyContext(m.params);
+      const h = handlers[m.method.replace("ui/notifications/", "")];
+      if (h) h(m.params || {});
+      return;
+    }
+    const p = pending.get(m.id);
+    if (!p) return;
+    pending.delete(m.id);
+    if (m.error) p.reject(Object.assign(new Error(m.error.message || "error"), { code: m.error.code, data: m.error.data }));
+    else p.resolve(m.result);
+  });
+  return {
+    on(name, fn) { handlers[name] = fn; },
+    get context() { return ctx; },
+    async call(name, args) {
+      const r = await request("tools/call", { name, arguments: args || {} });
+      if (r && r.isError) throw new Error(((r.content || [])[0] || {}).text || name + " failed");
+      return r;
+    },
+    read: (uri) => request("resources/read", { uri }),
+    message: (text) => request("ui/message", { role: "user", content: [{ type: "text", text }] }),
+    setContext: (text, structuredContent) => request("ui/update-model-context", { content: [{ type: "text", text }], structuredContent }),
+    openLink: (url) => request("ui/open-link", { url }),
+    download: (contents) => request("ui/download-file", { contents }),
+    displayMode: (mode) => request("ui/request-display-mode", { mode }),
+    async start(name, appCapabilities) {
+      const r = await request("ui/initialize", { appInfo: { name, version: "1.0.0" }, appCapabilities: appCapabilities || {}, protocolVersion: "2026-01-26" });
+      applyContext(r && r.hostContext);
+      notify("ui/notifications/initialized", {});
+      // the body's own height: the document's scrollHeight never drops below the frame's
+      new ResizeObserver(() => notify("ui/notifications/size-changed", {
+        width: Math.ceil(document.body.getBoundingClientRect().width), height: Math.ceil(document.body.getBoundingClientRect().height),
+      })).observe(document.body);
+      return r;
+    },
+  };
+})();
+function why(err) {
+  const reasons = { "-32031": "this view may not call that tool", "-32032": "the plugin is turned off", "-32033": "you declined it",
+    "-32034": "not supported in bise", "-32035": "too many calls, wait a moment", "-32036": "the server restarted, try again" };
+  return reasons[String(err && err.code)] || (err && err.message) || "it failed";
+}
+
+// ---- the ticker
+const $ = (id) => document.getElementById(id);
+const TICK_MS = 30000;
+let data = null, known = [], sel = null, ticks = {}, timer = 0, fails = 0;
+const status = (t, err) => { $("status").textContent = t || ""; $("status").className = "status" + (err ? " err" : ""); };
+const money = (v) => new Intl.NumberFormat(mcp.context.locale || undefined, { style: "currency", currency: data.vs.toUpperCase(), maximumSignificantDigits: v < 1 ? 4 : 7 }).format(v);
+const color = (id) => (known.find((c) => c.id === id) || {}).color || "#868e96";
+// the chart's labels: one format for both (no cents from 100 up)
+const axis = (v) => new Intl.NumberFormat(mcp.context.locale || undefined, { style: "currency", currency: data.vs.toUpperCase(), maximumFractionDigits: v >= 100 ? 0 : v >= 1 ? 2 : 4 }).format(v);
+const pct = (v) => `<span class="chg ${v >= 0 ? "up" : "down"}">${v >= 0 ? "▲" : "▼"} ${Math.abs(v).toFixed(2)}%</span>`;
+
+function path(vals, w, h, pad = 2) {
+  const lo = Math.min(...vals), hi = Math.max(...vals), span = hi - lo || 1;
+  return vals.map((v, i) => `${i ? "L" : "M"}${(i / (vals.length - 1 || 1) * w).toFixed(1)} ${(pad + (hi - v) / span * (h - 2 * pad)).toFixed(1)}`).join(" ");
+}
+
+function draw() {
+  if (!data) return;
+  const c = data.coins.find((k) => k.id === sel) || data.coins[0];
+  sel = c.id;
+  const live = ticks[c.id] || [], last = live.length ? live[live.length - 1].p : c.price;
+  const prev = live.length > 1 ? live[live.length - 2].p : null;
+  $("hero").innerHTML = `<div><div class="nm">${c.name} · ${c.symbol}/${data.vs.toUpperCase()}</div>
+    <div class="px${prev == null ? "" : last > prev ? " tick-up" : last < prev ? " tick-down" : ""}" data-testid="price">${money(last)}</div></div>
+    <div style="padding-bottom:4px">${pct(c.change24h)} <span class="nm">24h · low ${money(c.low24h)} · high ${money(c.high24h)}</span></div>`;
+  // 7 days of history, then the live ticks since this view opened, as one line; a dot at its end
+  const W = Math.max(280, $("chart").clientWidth || 560), H = 120;
+  const hist = c.spark.length > 1 ? c.spark : [c.price, c.price];
+  const vals = [...hist, ...live.map((t) => t.p)];
+  const min = Math.min(...vals), max = Math.max(...vals), air = (max - min || max * 0.01) * 0.08;
+  const lo = min - air, hi = max + air;
+  const x = (i) => i / (vals.length - 1) * (W - 4), y = (v) => (hi - v) / (hi - lo) * H;
+  const line = vals.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(" ");
+  const col = color(c.id), end = vals[vals.length - 1];
+  $("chart").innerHTML = `<svg viewBox="0 0 ${W} ${H + 14}" height="${H + 14}" role="img" aria-label="${c.name} price over 7 days, then live">
+    <path class="area" fill="${col}" d="${line} L${x(vals.length - 1)} ${H} L0 ${H} Z"/>
+    <path class="chart-l" stroke="${col}" d="${line}"/>
+    <circle cx="${x(vals.length - 1)}" cy="${y(end)}" r="3.5" fill="${col}"/>
+    <text class="ax" x="0" y="${H + 12}">7 days ago</text><text class="ax" x="${W}" y="${H + 12}" text-anchor="end">now${live.length ? " · " + live.length + " live tick" + (live.length === 1 ? "" : "s") : ""}</text>
+    <text class="ax" x="4" y="12">${axis(max)}</text><text class="ax" x="4" y="${H - 4}">${axis(min)}</text></svg>`;
+  $("rows").innerHTML = data.coins.map((k) => {
+    const p = (ticks[k.id] || []).slice(-1)[0];
+    return `<tr data-id="${k.id}" class="${k.id === sel ? "sel" : ""}"><td><span class="badge" style="background:${color(k.id)}">${k.symbol.slice(0, 3)}</span>${k.name}</td>
+      <td class="sp"><svg viewBox="0 0 90 24" height="24"><path fill="none" stroke="${k.change24h >= 0 ? "var(--up)" : "var(--down)"}" stroke-width="1.25" d="${path(k.spark.length > 1 ? k.spark : [k.price, k.price], 90, 24)}"/></svg></td>
+      <td class="r">${money(p ? p.p : k.price)}</td><td class="r">${pct(k.change24h)}</td></tr>`;
+  }).join("");
+  $("warn").innerHTML = data.source === "sample" ? `<div class="warn" data-testid="sample">Sample prices: CoinGecko is out of reach (${data.note}). Live ticks keep trying.</div>` : "";
+}
+
+// Live ticks: the view calls CoinGecko itself (connectDomains: https://api.coingecko.com).
+async function tick() {
+  clearTimeout(timer);
+  if (!data) return;
+  try {
+    const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${data.coins.map((c) => c.id).join(",")}&vs_currencies=${data.vs}&include_24hr_change=true`);
+    if (!r.ok) throw new Error(r.status === 429 ? "rate limited" : "HTTP " + r.status);
+    const j = await r.json(), now = Date.now();
+    for (const c of data.coins) if (j[c.id]) {
+      (ticks[c.id] = ticks[c.id] || []).push({ t: now, p: j[c.id][data.vs] });
+      if (j[c.id][data.vs + "_24h_change"] != null) c.change24h = j[c.id][data.vs + "_24h_change"];
+      ticks[c.id] = ticks[c.id].slice(-120);
+    }
+    fails = 0;
+    $("dot").classList.add("on");
+    $("liveText").textContent = "live · " + new Date(now).toLocaleTimeString(mcp.context.locale || undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    draw();
+  } catch (err) {
+    fails++;
+    $("dot").classList.remove("on"); $("liveText").textContent = "paused · " + (err.message || "offline");
+  }
+  timer = setTimeout(tick, TICK_MS * Math.min(8, 2 ** fails));
+}
+
+function show(s) {
+  data = s; ticks = {};
+  if (!sel || !s.coins.some((c) => c.id === sel)) sel = (s.coins[0] || {}).id;
+  draw(); tick(); fillPicker();
+}
+
+// The coin list is a plain resource of the server: the view reads it with resources/read.
+async function loadCoins() {
+  try {
+    const r = await mcp.read("crypto-ticker://coins");
+    known = JSON.parse(r.contents[0].text).coins;
+    fillPicker(); draw();
+  } catch (err) { status("Coin list: " + why(err), true); }
+}
+function fillPicker() {
+  const have = new Set(data ? data.coins.map((c) => c.id) : []);
+  $("addCoin").innerHTML = '<option value="">+ Add a coin</option>' + known.filter((c) => !have.has(c.id)).map((c) => `<option value="${c.id}">${c.name} (${c.symbol})</option>`).join("");
+}
+$("addCoin").onchange = async (e) => {
+  const id = e.target.value; if (!id || !data) return;
+  status("Ask the agent to add it, or call show_ticker again…");
+  try { await mcp.message(`Add ${id} to the crypto ticker.`); status("Asked the agent to add " + id + "."); }
+  catch (err) { status("Not sent: " + why(err), true); }
+  e.target.value = "";
+};
+
+$("rows").onclick = (e) => { const tr = e.target.closest("tr[data-id]"); if (tr) { sel = tr.dataset.id; draw(); } };
+// get_price has no _meta.ui: the spec's default visibility ["model", "app"]. The model sees it, so bise asks first.
+$("check").onclick = async () => {
+  status("Waiting for your approval in bise…");
+  try { const r = await mcp.call("get_price", { coin: sel, vs: data.vs }); status("Server says: " + r.content[0].text); }
+  catch (err) { status("Not checked: " + why(err), true); }
+};
+$("cg").onclick = () => mcp.openLink("https://www.coingecko.com/en/coins/" + (sel || "bitcoin")).catch((err) => status(why(err), true));
+new ResizeObserver(() => draw()).observe($("chart"));
+
+mcp.on("tool-result", (r) => { if (r.isError) return status(((r.content || [])[0] || {}).text || "The tool failed.", true); if (r.structuredContent) show(r.structuredContent); });
+mcp.on("tool-cancelled", () => status("The ticker was stopped."));
+mcp.on("context", () => draw());
+mcp.on("teardown", () => clearTimeout(timer));
+mcp.start("crypto-ticker").then(loadCoins);
+</script>
+</body>
+</html>

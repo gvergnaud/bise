@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "piano-composer",
+  "version": "1.0.0",
+  "description": "Compose short piano melodies the user can edit, play, export as MIDI and play on a MIDI keyboard, in an MCP Apps piano roll view."
+}

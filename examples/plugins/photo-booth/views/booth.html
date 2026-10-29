@@ -1,0 +1,225 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Photo booth</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: var(--color-background-primary, light-dark(#ffffff, #1c1c1f));
+    --bg2: var(--color-background-secondary, light-dark(#f6f6f5, #242428));
+    --bg3: var(--color-background-tertiary, light-dark(#ececea, #2f2f34));
+    --fg: var(--color-text-primary, light-dark(#1d1d1f, #ececef));
+    --fg2: var(--color-text-secondary, light-dark(#6c6c72, #a1a1aa));
+    --fg3: var(--color-text-tertiary, light-dark(#a0a0a6, #6f6f78));
+    --line: var(--color-border-primary, light-dark(#e4e4e2, #38383e));
+    --accent: var(--color-text-info, light-dark(#3b5bdb, #8ea2ff));
+    --danger: var(--color-text-danger, light-dark(#c92a2a, #ff8787));
+    --ok: var(--color-text-success, light-dark(#2b8a3e, #69db7c));
+    --radius: var(--border-radius-md, 8px);
+    --sans: var(--font-sans, -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif);
+  }
+  html[data-theme="light"] { color-scheme: light; }
+  html[data-theme="dark"] { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 13px/1.45 var(--sans); color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  .app { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .head { display: flex; align-items: baseline; gap: 10px; }
+  h1 { margin: 0; font-size: 14px; font-weight: 600; flex: 1; }
+  .sub { color: var(--fg2); font-size: 12px; }
+  .stage { position: relative; aspect-ratio: 4 / 3; max-height: 360px; border-radius: var(--radius); overflow: hidden; background: #111; display: grid; place-items: center; }
+  video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+  .off { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: #d0d0d6; padding: 20px; gap: 10px; align-content: center; }
+  .off[hidden] { display: none; }
+  .count { position: absolute; font-size: 96px; font-weight: 200; color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.4); pointer-events: none; }
+  .flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+  .flash.go { animation: flash .5s ease-out; }
+  @keyframes flash { from { opacity: .9; } }
+  .shoot { position: absolute; bottom: 12px; left: 50%; translate: -50% 0; width: 54px; height: 54px; border-radius: 50%; border: 3px solid #fff; background: rgba(255,255,255,.25); cursor: pointer; backdrop-filter: blur(4px); }
+  .shoot:hover { background: rgba(255,255,255,.45); }
+  .shoot:disabled { opacity: .4; cursor: default; }
+  .filters { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+  .filters button { flex: none; height: 26px; padding: 0 11px; border-radius: 13px; border: 1px solid transparent; background: var(--bg2); color: var(--fg); font: inherit; font-size: 12px; cursor: pointer; }
+  .filters button.on { border-color: var(--fg); }
+  .strip:empty { display: none; }
+  .strip { display: flex; gap: 8px; overflow-x: auto; }
+  .shot { flex: none; width: 132px; display: flex; flex-direction: column; gap: 4px; }
+  .shot img { width: 132px; height: 99px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); }
+  .shot .acts { display: flex; gap: 4px; }
+  .shot button, .off button { flex: 1; height: 24px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: inherit; font-size: 11px; cursor: pointer; }
+  .off button { flex: none; height: 28px; padding: 0 12px; font-size: 12px; }
+  .shot button:hover { background: var(--bg2); }
+  .status { color: var(--fg2); font-size: 12px; }
+  .status:empty { display: none; }
+  .status.err { color: var(--danger); }
+  .status.ok { color: var(--ok); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="head"><h1>Photo booth</h1><span class="sub" id="sub">camera off</span></div>
+  <div class="stage" id="stage" data-testid="stage">
+    <video id="video" playsinline muted></video>
+    <div class="off" id="off"><div>The booth uses your camera.<br>bise asks once, when the plugin is added.</div><div><button id="start" data-testid="start">Turn on the camera</button></div></div>
+    <div class="count" id="count"></div>
+    <div class="flash" id="flash"></div>
+    <button class="shoot" id="shoot" data-testid="shoot" title="Take a photo (3-2-1)" disabled hidden></button>
+  </div>
+  <div class="filters" id="filters" data-testid="filters"></div>
+  <div class="strip" id="strip" data-testid="strip"></div>
+  <div class="status" id="status" data-testid="status"></div>
+</div>
+<script>
+// ---- the MCP Apps bridge (SEP-1865): JSON-RPC 2.0 over postMessage to the host. No SDK, nothing external.
+const mcp = (() => {
+  const pending = new Map(), handlers = {};
+  let nextId = 1, ctx = {};
+  const post = (m) => window.parent.postMessage({ jsonrpc: "2.0", ...m }, "*");
+  const request = (method, params) => new Promise((resolve, reject) => {
+    const id = nextId++; pending.set(id, { resolve, reject }); post({ id, method, params });
+  });
+  const notify = (method, params) => post({ method, params });
+  function applyContext(c) {
+    if (!c) return;
+    ctx = { ...ctx, ...c };
+    const root = document.documentElement;
+    if (c.theme) root.dataset.theme = c.theme;
+    const vars = c.styles && c.styles.variables;
+    if (vars) for (const [k, v] of Object.entries(vars)) if (v) root.style.setProperty(k, v);
+    if (c.displayMode) root.dataset.mode = c.displayMode;
+    if (handlers.context) handlers.context(ctx);
+  }
+  window.addEventListener("message", (e) => {
+    if (e.source !== window.parent) return;
+    const m = e.data;
+    if (!m || m.jsonrpc !== "2.0") return;
+    if (m.method && m.id !== undefined) {
+      if (m.method === "ui/resource-teardown" && handlers.teardown) handlers.teardown();
+      if (m.method === "ui/resource-teardown" || m.method === "ping") post({ id: m.id, result: {} });
+      else post({ id: m.id, error: { code: -32601, message: "method not found" } });
+      return;
+    }
+    if (m.method) {
+      if (m.method === "ui/notifications/host-context-changed") applyContext(m.params);
+      const h = handlers[m.method.replace("ui/notifications/", "")];
+      if (h) h(m.params || {});
+      return;
+    }
+    const p = pending.get(m.id);
+    if (!p) return;
+    pending.delete(m.id);
+    if (m.error) p.reject(Object.assign(new Error(m.error.message || "error"), { code: m.error.code, data: m.error.data }));
+    else p.resolve(m.result);
+  });
+  return {
+    on(name, fn) { handlers[name] = fn; },
+    get context() { return ctx; },
+    async call(name, args) {
+      const r = await request("tools/call", { name, arguments: args || {} });
+      if (r && r.isError) throw new Error(((r.content || [])[0] || {}).text || name + " failed");
+      return r;
+    },
+    read: (uri) => request("resources/read", { uri }),
+    message: (text) => request("ui/message", { role: "user", content: [{ type: "text", text }] }),
+    setContext: (text, structuredContent) => request("ui/update-model-context", { content: [{ type: "text", text }], structuredContent }),
+    openLink: (url) => request("ui/open-link", { url }),
+    download: (contents) => request("ui/download-file", { contents }),
+    displayMode: (mode) => request("ui/request-display-mode", { mode }),
+    async start(name, appCapabilities) {
+      const r = await request("ui/initialize", { appInfo: { name, version: "1.0.0" }, appCapabilities: appCapabilities || {}, protocolVersion: "2026-01-26" });
+      applyContext(r && r.hostContext);
+      notify("ui/notifications/initialized", {});
+      // the body's own height: the document's scrollHeight never drops below the frame's
+      new ResizeObserver(() => notify("ui/notifications/size-changed", {
+        width: Math.ceil(document.body.getBoundingClientRect().width), height: Math.ceil(document.body.getBoundingClientRect().height),
+      })).observe(document.body);
+      return r;
+    },
+  };
+})();
+function why(err) {
+  const reasons = { "-32031": "this view may not call that tool", "-32032": "the plugin is turned off", "-32033": "you declined it",
+    "-32034": "not supported in bise", "-32035": "too many calls, wait a moment", "-32036": "the server restarted, try again" };
+  return reasons[String(err && err.code)] || (err && err.message) || "it failed";
+}
+
+// ---- the booth: getUserMedia video (permission: camera), canvas filters, clipboard (permission: clipboardWrite)
+const $ = (id) => document.getElementById(id);
+const FILTERS = {
+  none: "none", mono: "grayscale(1) contrast(1.05)", sepia: "sepia(.85) contrast(1.05) brightness(1.03)",
+  vivid: "saturate(1.6) contrast(1.1)", cool: "hue-rotate(-12deg) saturate(1.15) brightness(1.04)",
+  noir: "grayscale(1) contrast(1.6) brightness(.9)", pop: "saturate(2.2) contrast(1.25) hue-rotate(8deg)",
+};
+let stream = null, filter = "none", shots = [];
+const status = (t, kind) => { $("status").textContent = t; $("status").className = "status" + (kind ? " " + kind : ""); };
+
+$("filters").innerHTML = Object.keys(FILTERS).map((f) => `<button data-f="${f}">${f[0].toUpperCase() + f.slice(1)}</button>`).join("");
+function setFilter(f) {
+  filter = FILTERS[f] ? f : "none";
+  $("video").style.filter = FILTERS[filter];
+  document.querySelectorAll("[data-f]").forEach((b) => b.classList.toggle("on", b.dataset.f === filter));
+}
+$("filters").onclick = (e) => { const b = e.target.closest("[data-f]"); if (b) setFilter(b.dataset.f); };
+setFilter("none");
+
+async function camera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 960 } }, audio: false });
+    $("video").srcObject = stream; await $("video").play();
+    $("off").hidden = true; $("shoot").hidden = false; $("shoot").disabled = false;
+    $("sub").textContent = "camera on";
+    status("");
+  } catch (err) {
+    status(err.name === "NotAllowedError" ? "The camera is not allowed for this view. Grant it in bise's Plugins, photo-booth." : "No camera: " + err.message, "err");
+  }
+}
+$("start").onclick = camera;
+
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+$("shoot").onclick = async () => {
+  $("shoot").disabled = true;
+  for (const n of [3, 2, 1]) { $("count").textContent = n; await wait(700); }
+  $("count").textContent = "";
+  $("flash").classList.remove("go"); void $("flash").offsetWidth; $("flash").classList.add("go");
+  const v = $("video"), c = document.createElement("canvas");
+  c.width = v.videoWidth; c.height = v.videoHeight;
+  const g = c.getContext("2d");
+  g.filter = FILTERS[filter];
+  g.translate(c.width, 0); g.scale(-1, 1); // the preview is a mirror: keep the photo the same
+  g.drawImage(v, 0, 0);
+  const blob = await new Promise((ok) => c.toBlob(ok, "image/png"));
+  shots.unshift({ blob, url: URL.createObjectURL(blob), filter });
+  drawStrip();
+  $("shoot").disabled = false;
+};
+
+function drawStrip() {
+  $("strip").innerHTML = shots.slice(0, 12).map((s, i) => `<div class="shot"><img src="${s.url}" alt="photo ${i + 1}">
+    <div class="acts"><button data-copy="${i}" title="Copy the image">Copy</button><button data-dl="${i}">Save</button><button data-send="${i}" title="Send to the agent">Send</button></div></div>`).join("");
+}
+const base64 = (b) => new Promise((ok) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1]); r.readAsDataURL(b); });
+$("strip").onclick = async (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  const s = shots[+(b.dataset.copy ?? b.dataset.dl ?? b.dataset.send)];
+  if (b.dataset.copy) {
+    try { await navigator.clipboard.write([new ClipboardItem({ "image/png": s.blob })]); status("Copied: paste it anywhere.", "ok"); }
+    catch (err) { status("Copy is not allowed for this view (" + err.name + ").", "err"); }
+  } else if (b.dataset.dl) {
+    try { await mcp.download([{ type: "resource", resource: { uri: "file:///photo-booth-" + Date.now() + ".png", mimeType: "image/png", blob: await base64(s.blob) } }]); status("Saved.", "ok"); }
+    catch (err) { status("Save: " + why(err), "err"); }
+  } else {
+    try {
+      const r = await mcp.call("save_photo", { data: await base64(s.blob), mimeType: "image/png", filter: s.filter });
+      await mcp.message("Here is my photo" + (s.filter !== "none" ? " (" + s.filter + " filter)" : "") + ": " + r.structuredContent.path);
+      status("Sent to the agent.", "ok");
+    } catch (err) { status("Not sent: " + why(err), "err"); }
+  }
+};
+
+mcp.on("tool-input", (p) => setFilter((p.arguments || {}).filter || filter));
+mcp.on("tool-result", (r) => { if (r.structuredContent) setFilter(r.structuredContent.filter); });
+mcp.on("teardown", () => { if (stream) stream.getTracks().forEach((t) => t.stop()); });
+mcp.start("photo-booth");
+</script>
+</body>
+</html>

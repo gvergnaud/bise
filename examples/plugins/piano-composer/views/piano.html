@@ -1,0 +1,416 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Piano composer</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: var(--color-background-primary, light-dark(#ffffff, #1c1c1f));
+    --bg2: var(--color-background-secondary, light-dark(#f6f6f5, #242428));
+    --bg3: var(--color-background-tertiary, light-dark(#ececea, #2f2f34));
+    --fg: var(--color-text-primary, light-dark(#1d1d1f, #ececef));
+    --fg2: var(--color-text-secondary, light-dark(#6c6c72, #a1a1aa));
+    --fg3: var(--color-text-tertiary, light-dark(#a0a0a6, #6f6f78));
+    --line: var(--color-border-primary, light-dark(#e4e4e2, #38383e));
+    --line2: var(--color-border-secondary, light-dark(#efefed, #2c2c31));
+    --accent: var(--color-text-info, light-dark(#3b5bdb, #8ea2ff));
+    --danger: var(--color-text-danger, light-dark(#c92a2a, #ff8787));
+    --radius: var(--border-radius-md, 8px);
+    --sans: var(--font-sans, -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif);
+    --mono: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  }
+  html[data-theme="light"] { color-scheme: light; }
+  html[data-theme="dark"] { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 13px/1.45 var(--sans); color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  .app { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+  html[data-mode="fullscreen"] .app { height: 100vh; }
+  .head { display: flex; align-items: center; gap: 10px; }
+  .titles { flex: 1; min-width: 0; }
+  h1 { margin: 0; font-size: 14px; font-weight: 600; outline: none; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  h1:focus { box-shadow: 0 0 0 2px var(--accent); }
+  .sub { color: var(--fg2); font-size: 12px; font-variant-numeric: tabular-nums; }
+  button, select, input { font: inherit; font-size: 12px; color: var(--fg); }
+  button { height: 28px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  button:hover:not(:disabled) { background: var(--bg2); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--fg); color: var(--bg); border-color: transparent; }
+  button.primary:hover:not(:disabled) { background: var(--fg); opacity: .88; }
+  button.icon { width: 28px; padding: 0; justify-content: center; }
+  button.on { border-color: var(--accent); color: var(--accent); }
+  select { height: 28px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg); padding: 0 6px; }
+  svg { display: block; }
+  .roll { border: 1px solid var(--line); border-radius: var(--radius); overflow: auto; background: var(--bg); min-height: 120px; max-height: 340px; }
+  html[data-mode="fullscreen"] .roll { flex: 1; max-height: none; }
+  .roll .row-b { fill: var(--bg2); }
+  .roll .grid { stroke: var(--line2); }
+  .roll .bar { stroke: var(--line); }
+  .roll .lbl { fill: var(--fg3); font: 10px var(--mono); }
+  .roll .note { fill: var(--accent); rx: 3; cursor: pointer; }
+  .roll .note:hover { opacity: .75; }
+  .roll .note.lit { fill: var(--fg); }
+  .roll .head-line { stroke: var(--danger); stroke-width: 1.5; }
+  .roll .cell { fill: transparent; cursor: crosshair; }
+  .roll .cell:hover { fill: color-mix(in srgb, var(--accent) 14%, transparent); }
+  .tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .tools .spacer { flex: 1; }
+  .kbd { position: relative; height: 54px; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--bg3); }
+  .kbd .w, .kbd .k { position: absolute; top: 0; cursor: pointer; }
+  .kbd .w { height: 100%; background: light-dark(#fff, #e9e9ec); border-right: 1px solid light-dark(#ddd, #bbb); }
+  .kbd .k { height: 60%; background: light-dark(#1d1d1f, #111); border-radius: 0 0 3px 3px; z-index: 1; }
+  .kbd .down { background: var(--accent) !important; }
+  .midi { color: var(--fg2); font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--fg3); }
+  .dot.live { background: #2f9e44; }
+  .ask { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding-top: 10px; border-top: 1px solid var(--line2); }
+  .ask .lead { color: var(--fg2); font-size: 12px; margin-right: 2px; }
+  .chip { height: 26px; border-radius: 13px; padding: 0 10px; background: var(--bg2); border-color: transparent; }
+  .ask input { flex: 1; min-width: 160px; height: 28px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg); padding: 0 9px; outline: none; }
+  .ask input:focus { border-color: var(--accent); }
+  .status { color: var(--fg2); font-size: 12px; }
+  .status:empty { display: none; }
+  .status.err { color: var(--danger); }
+  .empty { padding: 28px; text-align: center; color: var(--fg2); }
+  .pulse { animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .4; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="head">
+    <div class="titles">
+      <h1 id="title" data-testid="title" spellcheck="false" title="Click to rename">Piano composer</h1>
+      <div class="sub" id="sub" data-testid="sub">waiting for the melody…</div>
+    </div>
+    <button class="primary" id="play" data-testid="play" disabled>▶ Play</button>
+    <button id="export" data-testid="export" disabled title="Download a .mid file">Export .mid</button>
+    <button class="icon" id="full" data-testid="fullscreen" title="Fullscreen">⤢</button>
+  </div>
+
+  <div class="roll" id="roll" data-testid="roll"><div class="empty pulse" id="empty">Composing…</div></div>
+
+  <div class="tools">
+    <label class="sub">Length
+      <select id="len" data-testid="length"><option value="0.5">½ beat</option><option value="1" selected>1 beat</option><option value="2">2 beats</option></select>
+    </label>
+    <button id="undo" data-testid="undo" disabled>Undo</button>
+    <button id="clear" data-testid="clear" disabled>Clear</button>
+    <span class="spacer"></span>
+    <span class="midi" data-testid="midi"><span class="dot" id="midiDot"></span><span id="midiText">MIDI off</span></span>
+    <button id="rec" data-testid="record" title="Each key you play on your MIDI keyboard adds a note at the end">● Record from MIDI</button>
+  </div>
+  <div class="kbd" id="kbd" data-testid="keyboard"></div>
+
+  <div class="ask">
+    <span class="lead">Ask the agent</span>
+    <button class="chip" id="flip" data-testid="ask-mode">Make it major</button>
+    <button class="chip" data-ask="Add a second phrase that answers the first one.">Add a second phrase</button>
+    <button class="chip" data-ask="Make it slower and more tender.">Slower, more tender</button>
+    <button class="chip" id="name" data-testid="suggest-title">Suggest a title</button>
+    <input id="askText" data-testid="ask-text" placeholder="Or ask for any change…">
+  </div>
+  <div class="status" id="status" data-testid="status"></div>
+</div>
+<script>
+// ---- the MCP Apps bridge (SEP-1865): JSON-RPC 2.0 over postMessage to the host. No SDK, nothing external.
+const mcp = (() => {
+  const pending = new Map(), handlers = {};
+  let nextId = 1, ctx = {};
+  const post = (m) => window.parent.postMessage({ jsonrpc: "2.0", ...m }, "*");
+  const request = (method, params) => new Promise((resolve, reject) => {
+    const id = nextId++; pending.set(id, { resolve, reject }); post({ id, method, params });
+  });
+  const notify = (method, params) => post({ method, params });
+  function applyContext(c) {
+    if (!c) return;
+    ctx = { ...ctx, ...c };
+    const root = document.documentElement;
+    if (c.theme) root.dataset.theme = c.theme;
+    const vars = c.styles && c.styles.variables;
+    if (vars) for (const [k, v] of Object.entries(vars)) if (v) root.style.setProperty(k, v);
+    if (c.displayMode) root.dataset.mode = c.displayMode;
+    if (handlers.context) handlers.context(ctx);
+  }
+  window.addEventListener("message", (e) => {
+    if (e.source !== window.parent) return;
+    const m = e.data;
+    if (!m || m.jsonrpc !== "2.0") return;
+    if (m.method && m.id !== undefined) {
+      if (m.method === "ui/resource-teardown" && handlers.teardown) handlers.teardown();
+      if (m.method === "ui/resource-teardown" || m.method === "ping") post({ id: m.id, result: {} });
+      else post({ id: m.id, error: { code: -32601, message: "method not found" } });
+      return;
+    }
+    if (m.method) {
+      if (m.method === "ui/notifications/host-context-changed") applyContext(m.params);
+      const h = handlers[m.method.replace("ui/notifications/", "")];
+      if (h) h(m.params || {});
+      return;
+    }
+    const p = pending.get(m.id);
+    if (!p) return;
+    pending.delete(m.id);
+    if (m.error) p.reject(Object.assign(new Error(m.error.message || "error"), { code: m.error.code, data: m.error.data }));
+    else p.resolve(m.result);
+  });
+  return {
+    on(name, fn) { handlers[name] = fn; },
+    get context() { return ctx; },
+    async call(name, args) {
+      const r = await request("tools/call", { name, arguments: args || {} });
+      if (r && r.isError) throw new Error(((r.content || [])[0] || {}).text || name + " failed");
+      return r;
+    },
+    read: (uri) => request("resources/read", { uri }),
+    message: (text) => request("ui/message", { role: "user", content: [{ type: "text", text }] }),
+    setContext: (text, structuredContent) => request("ui/update-model-context", { content: [{ type: "text", text }], structuredContent }),
+    openLink: (url) => request("ui/open-link", { url }),
+    download: (contents) => request("ui/download-file", { contents }),
+    displayMode: (mode) => request("ui/request-display-mode", { mode }),
+    async start(name, appCapabilities) {
+      const r = await request("ui/initialize", { appInfo: { name, version: "1.0.0" }, appCapabilities: appCapabilities || {}, protocolVersion: "2026-01-26" });
+      applyContext(r && r.hostContext);
+      notify("ui/notifications/initialized", {});
+      // the body's own height: the document's scrollHeight never drops below the frame's
+      new ResizeObserver(() => notify("ui/notifications/size-changed", {
+        width: Math.ceil(document.body.getBoundingClientRect().width), height: Math.ceil(document.body.getBoundingClientRect().height),
+      })).observe(document.body);
+      return r;
+    },
+  };
+})();
+// A host's refusal, said plainly (docs/mcp-apps.md C5 codes).
+function why(err) {
+  const reasons = { "-32031": "this view may not call that tool", "-32032": "the plugin is turned off", "-32033": "you declined it",
+    "-32034": "not supported in bise", "-32035": "too many calls, wait a moment", "-32036": "the server restarted, try again" };
+  return reasons[String(err && err.code)] || (err && err.message) || "it failed";
+}
+
+// ---- the piano
+const $ = (id) => document.getElementById(id);
+const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const midiOf = (p) => { const m = /^([A-G]#?)(-?\d)$/.exec(p); return m ? NAMES.indexOf(m[1]) + 12 * (+m[2] + 1) : 60; };
+const nameOf = (m) => NAMES[m % 12] + (Math.floor(m / 12) - 1);
+const isBlack = (m) => [1, 3, 6, 8, 10].includes(m % 12);
+const STEP = 0.5, GUTTER = 34;
+let COL = 20; // a column is half a beat; widened to fill the roll when the melody is short
+
+let score = null, history = [], saveTimer = 0, playing = null, recording = false;
+let row = 13;
+
+function status(text, err) { $("status").textContent = text || ""; $("status").className = "status" + (err ? " err" : ""); }
+
+function setScore(s, { save = false, remember = true } = {}) {
+  if (remember && score) history.push(JSON.stringify(score));
+  if (history.length > 50) history.shift();
+  score = s;
+  render();
+  if (save) { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 450); }
+}
+
+async function saveNow() {
+  try {
+    const r = await mcp.call("set_notes", score);
+    score = r.structuredContent; render();
+    const text = (r.content || [])[0] ? r.content[0].text : "";
+    await mcp.setContext("The user edited the melody in the piano view. Current score: " + text, { score });
+    status("Saved");
+  } catch (err) { status("Could not save: " + why(err), true); }
+}
+
+function render() {
+  if (!score) return;
+  $("title").textContent = score.title;
+  const beats = score.notes.reduce((b, n) => Math.max(b, n.t + n.d), 0);
+  $("sub").textContent = `${score.key} · ${score.bpm} bpm · ${score.notes.length} notes · ${Math.ceil(beats / 4) || 0} bars`;
+  $("flip").textContent = score.key.endsWith("minor") ? "Make it major" : "Make it minor";
+  for (const id of ["play", "export", "clear"]) $(id).disabled = !score.notes.length;
+  $("undo").disabled = !history.length;
+  drawRoll(beats);
+  drawKeyboard();
+}
+
+function range() {
+  const ms = score.notes.map((n) => midiOf(n.p));
+  let lo = ms.length ? Math.min(...ms) - 3 : 57, hi = ms.length ? Math.max(...ms) + 3 : 76;
+  while (hi - lo < 18) { lo--; hi++; }
+  return [Math.max(21, lo), Math.min(108, hi)];
+}
+
+function drawRoll(beats) {
+  const [lo, hi] = range();
+  const full = document.documentElement.dataset.mode === "fullscreen";
+  row = full ? Math.max(13, Math.floor(($("roll").clientHeight - 4) / (hi - lo + 1))) : 13;
+  const total = Math.max(16, Math.ceil((beats + 4) / 4) * 4);
+  COL = Math.max(14, Math.min(28, Math.floor(($("roll").clientWidth - GUTTER - 2) / (total / STEP))));
+  const w = GUTTER + (total / STEP) * COL, h = (hi - lo + 1) * row;
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("width", w); svg.setAttribute("height", h);
+  const add = (tag, attrs, parent = svg) => { const el = document.createElementNS(ns, tag); for (const k in attrs) el.setAttribute(k, attrs[k]); parent.appendChild(el); return el; };
+  for (let m = hi; m >= lo; m--) {
+    const y = (hi - m) * row;
+    if (isBlack(m)) add("rect", { x: GUTTER, y, width: w - GUTTER, height: row, class: "row-b" });
+    if (m % 12 === 0) add("text", { x: 4, y: y + row - 3, class: "lbl" }).textContent = nameOf(m);
+    for (let c = 0; c < total / STEP; c++) {
+      const cell = add("rect", { x: GUTTER + c * COL, y, width: COL, height: row, class: "cell" });
+      cell.onclick = () => addNote(m, c * STEP);
+    }
+  }
+  for (let c = 0; c <= total / STEP; c++) {
+    const x = GUTTER + c * COL;
+    add("line", { x1: x, x2: x, y1: 0, y2: h, class: c % 8 === 0 ? "bar" : "grid" });
+  }
+  score.notes.forEach((n, i) => {
+    const r = add("rect", { x: GUTTER + (n.t / STEP) * COL + 1, y: (hi - midiOf(n.p)) * row + 1, width: Math.max(4, (n.d / STEP) * COL - 2), height: row - 2, class: "note", "data-i": i });
+    add("title", {}, r).textContent = `${n.p} · ${n.d} beat${n.d === 1 ? "" : "s"} (click to remove)`;
+    r.onclick = (e) => { e.stopPropagation(); removeNote(i); };
+  });
+  add("line", { x1: -10, x2: -10, y1: 0, y2: h, class: "head-line", id: "playhead" });
+  $("roll").replaceChildren(svg);
+}
+
+function addNote(m, t) {
+  const d = +$("len").value;
+  const notes = [...score.notes, { p: nameOf(m), t, d }].sort((a, b) => a.t - b.t || midiOf(a.p) - midiOf(b.p));
+  setScore({ ...score, notes }, { save: true });
+  sound(m, 0, Math.min(d, 1) * 60 / score.bpm);
+}
+function removeNote(i) { setScore({ ...score, notes: score.notes.filter((_, j) => j !== i) }, { save: true }); }
+
+// ---- sound: a small two-oscillator piano voice through Web Audio
+let ac = null, master = null;
+function audio() {
+  if (!ac) {
+    ac = new AudioContext();
+    const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 3200;
+    master = ac.createGain(); master.gain.value = 0.7;
+    master.connect(lp).connect(ac.destination);
+  }
+  if (ac.state === "suspended") ac.resume();
+  return ac;
+}
+function sound(m, at, dur, vel = 0.8) {
+  const ctx = audio(), when = ctx.currentTime + at, f = 440 * 2 ** ((m - 69) / 12);
+  const g = ctx.createGain(); g.connect(master);
+  const o1 = ctx.createOscillator(); o1.type = "triangle"; o1.frequency.value = f;
+  const o2 = ctx.createOscillator(); o2.type = "sine"; o2.frequency.value = f * 2;
+  const g2 = ctx.createGain(); g2.gain.value = 0.22;
+  o1.connect(g); o2.connect(g2).connect(g);
+  g.gain.setValueAtTime(0, when);
+  g.gain.linearRampToValueAtTime(0.32 * vel, when + 0.008);
+  g.gain.exponentialRampToValueAtTime(0.1 * vel, when + 0.3);
+  g.gain.setTargetAtTime(0.0001, when + dur, 0.09);
+  for (const o of [o1, o2]) { o.start(when); o.stop(when + dur + 0.7); }
+}
+function play() {
+  if (playing) return stop();
+  const ctx = audio(), spb = 60 / score.bpm, t0 = ctx.currentTime + 0.08;
+  for (const n of score.notes) sound(midiOf(n.p), 0.08 + n.t * spb, n.d * spb * 0.95);
+  const end = score.notes.reduce((b, n) => Math.max(b, n.t + n.d), 0);
+  $("play").textContent = "■ Stop";
+  const tick = () => {
+    const beat = (ctx.currentTime - t0) / spb, ph = document.getElementById("playhead");
+    if (ph) { const x = GUTTER + (beat / STEP) * COL; ph.setAttribute("x1", x); ph.setAttribute("x2", x); }
+    document.querySelectorAll(".note").forEach((el) => { const n = score.notes[+el.dataset.i]; el.classList.toggle("lit", !!n && beat >= n.t && beat < n.t + n.d); });
+    if (beat > end + 0.25) return stop();
+    playing = requestAnimationFrame(tick);
+  };
+  playing = requestAnimationFrame(tick);
+}
+function stop() {
+  cancelAnimationFrame(playing); playing = null;
+  if (ac) { ac.close(); ac = null; }
+  $("play").textContent = "▶ Play";
+  document.querySelectorAll(".note.lit").forEach((el) => el.classList.remove("lit"));
+  const ph = document.getElementById("playhead"); if (ph) { ph.setAttribute("x1", -10); ph.setAttribute("x2", -10); }
+}
+
+// ---- the on-screen keyboard, two octaves around the melody
+function drawKeyboard() {
+  const [lo0] = range();
+  const lo = Math.max(21, lo0 - (lo0 % 12)), hi = Math.min(108, lo + 24);
+  const whites = []; for (let m = lo; m <= hi; m++) if (!isBlack(m)) whites.push(m);
+  const kw = 100 / whites.length;
+  const keys = [];
+  whites.forEach((m, i) => keys.push(`<div class="w" data-m="${m}" style="left:${i * kw}%;width:${kw}%"></div>`));
+  whites.forEach((m, i) => { if (m + 1 <= hi && isBlack(m + 1)) keys.push(`<div class="k" data-m="${m + 1}" style="left:${(i + 0.68) * kw}%;width:${kw * 0.64}%"></div>`); });
+  $("kbd").innerHTML = keys.join("");
+}
+$("kbd").addEventListener("pointerdown", (e) => { const m = +e.target.dataset.m; if (m) press(m); });
+function press(m, vel = 0.8) {
+  sound(m, 0, 0.5, vel);
+  const el = document.querySelector(`.kbd [data-m="${m}"]`);
+  if (el) { el.classList.add("down"); setTimeout(() => el.classList.remove("down"), 180); }
+  if (recording && score) {
+    const t = score.notes.reduce((b, n) => Math.max(b, n.t + n.d), 0);
+    setScore({ ...score, notes: [...score.notes, { p: nameOf(m), t, d: +$("len").value }] }, { save: true });
+  }
+}
+
+// ---- Web MIDI: a hardware keyboard plays and records (declared nowhere in the spec; degrades to the keys above)
+async function midi() {
+  if (!navigator.requestMIDIAccess) { $("midiText").textContent = "MIDI not available here"; return; }
+  try {
+    const access = await navigator.requestMIDIAccess();
+    const hook = () => {
+      const ins = [...access.inputs.values()];
+      ins.forEach((i) => { i.onmidimessage = (e) => { const [s, n, v] = e.data; if ((s & 0xf0) === 0x90 && v > 0) press(n, v / 127); }; });
+      $("midiDot").classList.toggle("live", ins.length > 0);
+      $("midiText").textContent = ins.length ? "MIDI: " + ins.map((i) => i.name).join(", ") : "MIDI: plug in a keyboard";
+    };
+    access.onstatechange = hook; hook();
+  } catch (err) { $("midiText").textContent = "MIDI not allowed"; }
+}
+
+// ---- buttons
+$("play").onclick = play;
+$("undo").onclick = () => { const prev = history.pop(); if (prev) setScore(JSON.parse(prev), { save: true, remember: false }); };
+$("clear").onclick = () => setScore({ ...score, notes: [] }, { save: true });
+$("rec").onclick = () => { recording = !recording; $("rec").classList.toggle("on", recording); status(recording ? "Recording: play on your MIDI keyboard or the keys below." : ""); };
+$("title").contentEditable = "plaintext-only";
+$("title").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); e.target.blur(); } };
+$("title").onblur = () => { const t = $("title").textContent.trim(); if (score && t && t !== score.title) setScore({ ...score, title: t }, { save: true }); };
+$("export").onclick = async () => {
+  try {
+    const r = await mcp.call("export_midi", score);
+    await mcp.download(r.content);
+    status("Exported " + r.content[0].resource.uri.split("/").pop());
+  } catch (err) { status("Export failed: " + why(err), true); }
+};
+$("full").onclick = async () => {
+  const want = document.documentElement.dataset.mode === "fullscreen" ? "inline" : "fullscreen";
+  try { const r = await mcp.displayMode(want); document.documentElement.dataset.mode = r.mode; render(); }
+  catch (err) { status("Fullscreen: " + why(err), true); }
+};
+async function ask(text) {
+  try { await mcp.message(text); status("Sent to the agent: “" + text + "”"); }
+  catch (err) { status("Not sent: " + why(err), true); }
+}
+$("flip").onclick = () => ask(score && score.key.endsWith("minor") ? "Make it major." : "Make it minor.");
+document.querySelectorAll("[data-ask]").forEach((b) => (b.onclick = () => ask(b.dataset.ask)));
+$("askText").onkeydown = (e) => { if (e.key === "Enter" && e.target.value.trim()) { ask(e.target.value.trim()); e.target.value = ""; } };
+// Le Chat's piano asks mistral/complete for a title: a Vibe extra bise does not support (it answers a clear error).
+$("name").onclick = async () => {
+  try {
+    const r = await mcp.call("mistral/complete", { prompt: "A short poetic title for a melody in " + score.key });
+    const t = ((r.content || [])[0] || {}).text; if (t) setScore({ ...score, title: t.trim().slice(0, 80) }, { save: true });
+  } catch (err) {
+    status("Title suggestions (mistral/complete): " + why(err) + ". Asking the agent instead.", true);
+    ask("Suggest a title for this melody and set it.");
+  }
+};
+
+// ---- host notifications
+mcp.on("tool-input-partial", (p) => { const a = p.arguments || {}; $("empty") && ($("empty").textContent = "Composing" + (a.key ? " in " + a.key : "") + "…"); });
+mcp.on("tool-input", (p) => { const a = p.arguments || {}; if (!score) $("sub").textContent = "composing" + (a.key ? " in " + a.key : "") + "…"; });
+mcp.on("tool-result", (r) => { if (r.isError) return status(((r.content || [])[0] || {}).text || "The tool failed.", true); if (r.structuredContent) { history = []; setScore(r.structuredContent, { remember: false }); } });
+mcp.on("tool-cancelled", (p) => { $("roll").innerHTML = '<div class="empty">The composition was stopped.</div>'; $("sub").textContent = p.reason || "cancelled"; });
+mcp.on("context", () => score && render());
+mcp.on("teardown", () => stop());
+
+mcp.start("piano-composer", { availableDisplayModes: ["inline", "fullscreen"] }).then(midi);
+</script>
+</body>
+</html>

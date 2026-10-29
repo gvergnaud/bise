@@ -1,0 +1,242 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Quiz</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: var(--color-background-primary, light-dark(#ffffff, #1c1c1f));
+    --bg2: var(--color-background-secondary, light-dark(#f6f6f5, #242428));
+    --bg3: var(--color-background-tertiary, light-dark(#ececea, #2f2f34));
+    --fg: var(--color-text-primary, light-dark(#1d1d1f, #ececef));
+    --fg2: var(--color-text-secondary, light-dark(#6c6c72, #a1a1aa));
+    --fg3: var(--color-text-tertiary, light-dark(#a0a0a6, #6f6f78));
+    --line: var(--color-border-primary, light-dark(#e4e4e2, #38383e));
+    --accent: var(--color-text-info, light-dark(#3b5bdb, #8ea2ff));
+    --bad: var(--color-text-danger, light-dark(#c92a2a, #ff8787));
+    --good: var(--color-text-success, light-dark(#2b8a3e, #69db7c));
+    --radius: var(--border-radius-lg, 12px);
+    --sans: var(--font-sans, -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif);
+  }
+  html[data-theme="light"] { color-scheme: light; }
+  html[data-theme="dark"] { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 13px/1.45 var(--sans); color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  .app { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+  .head { display: flex; align-items: center; gap: 10px; }
+  h1 { margin: 0; font-size: 14px; font-weight: 600; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .score { color: var(--fg2); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .dots { display: flex; gap: 4px; flex-wrap: wrap; }
+  .dots i { width: 18px; height: 4px; border-radius: 2px; background: var(--bg3); }
+  .dots i.good { background: var(--good); }
+  .dots i.bad { background: var(--bad); }
+  .dots i.now { background: var(--fg2); }
+  .scene { perspective: 1000px; height: 190px; cursor: pointer; outline: none; }
+  .card { position: relative; width: 100%; height: 100%; transition: transform .45s cubic-bezier(.3,.7,.3,1); transform-style: preserve-3d; }
+  .card.flip { transform: rotateY(180deg); }
+  .face { position: absolute; inset: 0; backface-visibility: hidden; border-radius: var(--radius); border: 1px solid var(--line); background: var(--bg2);
+          display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 18px 22px; gap: 8px; }
+  .face.back { transform: rotateY(180deg); background: var(--bg); }
+  .face .k { font-size: 11px; color: var(--fg3); text-transform: uppercase; letter-spacing: .06em; }
+  .face .q { font-size: 19px; font-weight: 500; line-height: 1.3; overflow-wrap: anywhere; }
+  .face .hint { font-size: 12px; color: var(--fg2); }
+  .face .tap { position: absolute; bottom: 10px; font-size: 11px; color: var(--fg3); }
+  .row { display: flex; gap: 8px; }
+  button { font: inherit; font-size: 13px; height: 34px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); cursor: pointer; flex: 1; }
+  button:hover:not(:disabled) { background: var(--bg2); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.bad { color: var(--bad); }
+  button.good { color: var(--good); }
+  button.primary { background: var(--fg); color: var(--bg); border-color: transparent; }
+  kbd { font: 11px var(--sans); color: var(--fg3); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-left: 6px; }
+  .end { text-align: center; padding: 6px 0 2px; }
+  .end .big { font-size: 40px; font-weight: 300; font-variant-numeric: tabular-nums; letter-spacing: -1px; }
+  .end ul { text-align: left; margin: 10px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+  .end li { padding: 6px 2px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; }
+  .end li span:first-child { flex: 1; color: var(--fg2); }
+  .status { color: var(--fg2); font-size: 12px; text-align: center; }
+  .status:empty { display: none; }
+  .status.err { color: var(--bad); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="head"><h1 id="topic" data-testid="topic">Quiz</h1><span class="score" id="score" data-testid="score"></span></div>
+  <div class="dots" id="dots"></div>
+  <div id="play">
+    <div class="scene" id="scene" tabindex="0" data-testid="card" aria-label="Flip the card">
+      <div class="card" id="card">
+        <div class="face"><span class="k">Question</span><span class="q" id="q">Loading the deck…</span><span class="hint" id="hint"></span><span class="tap">Click or press space to flip</span></div>
+        <div class="face back"><span class="k">Answer</span><span class="q" id="a"></span></div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="bad" id="miss" data-testid="missed" disabled>Missed it<kbd>←</kbd></button>
+      <button class="good" id="knew" data-testid="knew" disabled>I knew it<kbd>→</kbd></button>
+    </div>
+  </div>
+  <div id="end" hidden></div>
+  <div class="status" id="status" data-testid="status"></div>
+</div>
+<script>
+// ---- the MCP Apps bridge (SEP-1865): JSON-RPC 2.0 over postMessage to the host. No SDK, nothing external.
+const mcp = (() => {
+  const pending = new Map(), handlers = {};
+  let nextId = 1, ctx = {};
+  const post = (m) => window.parent.postMessage({ jsonrpc: "2.0", ...m }, "*");
+  const request = (method, params) => new Promise((resolve, reject) => {
+    const id = nextId++; pending.set(id, { resolve, reject }); post({ id, method, params });
+  });
+  const notify = (method, params) => post({ method, params });
+  function applyContext(c) {
+    if (!c) return;
+    ctx = { ...ctx, ...c };
+    const root = document.documentElement;
+    if (c.theme) root.dataset.theme = c.theme;
+    const vars = c.styles && c.styles.variables;
+    if (vars) for (const [k, v] of Object.entries(vars)) if (v) root.style.setProperty(k, v);
+    if (c.displayMode) root.dataset.mode = c.displayMode;
+    if (handlers.context) handlers.context(ctx);
+  }
+  window.addEventListener("message", (e) => {
+    if (e.source !== window.parent) return;
+    const m = e.data;
+    if (!m || m.jsonrpc !== "2.0") return;
+    if (m.method && m.id !== undefined) {
+      if (m.method === "ui/resource-teardown" && handlers.teardown) handlers.teardown();
+      if (m.method === "ui/resource-teardown" || m.method === "ping") post({ id: m.id, result: {} });
+      else post({ id: m.id, error: { code: -32601, message: "method not found" } });
+      return;
+    }
+    if (m.method) {
+      if (m.method === "ui/notifications/host-context-changed") applyContext(m.params);
+      const h = handlers[m.method.replace("ui/notifications/", "")];
+      if (h) h(m.params || {});
+      return;
+    }
+    const p = pending.get(m.id);
+    if (!p) return;
+    pending.delete(m.id);
+    if (m.error) p.reject(Object.assign(new Error(m.error.message || "error"), { code: m.error.code, data: m.error.data }));
+    else p.resolve(m.result);
+  });
+  return {
+    on(name, fn) { handlers[name] = fn; },
+    get context() { return ctx; },
+    async call(name, args) {
+      const r = await request("tools/call", { name, arguments: args || {} });
+      if (r && r.isError) throw new Error(((r.content || [])[0] || {}).text || name + " failed");
+      return r;
+    },
+    read: (uri) => request("resources/read", { uri }),
+    message: (text) => request("ui/message", { role: "user", content: [{ type: "text", text }] }),
+    setContext: (text, structuredContent) => request("ui/update-model-context", { content: [{ type: "text", text }], structuredContent }),
+    openLink: (url) => request("ui/open-link", { url }),
+    download: (contents) => request("ui/download-file", { contents }),
+    displayMode: (mode) => request("ui/request-display-mode", { mode }),
+    async start(name, appCapabilities) {
+      const r = await request("ui/initialize", { appInfo: { name, version: "1.0.0" }, appCapabilities: appCapabilities || {}, protocolVersion: "2026-01-26" });
+      applyContext(r && r.hostContext);
+      notify("ui/notifications/initialized", {});
+      // the body's own height: the document's scrollHeight never drops below the frame's
+      new ResizeObserver(() => notify("ui/notifications/size-changed", {
+        width: Math.ceil(document.body.getBoundingClientRect().width), height: Math.ceil(document.body.getBoundingClientRect().height),
+      })).observe(document.body);
+      return r;
+    },
+  };
+})();
+function why(err) {
+  const reasons = { "-32031": "this view may not call that tool", "-32032": "the plugin is turned off", "-32033": "you declined it",
+    "-32034": "not supported in bise", "-32035": "too many calls, wait a moment", "-32036": "the server restarted, try again" };
+  return reasons[String(err && err.code)] || (err && err.message) || "it failed";
+}
+
+// ---- the quiz
+const $ = (id) => document.getElementById(id);
+let quiz = null, order = [], at = 0, marks = {}, flipped = false;
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const status = (t, err) => { $("status").textContent = t || ""; $("status").className = "status" + (err ? " err" : ""); };
+
+function start(q, only) {
+  quiz = q; at = 0; marks = {}; flipped = false;
+  order = (only || q.cards.map((c) => c.id)).slice();
+  $("topic").textContent = q.topic;
+  $("play").hidden = false; $("end").hidden = true;
+  show();
+}
+const card = () => quiz.cards.find((c) => c.id === order[at]);
+function show() {
+  const c = card();
+  $("card").classList.remove("flip"); flipped = false;
+  setTimeout(() => { $("q").textContent = c.q; $("hint").textContent = c.hint || ""; $("a").textContent = c.a; }, flipped ? 200 : 0);
+  $("miss").disabled = $("knew").disabled = true;
+  dots();
+}
+function dots() {
+  const right = Object.values(marks).filter(Boolean).length, done = Object.keys(marks).length;
+  $("score").textContent = `${right} right · card ${Math.min(at + 1, order.length)} of ${order.length}`;
+  $("dots").innerHTML = order.map((id, i) => `<i class="${id in marks ? (marks[id] ? "good" : "bad") : i === at ? "now" : ""}"></i>`).join("");
+}
+function flip() {
+  if (!quiz || at >= order.length) return;
+  flipped = !flipped;
+  $("card").classList.toggle("flip", flipped);
+  $("miss").disabled = $("knew").disabled = !flipped;
+}
+function mark(ok) {
+  if (!flipped) return;
+  marks[order[at]] = ok;
+  at++;
+  share();
+  at < order.length ? show() : finish();
+}
+const missed = () => quiz.cards.filter((c) => marks[c.id] === false);
+
+// The model knows the score as it goes (ui/update-model-context), without a message per card.
+function share() {
+  const right = Object.values(marks).filter(Boolean).length, done = Object.keys(marks).length;
+  const miss = missed().map((c) => `"${c.q}" (answer: ${c.a})`).join("; ");
+  mcp.setContext(`Quiz "${quiz.topic}" in progress: ${right}/${done} right so far, ${order.length - done} cards left.` + (miss ? ` Missed: ${miss}.` : ""),
+    { topic: quiz.topic, right, done, total: order.length, missed: missed().map((c) => c.id) }).catch(() => {});
+}
+
+function finish() {
+  const right = Object.values(marks).filter(Boolean).length, miss = missed();
+  dots();
+  $("play").hidden = true; $("end").hidden = false;
+  $("end").innerHTML = `<div class="end"><div class="big" data-testid="final">${right}/${order.length}</div>
+    <div class="score">${right === order.length ? "All of them. Nice." : miss.length + " to review"}</div>
+    ${miss.length ? `<ul>${miss.map((c) => `<li><span>${esc(c.q)}</span><span>${esc(c.a)}</span></li>`).join("")}</ul>` : ""}</div>
+    <div class="row" style="margin-top:12px">
+      ${miss.length ? `<button id="retry">Retry the misses</button><button class="primary" id="ask" data-testid="ask">Quiz me on the misses</button>` : `<button id="again">Start over</button><button class="primary" id="ask" data-testid="ask">Ask for a harder deck</button>`}
+    </div>`;
+  if ($("retry")) $("retry").onclick = () => start(quiz, miss.map((c) => c.id));
+  if ($("again")) $("again").onclick = () => start(quiz);
+  $("ask").onclick = async () => {
+    const text = miss.length
+      ? `I got ${right}/${order.length} on "${quiz.topic}". Quiz me on the ones I missed: ${miss.map((c) => c.q).join("; ")}.`
+      : `I got ${right}/${order.length} on "${quiz.topic}". Give me a harder deck on the same topic.`;
+    try { await mcp.message(text); status("Sent to the agent."); $("ask").disabled = true; }
+    catch (err) { status("Not sent: " + why(err), true); }
+  };
+}
+
+$("scene").onclick = flip;
+$("miss").onclick = () => mark(false);
+$("knew").onclick = () => mark(true);
+document.addEventListener("keydown", (e) => {
+  if (e.target.matches("input,textarea")) return;
+  if (e.key === " ") { e.preventDefault(); flip(); }
+  if (e.key === "ArrowRight") mark(true);
+  if (e.key === "ArrowLeft") mark(false);
+});
+
+mcp.on("tool-input", (p) => { const a = p.arguments || {}; if (a.topic) $("topic").textContent = a.topic; });
+mcp.on("tool-result", (r) => { if (r.structuredContent && r.structuredContent.cards) start(r.structuredContent); });
+mcp.on("tool-cancelled", () => { $("q").textContent = "The quiz was stopped."; });
+mcp.start("quiz-cards");
+</script>
+</body>
+</html>

@@ -1,0 +1,257 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Voice memo</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: var(--color-background-primary, light-dark(#ffffff, #1c1c1f));
+    --bg2: var(--color-background-secondary, light-dark(#f6f6f5, #242428));
+    --bg3: var(--color-background-tertiary, light-dark(#ececea, #2f2f34));
+    --fg: var(--color-text-primary, light-dark(#1d1d1f, #ececef));
+    --fg2: var(--color-text-secondary, light-dark(#6c6c72, #a1a1aa));
+    --fg3: var(--color-text-tertiary, light-dark(#a0a0a6, #6f6f78));
+    --line: var(--color-border-primary, light-dark(#e4e4e2, #38383e));
+    --accent: var(--color-text-info, light-dark(#3b5bdb, #8ea2ff));
+    --rec: var(--color-text-danger, light-dark(#e03131, #ff6b6b));
+    --ok: var(--color-text-success, light-dark(#2b8a3e, #69db7c));
+    --radius: var(--border-radius-md, 8px);
+    --sans: var(--font-sans, -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif);
+  }
+  html[data-theme="light"] { color-scheme: light; }
+  html[data-theme="dark"] { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 13px/1.45 var(--sans); color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  .app { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .head { display: flex; align-items: baseline; gap: 10px; }
+  h1 { margin: 0; font-size: 14px; font-weight: 600; flex: 1; }
+  .prompt { color: var(--fg2); font-size: 12.5px; }
+  .deck { display: flex; align-items: center; gap: 14px; padding: 12px; background: var(--bg2); border-radius: var(--radius); }
+  .rec { flex: none; width: 52px; height: 52px; border-radius: 50%; border: 2px solid var(--line); background: var(--bg); cursor: pointer; display: grid; place-items: center; padding: 0; }
+  .rec::before { content: ""; width: 22px; height: 22px; border-radius: 50%; background: var(--rec); transition: all .15s; }
+  .rec.on::before { width: 18px; height: 18px; border-radius: 4px; }
+  .rec.on { border-color: var(--rec); animation: ring 1.6s ease-out infinite; }
+  @keyframes ring { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--rec) 40%, transparent); } 100% { box-shadow: 0 0 0 10px transparent; } }
+  .rec:disabled { opacity: .45; cursor: default; animation: none; }
+  .wave { flex: 1; min-width: 0; height: 52px; display: block; }
+  .time { font-size: 20px; font-weight: 300; font-variant-numeric: tabular-nums; min-width: 58px; text-align: right; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  button, input { font: inherit; font-size: 12px; color: var(--fg); }
+  button.b { height: 28px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; white-space: nowrap; }
+  button.b:hover:not(:disabled) { background: var(--bg2); }
+  button.b:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--fg); color: var(--bg); border-color: transparent; }
+  .row input { flex: 1; min-width: 140px; height: 28px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg); padding: 0 9px; outline: none; }
+  .row input:focus { border-color: var(--accent); }
+  .status { color: var(--fg2); font-size: 12px; }
+  .status:empty { display: none; }
+  .status.err { color: var(--rec); }
+  .status.ok { color: var(--ok); }
+  audio { display: none; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="head"><h1>Voice memo</h1><span class="prompt" id="prompt" data-testid="prompt"></span></div>
+  <div class="deck">
+    <button class="rec" id="rec" data-testid="record" title="Record" aria-label="Record"></button>
+    <canvas class="wave" id="wave" data-testid="wave"></canvas>
+    <span class="time" id="time" data-testid="time">0:00</span>
+  </div>
+  <div class="row">
+    <button class="b" id="play" data-testid="play" disabled>▶ Play</button>
+    <input id="title" data-testid="title" placeholder="Title (optional)" maxlength="80">
+    <button class="b" id="dl" data-testid="download" disabled>Download</button>
+    <button class="b primary" id="send" data-testid="send" disabled>Send to the agent</button>
+  </div>
+  <div class="status" id="status" data-testid="status">Press the red button to record. bise asks once for the microphone.</div>
+  <audio id="audio"></audio>
+</div>
+<script>
+// ---- the MCP Apps bridge (SEP-1865): JSON-RPC 2.0 over postMessage to the host. No SDK, nothing external.
+const mcp = (() => {
+  const pending = new Map(), handlers = {};
+  let nextId = 1, ctx = {};
+  const post = (m) => window.parent.postMessage({ jsonrpc: "2.0", ...m }, "*");
+  const request = (method, params) => new Promise((resolve, reject) => {
+    const id = nextId++; pending.set(id, { resolve, reject }); post({ id, method, params });
+  });
+  const notify = (method, params) => post({ method, params });
+  function applyContext(c) {
+    if (!c) return;
+    ctx = { ...ctx, ...c };
+    const root = document.documentElement;
+    if (c.theme) root.dataset.theme = c.theme;
+    const vars = c.styles && c.styles.variables;
+    if (vars) for (const [k, v] of Object.entries(vars)) if (v) root.style.setProperty(k, v);
+    if (c.displayMode) root.dataset.mode = c.displayMode;
+    if (handlers.context) handlers.context(ctx);
+  }
+  window.addEventListener("message", (e) => {
+    if (e.source !== window.parent) return;
+    const m = e.data;
+    if (!m || m.jsonrpc !== "2.0") return;
+    if (m.method && m.id !== undefined) {
+      if (m.method === "ui/resource-teardown" && handlers.teardown) handlers.teardown();
+      if (m.method === "ui/resource-teardown" || m.method === "ping") post({ id: m.id, result: {} });
+      else post({ id: m.id, error: { code: -32601, message: "method not found" } });
+      return;
+    }
+    if (m.method) {
+      if (m.method === "ui/notifications/host-context-changed") applyContext(m.params);
+      const h = handlers[m.method.replace("ui/notifications/", "")];
+      if (h) h(m.params || {});
+      return;
+    }
+    const p = pending.get(m.id);
+    if (!p) return;
+    pending.delete(m.id);
+    if (m.error) p.reject(Object.assign(new Error(m.error.message || "error"), { code: m.error.code, data: m.error.data }));
+    else p.resolve(m.result);
+  });
+  return {
+    on(name, fn) { handlers[name] = fn; },
+    get context() { return ctx; },
+    async call(name, args) {
+      const r = await request("tools/call", { name, arguments: args || {} });
+      if (r && r.isError) throw new Error(((r.content || [])[0] || {}).text || name + " failed");
+      return r;
+    },
+    read: (uri) => request("resources/read", { uri }),
+    message: (text) => request("ui/message", { role: "user", content: [{ type: "text", text }] }),
+    setContext: (text, structuredContent) => request("ui/update-model-context", { content: [{ type: "text", text }], structuredContent }),
+    openLink: (url) => request("ui/open-link", { url }),
+    download: (contents) => request("ui/download-file", { contents }),
+    displayMode: (mode) => request("ui/request-display-mode", { mode }),
+    async start(name, appCapabilities) {
+      const r = await request("ui/initialize", { appInfo: { name, version: "1.0.0" }, appCapabilities: appCapabilities || {}, protocolVersion: "2026-01-26" });
+      applyContext(r && r.hostContext);
+      notify("ui/notifications/initialized", {});
+      // the body's own height: the document's scrollHeight never drops below the frame's
+      new ResizeObserver(() => notify("ui/notifications/size-changed", {
+        width: Math.ceil(document.body.getBoundingClientRect().width), height: Math.ceil(document.body.getBoundingClientRect().height),
+      })).observe(document.body);
+      return r;
+    },
+  };
+})();
+function why(err) {
+  const reasons = { "-32031": "this view may not call that tool", "-32032": "the plugin is turned off", "-32033": "you declined it",
+    "-32034": "not supported in bise", "-32035": "too many calls, wait a moment", "-32036": "the server restarted, try again" };
+  return reasons[String(err && err.code)] || (err && err.message) || "it failed";
+}
+
+// ---- the recorder: getUserMedia (permission: microphone) + MediaRecorder + an AnalyserNode for the waveform
+const $ = (id) => document.getElementById(id);
+const MAX_S = 180;
+let stream = null, recorder = null, chunks = [], blob = null, seconds = 0, t0 = 0, raf = 0, peaks = [], analyser = null, actx = null, sent = false;
+
+function status(text, kind) { $("status").textContent = text; $("status").className = "status" + (kind ? " " + kind : ""); }
+const clock = (s) => Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0");
+
+// A canvas needs a real color: resolve a CSS variable (it may hold var() or light-dark()) through an element.
+function colorOf(name) {
+  const probe = document.getElementById("probe") || document.body.appendChild(Object.assign(document.createElement("i"), { id: "probe", hidden: true }));
+  probe.style.color = `var(${name})`;
+  return getComputedStyle(probe).color;
+}
+// The whole recording fitted to the bars: each bar is the loudest of its slice.
+function resample(vals, n) {
+  if (vals.length <= n) return vals;
+  return Array.from({ length: n }, (_, i) => Math.max(...vals.slice(Math.floor(i * vals.length / n), Math.floor((i + 1) * vals.length / n)) || [0]));
+}
+function drawWave(progress) {
+  const c = $("wave"), dpr = devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+  c.width = w * dpr; c.height = h * dpr;
+  const g = c.getContext("2d"); g.scale(dpr, dpr);
+  // 2 px bars, 2 px gaps, rounded, centred on the line; while recording the newest bars come in on the right
+  const bars = Math.floor(w / 4), recording = recorder && recorder.state === "recording";
+  const data = recording ? peaks.slice(-bars) : resample(peaks, bars);
+  const ink = colorOf("--fg"), rest = colorOf("--fg3");
+  for (let i = 0; i < bars; i++) {
+    const j = recording ? i - (bars - data.length) : i, v = j >= 0 ? data[j] ?? 0 : 0, bh = Math.max(2, v * (h - 4));
+    g.fillStyle = recording ? (j >= 0 ? ink : rest) : progress != null && i / bars < progress ? ink : rest;
+    g.beginPath(); g.roundRect(i * 4, (h - bh) / 2, 2, bh, 1); g.fill();
+  }
+}
+
+function sample() {
+  const buf = new Uint8Array(analyser.fftSize);
+  analyser.getByteTimeDomainData(buf);
+  let sum = 0; for (const v of buf) sum += ((v - 128) / 128) ** 2;
+  peaks.push(Math.min(1, Math.sqrt(sum / buf.length) * 4)); // RMS loudness, scaled for speech
+  seconds = (performance.now() - t0) / 1000;
+  $("time").textContent = clock(seconds);
+  drawWave();
+  if (seconds >= MAX_S) return stopRec();
+  raf = requestAnimationFrame(sample);
+}
+
+async function startRec() {
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (err) {
+    status(err.name === "NotAllowedError" ? "The microphone is not allowed for this view. Grant it in bise's Plugins, voice-memo." : "No microphone: " + err.message, "err");
+    return;
+  }
+  actx = new AudioContext();
+  analyser = actx.createAnalyser(); analyser.fftSize = 1024;
+  actx.createMediaStreamSource(stream).connect(analyser);
+  const type = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/mp4"].find((t) => MediaRecorder.isTypeSupported(t)) || "";
+  recorder = new MediaRecorder(stream, type ? { mimeType: type } : {});
+  chunks = []; peaks = []; blob = null; sent = false;
+  recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+  recorder.onstop = () => {
+    blob = new Blob(chunks, { type: recorder.mimeType.split(";")[0] || "audio/webm" });
+    $("audio").src = URL.createObjectURL(blob);
+    for (const id of ["play", "dl", "send"]) $(id).disabled = false;
+    status(`Recorded ${clock(seconds)}. Play it, download it, or send it to the agent.`);
+    drawWave(0);
+  };
+  recorder.start(250);
+  t0 = performance.now();
+  $("rec").classList.add("on"); $("rec").title = "Stop";
+  for (const id of ["play", "dl", "send"]) $(id).disabled = true;
+  status("Recording… press again to stop.");
+  sample();
+}
+function stopRec() {
+  cancelAnimationFrame(raf);
+  if (recorder && recorder.state === "recording") recorder.stop();
+  if (stream) stream.getTracks().forEach((t) => t.stop());
+  if (actx) actx.close();
+  stream = null; actx = null;
+  $("rec").classList.remove("on"); $("rec").title = "Record";
+}
+$("rec").onclick = () => (recorder && recorder.state === "recording" ? stopRec() : startRec());
+
+$("play").onclick = () => { const a = $("audio"); a.paused ? a.play() : a.pause(); };
+$("audio").onplay = () => { $("play").textContent = "❚❚ Pause"; const tick = () => { const a = $("audio"); drawWave(a.currentTime / (seconds || 1)); if (!a.paused) requestAnimationFrame(tick); }; tick(); };
+$("audio").onpause = $("audio").onended = () => { $("play").textContent = "▶ Play"; };
+
+const base64 = (b) => new Promise((ok) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1]); r.readAsDataURL(b); });
+const fileName = () => ($("title").value.trim() || "memo " + new Date().toISOString().slice(0, 16).replace("T", " ")).replace(/[^\w .-]+/g, "-") + "." + (blob.type.includes("mp4") ? "m4a" : blob.type.split("/")[1]);
+
+$("dl").onclick = async () => {
+  try { await mcp.download([{ type: "resource", resource: { uri: "file:///" + encodeURIComponent(fileName()), mimeType: blob.type, blob: await base64(blob) } }]); status("Downloaded " + fileName() + ".", "ok"); }
+  catch (err) { status("Download: " + why(err), "err"); }
+};
+$("send").onclick = async () => {
+  $("send").disabled = true;
+  try {
+    const s = Math.round(seconds), title = $("title").value.trim();
+    const r = await mcp.call("save_memo", { data: await base64(blob), mimeType: blob.type, seconds: s, title });
+    await mcp.message(`Here is my memo${title ? " “" + title + "”" : ""}, ${s} s: ${r.structuredContent.path}`);
+    sent = true;
+    status("Sent to the agent (" + s + " s).", "ok");
+  } catch (err) { status("Not sent: " + why(err), "err"); $("send").disabled = false; }
+};
+
+mcp.on("tool-input", (p) => { const a = p.arguments || {}; $("prompt").textContent = a.prompt || ""; });
+mcp.on("tool-result", (r) => { const s = r.structuredContent || {}; if (s.prompt) $("prompt").textContent = s.prompt; });
+mcp.on("teardown", () => stopRec());
+new ResizeObserver(() => drawWave(blob ? 0 : null)).observe($("wave"));
+mcp.start("voice-memo");
+</script>
+</body>
+</html>

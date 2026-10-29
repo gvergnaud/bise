@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "expense-form",
+  "version": "1.0.0",
+  "description": "Track expenses in a form under the conversation: add them by hand or by asking, see the month's totals by category, in an MCP Apps view."
+}

@@ -1,0 +1,324 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Trip map</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: var(--color-background-primary, light-dark(#ffffff, #1c1c1f));
+    --bg2: var(--color-background-secondary, light-dark(#f6f6f5, #242428));
+    --bg3: var(--color-background-tertiary, light-dark(#ececea, #2f2f34));
+    --fg: var(--color-text-primary, light-dark(#1d1d1f, #ececef));
+    --fg2: var(--color-text-secondary, light-dark(#6c6c72, #a1a1aa));
+    --fg3: var(--color-text-tertiary, light-dark(#a0a0a6, #6f6f78));
+    --line: var(--color-border-primary, light-dark(#e4e4e2, #38383e));
+    --line2: var(--color-border-secondary, light-dark(#efefed, #2c2c31));
+    --accent: var(--color-text-info, light-dark(#3b5bdb, #8ea2ff));
+    --danger: var(--color-text-danger, light-dark(#c92a2a, #ff8787));
+    --radius: var(--border-radius-md, 8px);
+    --sans: var(--font-sans, -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif);
+  }
+  html[data-theme="light"] { color-scheme: light; }
+  html[data-theme="dark"] { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 13px/1.45 var(--sans); color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  .app { padding: 14px 16px; display: grid; grid-template-columns: 1fr; gap: 10px; }
+  html[data-mode="fullscreen"] .app { height: 100vh; grid-template-columns: 1fr 300px; grid-template-rows: auto 1fr; }
+  html[data-mode="fullscreen"] .head { grid-column: 1 / -1; }
+  .head { display: flex; align-items: center; gap: 10px; }
+  .titles { flex: 1; min-width: 0; }
+  h1 { margin: 0; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sub { color: var(--fg2); font-size: 12px; font-variant-numeric: tabular-nums; }
+  button, input { font: inherit; font-size: 12px; color: var(--fg); }
+  button { height: 28px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  button:hover:not(:disabled) { background: var(--bg2); }
+  button:disabled { opacity: .45; cursor: default; }
+  .map { position: relative; height: 300px; border-radius: var(--radius); overflow: hidden; background: var(--bg3); border: 1px solid var(--line); cursor: grab; touch-action: none; user-select: none; }
+  .map.drag { cursor: grabbing; }
+  html[data-mode="fullscreen"] .map { height: auto; min-height: 0; }
+  .tiles img { position: absolute; width: 256px; height: 256px; pointer-events: none; }
+  html[data-theme="dark"] .tiles img { filter: brightness(.78) contrast(1.1) saturate(.7); }
+  .overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .route { fill: none; stroke: var(--accent); stroke-width: 3; stroke-dasharray: 2 7; stroke-linecap: round; }
+  .pin circle { fill: var(--accent); stroke: #fff; stroke-width: 2; }
+  .pin text { fill: #fff; font: 600 11px var(--sans); text-anchor: middle; dominant-baseline: central; }
+  .pin.sel circle { fill: var(--fg); }
+  .zoom { position: absolute; right: 8px; top: 8px; display: flex; flex-direction: column; gap: 4px; }
+  .zoom button { width: 28px; padding: 0; justify-content: center; background: var(--bg); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+  .attrib { position: absolute; right: 0; bottom: 0; font-size: 10px; padding: 1px 6px; background: color-mix(in srgb, var(--bg) 82%, transparent); color: var(--fg2); border-top-left-radius: 6px; }
+  .attrib a { color: inherit; cursor: pointer; }
+  .side { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+  ol { list-style: none; margin: 0; padding: 0; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+  li { display: grid; grid-template-columns: 22px 1fr auto auto; gap: 8px; align-items: center; padding: 6px 8px 6px 10px; border-bottom: 1px solid var(--line2); background: var(--bg); }
+  li:last-child { border-bottom: 0; }
+  li.sel { background: var(--bg2); }
+  li.over { box-shadow: inset 0 2px 0 var(--accent); }
+  li .n { width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 11px; font-weight: 600; display: grid; place-items: center; cursor: grab; }
+  li .name { min-width: 0; cursor: pointer; }
+  li .name b { font-weight: 500; }
+  li .name .meta { color: var(--fg2); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  li .wx { color: var(--fg2); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  li .rm { width: 22px; height: 22px; padding: 0; justify-content: center; border-color: transparent; color: var(--fg3); }
+  li .rm:hover { color: var(--danger); }
+  .add { display: flex; gap: 6px; }
+  .add input { flex: 1; min-width: 0; height: 28px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg); padding: 0 9px; outline: none; }
+  .add input:focus { border-color: var(--accent); }
+  .status { color: var(--fg2); font-size: 12px; }
+  .status:empty { display: none; }
+  .status.err { color: var(--danger); }
+  .empty { padding: 18px; color: var(--fg2); text-align: center; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="head">
+    <div class="titles">
+      <h1 id="title" data-testid="title">Trip</h1>
+      <div class="sub" id="sub" data-testid="sub">planning…</div>
+    </div>
+    <button id="osm" data-testid="open-osm" title="Open this area on openstreetmap.org">Open in OSM ↗</button>
+    <button id="full" data-testid="fullscreen">⤢ Open in panel</button>
+  </div>
+  <div class="map" id="map" data-testid="map">
+    <div class="tiles" id="tiles"></div>
+    <svg class="overlay" id="overlay"></svg>
+    <div class="zoom"><button id="zin" title="Zoom in">+</button><button id="zout" title="Zoom out">−</button></div>
+    <div class="attrib">© <a id="attrib">OpenStreetMap</a> contributors</div>
+  </div>
+  <div class="side">
+    <ol id="stops" data-testid="stops"><li><span></span><span class="empty">waiting for the itinerary…</span></li></ol>
+    <div class="add">
+      <input id="addName" data-testid="add-name" placeholder="Add a stop: a city…">
+      <button id="add" data-testid="add">Add</button>
+    </div>
+    <div class="status" id="status" data-testid="status"></div>
+  </div>
+</div>
+<script>
+// ---- the MCP Apps bridge (SEP-1865): JSON-RPC 2.0 over postMessage to the host. No SDK, nothing external.
+const mcp = (() => {
+  const pending = new Map(), handlers = {};
+  let nextId = 1, ctx = {};
+  const post = (m) => window.parent.postMessage({ jsonrpc: "2.0", ...m }, "*");
+  const request = (method, params) => new Promise((resolve, reject) => {
+    const id = nextId++; pending.set(id, { resolve, reject }); post({ id, method, params });
+  });
+  const notify = (method, params) => post({ method, params });
+  function applyContext(c) {
+    if (!c) return;
+    ctx = { ...ctx, ...c };
+    const root = document.documentElement;
+    if (c.theme) root.dataset.theme = c.theme;
+    const vars = c.styles && c.styles.variables;
+    if (vars) for (const [k, v] of Object.entries(vars)) if (v) root.style.setProperty(k, v);
+    if (c.displayMode) root.dataset.mode = c.displayMode;
+    if (handlers.context) handlers.context(ctx);
+  }
+  window.addEventListener("message", (e) => {
+    if (e.source !== window.parent) return;
+    const m = e.data;
+    if (!m || m.jsonrpc !== "2.0") return;
+    if (m.method && m.id !== undefined) {
+      if (m.method === "ui/resource-teardown" && handlers.teardown) handlers.teardown();
+      if (m.method === "ui/resource-teardown" || m.method === "ping") post({ id: m.id, result: {} });
+      else post({ id: m.id, error: { code: -32601, message: "method not found" } });
+      return;
+    }
+    if (m.method) {
+      if (m.method === "ui/notifications/host-context-changed") applyContext(m.params);
+      const h = handlers[m.method.replace("ui/notifications/", "")];
+      if (h) h(m.params || {});
+      return;
+    }
+    const p = pending.get(m.id);
+    if (!p) return;
+    pending.delete(m.id);
+    if (m.error) p.reject(Object.assign(new Error(m.error.message || "error"), { code: m.error.code, data: m.error.data }));
+    else p.resolve(m.result);
+  });
+  return {
+    on(name, fn) { handlers[name] = fn; },
+    get context() { return ctx; },
+    async call(name, args) {
+      const r = await request("tools/call", { name, arguments: args || {} });
+      if (r && r.isError) throw new Error(((r.content || [])[0] || {}).text || name + " failed");
+      return r;
+    },
+    read: (uri) => request("resources/read", { uri }),
+    message: (text) => request("ui/message", { role: "user", content: [{ type: "text", text }] }),
+    setContext: (text, structuredContent) => request("ui/update-model-context", { content: [{ type: "text", text }], structuredContent }),
+    openLink: (url) => request("ui/open-link", { url }),
+    download: (contents) => request("ui/download-file", { contents }),
+    displayMode: (mode) => request("ui/request-display-mode", { mode }),
+    async start(name, appCapabilities) {
+      const r = await request("ui/initialize", { appInfo: { name, version: "1.0.0" }, appCapabilities: appCapabilities || {}, protocolVersion: "2026-01-26" });
+      applyContext(r && r.hostContext);
+      notify("ui/notifications/initialized", {});
+      // the body's own height: the document's scrollHeight never drops below the frame's
+      new ResizeObserver(() => notify("ui/notifications/size-changed", {
+        width: Math.ceil(document.body.getBoundingClientRect().width), height: Math.ceil(document.body.getBoundingClientRect().height),
+      })).observe(document.body);
+      return r;
+    },
+  };
+})();
+function why(err) {
+  const reasons = { "-32031": "this view may not call that tool", "-32032": "the plugin is turned off", "-32033": "you declined it",
+    "-32034": "not supported in bise", "-32035": "too many calls, wait a moment", "-32036": "the server restarted, try again" };
+  return reasons[String(err && err.code)] || (err && err.message) || "it failed";
+}
+
+// ---- the map: OpenStreetMap tiles (resourceDomains) placed by hand in Web Mercator
+const $ = (id) => document.getElementById(id);
+const TILE = 256;
+let trip = null, zoom = 5, center = { x: 0, y: 0 }, selected = null, weather = {};
+
+const project = (lat, lon, z) => {
+  const s = TILE * 2 ** z, r = Math.min(85, Math.max(-85, lat)) * Math.PI / 180;
+  return { x: (lon + 180) / 360 * s, y: (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * s };
+};
+const unproject = (x, y, z) => {
+  const s = TILE * 2 ** z, n = Math.PI - 2 * Math.PI * y / s;
+  return { lat: 180 / Math.PI * Math.atan(Math.sinh(n)), lon: x / s * 360 - 180 };
+};
+
+function fit() {
+  const el = $("map"), w = el.clientWidth, h = el.clientHeight, s = trip ? trip.stops : [];
+  if (!s.length) { zoom = 4; center = project(48, 8, zoom); return; }
+  for (zoom = 12; zoom > 1; zoom--) {
+    const ps = s.map((p) => project(p.lat, p.lon, zoom));
+    const xs = ps.map((p) => p.x), ys = ps.map((p) => p.y);
+    if (Math.max(...xs) - Math.min(...xs) < w - 60 && Math.max(...ys) - Math.min(...ys) < h - 60) {
+      center = { x: (Math.max(...xs) + Math.min(...xs)) / 2, y: (Math.max(...ys) + Math.min(...ys)) / 2 };
+      return;
+    }
+  }
+  center = project(s[0].lat, s[0].lon, zoom);
+}
+
+function drawMap() {
+  const el = $("map"), w = el.clientWidth, h = el.clientHeight, n = 2 ** zoom;
+  const ox = center.x - w / 2, oy = center.y - h / 2;
+  const tiles = [];
+  for (let tx = Math.floor(ox / TILE); tx <= Math.floor((ox + w) / TILE); tx++)
+    for (let ty = Math.max(0, Math.floor(oy / TILE)); ty <= Math.min(n - 1, Math.floor((oy + h) / TILE)); ty++)
+      tiles.push(`<img alt="" src="https://tile.openstreetmap.org/${zoom}/${((tx % n) + n) % n}/${ty}.png" style="left:${tx * TILE - ox}px;top:${ty * TILE - oy}px">`);
+  $("tiles").innerHTML = tiles.join("");
+  const s = trip ? trip.stops : [];
+  const ps = s.map((p) => { const q = project(p.lat, p.lon, zoom); return { x: q.x - ox, y: q.y - oy }; });
+  $("overlay").innerHTML = (ps.length > 1 ? `<path class="route" d="M${ps.map((p) => p.x.toFixed(1) + " " + p.y.toFixed(1)).join(" L")}"/>` : "") +
+    ps.map((p, i) => `<g class="pin${s[i].id === selected ? " sel" : ""}"><circle cx="${p.x}" cy="${p.y}" r="11"/><text x="${p.x}" y="${p.y}">${i + 1}</text></g>`).join("");
+}
+
+// ---- the list: drag to reorder, × to remove
+function drawList() {
+  const s = trip.stops;
+  const start = trip.start ? new Date(trip.start + "T12:00:00") : null;
+  let night = 0;
+  $("stops").innerHTML = s.length ? s.map((p, i) => {
+    const from = start ? new Date(start.getTime() + night * 86400000) : null;
+    night += p.nights;
+    const when = from ? from.toLocaleDateString(mcp.context.locale || undefined, { month: "short", day: "numeric" }) + " · " : "";
+    const wx = weather[p.id];
+    return `<li draggable="true" data-id="${p.id}" class="${p.id === selected ? "sel" : ""}">
+      <span class="n" title="Drag to reorder">${i + 1}</span>
+      <span class="name" data-pick="${p.id}"><b>${esc(p.name)}</b><div class="meta">${when}${p.nights} night${p.nights === 1 ? "" : "s"}${p.country ? " · " + esc(p.country) : ""}${i ? " · " + trip.legs[i - 1] + " km from " + esc(s[i - 1].name) : ""}</div></span>
+      <span class="wx" title="Today, Open-Meteo">${wx ? wx : ""}</span>
+      <button class="rm" data-rm="${p.id}" title="Remove">×</button>
+    </li>`;
+  }).join("") : '<li><span></span><span class="empty">No stops yet: add a city below.</span></li>';
+  $("title").textContent = trip.title;
+  $("sub").textContent = `${s.length} stop${s.length === 1 ? "" : "s"} · ${trip.nights} night${trip.nights === 1 ? "" : "s"} · ${trip.km.toLocaleString()} km`;
+}
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+function show(t, { refit = true } = {}) {
+  trip = t;
+  if (refit) fit();
+  drawList(); drawMap(); loadWeather();
+}
+
+// ---- each stop's weather today, fetched by the view itself (connectDomains: api.open-meteo.com)
+async function loadWeather() {
+  const todo = trip.stops.filter((p) => !(p.id in weather));
+  if (!todo.length) return;
+  for (const p of todo) weather[p.id] = "";
+  try {
+    const q = new URLSearchParams({ latitude: todo.map((p) => p.lat).join(","), longitude: todo.map((p) => p.lon).join(","),
+      daily: "temperature_2m_max,weather_code", forecast_days: "1", timezone: "auto" });
+    const r = await fetch("https://api.open-meteo.com/v1/forecast?" + q);
+    const j = await r.json(), rows = Array.isArray(j) ? j : [j];
+    rows.forEach((row, i) => { const c = row.daily.weather_code[0]; weather[todo[i].id] = `${c === 0 ? "☀︎" : c <= 3 ? "⛅︎" : c <= 48 ? "≋" : c <= 82 ? "☂︎" : "ϟ"} ${Math.round(row.daily.temperature_2m_max[0])}°`; });
+  } catch (err) { /* no weather: the list still works */ }
+  drawList();
+}
+
+async function edit(name, args, what) {
+  try {
+    const r = await mcp.call(name, { trip, ...args });
+    show(r.structuredContent, { refit: name !== "move_stop" });
+    status(what);
+    const text = (r.content || [])[0] ? r.content[0].text : "";
+    await mcp.setContext("The user changed the trip on the map. Now: " + text, { trip: r.structuredContent });
+  } catch (err) { status(why(err), true); }
+}
+function status(text, err) { $("status").textContent = text || ""; $("status").className = "status" + (err ? " err" : ""); }
+
+$("add").onclick = () => { const v = $("addName").value.trim(); if (v && trip) { $("addName").value = ""; status("Finding " + v + "…"); edit("add_stop", { name: v }, "Added " + v); } };
+$("addName").onkeydown = (e) => { if (e.key === "Enter") $("add").click(); };
+$("stops").onclick = (e) => {
+  const rm = e.target.closest("[data-rm]"), pick = e.target.closest("[data-pick]");
+  if (rm) { const p = trip.stops.find((s) => s.id === +rm.dataset.rm); edit("remove_stop", { id: p.id }, "Removed " + p.name); }
+  else if (pick) { selected = +pick.dataset.pick; const p = trip.stops.find((s) => s.id === selected); center = project(p.lat, p.lon, zoom); drawList(); drawMap(); }
+};
+let dragId = null;
+$("stops").addEventListener("dragstart", (e) => { const li = e.target.closest("li"); dragId = li && +li.dataset.id; });
+$("stops").addEventListener("dragover", (e) => { e.preventDefault(); document.querySelectorAll("li.over").forEach((l) => l.classList.remove("over")); const li = e.target.closest("li"); if (li) li.classList.add("over"); });
+$("stops").addEventListener("drop", (e) => {
+  e.preventDefault();
+  const li = e.target.closest("li"); document.querySelectorAll("li.over").forEach((l) => l.classList.remove("over"));
+  if (!li || dragId == null) return;
+  const to = trip.stops.findIndex((s) => s.id === +li.dataset.id), from = trip.stops.findIndex((s) => s.id === dragId);
+  if (to >= 0 && to !== from) edit("move_stop", { id: dragId, to }, "Moved " + trip.stops[from].name);
+  dragId = null;
+});
+
+// ---- pan and zoom
+let pan = null;
+$("map").addEventListener("pointerdown", (e) => { if (e.target.closest("button,a")) return; pan = { x: e.clientX, y: e.clientY, c: { ...center } }; $("map").classList.add("drag"); $("map").setPointerCapture(e.pointerId); });
+$("map").addEventListener("pointermove", (e) => { if (!pan) return; center = { x: pan.c.x - (e.clientX - pan.x), y: pan.c.y - (e.clientY - pan.y) }; drawMap(); });
+$("map").addEventListener("pointerup", () => { pan = null; $("map").classList.remove("drag"); });
+function zoomBy(d) {
+  const nz = Math.max(2, Math.min(17, zoom + d)); if (nz === zoom) return;
+  const ll = unproject(center.x, center.y, zoom); zoom = nz; center = project(ll.lat, ll.lon, zoom); drawMap();
+}
+$("zin").onclick = () => zoomBy(1);
+$("zout").onclick = () => zoomBy(-1);
+$("map").addEventListener("wheel", (e) => { e.preventDefault(); zoomBy(e.deltaY < 0 ? 1 : -1); }, { passive: false });
+new ResizeObserver(() => { if (trip) drawMap(); }).observe($("map"));
+
+// ---- host: links, display mode, notifications
+$("attrib").onclick = () => mcp.openLink("https://www.openstreetmap.org/copyright").catch((err) => status(why(err), true));
+$("osm").onclick = () => { const ll = unproject(center.x, center.y, zoom); mcp.openLink(`https://www.openstreetmap.org/#map=${zoom}/${ll.lat.toFixed(4)}/${ll.lon.toFixed(4)}`).catch((err) => status(why(err), true)); };
+$("full").onclick = async () => {
+  const want = document.documentElement.dataset.mode === "fullscreen" ? "inline" : "fullscreen";
+  try { const r = await mcp.displayMode(want); document.documentElement.dataset.mode = r.mode; }
+  catch (err) { status("Panel: " + why(err), true); }
+};
+mcp.on("context", (c) => {
+  $("full").textContent = c.displayMode === "fullscreen" ? "Back to the thread" : "⤢ Open in panel";
+  if (trip) requestAnimationFrame(() => { fit(); drawMap(); });
+});
+mcp.on("tool-input", (p) => { const a = p.arguments || {}; if (a.title) $("title").textContent = a.title; $("sub").textContent = "placing " + (a.stops || []).length + " stops…"; });
+mcp.on("tool-result", (r) => {
+  if (r.isError) return status(((r.content || [])[0] || {}).text || "The tool failed.", true);
+  if (r.structuredContent) show(r.structuredContent);
+});
+mcp.on("tool-cancelled", () => { $("sub").textContent = "stopped"; status("The plan was stopped before it was placed."); });
+
+fit(); drawMap();
+mcp.start("travel-planner", { availableDisplayModes: ["inline", "fullscreen"] });
+</script>
+</body>
+</html>

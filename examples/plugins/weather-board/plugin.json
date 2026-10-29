@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "weather-board",
+  "version": "1.0.0",
+  "description": "The weather now and for the next 7 days anywhere, as a live chart (Open-Meteo, no key) in an MCP Apps view."
+}

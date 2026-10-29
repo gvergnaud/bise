@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "quiz-cards",
+  "version": "1.0.0",
+  "description": "Flashcards the agent writes and the user flips: the score goes back to the agent, which quizzes them again on the misses, in an MCP Apps view."
+}

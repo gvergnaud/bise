@@ -1,0 +1,235 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Expenses</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: var(--color-background-primary, light-dark(#ffffff, #1c1c1f));
+    --bg2: var(--color-background-secondary, light-dark(#f6f6f5, #242428));
+    --bg3: var(--color-background-tertiary, light-dark(#ececea, #2f2f34));
+    --fg: var(--color-text-primary, light-dark(#1d1d1f, #ececef));
+    --fg2: var(--color-text-secondary, light-dark(#6c6c72, #a1a1aa));
+    --fg3: var(--color-text-tertiary, light-dark(#a0a0a6, #6f6f78));
+    --line: var(--color-border-primary, light-dark(#e4e4e2, #38383e));
+    --line2: var(--color-border-secondary, light-dark(#efefed, #2c2c31));
+    --accent: var(--color-text-info, light-dark(#3b5bdb, #8ea2ff));
+    --danger: var(--color-text-danger, light-dark(#c92a2a, #ff8787));
+    --ok: var(--color-text-success, light-dark(#2b8a3e, #69db7c));
+    --radius: var(--border-radius-md, 8px);
+    --sans: var(--font-sans, -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif);
+  }
+  html[data-theme="light"] { color-scheme: light; }
+  html[data-theme="dark"] { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 13px/1.45 var(--sans); color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  .app { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+  .head { display: flex; align-items: baseline; gap: 10px; }
+  h1 { margin: 0; font-size: 14px; font-weight: 600; flex: 1; }
+  .sub { color: var(--fg2); font-size: 12px; font-variant-numeric: tabular-nums; }
+  form { display: grid; grid-template-columns: 1.1fr .8fr 1fr 1fr; gap: 8px 10px; padding: 12px; border-radius: var(--radius); background: var(--bg2); }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--fg2); min-width: 0; }
+  label.wide { grid-column: 1 / 4; }
+  input, select, button { font: inherit; font-size: 13px; color: var(--fg); }
+  input, select { height: 30px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg); padding: 0 9px; outline: none; min-width: 0; width: 100%; }
+  input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+  input[aria-invalid="true"] { border-color: var(--danger); }
+  .amount { display: flex; gap: 6px; }
+  .amount input { text-align: right; font-variant-numeric: tabular-nums; }
+  .amount select { width: 74px; flex: none; }
+  .submit { align-self: end; }
+  button { height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; white-space: nowrap; }
+  button.primary { width: 100%; background: var(--fg); color: var(--bg); border-color: transparent; font-weight: 500; }
+  button:disabled { opacity: .5; cursor: default; }
+  .msg { grid-column: 1 / -1; min-height: 17px; font-size: 12px; color: var(--fg2); }
+  .msg.err { color: var(--danger); }
+  .msg.ok { color: var(--ok); }
+  .wait { display: inline-flex; gap: 6px; align-items: center; }
+  .wait::before { content: ""; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .totals { display: flex; flex-direction: column; gap: 6px; }
+  .total { display: flex; align-items: baseline; gap: 8px; }
+  .total b { font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -.3px; }
+  .bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--bg3); }
+  .bar span { height: 100%; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11.5px; color: var(--fg2); font-variant-numeric: tabular-nums; }
+  .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  td { padding: 6px 4px; border-top: 1px solid var(--line2); vertical-align: top; }
+  td.d { color: var(--fg2); width: 64px; white-space: nowrap; }
+  td.c { width: 96px; }
+  td.n { color: var(--fg2); }
+  td.a { text-align: right; white-space: nowrap; font-weight: 500; }
+  tr.new td { animation: flash 1.6s ease-out; }
+  @keyframes flash { from { background: color-mix(in srgb, var(--accent) 16%, transparent); } }
+  .tag { font-size: 11px; padding: 1px 7px; border-radius: 9px; background: var(--bg2); color: var(--fg2); }
+  .empty { color: var(--fg2); padding: 8px 0; }
+  @media (max-width: 520px) { form { grid-template-columns: 1fr 1fr; } label.wide { grid-column: 1 / -1; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="head">
+    <h1>Expenses</h1>
+    <span class="sub" id="month" data-testid="month"></span>
+  </div>
+  <form id="form" data-testid="form" novalidate>
+    <label>Amount
+      <span class="amount">
+        <input id="amount" name="amount" inputmode="decimal" placeholder="0.00" required data-testid="amount">
+        <select id="currency" name="currency" data-testid="currency"></select>
+      </span>
+    </label>
+    <label>Date<input id="date" name="date" type="date" required data-testid="date"></label>
+    <label>Category<select id="category" name="category" data-testid="category"></select></label>
+    <label class="submit"><span>&nbsp;</span><button class="primary" id="add" type="submit" data-testid="add">Add expense</button></label>
+    <label class="wide">Note<input id="note" name="note" maxlength="140" placeholder="Lunch with the team, train to Lyon…" data-testid="note"></label>
+    <div class="msg" id="msg" data-testid="msg" role="status"></div>
+  </form>
+  <div class="totals" id="totals" data-testid="totals"></div>
+  <table><tbody id="rows" data-testid="rows"><tr><td class="empty">Loading…</td></tr></tbody></table>
+</div>
+<script>
+// ---- the MCP Apps bridge (SEP-1865): JSON-RPC 2.0 over postMessage to the host. No SDK, nothing external.
+const mcp = (() => {
+  const pending = new Map(), handlers = {};
+  let nextId = 1, ctx = {};
+  const post = (m) => window.parent.postMessage({ jsonrpc: "2.0", ...m }, "*");
+  const request = (method, params) => new Promise((resolve, reject) => {
+    const id = nextId++; pending.set(id, { resolve, reject }); post({ id, method, params });
+  });
+  const notify = (method, params) => post({ method, params });
+  function applyContext(c) {
+    if (!c) return;
+    ctx = { ...ctx, ...c };
+    const root = document.documentElement;
+    if (c.theme) root.dataset.theme = c.theme;
+    const vars = c.styles && c.styles.variables;
+    if (vars) for (const [k, v] of Object.entries(vars)) if (v) root.style.setProperty(k, v);
+    if (c.displayMode) root.dataset.mode = c.displayMode;
+    if (handlers.context) handlers.context(ctx);
+  }
+  window.addEventListener("message", (e) => {
+    if (e.source !== window.parent) return;
+    const m = e.data;
+    if (!m || m.jsonrpc !== "2.0") return;
+    if (m.method && m.id !== undefined) {
+      if (m.method === "ui/resource-teardown" && handlers.teardown) handlers.teardown();
+      if (m.method === "ui/resource-teardown" || m.method === "ping") post({ id: m.id, result: {} });
+      else post({ id: m.id, error: { code: -32601, message: "method not found" } });
+      return;
+    }
+    if (m.method) {
+      if (m.method === "ui/notifications/host-context-changed") applyContext(m.params);
+      const h = handlers[m.method.replace("ui/notifications/", "")];
+      if (h) h(m.params || {});
+      return;
+    }
+    const p = pending.get(m.id);
+    if (!p) return;
+    pending.delete(m.id);
+    if (m.error) p.reject(Object.assign(new Error(m.error.message || "error"), { code: m.error.code, data: m.error.data }));
+    else p.resolve(m.result);
+  });
+  return {
+    on(name, fn) { handlers[name] = fn; },
+    get context() { return ctx; },
+    async call(name, args) {
+      const r = await request("tools/call", { name, arguments: args || {} });
+      if (r && r.isError) throw new Error(((r.content || [])[0] || {}).text || name + " failed");
+      return r;
+    },
+    read: (uri) => request("resources/read", { uri }),
+    message: (text) => request("ui/message", { role: "user", content: [{ type: "text", text }] }),
+    setContext: (text, structuredContent) => request("ui/update-model-context", { content: [{ type: "text", text }], structuredContent }),
+    openLink: (url) => request("ui/open-link", { url }),
+    download: (contents) => request("ui/download-file", { contents }),
+    displayMode: (mode) => request("ui/request-display-mode", { mode }),
+    async start(name, appCapabilities) {
+      const r = await request("ui/initialize", { appInfo: { name, version: "1.0.0" }, appCapabilities: appCapabilities || {}, protocolVersion: "2026-01-26" });
+      applyContext(r && r.hostContext);
+      notify("ui/notifications/initialized", {});
+      // the body's own height: the document's scrollHeight never drops below the frame's
+      new ResizeObserver(() => notify("ui/notifications/size-changed", {
+        width: Math.ceil(document.body.getBoundingClientRect().width), height: Math.ceil(document.body.getBoundingClientRect().height),
+      })).observe(document.body);
+      return r;
+    },
+  };
+})();
+function why(err) {
+  const reasons = { "-32031": "this view may not call that tool", "-32032": "the plugin is turned off", "-32033": "you declined it",
+    "-32034": "not supported in bise", "-32035": "too many calls, wait a moment", "-32036": "the server restarted, try again" };
+  return reasons[String(err && err.code)] || (err && err.message) || "it failed";
+}
+
+// ---- the form
+const $ = (id) => document.getElementById(id);
+const COLORS = { food: "#e8590c", transport: "#1c7ed6", lodging: "#7048e8", office: "#0ca678", software: "#d6336c", other: "#868e96" };
+let data = null, newest = 0;
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const money = (v, cur) => new Intl.NumberFormat(mcp.context.locale || undefined, { style: "currency", currency: cur }).format(v);
+const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+
+function msg(text, kind) { $("msg").innerHTML = text; $("msg").className = "msg" + (kind ? " " + kind : ""); }
+
+function show(s) {
+  const first = !data;
+  data = s;
+  if (first) {
+    $("currency").innerHTML = s.currencies.map((c) => `<option>${c}</option>`).join("");
+    $("category").innerHTML = s.categories.map((c) => `<option value="${c}">${c[0].toUpperCase() + c.slice(1)}</option>`).join("");
+    $("date").value = today();
+  }
+  $("month").textContent = new Date(s.month + "-15").toLocaleDateString(mcp.context.locale || undefined, { month: "long", year: "numeric" });
+  $("totals").innerHTML = Object.entries(s.totals).map(([cur, t]) => {
+    const parts = Object.entries(t.by).sort((a, b) => b[1] - a[1]);
+    return `<div class="total"><b data-testid="total">${money(t.total, cur)}</b><span class="sub">this month</span></div>
+      <div class="bar">${parts.map(([k, v]) => `<span title="${k}" style="width:${v / t.total * 100}%;background:${COLORS[k]}"></span>`).join("")}</div>
+      <div class="legend">${parts.map(([k, v]) => `<span><i style="background:${COLORS[k]}"></i>${k} ${money(v, cur)}</span>`).join("")}</div>`;
+  }).join("") || "";
+  $("rows").innerHTML = s.expenses.length ? s.expenses.slice(0, 50).map((r) => `
+    <tr class="${r.id === newest ? "new" : ""}"><td class="d">${new Date(r.date + "T12:00:00").toLocaleDateString(mcp.context.locale || undefined, { month: "short", day: "numeric" })}</td>
+    <td class="c"><span class="tag">${r.category}</span></td><td class="n">${esc(r.note)}</td><td class="a">${money(r.amount, r.currency)}</td></tr>`).join("")
+    : '<tr><td class="empty">No expenses this month yet.</td></tr>';
+  shareTotals();
+}
+
+// The model sees the totals without a tool call: ui/update-model-context.
+function shareTotals() {
+  const lines = Object.entries(data.totals).map(([cur, t]) => `${t.total.toFixed(2)} ${cur} (` +
+    Object.entries(t.by).map(([k, v]) => `${k} ${v.toFixed(2)}`).join(", ") + ")");
+  const text = `Expenses in ${data.month}, as shown in the form: ` + (lines.length ? lines.join("; ") + `, ${data.expenses.length} expenses.` : "none yet.");
+  mcp.setContext(text, { month: data.month, totals: data.totals, count: data.expenses.length }).catch(() => {});
+}
+
+$("form").onsubmit = async (e) => {
+  e.preventDefault();
+  const amount = parseFloat($("amount").value.replace(",", "."));
+  const bad = !(amount > 0);
+  $("amount").setAttribute("aria-invalid", bad);
+  if (bad) { msg("Enter an amount above zero.", "err"); $("amount").focus(); return; }
+  const args = { amount, currency: $("currency").value, category: $("category").value, date: $("date").value || today(), note: $("note").value.trim() };
+  $("add").disabled = true;
+  // add_expense is a tool the model sees too: bise asks for your approval before it runs.
+  msg('<span class="wait">Waiting for your approval in bise…</span>');
+  try {
+    const r = await mcp.call("add_expense", args);
+    const s = r.structuredContent;
+    newest = Math.max(...s.expenses.map((x) => x.id));
+    show(s);
+    msg("Added " + money(amount, args.currency) + ".", "ok");
+    $("amount").value = ""; $("note").value = ""; $("amount").focus();
+  } catch (err) {
+    msg("Not added: " + esc(why(err)) + ".", "err");
+  } finally { $("add").disabled = false; }
+};
+
+mcp.on("tool-result", (r) => { if (r.isError) return msg(esc(((r.content || [])[0] || {}).text || "The tool failed."), "err"); if (r.structuredContent) show(r.structuredContent); });
+mcp.on("tool-cancelled", () => msg("The tool was stopped; you can still add expenses here."));
+mcp.on("context", () => data && show(data));
+mcp.start("expense-form");
+</script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "crypto-ticker",
+  "version": "1.0.0",
+  "description": "Live crypto prices with 7-day sparklines, and a slow price-history backfill you can stop, from CoinGecko's public API (no key), in MCP Apps views."
+}

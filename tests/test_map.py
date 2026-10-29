@@ -74,6 +74,9 @@ TOP = {
     # the office SDK: no e2e/tmux test loads it yet; the gate runs
     # tests/office_check.sh on it instead (office-run moves this when bise embeds it)
     "office": "none",
+    # example plugins users add by hand (examples/plugins/: MCP Apps views); no e2e/tmux
+    # test loads them: tests/fixtures/mcp-apps/check.py checks their shapes
+    "examples": "none",
 }
 # the desktop app's own paths: its checks, no terminal test
 DESKTOP_PREFIXES = ("apps/desktop/", "dev/", "scripts/desktop", "tests/desktop_", "tests/ambient_qa")

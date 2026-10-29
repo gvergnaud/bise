@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "travel-planner",
+  "version": "1.0.0",
+  "description": "Plan a trip on a map the user can edit: stops in order, nights, distances and each stop's weather (OpenStreetMap and Open-Meteo, no key), in an MCP Apps view."
+}

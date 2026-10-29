@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "voice-memo",
+  "version": "1.0.0",
+  "description": "Record a voice memo with a live waveform, play it back, download it or hand it to the agent, in an MCP Apps view (microphone)."
+}
