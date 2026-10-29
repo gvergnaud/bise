@@ -352,6 +352,35 @@ pub struct PluginPart {
     /// architect m_43316)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
+    /// an MCP App's view (kind `view`): its uri, what it declares and
+    /// what he granted (docs/mcp-apps.md C8); none for every other kind
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view: Option<PartView>,
+}
+
+/// A view part's facts (MCP Apps, docs/mcp-apps.md C8): the plugins
+/// page's VIEWS group draws its grant ticks from them.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct PartView {
+    /// its `ui://` uri
+    pub uri: String,
+    /// the server that serves it (none: a Vibe static view)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server: Option<String>,
+    /// the permissions it declares (`camera`, `microphone`, `midi`,
+    /// `clipboardWrite`)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub declared: Vec<String>,
+    /// the origins it reaches, as declared (its CSP's domains, every kind)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub domains: Vec<String>,
+    /// what he granted it (`plugins.json`'s `view_grants`)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub granted: Vec<String>,
+    /// he was asked (at the add or on its page): false is 'not granted'
+    #[serde(default)]
+    pub asked: bool,
 }
 
 /// What a plugin will run on his Mac once added, shown before his click
@@ -384,6 +413,11 @@ pub struct PluginPreview {
     /// source)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replaces: Option<String>,
+    /// its views known before it runs (its Vibe static views): each with
+    /// its domains and the permissions it asks, ticked on the add screen
+    /// (docs/mcp-apps.md C8); a server's views come once it runs
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub views: Vec<PluginPart>,
 }
 
 /// One MCP server of a [`PluginPreview`].
@@ -533,6 +567,8 @@ pub enum PartKind {
     Skill,
     Mcp,
     Tool,
+    /// an MCP App's view (its `view` facts)
+    View,
     /// a newer core's value
     #[serde(other)]
     Unknown,

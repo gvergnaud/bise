@@ -21,10 +21,19 @@ export interface ToolView {
   readonly state: 'live' | 'expired';
 }
 
-/** A tool call's view, when it has one (ToolItem.view, piece 4). Pure. */
-export function viewOf(item: ToolItem): ToolView | null {
-  const v = (item as ToolItem & { readonly view?: ToolView | null }).view;
-  return v === undefined || v === null || typeof v.call !== 'string' || v.call === '' ? null : v;
+/**
+ * A tool call's views, in order (C4's ToolItem.views: a run_typescript call can call several tools
+ * with a view, one card each, keyed by its call id); none without. Pure.
+ */
+export function viewsOf(item: ToolItem): ToolView[] {
+  const vs: unknown = (item as ToolItem & { readonly views?: unknown }).views;
+  if (!Array.isArray(vs)) return [];
+  const seen = new Set<string>();
+  return (vs as readonly ToolView[]).filter((v) => {
+    if (typeof v.call !== 'string' || v.call === '' || seen.has(v.call)) return false;
+    seen.add(v.call);
+    return true;
+  });
 }
 
 /** A view's state words: one quiet line, and 'try again' after a failure. */
@@ -158,7 +167,7 @@ export const ViewCard = memo(function ViewCard({ project, agent, view, store = v
 export function ViewCards({ tkey, pos, project, agent }: { tkey: string; pos: number; project: string; agent: string }) {
   const entry = useEntry(tkey, pos);
   const items = entry?.tools?.items ?? [];
-  const shown = items.map((i) => viewOf(i)).filter((v): v is ToolView => v !== null);
+  const shown = items.flatMap(viewsOf);
   if (shown.length === 0) return null;
   return (
     <>

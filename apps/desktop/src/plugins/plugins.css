@@ -171,3 +171,11 @@
 .plg-skill-file { display: flex; align-items: center; gap: var(--s-2); height: var(--h-control); margin: 0; padding: 0 var(--s-3); border: 0; border-radius: var(--r-2); background: none; color: var(--c-text); text-align: left; }
 .plg-skill-file:hover { background: var(--c-hover); }
 .plg-skill-file:focus-visible, .plg-skill-back:focus-visible, .plg-kv-fold:focus-visible, .plg-skill-toggle:focus-visible { outline: 2px solid var(--c-focus); outline-offset: -2px; }
+
+/* a view's permission ticks in its VIEWS row and on the add screen (ViewsGroup.tsx, MCP Apps C8) */
+.plg-perms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-inline) var(--gap-block);
+  margin-top: var(--s-1);
+}

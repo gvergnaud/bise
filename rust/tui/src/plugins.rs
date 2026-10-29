@@ -29,6 +29,7 @@ pub(crate) fn rows(workspace: &Path, pending: &[String]) -> Vec<bise_proto::app_
     let res = resolve::resolve(&resolve::Roots::standard(Some(workspace)));
     let cat = connectors::cached(&bise_home::Home::from_env().connectors_cache());
     let st = state::read(&state::state_path());
+    let grants = state::grants(&state::state_path());
     let (sd, od) = (status::dir(), oauth::store_dir());
     // the skills folders main reads (the user's view), off ones too; a
     // short wait per folder: a stuck one is skipped (bend_plugins::skills)
@@ -41,6 +42,7 @@ pub(crate) fn rows(workspace: &Path, pending: &[String]) -> Vec<bise_proto::app_
         catalog: &cat,
         skills: &found.skills,
         state: &st,
+        grants: &grants,
         status_dir: Some(&sd),
         oauth_dir: Some(&od),
         pending_logins: pending,
@@ -86,6 +88,15 @@ pub(crate) fn set(id: &str, on: bool) -> Result<bool, String> {
     let id = bend_plugins::id::PluginId::parse(id)?;
     let path = bend_plugins::state::state_path();
     bend_plugins::state::set(&path, &id, on).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// Grant view `uri` of plugin `plugin` its permissions `perms` (the add
+/// screen's views step, the VIEWS group; docs/mcp-apps.md C8): through
+/// bend_plugins::state's one writer. Returns whether the file changed.
+pub(crate) fn grant(plugin: &str, uri: &str, perms: &[String]) -> Result<bool, String> {
+    let id = bend_plugins::id::PluginId::plugin(plugin).part(bend_plugins::id::PartKind::View, None, uri);
+    let path = bend_plugins::state::state_path();
+    bend_plugins::state::grant(&path, &id, perms).map_err(|e| format!("{}: {e}", path.display()))
 }
 
 /// Forget the login of server `name` (`/plugins logout NAME`).

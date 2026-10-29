@@ -24,6 +24,26 @@ export const views = {
   back_inline: "show here",
   /** try again after a load that failed */
   retry: "try again",
+  /** a plugin page's group of its views */
+  group: "views",
+  /** a view he was never asked about (a server added it later): it runs with no permission */
+  not_granted: "not granted",
+  /** a view that asks for nothing */
+  asks_nothing: "uses no camera, microphone, MIDI or clipboard",
+  /** the origins a view reaches: 'reaches api.open-meteo.com, tile.openstreetmap.org' */
+  reaches: (a: { domains: string | number }): string => "reaches " + String(a.domains),
+  /** a permission's name, its tick's label: the camera */
+  perm_camera: "camera",
+  /** the microphone permission's tick */
+  perm_microphone: "microphone",
+  /** the MIDI permission's tick (bise's dev.bise/ui midi) */
+  perm_midi: "MIDI",
+  /** the clipboardWrite permission's tick */
+  perm_clipboard: "copy to the clipboard",
+  /** the add screen's label over its views */
+  preview_label: "views, and what each may use",
+  /** the add screen's line under its views: only what he ticks is granted */
+  preview_ticks: "only what you tick is granted; you can change it on its page",
   /** a view's panel tab title with no tool name yet */
   tab_view: "view",
   /** the view asked the agent something: it went 'via <plugin>' */

@@ -15,7 +15,7 @@ fn part(owner: &str, kind: PartKind, name: &str, on: bool) -> PluginPart {
         PartKind::Mcp => "mcp",
         _ => "tool",
     };
-    PluginPart { id: format!("{owner}#{k}:{name}"), kind, name: name.into(), what: None, on, status: None, login: None, tools: vec![], tool_count: None, error: None, path: None }
+    PluginPart { id: format!("{owner}#{k}:{name}"), kind, name: name.into(), what: None, on, status: None, login: None, tools: vec![], tool_count: None, error: None, path: None, view: None }
 }
 
 fn plugin(id: &str, kind: PluginKind, scope: Scope, what: &str, parts: Vec<PluginPart>) -> Plugin {
@@ -521,4 +521,34 @@ fn a_name_clash_150_80() {
     let mut sc = Screen { note: Some(("✗ x".into(), true)), ..Default::default() };
     key(&mut sc, &rows, &[], &press(KeyCode::Down));
     assert_eq!(sc.note, None);
+}
+
+/// A plugin's VIEWS group (MCP Apps, C8): each view, what it declares
+/// with ✓ granted or ✗ not, 'not granted' when he was never asked, the
+/// origins it reaches; the add's preview lists its views too.
+#[test]
+fn a_plugins_views_and_their_grants() {
+    use bise_proto::app_rows::PartView;
+    let view = |name: &str, declared: &[&str], granted: &[&str], asked: bool| PluginPart {
+        view: Some(PartView {
+            uri: format!("ui://piano/{name}"),
+            server: Some("piano".into()),
+            declared: declared.iter().map(|x| x.to_string()).collect(),
+            domains: vec!["https://api.open-meteo.com".into()],
+            granted: granted.iter().map(|x| x.to_string()).collect(),
+            asked,
+        }),
+        ..part("piano", PartKind::View, name, true)
+    };
+    let p = plugin("piano", PluginKind::Plugin, Scope::User, "a composer", vec![view("score", &["microphone", "midi"], &["midi"], true), view("late", &["camera"], &[], false)]);
+    let t = texts(&page_body(&Screen::default(), &p, 150));
+    assert!(t.iter().any(|l| l.contains(&format!("{} · 2", views::group))), "{t:?}");
+    let score = t.iter().find(|l| l.contains("score")).unwrap();
+    assert!(score.contains(&format!("✗ {}", views::perm_microphone)) && score.contains(&format!("✓ {}", views::perm_midi)), "{score}");
+    assert!(t.iter().find(|l| l.contains("late")).unwrap().contains(views::not_granted), "{t:?}");
+    assert!(t.iter().any(|l| l.contains(&views::reaches("api.open-meteo.com"))), "{t:?}");
+    // the add's preview: its views, none granted from the terminal
+    let pv = Preview { name: "piano".into(), from: "examples".into(), views: vec![view("score", &["midi"], &[], false)], ..Default::default() };
+    let f = frame(Screen { add: Some(Add::Preview { preview: pv, error: None }), ..Default::default() }, 150, 30);
+    assert!(f.contains(views::preview_label) && f.contains(views::not_granted), "{f}");
 }

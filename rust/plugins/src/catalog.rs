@@ -30,6 +30,7 @@ use bise_proto::words::settings;
 use std::path::{Path, PathBuf};
 
 mod summary;
+pub mod views;
 pub use summary::{summary, Market, USEFUL};
 
 /// What the list is built from.
@@ -43,6 +44,8 @@ pub struct Inputs<'a> {
     pub skills: &'a [SkillEntry],
     /// the on/off file (`state::read`)
     pub state: &'a StateV2,
+    /// the views' grants (`state::grants`, the same file)
+    pub grants: &'a crate::state::Grants,
     /// each MCP server's last state (`status::dir`)
     pub status_dir: Option<&'a Path>,
     /// the remote servers' login tokens (`oauth::store_dir`)
@@ -125,6 +128,8 @@ fn plugin_row(i: &Inputs, p: &resolve::Plugin, names: &[(String, String, String)
     for s in &p.remotes {
         parts.push(remote_part(i, &id, p, s, on, login_name(&s.id)));
     }
+    // VIEWS (MCP Apps, docs/mcp-apps.md C8): its views and his grants
+    parts.extend(views::parts(&p.name, &p.views, i.grants, on));
     for off in &p.off_servers {
         if let PluginId::Part { name, .. } = off {
             parts.push(PluginPart { on: false, ..part(off, PartKind::Mcp, name.clone(), None) });
@@ -171,6 +176,7 @@ fn part(id: &PluginId, kind: PartKind, name: String, what: Option<&str>) -> Plug
         tools: Vec::new(),
         tool_count: None,
         path: None,
+        view: None,
     }
 }
 

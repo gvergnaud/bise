@@ -333,11 +333,40 @@ Signed by architect (m_50047), with these owners:
 
 ### C8. The plugin's grant (piece 10)
 
-At add (`Add.tsx`, TUI `plugins_add.rs`) the screen lists the views,
-their domains and their permissions; "add and run it" stores the grant in
-`plugins.json` as parts `<plugin>#view:<uri>` with `perms: [...]`. A view
-not granted (a server that adds one later) runs with no permission and
-its card says so.
+Gabriel's q-perm: mic, camera, MIDI and clipboard per view, granted when
+he adds the plugin; nothing runs before "add and run it" (mcp-apps-lead
+m_50127, option A).
+
+- **Step 1, the add screen** (`plugins/Add.tsx`, TUI `plugins_add.rs`):
+  `PluginPreview.views` lists the views known before anything runs (its
+  Vibe static views), each a `PluginPart` of kind `view` with
+  `view: {uri, server?, declared, domains, granted, asked}`; a tick per
+  declared permission (all unticked at first). "add and run it" sends
+  `plugin_add_confirm`, then one `plugin_grant {plugin, uri, perms}` per
+  previewed view (an unticked one: `perms: []`, asked and nothing
+  granted). The TUI lists them, ticks none (granted from the app).
+- **Step 2, its views** (once it runs): the add screen waits for the
+  server's first list (the bridge's `GET <base>/<plugin>/~ui`, ba6ebf0f9;
+  "starting its server…"), then lists each view found with its ticks;
+  "done" sends their `plugin_grant`; nothing found closes it. Not built
+  yet: it needs the core's path to that route.
+- **Storage**: `plugins.json`'s `view_grants`, by view part id
+  (`<plugin>#view:<uri>`, the uri escaped by `PluginId`):
+  `{"fake-app#view:ui%3A%2F%2Ffake-app%2Fcounter": ["midi"]}`. No entry:
+  never asked; `[]`: asked, nothing granted. `bend_plugins::state::grant`
+  is the one writer (the same lock as the on/off lists), `grants` reads
+  them, `view_grant(grants, plugin, uri) -> Option<perms>` is the pure
+  rule the hub's `view/resource` uses for `permissions` = declared ∩
+  granted (it also returns `declared`). A removed plugin's grants go with
+  it (`state::forget`).
+- **The plugin's page**: a VIEWS group (`plugins/ViewsGroup.tsx`; TUI
+  `plugins_screen.rs`) shows each view part: the origins it reaches, a
+  tick per declared permission (a tick sends the view's whole grant), or
+  "not granted" for a view he was never asked about (a server's view that
+  came later). The catalog's rows (`catalog::views`) hold the static
+  views and every view with a grant.
+- A view never asked runs with no permission; its card says so
+  (`view/resource`'s `declared` minus `permissions`).
 
 ### C9. The web host (piece 11)
 

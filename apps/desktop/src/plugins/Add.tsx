@@ -10,6 +10,7 @@ import { Button, Caret, Field, PickerPop, sentenceCase, Sheet, TextArea } from '
 import type { AppCmd, ImportFrom, PluginPreview, PluginsSummary, SecretValue } from '@/proto';
 import { settings } from '@/proto/words.gen';
 import { itemsOf } from './model';
+import { grantsOf, PreviewViews } from './ViewsGroup';
 
 /** The menu's items, in its order. */
 export type AddItem = 'browse' | 'mcp' | 'import' | 'plugin' | 'market' | 'agent';
@@ -105,6 +106,8 @@ export function AddSheet({ item, project, summary, preview, ports, onClose }: {
   const [asked, setAsked] = useState(false);
   // the values of the secrets he typed, by name: sent only with the confirm
   const [secrets, setSecrets] = useState<Record<string, string>>({});
+  // the views' ticks, by uri: granted once he adds it (C8), nothing ticked is nothing granted
+  const [ticks, setTicks] = useState<Record<string, readonly string[]>>({});
   const at = project === undefined ? {} : { project };
   const reset = () => {
     setName('');
@@ -113,6 +116,7 @@ export function AddSheet({ item, project, summary, preview, ports, onClose }: {
     setWords('');
     setAsked(false);
     setSecrets({});
+    setTicks({});
   };
   const close = () => {
     if (preview !== null) ports.send({ cmd: 'plugin_add_cancel', token: preview.token });
@@ -128,9 +132,11 @@ export function AddSheet({ item, project, summary, preview, ports, onClose }: {
   if (asked && preview !== null) {
     return (
       <PreviewSheet preview={preview.preview} values={secrets} onValue={(n, v) => { setSecrets({ ...secrets, [n]: v }); }}
+        ticks={ticks} onTicks={(uri, perms) => { setTicks({ ...ticks, [uri]: perms }); }}
         onAdd={() => {
           const out: SecretValue[] = preview.preview.secrets?.flatMap((n) => (secrets[n] !== undefined && secrets[n] !== '' ? [{ name: n, value: secrets[n] }] : [])) ?? [];
           ports.send(out.length === 0 ? { cmd: 'plugin_add_confirm', token: preview.token } : { cmd: 'plugin_add_confirm', token: preview.token, secrets: out });
+          for (const g of grantsOf(preview.preview.name, preview.preview.views ?? [], ticks, project)) ports.send(g);
           reset();
           onClose();
         }}
@@ -250,10 +256,13 @@ export function AddSheet({ item, project, summary, preview, ports, onClose }: {
 }
 
 /** What a plugin will run, before his click (page plugins §4: 'add LaTeX: what it runs'). */
-export function PreviewSheet({ preview, values, onValue, onAdd, onCancel }: {
+export function PreviewSheet({ preview, values, onValue, ticks = {}, onTicks = () => undefined, onAdd, onCancel }: {
   preview: PluginPreview;
   values: Record<string, string>;
   onValue: (name: string, value: string) => void;
+  /** the views' ticks by uri (C8) */
+  ticks?: Readonly<Record<string, readonly string[]>>;
+  onTicks?: (uri: string, perms: string[]) => void;
   onAdd: () => void;
   onCancel: () => void;
 }) {
@@ -300,6 +309,8 @@ export function PreviewSheet({ preview, values, onValue, onAdd, onCancel }: {
             <div className="plg-dim">{settings.plugins_secrets_where}</div>
           </>
         )}
+        {/* MCP Apps: its views and what each may use, ticked here (C8, mcp-apps-host) */}
+        <PreviewViews parts={preview.views ?? []} ticks={ticks} onTicks={onTicks} />
         {(preview.dropped ?? []).length > 0 && (
           <>
             <label className="plg-label">{settings.plugins_preview_label_dropped}</label>

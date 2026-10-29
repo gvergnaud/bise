@@ -108,6 +108,8 @@ pub type ManifestFn = Box<dyn Fn(bise_home::release::DesktopChannel, Sender<Done
 /// A workspace's plugins (`pending`: the logins whose browser is open).
 pub type PluginsFn = Box<dyn Fn(&Path, &[String]) -> Vec<Plugin>>;
 pub type PluginSetFn = Box<dyn Fn(&str, bool) -> Result<(), String>>;
+/// a view's grant: plugin, uri, permissions (docs/mcp-apps.md C8)
+pub type PluginGrantFn = Box<dyn Fn(&str, &str, &[String]) -> Result<(), String>>;
 /// (workspace, server name, the project it was asked for, the channel of its end)
 pub type PluginLoginFn = Box<dyn Fn(&Path, &str, Option<String>, Sender<Done>) -> Result<(), String>>;
 pub type PluginLogoutFn = Box<dyn Fn(&Path, &str) -> Result<(), String>>;
@@ -188,6 +190,8 @@ pub struct SetupPorts {
     pub plugins: PluginsFn,
     /// plugins.json through bend_plugins' one writer
     pub plugin_set: PluginSetFn,
+    /// a view's grant in plugins.json, through bend_plugins' one writer
+    pub plugin_grant: PluginGrantFn,
     /// a plugin server's browser login, `Done::LoggedIn` at its end (never
     /// run by a test)
     pub plugin_login: PluginLoginFn,
@@ -625,6 +629,7 @@ pub fn live(flow: FlowFn) -> SetupPorts {
         // the TUI's /plugins functions (crate::plugins), the one code path
         plugins: Box::new(crate::plugins::rows),
         plugin_set: Box::new(|name, on| crate::plugins::set(name, on).map(|_| ())),
+        plugin_grant: Box::new(|plugin, uri, perms| crate::plugins::grant(plugin, uri, perms).map(|_| ())),
         roles: Box::new(move || role_rows(&bise_catalog::Setup::load(&home().config_file()))),
         role_set: Box::new(move |role, model, effort| {
             let file = home().config_file();

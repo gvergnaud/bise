@@ -22,6 +22,7 @@ struct World {
     signing: Option<std::sync::mpsc::Sender<Done>>,
     /// plugins.json's toggles, the plugin logins started, the logouts
     plugin_sets: Vec<(String, bool)>,
+    grants: Vec<(String, String, Vec<String>)>,
     plugin_logins: Vec<(PathBuf, String)>,
     plugin_logouts: Vec<(PathBuf, String)>,
     logging_in: Option<std::sync::mpsc::Sender<Done>>,
@@ -79,6 +80,7 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
     let (x, y, z) = (w.clone(), w.clone(), w.clone());
     let mf = w.clone();
     let sg = w.clone();
+    let gr = w.clone();
     let (ad, am, ac, pc) = (w.clone(), w.clone(), w.clone(), w.clone());
     let (kn, ks, pt) = (w.clone(), w.clone(), w.clone());
     t.core.set_setup(SetupPorts {
@@ -172,6 +174,7 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
                 tools: vec![],
                 tool_count: None,
                 path: None,
+                view: None,
             };
             let p = |name: &str, on: bool, parts: Vec<PluginPart>| Plugin {
                 id: name.into(),
@@ -200,6 +203,10 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
                 return Err("no plugin nope".into());
             }
             k.borrow_mut().plugin_sets.push((name.into(), on));
+            Ok(())
+        }),
+        plugin_grant: Box::new(move |plugin, uri, perms| {
+            gr.borrow_mut().grants.push((plugin.into(), uri.into(), perms.to_vec()));
             Ok(())
         }),
         plugin_login: Box::new(move |ws, name, _project, tx| {
@@ -521,6 +528,8 @@ fn the_window_lists_toggles_and_logs_in_to_plugins() {
     assert_eq!((ev[0]["project"].as_str(), ev[0]["items"][1]["state"].as_str()), (Some("shop"), Some("loaded")));
     assert_eq!(ev[0]["items"][0]["what"], "/p/shop");
 
+    app(&mut t, r#"{"cmd":"plugin_grant","project":"shop","plugin":"fake-app","uri":"ui://fake-app/counter","perms":["midi"]}"#);
+    assert_eq!(w.borrow().grants, vec![("fake-app".to_string(), "ui://fake-app/counter".to_string(), vec!["midi".to_string()])]);
     app(&mut t, r#"{"cmd":"plugin_set","name":"nope","on":false}"#);
     let out = t.take();
     assert_eq!(evs(&out, "error")[0]["cmd"], "plugin_set");

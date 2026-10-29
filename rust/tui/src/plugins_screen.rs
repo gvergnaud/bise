@@ -19,13 +19,13 @@
 //! `parts[].error`), never the status words.
 
 use bise_proto::app_rows::{LoginState, PartKind, Plugin, PluginAction, PluginKind, PluginPart, PluginScope, PluginState};
-use bise_proto::words::settings;
+use bise_proto::words::{settings, views};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use unicode_width::UnicodeWidthStr;
 
-use crate::theme::{accent, dim, error, faint, text};
+use crate::theme::{accent, dim, error, faint, ok, text};
 
 /// From this many columns the rows have their kind and description.
 pub(crate) const WIDE_FROM: usize = 110;
@@ -114,6 +114,8 @@ pub(crate) struct Preview {
     pub(crate) dropped: Vec<String>,
     pub(crate) notes: Vec<String>,
     pub(crate) replaces: Option<String>,
+    /// its views known before it runs, with what each declares (C8)
+    pub(crate) views: Vec<PluginPart>,
 }
 
 /// A form of the add menu.
@@ -828,7 +830,63 @@ pub(crate) fn page_body(sc: &Screen, p: &Plugin, width: usize) -> Body {
         out.push(head(settings::plugins_part_tools(tools.len())));
         tool_grid(sc, &p.id, &tools, width, &mut out);
     }
+    view_lines(p, width, &mut out);
     out
+}
+
+/// A permission's words (the desktop's ViewsGroup permWords).
+pub(crate) fn perm_word(p: &str) -> &str {
+    match p {
+        "camera" => views::perm_camera,
+        "microphone" => views::perm_microphone,
+        "midi" => views::perm_midi,
+        "clipboardWrite" => views::perm_clipboard,
+        other => other,
+    }
+}
+
+/// One view's line: its name, then each permission it declares, ✓
+/// granted or ✗ not, or 'not granted' when he was never asked; the
+/// origins it reaches under it (MCP Apps, docs/mcp-apps.md C8).
+pub(crate) fn view_line(x: &PluginPart, width: usize) -> Vec<Line<'static>> {
+    let Some(v) = &x.view else { return Vec::new() };
+    let mut spans = vec![Span::raw(" ".repeat(NAME_X)), plain(pad(&cut(&x.name, NAME_W), NAME_W), Style::default().fg(text())), Span::raw("  ")];
+    if v.declared.is_empty() {
+        spans.push(plain(views::asks_nothing, Style::default().fg(dim())));
+    } else if !v.asked {
+        spans.push(plain(views::not_granted, Style::default().fg(accent())));
+    } else {
+        for (i, p) in v.declared.iter().enumerate() {
+            let on = v.granted.contains(p);
+            if i > 0 {
+                spans.push(Span::raw("  "));
+            }
+            spans.push(plain(if on { "✓ " } else { "✗ " }, Style::default().fg(if on { ok() } else { dim() })));
+            spans.push(plain(perm_word(p).to_string(), Style::default().fg(if on { text() } else { dim() })));
+        }
+    }
+    let mut out = vec![Line::from(spans)];
+    if !v.domains.is_empty() {
+        let d = v.domains.iter().map(|d| d.trim_start_matches("https://").trim_start_matches("http://")).collect::<Vec<_>>().join(", ");
+        out.push(Line::from(plain(format!("{}{}", " ".repeat(TOOL_X), cut(&views::reaches(d), width.saturating_sub(TOOL_X + 1))), Style::default().fg(dim()))));
+    }
+    out
+}
+
+/// A plugin's VIEWS group on its page (its view parts): read here; he
+/// grants them in the app or at the add (C8).
+fn view_lines(p: &Plugin, width: usize, out: &mut Body) {
+    let vs: Vec<&PluginPart> = p.parts.iter().filter(|x| x.kind == PartKind::View && x.view.is_some()).collect();
+    if vs.is_empty() {
+        return;
+    }
+    out.push((Line::default(), None));
+    out.push((Line::from(plain(format!(" {} · {}", views::group, vs.len()), Style::default().fg(dim()).add_modifier(Modifier::BOLD))), None));
+    for x in vs {
+        for l in view_line(x, width) {
+            out.push((l, None));
+        }
+    }
 }
 
 // ---- add ----
@@ -898,6 +956,15 @@ fn preview_lines(pv: &Preview, width: usize, out: &mut Body) {
     }
     if !pv.dropped.is_empty() {
         row(settings::plugins_preview_label_dropped, &pv.dropped.join(", "), dim(), out);
+    }
+    if !pv.views.is_empty() {
+        // its views and what each declares: none granted from here (the app ticks them, C8)
+        out.push(t(format!(" {}", views::preview_label), dim()));
+        for x in &pv.views {
+            for l in view_line(x, width) {
+                out.push((l, None));
+            }
+        }
     }
     if let Some(r) = &pv.replaces {
         out.push(t(format!(" {}", settings::plugins_preview_replaces(r)), dim()));

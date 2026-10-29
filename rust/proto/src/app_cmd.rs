@@ -110,6 +110,20 @@ pub enum AppCmd {
         name: String,
         on: bool,
     },
+    /// grant an MCP App's view its permissions (docs/mcp-apps.md C8:
+    /// the add screen's 'its views' step, the plugins page's VIEWS
+    /// group): `plugins.json`'s `view_grants` through bend_plugins' one
+    /// writer, then `plugins` again. `plugin`: the plugin's name, `uri`:
+    /// the view's `ui://` uri, `perms`: what he ticked (none: asked,
+    /// nothing granted)
+    PluginGrant {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        project: Option<Project>,
+        plugin: String,
+        uri: String,
+        #[serde(default)]
+        perms: Vec<String>,
+    },
     /// connect a Mistral connector (`mistral:<name>`): opens his browser
     /// on Mistral's page (his click only, never a test), then the catalog
     /// is read again until it is ready: `plugins` at each change
@@ -536,6 +550,7 @@ impl AppCmd {
         "bise_update",
         "plugins",
         "plugin_set",
+        "plugin_grant",
         "plugin_connect",
         "plugins_refresh",
         "plugin_add",

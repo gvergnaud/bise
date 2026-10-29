@@ -11,6 +11,15 @@
 //! part: today's bare names stay valid), `parts_off`/`parts_on` parts.
 //! A missing or unreadable file: everything on but the opt-in plugins.
 //!
+//! `view_grants` (MCP Apps, docs/mcp-apps.md C8) holds what he granted
+//! each view at the plugin's add or on its page, by its view part
+//! (`<plugin>#view:<uri>`): `{"fake-app#view:ui%3A…": ["midi"]}`. A view
+//! with no entry was never asked (it runs with no permission, its card
+//! says so); an empty list: asked, nothing granted.
+//!
+//! - [`grants`], [`view_grant`]: the grants as read, and one view's, pure;
+//! - [`grant`]: sets one view's grant, under the same lock.
+//!
 //! - [`read`]: the four lists as a [`StateV2`];
 //! - [`StateV2::is_on`]: the rule, pure;
 //! - [`set`]: the one writer of the file, for any [`PluginId`]. The TUI,
@@ -88,10 +97,76 @@ pub fn forget(path: &Path, plugin: &PluginId) -> std::io::Result<bool> {
             changed = true;
         }
     }
+    if let Some(g) = doc.get_mut("view_grants").and_then(Value::as_object_mut) {
+        let n = g.len();
+        g.retain(|k, _| !PluginId::parse(k).is_ok_and(|id| *id.owner() == owner));
+        changed |= g.len() != n;
+    }
     if changed {
         save(path, &doc)?;
     }
     Ok(changed)
+}
+
+/// The permissions a view may be granted (the spec's `_meta.ui.permissions`
+/// keys, and bise's `midi`; `apps/desktop/src/shared/viewperms.ts`).
+pub const VIEW_PERMS: [&str; 4] = ["camera", "microphone", "midi", "clipboardWrite"];
+
+/// Each view's grant, by its view part id (the file's `view_grants`).
+pub type Grants = std::collections::BTreeMap<PluginId, Vec<String>>;
+
+/// `plugins.json`'s `view_grants` (missing, unreadable, an id that does
+/// not parse or is not a view: left out; unknown permissions dropped).
+pub fn grants(path: &Path) -> Grants {
+    let doc = doc(path);
+    let Some(map) = doc.get("view_grants").and_then(Value::as_object) else { return Grants::new() };
+    map.iter()
+        .filter_map(|(k, v)| {
+            let id = PluginId::parse(k).ok().filter(is_view)?;
+            let names: Vec<String> = v.as_array()?.iter().filter_map(Value::as_str).map(String::from).collect();
+            Some((id, known(&names)))
+        })
+        .collect()
+}
+
+fn is_view(id: &PluginId) -> bool {
+    matches!(id, PluginId::Part { kind: PartKind::View, .. })
+}
+
+/// The known permissions of `names`, each once, in [`VIEW_PERMS`]' order.
+fn known(names: &[String]) -> Vec<String> {
+    VIEW_PERMS.iter().filter(|p| names.iter().any(|n| n == *p)).map(|p| p.to_string()).collect()
+}
+
+/// What view `uri` of plugin `plugin` was granted: `None` when never
+/// asked, else its permissions (maybe none). Pure: the hub's
+/// `view/resource` gives `declared ∩ granted` from it.
+pub fn view_grant(grants: &Grants, plugin: &str, uri: &str) -> Option<Vec<String>> {
+    grants.get(&PluginId::plugin(plugin).part(PartKind::View, None, uri)).cloned()
+}
+
+/// Set view `id`'s grant to `perms` (unknown ones dropped). Returns
+/// whether the file changed.
+pub fn grant(path: &Path, id: &PluginId, perms: &[String]) -> std::io::Result<bool> {
+    if !is_view(id) {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("{id} is not a view")));
+    }
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let _lock = lock(&path.with_extension("json.lock"))?;
+    let mut doc = doc(path);
+    let key = id.to_string();
+    let want = json!(known(perms));
+    if doc.get("view_grants").and_then(|g| g.get(&key)) == Some(&want) {
+        return Ok(false);
+    }
+    if !doc.get("view_grants").is_some_and(Value::is_object) {
+        doc["view_grants"] = json!({});
+    }
+    doc["view_grants"][key] = want;
+    save(path, &doc)?;
+    Ok(true)
 }
 
 /// `doc` written to `path` through a tmp file and a rename (under the
@@ -251,6 +326,31 @@ mod tests {
         assert_eq!(read(&dir.join("missing.json")), StateV2::default());
         std::fs::write(&p, "not json").unwrap();
         assert_eq!(read(&p), StateV2::default());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_views_grant_is_written_read_and_forgotten() {
+        let dir = tmp("grants");
+        let p = dir.join("plugins.json");
+        let counter = PluginId::plugin("fake-app").part(PartKind::View, None, "ui://fake-app/counter");
+        assert_eq!(view_grant(&grants(&p), "fake-app", "ui://fake-app/counter"), None, "never asked");
+        assert!(set(&p, &id("docs#skill:docs"), false).unwrap());
+        let perms = |l: &[&str]| l.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        assert!(grant(&p, &counter, &perms(&["midi", "geolocation", "camera", "midi"])).unwrap());
+        assert!(!grant(&p, &counter, &perms(&["camera", "midi"])).unwrap(), "the same grant writes nothing");
+        let g = grants(&p);
+        assert_eq!(view_grant(&g, "fake-app", "ui://fake-app/counter"), Some(perms(&["camera", "midi"])));
+        assert_eq!(view_grant(&g, "fake-app", "ui://fake-app/other"), None);
+        assert_eq!(view_grant(&g, "other", "ui://fake-app/counter"), None, "another plugin's view");
+        // asked, nothing granted: an empty list, not 'never asked'
+        assert!(grant(&p, &counter, &[]).unwrap());
+        assert_eq!(view_grant(&grants(&p), "fake-app", "ui://fake-app/counter"), Some(vec![]));
+        assert_eq!(read(&p).parts_off, vec![id("docs#skill:docs")], "the other lists kept");
+        assert!(grant(&p, &id("docs#skill:docs"), &[]).is_err(), "a grant is a view's");
+        // the plugin removed: its grants go with it
+        assert!(forget(&p, &PluginId::plugin("fake-app")).unwrap());
+        assert_eq!(grants(&p), Grants::new());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -72,6 +72,7 @@ pub const TAGS: &[&str] = &[
     "project_rename",
     "plugins",
     "plugin_set",
+    "plugin_grant",
     "plugin_login",
     "plugin_logout",
     "plugin_connect",
@@ -457,6 +458,11 @@ impl Core {
                 let res = (p.plugin_set)(&name, on);
                 let shown = self.emit_plugins(project);
                 ("plugin_set", res.and(shown))
+            }
+            AppCmd::PluginGrant { project, plugin, uri, perms } => {
+                let res = (p.plugin_grant)(&plugin, &uri, &perms);
+                let shown = self.emit_plugins(project);
+                ("plugin_grant", res.and(shown))
             }
             AppCmd::PluginLogin { project, name } => {
                 let res = match self.workspace_of(project.as_deref()) {

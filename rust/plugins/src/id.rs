@@ -13,6 +13,7 @@
 //! | an MCP server | `linear#mcp:linear` |
 //! | an MCP server's tool | `linear#tool:linear/create_issue` |
 //! | a connector's tool (the connector is its own server) | `mistral:gmail#tool:send_email` |
+//! | an MCP App's view, by its `ui://` uri (its grant, docs/mcp-apps.md C8) | `fake-app#view:ui%3A%2F%2Ffake-app%2Fcounter` |
 //!
 //! Every name is percent-escaped for `:` `/` `#` `%` and the space
 //! (`%3A %2F %23 %25 %20`), so any name round-trips:
@@ -56,6 +57,9 @@ pub enum PartKind {
     /// a tool: of `server` in a plugin, of the connector itself (no
     /// server) in a Mistral connector
     Tool,
+    /// an MCP App's view (its `name` is its `ui://` uri): what holds its
+    /// grant (`state::view_grant`, docs/mcp-apps.md C8)
+    View,
 }
 
 impl SkillsScope {
@@ -77,6 +81,7 @@ impl PartKind {
             PartKind::Skill => "skill",
             PartKind::Mcp => "mcp",
             PartKind::Tool => "tool",
+            PartKind::View => "view",
         }
     }
 }
@@ -131,16 +136,17 @@ impl PluginId {
             PluginId::Plugin { name: name(owner)? }
         };
         let Some(part) = part else { return Ok(owner) };
-        let Some((kind, rest)) = part.split_once(':') else { return bad("a part needs skill:, mcp: or tool:") };
+        let Some((kind, rest)) = part.split_once(':') else { return bad("a part needs skill:, mcp:, tool: or view:") };
         let (kind, server, n) = match kind {
             "skill" => (PartKind::Skill, None, rest),
             "mcp" => (PartKind::Mcp, None, rest),
+            "view" => (PartKind::View, None, rest),
             "tool" => match rest.split_once('/') {
                 Some((sv, t)) => (PartKind::Tool, Some(name(sv)?), t),
                 None if matches!(owner, PluginId::Mistral { .. }) => (PartKind::Tool, None, rest),
                 None => return bad("a plugin's tool is tool:<server>/<tool>"),
             },
-            _ => return bad("a part is skill:, mcp: or tool:"),
+            _ => return bad("a part is skill:, mcp:, tool: or view:"),
         };
         if server.is_some() && matches!(owner, PluginId::Mistral { .. }) {
             return bad("a connector's tool has no server");
@@ -233,6 +239,8 @@ mod tests {
         rt(&linear.part(PartKind::Tool, Some("linear"), "create_issue"), "linear#tool:linear/create_issue");
         rt(&PluginId::mistral("gmail").part(PartKind::Tool, None, "send_email"), "mistral:gmail#tool:send_email");
         rt(&PluginId::Skills { scope: SkillsScope::Personal }.part(PartKind::Skill, None, "grill-me"), "skills:personal#skill:grill-me");
+        rt(&PluginId::plugin("fake-app").part(PartKind::View, None, "ui://fake-app/counter"), "fake-app#view:ui%3A%2F%2Ffake-app%2Fcounter");
+        rt(&PluginId::plugin("x").part(PartKind::View, None, "ui://x/a b#c%"), "x#view:ui%3A%2F%2Fx%2Fa%20b%23c%25");
     }
 
     #[test]

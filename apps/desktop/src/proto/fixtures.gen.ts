@@ -326,6 +326,8 @@ export const app_cmd: readonly AppCmd[] = [
   {"cmd":"plugins","project":"acme-1a2b3c4d"},
   {"cmd":"plugin_set","name":"computer","on":true},
   {"cmd":"plugin_set","name":"mistral:gmail#tool:send_email","on":false,"project":"acme-1a2b3c4d"},
+  {"cmd":"plugin_grant","perms":["midi"],"plugin":"fake-app","project":"acme-1a2b3c4d","uri":"ui://fake-app/counter"},
+  {"cmd":"plugin_grant","perms":[],"plugin":"fake-app","uri":"ui://fake-app/hostile"},
   {"cmd":"plugin_connect","id":"mistral:notion"},
   {"cmd":"plugins_refresh"},
   {"cmd":"plugins_refresh","project":"acme-1a2b3c4d"},

@@ -19,6 +19,7 @@ import { settings } from '@/proto/words.gen';
 import { badgeOf, controlOf, gives, installed, isComputer, leadOf, removable, tagsOf, titleOf, toolsOf } from './model';
 import { ds } from '@/proto/words_ds.gen';
 import { PluginIcon } from './PluginIcon';
+import { ViewsGroup } from './ViewsGroup';
 
 export interface PagePorts {
   send: (cmd: AppCmd) => void;
@@ -135,6 +136,8 @@ export function PluginPage({ p, project, ports }: { p: Plugin; project?: string;
           ))}
         </Parts>
       )}
+      {/* MCP Apps: its views and what each may use (C8, mcp-apps-host) */}
+      <ViewsGroup plugin={p.name} parts={p.parts ?? []} {...at} send={ports.send} />
       {tools.length > 0 && (
         <Parts head={settings.plugins_tools_head} n={tools.length}>
           {tools.map((x) => (

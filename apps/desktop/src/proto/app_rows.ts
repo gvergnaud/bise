@@ -271,7 +271,43 @@ tool_count?: number | null,
  * through main, fenced to the paths of the rows it got (nm-pages-b,
  * architect m_43316)
  */
-path?: string | null, };
+path?: string | null, 
+/**
+ * an MCP App's view (kind `view`): its uri, what it declares and
+ * what he granted (docs/mcp-apps.md C8); none for every other kind
+ */
+view?: PartView | null, };
+
+/**
+ * A view part's facts (MCP Apps, docs/mcp-apps.md C8): the plugins
+ * page's VIEWS group draws its grant ticks from them.
+ */
+export type PartView = { 
+/**
+ * its `ui://` uri
+ */
+uri: string, 
+/**
+ * the server that serves it (none: a Vibe static view)
+ */
+server?: string | null, 
+/**
+ * the permissions it declares (`camera`, `microphone`, `midi`,
+ * `clipboardWrite`)
+ */
+declared?: Array<string>, 
+/**
+ * the origins it reaches, as declared (its CSP's domains, every kind)
+ */
+domains?: Array<string>, 
+/**
+ * what he granted it (`plugins.json`'s `view_grants`)
+ */
+granted?: Array<string>, 
+/**
+ * he was asked (at the add or on its page): false is 'not granted'
+ */
+asked: boolean, };
 
 /**
  * What a plugin will run on his Mac once added, shown before his click
@@ -312,7 +348,13 @@ notes?: Array<string>,
  * it replaces his plugin of that name (a new import of the same
  * source)
  */
-replaces?: string | null, };
+replaces?: string | null, 
+/**
+ * its views known before it runs (its Vibe static views): each with
+ * its domains and the permissions it asks, ticked on the add screen
+ * (docs/mcp-apps.md C8); a server's views come once it runs
+ */
+views?: Array<PluginPart>, };
 
 /**
  * One MCP server of a [`PluginPreview`].
@@ -336,7 +378,7 @@ export type RunTransport = "stdio" | "http" | "sse" | "unknown";
 /**
  * What a plugin part is.
  */
-export type PartKind = "skill" | "mcp" | "tool" | "unknown";
+export type PartKind = "skill" | "mcp" | "tool" | "view" | "unknown";
 
 /**
  * A remote MCP server's login.

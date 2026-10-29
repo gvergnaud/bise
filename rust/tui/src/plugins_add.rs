@@ -83,6 +83,7 @@ fn preview_of(p: &bise_proto::app_rows::PluginPreview) -> Preview {
         dropped: p.dropped.clone(),
         notes: p.notes.clone(),
         replaces: p.replaces.clone(),
+        views: p.views.clone(),
     }
 }
 
