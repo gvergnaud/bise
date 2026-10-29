@@ -88,6 +88,25 @@ fn ages_read_short() {
     assert_eq!(age_words(Duration::from_secs(3 * 86_400)), "3 d");
 }
 
+/// A program's views: run_typescript is a box (its row closed, or the box
+/// opened), never tool_lines, and every view comes from a program (a
+/// tmux capture showed none, sandbox's captures for designer).
+#[test]
+fn a_programs_box_draws_its_views_under_it() {
+    for opened in [false, true] {
+        let mut t = ToolData::bare(2, ToolState::Ok);
+        t.name = Some("run_typescript".into());
+        t.intent = Some("show two counters".into());
+        t.opened = opened;
+        let bare = crate::feed::build_rows(&[crate::wire::Ev::Tool(t.clone())], 0, false, 80, 0);
+        t.views = vec![chip("1-1", false), chip("1-2", false)];
+        let rows = crate::feed::build_rows(&[crate::wire::Ev::Tool(t)], 0, false, 80, 0);
+        assert_eq!(rows.len(), bare.len() + 2, "opened {opened}");
+        let chips: Vec<String> = rows[bare.len()..].iter().map(text).collect();
+        assert!(chips.iter().all(|c| c.contains("counter · fake-app") && c.contains(views::tui_app)), "opened {opened}: {chips:?}");
+    }
+}
+
 /// The `⊞` lines come right under the tool row, in every form of it.
 #[test]
 fn the_tool_row_draws_its_views_under_it() {

@@ -113,7 +113,10 @@ artifact for all the shots (never one artifact per PNG), sent to designer.
 `scripts/nightly_desktop.sh <out> [<sha>] [--until HH:MM|@<epoch>]`, one step of the nightly
 (`scripts/nightly_gate.sh`, results in `~/.bise/run/nightly/desktop-<date>/summary.txt`, a red
 in the night's `red` file), by value: the candidate of the tip, every quick as-he-does row with
-the first run and a fake-voice take, `pnpm test:land`, the full as-he-does pass (first, cut,
+the first run and a fake-voice take, `pnpm test:land`, the hostile MCP App through a throwaway
+hub's web host (`tests/mcp_apps_hostile_e2e.py`, step `mcp-apps`, owner mcp-apps, docs/mcp-apps.md
+C6: its red `desktop/mcp-apps-hostile` is a leak, never a known red, `tests/known_reds.py`
+refuses it), the full as-he-does pass (first, cut,
 rows2, two restarts, second, the core with no env), the DMG (`scripts/desktop-dmg.sh`, mounted
 read-only and checked). Every tests/checks spec also runs once a night under coverage
 (try-select's step). Nothing new starts after the night's end, 06:00 (`--until @<epoch>`: the

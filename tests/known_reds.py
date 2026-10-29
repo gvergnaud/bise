@@ -20,6 +20,14 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 FILE = os.path.join(HERE, "known_reds.txt")
 
+# The reds that are never known: a line naming one (or a name under it) is refused, so no one
+# lists it to get a desktop tag through (architect m_50511).
+NEVER = {
+    # the hostile MCP App through the real hub (docs/mcp-apps.md C6, risk 1): its red is a leak
+    # out of a view's sandbox, fixed before any tag, never owned and shipped
+    "desktop/mcp-apps-hostile": "a view leaking out of its sandbox is never a known red",
+}
+
 
 def parse(text):
     """{test: (since, owner, why)}; a malformed line raises ValueError with its number."""
@@ -31,6 +39,9 @@ def parse(text):
         if len(parts) != 4 or not all(p.strip() for p in parts):
             raise ValueError(f"known_reds.txt:{n}: want <test>\\t<since>\\t<owner>\\t<why>, got {line!r}")
         test, since, owner, why = (p.strip() for p in parts)
+        for never, reason in NEVER.items():
+            if test.startswith(never):
+                raise ValueError(f"known_reds.txt:{n}: {test} can't be a known red: {reason}")
         reds[test] = (since, owner, why)
     return reds
 
@@ -56,6 +67,12 @@ def self_test():
         raise AssertionError("3 fields parsed")
     except ValueError as e:
         assert "known_reds.txt:1" in str(e), e
+    for leak in ("desktop/mcp-apps-hostile", "desktop/mcp-apps-hostile: nested-blob-escape"):
+        try:
+            parse(f"{leak}\tabc\tsomeone\tlater")
+            raise AssertionError(f"{leak} parsed as a known red")
+        except ValueError as e:
+            assert "never a known red" in str(e), e
     assert split(reds, ["history-perf", "feature_e2e", "feature_e2e", ""]) == [
         "known reds (tests/known_reds.txt): history-perf (land-reds, since 12c3d88dc)",
         "NEW reds (not in tests/known_reds.txt): feature_e2e",

@@ -331,6 +331,8 @@ pub(crate) fn build_rows(events: &[Ev], i: usize, debug: bool, width: usize, tic
                 let (_, _, code) = tool_meta(td);
                 rows.extend(crate::toolbox::box_lines(td, &code, &subs_of(events, i), tick, cw));
             }
+            // a program's views (C9): a program is the box, its views under it
+            rows.extend(crate::views_tui::chip_lines(&td.views, cw));
         }
         // BISE-304: 3 done edits or more in a run fold into `± ▸ 3 files`
         Ev::Tool(td) if is_edit(td) => {

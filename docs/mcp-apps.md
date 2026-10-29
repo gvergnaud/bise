@@ -345,6 +345,25 @@ Signed by architect (m_50047), with these owners:
   `com.apple.security.device.camera` in
   `packaging/entitlements/desktop.plist` and `NSCameraUsageDescription`
   (the mic's are already there).
+  The proxy puts the hub's CSP meta after the view's own leading
+  `<!doctype>`: before it the view would run in quirks mode. A
+  pointer-down is placed by its screen point (`globalX/Y` minus the
+  window's content corner, over the zoom: `viewrules.pointInWindow`),
+  never by its `x/y`, which are relative to the view's own frame when
+  Chromium hands it to the proxy's widget.
+  The check of all this through the real hub is
+  `tests/mcp_apps_hostile_e2e.py`: a throwaway hub, fake-app's
+  `show_hostile`, its web host page (`GET /v/main/<call>`, C9) in
+  headless Chromium (`*.localhost` mapped to 127.0.0.1); it wants the
+  proxy on `v-<hash>.localhost`, standards mode, `body[data-done]` and
+  every probe (22) `blocked`. Two rules run it (architect m_50500):
+  on the `mcp-apps` tip after each sandbox or host land and before
+  `sb feature ready` (risk 1); and, once merged, as the `mcp-apps` step
+  of `scripts/nightly_desktop.sh` (owner mcp-apps), so in the nightly
+  and on a release's exact sha (`desktop_tag.py` reads its state). Never
+  in run_all's TESTS (Playwright). Its red, `desktop/mcp-apps-hostile`,
+  is a leak: `tests/known_reds.py` refuses to list it, so no desktop tag
+  goes through it.
 
 ### C7. The desktop host (pieces 7, 8; apps/desktop/src/views/)
 
@@ -486,8 +505,10 @@ isn't running, and any web page could trigger it):
      wrapped in the prompt like a page note, and never counted as his
      words by the auto mode's approval checker.
    - The hostile view is the test: Rust and vitest parts before each
-     land, its Playwright check on the `mcp-apps` tip after each sandbox
-     land and before `sb feature ready`: a leak never reaches main.
+     land, its Playwright check (`tests/mcp_apps_hostile_e2e.py`, C6) on
+     the `mcp-apps` tip after each sandbox or host land and before
+     `sb feature ready`: a leak never reaches main. After the merge it
+     runs in the nightly's desktop checks and on a release's exact sha.
    - architect signs the seams (sandbox, view/call, ui/message,
      permissions) before the pieces 5b, 6 and 9 land.
 2. **The fixed iframe in the redesign.** The redesign is on main

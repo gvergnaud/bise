@@ -55,6 +55,12 @@ echo "dmg $*" >> "$FAKE_LOG"
 echo "$FAKE_CAND_DIR/share/bise.dmg"
 """
 
+FAKE_HOSTILE = """#!/usr/bin/env bash
+echo "hostile" >> "$FAKE_LOG"
+[ -n "${FAKE_HOSTILE_RED:-}" ] && { echo "FAIL every probe blocked: ['nested-blob-escape: reached']"; exit 1; }
+echo "PASS mcp apps hostile"
+"""
+
 FAKE_PNPM = """#!/usr/bin/env bash
 echo "pnpm $*" >> "$FAKE_LOG"
 [ "$1" = test:land ] && [ -n "${FAKE_LAND_RED:-}" ] && { echo "NEW reds (not in tests/known_reds.txt): keep"; exit 1; }
@@ -96,7 +102,7 @@ def main():
         subprocess.run(["git", "-C", repo, "-c", "user.email=t@t", "-c", "user.name=t", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "one"], check=True)
         sha = subprocess.run(["git", "-C", repo, "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
         fakes = os.path.join(t, "fakes")
-        for n, body in (("try", FAKE_TRY), ("cand", FAKE_CAND), ("dmg", FAKE_DMG), ("pnpm", FAKE_PNPM)):
+        for n, body in (("try", FAKE_TRY), ("cand", FAKE_CAND), ("dmg", FAKE_DMG), ("pnpm", FAKE_PNPM), ("hostile", FAKE_HOSTILE)):
             write(os.path.join(fakes, n), body)
         clock = os.path.join(t, "now")
 
@@ -110,7 +116,8 @@ def main():
             env = dict(os.environ, BISE_HOME=os.path.join(home, ".bise"), HOME=home, FAKE_LOG=log,
                        FAKE_CAND_DIR=os.path.join(t, "cand"), NIGHTLY_DESKTOP_NOW=clock, NIGHTLY_DESKTOP_BATTERY="0",
                        NIGHTLY_DESKTOP_TRY=os.path.join(fakes, "try"), NIGHTLY_DESKTOP_CAND=os.path.join(fakes, "cand"),
-                       NIGHTLY_DESKTOP_DMG=os.path.join(fakes, "dmg"), NIGHTLY_DESKTOP_PNPM=os.path.join(fakes, "pnpm"))
+                       NIGHTLY_DESKTOP_DMG=os.path.join(fakes, "dmg"), NIGHTLY_DESKTOP_PNPM=os.path.join(fakes, "pnpm"),
+                       NIGHTLY_DESKTOP_HOSTILE=os.path.join(fakes, "hostile"))
             env.update(extra)
             env.pop("BISE_SOCKET", None)
             r = subprocess.run(["bash", os.path.join(repo, "scripts", "nightly_desktop.sh"), out, *args], env=env,
@@ -136,11 +143,11 @@ def main():
         rc, o, calls = run()
         check(rc == 0, "green: rc %s\n%s" % (rc, o))
         kinds = [c.split()[0] + ("" if not c.startswith("cand") else " " + c.split()[1]) for c in calls]
-        check(kinds == ["try", "cand quick", "pnpm", "pnpm", "cand full", "dmg"], "green: the order %s" % kinds)
+        check(kinds == ["try", "cand quick", "pnpm", "pnpm", "hostile", "cand full", "dmg"], "green: the order %s" % kinds)
         check(any(c.startswith("cand quick") and "first=1 voice=1 rows=" in c and c.endswith("rows=") for c in calls), "green: quick args %s" % calls)
         lr = last_run()
         check(len(lr) == 4 and lr[1:] == [sha, "green", out], "green: desktop-runs.tsv's line %s" % lr)
-        check(facts() == ([], {"candidate": "green", "quick": "green", "land": "green", "full": "green", "dmg": "green"}), "green: reds.txt, steps.tsv %s" % (facts(),))
+        check(facts() == ([], {"candidate": "green", "quick": "green", "land": "green", "mcp-apps": "green", "full": "green", "dmg": "green"}), "green: reds.txt, steps.tsv %s" % (facts(),))
         check(not os.path.exists(os.path.join(home, ".bise", "run", "nightly", "desktop-green.tsv")), "green: no desktop-green.tsv any more")
         check(os.path.isdir(os.path.join(t, "cand", sha[:12])) and "kept the night's candidate" in o, "green: the candidate it built is kept for a rerun")
         check("STEP dmg: green" in o and "nightly desktop: green" in o, "green: summary\n" + o)
@@ -169,7 +176,13 @@ def main():
         # no candidate: red, and the app's steps are none, test:land still runs
         rc, o, calls = run(FAKE_TRY_RC="1")
         check(rc == 1 and "FAIL candidate" in o and "STEP quick: none (no candidate)" in o and "STEP full: none (no candidate)" in o, "no cand\n" + o)
-        check([c.split()[0] for c in calls] == ["try", "pnpm", "pnpm"], "no cand: land still runs %s" % calls)
+        check([c.split()[0] for c in calls] == ["try", "pnpm", "pnpm", "hostile"], "no cand: land and the hostile view still run %s" % calls)
+
+        # the hostile view leaking: its own red, never known (known_reds.py refuses to list it)
+        rc, o, _ = run(FAKE_HOSTILE_RED="1")
+        check(rc == 1 and "FAIL mcp-apps" in o and "nested-blob-escape" in o, "hostile red: " + o)
+        check(facts()[0] == ["desktop/mcp-apps-hostile"] and facts()[1].get("mcp-apps") == "red", "hostile red: reds.txt, steps.tsv %s" % (facts(),))
+        check("NEW reds (not in tests/known_reds.txt): desktop/mcp-apps-hostile" in o, "hostile red, NEW: " + o)
 
         # the hard end: the build ends past 08:00, nothing new starts: none, never green
         rc, o, calls = run("--until", "08:00", NOW=at(7, 50), FAKE_TRY_NOW=at(8, 1))

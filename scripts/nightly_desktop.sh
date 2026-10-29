@@ -10,6 +10,10 @@
 #   quick      every quick as-he-does row (no QUICK_ROWS), the first run (fresh home, the model
 #              step) and one fake-voice ctrl+r take: cand.sh with AS_HE_DOES_ONLY=quick
 #   land       apps/desktop pnpm build + pnpm test:land
+#   mcp-apps   tests/mcp_apps_hostile_e2e.py (this tree's bise built first): the hostile MCP App
+#              through a throwaway hub's web host in Chromium, every probe blocked (docs/mcp-apps.md
+#              C6, risk 1; owner mcp-apps). Its red, desktop/mcp-apps-hostile, is a leak:
+#              tests/known_reds.py refuses it, so a tag never goes through it (architect m_50511)
 #   full       the full as-he-does pass: cand.sh (first, cut, rows2, two restarts, second, the
 #              hubs outside the bundle, the core with no env)
 #   dmg        scripts/desktop-dmg.sh <sha>: that candidate repacked as 'bise', the DMG mounted
@@ -45,6 +49,7 @@ mkdir -p "$out" && out="$(cd "$out" && pwd)"
 sha="$(git -C "$here" rev-parse --verify -q "${sha:-HEAD}^{commit}")" || { echo "no commit ${sha:-HEAD} in $here" >&2; return 2; }
 bh="${BISE_HOME:-$HOME/.bise}"
 try_sh="${NIGHTLY_DESKTOP_TRY:-$here/scripts/desktop-try.sh}"
+hostile_sh="${NIGHTLY_DESKTOP_HOSTILE:-}"
 dmg_sh="${NIGHTLY_DESKTOP_DMG:-$here/scripts/desktop-dmg.sh}"
 cand_sh="${NIGHTLY_DESKTOP_CAND:-$here/dev/plugins/ambient-qa/as-he-does/cand.sh}"
 pnpm="${NIGHTLY_DESKTOP_PNPM:-pnpm}"
@@ -73,7 +78,7 @@ late() { [ -n "$end" ] && [ "$(now)" -ge "$end" ]; }
 on_battery() { [ -n "${NIGHTLY_DESKTOP_BATTERY:-}" ] && { [ "$NIGHTLY_DESKTOP_BATTERY" = 1 ]; return; }; /usr/bin/pmset -g batt 2>/dev/null | head -1 | grep -q "Battery Power"; }
 
 note "nightly desktop: $sha in $here, $(date)${until:+, nothing new after $until}"
-steps=(candidate quick land full dmg)
+steps=(candidate quick land mcp-apps full dmg)
 if on_battery; then
   for s in "${steps[@]}"; do record "$s" none "on battery"; done
   verdict; return $?
@@ -167,6 +172,17 @@ for s in "${steps[@]}"; do
         [ $n = 0 ] && reds+=("desktop/test:land")
         record land red "exit $rc; $(grep -E '^(known reds|NEW reds)' "$out/land.log" | tr '\n' ' ')$out/land.log"
       fi ;;
+    mcp-apps)
+      # the hub's binaries of this tree (run_all's), then the check (NIGHTLY_DESKTOP_HOSTILE: the
+      # test's fake, the whole step)
+      if [ -n "$hostile_sh" ]; then bash "$hostile_sh" >"$out/mcp-apps.log" 2>&1
+      else
+        { deps && ( cd "$here" && scripts/bins.sh repl-live repl-scripted sb-core && scripts/bins.sh path bend-jsrt >/dev/null \
+            && ( cd rust && cargo build --offline -q ) && python3 -u tests/mcp_apps_hostile_e2e.py ); } >"$out/mcp-apps.log" 2>&1
+      fi
+      rc=$?
+      if [ $rc = 0 ]; then record mcp-apps green
+      else reds+=("desktop/mcp-apps-hostile"); record mcp-apps red "exit $rc, $(grep -E '^FAIL' "$out/mcp-apps.log" | tail -1 | cut -c1-200), $out/mcp-apps.log"; fi ;;
     dmg)
       if [ -z "$app" ]; then record dmg none "no candidate"; continue; fi
       bash "$dmg_sh" "$sha" >"$out/dmg.log" 2>&1; rc=$?
