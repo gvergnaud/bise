@@ -23,7 +23,7 @@
   html[data-theme="light"] { color-scheme: light; }
   html[data-theme="dark"] { color-scheme: dark; }
   * { box-sizing: border-box; }
-  body { margin: 0; font: 13px/1.45 var(--sans); color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  body { margin: 0; font-family: var(--sans); font-size: 13px; line-height: 1.45; color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; }
   .app { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
   html[data-mode="fullscreen"] .app { height: 100vh; }
   .head { display: flex; align-items: center; gap: 10px; }
@@ -46,7 +46,7 @@
   .roll .row-b { fill: var(--bg2); }
   .roll .grid { stroke: var(--line2); }
   .roll .bar { stroke: var(--line); }
-  .roll .lbl { fill: var(--fg3); font: 10px var(--mono); }
+  .roll .lbl { fill: var(--fg3); font-family: var(--mono); font-size: 10px; }
   .roll .note { fill: var(--accent); rx: 3; cursor: pointer; }
   .roll .note:hover { opacity: .75; }
   .roll .note.lit { fill: var(--fg); }
@@ -85,7 +85,6 @@
     </div>
     <button class="primary" id="play" data-testid="play" disabled>▶ Play</button>
     <button id="export" data-testid="export" disabled title="Download a .mid file">Export .mid</button>
-    <button class="icon" id="full" data-testid="fullscreen" title="Fullscreen">⤢</button>
   </div>
 
   <div class="roll" id="roll" data-testid="roll"><div class="empty pulse" id="empty">Composing…</div></div>
@@ -223,7 +222,7 @@ function render() {
   if (!score) return;
   $("title").textContent = score.title;
   const beats = score.notes.reduce((b, n) => Math.max(b, n.t + n.d), 0);
-  $("sub").textContent = `${score.key} · ${score.bpm} bpm · ${score.notes.length} notes · ${Math.ceil(beats / 4) || 0} bars`;
+  $("sub").textContent = `${score.key} · ${score.bpm}\u00a0bpm · ${score.notes.length}\u00a0notes · ${Math.ceil(beats / 4) || 0}\u00a0bars`;
   $("flip").textContent = score.key.endsWith("minor") ? "Make it major" : "Make it minor";
   for (const id of ["play", "export", "clear"]) $(id).disabled = !score.notes.length;
   $("undo").disabled = !history.length;
@@ -378,11 +377,6 @@ $("export").onclick = async () => {
     await mcp.download(r.content);
     status("Exported " + r.content[0].resource.uri.split("/").pop());
   } catch (err) { status("Export failed: " + why(err), true); }
-};
-$("full").onclick = async () => {
-  const want = document.documentElement.dataset.mode === "fullscreen" ? "inline" : "fullscreen";
-  try { const r = await mcp.displayMode(want); document.documentElement.dataset.mode = r.mode; render(); }
-  catch (err) { status("Fullscreen: " + why(err), true); }
 };
 async function ask(text) {
   try { await mcp.message(text); status("Sent to the agent: “" + text + "”"); }

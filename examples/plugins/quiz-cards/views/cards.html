@@ -22,7 +22,7 @@
   html[data-theme="light"] { color-scheme: light; }
   html[data-theme="dark"] { color-scheme: dark; }
   * { box-sizing: border-box; }
-  body { margin: 0; font: 13px/1.45 var(--sans); color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  body { margin: 0; font-family: var(--sans); font-size: 13px; line-height: 1.45; color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; }
   .app { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
   .head { display: flex; align-items: center; gap: 10px; }
   h1 { margin: 0; font-size: 14px; font-weight: 600; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -49,7 +49,7 @@
   button.bad { color: var(--bad); }
   button.good { color: var(--good); }
   button.primary { background: var(--fg); color: var(--bg); border-color: transparent; }
-  kbd { font: 11px var(--sans); color: var(--fg3); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-left: 6px; }
+  kbd { font-family: var(--sans); font-size: 11px; color: var(--fg3); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-left: 6px; }
   .end { text-align: center; padding: 6px 0 2px; }
   .end .big { font-size: 40px; font-weight: 300; font-variant-numeric: tabular-nums; letter-spacing: -1px; }
   .end ul { text-align: left; margin: 10px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
@@ -198,7 +198,7 @@ const missed = () => quiz.cards.filter((c) => marks[c.id] === false);
 function share() {
   const right = Object.values(marks).filter(Boolean).length, done = Object.keys(marks).length;
   const miss = missed().map((c) => `"${c.q}" (answer: ${c.a})`).join("; ");
-  mcp.setContext(`Quiz "${quiz.topic}" in progress: ${right}/${done} right so far, ${order.length - done} cards left.` + (miss ? ` Missed: ${miss}.` : ""),
+  mcp.setContext(`Quiz "${quiz.topic}" in progress: ${right}/${done} right so far, ${order.length - done}\u00a0cards left.` + (miss ? ` Missed: ${miss}.` : ""),
     { topic: quiz.topic, right, done, total: order.length, missed: missed().map((c) => c.id) }).catch(() => {});
 }
 

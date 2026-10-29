@@ -22,7 +22,7 @@
   html[data-theme="light"] { color-scheme: light; }
   html[data-theme="dark"] { color-scheme: dark; }
   * { box-sizing: border-box; }
-  body { margin: 0; font: 13px/1.45 var(--sans); color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  body { margin: 0; font-family: var(--sans); font-size: 13px; line-height: 1.45; color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; }
   .app { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
   html[data-mode="fullscreen"] .app { height: 100vh; }
   .head { display: flex; align-items: center; gap: 10px; }
@@ -64,7 +64,6 @@
   <div class="head">
     <h1>Board</h1>
     <span class="live" data-testid="live"><span class="dot" id="dot"></span><span id="liveText">connecting…</span></span>
-    <button id="full" data-testid="fullscreen">⤢ Open in panel</button>
   </div>
   <div class="cols" id="cols" data-testid="board"></div>
   <div class="status" id="status" data-testid="status"></div>
@@ -212,13 +211,7 @@ $("cols").addEventListener("click", async (e) => {
   try { await mcp.message(`Split the card #${card.id} "${card.title}" into 2 to 4 smaller cards in To do, then remove it.`); status("Asked the agent to split #" + card.id + "."); }
   catch (err) { status("Not sent: " + why(err) + ".", true); }
 });
-$("full").onclick = async () => {
-  const want = document.documentElement.dataset.mode === "fullscreen" ? "inline" : "fullscreen";
-  try { const r = await mcp.displayMode(want); document.documentElement.dataset.mode = r.mode; }
-  catch (err) { status("Panel: " + why(err), true); }
-};
 
-mcp.on("context", (c) => { $("full").textContent = c.displayMode === "fullscreen" ? "Back to the thread" : "⤢ Open in panel"; });
 mcp.on("tool-result", (r) => { if (r.structuredContent) show(r.structuredContent); poll(); });
 mcp.on("tool-cancelled", () => { status("The tool was stopped; the board still updates."); poll(); });
 mcp.on("teardown", () => clearTimeout(poller));

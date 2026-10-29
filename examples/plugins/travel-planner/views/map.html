@@ -22,13 +22,14 @@
   html[data-theme="light"] { color-scheme: light; }
   html[data-theme="dark"] { color-scheme: dark; }
   * { box-sizing: border-box; }
-  body { margin: 0; font: 13px/1.45 var(--sans); color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  body { margin: 0; font-family: var(--sans); font-size: 13px; line-height: 1.45; color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; }
   .app { padding: 14px 16px; display: grid; grid-template-columns: 1fr; gap: 10px; }
   html[data-mode="fullscreen"] .app { height: 100vh; grid-template-columns: 1fr 300px; grid-template-rows: auto 1fr; }
   html[data-mode="fullscreen"] .head { grid-column: 1 / -1; }
-  /* a narrow panel (bise's is ~420 px): the map on top, the list under it */
-  @media (max-width: 720px) {
-    html[data-mode="fullscreen"] .app { grid-template-columns: 1fr; grid-template-rows: auto minmax(240px, 1fr) auto; }
+  /* a narrow panel (bise's is ~420 px): the map full width, 240 high, the list under it */
+  @media (max-width: 560px) {
+    html[data-mode="fullscreen"] .app { grid-template-columns: 1fr; grid-template-rows: auto 240px minmax(0, 1fr); }
+    html[data-mode="fullscreen"] .map { height: 240px; }
   }
   .head { display: flex; align-items: center; gap: 10px; }
   .titles { flex: 1; min-width: 0; }
@@ -46,7 +47,7 @@
   .overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   .route { fill: none; stroke: var(--accent); stroke-width: 3; stroke-dasharray: 2 7; stroke-linecap: round; }
   .pin circle { fill: var(--accent); stroke: #fff; stroke-width: 2; }
-  .pin text { fill: #fff; font: 600 11px var(--sans); text-anchor: middle; dominant-baseline: central; }
+  .pin text { fill: #fff; font-family: var(--sans); font-size: 11px; font-weight: 600; text-anchor: middle; dominant-baseline: central; }
   .pin.sel circle { fill: var(--fg); }
   .zoom { position: absolute; right: 8px; top: 8px; display: flex; flex-direction: column; gap: 4px; }
   .zoom button { width: 28px; padding: 0; justify-content: center; background: var(--bg); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
@@ -82,7 +83,6 @@
       <div class="sub" id="sub" data-testid="sub">planning…</div>
     </div>
     <button id="osm" data-testid="open-osm" title="Open this area on openstreetmap.org">Open in OSM ↗</button>
-    <button id="full" data-testid="fullscreen">⤢ Open in panel</button>
   </div>
   <div class="map" id="map" data-testid="map">
     <div class="tiles" id="tiles"></div>
@@ -233,7 +233,7 @@ function drawList() {
     </li>`;
   }).join("") : '<li><span></span><span class="empty">No stops yet: add a city below.</span></li>';
   $("title").textContent = trip.title;
-  $("sub").textContent = `${s.length} stop${s.length === 1 ? "" : "s"} · ${trip.nights} night${trip.nights === 1 ? "" : "s"} · ${trip.km.toLocaleString()} km`;
+  $("sub").textContent = `${s.length} stop${s.length === 1 ? "" : "s"} · ${trip.nights} night${trip.nights === 1 ? "" : "s"} · ${trip.km.toLocaleString()}\u00a0km`;
 }
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
@@ -306,13 +306,7 @@ new ResizeObserver(() => { if (trip) drawMap(); }).observe($("map"));
 // ---- host: links, display mode, notifications
 $("attrib").onclick = () => mcp.openLink("https://www.openstreetmap.org/copyright").catch((err) => status(why(err), true));
 $("osm").onclick = () => { const ll = unproject(center.x, center.y, zoom); mcp.openLink(`https://www.openstreetmap.org/#map=${zoom}/${ll.lat.toFixed(4)}/${ll.lon.toFixed(4)}`).catch((err) => status(why(err), true)); };
-$("full").onclick = async () => {
-  const want = document.documentElement.dataset.mode === "fullscreen" ? "inline" : "fullscreen";
-  try { const r = await mcp.displayMode(want); document.documentElement.dataset.mode = r.mode; }
-  catch (err) { status("Panel: " + why(err), true); }
-};
 mcp.on("context", (c) => {
-  $("full").textContent = c.displayMode === "fullscreen" ? "Back to the thread" : "⤢ Open in panel";
   if (trip) requestAnimationFrame(() => { fit(); drawMap(); });
 });
 mcp.on("tool-input", (p) => { const a = p.arguments || {}; if (a.title) $("title").textContent = a.title; $("sub").textContent = "placing " + (a.stops || []).length + " stops…"; });

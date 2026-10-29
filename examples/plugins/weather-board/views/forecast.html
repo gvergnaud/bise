@@ -21,7 +21,7 @@
   html[data-theme="light"] { color-scheme: light; }
   html[data-theme="dark"] { color-scheme: dark; }
   * { box-sizing: border-box; }
-  body { margin: 0; font: 13px/1.45 var(--sans); color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  body { margin: 0; font-family: var(--sans); font-size: 13px; line-height: 1.45; color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; }
   .app { padding: 14px 16px; }
   .head { display: flex; align-items: baseline; gap: 10px; }
   h1 { margin: 0; font-size: 14px; font-weight: 600; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -198,7 +198,7 @@ function draw() {
     <div class="now">
       <span class="glyph">${GLYPH(c.code)}</span>
       <span class="temp" data-testid="now">${deg(c.temp)}</span>
-      <span class="cond">${WORD[c.code] || ""}<div class="meta">feels ${deg(c.feels)} · wind ${Math.round(c.wind)} km/h · humidity ${c.humidity}%</div></span>
+      <span class="cond">${WORD[c.code] || ""}<div class="meta">feels ${deg(c.feels)} · wind ${Math.round(c.wind)}\u00a0km/h · humidity ${c.humidity}%</div></span>
     </div>${svg}
     ${data.source === "sample" ? `<div class="warn" data-testid="sample">Sample data: Open-Meteo is out of reach (${data.note.replace("offline sample: ", "")}). Live updates keep trying.</div>` : ""}
     ${lastError ? `<div class="warn err">Live update paused: ${lastError}</div>` : ""}`;

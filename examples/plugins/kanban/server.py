@@ -28,7 +28,7 @@ COLUMN_IDS = [c["id"] for c in COLUMNS]
 SEED = [
     {"title": "Open the board in the panel", "note": "The ⤢ button at the top right", "column": "todo"},
     {"title": "Drag this card to Doing", "note": "bise asks before the move runs", "column": "todo"},
-    {"title": "Ask the agent to add a card", "note": "It appears here within 3 s", "column": "doing"},
+    {"title": "Ask the agent to add a card", "note": "It appears here within 3\u00a0s", "column": "doing"},
     {"title": "Add the kanban plugin", "note": "", "column": "done"},
 ]
 

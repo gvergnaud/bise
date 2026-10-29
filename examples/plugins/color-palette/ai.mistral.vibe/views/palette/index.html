@@ -21,7 +21,7 @@
   html[data-theme="light"] { color-scheme: light; }
   html[data-theme="dark"] { color-scheme: dark; }
   * { box-sizing: border-box; }
-  body { margin: 0; font: 13px/1.45 var(--sans); color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  body { margin: 0; font-family: var(--sans); font-size: 13px; line-height: 1.45; color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; }
   .app { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
   .head { display: flex; align-items: center; gap: 8px; }
   h1 { margin: 0; font-size: 14px; font-weight: 600; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -32,11 +32,11 @@
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
   .sw { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; cursor: pointer; background: var(--bg); text-align: left; padding: 0; height: auto; display: block; width: 100%; }
   .sw:hover { background: var(--bg); box-shadow: 0 2px 8px rgba(0,0,0,.08); }
-  .chip { height: 72px; display: flex; align-items: flex-end; justify-content: space-between; padding: 6px 8px; font: 600 15px var(--sans); }
-  .chip small { font: 500 10px var(--sans); opacity: .85; }
+  .chip { height: 72px; display: flex; align-items: flex-end; justify-content: space-between; padding: 6px 8px; font-family: var(--sans); font-size: 15px; font-weight: 600; }
+  .chip small { font-family: var(--sans); font-size: 10px; font-weight: 500; opacity: .85; }
   .meta { padding: 6px 8px 7px; }
   .meta .n { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .meta .hex { font: 11.5px var(--mono); color: var(--fg2); }
+  .meta .hex { font-family: var(--mono); font-size: 11.5px; color: var(--fg2); }
   .meta .copied { color: var(--ok); font-family: var(--sans); }
   .ratios { display: flex; gap: 8px; margin-top: 3px; font-size: 10.5px; color: var(--fg3); font-variant-numeric: tabular-nums; }
   .status { min-height: 16px; color: var(--fg2); font-size: 12px; }
