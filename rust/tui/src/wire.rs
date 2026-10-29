@@ -209,13 +209,6 @@ pub(crate) enum Ev {
         id: u32,
         text: String,
     },
-    // an MCP Apps view of a call (tool_view, docs/mcp-apps.md C3, C9),
-    // merged into the matching Tool by id like ToolIntent; the entry's
-    // ToolItem.views replaces it when it settles
-    ToolView {
-        id: u32,
-        view: ViewChip,
-    },
     Turn,
     TurnDone,
     // a compaction started (`≡ compacting`, BISE-90: the wire's count and
@@ -465,8 +458,10 @@ fn rec_ev(rec: Rec) -> Option<Ev> {
 /// A tool move as the feed's event: a row (started; finished, which
 /// push_event merges into the running row with its id, else its own),
 /// or an annotation push_event merges into the newest row with its id.
-/// A view (`tool_view`, MCP Apps) is an annotation too: its `⊞` line
-/// (docs/mcp-apps.md C9).
+/// A view (`tool_view`, MCP Apps) draws nothing here yet: the TUI's view
+/// chip is piece 11's (docs/mcp-apps.md C9).
+/// Piece 11 draws it from the entry's ToolItem.views only, one source
+/// (architect m_50261): this line path stays without it.
 fn tool_ev(m: lines::ToolMove) -> Option<Ev> {
     use lines::ToolMove as M;
     Some(match m {
@@ -476,7 +471,7 @@ fn tool_ev(m: lines::ToolMove) -> Option<Ev> {
         M::Intent { id, text } => Ev::ToolIntent { id, text },
         M::Code { id, code } => Ev::ToolCode { id, code },
         M::Result { id, ok, preview } => Ev::ToolResult { id, ok, preview },
-        M::View { id, view } => Ev::ToolView { id, view: ViewChip { plugin: view.plugin, uri: view.uri, call: view.call, expired: false } },
+        M::View { .. } => return None,
     })
 }
 
