@@ -26,7 +26,7 @@ VIEW_META = {"prefersBorder": True}
 COLUMNS = [{"id": "todo", "title": "To do"}, {"id": "doing", "title": "Doing"}, {"id": "done", "title": "Done"}]
 COLUMN_IDS = [c["id"] for c in COLUMNS]
 SEED = [
-    {"title": "Open the board in the panel", "note": "The ⤢ button at the top right", "column": "todo"},
+    {"title": "Open the board in the panel", "note": "'open in the panel' under the board", "column": "todo"},
     {"title": "Drag this card to Doing", "note": "bise asks before the move runs", "column": "todo"},
     {"title": "Ask the agent to add a card", "note": "It appears here within 3\u00a0s", "column": "doing"},
     {"title": "Add the kanban plugin", "note": "", "column": "done"},

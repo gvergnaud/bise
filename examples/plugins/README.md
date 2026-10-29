@@ -34,11 +34,11 @@ run it" grants them. Then ask an agent with the line below.
 
 | plugin | ask the agent | then click |
 | --- | --- | --- |
-| [piano-composer](piano-composer) | "compose a sad little tune in D minor" | ▶ Play; click the roll to add or remove notes; Export .mid; ⤢; plug a MIDI keyboard and press "Record from MIDI"; "Make it major"; "Suggest a title" (calls `mistral/complete`: bise answers "not supported", the view falls back to asking the agent) |
-| [travel-planner](travel-planner) | "plan 9 days in Italy by train from Milan" | ⤢ Open in panel; drag a stop in the list; add "Bologna"; × on a stop; "Open in OSM ↗" |
+| [piano-composer](piano-composer) | "compose a sad little tune in D minor" | ▶ Play; click the roll to add or remove notes; Export .mid; "open in the panel" under the card; plug a MIDI keyboard and press "Record from MIDI"; "Make it major"; "Suggest a title" (calls `mistral/complete`: bise answers "not supported", the view falls back to asking the agent) |
+| [travel-planner](travel-planner) | "plan 9 days in Italy by train from Milan" | "open in the panel" under the card; drag a stop in the list; add "Bologna"; × on a stop; "Open in OSM ↗" |
 | [weather-board](weather-board) | "what's the weather in Lyon this week?" | °C/°F; leave it open: it refreshes every minute; Refresh now; the Open-Meteo credit opens their site |
 | [expense-form](expense-form) | "show my expenses" | fill the form, Add expense: bise asks for your approval first; then "how much did I spend on food?" (the agent already has the totals) |
-| [kanban](kanban) | "show my board" | ⤢ Open in panel; drag a card to Doing (approval); type a card in "+ Add a card"; ask "add a card 'write the release notes'" and watch it appear; Split on a card |
+| [kanban](kanban) | "show my board" | "open in the panel" under the card; drag a card to Doing (approval); type a card in "+ Add a card"; ask "add a card 'write the release notes'" and watch it appear; Split on a card |
 | [voice-memo](voice-memo) | "I want to record a voice memo" | the red button (bise asks for the microphone once), stop, ▶ Play, Download, Send to the agent |
 | [photo-booth](photo-booth) | "open the photo booth" | Turn on the camera, pick a filter, the shutter (3-2-1), Copy (clipboard), Save, Send |
 | [quiz-cards](quiz-cards) | "quiz me on the capitals of Europe" | click the card to flip, ← / → to mark it; at the end "Quiz me on the misses" |
