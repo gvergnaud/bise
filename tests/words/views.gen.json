@@ -236,5 +236,10 @@
     ],
     "one": null,
     "text": "uses {perms}"
+  },
+  "views.waiting_ok": {
+    "args": [],
+    "one": null,
+    "text": "waiting for your ok in the inbox"
   }
 }

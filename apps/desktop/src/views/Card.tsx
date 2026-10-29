@@ -8,7 +8,7 @@ import { AppIcon, Press } from '@/ds';
 import { views } from '@/proto/words_views.gen';
 import { quiet } from './names';
 import type { ToolItem, ToolView } from '@/proto';
-import { useEntry } from '@/store';
+import { useCards, useEntry } from '@/store';
 import { openTab } from '@/app/panel/tabs';
 import type { ViewRef } from './port';
 import type { ViewState, ViewsStore } from './store';
@@ -38,8 +38,9 @@ export function viewsOf(item: ToolItem): ToolView[] {
  * what it runs without ('change it' opens its plugin's page), a message it sent; then 'open in
  * the panel'. Never over the view.
  */
-function Foot({ state, view, agent, onPanel }: { state: Extract<ViewState, { kind: 'live' }>; view: ToolView; agent: string; onPanel: () => void }) {
+function Foot({ state, view, agent, waiting, onPanel }: { state: Extract<ViewState, { kind: 'live' }>; view: ToolView; agent: string; waiting: boolean; onPanel: () => void }) {
   const notes: { key: string; node: ReactNode }[] = [];
+  if (waiting) notes.push({ key: 'waiting', node: views.waiting_ok });
   if (state.note === 'gone') notes.push({ key: 'gone', node: views.server_gone });
   if (state.note === 'too-large') notes.push({ key: 'too-large', node: views.too_large });
   if (state.ungranted.length > 0)
@@ -79,6 +80,15 @@ function Foot({ state, view, agent, onPanel }: { state: Extract<ViewState, { kin
   );
 }
 
+/**
+ * Whether one of the view's calls waits on his ok: an open notification placed
+ * `view:<agent>/<call>` (sb-core's view_place, C5; the view's call answers when he does). Pure.
+ */
+export function waitsOnHim(cards: readonly { place?: string | null }[], agent: string, call: string): boolean {
+  const place = `view:${agent}/${call}`;
+  return cards.some((c) => c.place === place);
+}
+
 /** How long a card he switched holds its y while the thread lays out again (the panel opening narrows it). */
 const HOLD_MS = 800;
 
@@ -111,6 +121,7 @@ function holdCard(testId: string): void {
 export const ViewCard = memo(function ViewCard({ project, agent, view, store = viewsStore }: { project: string; agent: string; view: ToolView; store?: ViewsStore }) {
   const r = useMemo<ViewRef>(() => ({ project, agent, call: view.call }), [project, agent, view.call]);
   const state = useViewState(store, r);
+  const waiting = waitsOnHim(useCards(project), agent, view.call);
   const box = useRef<HTMLDivElement>(null);
   const expired = view.state === 'expired';
   useEffect(() => {
@@ -191,6 +202,7 @@ export const ViewCard = memo(function ViewCard({ project, agent, view, store = v
         state={state}
         view={view}
         agent={agent}
+        waiting={waiting}
         onPanel={() => {
           holdCard(testId);
           store.fullscreen(r);

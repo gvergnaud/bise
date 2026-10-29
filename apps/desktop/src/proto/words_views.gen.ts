@@ -70,6 +70,8 @@ export const views = {
   tab_of: (a: { plugin: string | number; name: string | number }): string => String(a.plugin) + " · " + String(a.name),
   /** the view wrote to its agent: 'sent to perf via kanban' */
   message_sent: (a: { agent: string | number; plugin: string | number }): string => "sent to " + String(a.agent) + " via " + String(a.plugin),
+  /** a call of the view waits on his ok (an off-turn confirm notification placed view:<agent>/<call>, C5): the card's foot */
+  waiting_ok: "waiting for your ok in the inbox",
   /** the line under a tool row, its head: `counter · fake-app` (the glyph is the TUI's G_VIEW) */
   tui_chip: (a: { view: string | number; plugin: string | number }): string => String(a.view) + " · " + String(a.plugin),
   /** the chip's link that opens the view in the desktop app */

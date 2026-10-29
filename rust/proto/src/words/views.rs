@@ -77,6 +77,8 @@ crate::words! { views:
     // ---- what a view asked (the card's footnote, one at a time)
     /// the view wrote to its agent: 'sent to perf via kanban'
     message_sent(agent, plugin) = "sent to {agent} via {plugin}";
+    /// a call of the view waits on his ok (an off-turn confirm notification placed view:<agent>/<call>, C5): the card's foot
+    waiting_ok = "waiting for your ok in the inbox";
 
     // ---- the terminal (C9: it can't show a view; designer m_50266)
     /// the line under a tool row, its head: `counter · fake-app` (the glyph is the TUI's G_VIEW)
