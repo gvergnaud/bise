@@ -189,6 +189,14 @@ a client never parses transcript lines.
 `data.kind` is `hub::ErrorKind` (`hub_older`, `hub_refused`, an unknown
 value from a newer hub decodes as `Unknown`).
 
+The MCP App views' methods (`view/resource`, `view/call`, `view/message`,
+`view/context`; docs/mcp-apps.md C5) answer their own codes, the reason
+typed in `data.reason` (`bise_proto::view_rpc::ViewError`): -32030
+`expired`, -32031 `not-visible`, -32032 `plugin-off`, -32033 `denied`,
+-32034 `not-supported`, -32035 `rate-limited`, -32036
+`server-restarted`; -32000 `server-gone` when the view's server can't be
+reached; a server's own error as it gave it.
+
 ## The wire rule
 
 On the wire an existing field, list or enum value never changes meaning.

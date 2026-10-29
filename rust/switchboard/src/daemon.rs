@@ -237,6 +237,9 @@ enum Msg {
         id: u64,
         reply: Option<String>,
     },
+    /// mcp-apps (C5): a view request's next step on the loop, from its
+    /// thread (daemon/views.rs).
+    View(views::ViewStep),
     /// The checker answered a gated call (approvals-design.md §4).
     GateChecked {
         dir: String,
@@ -428,6 +431,9 @@ struct Shell {
     down: BTreeSet<String>,
     /// The approvals mode and gate (approvals-design.md §8-§10).
     gates: gate::Gates,
+    /// mcp-apps (C5): the views' limits, waiting calls, contexts and the
+    /// hub's views bridge (daemon/views.rs).
+    views: views::Views,
     /// `sb land`'s line: one land at a time per target ref (dev-flow §5).
     lands: crate::land::Queue,
     /// The feature branches (dev-flow §5.1): the registry, their facts,
@@ -1717,6 +1723,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
             std::env::var(crate::approvals::mode::ENV).ok().as_deref(),
             runner,
         ),
+        views: views::Views::default(),
         lands: crate::land::Queue::default(),
         features: features::Features::load(&paths.state),
         prs: None,
@@ -1859,6 +1866,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
 
     let keep_agents = sh.serve(rx, &tick_queued);
     sh.photo_stop();
+    sh.views_stop();
     // for good: no new client reaches a hub that is going (it would wait
     // for a hello that never comes); a `bise` meanwhile starts the next
     // hub, which waits for this one to be gone (`wait_previous_hub`)

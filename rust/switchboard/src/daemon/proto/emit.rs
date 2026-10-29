@@ -521,8 +521,12 @@ impl Shell {
             }
         }
         let project = self.project();
+        let dir = self.dir_of(agent);
         let mut ids = Vec::new();
-        for (id, entries) in out {
+        for (id, mut entries) in out {
+            if let Some(d) = &dir {
+                self.expire_views(d, &mut entries);
+            }
             for e in entries {
                 self.proto_send(id, &HubEv::Entry { project: project.clone(), agent: agent.to_string(), entry: Box::new(e) });
             }

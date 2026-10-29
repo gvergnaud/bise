@@ -135,6 +135,13 @@ pub const METHODS: &[MethodRow] = &[
     m("usage/read", "usage", Some("usage")),
     m("project/pause", "pause", None),
     m("project/resume", "resume", None),
+    // mcp-apps (docs/mcp-apps.md, C5): a view's requests, client sockets
+    // only (never an agent's op); answered later, by the server or his
+    // card (view_rpc's codes on a refusal)
+    m("view/resource", "view_resource", None),
+    m("view/call", "view_call", None),
+    m("view/message", "view_message", None),
+    m("view/context", "view_context", None),
 ];
 
 /// The protocol's own methods (no [`HubCmd`]).
@@ -173,6 +180,9 @@ pub const OWN_RESULTS: &[(&str, &str)] = &[
     ("turn/send", "SendResult"),
     // inbox picks (3) (architect m_22636): his answer as sb-core wrote it
     ("card/answer", "AnswerResult"),
+    // mcp-apps (C5): a view's resource; a call answers its server's result
+    ("view/resource", "ViewResource"),
+    ("view/call", "ViewCallResult"),
 ];
 
 /// A command whose method answers the hub's words ([`CommandRunResult`]):

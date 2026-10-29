@@ -65,7 +65,7 @@ pub(crate) fn of(parts: &[Part], text: &str, first: usize) -> (String, Vec<Attac
                 after_chip = false;
                 continue;
             }
-            Part::Hint { .. } | Part::Forwarded { .. } | Part::Unknown(_) => continue,
+            Part::Hint { .. } | Part::Forwarded { .. } | Part::ViewContext { .. } | Part::Unknown(_) => continue,
         };
         let (label, marker, info) = chip;
         out.push_str(&label);

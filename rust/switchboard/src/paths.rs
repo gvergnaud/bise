@@ -156,6 +156,21 @@ impl Paths {
     pub fn agent_bg(&self, name: &str) -> PathBuf {
         bise_home::hub_state::agent_bg(&self.state, name)
     }
+    /// The hub's views bridge (mcp-apps, C5): its `bridge.json`, log
+    /// and pid, so a restarted hub ends an orphan.
+    pub fn views_bridge_dir(&self) -> PathBuf {
+        self.state.join("views-bridge")
+    }
+    /// The views bridge's `bridge.json` (in [`Paths::views_bridge_dir`]).
+    pub fn views_bridge_json(&self) -> PathBuf {
+        self.views_bridge_dir().join(bend_plugins::bridge::BRIDGE_FILE)
+    }
+    /// An agent's own bridge's `bridge.json`, the REPL on `port`'s
+    /// (`$BEND_RUN_DIR/<port>/plugins`, docs/mcp-apps.md C1): the one path
+    /// from the hub to an agent's bridge.
+    pub fn agent_bridge_json(&self, port: u16) -> PathBuf {
+        bise_home::Home::from_env().run_dir().join(port.to_string()).join("plugins").join(bend_plugins::bridge::BRIDGE_FILE)
+    }
     /// The agent's MCP Apps views folder (`BEND_VIEWS_DIR`,
     /// docs/mcp-apps.md C2): pruned with the images (`image_care`).
     pub fn agent_views_dir(&self, name: &str) -> PathBuf {

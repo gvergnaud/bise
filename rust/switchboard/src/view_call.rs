@@ -1,0 +1,265 @@
+//! The pure parts of the hub's view requests (docs/mcp-apps.md, C2, C5):
+//! what a view request names, the views file the bridge wrote, the
+//! bridge's address, a resource's HTML and declared sandbox, a view's
+//! message text. The shell (`daemon/views.rs`) reads the files and the
+//! network; this module decides what they say.
+
+use bise_proto::view_rpc::ViewError;
+use serde::Deserialize;
+use serde_json::{json, Value};
+
+/// A view request's `agent` and `call` (every C5 method).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ViewParams {
+    pub agent: String,
+    pub call: String,
+}
+
+/// A call id as the bridge picks it (C2: `<ms>-<n>`): digits, one dash,
+/// digits. Anything else (a path, `..`) names no file.
+pub fn call_ok(call: &str) -> bool {
+    let digits = |s: &str| !s.is_empty() && s.len() <= 20 && s.bytes().all(|b| b.is_ascii_digit());
+    call.split_once('-').is_some_and(|(a, b)| digits(a) && digits(b))
+}
+
+impl ViewParams {
+    /// From a request's params; a bad call id is no file: expired.
+    pub fn of(params: &Value) -> Result<ViewParams, ViewError> {
+        let s = |k: &str| params.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+        let (agent, call) = (s("agent"), s("call"));
+        if agent.is_empty() || !call_ok(&call) {
+            return Err(ViewError::Expired);
+        }
+        Ok(ViewParams { agent, call })
+    }
+}
+
+/// The views file of a call (C2), as the bridge wrote it.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+pub struct ViewFile {
+    #[serde(default)]
+    pub plugin: String,
+    #[serde(default)]
+    pub server: String,
+    #[serde(default)]
+    pub uri: String,
+    #[serde(default)]
+    pub tool: String,
+    #[serde(default)]
+    pub args: Value,
+    #[serde(default)]
+    pub result: Value,
+}
+
+impl ViewFile {
+    /// Its text read; unreadable or naming no view: expired.
+    pub fn parse(text: &str) -> Result<ViewFile, ViewError> {
+        let f: ViewFile = serde_json::from_str(text).map_err(|_| ViewError::Expired)?;
+        if f.plugin.is_empty() || f.server.is_empty() || !f.uri.starts_with("ui://") {
+            return Err(ViewError::Expired);
+        }
+        Ok(f)
+    }
+}
+
+/// `D/bridge.json`'s base (`http://127.0.0.1:<port>/<token>`): a server's
+/// route is `<base>/<plugin>/<server>` (C1).
+pub fn bridge_base(text: &str) -> Option<String> {
+    let v: Value = serde_json::from_str(text).ok()?;
+    let base = v.get("base")?.as_str()?;
+    base.starts_with("http://127.0.0.1:").then(|| base.trim_end_matches('/').to_string())
+}
+
+/// A route's URL: the bridge's base, the plugin, the server.
+pub fn route_url(base: &str, plugin: &str, server: &str) -> String {
+    format!("{base}/{plugin}/{server}")
+}
+
+/// The JSON-RPC request the hub sends a view's server.
+pub fn request(method: &str, params: &Value) -> Value {
+    json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+}
+
+/// A server's JSON-RPC answer: its `result`, or its `error` as it gave it.
+pub fn answer(v: &Value) -> Result<Value, Value> {
+    match (v.get("result"), v.get("error")) {
+        (_, Some(e)) => Err(e.clone()),
+        (Some(r), None) => Ok(r.clone()),
+        _ => Err(json!({"code": -32603, "message": "the server's answer had no result"})),
+    }
+}
+
+/// What a view resource declares and holds (`resources/read`'s first
+/// content): its HTML (text, or base64 `blob`), its `_meta.ui`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ResourceRead {
+    pub html: String,
+    pub csp: Value,
+    pub declared: Vec<String>,
+    pub prefers_border: bool,
+}
+
+/// The permissions a view may ask for (C6): the spec's
+/// `_meta.ui.permissions` keys, and MIDI from `_meta["dev.bise/ui"]`.
+pub const PERMS: [&str; 4] = ["camera", "microphone", "midi", "clipboardWrite"];
+
+/// The first content of a `resources/read` result.
+pub fn resource_read(result: &Value) -> Option<ResourceRead> {
+    let c = result.get("contents")?.as_array()?.first()?;
+    let html = match (c.get("text").and_then(Value::as_str), c.get("blob").and_then(Value::as_str)) {
+        (Some(t), _) => t.to_string(),
+        (None, Some(b)) => String::from_utf8(base64_decode(b)?).ok()?,
+        _ => return None,
+    };
+    let meta = c.get("_meta");
+    let ui = meta.and_then(|m| m.get("ui"));
+    let keys = |v: Option<&Value>| -> Vec<String> { v.and_then(Value::as_object).map(|o| o.keys().cloned().collect()).unwrap_or_default() };
+    let mut declared = keys(ui.and_then(|u| u.get("permissions")));
+    declared.extend(keys(meta.and_then(|m| m.get("dev.bise/ui")).and_then(|u| u.get("permissions"))));
+    let mut declared: Vec<String> = PERMS.iter().filter(|p| declared.iter().any(|d| d == *p)).map(|p| p.to_string()).collect();
+    declared.dedup();
+    Some(ResourceRead {
+        html,
+        csp: ui.and_then(|u| u.get("csp")).cloned().filter(Value::is_object).unwrap_or_else(|| json!({})),
+        declared,
+        prefers_border: ui.and_then(|u| u.get("prefersBorder")).and_then(Value::as_bool).unwrap_or(false),
+    })
+}
+
+/// What a view may use: what it declared and he granted.
+pub fn granted(declared: &[String], grant: &[String]) -> Vec<String> {
+    declared.iter().filter(|p| grant.contains(p)).cloned().collect()
+}
+
+/// The tool named `name` in a `tools/list` result.
+pub fn tool_of(list: &Value, name: &str) -> Value {
+    list.get("tools").and_then(Value::as_array).and_then(|t| t.iter().find(|t| t.get("name").and_then(Value::as_str) == Some(name))).cloned().unwrap_or(Value::Null)
+}
+
+/// A `tools/list` result's tools.
+pub fn tools(list: &Value) -> Vec<Value> {
+    list.get("tools").and_then(Value::as_array).cloned().unwrap_or_default()
+}
+
+/// The text of a view's `ui/message` or `ui/update-model-context`: its
+/// text blocks, in order (the others are not supported yet: none, an
+/// error).
+pub fn text_of(content: &Value) -> Result<String, ViewError> {
+    let blocks = content.as_array().ok_or(ViewError::NotSupported)?;
+    let texts: Vec<&str> = blocks.iter().filter(|b| b.get("type").and_then(Value::as_str) == Some("text")).filter_map(|b| b.get("text").and_then(Value::as_str)).collect();
+    if texts.is_empty() || texts.len() != blocks.len() {
+        return Err(ViewError::NotSupported);
+    }
+    Ok(texts.join("\n\n"))
+}
+
+/// The card's words for a view's call he must allow.
+pub fn card_text(plugin: &str, tool: &str, args: &Value) -> String {
+    let mut out = vec![format!("{plugin} view wants to run {tool}")];
+    let body = serde_json::to_string_pretty(args).unwrap_or_default();
+    out.extend(body.lines().take(40).map(|l| format!("| {l}")));
+    out.push("reason: a view called a tool the model can call too".into());
+    out.join("\n")
+}
+
+fn base64_decode(s: &str) -> Option<Vec<u8>> {
+    use base64_lite::decode;
+    decode(s)
+}
+
+/// A small standard base64 decoder (no dependency for one blob field).
+mod base64_lite {
+    pub fn decode(s: &str) -> Option<Vec<u8>> {
+        let val = |c: u8| -> Option<u32> {
+            Some(match c {
+                b'A'..=b'Z' => c - b'A',
+                b'a'..=b'z' => c - b'a' + 26,
+                b'0'..=b'9' => c - b'0' + 52,
+                b'+' | b'-' => 62,
+                b'/' | b'_' => 63,
+                _ => return None,
+            } as u32)
+        };
+        let bytes: Vec<u8> = s.bytes().filter(|b| !b.is_ascii_whitespace() && *b != b'=').collect();
+        let mut out = Vec::with_capacity(bytes.len() * 3 / 4);
+        for chunk in bytes.chunks(4) {
+            let mut n = 0u32;
+            for (i, c) in chunk.iter().enumerate() {
+                n |= val(*c)? << (18 - 6 * i);
+            }
+            let k = chunk.len();
+            if k < 2 {
+                return None;
+            }
+            out.push((n >> 16) as u8);
+            if k > 2 {
+                out.push((n >> 8) as u8);
+            }
+            if k > 3 {
+                out.push(n as u8);
+            }
+        }
+        Some(out)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_call_id_is_digits_dash_digits() {
+        assert!(call_ok("1700000000000-3"));
+        for bad in ["", "1-", "-1", "1-2-3", "../1-2", "a-1", "1 -2", "1/2"] {
+            assert!(!call_ok(bad), "{bad}");
+        }
+        assert_eq!(ViewParams::of(&json!({"agent": "docs", "call": "../../x"})), Err(ViewError::Expired));
+        assert_eq!(ViewParams::of(&json!({"agent": "docs", "call": "1-2"})), Ok(ViewParams { agent: "docs".into(), call: "1-2".into() }));
+    }
+
+    #[test]
+    fn the_views_file_names_its_view_or_it_is_expired() {
+        let f = ViewFile::parse(r#"{"v":1,"plugin":"fake-app","server":"fake-app","uri":"ui://fake-app/counter","tool":"show_counter","args":{"start":3},"result":{"structuredContent":{"count":3}},"at_ms":1}"#).unwrap();
+        assert_eq!((f.plugin.as_str(), f.tool.as_str(), f.args["start"].as_i64()), ("fake-app", "show_counter", Some(3)));
+        assert_eq!(ViewFile::parse("{}"), Err(ViewError::Expired));
+        assert_eq!(ViewFile::parse("not json"), Err(ViewError::Expired));
+        assert_eq!(ViewFile::parse(r#"{"plugin":"p","server":"s","uri":"https://x"}"#), Err(ViewError::Expired));
+    }
+
+    #[test]
+    fn the_bridge_base_is_loopback_only() {
+        assert_eq!(bridge_base(r#"{"v":1,"base":"http://127.0.0.1:4100/tok/","pid":9}"#).as_deref(), Some("http://127.0.0.1:4100/tok"));
+        assert_eq!(bridge_base(r#"{"base":"http://evil.example/tok"}"#), None);
+        assert_eq!(route_url("http://127.0.0.1:4100/tok", "fake-app", "~views"), "http://127.0.0.1:4100/tok/fake-app/~views");
+    }
+
+    #[test]
+    fn a_resource_says_its_html_csp_and_declared_permissions() {
+        let r = json!({"contents": [{"uri": "ui://x", "mimeType": "text/html;profile=mcp-app", "text": "<p>hi</p>",
+            "_meta": {"ui": {"csp": {"connectDomains": ["https://api.open-meteo.com"]}, "permissions": {"microphone": {}, "geolocation": {}}, "prefersBorder": true},
+                      "dev.bise/ui": {"permissions": {"midi": {}}}}}]});
+        let got = resource_read(&r).unwrap();
+        assert_eq!(got.html, "<p>hi</p>");
+        assert_eq!(got.csp["connectDomains"][0], "https://api.open-meteo.com");
+        assert_eq!(got.declared, vec!["microphone", "midi"], "geolocation is not one bise grants");
+        assert!(got.prefers_border);
+        let blob = json!({"contents": [{"uri": "ui://x", "blob": "PHA+aGk8L3A+"}]});
+        assert_eq!(resource_read(&blob).unwrap().html, "<p>hi</p>");
+        assert_eq!(resource_read(&json!({"contents": []})), None);
+        assert_eq!(granted(&["microphone".into(), "midi".into()], &["midi".into()]), vec!["midi"]);
+    }
+
+    #[test]
+    fn a_message_is_its_text_blocks_only() {
+        assert_eq!(text_of(&json!([{"type": "text", "text": "make it major"}])), Ok("make it major".into()));
+        assert_eq!(text_of(&json!([{"type": "image", "data": "x"}])), Err(ViewError::NotSupported));
+        assert_eq!(text_of(&json!([])), Err(ViewError::NotSupported));
+        assert_eq!(text_of(&json!("hi")), Err(ViewError::NotSupported));
+    }
+
+    #[test]
+    fn a_servers_answer_is_its_result_or_its_error() {
+        assert_eq!(answer(&json!({"id": 1, "result": {"a": 1}})), Ok(json!({"a": 1})));
+        assert_eq!(answer(&json!({"id": 1, "error": {"code": -32602, "message": "no"}})), Err(json!({"code": -32602, "message": "no"})));
+    }
+}

@@ -48,6 +48,10 @@ pub const ASK_LATE: std::time::Duration = std::time::Duration::from_secs(30);
 /// How long a send answered [`LATE`] waits for its hub's own response
 /// (architect m_34889): after it, the core says it gone.
 pub const SEND_KEPT: std::time::Duration = std::time::Duration::from_secs(600);
+/// How long a view's `view/call` waits for its hub (mcp-apps C5): a
+/// model-visible call may wait on his card, which the hub closes as
+/// denied at 10 min, so it outlives [`ASK_LATE`] by that and a minute.
+pub const VIEW_CALL_KEPT: std::time::Duration = std::time::Duration::from_secs(660);
 
 /// Why the core answered an app request with an error of its own, typed
 /// in the error's `data.reason` (the window never reads the words).
@@ -188,7 +192,13 @@ impl RpcConn {
     /// kept until that response ([`LateSend`]), its connection's loss, or
     /// [`SEND_KEPT`] after it was asked (then gone).
     pub fn late(&mut self, before: Instant, why: &str) {
-        let late: Vec<u64> = self.waiting.iter().filter(|(_, w)| w.app.is_some() && w.at < before).map(|(id, _)| *id).collect();
+        // a view's call: its own wait (VIEW_CALL_KEPT, not ASK_LATE)
+        let view_before = before.checked_sub(VIEW_CALL_KEPT.saturating_sub(ASK_LATE));
+        let past = |w: &Waiting| match w.method {
+            "view/call" => view_before.is_some_and(|b| w.at < b),
+            _ => w.at < before,
+        };
+        let late: Vec<u64> = self.waiting.iter().filter(|(_, w)| w.app.is_some() && past(w)).map(|(id, _)| *id).collect();
         for id in late {
             let Some(mut w) = self.waiting.remove(&id) else { continue };
             if let Some(app) = w.app.take() {
@@ -514,5 +524,27 @@ mod tests {
         assert!(c.waiting.is_empty());
         c.read("shop", serde_json::to_value(Response::ok(Id::Num(req["id"].as_u64().unwrap()), json!({}))).unwrap());
         assert!(c.take_late_sends().is_empty() && c.take_replies().is_empty());
+    }
+
+    #[test]
+    fn a_views_call_waits_for_his_card_not_ask_late() {
+        let ms = std::time::Duration::from_millis;
+        let t0 = Instant::now();
+        let mut c = RpcConn::default();
+        c.initialize("v1");
+        c.read("shop", init_result(4));
+        let call = json!({"cmd": "view_call", "project": "shop", "agent": "main", "call": "1-1", "method": "tools/call", "params": {"name": "bump"}});
+        let req = c.request(&call, Some(Id::Num(5)), t0).unwrap();
+        assert_eq!(req["method"], "view/call");
+        // a card answered at 5 min: still waiting past ASK_LATE
+        c.late(t0 + ASK_LATE + ms(1), LATE);
+        assert!(c.take_replies().is_empty(), "a view's call outlives ASK_LATE");
+        // (`late`'s `before` is the core's now less ASK_LATE, hubs.rs)
+        c.late(t0 + VIEW_CALL_KEPT - ASK_LATE - ms(1), LATE);
+        assert!(c.take_replies().is_empty(), "within VIEW_CALL_KEPT");
+        c.late(t0 + VIEW_CALL_KEPT - ASK_LATE + ms(1), LATE);
+        let r = c.take_replies();
+        assert_eq!((r.len(), r[0].id.clone()), (1, Some(Id::Num(5))), "LATE past VIEW_CALL_KEPT");
+        assert!(c.waiting.is_empty());
     }
 }

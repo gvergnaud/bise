@@ -75,8 +75,9 @@ impl Shell {
                 let setup = &self.setup;
                 let ctx = Ctx { open_cards: &facts.open, page: &|p: &str| facts.page(p), provider: &|i: &str, k: &str| provider_name(setup, i, k), width: &width, offset: &offset, attached: &crate::attached::split };
                 // the newest page: nothing after it yet
-                let (entries, before, more) = pthread::page(&lines, &[], &ctx, limit.map_or(LIMIT, |l| (l as usize).clamp(1, MAX_LIMIT)));
+                let (mut entries, before, more) = pthread::page(&lines, &[], &ctx, limit.map_or(LIMIT, |l| (l as usize).clamp(1, MAX_LIMIT)));
                 let live = Live::start(lines, &entries);
+                self.expire_views(&dir, &mut entries);
                 if let Some(c) = self.proto.conns.get_mut(&id) {
                     c.subs.insert(agent.clone(), live);
                 }
@@ -103,11 +104,16 @@ impl Shell {
                 self.setup();
                 let setup = &self.setup;
                 let ctx = Ctx { open_cards: &facts.open, page: &|p: &str| facts.page(p), provider: &|i: &str, k: &str| provider_name(setup, i, k), width: &width, offset: &offset, attached: &crate::attached::split };
-                let (entries, before, more) = pthread::page(&lines, &ahead, &ctx, limit.map_or(LIMIT, |l| (l as usize).clamp(1, MAX_LIMIT)));
+                let (mut entries, before, more) = pthread::page(&lines, &ahead, &ctx, limit.map_or(LIMIT, |l| (l as usize).clamp(1, MAX_LIMIT)));
+                self.expire_views(&dir, &mut entries);
                 self.proto_send(id, &HubEv::Thread { project, agent, entries, before, more });
             }
             HubCmd::Find { agent, needle, rid, .. } => self.proto_find(id, &tag, project, agent, needle, rid),
-            HubCmd::Send { agent, text, opts, cid, parts, .. } if parts.is_empty() => self.proto_input(id, &tag, agent, text, opts, cid, String::new()),
+            HubCmd::Send { agent, text, opts, cid, parts, .. } if parts.is_empty() => {
+                // mcp-apps (C5): his send carries the views' contexts once
+                let (text, parts) = self.with_view_contexts(&agent, text, String::new());
+                self.proto_input(id, &tag, agent, text, opts, cid, parts)
+            }
             // msg-parts: the model's text from his parts, the parts kept
             // on his message (a part this hub doesn't know: refused)
             HubCmd::Send { agent, text, opts, cid, parts, .. } => {
@@ -117,7 +123,8 @@ impl Shell {
                 match crate::parts_in::said(&parts, &crate::parts_in::Door { store: &bise_home::Home::from_env().images_dir(), put: &crate::daemon::fn_context::store_image, exists: &crate::daemon::fn_context::file_exists, known: &self.artifact_known() }) {
                     Ok(s) => {
                         self.artifact_notes_said(&s.parts);
-                        self.proto_input(id, &tag, agent, s.text, opts, cid, s.parts)
+                        let (text, parts) = self.with_view_contexts(&agent, s.text, s.parts);
+                        self.proto_input(id, &tag, agent, text, opts, cid, parts)
                     }
                     Err(e) => self.proto_error_cid(id, &tag, &e, cid, cid.map(|_| "refused")),
                 }
@@ -556,6 +563,8 @@ impl Shell {
                 (None, true) => self.procs.ask(Ask::Stop { client: id, agent, id: None }),
                 _ => self.proto_error(id, &tag, "proc_stop takes a process id or all, one of the two"),
             },
+            // mcp-apps (C5): answered by their id (daemon/rpc.rs, views.rs)
+            HubCmd::ViewResource { .. } | HubCmd::ViewCall { .. } | HubCmd::ViewMessage { .. } | HubCmd::ViewContext { .. } => {}
             HubCmd::Unknown { .. } => {}
         }
     }

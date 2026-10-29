@@ -7,6 +7,47 @@
 //! the window draws it by reason, never by its words.
 
 use crate::jsonrpc::{ErrorData, RpcError};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+/// `view/resource`'s answer (C5): the view's HTML and what its sandbox
+/// takes, with its call's input and result for `ui/notifications/tool-*`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct ViewResource {
+    /// `http://v-<16 hex>.localhost:<pages port>` (C6)
+    pub origin: String,
+    pub html: String,
+    /// the resource's `_meta.ui.csp` as it declared it (the pages server
+    /// makes the header from it)
+    #[cfg_attr(feature = "ts", ts(type = "Record<string, unknown>"))]
+    pub csp: Value,
+    /// what it may use: declared and granted at the plugin's add (C8)
+    pub permissions: Vec<String>,
+    /// what it declared (`_meta.ui.permissions`, MIDI from
+    /// `_meta["dev.bise/ui"].permissions`): the card says what runs
+    /// without its grant
+    pub declared: Vec<String>,
+    #[serde(rename = "prefersBorder")]
+    pub prefers_border: bool,
+    /// the call's arguments; none: no views file kept them
+    #[serde(rename = "toolInput")]
+    #[cfg_attr(feature = "ts", ts(type = "Record<string, unknown> | null"))]
+    pub tool_input: Value,
+    /// the call's whole result (`{"truncated": true}` past 4 MiB)
+    #[serde(rename = "toolResult")]
+    #[cfg_attr(feature = "ts", ts(type = "Record<string, unknown> | null"))]
+    pub tool_result: Value,
+    /// the tool as its server lists it (`toolInfo`)
+    #[cfg_attr(feature = "ts", ts(type = "Record<string, unknown> | null"))]
+    pub tool: Value,
+}
+
+/// `view/call`'s answer: its server's result as it gave it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(transparent)]
+pub struct ViewCallResult(#[cfg_attr(feature = "ts", ts(type = "Record<string, unknown>"))] pub Value);
 
 /// Why the hub refused a view's request (C5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

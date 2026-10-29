@@ -815,9 +815,33 @@ impl Shell {
         self.state_now();
     }
 
+    /// mcp-apps (docs/mcp-apps.md, C5, risk 3): the gate's off-turn entry,
+    /// for a view's call to a tool the model could also make.
+    /// `approvals::judge` unchanged, no gate file, no runtime nonce, never
+    /// the agent's waiting slot nor its `on_you`. Ok(true): it runs;
+    /// Ok(false): his card decides (the checker is not asked off-turn: no
+    /// turn's task to judge it by); Err: refused, with its hint.
+    pub(super) fn view_gate(&mut self, dir: &str, agent: &str, tool: &str, args: &Value) -> Result<bool, String> {
+        if self.gates.mode == Mode::Yolo {
+            return Ok(true);
+        }
+        let call = self.call_of(dir, agent, tool.to_string(), args.clone());
+        let rules = self.rules_now();
+        let cache = self.gates.caches.entry(call.repo.clone()).or_default();
+        match approvals::judge(&call, &rules, cache, false) {
+            Verdict::Allow { .. } => Ok(true),
+            Verdict::DenyOnce { hint, .. } => Err(hint),
+            Verdict::Card { .. } | Verdict::Check { .. } => Ok(false),
+        }
+    }
+
     /// The user answered card `id` (the `confirm` effect of sb-core, which
     /// closed it).
     pub(super) fn on_confirm(&mut self, id: u64, text: &str) {
+        // a view's card (daemon/views.rs): its call only, never a gate's
+        if self.view_card_answered(id, !matches!(answer_of(text), Answer::No(_))) {
+            return;
+        }
         let Some(c) = self.gates.cards.remove(&id) else { return };
         let answer = answer_of(text);
         let names: Vec<String> =

@@ -186,7 +186,7 @@ All take `{"agent": "<name>", "call": "<call>"}` plus:
 
 | method | params | result |
 | --- | --- | --- |
-| `view/resource` | — | `{origin, html, csp, permissions, prefersBorder, toolInput, toolResult, tool}`; `-32030` expired |
+| `view/resource` | — | `{origin, html, csp, permissions, declared, prefersBorder, toolInput, toolResult, tool}` (`declared`: the permissions it asks, `permissions`: those granted, C8); `-32030` expired |
 | `view/call` | `method: "tools/call" \| "resources/read"`, `params` | the server's result; errors below |
 | `view/message` | `content` (spec content blocks, text only at first) | `{}` once the message is in the thread |
 | `view/context` | `content` | `{}`; replaces this view's context for the next send |
@@ -197,9 +197,33 @@ All take `{"agent": "<name>", "call": "<call>"}` plus:
 not-supported` (`mistral/*`, connector tools: "not supported in bise",
 decision q-vibe), `-32035 rate-limited`, `-32036 server-restarted` (the
 call ran, on a fresh server: in-memory state is gone; said once).
+Any method: `-32000 server-gone` when its server can't be reached (no
+bridge, the bridge refused), and a server's own JSON-RPC error as it
+gave it.
 
 Never an agent op: the views methods are on hub.sock only (an agent's
-`sb` cannot call them; issue 16, a test that an agent's `sb` is refused).
+`sb` cannot call them; issue 16: an agent's process is refused at
+`initialize`, and agent.sock serves no `view*` op, the socket table's
+test in `bise_proto::socket`).
+
+As built (pieces 5a, 5b, 12): `rust/switchboard/src/daemon/views.rs` is
+the shell's side, one dispatcher for hub.sock and the pages server's
+`/api/view` (`Shell::view_request`); the pure parts are
+`crate::view_call` (params, the views file, the bridge route, a
+resource's html/csp/declared permissions, a message's text blocks) and
+`crate::view_limits`. A call goes to the agent's own bridge while its
+REPL lives, else to the hub's views bridge (`bise plugins serve
+--workspace --parent <hub>` in `<state>/views-bridge`, started on the
+first need, stopped when idle or with the hub). A model-visible call
+goes through the approvals as the agent's own call would (`approvals::judge`:
+allowed runs, a rule's no refuses `denied`, else a card); the card is
+sb-core's `view_confirm_open`, its answer by card id, never the agent's
+wait. A view's `view/call` waits 11 min in the ambient core
+(`VIEW_CALL_KEPT`, not `ASK_LATE`), past the card's 10 min. Contexts are
+joined to his next `turn/send` to that agent as `<view_context
+plugin=… uri=…>` parts (`Part::ViewContext`, never from a client). The
+thread's `ToolView.state` reads `expired` when its views file is gone,
+at subscribe, page and each live entry (C4).
 
 `view/message` also carries `gesture_ms`: when Electron's main process
 last saw a pointer-down inside that view's frame rect (C7). The hub

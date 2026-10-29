@@ -165,6 +165,12 @@ pub enum Part {
         at: String,
         by: String,
     },
+    /// mcp-apps (docs/mcp-apps.md, C5; architect m_49840): what a view of
+    /// `plugin` (its resource `uri`) last said of itself with
+    /// `ui/update-model-context`, joined to his next send to that view's
+    /// agent once. Only the hub makes one (`parts_in::said` refuses it
+    /// from a client); rendered before his words, never drawn as them
+    ViewContext { plugin: String, uri: String, text: String },
     /// a part a newer client sent: kept whole, never rendered
     #[serde(untagged)]
     #[cfg_attr(feature = "ts", ts(skip))]
@@ -435,6 +441,7 @@ fn render_one(parts: &[Part]) -> String {
             Part::Page { text, .. } => body.push_str(text),
             Part::Anchor { artifact, version, rev, anchor, quote, n: None } => head.push(anchor_tag(artifact, *version, *rev, anchor, quote, None)),
             Part::Anchor { artifact, version, rev, anchor, quote, n: Some(n) } => body.push_str(&anchor_tag(artifact, *version, *rev, anchor, quote, Some(*n))),
+            Part::ViewContext { plugin, uri, text } => head.push(view_context_tag(plugin, uri, text)),
             Part::Unknown(_) | Part::Forwarded { .. } => {}
         }
     }
@@ -496,6 +503,11 @@ pub fn quote_tag(from: &str, file: &str, new: &str, old: &str, n: Option<u32>, t
 ///
 /// `rev` and `n` only when they have a value; the quote's own closing
 /// tag is broken, like a selection's.
+/// A view's context as the model reads it, before his words.
+pub fn view_context_tag(plugin: &str, uri: &str, text: &str) -> String {
+    format!("<view_context plugin=\"{}\" uri=\"{}\">\n{}\n</view_context>\n", marker_attr(plugin), marker_attr(uri), unclosed(text.trim_end_matches('\n'), "</view_context>"))
+}
+
 pub fn anchor_tag(artifact: &str, version: u64, rev: u32, anchor: &crate::anchor::Anchor, quote: &str, n: Option<u32>) -> String {
     let mut head = format!("{ANCHOR_OPEN}{}\" version=\"{version}\"", marker_attr(artifact));
     if rev > 0 {

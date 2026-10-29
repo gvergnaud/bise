@@ -109,6 +109,8 @@ pub mod store_gen;
 pub mod usage_ledger;
 pub mod util;
 pub mod view;
+pub mod view_call;
+pub mod view_limits;
 pub mod wake;
 pub mod watch;
 pub mod wire;

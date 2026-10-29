@@ -92,3 +92,7 @@
 {"cmd":"artifacts_move","project":"acme-1a2b3c4d","ids":["perf-notes","report-html"],"folder":"f-abcdefghij","to":"site","keep_undo":true}
 {"cmd":"artifacts_folders","project":"acme-1a2b3c4d","op":{"make":{"name":"pricing","parent":"f-abcdefghij"}}}
 {"cmd":"artifacts_library","project":"acme-1a2b3c4d"}
+{"cmd":"view_resource","project":"acme-1a2b3c4d","agent":"perf","call":"1730000000000-1"}
+{"cmd":"view_call","project":"acme-1a2b3c4d","agent":"perf","call":"1730000000000-1","method":"tools/call","params":{"name":"bump","arguments":{"by":1}}}
+{"cmd":"view_message","project":"acme-1a2b3c4d","agent":"perf","call":"1730000000000-1","content":[{"type":"text","text":"count is 4"}],"gesture_ms":1730000001000}
+{"cmd":"view_context","project":"acme-1a2b3c4d","agent":"perf","call":"1730000000000-1","content":[{"type":"text","text":"count=4"}]}

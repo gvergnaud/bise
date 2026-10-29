@@ -156,3 +156,45 @@ export type CardAnswer = { agent: string, question: string, said: string, pick?:
  * words.
  */
 export type AnswerResult = { answer?: CardAnswer | null, };
+
+/**
+ * `view/resource`'s answer (C5): the view's HTML and what its sandbox
+ * takes, with its call's input and result for `ui/notifications/tool-*`.
+ */
+export type ViewResource = { 
+/**
+ * `http://v-<16 hex>.localhost:<pages port>` (C6)
+ */
+origin: string, html: string, 
+/**
+ * the resource's `_meta.ui.csp` as it declared it (the pages server
+ * makes the header from it)
+ */
+csp: Record<string, unknown>, 
+/**
+ * what it may use: declared and granted at the plugin's add (C8)
+ */
+permissions: Array<string>, 
+/**
+ * what it declared (`_meta.ui.permissions`, MIDI from
+ * `_meta["dev.bise/ui"].permissions`): the card says what runs
+ * without its grant
+ */
+declared: Array<string>, prefersBorder: boolean, 
+/**
+ * the call's arguments; none: no views file kept them
+ */
+toolInput: Record<string, unknown> | null, 
+/**
+ * the call's whole result (`{"truncated": true}` past 4 MiB)
+ */
+toolResult: Record<string, unknown> | null, 
+/**
+ * the tool as its server lists it (`toolInfo`)
+ */
+tool: Record<string, unknown> | null, };
+
+/**
+ * `view/call`'s answer: its server's result as it gave it.
+ */
+export type ViewCallResult = Record<string, unknown>;

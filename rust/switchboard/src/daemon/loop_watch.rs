@@ -199,6 +199,7 @@ impl Msg {
             Msg::Page(_) => "page".into(),
             Msg::Land { .. } => "land".into(),
             Msg::GateChecked { dir, .. } => format!("gate checked {dir}"),
+            Msg::View(_) => "a view's request".into(),
             Msg::RoleLine { dir, .. } => format!("role line {dir}"),
             Msg::Typed { .. } => "typed event".into(),
             Msg::WakeSeen(s) => format!("wake seen {}", s.id),

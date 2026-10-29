@@ -108,6 +108,8 @@ impl Shell {
                     }
                     w.phase("page waits");
                     self.page_waits_check();
+                    w.phase("views");
+                    self.views_tick();
                     // the wake worker's copy (daemon/wake_look.rs)
                     self.wakes_sync();
                     w.phase("starts");
@@ -300,6 +302,7 @@ impl Shell {
             }
             Msg::TimerName { id, reply } => self.step(Input::TimerName { id, reply }),
             Msg::GateChecked { dir, n, req, out } => self.on_checked(&dir, &n, *req, out),
+            Msg::View(step) => step(self),
             Msg::BuildEnded { rev } => {
                 self.building.remove(&rev);
                 self.broadcast_versions();

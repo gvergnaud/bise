@@ -166,6 +166,15 @@ impl Shell {
         }
     }
 
+    /// A request answered later, by its id (a view's, daemon/views.rs).
+    pub(super) fn rpc_answer(&mut self, id: ClientId, rid: Id, r: Result<Value, RpcError>) {
+        let resp = match r {
+            Ok(v) => Response::ok(rid, v),
+            Err(e) => Response::err(Some(rid), e),
+        };
+        self.rpc_respond(id, resp);
+    }
+
     fn rpc_respond(&mut self, id: ClientId, resp: Response) {
         self.rpc_write(id, &Message::Response(resp).encode(), true);
     }
@@ -213,6 +222,11 @@ impl Shell {
         if let Some(p) = cmd.project().filter(|p| *p != self.project()) {
             let e = RpcError::refused(format!("this hub is {}, not {p}", self.project()), None);
             return self.rpc_respond(id, Response::err(Some(rid), e));
+        }
+        // mcp-apps (C5): a view's request answers later, by its own id
+        // (its server, his card), never through an event
+        if row.cmd.starts_with("view_") {
+            return self.view_rpc(id, rid, cmd);
         }
         let c = self.rpc.conns.entry(id).or_default();
         c.pending.push(Pending { id: rid.clone(), cmd: row.cmd, result: row.result });

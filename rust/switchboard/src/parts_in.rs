@@ -79,6 +79,8 @@ pub fn said(parts: &[Part], door: &Door) -> Result<Said, String> {
             // a forward's header is sb-core's (msg-forward, architect
             // m_41547): never a client's
             Part::Forwarded { .. } => return Err("a forwarded part is the hub's: forward with sb send --forward".into()),
+            // a view's context is the hub's (mcp-apps, C5): never a client's
+            Part::ViewContext { .. } => return Err("a view's context part is the hub's: update bise".into()),
             // a part of an artifact he selected: that artifact and version
             // exist here (pages/artifact/notes.rs records it after)
             // an anchor this hub can't read: a known kind with bad fields, or

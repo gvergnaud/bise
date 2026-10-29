@@ -67,7 +67,7 @@ mod tests {
     /// only, the user's ops hub.sock's only, ping both, the rest none.
     #[test]
     fn every_socket_and_op_pair() {
-        let ops = ["agent", "version", "hello", "notice", "xin", "xreply", "xfollow", "ping", "stop_hub", "", "whatever"];
+        let ops = ["agent", "version", "hello", "notice", "xin", "xreply", "xfollow", "ping", "stop_hub", "", "whatever", "view/call", "view_call", "view/message"];
         for op in ops {
             let (a, c) = (access(Sock::Agent, op), access(Sock::Client, op));
             let want = match op {

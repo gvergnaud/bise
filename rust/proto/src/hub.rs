@@ -983,13 +983,54 @@ pub enum HubCmd {
         #[serde(default, skip_serializing_if = "String::is_empty")]
         text: String,
     },
+    /// mcp-apps (docs/mcp-apps.md, C5): a view's HTML, its sandbox and its
+    /// call's input and result (`view/resource`); its answer is
+    /// [`crate::view_rpc::ViewResource`] or a [`crate::view_rpc::ViewError`]
+    ViewResource { project: Project, agent: String, call: String },
+    /// a view's request to its own server (`view/call`): `method`
+    /// `tools/call` or `resources/read`, `params` as the view sent them;
+    /// its answer is the server's result, or a view error
+    ViewCall {
+        project: Project,
+        agent: String,
+        call: String,
+        method: String,
+        #[serde(default)]
+        #[cfg_attr(feature = "ts", ts(type = "Record<string, unknown>"))]
+        params: Value,
+    },
+    /// a view's `ui/message` (`view/message`): the spec's content blocks
+    /// (text only); `gesture_ms`: when Electron's main last saw his
+    /// pointer-down in that view's frame (main stamps it, never the
+    /// renderer); answered `{}` once the message is in the thread
+    ViewMessage {
+        project: Project,
+        agent: String,
+        call: String,
+        #[serde(default)]
+        #[cfg_attr(feature = "ts", ts(type = "Array<Record<string, unknown>>"))]
+        content: Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        gesture_ms: Option<u64>,
+    },
+    /// a view's `ui/update-model-context` (`view/context`): its content
+    /// replaces this view's context, which joins his next send to the
+    /// agent once
+    ViewContext {
+        project: Project,
+        agent: String,
+        call: String,
+        #[serde(default)]
+        #[cfg_attr(feature = "ts", ts(type = "Array<Record<string, unknown>>"))]
+        content: Value,
+    },
     /// a tag this version doesn't know: answered with `error`
     #[serde(skip)]
     Unknown { tag: String, raw: Value },
 }
 
 impl HubCmd {
-    pub const TAGS: &'static [&'static str] = &["subscribe", "unsubscribe", "page", "find", "send", "answer", "close", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "log", "completion", "log_body", "queued_take", "queued_steer", "diff", "worktrees", "processes", "proc_out", "proc_follow", "proc_stop", "merged", "features", "prs", "inbox_history", "scheduled", "scheduled_stop", "wake_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "branches", "scheduled_run", "artifacts_add", "artifacts_move", "artifacts_folders", "artifacts_library", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "bise_update", "release_plan", "release_run", "stop_hub", "page_voice", "usage", "pause", "resume"];
+    pub const TAGS: &'static [&'static str] = &["subscribe", "unsubscribe", "page", "find", "send", "answer", "close", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "log", "completion", "log_body", "queued_take", "queued_steer", "diff", "worktrees", "processes", "proc_out", "proc_follow", "proc_stop", "merged", "features", "prs", "inbox_history", "scheduled", "scheduled_stop", "wake_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "branches", "scheduled_run", "artifacts_add", "artifacts_move", "artifacts_folders", "artifacts_library", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "bise_update", "release_plan", "release_run", "stop_hub", "page_voice", "usage", "pause", "resume", "view_resource", "view_call", "view_message", "view_context"];
 
     pub fn decode(line: &str) -> Result<HubCmd, String> {
         Self::from_value(parse(line)?)
@@ -1078,7 +1119,11 @@ impl HubCmd {
             | HubCmd::Log { project, .. }
             | HubCmd::LogBody { project, .. }
             | HubCmd::QueuedTake { project, .. }
-            | HubCmd::QueuedSteer { project, .. } => project,
+            | HubCmd::QueuedSteer { project, .. }
+            | HubCmd::ViewResource { project, .. }
+            | HubCmd::ViewCall { project, .. }
+            | HubCmd::ViewMessage { project, .. }
+            | HubCmd::ViewContext { project, .. } => project,
             HubCmd::Completion(c) => &c.project,
             HubCmd::Unknown { .. } => return None,
         };

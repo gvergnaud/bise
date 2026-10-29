@@ -1,12 +1,55 @@
-//! MCP App views in the hub (docs/mcp-apps.md, C5): the shell's side.
+//! MCP App views in the hub (docs/mcp-apps.md, C5, risks 1 and 3): the
+//! shell's side of `view/resource`, `view/call`, `view/message` and
+//! `view/context`, one dispatcher for hub.sock and the pages server's
+//! `/api/view` ([`Shell::view_request`]). The decisions are elsewhere:
+//! what a request names and what a resource holds (`crate::view_call`),
+//! the limits (`crate::view_limits`), which tools a view may call
+//! (`bend_plugins::visibility`), whether a call needs his ok
+//! (`approvals::judge` through the gate's off-turn entry, gate.rs), who is
+//! told (sb-core: the view's card, the view's message).
 //!
-//! - at boot, a view's approval card left open by the hub before has no
-//!   call waiting behind it any more (the calls are this process's
-//!   runtime state): it closes ([`Shell::close_view_cards`], architect
-//!   m_50085), so no card waits for ever in his inbox.
+//! - a request's I/O (the views file, the bridge) runs on a thread; it
+//!   comes back to the loop as a [`ViewStep`], and its answer goes to
+//!   its [`ViewDone`] (a client's response, a page's reply);
+//! - a call goes to the agent's own bridge while its REPL lives
+//!   (`$BEND_RUN_DIR/<port>/plugins/bridge.json`), else to the hub's
+//!   views bridge ([`ViewsBridge`]: `bise plugins serve --parent <hub>`,
+//!   started on the first need, stopped after its idle time or with the
+//!   hub, its folder `Paths::views_bridge_dir` so a restarted hub ends an
+//!   orphan);
+//! - a call the model could also make waits on a `confirm` card placed
+//!   `view:<agent>/<call>` (sb-core), never the agent's own wait; his
+//!   answer comes back by the card's id ([`Shell::view_card_answered`]);
+//! - a server that is not the one that ran the view's call (the views
+//!   bridge, a new bridge) is said once, `server-restarted` (the call ran);
+//! - at boot, a view's card left open has no call behind it any more: it
+//!   closes ([`Shell::close_view_cards`], architect m_50085);
+//! - `view/context` is kept per (agent, view) and joins his next send to
+//!   that agent once ([`Shell::take_view_contexts`]); lost when the hub
+//!   restarts (architect m_49840).
 
-use super::Shell;
+use super::{log_line, ClientId, Msg, Shell};
 use crate::core::Input;
+use crate::util::now_ms;
+use crate::view_call::{self, ViewFile, ViewParams};
+use crate::view_limits::{Limits, ViewKey};
+use bend_plugins::visibility::{self, Ask, Verdict, ViewOf};
+use bise_proto::hub::HubCmd;
+use bise_proto::jsonrpc::{ErrorData, Id, RpcError};
+use bise_proto::parts::Part;
+use bise_proto::view_rpc::{ViewError, ViewResource};
+use serde_json::{json, Value};
+use std::collections::{BTreeMap, BTreeSet};
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+/// Where a view request's answer goes: a client's response, a page's
+/// reply. Called once, from any thread.
+pub(crate) type ViewDone = Box<dyn FnOnce(Result<Value, RpcError>) + Send>;
+
+/// A view request's next step on the loop, from its thread.
+pub(super) type ViewStep = Box<dyn FnOnce(&mut Shell) + Send>;
 
 /// A view's card's place (sb-core's `view_place`): `view:<agent>/<call>`.
 pub(crate) const VIEW_PLACE: &str = "view:";
@@ -14,18 +57,522 @@ pub(crate) const VIEW_PLACE: &str = "view:";
 /// How a view's card left by an older hub closes.
 pub(crate) const ENDED_WITH_HUB: &str = "the view's call ended with the hub";
 
+/// How long a thread waits for a bridge's address (a views bridge that
+/// just started lists its servers first).
+const BRIDGE_WAIT: Duration = Duration::from_secs(15);
+/// One request to a view's server (the bridge's own timeout is its
+/// mcp.json's).
+const CALL_TIMEOUT: Duration = Duration::from_secs(300);
+
+/// `data.reason` of a request whose server could not be reached.
+pub(crate) const REASON_SERVER_GONE: &str = "server-gone";
+
+/// The hub's views: the limits, the calls waiting for his ok, the views'
+/// contexts, the bridges their calls went through, the views bridge.
+#[derive(Default)]
+pub(super) struct Views {
+    limits: Limits,
+    /// a view's call waiting on its card, by card id
+    waits: BTreeMap<u64, Wait>,
+    /// each agent's views' context for his next send: call -> part
+    contexts: BTreeMap<String, BTreeMap<String, Part>>,
+    /// the bridge each view's calls last went through
+    bases: BTreeMap<ViewKey, String>,
+    /// the views told their server restarted (once each)
+    restarted: BTreeSet<ViewKey>,
+    bridge: ViewsBridge,
+}
+
+impl Views {
+    /// A call about to go through `route`: true once per view when its
+    /// server is not the one before (another bridge, or the views bridge
+    /// for its first call: the REPL that ran it is gone).
+    fn server_restarted(&mut self, key: ViewKey, route: &Route) -> bool {
+        let before = self.bases.insert(key.clone(), route.base.clone());
+        let fresh = match before {
+            Some(b) => b != route.base,
+            None => route.hubs,
+        };
+        fresh && self.restarted.insert(key)
+    }
+}
+
+/// A view's call that waits for his answer on its card.
+struct Wait {
+    key: ViewKey,
+    route: Route,
+    method: String,
+    params: Value,
+    summary: String,
+    done: ViewDone,
+}
+
+/// Where a view's server is: its URL on a bridge, and whether that bridge
+/// is the hub's views bridge.
+#[derive(Clone, Debug)]
+struct Route {
+    base: String,
+    url: String,
+    hubs: bool,
+}
+
 /// The open view cards of a hub's state, by id.
-pub(crate) fn view_cards(cards: &std::collections::BTreeMap<u64, crate::model::Card>) -> Vec<u64> {
+pub(crate) fn view_cards(cards: &BTreeMap<u64, crate::model::Card>) -> Vec<u64> {
     cards.values().filter(|c| c.place.as_deref().is_some_and(|p| p.starts_with(VIEW_PLACE))).map(|c| c.id).collect()
 }
 
+/// A C5 command as its method and params.
+fn method_of(cmd: HubCmd) -> Option<(&'static str, Value)> {
+    Some(match cmd {
+        HubCmd::ViewResource { agent, call, .. } => ("view/resource", json!({"agent": agent, "call": call})),
+        HubCmd::ViewCall { agent, call, method, params, .. } => ("view/call", json!({"agent": agent, "call": call, "method": method, "params": params})),
+        HubCmd::ViewMessage { agent, call, content, gesture_ms, .. } => ("view/message", json!({"agent": agent, "call": call, "content": content, "gesture_ms": gesture_ms})),
+        HubCmd::ViewContext { agent, call, content, .. } => ("view/context", json!({"agent": agent, "call": call, "content": content})),
+        _ => return None,
+    })
+}
+
+/// A server's JSON-RPC error, as the view gets it.
+fn server_error(e: &Value) -> RpcError {
+    RpcError {
+        code: e.get("code").and_then(Value::as_i64).unwrap_or(-32603),
+        message: e.get("message").and_then(Value::as_str).unwrap_or("the server failed").to_string(),
+        data: None,
+    }
+}
+
+fn gone(why: &str) -> RpcError {
+    RpcError { code: -32000, message: format!("the view's server is not reachable: {why}"), data: Some(ErrorData { reason: Some(REASON_SERVER_GONE.into()), ..Default::default() }) }
+}
+
+/// One JSON-RPC request to a bridge route (`http://127.0.0.1:<port>/…`),
+/// its answer's JSON.
+fn post(url: &str, body: &Value, timeout: Duration) -> Result<Value, String> {
+    let rest = url.strip_prefix("http://").ok_or("not a loopback URL")?;
+    let (host, path) = rest.split_once('/').map(|(h, p)| (h, format!("/{p}"))).ok_or("no path")?;
+    let mut s = std::net::TcpStream::connect(host).map_err(|e| e.to_string())?;
+    s.set_read_timeout(Some(timeout)).map_err(|e| e.to_string())?;
+    let body = body.to_string();
+    write!(s, "POST {path} HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).map_err(|e| e.to_string())?;
+    let mut out = Vec::new();
+    s.read_to_end(&mut out).map_err(|e| e.to_string())?;
+    let text = String::from_utf8_lossy(&out);
+    let (head, body) = text.split_once("\r\n\r\n").ok_or("no answer")?;
+    if !head.starts_with("HTTP/1.1 200") {
+        return Err(head.lines().next().unwrap_or("").to_string());
+    }
+    serde_json::from_str(body).map_err(|e| e.to_string())
+}
+
+/// A view's call judged off the loop: its views file (`file`), its
+/// bridge (`bridge.json` and whether it is the views bridge), the server's
+/// tools for a `tools/call`, the plugins' state: the view, where its
+/// server is, and the verdict (`bend_plugins::visibility`).
+fn judge_call(file: &Path, bridge: Result<(PathBuf, bool), String>, method: &str, inner: &Value, state: &bend_plugins::model::StateV2) -> Result<(ViewFile, Route, Verdict), RpcError> {
+    let what = Ask::of(method, inner).what().to_string();
+    let text = std::fs::read_to_string(file).map_err(|_| ViewError::Expired.rpc(&what))?;
+    let f = ViewFile::parse(&text).map_err(|e| e.rpc(&what))?;
+    let (json_path, hubs) = bridge.map_err(|e| gone(&e))?;
+    let base = wait_base(&json_path).ok_or_else(|| gone("no bridge"))?;
+    let url = view_call::route_url(&base, &f.plugin, &f.server);
+    let tools = if method == "tools/call" {
+        let got = post(&url, &view_call::request("tools/list", &json!({})), CALL_TIMEOUT).map_err(|e| gone(&e))?;
+        view_call::tools(&view_call::answer(&got).map_err(|e| server_error(&e))?)
+    } else {
+        Vec::new()
+    };
+    let view = ViewOf { plugin: &f.plugin, server: &f.server, opt_in: false };
+    let verdict = visibility::judge(view, Ask::of(method, inner), &tools, state);
+    Ok((f, Route { base, url, hubs }, verdict))
+}
+
+/// `bridge.json`'s base, waited for up to [`BRIDGE_WAIT`].
+fn wait_base(path: &Path) -> Option<String> {
+    let until = std::time::Instant::now() + BRIDGE_WAIT;
+    loop {
+        if let Some(b) = std::fs::read_to_string(path).ok().as_deref().and_then(view_call::bridge_base) {
+            return Some(b);
+        }
+        if std::time::Instant::now() >= until {
+            return None;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// The hub's own bridge, for the views whose agent has no REPL now.
+#[derive(Default)]
+pub(super) struct ViewsBridge {
+    child: Option<std::process::Child>,
+    last_use: u64,
+}
+
+impl ViewsBridge {
+    /// Its `bridge.json` (`json`, in `dir`), the bridge started when it
+    /// isn't running.
+    fn ensure(&mut self, exe: &Path, dir: &Path, json: &Path, workspace: &Path, now: u64) -> Result<PathBuf, String> {
+        self.last_use = now;
+        if let Some(c) = self.child.as_mut() {
+            if matches!(c.try_wait(), Ok(None)) {
+                return Ok(json.to_path_buf());
+            }
+            self.child = None;
+        }
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        let _ = std::fs::remove_file(json);
+        let log = std::fs::File::create(dir.join("bridge.log")).map_err(|e| e.to_string())?;
+        let mut cmd = std::process::Command::new(exe);
+        cmd.args(["plugins", "serve", "--dir"])
+            .arg(dir)
+            .arg("--workspace")
+            .arg(workspace)
+            .args(["--parent", &std::process::id().to_string()])
+            .stdin(std::process::Stdio::null())
+            .stdout(log.try_clone().map_err(|e| e.to_string())?)
+            .stderr(log);
+        bise_home::env::for_child::<&str, &str>(bise_home::env::Child::Repl, []).apply(&mut cmd);
+        self.child = Some(cmd.spawn().map_err(|e| e.to_string())?);
+        Ok(json.to_path_buf())
+    }
+
+    /// Stopped after its idle time with no view call.
+    fn stop_idle(&mut self, now: u64) {
+        let idle = bend_plugins::tools_cache::IDLE_STOP.as_millis() as u64;
+        if self.child.is_some() && now.saturating_sub(self.last_use) >= idle {
+            self.stop();
+        }
+    }
+
+    fn stop(&mut self) {
+        if let Some(mut c) = self.child.take() {
+            let _ = c.kill();
+            let _ = c.wait();
+        }
+    }
+}
+
+/// A views bridge an older hub left (its `bridge.json`'s pid, when that
+/// pid is still a `plugins serve`): ended. Its own parent watch ends it
+/// once its hub is gone; this covers a pid that watch missed.
+pub(super) fn kill_orphan_bridge(file: &Path) {
+    let pid = std::fs::read_to_string(file).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()).and_then(|v| v.get("pid").and_then(Value::as_u64));
+    if let Some(pid) = pid.filter(|p| *p > 1 && *p < i32::MAX as u64) {
+        let cmd = std::process::Command::new("ps").args(["-o", "command=", "-p", &pid.to_string()]).output().ok();
+        if cmd.is_some_and(|o| String::from_utf8_lossy(&o.stdout).contains("plugins serve")) {
+            // SAFETY: kill(2) on a pid that runs our `plugins serve`, checked above
+            unsafe { libc::kill(pid as i32, libc::SIGTERM) };
+        }
+    }
+    let _ = std::fs::remove_file(file);
+}
+
 impl Shell {
-    /// Boot: every view card the journal left open closes.
+    /// Boot: every view card the journal left open closes; a views bridge
+    /// an older hub left ends.
     pub(super) fn close_view_cards(&mut self) {
         for card in view_cards(&self.hub.st.cards) {
             self.step(Input::ConfirmClose { card, res: ENDED_WITH_HUB.into() });
         }
+        kill_orphan_bridge(&self.opts.paths.views_bridge_json());
     }
+
+    /// The hub's tick: the views bridge idle long enough stops, the limits
+    /// forget old views, a call whose card closed without his answer (its
+    /// agent stopped) gets its no.
+    pub(super) fn views_tick(&mut self) {
+        let now = now_ms();
+        self.views.bridge.stop_idle(now);
+        self.views.limits.prune(now);
+        let gone: Vec<u64> = self.views.waits.keys().filter(|id| !self.hub.st.cards.contains_key(id)).copied().collect();
+        for id in gone {
+            if let Some(w) = self.views.waits.remove(&id) {
+                (w.done)(Err(ViewError::Denied.rpc(&w.summary)));
+            }
+        }
+    }
+
+    /// The hub stops: its views bridge with it.
+    pub(super) fn views_stop(&mut self) {
+        self.views.bridge.stop();
+    }
+
+    /// A client's C5 request (`hub.sock`): answered to `client` by `rid`.
+    pub(super) fn view_rpc(&mut self, client: ClientId, rid: Id, cmd: HubCmd) {
+        let Some((method, params)) = method_of(cmd) else { return };
+        let tx = self.tx.clone();
+        let done: ViewDone = Box::new(move |r| {
+            let step: ViewStep = Box::new(move |sh: &mut Shell| sh.rpc_answer(client, rid, r));
+            let _ = tx.send(Msg::View(step));
+        });
+        self.view_request(method, params, done);
+    }
+
+    /// One view request (C5's methods), from hub.sock or `/api/view`.
+    pub(crate) fn view_request(&mut self, method: &str, params: Value, done: ViewDone) {
+        let p = match ViewParams::of(&params) {
+            Ok(p) => p,
+            Err(e) => return done(Err(e.rpc(method))),
+        };
+        let Some(dir) = self.dir_of(&p.agent) else { return done(Err(ViewError::Expired.rpc(method))) };
+        match method {
+            "view/resource" => self.view_resource(p, dir, done),
+            "view/call" => self.view_call(p, dir, params, done),
+            "view/message" => self.view_message(p, dir, params, done),
+            "view/context" => self.view_context(p, dir, params, done),
+            m => done(Err(ViewError::NotSupported.rpc(m))),
+        }
+    }
+
+    /// Hands a thread's next step to the loop.
+    fn view_step(&self) -> impl Fn(ViewStep) + Send + 'static {
+        let tx = self.tx.clone();
+        move |s: ViewStep| {
+            let _ = tx.send(Msg::View(s));
+        }
+    }
+
+    /// Where a view's file is (C2).
+    fn view_file(&self, dir: &str, call: &str) -> PathBuf {
+        self.opts.paths.agent_views_dir(dir).join(format!("{call}.json"))
+    }
+
+    /// C4: a live view whose file is gone reads `expired` before its
+    /// entries leave for a client (agent folder `dir`).
+    pub(in crate::daemon) fn expire_views(&self, dir: &str, entries: &mut [bise_proto::thread::Entry]) {
+        bise_proto::thread::expire_views(entries, |call| !self.view_file(dir, call).exists());
+    }
+
+    /// The `bridge.json` a view's server is reached through: its agent's
+    /// own bridge while its REPL lives, else the hub's views bridge.
+    fn bridge_json(&mut self, dir: &str) -> Result<(PathBuf, bool), String> {
+        if let Some(port) = self.ports.get(dir) {
+            let own = self.opts.paths.agent_bridge_json(*port);
+            if own.exists() {
+                return Ok((own, false));
+            }
+        }
+        let (exe, d, json, ws) = (self.opts.exe.clone(), self.opts.paths.views_bridge_dir(), self.opts.paths.views_bridge_json(), self.opts.paths.workspace.clone());
+        self.views.bridge.ensure(&exe, &d, &json, &ws, now_ms()).map(|p| (p, true))
+    }
+
+    // ---- view/resource ----
+
+    fn view_resource(&mut self, p: ViewParams, dir: String, done: ViewDone) {
+        let file = self.view_file(&dir, &p.call);
+        let bridge = self.bridge_json(&dir);
+        let step = self.view_step();
+        std::thread::spawn(move || {
+            let read = || -> Result<(ViewFile, view_call::ResourceRead, Value), RpcError> {
+                let text = std::fs::read_to_string(&file).map_err(|_| ViewError::Expired.rpc("view/resource"))?;
+                let f = ViewFile::parse(&text).map_err(|e| e.rpc("view/resource"))?;
+                let (json_path, _) = bridge.map_err(|e| gone(&e))?;
+                let base = wait_base(&json_path).ok_or_else(|| gone("no bridge"))?;
+                let url = view_call::route_url(&base, &f.plugin, &f.server);
+                let got = post(&url, &view_call::request("resources/read", &json!({"uri": f.uri})), CALL_TIMEOUT).map_err(|e| gone(&e))?;
+                let res = view_call::answer(&got).map_err(|e| server_error(&e))?;
+                let r = view_call::resource_read(&res).ok_or_else(|| ViewError::Expired.rpc(&f.uri))?;
+                let list = post(&url, &view_call::request("tools/list", &json!({})), CALL_TIMEOUT).ok().and_then(|v| view_call::answer(&v).ok()).unwrap_or_default();
+                let tool = view_call::tool_of(&list, &f.tool);
+                Ok((f, r, tool))
+            };
+            match read() {
+                Err(e) => done(Err(e)),
+                Ok((f, r, tool)) => step(Box::new(move |sh: &mut Shell| sh.view_resource_read(f, r, tool, done))),
+            }
+        });
+    }
+
+    /// The resource is read: its sandbox registered on the pages server,
+    /// then its answer.
+    fn view_resource_read(&mut self, f: ViewFile, r: view_call::ResourceRead, tool: Value, done: ViewDone) {
+        let Some(pages) = self.pg.pages.clone() else {
+            return done(Err(RpcError::refused("this hub serves no pages: views need its pages server", None)));
+        };
+        // the grant (C8) comes with the plugins place (piece 10); until
+        // then a view runs with no permission and its card says so
+        let grant: Vec<String> = Vec::new();
+        let permissions = view_call::granted(&r.declared, &grant);
+        let hash = crate::pages::views::hash(&f.plugin, &f.server, &f.uri);
+        pages.view_sandbox(&hash, crate::pages::views::ViewSandbox { csp: r.csp.clone(), perms: permissions.clone() });
+        let res = ViewResource {
+            origin: crate::pages::views::origin(&f.plugin, &f.server, &f.uri, pages.port),
+            html: r.html,
+            csp: r.csp,
+            permissions,
+            declared: r.declared,
+            prefers_border: r.prefers_border,
+            tool_input: f.args,
+            tool_result: f.result,
+            tool,
+        };
+        done(Ok(serde_json::to_value(res).unwrap_or_default()));
+    }
+
+    // ---- view/call ----
+
+    fn view_call(&mut self, p: ViewParams, dir: String, params: Value, done: ViewDone) {
+        let method = params.get("method").and_then(Value::as_str).unwrap_or("").to_string();
+        let inner = params.get("params").cloned().filter(Value::is_object).unwrap_or_else(|| json!({}));
+        let what = Ask::of(&method, &inner).what().to_string();
+        // piece 12 (q-vibe): Le Chat's extras need no file nor server
+        let none = ViewOf { plugin: "", server: "", opt_in: false };
+        if visibility::judge(none, Ask::of(&method, &inner), &[], &Default::default()) == Verdict::Refused(ViewError::NotSupported) {
+            return done(Err(ViewError::NotSupported.rpc(&what)));
+        }
+        let key = ViewKey::new(&p.agent, &p.call);
+        if !self.views.limits.call(&key, now_ms()) {
+            return done(Err(ViewError::RateLimited.rpc(&what)));
+        }
+        let file = self.view_file(&dir, &p.call);
+        let bridge = self.bridge_json(&dir);
+        let state_path = bend_plugins::state::state_path();
+        let step = self.view_step();
+        std::thread::spawn(move || {
+            let state = bend_plugins::state::read(&state_path);
+            match judge_call(&file, bridge, &method, &inner, &state) {
+                Err(e) => done(Err(e)),
+                Ok((f, route, verdict)) => step(Box::new(move |sh: &mut Shell| sh.view_call_judged(key, dir, f, route, method, inner, verdict, done))),
+            }
+        });
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn view_call_judged(&mut self, key: ViewKey, dir: String, f: ViewFile, route: Route, method: String, params: Value, verdict: Verdict, done: ViewDone) {
+        let what = Ask::of(&method, &params).what().to_string();
+        match verdict {
+            Verdict::Refused(e) => done(Err(e.rpc(&what))),
+            Verdict::Free => self.view_forward(key, route, method, params, done),
+            Verdict::Ask => {
+                let tool = format!("{}.{}", f.plugin, what);
+                let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
+                match self.view_gate(&dir, &key.agent, &tool, &args) {
+                    Ok(true) => self.view_forward(key, route, method, params, done),
+                    Ok(false) => self.view_card(key, route, method, params, &f.plugin, &what, tool, done),
+                    Err(hint) => done(Err(RpcError { message: hint, ..ViewError::Denied.rpc(&what) })),
+                }
+            }
+        }
+    }
+
+    /// A card for a view's call (sb-core's view_confirm_open); its answer
+    /// comes back by the card's id.
+    #[allow(clippy::too_many_arguments)]
+    fn view_card(&mut self, key: ViewKey, route: Route, method: String, params: Value, plugin: &str, what: &str, summary: String, done: ViewDone) {
+        let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
+        let text = view_call::card_text(plugin, what, &args);
+        let before: BTreeSet<u64> = self.hub.st.cards.keys().copied().collect();
+        self.step(Input::ViewConfirmOpen { agent: key.agent.clone(), call: key.call.clone(), text });
+        let place = format!("{VIEW_PLACE}{}/{}", key.agent, key.call);
+        let card = self.hub.st.cards.values().filter(|c| !before.contains(&c.id) && c.place.as_deref() == Some(place.as_str())).map(|c| c.id).max();
+        match card {
+            Some(id) => {
+                self.views.waits.insert(id, Wait { key, route, method, params, summary, done });
+            }
+            None => done(Err(ViewError::Denied.rpc(what))),
+        }
+    }
+
+    /// His answer on a view's card (the gate's `confirm` effect): true
+    /// when the card was a view's.
+    pub(super) fn view_card_answered(&mut self, card: u64, allow: bool) -> bool {
+        let Some(w) = self.views.waits.remove(&card) else { return false };
+        let how = if allow { super::gate::Fold::Allowed } else { super::gate::Fold::No };
+        let fold = super::gate::fold_line(how, std::slice::from_ref(&w.key.agent), &w.summary, "");
+        let agent = w.key.agent.clone();
+        self.feed(&agent, &fold);
+        if allow {
+            self.view_forward(w.key, w.route, w.method, w.params, w.done);
+        } else {
+            (w.done)(Err(ViewError::Denied.rpc(&w.summary)));
+        }
+        true
+    }
+
+    /// The call goes to its server; a server that is not the one before
+    /// is said once (the call still ran).
+    fn view_forward(&mut self, key: ViewKey, route: Route, method: String, params: Value, done: ViewDone) {
+        let restarted = self.views.server_restarted(key, &route);
+        let what = Ask::of(&method, &params).what().to_string();
+        std::thread::spawn(move || {
+            let r = match post(&route.url, &view_call::request(&method, &params), CALL_TIMEOUT) {
+                Err(e) => Err(gone(&e)),
+                Ok(v) => match view_call::answer(&v) {
+                    Ok(_) if restarted => Err(ViewError::ServerRestarted.rpc(&what)),
+                    Ok(r) => Ok(r),
+                    Err(e) => Err(server_error(&e)),
+                },
+            };
+            done(r);
+        });
+    }
+
+    // ---- view/message, view/context ----
+
+    /// The views file of a call, read now (a message and a context need
+    /// only its plugin and uri).
+    fn view_file_now(&self, dir: &str, call: &str) -> Result<ViewFile, ViewError> {
+        let text = std::fs::read_to_string(self.view_file(dir, call)).map_err(|_| ViewError::Expired)?;
+        ViewFile::parse(&text)
+    }
+
+    fn view_message(&mut self, p: ViewParams, dir: String, params: Value, done: ViewDone) {
+        const WHAT: &str = "ui/message";
+        let key = ViewKey::new(&p.agent, &p.call);
+        let gesture = params.get("gesture_ms").and_then(Value::as_u64);
+        let text = match view_call::text_of(params.get("content").unwrap_or(&Value::Null)) {
+            Ok(t) => t,
+            Err(e) => return done(Err(e.rpc(WHAT))),
+        };
+        let plugin = match self.view_file_now(&dir, &p.call) {
+            Ok(f) => f.plugin,
+            Err(e) => return done(Err(e.rpc(WHAT))),
+        };
+        if self.views.limits.message(&key, now_ms(), gesture).is_err() {
+            return done(Err(ViewError::RateLimited.rpc(WHAT)));
+        }
+        if self.hub.st.agents.get(&p.agent).is_none_or(|a| a.lifecycle != crate::model::Lifecycle::Active) {
+            return done(Err(RpcError::refused(format!("@{} is not active: the view's message reached nobody", p.agent), None)));
+        }
+        log_line(&self.opts.paths, &format!("view message from {plugin} to {} ({} chars)", p.agent, text.len()));
+        self.step(Input::ViewMessage { agent: p.agent, plugin, text });
+        done(Ok(json!({})));
+    }
+
+    fn view_context(&mut self, p: ViewParams, dir: String, params: Value, done: ViewDone) {
+        const WHAT: &str = "ui/update-model-context";
+        let text = match view_call::text_of(params.get("content").unwrap_or(&Value::Null)) {
+            Ok(t) => t,
+            Err(e) => return done(Err(e.rpc(WHAT))),
+        };
+        let f = match self.view_file_now(&dir, &p.call) {
+            Ok(f) => f,
+            Err(e) => return done(Err(e.rpc(WHAT))),
+        };
+        let part = Part::ViewContext { plugin: f.plugin, uri: f.uri, text };
+        self.views.contexts.entry(p.agent).or_default().insert(p.call, part);
+        done(Ok(json!({})));
+    }
+
+    /// His send to `agent` (its model text and parts' JSON, "" none):
+    /// the views' contexts waiting for it join it once, before his words.
+    pub(super) fn with_view_contexts(&mut self, agent: &str, text: String, parts: String) -> (String, String) {
+        let Some(ctx) = self.views.contexts.remove(agent) else { return (text, parts) };
+        join_contexts(ctx.into_values().collect(), text, parts)
+    }
+}
+
+/// `contexts` before his send's parts (his words as a text part when he
+/// sent none): the model's text rendered again from them all.
+fn join_contexts(contexts: Vec<Part>, text: String, parts: String) -> (String, String) {
+    if contexts.is_empty() {
+        return (text, parts);
+    }
+    let his: Vec<Part> = match parts.is_empty() {
+        true => vec![Part::Text { text }],
+        false => serde_json::from_str(&parts).unwrap_or_default(),
+    };
+    let all: Vec<Part> = contexts.into_iter().chain(his).collect();
+    (bise_proto::parts::render(&all), serde_json::to_string(&all).unwrap_or_default())
 }
 
 #[cfg(test)]
@@ -33,13 +580,125 @@ mod tests {
     use super::*;
     use crate::model::Card;
 
+    #[test]
+    fn a_views_context_joins_his_send_before_his_words() {
+        let ctx = vec![Part::ViewContext { plugin: "fake-app".into(), uri: "ui://fake-app/counter".into(), text: "count=4".into() }];
+        let (text, parts) = join_contexts(ctx.clone(), "bump it".into(), String::new());
+        assert!(text.starts_with("<view_context plugin=\"fake-app\" uri=\"ui://fake-app/counter\">\ncount=4\n</view_context>"), "{text}");
+        assert!(text.ends_with("bump it"), "{text}");
+        let typed: Vec<Part> = serde_json::from_str(&parts).unwrap();
+        assert_eq!(typed.len(), 2);
+        assert_eq!(join_contexts(Vec::new(), "hi".into(), String::new()), ("hi".into(), String::new()));
+    }
+
     fn card(id: u64, place: Option<&str>) -> (u64, Card) {
         (id, Card { id, kind: "confirm".into(), place: place.map(String::from), ..Card::default() })
+    }
+
+    /// A bridge on loopback serving fake-app's tools/list (the fixture's
+    /// shapes, tests/fixtures/mcp-apps/fake-app): its `bridge.json` in
+    /// `dir`, and the methods it was asked, in order.
+    fn fake_bridge(dir: &Path) -> (PathBuf, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
+        let l = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = l.local_addr().unwrap().port();
+        let asked = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let log = asked.clone();
+        std::thread::spawn(move || {
+            for s in l.incoming() {
+                let Ok(mut s) = s else { continue };
+                let mut r = std::io::BufReader::new(s.try_clone().unwrap());
+                let mut len = 0usize;
+                loop {
+                    let mut line = String::new();
+                    if std::io::BufRead::read_line(&mut r, &mut line).unwrap_or(0) == 0 || line == "\r\n" {
+                        break;
+                    }
+                    if let Some(v) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                        len = v.trim().parse().unwrap_or(0);
+                    }
+                }
+                let mut body = vec![0; len];
+                let _ = r.read_exact(&mut body);
+                let req: Value = serde_json::from_slice(&body).unwrap_or_default();
+                let method = req["method"].as_str().unwrap_or("").to_string();
+                log.lock().unwrap().push(method.clone());
+                let result = match method.as_str() {
+                    "tools/list" => json!({"tools": [
+                        {"name": "show_counter", "_meta": {"ui": {"resourceUri": "ui://fake-app/counter"}}},
+                        {"name": "bump", "_meta": {"ui": {"visibility": ["app"]}}},
+                        {"name": "whisper", "_meta": {"ui": {"visibility": ["model"]}}},
+                    ]}),
+                    _ => json!({"content": [{"type": "text", "text": "ok"}]}),
+                };
+                let out = json!({"jsonrpc": "2.0", "id": 1, "result": result}).to_string();
+                let _ = write!(s, "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{out}", out.len());
+            }
+        });
+        let json_path = dir.join("bridge.json");
+        std::fs::write(&json_path, json!({"v": 1, "base": format!("http://127.0.0.1:{port}/tok"), "pid": 1}).to_string()).unwrap();
+        (json_path, asked)
+    }
+
+    fn tmp(name: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("sb-views-{name}-{}-{}", std::process::id(), now_ms()));
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    /// C5 on fake-app: an app-only tool runs, a model-visible one asks,
+    /// a model-only one or another server's is refused, the plugin off
+    /// refuses; the call goes to the view's own server on its bridge.
+    #[test]
+    fn a_views_call_is_judged_on_its_own_servers_tools() {
+        let d = tmp("judge");
+        let (bridge, asked) = fake_bridge(&d);
+        let file = d.join("1-1.json");
+        std::fs::write(&file, json!({"v": 1, "plugin": "fake-app", "server": "fake-app", "uri": "ui://fake-app/counter", "tool": "show_counter", "args": {}, "result": {}, "at_ms": 1}).to_string()).unwrap();
+        let on = bend_plugins::model::StateV2::default();
+        let call = |name: &str, state: &bend_plugins::model::StateV2| judge_call(&file, Ok((bridge.clone(), false)), "tools/call", &json!({"name": name}), state);
+        let (f, route, v) = call("bump", &on).unwrap();
+        assert_eq!((f.plugin.as_str(), v), ("fake-app", Verdict::Free), "app-only: no card");
+        assert!(route.url.ends_with("/tok/fake-app/fake-app") && !route.hubs, "{route:?}");
+        assert_eq!(call("show_counter", &on).unwrap().2, Verdict::Ask, "the model sees it too: his ok");
+        assert_eq!(call("whisper", &on).unwrap().2, Verdict::Refused(ViewError::NotVisible), "model-only");
+        assert_eq!(call("create_issue", &on).unwrap().2, Verdict::Refused(ViewError::NotVisible), "another server's tool");
+        let off = bend_plugins::model::StateV2 { disabled: vec!["fake-app".into()], ..Default::default() };
+        assert_eq!(call("bump", &off).unwrap().2, Verdict::Refused(ViewError::PluginOff));
+        assert!(asked.lock().unwrap().iter().all(|m| m == "tools/list"), "judging runs nothing");
+        // no file: expired; no bridge: the server is gone, typed
+        let none = judge_call(&d.join("9-9.json"), Ok((bridge.clone(), false)), "tools/call", &json!({"name": "bump"}), &on).unwrap_err();
+        assert_eq!(none.code, ViewError::Expired.rpc("bump").code);
+        let gone = judge_call(&file, Err("no REPL".into()), "tools/call", &json!({"name": "bump"}), &on).unwrap_err();
+        assert_eq!(gone.data.and_then(|d| d.reason).as_deref(), Some(REASON_SERVER_GONE));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// A view whose agent's REPL went: its first call through the views
+    /// bridge, or a call through a new bridge, is said restarted once.
+    #[test]
+    fn a_new_server_is_said_once_per_view() {
+        let mut v = Views::default();
+        let route = |base: &str, hubs: bool| Route { base: base.into(), url: format!("{base}/p/s"), hubs };
+        let (a, b) = (ViewKey::new("docs", "1-1"), ViewKey::new("docs", "1-2"));
+        assert!(!v.server_restarted(a.clone(), &route("http://127.0.0.1:1/x", false)), "its own bridge: the server that ran it");
+        assert!(!v.server_restarted(a.clone(), &route("http://127.0.0.1:1/x", false)));
+        assert!(v.server_restarted(a.clone(), &route("http://127.0.0.1:2/y", true)), "another bridge");
+        assert!(!v.server_restarted(a.clone(), &route("http://127.0.0.1:3/z", false)), "once per view");
+        assert!(v.server_restarted(b.clone(), &route("http://127.0.0.1:2/y", true)), "first call on the views bridge");
+        assert!(!v.server_restarted(b, &route("http://127.0.0.1:2/y", true)));
     }
 
     #[test]
     fn only_the_view_cards_close_at_boot() {
         let cards = [card(1, None), card(2, Some("view:docs/1-2")), card(3, Some("pr:docs")), card(4, Some("view:main/9-9"))].into_iter().collect();
         assert_eq!(view_cards(&cards), vec![2, 4]);
+    }
+
+    #[test]
+    fn a_c5_command_is_its_method_and_params() {
+        let (m, p) = method_of(HubCmd::ViewMessage { project: "p".into(), agent: "docs".into(), call: "1-2".into(), content: json!([{"type": "text", "text": "hi"}]), gesture_ms: Some(5) }).unwrap();
+        assert_eq!(m, "view/message");
+        assert_eq!(p, json!({"agent": "docs", "call": "1-2", "content": [{"type": "text", "text": "hi"}], "gesture_ms": 5}));
+        assert!(method_of(HubCmd::Usage { project: "p".into() }).is_none());
     }
 }

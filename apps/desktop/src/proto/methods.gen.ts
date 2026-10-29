@@ -69,6 +69,10 @@ export const METHODS = {
   "usage/read": { cmd: "usage", result: "usage" },
   "project/pause": { cmd: "pause", result: null },
   "project/resume": { cmd: "resume", result: null },
+  "view/resource": { cmd: "view_resource", result: null },
+  "view/call": { cmd: "view_call", result: null },
+  "view/message": { cmd: "view_message", result: null },
+  "view/context": { cmd: "view_context", result: null },
 } as const;
 
 export const NOTIFICATIONS = {
@@ -126,4 +130,6 @@ export const RESULTS = {
   "project/resume": "CommandRunResult",
   "turn/send": "SendResult",
   "card/answer": "AnswerResult",
+  "view/resource": "ViewResource",
+  "view/call": "ViewCallResult",
 } as const;
