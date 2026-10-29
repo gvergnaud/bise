@@ -22,7 +22,7 @@ export const TEARDOWN_MS = 500;
 /** What a card or a tab shows of a view. */
 export type ViewState =
   | { readonly kind: 'none' }
-  | { readonly kind: 'loading' }
+  | { readonly kind: 'loading'; readonly height: number }
   | { readonly kind: 'expired' }
   | { readonly kind: 'failed'; readonly message: string }
   | {
@@ -32,8 +32,8 @@ export type ViewState =
       readonly height: number;
       readonly mode: DisplayMode;
       readonly prefersBorder: boolean;
-      /** declared by the view, not granted at the plugin's add (C8) */
-      readonly ungranted: boolean;
+      /** declared by the view, not granted at the plugin's add (C8): what it runs without */
+      readonly ungranted: readonly ViewPerm[];
       readonly tool: string;
       /** a ui/message went in (ms), for the card's footnote */
       readonly messageAt: number | null;
@@ -52,6 +52,8 @@ export interface ViewsEnv {
     readonly open: (r: ViewRef) => void;
     readonly close: (r: ViewRef) => void;
   };
+  /** the display mode's source changes (the panel's tabs): the returned function stops */
+  readonly watch: (f: () => void) => () => void;
   readonly now: () => number;
   /** a timer (teardown's bound) */
   readonly later: (ms: number, f: () => void) => void;
@@ -166,6 +168,11 @@ export class ViewsStore {
     return r;
   }
 
+  /** Follows what decides the display modes (the panel's tabs); the returned function stops. */
+  watch(f: () => void): () => void {
+    return this.env.watch(f);
+  }
+
   /** What a view shows now. */
   state(ref: ViewRef): ViewState {
     return this.recs.get(viewKey(ref))?.state ?? NONE;
@@ -192,7 +199,7 @@ export class ViewsStore {
     r.seenAt = this.env.now();
     if (r.asking || r.session !== null || r.state.kind === 'expired' || r.state.kind === 'failed') return;
     r.asking = true;
-    r.state = { kind: 'loading' };
+    r.state = { kind: 'loading', height: r.height };
     this.emit();
     void this.env.ask({ cmd: 'view_resource', ...ref }).then((a) => {
       r.asking = false;
@@ -207,7 +214,7 @@ export class ViewsStore {
         this.emit();
         return;
       }
-      this.start(r, res, ungranted(a.result).length > 0);
+      this.start(r, res, ungranted(a.result));
     });
   }
 
@@ -231,7 +238,7 @@ export class ViewsStore {
     this.ensure(ref);
   }
 
-  private start(r: Rec, res: ViewResource, missing: boolean): void {
+  private start(r: Rec, res: ViewResource, missing: readonly ViewPerm[]): void {
     const key = viewKey(r.ref);
     const session = new ViewSession(r.ref, res, {
       post: (msg) => {
@@ -273,7 +280,7 @@ export class ViewsStore {
     this.emit();
   }
 
-  private liveState(r: Rec, missing: boolean): ViewState {
+  private liveState(r: Rec, missing: readonly ViewPerm[]): ViewState {
     const res = r.session?.res;
     return {
       kind: 'live',

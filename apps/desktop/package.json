@@ -10,7 +10,8 @@
   },
   "scripts": {
     "dev": "electron-vite dev",
-    "build": "electron-vite build",
+    "build": "electron-vite build && NODE_OPTIONS='--experimental-strip-types --disable-warning=ExperimentalWarning' node scripts/views-web.mts --check",
+    "build:views-web": "NODE_OPTIONS='--experimental-strip-types --disable-warning=ExperimentalWarning' node scripts/views-web.mts",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tests/harness/tsconfig.electron.json && NODE_OPTIONS='--experimental-strip-types --disable-warning=ExperimentalWarning' node ../../scripts/ts_emit.ts tests/harness/tsconfig.electron.json --check",
     "lint": "eslint --max-warnings 0 .",

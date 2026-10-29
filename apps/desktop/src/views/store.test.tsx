@@ -37,6 +37,7 @@ function rig(answer: (c: ViewCmd) => ViewAnswer = () => ({ result: resource() })
       open: (r) => tabs.add(viewKey(r)),
       close: (r) => tabs.delete(viewKey(r)),
     },
+    watch: () => () => undefined,
     now: () => (now += 1),
     later: (_ms, f) => timers.push(f),
   };
@@ -117,10 +118,10 @@ describe('a view\'s states', () => {
     const { store, asked } = rig();
     store.ensure(REF);
     store.ensure(REF);
-    expect(store.state(REF)).toEqual({ kind: 'loading' });
+    expect(store.state(REF)).toEqual({ kind: 'loading', height: 160 });
     await flush();
     expect(asked).toEqual([{ cmd: 'view_resource', ...REF }]);
-    expect(store.state(REF)).toMatchObject({ kind: 'live', phase: 'proxy', mode: 'inline', ungranted: true, tool: 'show_counter' });
+    expect(store.state(REF)).toMatchObject({ kind: 'live', phase: 'proxy', mode: 'inline', ungranted: ['camera'], tool: 'show_counter' });
     expect(store.live()).toEqual([viewKey(REF)]);
   });
 
@@ -135,7 +136,7 @@ describe('a view\'s states', () => {
     await flush();
     expect(store.state(other)).toEqual({ kind: 'failed', message: 'plugin off' });
     store.retry(other);
-    expect(store.state(other)).toEqual({ kind: 'loading' });
+    expect(store.state(other)).toEqual({ kind: 'loading', height: 160 });
   });
 
   it('a result that is not a view is a failure', async () => {
@@ -171,7 +172,7 @@ describe('the layer', () => {
     const frames = step(store, root, last);
     expect(frame.style.visibility).toBe('visible');
     expect([frame.style.left, frame.style.top, frame.style.width, frame.style.height, frame.style.zIndex]).toEqual(['300px', '700px', '560px', '160px', '2']);
-    expect(frame.style.clipPath).toBe('inset(0px 0px 92px 0px)');
+    expect(frame.style.clipPath).toBe('inset(0px 0px 92px 0px round var(--r-2))');
     expect(frames).toEqual([{ project: 'p', agent: 'a', call: REF.call, origin: ORIGIN, rect: { x: 300, y: 700, w: 560, h: 68 }, perms: ['midi'] }]);
     // fullscreen: its tab opens, the card says so, the same frame goes over the tab at z 4
     act(() => {

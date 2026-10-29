@@ -8,7 +8,6 @@
 // are main's). Owner: mcp-apps-host.
 import { memo, useEffect, useRef } from 'react';
 import { allowOf } from '@/shared/viewperms';
-import { panelState } from '@/app/panel/state';
 import { pick, samePlace, type Anchors, type Place, type Rect } from './place';
 import { useViewsVersion, type Anchor, type ViewsStore } from './store';
 import { viewsStore } from './window';
@@ -25,8 +24,8 @@ function boxOf(a: Anchor | undefined, off: { x: number; y: number }): Anchors['t
   return { box: rectOf(a.el, off), clips: [...a.clips.filter((c) => c.isConnected).map((c) => rectOf(c, off)), { x: -off.x, y: -off.y, w: window.innerWidth, h: window.innerHeight }] };
 }
 
-/** Writes a place on a frame: its box, clip and z, or hidden. */
-function put(el: HTMLIFrameElement, p: Place | null): void {
+/** Writes a place on a frame: its box, clip and z, or hidden; `round`: its corners at r-2 (a view that prefers a border, designer m_50319). */
+function put(el: HTMLIFrameElement, p: Place | null, round: boolean): void {
   if (p === null) {
     el.style.visibility = 'hidden';
     return;
@@ -39,7 +38,8 @@ function put(el: HTMLIFrameElement, p: Place | null): void {
   s.height = `${String(p.box.h)}px`;
   s.zIndex = String(p.z);
   const [t, r, b, l] = p.inset;
-  s.clipPath = t === 0 && r === 0 && b === 0 && l === 0 ? '' : `inset(${String(t)}px ${String(r)}px ${String(b)}px ${String(l)}px)`;
+  const corner = round ? ' round var(--r-2)' : '';
+  s.clipPath = t === 0 && r === 0 && b === 0 && l === 0 && !round ? '' : `inset(${String(t)}px ${String(r)}px ${String(b)}px ${String(l)}px${corner})`;
 }
 
 /** One place per live view, read from its anchors now (the layer's frame step). */
@@ -57,7 +57,7 @@ export function step(store: ViewsStore, root: HTMLElement, last: Map<string, Pla
     if (anchors.thread !== undefined) store.size(key, 'thread', anchors.thread.box.w, anchors.thread.box.h);
     if (anchors.tab !== undefined) store.size(key, 'tab', anchors.tab.box.w, anchors.tab.box.h);
     const p = pick(store.modeOfKey(key), anchors);
-    if (!samePlace(last.get(key) ?? null, p)) put(el, p);
+    if (!samePlace(last.get(key) ?? null, p)) put(el, p, live.res.prefersBorder);
     last.set(key, p);
     if (p === null) continue;
     showing.add(key);
@@ -94,7 +94,7 @@ export function ViewsLayer({ store = viewsStore }: { store?: ViewsStore }) {
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => store.listen(window), [store]);
   // a tab opened or closed is a mode changed; a theme changed is a context changed
-  useEffect(() => panelState.subscribe(() => {
+  useEffect(() => store.watch(() => {
     store.changed();
   }), [store]);
   useEffect(() => {

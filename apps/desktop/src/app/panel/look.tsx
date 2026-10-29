@@ -10,6 +10,7 @@ import { useAllProcesses } from '@/running';
 import { useProjects } from '@/store';
 import type { Tab } from './model';
 import { viewTitle } from '@/views/Tab';
+import { viewsStore } from '@/views/window';
 
 export interface TabLook {
   readonly title: string;
@@ -63,7 +64,7 @@ function lookOf(tab: Tab, projects: ReturnType<typeof useProjects>, arts: Return
       return { title: e.id, icon: <AppIcon name="plugins" size={14} /> };
     case 'view':
       // an MCP App's view: its tool's name (src/views/Tab.tsx viewTitle)
-      return { title: viewTitle(e), icon: <AppIcon name="plugins" size={14} /> };
+      return { title: viewTitle(e, viewsStore), icon: <AppIcon name="plugins" size={14} /> };
     case 'skill':
       // one glyph on the tab: its '$' (designer m_43933 #12), no plug icon too
       return { title: `$ ${e.name}`, icon: null };

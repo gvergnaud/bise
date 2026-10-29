@@ -19,8 +19,18 @@
   color-scheme: normal;
 }
 
+/* in the thread, the card takes the text column's width and left edge like every row
+   (thread.css's --th-col, --th-col-x): never the whole list, which runs under the side (examples H1) */
+.th-screen .vw-card {
+  box-sizing: border-box;
+  width: var(--th-col);
+  margin-left: var(--th-col-x);
+  margin-right: 0;
+}
+
 .vw-card {
-  margin: var(--gap-tight) 0;
+  margin-top: var(--gap-tight);
+  margin-bottom: var(--gap-tight);
   font: var(--f-meta);
   color: var(--c-text-2);
 }
@@ -35,10 +45,9 @@
   overflow: hidden;
 }
 
-.vw-anchor > .vw-line {
+.vw-anchor > .vw-quiet {
   position: absolute;
   inset: 0;
-  justify-content: center;
 }
 
 .vw-line {
@@ -49,14 +58,12 @@
 
 .vw-foot {
   display: flex;
-  align-items: flex-start;
-  gap: var(--gap-block);
-  margin-top: var(--s-1);
-}
-
-.vw-notes {
-  flex: 1;
-  min-width: 0;
+  align-items: baseline;
+  margin-top: var(--s-2);
+  color: var(--c-text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .vw-note {
@@ -65,13 +72,23 @@
 
 .vw-act {
   color: var(--c-text-2);
-  text-decoration: underline;
   text-underline-offset: 2px;
-  margin-left: auto;
 }
 
 .vw-act:hover {
-  color: var(--c-text);
+  text-decoration: underline;
+}
+
+.vw-end {
+  margin-left: auto;
+  padding-left: var(--gap-block);
+}
+
+.vw-quiet {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--c-text-3);
 }
 
 .vw-tab {
@@ -86,8 +103,8 @@
   min-height: 0;
 }
 
-.vw-tab > .vw-line {
+.vw-tab > .vw-quiet {
   position: absolute;
   inset: 0;
-  justify-content: center;
+  height: auto !important;
 }

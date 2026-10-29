@@ -1,0 +1,31 @@
+/* src/views · the web host's page (C9): the view's frame fills <main id="bise-view">; its quiet
+   line centred until it shows. Owner: mcp-apps-host. */
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: var(--c-solid);
+}
+
+#bise-view {
+  position: relative;
+  height: 100%;
+}
+
+.vw-web-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.vw-web-line {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: var(--f-meta);
+  color: var(--c-text-3);
+}

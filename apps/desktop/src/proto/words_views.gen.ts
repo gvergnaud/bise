@@ -10,15 +10,25 @@ export const views = {
   expired: "this view expired",
   /** the hub could not give the view (its plugin or server is gone, or another refusal) */
   failed: "the view didn't load",
-  /** the view's server went away while it ran (a call answered server-restarted or plugin-off) */
-  server_gone: "its server is gone",
+  /** the view's server stopped while it ran (a call answered plugin-off): what he still sees */
+  server_gone: "its server stopped: the view shows its last result",
   /** the tool's result was over the 4 MiB the hub keeps for a view */
-  too_large: "result too large for the view",
-  /** the view runs without the permissions it declared (not granted at the plugin's add, C8) */
-  no_grant: "runs without its permissions: not granted when the plugin was added",
-  /** the card while its view shows in the panel (fullscreen): the line that brings it back */
-  in_panel: "open in the panel",
-  /** the card's button that opens the view in the panel */
+  too_large: "the result is too big for the view",
+  /** the view runs without permissions it declared (not granted at the plugin's add, C8): 'runs without the microphone: not granted' */
+  no_grant: (a: { missing: string | number }): string => "runs without " + String(a.missing) + ": not granted",
+  /** the foot's link after no_grant: opens the plugin's page at its VIEWS group */
+  change_it: "change it",
+  /** a missing permission in no_grant: the camera */
+  missing_camera: "the camera",
+  /** a missing permission in no_grant: the microphone */
+  missing_microphone: "the microphone",
+  /** a missing permission in no_grant: MIDI */
+  missing_midi: "MIDI",
+  /** a missing permission in no_grant: the clipboard */
+  missing_clipboard: "the clipboard",
+  /** two or more missing permissions: 'the camera and the microphone' */
+  list_and: (a: { head: string | number; last: string | number }): string => String(a.head) + " and " + String(a.last),
+  /** the card's link that opens the view in the panel, and its line while it shows there (designer m_50319: one key) */
   open_panel: "open in the panel",
   /** the card's button that brings a panel view back under its tool row */
   back_inline: "show here",
@@ -52,6 +62,6 @@ export const views = {
   step_done: "done",
   /** a view's panel tab title with no tool name yet */
   tab_view: "view",
-  /** the view asked the agent something: it went 'via <plugin>' */
-  message_sent: (a: { plugin: string | number }): string => "sent to the agent via " + String(a.plugin),
+  /** the view wrote to its agent: 'sent to perf via kanban' */
+  message_sent: (a: { agent: string | number; plugin: string | number }): string => "sent to " + String(a.agent) + " via " + String(a.plugin),
 } as const;

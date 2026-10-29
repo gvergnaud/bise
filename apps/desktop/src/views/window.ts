@@ -53,6 +53,7 @@ export const viewsStore = new ViewsStore({
       closeTab(entityKey(viewEntity(r)));
     },
   },
+  watch: (f) => panelState.subscribe(f),
   now: () => Date.now(),
   later: (ms, f) => {
     setTimeout(f, ms);

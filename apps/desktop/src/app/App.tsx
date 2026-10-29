@@ -48,6 +48,7 @@ import { useZen, useZenWatch } from './zen';
 import { Bar, Over, SIDEBAR_WIDTH_LABEL, useFrame } from './Frame';
 import { PanelHost } from './panel/Host';
 import { ViewsLayer } from '@/views/Layer';
+import { viewsStore } from '@/views/window';
 import { UnlessFull } from './panel/Full';
 import { SideHost } from './side3d/Host';
 import { FloatHost } from '@/composer/float/Host';
@@ -348,7 +349,7 @@ function Shell() {
               <PanelHost />
             </div>
             {/* MCP Apps: every live view's one frame, over its card or its tab (src/views, mcp-apps-host) */}
-            <ViewsLayer />
+            <ViewsLayer store={viewsStore} />
           </div>
           {/* his try a43609b2: both side columns resize by their border (designer m_19374); a folded
               sidebar opens again by a drag from the window's left edge */}

@@ -10,6 +10,11 @@
     "one": null,
     "text": "show here"
   },
+  "views.change_it": {
+    "args": [],
+    "one": null,
+    "text": "change it"
+  },
   "views.expired": {
     "args": [],
     "one": null,
@@ -25,10 +30,13 @@
     "one": null,
     "text": "views"
   },
-  "views.in_panel": {
-    "args": [],
+  "views.list_and": {
+    "args": [
+      "head",
+      "last"
+    ],
     "one": null,
-    "text": "open in the panel"
+    "text": "{head} and {last}"
   },
   "views.loading": {
     "args": [],
@@ -37,15 +45,38 @@
   },
   "views.message_sent": {
     "args": [
+      "agent",
       "plugin"
     ],
     "one": null,
-    "text": "sent to the agent via {plugin}"
+    "text": "sent to {agent} via {plugin}"
   },
-  "views.no_grant": {
+  "views.missing_camera": {
     "args": [],
     "one": null,
-    "text": "runs without its permissions: not granted when the plugin was added"
+    "text": "the camera"
+  },
+  "views.missing_clipboard": {
+    "args": [],
+    "one": null,
+    "text": "the clipboard"
+  },
+  "views.missing_microphone": {
+    "args": [],
+    "one": null,
+    "text": "the microphone"
+  },
+  "views.missing_midi": {
+    "args": [],
+    "one": null,
+    "text": "MIDI"
+  },
+  "views.no_grant": {
+    "args": [
+      "missing"
+    ],
+    "one": null,
+    "text": "runs without {missing}: not granted"
   },
   "views.not_granted": {
     "args": [],
@@ -102,7 +133,7 @@
   "views.server_gone": {
     "args": [],
     "one": null,
-    "text": "its server is gone"
+    "text": "its server stopped: the view shows its last result"
   },
   "views.step_done": {
     "args": [],
@@ -129,6 +160,6 @@
   "views.too_large": {
     "args": [],
     "one": null,
-    "text": "result too large for the view"
+    "text": "the result is too big for the view"
   }
 }

@@ -6,16 +6,15 @@ import { views } from '@/proto/words_views.gen';
 import type { Entity } from '@/shared/entity';
 import type { ViewRef } from './port';
 import { useViewState, type ViewsStore } from './store';
-import { viewsStore } from './window';
-import { StateLine } from './Card';
+import { StateLine } from './StateLine';
 
 /** A view tab's title: its tool's name the store knows, else 'view'. */
-export function viewTitle(e: Extract<Entity, { kind: 'view' }>, store: ViewsStore = viewsStore): string {
+export function viewTitle(e: Extract<Entity, { kind: 'view' }>, store: ViewsStore): string {
   const s = store.state(e);
   return s.kind === 'live' && s.tool !== '' ? s.tool : views.tab_view;
 }
 
-export function ViewTab({ project, agent, call, store = viewsStore }: ViewRef & { store?: ViewsStore }) {
+export function ViewTab({ project, agent, call, store }: ViewRef & { store: ViewsStore }) {
   const ref = useMemo<ViewRef>(() => ({ project, agent, call }), [project, agent, call]);
   const state = useViewState(store, ref);
   const box = useRef<HTMLDivElement>(null);

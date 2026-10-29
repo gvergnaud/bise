@@ -16,6 +16,7 @@ import { MAIN } from '@/app/route';
 import { Browser } from './Browser';
 import { OfficeTab } from './Office';
 import { ViewTab } from '@/views/Tab';
+import { viewsStore } from '@/views/window';
 
 /** The body of a thing's tab. */
 export function ThingTab({ e, tabId }: { e: Exclude<Entity, { kind: 'tab' }>; tabId: string }) {
@@ -69,7 +70,7 @@ export function ThingTab({ e, tabId }: { e: Exclude<Entity, { kind: 'tab' }>; ta
       return <OfficeTab project={e.project} />;
     case 'view':
       // an MCP App's view, fullscreen: the layer puts its one frame over this tab (src/views)
-      return <ViewTab project={e.project} agent={e.agent} call={e.call} />;
+      return <ViewTab project={e.project} agent={e.agent} call={e.call} store={viewsStore} />;
     case 'skill':
       // a plugin's skill (page skill-panel, pick A): its file, its frontmatter, its folder (nm-pages-b)
       return (
