@@ -89,6 +89,12 @@ settings › plugins in bise desktop, `bise plugins` or `/plugins` in bise termi
 
 look for `?` next to it: it may wait for you in the inbox (`⌘I` in bise desktop, `ctrl+1` in bise terminal). stopping its turn (`⌘.`, or `/interrupt` in bise terminal) and writing to it starts the next one. `/stop <agent>` also takes its hands off Chrome and your apps.
 
+### main keeps compacting or seems to hold stale context
+
+bise deliberately has no full-context reset for main: main keeps the continuity around ongoing agents, processes and unanswered questions. `/compact` compacts the conversation of the agent in view; it does not start a fresh thread or erase the canonical history. `/clear` only clears the visible feed, so it does not reset model context either.
+
+if main repeatedly reloads a large context and compacts again, inspect `bise session show --context` and `bise doctor --verbose` before restarting. these show the context bise actually sent to the model and the setup diagnostics; check for private information and redact sensitive content before sharing excerpts in an issue.
+
 ## logs
 
 ::: terminal bise session show
