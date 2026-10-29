@@ -100,6 +100,7 @@ pub mod sb;
 pub mod slash;
 pub mod socket;
 pub mod thread;
+pub mod view_rpc;
 pub mod words;
 
 use serde::de::DeserializeOwned;

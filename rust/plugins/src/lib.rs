@@ -31,7 +31,9 @@
 //! - `signals`: what his projects name (remotes, file names, env example
 //!   keys; names only), the evidence the 'connect your tools' band ranks
 //!   and says why by;
-//! - `secrets`: the values of an MCP server's `${VAR}` he typed in.
+//! - `secrets`: the values of an MCP server's `${VAR}` he typed in;
+//! - `visibility`: whether a view's call may run (its own server's
+//!   app-visible tools only; docs/mcp-apps.md, risk 1).
 
 // the tests run on a temp HOME, never the user's (bise_home::test_home)
 bise_home::test_home!();
@@ -61,3 +63,4 @@ pub mod status;
 pub mod stdio;
 pub mod title;
 pub mod tools_cache;
+pub mod visibility;

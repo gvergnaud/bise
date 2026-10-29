@@ -1,0 +1,126 @@
+//! The views' client methods on `hub.sock` (docs/mcp-apps.md, C5): their
+//! errors, one owner of each code, reason and the words a view gets.
+//!
+//! `view/resource`, `view/call`, `view/message`, `view/context` are
+//! `HubCmd`s (`hub::HubCmd::View*`, rows in `rpc::METHODS`); a refusal
+//! is a JSON-RPC error whose `data.reason` is [`ViewError::reason`], so
+//! the window draws it by reason, never by its words.
+
+use crate::jsonrpc::{ErrorData, RpcError};
+
+/// Why the hub refused a view's request (C5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ViewError {
+    /// the call's views file is gone (pruned, or never written)
+    Expired,
+    /// a model-only tool, a tool of another server, an unknown tool
+    NotVisible,
+    /// the plugin, its server or the tool is turned off
+    PluginOff,
+    /// he refused it in the approval card (or let it lapse)
+    Denied,
+    /// `mistral/*`, a connector's tool, a method bise does not serve to
+    /// views (decision q-vibe)
+    NotSupported,
+    /// past the view's limits (30 calls a minute, 1 message every 10 s,
+    /// a message without his fresh click)
+    RateLimited,
+    /// the call ran on a fresh server: what it kept in memory is gone
+    /// (said once per server start)
+    ServerRestarted,
+}
+
+impl ViewError {
+    pub const ALL: [ViewError; 7] = [
+        ViewError::Expired,
+        ViewError::NotVisible,
+        ViewError::PluginOff,
+        ViewError::Denied,
+        ViewError::NotSupported,
+        ViewError::RateLimited,
+        ViewError::ServerRestarted,
+    ];
+
+    /// Its JSON-RPC code, -32030..-32036.
+    pub fn code(self) -> i64 {
+        match self {
+            ViewError::Expired => -32030,
+            ViewError::NotVisible => -32031,
+            ViewError::PluginOff => -32032,
+            ViewError::Denied => -32033,
+            ViewError::NotSupported => -32034,
+            ViewError::RateLimited => -32035,
+            ViewError::ServerRestarted => -32036,
+        }
+    }
+
+    /// Its `data.reason`.
+    pub fn reason(self) -> &'static str {
+        match self {
+            ViewError::Expired => "expired",
+            ViewError::NotVisible => "not-visible",
+            ViewError::PluginOff => "plugin-off",
+            ViewError::Denied => "denied",
+            ViewError::NotSupported => "not-supported",
+            ViewError::RateLimited => "rate-limited",
+            ViewError::ServerRestarted => "server-restarted",
+        }
+    }
+
+    pub fn from_reason(reason: &str) -> Option<ViewError> {
+        ViewError::ALL.into_iter().find(|e| e.reason() == reason)
+    }
+
+    /// The words the view (and its developer) reads; `what` names the
+    /// tool or method asked.
+    pub fn words(self, what: &str) -> String {
+        match self {
+            ViewError::Expired => "this view's result is gone: run the tool again".into(),
+            ViewError::NotVisible => format!("{what} is not a tool this view can call (only its own server's tools that are visible to apps)"),
+            ViewError::PluginOff => format!("{what} is turned off in plugins"),
+            ViewError::Denied => format!("{what} was not allowed"),
+            ViewError::NotSupported => format!("{what} is not supported in bise"),
+            ViewError::RateLimited => format!("{what}: too many requests from this view, or no recent click in it"),
+            ViewError::ServerRestarted => format!("{what} ran on a restarted server: what it kept in memory is gone"),
+        }
+    }
+
+    /// The JSON-RPC error a view's request gets.
+    pub fn rpc(self, what: &str) -> RpcError {
+        let data = ErrorData { kind: None, reason: Some(self.reason().into()), field: None };
+        RpcError { code: self.code(), message: self.words(what), data: Some(data) }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn codes_and_reasons_are_the_contracts() {
+        let got: Vec<(i64, &str)> = ViewError::ALL.iter().map(|e| (e.code(), e.reason())).collect();
+        assert_eq!(
+            got,
+            vec![
+                (-32030, "expired"),
+                (-32031, "not-visible"),
+                (-32032, "plugin-off"),
+                (-32033, "denied"),
+                (-32034, "not-supported"),
+                (-32035, "rate-limited"),
+                (-32036, "server-restarted"),
+            ]
+        );
+        for e in ViewError::ALL {
+            assert_eq!(ViewError::from_reason(e.reason()), Some(e));
+        }
+    }
+
+    #[test]
+    fn the_error_carries_its_reason_and_says_not_supported_in_bise() {
+        let e = ViewError::NotSupported.rpc("mistral/complete");
+        assert_eq!(e.code, -32034);
+        assert_eq!(e.data.and_then(|d| d.reason).as_deref(), Some("not-supported"));
+        assert!(e.message.contains("not supported in bise"));
+    }
+}
