@@ -116,6 +116,8 @@ describe('a newcomer\'s poof', () => {
         for (let i = 1; i < starts.length; i++) expect((starts[i] ?? 0) - (starts[i - 1] ?? 0)).toBeCloseTo(SPARK_FAR.gap, 1);
         for (let s = 0; s < POOF_S; s += 0.01) {
           const on = poofAt(seed, s, ...args).filter((b) => b.kind === 'spark' && b.r > 1e-3);
+          // never over its head on screen, where the bims' pills stand (designer m_50022): at most its twinkle's lift
+          for (const a of on) expect(dot({ x: a.x, y: a.y - SPARK.y, z: a.z }, UP) / scale).toBeLessThanOrEqual(1.5);
           for (const a of on) for (const b of on) {
             if (a === b) continue;
             const d = { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };

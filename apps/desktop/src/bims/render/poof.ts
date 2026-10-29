@@ -5,6 +5,7 @@
 // see-through material: no sorting, one draw call per kind). Pure: where each piece is and its size
 // at s seconds, from its bim's feet; poofs.ts draws them. Under reduced motion there is none (the
 // caller never starts one). Owner: bim-pop.
+import { AZ } from './camera';
 
 /** a poof's whole length, s (longer than the bim's own pop, APPEAR_S: the cloud clears after it) */
 export const POOF_S = 0.9;
@@ -45,12 +46,17 @@ const SPARK_MAX = 4.5;
  * grows so the nearest star is at least SPARK_RING_PX from it on screen, at most SPREAD_MAX times
  * its close-up size (the hero's, ×1, unchanged)
  */
-export const SPARK_RING_PX = 13;
-const SPREAD_MAX = 5;
+export const SPARK_RING_PX = 14;
+const SPREAD_MAX = 8;
 /** far out (spread past 1), one star after another: each in this long after the last, living this long (designer m_49952) */
 export const SPARK_FAR = { life: 0.3, gap: 0.08 } as const;
 /** the ring's nearest radius close up, office units (sparks: far) */
 const RING_IN = 0.45;
+/** the floor's way toward the camera (camera.ts AZ: x cos a, z sin a), and the arc of the ring the far stars use round it */
+const FRONT = Math.atan2(Math.cos(AZ), Math.sin(AZ));
+const FRONT_ARC = Math.PI - 0.6;
+/** the far stars' slots on that arc, in their order in time */
+const FAR_SLOTS = [1, 3, 0, 2] as const;
 
 /** How much the sparkles grow at this camera (`scale`: office units per css px): 1 close up, more far out. Pure. */
 export function sparkBoost(scale: number): number {
@@ -128,7 +134,11 @@ function sparks(rnd: () => number, s: number, boost = 1, spread = 1): PoofBit[] 
   const gap = one ? SPARK_FAR.gap : SPARK.gap;
   const turn = rnd() * Math.PI * 2;
   for (let i = 0; i < SPARK.n; i++) {
-    const a = turn + (i / SPARK.n) * Math.PI * 2 + (rnd() - 0.5) * 0.7;
+    const jitter = (rnd() - 0.5) * 0.7;
+    // far out: on the ring's half toward the camera, never over the head on screen, where the bims'
+    // pills and labels stand (designer m_50022: the top star went under the '?' pills); one after
+    // another on slots apart (FAR_SLOTS), never two neighbours in a row
+    const a = one ? FRONT - FRONT_ARC / 2 + ((FAR_SLOTS[i % FAR_SLOTS.length] ?? 0) + 0.5 + jitter * 0.3) * (FRONT_ARC / SPARK.n) : turn + (i / SPARK.n) * Math.PI * 2 + jitter;
     const far = RING_IN + rnd() * 0.3;
     const up = 0.15 + rnd() * 0.45;
     const big = 0.7 + rnd() * 0.5;
