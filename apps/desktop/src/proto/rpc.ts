@@ -198,3 +198,10 @@ tool: Record<string, unknown> | null, };
  * `view/call`'s answer: its server's result as it gave it.
  */
 export type ViewCallResult = Record<string, unknown>;
+
+/**
+ * `plugin/views`' answer (C8): the bridge's `~ui` answer as it gave it,
+ * `{views: [{server, tool, uri, csp, permissions, bise_permissions,
+ * prefersBorder, ready, error?}]}`.
+ */
+export type PluginViewsResult = { views: Array<Record<string, unknown>> };

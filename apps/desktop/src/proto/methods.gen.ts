@@ -73,6 +73,7 @@ export const METHODS = {
   "view/call": { cmd: "view_call", result: null },
   "view/message": { cmd: "view_message", result: null },
   "view/context": { cmd: "view_context", result: null },
+  "plugin/views": { cmd: "plugin_views", result: null },
 } as const;
 
 export const NOTIFICATIONS = {
@@ -132,4 +133,5 @@ export const RESULTS = {
   "card/answer": "AnswerResult",
   "view/resource": "ViewResource",
   "view/call": "ViewCallResult",
+  "plugin/views": "PluginViewsResult",
 } as const;

@@ -191,6 +191,17 @@ All take `{"agent": "<name>", "call": "<call>"}` plus:
 | `view/message` | `content` (spec content blocks, text only at first) | `{}` once the message is in the thread |
 | `view/context` | `content` | `{}`; replaces this view's context for the next send |
 
+And one per plugin, not per view (C8, the add's step 2): `plugin/views
+{plugin}` (the app's `hub/plugin_views {project, plugin}`) asks the hub's
+views bridge `GET <base>/<plugin>/~ui` and answers its `{views: [{server,
+tool, uri, csp, permissions, bise_permissions, prefersBorder, ready,
+error?}]}` as is; `-32032` when the plugin is off, `-32000 server-gone`
+when the bridge can't answer.
+
+`view/resource`'s `permissions` are `declared ∩ granted`: the grant from
+`bend_plugins::state::view_grant(grants, plugin, uri)`, read at each
+`view/resource` (never asked: none).
+
 `view/call` errors (JSON-RPC, `data.reason`): `-32031 not-visible`
 (model-only tool, other server, unknown tool), `-32032 plugin-off`,
 `-32033 denied` (he refused in the approval card), `-32034
@@ -212,7 +223,8 @@ the shell's side, one dispatcher for hub.sock and the pages server's
 `crate::view_call` (params, the views file, the bridge route, a
 resource's html/csp/declared permissions, a message's text blocks) and
 `crate::view_limits`. A call goes to the agent's own bridge while its
-REPL lives, else to the hub's views bridge (`bise plugins serve
+REPL's pid runs (its `repl.pid`, never only its port known: a REPL just
+killed leaves a bridge that refuses as "turned off"), else to the hub's views bridge (`bise plugins serve
 --workspace --parent <hub>` in `<state>/views-bridge`, started on the
 first need, stopped when idle or with the hub). A model-visible call
 goes through the approvals as the agent's own call would (`approvals::judge`:

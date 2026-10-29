@@ -128,6 +128,7 @@ fn method_of(cmd: HubCmd) -> Option<(&'static str, Value)> {
         HubCmd::ViewCall { agent, call, method, params, .. } => ("view/call", json!({"agent": agent, "call": call, "method": method, "params": params})),
         HubCmd::ViewMessage { agent, call, content, gesture_ms, .. } => ("view/message", json!({"agent": agent, "call": call, "content": content, "gesture_ms": gesture_ms})),
         HubCmd::ViewContext { agent, call, content, .. } => ("view/context", json!({"agent": agent, "call": call, "content": content})),
+        HubCmd::PluginViews { plugin, .. } => ("plugin/views", json!({"plugin": plugin})),
         _ => return None,
     })
 }
@@ -266,6 +267,28 @@ pub(super) fn kill_orphan_bridge(file: &Path) {
     let _ = std::fs::remove_file(file);
 }
 
+/// An agent's REPL runs: its `repl.pid` names a live process.
+fn repl_alive(pid_file: &Path) -> bool {
+    std::fs::read_to_string(pid_file).ok().and_then(|t| t.trim().parse::<u32>().ok()).is_some_and(|p| p > 1 && crate::procs::alive(p))
+}
+
+/// One GET to a bridge route, its answer's JSON.
+fn get(url: &str, timeout: Duration) -> Result<Value, String> {
+    let rest = url.strip_prefix("http://").ok_or("not a loopback URL")?;
+    let (host, path) = rest.split_once('/').map(|(h, p)| (h, format!("/{p}"))).ok_or("no path")?;
+    let mut s = std::net::TcpStream::connect(host).map_err(|e| e.to_string())?;
+    s.set_read_timeout(Some(timeout)).map_err(|e| e.to_string())?;
+    write!(s, "GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n").map_err(|e| e.to_string())?;
+    let mut out = Vec::new();
+    s.read_to_end(&mut out).map_err(|e| e.to_string())?;
+    let text = String::from_utf8_lossy(&out);
+    let (head, body) = text.split_once("\r\n\r\n").ok_or("no answer")?;
+    if !head.starts_with("HTTP/1.1 200") {
+        return Err(head.lines().next().unwrap_or("").to_string());
+    }
+    serde_json::from_str(body).map_err(|e| e.to_string())
+}
+
 impl Shell {
     /// Boot: every view card the journal left open closes; a views bridge
     /// an older hub left ends.
@@ -309,6 +332,9 @@ impl Shell {
 
     /// One view request (C5's methods), from hub.sock or `/api/view`.
     pub(crate) fn view_request(&mut self, method: &str, params: Value, done: ViewDone) {
+        if method == "plugin/views" {
+            return self.plugin_views(params, done);
+        }
         let p = match ViewParams::of(&params) {
             Ok(p) => p,
             Err(e) => return done(Err(e.rpc(method))),
@@ -345,7 +371,9 @@ impl Shell {
     /// The `bridge.json` a view's server is reached through: its agent's
     /// own bridge while its REPL lives, else the hub's views bridge.
     fn bridge_json(&mut self, dir: &str) -> Result<(PathBuf, bool), String> {
-        if let Some(port) = self.ports.get(dir) {
+        // its REPL alive, never only its port known: a REPL just killed
+        // leaves a bridge that retires its servers ("turned off")
+        if let Some(port) = self.ports.get(dir).filter(|_| repl_alive(&self.opts.paths.agent_dir(dir).join("repl.pid"))) {
             let own = self.opts.paths.agent_bridge_json(*port);
             if own.exists() {
                 return Ok((own, false));
@@ -355,6 +383,34 @@ impl Shell {
         self.views.bridge.ensure(&exe, &d, &json, &ws, now_ms()).map(|p| (p, true))
     }
 
+    // ---- plugin/views (C8) ----
+
+    /// A plugin's views as its servers declare them, through the hub's
+    /// views bridge (`<base>/<plugin>/~ui`), its answer as is; the plugin
+    /// off: `plugin-off`.
+    fn plugin_views(&mut self, params: Value, done: ViewDone) {
+        const WHAT: &str = "plugin/views";
+        let plugin = params.get("plugin").and_then(Value::as_str).unwrap_or("").to_string();
+        if plugin.is_empty() || plugin.contains('/') || plugin.starts_with('.') {
+            return done(Err(RpcError { code: bise_proto::rpc::code::INVALID_PARAMS, message: "plugin/views needs a plugin name".into(), data: None }));
+        }
+        let state = bend_plugins::state::read(&bend_plugins::state::state_path());
+        if !state.is_on(&bend_plugins::id::PluginId::plugin(&plugin), false) {
+            return done(Err(ViewError::PluginOff.rpc(WHAT)));
+        }
+        let (exe, d, json, ws) = (self.opts.exe.clone(), self.opts.paths.views_bridge_dir(), self.opts.paths.views_bridge_json(), self.opts.paths.workspace.clone());
+        let bridge = self.views.bridge.ensure(&exe, &d, &json, &ws, now_ms());
+        std::thread::spawn(move || {
+            let r = (|| {
+                let json_path = bridge.map_err(|e| gone(&e))?;
+                let base = wait_base(&json_path).ok_or_else(|| gone("no bridge"))?;
+                let url = format!("{base}/{plugin}{}", bend_plugins::bridge::UI_ROUTE);
+                get(&url, CALL_TIMEOUT).map_err(|e| gone(&e))
+            })();
+            done(r);
+        });
+    }
+
     // ---- view/resource ----
 
     fn view_resource(&mut self, p: ViewParams, dir: String, done: ViewDone) {
@@ -362,7 +418,7 @@ impl Shell {
         let bridge = self.bridge_json(&dir);
         let step = self.view_step();
         std::thread::spawn(move || {
-            let read = || -> Result<(ViewFile, view_call::ResourceRead, Value), RpcError> {
+            let read = || -> Result<(ViewFile, view_call::ResourceRead, Value, Vec<String>), RpcError> {
                 let text = std::fs::read_to_string(&file).map_err(|_| ViewError::Expired.rpc("view/resource"))?;
                 let f = ViewFile::parse(&text).map_err(|e| e.rpc("view/resource"))?;
                 let (json_path, _) = bridge.map_err(|e| gone(&e))?;
@@ -373,24 +429,23 @@ impl Shell {
                 let r = view_call::resource_read(&res).ok_or_else(|| ViewError::Expired.rpc(&f.uri))?;
                 let list = post(&url, &view_call::request("tools/list", &json!({})), CALL_TIMEOUT).ok().and_then(|v| view_call::answer(&v).ok()).unwrap_or_default();
                 let tool = view_call::tool_of(&list, &f.tool);
-                Ok((f, r, tool))
+                // C8: what he granted this view (never asked: nothing)
+                let grant = bend_plugins::state::view_grant(&bend_plugins::state::grants(&bend_plugins::state::state_path()), &f.plugin, &f.uri).unwrap_or_default();
+                Ok((f, r, tool, grant))
             };
             match read() {
                 Err(e) => done(Err(e)),
-                Ok((f, r, tool)) => step(Box::new(move |sh: &mut Shell| sh.view_resource_read(f, r, tool, done))),
+                Ok((f, r, tool, grant)) => step(Box::new(move |sh: &mut Shell| sh.view_resource_read(f, r, tool, grant, done))),
             }
         });
     }
 
     /// The resource is read: its sandbox registered on the pages server,
     /// then its answer.
-    fn view_resource_read(&mut self, f: ViewFile, r: view_call::ResourceRead, tool: Value, done: ViewDone) {
+    fn view_resource_read(&mut self, f: ViewFile, r: view_call::ResourceRead, tool: Value, grant: Vec<String>, done: ViewDone) {
         let Some(pages) = self.pg.pages.clone() else {
             return done(Err(RpcError::refused("this hub serves no pages: views need its pages server", None)));
         };
-        // the grant (C8) comes with the plugins place (piece 10); until
-        // then a view runs with no permission and its card says so
-        let grant: Vec<String> = Vec::new();
         let permissions = view_call::granted(&r.declared, &grant);
         let hash = crate::pages::views::hash(&f.plugin, &f.server, &f.uri);
         pages.view_sandbox(&hash, crate::pages::views::ViewSandbox { csp: r.csp.clone(), perms: permissions.clone() });
@@ -621,6 +676,12 @@ mod tests {
                 let _ = r.read_exact(&mut body);
                 let req: Value = serde_json::from_slice(&body).unwrap_or_default();
                 let method = req["method"].as_str().unwrap_or("").to_string();
+                if body.is_empty() {
+                    // a GET: the plugin's views (C8, `~ui`)
+                    let out = json!({"views": [{"server": "fake-app", "tool": "show_counter", "uri": "ui://fake-app/counter", "ready": true}]}).to_string();
+                    let _ = write!(s, "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{out}", out.len());
+                    continue;
+                }
                 log.lock().unwrap().push(method.clone());
                 let result = match method.as_str() {
                     "tools/list" => json!({"tools": [
@@ -686,6 +747,37 @@ mod tests {
         assert!(!v.server_restarted(a.clone(), &route("http://127.0.0.1:3/z", false)), "once per view");
         assert!(v.server_restarted(b.clone(), &route("http://127.0.0.1:2/y", true)), "first call on the views bridge");
         assert!(!v.server_restarted(b, &route("http://127.0.0.1:2/y", true)));
+    }
+
+    /// C8: a plugin's views come back as the bridge gave them.
+    #[test]
+    fn a_plugins_views_are_the_bridges_answer_as_is() {
+        let d = tmp("ui");
+        let (bridge, _) = fake_bridge(&d);
+        let base = wait_base(&bridge).unwrap();
+        let got = get(&format!("{base}/fake-app{}", bend_plugins::bridge::UI_ROUTE), Duration::from_secs(5)).unwrap();
+        assert_eq!(got["views"][0]["uri"], "ui://fake-app/counter");
+        assert!(get("http://127.0.0.1:1/x", Duration::from_secs(1)).is_err(), "nobody there");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// A REPL killed leaves its port known a moment: its own bridge is
+    /// used only while its pid lives.
+    #[test]
+    fn a_repl_is_alive_only_when_its_pid_runs() {
+        let d = tmp("repl");
+        let f = d.join("repl.pid");
+        assert!(!repl_alive(&f), "no file");
+        std::fs::write(&f, std::process::id().to_string()).unwrap();
+        assert!(repl_alive(&f));
+        let mut c = std::process::Command::new("true").spawn().unwrap();
+        let pid = c.id();
+        c.wait().unwrap();
+        std::fs::write(&f, pid.to_string()).unwrap();
+        assert!(!repl_alive(&f), "a pid gone");
+        std::fs::write(&f, "1").unwrap();
+        assert!(!repl_alive(&f), "never launchd");
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]

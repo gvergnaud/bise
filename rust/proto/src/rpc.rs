@@ -142,6 +142,8 @@ pub const METHODS: &[MethodRow] = &[
     m("view/call", "view_call", None),
     m("view/message", "view_message", None),
     m("view/context", "view_context", None),
+    // C8: a plugin's views, through the hub's views bridge
+    m("plugin/views", "plugin_views", None),
 ];
 
 /// The protocol's own methods (no [`HubCmd`]).
@@ -183,6 +185,7 @@ pub const OWN_RESULTS: &[(&str, &str)] = &[
     // mcp-apps (C5): a view's resource; a call answers its server's result
     ("view/resource", "ViewResource"),
     ("view/call", "ViewCallResult"),
+    ("plugin/views", "PluginViewsResult"),
 ];
 
 /// A command whose method answers the hub's words ([`CommandRunResult`]):

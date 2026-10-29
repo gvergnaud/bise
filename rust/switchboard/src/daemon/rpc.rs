@@ -225,7 +225,7 @@ impl Shell {
         }
         // mcp-apps (C5): a view's request answers later, by its own id
         // (its server, his card), never through an event
-        if row.cmd.starts_with("view_") {
+        if row.cmd.starts_with("view_") || row.cmd == "plugin_views" {
             return self.view_rpc(id, rid, cmd);
         }
         let c = self.rpc.conns.entry(id).or_default();

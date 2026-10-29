@@ -96,3 +96,4 @@
 {"cmd":"view_call","project":"acme-1a2b3c4d","agent":"perf","call":"1730000000000-1","method":"tools/call","params":{"name":"bump","arguments":{"by":1}}}
 {"cmd":"view_message","project":"acme-1a2b3c4d","agent":"perf","call":"1730000000000-1","content":[{"type":"text","text":"count is 4"}],"gesture_ms":1730000001000}
 {"cmd":"view_context","project":"acme-1a2b3c4d","agent":"perf","call":"1730000000000-1","content":[{"type":"text","text":"count=4"}]}
+{"cmd":"plugin_views","project":"acme-1a2b3c4d","plugin":"fake-app"}

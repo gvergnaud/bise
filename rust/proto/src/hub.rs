@@ -1024,13 +1024,18 @@ pub enum HubCmd {
         #[cfg_attr(feature = "ts", ts(type = "Array<Record<string, unknown>>"))]
         content: Value,
     },
+    /// mcp-apps (C8, the add's step 2): plugin `plugin`'s views as its
+    /// servers declare them, read through the hub's views bridge
+    /// (`<base>/<plugin>/~ui`); its answer is the bridge's
+    /// `{views: [...]}` as is ([`crate::view_rpc::PluginViewsResult`])
+    PluginViews { project: Project, plugin: String },
     /// a tag this version doesn't know: answered with `error`
     #[serde(skip)]
     Unknown { tag: String, raw: Value },
 }
 
 impl HubCmd {
-    pub const TAGS: &'static [&'static str] = &["subscribe", "unsubscribe", "page", "find", "send", "answer", "close", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "log", "completion", "log_body", "queued_take", "queued_steer", "diff", "worktrees", "processes", "proc_out", "proc_follow", "proc_stop", "merged", "features", "prs", "inbox_history", "scheduled", "scheduled_stop", "wake_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "branches", "scheduled_run", "artifacts_add", "artifacts_move", "artifacts_folders", "artifacts_library", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "bise_update", "release_plan", "release_run", "stop_hub", "page_voice", "usage", "pause", "resume", "view_resource", "view_call", "view_message", "view_context"];
+    pub const TAGS: &'static [&'static str] = &["subscribe", "unsubscribe", "page", "find", "send", "answer", "close", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "log", "completion", "log_body", "queued_take", "queued_steer", "diff", "worktrees", "processes", "proc_out", "proc_follow", "proc_stop", "merged", "features", "prs", "inbox_history", "scheduled", "scheduled_stop", "wake_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "branches", "scheduled_run", "artifacts_add", "artifacts_move", "artifacts_folders", "artifacts_library", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "bise_update", "release_plan", "release_run", "stop_hub", "page_voice", "usage", "pause", "resume", "view_resource", "view_call", "view_message", "view_context", "plugin_views"];
 
     pub fn decode(line: &str) -> Result<HubCmd, String> {
         Self::from_value(parse(line)?)
@@ -1123,7 +1128,8 @@ impl HubCmd {
             | HubCmd::ViewResource { project, .. }
             | HubCmd::ViewCall { project, .. }
             | HubCmd::ViewMessage { project, .. }
-            | HubCmd::ViewContext { project, .. } => project,
+            | HubCmd::ViewContext { project, .. }
+            | HubCmd::PluginViews { project, .. } => project,
             HubCmd::Completion(c) => &c.project,
             HubCmd::Unknown { .. } => return None,
         };

@@ -49,6 +49,14 @@ pub struct ViewResource {
 #[serde(transparent)]
 pub struct ViewCallResult(#[cfg_attr(feature = "ts", ts(type = "Record<string, unknown>"))] pub Value);
 
+/// `plugin/views`' answer (C8): the bridge's `~ui` answer as it gave it,
+/// `{views: [{server, tool, uri, csp, permissions, bise_permissions,
+/// prefersBorder, ready, error?}]}`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(transparent)]
+pub struct PluginViewsResult(#[cfg_attr(feature = "ts", ts(type = "{ views: Array<Record<string, unknown>> }"))] pub Value);
+
 /// Why the hub refused a view's request (C5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ViewError {

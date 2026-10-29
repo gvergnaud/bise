@@ -222,6 +222,7 @@ export const hub_cmd: readonly HubCmd[] = [
   {"agent":"perf","call":"1730000000000-1","cmd":"view_call","method":"tools/call","params":{"arguments":{"by":1},"name":"bump"},"project":"acme-1a2b3c4d"},
   {"agent":"perf","call":"1730000000000-1","cmd":"view_message","content":[{"text":"count is 4","type":"text"}],"gesture_ms":1730000001000,"project":"acme-1a2b3c4d"},
   {"agent":"perf","call":"1730000000000-1","cmd":"view_context","content":[{"text":"count=4","type":"text"}],"project":"acme-1a2b3c4d"},
+  {"cmd":"plugin_views","plugin":"fake-app","project":"acme-1a2b3c4d"},
 ];
 
 /** rust/proto/fixtures/core_ev.jsonl */
