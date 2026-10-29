@@ -122,6 +122,14 @@ it on replay). TS types from `tests/ts.rs`.
 
 ### C5. Client methods on hub.sock (piece 5; docs/client-protocol.md)
 
+The desktop reaches them through the app's request path as
+`hub/view_resource`, `hub/view_call`, `hub/view_message` and
+`hub/view_context` (answered in the request's own reply, no
+`view_reply` event); Electron main stamps `gesture_ms` on
+`hub/view_message` (below). The codes and reasons live in
+`bise_proto::view_rpc`; the visibility rule in
+`rust/plugins/src/visibility.rs` (landed 76d6f674b).
+
 All take `{"agent": "<name>", "call": "<call>"}` plus:
 
 | method | params | result |
@@ -144,13 +152,18 @@ Never an agent op: the views methods are on hub.sock only (an agent's
 `view/message` also carries `gesture_ms`: when Electron's main process
 last saw a pointer-down inside that view's frame rect (C7). The hub
 decides with it (risk 1); the renderer and the proxy never do. The
-renderer sends the core cmd `{"cmd": "view_message", "agent", "call",
-"content"}`; Electron main (`core/ipc.ts`, on `CORE_IPC.cmd`) sets
-`gesture_ms` from the last `input-event` mouseDown inside that
-`(agent, call)` frame's rect, or removes it when there is none (a
-`gesture_ms` from the renderer is never kept); the core passes it on as
-`view/message {agent, call, content, gesture_ms}`. `view_context` goes
-the same way without `gesture_ms`.
+renderer sends `hub/view_message {agent, call, content}` on the app's
+request path; Electron main (`core/ipc.ts`) sets `gesture_ms` from the
+last `input-event` mouseDown inside that `(agent, call)` frame's rect,
+or removes it when there is none (a `gesture_ms` from the renderer is
+never kept); the core passes it on as `view/message {agent, call,
+content, gesture_ms}`. `hub/view_context` goes the same way without
+`gesture_ms`.
+
+The view's sender in sb-core is the typed field `Msg.view = <plugin>`
+(`Msg.via` already names routes); off-turn view cards carry the place
+`view:<agent>/<call>` and a due act that closes them as "timed out"
+(architect m_50085).
 
 Signed by architect (m_50047), with these owners:
 
