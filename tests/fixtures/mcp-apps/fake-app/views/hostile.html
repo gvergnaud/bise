@@ -71,6 +71,22 @@ async function run() {
     document.body.appendChild(f);
     setTimeout(() => { document.removeEventListener("securitypolicyviolation", seen); f.remove(); res(!violated); }, 2000);
   }));
+  // a blob: frame of its own inherits the view's CSP (architect m_50106):
+  // its fetch and image to an undeclared host must both fail; a frame the
+  // CSP refuses outright never answers, which is blocked too
+  await probe("nested-blob-escape", () => new Promise((res) => {
+    const inner = "<script>(async()=>{let f=false,i=false;" +
+      "try{await fetch('https://example.com/');f=true}catch{}" +
+      "i=await new Promise(r=>{const m=new Image();m.onload=()=>r(true);m.onerror=()=>r(false);m.src='https://example.com/favicon.ico'});" +
+      "parent.postMessage({blobProbe:{fetch:f,img:i}},'*')})()<\/script>";
+    const url = URL.createObjectURL(new Blob([inner], { type: "text/html" }));
+    const f = document.createElement("iframe");
+    const done = (r) => { window.removeEventListener("message", got); f.remove(); URL.revokeObjectURL(url); res(r); };
+    const got = (e) => { const p = e.data && e.data.blobProbe; if (e.source === f.contentWindow && p) done(p.fetch || p.img ? true : "fetch and image failed"); };
+    window.addEventListener("message", got);
+    f.src = url; document.body.appendChild(f);
+    setTimeout(() => done("frame never answered"), 4000);
+  }));
   await probe("base-uri-honoured", () => document.baseURI.startsWith("https://evil.example"));
   await probe("open-popup", () => window.open("https://example.com/") !== null);
   await probe("navigate-top", () => { window.top.location.href = "https://example.com/"; return true; });
