@@ -999,3 +999,48 @@ fn a_call_with_a_view_keeps_its_full_result() {
     let _ = std::fs::remove_dir_all(&base);
     let _ = std::fs::remove_file(&log);
 }
+
+/// `GET <base>/<plugin>/~ui`: one row per tool with a view, what its
+/// resource declares (C8's add screen); an unknown plugin is a 404.
+#[test]
+fn the_ui_route_lists_a_plugins_views_and_what_they_declare() {
+    let log = std::env::temp_dir().join(format!("bp-bridge-apps-ui-log-{}", std::process::id()));
+    let (base, plugins) = mcp_apps_root("apps-ui", &log);
+    let dir = base.join("run/plugins");
+    let mut parent = std::process::Command::new("sleep").arg("60").spawn().unwrap();
+    let opts = bridge::Opts::new(dir.clone(), Some(parent.id()), roots_of(&base, Some(plugins)));
+    let server = std::thread::spawn(move || bridge::serve(opts));
+    wait_until("ready", || dir.join("ready").exists());
+    let b: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join(bridge::BRIDGE_FILE)).unwrap()).unwrap();
+    let rest = b["base"].as_str().unwrap().strip_prefix("http://").unwrap().to_string();
+    let (host, prefix) = rest.split_at(rest.find('/').unwrap());
+    let get = |path: &str| -> (u32, String) {
+        let mut s = TcpStream::connect(host).unwrap();
+        write!(s, "GET {}{} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", prefix, path, host).unwrap();
+        let mut out = String::new();
+        s.read_to_string(&mut out).unwrap();
+        let code = out.split_whitespace().nth(1).unwrap().parse().unwrap();
+        (code, out.split_once("\r\n\r\n").map(|x| x.1.to_string()).unwrap_or_default())
+    };
+    let (c, body) = get(&format!("/fake-app{}", bridge::UI_ROUTE));
+    assert_eq!(c, 200, "{body}");
+    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let rows = v["views"].as_array().unwrap();
+    let tools: Vec<&str> = rows.iter().map(|r| r["tool"].as_str().unwrap()).collect();
+    assert_eq!(tools, vec!["show_counter", "show_hostile"]);
+    let counter = &rows[0];
+    assert_eq!((counter["server"].clone(), counter["uri"].clone(), counter["ready"].clone()), (serde_json::json!("fake-app"), serde_json::json!("ui://fake-app/counter"), serde_json::json!(true)));
+    assert_eq!(counter["csp"]["connectDomains"], serde_json::json!(["https://api.open-meteo.com"]));
+    assert_eq!(counter["permissions"], serde_json::json!({"microphone": {}}));
+    assert_eq!(counter["prefersBorder"], serde_json::json!(true));
+    assert_eq!(counter["bise_permissions"], serde_json::json!({}));
+    let (c, body) = get(&format!("/fake-views{}", bridge::UI_ROUTE));
+    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!((c, v["views"][0]["server"].clone(), v["views"][0]["ready"].clone()), (200, serde_json::json!("~views"), serde_json::json!(true)));
+    assert_eq!(get(&format!("/nope{}", bridge::UI_ROUTE)).0, 404);
+    parent.kill().unwrap();
+    parent.wait().unwrap();
+    wait_until("the bridge's end", || server.is_finished());
+    let _ = std::fs::remove_dir_all(&base);
+    let _ = std::fs::remove_file(&log);
+}

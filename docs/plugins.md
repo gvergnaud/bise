@@ -389,7 +389,8 @@ tests use temp dirs.
 - Announces the MCP Apps extension at `initialize`
   (`views::client_capabilities`), so a server lists its tools' `_meta.ui`;
   a `resources/read` of a `ui://` URI is answered from the server once
-  per start (`views::ResourceCache`).
+  per start (`views::ResourceCache`); `GET <base>/<plugin>/~ui` lists a
+  plugin's views and what each declares (docs/mcp-apps.md C1).
 - Serves HTTP/1.1 on `127.0.0.1:0`. The path carries a random token, so
   another local process cannot call the tools without reading `D`.
   JSON-RPC over POST: `initialize` answers with the server's cached

@@ -96,7 +96,14 @@ remote), keeps each server's `ui://` resources once per start, and
 writes `D/bridge.json` = `{"v":1,"base":"http://127.0.0.1:<port>/<token>","pid"}`
 before `ready` (`D` = `$BEND_RUN_DIR/<repl port>/plugins`): the hub
 reaches a server at `<base>/<plugin>/<server>` (a raw `tools/list` there
-keeps `_meta.ui` and the app-only tools). Code: `rust/plugins/src/views.rs`.
+keeps `_meta.ui` and the app-only tools). `GET <base>/<plugin>/~ui`
+(`bridge::UI_ROUTE`) lists the plugin's views as its servers declare them
+now, for the add screen (C8): `{"views":[{"server","tool","uri","csp",
+"permissions","bise_permissions" (the resource's
+`_meta["dev.bise/ui"].permissions`),"prefersBorder","ready","error"?}]}`,
+one row per tool with a view (its static views last, server `~views`),
+read through the `ui://` cache (a lazy server is started for it); 404 for
+a plugin the bridge does not run. Code: `rust/plugins/src/views.rs`.
 
 ### C2. The full result (pieces 2 and 3)
 

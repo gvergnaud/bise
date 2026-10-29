@@ -143,6 +143,10 @@ impl Opts {
 /// `<base>/<plugin>/~views` (the hub's view calls, docs/mcp-apps.md).
 pub const BRIDGE_FILE: &str = "bridge.json";
 
+/// `GET <base>/<plugin>/~ui`: the plugin's views and what each declares
+/// ([`ui_list`]).
+pub const UI_ROUTE: &str = "/~ui";
+
 /// At most this many tool names ride on an "unknown tool" answer.
 pub const NAMES_SHOWN: usize = 50;
 
@@ -1299,6 +1303,70 @@ fn handle_virtual(live: &Live, v: &Virtual, body: &[u8], call: Option<&str>) -> 
     ("200 OK", stamp(answer, id))
 }
 
+/// One view's line of [`ui_list`]: what its resource declares (`_meta.ui`
+/// of its first content, else of the answer), read through the server's
+/// `ui://` cache.
+fn ui_row(server: &str, tool: &str, uri: &str, read: Result<Value, String>) -> Value {
+    let content = read.as_ref().ok().and_then(|a| a.pointer("/result/contents/0").cloned());
+    let meta = content.as_ref().and_then(|c| c.get("_meta")).cloned().unwrap_or_else(|| json!({}));
+    let ui = meta.get("ui").cloned().unwrap_or_else(|| json!({}));
+    let html = content.as_ref().is_some_and(|c| c.get("text").and_then(Value::as_str).is_some() || c.get("blob").and_then(Value::as_str).is_some());
+    let mut row = json!({
+        "server": server, "tool": tool, "uri": uri,
+        "csp": ui.get("csp").cloned().unwrap_or_else(|| json!({})),
+        "permissions": ui.get("permissions").cloned().unwrap_or_else(|| json!({})),
+        "bise_permissions": meta.pointer("/dev.bise~1ui/permissions").cloned().unwrap_or_else(|| json!({})),
+        "prefersBorder": ui.get("prefersBorder").cloned().unwrap_or(Value::Null),
+        "ready": html,
+    });
+    if !html {
+        let why = match (&read, read.as_ref().ok().and_then(|a| a.pointer("/error/message")).and_then(Value::as_str)) {
+            (Err(e), _) => e.clone(),
+            (Ok(_), Some(m)) => m.to_string(),
+            (Ok(_), None) => "no HTML in the resource".to_string(),
+        };
+        row["error"] = json!(why);
+    }
+    row
+}
+
+/// `GET <base>/<plugin>/~ui`: every view of the plugin as its servers
+/// declare it now (`{"views": [{server, tool, uri, csp, permissions,
+/// bise_permissions, prefersBorder, ready, error?}]}`), one row per tool
+/// with a view, its static views last (server `~views`); a lazy server
+/// is started to read its resources. None: no such plugin here (the
+/// add screen's views and permissions, C8).
+fn ui_list(live: &Live, plugin: &str) -> Option<Value> {
+    let entries: Vec<Arc<Entry>> = live.entries().into_iter().filter(|e| e.plugin_name == plugin && !e.off.load(Ordering::SeqCst)).collect();
+    let virt = live.virtuals().into_iter().find(|v| v.plugin == plugin);
+    if entries.is_empty() && virt.is_none() {
+        return None;
+    }
+    let state = live.state_now();
+    let mut rows = Vec::new();
+    for e in &entries {
+        let tools: Vec<(String, String)> = lock(&e.tools)
+            .iter()
+            .filter_map(|t| {
+                let src = t.get("name").and_then(Value::as_str)?;
+                let uri = crate::views::tool_ui(t).uri?;
+                e.spec.limits().allows(src).then(|| (resolve::identifier(src), uri))
+            })
+            .collect();
+        for (tool, uri) in tools {
+            let read = e.forward("resources/read", json!({"uri": uri}), &state);
+            rows.push(ui_row(e.spec.id(), &tool, &uri, read));
+        }
+    }
+    if let Some(v) = virt {
+        for view in &v.views {
+            let read = v.answer("resources/read", &json!({"uri": view.uri}));
+            rows.push(ui_row(crate::views::SERVER, &view.tool, &view.uri, Ok(read)));
+        }
+    }
+    Some(json!({"views": rows}))
+}
+
 /// A server turned off keeps its URL until the REPL reads the new index:
 /// its entry (retired) answers, by the off words; one never known is a 404.
 /// `<plugin>/~views` is that plugin's virtual server of static views.
@@ -1310,6 +1378,16 @@ fn connection(stream: TcpStream, token: String, live: Arc<Live>, retired: Arc<Mu
         let key = req.path.strip_prefix(&prefix).map(|k| k.trim_end_matches('/').to_string());
         let find = |k: &str| live.entries().into_iter().find(|e| e.key == k).or_else(|| lock(&retired).iter().rev().find(|e| e.key == k).cloned());
         let virt = key.as_deref().and_then(|k| live.virtuals().into_iter().find(|v| v.key() == k));
+        if let (Some(plugin), "GET") = (key.as_deref().and_then(|k| k.strip_suffix(UI_ROUTE)), req.method.as_str()) {
+            let out = match ui_list(&live, plugin) {
+                Some(v) => ("200 OK", v.to_string()),
+                None => ("404 Not Found", String::new()),
+            };
+            if respond(&mut w, out.0, &out.1).is_err() || req.close {
+                break;
+            }
+            continue;
+        }
         let out = match (req.method.as_str(), key.and_then(|k| find(&k)), virt) {
             ("POST", Some(e), _) => handle_rpc(&live, &e, &req.body, req.call.as_deref()),
             ("POST", None, Some(v)) => handle_virtual(&live, &v, &req.body, req.call.as_deref()),
