@@ -53,7 +53,7 @@ down?: string | null,
  */
 pulse?: Pulse | null, };
 
-export type OpenWhat = "thread" | "review" | "artifact" | "worktree";
+export type OpenWhat = "thread" | "review" | "artifact" | "worktree" | "view";
 
 /**
  * A model account of his (S11's settings, amb-win m_8382).

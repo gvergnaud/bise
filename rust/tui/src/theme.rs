@@ -335,6 +335,7 @@ pub(crate) const G_SUBCALL: &str = "↳"; // a sub-call inside a TypeScript run
 pub(crate) const G_PATCH: &str = "±"; // a file edit
 pub(crate) const G_MSG: &str = "@"; // a message between agents, or to you (was ✉)
 pub(crate) const G_IMAGE: &str = "▣"; // an image (accent chip)
+pub(crate) const G_VIEW: &str = "⊞"; // an MCP Apps view under its tool row (dim; designer m_50266)
 pub(crate) const G_QUOTE: &str = "❝"; // a quote of the history (accent chip, BISE-134)
 pub(crate) const G_PASTE: &str = "▤"; // a long paste (accent chip, BISE-240)
 pub(crate) const G_FILE: &str = "▯"; // a file he attached (accent chip, file-chips: designer m_21765)
@@ -466,6 +467,7 @@ pub(crate) const LEGEND: &[Symbol] = &[
     sym(HISTORY, G_TS, Tone::Text, "a TypeScript call"),
     sym(HISTORY, G_SUBCALL, Tone::Text, "a call inside a TypeScript run"),
     sym(HISTORY, G_PATCH, Tone::Text, "a file edit"),
+    sym(HISTORY, G_VIEW, Tone::Dim, "a tool's view: open it in the app or your browser (/views)"),
     sym(HISTORY, "·", Tone::Dim, "a note from the app"),
     sym(HISTORY, G_COMPACTING, Tone::Dim, "compaction: it pulses while running, then its summary"),
     sym(HISTORY, G_INTERRUPTED, Tone::Dim, "turn interrupted"),
@@ -510,6 +512,7 @@ pub(crate) const ASCII: &[(&str, &str)] = &[
     ("↳", "L"),
     ("±", "%"),
     ("▣", "#"),
+    ("⊞", "V"),
     ("❝", "\""),
     ("▤", "T"),
     ("▯", "F"),

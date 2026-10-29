@@ -675,6 +675,9 @@ pub(crate) fn on_key(app: &mut App, k: &crossterm::event::KeyEvent) -> bool {
     if crate::running_screen::on_key(app, k) {
         return false;
     }
+    if crate::views_tui::on_key(app, k) {
+        return false;
+    }
     if crate::computer_use::on_key(app, k) {
         return false;
     }

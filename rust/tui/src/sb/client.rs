@@ -114,6 +114,7 @@ pub(super) fn new_sb(writer: std::sync::Arc<std::sync::Mutex<UnixStream>>, works
     Sb {
         writer,
         workspace,
+        pages_url: None,
         focus: "main".to_string(),
         views: HashMap::new(),
         agents: Vec::new(),

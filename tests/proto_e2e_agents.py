@@ -12,13 +12,14 @@ Run: python3 -u tests/proto_e2e_agents.py (after scripts/bins.sh)
 import json
 import os
 import signal
+import socket
 import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import obs_lines  # noqa: E402
 import e2e  # noqa: E402
-from e2e import EXE, check  # noqa: E402
+from e2e import EXE, PROTO, check  # noqa: E402
 from proto_rpc import (agent_row, check_keys, entries, hub_all, hub_now, notes, ok, refused, req, run,  # noqa: E402
                        subscribe, thread_of, unsubscribe)
 
@@ -401,6 +402,48 @@ def slash_round(c):
     check(refused(run(c, "/approvals maybe"), "/approvals maybe")["message"] == "/approvals maybe: yolo or auto", "approvals words")
 
 
+def app_open_round(c, sock):
+    """MCP Apps C9 (architect m_50268): a terminal's `app/open` goes to the
+    connections that said `desktop` at initialize, and says how many; an
+    older client (no kind) is never taken for the app."""
+    def connect(kind):
+        s = socket.socket(socket.AF_UNIX)
+        s.settimeout(5)
+        s.connect(sock)
+        client = {"name": "probe", "version": "0"}
+        if kind:
+            client["kind"] = kind
+        s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"proto": PROTO, "client": client}}) + "\n").encode())
+        f = s.makefile("r")
+        while "id" not in json.loads(f.readline()):
+            pass
+        return s, f
+
+    def got_open(f):
+        try:
+            while True:
+                m = json.loads(f.readline())
+                if m.get("method") == "app/open":
+                    return m["params"]
+        except (socket.timeout, ValueError):
+            return None
+
+    r = ok(req(c, "app/open", what="view", agent="main", id="1-2"), "app/open with no app")
+    check(r == {"delivered": 0}, "no desktop connection: delivered 0: %r" % r)
+    old, old_f = connect(None)
+    desk, desk_f = connect("desktop")
+    try:
+        r = ok(req(c, "app/open", what="view", agent="main", id="1-2"), "app/open")
+        check(r == {"delivered": 1}, "one desktop connection: delivered 1: %r" % r)
+        p = got_open(desk_f)
+        check(p is not None and p.get("what") == "view" and p.get("agent") == "main" and p.get("id") == "1-2", "the desktop got app/open: %r" % p)
+        old.settimeout(1)
+        check(got_open(old_f) is None, "an older client (no kind) never gets app/open")
+    finally:
+        old.close()
+        desk.close()
+
+
 def main():
     if not os.path.exists(EXE):
         sys.exit("build first: scripts/bins.sh")
@@ -419,6 +462,7 @@ def main():
         worktree_round(c, E)
         undelivered_round(c)
         slash_round(c)
+        app_open_round(c, sock)
         check_keys(c)
         ok_ = True
         print("PASS proto_e2e_agents", flush=True)

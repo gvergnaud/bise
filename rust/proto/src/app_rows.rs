@@ -60,6 +60,8 @@ pub enum OpenWhat {
     Review,
     Artifact,
     Worktree,
+    /// an MCP Apps view: `agent` its agent, `id` its call (docs/mcp-apps.md C9)
+    View,
 }
 
 /// A model account of his (S11's settings, amb-win m_8382).

@@ -443,6 +443,7 @@ pub(crate) fn ev_visible(ev: &Ev, debug: bool) -> bool {
             | Ev::ToolResult { .. }
             | Ev::ToolCode { .. }
             | Ev::ToolIntent { .. }
+            | Ev::ToolView { .. }
     )
 }
 
@@ -638,6 +639,16 @@ pub(crate) fn push_event(events: &mut Vec<Ev>, cache: &mut Vec<Option<EventRows>
                 td.intent = Some(text.clone());
                 cache[i] = None;
                 forget_work_run(events, cache, i);
+            }
+            return false;
+        }
+        // a view of a call (MCP Apps C9): its `⊞` line, once per call
+        Ev::ToolView { id, view } => {
+            if let Some((i, td)) = last_tool_mut(events, |td| td.id == *id) {
+                if !td.views.iter().any(|v| v.call == view.call) {
+                    td.views.push(view.clone());
+                    cache[i] = None;
+                }
             }
             return false;
         }

@@ -2,6 +2,7 @@
 // BISE_PROTO_BLESS=1 cargo test -p bise-proto --features ts --test ts
 // ids, positions and *_ms are numbers (u64 in Rust, safe below 2^53).
 
+import type { OpenWhat } from './app_rows';
 import type { FnContext } from './context';
 import type { DiffFile, DiffResult } from './diff';
 import type { InboxRecord, StateFilter } from './inbox';
@@ -113,7 +114,7 @@ kicker?: string | null,
 /**
  * it holds a question whose card is open (§4.2)
  */
-asking?: boolean, } | { "ev": "card_open", project: string, id: number, } | { "ev": "inbox_history", project: string, 
+asking?: boolean, } | { "ev": "card_open", project: string, id: number, } | { "ev": "app_open", project: string, what: OpenWhat, agent?: string | null, id?: string | null, } | { "ev": "inbox_history", project: string, 
 /**
  * newest first
  */
@@ -214,7 +215,7 @@ before?: number | null,
 /**
  * at most [`PAGE_MAX`]; none: [`PAGE`]
  */
-limit?: number | null, } | { "cmd": "scheduled", project: string, } | { "cmd": "usage", project: string, } | { "cmd": "pause", project: string, } | { "cmd": "resume", project: string, } | { "cmd": "scheduled_stop", project: string, id: number, } | { "cmd": "wake_stop", project: string, id: number, } | { "cmd": "models", project: string, } | { "cmd": "new", project: string, name?: string | null, brief: string, worktree?: boolean, with_changes?: boolean, } | { "cmd": "rename", project: string, agent: string, to: string, } | { "cmd": "model", project: string, agent: string, model: string, default?: boolean, } | { "cmd": "effort", project: string, agent: string, effort: string, } | { "cmd": "route_correct", project: string, rid: number, to: string, } | { "cmd": "route_cancel", project: string, rid: number, } | { "cmd": "follow", project: string, agent: string, on: boolean, } | { "cmd": "slash", project: string, agent: string, line: string, cid?: number | null, 
+limit?: number | null, } | { "cmd": "scheduled", project: string, } | { "cmd": "usage", project: string, } | { "cmd": "pause", project: string, } | { "cmd": "resume", project: string, } | { "cmd": "app_open", project: string, what: OpenWhat, agent?: string | null, id?: string | null, } | { "cmd": "scheduled_stop", project: string, id: number, } | { "cmd": "wake_stop", project: string, id: number, } | { "cmd": "models", project: string, } | { "cmd": "new", project: string, name?: string | null, brief: string, worktree?: boolean, with_changes?: boolean, } | { "cmd": "rename", project: string, agent: string, to: string, } | { "cmd": "model", project: string, agent: string, model: string, default?: boolean, } | { "cmd": "effort", project: string, agent: string, effort: string, } | { "cmd": "route_correct", project: string, rid: number, to: string, } | { "cmd": "route_cancel", project: string, rid: number, } | { "cmd": "follow", project: string, agent: string, on: boolean, } | { "cmd": "slash", project: string, agent: string, line: string, cid?: number | null, 
 /**
  * his words' typed parts (msg-parts, as `Send.parts`): a line
  * that isn't a command takes `send`'s path with them (`line` is

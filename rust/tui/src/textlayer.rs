@@ -601,6 +601,10 @@ pub(crate) fn open(app: &mut crate::App, url: &str) -> String {
         crate::diffview::request(app, ask, crate::diffview::By::Click);
         return String::new();
     }
+    // a view's chip (MCP Apps C9): `app ↗`, `browser ↗`
+    if let Some((how, call)) = crate::views_tui::of_url(url) {
+        return crate::views_tui::open(app, how, &call);
+    }
     if url == crate::artifacts_screen::OPEN_URL {
         crate::artifacts_screen::open(app);
         return String::new();

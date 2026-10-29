@@ -413,8 +413,42 @@ m_50127, option A).
 `GET /v/<agent>/<call>` on the main pages host serves the host page (the
 same `views/` host code, built for the browser); its calls go to `POST
 /api/view` (`x-bise-token` and `Origin` checked like every `/api` route)
-with C5's methods in the body. The TUI's `O` opens that URL; `o` asks
-the app (`app/open` with the entity `view:<agent>/<call>`).
+with C5's methods in the body. `view/message` there is refused
+(`-32035`): no Electron main sees a gesture in a browser.
+
+The TUI (architect m_50261, designer m_50266; a change to q-tui's bare
+`o`/`O`, which can't work: the feed has no row focus and letters go to
+the composer):
+
+- under a tool row, one dim line per view of `ToolItem.views`:
+  `⊞ counter · fake-app   app ↗   browser ↗` (G_VIEW, ASCII `+`);
+  expired: `⊞ counter · fake-app · expired`, faint, no link. `app ↗`
+  opens it in the desktop app, `browser ↗` opens
+  `http://127.0.0.1:<pages port>/v/<agent>/<call>` in his browser;
+- `/views` (a client command): the thread's views newest first, `⏎` in
+  the app, `b` in his browser, `esc` back: the keyboard path when clicks
+  are off;
+- the words are the catalog's (`words::views::tui_*`).
+
+Opening in the app goes through the hub, never a URL scheme (architect
+m_50268: a `bise://` scheme would launch the app instead of saying it
+isn't running, and any web page could trigger it):
+
+- `initialize`'s `client` carries `kind: terminal | desktop | web`
+  (absent: unknown, an older client is never taken for the app); the
+  desktop core says `desktop`, the TUI `terminal`;
+- `app/open` (`HubCmd::AppOpen {project, what, agent, id}`, `what:
+  OpenWhat::View`, `agent`, `id` = the call) is forwarded as the
+  notification `app/open` (`HubEv::AppOpen`, scope one) to the
+  connections that said `desktop` only; its result is `{delivered: n}`,
+  and the TUI flashes `words::views::tui_no_app` on 0. The shell
+  forwards it, no sb-core: a UI hint between his own clients, no
+  message, no agent, nothing journaled; client socket only (an agent's
+  `sb` can't send it);
+- the desktop core passes the hub's `app_open` event to its window like
+  `card_open` (a one-shot read through `onEvent`, `store/apply.ts`); the
+  window's views host opens that view's panel tab (`what: view`, `agent`,
+  `id` = the call).
 
 ## The three risks (mcp-apps-review v2) and how each is handled
 

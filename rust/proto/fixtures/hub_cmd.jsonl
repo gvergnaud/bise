@@ -83,6 +83,7 @@
 {"cmd":"log","project":"acme-1a2b3c4d","agent":"perf","before":212}
 {"cmd":"usage","project":"acme-1a2b3c4d"}
 {"cmd":"pause","project":"acme-1a2b3c4d"}
+{"cmd":"app_open","project":"acme-1a2b3c4d","what":"view","agent":"t1","id":"1730000000000-3"}
 {"cmd":"resume","project":"acme-1a2b3c4d"}
 {"cmd":"log","project":"acme-1a2b3c4d","agent":"perf","before":13893632,"find":"hero"}
 {"cmd":"completion","project":"acme-1a2b3c4d","agent":"perf"}

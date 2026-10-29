@@ -131,7 +131,7 @@ impl RpcConn {
         let replies = std::mem::take(&mut self.replies);
         let late_sends = std::mem::take(&mut self.late_sends);
         *self = RpcConn { replies, late_sends, ..RpcConn::default() };
-        let params = serde_json::to_value(InitializeParams::new("bise-ambient-core", version)).unwrap_or_default();
+        let params = serde_json::to_value(InitializeParams::new("bise-ambient-core", version).of_kind(rpc::ClientKind::Desktop)).unwrap_or_default();
         Message::Request(Request::new(Id::Num(INIT), rpc::INITIALIZE, params)).to_value()
     }
 

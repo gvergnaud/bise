@@ -40,7 +40,7 @@ const INIT: u64 = 0;
 /// The terminal's first line on the hub's socket (at start and on every
 /// reconnection): `initialize`, this client's name and version.
 pub fn init_line() -> String {
-    let params = serde_json::to_value(InitializeParams::new("bise-tui", env!("CARGO_PKG_VERSION"))).unwrap_or_default();
+    let params = serde_json::to_value(InitializeParams::new("bise-tui", env!("CARGO_PKG_VERSION")).of_kind(rpc::ClientKind::Terminal)).unwrap_or_default();
     format!("{}\n", Message::Request(Request::new(Id::Num(INIT), rpc::INITIALIZE, params)).to_value())
 }
 
@@ -76,6 +76,7 @@ fn initialized(app: &mut App, res: InitializeResult) {
     let sb = &mut app.sb;
     sb.rpc.initialized = true;
     sb.workspace = res.workspace;
+    sb.pages_url = res.pages_url.filter(|u| !u.is_empty());
     crate::artifacts::set_workspace(&sb.workspace);
     sb.version = res.version.pointer("/id").and_then(Value::as_str).unwrap_or("").to_string();
     let first = sb.reload_seen.is_none();

@@ -155,6 +155,7 @@ pub const COMMANDS: &[Cmd] = &[
     Cmd { name: "/artifacts", desc: "what your agents made: pages, docs, files, links", args: &[], client: true },
     Cmd { name: "/scheduled", desc: "your scheduled tasks: list, open, run now, stop", args: &[], client: true },
     Cmd { name: "/processes", desc: "what your agents left running: its output, open, stop (also /running)", args: &[], client: true },
+    Cmd { name: "/views", desc: "the views of this thread's tools: open one in the app or your browser", args: &[], client: true },
     Cmd {
         name: "/diff",
         desc: "a branch's changes against main, in a panel on the right: /diff [<branch>]",
@@ -313,12 +314,13 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    /// Law: 39 commands, each name once and a slash word; 22 the
-    /// client's own, the 17 others the hub's router parses.
+    /// Law: 40 commands, each name once and a slash word; 23 the
+    /// client's own (`/views`: MCP Apps C9), the 17 others the hub's
+    /// router parses.
     #[test]
-    fn the_catalog_holds_39_commands_22_of_them_the_clients() {
-        assert_eq!(COMMANDS.len(), 39);
-        assert_eq!(COMMANDS.iter().filter(|c| c.client).count(), 22);
+    fn the_catalog_holds_40_commands_23_of_them_the_clients() {
+        assert_eq!(COMMANDS.len(), 40);
+        assert_eq!(COMMANDS.iter().filter(|c| c.client).count(), 23);
         let hub: Vec<&str> = COMMANDS.iter().filter(|c| !c.client).map(|c| c.name).collect();
         assert_eq!(
             hub,

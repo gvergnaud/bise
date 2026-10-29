@@ -28,6 +28,8 @@ pub(crate) struct App {
     pub(crate) usage: Option<crate::usage_screen::Screen>,
     /// `/processes`, the full screen of what the agents left running, when open
     pub(crate) running: Option<crate::running_screen::Screen>,
+    /// `/views`, the thread's MCP Apps views, when open (views_tui.rs)
+    pub(crate) views_list: Option<crate::views_tui::Screen>,
     /// the diff panel (ctrl+g, `/diff`, `± 3 files`), when open
     pub(crate) diff: Option<crate::diffview::Panel>,
     // the /computer-use screen, when open (computer_use.rs)
@@ -306,6 +308,7 @@ impl App {
             inbox: None,
             usage: None,
             running: None,
+            views_list: None,
             diff: None,
             computer_use: None,
             debug,

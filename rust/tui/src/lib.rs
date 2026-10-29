@@ -68,6 +68,7 @@ mod livetext;
 mod answered;
 mod toolbox;
 mod toolrow;
+mod views_tui;
 mod release_row;
 use render::*;
 mod feed;

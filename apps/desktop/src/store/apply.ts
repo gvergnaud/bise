@@ -403,6 +403,7 @@ export function applyTyped(s: Store, ev: Ev): void {
     case "open":
     case "page_changed":
     case "card_open":
+    case "app_open":
     case "focused":
       // one-shot: read through onEvent (page_changed: a 'v2 published' moment before the next
       // pages; card_open: open that card in the inbox; focused: this connection's thread moved)

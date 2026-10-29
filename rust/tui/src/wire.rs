@@ -57,6 +57,32 @@ pub(crate) struct ToolData {
     // in memory only (cost-pause, designer m_19111): a call /pause cut:
     // its row reads `– stopped by the pause`, dim, no ✗, no output
     pub(crate) paused: bool,
+    // its MCP Apps views, in line order (ToolItem.views; the `⊞` lines
+    // under the row, docs/mcp-apps.md C9)
+    pub(crate) views: Vec<ViewChip>,
+}
+
+/// One view under a tool row: what the `⊞` line and /views show and open.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ViewChip {
+    pub(crate) plugin: String,
+    pub(crate) uri: String,
+    pub(crate) call: String,
+    /// its stored result is gone: no link, `expired`
+    pub(crate) expired: bool,
+}
+
+impl ViewChip {
+    /// The view's name: the last part of its `ui://` uri (`counter`).
+    pub(crate) fn name(&self) -> &str {
+        let u = self.uri.trim_end_matches('/');
+        u.rsplit('/').next().filter(|n| !n.is_empty()).unwrap_or(u)
+    }
+
+    /// From the thread's typed view (the entry's ToolItem.views).
+    pub(crate) fn of(v: &bise_proto::thread::ToolView) -> ViewChip {
+        ViewChip { plugin: v.plugin.clone(), uri: v.uri.clone(), call: v.call.clone(), expired: v.state == bise_proto::thread::ViewState::Expired }
+    }
 }
 
 impl ToolData {
@@ -87,6 +113,7 @@ impl ToolData {
             gate: None,
             took,
             paused: false,
+            views: Vec::new(),
         }
     }
 }
@@ -181,6 +208,13 @@ pub(crate) enum Ev {
     ToolIntent {
         id: u32,
         text: String,
+    },
+    // an MCP Apps view of a call (tool_view, docs/mcp-apps.md C3, C9),
+    // merged into the matching Tool by id like ToolIntent; the entry's
+    // ToolItem.views replaces it when it settles
+    ToolView {
+        id: u32,
+        view: ViewChip,
     },
     Turn,
     TurnDone,
@@ -431,8 +465,8 @@ fn rec_ev(rec: Rec) -> Option<Ev> {
 /// A tool move as the feed's event: a row (started; finished, which
 /// push_event merges into the running row with its id, else its own),
 /// or an annotation push_event merges into the newest row with its id.
-/// A view (`tool_view`, MCP Apps) draws nothing here yet: the TUI's view
-/// chip is piece 11's (docs/mcp-apps.md C9).
+/// A view (`tool_view`, MCP Apps) is an annotation too: its `⊞` line
+/// (docs/mcp-apps.md C9).
 fn tool_ev(m: lines::ToolMove) -> Option<Ev> {
     use lines::ToolMove as M;
     Some(match m {
@@ -442,7 +476,7 @@ fn tool_ev(m: lines::ToolMove) -> Option<Ev> {
         M::Intent { id, text } => Ev::ToolIntent { id, text },
         M::Code { id, code } => Ev::ToolCode { id, code },
         M::Result { id, ok, preview } => Ev::ToolResult { id, ok, preview },
-        M::View { .. } => return None,
+        M::View { id, view } => Ev::ToolView { id, view: ViewChip { plugin: view.plugin, uri: view.uri, call: view.call, expired: false } },
     })
 }
 

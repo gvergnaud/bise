@@ -68,6 +68,7 @@ export const METHODS = {
   "page/voice": { cmd: "page_voice", result: null },
   "usage/read": { cmd: "usage", result: "usage" },
   "project/pause": { cmd: "pause", result: null },
+  "app/open": { cmd: "app_open", result: null },
   "project/resume": { cmd: "resume", result: null },
   "view/resource": { cmd: "view_resource", result: null },
   "view/call": { cmd: "view_call", result: null },
@@ -105,6 +106,7 @@ export const NOTIFICATIONS = {
   "route/held": { ev: "route", scope: "hub" },
   "route/done": { ev: "route_done", scope: "hub" },
   "card/open": { ev: "card_open", scope: "one" },
+  "app/open": { ev: "app_open", scope: "one" },
   "inbox/recorded": { ev: "inbox_recorded", scope: "hub" },
   "client/focused": { ev: "focused", scope: "one" },
   "hub/notice": { ev: "notice", scope: "one" },
@@ -134,4 +136,5 @@ export const RESULTS = {
   "view/resource": "ViewResource",
   "view/call": "ViewCallResult",
   "plugin/views": "PluginViewsResult",
+  "app/open": "AppOpenResult",
 } as const;

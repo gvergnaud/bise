@@ -70,4 +70,24 @@ export const views = {
   tab_of: (a: { plugin: string | number; name: string | number }): string => String(a.plugin) + " · " + String(a.name),
   /** the view wrote to its agent: 'sent to perf via kanban' */
   message_sent: (a: { agent: string | number; plugin: string | number }): string => "sent to " + String(a.agent) + " via " + String(a.plugin),
+  /** the line under a tool row, its head: `counter · fake-app` (the glyph is the TUI's G_VIEW) */
+  tui_chip: (a: { view: string | number; plugin: string | number }): string => String(a.view) + " · " + String(a.plugin),
+  /** the chip's link that opens the view in the desktop app */
+  tui_app: "app ↗",
+  /** the chip's link that opens the view in his browser (the hub's web host) */
+  tui_browser: "browser ↗",
+  /** an expired view's chip, after its head: no link */
+  tui_expired: "expired",
+  /** the flash when the desktop app isn't there to open it */
+  tui_no_app: "the bise app isn't running. b opens it in your browser.",
+  /** the flash when the hub's pages server (the web host) isn't up */
+  tui_no_web: "the hub's pages server isn't running",
+  /** /views: its title */
+  tui_list_title: "views",
+  /** /views: a row's age after its head: `2 min ago` */
+  tui_list_age: (a: { age: string | number }): string => String(a.age) + " ago",
+  /** /views: the key bar, in the TUI's own form */
+  tui_list_keys: "⏎ open in the app   b in your browser   esc back",
+  /** /views with none */
+  tui_list_empty: "no views in this thread yet.",
 } as const;

@@ -54,7 +54,18 @@ export type RpcError = { code: number, message: string, data?: ErrorData | null,
  */
 export type Watermark = { epoch: number, seq: number, };
 
-export type ClientInfo = { name: string, version: string, };
+export type ClientInfo = { name: string, version: string, 
+/**
+ * what it is (docs/mcp-apps.md C9): the hub sends `app/open` to the
+ * `desktop` ones only; absent: unknown, an older client is never
+ * taken for the app
+ */
+kind?: ClientKind, };
+
+/**
+ * A client's kind, as it says it at `initialize`.
+ */
+export type ClientKind = "terminal" | "desktop" | "web" | "unknown";
 
 /**
  * `initialize`'s params: the client says who it is and which protocol.
@@ -156,6 +167,12 @@ export type CardAnswer = { agent: string, question: string, said: string, pick?:
  * words.
  */
 export type AnswerResult = { answer?: CardAnswer | null, };
+
+/**
+ * `app/open`'s result (docs/mcp-apps.md C9): how many connections that
+ * said `desktop` got its `app/open` notification; 0: no app on this hub.
+ */
+export type AppOpenResult = { delivered: number, };
 
 /**
  * `view/resource`'s answer (C5): the view's HTML and what its sandbox

@@ -20,6 +20,9 @@ use std::collections::BTreeMap;
 /// What to do with one request's answer.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Then {
+    /// `app/open` (a view's `app ↗`, MCP Apps C9): no desktop got it,
+    /// the flash says the app isn't running (views_tui.rs)
+    AppOpen,
     /// the hub's words (a `CommandRunResult`'s notice: version/info,
     /// switch, rollback, restart; `/artifacts add`'s artifacts/add),
     /// shown as its notice was
@@ -191,6 +194,7 @@ fn run(app: &mut App, then: Then, r: Response) {
         (Then::HubRead, Err(_)) => app.sb.rpc.reading = false,
         (_, Err(e)) => refused(app, &e),
         (Then::HubRead, Ok(v)) => hub_reads::reread(app, v),
+        (Then::AppOpen, Ok(v)) => crate::views_tui::app_opened(app, &v),
         (Then::Shown | Then::RuleRemoved, Ok(_)) => {}
         (Then::Processes, Ok(v)) => {
             if let Ok(Some(bise_proto::hub::HubEv::Processes { items, .. })) = bise_proto::rpc::ev_of_result("processes/list", v) {

@@ -526,7 +526,7 @@ pub(crate) fn ev_lines(ev: &Ev, width: usize) -> Vec<Line<'static>> {
             }
             l
         }
-        Ev::ToolInfo { .. } | Ev::ToolResult { .. } | Ev::ToolCode { .. } | Ev::ToolIntent { .. } | Ev::Gate(_) => vec![],
+        Ev::ToolInfo { .. } | Ev::ToolResult { .. } | Ev::ToolCode { .. } | Ev::ToolIntent { .. } | Ev::ToolView { .. } | Ev::Gate(_) => vec![],
         Ev::Usage(u) => vec![Line::from(Span::styled(u.line(), dim_st))],
         Ev::Raw(t) => vec![Line::from(Span::styled(format!("  {}", t), dim_st))],
         Ev::AgentMsg { text, open, .. } if is_brief(text) => brief_lines(text, *open, width),
@@ -1534,6 +1534,12 @@ pub(crate) fn edit_head(td: &ToolData, tick: u32, src: &str) -> Line<'static> {
 }
 
 pub(crate) fn tool_lines(td: &ToolData, tick: u32, width: usize) -> Vec<Line<'static>> {
+    let mut ls = tool_rows(td, tick, width);
+    ls.extend(crate::views_tui::chip_lines(&td.views, width));
+    ls
+}
+
+fn tool_rows(td: &ToolData, tick: u32, width: usize) -> Vec<Line<'static>> {
     let (name, args, code) = tool_meta(td);
     // a closed skill call is its sentence, in every view (BISE-283)
     if crate::toolrow::is_skill(td) && crate::toolrow::row_mode(td) {

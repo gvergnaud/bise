@@ -85,6 +85,8 @@ pub(super) struct Rpcs {
 struct Conn {
     /// said `initialize`: notifications go to it
     init: bool,
+    /// what it said it is at `initialize` (`app/open` goes to `desktop`)
+    kind: bise_proto::rpc::ClientKind,
     pending: Vec<Pending>,
     /// its lines held while one of its requests runs
     hold: Option<Vec<String>>,
@@ -249,6 +251,21 @@ impl Shell {
         }
     }
 
+    /// The connections that said `desktop` at `initialize` (docs/mcp-apps.md C9).
+    pub(super) fn desktop_conns(&self) -> Vec<ClientId> {
+        self.rpc.conns.iter().filter(|(_, c)| c.init && c.kind == bise_proto::rpc::ClientKind::Desktop).map(|(id, _)| *id).collect()
+    }
+
+    /// `app/open` (docs/mcp-apps.md C9): the notification to every
+    /// `desktop` connection, the result how many got it (0: no app).
+    pub(super) fn app_open(&mut self, what: bise_proto::app_rows::OpenWhat, agent: Option<String>, thing: Option<String>) {
+        let ids = self.desktop_conns();
+        let ev = HubEv::AppOpen { project: self.project(), what, agent, id: thing };
+        self.proto_note(&ids, &ev);
+        let r = rpc::AppOpenResult { delivered: u32::try_from(ids.len()).unwrap_or(u32::MAX) };
+        self.rpc.result = Some(serde_json::to_value(r).unwrap_or_default());
+    }
+
     fn rpc_initialize(&mut self, id: ClientId, rid: Id, params: Value) {
         let p: InitializeParams = match serde_json::from_value(params) {
             Ok(p) => p,
@@ -259,7 +276,7 @@ impl Shell {
             return self.rpc_respond(id, Response::err(Some(rid), e));
         }
         crate::util::timing(&format!("rpc initialize from {} {}", p.client.name, p.client.version));
-        self.rpc.conns.insert(id, Conn { init: true, ..Default::default() });
+        self.rpc.conns.insert(id, Conn { init: true, kind: p.client.kind, ..Default::default() });
         self.proto.typed(id);
         let ws = self.opts.paths.workspace.clone();
         let result = InitializeResult {

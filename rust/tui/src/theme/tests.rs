@@ -290,7 +290,7 @@ fn every_glyph_constant_has_a_legend_row() {
     let named: &[(&str, &str)] = &[
         ("G_YOU", G_YOU), ("G_MAIN", G_MAIN), ("G_BRIEF", G_BRIEF), ("G_THINK", G_THINK),
         ("G_BASH", G_BASH), ("G_TS", G_TS), ("G_SUBCALL", G_SUBCALL), ("G_PATCH", G_PATCH),
-        ("G_MSG", G_MSG), ("G_IMAGE", G_IMAGE), ("G_QUOTE", G_QUOTE), ("G_PASTE", G_PASTE), ("G_FILE", G_FILE),
+        ("G_MSG", G_MSG), ("G_IMAGE", G_IMAGE), ("G_VIEW", G_VIEW), ("G_QUOTE", G_QUOTE), ("G_PASTE", G_PASTE), ("G_FILE", G_FILE),
         ("G_CARD", G_CARD),
         ("G_COMPACTING", G_COMPACTING), ("G_SUMMARY", G_SUMMARY), ("G_INTERRUPTED", G_INTERRUPTED),
         ("G_WRAP", G_WRAP), ("G_SCHEDULED", G_SCHEDULED), ("G_STARTING", G_STARTING), ("G_WORKING", G_WORKING),

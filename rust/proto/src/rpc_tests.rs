@@ -363,3 +363,29 @@ fn a_retired_tag_reads_as_unknown_and_a_retired_method_is_refused_by_name() {
     }
     assert_eq!(cmd("never/was", serde_json::json!({})).unwrap_err().code, code::METHOD_NOT_FOUND);
 }
+
+/// MCP Apps C9: a client says what it is at `initialize`; absent or a
+/// kind this version doesn't know is `unknown`, never taken for the app.
+#[test]
+fn a_client_says_its_kind_and_an_older_one_is_unknown() {
+    let p = |v: serde_json::Value| serde_json::from_value::<InitializeParams>(v).unwrap().client.kind;
+    assert_eq!(p(serde_json::json!({"proto": PROTO, "client": {"name": "old"}})), ClientKind::Unknown);
+    assert_eq!(p(serde_json::json!({"proto": PROTO, "client": {"name": "a", "kind": "desktop"}})), ClientKind::Desktop);
+    assert_eq!(p(serde_json::json!({"proto": PROTO, "client": {"name": "a", "kind": "toaster"}})), ClientKind::Unknown);
+    let v = serde_json::to_value(InitializeParams::new("x", "1")).unwrap();
+    assert!(v["client"].get("kind").is_none(), "unknown is not written: {v}");
+    let v = serde_json::to_value(InitializeParams::new("x", "1").of_kind(ClientKind::Terminal)).unwrap();
+    assert_eq!(v["client"]["kind"], "terminal");
+}
+
+/// MCP Apps C9: `app/open` is a command with its own result, and the
+/// notification of the same name goes to one connection at a time.
+#[test]
+fn app_open_is_a_command_and_a_one_connection_notification() {
+    let c = cmd("app/open", serde_json::json!({"project": "p", "what": "view", "agent": "t1", "id": "17-3"})).unwrap();
+    assert_eq!(c, HubCmd::AppOpen { project: "p".into(), what: crate::app_rows::OpenWhat::View, agent: Some("t1".into()), id: Some("17-3".into()) });
+    assert!(OWN_RESULTS.contains(&("app/open", "AppOpenResult")));
+    assert_eq!(note_of_ev("app_open").map(|r| r.scope), Some(Scope::One));
+    let ev = HubEv::from_value(serde_json::json!({"ev": "app_open", "project": "p", "what": "view", "agent": "t1", "id": "17-3"})).unwrap();
+    assert!(matches!(ev, HubEv::AppOpen { what: crate::app_rows::OpenWhat::View, .. }), "{ev:?}");
+}

@@ -242,6 +242,9 @@ pub(super) struct Sb {
     /// of version).
     writer: std::sync::Arc<std::sync::Mutex<UnixStream>>,
     workspace: String,
+    /// the hub's pages server (`initialize`'s `pages_url`): a view's web
+    /// host is under it (docs/mcp-apps.md C9); none: no pages server
+    pub(crate) pages_url: Option<String>,
     pub(super) focus: String,
     views: HashMap<String, View>,
     agents: Vec<Agent>,
@@ -871,6 +874,11 @@ pub(crate) fn handle_input(app: &mut App, v: &str) -> Vec<Ev> {
         // (/processes, designer m_38642; /running its old name, kept)
         Some("/processes" | "/running") => {
             crate::running_screen::open(app);
+            return out;
+        }
+        // MCP Apps C9: the thread's views, to open in the app or the browser
+        Some("/views") => {
+            crate::views_tui::open_screen(app);
             return out;
         }
         // cost-pause: what the calls cost, full screen

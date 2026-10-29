@@ -134,6 +134,8 @@ pub const METHODS: &[MethodRow] = &[
     // cost-pause: the project's cost, its pause and resume (his only)
     m("usage/read", "usage", Some("usage")),
     m("project/pause", "pause", None),
+    // MCP Apps C9: open this in the desktop app (the TUI's `app ↗`)
+    m("app/open", "app_open", None),
     m("project/resume", "resume", None),
     // mcp-apps (docs/mcp-apps.md, C5): a view's requests, client sockets
     // only (never an agent's op); answered later, by the server or his
@@ -186,6 +188,8 @@ pub const OWN_RESULTS: &[(&str, &str)] = &[
     ("view/resource", "ViewResource"),
     ("view/call", "ViewCallResult"),
     ("plugin/views", "PluginViewsResult"),
+    // MCP Apps C9: how many desktop connections got it
+    ("app/open", "AppOpenResult"),
 ];
 
 /// A command whose method answers the hub's words ([`CommandRunResult`]):
@@ -255,6 +259,8 @@ pub const NOTIFICATIONS: &[NoteRow] = &[
     n("route/held", "route", Scope::Hub),
     n("route/done", "route_done", Scope::Hub),
     n("card/open", "card_open", Scope::One),
+    // MCP Apps C9: a terminal's `app ↗`, to the desktop connections only
+    n("app/open", "app_open", Scope::One),
     // inbox-record: a card closed, or its answer's position came
     n("inbox/recorded", "inbox_recorded", Scope::Hub),
     n("client/focused", "focused", Scope::One),
@@ -538,6 +544,14 @@ impl CardAnswer {
     }
 }
 
+/// `app/open`'s result (docs/mcp-apps.md C9): how many connections that
+/// said `desktop` got its `app/open` notification; 0: no app on this hub.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct AppOpenResult {
+    pub delivered: u32,
+}
+
 // ---- initialize ----
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -546,6 +560,34 @@ pub struct ClientInfo {
     pub name: String,
     #[serde(default)]
     pub version: String,
+    /// what it is (docs/mcp-apps.md C9): the hub sends `app/open` to the
+    /// `desktop` ones only; absent: unknown, an older client is never
+    /// taken for the app
+    #[serde(default, skip_serializing_if = "ClientKind::is_unknown")]
+    pub kind: ClientKind,
+}
+
+/// A client's kind, as it says it at `initialize`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum ClientKind {
+    /// the TUI
+    Terminal,
+    /// the desktop app's core (`bise ambient-core`)
+    Desktop,
+    /// a browser page of the hub's pages server
+    Web,
+    /// said nothing, or a kind this version doesn't know
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+impl ClientKind {
+    pub fn is_unknown(&self) -> bool {
+        *self == ClientKind::Unknown
+    }
 }
 
 /// `initialize`'s params: the client says who it is and which protocol.
@@ -572,7 +614,13 @@ impl InitializeParams {
     /// (`rows::Archived`), `bise stop` and `/version` never read agents.
     pub fn new(name: &str, version: &str) -> InitializeParams {
         let caps = Map::from_iter([(CAP_ARCHIVED_LIST.to_string(), Value::Bool(true))]);
-        InitializeParams { proto: PROTO, client: ClientInfo { name: name.into(), version: version.into() }, capabilities: Value::Object(caps) }
+        InitializeParams { proto: PROTO, client: ClientInfo { name: name.into(), version: version.into(), kind: ClientKind::Unknown }, capabilities: Value::Object(caps) }
+    }
+
+    /// The same, saying what the client is ([`ClientKind`]).
+    pub fn of_kind(mut self, kind: ClientKind) -> InitializeParams {
+        self.client.kind = kind;
+        self
     }
 
     /// Whether the client said [`CAP_ARCHIVED_LIST`].

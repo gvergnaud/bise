@@ -159,6 +159,7 @@ fn tool(i: usize, it: &pthread::ToolItem) -> Ev {
     t.args = Some(it.args.clone()).filter(|a| !a.is_empty());
     t.intent = it.intent.clone();
     t.code = it.code.clone();
+    t.views = it.views.iter().map(crate::wire::ViewChip::of).collect();
     t.result = it.out.clone().map(|o| (it.state != pthread::ToolState::Err, crate::sanitize::clean(&o, crate::sanitize::TAB_OUTPUT).into_owned()));
     match state {
         // a running call's clock and its gate's run from their lines' times

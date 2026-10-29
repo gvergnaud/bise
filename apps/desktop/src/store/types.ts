@@ -90,6 +90,8 @@ export const TAGS = {
   // onEvent (page_changed, card_open, focused)
   branches: true,
   card_open: true,
+  // MCP Apps C9: a terminal's `app ↗`, read through onEvent (the views host opens its tab)
+  app_open: true,
   flow: true,
   focused: true,
   page_changed: true,

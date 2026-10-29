@@ -390,6 +390,9 @@ impl Shell {
             // did ('paused: 2 turns stopped…') is the result, not an error
             HubCmd::Pause { .. } => self.said_step(id, &tag, UserCmd::Pause),
             HubCmd::Resume { .. } => self.said_step(id, &tag, UserCmd::Resume),
+            // MCP Apps C9: a terminal's `app ↗`: a UI hint to his desktop
+            // app, forwarded as is (no sb-core: no message, nothing kept)
+            HubCmd::AppOpen { what, agent, id: thing, .. } => self.app_open(what, agent, thing),
             // the live timers, from the hub's state (no line read)
             HubCmd::Scheduled { .. } => {
                 let sched = self.scheduled_ev();
