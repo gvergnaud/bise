@@ -6,31 +6,23 @@
 import { memo, useEffect, useMemo, useRef } from 'react';
 import { Press } from '@/ds';
 import { views } from '@/proto/words_views.gen';
-import type { ToolItem } from '@/proto';
+import type { ToolItem, ToolView } from '@/proto';
 import { useEntry } from '@/store';
 import type { ViewRef } from './port';
 import { DEFAULT_H, useViewState, type ViewState, type ViewsStore } from './store';
 import { viewsStore } from './window';
 
-/** C4's view of a tool call: its plugin, server, ui:// uri, call id, and whether its stored result is gone. */
-export interface ToolView {
-  readonly plugin: string;
-  readonly server: string;
-  readonly uri: string;
-  readonly call: string;
-  readonly state: 'live' | 'expired';
-}
+/** C4's view of a tool call (bise_proto::thread::ToolView): its plugin, server, ui:// uri, call id, live or expired. */
+export type { ToolView };
 
 /**
  * A tool call's views, in order (C4's ToolItem.views: a run_typescript call can call several tools
- * with a view, one card each, keyed by its call id); none without. Pure.
+ * with a view, one card each, keyed by its call id); none without; a call twice is one card. Pure.
  */
 export function viewsOf(item: ToolItem): ToolView[] {
-  const vs: unknown = (item as ToolItem & { readonly views?: unknown }).views;
-  if (!Array.isArray(vs)) return [];
   const seen = new Set<string>();
-  return (vs as readonly ToolView[]).filter((v) => {
-    if (typeof v.call !== 'string' || v.call === '' || seen.has(v.call)) return false;
+  return (item.views ?? []).filter((v) => {
+    if (v.call === '' || seen.has(v.call)) return false;
     seen.add(v.call);
     return true;
   });

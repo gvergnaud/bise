@@ -7,8 +7,8 @@
 import { ipcMain } from 'electron';
 import { IPC, type ViewAnswerWire } from '../shared/api';
 
-/** The view commands, by their cmd tag. */
-export const VIEW_CMDS: readonly string[] = ['view_resource', 'view_call', 'view_message', 'view_context'];
+/** The view commands, by their cmd tag; plugin_views: a plugin's views once it runs (the add's step 2, C8). */
+export const VIEW_CMDS: readonly string[] = ['view_resource', 'view_call', 'view_message', 'view_context', 'plugin_views'];
 
 /** Is it a view command (refused on the window's plain core channel)? */
 export function isViewCmd(cmd: unknown): boolean {
@@ -20,7 +20,8 @@ export function isViewCmd(cmd: unknown): boolean {
 export function viewCmdOf(raw: unknown): Record<string, unknown> | null {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw) || !isViewCmd(raw)) return null;
   const c = raw as Record<string, unknown>;
-  for (const k of ['project', 'agent', 'call']) if (typeof c[k] !== 'string' || c[k] === '') return null;
+  const ids = c['cmd'] === 'plugin_views' ? ['project', 'plugin'] : ['project', 'agent', 'call'];
+  for (const k of ids) if (typeof c[k] !== 'string' || c[k] === '') return null;
   return { ...c };
 }
 

@@ -16,11 +16,21 @@ export interface ViewRef {
 /** The hub's commands for a view (hub/view_resource, hub/view_call, …). */
 export type ViewCmd = (ViewRef & { readonly cmd: 'view_resource' }) | (ViewRef & { readonly cmd: 'view_call'; readonly method: 'tools/call' | 'resources/read'; readonly params: JsonObject }) | (ViewRef & { readonly cmd: 'view_message'; readonly content: JsonObject[] }) | (ViewRef & { readonly cmd: 'view_context'; readonly content: JsonObject[] });
 
+/** A plugin's views once it runs (hub/plugin_views: the hub's views bridge, its GET /<plugin>/~ui; the add's step 2, C8). */
+export interface PluginViewsCmd {
+  readonly cmd: 'plugin_views';
+  readonly project: string;
+  readonly plugin: string;
+}
+
 /** The hub's answer, as it gave it. */
 export type ViewAnswer = { readonly result: Json } | { readonly error: RpcError };
 
 /** Asks the hub one view command. */
 export type ViewAsk = (cmd: ViewCmd) => Promise<ViewAnswer>;
+
+/** Asks the hub for a plugin's views. */
+export type PluginViewsAsk = (cmd: PluginViewsCmd) => Promise<ViewAnswer>;
 
 /** The hub's error codes for views (C5). */
 export const VIEW_ERR = {
@@ -34,7 +44,7 @@ export const VIEW_ERR = {
 } as const;
 
 /** The real door: window.bise.views.call; with none (a test page, an older preload) every ask is refused. */
-export const askHub: ViewAsk = (cmd) => {
+export const askHub: ViewAsk & PluginViewsAsk = (cmd: ViewCmd | PluginViewsCmd) => {
   const views = (window as Partial<Window>).bise?.views;
   if (views === undefined) return Promise.resolve({ error: { code: -32603, message: 'views are not available here' } });
   return views.call(cmd) as Promise<ViewAnswer>;

@@ -104,6 +104,23 @@
     "one": null,
     "text": "its server is gone"
   },
+  "views.step_done": {
+    "args": [],
+    "one": null,
+    "text": "done"
+  },
+  "views.step_head": {
+    "args": [
+      "name"
+    ],
+    "one": null,
+    "text": "{name}'s views"
+  },
+  "views.step_starting": {
+    "args": [],
+    "one": null,
+    "text": "starting its server…"
+  },
   "views.tab_view": {
     "args": [],
     "one": null,

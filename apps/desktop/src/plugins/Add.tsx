@@ -10,7 +10,9 @@ import { Button, Caret, Field, PickerPop, sentenceCase, Sheet, TextArea } from '
 import type { AppCmd, ImportFrom, PluginPreview, PluginsSummary, SecretValue } from '@/proto';
 import { settings } from '@/proto/words.gen';
 import { itemsOf } from './model';
-import { grantsOf, PreviewViews } from './ViewsGroup';
+import { grantsOf, PreviewViews, ViewsStep } from './ViewsGroup';
+import { askHub } from '@/views/port';
+import { useProjects } from '@/store';
 
 /** The menu's items, in its order. */
 export type AddItem = 'browse' | 'mcp' | 'import' | 'plugin' | 'market' | 'agent';
@@ -108,6 +110,11 @@ export function AddSheet({ item, project, summary, preview, ports, onClose }: {
   const [secrets, setSecrets] = useState<Record<string, string>>({});
   // the views' ticks, by uri: granted once he adds it (C8), nothing ticked is nothing granted
   const [ticks, setTicks] = useState<Record<string, readonly string[]>>({});
+  // step 2 (C8): once it runs, its server's views: its name and the uris ticked at step 1
+  const [step2, setStep2] = useState<{ readonly plugin: string; readonly skip: readonly string[] } | null>(null);
+  // the hub that runs it: this project's, else bise's own (its views bridge, hub/plugin_views)
+  const home = useProjects().find((r) => r.home)?.project;
+  const hub = project ?? home;
   const at = project === undefined ? {} : { project };
   const reset = () => {
     setName('');
@@ -123,6 +130,14 @@ export function AddSheet({ item, project, summary, preview, ports, onClose }: {
     reset();
     onClose();
   };
+  if (step2 !== null && hub !== undefined)
+    return (
+      <ViewsStep plugin={step2.plugin} project={hub} skip={step2.skip} ask={askHub} send={ports.send}
+        onClose={() => {
+          setStep2(null);
+          onClose();
+        }} />
+    );
   if (item === null) return null;
   const go = (cmd: AppCmd) => {
     ports.send(cmd);
@@ -137,8 +152,12 @@ export function AddSheet({ item, project, summary, preview, ports, onClose }: {
           const out: SecretValue[] = preview.preview.secrets?.flatMap((n) => (secrets[n] !== undefined && secrets[n] !== '' ? [{ name: n, value: secrets[n] }] : [])) ?? [];
           ports.send(out.length === 0 ? { cmd: 'plugin_add_confirm', token: preview.token } : { cmd: 'plugin_add_confirm', token: preview.token, secrets: out });
           for (const g of grantsOf(preview.preview.name, preview.preview.views ?? [], ticks, project)) ports.send(g);
+          const runs = (preview.preview.runs ?? []).length > 0;
+          const next = { plugin: preview.preview.name, skip: (preview.preview.views ?? []).flatMap((x) => (x.view == null ? [] : [x.view.uri])) };
           reset();
-          onClose();
+          // a server runs: its views come once it does (step 2), else done
+          if (runs && hub !== undefined) setStep2(next);
+          else onClose();
         }}
         onCancel={close} />
     );

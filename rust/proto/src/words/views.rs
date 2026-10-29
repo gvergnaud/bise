@@ -47,6 +47,12 @@ crate::words! { views:
     preview_label = "views, and what each may use";
     /// the add screen's line under its views: only what he ticks is granted
     preview_ticks = "only what you tick is granted; you can change it on its page";
+    /// the add screen's 2nd step: the views its server showed once it ran
+    step_head(name) = "{name}'s views";
+    /// the 2nd step while its server starts
+    step_starting = "starting its server…";
+    /// the 2nd step's button: the ticks become the grant
+    step_done = "done";
 
     // ---- the tab
     /// a view's panel tab title with no tool name yet

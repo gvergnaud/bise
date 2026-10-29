@@ -14,6 +14,8 @@ describe('outgoing', () => {
     expect(outgoing({ cmd: 'view_resource', project: 'p', agent: 'a' }, 1)).toBeNull();
     expect(outgoing({ cmd: 'send', ...ids }, 1)).toBeNull();
     expect(outgoing(null, 1)).toBeNull();
+    expect(outgoing({ cmd: 'plugin_views', project: 'p', plugin: 'piano' }, 1)).toEqual({ cmd: 'plugin_views', project: 'p', plugin: 'piano' });
+    expect(outgoing({ cmd: 'plugin_views', project: 'p' }, 1)).toBeNull();
     expect(isViewCmd({ cmd: 'view_message' })).toBe(true);
     expect(isViewCmd({ cmd: 'send' })).toBe(false);
   });

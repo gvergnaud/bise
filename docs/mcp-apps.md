@@ -369,11 +369,15 @@ m_50127, option A).
   `plugin_add_confirm`, then one `plugin_grant {plugin, uri, perms}` per
   previewed view (an unticked one: `perms: []`, asked and nothing
   granted). The TUI lists them, ticks none (granted from the app).
-- **Step 2, its views** (once it runs): the add screen waits for the
-  server's first list (the bridge's `GET <base>/<plugin>/~ui`, ba6ebf0f9;
-  "starting its server…"), then lists each view found with its ticks;
-  "done" sends their `plugin_grant`; nothing found closes it. Not built
-  yet: it needs the core's path to that route.
+- **Step 2, its views** (once it runs; `plugins/ViewsGroup.tsx`
+  `ViewsStep`): after the confirm of a plugin with a server, the add
+  screen asks `hub/plugin_views {project, plugin}` (through
+  `window.bise.views.call`; the hub asks its views bridge's
+  `GET <base>/<plugin>/~ui`, ba6ebf0f9, mcp-apps-calls) while it says
+  "starting its server…", then lists each view found (step 1's skipped)
+  with its ticks; "done" sends their `plugin_grant`; nothing found, or
+  an error, closes it at once. The hub's project is the add's, else
+  bise's home hub.
 - **Storage**: `plugins.json`'s `view_grants`, by view part id
   (`<plugin>#view:<uri>`, the uri escaped by `PluginId`):
   `{"fake-app#view:ui%3A%2F%2Ffake-app%2Fcounter": ["midi"]}`. No entry:

@@ -9,12 +9,12 @@ const v = (call: string): ToolView => ({ plugin: 'fake-app', server: 'fake-app',
 
 describe('viewsOf', () => {
   it('every view of the call, in order, each call once', () => {
-    expect(viewsOf({ ...item, views: [v('1-4'), v('1-5'), v('1-4')] } as ToolItem)).toEqual([v('1-4'), v('1-5')]);
+    expect(viewsOf({ ...item, views: [v('1-4'), v('1-5'), v('1-4')] })).toEqual([v('1-4'), v('1-5')]);
   });
 
   it('none: no views, an empty list, a view with no call', () => {
     expect(viewsOf(item)).toEqual([]);
-    expect(viewsOf({ ...item, views: [] } as ToolItem)).toEqual([]);
-    expect(viewsOf({ ...item, views: [{ ...v(''), call: '' }] } as ToolItem)).toEqual([]);
+    expect(viewsOf({ ...item, views: [] })).toEqual([]);
+    expect(viewsOf({ ...item, views: [{ ...v(''), call: '' }] })).toEqual([]);
   });
 });
