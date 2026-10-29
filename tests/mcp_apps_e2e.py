@@ -101,7 +101,8 @@ def chain(E, c):
     check([v["call"] for _, v in with_views] == [r["call"] for _, r in lines], "the thread's calls are the lines'")
 
     said = [l for l in c.lines("main") if "done: " in l][-1]
-    check("counter at 1 / counter at 2" in said, "the model reads the tools' own text: %r" % said[:200])
+    # each result's text blocks as mcp.bend reads them (res_text: a line each)
+    check("counter at 1" in said and "/ counter at 2" in said, "the model reads the tools' own text: %r" % said[:200])
     seen = json.dumps(E.fake_requests())
     check("ui://" not in seen and "x-bise" not in seen and "| ui:" not in seen, "nothing of the views reaches the model")
     return with_views
