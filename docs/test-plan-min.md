@@ -523,6 +523,7 @@ A deleted file is read with `git show 6f9114127:<path>` (the tree before the cul
 | `plan_card_e2e` | TRANSFORM | one process's decision or format: no seam needs the real hub |
 | `plugins_reload_e2e` | TRANSFORM | one process's decision or format: no seam needs the real hub |
 | `plugins_ts_e2e` | KEEP | MCP tools (stdio + remote, list_changed) as run_typescript functions: real servers |
+| `mcp_apps_e2e` | KEEP | MCP Apps views across REPL -> plugins bridge -> transcript -> hub fold -> client (views files, tool_view lines, ToolItem.views) and the hub's view methods on real servers (docs/mcp-apps.md piece 13): the chain crosses four processes |
 | `projects_e2e` | TRANSFORM | one process's decision or format: no seam needs the real hub |
 | `prompt_size_e2e` | TRANSFORM | one process's decision or format: no seam needs the real hub |
 | `repl_recycle_e2e` | KEEP | an aged REPL is recycled at idle, unseen (process lifecycle) |
