@@ -245,6 +245,8 @@ pub fn route(pages: &Pages, req: &Request) -> Response {
             return r;
         }
         return match segs.as_slice() {
+            // a view's request from the web host (view_web.rs, C9)
+            ["api", "view"] => super::view_web::post(pages, &req.body),
             ["api", "p", id, "notes"] if valid_id(id) => post_notes(pages, id, &req.body),
             ["api", "p", id, "send"] if valid_id(id) => post_send(pages, id),
             ["api", "p", id, "answer"] if valid_id(id) => post_answer(pages, id, &req.body),
@@ -260,6 +262,8 @@ pub fn route(pages: &Pages, req: &Request) -> Response {
     }
     match segs.as_slice() {
         [""] => Response::html(home(pages)),
+        // a view in his browser (view_web.rs, C9)
+        ["v", agent, call] => super::view_web::page(pages, agent, call),
         ["kit", rest @ ..] if !rest.is_empty() => kit_file(pages, &rest.join("/")),
         ["a", id, v, rest @ ..] if valid_id(id) => artifact_file(pages, id, v, rest),
         ["p", id] if valid_id(id) => page(pages, id, None, false),

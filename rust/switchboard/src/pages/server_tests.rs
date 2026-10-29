@@ -613,3 +613,30 @@ fn a_view_host_serves_its_proxy_and_nothing_else() {
     assert_eq!(get(&p, "/mcp-app").status, 404);
     let _ = std::fs::remove_dir_all(d);
 }
+
+/// The web host (docs/mcp-apps.md C9): `GET /v/<agent>/<call>` is the page
+/// the views host's script fills, framing only this port's views;
+/// `POST /api/view` needs the token and the Origin, and a view's message
+/// from a browser is refused every time (no Electron main saw a click).
+#[test]
+fn the_web_host_serves_its_page_and_refuses_a_browsers_message() {
+    let (p, d) = pages();
+    let r = get(&p, "/v/t1/1730000000000-3");
+    assert_eq!(r.status, 200);
+    let t = text(&r);
+    assert!(t.contains("<main id=\"bise-view\" data-agent=\"t1\" data-call=\"1730000000000-3\">") && t.contains("/kit/views/web.js"), "{t}");
+    assert!(t.contains(&format!("<meta name=\"bise-token\" content=\"{}\">", p.token)));
+    assert_eq!(r.csp, super::super::view_web::page_csp(p.port));
+    for bad in ["/v/t1/x", "/v/..%2F/1-2", "/v/t1/1-2-3", "/v/t1"] {
+        assert_eq!(get(&p, bad).status, 404, "{bad}");
+    }
+    let (tok, o) = (p.token.clone(), format!("http://127.0.0.1:{}", p.port));
+    let msg = json!({"method": "view/message", "params": {"agent": "t1", "call": "1-2", "content": [{"type": "text", "text": "yes do it"}]}});
+    assert_eq!(post(&p, "/api/view", None, Some(&o), msg.clone()).status, 403, "no token");
+    assert_eq!(post(&p, "/api/view", Some(&tok), Some("http://v-0123456789abcdef.localhost:47123"), msg.clone()).status, 403, "a view's origin");
+    let r = post(&p, "/api/view", Some(&tok), Some(&o), msg);
+    let v: Value = serde_json::from_slice(&r.body).unwrap();
+    assert_eq!((r.status, v["error"]["code"].as_i64(), v["error"]["data"]["reason"].as_str()), (200, Some(-32035), Some("no-gesture")), "{v}");
+    assert_eq!(post(&p, "/api/view", Some(&tok), Some(&o), json!({"method": "plugin/views", "params": {"agent": "t1", "call": "1-2"}})).status, 400);
+    let _ = std::fs::remove_dir_all(d);
+}

@@ -23,6 +23,7 @@ pub mod site;
 pub mod store;
 pub mod ui;
 pub mod view_csp;
+pub mod view_web;
 pub mod views;
 pub mod waiting;
 
@@ -57,6 +58,10 @@ pub enum PageMsg {
     /// the hub starts its recipe again (daemon/revive.rs) and answers
     /// `reply` (200 `{pid}`, else `{why}`); the door waits for the port
     Revive { id: String, reply: artifact::save::Reply },
+    /// a view's request from the web host (`POST /api/view`, C9): C5's
+    /// `method` and `params`; the hub answers `reply` (200 `{result}` or
+    /// `{error}`) through the same dispatcher as hub.sock's
+    View { method: String, params: Value, reply: artifact::save::Reply },
     /// the user's mirror of the public pages failed after a publish of `id`
     /// (mirror.rs): one line in main's thread
     Mirror { id: String, error: String },

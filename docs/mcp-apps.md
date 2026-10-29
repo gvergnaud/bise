@@ -413,8 +413,14 @@ m_50127, option A).
 `GET /v/<agent>/<call>` on the main pages host serves the host page (the
 same `views/` host code, built for the browser); its calls go to `POST
 /api/view` (`x-bise-token` and `Origin` checked like every `/api` route)
-with C5's methods in the body. `view/message` there is refused
-(`-32035`): no Electron main sees a gesture in a browser.
+with C5's methods in the body (`{method, params: {agent, call, ...}}`,
+answered 200 `{result}` or `{error: {code, message, data}}`; the hub's
+one dispatcher, `PageMsg::View` -> `Shell::view_request`). The page
+(`pages/view_web.rs`) carries the token, loads `/kit/views/web.js` and
+`.css` and fills `<main id="bise-view" data-agent data-call>`; its CSP
+frames only `http://*.localhost:<pages port>` and fetches only itself.
+`view/message` there is refused every time (`-32035`, reason
+`no-gesture`): no Electron main sees a click in a browser.
 
 The TUI (architect m_50261, designer m_50266; a change to q-tui's bare
 `o`/`O`, which can't work: the feed has no row focus and letters go to

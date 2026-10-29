@@ -337,6 +337,11 @@ impl Shell {
                 let (status, body) = self.art_save(&pages, &id, req);
                 reply.send(status, body);
             }
+            // a view's request from the web host (pages/view_web.rs, C9):
+            // the views dispatcher (daemon/views.rs), answered when it can
+            crate::pages::PageMsg::View { method, params, reply } => {
+                self.view_request(&method, params, Box::new(move |r| reply.send(200, crate::pages::view_web::answer(r))));
+            }
             // a local site's door found its port free: its recipe again (daemon/revive.rs)
             crate::pages::PageMsg::Revive { id, reply } => {
                 let (status, body) = self.revive.answer(&self.art_store(), &self.opts.paths.revive_dir(), &id);
