@@ -1,7 +1,7 @@
 //! Tool rows (G3): the TUI's rule, the fold's too (moved out of lines.rs
 //! unchanged, to keep it under 1000 lines).
 
-use super::{Obs, Rec};
+use super::{Obs, Rec, ToolViewRef};
 
 /// What a line does to a thread's tool rows.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -20,6 +20,8 @@ pub enum ToolMove {
     /// `tool_finished`: the running row with that id ends, ok or not;
     /// none running: an ended row of its own
     Finish { id: u32, ok: bool },
+    /// `tool_view`: a view on the newest row with that id; none: nothing
+    View { id: u32, view: ToolViewRef },
 }
 
 /// The tool move of a line, if any.
@@ -37,6 +39,7 @@ pub fn tool_move(rec: &Rec) -> Option<ToolMove> {
         Rec::ToolIntent { id, text } => ToolMove::Intent { id, text },
         Rec::ToolCode { id, code } => ToolMove::Code { id, code },
         Rec::ToolResult { id, ok, preview } => ToolMove::Result { id, ok, preview },
+        Rec::ToolView { id, view } => ToolMove::View { id, view },
         _ => return None,
     })
 }

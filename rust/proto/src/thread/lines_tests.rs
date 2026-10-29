@@ -403,3 +403,23 @@ fn main_answer_notes_read_with_either_head() {
     assert!(is_main_answer_note("the user answered card #3 (\"ship?\"): \"yes\""));
     assert!(!is_main_answer_note("the user answered a question"));
 }
+
+/// docs/mcp-apps.md C3: `tool_view #<id> : <ref>`; a ref that is not
+/// the four strings, a bad call id or a non-ui:// uri is dropped.
+#[test]
+fn a_tool_view_line_reads_its_ref() {
+    let r = r#"{"plugin":"fake-app","server":"fake-app","uri":"ui://fake-app/counter","call":"1730000000000-0"}"#;
+    assert_eq!(
+        read(&format!("tool_view #4 : {r}")),
+        Rec::ToolView { id: 4, view: ToolViewRef { plugin: "fake-app".into(), server: "fake-app".into(), uri: "ui://fake-app/counter".into(), call: "1730000000000-0".into() } }
+    );
+    for bad in [
+        "tool_view #4 : {}",
+        "tool_view #4 : not json",
+        r#"tool_view #x : {"plugin":"p","server":"s","uri":"ui://p/v","call":"1-0"}"#,
+        r#"tool_view #4 : {"plugin":"p","server":"s","uri":"ui://p/v","call":"../1-0"}"#,
+        r#"tool_view #4 : {"plugin":"p","server":"s","uri":"https://x","call":"1-0"}"#,
+    ] {
+        assert_eq!(read(bad), Rec::Dropped, "{bad}");
+    }
+}

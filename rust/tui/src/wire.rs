@@ -398,7 +398,7 @@ fn rec_ev(rec: Rec) -> Option<Ev> {
     // the tool rows: bise-proto's rule (G3, the hub's fold reads the same
     // moves): a row from tool_started, its annotations merged by id
     if let Some(m) = lines::tool_move(&rec) {
-        return Some(tool_ev(m));
+        return tool_ev(m);
     }
     Some(match rec {
         // the session-log facts (BISE-195) are for the hub's writer
@@ -410,7 +410,7 @@ fn rec_ev(rec: Rec) -> Option<Ev> {
         Rec::Hub(h) => return sb::hub_ev(h),
         Rec::Sub { name, ok, preview } => Ev::Sub { name, ok, preview },
         // tool_move read these above
-        Rec::Tool { .. } | Rec::ToolIntent { .. } | Rec::ToolCode { .. } | Rec::ToolResult { .. } => return None,
+        Rec::Tool { .. } | Rec::ToolIntent { .. } | Rec::ToolCode { .. } | Rec::ToolResult { .. } | Rec::ToolView { .. } => return None,
         // BR-003: right after an interrupt, an info; else an error
         Rec::Rejected(r) => notice_ev(words::rejected(&r)),
         // a replayed message was committed: the model read it
@@ -431,16 +431,19 @@ fn rec_ev(rec: Rec) -> Option<Ev> {
 /// A tool move as the feed's event: a row (started; finished, which
 /// push_event merges into the running row with its id, else its own),
 /// or an annotation push_event merges into the newest row with its id.
-fn tool_ev(m: lines::ToolMove) -> Ev {
+/// A view (`tool_view`, MCP Apps) draws nothing here yet: the TUI's view
+/// chip is piece 11's (docs/mcp-apps.md C9).
+fn tool_ev(m: lines::ToolMove) -> Option<Ev> {
     use lines::ToolMove as M;
-    match m {
+    Some(match m {
         M::Start(id) => Ev::Tool(ToolData::bare(id, ToolState::Run)),
         M::Finish { id, ok } => Ev::Tool(ToolData::bare(id, if ok { ToolState::Ok } else { ToolState::Fail })),
         M::Info { id, name, args } => Ev::ToolInfo { id, name, args },
         M::Intent { id, text } => Ev::ToolIntent { id, text },
         M::Code { id, code } => Ev::ToolCode { id, code },
         M::Result { id, ok, preview } => Ev::ToolResult { id, ok, preview },
-    }
+        M::View { .. } => return None,
+    })
 }
 
 fn obs_ev(o: Obs) -> Option<Ev> {

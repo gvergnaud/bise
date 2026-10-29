@@ -1,6 +1,6 @@
 use super::*;
 use crate::rows::ReportKind;
-use crate::thread::{page, EntryKind, Line, PageRef, ReportRef};
+use crate::thread::{page, EntryKind, Line, PageRef, ReportRef, ViewState};
 
 fn lines() -> Vec<Line> {
     let l = |pos: u64, line: &str| (pos, 1_000 + pos, line.to_string());
@@ -1160,4 +1160,45 @@ fn an_old_journals_messages_read_as_their_parts() {
     assert_eq!(e[2].parts, [quote("Nouvel essai"), text("Son process")]);
     assert_eq!(e[3].kind, EntryKind::Notice, "a routed message stays the notice it was (the wire rule)");
     assert_eq!(e[3].parts, [text("look "), Part::Paste { n: 1, text: "a\nb".into() }, text(" here")]);
+}
+
+/// docs/mcp-apps.md C3-C4: a `tool_view` line attaches to the newest row
+/// with its id, never by its place (another line between); a
+/// run_typescript that called two view tools has two views in order; a
+/// view whose row is gone is dropped; the same call twice is one view;
+/// a tool without a view sends no `views` key.
+#[test]
+fn a_tool_view_attaches_by_its_id() {
+    let none = |_: &str| None;
+    let l = |pos: u64, line: &str| (pos, 1_000 + pos, line.to_string());
+    let v = |call: &str| format!("{{\"plugin\":\"fake-app\",\"server\":\"fake-app\",\"uri\":\"ui://fake-app/counter\",\"call\":\"{call}\"}}");
+    let ls = vec![
+        l(1, "  obs: tool_started #1"),
+        l(2, "tool #1 run_typescript : {}"),
+        l(3, "  obs: tool_finished #1 ok"),
+        l(4, "tool_result #1 ok : counter at 3"),
+        l(5, "  obs: tool_started #2"),
+        l(6, &format!("tool_view #1 : {}", v("17-0"))),
+        l(7, &format!("tool_view #1 : {}", v("17-1"))),
+        l(8, &format!("tool_view #1 : {}", v("17-1"))),
+        l(9, &format!("tool_view #5 : {}", v("17-2"))),
+        l(10, "  obs: tool_finished #2 ok"),
+        l(11, "tool_result #2 ok : done"),
+    ];
+    let e = fold(&ls, &ctx_with(&[], &none));
+    let items = &e[0].tools.as_ref().unwrap().items;
+    assert_eq!(items.len(), 2, "{e:?}");
+    let calls: Vec<(&str, ViewState)> = items[0].views.iter().map(|v| (v.call.as_str(), v.state)).collect();
+    assert_eq!(calls, [("17-0", ViewState::Live), ("17-1", ViewState::Live)]);
+    assert_eq!((items[0].views[0].plugin.as_str(), items[0].views[0].uri.as_str()), ("fake-app", "ui://fake-app/counter"));
+    assert!(items[1].views.is_empty(), "#2 never gets #1's or #5's view");
+    let j = serde_json::to_value(&items[1]).unwrap();
+    assert!(j.get("views").is_none(), "no views key without a view: {j}");
+    let j = serde_json::to_value(&items[0]).unwrap();
+    assert_eq!(j["views"][1], serde_json::json!({"plugin": "fake-app", "server": "fake-app", "uri": "ui://fake-app/counter", "call": "17-1", "state": "live"}));
+    // the hub marks a view whose file the prune took
+    let mut e = e;
+    crate::thread::expire_views(&mut e, |c| c == "17-0");
+    let st: Vec<ViewState> = e[0].tools.as_ref().unwrap().items[0].views.iter().map(|v| v.state).collect();
+    assert_eq!(st, [ViewState::Expired, ViewState::Live]);
 }

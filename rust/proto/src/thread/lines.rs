@@ -158,6 +158,15 @@ pub fn msg_id(s: &str) -> Option<u64> {
     s.strip_prefix("m_").filter(|_| is_msg_id(s)).and_then(|n| n.parse().ok())
 }
 
+/// A `tool_view` line's ref: where its view and its full result are.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+pub struct ToolViewRef {
+    pub plugin: String,
+    pub server: String,
+    pub uri: String,
+    pub call: String,
+}
+
 /// One transcript line, read.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Rec {
@@ -177,6 +186,9 @@ pub enum Rec {
     ToolCode { id: u32, code: String },
     /// `tool_result #<id> <ok|fail> : <preview>`
     ToolResult { id: u32, ok: bool, preview: String },
+    /// `tool_view #<id> : {"plugin","server","uri","call"}`: a view of
+    /// that call (MCP Apps, docs/mcp-apps.md C3)
+    ToolView { id: u32, view: ToolViewRef },
     /// `subtool <name> <ok|fail> : <preview>` (a run_typescript sub-call)
     Sub { name: String, ok: bool, preview: String },
     /// `core rejected: <why>`
@@ -387,6 +399,9 @@ pub fn read(line: &str) -> Rec {
     }
     if let Some(r) = line.strip_prefix("tool_result #") {
         return result(r).unwrap_or(Rec::Dropped);
+    }
+    if let Some(r) = line.strip_prefix("tool_view #") {
+        return tool_view(r).unwrap_or(Rec::Dropped);
     }
     if let Some(r) = line.strip_prefix("subtool ") {
         return sub(r).unwrap_or(Rec::Dropped);
@@ -656,6 +671,16 @@ fn result(r: &str) -> Option<Rec> {
     let (id, rest) = r.split_once(' ')?;
     let (st, preview) = rest.split_once(" : ").unwrap_or((rest, ""));
     Some(Rec::ToolResult { id: id.parse().ok()?, ok: st.trim() == "ok", preview: preview.to_string() })
+}
+
+/// `<id> : <ref json>`; a ref without its four strings, or a call id
+/// that is not `[0-9]+-[0-9]+`: dropped.
+fn tool_view(r: &str) -> Option<Rec> {
+    let (id, rest) = r.split_once(" : ")?;
+    let view: ToolViewRef = serde_json::from_str(rest.trim()).ok()?;
+    let digits = |s: &str| !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit());
+    let ok = view.call.split_once('-').is_some_and(|(a, b)| digits(a) && digits(b)) && view.uri.starts_with("ui://") && !view.plugin.is_empty();
+    ok.then_some(Rec::ToolView { id: id.trim().parse().ok()?, view })
 }
 
 fn sub(r: &str) -> Option<Rec> {

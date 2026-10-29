@@ -163,8 +163,14 @@ dropped, never put on another row.
 `ToolItem.views: Vec<ToolView>` (in the order of their lines; empty for
 a tool with no view) with `ToolView { plugin, server, uri, call, state }`,
 `state: "live" | "expired"` (expired: the file is gone; the hub says so
-when `view/resource` finds no file, and the fold marks it on replay). TS
-types from `tests/ts.rs`.
+when `view/resource` finds no file). The fold reads lines only: it makes
+every view `live`; the hub marks the expired ones before it sends
+entries, with `bise_proto::thread::expire_views(entries, |call| <no
+views file>)`. Code: `Rec::ToolView` / `ToolViewRef` (lines.rs, a ref
+without its four strings, a call id not `[0-9]+-[0-9]+` or a uri not
+`ui://`: dropped), `ToolMove::View`, `Fold::view` (by id, the same call
+once). TS types from `tests/ts.rs` (`ToolView`, `ViewState` in
+`apps/desktop/src/proto/thread.ts`).
 
 ### C5. Client methods on hub.sock (piece 5; docs/client-protocol.md)
 

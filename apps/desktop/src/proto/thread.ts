@@ -37,6 +37,21 @@ export type ToolGate = { wait: GateWait, at_ms: number, };
  */
 export type FileCount = { path: string, add: number, del: number, };
 
+/**
+ * A view's state (docs/mcp-apps.md C4): `live` while its views file
+ * (the call's full result) exists; `expired` once the daily prune took
+ * it (the hub marks it, [`expire_views`]).
+ */
+export type ViewState = "live" | "expired" | "unknown";
+
+/**
+ * A view of a tool call (an MCP App, docs/mcp-apps.md C3-C4): its
+ * plugin, its server (`~views`: a plugin's static view), its `ui://`
+ * resource and the call id that names its full result
+ * (`<agent dir>/views/<call>.json`).
+ */
+export type ToolView = { plugin: string, server: string, uri: string, call: string, state: ViewState, };
+
 export type ToolItem = { pos: number, 
 /**
  * the call's number in its transcript (`tool #N`, the runtime's
@@ -98,7 +113,13 @@ out?: string | null,
  * an edit's files with their line counts (the window formats
  * `+18 −6` from them: counts, like the folds)
  */
-files?: Array<FileCount>, };
+files?: Array<FileCount>, 
+/**
+ * its views (MCP Apps, the runtime's `tool_view` lines), in their
+ * lines' order: a `run_typescript` that called two tools with a view
+ * has two
+ */
+views?: Array<ToolView>, };
 
 export type Tools = { count: number, 
 /**

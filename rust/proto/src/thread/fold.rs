@@ -99,7 +99,20 @@ impl Fold<'_> {
             ToolMove::Code { id, code } => self.code(id, &code),
             ToolMove::Result { id, ok, preview } => self.result(id, ok, &preview, ms),
             ToolMove::Finish { id, ok } => self.finish(pos, ms, id, ok),
+            ToolMove::View { id, view } => self.view(id, view),
         }
+    }
+
+    /// `tool_view`: a view of the newest row with that id, by its id
+    /// never by its place (docs/mcp-apps.md C3); no such row (its turn
+    /// cut off a page, an id from a late call whose row is gone):
+    /// dropped, never put on another row. The same call twice: once.
+    fn view(&mut self, id: u32, view: lines::ToolViewRef) {
+        let Some(item) = self.item(id) else { return };
+        if item.views.iter().any(|v| v.call == view.call) {
+            return;
+        }
+        item.views.push(super::ToolView { plugin: view.plugin, server: view.server, uri: view.uri, call: view.call, state: super::ViewState::Live });
     }
 
     /// `tool_started`: a running item, in the tools entry it continues
@@ -131,6 +144,7 @@ impl Fold<'_> {
             code: None,
             out: None,
             files: Vec::new(),
+            views: Vec::new(),
         };
         let items = &mut self.out[e].tools.as_mut().expect("a tools entry").items;
         items.push(item);
@@ -919,7 +933,7 @@ pub fn tail_start(lines: &[Line], entries: &[Entry], want: usize) -> Pos {
         }
         let Some(m) = lines::tool_move(&rec) else { continue };
         let id = match &m {
-            ToolMove::Start(id) | ToolMove::Info { id, .. } | ToolMove::Intent { id, .. } | ToolMove::Code { id, .. } | ToolMove::Result { id, .. } | ToolMove::Finish { id, .. } => *id,
+            ToolMove::Start(id) | ToolMove::Info { id, .. } | ToolMove::Intent { id, .. } | ToolMove::Code { id, .. } | ToolMove::Result { id, .. } | ToolMove::Finish { id, .. } | ToolMove::View { id, .. } => *id,
         };
         if let ToolMove::Start(_) = m {
             last.retain(|&(i, _)| i != id);

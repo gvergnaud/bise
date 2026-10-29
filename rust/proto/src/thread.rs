@@ -458,6 +458,49 @@ pub struct ToolGate {
     pub at_ms: u64,
 }
 
+/// A view's state (docs/mcp-apps.md C4): `live` while its views file
+/// (the call's full result) exists; `expired` once the daily prune took
+/// it (the hub marks it, [`expire_views`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum ViewState {
+    #[default]
+    Live,
+    Expired,
+    /// a state this version doesn't know (a newer hub)
+    #[serde(other)]
+    Unknown,
+}
+
+/// A view of a tool call (an MCP App, docs/mcp-apps.md C3-C4): its
+/// plugin, its server (`~views`: a plugin's static view), its `ui://`
+/// resource and the call id that names its full result
+/// (`<agent dir>/views/<call>.json`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct ToolView {
+    pub plugin: String,
+    pub server: String,
+    pub uri: String,
+    pub call: String,
+    #[serde(default)]
+    pub state: ViewState,
+}
+
+/// Mark `expired` every view of `entries` whose call `gone` says has no
+/// views file any more (the hub, before it sends a thread's entries:
+/// the fold reads lines only).
+pub fn expire_views(entries: &mut [Entry], gone: impl Fn(&str) -> bool) {
+    for t in entries.iter_mut().filter_map(|e| e.tools.as_mut()) {
+        for v in t.items.iter_mut().flat_map(|i| i.views.iter_mut()) {
+            if v.state == ViewState::Live && gone(&v.call) {
+                v.state = ViewState::Expired;
+            }
+        }
+    }
+}
+
 /// A file an edit touched, with its lines added and removed (the TUI's
 /// `± file +18 −6`; a move reads `old → new`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -560,6 +603,11 @@ pub struct ToolItem {
     /// `+18 −6` from them: counts, like the folds)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<FileCount>,
+    /// its views (MCP Apps, the runtime's `tool_view` lines), in their
+    /// lines' order: a `run_typescript` that called two tools with a view
+    /// has two
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub views: Vec<ToolView>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
