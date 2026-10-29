@@ -122,6 +122,7 @@ pub const VARS: &[Var] = &[
     internal("BEND_SESSION_FILE", "a REPL's session file"),
     user("BEND_THRESHOLD", "when the conversations compact"),
     internal("BEND_TOOLS_NOTE", "whether rg and git are there, told to a REPL once"),
+    internal("BEND_VIEWS_DIR", "an agent's MCP Apps views folder: the full result of each call with a view (docs/mcp-apps.md C2)"),
     internal("BEND_WIRE_DUMP", "the folder of a REPL's request ring (/debug completion)"),
     internal("BEND_WIRE_LOG", "a REPL's event log, read by the hub"),
     internal("BEND_WORKDIR", "an agent's working directory"),

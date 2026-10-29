@@ -101,6 +101,10 @@ pub struct Opts {
     /// a stdio server with no call for this long is stopped
     /// ([`tools_cache::IDLE_STOP`])
     pub idle_stop: Duration,
+    /// the agent's views folder (`BEND_VIEWS_DIR`, `--views-dir`): a
+    /// `tools/call` with an `x-bise-call` header writes its full result
+    /// there (docs/mcp-apps.md C2); None: nothing written
+    pub views_dir: Option<PathBuf>,
     /// how often logins and idle servers are looked at ([`CHORES`]);
     /// the parent's exit never waits for it (`crate::parent`)
     pub chores: Duration,
@@ -127,6 +131,7 @@ impl Opts {
             grace: STOP_GRACE,
             tools_cache: None,
             idle_stop: tools_cache::IDLE_STOP,
+            views_dir: None,
             chores: CHORES,
         }
     }
@@ -781,6 +786,8 @@ struct Live {
     key_env: (Vec<u8>, Vec<(String, String)>),
     /// [`Opts::idle_stop`]
     idle_stop: Duration,
+    /// [`Opts::views_dir`]
+    views_dir: Option<PathBuf>,
     /// `<plugin>/<server>` when a server says its tools changed, or a
     /// login or a late start brought it up
     changed: Sender<String>,
@@ -1139,6 +1146,8 @@ struct Request {
     path: String,
     body: Vec<u8>,
     close: bool,
+    /// [`crate::views::CALL_HEADER`]: this call's view gets its full result
+    call: Option<String>,
 }
 
 fn read_request(r: &mut BufReader<TcpStream>) -> Option<Request> {
@@ -1151,6 +1160,7 @@ fn read_request(r: &mut BufReader<TcpStream>) -> Option<Request> {
     let path = parts.next()?.to_string();
     let mut len = 0usize;
     let mut close = false;
+    let mut call = None;
     loop {
         let mut h = String::new();
         if r.read_line(&mut h).ok()? == 0 {
@@ -1166,12 +1176,14 @@ fn read_request(r: &mut BufReader<TcpStream>) -> Option<Request> {
                 len = v.trim().parse().ok()?;
             } else if k == "connection" && v.trim().eq_ignore_ascii_case("close") {
                 close = true;
+            } else if k == crate::views::CALL_HEADER {
+                call = Some(v.trim().to_string());
             }
         }
     }
     let mut body = vec![0u8; len];
     r.read_exact(&mut body).ok()?;
-    Some(Request { method, path, body, close })
+    Some(Request { method, path, body, close, call })
 }
 
 fn respond(w: &mut TcpStream, status: &str, body: &str) -> std::io::Result<()> {
@@ -1184,8 +1196,30 @@ fn rpc_error(id: &Value, code: i64, message: &str) -> String {
     json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}}).to_string()
 }
 
-/// One JSON-RPC message for one server: (HTTP status, body).
-fn handle_rpc(live: &Live, entry: &Entry, body: &[u8]) -> (&'static str, String) {
+/// The full result of a call with a view, kept for its view (C2): when
+/// the REPL named the call and this session has a views folder. A
+/// failed write is said on stderr (the bridge log); the model's answer
+/// is the same either way.
+fn keep_for_view(live: &Live, call: Option<&str>, record: impl FnOnce() -> Option<(String, String, String, String, Value)>, answer: &Value) {
+    let (Some(call), Some(dir)) = (call, live.views_dir.as_deref()) else { return };
+    let Some((plugin, server, uri, tool, args)) = record() else { return };
+    let r = crate::views::Record { plugin: &plugin, server: &server, uri: &uri, tool: &tool, args: &args, answer, at_ms: now_ms() };
+    if let Err(e) = crate::views::write_file(dir, call, &r) {
+        eprintln!("views file {}: {}", call, e);
+    }
+}
+
+/// The view of the tool `published` of `entry`, as its server listed it.
+fn view_of(entry: &Entry, published: &str) -> Option<String> {
+    let src = lock(&entry.names).get(published).cloned().unwrap_or_else(|| published.to_string());
+    let tools = lock(&entry.tools);
+    let t = tools.iter().find(|t| t.get("name").and_then(Value::as_str) == Some(src.as_str()))?;
+    crate::views::tool_ui(t).uri
+}
+
+/// One JSON-RPC message for one server: (HTTP status, body). `call`: the
+/// REPL's [`crate::views::CALL_HEADER`].
+fn handle_rpc(live: &Live, entry: &Entry, body: &[u8], call: Option<&str>) -> (&'static str, String) {
     let Ok(msg) = serde_json::from_slice::<Value>(body) else {
         return ("400 Bad Request", rpc_error(&Value::Null, -32700, "parse error"));
     };
@@ -1202,8 +1236,20 @@ fn handle_rpc(live: &Live, entry: &Entry, body: &[u8]) -> (&'static str, String)
         return ("200 OK", json!({"jsonrpc": "2.0", "id": id, "result": init}).to_string());
     }
     let params = msg.get("params").cloned().unwrap_or_else(|| json!({}));
+    let asked = params.clone();
     match entry.forward(method, params, &live.state_now()) {
-        Ok(answer) => ("200 OK", stamp(answer, id)),
+        Ok(answer) => {
+            if method == "tools/call" {
+                let record = || {
+                    let tool = asked.get("name").and_then(Value::as_str)?.to_string();
+                    let uri = view_of(entry, &tool)?;
+                    let args = asked.get("arguments").cloned().unwrap_or_else(|| json!({}));
+                    Some((entry.plugin_name.clone(), entry.spec.id().to_string(), uri, tool, args))
+                };
+                keep_for_view(live, call, record, &answer);
+            }
+            ("200 OK", stamp(answer, id))
+        }
         Err(e) => ("200 OK", rpc_error(&id, -32000, &e)),
     }
 }
@@ -1224,7 +1270,7 @@ fn stamp(answer: Value, id: Value) -> String {
 
 /// One JSON-RPC message for a plugin's virtual server of static views:
 /// (HTTP status, body). A view turned off is refused like an off tool.
-fn handle_virtual(live: &Live, v: &Virtual, body: &[u8]) -> (&'static str, String) {
+fn handle_virtual(live: &Live, v: &Virtual, body: &[u8], call: Option<&str>) -> (&'static str, String) {
     let Ok(msg) = serde_json::from_slice::<Value>(body) else {
         return ("400 Bad Request", rpc_error(&Value::Null, -32700, "parse error"));
     };
@@ -1240,7 +1286,17 @@ fn handle_virtual(live: &Live, v: &Virtual, body: &[u8]) -> (&'static str, Strin
             return ("200 OK", rpc_error(&id, -32000, &off_error(&format!("{}.{}", v.namespace, tool))));
         }
     }
-    ("200 OK", stamp(v.answer(method, &params), id))
+    let answer = v.answer(method, &params);
+    if method == "tools/call" {
+        let record = || {
+            let tool = params.get("name").and_then(Value::as_str)?;
+            let view = v.views.iter().find(|x| x.tool == tool)?;
+            let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
+            Some((v.plugin.clone(), crate::views::SERVER.to_string(), view.uri.clone(), tool.to_string(), args))
+        };
+        keep_for_view(live, call, record, &answer);
+    }
+    ("200 OK", stamp(answer, id))
 }
 
 /// A server turned off keeps its URL until the REPL reads the new index:
@@ -1255,8 +1311,8 @@ fn connection(stream: TcpStream, token: String, live: Arc<Live>, retired: Arc<Mu
         let find = |k: &str| live.entries().into_iter().find(|e| e.key == k).or_else(|| lock(&retired).iter().rev().find(|e| e.key == k).cloned());
         let virt = key.as_deref().and_then(|k| live.virtuals().into_iter().find(|v| v.key() == k));
         let out = match (req.method.as_str(), key.and_then(|k| find(&k)), virt) {
-            ("POST", Some(e), _) => handle_rpc(&live, &e, &req.body),
-            ("POST", None, Some(v)) => handle_virtual(&live, &v, &req.body),
+            ("POST", Some(e), _) => handle_rpc(&live, &e, &req.body, req.call.as_deref()),
+            ("POST", None, Some(v)) => handle_virtual(&live, &v, &req.body, req.call.as_deref()),
             (_, Some(_), _) | (_, None, Some(_)) => ("405 Method Not Allowed", String::new()),
             (_, None, None) => ("404 Not Found", String::new()),
         };
@@ -1306,6 +1362,7 @@ pub fn serve(opts: Opts) -> std::io::Result<()> {
         tools_cache,
         key_env: (salt, tools_cache::inherited(std::env::vars_os())),
         idle_stop: opts.idle_stop,
+        views_dir: opts.views_dir.clone(),
         changed: changed_tx.clone(),
         entries: RwLock::new(Vec::new()),
         virtuals: RwLock::new(Vec::new()),

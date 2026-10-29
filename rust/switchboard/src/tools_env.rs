@@ -439,7 +439,10 @@ pub fn session_note(path: &str, workspace: &Path) -> String {
 /// `TMPDIR`, `TMP`, `TEMP` and `TMUX_TMPDIR` are its `tmp/` (mktemp,
 /// python tempfile, tmux sockets land there, never in /tmp); its
 /// background jobs write in `tmp/bg`; the harness's own files go to
-/// `run/` (`BEND_AGENT_RUN`, bend/runtime/persist.bend `side_dir`).
+/// `run/` (`BEND_AGENT_RUN`, bend/runtime/persist.bend `side_dir`); the
+/// full results of its calls with a view go to `views/` next to `run/`
+/// (`BEND_VIEWS_DIR`, `Paths::agent_views_dir`; its plugins bridge writes
+/// there, docs/mcp-apps.md C2).
 ///
 /// `TMUX_TMPDIR` only when a tmux socket fits there: tmux puts it at
 /// `<realpath>/tmux-<uid>/<name>` and a unix socket path is at most 103
@@ -455,6 +458,9 @@ pub fn temp_env(tmp: &Path, run: &Path) -> Vec<(&'static str, PathBuf)> {
         .collect();
     v.push(("BEND_BG_DIR", bise_home::hub_state::bg_dir_of_tmp(tmp)));
     v.push(("BEND_AGENT_RUN", run.to_path_buf()));
+    if let Some(agent) = run.parent() {
+        v.push(("BEND_VIEWS_DIR", bise_home::hub_state::views_of_agent_dir(agent)));
+    }
     v
 }
 
@@ -616,6 +622,7 @@ mod tests {
         assert_eq!(get("TMUX_TMPDIR"), tmux_fits(&t).then(|| t.clone()));
         assert_eq!(get("BEND_BG_DIR"), Some(t.join("bg")));
         assert_eq!(get("BEND_AGENT_RUN"), Some(r.clone()));
+        assert_eq!(get("BEND_VIEWS_DIR"), Some(d.join("a/views")));
         // per agent and not bise's: only PER_CHILD_NAMES (the tools
         // cache's key leaves exactly those out); the rest are registered
         for (k, _) in &env {

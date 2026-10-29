@@ -107,12 +107,18 @@ keeps `_meta.ui` and the app-only tools). Code: `rust/plugins/src/views.rs`.
   `Paths::agent_views_dir(<dir>)/<call>.json` as
   `{"v":1,"plugin","server","uri","tool","args":{…},"result":{…},"at_ms"}`,
   atomically, at most 4 MiB (bigger: `result` replaced by
-  `{"truncated":true}` and the view shows "result too large").
-  The REPL never builds that path: the hub gives it in an Internal
-  variable declared in `bise_home::env::VARS` (its row and
-  `bise_env.py`), filled from `Paths::agent_views_dir` when the REPL is
-  created; the REPL passes it to the bridge as is (`--views-dir`). A
-  headless session without a hub: none, nothing written.
+  `{"truncated":true}` and the view shows "result too large"; args too
+  big as well: `args` too). An error answer keeps `"error":{code,message}`
+  instead of `result` (the view gets `tool-cancelled`). `<call>` that is
+  not `[0-9]+-[0-9]+` writes nothing.
+  The REPL never builds that path: the hub gives it in the Internal
+  variable `BEND_VIEWS_DIR` (`bise_home::env::VARS`, `bise_env.py`),
+  `<agent dir>/views` (`Paths::agent_views_dir`,
+  `bise_home::hub_state::agent_views`), set with the agent's other
+  folders (`switchboard::tools_env::temp_env`); the REPL passes it to
+  the bridge as is (`--views-dir`, bend/runtime/plugins.bend). A
+  headless session without a hub: none, nothing written. Code:
+  `views::{call_ok, file_text, write_file}`, `bridge::keep_for_view`.
 - The prune has one owner: the daily images prune
   (`switchboard::image_care`, `keep_days`) takes `views/` too; no second
   loop.

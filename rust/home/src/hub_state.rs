@@ -41,6 +41,18 @@ pub fn agent_bg(state: &Path, dir: &str) -> PathBuf {
     bg_dir_of_tmp(&agent_tmp(state, dir))
 }
 
+/// The views folder of the agent whose folder is `agent`: the full result
+/// of each of its tool calls with a view, `<call>.json` (docs/mcp-apps.md
+/// C2; `BEND_VIEWS_DIR`, the plugins bridge writes there).
+pub fn views_of_agent_dir(agent: &Path) -> PathBuf {
+    agent.join("views")
+}
+
+/// The agent's views folder ([`views_of_agent_dir`]).
+pub fn agent_views(state: &Path, dir: &str) -> PathBuf {
+    views_of_agent_dir(&agent_dir(state, dir))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -51,5 +63,6 @@ mod tests {
         assert_eq!(agent_tmp(s, "perf"), Path::new("/h/hubs/x-0a1b2c3d/agents/perf/tmp"));
         assert_eq!(agent_bg(s, "perf.2"), Path::new("/h/hubs/x-0a1b2c3d/agents/perf.2/tmp/bg"));
         assert_eq!(agent_bg(s, "my agent"), Path::new("/h/hubs/x-0a1b2c3d/agents/my agent/tmp/bg"));
+        assert_eq!(agent_views(s, "perf"), Path::new("/h/hubs/x-0a1b2c3d/agents/perf/views"));
     }
 }

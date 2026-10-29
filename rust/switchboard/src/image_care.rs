@@ -12,6 +12,11 @@
 //!   has the time to read the release note or change the setting;
 //!   [`prune_allowed`]).
 //!
+//! - prunes its agents' MCP Apps views files (`<agent>/views/<call>.json`,
+//!   `Paths::agent_views_dir`, docs/mcp-apps.md C2) with the same days on
+//!   the same thread: the one prune owner (architect m_50047); a view
+//!   whose file is gone shows "expired".
+//!
 //! When each was last done is the mtime of a stamp in the hub's folder
 //! (`Paths::images_touched`, `Paths::images_pruned`, and
 //! `Paths::images_since` for the grace's start): one stat each per tick,
@@ -47,6 +52,33 @@ fn stamp_ms(p: &Path) -> Option<u64> {
 fn stamp(p: &Path) {
     // a rewrite moves the mtime (the content says what it is)
     let _ = std::fs::write(p, b"bend_images::prune stamp\x0a");
+}
+
+/// A views file last written at `mtime_ms` is past `keep_days` at
+/// `now_ms` (the images' rule: older than the days kept). Pure.
+pub fn view_expired(mtime_ms: u64, now_ms: u64, keep_days: u64) -> bool {
+    now_ms.saturating_sub(mtime_ms) > keep_days.max(1).saturating_mul(DAY_MS)
+}
+
+/// Delete every `<agents>/<agent>/views/*.json` past `keep_days` (and a
+/// writer's leftover temp file); the count deleted.
+pub fn prune_views(agents: &Path, now_ms: u64, keep_days: u64) -> usize {
+    let Ok(rd) = std::fs::read_dir(agents) else { return 0 };
+    let mut n = 0;
+    for a in rd.flatten() {
+        let views = bise_home::hub_state::views_of_agent_dir(&a.path());
+        let Ok(files) = std::fs::read_dir(&views) else { continue };
+        for f in files.flatten() {
+            let p = f.path();
+            if p.extension().and_then(|e| e.to_str()) != Some("json") && p.extension().and_then(|e| e.to_str()) != Some("tmp") {
+                continue;
+            }
+            if stamp_ms(&p).is_some_and(|t| view_expired(t, now_ms, keep_days)) && std::fs::remove_file(&p).is_ok() {
+                n += 1;
+            }
+        }
+    }
+    n
 }
 
 /// What one tick did (the log's words).
@@ -101,7 +133,12 @@ pub fn tick<'a>(
         // stamped first: a crash mid-prune never makes it run at each tick
         stamp(&paths.images_pruned());
         let store = store.to_path_buf();
-        std::thread::spawn(move || done(prune::prune(&store, now_ms, days, &named)));
+        let agents = paths.state.join("agents");
+        std::thread::spawn(move || {
+            let r = prune::prune(&store, now_ms, days, &named);
+            prune_views(&agents, now_ms, days);
+            done(r)
+        });
         care.pruning = Some(days);
     }
     care
@@ -154,6 +191,30 @@ mod tests {
         // the next tick: both stamps are fresh, nothing to do
         let again = tick(&paths, &store, &prefs, [text.as_str()].into_iter(), now + 2000, |_| {});
         assert_eq!(again, Care::default());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// docs/mcp-apps.md C2: the daily prune takes the agents' views
+    /// files past keep_days, keeps the fresh ones and anything else.
+    #[test]
+    fn the_prune_takes_old_views_files() {
+        assert!(!view_expired(0, DAY_MS, 1));
+        assert!(view_expired(0, DAY_MS + 1, 1));
+        assert!(!view_expired(5, 1, 30), "a clock moved back keeps it");
+        let root = std::env::temp_dir().join(format!("sb-image-care-views-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let views = bise_home::hub_state::agent_views(&root, "a");
+        std::fs::create_dir_all(&views).expect("views");
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).expect("clock").as_millis() as u64;
+        for (name, age_days) in [("1-1.json", 31u64), ("1-2.json", 1), (".1-3.json.tmp", 40), ("notes.txt", 40)] {
+            let p = views.join(name);
+            std::fs::write(&p, "{}").expect("file");
+            prune::touch_file(&p, prune::at_ms(now - age_days * DAY_MS));
+        }
+        assert_eq!(prune_views(&root.join("agents"), now, 30), 2);
+        let mut left: Vec<String> = std::fs::read_dir(&views).expect("dir").flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        left.sort();
+        assert_eq!(left, vec!["1-2.json", "notes.txt"]);
         let _ = std::fs::remove_dir_all(&root);
     }
 

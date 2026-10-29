@@ -156,6 +156,11 @@ impl Paths {
     pub fn agent_bg(&self, name: &str) -> PathBuf {
         bise_home::hub_state::agent_bg(&self.state, name)
     }
+    /// The agent's MCP Apps views folder (`BEND_VIEWS_DIR`,
+    /// docs/mcp-apps.md C2): pruned with the images (`image_care`).
+    pub fn agent_views_dir(&self, name: &str) -> PathBuf {
+        bise_home::hub_state::agent_views(&self.state, name)
+    }
     /// The harness's own files of the agent (bash wrappers, steer,
     /// interrupt, run_typescript files): `BEND_AGENT_RUN`, never deleted
     /// while the agent lives.

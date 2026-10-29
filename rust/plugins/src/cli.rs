@@ -17,7 +17,7 @@ pub const USAGE: &str = "usage:
   bise plugins logout SERVER    forget its tokens
   bise plugins refresh          fetch your Mistral connectors' catalog now
   bise plugins connect mistral:NAME   connect a Mistral connector (its page opens in your browser)
-  bise plugins serve --dir DIR [--workspace DIR] [--parent PID]   (internal: the session bridge)
+  bise plugins serve --dir DIR [--workspace DIR] [--parent PID] [--views-dir DIR]   (internal: the session bridge)
 
 Roots: bise's built-in plugins (<app root>/plugins), ~/.agents/plugins (or $BEND_PLUGINS_HOME)
 and <workspace>/.agents/plugins.
@@ -162,6 +162,9 @@ pub fn main(args: &[String]) -> i32 {
                 secrets_dir: Some(crate::oauth::store_dir()),
                 env_dir: Some(home.mcp_secrets_dir()),
                 tools_cache: Some(crate::tools_cache::Place::of(&home)),
+                // the agent's views folder (BEND_VIEWS_DIR, from the hub): the
+                // full results of its calls with a view (docs/mcp-apps.md C2)
+                views_dir: val(args, "--views-dir").filter(|d| !d.is_empty()).map(PathBuf::from),
                 ..bridge::Opts::new(PathBuf::from(dir), parent, resolve::Roots::standard(Some(&ws)))
             };
             match bridge::serve(opts) {

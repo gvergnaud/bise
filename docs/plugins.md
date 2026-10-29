@@ -380,6 +380,9 @@ tests use temp dirs.
     loaded plugins' skills, first name kept (workspace, plugins, bise,
     personal, vibe). The only skills index the REPL reads;
   - `D/report.txt`: the human report (the same text as the CLI);
+  - with `--views-dir` (the hub's `BEND_VIEWS_DIR`): a `tools/call` of a
+    tool with a view that carries `x-bise-call: <call>` leaves its whole
+    result in `<views dir>/<call>.json` (docs/mcp-apps.md C2);
   - `D/bridge.json` (`bridge::BRIDGE_FILE`): `{"v":1,"base","pid"}`,
     where the hub reaches this bridge for a view's calls
     (docs/mcp-apps.md C5).

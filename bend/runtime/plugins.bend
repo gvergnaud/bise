@@ -69,6 +69,9 @@ def skills_index_path() -> IO(String):
 # 15 s. The sh exits, so the bridge has ppid 1 from birth, by design:
 # its owner is its --parent (it exits on that pid's exit event,
 # rust/plugins/src/parent.rs), never its ppid.
+# $BEND_VIEWS_DIR (the hub sets it: the agent's views folder) goes to
+# the bridge as is (--views-dir): the full result of each call with a
+# view is written there (docs/mcp-apps.md C2); unset, nothing is.
 
 def start_script() -> String:
   "d=\"$1\"
@@ -79,7 +82,9 @@ bin=\"$BEND_HARNESS_BIN\"
 [ -x \"$bin\" ] || bin=rust/target/release/bend-harness
 [ -x \"$bin\" ] || bin=rust/target/debug/bend-harness
 [ -x \"$bin\" ] || exit 0
-nohup \"$bin\" plugins serve --dir \"$d\" --parent \"$PPID\" > \"$d/bridge.log\" 2>&1 < /dev/null &
+set -- plugins serve --dir \"$d\" --parent \"$PPID\"
+[ -n \"$BEND_VIEWS_DIR\" ] && set -- \"$@\" --views-dir \"$BEND_VIEWS_DIR\"
+nohup \"$bin\" \"$@\" > \"$d/bridge.log\" 2>&1 < /dev/null &
 i=0
 while [ ! -f \"$d/ready\" ] && [ \"$i\" -lt 300 ]; do sleep 0.05; i=$((i+1)); done"
 

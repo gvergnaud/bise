@@ -258,6 +258,76 @@ impl Virtual {
     }
 }
 
+/// The header the REPL sends on a `tools/call` whose index line has
+/// `ui:` (docs/mcp-apps.md C2): `<turn-start epoch ms>-<tool id>`.
+pub const CALL_HEADER: &str = "x-bise-call";
+/// A views file bigger than this keeps `{"truncated": true}` for its
+/// result (the view says "result too large").
+pub const MAX_FILE: usize = 4 * 1024 * 1024;
+
+/// A call id as the REPL makes it (`[0-9]+-[0-9]+`, at most 40 chars):
+/// anything else names no file (a path never comes from a header).
+pub fn call_ok(call: &str) -> bool {
+    let Some((a, b)) = call.split_once('-') else { return false };
+    let digits = |s: &str| !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit());
+    call.len() <= 40 && digits(a) && digits(b)
+}
+
+/// One call with a view, as its views file keeps it (C2).
+pub struct Record<'a> {
+    pub plugin: &'a str,
+    pub server: &'a str,
+    /// the server's own `ui://` URI (never the index's encoded one)
+    pub uri: &'a str,
+    /// the tool's published name
+    pub tool: &'a str,
+    pub args: &'a Value,
+    /// the server's whole JSON-RPC answer: its `result` is kept, or its
+    /// `error` (the view gets `tool-cancelled`)
+    pub answer: &'a Value,
+    pub at_ms: u64,
+}
+
+/// The views file's text: `{"v":1,"plugin","server","uri","tool","args",
+/// "result","at_ms"}` (`"error"` instead of `"result"` for an error
+/// answer); over [`MAX_FILE`], `result` is `{"truncated": true}`. Pure.
+pub fn file_text(r: &Record) -> String {
+    let mut v = json!({"v": 1, "plugin": r.plugin, "server": r.server, "uri": r.uri, "tool": r.tool, "args": r.args, "at_ms": r.at_ms});
+    match (r.answer.get("result"), r.answer.get("error")) {
+        (Some(res), _) => v["result"] = res.clone(),
+        (None, Some(e)) => v["error"] = e.clone(),
+        (None, None) => v["error"] = json!({"code": -32603, "message": "no result"}),
+    }
+    let text = v.to_string();
+    if text.len() <= MAX_FILE {
+        return text;
+    }
+    v["result"] = json!({"truncated": true});
+    if let Some(o) = v.as_object_mut() {
+        o.remove("error");
+    }
+    let text = v.to_string();
+    if text.len() <= MAX_FILE {
+        return text;
+    }
+    // the args alone are too big: dropped too
+    v["args"] = json!({"truncated": true});
+    v.to_string()
+}
+
+/// Write `<dir>/<call>.json` atomically (a temp file, then a rename);
+/// a bad call id writes nothing.
+pub fn write_file(dir: &Path, call: &str, r: &Record) -> std::io::Result<()> {
+    if !call_ok(call) {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("bad call id {:?}", call)));
+    }
+    std::fs::create_dir_all(dir)?;
+    let path = dir.join(format!("{}.json", call));
+    let tmp = dir.join(format!(".{}.json.tmp", call));
+    std::fs::write(&tmp, file_text(r))?;
+    std::fs::rename(&tmp, &path)
+}
+
 /// The `ui://` resources one server answered, by URI: a view's HTML is
 /// read from its server once per start (cleared when it starts again
 /// or says its tools changed). Only a `result` is kept, at most

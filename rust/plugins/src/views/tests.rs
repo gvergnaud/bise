@@ -147,3 +147,49 @@ fn the_resource_cache_keeps_ui_results_only() {
     c.clear();
     assert!(c.is_empty());
 }
+
+#[test]
+fn a_call_id_is_digits_dash_digits_only() {
+    for ok in ["1730000000000-3", "0-0"] {
+        assert!(call_ok(ok), "{ok}");
+    }
+    for bad in ["", "1", "-1", "1-", "a-1", "1-2-3", "../1-2", "1-2/x", "1 -2", &"9".repeat(41)] {
+        assert!(!call_ok(bad), "{bad}");
+    }
+}
+
+#[test]
+fn the_views_file_keeps_the_whole_result_or_says_truncated() {
+    let args = json!({"start": 3});
+    let answer = json!({"jsonrpc": "2.0", "id": 2, "result": {"content": [{"type": "text", "text": "counter at 3"}], "structuredContent": {"count": 3}}});
+    let r = Record { plugin: "fake-app", server: "fake-app", uri: "ui://fake-app/counter", tool: "show_counter", args: &args, answer: &answer, at_ms: 7 };
+    let v: Value = serde_json::from_str(&file_text(&r)).unwrap();
+    assert_eq!(v, json!({"v": 1, "plugin": "fake-app", "server": "fake-app", "uri": "ui://fake-app/counter", "tool": "show_counter",
+        "args": {"start": 3}, "result": answer["result"], "at_ms": 7}));
+    // an error answer: its error, no result
+    let err = json!({"error": {"code": -32000, "message": "boom"}});
+    let v: Value = serde_json::from_str(&file_text(&Record { answer: &err, ..r })).unwrap();
+    assert_eq!((v.get("result"), v["error"]["message"].clone()), (None, json!("boom")));
+    // too big: the result says so, the file stays under the cap
+    let big = json!({"result": {"structuredContent": {"blob": "x".repeat(MAX_FILE)}}});
+    let text = file_text(&Record { answer: &big, ..r });
+    assert!(text.len() <= MAX_FILE);
+    let v: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!((v["result"].clone(), v["args"].clone()), (json!({"truncated": true}), json!({"start": 3})));
+    let huge_args = json!({"blob": "y".repeat(MAX_FILE)});
+    let v: Value = serde_json::from_str(&file_text(&Record { args: &huge_args, ..r })).unwrap();
+    assert_eq!(v["args"], json!({"truncated": true}));
+}
+
+#[test]
+fn the_views_file_is_written_whole_and_never_outside_its_folder() {
+    let d = tmp("file");
+    let args = json!({});
+    let answer = json!({"result": {}});
+    let r = Record { plugin: "p", server: "s", uri: "ui://p/v", tool: "t", args: &args, answer: &answer, at_ms: 1 };
+    write_file(&d.join("views"), "12-3", &r).unwrap();
+    let names: Vec<String> = std::fs::read_dir(d.join("views")).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+    assert_eq!(names, vec!["12-3.json"]);
+    assert!(write_file(&d.join("views"), "../12-3", &r).is_err());
+    assert!(!d.join("12-3.json").exists());
+}

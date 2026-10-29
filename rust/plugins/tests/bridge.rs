@@ -930,3 +930,72 @@ fn a_static_view_turned_off_is_refused() {
     let _ = std::fs::remove_dir_all(&base);
     let _ = std::fs::remove_file(&log);
 }
+
+/// POST one JSON-RPC body with an `x-bise-call` header.
+fn post_call(r: &mut BufReader<TcpStream>, path: &str, call: &str, body: &str) -> (u32, String) {
+    let host = r.get_ref().peer_addr().unwrap();
+    write!(r.get_mut(), "POST {} HTTP/1.1\r\nHost: {}\r\nX-Bise-Call: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}", path, host, call, body.len(), body).unwrap();
+    let mut status = String::new();
+    r.read_line(&mut status).unwrap();
+    let code: u32 = status.split_whitespace().nth(1).unwrap().parse().unwrap();
+    let mut len = 0;
+    loop {
+        let mut h = String::new();
+        r.read_line(&mut h).unwrap();
+        if h.trim().is_empty() {
+            break;
+        }
+        if let Some(v) = h.to_ascii_lowercase().strip_prefix("content-length:") {
+            len = v.trim().parse().unwrap();
+        }
+    }
+    let mut b = vec![0; len];
+    r.read_exact(&mut b).unwrap();
+    (code, String::from_utf8(b).unwrap())
+}
+
+/// docs/mcp-apps.md C2: a call with a view and an `x-bise-call` header
+/// leaves its full result in the views folder, the model's answer the
+/// same; a call without a view, without the header or with a bad call id
+/// writes nothing; a static view's call is kept too.
+#[test]
+fn a_call_with_a_view_keeps_its_full_result() {
+    let log = std::env::temp_dir().join(format!("bp-bridge-apps-c2-log-{}", std::process::id()));
+    let (base, plugins) = mcp_apps_root("apps-c2", &log);
+    let (dir, views) = (base.join("run/plugins"), base.join("agent/views"));
+    let mut parent = std::process::Command::new("sleep").arg("60").spawn().unwrap();
+    let mut opts = bridge::Opts::new(dir.clone(), Some(parent.id()), roots_of(&base, Some(plugins)));
+    opts.views_dir = Some(views.clone());
+    let server = std::thread::spawn(move || bridge::serve(opts));
+    wait_until("ready", || dir.join("ready").exists());
+
+    let (mut r, path) = route(&dir, "show_counter");
+    let call = r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"show_counter","arguments":{"start":5}}}"#;
+    let (_, plain) = post(&mut r, &path, call);
+    assert!(!views.exists(), "no header: nothing written");
+    let (c, with) = post_call(&mut r, &path, "1730000000000-4", call);
+    assert_eq!((c, with.clone()), (200, plain), "the model's answer is the same");
+    let f: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(views.join("1730000000000-4.json")).unwrap()).unwrap();
+    assert_eq!((f["v"].clone(), f["plugin"].clone(), f["server"].clone()), (serde_json::json!(1), serde_json::json!("fake-app"), serde_json::json!("fake-app")));
+    assert_eq!((f["uri"].clone(), f["tool"].clone(), f["args"].clone()), (serde_json::json!("ui://fake-app/counter"), serde_json::json!("show_counter"), serde_json::json!({"start": 5})));
+    assert_eq!(f["result"]["structuredContent"], serde_json::json!({"count": 5}));
+    assert!(f["at_ms"].as_u64().unwrap() > 0);
+    // no view, or a bad id: nothing
+    post_call(&mut r, &path, "1730000000000-5", r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"slow","arguments":{"ms":1}}}"#);
+    post_call(&mut r, &path, "../evil", call);
+    let mut names: Vec<String> = std::fs::read_dir(&views).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+    names.sort();
+    assert_eq!(names, vec!["1730000000000-4.json"]);
+    // a static view's call
+    let (mut r, path) = route(&dir, "hello");
+    post_call(&mut r, &path, "1730000000000-6", r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"hello","arguments":{"name":"Ada"}}}"#);
+    let f: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(views.join("1730000000000-6.json")).unwrap()).unwrap();
+    assert_eq!((f["server"].clone(), f["uri"].clone()), (serde_json::json!("~views"), serde_json::json!("ui://fake-views/views/hello")));
+    assert_eq!(f["result"]["structuredContent"], serde_json::json!({"name": "Ada"}));
+
+    parent.kill().unwrap();
+    parent.wait().unwrap();
+    wait_until("the bridge's end", || server.is_finished());
+    let _ = std::fs::remove_dir_all(&base);
+    let _ = std::fs::remove_file(&log);
+}
