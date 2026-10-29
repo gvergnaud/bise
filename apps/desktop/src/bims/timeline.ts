@@ -82,6 +82,13 @@ export interface TimelineOpts {
 export function newTimeline(opts: TimelineOpts = {}): Timeline {
   const bims = new Map<string, Bim>();
   let office: Office | null = null;
+  /**
+   * the office has had a bim: until then every update is its first look (everyone at their spot). The
+   * app's first rows are often empty (the hub not heard yet): the crew that came next walked in by
+   * the door all at once, past the update's walk budget, and most stayed out (bims missing in the
+   * side tile until another update; bim-review m_49981)
+   */
+  let peopled = false;
   /** the hub events already played (an event passed again is not played twice) */
   const seen = new Set<string>();
 
@@ -139,7 +146,7 @@ export function newTimeline(opts: TimelineOpts = {}): Timeline {
 
   return {
     update(acts: ReadonlyMap<string, Activity>, next: Office, t: number, events: readonly BimEvent[], built?: Built, fun?: FunIn): void {
-      const first = office === null;
+      const first = office === null || !peopled;
       // a room that grew (the loft's rows, its 3 columns) or another map: its world is rebuilt, every bim at its spot in it
       const rebuilt = office !== null && (office.map !== next.map || office.size !== next.size);
       office = next;
@@ -243,6 +250,7 @@ export function newTimeline(opts: TimelineOpts = {}): Timeline {
         }
         if (ok && w.b.over && w.b.over.act === w.act && w.b.over.until === Infinity) w.b.over.until = seg.t + walkTime(seg) + w.b.over.stay;
       }
+      if (bims.size > 0) peopled = true;
       chats(bims, next);
       // an event whose walk wasn't made here (the room was rebuilt, the same stretch went on, no clear way): it ends anyway
       for (const b of bims.values()) if (b.over && b.over.until === Infinity) b.over.until = t + MAX_WALK_S + b.over.stay;

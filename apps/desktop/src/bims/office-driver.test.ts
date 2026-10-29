@@ -3,7 +3,7 @@ import { activities } from './activity';
 import { labelsOf } from './labels';
 import { layoutOf } from './maps';
 import { newTimeline } from './timeline';
-import { agent, mainAgent } from './fixtures';
+import { agent, mainAgent, office } from './fixtures';
 import { growOf, STAGE_AT, UNLOCK_LABEL, UNLOCK_WALK } from './growth';
 import { localOf } from './eggs';
 import { makeDriver, NO_ATTENTION, officeKey, type Clock } from './office-driver';
@@ -36,6 +36,23 @@ describe('office-driver: one office brain', () => {
     const k = d.step(clock(T + 3), NO_ATTENTION);
     expect(k?.reshaped).toBe(true);
     expect(k?.want).toBe('kyoto');
+  });
+
+  it('poses the whole crew when the first rows were empty, and a newcomer after it (bim-review m_49981: 9 of 16 in the side tile)', () => {
+    const d = makeDriver(parts);
+    const moving = (t: number): Clock => ({ ...clock(t), reduced: false });
+    const empty = { agents: [], cards: [], places: [] };
+    // the app's first rows: none yet (the hub not heard), then the crew
+    d.rows(empty, [], 'loft');
+    d.step(moving(T), NO_ATTENTION);
+    d.rows(office, office.agents, 'loft');
+    const names = (t: number): string[] => d.step(moving(t), NO_ATTENTION)?.frames.map((f) => f.name) ?? [];
+    expect(new Set(names(T + 0.2))).toEqual(new Set(office.agents.map((a) => a.name)));
+    // a newcomer: in by the door, posed on the next step
+    const grown = { ...office, agents: [...office.agents, agent('newcomer', { status: 'working' })] };
+    d.rows(grown, grown.agents, 'loft');
+    expect(names(T + 20)).toContain('newcomer');
+    expect(names(T + 20)).toHaveLength(grown.agents.length);
   });
 
   it("his sketch's extensions: they come with the objects that need them, a kept mark brings them back, and they never go", () => {
