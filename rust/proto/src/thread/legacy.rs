@@ -76,7 +76,7 @@ fn of(kind: &str, raw: &str) -> Option<Feed> {
         "msg-in" => {
             let (head, body) = text.split_once(" : ").unwrap_or(("", &text));
             let (from, id) = head.split_once(' ').unwrap_or((head, ""));
-            Feed::MsgIn(feed::MsgIn { from: from.into(), id: msg_id(id), body: body.into() })
+            Feed::MsgIn(feed::MsgIn { from: from.into(), id: msg_id(id), body: body.into(), view: None })
         }
         // `{from} → {to} m_<n> : {text}`, no id before BISE-110
         "msg" => {

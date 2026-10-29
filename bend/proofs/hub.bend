@@ -29,6 +29,7 @@ import ./lib/hub-cold-2.bend as PLC2
 import ./lib/hub-cold-3.bend as PLC3
 import ./lib/hub-cold-4.bend as PLC4
 import ./lib/hub-cold-5.bend as PLC5
+import ./lib/hub-views.bend as PLV
 import ../hub/cold.bend as CO
 import ../laws/hub.bend as Laws
 
@@ -787,3 +788,39 @@ def Laws.hot_woken(s, h):
 
 def Laws.hot_his(s, h):
   PL3.hub_via_hot(Nat, x => HP.his.go(x), HS.St.hot(s), HM.every(s), hub_his_hot(HS.St.hot(s)), hub_his_hot(HM.every(s)), PLC4.hc_hot_index(s, h))
+
+# ---- MCP App views ----
+
+def Laws.view_card_keeps_runtime(o, cx, agent, call, text):
+  match cx:
+    case HX.Cx{c, r}:
+      match r:
+        case HX.R{a, b, st, d, e, f, g, h, i, j, k, l, m, n}:
+          {==}
+
+def Laws.view_card_due_after_close(o, cx):
+  {==}
+
+def Laws.card_close_keeps_other(xs, a, b, e):
+  PLV.hv_keep(xs, a, b, e)
+
+def Laws.card_close_commutes(xs, a, b):
+  PLV.hv_comm(xs, a, b)
+
+def Laws.view_msg_from_view(agent, plugin, text, id, now):
+  {==}
+
+def Laws.view_msg_never_user():
+  {==}
+
+def Laws.view_msg_to_its_agent(agent, plugin, text, id, now):
+  {==}
+
+def Laws.view_msg_queued(agent, plugin, text, id, now):
+  {==}
+
+def Laws.view_msg_plugin(agent, plugin, text, id, now):
+  {==}
+
+def Laws.view_msg_one_delivery(o, cx, agent, plugin, text):
+  {==}

@@ -24,6 +24,9 @@ pub enum Party {
     Bise,
     /// GitHub's news about a PR (pr-news)
     Github,
+    /// an MCP App view's `ui/message` (sb-core's sender `view`; its
+    /// plugin is on the message, never in this word)
+    View,
     /// a kind this version doesn't know (a newer hub)
     #[serde(other)]
     Unknown,
@@ -31,12 +34,13 @@ pub enum Party {
 
 impl Party {
     /// sb-core's word for a message's end (`model.bend`'s USER, HUB,
-    /// GITHUB, else an agent's name).
+    /// GITHUB, VIEW, else an agent's name).
     pub fn of_word(w: &str) -> Party {
         match w {
             "user" => Party::You,
             "switchboard" | "bise" => Party::Bise,
             "github" => Party::Github,
+            "view" => Party::View,
             name => Party::Agent { name: name.to_string() },
         }
     }
@@ -106,6 +110,7 @@ mod tests {
         assert_eq!(Party::of_word("user"), Party::You);
         assert_eq!(Party::of_word("switchboard"), Party::Bise);
         assert_eq!(Party::of_word("github"), Party::Github);
+        assert_eq!(Party::of_word("view"), Party::View);
         assert_eq!(Party::of_word("you"), Party::Agent { name: "you".into() }, "an agent may be named you");
     }
 }

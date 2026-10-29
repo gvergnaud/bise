@@ -359,6 +359,11 @@ msg?: number | null,
  */
 thinking?: Thinking | null, notice?: Notice | null, not_delivered?: NotDelivered | null, landed?: Landed | null, pr?: PrNews | null, made?: Made | null, answered?: Answered | null, approval?: ApprovalFold | null, scheduled?: Scheduled | null, turn_failed?: TurnFailed | null, wake?: WakeFold | null, 
 /**
+ * a `from_agent` entry an MCP App view wrote (sender `view`): its
+ * plugin, so the thread says "via <plugin>" (docs/mcp-apps.md, C5)
+ */
+via_view?: string | null, 
+/**
  * the first entry after a `turn_started` line: a turn starts here
  * (the TUI's turn row; a reply's turn ends before the next start)
  */

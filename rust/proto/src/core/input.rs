@@ -94,6 +94,14 @@ core_kinds! {
         /// the approvals gate: a card opens, closes
         ConfirmOpen = "confirm_open" => IConfirmOpen { agent: Str, text: Str },
         ConfirmClose = "confirm_close" => IConfirmClose { card: Nat, res: Str },
+        /// an MCP App view's call that needs his ok, outside the agent's
+        /// turn (docs/mcp-apps.md, C5): a `confirm` card placed
+        /// `view:<agent>/<call>`, closed as timed out at its due
+        ViewConfirmOpen = "view_confirm_open" => IViewConfirmOpen { agent: Str, call: Str, text: Str },
+        /// an MCP App view's `ui/message` (C5): one message from the
+        /// fixed sender `view`, its plugin typed (`Msg.view`), queued to
+        /// `agent` only; never his words
+        ViewMessage = "view_message" => IViewMessage { agent: Str, plugin: Str, text: Str },
         /// pr-news: GitHub's news to the agent that owns the PR
         Forge = "forge" => IForge { to: Str, text: Str },
         /// a check still fails after two tries: a card for him

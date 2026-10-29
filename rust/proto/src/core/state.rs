@@ -304,9 +304,13 @@ pub const STATE: State = State {
         },
         Enum {
             name: "What",
-            doc: "what an act does: send a held route (its id) or try a cross-hub delivery again (its xid)",
+            doc: "what an act does: send a held route (its id), try a cross-hub delivery again (its xid), or close a view's approval card he left unanswered (its card id; docs/mcp-apps.md, C5)",
             tag_key: "kind",
-            variants: &[vf("RouteSend", "route_send", &[f("rid", Nat)]), vf("Retry", "retry", &[f("xid", Nat)])],
+            variants: &[
+                vf("RouteSend", "route_send", &[f("rid", Nat)]),
+                vf("Retry", "retry", &[f("xid", Nat)]),
+                vf("CardDue", "card_due", &[f("card", Nat)]),
+            ],
             fallback: "RouteSend",
         },
         Enum {
@@ -354,6 +358,9 @@ pub const STATE: State = State {
                 // --forward m_<n>`), none for any other; its text says it
                 // for the model, this field for every other reader
                 f("fwd", OptNat),
+                // mcp-apps: the plugin whose view wrote it (`from` is
+                // the fixed sender `view`); none for any other message
+                f("view", OptStr),
             ],
             shapes: &[Shape {
                 name: "journal",
@@ -373,6 +380,7 @@ pub const STATE: State = State {
                     k("via", W::OptStrOmit),
                     k("parts", W::StrOmit),
                     k("fwd", W::OptNatOmit),
+                    k("view", W::OptStrOmit),
                 ],
             }],
         },

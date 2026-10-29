@@ -10,6 +10,9 @@
 pub const USER_MESSAGE: &str = "user_message";
 /// another agent's message: `<agent_message from="…" …>…</agent_message>`
 pub const AGENT_MESSAGE: &str = "agent_message";
+/// an MCP App view's message (docs/mcp-apps.md, C5): `<view_message
+/// plugin="…" id="m_<n>">…</view_message>`, never his words
+pub const VIEW_MESSAGE: &str = "view_message";
 /// the live state before each call: `<bise_state>…</bise_state>`
 pub const BISE_STATE: &str = "bise_state";
 /// the head of an agent's role preamble (`# Your role: …`)

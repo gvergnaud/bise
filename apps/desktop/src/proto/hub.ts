@@ -25,7 +25,7 @@ export type Job = { agent: string, label: string, step?: number | null, of?: num
  * senders. Typed, so no client compares a name with "you" (a client
  * says "you" from its words catalog).
  */
-export type Party = { "who": "you" } | { "who": "agent", name: string, } | { "who": "bise" } | { "who": "github" } | { "who": "unknown" };
+export type Party = { "who": "you" } | { "who": "agent", name: string, } | { "who": "bise" } | { "who": "github" } | { "who": "view" } | { "who": "unknown" };
 
 /**
  * How a message was sent (`sb send --mode`).

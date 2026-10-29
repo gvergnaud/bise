@@ -1132,7 +1132,7 @@ pub(crate) fn hub_ev(h: Hub) -> Option<Ev> {
         Hub::Undelivered { to, text } => Ev::Undelivered { name: to, text, open: true },
         // v1: what this feed's owner received (`@{from}`: an old direct
         // reply to the user)
-        Hub::MsgIn { from, id, body } => {
+        Hub::MsgIn { from, id, body, .. } => {
             // a scheduled task's run reads as its ◷ line; the note of a
             // stop is for the agent only (site/m/timers)
             if crate::scheduled::is_hub(&from) {

@@ -53,8 +53,9 @@ core_kinds! {
         Context = "context" => RContext { context: Json },
         /// his message could not reach `to` (stopped, dropped, archived)
         Undelivered = "undelivered" => RUndelivered { to: Str, text: Str },
-        /// what the feed's owner received (`id` none: older lines)
-        MsgIn = "msg-in" => RMsgIn { from: Str, id: OptNatOmit, body: Str },
+        /// what the feed's owner received (`id` none: older lines);
+        /// `view`: the plugin whose MCP App view wrote it (from `view`)
+        MsgIn = "msg-in" => RMsgIn { from: Str, id: OptNatOmit, body: Str, view: OptStrOmit },
         /// a message between two others (`id` none: before BISE-110)
         Msg = "msg" => RMsg { from: Str, to: Str, id: OptNatOmit, body: Str },
         /// what the feed's owner sent (`ask`: it awaits a reply)

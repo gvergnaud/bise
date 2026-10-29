@@ -40,8 +40,8 @@ def context(+context: J.Json) -> J.Json:
 def undelivered(+to: String, +text: String) -> J.Json:
   J.obj([J.kv("sb", J.JStr{"undelivered"}), J.kv("to", J.JStr{to}), J.kv("text", J.JStr{text})])
 
-def msg_in(+from: String, +id: Maybe<&2, Nat>, +body: String) -> J.Json:
-  J.obj(K.cat([[J.kv("sb", J.JStr{"msg-in"})], [J.kv("from", J.JStr{from})], K.omit_mn("id", id), [J.kv("body", J.JStr{body})]]))
+def msg_in(+from: String, +id: Maybe<&2, Nat>, +body: String, +view: Maybe<&2, String>) -> J.Json:
+  J.obj(K.cat([[J.kv("sb", J.JStr{"msg-in"})], [J.kv("from", J.JStr{from})], K.omit_mn("id", id), [J.kv("body", J.JStr{body})], K.omit_ms("view", view)]))
 
 def msg(+from: String, +to: String, +id: Maybe<&2, Nat>, +body: String) -> J.Json:
   J.obj(K.cat([[J.kv("sb", J.JStr{"msg"})], [J.kv("from", J.JStr{from})], [J.kv("to", J.JStr{to})], K.omit_mn("id", id), [J.kv("body", J.JStr{body})]]))

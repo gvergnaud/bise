@@ -126,6 +126,12 @@ def HUB() -> String:
 def GITHUB() -> String:
   "github"
 
+# mcp-apps (docs/mcp-apps.md, C5): the fixed sender of an MCP App view's
+# `ui/message`; its plugin is the message's typed `view` field, never a
+# part of this name. Never the user (law view_msg_never_user)
+def VIEW() -> String:
+  "view"
+
 # ---- small helpers ----
 
 def snoc(-A: Data, xs: List<&2, A>, +x: A) -> List<&2, A>:

@@ -570,10 +570,12 @@ impl Fold<'_> {
             Hub::MsgIn { id, .. } if id.strip_prefix("m_").and_then(|n| n.parse().ok()).is_some_and(|n: u64| self.answered.contains(&n)) => {}
             // G4: its message id; G5: an old direct reply (`@from`) was
             // written to him
-            Hub::MsgIn { from, id, body } => {
+            Hub::MsgIn { from, id, body, view } => {
                 let mut e = Entry::new(pos, ms, EntryKind::FromAgent, body);
                 e.to_you = from.starts_with('@');
                 e.from = Some(from.trim_start_matches('@').to_string());
+                // mcp-apps: a view's message, its author typed (never a phrase)
+                e.via_view = view;
                 e.msg = id.strip_prefix("m_").and_then(|n| n.parse().ok());
                 self.cont = Some(self.push(e));
             }

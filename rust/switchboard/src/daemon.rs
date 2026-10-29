@@ -67,6 +67,7 @@ mod state_gate;
 mod contexts;
 mod tindex;
 mod usage;
+mod views;
 mod wake_look;
 mod place_work;
 mod worktrees;
@@ -1825,6 +1826,8 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     sh.booting = true;
     sh.step(Input::Boot);
     sh.booting = false;
+    // mcp-apps: a view's card has no call behind it after a restart
+    sh.close_view_cards();
     // land-claims: the shared folder's claims whose file has no change
     // left (stale from before, or landed while no hub ran) end, off the loop
     {

@@ -175,6 +175,10 @@ mod core_attach_tests;
 #[path = "core_forward_tests.rs"]
 mod core_forward_tests;
 
+/// mcp-apps: a view's off-turn card and a view's message.
+#[path = "core_mcp_view_tests.rs"]
+mod core_mcp_view_tests;
+
 /// issue 36 chunk 3's: photo / restore_photo, only on a fresh hub.
 #[path = "core_photo_tests.rs"]
 mod core_photo_tests;

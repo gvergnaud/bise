@@ -312,7 +312,8 @@ pub enum Hub {
     Undelivered { to: String, text: String },
     /// what the feed's owner received: `{from} m_<n> : {text}`; `from`
     /// keeps its `@` (an old direct reply to the user)
-    MsgIn { from: String, id: String, body: String },
+    /// `view`: the plugin whose MCP App view wrote it (from `view`)
+    MsgIn { from: String, id: String, body: String, view: Option<String> },
     /// `{from} → {to} m_<n> : {text}` (no id before BISE-110)
     Msg { from: String, to: String, id: String, body: String },
     /// what the feed's owner sent: `sent : {to} : m_<n> : {ask} : {text}`
@@ -709,7 +710,7 @@ pub fn view(f: Feed) -> Hub {
         Feed::SteerRx(r) => Hub::SteerRx(r.ids),
         Feed::Context(r) => Hub::Context(r.context.to_string()),
         Feed::Undelivered(r) => Hub::Undelivered { to: r.to, text: r.text },
-        Feed::MsgIn(r) => Hub::MsgIn { from: r.from, id: m(r.id), body: r.body },
+        Feed::MsgIn(r) => Hub::MsgIn { from: r.from, id: m(r.id), body: r.body, view: r.view },
         Feed::Msg(r) => Hub::Msg { from: r.from, to: r.to, id: m(r.id), body: r.body },
         Feed::Sent(r) => Hub::Sent { to: r.to, id: m(Some(r.id)), ask: r.ask, body: r.body },
         Feed::MsgYou(r) => Hub::MsgYou { from: r.from, body: r.body },

@@ -51,8 +51,9 @@ pub fn readable(line: &str) -> Option<String> {
     if let Some(rest) = line.strip_prefix("sb ") {
         return Some(match lines::hub(rest) {
             Hub::You(t, _) => format!("user: {t}"),
-            Hub::MsgIn { from, id, body } if from.is_empty() => format!("message from {}", with_id(&id, &body)),
-            Hub::MsgIn { from, id, body } => format!("message from {} {}", from, with_id(&id, &body)),
+            Hub::MsgIn { from, id, body, .. } if from.is_empty() => format!("message from {}", with_id(&id, &body)),
+            Hub::MsgIn { id, body, view: Some(plugin), .. } => format!("message from a view via {} {}", plugin, with_id(&id, &body)),
+            Hub::MsgIn { from, id, body, .. } => format!("message from {} {}", from, with_id(&id, &body)),
             // hub line protocol v2 (C2)
             Hub::Msg { from, id, body, .. } if from.is_empty() => format!("message {}", with_id(&id, &body)),
             Hub::Msg { from, to, id, body } => format!("message {} → {} {}", from, to, with_id(&id, &body)),

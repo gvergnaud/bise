@@ -691,6 +691,10 @@ pub struct Entry {
     pub turn_failed: Option<TurnFailed>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wake: Option<WakeFold>,
+    /// a `from_agent` entry an MCP App view wrote (sender `view`): its
+    /// plugin, so the thread says "via <plugin>" (docs/mcp-apps.md, C5)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub via_view: Option<String>,
     /// the first entry after a `turn_started` line: a turn starts here
     /// (the TUI's turn row; a reply's turn ends before the next start)
     #[serde(default, skip_serializing_if = "is_false")]
@@ -768,6 +772,7 @@ impl Entry {
             scheduled: None,
             turn_failed: None,
             wake: None,
+            via_view: None,
             turn_start: false,
             turn_end_ms: None,
             parts: Vec::new(),

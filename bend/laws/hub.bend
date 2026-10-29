@@ -993,3 +993,94 @@ law hot_his:
   for +s: HS.St
   for h: HI.Split(s)
   {HP.his(s) == HP.his.go(HM.every(s)) : Nat}
+
+# ---- MCP App views (docs/mcp-apps.md, C5; architect m_47, m_50085) ----
+# A view's call that needs his ok opens a `confirm` card outside the
+# agent's turn; a view's message is one message from the fixed sender
+# `view`, its plugin typed.
+
+# LAW: a view's card opens without touching any agent's runtime (never
+# the agent's `waiting` slot, its run or its turn).
+law view_card_keeps_runtime:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +agent: String
+  for +call: String
+  for +text: String
+  {HX.R.rts(HX.Cx.r(o, HC.open_view_confirm(o, cx, agent, call, text))) == HX.R.rts(HX.Cx.r(o, cx)) : List<&2, HX.Rt>}
+
+# LAW: a view card's due finds it gone (answered or closed before):
+# nothing happens, so it is closed once, by his answer or by its due.
+law view_card_due_after_close:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  {HC.card_due(o, None{}, cx) == cx : HX.Cx<o>}
+
+# LAW: closing a card leaves every other card as it was (an answer
+# touches only its card).
+law card_close_keeps_other:
+  for +xs: List<&2, HS.Card>
+  for +a: Nat
+  for +b: Nat
+  for e: {Nat.is_eq(a, b) == False{} : Bool}
+  {HM.card_of(HM.drop_card(xs, a), b) == HM.card_of(xs, b) : Maybe<&2, HS.Card>}
+
+# LAW: two cards closed in either order leave the same cards (a view's
+# card and the agent's own, answered in any order).
+law card_close_commutes:
+  for +xs: List<&2, HS.Card>
+  for +a: Nat
+  for +b: Nat
+  {HM.drop_card(HM.drop_card(xs, a), b) == HM.drop_card(HM.drop_card(xs, b), a) : List<&2, HS.Card>}
+
+# LAW: a view's message is from `view`, never from the user...
+law view_msg_from_view:
+  for +agent: String
+  for +plugin: String
+  for +text: String
+  for +id: Nat
+  for +now: Nat
+  {HS.Msg.from(HC.view_msg_of(agent, plugin, text, id, now)) == HM.VIEW() : String}
+
+law view_msg_never_user:
+  {String.eq(HM.VIEW(), HM.USER()) == False{} : Bool}
+
+# ...to that view's agent only...
+law view_msg_to_its_agent:
+  for +agent: String
+  for +plugin: String
+  for +text: String
+  for +id: Nat
+  for +now: Nat
+  {HS.Msg.to(HC.view_msg_of(agent, plugin, text, id, now)) == agent : String}
+
+# ...queued (never steered into a turn)...
+law view_msg_queued:
+  for +agent: String
+  for +plugin: String
+  for +text: String
+  for +id: Nat
+  for +now: Nat
+  {HS.Msg.queued(HC.view_msg_of(agent, plugin, text, id, now)) == True{} : Bool}
+
+# ...its plugin typed, as the input named it...
+law view_msg_plugin:
+  for +agent: String
+  for +plugin: String
+  for +text: String
+  for +id: Nat
+  for +now: Nat
+  {HS.Msg.view(HC.view_msg_of(agent, plugin, text, id, now)) == Some{plugin} : Maybe<&2, String>}
+
+# ...and delivered once: one message journaled, handed to no `sb wait`
+# waiter, then its agent's queue pumped like any queued message.
+law view_msg_one_delivery:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +agent: String
+  for +plugin: String
+  for +text: String
+  {HC.view_message.go(o, True{}, cx, agent, plugin, text)
+    == HC.fst(o, HC.send.waiter(o, None{},
+         HC.emit(o, cx, HM.EMsgSent{HC.view_msg_of(agent, plugin, text, HS.St.next_msg(HC.st(o, cx)), HC.now(o, cx))}, {==}, {==}, Unit{}),
+         HC.view_msg_of(agent, plugin, text, HS.St.next_msg(HC.st(o, cx)), HC.now(o, cx)))) : HX.Cx<o>}

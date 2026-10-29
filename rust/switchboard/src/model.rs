@@ -18,6 +18,10 @@ pub const USER: &str = "user";
 /// The hub itself, as the sender of notifications (a task crashed...).
 /// Never an agent name.
 pub const HUB: &str = "switchboard";
+/// An MCP App view, as the sender of its `ui/message` (sb-core's
+/// `M.VIEW()`; its plugin is the message's `view` field). Never an
+/// agent name, never the user.
+pub const VIEW: &str = "view";
 
 /// The status every view shows (RFC 0001 §9.1, RFC 0003 `ListedAgent`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -56,7 +56,7 @@ fn hub_lines_read_their_fields() {
     };
     assert_eq!(h("you : a\\nb"), Hub::You("a\nb".into(), None));
     assert_eq!(h("undelivered : fix : d'abord \\: les tests"), Hub::Undelivered { to: "fix".into(), text: "d'abord : les tests".into() });
-    assert_eq!(h("msg-in : docs m_3 : hi : there"), Hub::MsgIn { from: "docs".into(), id: "m_3".into(), body: "hi : there".into() });
+    assert_eq!(h("msg-in : docs m_3 : hi : there"), Hub::MsgIn { from: "docs".into(), id: "m_3".into(), body: "hi : there".into(), view: None });
     assert_eq!(h("msg : a → b m_9 : hello"), Hub::Msg { from: "a".into(), to: "b".into(), id: "m_9".into(), body: "hello".into() });
     assert_eq!(h("msg : a → b c : hello"), Hub::Msg { from: "a".into(), to: "b c".into(), id: String::new(), body: "hello".into() });
     assert_eq!(h("sent : main : m_9 : 1 : cart \\: or not"), Hub::Sent { to: "main".into(), id: "m_9".into(), ask: true, body: "cart : or not".into() });

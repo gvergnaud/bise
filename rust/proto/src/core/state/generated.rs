@@ -228,6 +228,8 @@ pub struct Msg {
     pub parts: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fwd: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub view: Option<String>,
 }
 
 /// Not an object: an error (its reader skips it).
@@ -249,6 +251,7 @@ impl<'de> Deserialize<'de> for Msg {
             via: field(&o, "via"),
             parts: field(&o, "parts"),
             fwd: field(&o, "fwd"),
+            view: field(&o, "view"),
         })
     }
 }

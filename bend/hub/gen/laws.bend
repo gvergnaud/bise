@@ -201,6 +201,18 @@ law in_confirm_close_bare:
 def in_confirm_close_bare():
   {==}
 
+law in_view_confirm_open_bare:
+  {IN.of(J.obj([J.kv("t", J.JStr{"view_confirm_open"})])) == IN.IViewConfirmOpen{"", "", ""} : IN.In}
+
+def in_view_confirm_open_bare():
+  {==}
+
+law in_view_message_bare:
+  {IN.of(J.obj([J.kv("t", J.JStr{"view_message"})])) == IN.IViewMessage{"", "", ""} : IN.In}
+
+def in_view_message_bare():
+  {==}
+
 law in_forge_bare:
   {IN.of(J.obj([J.kv("t", J.JStr{"forge"})])) == IN.IForge{"", ""} : IN.In}
 
@@ -666,6 +678,24 @@ law in_IConfirmClose_round:
   {IN.of(IN.json(IN.IConfirmClose{card, res})) == IN.IConfirmClose{card, res} : IN.In}
 
 def in_IConfirmClose_round(card, res):
+  {==}
+
+law in_IViewConfirmOpen_round:
+  for agent: String
+  for call: String
+  for text: String
+  {IN.of(IN.json(IN.IViewConfirmOpen{agent, call, text})) == IN.IViewConfirmOpen{agent, call, text} : IN.In}
+
+def in_IViewConfirmOpen_round(agent, call, text):
+  {==}
+
+law in_IViewMessage_round:
+  for agent: String
+  for plugin: String
+  for text: String
+  {IN.of(IN.json(IN.IViewMessage{agent, plugin, text})) == IN.IViewMessage{agent, plugin, text} : IN.In}
+
+def in_IViewMessage_round(agent, plugin, text):
   {==}
 
 law in_IForge_round:

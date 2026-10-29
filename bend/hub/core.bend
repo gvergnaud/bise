@@ -420,7 +420,7 @@ def waiter_reply(-o: S.St, +cx: X.Cx<o>, +w: X.Waiter, +m: S.Msg, +kind: String)
     J.kv("expects_reply", J.JBool{S.Msg.expect(m)}), J.kv("auto", J.JBool{S.Msg.auto(m)}),
     J.kv("asked", J.JStr{mid(X.Waiter.msg(w))}),
     J.kv("message", J.JStr{S.Msg.text(m)})]))
-  +cx4 = msg_parts(o, feed(o, cx3, X.Waiter.agent(w), FD.msg_in(S.Msg.from(m), Some{S.Msg.id(m)}, S.Msg.text(m))), X.Waiter.agent(w), m)
+  +cx4 = msg_parts(o, feed(o, cx3, X.Waiter.agent(w), FD.msg_in(S.Msg.from(m), Some{S.Msg.id(m)}, S.Msg.text(m), S.Msg.view(m))), X.Waiter.agent(w), m)
   +still = X.any_waiter(X.R.waiters(rr(o, cx4)), X.Waiter.agent(w))
   +x = X.Rt.with_waiting(rt(o, cx4, X.Waiter.agent(w)), still)
   dirty(o, upd_rt(o, cx4, x))
@@ -488,7 +488,7 @@ def deliver.line(-o: S.St, again: Bool, you: Bool, +cx: X.Cx<o>, +name: String, 
       +cx2 = feed(o, feed(o, cx, name, FD.you(S.Msg.text(m), S.Msg.via(m))), name, FD.you_id(S.Msg.id(m)))
       you_parts(o, cx2, name, S.Msg.parts(m))
     case False{} False{}:
-      msg_parts(o, feed(o, cx, name, FD.msg_in(S.Msg.from(m), Some{S.Msg.id(m)}, S.Msg.text(m))), name, m)
+      msg_parts(o, feed(o, cx, name, FD.msg_in(S.Msg.from(m), Some{S.Msg.id(m)}, S.Msg.text(m), S.Msg.view(m))), name, m)
 
 def deliver_each(-o: S.St, batch: List<&2, S.Msg>, +cx: X.Cx<o>, +name: String, +acc: List<&2, K.Delivered>) -> X.Cx<o> & List<&2, K.Delivered>:
   match batch:
@@ -933,6 +933,39 @@ def fst(-o: S.St, p: X.Cx<o> & SendR) -> X.Cx<o>:
   match p:
     case (+cx, _):
       cx
+
+# ---- an MCP App view's message (docs/mcp-apps.md, C5, decision q-message) ----
+# A view's `ui/message` is one message from the fixed sender `view`, its
+# plugin in the typed field `view`, to that view's agent only, queued
+# (never steered in): the agent reads it at its next turn, wrapped like a
+# page note; it is never his words (laws view_msg_*). An agent gone or not
+# active: nothing is sent, the hub says so to the view.
+
+def view_snd(+agent: String, +text: String) -> Snd:
+  Snd{M.VIEW(), agent, text, False{}, None{}, False{}, False{}, True{}, None{}, "", None{}}
+
+# the message a view's text becomes: msg_of_snd's, with its plugin
+def view_msg_of(+agent: String, +plugin: String, +text: String, +id: Nat, +now: Nat) -> S.Msg:
+  S.Msg.with_view(msg_of_snd(view_snd(agent, text), id, id, now), Some{plugin})
+
+def view_message.go(-o: S.St, ok: Bool, +cx: X.Cx<o>, +agent: String, +plugin: String, +text: String) -> X.Cx<o>:
+  match ok:
+    case False{}:
+      notice(o, cx, cat(["the view's message didn't reach @", agent, ": it is not active"]))
+    case True{}:
+      +m = view_msg_of(agent, plugin, text, S.St.next_msg(st(o, cx)), now(o, cx))
+      fst(o, send.waiter(o, None{}, emit(o, cx, M.EMsgSent{m}, {==}, {==}, Unit{}), m))
+
+# an agent of the hub, not archived, stopped nor failed
+def live_agent(m: Maybe<&2, S.Agent>) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{+a}:
+      is_active(S.Agent.life(a))
+
+def view_message(-o: S.St, +cx: X.Cx<o>, +agent: String, +plugin: String, +text: String) -> X.Cx<o>:
+  view_message.go(o, live_agent(M.agent_named(S.St.agents(st(o, cx)), agent)), cx, agent, plugin, text)
 
 # a notification of the hub to main: it wakes main like any message (a
 # main note waits for main's next turn instead)
@@ -2421,12 +2454,52 @@ def route_go(-o: S.St, m: Maybe<&2, S.Route>, +cx: X.Cx<o>) -> X.Cx<o>:
         u => route_plain(o, cx, r),
         u => route_fire(o, Some{r}, cx))
 
+# ---- an MCP App view's call (docs/mcp-apps.md, C5, risk 3) ----
+# A view's call to a tool the model sees too asks him like the agent's
+# own call, but outside the agent's turn: a `confirm` card placed
+# `view:<agent>/<call>`, never the agent's runtime (no wait, no run
+# change: law view_card_keeps_runtime); his answer goes out as today's
+# `confirm` effect, which the hub's Rust side gives to that view's call by
+# the card's id. Left unanswered, its due act closes it once as timed
+# out, with a no for the call (laws view_card_due_*).
+
+# how long a view's card waits for him
+def VIEW_CARD_MS() -> Nat:
+  600000n
+
+def view_place(+agent: String, +call: String) -> String:
+  cat(["view:", agent, "/", call])
+
+# the answer a view's card gets at its due: a no, as the gate reads it
+def VIEW_CARD_LATE() -> String:
+  "no: nobody answered in time"
+
+def view_card_act(+tm: S.Tms, +card: Nat, +now: Nat) -> S.Act:
+  TM.act_of(S.Tms.next_act(tm), Nat.add(now, VIEW_CARD_MS()), S.CardDue{card})
+
+def open_view_confirm(-o: S.St, +cx: X.Cx<o>, +agent: String, +call: String, +text: String) -> X.Cx<o>:
+  +id = S.St.next_card(st(o, cx))
+  +cx2 = open_card_at(o, cx, "confirm", agent, text, None{}, Some{view_place(agent, call)}, None{})
+  aemit(o, cx2, TM.ActSet{view_card_act(tms(o, cx2), id, now(o, cx2))})
+
+# a view card's due: still open, it closes as timed out and its call gets
+# a no (the `confirm` effect); answered or closed before, nothing
+def card_due(-o: S.St, m: Maybe<&2, S.Card>, +cx: X.Cx<o>) -> X.Cx<o>:
+  match m:
+    case None{}:
+      cx
+    case Some{+c}:
+      +cx2 = out(o, cx, F.confirm_card(S.Card.id(c), S.Card.agent(c), VIEW_CARD_LATE()))
+      close_card(o, cx2, S.Card.id(c), "timed out")
+
 def act_fire(-o: S.St, w: S.What, +cx: X.Cx<o>) -> X.Cx<o>:
   match w:
     case S.Retry{+xid}:
       xretry(o, XB.pending(xst(o, cx), xid), cx)
     case S.RouteSend{+rid}:
       route_go(o, XB.held(xst(o, cx), rid), cx)
+    case S.CardDue{+card}:
+      card_due(o, M.card_of(S.St.cards(st(o, cx)), card), cx)
 
 def acts_tick.each(-o: S.St, xs: List<&2, S.Act>, +cx: X.Cx<o>) -> X.Cx<o>:
   match xs:
@@ -3798,6 +3871,10 @@ def dispatch(-o: S.St, +cx: X.Cx<o>, +i: GI.In) -> X.Cx<o>:
       open_confirm(o, cx, agent, text)
     case GI.IConfirmClose{+card, +res}:
       confirm_close(o, M.card_of(S.St.cards(st(o, cx)), card), cx, card, res)
+    case GI.IViewConfirmOpen{+agent, +call, +text}:
+      open_view_confirm(o, cx, agent, call, text)
+    case GI.IViewMessage{+agent, +plugin, +text}:
+      view_message(o, cx, agent, plugin, text)
     case GI.IPageAnswered{+card, +agent, +page, +text, +block}:
       page_answered(o, M.card_of(S.St.cards(st(o, cx)), card), cx, agent, page, text, block)
     case GI.IForge{+to, +text}:

@@ -190,6 +190,13 @@ pub enum Input {
     ConfirmOpen { agent: String, text: String },
     /// Its calls are gone (interrupted): the card closes unanswered.
     ConfirmClose { card: u64, res: String },
+    /// mcp-apps (docs/mcp-apps.md, C5): a view's call that needs his ok,
+    /// outside `agent`'s turn: a `confirm` card placed `view:<agent>/<call>`
+    /// that sb-core closes as timed out at its due (never the agent's wait).
+    ViewConfirmOpen { agent: String, call: String, text: String },
+    /// mcp-apps: a view's `ui/message`, queued to `agent` from the sender
+    /// `view` with its plugin typed.
+    ViewMessage { agent: String, plugin: String, text: String },
     /// A page question's card answered on its page: sb-core's page_answered (its asker told unless it is `agent`).
     PageAnswered { card: u64, agent: String, page: String, text: String, block: String },
     /// A page's own card (plan-ok): sb-core's page_card opens a `kind`
@@ -1553,6 +1560,8 @@ impl Hub {
             Input::Placed { name, ws, err } => self.core(&mut fx, env, None, In::Placed(ci::Placed { name, ws, err })),
             Input::ConfirmOpen { agent, text } => self.core(&mut fx, env, None, In::ConfirmOpen(ci::ConfirmOpen { agent, text })),
             Input::ConfirmClose { card, res } => self.core(&mut fx, env, None, In::ConfirmClose(ci::ConfirmClose { card, res })),
+            Input::ViewConfirmOpen { agent, call, text } => self.core(&mut fx, env, None, In::ViewConfirmOpen(ci::ViewConfirmOpen { agent, call, text })),
+            Input::ViewMessage { agent, plugin, text } => self.core(&mut fx, env, None, In::ViewMessage(ci::ViewMessage { agent, plugin, text })),
             Input::PageAnswered { card, agent, page, text, block } => self.core(&mut fx, env, None, In::PageAnswered(ci::PageAnswered { card, agent, page, text, block })),
             Input::PageCard { agents, kind, text, key } => self.core(&mut fx, env, None, In::PageCard(ci::PageCard { agents, kind, text, key })),
             Input::AnswerPos { card, agent, pos } => self.core(&mut fx, env, None, In::AnswerPos(ci::AnswerPos { card, agent, pos })),
