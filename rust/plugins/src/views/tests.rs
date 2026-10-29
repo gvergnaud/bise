@@ -182,14 +182,26 @@ fn the_views_file_keeps_the_whole_result_or_says_truncated() {
 }
 
 #[test]
-fn the_views_file_is_written_whole_and_never_outside_its_folder() {
+fn each_kept_call_gets_its_own_id_and_file() {
     let d = tmp("file");
     let args = json!({});
     let answer = json!({"result": {}});
-    let r = Record { plugin: "p", server: "s", uri: "ui://p/v", tool: "t", args: &args, answer: &answer, at_ms: 1 };
-    write_file(&d.join("views"), "12-3", &r).unwrap();
-    let names: Vec<String> = std::fs::read_dir(d.join("views")).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
-    assert_eq!(names, vec!["12-3.json"]);
-    assert!(write_file(&d.join("views"), "../12-3", &r).is_err());
-    assert!(!d.join("12-3.json").exists());
+    let r = Record { plugin: "p", server: "s", uri: "ui://p/v", tool: "t", args: &args, answer: &answer, at_ms: 12 };
+    let a = keep(&d.join("views"), &r).unwrap();
+    let b = keep(&d.join("views"), &r).unwrap();
+    assert_eq!((a.as_str(), b.as_str()), ("12-0", "12-1"), "two calls of one ms");
+    assert!(call_ok(&a) && call_ok(&b));
+    let mut names: Vec<String> = std::fs::read_dir(d.join("views")).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+    names.sort();
+    assert_eq!(names, vec!["12-0.json", "12-1.json"], "no temp file left");
+    let v: Value = serde_json::from_str(&std::fs::read_to_string(d.join("views/12-1.json")).unwrap()).unwrap();
+    assert_eq!(v["uri"], "ui://p/v");
+}
+
+#[test]
+fn the_view_header_is_one_ascii_line_of_json() {
+    let h = view_header("p", "s", "ui://p/vue é\n", "12-0");
+    assert!(h.is_ascii() && !h.contains('\n') && !h.contains('\r'), "{h}");
+    let v: Value = serde_json::from_str(&h).unwrap();
+    assert_eq!(v, json!({"plugin": "p", "server": "s", "uri": "ui://p/vue é\n", "call": "12-0"}));
 }

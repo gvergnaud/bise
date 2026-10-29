@@ -1150,8 +1150,8 @@ struct Request {
     path: String,
     body: Vec<u8>,
     close: bool,
-    /// [`crate::views::CALL_HEADER`]: this call's view gets its full result
-    call: Option<String>,
+    /// [`crate::views::CALL_HEADER`]: keep this call's full result for its view
+    call: bool,
 }
 
 fn read_request(r: &mut BufReader<TcpStream>) -> Option<Request> {
@@ -1164,7 +1164,7 @@ fn read_request(r: &mut BufReader<TcpStream>) -> Option<Request> {
     let path = parts.next()?.to_string();
     let mut len = 0usize;
     let mut close = false;
-    let mut call = None;
+    let mut call = false;
     loop {
         let mut h = String::new();
         if r.read_line(&mut h).ok()? == 0 {
@@ -1181,7 +1181,7 @@ fn read_request(r: &mut BufReader<TcpStream>) -> Option<Request> {
             } else if k == "connection" && v.trim().eq_ignore_ascii_case("close") {
                 close = true;
             } else if k == crate::views::CALL_HEADER {
-                call = Some(v.trim().to_string());
+                call = !v.trim().is_empty();
             }
         }
     }
@@ -1190,9 +1190,11 @@ fn read_request(r: &mut BufReader<TcpStream>) -> Option<Request> {
     Some(Request { method, path, body, close, call })
 }
 
-fn respond(w: &mut TcpStream, status: &str, body: &str) -> std::io::Result<()> {
+/// `view`: the call's [`crate::views::VIEW_HEADER`] (ASCII, one line).
+fn respond(w: &mut TcpStream, status: &str, body: &str, view: Option<&str>) -> std::io::Result<()> {
     let ctype = if body.is_empty() { "" } else { "Content-Type: application/json\r\n" };
-    write!(w, "HTTP/1.1 {}\r\n{}Content-Length: {}\r\nConnection: keep-alive\r\n\r\n{}", status, ctype, body.len(), body)?;
+    let view = view.map(|v| format!("{}: {}\r\n", crate::views::VIEW_HEADER, v)).unwrap_or_default();
+    write!(w, "HTTP/1.1 {}\r\n{}{}Content-Length: {}\r\nConnection: keep-alive\r\n\r\n{}", status, ctype, view, body.len(), body)?;
     w.flush()
 }
 
@@ -1201,17 +1203,26 @@ fn rpc_error(id: &Value, code: i64, message: &str) -> String {
 }
 
 /// The full result of a call with a view, kept for its view (C2): when
-/// the REPL named the call and this session has a views folder. A
-/// failed write is said on stderr (the bridge log); the model's answer
-/// is the same either way.
-fn keep_for_view(live: &Live, call: Option<&str>, record: impl FnOnce() -> Option<(String, String, String, String, Value)>, answer: &Value) {
-    let (Some(call), Some(dir)) = (call, live.views_dir.as_deref()) else { return };
-    let Some((plugin, server, uri, tool, args)) = record() else { return };
+/// the REPL asked (`x-bise-call`), the tool has a view and this session
+/// has a views folder. The view's ref for the answer's
+/// [`crate::views::VIEW_HEADER`]; a failed write is said on stderr (the
+/// bridge log) and gives none. The model's answer is the same either way.
+fn keep_for_view(live: &Live, asked: bool, record: impl FnOnce() -> Option<(String, String, String, String, Value)>, answer: &Value) -> Option<String> {
+    let dir = live.views_dir.as_deref().filter(|_| asked)?;
+    let (plugin, server, uri, tool, args) = record()?;
     let r = crate::views::Record { plugin: &plugin, server: &server, uri: &uri, tool: &tool, args: &args, answer, at_ms: now_ms() };
-    if let Err(e) = crate::views::write_file(dir, call, &r) {
-        eprintln!("views file {}: {}", call, e);
+    match crate::views::keep(dir, &r) {
+        Ok(call) => Some(crate::views::view_header(&plugin, &server, &uri, &call)),
+        Err(e) => {
+            eprintln!("views file of {}: {}", tool, e);
+            None
+        }
     }
 }
+
+/// An HTTP answer: its status, body and the view's ref when the call
+/// kept one.
+type Answer = (&'static str, String, Option<String>);
 
 /// The view of the tool `published` of `entry`, as its server listed it.
 fn view_of(entry: &Entry, published: &str) -> Option<String> {
@@ -1221,15 +1232,15 @@ fn view_of(entry: &Entry, published: &str) -> Option<String> {
     crate::views::tool_ui(t).uri
 }
 
-/// One JSON-RPC message for one server: (HTTP status, body). `call`: the
-/// REPL's [`crate::views::CALL_HEADER`].
-fn handle_rpc(live: &Live, entry: &Entry, body: &[u8], call: Option<&str>) -> (&'static str, String) {
+/// One JSON-RPC message for one server. `asked`: the REPL sent
+/// [`crate::views::CALL_HEADER`].
+fn handle_rpc(live: &Live, entry: &Entry, body: &[u8], asked: bool) -> Answer {
     let Ok(msg) = serde_json::from_slice::<Value>(body) else {
-        return ("400 Bad Request", rpc_error(&Value::Null, -32700, "parse error"));
+        return ("400 Bad Request", rpc_error(&Value::Null, -32700, "parse error"), None);
     };
     let Some(id) = msg.get("id").cloned() else {
         // a notification: accepted, nothing to answer
-        return ("202 Accepted", String::new());
+        return ("202 Accepted", String::new(), None);
     };
     let method = msg.get("method").and_then(Value::as_str).unwrap_or("");
     if method == "initialize" {
@@ -1237,24 +1248,25 @@ fn handle_rpc(live: &Live, entry: &Entry, body: &[u8], call: Option<&str>) -> (&
             json!({"protocolVersion": crate::stdio::PROTOCOL, "capabilities": {"tools": {}},
                    "serverInfo": {"name": "bend-plugin-bridge", "version": "1"}})
         });
-        return ("200 OK", json!({"jsonrpc": "2.0", "id": id, "result": init}).to_string());
+        return ("200 OK", json!({"jsonrpc": "2.0", "id": id, "result": init}).to_string(), None);
     }
     let params = msg.get("params").cloned().unwrap_or_else(|| json!({}));
-    let asked = params.clone();
+    let sent = params.clone();
     match entry.forward(method, params, &live.state_now()) {
         Ok(answer) => {
+            let mut view = None;
             if method == "tools/call" {
                 let record = || {
-                    let tool = asked.get("name").and_then(Value::as_str)?.to_string();
+                    let tool = sent.get("name").and_then(Value::as_str)?.to_string();
                     let uri = view_of(entry, &tool)?;
-                    let args = asked.get("arguments").cloned().unwrap_or_else(|| json!({}));
+                    let args = sent.get("arguments").cloned().unwrap_or_else(|| json!({}));
                     Some((entry.plugin_name.clone(), entry.spec.id().to_string(), uri, tool, args))
                 };
-                keep_for_view(live, call, record, &answer);
+                view = keep_for_view(live, asked, record, &answer);
             }
-            ("200 OK", stamp(answer, id))
+            ("200 OK", stamp(answer, id), view)
         }
-        Err(e) => ("200 OK", rpc_error(&id, -32000, &e)),
+        Err(e) => ("200 OK", rpc_error(&id, -32000, &e), None),
     }
 }
 
@@ -1274,12 +1286,12 @@ fn stamp(answer: Value, id: Value) -> String {
 
 /// One JSON-RPC message for a plugin's virtual server of static views:
 /// (HTTP status, body). A view turned off is refused like an off tool.
-fn handle_virtual(live: &Live, v: &Virtual, body: &[u8], call: Option<&str>) -> (&'static str, String) {
+fn handle_virtual(live: &Live, v: &Virtual, body: &[u8], asked: bool) -> Answer {
     let Ok(msg) = serde_json::from_slice::<Value>(body) else {
-        return ("400 Bad Request", rpc_error(&Value::Null, -32700, "parse error"));
+        return ("400 Bad Request", rpc_error(&Value::Null, -32700, "parse error"), None);
     };
     let Some(id) = msg.get("id").cloned() else {
-        return ("202 Accepted", String::new());
+        return ("202 Accepted", String::new(), None);
     };
     let method = msg.get("method").and_then(Value::as_str).unwrap_or("");
     let params = msg.get("params").cloned().unwrap_or_else(|| json!({}));
@@ -1287,10 +1299,11 @@ fn handle_virtual(live: &Live, v: &Virtual, body: &[u8], call: Option<&str>) -> 
         let tool = params.get("name").and_then(Value::as_str).unwrap_or("");
         let part = PluginId::plugin(v.plugin.as_str()).part(PartKind::Tool, Some(crate::views::SERVER), tool);
         if !live.state_now().is_on(&part, v.opt_in) {
-            return ("200 OK", rpc_error(&id, -32000, &off_error(&format!("{}.{}", v.namespace, tool))));
+            return ("200 OK", rpc_error(&id, -32000, &off_error(&format!("{}.{}", v.namespace, tool))), None);
         }
     }
     let answer = v.answer(method, &params);
+    let mut view = None;
     if method == "tools/call" {
         let record = || {
             let tool = params.get("name").and_then(Value::as_str)?;
@@ -1298,9 +1311,9 @@ fn handle_virtual(live: &Live, v: &Virtual, body: &[u8], call: Option<&str>) -> 
             let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
             Some((v.plugin.clone(), crate::views::SERVER.to_string(), view.uri.clone(), tool.to_string(), args))
         };
-        keep_for_view(live, call, record, &answer);
+        view = keep_for_view(live, asked, record, &answer);
     }
-    ("200 OK", stamp(answer, id))
+    ("200 OK", stamp(answer, id), view)
 }
 
 /// One view's line of [`ui_list`]: what its resource declares (`_meta.ui`
@@ -1383,18 +1396,18 @@ fn connection(stream: TcpStream, token: String, live: Arc<Live>, retired: Arc<Mu
                 Some(v) => ("200 OK", v.to_string()),
                 None => ("404 Not Found", String::new()),
             };
-            if respond(&mut w, out.0, &out.1).is_err() || req.close {
+            if respond(&mut w, out.0, &out.1, None).is_err() || req.close {
                 break;
             }
             continue;
         }
         let out = match (req.method.as_str(), key.and_then(|k| find(&k)), virt) {
-            ("POST", Some(e), _) => handle_rpc(&live, &e, &req.body, req.call.as_deref()),
-            ("POST", None, Some(v)) => handle_virtual(&live, &v, &req.body, req.call.as_deref()),
-            (_, Some(_), _) | (_, None, Some(_)) => ("405 Method Not Allowed", String::new()),
-            (_, None, None) => ("404 Not Found", String::new()),
+            ("POST", Some(e), _) => handle_rpc(&live, &e, &req.body, req.call),
+            ("POST", None, Some(v)) => handle_virtual(&live, &v, &req.body, req.call),
+            (_, Some(_), _) | (_, None, Some(_)) => ("405 Method Not Allowed", String::new(), None),
+            (_, None, None) => ("404 Not Found", String::new(), None),
         };
-        if respond(&mut w, out.0, &out.1).is_err() || req.close {
+        if respond(&mut w, out.0, &out.1, out.2.as_deref()).is_err() || req.close {
             break;
         }
     }

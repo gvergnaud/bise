@@ -107,17 +107,22 @@ a plugin the bridge does not run. Code: `rust/plugins/src/views.rs`.
 
 ### C2. The full result (pieces 2 and 3)
 
-- The REPL sends `x-bise-call: <call>` on a `tools/call` POST whose index
-  line has `ui:`; `<call>` = `<turn-start epoch ms>-<tool id>`
-  (`[0-9]+-[0-9]+`, unique in an agent's dir across REPL restarts).
-- The bridge writes the whole JSON-RPC `result` to
-  `Paths::agent_views_dir(<dir>)/<call>.json` as
+- The REPL sends `x-bise-call: 1` on a `tools/call` POST whose index
+  line has `ui:` (a plugin tool on its loopback bridge only;
+  `Mcp.asks_view`).
+- The bridge picks the call id `<call>` = `<its now ms>-<n>` (the first
+  `n` whose file is free, taken by an exclusive create:
+  `[0-9]+-[0-9]+`, unique in an agent's dir across REPL restarts, two
+  views of one `run_typescript` get two ids) and writes the whole
+  JSON-RPC `result` to `Paths::agent_views_dir(<dir>)/<call>.json` as
   `{"v":1,"plugin","server","uri","tool","args":{…},"result":{…},"at_ms"}`,
   atomically, at most 4 MiB (bigger: `result` replaced by
   `{"truncated":true}` and the view shows "result too large"; args too
   big as well: `args` too). An error answer keeps `"error":{code,message}`
-  instead of `result` (the view gets `tool-cancelled`). `<call>` that is
-  not `[0-9]+-[0-9]+` writes nothing.
+  instead of `result` (the view gets `tool-cancelled`). It answers the
+  view's ref in the header `x-bise-view: {"plugin","server","uri","call"}`
+  (ASCII JSON, `views::view_header`); a tool without a view, no views
+  folder or a failed write: no header.
   The REPL never builds that path: the hub gives it in the Internal
   variable `BEND_VIEWS_DIR` (`bise_home::env::VARS`, `bise_env.py`),
   `<agent dir>/views` (`Paths::agent_views_dir`,
@@ -125,27 +130,41 @@ a plugin the bridge does not run. Code: `rust/plugins/src/views.rs`.
   folders (`switchboard::tools_env::temp_env`); the REPL passes it to
   the bridge as is (`--views-dir`, bend/runtime/plugins.bend). A
   headless session without a hub: none, nothing written. Code:
-  `views::{call_ok, file_text, write_file}`, `bridge::keep_for_view`.
+  `views::{call_ok, file_text, keep, view_header}`, `bridge::keep_for_view`.
 - The prune has one owner: the daily images prune
   (`switchboard::image_care`, `keep_days`) takes `views/` too; no second
   loop.
-- The model's text is unchanged (`res_text`).
+- The model's text is unchanged (`res_text`), and its tool description
+  has no `ui:` field (`Mcp.desc_only`).
 
 ### C3. The wire line (piece 3 emits, piece 4 reads)
 
-`tool_view #<id> : {"plugin":"…","server":"…","uri":"ui://…","call":"…"}`,
-right after the `tool_result #<id>` line of the same call. A new `Rec`
+`tool_view #<id> : {"plugin":"…","server":"…","uri":"ui://…","call":"…"}`
+(the ref is the bridge's `x-bise-view` header as is), after the
+`tool_result #<id>` line of the tool whose call it was: `#<id>` is the
+id of the tool running when the MCP call started (a direct call's own
+id, or the `run_typescript` that called it; two view tools in one
+program: two lines with the same id). How (bend/runtime/mcp.bend's
+header): the runtime writes the running tool's id to
+`<BEND_AGENT_RUN>/bend-tool-<port>.txt` at each tool's start; mcp.bend
+reads it at the call's start and appends `<id> <ref>` to
+`bend-views-<port>.txt`; at each tool's end the runtime takes that file
+whole (moved aside, read, removed) and emits one line per ref, each
+under its own id (a stopped call that finishes later goes to its own
+row). This holds while a REPL runs one tool at a time. A new `Rec`
 (`Rec::ToolView { id, view: ToolViewRef }`), published under the wire
 rule (`tests/released.rs`, fixtures): an older client drops the line.
 The fold attaches it by `#<id>`, never by adjacency (another line can
-come between the two; a test has one there).
+come between the two; a test has one there); a ref whose row is gone is
+dropped, never put on another row.
 
 ### C4. The thread entry (piece 4)
 
-`ToolItem.view: Option<ToolView>` with `ToolView { plugin, server, uri,
-call, state }`, `state: "live" | "expired"` (expired: the file is gone;
-the hub says so when `view/resource` finds no file, and the fold marks
-it on replay). TS types from `tests/ts.rs`.
+`ToolItem.views: Vec<ToolView>` (in the order of their lines; empty for
+a tool with no view) with `ToolView { plugin, server, uri, call, state }`,
+`state: "live" | "expired"` (expired: the file is gone; the hub says so
+when `view/resource` finds no file, and the fold marks it on replay). TS
+types from `tests/ts.rs`.
 
 ### C5. Client methods on hub.sock (piece 5; docs/client-protocol.md)
 

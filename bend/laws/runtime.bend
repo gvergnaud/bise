@@ -611,3 +611,57 @@ law bash_script_path_per_command:
 law bash_script_path_in_side_dir:
   {String.starts_with(Sh.bash_script_path("/h/agents/a/run", "7", "ls"),
      "/h/agents/a/run/bend-sh-7-") == True{} : Bool}
+
+# ---- MCP Apps views (runtime/mcp-pure.bend, docs/mcp-apps.md C1-C3) ----
+
+# LAW: an index line's description part splits off its last field
+# ` | ui: <uri>`: the model reads the rest, the call gets the uri.
+law ui_field_splits_off:
+  {Mc.desc_ui("#Show a counter | input: {\"type\":\"object\"} | ui: ui://fake-app/counter")
+    == ("#Show a counter | input: {\"type\":\"object\"}", "ui://fake-app/counter") : String & String}
+
+# LAW: no ui field: the description as it is, no uri.
+law ui_field_absent:
+  {Mc.desc_ui("#Say a word | input: {}") == ("#Say a word | input: {}", "") : String & String}
+
+# LAW: the field is the LAST marker (one inside the schema's words is
+# not it).
+law ui_field_is_the_last:
+  {Mc.desc_ui("#a | input: {\"description\":\"x | ui: y\"} | ui: ui://p/v")
+    == ("#a | input: {\"description\":\"x | ui: y\"}", "ui://p/v") : String & String}
+
+# LAW: text with a space after the last marker is no uri: nothing split.
+law ui_field_has_no_space:
+  {Mc.desc_ui("#a | ui: not a uri") == ("#a | ui: not a uri", "") : String & String}
+
+# LAW: the model's tool description never carries the ui field.
+law index_tool_hides_the_ui_field:
+  {Mc.index_of("http://127.0.0.1:9/t/p/s p show : #Show | input: {} | ui: ui://p/v")
+    == Con{T.ToolDef{"p.show", "#Show | input: {}"}, Nil{}} : List<&2, T.ToolDef>}
+
+# LAW: only a plugin tool (its loopback bridge) with a view asks the
+# bridge to keep its full result (x-bise-call); a connector never does.
+law asks_view_only_local_with_ui:
+  {(Mc.asks_view("http://127.0.0.1:9/t/p/s", "ui://p/v"),
+    (Mc.asks_view("http://127.0.0.1:9/t/p/s", ""),
+     Mc.asks_view("conn-id-42", "ui://p/v")))
+    == (True{}, (False{}, False{})) : Bool & (Bool & Bool)}
+
+# LAW: a kept ref is one `<tool id> <ref>` line; no ref or no id: nothing.
+law view_entry_line:
+  {(Mc.view_entry("7", "{\"call\":\"1-0\"}"), (Mc.view_entry("7", ""), Mc.view_entry("", "{}")))
+    == ("7 {\"call\":\"1-0\"}\n", ("", "")) : String & (String & String)}
+
+# LAW: the views file becomes one `tool_view #<id> : <ref>` line per
+# ref, each under its OWN id, in order (two views of one run_typescript;
+# a late ref of an earlier tool); a bad line is dropped.
+law view_lines_each_under_its_id:
+  {Mc.view_lines("7 {\"call\":\"1-0\"}\n7 {\"call\":\"1-1\"}\n\nbad\n3 {\"call\":\"0-0\"}\n")
+    == Con{"tool_view #7 : {\"call\":\"1-0\"}",
+         Con{"tool_view #7 : {\"call\":\"1-1\"}",
+           Con{"tool_view #3 : {\"call\":\"0-0\"}", Nil{}}}} : List<&2, String>}
+
+# LAW: the runtime's files of views sit in its side folder, per REPL.
+law views_files_in_side_dir:
+  {(Mc.tool_now_path("/h/agents/a/run", "7"), Mc.views_path("/h/agents/a/run", "7"))
+    == ("/h/agents/a/run/bend-tool-7.txt", "/h/agents/a/run/bend-views-7.txt") : String & String}

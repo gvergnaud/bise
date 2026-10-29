@@ -26,6 +26,22 @@
 # parameters from its index line's input schema and a check of the
 # arguments against it (mcp-args.bend).
 #
+# A plugin tool with a view (its index line's ` | ui: <uri>`, docs/
+# mcp-apps.md C1-C3) asks its bridge to keep the call's full result
+# (`x-bise-call: 1`); the bridge answers the view's ref in `x-bise-view`,
+# which goes, with the tool's id read at the call's START, as one
+# `<id> <ref>` line into the views file; the runtime (main.bend) takes
+# that file at each tool's end and says each line as `tool_view #<id> :
+# <ref>`. The runtime's two files of views, both in its side folder
+# (BEND_AGENT_RUN), one each per REPL (Mcp.tool_now_path, Mcp.views_path):
+#   bend-tool-<port>.txt   the tool running now (its id, written at its
+#                          start): "the current tool" holds only while a
+#                          REPL runs one tool at a time; tools run in
+#                          parallel one day, the id moves to the call
+#   bend-views-<port>.txt  the refs kept since the last tool's end
+# A late ref (a stopped call that still finishes) carries its own id and
+# goes to its own row (the fold attaches by id, never by adjacency).
+#
 # Defs are ordered bottom-up: a def only calls defs defined ABOVE it.
 # Recursive loops pass their recursive result to a pure "put" helper
 # (Bend is lazy, so the unchosen branch is never forced).
@@ -57,8 +73,9 @@ type MR is Data:
 
 # schema: the tool's input schema as JSON text ("" when its index line
 # has none), for the words of a failure (runtime/mcp-args.bend)
+# ui: the view's uri of its index line ("" when none)
 type McpTool is Data:
-  MT{cid: String, tool: String, schema: String}
+  MT{cid: String, tool: String, schema: String, ui: String}
 
 # ---- tolerant JSON accessors (numbers-as-text JSON) ----
 
@@ -139,9 +156,13 @@ def find_line.hit.of(sp: String & String & String & String, +v: String)
 def find_line.hit(+line: String, +v: String) -> Bool:
   find_line.hit.of(Mcp.line_parts(line), v)
 
+def find_put.mt(+cid: String, +tool: String, du: String & String) -> McpTool:
+  (d, u) = du
+  MT{cid, tool, Ma.schema_of(d), u}
+
 def find_put.of(sp: String & String & String & String) -> McpTool:
   (cid, a1, tool, desc) = sp
-  MT{cid, tool, Ma.schema_of(desc)}
+  find_put.mt(cid, tool, Mcp.desc_ui(desc))
 
 def find_put(hit: Bool, +line: String, +rest_res: Maybe<&2, McpTool>)
     -> Maybe<&2, McpTool>:
@@ -232,9 +253,9 @@ def call_res(+j: Jv.Val) -> String & Bool:
       jdone(Jv.get(j, "result"))),
     jbool(jdone(Jv.get(j, "result")), "isError", False{}))
 
-def call_ok(sp: String & Bool) -> Mcp.Try:
+def call_ok(sp: String & Bool, +view: String) -> Mcp.Try:
   (out, is_err) = sp
-  Mcp.TOk{Bool.not(is_err), out}
+  Mcp.TOk{Bool.not(is_err), out, view}
 
 # a JSON-RPC error the server answered instead of a result: its code
 # (the JSON text, "" when absent) and its message with its data (a
@@ -269,17 +290,18 @@ def rpc_err(+j: Jv.Val) -> Maybe<&2, Mcp.Why>:
 def rpc_json(+body: String) -> Jv.Val:
   jdone(Jv.parse(Mcp.rpc_text(body)))
 
-def call_rpc(m: Maybe<&2, Mcp.Why>, +j: Jv.Val) -> Mcp.Try:
+def call_rpc(m: Maybe<&2, Mcp.Why>, +j: Jv.Val, +view: String) -> Mcp.Try:
   match m:
     case Some{+w}:
       Mcp.TFail{Mcp.SCall{}, w}
     case None{}:
-      call_ok(call_res(j))
+      call_ok(call_res(j), view)
 
-def call_status(ok: Bool, +status: U32, +body: String) -> Mcp.Try:
+# view: the bridge's x-bise-view header ("" when none)
+def call_status(ok: Bool, +status: U32, +body: String, +view: String) -> Mcp.Try:
   match ok:
     case True{}:
-      call_rpc(rpc_err(rpc_json(body)), rpc_json(body))
+      call_rpc(rpc_err(rpc_json(body)), rpc_json(body), view)
     case False{}:
       Mcp.TFail{Mcp.SCall{}, Mcp.WStatus{status, body}}
 
@@ -289,8 +311,9 @@ def call_got(r: Result<&2, &2, Http.Err, Http.Res>) -> Mcp.Try:
       Mcp.TFail{Mcp.SCall{}, Mcp.WNet{Pv.net_of(e)}}
     case Done{+res}:
       match res:
-        case Http.Res{+status, _, _}:
-          call_status(U32.is_eq(status, 200), status, Http.text(res))
+        case Http.Res{+status, +hs, _}:
+          call_status(U32.is_eq(status, 200), status, Http.text(res),
+            Http.header(hs, "x-bise-view"))
 
 # close the try's connection, hand back its outcome
 def try_end(p: Http.Pool, +t: Mcp.Try) -> IO(Mcp.Try):
@@ -413,7 +436,7 @@ def log_ev(+kind: String, +fields: List<&2, Dp.Field>) -> IO(Unit):
 
 def try_why(+host: String, t: Mcp.Try) -> String:
   match t:
-    case Mcp.TOk{_, _}:
+    case Mcp.TOk{_, _, _}:
       ""
     case Mcp.TFail{+st, +w}:
       Mcp.why_line(host, st, w)
@@ -433,7 +456,7 @@ def try_mr.ok(ok: Bool, +out: String, +name: String, +host: String,
 def try_mr(t: Mcp.Try, +name: String, +host: String, +schema: String,
     +args: String, +n: Nat) -> MR:
   match t:
-    case Mcp.TOk{ok, +out}:
+    case Mcp.TOk{ok, +out, _}:
       try_mr.ok(ok, out, name, host, schema, args)
     case Mcp.TFail{+st, +w}:
       MR{False{}, Ma.call_failed(name, host, schema, args, st, w, n)}
@@ -446,6 +469,36 @@ def try_done.log(ok: Bool, +name: String, +text: String, +n: Nat) -> IO(Unit):
       log_ev("mcp_failed", Con{Dp.FStr{"tool", name}, Con{Dp.FNat{"retries",
         n}, Con{Dp.FStr{"error", text}, Nil{}}}})
 
+# the view's ref a try got from the bridge ("" when none)
+def try_view(t: Mcp.Try) -> String:
+  match t:
+    case Mcp.TOk{_, _, +v}:
+      v
+    case Mcp.TFail{_, _}:
+      ""
+
+def note_view.opened(f: Result<&1, &1, U32 & String, File>, +line: String)
+    -> IO(Unit):
+  P.write.opened(f, line)
+
+def note_view.put(skip: Bool, +path: String, +line: String) -> IO(Unit):
+  match skip:
+    case True{}:
+      IO.pure(Unit, Unit{})
+    case False{}:
+      do IO<Unit>:
+        f : Result<&1, &1, U32 & String, File> <- File.open(path, "a")
+        note_view.opened(f, line)
+
+# one `<tool id> <ref>` line appended to the views file (none without a
+# ref or an id)
+def note_view(+tid: String, +ref: String) -> IO(Unit):
+  do IO<Unit>:
+    +side : String <- P.side_dir()
+    pr : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_REPL_PORT")
+    +line : String <- IO.pure(String, Mcp.view_entry(tid, ref))
+    note_view.put(String.is_empty(line), Mcp.views_path(side, P.env_or(pr, "0")), line)
+
 def try_done(+m: MR, +name: String, +n: Nat) -> IO(MR):
   match m:
     case MR{+ok, +out}:
@@ -456,7 +509,7 @@ def try_done(+m: MR, +name: String, +n: Nat) -> IO(MR):
 # go again (after a pause, with a fresh initialize) or answer; `more`
 # is the next try, built lazily and run only when chosen
 def try_next(go: Bool, +t: Mcp.Try, +name: String, +host: String,
-    +schema: String, +args: String, +n: Nat, more: IO(MR)) -> IO(MR):
+    +schema: String, +args: String, +n: Nat, +tid: String, more: IO(MR)) -> IO(MR):
   match go:
     case True{}:
       do IO<MR>:
@@ -466,11 +519,14 @@ def try_next(go: Bool, +t: Mcp.Try, +name: String, +host: String,
         w : Unit <- IO.sleep(Mcp.pause_ms(n))
         more
     case False{}:
-      try_done(try_mr(t, name, host, schema, args, n), name, n)
+      do IO<MR>:
+        u : Unit <- note_view(tid, try_view(t))
+        try_done(try_mr(t, name, host, schema, args, n), name, n)
 
+# tid: the tool's id read at the call's start ("" when no view is asked)
 def tries(+fuel: Nat, +n: Nat, +name: String, +host: String, +url: String,
     +h: Map<&2, List<&2, String>>, +tool: String, +schema: String,
-    +args: String) -> IO(MR):
+    +args: String, +tid: String) -> IO(MR):
   match fuel:
     case 0n:
       IO.pure(MR, MR{False{}, "mcp call failed: no try left"})
@@ -478,28 +534,44 @@ def tries(+fuel: Nat, +n: Nat, +name: String, +host: String, +url: String,
       do IO<MR>:
         +t : Mcp.Try <- attempt(url, h, tool, args)
         try_next(Bool.and(Mcp.again(t), Bool.not(Nat.is_eq(p, 0n))), t, name,
-          host, schema, args, n, tries(p, Nat.add(n, 1n), name, host, url, h,
-            tool, schema, args))
+          host, schema, args, n, tid, tries(p, Nat.add(n, 1n), name, host, url, h,
+            tool, schema, args, tid))
 
+# the tool running now (its id; "" when unknown or not asked)
+def tool_now.read(asks: Bool) -> IO(String):
+  match asks:
+    case False{}:
+      IO.pure(String, "")
+    case True{}:
+      do IO<String>:
+        +side : String <- P.side_dir()
+        pr : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_REPL_PORT")
+        +now : String <- P.read_or(Mcp.tool_now_path(side, P.env_or(pr, "0")), "")
+        IO.pure(String, String.trim(now))
+
+# a tool with a view asks its bridge to keep the full result (C2)
 def mcp_call.send(+name: String, +cid: String, +tool: String,
-    +schema: String, +args: String, +key: String) -> IO(MR):
-  tries(Mcp.max_tries(), 0n, name, Pvp.url_host(gateway_url(cid)),
-    gateway_url(cid), mcp_hdrs(Bool.pick(String, is_local(cid), "", key)),
-    tool, schema, args)
+    +schema: String, +args: String, +key: String, +ui: String) -> IO(MR):
+  do IO<MR>:
+    +tid : String <- tool_now.read(Mcp.asks_view(cid, ui))
+    tries(Mcp.max_tries(), 0n, name, Pvp.url_host(gateway_url(cid)),
+      gateway_url(cid), hdr_if(Bool.not(Mcp.asks_view(cid, ui)),
+        mcp_hdrs(Bool.pick(String, is_local(cid), "", key)), "x-bise-call", "1"),
+      tool, schema, args, tid)
 
 # a gateway call needs the Mistral key: without one, say so and send nothing
 def mcp_call.keyed(no_key: Bool, +name: String, +cid: String, +tool: String,
-    +schema: String, +args: String, +key: String) -> IO(MR):
+    +schema: String, +args: String, +key: String, +ui: String) -> IO(MR):
   match no_key:
     case True{}:
       IO.pure(MR, MR{False{}, Mcp.no_key_text()})
     case False{}:
-      mcp_call.send(name, cid, tool, schema, args, key)
+      mcp_call.send(name, cid, tool, schema, args, key, ui)
 
 def mcp_call.found(+name: String, +cid: String, +tool: String,
-    +schema: String, +args: String, +key: String) -> IO(MR):
+    +schema: String, +args: String, +key: String, +ui: String) -> IO(MR):
   mcp_call.keyed(Bool.and(String.is_empty(key), Bool.not(is_local(cid))),
-    name, cid, tool, schema, args, key)
+    name, cid, tool, schema, args, key, ui)
 
 # a call with no arguments still needs a JSON object body
 def call_args.of(is_empty: Bool, +args: String) -> String:
@@ -515,8 +587,8 @@ def call_args(+args: String) -> String:
 def mcp_call.mt(mt: McpTool, +name: String, +args: String, +key: String)
     -> IO(MR):
   match mt:
-    case MT{+cid, +tool, +schema}:
-      mcp_call.found(name, cid, tool, schema, call_args(args), key)
+    case MT{+cid, +tool, +schema, +ui}:
+      mcp_call.found(name, cid, tool, schema, call_args(args), key, ui)
 
 # no index: the call is still named (issue 21: a nameless answer read
 # like an empty result)

@@ -258,19 +258,42 @@ impl Virtual {
     }
 }
 
-/// The header the REPL sends on a `tools/call` whose index line has
-/// `ui:` (docs/mcp-apps.md C2): `<turn-start epoch ms>-<tool id>`.
+/// The header the REPL sends (`x-bise-call: 1`) on a `tools/call` whose
+/// index line has `ui:` (docs/mcp-apps.md C2): keep its full result.
 pub const CALL_HEADER: &str = "x-bise-call";
+/// The header the bridge answers when it kept a call's full result: the
+/// view's ref as ASCII JSON ([`view_header`]), which the REPL puts on its
+/// `tool_view #<id>` line as is (C3).
+pub const VIEW_HEADER: &str = "x-bise-view";
 /// A views file bigger than this keeps `{"truncated": true}` for its
 /// result (the view says "result too large").
 pub const MAX_FILE: usize = 4 * 1024 * 1024;
 
-/// A call id as the REPL makes it (`[0-9]+-[0-9]+`, at most 40 chars):
-/// anything else names no file (a path never comes from a header).
+/// A call id as the bridge makes it (`[0-9]+-[0-9]+`, at most 40
+/// chars): anything else names no file.
 pub fn call_ok(call: &str) -> bool {
     let Some((a, b)) = call.split_once('-') else { return false };
     let digits = |s: &str| !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit());
     call.len() <= 40 && digits(a) && digits(b)
+}
+
+/// The view's ref the REPL's `tool_view` line carries:
+/// `{"plugin","server","uri","call"}`, every non-ASCII character as
+/// `\uXXXX` so it rides an HTTP header (no CR or LF either). Pure.
+pub fn view_header(plugin: &str, server: &str, uri: &str, call: &str) -> String {
+    let text = json!({"plugin": plugin, "server": server, "uri": uri, "call": call}).to_string();
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        if c.is_ascii() {
+            out.push(c);
+        } else {
+            let mut b = [0u16; 2];
+            for u in c.encode_utf16(&mut b) {
+                out.push_str(&format!("\\u{:04x}", u));
+            }
+        }
+    }
+    out
 }
 
 /// One call with a view, as its views file keeps it (C2).
@@ -315,17 +338,27 @@ pub fn file_text(r: &Record) -> String {
     v.to_string()
 }
 
-/// Write `<dir>/<call>.json` atomically (a temp file, then a rename);
-/// a bad call id writes nothing.
-pub fn write_file(dir: &Path, call: &str, r: &Record) -> std::io::Result<()> {
-    if !call_ok(call) {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("bad call id {:?}", call)));
-    }
+/// Keep `r` in `dir` under a new call id `<at_ms>-<n>` (the first `n`
+/// whose file does not exist yet, taken by an exclusive create, so two
+/// calls of one ms or two bridges of one agent never share a file), the
+/// text written whole (a temp file, then a rename). The call id.
+pub fn keep(dir: &Path, r: &Record) -> std::io::Result<String> {
     std::fs::create_dir_all(dir)?;
-    let path = dir.join(format!("{}.json", call));
-    let tmp = dir.join(format!(".{}.json.tmp", call));
-    std::fs::write(&tmp, file_text(r))?;
-    std::fs::rename(&tmp, &path)
+    for n in 0..1000u32 {
+        let call = format!("{}-{}", r.at_ms, n);
+        let path = dir.join(format!("{}.json", call));
+        match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(_) => {
+                let tmp = dir.join(format!(".{}.json.tmp", call));
+                std::fs::write(&tmp, file_text(r))?;
+                std::fs::rename(&tmp, &path)?;
+                return Ok(call);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    Err(std::io::Error::other("no free call id"))
 }
 
 /// The `ui://` resources one server answered, by URI: a view's HTML is

@@ -30,6 +30,7 @@ import ./tools-pure.bend as Xp
 import ./persist.bend as P
 import ./remote.bend as Rem
 import ./mcp.bend as Mcp
+import ./mcp-pure.bend as Mcpp
 import ./skills.bend as Sk
 import ./provider.bend as Pv
 import ./bash.bend as Sh
@@ -55,10 +56,70 @@ type RtEnd is Type:
 
 # ---- the IO loop ----
 
+# the tool running now, for a view's ref (runtime/mcp.bend's header:
+# one tool at a time per REPL)
+def tool_now.write(+call: T.Call) -> IO(Unit):
+  do IO<Unit>:
+    +side : String <- P.side_dir()
+    pr : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_REPL_PORT")
+    P.write_file(Mcpp.tool_now_path(side, P.env_or(pr, "0")), U32.show(Rtp.call_id(call)))
+
 def emit_call_ann(out: Pv.Out, +call: T.Call, live: Bool) -> IO(Pv.Out):
   match live:
     case True{}:
-      Dr.emit(out, Con{Rtp.call_ann(call), Nil{}})
+      do IO<Pv.Out>:
+        u : Unit <- tool_now.write(call)
+        Dr.emit(out, Con{Rtp.call_ann(call), Nil{}})
+    case False{}:
+      IO.pure(Pv.Out, out)
+
+# the views file taken whole: moved aside, then read and removed, so a
+# ref written meanwhile lands in a new file, never lost
+def take_views.sh() -> String:
+  "f=\"$0\"; t=\"$f.take\"; mv -f \"$f\" \"$t\" 2>/dev/null || exit 0; cat \"$t\"; rm -f \"$t\""
+
+def take_views.got(r: Result<&1, &1, U32 & String, U32 & (String & String)>) -> String:
+  match r:
+    case Done{(_, (+o, _))}:
+      o
+    case Fail{_}:
+      ""
+
+def take_views.if(m: Maybe<&2, String>, +path: String) -> IO(String):
+  match m:
+    case None{}:
+      IO.pure(String, "")
+    case Some{_}:
+      do IO<String>:
+        r : Result<&1, &1, U32 & String, U32 & (String & String)> <- Process.run(
+          "/bin/sh", Con{"-c", Con{take_views.sh(), Con{path, Nil{}}}}, "",
+          4194304, 10000)
+        IO.pure(String, take_views.got(r))
+
+# the views refs kept since the last tool's end ("" when none: one read)
+def take_views() -> IO(String):
+  do IO<String>:
+    +side : String <- P.side_dir()
+    pr : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_REPL_PORT")
+    +path : String <- IO.pure(String, Mcpp.views_path(side, P.env_or(pr, "0")))
+    m : Maybe<&2, String> <- P.read_file(path)
+    take_views.if(m, path)
+
+def emit_views.lines(out: Pv.Out, ls: List<&2, String>) -> IO(Pv.Out):
+  match ls:
+    case Nil{}:
+      IO.pure(Pv.Out, out)
+    case Con{+h, rest}:
+      Dr.emit(out, Con{h, rest})
+
+# each view kept since the last tool's end: `tool_view #<its id> : <ref>`
+# (docs/mcp-apps.md C3; live only), after the tool's result line
+def emit_views(out: Pv.Out, live: Bool) -> IO(Pv.Out):
+  match live:
+    case True{}:
+      do IO<Pv.Out>:
+        +text : String <- take_views()
+        emit_views.lines(out, Mcpp.view_lines(text))
     case False{}:
       IO.pure(Pv.Out, out)
 
@@ -788,7 +849,8 @@ def exec_done.run(out3: Pv.Out, +d: Sfp.Def, +r: Xp.ExecRes, k: Nat,
     +call: T.Call, +after: List<&2, T.Act>, +rt2: Rtp.Rt, +live: Bool,
     next: Nat -> Pv.Out -> Rtp.Rt -> Rtp.Job -> IO(RtEnd)) -> IO(RtEnd):
   do IO<RtEnd>:
-    out4 : Pv.Out <- emit_res_ann(out3, Rtp.call_id(call), r, live)
+    out5 : Pv.Out <- emit_res_ann(out3, Rtp.call_id(call), r, live)
+    out4 : Pv.Out <- emit_views(out5, live)
     +cmd : T.Cmd <- IO.pure(T.Cmd,
       Xp.exec_cmd(r, Rtp.call_id(call), Sfp.def_compact(d)))
     +stop : Bool <- exec_done.stopped(live)

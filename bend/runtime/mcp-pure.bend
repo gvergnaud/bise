@@ -29,8 +29,119 @@ def seen_has(seen: List<&2, String>, +alias: String) -> Bool:
     case Con{+h, rest}:
       seen_pick(String.eq(h, alias), seen_has(rest, alias))
 
+# ---- views (docs/mcp-apps.md C1-C3) ----
+# An index line of a tool with a view ends with ` | ui: <uri>` (the uri
+# has no space). The runtime splits it off the description (the model
+# reads neither the field nor the uri), asks the bridge to keep the
+# call's full result (`x-bise-call: 1`, a local tool with a ui only) and
+# puts the bridge's answer `x-bise-view: <ref>` on a `tool_view` line.
+
+def ui_marker() -> String:
+  " | ui: "
+
+# the last place of the marker: `m` is the marker's next place found
+# (Tx.find's third argument only offsets the index it answers, so the
+# search goes on in the text after the last hit),
+# `best` the last one before it; fuel bounds the steps (the text's length)
+def ui_last(fuel: Nat, m: Maybe<&2, Nat>, +desc: String,
+    +best: Maybe<&2, Nat>) -> Maybe<&2, Nat>:
+  match fuel:
+    case 0n:
+      best
+    case 1n+k:
+      match m:
+        case None{}:
+          best
+        case Some{+p}:
+          ui_last(k, Tx.find(String.drop(desc, Nat.add(p, 1n)), ui_marker(),
+            Nat.add(p, 1n)), desc, Some{p})
+
+# the uri after the last marker is the field only when it has no space
+def desc_ui.rest(sp: Maybe<&2, Nat>, +desc: String, +p: Nat, +rest: String)
+    -> String & String:
+  match sp:
+    case None{}:
+      (String.take(desc, p), rest)
+    case Some{_}:
+      (desc, "")
+
+def desc_ui.at(m: Maybe<&2, Nat>, +desc: String) -> String & String:
+  match m:
+    case None{}:
+      (desc, "")
+    case Some{+p}:
+      desc_ui.rest(Tx.find(String.drop(desc, Nat.add(p, String.length(ui_marker()))), " ", 0n),
+        desc, p, String.drop(desc, Nat.add(p, String.length(ui_marker()))))
+
+# an index line's description part: (the part without its ui field, the
+# view's uri or "")
+def desc_ui(+desc: String) -> String & String:
+  desc_ui.at(ui_last(String.length(desc), Tx.find(desc, ui_marker(), 0n), desc,
+    None{}), desc)
+
+def desc_only.of(sp: String & String) -> String:
+  (d, u) = sp
+  d
+
+def ui_only.of(sp: String & String) -> String:
+  (d, u) = sp
+  u
+
+def desc_only(+desc: String) -> String:
+  desc_only.of(desc_ui(desc))
+
+def ui_only(+desc: String) -> String:
+  ui_only.of(desc_ui(desc))
+
+# the call asks the bridge to keep its full result: a plugin tool (its
+# loopback bridge) with a view; never a connector's
+def asks_view(+cid: String, +ui: String) -> Bool:
+  Bool.and(String.starts_with(cid, "http://127.0.0.1:"),
+    Bool.not(String.is_empty(ui)))
+
+# the runtime's two files of views, in its side folder (BEND_AGENT_RUN),
+# one each per REPL: the tool running now (`<id>`, written at its start)
+# and the refs kept since the last tool's end (`<id> <ref>` lines)
+def tool_now_path(+side: String, +port: String) -> String:
+  String.concat([side, "/bend-tool-", port, ".txt"])
+
+def views_path(+side: String, +port: String) -> String:
+  String.concat([side, "/bend-views-", port, ".txt"])
+
+# one ref of the views file: `<tool id> <ref>`; "" when the bridge kept
+# nothing (no header) or no tool is known
+def view_entry(+id: String, +ref: String) -> String:
+  Bool.pick(String, Bool.or(String.is_empty(String.trim(ref)), String.is_empty(String.trim(id))), "",
+    String.concat([String.trim(id), " ", String.trim(ref), "\n"]))
+
+# a views file line as the wire line `tool_view #<id> : <ref>` (C3);
+# a line without both: nothing
+def view_line.at(m: Maybe<&2, Nat>, +l: String) -> List<&2, String>:
+  match m:
+    case None{}:
+      Nil{}
+    case Some{+p}:
+      Bool.pick(List<&2, String>, Nat.is_eq(p, 0n), Nil{},
+        Con{String.concat(["tool_view #", String.take(l, p), " : ",
+          String.trim(String.drop(l, Nat.add(p, 1n)))]), Nil{}})
+
+def view_line(+l: String) -> List<&2, String>:
+  view_line.at(Tx.find(String.trim(l), " ", 0n), String.trim(l))
+
+def view_lines.go(ls: List<&2, String>) -> List<&2, String>:
+  match ls:
+    case Nil{}:
+      Nil{}
+    case Con{+l, rest}:
+      List.append(&2, String, view_line(l), view_lines.go(rest))
+
+# the views file's text as its wire lines, in order
+def view_lines(+content: String) -> List<&2, String>:
+  view_lines.go(String.split(content, Tx.newline()))
+
 # ---- the index line format, parsed ----
-# line: "<cid> <cname> <tool> : #<desc>"
+# line: "<cid> <cname> <tool> : #<desc>", the desc part ending
+# " | input: <schema>" and, for a tool with a view, " | ui: <uri>"
 
 def line_parts.n2(sp: Maybe<&2, Nat>, +cid: String, +cname: String,
     +rest: String) -> String & String & String & String:
@@ -82,9 +193,10 @@ def line_tool(+line: String) -> String:
 def pub_name(+cname: String, +tool: String) -> String:
   String.append(cname, String.append(".", tool))
 
+# the model reads the description without its ui field (C1)
 def index_tool.of(cid: String, cname: String, tool: String, +desc: String)
     -> T.ToolDef:
-  T.ToolDef{pub_name(cname, tool), desc}
+  T.ToolDef{pub_name(cname, tool), desc_only(desc)}
 
 # skip a malformed line; cons its ToolDef onto the recursive result
 # (the discovery.bend pattern: the unchosen branch is never forced)
@@ -255,8 +367,9 @@ type Cause is Data:
   KTool{}
 
 # one try: the tool's answer, or where and why it stopped
+# (`view`: the bridge's `x-bise-view` answer header, "" when none)
 type Try is Data:
-  TOk{ok: Bool, out: String}
+  TOk{ok: Bool, out: String, view: String}
   TFail{stage: Stage, why: Why}
 
 # a connector call with no Mistral key: said at once, nothing sent (an
@@ -354,7 +467,7 @@ def retry(+st: Stage, +w: Why) -> Bool:
 # the verdict on a try: go again (with a fresh initialize) or not
 def again(t: Try) -> Bool:
   match t:
-    case TOk{_, _}:
+    case TOk{_, _, _}:
       False{}
     case TFail{+st, +w}:
       retry(st, w)
@@ -643,3 +756,4 @@ def rpc_text.pick(m: Maybe<&2, String>, +body: String) -> String:
 
 def rpc_text(+body: String) -> String:
   rpc_text.pick(rpc_text.go(String.split(body, Tx.newline()), None{}), body)
+

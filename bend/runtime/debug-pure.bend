@@ -65,6 +65,7 @@ def is_crumb(+l: String) -> Bool:
   is_obs_line(l)
     || String.starts_with(l, "tool #")
     || String.starts_with(l, "tool_result #")
+    || String.starts_with(l, "tool_view #")
 
 def crumb.pick(keep: Bool, +ts: Nat, +l: String) -> String:
   match keep:

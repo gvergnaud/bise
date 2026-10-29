@@ -199,3 +199,30 @@ def Laws.bg_wrapper_multiline_command_intact():
 def Laws.bg_sentinel_derives_from_command():
   {==}
 
+
+def Laws.ui_field_splits_off():
+  {==}
+
+def Laws.ui_field_absent():
+  {==}
+
+def Laws.ui_field_is_the_last():
+  {==}
+
+def Laws.ui_field_has_no_space():
+  {==}
+
+def Laws.index_tool_hides_the_ui_field():
+  {==}
+
+def Laws.asks_view_only_local_with_ui():
+  {==}
+
+def Laws.view_entry_line():
+  {==}
+
+def Laws.view_lines_each_under_its_id():
+  {==}
+
+def Laws.views_files_in_side_dir():
+  {==}
