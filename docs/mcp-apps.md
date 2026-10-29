@@ -142,7 +142,14 @@ Never an agent op: the views methods are on hub.sock only (an agent's
 
 `view/message` also carries `gesture_ms`: when Electron's main process
 last saw a pointer-down inside that view's frame rect (C7). The hub
-decides with it (risk 1); the renderer and the proxy never do.
+decides with it (risk 1); the renderer and the proxy never do. The
+renderer sends the core cmd `{"cmd": "view_message", "agent", "call",
+"content"}`; Electron main (`core/ipc.ts`, on `CORE_IPC.cmd`) sets
+`gesture_ms` from the last `input-event` mouseDown inside that
+`(agent, call)` frame's rect, or removes it when there is none (a
+`gesture_ms` from the renderer is never kept); the core passes it on as
+`view/message {agent, call, content, gesture_ms}`. `view_context` goes
+the same way without `gesture_ms`.
 
 Signed by architect (m_50047), with these owners:
 
@@ -196,7 +203,19 @@ Signed by architect (m_50047), with these owners:
   hosts of the current pages port; `setPermissionRequestHandler` grants
   `media` (audio, video), `midi`, `midiSysex: never`, `clipboard-sanitized-write`
   to a view origin only when its resource declared it and the plugin's
-  grant (C8) has it; everything else denied. The camera needs
+  grant (C8) has it; everything else denied. MIDI is not in the spec's
+  permissions: a view declares it in bise's own key next to `ui` on the
+  resource, `_meta["dev.bise/ui"]: {"permissions": {"midi": {}}}` (other
+  hosts ignore it; the spec's `_meta.ui.permissions` stays clean), and
+  its view should degrade when `requestMIDIAccess` is refused.
+  The pages server knows each origin's sandbox: the hub registers
+  `ViewSandbox {csp, perms}` (`pages/views.rs`) when it answers
+  `view/resource`, and serves `/mcp-app` with that CSP as its header
+  (never from the query: a view can navigate its own frame); an unknown
+  hash is 404. The layer tells Electron main its live frames
+  (`window.bise.views.frames([{origin, agent, call, rect, perms}])`, the
+  whole list on each change); main grants a request from `origin` only
+  within its `perms`. The camera needs
   `com.apple.security.device.camera` in
   `packaging/entitlements/desktop.plist` and `NSCameraUsageDescription`
   (the mic's are already there).

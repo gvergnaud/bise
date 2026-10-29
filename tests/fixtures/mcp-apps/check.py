@@ -79,6 +79,11 @@ def check_perms(where, perms, bad):
 
 
 def check_res_meta(where, meta, bad):
+    # bise's own key (docs/mcp-apps.md C6): what the spec lacks, MIDI only
+    extra = (meta or {}).get("dev.bise/ui") or {}
+    for k, v in extra.items():
+        if k != "permissions" or not isinstance(v, dict) or any(p != "midi" or x != {} for p, x in v.items()):
+            bad(f"{where}: _meta['dev.bise/ui'] allows only {{'permissions': {{'midi': {{}}}}}}")
     ui = (meta or {}).get("ui") or {}
     for k in ui:
         if k not in RES_META_KEYS:
