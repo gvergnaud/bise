@@ -10,7 +10,7 @@ import { memo, useEffect, useRef } from 'react';
 import { allowOf } from '@/shared/viewperms';
 import { pick, samePlace, type Anchors, type Place, type Rect } from './place';
 import type { Anchor, ViewsStore } from './store';
-import { useViewsVersion } from './hooks';
+import { useViewOpen, useViewsVersion } from './hooks';
 import { viewsStore } from './window';
 import type { ViewFrame } from '@/shared/api';
 import './views.css';
@@ -92,6 +92,7 @@ const ViewFrameEl = memo(function ViewFrameEl({ store, k }: { store: ViewsStore;
 /** The window's views layer: one per window, in app/ beside the Frame's columns. */
 export function ViewsLayer({ store = viewsStore }: { store?: ViewsStore }) {
   useViewsVersion(store);
+  useViewOpen(store);
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => store.listen(window), [store]);
   // a tab opened or closed is a mode changed; a theme changed is a context changed

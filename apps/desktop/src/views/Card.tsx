@@ -79,6 +79,35 @@ function Foot({ state, view, agent, onPanel }: { state: Extract<ViewState, { kin
   );
 }
 
+/** How long a card he switched holds its y while the thread lays out again (the panel opening narrows it). */
+const HOLD_MS = 800;
+
+/**
+ * His 'open in the panel' or 'show here': the card he clicked keeps its top at the y it had, the
+ * card shrinking into its one line (or the line growing into the card) downward, the rows below
+ * moving (designer m_50494, ui-review m_50492: the thread stuck at its end took the card 660 px up
+ * when the panel opened). Through his own move first (a wheel up: the list no longer follows its
+ * end), then the scroller nudged each frame for HOLD_MS. Under 1 px of drift.
+ */
+function holdCard(testId: string): void {
+  const find = () => document.querySelector<HTMLElement>(`[data-testid="${testId}"]`);
+  const card = find();
+  const scroller = card?.closest<HTMLElement>('[data-virtuoso-scroller]') ?? null;
+  if (card === null || scroller === null) return;
+  const y = card.getBoundingClientRect().top;
+  card.dispatchEvent(new WheelEvent('wheel', { deltaY: -1, bubbles: true }));
+  const until = performance.now() + HOLD_MS;
+  const step = () => {
+    const now = find();
+    if (now !== null) {
+      const d = now.getBoundingClientRect().top - y;
+      if (Math.abs(d) >= 0.5) scroller.scrollTop += d;
+    }
+    if (performance.now() < until) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
 export const ViewCard = memo(function ViewCard({ project, agent, view, store = viewsStore }: { project: string; agent: string; view: ToolView; store?: ViewsStore }) {
   const r = useMemo<ViewRef>(() => ({ project, agent, call: view.call }), [project, agent, view.call]);
   const state = useViewState(store, r);
@@ -147,6 +176,7 @@ export const ViewCard = memo(function ViewCard({ project, agent, view, store = v
             look="vw-act"
             {...quiet}
             onClick={() => {
+              holdCard(testId);
               store.inline(r);
             }}
             data-testid="views.inline"
@@ -166,6 +196,7 @@ export const ViewCard = memo(function ViewCard({ project, agent, view, store = v
         view={view}
         agent={agent}
         onPanel={() => {
+          holdCard(testId);
           store.fullscreen(r);
         }}
       />
