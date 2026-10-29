@@ -175,6 +175,61 @@
     "one": null,
     "text": "the result is too big for the view"
   },
+  "views.tui_app": {
+    "args": [],
+    "one": null,
+    "text": "app ↗"
+  },
+  "views.tui_browser": {
+    "args": [],
+    "one": null,
+    "text": "browser ↗"
+  },
+  "views.tui_chip": {
+    "args": [
+      "view",
+      "plugin"
+    ],
+    "one": null,
+    "text": "{view} · {plugin}"
+  },
+  "views.tui_expired": {
+    "args": [],
+    "one": null,
+    "text": "expired"
+  },
+  "views.tui_list_age": {
+    "args": [
+      "age"
+    ],
+    "one": null,
+    "text": "{age} ago"
+  },
+  "views.tui_list_empty": {
+    "args": [],
+    "one": null,
+    "text": "no views in this thread yet."
+  },
+  "views.tui_list_keys": {
+    "args": [],
+    "one": null,
+    "text": "⏎ open in the app   b in your browser   esc back"
+  },
+  "views.tui_list_title": {
+    "args": [],
+    "one": null,
+    "text": "views"
+  },
+  "views.tui_no_app": {
+    "args": [],
+    "one": null,
+    "text": "the bise app isn't running. b opens it in your browser."
+  },
+  "views.tui_no_web": {
+    "args": [],
+    "one": null,
+    "text": "the hub's pages server isn't running"
+  },
   "views.uses": {
     "args": [
       "perms"
