@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { FILM_S, KILN, NOTES, REVIEWER } from './cast';
 import { advance, FEED_X, makeRuns, stepOf } from './run';
 import { ORIGIN } from './world';
+import { rigOf, type Rig } from '../bims/render/pose';
 
 /** every bim of every office at each 0.25 s of film time, from world time `from` for one loop */
 function play(from: number, runs = makeRuns()): Map<number, string> {
@@ -78,5 +79,39 @@ describe('the hero film', () => {
     expect(review?.egg?.kind).toBe('stamp');
     expect(review?.pose.moving).toBe(false);
     expect(at(60, 'main')?.egg?.kind).toBe('itemget');
+  });
+
+  it("keeps the landing line's crates out of the other bims (designer m_50710)", () => {
+    const runs = makeRuns();
+    const kiln = runs.find((r) => r.cast.id === KILN);
+    // a crate held 0.3 ahead of its carrier, 0.4 wide and 0.3 deep (bim.ts); a body 0.21 round
+    const gap = (r: Rig, x: number, z: number): number => {
+      const ux = Math.sin(r.dir);
+      const uz = Math.cos(r.dir);
+      const dx = x - (r.x + ux * 0.3);
+      const dz = z - (r.z + uz * 0.3);
+      const along = Math.max(0, Math.abs(dx * ux + dz * uz) - 0.15);
+      const across = Math.max(0, Math.abs(-dx * uz + dz * ux) - 0.2);
+      return Math.hypot(along, across) - 0.21;
+    };
+    const waiting: string[] = [];
+    let walking = 0;
+    for (let T = 44; T <= 60; T += 0.05) {
+      for (const r of runs) advance(r, ORIGIN + T, false, false);
+      const played = kiln ? (stepOf(kiln, false, false)?.played ?? []) : [];
+      const rigs = played.map((f) => ({ f, rig: rigOf({ pose: f.pose, t: ORIGIN + T, main: f.main, phase: 0, reduced: false }) }));
+      for (const a of rigs) {
+        if (!a.rig.props.crate || a.rig.props.crateUp) continue;
+        for (const b of rigs) {
+          if (a === b || gap(a.rig, b.rig.x, b.rig.z) >= 0.1) continue;
+          if (a.f.pose.moving || b.f.pose.moving) walking += 0.05;
+          else waiting.push(`${T.toFixed(2)} ${a.f.name}'s crate in ${b.f.name}`);
+        }
+      }
+    }
+    // in line, one crate's depth + 0.1 between carriers: no one waits with its crate in another's back
+    expect(waiting).toEqual([]);
+    // on the way, at most a brush as a walk merges into the line (before: 4.5 s of crates in bodies)
+    expect(walking).toBeLessThan(0.8);
   });
 });

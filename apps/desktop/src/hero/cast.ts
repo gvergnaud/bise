@@ -184,20 +184,23 @@ export const CAST: readonly Cast[] = [
       // alone at 0:00 (it pops with the wave), his first plane in its hands at 0:07.3
       { name: 'main', main: true, life: [[0, { k: 'mainidle' }], [7.3, { k: 'main' }]] },
       // one agent per line, popping at its desk 0.3 s after main catches it (bims-film v14: cart and
-      // checkout from the same line); the crates leave from 0:44.6 (checkout's), the others from 0:45,
-      // ~0.6 s apart: the walks overlap (bims-film v15: each gets up round its chair first, bims-sit)
-      { name: 'catalog', life: [[0, gone], [10.7, work], [45, landing(2)]] },
-      { name: 'cart', life: [[0, gone], [12.2, work], [45.7, landing(3)]] },
+      // checkout from the same line); the crates leave from 0:44.6 (checkout's), the others from 0:45:
+      // the walks overlap (bims-film v15: each gets up round its chair first, bims-sit). In line every
+      // other place (ranks 1, 3, 7, 9, 11, 13): one crate's depth + 0.1 between carriers, none waits with
+      // its crate in another's back (designer m_50710; 5 is free, the reviewer pops there); the starts
+      // keep the walks from carrying a crate into another bim (run.test 'the landing line')
+      { name: 'catalog', life: [[0, gone], [10.7, work], [45, landing(3)]] },
+      { name: 'cart', life: [[0, gone], [12.2, work], [47.5, landing(7)]] },
       // visits cart (0:15.5), asks him (0:26.8), his answer at 0:32.8: at its desk it reads it and lays
       // it there (to 0:34.55), its '?' goes as it hops, it sits and types fast (bims-film v16); its crate
       // first (0:44.6, there at 0:52)
       // its hair (Gabriel m_46420: not the 'long' its name draws): the film's, bare-headed
       { name: 'checkout', head: CHECKOUT_HEAD, life: [[0, gone], [12.5, work], [26.8, { k: 'asks' }], [34.55, work], [44.6, landing(1)]] },
-      { name: 'emails', life: [[0, gone], [13.7, work], [46, landing(4)]] },
-      { name: 'theme', life: [[0, gone], [39.1, work], [47.2, landing(6)]] },
+      { name: 'emails', life: [[0, gone], [13.7, work], [45, landing(9)]] },
+      { name: 'theme', life: [[0, gone], [39.1, work], [46.8, landing(11)]] },
       // finds checkout a bug (0:38.1, its visit over by 0:44.0: gone before checkout gets up at 0:44.6,
-      // its head brushed checkout's as it rose, designer m_50704), no ✗; 5th in line (from its desk the 6th place has no clear way: it never left)
-      { name: 'order-test', life: [[0, gone], [37.6, work], [47.8, landing(5)]] },
+      // its head brushed checkout's as it rose, designer m_50704), no ✗; last in line
+      { name: 'order-test', life: [[0, gone], [37.6, work], [47.8, landing(13)]] },
       // 'review it for me': pops beside checkout's crate, reads, stamps ✓ (0:58.9)
       { name: REVIEWER, life: [[0, gone], [56.7, work]] },
     ],
