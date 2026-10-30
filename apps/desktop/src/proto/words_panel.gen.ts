@@ -340,8 +340,6 @@ export const panel = {
   addr_reload: "Reload",
   /** the address bar's ↗: the page in his browser */
   addr_out: "Open in your browser",
-  /** the bar's button over an artifact's tab: the artifact in a window of its own */
-  addr_window: "Open in a window",
   /** an artifact's tab whose id the list no longer has: its first line (designer m_46415) */
   art_gone: "this artifact isn't in the list any more.",
   /** its second line when the project has archived artifacts, before the link */

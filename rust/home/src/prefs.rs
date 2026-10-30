@@ -77,7 +77,31 @@ pub fn keep_days(prefs: Option<&Value>) -> u64 {
 
 /// The top keys of `prefs.json` the window may set (`prefs_set`,
 /// architect m_9130): anything else is refused, never written.
-pub const WINDOW_KEYS: &[&str] = &["onboarded", "theme", "voice", "context", "excluded_apps", "quiet", "shots_keep_days", "desktop_channel", "bims", "bim", "seen", AUTO_UPDATE];
+pub const WINDOW_KEYS: &[&str] = &["onboarded", "theme", "voice", "context", "excluded_apps", "quiet", "shots_keep_days", "desktop_channel", "bims", "bim", "seen", AUTO_UPDATE, "pins", "pins_art", "pins_sched", "pins_proc"];
+
+/// The pins' top keys, one per kind (the desktop's app/pins.ts ROOTS:
+/// agents, artifacts, scheduled, processes).
+const PIN_ROOTS: &[&str] = &["pins", "pins_art", "pins_sched", "pins_proc"];
+
+/// `<pin root>.<hub id>`: the ids he pinned in that project, in pin order
+/// (the desktop's app/pins.ts pinThing; his m_50763: every pin was
+/// refused, 'couldn't pin', the roots were not in WINDOW_KEYS). Only that
+/// path, the id with [`crate::hub_id`]'s shape, the value a list of
+/// non-empty strings (an agent's name, an artifact id, a timer or watch id,
+/// '<agent>/<process id>'), or null. Set whole, never one id.
+fn pins_key(parts: &[&str], v: &Value) -> Result<(), String> {
+    match parts {
+        [root, id] if crate::hub_id::is_hub_id(id) => {
+            let ids = |a: &Vec<Value>| a.len() <= 500 && a.iter().all(|x| x.as_str().is_some_and(|s| (1..=256).contains(&s.len())));
+            if v.is_null() || v.as_array().is_some_and(ids) {
+                Ok(())
+            } else {
+                Err(format!("{root}.{id} can't be {v}"))
+            }
+        }
+        _ => Err(format!("{} is not a pins preference", parts.join("."))),
+    }
+}
 
 /// `seen.<hub id>`: when he last looked at that project, in ms (the
 /// desktop's app/seen.ts markSeen; bise_proto::rows::seen_key builds the
@@ -193,6 +217,9 @@ pub fn set_dotted(obj: &Value, key: &str, value: Value) -> Result<Value, String>
     }
     if top == "seen" {
         seen_key(&parts, &value)?;
+    }
+    if PIN_ROOTS.contains(&top) {
+        pins_key(&parts, &value)?;
     }
     if parts.len() == 1 {
         if !value.is_null() {

@@ -2,8 +2,7 @@
 // panel at 640 (model.ts widthOf 'page'), an address bar (← → ↻, the address 28 r 8, ↗ his
 // browser, '…' the artifact's menu) over the page (artifacts' ArtifactOpen). ← and → walk its
 // versions (an artifact's history is its versions: the one before, the one after; the address
-// says which one and opens the list); ↻ loads the page again. 'open in a window' (the tab row's
-// end, Host.tsx, openWindow kind artifact) gives it a window of its own. The artifact no longer
+// says which one and opens the list); ↻ loads the page again. The artifact no longer
 // replaces the thread in the centre
 // (ArtifactView's centre and column modes are gone, rule 7): the centre keeps the thread, the
 // maker's composer is the centre's. A browser tab with no page yet (the launcher's Browser, ⌘L:

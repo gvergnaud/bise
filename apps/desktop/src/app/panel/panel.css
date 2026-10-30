@@ -237,6 +237,30 @@
 .pn-tab-x:focus-visible {
   outline: 2px solid var(--c-focus);
 }
+/* its thing's pin (TabPin.tsx, his m_50763): only while the pointer is on the tab, just left of the
+   ×, as big as it; it sits over the title's end, which fades out under it, so the tab keeps its
+   width. Hidden, it takes no click and no focus (the tab's menu has Pin/Unpin for the keyboard). */
+.pn-tab {
+  position: relative;
+}
+.pn-tab-pin {
+  position: absolute;
+  top: 50%;
+  right: calc(var(--s-2) + var(--s-5) + var(--s-1));
+  display: inline-flex;
+  visibility: hidden;
+  transform: translateY(-50%);
+}
+.pn-tab-pin .b-ibtn.row {
+  width: var(--s-5);
+  height: var(--s-5);
+}
+.pn-tab:hover .pn-tab-pin {
+  visibility: visible;
+}
+.pn-tab:hover:has(.pn-tab-pin) .pn-tab-t {
+  mask-image: linear-gradient(to left, transparent var(--s-5), #000 calc(var(--s-5) + var(--s-3)));
+}
 /* past six tabs: the overflow button, its native menu lists the rest */
 .pn-over {
   flex: none;

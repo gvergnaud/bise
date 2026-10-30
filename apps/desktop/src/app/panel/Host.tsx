@@ -1,8 +1,8 @@
 // src/app/panel · PanelHost: the tabbed panel in the shell's right column (App.tsx's <Win aside>),
 // so nm-panel never edits App.tsx (plan native-mac-plan v4 §3). Folded by default; ▯ and ⌥⌘0 unfold
 // it (state.ts, kept per window). Its column runs the window's height: its own top row in the
-// transparent 52 bar (the tabs, '+', the front thing's pin (TabPin.tsx) and 'open in a window' for
-// an artifact: mockups 3 and 4), then
+// transparent 52 bar (the tabs, each with its thing's pin on hover (TabPin.tsx), and '+': mockup 3;
+// his m_50763: no 'open in a window' button, the pin in the tab), then
 // the body on --c-solid with its 1 px line. Its width is the one the tab in front asks (384 rows,
 // 480 a shell, 640 a page; 320-640 by its border); an artifact in front takes its kind's share of
 // the window instead, the thread keeping 400 (model.ts artFit, r3-escape item 2: 55%, a sheet and
@@ -19,7 +19,7 @@ import { stateFactOf } from '@/app/title';
 import { shownName } from '@/agents/model';
 import { useAboutWords } from '@/artifacts/maker';
 import { Breath } from '@/working/Signs';
-import { formatRoute, MAIN } from '@/app/route';
+import { MAIN } from '@/app/route';
 import { useEscLayer } from '@/app/escape';
 import { panel } from '@/proto/words_panel.gen';
 import { useAgents, useProjects, useStore } from '@/store';
@@ -32,7 +32,6 @@ import { Launcher } from './Launcher';
 import { ThingTab } from './Thing';
 import { BlankBrowser } from './Browser';
 import { PanelTabs } from './BarTabs';
-import { TabPin } from './TabPin';
 import './panel.css';
 
 /** The tabbed panel on the window's right (--w-panel 384, from --w-panel-min to --w-panel-max). */
@@ -45,19 +44,9 @@ export function PanelHost() {
   useDropGoneArts(s.tabs.list, route.screen === 'artifacts' && route.project !== '' && route.id !== undefined ? { project: route.project, id: route.id } : undefined);
   const box = useRef<HTMLElement>(null);
   useSheetOut(s.open && over, box);
-  const front = s.tabs.list.find((t) => t.id === s.tabs.active);
-  const art = front?.what.kind === 'thing' && front.what.e.kind === 'artifact' ? front.what.e : undefined;
   const artKind = useFrontArtKind();
   const full = usePanelFull();
   const snap = useScopeSnap();
-  const thing = front?.what.kind === 'thing' ? front.what.e : undefined;
-  // the front thing's pin (TabPin.tsx), then an artifact's own window
-  const window_ = (
-    <>
-      {thing !== undefined && <TabPin key={front?.id} e={thing} />}
-      {art !== undefined && <WindowButton project={art.project} id={art.id} />}
-    </>
-  );
   return (
     <aside
       ref={box}
@@ -74,7 +63,7 @@ export function PanelHost() {
     >
       {s.open && <Border width={width} onDrag={setDragging} full={full} canFull={!over} {...(artKind === undefined ? {} : { artKind })} />}
       <div className="pn-col" style={{ width }}>
-        <PanelTabs end={full ? <>{window_}<ThreadBack /></> : window_} {...(full ? { start: <FullLead /> } : {})} />
+        <PanelTabs {...(full ? { end: <ThreadBack />, start: <FullLead /> } : {})} />
         <div className="pn-in" role="tabpanel" data-testid={`app.panel.body.${s.tabs.active}`}>
           {s.tabs.list.map((t) => (
             <Body key={t.id} tab={t} shown={s.open && t.id === s.tabs.active} />
@@ -102,22 +91,6 @@ function useSheetOut(on: boolean, box: RefObject<HTMLElement | null>): void {
       document.removeEventListener('pointerdown', down, true);
     };
   }, [on, box]);
-}
-
-/** The tab row's end over an artifact (mockup 4): the artifact in a window of its own. */
-function WindowButton({ project, id }: { project: string; id: string }) {
-  return (
-    <IconButton
-      label={panel.addr_window}
-      size="bar"
-      onClick={() => {
-        (window as Partial<Window>).bise?.openWindow({ kind: 'artifact', route: formatRoute({ screen: 'artifacts', project, id }) });
-      }}
-      testId="app.panel.window"
-    >
-      <AppIcon name="window" size={16} />
-    </IconButton>
-  );
 }
 
 /** One tab's body: drawn while in front; a shell's stays mounted hidden. */

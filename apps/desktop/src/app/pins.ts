@@ -1,7 +1,7 @@
 // What he pinned (bise fait mac, decision d5, architect m_42051; every kind his m_49100, architect
 // m_49104): an agent, an artifact, a scheduled task or a process, pinned from the right side's rows
-// (a hover pin in the row's end) or its menu, or from the tab it is open in (its pin at the tab
-// row's end, panel/TabPin.tsx, and the tab's menu; tab-pin, his m_49983), first in its list there
+// (a hover pin in the row's end) or its menu, or from the tab it is open in (its hover pin left of
+// the tab's ×, panel/TabPin.tsx, and the tab's menu; tab-pin, his m_49983, m_50763), first in its list there
 // and on its page. Desktop view
 // state that lasts across windows and restarts, kept in the app's prefs through prefs_set, one key
 // per kind and project hub id (pinKeyOf), each the pinned ids in the order he pinned them:

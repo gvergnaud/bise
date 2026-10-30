@@ -25,11 +25,6 @@
     "one": null,
     "text": "Reload"
   },
-  "panel.addr_window": {
-    "args": [],
-    "one": null,
-    "text": "Open in a window"
-  },
   "panel.agents": {
     "args": [],
     "one": null,

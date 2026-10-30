@@ -4,7 +4,8 @@
 // amb-home.
 //
 // The keys the window may set are bise_home::prefs::WINDOW_KEYS (theme,
-// voice.*, context.*, excluded_apps, quiet.*, shots_keep_days, onboarded);
+// voice.*, context.*, excluded_apps, quiet.*, shots_keep_days, onboarded,
+// seen.<hub id>, the pins' pins*.<hub id> of app/pins.ts, ...);
 // the core refuses any other one, and a typed key keeps its type.
 import type { JsonValue } from '@/proto';
 

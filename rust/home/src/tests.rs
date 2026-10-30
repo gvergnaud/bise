@@ -211,6 +211,27 @@ fn the_window_marks_a_project_seen_by_its_hub_id_in_ms() {
 }
 
 #[test]
+fn the_window_pins_each_kind_by_its_hub_id() {
+    use serde_json::json;
+    // the desktop's app/pins.ts pinThing (his m_50763: 'couldn't pin', the core refused every pin):
+    // `<root>.<hub id>` = the pinned ids in pin order, one root per kind
+    let o = json!({"theme": "dark"});
+    for (root, id) in [("pins", "main"), ("pins_art", "visite-webgl"), ("pins_sched", "watch:12"), ("pins_proc", "perf/bg3.1791100100")] {
+        let key = format!("{root}.ai-docs-1a2b3c4d");
+        let v = prefs::set_dotted(&o, &key, json!([id])).unwrap();
+        assert_eq!(v[root], json!({"ai-docs-1a2b3c4d": [id]}), "{root}");
+        assert_eq!(prefs::set_dotted(&v, &key, json!([])).unwrap()[root], json!({"ai-docs-1a2b3c4d": []}), "{root}: unpinned the last");
+        assert_eq!(prefs::set_dotted(&v, &key, Value::Null).unwrap()[root], json!({}), "{root}: null takes it out");
+        assert!(prefs::set_dotted(&o, root, json!({})).is_err(), "{root}: never whole");
+        assert!(prefs::set_dotted(&o, &format!("{root}.not a hub id"), json!([id])).is_err(), "{root}: a hub id");
+        assert!(prefs::set_dotted(&o, &key, json!(id)).is_err(), "{root}: a list");
+        assert!(prefs::set_dotted(&o, &key, json!([1])).is_err(), "{root}: of strings");
+        assert!(prefs::set_dotted(&o, &key, json!([""])).is_err(), "{root}: not empty");
+        assert!(prefs::set_dotted(&o, &format!("{key}.x"), json!([id])).is_err(), "{root}: nothing under it");
+    }
+}
+
+#[test]
 fn the_window_sets_known_prefs_by_dotted_key_and_keeps_their_types() {
     use serde_json::json;
     let o = json!({"theme": "dark", "quiet": {"call": true, "batch_min": 20}});

@@ -43,7 +43,7 @@ export const pinTip = (on: boolean, failed: boolean | null): string =>
 export function PinButton({ pin, look, size = 'row', hold = true, testId }: {
   pin: PinOf;
   look?: string;
-  /** 'row' in a list row (16 wide), 'bar' in a bar (24: the tab row's end, panel/TabPin.tsx) */
+  /** 'row' in a list row (16 wide; a tab's, panel/TabPin.tsx, 20 like its ×), 'bar' in a bar (24) */
   size?: 'row' | 'bar';
   /** a click holds its list's order under the pointer (pinhold.ts); a pin outside the lists holds nothing */
   hold?: boolean;

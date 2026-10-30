@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // Pin from the tab (tab-pin, his m_49983: « pin un artifact depuis la tab dans laquelle il est
-// ouvert, et pas seulement depuis la sidebar de droite »): the front tab's pin at the tab row's end
-// writes the side's own prefs, so a pin made in the tab shows on the side's row at once and the other
+// ouvert, et pas seulement depuis la sidebar de droite »; his m_50763: in the tab, left of its ×,
+// on hover; no 'open in a window'): a tab's pin writes the side's own prefs, so a pin made in the tab shows on the side's row at once and the other
 // way round; the tab's menu has Pin/Unpin too. A fake core: its prefs_set echoes as the hub's prefs.
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -88,32 +88,43 @@ function SideRow({ kind, id }: { kind: PinKind; id: string }) {
 }
 
 const icon = (el: HTMLElement) => el.querySelector('svg')?.getAttribute('data-icon');
+/** the tab in front's pin, inside its tab (null: none) */
+const frontPin = (): HTMLElement | null => document.querySelector<HTMLElement>('.pn-tabs [role="tab"][aria-selected="true"] [data-testid$=".pin"]');
+const pinOf = (): HTMLElement => {
+  const el = frontPin();
+  if (el === null) throw new Error('no pin in the tab in front');
+  return el;
+};
 const flush = () => act(() => Promise.resolve());
 
 describe('the pin in the tab', () => {
-  it('an artifact in front: its pin at the tab row’s end, the outline and Pin; a click pins it, and the side’s row shows it', async () => {
+  it('an artifact in front: its pin in its tab, just left of its ×, the outline and Pin; a click pins it, and the side’s row shows it', async () => {
     const { v, cmds } = world();
     act(() => {
       openTab({ kind: 'artifact', project: ACME, id: 'changelog' });
     });
-    const pin = v.getByTestId('app.panel.pin');
+    const pin = pinOf();
+    // his m_50763: in the tab, the × right after it, and no 'open in a window' at the row's end
+    const close = pin.closest('[role="tab"]')?.querySelector('[data-testid$=".close"]');
+    expect(pin.closest('.pn-tab-pin')?.nextElementSibling).toBe(close);
+    expect(v.getByTestId('app.panel.top').querySelectorAll('.pn-top > button, .pn-top > span')).toHaveLength(0);
     expect(icon(pin)).toBe('pin');
     expect(pin.getAttribute('aria-label')).toBe(menus.pin);
     expect(v.getByTestId('side.row').hasAttribute('data-on')).toBe(false);
     fireEvent.click(pin);
     // at once, before the echo
-    expect(icon(v.getByTestId('app.panel.pin'))).toBe('pin-on');
+    expect(icon(pinOf())).toBe('pin-on');
     expect(cmds.at(-1)).toEqual({ cmd: 'prefs_set', key: `pins_art.${ACME}`, value: ['changelog'] });
     await flush();
     expect(v.getByTestId('side.row').hasAttribute('data-on')).toBe(true);
     expect(icon(v.getByTestId('side.pin'))).toBe('pin-on');
-    expect(v.getByTestId('app.panel.pin').getAttribute('aria-label')).toBe(menus.unpin);
+    expect(pinOf().getAttribute('aria-label')).toBe(menus.unpin);
     // again: unpinned, on both
-    fireEvent.click(v.getByTestId('app.panel.pin'));
+    fireEvent.click(pinOf());
     await flush();
     expect(cmds.at(-1)).toEqual({ cmd: 'prefs_set', key: `pins_art.${ACME}`, value: [] });
     expect(v.getByTestId('side.row').hasAttribute('data-on')).toBe(false);
-    expect(icon(v.getByTestId('app.panel.pin'))).toBe('pin');
+    expect(icon(pinOf())).toBe('pin');
   });
 
   it('a pin made on the side shows in the tab at once, and its unpin too', async () => {
@@ -123,38 +134,38 @@ describe('the pin in the tab', () => {
     });
     fireEvent.click(v.getByTestId('side.pin'));
     await flush();
-    expect(icon(v.getByTestId('app.panel.pin'))).toBe('pin-on');
+    expect(icon(pinOf())).toBe('pin-on');
     fireEvent.click(v.getByTestId('side.pin'));
     await flush();
-    expect(icon(v.getByTestId('app.panel.pin'))).toBe('pin');
+    expect(icon(pinOf())).toBe('pin');
   });
 
   it('an agent’s thread and a process in front: their own pins (pins, pins_proc)', async () => {
-    const { v, cmds } = world();
+    const { cmds } = world();
     act(() => {
       openTab({ kind: 'agent', project: ACME, agent: 'perf' });
     });
-    fireEvent.click(v.getByTestId('app.panel.pin'));
+    fireEvent.click(pinOf());
     expect(cmds.at(-1)).toEqual({ cmd: 'prefs_set', key: `pins.${ACME}`, value: ['perf'] });
     await flush();
     act(() => {
       openTab({ kind: 'process', project: ACME, agent: 'perf', id: 'bg1' });
     });
-    expect(icon(v.getByTestId('app.panel.pin'))).toBe('pin');
-    fireEvent.click(v.getByTestId('app.panel.pin'));
+    expect(icon(pinOf())).toBe('pin');
+    fireEvent.click(pinOf());
     expect(cmds.at(-1)).toEqual({ cmd: 'prefs_set', key: `pins_proc.${ACME}`, value: [procPinId('perf', 'bg1')] });
   });
 
   it('no pin on what has none, on Scheduled (the whole list), nor on a thing no longer in its list', () => {
-    const { v } = world();
+    world();
     act(() => {
       openTab({ kind: 'pr', project: ACME, number: 12 });
     });
-    expect(v.queryByTestId('app.panel.pin')).toBeNull();
+    expect(frontPin()).toBeNull();
     act(() => {
       openTab({ kind: 'artifact', project: ACME, id: 'gone' });
     });
-    expect(v.queryByTestId('app.panel.pin')).toBeNull();
+    expect(frontPin()).toBeNull();
     expect(tabPinOf({ kind: 'scheduled', project: ACME, id: 7 })).toBeUndefined();
     expect(tabPinOf({ kind: 'commit', project: ACME, sha: 'abc' })).toBeUndefined();
   });

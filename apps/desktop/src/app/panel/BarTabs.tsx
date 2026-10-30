@@ -3,7 +3,8 @@
 // pressed while the panel is open; ⌥⌘B does the same (⌥⌘0 too). PanelTabs: the tabs in the panel's top row,
 // the window's one 52 bar over the panel's column (his m_44307: no band of its own; it drags and
 // double-clicks as the bar's ground; mockup 3: from the panel's left + 12; ui-review m_42482 #1): 28 high, padding 0 12, r 8, 13/500, the icon 14, 160 at most with '…';
-// × on the one in front and on hover, its slot kept so a tab never changes width (#4); Overview,
+// × on the one in front and on hover, its slot kept so a tab never changes width (#4); its thing's
+// pin just left of the × on hover, over the title's end (TabPin.tsx, his m_50763); Overview,
 // the home, has none; '+' 28 opens New tab. As many whole tabs as the row holds, six at most
 // (HIG), the rest behind an overflow button whose native menu lists them, none cut (#3); a drag
 // reorders; a right click is the tab's menu (nm-menus' useEntityMenu({ kind: 'tab', id })).
@@ -19,6 +20,7 @@ import { fitTabs, shownOf, TAB_GAP, type Tab } from './model';
 import { activateTab, closeTabId, moveTabTo, openLauncher, panelToggle, usePanelState } from './state';
 import { useTabLooks, type TabLook } from './look';
 import { PANEL_KEYS } from './keys';
+import { TabPin } from './TabPin';
 
 /** The panel's ▯ at the title bar's end (⌥⌘B), pressed while it is open; ⌥⌘ held, its ⌥⌘B keycap in place of the glyph (designer m_45008). */
 export function BarTabs() {
@@ -208,6 +210,7 @@ function BarTab({ tab, look, on, dragging, onDragStart, onDropAt, onDragEnd }: {
     >
       {look.icon}
       <span className="pn-tab-t" ref={titleEl}>{look.title}</span>
+      {tab.what.kind === 'thing' && <TabPin e={tab.what.e} testId={`app.panel.tab.${tab.id}.pin`} />}
       {<Press
         look="pn-tab-x"
         aria-label={close}
