@@ -66,8 +66,11 @@ END
 "))
     == "{\"model\":\"deepseek-flash\",\"max_tokens\":64,\"thinking\":{\"type\":\"disabled\"},\"messages\":[{\"role\":\"assistant\",\"content\":\"answer\",\"reasoning_content\":\"old\"}]}" : String}
 
-# Empty assistant turns still need content when they have no tool calls.
-# Keep native reasoning, including whitespace; remove only foreign signatures.
+# An assistant turn with no call and no visible text (blank, or only
+# reasoning, native or foreign) is left out: its content would be ""
+# (main's 400 of 2026-10-30, "text content blocks must be non-empty").
+# Its neighbours stay as they are; the turns around a visible one keep
+# their reasoning (deepseek_tools_keep_all_turns_reasoning_and_ids).
 def empty_body(+effort: String) -> J.Json:
   W.parse_json(Api.api_body_for(Api.DeepSeek{}, "deepseek-flash",
     Api.MFacts{True{}, 64n, "max_tokens", "", "", effort, False{}},
@@ -75,9 +78,8 @@ def empty_body(+effort: String) -> J.Json:
       W.WMsg{"assistant", "<think> native\n </think>", Nil{}},
       W.WMsg{"assistant", "<think>foreign\nBENDSIG::sig</think>", Nil{}}], None{}}))
 
-law deepseek_empty_and_reasoning_only_turns_have_content:
-  {W.arr_field_or(empty_body("high"), "messages")
-    == W.arr_field_or(W.parse_json("{\"messages\":[{\"role\":\"assistant\",\"content\":\"\",\"reasoning_content\":\"\"},{\"role\":\"assistant\",\"content\":\"\",\"reasoning_content\":\" native\\n \"},{\"role\":\"assistant\",\"content\":\"\",\"reasoning_content\":\"\"}]}"), "messages") : List<&2, J.Json>}
+law deepseek_empty_and_reasoning_only_turns_are_left_out:
+  {W.arr_field_or(empty_body("high"), "messages") == Nil{} : List<&2, J.Json>}
 
 law deepseek_empty_turns_none_keeps_history:
   {W.arr_field_or(empty_body("none"), "messages")

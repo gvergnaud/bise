@@ -145,7 +145,8 @@ def items_calls(cs: List<&2, W.WCall>) -> List<&2, J.Json>:
 def item_output(+id: String, +content: String) -> J.Json:
   J.obj(Con{J.kv("type", J.str("function_call_output")),
     Con{J.kv("call_id", J.str(id)),
-    Con{J.kv("output", W.img_content_of("tool", Im.IResp{}, content)), Nil{}}}})
+    Con{J.kv("output", W.img_content_of("tool", Im.IResp{},
+      W.tool_text(content))), Nil{}}}})
 
 # the plain text between two spans: a whitespace-only gap is no item
 def seg_text.pick(empty: Bool, +t: String) -> List<&2, J.Json>:
@@ -256,9 +257,11 @@ def items_go(fuel: Nat, w: RWalk) -> List<&2, J.Json>:
               items_go(k, RNext{todo, ids2,
                 List.append(&2, J.Json, List.reverse(&2, J.Json, items), acc)})
 
+# a message with empty content never leaves (W.sendable; an assistant
+# message with no replayable item already gives none)
 def input_items(+msgs: List<&2, W.WMsg>) -> List<&2, J.Json>:
   items_go(Nat.add(Nat.mul(List.length(&2, W.WMsg, msgs), 2n), 16n),
-    RNext{msgs, Nil{}, Nil{}})
+    RNext{W.sendable(msgs), Nil{}, Nil{}})
 
 # ---- the body ----
 

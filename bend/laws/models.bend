@@ -141,6 +141,45 @@ END
     == "{\"model\":\"m\",\"max_tokens\":64000,\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"a\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"x\"},{\"type\":\"tool_use\",\"id\":\"call_7\",\"name\":\"echo\",\"input\":{\"arg\":\"hi\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_7\",\"cache_control\":{\"type\":\"ephemeral\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"b\",\"cache_control\":{\"type\":\"ephemeral\"}}]}]}"
     : String}
 
+# LAW: the same for the OpenAI-style families (W.sendable): a blank
+# system or user message and an assistant with no call and no text are
+# left out (never content "" or an assistant with content null and no
+# tool_calls); a blank tool result reads (no output); a user message of
+# only an image keeps its frame text, never an empty text part.
+def no_empty_req() -> W.WReq:
+  W.parse_wire("MODEL default
+MSG system : 
+MSG user : a
+MSG assistant : 
+MSG user :  \\n 
+MSG assistant :  \\n 
+MSG assistant : x
+  CALL 7 echo : hi
+MSG tool : 
+MSG user : <image name=\"[Image #1]\" path=\"p.png\" mime=\"image/png\" b64=\"/s/x.b64\">
+END
+")
+
+law oai_no_empty_content:
+  {Api.api_body_for(Api.OpenAI{}, "m", Api.facts0(), no_empty_req())
+    == "{\"model\":\"m\",\"reasoning_effort\":\"high\",\"messages\":[{\"role\":\"user\",\"content\":\"a\"},{\"role\":\"assistant\",\"content\":\"x\",\"tool_calls\":[{\"id\":\"call_7\",\"type\":\"function\",\"function\":{\"name\":\"echo\",\"arguments\":\"{\\\"arg\\\":\\\"hi\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"(no output)\",\"tool_call_id\":\"call_7\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"<image name=[Image #1] path=\\\"p.png\\\">\"},\"@@BENDPART:o|image/png|/s/x.b64|[Image #1]@@\",{\"type\":\"text\",\"text\":\"</image>\"}]}]}"
+    : String}
+
+law resp_no_empty_content:
+  {Api.api_body_for(Api.OpenAIResp{}, "m", Api.facts0(), no_empty_req())
+    == "{\"model\":\"m\",\"store\":false,\"reasoning\":{\"effort\":\"high\",\"summary\":\"auto\"},\"include\":[\"reasoning.encrypted_content\"],\"input\":[{\"role\":\"user\",\"content\":\"a\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"x\"}]},{\"type\":\"function_call\",\"call_id\":\"call_7\",\"name\":\"echo\",\"arguments\":\"{\\\"arg\\\":\\\"hi\\\"}\"},{\"type\":\"function_call_output\",\"call_id\":\"call_7\",\"output\":\"(no output)\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"<image name=[Image #1] path=\\\"p.png\\\">\"},\"@@BENDPART:r|image/png|/s/x.b64|[Image #1]@@\",{\"type\":\"input_text\",\"text\":\"</image>\"}]}]}"
+    : String}
+
+law deepseek_no_empty_content:
+  {Api.api_body_for(Api.DeepSeek{}, "m", Api.facts0(), no_empty_req())
+    == "{\"model\":\"m\",\"reasoning_effort\":\"high\",\"messages\":[{\"role\":\"user\",\"content\":\"a\"},{\"role\":\"assistant\",\"content\":\"x\",\"reasoning_content\":\"\",\"tool_calls\":[{\"id\":\"call_7\",\"type\":\"function\",\"function\":{\"name\":\"echo\",\"arguments\":\"{\\\"arg\\\":\\\"hi\\\"}\"}}]},{\"role\":\"tool\",\"content\":\"(no output)\",\"tool_call_id\":\"call_7\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"<image name=[Image #1] path=\\\"p.png\\\">\"},\"@@BENDPART:o|image/png|/s/x.b64|[Image #1]@@\",{\"type\":\"text\",\"text\":\"</image>\"}]}]}"
+    : String}
+
+law anth_image_only_user_has_no_empty_text:
+  {Api.api_body_for(Api.Anthropic{}, "m", Api.facts0(), no_empty_req())
+    == "{\"model\":\"m\",\"max_tokens\":32768,\"thinking\":{\"type\":\"adaptive\",\"display\":\"summarized\"},\"output_config\":{\"effort\":\"high\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"a\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"x\"},{\"type\":\"tool_use\",\"id\":\"call_7\",\"name\":\"echo\",\"input\":{\"arg\":\"hi\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_7\",\"cache_control\":{\"type\":\"ephemeral\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"<image name=[Image #1] path=\\\"p.png\\\">\"},\"@@BENDPART:a|image/png|/s/x.b64|[Image #1]@@\",{\"type\":\"text\",\"text\":\"</image>\",\"cache_control\":{\"type\":\"ephemeral\"}}]}]}"
+    : String}
+
 # LAW: `thinking = budget` (Haiku 4.5 refuses adaptive thinking):
 # extended thinking with budget_tokens = half the max output, at most
 # 16000; no output_config.

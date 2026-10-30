@@ -43,6 +43,18 @@ def Laws.anth_thinking_none_and_no_cache_on_thinking():
 def Laws.anth_no_empty_text_block():
   {==}
 
+def Laws.oai_no_empty_content():
+  {==}
+
+def Laws.resp_no_empty_content():
+  {==}
+
+def Laws.deepseek_no_empty_content():
+  {==}
+
+def Laws.anth_image_only_user_has_no_empty_text():
+  {==}
+
 def Laws.anth_thinking_budget():
   {==}
 

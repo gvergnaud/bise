@@ -195,6 +195,57 @@ type WTool is Data:
 type WReq is Data:
   WReq{tools: List<&2, WTool>, msgs: List<&2, WMsg>, cur: Maybe<&2, WMsg>}
 
+# ---- what never leaves: empty content (main's 400 of 2026-10-30) ----
+# A provider refuses a message with empty content ("text content blocks
+# must be non-empty", an assistant with content null and no tool_calls).
+# Each family drops such a message from its body: a blank user, context
+# or system message, and an assistant message with no call whose text
+# (the family's own replayable text) is blank. A tool result always
+# stays (it pairs with its call); a blank one says so in words.
+
+def is_blank(+s: String) -> Bool:
+  String.is_empty(String.trim(s))
+
+def has_calls(calls: List<&2, WCall>) -> Bool:
+  match calls:
+    case Nil{}:
+      False{}
+    case Con{_, _}:
+      True{}
+
+# `text`: the content the family would send for that message
+def unsendable(+role: String, +text: String, has_calls: Bool) -> Bool:
+  match has_calls:
+    case True{}:
+      False{}
+    case False{}:
+      Bool.and(Bool.not(String.eq(role, "tool")), is_blank(text))
+
+def keep_msg(drop: Bool, +m: WMsg, +rest: List<&2, WMsg>) -> List<&2, WMsg>:
+  match drop:
+    case True{}:
+      rest
+    case False{}:
+      Con{m, rest}
+
+# a family whose text is the content as is (OpenAI Chat, Responses)
+def sendable(msgs: List<&2, WMsg>) -> List<&2, WMsg>:
+  match msgs:
+    case Nil{}:
+      Nil{}
+    case Con{+m, rest}:
+      match m:
+        case WMsg{+role, +content, +calls}:
+          keep_msg(unsendable(role, content, has_calls(calls)),
+            WMsg{role, content, calls}, sendable(rest))
+
+def NO_OUTPUT() -> String:
+  "(no output)"
+
+# a tool result's text: a blank one reads as (no output), never ""
+def tool_text(+content: String) -> String:
+  Bool.pick(String, is_blank(content), NO_OUTPUT(), content)
+
 # ---- wire request parsing (the mirror of remote.bend's serialization) ----
 
 # the role a family sends: the ephemeral context (`MSG context`, runtime/

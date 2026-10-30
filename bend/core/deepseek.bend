@@ -39,7 +39,8 @@ def split(+content: String) -> History:
     content, "", "")
 
 # Null is valid only with tool calls. A blank or reasoning-only assistant
-# without calls must send a string; keep that turn and its reasoning intact.
+# without calls is left out (sendable): its content would be "" (main's
+# 400 of 2026-10-30, "text content blocks must be non-empty").
 def content.pick(null_ok: Bool, +text: String) -> J.Json:
   match null_ok:
     case True{}:
@@ -103,9 +104,36 @@ def msgs_go(fuel: Nat, w: Oai.MWalk) -> List<&2, J.Json>:
             case Oai.MP{+j, +ids2}:
               msgs_go(k, Oai.MNext{todo, ids2, Con{j, acc}})
 
+# the text DeepSeek sends of a message: an assistant's visible part (its
+# reasoning rides reasoning_content), any other's content
+def visible_of(h: History) -> String:
+  match h:
+    case H{+visible, _}:
+      visible
+
+def sent_text(is_asst: Bool, +content: String) -> String:
+  match is_asst:
+    case True{}:
+      visible_of(split(content))
+    case False{}:
+      content
+
+# a message with empty content never leaves (W.unsendable)
+def sendable(msgs: List<&2, W.WMsg>) -> List<&2, W.WMsg>:
+  match msgs:
+    case Nil{}:
+      Nil{}
+    case Con{+m, rest}:
+      match m:
+        case W.WMsg{+role, +content, +calls}:
+          W.keep_msg(W.unsendable(role,
+              sent_text(String.eq(role, "assistant"), content),
+              W.has_calls(calls)),
+            W.WMsg{role, content, calls}, sendable(rest))
+
 def msgs_json(+msgs: List<&2, W.WMsg>) -> List<&2, J.Json>:
   msgs_go(Nat.add(Nat.mul(List.length(&2, W.WMsg, msgs), 2n), 16n),
-    Oai.MNext{msgs, Nil{}, Nil{}})
+    Oai.MNext{sendable(msgs), Nil{}, Nil{}})
 
 # In DeepSeek's Chat API, reasoning_effort none does NOT disable
 # thinking. Send its documented thinking toggle and omit that effort.

@@ -83,11 +83,13 @@ def msg_json.tool(ids: List<&2, String>, +content: String)
   match ids:
     case Con{+id, rest}:
       (J.obj(Con{J.kv("role", J.str("tool")),
-        Con{J.kv("content", W.img_content_of("tool", Im.IOai{}, content)),
+        Con{J.kv("content", W.img_content_of("tool", Im.IOai{},
+          W.tool_text(content))),
           Con{J.kv("tool_call_id", J.str(id)), Nil{}}}}), rest)
     case Nil{}:
       (J.obj(Con{J.kv("role", J.str("tool")),
-        Con{J.kv("content", W.img_content_of("tool", Im.IOai{}, content)),
+        Con{J.kv("content", W.img_content_of("tool", Im.IOai{},
+          W.tool_text(content))),
           Con{J.kv("tool_call_id", J.str("call_0")), Nil{}}}}), Nil{})
 
 def content_json.pick(empty: Bool, +text: String) -> J.Json:
@@ -97,8 +99,10 @@ def content_json.pick(empty: Bool, +text: String) -> J.Json:
     case False{}:
       J.str(text)
 
+# blank: null, which goes only with tool_calls (W.sendable drops a
+# blank assistant message without any)
 def content_json(+text: String) -> J.Json:
-  content_json.pick(String.is_empty(text), text)
+  content_json.pick(W.is_blank(text), text)
 
 # the exact vibe ThinkChunk shape: the thinking block first, the text
 # block second (a thinking-only assistant message carries no text block)
@@ -129,14 +133,14 @@ def asst_content.pick_signed.signed(tm: W.ThinkMark, +visible: String)
     -> J.Json:
   match tm:
     case W.TM{+reason, +sig}:
-      asst_content.marked.pick(String.is_empty(visible), reason,
+      asst_content.marked.pick(W.is_blank(visible), reason,
         visible, Some{sig})
 
 def asst_content.pick_signed(is_unsigned: Bool, tm: W.ThinkMark,
     +reasoning: String, +visible: String) -> J.Json:
   match is_unsigned:
     case True{}:
-      asst_content.marked.pick(String.is_empty(visible), reasoning,
+      asst_content.marked.pick(W.is_blank(visible), reasoning,
         visible, None{})
     case False{}:
       asst_content.pick_signed.signed(tm, visible)
@@ -231,9 +235,10 @@ def msgs_go(fuel: Nat, w: MWalk) -> List<&2, J.Json>:
             case MP{+j, +ids2}:
               msgs_go(k, MNext{todo, ids2, Con{j, acc}})
 
+# a message with empty content never leaves (W.sendable)
 def msgs_json(+msgs: List<&2, W.WMsg>) -> List<&2, J.Json>:
   msgs_go(Nat.add(Nat.mul(List.length(&2, W.WMsg, msgs), 2n), 16n),
-    MNext{msgs, Nil{}, Nil{}})
+    MNext{W.sendable(msgs), Nil{}, Nil{}})
 
 # what the catalog says of the model (core/api.bend MFacts): whether it
 # reasons, its output cap (0n: none sent) and the cap's field name

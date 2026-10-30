@@ -26,7 +26,7 @@ def Laws.deepseek_normal_history_high():
 def Laws.deepseek_normal_history_none():
   {==}
 
-def Laws.deepseek_empty_and_reasoning_only_turns_have_content():
+def Laws.deepseek_empty_and_reasoning_only_turns_are_left_out():
   {==}
 
 def Laws.deepseek_empty_turns_none_keeps_history():
