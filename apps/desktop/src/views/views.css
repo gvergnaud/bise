@@ -28,9 +28,11 @@
   margin-right: 0;
 }
 
+/* its space under it is padding: a bottom margin left the thread's row through its end (Virtuoso
+   measures the row's box), so a list stuck to its end stopped 4 px short of it (mcp-apps-hold) */
 .vw-card {
   margin-top: var(--gap-tight);
-  margin-bottom: var(--gap-tight);
+  padding-bottom: var(--gap-tight);
   font: var(--f-meta);
   color: var(--c-text-2);
 }
@@ -101,6 +103,17 @@
 .vw-card[data-state="panel"] {
   margin-top: var(--s-2);
   color: var(--c-text-3);
+}
+
+/* two cards of one call: the gap the margins made when they collapsed, now that the first one's
+   space under it is padding */
+.vw-card + .vw-card {
+  margin-top: 0;
+}
+
+.vw-card + .vw-card.vw-gone,
+.vw-card + .vw-card[data-state="panel"] {
+  margin-top: calc(var(--s-2) - var(--gap-tight));
 }
 
 .vw-tab {

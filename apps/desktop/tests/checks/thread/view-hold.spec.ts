@@ -92,14 +92,8 @@ for (const width of [1440, 1100] as const)
         }, width);
         await expect.poll(() => page.evaluate(() => window.innerWidth), { timeout: 5000 }).toBe(width);
         await expect(page.getByTestId('thread.list')).toBeVisible({ timeout: 15_000 });
-        // the fixtures' app_open opened a view's tab at the start: the panel closed first, as his was
-        await page.waitForTimeout(500);
-        const closes = page.locator('[data-testid^="app.panel.tab."][data-testid$=".close"]');
-        for (let i = 0; i < 4 && (await closes.count()) > 0; i++) {
-          await closes.first().click({ force: true });
-          await page.waitForTimeout(300);
-        }
-        await expect(closes).toHaveCount(0);
+        // the panel closed before his click, as his was (the start world opens no view's tab)
+        await expect(page.locator('[data-testid^="app.panel.tab."][data-testid$=".close"]')).toHaveCount(0);
         for (let i = 0; i < 6; i++) await core.result('view_resource', undefined, RESOURCE);
         const at = where === 'mid' ? N / 2 : N;
         await core.send({ ev: 'thread', project: ACME, agent: 'perf', entries: history(at), before: null, more: false } as never);
