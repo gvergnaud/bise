@@ -9,7 +9,7 @@ import { layoutOf } from './maps';
 import { MAP_IDS } from './maps/ids';
 import type { Activity, Office, Spot } from './model';
 import { rigOf, type Rig } from './render/pose';
-import { CHAIR, chairSpots, hopBeat, pullRoom, seatWaits, SIT, SIT_S, sitBeat, sidePoints, toLocal } from './sit';
+import { CHAIR, chairSpots, hopBeat, pullRoom, seatWaits, SIT, SIT_S, sitBeat, sidePoints, STAND_AT, standBeat, toLocal } from './sit';
 import { makePath } from './paths';
 import { newTimeline } from './timeline';
 
@@ -29,12 +29,12 @@ interface Box3 {
   readonly y1: number;
 }
 
-/** the chair (furniture.ts chair: the seat 0.42 square at 0.28..0.36, the backrest 0.07 thick from 0.34 to 0.76, 0.2 behind its middle), slid back `back` */
+/** the chair (furniture.ts chair: the seat 0.42 square 0.08 thick under CHAIR.seatTop, the backrest 0.07 thick from just under it to CHAIR.backTop, 0.2 behind its middle), slid back `back` */
 function chairParts(back: number): { seat: Box3; rest: Box3 } {
   const c = -CHAIR.dz - back;
   return {
-    seat: { u0: -0.21, u1: 0.21, v0: c - 0.21, v1: c + 0.21, y0: 0.28, y1: 0.36 },
-    rest: { u0: -0.21, u1: 0.21, v0: c - 0.235, v1: c - 0.165, y0: 0.34, y1: 0.76 },
+    seat: { u0: -0.21, u1: 0.21, v0: c - 0.21, v1: c + CHAIR.front, y0: CHAIR.seatTop - 0.08, y1: CHAIR.seatTop },
+    rest: { u0: -0.21, u1: 0.21, v0: c - 0.235, v1: c - 0.165, y0: CHAIR.seatTop - 0.02, y1: CHAIR.backTop },
   };
 }
 
@@ -80,11 +80,15 @@ function depth(p: Part, b: Box3): number {
   return p.r - Math.hypot(du, dv, dy);
 }
 
-/** sat on it: its middle where a seated bim's is, its chair's middle CHAIR.dz behind it */
+/**
+ * sat on it: its legs a seated bim's, its middle over the seat (where a seated bim's is, its chair's
+ * middle CHAIR.dz behind it, or the seat sliding back from under it as it gets up: sit.ts standBeat)
+ */
 function onSeat(r: Rig, spot: Spot): boolean {
   const l = toLocal(spot, r);
   const back = r.seat?.back ?? 0;
-  return Math.abs(l.u) < 0.015 && Math.abs(l.v - (-CHAIR.dz - back) - CHAIR.dz) < 0.015 && r.legL < -1.2;
+  const mid = -CHAIR.dz - back;
+  return Math.abs(l.u) < 0.015 && l.v >= mid - 0.015 && l.v <= mid + CHAIR.half && r.legL < -1.2;
 }
 
 /**
@@ -136,10 +140,29 @@ describe('the sitting law (bims-sit): never through the chair', () => {
     expect(hopBeat(1).back).toBeCloseTo(0, 9);
     for (let h = 0; h <= 1; h += 0.01) {
       const b = hopBeat(h);
-      const front = -CHAIR.dz - b.back + CHAIR.half;
+      const front = -CHAIR.dz - b.back + CHAIR.front;
       // the seat's front under the bim's back: it is up (its hoodie over the seat) or sat on it
       if (front > b.v - 0.21) expect(b.y >= SIT.hop - 0.02 || b.seated, `h=${h.toFixed(2)}`).toBe(true);
     }
+  });
+
+  it('the get-up: the chair pushed back before the bim rises, never rising inside it (his m_50679)', () => {
+    expect(standBeat(0)).toMatchObject({ u: 0, y: 0, legs: 1, back: 0, seated: true });
+    expect(standBeat(1)).toMatchObject({ u: 0, v: SIT.gap, y: 0, legs: 0, back: SIT.pull, seated: false });
+    expect(standBeat(1, 0).v).toBe(0);
+    let last = -1;
+    for (let s = 0; s <= 1.0001; s += 0.01) {
+      const b = standBeat(s);
+      // the chair only goes back, never in under it again
+      expect(b.back).toBeGreaterThanOrEqual(last - 1e-9);
+      last = b.back;
+      // the seat's front clears its standing legs (a body's radius, 0.15) before they are half down
+      const front = -CHAIR.dz - b.back + CHAIR.front;
+      if (b.legs < 0.5) expect(front, `s=${s.toFixed(2)}`).toBeLessThanOrEqual(b.v - 0.15);
+    }
+    // it still sits a moment as the chair starts back: the push comes first
+    expect(standBeat(STAND_AT.rise).legs).toBe(1);
+    expect(standBeat(STAND_AT.rise).back).toBeGreaterThan(0.2);
   });
 
   it('a sit and a get-up add their beats as waits on the walk', () => {

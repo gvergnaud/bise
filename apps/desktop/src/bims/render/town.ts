@@ -25,6 +25,7 @@ import { lookOf } from './maps';
 import { DAY, NIGHT } from './palette';
 import { STYLE } from './style';
 import { mergeRoot, type Merged } from './merge';
+import { looseChairs } from './furniture';
 import { APPEAR_S, makeOfficeScene, UP_LAYER, type OfficeScene } from './office-scene';
 import { POOF_S } from './poof';
 import { makeView } from './view';
@@ -203,6 +204,17 @@ export const makeTownRenderer: MakeTownRenderer = (canvas, opts = {}) => {
     s.bake = null;
   }
 
+  /**
+   * Its world's desk chairs out of any bake, drawn on their own (furniture.ts looseChairs): their
+   * slides as a bim sits and gets up show (his m_50679). An old world's holders go with it.
+   */
+  function syncChairs(s: Spot): void {
+    const w = s.scene.world();
+    const root = s.scene.root;
+    for (const c of [...root.children]) if (c.userData.chairsOf !== undefined && c.userData.chairsOf !== w?.id) root.remove(c);
+    if (w && !root.children.some((c) => c.userData.chairsOf === w.id)) looseChairs(w, root);
+  }
+
   function dropWalls(s: Spot): void {
     if (!s.walls) return;
     s.scene.root.remove(s.walls.merged.group);
@@ -231,6 +243,8 @@ export const makeTownRenderer: MakeTownRenderer = (canvas, opts = {}) => {
     // walls bake made after the office was drawn carries its place twice: the walls off their bims)
     s.scene.root.updateMatrixWorld(true);
     w.visible = true;
+    // its chairs out of the walls: they slide under their bims
+    syncChairs(s);
     const merged = mergeRoot(w, STYLE, STYLE.shadows);
     s.scene.root.position.copy(at);
     s.scene.root.updateMatrixWorld(true);
@@ -617,6 +631,7 @@ export const makeTownRenderer: MakeTownRenderer = (canvas, opts = {}) => {
       if (posed(s, step, step.frames[0]?.pose.since ?? 0) === null && !s.scene.office()) return false;
       // baked where it stands in its own units, then placed: a new plan moves the bake, never bakes it again
       s.scene.root.position.set(0, 0, 0);
+      syncChairs(s);
       const merged = mergeRoot(s.scene.root, STYLE, STYLE.shadows);
       const glows: [MeshLambertMaterial, MeshLambertMaterial][] = [];
       for (const c of merged.group.children) {

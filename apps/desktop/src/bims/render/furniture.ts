@@ -3,6 +3,7 @@
 // Split out of world.ts when the maps came (render/maps/look.ts); nothing here decides.
 import { Group, type MeshLambertMaterial, type Object3D } from 'three';
 import type { Box, Pt } from '../model';
+import { CHAIR } from '../sit';
 import type { Kit } from './kit';
 import { LAPTOP } from './laptop';
 import { WORLD } from './palette';
@@ -51,9 +52,16 @@ export function chair(k: Kit, parent: Object3D, x: number, z: number, color: str
   g.position.set(x, 0, z);
   g.rotation.y = face;
   parent.add(g);
-  k.add(k.style.box(0.42, 0.08, 0.42), k.mat(color), g, 0, 0.32, 0);
-  k.add(k.style.box(0.42, 0.42, 0.07), k.mat(color), g, 0, 0.55, -0.2);
-  k.add(k.style.cylinder(0.03, 0.3), k.mat(k.pal.ink), g, 0, 0.15, 0);
+  // the seat at a seated bim's hips (sit.ts CHAIR.seatTop; his m_50679: they sat 20 cm into a seat
+  // at 0.36), the back from it up, on a short post
+  const top = CHAIR.seatTop;
+  // its front CHAIR.front ahead of its middle, its back where it always was (0.21 behind)
+  const deep = CHAIR.front + 0.21;
+  k.add(k.style.box(0.42, 0.08, deep), k.mat(color), g, 0, top - 0.04, (CHAIR.front - 0.21) / 2);
+  k.add(k.style.box(0.42, CHAIR.backTop - top + 0.02, 0.07), k.mat(color), g, 0, (CHAIR.backTop + top - 0.02) / 2, -0.2);
+  k.add(k.style.cylinder(0.03, top - 0.08), k.mat(k.pal.ink), g, 0, (top - 0.08) / 2, 0);
+  // kept out of a town's bake of its office: the chair slides under its bim (town.ts walls, looseChairs)
+  g.userData.chair = true;
   return { obj: g, x, z, face };
 }
 
@@ -63,6 +71,33 @@ export function seatChair(c: Seat | undefined, s: { readonly back: number; reado
   const back = s?.back ?? 0;
   c.obj.position.set(c.x - Math.sin(c.face) * back, 0, c.z - Math.cos(c.face) * back);
   c.obj.rotation.y = c.face + (s?.turn ?? 0);
+}
+
+/**
+ * The desk chairs (furniture.ts chair: userData.chair) taken out of `world` into `root`, each in a
+ * holder standing where its parent stood, so a bake of the world (town.ts walls) leaves them out and
+ * seatChair still slides them in their parent's frame (his m_50679: in the hero's town the bake drew
+ * every chair where it was built, the bims going through it). The holders, for the caller to drop.
+ */
+export function looseChairs(world: Object3D, root: Object3D): Group[] {
+  root.updateMatrixWorld(true);
+  const chairs: Object3D[] = [];
+  world.traverse((o) => {
+    if (o.userData.chair === true) chairs.push(o);
+  });
+  const toRoot = root.matrixWorld.clone().invert();
+  return chairs.flatMap((c) => {
+    const parent = c.parent;
+    if (parent === null) return [];
+    const holder = new Group();
+    holder.matrixAutoUpdate = false;
+    holder.matrix.multiplyMatrices(toRoot, parent.matrixWorld);
+    holder.userData.chairsOf = world.id;
+    holder.add(c);
+    root.add(holder);
+    holder.updateMatrixWorld(true);
+    return [holder];
+  });
 }
 
 /** the furniture box in front of a chair (Office.furniture: a desk is ahead of its spot, +z) */

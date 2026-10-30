@@ -14,7 +14,11 @@ import { BODY_R, progress } from './avoid';
 
 
 /** the desk chair (render/furniture.ts chair): its middle this far behind its spot, its half width, its back behind its middle */
-export const CHAIR = { dz: 0.05, half: 0.21, back: 0.235, seatTop: 0.36, backTop: 0.76 } as const;
+// seatTop: under a seated bim's hips (render/pose.ts SEATED: its hoodie's bottom at 0.14, its legs'
+// at ~0.16; his m_50679, at 0.36 they sat 20 cm into the seat), backTop 0.4 over it as before; front:
+// the seat's front edge ahead of its middle (shallower than `half`: low now, main's walking feet beside
+// it slid back SIT.pull reached a front at 0.21, and there is no room to slide it further on cyclades)
+export const CHAIR = { dz: 0.05, half: 0.21, front: 0.17, back: 0.235, seatTop: 0.14, backTop: 0.54 } as const;
 
 /** the sit's sizes, office units (bims m_32740) */
 export const SIT = {
@@ -25,7 +29,7 @@ export const SIT = {
   /** how far the chair slides back to let its bim in (its front clears the bim at G, and one standing at its build, 0.15 back) */
   pull: 0.55,
   /** the hop: the body this high while the chair slides in under it (its hoodie and legs over the seat) */
-  hop: 0.26,
+  hop: 0.1,
 } as const;
 
 /** the beats' lengths, s: the chair out (the bim beside it), the hop (up, chair in, down, slide in), the chair back in */
@@ -292,7 +296,7 @@ export function sitBeat(seg: { readonly path: Path; readonly speed: number; read
   const sit = seg.sit;
   if (!sit) return null;
   // at its desk without a walk: the hop where it stands, up (the chair out) or down (the chair in)
-  if (sit.up) return e < SIT_S.hop ? { at: sit.up, beat: hopBeat(1 - e / SIT_S.hop, 0) } : null;
+  if (sit.up) return e < SIT_S.hop ? { at: sit.up, beat: standBeat(e / SIT_S.hop, 0) } : null;
   if (sit.down) return e < SIT_S.hop ? { at: sit.down, beat: hopBeat(e / SIT_S.hop, 0) } : null;
   if (!sit.in && !sit.out) return null;
   const waits = seg.waits ?? [];
@@ -305,7 +309,7 @@ export function sitBeat(seg: { readonly path: Path; readonly speed: number; read
     const tEnd = timeAt(seg.path, seg.speed, waits, m.outS, true);
     if (e < tS) {
       const hop = o.standing ? 0 : SIT_S.hop;
-      if (e < hop) return { at: o, beat: hopBeat(1 - e / hop) };
+      if (e < hop) return { at: o, beat: standBeat(e / hop) };
       // in front of the desk at G (the chair's slide's last bit), then sideways out to S
       const d = walked();
       const f = clamp01((d - m.outG) / Math.max(1e-6, m.outS - m.outG));
@@ -364,6 +368,25 @@ export function hopBeat(h: number, gap: number = SIT.gap): Beat {
   const back = SIT.pull + (-gap - SIT.pull) * chairIn - -gap * slide;
   return { u: 0, v: gap * (1 - slide), y: SIT.hop * up * (1 - down), legs: up, back, facing: true, seated: h >= IN, step: false };
 }
+
+/**
+ * Getting up from its chair, s from 0 (seated) to 1 (standing in front of it): the chair pushed back
+ * first, the bim rising once its seat's front has cleared its legs, then a step back to `gap` (his
+ * m_50679: « quand on se lève on la recule un peu »; the hop played backwards rose the bim inside its
+ * chair, the chair sliding out only once it was up). Pure.
+ */
+export function standBeat(s: number, gap: number = SIT.gap): Beat {
+  const push = ease(clamp01(s / STAND_AT.push));
+  const rise = ease(clamp01((s - STAND_AT.rise) / (1 - STAND_AT.rise)));
+  const step = ease(clamp01((s - STAND_AT.step) / (1 - STAND_AT.step)));
+  // its weight off the seat a little as it pushes back (the seat slides out from under it)
+  return { u: 0, v: gap * step, y: STAND_LIFT * push * (1 - rise), legs: 1 - rise, back: SIT.pull * push, facing: true, seated: rise < 0.5, step: false };
+}
+
+/** the get-up's beats, as shares of it: the chair pushed back by `push`, the bim rising from `rise`, its step back from `step` */
+export const STAND_AT = { push: 0.55, rise: 0.25, step: 0.7 } as const;
+/** how far it lifts off the seat as it pushes back */
+const STAND_LIFT = 0.04;
 
 const ease = (f: number): number => {
   const x = clamp01(f);
