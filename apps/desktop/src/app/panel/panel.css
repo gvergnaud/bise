@@ -170,10 +170,11 @@
 }
 .pn-tab {
   box-sizing: border-box;
-  /* sized to its title, 64 to 180, cut with '…' past it (designer m_43050 #5); model.ts fitTabs
-     sends to ⌄ N only what really doesn't fit */
+  /* sized to its title, 132 to 180, cut with '…' past it (designer m_43050 #5); model.ts fitTabs
+     sends to ⌄ N only what really doesn't fit. 132 at least (designer m_50832): its icon, about 6
+     characters of title, the pin's slot and the ×, so the hover pin never covers a short title */
   flex: none;
-  min-width: var(--s-16);
+  min-width: calc(var(--s-16) * 2 + var(--s-1));
   display: inline-flex;
   align-items: center;
   gap: var(--s-2);
@@ -207,6 +208,8 @@
   outline-offset: -2px;
 }
 .pn-tab-t {
+  /* the room past a short title is its own, so the × stays at the tab's end */
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

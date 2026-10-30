@@ -150,18 +150,19 @@ describe('the tab model: six at most in the bar (HIG), the rest in the overflow 
     expect(shownOf(FIRST).over).toEqual([]);
   });
   it('tabs at their own widths: only what really does not fit goes to ⌄ N, six at most, one at least (designer m_43050 #5)', () => {
-    // Overview 92, Perf notes 120, New tab 96 in the 320 a 384 panel leaves them: all three
-    expect(fitTabs([92, 120, 96], 2, 320)).toBe(3);
-    expect(fitTabs([92, 120, 96], 2, 250)).toBe(2);
-    // 64 and 180 bound a tab's width
-    expect(fitTabs([10, 10, 10], 0, 200)).toBe(3);
+    // three tabs of 140, 160 and 150: all three in 458, two in 400
+    expect(fitTabs([140, 160, 150], 2, 458)).toBe(3);
+    expect(fitTabs([140, 160, 150], 2, 400)).toBe(2);
+    // 132 (designer m_50832: room for the hover pin) and 180 bound a tab's width
+    expect(fitTabs([10, 10, 10], 0, 132 * 3 + 8)).toBe(3);
+    expect(fitTabs([10, 10, 10], 0, 132 * 3 + 7)).toBe(2);
     expect(fitTabs([500, 500], 0, 370)).toBe(2);
-    expect(fitTabs(Array.from({ length: 9 }, () => 64), 0, 2000)).toBe(6);
+    expect(fitTabs(Array.from({ length: 9 }, () => 132), 0, 2000)).toBe(6);
     expect(fitTabs([180, 180], 1, 100)).toBe(1);
     // the one in front takes the last place: its own width counts there
-    expect(fitTabs([64, 64, 64, 180], 3, 64 * 2 + 180 + 8)).toBe(3);
+    expect(fitTabs([132, 132, 132, 180], 3, 132 * 2 + 180 + 8)).toBe(3);
     const t = activate(many, 'artifact:acme/a');
-    expect(shownOf(t, fitTabs([92, 120, 120], 0, 250)).shown.map((x) => x.id)).toEqual(['artifact:acme/a', 'artifact:acme/b']);
+    expect(shownOf(t, fitTabs([92, 120, 120], 0, 270)).shown.map((x) => x.id)).toEqual(['artifact:acme/a', 'artifact:acme/b']);
   });
 });
 

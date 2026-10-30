@@ -202,10 +202,11 @@ export function stepIn(t: Tabs, dir: 1 | -1): Tabs {
 }
 
 /**
- * A tab is sized to its title (designer m_43050 #5): 64 at least, 180 at most, its title cut with
- * '…' past it; panel.css .pn-tab's min-width and max-width. TAB_GAP: the row's gap between two.
+ * A tab is sized to its title (designer m_43050 #5): 132 at least (designer m_50832: its icon, ~6
+ * characters, the hover pin's slot and the ×), 180 at most, its title cut with '…' past it;
+ * panel.css .pn-tab's min-width and max-width. TAB_GAP: the row's gap between two.
  */
-export const TAB_MIN_W = 64;
+export const TAB_MIN_W = 132;
 export const TAB_MAX_W = 180;
 export const TAB_GAP = 4;
 
