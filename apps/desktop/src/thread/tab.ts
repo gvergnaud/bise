@@ -1,8 +1,9 @@
 // The composer's context strip (bise fait mac, mockup 1; it replaced designer's composer-strip A tab):
-// the box's first row, where his words go: the project, the addressee's state while it runs
+// the box's first row, where his words go: the addressee, its state while it runs
 // (stripState: 'working · 3 min', 'waits for you'; nothing idle) and the branch in mono, and on the
-// right the context ring or the screen's own words.
-// Short, it drops whole items: the project first, then the right end, then the state; the branch
+// right the context ring or the screen's own words. No project: the sidebar picks and says it (his
+// m_50754).
+// Short, it drops whole items: 'lands on main' first, then the right end, then the state; the branch
 // stays and 'to perf' never goes (stripFit). Answering a card: '↳ answering search · <question>'
 // and 'esc to bise instead' on the right; short, the question goes first, then that end;
 // '↳ answering search' never goes (answerFit). Which states make it pink (an item, words opening
@@ -77,7 +78,6 @@ export function tabPlace(
 
 /** Which of the strip's items show. */
 export interface StripFit {
-  readonly project: boolean;
   /** the addressee's state while it runs ('working · 3 min', 'waits for you') */
   readonly state: boolean;
   /** the right end: the context ring, or the screen's words */
@@ -93,26 +93,24 @@ export interface StripFit {
 export const BRANCH_MIN = 56;
 
 /**
- * The strip's items that fit in `avail` px, each whole or not at all: the project goes first (the
- * sidebar already says it, his m_47126), then 'lands on main', then the right end, then the state;
- * the branch stays, cut by its css past that, until even BRANCH_MIN doesn't fit. `avail` is what 'to perf' leaves: it never
+ * The strip's items that fit in `avail` px, each whole or not at all: 'lands on main' goes first,
+ * then the right end, then the state; the branch stays, cut by its css past that, until even BRANCH_MIN doesn't fit. `avail` is what 'to perf' leaves: it never
  * goes. `gap` is the space between two items (16); a width of 0 is an item that isn't there.
  * Every item is counted: one left out (ui-review m_47192: 'lands' was) is squeezed to a sliver by
  * the css while the ones after it stay. Pure.
  */
-export function stripFit(w: { avail: number; gap: number; project: number; state: number; branch: number; end: number; lands?: number }): StripFit {
+export function stripFit(w: { avail: number; gap: number; state: number; branch: number; end: number; lands?: number }): StripFit {
   const sum = (on: StripFit): number => {
-    const items = [on.project ? w.project : 0, on.state ? w.state : 0, on.branch ? w.branch : 0, on.lands ? (w.lands ?? 0) : 0, on.end ? w.end : 0].filter((x) => x > 0);
+    const items = [on.state ? w.state : 0, on.branch ? w.branch : 0, on.lands ? (w.lands ?? 0) : 0, on.end ? w.end : 0].filter((x) => x > 0);
     return items.reduce((n, x) => n + x, 0) + w.gap * Math.max(0, items.length - 1);
   };
   const tries: StripFit[] = [
-    { project: true, state: true, end: true, lands: true, branch: true },
-    { project: false, state: true, end: true, lands: true, branch: true },
-    { project: false, state: true, end: true, lands: false, branch: true },
-    { project: false, state: true, end: false, lands: false, branch: true },
+    { state: true, end: true, lands: true, branch: true },
+    { state: true, end: true, lands: false, branch: true },
+    { state: true, end: false, lands: false, branch: true },
   ];
   for (const t of tries) if (sum(t) <= w.avail) return t;
-  return { project: false, state: false, end: false, lands: false, branch: w.branch === 0 || w.avail >= Math.min(w.branch, BRANCH_MIN) };
+  return { state: false, end: false, lands: false, branch: w.branch === 0 || w.avail >= Math.min(w.branch, BRANCH_MIN) };
 }
 
 /** The addressee's state in the strip (his m_44719): it waits for him, or it works and for how long; null idle. */

@@ -435,12 +435,6 @@ crate::words! { composer:
     ctx_branch_tip(branch) = "on branch {branch}";
     /// after the branch, text-3, when the project's flow is trunk: where its work lands (the hub's devflow::lands)
     ctx_lands(branch) = "lands on {branch}";
-    /// the tip of the strip's project when it is not a picker
-    ctx_project_tip(path) = "the project's folder: {path}";
-    /// the strip's project picker: its name and tip
-    ctx_project_pick(project) = "{project} · pick another project";
-    /// the project picker's title
-    ctx_projects = "Projects";
     /// the strip's addressee picker ('to perf ⌄', his m_47126): its tip and name
     ctx_agent_pick(agent) = "to {agent} · talk to another agent";
     /// the addressee picker's title

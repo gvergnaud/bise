@@ -38,35 +38,33 @@ describe("the composer's one pink state (composer-target A, art-target, agent-ta
 });
 
 describe("the composer's context strip (bise fait mac, mockup 1)", () => {
-  const w = { gap: 16, project: 90, state: 80, branch: 120, end: 60 };
+  const w = { gap: 16, state: 80, branch: 120, end: 60 };
   it('shows every item when they fit', () => {
-    expect(stripFit({ ...w, avail: 90 + 80 + 120 + 60 + 3 * 16 })).toEqual({ project: true, state: true, end: true, lands: true, branch: true });
+    expect(stripFit({ ...w, avail: 80 + 120 + 60 + 2 * 16 })).toEqual({ state: true, end: true, lands: true, branch: true });
   });
-  // his m_47126: the project's picker gave way last, and 'to perf' shrank first; the sidebar
-  // already says the project. Mutation: the old order (end, state, project) turns this red.
-  it('drops whole items: the project first, then the right end, then the state; the branch stays', () => {
-    expect(stripFit({ ...w, avail: 90 + 80 + 120 + 60 + 3 * 16 - 1 })).toEqual({ project: false, state: true, end: true, lands: true, branch: true });
-    expect(stripFit({ ...w, avail: 80 + 120 + 60 + 2 * 16 - 1 })).toEqual({ project: false, state: true, end: false, lands: false, branch: true });
-    expect(stripFit({ ...w, avail: 80 + 120 + 16 - 1 })).toEqual({ project: false, state: false, end: false, lands: false, branch: true });
-    expect(stripFit({ ...w, avail: 10 })).toEqual({ project: false, state: false, end: false, lands: false, branch: false });
+  // Mutation: the old order (state before end) turns this red.
+  it('drops whole items: the right end first, then the state; the branch stays', () => {
+    expect(stripFit({ ...w, avail: 80 + 120 + 60 + 2 * 16 - 1 })).toEqual({ state: true, end: false, lands: false, branch: true });
+    expect(stripFit({ ...w, avail: 80 + 120 + 16 - 1 })).toEqual({ state: false, end: false, lands: false, branch: true });
+    expect(stripFit({ ...w, avail: 10 })).toEqual({ state: false, end: false, lands: false, branch: false });
   });
   // ui-review m_47192: 'lands on main' was left out of the fit, so the css squeezed it to a 3 px
   // sliver while the ring and the state stayed. Mutation: 'lands' out of stripFit's sum turns it red.
-  it("'lands on main' goes whole right after the project, before the ring and the state", () => {
+  it("'lands on main' goes whole first, before the ring and the state", () => {
     const l = { ...w, lands: 100 };
-    expect(stripFit({ ...l, avail: 80 + 120 + 100 + 60 + 3 * 16 })).toEqual({ project: false, state: true, end: true, lands: true, branch: true });
-    expect(stripFit({ ...l, avail: 80 + 120 + 100 + 60 + 3 * 16 - 1 })).toEqual({ project: false, state: true, end: true, lands: false, branch: true });
-    expect(stripFit({ ...l, avail: 80 + 120 + 16 })).toEqual({ project: false, state: true, end: false, lands: false, branch: true });
+    expect(stripFit({ ...l, avail: 80 + 120 + 100 + 60 + 3 * 16 })).toEqual({ state: true, end: true, lands: true, branch: true });
+    expect(stripFit({ ...l, avail: 80 + 120 + 100 + 60 + 3 * 16 - 1 })).toEqual({ state: true, end: true, lands: false, branch: true });
+    expect(stripFit({ ...l, avail: 80 + 120 + 16 })).toEqual({ state: true, end: false, lands: false, branch: true });
   });
   // ui-review m_47192: at 680 with a panel open the branch kept its icon and one clipped letter.
   // Mutation: the branch always kept turns it red.
   it('the branch, last, cuts with its ellipsis down to BRANCH_MIN, then goes whole', () => {
-    expect(stripFit({ ...w, avail: BRANCH_MIN })).toEqual({ project: false, state: false, end: false, lands: false, branch: true });
-    expect(stripFit({ ...w, avail: BRANCH_MIN - 1 })).toEqual({ project: false, state: false, end: false, lands: false, branch: false });
+    expect(stripFit({ ...w, avail: BRANCH_MIN })).toEqual({ state: false, end: false, lands: false, branch: true });
+    expect(stripFit({ ...w, avail: BRANCH_MIN - 1 })).toEqual({ state: false, end: false, lands: false, branch: false });
     expect(stripFit({ ...w, branch: 40, avail: 40 })).toMatchObject({ branch: true });
   });
   it('an item that is not there takes no room and no gap', () => {
-    expect(stripFit({ gap: 16, project: 0, state: 80, branch: 120, end: 60, avail: 80 + 120 + 60 + 2 * 16 })).toEqual({ project: true, state: true, end: true, lands: true, branch: true });
+    expect(stripFit({ gap: 16, state: 0, branch: 120, end: 60, avail: 120 + 60 + 16 })).toEqual({ state: true, end: true, lands: true, branch: true });
   });
   it("the addressee's state (his m_44719): waits on him first, then its turn's length; idle says nothing", () => {
     const a = { status: 'working', waits: 0, since_ms: 1_000, turn_ms: 180_000 };

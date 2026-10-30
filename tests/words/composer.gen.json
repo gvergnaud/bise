@@ -503,25 +503,6 @@
     "one": null,
     "text": "lands on {branch}"
   },
-  "composer.ctx_project_pick": {
-    "args": [
-      "project"
-    ],
-    "one": null,
-    "text": "{project} · pick another project"
-  },
-  "composer.ctx_project_tip": {
-    "args": [
-      "path"
-    ],
-    "one": null,
-    "text": "the project's folder: {path}"
-  },
-  "composer.ctx_projects": {
-    "args": [],
-    "one": null,
-    "text": "Projects"
-  },
   "composer.ctx_waits": {
     "args": [],
     "one": null,

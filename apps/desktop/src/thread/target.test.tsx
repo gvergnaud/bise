@@ -2,8 +2,8 @@ import type { ReactNode } from 'react';
 // @vitest-environment happy-dom
 // Whom his words go to, clear at a glance (his ask m_44704, as main's tab had it, designer m_28208):
 // a thread of an agent that is not main says 'to perf' first in its composer's strip, in the
-// accent; main's own thread 'to bise' text-2. That name is a picker of the project's agents, and
-// short of room the project gives way first, never the name (his m_47126, designer m_47129). The
+// accent; main's own thread 'to bise' text-2. That name is a picker of the project's agents, never
+// cut (his m_47126, designer m_47129); no project in the strip, the sidebar's (his m_50754). The
 // strip as ThreadScreen draws it (the field mocked, its head the frame's `.head`).
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -88,11 +88,19 @@ describe("the strip's name is a picker of the project's agents", () => {
   });
 });
 
-// his m_47126 (3): short of room the project's picker gives way first and the name stays. The
-// strip measures its items (happy-dom lays nothing out: the widths are given here). The cause on
-// main: the fit read the project by a data-item its picker's button never carried, so it took no
-// room and never went, and 'to perf' shrank instead. Mutation: the measure back to
-// '[data-item="project"]' turns it red.
+// his m_50754: the strip names no project and picks none, the sidebar does both; on a project's
+// thread and on bise's own screen alike. Mutation: the project item drawn back turns it red.
+describe('the strip says no project', () => {
+  it("a sub-agent's thread and main's: no project item, no project menu", () => {
+    for (const agent of ['native-lead', 'main']) {
+      const v = strip(agent);
+      expect(v.getByTestId('composer.ctx').textContent).not.toContain('acme');
+      expect(v.queryByTestId('composer.ctx.project')).toBeNull();
+      cleanup();
+    }
+  });
+});
+
 // ui-review m_47192: at 680 with a panel the branch kept 's…' in 40 px, under BRANCH_MIN: the fit
 // read its width as its css had cut it. Mutation: the branch read by its box alone again turns it red.
 describe("the strip's branch at the narrowest", () => {
@@ -115,29 +123,6 @@ describe("the strip's branch at the narrowest", () => {
     try {
       const v = strip('native-lead', { branch: 'sb/native-lead' });
       expect(v.getByTestId('composer.ctx.branch').classList.contains('gone')).toBe(true);
-    } finally {
-      if (sw !== undefined) Object.defineProperty(HTMLElement.prototype, 'scrollWidth', sw);
-      if (cw !== undefined) Object.defineProperty(HTMLElement.prototype, 'clientWidth', cw);
-    }
-  });
-});
-
-describe("the strip short of room", () => {
-  it("drops the project's picker first and keeps 'to native-lead' whole", () => {
-    const widths: Record<string, number> = { 'composer.ctx.to': 110, 'composer.ctx.project': 90 };
-    const sw = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollWidth');
-    const cw = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth');
-    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', { configurable: true, get(this: HTMLElement) { return widths[this.dataset['testid'] ?? ''] ?? 0; } });
-    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get(this: HTMLElement) { return this.classList.contains('head') ? 160 : 0; } });
-    try {
-      const v = strip('native-lead');
-      expect(v.getByTestId('composer.ctx.project').classList.contains('gone')).toBe(true);
-      expect(v.getByTestId('composer.ctx.to').classList.contains('gone')).toBe(false);
-      cleanup();
-      // with the room: both
-      widths['composer.ctx.project'] = 40;
-      const w = strip('native-lead');
-      expect(w.getByTestId('composer.ctx.project').classList.contains('gone')).toBe(false);
     } finally {
       if (sw !== undefined) Object.defineProperty(HTMLElement.prototype, 'scrollWidth', sw);
       if (cw !== undefined) Object.defineProperty(HTMLElement.prototype, 'clientWidth', cw);

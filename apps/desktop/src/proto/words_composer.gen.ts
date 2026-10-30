@@ -392,12 +392,6 @@ export const composer = {
   ctx_branch_tip: (a: { branch: string | number }): string => "on branch " + String(a.branch),
   /** after the branch, text-3, when the project's flow is trunk: where its work lands (the hub's devflow::lands) */
   ctx_lands: (a: { branch: string | number }): string => "lands on " + String(a.branch),
-  /** the tip of the strip's project when it is not a picker */
-  ctx_project_tip: (a: { path: string | number }): string => "the project's folder: " + String(a.path),
-  /** the strip's project picker: its name and tip */
-  ctx_project_pick: (a: { project: string | number }): string => String(a.project) + " · pick another project",
-  /** the project picker's title */
-  ctx_projects: "Projects",
   /** the strip's addressee picker ('to perf ⌄', his m_47126): its tip and name */
   ctx_agent_pick: (a: { agent: string | number }): string => "to " + String(a.agent) + " · talk to another agent",
   /** the addressee picker's title */

@@ -358,7 +358,7 @@
   display: inline-flex;
 }
 /* 'lands on main' after the branch: a fact, text-3 (designer m_43996); short of room it goes whole
-   right after the project (tab.ts stripFit), never squeezed to a sliver (ui-review m_47192) */
+   first (tab.ts stripFit), never squeezed to a sliver (ui-review m_47192) */
 .b-composer .cmp-ctx .it.lands {
   flex: none;
   color: var(--c-text-3);
@@ -371,7 +371,7 @@
 .b-composer .cmp-ctx .mono {
   font-family: var(--font-mono);
 }
-/* the project's picker: the strip's words, its caret; the 6% hover, never a fill at rest */
+/* the addressee's picker ('to perf ⌄'): the strip's words, its caret; the 6% hover, never a fill at rest */
 .b-composer .cmp-ctx .cmp-ctx-pick {
   height: var(--s-6);
   gap: var(--s-2);

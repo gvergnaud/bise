@@ -1,15 +1,15 @@
 // The composer's context strip (bise fait mac, mockup 1; it replaced designer's composer-strip A
-// tab): the box's first row, 32 high, 12/16 text-2, 14 px icons, 16 between: the project (its
-// picker when the screen gives one: it changes where his words go), the place ('local' or
-// 'worktree', its path in the tip) and the branch in mono, each a tipped label when there is
-// nothing to pick (native-lead m_42159: a picker only where a real choice exists). On the right
+// tab): the box's first row, 32 high, 12/16 text-2, 14 px icons, 16 between: the addressee, its
+// state while it runs and the branch in mono, each a tipped label when there is nothing to pick
+// (native-lead m_42159: a picker only where a real choice exists). No project: the sidebar picks
+// and says it (his m_50754; its picker here only opened another project's main). On the right
 // the context ring, or the screen's own words ('esc to bise instead', the approvals flash). His
 // words answering a card (or another agent's @name, an open artifact): the label alone in the
 // accent, '↳ answering search · …' (answerFit). His words to an agent that is not main: 'to perf'
 // first, in the accent, always kept (his ask m_44704); main's 'to bise' text-2. That name is a
 // picker of the project's live agents (his m_47126, designer m_47129: tab.ts agentPicks); a bare
 // strip's name stays a label (the card or the artifact decides who). Items that don't fit go whole,
-// the project first (tab.ts stripFit), measured on a resize or new words, never per keystroke (the
+// 'lands on main' first (tab.ts stripFit), measured on a resize or new words, never per keystroke (the
 // composer is memoised). Owner: nm-composer.
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Agent } from '@/proto';
@@ -49,12 +49,6 @@ export function useTabWords(label: string, place: TabPlace | undefined, context:
   );
 }
 
-/** The strip's project: its hub id, and what picking another one does (none: a tipped label). */
-export interface StripProject {
-  readonly id: string;
-  readonly onPick?: ((project: string) => void) | undefined;
-}
-
 /** The strip's addressee: the agent his words go to ('to perf', whatever the label's rest says),
  *  and what picking another one does (none: a label, as under an open artifact, which decides who). */
 export interface StripAgent {
@@ -63,7 +57,7 @@ export interface StripAgent {
   readonly onPick?: ((agent: string) => void) | undefined;
 }
 
-const ALL: StripFit = { project: true, state: true, end: true, lands: true, branch: true };
+const ALL: StripFit = { state: true, end: true, lands: true, branch: true };
 /** The room a notice at the strip's right keeps at least (Composer's NoticeLine cuts its words to the rest). */
 const NOTICE_ROOM = 160;
 
@@ -104,59 +98,6 @@ function MarkedLabel({ label, mark }: { label: string; mark: ReactNode }) {
       <span className="who">{label.slice(0, cut)}</span>
       {mark}
       {label.slice(cut)}
-    </>
-  );
-}
-
-/** The project's segment: its name with the folder icon; with `onPick`, a button that opens the projects' picker. */
-function ProjectItem({ project, shown, testId }: { project: StripProject; shown: boolean; testId: string }) {
-  const rows = useProjects();
-  const row = rows.find((p) => p.project === project.id);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const [open, setOpen] = useState(false);
-  if (row === undefined) return null;
-  const pick = project.onPick;
-  const cls = shown ? 'it' : 'it gone';
-  const inner = (
-    <>
-      <AppIcon name="folder" size={14} />
-      <span className="nm">{row.name}</span>
-    </>
-  );
-  if (pick === undefined) {
-    return (
-      <span className={cls} data-item="project" data-testid={`${testId}.project`} {...tipAttrs(composer.ctx_project_tip({ path: tilde(row.path, HOME) }))} aria-hidden={!shown || undefined}>
-        {inner}
-      </span>
-    );
-  }
-  return (
-    <>
-      <PickerTrigger ref={trigger} extra={`${cls} cmp-ctx-pick`} open={open} label={composer.ctx_project_pick({ project: row.name })}
-        tip={composer.ctx_project_pick({ project: row.name })} testId={`${testId}.project`}
-        onClick={() => {
-          setOpen((o) => !o);
-        }}>
-        {inner}
-      </PickerTrigger>
-      {open && (
-        <PickerPop
-          anchor={trigger}
-          box=".box"
-          side="above"
-          align="start"
-          title={composer.ctx_projects}
-          groups={[{ id: 'projects', rows: rows.map((p) => ({ id: p.project, name: p.name, current: p.project === project.id, testId: `${testId}.project.pick.${p.project}` })) }]}
-          onPick={(id) => {
-            setOpen(false);
-            if (id !== project.id) pick(id);
-          }}
-          onClose={() => {
-            setOpen(false);
-          }}
-          testId={`${testId}.project.menu`}
-        />
-      )}
     </>
   );
 }
@@ -235,8 +176,9 @@ export function ComposerTab({ words, mark, end, project, who, bare = false, newP
   mark?: ReactNode;
   /** the right end instead of the context ring */
   end?: ReactNode;
-  /** the project segment; none: not said */
-  project?: StripProject | undefined;
+  /** the project's hub id: its branch and flow ('lands on main'); its name is never said here, the
+   *  sidebar picks and says it (his m_50754) */
+  project?: string | undefined;
   /** the label alone (answering, an @name, an open artifact): no project, place or branch */
   bare?: boolean;
   /** the empty home: the branch is the project's own (main starts its worktrees from it) */
@@ -250,8 +192,8 @@ export function ComposerTab({ words, mark, end, project, who, bare = false, newP
   const now = useNow();
   const state = bare ? null : stripState(at, now);
   // the empty home: the project's own branch (where main starts its worktrees from)
-  const projectBranch = useProjects().find((p) => p.project === project?.id)?.branch ?? undefined;
-  const flow = useFlow(project?.id ?? '');
+  const projectBranch = useProjects().find((p) => p.project === project)?.branch ?? undefined;
+  const flow = useFlow(project ?? '');
   const [fit, setFit] = useState<StripFit>(ALL);
   // the label cut after a whole word when even alone it doesn't fit (designer m_24325); null: whole
   const [cut, setCut] = useState<string | null>(null);
@@ -260,7 +202,7 @@ export function ComposerTab({ words, mark, end, project, who, bare = false, newP
   const context = words.context ?? '';
   const ring = contextOf(context);
   const place = words.place;
-  const key = `${words.label}|${place?.name ?? '-'}|${place?.branch ?? ''}|${project?.id ?? ''}|${context}|${end === undefined ? '' : 'end'}|${bare ? 'b' : ''}|${to ? 't' : ''}`;
+  const key = `${words.label}|${place?.name ?? '-'}|${place?.branch ?? ''}|${project ?? ''}|${context}|${end === undefined ? '' : 'end'}|${bare ? 'b' : ''}|${to ? 't' : ''}`;
   useLayoutEffect(() => {
     const host = ref.current?.closest<HTMLElement>('.head');
     if (host == null) return;
@@ -287,18 +229,16 @@ export function ComposerTab({ words, mark, end, project, who, bare = false, newP
         return;
       }
       setEndIn(true);
-      // the project's item is its picker's button when it has one: read by its test id, never a
-      // data-item the ds button doesn't carry (his m_47126: the fit never dropped it)
       // the branch's whole width even while its css cuts it: its box less what its words show, plus
       // all of its words (ui-review m_47192: read cut, 40 px kept 's…' under BRANCH_MIN)
       const br = q('[data-item="branch"]');
       const brWords = br?.querySelector<HTMLElement>('.nm') ?? null;
       const branchW = br === null ? 0 : nat(br) + (brWords === null ? 0 : Math.max(0, Math.ceil(brWords.scrollWidth) - Math.ceil(brWords.clientWidth)));
-      const w = { project: nat(q(`[data-testid="${testId}.project"]`)), state: nat(q('[data-item="state"]')), branch: branchW, end: nat(q('[data-item="end"]')), lands: nat(q('[data-item="lands"]')) };
+      const w = { state: nat(q('[data-item="state"]')), branch: branchW, end: nat(q('[data-item="end"]')), lands: nat(q('[data-item="lands"]')) };
       // 'to perf' always stays: the rest fits in what it leaves
       const toEl = q(`[data-testid="${testId}.to"]`);
       const next = stripFit({ avail: inner - (toEl === null ? 0 : nat(toEl) + gap), gap, ...w });
-      setFit((f) => (f.project === next.project && f.state === next.state && f.end === next.end && f.lands === next.lands && f.branch === next.branch ? f : next));
+      setFit((f) => (f.state === next.state && f.end === next.end && f.lands === next.lands && f.branch === next.branch ? f : next));
       // the label is only drawn bare; a plain strip never cuts one
       setCut((c) => (c === null ? c : null));
     };
@@ -347,7 +287,6 @@ export function ComposerTab({ words, mark, end, project, who, bare = false, newP
           designer m_28208; his ask m_44704: clear at a glance), main's 'to bise' text-2; a picker
           of the project's agents (his m_47126) */}
       <AgentItem label={who === undefined ? words.label : composerWords(shownName(who.agent)).label} accent={to} who={who} testId={testId} />
-      {project !== undefined && <ProjectItem project={project} shown={fit.project} testId={testId} />}
       {/* where 'local' was (his m_44719: the only option, no control): the addressee's state while
           it runs, main's breath and how long, or the ask mark in the accent; nothing when idle */}
       {state !== null && (

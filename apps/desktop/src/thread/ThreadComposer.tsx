@@ -12,7 +12,6 @@ import type { ComposerActions, Notice } from '@/composer';
 import type { Outgoing } from '@/composer/message';
 import { threadKey, useApprovals, useCards, useCommands, useCoreEvent, useFiles, useNotice, useSkills, useStore, type HubLine } from '@/store';
 import { useRouter } from '@/app/router';
-import { MAIN } from '@/app/route';
 import { pickCommands, slashLine, slashOf, windowRun } from './commands';
 import { HELP_EVENT } from '@/app/keys';
 import { keptStorage } from '@/app/keep';
@@ -21,7 +20,7 @@ import { emptyEnterAct } from './head';
 import { useComposerHeld } from './foldHint';
 import { computerRowOf, computerState } from './ComputerLine';
 import type { Agent } from '@/proto';
-import { ComposerTab, type StripProject } from './ComposerTab';
+import { ComposerTab } from './ComposerTab';
 import { useThreadQueue } from './ThreadQueue';
 import { AttachTool, ModelTool, ModeTool } from './ComposerTools';
 import { pinkState, type TabWords } from './tab';
@@ -58,7 +57,6 @@ export const ThreadComposer = memo(function ThreadComposer({
   lead,
   mark,
   hubNotes = false,
-  strip,
   placeOnly = false,
   floating = false,
   onCanSend,
@@ -72,9 +70,6 @@ export const ThreadComposer = memo(function ThreadComposer({
   mark?: ReactNode;
   /** the hub's plain lines show on the key line too (a screen with no thread: no HubNoteRow says them) */
   hubNotes?: boolean;
-  /** the strip's project segment and what picking another does (the thread: go to its main; the
-   *  empty home: the addressee); none: the strip says no project */
-  strip?: StripProject | undefined;
   /** the empty home: the strip's place is 'new worktree' (main starts its agents in one) */
   placeOnly?: boolean;
   /** the floating composer's (composer/float): no strip (its head says whom it writes to), '+'
@@ -389,11 +384,6 @@ export const ThreadComposer = memo(function ThreadComposer({
   const label = atTo === null ? tab.label : `${ABOUT_HEAD}${composerWords(shownName(atTo)).label}`;
   const tabWords = useMemo(() => (bare ? { label, ...(whole ? { whole } : {}) } : tab), [bare, whole, tab, label]);
   const endWords = atTo === null || flash !== null ? end : composer.lead_end({ here: shownName(agent) });
-  // the strip's project: the screen's, else this one, its picker going to the picked project's main
-  const goProject = useCallback((p: string) => {
-    router.go({ screen: 'thread', project: p, agent: MAIN });
-  }, [router]);
-  const stripProject = useMemo(() => strip ?? { id: project, onPick: goProject }, [strip, project, goProject]);
   // the strip's addressee: its picker opens another agent's thread of this project (his m_47126);
   // the draft stays with the thread it was typed in (its own target). Under an open artifact the
   // artifact decides who: its name a label (designer m_47129)
@@ -401,7 +391,7 @@ export const ThreadComposer = memo(function ThreadComposer({
   const stripAgent = useMemo(() => ({ project, agent, ...(aboutOpen ? {} : { onPick: (a: string) => {
     router.go({ screen: 'thread', project, agent: a });
   } }) }), [project, agent, router, aboutOpen]);
-  const tabEl = <ComposerTab words={tabWords} bare={bare || atTo !== null} to={toAccent(ps, atTo)} asks={ps.asks} who={stripAgent} at={me} mark={atTo === null ? mark : undefined} end={endWords ?? undefined} project={stripProject} newPlace={placeOnly || home} testId="composer.ctx" />;
+  const tabEl = <ComposerTab words={tabWords} bare={bare || atTo !== null} to={toAccent(ps, atTo)} asks={ps.asks} who={stripAgent} at={me} mark={atTo === null ? mark : undefined} end={endWords ?? undefined} project={project} newPlace={placeOnly || home} testId="composer.ctx" />;
   // the one notice at the strip's right (noticeOf): it goes at his first key in the frame (esc
   // too), at any send or command, a note also after LINE_MS; never outlives his next message,
   // never moves the composer (designer m_29135)
