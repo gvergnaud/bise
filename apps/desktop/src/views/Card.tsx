@@ -6,7 +6,7 @@
 import { memo, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { AppIcon, Press } from '@/ds';
 import { views } from '@/proto/words_views.gen';
-import { quiet } from './names';
+import { holds, quiet } from './names';
 import type { ToolItem, ToolView } from '@/proto';
 import { useCards, useEntry } from '@/store';
 import { openTab } from '@/app/panel/tabs';
@@ -73,7 +73,7 @@ function Foot({ state, view, agent, waiting, onPanel }: { state: Extract<ViewSta
         </span>
       ))}
       {notes.length > 0 && <span className="vw-note">{'\u00a0·\u00a0'}</span>}
-      <Press look="vw-act" {...quiet} onClick={onPanel} data-testid="views.fullscreen">
+      <Press look="vw-act" {...holds} onClick={onPanel} data-testid="views.fullscreen">
         {views.open_panel}
       </Press>
     </div>
@@ -87,35 +87,6 @@ function Foot({ state, view, agent, waiting, onPanel }: { state: Extract<ViewSta
 export function waitsOnHim(cards: readonly { place?: string | null }[], agent: string, call: string): boolean {
   const place = `view:${agent}/${call}`;
   return cards.some((c) => c.place === place);
-}
-
-/** How long a card he switched holds its y while the thread lays out again (the panel opening narrows it). */
-const HOLD_MS = 800;
-
-/**
- * His 'open in the panel' or 'show here': the card he clicked keeps its top at the y it had, the
- * card shrinking into its one line (or the line growing into the card) downward, the rows below
- * moving (designer m_50494, ui-review m_50492: the thread stuck at its end took the card 660 px up
- * when the panel opened). Through his own move first (a wheel up: the list no longer follows its
- * end), then the scroller nudged each frame for HOLD_MS. Under 1 px of drift.
- */
-function holdCard(testId: string): void {
-  const find = () => document.querySelector<HTMLElement>(`[data-testid="${testId}"]`);
-  const card = find();
-  const scroller = card?.closest<HTMLElement>('[data-virtuoso-scroller]') ?? null;
-  if (card === null || scroller === null) return;
-  const y = card.getBoundingClientRect().top;
-  card.dispatchEvent(new WheelEvent('wheel', { deltaY: -1, bubbles: true }));
-  const until = performance.now() + HOLD_MS;
-  const step = () => {
-    const now = find();
-    if (now !== null) {
-      const d = now.getBoundingClientRect().top - y;
-      if (Math.abs(d) >= 0.5) scroller.scrollTop += d;
-    }
-    if (performance.now() < until) requestAnimationFrame(step);
-  };
-  requestAnimationFrame(step);
 }
 
 export const ViewCard = memo(function ViewCard({ project, agent, view, store = viewsStore }: { project: string; agent: string; view: ToolView; store?: ViewsStore }) {
@@ -174,16 +145,15 @@ export const ViewCard = memo(function ViewCard({ project, agent, view, store = v
     );
   if (state.mode === 'fullscreen')
     return (
-      <div className="vw-card" data-testid={testId} data-state="panel">
+      <div className="vw-card" data-testid={testId} data-hold={testId} data-state="panel">
         <div className="vw-line" data-testid="views.state.panel">
           <AppIcon name="plugins" size={14} />
           {/* one text run, its separators kept as text (a flex item each lost its '·' in light, designer m_50534) */}
           <span>{`${state.tool === '' ? uriName(view.uri) : humanName(state.tool)} · ${views.in_panel} ·`}</span>
           <Press
             look="vw-act"
-            {...quiet}
+            {...holds}
             onClick={() => {
-              holdCard(testId);
               store.inline(r);
             }}
             data-testid="views.inline"
@@ -194,7 +164,7 @@ export const ViewCard = memo(function ViewCard({ project, agent, view, store = v
       </div>
     );
   return (
-    <div className="vw-card" data-testid={testId} data-state="live" data-phase={state.phase} data-border={state.prefersBorder || undefined}>
+    <div className="vw-card" data-testid={testId} data-hold={testId} data-state="live" data-phase={state.phase} data-border={state.prefersBorder || undefined}>
       <div ref={box} className="vw-anchor" style={{ height: state.height }} data-testid="views.card.anchor">
         {state.phase !== 'live' && <StateLine store={store} r={r} state={state} height={state.height} />}
       </div>
@@ -204,7 +174,6 @@ export const ViewCard = memo(function ViewCard({ project, agent, view, store = v
         agent={agent}
         waiting={waiting}
         onPanel={() => {
-          holdCard(testId);
           store.fullscreen(r);
         }}
       />

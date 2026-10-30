@@ -11,6 +11,8 @@
 //   filled above him; the row is held at its y by its key (thread-perf);
 // - a jump of his (⌘F's match, his answer far back) wins over that hold; a reveal of a row not
 //   listed yet (⌘F's match in a fold that opens for it) waits for it, HOLD_MS at most;
+// - a row he opens or closes keeps its y, or the part of it marked data-hold around his press (a
+//   part that changes its own height: the thread's view card going to the panel and back);
 // - at the bottom it follows new rows; scrolled up, it stays where he is;
 // - the list never holds the composer: it sits beside it in the screen.
 import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from 'react';
@@ -158,6 +160,21 @@ function partOf(row: HTMLElement, sel: string | undefined): HTMLElement {
   return (sel === undefined ? null : row.querySelector<HTMLElement>(sel)) ?? row;
 }
 
+/**
+ * What his press holds still while its row opens or closes: the row of the toggle he pressed (a
+ * button, a fold), and the part of it kept at its y: the element marked `data-hold` around the
+ * toggle (a part that changes its own height, mcp-apps-hold), else the row's `holdPart`. None for a
+ * press on no toggle of a row. Reads the DOM, writes nothing.
+ */
+export function pressHold(target: Element, holdPart: string | undefined): { row: HTMLElement; part: string | undefined } | undefined {
+  const toggle = target.closest('button, [role="button"], summary, [aria-expanded]');
+  const row = toggle?.closest<HTMLElement>('[data-item-index]') ?? null;
+  if (toggle === null || row === null) return undefined;
+  const mark = toggle.closest<HTMLElement>('[data-hold]');
+  const v = mark !== null && row.contains(mark) ? mark.dataset['hold'] : undefined;
+  return { row, part: v === undefined || v === '' ? holdPart : `[data-hold=${JSON.stringify(v)}]` };
+}
+
 /** How many keys came after `last` (an older page in front doesn't count). Pure. */
 export function newAtEnd(last: string | undefined, keys: readonly string[]): number {
   if (last === undefined) return 0;
@@ -198,7 +215,8 @@ export function ThreadList({ keys, row, more, onOlder, head, tail, cue, testId, 
   const told = useRef<string | undefined>(undefined);
   // click: held because he opened or closed a row (it keeps its y even at the end: never re-stuck)
   // end: the click came while the list stuck to its end (followOpened)
-  const held = useRef<{ index: number; top: number; until: number; click?: boolean; end?: boolean } | undefined>(undefined);
+  // part: the row's part held (pressHold's data-hold), else holdPart
+  const held = useRef<{ index: number; top: number; until: number; click?: boolean; end?: boolean; part?: string } | undefined>(undefined);
   const holdRef = useRef<() => void>(() => undefined);
   // his place written to keep.ts (keepPlace below, once `stick` exists)
   const placeRef = useRef<() => void>(() => undefined);
@@ -350,11 +368,12 @@ export function ThreadList({ keys, row, more, onOlder, head, tail, cue, testId, 
     }
     const row = el.querySelector<HTMLElement>(`[data-item-index="${String(h.index)}"]`);
     if (row === null) return;
+    const part = partOf(row, h.part ?? holdPart);
     if (h.click === true && h.end === true) {
       // opened at the thread's end (designer m_43996): what it opened comes into view, the list
       // still at its end, never further than the clicked row at the view's top; taller than the
       // view, he reads it from its row and the list no longer follows the end
-      const f = followOpened(partOf(row, holdPart).getBoundingClientRect().top - el.getBoundingClientRect().top, el.scrollHeight - el.clientHeight - el.scrollTop);
+      const f = followOpened(part.getBoundingClientRect().top - el.getBoundingClientRect().top, el.scrollHeight - el.clientHeight - el.scrollTop);
       if (f.by >= 0.5) el.scrollTop += f.by;
       if (!f.stuck && stick.current) {
         stick.current = false;
@@ -362,7 +381,7 @@ export function ThreadList({ keys, row, more, onOlder, head, tail, cue, testId, 
       }
       return;
     }
-    const d = partOf(row, holdPart).getBoundingClientRect().top - h.top;
+    const d = part.getBoundingClientRect().top - h.top;
     if (Math.abs(d) < 0.5) return;
     el.scrollTop += d;
     // he opened a row at the end: he reads it there now, the list no longer follows the end
@@ -420,7 +439,7 @@ export function ThreadList({ keys, row, more, onOlder, head, tail, cue, testId, 
    * never moves, the thread grows below it; never back to the end on his click).
    */
   const holdRow = useCallback(
-    (rowEl: HTMLElement | null) => {
+    (rowEl: HTMLElement | null, part?: string) => {
       const el = scroller.current;
       if (el === null) return;
       const top = el.getBoundingClientRect().top;
@@ -429,7 +448,8 @@ export function ThreadList({ keys, row, more, onOlder, head, tail, cue, testId, 
         [...el.querySelectorAll<HTMLElement>('[data-item-index]')].find((x) => x.getBoundingClientRect().bottom > top) ??
         null;
       if (r === null) return;
-      held.current = { index: Number(r.dataset.itemIndex), top: partOf(r, holdPart).getBoundingClientRect().top, until: Date.now() + HOLD_MS, click: true, end: stick.current };
+      const p = part ?? holdPart;
+      held.current = { index: Number(r.dataset.itemIndex), top: partOf(r, p).getBoundingClientRect().top, until: Date.now() + HOLD_MS, click: true, end: stick.current, ...(p === undefined ? {} : { part: p }) };
       still.current = undefined;
       keepHeld();
     },
@@ -706,11 +726,9 @@ export function ThreadList({ keys, row, more, onOlder, head, tail, cue, testId, 
         held.current = undefined;
         jumpUntil.current = 0;
         // a press on a row's toggle (a fold, a thinking row, a tool line): that row keeps its y
-        // while it opens or closes
-        const t = e.target as HTMLElement;
-        const toggle = t.closest('button, [role="button"], summary, [aria-expanded]');
-        const rowEl = toggle?.closest<HTMLElement>('[data-item-index]') ?? null;
-        if (rowEl !== null) holdRow(rowEl);
+        // while it opens or closes, or the part marked data-hold around it (pressHold)
+        const p = pressHold(e.target as Element, holdPart);
+        if (p !== undefined) holdRow(p.row, p.part);
       }}
       onWheel={(e) => {
         moved.current = true;

@@ -50,3 +50,12 @@ export const quiet = {
     e.stopPropagation();
   },
 } as const;
+
+/**
+ * 'open in the panel' and 'show here' press without focus too, but their press reaches the thread
+ * list: the card is its row's `data-hold` part, so the list holds the card's top at its y while it
+ * shrinks into its line or grows back, and keeps a list stuck to its end there (ThreadList's
+ * pressHold; designer m_50494, mcp-apps-hold). Holding the card itself, nothing moves between his
+ * press and its release.
+ */
+export const holds = { onMouseDown: quiet.onMouseDown } as const;
