@@ -39,18 +39,43 @@ def tool_use_json(c: W.WCall) -> J.Json:
         Con{J.kv("name", J.str(W.wire_name(name))),
         Con{J.kv("input", input_json(name, args)), Nil{}}}}})
 
+# the Messages API refuses an empty or whitespace-only text block
+# ("text content blocks must be non-empty"): a blank text is no block
+def is_blank(+s: String) -> Bool:
+  String.is_empty(String.trim(s))
+
+# a blank result omits its content (optional in the API): a "" there
+# reads as an empty text block
+def tool_result_json.pick(blank: Bool, +id: String, +content: String)
+    -> J.Json:
+  match blank:
+    case True{}:
+      J.obj(Con{J.kv("type", J.str("tool_result")),
+        Con{J.kv("tool_use_id", J.str(id)), Nil{}}})
+    case False{}:
+      J.obj(Con{J.kv("type", J.str("tool_result")),
+        Con{J.kv("tool_use_id", J.str(id)),
+        Con{J.kv("content", W.img_content_of("tool", Im.IAnth{}, content)),
+          Nil{}}}})
+
 def tool_result_json(+id: String, +content: String) -> J.Json:
-  J.obj(Con{J.kv("type", J.str("tool_result")),
-    Con{J.kv("tool_use_id", J.str(id)),
-    Con{J.kv("content", W.img_content_of("tool", Im.IAnth{}, content)), Nil{}}}})
+  tool_result_json.pick(is_blank(content), id, content)
+
+def user_blocks.text(blank: Bool, +content: String) -> List<&2, J.Json>:
+  match blank:
+    case True{}:
+      Nil{}
+    case False{}:
+      Con{W.text_block_json(content), Nil{}}
 
 # a user message: one text block, or the parts when it carries images
+# (Im.content_blocks drops blank text parts); a blank one, no block
 def user_blocks.pick(has: Bool, +content: String) -> List<&2, J.Json>:
   match has:
     case True{}:
       Im.content_blocks(Im.IAnth{}, content)
     case False{}:
-      Con{W.text_block_json(content), Nil{}}
+      user_blocks.text(is_blank(content), content)
 
 def user_blocks(+content: String) -> List<&2, J.Json>:
   user_blocks.pick(Im.has_image(content), content)
@@ -100,7 +125,7 @@ def asst_blocks.text(empty: Bool, +t: String,
       Con{W.text_block_json(t), call_blocks(calls)}
 
 def asst_blocks(+t: String, +calls: List<&2, W.WCall>) -> List<&2, J.Json>:
-  asst_blocks.text(String.is_empty(t), t, calls)
+  asst_blocks.text(is_blank(t), t, calls)
 
 def anth_thinking_block(+reasoning: String, +sig: String) -> J.Json:
   J.obj(Con{J.kv("type", J.str("thinking")),
@@ -177,13 +202,8 @@ def amsg_json(m: AMsg) -> J.Json:
       J.obj(Con{J.kv("role", J.str("user")),
         Con{J.kv("content", J.arr(blocks)), Nil{}}})
     case AA{+blocks}:
-      match blocks:
-        case Nil{}:
-          J.obj(Con{J.kv("role", J.str("assistant")),
-            Con{J.kv("content", J.str("")), Nil{}}})
-        case Con{_, _}:
-          J.obj(Con{J.kv("role", J.str("assistant")),
-            Con{J.kv("content", J.arr(blocks)), Nil{}}})
+      J.obj(Con{J.kv("role", J.str("assistant")),
+        Con{J.kv("content", J.arr(blocks)), Nil{}}})
 
 def amsgs_json.go(acc: List<&2, AMsg>) -> List<&2, J.Json>:
   match acc:
@@ -300,6 +320,31 @@ def amsg_user(is_ctx: Bool, +blocks: List<&2, J.Json>) -> AMsg:
     case False{}:
       AU{blocks}
 
+def amsg_blocks(m: AMsg) -> List<&2, J.Json>:
+  match m:
+    case AU{+blocks}:
+      blocks
+    case AA{+blocks}:
+      blocks
+    case AC{+blocks}:
+      blocks
+
+def amsg_push.pick(empty: Bool, +m: AMsg, +acc: List<&2, AMsg>)
+    -> List<&2, AMsg>:
+  match empty:
+    case True{}:
+      acc
+    case False{}:
+      Con{m, acc}
+
+# a message with no block is no message: an assistant turn of only an
+# unsigned think span (its span dropped, no text, no call: a turn cut
+# mid-thought) or a blank user message. Sent, its content "" or [] is
+# refused ("text content blocks must be non-empty", main's 400 of
+# 2026-10-30); two user messages in a row are fine for the API.
+def amsg_push(+m: AMsg, +acc: List<&2, AMsg>) -> List<&2, AMsg>:
+  amsg_push.pick(List.is_empty(&2, J.Json, amsg_blocks(m)), m, acc)
+
 type AWalk is Data:
   AN{todo: List<&2, W.WMsg>, ids: List<&2, String>, acc: List<&2, AMsg>}
   AR{is_sys: Bool, is_user: Bool, is_asst: Bool, m: W.WMsg,
@@ -331,8 +376,8 @@ def awalk_go(fuel: Nat, w: AWalk) -> List<&2, J.Json>:
                   match m:
                     case W.WMsg{+role, +content, _}:
                       awalk_go(k, AN{todo, ids,
-                        Con{amsg_user(String.eq(role, "context"),
-                          user_blocks(content)), acc}})
+                        amsg_push(amsg_user(String.eq(role, "context"),
+                          user_blocks(content)), acc)})
                 case False{}:
                   match is_asst:
                     case True{}:
@@ -340,9 +385,9 @@ def awalk_go(fuel: Nat, w: AWalk) -> List<&2, J.Json>:
                         case W.WMsg{_, +content, +calls}:
                           awalk_go(k, AN{todo,
                             List.append(&2, String, ids, W.ids_of(calls)),
-                            Con{AA{asst_blocks_signed(
+                            amsg_push(AA{asst_blocks_signed(
                                 W.asst_think.find(content),
-                                  content, calls)}, acc}})
+                                  content, calls)}, acc)})
                     case False{}:
                       awalk_go(k, AT{user_head_of(acc), acc, ids, m, todo})
         case AT{+user_head, +acc, +ids, +m, +todo}:
@@ -414,7 +459,9 @@ def wire_sys(msgs: List<&2, W.WMsg>) -> Maybe<&2, String>:
     case Con{+m, _}:
       match m:
         case W.WMsg{+role, +content, _}:
-          wire_sys.is_sys(String.eq(role, "system"), content)
+          # a blank system prompt sends no system field (no empty block)
+          wire_sys.is_sys(Bool.and(String.eq(role, "system"),
+            Bool.not(is_blank(content))), content)
 
 def api_body_anth.with_sys(sys: Maybe<&2, String>,
     +rest: List<&2, Sigma<&2, &2, String, _ => J.Json>>)

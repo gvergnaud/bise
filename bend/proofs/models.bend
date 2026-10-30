@@ -40,6 +40,9 @@ def Laws.anth_cache_breakpoints():
 def Laws.anth_thinking_none_and_no_cache_on_thinking():
   {==}
 
+def Laws.anth_no_empty_text_block():
+  {==}
+
 def Laws.anth_thinking_budget():
   {==}
 

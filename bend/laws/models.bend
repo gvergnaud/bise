@@ -118,6 +118,29 @@ END
     == "{\"model\":\"m\",\"max_tokens\":64000,\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"a\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"t\",\"signature\":\"s1\"}]},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"b\",\"cache_control\":{\"type\":\"ephemeral\"}}]}]}"
     : String}
 
+# LAW: no empty text block ever leaves (the Messages API refuses one:
+# "text content blocks must be non-empty", main's 400 of 2026-10-30). An
+# assistant turn that holds only an UNSIGNED think span (cut before its
+# text and calls) replays as no message at all, never as content "" (the
+# API reads "" as an empty text block); an empty or whitespace-only
+# user message is dropped, an empty system prompt sends no system field,
+# and an empty tool result omits its content.
+law anth_no_empty_text_block:
+  {Anth.api_body_anth_for("m", 64000n, "none", True{}, "high", W.parse_wire("MODEL default
+MSG system : 
+MSG user : a
+MSG assistant : <think>t\\n</think>
+MSG user : 
+MSG user :  \\n 
+MSG assistant : x
+  CALL 7 echo : hi
+MSG tool : 
+MSG user : b
+END
+"))
+    == "{\"model\":\"m\",\"max_tokens\":64000,\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"a\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"x\"},{\"type\":\"tool_use\",\"id\":\"call_7\",\"name\":\"echo\",\"input\":{\"arg\":\"hi\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_7\",\"cache_control\":{\"type\":\"ephemeral\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"b\",\"cache_control\":{\"type\":\"ephemeral\"}}]}]}"
+    : String}
+
 # LAW: `thinking = budget` (Haiku 4.5 refuses adaptive thinking):
 # extended thinking with budget_tokens = half the max output, at most
 # 16000; no output_config.
