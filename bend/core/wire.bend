@@ -787,6 +787,37 @@ def text_block_json(+text: String) -> J.Json:
 def asst_think.raw_visible(+content: String, +n1: Nat) -> String:
   String.drop(content, Nat.add(n1, 8n))
 
+# ---- a hollow assistant text: nothing to show, nothing to replay ----
+# No visible text (blank outside its think spans) and no signed span:
+# an unsigned span replays to no family that checks reasoning (Anthropic
+# drops it, main's 400 of 2026-10-30: a reply of one unsigned thinking
+# part, no text, no call). Such a reply is no answer (core/session.bend
+# commits it as a null iteration), and such a message never reaches a
+# request (session.bend model_input).
+def is_unsigned(tm: ThinkMark) -> Bool:
+  match tm:
+    case TM{_, +sig}:
+      String.is_empty(sig)
+
+def is_hollow.go(fuel: Nat, span: Maybe<&2, ThinkSpan>, +content: String)
+    -> Bool:
+  match fuel:
+    case 0n:
+      is_blank(content)
+    case 1n+k:
+      match span:
+        case None{}:
+          is_blank(content)
+        case Some{TSpan{+n0, +n1}}:
+          +rest = asst_think.visible(asst_think.raw_visible(content, n1))
+          Bool.and(is_blank(String.take(content, n0)),
+            Bool.and(is_unsigned(think_split(asst_think.raw_span(content, n0, n1))),
+              is_hollow.go(k, asst_think.find(rest), rest)))
+
+def is_hollow(+content: String) -> Bool:
+  is_hollow.go(Nat.add(String.length(content), 1n), asst_think.find(content),
+    content)
+
 def is_empty_tools(ts: List<&2, WTool>) -> Bool:
   match ts:
     case Nil{}:

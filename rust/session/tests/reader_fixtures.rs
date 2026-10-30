@@ -15,7 +15,7 @@ pub fn fixtures() -> Vec<(String, PathBuf, Value)> {
         })
         .collect();
     out.sort_by(|a, b| a.0.cmp(&b.0));
-    assert_eq!(out.len(), 15, "the 15 cases of §13.3");
+    assert_eq!(out.len(), 16, "the 15 cases of §13.3 and 16-hollow-assistant");
     out
 }
 

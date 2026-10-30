@@ -77,7 +77,7 @@ fn every_fixture_resumes_to_its_state_and_projection() {
         }
         n += 1;
     }
-    assert_eq!(n, 14);
+    assert_eq!(n, 15);
 }
 
 #[test]

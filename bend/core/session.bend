@@ -54,13 +54,57 @@ def head_role(input: List<&2, T.Msg>) -> Maybe<&2, T.Role>:
         case T.Msg{role, _, _, _}:
           Some{role}
 
+# a message no request carries (main's 400 of 2026-10-30): an assistant
+# message with no call and a hollow text (W.is_hollow: only unsigned
+# thinking, or blank; saved by an older bise, or loaded from a session
+# log) and a blank user message. The history keeps them (one message
+# per context event of the session log); only the request leaves them
+# out. A message with calls always stays: its results pair with them.
+def unsent.role(role: T.Role, +text: String) -> Bool:
+  match role:
+    case T.RAsst{}:
+      W.is_hollow(text)
+    case T.RUser{}:
+      W.is_blank(text)
+    case _:
+      False{}
+
+def unsent.calls(calls: List<&2, T.Call>, +role: T.Role, +text: String)
+    -> Bool:
+  match calls:
+    case Con{_, _}:
+      False{}
+    case Nil{}:
+      unsent.role(role, text)
+
+def unsent(+m: T.Msg) -> Bool:
+  match m:
+    case T.Msg{+role, +text, +calls, _}:
+      unsent.calls(calls, role, text)
+
+def sendable.put(drop: Bool, +m: T.Msg, +rest: List<&2, T.Msg>)
+    -> List<&2, T.Msg>:
+  match drop:
+    case True{}:
+      rest
+    case False{}:
+      Con{m, rest}
+
+def sendable(ms: List<&2, T.Msg>) -> List<&2, T.Msg>:
+  match ms:
+    case Nil{}:
+      Nil{}
+    case Con{+m, rest}:
+      sendable.put(unsent(m), m, sendable(rest))
+
 # the projected model input: system message + canonical history, every
 # call answered before the next message (H.pair_calls, BISE-242: a
-# history cut by a restart never reaches the provider unpaired)
+# history cut by a restart never reaches the provider unpaired), no
+# message with nothing to send (sendable)
 def model_input(+cfg: T.Cfg, +history: List<&2, T.Msg>) -> List<&2, T.Msg>:
   match cfg:
     case T.Cfg{_, _, _, system, _}:
-      Con{T.sys(system), H.pair_calls(history)}
+      Con{T.sys(system), H.pair_calls(sendable(history))}
 
 def calls_count(calls: List<&2, T.Call>) -> Nat:
   match calls:
@@ -366,7 +410,7 @@ def start_compaction(in_turn: Bool, auto: Bool, +extra: String, +cfg: T.Cfg,
     +history: List<&2, T.Msg>, +actions: U32, turn: Maybe<&2, T.Turn>,
     +steer: List<&2, String>, +notifs: List<&2, String>) -> DRes:
   start_compaction.project(in_turn, auto, extra, actions, turn, steer, notifs,
-    C.project(cfg, history, extra), history)
+    C.project(cfg, sendable(history), extra), history)
 
 # ---- dispatch: the seam before every agent completion ----
 # Steering and notifications enter model context here (model-safe
@@ -530,7 +574,7 @@ def apply.completion.malformed(retry: Bool, +compaction: U32, +extra: String,
       match s:
         case T.Sess{+cfg, +history, _, +actions, _, _, _, _}:
           apply.completion.malformed.project(
-            C.project(cfg, history, extra), U32.add(actions, 1),
+            C.project(cfg, sendable(history), extra), U32.add(actions, 1),
             compaction, extra, in_turn, s)
     case False{}:
       apply.completion.too_large(in_turn, "invalid_compaction_summary", s)
@@ -635,7 +679,10 @@ def apply.completion.agent(matched: Bool, +text: String,
     case True{}:
       match calls:
         case Nil{}:
-          apply.completion.plain2(String.is_empty(String.trim(text)), text, s)
+          # a hollow reply (blank, or only unsigned thinking: main's
+          # reply of 2026-10-30 through a gateway) is no answer: a null
+          # iteration, never a saved message with nothing to replay
+          apply.completion.plain2(W.is_hollow(text), text, s)
         case Con{_, _}:
           # run_typescript is an ordinary tool: the runtime runs it in
           # V8 (bend-jsrt) and answers one tool result

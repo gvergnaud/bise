@@ -319,3 +319,18 @@ def Laws.only_the_compaction_writes_a_summary():
 
 def Laws.chained_compaction_sees_the_summary():
   {==}
+
+def Laws.model_input_leaves_out_hollow_messages():
+  {==}
+
+def Laws.compaction_input_leaves_out_hollow_messages():
+  {==}
+
+def Laws.hollow_reply_is_a_null_iteration():
+  {==}
+
+def Laws.signed_think_reply_is_committed():
+  {==}
+
+def Laws.hollow_session_loads_and_sends():
+  {==}

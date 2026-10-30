@@ -1,0 +1,46 @@
+{
+  "open": "ok",
+  "bad_lines": [],
+  "torn": null,
+  "unknown": [],
+  "others": [],
+  "seq_errors": [],
+  "repair": [],
+  "projection": "session.txt",
+  "state": {
+    "context": [
+      7,
+      8,
+      12,
+      13
+    ],
+    "queue": [],
+    "system": "You are bise.",
+    "tools": [
+      "bash"
+    ],
+    "model": {
+      "model": "anthropic/claude-sonnet-x",
+      "effort": "medium",
+      "provider": "anthropic"
+    },
+    "limits": {
+      "compact_threshold": 800000,
+      "select_budget": 20000,
+      "max_nulls": 3
+    },
+    "counters": {
+      "req": 2,
+      "turn": 2,
+      "compaction": 0,
+      "inputs": 2,
+      "actions": 2
+    },
+    "usage_total": {
+      "input": 18100,
+      "output": 14,
+      "cache_read": 0,
+      "cache_write": 0
+    }
+  }
+}

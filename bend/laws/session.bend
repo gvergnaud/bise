@@ -11,6 +11,7 @@ import ../core/session.bend as S
 import ../core/commands.bend as Cm
 import ../core/wire.bend as W
 import ../core/oai-chat.bend as Oai
+import ../core/api.bend as Api
 import ../core/obs.bend as O
 import ../runtime/remote.bend as Rm
 import ../runtime/main-pure.bend as Rt
@@ -1174,3 +1175,120 @@ law checkpoint_loads_node_program_as_run_typescript:
 # LAW: every other call name loads untouched.
 law checkpoint_keeps_call_names:
   {K.fcall("  CALL 7 bash : ls") == T.Call{7, "bash", "ls"} : T.Call}
+
+# ---- nothing hollow reaches a request (main's 400 of 2026-10-30) ----
+
+# a history saved before the fix (or loaded from a session log): an
+# assistant message of only an unsigned think span, a blank user
+# message, a blank assistant message, among messages that must stay
+def hollow_history() -> List<&2, T.Msg>:
+  [T.user("a"),
+    T.asst("<think>t
+</think>", Nil{}),
+    T.user("  "),
+    T.asst("<think>t
+BENDSIG::s1</think>", Nil{}),
+    T.asst("", [T.Call{1, "bash", "ls"}]),
+    T.tool_res(""),
+    T.asst(" 
+ ", Nil{}),
+    T.user("b")]
+
+# LAW: the request leaves out an assistant message with no call and a
+# hollow text (only unsigned thinking, or blank) and a blank user
+# message; a signed think span, a message with calls and its result stay.
+law model_input_leaves_out_hollow_messages:
+  {S.model_input(law_cfg(), hollow_history())
+    == [T.sys("system prompt"), T.user("a"),
+      T.asst("<think>t
+BENDSIG::s1</think>", Nil{}),
+      T.asst("", [T.Call{1, "bash", "ls"}]),
+      T.tool_res(""),
+      T.user("b")]
+    : List<&2, T.Msg>}
+
+# LAW: the compaction request leaves them out too.
+law compaction_input_leaves_out_hollow_messages:
+  {C.project(law_cfg(), S.sendable(hollow_history()), "")
+    == C.POk{[T.sys("system prompt"), T.user("a"),
+      T.asst("<think>t
+BENDSIG::s1</think>", Nil{}),
+      T.asst("", [T.Call{1, "bash", "ls"}]),
+      T.tool_res(""),
+      T.user("b"),
+      T.injected_user(C.compaction_prompt(""))]}
+    : C.PRes}
+
+def hollow_flow.started(+cfg: T.Cfg) -> T.Session:
+  S.res_next(S.apply(T.new_session(cfg), T.UserMsg{T.Queue{}, "go"}),
+    T.new_session(cfg))
+
+def res_obs(r: T.Res) -> List<&2, T.Obs>:
+  match r:
+    case T.Accepted{+obs, _, _}:
+      obs
+    case T.Rejected{_}:
+      Nil{}
+
+def hollow_flow.res(+cfg: T.Cfg) -> T.Res:
+  S.apply(hollow_flow.started(cfg), T.CompletionOk{0, "<think>t
+</think>", Nil{}})
+
+# LAW: a reply of only an unsigned think span (no text, no call: main's
+# reply req 38870 through a gateway) is no answer: a null iteration, the
+# turn asks again, and the history keeps nothing of it.
+law hollow_reply_is_a_null_iteration:
+  {(List.head(&2, T.Obs, res_obs(hollow_flow.res(law_cfg()))),
+      S.sess_history(S.res_next(hollow_flow.res(law_cfg()),
+        hollow_flow.started(law_cfg()))))
+    == (Some{T.NullIteration{}}, [T.user("go")])
+    : Maybe<&2, T.Obs> & List<&2, T.Msg>}
+
+# LAW: a reply of only a SIGNED think span has something to replay: it
+# is committed as before.
+law signed_think_reply_is_committed:
+  {S.sess_history(S.res_next(S.apply(hollow_flow.started(law_cfg()),
+      T.CompletionOk{0, "<think>t
+BENDSIG::s1</think>", Nil{}}), hollow_flow.started(law_cfg())))
+    == [T.user("go"), T.asst("<think>t
+BENDSIG::s1</think>", Nil{})]
+    : List<&2, T.Msg>}
+
+# the session main saved on 2026-10-30, as the resume projects it:
+# tests/fixtures/session/16-hollow-assistant/session.txt, byte for byte
+# (its events.jsonl holds the reply of one thinking part, no signature)
+def hollow_session_txt() -> String:
+  "BEND-SESSION 2
+TOOL bash : Run a shell command.
+CFG 800000 20000 3 You are bise.
+COUNT 2 2
+MSG False user : Where were we?
+MSG False assistant : <think>Checking where the schema lives.\\n\\n</think>
+MSG False user : Are you there?
+MSG False assistant : Yes: the schema is in tools.ts.
+"
+
+def hollow_loaded(m: Maybe<&2, K.Checkpoint>) -> T.Session:
+  match m:
+    case Some{+c}:
+      K.restore(c)
+    case None{}:
+      T.new_session(law_cfg())
+
+# the messages of the body of the loaded session's next request
+def hollow_msgs(+st: Api.Style, +s: T.Session) -> List<&2, J.Json>:
+  match s:
+    case T.Sess{+cfg, +history, _, _, _, _, _, _}:
+      W.arr_field_or(W.parse_json(Api.api_body_for(st, "m", Api.facts0(),
+        W.parse_wire(Rm.build_request(cfg, S.model_input(cfg, history))))),
+        "messages")
+
+# LAW: that session loads, and its next request leaves the hollow
+# assistant out: no empty content, the two user messages side by side
+# (Anthropic and OpenAI Chat take them).
+law hollow_session_loads_and_sends:
+  {(hollow_msgs(Api.Anthropic{}, hollow_loaded(K.from_text(hollow_session_txt()))),
+      hollow_msgs(Api.OpenAI{}, hollow_loaded(K.from_text(hollow_session_txt()))))
+    == (W.arr_field_or(W.parse_json("{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Where were we?\"}]},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Are you there?\",\"cache_control\":{\"type\":\"ephemeral\"}}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Yes: the schema is in tools.ts.\",\"cache_control\":{\"type\":\"ephemeral\"}}]}]}"), "messages"),
+      W.arr_field_or(W.parse_json("{\"messages\":[{\"role\":\"system\",\"content\":\"You are bise.\"},{\"role\":\"user\",\"content\":\"Where were we?\"},{\"role\":\"user\",\"content\":\"Are you there?\"},{\"role\":\"assistant\",\"content\":\"Yes: the schema is in tools.ts.\"}]}"), "messages"))
+    : List<&2, J.Json> & List<&2, J.Json>}

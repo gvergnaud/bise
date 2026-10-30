@@ -4,6 +4,7 @@
 import Base
 import ../core/types.bend as T
 import ../core/history.bend as H
+import ../core/session.bend as S
 import ./lib/hub-1.bend as PL1
 import ../laws/models.bend as Laws
 
@@ -173,7 +174,7 @@ def Laws.pair_calls_paired(ms):
 def Laws.model_input_paired(cfg, h):
   match cfg:
     case T.Cfg{a, b, c, d, e}:
-      pair_go(h, Nil{})
+      pair_go(S.sendable(h), Nil{})
 
 def pair_keep(+ms: List<&2, T.Msg>, +owed: List<&2, T.Call>,
     p: {H.paired(ms, owed) == True{} : Bool})

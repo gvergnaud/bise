@@ -1,0 +1,15 @@
+{"seq":1,"at":"2026-10-01T09:14:01.001Z","type":"session_start","v":1,"data":{"session":"s-20261001-091403-7f3a9c","format":1,"created_by":"bise 0.9.4 (a1b2c3d)","cwd":"/Users/ada/code/shop"}}
+{"seq":2,"at":"2026-10-01T09:14:02.002Z","type":"process_opened","v":1,"data":{"writer":"bise 0.9.4 (a1b2c3d)","pid":4242,"resume":false}}
+{"seq":3,"at":"2026-10-01T09:14:03.003Z","type":"context_set","v":1,"must":true,"data":{"system":{"text":"You are bise."},"tools":[{"name":"bash","description":"Run a shell command."}]}}
+{"seq":4,"at":"2026-10-01T09:14:04.004Z","type":"limits_set","v":1,"data":{"compact_threshold":800000,"select_budget":20000,"max_nulls":3}}
+{"seq":5,"at":"2026-10-01T09:14:05.005Z","type":"model_set","v":1,"data":{"model":"anthropic/claude-sonnet-x","effort":"medium","provider":"anthropic","context_window":1000000,"source":"config"}}
+{"seq":6,"at":"2026-10-01T09:14:06.006Z","turn":1,"type":"turn_started","v":1,"data":{"cause":"user"}}
+{"seq":7,"at":"2026-10-01T09:14:07.007Z","turn":1,"type":"user_message","v":1,"must":true,"data":{"content":[{"kind":"text","text":"Where were we?"}],"delivery":"prompt"}}
+{"seq":8,"at":"2026-10-01T09:14:08.008Z","turn":1,"type":"assistant_message","v":1,"must":true,"data":{"req":1,"model":"gateway/claude-x","parts":[{"kind":"thinking","text":"Checking where the schema lives.\n\n"}],"calls":[],"stop":"end"}}
+{"seq":9,"at":"2026-10-01T09:14:09.009Z","turn":1,"type":"usage","v":1,"data":{"req":1,"model":"gateway/claude-x","input":9000,"output":5}}
+{"seq":10,"at":"2026-10-01T09:14:10.010Z","turn":1,"type":"turn_ended","v":1,"data":{"outcome":"done","counts":{"inputs":1,"actions":1}}}
+{"seq":11,"at":"2026-10-01T09:14:11.011Z","turn":2,"type":"turn_started","v":1,"data":{"cause":"user"}}
+{"seq":12,"at":"2026-10-01T09:14:12.012Z","turn":2,"type":"user_message","v":1,"must":true,"data":{"content":[{"kind":"text","text":"Are you there?"}],"delivery":"prompt"}}
+{"seq":13,"at":"2026-10-01T09:14:13.013Z","turn":2,"type":"assistant_message","v":1,"must":true,"data":{"req":2,"model":"gateway/claude-x","parts":[{"kind":"text","text":"Yes: the schema is in tools.ts."}],"calls":[],"stop":"end"}}
+{"seq":14,"at":"2026-10-01T09:14:14.014Z","turn":2,"type":"usage","v":1,"data":{"req":2,"model":"gateway/claude-x","input":9100,"output":9}}
+{"seq":15,"at":"2026-10-01T09:14:15.015Z","turn":2,"type":"turn_ended","v":1,"data":{"outcome":"done","counts":{"inputs":2,"actions":2}}}

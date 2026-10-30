@@ -366,6 +366,45 @@ def _():
     return {"session.txt": MIGRATED_TXT, "events.jsonl": ev, "projection.txt": proj}, \
         expect(st, projection="projection.txt")
 
+# main's 400 of 2026-10-30: a reply of one thinking part with no
+# signature, no text and no call (through a gateway), saved as is. The
+# resume keeps it (one message per context event); the Core leaves it out
+# of every request (bend/laws/session.bend hollow_session_loads_and_sends,
+# which loads this session.txt)
+HOLLOW_THINK = "Checking where the schema lives." + chr(10) * 2
+HOLLOW_TXT = "".join(l + chr(10) for l in [
+    "BEND-SESSION 2",
+    "TOOL bash : Run a shell command.",
+    "CFG 800000 20000 3 You are bise.",
+    "COUNT 2 2",
+    "MSG False user : Where were we?",
+    "MSG False assistant : <think>" + HOLLOW_THINK.replace(chr(10), chr(92) + "n") + "</think>",
+    "MSG False user : Are you there?",
+    "MSG False assistant : Yes: the schema is in tools.ts.",
+])
+
+@case("16-hollow-assistant")
+def _():
+    m = {"model": "gateway/claude-x", "effort": "high", "provider": "gateway"}
+    ev = head() + [
+        line(6, "turn_started", {"cause": "user"}, 1),
+        line(7, "user_message", {"content": text("Where were we?"), "delivery": "prompt"}, 1, True),
+        line(8, "assistant_message", {"req": 1, "model": m["model"],
+             "parts": [{"kind": "thinking", "text": HOLLOW_THINK}],
+             "calls": [], "stop": "end"}, 1, True),
+        line(9, "usage", {"req": 1, "model": m["model"], "input": 9000, "output": 5}, 1),
+        line(10, "turn_ended", {"outcome": "done", "counts": {"inputs": 1, "actions": 1}}, 1),
+        line(11, "turn_started", {"cause": "user"}, 2),
+        line(12, "user_message", {"content": text("Are you there?"), "delivery": "prompt"}, 2, True),
+        line(13, "assistant_message", {"req": 2, "model": m["model"],
+             "parts": text("Yes: the schema is in tools.ts."), "calls": [], "stop": "end"}, 2, True),
+        line(14, "usage", {"req": 2, "model": m["model"], "input": 9100, "output": 9}, 2),
+        line(15, "turn_ended", {"outcome": "done", "counts": {"inputs": 2, "actions": 2}}, 2),
+    ]
+    st = base_state([7, 8, 12, 13], counters={"req": 2, "turn": 2, "inputs": 2, "actions": 2},
+                    usage={"input": 18100, "output": 14})
+    return {"events.jsonl": ev, "session.txt": HOLLOW_TXT}, expect(st, projection="session.txt")
+
 def write(folder, files, exp):
     d = os.path.join(HERE, folder)
     shutil.rmtree(d, ignore_errors=True)

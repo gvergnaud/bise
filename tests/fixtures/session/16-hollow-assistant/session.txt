@@ -1,0 +1,8 @@
+BEND-SESSION 2
+TOOL bash : Run a shell command.
+CFG 800000 20000 3 You are bise.
+COUNT 2 2
+MSG False user : Where were we?
+MSG False assistant : <think>Checking where the schema lives.\n\n</think>
+MSG False user : Are you there?
+MSG False assistant : Yes: the schema is in tools.ts.
