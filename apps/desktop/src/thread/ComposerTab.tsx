@@ -243,11 +243,21 @@ export function ComposerTab({ words, mark, end, project, who, bare = false, newP
       setCut((c) => (c === null ? c : null));
     };
     measure();
-    if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(measure);
-    ro.observe(host);
+    // a font that loads after the first measure widens the items, not the host: measure again then
+    // (designer m_50840: main at 900 kept 'lands on main' in one theme's run, dropped it in the other's)
+    const fonts = (document as { fonts?: FontFaceSet }).fonts;
+    let live = true;
+    const again = () => {
+      if (live) measure();
+    };
+    void fonts?.ready.then(again);
+    fonts?.addEventListener('loadingdone', again);
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    ro?.observe(host);
     return () => {
-      ro.disconnect();
+      live = false;
+      fonts?.removeEventListener('loadingdone', again);
+      ro?.disconnect();
     };
   }, [key, words.label, words.whole, bare, to, testId]);
   const endEl =

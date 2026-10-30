@@ -130,6 +130,36 @@ describe("the strip's branch at the narrowest", () => {
   });
 });
 
+// designer m_50840: main at 900 kept 'lands on main' in one theme's run and dropped it in the
+// other's: a font that loads after the first measure widens the items, never the host, so the fit
+// kept its first answer. Mutation: no re-measure on the fonts' 'loadingdone' turns it red.
+describe('the strip measures again when a font loads', () => {
+  it("a branch the loaded font widens past the room goes, as on a first measure", () => {
+    const widths: Record<string, number> = { 'composer.ctx.to': 110, 'composer.ctx.branch': 40 };
+    const sw = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollWidth');
+    const cw = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth');
+    const fonts = Object.getOwnPropertyDescriptor(document, 'fonts');
+    const set = Object.assign(new EventTarget(), { ready: new Promise<never>(() => undefined) });
+    Object.defineProperty(document, 'fonts', { configurable: true, value: set });
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', { configurable: true, get(this: HTMLElement) { return widths[this.dataset['testid'] ?? ''] ?? 0; } });
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get(this: HTMLElement) { return this.classList.contains('head') ? 165 : 0; } });
+    try {
+      const v = strip('native-lead', { branch: 'sb/native-lead' });
+      expect(v.getByTestId('composer.ctx.branch').classList.contains('gone')).toBe(false);
+      widths['composer.ctx.branch'] = 70;
+      act(() => {
+        set.dispatchEvent(new Event('loadingdone'));
+      });
+      expect(v.getByTestId('composer.ctx.branch').classList.contains('gone')).toBe(true);
+    } finally {
+      if (sw !== undefined) Object.defineProperty(HTMLElement.prototype, 'scrollWidth', sw);
+      if (cw !== undefined) Object.defineProperty(HTMLElement.prototype, 'clientWidth', cw);
+      if (fonts === undefined) Reflect.deleteProperty(document, 'fonts');
+      else Object.defineProperty(document, 'fonts', fonts);
+    }
+  });
+});
+
 describe("the strip says the addressee's state where 'local' was (his m_44719)", () => {
   it("running: main's breath (WorkingMark) and 'working · 3 min'", () => {
     const v = strip('native-lead', { status: 'working', turn_ms: 180_000 });
