@@ -195,7 +195,8 @@ export const CAST: readonly Cast[] = [
       { name: 'checkout', head: CHECKOUT_HEAD, life: [[0, gone], [12.5, work], [26.8, { k: 'asks' }], [34.55, work], [44.6, landing(1)]] },
       { name: 'emails', life: [[0, gone], [13.7, work], [46, landing(4)]] },
       { name: 'theme', life: [[0, gone], [39.1, work], [47.2, landing(6)]] },
-      // finds checkout a bug (0:38.5, there 0:41.2, its visit over by 0:44.6), no ✗; 5th in line (from its desk the 6th place has no clear way: it never left)
+      // finds checkout a bug (0:38.1, its visit over by 0:44.0: gone before checkout gets up at 0:44.6,
+      // its head brushed checkout's as it rose, designer m_50704), no ✗; 5th in line (from its desk the 6th place has no clear way: it never left)
       { name: 'order-test', life: [[0, gone], [37.6, work], [47.8, landing(5)]] },
       // 'review it for me': pops beside checkout's crate, reads, stamps ✓ (0:58.9)
       { name: REVIEWER, life: [[0, gone], [56.7, work]] },
@@ -246,8 +247,8 @@ export const NOTES: readonly Note[] = [
   { at: 30, office: KILN, from: 'you', to: 'checkout', flight: SHORT },
   { at: 36, office: KILN, from: 'you', to: 'main', flight: SHORT },
   { at: 37.5, office: KILN, from: 'you', to: 'main', flight: SHORT },
-  // 0.9 s after it pops: a message in the step that makes the bim is played before it exists, and lost
-  { at: 38.5, office: KILN, from: 'order-test', to: 'checkout' },
+  // 0.5 s after it pops: a message in the step that makes the bim is played before it exists, and lost
+  { at: 38.1, office: KILN, from: 'order-test', to: 'checkout' },
   // 'review it for me'
   { at: 53.6, office: KILN, from: 'you', to: 'main', flight: SHORT },
 ];
@@ -273,13 +274,13 @@ export const FEED: readonly Line[] = [
 export const BUBBLES: readonly Bubble[] = [
   { at: 19.1, office: KILN, bim: 'checkout', words: 'cart line format?' },
   { at: 21.1, office: KILN, bim: 'cart', words: 'id, qty, price' },
-  { at: 42.6, office: KILN, bim: 'order-test', words: 'a mug sold twice' },
+  { at: 42.2, office: KILN, bim: 'order-test', words: 'a mug sold twice' },
 ];
 
 export const EGGS: readonly Egg[] = [
   // after his answer's catch and read, its plane put away (render/catch.ts: 1.75 s on): no thumbs up, this hop
   { at: 34.55, dur: 0.6, office: KILN, bim: 'checkout', kind: 'hop' },
-  { at: 44.2, dur: 0.6, office: KILN, bim: 'order-test', kind: 'hop' },
+  { at: 43.8, dur: 0.6, office: KILN, bim: 'order-test', kind: 'hop' },
   // the reviewer reads the crate's sheet (main's paper) a second, then stamps it: ✓ at 0:58.9
   { at: 57.5, dur: 1.8, office: KILN, bim: REVIEWER, kind: 'stamp' },
   // main lifts the last crate over its head, three notes
