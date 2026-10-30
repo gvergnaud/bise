@@ -277,8 +277,10 @@ describe('artifacts screens', () => {
   it("under the page, the one composer asks the agent that made it: 'to perf · about “…”'", () => {
     mount(<ArtifactOpen project="shop-1" id="notes" />, { screen: 'artifacts', project: 'shop-1', id: 'notes' });
     const c = screen.getByTestId('artifact.composer');
-    // the composer's context says the project (nm-composer's L1 words); its placeholder asks the maker
-    expect(c.textContent).toContain('storefront');
+    // the composer's context names the maker, never the project (his m_50754: the sidebar's); its
+    // placeholder asks the maker
+    expect(c.textContent).toContain('to perf');
+    expect(c.textContent).not.toContain('storefront');
     expect(c.textContent).not.toContain('to perf · about “product page, before / after”');
     expect(c.innerHTML).toContain('ask perf about it, then ⏎');
     expect(aboutText({ title: 'Q3 [plan]', url: 'http://h/p/q3' }, 'why v2?')).toBe('about [Q3 plan](http://h/p/q3): why v2?');
