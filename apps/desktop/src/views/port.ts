@@ -1,6 +1,6 @@
 // src/views · the hub's views methods as the window asks them (docs/mcp-apps.md C5; their
 // commands from mcp-apps-calls, m_50069): one request per method, answered with the hub's
-// result or its error (-32030 expired … -32036 server-restarted, `data.reason`). The window's
+// result or its error (-32030 expired … -32037 no-gesture, `data.reason`). The window's
 // only door to them is window.bise.views.call (main sends it through the core and hands back
 // the answer; main stamps view_message's gesture_ms, never this side). Owner: mcp-apps-host.
 import type { Json, JsonObject, RpcError } from './protocol';
@@ -40,7 +40,8 @@ export const VIEW_ERR = {
   denied: -32033,
   notSupported: -32034,
   rateLimited: -32035,
-  serverRestarted: -32036,
+  /** a ui/message without his fresh click in the view (-32036 was server-restarted: never reused) */
+  noGesture: -32037,
 } as const;
 
 /** The real door: window.bise.views.call; with none (a test page, an older preload) every ask is refused. */

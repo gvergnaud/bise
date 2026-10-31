@@ -13,7 +13,7 @@ describe('the web host', () => {
 
   it('reads the answer: a result, an error as given, anything else an error', () => {
     expect(answerOf(true, { result: { ok: 1 } })).toEqual({ result: { ok: 1 } });
-    expect(answerOf(true, { error: { code: -32035, message: 'no gesture', data: { reason: 'no-gesture' } } })).toEqual({ error: { code: -32035, message: 'no gesture', data: { reason: 'no-gesture' } } });
+    expect(answerOf(true, { error: { code: -32037, message: 'no gesture', data: { reason: 'no-gesture' } } })).toEqual({ error: { code: -32037, message: 'no gesture', data: { reason: 'no-gesture' } } });
     expect(answerOf(false, null)).toMatchObject({ error: { code: -32603 } });
     expect(answerOf(true, {})).toMatchObject({ error: { code: -32603 } });
   });

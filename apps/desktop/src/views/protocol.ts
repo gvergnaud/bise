@@ -35,7 +35,7 @@ export const UI = {
   teardown: 'ui/resource-teardown',
 } as const;
 
-/** JSON-RPC's error codes this host answers with (the hub's own -32030..-32036 pass as they are). */
+/** JSON-RPC's error codes this host answers with (the hub's own -32030..-32037 pass as they are). */
 export const RPC = {
   notFound: -32601,
   invalid: -32602,
