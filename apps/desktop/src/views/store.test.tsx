@@ -219,4 +219,33 @@ describe('the layer', () => {
     expect(asked.filter((c) => c.call === '1-0')).toHaveLength(2);
     expect(store.state(refs[0] as ViewRef).kind).toBe('live');
   });
+
+  it('a view the layer shows is never torn down, even the one shown longest ago (step tells the store what shows)', async () => {
+    const { store, timers } = rig();
+    // the layer's DOM without its animation-frame loop (it would mark REF seen at every flush)
+    const root = document.createElement('div');
+    document.body.append(root);
+    box(root, { x: 0, y: 0, w: 1440, h: 900 });
+    store.ensure(REF);
+    await flush();
+    const frame = document.createElement('iframe');
+    frame.dataset['view'] = viewKey(REF);
+    root.append(frame);
+    const anchor = document.createElement('div');
+    document.body.append(anchor);
+    box(anchor, { x: 300, y: 100, w: 560, h: 160 });
+    store.anchor(REF, 'thread', anchor);
+    expect(step(store, root, new Map())).toHaveLength(1);
+    // MAX_LIVE more cards mount before the next frame: REF, placed now, is the one seen longest ago
+    for (let i = 0; i < MAX_LIVE; i += 1) {
+      store.ensure({ ...REF, call: `2-${String(i)}` });
+      await flush();
+    }
+    for (const t of timers) t();
+    expect(store.live()).toHaveLength(MAX_LIVE);
+    expect(store.live(), 'the shown one stays').toContain(viewKey(REF));
+    expect(store.live(), 'the oldest hidden one went').not.toContain(viewKey({ ...REF, call: '2-0' }));
+    anchor.remove();
+    root.remove();
+  });
 });

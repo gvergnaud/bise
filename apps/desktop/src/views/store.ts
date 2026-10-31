@@ -138,6 +138,8 @@ export class ViewsStore {
   private readonly recs = new Map<string, Rec>();
   /** live frames' keys in the order they came: the layer draws them in this order, so none moves */
   private order: string[] = [];
+  /** the views the layer placed at its last frame (step's trim): never torn down by a trim */
+  private showing: ReadonlySet<string> = new Set();
   private readonly listeners = new Set<() => void>();
   private version = 0;
   /** the anchors' elements, by view and slot, with the boxes that clip them (read once, at mount) */
@@ -364,11 +366,16 @@ export class ViewsStore {
     this.emit();
   }
 
-  /** Past MAX_LIVE live frames, the ones shown longest ago go (`showing`: placed now, never torn). */
-  trim(showing: ReadonlySet<string> = new Set()): void {
+  /**
+   * Past MAX_LIVE live frames, the ones shown longest ago go, never one the layer placed at its
+   * last frame. `showing`: the layer's step tells what it placed now (kept for the trims a new view
+   * makes between two frames); none: the last one told.
+   */
+  trim(showing?: ReadonlySet<string>): void {
+    if (showing !== undefined) this.showing = showing;
     const live = new Map<string, number>();
     for (const k of this.order) live.set(k, this.recs.get(k)?.seenAt ?? 0);
-    for (const k of evict(live, showing, MAX_LIVE)) void this.teardown(k);
+    for (const k of evict(live, this.showing, MAX_LIVE)) void this.teardown(k);
   }
 
   /** ui/resource-teardown, bounded by TEARDOWN_MS, then its frame leaves the layer; its anchor brings it back from the hub. */

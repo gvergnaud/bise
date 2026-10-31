@@ -66,6 +66,7 @@ export function step(store: ViewsStore, root: HTMLElement, last: Map<string, Pla
     frames.push({ project: live.ref.project, agent: live.ref.agent, call: live.ref.call, origin: live.res.origin, rect: { x: p.seen.x + off.x, y: p.seen.y + off.y, w: p.seen.w, h: p.seen.h }, perms: [...live.res.permissions] });
   }
   for (const k of [...last.keys()]) if (!store.live().includes(k)) last.delete(k);
+  store.trim(showing);
   return frames;
 }
 
