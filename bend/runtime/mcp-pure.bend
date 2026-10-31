@@ -117,6 +117,13 @@ def tool_now_path(+side: String, +port: String) -> String:
 def views_path(+side: String, +port: String) -> String:
   String.concat([side, "/bend-views-", port, ".txt"])
 
+# the boot cleanup of both files of a previous process on this port (the
+# folder quoted: it may hold a space): after a crash, the next REPL never
+# says the old refs at its first tool's end
+def views_cleanup_cmd(+side: String, +port: String) -> String:
+  String.concat(["rm -f ", Tx.sh_quote(tool_now_path(side, port)), " ",
+    Tx.sh_quote(views_path(side, port))])
+
 # one ref of the views file: `<tool id> <ref>`; "" when the bridge kept
 # nothing (no header) or no tool is known
 def view_entry(+id: String, +ref: String) -> String:

@@ -656,6 +656,12 @@ law asks_view_only_local_with_ui:
      Mc.asks_view("conn-id-42", "ui://p/v")))
     == (True{}, (False{}, False{})) : Bool & (Bool & Bool)}
 
+# LAW: the boot removes both views files of this port (the folder quoted),
+# so a REPL after a crash never says a previous process's refs.
+law views_cleanup_cmd_removes_both:
+  {Mc.views_cleanup_cmd("/a b/run", "7")
+    == "rm -f '/a b/run/bend-tool-7.txt' '/a b/run/bend-views-7.txt'" : String}
+
 # LAW: a kept ref is one `<tool id> <ref>` line; no ref or no id: nothing.
 law view_entry_line:
   {(Mc.view_entry("7", "{\"call\":\"1-0\"}"), (Mc.view_entry("7", ""), Mc.view_entry("", "{}")))

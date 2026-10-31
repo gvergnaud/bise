@@ -10,6 +10,7 @@ import ./tools.bend as X
 import ./tools-pure.bend as Xp
 import ./persist.bend as P
 import ./mcp.bend as Mcp
+import ./mcp-pure.bend as Mcpp
 import ./proc.bend as Proc
 import ./settings.bend as St
 import ./bash-pure.bend as Shp
@@ -118,6 +119,15 @@ def bash_cleanup(+port: String) -> IO(Unit):
     +side : String <- P.side_dir()
     out : String <- Proc.run(Con{"/bin/sh", Con{"-c",
       Con{Shp.bash_cleanup_cmd(side, port), Nil{}}}})
+    IO.pure(Unit, Unit{})
+
+# boot cleanup: a previous process's two views files on this port
+# (runtime/mcp.bend's header) go too, so its refs never reach this one
+def views_cleanup(+port: String) -> IO(Unit):
+  do IO<Unit>:
+    +side : String <- P.side_dir()
+    out : String <- Proc.run(Con{"/bin/sh", Con{"-c",
+      Con{Mcpp.views_cleanup_cmd(side, port), Nil{}}}})
     IO.pure(Unit, Unit{})
 
 def exec_mr(m: Mcp.MR) -> Xp.ExecRes:

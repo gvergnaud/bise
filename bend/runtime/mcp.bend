@@ -39,6 +39,13 @@
 #                          REPL runs one tool at a time; tools run in
 #                          parallel one day, the id moves to the call
 #   bend-views-<port>.txt  the refs kept since the last tool's end
+# Why files, though both sides run in this one process (one writer, the
+# call; one reader, main.bend at a tool's end): a stopped call (main.bend's
+# race) is abandoned, and its late ref still needs a place to land outside
+# the call's return; run_typescript's calls run deep with no call id of
+# their own. Their only reset is the boot (bash.bend views_cleanup, next
+# to bash_cleanup): a crashed process's refs never reach the next REPL on
+# that port.
 # A late ref (a stopped call that still finishes) carries its own id and
 # goes to its own row (the fold attaches by id, never by adjacency).
 #

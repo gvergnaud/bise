@@ -257,6 +257,7 @@ def live_main() -> IO(Unit):
     +cfg : T.Cfg <- live_cfg(core_thr, keep)
     +ld : P.Load <- P.load(T.new_session(cfg))
     u3 : Unit <- Sh.bash_cleanup(U32.show(p))
+    u6 : Unit <- Sh.views_cleanup(U32.show(p))
     w : Unit <- hub_watch_start()
     f : Rc.Flow <- Rc.serve(True{}, l, Rc.ld_greet(ld), Rc.ld_sess(ld))
     # Stop (a /reload) lands here: main returns, the process exits 0,

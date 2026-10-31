@@ -221,6 +221,9 @@ def Laws.index_tool_hides_the_ui_field():
 def Laws.asks_view_only_local_with_ui():
   {==}
 
+def Laws.views_cleanup_cmd_removes_both():
+  {==}
+
 def Laws.view_entry_line():
   {==}
 
