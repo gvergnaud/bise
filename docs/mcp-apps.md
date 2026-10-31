@@ -293,8 +293,15 @@ Signed by architect (m_50047), with these owners:
   16 hex of sha256(`<plugin>\0<server>\0<uri>`): one origin per view, the
   same across calls (its storage persists like a site's), never shared
   between two plugins.
-- On a view host the pages server answers `GET /mcp-app` (the proxy page)
-  and nothing else: `/api`, `/p`, `/kit`… answer 403. On the main host
+- On a view host the pages server answers `GET /mcp-app?s=<session>` (the
+  proxy page) and nothing else. The session is 32 hex from the system's
+  random source that `view/resource` made for that origin and answers in
+  `ViewResource.proxy` (`<origin>/mcp-app?s=<session>`, the URL the hosts
+  frame); the last 8 per origin are kept (an older tab loads again through
+  `view/resource`), never logged. No session, a wrong one or another
+  origin's: 404, so a page that never asked the hub (a `.html` file opened
+  in his browser, which `file:` in `frame-ancestors` lets frame the proxy)
+  can't feed the view's origin its own html. Else: `/api`, `/p`, `/kit`… answer 403. On the main host
   `/mcp-app` is 404. `host_ok` accepts `v-[0-9a-f]{16}.localhost:<port>`
   exactly (no other subdomain: the DNS-rebinding guard stays).
 - The proxy page (ours, from the spec's "sandbox proxy" section): checks

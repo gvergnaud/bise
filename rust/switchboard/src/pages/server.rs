@@ -43,11 +43,19 @@ pub fn serve(listener: TcpListener, pages: Arc<Pages>) {
 pub struct Request {
     pub method: String,
     pub path: String,
+    /// the target's part after `?` (before any `#`), "" none
+    pub query: String,
     pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
 }
 
 impl Request {
+    /// The value of `name` in the query (`a=1&s=..`), as sent (no
+    /// percent-decoding: the hub's own values are hex).
+    pub fn param(&self, name: &str) -> Option<&str> {
+        self.query.split('&').find_map(|kv| kv.split_once('=').filter(|(k, _)| *k == name).map(|(_, v)| v))
+    }
+
     pub fn header(&self, name: &str) -> Option<&str> {
         self.headers.iter().find(|(k, _)| k.eq_ignore_ascii_case(name)).map(|(_, v)| v.as_str())
     }
@@ -60,7 +68,9 @@ pub fn read_request(r: &mut impl BufRead) -> Option<Request> {
     let mut parts = line.split_whitespace();
     let method = parts.next()?.to_string();
     let target = parts.next()?;
-    let path = target.split(['?', '#']).next().unwrap_or("/").to_string();
+    let target = target.split('#').next().unwrap_or("/");
+    let (path, query) = target.split_once('?').unwrap_or((target, ""));
+    let (path, query) = (path.to_string(), query.to_string());
     let mut headers = Vec::new();
     let mut size = line.len();
     loop {
@@ -77,7 +87,7 @@ pub fn read_request(r: &mut impl BufRead) -> Option<Request> {
         let (k, v) = h.split_once(':')?;
         headers.push((k.trim().to_string(), v.trim().to_string()));
     }
-    let mut req = Request { method, path, headers, body: Vec::new() };
+    let mut req = Request { method, path, query, headers, body: Vec::new() };
     let len: usize = req.header("content-length").and_then(|v| v.parse().ok()).unwrap_or(0);
     if len > MAX_BODY {
         return None;

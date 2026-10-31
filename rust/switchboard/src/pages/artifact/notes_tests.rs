@@ -116,7 +116,7 @@ fn the_sent_notes_make_one_message_with_their_anchors() {
 fn req(p: &Pages, method: &str, path: &str, body: Value) -> Response {
     let origin = format!("http://127.0.0.1:{}", p.port);
     let headers = vec![("Host".into(), format!("127.0.0.1:{}", p.port)), ("Origin".into(), origin), ("X-Bise-Token".into(), p.token.clone())];
-    route(p, &Request { method: method.into(), path: path.into(), headers, body: serde_json::to_vec(&body).unwrap() })
+    route(p, &Request { method: method.into(), path: path.into(), query: String::new(), headers, body: serde_json::to_vec(&body).unwrap() })
 }
 
 fn body(r: &Response) -> Value {
@@ -159,7 +159,7 @@ fn the_browser_door_drafts_sends_and_reads_back() {
     // no such artifact; no token: refused before anything
     assert_eq!(req(&p, "POST", "/api/a/nope/notes", json!({"notes": []})).status, 404);
     assert_eq!(req(&p, "GET", "/a/nope/notes", json!(null)).status, 404);
-    let no_token = route(&p, &Request { method: "POST".into(), path: format!("/api/a/{id}/send"), headers: vec![("Host".into(), "127.0.0.1:47123".into())], body: vec![] });
+    let no_token = route(&p, &Request { method: "POST".into(), path: format!("/api/a/{id}/send"), query: String::new(), headers: vec![("Host".into(), "127.0.0.1:47123".into())], body: vec![] });
     assert_eq!(no_token.status, 403);
 }
 

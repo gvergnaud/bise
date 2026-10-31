@@ -10,7 +10,7 @@ fn pages() -> (Pages, std::path::PathBuf) {
 }
 
 fn get(p: &Pages, path: &str) -> Response {
-    let req = Request { method: "GET".into(), path: path.into(), headers: vec![("Host".into(), format!("127.0.0.1:{}", p.port))], body: vec![] };
+    let req = Request { method: "GET".into(), path: path.into(), query: String::new(), headers: vec![("Host".into(), format!("127.0.0.1:{}", p.port))], body: vec![] };
     route(p, &req)
 }
 
@@ -22,7 +22,7 @@ fn post(p: &Pages, path: &str, token: Option<&str>, origin: Option<&str>, body: 
     if let Some(o) = origin {
         headers.push(("Origin".into(), o.into()));
     }
-    route(p, &Request { method: "POST".into(), path: path.into(), headers, body: body.to_string().into_bytes() })
+    route(p, &Request { method: "POST".into(), path: path.into(), query: String::new(), headers, body: body.to_string().into_bytes() })
 }
 
 fn text(r: &Response) -> String {
@@ -136,7 +136,7 @@ fn serves_the_page_in_its_shell_with_the_csp() {
         assert!(why.contains(&path[1..].replace("/page.css", "")) && !why.contains(&*d.to_string_lossy()), "{path}: {why}");
     }
     // another Host: refused
-    let r = route(&p, &Request { method: "GET".into(), path: "/".into(), headers: vec![("Host".into(), "evil.example:47123".into())], body: vec![] });
+    let r = route(&p, &Request { method: "GET".into(), path: "/".into(), query: String::new(), headers: vec![("Host".into(), "evil.example:47123".into())], body: vec![] });
     assert_eq!(r.status, 403);
     let _ = std::fs::remove_dir_all(d);
 }
@@ -589,14 +589,24 @@ fn a_sites_storage_is_kept_by_the_hub_and_seeds_every_version() {
 fn a_view_host_serves_its_proxy_and_nothing_else() {
     let (p, d) = pages();
     let hash = super::super::views::hash("fake-app", "fake-app", "ui://fake-app/counter");
-    let at = |host: &str, method: &str, path: &str| route(&p, &Request { method: method.into(), path: path.into(), headers: vec![("Host".into(), host.into())], body: vec![] });
+    let at = |host: &str, method: &str, target: &str| {
+        let (path, query) = target.split_once('?').unwrap_or((target, ""));
+        route(&p, &Request { method: method.into(), path: path.into(), query: query.into(), headers: vec![("Host".into(), host.into())], body: vec![] })
+    };
     let vh = format!("v-{hash}.localhost:{}", p.port);
     assert_eq!(at(&vh, "GET", "/mcp-app").status, 404, "an origin the hub never registered");
     let declared = json!({"connectDomains": ["https://api.open-meteo.com", "*"], "domain": "https://evil.example"});
     let session = p.view_sandbox(&hash, super::super::views::ViewSandbox { csp: declared.clone(), perms: vec!["microphone".into()] });
     assert!(session.len() == 32 && session.bytes().all(|b| b.is_ascii_hexdigit()), "{session}");
     assert_ne!(session, p.view_sandbox(&hash, super::super::views::ViewSandbox { csp: declared.clone(), perms: vec!["microphone".into()] }), "a new session per view/resource");
-    let r = at(&vh, "GET", "/mcp-app");
+    assert_eq!(at(&vh, "GET", "/mcp-app").status, 404, "no session: a page that never asked the hub");
+    assert_eq!(at(&vh, "GET", "/mcp-app?s=").status, 404);
+    assert_eq!(at(&vh, "GET", &format!("/mcp-app?s={}", "0".repeat(32))).status, 404, "a wrong session");
+    let other = super::super::views::hash("fake-app", "fake-app", "ui://fake-app/hostile");
+    assert_eq!(at(&format!("v-{other}.localhost:{}", p.port), "GET", &format!("/mcp-app?s={session}")).status, 404, "another origin's session");
+    assert_eq!(at(&vh, "GET", &format!("/mcp-app?x=1&s={session}")).status, 200, "an older session of the last 8 still loads");
+    let session = p.view_sandbox(&hash, super::super::views::ViewSandbox { csp: declared.clone(), perms: vec!["microphone".into()] });
+    let r = at(&vh, "GET", &format!("/mcp-app?s={session}"));
     assert_eq!(r.status, 200);
     assert_eq!(r.csp, super::super::view_csp::csp(&declared, p.port, p.view_dev), "the hub's policy, never the request's");
     assert!(r.csp.contains("connect-src https://api.open-meteo.com;"), "{}", r.csp);

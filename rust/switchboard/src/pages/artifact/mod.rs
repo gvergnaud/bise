@@ -79,7 +79,7 @@ mod tests {
     use serde_json::json;
 
     fn get(p: &Pages, path: &str) -> Response {
-        route(p, &Request { method: "GET".into(), path: path.into(), headers: vec![("Host".into(), format!("127.0.0.1:{}", p.port))], body: vec![] })
+        route(p, &Request { method: "GET".into(), path: path.into(), query: String::new(), headers: vec![("Host".into(), format!("127.0.0.1:{}", p.port))], body: vec![] })
     }
 
     fn text(r: &Response) -> String {

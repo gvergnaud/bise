@@ -18,7 +18,11 @@
 //! That CSP comes from the hub, never the request: the hub keeps
 //! each origin's [`ViewSandbox`] (registered by `view/resource`, which
 //! read the resource's `_meta.ui.csp` and the plugin's grant); an origin
-//! the hub never registered gets a 404.
+//! the hub never registered gets a 404. So does a load without one of the
+//! sessions `view/resource` made for that origin (`/mcp-app?s=<32 hex>`,
+//! [`ViewResource::proxy`](bise_proto::view_rpc::ViewResource)): the
+//! proxy takes its html from whoever frames it, and `frame-ancestors`
+//! lets any `file:` page frame it.
 //!
 //! [`view_csp`]: super::view_csp
 
@@ -134,8 +138,13 @@ impl Pages {
         session
     }
 
-    fn sandbox_of(&self, hash: &str) -> Option<ViewSandbox> {
-        Some(self.views.lock().ok()?.get(hash)?.sandbox.clone())
+    /// The sandbox of view origin `hash` for a proxy load with `session`:
+    /// one `view/resource` made it (among the last [`SESSIONS`]), else none.
+    fn sandbox_of(&self, hash: &str, session: Option<&str>) -> Option<ViewSandbox> {
+        let m = self.views.lock().ok()?;
+        let o = m.get(hash)?;
+        let s = session.filter(|s| !s.is_empty())?;
+        o.sessions.iter().any(|k| k == s).then(|| o.sandbox.clone())
     }
 }
 
@@ -147,7 +156,10 @@ pub fn route(pages: &Pages, req: &Request, hash: &str) -> Response {
     if req.method != "GET" {
         return Response::err(405, "GET only");
     }
-    let Some(s) = pages.sandbox_of(hash) else { return Response::missing("no such view") };
+    // a session only view/resource gives (C6): a page that never asked
+    // the hub (a .html file opened in his browser, which file: lets frame
+    // the proxy) can't load the view's origin with its own html
+    let Some(s) = pages.sandbox_of(hash, req.param("s")) else { return Response::missing("no such view") };
     let csp = super::view_csp::csp(&s.csp, pages.port, pages.view_dev);
     let html = proxy_page(&csp, &allow(&s.perms));
     let mut r = Response::page(200, html);
