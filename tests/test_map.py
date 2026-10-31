@@ -75,7 +75,8 @@ TOP = {
     # tests/office_check.sh on it instead (office-run moves this when bise embeds it)
     "office": "none",
     # example plugins users add by hand (examples/plugins/: MCP Apps views); no e2e/tmux
-    # test loads them: tests/fixtures/mcp-apps/check.py checks their shapes
+    # test loads them: tests/fixtures/mcp-apps/check.py checks their shapes and
+    # their views' escaping, in gate.sh quick (map_paths' mcpapps)
     "examples": "none",
 }
 # the desktop app's own paths: its checks, no terminal test

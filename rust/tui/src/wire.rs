@@ -68,6 +68,9 @@ pub(crate) struct ViewChip {
     pub(crate) plugin: String,
     pub(crate) uri: String,
     pub(crate) call: String,
+    /// when its call started, ms since the epoch: the call id's first part
+    /// (`<its now ms>-<n>`, docs/mcp-apps.md C2); 0 for an id not shaped so
+    pub(crate) at_ms: u64,
     /// its stored result is gone: no link, `expired`
     pub(crate) expired: bool,
 }
@@ -81,7 +84,26 @@ impl ViewChip {
 
     /// From the thread's typed view (the entry's ToolItem.views).
     pub(crate) fn of(v: &bise_proto::thread::ToolView) -> ViewChip {
-        ViewChip { plugin: v.plugin.clone(), uri: v.uri.clone(), call: v.call.clone(), expired: v.state == bise_proto::thread::ViewState::Expired }
+        ViewChip {
+            plugin: v.plugin.clone(),
+            uri: v.uri.clone(),
+            call: v.call.clone(),
+            at_ms: call_ms(&v.call),
+            expired: v.state == bise_proto::thread::ViewState::Expired,
+        }
+    }
+}
+
+/// When a view's call started: its id's `<ms>` part (`<ms>-<n>`); 0 when
+/// the id is not shaped so.
+pub(crate) fn call_ms(call: &str) -> u64 {
+    call.split_once('-').and_then(|(ms, _)| ms.parse().ok()).unwrap_or(0)
+}
+
+impl ViewChip {
+    #[cfg(test)]
+    pub(crate) fn test(call: &str, expired: bool) -> ViewChip {
+        ViewChip { plugin: "fake-app".into(), uri: "ui://fake-app/counter".into(), call: call.into(), at_ms: call_ms(call), expired }
     }
 }
 

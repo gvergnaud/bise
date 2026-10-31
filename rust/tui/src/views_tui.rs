@@ -130,13 +130,15 @@ pub(crate) struct Row {
     pub(crate) ago: std::time::Duration,
 }
 
-/// The thread's views, newest first.
-pub(crate) fn rows(events: &[Ev]) -> Vec<Row> {
+/// The thread's views, newest first; `now_ms` (ms since the epoch) dates
+/// each from its call's start (ViewChip.at_ms), so a view loaded from the
+/// history keeps its age.
+pub(crate) fn rows(events: &[Ev], now_ms: u64) -> Vec<Row> {
     let mut out: Vec<Row> = Vec::new();
     for e in events.iter().rev() {
         let Ev::Tool(td) = e else { continue };
         for v in td.views.iter().rev() {
-            out.push(Row { view: v.clone(), ago: td.started.elapsed() });
+            out.push(Row { view: v.clone(), ago: std::time::Duration::from_millis(now_ms.saturating_sub(v.at_ms)) });
         }
     }
     out
@@ -162,7 +164,7 @@ fn first(rows: &[Row]) -> usize {
 
 /// `/views`: the screen opens on the newest live view.
 pub(crate) fn open_screen(app: &mut App) {
-    let sel = first(&rows(&app.events));
+    let sel = first(&rows(&app.events, crate::when::now_ms()));
     app.views_list = Some(Screen { sel });
 }
 
@@ -173,7 +175,7 @@ pub(crate) fn on_key(app: &mut App, k: &KeyEvent) -> bool {
         return true;
     }
     let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
-    let rows = rows(&app.events);
+    let rows = rows(&app.events, crate::when::now_ms());
     let sel = sc.sel.min(rows.len().saturating_sub(1));
     let live = rows.get(sel).filter(|r| !r.view.expired).map(|r| r.view.call.clone());
     match k.code {
@@ -254,7 +256,7 @@ pub(crate) fn draw(app: &mut App, frame: &mut Frame) {
     if full.width < 20 || full.height < 6 {
         return;
     }
-    let rows = rows(&app.events);
+    let rows = rows(&app.events, crate::when::now_ms());
     let sel = sc.sel.min(rows.len().saturating_sub(1));
     let area = Rect { x: full.x + 2, y: full.y + 1, width: full.width.saturating_sub(4), height: full.height.saturating_sub(2) };
     frame.render_widget(Paragraph::new(lines(&rows, sel)), area);

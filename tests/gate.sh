@@ -224,6 +224,9 @@ map_paths() {  # <changed path>...
     # the kit's node checks (kit/*.check.ts, no deps, ~0.1 s), and the page scripts' types
     # and emit, bise.dev's (site/) with them
     case "$f" in kit/*|site/*) kit=1 ;; esac
+    # the MCP Apps plugins' shapes and their views' escaping (tests/fixtures/mcp-apps/check.py,
+    # no deps, ~2 s): the example plugins and the test fixtures
+    case "$f" in examples/plugins/*|tests/fixtures/mcp-apps/*) mcpapps=1 ;; esac
     # the extension's unit tests and the computer-use scripts' types (~2 s)
     case "$f" in computer-use/extension/*|computer-use/bench/*|computer-use/tsconfig.node.json) cu=1 ;; esac
     # the as-he-does driver and pagedrive: fx's unit test and their types (~3 s)
@@ -1156,6 +1159,8 @@ fi
 [ "${office:-0}" = 1 ] && step office_check tests/office_check.sh
 # the kit's node checks and their types (land had them, quick did not: js-to-ts)
 [ "${kit:-0}" = 1 ] && step kit kit_check
+# the MCP Apps fixtures and example plugins against the spec's shapes, their views' innerHTML escaped
+[ "${mcpapps:-0}" = 1 ] && step mcp_apps_plugins python3 tests/fixtures/mcp-apps/check.py
 # the extension's unit tests and the computer-use scripts' types
 [ "${cu:-0}" = 1 ] && step computer_use cu_check
 # the as-he-does helpers' unit test and the driver's types

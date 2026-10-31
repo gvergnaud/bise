@@ -150,6 +150,8 @@ function why(err) {
 
 // ---- the board
 const $ = (id) => document.getElementById(id);
+// every text from a server or an API goes through esc() into innerHTML
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const LIVE_MS = 60000;
 let data = null, unit = "c", timer = 0, lastError = "";
 
@@ -189,7 +191,7 @@ function draw() {
     svg += `<circle class="pt-hi" cx="${x}" cy="${y(d.max)}" r="3"/><circle class="pt-lo" cx="${x}" cy="${y(d.min)}" r="3"/>
       <text class="v" x="${x}" y="${y(d.max) - 8}">${deg(d.max)}</text><text class="v lo-t" x="${x}" y="${y(d.min) + 16}">${deg(d.min)}</text>
       <rect class="rain" x="${x - 9}" y="${rainTop + rainH * (1 - d.rain / 100)}" width="18" height="${Math.max(1, rainH * d.rain / 100)}" rx="2"/>
-      <text class="rain-t" x="${x}" y="${rainTop + rainH + 11}">${d.rain}%</text>
+      <text class="rain-t" x="${x}" y="${rainTop + rainH + 11}">${esc(d.rain)}%</text>
       <text class="ic" x="${x}" y="${H - 1}">${GLYPH(d.code)}</text>
       <text class="day${i === 0 ? " today" : ""}" x="${x}" y="${H + 8}">${dayName(d.date, i)}</text>`;
   });
@@ -198,10 +200,10 @@ function draw() {
     <div class="now">
       <span class="glyph">${GLYPH(c.code)}</span>
       <span class="temp" data-testid="now">${deg(c.temp)}</span>
-      <span class="cond">${WORD[c.code] || ""}<div class="meta">feels ${deg(c.feels)} · wind ${Math.round(c.wind)}\u00a0km/h · humidity ${c.humidity}%</div></span>
+      <span class="cond">${WORD[c.code] || ""}<div class="meta">feels ${deg(c.feels)} · wind ${Math.round(c.wind)}\u00a0km/h · humidity ${esc(c.humidity)}%</div></span>
     </div>${svg}
-    ${data.source === "sample" ? `<div class="warn" data-testid="sample">Sample data: Open-Meteo is out of reach (${data.note.replace("offline sample: ", "")}). Live updates keep trying.</div>` : ""}
-    ${lastError ? `<div class="warn err">Live update paused: ${lastError}</div>` : ""}`;
+    ${data.source === "sample" ? `<div class="warn" data-testid="sample">Sample data: Open-Meteo is out of reach (${esc(data.note.replace("offline sample: ", ""))}). Live updates keep trying.</div>` : ""}
+    ${lastError ? `<div class="warn err">Live update paused: ${esc(lastError)}</div>` : ""}`;
 }
 
 async function refresh() {
@@ -228,7 +230,7 @@ new ResizeObserver(() => draw()).observe($("body"));
 
 mcp.on("tool-input", (p) => { const a = p.arguments || {}; $("place").textContent = a.place || a.name || "Weather"; });
 mcp.on("tool-result", (r) => {
-  if (r.isError) { $("body").innerHTML = `<div class="warn err">${((r.content || [])[0] || {}).text || "No forecast."}</div>`; return; }
+  if (r.isError) { $("body").innerHTML = `<div class="warn err">${esc(((r.content || [])[0] || {}).text || "No forecast.")}</div>`; return; }
   if (r.structuredContent) show(r.structuredContent);
 });
 mcp.on("tool-cancelled", () => { $("body").innerHTML = '<div class="warn">The forecast was stopped.</div>'; $("updated").textContent = "stopped"; });

@@ -159,6 +159,8 @@ function why(err) {
 
 // ---- the ticker
 const $ = (id) => document.getElementById(id);
+// every text from a server or an API goes through esc() into innerHTML
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const TICK_MS = 30000;
 let data = null, known = [], sel = null, ticks = {}, timer = 0, fails = 0;
 const status = (t, err) => { $("status").textContent = t || ""; $("status").className = "status" + (err ? " err" : ""); };
@@ -179,7 +181,7 @@ function draw() {
   sel = c.id;
   const live = ticks[c.id] || [], last = live.length ? live[live.length - 1].p : c.price;
   const prev = live.length > 1 ? live[live.length - 2].p : null;
-  $("hero").innerHTML = `<div><div class="nm">${c.name} · ${c.symbol}/${data.vs.toUpperCase()}</div>
+  $("hero").innerHTML = `<div><div class="nm">${esc(c.name)} · ${esc(c.symbol)}/${esc(data.vs.toUpperCase())}</div>
     <div class="px${prev == null ? "" : last > prev ? " tick-up" : last < prev ? " tick-down" : ""}" data-testid="price">${money(last)}</div></div>
     <div style="padding-bottom:4px">${pct(c.change24h)} <span class="nm">24h · low ${money(c.low24h)} · high ${money(c.high24h)}</span></div>`;
   // 7 days of history, then the live ticks since this view opened, as one line; a dot at its end
@@ -191,7 +193,7 @@ function draw() {
   const x = (i) => i / (vals.length - 1) * (W - 4), y = (v) => (hi - v) / (hi - lo) * H;
   const line = vals.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(" ");
   const col = color(c.id), end = vals[vals.length - 1];
-  $("chart").innerHTML = `<svg viewBox="0 0 ${W} ${H + 14}" height="${H + 14}" role="img" aria-label="${c.name} price over 7 days, then live">
+  $("chart").innerHTML = `<svg viewBox="0 0 ${W} ${H + 14}" height="${H + 14}" role="img" aria-label="${esc(c.name)} price over 7 days, then live">
     <path class="area" fill="${col}" d="${line} L${x(vals.length - 1)} ${H} L0 ${H} Z"/>
     <path class="chart-l" stroke="${col}" d="${line}"/>
     <circle cx="${x(vals.length - 1)}" cy="${y(end)}" r="3.5" fill="${col}"/>
@@ -199,11 +201,11 @@ function draw() {
     <text class="ax" x="4" y="12">${axis(max)}</text><text class="ax" x="4" y="${H - 4}">${axis(min)}</text></svg>`;
   $("rows").innerHTML = data.coins.map((k) => {
     const p = (ticks[k.id] || []).slice(-1)[0];
-    return `<tr data-id="${k.id}" class="${k.id === sel ? "sel" : ""}"><td><span class="badge" style="background:${color(k.id)}">${k.symbol.slice(0, 3)}</span>${k.name}</td>
+    return `<tr data-id="${esc(k.id)}" class="${k.id === sel ? "sel" : ""}"><td><span class="badge" style="background:${esc(color(k.id))}">${esc(k.symbol.slice(0, 3))}</span>${esc(k.name)}</td>
       <td class="sp"><svg viewBox="0 0 90 24" height="24"><path fill="none" stroke="${k.change24h >= 0 ? "var(--up)" : "var(--down)"}" stroke-width="1.25" d="${path(k.spark.length > 1 ? k.spark : [k.price, k.price], 90, 24)}"/></svg></td>
       <td class="r">${money(p ? p.p : k.price)}</td><td class="r">${pct(k.change24h)}</td></tr>`;
   }).join("");
-  $("warn").innerHTML = data.source === "sample" ? `<div class="warn" data-testid="sample">Sample prices: CoinGecko is out of reach (${data.note}). Live ticks keep trying.</div>` : "";
+  $("warn").innerHTML = data.source === "sample" ? `<div class="warn" data-testid="sample">Sample prices: CoinGecko is out of reach (${esc(data.note)}). Live ticks keep trying.</div>` : "";
 }
 
 // Live ticks: the view calls CoinGecko itself (connectDomains: https://api.coingecko.com).
@@ -246,7 +248,7 @@ async function loadCoins() {
 }
 function fillPicker() {
   const have = new Set(data ? data.coins.map((c) => c.id) : []);
-  $("addCoin").innerHTML = '<option value="">+ Add a coin</option>' + known.filter((c) => !have.has(c.id)).map((c) => `<option value="${c.id}">${c.name} (${c.symbol})</option>`).join("");
+  $("addCoin").innerHTML = '<option value="">+ Add a coin</option>' + known.filter((c) => !have.has(c.id)).map((c) => `<option value="${esc(c.id)}">${esc(c.name)} (${esc(c.symbol)})</option>`).join("");
 }
 $("addCoin").onchange = async (e) => {
   const id = e.target.value; if (!id || !data) return;

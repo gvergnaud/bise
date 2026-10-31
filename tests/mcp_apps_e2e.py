@@ -13,7 +13,7 @@ calls fake_score.compose, the next calls fake_app.show_counter twice.
 3. the thread (C4): ToolItem.views, three views in order, the two
    counters on the same row, every one live;
 4. the model's text (C2): the tools' own text, nothing of the views;
-5. the hub's view methods (C5), once the hub has them (else SKIP):
+5. the hub's view methods (C5); -32601 on one is a FAIL:
    view/resource gives html, csp, input and result; view/call: bump (an
    app-only tool of the view's server) runs, whisper (model-only) is
    -32031, fake-score's export from fake-app's view is -32031,
@@ -108,11 +108,6 @@ def chain(E, c):
     return with_views
 
 
-def hub_has_views(c):
-    r = c.rpc("view/resource", {"project": c.project(), "agent": "main", "call": "0-0"})
-    return (r.get("error") or {}).get("code") != -32601
-
-
 def call(c, view, method, params):
     return c.rpc("view/call", {"project": c.project(), "agent": "main", "call": view["call"], "method": method, "params": params}, timeout=60)
 
@@ -123,11 +118,11 @@ def code_of(r):
 
 def hub_methods(E, c, views):
     """Step 5: the hub's view methods on the real servers (pieces 5a, 5b, 12)."""
-    if not hub_has_views(c):
-        print("SKIP view methods: this hub has no view/resource yet (mcp-apps-calls, pieces 5a-5b)", flush=True)
-        return
     counter = views[1][1]
-    r = c.rpc("view/resource", {"project": c.project(), "agent": "main", "call": counter["call"]}).get("result") or {}
+    got = c.rpc("view/resource", {"project": c.project(), "agent": "main", "call": counter["call"]})
+    # a hub that no longer serves the method (a rename) is a red, never a skip
+    check(code_of(got) != -32601, "the hub serves view/resource: %r" % got.get("error"))
+    r = got.get("result") or {}
     check("<" in (r.get("html") or "") and r.get("toolInput") == {"start": 1}, "view/resource: the html and the input %r" % {k: r.get(k) for k in ("toolInput", "tool")})
     check((r.get("toolResult") or {}).get("structuredContent") == {"count": 1}, "view/resource: the result")
     check("https://api.open-meteo.com" in json.dumps(r.get("csp")), "view/resource: the csp as declared %r" % r.get("csp"))

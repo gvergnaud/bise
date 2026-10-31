@@ -3,7 +3,7 @@ use crate::wire::{ToolData, ToolState};
 use std::time::Duration;
 
 fn chip(call: &str, expired: bool) -> ViewChip {
-    ViewChip { plugin: "fake-app".into(), uri: "ui://fake-app/counter".into(), call: call.into(), expired }
+    ViewChip::test(call, expired)
 }
 
 fn text(l: &Line) -> String {
@@ -56,15 +56,28 @@ fn tool(id: u32, views: Vec<ViewChip>) -> Ev {
 #[test]
 fn views_lists_the_threads_views_newest_first_and_skips_expired() {
     let evs = vec![tool(1, vec![chip("1-1", false)]), Ev::Info("x".into()), tool(2, vec![chip("1-2", true), chip("1-3", false)]), tool(3, vec![])];
-    let rs = rows(&evs);
+    let rs = rows(&evs, 0);
     let calls: Vec<&str> = rs.iter().map(|r| r.view.call.as_str()).collect();
     assert_eq!(calls, ["1-3", "1-2", "1-1"]);
     assert_eq!(first(&rs), 0);
     assert_eq!(step(&rs, 0, true), 2, "↓ skips the expired row");
     assert_eq!(step(&rs, 2, false), 0, "↑ too");
     assert_eq!(step(&rs, 2, true), 2, "the end stays");
-    let only_expired = rows(&[tool(1, vec![chip("1-1", true)])]);
+    let only_expired = rows(&[tool(1, vec![chip("1-1", true)])], 0);
     assert_eq!(first(&only_expired), 0);
+}
+
+#[test]
+fn a_view_from_the_history_keeps_the_age_of_its_call() {
+    // the thread loaded now (its ToolData built this instant), its calls
+    // made 130 s and 2 h before: the ages are the calls', never 0 s
+    let now = 1_700_000_000_000u64;
+    let evs = vec![tool(1, vec![chip(&format!("{}-1", now - 7_200_000), false)]), tool(2, vec![chip(&format!("{}-2", now - 130_000), false)])];
+    let rs = rows(&evs, now);
+    assert_eq!(rs.iter().map(|r| r.ago).collect::<Vec<_>>(), [Duration::from_secs(130), Duration::from_secs(7200)]);
+    assert_eq!(text(&lines(&rs, 0)[2]), format!("› {} counter · fake-app · 2 min ago", glyph(G_VIEW)));
+    assert_eq!(crate::wire::call_ms("1700000000000-3"), 1_700_000_000_000);
+    assert_eq!(crate::wire::call_ms("x-3"), 0);
 }
 
 #[test]

@@ -170,6 +170,69 @@ def check_views(root, manifest, bad):
             bad(f"{where}: index.html is missing")
 
 
+# a `${...}` that reads a text a server or an API wrote: it must go through
+# esc() when it lands in innerHTML (plugin authors copy the examples; an
+# API's text in innerHTML could run script that calls the view's tools)
+TEXTY = re.compile(r"\.(text|note|message|name|title|label|description|error|symbol|humidity|rain)\b|\blastError\b|\berr\b")
+
+
+def template_exprs(s, i):
+    """s[i] is a backtick: (the index past its closing one, every `${...}`
+    in it and in the templates nested in them)."""
+    i += 1
+    exprs = []
+    while i < len(s):
+        c = s[i]
+        if c == "\\":
+            i += 2
+            continue
+        if c == "`":
+            return i + 1, exprs
+        if s.startswith("${", i):
+            j, depth = i + 2, 1
+            while j < len(s) and depth:
+                if s[j] == "`":
+                    j, inner = template_exprs(s, j)
+                    exprs.extend(inner)
+                    continue
+                depth += {"{": 1, "}": -1}.get(s[j], 0)
+                j += 1
+            exprs.append(s[i + 2:j - 1].strip())
+            i = j
+            continue
+        i += 1
+    return i, exprs
+
+
+def unescaped_html(html):
+    """The `${...}` of an innerHTML template that put a server's text in raw."""
+    out = []
+    for m in re.finditer(r"innerHTML\s*\+?=\s*`", html):
+        for e in template_exprs(html, m.end() - 1)[1]:
+            if "`" not in e and TEXTY.search(e) and not e.startswith("esc("):
+                out.append(e)
+    return out
+
+
+def check_html(root, bad):
+    for d, dirs, files in os.walk(root):
+        dirs[:] = [x for x in dirs if x not in ("node_modules", ".data")]
+        for f in sorted(files):
+            if f.endswith(".html"):
+                p = os.path.join(d, f)
+                with open(p) as h:
+                    for e in unescaped_html(h.read()):
+                        bad(f"{os.path.relpath(p, os.path.dirname(root))}: innerHTML gets ${{{e[:80]}}} unescaped: wrap it in esc()")
+
+
+def self_test():
+    """The lint itself, on a raw and an escaped template."""
+    raw = 'el.innerHTML = `<b>${r.text}</b>${ok ? `<i>${data.note}</i>` : ""}${n + 1}`;'
+    got = sorted(unescaped_html(raw))
+    assert got == ["data.note", "r.text"], got
+    assert unescaped_html('el.innerHTML = `<b>${esc(r.text)}</b>${deg(t)}`;') == []
+
+
 def check_plugin(root, bad):
     with open(os.path.join(root, "plugin.json")) as f:
         manifest = json.load(f)
@@ -183,12 +246,15 @@ def check_plugin(root, bad):
             if spec.get("type", "stdio") == "stdio":
                 check_server(root, name, spec, bad)
     check_views(root, manifest, bad)
+    check_html(root, bad)
 
 
 def main(argv):
+    self_test()
     here = os.path.dirname(os.path.abspath(__file__))
-    roots = argv or [os.path.join(here, d) for d in sorted(os.listdir(here))
-                     if os.path.isfile(os.path.join(here, d, "plugin.json"))]
+    examples = os.path.join(here, "..", "..", "..", "examples", "plugins")
+    roots = argv or [os.path.join(top, d) for top in (here, examples) for d in sorted(os.listdir(top))
+                     if os.path.isfile(os.path.join(top, d, "plugin.json"))]
     problems = []
     for root in roots:
         try:
