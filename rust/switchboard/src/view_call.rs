@@ -16,19 +16,12 @@ pub struct ViewParams {
     pub call: String,
 }
 
-/// A call id as the bridge picks it (C2: `<ms>-<n>`): digits, one dash,
-/// digits. Anything else (a path, `..`) names no file.
-pub fn call_ok(call: &str) -> bool {
-    let digits = |s: &str| !s.is_empty() && s.len() <= 20 && s.bytes().all(|b| b.is_ascii_digit());
-    call.split_once('-').is_some_and(|(a, b)| digits(a) && digits(b))
-}
-
 impl ViewParams {
     /// From a request's params; a bad call id is no file: expired.
     pub fn of(params: &Value) -> Result<ViewParams, ViewError> {
         let s = |k: &str| params.get(k).and_then(Value::as_str).unwrap_or("").to_string();
         let (agent, call) = (s("agent"), s("call"));
-        if agent.is_empty() || !call_ok(&call) {
+        if agent.is_empty() || !view_rules::call_ok(&call) {
             return Err(ViewError::Expired);
         }
         Ok(ViewParams { agent, call })
@@ -235,11 +228,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_call_id_is_digits_dash_digits() {
-        assert!(call_ok("1700000000000-3"));
-        for bad in ["", "1-", "-1", "1-2-3", "../1-2", "a-1", "1 -2", "1/2"] {
-            assert!(!call_ok(bad), "{bad}");
-        }
+    fn a_bad_call_id_names_no_file() {
         assert_eq!(ViewParams::of(&json!({"agent": "docs", "call": "../../x"})), Err(ViewError::Expired));
         assert_eq!(ViewParams::of(&json!({"agent": "docs", "call": "1-2"})), Ok(ViewParams { agent: "docs".into(), call: "1-2".into() }));
     }

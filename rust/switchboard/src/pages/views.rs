@@ -99,16 +99,13 @@ pub fn hash(plugin: &str, server: &str, uri: &str) -> String {
 
 /// A view's origin on the pages server of `port`.
 pub fn origin(plugin: &str, server: &str, uri: &str, port: u16) -> String {
-    format!("http://v-{}.localhost:{port}", hash(plugin, server, uri))
+    view_rules::origin_of(&hash(plugin, server, uri), port)
 }
 
-/// The hash a `Host` header names when it is a view host of this port:
-/// `v-[0-9a-f]{16}.localhost:<port>` exactly, nothing else.
+/// The hash a `Host` header names when it is a view host of this port
+/// ([`view_rules::view_host`]: `v-<16 hex>.localhost:<port>` exactly).
 pub fn view_host(host: &str, port: u16) -> Option<&str> {
-    let rest = host.strip_prefix("v-")?;
-    let (hash, after) = rest.split_at_checked(16)?;
-    let ok = hash.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
-    (ok && after == format!(".localhost:{port}")).then_some(hash)
+    view_rules::view_host(host).filter(|(_, p)| *p == port).map(|(h, _)| h)
 }
 
 
@@ -243,6 +240,22 @@ mod tests {
         // the separator: no two splits of the same bytes meet
         assert_ne!(hash("ab", "c", "u"), hash("a", "bc", "u"));
         assert_eq!(origin("fake-app", "fake-app", "ui://fake-app/counter", 47123), format!("http://v-{a}.localhost:47123"));
+    }
+
+    /// The shared origins (tests/fixtures/mcp-apps/origins.json, the
+    /// desktop's viewrules.test.ts reads them too): a view origin is a view
+    /// host at its own port, and nothing else is (mcp-apps review d2).
+    #[test]
+    fn a_view_host_is_what_the_shared_origins_say() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/mcp-apps/origins.json");
+        let fx: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        for c in fx["origins"].as_array().unwrap() {
+            let o = c["origin"].as_str().unwrap();
+            let host = o.strip_prefix("http://");
+            let port = host.and_then(|h| h.rsplit_once(':')).and_then(|(_, p)| p.parse::<u16>().ok());
+            let got = host.zip(port).and_then(|(h, p)| view_host(h, p)).is_some();
+            assert_eq!(got, c["view"].as_bool().unwrap(), "{o}");
+        }
     }
 
     #[test]

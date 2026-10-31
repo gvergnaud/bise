@@ -301,8 +301,9 @@ fn render_chips() -> String {
     s
 }
 
-/// bise_proto::view_rules (mcp-apps review d1): a view's permissions, their
-/// `allow=` features and their words by key (never their text copied).
+/// bise_proto::view_rules (mcp-apps review d1, d2): a view's permissions,
+/// their `allow=` features and their words by key (never their text
+/// copied), and a view origin's rule.
 fn render_view_rules() -> String {
     use bise_proto::view_rules::{ViewPerm, SPEC_UNGRANTED};
     let cfg = Config::new().with_large_int("number");
@@ -329,6 +330,9 @@ fn render_view_rules() -> String {
     writeln!(s).unwrap();
     writeln!(s, "/** The spec's permission keys bise never grants. */").unwrap();
     writeln!(s, "export const SPEC_UNGRANTED = [{}] as const;", SPEC_UNGRANTED.iter().map(|k| format!("{k:?}")).collect::<Vec<_>>().join(", ")).unwrap();
+    writeln!(s).unwrap();
+    writeln!(s, "/** A view's origin, http://v-<16 hex>.localhost:<port> (view_rules::view_origin; tests/fixtures/mcp-apps/origins.json holds both to the same cases); its group 1 is the port, whose range (1..=65535) the reader checks after the match. */").unwrap();
+    writeln!(s, "export const VIEW_ORIGIN_RE = new RegExp({:?}, 'u');", bise_proto::view_rules::VIEW_ORIGIN_RE).unwrap();
     s
 }
 

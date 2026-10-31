@@ -183,16 +183,6 @@ fn the_resource_cache_keeps_ui_results_only() {
 }
 
 #[test]
-fn a_call_id_is_digits_dash_digits_only() {
-    for ok in ["1730000000000-3", "0-0"] {
-        assert!(call_ok(ok), "{ok}");
-    }
-    for bad in ["", "1", "-1", "1-", "a-1", "1-2-3", "../1-2", "1-2/x", "1 -2", &"9".repeat(41)] {
-        assert!(!call_ok(bad), "{bad}");
-    }
-}
-
-#[test]
 fn the_views_file_keeps_the_whole_result_or_says_truncated() {
     let args = json!({"start": 3});
     let answer = json!({"jsonrpc": "2.0", "id": 2, "result": {"content": [{"type": "text", "text": "counter at 3"}], "structuredContent": {"count": 3}}});
@@ -224,7 +214,7 @@ fn each_kept_call_gets_its_own_id_and_file() {
     let a = keep(&d.join("views"), &r).unwrap();
     let b = keep(&d.join("views"), &r).unwrap();
     assert_eq!((a.as_str(), b.as_str()), ("12-0", "12-1"), "two calls of one ms");
-    assert!(call_ok(&a) && call_ok(&b));
+    assert!(bise_proto::view_rules::call_ok(&a) && bise_proto::view_rules::call_ok(&b), "the bridge makes ids the hub takes");
     let mut names: Vec<String> = std::fs::read_dir(d.join("views")).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
     names.sort();
     assert_eq!(names, vec!["12-0.json", "12-1.json"], "no temp file left");

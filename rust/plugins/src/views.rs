@@ -294,14 +294,6 @@ pub const VIEW_HEADER: &str = "x-bise-view";
 /// result (the view says "result too large").
 pub const MAX_FILE: usize = 4 * 1024 * 1024;
 
-/// A call id as the bridge makes it (`[0-9]+-[0-9]+`, at most 40
-/// chars): anything else names no file.
-pub fn call_ok(call: &str) -> bool {
-    let Some((a, b)) = call.split_once('-') else { return false };
-    let digits = |s: &str| !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit());
-    call.len() <= 40 && digits(a) && digits(b)
-}
-
 /// The view's ref the REPL's `tool_view` line carries:
 /// `{"plugin","server","uri","call"}`, every non-ASCII character as
 /// `\uXXXX` so it rides an HTTP header (no CR or LF either). Pure.

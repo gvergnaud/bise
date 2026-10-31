@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import ORIGINS from '../../../../tests/fixtures/mcp-apps/origins.json';
 import { freshGesture, GESTURE_MS, frameAt, pointInWindow, isViewOrigin, isViewProxy, originOf, stampGesture, viewKey, viewNavigation, viewPermission, type ViewFrame, type ViewPerm } from './viewrules';
 
 const A = 'http://v-0123456789abcdef.localhost:47123';
@@ -6,6 +7,10 @@ const B = 'http://v-fedcba9876543210.localhost:47123';
 const frame = (origin: string, perms: ViewPerm[], rect = { x: 0, y: 0, w: 100, h: 100 }, call = '1-2'): ViewFrame => ({ project: 'p', origin, agent: 't1', call, rect, perms, covers: [] });
 
 describe('view origins', () => {
+  it('are what the shared origins say (tests/fixtures/mcp-apps/origins.json, the hub reads them too)', () => {
+    for (const c of ORIGINS.origins) expect(isViewOrigin(c.origin), c.origin).toBe(c.view);
+  });
+
   it('exactly v-<16 hex>.localhost:<port>', () => {
     expect(isViewOrigin(A)).toBe(true);
     for (const bad of [

@@ -8,7 +8,15 @@
 //!   the names (`tests/fixtures/mcp-apps/view_rules.gen.json`);
 //! - [`declared`]: what a view resource's `_meta` declares. Its cases are
 //!   `tests/fixtures/mcp-apps/declared.json`, read by this module's test
-//!   and the desktop's `permsOf` test.
+//!   and the desktop's `permsOf` test;
+//! - [`call_ok`]: a view call's id, the one check of the bridge that makes
+//!   it, the hub, the pages server and the terminal (mcp-apps review d2);
+//! - [`view_host`] / [`view_origin`]: a view's own origin on the pages
+//!   server, `http://v-<16 hex>.localhost:<port>`; the desktop reads it
+//!   as [`VIEW_ORIGIN_RE`] (generated). Their cases are
+//!   `tests/fixtures/mcp-apps/origins.json`, read here, by the pages
+//!   server's test and by the desktop's `viewrules.test.ts`. The hash
+//!   (sha256 of plugin, server, uri) stays the pages server's.
 //!
 //! Pure; no wire type changes here: the wire's lists stay strings, so a
 //! reader of an older or newer hub decodes a name it doesn't know.
@@ -152,6 +160,49 @@ pub fn allow(perms: &[String]) -> String {
     known(perms).iter().map(|p| p.feature()).collect::<Vec<_>>().join("; ")
 }
 
+/// At most this many digits on each side of a call id: a u64's.
+pub const CALL_DIGITS: usize = 20;
+
+/// A view call's id as the bridge makes it (C2: `<ms>-<n>`): digits, one
+/// dash, digits, each 1 to [`CALL_DIGITS`] ASCII digits. Anything else (a
+/// path, `..`) names no file.
+pub fn call_ok(call: &str) -> bool {
+    let digits = |s: &str| !s.is_empty() && s.len() <= CALL_DIGITS && s.bytes().all(|b| b.is_ascii_digit());
+    call.split_once('-').is_some_and(|(a, b)| digits(a) && digits(b))
+}
+
+/// The hex digits of a view origin's hash (`v-<16 hex>`).
+pub const VIEW_HASH_HEX: usize = 16;
+
+/// [`view_origin`]'s rule as a JS regular expression (`u` flag) for the
+/// desktop (`view_rules.gen.ts`); `origins.json` holds both to the same
+/// cases. It admits up to 99999: the port's range (1..=65535) is checked
+/// after the match on both sides (here by `u16`, there by `isViewOrigin`).
+pub const VIEW_ORIGIN_RE: &str = r"^http://v-[0-9a-f]{16}\.localhost:([1-9][0-9]{0,4})$";
+
+/// A view's origin on the pages server of `port` from its hash.
+pub fn origin_of(hash: &str, port: u16) -> String {
+    format!("http://v-{hash}.localhost:{port}")
+}
+
+/// The hash and port a `Host` value names when it is a view host:
+/// `v-<16 lower hex>.localhost:<port>` exactly, its port 1..=65535 as a
+/// browser writes it (no sign, no leading zero); none for anything else.
+pub fn view_host(host: &str) -> Option<(&str, u16)> {
+    let rest = host.strip_prefix("v-")?;
+    let (hash, after) = rest.split_at_checked(VIEW_HASH_HEX)?;
+    let port = after.strip_prefix(".localhost:")?;
+    let hex = hash.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
+    let digits = !port.is_empty() && !port.starts_with('0') && port.bytes().all(|b| b.is_ascii_digit());
+    let port: u16 = if digits { port.parse().ok()? } else { return None };
+    hex.then_some((hash, port))
+}
+
+/// The hash and port of a view's origin (`http://` + [`view_host`]).
+pub fn view_origin(origin: &str) -> Option<(&str, u16)> {
+    view_host(origin.strip_prefix("http://")?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -189,6 +240,25 @@ mod tests {
         for p in ViewPerm::ALL {
             assert_eq!(text(p.word_key()), Some(p.word()));
             assert_eq!(text(p.in_sentence_key()), Some(p.in_sentence()));
+        }
+    }
+
+    #[test]
+    fn a_view_origin_is_what_the_shared_origins_say() {
+        for c in fixture("origins.json")["origins"].as_array().unwrap() {
+            let o = c["origin"].as_str().unwrap();
+            assert_eq!(view_origin(o).is_some(), c["view"].as_bool().unwrap(), "{o}");
+            if let Some((hash, port)) = view_origin(o) {
+                assert_eq!(origin_of(hash, port), o, "it makes the origin it reads");
+            }
+        }
+    }
+
+    #[test]
+    fn a_call_id_is_what_the_shared_calls_say() {
+        for c in fixture("origins.json")["calls"].as_array().unwrap() {
+            let id = c["call"].as_str().unwrap();
+            assert_eq!(call_ok(id), c["ok"].as_bool().unwrap(), "{id}");
         }
     }
 }

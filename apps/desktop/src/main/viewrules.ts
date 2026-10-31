@@ -17,6 +17,7 @@
 //     goes where the CSP lets it (frameDomains), anything else (the view or the proxy leaving
 //     for another url) is dropped, never opened in his browser.
 
+import { VIEW_ORIGIN_RE } from '../proto/view_rules.gen';
 import type { ViewFrame } from '../shared/api';
 import type { ViewPerm } from '../shared/viewperms';
 import { isPagesFrame } from './framelink';
@@ -26,12 +27,10 @@ export type { ViewFrame, ViewPerm };
 /** A rect in the window, CSS px (a frame's visible part, a cover). */
 export type ViewRect = ViewFrame['rect'];
 
-const VIEW_ORIGIN = /^http:\/\/v-[0-9a-f]{16}\.localhost:(\d{1,5})$/u;
-
-/** Pure: is `origin` exactly a view's origin (any pages port: one per project's hub)? */
+/** Pure: is `origin` exactly a view's origin (any pages port: one per project's hub)? The rule is the hub's (bise_proto::view_rules, generated VIEW_ORIGIN_RE; origins.json pins both). */
 export function isViewOrigin(origin: string | null | undefined): boolean {
   if (origin === null || origin === undefined) return false;
-  const m = VIEW_ORIGIN.exec(origin);
+  const m = VIEW_ORIGIN_RE.exec(origin);
   if (m === null) return false;
   const port = Number(m[1]);
   return port > 0 && port < 65536;

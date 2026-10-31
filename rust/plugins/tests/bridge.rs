@@ -1015,7 +1015,7 @@ fn a_call_with_a_view_keeps_its_full_result() {
     let view: serde_json::Value = serde_json::from_str(&view.expect("x-bise-view")).unwrap();
     assert_eq!((view["plugin"].clone(), view["server"].clone(), view["uri"].clone()), (serde_json::json!("fake-app"), serde_json::json!("fake-app"), serde_json::json!("ui://fake-app/counter")));
     let id = view["call"].as_str().unwrap().to_string();
-    assert!(bend_plugins::views::call_ok(&id), "{id}");
+    assert!(bise_proto::view_rules::call_ok(&id), "{id}");
     let f = read(&id);
     assert_eq!((f["v"].clone(), f["plugin"].clone(), f["server"].clone()), (serde_json::json!(1), serde_json::json!("fake-app"), serde_json::json!("fake-app")));
     assert_eq!((f["uri"].clone(), f["tool"].clone(), f["args"].clone()), (serde_json::json!("ui://fake-app/counter"), serde_json::json!("show_counter"), serde_json::json!({"start": 5})));

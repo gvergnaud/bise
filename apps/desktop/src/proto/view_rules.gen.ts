@@ -27,3 +27,6 @@ export const VIEW_PERMS: readonly ViewPermRow[] = [
 
 /** The spec's permission keys bise never grants. */
 export const SPEC_UNGRANTED = ["geolocation"] as const;
+
+/** A view's origin, http://v-<16 hex>.localhost:<port> (view_rules::view_origin; tests/fixtures/mcp-apps/origins.json holds both to the same cases); its group 1 is the port, whose range (1..=65535) the reader checks after the match. */
+export const VIEW_ORIGIN_RE = new RegExp("^http://v-[0-9a-f]{16}\\.localhost:([1-9][0-9]{0,4})$", 'u');

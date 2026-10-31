@@ -314,7 +314,11 @@ Signed by architect (m_50047), with these owners:
   in his browser, which `file:` in `frame-ancestors` lets frame the proxy)
   can't feed the view's origin its own html. Else: `/api`, `/p`, `/kit`… answer 403. On the main host
   `/mcp-app` is 404. `host_ok` accepts `v-[0-9a-f]{16}.localhost:<port>`
-  exactly (no other subdomain: the DNS-rebinding guard stays).
+  exactly (no other subdomain: the DNS-rebinding guard stays). That rule
+  is `bise_proto::view_rules::view_host` (the desktop's `isViewOrigin`
+  reads it generated, `VIEW_ORIGIN_RE`), and a view call's id is
+  `view_rules::call_ok` (two runs of 1 to 20 digits): both sides read the
+  cases in `tests/fixtures/mcp-apps/origins.json`.
 - The proxy page (ours, from the spec's "sandbox proxy" section): checks
   it is cross-origin with its parent, sends
   `ui/notifications/sandbox-proxy-ready`, takes

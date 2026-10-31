@@ -65,14 +65,7 @@ pub(crate) fn of_url(url: &str) -> Option<(How, String)> {
         (_, Some(c)) => (How::Web, c),
         _ => return None,
     };
-    valid_call(call).then(|| (how, call.to_string()))
-}
-
-/// A call id as the runtime makes them (`<turn ms>-<tool id>`, C2).
-fn valid_call(call: &str) -> bool {
-    let mut parts = call.split('-');
-    let ok = |p: Option<&str>| p.is_some_and(|s| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()));
-    ok(parts.next()) && ok(parts.next()) && parts.next().is_none()
+    bise_proto::view_rules::call_ok(call).then(|| (how, call.to_string()))
 }
 
 /// The web host's url of a view (C9): `<pages url>/v/<agent>/<call>`.

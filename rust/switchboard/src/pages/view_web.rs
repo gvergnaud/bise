@@ -16,6 +16,7 @@ use super::server::{esc, Response};
 use super::{PageMsg, Pages};
 use bise_proto::rpc::RpcError;
 use bise_proto::view_rpc::ViewError;
+use bise_proto::view_rules::call_ok;
 use serde_json::{json, Value};
 use std::borrow::Cow;
 use std::sync::mpsc::channel;
@@ -36,13 +37,6 @@ pub fn valid_agent(a: &str) -> bool {
     !a.is_empty() && a.len() <= 64 && !a.starts_with('.') && a.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
 }
 
-/// A call id as the runtime makes them (C2): `<turn ms>-<tool id>`.
-pub fn valid_call(c: &str) -> bool {
-    let mut parts = c.split('-');
-    let num = |p: Option<&str>| p.is_some_and(|s| !s.is_empty() && s.len() <= 20 && s.bytes().all(|b| b.is_ascii_digit()));
-    num(parts.next()) && num(parts.next()) && parts.next().is_none()
-}
-
 /// The host page's CSP: the server's own, plus the views' origins of
 /// this port as frames and its own `/api` to fetch.
 pub fn page_csp(port: u16) -> String {
@@ -51,7 +45,7 @@ pub fn page_csp(port: u16) -> String {
 
 /// `GET /v/<agent>/<call>`: the page the web host's script fills.
 pub fn page(pages: &Pages, agent: &str, call: &str) -> Response {
-    if !valid_agent(agent) || !valid_call(call) {
+    if !valid_agent(agent) || !call_ok(call) {
         return Response::missing("no such view");
     }
     let html = format!(
@@ -91,7 +85,7 @@ fn parse(body: &[u8]) -> Result<(String, Value), String> {
     let params = v.get("params").cloned().unwrap_or(Value::Null);
     let agent = params.get("agent").and_then(Value::as_str).unwrap_or("");
     let call = params.get("call").and_then(Value::as_str).unwrap_or("");
-    if !valid_agent(agent) || !valid_call(call) {
+    if !valid_agent(agent) || !call_ok(call) {
         return Err("params need an agent and a call".into());
     }
     Ok((method.to_string(), params))
@@ -139,10 +133,6 @@ mod tests {
         }
         for a in ["", ".hidden", "a/b", "a b", "../x", "é", &"x".repeat(65)] {
             assert!(!valid_agent(a), "{a}");
-        }
-        assert!(valid_call("1730000000000-3"));
-        for c in ["", "1", "1-", "-1", "1-2-3", "a-1", "1-2/x", &format!("{}-1", "9".repeat(21))] {
-            assert!(!valid_call(c), "{c}");
         }
     }
 
