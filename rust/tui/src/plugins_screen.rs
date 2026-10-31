@@ -19,6 +19,7 @@
 //! `parts[].error`), never the status words.
 
 use bise_proto::app_rows::{LoginState, PartKind, Plugin, PluginAction, PluginKind, PluginPart, PluginScope, PluginState};
+use bise_proto::view_rules::ViewPerm;
 use bise_proto::words::{settings, views};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::style::{Modifier, Style};
@@ -834,14 +835,12 @@ pub(crate) fn page_body(sc: &Screen, p: &Plugin, width: usize) -> Body {
     out
 }
 
-/// A permission's words (the desktop's ViewsGroup permWords).
+/// A permission's words (bise_proto::view_rules: the window reads the
+/// same table); an unknown name as it is.
 pub(crate) fn perm_word(p: &str) -> &str {
-    match p {
-        "camera" => views::perm_camera,
-        "microphone" => views::perm_microphone,
-        "midi" => views::perm_midi,
-        "clipboardWrite" => views::perm_clipboard,
-        other => other,
+    match ViewPerm::parse(p) {
+        Some(perm) => perm.word(),
+        None => p,
     }
 }
 

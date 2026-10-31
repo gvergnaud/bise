@@ -18,7 +18,11 @@ import sys
 MIME = "text/html;profile=mcp-app"
 EXT = "io.modelcontextprotocol/ui"
 CSP_KEYS = {"connectDomains", "resourceDomains", "frameDomains", "baseUriDomains"}
-PERM_KEYS = {"camera", "microphone", "geolocation", "clipboardWrite"}
+# the permission names: bise_proto::view_rules, generated (the spec's keys, bise's own)
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "view_rules.gen.json")) as _f:
+    _RULES = json.load(_f)
+PERM_KEYS = set(_RULES["spec_perms"])
+BISE_PERM_KEYS = set(_RULES["bise_perms"])
 RES_META_KEYS = {"csp", "permissions", "domain", "prefersBorder"}
 # an origin: scheme, host (a leading `*.` allowed), optional port; no path
 ORIGIN = re.compile(r"^(https|wss|http|ws)://(\*\.)?[a-z0-9.-]+(:\d+)?$")
@@ -82,8 +86,8 @@ def check_res_meta(where, meta, bad):
     # bise's own key (docs/mcp-apps.md C6): what the spec lacks, MIDI only
     extra = (meta or {}).get("dev.bise/ui") or {}
     for k, v in extra.items():
-        if k != "permissions" or not isinstance(v, dict) or any(p != "midi" or x != {} for p, x in v.items()):
-            bad(f"{where}: _meta['dev.bise/ui'] allows only {{'permissions': {{'midi': {{}}}}}}")
+        if k != "permissions" or not isinstance(v, dict) or any(p not in BISE_PERM_KEYS or x != {} for p, x in v.items()):
+            bad(f"{where}: _meta['dev.bise/ui'] allows only {{'permissions': {{{', '.join(f'{p!r}: {{}}' for p in sorted(BISE_PERM_KEYS))}}}}}")
     ui = (meta or {}).get("ui") or {}
     for k in ui:
         if k not in RES_META_KEYS:

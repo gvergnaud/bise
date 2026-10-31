@@ -1,0 +1,19 @@
+{
+  "doc": "What a view resource's _meta declares (docs/mcp-apps.md C6, C8): `meta` is the resource's _meta, `declared` what bise_proto::view_rules::declared gives, in ViewPerm::ALL's order. Read by rust/proto/src/view_rules.rs's test and apps/desktop/src/shared/viewperms.test.ts. `was`: what the two old parsers said (switchboard view_call::resource_read, plugins catalog::views::declared) where they disagreed (mcp-apps review d1).",
+  "rows": [
+    { "meta": { "ui": { "permissions": { "camera": false, "microphone": {} } } }, "declared": ["microphone"], "was": "view_call [camera, microphone]; catalog [microphone]" },
+    { "meta": { "ui": { "permissions": { "camera": null } } }, "declared": [], "was": "view_call [camera]; catalog []" },
+    { "meta": { "ui": { "permissions": ["clipboardWrite", "camera"] } }, "declared": ["camera", "clipboardWrite"], "was": "view_call [] (no arrays); catalog [camera, clipboardWrite]" },
+    { "meta": { "dev.bise/ui": { "permissions": { "midi": {} } } }, "declared": ["midi"], "was": "view_call [midi]; catalog [] (it read dev.bise/ui inside ui)" },
+    { "meta": { "ui": { "dev.bise/ui": { "permissions": { "midi": {} } } } }, "declared": [], "was": "view_call []; catalog [midi]" },
+    { "meta": { "dev.bise/ui": { "permissions": ["midi"] } }, "declared": ["midi"], "was": "view_call []; catalog []" },
+    { "meta": { "ui": { "permissions": { "camera": true } } }, "declared": ["camera"] },
+    { "meta": { "ui": { "permissions": { "geolocation": {}, "microphone": {} } } }, "declared": ["microphone"] },
+    { "meta": { "ui": { "permissions": { "midi": {}, "clipboardWrite": {}, "camera": {} } } }, "declared": ["camera", "midi", "clipboardWrite"] },
+    { "meta": { "ui": { "permissions": { "camera": {} } }, "dev.bise/ui": { "permissions": { "camera": {}, "midi": {} } } }, "declared": ["camera", "midi"] },
+    { "meta": { "ui": { "permissions": "camera" } }, "declared": [] },
+    { "meta": { "ui": { "permissions": ["camera", 3, null, "camera"] } }, "declared": ["camera"] },
+    { "meta": {}, "declared": [] },
+    { "meta": null, "declared": [] }
+  ]
+}

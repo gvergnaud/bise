@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { freshGesture, GESTURE_MS, frameAt, pointInWindow, isViewOrigin, isViewProxy, originOf, stampGesture, viewKey, viewNavigation, viewPermission, type ViewFrame } from './viewrules';
+import { freshGesture, GESTURE_MS, frameAt, pointInWindow, isViewOrigin, isViewProxy, originOf, stampGesture, viewKey, viewNavigation, viewPermission, type ViewFrame, type ViewPerm } from './viewrules';
 
 const A = 'http://v-0123456789abcdef.localhost:47123';
 const B = 'http://v-fedcba9876543210.localhost:47123';
-const frame = (origin: string, perms: string[], rect = { x: 0, y: 0, w: 100, h: 100 }, call = '1-2'): ViewFrame => ({ project: 'p', origin, agent: 't1', call, rect, perms });
+const frame = (origin: string, perms: ViewPerm[], rect = { x: 0, y: 0, w: 100, h: 100 }, call = '1-2'): ViewFrame => ({ project: 'p', origin, agent: 't1', call, rect, perms, covers: [] });
 
 describe('view origins', () => {
   it('exactly v-<16 hex>.localhost:<port>', () => {
@@ -59,7 +59,7 @@ describe('a view asks for a permission', () => {
   it('a view not in the live list, or one granted nothing: denied', () => {
     expect(viewPermission('midi', fromA, [])).toBe(false);
     expect(viewPermission('midi', fromA, [frame(A, [])])).toBe(false);
-    expect(viewPermission('midi', fromA, [frame(A, ['midi; camera *', 'MIDI'])])).toBe(false);
+    expect(viewPermission('midi', fromA, [frame(A, ['midi; camera *', 'MIDI'] as unknown as ViewPerm[])])).toBe(false);
   });
 
   it("a check (navigator.permissions, the clipboard's) follows the same rule", () => {

@@ -5,6 +5,7 @@
 // handler, the guard and a view's link or download (window.bise.views.gesture: one each) ask of them.
 import { BrowserWindow, ipcMain, type WebContents } from 'electron';
 import { IPC } from '../shared/api';
+import { isViewPerm } from '../shared/viewperms';
 import { frameAt, freshGesture, pointInWindow, stampGesture, viewKey, viewPermission, type PermAsk, type ViewFrame, type ViewRect } from './viewrules';
 
 /** A window's view frames, by its webContents id. */
@@ -25,7 +26,7 @@ export function readFrames(raw: unknown): ViewFrame[] {
     const rect = r['rect'] as Record<string, unknown> | undefined;
     if (typeof r['origin'] !== 'string' || typeof r['agent'] !== 'string' || typeof r['call'] !== 'string' || rect === undefined) continue;
     if (!num(rect['x']) || !num(rect['y']) || !num(rect['w']) || !num(rect['h'])) continue;
-    const perms = Array.isArray(r['perms']) ? (r['perms'] as unknown[]).filter((p): p is string => typeof p === 'string') : [];
+    const perms = Array.isArray(r['perms']) ? (r['perms'] as unknown[]).filter(isViewPerm) : [];
     const covers: ViewRect[] = [];
     for (const c of Array.isArray(r['covers']) ? (r['covers'] as unknown[]) : []) {
       const o = c !== null && typeof c === 'object' ? (c as Record<string, unknown>) : {};

@@ -1,33 +1,23 @@
 //! A plugin's views as parts of its row (MCP Apps, docs/mcp-apps.md C8):
 //! each view's uri, the permissions and origins it declares (its
-//! resource's `_meta.ui`: `permissions`, `csp`; bise's `midi` from
-//! `_meta["dev.bise/ui"].permissions`) and what he granted it
+//! resource's `_meta.ui`: `permissions`, read by
+//! `bise_proto::view_rules::declared`, and `csp`) and what he granted it
 //! (`state::view_grant`). Pure: the catalog's VIEWS group and the add
 //! screen's preview read the same parts.
 
 use crate::id::{PartKind as IdPart, PluginId};
-use crate::state::{self, Grants, VIEW_PERMS};
+use crate::state::{self, Grants};
 use bise_proto::app_rows::{PartKind, PartView, PluginPart};
+use bise_proto::view_rules;
 use serde_json::Value;
-
-/// The `_meta` key of bise's own view fields (`permissions.midi`).
-pub const BISE_UI: &str = "dev.bise/ui";
 
 /// The CSP fields whose origins a view reaches, in the order shown.
 const DOMAIN_FIELDS: [&str; 4] = ["connectDomains", "resourceDomains", "frameDomains", "baseUriDomains"];
 
-/// The permissions a view's `_meta.ui` declares, in [`VIEW_PERMS`]' order.
+/// The permissions a view's `_meta.ui` declares: its resource's `_meta`
+/// is `{"ui": ui}` (a static view's; bise_proto::view_rules::declared).
 pub fn declared(ui: &Value) -> Vec<String> {
-    let keys = |v: Option<&Value>| -> Vec<String> {
-        match v {
-            Some(Value::Object(m)) => m.iter().filter(|(_, x)| !matches!(x, Value::Bool(false) | Value::Null)).map(|(k, _)| k.clone()).collect(),
-            Some(Value::Array(a)) => a.iter().filter_map(Value::as_str).map(String::from).collect(),
-            _ => Vec::new(),
-        }
-    };
-    let mut names = keys(ui.get("permissions"));
-    names.extend(keys(ui.get(BISE_UI).and_then(|b| b.get("permissions"))));
-    VIEW_PERMS.iter().filter(|p| names.iter().any(|n| n == *p)).map(|p| p.to_string()).collect()
+    view_rules::names(&view_rules::declared(&serde_json::json!({ "ui": ui })))
 }
 
 /// The origins a view's `_meta.ui.csp` declares, each once, in order.
@@ -95,14 +85,28 @@ mod tests {
     #[test]
     fn a_view_declares_its_permissions_and_domains() {
         let ui = json!({
-            "permissions": {"microphone": {}, "camera": false, "geolocation": {}},
-            "dev.bise/ui": {"permissions": {"midi": {}}},
+            "permissions": {"microphone": {}, "camera": false, "geolocation": {}, "midi": {}},
             "csp": {"connectDomains": ["https://api.open-meteo.com"], "resourceDomains": ["https://tile.openstreetmap.org", "https://api.open-meteo.com"]}
         });
         assert_eq!(declared(&ui), vec!["microphone", "midi"]);
         assert_eq!(domains(&ui), vec!["https://api.open-meteo.com", "https://tile.openstreetmap.org"]);
         assert_eq!(declared(&json!({"permissions": ["clipboardWrite"]})), vec!["clipboardWrite"]);
         assert!(declared(&Value::Null).is_empty() && domains(&Value::Null).is_empty());
+    }
+
+    /// A static view's part declares as the hub reads its resource (its
+    /// `_meta` is `{"ui": <view.json's ui>}`): the shared fixture, rows
+    /// whose `dev.bise/ui` is not inside `ui` (mcp-apps review d1).
+    #[test]
+    fn a_view_part_declares_as_the_shared_fixture_says() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/mcp-apps/declared.json");
+        let fx: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        for row in fx["rows"].as_array().unwrap().iter().filter(|r| r["meta"].get("dev.bise/ui").is_none()) {
+            let ui = row["meta"].get("ui").cloned().unwrap_or(Value::Null);
+            let want: Vec<String> = serde_json::from_value(row["declared"].clone()).unwrap();
+            let p = view_part("p", None, "t", "ui://p/v", &ui, &Grants::new(), true);
+            assert_eq!(p.view.unwrap().declared, want, "{}", row["meta"]);
+        }
     }
 
     #[test]

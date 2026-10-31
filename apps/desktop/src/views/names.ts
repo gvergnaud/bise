@@ -2,6 +2,7 @@
 // ('show_board' -> 'show board'), the permissions in a sentence ('the camera and the
 // microphone'), and the card's links keep the focus where it is. The card, the tab and the plugins page share them. Owner: mcp-apps-host.
 import { views } from '@/proto/words_views.gen';
+import { permRow } from '@/shared/viewperms';
 
 /** A tool's or a view's name humanised: '_' and '-' are spaces. Pure. */
 export function humanName(name: string): string {
@@ -13,20 +14,9 @@ export function uriName(uri: string): string {
   return humanName(uri.split('/').filter((x) => x !== '').at(-1) ?? uri);
 }
 
-/** One permission in a sentence ('the microphone', 'MIDI'). Pure. */
+/** One permission in a sentence ('the microphone', 'MIDI'; the generated table's); an unknown name as it is. Pure. */
 export function permIn(p: string): string {
-  switch (p) {
-    case 'camera':
-      return views.missing_camera;
-    case 'microphone':
-      return views.missing_microphone;
-    case 'midi':
-      return views.missing_midi;
-    case 'clipboardWrite':
-      return views.missing_clipboard;
-    default:
-      return p;
-  }
+  return permRow(p)?.inSentence ?? p;
 }
 
 /** Permissions in a sentence: 'the camera and the microphone', 'the camera, MIDI and the clipboard'. Pure. */

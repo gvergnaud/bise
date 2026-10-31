@@ -17,30 +17,14 @@
 //     goes where the CSP lets it (frameDomains), anything else (the view or the proxy leaving
 //     for another url) is dropped, never opened in his browser.
 
+import type { ViewFrame } from '../shared/api';
+import type { ViewPerm } from '../shared/viewperms';
 import { isPagesFrame } from './framelink';
 
-/** The permissions a view can be granted (views.rs PERMS; the plugin's grant, C8). */
-export type ViewPerm = 'camera' | 'microphone' | 'midi' | 'clipboardWrite';
+export type { ViewFrame, ViewPerm };
 
-export interface ViewRect {
-  readonly x: number;
-  readonly y: number;
-  readonly w: number;
-  readonly h: number;
-}
-
-/** One live view frame, as the window's layer sends it (shared/api ViewFrame). */
-export interface ViewFrame {
-  readonly project: string;
-  readonly origin: string;
-  readonly agent: string;
-  readonly call: string;
-  /** the frame's visible rect in the window, CSS px; a hidden frame is not in the list */
-  readonly rect: ViewRect;
-  readonly perms: readonly string[];
-  /** the window's menus, floats and scrims drawn over it now (window CSS px): a press there is theirs */
-  readonly covers?: readonly ViewRect[];
-}
+/** A rect in the window, CSS px (a frame's visible part, a cover). */
+export type ViewRect = ViewFrame['rect'];
 
 const VIEW_ORIGIN = /^http:\/\/v-[0-9a-f]{16}\.localhost:(\d{1,5})$/u;
 
@@ -181,7 +165,7 @@ export function frameAt(frames: readonly ViewFrame[], x: number, y: number): Vie
   for (let i = frames.length - 1; i >= 0; i -= 1) {
     const f = frames[i];
     if (f === undefined || !inside(f.rect, x, y)) continue;
-    return (f.covers ?? []).some((c) => inside(c, x, y)) ? null : f;
+    return f.covers.some((c) => inside(c, x, y)) ? null : f;
   }
   return null;
 }

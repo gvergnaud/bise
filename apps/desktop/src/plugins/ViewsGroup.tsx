@@ -6,24 +6,13 @@ import { useEffect, useRef, useState } from 'react';
 import { Button, GroupLabel, sentenceCase, Sheet, Toggle } from '@/ds';
 import type { AppCmd, PluginPart } from '@/proto';
 import { views } from '@/proto/words_views.gen';
-import { permsOf } from '@/shared/viewperms';
+import { permRow, permsOf } from '@/shared/viewperms';
 import { humanName, permsIn } from '@/views/names';
 import type { PluginViewsAsk } from '@/views/port';
 
-/** A permission's words. */
+/** A permission's words (its tick's label, the generated table's); an unknown name as it is. */
 export function permWords(p: string): string {
-  switch (p) {
-    case 'camera':
-      return views.perm_camera;
-    case 'microphone':
-      return views.perm_microphone;
-    case 'midi':
-      return views.perm_midi;
-    case 'clipboardWrite':
-      return views.perm_clipboard;
-    default:
-      return p;
-  }
+  return permRow(p)?.word ?? p;
 }
 
 /** A view's grant with one permission ticked or not, in its declared order. Pure. */
@@ -151,7 +140,7 @@ export function partsOfList(plugin: string, result: unknown, skip: readonly stri
       const ds = csp?.[f];
       if (Array.isArray(ds)) for (const d of ds) if (typeof d === 'string' && !domains.includes(d)) domains.push(d);
     }
-    const declared = permsOf([...permsOf(v['permissions']), ...permsOf(v['bise_permissions'])]);
+    const declared = permsOf(v['permissions'], v['bise_permissions']);
     const tool = typeof v['tool'] === 'string' ? v['tool'] : (uri.split('/').at(-1) ?? uri);
     out.push({
       id: `${plugin}#view:${encodeURIComponent(uri)}`,

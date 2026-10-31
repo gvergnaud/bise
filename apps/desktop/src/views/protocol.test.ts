@@ -1,7 +1,6 @@
 // The ui/* protocol's pure parts: what is a message, what a link or a download is, what the host
 // announces (C7: never sampling), the context's style variables and its changes.
 import { describe, expect, it } from 'vitest';
-import { allowOf, permsOf } from '@/shared/viewperms';
 import { contextChange, hostContext, styleVariables } from './context';
 import { downloadsOf, hostCapabilities, linkOf, readMsg, textBlocks } from './protocol';
 
@@ -71,15 +70,5 @@ describe('what the host announces', () => {
     const b = hostContext({ ...base, theme: 'light' });
     expect(contextChange(a, b)).toEqual({ theme: 'light' });
     expect(contextChange(a, a)).toBeNull();
-  });
-});
-
-describe('view permissions', () => {
-  it("reads a list or the spec's object, unknown names dropped, and makes the frame's allow", () => {
-    expect(permsOf(['midi', 'camera', 'geolocation'])).toEqual(['camera', 'midi']);
-    expect(permsOf({ microphone: {}, clipboardWrite: {}, camera: false })).toEqual(['microphone', 'clipboardWrite']);
-    expect(permsOf(null)).toEqual([]);
-    expect(allowOf(['clipboardWrite', 'camera'])).toBe('camera; clipboard-write');
-    expect(allowOf([])).toBe('');
   });
 });

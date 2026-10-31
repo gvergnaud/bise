@@ -28,13 +28,9 @@
 
 use super::server::{Request, Response};
 use super::Pages;
+use bise_proto::view_rules;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-
-/// The permissions a view can be granted (C6, C8): the spec's
-/// `_meta.ui.permissions` keys plus `midi` (bise's `dev.bise/ui`), and the
-/// `allow=` feature each delegates to the view's frame.
-pub const PERMS: [(&str, &str); 4] = [("camera", "camera"), ("microphone", "microphone"), ("midi", "midi"), ("clipboardWrite", "clipboard-write")];
 
 /// What the hub knows of one view origin: its declared CSP (`_meta.ui.csp`
 /// as the resource gave it; [`view_csp::csp`](super::view_csp::csp) keeps
@@ -115,11 +111,6 @@ pub fn view_host(host: &str, port: u16) -> Option<&str> {
     (ok && after == format!(".localhost:{port}")).then_some(hash)
 }
 
-/// The `allow=` of the view's frame for its granted permissions, in
-/// [`PERMS`]'s order; unknown names are dropped.
-pub fn allow(perms: &[String]) -> String {
-    PERMS.iter().filter(|(p, _)| perms.iter().any(|g| g == p)).map(|(_, a)| *a).collect::<Vec<_>>().join("; ")
-}
 
 impl Pages {
     /// `view/resource` registers (or updates) the sandbox of view origin
@@ -161,7 +152,7 @@ pub fn route(pages: &Pages, req: &Request, hash: &str) -> Response {
     // the proxy) can't load the view's origin with its own html
     let Some(s) = pages.sandbox_of(hash, req.param("s")) else { return Response::missing("no such view") };
     let csp = super::view_csp::csp(&s.csp, pages.port, pages.view_dev);
-    let html = proxy_page(&csp, &allow(&s.perms));
+    let html = proxy_page(&csp, &view_rules::allow(&s.perms));
     let mut r = Response::page(200, html);
     r.csp = csp.into();
     r
@@ -298,14 +289,6 @@ mod tests {
         assert_eq!(m.len(), ORIGINS);
         assert!(!m.contains_key(&format!("{:016x}", 4)), "the least recently loaded went");
         assert!(m.contains_key(&format!("{:016x}", 5)) && m.contains_key(&format!("{:016x}", ORIGINS + 4)));
-    }
-
-    #[test]
-    fn allow_lists_the_granted_features_only() {
-        let p = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-        assert_eq!(allow(&p(&[])), "");
-        assert_eq!(allow(&p(&["clipboardWrite", "camera", "geolocation", "midi; camera *"])), "camera; clipboard-write");
-        assert_eq!(allow(&p(&["midi", "microphone", "camera", "clipboardWrite"])), "camera; microphone; midi; clipboard-write");
     }
 
     #[test]

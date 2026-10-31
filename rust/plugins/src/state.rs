@@ -30,6 +30,7 @@
 
 use std::path::{Path, PathBuf};
 
+use bise_proto::view_rules;
 use serde_json::{json, Value};
 
 use crate::id::{PartKind, PluginId, SkillsScope};
@@ -108,10 +109,6 @@ pub fn forget(path: &Path, plugin: &PluginId) -> std::io::Result<bool> {
     Ok(changed)
 }
 
-/// The permissions a view may be granted (the spec's `_meta.ui.permissions`
-/// keys, and bise's `midi`; `apps/desktop/src/shared/viewperms.ts`).
-pub const VIEW_PERMS: [&str; 4] = ["camera", "microphone", "midi", "clipboardWrite"];
-
 /// Each view's grant, by its view part id (the file's `view_grants`).
 pub type Grants = std::collections::BTreeMap<PluginId, Vec<String>>;
 
@@ -133,9 +130,10 @@ fn is_view(id: &PluginId) -> bool {
     matches!(id, PluginId::Part { kind: PartKind::View, .. })
 }
 
-/// The known permissions of `names`, each once, in [`VIEW_PERMS`]' order.
+/// The known permissions of `names`, each once, in their order
+/// (bise_proto::view_rules: the one list).
 fn known(names: &[String]) -> Vec<String> {
-    VIEW_PERMS.iter().filter(|p| names.iter().any(|n| n == *p)).map(|p| p.to_string()).collect()
+    view_rules::names(&view_rules::known(names))
 }
 
 /// What view `uri` of plugin `plugin` was granted: `None` when never

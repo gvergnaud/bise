@@ -5,6 +5,7 @@
 //! network; this module decides what they say.
 
 use bise_proto::view_rpc::ViewError;
+use bise_proto::view_rules;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -127,10 +128,6 @@ pub struct ResourceRead {
     pub prefers_border: bool,
 }
 
-/// The permissions a view may ask for (C6): the spec's
-/// `_meta.ui.permissions` keys, and MIDI from `_meta["dev.bise/ui"]`.
-pub const PERMS: [&str; 4] = ["camera", "microphone", "midi", "clipboardWrite"];
-
 /// The first content of a `resources/read` result.
 pub fn resource_read(result: &Value) -> Option<ResourceRead> {
     let c = result.get("contents")?.as_array()?.first()?;
@@ -141,15 +138,10 @@ pub fn resource_read(result: &Value) -> Option<ResourceRead> {
     };
     let meta = c.get("_meta");
     let ui = meta.and_then(|m| m.get("ui"));
-    let keys = |v: Option<&Value>| -> Vec<String> { v.and_then(Value::as_object).map(|o| o.keys().cloned().collect()).unwrap_or_default() };
-    let mut declared = keys(ui.and_then(|u| u.get("permissions")));
-    declared.extend(keys(meta.and_then(|m| m.get("dev.bise/ui")).and_then(|u| u.get("permissions"))));
-    let mut declared: Vec<String> = PERMS.iter().filter(|p| declared.iter().any(|d| d == *p)).map(|p| p.to_string()).collect();
-    declared.dedup();
     Some(ResourceRead {
         html,
         csp: ui.and_then(|u| u.get("csp")).cloned().filter(Value::is_object).unwrap_or_else(|| json!({})),
-        declared,
+        declared: view_rules::names(&view_rules::declared(meta.unwrap_or(&Value::Null))),
         prefers_border: ui.and_then(|u| u.get("prefersBorder")).and_then(Value::as_bool).unwrap_or(false),
     })
 }
@@ -282,6 +274,19 @@ mod tests {
         assert_eq!(resource_read(&blob).unwrap().html, "<p>hi</p>");
         assert_eq!(resource_read(&json!({"contents": []})), None);
         assert_eq!(granted(&["microphone".into(), "midi".into()], &["midi".into()]), vec!["midi"]);
+    }
+
+    /// The hub reads a resource's declared permissions as the shared
+    /// fixture says (bise_proto::view_rules::declared, mcp-apps review d1).
+    #[test]
+    fn a_resource_declares_as_the_shared_fixture_says() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/mcp-apps/declared.json");
+        let fx: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        for row in fx["rows"].as_array().unwrap() {
+            let r = json!({"contents": [{"uri": "ui://x", "text": "", "_meta": row["meta"]}]});
+            let want: Vec<String> = serde_json::from_value(row["declared"].clone()).unwrap();
+            assert_eq!(resource_read(&r).unwrap().declared, want, "{}", row["meta"]);
+        }
     }
 
     #[test]
