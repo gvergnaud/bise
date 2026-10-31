@@ -14,6 +14,8 @@ import { VIEW_ERR, type ViewAsk, type ViewRef } from './port';
 /** What view/resource gives (C5). */
 export interface ViewResource {
   readonly origin: string;
+  /** the proxy's URL for this load, the one the host frames: <origin>/mcp-app?s=<session> (C6) */
+  readonly proxy: string;
   readonly html: string;
   readonly csp: Json;
   readonly permissions: readonly ViewPerm[];

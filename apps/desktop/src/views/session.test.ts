@@ -8,6 +8,7 @@ import { ViewSession, type Note, type Phase, type ViewResource } from './session
 
 const RES: ViewResource = {
   origin: 'http://v-0123456789abcdef.localhost:47123',
+  proxy: 'http://v-0123456789abcdef.localhost:47123/mcp-app?s=0123456789abcdef0123456789abcdef',
   html: '<p>counter</p>',
   csp: { connectDomains: [] },
   permissions: ['microphone'],

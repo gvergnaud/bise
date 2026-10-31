@@ -11,12 +11,14 @@ import { ViewTab } from './Tab';
 import { MAX_LIVE, type Place } from './place';
 import { UI, type Json, type JsonObject } from './protocol';
 import { viewKey, type ViewAnswer, type ViewCmd, type ViewRef } from './port';
-import { ViewsStore, type ViewsEnv } from './store';
+import { resourceOf, ViewsStore, type ViewsEnv } from './store';
 
 const ORIGIN = 'http://v-0123456789abcdef.localhost:47123';
 
+const SESSION = '0123456789abcdef0123456789abcdef';
+
 function resource(origin = ORIGIN): Json {
-  return { origin, html: '<p>v</p>', csp: {}, permissions: ['midi'], declared: ['midi', 'camera'], prefersBorder: true, toolInput: { a: 1 }, toolResult: { structuredContent: { count: 1 } }, tool: { name: 'show_counter' } };
+  return { origin, proxy: `${origin}/mcp-app?s=${SESSION}`, html: '<p>v</p>', csp: {}, permissions: ['midi'], declared: ['midi', 'camera'], prefersBorder: true, toolInput: { a: 1 }, toolResult: { structuredContent: { count: 1 } }, tool: { name: 'show_counter' } };
 }
 
 function rig(answer: (c: ViewCmd) => ViewAnswer = () => ({ result: resource() })) {
@@ -162,6 +164,15 @@ describe('a view\'s states', () => {
     stop();
   });
 
+  it("the frame loads the hub's proxy URL (its session): on the view's origin only, else not a view", () => {
+    const r = resource() as JsonObject;
+    expect(resourceOf(r)?.proxy).toBe(`${ORIGIN}/mcp-app?s=${SESSION}`);
+    expect(resourceOf({ ...r, proxy: undefined } as unknown as Json)?.proxy, 'an older hub: its plain proxy').toBe(`${ORIGIN}/mcp-app`);
+    for (const bad of ['http://v-ffffffffffffffff.localhost:47123/mcp-app?s=1', `${ORIGIN}/other?s=1`, `${ORIGIN}.evil.com/mcp-app`, 'javascript:alert(1)', 7]) {
+      expect(resourceOf({ ...r, proxy: bad }), String(bad)).toBe(null);
+    }
+  });
+
   it('a result that is not a view is a failure', async () => {
     const { store } = rig(() => ({ result: { html: 1 } }));
     store.ensure(REF);
@@ -184,7 +195,7 @@ describe('the layer', () => {
     const card = render(<ViewCard project="p" agent="a" view={view} store={store} />);
     await flush();
     const frame = layer.getByTestId(`views.frame.${viewKey(REF)}`) as HTMLIFrameElement;
-    expect(frame.getAttribute('src')).toBe(`${ORIGIN}/mcp-app`);
+    expect(frame.getAttribute('src'), "the hub's proxy URL for this load, its session with it").toBe(`${ORIGIN}/mcp-app?s=${SESSION}`);
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-same-origin allow-forms');
     expect(frame.getAttribute('allow')).toBe('midi');
     // the card's anchor, in the window (happy-dom's is 1024 × 768): its frame clipped at the window's bottom

@@ -113,7 +113,7 @@ export function start(main: HTMLElement, token: string): void {
     if (live !== undefined && frame === null) {
       frame = document.createElement('iframe');
       frame.className = 'vw-web-frame';
-      frame.src = `${live.res.origin}/mcp-app`;
+      frame.src = live.res.proxy;
       frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
       frame.allow = allowOf(live.res.permissions);
       frame.title = s.kind === 'live' && s.tool !== '' ? s.tool : views.tab_view;
