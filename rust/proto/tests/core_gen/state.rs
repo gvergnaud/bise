@@ -283,7 +283,7 @@ fn enum_codec(s: &mut String, e: &st::Enum) {
 /// How a key's segment of the key-value list is: always one key-value
 /// (`Lit`), or its presence or its key known only from its value.
 fn stuck(w: Wire) -> bool {
-    matches!(w, Wire::StrOmit | Wire::OptStrOmit | Wire::OptNatOmit | Wire::Flag | Wire::Hand(_) | Wire::Inline)
+    matches!(w, Wire::StrOmit | Wire::OptStrOmit | Wire::OptNatOmit | Wire::OptObjOmit | Wire::Flag | Wire::Hand(_) | Wire::Inline)
 }
 
 /// A record's shape of the same name as `shape`, else its journal's.
@@ -314,6 +314,7 @@ fn key_kv(k: &st::Key, f: &st::Field, shape: &str, v: &str) -> String {
         Wire::StrOmit => format!("K.omit_s(\"{key}\", {v})"),
         Wire::OptStrOmit => format!("K.omit_ms(\"{key}\", {v})"),
         Wire::OptNatOmit => format!("K.omit_mn(\"{key}\", {v})"),
+        Wire::OptObjOmit => format!("K.omit_mj(\"{key}\", {})", opt_json(f, shape, v)),
         Wire::Flag => format!("K.flag(\"{key}\", {v})"),
         Wire::Hand(h) => format!("[SH.{}_kv({v})]", h.name),
         Wire::Inline => match STATE.record(named(f.ty)) {
@@ -325,6 +326,50 @@ fn key_kv(k: &st::Key, f: &st::Field, shape: &str, v: &str) -> String {
             format!("J.kv(\"{key}\", J.JArr{{{}.{}_list({v})}})", r.name, inner_shape(r, shape).name)
         }
     }
+}
+
+/// A `Maybe` of a nested record's value `v` as its `Maybe` of JSON
+/// (`Wire::OptObjOmit`): `<T>.<shape>_mjson(v)`.
+fn opt_json(f: &st::Field, shape: &str, v: &str) -> String {
+    let r = STATE.record(named(f.ty)).expect("a Maybe of a record");
+    format!("{}.{}_mjson({v})", r.name, inner_shape(r, shape).name)
+}
+
+/// The (record, shape) pairs a `Wire::OptObjOmit` key writes as a Maybe.
+fn optioned() -> Vec<(&'static str, &'static str)> {
+    let mut out: Vec<(&'static str, &'static str)> = Vec::new();
+    for r in STATE.records {
+        for sh in r.shapes {
+            for k in sh.keys.iter().filter(|k| k.wire == Wire::OptObjOmit) {
+                let inner = STATE.record(named(r.field(k.field).ty)).unwrap();
+                let pair = (inner.name, inner_shape(inner, sh.name).name);
+                if !out.contains(&pair) {
+                    out.push(pair);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// A Maybe of a record in one shape (`Wire::OptObjOmit`): `_mjson`,
+/// `_mof` (a value that is not its object still reads as the record
+/// with its defaults, like `Wire::Obj`).
+fn opt_codec(s: &mut String, n: &str, shn: &str) {
+    writeln!(s, "def {n}.{shn}_mjson(m: Maybe<&2, S.{n}>) -> Maybe<&2, J.Json>:
+  match m:
+    case None{{}}:
+      None{{}}
+    case Some{{+x}}:
+      Some{{{n}.{shn}_json(x)}}
+").unwrap();
+    writeln!(s, "def {n}.{shn}_mof(m: Maybe<&2, J.Json>) -> Maybe<&2, S.{n}>:
+  match m:
+    case None{{}}:
+      None{{}}
+    case Some{{+j}}:
+      Some{{{n}.{shn}_of(j)}}
+").unwrap();
 }
 
 /// The segments of a shape's key-value list: runs of literal keys, each
@@ -395,6 +440,12 @@ fn key_read(k: &st::Key, f: &st::Field, shape: &str, look: &dyn Fn(&str) -> Stri
             let ms: Vec<String> = h.keys.iter().map(|(_, x)| look(x)).collect();
             format!("SH.{}_of({})", h.name, ms.join(", "))
         }
+        Wire::OptObjOmit => {
+            let r = STATE.record(named(f.ty)).expect("a Maybe of a record");
+            let sh = inner_shape(r, shape);
+            assert!(whole(r, sh), "{}.{}: a nested record read whole", r.name, sh.name);
+            format!("{}.{}_mof({m})", r.name, sh.name)
+        }
         Wire::Inline => panic!("{}: an inline field is written only", f.name),
         Wire::Recs => {
             let r = STATE.record(named(f.ty)).expect("a list of records");
@@ -432,7 +483,7 @@ fn split(k: &st::Key, f: &st::Field, v: &str) -> Vec<(String, String)> {
     let one = |p: &str| (p.to_string(), p.to_string());
     match k.wire {
         Wire::StrOmit => vec![one("SNil{}"), one(&format!("SCon{{{v}_h, {v}_t}}"))],
-        Wire::OptStr | Wire::OptStrOmit | Wire::OptNat | Wire::OptNatOmit => vec![one("None{}"), one(&format!("Some{{{v}_x}}"))],
+        Wire::OptStr | Wire::OptStrOmit | Wire::OptNat | Wire::OptNatOmit | Wire::OptObjOmit => vec![one("None{}"), one(&format!("Some{{{v}_x}}"))],
         Wire::Flag => vec![one("True{}"), one("False{}")],
         Wire::Word => the_enum(named(f.ty)).variants.iter().map(|x| one(&format!("S.{}{{}}", x.name))).collect(),
         Wire::OptWord => {
@@ -456,7 +507,7 @@ fn writes(k: &st::Key, p: Option<&str>, look: &str) -> Option<bool> {
     let p = p?;
     Some(match k.wire {
         Wire::StrOmit => p.starts_with("SCon") && k.key == look,
-        Wire::OptStrOmit | Wire::OptNatOmit => p.starts_with("Some") && k.key == look,
+        Wire::OptStrOmit | Wire::OptNatOmit | Wire::OptObjOmit => p.starts_with("Some") && k.key == look,
         Wire::Flag => p == "True{}" && k.key == look,
         Wire::Hand(h) => h.keys.iter().any(|(vn, key)| p.starts_with(&format!("S.{vn}{{")) && *key == look),
         _ => k.key == look,
@@ -465,8 +516,9 @@ fn writes(k: &st::Key, p: Option<&str>, look: &str) -> Option<bool> {
 
 /// The skip lemma of a stuck key whose value is `v`: past its segment,
 /// a lookup of `look` reads what the rest of the list reads.
-fn skip_call(k: &st::Key, v: &str, rest: &str, look: &str) -> String {
+fn skip_call(k: &st::Key, f: &st::Field, shape: &str, v: &str, rest: &str, look: &str) -> String {
     match k.wire {
+        Wire::OptObjOmit => format!("skip_mj(\"{}\", {}, {rest}, \"{look}\", {{==}})", k.key, opt_json(f, shape, v)),
         Wire::StrOmit => format!("skip_s(\"{}\", {v}, {rest}, \"{look}\", {{==}})", k.key),
         Wire::OptStrOmit => format!("skip_ms(\"{}\", {v}, {rest}, \"{look}\", {{==}})", k.key),
         Wire::OptNatOmit => format!("skip_mn(\"{}\", {v}, {rest}, \"{look}\", {{==}})", k.key),
@@ -540,7 +592,7 @@ fn shape_laws(s: &mut String, r: &st::Record, sh: &st::Shape) {
                                 let mut holed = cur.clone();
                                 holed[li] = "_".into();
                                 let motive = key_read(k, f, shn, &|key| holed[looks.iter().position(|x| *x == key).unwrap()].clone());
-                                let call = skip_call(gk, &field_var(gk.field), &rest, look);
+                                let call = skip_call(gk, r.field(gk.field), shn, &field_var(gk.field), &rest, look);
                                 writeln!(s, "{ind}%{call} : {{{motive} == {want} : {fty}}}").unwrap();
                                 cur[li] = format!("J.get_kv(K.cat({rest}), \"{look}\")");
                             }
@@ -557,6 +609,14 @@ fn shape_laws(s: &mut String, r: &st::Record, sh: &st::Shape) {
                     Some(inner) => writeln!(s, "{ind}{}.{}_round({v})", inner.name, inner_shape(inner, shn).name).unwrap(),
                     None => writeln!(s, "{ind}{}.journal_round({v})", named(f.ty)).unwrap(),
                 },
+                // a Maybe of a nested record, some: its shape's round law under the Some
+                (None, Wire::OptObjOmit) if pat.starts_with("Some") => {
+                    let inner = STATE.record(named(f.ty)).unwrap();
+                    let (i, ish) = (inner.name, inner_shape(inner, shn).name);
+                    let x = format!("{v}_x");
+                    writeln!(s, "{ind}%{i}.{ish}_round({x}) : {{Some{{{i}.{ish}_of({i}.{ish}_json({x}))}} == Some{{_}} : Maybe<&2, S.{i}>}}").unwrap();
+                    writeln!(s, "{ind}{{==}}").unwrap()
+                }
                 (None, Wire::Recs) => {
                     let inner = STATE.record(named(f.ty)).unwrap();
                     writeln!(s, "{ind}{}.{}_list_round({v})", inner.name, inner_shape(inner, shn).name).unwrap()
@@ -882,6 +942,21 @@ def skip_mn(k, m, rest, key, d):
     case Some{x}:
       skip_one(J.kv(k, J.JNum{x}), rest, key, d)
 
+law skip_mj:
+  for k: String
+  for m: Maybe<&2, J.Json>
+  for rest: List<&2, List<&2, Sigma<&2, &2, String, _ => J.Json>>>
+  for key: String
+  for d: {String.eq(k, key) == False{} : Bool}
+  {J.get_kv(K.cat(rest), key) == J.get_kv(K.cat(K.omit_mj(k, m) <> rest), key) : Maybe<&2, J.Json>}
+
+def skip_mj(k, m, rest, key, d):
+  match m:
+    case None{}:
+      {==}
+    case Some{x}:
+      skip_one(J.kv(k, x), rest, key, d)
+
 law skip_flag:
   for k: String
   for b: Bool
@@ -946,6 +1021,9 @@ pub(crate) fn state_codec() -> String {
     for r in STATE.records {
         for sh in r.shapes {
             shape_codec(&mut s, r, sh);
+        }
+        for (n, shn) in optioned().iter().filter(|(n, _)| *n == r.name) {
+            opt_codec(&mut s, n, shn);
         }
         // its lists, before a record that holds them (photo shapes)
         for (n, shn) in lists.iter().filter(|(n, _)| *n == r.name) {

@@ -190,6 +190,13 @@ pub fn card_text(plugin: &str, tool: &str, args: &Value) -> String {
     out.join("\n")
 }
 
+/// What a view's card asks, typed on it (sb-core's `Card.view.ask`): the
+/// tool and its arguments as canonical JSON (keys sorted), so the same
+/// call asked twice is the same ask.
+pub fn ask(tool: &str, args: &Value) -> String {
+    serde_json::json!({ "tool": tool, "args": args }).to_string()
+}
+
 fn base64_decode(s: &str) -> Option<Vec<u8>> {
     use base64_lite::decode;
     decode(s)

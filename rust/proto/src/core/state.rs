@@ -93,6 +93,9 @@ pub enum Wire {
     /// a record or a tagged enum, as an object: its shape of the same
     /// name (an enum: its word under its tag key, its variant's keys)
     Obj,
+    /// `Maybe` of a record, as an object (its shape of the same name,
+    /// else its journal's), absent when none
+    OptObjOmit,
     /// a record or a tagged enum whose keys sit in this object (a
     /// message's state: `state`, `reason`; an ended timer's timer)
     Inline,
@@ -391,8 +394,14 @@ pub const STATE: State = State {
             shapes: &[photo(&[k("msg", W::Obj), k("st", W::Obj), k("settled", W::Bool)])],
         },
         Record {
+            name: "ViewAsk",
+            doc: "what a view's card asks (mcp-apps, C5): the view's agent and call, and its ask (the tool and its arguments as canonical JSON, the shell's): sb-core reads a view's cards by it, never by their place",
+            fields: &[f("agent", Str), f("call", Str), f("ask", Str)],
+            shapes: &[Shape { name: "journal", read: true, keys: &[k("agent", W::Str), k("call", W::Str), k("ask", W::Str)] }],
+        },
+        Record {
             name: "Card",
-            doc: "a card of his inbox; `place`, `pr`: a place's card (ready to merge: its id, PR)",
+            doc: "a card of his inbox; `place`, `pr`: a place's card (ready to merge: its id, PR); `view`: a view's call's card (mcp-apps)",
             fields: &[
                 f("id", Nat),
                 f("kind", Str),
@@ -402,6 +411,7 @@ pub const STATE: State = State {
                 f("created", Nat),
                 f("place", OptStr),
                 f("pr", OptNat),
+                f("view", OptT("ViewAsk")),
             ],
             shapes: &[Shape {
                 name: "journal",
@@ -415,6 +425,7 @@ pub const STATE: State = State {
                     kn("created", "created_ms", W::Nat),
                     k("place", W::OptStr),
                     k("pr", W::OptNat),
+                    k("view", W::OptObjOmit),
                 ],
             }],
         },
@@ -800,7 +811,7 @@ pub const STATE: State = State {
 /// reads the field's default; an enum's other word reads its fallback.
 /// The others get a Rust name when a Rust reader needs one.
 pub const RUST: &[(&str, &str)] =
-    &[("Life", "Lifecycle"), ("Run", "Run"), ("Decl", "Declared"), ("MSt", "MsgState"), ("Msg", "Msg"), ("Card", "Card")];
+    &[("Life", "Lifecycle"), ("Run", "Run"), ("Decl", "Declared"), ("MSt", "MsgState"), ("Msg", "Msg"), ("ViewAsk", "ViewAsk"), ("Card", "Card")];
 
 mod generated;
 mod opaque;
@@ -848,6 +859,7 @@ mod tests {
                         Wire::Word => matches!(fl.ty, T(n) if STATE.enum_(n).is_some_and(|e| e.tag_key.is_empty())),
                         Wire::OptWord => matches!(fl.ty, OptT(n) if STATE.enum_(n).is_some_and(|e| e.tag_key.is_empty())),
                         Wire::Obj | Wire::Inline => matches!(fl.ty, T(_)),
+                        Wire::OptObjOmit => matches!(fl.ty, OptT(n) if STATE.record(n).is_some()),
                         Wire::Hand(_) => matches!(fl.ty, T(_)),
                         Wire::Recs => matches!(fl.ty, Ts(n) if STATE.record(n).is_some()),
                     };

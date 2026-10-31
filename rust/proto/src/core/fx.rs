@@ -68,6 +68,11 @@ core_kinds! {
         /// the gate card's verdict (`/archive`'s own yes/no is a drop
         /// card now, drop-card)
         Confirm = "confirm" => FConfirm { card: OptNatOmit, agent: OptStrOmit, text: Str },
+        /// an MCP App view's call that needs his ok (input
+        /// `view_confirm_open`, docs/mcp-apps.md C5): the card its answer
+        /// comes back by (`confirm`), the one it opened or the open one
+        /// it joined; none when its agent is not active (no card: a no)
+        ViewCard = "view_card" => FViewCard { agent: Str, call: Str, card: OptNatOmit },
         /// the clients on `name` go back to main (it was archived)
         FocusMain = "focus_main" => FFocusMain { name: Str },
         /// his text, for the client's direct-exchange note

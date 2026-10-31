@@ -27,7 +27,7 @@ fn a_view_card_and_the_agents_own_card_are_answered_in_either_order() {
         t.spawn_task("docs");
         t.go(Input::ConfirmOpen { agent: "docs".into(), text: "docs wants to run make".into() });
         let own = *t.hub.st.cards.keys().max().unwrap();
-        t.go(Input::ViewConfirmOpen { agent: "docs".into(), call: "17-3".into(), text: "fake-app view wants to run show_counter".into() });
+        t.go(Input::ViewConfirmOpen { agent: "docs".into(), call: "17-3".into(), text: "fake-app view wants to run show_counter".into(), ask: "{}".into() });
         let view = card_of(&t, "view:docs/17-3");
         assert_ne!(own, view);
         assert_eq!(t.hub.st.cards[&view].kind, "confirm");
@@ -48,7 +48,7 @@ fn a_view_card_leaves_the_agent_as_it_was() {
     t.spawn_task("docs");
     t.turn("docs", "ok");
     let before = t.status("docs");
-    t.go(Input::ViewConfirmOpen { agent: "docs".into(), call: "17-3".into(), text: "wants to run show_counter".into() });
+    t.go(Input::ViewConfirmOpen { agent: "docs".into(), call: "17-3".into(), text: "wants to run show_counter".into(), ask: "{}".into() });
     assert_eq!(t.status("docs"), before);
 }
 
@@ -58,9 +58,9 @@ fn a_view_card_leaves_the_agent_as_it_was() {
 fn a_view_card_times_out_once() {
     let mut t = T::new();
     t.spawn_task("docs");
-    t.go(Input::ViewConfirmOpen { agent: "docs".into(), call: "1-1".into(), text: "wants to run show_counter".into() });
+    t.go(Input::ViewConfirmOpen { agent: "docs".into(), call: "1-1".into(), text: "wants to run show_counter".into(), ask: "{}".into() });
     let late = card_of(&t, "view:docs/1-1");
-    t.go(Input::ViewConfirmOpen { agent: "docs".into(), call: "1-2".into(), text: "wants to run show_counter".into() });
+    t.go(Input::ViewConfirmOpen { agent: "docs".into(), call: "1-2".into(), text: "wants to run show_counter".into(), ask: "{}".into() });
     let answered = card_of(&t, "view:docs/1-2");
     t.user("docs", &format!("/answer {answered} 1"));
     t.env.now += 599_000;
@@ -112,4 +112,24 @@ fn a_view_message_to_a_gone_agent_is_not_sent() {
     let n = t.hub.st.msgs().len();
     t.go(Input::ViewMessage { agent: "nobody".into(), plugin: "fake-app".into(), text: "hi".into() });
     assert_eq!(t.hub.st.msgs().len(), n);
+}
+
+// d4: sb-core closes its own view cards at boot (a restarted hub has no
+// call behind them): each gets one no, and is closed
+#[test]
+fn a_view_card_left_open_closes_at_boot_with_one_no() {
+    let mut t = T::new();
+    t.spawn_task("docs");
+    t.go(Input::ConfirmOpen { agent: "docs".into(), text: "docs wants to run make".into() });
+    let own = *t.hub.st.cards.keys().max().unwrap();
+    t.go(Input::ViewConfirmOpen { agent: "docs".into(), call: "1-1".into(), text: "wants to run show_counter".into(), ask: "{}".into() });
+    let view = card_of(&t, "view:docs/1-1");
+    let fx = t.go(Input::Boot);
+    let got = confirms(&fx);
+    assert_eq!(got.len(), 1, "{fx:?}");
+    assert_eq!(got[0].0, view);
+    assert!(matches!(crate::daemon::gate::answer_of(&got[0].1), crate::daemon::gate::Answer::No(_)), "a no for its call");
+    assert!(!t.hub.st.cards.contains_key(&view), "closed");
+    assert!(t.hub.st.cards.contains_key(&own), "the gate's own card stays");
+    assert!(confirms(&t.go(Input::Boot)).is_empty(), "one answer: a second boot finds it closed");
 }

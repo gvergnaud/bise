@@ -1438,13 +1438,13 @@ def set_waiters(-o: S.St, +cx: X.Cx<o>, +ws: List<&2, X.Waiter>) -> X.Cx<o>:
 def VIEW_CARD_STOPPED() -> String:
   "no: the agent stopped"
 
-# a card placed `view:<agent>/<call>` (view_place)
-def is_view_place(m: Maybe<&2, String>) -> Bool:
+# a view's call's card: its typed `view` (Card.view), never its place
+def is_view(m: Maybe<&2, S.ViewAsk>) -> Bool:
   match m:
     case None{}:
       False{}
-    case Some{+p}:
-      String.starts_with(p, "view:")
+    case Some{_}:
+      True{}
 
 def view_no.one(-o: S.St, hit: Bool, +cx: X.Cx<o>, +c: S.Card) -> X.Cx<o>:
   match hit:
@@ -1462,7 +1462,7 @@ def view_nos(-o: S.St, cs: List<&2, S.Card>, +cx: X.Cx<o>, +agent: String) -> X.
     case Nil{}:
       cx
     case Con{+c, +rest}:
-      view_nos(o, rest, view_no.one(o, String.eq(S.Card.agent(c), agent) && is_view_place(S.Card.place(c)), cx, c), agent)
+      view_nos(o, rest, view_no.one(o, String.eq(S.Card.agent(c), agent) && is_view(S.Card.view(c)), cx, c), agent)
 
 def stop_task.go(-o: S.St, +cx: X.Cx<o>, +name: String, +life: S.Life, +reason: String) -> X.Cx<o>:
   +cx1 = out(o, cx, F.kill(name))
@@ -2504,22 +2504,71 @@ def view_place(+agent: String, +call: String) -> String:
 def VIEW_CARD_LATE() -> String:
   "no: nobody answered in time"
 
+# the answer a view's card left open gets at boot: its call ended with
+# the hub that ran it
+def VIEW_CARD_ENDED() -> String:
+  "no: the view's call ended with the hub"
+
+# what a view's card asks: its view (agent, call) and the shell's ask
+def view_ask(+agent: String, +call: String, +ask: String) -> S.ViewAsk:
+  S.ViewAsk.with_ask(S.ViewAsk.with_call(S.ViewAsk.with_agent(S.ViewAsk.empty(), agent), call), ask)
+
+# a view's call's card in his inbox: `confirm`, placed view:<agent>/<call>
+# (shown only), its ask typed (law view_card_typed)
+def view_card_new(+id: Nat, +text: String, +v: S.ViewAsk, +now: Nat) -> S.Card:
+  +c = S.Card.with_kind(S.Card.with_id(S.Card.empty(), id), "confirm")
+  +c2 = S.Card.with_created(S.Card.with_text(S.Card.with_agent(c, S.ViewAsk.agent(v)), text), now)
+  S.Card.with_view(S.Card.with_place(c2, Some{view_place(S.ViewAsk.agent(v), S.ViewAsk.call(v))}), Some{v})
+
+# the card id a view's call waits on, said to the shell (fx view_card):
+# none when no card opened (law view_card_says_its_id)
+def view_card_said(-o: S.St, +cx: X.Cx<o>, +v: S.ViewAsk, +card: Maybe<&2, Nat>) -> X.Cx<o>:
+  out(o, cx, F.view_card(S.ViewAsk.agent(v), S.ViewAsk.call(v), card))
+
 def view_card_act(+tm: S.Tms, +card: Nat, +now: Nat) -> S.Act:
   TM.act_of(S.Tms.next_act(tm), Nat.add(now, VIEW_CARD_MS()), S.CardDue{card})
 
+# a new view card: journaled, in main's feed, its due set...
+def open_view_confirm.card(-o: S.St, +cx: X.Cx<o>, +v: S.ViewAsk, +text: String) -> X.Cx<o>:
+  +id = S.St.next_card(st(o, cx))
+  +cx2 = emit(o, cx, M.ECardOpened{view_card_new(id, text, v, now(o, cx))}, {==}, Unit{}, Unit{})
+  +cx3 = feed(o, cx2, M.MAIN(), FD.card(id, "confirm", S.ViewAsk.agent(v), text))
+  aemit(o, cx3, TM.ActSet{view_card_act(tms(o, cx3), id, now(o, cx3))})
+
+# ...and its id said (law view_card_says_its_id)
+def open_view_confirm.new(-o: S.St, +cx: X.Cx<o>, +v: S.ViewAsk, +text: String) -> X.Cx<o>:
+  view_card_said(o, open_view_confirm.card(o, cx, v, text), v, Some{S.St.next_card(st(o, cx))})
+
 # an agent not active (stopped, archived, gone): no card, the hub says so
-# (the view's call gets a no: no card opened, law view_card_needs_active)
-def open_view_confirm.go(-o: S.St, ok: Bool, +cx: X.Cx<o>, +agent: String, +call: String, +text: String) -> X.Cx<o>:
+# and the view's call gets a no (laws view_card_needs_active,
+# view_card_says_no_card)
+def open_view_confirm.go(-o: S.St, ok: Bool, +cx: X.Cx<o>, +v: S.ViewAsk, +text: String) -> X.Cx<o>:
   match ok:
     case False{}:
-      notice(o, cx, cat(["the view's call didn't reach @", agent, ": it is not active"]))
+      view_card_said(o, notice(o, cx, cat(["the view's call didn't reach @", S.ViewAsk.agent(v), ": it is not active"])), v, None{})
     case True{}:
-      +id = S.St.next_card(st(o, cx))
-      +cx2 = open_card_at(o, cx, "confirm", agent, text, None{}, Some{view_place(agent, call)}, None{})
-      aemit(o, cx2, TM.ActSet{view_card_act(tms(o, cx2), id, now(o, cx2))})
+      open_view_confirm.new(o, cx, v, text)
 
-def open_view_confirm(-o: S.St, +cx: X.Cx<o>, +agent: String, +call: String, +text: String) -> X.Cx<o>:
-  open_view_confirm.go(o, live_agent(M.agent_named(S.St.agents(st(o, cx)), agent)), cx, agent, call, text)
+def open_view_confirm(-o: S.St, +cx: X.Cx<o>, +agent: String, +call: String, +text: String, +ask: String) -> X.Cx<o>:
+  open_view_confirm.go(o, live_agent(M.agent_named(S.St.agents(st(o, cx)), agent)), cx, view_ask(agent, call, ask), text)
+
+# boot: a view's card left open has no call behind it any more (its hub
+# ended): it gets its no, the `confirm` card_due sends, and closes (law
+# boot_closes_view_cards); an answered or closed card is not among them,
+# so a view's call is answered once
+def view_ends.one(-o: S.St, hit: Bool, +cx: X.Cx<o>, +c: S.Card) -> X.Cx<o>:
+  match hit:
+    case True{}:
+      close_card(o, out(o, cx, F.confirm_card(S.Card.id(c), S.Card.agent(c), VIEW_CARD_ENDED())), S.Card.id(c), "ended with the hub")
+    case False{}:
+      cx
+
+def view_ends(-o: S.St, cs: List<&2, S.Card>, +cx: X.Cx<o>) -> X.Cx<o>:
+  match cs:
+    case Nil{}:
+      cx
+    case Con{+c, +rest}:
+      view_ends(o, rest, view_ends.one(o, is_view(S.Card.view(c)), cx, c))
 
 # a view card's due: still open, it closes as timed out and its call gets
 # a no (the `confirm` effect); answered or closed before, nothing
@@ -3607,7 +3656,8 @@ def boot.each(-o: S.St, names: List<&2, String>, +cx: X.Cx<o>) -> X.Cx<o>:
 # traffic, main's since BISE-299) close first; their reports and notes
 # are in main's thread already
 def boot(-o: S.St, +cx: X.Cx<o>) -> X.Cx<o>:
-  +cx2 = close_ids(o, CK.legacy_cards(S.St.cards(st(o, cx))), cx, "moved to main's inbox")
+  +cx1 = view_ends(o, S.St.cards(st(o, cx)), cx)
+  +cx2 = close_ids(o, CK.legacy_cards(S.St.cards(st(o, cx1))), cx1, "moved to main's inbox")
   boot.each(o, M.live_names(st(o, cx2)), cx2)
 
 # the asked message, still with no reply watch and no reply, of an active
@@ -3910,8 +3960,8 @@ def dispatch(-o: S.St, +cx: X.Cx<o>, +i: GI.In) -> X.Cx<o>:
       open_confirm(o, cx, agent, text)
     case GI.IConfirmClose{+card, +res}:
       confirm_close(o, M.card_of(S.St.cards(st(o, cx)), card), cx, card, res)
-    case GI.IViewConfirmOpen{+agent, +call, +text}:
-      open_view_confirm(o, cx, agent, call, text)
+    case GI.IViewConfirmOpen{+agent, +call, +text, +ask}:
+      open_view_confirm(o, cx, agent, call, text, ask)
     case GI.IViewMessage{+agent, +plugin, +text}:
       view_message(o, cx, agent, plugin, text)
     case GI.IPageAnswered{+card, +agent, +page, +text, +block}:

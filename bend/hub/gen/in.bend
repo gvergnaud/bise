@@ -71,7 +71,7 @@ type In is Data:
   # confirm_close, card_close
   IConfirmClose{card: Nat, res: String}
   # view_confirm_open
-  IViewConfirmOpen{agent: String, call: String, text: String}
+  IViewConfirmOpen{agent: String, call: String, text: String, ask: String}
   # view_message
   IViewMessage{agent: String, plugin: String, text: String}
   # forge
@@ -230,7 +230,7 @@ def IConfirmClose.of(+i: J.Json) -> In:
   IConfirmClose{K.get_n(i, "card"), K.get_s(i, "res")}
 
 def IViewConfirmOpen.of(+i: J.Json) -> In:
-  IViewConfirmOpen{K.get_s(i, "agent"), K.get_s(i, "call"), K.get_s(i, "text")}
+  IViewConfirmOpen{K.get_s(i, "agent"), K.get_s(i, "call"), K.get_s(i, "text"), K.get_s(i, "ask")}
 
 def IViewMessage.of(+i: J.Json) -> In:
   IViewMessage{K.get_s(i, "agent"), K.get_s(i, "plugin"), K.get_s(i, "text")}
@@ -916,8 +916,8 @@ def kvs(x: In) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
       [J.kv("t", J.JStr{"confirm_open"}), J.kv("agent", J.JStr{agent}), J.kv("text", J.JStr{text})]
     case IConfirmClose{+card, +res}:
       [J.kv("t", J.JStr{"confirm_close"}), J.kv("card", J.JNum{card}), J.kv("res", J.JStr{res})]
-    case IViewConfirmOpen{+agent, +call, +text}:
-      [J.kv("t", J.JStr{"view_confirm_open"}), J.kv("agent", J.JStr{agent}), J.kv("call", J.JStr{call}), J.kv("text", J.JStr{text})]
+    case IViewConfirmOpen{+agent, +call, +text, +ask}:
+      [J.kv("t", J.JStr{"view_confirm_open"}), J.kv("agent", J.JStr{agent}), J.kv("call", J.JStr{call}), J.kv("text", J.JStr{text}), J.kv("ask", J.JStr{ask})]
     case IViewMessage{+agent, +plugin, +text}:
       [J.kv("t", J.JStr{"view_message"}), J.kv("agent", J.JStr{agent}), J.kv("plugin", J.JStr{plugin}), J.kv("text", J.JStr{text})]
     case IForge{+to, +text}:

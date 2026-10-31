@@ -263,9 +263,14 @@ content, gesture_ms}`. `hub/view_context` goes the same way without
 `gesture_ms`.
 
 The view's sender in sb-core is the typed field `Msg.view = <plugin>`
-(`Msg.via` already names routes); off-turn view cards carry the place
-`view:<agent>/<call>` and a due act that closes them as "timed out"
-(architect m_50085).
+(`Msg.via` already names routes); an off-turn view card carries its
+ask typed (`Card.view = {agent, call, ask}`, `ask` the tool and its
+arguments as canonical JSON; the place `view:<agent>/<call>` is for
+display only) and a due act that closes it as "timed out" (architect
+m_50085). Its id comes back to the shell as the step's `view_card`
+effect (none: its agent is not active), never found by its place's
+text; a stop, its due and the hub's boot each answer it no and close it
+in sb-core, once (laws `view_card_*`, `boot_*_view_cards`).
 
 Signed by architect (m_50047), with these owners:
 

@@ -1,6 +1,8 @@
 {"fx": "card_choice", "card": 1, "kind": "update", "agent": "main", "place": "release:5", "pr": null, "text": "3"}
 {"fx": "card_choice", "card": 1, "kind": "merge", "agent": "dark", "place": "wt:dark", "pr": 412, "text": "3"}
 {"fx": "confirm", "card": 3, "agent": "t8", "text": "2"}
+{"fx": "view_card", "agent": "docs", "call": "1700000000000-3", "card": 4}
+{"fx": "view_card", "agent": "gone", "call": "1700000000000-4"}
 {"fx": "deliver", "mode": "say", "agent": "w", "notes": [], "status": false, "msgs": [{"id": 2, "rel": "hub"}]}
 {"fx": "deliver", "mode": "say", "agent": "main", "notes": ["the user dropped the agent @t1"], "status": true, "msgs": [{"id": 15, "rel": "user"}]}
 {"fx": "focus_main", "name": "g"}

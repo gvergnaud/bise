@@ -103,6 +103,7 @@ pub(super) fn plain(f: CoreFx) -> Plain {
             agent: c.agent.unwrap_or_default(),
             text: c.text,
         },
+        CoreFx::ViewCard(c) => Effect::ViewCard { agent: c.agent, call: c.call, card: c.card },
         other => return Plain::Hub(other),
     };
     Plain::Effect(e)

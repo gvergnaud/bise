@@ -939,6 +939,8 @@ impl Shell {
             Effect::AskRole { dir, key, request } => self.ask_role(dir, key, request),
             Effect::AskTimerName { id, request } => self.ask_timer_name(id, request),
             Effect::Confirm { card, agent: _, text } => self.on_confirm(card, &text),
+            // read by its step's caller (daemon/views.rs view_card)
+            Effect::ViewCard { .. } => {}
             Effect::Flow { client, token, set } => {
                 let (ok, text) = self.flow_cmd(set);
                 if let Some(c) = client {
@@ -1833,8 +1835,9 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     sh.booting = true;
     sh.step(Input::Boot);
     sh.booting = false;
-    // mcp-apps: a view's card has no call behind it after a restart
-    sh.close_view_cards();
+    // mcp-apps: a views bridge an older hub left (its view cards closed
+    // in sb-core's boot step)
+    sh.views_boot();
     // land-claims: the shared folder's claims whose file has no change
     // left (stale from before, or landed while no hub ran) end, off the loop
     {

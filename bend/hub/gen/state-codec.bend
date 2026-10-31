@@ -115,6 +115,21 @@ def skip_mn(k, m, rest, key, d):
     case Some{x}:
       skip_one(J.kv(k, J.JNum{x}), rest, key, d)
 
+law skip_mj:
+  for k: String
+  for m: Maybe<&2, J.Json>
+  for rest: List<&2, List<&2, Sigma<&2, &2, String, _ => J.Json>>>
+  for key: String
+  for d: {String.eq(k, key) == False{} : Bool}
+  {J.get_kv(K.cat(rest), key) == J.get_kv(K.cat(K.omit_mj(k, m) <> rest), key) : Maybe<&2, J.Json>}
+
+def skip_mj(k, m, rest, key, d):
+  match m:
+    case None{}:
+      {==}
+    case Some{x}:
+      skip_one(J.kv(k, x), rest, key, d)
+
 law skip_flag:
   for k: String
   for b: Bool
@@ -1299,18 +1314,94 @@ law MRec.photo_list_round:
 def MRec.photo_list_round(xs):
   MRec.photo_list_round.go(xs)
 
-# ---- Card, its journal shape: id, kind, agent, text, for_msg, created_ms, place, pr ----
+# ---- ViewAsk, its journal shape: agent, call, ask ----
+
+def ViewAsk.journal_kvs(r: S.ViewAsk) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  match r:
+    case S.ViewAsk{+agent, +call, +ask}:
+      [J.kv("agent", J.JStr{agent}), J.kv("call", J.JStr{call}), J.kv("ask", J.JStr{ask})]
+
+def ViewAsk.journal_json(r: S.ViewAsk) -> J.Json:
+  J.obj(ViewAsk.journal_kvs(r))
+
+def ViewAsk.journal_of(+j: J.Json) -> S.ViewAsk:
+  S.ViewAsk{rd.s(J.get(j, "agent")), rd.s(J.get(j, "call")), rd.s(J.get(j, "ask"))}
+
+law ViewAsk.journal.agent:
+  for +agent: String
+  for +call: String
+  for +ask: String
+  {rd.s(J.get(J.obj(ViewAsk.journal_kvs(S.ViewAsk{agent, call, ask})), "agent")) == agent : String}
+
+def ViewAsk.journal.agent(agent, call, ask):
+  {==}
+
+law ViewAsk.journal.call:
+  for +agent: String
+  for +call: String
+  for +ask: String
+  {rd.s(J.get(J.obj(ViewAsk.journal_kvs(S.ViewAsk{agent, call, ask})), "call")) == call : String}
+
+def ViewAsk.journal.call(agent, call, ask):
+  {==}
+
+law ViewAsk.journal.ask:
+  for +agent: String
+  for +call: String
+  for +ask: String
+  {rd.s(J.get(J.obj(ViewAsk.journal_kvs(S.ViewAsk{agent, call, ask})), "ask")) == ask : String}
+
+def ViewAsk.journal.ask(agent, call, ask):
+  {==}
+
+# the fields it carries come back (the others at their default)
+law ViewAsk.journal_round_by_fields:
+  for +agent: String
+  for +call: String
+  for +ask: String
+  {ViewAsk.journal_of(ViewAsk.journal_json(S.ViewAsk{agent, call, ask})) == S.ViewAsk{agent, call, ask} : S.ViewAsk}
+
+def ViewAsk.journal_round_by_fields(agent, call, ask):
+  %Equal.sym(String, rd.s(J.get(J.obj(ViewAsk.journal_kvs(S.ViewAsk{agent, call, ask})), "agent")), agent, ViewAsk.journal.agent(agent, call, ask)) : {S.ViewAsk{_, rd.s(J.get(J.obj(ViewAsk.journal_kvs(S.ViewAsk{agent, call, ask})), "call")), rd.s(J.get(J.obj(ViewAsk.journal_kvs(S.ViewAsk{agent, call, ask})), "ask"))} == S.ViewAsk{agent, call, ask} : S.ViewAsk}
+  %Equal.sym(String, rd.s(J.get(J.obj(ViewAsk.journal_kvs(S.ViewAsk{agent, call, ask})), "call")), call, ViewAsk.journal.call(agent, call, ask)) : {S.ViewAsk{agent, _, rd.s(J.get(J.obj(ViewAsk.journal_kvs(S.ViewAsk{agent, call, ask})), "ask"))} == S.ViewAsk{agent, call, ask} : S.ViewAsk}
+  %Equal.sym(String, rd.s(J.get(J.obj(ViewAsk.journal_kvs(S.ViewAsk{agent, call, ask})), "ask")), ask, ViewAsk.journal.ask(agent, call, ask)) : {S.ViewAsk{agent, call, _} == S.ViewAsk{agent, call, ask} : S.ViewAsk}
+  {==}
+
+law ViewAsk.journal_round:
+  for x: S.ViewAsk
+  {ViewAsk.journal_of(ViewAsk.journal_json(x)) == x : S.ViewAsk}
+
+def ViewAsk.journal_round(x):
+  match x:
+    case S.ViewAsk{agent, call, ask}:
+      ViewAsk.journal_round_by_fields(agent, call, ask)
+
+def ViewAsk.journal_mjson(m: Maybe<&2, S.ViewAsk>) -> Maybe<&2, J.Json>:
+  match m:
+    case None{}:
+      None{}
+    case Some{+x}:
+      Some{ViewAsk.journal_json(x)}
+
+def ViewAsk.journal_mof(m: Maybe<&2, J.Json>) -> Maybe<&2, S.ViewAsk>:
+  match m:
+    case None{}:
+      None{}
+    case Some{+j}:
+      Some{ViewAsk.journal_of(j)}
+
+# ---- Card, its journal shape: id, kind, agent, text, for_msg, created_ms, place, pr, view ----
 
 def Card.journal_kvs(r: S.Card) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   match r:
-    case S.Card{+id, +kind, +agent, +text, +for_msg, +created, +place, +pr}:
-      [J.kv("id", J.JNum{id}), J.kv("kind", J.JStr{kind}), J.kv("agent", J.JStr{agent}), J.kv("text", J.JStr{text}), J.kv("for_msg", K.jmaybe_n(for_msg)), J.kv("created_ms", J.JNum{created}), J.kv("place", K.jmaybe_s(place)), J.kv("pr", K.jmaybe_n(pr))]
+    case S.Card{+id, +kind, +agent, +text, +for_msg, +created, +place, +pr, +view}:
+      K.cat([[J.kv("id", J.JNum{id}), J.kv("kind", J.JStr{kind}), J.kv("agent", J.JStr{agent}), J.kv("text", J.JStr{text}), J.kv("for_msg", K.jmaybe_n(for_msg)), J.kv("created_ms", J.JNum{created}), J.kv("place", K.jmaybe_s(place)), J.kv("pr", K.jmaybe_n(pr))], K.omit_mj("view", ViewAsk.journal_mjson(view))])
 
 def Card.journal_json(r: S.Card) -> J.Json:
   J.obj(Card.journal_kvs(r))
 
 def Card.journal_of(+j: J.Json) -> S.Card:
-  S.Card{rd.n(J.get(j, "id")), rd.s(J.get(j, "kind")), rd.s(J.get(j, "agent")), rd.s(J.get(j, "text")), K.opt_n(J.get(j, "for_msg")), rd.n(J.get(j, "created_ms")), K.opt_s(J.get(j, "place")), K.opt_n(J.get(j, "pr"))}
+  S.Card{rd.n(J.get(j, "id")), rd.s(J.get(j, "kind")), rd.s(J.get(j, "agent")), rd.s(J.get(j, "text")), K.opt_n(J.get(j, "for_msg")), rd.n(J.get(j, "created_ms")), K.opt_s(J.get(j, "place")), K.opt_n(J.get(j, "pr")), ViewAsk.journal_mof(J.get(j, "view"))}
 
 law Card.journal.id:
   for +id: Nat
@@ -1321,9 +1412,10 @@ law Card.journal.id:
   for +created: Nat
   for +place: Maybe<&2, String>
   for +pr: Maybe<&2, Nat>
-  {rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "id")) == id : Nat}
+  for +view: Maybe<&2, S.ViewAsk>
+  {rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "id")) == id : Nat}
 
-def Card.journal.id(id, kind, agent, text, for_msg, created, place, pr):
+def Card.journal.id(id, kind, agent, text, for_msg, created, place, pr, view):
   {==}
 
 law Card.journal.kind:
@@ -1335,9 +1427,10 @@ law Card.journal.kind:
   for +created: Nat
   for +place: Maybe<&2, String>
   for +pr: Maybe<&2, Nat>
-  {rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "kind")) == kind : String}
+  for +view: Maybe<&2, S.ViewAsk>
+  {rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "kind")) == kind : String}
 
-def Card.journal.kind(id, kind, agent, text, for_msg, created, place, pr):
+def Card.journal.kind(id, kind, agent, text, for_msg, created, place, pr, view):
   {==}
 
 law Card.journal.agent:
@@ -1349,9 +1442,10 @@ law Card.journal.agent:
   for +created: Nat
   for +place: Maybe<&2, String>
   for +pr: Maybe<&2, Nat>
-  {rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "agent")) == agent : String}
+  for +view: Maybe<&2, S.ViewAsk>
+  {rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "agent")) == agent : String}
 
-def Card.journal.agent(id, kind, agent, text, for_msg, created, place, pr):
+def Card.journal.agent(id, kind, agent, text, for_msg, created, place, pr, view):
   {==}
 
 law Card.journal.text:
@@ -1363,9 +1457,10 @@ law Card.journal.text:
   for +created: Nat
   for +place: Maybe<&2, String>
   for +pr: Maybe<&2, Nat>
-  {rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "text")) == text : String}
+  for +view: Maybe<&2, S.ViewAsk>
+  {rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "text")) == text : String}
 
-def Card.journal.text(id, kind, agent, text, for_msg, created, place, pr):
+def Card.journal.text(id, kind, agent, text, for_msg, created, place, pr, view):
   {==}
 
 law Card.journal.for_msg:
@@ -1377,9 +1472,10 @@ law Card.journal.for_msg:
   for +created: Nat
   for +place: Maybe<&2, String>
   for +pr: Maybe<&2, Nat>
-  {K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "for_msg")) == for_msg : Maybe<&2, Nat>}
+  for +view: Maybe<&2, S.ViewAsk>
+  {K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "for_msg")) == for_msg : Maybe<&2, Nat>}
 
-def Card.journal.for_msg(id, kind, agent, text, for_msg, created, place, pr):
+def Card.journal.for_msg(id, kind, agent, text, for_msg, created, place, pr, view):
   match for_msg:
     case None{}:
       {==}
@@ -1395,9 +1491,10 @@ law Card.journal.created:
   for +created: Nat
   for +place: Maybe<&2, String>
   for +pr: Maybe<&2, Nat>
-  {rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "created_ms")) == created : Nat}
+  for +view: Maybe<&2, S.ViewAsk>
+  {rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "created_ms")) == created : Nat}
 
-def Card.journal.created(id, kind, agent, text, for_msg, created, place, pr):
+def Card.journal.created(id, kind, agent, text, for_msg, created, place, pr, view):
   {==}
 
 law Card.journal.place:
@@ -1409,9 +1506,10 @@ law Card.journal.place:
   for +created: Nat
   for +place: Maybe<&2, String>
   for +pr: Maybe<&2, Nat>
-  {K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "place")) == place : Maybe<&2, String>}
+  for +view: Maybe<&2, S.ViewAsk>
+  {K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "place")) == place : Maybe<&2, String>}
 
-def Card.journal.place(id, kind, agent, text, for_msg, created, place, pr):
+def Card.journal.place(id, kind, agent, text, for_msg, created, place, pr, view):
   match place:
     case None{}:
       {==}
@@ -1427,13 +1525,34 @@ law Card.journal.pr:
   for +created: Nat
   for +place: Maybe<&2, String>
   for +pr: Maybe<&2, Nat>
-  {K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "pr")) == pr : Maybe<&2, Nat>}
+  for +view: Maybe<&2, S.ViewAsk>
+  {K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "pr")) == pr : Maybe<&2, Nat>}
 
-def Card.journal.pr(id, kind, agent, text, for_msg, created, place, pr):
+def Card.journal.pr(id, kind, agent, text, for_msg, created, place, pr, view):
   match pr:
     case None{}:
       {==}
     case Some{pr_x}:
+      {==}
+
+law Card.journal.view:
+  for +id: Nat
+  for +kind: String
+  for +agent: String
+  for +text: String
+  for +for_msg: Maybe<&2, Nat>
+  for +created: Nat
+  for +place: Maybe<&2, String>
+  for +pr: Maybe<&2, Nat>
+  for +view: Maybe<&2, S.ViewAsk>
+  {ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "view")) == view : Maybe<&2, S.ViewAsk>}
+
+def Card.journal.view(id, kind, agent, text, for_msg, created, place, pr, view):
+  match view:
+    case None{}:
+      {==}
+    case Some{view_x}:
+      %ViewAsk.journal_round(view_x) : {Some{ViewAsk.journal_of(ViewAsk.journal_json(view_x))} == Some{_} : Maybe<&2, S.ViewAsk>}
       {==}
 
 # the fields it carries come back (the others at their default)
@@ -1446,17 +1565,19 @@ law Card.journal_round_by_fields:
   for +created: Nat
   for +place: Maybe<&2, String>
   for +pr: Maybe<&2, Nat>
-  {Card.journal_of(Card.journal_json(S.Card{id, kind, agent, text, for_msg, created, place, pr})) == S.Card{id, kind, agent, text, for_msg, created, place, pr} : S.Card}
+  for +view: Maybe<&2, S.ViewAsk>
+  {Card.journal_of(Card.journal_json(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})) == S.Card{id, kind, agent, text, for_msg, created, place, pr, view} : S.Card}
 
-def Card.journal_round_by_fields(id, kind, agent, text, for_msg, created, place, pr):
-  %Equal.sym(Nat, rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "id")), id, Card.journal.id(id, kind, agent, text, for_msg, created, place, pr)) : {S.Card{_, rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "kind")), rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "agent")), rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "text")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "for_msg")), rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "created_ms")), K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "place")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "pr"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr} : S.Card}
-  %Equal.sym(String, rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "kind")), kind, Card.journal.kind(id, kind, agent, text, for_msg, created, place, pr)) : {S.Card{id, _, rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "agent")), rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "text")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "for_msg")), rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "created_ms")), K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "place")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "pr"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr} : S.Card}
-  %Equal.sym(String, rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "agent")), agent, Card.journal.agent(id, kind, agent, text, for_msg, created, place, pr)) : {S.Card{id, kind, _, rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "text")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "for_msg")), rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "created_ms")), K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "place")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "pr"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr} : S.Card}
-  %Equal.sym(String, rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "text")), text, Card.journal.text(id, kind, agent, text, for_msg, created, place, pr)) : {S.Card{id, kind, agent, _, K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "for_msg")), rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "created_ms")), K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "place")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "pr"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr} : S.Card}
-  %Equal.sym(Maybe<&2, Nat>, K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "for_msg")), for_msg, Card.journal.for_msg(id, kind, agent, text, for_msg, created, place, pr)) : {S.Card{id, kind, agent, text, _, rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "created_ms")), K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "place")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "pr"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr} : S.Card}
-  %Equal.sym(Nat, rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "created_ms")), created, Card.journal.created(id, kind, agent, text, for_msg, created, place, pr)) : {S.Card{id, kind, agent, text, for_msg, _, K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "place")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "pr"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr} : S.Card}
-  %Equal.sym(Maybe<&2, String>, K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "place")), place, Card.journal.place(id, kind, agent, text, for_msg, created, place, pr)) : {S.Card{id, kind, agent, text, for_msg, created, _, K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "pr"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr} : S.Card}
-  %Equal.sym(Maybe<&2, Nat>, K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr})), "pr")), pr, Card.journal.pr(id, kind, agent, text, for_msg, created, place, pr)) : {S.Card{id, kind, agent, text, for_msg, created, place, _} == S.Card{id, kind, agent, text, for_msg, created, place, pr} : S.Card}
+def Card.journal_round_by_fields(id, kind, agent, text, for_msg, created, place, pr, view):
+  %Equal.sym(Nat, rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "id")), id, Card.journal.id(id, kind, agent, text, for_msg, created, place, pr, view)) : {S.Card{_, rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "kind")), rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "agent")), rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "text")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "for_msg")), rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "created_ms")), K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "place")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "pr")), ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "view"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view} : S.Card}
+  %Equal.sym(String, rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "kind")), kind, Card.journal.kind(id, kind, agent, text, for_msg, created, place, pr, view)) : {S.Card{id, _, rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "agent")), rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "text")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "for_msg")), rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "created_ms")), K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "place")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "pr")), ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "view"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view} : S.Card}
+  %Equal.sym(String, rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "agent")), agent, Card.journal.agent(id, kind, agent, text, for_msg, created, place, pr, view)) : {S.Card{id, kind, _, rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "text")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "for_msg")), rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "created_ms")), K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "place")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "pr")), ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "view"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view} : S.Card}
+  %Equal.sym(String, rd.s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "text")), text, Card.journal.text(id, kind, agent, text, for_msg, created, place, pr, view)) : {S.Card{id, kind, agent, _, K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "for_msg")), rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "created_ms")), K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "place")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "pr")), ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "view"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view} : S.Card}
+  %Equal.sym(Maybe<&2, Nat>, K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "for_msg")), for_msg, Card.journal.for_msg(id, kind, agent, text, for_msg, created, place, pr, view)) : {S.Card{id, kind, agent, text, _, rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "created_ms")), K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "place")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "pr")), ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "view"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view} : S.Card}
+  %Equal.sym(Nat, rd.n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "created_ms")), created, Card.journal.created(id, kind, agent, text, for_msg, created, place, pr, view)) : {S.Card{id, kind, agent, text, for_msg, _, K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "place")), K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "pr")), ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "view"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view} : S.Card}
+  %Equal.sym(Maybe<&2, String>, K.opt_s(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "place")), place, Card.journal.place(id, kind, agent, text, for_msg, created, place, pr, view)) : {S.Card{id, kind, agent, text, for_msg, created, _, K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "pr")), ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "view"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view} : S.Card}
+  %Equal.sym(Maybe<&2, Nat>, K.opt_n(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "pr")), pr, Card.journal.pr(id, kind, agent, text, for_msg, created, place, pr, view)) : {S.Card{id, kind, agent, text, for_msg, created, place, _, ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "view"))} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view} : S.Card}
+  %Equal.sym(Maybe<&2, S.ViewAsk>, ViewAsk.journal_mof(J.get(J.obj(Card.journal_kvs(S.Card{id, kind, agent, text, for_msg, created, place, pr, view})), "view")), view, Card.journal.view(id, kind, agent, text, for_msg, created, place, pr, view)) : {S.Card{id, kind, agent, text, for_msg, created, place, pr, _} == S.Card{id, kind, agent, text, for_msg, created, place, pr, view} : S.Card}
   {==}
 
 law Card.journal_round:
@@ -1465,8 +1586,8 @@ law Card.journal_round:
 
 def Card.journal_round(x):
   match x:
-    case S.Card{id, kind, agent, text, for_msg, created, place, pr}:
-      Card.journal_round_by_fields(id, kind, agent, text, for_msg, created, place, pr)
+    case S.Card{id, kind, agent, text, for_msg, created, place, pr, view}:
+      Card.journal_round_by_fields(id, kind, agent, text, for_msg, created, place, pr, view)
 
 # ---- a list of Card, each in its journal shape ----
 
@@ -4990,7 +5111,7 @@ def TimerEnd.view_pinned():
   {==}
 
 law Card.view_pinned:
-  {Card.journal_json(S.Card{2n, "drop", "fix", "main suggests: archive @fix? 1 changed file and 0 unpushed commit will be saved (/restore). (answer yes or no)", None{}, 1000000n, None{}, None{}}) == J.obj([J.kv("id", J.JNum{2n}), J.kv("kind", J.JStr{"drop"}), J.kv("agent", J.JStr{"fix"}), J.kv("text", J.JStr{"main suggests: archive @fix? 1 changed file and 0 unpushed commit will be saved (/restore). (answer yes or no)"}), J.kv("for_msg", J.JNull{}), J.kv("created_ms", J.JNum{1000000n}), J.kv("place", J.JNull{}), J.kv("pr", J.JNull{})]) : J.Json}
+  {Card.journal_json(S.Card{2n, "drop", "fix", "main suggests: archive @fix? 1 changed file and 0 unpushed commit will be saved (/restore). (answer yes or no)", None{}, 1000000n, None{}, None{}, None{}}) == J.obj([J.kv("id", J.JNum{2n}), J.kv("kind", J.JStr{"drop"}), J.kv("agent", J.JStr{"fix"}), J.kv("text", J.JStr{"main suggests: archive @fix? 1 changed file and 0 unpushed commit will be saved (/restore). (answer yes or no)"}), J.kv("for_msg", J.JNull{}), J.kv("created_ms", J.JNum{1000000n}), J.kv("place", J.JNull{}), J.kv("pr", J.JNull{})]) : J.Json}
 
 def Card.view_pinned():
   {==}

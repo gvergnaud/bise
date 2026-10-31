@@ -191,9 +191,11 @@ pub enum Input {
     /// Its calls are gone (interrupted): the card closes unanswered.
     ConfirmClose { card: u64, res: String },
     /// mcp-apps (docs/mcp-apps.md, C5): a view's call that needs his ok,
-    /// outside `agent`'s turn: a `confirm` card placed `view:<agent>/<call>`
-    /// that sb-core closes as timed out at its due (never the agent's wait).
-    ViewConfirmOpen { agent: String, call: String, text: String },
+    /// outside `agent`'s turn: a `confirm` card for that view's `ask` (its
+    /// tool and arguments, canonical JSON) that sb-core closes as timed out
+    /// at its due, at a stop, at boot (never the agent's wait); its id
+    /// comes back as [`Effect::ViewCard`].
+    ViewConfirmOpen { agent: String, call: String, text: String, ask: String },
     /// mcp-apps: a view's `ui/message`, queued to `agent` from the sender
     /// `view` with its plugin typed.
     ViewMessage { agent: String, plugin: String, text: String },
@@ -419,6 +421,14 @@ pub enum Effect {
         card: u64,
         agent: String,
         text: String,
+    },
+    /// mcp-apps (C5): the card a view's call waits on, the answer to
+    /// [`Input::ViewConfirmOpen`] (none: its agent is not active, no card).
+    /// Read by the shell from that step's effects (daemon/views.rs).
+    ViewCard {
+        agent: String,
+        call: String,
+        card: Option<u64>,
     },
     /// Issue #4: the answer to a spawn that asked for a model (`--model`,
     /// `--effort`, `--profile`): the daemon picks what runs (the agents
@@ -1560,7 +1570,7 @@ impl Hub {
             Input::Placed { name, ws, err } => self.core(&mut fx, env, None, In::Placed(ci::Placed { name, ws, err })),
             Input::ConfirmOpen { agent, text } => self.core(&mut fx, env, None, In::ConfirmOpen(ci::ConfirmOpen { agent, text })),
             Input::ConfirmClose { card, res } => self.core(&mut fx, env, None, In::ConfirmClose(ci::ConfirmClose { card, res })),
-            Input::ViewConfirmOpen { agent, call, text } => self.core(&mut fx, env, None, In::ViewConfirmOpen(ci::ViewConfirmOpen { agent, call, text })),
+            Input::ViewConfirmOpen { agent, call, text, ask } => self.core(&mut fx, env, None, In::ViewConfirmOpen(ci::ViewConfirmOpen { agent, call, text, ask })),
             Input::ViewMessage { agent, plugin, text } => self.core(&mut fx, env, None, In::ViewMessage(ci::ViewMessage { agent, plugin, text })),
             Input::PageAnswered { card, agent, page, text, block } => self.core(&mut fx, env, None, In::PageAnswered(ci::PageAnswered { card, agent, page, text, block })),
             Input::PageCard { agents, kind, text, key } => self.core(&mut fx, env, None, In::PageCard(ci::PageCard { agents, kind, text, key })),

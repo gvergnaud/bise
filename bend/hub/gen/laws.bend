@@ -202,7 +202,7 @@ def in_confirm_close_bare():
   {==}
 
 law in_view_confirm_open_bare:
-  {IN.of(J.obj([J.kv("t", J.JStr{"view_confirm_open"})])) == IN.IViewConfirmOpen{"", "", ""} : IN.In}
+  {IN.of(J.obj([J.kv("t", J.JStr{"view_confirm_open"})])) == IN.IViewConfirmOpen{"", "", "", ""} : IN.In}
 
 def in_view_confirm_open_bare():
   {==}
@@ -684,9 +684,10 @@ law in_IViewConfirmOpen_round:
   for agent: String
   for call: String
   for text: String
-  {IN.of(IN.json(IN.IViewConfirmOpen{agent, call, text})) == IN.IViewConfirmOpen{agent, call, text} : IN.In}
+  for ask: String
+  {IN.of(IN.json(IN.IViewConfirmOpen{agent, call, text, ask})) == IN.IViewConfirmOpen{agent, call, text, ask} : IN.In}
 
-def in_IViewConfirmOpen_round(agent, call, text):
+def in_IViewConfirmOpen_round(agent, call, text, ask):
   {==}
 
 law in_IViewMessage_round:
@@ -1326,6 +1327,12 @@ law fx_confirm_bare:
 def fx_confirm_bare():
   {==}
 
+law fx_view_card_bare:
+  {FX.of(J.obj([J.kv("fx", J.JStr{"view_card"})])) == FX.FViewCard{"", "", None{}} : FX.Fx}
+
+def fx_view_card_bare():
+  {==}
+
 law fx_focus_main_bare:
   {FX.of(J.obj([J.kv("fx", J.JStr{"focus_main"})])) == FX.FFocusMain{""} : FX.Fx}
 
@@ -1618,6 +1625,19 @@ def fx_FConfirm_round(card, agent, text):
     case Some{x_card} None{}:
       {==}
     case Some{x_card} Some{x_agent}:
+      {==}
+
+law fx_FViewCard_round:
+  for agent: String
+  for call: String
+  for card: Maybe<&2, Nat>
+  {FX.of(FX.json(FX.FViewCard{agent, call, card})) == FX.FViewCard{agent, call, card} : FX.Fx}
+
+def fx_FViewCard_round(agent, call, card):
+  match card:
+    case None{}:
+      {==}
+    case Some{x_card}:
       {==}
 
 law fx_FFocusMain_round:

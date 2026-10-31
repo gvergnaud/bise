@@ -96,8 +96,11 @@ core_kinds! {
         ConfirmClose = "confirm_close" => IConfirmClose { card: Nat, res: Str },
         /// an MCP App view's call that needs his ok, outside the agent's
         /// turn (docs/mcp-apps.md, C5): a `confirm` card placed
-        /// `view:<agent>/<call>`, closed as timed out at its due
-        ViewConfirmOpen = "view_confirm_open" => IViewConfirmOpen { agent: Str, call: Str, text: Str },
+        /// `view:<agent>/<call>` (shown only), its `ask` (the tool and its
+        /// arguments, the shell's canonical JSON) typed on the card
+        /// (`Card.view`); closed as timed out at its due, at a stop and at
+        /// boot; its id comes back as fx `view_card`
+        ViewConfirmOpen = "view_confirm_open" => IViewConfirmOpen { agent: Str, call: Str, text: Str, ask: Str },
         /// an MCP App view's `ui/message` (C5): one message from the
         /// fixed sender `view`, its plugin typed (`Msg.view`), queued to
         /// `agent` only; never his words

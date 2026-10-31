@@ -26,7 +26,7 @@ def hv_nos_d(-o: HS.St, +cs: List<&2, HS.Card>, +cx: HX.Cx<o>, +agent: String)
     case Nil{}:
       {==}
     case Con{+c, +rest}:
-      +h = String.eq(HS.Card.agent(c), agent) && HC.is_view_place(HS.Card.place(c))
+      +h = String.eq(HS.Card.agent(c), agent) && HC.is_view(HS.Card.view(c))
       Equal.trans(HS.St, HX.d(o, HC.view_nos(o, rest, HC.view_no.one(o, h, cx, c), agent)), HX.d(o, HC.view_no.one(o, h, cx, c)), HX.d(o, cx),
         hv_nos_d(o, rest, HC.view_no.one(o, h, cx, c), agent), hv_one_d(o, h, cx, c))
 

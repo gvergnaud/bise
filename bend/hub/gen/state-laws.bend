@@ -929,6 +929,167 @@ def MRec.open_eq(r):
     case S.MRec{f0, f1, f2}:
       {==}
 
+# ---- ViewAsk ----
+
+law ViewAsk.agent.get_with:
+  for r: S.ViewAsk
+  for v: String
+  {S.ViewAsk.agent(S.ViewAsk.with_agent(r, v)) == v : String}
+
+def ViewAsk.agent.get_with(r, v):
+  match r:
+    case S.ViewAsk{f0, f1, f2}:
+      {==}
+
+law ViewAsk.agent.eta:
+  for r: S.ViewAsk
+  for v: String
+  {S.ViewAsk{v, S.ViewAsk.call(r), S.ViewAsk.ask(r)} == S.ViewAsk.with_agent(r, v) : S.ViewAsk}
+
+def ViewAsk.agent.eta(r, v):
+  match r:
+    case S.ViewAsk{f0, f1, f2}:
+      {==}
+
+law ViewAsk.agent.set_get:
+  for r: S.ViewAsk
+  {S.ViewAsk.with_agent(r, S.ViewAsk.agent(r)) == r : S.ViewAsk}
+
+def ViewAsk.agent.set_get(r):
+  match r:
+    case S.ViewAsk{f0, f1, f2}:
+      {==}
+
+law ViewAsk.agent.set_set:
+  for r: S.ViewAsk
+  for a: String
+  for b: String
+  {S.ViewAsk.with_agent(S.ViewAsk.with_agent(r, a), b) == S.ViewAsk.with_agent(r, b) : S.ViewAsk}
+
+def ViewAsk.agent.set_set(r, a, b):
+  match r:
+    case S.ViewAsk{f0, f1, f2}:
+      {==}
+
+law ViewAsk.agent.over:
+  for r: S.ViewAsk
+  for g: String -> String
+  {S.ViewAsk.over_agent(r, g) == S.ViewAsk.with_agent(r, g(S.ViewAsk.agent(r))) : S.ViewAsk}
+
+def ViewAsk.agent.over(r, g):
+  match r:
+    case S.ViewAsk{f0, f1, f2}:
+      {==}
+
+law ViewAsk.call.get_with:
+  for r: S.ViewAsk
+  for v: String
+  {S.ViewAsk.call(S.ViewAsk.with_call(r, v)) == v : String}
+
+def ViewAsk.call.get_with(r, v):
+  match r:
+    case S.ViewAsk{f0, f1, f2}:
+      {==}
+
+law ViewAsk.call.eta:
+  for r: S.ViewAsk
+  for v: String
+  {S.ViewAsk{S.ViewAsk.agent(r), v, S.ViewAsk.ask(r)} == S.ViewAsk.with_call(r, v) : S.ViewAsk}
+
+def ViewAsk.call.eta(r, v):
+  match r:
+    case S.ViewAsk{f0, f1, f2}:
+      {==}
+
+law ViewAsk.call.set_get:
+  for r: S.ViewAsk
+  {S.ViewAsk.with_call(r, S.ViewAsk.call(r)) == r : S.ViewAsk}
+
+def ViewAsk.call.set_get(r):
+  match r:
+    case S.ViewAsk{f0, f1, f2}:
+      {==}
+
+law ViewAsk.call.set_set:
+  for r: S.ViewAsk
+  for a: String
+  for b: String
+  {S.ViewAsk.with_call(S.ViewAsk.with_call(r, a), b) == S.ViewAsk.with_call(r, b) : S.ViewAsk}
+
+def ViewAsk.call.set_set(r, a, b):
+  match r:
+    case S.ViewAsk{f0, f1, f2}:
+      {==}
+
+law ViewAsk.call.over:
+  for r: S.ViewAsk
+  for g: String -> String
+  {S.ViewAsk.over_call(r, g) == S.ViewAsk.with_call(r, g(S.ViewAsk.call(r))) : S.ViewAsk}
+
+def ViewAsk.call.over(r, g):
+  match r:
+    case S.ViewAsk{f0, f1, f2}:
+      {==}
+
+law ViewAsk.ask.get_with:
+  for r: S.ViewAsk
+  for v: String
+  {S.ViewAsk.ask(S.ViewAsk.with_ask(r, v)) == v : String}
+
+def ViewAsk.ask.get_with(r, v):
+  match r:
+    case S.ViewAsk{f0, f1, f2}:
+      {==}
+
+law ViewAsk.ask.eta:
+  for r: S.ViewAsk
+  for v: String
+  {S.ViewAsk{S.ViewAsk.agent(r), S.ViewAsk.call(r), v} == S.ViewAsk.with_ask(r, v) : S.ViewAsk}
+
+def ViewAsk.ask.eta(r, v):
+  match r:
+    case S.ViewAsk{f0, f1, f2}:
+      {==}
+
+law ViewAsk.ask.set_get:
+  for r: S.ViewAsk
+  {S.ViewAsk.with_ask(r, S.ViewAsk.ask(r)) == r : S.ViewAsk}
+
+def ViewAsk.ask.set_get(r):
+  match r:
+    case S.ViewAsk{f0, f1, f2}:
+      {==}
+
+law ViewAsk.ask.set_set:
+  for r: S.ViewAsk
+  for a: String
+  for b: String
+  {S.ViewAsk.with_ask(S.ViewAsk.with_ask(r, a), b) == S.ViewAsk.with_ask(r, b) : S.ViewAsk}
+
+def ViewAsk.ask.set_set(r, a, b):
+  match r:
+    case S.ViewAsk{f0, f1, f2}:
+      {==}
+
+law ViewAsk.ask.over:
+  for r: S.ViewAsk
+  for g: String -> String
+  {S.ViewAsk.over_ask(r, g) == S.ViewAsk.with_ask(r, g(S.ViewAsk.ask(r))) : S.ViewAsk}
+
+def ViewAsk.ask.over(r, g):
+  match r:
+    case S.ViewAsk{f0, f1, f2}:
+      {==}
+
+law ViewAsk.open_eq:
+  for r: S.ViewAsk
+  {S.ViewAsk.open(r) == r : S.ViewAsk}
+
+def ViewAsk.open_eq(r):
+  match r:
+    case S.ViewAsk{f0, f1, f2}:
+      {==}
+
 # ---- Card ----
 
 law Card.id.get_with:
@@ -938,17 +1099,17 @@ law Card.id.get_with:
 
 def Card.id.get_with(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.id.eta:
   for r: S.Card
   for v: Nat
-  {S.Card{v, S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r)} == S.Card.with_id(r, v) : S.Card}
+  {S.Card{v, S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r), S.Card.view(r)} == S.Card.with_id(r, v) : S.Card}
 
 def Card.id.eta(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.id.set_get:
@@ -957,7 +1118,7 @@ law Card.id.set_get:
 
 def Card.id.set_get(r):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.id.set_set:
@@ -968,7 +1129,7 @@ law Card.id.set_set:
 
 def Card.id.set_set(r, a, b):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.id.over:
@@ -978,7 +1139,7 @@ law Card.id.over:
 
 def Card.id.over(r, g):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.kind.get_with:
@@ -988,17 +1149,17 @@ law Card.kind.get_with:
 
 def Card.kind.get_with(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.kind.eta:
   for r: S.Card
   for v: String
-  {S.Card{S.Card.id(r), v, S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r)} == S.Card.with_kind(r, v) : S.Card}
+  {S.Card{S.Card.id(r), v, S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r), S.Card.view(r)} == S.Card.with_kind(r, v) : S.Card}
 
 def Card.kind.eta(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.kind.set_get:
@@ -1007,7 +1168,7 @@ law Card.kind.set_get:
 
 def Card.kind.set_get(r):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.kind.set_set:
@@ -1018,7 +1179,7 @@ law Card.kind.set_set:
 
 def Card.kind.set_set(r, a, b):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.kind.over:
@@ -1028,7 +1189,7 @@ law Card.kind.over:
 
 def Card.kind.over(r, g):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.agent.get_with:
@@ -1038,17 +1199,17 @@ law Card.agent.get_with:
 
 def Card.agent.get_with(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.agent.eta:
   for r: S.Card
   for v: String
-  {S.Card{S.Card.id(r), S.Card.kind(r), v, S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r)} == S.Card.with_agent(r, v) : S.Card}
+  {S.Card{S.Card.id(r), S.Card.kind(r), v, S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r), S.Card.view(r)} == S.Card.with_agent(r, v) : S.Card}
 
 def Card.agent.eta(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.agent.set_get:
@@ -1057,7 +1218,7 @@ law Card.agent.set_get:
 
 def Card.agent.set_get(r):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.agent.set_set:
@@ -1068,7 +1229,7 @@ law Card.agent.set_set:
 
 def Card.agent.set_set(r, a, b):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.agent.over:
@@ -1078,7 +1239,7 @@ law Card.agent.over:
 
 def Card.agent.over(r, g):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.text.get_with:
@@ -1088,17 +1249,17 @@ law Card.text.get_with:
 
 def Card.text.get_with(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.text.eta:
   for r: S.Card
   for v: String
-  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), v, S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r)} == S.Card.with_text(r, v) : S.Card}
+  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), v, S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r), S.Card.view(r)} == S.Card.with_text(r, v) : S.Card}
 
 def Card.text.eta(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.text.set_get:
@@ -1107,7 +1268,7 @@ law Card.text.set_get:
 
 def Card.text.set_get(r):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.text.set_set:
@@ -1118,7 +1279,7 @@ law Card.text.set_set:
 
 def Card.text.set_set(r, a, b):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.text.over:
@@ -1128,7 +1289,7 @@ law Card.text.over:
 
 def Card.text.over(r, g):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.for_msg.get_with:
@@ -1138,17 +1299,17 @@ law Card.for_msg.get_with:
 
 def Card.for_msg.get_with(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.for_msg.eta:
   for r: S.Card
   for v: Maybe<&2, Nat>
-  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), v, S.Card.created(r), S.Card.place(r), S.Card.pr(r)} == S.Card.with_for_msg(r, v) : S.Card}
+  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), v, S.Card.created(r), S.Card.place(r), S.Card.pr(r), S.Card.view(r)} == S.Card.with_for_msg(r, v) : S.Card}
 
 def Card.for_msg.eta(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.for_msg.set_get:
@@ -1157,7 +1318,7 @@ law Card.for_msg.set_get:
 
 def Card.for_msg.set_get(r):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.for_msg.set_set:
@@ -1168,7 +1329,7 @@ law Card.for_msg.set_set:
 
 def Card.for_msg.set_set(r, a, b):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.for_msg.over:
@@ -1178,7 +1339,7 @@ law Card.for_msg.over:
 
 def Card.for_msg.over(r, g):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.created.get_with:
@@ -1188,17 +1349,17 @@ law Card.created.get_with:
 
 def Card.created.get_with(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.created.eta:
   for r: S.Card
   for v: Nat
-  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), v, S.Card.place(r), S.Card.pr(r)} == S.Card.with_created(r, v) : S.Card}
+  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), v, S.Card.place(r), S.Card.pr(r), S.Card.view(r)} == S.Card.with_created(r, v) : S.Card}
 
 def Card.created.eta(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.created.set_get:
@@ -1207,7 +1368,7 @@ law Card.created.set_get:
 
 def Card.created.set_get(r):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.created.set_set:
@@ -1218,7 +1379,7 @@ law Card.created.set_set:
 
 def Card.created.set_set(r, a, b):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.created.over:
@@ -1228,7 +1389,7 @@ law Card.created.over:
 
 def Card.created.over(r, g):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.place.get_with:
@@ -1238,17 +1399,17 @@ law Card.place.get_with:
 
 def Card.place.get_with(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.place.eta:
   for r: S.Card
   for v: Maybe<&2, String>
-  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), v, S.Card.pr(r)} == S.Card.with_place(r, v) : S.Card}
+  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), v, S.Card.pr(r), S.Card.view(r)} == S.Card.with_place(r, v) : S.Card}
 
 def Card.place.eta(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.place.set_get:
@@ -1257,7 +1418,7 @@ law Card.place.set_get:
 
 def Card.place.set_get(r):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.place.set_set:
@@ -1268,7 +1429,7 @@ law Card.place.set_set:
 
 def Card.place.set_set(r, a, b):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.place.over:
@@ -1278,7 +1439,7 @@ law Card.place.over:
 
 def Card.place.over(r, g):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.pr.get_with:
@@ -1288,17 +1449,17 @@ law Card.pr.get_with:
 
 def Card.pr.get_with(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.pr.eta:
   for r: S.Card
   for v: Maybe<&2, Nat>
-  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), v} == S.Card.with_pr(r, v) : S.Card}
+  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), v, S.Card.view(r)} == S.Card.with_pr(r, v) : S.Card}
 
 def Card.pr.eta(r, v):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.pr.set_get:
@@ -1307,7 +1468,7 @@ law Card.pr.set_get:
 
 def Card.pr.set_get(r):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.pr.set_set:
@@ -1318,7 +1479,7 @@ law Card.pr.set_set:
 
 def Card.pr.set_set(r, a, b):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.pr.over:
@@ -1328,7 +1489,57 @@ law Card.pr.over:
 
 def Card.pr.over(r, g):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
+      {==}
+
+law Card.view.get_with:
+  for r: S.Card
+  for v: Maybe<&2, S.ViewAsk>
+  {S.Card.view(S.Card.with_view(r, v)) == v : Maybe<&2, S.ViewAsk>}
+
+def Card.view.get_with(r, v):
+  match r:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
+      {==}
+
+law Card.view.eta:
+  for r: S.Card
+  for v: Maybe<&2, S.ViewAsk>
+  {S.Card{S.Card.id(r), S.Card.kind(r), S.Card.agent(r), S.Card.text(r), S.Card.for_msg(r), S.Card.created(r), S.Card.place(r), S.Card.pr(r), v} == S.Card.with_view(r, v) : S.Card}
+
+def Card.view.eta(r, v):
+  match r:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
+      {==}
+
+law Card.view.set_get:
+  for r: S.Card
+  {S.Card.with_view(r, S.Card.view(r)) == r : S.Card}
+
+def Card.view.set_get(r):
+  match r:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
+      {==}
+
+law Card.view.set_set:
+  for r: S.Card
+  for a: Maybe<&2, S.ViewAsk>
+  for b: Maybe<&2, S.ViewAsk>
+  {S.Card.with_view(S.Card.with_view(r, a), b) == S.Card.with_view(r, b) : S.Card}
+
+def Card.view.set_set(r, a, b):
+  match r:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
+      {==}
+
+law Card.view.over:
+  for r: S.Card
+  for g: Maybe<&2, S.ViewAsk> -> Maybe<&2, S.ViewAsk>
+  {S.Card.over_view(r, g) == S.Card.with_view(r, g(S.Card.view(r))) : S.Card}
+
+def Card.view.over(r, g):
+  match r:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 law Card.open_eq:
@@ -1337,7 +1548,7 @@ law Card.open_eq:
 
 def Card.open_eq(r):
   match r:
-    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7}:
+    case S.Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
       {==}
 
 # ---- Ans ----

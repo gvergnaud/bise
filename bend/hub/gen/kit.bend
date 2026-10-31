@@ -186,6 +186,13 @@ def omit_mjs(+k: String, m: Maybe<&2, List<&2, J.Json>>) -> List<&2, Sigma<&2, &
     case Some{+xs}:
       [J.kv(k, J.JArr{xs})]
 
+def omit_mj(+k: String, m: Maybe<&2, J.Json>) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  match m:
+    case None{}:
+      Nil{}
+    case Some{+x}:
+      [J.kv(k, x)]
+
 # a flag, written only when true (an old line has none: false)
 def flag(+k: String, +b: Bool) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   match b:

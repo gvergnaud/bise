@@ -76,5 +76,5 @@
 {"ans": [], "git": true, "now": 1000000, "t": "pause"}
 {"ans": [], "git": true, "now": 1000500, "t": "resume"}
 {"agents": ["lean-install", "main"], "ans": [], "git": true, "key": "plan:plan", "kind": "plan", "now": 1000000, "t": "page_card", "text": "lean installs: start the plan lean-install recommends?\n1. start the plan\n2. open the plan"}
-{"agent": "docs", "ans": [], "call": "1700000000000-3", "git": true, "now": 1000000, "t": "view_confirm_open", "text": "fake-app view wants to run show_counter"}
+{"agent": "docs", "ans": [], "ask": "{\"args\":{},\"tool\":\"show_counter\"}", "call": "1700000000000-3", "git": true, "now": 1000000, "t": "view_confirm_open", "text": "fake-app view wants to run show_counter"}
 {"agent": "docs", "ans": [], "git": true, "now": 1000000, "plugin": "fake-app", "t": "view_message", "text": "make it major"}

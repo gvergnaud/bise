@@ -17,14 +17,18 @@
 //!   started on the first need, stopped after its idle time or with the
 //!   hub, its folder `Paths::views_bridge_dir` so a restarted hub ends an
 //!   orphan);
-//! - a call the model could also make waits on a `confirm` card placed
-//!   `view:<agent>/<call>` (sb-core), never the agent's own wait; his
-//!   answer comes back by the card's id ([`Shell::view_card_answered`]);
+//! - a call the model could also make waits on a `confirm` card that
+//!   sb-core opens for its ask (the tool and its arguments, typed on the
+//!   card) and names in the step's `view_card` effect, never the agent's
+//!   own wait; his answer comes back by the card's id
+//!   ([`Shell::view_card_answered`]);
 //! - a server that is not the one that ran the view's call (the views
 //!   bridge, a new bridge) is said once, on the call's result
 //!   (`view_call::RESTARTED_META`): the call ran, its result is kept;
-//! - at boot, a view's card left open has no call behind it any more: it
-//!   closes ([`Shell::close_view_cards`], architect m_50085);
+//! - at boot, a view's card left open has no call behind it any more:
+//!   sb-core answers it no and closes it (law boot_answers_view_cards);
+//!   the shell only ends a views bridge an older hub left
+//!   ([`Shell::views_boot`]);
 //! - `view/context` is kept per (agent, view) and joins his next send to
 //!   that agent once ([`Shell::take_view_contexts`]); lost when the hub
 //!   restarts (architect m_49840).
@@ -40,7 +44,7 @@ use bise_proto::jsonrpc::{ErrorData, Id, RpcError};
 use bise_proto::parts::Part;
 use bise_proto::view_rpc::{ViewError, ViewResource};
 use serde_json::{json, Value};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -51,12 +55,6 @@ pub(crate) type ViewDone = Box<dyn FnOnce(Result<Value, RpcError>) + Send>;
 
 /// A view request's next step on the loop, from its thread.
 pub(super) type ViewStep = Box<dyn FnOnce(&mut Shell) + Send>;
-
-/// A view's card's place (sb-core's `view_place`): `view:<agent>/<call>`.
-pub(crate) const VIEW_PLACE: &str = "view:";
-
-/// How a view's card left by an older hub closes.
-pub(crate) const ENDED_WITH_HUB: &str = "the view's call ended with the hub";
 
 /// How long a thread waits for a bridge's address (a views bridge that
 /// just started lists its servers first).
@@ -111,9 +109,12 @@ struct Route {
     hubs: bool,
 }
 
-/// The open view cards of a hub's state, by id.
-pub(crate) fn view_cards(cards: &BTreeMap<u64, crate::model::Card>) -> Vec<u64> {
-    cards.values().filter(|c| c.place.as_deref().is_some_and(|p| p.starts_with(VIEW_PLACE))).map(|c| c.id).collect()
+/// The card a step's `view_card` effect names for `key`'s call.
+fn card_said(fx: &[crate::core::Effect], key: &ViewKey) -> Option<u64> {
+    fx.iter().find_map(|e| match e {
+        crate::core::Effect::ViewCard { agent, call, card } if *agent == key.agent && *call == key.call => *card,
+        _ => None,
+    })
 }
 
 /// A C5 command as its method and params.
@@ -290,12 +291,9 @@ fn get(url: &str, timeout: Duration) -> Result<Value, String> {
 }
 
 impl Shell {
-    /// Boot: every view card the journal left open closes; a views bridge
-    /// an older hub left ends.
-    pub(super) fn close_view_cards(&mut self) {
-        for card in view_cards(&self.hub.st.cards) {
-            self.step(Input::ConfirmClose { card, res: ENDED_WITH_HUB.into() });
-        }
+    /// Boot: a views bridge an older hub left ends (its view cards are
+    /// sb-core's to close, at its boot step).
+    pub(super) fn views_boot(&mut self) {
         kill_orphan_bridge(&self.opts.paths.views_bridge_json());
     }
 
@@ -526,16 +524,17 @@ impl Shell {
         }
     }
 
-    /// A card for a view's call (sb-core's view_confirm_open); its answer
-    /// comes back by the card's id.
+    /// A card for a view's call (sb-core's view_confirm_open): its id is
+    /// the step's `view_card` effect (none: its agent is not active); his
+    /// answer comes back by it.
     #[allow(clippy::too_many_arguments)]
     fn view_card(&mut self, key: ViewKey, route: Route, method: String, params: Value, plugin: &str, what: &str, summary: String, done: ViewDone) {
         let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
         let text = view_call::card_text(plugin, what, &args);
-        let before: BTreeSet<u64> = self.hub.st.cards.keys().copied().collect();
-        self.step(Input::ViewConfirmOpen { agent: key.agent.clone(), call: key.call.clone(), text });
-        let place = format!("{VIEW_PLACE}{}/{}", key.agent, key.call);
-        let card = self.hub.st.cards.values().filter(|c| !before.contains(&c.id) && c.place.as_deref() == Some(place.as_str())).map(|c| c.id).max();
+        let ask = view_call::ask(what, &args);
+        let fx = self.hub.handle(Input::ViewConfirmOpen { agent: key.agent.clone(), call: key.call.clone(), text, ask }, &mut self.env);
+        let card = card_said(&fx, &key);
+        self.step_fx(fx);
         match card {
             Some(id) => {
                 self.views.waits.insert(id, Wait { key, route, method, params, summary, done });
@@ -648,7 +647,6 @@ fn join_contexts(contexts: Vec<Part>, text: String, parts: String) -> (String, S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::Card;
 
     #[test]
     fn a_views_context_joins_his_send_before_his_words() {
@@ -659,10 +657,6 @@ mod tests {
         let typed: Vec<Part> = serde_json::from_str(&parts).unwrap();
         assert_eq!(typed.len(), 2);
         assert_eq!(join_contexts(Vec::new(), "hi".into(), String::new()), ("hi".into(), String::new()));
-    }
-
-    fn card(id: u64, place: Option<&str>) -> (u64, Card) {
-        (id, Card { id, kind: "confirm".into(), place: place.map(String::from), ..Card::default() })
     }
 
     /// A bridge on loopback serving fake-app's tools/list (the fixture's
@@ -796,9 +790,14 @@ mod tests {
     }
 
     #[test]
-    fn only_the_view_cards_close_at_boot() {
-        let cards = [card(1, None), card(2, Some("view:docs/1-2")), card(3, Some("pr:docs")), card(4, Some("view:main/9-9"))].into_iter().collect();
-        assert_eq!(view_cards(&cards), vec![2, 4]);
+    fn a_views_card_is_the_one_its_effect_names() {
+        use crate::core::Effect;
+        let k = ViewKey::new("docs", "1-2");
+        let said = |agent: &str, call: &str, card| Effect::ViewCard { agent: agent.into(), call: call.into(), card };
+        assert_eq!(card_said(&[Effect::State, said("docs", "1-2", Some(7))], &k), Some(7));
+        assert_eq!(card_said(&[said("docs", "1-3", Some(8)), said("main", "1-2", Some(9))], &k), None, "another view's");
+        assert_eq!(card_said(&[said("docs", "1-2", None)], &k), None, "not active: no card");
+        assert_eq!(card_said(&[], &k), None);
     }
 
     #[test]

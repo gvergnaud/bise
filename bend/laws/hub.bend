@@ -16,6 +16,7 @@ import ../hub/xhub-model.bend as HXH
 import ../hub/xhub.bend as HXB
 import ../hub/gen/kit.bend as HK
 import ../hub/gen/feed.bend as HFD
+import ../hub/gen/fx.bend as HF
 import ../hub/pause.bend as HP
 import ../hub/reach.bend as HR
 import ../hub/answers.bend as HA
@@ -1007,7 +1008,8 @@ law view_card_keeps_runtime:
   for +agent: String
   for +call: String
   for +text: String
-  {HX.R.rts(HX.Cx.r(o, HC.open_view_confirm(o, cx, agent, call, text))) == HX.R.rts(HX.Cx.r(o, cx)) : List<&2, HX.Rt>}
+  for +ask: String
+  {HX.R.rts(HX.Cx.r(o, HC.open_view_confirm(o, cx, agent, call, text, ask))) == HX.R.rts(HX.Cx.r(o, cx)) : List<&2, HX.Rt>}
 
 # LAW: a view card's due finds it gone (answered or closed before):
 # nothing happens, so it is closed once, by his answer or by its due.
@@ -1095,11 +1097,73 @@ law view_card_needs_active:
   for +agent: String
   for +call: String
   for +text: String
+  for +ask: String
   for e: {HC.live_agent(HM.agent_named(HS.St.agents(HX.d(o, cx)), agent)) == False{} : Bool}
-  {HX.journal(HX.Core.fx(o, HX.Cx.c(o, HC.open_view_confirm(o, cx, agent, call, text))))
+  {HX.journal(HX.Core.fx(o, HX.Cx.c(o, HC.open_view_confirm(o, cx, agent, call, text, ask))))
     == HX.journal(HX.Core.fx(o, HX.Cx.c(o, cx))) : List<&2, HM.Ev>}
 
-# A view's card gets one answer: his, its due's or its agent's stop.
+# A view's card is said to the shell by its id, typed (fx view_card),
+# never found by its place's text (d4, mcp-apps review). The last
+# effect of a step.
+def last_fx.or(m: Maybe<&2, HX.Fx>, +f: HX.Fx) -> Maybe<&2, HX.Fx>:
+  match m:
+    case None{}:
+      Some{f}
+    case Some{+g}:
+      Some{g}
+
+def last_fx(fx: List<&2, HX.Fx>) -> Maybe<&2, HX.Fx>:
+  match fx:
+    case Nil{}:
+      None{}
+    case Con{+f, +rest}:
+      last_fx.or(last_fx(rest), f)
+
+# LAW: a view's new card ends its step with fx view_card saying its id
+# (the id the card opened with: the next one)...
+law view_card_says_its_id:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +v: HS.ViewAsk
+  for +text: String
+  {last_fx(HX.Core.fx(o, HX.Cx.c(o, HC.open_view_confirm.new(o, cx, v, text))))
+    == Some{HX.FO{J.obj(HF.view_card(HS.ViewAsk.agent(v), HS.ViewAsk.call(v), Some{HS.St.next_card(HX.d(o, cx))}))}} : Maybe<&2, HX.Fx>}
+
+# ...and the card it journals carries its ask typed (Card.view), the one
+# thing stop, due, boot and the join read...
+law view_card_typed:
+  for +id: Nat
+  for +text: String
+  for +v: HS.ViewAsk
+  for +now: Nat
+  {HS.Card.view(HC.view_card_new(id, text, v, now)) == Some{v} : Maybe<&2, HS.ViewAsk>}
+
+law view_card_id:
+  for +id: Nat
+  for +text: String
+  for +v: HS.ViewAsk
+  for +now: Nat
+  {HS.Card.id(HC.view_card_new(id, text, v, now)) == id : Nat}
+
+# ...and an agent not active: no card, and fx view_card says none (the
+# view's call gets its no at once).
+law view_card_says_no_card:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +agent: String
+  for +call: String
+  for +text: String
+  for +ask: String
+  for e: {HC.live_agent(HM.agent_named(HS.St.agents(HX.d(o, cx)), agent)) == False{} : Bool}
+  {last_fx(HX.Core.fx(o, HX.Cx.c(o, HC.open_view_confirm(o, cx, agent, call, text, ask))))
+    == Some{HX.FO{J.obj(HF.view_card(agent, call, None{}))}} : Maybe<&2, HX.Fx>}
+
+# A view's card gets one answer: his, its due's, its agent's stop or the
+# hub's boot. No state law says it alone: each of them answers only a card
+# still open and closes it (view_card_due_after_close, view_card_due_closes,
+# view_card_stop_answers with stop_leaves_no_card, boot_answers_view_cards
+# and boot_closes_view_cards), and core_mcp_view_tests runs Boot twice (the
+# second answers nothing).
 # The `confirm` effects among a step's effects (each one answers a card).
 def confirm_n(+x: J.Json) -> Nat:
   Bool.pick(Nat, String.eq(J.get_str_or(x, "fx", ""), "confirm"), 1n, 0n)
@@ -1142,7 +1206,7 @@ def view_cards(cs: List<&2, HS.Card>, +agent: String) -> Nat:
       0n
     case Con{+c, +rest}:
       +n = view_cards(rest, agent)
-      Bool.pick(Nat, String.eq(HS.Card.agent(c), agent) && HC.is_view_place(HS.Card.place(c)), 1n+n, n)
+      Bool.pick(Nat, String.eq(HS.Card.agent(c), agent) && HC.is_view(HS.Card.view(c)), 1n+n, n)
 
 # LAW: an agent's stop answers each of its view cards once (one `confirm`,
 # a no, per card placed view:<agent>/...) and no other card; the stop
@@ -1155,3 +1219,31 @@ law view_card_stop_answers:
   for +agent: String
   {confirms(HX.Core.fx(o, HX.Cx.c(o, HC.view_nos(o, cs, cx, agent))))
     == Nat.add(confirms(HX.Core.fx(o, HX.Cx.c(o, cx))), view_cards(cs, agent)) : Nat}
+
+# the view cards in `cs`, whoever's
+def view_cards_all(cs: List<&2, HS.Card>) -> Nat:
+  match cs:
+    case Nil{}:
+      0n
+    case Con{+c, +rest}:
+      +n = view_cards_all(rest)
+      Bool.pick(Nat, HC.is_view(HS.Card.view(c)), 1n+n, n)
+
+# LAW: at boot, sb-core answers each view card left open once (one
+# `confirm`, a no: its call ended with the hub that ran it) and no other
+# card (d4: never the shell, never by the place's text)...
+law boot_answers_view_cards:
+  for -o: HS.St
+  for +cs: List<&2, HS.Card>
+  for +cx: HX.Cx<o>
+  {confirms(HX.Core.fx(o, HX.Cx.c(o, HC.view_ends(o, cs, cx))))
+    == Nat.add(confirms(HX.Core.fx(o, HX.Cx.c(o, cx))), view_cards_all(cs)) : Nat}
+
+# ...and closes it (so no due, stop or boot after finds it: one answer,
+# view_card_due_after_close)
+law boot_closes_view_cards:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +c: HS.Card
+  {HX.journal(HX.Core.fx(o, HX.Cx.c(o, HC.view_ends.one(o, True{}, cx, c))))
+    == HM.snoc(HM.Ev, HX.journal(HX.Core.fx(o, HX.Cx.c(o, cx))), HM.ECardClosed{HS.Card.id(c), "ended with the hub", HS.Ans.empty()}) : List<&2, HM.Ev>}

@@ -256,8 +256,30 @@ impl<'de> Deserialize<'de> for Msg {
     }
 }
 
+/// what a view's card asks (mcp-apps, C5): the view's agent and call, and
+/// its ask (the tool and its arguments as canonical JSON, the shell's):
+/// sb-core reads a view's cards by it, never by their place
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct ViewAsk {
+    pub agent: String,
+    pub call: String,
+    pub ask: String,
+}
+
+/// Not an object: an error (its reader skips it).
+impl<'de> Deserialize<'de> for ViewAsk {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let o = Obj::deserialize(d)?;
+        Ok(ViewAsk {
+            agent: field(&o, "agent"),
+            call: field(&o, "call"),
+            ask: field(&o, "ask"),
+        })
+    }
+}
+
 /// a card of his inbox; `place`, `pr`: a place's card (ready to merge: its
-/// id, PR)
+/// id, PR); `view`: a view's call's card (mcp-apps)
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct Card {
     pub id: u64,
@@ -268,6 +290,8 @@ pub struct Card {
     pub created_ms: u64,
     pub place: Option<String>,
     pub pr: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub view: Option<ViewAsk>,
 }
 
 /// Not an object: an error (its reader skips it).
@@ -283,6 +307,7 @@ impl<'de> Deserialize<'de> for Card {
             created_ms: field(&o, "created_ms"),
             place: field(&o, "place"),
             pr: field(&o, "pr"),
+            view: field(&o, "view"),
         })
     }
 }

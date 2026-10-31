@@ -803,8 +803,8 @@ def Laws.hot_his(s, h):
 
 # open_view_confirm's two branches: the card (outside the runtime) or the
 # notice; neither touches a runtime
-def hv_rt(-o: HS.St, ok: Bool, +cx: HX.Cx<o>, +agent: String, +call: String, +text: String)
-    -> {HX.R.rts(HX.Cx.r(o, HC.open_view_confirm.go(o, ok, cx, agent, call, text))) == HX.R.rts(HX.Cx.r(o, cx)) : List<&2, HX.Rt>}:
+def hv_rt(-o: HS.St, ok: Bool, +cx: HX.Cx<o>, +v: HS.ViewAsk, +text: String)
+    -> {HX.R.rts(HX.Cx.r(o, HC.open_view_confirm.go(o, ok, cx, v, text))) == HX.R.rts(HX.Cx.r(o, cx)) : List<&2, HX.Rt>}:
   match ok:
     case False{}:
       match cx:
@@ -817,8 +817,8 @@ def hv_rt(-o: HS.St, ok: Bool, +cx: HX.Cx<o>, +agent: String, +call: String, +te
             case HX.R{a, b, st, d, e, f, g, h, i, j, k, l, m, n}:
               {==}
 
-def Laws.view_card_keeps_runtime(o, cx, agent, call, text):
-  hv_rt(o, HC.live_agent(HM.agent_named(HS.St.agents(HX.d(o, cx)), agent)), cx, agent, call, text)
+def Laws.view_card_keeps_runtime(o, cx, agent, call, text, ask):
+  hv_rt(o, HC.live_agent(HM.agent_named(HS.St.agents(HX.d(o, cx)), agent)), cx, HC.view_ask(agent, call, ask), text)
 
 # an effect out journals nothing
 def hv_out_journal(-o: HS.St, +cx: HX.Cx<o>, +x: J.Json)
@@ -833,9 +833,43 @@ def Laws.view_msg_needs_active(o, cx, agent, plugin, text, e):
   %Equal.sym(Bool, HC.live_agent(HM.agent_named(HS.St.agents(HX.d(o, cx)), agent)), False{}, e) : {HX.journal(HX.Core.fx(o, HX.Cx.c(o, HC.view_message.go(o, _, cx, agent, plugin, text)))) == HX.journal(HX.Core.fx(o, HX.Cx.c(o, cx))) : List<&2, HM.Ev>}
   hv_out_journal(o, cx, J.obj(HF.notice(HC.cat(["the view's message didn't reach @", agent, ": it is not active"]))))
 
-def Laws.view_card_needs_active(o, cx, agent, call, text, e):
-  %Equal.sym(Bool, HC.live_agent(HM.agent_named(HS.St.agents(HX.d(o, cx)), agent)), False{}, e) : {HX.journal(HX.Core.fx(o, HX.Cx.c(o, HC.open_view_confirm.go(o, _, cx, agent, call, text)))) == HX.journal(HX.Core.fx(o, HX.Cx.c(o, cx))) : List<&2, HM.Ev>}
-  hv_out_journal(o, cx, J.obj(HF.notice(HC.cat(["the view's call didn't reach @", agent, ": it is not active"]))))
+def Laws.view_card_needs_active(o, cx, agent, call, text, ask, e):
+  %Equal.sym(Bool, HC.live_agent(HM.agent_named(HS.St.agents(HX.d(o, cx)), agent)), False{}, e) : {HX.journal(HX.Core.fx(o, HX.Cx.c(o, HC.open_view_confirm.go(o, _, cx, HC.view_ask(agent, call, ask), text)))) == HX.journal(HX.Core.fx(o, HX.Cx.c(o, cx))) : List<&2, HM.Ev>}
+  +n = J.obj(HF.notice(HC.cat(["the view's call didn't reach @", agent, ": it is not active"])))
+  +said = J.obj(HF.view_card(agent, call, None{}))
+  Equal.trans(List<&2, HM.Ev>, HX.journal(HX.Core.fx(o, HX.Cx.c(o, HX.out(o, HX.out(o, cx, n), said)))), HX.journal(HX.Core.fx(o, HX.Cx.c(o, HX.out(o, cx, n)))), HX.journal(HX.Core.fx(o, HX.Cx.c(o, cx))),
+    hv_out_journal(o, HX.out(o, cx, n), said), hv_out_journal(o, cx, n))
+
+# the last effect of effects with one more at their end is that one
+def hv_last_snoc(+xs: List<&2, HX.Fx>, +y: HX.Fx) -> {Laws.last_fx(HM.snoc(HX.Fx, xs, y)) == Some{y} : Maybe<&2, HX.Fx>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{+h, +t}:
+      %Equal.sym(Maybe<&2, HX.Fx>, Laws.last_fx(HM.snoc(HX.Fx, t, y)), Some{y}, hv_last_snoc(t, y)) : {Laws.last_fx.or(_, h) == Some{y} : Maybe<&2, HX.Fx>}
+      {==}
+
+# an effect out is the step's last
+def hv_last_out(-o: HS.St, +cx: HX.Cx<o>, +x: J.Json)
+    -> {Laws.last_fx(HX.Core.fx(o, HX.Cx.c(o, HX.out(o, cx, x)))) == Some{HX.FO{x}} : Maybe<&2, HX.Fx>}:
+  match cx:
+    case HX.Cx{c, r}:
+      match c:
+        case HX.Core{d, fx, p, f, q, v}:
+          hv_last_snoc(fx, HX.FO{x})
+
+def Laws.view_card_says_its_id(o, cx, v, text):
+  hv_last_out(o, HC.open_view_confirm.card(o, cx, v, text), J.obj(HF.view_card(HS.ViewAsk.agent(v), HS.ViewAsk.call(v), Some{HS.St.next_card(HX.d(o, cx))})))
+
+def Laws.view_card_typed(id, text, v, now):
+  {==}
+
+def Laws.view_card_id(id, text, v, now):
+  {==}
+
+def Laws.view_card_says_no_card(o, cx, agent, call, text, ask, e):
+  %Equal.sym(Bool, HC.live_agent(HM.agent_named(HS.St.agents(HX.d(o, cx)), agent)), False{}, e) : {Laws.last_fx(HX.Core.fx(o, HX.Cx.c(o, HC.open_view_confirm.go(o, _, cx, HC.view_ask(agent, call, ask), text)))) == Some{HX.FO{J.obj(HF.view_card(agent, call, None{}))}} : Maybe<&2, HX.Fx>}
+  hv_last_out(o, HX.out(o, cx, J.obj(HF.notice(HC.cat(["the view's call didn't reach @", agent, ": it is not active"])))), J.obj(HF.view_card(agent, call, None{})))
 
 def hv_add0(n: Nat) -> {Nat.add(n, 0n) == n : Nat}:
   match n:
@@ -950,8 +984,57 @@ def Laws.view_card_stop_answers(o, cs, cx, agent):
     case Nil{}:
       Equal.sym(Nat, Nat.add(Laws.confirms(HX.Core.fx(o, HX.Cx.c(o, cx))), 0n), Laws.confirms(HX.Core.fx(o, HX.Cx.c(o, cx))), hv_add0(Laws.confirms(HX.Core.fx(o, HX.Cx.c(o, cx)))))
     case Con{+c, +rest}:
-      +h = String.eq(HS.Card.agent(c), agent) && HC.is_view_place(HS.Card.place(c))
+      +h = String.eq(HS.Card.agent(c), agent) && HC.is_view(HS.Card.view(c))
       hv_nos.go(o, h, c, rest, cx, agent, Laws.view_card_stop_answers(o, rest, HC.view_no.one(o, h, cx, c), agent))
+
+# boot's answer to one view card: a confirm, its close, its feed line
+def hv_end_one(-o: HS.St, +cx: HX.Cx<o>, +c: HS.Card)
+    -> {Laws.confirms(HX.Core.fx(o, HX.Cx.c(o, HC.view_ends.one(o, True{}, cx, c)))) == Nat.add(Laws.confirms(HX.Core.fx(o, HX.Cx.c(o, cx))), 1n) : Nat}:
+  match cx:
+    case HX.Cx{core, r}:
+      match core:
+        case HX.Core{d, fx, p, f, q, v}:
+          hv_c3(fx, HX.FO{J.obj(HF.confirm_card(HS.Card.id(c), HS.Card.agent(c), HC.VIEW_CARD_ENDED()))},
+            HX.FJ{HM.ECardClosed{HS.Card.id(c), "ended with the hub", HS.Ans.empty()}},
+            HX.FO{J.obj(HF.feed(HM.MAIN(), HFD.card_closed(HS.Card.id(c), "ended with the hub")))}, {==}, {==}, {==})
+
+# view_ends' step: the card is a view's (one confirm) or not
+def hv_ends.go(-o: HS.St, hit: Bool, +c: HS.Card, +rest: List<&2, HS.Card>, +cx: HX.Cx<o>,
+    ih: {Laws.confirms(HX.Core.fx(o, HX.Cx.c(o, HC.view_ends(o, rest, HC.view_ends.one(o, hit, cx, c)))))
+      == Nat.add(Laws.confirms(HX.Core.fx(o, HX.Cx.c(o, HC.view_ends.one(o, hit, cx, c)))), Laws.view_cards_all(rest)) : Nat})
+    -> {Laws.confirms(HX.Core.fx(o, HX.Cx.c(o, HC.view_ends(o, rest, HC.view_ends.one(o, hit, cx, c)))))
+      == Nat.add(Laws.confirms(HX.Core.fx(o, HX.Cx.c(o, cx))), Bool.pick(Nat, hit, 1n+Laws.view_cards_all(rest), Laws.view_cards_all(rest))) : Nat}:
+  match hit:
+    case False{}:
+      ih
+    case True{}:
+      +one = HC.view_ends.one(o, True{}, cx, c)
+      +k = Laws.confirms(HX.Core.fx(o, HX.Cx.c(o, cx)))
+      +rc = Laws.view_cards_all(rest)
+      Equal.trans(Nat, Laws.confirms(HX.Core.fx(o, HX.Cx.c(o, HC.view_ends(o, rest, one)))),
+        Nat.add(Nat.add(k, 1n), rc), Nat.add(k, 1n+rc),
+        Equal.trans(Nat, Laws.confirms(HX.Core.fx(o, HX.Cx.c(o, HC.view_ends(o, rest, one)))),
+          Nat.add(Laws.confirms(HX.Core.fx(o, HX.Cx.c(o, one))), rc), Nat.add(Nat.add(k, 1n), rc),
+          ih,
+          Equal.cong(Nat, Nat, y => Nat.add(y, rc), Laws.confirms(HX.Core.fx(o, HX.Cx.c(o, one))), Nat.add(k, 1n), hv_end_one(o, cx, c))),
+        hv_assoc(k, 1n, rc))
+
+def Laws.boot_answers_view_cards(o, cs, cx):
+  match cs:
+    case Nil{}:
+      Equal.sym(Nat, Nat.add(Laws.confirms(HX.Core.fx(o, HX.Cx.c(o, cx))), 0n), Laws.confirms(HX.Core.fx(o, HX.Cx.c(o, cx))), hv_add0(Laws.confirms(HX.Core.fx(o, HX.Cx.c(o, cx)))))
+    case Con{+c, +rest}:
+      +h = HC.is_view(HS.Card.view(c))
+      hv_ends.go(o, h, c, rest, cx, Laws.boot_answers_view_cards(o, rest, HC.view_ends.one(o, h, cx, c)))
+
+def Laws.boot_closes_view_cards(o, cx, c):
+  match cx:
+    case HX.Cx{core, r}:
+      match core:
+        case HX.Core{d, fx, p, f, q, v}:
+          hv_j3(fx, J.obj(HF.confirm_card(HS.Card.id(c), HS.Card.agent(c), HC.VIEW_CARD_ENDED())),
+            HM.ECardClosed{HS.Card.id(c), "ended with the hub", HS.Ans.empty()},
+            J.obj(HF.feed(HM.MAIN(), HFD.card_closed(HS.Card.id(c), "ended with the hub"))))
 
 def Laws.card_close_keeps_other(xs, a, b, e):
   PLV.hv_keep(xs, a, b, e)
