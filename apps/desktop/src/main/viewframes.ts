@@ -6,7 +6,6 @@
 import { BrowserWindow, ipcMain, type WebContents } from 'electron';
 import { IPC } from '../shared/api';
 import { frameAt, pointInWindow, stampGesture, viewKey, viewPermission, type PermAsk, type ViewFrame } from './viewrules';
-import { setGestureStamp } from './views';
 
 /** A window's view frames, by its webContents id. */
 const framesOf = new Map<number, readonly ViewFrame[]>();
@@ -49,16 +48,15 @@ function watch(wc: WebContents): void {
   });
 }
 
-/** Once, before any window: the frames channel (preload: window.bise.views.frames), and the stamp of view_message. */
+/** Once, before any window: the frames channel (preload: window.bise.views.frames). */
 export function installViewFrames(): void {
-  setGestureStamp(stampViewGesture);
   ipcMain.on(IPC.viewsFrames, (e, raw: unknown) => {
     framesOf.set(e.sender.id, readFrames(raw));
     watch(e.sender);
   });
 }
 
-/** The view_message from window `windowId` as it goes to the hub: main's gesture_ms, never the window's. */
+/** The view_message from window `windowId` as it goes to the hub: main's gesture_ms, never the window's (main/views.ts's stamp, core/ipc.ts gives it). */
 export function stampViewGesture(cmd: Readonly<Record<string, unknown>>, windowId: number): Record<string, unknown> {
   return stampGesture(cmd, downsOf.get(windowId) ?? new Map<string, number>());
 }

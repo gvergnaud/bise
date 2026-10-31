@@ -25,35 +25,24 @@ export function viewCmdOf(raw: unknown): Record<string, unknown> | null {
   return { ...c };
 }
 
-/** gesture_ms's stamp (mcp-apps-sandbox's stampViewGesture, from that window's input events); none set: never a gesture. */
-type Stamp = (cmd: Record<string, unknown>, windowId: number) => Record<string, unknown>;
-let stamp: Stamp = (cmd) => {
-  const out = { ...cmd };
-  delete out['gesture_ms'];
-  return out;
-};
-
-/** Main's gesture observer sets the stamp (main/viewframes.ts). */
-export function setGestureStamp(f: Stamp): void {
-  stamp = f;
-}
+/** gesture_ms's stamp (viewframes.stampViewGesture, from that window's input events): given, never a module global. */
+export type Stamp = (cmd: Record<string, unknown>, windowId: number) => Record<string, unknown>;
 
 // the calls the core has not answered yet, by the very cmd object sent (the core hands it back)
 const waiting = new Map<object, (a: ViewAnswerWire) => void>();
 
-/** A view command for the hub, as window `windowId` asked it: gesture stamped, the rest as is. Pure but for the stamp. */
-export function outgoing(raw: unknown, windowId: number): Record<string, unknown> | null {
+/** A view command for the hub, as window `windowId` asked it: the window's gesture_ms dropped, view_message's `stamp`ed. Pure but for the stamp. */
+export function outgoing(raw: unknown, windowId: number, stamp: Stamp): Record<string, unknown> | null {
   const c = viewCmdOf(raw);
   if (c === null) return null;
-  if (c['cmd'] === 'view_message') return stamp(c, windowId);
   delete c['gesture_ms'];
-  return c;
+  return c['cmd'] === 'view_message' ? stamp(c, windowId) : c;
 }
 
-/** Answers window.bise.views.call through `send` (the core's: false when it is down). */
-export function installViewCalls(send: (cmd: unknown) => boolean): void {
+/** Answers window.bise.views.call through `send` (the core's: false when it is down), view_message `stamp`ed. */
+export function installViewCalls(send: (cmd: unknown) => boolean, stamp: Stamp): void {
   ipcMain.handle(IPC.viewsCall, (e, raw: unknown): Promise<ViewAnswerWire> => {
-    const cmd = outgoing(raw, e.sender.id);
+    const cmd = outgoing(raw, e.sender.id, stamp);
     if (cmd === null) return Promise.resolve({ error: { code: -32602, message: 'not a view command' } });
     return new Promise((resolve) => {
       waiting.set(cmd, resolve);

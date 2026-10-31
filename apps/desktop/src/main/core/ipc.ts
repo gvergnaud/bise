@@ -19,6 +19,7 @@ import { startThumbs } from '../thumbs/make';
 import { DictationRoutes, type Route } from './dictation';
 import { SubRoutes } from './subs';
 import { installViewCalls, isViewCmd, viewAnswered, viewRefused, viewsCoreGone } from '../views';
+import { stampViewGesture } from '../viewframes';
 import { answeredEv, lateAnsweredEv, refusedEv, RESTARTED_WORDS, sendRefusedEv } from '../../shared/local';
 
 let core: CoreProcess | null = null;
@@ -115,7 +116,7 @@ export function startCore(env: Readonly<Record<string, string | undefined>> = pr
   const quiet = noAsks(env, env[TEST_ENV] === '1');
   let state: CoreState = 'down';
   // a view's commands go by window.bise.views.call only (main stamps their gesture: main/views.ts)
-  installViewCalls((c) => core?.send(c) ?? false);
+  installViewCalls((c) => core?.send(c) ?? false, stampViewGesture);
   ipcMain.on(CORE_IPC.cmd, (e, cmd: unknown) => {
     const name = (cmd as { cmd?: unknown } | null)?.cmd;
     dictations.sent(e.sender.id, cmd);

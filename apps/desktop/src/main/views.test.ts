@@ -4,9 +4,13 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({ ipcMain: {} }));
 
-const { isViewCmd, outgoing, setGestureStamp, viewAnswered, viewRefused } = await import('./views');
+const views = await import('./views');
+const { isViewCmd, viewAnswered, viewRefused } = views;
 
 const ids = { project: 'p', agent: 'a', call: '1-1' };
+// main's stamp (viewframes.stampViewGesture), here by its window id
+const stamp = (cmd: Record<string, unknown>, win: number): Record<string, unknown> => ({ ...cmd, gesture_ms: win * 1000 });
+const outgoing = (raw: unknown, win: number): Record<string, unknown> | null => views.outgoing(raw, win, stamp);
 
 describe('outgoing', () => {
   it('a view command with its ids, else null', () => {
@@ -22,9 +26,14 @@ describe('outgoing', () => {
 
   it("the window's gesture_ms never goes; view_message's is the stamp's, by its window", () => {
     expect(outgoing({ cmd: 'view_call', ...ids, method: 'tools/call', params: {}, gesture_ms: 5 }, 1)).toEqual({ cmd: 'view_call', ...ids, method: 'tools/call', params: {} });
-    expect(outgoing({ cmd: 'view_message', ...ids, content: [], gesture_ms: 5 }, 1)).toEqual({ cmd: 'view_message', ...ids, content: [] });
-    setGestureStamp((cmd, win) => ({ ...cmd, gesture_ms: win * 1000 }));
     expect(outgoing({ cmd: 'view_message', ...ids, content: [], gesture_ms: 5 }, 7)).toEqual({ cmd: 'view_message', ...ids, content: [], gesture_ms: 7000 });
+    // the stamp sees the command without the window's gesture_ms: a stamp with no pointer-down adds none
+    expect(views.outgoing({ cmd: 'view_message', ...ids, content: [], gesture_ms: 5 }, 7, (c) => c)).toEqual({ cmd: 'view_message', ...ids, content: [] });
+  });
+
+  it('the stamp is an argument, never a module global set by whoever installs first (review: install order lost every gesture)', () => {
+    expect(Object.keys(views)).not.toContain('setGestureStamp');
+    expect(views.installViewCalls.length, 'installViewCalls(send, stamp)').toBe(2);
   });
 });
 
