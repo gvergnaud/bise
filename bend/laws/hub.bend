@@ -1042,8 +1042,11 @@ law view_msg_from_view:
   for +now: Nat
   {HS.Msg.from(HC.view_msg_of(agent, plugin, text, id, now)) == HM.VIEW() : String}
 
-law view_msg_never_user:
-  {String.eq(HM.VIEW(), HM.USER()) == False{} : Bool}
+# ...a name no agent can take, so no agent's message looks like a view's
+# and `sb send view` reaches no agent...
+law view_name_taken:
+  for +st: HS.St
+  {HM.name_taken(st, HM.VIEW()) == True{} : Bool}
 
 # ...to that view's agent only...
 law view_msg_to_its_agent:
@@ -1072,15 +1075,83 @@ law view_msg_plugin:
   for +now: Nat
   {HS.Msg.view(HC.view_msg_of(agent, plugin, text, id, now)) == Some{plugin} : Maybe<&2, String>}
 
-# ...and delivered once: one message journaled, handed to no `sb wait`
-# waiter, then its agent's queue pumped like any queued message.
-law view_msg_one_delivery:
+# ...and only to an active agent: one stopped, archived or gone gets no
+# message (nothing is journaled, no EMsgSent).
+law view_msg_needs_active:
   for -o: HS.St
   for +cx: HX.Cx<o>
   for +agent: String
   for +plugin: String
   for +text: String
-  {HC.view_message.go(o, True{}, cx, agent, plugin, text)
-    == HC.fst(o, HC.send.waiter(o, None{},
-         HC.emit(o, cx, HM.EMsgSent{HC.view_msg_of(agent, plugin, text, HS.St.next_msg(HC.st(o, cx)), HC.now(o, cx))}, {==}, {==}, Unit{}),
-         HC.view_msg_of(agent, plugin, text, HS.St.next_msg(HC.st(o, cx)), HC.now(o, cx)))) : HX.Cx<o>}
+  for e: {HC.live_agent(HM.agent_named(HS.St.agents(HX.d(o, cx)), agent)) == False{} : Bool}
+  {HX.journal(HX.Core.fx(o, HX.Cx.c(o, HC.view_message(o, cx, agent, plugin, text))))
+    == HX.journal(HX.Core.fx(o, HX.Cx.c(o, cx))) : List<&2, HM.Ev>}
+
+# A view's call of an agent that is not active opens no card in his
+# inbox (nothing is journaled); the view's call gets a no.
+law view_card_needs_active:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +agent: String
+  for +call: String
+  for +text: String
+  for e: {HC.live_agent(HM.agent_named(HS.St.agents(HX.d(o, cx)), agent)) == False{} : Bool}
+  {HX.journal(HX.Core.fx(o, HX.Cx.c(o, HC.open_view_confirm(o, cx, agent, call, text))))
+    == HX.journal(HX.Core.fx(o, HX.Cx.c(o, cx))) : List<&2, HM.Ev>}
+
+# A view's card gets one answer: his, its due's or its agent's stop.
+# The `confirm` effects among a step's effects (each one answers a card).
+def confirm_n(+x: J.Json) -> Nat:
+  Bool.pick(Nat, String.eq(J.get_str_or(x, "fx", ""), "confirm"), 1n, 0n)
+
+def fx_confirms(f: HX.Fx) -> Nat:
+  match f:
+    case HX.FJ{_}:
+      0n
+    case HX.FO{+x}:
+      confirm_n(x)
+
+def confirms(fx: List<&2, HX.Fx>) -> Nat:
+  match fx:
+    case Nil{}:
+      0n
+    case Con{+f, +rest}:
+      Nat.add(fx_confirms(f), confirms(rest))
+
+# LAW: a view card still open at its due gets one `confirm` (a no)...
+law view_card_due_answers:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +c: HS.Card
+  {confirms(HX.Core.fx(o, HX.Cx.c(o, HC.card_due(o, Some{c}, cx))))
+    == Nat.add(confirms(HX.Core.fx(o, HX.Cx.c(o, cx))), 1n) : Nat}
+
+# ...and the one event journaled is its close as timed out (so its card
+# is gone: a second due finds nothing, view_card_due_after_close).
+law view_card_due_closes:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +c: HS.Card
+  {HX.journal(HX.Core.fx(o, HX.Cx.c(o, HC.card_due(o, Some{c}, cx))))
+    == HM.snoc(HM.Ev, HX.journal(HX.Core.fx(o, HX.Cx.c(o, cx))), HM.ECardClosed{HS.Card.id(c), "timed out", HS.Ans.empty()}) : List<&2, HM.Ev>}
+
+# the view cards of `agent` in `cs`
+def view_cards(cs: List<&2, HS.Card>, +agent: String) -> Nat:
+  match cs:
+    case Nil{}:
+      0n
+    case Con{+c, +rest}:
+      +n = view_cards(rest, agent)
+      Bool.pick(Nat, String.eq(HS.Card.agent(c), agent) && HC.is_view_place(HS.Card.place(c)), 1n+n, n)
+
+# LAW: an agent's stop answers each of its view cards once (one `confirm`,
+# a no, per card placed view:<agent>/...) and no other card; the stop
+# closes them all (stop_leaves_no_card), so their due finds them gone
+# (view_card_due_after_close): no second answer.
+law view_card_stop_answers:
+  for -o: HS.St
+  for +cs: List<&2, HS.Card>
+  for +cx: HX.Cx<o>
+  for +agent: String
+  {confirms(HX.Core.fx(o, HX.Cx.c(o, HC.view_nos(o, cs, cx, agent))))
+    == Nat.add(confirms(HX.Core.fx(o, HX.Cx.c(o, cx))), view_cards(cs, agent)) : Nat}

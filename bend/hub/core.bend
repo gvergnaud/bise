@@ -1434,6 +1434,36 @@ def reject_ids(-o: S.St, ids: List<&2, Nat>, +cx: X.Cx<o>) -> X.Cx<o>:
 def set_waiters(-o: S.St, +cx: X.Cx<o>, +ws: List<&2, X.Waiter>) -> X.Cx<o>:
   set_r(o, cx, X.R.with_waiters(rr(o, cx), ws))
 
+# the answer a view's card (docs/mcp-apps.md, C5) gets when its agent stops
+def VIEW_CARD_STOPPED() -> String:
+  "no: the agent stopped"
+
+# a card placed `view:<agent>/<call>` (view_place)
+def is_view_place(m: Maybe<&2, String>) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{+p}:
+      String.starts_with(p, "view:")
+
+def view_no.one(-o: S.St, hit: Bool, +cx: X.Cx<o>, +c: S.Card) -> X.Cx<o>:
+  match hit:
+    case True{}:
+      out(o, cx, F.confirm_card(S.Card.id(c), S.Card.agent(c), VIEW_CARD_STOPPED()))
+    case False{}:
+      cx
+
+# an agent stops: each of its view cards in `cs` (the cards before the
+# stop closed them) gets its no, the `confirm` effect card_due sends at
+# its due (law view_card_stop_answers): a view's call is answered once,
+# by him, by its card's due or by its agent's stop
+def view_nos(-o: S.St, cs: List<&2, S.Card>, +cx: X.Cx<o>, +agent: String) -> X.Cx<o>:
+  match cs:
+    case Nil{}:
+      cx
+    case Con{+c, +rest}:
+      view_nos(o, rest, view_no.one(o, String.eq(S.Card.agent(c), agent) && is_view_place(S.Card.place(c)), cx, c), agent)
+
 def stop_task.go(-o: S.St, +cx: X.Cx<o>, +name: String, +life: S.Life, +reason: String) -> X.Cx<o>:
   +cx1 = out(o, cx, F.kill(name))
   +cx2 = fail_waiters(o, cx1, name, "stopped")
@@ -1442,7 +1472,7 @@ def stop_task.go(-o: S.St, +cx: X.Cx<o>, +name: String, +life: S.Life, +reason: 
   +cx4 = upd_rt(o, cx3, X.Rt.with_turn(X.Rt.with_run(rt(o, cx3, name), S.RDown{}), None{}))
   +cx5 = emit(o, cx4, M.ELifecycle{name, life, Bool.pick(Maybe<&2, String>, String.is_empty(reason), None{}, Some{reason})}, Unit{}, Unit{}, Unit{})
   +cx6 = reject_ids(o, ids_of(M.queued_for(st(o, cx5), name)), cx5)
-  close_cards(o, cx6, name, Nil{}, "agent stopped")
+  view_nos(o, S.St.cards(st(o, cx6)), close_cards(o, cx6, name, Nil{}, "agent stopped"), name)
 
 # no wait of the stopped task survives (law stop_leaves_no_waiter)
 def stop_task(-o: S.St, +cx: X.Cx<o>, +name: String, +life: S.Life, +reason: String) -> X.Cx<o>:
@@ -2477,10 +2507,19 @@ def VIEW_CARD_LATE() -> String:
 def view_card_act(+tm: S.Tms, +card: Nat, +now: Nat) -> S.Act:
   TM.act_of(S.Tms.next_act(tm), Nat.add(now, VIEW_CARD_MS()), S.CardDue{card})
 
+# an agent not active (stopped, archived, gone): no card, the hub says so
+# (the view's call gets a no: no card opened, law view_card_needs_active)
+def open_view_confirm.go(-o: S.St, ok: Bool, +cx: X.Cx<o>, +agent: String, +call: String, +text: String) -> X.Cx<o>:
+  match ok:
+    case False{}:
+      notice(o, cx, cat(["the view's call didn't reach @", agent, ": it is not active"]))
+    case True{}:
+      +id = S.St.next_card(st(o, cx))
+      +cx2 = open_card_at(o, cx, "confirm", agent, text, None{}, Some{view_place(agent, call)}, None{})
+      aemit(o, cx2, TM.ActSet{view_card_act(tms(o, cx2), id, now(o, cx2))})
+
 def open_view_confirm(-o: S.St, +cx: X.Cx<o>, +agent: String, +call: String, +text: String) -> X.Cx<o>:
-  +id = S.St.next_card(st(o, cx))
-  +cx2 = open_card_at(o, cx, "confirm", agent, text, None{}, Some{view_place(agent, call)}, None{})
-  aemit(o, cx2, TM.ActSet{view_card_act(tms(o, cx2), id, now(o, cx2))})
+  open_view_confirm.go(o, live_agent(M.agent_named(S.St.agents(st(o, cx)), agent)), cx, agent, call, text)
 
 # a view card's due: still open, it closes as timed out and its call gets
 # a no (the `confirm` effect); answered or closed before, nothing

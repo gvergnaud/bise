@@ -240,7 +240,7 @@ def resolve(+st: S.St, +n: String) -> Maybe<&2, String>:
   resolve.pick(get_agent(st, n), st, n)
 
 def reserved(+n: String) -> Bool:
-  String.eq(n, MAIN()) || String.eq(n, USER()) || String.eq(n, HUB()) || String.eq(n, GITHUB())
+  String.eq(n, MAIN()) || String.eq(n, USER()) || String.eq(n, HUB()) || String.eq(n, GITHUB()) || String.eq(n, VIEW())
 
 def live_life(l: S.Life) -> Bool:
   match l:

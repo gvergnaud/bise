@@ -5,7 +5,30 @@ import Base
 import ../../hub/model.bend as HM
 import ../../hub/gen/state.bend as HS
 import ../../hub/lazy.bend as HLZ
+import ../../hub/cx.bend as HX
+import ../../hub/core.bend as HC
+import ../../hub/gen/fx.bend as HF
 import ./hub-cold.bend as PLC
+import ./hub-1.bend as PL1
+
+# a stop's answers to its view cards are effects only: the state stays
+def hv_one_d(-o: HS.St, hit: Bool, +cx: HX.Cx<o>, +c: HS.Card)
+    -> {HX.d(o, HC.view_no.one(o, hit, cx, c)) == HX.d(o, cx) : HS.St}:
+  match hit:
+    case True{}:
+      PL1.hub_d_hout(o, cx, HF.confirm_card(HS.Card.id(c), HS.Card.agent(c), HC.VIEW_CARD_STOPPED()))
+    case False{}:
+      {==}
+
+def hv_nos_d(-o: HS.St, +cs: List<&2, HS.Card>, +cx: HX.Cx<o>, +agent: String)
+    -> {HX.d(o, HC.view_nos(o, cs, cx, agent)) == HX.d(o, cx) : HS.St}:
+  match cs:
+    case Nil{}:
+      {==}
+    case Con{+c, +rest}:
+      +h = String.eq(HS.Card.agent(c), agent) && HC.is_view_place(HS.Card.place(c))
+      Equal.trans(HS.St, HX.d(o, HC.view_nos(o, rest, HC.view_no.one(o, h, cx, c), agent)), HX.d(o, HC.view_no.one(o, h, cx, c)), HX.d(o, cx),
+        hv_nos_d(o, rest, HC.view_no.one(o, h, cx, c), agent), hv_one_d(o, h, cx, c))
 
 # card_close_keeps_other's step: h's id is a or not
 def hv_keep.go(ca: Bool, +h: HS.Card, +t: List<&2, HS.Card>, +a: Nat, +b: Nat,
