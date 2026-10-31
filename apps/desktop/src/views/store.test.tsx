@@ -139,6 +139,29 @@ describe('a view\'s states', () => {
     expect(store.state(other)).toEqual({ kind: 'loading', height: 96 });
   });
 
+  it("a teardown's end never wipes the new session its card started meanwhile (else 'loading' for good)", async () => {
+    const { store, timers, asked } = rig();
+    const stop = store.listen(window);
+    store.ensure(REF);
+    await flush();
+    const proxy = fakeProxy();
+    frameFor(store, REF, proxy.win);
+    // the page went to the proxy: its teardown waits for the view's answer, bounded by TEARDOWN_MS
+    proxy.send({ jsonrpc: '2.0', method: UI.proxyReady });
+    void store.teardown(viewKey(REF));
+    // the card shows again before the bound: a new session from the hub
+    store.ensure(REF);
+    await flush();
+    expect(asked.filter((c) => c.cmd === 'view_resource')).toHaveLength(2);
+    expect(store.state(REF).kind).toBe('live');
+    // the old teardown's bound runs now
+    for (const t of timers) t();
+    expect(store.state(REF).kind, 'the new session stays live').toBe('live');
+    expect(store.live()).toEqual([viewKey(REF)]);
+    expect(store.liveOf(viewKey(REF))).toBeDefined();
+    stop();
+  });
+
   it('a result that is not a view is a failure', async () => {
     const { store } = rig(() => ({ result: { html: 1 } }));
     store.ensure(REF);

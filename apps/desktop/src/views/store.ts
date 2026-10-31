@@ -390,6 +390,12 @@ export class ViewsStore {
         if (over) return;
         over = true;
         s.drop();
+        // its card showed again meanwhile: ensure() asked the hub and a new session may hold the
+        // record (or is being asked): only the old one goes, the record stays the new one's
+        if (r.session !== null || r.asking) {
+          resolve();
+          return;
+        }
         this.order = this.order.filter((k) => k !== key);
         r.frame = null;
         r.state = NONE;
