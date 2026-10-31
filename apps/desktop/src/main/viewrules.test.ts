@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { frameAt, pointInWindow, isViewOrigin, isViewProxy, originOf, stampGesture, viewKey, viewNavigation, viewPermission, type ViewFrame } from './viewrules';
+import { freshGesture, GESTURE_MS, frameAt, pointInWindow, isViewOrigin, isViewProxy, originOf, stampGesture, viewKey, viewNavigation, viewPermission, type ViewFrame } from './viewrules';
 
 const A = 'http://v-0123456789abcdef.localhost:47123';
 const B = 'http://v-fedcba9876543210.localhost:47123';
@@ -115,7 +115,18 @@ describe('the gesture', () => {
     expect(pointInWindow({ globalX: 110, globalY: 90 }, content, 0), 'a zoom of 0 reads as 1').toEqual({ x: 10, y: 10 });
   });
 
-  it("view_message carries main's time, never the window's", () => {
+  it("a view's link or download takes main's fresh pointer-down in its frame, once (the hub's GESTURE_MS)", () => {
+    expect(GESTURE_MS).toBe(5000);
+    expect(freshGesture(undefined, undefined, 10_000), 'no pointer-down').toBe(false);
+    expect(freshGesture(9000, undefined, 10_000)).toBe(true);
+    expect(freshGesture(10_000 - GESTURE_MS, undefined, 10_000), 'at the bound').toBe(true);
+    expect(freshGesture(10_000 - GESTURE_MS - 1, undefined, 10_000), 'past it').toBe(false);
+    expect(freshGesture(9000, 9000, 10_000), 'taken already: one link per click').toBe(false);
+    expect(freshGesture(9500, 9000, 10_000), 'a new click').toBe(true);
+    expect(freshGesture(11_000, undefined, 10_000), 'from the future').toBe(false);
+  });
+
+    it("view_message carries main's time, never the window's", () => {
     const downs = new Map([[viewKey('p', 't1', '1-1'), 1000]]);
     const cmd = { cmd: 'view_message', project: 'p', agent: 't1', call: '1-1', content: [{ type: 'text', text: 'hi' }], gesture_ms: 99_999 };
     expect(stampGesture(cmd, downs)).toEqual({ ...cmd, gesture_ms: 1000 });

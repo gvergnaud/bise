@@ -41,6 +41,11 @@ export interface SessionEnv {
   readonly context: () => ContextIn;
   readonly openLink: (url: string) => void;
   readonly download: (files: readonly Download[]) => void;
+  /**
+   * takes his fresh click in this view, once (desktop: the pointer-down Electron main saw in its
+   * frame; the web host: the browser's own user activation): false, the link or download is refused
+   */
+  readonly gesture: () => Promise<boolean>;
   /** the view asks for a mode: the one it gets */
   readonly requestMode: (mode: DisplayMode) => DisplayMode;
   /** the view's own size (size-changed), css px */
@@ -49,6 +54,11 @@ export interface SessionEnv {
   readonly onNote: (n: Note) => void;
   /** a ui/message went in (the card's footnote) */
   readonly onMessage: () => void;
+}
+
+/** The refusal of a link or a download without his click: the hub's no-gesture (view_rpc.rs ViewError::NoGesture). */
+function noGesture(method: string): RpcError {
+  return { code: VIEW_ERR.noGesture, message: `${method} needs a click in the view first`, data: { reason: 'no-gesture' } };
 }
 
 /** Is a result the hub's 'too large' stand-in (C2)? */
@@ -182,15 +192,18 @@ export class ViewSession {
         const a = await this.env.ask({ cmd: 'view_context', ...this.ref, content: textBlocks(params['content']) });
         return 'error' in a ? error(id, a.error) : result(id, {});
       }
+      // his browser or a save, never in a loop: each takes one fresh click of his in the view
       case UI.openLink: {
         const url = linkOf(params);
         if (url === null) return error(id, { code: RPC.invalid, message: 'http, https or mailto links only' });
+        if (!(await this.env.gesture())) return error(id, noGesture(method));
         this.env.openLink(url);
         return result(id, {});
       }
       case UI.download: {
         const files = downloadsOf(params);
         if (files.length === 0) return error(id, { code: RPC.invalid, message: 'nothing to download' });
+        if (!(await this.env.gesture())) return error(id, noGesture(method));
         this.env.download(files);
         return result(id, {});
       }

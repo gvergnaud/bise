@@ -34,6 +34,7 @@ function rig(answer: (c: ViewCmd) => ViewAnswer = () => ({ result: resource() })
     base: () => ({ theme: 'dark', variables: {}, locale: 'en', timeZone: 'UTC' }),
     openLink: () => undefined,
     download: () => undefined,
+    gesture: () => Promise.resolve(false),
     panel: {
       has: (r) => tabs.has(viewKey(r)),
       open: (r) => tabs.add(viewKey(r)),

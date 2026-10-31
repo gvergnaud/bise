@@ -89,6 +89,9 @@ export function start(main: HTMLElement, token: string): void {
       window.open(url, '_blank', 'noopener,noreferrer');
     },
     download: save,
+    // no Electron main here: the browser's own user activation (a click in the view's frame
+    // activates this page too; window.open then uses it up)
+    gesture: () => Promise.resolve('userActivation' in navigator && navigator.userActivation.isActive),
     // the page is the view: always fullscreen, no panel
     panel: { has: () => true, open: () => undefined, close: () => undefined },
     watch: () => () => undefined,

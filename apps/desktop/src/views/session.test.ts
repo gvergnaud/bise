@@ -27,8 +27,11 @@ function rig(res: ViewResource = RES, answer: (c: ViewCmd) => ViewAnswer = () =>
   const notes: Note[] = [];
   const sizes: [number, number][] = [];
   const links: string[] = [];
+  const saved: string[] = [];
   const modes: string[] = [];
   let messages = 0;
+  // his fresh pointer-down in the view, as the host tells it (main's, once each)
+  let gestures = 0;
   const s = new ViewSession(REF, res, {
     post: (m) => posted.push(m),
     ask: (c) => {
@@ -37,7 +40,12 @@ function rig(res: ViewResource = RES, answer: (c: ViewCmd) => ViewAnswer = () =>
     },
     context: () => ({ theme: 'dark', variables: {}, mode: 'inline', width: 600, height: 800, locale: 'en', timeZone: 'UTC', tool: res.tool }),
     openLink: (u) => links.push(u),
-    download: () => undefined,
+    download: (fs) => saved.push(...fs.map((f) => f.name)),
+    gesture: () => {
+      const had = gestures > 0;
+      if (had) gestures -= 1;
+      return Promise.resolve(had);
+    },
     requestMode: (m) => {
       modes.push(m);
       return m;
@@ -58,7 +66,10 @@ function rig(res: ViewResource = RES, answer: (c: ViewCmd) => ViewAnswer = () =>
   };
   const flush = () => new Promise((r) => setTimeout(r, 0));
   const answerOf = (id: number) => posted.find((m) => m['id'] === id && m['method'] === undefined);
-  return { s, posted, asked, phases, notes, sizes, links, modes, methods, req, note, flush, answerOf, messages: () => messages };
+  const click = (n = 1) => {
+    gestures += n;
+  };
+  return { s, posted, asked, phases, notes, sizes, links, saved, modes, methods, req, note, flush, answerOf, click, messages: () => messages };
 }
 
 /** the handshake up to `initialized` */
@@ -163,6 +174,7 @@ describe("the view's requests", () => {
   it('links (http only), display modes, sizes; an unknown method is not found', async () => {
     const r = rig();
     await live(r);
+    r.click();
     r.req(11, UI.openLink, { url: 'https://example.com' });
     r.req(12, UI.openLink, { url: 'javascript:void(0)' });
     r.req(13, UI.displayMode, { mode: 'fullscreen' });
@@ -177,6 +189,28 @@ describe("the view's requests", () => {
     expect(r.answerOf(14)?.['error']).toMatchObject({ code: -32601 });
     expect(r.sizes).toEqual([[400, 233]]);
   });
+
+  it('a link or a download needs his fresh click in the view, one each: never in a loop (-32037 no-gesture)', async () => {
+    const r = rig();
+    await live(r);
+    const file = { contents: [{ type: 'resource', resource: { uri: 'file:///a.txt', mimeType: 'text/plain', text: 'a' } }] };
+    r.req(21, UI.openLink, { url: 'https://example.com/1' });
+    r.req(22, UI.download, file);
+    await r.flush();
+    expect(r.links, 'no click: no link').toEqual([]);
+    expect(r.saved, 'no click: no save').toEqual([]);
+    expect(r.answerOf(21)?.['error']).toMatchObject({ code: -32037, data: { reason: 'no-gesture' } });
+    expect(r.answerOf(22)?.['error']).toMatchObject({ code: -32037, data: { reason: 'no-gesture' } });
+    r.click();
+    for (let i = 0; i < 5; i += 1) r.req(30 + i, UI.openLink, { url: `https://example.com/${String(i)}` });
+    await r.flush();
+    expect(r.links, 'one click: one link').toEqual(['https://example.com/0']);
+    r.click();
+    r.req(40, UI.download, file);
+    await r.flush();
+    expect(r.saved).toEqual(['a.txt']);
+    expect(r.answerOf(40)?.['result']).toEqual({});
+  });
 });
 
 describe('context and teardown', () => {
@@ -190,6 +224,7 @@ describe('context and teardown', () => {
       context: () => ({ theme, variables: {}, mode: 'inline', width: 600, height: 800, locale: 'en', timeZone: 'UTC', tool: null }),
       openLink: () => undefined,
       download: () => undefined,
+      gesture: () => Promise.resolve(false),
       requestMode: (m) => m,
       onSize: () => undefined,
       onPhase: () => undefined,

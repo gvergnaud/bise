@@ -100,6 +100,7 @@ const api: BiseApi = {
     frames: (list) => {
       ipcRenderer.send(IPC.viewsFrames, list);
     },
+    gesture: async (ref) => (await ipcRenderer.invoke(IPC.viewsGesture, ref)) === true,
   },
   openPath: async (path, opts) => (await ipcRenderer.invoke(IPC.openPath, path, opts)) === true,
   quickLook: async (path) => (await ipcRenderer.invoke(IPC.quickLook, path)) === true,

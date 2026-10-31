@@ -71,6 +71,11 @@ export interface BiseApi {
   readonly views?: {
     readonly call: (cmd: unknown) => Promise<ViewAnswerWire>;
     readonly frames: (list: readonly ViewFrame[]) => void;
+    /**
+     * takes his last pointer-down main saw in that view's frame, when fresh (GESTURE_MS) and not
+     * taken yet: a view's link or download needs one (main/viewframes.ts)
+     */
+    readonly gesture: (ref: { readonly project: string; readonly agent: string; readonly call: string }) => Promise<boolean>;
   };
   /**
    * Opens a file or folder named in an answer (an absolute path) in his
@@ -539,6 +544,7 @@ export const IPC = {
   openExternal: 'bise:open-external',
   viewsCall: 'bise:views-call',
   viewsFrames: 'bise:views-frames',
+  viewsGesture: 'bise:views-gesture',
   openPath: 'bise:open-path',
   pickFolder: 'bise:pick-folder',
   pickFiles: 'bise:pick-files',

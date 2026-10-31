@@ -47,6 +47,8 @@ export interface ViewsEnv {
   readonly base: () => Pick<ContextIn, 'theme' | 'variables' | 'locale' | 'timeZone'>;
   readonly openLink: (url: string) => void;
   readonly download: (files: readonly Download[]) => void;
+  /** takes his fresh click in that view, once (a link or a download needs one; session.ts) */
+  readonly gesture: (r: ViewRef) => Promise<boolean>;
   /** the panel: is its tab there, open it, close it */
   readonly panel: {
     readonly has: (r: ViewRef) => boolean;
@@ -268,6 +270,7 @@ export class ViewsStore {
       context: () => this.contextOf(r),
       openLink: this.env.openLink,
       download: this.env.download,
+      gesture: () => this.env.gesture(r.ref),
       requestMode: (mode) => {
         if (mode === 'fullscreen') this.env.panel.open(r.ref);
         else this.env.panel.close(r.ref);

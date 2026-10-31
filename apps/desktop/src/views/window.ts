@@ -41,6 +41,8 @@ export const viewsStore = new ViewsStore({
     void (window as Partial<Window>).bise?.openExternal(url);
   },
   download: save,
+  // main takes the pointer-down it saw in that view's frame (viewframes.ts); no door: none
+  gesture: async (r) => (await (window as Partial<Window>).bise?.views?.gesture(r)) === true,
   panel: {
     has: (r) => {
       const id = entityKey(viewEntity(r));

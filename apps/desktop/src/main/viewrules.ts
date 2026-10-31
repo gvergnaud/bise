@@ -9,8 +9,9 @@
 //     denies everything else to it, and to any subframe that isn't the app's own (file:, the pages
 //     server): a frame nested in a view, or one whose origin it can't tell;
 //   - a pointer-down main itself sees inside a frame's rect is that view's gesture: main stamps
-//     gesture_ms on the window's view_message (the renderer and the proxy are never trusted for
-//     it; the hub decides with it);
+//     gesture_ms on the window's view_message (the hub decides with it), and a view's link or
+//     download takes one fresh pointer-down each (freshGesture). The view and its proxy can't make
+//     one; the rects come from the window's layer (the app's own code, never a view's);
 //   - a frame navigation in a view: the proxy may make its blob view, a frame nested in the view
 //     goes where the CSP lets it (frameDomains), anything else (the view or the proxy leaving
 //     for another url) is dropped, never opened in his browser.
@@ -174,6 +175,18 @@ export function frameAt(frames: readonly ViewFrame[], x: number, y: number): Vie
     if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) return f;
   }
   return null;
+}
+
+/** How fresh his pointer-down must be (the hub's view_limits.rs GESTURE_MS, for ui/message). */
+export const GESTURE_MS = 5000;
+
+/**
+ * Pure: may a view's link or download go now? Main saw his pointer-down in its frame at `at`
+ * (epoch ms), within GESTURE_MS of `now`, and no earlier one took it (`taken`: the pointer-down
+ * the last link or download used): one per click, never a loop.
+ */
+export function freshGesture(at: number | undefined, taken: number | undefined, now: number): boolean {
+  return at !== undefined && at !== taken && at <= now && now - at <= GESTURE_MS;
 }
 
 /** A view's key: one per (project, agent, call). */
