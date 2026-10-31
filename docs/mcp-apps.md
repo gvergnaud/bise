@@ -44,11 +44,17 @@ proxy page and the CSP are written from the public spec. The public SDK
 - `fake-app/views/hostile.html`: every escape a view can try (top
   window and its document, cookie, undeclared fetch/img/frame (a frame
   counts as blocked when CSP fired its `frame-src` violation), `<base>`, popup,
-  top navigation, spoofed host messages, model-only tool, other server's
-  tool, `mistral/*`, undeclared mic/camera/MIDI/clipboard, a 200-message
-  flood). Each probe is a `[data-probe][data-result=blocked|leaked]` row;
-  `body[data-done]` when all ran. A host is safe when no row says
-  `leaked` (the counter of accepted flood messages must stay ≤ 5).
+  top navigation, model-only tool, other server's tool, `mistral/*`,
+  undeclared mic/camera/MIDI/clipboard, a 200-message flood, a 40-call
+  flood), and three controls that must work (an app-visible call, the
+  declared fetch, a blob frame of its own). Each is a
+  `[data-probe][data-kind=probe|control][data-result]` row; a probe says
+  `blocked` only for the refusal the host owes it (its JSON-RPC code and
+  reason, a CSP violation of its directive, a SecurityError, a
+  permissions-policy refusal), `broken` for any other failure (no answer,
+  a 503), `leaked` when it got through; a control says `ok` or `broken`.
+  `body[data-done]` when all ran. A host is safe when every probe says
+  `blocked` and every control `ok`.
 - `fake-views/`: a plugin with one static Vibe view
   (`ai.mistral.vibe/views/hello`), no server.
 - `fake-score/`: imitates the piano composer: `compose` (score in
@@ -356,7 +362,9 @@ Signed by architect (m_50047), with these owners:
   `show_hostile`, its web host page (`GET /v/main/<call>`, C9) in
   headless Chromium (`*.localhost` mapped to 127.0.0.1); it wants the
   proxy on `v-<hash>.localhost`, standards mode, `body[data-done]` and
-  every probe (22) `blocked`. Two rules run it (architect m_50500):
+  exactly its rows by name (3 controls `ok`, then 21 probes `blocked`;
+  every https request answered by the test, every permission granted and
+  the devices faked, so a refusal can only be the sandbox's). Two rules run it (architect m_50500):
   on the `mcp-apps` tip after each sandbox or host land and before
   `sb feature ready` (risk 1); and, once merged, as the `mcp-apps` step
   of `scripts/nightly_desktop.sh` (owner mcp-apps), so in the nightly
