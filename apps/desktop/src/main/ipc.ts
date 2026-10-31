@@ -118,7 +118,8 @@ export function installIpc(testMode: boolean): void {
   // navigator.clipboard can never read or write his clipboard; his run: electron's default, granted
   const quiet = noAsks(process.env, testMode);
   const base = (permission: string): boolean => (quiet ? offscreenGrants(permission) : testMode ? !CLIPBOARD_PERMS.has(permission) : true);
-  // an MCP Apps view's (viewrules.ts): only what its frame was granted, before the rule above
+  // an MCP Apps view's (viewrules.ts): only what its frame was granted, before the rule above; a
+  // subframe that isn't the app's own (file:, the pages server), a frame nested in a view: denied
   const s = session.defaultSession;
   s.setPermissionCheckHandler((wc, permission, requestingOrigin, d) => viewPermissionIn(wc, permission, { ...d, requestingOrigin }) ?? base(permission));
   s.setPermissionRequestHandler((wc, permission, done, d) => {

@@ -6,13 +6,16 @@
 //   - the window tells main its live view frames (window.bise.views.frames: the whole list, each
 //     with its visible rect and its granted permissions); main grants media (audio, video), MIDI
 //     and the clipboard's sanitized write to a view origin only when its frame says granted, and
-//     denies everything else to it, and to any subframe whose origin it can't tell;
+//     denies everything else to it, and to any subframe that isn't the app's own (file:, the pages
+//     server): a frame nested in a view, or one whose origin it can't tell;
 //   - a pointer-down main itself sees inside a frame's rect is that view's gesture: main stamps
 //     gesture_ms on the window's view_message (the renderer and the proxy are never trusted for
 //     it; the hub decides with it);
 //   - a frame navigation in a view: the proxy may make its blob view, a frame nested in the view
 //     goes where the CSP lets it (frameDomains), anything else (the view or the proxy leaving
 //     for another url) is dropped, never opened in his browser.
+
+import { isPagesFrame } from './framelink';
 
 /** The permissions a view can be granted (views.rs PERMS; the plugin's grant, C8). */
 export type ViewPerm = 'camera' | 'microphone' | 'midi' | 'clipboardWrite';
@@ -116,14 +119,26 @@ export function askOrigin(ask: PermAsk): string | null {
 }
 
 /**
- * Pure: a view's answer to a permission, or null when the request is not a view's (the app's own
- * rule answers it). A subframe whose origin can't be told (about:srcdoc, about:blank, data:) gets
- * false: it may be inside a view.
+ * Pure: is a subframe's request the app's own (an artifact on the pages server, or a file: page)?
+ * Never a frame nested in a view: its CSP's frame-src and the guard's webRequest fence keep both
+ * out of a view.
+ */
+function appFrame(ask: PermAsk, origin: string | null): boolean {
+  if (origin !== null) return isPagesFrame(origin);
+  const url = ask.requestingUrl ?? ask.securityOrigin ?? ask.requestingOrigin;
+  return url !== undefined && url.startsWith('file:');
+}
+
+/**
+ * Pure: a view's answer to a permission, or null when the request is the app's own (the app's rule
+ * answers it): its main frame, and a subframe of the app's own origins (file:, the pages server).
+ * Any other subframe gets false: a frame nested in a view (one of its frameDomains, an https
+ * origin), or one whose origin can't be told (about:srcdoc, about:blank, data:), would else get the
+ * app's rule, electron's grant-all in his run (openExternal, pointerLock, notifications).
  */
 export function viewPermission(permission: string, ask: PermAsk, frames: readonly ViewFrame[]): boolean | null {
   const origin = askOrigin(ask);
-  if (origin === null) return ask.isMainFrame ? null : false;
-  if (!isViewOrigin(origin)) return null;
+  if (origin === null || !isViewOrigin(origin)) return ask.isMainFrame || appFrame(ask, origin) ? null : false;
   const media = ask.mediaTypes ?? (ask.mediaType !== undefined ? [ask.mediaType] : []);
   const need = wanted(permission, media);
   if (need === null) return false;

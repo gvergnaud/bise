@@ -72,6 +72,21 @@ describe('a view asks for a permission', () => {
     expect(viewPermission('midi', { isMainFrame: false, requestingUrl: 'about:blank' }, frames)).toBe(false);
     expect(viewPermission('media', { isMainFrame: true, requestingUrl: 'file:///Applications/bise.app/x/index.html', mediaTypes: ['audio'] }, frames)).toBe(null);
     expect(viewPermission('clipboard-sanitized-write', { isMainFrame: false, requestingUrl: 'http://127.0.0.1:47123/a/x/1/x.html' }, frames)).toBe(null);
+    expect(viewPermission('clipboard-sanitized-write', { isMainFrame: false, requestingUrl: 'file:///Applications/bise.app/x/index.html' }, frames)).toBe(null);
+  });
+
+  it("a frame nested in a view (one of its frameDomains) never gets the app's rule: denied", () => {
+    // the app's rule answers true to all in his run (electron's default): the nested frame would
+    // get openExternal, pointerLock and notifications without asking (review blocker, cr-desktop 1)
+    const yt = { isMainFrame: false, requestingUrl: 'https://www.youtube.com/embed/x' };
+    for (const p of ['openExternal', 'pointerLock', 'notifications', 'fullscreen', 'midi', 'clipboard-sanitized-write', 'geolocation']) {
+      expect(viewPermission(p, yt, frames), p).toBe(false);
+    }
+    expect(viewPermission('media', { ...yt, securityOrigin: 'https://www.youtube.com/', mediaTypes: ['audio'] }, frames)).toBe(false);
+    expect(viewPermission('notifications', { isMainFrame: false, requestingOrigin: 'https://www.youtube.com' }, frames), 'a check too').toBe(false);
+    for (const url of ['http://localhost:5173/x', 'http://127.0.0.1.evil.com/x', 'http://user@127.0.0.1:47123/x', 'https://127.0.0.1:47123/x', 'ws://127.0.0.1:1/']) {
+      expect(viewPermission('notifications', { isMainFrame: false, requestingUrl: url }, frames), url).toBe(false);
+    }
   });
 });
 
