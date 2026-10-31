@@ -22,6 +22,7 @@ python3 -u tests/mcp_apps_hostile_e2e.py
 """
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -80,6 +81,18 @@ try {
     out.done = await fr.$('body[data-done]').then((e) => e !== null);
     out.mode = await fr.evaluate(() => document.compatMode).catch((e) => String(e));
     out.rows = await fr.$$eval('[data-probe]', (rs) => rs.map((r) => ({ probe: r.dataset.probe, kind: r.dataset.kind, result: r.dataset.result, text: r.textContent })));
+  }
+  // the proxy loads only with a session view/resource made (C6): its url
+  // without one, with an empty or a wrong one, then with its own
+  const proxy = out.frames.find((u) => /^http:\/\/v-[0-9a-f]+\.localhost:\d+\/mcp-app\?s=/.test(u));
+  if (proxy) {
+    const bare = proxy.split('?')[0];
+    out.sessions = {};
+    for (const [k, u] of [['none', bare], ['empty', bare + '?s='], ['wrong', bare + '?s=' + '0'.repeat(32)], ['own', proxy]]) {
+      const p = await ctx.newPage();
+      out.sessions[k] = await p.goto(u).then((r) => r ? r.status() : 0, (e) => String(e).slice(0, 120));
+      await p.close();
+    }
   }
 } finally {
   await b.close();
@@ -159,7 +172,12 @@ def main():
         if call and base:
             out = browse("%s/v/main/%s" % (base, call))
             rows = out.get("rows", [])
-            check(any(f.startswith("http://v-") and f.endswith("/mcp-app") for f in out.get("frames", [])), "the view's proxy on its own origin: %r" % out.get("frames"))
+            check(any(re.match(r"^http://v-[0-9a-f]{16}\.localhost:\d+/mcp-app\?s=[0-9a-f]{32}$", f) for f in out.get("frames", [])),
+                  "the view's proxy on its own origin, with its session: %r" % out.get("frames"))
+            # a page that never asked view/resource (a .html file file: lets
+            # frame the proxy) gets 404; the session the host got loads (the control)
+            check(out.get("sessions") == {"none": 404, "empty": 404, "wrong": 404, "own": 200},
+                  "the proxy: 404 without its session (none, empty, wrong), 200 with it: %r" % out.get("sessions"))
             # the hub's CSP meta goes after the view's doctype: else quirks mode
             check(out.get("mode") == "CSS1Compat", "the view's doctype keeps it in standards mode: %r" % out.get("mode"))
             check(out.get("done") is True, "the hostile view ran every probe (body[data-done])")

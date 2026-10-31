@@ -379,7 +379,9 @@ Signed by architect (m_50047), with these owners:
   proxy on `v-<hash>.localhost`, standards mode, `body[data-done]` and
   exactly its rows by name (3 controls `ok`, then 21 probes `blocked`;
   every https request answered by the test, every permission granted and
-  the devices faked, so a refusal can only be the sandbox's). Two rules run it (architect m_50500):
+  the devices faked, so a refusal can only be the sandbox's), and the
+  proxy's url 404 with no session, an empty or a wrong one, 200 with
+  its own. Two rules run it (architect m_50500):
   on the `mcp-apps` tip after each sandbox or host land and before
   `sb feature ready` (risk 1); and, once merged, as the `mcp-apps` step
   of `scripts/nightly_desktop.sh` (owner mcp-apps), so in the nightly
