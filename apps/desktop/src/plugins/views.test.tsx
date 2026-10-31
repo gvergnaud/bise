@@ -111,6 +111,27 @@ describe("the add's step 2: the server's views once it runs", () => {
     vi.useRealTimers();
   });
 
+  it('a parent that renders again (a new onClose each time) neither speeds the asks up nor pushes the 15 s bound back', async () => {
+    vi.useFakeTimers();
+    let closed = 0;
+    let asked = 0;
+    // Add.tsx's props: askHub and step2.skip are the same at each render, onClose a new arrow
+    const ask = () => { asked += 1; return Promise.resolve({ result: [] }); };
+    const skip: string[] = [];
+    const step = () => (
+      <ViewsStep plugin="docs" project="home" skip={skip} wait={{ every: 1000, upTo: 2000 }} ask={ask} send={() => undefined} onClose={() => { closed += 1; }} />
+    );
+    const v = render(step());
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    for (let i = 0; i < 6; i += 1) {
+      v.rerender(step());
+      await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+    }
+    expect(asked, 'once a second, from the first ask').toBe(3);
+    expect(closed, 'closed at its bound, 2 s after it opened').toBe(1);
+    vi.useRealTimers();
+  });
+
   it("the bridge not ready yet (404, 404, then the list): still 'starting…', then its switches", async () => {
     vi.useFakeTimers();
     let n = 0;

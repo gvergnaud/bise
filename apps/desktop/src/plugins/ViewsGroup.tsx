@@ -2,7 +2,7 @@
 // it uses and reaches, a switch per permission it declares, 'not granted' while off); on the add
 // screen, the views it shows before it runs, switched there. A switch sends `plugin_grant` with
 // the view's whole grant; what he leaves off is not granted. Owner: mcp-apps-host.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, GroupLabel, sentenceCase, Sheet, Toggle } from '@/ds';
 import type { AppCmd, PluginPart } from '@/proto';
 import { views } from '@/proto/words_views.gen';
@@ -175,20 +175,25 @@ export const STEP_WAIT = { every: 1000, upTo: 15_000 } as const;
 export function ViewsStep({ plugin, project, skip, ask, send, onClose, wait = STEP_WAIT }: { plugin: string; project: string; skip: readonly string[]; ask: PluginViewsAsk; send: (cmd: AppCmd) => void; onClose: () => void; wait?: { readonly every: number; readonly upTo: number } }) {
   const [parts, setParts] = useState<PluginPart[] | null>(null);
   const [ticks, setTicks] = useState<Record<string, readonly string[]>>({});
+  // the parent's onClose is a new function at each of its renders: read through a ref, never an
+  // effect's dependency (each render restarted the asks, faster than once a second, and pushed the
+  // bound back without end); the bound counts from the step's opening, once
+  const close = useRef(onClose);
+  useEffect(() => {
+    close.current = onClose;
+  }, [onClose]);
   useEffect(() => {
     let live = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    let left = wait.upTo;
+    let asks = 0;
     const once = () => {
+      asks += 1;
       void ask({ cmd: 'plugin_views', project, plugin }).then((a) => {
         if (!live) return;
         const found = 'error' in a ? [] : partsOfList(plugin, a.result, skip);
         if (found.length > 0) setParts(found);
-        else if (left <= 0) onClose();
-        else {
-          left -= wait.every;
-          timer = setTimeout(once, wait.every);
-        }
+        else if (asks * wait.every > wait.upTo) close.current();
+        else timer = setTimeout(once, wait.every);
       });
     };
     once();
@@ -196,7 +201,7 @@ export function ViewsStep({ plugin, project, skip, ask, send, onClose, wait = ST
       live = false;
       if (timer !== undefined) clearTimeout(timer);
     };
-  }, [ask, project, plugin, skip, onClose, wait.every, wait.upTo]);
+  }, [ask, project, plugin, skip, wait.every, wait.upTo]);
   return (
     <Sheet open onClose={onClose} title={views.step_head({ name: plugin })} testId="plugins.views_step"
       foot={
