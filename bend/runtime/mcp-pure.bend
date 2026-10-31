@@ -56,12 +56,21 @@ def ui_last(fuel: Nat, m: Maybe<&2, Nat>, +desc: String,
           ui_last(k, Tx.find(String.drop(desc, Nat.add(p, 1n)), ui_marker(),
             Nat.add(p, 1n)), desc, Some{p})
 
-# the uri after the last marker is the field only when it has no space
+# the text after the last marker is the field only when it is a `ui://`
+# uri (MCP Apps' only scheme) with no space: a tool with no view whose
+# schema ends with ` | ui: <word>` keeps its whole description
+def desc_ui.uri(ok: Bool, +desc: String, +p: Nat, +rest: String) -> String & String:
+  match ok:
+    case True{}:
+      (String.take(desc, p), rest)
+    case False{}:
+      (desc, "")
+
 def desc_ui.rest(sp: Maybe<&2, Nat>, +desc: String, +p: Nat, +rest: String)
     -> String & String:
   match sp:
     case None{}:
-      (String.take(desc, p), rest)
+      desc_ui.uri(String.starts_with(rest, "ui://"), desc, p, rest)
     case Some{_}:
       (desc, "")
 

@@ -212,6 +212,9 @@ def Laws.ui_field_is_the_last():
 def Laws.ui_field_has_no_space():
   {==}
 
+def Laws.ui_field_needs_the_ui_scheme():
+  {==}
+
 def Laws.index_tool_hides_the_ui_field():
   {==}
 

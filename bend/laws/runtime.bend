@@ -634,6 +634,15 @@ law ui_field_is_the_last:
 law ui_field_has_no_space:
   {Mc.desc_ui("#a | ui: not a uri") == ("#a | ui: not a uri", "") : String & String}
 
+# LAW: a tool with no view whose schema text ends with ` | ui: <word>`
+# keeps its whole description: the field is a `ui://` uri (MCP Apps'
+# only scheme), never any word after the marker.
+law ui_field_needs_the_ui_scheme:
+  {(Mc.desc_ui("#a | input: {\"description\":\"x | ui: y\"}"),
+    Mc.desc_ui("#a | ui: https://p/v"))
+    == (("#a | input: {\"description\":\"x | ui: y\"}", ""),
+        ("#a | ui: https://p/v", "")) : (String & String) & (String & String)}
+
 # LAW: the model's tool description never carries the ui field.
 law index_tool_hides_the_ui_field:
   {Mc.index_of("http://127.0.0.1:9/t/p/s p show : #Show | input: {} | ui: ui://p/v")
