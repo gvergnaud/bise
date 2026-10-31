@@ -18,7 +18,8 @@ calls fake_score.compose, the next calls fake_app.show_counter twice.
    app-only tool of the view's server) runs, whisper (model-only) is
    -32031, fake-score's export from fake-app's view is -32031,
    mistral/complete is -32034; with main's REPL gone the call goes
-   through the hub's views bridge and says -32036 server-restarted once.
+   through the hub's views bridge: its result, with
+   `_meta["dev.bise/server-restarted"]` on the first call only.
 
 python3 -u tests/mcp_apps_e2e.py
 """
@@ -144,10 +145,15 @@ def hub_methods(E, c, views):
     except (OSError, ValueError) as e:
         check(False, "main's REPL to stop: %s" % e)
         return
+    restarted = lambda r: ((r.get("result") or {}).get("_meta") or {}).get("dev.bise/server-restarted")
     first = call(c, counter, "tools/call", {"name": "bump", "arguments": {"by": 1}})
-    check(code_of(first) == -32036, "the first call after its REPL went: -32036 server-restarted %r" % (first.get("error") or first.get("result")))
+    # the call ran (its result kept: a view that retried would run it twice),
+    # on a fresh server whose count started over, and says so on its result
+    check("counter at 1" in json.dumps(first.get("result")) and restarted(first) is True,
+          "the first call after its REPL went: its result, _meta['dev.bise/server-restarted'] %r" % (first.get("error") or first.get("result")))
     again = call(c, counter, "tools/call", {"name": "bump", "arguments": {"by": 1}})
-    check("counter at" in json.dumps(again.get("result")), "said once: the next call runs %r" % (again.get("error") or again.get("result")))
+    check("counter at 2" in json.dumps(again.get("result")) and restarted(again) is None,
+          "said once: the next call's result has no restart flag %r" % (again.get("error") or again.get("result")))
 
 
 def main():

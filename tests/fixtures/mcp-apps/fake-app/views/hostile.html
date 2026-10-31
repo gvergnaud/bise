@@ -223,9 +223,7 @@ async function run() {
     const errs = await Promise.all(all);
     const ok = errs.filter((e) => e === null).length;
     if (ok > 0) return leaked(ok + " accepted");
-    // -32037 no-gesture (ViewError::NoGesture); -32035 with that reason
-    // was the web host's word before it
-    const bad = errs.filter((e) => !(e && (e.code === -32037 || e.code === -32035) && e.data && e.data.reason === "no-gesture"));
+    const bad = errs.filter((e) => !(e && e.code === -32037 && e.data && e.data.reason === "no-gesture"));
     return bad.length === 0 ? blocked("200 refused, no-gesture") : broken(bad.length + " refused otherwise: " + JSON.stringify(bad[0]).slice(0, 160));
   });
   // 40 calls in a burst: past 30 a minute (the control and the probes
