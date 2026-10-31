@@ -740,6 +740,91 @@ def turn_with_notifs(turn: Maybe<&2, T.Turn>, +notifs: List<&2, String>)
           Some{T.Turn{nulls, steer, List.append(&2, String, notifs, tnotifs),
             False{}}}
 
+# ---- a refused history (main's 400 of 2026-10-30) ----
+# The provider refused the conversation's history itself (W.history_mark:
+# a 400 about its messages or a thinking signature): the same history
+# would fail every turn, and the session would be stuck. The reasoning
+# replayed in it (the think spans, signed or not) is what a provider
+# checks the most and what a gateway mangles, so the call goes again
+# once without any (heal); the user reads what was dropped. Healed, the
+# history holds no span: a second refusal fails the turn, as before.
+def heal_msg.role(role: T.Role, +text: String, +calls: List<&2, T.Call>,
+    +inj: Bool) -> T.Msg:
+  match role:
+    case T.RAsst{}:
+      T.Msg{T.RAsst{}, W.no_think(text), calls, inj}
+    case T.RUser{}:
+      T.Msg{T.RUser{}, text, calls, inj}
+    case T.RSys{}:
+      T.Msg{T.RSys{}, text, calls, inj}
+    case T.RTool{}:
+      T.Msg{T.RTool{}, text, calls, inj}
+
+def heal_msg(+m: T.Msg) -> T.Msg:
+  match m:
+    case T.Msg{+role, +text, +calls, +inj}:
+      heal_msg.role(role, text, calls, inj)
+
+def heal(ms: List<&2, T.Msg>) -> List<&2, T.Msg>:
+  match ms:
+    case Nil{}:
+      Nil{}
+    case Con{+m, rest}:
+      Con{heal_msg(m), heal(rest)}
+
+def thinking_n.role(role: T.Role, +text: String) -> Nat:
+  match role:
+    case T.RAsst{}:
+      Bool.pick(Nat, W.has_think(text), 1n, 0n)
+    case _:
+      0n
+
+# how many messages heal changes (assistant messages with a think span)
+def thinking_n(ms: List<&2, T.Msg>) -> Nat:
+  match ms:
+    case Nil{}:
+      0n
+    case Con{+m, rest}:
+      match m:
+        case T.Msg{+role, +text, _, _}:
+          Nat.add(thinking_n.role(role, text), thinking_n(rest))
+
+def set_history(+s: T.Session, +h: List<&2, T.Msg>) -> T.Session:
+  match s:
+    case T.Sess{+cfg, _, +inputs, +actions, +turn, +pending, +queued, +notifs}:
+      T.Sess{cfg, h, inputs, actions, turn, pending, queued, notifs}
+
+# what the user reads: the refusal, then what was dropped and what next
+def heal_notice(+error: String, +n: Nat) -> String:
+  String.concat([error, " bise sends it again once without the reasoning of ",
+    Nat.show(n), Bool.pick(String, Nat.is_eq(n, 1n), " earlier reply", " earlier replies"),
+    " (the model thinks again; nothing else of the conversation is dropped)."])
+
+def apply.completion_fail.fail(+error: String, +s: T.Session) -> T.Res:
+  T.Accepted{Con{T.CandidateDiscarded{error},
+      Con{T.turn_failed(error), Nil{}}},
+    Nil{}, bump_inputs(finish_turn(s))}
+
+def apply.completion_fail.heal(none: Bool, +n: Nat, +error: String,
+    +s: T.Session) -> T.Res:
+  match none:
+    case True{}:
+      apply.completion_fail.fail(error, s)
+    case False{}:
+      +s1 = bump_inputs(set_history(s, heal(sess_history(s))))
+      d = dispatch(s1)
+      dispatch_result(d, Con{T.CandidateDiscarded{heal_notice(error, n)}, Nil{}},
+        s1)
+
+def apply.completion_fail.hist(hist: Bool, +error: String, +s: T.Session)
+    -> T.Res:
+  match hist:
+    case True{}:
+      +n = thinking_n(sess_history(s))
+      apply.completion_fail.heal(Nat.is_eq(n, 0n), n, error, s)
+    case False{}:
+      apply.completion_fail.fail(error, s)
+
 # big-request (2026-10-04): a call the provider refused for its size,
 # after the images were already cut (runtime/provider.bend), starts an
 # automatic compaction instead of failing the turn: the turn goes on
@@ -756,9 +841,7 @@ def apply.completion_fail.big(big: Bool, +error: String, +s: T.Session)
               turn_with_notifs(turn, notifs), Nil{}, Nil{}),
             Con{T.CandidateDiscarded{error}, Nil{}}, bump_inputs(s))
     case False{}:
-      T.Accepted{Con{T.CandidateDiscarded{error},
-          Con{T.turn_failed(error), Nil{}}},
-        Nil{}, bump_inputs(finish_turn(s))}
+      apply.completion_fail.hist(W.history_refused_in(error), error, s)
 
 def apply.completion_fail.agent(matched: Bool, +error: String,
     +s: T.Session) -> T.Res:

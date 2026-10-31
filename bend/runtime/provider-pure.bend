@@ -975,7 +975,11 @@ def refusal.who(+name: String) -> String:
 # check (the designer's words, BISE-282's pattern)
 # (big: a refusal for size, W.size_refused: a 413 or a 400 that says so;
 # its line carries W.too_large_mark, which the Core reads to compact)
-def refusal.head(+who: String, +status: U32, big: Bool) -> String:
+# (hist: a refusal of the history itself, W.history_refused; its line
+# carries W.history_mark, which the Core reads to send it again once
+# without its reasoning)
+def refusal.head(+who: String, +status: U32, big: Bool, hist: Bool)
+    -> String:
   +s = U32.show(status)
   Bool.pick(String, Bool.or(U32.is_eq(status, 401), U32.is_eq(status, 403)),
     String.concat([who, " refused the key (", s, "). check it with /setup."]),
@@ -985,7 +989,9 @@ def refusal.head(+who: String, +status: U32, big: Bool) -> String:
       Bool.pick(String, big,
         String.concat([who, " refused the request (", s, "). ",
           W.too_large_mark(), "."]),
-        String.concat([who, " refused the request (", s, ")."]))))
+        Bool.pick(String, hist,
+          String.concat([who, " ", W.history_mark(), " (", s, ")."]),
+          String.concat([who, " refused the request (", s, ")."])))))
 
 # the retry line of a request refused for its size (model_call.sized)
 def size_retry_why(+name: String, +status: U32, +half: Nat) -> String:
@@ -1040,7 +1046,8 @@ def refusal(+name: String, +status: U32, +body: String, +key: String)
     -> String:
   +who = refusal.who(name)
   +said = said_cut(mask(W.err_said(body), key))
-  String.append(refusal.head(who, status, W.size_refused(status, body)),
+  String.append(refusal.head(who, status, W.size_refused(status, body),
+      W.history_refused(status, body)),
     refusal.said(String.is_empty(said), who, said))
 
 def attempt_for.fail(refused: Bool, +why: String, +name: String,

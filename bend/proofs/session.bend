@@ -334,3 +334,18 @@ def Laws.signed_think_reply_is_committed():
 
 def Laws.hollow_session_loads_and_sends():
   {==}
+
+def Laws.history_refusal_reads_the_messages():
+  {==}
+
+def Laws.history_refusal_line():
+  {==}
+
+def Laws.refused_history_goes_again_without_reasoning():
+  {==}
+
+def Laws.refused_history_twice_fails_the_turn():
+  {==}
+
+def Laws.other_refusal_fails_the_turn():
+  {==}

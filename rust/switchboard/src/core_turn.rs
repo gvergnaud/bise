@@ -12,6 +12,11 @@ pub(crate) fn model_refusal(turn_done: &str) -> Option<String> {
     if why.contains("the request is too large") {
         return None;
     }
+    // a refusal of the conversation's history is the history's, not the
+    // model's (core/wire.bend history_mark: the Core sent it again once)
+    if why.contains("refused the conversation's history") {
+        return None;
+    }
     let at = why.find(" refused the ")?;
     let rest = &why[at..];
     let open = rest.find('(')?;

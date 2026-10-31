@@ -1292,3 +1292,74 @@ law hollow_session_loads_and_sends:
     == (W.arr_field_or(W.parse_json("{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Where were we?\"}]},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Are you there?\",\"cache_control\":{\"type\":\"ephemeral\"}}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Yes: the schema is in tools.ts.\",\"cache_control\":{\"type\":\"ephemeral\"}}]}]}"), "messages"),
       W.arr_field_or(W.parse_json("{\"messages\":[{\"role\":\"system\",\"content\":\"You are bise.\"},{\"role\":\"user\",\"content\":\"Where were we?\"},{\"role\":\"user\",\"content\":\"Are you there?\"},{\"role\":\"assistant\",\"content\":\"Yes: the schema is in tools.ts.\"}]}"), "messages"))
     : List<&2, J.Json> & List<&2, J.Json>}
+
+# ---- a refused history never wedges the session (main's 400 of 2026-10-30) ----
+
+def gw_said() -> String:
+  "{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"litellm.BadRequestError: messages: text content blocks must be non-empty\"}}"
+
+# LAW: a 400 about the messages or a thinking signature is a refusal of
+# the history; one for size, about the tools, or another status is not.
+law history_refusal_reads_the_messages:
+  {[W.history_refused(400, gw_said()),
+      W.history_refused(400, "{\"error\":{\"message\":\"messages.3.content.0: Invalid signature in thinking block\"}}"),
+      W.history_refused(400, "{\"error\":{\"message\":\"Request content length exceeded 32 MB limit for messages\"}}"),
+      W.history_refused(400, "{\"error\":{\"message\":\"Invalid 'tools[0].function.name'\"}}"),
+      W.history_refused(500, gw_said())]
+    == [True{}, True{}, False{}, False{}, False{}] : List<&2, Bool>}
+
+def gw_err() -> String:
+  Pv.refusal("Gateway", 400, gw_said(), "")
+
+# LAW: bise's line of it says so and carries the mark the Core reads.
+law history_refusal_line:
+  {gw_err()
+    == "Gateway refused the conversation's history (400). Gateway said: \"litellm.BadRequestError: messages: text content blocks must be non-empty\""
+    : String}
+
+def wedge_step(+s: T.Session, +c: T.Cmd) -> T.Session:
+  S.res_next(S.apply(s, c), s)
+
+# a session whose history replays a signed think span, then a new turn
+# whose call (action 1) the gateway refuses
+def wedge_flow() -> T.Session:
+  wedge_step(wedge_step(wedge_step(T.new_session(law_cfg()),
+      T.UserMsg{T.Queue{}, "go"}),
+    T.CompletionOk{0, "<think>t
+BENDSIG::s1</think>
+hi", Nil{}}),
+    T.UserMsg{T.Queue{}, "again"})
+
+def res_acts(r: T.Res) -> List<&2, T.Act>:
+  match r:
+    case T.Accepted{_, +acts, _}:
+      acts
+    case T.Rejected{_}:
+      Nil{}
+
+# LAW: the turn does not fail on a refused history: the call goes again
+# at once, its history without the reasoning, and the user reads the
+# refusal and what was dropped.
+law refused_history_goes_again_without_reasoning:
+  {(res_obs(S.apply(wedge_flow(), T.CompletionFail{1, gw_err()})),
+      res_acts(S.apply(wedge_flow(), T.CompletionFail{1, gw_err()})))
+    == ([T.CandidateDiscarded{S.heal_notice(gw_err(), 1n)}],
+      [T.AgentCall{2, [T.sys("system prompt"), T.user("go"),
+        T.asst("hi", Nil{}), T.user("again")]}])
+    : List<&2, T.Obs> & List<&2, T.Act>}
+
+# LAW: once only: refused again, with nothing left to drop, the turn
+# fails as any refusal does (the next turn sends the healed history).
+law refused_history_twice_fails_the_turn:
+  {res_obs(S.apply(wedge_step(wedge_flow(), T.CompletionFail{1, gw_err()}),
+      T.CompletionFail{2, gw_err()}))
+    == [T.CandidateDiscarded{gw_err()}, T.TurnDone{"failed", gw_err()}]
+    : List<&2, T.Obs>}
+
+# LAW: any other refusal fails the turn at once, history untouched.
+law other_refusal_fails_the_turn:
+  {res_obs(S.apply(wedge_flow(), T.CompletionFail{1,
+      "Gateway refused the request (400)."}))
+    == [T.CandidateDiscarded{"Gateway refused the request (400)."},
+      T.TurnDone{"failed", "Gateway refused the request (400)."}]
+    : List<&2, T.Obs>}

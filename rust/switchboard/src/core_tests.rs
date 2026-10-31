@@ -2190,6 +2190,7 @@ fn model_refusal_reads_the_refusals_of_a_model() {
     assert_eq!(r("failed: Mistral refused the request (429)."), None);
     assert_eq!(r("failed: Mistral refused the request (500)."), None);
     assert_eq!(r("failed: Anthropic refused the request (400). the request is too large."), None);
+    assert_eq!(r("failed: Anthropic refused the conversation's history (400). Anthropic said: \"messages: text content blocks must be non-empty\""), None);
     assert_eq!(r("failed: provider failed after 10 attempts: cannot reach api"), None);
     assert_eq!(r("completed"), None);
 }

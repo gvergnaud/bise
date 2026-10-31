@@ -818,6 +818,36 @@ def is_hollow(+content: String) -> Bool:
   is_hollow.go(Nat.add(String.length(content), 1n), asst_think.find(content),
     content)
 
+# an assistant text without its think spans, signed or not (the history
+# sent again after a refusal of it, core/session.bend heal)
+def no_think.go(fuel: Nat, span: Maybe<&2, ThinkSpan>, +content: String,
+    +acc: String) -> String:
+  match fuel:
+    case 0n:
+      String.append(acc, content)
+    case 1n+k:
+      match span:
+        case None{}:
+          String.append(acc, content)
+        case Some{TSpan{+n0, +n1}}:
+          +rest = asst_think.visible(asst_think.raw_visible(content, n1))
+          no_think.go(k, asst_think.find(rest), rest,
+            String.append(acc, String.take(content, n0)))
+
+def no_think(+content: String) -> String:
+  no_think.go(Nat.add(String.length(content), 1n), asst_think.find(content),
+    content, "")
+
+def has_think.of(m: Maybe<&2, ThinkSpan>) -> Bool:
+  match m:
+    case Some{_}:
+      True{}
+    case None{}:
+      False{}
+
+def has_think(+content: String) -> Bool:
+  has_think.of(asst_think.find(content))
+
 def is_empty_tools(ts: List<&2, WTool>) -> Bool:
   match ts:
     case Nil{}:
@@ -1172,6 +1202,30 @@ def too_large_mark() -> String:
 
 def too_large(+error: String) -> Bool:
   String.contains(error, too_large_mark())
+
+# ---- a refusal of the conversation's history (main's 400 of 2026-10-30) ----
+# A 400 whose words name the messages (Anthropic "messages.12.content...",
+# a gateway's "messages: text content blocks must be non-empty", OpenAI's
+# "messages[3].content") or a thinking signature ("Invalid signature in
+# thinking block"): the provider refuses the history itself, so the same
+# history fails every turn. Not a refusal for size (size_refused).
+def history_words(+s: String) -> Bool:
+  Bool.or(String.contains(s, "messages"), String.contains(s, "signature"))
+
+def history_refused(+status: U32, +body: String) -> Bool:
+  Bool.and(U32.is_eq(status, 400),
+    Bool.and(Bool.not(size_words(String.to_lower(body))),
+      history_words(String.to_lower(body))))
+
+# the words such a refusal carries in bise's line
+# (runtime/provider-pure.bend refusal.head); the Core reads them on a
+# failed call and sends the history again once without its reasoning
+# (core/session.bend apply.completion_fail.hist)
+def history_mark() -> String:
+  "refused the conversation's history"
+
+def history_refused_in(+error: String) -> Bool:
+  String.contains(error, history_mark())
 
 def reply_err(+status: U32, +body: String) -> String:
   String.append("ERROR provider ",
