@@ -89,6 +89,34 @@ pub fn answer(v: &Value) -> Result<Value, Value> {
     }
 }
 
+/// The `_meta` key a `view/call` result carries when it ran on a server
+/// that is not the one before (a new bridge, the hub's views bridge):
+/// the call ran, but what that server kept in memory is gone. Said once
+/// per view; the result itself is never dropped (the tool did run, maybe
+/// after his ok: a view that ran it again would run it twice).
+pub const RESTARTED_META: &str = "dev.bise/server-restarted";
+
+/// `result` as the view gets it: [`RESTARTED_META`] in its `_meta` when
+/// `restarted`, and never otherwise. The hub alone says it: a server's
+/// own key is overwritten either way (it can't fake nor hide a restart).
+/// A result that is not an object stays as it is.
+pub fn mark_restarted(mut result: Value, restarted: bool) -> Value {
+    let Some(o) = result.as_object_mut() else { return result };
+    match o.get_mut("_meta").and_then(Value::as_object_mut) {
+        Some(meta) if restarted => {
+            meta.insert(RESTARTED_META.into(), Value::Bool(true));
+        }
+        Some(meta) => {
+            meta.remove(RESTARTED_META);
+        }
+        None if restarted => {
+            o.insert("_meta".into(), json!({ RESTARTED_META: true }));
+        }
+        None => {}
+    }
+    result
+}
+
 /// What a view resource declares and holds (`resources/read`'s first
 /// content): its HTML (text, or base64 `blob`), its `_meta.ui`.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -255,6 +283,26 @@ mod tests {
         assert_eq!(text_of(&json!([{"type": "image", "data": "x"}])), Err(ViewError::NotSupported));
         assert_eq!(text_of(&json!([])), Err(ViewError::NotSupported));
         assert_eq!(text_of(&json!("hi")), Err(ViewError::NotSupported));
+    }
+
+    #[test]
+    fn a_result_after_a_restart_is_kept_and_says_so() {
+        let r = json!({"content": [{"type": "text", "text": "created #12"}], "_meta": {"x": 1}});
+        let got = mark_restarted(r.clone(), true);
+        assert_eq!(got["content"], r["content"], "the result is never dropped");
+        assert_eq!(got["_meta"]["x"], 1);
+        assert_eq!(got["_meta"][RESTARTED_META], true);
+        assert_eq!(mark_restarted(json!({}), true)["_meta"][RESTARTED_META], true);
+        assert_eq!(mark_restarted(r.clone(), false), r, "the same server: as it gave it");
+        assert_eq!(mark_restarted(json!("x"), true), json!("x"));
+    }
+
+    #[test]
+    fn a_server_can_neither_fake_nor_hide_a_restart() {
+        let fake = json!({"content": [], "_meta": {RESTARTED_META: true, "x": 1}});
+        assert_eq!(mark_restarted(fake, false), json!({"content": [], "_meta": {"x": 1}}));
+        let hide = json!({"content": [], "_meta": {RESTARTED_META: false}});
+        assert_eq!(mark_restarted(hide, true)["_meta"][RESTARTED_META], true);
     }
 
     #[test]

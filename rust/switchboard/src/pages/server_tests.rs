@@ -636,7 +636,7 @@ fn the_web_host_serves_its_page_and_refuses_a_browsers_message() {
     assert_eq!(post(&p, "/api/view", Some(&tok), Some("http://v-0123456789abcdef.localhost:47123"), msg.clone()).status, 403, "a view's origin");
     let r = post(&p, "/api/view", Some(&tok), Some(&o), msg);
     let v: Value = serde_json::from_slice(&r.body).unwrap();
-    assert_eq!((r.status, v["error"]["code"].as_i64(), v["error"]["data"]["reason"].as_str()), (200, Some(-32035), Some("no-gesture")), "{v}");
+    assert_eq!((r.status, v["error"]["code"].as_i64(), v["error"]["data"]["reason"].as_str()), (200, Some(-32037), Some("no-gesture")), "{v}");
     assert_eq!(post(&p, "/api/view", Some(&tok), Some(&o), json!({"method": "plugin/views", "params": {"agent": "t1", "call": "1-2"}})).status, 400);
     let _ = std::fs::remove_dir_all(d);
 }

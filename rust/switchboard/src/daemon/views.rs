@@ -21,7 +21,8 @@
 //!   `view:<agent>/<call>` (sb-core), never the agent's own wait; his
 //!   answer comes back by the card's id ([`Shell::view_card_answered`]);
 //! - a server that is not the one that ran the view's call (the views
-//!   bridge, a new bridge) is said once, `server-restarted` (the call ran);
+//!   bridge, a new bridge) is said once, on the call's result
+//!   (`view_call::RESTARTED_META`): the call ran, its result is kept;
 //! - at boot, a view's card left open has no call behind it any more: it
 //!   closes ([`Shell::close_view_cards`], architect m_50085);
 //! - `view/context` is kept per (agent, view) and joins his next send to
@@ -563,16 +564,14 @@ impl Shell {
     }
 
     /// The call goes to its server; a server that is not the one before
-    /// is said once (the call still ran).
+    /// is said once, on its result (`_meta["dev.bise/server-restarted"]`).
     fn view_forward(&mut self, key: ViewKey, route: Route, method: String, params: Value, done: ViewDone) {
         let restarted = self.views.server_restarted(key, &route);
-        let what = Ask::of(&method, &params).what().to_string();
         std::thread::spawn(move || {
             let r = match post(&route.url, &view_call::request(&method, &params), CALL_TIMEOUT) {
                 Err(e) => Err(gone(&e)),
                 Ok(v) => match view_call::answer(&v) {
-                    Ok(_) if restarted => Err(ViewError::ServerRestarted.rpc(&what)),
-                    Ok(r) => Ok(r),
+                    Ok(r) => Ok(view_call::mark_restarted(r, restarted)),
                     Err(e) => Err(server_error(&e)),
                 },
             };
@@ -601,8 +600,8 @@ impl Shell {
             Ok(f) => f.plugin,
             Err(e) => return done(Err(e.rpc(WHAT))),
         };
-        if self.views.limits.message(&key, now_ms(), gesture).is_err() {
-            return done(Err(ViewError::RateLimited.rpc(WHAT)));
+        if let Err(why) = self.views.limits.message(&key, now_ms(), gesture) {
+            return done(Err(why.error().rpc(WHAT)));
         }
         if self.hub.st.agents.get(&p.agent).is_none_or(|a| a.lifecycle != crate::model::Lifecycle::Active) {
             return done(Err(RpcError::refused(format!("@{} is not active: the view's message reached nobody", p.agent), None)));

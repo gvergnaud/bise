@@ -212,8 +212,16 @@ when the bridge can't answer.
 (model-only tool, other server, unknown tool), `-32032 plugin-off`,
 `-32033 denied` (he refused in the approval card), `-32034
 not-supported` (`mistral/*`, connector tools: "not supported in bise",
-decision q-vibe), `-32035 rate-limited`, `-32036 server-restarted` (the
-call ran, on a fresh server: in-memory state is gone; said once).
+decision q-vibe), `-32035 rate-limited` (30 calls a minute, 1 message
+every 10 s). `view/message` without his fresh click: `-32037 no-gesture`.
+A call that ran on a server that is not the one before (a new bridge,
+the hub's views bridge): its result as the server gave it, with
+`_meta["dev.bise/server-restarted"]: true` on the first one (in-memory
+state is gone; said once per view). The hub alone sets that key: a
+server's own is overwritten (`view_call::mark_restarted`). Never an
+error: the tool ran, maybe after his ok, and a view that ran it again
+would run it twice (`-32036` was `server-restarted` before: never
+reused).
 Any method: `-32000 server-gone` when its server can't be reached (no
 bridge, the bridge refused), and a server's own JSON-RPC error as it
 gave it.
@@ -446,7 +454,7 @@ one dispatcher, `PageMsg::View` -> `Shell::view_request`). The page
 (`pages/view_web.rs`) carries the token, loads `/kit/views/web.js` and
 `.css` and fills `<main id="bise-view" data-agent data-call>`; its CSP
 frames only `http://*.localhost:<pages port>` and fetches only itself.
-`view/message` there is refused every time (`-32035`, reason
+`view/message` there is refused every time (`-32037`, reason
 `no-gesture`): no Electron main sees a click in a browser.
 
 The TUI (architect m_50261, designer m_50266; a change to q-tui's bare

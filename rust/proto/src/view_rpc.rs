@@ -71,12 +71,11 @@ pub enum ViewError {
     /// `mistral/*`, a connector's tool, a method bise does not serve to
     /// views (decision q-vibe)
     NotSupported,
-    /// past the view's limits (30 calls a minute, 1 message every 10 s,
-    /// a message without his fresh click)
+    /// past the view's limits (30 calls a minute, 1 message every 10 s)
     RateLimited,
-    /// the call ran on a fresh server: what it kept in memory is gone
-    /// (said once per server start)
-    ServerRestarted,
+    /// a `ui/message` without his fresh click in the view (risk 1; the
+    /// web host never has one: no Electron main sees his clicks)
+    NoGesture,
 }
 
 impl ViewError {
@@ -87,10 +86,11 @@ impl ViewError {
         ViewError::Denied,
         ViewError::NotSupported,
         ViewError::RateLimited,
-        ViewError::ServerRestarted,
+        ViewError::NoGesture,
     ];
 
-    /// Its JSON-RPC code, -32030..-32036.
+    /// Its JSON-RPC code, -32030..-32035 and -32037 (-32036 was `server-restarted`, now a
+    /// result's `_meta`: never reuse it).
     pub fn code(self) -> i64 {
         match self {
             ViewError::Expired => -32030,
@@ -99,7 +99,7 @@ impl ViewError {
             ViewError::Denied => -32033,
             ViewError::NotSupported => -32034,
             ViewError::RateLimited => -32035,
-            ViewError::ServerRestarted => -32036,
+            ViewError::NoGesture => -32037,
         }
     }
 
@@ -112,7 +112,7 @@ impl ViewError {
             ViewError::Denied => "denied",
             ViewError::NotSupported => "not-supported",
             ViewError::RateLimited => "rate-limited",
-            ViewError::ServerRestarted => "server-restarted",
+            ViewError::NoGesture => "no-gesture",
         }
     }
 
@@ -129,8 +129,8 @@ impl ViewError {
             ViewError::PluginOff => format!("{what} is turned off in plugins"),
             ViewError::Denied => format!("{what} was not allowed"),
             ViewError::NotSupported => format!("{what} is not supported in bise"),
-            ViewError::RateLimited => format!("{what}: too many requests from this view, or no recent click in it"),
-            ViewError::ServerRestarted => format!("{what} ran on a restarted server: what it kept in memory is gone"),
+            ViewError::RateLimited => format!("{what}: too many requests from this view"),
+            ViewError::NoGesture => format!("{what} needs a click in the view first (and a browser tab never has one)"),
         }
     }
 
@@ -157,7 +157,7 @@ mod tests {
                 (-32033, "denied"),
                 (-32034, "not-supported"),
                 (-32035, "rate-limited"),
-                (-32036, "server-restarted"),
+                (-32037, "no-gesture"),
             ]
         );
         for e in ViewError::ALL {

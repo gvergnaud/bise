@@ -193,8 +193,9 @@ The MCP App views' methods (`view/resource`, `view/call`, `view/message`,
 `view/context`; docs/mcp-apps.md C5) answer their own codes, the reason
 typed in `data.reason` (`bise_proto::view_rpc::ViewError`): -32030
 `expired`, -32031 `not-visible`, -32032 `plugin-off`, -32033 `denied`,
--32034 `not-supported`, -32035 `rate-limited`, -32036
-`server-restarted`; -32000 `server-gone` when the view's server can't be
+-32034 `not-supported`, -32035 `rate-limited`, -32037 `no-gesture`
+(-32036 is never reused: a restarted server is a result's
+`_meta["dev.bise/server-restarted"]`); -32000 `server-gone` when the view's server can't be
 reached; a server's own error as it gave it.
 
 ## The wire rule

@@ -45,6 +45,16 @@ pub enum MsgRefused {
     TooSoon,
 }
 
+impl MsgRefused {
+    /// The error the view gets: `no-gesture` or `rate-limited`.
+    pub fn error(self) -> bise_proto::view_rpc::ViewError {
+        match self {
+            MsgRefused::NoGesture => bise_proto::view_rpc::ViewError::NoGesture,
+            MsgRefused::TooSoon => bise_proto::view_rpc::ViewError::RateLimited,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Limits {
     calls: BTreeMap<ViewKey, VecDeque<u64>>,
@@ -121,6 +131,14 @@ mod tests {
         assert_eq!(l.message(&k("1-1"), now, Some(now - GESTURE_MS - 1)), Err(MsgRefused::NoGesture));
         assert_eq!(l.message(&k("1-1"), now, Some(now + SKEW_MS + 1)), Err(MsgRefused::NoGesture), "a click from the future");
         assert_eq!(l.message(&k("1-1"), now, Some(now - GESTURE_MS)), Ok(()));
+    }
+
+    #[test]
+    fn each_refusal_reaches_the_view_with_its_own_reason() {
+        use bise_proto::view_rpc::ViewError;
+        assert_eq!(MsgRefused::NoGesture.error(), ViewError::NoGesture);
+        assert_eq!(MsgRefused::TooSoon.error(), ViewError::RateLimited);
+        assert_eq!(MsgRefused::NoGesture.error().rpc("ui/message").data.and_then(|d| d.reason).as_deref(), Some("no-gesture"));
     }
 
     #[test]

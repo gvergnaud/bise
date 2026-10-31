@@ -8,7 +8,7 @@
 //!
 //! The hub answers them (`PageMsg::View`, the same dispatcher as
 //! hub.sock's, daemon/views.rs). `view/message` is refused here, every
-//! time (`-32035`, reason `no-gesture`): no Electron main sees a click in
+//! time (`-32037`, reason `no-gesture`): no Electron main sees a click in
 //! a browser, so nothing can vouch for one (risk 1).
 
 use super::artifact::save::Reply;
@@ -102,6 +102,11 @@ pub fn answer(r: Result<Value, RpcError>) -> Value {
     }
 }
 
+/// A `view/message`'s answer on the web host, every time: `no-gesture`.
+fn message_refused() -> Value {
+    answer(Err(ViewError::NoGesture.rpc("ui/message")))
+}
+
 /// `POST /api/view` (token and Origin already checked by the server).
 pub fn post(pages: &Pages, body: &[u8]) -> Response {
     let (method, params) = match parse(body) {
@@ -110,11 +115,7 @@ pub fn post(pages: &Pages, body: &[u8]) -> Response {
     };
     // risk 1: a browser has no Electron main to see his click
     if method == "view/message" {
-        let mut e = ViewError::RateLimited.rpc(&method);
-        if let Some(d) = e.data.as_mut() {
-            d.reason = Some("no-gesture".into());
-        }
-        return Response::json(200, &answer(Err(e)));
+        return Response::json(200, &message_refused());
     }
     let (tx, rx) = channel();
     pages.tell_hub(PageMsg::View { method, params, reply: Reply(tx) });
@@ -150,6 +151,13 @@ mod tests {
         for bad in [&b"x"[..], br#"{"method":"plugin/views","params":{"agent":"t1","call":"1-2"}}"#, br#"{"method":"view/call","params":{"agent":"t1"}}"#, br#"{"method":"view/call","params":{"agent":"../x","call":"1-2"}}"#] {
             assert!(parse(bad).is_err(), "{}", String::from_utf8_lossy(bad));
         }
+    }
+
+    #[test]
+    fn a_message_is_refused_as_no_gesture_by_its_own_code() {
+        let a = message_refused();
+        assert_eq!(a["error"]["code"], -32037, "{a}");
+        assert_eq!(a["error"]["data"]["reason"], "no-gesture", "{a}");
     }
 
     #[test]
