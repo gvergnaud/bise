@@ -109,8 +109,11 @@ pub struct StaticView {
     pub input_schema: Value,
     /// `ui://<plugin>/views/<name>`
     pub uri: String,
-    /// its `index.html`
+    /// its `index.html`, canonical, under `root`
     pub html: PathBuf,
+    /// the plugin's root, canonical: `html` must stay under it, at load
+    /// and at each read ([`html_under`])
+    pub root: PathBuf,
     /// `view.json`'s `ui` (`csp`, `permissions`, `prefersBorder`): the
     /// resource's `_meta.ui`
     pub ui: Value,
@@ -151,8 +154,8 @@ fn load_one(plugin: &str, root: &Path, dir: &Path, folder: &str) -> Result<Stati
     if !real.starts_with(root) {
         return Err("its folder is outside the plugin".into());
     }
-    let json_path = real.join("view.json");
-    let html = real.join("index.html");
+    let json_path = html_under(root, &real.join("view.json")).map_err(|why| format!("view.json {}", why))?;
+    let html = html_under(root, &real.join("index.html")).map_err(|why| format!("index.html {}", why))?;
     let size = |p: &Path| std::fs::metadata(p).map(|m| m.len()).map_err(|_| format!("no {}", p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()));
     if size(&json_path)? > MAX_VIEW_JSON {
         return Err(format!("view.json is over {} KiB", MAX_VIEW_JSON / 1024));
@@ -192,8 +195,24 @@ fn load_one(plugin: &str, root: &Path, dir: &Path, folder: &str) -> Result<Stati
         input_schema,
         uri: format!("ui://{}/views/{}", plugin, name),
         html,
+        root: root.to_path_buf(),
         ui,
     })
+}
+
+/// `path` canonical (its symlinks followed), when it is a file under
+/// `root` (canonical): a view's `index.html` or `view.json` that links
+/// out of its plugin (`index.html -> ~/.ssh/id_rsa`) names no file. Its
+/// error ends "...is missing" or "...is outside the plugin".
+pub fn html_under(root: &Path, path: &Path) -> Result<PathBuf, String> {
+    let real = path.canonicalize().map_err(|_| "is missing".to_string())?;
+    if !real.starts_with(root) {
+        return Err("is outside the plugin".into());
+    }
+    if !real.is_file() {
+        return Err("is not a file".into());
+    }
+    Ok(real)
 }
 
 /// A plugin's virtual server of static views: answers the JSON-RPC
@@ -248,9 +267,15 @@ impl Virtual {
                 let Some(v) = self.views.iter().find(|v| v.uri == uri) else {
                     return err(-32602, format!("unknown resource: {}", uri));
                 };
-                match std::fs::read_to_string(&v.html) {
+                // read again each time (an edit shows), so checked again:
+                // a file swapped for a link out of the plugin since the
+                // load is refused, its target never read
+                let read = html_under(&v.root, &v.html)
+                    .map_err(|why| format!("index.html {}", why))
+                    .and_then(|p| std::fs::read_to_string(p).map_err(|e| e.to_string()));
+                match read {
                     Ok(html) => json!({"result": {"contents": [{"uri": v.uri, "mimeType": MIME, "text": html, "_meta": {"ui": v.ui}}]}}),
-                    Err(e) => err(-32603, format!("{}: {}", v.html.display(), e)),
+                    Err(e) => err(-32603, format!("view {}: {}", v.name, e)),
                 }
             }
             m => err(-32601, format!("method not found: {}", m)),

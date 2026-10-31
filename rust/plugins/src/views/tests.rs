@@ -127,6 +127,40 @@ fn the_virtual_server_answers_like_a_server() {
     assert_eq!(v.answer("sampling/createMessage", &json!({}))["error"]["code"], -32601);
 }
 
+/// A view whose `index.html` links out of its plugin is dropped at load,
+/// and one swapped for such a link after the load is never read: its
+/// target (`~/.ssh/id_rsa`) never reaches the view (review blocker).
+#[cfg(unix)]
+#[test]
+fn an_index_html_linked_out_of_the_plugin_is_never_read() {
+    let root = tmp("link");
+    let out = tmp("link-outside");
+    write(&out.join("secret"), "SECRET-KEY");
+    let views = root.join(VIBE_EXTENSION).join("views");
+    write(&views.join("leak/view.json"), r#"{"name":"leak"}"#);
+    std::os::unix::fs::symlink(out.join("secret"), views.join("leak/index.html")).unwrap();
+    write(&views.join("swap/view.json"), r#"{"name":"swap"}"#);
+    write(&views.join("swap/index.html"), "<p>ok</p>");
+    // a link inside the plugin is fine
+    write(&root.join("shared/page.html"), "<p>shared</p>");
+    write(&views.join("inside/view.json"), r#"{"name":"inside"}"#);
+    std::os::unix::fs::symlink(root.join("shared/page.html"), views.join("inside/index.html")).unwrap();
+    let (got, diags) = load("p", &root);
+    assert_eq!(got.iter().map(|v| v.name.as_str()).collect::<Vec<_>>(), vec!["inside", "swap"]);
+    assert!(diags.iter().any(|d| d.message.contains("\"leak\"") && d.message.contains("index.html is outside the plugin")), "{:?}", diags);
+    let v = Virtual { plugin: "p".into(), namespace: "p".into(), opt_in: false, views: got };
+    let read = |name: &str| v.answer("resources/read", &json!({"uri": format!("ui://p/views/{}", name)}));
+    assert_eq!(read("inside")["result"]["contents"][0]["text"], "<p>shared</p>");
+    assert_eq!(read("swap")["result"]["contents"][0]["text"], "<p>ok</p>");
+    // swapped for a link out after the load
+    std::fs::remove_file(views.join("swap/index.html")).unwrap();
+    std::os::unix::fs::symlink(out.join("secret"), views.join("swap/index.html")).unwrap();
+    let a = read("swap");
+    assert_eq!(a["error"]["code"], -32603, "{a}");
+    assert!(!a.to_string().contains("SECRET"), "{a}");
+    assert!(a["error"]["message"].as_str().unwrap().contains("outside the plugin"), "{a}");
+}
+
 #[test]
 fn the_resource_cache_keeps_ui_results_only() {
     assert_eq!(ui_read("resources/read", &json!({"uri": "ui://a/b"})).as_deref(), Some("ui://a/b"));
