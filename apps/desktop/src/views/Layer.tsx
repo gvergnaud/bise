@@ -5,9 +5,11 @@
 // container is absolute with no z-index (no stacking context), so the window's floats, scrims and
 // menus stay above. A frame is never moved in the DOM; an anchor gone hides it (visibility). It
 // tells Electron main the frames that show (window.bise.views.frames: permissions and gestures
-// are main's). Owner: mcp-apps-host.
+// are main's), each with the menus, floats and scrims drawn over it (covers.ts: a press on them is
+// never the view's). Owner: mcp-apps-host.
 import { memo, useEffect, useRef } from 'react';
 import { allowOf } from '@/shared/viewperms';
+import { coverRects, coversOf } from './covers';
 import { pick, samePlace, type Anchors, type Place, type Rect } from './place';
 import type { Anchor, ViewsStore } from './store';
 import { useViewOpen, useViewsVersion } from './hooks';
@@ -49,6 +51,8 @@ export function step(store: ViewsStore, root: HTMLElement, last: Map<string, Pla
   const off = { x: o.left, y: o.top };
   const frames: ViewFrame[] = [];
   const showing = new Set<string>();
+  // the menus, floats and scrims open now, over any frame (window px): main never counts a press there
+  const over = store.live().length > 0 ? coverRects(root.ownerDocument) : [];
   for (const key of store.live()) {
     const live = store.liveOf(key);
     const el = root.querySelector<HTMLIFrameElement>(`iframe[data-view="${CSS.escape(key)}"]`);
@@ -63,7 +67,8 @@ export function step(store: ViewsStore, root: HTMLElement, last: Map<string, Pla
     if (p === null) continue;
     showing.add(key);
     store.seen(key);
-    frames.push({ project: live.ref.project, agent: live.ref.agent, call: live.ref.call, origin: live.res.origin, rect: { x: p.seen.x + off.x, y: p.seen.y + off.y, w: p.seen.w, h: p.seen.h }, perms: [...live.res.permissions] });
+    const rect = { x: p.seen.x + off.x, y: p.seen.y + off.y, w: p.seen.w, h: p.seen.h };
+    frames.push({ project: live.ref.project, agent: live.ref.agent, call: live.ref.call, origin: live.res.origin, rect, perms: [...live.res.permissions], covers: coversOf(rect, over) });
   }
   for (const k of [...last.keys()]) if (!store.live().includes(k)) last.delete(k);
   store.trim(showing);

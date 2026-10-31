@@ -498,6 +498,8 @@ export interface ViewFrame {
   readonly origin: string;
   readonly rect: { readonly x: number; readonly y: number; readonly w: number; readonly h: number };
   readonly perms: readonly ViewPerm[];
+  /** the window's menus, floats and scrims over it now, window CSS px (views/covers.ts): a press there is never the view's */
+  readonly covers: readonly { readonly x: number; readonly y: number; readonly w: number; readonly h: number }[];
 }
 
 /** window.bise.saveCopy's answer: where the copy went, why it failed, or null (he cancelled, or refused). */

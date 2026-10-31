@@ -208,7 +208,7 @@ describe('the layer', () => {
     expect(frame.style.visibility).toBe('visible');
     expect([frame.style.left, frame.style.top, frame.style.width, frame.style.height, frame.style.zIndex]).toEqual(['300px', '700px', '560px', '160px', '2']);
     expect(frame.style.clipPath).toBe('inset(0px 0px 92px 0px round var(--r-2))');
-    expect(frames).toEqual([{ project: 'p', agent: 'a', call: REF.call, origin: ORIGIN, rect: { x: 300, y: 700, w: 560, h: 68 }, perms: ['midi'] }]);
+    expect(frames).toEqual([{ project: 'p', agent: 'a', call: REF.call, origin: ORIGIN, rect: { x: 300, y: 700, w: 560, h: 68 }, perms: ['midi'], covers: [] }]);
     // fullscreen: its tab opens, the card says so, the same frame goes over the tab at z 4
     act(() => {
       store.fullscreen(REF);
@@ -237,7 +237,33 @@ describe('the layer', () => {
     expect(layer.getByTestId(`views.frame.${viewKey(REF)}`)).toBe(frame);
   });
 
-  it(`past ${String(MAX_LIVE)} live views the one shown longest ago is torn down, then comes back from the hub`, async () => {
+  it("a menu, a float or a scrim drawn over a frame is told to main as that frame's covers", async () => {
+    const { store } = rig();
+    const root = document.createElement('div');
+    document.body.append(root);
+    box(root, { x: 0, y: 0, w: 1440, h: 900 });
+    store.ensure(REF);
+    await flush();
+    const frame = document.createElement('iframe');
+    frame.dataset['view'] = viewKey(REF);
+    root.append(frame);
+    const anchor = document.createElement('div');
+    document.body.append(anchor);
+    box(anchor, { x: 300, y: 100, w: 560, h: 160 });
+    store.anchor(REF, 'thread', anchor);
+    expect(step(store, root, new Map())[0]?.covers, 'nothing open').toEqual([]);
+    const menu = document.createElement('div');
+    menu.setAttribute('role', 'menu');
+    box(menu, { x: 800, y: 150, w: 200, h: 300 });
+    const tip = document.createElement('div');
+    tip.className = 'b-tip';
+    box(tip, { x: 300, y: 100, w: 50, h: 20 });
+    document.body.append(menu, tip);
+    expect(step(store, root, new Map())[0]?.covers, "the menu's part over the frame; a tip takes no press").toEqual([{ x: 800, y: 150, w: 60, h: 110 }]);
+    for (const el of [menu, tip, anchor, root]) el.remove();
+  });
+
+    it(`past ${String(MAX_LIVE)} live views the one shown longest ago is torn down, then comes back from the hub`, async () => {
     const { store, timers, asked } = rig();
     const refs = Array.from({ length: MAX_LIVE + 1 }, (_, i) => ({ ...REF, call: `1-${String(i)}` }));
     for (const r of refs) {

@@ -100,7 +100,16 @@ describe('the gesture', () => {
     expect(frameAt(frames, 110, 30), 'the right edge is out').toBe(null);
   });
 
-  it("a click in a view's own frame is placed by its screen point, never its widget's x/y", () => {
+  it("a pointer-down on a menu, a float or a scrim drawn over a view is never that view's", () => {
+    // a menu at (40, 20, 60 × 30) over A's frame (10, 10, 100 × 50): the window's layer tells it
+    const covered = [{ ...frames[0], covers: [{ x: 40, y: 20, w: 60, h: 30 }] } as ViewFrame, frames[1] as ViewFrame];
+    expect(frameAt(covered, 50, 30), 'on the menu').toBe(null);
+    expect(frameAt(covered, 20, 20)?.call, "beside it, the view's own").toBe('1-1');
+    expect(frameAt(covered, 60, 45), 'on B, on top, its own covers none').toBe(frames[1]);
+    expect(frameAt([{ ...(frames[1] as ViewFrame), covers: [{ x: 0, y: 0, w: 1000, h: 1000 }] }], 60, 45), 'a scrim over all').toBe(null);
+  });
+
+    it("a click in a view's own frame is placed by its screen point, never its widget's x/y", () => {
     // a window whose content starts at (100, 80) on screen; a card at (600, 400) in it, and
     // another one at the window's corner, where the OOPIF's own x/y (2, 3) would land
     const cards = [frame(A, [], { x: 0, y: 0, w: 50, h: 50 }, 'corner'), frame(B, [], { x: 600, y: 400, w: 300, h: 200 }, 'card')];

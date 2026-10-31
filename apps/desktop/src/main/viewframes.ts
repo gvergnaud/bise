@@ -5,7 +5,7 @@
 // handler, the guard and a view's link or download (window.bise.views.gesture: one each) ask of them.
 import { BrowserWindow, ipcMain, type WebContents } from 'electron';
 import { IPC } from '../shared/api';
-import { frameAt, freshGesture, pointInWindow, stampGesture, viewKey, viewPermission, type PermAsk, type ViewFrame } from './viewrules';
+import { frameAt, freshGesture, pointInWindow, stampGesture, viewKey, viewPermission, type PermAsk, type ViewFrame, type ViewRect } from './viewrules';
 
 /** A window's view frames, by its webContents id. */
 const framesOf = new Map<number, readonly ViewFrame[]>();
@@ -26,7 +26,12 @@ export function readFrames(raw: unknown): ViewFrame[] {
     if (typeof r['origin'] !== 'string' || typeof r['agent'] !== 'string' || typeof r['call'] !== 'string' || rect === undefined) continue;
     if (!num(rect['x']) || !num(rect['y']) || !num(rect['w']) || !num(rect['h'])) continue;
     const perms = Array.isArray(r['perms']) ? (r['perms'] as unknown[]).filter((p): p is string => typeof p === 'string') : [];
-    out.push({ project: typeof r['project'] === 'string' ? r['project'] : '', origin: r['origin'], agent: r['agent'], call: r['call'], rect: { x: rect['x'], y: rect['y'], w: rect['w'], h: rect['h'] }, perms });
+    const covers: ViewRect[] = [];
+    for (const c of Array.isArray(r['covers']) ? (r['covers'] as unknown[]) : []) {
+      const o = c !== null && typeof c === 'object' ? (c as Record<string, unknown>) : {};
+      if (num(o['x']) && num(o['y']) && num(o['w']) && num(o['h'])) covers.push({ x: o['x'], y: o['y'], w: o['w'], h: o['h'] });
+    }
+    out.push({ project: typeof r['project'] === 'string' ? r['project'] : '', origin: r['origin'], agent: r['agent'], call: r['call'], rect: { x: rect['x'], y: rect['y'], w: rect['w'], h: rect['h'] }, perms, covers });
   }
   return out;
 }

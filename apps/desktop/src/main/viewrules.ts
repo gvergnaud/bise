@@ -11,7 +11,8 @@
 //   - a pointer-down main itself sees inside a frame's rect is that view's gesture: main stamps
 //     gesture_ms on the window's view_message (the hub decides with it), and a view's link or
 //     download takes one fresh pointer-down each (freshGesture). The view and its proxy can't make
-//     one; the rects come from the window's layer (the app's own code, never a view's);
+//     one; the rects come from the window's layer (the app's own code, never a view's), with the
+//     menus, floats and scrims over each frame (covers): a press on them is never the view's;
 //   - a frame navigation in a view: the proxy may make its blob view, a frame nested in the view
 //     goes where the CSP lets it (frameDomains), anything else (the view or the proxy leaving
 //     for another url) is dropped, never opened in his browser.
@@ -37,6 +38,8 @@ export interface ViewFrame {
   /** the frame's visible rect in the window, CSS px; a hidden frame is not in the list */
   readonly rect: ViewRect;
   readonly perms: readonly string[];
+  /** the window's menus, floats and scrims drawn over it now (window CSS px): a press there is theirs */
+  readonly covers?: readonly ViewRect[];
 }
 
 const VIEW_ORIGIN = /^http:\/\/v-[0-9a-f]{16}\.localhost:(\d{1,5})$/u;
@@ -166,13 +169,19 @@ export function pointInWindow(
   return { x: (gx - content.x) / z, y: (gy - content.y) / z };
 }
 
-/** Pure: the frame a pointer-down at (x, y) (window CSS px) fell in, the topmost (last) one. */
+function inside(r: ViewRect, x: number, y: number): boolean {
+  return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+}
+
+/**
+ * Pure: the frame a pointer-down at (x, y) (window CSS px) fell in, the topmost (last) one; null
+ * when it fell on a menu, a float or a scrim the window drew over it (its `covers`).
+ */
 export function frameAt(frames: readonly ViewFrame[], x: number, y: number): ViewFrame | null {
   for (let i = frames.length - 1; i >= 0; i -= 1) {
     const f = frames[i];
-    if (f === undefined) continue;
-    const r = f.rect;
-    if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) return f;
+    if (f === undefined || !inside(f.rect, x, y)) continue;
+    return (f.covers ?? []).some((c) => inside(c, x, y)) ? null : f;
   }
   return null;
 }
