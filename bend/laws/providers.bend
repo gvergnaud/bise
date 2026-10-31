@@ -952,3 +952,22 @@ law plan_no_shape_unchanged:
   for +c: String
   for a: Pv.Attempt
   {Pv.attempt_plan(False{}, s, c, a) == a : Pv.Attempt}
+
+# LAW: a refusal names the provider actually used. A provider whose URL
+# the user brings (base_url_env: foundry) is named by the host the call
+# went to, a gateway behind it included (2026-10-30: "Anthropic (foundry
+# proxy) refused..." for a call that went to a gateway); a provider with
+# its own URL keeps its display name.
+law refusal_names_the_host_of_a_brought_url:
+  {[Pv.prov_label("[providers.foundry]
+name = \"Anthropic (foundry proxy)\"
+base_url_env = \"ANTHROPIC_FOUNDRY_BASE_URL\"
+", "foundry", "https://gateway.example.test/anthropic/v1/messages"),
+      Pv.prov_label("", "mistral", "https://api.mistral.ai/v1/chat/completions"),
+      Pv.refusal(Pv.prov_label("[providers.foundry]
+base_url_env = \"ANTHROPIC_FOUNDRY_BASE_URL\"
+", "foundry", "https://gateway.example.test/anthropic/v1/messages"), 400,
+        "{\"error\":{\"message\":\"messages: text content blocks must be non-empty\"}}", "")]
+    == ["gateway.example.test", Pv.prov_display("", "mistral"),
+      "gateway.example.test refused the conversation's history (400). gateway.example.test said: \"messages: text content blocks must be non-empty\""]
+    : List<&2, String>}

@@ -968,6 +968,19 @@ def prov_display(+file: String, +prov: String) -> String:
   Cf.cfg_or(Cf.cfg_find(registry(file),
     String.concat(["providers.", prov, ".name"])), "")
 
+# who a refusal names: the provider's display name, or, for a provider
+# whose URL the user brings (base_url_env: foundry, any endpoint behind
+# it), the host the call went to. 2026-10-30: foundry's URL pointed to a
+# gateway, and its 400 read "Anthropic (foundry proxy) refused...".
+def prov_label.pick(own: Bool, +name: String, +host: String) -> String:
+  Bool.pick(String, Bool.and(own, Bool.not(String.is_empty(host))), host, name)
+
+def prov_label(+file: String, +prov: String, +url: String) -> String:
+  prov_label.pick(
+    Bool.not(String.is_empty(Cf.cfg_or(Cf.cfg_find(registry(file),
+      String.concat(["providers.", prov, ".base_url_env"])), ""))),
+    prov_display(file, prov), url_host(url))
+
 def refusal.who(+name: String) -> String:
   Bool.pick(String, String.is_empty(name), "the provider", name)
 

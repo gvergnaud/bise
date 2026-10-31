@@ -322,3 +322,6 @@ def Laws.plan_other_attempts_unchanged(a):
 
 def Laws.plan_no_shape_unchanged(s, c, a):
   {==}
+
+def Laws.refusal_names_the_host_of_a_brought_url():
+  {==}
