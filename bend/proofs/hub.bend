@@ -801,6 +801,21 @@ def Laws.hot_his(s, h):
 
 # ---- MCP App views ----
 
+# a new card or a joined one: neither touches a runtime
+def hv_rt_at(-o: HS.St, m: Maybe<&2, HS.Card>, +cx: HX.Cx<o>, +v: HS.ViewAsk, +text: String)
+    -> {HX.R.rts(HX.Cx.r(o, HC.open_view_confirm.at(o, m, cx, v, text))) == HX.R.rts(HX.Cx.r(o, cx)) : List<&2, HX.Rt>}:
+  match m:
+    case None{}:
+      match cx:
+        case HX.Cx{c, r}:
+          match r:
+            case HX.R{a, b, st, d, e, f, g, h, i, j, k, l, m, n}:
+              {==}
+    case Some{x}:
+      match cx:
+        case HX.Cx{c, r}:
+          {==}
+
 # open_view_confirm's two branches: the card (outside the runtime) or the
 # notice; neither touches a runtime
 def hv_rt(-o: HS.St, ok: Bool, +cx: HX.Cx<o>, +v: HS.ViewAsk, +text: String)
@@ -811,11 +826,7 @@ def hv_rt(-o: HS.St, ok: Bool, +cx: HX.Cx<o>, +v: HS.ViewAsk, +text: String)
         case HX.Cx{c, r}:
           {==}
     case True{}:
-      match cx:
-        case HX.Cx{c, r}:
-          match r:
-            case HX.R{a, b, st, d, e, f, g, h, i, j, k, l, m, n}:
-              {==}
+      hv_rt_at(o, HC.view_card_of(HS.St.cards(HX.d(o, cx)), v), cx, v, text)
 
 def Laws.view_card_keeps_runtime(o, cx, agent, call, text, ask):
   hv_rt(o, HC.live_agent(HM.agent_named(HS.St.agents(HX.d(o, cx)), agent)), cx, HC.view_ask(agent, call, ask), text)
@@ -860,6 +871,32 @@ def hv_last_out(-o: HS.St, +cx: HX.Cx<o>, +x: J.Json)
 
 def Laws.view_card_says_its_id(o, cx, v, text):
   hv_last_out(o, HC.open_view_confirm.card(o, cx, v, text), J.obj(HF.view_card(HS.ViewAsk.agent(v), HS.ViewAsk.call(v), Some{HS.St.next_card(HX.d(o, cx))})))
+
+def Laws.view_card_joins_same_ask(o, cx, c, v, text):
+  hv_out_journal(o, cx, J.obj(HF.view_card(HS.ViewAsk.agent(v), HS.ViewAsk.call(v), Some{HS.Card.id(c)})))
+
+def Laws.view_card_joined_says_its_id(o, cx, c, v, text):
+  hv_last_out(o, cx, J.obj(HF.view_card(HS.ViewAsk.agent(v), HS.ViewAsk.call(v), Some{HS.Card.id(c)})))
+
+# view_card_of's step: the head is that ask's card or not
+def hv_of.go(h: Bool, +c: HS.Card, +rest: List<&2, HS.Card>, +v: HS.ViewAsk,
+    +eh: {HC.view_is(HS.Card.view(c), v) == h : Bool},
+    ih: {Laws.found_is(HC.view_card_of(rest, v), v) == True{} : Bool})
+    -> {Laws.found_is(HC.view_card_of(c <> rest, v), v) == True{} : Bool}:
+  match h:
+    case True{}:
+      %Equal.sym(Bool, HC.view_is(HS.Card.view(c), v), True{}, eh) : {Laws.found_is(HLZ.pick(Maybe<&2, HS.Card>, _, u => Some{c}, u => HC.view_card_of(rest, v)), v) == True{} : Bool}
+      eh
+    case False{}:
+      %Equal.sym(Bool, HC.view_is(HS.Card.view(c), v), False{}, eh) : {Laws.found_is(HLZ.pick(Maybe<&2, HS.Card>, _, u => Some{c}, u => HC.view_card_of(rest, v)), v) == True{} : Bool}
+      ih
+
+def Laws.view_card_of_its_ask(cs, v):
+  match cs:
+    case Nil{}:
+      {==}
+    case Con{+c, +rest}:
+      hv_of.go(HC.view_is(HS.Card.view(c), v), c, rest, v, {==}, Laws.view_card_of_its_ask(rest, v))
 
 def Laws.view_card_typed(id, text, v, now):
   {==}

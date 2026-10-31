@@ -56,12 +56,11 @@ pub(crate) type ViewDone = Box<dyn FnOnce(Result<Value, RpcError>) + Send>;
 /// A view request's next step on the loop, from its thread.
 pub(super) type ViewStep = Box<dyn FnOnce(&mut Shell) + Send>;
 
-/// How long a thread waits for a bridge's address (a views bridge that
-/// just started lists its servers first).
-const BRIDGE_WAIT: Duration = Duration::from_secs(15);
-/// One request to a view's server (the bridge's own timeout is its
-/// mcp.json's).
-const CALL_TIMEOUT: Duration = Duration::from_secs(300);
+/// How long a thread waits for a bridge's address (bise_proto's, part of
+/// the bound clients hold a view's call for: view_rpc::VIEW_CALL_MAX_MS).
+const BRIDGE_WAIT: Duration = Duration::from_millis(bise_proto::view_rpc::VIEW_BRIDGE_MS);
+/// One request to a view's server (likewise).
+const CALL_TIMEOUT: Duration = Duration::from_millis(bise_proto::view_rpc::VIEW_SERVER_MS);
 
 /// `data.reason` of a request whose server could not be reached.
 pub(crate) const REASON_SERVER_GONE: &str = "server-gone";
@@ -71,8 +70,9 @@ pub(crate) const REASON_SERVER_GONE: &str = "server-gone";
 #[derive(Default)]
 pub(super) struct Views {
     limits: Limits,
-    /// a view's call waiting on its card, by card id
-    waits: BTreeMap<u64, Wait>,
+    /// the views' calls waiting on each card, by card id: the same ask
+    /// asked again joins its open card (sb-core's join, d3)
+    waits: BTreeMap<u64, Vec<Wait>>,
     /// each agent's views' context for his next send: call -> part
     contexts: BTreeMap<String, BTreeMap<String, Part>>,
     /// the bridge each view's calls last went through (a restart said
@@ -107,6 +107,21 @@ struct Route {
     base: String,
     url: String,
     hubs: bool,
+}
+
+/// The waiters of one card as one call: the first's ask (theirs are the
+/// same: sb-core joins only the same ask) and one answer for them all,
+/// each getting it once.
+fn joined(waits: Vec<Wait>) -> Option<(Wait, ViewDone)> {
+    let mut it = waits.into_iter();
+    let mut first = it.next()?;
+    let mut dones: Vec<ViewDone> = it.map(|w| w.done).collect();
+    if dones.is_empty() {
+        let done = std::mem::replace(&mut first.done, Box::new(|_| {}));
+        return Some((first, done));
+    }
+    dones.insert(0, std::mem::replace(&mut first.done, Box::new(|_| {})));
+    Some((first, Box::new(move |r: Result<Value, RpcError>| dones.into_iter().for_each(|d| d(r.clone())))))
 }
 
 /// The card a step's `view_card` effect names for `key`'s call.
@@ -307,7 +322,7 @@ impl Shell {
         self.views.servers.prune(now);
         let gone: Vec<u64> = self.views.waits.keys().filter(|id| !self.hub.st.cards.contains_key(id)).copied().collect();
         for id in gone {
-            if let Some(w) = self.views.waits.remove(&id) {
+            for w in self.views.waits.remove(&id).unwrap_or_default() {
                 (w.done)(Err(ViewError::Denied.rpc(&w.summary)));
             }
         }
@@ -536,25 +551,26 @@ impl Shell {
         let card = card_said(&fx, &key);
         self.step_fx(fx);
         match card {
-            Some(id) => {
-                self.views.waits.insert(id, Wait { key, route, method, params, summary, done });
-            }
+            Some(id) => self.views.waits.entry(id).or_default().push(Wait { key, route, method, params, summary, done }),
             None => done(Err(ViewError::Denied.rpc(what))),
         }
     }
 
     /// His answer on a view's card (the gate's `confirm` effect): true
     /// when the card was a view's.
+    /// Joined asks (the same tool and arguments) run once: every waiter
+    /// gets that one result.
     pub(super) fn view_card_answered(&mut self, card: u64, allow: bool) -> bool {
-        let Some(w) = self.views.waits.remove(&card) else { return false };
+        let Some(waits) = self.views.waits.remove(&card) else { return false };
+        let Some((w, done)) = joined(waits) else { return false };
         let how = if allow { super::gate::Fold::Allowed } else { super::gate::Fold::No };
         let fold = super::gate::fold_line(how, std::slice::from_ref(&w.key.agent), &w.summary, "");
         let agent = w.key.agent.clone();
         self.feed(&agent, &fold);
         if allow {
-            self.view_forward(w.key, w.route, w.method, w.params, w.done);
+            self.view_forward(w.key, w.route, w.method, w.params, done);
         } else {
-            (w.done)(Err(ViewError::Denied.rpc(&w.summary)));
+            done(Err(ViewError::Denied.rpc(&w.summary)));
         }
         true
     }
@@ -787,6 +803,31 @@ mod tests {
         std::fs::write(&f, "1").unwrap();
         assert!(!repl_alive(&f), "never launchd");
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// d3: two waiters joined on one card get his one answer, once each.
+    #[test]
+    fn a_joined_cards_answer_reaches_every_waiter_once() {
+        let got = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let wait = |n: u32| {
+            let got = got.clone();
+            Wait {
+                key: ViewKey::new("docs", "1-1"),
+                route: Route { base: "b".into(), url: format!("u{n}"), hubs: false },
+                method: "tools/call".into(),
+                params: json!({"name": "bump"}),
+                summary: "bump".into(),
+                done: Box::new(move |r| got.lock().unwrap().push((n, r.is_ok()))),
+            }
+        };
+        let (w, done) = joined(vec![wait(1), wait(2), wait(3)]).unwrap();
+        assert_eq!(w.route.url, "u1", "the first's ask runs");
+        done(Ok(json!({})));
+        assert_eq!(*got.lock().unwrap(), vec![(1, true), (2, true), (3, true)]);
+        let (_, one) = joined(vec![wait(4)]).unwrap();
+        one(Err(ViewError::Denied.rpc("bump")));
+        assert_eq!(got.lock().unwrap().last(), Some(&(4, false)));
+        assert!(joined(Vec::new()).is_none());
     }
 
     #[test]

@@ -245,3 +245,8 @@ def msgs_round(xs):
     case Con{Delivered{id, rel}, t}:
       %msgs_round(t) : {Delivered{id, rel} <> msgs(jmsgs(t)) == Delivered{id, rel} <> _ : List<&2, Delivered>}
       {==}
+
+# how long a view's card waits for him (bise_proto::view_rpc::VIEW_CARD_MS:
+# the shell's and the clients' bounds derive from it)
+def VIEW_CARD_MS() -> Nat:
+  600000n

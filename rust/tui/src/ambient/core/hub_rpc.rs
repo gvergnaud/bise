@@ -48,10 +48,11 @@ pub const ASK_LATE: std::time::Duration = std::time::Duration::from_secs(30);
 /// How long a send answered [`LATE`] waits for its hub's own response
 /// (architect m_34889): after it, the core says it gone.
 pub const SEND_KEPT: std::time::Duration = std::time::Duration::from_secs(600);
-/// How long a view's `view/call` waits for its hub (mcp-apps C5): a
-/// model-visible call may wait on his card, which the hub closes as
-/// denied at 10 min, so it outlives [`ASK_LATE`] by that and a minute.
-pub const VIEW_CALL_KEPT: std::time::Duration = std::time::Duration::from_secs(660);
+/// How long a view's `view/call` waits for its hub (mcp-apps C5, d3): a
+/// model-visible call may wait on his card, so it waits as long as the hub
+/// can take to answer one (`view_rpc::VIEW_CALL_MAX_MS`, derived from the
+/// card's one deadline); the hub always answers before.
+pub const VIEW_CALL_KEPT: std::time::Duration = std::time::Duration::from_millis(bise_proto::view_rpc::VIEW_CALL_MAX_MS);
 
 /// Why the core answered an app request with an error of its own, typed
 /// in the error's `data.reason` (the window never reads the words).

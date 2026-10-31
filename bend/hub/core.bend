@@ -2493,9 +2493,11 @@ def route_go(-o: S.St, m: Maybe<&2, S.Route>, +cx: X.Cx<o>) -> X.Cx<o>:
 # the card's id. Left unanswered, its due act closes it once as timed
 # out, with a no for the call (laws view_card_due_*).
 
-# how long a view's card waits for him
+# how long a view's card waits for him: bise_proto's VIEW_CARD_MS, the one
+# deadline of a view's call (the shell's and the clients' bounds derive
+# from it, view_rpc::VIEW_CALL_MAX_MS; d3)
 def VIEW_CARD_MS() -> Nat:
-  600000n
+  K.VIEW_CARD_MS()
 
 def view_place(+agent: String, +call: String) -> String:
   cat(["view:", agent, "/", call])
@@ -2528,6 +2530,23 @@ def view_card_said(-o: S.St, +cx: X.Cx<o>, +v: S.ViewAsk, +card: Maybe<&2, Nat>)
 def view_card_act(+tm: S.Tms, +card: Nat, +now: Nat) -> S.Act:
   TM.act_of(S.Tms.next_act(tm), Nat.add(now, VIEW_CARD_MS()), S.CardDue{card})
 
+# a view's ask is that card's: its agent, call and ask (the tool and its
+# arguments) all the same
+def view_is(m: Maybe<&2, S.ViewAsk>, +v: S.ViewAsk) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{+a}:
+      String.eq(S.ViewAsk.agent(a), S.ViewAsk.agent(v)) && String.eq(S.ViewAsk.call(a), S.ViewAsk.call(v)) && String.eq(S.ViewAsk.ask(a), S.ViewAsk.ask(v))
+
+# the open card of that ask, if any (law view_card_of_its_ask)
+def view_card_of(cs: List<&2, S.Card>, +v: S.ViewAsk) -> Maybe<&2, S.Card>:
+  match cs:
+    case Nil{}:
+      None{}
+    case Con{+c, +rest}:
+      LZ.pick(Maybe<&2, S.Card>, view_is(S.Card.view(c), v), u => Some{c}, u => view_card_of(rest, v))
+
 # a new view card: journaled, in main's feed, its due set...
 def open_view_confirm.card(-o: S.St, +cx: X.Cx<o>, +v: S.ViewAsk, +text: String) -> X.Cx<o>:
   +id = S.St.next_card(st(o, cx))
@@ -2539,6 +2558,16 @@ def open_view_confirm.card(-o: S.St, +cx: X.Cx<o>, +v: S.ViewAsk, +text: String)
 def open_view_confirm.new(-o: S.St, +cx: X.Cx<o>, +v: S.ViewAsk, +text: String) -> X.Cx<o>:
   view_card_said(o, open_view_confirm.card(o, cx, v, text), v, Some{S.St.next_card(st(o, cx))})
 
+# the same ask while its card is open (a page asking again after a
+# reload): no second card, the open one's id said; the shell's waiters on
+# it get his one answer (d3, law view_card_joins_same_ask)
+def open_view_confirm.at(-o: S.St, m: Maybe<&2, S.Card>, +cx: X.Cx<o>, +v: S.ViewAsk, +text: String) -> X.Cx<o>:
+  match m:
+    case None{}:
+      open_view_confirm.new(o, cx, v, text)
+    case Some{+c}:
+      view_card_said(o, cx, v, Some{S.Card.id(c)})
+
 # an agent not active (stopped, archived, gone): no card, the hub says so
 # and the view's call gets a no (laws view_card_needs_active,
 # view_card_says_no_card)
@@ -2547,7 +2576,7 @@ def open_view_confirm.go(-o: S.St, ok: Bool, +cx: X.Cx<o>, +v: S.ViewAsk, +text:
     case False{}:
       view_card_said(o, notice(o, cx, cat(["the view's call didn't reach @", S.ViewAsk.agent(v), ": it is not active"])), v, None{})
     case True{}:
-      open_view_confirm.new(o, cx, v, text)
+      open_view_confirm.at(o, view_card_of(S.St.cards(st(o, cx)), v), cx, v, text)
 
 def open_view_confirm(-o: S.St, +cx: X.Cx<o>, +agent: String, +call: String, +text: String, +ask: String) -> X.Cx<o>:
   open_view_confirm.go(o, live_agent(M.agent_named(S.St.agents(st(o, cx)), agent)), cx, view_ask(agent, call, ask), text)

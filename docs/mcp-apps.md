@@ -244,8 +244,14 @@ first need, stopped when idle or with the hub). A model-visible call
 goes through the approvals as the agent's own call would (`approvals::judge`:
 allowed runs, a rule's no refuses `denied`, else a card); the card is
 sb-core's `view_confirm_open`, its answer by card id, never the agent's
-wait. A view's `view/call` waits 11 min in the ambient core
-(`VIEW_CALL_KEPT`, not `ASK_LATE`), past the card's 10 min. Contexts are
+wait. One deadline (d3): the card waits `view_rpc::VIEW_CARD_MS` (10
+min, generated into sb-core as `K.VIEW_CARD_MS`); a client holds a
+`view/call` for `VIEW_CALL_MAX_MS`, the longest the hub can take to
+answer one (its bridge and tools twice, the card, the call), so the
+ambient core (`VIEW_CALL_KEPT`) and the web host (`/api/view`) never give
+up on a card still open. The same ask (agent, call, tool and arguments)
+while its card is open joins that card: no second card, one run, every
+waiter gets the answer. Contexts are
 joined to his next `turn/send` to that agent as `<view_context
 plugin=… uri=…>` parts (`Part::ViewContext`, never from a client). The
 thread's `ToolView.state` reads `expired` when its views file is gone,

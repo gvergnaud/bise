@@ -652,3 +652,65 @@ fn the_web_host_serves_its_page_and_refuses_a_browsers_message() {
     assert_eq!(post(&p, "/api/view", Some(&tok), Some(&o), json!({"method": "plugin/views", "params": {"agent": "t1", "call": "1-2"}})).status, 400);
     let _ = std::fs::remove_dir_all(d);
 }
+
+/// d3: `/api/view` holds a `view/call` as long as the hub can take to
+/// answer it (its card's whole wait and more: never a 503 while his card
+/// is open), and a held one blocks nothing: each request has its own
+/// server thread, so another gets its answer meanwhile.
+#[test]
+fn a_held_view_call_blocks_no_other_request() {
+    use std::io::{Read, Write};
+    let (p, d) = pages();
+    let held = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let keep = held.clone();
+    // the hub: a view/call waits on his card (its reply kept, never sent)
+    p.connect_hub(Box::new(move |m| {
+        if let PageMsg::View { reply, .. } = m {
+            keep.lock().unwrap().push(reply);
+        }
+    }));
+    let p = std::sync::Arc::new(p);
+    let l = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = l.local_addr().unwrap().port();
+    serve(l, p.clone());
+    let ask = |raw: String| {
+        let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        s.write_all(raw.as_bytes()).unwrap();
+        s
+    };
+    let body = json!({"method": "view/call", "params": {"agent": "t1", "call": "1-2", "method": "tools/call", "params": {"name": "bump"}}}).to_string();
+    let mut call = ask(format!(
+        "POST /api/view HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nOrigin: http://127.0.0.1:{}\r\nX-Bise-Token: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        p.port,
+        p.port,
+        p.token,
+        body.len()
+    ));
+    let until = std::time::Instant::now() + Duration::from_secs(5);
+    while held.lock().unwrap().is_empty() && std::time::Instant::now() < until {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    if held.lock().unwrap().is_empty() {
+        let mut out = String::new();
+        let _ = call.read_to_string(&mut out);
+        panic!("the call never reached the hub: {out}");
+    }
+    let mut other = ask(format!("GET /kit/kit.css HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nConnection: close\r\n\r\n", p.port));
+    let mut out = String::new();
+    other.read_to_string(&mut out).unwrap();
+    assert!(out.starts_with("HTTP/1.1 200"), "answered while the call waits: {out}");
+    // the call is still held, not given up
+    call.set_read_timeout(Some(Duration::from_millis(200))).unwrap();
+    let mut b = [0u8; 1];
+    assert!(call.read(&mut b).is_err(), "no answer before the hub's");
+    let _ = std::fs::remove_dir_all(d);
+}
+
+/// d3: the web host's and the ambient core's hold derive from the one
+/// deadline, and outlast the card and its call.
+#[test]
+fn a_view_calls_bound_outlasts_its_card() {
+    use bise_proto::view_rpc::VIEW_CALL_MAX_MS;
+    assert_eq!(super::super::view_web::WAIT, Duration::from_millis(VIEW_CALL_MAX_MS));
+}

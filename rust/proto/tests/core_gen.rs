@@ -791,6 +791,12 @@ fn kit() -> String {
     let mut s = String::new();
     header(&mut s, "kit: the field readers and writers of the generated codecs.");
     s.push_str(KIT);
+    // d3: the one deadline of a view's call, declared in bise_proto only
+    writeln!(s, "
+# how long a view's card waits for him (bise_proto::view_rpc::VIEW_CARD_MS:
+# the shell's and the clients' bounds derive from it)
+def VIEW_CARD_MS() -> Nat:
+  {}n", bise_proto::view_rpc::VIEW_CARD_MS).unwrap();
     s
 }
 

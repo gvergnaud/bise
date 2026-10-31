@@ -1145,6 +1145,40 @@ law view_card_id:
   for +now: Nat
   {HS.Card.id(HC.view_card_new(id, text, v, now)) == id : Nat}
 
+# LAW: the same ask while its card is open joins it: nothing journaled
+# (no second card) and fx view_card says the open card's id (d3)...
+law view_card_joins_same_ask:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +c: HS.Card
+  for +v: HS.ViewAsk
+  for +text: String
+  {HX.journal(HX.Core.fx(o, HX.Cx.c(o, HC.open_view_confirm.at(o, Some{c}, cx, v, text))))
+    == HX.journal(HX.Core.fx(o, HX.Cx.c(o, cx))) : List<&2, HM.Ev>}
+
+law view_card_joined_says_its_id:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +c: HS.Card
+  for +v: HS.ViewAsk
+  for +text: String
+  {last_fx(HX.Core.fx(o, HX.Cx.c(o, HC.open_view_confirm.at(o, Some{c}, cx, v, text))))
+    == Some{HX.FO{J.obj(HF.view_card(HS.ViewAsk.agent(v), HS.ViewAsk.call(v), Some{HS.Card.id(c)}))}} : Maybe<&2, HX.Fx>}
+
+# ...and the card it joins is one of that very ask (same view, same tool
+# and arguments): another tool or another view opens its own card
+def found_is(m: Maybe<&2, HS.Card>, +v: HS.ViewAsk) -> Bool:
+  match m:
+    case None{}:
+      True{}
+    case Some{+c}:
+      HC.view_is(HS.Card.view(c), v)
+
+law view_card_of_its_ask:
+  for +cs: List<&2, HS.Card>
+  for +v: HS.ViewAsk
+  {found_is(HC.view_card_of(cs, v), v) == True{} : Bool}
+
 # ...and an agent not active: no card, and fx view_card says none (the
 # view's call gets its no at once).
 law view_card_says_no_card:

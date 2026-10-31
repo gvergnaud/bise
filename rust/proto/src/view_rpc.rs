@@ -10,6 +10,27 @@ use crate::jsonrpc::{ErrorData, RpcError};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+/// How long a view's approval card waits for his answer (C5): the one
+/// deadline of a view's call (mcp-apps review d3). sb-core decides with
+/// it (generated into `bend/hub/gen/kit.bend` as `K.VIEW_CARD_MS`, never
+/// typed again); the bounds below derive from it.
+pub const VIEW_CARD_MS: u64 = 600_000;
+/// One request to a view's server through a bridge route (the bridge's
+/// own timeout is its mcp.json's).
+pub const VIEW_SERVER_MS: u64 = 300_000;
+/// How long the hub waits for a bridge's address (a views bridge that
+/// just started lists its servers first).
+pub const VIEW_BRIDGE_MS: u64 = 15_000;
+/// The longest the hub can take to answer a `view/call`, and so how long
+/// a client holds one (the web host's `/api/view`, the ambient core):
+/// its bridge found and its tools listed, twice at most (its agent's
+/// bridge gone: once more on the views bridge), its card's whole wait,
+/// then the call. The hub always answers before it (its card's due, the
+/// server's timeout), so a client never gives up on a card still open.
+pub const VIEW_CALL_MAX_MS: u64 = 2 * (VIEW_BRIDGE_MS + VIEW_SERVER_MS) + VIEW_CARD_MS + VIEW_SERVER_MS;
+// it outlasts the card and its call, whatever the numbers become
+const _: () = assert!(VIEW_CALL_MAX_MS >= VIEW_CARD_MS + VIEW_SERVER_MS);
+
 /// `view/resource`'s answer (C5): the view's HTML and what its sandbox
 /// takes, with its call's input and result for `ui/notifications/tool-*`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

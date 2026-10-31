@@ -21,9 +21,12 @@ use std::borrow::Cow;
 use std::sync::mpsc::channel;
 use std::time::Duration;
 
-/// How long a request waits for the hub (a `view/call` may wait on an
-/// approval card: its answer comes later, the page asks again).
-const WAIT: Duration = Duration::from_secs(60);
+/// How long a request waits for the hub: as long as the hub can take to
+/// answer a `view/call` that waits on his card (mcp-apps review d3:
+/// `view_rpc::VIEW_CALL_MAX_MS`, derived from the card's one deadline).
+/// The hub always answers before it, so the page never gives up on a card
+/// still open; each request holds its own server thread.
+pub(crate) const WAIT: Duration = Duration::from_millis(bise_proto::view_rpc::VIEW_CALL_MAX_MS);
 
 /// The methods a web host may ask (C5's, `view/message` refused below).
 const METHODS: [&str; 4] = ["view/resource", "view/call", "view/message", "view/context"];

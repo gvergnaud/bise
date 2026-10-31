@@ -133,3 +133,35 @@ fn a_view_card_left_open_closes_at_boot_with_one_no() {
     assert!(t.hub.st.cards.contains_key(&own), "the gate's own card stays");
     assert!(confirms(&t.go(Input::Boot)).is_empty(), "one answer: a second boot finds it closed");
 }
+
+fn view_cards_said(fx: &[Effect]) -> Vec<Option<u64>> {
+    fx.iter()
+        .filter_map(|e| match e {
+            Effect::ViewCard { card, .. } => Some(*card),
+            _ => None,
+        })
+        .collect()
+}
+
+// d3: the same ask of a view while its card is open joins that card (a
+// page that asks again after a reload opens no second card); another
+// tool, or another view, opens its own
+#[test]
+fn the_same_ask_joins_the_open_card() {
+    let mut t = T::new();
+    t.spawn_task("docs");
+    let ask = |t: &mut T, call: &str, ask: &str| view_cards_said(&t.go(Input::ViewConfirmOpen { agent: "docs".into(), call: call.into(), text: "wants to run bump".into(), ask: ask.into() }));
+    let first = ask(&mut t, "1-1", r#"{"args":{},"tool":"bump"}"#);
+    let n = t.hub.st.cards.len();
+    assert_eq!(ask(&mut t, "1-1", r#"{"args":{},"tool":"bump"}"#), first, "joined: the same card");
+    assert_eq!(t.hub.st.cards.len(), n, "no second card");
+    let other = ask(&mut t, "1-1", r#"{"args":{"n":2},"tool":"bump"}"#);
+    assert_ne!(other, first, "another ask: its own card");
+    let view2 = ask(&mut t, "1-2", r#"{"args":{},"tool":"bump"}"#);
+    assert_ne!(view2, first, "another view: its own card");
+    assert_eq!(t.hub.st.cards.len(), n + 2);
+    // answered, the next same ask opens a new card
+    t.user("docs", &format!("/answer {} 1", first[0].unwrap()));
+    let again = ask(&mut t, "1-1", r#"{"args":{},"tool":"bump"}"#);
+    assert_ne!(again, first);
+}
