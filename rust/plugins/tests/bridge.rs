@@ -749,6 +749,35 @@ fn an_unknown_tool_relists_the_session_and_drops_a_stale_entry_once() {
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// A route's `tools/list` is answered from the tools the bridge holds
+/// (the hub asks it before each view's call and each view's load): a
+/// listed lazy server is not started for it, and its answer is the
+/// server's own list (mcp-apps review, "each click does a full
+/// tools/list first").
+#[test]
+fn a_routes_tools_list_never_starts_a_listed_server() {
+    let (base, plugins) = fixture_root("cache-list");
+    let starts = base.join("starts.txt");
+    counted_server(&plugins, &starts, "{}");
+    let cache = base.join("cache/mcp-tools");
+    let count = || std::fs::read_to_string(&starts).unwrap_or_default().lines().count();
+    let dir = base.join("one/plugins");
+    let b = cached_bridge(&base, &plugins, &cache, &dir, None);
+    wait_until("listed", || index(&dir).contains(" shout :"));
+    assert_eq!(count(), 1, "the listing start");
+    let (mut r, path) = route(&dir, "shout");
+    for id in 3..5 {
+        let (status, body) = post(&mut r, &path, &format!(r#"{{"jsonrpc":"2.0","id":{id},"method":"tools/list","params":{{}}}}"#));
+        assert_eq!(status, 200, "{body}");
+        let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(v["id"], id, "{body}");
+        assert_eq!(v["result"]["tools"][0]["name"], "shout", "the server's own name: {body}");
+    }
+    assert_eq!(count(), 1, "no start for a list");
+    stop_bridge(b);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
 /// The REPL's exit ends its bridge at once, and with it every server
 /// (release-53, agents/new: a bridge left after the app closed). The
 /// REPL is killed and not reaped, and the chores tick is 10 s: a bridge

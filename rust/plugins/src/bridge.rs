@@ -509,6 +509,18 @@ impl Entry {
         }
     }
 
+    /// Its tools as it last listed them (a start, the shared cache, a
+    /// `list_changed`), when it is on and listed: a route's `tools/list`
+    /// is answered from them, never a start nor a round trip (the hub
+    /// judges each view's call with it, mcp-apps review). None: forward
+    /// it (starting, off, failed: the server's own answer or error).
+    fn listed(&self, state: &StateV2) -> Option<Vec<Value>> {
+        if self.off.load(Ordering::SeqCst) || !state.is_on(&self.server_id(), self.opt_in) {
+            return None;
+        }
+        matches!(*lock(&self.outcome), Outcome::Listed | Outcome::Up).then(|| lock(&self.tools).clone())
+    }
+
     /// Forward one JSON-RPC request; a dead local server is restarted
     /// once. `state`: plugins.json now.
     fn forward(&self, method: &str, mut params: Value, state: &StateV2) -> Result<Value, String> {
@@ -1252,7 +1264,13 @@ fn handle_rpc(live: &Live, entry: &Entry, body: &[u8], asked: bool) -> Answer {
     }
     let params = msg.get("params").cloned().unwrap_or_else(|| json!({}));
     let sent = params.clone();
-    match entry.forward(method, params, &live.state_now()) {
+    let state = live.state_now();
+    if method == "tools/list" {
+        if let Some(tools) = entry.listed(&state) {
+            return ("200 OK", stamp(json!({"result": {"tools": tools}}), id), None);
+        }
+    }
+    match entry.forward(method, params, &state) {
         Ok(answer) => {
             let mut view = None;
             if method == "tools/call" {

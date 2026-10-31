@@ -1132,7 +1132,7 @@ mod tests {
     #[test]
     fn the_tui_hashes_the_hubs_own_socket() {
         let state = std::path::PathBuf::from(format!("/var/folders/xy/{}/T/.bise/hubs/tmp-x-ee85d2ab", "a".repeat(80)));
-        let paths = switchboard::paths::Paths { workspace: "/w".into(), state: state.clone(), worktrees: state.join("worktrees") };
+        let paths = switchboard::paths::Paths { workspace: "/w".into(), state: state.clone(), worktrees: state.join("worktrees"), run: state.join("run") };
         assert_ne!(paths.socket(), paths.natural_socket(), "relocated");
         assert_eq!(switchboard::procs::hub_id(&tui_socket(&paths)), paths.proc_hub());
         assert_ne!(switchboard::procs::hub_id(&paths.natural_socket()), paths.proc_hub());
@@ -1146,7 +1146,7 @@ mod tests {
     fn the_hub_and_the_tui_stop_the_same_key() {
         use bise_computer_use::who::{key, split};
         let state = std::path::PathBuf::from(format!("/var/folders/xy/{}/T/.bise/hubs/tmp-x-ee85d2ab", "a".repeat(80)));
-        let paths = switchboard::paths::Paths { workspace: "/w".into(), state: state.clone(), worktrees: state.join("worktrees") };
+        let paths = switchboard::paths::Paths { workspace: "/w".into(), state: state.clone(), worktrees: state.join("worktrees"), run: state.join("run") };
         let hub = paths.proc_hub();
         let tui = switchboard::procs::hub_id(&tui_socket(&paths));
         assert_eq!(key(&tui, "docs"), key(&hub, "docs"));

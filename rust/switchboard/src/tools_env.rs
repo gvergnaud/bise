@@ -732,7 +732,7 @@ mod tests {
     #[test]
     fn a_failed_login_probe_keeps_the_last_login_path() {
         let d = tmp("login-kept");
-        let paths = crate::paths::Paths { workspace: d.join("ws"), state: d.join("hub"), worktrees: d.join("wt") };
+        let paths = crate::paths::Paths { workspace: d.join("ws"), state: d.join("hub"), worktrees: d.join("wt"), run: d.join("run") };
         std::fs::create_dir_all(&paths.state).unwrap();
         let volta = format!("{}/home/.volta/bin", d.display());
         let login = format!("{}:/usr/bin", volta);

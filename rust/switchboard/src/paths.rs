@@ -16,6 +16,11 @@ pub struct Paths {
     /// `<state>/worktrees` when `SB_STATE_DIR` is set (tests: nothing
     /// outside the state dir).
     pub worktrees: PathBuf,
+    /// The agents' run dir (`$BEND_RUN_DIR`, `bise_home::Home::run_dir`),
+    /// read once: the hub gives it to each REPL it starts and finds their
+    /// bridges in it ([`Paths::agent_bridge_json`]), so it never reads
+    /// another home than its REPLs write.
+    pub run: PathBuf,
 }
 
 /// The hub id of a workspace: `bise_home::hub_id` (one owner).
@@ -62,7 +67,8 @@ impl Paths {
             Some(_) => state.join("worktrees"),
             None => bise_home::Home::from_env().worktrees_dir().join(workspace_id(&workspace)),
         };
-        Paths { workspace, state, worktrees }
+        let run = bise_home::Home::from_env().run_dir();
+        Paths { workspace, state, worktrees, run }
     }
 
     /// The hub's socket as clients and the hub reach it: `<state>/hub.sock`
@@ -169,7 +175,7 @@ impl Paths {
     /// (`$BEND_RUN_DIR/<port>/plugins`, docs/mcp-apps.md C1): the one path
     /// from the hub to an agent's bridge.
     pub fn agent_bridge_json(&self, port: u16) -> PathBuf {
-        bise_home::Home::from_env().run_dir().join(port.to_string()).join("plugins").join(bend_plugins::bridge::BRIDGE_FILE)
+        self.run.join(port.to_string()).join("plugins").join(bend_plugins::bridge::BRIDGE_FILE)
     }
     /// The agent's MCP Apps views folder (`BEND_VIEWS_DIR`,
     /// docs/mcp-apps.md C2): pruned with the images (`image_care`).
@@ -228,7 +234,7 @@ mod tests {
     /// BEND_BG_DIR puts its bg jobs.
     #[test]
     fn an_agents_bg_folder_is_bise_homes() {
-        let p = Paths { workspace: "/w".into(), state: "/h/hubs/w-0a1b2c3d".into(), worktrees: "/h/wt".into() };
+        let p = Paths { workspace: "/w".into(), state: "/h/hubs/w-0a1b2c3d".into(), worktrees: "/h/wt".into(), run: "/h/run".into() };
         for dir in ["perf", "perf.2", "x.2", "my agent"] {
             let tmp = p.agent_tmp(dir);
             let bg = crate::tools_env::temp_env(&tmp, &p.agent_run(dir)).into_iter().find(|(k, _)| *k == "BEND_BG_DIR").map(|(_, v)| v);

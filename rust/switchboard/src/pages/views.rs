@@ -44,6 +44,9 @@ pub struct ViewSandbox {
 /// At most this many proxy sessions per view origin: an older tab of
 /// that view past them loads it again through `view/resource`.
 pub const SESSIONS: usize = 8;
+/// At most this many view origins kept (the least recently loaded go
+/// first; a tab of one loads it again through `view/resource`).
+pub const ORIGINS: usize = 512;
 
 /// One view origin as the pages server keeps it: its sandbox and the
 /// sessions `view/resource` made for it, newest last.
@@ -51,6 +54,19 @@ pub const SESSIONS: usize = 8;
 pub(super) struct ViewOrigin {
     pub(super) sandbox: ViewSandbox,
     pub(super) sessions: Vec<String>,
+    /// its last `view/resource` (a count, the newest highest)
+    pub(super) seq: u64,
+}
+
+/// Drop the least recently loaded origins past [`ORIGINS`].
+fn bound(m: &mut std::collections::HashMap<String, ViewOrigin>) {
+    if m.len() <= ORIGINS {
+        return;
+    }
+    let mut seqs: Vec<u64> = m.values().map(|o| o.seq).collect();
+    seqs.sort_unstable();
+    let cut = seqs[m.len() - ORIGINS];
+    m.retain(|_, o| o.seq >= cut);
 }
 
 impl ViewOrigin {
@@ -108,9 +124,12 @@ impl Pages {
     pub fn view_sandbox(&self, hash: &str, s: ViewSandbox) -> String {
         let session = super::new_token();
         if let Ok(mut m) = self.views.lock() {
+            let seq = m.values().map(|o| o.seq).max().unwrap_or(0) + 1;
             let o = m.entry(hash.to_string()).or_default();
             o.sandbox = s;
+            o.seq = seq;
             o.add(session.clone());
+            bound(&mut m);
         }
         session
     }
@@ -255,6 +274,18 @@ mod tests {
         assert_eq!(o.sessions.first().map(String::as_str), Some("s3"), "the oldest went first");
         assert_eq!(o.sessions.last().map(String::as_str), Some("s10"));
         assert_eq!(proxy_url("http://v-0123456789abcdef.localhost:47123", "ab"), "http://v-0123456789abcdef.localhost:47123/mcp-app?s=ab");
+    }
+
+    #[test]
+    fn the_view_origins_kept_are_bounded_newest_first() {
+        let mut m = std::collections::HashMap::new();
+        for i in 0..ORIGINS as u64 + 5 {
+            m.insert(format!("{i:016x}"), ViewOrigin { seq: i + 1, ..Default::default() });
+            bound(&mut m);
+        }
+        assert_eq!(m.len(), ORIGINS);
+        assert!(!m.contains_key(&format!("{:016x}", 4)), "the least recently loaded went");
+        assert!(m.contains_key(&format!("{:016x}", 5)) && m.contains_key(&format!("{:016x}", ORIGINS + 4)));
     }
 
     #[test]

@@ -160,7 +160,7 @@ mod tests {
     fn a_tick_touches_hourly_and_prunes_daily() {
         let root = std::env::temp_dir().join(format!("sb-image-care-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
-        let paths = Paths { workspace: root.join("ws"), state: root.join("hub"), worktrees: root.join("wt") };
+        let paths = Paths { workspace: root.join("ws"), state: root.join("hub"), worktrees: root.join("wt"), run: root.join("run") };
         let store = root.join("images");
         std::fs::create_dir_all(&paths.state).expect("state");
         std::fs::create_dir_all(&store).expect("store");

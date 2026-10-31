@@ -282,6 +282,9 @@ impl Shell {
             bise_home::env::Child::Repl,
             [
                 ("BEND_REPL_PORT", std::ffi::OsString::from(port.to_string())),
+                // its run dir is the hub's (`Paths::run`): its bridge.json
+                // is where the hub looks for it
+                ("BEND_RUN_DIR", self.opts.paths.run.clone().into()),
                 ("BEND_SESSION_FILE", session.clone().into()),
                 ("BEND_EXTRA_PROMPT", adir.join("role.md").into()),
                 ("BEND_CONTEXT_FILE", adir.join("context.txt").into()),

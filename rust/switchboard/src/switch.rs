@@ -390,7 +390,7 @@ fn probation(paths: &Paths, period: Duration) -> Result<(), String> {
 /// The hub whose state is `state` runs (a live socket or pid) or is being
 /// switched: the migration to ~/.bise leaves it in place (BISE-161).
 pub fn hub_busy(state: &Path) -> bool {
-    let paths = Paths { workspace: PathBuf::new(), state: state.to_path_buf(), worktrees: PathBuf::new() };
+    let paths = Paths { workspace: PathBuf::new(), state: state.to_path_buf(), worktrees: PathBuf::new(), run: PathBuf::new() };
     UnixStream::connect(paths.socket()).is_ok() || hub_pid(&paths).is_some_and(alive) || switch_running(&paths)
 }
 
@@ -789,7 +789,7 @@ mod state_tests {
     fn the_reload_file_is_taken_once() {
         let d = std::env::temp_dir().join(format!("sb-reload-{}", std::process::id()));
         std::fs::create_dir_all(&d).unwrap();
-        let paths = crate::paths::Paths { workspace: d.clone(), state: d.clone(), worktrees: d.join("worktrees") };
+        let paths = crate::paths::Paths { workspace: d.clone(), state: d.clone(), worktrees: d.join("worktrees"), run: d.join("run") };
         assert_eq!(super::take_reload(&paths), None);
         std::fs::write(super::reload_file(&paths), "123\n").unwrap();
         assert_eq!(super::take_reload(&paths).as_deref(), Some("123"));

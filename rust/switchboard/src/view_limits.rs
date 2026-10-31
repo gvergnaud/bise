@@ -36,6 +36,69 @@ impl ViewKey {
     }
 }
 
+/// How long the hub remembers the server a view's calls went through
+/// with no call of it: past that, its next call through the views bridge
+/// says `server-restarted` again (the views bridge stops when idle too:
+/// what it kept in memory is gone by then).
+pub const SERVER_MEMORY_MS: u64 = 60 * 60_000;
+/// At most this many views remembered (the least recently called go
+/// first).
+pub const SERVERS: usize = 4096;
+
+/// The server (the bridge's base) a view's calls went through last.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Seen {
+    base: String,
+    told: bool,
+    at: u64,
+}
+
+/// The server each view's calls last went through, so a restart is said
+/// once per view (docs/mcp-apps.md C5); pruned like [`Limits`].
+#[derive(Debug, Default)]
+pub struct Servers {
+    map: BTreeMap<ViewKey, Seen>,
+}
+
+impl Servers {
+    /// A call of `key` through the bridge `base` at `now` (`hubs`: the
+    /// hub's views bridge): true once per view when its server is not the
+    /// one before (another bridge, or the views bridge for its first
+    /// call: the REPL that ran it is gone).
+    pub fn restarted(&mut self, key: &ViewKey, base: &str, hubs: bool, now: u64) -> bool {
+        let fresh = match self.map.get(key) {
+            Some(s) => s.base != base,
+            None => hubs,
+        };
+        let seen = self.map.entry(key.clone()).or_insert_with(|| Seen { base: base.to_string(), told: false, at: now });
+        seen.base = base.to_string();
+        seen.at = now;
+        let say = fresh && !seen.told;
+        seen.told |= fresh;
+        say
+    }
+
+    /// Forget the views not called for [`SERVER_MEMORY_MS`], and the
+    /// least recently called past [`SERVERS`].
+    pub fn prune(&mut self, now: u64) {
+        self.map.retain(|_, s| now.saturating_sub(s.at) < SERVER_MEMORY_MS);
+        if self.map.len() > SERVERS {
+            let mut ats: Vec<u64> = self.map.values().map(|s| s.at).collect();
+            ats.sort_unstable();
+            let cut = ats[self.map.len() - SERVERS];
+            self.map.retain(|_, s| s.at >= cut);
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.map.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+}
+
 /// Why a message is refused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MsgRefused {
@@ -148,6 +211,27 @@ mod tests {
         assert_eq!(l.message(&k("1-1"), 59_999, Some(59_999)), Err(MsgRefused::TooSoon));
         assert_eq!(l.message(&k("1-2"), 59_999, Some(59_999)), Ok(()), "another view");
         assert_eq!(l.message(&k("1-1"), 60_000, Some(60_000)), Ok(()));
+    }
+
+    #[test]
+    fn a_restart_is_said_once_per_view_and_old_views_are_forgotten() {
+        let mut s = Servers::default();
+        assert!(!s.restarted(&k("1-1"), "http://own", false, 1000), "its own bridge, first call");
+        assert!(!s.restarted(&k("1-1"), "http://own", false, 1001));
+        assert!(s.restarted(&k("1-1"), "http://hubs", true, 1002), "another bridge: said");
+        assert!(!s.restarted(&k("1-1"), "http://other", true, 1003), "once per view");
+        assert!(s.restarted(&k("1-2"), "http://hubs", true, 1004), "the views bridge for its first call");
+        assert_eq!(s.len(), 2);
+        s.prune(1003 + SERVER_MEMORY_MS - 1);
+        assert_eq!(s.len(), 2);
+        s.prune(1004 + SERVER_MEMORY_MS);
+        assert!(s.is_empty(), "not called for an hour: forgotten");
+        for i in 0..SERVERS as u64 + 10 {
+            s.restarted(&k(&format!("{i}-1")), "http://own", false, 5000 + i);
+        }
+        s.prune(5000 + SERVERS as u64 + 10);
+        assert_eq!(s.len(), SERVERS, "the least recently called went first");
+        assert!(!s.restarted(&k(&format!("{}-1", SERVERS + 9)), "http://own", false, 9_999), "the newest stayed");
     }
 
     #[test]

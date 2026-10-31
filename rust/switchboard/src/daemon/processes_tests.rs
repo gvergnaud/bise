@@ -8,7 +8,7 @@ use bise_proto::rows::ProcState;
 const GONE: u32 = 4_000_000;
 
 fn state(dir: &Path) -> (State, Receiver<Msg>) {
-    let paths = Paths { workspace: dir.join("ws"), state: dir.join("hub"), worktrees: dir.join("wt") };
+    let paths = Paths { workspace: dir.join("ws"), state: dir.join("hub"), worktrees: dir.join("wt"), run: dir.join("run") };
     let (out, rx) = channel();
     let (me, _) = channel();
     let mut s = State::new(paths, "aa".into(), "acme".into(), out, me);

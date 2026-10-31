@@ -33,7 +33,7 @@ use super::{log_line, ClientId, Msg, Shell};
 use crate::core::Input;
 use crate::util::now_ms;
 use crate::view_call::{self, ViewFile, ViewParams};
-use crate::view_limits::{Limits, ViewKey};
+use crate::view_limits::{Limits, Servers, ViewKey};
 use bend_plugins::visibility::{self, Ask, Verdict, ViewOf};
 use bise_proto::hub::HubCmd;
 use bise_proto::jsonrpc::{ErrorData, Id, RpcError};
@@ -77,10 +77,9 @@ pub(super) struct Views {
     waits: BTreeMap<u64, Wait>,
     /// each agent's views' context for his next send: call -> part
     contexts: BTreeMap<String, BTreeMap<String, Part>>,
-    /// the bridge each view's calls last went through
-    bases: BTreeMap<ViewKey, String>,
-    /// the views told their server restarted (once each)
-    restarted: BTreeSet<ViewKey>,
+    /// the bridge each view's calls last went through (a restart said
+    /// once per view), pruned with the limits
+    servers: Servers,
     bridge: ViewsBridge,
 }
 
@@ -88,13 +87,8 @@ impl Views {
     /// A call about to go through `route`: true once per view when its
     /// server is not the one before (another bridge, or the views bridge
     /// for its first call: the REPL that ran it is gone).
-    fn server_restarted(&mut self, key: ViewKey, route: &Route) -> bool {
-        let before = self.bases.insert(key.clone(), route.base.clone());
-        let fresh = match before {
-            Some(b) => b != route.base,
-            None => route.hubs,
-        };
-        fresh && self.restarted.insert(key)
+    fn server_restarted(&mut self, key: &ViewKey, route: &Route) -> bool {
+        self.servers.restarted(key, &route.base, route.hubs, now_ms())
     }
 }
 
@@ -312,6 +306,7 @@ impl Shell {
         let now = now_ms();
         self.views.bridge.stop_idle(now);
         self.views.limits.prune(now);
+        self.views.servers.prune(now);
         let gone: Vec<u64> = self.views.waits.keys().filter(|id| !self.hub.st.cards.contains_key(id)).copied().collect();
         for id in gone {
             if let Some(w) = self.views.waits.remove(&id) {
@@ -568,7 +563,7 @@ impl Shell {
     /// The call goes to its server; a server that is not the one before
     /// is said once, on its result (`_meta["dev.bise/server-restarted"]`).
     fn view_forward(&mut self, key: ViewKey, route: Route, method: String, params: Value, done: ViewDone) {
-        let restarted = self.views.server_restarted(key, &route);
+        let restarted = self.views.server_restarted(&key, &route);
         std::thread::spawn(move || {
             let r = match post(&route.url, &view_call::request(&method, &params), CALL_TIMEOUT) {
                 Err(e) => Err(gone(&e)),
@@ -761,12 +756,12 @@ mod tests {
         let mut v = Views::default();
         let route = |base: &str, hubs: bool| Route { base: base.into(), url: format!("{base}/p/s"), hubs };
         let (a, b) = (ViewKey::new("docs", "1-1"), ViewKey::new("docs", "1-2"));
-        assert!(!v.server_restarted(a.clone(), &route("http://127.0.0.1:1/x", false)), "its own bridge: the server that ran it");
-        assert!(!v.server_restarted(a.clone(), &route("http://127.0.0.1:1/x", false)));
-        assert!(v.server_restarted(a.clone(), &route("http://127.0.0.1:2/y", true)), "another bridge");
-        assert!(!v.server_restarted(a.clone(), &route("http://127.0.0.1:3/z", false)), "once per view");
-        assert!(v.server_restarted(b.clone(), &route("http://127.0.0.1:2/y", true)), "first call on the views bridge");
-        assert!(!v.server_restarted(b, &route("http://127.0.0.1:2/y", true)));
+        assert!(!v.server_restarted(&a, &route("http://127.0.0.1:1/x", false)), "its own bridge: the server that ran it");
+        assert!(!v.server_restarted(&a, &route("http://127.0.0.1:1/x", false)));
+        assert!(v.server_restarted(&a, &route("http://127.0.0.1:2/y", true)), "another bridge");
+        assert!(!v.server_restarted(&a, &route("http://127.0.0.1:3/z", false)), "once per view");
+        assert!(v.server_restarted(&b, &route("http://127.0.0.1:2/y", true)), "first call on the views bridge");
+        assert!(!v.server_restarted(&b, &route("http://127.0.0.1:2/y", true)));
     }
 
     /// C8: a plugin's views come back as the bridge gave them.

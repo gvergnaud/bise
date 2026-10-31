@@ -59,7 +59,7 @@ fn live_lines_carry_their_time() {
 fn a_second_hub_leaves_the_first_ones_hub_root() {
     let t = std::env::temp_dir().join(format!("sb-claim-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&t);
-    let paths = Paths { workspace: t.join("ws"), state: t.join("st"), worktrees: t.join("wt") };
+    let paths = Paths { workspace: t.join("ws"), state: t.join("st"), worktrees: t.join("wt"), run: t.join("run") };
     std::fs::create_dir_all(&paths.state).unwrap();
     paths.prepare_socket().unwrap();
     let first = claim(&paths, &t.join("v1")).unwrap().expect("the first hub claims the workspace");

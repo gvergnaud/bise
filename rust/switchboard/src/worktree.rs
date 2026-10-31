@@ -623,6 +623,7 @@ mod tests {
             workspace: ws.canonicalize().unwrap(),
             state: root.join("state"),
             worktrees: root.canonicalize().unwrap().join("worktrees"),
+            run: root.join("run"),
         };
         let config = Config {
             copy: vec![".env".into()],

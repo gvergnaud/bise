@@ -265,7 +265,7 @@ mod tests {
         assert_eq!(s, "[worktree]\u{a}base = \"HEAD\"\u{a}\u{a}[flow]\u{a}mode = \"pr\"\u{a}");
         assert_eq!(FlowConfig::parse(&s).check, None);
         let dir = std::env::temp_dir().join(format!("sb-flow-{}-{}", std::process::id(), crate::util::now_ms()));
-        let paths = Paths { workspace: dir.clone(), state: dir.join("state"), worktrees: dir.join("wt") };
+        let paths = Paths { workspace: dir.clone(), state: dir.join("state"), worktrees: dir.join("wt"), run: dir.join("run") };
         save_mode(&paths, FlowMode::Trunk).unwrap();
         assert_eq!(FlowConfig::load(&paths).mode, Some(FlowMode::Trunk));
         let _ = std::fs::remove_dir_all(dir);

@@ -393,7 +393,7 @@ mod tests {
     #[test]
     fn a_stuck_start_holds_the_start_lock_no_longer_than_the_wait() {
         let dir = std::env::temp_dir().join(format!("start-lock-{}", std::process::id()));
-        let paths = Paths { workspace: dir.clone(), state: dir.join("state"), worktrees: dir.join("wt") };
+        let paths = Paths { workspace: dir.clone(), state: dir.join("state"), worktrees: dir.join("wt"), run: dir.join("run") };
         let held = start_lock(&paths).unwrap();
         let t0 = Instant::now();
         let e = start_lock_within(&paths, Duration::from_millis(300)).unwrap_err();
