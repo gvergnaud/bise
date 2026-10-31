@@ -593,7 +593,9 @@ fn a_view_host_serves_its_proxy_and_nothing_else() {
     let vh = format!("v-{hash}.localhost:{}", p.port);
     assert_eq!(at(&vh, "GET", "/mcp-app").status, 404, "an origin the hub never registered");
     let declared = json!({"connectDomains": ["https://api.open-meteo.com", "*"], "domain": "https://evil.example"});
-    p.view_sandbox(&hash, super::super::views::ViewSandbox { csp: declared.clone(), perms: vec!["microphone".into()] });
+    let session = p.view_sandbox(&hash, super::super::views::ViewSandbox { csp: declared.clone(), perms: vec!["microphone".into()] });
+    assert!(session.len() == 32 && session.bytes().all(|b| b.is_ascii_hexdigit()), "{session}");
+    assert_ne!(session, p.view_sandbox(&hash, super::super::views::ViewSandbox { csp: declared.clone(), perms: vec!["microphone".into()] }), "a new session per view/resource");
     let r = at(&vh, "GET", "/mcp-app");
     assert_eq!(r.status, 200);
     assert_eq!(r.csp, super::super::view_csp::csp(&declared, p.port, p.view_dev), "the hub's policy, never the request's");

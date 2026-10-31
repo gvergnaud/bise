@@ -41,6 +41,32 @@ pub struct ViewSandbox {
     pub perms: Vec<String>,
 }
 
+/// At most this many proxy sessions per view origin: an older tab of
+/// that view past them loads it again through `view/resource`.
+pub const SESSIONS: usize = 8;
+
+/// One view origin as the pages server keeps it: its sandbox and the
+/// sessions `view/resource` made for it, newest last.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(super) struct ViewOrigin {
+    pub(super) sandbox: ViewSandbox,
+    pub(super) sessions: Vec<String>,
+}
+
+impl ViewOrigin {
+    /// `session` kept, the oldest past [`SESSIONS`] dropped.
+    fn add(&mut self, session: String) {
+        self.sessions.push(session);
+        let over = self.sessions.len().saturating_sub(SESSIONS);
+        self.sessions.drain(..over);
+    }
+}
+
+/// The proxy's URL of a view origin for one session.
+pub fn proxy_url(origin: &str, session: &str) -> String {
+    format!("{origin}/mcp-app?s={session}")
+}
+
 /// The 16 hex of a view's origin. A cryptographic hash, never a fast one
 /// (FNV...): with a 64-bit non-cryptographic hash a hostile plugin could
 /// craft a `uri` that lands on another plugin's origin and read its
@@ -76,15 +102,21 @@ pub fn allow(perms: &[String]) -> String {
 }
 
 impl Pages {
-    /// `view/resource` registers (or updates) the sandbox of view origin `hash`.
-    pub fn view_sandbox(&self, hash: &str, s: ViewSandbox) {
+    /// `view/resource` registers (or updates) the sandbox of view origin
+    /// `hash`, with a new session for its proxy (32 hex from the system's
+    /// random source, never written to a log): the session.
+    pub fn view_sandbox(&self, hash: &str, s: ViewSandbox) -> String {
+        let session = super::new_token();
         if let Ok(mut m) = self.views.lock() {
-            m.insert(hash.to_string(), s);
+            let o = m.entry(hash.to_string()).or_default();
+            o.sandbox = s;
+            o.add(session.clone());
         }
+        session
     }
 
     fn sandbox_of(&self, hash: &str) -> Option<ViewSandbox> {
-        self.views.lock().ok()?.get(hash).cloned()
+        Some(self.views.lock().ok()?.get(hash)?.sandbox.clone())
     }
 }
 
@@ -211,6 +243,18 @@ mod tests {
         ] {
             assert_eq!(view_host(&bad, 47123), None, "{bad}");
         }
+    }
+
+    #[test]
+    fn an_origin_keeps_its_last_sessions_only() {
+        let mut o = ViewOrigin::default();
+        for i in 0..SESSIONS + 3 {
+            o.add(format!("s{i}"));
+        }
+        assert_eq!(o.sessions.len(), SESSIONS);
+        assert_eq!(o.sessions.first().map(String::as_str), Some("s3"), "the oldest went first");
+        assert_eq!(o.sessions.last().map(String::as_str), Some("s10"));
+        assert_eq!(proxy_url("http://v-0123456789abcdef.localhost:47123", "ab"), "http://v-0123456789abcdef.localhost:47123/mcp-app?s=ab");
     }
 
     #[test]

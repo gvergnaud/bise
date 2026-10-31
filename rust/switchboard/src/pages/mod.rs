@@ -102,7 +102,7 @@ pub struct Pages {
     rows_memo: Mutex<RowsMemo>,
     /// each view origin's sandbox (views.rs): its hash → what
     /// `view/resource` registered; lost on a restart (the app asks again)
-    views: Mutex<HashMap<String, views::ViewSandbox>>,
+    views: Mutex<HashMap<String, views::ViewOrigin>>,
     /// the app's dev server, who may also frame a view (view_csp.rs): a
     /// hub run with `BISE_DEV` only
     pub view_dev: Option<&'static str>,

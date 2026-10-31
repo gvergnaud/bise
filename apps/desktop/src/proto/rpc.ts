@@ -182,7 +182,14 @@ export type ViewResource = {
 /**
  * `http://v-<16 hex>.localhost:<pages port>` (C6)
  */
-origin: string, html: string, 
+origin: string, 
+/**
+ * the sandbox proxy's URL for this load, the one the host frames:
+ * `<origin>/mcp-app?s=<32 hex>`, a session the hub made for this
+ * `view/resource` (C6: a page that never asked the hub, a `.html`
+ * file opened in his browser, can't frame the view's origin)
+ */
+proxy?: string, html: string, 
 /**
  * the resource's `_meta.ui.csp` as it declared it (the pages server
  * makes the header from it)

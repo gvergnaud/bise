@@ -459,9 +459,11 @@ impl Shell {
         };
         let permissions = view_call::granted(&r.declared, &grant);
         let hash = crate::pages::views::hash(&f.plugin, &f.server, &f.uri);
-        pages.view_sandbox(&hash, crate::pages::views::ViewSandbox { csp: r.csp.clone(), perms: permissions.clone() });
+        let session = pages.view_sandbox(&hash, crate::pages::views::ViewSandbox { csp: r.csp.clone(), perms: permissions.clone() });
+        let origin = crate::pages::views::origin(&f.plugin, &f.server, &f.uri, pages.port);
         let res = ViewResource {
-            origin: crate::pages::views::origin(&f.plugin, &f.server, &f.uri, pages.port),
+            proxy: Some(crate::pages::views::proxy_url(&origin, &session)),
+            origin,
             html: r.html,
             csp: r.csp,
             permissions,
