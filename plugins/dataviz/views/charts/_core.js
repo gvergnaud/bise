@@ -22,6 +22,17 @@
   DV.textW = (s, size = DV.FONT) => String(s).length * size * 0.56;
   // Whole or nothing: the first of the texts that fits in maxW, else "" (the tip has it).
   DV.fit = (texts, maxW, size = DV.FONT) => texts.find((s) => s && DV.textW(s, size) <= maxW) || "";
+  // Whole words on lines of maxW, or null when a word alone is wider.
+  DV.wrap = (s, maxW, size = DV.FONT) => {
+    const lines = [];
+    for (const w of String(s).split(/\s+/).filter(Boolean)) {
+      if (DV.textW(w, size) > maxW) return null;
+      const last = lines[lines.length - 1];
+      if (last && DV.textW(last + " " + w, size) <= maxW) lines[lines.length - 1] = last + " " + w;
+      else lines.push(w);
+    }
+    return lines;
+  };
   DV.clip = (s, maxW, size = DV.FONT) => {
     s = String(s);
     const n = Math.floor(maxW / (size * 0.56));

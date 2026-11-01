@@ -63,11 +63,14 @@
         }
         svg += `<g data-tip="${i}"><rect x="${DV.px(x)}" y="${DV.px(y)}" width="${DV.px(w)}" height="${DV.px(h)}" rx="${w > 8 && h > 8 ? 3 : 0}" style="fill:${color};fill-opacity:${depth === 1 ? 0.2 : 0.16};stroke:var(--k-bg);stroke-width:1"/>`;
         // a tint light enough for --k-text and --k-text-2 on it in both themes; labels whole or none
-        const name = h > 22 ? DV.fit([n.name], w - 12) : "";
-        if (name) {
-          svg += `<text x="${DV.px(x + 6)}" y="${DV.px(y + 14)}" style="fill:var(--k-text)">${DV.esc(name)}</text>`;
-          const val = h > 38 ? DV.fit([DV.num(n.value, c.unit, { compact: true, locale: o.locale })], w - 12) : "";
-          if (val) svg += `<text x="${DV.px(x + 6)}" y="${DV.px(y + 30)}" style="fill:var(--k-text-2)">${DV.esc(val)}</text>`;
+        // the name on one line, or on whole-word lines in a tall narrow tile
+        let lines = DV.fit([n.name], w - 12) ? [n.name] : null;
+        if (!lines && w >= 40) lines = DV.wrap(n.name, w - 12);
+        if (lines && h >= 22 + (lines.length - 1) * 15) {
+          lines.forEach((l, k) => { svg += `<text x="${DV.px(x + 6)}" y="${DV.px(y + 14 + k * 15)}" style="fill:var(--k-text)">${DV.esc(l)}</text>`; });
+          const vy = y + 30 + (lines.length - 1) * 15;
+          const val = h > vy - y + 8 ? DV.fit([DV.num(n.value, c.unit, { compact: true, locale: o.locale })], w - 12) : "";
+          if (val) svg += `<text x="${DV.px(x + 6)}" y="${DV.px(vy)}" style="fill:var(--k-text-2)">${DV.esc(val)}</text>`;
         }
         svg += "</g>";
       };

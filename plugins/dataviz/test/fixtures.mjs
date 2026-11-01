@@ -44,8 +44,8 @@ export const FIXTURES = {
   },
   treemap: {
     title: "Disk usage",
+    subtitle: "fake laptop",
     unit: "GB",
-    note: "fake data",
     items: [
       { name: "Photos", children: [{ name: "2024", value: 38 }, { name: "2025", value: 52 }, { name: "2026", value: 27 }] },
       { name: "Code", children: [{ name: "bise", children: [{ name: "target", value: 41 }, { name: "node_modules", value: 9 }, { name: "src", value: 1.2 }] }, { name: "other repos", value: 18 }] },
