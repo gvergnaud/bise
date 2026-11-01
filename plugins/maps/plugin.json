@@ -12,6 +12,16 @@
         "find good ramen near Gare de Lyon",
         "how do I get from Bastille to the Louvre by metro?",
         "plan my Saturday in Lyon on a map: 4 stops, walking"
+      ],
+      "settings": [
+        {
+          "var": "GOOGLE_MAPS_API_KEY",
+          "label": "Google Maps API key",
+          "secret": true,
+          "required": false,
+          "help": "optional: ratings, opening hours, transit and Google's map. Turn on Places API (New), Routes API and Map Tiles API for the key. Without it the map uses OpenStreetMap",
+          "placeholder": "AIza…"
+        }
       ]
     }
   }
