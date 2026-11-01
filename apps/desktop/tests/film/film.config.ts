@@ -3,7 +3,7 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: '.',
-  testMatch: ['readme.spec.ts'],
+  testMatch: ['readme.spec.ts', 'onscreen.spec.ts'],
   workers: 1,
   reporter: [['line']],
   outputDir: '../../.harness-cache/film-results',

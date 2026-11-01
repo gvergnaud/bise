@@ -1,7 +1,7 @@
 // The README film's take (readme-film): the real app (out/), off screen, in a throwaway home, on the
 // scripted core with world.ts's made-up shop. Real clicks and keys; the hub's answers sent on cue.
 // Not a check: it records a tape (tape.ts) the film page composes. Run by record.mts:
-//   FILM_OUT=<dir> playwright test -c tests/film/film.config.ts
+//   FILM_OUT=<dir> playwright test -c tests/film/film.config.ts readme
 import { FakeCore, FakeHelper, expect, launchDesktop, test } from '../harness';
 import { Tape } from './tape';
 import { ASK, LAND_SHA, P, agents, perfLive, perfLive2, projects, world, type Row } from './world';
