@@ -187,4 +187,4 @@
 .plg-setting-needed { color: var(--c-accent); }
 /* the forget ask: the row's own fill, its words on the names' edge; Forget a ghost in the err tone (#3) */
 .plg-setting-ask .plg-row-words { white-space: normal; }
-.plg-setting-forget .b-btn { color: var(--c-err); }
+.plg-setting-forget .b-btn.ghost, .plg-setting-forget .b-btn.ghost:hover { color: var(--c-err); }
