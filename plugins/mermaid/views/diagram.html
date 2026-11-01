@@ -7,7 +7,8 @@
 <style>
   /* the kit's tokens only (plugins/.view-kit/kit.css) */
   .app { display: flex; flex-direction: column; }
-  html[data-mode="fullscreen"] .app { height: 100%; }
+  /* the frame's own height, not a chain of 100 %s a host can break (ui-review m_51680) */
+  html[data-mode="fullscreen"] .app { height: 100vh; }
   .bar { display: flex; align-items: center; gap: var(--k-s-2); padding: var(--k-s-2) var(--k-s-2) var(--k-s-2) var(--k-s-4); border-bottom: 1px solid var(--k-line); }
   .bar .k-title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--k-t-md); }
   .bar .k-chip, .bar .k-toolbar, .bar .k-seg { flex: none; }
