@@ -112,7 +112,11 @@ fn a_listed_model_takes_its_own_fields_then_its_providers() {
     let r = c.resolve("mistral/mistral-large-4");
     assert_eq!(r.known, Known::Listed);
     assert_eq!((r.caps.context, r.caps.max_output, r.caps.reasoning, r.caps.vision, r.caps.tools), (524_288, 262_144, true, true, true));
-    assert_eq!(r.efforts(), ["none", "high"], "Mistral's reasoning_effort words");
+    // its API takes low, medium, high and refuses none (checked 2026-11-01)
+    assert_eq!(r.efforts(), ["low", "medium", "high"], "Large 4's reasoning_effort words");
+    assert_eq!((r.default_effort().as_str(), r.effort_for("none").as_str()), ("high", "high"));
+    let r = c.resolve("mistral/mistral-small-latest");
+    assert_eq!(r.efforts(), ["none", "high"], "the other Mistral models keep the provider's two");
     let r = c.resolve("openai/gpt-6-astra");
     assert_eq!((r.caps.context, r.caps.max_output, r.caps.reasoning, r.caps.vision), (1_050_000, 128_000, true, true));
 }

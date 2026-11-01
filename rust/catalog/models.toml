@@ -359,7 +359,7 @@ voice_model = "voxtral-mini-transcribe-3"
 small_model = "mistral-small-latest"
 context = 262144
 # the Mistral API's reasoning_effort takes these two (the vibe CLI maps
-# its thinking levels onto them)
+# its thinking levels onto them); Large 4 has its own list below
 efforts = "none,high"
 
 # Mistral Medium 3.5 (2604): "optimized for agentic and coding use cases"
@@ -382,9 +382,14 @@ cache_read_price = 0.015
 # max_context_length 524288 (the docs card says 1M: the API's number
 # wins); max output 256k (vals.ai, Vercel's gateway). Prices: the docs
 # card's preview rates (list 1.36 / 0.14 / 4.18).
+# Efforts checked 2026-11-01 with a key, one call per word: reasoning_effort
+# low, medium, high answer; none (and minimal, xhigh) is a 400 "supported
+# values: high, low, medium" (docs.mistral.ai/studio/conversations/reasoning:
+# high recommended, so high stays the default)
 [models."mistral/mistral-large-4"]
 vision = true
 reasoning = true
+efforts = "low,medium,high"
 context = 524288
 max_output = 262144
 input_price = 0.68
