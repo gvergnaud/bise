@@ -13,10 +13,10 @@
 //!   its [`ViewDone`] (a client's response, a page's reply);
 //! - a call goes to the agent's own bridge while its REPL lives
 //!   (`$BEND_RUN_DIR/<port>/plugins/bridge.json`), else to the hub's
-//!   views bridge ([`ViewsBridge`]: `bise plugins serve --parent <hub>`,
-//!   started on the first need, stopped after its idle time or with the
-//!   hub, its folder `Paths::views_bridge_dir` so a restarted hub ends an
-//!   orphan);
+//!   views bridge (its folder `Paths::views_bridge_dir`, so a restarted
+//!   hub ends an orphan); the bridges' client and the views bridge's
+//!   supervisor are `crate::view_bridge` (review d6), this file is the
+//!   dispatch;
 //! - a call the model could also make waits on a `confirm` card that
 //!   sb-core opens for its ask (the tool and its arguments, typed on the
 //!   card) and names in the step's `view_card` effect, never the agent's
@@ -46,10 +46,9 @@ use bise_proto::jsonrpc::{ErrorData, Id, RpcError};
 use bise_proto::parts::Part;
 use bise_proto::view_rpc::{ViewError, ViewResource};
 use serde_json::{json, Value};
+use crate::view_bridge::{kill_orphan_bridge, repl_alive, request, wait_base, ViewsBridge, CALL_TIMEOUT};
 use std::collections::BTreeMap;
-use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 /// Where a view request's answer goes: a client's response, a page's
 /// reply. Called once, from any thread.
@@ -57,12 +56,6 @@ pub(crate) type ViewDone = Box<dyn FnOnce(Result<Value, RpcError>) + Send>;
 
 /// A view request's next step on the loop, from its thread.
 pub(super) type ViewStep = Box<dyn FnOnce(&mut Shell) + Send>;
-
-/// How long a thread waits for a bridge's address (bise_proto's, part of
-/// the bound clients hold a view's call for: view_rpc::VIEW_CALL_MAX_MS).
-const BRIDGE_WAIT: Duration = Duration::from_millis(bise_proto::view_rpc::VIEW_BRIDGE_MS);
-/// One request to a view's server (likewise).
-const CALL_TIMEOUT: Duration = Duration::from_millis(bise_proto::view_rpc::VIEW_SERVER_MS);
 
 /// `data.reason` of a request whose server could not be reached.
 pub(crate) const REASON_SERVER_GONE: &str = "server-gone";
@@ -171,25 +164,6 @@ fn gone(why: &str) -> RpcError {
     RpcError { code: -32000, message: format!("the view's server is not reachable: {why}"), data: Some(ErrorData { reason: Some(REASON_SERVER_GONE.into()), ..Default::default() }) }
 }
 
-/// One JSON-RPC request to a bridge route (`http://127.0.0.1:<port>/…`),
-/// its answer's JSON.
-fn post(url: &str, body: &Value, timeout: Duration) -> Result<Value, String> {
-    let rest = url.strip_prefix("http://").ok_or("not a loopback URL")?;
-    let (host, path) = rest.split_once('/').map(|(h, p)| (h, format!("/{p}"))).ok_or("no path")?;
-    let mut s = std::net::TcpStream::connect(host).map_err(|e| e.to_string())?;
-    s.set_read_timeout(Some(timeout)).map_err(|e| e.to_string())?;
-    let body = body.to_string();
-    write!(s, "POST {path} HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).map_err(|e| e.to_string())?;
-    let mut out = Vec::new();
-    s.read_to_end(&mut out).map_err(|e| e.to_string())?;
-    let text = String::from_utf8_lossy(&out);
-    let (head, body) = text.split_once("\r\n\r\n").ok_or("no answer")?;
-    if !head.starts_with("HTTP/1.1 200") {
-        return Err(head.lines().next().unwrap_or("").to_string());
-    }
-    serde_json::from_str(body).map_err(|e| e.to_string())
-}
-
 /// A view's call judged off the loop: its views file (`file`), its
 /// bridge (`bridge.json` and whether it is the views bridge), the server's
 /// tools for a `tools/call`, the plugins' state: the view, where its
@@ -202,7 +176,7 @@ fn judge_call(file: &Path, bridge: Result<(PathBuf, bool), String>, method: &str
     let base = wait_base(&json_path).ok_or_else(|| gone("no bridge"))?;
     let url = view_call::route_url(&base, &f.plugin, &f.server);
     let tools = if method == "tools/call" {
-        let got = post(&url, &view_call::request("tools/list", &json!({})), CALL_TIMEOUT).map_err(|e| gone(&e))?;
+        let got = request(&url, Some(&view_call::request("tools/list", &json!({}))), CALL_TIMEOUT).map_err(|e| gone(&e))?;
         view_call::tools(&view_call::answer(&got).map_err(|e| server_error(&e))?)
     } else {
         Vec::new()
@@ -210,108 +184,6 @@ fn judge_call(file: &Path, bridge: Result<(PathBuf, bool), String>, method: &str
     let view = ViewOf { plugin: &f.plugin, server: &f.server, opt_in: false };
     let verdict = visibility::judge(view, Ask::of(method, inner), &tools, state);
     Ok((f, Route { base, url, hubs }, verdict))
-}
-
-/// `bridge.json`'s base, waited for up to [`BRIDGE_WAIT`].
-fn wait_base(path: &Path) -> Option<String> {
-    let until = std::time::Instant::now() + BRIDGE_WAIT;
-    loop {
-        if let Some(b) = std::fs::read_to_string(path).ok().as_deref().and_then(view_call::bridge_base) {
-            return Some(b);
-        }
-        if std::time::Instant::now() >= until {
-            return None;
-        }
-        std::thread::sleep(Duration::from_millis(100));
-    }
-}
-
-/// The hub's own bridge, for the views whose agent has no REPL now.
-#[derive(Default)]
-pub(super) struct ViewsBridge {
-    child: Option<std::process::Child>,
-    last_use: u64,
-}
-
-impl ViewsBridge {
-    /// Its `bridge.json` (`json`, in `dir`), the bridge started when it
-    /// isn't running.
-    fn ensure(&mut self, exe: &Path, dir: &Path, json: &Path, workspace: &Path, now: u64) -> Result<PathBuf, String> {
-        self.last_use = now;
-        if let Some(c) = self.child.as_mut() {
-            if matches!(c.try_wait(), Ok(None)) {
-                return Ok(json.to_path_buf());
-            }
-            self.child = None;
-        }
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-        let _ = std::fs::remove_file(json);
-        let log = std::fs::File::create(dir.join("bridge.log")).map_err(|e| e.to_string())?;
-        let mut cmd = std::process::Command::new(exe);
-        cmd.args(["plugins", "serve", "--dir"])
-            .arg(dir)
-            .arg("--workspace")
-            .arg(workspace)
-            .args(["--parent", &std::process::id().to_string()])
-            .stdin(std::process::Stdio::null())
-            .stdout(log.try_clone().map_err(|e| e.to_string())?)
-            .stderr(log);
-        bise_home::env::for_child::<&str, &str>(bise_home::env::Child::Repl, []).apply(&mut cmd);
-        self.child = Some(cmd.spawn().map_err(|e| e.to_string())?);
-        Ok(json.to_path_buf())
-    }
-
-    /// Stopped after its idle time with no view call.
-    fn stop_idle(&mut self, now: u64) {
-        let idle = bend_plugins::tools_cache::IDLE_STOP.as_millis() as u64;
-        if self.child.is_some() && now.saturating_sub(self.last_use) >= idle {
-            self.stop();
-        }
-    }
-
-    fn stop(&mut self) {
-        if let Some(mut c) = self.child.take() {
-            let _ = c.kill();
-            let _ = c.wait();
-        }
-    }
-}
-
-/// A views bridge an older hub left (its `bridge.json`'s pid, when that
-/// pid is still a `plugins serve`): ended. Its own parent watch ends it
-/// once its hub is gone; this covers a pid that watch missed.
-pub(super) fn kill_orphan_bridge(file: &Path) {
-    let pid = std::fs::read_to_string(file).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()).and_then(|v| v.get("pid").and_then(Value::as_u64));
-    if let Some(pid) = pid.filter(|p| *p > 1 && *p < i32::MAX as u64) {
-        let cmd = std::process::Command::new("ps").args(["-o", "command=", "-p", &pid.to_string()]).output().ok();
-        if cmd.is_some_and(|o| String::from_utf8_lossy(&o.stdout).contains("plugins serve")) {
-            // SAFETY: kill(2) on a pid that runs our `plugins serve`, checked above
-            unsafe { libc::kill(pid as i32, libc::SIGTERM) };
-        }
-    }
-    let _ = std::fs::remove_file(file);
-}
-
-/// An agent's REPL runs: its `repl.pid` names a live process.
-fn repl_alive(pid_file: &Path) -> bool {
-    std::fs::read_to_string(pid_file).ok().and_then(|t| t.trim().parse::<u32>().ok()).is_some_and(|p| p > 1 && crate::procs::alive(p))
-}
-
-/// One GET to a bridge route, its answer's JSON.
-fn get(url: &str, timeout: Duration) -> Result<Value, String> {
-    let rest = url.strip_prefix("http://").ok_or("not a loopback URL")?;
-    let (host, path) = rest.split_once('/').map(|(h, p)| (h, format!("/{p}"))).ok_or("no path")?;
-    let mut s = std::net::TcpStream::connect(host).map_err(|e| e.to_string())?;
-    s.set_read_timeout(Some(timeout)).map_err(|e| e.to_string())?;
-    write!(s, "GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n").map_err(|e| e.to_string())?;
-    let mut out = Vec::new();
-    s.read_to_end(&mut out).map_err(|e| e.to_string())?;
-    let text = String::from_utf8_lossy(&out);
-    let (head, body) = text.split_once("\r\n\r\n").ok_or("no answer")?;
-    if !head.starts_with("HTTP/1.1 200") {
-        return Err(head.lines().next().unwrap_or("").to_string());
-    }
-    serde_json::from_str(body).map_err(|e| e.to_string())
 }
 
 impl Shell {
@@ -429,7 +301,7 @@ impl Shell {
                 let json_path = bridge.map_err(|e| gone(&e))?;
                 let base = wait_base(&json_path).ok_or_else(|| gone("no bridge"))?;
                 let url = format!("{base}/{plugin}{}", bend_plugins::bridge::UI_ROUTE);
-                get(&url, CALL_TIMEOUT).map_err(|e| gone(&e))
+                request(&url, None, CALL_TIMEOUT).map_err(|e| gone(&e))
             })();
             done(r);
         });
@@ -451,10 +323,10 @@ impl Shell {
                 let (json_path, _) = bridge.map_err(|e| gone(&e))?;
                 let base = wait_base(&json_path).ok_or_else(|| gone("no bridge"))?;
                 let url = view_call::route_url(&base, &f.plugin, &f.server);
-                let got = post(&url, &view_call::request("resources/read", &json!({"uri": f.uri})), CALL_TIMEOUT).map_err(|e| gone(&e))?;
+                let got = request(&url, Some(&view_call::request("resources/read", &json!({"uri": f.uri}))), CALL_TIMEOUT).map_err(|e| gone(&e))?;
                 let res = view_call::answer(&got).map_err(|e| server_error(&e))?;
                 let r = view_call::resource_read(&res).ok_or_else(|| ViewError::Expired.rpc(&f.uri))?;
-                let list = post(&url, &view_call::request("tools/list", &json!({})), CALL_TIMEOUT).ok().and_then(|v| view_call::answer(&v).ok()).unwrap_or_default();
+                let list = request(&url, Some(&view_call::request("tools/list", &json!({}))), CALL_TIMEOUT).ok().and_then(|v| view_call::answer(&v).ok()).unwrap_or_default();
                 let tool = view_call::tool_of(&list, &f.tool);
                 // C8: what he granted this view (never asked: nothing)
                 let grant = bend_plugins::state::view_grant(&bend_plugins::state::grants(&bend_plugins::state::state_path()), &f.plugin, &f.uri).unwrap_or_default();
@@ -589,7 +461,7 @@ impl Shell {
     fn view_forward(&mut self, key: ViewKey, route: Route, method: String, params: Value, done: ViewDone) {
         let restarted = self.views.server_restarted(&key, &route);
         std::thread::spawn(move || {
-            let r = match post(&route.url, &view_call::request(&method, &params), CALL_TIMEOUT) {
+            let r = match request(&route.url, Some(&view_call::request(&method, &params)), CALL_TIMEOUT) {
                 Err(e) => Err(gone(&e)),
                 Ok(v) => match view_call::answer(&v) {
                     Ok(r) => Ok(view_call::mark_restarted(r, restarted)),
@@ -665,62 +537,7 @@ impl Shell {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// A bridge on loopback serving fake-app's tools/list (the fixture's
-    /// shapes, tests/fixtures/mcp-apps/fake-app): its `bridge.json` in
-    /// `dir`, and the methods it was asked, in order.
-    fn fake_bridge(dir: &Path) -> (PathBuf, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
-        let l = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
-        let port = l.local_addr().unwrap().port();
-        let asked = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-        let log = asked.clone();
-        std::thread::spawn(move || {
-            for s in l.incoming() {
-                let Ok(mut s) = s else { continue };
-                let mut r = std::io::BufReader::new(s.try_clone().unwrap());
-                let mut len = 0usize;
-                loop {
-                    let mut line = String::new();
-                    if std::io::BufRead::read_line(&mut r, &mut line).unwrap_or(0) == 0 || line == "\r\n" {
-                        break;
-                    }
-                    if let Some(v) = line.to_ascii_lowercase().strip_prefix("content-length:") {
-                        len = v.trim().parse().unwrap_or(0);
-                    }
-                }
-                let mut body = vec![0; len];
-                let _ = r.read_exact(&mut body);
-                let req: Value = serde_json::from_slice(&body).unwrap_or_default();
-                let method = req["method"].as_str().unwrap_or("").to_string();
-                if body.is_empty() {
-                    // a GET: the plugin's views (C8, `~ui`)
-                    let out = json!({"views": [{"server": "fake-app", "tool": "show_counter", "uri": "ui://fake-app/counter", "ready": true}]}).to_string();
-                    let _ = write!(s, "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{out}", out.len());
-                    continue;
-                }
-                log.lock().unwrap().push(method.clone());
-                let result = match method.as_str() {
-                    "tools/list" => json!({"tools": [
-                        {"name": "show_counter", "_meta": {"ui": {"resourceUri": "ui://fake-app/counter"}}},
-                        {"name": "bump", "_meta": {"ui": {"visibility": ["app"]}}},
-                        {"name": "whisper", "_meta": {"ui": {"visibility": ["model"]}}},
-                    ]}),
-                    _ => json!({"content": [{"type": "text", "text": "ok"}]}),
-                };
-                let out = json!({"jsonrpc": "2.0", "id": 1, "result": result}).to_string();
-                let _ = write!(s, "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{out}", out.len());
-            }
-        });
-        let json_path = dir.join("bridge.json");
-        std::fs::write(&json_path, json!({"v": 1, "base": format!("http://127.0.0.1:{port}/tok"), "pid": 1}).to_string()).unwrap();
-        (json_path, asked)
-    }
-
-    fn tmp(name: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("sb-views-{name}-{}-{}", std::process::id(), now_ms()));
-        std::fs::create_dir_all(&d).unwrap();
-        d
-    }
+    use crate::view_bridge::tests::{fake_bridge, tmp};
 
     /// C5 on fake-app: an app-only tool runs, a model-visible one asks,
     /// a model-only one or another server's is refused, the plugin off
@@ -763,37 +580,6 @@ mod tests {
         assert!(!v.server_restarted(&a, &route("http://127.0.0.1:3/z", false)), "once per view");
         assert!(v.server_restarted(&b, &route("http://127.0.0.1:2/y", true)), "first call on the views bridge");
         assert!(!v.server_restarted(&b, &route("http://127.0.0.1:2/y", true)));
-    }
-
-    /// C8: a plugin's views come back as the bridge gave them.
-    #[test]
-    fn a_plugins_views_are_the_bridges_answer_as_is() {
-        let d = tmp("ui");
-        let (bridge, _) = fake_bridge(&d);
-        let base = wait_base(&bridge).unwrap();
-        let got = get(&format!("{base}/fake-app{}", bend_plugins::bridge::UI_ROUTE), Duration::from_secs(5)).unwrap();
-        assert_eq!(got["views"][0]["uri"], "ui://fake-app/counter");
-        assert!(get("http://127.0.0.1:1/x", Duration::from_secs(1)).is_err(), "nobody there");
-        let _ = std::fs::remove_dir_all(&d);
-    }
-
-    /// A REPL killed leaves its port known a moment: its own bridge is
-    /// used only while its pid lives.
-    #[test]
-    fn a_repl_is_alive_only_when_its_pid_runs() {
-        let d = tmp("repl");
-        let f = d.join("repl.pid");
-        assert!(!repl_alive(&f), "no file");
-        std::fs::write(&f, std::process::id().to_string()).unwrap();
-        assert!(repl_alive(&f));
-        let mut c = std::process::Command::new("true").spawn().unwrap();
-        let pid = c.id();
-        c.wait().unwrap();
-        std::fs::write(&f, pid.to_string()).unwrap();
-        assert!(!repl_alive(&f), "a pid gone");
-        std::fs::write(&f, "1").unwrap();
-        assert!(!repl_alive(&f), "never launchd");
-        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]

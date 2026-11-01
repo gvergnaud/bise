@@ -233,7 +233,10 @@ test in `bise_proto::socket`).
 
 As built (pieces 5a, 5b, 12): `rust/switchboard/src/daemon/views.rs` is
 the shell's side, one dispatcher for hub.sock and the pages server's
-`/api/view` (`Shell::view_request`); the pure parts are
+`/api/view` (`Shell::view_request`), the dispatch only; the bridges'
+client (one request fn: a 200, never chunked), `bridge.json`'s wait and
+the views bridge's supervisor are `crate::view_bridge` (review d6); the
+pure parts are
 `crate::view_call` (params, the views file, the bridge route, a
 resource's html/csp/declared permissions, a message's text blocks) and
 `crate::view_limits`. A call goes to the agent's own bridge while its
