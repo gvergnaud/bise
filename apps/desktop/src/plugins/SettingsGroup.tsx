@@ -7,7 +7,7 @@
 // (architect m_51451: never on the wire), and the variable's name never shows here. Owner:
 // gallery-lead.
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { BannerWait, Button, GroupLabel, Input, sentenceCase } from '@/ds';
+import { Button, GroupLabel, Input, sentenceCase } from '@/ds';
 import type { AppCmd, PluginSetting } from '@/proto';
 import { settings } from '@/proto/words.gen';
 
@@ -57,7 +57,8 @@ function SettingRow({ s, testId, save }: { s: PluginSetting; testId: string; sav
             <span className="plg-dim" data-testid={`${testId}.applies`}>{settings.plugins_setting_applies}</span>
           ) : mode.kind === 'idle' && (
             <>
-              {st === 'needed' && <span data-testid={`${testId}.needed`}><BannerWait>?</BannerWait>{` ${settings.plugins_setting_needed}`}</span>}
+              {/* it waits on him: the '?' and its words both in the accent (designer m_51734 #2) */}
+              {st === 'needed' && <span className="plg-setting-needed" data-testid={`${testId}.needed`}>{`? ${settings.plugins_setting_needed}`}</span>}
               {st === 'not_set' && <span className="plg-dim" data-testid={`${testId}.not_set`}>{settings.plugins_setting_not_set}</span>}
               {st === 'set' && <span className="plg-dim" data-testid={`${testId}.set`}>{settings.plugins_setting_set}</span>}
               <Button size="sm" onClick={() => { setMode({ kind: 'edit' }); }} testId={`${testId}.edit`}>
@@ -81,10 +82,13 @@ function SettingRow({ s, testId, save }: { s: PluginSetting; testId: string; sav
         </div>
       )}
       {mode.kind === 'forget' && (
-        <div className="plg-ask" role="group" data-testid={`${testId}.ask`}>
-          <span>{settings.plugins_setting_forget_ask({ label: s.label.toLowerCase() })}</span>
+        // the row's own fill, on the names' edge; the label as the plugin wrote it; Forget a ghost
+        // in the err tone, Keep a ghost (designer m_51734 #3, ui-review m_51732)
+        <div className="plg-row part plg-setting-ask" role="group" data-testid={`${testId}.ask`}>
+          <span className="plg-lead" aria-hidden="true" />
+          <span className="plg-row-words">{settings.plugins_setting_forget_ask({ label: s.label })}</span>
           <span className="plg-acts">
-            <Button kind="danger" size="sm" onClick={() => { save(null); close(); }} testId={`${testId}.ask.yes`}>{settings.plugins_setting_forget}</Button>
+            <span className="plg-setting-forget"><Button kind="ghost" size="sm" onClick={() => { save(null); close(); }} testId={`${testId}.ask.yes`}>{settings.plugins_setting_forget}</Button></span>
             <Button kind="ghost" size="sm" onClick={close} testId={`${testId}.ask.no`}>{settings.plugins_setting_keep}</Button>
           </span>
         </div>

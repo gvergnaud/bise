@@ -92,8 +92,13 @@ export function badgeOf(p: Plugin): Badge {
   if (!p.on || !installed(p)) return null;
   if (needsLogin(p) || p.state === 'invalid') return p.state === 'invalid' ? '✗' : '?';
   // a setting it needs to work, not given: it waits on him like a login (designer m_51514)
-  if ((p.settings ?? []).some((s) => s.required === true && !s.set)) return '?';
+  if (needsSetting(p)) return '?';
   return failedPart(p) !== null ? '✗' : null;
+}
+
+/** A setting it needs to work (required) has no value. */
+export function needsSetting(p: Plugin): boolean {
+  return (p.settings ?? []).some((s) => s.required === true && !s.set);
 }
 
 /** The built-in computer: off until /computer-use set it up (it is opt-in). */

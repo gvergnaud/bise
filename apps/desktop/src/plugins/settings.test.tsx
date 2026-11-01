@@ -36,7 +36,7 @@ describe('the Settings group', () => {
   it('each row says its state; the variable name never shows', () => {
     const v = render(<SettingsGroup plugin="maps" list={[key, units, { ...key, var: 'K2', set: true }]} send={() => {}} />);
     expect(v.getByTestId(`${id(key)}.not_set`).textContent).toBe(settings.plugins_setting_not_set);
-    expect(v.getByTestId(`${id(units)}.needed`).textContent).toContain(settings.plugins_setting_needed);
+    expect(v.getByTestId(`${id(units)}.needed`).textContent).toBe(`? ${settings.plugins_setting_needed}`);
     expect(v.getByTestId('plugins.setting.maps.K2.set').textContent).toBe(settings.plugins_setting_set);
     expect(v.getByTestId('plugins.setting.maps.K2.forget')).toBeTruthy();
     expect(v.queryByTestId(`${id(key)}.forget`)).toBeNull();
@@ -78,6 +78,8 @@ describe('the Settings group', () => {
     const set = { ...key, set: true };
     const v = render(<SettingsGroup plugin="maps" list={[set]} send={(c) => sent.push(c)} />);
     fireEvent.click(v.getByTestId(`${id(set)}.forget`));
+    // the label as the plugin wrote it (ui-review m_51732)
+    expect(v.getByTestId(`${id(set)}.ask`).textContent).toContain('forget the Google Maps API key?');
     fireEvent.click(v.getByTestId(`${id(set)}.ask.no`));
     expect(sent).toEqual([]);
     fireEvent.click(v.getByTestId(`${id(set)}.forget`));

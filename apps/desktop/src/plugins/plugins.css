@@ -183,3 +183,8 @@
 .plg-setting-field { gap: var(--gap-inline); }
 .plg-setting-input { flex: 1; min-width: 0; height: var(--h-control-sm); padding: 0 var(--s-2); border: 1px solid var(--c-line-strong); border-radius: var(--r-1); background: var(--c-solid); color: var(--c-text); font: var(--t-13) var(--font-ui); }
 .plg-setting-input:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 1px; }
+/* a required setting with no value waits on him: '?' and its words in the accent (designer m_51734 #2) */
+.plg-setting-needed { color: var(--c-accent); }
+/* the forget ask: the row's own fill, its words on the names' edge; Forget a ghost in the err tone (#3) */
+.plg-setting-ask .plg-row-words { white-space: normal; }
+.plg-setting-forget .b-btn { color: var(--c-err); }

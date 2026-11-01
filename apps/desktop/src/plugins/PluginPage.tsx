@@ -16,7 +16,7 @@ import { usePanelState } from '@/app/panel/state';
 import { entityKey } from '@/shared/entity';
 import type { AppCmd, Plugin, PluginPart } from '@/proto';
 import { settings } from '@/proto/words.gen';
-import { badgeOf, controlOf, gives, installed, isComputer, leadOf, removable, tagsOf, titleOf, toolsOf } from './model';
+import { badgeOf, controlOf, gives, installed, isComputer, leadOf, needsLogin, needsSetting, removable, tagsOf, titleOf, toolsOf } from './model';
 import { ds } from '@/proto/words_ds.gen';
 import { PluginIcon } from './PluginIcon';
 import { ViewsGroup } from './ViewsGroup';
@@ -72,7 +72,8 @@ export function PluginPage({ p, project, ports }: { p: Plugin; project?: string;
         // never a lone badge in the box's corner (designer m_44023 #4)
         facts={<span data-testid={`${tid}.facts`}>
           {[gives(p), c.kind === 'locked' ? settings.plugins_always_on : '', off > 0 ? settings.plugins_n_off({ n: off }) : ''].filter((x) => x !== '').join(' · ')}
-          {badge === '?' && <>{' · '}<BannerWait><AppIcon name="ask" size={14} /></BannerWait>{` ${settings.plugins_part_needs_login}`}</>}
+          {/* a login it needs, else a setting it needs (ui-review m_51732: never 'needs a login' for a setting) */}
+          {badge === '?' && <>{' · '}<BannerWait><AppIcon name="ask" size={14} /></BannerWait>{` ${needsSetting(p) && !needsLogin(p) ? settings.plugins_setting_waits : settings.plugins_part_needs_login}`}</>}
           {badge === '✗' && <>{' · '}<span className="plg-err">{`✗ ${settings.plugins_badge_failed}`}</span></>}
         </span>}
         visual={<PluginIcon row={p} size="head" {...(project === undefined ? {} : { project })} {...(isComputer(p) ? { lit: true } : {})} />} />
