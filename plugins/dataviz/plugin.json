@@ -1,0 +1,18 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "dataviz",
+  "version": "0.1.0",
+  "description": "Charts in the thread: time series, ring charts, top lists (horizontal bars), bars over time buckets, treemaps and Sankey diagrams, with tooltips and SVG/PNG export. Use it when numbers read better as a picture: a trend, a share, a ranking, a breakdown or a flow.",
+  "homepage": "https://bise.dev",
+  "license": "Apache-2.0",
+  "extensions": {
+    "dev.bise": {
+      "default": "off",
+      "prompts": [
+        "chart the commits per week on this repo over the last 6 months",
+        "show where my disk space goes as a treemap",
+        "draw a Sankey of last month's budget: income to spending categories"
+      ]
+    }
+  }
+}
