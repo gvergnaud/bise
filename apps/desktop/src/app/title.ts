@@ -46,7 +46,8 @@ export function stateFactOf(a: { readonly status: string; readonly waits: number
   if (a === undefined || a.archived) return null;
   if (a.waits > 0 || a.waiting_on?.who === 'you') return { kind: 'waits', text: frame.bar_waits };
   if (a.status !== 'working') return null;
-  return { kind: 'working', text: frame.bar_working({ age: shortAge(now - (a.turn_ms ?? a.since_ms)) }) };
+  // turn_ms: how long its turn has run (a duration); none yet: since its status changed
+  return { kind: 'working', text: frame.bar_working({ age: shortAge(a.turn_ms ?? now - a.since_ms) }) };
 }
 
 /** The window's title: the bar's title (macOS shows it in the Window menu and Mission Control). Pure. */

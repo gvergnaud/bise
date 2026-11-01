@@ -33,7 +33,10 @@ describe("the subtitle's one fact on a thread (designer m_43892)", () => {
   it('what waits on him first, then its work with its turn\'s age, else nothing', () => {
     expect(stateFactOf(a({ status: 'working', waits: 1 }), NOW)).toEqual({ kind: 'waits', text: 'waits for you' });
     expect(stateFactOf(a({ waiting_on: { who: 'you' } }), NOW)?.kind).toBe('waits');
-    expect(stateFactOf(a({ status: 'working', turn_ms: NOW - 3 * MIN }), NOW)).toEqual({ kind: 'working', text: 'working · 3 min' });
+    // turn_ms is the turn's duration (proto rows/agents.rs), never a timestamp
+    expect(stateFactOf(a({ status: 'working', turn_ms: 3 * MIN }), NOW)).toEqual({ kind: 'working', text: 'working · 3 min' });
+    // no turn_ms yet: the age since its status changed
+    expect(stateFactOf(a({ status: 'working', since_ms: NOW - 5 * MIN }), NOW)).toEqual({ kind: 'working', text: 'working · 5 min' });
     expect(stateFactOf(a(), NOW)).toBeNull();
     expect(stateFactOf(a({ status: 'done' }), NOW)).toBeNull();
     expect(stateFactOf(a({ status: 'working', archived: true }), NOW)).toBeNull();
