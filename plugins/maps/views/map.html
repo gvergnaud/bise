@@ -74,6 +74,7 @@
   .card .acts { display: none; gap: var(--k-s-1); margin-top: var(--k-s-1); }
   .card.sel .acts { display: flex; }
   .closed { color: var(--k-text-3); }
+  .parts span { white-space: nowrap; }
   .steps { list-style: none; margin: 0; padding: 0; }
   .steps li { display: grid; grid-template-columns: var(--k-s-6) minmax(0, 1fr) auto; gap: var(--k-s-2); padding: var(--k-s-1) var(--k-s-2);
     font-size: var(--k-t-sm); border-bottom: 1px solid var(--k-line); align-items: baseline; }
@@ -122,7 +123,7 @@
 <script>
 "use strict";
 const app = kit.app, esc = kit.esc, $ = (id) => document.getElementById(id);
-const TILE = 256, MIN_Z = 2, MAX_Z = 18, PAD = 32, INLINE_CARDS = 4;
+const TILE = 256, MIN_Z = 2, MAX_Z = 18, PAD = 32, PAD_CTL = 56, INLINE_CARDS = 4; // PAD_CTL: the +/− column's side, its width + 16
 const MODE_WORD = { walk: "Walk", transit: "Transit", drive: "Car", bike: "Bike" };
 const GMODE = { walk: "walking", transit: "transit", drive: "driving", bike: "bicycling" };
 const OSM_TILES = { url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "© OpenStreetMap contributors", link: "https://www.openstreetmap.org/copyright" };
@@ -144,6 +145,7 @@ const metersPerPx = (lat, z) => 156543.03392 * Math.cos(lat * Math.PI / 180) / 2
 const fmtDist = (m) => m < 1000 ? `${Math.round(m / 10) * 10}\u00a0m` : m < 10000 ? `${(m / 1000).toFixed(1)}\u00a0km` : `${Math.round(m / 1000)}\u00a0km`;
 const fmtTime = (s) => { const m = Math.max(1, Math.round(s / 60)); return m < 60 ? `${m}\u00a0min` : `${Math.floor(m / 60)}\u00a0h\u00a0${String(m % 60).padStart(2, "0")}`; };
 
+const sentence = (t) => (t ? t[0].toUpperCase() + t.slice(1) : t);
 const fullscreen = () => document.documentElement.dataset.mode === "fullscreen";
 const routes = () => route ? [route] : (spec.routes || []);
 const visible = (x) => !x.group || !hidden.has(x.group);
@@ -161,10 +163,11 @@ function fit() {
   if (!pts.length) { zoom = 13; center = spec.center ? project(spec.center.lat, spec.center.lon, zoom) : project(48.8566, 2.3522, zoom); return; }
   for (zoom = pts.length === 1 ? 17 : MAX_Z - 1; zoom > MIN_Z; zoom--) {
     const ps = pts.map(([la, lo]) => project(la, lo, zoom)), xs = ps.map((p) => p.x), ys = ps.map((p) => p.y);
-    if (Math.max(...xs) - Math.min(...xs) < w - 2 * PAD && Math.max(...ys) - Math.min(...ys) < h - 2 * PAD) break;
+    if (Math.max(...xs) - Math.min(...xs) < w - PAD - PAD_CTL && Math.max(...ys) - Math.min(...ys) < h - 2 * PAD) break;
   }
   const ps = pts.map(([la, lo]) => project(la, lo, zoom)), xs = ps.map((p) => p.x), ys = ps.map((p) => p.y);
-  center = { x: (Math.max(...xs) + Math.min(...xs)) / 2, y: (Math.max(...ys) + Math.min(...ys)) / 2 };
+  // the box sits between PAD on the left and PAD_CTL on the right: its middle is (PAD_CTL - PAD) / 2 left of the map's
+  center = { x: (Math.max(...xs) + Math.min(...xs)) / 2 + (PAD_CTL - PAD) / 2, y: (Math.max(...ys) + Math.min(...ys)) / 2 };
   moved = false;
 }
 
@@ -226,22 +229,20 @@ function draw() {
 }
 
 // ---- the side: cards, a route's steps, the groups' legend
-function stars(p) {
-  const bits = [];
-  if (p.rating != null) bits.push(`★\u00a0${Number(p.rating).toFixed(1)}${p.ratings ? ` (${kit.fmt(p.ratings)})` : ""}`);
-  if (p.price) bits.push("€".repeat(p.price));
-  return bits.join(" · ");
-}
+const stars = (p) => p.rating != null ? `★\u00a0${Number(p.rating).toFixed(1)}${p.ratings ? ` (${kit.fmt(p.ratings)})` : ""}` : "";
 function card(p) {
   const c = groupColor(p.group);
-  const meta = [p.category, p.distance_m != null && spec.kind === "places" ? fmtDist(p.distance_m) : "", stars(p)].filter(Boolean).join(" · ");
+  // the facts wrap between their ' · ' parts, never inside one; the price and open/closed go together
+  const parts = [p.category, p.distance_m != null && spec.kind === "places" ? fmtDist(p.distance_m) : "", stars(p)].filter(Boolean).map((t) => `<span>${esc(t)}</span>`);
   const open = p.open_now === true ? "open now" : p.open_now === false ? `<span class="closed">closed now</span>` : "";
+  const tail = [p.price ? "€".repeat(p.price) : "", open].filter(Boolean).join(" · ");
+  if (tail) parts.push(`<span>${tail}</span>`);
   const canRoute = spec.kind === "places" && spec.center;
   return `<div class="card${p.id === selected ? " sel" : ""}" data-pick="${esc(p.id)}" data-testid="card"${c ? ` style="--pin:${c}"` : ""}>
     <span class="n">${esc(p.label)}</span>
     <div class="body">
       <b>${esc(p.name)}</b>
-      ${meta || open ? `<div class="meta">${esc(meta)}${meta && open ? " · " : ""}${open}</div>` : ""}
+      ${parts.length ? `<div class="meta parts">${parts.join(" · ")}</div>` : ""}
       ${p.address ? `<div class="addr" title="${esc(p.address)}">${esc(p.address)}</div>` : ""}
       ${p.note ? `<div class="note">${esc(p.note)}</div>` : ""}
       ${p.hours ? `<div class="meta">${esc(p.hours)}</div>` : ""}
@@ -281,7 +282,7 @@ function drawSide() {
     const sections = groups.length
       ? [undefined, ...groups].filter((g) => !g || !hidden.has(g)).map((g) => {
           const rows = shown.filter((p) => p.group === g).map(card).join("") + rs.filter((r) => r.group === g).map(routeRow).join("");
-          return rows ? (g ? `<div class="group-head" data-testid="group-head">${esc(g)}</div>` : "") + rows : "";
+          return rows ? (g ? `<div class="group-head" data-testid="group-head">${esc(sentence(g))}</div>` : "") + rows : "";
         }).join("")
       : shown.slice(0, cut).map(card).join("") + more + rs.map(routeRow).join("");
     $("list").innerHTML = ps.length || rs.length ? sections
@@ -296,7 +297,7 @@ function drawSide() {
   }
   const groups = spec.groups || [];
   $("legend").hidden = groups.length < 2;
-  $("legend").innerHTML = groups.map((g, i) => `<button data-group="${esc(g)}" aria-pressed="${!hidden.has(g)}"><span class="k-swatch" style="background:${kit.series(i)}"></span>${esc(g)}</button>`).join("");
+  $("legend").innerHTML = groups.map((g, i) => `<button data-group="${esc(g)}" aria-pressed="${!hidden.has(g)}"><span class="k-swatch" style="background:${kit.series(i)}"></span>${esc(sentence(g))}</button>`).join("");
 }
 
 function drawHead() {
@@ -345,7 +346,7 @@ async function searchArea() {
   busy = true; status(`Looking for ${spec.query} here…`);
   try {
     const r = await app.call("search_area", { query: spec.query, center: { lat: c.lat, lon: c.lon }, radius_m: radius, open_now: spec.open_now, limit: spec.limit });
-    const title = spec.title;
+    const title = `${spec.query[0].toUpperCase()}${spec.query.slice(1)} in this area`;
     show({ ...r.structuredContent, title }, { refit: false });
     moved = false; draw(); status("");
     tell("The user searched another area on the map. " + ((r.content[0] || {}).text || "").slice(0, 3800), { query: spec.query, center: c });

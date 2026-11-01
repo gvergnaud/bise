@@ -113,12 +113,14 @@ test("directions: a route with its steps; transit on the open provider falls bac
 test("show_map: markers found or given, routes, groups; a missing place is left out and named", async () => {
   const r = await callTool(fakeProvider(), "show_map", {
     title: "Weekend",
-    markers: ["Louvre", { name: "Lunch", lat: 48.86, lon: 2.34, note: "booked", group: "Day 1" }, { name: "Tea", lat: 48.85, lon: 2.35, group: "Day 2" }, ""],
+    markers: ["Louvre", { name: "Lunch", lat: 48.86, lon: 2.34, note: "booked", group: "Day 1" }, { name: "Tea", lat: 48.85, lon: 2.35, group: "Day 2" }, "",
+      { name: "Bar", lat: 48.851, lon: 2.351, group: "day 2" }],
     routes: [{ from: "Louvre", to: "Bastille", mode: "bike", group: "Day 1" }],
   });
   const s = r.structuredContent;
-  assert.equal(s.places.length, 3);
+  assert.equal(s.places.length, 4);
   assert.deepEqual(s.groups, ["Day 1", "Day 2"]);
+  assert.equal(s.places[3].group, "Day 2");
   assert.equal(s.routes[0].mode, "bike");
   assert.match(r.content[0].text, /Left out: a place is empty/);
   const none = await callTool(fakeProvider(), "show_map", {});

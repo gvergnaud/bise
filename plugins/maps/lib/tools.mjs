@@ -236,7 +236,14 @@ async function showMap(provider, a) {
   const rawRoutes = (Array.isArray(a.routes) ? a.routes : []).slice(0, MAX_ROUTES);
   if (!markers.length && !rawRoutes.length) throw new ToolError("show_map needs markers or routes");
   const places = [], missed = [], groups = [];
-  const group = (g) => { const t = g ? String(g).slice(0, 40) : ""; if (t && !groups.includes(t)) groups.push(t); return t || undefined; };
+  // a group's name as first written: "morning" and "Morning" are one group
+  const group = (g) => {
+    const t = g ? String(g).trim().slice(0, 40) : "";
+    if (!t) return undefined;
+    const same = groups.find((x) => x.toLowerCase() === t.toLowerCase());
+    if (!same) groups.push(t);
+    return same || t;
+  };
   for (const m of markers) {
     try {
       const at = await resolvePlace(m, provider, near);
