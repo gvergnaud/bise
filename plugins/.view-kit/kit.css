@@ -42,20 +42,23 @@
   --k-s-1: 4px; --k-s-2: 8px; --k-s-3: 12px; --k-s-4: 16px; --k-s-6: 24px; --k-s-8: 32px;
   --k-h-control: 24px; --k-h-row: 28px;
   --k-fast: 140ms; --k-ease: cubic-bezier(.2, 0, 0, 1);
-  /* the series palette (charts, diagrams, drawings, map layers): 8 hues around bise's rose,
-     each readable on --k-bg in its theme; series 1 is the accent */
-  --k-series-1: light-dark(#b8416b, #f4a6b0);
-  --k-series-2: light-dark(#2f6f9f, #8ec0e8);
-  --k-series-3: light-dark(#b0690f, #f0b860);
-  --k-series-4: light-dark(#3f7a2a, #b9d99a);
-  --k-series-5: light-dark(#6b4fa0, #c3a8f0);
-  --k-series-6: light-dark(#1f7f7a, #7fd1c9);
-  --k-series-7: light-dark(#a8502f, #f09a7a);
+  /* the series palette (charts, diagrams, drawings, map layers): 8 hues, each readable on
+     --k-bg in its theme. Series 1 is a neutral ink-blue (a one-series chart uses it); never
+     the accent pink, which bise keeps for 'waits for you' (designer m_51492) */
+  --k-series-1: light-dark(#2f6f9f, #8ec0e8);
+  --k-series-2: light-dark(#b0690f, #f0b860);
+  --k-series-3: light-dark(#3f7a2a, #b9d99a);
+  --k-series-4: light-dark(#6b4fa0, #c3a8f0);
+  --k-series-5: light-dark(#1f7f7a, #7fd1c9);
+  --k-series-6: light-dark(#a8502f, #f09a7a);
+  --k-series-7: light-dark(#76702a, #d4cc84);
   --k-series-8: light-dark(#6b645a, #a39c90);
 }
 html[data-theme="light"] { color-scheme: light; }
 html[data-theme="dark"] { color-scheme: dark; }
 * { box-sizing: border-box; }
+/* the kit's classes set display: [hidden] still hides (maps-plugin m_51472) */
+[hidden] { display: none !important; }
 html, body { margin: 0; }
 body {
   font-family: var(--k-sans); font-size: var(--k-t-md); line-height: 1.35; color: var(--k-text);
