@@ -14,3 +14,4 @@ plugins/*/lib/**                       # the gallery plugins' server modules, im
 plugins/*/test/**                      # the gallery plugins' node:test units (gate.sh quick's gallery_plugins step)
 plugins/.view-kit/**                   # the gallery's shared view kit, inlined as-is into each view's HTML by its server at resources/read (no build step)
 plugins/*/vendor/**                    # vendored third-party code a gallery plugin ships with its LICENSE (mermaid)
+plugins/*/views/**                     # a gallery view's own scripts (dataviz's chart renderers), inlined into its HTML by its server at resources/read (no build step)
