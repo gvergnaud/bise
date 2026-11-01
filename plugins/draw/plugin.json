@@ -1,0 +1,14 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "draw",
+  "version": "0.1.0",
+  "description": "A hand-drawn canvas the agent and the user share: the agent draws diagrams for him (boxes, ellipses, diamonds, notes, arrows, groups, laid out for it), he edits them by hand (move, draw, write), the agent reads his edits back; export to SVG or PNG. Use it to sketch an architecture, a flow, a plan or an idea.",
+  "homepage": "https://bise.dev",
+  "license": "Apache-2.0",
+  "extensions": {
+    "dev.bise": {
+      "default": "off",
+      "prompts": ["sketch how the hub, the agents and the TUI talk to each other", "draw the signup flow as boxes and arrows, I'll fix it by hand", "look at what I changed in the drawing and update the plan"]
+    }
+  }
+}
