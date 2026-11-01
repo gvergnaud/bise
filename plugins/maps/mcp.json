@@ -1,0 +1,14 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "maps": {
+      "type": "stdio",
+      "command": "${BISE_NODE}",
+      "args": ["${PLUGIN_ROOT}/server.mjs"],
+      "env": {
+        "GOOGLE_MAPS_API_KEY": "${GOOGLE_MAPS_API_KEY:-}",
+        "MAPS_PROVIDER": "${MAPS_PROVIDER:-}"
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "maps",
+  "version": "0.1.0",
+  "description": "maps: places near a place (restaurants, shops of a kind, a pharmacy...) on a map with a card each, directions from A to B (walk, transit, car, bike) and your own maps with markers and routes, in a map view in the thread. OpenStreetMap with no key; Google Maps with a key in the plugin's settings. Use it when the user asks where something is, what is near, how to get somewhere, or to plan a day on a map",
+  "homepage": "https://bise.dev",
+  "license": "Apache-2.0",
+  "extensions": {
+    "dev.bise": {
+      "default": "off",
+      "prompts": [
+        "find good ramen near Gare de Lyon",
+        "how do I get from Bastille to the Louvre by metro?",
+        "plan my Saturday in Lyon on a map: 4 stops, walking"
+      ]
+    }
+  }
+}

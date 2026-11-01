@@ -1,0 +1,463 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Map</title>
+<!-- bise-view-kit -->
+<style>
+  /* the kit's buttons and segments set a display: hidden must still hide them */
+  [hidden] { display: none !important; }
+  /* the map view: inline, the map above its cards; in the panel, the map beside them */
+  .app { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--k-s-2); }
+  html[data-mode="fullscreen"] .app { height: 100vh; grid-template-columns: minmax(0, 1fr) 320px; grid-template-rows: auto minmax(0, 1fr); }
+  html[data-mode="fullscreen"] .head { grid-column: 1 / -1; }
+  @media (max-width: 560px) {
+    html[data-mode="fullscreen"] .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 260px minmax(0, 1fr); }
+  }
+  .head { display: flex; align-items: center; gap: var(--k-s-2); min-width: 0; }
+  /* narrow (the panel is ~420 px): the mode tabs go under the title, which keeps its width */
+  @media (max-width: 560px) { .head { flex-wrap: wrap; } .head .titles { flex: 1 1 calc(100% - 140px); } .head .k-seg { order: 3; } }
+  .titles { flex: 1; min-width: 0; }
+  .titles .k-title, .titles .k-dim { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .titles .k-dim { font-size: var(--k-t-sm); }
+
+  .map { position: relative; height: 280px; overflow: hidden; border-radius: var(--k-r-md); border: 1px solid var(--k-line);
+    background-color: var(--k-bg-2); cursor: grab; touch-action: none; user-select: none; }
+  .map.off { background-image: linear-gradient(var(--k-line) 1px, transparent 1px), linear-gradient(90deg, var(--k-line) 1px, transparent 1px);
+    background-size: var(--k-s-8) var(--k-s-8); }
+  .map.drag { cursor: grabbing; }
+  html[data-mode="fullscreen"] .map { height: auto; min-height: 0; }
+  @media (max-width: 560px) { html[data-mode="fullscreen"] .map { height: 260px; } }
+  .tiles img { position: absolute; width: 256px; height: 256px; pointer-events: none; }
+  html[data-theme="dark"] .tiles img { filter: invert(1) hue-rotate(180deg) brightness(.8) contrast(.85) saturate(.5); }
+  @media (prefers-color-scheme: dark) { html:not([data-theme="light"]) .tiles img { filter: invert(1) hue-rotate(180deg) brightness(.8) contrast(.85) saturate(.5); } }
+  .overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .casing { fill: none; stroke: var(--k-bg); stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; }
+  .line { fill: none; stroke-width: 4.5; stroke-linecap: round; stroke-linejoin: round; }
+  .line.walk { stroke-dasharray: 1 7; stroke-width: 5; }
+  .radius { fill: var(--k-series-1); fill-opacity: .06; stroke: var(--k-line-strong); stroke-dasharray: 4 4; }
+  .here { fill: var(--k-text); stroke: var(--k-bg); stroke-width: 3; }
+  .pins { position: absolute; inset: 0; pointer-events: none; }
+  .pin { position: absolute; transform: translate(-50%, -50%); pointer-events: auto; cursor: pointer; border: 2px solid var(--k-bg);
+    min-width: var(--k-h-control); height: var(--k-h-control); padding: 0 var(--k-s-1); border-radius: var(--k-r-full);
+    background: var(--pin, var(--k-series-1)); color: var(--k-bg); font: 600 var(--k-t-xs) / 1 var(--k-sans);
+    display: grid; place-items: center; box-shadow: var(--k-shadow); }
+  .pin.sel { background: var(--k-inverse); color: var(--k-on-inverse); z-index: 2; transform: translate(-50%, -50%) scale(1.15); }
+  .pin:focus-visible { outline: 2px solid var(--k-focus); }
+  .ctl { position: absolute; right: var(--k-s-2); top: var(--k-s-2); display: flex; flex-direction: column; gap: var(--k-s-1); }
+  .ctl .k-btn, .area { box-shadow: var(--k-shadow); }
+  .area { position: absolute; left: 50%; top: var(--k-s-2); transform: translateX(-50%); }
+  .attrib { position: absolute; right: 0; bottom: 0; padding: 0 var(--k-s-1); font-size: var(--k-t-xs); color: var(--k-text-2);
+    background: color-mix(in srgb, var(--k-bg) 80%, transparent); border-top-left-radius: var(--k-r-sm); }
+  .attrib a { color: inherit; cursor: pointer; text-decoration: underline; }
+  .hint { position: absolute; left: var(--k-s-2); bottom: var(--k-s-1); font-size: var(--k-t-xs); color: var(--k-text-3); }
+
+  .side { display: flex; flex-direction: column; gap: var(--k-s-2); min-height: 0; }
+  .list { display: flex; flex-direction: column; }
+  html[data-mode="fullscreen"] .list { overflow: auto; }
+  .more { align-self: flex-start; color: var(--k-text-3); }
+  html[data-mode="fullscreen"] .list { max-height: none; flex: 1; min-height: 0; }
+  .card { display: grid; grid-template-columns: var(--k-h-control) minmax(0, 1fr); gap: var(--k-s-1) var(--k-s-2);
+    padding: var(--k-s-2); border-radius: var(--k-r-md); cursor: pointer; }
+  .card:hover { background: var(--k-hover); }
+  .card.sel { background: var(--k-bg-2); }
+  .card .n { width: var(--k-h-control); height: var(--k-h-control); border-radius: var(--k-r-full); background: var(--pin, var(--k-series-1));
+    color: var(--k-bg); font-size: var(--k-t-xs); font-weight: 600; display: grid; place-items: center; }
+  .card .body { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .card b { font-weight: 600; }
+  .card .meta, .card .addr { font-size: var(--k-t-sm); color: var(--k-text-2); }
+  .card .addr { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .note { font-size: var(--k-t-sm); }
+  .card .acts { display: none; gap: var(--k-s-1); margin-top: var(--k-s-1); }
+  .card.sel .acts { display: flex; }
+  .closed { color: var(--k-text-3); }
+  .steps { list-style: none; margin: 0; padding: 0; }
+  .steps li { display: grid; grid-template-columns: var(--k-s-6) minmax(0, 1fr) auto; gap: var(--k-s-2); padding: var(--k-s-1) var(--k-s-2);
+    font-size: var(--k-t-sm); border-bottom: 1px solid var(--k-line); align-items: baseline; }
+  .steps li:last-child { border-bottom: 0; }
+  .steps .i { color: var(--k-text-3); font-variant-numeric: tabular-nums; }
+  .steps .d { color: var(--k-text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .steps .line-chip { color: var(--k-bg); background: var(--k-series-1); border-radius: var(--k-r-sm); padding: 0 var(--k-s-1); font-weight: 600; }
+  .total { display: flex; align-items: baseline; gap: var(--k-s-2); padding: 0 var(--k-s-2); }
+  .total b { font-size: var(--k-h-md); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .legend button { font: inherit; border: 0; background: none; color: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: var(--k-s-1); padding: 0; }
+  .legend button[aria-pressed="false"] { opacity: .45; }
+  .k-skeleton.sk { height: var(--k-s-8); margin: var(--k-s-1) 0; }
+</style>
+</head>
+<body>
+<div class="app k-app">
+  <div class="head">
+    <div class="titles">
+      <h1 class="k-title" id="title" data-testid="title">Map</h1>
+      <div class="k-dim" id="sub" data-testid="sub">finding…</div>
+    </div>
+    <div class="k-seg" id="modes" data-testid="modes" hidden></div>
+    <button class="k-btn" id="ext" data-testid="open-external" title="Open in Google Maps">Google Maps ↗</button>
+  </div>
+  <div class="map" id="map" data-testid="map">
+    <div class="tiles" id="tiles"></div>
+    <svg class="overlay" id="overlay"></svg>
+    <div class="pins" id="pins"></div>
+    <button class="k-btn area" id="area" data-testid="search-area" hidden>Search this area</button>
+    <div class="ctl">
+      <button class="k-btn k-icon" id="zin" title="Zoom in" aria-label="Zoom in">+</button>
+      <button class="k-btn k-icon" id="zout" title="Zoom out" aria-label="Zoom out">−</button>
+      <button class="k-btn k-icon" id="refit" title="Show everything" aria-label="Show everything">⤢</button>
+    </div>
+    <div class="hint" id="hint"></div>
+    <div class="attrib"><a id="attrib" data-testid="attribution"></a></div>
+  </div>
+  <div class="side">
+    <div class="k-legend legend" id="legend" data-testid="legend" hidden></div>
+    <div class="list" id="list" data-testid="list">
+      <div class="k-skeleton sk"></div><div class="k-skeleton sk"></div><div class="k-skeleton sk"></div>
+    </div>
+    <div class="k-note" id="status" data-testid="status" hidden></div>
+  </div>
+</div>
+<script>
+"use strict";
+const app = kit.app, esc = kit.esc, $ = (id) => document.getElementById(id);
+const TILE = 256, MIN_Z = 2, MAX_Z = 18, PAD = 32, INLINE_CARDS = 4;
+const MODE_WORD = { walk: "Walk", transit: "Transit", drive: "Car", bike: "Bike" };
+const GMODE = { walk: "walking", transit: "transit", drive: "driving", bike: "bicycling" };
+const OSM_TILES = { url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "© OpenStreetMap contributors", link: "https://www.openstreetmap.org/copyright" };
+
+// the state: the tool's spec, a route the view asked for (a card's directions, a mode tab), what is picked
+let spec = null, route = null, selected = null, hidden = new Set(), tiles = null, allCards = false;
+let zoom = 13, center = { x: 0, y: 0 }, moved = false, busy = false;
+
+// ---- Web Mercator, by hand: no map library, the tiles are plain images
+const project = (lat, lon, z) => {
+  const s = TILE * 2 ** z, r = Math.min(85, Math.max(-85, lat)) * Math.PI / 180;
+  return { x: (lon + 180) / 360 * s, y: (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * s };
+};
+const unproject = (x, y, z) => {
+  const s = TILE * 2 ** z, n = Math.PI - 2 * Math.PI * y / s;
+  return { lat: 180 / Math.PI * Math.atan(Math.sinh(n)), lon: x / s * 360 - 180 };
+};
+const metersPerPx = (lat, z) => 156543.03392 * Math.cos(lat * Math.PI / 180) / 2 ** z;
+const fmtDist = (m) => m < 1000 ? `${Math.round(m / 10) * 10}\u00a0m` : m < 10000 ? `${(m / 1000).toFixed(1)}\u00a0km` : `${Math.round(m / 1000)}\u00a0km`;
+const fmtTime = (s) => { const m = Math.max(1, Math.round(s / 60)); return m < 60 ? `${m}\u00a0min` : `${Math.floor(m / 60)}\u00a0h\u00a0${String(m % 60).padStart(2, "0")}`; };
+
+const fullscreen = () => document.documentElement.dataset.mode === "fullscreen";
+const routes = () => route ? [route] : (spec.routes || []);
+const visible = (x) => !x.group || !hidden.has(x.group);
+const groupColor = (g) => g && spec.groups ? kit.series(spec.groups.indexOf(g)) : "";
+function allPoints() {
+  const pts = (spec.places || []).filter(visible).map((p) => [p.lat, p.lon]);
+  for (const r of routes()) if (visible(r)) pts.push(...r.path);
+  if (spec.kind === "places" && spec.center && !(spec.places || []).length) pts.push([spec.center.lat, spec.center.lon]);
+  return pts;
+}
+
+function fit() {
+  const el = $("map"), w = el.clientWidth || 600, h = el.clientHeight || 280, pts = allPoints();
+  if (!pts.length) { zoom = 13; center = spec.center ? project(spec.center.lat, spec.center.lon, zoom) : project(48.8566, 2.3522, zoom); return; }
+  for (zoom = pts.length === 1 ? 17 : MAX_Z - 1; zoom > MIN_Z; zoom--) {
+    const ps = pts.map(([la, lo]) => project(la, lo, zoom)), xs = ps.map((p) => p.x), ys = ps.map((p) => p.y);
+    if (Math.max(...xs) - Math.min(...xs) < w - 2 * PAD && Math.max(...ys) - Math.min(...ys) < h - 2 * PAD) break;
+  }
+  const ps = pts.map(([la, lo]) => project(la, lo, zoom)), xs = ps.map((p) => p.x), ys = ps.map((p) => p.y);
+  center = { x: (Math.max(...xs) + Math.min(...xs)) / 2, y: (Math.max(...ys) + Math.min(...ys)) / 2 };
+  moved = false;
+}
+
+// ---- drawing: tiles kept by key (no flicker while dragging), the overlay and the pins redrawn
+const tileEls = new Map();
+function drawTiles(ox, oy, w, h) {
+  const n = 2 ** zoom, want = new Set(), layer = $("tiles"), src = tiles || OSM_TILES;
+  for (let tx = Math.floor(ox / TILE); tx <= Math.floor((ox + w) / TILE); tx++)
+    for (let ty = Math.max(0, Math.floor(oy / TILE)); ty <= Math.min(n - 1, Math.floor((oy + h) / TILE)); ty++) {
+      const key = `${zoom}/${tx}/${ty}`;
+      want.add(key);
+      let img = tileEls.get(key);
+      if (!img) {
+        img = new Image(); img.alt = "";
+        img.onerror = () => $("map").classList.add("off");
+        img.src = src.url.replace("{z}", zoom).replace("{x}", ((tx % n) + n) % n).replace("{y}", ty);
+        tileEls.set(key, img); layer.appendChild(img);
+      }
+      img.style.left = `${tx * TILE - ox}px`; img.style.top = `${ty * TILE - oy}px`;
+    }
+  for (const [k, img] of tileEls) if (!want.has(k)) { img.remove(); tileEls.delete(k); }
+}
+
+function draw() {
+  if (!spec) return;
+  const el = $("map"), w = el.clientWidth, h = el.clientHeight, ox = center.x - w / 2, oy = center.y - h / 2;
+  const at = (lat, lon) => { const q = project(lat, lon, zoom); return [q.x - ox, q.y - oy]; };
+  drawTiles(ox, oy, w, h);
+  let svg = "";
+  if (spec.kind === "places" && spec.center && !route) {
+    const [cx, cy] = at(spec.center.lat, spec.center.lon), r = spec.radius_m / metersPerPx(spec.center.lat, zoom);
+    if (r < 4 * Math.max(w, h)) svg += `<circle class="radius" cx="${cx}" cy="${cy}" r="${r}"/>`;
+    svg += `<circle class="here" cx="${cx}" cy="${cy}" r="6"/>`;
+  }
+  for (const r of routes().filter(visible)) {
+    const color = groupColor(r.group) || kit.series(0);
+    const d = (pts) => "M" + pts.map(([la, lo]) => at(la, lo).map((v) => v.toFixed(1)).join(" ")).join(" L");
+    svg += `<path class="casing" d="${d(r.path)}"/><path class="line${r.mode === "walk" ? " walk" : ""}" style="stroke:${color}" d="${d(r.path)}"/>`;
+  }
+  $("overlay").innerHTML = svg;
+  const places = (spec.places || []).filter(visible);
+  $("pins").innerHTML = places.map((p) => {
+    const [x, y] = at(p.lat, p.lon), c = groupColor(p.group);
+    return `<button class="pin${p.id === selected ? " sel" : ""}" data-pick="${esc(p.id)}" style="left:${x}px;top:${y}px;${c ? `--pin:${c}` : ""}" aria-label="${esc(p.name)}">${esc(p.label)}</button>`;
+  }).join("");
+  for (const b of $("pins").children) {
+    const p = places.find((q) => q.id === b.dataset.pick);
+    kit.tip(b, () => `<b>${esc(p.name)}</b>${p.category ? `<br>${esc(p.category)}` : ""}${p.distance_m != null ? ` · ${fmtDist(p.distance_m)}` : ""}`);
+  }
+  $("area").hidden = !(moved && spec.kind === "places" && !route);
+}
+
+// ---- the side: cards, a route's steps, the groups' legend
+function stars(p) {
+  const bits = [];
+  if (p.rating != null) bits.push(`★\u00a0${Number(p.rating).toFixed(1)}${p.ratings ? ` (${kit.fmt(p.ratings)})` : ""}`);
+  if (p.price) bits.push("€".repeat(p.price));
+  return bits.join(" · ");
+}
+function card(p) {
+  const c = groupColor(p.group);
+  const meta = [p.category, p.distance_m != null && spec.kind === "places" ? fmtDist(p.distance_m) : "", stars(p)].filter(Boolean).join(" · ");
+  const open = p.open_now === true ? "open now" : p.open_now === false ? `<span class="closed">closed now</span>` : "";
+  const canRoute = spec.kind === "places" && spec.center;
+  return `<div class="card${p.id === selected ? " sel" : ""}" data-pick="${esc(p.id)}" data-testid="card"${c ? ` style="--pin:${c}"` : ""}>
+    <span class="n">${esc(p.label)}</span>
+    <div class="body">
+      <b>${esc(p.name)}</b>
+      ${meta || open ? `<div class="meta">${esc(meta)}${meta && open ? " · " : ""}${open}</div>` : ""}
+      ${p.address ? `<div class="addr" title="${esc(p.address)}">${esc(p.address)}</div>` : ""}
+      ${p.note ? `<div class="note">${esc(p.note)}</div>` : ""}
+      ${p.hours ? `<div class="meta">${esc(p.hours)}</div>` : ""}
+      <div class="acts">
+        ${canRoute ? `<button class="k-btn" data-route="${esc(p.id)}" data-testid="card-directions">Directions</button>` : ""}
+        <button class="k-btn k-ghost" data-open="${esc(p.id)}">Open ↗</button>
+        <button class="k-btn k-ghost" data-ask="${esc(p.id)}" title="Ask the agent about this place">Ask about it</button>
+      </div>
+    </div>
+  </div>`;
+}
+function stepsOf(r) {
+  return `<div class="total"><b>${fmtTime(r.duration_s)}</b><span class="k-dim">${fmtDist(r.distance_m)}${r.summary ? " · " + esc(r.summary) : ""}</span></div>
+    ${r.note ? `<div class="k-note">${esc(r.note)}</div>` : ""}
+    <ol class="steps" data-testid="steps">${r.steps.map((s, i) => `<li><span class="i">${i + 1}</span>
+      <span>${s.line ? `<span class="line-chip">${esc(s.line)}</span> ` : ""}${esc(s.text)}</span>
+      <span class="d">${s.distance_m ? fmtDist(s.distance_m) : ""}${s.duration_s && s.mode ? " · " + fmtTime(s.duration_s) : ""}</span></li>`).join("")}</ol>`;
+}
+
+function drawSide() {
+  const head = route && spec.kind === "places"
+    ? `<button class="k-btn k-ghost" id="back" data-testid="back">← ${esc(spec.places.length)} places</button>` : "";
+  if (route || spec.kind === "route") {
+    const r = route || spec.routes[0];
+    $("list").innerHTML = head + stepsOf(r);
+  } else {
+    const ps = spec.places || [], rs = (spec.routes || []).filter(visible);
+    // inline: whole cards only, the first few then '+ N more'; the panel scrolls them all
+    const shown = ps.filter(visible), cut = !allCards && !fullscreen() && shown.length > INLINE_CARDS + 1 ? INLINE_CARDS : shown.length;
+    const more = cut < shown.length ? `<button class="k-btn k-ghost more" id="more" data-testid="more">+ ${shown.length - cut} more</button>` : "";
+    $("list").innerHTML = ps.length || rs.length ? shown.slice(0, cut).map(card).join("") + more + rs.map((r) =>
+      `<div class="card" data-testid="route-row" style="${r.group ? `--pin:${groupColor(r.group)}` : ""}"><span class="n" aria-hidden="true">→</span>
+        <div class="body"><b>${esc(r.from.name)} → ${esc(r.to.name)}</b><div class="meta">${esc(MODE_WORD[r.mode])} · ${fmtTime(r.duration_s)} · ${fmtDist(r.distance_m)}${r.label ? " · " + esc(r.label) : ""}</div>
+        ${r.note ? `<div class="meta">${esc(r.note)}</div>` : ""}</div></div>`).join("")
+      : `<div class="k-note">Nothing found here. Move the map and search this area, or ask for a wider radius.</div>`;
+  }
+  const r = route || (spec.kind === "route" ? spec.routes[0] : null);
+  const modes = $("modes");
+  modes.hidden = !r;
+  if (r) {
+    const want = r.asked || r.mode;
+    modes.innerHTML = (spec.modes || ["walk"]).map((m) => `<button data-mode="${m}" aria-pressed="${m === want}">${MODE_WORD[m]}</button>`).join("");
+  }
+  const groups = spec.groups || [];
+  $("legend").hidden = groups.length < 2;
+  $("legend").innerHTML = groups.map((g, i) => `<button data-group="${esc(g)}" aria-pressed="${!hidden.has(g)}"><span class="k-swatch" style="background:${kit.series(i)}"></span>${esc(g)}</button>`).join("");
+}
+
+function drawHead() {
+  const r = route || (spec.kind === "route" ? spec.routes[0] : null);
+  $("title").textContent = route && spec.kind === "places" ? `${route.from.name} → ${route.to.name}` : spec.title;
+  $("sub").textContent = r ? `${MODE_WORD[r.mode]} · ${fmtTime(r.duration_s)} · ${fmtDist(r.distance_m)}` : `${spec.subtitle} · ${spec.provider.label}`;
+  const src = tiles || OSM_TILES;
+  $("attrib").textContent = src.attribution;
+}
+
+function show(next, { refit = true } = {}) {
+  spec = next; route = null; selected = null; hidden = new Set(); allCards = false;
+  if (refit) fit();
+  drawHead(); drawSide(); draw();
+}
+function redraw({ refit = false } = {}) { if (refit) fit(); drawHead(); drawSide(); draw(); }
+
+function status(text, err) {
+  const s = $("status");
+  s.hidden = !text; s.textContent = text || ""; s.className = "k-note" + (err ? " k-err" : "");
+}
+function why(err) {
+  const reasons = { "-32031": "this view may not call that tool", "-32032": "the maps plugin is turned off", "-32033": "you declined it",
+    "-32035": "too many calls: try again in a moment", "-32037": "bise wants a click in the view first" };
+  return reasons[String(err && err.code)] || (err && err.message) || "it failed";
+}
+const tell = (text, structured) => app.setContext(text, structured).catch(() => { /* rate-limited: the next one says it */ });
+
+// ---- the view's calls
+async function getRoute(from, to, mode) {
+  if (busy) return;
+  busy = true; status(`Finding the ${MODE_WORD[mode].toLowerCase()} route…`);
+  try {
+    const r = await app.call("route", { from: pt(from), to: pt(to), mode });
+    route = r.structuredContent.routes[0];
+    status(""); redraw({ refit: true });
+    tell(`The user is looking at the ${MODE_WORD[mode].toLowerCase()} route on the map: ${(r.content[0] || {}).text || ""}`.slice(0, 4000), { route: { from, to, mode, duration_s: route.duration_s, distance_m: route.distance_m } });
+  } catch (err) { status(why(err), true); } finally { busy = false; }
+}
+const pt = (p) => ({ name: p.name, lat: p.lat, lon: p.lon });
+
+async function searchArea() {
+  if (busy) return;
+  const el = $("map"), c = unproject(center.x, center.y, zoom);
+  const radius = Math.round(Math.min(50000, Math.max(200, metersPerPx(c.lat, zoom) * Math.hypot(el.clientWidth, el.clientHeight) / 2.4)));
+  busy = true; status(`Looking for ${spec.query} here…`);
+  try {
+    const r = await app.call("search_area", { query: spec.query, center: { lat: c.lat, lon: c.lon }, radius_m: radius, open_now: spec.open_now, limit: spec.limit });
+    const title = spec.title;
+    show({ ...r.structuredContent, title }, { refit: false });
+    moved = false; draw(); status("");
+    tell("The user searched another area on the map. " + ((r.content[0] || {}).text || "").slice(0, 3800), { query: spec.query, center: c });
+  } catch (err) { status(why(err), true); } finally { busy = false; }
+}
+
+function pick(id, { pan = true } = {}) {
+  const p = (spec.places || []).find((q) => q.id === id);
+  if (!p) return;
+  selected = p.id;
+  if (pan) {
+    const q = project(p.lat, p.lon, zoom), el = $("map");
+    if (Math.abs(q.x - center.x) > el.clientWidth / 2 - PAD || Math.abs(q.y - center.y) > el.clientHeight / 2 - PAD) center = q;
+  }
+  drawSide(); draw();
+  const cardEl = document.querySelector(`.card[data-pick="${CSS.escape(id)}"]`);
+  if (cardEl) cardEl.scrollIntoView({ block: "nearest" });
+  tell(`The user picked ${p.name}${p.address ? ` (${p.address})` : ""} on the map.`, { picked: p });
+}
+
+function gmapsLink(p) {
+  if (!p) {
+    const r = route || (spec.kind === "route" ? spec.routes[0] : null);
+    if (r) return `https://www.google.com/maps/dir/?api=1&origin=${r.from.lat},${r.from.lon}&destination=${r.to.lat},${r.to.lon}&travelmode=${GMODE[r.asked || r.mode]}`;
+    const c = unproject(center.x, center.y, zoom);
+    if (spec.kind === "places") return `https://www.google.com/maps/search/${encodeURIComponent(spec.query)}/@${c.lat.toFixed(5)},${c.lon.toFixed(5)},${zoom}z`;
+    return `https://www.google.com/maps/@${c.lat.toFixed(5)},${c.lon.toFixed(5)},${zoom}z`;
+  }
+  if (p.url) return p.url;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.name + (p.address ? ", " + p.address : ""))}`;
+}
+const open = (url) => app.openLink(url).catch((err) => status(why(err), true));
+
+// ---- input: drag, ⌘/ctrl + wheel (a plain wheel scrolls the thread), double-click, the buttons
+let dragFrom = null;
+$("map").addEventListener("pointerdown", (e) => {
+  if (e.target.closest("button")) return;
+  dragFrom = { x: e.clientX, y: e.clientY, c: { ...center } };
+  $("map").setPointerCapture(e.pointerId); $("map").classList.add("drag");
+});
+$("map").addEventListener("pointermove", (e) => {
+  if (!dragFrom) return;
+  center = { x: dragFrom.c.x - (e.clientX - dragFrom.x), y: dragFrom.c.y - (e.clientY - dragFrom.y) };
+  if (Math.hypot(e.clientX - dragFrom.x, e.clientY - dragFrom.y) > 4) moved = true;
+  draw();
+});
+const endDrag = () => { dragFrom = null; $("map").classList.remove("drag"); };
+$("map").addEventListener("pointerup", endDrag);
+$("map").addEventListener("pointercancel", endDrag);
+function zoomAt(dz, px, py) {
+  const nz = Math.max(MIN_Z, Math.min(MAX_Z, zoom + dz));
+  if (nz === zoom) return;
+  const el = $("map"), r = el.getBoundingClientRect();
+  const ax = px == null ? 0 : px - r.left - el.clientWidth / 2, ay = py == null ? 0 : py - r.top - el.clientHeight / 2;
+  const k = 2 ** (nz - zoom);
+  center = { x: (center.x + ax) * k - ax, y: (center.y + ay) * k - ay };
+  zoom = nz; moved = true; draw();
+}
+let wheelHinted = false;
+$("map").addEventListener("wheel", (e) => {
+  if (!(e.ctrlKey || e.metaKey)) {
+    if (!wheelHinted) { wheelHinted = true; $("hint").textContent = "⌘ + scroll to zoom"; setTimeout(() => { $("hint").textContent = ""; }, 2500); }
+    return;
+  }
+  e.preventDefault(); zoomAt(e.deltaY < 0 ? 1 : -1, e.clientX, e.clientY);
+}, { passive: false });
+$("map").addEventListener("dblclick", (e) => { if (!e.target.closest("button")) zoomAt(1, e.clientX, e.clientY); });
+$("zin").onclick = () => zoomAt(1);
+$("zout").onclick = () => zoomAt(-1);
+$("refit").onclick = () => { fit(); draw(); };
+$("area").onclick = searchArea;
+$("ext").onclick = () => open(gmapsLink(null));
+$("attrib").onclick = () => open((tiles || OSM_TILES).link);
+$("pins").onclick = (e) => { const b = e.target.closest("[data-pick]"); if (b) pick(b.dataset.pick, { pan: false }); };
+$("modes").onclick = (e) => {
+  const b = e.target.closest("[data-mode]"); if (!b) return;
+  const r = route || spec.routes[0];
+  getRoute(r.from, r.to, b.dataset.mode);
+};
+$("legend").onclick = (e) => {
+  const b = e.target.closest("[data-group]"); if (!b) return;
+  const g = b.dataset.group;
+  if (hidden.has(g)) hidden.delete(g); else hidden.add(g);
+  if (hidden.size === (spec.groups || []).length) hidden.clear();
+  drawSide(); draw();
+};
+$("list").onclick = (e) => {
+  const t = e.target;
+  if (t.closest("#back")) { route = null; redraw({ refit: true }); return; }
+  if (t.closest("#more")) { allCards = true; drawSide(); return; }
+  const byId = (id) => spec.places.find((p) => p.id === id);
+  const rt = t.closest("[data-route]"), op = t.closest("[data-open]"), ask = t.closest("[data-ask]");
+  if (rt) { const p = byId(rt.dataset.route); getRoute(spec.center, p, "walk"); return; }
+  if (op) { open(gmapsLink(byId(op.dataset.open))); return; }
+  if (ask) {
+    const p = byId(ask.dataset.ask);
+    app.message(`Tell me more about ${p.name}${p.address ? ` (${p.address})` : ""}.`).catch((err) => status(why(err), true));
+    return;
+  }
+  const c = t.closest(".card[data-pick]"); if (c) pick(c.dataset.pick);
+};
+// the map's size moves (the panel opens, the frame settles): fit again unless he moved it
+let lastSize = "";
+new ResizeObserver(() => {
+  const el = $("map"), size = `${el.clientWidth}x${el.clientHeight}`;
+  if (!spec || size === lastSize) return;
+  lastSize = size;
+  if (!moved) fit();
+  draw();
+}).observe($("map"));
+
+// ---- the host: the tool's input while it runs, then its result
+app.on("tool-input", (p) => {
+  const a = p.arguments || {};
+  $("title").textContent = a.title || (a.query ? `${a.query}${typeof a.near === "string" ? " near " + a.near : ""}` : a.from && a.to ? "Directions" : "Map");
+});
+app.on("tool-result", async (p) => {
+  const sc = p.structuredContent;
+  if (p.isError || !sc || !sc.kind) {
+    $("sub").textContent = ""; $("list").innerHTML = "";
+    status(((p.content || [])[0] || {}).text || "the map could not be made", true);
+    return;
+  }
+  if (!sc.tiles) {
+    // Google's tiles need a session: an app-only call gives their URL (the key never sits in the result)
+    try { tiles = (await app.call("map_tiles", {})).structuredContent.tiles; }
+    catch (err) { tiles = null; status("Google's map tiles are off for this key: OpenStreetMap's are shown."); }
+  } else tiles = sc.tiles;
+  show(sc);
+});
+app.on("tool-cancelled", () => { $("sub").textContent = "stopped"; $("list").innerHTML = ""; });
+app.on("context", () => { if (spec) { drawSide(); draw(); } });
+app.start("maps");
+</script>
+</body>
+</html>
