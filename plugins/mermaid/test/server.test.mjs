@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { answer, call, cleanSource, EXAMPLES } from "../server.mjs";
+import { answer, call, cleanSource, EXAMPLES, hint } from "../server.mjs";
 
 const text = (r) => r.content[0].text;
 
@@ -31,12 +31,25 @@ test("a langium syntax error (pie, packet...) has its line and column too", asyn
 
 test("an error at the end of the source points at its last line", async () => {
   const r = await call("check_diagram", { source: "graph TD\n  A-->" });
-  assert.match(text(r), /line 2, column \d+: `A-->`: expected .*found the end of the source/);
+  assert.match(text(r), /line 2, column \d+ \(an arrow points to nothing\): `A-->`: expected .*found the end of the source/);
+});
+
+test("a plain hint says what is wrong on the line when a look can tell", async () => {
+  assert.equal(hint("  B -->|yes| C[Land"), "a bracket isn't closed");
+  assert.equal(hint('  A["step 1] --> B'), "a quote isn't closed");
+  assert.equal(hint("  A] --> B"), "a bracket closes that was never opened");
+  assert.equal(hint("  A -->|no|"), "an arrow points to nothing");
+  assert.equal(hint("  A --> B", "the end of the source"), "the source ends too early");
+  assert.equal(hint('  A["a [x] (y)"] --> B'), null, "brackets inside a quoted label do not count");
+  const r = await call("render_diagram", { source: "flowchart TD\n  A[Start] --> B{ok?}\n  B -->|yes| C[Land\n  B -->|no| D" });
+  assert.match(text(r), /^Mermaid syntax error on line 3, column \d+ \(a bracket isn't closed\): `B -->\|yes\| C\[Land`/);
+  assert.equal(r.structuredContent.error.hint, "a bracket isn't closed");
+  assert.equal((await call("check_diagram", { source: "nonsense" })).structuredContent.error.hint, "the first line names no diagram type");
 });
 
 test("a source with no type says what the first line must be", async () => {
   const r = await call("check_diagram", { source: "nonsense here" });
-  assert.match(text(r), /line 1: `nonsense here`: no diagram type: the first line must name one/);
+  assert.match(text(r), /line 1 \(the first line names no diagram type\): `nonsense here`: no diagram type: the first line must name one/);
 });
 
 test("diagrams whose parse sanitizes labels parse with no DOM (the DOMPurify stub)", async () => {

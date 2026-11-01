@@ -122,3 +122,14 @@ html[data-mode="fullscreen"], html[data-mode="fullscreen"] body { height: 100%; 
 .k-tip.k-on { opacity: 1; }
 .k-tip b { font-weight: 600; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+/* the menu (kit.js menu()): a few actions under a button, on top of the view */
+.k-menu {
+  position: fixed; z-index: 1000; min-width: 120px; padding: var(--k-s-1);
+  display: flex; flex-direction: column;
+  border-radius: var(--k-r-md); background: var(--k-bg); box-shadow: var(--k-shadow-md);
+}
+.k-menu button {
+  font: inherit; font-size: var(--k-t-sm); height: var(--k-h-row); padding: 0 var(--k-s-2); text-align: left;
+  border: 0; border-radius: var(--k-r-sm); background: transparent; color: var(--k-text); cursor: pointer; white-space: nowrap;
+}
+.k-menu button:hover, .k-menu button:focus-visible { background: var(--k-hover); outline: none; }

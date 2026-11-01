@@ -106,7 +106,8 @@ export function explain(err, source) {
   } else {
     message = raw.split("\n")[0];
   }
-  return { message, line, column, expected, found, raw: raw.slice(0, 2000) };
+  const plain = /No diagram type detected/.test(raw) ? "the first line names no diagram type" : line ? hint(lines[line - 1], found) : null;
+  return { message, hint: plain, line, column, expected, found, raw: raw.slice(0, 2000) };
 }
 
 /** Parse a source: {ok, type} or {ok: false, error}. */
@@ -121,12 +122,32 @@ export async function check(source) {
   }
 }
 
+/** What is wrong on that line, in plain words, when a simple look can tell (else null).
+ *  The view holds the same function (views/diagram.html, hint): keep them alike. */
+export function hint(lineText, found) {
+  const t = String(lineText || "");
+  const open = { "[": "]", "(": ")", "{": "}" };
+  const stack = [];
+  let quoted = false;
+  for (const ch of t) {
+    if (ch === '"') { quoted = !quoted; continue; }
+    if (quoted) continue;
+    if (open[ch]) stack.push(open[ch]);
+    else if (ch === "]" || ch === ")" || ch === "}") { if (stack.pop() !== ch) return "a bracket closes that was never opened"; }
+  }
+  if (quoted) return "a quote isn't closed";
+  if (stack.length) return "a bracket isn't closed";
+  if (/(-->|->>|-->>|->|--|==>|-\.->|~~~)\s*(\|[^|]*\|)?\s*$/.test(t.trim())) return "an arrow points to nothing";
+  if (found === "the end of the source") return "the source ends too early";
+  return null;
+}
+
 function errorText(source, error) {
   const lines = source.split("\n");
   let where = "";
   if (error.line) {
     const text = lines[error.line - 1] ?? "";
-    where = `line ${error.line}${error.column ? `, column ${error.column}` : ""}: \`${text.trim().slice(0, 160)}\``;
+    where = `line ${error.line}${error.column ? `, column ${error.column}` : ""}${error.hint ? ` (${error.hint})` : ""}: \`${text.trim().slice(0, 160)}\``;
   }
   return `Mermaid syntax error${where ? ` on ${where}` : ""}: ${error.message}.`;
 }

@@ -12,6 +12,8 @@
 //   kit.tip(el, html | fn)  a tooltip on hover and focus that never takes the pointer
 //   kit.saveSvg(svg, name)  kit.savePng(svg, name, scale)  a download through the host
 //   kit.fmt(n)      a number, short and in the host's locale (1.2k, 3.4M)
+//   kit.menu(button, [{label, run, testid?}])  a few actions under a button (.k-menu):
+//                   below it or flipped up, ↑ ↓ ⏎ esc, closed by an outside click
 // The theme comes from the host context (html[data-theme], the spec's CSS variables on
 // :root), the display mode as html[data-mode]; kit.css reads both.
 (() => {
@@ -176,5 +178,62 @@
     return new Intl.NumberFormat(locale, { notation: Math.abs(n) >= 10000 ? "compact" : "standard", maximumFractionDigits: 2, ...opts }).format(n);
   }
 
-  window.kit = { app, esc, series, tip, saveSvg, savePng, fmt };
+  // a menu of a few actions under a button: opens below it (flips up at the bottom edge),
+  // ↑ ↓ ⏎ esc, closes on an outside click or a pick. Items are text (textContent, never html).
+  let openMenu = null;
+  function menu(button, items) {
+    button.setAttribute("aria-haspopup", "menu");
+    button.setAttribute("aria-expanded", "false");
+    const close = (refocus) => {
+      if (!openMenu || openMenu.button !== button) return;
+      openMenu.el.remove();
+      document.removeEventListener("pointerdown", openMenu.outside, true);
+      openMenu = null;
+      button.setAttribute("aria-expanded", "false");
+      if (refocus) button.focus();
+    };
+    const open = () => {
+      if (openMenu) openMenu.close(false);
+      const el = document.createElement("div");
+      el.className = "k-menu";
+      el.setAttribute("role", "menu");
+      const rows = items.map((it) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.setAttribute("role", "menuitem");
+        b.tabIndex = -1;
+        b.textContent = it.label;
+        if (it.testid) b.dataset.testid = it.testid;
+        b.addEventListener("click", () => { close(true); it.run(); });
+        el.appendChild(b);
+        return b;
+      });
+      el.addEventListener("keydown", (e) => {
+        const i = rows.indexOf(document.activeElement);
+        if (e.key === "ArrowDown") rows[(i + 1) % rows.length].focus();
+        else if (e.key === "ArrowUp") rows[(i - 1 + rows.length) % rows.length].focus();
+        else if (e.key === "Escape" || e.key === "Tab") close(true);
+        else if (e.key === "Home") rows[0].focus();
+        else if (e.key === "End") rows[rows.length - 1].focus();
+        else return;
+        e.preventDefault();
+      });
+      document.body.appendChild(el);
+      const r = button.getBoundingClientRect(), m = el.getBoundingClientRect();
+      const gap = 4;
+      const below = r.bottom + gap + m.height <= window.innerHeight || r.top - gap - m.height < 0;
+      el.style.top = (below ? r.bottom + gap : r.top - gap - m.height) + "px";
+      el.style.left = Math.max(gap, Math.min(r.right - m.width, window.innerWidth - m.width - gap)) + "px";
+      const outside = (e) => { if (!el.contains(e.target) && !button.contains(e.target)) close(false); };
+      document.addEventListener("pointerdown", outside, true);
+      openMenu = { button, el, outside, close };
+      button.setAttribute("aria-expanded", "true");
+      rows[0].focus();
+    };
+    button.addEventListener("click", () => (openMenu && openMenu.button === button ? close(true) : open()));
+    button.addEventListener("keydown", (e) => { if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); open(); } });
+    return { open, close: () => close(false) };
+  }
+
+  window.kit = { app, esc, series, tip, saveSvg, savePng, fmt, menu };
 })();
