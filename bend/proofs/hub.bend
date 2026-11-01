@@ -22,6 +22,7 @@ import ../hub/lazy.bend as HLZ
 import ../hub/names.bend as HN
 import ../hub/gen/fx.bend as HF
 import ../hub/gen/feed.bend as HFD
+import ../hub/viewctx.bend as HVC
 import ./lib/hub-1.bend as PL1
 import ./lib/hub-2.bend as PL2
 import ./lib/hub-3.bend as PL3
@@ -66,9 +67,19 @@ def Laws.tick_clears_late_waiters(o, cx):
     PL1.hub_set_waiters(o, HC.tick.go(o, cx), HC.tick.keep(o, cx)),
     PL1.hub_keep_later(HX.R.waiters(HX.Cx.r(o, cx)), HX.R.now(HX.Cx.r(o, cx))))
 
+# a stop's state is the one before its waiters and the views' contexts
+# went (both runtime only)
+def hv_stop_d(-o: HS.St, +cx: HX.Cx<o>, +n: String, +life: HS.Life, +why: String)
+    -> {HX.d(o, HC.stop_task(o, cx, n, life, why)) == HX.d(o, HC.wakes_gone(o, life, HC.timers_gone(o, life, HC.stop_task.go(o, cx, n, life, why), n), n)) : HS.St}:
+  +wg = HC.wakes_gone(o, life, HC.timers_gone(o, life, HC.stop_task.go(o, cx, n, life, why), n), n)
+  +vd = HC.view_ctx_drop(o, wg, n)
+  Equal.trans(HS.St, HX.d(o, HC.stop_task(o, cx, n, life, why)), HX.d(o, vd), HX.d(o, wg),
+    PL1.hub_d_with_r(o, vd, HX.R.with_waiters(HC.rr(o, vd), HX.waiters_not(HX.R.waiters(HC.rr(o, cx)), n))),
+    PL1.hub_d_with_r(o, wg, HX.R.with_ctx(HC.rr(o, wg), HVC.drop(HX.R.ctx(HC.rr(o, wg)), n))))
+
 def Laws.stop_leaves_no_waiter(o, cx, n, life, why):
   PL1.hub_none_tr(HC.waiters_of_cx(o, HC.stop_task(o, cx, n, life, why)), HX.waiters_not(HX.R.waiters(HX.Cx.r(o, cx)), n), n,
-    PL1.hub_set_waiters(o, HC.wakes_gone(o, life, HC.timers_gone(o, life, HC.stop_task.go(o, cx, n, life, why), n), n), HX.waiters_not(HX.R.waiters(HX.Cx.r(o, cx)), n)),
+    PL1.hub_set_waiters(o, HC.view_ctx_drop(o, HC.wakes_gone(o, life, HC.timers_gone(o, life, HC.stop_task.go(o, cx, n, life, why), n), n), n), HX.waiters_not(HX.R.waiters(HX.Cx.r(o, cx)), n)),
     PL1.hub_not_none(HX.R.waiters(HX.Cx.r(o, cx)), n))
 
 def Laws.init_unique(w):
@@ -125,7 +136,7 @@ def Laws.stop_leaves_no_queue(o, cx, n, life, why, u):
   +ef = Equal.trans(List<&2, HS.MRec>, HM.every(HX.d(o, HC.stop_task(o, cx, n, life, why))), HM.every(HX.d(o, g)), PL1.hub_rej(ids, m5),
     Equal.trans(List<&2, HS.MRec>, HM.every(HX.d(o, HC.stop_task(o, cx, n, life, why))), HM.every(HX.d(o, tg)), HM.every(HX.d(o, g)),
       Equal.trans(List<&2, HS.MRec>, HM.every(HX.d(o, HC.stop_task(o, cx, n, life, why))), HM.every(HX.d(o, wg)), HM.every(HX.d(o, tg)),
-        PL1.hub_msgs_eq(o, HC.stop_task(o, cx, n, life, why), wg, PL1.hub_d_with_r(o, wg, HX.R.with_waiters(HC.rr(o, wg), HX.waiters_not(HX.R.waiters(HC.rr(o, cx)), n)))),
+        PL1.hub_msgs_eq(o, HC.stop_task(o, cx, n, life, why), wg, hv_stop_d(o, cx, n, life, why)),
         PL1.hub_msgs_wakes(o, life, tg, n)),
       PL2.hub_msgs_gone(o, HR.life_gone(life), g, n, HM.names_of(HX.d(o, g), n))),
     Equal.trans(List<&2, HS.MRec>, HM.every(HX.d(o, g)), HM.every(HX.d(o, cx6)), PL1.hub_rej(ids, m5),
@@ -138,7 +149,7 @@ def Laws.stop_leaves_no_queue(o, cx, n, life, why, u):
     Equal.trans(List<&2, HS.Agent>, PL1.hub_ag(HX.d(o, HC.stop_task(o, cx, n, life, why))), PL1.hub_ag(HX.d(o, g)), PL1.hub_ag(HX.d(o, cx5)),
       Equal.trans(List<&2, HS.Agent>, PL1.hub_ag(HX.d(o, HC.stop_task(o, cx, n, life, why))), PL1.hub_ag(HX.d(o, tg)), PL1.hub_ag(HX.d(o, g)),
         Equal.trans(List<&2, HS.Agent>, PL1.hub_ag(HX.d(o, HC.stop_task(o, cx, n, life, why))), PL1.hub_ag(HX.d(o, wg)), PL1.hub_ag(HX.d(o, tg)),
-          PL2.hub_agents_eq(o, HC.stop_task(o, cx, n, life, why), wg, PL1.hub_d_with_r(o, wg, HX.R.with_waiters(HC.rr(o, wg), HX.waiters_not(HX.R.waiters(HC.rr(o, cx)), n)))),
+          PL2.hub_agents_eq(o, HC.stop_task(o, cx, n, life, why), wg, hv_stop_d(o, cx, n, life, why)),
           PL1.hub_agents_wakes(o, life, tg, n)),
         PL2.hub_agents_gone(o, HR.life_gone(life), g, n, HM.names_of(HX.d(o, g), n))),
       Equal.trans(List<&2, HS.Agent>, PL1.hub_ag(HX.d(o, g)), PL1.hub_ag(HX.d(o, cx6)), PL1.hub_ag(HX.d(o, cx5)),
@@ -184,7 +195,7 @@ def Laws.stop_leaves_no_card(o, cx, n, life, why, u):
     PL2.hub_dropc(HC.card_ids(c6, n, Nil{}), c6),
     Equal.trans(List<&2, HS.Card>, HS.St.cards(HX.d(o, HC.stop_task(o, cx, n, life, why))), HS.St.cards(HX.d(o, tg)), HS.St.cards(HX.d(o, g)),
       Equal.trans(List<&2, HS.Card>, HS.St.cards(HX.d(o, HC.stop_task(o, cx, n, life, why))), HS.St.cards(HX.d(o, wg)), HS.St.cards(HX.d(o, tg)),
-        PL2.hub_cards_eq(o, HC.stop_task(o, cx, n, life, why), wg, PL1.hub_d_with_r(o, wg, HX.R.with_waiters(HC.rr(o, wg), HX.waiters_not(HX.R.waiters(HC.rr(o, cx)), n)))),
+        PL2.hub_cards_eq(o, HC.stop_task(o, cx, n, life, why), wg, hv_stop_d(o, cx, n, life, why)),
         PL2.hub_cards_wakes(o, life, tg, n)),
       PL2.hub_cards_gone(o, HR.life_gone(life), g, n, HM.names_of(HX.d(o, g), n))),
     Equal.trans(List<&2, HS.Card>, HS.St.cards(HX.d(o, g)), HS.St.cards(HX.d(o, cc)), PL2.hub_dropc(HC.card_ids(c6, n, Nil{}), c6),
@@ -299,7 +310,7 @@ def Laws.stop_leaves_no_timer(o, cx, n, why):
   +xs = HS.Tms.live(HS.St.tm(HX.d(o, g)))
   +ids = HTM.ids_in(xs, ns)
   +e0 = Equal.cong(HS.St, List<&2, HS.Timer>, s => HS.Tms.live(HS.St.tm(s)), HX.d(o, st), HX.d(o, wg),
-    PL1.hub_d_with_r(o, wg, HX.R.with_waiters(HC.rr(o, wg), HX.waiters_not(HX.R.waiters(HC.rr(o, cx)), n))))
+    hv_stop_d(o, cx, n, HS.LArchived{}, why))
   +e1 = Equal.trans(List<&2, HS.Timer>, HS.Tms.live(HS.St.tm(HX.d(o, st))), HS.Tms.live(HS.St.tm(HX.d(o, wg))), HS.Tms.live(HS.St.tm(HX.d(o, tg))),
     e0, PL3.hub_live_wakes_each(o, wids, tg))
   +e2 = PL3.hub_live_gone_each(o, ids, g, HC.cat(["@", n, " is gone"]))
@@ -809,7 +820,7 @@ def hv_rt_at(-o: HS.St, m: Maybe<&2, HS.Card>, +cx: HX.Cx<o>, +v: HS.ViewAsk, +t
       match cx:
         case HX.Cx{c, r}:
           match r:
-            case HX.R{a, b, st, d, e, f, g, h, i, j, k, l, m, n}:
+            case HX.R{a, b, st, d, e, f, g, h, i, j, k, l, m, n, vc}:
               {==}
     case Some{x}:
       match cx:
@@ -1072,6 +1083,68 @@ def Laws.boot_closes_view_cards(o, cx, c):
           hv_j3(fx, J.obj(HF.confirm_card(HS.Card.id(c), HS.Card.agent(c), HC.VIEW_CARD_ENDED())),
             HM.ECardClosed{HS.Card.id(c), "ended with the hub", HS.Ans.empty()},
             J.obj(HF.feed(HM.MAIN(), HFD.card_closed(HS.Card.id(c), "ended with the hub"))))
+
+def Laws.view_context_says_kept(o, ok, cx, c):
+  match ok:
+    case False{}:
+      hv_last_out(o, cx, J.obj(HF.view_context(HS.Vctx.agent(c), HS.Vctx.call(c), False{}, HC.view_context.why(False{}, HS.Vctx.agent(c)))))
+    case True{}:
+      hv_last_out(o, HC.set_r(o, cx, HX.R.with_ctx(HC.rr(o, cx), HVC.put(HX.R.ctx(HC.rr(o, cx)), c))), J.obj(HF.view_context(HS.Vctx.agent(c), HS.Vctx.call(c), True{}, "")))
+
+def Laws.view_context_none_text(text):
+  {==}
+
+def Laws.view_context_none_parts(parts, text):
+  {==}
+
+# view_context_taken_once's step: the head is that agent's or not
+def hv_take.go(h: Bool, +c: HS.Vctx, +rest: List<&2, HS.Vctx>, +a: String,
+    +eh: {String.eq(HVC.agent_of(c), a) == h : Bool},
+    ih: {HVC.of(HVC.drop(rest, a), a) == Nil{} : List<&2, HS.Vctx>})
+    -> {HVC.of(HVC.drop(c <> rest, a), a) == Nil{} : List<&2, HS.Vctx>}:
+  match h:
+    case True{}:
+      %Equal.sym(Bool, String.eq(HVC.agent_of(c), a), True{}, eh) : {HVC.of(HLZ.pick(List<&2, HS.Vctx>, _, u => HVC.drop(rest, a), u => c <> HVC.drop(rest, a)), a) == Nil{} : List<&2, HS.Vctx>}
+      ih
+    case False{}:
+      %Equal.sym(Bool, String.eq(HVC.agent_of(c), a), False{}, eh) : {HVC.of(HLZ.pick(List<&2, HS.Vctx>, _, u => HVC.drop(rest, a), u => c <> HVC.drop(rest, a)), a) == Nil{} : List<&2, HS.Vctx>}
+      %Equal.sym(Bool, String.eq(HVC.agent_of(c), a), False{}, eh) : {HLZ.pick(List<&2, HS.Vctx>, _, u => c <> HVC.of(HVC.drop(rest, a), a), u => HVC.of(HVC.drop(rest, a), a)) == Nil{} : List<&2, HS.Vctx>}
+      ih
+
+def Laws.view_context_taken_once(cs, agent):
+  match cs:
+    case Nil{}:
+      {==}
+    case Con{+c, +rest}:
+      hv_take.go(String.eq(HVC.agent_of(c), agent), c, rest, agent, {==}, Laws.view_context_taken_once(rest, agent))
+
+# view_context_keeps_others' step: the head is a's (so not b's) or not
+def hv_keep_ctx.go(h: Bool, +c: HS.Vctx, +rest: List<&2, HS.Vctx>, +a: String, +b: String,
+    +e: {String.eq(a, b) == False{} : Bool},
+    +eh: {String.eq(HVC.agent_of(c), a) == h : Bool},
+    ih: {HVC.of(HVC.drop(rest, a), b) == HVC.of(rest, b) : List<&2, HS.Vctx>})
+    -> {HVC.of(HVC.drop(c <> rest, a), b) == HVC.of(c <> rest, b) : List<&2, HS.Vctx>}:
+  match h:
+    case True{}:
+      %Equal.sym(Bool, String.eq(HVC.agent_of(c), a), True{}, eh) : {HVC.of(HLZ.pick(List<&2, HS.Vctx>, _, u => HVC.drop(rest, a), u => c <> HVC.drop(rest, a)), b) == HVC.of(c <> rest, b) : List<&2, HS.Vctx>}
+      %Equal.sym(String, HVC.agent_of(c), a, PL2.hub_str_eq_sound(HVC.agent_of(c), a, eh)) : {HVC.of(HVC.drop(rest, a), b) == HLZ.pick(List<&2, HS.Vctx>, String.eq(_, b), u => c <> HVC.of(rest, b), u => HVC.of(rest, b)) : List<&2, HS.Vctx>}
+      %Equal.sym(Bool, String.eq(a, b), False{}, e) : {HVC.of(HVC.drop(rest, a), b) == HLZ.pick(List<&2, HS.Vctx>, _, u => c <> HVC.of(rest, b), u => HVC.of(rest, b)) : List<&2, HS.Vctx>}
+      ih
+    case False{}:
+      %Equal.sym(Bool, String.eq(HVC.agent_of(c), a), False{}, eh) : {HVC.of(HLZ.pick(List<&2, HS.Vctx>, _, u => HVC.drop(rest, a), u => c <> HVC.drop(rest, a)), b) == HVC.of(c <> rest, b) : List<&2, HS.Vctx>}
+      Equal.cong(List<&2, HS.Vctx>, List<&2, HS.Vctx>, y => HLZ.pick(List<&2, HS.Vctx>, String.eq(HVC.agent_of(c), b), u => c <> y, u => y),
+        HVC.of(HVC.drop(rest, a), b), HVC.of(rest, b), ih)
+
+def hv_keep_ctx(+cs: List<&2, HS.Vctx>, +a: String, +b: String, +e: {String.eq(a, b) == False{} : Bool})
+    -> {HVC.of(HVC.drop(cs, a), b) == HVC.of(cs, b) : List<&2, HS.Vctx>}:
+  match cs:
+    case Nil{}:
+      {==}
+    case Con{+c, +rest}:
+      hv_keep_ctx.go(String.eq(HVC.agent_of(c), a), c, rest, a, b, e, {==}, hv_keep_ctx(rest, a, b, e))
+
+def Laws.view_context_keeps_others(cs, a, b, e):
+  hv_keep_ctx(cs, a, b, e)
 
 def Laws.card_close_keeps_other(xs, a, b, e):
   PLV.hv_keep(xs, a, b, e)

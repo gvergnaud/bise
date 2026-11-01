@@ -48,7 +48,7 @@ def Laws.wake_set_keeps_run(o, ok, cx, a, agent, spec, max_text, max_ms, quiet, 
       match cx:
         case HX.Cx{c, r}:
           match r:
-            case HX.R{x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13}:
+            case HX.R{x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, vc}:
               {==}
 
 def Laws.wake_set_keeps_agents(o, ok, cx, agent, spec, max_text, max_ms, quiet, then):

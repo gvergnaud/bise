@@ -47,7 +47,7 @@ type R is Data:
     counts: List<&2, Cnt>, last: List<&2, Kv>, crashes: List<&2, Kn>,
     workspace: String, dirty: Bool, now: Nat, git: Bool,
     ans: List<&2, J.Json>, need: Maybe<&2, J.Json>, answered: Maybe<&2, PK.Answer>,
-    due: List<&2, Nat>}
+    due: List<&2, Nat>, ctx: List<&2, S.Vctx>}
 # due (inbox-record): the cards closed with his answer whose route line's
 # position the shell has not given yet (answer_pos); runtime only, so a
 # position lost to a restart stays unknown
@@ -197,140 +197,150 @@ def Kn.n(x: Kn) -> Nat:
 
 def R.rts(x: R) -> List<&2, Rt>:
   match x:
-    case R{+rts, _, _, _, _, _, _, _, _, _, _, _, _, _}:
+    case R{+rts, _, _, _, _, _, _, _, _, _, _, _, _, _, _}:
       rts
 
 def R.with_rts(x: R, +v: List<&2, Rt>) -> R:
   match x:
-    case R{_, +waiters, +steered, +counts, +last, +crashes, +workspace, +dirty, +now, +git, +ans, +need, +answered, +due}:
-      R{v, waiters, steered, counts, last, crashes, workspace, dirty, now, git, ans, need, answered, due}
+    case R{_, +waiters, +steered, +counts, +last, +crashes, +workspace, +dirty, +now, +git, +ans, +need, +answered, +due, +ctx}:
+      R{v, waiters, steered, counts, last, crashes, workspace, dirty, now, git, ans, need, answered, due, ctx}
 
 def R.waiters(x: R) -> List<&2, Waiter>:
   match x:
-    case R{_, +waiters, _, _, _, _, _, _, _, _, _, _, _, _}:
+    case R{_, +waiters, _, _, _, _, _, _, _, _, _, _, _, _, _}:
       waiters
 
 def R.with_waiters(x: R, +v: List<&2, Waiter>) -> R:
   match x:
-    case R{+rts, _, +steered, +counts, +last, +crashes, +workspace, +dirty, +now, +git, +ans, +need, +answered, +due}:
-      R{rts, v, steered, counts, last, crashes, workspace, dirty, now, git, ans, need, answered, due}
+    case R{+rts, _, +steered, +counts, +last, +crashes, +workspace, +dirty, +now, +git, +ans, +need, +answered, +due, +ctx}:
+      R{rts, v, steered, counts, last, crashes, workspace, dirty, now, git, ans, need, answered, due, ctx}
 
 def R.steered(x: R) -> List<&2, Steer>:
   match x:
-    case R{_, _, +steered, _, _, _, _, _, _, _, _, _, _, _}:
+    case R{_, _, +steered, _, _, _, _, _, _, _, _, _, _, _, _}:
       steered
 
 def R.with_steered(x: R, +v: List<&2, Steer>) -> R:
   match x:
-    case R{+rts, +waiters, _, +counts, +last, +crashes, +workspace, +dirty, +now, +git, +ans, +need, +answered, +due}:
-      R{rts, waiters, v, counts, last, crashes, workspace, dirty, now, git, ans, need, answered, due}
+    case R{+rts, +waiters, _, +counts, +last, +crashes, +workspace, +dirty, +now, +git, +ans, +need, +answered, +due, +ctx}:
+      R{rts, waiters, v, counts, last, crashes, workspace, dirty, now, git, ans, need, answered, due, ctx}
 
 def R.counts(x: R) -> List<&2, Cnt>:
   match x:
-    case R{_, _, _, +counts, _, _, _, _, _, _, _, _, _, _}:
+    case R{_, _, _, +counts, _, _, _, _, _, _, _, _, _, _, _}:
       counts
 
 def R.with_counts(x: R, +v: List<&2, Cnt>) -> R:
   match x:
-    case R{+rts, +waiters, +steered, _, +last, +crashes, +workspace, +dirty, +now, +git, +ans, +need, +answered, +due}:
-      R{rts, waiters, steered, v, last, crashes, workspace, dirty, now, git, ans, need, answered, due}
+    case R{+rts, +waiters, +steered, _, +last, +crashes, +workspace, +dirty, +now, +git, +ans, +need, +answered, +due, +ctx}:
+      R{rts, waiters, steered, v, last, crashes, workspace, dirty, now, git, ans, need, answered, due, ctx}
 
 def R.last(x: R) -> List<&2, Kv>:
   match x:
-    case R{_, _, _, _, +last, _, _, _, _, _, _, _, _, _}:
+    case R{_, _, _, _, +last, _, _, _, _, _, _, _, _, _, _}:
       last
 
 def R.with_last(x: R, +v: List<&2, Kv>) -> R:
   match x:
-    case R{+rts, +waiters, +steered, +counts, _, +crashes, +workspace, +dirty, +now, +git, +ans, +need, +answered, +due}:
-      R{rts, waiters, steered, counts, v, crashes, workspace, dirty, now, git, ans, need, answered, due}
+    case R{+rts, +waiters, +steered, +counts, _, +crashes, +workspace, +dirty, +now, +git, +ans, +need, +answered, +due, +ctx}:
+      R{rts, waiters, steered, counts, v, crashes, workspace, dirty, now, git, ans, need, answered, due, ctx}
 
 def R.crashes(x: R) -> List<&2, Kn>:
   match x:
-    case R{_, _, _, _, _, +crashes, _, _, _, _, _, _, _, _}:
+    case R{_, _, _, _, _, +crashes, _, _, _, _, _, _, _, _, _}:
       crashes
 
 def R.with_crashes(x: R, +v: List<&2, Kn>) -> R:
   match x:
-    case R{+rts, +waiters, +steered, +counts, +last, _, +workspace, +dirty, +now, +git, +ans, +need, +answered, +due}:
-      R{rts, waiters, steered, counts, last, v, workspace, dirty, now, git, ans, need, answered, due}
+    case R{+rts, +waiters, +steered, +counts, +last, _, +workspace, +dirty, +now, +git, +ans, +need, +answered, +due, +ctx}:
+      R{rts, waiters, steered, counts, last, v, workspace, dirty, now, git, ans, need, answered, due, ctx}
 
 def R.workspace(x: R) -> String:
   match x:
-    case R{_, _, _, _, _, _, +workspace, _, _, _, _, _, _, _}:
+    case R{_, _, _, _, _, _, +workspace, _, _, _, _, _, _, _, _}:
       workspace
 
 def R.dirty(x: R) -> Bool:
   match x:
-    case R{_, _, _, _, _, _, _, +dirty, _, _, _, _, _, _}:
+    case R{_, _, _, _, _, _, _, +dirty, _, _, _, _, _, _, _}:
       dirty
 
 def R.with_dirty(x: R, +v: Bool) -> R:
   match x:
-    case R{+rts, +waiters, +steered, +counts, +last, +crashes, +workspace, _, +now, +git, +ans, +need, +answered, +due}:
-      R{rts, waiters, steered, counts, last, crashes, workspace, v, now, git, ans, need, answered, due}
+    case R{+rts, +waiters, +steered, +counts, +last, +crashes, +workspace, _, +now, +git, +ans, +need, +answered, +due, +ctx}:
+      R{rts, waiters, steered, counts, last, crashes, workspace, v, now, git, ans, need, answered, due, ctx}
 
 def R.now(x: R) -> Nat:
   match x:
-    case R{_, _, _, _, _, _, _, _, +now, _, _, _, _, _}:
+    case R{_, _, _, _, _, _, _, _, +now, _, _, _, _, _, _}:
       now
 
 def R.with_now(x: R, +v: Nat) -> R:
   match x:
-    case R{+rts, +waiters, +steered, +counts, +last, +crashes, +workspace, +dirty, _, +git, +ans, +need, +answered, +due}:
-      R{rts, waiters, steered, counts, last, crashes, workspace, dirty, v, git, ans, need, answered, due}
+    case R{+rts, +waiters, +steered, +counts, +last, +crashes, +workspace, +dirty, _, +git, +ans, +need, +answered, +due, +ctx}:
+      R{rts, waiters, steered, counts, last, crashes, workspace, dirty, v, git, ans, need, answered, due, ctx}
 
 def R.git(x: R) -> Bool:
   match x:
-    case R{_, _, _, _, _, _, _, _, _, +git, _, _, _, _}:
+    case R{_, _, _, _, _, _, _, _, _, +git, _, _, _, _, _}:
       git
 
 def R.with_git(x: R, +v: Bool) -> R:
   match x:
-    case R{+rts, +waiters, +steered, +counts, +last, +crashes, +workspace, +dirty, +now, _, +ans, +need, +answered, +due}:
-      R{rts, waiters, steered, counts, last, crashes, workspace, dirty, now, v, ans, need, answered, due}
+    case R{+rts, +waiters, +steered, +counts, +last, +crashes, +workspace, +dirty, +now, _, +ans, +need, +answered, +due, +ctx}:
+      R{rts, waiters, steered, counts, last, crashes, workspace, dirty, now, v, ans, need, answered, due, ctx}
 
 def R.ans(x: R) -> List<&2, J.Json>:
   match x:
-    case R{_, _, _, _, _, _, _, _, _, _, +ans, _, _, _}:
+    case R{_, _, _, _, _, _, _, _, _, _, +ans, _, _, _, _}:
       ans
 
 def R.with_ans(x: R, +v: List<&2, J.Json>) -> R:
   match x:
-    case R{+rts, +waiters, +steered, +counts, +last, +crashes, +workspace, +dirty, +now, +git, _, +need, +answered, +due}:
-      R{rts, waiters, steered, counts, last, crashes, workspace, dirty, now, git, v, need, answered, due}
+    case R{+rts, +waiters, +steered, +counts, +last, +crashes, +workspace, +dirty, +now, +git, _, +need, +answered, +due, +ctx}:
+      R{rts, waiters, steered, counts, last, crashes, workspace, dirty, now, git, v, need, answered, due, ctx}
 
 def R.need(x: R) -> Maybe<&2, J.Json>:
   match x:
-    case R{_, _, _, _, _, _, _, _, _, _, _, +need, _, _}:
+    case R{_, _, _, _, _, _, _, _, _, _, _, +need, _, _, _}:
       need
 
 def R.with_need(x: R, +v: Maybe<&2, J.Json>) -> R:
   match x:
-    case R{+rts, +waiters, +steered, +counts, +last, +crashes, +workspace, +dirty, +now, +git, +ans, _, +answered, +due}:
-      R{rts, waiters, steered, counts, last, crashes, workspace, dirty, now, git, ans, v, answered, due}
+    case R{+rts, +waiters, +steered, +counts, +last, +crashes, +workspace, +dirty, +now, +git, +ans, _, +answered, +due, +ctx}:
+      R{rts, waiters, steered, counts, last, crashes, workspace, dirty, now, git, ans, v, answered, due, ctx}
 
 # his answer to a card in this step, for the step's answer (inbox picks
 # (3), architect m_22636): set where its route line is written
 def R.answered(x: R) -> Maybe<&2, PK.Answer>:
   match x:
-    case R{_, _, _, _, _, _, _, _, _, _, _, _, +answered, _}:
+    case R{_, _, _, _, _, _, _, _, _, _, _, _, +answered, _, _}:
       answered
 
 def R.with_answered(x: R, +v: Maybe<&2, PK.Answer>) -> R:
   match x:
-    case R{+rts, +waiters, +steered, +counts, +last, +crashes, +workspace, +dirty, +now, +git, +ans, +need, _, +due}:
-      R{rts, waiters, steered, counts, last, crashes, workspace, dirty, now, git, ans, need, v, due}
+    case R{+rts, +waiters, +steered, +counts, +last, +crashes, +workspace, +dirty, +now, +git, +ans, +need, _, +due, +ctx}:
+      R{rts, waiters, steered, counts, last, crashes, workspace, dirty, now, git, ans, need, v, due, ctx}
 
 def R.due(x: R) -> List<&2, Nat>:
   match x:
-    case R{_, _, _, _, _, _, _, _, _, _, _, _, _, +due}:
+    case R{_, _, _, _, _, _, _, _, _, _, _, _, _, +due, _}:
       due
 
 def R.with_due(x: R, +v: List<&2, Nat>) -> R:
   match x:
-    case R{+rts, +waiters, +steered, +counts, +last, +crashes, +workspace, +dirty, +now, +git, +ans, +need, +answered, _}:
-      R{rts, waiters, steered, counts, last, crashes, workspace, dirty, now, git, ans, need, answered, v}
+    case R{+rts, +waiters, +steered, +counts, +last, +crashes, +workspace, +dirty, +now, +git, +ans, +need, +answered, _, +ctx}:
+      R{rts, waiters, steered, counts, last, crashes, workspace, dirty, now, git, ans, need, answered, v, ctx}
+
+def R.ctx(x: R) -> List<&2, S.Vctx>:
+  match x:
+    case R{_, _, _, _, _, _, _, _, _, _, _, _, _, _, +ctx}:
+      ctx
+
+def R.with_ctx(x: R, +v: List<&2, S.Vctx>) -> R:
+  match x:
+    case R{+rts, +waiters, +steered, +counts, +last, +crashes, +workspace, +dirty, +now, +git, +ans, +need, +answered, +due, _}:
+      R{rts, waiters, steered, counts, last, crashes, workspace, dirty, now, git, ans, need, answered, due, v}
 
 # the journal events among the effects, in order
 def journal(fx: List<&2, Fx>) -> List<&2, M.Ev>:
@@ -578,8 +588,8 @@ def d(-o: S.St, +cx: Cx<o>) -> S.St:
 
 def mark(+r: R) -> R:
   match r:
-    case R{+a, +b, +c, +e, +f, +g, +w, _, +n, +gi, +an, +ne, +ad, +due}:
-      R{a, b, c, e, f, g, w, True{}, n, gi, an, ne, ad, due}
+    case R{+a, +b, +c, +e, +f, +g, +w, _, +n, +gi, +an, +ne, +ad, +due, +ctx}:
+      R{a, b, c, e, f, g, w, True{}, n, gi, an, ne, ad, due, ctx}
 
 def emit(-o: S.St, cx: Cx<o>, +e: M.Ev, k: FreshEv(d(o, cx), e), kq: QuietEv(e), kv: DelivEv(d(o, cx), e)) -> Cx<o>:
   match cx:

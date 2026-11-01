@@ -929,6 +929,217 @@ def MRec.open_eq(r):
     case S.MRec{f0, f1, f2}:
       {==}
 
+# ---- Vctx ----
+
+law Vctx.agent.get_with:
+  for r: S.Vctx
+  for v: String
+  {S.Vctx.agent(S.Vctx.with_agent(r, v)) == v : String}
+
+def Vctx.agent.get_with(r, v):
+  match r:
+    case S.Vctx{f0, f1, f2, f3}:
+      {==}
+
+law Vctx.agent.eta:
+  for r: S.Vctx
+  for v: String
+  {S.Vctx{v, S.Vctx.call(r), S.Vctx.text(r), S.Vctx.part(r)} == S.Vctx.with_agent(r, v) : S.Vctx}
+
+def Vctx.agent.eta(r, v):
+  match r:
+    case S.Vctx{f0, f1, f2, f3}:
+      {==}
+
+law Vctx.agent.set_get:
+  for r: S.Vctx
+  {S.Vctx.with_agent(r, S.Vctx.agent(r)) == r : S.Vctx}
+
+def Vctx.agent.set_get(r):
+  match r:
+    case S.Vctx{f0, f1, f2, f3}:
+      {==}
+
+law Vctx.agent.set_set:
+  for r: S.Vctx
+  for a: String
+  for b: String
+  {S.Vctx.with_agent(S.Vctx.with_agent(r, a), b) == S.Vctx.with_agent(r, b) : S.Vctx}
+
+def Vctx.agent.set_set(r, a, b):
+  match r:
+    case S.Vctx{f0, f1, f2, f3}:
+      {==}
+
+law Vctx.agent.over:
+  for r: S.Vctx
+  for g: String -> String
+  {S.Vctx.over_agent(r, g) == S.Vctx.with_agent(r, g(S.Vctx.agent(r))) : S.Vctx}
+
+def Vctx.agent.over(r, g):
+  match r:
+    case S.Vctx{f0, f1, f2, f3}:
+      {==}
+
+law Vctx.call.get_with:
+  for r: S.Vctx
+  for v: String
+  {S.Vctx.call(S.Vctx.with_call(r, v)) == v : String}
+
+def Vctx.call.get_with(r, v):
+  match r:
+    case S.Vctx{f0, f1, f2, f3}:
+      {==}
+
+law Vctx.call.eta:
+  for r: S.Vctx
+  for v: String
+  {S.Vctx{S.Vctx.agent(r), v, S.Vctx.text(r), S.Vctx.part(r)} == S.Vctx.with_call(r, v) : S.Vctx}
+
+def Vctx.call.eta(r, v):
+  match r:
+    case S.Vctx{f0, f1, f2, f3}:
+      {==}
+
+law Vctx.call.set_get:
+  for r: S.Vctx
+  {S.Vctx.with_call(r, S.Vctx.call(r)) == r : S.Vctx}
+
+def Vctx.call.set_get(r):
+  match r:
+    case S.Vctx{f0, f1, f2, f3}:
+      {==}
+
+law Vctx.call.set_set:
+  for r: S.Vctx
+  for a: String
+  for b: String
+  {S.Vctx.with_call(S.Vctx.with_call(r, a), b) == S.Vctx.with_call(r, b) : S.Vctx}
+
+def Vctx.call.set_set(r, a, b):
+  match r:
+    case S.Vctx{f0, f1, f2, f3}:
+      {==}
+
+law Vctx.call.over:
+  for r: S.Vctx
+  for g: String -> String
+  {S.Vctx.over_call(r, g) == S.Vctx.with_call(r, g(S.Vctx.call(r))) : S.Vctx}
+
+def Vctx.call.over(r, g):
+  match r:
+    case S.Vctx{f0, f1, f2, f3}:
+      {==}
+
+law Vctx.text.get_with:
+  for r: S.Vctx
+  for v: String
+  {S.Vctx.text(S.Vctx.with_text(r, v)) == v : String}
+
+def Vctx.text.get_with(r, v):
+  match r:
+    case S.Vctx{f0, f1, f2, f3}:
+      {==}
+
+law Vctx.text.eta:
+  for r: S.Vctx
+  for v: String
+  {S.Vctx{S.Vctx.agent(r), S.Vctx.call(r), v, S.Vctx.part(r)} == S.Vctx.with_text(r, v) : S.Vctx}
+
+def Vctx.text.eta(r, v):
+  match r:
+    case S.Vctx{f0, f1, f2, f3}:
+      {==}
+
+law Vctx.text.set_get:
+  for r: S.Vctx
+  {S.Vctx.with_text(r, S.Vctx.text(r)) == r : S.Vctx}
+
+def Vctx.text.set_get(r):
+  match r:
+    case S.Vctx{f0, f1, f2, f3}:
+      {==}
+
+law Vctx.text.set_set:
+  for r: S.Vctx
+  for a: String
+  for b: String
+  {S.Vctx.with_text(S.Vctx.with_text(r, a), b) == S.Vctx.with_text(r, b) : S.Vctx}
+
+def Vctx.text.set_set(r, a, b):
+  match r:
+    case S.Vctx{f0, f1, f2, f3}:
+      {==}
+
+law Vctx.text.over:
+  for r: S.Vctx
+  for g: String -> String
+  {S.Vctx.over_text(r, g) == S.Vctx.with_text(r, g(S.Vctx.text(r))) : S.Vctx}
+
+def Vctx.text.over(r, g):
+  match r:
+    case S.Vctx{f0, f1, f2, f3}:
+      {==}
+
+law Vctx.part.get_with:
+  for r: S.Vctx
+  for v: J.Json
+  {S.Vctx.part(S.Vctx.with_part(r, v)) == v : J.Json}
+
+def Vctx.part.get_with(r, v):
+  match r:
+    case S.Vctx{f0, f1, f2, f3}:
+      {==}
+
+law Vctx.part.eta:
+  for r: S.Vctx
+  for v: J.Json
+  {S.Vctx{S.Vctx.agent(r), S.Vctx.call(r), S.Vctx.text(r), v} == S.Vctx.with_part(r, v) : S.Vctx}
+
+def Vctx.part.eta(r, v):
+  match r:
+    case S.Vctx{f0, f1, f2, f3}:
+      {==}
+
+law Vctx.part.set_get:
+  for r: S.Vctx
+  {S.Vctx.with_part(r, S.Vctx.part(r)) == r : S.Vctx}
+
+def Vctx.part.set_get(r):
+  match r:
+    case S.Vctx{f0, f1, f2, f3}:
+      {==}
+
+law Vctx.part.set_set:
+  for r: S.Vctx
+  for a: J.Json
+  for b: J.Json
+  {S.Vctx.with_part(S.Vctx.with_part(r, a), b) == S.Vctx.with_part(r, b) : S.Vctx}
+
+def Vctx.part.set_set(r, a, b):
+  match r:
+    case S.Vctx{f0, f1, f2, f3}:
+      {==}
+
+law Vctx.part.over:
+  for r: S.Vctx
+  for g: J.Json -> J.Json
+  {S.Vctx.over_part(r, g) == S.Vctx.with_part(r, g(S.Vctx.part(r))) : S.Vctx}
+
+def Vctx.part.over(r, g):
+  match r:
+    case S.Vctx{f0, f1, f2, f3}:
+      {==}
+
+law Vctx.open_eq:
+  for r: S.Vctx
+  {S.Vctx.open(r) == r : S.Vctx}
+
+def Vctx.open_eq(r):
+  match r:
+    case S.Vctx{f0, f1, f2, f3}:
+      {==}
+
 # ---- ViewAsk ----
 
 law ViewAsk.agent.get_with:

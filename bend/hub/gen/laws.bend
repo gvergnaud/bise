@@ -213,6 +213,12 @@ law in_view_message_bare:
 def in_view_message_bare():
   {==}
 
+law in_view_context_bare:
+  {IN.of(J.obj([J.kv("t", J.JStr{"view_context"})])) == IN.IViewContext{"", "", "", J.JNull{}} : IN.In}
+
+def in_view_context_bare():
+  {==}
+
 law in_forge_bare:
   {IN.of(J.obj([J.kv("t", J.JStr{"forge"})])) == IN.IForge{"", ""} : IN.In}
 
@@ -697,6 +703,16 @@ law in_IViewMessage_round:
   {IN.of(IN.json(IN.IViewMessage{agent, plugin, text})) == IN.IViewMessage{agent, plugin, text} : IN.In}
 
 def in_IViewMessage_round(agent, plugin, text):
+  {==}
+
+law in_IViewContext_round:
+  for agent: String
+  for call: String
+  for text: String
+  for part: J.Json
+  {IN.of(IN.json(IN.IViewContext{agent, call, text, part})) == IN.IViewContext{agent, call, text, part} : IN.In}
+
+def in_IViewContext_round(agent, call, text, part):
   {==}
 
 law in_IForge_round:
@@ -1333,6 +1349,12 @@ law fx_view_card_bare:
 def fx_view_card_bare():
   {==}
 
+law fx_view_context_bare:
+  {FX.of(J.obj([J.kv("fx", J.JStr{"view_context"})])) == FX.FViewContext{"", "", False{}, ""} : FX.Fx}
+
+def fx_view_context_bare():
+  {==}
+
 law fx_focus_main_bare:
   {FX.of(J.obj([J.kv("fx", J.JStr{"focus_main"})])) == FX.FFocusMain{""} : FX.Fx}
 
@@ -1638,6 +1660,20 @@ def fx_FViewCard_round(agent, call, card):
     case None{}:
       {==}
     case Some{x_card}:
+      {==}
+
+law fx_FViewContext_round:
+  for agent: String
+  for call: String
+  for kept: Bool
+  for why: String
+  {FX.of(FX.json(FX.FViewContext{agent, call, kept, why})) == FX.FViewContext{agent, call, kept, why} : FX.Fx}
+
+def fx_FViewContext_round(agent, call, kept, why):
+  match why:
+    case SNil{}:
+      {==}
+    case SCon{h_why, t_why}:
       {==}
 
 law fx_FFocusMain_round:

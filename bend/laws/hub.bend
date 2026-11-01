@@ -17,6 +17,7 @@ import ../hub/xhub.bend as HXB
 import ../hub/gen/kit.bend as HK
 import ../hub/gen/feed.bend as HFD
 import ../hub/gen/fx.bend as HF
+import ../hub/viewctx.bend as HVC
 import ../hub/pause.bend as HP
 import ../hub/reach.bend as HR
 import ../hub/answers.bend as HA
@@ -1191,6 +1192,44 @@ law view_card_says_no_card:
   for e: {HC.live_agent(HM.agent_named(HS.St.agents(HX.d(o, cx)), agent)) == False{} : Bool}
   {last_fx(HX.Core.fx(o, HX.Cx.c(o, HC.open_view_confirm(o, cx, agent, call, text, ask))))
     == Some{HX.FO{J.obj(HF.view_card(agent, call, None{}))}} : Maybe<&2, HX.Fx>}
+
+# A view's context (d5) is sb-core's: kept per view in the runtime record
+# (never journaled), joined before his next message to its agent once.
+# LAW: no context, his message as he sent it (text and parts unchanged)...
+law view_context_none_text:
+  for +text: String
+  {HVC.join_text(Nil{}, text) == text : String}
+
+law view_context_none_parts:
+  for +parts: String
+  for +text: String
+  {HVC.join_parts(Nil{}, parts, text) == parts : String}
+
+# ...a view's context is kept for an active agent only, and the step says
+# which last (fx view_context, with sb-core's words when not): the shell
+# never decides it again...
+law view_context_says_kept:
+  for -o: HS.St
+  for ok: Bool
+  for +cx: HX.Cx<o>
+  for +c: HS.Vctx
+  {last_fx(HX.Core.fx(o, HX.Cx.c(o, HC.view_context.go(o, ok, cx, c))))
+    == Some{HX.FO{J.obj(HF.view_context(HS.Vctx.agent(c), HS.Vctx.call(c), ok, HC.view_context.why(ok, HS.Vctx.agent(c))))}} : Maybe<&2, HX.Fx>}
+
+# ...a message takes its agent's contexts: none is left for it (once)...
+law view_context_taken_once:
+  for +cs: List<&2, HS.Vctx>
+  for +agent: String
+  {HVC.of(HVC.drop(cs, agent), agent) == Nil{} : List<&2, HS.Vctx>}
+
+# ...and leaves every other agent's as they were (never another agent's).
+# A stop drops its agent's the same way (stop_task: view_ctx_drop).
+law view_context_keeps_others:
+  for +cs: List<&2, HS.Vctx>
+  for +a: String
+  for +b: String
+  for e: {String.eq(a, b) == False{} : Bool}
+  {HVC.of(HVC.drop(cs, a), b) == HVC.of(cs, b) : List<&2, HS.Vctx>}
 
 # A view's card gets one answer: his, its due's, its agent's stop or the
 # hub's boot. No state law says it alone: each of them answers only a card

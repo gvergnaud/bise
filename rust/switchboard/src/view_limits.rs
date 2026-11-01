@@ -3,7 +3,9 @@
 //! decides no wake): at most [`CALLS`] `view/call` in [`CALL_WINDOW_MS`],
 //! one `view/message` every [`MESSAGE_EVERY_MS`], and a message only
 //! within [`GESTURE_MS`] of his pointer-down in that view's frame, as
-//! Electron's main process saw it (`gesture_ms`). The proxy and the
+//! Electron's main process saw it (`gesture_ms`); a `view/context` of
+//! at most [`CONTEXT_BYTES`], one every [`CONTEXT_EVERY_MS`] (review
+//! d5: a view can't slip megabytes into his next message). The proxy and the
 //! renderer never decide: a gesture they forge never reaches the hub
 //! (Electron main overwrites it), and a view with none is refused.
 //!
@@ -19,6 +21,10 @@ pub const MESSAGE_EVERY_MS: u64 = 10_000;
 /// A `view/message` needs his pointer-down in the view at most this
 /// long before.
 pub const GESTURE_MS: u64 = 5_000;
+/// The most a view's context may hold (its text, in bytes).
+pub const CONTEXT_BYTES: usize = 16 * 1024;
+/// One `view/context` per view at most this often.
+pub const CONTEXT_EVERY_MS: u64 = 1_000;
 /// A gesture stamped this far in the hub's future still counts (two
 /// clocks of one machine).
 pub const SKEW_MS: u64 = 1_000;
@@ -118,10 +124,30 @@ impl MsgRefused {
     }
 }
 
+/// Why a context is refused.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CtxRefused {
+    /// over [`CONTEXT_BYTES`]
+    TooLarge,
+    /// one already in the last [`CONTEXT_EVERY_MS`]
+    TooSoon,
+}
+
+impl CtxRefused {
+    /// The error the view gets: `too-large` or `rate-limited`.
+    pub fn error(self) -> bise_proto::view_rpc::ViewError {
+        match self {
+            CtxRefused::TooLarge => bise_proto::view_rpc::ViewError::TooLarge,
+            CtxRefused::TooSoon => bise_proto::view_rpc::ViewError::RateLimited,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Limits {
     calls: BTreeMap<ViewKey, VecDeque<u64>>,
     messages: BTreeMap<ViewKey, u64>,
+    contexts: BTreeMap<ViewKey, u64>,
 }
 
 impl Limits {
@@ -153,16 +179,30 @@ impl Limits {
         Ok(())
     }
 
+    /// A `view/context` of `key` at `now`, `bytes` long: allowed and
+    /// noted, or why not (a refused one is not counted).
+    pub fn context(&mut self, key: &ViewKey, now: u64, bytes: usize) -> Result<(), CtxRefused> {
+        if bytes > CONTEXT_BYTES {
+            return Err(CtxRefused::TooLarge);
+        }
+        if self.contexts.get(key).is_some_and(|t| now.saturating_sub(*t) < CONTEXT_EVERY_MS) {
+            return Err(CtxRefused::TooSoon);
+        }
+        self.contexts.insert(key.clone(), now);
+        Ok(())
+    }
+
     /// Forget the views with nothing in their windows at `now` (the
     /// shell's tick), so the maps never grow with old views.
     pub fn prune(&mut self, now: u64) {
         self.calls.retain(|_, q| q.back().is_some_and(|t| now.saturating_sub(*t) < CALL_WINDOW_MS));
         self.messages.retain(|_, t| now.saturating_sub(*t) < MESSAGE_EVERY_MS);
+        self.contexts.retain(|_, t| now.saturating_sub(*t) < CONTEXT_EVERY_MS);
     }
 
     #[cfg(test)]
     fn len(&self) -> usize {
-        self.calls.len() + self.messages.len()
+        self.calls.len() + self.messages.len() + self.contexts.len()
     }
 }
 
@@ -211,6 +251,23 @@ mod tests {
         assert_eq!(l.message(&k("1-1"), 59_999, Some(59_999)), Err(MsgRefused::TooSoon));
         assert_eq!(l.message(&k("1-2"), 59_999, Some(59_999)), Ok(()), "another view");
         assert_eq!(l.message(&k("1-1"), 60_000, Some(60_000)), Ok(()));
+    }
+
+    /// d5: a context is at most 16 KB, one a second per view; a refused
+    /// one is not counted, and old views are forgotten.
+    #[test]
+    fn a_context_is_capped_in_size_and_rate() {
+        use bise_proto::view_rpc::ViewError;
+        let mut l = Limits::default();
+        assert_eq!(l.context(&k("1-1"), 1000, CONTEXT_BYTES + 1), Err(CtxRefused::TooLarge));
+        assert_eq!(l.context(&k("1-1"), 1000, CONTEXT_BYTES), Ok(()), "the refused one left no trace");
+        assert_eq!(l.context(&k("1-1"), 1999, 10), Err(CtxRefused::TooSoon));
+        assert_eq!(l.context(&k("1-2"), 1999, 10), Ok(()), "another view");
+        assert_eq!(l.context(&k("1-1"), 2000, 10), Ok(()));
+        assert_eq!(CtxRefused::TooLarge.error(), ViewError::TooLarge);
+        assert_eq!(CtxRefused::TooSoon.error(), ViewError::RateLimited);
+        l.prune(2000 + CONTEXT_EVERY_MS);
+        assert_eq!(l.len(), 0);
     }
 
     #[test]

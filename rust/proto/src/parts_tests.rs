@@ -486,3 +486,25 @@ fn an_old_page_note_with_a_marker_reads_typed() {
     let v = serde_json::to_value(page(vec![PageNote { parts: vec![t("hi")], ..PageNote::default() }])).unwrap();
     assert_eq!(v["notes"][0]["parts"], serde_json::json!([{"kind": "text", "text": "hi"}]), "parts on the wire");
 }
+
+/// mcp-apps review d5: sb-core joins a view's contexts before his message
+/// without knowing their tag: text = ctx renders and his render joined by
+/// "\n", parts = ctx parts ++ his parts. That is render(a ++ b) for these
+/// shapes (his words, a quote, an image, a file list, a hint).
+#[test]
+fn a_views_contexts_join_his_message_by_a_newline() {
+    let ctx = |s: &str| Part::ViewContext { plugin: "fake-app".into(), uri: "ui://fake-app/counter".into(), text: s.into() };
+    let one = |p: &Part| render(std::slice::from_ref(p));
+    let (c1, c2) = (ctx("count=4"), ctx("board=x\n"));
+    let his_shapes: Vec<Vec<Part>> = vec![
+        vec![t("bump it")],
+        vec![q("@docs", "a quote"), t("and why")],
+        vec![t("see "), img("shot.png"), t(" there")],
+        vec![t("look"), listed("/w/a.txt")],
+        vec![t("short"), Part::Hint { of: HintKind::Capsule, text: "\n(answer in one line)".into() }],
+    ];
+    for his in his_shapes {
+        let all: Vec<Part> = [c1.clone(), c2.clone()].into_iter().chain(his.clone()).collect();
+        assert_eq!(render(&all), [one(&c1), one(&c2), render(&his)].join("\n"), "{his:?}");
+    }
+}

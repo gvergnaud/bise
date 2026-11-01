@@ -109,11 +109,7 @@ impl Shell {
                 self.proto_send(id, &HubEv::Thread { project, agent, entries, before, more });
             }
             HubCmd::Find { agent, needle, rid, .. } => self.proto_find(id, &tag, project, agent, needle, rid),
-            HubCmd::Send { agent, text, opts, cid, parts, .. } if parts.is_empty() => {
-                // mcp-apps (C5): his send carries the views' contexts once
-                let (text, parts) = self.with_view_contexts(&agent, text, String::new());
-                self.proto_input(id, &tag, agent, text, opts, cid, parts)
-            }
+            HubCmd::Send { agent, text, opts, cid, parts, .. } if parts.is_empty() => self.proto_input(id, &tag, agent, text, opts, cid, String::new()),
             // msg-parts: the model's text from his parts, the parts kept
             // on his message (a part this hub doesn't know: refused)
             HubCmd::Send { agent, text, opts, cid, parts, .. } => {
@@ -123,8 +119,7 @@ impl Shell {
                 match crate::parts_in::said(&parts, &crate::parts_in::Door { store: &bise_home::Home::from_env().images_dir(), put: &crate::daemon::fn_context::store_image, exists: &crate::daemon::fn_context::file_exists, known: &self.artifact_known() }) {
                     Ok(s) => {
                         self.artifact_notes_said(&s.parts);
-                        let (text, parts) = self.with_view_contexts(&agent, s.text, s.parts);
-                        self.proto_input(id, &tag, agent, text, opts, cid, parts)
+                        self.proto_input(id, &tag, agent, s.text, opts, cid, s.parts)
                     }
                     Err(e) => self.proto_error_cid(id, &tag, &e, cid, cid.map(|_| "refused")),
                 }

@@ -940,7 +940,7 @@ impl Shell {
             Effect::AskTimerName { id, request } => self.ask_timer_name(id, request),
             Effect::Confirm { card, agent: _, text } => self.on_confirm(card, &text),
             // read by its step's caller (daemon/views.rs view_card)
-            Effect::ViewCard { .. } => {}
+            Effect::ViewCard { .. } | Effect::ViewContext { .. } => {}
             Effect::Flow { client, token, set } => {
                 let (ok, text) = self.flow_cmd(set);
                 if let Some(c) = client {

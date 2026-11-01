@@ -2,9 +2,11 @@
 // sends one view command (view_resource, view_call, view_message, view_context) through the core
 // as a hub request and hands back the hub's answer, result or error, to that call only. Main
 // stamps view_message's gesture_ms (C5, risk 1: from what Electron main saw, mcp-apps-sandbox's
-// stampGesture), so a view command never goes by the window's plain core.send. Owner:
-// mcp-apps-host.
+// stampGesture), so a view command never goes by the window's plain core.send. A call is
+// held at most VIEW_CALL_MAX_MS (the hub always answers before: review d3) and dropped
+// with its window. Owner: mcp-apps-host.
 import { ipcMain } from 'electron';
+import { VIEW_CALL_MAX_MS } from '../proto/view_rules.gen';
 import { IPC, type ViewAnswerWire } from '../shared/api';
 
 /** The view commands, by their cmd tag; plugin_views: a plugin's views once it runs (the add's step 2, C8). */
@@ -28,8 +30,45 @@ export function viewCmdOf(raw: unknown): Record<string, unknown> | null {
 /** gesture_ms's stamp (viewframes.stampViewGesture, from that window's input events): given, never a module global. */
 export type Stamp = (cmd: Record<string, unknown>, windowId: number) => Record<string, unknown>;
 
+/** A call the core has not answered yet: its answer, its bound's timer, its window. */
+interface Waiting {
+  readonly answer: (a: ViewAnswerWire) => void;
+  readonly timer: ReturnType<typeof setTimeout>;
+  readonly windowId: number;
+}
+
 // the calls the core has not answered yet, by the very cmd object sent (the core hands it back)
-const waiting = new Map<object, (a: ViewAnswerWire) => void>();
+const waiting = new Map<object, Waiting>();
+
+/** A call the hub took longer than it ever can to answer (view_rpc VIEW_CALL_MAX_MS, review d3): -32603, never a wait without end. */
+export const TOO_LATE: ViewAnswerWire = { error: { code: -32603, message: 'bise did not answer this view in time' } };
+
+/** Holds `cmd`'s answer for window `windowId` until the core gives it, or VIEW_CALL_MAX_MS. */
+export function hold(cmd: object, windowId: number, answer: (a: ViewAnswerWire) => void): void {
+  const timer = setTimeout(() => {
+    if (waiting.get(cmd)?.timer !== timer) return;
+    waiting.delete(cmd);
+    answer(TOO_LATE);
+  }, VIEW_CALL_MAX_MS);
+  waiting.set(cmd, { answer, timer, windowId });
+}
+
+/** `cmd`'s answer, once: none when it was not held (answered, timed out, its window gone). */
+function take(cmd: object): ((a: ViewAnswerWire) => void) | undefined {
+  const w = waiting.get(cmd);
+  if (w === undefined) return undefined;
+  waiting.delete(cmd);
+  clearTimeout(w.timer);
+  return w.answer;
+}
+
+/** Window `windowId` is gone: its calls are dropped (nobody to answer), their timers with them. */
+export function viewsWindowGone(windowId: number): void {
+  for (const [cmd, w] of [...waiting]) if (w.windowId === windowId) take(cmd);
+}
+
+// the windows whose 'destroyed' drops their calls, once each
+const watched = new Set<number>();
 
 /** A view command for the hub, as window `windowId` asked it: the window's gesture_ms dropped, view_message's `stamp`ed. Pure but for the stamp. */
 export function outgoing(raw: unknown, windowId: number, stamp: Stamp): Record<string, unknown> | null {
@@ -44,10 +83,18 @@ export function installViewCalls(send: (cmd: unknown) => boolean, stamp: Stamp):
   ipcMain.handle(IPC.viewsCall, (e, raw: unknown): Promise<ViewAnswerWire> => {
     const cmd = outgoing(raw, e.sender.id, stamp);
     if (cmd === null) return Promise.resolve({ error: { code: -32602, message: 'not a view command' } });
+    const windowId = e.sender.id;
+    if (!watched.has(windowId)) {
+      watched.add(windowId);
+      e.sender.once('destroyed', () => {
+        watched.delete(windowId);
+        viewsWindowGone(windowId);
+      });
+    }
     return new Promise((resolve) => {
-      waiting.set(cmd, resolve);
+      hold(cmd, windowId, resolve);
       if (!send(cmd)) {
-        waiting.delete(cmd);
+        take(cmd);
         resolve({ error: { code: -32603, message: 'bise is not running' } });
       }
     });
@@ -56,24 +103,21 @@ export function installViewCalls(send: (cmd: unknown) => boolean, stamp: Stamp):
 
 /** The core answered a command: true when it was a view call (its window has it now). */
 export function viewAnswered(cmd: object, result: unknown): boolean {
-  const r = waiting.get(cmd);
+  const r = take(cmd);
   if (r === undefined) return false;
-  waiting.delete(cmd);
   r({ result: result ?? null });
   return true;
 }
 
 /** The core refused a command: true when it was a view call. */
 export function viewRefused(cmd: object, error: { readonly code: number; readonly message: string; readonly data?: unknown }): boolean {
-  const r = waiting.get(cmd);
+  const r = take(cmd);
   if (r === undefined) return false;
-  waiting.delete(cmd);
   r({ error: { code: error.code, message: error.message, ...(error.data === undefined ? {} : { data: error.data }) } });
   return true;
 }
 
 /** A new core starts: every call the last one held is answered 'gone'. */
 export function viewsCoreGone(): void {
-  for (const r of waiting.values()) r({ error: { code: -32603, message: 'bise restarted' } });
-  waiting.clear();
+  for (const cmd of [...waiting.keys()]) take(cmd)?.({ error: { code: -32603, message: 'bise restarted' } });
 }

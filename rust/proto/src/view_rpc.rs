@@ -104,10 +104,12 @@ pub enum ViewError {
     /// a `ui/message` without his fresh click in the view (risk 1; the
     /// web host never has one: no Electron main sees his clicks)
     NoGesture,
+    /// a `ui/update-model-context` over the hub's 16 KB (review d5)
+    TooLarge,
 }
 
 impl ViewError {
-    pub const ALL: [ViewError; 7] = [
+    pub const ALL: [ViewError; 8] = [
         ViewError::Expired,
         ViewError::NotVisible,
         ViewError::PluginOff,
@@ -115,9 +117,10 @@ impl ViewError {
         ViewError::NotSupported,
         ViewError::RateLimited,
         ViewError::NoGesture,
+        ViewError::TooLarge,
     ];
 
-    /// Its JSON-RPC code, -32030..-32035 and -32037 (-32036 was `server-restarted`, now a
+    /// Its JSON-RPC code, -32030..-32035, -32037 and -32038 (-32036 was `server-restarted`, now a
     /// result's `_meta`: never reuse it).
     pub fn code(self) -> i64 {
         match self {
@@ -128,6 +131,7 @@ impl ViewError {
             ViewError::NotSupported => -32034,
             ViewError::RateLimited => -32035,
             ViewError::NoGesture => -32037,
+            ViewError::TooLarge => -32038,
         }
     }
 
@@ -141,6 +145,7 @@ impl ViewError {
             ViewError::NotSupported => "not-supported",
             ViewError::RateLimited => "rate-limited",
             ViewError::NoGesture => "no-gesture",
+            ViewError::TooLarge => "too-large",
         }
     }
 
@@ -159,6 +164,7 @@ impl ViewError {
             ViewError::NotSupported => format!("{what} is not supported in bise"),
             ViewError::RateLimited => format!("{what}: too many requests from this view"),
             ViewError::NoGesture => format!("{what} needs a click in the view first (and a browser tab never has one)"),
+            ViewError::TooLarge => format!("{what}: too big for bise (16 KB at most)"),
         }
     }
 
@@ -186,6 +192,7 @@ mod tests {
                 (-32034, "not-supported"),
                 (-32035, "rate-limited"),
                 (-32037, "no-gesture"),
+                (-32038, "too-large"),
             ]
         );
         for e in ViewError::ALL {

@@ -47,6 +47,7 @@ import ./take.bend as TK
 import ./peer.bend as PR
 import ./stall.bend as SL
 import ./forward.bend as FW
+import ./viewctx.bend as VC
 
 type Snd is Data:
   Snd{from: String, to: String, text: String, expect: Bool,
@@ -1474,9 +1475,15 @@ def stop_task.go(-o: S.St, +cx: X.Cx<o>, +name: String, +life: S.Life, +reason: 
   +cx6 = reject_ids(o, ids_of(M.queued_for(st(o, cx5), name)), cx5)
   view_nos(o, S.St.cards(st(o, cx6)), close_cards(o, cx6, name, Nil{}, "agent stopped"), name)
 
-# no wait of the stopped task survives (law stop_leaves_no_waiter)
+# `agent`'s contexts leave (his message took them, or it stopped: an MCP App view's
+# context, review d5)
+def view_ctx_drop(-o: S.St, +cx: X.Cx<o>, +agent: String) -> X.Cx<o>:
+  set_r(o, cx, X.R.with_ctx(rr(o, cx), VC.drop(X.R.ctx(rr(o, cx)), agent)))
+
+# no wait of the stopped task survives (law stop_leaves_no_waiter), nor
+# any view's context for it (d5)
 def stop_task(-o: S.St, +cx: X.Cx<o>, +name: String, +life: S.Life, +reason: String) -> X.Cx<o>:
-  set_waiters(o, wakes_gone(o, life, timers_gone(o, life, stop_task.go(o, cx, name, life, reason), name), name), X.waiters_not(X.R.waiters(rr(o, cx)), name))
+  set_waiters(o, view_ctx_drop(o, wakes_gone(o, life, timers_gone(o, life, stop_task.go(o, cx, name, life, reason), name), name), name), X.waiters_not(X.R.waiters(rr(o, cx)), name))
 
 # stop_task, after saying which of the user's queued messages will never
 # arrive (BISE-86)
@@ -2048,6 +2055,48 @@ def route.target(-o: S.St, m: Maybe<&2, String>, +cx: X.Cx<o>, +target: String, 
 def route(-o: S.St, +cx: X.Cx<o>, +target: String, +text: String, +focus: String, +queued: Bool, +parts: String) -> X.Cx<o>:
   LZ.pick(X.Cx<o>, String.eq(target, M.MAIN()), u => user_says(o, cx, M.MAIN(), text, queued, parts, ""),
     u => route.target(o, M.resolve(st(o, cx), target), cx, target, text, focus, queued, parts))
+
+# ---- an MCP App view's context (docs/mcp-apps.md, C5, review d5) ----
+# A view's `ui/update-model-context` is kept for its agent (the last one
+# per view, runtime only: X.R.ctx) and joins his next message to that
+# agent once, before his words, whatever client sent it (the Send and the
+# Slash paths both reach the say and route inputs). An agent not active
+# keeps none; a stop drops its contexts. The tag is the shell's render.
+
+# kept or not, the step says it last (fx view_context, law
+# view_context_says_kept): the shell answers the view from it
+# why a view's context was not kept ("" kept)
+def view_context.why(ok: Bool, +agent: String) -> String:
+  match ok:
+    case False{}:
+      cat(["the view's context didn't reach @", agent, ": it is not active"])
+    case True{}:
+      ""
+
+def view_context.go(-o: S.St, ok: Bool, +cx: X.Cx<o>, +c: S.Vctx) -> X.Cx<o>:
+  match ok:
+    case False{}:
+      out(o, cx, F.view_context(S.Vctx.agent(c), S.Vctx.call(c), False{}, view_context.why(False{}, S.Vctx.agent(c))))
+    case True{}:
+      +cx2 = set_r(o, cx, X.R.with_ctx(rr(o, cx), VC.put(X.R.ctx(rr(o, cx)), c)))
+      out(o, cx2, F.view_context(S.Vctx.agent(c), S.Vctx.call(c), True{}, ""))
+
+def view_context(-o: S.St, +cx: X.Cx<o>, +agent: String, +call: String, +text: String, +part: J.Json) -> X.Cx<o>:
+  view_context.go(o, live_agent(M.agent_named(S.St.agents(st(o, cx)), agent)), cx, S.Vctx.with_part(S.Vctx.with_text(S.Vctx.with_call(S.Vctx.with_agent(S.Vctx.empty(), agent), call), text), part))
+
+# his message to `to`, its views' contexts before his words, taken once
+def says_ctx(-o: S.St, +cx: X.Cx<o>, +to: String, +text: String, +queued: Bool, +parts: String, +from: String) -> X.Cx<o>:
+  +cs = VC.of(X.R.ctx(rr(o, cx)), to)
+  user_says(o, view_ctx_drop(o, cx, to), to, VC.join_text(cs, text), queued, VC.join_parts(cs, parts, text), from)
+
+# his `@agent` message likewise (an agent it names: its contexts)
+def route_ctx(-o: S.St, m: Maybe<&2, String>, +cx: X.Cx<o>, +target: String, +text: String, +focus: String, +queued: Bool, +parts: String) -> X.Cx<o>:
+  match m:
+    case None{}:
+      route(o, cx, target, text, focus, queued, parts)
+    case Some{+name}:
+      +cs = VC.of(X.R.ctx(rr(o, cx)), name)
+      route(o, view_ctx_drop(o, cx, name), target, VC.join_text(cs, text), focus, queued, VC.join_parts(cs, parts, text))
 
 def user_new.res(-o: S.St, p: X.Cx<o> & TaskR) -> X.Cx<o>:
   match p:
@@ -3347,7 +3396,7 @@ def Hub.r(x: Hub) -> X.R:
       r
 
 def hub_new(+workspace: String) -> Hub:
-  Hub{M.init(workspace), X.R{Nil{}, Nil{}, Nil{}, Nil{}, Nil{}, Nil{}, workspace, False{}, 0n, False{}, Nil{}, None{}, None{}, Nil{}}, True{}}
+  Hub{M.init(workspace), X.R{Nil{}, Nil{}, Nil{}, Nil{}, Nil{}, Nil{}, workspace, False{}, 0n, False{}, Nil{}, None{}, None{}, Nil{}, Nil{}}, True{}}
 
 # the context of one input over the hub
 def start(+h: Hub, +i: J.Json) -> X.Cx<Hub.d(h)>:
@@ -3946,11 +3995,11 @@ def dispatch(-o: S.St, +cx: X.Cx<o>, +i: GI.In) -> X.Cx<o>:
     case GI.IBoot{}:
       xboot(o, boot(o, cx))
     case GI.ISay{+focus, +text, +queued, +parts, +from}:
-      user_says(o, cx, focus, text, queued, parts, from)
+      says_ctx(o, cx, focus, text, queued, parts, from)
     case GI.IRoute{+target, +text, +focus, +queued, +parts}:
       LZ.pick(X.Cx<o>, String.eq(target, M.MAIN()),
-        u => user_says(o, cx, M.MAIN(), text, queued, parts, ""),
-        u => route(o, cx, target, text, focus, queued, parts))
+        u => says_ctx(o, cx, M.MAIN(), text, queued, parts, ""),
+        u => route_ctx(o, M.resolve(st(o, cx), target), cx, target, text, focus, queued, parts))
     case GI.INew{+base, +brief, +brief_text, +objective, +worktree, +with_changes}:
       user_new.res(o, create_task(o, cx, NewTask{M.USER(), base, brief, brief_text, objective, worktree, with_changes, "", None{}}))
     case GI.IDrop{+name, +force}:
@@ -3993,6 +4042,8 @@ def dispatch(-o: S.St, +cx: X.Cx<o>, +i: GI.In) -> X.Cx<o>:
       open_view_confirm(o, cx, agent, call, text, ask)
     case GI.IViewMessage{+agent, +plugin, +text}:
       view_message(o, cx, agent, plugin, text)
+    case GI.IViewContext{+agent, +call, +text, +part}:
+      view_context(o, cx, agent, call, text, part)
     case GI.IPageAnswered{+card, +agent, +page, +text, +block}:
       page_answered(o, M.card_of(S.St.cards(st(o, cx)), card), cx, agent, page, text, block)
     case GI.IForge{+to, +text}:

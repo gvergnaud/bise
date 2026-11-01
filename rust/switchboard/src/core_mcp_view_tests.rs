@@ -165,3 +165,43 @@ fn the_same_ask_joins_the_open_card() {
     let again = ask(&mut t, "1-1", r#"{"args":{},"tool":"bump"}"#);
     assert_ne!(again, first);
 }
+
+fn ctx_part(text: &str) -> (String, serde_json::Value) {
+    let p = bise_proto::parts::Part::ViewContext { plugin: "fake-app".into(), uri: "ui://fake-app/counter".into(), text: text.into() };
+    (bise_proto::parts::render(std::slice::from_ref(&p)), serde_json::to_value(&p).unwrap())
+}
+
+// d5: a view's context is sb-core's: kept per view (the last one wins),
+// joined before his next message to its agent once (its model text is
+// parts::render of the message's parts), never to another agent, and
+// dropped when the agent stops
+#[test]
+fn a_views_context_joins_his_next_message_once() {
+    let mut t = T::new();
+    t.spawn_task("docs");
+    t.spawn_task("other");
+    t.turn("docs", "ok");
+    t.turn("other", "ok");
+    for (call, text) in [("1-1", "count=3"), ("1-1", "count=4"), ("1-2", "board=x")] {
+        let (r, part) = ctx_part(text);
+        t.go(Input::ViewContext { agent: "docs".into(), call: call.into(), text: r, part });
+    }
+    assert!(say_to(&t.user("other", "hi"), "other").is_some_and(|s| !s.contains("view_context")), "another agent's message carries none");
+    let said = say_to(&t.user("docs", "bump it"), "docs").expect("an idle agent reads it");
+    assert!(!said.contains("count=3"), "the last context of a view only: {said}");
+    let (c4, b) = (said.find("count=4").expect("its context"), said.find("board=x").expect("the other view's"));
+    assert!(c4 < b && b < said.find("bump it").unwrap(), "before his words, in order: {said}");
+    let m = t.hub.st.msgs().values().find(|m| m.text.contains("bump it")).expect("his message").clone();
+    let parts: Vec<bise_proto::parts::Part> = serde_json::from_str(&m.parts).expect("its parts");
+    assert_eq!(parts.len(), 3, "{parts:?}");
+    assert_eq!(bise_proto::parts::render(&parts), m.text, "its text is its parts' render");
+    t.turn("docs", "ok");
+    assert!(say_to(&t.user("docs", "again"), "docs").is_some_and(|s| !s.contains("view_context")), "once");
+    // kept for a stopped agent: never
+    let (r, part) = ctx_part("count=9");
+    t.go(Input::ViewContext { agent: "other".into(), call: "2-1".into(), text: r, part });
+    t.user(MAIN, "/stop other");
+    t.user(MAIN, "/restore other");
+    let fx = t.user("other", "back");
+    assert!(say_to(&fx, "other").is_none_or(|s| !s.contains("count=9")), "dropped at its stop");
+}

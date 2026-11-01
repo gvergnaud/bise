@@ -104,6 +104,7 @@ pub(super) fn plain(f: CoreFx) -> Plain {
             text: c.text,
         },
         CoreFx::ViewCard(c) => Effect::ViewCard { agent: c.agent, call: c.call, card: c.card },
+        CoreFx::ViewContext(c) => Effect::ViewContext { agent: c.agent, call: c.call, kept: c.kept, why: c.why },
         other => return Plain::Hub(other),
     };
     Plain::Effect(e)

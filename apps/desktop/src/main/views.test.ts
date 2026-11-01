@@ -43,3 +43,44 @@ describe('answers', () => {
     expect(viewRefused({ cmd: 'view_call' }, { code: -1, message: 'x' })).toBe(false);
   });
 });
+
+describe('the bound of a held call (review d3)', () => {
+  it('a call the core never answers gets -32603 at VIEW_CALL_MAX_MS, once; an answer before clears it', async () => {
+    const { VIEW_CALL_MAX_MS } = await import('../proto/view_rules.gen');
+    vi.useFakeTimers();
+    try {
+      const got: unknown[] = [];
+      const late = { cmd: 'view_call' };
+      views.hold(late, 1, (a) => got.push(a));
+      vi.advanceTimersByTime(VIEW_CALL_MAX_MS - 1);
+      expect(got).toEqual([]);
+      vi.advanceTimersByTime(1);
+      expect(got).toEqual([views.TOO_LATE]);
+      expect(viewAnswered(late, {}), 'answered late: nobody holds it any more').toBe(false);
+      const fast = { cmd: 'view_call' };
+      views.hold(fast, 1, (a) => got.push(a));
+      expect(viewAnswered(fast, { ok: 1 })).toBe(true);
+      vi.advanceTimersByTime(VIEW_CALL_MAX_MS);
+      expect(got).toEqual([views.TOO_LATE, { result: { ok: 1 } }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a window gone drops its calls only (nobody to answer), their timers with them", () => {
+    vi.useFakeTimers();
+    try {
+      const got: string[] = [];
+      const [a, b] = [{ cmd: 'view_call' }, { cmd: 'view_call' }];
+      views.hold(a, 1, () => got.push('a'));
+      views.hold(b, 2, () => got.push('b'));
+      views.viewsWindowGone(1);
+      expect(viewAnswered(a, {})).toBe(false);
+      expect(viewAnswered(b, {})).toBe(true);
+      vi.runAllTimers();
+      expect(got).toEqual(['b']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

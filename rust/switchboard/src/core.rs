@@ -199,6 +199,10 @@ pub enum Input {
     /// mcp-apps: a view's `ui/message`, queued to `agent` from the sender
     /// `view` with its plugin typed.
     ViewMessage { agent: String, plugin: String, text: String },
+    /// mcp-apps (d5): a view's context for `agent`'s next message from him
+    /// (sb-core keeps it, joins it once, drops it at a stop): `text` the
+    /// model text of `part`, its `Part::ViewContext` as JSON.
+    ViewContext { agent: String, call: String, text: String, part: serde_json::Value },
     /// A page question's card answered on its page: sb-core's page_answered (its asker told unless it is `agent`).
     PageAnswered { card: u64, agent: String, page: String, text: String, block: String },
     /// A page's own card (plan-ok): sb-core's page_card opens a `kind`
@@ -429,6 +433,15 @@ pub enum Effect {
         agent: String,
         call: String,
         card: Option<u64>,
+    },
+    /// mcp-apps (d5): sb-core kept a view's context or not (`why`, its
+    /// words: its agent is not active), the answer to
+    /// [`Input::ViewContext`]; read by its step's caller (daemon/views.rs).
+    ViewContext {
+        agent: String,
+        call: String,
+        kept: bool,
+        why: String,
     },
     /// Issue #4: the answer to a spawn that asked for a model (`--model`,
     /// `--effort`, `--profile`): the daemon picks what runs (the agents
@@ -1571,6 +1584,7 @@ impl Hub {
             Input::ConfirmOpen { agent, text } => self.core(&mut fx, env, None, In::ConfirmOpen(ci::ConfirmOpen { agent, text })),
             Input::ConfirmClose { card, res } => self.core(&mut fx, env, None, In::ConfirmClose(ci::ConfirmClose { card, res })),
             Input::ViewConfirmOpen { agent, call, text, ask } => self.core(&mut fx, env, None, In::ViewConfirmOpen(ci::ViewConfirmOpen { agent, call, text, ask })),
+            Input::ViewContext { agent, call, text, part } => self.core(&mut fx, env, None, In::ViewContext(ci::ViewContext { agent, call, text, part })),
             Input::ViewMessage { agent, plugin, text } => self.core(&mut fx, env, None, In::ViewMessage(ci::ViewMessage { agent, plugin, text })),
             Input::PageAnswered { card, agent, page, text, block } => self.core(&mut fx, env, None, In::PageAnswered(ci::PageAnswered { card, agent, page, text, block })),
             Input::PageCard { agents, kind, text, key } => self.core(&mut fx, env, None, In::PageCard(ci::PageCard { agents, kind, text, key })),

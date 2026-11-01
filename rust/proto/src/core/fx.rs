@@ -73,6 +73,10 @@ core_kinds! {
         /// comes back by (`confirm`), the one it opened or the open one
         /// it joined; none when its agent is not active (no card: a no)
         ViewCard = "view_card" => FViewCard { agent: Str, call: Str, card: OptNatOmit },
+        /// a view's context (input `view_context`, review d5): `kept` for
+        /// its agent's next message from him, or not (`why`: its agent is
+        /// not active, sb-core's words); the shell answers the view from it
+        ViewContext = "view_context" => FViewContext { agent: Str, call: Str, kept: Bool, why: StrOmit },
         /// the clients on `name` go back to main (it was archived)
         FocusMain = "focus_main" => FFocusMain { name: Str },
         /// his text, for the client's direct-exchange note

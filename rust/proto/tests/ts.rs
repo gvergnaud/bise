@@ -10,7 +10,8 @@
 //!   `office/sdk/src/anchor.gen.ts` (the office SDK's `at()` takes it);
 //! - `words_<area>.gen.ts` + `words.gen.ts`: the UI words (bise_proto::words),
 //!   and their JSON for the Python tests in `tests/words/` (see `ts/words.rs`);
-//! - `view_rules.gen.ts`: a view's permissions (bise_proto::view_rules),
+//! - `view_rules.gen.ts`: a view's permissions (bise_proto::view_rules)
+//!   and view_rpc's VIEW_CALL_MAX_MS,
 //!   and their names for `tests/fixtures/mcp-apps/check.py` in
 //!   `tests/fixtures/mcp-apps/view_rules.gen.json`;
 //! - `fixtures.gen.ts`: every fixture line as a typed constant, so
@@ -333,6 +334,9 @@ fn render_view_rules() -> String {
     writeln!(s).unwrap();
     writeln!(s, "/** A view's origin, http://v-<16 hex>.localhost:<port> (view_rules::view_origin; tests/fixtures/mcp-apps/origins.json holds both to the same cases); its group 1 is the port, whose range (1..=65535) the reader checks after the match. */").unwrap();
     writeln!(s, "export const VIEW_ORIGIN_RE = new RegExp({:?}, 'u');", bise_proto::view_rules::VIEW_ORIGIN_RE).unwrap();
+    writeln!(s).unwrap();
+    writeln!(s, "/** The longest the hub can take to answer a view/call (view_rpc::VIEW_CALL_MAX_MS, derived from its card's one deadline, review d3): a client holds one this long, never less. */").unwrap();
+    writeln!(s, "export const VIEW_CALL_MAX_MS = {};", bise_proto::view_rpc::VIEW_CALL_MAX_MS).unwrap();
     s
 }
 

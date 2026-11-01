@@ -29,9 +29,11 @@
 //!   sb-core answers it no and closes it (law boot_answers_view_cards);
 //!   the shell only ends a views bridge an older hub left
 //!   ([`Shell::views_boot`]);
-//! - `view/context` is kept per (agent, view) and joins his next send to
-//!   that agent once ([`Shell::take_view_contexts`]); lost when the hub
-//!   restarts (architect m_49840).
+//! - `view/context` is capped here (`view_limits`: 16 KB, one a second
+//!   per view) and goes to sb-core as a rendered `Part::ViewContext`;
+//!   sb-core keeps it and joins it to his next message to that agent once,
+//!   whatever client sent it (review d5; lost when the hub restarts,
+//!   architect m_49840).
 
 use super::{log_line, ClientId, Msg, Shell};
 use crate::core::Input;
@@ -65,16 +67,14 @@ const CALL_TIMEOUT: Duration = Duration::from_millis(bise_proto::view_rpc::VIEW_
 /// `data.reason` of a request whose server could not be reached.
 pub(crate) const REASON_SERVER_GONE: &str = "server-gone";
 
-/// The hub's views: the limits, the calls waiting for his ok, the views'
-/// contexts, the bridges their calls went through, the views bridge.
+/// The hub's views: the limits, the calls waiting for his ok, the
+/// bridges their calls went through, the views bridge.
 #[derive(Default)]
 pub(super) struct Views {
     limits: Limits,
     /// the views' calls waiting on each card, by card id: the same ask
     /// asked again joins its open card (sb-core's join, d3)
     waits: BTreeMap<u64, Vec<Wait>>,
-    /// each agent's views' context for his next send: call -> part
-    contexts: BTreeMap<String, BTreeMap<String, Part>>,
     /// the bridge each view's calls last went through (a restart said
     /// once per view), pruned with the limits
     servers: Servers,
@@ -128,6 +128,15 @@ fn joined(waits: Vec<Wait>) -> Option<(Wait, ViewDone)> {
 fn card_said(fx: &[crate::core::Effect], key: &ViewKey) -> Option<u64> {
     fx.iter().find_map(|e| match e {
         crate::core::Effect::ViewCard { agent, call, card } if *agent == key.agent && *call == key.call => *card,
+        _ => None,
+    })
+}
+
+/// Whether a step's `view_context` effect kept `key`'s context (its
+/// words when not); none: no such effect (an older sb-core).
+fn context_said(fx: &[crate::core::Effect], key: &ViewKey) -> Option<Result<(), String>> {
+    fx.iter().find_map(|e| match e {
+        crate::core::Effect::ViewContext { agent, call, kept, why } if *agent == key.agent && *call == key.call => Some(if *kept { Ok(()) } else { Err(why.clone()) }),
         _ => None,
     })
 }
@@ -633,47 +642,29 @@ impl Shell {
             Ok(f) => f,
             Err(e) => return done(Err(e.rpc(WHAT))),
         };
+        if let Err(why) = self.views.limits.context(&ViewKey::new(&p.agent, &p.call), now_ms(), text.len()) {
+            return done(Err(why.error().rpc(WHAT)));
+        }
+        // sb-core keeps it (an active agent's only) and joins it (d5); its
+        // model text is rendered here, the answer is the step's view_context
+        let key = ViewKey::new(&p.agent, &p.call);
         let part = Part::ViewContext { plugin: f.plugin, uri: f.uri, text };
-        self.views.contexts.entry(p.agent).or_default().insert(p.call, part);
-        done(Ok(json!({})));
+        let text = bise_proto::parts::render(std::slice::from_ref(&part));
+        let part = serde_json::to_value(&part).unwrap_or_default();
+        let fx = self.hub.handle(Input::ViewContext { agent: p.agent, call: p.call, text, part }, &mut self.env);
+        let kept = context_said(&fx, &key);
+        self.step_fx(fx);
+        match kept {
+            Some(Ok(())) => done(Ok(json!({}))),
+            Some(Err(why)) => done(Err(RpcError::refused(why, None))),
+            None => done(Err(RpcError::refused("bise did not keep the view's context", None))),
+        }
     }
-
-    /// His send to `agent` (its model text and parts' JSON, "" none):
-    /// the views' contexts waiting for it join it once, before his words.
-    pub(super) fn with_view_contexts(&mut self, agent: &str, text: String, parts: String) -> (String, String) {
-        let Some(ctx) = self.views.contexts.remove(agent) else { return (text, parts) };
-        join_contexts(ctx.into_values().collect(), text, parts)
-    }
-}
-
-/// `contexts` before his send's parts (his words as a text part when he
-/// sent none): the model's text rendered again from them all.
-fn join_contexts(contexts: Vec<Part>, text: String, parts: String) -> (String, String) {
-    if contexts.is_empty() {
-        return (text, parts);
-    }
-    let his: Vec<Part> = match parts.is_empty() {
-        true => vec![Part::Text { text }],
-        false => serde_json::from_str(&parts).unwrap_or_default(),
-    };
-    let all: Vec<Part> = contexts.into_iter().chain(his).collect();
-    (bise_proto::parts::render(&all), serde_json::to_string(&all).unwrap_or_default())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn a_views_context_joins_his_send_before_his_words() {
-        let ctx = vec![Part::ViewContext { plugin: "fake-app".into(), uri: "ui://fake-app/counter".into(), text: "count=4".into() }];
-        let (text, parts) = join_contexts(ctx.clone(), "bump it".into(), String::new());
-        assert!(text.starts_with("<view_context plugin=\"fake-app\" uri=\"ui://fake-app/counter\">\ncount=4\n</view_context>"), "{text}");
-        assert!(text.ends_with("bump it"), "{text}");
-        let typed: Vec<Part> = serde_json::from_str(&parts).unwrap();
-        assert_eq!(typed.len(), 2);
-        assert_eq!(join_contexts(Vec::new(), "hi".into(), String::new()), ("hi".into(), String::new()));
-    }
 
     /// A bridge on loopback serving fake-app's tools/list (the fixture's
     /// shapes, tests/fixtures/mcp-apps/fake-app): its `bridge.json` in
@@ -803,6 +794,16 @@ mod tests {
         std::fs::write(&f, "1").unwrap();
         assert!(!repl_alive(&f), "never launchd");
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_views_context_is_answered_by_its_effect() {
+        use crate::core::Effect;
+        let k = ViewKey::new("docs", "1-2");
+        let said = |agent: &str, kept: bool, why: &str| Effect::ViewContext { agent: agent.into(), call: "1-2".into(), kept, why: why.into() };
+        assert_eq!(context_said(&[Effect::State, said("docs", true, "")], &k), Some(Ok(())));
+        assert_eq!(context_said(&[said("docs", false, "not active")], &k), Some(Err("not active".into())));
+        assert_eq!(context_said(&[said("main", true, "")], &k), None, "another view's");
     }
 
     /// d3: two waiters joined on one card get his one answer, once each.

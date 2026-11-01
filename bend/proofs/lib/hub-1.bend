@@ -110,7 +110,7 @@ def hub_set_waiters(-o: HS.St, cx: HX.Cx<o>, +ws: List<&2, HX.Waiter>)
   match cx:
     case HX.Cx{c, r}:
       match r:
-        case HX.R{a, b, st, d, e, f, g, h, i, j, k, l, m, n}:
+        case HX.R{a, b, st, d, e, f, g, h, i, j, k, l, m, n, vc}:
           {==}
 
 def hub_later_tr(-x: List<&2, HX.Waiter>, -y: List<&2, HX.Waiter>, -now: Nat, e: {x == y : List<&2, HX.Waiter>},

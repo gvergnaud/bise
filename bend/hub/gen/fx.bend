@@ -56,6 +56,8 @@ type Fx is Data:
   FConfirm{card: Maybe<&2, Nat>, agent: Maybe<&2, String>, text: String}
   # view_card
   FViewCard{agent: String, call: String, card: Maybe<&2, Nat>}
+  # view_context
+  FViewContext{agent: String, call: String, kept: Bool, why: String}
   # focus_main
   FFocusMain{name: String}
   # user_sent
@@ -140,6 +142,9 @@ def FConfirm.of(+i: J.Json) -> Fx:
 
 def FViewCard.of(+i: J.Json) -> Fx:
   FViewCard{K.get_s(i, "agent"), K.get_s(i, "call"), K.opt_n(J.get(i, "card"))}
+
+def FViewContext.of(+i: J.Json) -> Fx:
+  FViewContext{K.get_s(i, "agent"), K.get_s(i, "call"), K.get_b(i, "kept"), K.get_s(i, "why")}
 
 def FFocusMain.of(+i: J.Json) -> Fx:
   FFocusMain{K.get_s(i, "name")}
@@ -315,6 +320,15 @@ def of.t19(c: Cmp, +t: String, +i: J.Json) -> Fx:
     case GT{}:
       FNone{}
 
+def of.t21(c: Cmp, +t: String, +i: J.Json) -> Fx:
+  match c:
+    case LT{}:
+      FNone{}
+    case EQ{}:
+      FSpoke.of(i)
+    case GT{}:
+      FNone{}
+
 def of.t20(c: Cmp, +t: String, +i: J.Json) -> Fx:
   match c:
     case LT{}:
@@ -322,7 +336,7 @@ def of.t20(c: Cmp, +t: String, +i: J.Json) -> Fx:
     case EQ{}:
       FSpawn.of(i)
     case GT{}:
-      FNone{}
+      of.t21(String.order(t, "spoke"), t, i)
 
 def of.t18(c: Cmp, +t: String, +i: J.Json) -> Fx:
   match c:
@@ -333,16 +347,16 @@ def of.t18(c: Cmp, +t: String, +i: J.Json) -> Fx:
     case GT{}:
       of.t20(String.order(t, "spawn"), t, i)
 
-def of.t22(c: Cmp, +t: String, +i: J.Json) -> Fx:
+def of.t23(c: Cmp, +t: String, +i: J.Json) -> Fx:
   match c:
     case LT{}:
       FNone{}
     case EQ{}:
-      FUserSent.of(i)
+      FViewCard.of(i)
     case GT{}:
       FNone{}
 
-def of.t24(c: Cmp, +t: String, +i: J.Json) -> Fx:
+def of.t25(c: Cmp, +t: String, +i: J.Json) -> Fx:
   match c:
     case LT{}:
       FNone{}
@@ -351,16 +365,16 @@ def of.t24(c: Cmp, +t: String, +i: J.Json) -> Fx:
     case GT{}:
       FNone{}
 
-def of.t23(c: Cmp, +t: String, +i: J.Json) -> Fx:
+def of.t24(c: Cmp, +t: String, +i: J.Json) -> Fx:
   match c:
     case LT{}:
-      of.t22(String.order(t, "user_sent"), t, i)
+      of.t23(String.order(t, "view_card"), t, i)
     case EQ{}:
-      FViewCard.of(i)
+      FViewContext.of(i)
     case GT{}:
-      of.t24(String.order(t, "worktree_create"), t, i)
+      of.t25(String.order(t, "worktree_create"), t, i)
 
-def of.t26(c: Cmp, +t: String, +i: J.Json) -> Fx:
+def of.t27(c: Cmp, +t: String, +i: J.Json) -> Fx:
   match c:
     case LT{}:
       FNone{}
@@ -369,32 +383,32 @@ def of.t26(c: Cmp, +t: String, +i: J.Json) -> Fx:
     case GT{}:
       FNone{}
 
-def of.t27(c: Cmp, +t: String, +i: J.Json) -> Fx:
+def of.t28(c: Cmp, +t: String, +i: J.Json) -> Fx:
   match c:
     case LT{}:
-      of.t26(String.order(t, "xdeliver"), t, i)
+      of.t27(String.order(t, "xdeliver"), t, i)
     case EQ{}:
       FXReply.of(i)
     case GT{}:
       FNone{}
 
-def of.t25(c: Cmp, +t: String, +i: J.Json) -> Fx:
+def of.t26(c: Cmp, +t: String, +i: J.Json) -> Fx:
   match c:
     case LT{}:
-      of.t23(String.order(t, "view_card"), t, i)
+      of.t24(String.order(t, "view_context"), t, i)
     case EQ{}:
       FWorktreeDrop.of(i)
     case GT{}:
-      of.t27(String.order(t, "xreply"), t, i)
+      of.t28(String.order(t, "xreply"), t, i)
 
-def of.t21(c: Cmp, +t: String, +i: J.Json) -> Fx:
+def of.t22(c: Cmp, +t: String, +i: J.Json) -> Fx:
   match c:
     case LT{}:
       of.t18(String.order(t, "rt"), t, i)
     case EQ{}:
-      FSpoke.of(i)
+      FUserSent.of(i)
     case GT{}:
-      of.t25(String.order(t, "worktree_drop"), t, i)
+      of.t26(String.order(t, "worktree_drop"), t, i)
 
 def of.t14(c: Cmp, +t: String, +i: J.Json) -> Fx:
   match c:
@@ -403,9 +417,9 @@ def of.t14(c: Cmp, +t: String, +i: J.Json) -> Fx:
     case EQ{}:
       FRetarget.of(i)
     case GT{}:
-      of.t21(String.order(t, "spoke"), t, i)
+      of.t22(String.order(t, "user_sent"), t, i)
 
-# the record of a tag (a binary search over the 28 sorted tags); any
+# the record of a tag (a binary search over the 29 sorted tags); any
 # other tag: FNone
 def of_tag(+t: String, +i: J.Json) -> Fx:
   of.t14(String.order(t, "retarget"), t, i)
@@ -466,6 +480,8 @@ def kvs(x: Fx) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
       K.cat([[J.kv("fx", J.JStr{"confirm"})], K.omit_mn("card", card), K.omit_ms("agent", agent), [J.kv("text", J.JStr{text})]])
     case FViewCard{+agent, +call, +card}:
       K.cat([[J.kv("fx", J.JStr{"view_card"}), J.kv("agent", J.JStr{agent}), J.kv("call", J.JStr{call})], K.omit_mn("card", card)])
+    case FViewContext{+agent, +call, +kept, +why}:
+      K.cat([[J.kv("fx", J.JStr{"view_context"}), J.kv("agent", J.JStr{agent}), J.kv("call", J.JStr{call}), J.kv("kept", J.JBool{kept})], K.omit_s("why", why)])
     case FFocusMain{+name}:
       [J.kv("fx", J.JStr{"focus_main"}), J.kv("name", J.JStr{name})]
     case FUserSent{+text}:
@@ -554,6 +570,9 @@ def confirm_card(+card: Nat, +agent: String, +text: String) -> List<&2, Sigma<&2
 
 def view_card(+agent: String, +call: String, +card: Maybe<&2, Nat>) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   kvs(FViewCard{agent, call, card})
+
+def view_context(+agent: String, +call: String, +kept: Bool, +why: String) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  kvs(FViewContext{agent, call, kept, why})
 
 def focus_main(+name: String) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   kvs(FFocusMain{name})

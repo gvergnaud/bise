@@ -394,6 +394,13 @@ pub const STATE: State = State {
             shapes: &[photo(&[k("msg", W::Obj), k("st", W::Obj), k("settled", W::Bool)])],
         },
         Record {
+            // runtime only (cx.bend's R.ctx, never journaled): no shape
+            name: "Vctx",
+            doc: "an MCP App view's context for its agent's next message from him (mcp-apps review d5): the view (`agent`, `call`), its model text (the shell's render) and its Part::ViewContext",
+            fields: &[f("agent", Str), f("call", Str), f("text", Str), f("part", Json)],
+            shapes: &[],
+        },
+        Record {
             name: "ViewAsk",
             doc: "what a view's card asks (mcp-apps, C5): the view's agent and call, and its ask (the tool and its arguments as canonical JSON, the shell's): sb-core reads a view's cards by it, never by their place",
             fields: &[f("agent", Str), f("call", Str), f("ask", Str)],

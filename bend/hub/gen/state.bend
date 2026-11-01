@@ -73,6 +73,10 @@ type Msg is Data:
 type MRec is Data:
   MRec{msg: Msg, st: MSt, settled: Bool}
 
+# an MCP App view's context for its agent's next message from him (mcp-apps review d5): the view (`agent`, `call`), its model text (the shell's render) and its Part::ViewContext
+type Vctx is Data:
+  Vctx{agent: String, call: String, text: String, part: J.Json}
+
 # what a view's card asks (mcp-apps, C5): the view's agent and call, and its ask (the tool and its arguments as canonical JSON, the shell's): sb-core reads a view's cards by it, never by their place
 type ViewAsk is Data:
   ViewAsk{agent: String, call: String, ask: String}
@@ -426,6 +430,74 @@ def MRec.over_settled(r: MRec, g: Bool -> Bool) -> MRec:
 
 def MRec.open(+r: MRec) -> MRec:
   MRec.with_settled(MRec.with_st(MRec.with_msg(MRec.empty(), MRec.msg(r)), MRec.st(r)), MRec.settled(r))
+
+# ---- Vctx ----
+
+def Vctx.empty() -> Vctx:
+  Vctx{"", "", "", J.JNull{}}
+
+def Vctx.agent(r: Vctx) -> String:
+  match r:
+    case Vctx{f0, _, _, _}:
+      f0
+
+def Vctx.with_agent(r: Vctx, v: String) -> Vctx:
+  match r:
+    case Vctx{_, f1, f2, f3}:
+      Vctx{v, f1, f2, f3}
+
+def Vctx.over_agent(r: Vctx, g: String -> String) -> Vctx:
+  match r:
+    case Vctx{f0, f1, f2, f3}:
+      Vctx{g(f0), f1, f2, f3}
+
+def Vctx.call(r: Vctx) -> String:
+  match r:
+    case Vctx{_, f1, _, _}:
+      f1
+
+def Vctx.with_call(r: Vctx, v: String) -> Vctx:
+  match r:
+    case Vctx{f0, _, f2, f3}:
+      Vctx{f0, v, f2, f3}
+
+def Vctx.over_call(r: Vctx, g: String -> String) -> Vctx:
+  match r:
+    case Vctx{f0, f1, f2, f3}:
+      Vctx{f0, g(f1), f2, f3}
+
+def Vctx.text(r: Vctx) -> String:
+  match r:
+    case Vctx{_, _, f2, _}:
+      f2
+
+def Vctx.with_text(r: Vctx, v: String) -> Vctx:
+  match r:
+    case Vctx{f0, f1, _, f3}:
+      Vctx{f0, f1, v, f3}
+
+def Vctx.over_text(r: Vctx, g: String -> String) -> Vctx:
+  match r:
+    case Vctx{f0, f1, f2, f3}:
+      Vctx{f0, f1, g(f2), f3}
+
+def Vctx.part(r: Vctx) -> J.Json:
+  match r:
+    case Vctx{_, _, _, f3}:
+      f3
+
+def Vctx.with_part(r: Vctx, v: J.Json) -> Vctx:
+  match r:
+    case Vctx{f0, f1, f2, _}:
+      Vctx{f0, f1, f2, v}
+
+def Vctx.over_part(r: Vctx, g: J.Json -> J.Json) -> Vctx:
+  match r:
+    case Vctx{f0, f1, f2, f3}:
+      Vctx{f0, f1, f2, g(f3)}
+
+def Vctx.open(+r: Vctx) -> Vctx:
+  Vctx.with_part(Vctx.with_text(Vctx.with_call(Vctx.with_agent(Vctx.empty(), Vctx.agent(r)), Vctx.call(r)), Vctx.text(r)), Vctx.part(r))
 
 # ---- ViewAsk ----
 

@@ -195,7 +195,7 @@ All take `{"agent": "<name>", "call": "<call>"}` plus:
 | `view/resource` | — | `{origin, html, csp, permissions, declared, prefersBorder, toolInput, toolResult, tool}` (`declared`: the permissions it asks, `permissions`: those granted, C8); `-32030` expired |
 | `view/call` | `method: "tools/call" \| "resources/read"`, `params` | the server's result; errors below |
 | `view/message` | `content` (spec content blocks, text only at first) | `{}` once the message is in the thread |
-| `view/context` | `content` | `{}`; replaces this view's context for the next send |
+| `view/context` | `content` (16 KB of text at most: `-32038 too-large`; one a second per view: `-32035 rate-limited`) | `{}`; replaces this view's context for his next message to its agent |
 
 And one per plugin, not per view (C8, the add's step 2): `plugin/views
 {plugin}` (the app's `hub/plugin_views {project, plugin}`) asks the hub's
@@ -251,9 +251,15 @@ answer one (its bridge and tools twice, the card, the call), so the
 ambient core (`VIEW_CALL_KEPT`) and the web host (`/api/view`) never give
 up on a card still open. The same ask (agent, call, tool and arguments)
 while its card is open joins that card: no second card, one run, every
-waiter gets the answer. Contexts are
-joined to his next `turn/send` to that agent as `<view_context
-plugin=… uri=…>` parts (`Part::ViewContext`, never from a client). The
+waiter gets the answer. A view's context is sb-core's (d5): the shell
+caps it (`view_limits`) and sends it as `view_context {agent, call,
+text, part}` (`part` its `Part::ViewContext`, never from a client;
+`text` its `parts::render`); sb-core keeps the last one per view in its
+runtime record (never journaled: lost at a restart) and joins them all
+before his next message to that agent, whatever client sent it (the
+`say` and `route` inputs): text = their texts and his joined by "\n",
+parts = theirs then his (his words as a text part when he sent none),
+once (laws `view_context_*`); a stop drops them. The
 thread's `ToolView.state` reads `expired` when its views file is gone,
 at subscribe, page and each live entry (C4).
 

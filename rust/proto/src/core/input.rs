@@ -105,6 +105,13 @@ core_kinds! {
         /// fixed sender `view`, its plugin typed (`Msg.view`), queued to
         /// `agent` only; never his words
         ViewMessage = "view_message" => IViewMessage { agent: Str, plugin: Str, text: Str },
+        /// an MCP App view's `ui/update-model-context` (C5, review d5):
+        /// kept for `agent` (the last one per view `call`, never
+        /// journaled: lost at a restart) and joined before his next
+        /// message to it, once; `text` its model text (the shell's
+        /// `parts::render` of that one part), `part` its
+        /// `Part::ViewContext`; dropped when the agent stops
+        ViewContext = "view_context" => IViewContext { agent: Str, call: Str, text: Str, part: Json },
         /// pr-news: GitHub's news to the agent that owns the PR
         Forge = "forge" => IForge { to: Str, text: Str },
         /// a check still fails after two tries: a card for him
