@@ -16,7 +16,7 @@
   .k-legend button[aria-pressed="false"] { opacity: .4; }
   .k-legend button[aria-pressed="false"] .k-swatch { background: var(--k-text-3) !important; }
   .chart { margin-top: var(--k-s-3); position: relative; }
-  .chart svg { display: block; overflow: visible; font-family: var(--k-sans); font-size: var(--k-t-xs); font-variant-numeric: tabular-nums; }
+  .chart svg { display: block; overflow: visible; font-family: var(--k-sans); font-size: var(--k-t-sm); font-variant-numeric: tabular-nums; }
   .chart svg.hl [data-tip]:not(.on) { opacity: .35; }
   .chart svg [data-tip] { transition: opacity var(--k-fast) var(--k-ease); }
   .k-skeleton { height: 220px; }
@@ -149,7 +149,7 @@ kit.tip($("chart"), () => hover);
 // ---- export: the title, the legend, the chart and the note in one SVG
 function exportSvg() {
   const W = lastW + 32, pad = 16, ns = "http://www.w3.org/2000/svg";
-  let y = pad + 14, s = `<text x="${pad}" y="${y}" style="fill:var(--k-text);font-size:var(--k-h-sm);font-weight:600">${DV.esc(chart.title)}</text>`;
+  let y = pad + 14, s = `<text x="${pad}" y="${y}" style="fill:var(--k-text);font-size:var(--k-t-md);font-weight:600">${DV.esc(chart.title)}</text>`;
   if (chart.subtitle) { y += 18; s += `<text x="${pad}" y="${y}" style="fill:var(--k-text-2)">${DV.esc(chart.subtitle)}</text>`; }
   const L = (drawing.legend || []).filter((l) => !l.off);
   if (L.length) {
@@ -167,7 +167,7 @@ function exportSvg() {
   y += drawing.height;
   if (chart.note) { y += 20; s += `<text x="${pad}" y="${y}" style="fill:var(--k-text-3)">${DV.esc(chart.note)}</text>`; }
   const H = y + pad;
-  $("export").innerHTML = `<svg xmlns="${ns}" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="font-family:var(--k-sans);font-size:var(--k-t-xs);font-variant-numeric:tabular-nums">${s}</svg>`;
+  $("export").innerHTML = `<svg xmlns="${ns}" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="font-family:var(--k-sans);font-size:var(--k-t-sm);font-variant-numeric:tabular-nums">${s}</svg>`;
   return $("export").firstChild;
 }
 const fileName = () => (chart.title || "chart").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "chart";

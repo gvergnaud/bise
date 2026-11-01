@@ -12,10 +12,10 @@
   .title { font: inherit; font-weight: 600; font-size: var(--k-t-md); color: var(--k-text); border: 1px solid transparent; border-radius: var(--k-r-sm); background: transparent; height: var(--k-h-control); padding: 0 var(--k-s-1); min-width: 60px; max-width: 320px; text-overflow: ellipsis; }
   .title:hover { border-color: var(--k-line); }
   .title:focus { outline: none; border-color: var(--k-line-strong); background: var(--k-bg); }
-  .tools { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--k-r-sm); background: var(--k-bg-2); }
-  .tools .k-btn { border-color: transparent; background: transparent; color: var(--k-text-2); height: 22px; width: 26px; }
+  .tools { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--k-r-md); background: var(--k-bg-2); }
+  .tools .k-btn { box-shadow: none; background: transparent; color: var(--k-text-2); height: 22px; width: 26px; }
   .tools .k-btn:hover { color: var(--k-text); }
-  .tools .k-btn[aria-pressed="true"] { background: var(--k-bg); color: var(--k-text); box-shadow: var(--k-shadow); }
+  .tools .k-btn[aria-pressed="true"] { background: var(--k-seg-on); color: var(--k-text); box-shadow: var(--k-shadow); }
   .sep { width: 1px; height: 16px; background: var(--k-line); }
   svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
   .stage { position: relative; height: 440px; border-radius: var(--k-r-md); border: 1px solid var(--k-line); overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none;
@@ -42,7 +42,7 @@
   .empty[hidden] { display: none; }
   .empty b { color: var(--k-text-2); font-weight: 500; font-size: var(--k-t-md); }
   .props { position: absolute; top: var(--k-s-2); display: flex; flex-direction: column; gap: var(--k-s-2); padding: var(--k-s-2); width: 184px;
-    border-radius: var(--k-r-md); background: var(--k-bg); box-shadow: var(--k-shadow-md); font-size: var(--k-t-xs); color: var(--k-text-2);
+    border-radius: var(--k-r-md); background: var(--k-bg); box-shadow: var(--k-shadow-md); font-size: var(--k-t-sm); color: var(--k-text-2);
     max-height: calc(100% - 2 * var(--k-s-2)); overflow: auto; z-index: 3; }
   .props[hidden] { display: none; }
   .props .lbl { margin-bottom: var(--k-s-1); }
@@ -59,10 +59,11 @@
   .props .row.del .k-btn { color: var(--k-err); }
   .props .row.del .k-btn:hover { background: var(--k-err-soft); }
   .editor { position: absolute; margin: 0; padding: 0; border: 0; outline: none; resize: none; overflow: hidden; background: transparent; white-space: pre; line-height: 1.25; z-index: 5; }
-  .zoom { position: absolute; right: var(--k-s-2); bottom: var(--k-s-2); display: flex; align-items: center; gap: 2px; padding: 2px; border-radius: var(--k-r-sm); background: var(--k-bg); box-shadow: var(--k-shadow); }
-  .zoom .k-btn { border-color: transparent; height: 22px; }
+  .zoom { position: absolute; right: var(--k-s-2); bottom: var(--k-s-2); display: flex; align-items: center; gap: 2px; padding: 2px; border-radius: var(--k-r-md); background: var(--k-bg); box-shadow: var(--k-shadow); }
+  .zoom .k-btn { box-shadow: none; background: transparent; color: var(--k-text-2); height: 22px; }
+  .zoom .k-btn:hover { background: var(--k-hover); color: var(--k-text); }
   .zoom .pct { min-width: 44px; justify-content: center; font-variant-numeric: tabular-nums; }
-  .foot { display: flex; align-items: center; gap: var(--k-s-2); font-size: var(--k-t-xs); color: var(--k-text-3); min-height: 16px; white-space: nowrap; min-width: 0; }
+  .foot { display: flex; align-items: center; gap: var(--k-s-2); font-size: var(--k-t-sm); color: var(--k-text-3); min-height: 16px; white-space: nowrap; min-width: 0; }
   .foot #live { flex: none; }
   .foot .status { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .dot { width: 6px; height: 6px; border-radius: var(--k-r-full); background: var(--k-text-3); flex: none; }

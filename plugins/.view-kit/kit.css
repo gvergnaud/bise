@@ -3,11 +3,12 @@
    the host injects nothing. The colors, fonts, sizes and radii are the spec's CSS variables,
    which bise desktop maps to its own tokens (apps/desktop/src/views/context.ts); each has a
    fallback copied from apps/desktop/src/ds/tokens.css, light and dark, for a host that sends
-   none. The theme: the host context's `theme` (html[data-theme], set by kit.js), else the
+   none: the ground is a thread card's fill (--c-card), the type the desktop's --f-meta 12/16 and
+   --f-ui 13/18, the controls its ds ones (prim.css .b-btn.sm, filters, tips, picker). The theme: the host context's `theme` (html[data-theme], set by kit.js), else the
    system's. A view uses the --k-* names below, never a raw color or a hand-picked px. */
 :root {
   color-scheme: light dark;
-  --k-bg: var(--color-background-primary, light-dark(#fdfbf7, #141211));
+  --k-bg: var(--color-background-primary, light-dark(#f8f5ef, #1c1917));
   --k-bg-2: var(--color-background-secondary, light-dark(#efe9df, #231f1d));
   --k-hover: var(--color-background-tertiary, light-dark(rgb(27 25 23 / .06), rgb(236 230 218 / .06)));
   --k-text: var(--color-text-primary, light-dark(#1b1917, #ece6da));
@@ -41,18 +42,27 @@
   /* the 4 px grid (desktop's --s-*): a margin, padding or gap is one of these */
   --k-s-1: 4px; --k-s-2: 8px; --k-s-3: 12px; --k-s-4: 16px; --k-s-6: 24px; --k-s-8: 32px;
   --k-h-control: 24px; --k-h-row: 28px;
+  /* line heights: the desktop's --f-meta 12/16, --f-ui 13/18, --f-lead 15/22 */
+  --k-lh-sm: var(--font-text-sm-line-height, 16px);
+  --k-lh-md: var(--font-text-md-line-height, 18px);
+  /* the desktop's pressed and chosen fills (--c-active, --c-press, --c-seg-on), from the colors above */
+  --k-active: color-mix(in srgb, var(--k-text) 10%, transparent);
+  --k-press: color-mix(in srgb, var(--k-text) 15%, transparent);
+  --k-seg-on: light-dark(var(--k-bg), color-mix(in srgb, var(--k-text) 14%, var(--k-bg-2))); /* light: the ground itself, as the desktop's light --c-seg-on */
   --k-fast: 140ms; --k-ease: cubic-bezier(.2, 0, 0, 1);
-  /* the series palette (charts, diagrams, drawings, map layers): 8 hues, each readable on
-     --k-bg in its theme. Series 1 is a neutral ink-blue (a one-series chart uses it); never
-     the accent pink, which bise keeps for 'waits for you' (designer m_51492) */
-  --k-series-1: light-dark(#2f6f9f, #8ec0e8);
-  --k-series-2: light-dark(#b0690f, #f0b860);
-  --k-series-3: light-dark(#3f7a2a, #b9d99a);
-  --k-series-4: light-dark(#6b4fa0, #c3a8f0);
-  --k-series-5: light-dark(#1f7f7a, #7fd1c9);
-  --k-series-6: light-dark(#a8502f, #f09a7a);
-  --k-series-7: light-dark(#76702a, #d4cc84);
-  --k-series-8: light-dark(#6b645a, #a39c90);
+  /* the series palette (charts, diagrams, drawings, map layers): 8 hues on bise's paper and ink,
+     warm and muted (designer m_51798). Series 1 is the ink-blue (a one-series chart uses it); never
+     the accent pink, which bise keeps for 'waits for you' (designer m_51492), nor red (--k-err).
+     Each is >= 3:1 on the card's ground in its theme; 1-4 stay apart under deuteranopia (their
+     lightness differs). ink-blue, ochre, moss, plum, sea-teal, clay, olive, stone */
+  --k-series-1: light-dark(#33607f, #7da4c1);
+  --k-series-2: light-dark(#b07a2e, #e4b478);
+  --k-series-3: light-dark(#5e7a3c, #839c67);
+  --k-series-4: light-dark(#9e7db0, #c8b6ee);
+  --k-series-5: light-dark(#3d7d78, #81b7b2);
+  --k-series-6: light-dark(#a55a3c, #d6905f);
+  --k-series-7: light-dark(#8f8a42, #b1ae7d);
+  --k-series-8: light-dark(#857b70, #b2a99f);
 }
 html[data-theme="light"] { color-scheme: light; }
 html[data-theme="dark"] { color-scheme: dark; }
@@ -61,13 +71,14 @@ html[data-theme="dark"] { color-scheme: dark; }
 [hidden] { display: none !important; }
 html, body { margin: 0; }
 body {
-  font-family: var(--k-sans); font-size: var(--k-t-md); line-height: 1.35; color: var(--k-text);
+  font-family: var(--k-sans); font-size: var(--k-t-md); line-height: var(--k-lh-md); color: var(--k-text);
   background: var(--k-bg); -webkit-font-smoothing: antialiased;
 }
 /* a view with no frame of its own: the panel (fullscreen) fills the tab */
 html[data-mode="fullscreen"], html[data-mode="fullscreen"] body { height: 100%; }
 .k-app { padding: var(--k-s-3) var(--k-s-4); }
-.k-title { margin: 0; font-size: var(--k-h-sm); font-weight: 600; }
+/* a card's title: the desktop's --f-ui, 600 (13/18), like the app's own heads */
+.k-title { margin: 0; font-size: var(--k-t-md); line-height: var(--k-lh-md); font-weight: 600; }
 .k-dim { color: var(--k-text-2); }
 .k-faint { color: var(--k-text-3); font-size: var(--k-t-sm); }
 .k-num { font-variant-numeric: tabular-nums; }
@@ -77,34 +88,42 @@ html[data-mode="fullscreen"], html[data-mode="fullscreen"] body { height: 100%; 
 /* the toolbar: a row of quiet buttons above or below the view's content */
 .k-toolbar { display: flex; align-items: center; gap: var(--k-s-1); flex-wrap: wrap; }
 .k-btn {
-  font: inherit; font-size: var(--k-t-sm); height: var(--k-h-control); padding: 0 var(--k-s-2);
+  font: inherit; font-size: var(--k-t-md); font-weight: 500; line-height: 1; height: var(--k-h-control); padding: 0 var(--k-s-2);
   display: inline-flex; align-items: center; gap: var(--k-s-1); white-space: nowrap;
-  border: 1px solid var(--k-line); border-radius: var(--k-r-sm); background: var(--k-bg); color: var(--k-text);
+  border: 0; border-radius: var(--k-r-md); background: var(--k-hover); color: var(--k-text);
+  box-shadow: inset 0 0 0 1px var(--k-line);
   cursor: pointer; transition: background var(--k-fast) var(--k-ease);
 }
-.k-btn:hover { background: var(--k-hover); }
-.k-btn:focus-visible, .k-seg button:focus-visible, .k-input:focus-visible { outline: 2px solid var(--k-focus); outline-offset: 1px; }
-.k-btn:disabled { opacity: .5; cursor: default; }
-.k-btn.k-primary { background: var(--k-inverse); color: var(--k-on-inverse); border-color: transparent; }
-.k-btn.k-ghost { border-color: transparent; background: transparent; color: var(--k-text-2); }
+/* the desktop's .b-btn.sm (prim.css): its fill, ring, 13/500 text, radius and focus ring */
+.k-btn:hover { background: var(--k-active); }
+.k-btn:active { background: var(--k-press); }
+.k-btn:focus-visible { outline: 0; box-shadow: inset 0 0 0 1px var(--k-line), 0 0 0 2px var(--k-bg), 0 0 0 4px var(--k-focus); }
+.k-seg button:focus-visible, .k-input:focus-visible { outline: 2px solid var(--k-focus); outline-offset: -2px; }
+.k-btn:disabled { opacity: .4; cursor: default; }
+.k-btn.k-primary { background: var(--k-inverse); color: var(--k-on-inverse); box-shadow: none; }
+.k-btn.k-ghost { background: transparent; box-shadow: none; color: var(--k-text-2); }
 .k-btn.k-ghost:hover { color: var(--k-text); background: var(--k-hover); }
+.k-btn.k-ghost:focus-visible { box-shadow: 0 0 0 2px var(--k-focus); }
 .k-btn.k-icon { width: var(--k-h-control); padding: 0; justify-content: center; }
-.k-btn[aria-pressed="true"] { background: var(--k-bg-2); }
-/* a segmented control: one choice of a few (°C/°F, bars/lines, walk/bike/car) */
-.k-seg { display: inline-flex; padding: 2px; gap: 2px; border-radius: var(--k-r-sm); background: var(--k-bg-2); }
+.k-btn[aria-pressed="true"] { background: var(--k-active); color: var(--k-text); box-shadow: none; }
+/* a segmented control: one choice of a few (°C/°F, bars/lines, walk/bike/car), the desktop's
+   filters (filters.css): a sunken track, the chosen segment lighter (--k-seg-on) with a hairline */
+.k-seg { display: inline-flex; padding: 2px; gap: 0; border-radius: var(--k-r-md); background: var(--k-bg-2); }
 .k-seg button {
-  font: inherit; font-size: var(--k-t-sm); height: 20px; padding: 0 var(--k-s-2); border: 0;
-  border-radius: 4px; background: transparent; color: var(--k-text-2); cursor: pointer;
+  font: inherit; font-size: var(--k-t-sm); font-weight: 500; line-height: var(--k-lh-sm); height: 20px; padding: 0 var(--k-s-2); border: 0;
+  border-radius: var(--k-r-sm); background: transparent; color: var(--k-text-2); cursor: pointer; white-space: nowrap;
 }
-.k-seg button[aria-pressed="true"] { background: var(--k-bg); color: var(--k-text); box-shadow: var(--k-shadow); }
+.k-seg button:not([aria-pressed="true"]):hover { color: var(--k-text); }
+.k-seg button[aria-pressed="true"] { background: var(--k-seg-on); color: var(--k-text); box-shadow: var(--k-shadow); }
 .k-input {
   font: inherit; font-size: var(--k-t-md); height: var(--k-h-row); padding: 0 var(--k-s-2);
-  border: 1px solid var(--k-line-strong); border-radius: var(--k-r-sm); background: var(--k-bg); color: var(--k-text);
+  border: 0; border-radius: var(--k-r-md); background: var(--k-bg-2); color: var(--k-text);
+  box-shadow: inset 0 0 0 1px var(--k-line);
 }
 .k-card { border: 1px solid var(--k-line); border-radius: var(--k-r-md); background: var(--k-bg); }
 .k-chip {
-  display: inline-flex; align-items: center; gap: var(--k-s-1); height: 20px; padding: 0 var(--k-s-2);
-  border-radius: var(--k-r-full); background: var(--k-bg-2); color: var(--k-text-2); font-size: var(--k-t-xs);
+  display: inline-flex; align-items: center; gap: var(--k-s-1); height: 20px; padding: 0 var(--k-s-2); white-space: nowrap;
+  border-radius: var(--k-r-full); background: var(--k-hover); color: var(--k-text-2); font-size: var(--k-t-sm); line-height: var(--k-lh-sm);
 }
 .k-swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex: none; }
 /* a legend under a chart or a map: a swatch and its name, wrapped */
@@ -115,12 +134,13 @@ html[data-mode="fullscreen"], html[data-mode="fullscreen"] body { height: 100%; 
 .k-note.k-err { background: var(--k-err-soft); color: var(--k-err); }
 .k-skeleton { border-radius: var(--k-r-md); background: var(--k-bg-2); animation: k-beat 1.4s ease-in-out infinite; }
 @keyframes k-beat { 50% { opacity: .45; } }
-/* the tooltip (kit.js tip()): a short tip that never takes the pointer */
+/* the tooltip (kit.js tip()): a short tip that never takes the pointer; the desktop's hover tip
+   (tips.css): the card's own ground and text, a hairline, 12 sans */
 .k-tip {
-  position: fixed; z-index: 1000; pointer-events: none; max-width: 260px;
-  padding: var(--k-s-1) var(--k-s-2); border-radius: var(--k-r-sm);
-  background: var(--k-inverse); color: var(--k-on-inverse); font-size: var(--k-t-sm); line-height: 1.35;
-  box-shadow: var(--k-shadow-md); opacity: 0; transition: opacity var(--k-fast) var(--k-ease);
+  position: fixed; z-index: 1000; pointer-events: none; max-width: 280px;
+  padding: var(--k-s-1) var(--k-s-2); border: 1px solid var(--k-line); border-radius: var(--k-r-sm);
+  background: var(--k-bg); color: var(--k-text); font-size: var(--k-t-sm); line-height: var(--k-lh-sm);
+  opacity: 0; transition: opacity var(--k-fast) var(--k-ease);
 }
 .k-tip.k-on { opacity: 1; }
 .k-tip b { font-weight: 600; }
@@ -129,10 +149,10 @@ html[data-mode="fullscreen"], html[data-mode="fullscreen"] body { height: 100%; 
 .k-menu {
   position: fixed; z-index: 1000; min-width: 120px; padding: var(--k-s-1);
   display: flex; flex-direction: column;
-  border-radius: var(--k-r-md); background: var(--k-bg); box-shadow: var(--k-shadow-md);
+  border-radius: var(--k-r-lg); background: var(--k-bg); box-shadow: var(--k-shadow-md);
 }
 .k-menu button {
-  font: inherit; font-size: var(--k-t-sm); height: var(--k-h-row); padding: 0 var(--k-s-2); text-align: left;
-  border: 0; border-radius: var(--k-r-sm); background: transparent; color: var(--k-text); cursor: pointer; white-space: nowrap;
+  font: inherit; font-size: var(--k-t-md); height: var(--k-h-row); padding: 0 var(--k-s-3); text-align: left;
+  border: 0; border-radius: var(--k-r-md); background: transparent; color: var(--k-text); cursor: pointer; white-space: nowrap;
 }
 .k-menu button:hover, .k-menu button:focus-visible { background: var(--k-hover); outline: none; }

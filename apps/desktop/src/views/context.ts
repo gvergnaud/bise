@@ -1,6 +1,7 @@
 // src/views · the host context a view gets at ui/initialize and in host-context-changed (spec
 // HostContext; docs/mcp-apps.md C7): its theme, our design tokens mapped on the spec's CSS
-// variables (their computed values: a view can't read our var() names), its display mode and
+// variables (their computed values: a view can't read our var() names; the line heights read out of
+// our --f-* type styles; the ground --c-card, a thread card's fill made opaque), its display mode and
 // size, his locale and time zone, the tool it shows. Pure but for readTokens, which reads the
 // page's computed styles once per theme. Owner: mcp-apps-host.
 import type { DisplayMode, JsonObject } from './protocol';
@@ -11,7 +12,8 @@ import { DISPLAY_MODES } from './protocol';
  * listed here is left to the view's own fallback.
  */
 export const STYLE_MAP: Readonly<Record<string, string>> = {
-  '--color-background-primary': '--c-solid',
+  // the view's ground: a thread card's fill, opaque (designer m_51798)
+  '--color-background-primary': '--c-card',
   '--color-background-secondary': '--c-sunken',
   '--color-background-tertiary': '--c-hover',
   '--color-background-inverse': '--c-ink',
@@ -51,11 +53,35 @@ export const STYLE_MAP: Readonly<Record<string, string>> = {
   '--shadow-lg': '--e-3',
 };
 
+/**
+ * The spec's line heights, each the line height of one of our type styles (tokens.css's --f-*,
+ * a `font` shorthand `<size>/<line-height> <family>`): meta 12/16, ui 13/18, lead 15/22.
+ */
+export const LINE_HEIGHT_MAP: Readonly<Record<string, string>> = {
+  '--font-text-xs-line-height': '--f-kbd',
+  '--font-text-sm-line-height': '--f-meta',
+  '--font-text-md-line-height': '--f-ui',
+  '--font-text-lg-line-height': '--f-lead',
+  '--font-heading-xs-line-height': '--f-ui',
+  '--font-heading-sm-line-height': '--f-lead',
+  '--font-heading-lg-line-height': '--f-title',
+  '--font-heading-xl-line-height': '--f-question',
+};
+
+/** The line height of a `font` shorthand's value (`.75rem/16px -apple-system`), or ''. Pure. */
+export function lineHeightOf(font: string): string {
+  return /\/\s*([\d.]+(?:px|rem|em)?)\b/.exec(font)?.[1] ?? '';
+}
+
 /** The spec's variables with their values, from a reader of our tokens' computed values; an empty one left out. Pure. */
 export function styleVariables(read: (token: string) => string): JsonObject {
   const out: JsonObject = {};
   for (const [spec, ours] of Object.entries(STYLE_MAP)) {
     const v = read(ours).trim();
+    if (v !== '') out[spec] = v;
+  }
+  for (const [spec, ours] of Object.entries(LINE_HEIGHT_MAP)) {
+    const v = lineHeightOf(read(ours));
     if (v !== '') out[spec] = v;
   }
   return out;

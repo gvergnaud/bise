@@ -8,7 +8,7 @@
 // hover() covers the rest (the nearest point of a line, a bucket's column).
 // Colors and sizes are the view kit's CSS variables in style attributes
 // (var(--k-…), plugins/.view-kit/kit.css), so a theme change is a repaint and
-// the export (kit.saveSvg) resolves them. Text is --k-t-xs (11.5 px, the kit's floor).
+// the export (kit.saveSvg) resolves them. Text is --k-t-sm (12 px, the desktop's --f-meta).
 (function (root) {
   const DV = (root.DV = root.DV || {});
   DV.kinds = DV.kinds || {};
@@ -16,7 +16,7 @@
   DV.esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   DV.color = (i) => `var(--k-series-${(i % 8) + 1})`;
   DV.px = (n) => Math.round(n * 10) / 10;
-  DV.FONT = 11.5; // --k-t-xs
+  DV.FONT = 12; // --k-t-sm
 
   // Text width, close enough for layout (the UI font: ~0.56 em per char on average).
   DV.textW = (s, size = DV.FONT) => String(s).length * size * 0.56;

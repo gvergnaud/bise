@@ -41,18 +41,21 @@
   .pins { position: absolute; inset: 0; pointer-events: none; }
   .pin { position: absolute; transform: translate(-50%, -50%); pointer-events: auto; cursor: pointer; border: 2px solid var(--k-bg);
     min-width: var(--k-h-control); height: var(--k-h-control); padding: 0 var(--k-s-1); border-radius: var(--k-r-full);
-    background: var(--pin, var(--k-series-1)); color: var(--k-bg); font: 600 var(--k-t-xs) / 1 var(--k-sans);
+    background: var(--pin, var(--k-series-1)); color: var(--k-bg); font: 600 var(--k-t-sm) / 1 var(--k-sans);
     display: grid; place-items: center; box-shadow: var(--k-shadow); }
   .pin.sel { background: var(--k-inverse); color: var(--k-on-inverse); z-index: 2; transform: translate(-50%, -50%) scale(1.15); }
   .pin:focus-visible { outline: 2px solid var(--k-focus); }
   .ctl { position: absolute; right: var(--k-s-2); top: var(--k-s-2); display: flex; flex-direction: column; gap: var(--k-s-1); }
   .ctl .k-btn, .area { box-shadow: var(--k-shadow); }
+  /* over the map: the kit button's see-through fill on the card's own ground */
+  .ctl .k-btn { background: var(--k-bg); }
+  .ctl .k-btn:hover { background: linear-gradient(var(--k-active), var(--k-active)) var(--k-bg); }
   .ctl .k-btn { font-size: var(--k-t-lg); line-height: 1; }
   .area { position: absolute; left: 50%; top: var(--k-s-2); transform: translateX(-50%); }
-  .attrib { position: absolute; right: 0; bottom: 0; padding: 0 var(--k-s-1); font-size: var(--k-t-xs); color: var(--k-text-2);
+  .attrib { position: absolute; right: 0; bottom: 0; padding: 0 var(--k-s-1); font-size: var(--k-t-sm); color: var(--k-text-2);
     background: color-mix(in srgb, var(--k-bg) 80%, transparent); border-top-left-radius: var(--k-r-sm); }
   .attrib a { color: inherit; cursor: pointer; text-decoration: underline; }
-  .hint { position: absolute; left: var(--k-s-2); bottom: var(--k-s-1); font-size: var(--k-t-xs); color: var(--k-text-3); }
+  .hint { position: absolute; left: var(--k-s-2); bottom: var(--k-s-1); font-size: var(--k-t-sm); color: var(--k-text-3); }
 
   .side { display: flex; flex-direction: column; gap: var(--k-s-2); min-height: 0; }
   .list { display: flex; flex-direction: column; }
@@ -65,7 +68,7 @@
   .card:hover { background: var(--k-hover); }
   .card.sel { background: var(--k-bg-2); }
   .card .n { width: var(--k-h-control); height: var(--k-h-control); border-radius: var(--k-r-full); background: var(--pin, var(--k-series-1));
-    color: var(--k-bg); font-size: var(--k-t-xs); font-weight: 600; display: grid; place-items: center; }
+    color: var(--k-bg); font-size: var(--k-t-sm); font-weight: 600; display: grid; place-items: center; }
   .card .body { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
   .card b { font-weight: 600; }
   .card .meta, .card .addr { font-size: var(--k-t-sm); color: var(--k-text-2); }

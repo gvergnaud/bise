@@ -31,14 +31,14 @@ var DrawCore = (function () {
   // since an export is read outside the view. A fill is its color, lighter.
   const PALETTE = {
     ink: ["#1b1917", "#ece6da"],
-    blue: ["#2f6f9f", "#8ec0e8"],
-    amber: ["#b0690f", "#f0b860"],
-    green: ["#3f7a2a", "#b9d99a"],
-    violet: ["#6b4fa0", "#c3a8f0"],
-    teal: ["#1f7f7a", "#7fd1c9"],
-    rust: ["#a8502f", "#f09a7a"],
-    olive: ["#76702a", "#d4cc84"],
-    gray: ["#6b645a", "#a39c90"],
+    blue: ["#33607f", "#7da4c1"],
+    amber: ["#b07a2e", "#e4b478"],
+    green: ["#5e7a3c", "#839c67"],
+    violet: ["#9e7db0", "#c8b6ee"],
+    teal: ["#3d7d78", "#81b7b2"],
+    rust: ["#a55a3c", "#d6905f"],
+    olive: ["#8f8a42", "#b1ae7d"],
+    gray: ["#857b70", "#b2a99f"],
     red: ["#b3261e", "#ff5a52"],
   };
   // bise keeps pink for "waits for you": a pink ask is drawn red

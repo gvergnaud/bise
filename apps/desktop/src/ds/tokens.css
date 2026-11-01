@@ -15,6 +15,9 @@
   --c-surface: color-mix(in srgb, var(--p-bg) 55%, transparent);
   --c-raised: color-mix(in srgb, var(--p-raised) 72%, transparent);
   --c-solid: var(--p-bg);
+  /* a card's fill made opaque (--c-raised over the window's own ground): an MCP Apps view's ground in
+     the thread, where nothing may show through a chart or a map (designer m_51798) */
+  --c-card: color-mix(in srgb, var(--p-raised) 72%, var(--p-bg));
   --c-sunken: var(--p-chip);
   --c-overlay: color-mix(in srgb, var(--p-bg) 76%, transparent);
   --c-text: var(--p-text);
@@ -169,6 +172,7 @@
   --c-surface: color-mix(in srgb, var(--p-bg) 55%, transparent);
   --c-raised: color-mix(in srgb, var(--p-raised) 72%, transparent);
   --c-solid: var(--p-bg);
+  --c-card: color-mix(in srgb, var(--p-raised) 72%, var(--p-bg));
   --c-sunken: var(--p-chip);
   --c-overlay: color-mix(in srgb, var(--p-bg) 76%, transparent);
   --c-text: var(--p-text);
@@ -222,6 +226,7 @@
   --sh-world-1: 14%; --sh-world-2: 20%; --sh-world-3: 12%;
   --c-seg-on: var(--c-solid);
   --c-raised: color-mix(in srgb, var(--p-raised) 60%, transparent);
+  --c-card: color-mix(in srgb, var(--p-raised) 60%, var(--p-bg));
   --c-switch-off: color-mix(in srgb, var(--p-text) 14%, var(--p-bg)); --c-switch-off-hover: color-mix(in srgb, var(--p-text) 18%, var(--p-bg));
   --c-switch-on: var(--p-text); --c-switch-on-hover: color-mix(in srgb, var(--p-text) 88%, var(--p-bg));
   --c-knob: #fff; --sh-knob: 0 1px 2px rgb(0 0 0 / .16), 0 0 0 .5px rgb(0 0 0 / .08);
@@ -233,6 +238,7 @@
   --sh-world-1: 14%; --sh-world-2: 20%; --sh-world-3: 12%;
   --c-seg-on: var(--c-solid);
   --c-raised: color-mix(in srgb, var(--p-raised) 60%, transparent);
+  --c-card: color-mix(in srgb, var(--p-raised) 60%, var(--p-bg));
   --c-switch-off: color-mix(in srgb, var(--p-text) 14%, var(--p-bg)); --c-switch-off-hover: color-mix(in srgb, var(--p-text) 18%, var(--p-bg));
   --c-switch-on: var(--p-text); --c-switch-on-hover: color-mix(in srgb, var(--p-text) 88%, var(--p-bg));
   --c-knob: #fff; --sh-knob: 0 1px 2px rgb(0 0 0 / .16), 0 0 0 .5px rgb(0 0 0 / .08);
@@ -246,12 +252,12 @@
 /* reduce transparency: no glass, opaque grounds, so no text sits on a ground it can't be read on */
 @media (prefers-reduced-transparency: reduce) { :root, [data-theme] {
   --glass: none;
-  --c-window: var(--p-bg); --c-surface: var(--p-bg); --c-raised: var(--p-raised);
+  --c-window: var(--p-bg); --c-surface: var(--p-bg); --c-raised: var(--p-raised); --c-card: var(--p-raised);
   --c-overlay: var(--p-bg); --c-sidebar: var(--p-raised);
 } }
 :root[data-reduce-transparency], :root[data-reduce-transparency] [data-theme] {
   --glass: none;
-  --c-window: var(--p-bg); --c-surface: var(--p-bg); --c-raised: var(--p-raised);
+  --c-window: var(--p-bg); --c-surface: var(--p-bg); --c-raised: var(--p-raised); --c-card: var(--p-raised);
   --c-overlay: var(--p-bg); --c-sidebar: var(--p-raised);
 }
 /* reduce motion: every duration 0, and the world does not grow on hover */

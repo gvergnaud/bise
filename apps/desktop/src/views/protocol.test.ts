@@ -63,6 +63,12 @@ describe('what the host announces', () => {
     expect(vars).toEqual({ '--color-text-primary': '#eee', '--font-sans': '-apple-system' });
   });
 
+  it('sends the line heights of our type styles, read out of their font shorthand', () => {
+    const fonts: Record<string, string> = { '--f-meta': ' .75rem/16px -apple-system, sans-serif', '--f-ui': '.8125rem / 18px -apple-system' };
+    const vars = styleVariables((t) => fonts[t] ?? '');
+    expect(vars).toEqual({ '--font-text-sm-line-height': '16px', '--font-text-md-line-height': '18px', '--font-heading-xs-line-height': '18px' });
+  });
+
   it('a context: desktop, both modes, the tool; a change says only the keys that moved', () => {
     const base = { theme: 'dark' as const, variables: {}, mode: 'inline' as const, width: 600, height: 800, locale: 'fr-FR', timeZone: 'Europe/Paris', tool: { name: 'show_counter' } };
     const a = hostContext(base);

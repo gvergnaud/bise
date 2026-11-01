@@ -37,7 +37,7 @@
         }
         a += span;
       });
-      svg += `<text x="${DV.px(cx)}" y="${DV.px(cy - (c.center ? 4 : 0))}" text-anchor="middle" dy="0.32em" style="fill:var(--k-text);font-size:var(--k-h-md);font-weight:600">${DV.esc(DV.num(total, c.unit, { compact: true, locale: o.locale }))}</text>`;
+      svg += `<text x="${DV.px(cx)}" y="${DV.px(cy - (c.center ? 4 : 0))}" text-anchor="middle" dy="0.32em" style="fill:var(--k-text);font-size:var(--k-t-lg);font-weight:600">${DV.esc(DV.num(total, c.unit, { compact: true, locale: o.locale }))}</text>`;
       if (c.center) svg += `<text x="${DV.px(cx)}" y="${DV.px(cy + 16)}" text-anchor="middle" style="fill:var(--k-text-3)">${DV.esc(DV.clip(c.center, r0 * 1.6))}</text>`;
       // the legend: swatch, label, value, share
       const lx = narrow ? 8 : 2 * R + 32, lw = W - lx - 4;
