@@ -29,10 +29,7 @@ you talk to one agent, the lead (`main`). it splits what you ask into tasks, doe
 one lead, one agent per task, one inbox. there is no workflow to configure.
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/demo-b-desktop-dark.svg">
-    <img src="docs/brand/readme/demo-b-desktop-light.svg" width="860" alt="bise desktop: you ask for two things; main starts perf and search, they show in the right bar; search's question waits in the inbox, you answer with one key; perf lands on main.">
-  </picture>
+  <img src="docs/brand/readme/desktop-real.webp" width="860" alt="a screen recording of bise desktop on a made-up project, acme: you ask for a yearly plan on the pricing page; main answers and starts pricing-page, which shows in the agents list; signup-perf lands on main.">
 </p>
 
 ## two front ends, one engine

@@ -154,6 +154,10 @@ test('readme first shot: the real window', async () => {
     const geo = await showWindows(app, hidden.url(), backdrop, h.home);
     const page = await shownPage(app, hidden);
     await expect(page.getByTestId('thread.list')).toBeVisible({ timeout: 20_000 });
+    // test mode marks <html> data-no-vibrancy (a11yroot.ts noVibrancy: the harness's off-screen
+    // window has no glass), so the sidebar and the bar paint opaque; this window has the real glass
+    // (Gabriel m_51807: « le cadre semi transparent ... opaque »): its page gets the real look
+    await page.evaluate(() => { document.documentElement.removeAttribute('data-no-vibrancy'); });
     await prep(page);
     const rect = [geo.x - MARGIN, geo.y - MARGIN, geo.w + 2 * MARGIN, geo.h + 2 * MARGIN].join(',');
     writeFileSync(path.join(OUT, 'geo.json'), JSON.stringify({ ...geo, rect }));
