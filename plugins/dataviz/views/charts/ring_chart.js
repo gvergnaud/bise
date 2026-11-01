@@ -50,7 +50,9 @@
           + `<text x="${lx + 16}" y="${DV.px(yy)}" dy="0.32em" style="fill:var(--k-text)">${DV.esc(DV.clip(s.label, lw - 16 - valW - pctW))}</text>`
           + `<text x="${DV.px(lx + lw - pctW)}" y="${DV.px(yy)}" dy="0.32em" text-anchor="end" style="fill:var(--k-text)">${DV.esc(DV.num(s.value, c.unit, { locale: o.locale }))}</text>`
           + `<text x="${DV.px(lx + lw)}" y="${DV.px(yy)}" dy="0.32em" text-anchor="end" style="fill:var(--k-text-3)">${DV.esc(DV.pct(s.value, total))}</text></g>`;
-        if (i < c.slices.length - 1) svg += `<line x1="${lx}" x2="${DV.px(lx + lw)}" y1="${DV.px(yy + rowH / 2)}" y2="${DV.px(yy + rowH / 2)}" style="stroke:var(--k-line)"/>`;
+        // a 1 px rule on the pixel grid (a fractional y drew a 2 px band; ui-review m_51875)
+        const ry = Math.round(yy + rowH / 2) + 0.5;
+        if (i < c.slices.length - 1) svg += `<line x1="${lx}" x2="${DV.px(lx + lw)}" y1="${ry}" y2="${ry}" style="stroke:var(--k-line);stroke-width:1" shape-rendering="crispEdges"/>`;
       });
       return { height: Math.ceil(H), svg, tips };
     },
