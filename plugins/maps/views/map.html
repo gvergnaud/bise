@@ -74,7 +74,11 @@
   .card .acts { display: none; gap: var(--k-s-1); margin-top: var(--k-s-1); }
   .card.sel .acts { display: flex; }
   .closed { color: var(--k-text-3); }
-  .parts span { white-space: nowrap; }
+  /* each part brings its ' · ' before it; the one starting a line has it in the clipped margin */
+  .parts { overflow: hidden; }
+  .parts > div { display: flex; flex-wrap: wrap; margin-left: calc(-1 * var(--k-s-3)); }
+  .parts > div > span { white-space: nowrap; }
+  .parts > div > span::before { content: "·"; display: inline-block; width: var(--k-s-3); text-align: center; color: var(--k-text-2); }
   .steps { list-style: none; margin: 0; padding: 0; }
   .steps li { display: grid; grid-template-columns: var(--k-s-6) minmax(0, 1fr) auto; gap: var(--k-s-2); padding: var(--k-s-1) var(--k-s-2);
     font-size: var(--k-t-sm); border-bottom: 1px solid var(--k-line); align-items: baseline; }
@@ -242,7 +246,7 @@ function card(p) {
     <span class="n">${esc(p.label)}</span>
     <div class="body">
       <b>${esc(p.name)}</b>
-      ${parts.length ? `<div class="meta parts">${parts.join(" · ")}</div>` : ""}
+      ${parts.length ? `<div class="meta parts"><div>${parts.join("")}</div></div>` : ""}
       ${p.address ? `<div class="addr" title="${esc(p.address)}">${esc(p.address)}</div>` : ""}
       ${p.note ? `<div class="note">${esc(p.note)}</div>` : ""}
       ${p.hours ? `<div class="meta">${esc(p.hours)}</div>` : ""}
