@@ -36,7 +36,8 @@
   .line { fill: none; stroke-width: 4.5; stroke-linecap: round; stroke-linejoin: round; }
   .line.walk { stroke-dasharray: 1 7; stroke-width: 5; }
   .radius { fill: var(--k-series-1); fill-opacity: .06; stroke: var(--k-line-strong); stroke-dasharray: 4 4; }
-  .here { fill: var(--k-text); stroke: var(--k-bg); stroke-width: 3; }
+  .origin { position: absolute; z-index: 3; width: 10px; height: 10px; transform: translate(-50%, -50%); border-radius: var(--k-r-full);
+    border: 3px solid var(--k-text); background: var(--k-bg); box-shadow: 0 0 0 1px var(--k-bg); pointer-events: auto; }
   .pins { position: absolute; inset: 0; pointer-events: none; }
   .pin { position: absolute; transform: translate(-50%, -50%); pointer-events: auto; cursor: pointer; border: 2px solid var(--k-bg);
     min-width: var(--k-h-control); height: var(--k-h-control); padding: 0 var(--k-s-1); border-radius: var(--k-r-full);
@@ -46,6 +47,7 @@
   .pin:focus-visible { outline: 2px solid var(--k-focus); }
   .ctl { position: absolute; right: var(--k-s-2); top: var(--k-s-2); display: flex; flex-direction: column; gap: var(--k-s-1); }
   .ctl .k-btn, .area { box-shadow: var(--k-shadow); }
+  .ctl .k-btn { font-size: var(--k-t-lg); line-height: 1; }
   .area { position: absolute; left: 50%; top: var(--k-s-2); transform: translateX(-50%); }
   .attrib { position: absolute; right: 0; bottom: 0; padding: 0 var(--k-s-1); font-size: var(--k-t-xs); color: var(--k-text-2);
     background: color-mix(in srgb, var(--k-bg) 80%, transparent); border-top-left-radius: var(--k-r-sm); }
@@ -56,6 +58,7 @@
   .list { display: flex; flex-direction: column; }
   html[data-mode="fullscreen"] .list { overflow: auto; }
   .more { align-self: flex-start; color: var(--k-text-3); }
+  .group-head { font-size: var(--k-t-sm); color: var(--k-text-3); padding: var(--k-s-2) var(--k-s-2) 0; }
   html[data-mode="fullscreen"] .list { max-height: none; flex: 1; min-height: 0; }
   .card { display: grid; grid-template-columns: var(--k-h-control) minmax(0, 1fr); gap: var(--k-s-1) var(--k-s-2);
     padding: var(--k-s-2); border-radius: var(--k-r-md); cursor: pointer; }
@@ -103,7 +106,7 @@
     <div class="ctl">
       <button class="k-btn k-icon" id="zin" title="Zoom in" aria-label="Zoom in">+</button>
       <button class="k-btn k-icon" id="zout" title="Zoom out" aria-label="Zoom out">−</button>
-      <button class="k-btn k-icon" id="refit" title="Show everything" aria-label="Show everything">⤢</button>
+      <button class="k-btn k-icon" id="refit" title="Show all" aria-label="Show all">⌖</button>
     </div>
     <div class="hint" id="hint"></div>
     <div class="attrib"><a id="attrib" data-testid="attribution"></a></div>
@@ -146,6 +149,7 @@ const routes = () => route ? [route] : (spec.routes || []);
 const visible = (x) => !x.group || !hidden.has(x.group);
 const groupColor = (g) => g && spec.groups ? kit.series(spec.groups.indexOf(g)) : "";
 function allPoints() {
+  if (route) return route.path.length ? route.path : [[route.from.lat, route.from.lon], [route.to.lat, route.to.lon]];
   const pts = (spec.places || []).filter(visible).map((p) => [p.lat, p.lon]);
   for (const r of routes()) if (visible(r)) pts.push(...r.path);
   if (spec.kind === "places" && spec.center && !(spec.places || []).length) pts.push([spec.center.lat, spec.center.lon]);
@@ -193,7 +197,6 @@ function draw() {
   if (spec.kind === "places" && spec.center && !route) {
     const [cx, cy] = at(spec.center.lat, spec.center.lon), r = spec.radius_m / metersPerPx(spec.center.lat, zoom);
     if (r < 4 * Math.max(w, h)) svg += `<circle class="radius" cx="${cx}" cy="${cy}" r="${r}"/>`;
-    svg += `<circle class="here" cx="${cx}" cy="${cy}" r="6"/>`;
   }
   for (const r of routes().filter(visible)) {
     const color = groupColor(r.group) || kit.series(0);
@@ -202,11 +205,20 @@ function draw() {
   }
   $("overlay").innerHTML = svg;
   const places = (spec.places || []).filter(visible);
+  // the origin (the search's place, or where a card's route starts): a ring above the pins;
+  // a pin on it moves 6 px away along the line from it
+  const from = route && spec.kind === "places" ? route.from : spec.kind === "places" ? spec.center : null;
+  const [fx, fy] = from ? at(from.lat, from.lon) : [0, 0];
   $("pins").innerHTML = places.map((p) => {
-    const [x, y] = at(p.lat, p.lon), c = groupColor(p.group);
+    let [x, y] = at(p.lat, p.lon);
+    const c = groupColor(p.group);
+    if (from) {
+      const dx = x - fx, dy = y - fy, d = Math.hypot(dx, dy);
+      if (d < 12) { x += d ? (dx / d) * 6 : 0; y += d ? (dy / d) * 6 : -6; }
+    }
     return `<button class="pin${p.id === selected ? " sel" : ""}" data-pick="${esc(p.id)}" style="left:${x}px;top:${y}px;${c ? `--pin:${c}` : ""}" aria-label="${esc(p.name)}">${esc(p.label)}</button>`;
-  }).join("");
-  for (const b of $("pins").children) {
+  }).join("") + (from ? `<span class="origin" data-testid="origin" style="left:${fx}px;top:${fy}px" title="${esc(from.name)}"></span>` : "");
+  for (const b of $("pins").querySelectorAll(".pin")) {
     const p = places.find((q) => q.id === b.dataset.pick);
     kit.tip(b, () => `<b>${esc(p.name)}</b>${p.category ? `<br>${esc(p.category)}` : ""}${p.distance_m != null ? ` · ${fmtDist(p.distance_m)}` : ""}`);
   }
@@ -258,12 +270,21 @@ function drawSide() {
   } else {
     const ps = spec.places || [], rs = (spec.routes || []).filter(visible);
     // inline: whole cards only, the first few then '+ N more'; the panel scrolls them all
-    const shown = ps.filter(visible), cut = !allCards && !fullscreen() && shown.length > INLINE_CARDS + 1 ? INLINE_CARDS : shown.length;
+    const shown = ps.filter(visible), cut = !allCards && !fullscreen() && !(spec.groups || []).length && shown.length > INLINE_CARDS + 1 ? INLINE_CARDS : shown.length;
     const more = cut < shown.length ? `<button class="k-btn k-ghost more" id="more" data-testid="more">+ ${shown.length - cut} more</button>` : "";
-    $("list").innerHTML = ps.length || rs.length ? shown.slice(0, cut).map(card).join("") + more + rs.map((r) =>
+    const routeRow = (r) =>
       `<div class="card" data-testid="route-row" style="${r.group ? `--pin:${groupColor(r.group)}` : ""}"><span class="n" aria-hidden="true">→</span>
         <div class="body"><b>${esc(r.from.name)} → ${esc(r.to.name)}</b><div class="meta">${esc(MODE_WORD[r.mode])} · ${fmtTime(r.duration_s)} · ${fmtDist(r.distance_m)}${r.label ? " · " + esc(r.label) : ""}</div>
-        ${r.note ? `<div class="meta">${esc(r.note)}</div>` : ""}</div></div>`).join("")
+        ${r.note ? `<div class="meta">${esc(r.note)}</div>` : ""}</div></div>`;
+    // groups (a day, a part of it): a head word before each group's rows, never the colour alone
+    const groups = spec.groups || [];
+    const sections = groups.length
+      ? [undefined, ...groups].filter((g) => !g || !hidden.has(g)).map((g) => {
+          const rows = shown.filter((p) => p.group === g).map(card).join("") + rs.filter((r) => r.group === g).map(routeRow).join("");
+          return rows ? (g ? `<div class="group-head" data-testid="group-head">${esc(g)}</div>` : "") + rows : "";
+        }).join("")
+      : shown.slice(0, cut).map(card).join("") + more + rs.map(routeRow).join("");
+    $("list").innerHTML = ps.length || rs.length ? sections
       : `<div class="k-note">Nothing found here. Move the map and search this area, or ask for a wider radius.</div>`;
   }
   const r = route || (spec.kind === "route" ? spec.routes[0] : null);
@@ -417,7 +438,7 @@ $("list").onclick = (e) => {
   if (t.closest("#more")) { allCards = true; drawSide(); return; }
   const byId = (id) => spec.places.find((p) => p.id === id);
   const rt = t.closest("[data-route]"), op = t.closest("[data-open]"), ask = t.closest("[data-ask]");
-  if (rt) { const p = byId(rt.dataset.route); getRoute(spec.center, p, "walk"); return; }
+  if (rt) { const p = byId(rt.dataset.route); selected = p.id; getRoute(spec.center, p, "walk"); return; }
   if (op) { open(gmapsLink(byId(op.dataset.open))); return; }
   if (ask) {
     const p = byId(ask.dataset.ask);
