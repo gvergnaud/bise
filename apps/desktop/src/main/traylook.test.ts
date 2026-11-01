@@ -60,8 +60,8 @@ describe('the tray look', () => {
     expect(trayTip({ waiting: 2, working: 0 })).toBe('bise: 2 things wait for you');
   });
 
-  it('frames: black (template) at rest, the accent star on a wait, 1x and 2x', () => {
-    const rest = trayFrame('rest', 2, { dark: true });
+  it('frames: black (template) at rest, all one pink on a wait whatever the bar, 1x and 2x', () => {
+    const rest = trayFrame('rest', 2);
     expect(rest.px).toBe(TRAY_PT * 2);
     const opaque = (f: Uint8Array): number[][] => {
       const out: number[][] = [];
@@ -69,9 +69,11 @@ describe('the tray look', () => {
       return out;
     };
     expect(opaque(rest.bgra).every(([b, g, r]) => b === 0 && g === 0 && r === 0)).toBe(true);
-    const wait = trayFrame('wait', 2, { dark: false });
-    // BGRA: light's accent #b8416b
-    expect(opaque(wait.bgra)).toContainEqual([107, 65, 184]);
+    // BGRA: #d03a72, eyes and star alike (a dark bar or a light one: the image can't know)
+    const wait = opaque(trayFrame('wait', 2).bgra);
+    expect(wait.length).toBeGreaterThan(0);
+    expect(wait.every(([b, g, r]) => b === 114 && g === 58 && r === 208)).toBe(true);
+    expect(trayFrame('wait', 1).px).toBe(TRAY_PT);
   });
 
   it('BGRA premultiplied', () => {

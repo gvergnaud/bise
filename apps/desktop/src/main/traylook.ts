@@ -2,9 +2,11 @@
 // At rest the ink ':*', a template image (black + alpha: macOS tints it for the menu bar). While
 // agents work, the plain three-branch star turns one step per 400 ms (template frames; the team's
 // branches, 1b, only from 26 px up: they don't read at 15, designer m_24537). When something waits on him, a colour image (macOS shows colour only
-// in a non-template one): the star in the accent, and on each new wait two kisses, two beats
-// (1 → 1.25 → 1, 140 ms each, 120 ms apart), then still. Under reduced motion no steps and no
-// beats: the shape and the colour only. Its tip says the state in words (law 6).
+// in a non-template one): the whole ':*' in one pink, WAIT_PINK, the same on any bar (designer
+// m_51405): the macOS 26 menu bar follows the wallpaper, not the system theme, Electron can't read
+// it, and two screens can have different bars, so the colour image can't follow it. On each new
+// wait two kisses, two beats (1 → 1.25 → 1, 140 ms each, 120 ms apart), then still. Under reduced
+// motion no steps and no beats: the shape and the colour only. Its tip says the state in words (law 6).
 import { PLAIN_ARMS, rasterMark, type Rgba } from '../shared/mark';
 import type { Counts } from './counts';
 import { common } from '../proto/words_common.gen';
@@ -43,10 +45,8 @@ export function trayTip(c: Counts): string {
 /** The star's turn in degrees at a working step: a third of its 60° symmetry per step. Pure. */
 export const stepTurn = (step: number): number => ((step % STEPS) * 60) / STEPS;
 
-/** The menu bar's ink for a colour image (its appearance): near white on dark, near black on light. Pure. */
-export const barInk = (dark: boolean): Rgba => (dark ? [236, 230, 218, 255] : [27, 25, 23, 255]);
-/** bise's accent for the menu bar (the tokens' --p-accent: dark #f4a6b0, light #b8416b). Pure. */
-export const barAccent = (dark: boolean): Rgba => (dark ? [244, 166, 176, 255] : [184, 65, 107, 255]);
+/** A wait's pink (#d03a72, pink = waits on him): eyes and star, read on a light, a pink and a dark bar. */
+export const WAIT_PINK: Rgba = [208, 58, 114, 255];
 const BLACK: Rgba = [0, 0, 0, 255];
 
 export interface TrayFrame {
@@ -70,12 +70,13 @@ export function toBgra(rgba: Uint8Array): Uint8Array {
 
 /**
  * One frame of the icon at a scale (1, 2): a template look draws black (macOS tints it), a wait
- * draws the bar's ink eyes and the accent star. Pure.
+ * draws it all in WAIT_PINK. Pure.
  */
-export function trayFrame(look: TrayLook, scale: number, o: { readonly step?: number; readonly beat?: number; readonly dark: boolean }): TrayFrame {
+export function trayFrame(look: TrayLook, scale: number, o: { readonly step?: number; readonly beat?: number } = {}): TrayFrame {
   const px = TRAY_PT * scale;
   const turn = look === 'work' ? stepTurn(o.step ?? 0) : 0;
   const shape = { size: TRAY_PT, arms: PLAIN_ARMS, turn, beat: o.beat ?? 1 };
-  const rgba = look === 'wait' ? rasterMark(px, barInk(o.dark), barAccent(o.dark), shape) : rasterMark(px, BLACK, BLACK, shape);
+  const ink = look === 'wait' ? WAIT_PINK : BLACK;
+  const rgba = rasterMark(px, ink, ink, shape);
   return { bgra: toBgra(rgba), px };
 }

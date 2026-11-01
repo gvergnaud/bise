@@ -6,7 +6,7 @@
 // 'menu', why 'tray'); a right click is the native fallback menu, which works with no page at
 // all: open bise ⌘0, settings ⌘,, quit ⌘Q. Never in a test run (a tray icon would sit in his
 // menu bar).
-import { app, Menu, nativeImage, nativeTheme, systemPreferences, Tray, type MenuItemConstructorOptions, type NativeImage } from 'electron';
+import { app, Menu, nativeImage, systemPreferences, Tray, type MenuItemConstructorOptions, type NativeImage } from 'electron';
 import type { Capsule } from './capsule';
 import type { Counts } from './counts';
 import { BEAT_FRAME_MS, KISSES, newWait, STEP_MS, STEPS, trayFrame, trayLook, trayTip, type TrayLook } from './traylook';
@@ -22,10 +22,9 @@ export function fallbackMenu(open: (route?: string) => void): MenuItemConstructo
 }
 
 function imageOf(look: TrayLook, o: { readonly step?: number; readonly beat?: number }): NativeImage {
-  const dark = nativeTheme.shouldUseDarkColors;
   const img = nativeImage.createEmpty();
   for (const scale of [1, 2]) {
-    const f = trayFrame(look, scale, { ...o, dark });
+    const f = trayFrame(look, scale, o);
     img.addRepresentation({ scaleFactor: scale, width: f.px, height: f.px, buffer: Buffer.from(f.bgra) });
   }
   // black + alpha: macOS tints it for the bar; a wait is a colour image, the only way to show colour
@@ -50,10 +49,6 @@ export class BiseTray {
     });
     this.tray.on('right-click', () => {
       this.tray.popUpContextMenu(menu);
-    });
-    // his appearance changed: the colour image's ink follows it
-    nativeTheme.on('updated', () => {
-      this.draw(false);
     });
     capsule.tray = this.tray;
   }
