@@ -32,6 +32,12 @@
   .marquee { fill: var(--k-accent-soft); fill-opacity: .5; stroke: var(--k-accent); stroke-width: 1; }
   .handle { fill: var(--k-bg); stroke: var(--k-accent); stroke-width: 1.2; }
   .bind { fill: none; stroke: var(--k-accent); stroke-width: 2; opacity: .55; }
+  .fade { position: absolute; pointer-events: none; z-index: 2; opacity: 0; transition: opacity var(--k-fast) var(--k-ease); }
+  .fade.on { opacity: 1; }
+  .fade.r { top: 0; right: 0; bottom: 0; width: 16px; background: linear-gradient(to left, var(--k-bg), transparent); }
+  .fade.l { top: 0; left: 0; bottom: 0; width: 16px; background: linear-gradient(to right, var(--k-bg), transparent); }
+  .fade.b { left: 0; right: 0; bottom: 0; height: 16px; background: linear-gradient(to top, var(--k-bg), transparent); }
+  .fade.t { left: 0; right: 0; top: 0; height: 16px; background: linear-gradient(to bottom, var(--k-bg), transparent); }
   .empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--k-s-1); color: var(--k-text-3); font-size: var(--k-t-sm); pointer-events: none; text-align: center; }
   .empty[hidden] { display: none; }
   .empty b { color: var(--k-text-2); font-weight: 500; font-size: var(--k-t-md); }
@@ -56,13 +62,15 @@
   .zoom { position: absolute; right: var(--k-s-2); bottom: var(--k-s-2); display: flex; align-items: center; gap: 2px; padding: 2px; border-radius: var(--k-r-sm); background: var(--k-bg); box-shadow: var(--k-shadow); }
   .zoom .k-btn { border-color: transparent; height: 22px; }
   .zoom .pct { min-width: 44px; justify-content: center; font-variant-numeric: tabular-nums; }
-  .foot { display: flex; align-items: center; gap: var(--k-s-2); font-size: var(--k-t-xs); color: var(--k-text-3); min-height: 16px; }
+  .foot { display: flex; align-items: center; gap: var(--k-s-2); font-size: var(--k-t-xs); color: var(--k-text-3); min-height: 16px; white-space: nowrap; min-width: 0; }
+  .foot #live { flex: none; }
+  .foot .status { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .dot { width: 6px; height: 6px; border-radius: var(--k-r-full); background: var(--k-text-3); flex: none; }
   .dot.off { background: transparent; box-shadow: inset 0 0 0 1px var(--k-text-3); }
   .dot.agent { width: auto; height: auto; background: none; line-height: 1; }
   .dot.agent::before { content: "∿"; }
   .status.err { color: var(--k-err); }
-  .hint { margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .hint { margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1000 auto; }
   /* the head never wraps: it gives way (fitBar) - the shape tools fold into a picker,
      then Export and the panel into ⋯, then the title is cut; Send to agent stays whole */
   .bar { flex-wrap: nowrap; min-width: 0; }
@@ -74,6 +82,8 @@
   .picker { gap: 2px; padding: 0 var(--k-s-1); }
   .picker .chev { width: 12px; height: 12px; }
   .bar.fold-tools .tools, .bar:not(.fold-tools) .picker { display: none; }
+  /* nothing to send: the kit's quiet look, never a grey primary */
+  #send[aria-disabled="true"] { background: transparent; color: var(--k-text-3); border-color: var(--k-line); cursor: default; }
   .bar.fold-more .wide, .bar:not(.fold-more) #more { display: none; }
 </style>
 </head>
@@ -92,16 +102,18 @@
       <button class="k-btn k-ghost k-icon" id="panel" aria-label="Open in the panel"><svg class="i" viewBox="0 0 20 20"><path d="M12 3h5v5M8 17H3v-5M17 3l-6 6M3 17l6-6"/></svg></button>
     </span>
     <button class="k-btn k-ghost k-icon" id="more" data-testid="more" aria-label="More"><svg class="i" viewBox="0 0 20 20"><path d="M5 10h.01M10 10h.01M15 10h.01" stroke-width="2.6"/></svg></button>
-    <button class="k-btn k-primary" id="send" data-testid="send" disabled><svg class="i" viewBox="0 0 20 20"><path d="M4 10h11M11 6l4 4-4 4"/></svg>Send to agent</button>
+    <button class="k-btn k-primary" id="send" data-testid="send" aria-disabled="true"><svg class="i" viewBox="0 0 20 20"><path d="M4 10h11M11 6l4 4-4 4"/></svg>Send to agent</button>
   </div>
   <div class="stage" id="stage" data-tool="select" data-testid="stage" tabindex="0">
     <svg class="canvas" id="svg" xmlns="http://www.w3.org/2000/svg"><g id="world"><g id="els"></g><g id="over"></g></g></svg>
+    <div class="fade t" id="fadeT"></div><div class="fade r" id="fadeR"></div><div class="fade b" id="fadeB"></div><div class="fade l" id="fadeL"></div>
     <div class="empty" id="empty" hidden><b>Nothing drawn yet</b><span>Pick a tool above, or ask the agent to draw something.</span></div>
     <div class="props" id="props" hidden data-testid="props"></div>
     <div class="zoom">
       <button class="k-btn k-icon" id="zout" aria-label="Zoom out"><svg class="i" viewBox="0 0 20 20"><path d="M5 10h10"/></svg></button>
       <button class="k-btn pct" id="zpct" aria-label="Fit the drawing">100%</button>
       <button class="k-btn k-icon" id="zin" aria-label="Zoom in"><svg class="i" viewBox="0 0 20 20"><path d="M5 10h10M10 5v10"/></svg></button>
+      <button class="k-btn k-icon" id="zall" aria-label="Show all" data-testid="show-all"><svg class="i" viewBox="0 0 20 20"><circle cx="10" cy="10" r="5"/><path d="M10 2v4M10 14v4M2 10h4M14 10h4"/></svg></button>
     </div>
   </div>
   <div class="foot"><span class="dot" id="dot"></span><span id="live" data-testid="live">connecting…</span><span class="status" id="status" data-testid="status"></span><span class="hint" id="hint"></span></div>
@@ -144,7 +156,11 @@ const TOOLS = [["select", "Select · V"], ["hand", "Pan · H or hold space"], ["
 const KEYS = { v: "select", h: "hand", r: "rect", o: "ellipse", d: "diamond", a: "arrow", l: "line", p: "draw", t: "text" };
 $("tools").innerHTML = TOOLS.map(([t, label]) => `<button class="k-btn k-icon" data-tool="${t}" aria-label="${esc(label)}" aria-pressed="${t === tool}"><svg class="i" viewBox="0 0 20 20">${ICONS[t]}</svg></button>`).join("");
 for (const b of $("tools").querySelectorAll("button")) { b.onclick = () => setTool(b.dataset.tool); kit.tip(b, esc(b.getAttribute("aria-label"))); }
-for (const [id, t] of [["undo", "Undo · ⌘Z"], ["redo", "Redo · ⇧⌘Z"], ["panel", "Open in the panel"], ["zpct", "Fit the drawing"], ["send", "Tell the agent what you changed"]]) kit.tip($(id), esc(t));
+for (const [id, t] of [["undo", "Undo · ⌘Z"], ["redo", "Redo · ⇧⌘Z"], ["panel", "Open in the panel"], ["zpct", "Fit the drawing"], ["zall", "Show all"]]) kit.tip($(id), esc(t));
+// Send to agent: aria-disabled, not disabled (a disabled button gets no hover, so no tip)
+kit.tip($("send"), () => (sendable() ? "Tell the agent what you changed" : "nothing new to send"));
+const sendable = () => $("send").getAttribute("aria-disabled") !== "true";
+function setSendable(on) { $("send").setAttribute("aria-disabled", String(!on)); }
 function setTool(t) {
   tool = t;
   $("pickerIcon").innerHTML = `<svg class="i" viewBox="0 0 20 20">${ICONS[t]}</svg>`;
@@ -152,6 +168,13 @@ function setTool(t) {
   for (const b of $("tools").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.tool === t));
   if (t !== "select") { sel.clear(); paint(); }
   hint();
+}
+// a fade on each edge that cuts the drawing
+function cutCue() {
+  const b = D.sceneBounds(els), r = $("stage").getBoundingClientRect();
+  const s = b ? { x0: b.x * view.k + view.x, y0: b.y * view.k + view.y, x1: (b.x + b.w) * view.k + view.x, y1: (b.y + b.h) * view.k + view.y } : null;
+  const cut = { L: s && s.x0 < -1, R: s && s.x1 > r.width + 1, T: s && s.y0 < -1, B: s && s.y1 > r.height + 1 };
+  for (const k of ["L", "R", "T", "B"]) $("fade" + k).classList.toggle("on", !!cut[k]);
 }
 function hint() {
   const h = { select: "drag to move · double-click to write · ⌫ deletes", hand: "drag to pan", text: "click to write", arrow: "drag from a shape to another", line: "drag to draw a line", draw: "drag to draw" }[tool] || "drag to draw · shift for a square";
@@ -167,6 +190,7 @@ function applyView() {
   $("stage").style.backgroundPosition = `${view.x}px ${view.y}px`;
   $("zpct").textContent = Math.round(view.k * 100) + "%";
   placeEditor();
+  cutCue();
 }
 function zoomAt(k, sx, sy) {
   k = Math.max(0.1, Math.min(4, k));
@@ -180,7 +204,7 @@ function inView() {
   const x0 = b.x * view.k + view.x, y0 = b.y * view.k + view.y;
   return x0 >= 0 && y0 >= 0 && x0 + b.w * view.k <= r.width && y0 + b.h * view.k <= r.height;
 }
-const INLINE_MIN = 240, INLINE_MAX = 560, MIN_TEXT = 12;
+const INLINE_MIN = 240, INLINE_MAX = 560, MIN_TEXT = 12, INLINE_ZOOM = 0.6;
 // the zoom under which the drawing's smallest text drops below MIN_TEXT
 function minZoom() {
   let small = Infinity;
@@ -189,21 +213,23 @@ function minZoom() {
     else if (e.points) { if (e.label) small = Math.min(small, Math.max(10, e.fontSize * 0.8)); }
     else if (e.text) small = Math.min(small, e.fontSize);
   }
-  return small === Infinity ? 0.1 : Math.min(1, MIN_TEXT / small);
+  const floor = small === Infinity ? 0.1 : Math.min(1, MIN_TEXT / small);
+  // inline, the whole drawing first, even under the 12 px floor, down to INLINE_ZOOM
+  return fullscreen() ? floor : Math.min(floor, INLINE_ZOOM);
 }
-function fit() {
+function fit(all) {
   const b = D.sceneBounds(els);
   if (b && document.documentElement.dataset.mode !== "fullscreen") {
     // inline, the stage takes the drawing's height (at most 1:1), within bounds
     const w = $("stage").getBoundingClientRect().width, top = els.some((e) => e.type === "frame" && e.text) ? D.FRAME_LABEL : 0;
-    const k = Math.max(minZoom(), Math.min(1, (w - 80) / Math.max(b.w, 1)));
+    const k = Math.max(all ? 0.1 : minZoom(), Math.min(1, (w - 80) / Math.max(b.w, 1)));
     $("stage").style.height = Math.round(Math.max(INLINE_MIN, Math.min(INLINE_MAX, (b.h + top) * k + 80))) + "px";
     if (grownFrom != null) { grownFrom = $("stage").style.height; if (parseFloat(grownFrom) < PANEL_MIN) $("stage").style.height = PANEL_MIN + "px"; }
   } else $("stage").style.height = "";
   const r = $("stage").getBoundingClientRect();
   if (!b || !r.width) { view = { x: r.width / 2, y: r.height / 2, k: 1 }; applyView(); return; }
   const pad = 40, top = els.some((e) => e.type === "frame" && e.text) ? D.FRAME_LABEL : 0;
-  const k = Math.max(minZoom(), Math.min(1, (r.width - 2 * pad) / Math.max(b.w, 1), (r.height - 2 * pad) / Math.max(b.h + top, 1)));
+  const k = Math.max(all ? 0.1 : minZoom(), Math.min(1, (r.width - 2 * pad) / Math.max(b.w, 1), (r.height - 2 * pad) / Math.max(b.h + top, 1)));
   // centered when it fits; else from its top-left corner (the rest pans)
   const cx = b.w * k <= r.width - 2 * pad ? r.width / 2 - (b.x + b.w / 2) * k : pad - b.x * k;
   const cy = (b.h + top) * k <= r.height - 2 * pad ? r.height / 2 - (b.y - top + (b.h + top) / 2) * k : pad - (b.y - top) * k;
@@ -442,7 +468,7 @@ async function saveNow() {
     failures = 0;
   } catch (err) {
     failures++;
-    status("Not saved: " + why(err) + ". It retries.", true);
+    status("not saved: " + why(err) + ", it retries", true);
     saveTimer = setTimeout(saveNow, Math.min(30000, 2000 * 2 ** failures));
   } finally { saving = false; }
 }
@@ -461,15 +487,15 @@ function adopt(s, fromSave) {
   sel = new Set([...sel].filter((id) => byId(id)));
   if (first) { nextN = 1; }
   paint();
-  if (!fitted) { fitted = true; requestAnimationFrame(fit); }
-  if (theirs) { status("The agent changed the drawing."); agentWrote(); if (!inView()) fit(); }
+  if (!fitted) { fitted = true; requestAnimationFrame(() => fit()); }
+  if (theirs) { status("the agent changed the drawing"); agentWrote(); if (!inView()) fit(); }
   snapLater();
 }
 // his edits since the agent's last change, as words for the agent's next turn
 function myChanges() { return D.diff(agentBase, els); }
 function tellAgent() {
   const c = myChanges();
-  $("send").disabled = !c.length;
+  setSendable(c.length > 0);
   clearTimeout(ctxTimer);
   if (!c.length) return;
   ctxTimer = setTimeout(() => {
@@ -479,15 +505,15 @@ function tellAgent() {
 }
 $("send").onclick = async () => {
   const c = myChanges();
-  if (!c.length || !doc) return;
+  if (!c.length || !doc || !sendable()) return;
   const lines = c.slice(0, 12).map((x) => "- " + x).join("\n") + (c.length > 12 ? `\n- and ${c.length - 12} more` : "");
   try {
     await saveNow();
     await app.message(`I edited the drawing "${doc.title}" (${doc.id}):\n${lines}\nTake a look with read_drawing.`);
     agentBase = clone(els);
-    $("send").disabled = true;
-    status("Sent to the agent.");
-  } catch (err) { status("Not sent: " + why(err) + ".", true); }
+    setSendable(false);
+    status("sent to the agent");
+  } catch (err) { status("not sent: " + why(err), true); }
 };
 async function poll() {
   clearTimeout(pollTimer);
@@ -538,12 +564,12 @@ function rasterize(svgText, scale) {
 }
 const file = (name, mimeType, body) => [{ type: "resource", resource: { uri: "file:///" + name, mimeType, ...body } }];
 async function exportSvg() {
-  try { await app.download(file(slug() + ".svg", "image/svg+xml", { text: D.toSVG({ ...doc, elements: els }, { theme }) })); status("Downloaded " + slug() + ".svg"); }
-  catch (err) { status("Download: " + why(err), true); }
+  try { await app.download(file(slug() + ".svg", "image/svg+xml", { text: D.toSVG({ ...doc, elements: els }, { theme }) })); status("downloaded " + slug() + ".svg"); }
+  catch (err) { status("not downloaded: " + why(err), true); }
 }
 async function exportPng() {
-  try { const blob = await rasterize(D.toSVG({ ...doc, elements: els }, { theme }), 2); await app.download(file(slug() + ".png", "image/png", { blob })); status("Downloaded " + slug() + ".png"); }
-  catch (err) { status("Download: " + why(err), true); }
+  try { const blob = await rasterize(D.toSVG({ ...doc, elements: els }, { theme }), 2); await app.download(file(slug() + ".png", "image/png", { blob })); status("downloaded " + slug() + ".png"); }
+  catch (err) { status("not downloaded: " + why(err), true); }
 }
 const fullscreen = () => document.documentElement.dataset.mode === "fullscreen";
 const togglePanel = () => app.displayMode(fullscreen() ? "inline" : "fullscreen").catch((err) => status(why(err), true));
@@ -573,7 +599,8 @@ $("undo").onclick = () => undo(true);
 $("redo").onclick = () => undo(false);
 $("zin").onclick = () => { const r = $("stage").getBoundingClientRect(); zoomAt(view.k * 1.2, r.width / 2, r.height / 2); };
 $("zout").onclick = () => { const r = $("stage").getBoundingClientRect(); zoomAt(view.k / 1.2, r.width / 2, r.height / 2); };
-$("zpct").onclick = fit;
+$("zpct").onclick = () => fit();
+$("zall").onclick = () => fit(true);
 function sizeTitle() { $("title").size = Math.max(8, Math.min(40, $("title").value.length + 1)); fitBar(); }
 $("title").addEventListener("input", sizeTitle);
 $("title").addEventListener("change", scheduleSave);
@@ -783,7 +810,7 @@ function edit(el, field, before, fresh) {
   placeEditor();
   paint();
   ta.focus();
-  ta.select();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
   ta.addEventListener("input", placeEditor);
   ta.addEventListener("keydown", (e) => {
     e.stopPropagation();
@@ -903,7 +930,7 @@ app.on("context", (c) => {
   buildMore();
   fitBar();
   const mode = c.displayMode || lastMode;
-  if (mode !== lastMode) { lastMode = mode; requestAnimationFrame(() => { if (doc) fit(); }); }
+  if (mode !== lastMode) { lastMode = mode; sel.clear(); shrink(); requestAnimationFrame(() => { if (doc) { paint(); fit(); } }); }
 });
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readTheme);
 app.on("tool-result", (r) => {
