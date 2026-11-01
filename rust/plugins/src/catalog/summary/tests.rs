@@ -26,6 +26,7 @@ fn row(id: &str, kind: PluginKind, scope: PluginScope, state: PluginState, on: b
         parts: Vec::new(),
         prompts: Vec::new(),
         settings: Vec::new(),
+        needs_node: false,
         logins: Vec::new(),
     }
 }

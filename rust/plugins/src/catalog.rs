@@ -161,6 +161,7 @@ fn plugin_row(i: &Inputs, p: &resolve::Plugin, names: &[(String, String, String)
         login: None,
         prompts: prompts(&p.prompts),
         settings: settings_of(p, i.secrets_dir),
+        needs_node: p.needs_node,
         logins: Vec::new(),
         parts,
     }
@@ -374,6 +375,7 @@ fn connector_base(c: &ConnectorEntry, id: PluginId) -> Plugin {
         parts: Vec::new(),
         prompts: Vec::new(),
         settings: Vec::new(),
+        needs_node: false,
         logins: Vec::new(),
     }
 }
@@ -426,6 +428,7 @@ fn skills_row(i: &Inputs, scope: SkillsScope) -> Option<Plugin> {
         parts,
         prompts: Vec::new(),
         settings: Vec::new(),
+        needs_node: false,
         logins: Vec::new(),
     })
 }

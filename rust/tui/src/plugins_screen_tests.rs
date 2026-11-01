@@ -38,6 +38,7 @@ fn plugin(id: &str, kind: PluginKind, scope: Scope, what: &str, parts: Vec<Plugi
         path: None,
         prompts: vec![],
         settings: vec![],
+        needs_node: false,
     }
 }
 

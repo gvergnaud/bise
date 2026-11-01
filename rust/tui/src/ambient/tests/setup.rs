@@ -195,6 +195,7 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
                 login: None,
                 prompts: vec![],
                 settings: vec![],
+                needs_node: false,
                 logins: vec![],
                 parts,
             };

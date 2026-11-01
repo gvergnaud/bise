@@ -520,3 +520,23 @@ fn bise_node_is_the_node_found_or_says_it_needs_one() {
         (got, node) => panic!("{got:?} with node {node:?}"),
     }
 }
+
+#[test]
+fn a_node_found_is_kept_a_miss_is_asked_again() {
+    use std::cell::Cell;
+    let cache = NodeCache::new();
+    let asked = Cell::new(0);
+    let there = Cell::new(false);
+    let look = || {
+        asked.set(asked.get() + 1);
+        there.get().then(|| PathBuf::from("/opt/homebrew/bin/node"))
+    };
+    assert_eq!(cache.find(&look), None, "no Node yet");
+    assert_eq!(cache.find(&look), None);
+    assert_eq!(asked.get(), 2, "a miss is asked again");
+    there.set(true);
+    assert_eq!(cache.find(&look), Some(PathBuf::from("/opt/homebrew/bin/node")), "installed since: found");
+    there.set(false);
+    assert_eq!(cache.find(&look), Some(PathBuf::from("/opt/homebrew/bin/node")), "a hit is kept");
+    assert_eq!(asked.get(), 3);
+}

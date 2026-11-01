@@ -96,7 +96,11 @@ export function PluginPage({ p, project, ports }: { p: Plugin; project?: string;
             // its switch, a row in a box like its parts' (designer m_44023 #4)
             <div className="plg-list plg-page-switch">
               <div className="plg-row">
-                <span className="plg-row-words"><span className="plg-title">{sentenceCase(p.on ? settings.plugins_on_everywhere : settings.plugins_off_everywhere)}</span></span>
+                <span className="plg-row-words">
+                  <span className="plg-title">{sentenceCase(p.on ? settings.plugins_on_everywhere : settings.plugins_off_everywhere)}</span>
+                  {/* its server runs on Node and there is none: said beside the switch, which still turns it on */}
+                  {p.needs_node === true && <span className="plg-row-what err" data-testid={`${tid}.needs_node`}>{settings.plugins_needs_node}</span>}
+                </span>
                 <span className="plg-row-end"><Toggle on={p.on} label={titleOf(p)} onChange={(on) => { set(id, on); }} testId={`${tid}.toggle`} /></span>
               </div>
             </div>

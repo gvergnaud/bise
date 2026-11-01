@@ -159,6 +159,7 @@ pub const VARS: &[Var] = &[
     test("BISE_MISTRAL_URL", "Mistral's API base for the connectors' catalog and connect (a fake Mistral in tests)"),
     user("BISE_MODEL", "the main model"),
     internal("BISE_MODELS_FILE", "the merged model catalog, for the REPLs"),
+    user("BISE_NODE", "the Node a built-in plugin's `${BISE_NODE}` server runs on (else node >= 18 on PATH or Homebrew's)"),
     user("BISE_NO_UPDATE", "no background update check"),
     internal("BISE_ONESHOT", "a one-shot provider call's request file, for repl-live"),
     user("BISE_OPEN", "the program a link opens with"),

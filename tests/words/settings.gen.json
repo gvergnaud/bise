@@ -3349,6 +3349,11 @@
     "one": null,
     "text": "{name} needs a login: /plugins login"
   },
+  "settings.plugins_needs_node": {
+    "args": [],
+    "one": null,
+    "text": "needs Node 18 or newer"
+  },
   "settings.plugins_needs_setup": {
     "args": [],
     "one": null,

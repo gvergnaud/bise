@@ -223,6 +223,11 @@ pub struct Plugin {
     /// key), each set with `plugin_setting`; never a value, only `set`
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub settings: Vec<PluginSetting>,
+    /// its MCP server runs on Node and none (18 or newer) is on his Mac:
+    /// the row's own state says 'needs Node 18 or newer' beside its switch,
+    /// which still turns it on (architect m_51637)
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub needs_node: bool,
     /// the released app's (before desktop-v2026.10.16) remote MCP servers
     /// that log in: kept on the wire for the released law, always empty
     /// now; a server's login is its `mcp` part's `login`

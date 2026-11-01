@@ -516,6 +516,9 @@ crate::words! { settings:
     plugins_setting_forget_ask(label) = "forget the {label}? it can't be shown again.";
     /// a setting's forget: keep it
     plugins_setting_keep = "Keep";
+    /// a plugin whose server runs on Node, none 18 or newer on his Mac:
+    /// its row's state beside its switch (architect m_51637)
+    plugins_needs_node = "needs Node 18 or newer";
     /// a setting: just saved (4 s, then 'set')
     plugins_setting_applies = "applies from the next call";
 }

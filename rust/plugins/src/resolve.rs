@@ -294,6 +294,10 @@ pub struct Plugin {
     pub prompts: Vec<String>,
     /// what he may give it on the plugins page (`dev.bise.settings`)
     pub settings: Vec<Setting>,
+    /// a `${BISE_NODE}` server found no Node 18 or newer ([`node_exe`]):
+    /// its row says so; his switch still turns it on (it works once Node
+    /// is installed, the next resolve finds it)
+    pub needs_node: bool,
     /// components present on disk but not supported yet
     pub unsupported: Vec<String>,
     /// opt-in (`"dev.bise": {"default": "off"}`): on only when named in
@@ -869,18 +873,43 @@ pub const NODE_MIN_MAJOR: u32 = 18;
 
 /// The Node for `${BISE_NODE}`: `$BISE_NODE` when set, else the first
 /// `node` of PATH then Homebrew's and /usr/local's whose `--version` is
-/// [`NODE_MIN_MAJOR`] or newer. Asked once per process (a resolve runs
-/// often), none when none fits.
+/// [`NODE_MIN_MAJOR`] or newer; none when none fits. A hit is kept for the
+/// process (a resolve runs often); a miss is asked again at the next
+/// resolve, so a Node he installs after 'needs Node 18 or newer' is found
+/// without a restart (architect m_51637).
 pub fn node_exe() -> Option<PathBuf> {
-    static NODE: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
-    NODE.get_or_init(|| {
+    static NODE: NodeCache = NodeCache::new();
+    NODE.find(&|| {
         let path = std::env::var_os("PATH").unwrap_or_default();
         let mut dirs: Vec<PathBuf> = std::env::split_paths(&path).collect();
         dirs.extend(["/opt/homebrew/bin", "/usr/local/bin"].map(PathBuf::from));
         let given = std::env::var_os("BISE_NODE").filter(|v| !v.is_empty()).map(PathBuf::from);
         given.into_iter().chain(dirs.into_iter().map(|d| d.join("node"))).find(|n| node_fits(n))
     })
-    .clone()
+}
+
+/// [`node_exe`]'s memory: a found Node only.
+pub struct NodeCache(std::sync::OnceLock<PathBuf>);
+
+impl NodeCache {
+    pub const fn new() -> NodeCache {
+        NodeCache(std::sync::OnceLock::new())
+    }
+
+    /// The kept Node, else `look()`'s (kept when found).
+    pub fn find(&self, look: &dyn Fn() -> Option<PathBuf>) -> Option<PathBuf> {
+        if let Some(n) = self.0.get() {
+            return Some(n.clone());
+        }
+        let n = look()?;
+        Some(self.0.get_or_init(|| n).clone())
+    }
+}
+
+impl Default for NodeCache {
+    fn default() -> Self {
+        NodeCache::new()
+    }
 }
 
 fn node_fits(exe: &Path) -> bool {
@@ -1037,8 +1066,12 @@ fn load_mcp(p: &mut Plugin, out: &mut Vec<Diagnostic>) {
                     out.push(diag("plugin.component.unsupported", Severity::Warning, &p.name,
                         format!("mcp.json server {:?}: {}; skipped", id, why)));
                 }
-                None => out.push(diag("plugin.mcp.server_invalid", Severity::Warning, &p.name,
-                    format!("mcp.json server {:?}: {}; skipped", id, e))),
+                None => {
+                    // its row says it (architect m_51637), not only this diagnostic
+                    p.needs_node |= e == NEEDS_NODE;
+                    out.push(diag("plugin.mcp.server_invalid", Severity::Warning, &p.name,
+                        format!("mcp.json server {:?}: {}; skipped", id, e)))
+                }
             },
         }
     }
@@ -1152,6 +1185,7 @@ fn discover(root: &Path, scope: Scope, data: &Path, out: &mut Vec<Diagnostic>) -
             off_servers: Vec::new(),
             prompts: Vec::new(),
             settings: Vec::new(),
+            needs_node: false,
             unsupported: Vec::new(),
             opt_in: false,
         };
