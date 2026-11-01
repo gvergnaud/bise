@@ -33,6 +33,9 @@ fn a_worktree_alone_lands_every_change_however_made_and_is_clean_after() {
     let mut j = job("x", &wt, &ws, &["a"], &[]);
     j.place = "wt:x".into();
     j.here = false;
+    // x started after init (its rm c is no undo of it, the revert guard
+    // looks from x's start on)
+    j.since_ms = crate::util::now_ms() - 60_000;
     let o = run(&j, &Queue::default(), &mut || {}).unwrap();
     assert_eq!(log(&ws), lines(&["x's work", "deps", "init"]), "one commit");
     // git show names a rename by its new path (r.rs -> s.rs, m.rs -> n.rs)

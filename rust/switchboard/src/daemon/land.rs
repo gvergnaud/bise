@@ -142,6 +142,13 @@ mod tests {
     fn a_gone_sb_is_not_told_a_live_one_is() {
         let (mut ours, theirs) = UnixStream::pair().unwrap();
         drop(theirs);
+        // macOS sets a pair's close-on-exec after socketpair(): a process
+        // the other tests spawn in that gap keeps a copy of theirs until
+        // it exits (a red in a loaded gate, fix-mcp-core 11-01)
+        let t0 = std::time::Instant::now();
+        while !crate::daemon::outbox::peer_gone(&ours) && t0.elapsed() < Duration::from_secs(10) {
+            std::thread::sleep(Duration::from_millis(20));
+        }
         assert!(!told(&mut ours, &json!({"ok": true})));
         let (mut ours, theirs) = UnixStream::pair().unwrap();
         assert!(told(&mut ours, &json!({"ok": true, "text": "x"})));

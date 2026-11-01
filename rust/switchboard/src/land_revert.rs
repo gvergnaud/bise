@@ -205,8 +205,10 @@ pub fn guard(dir: &Path, target: &str, base: &str, tip: &str, since_ms: u64, lan
         return Ok(());
     }
     let messages = git(dir, &["log", "--format=%B", &format!("{}..{}", base, tip)])?;
-    // git reads `--since=@0` as no commit at all: @1 is "from the start"
-    let since = format!("--since=@{}", (since_ms / 1000).max(1));
+    // "@<secs> +0000": git's strict epoch form. A bare "@<secs>" is an
+    // epoch only past 8 digits; "@1" read as day 1 of this month at this
+    // hour, so on the 1st the guard saw no commit at all (2026-11-01)
+    let since = format!("--since=@{} +0000", since_ms / 1000);
     let n = format!("-n{}", RECENT);
     let log = git(
         dir,
