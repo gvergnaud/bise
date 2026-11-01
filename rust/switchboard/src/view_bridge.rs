@@ -141,9 +141,15 @@ pub(crate) fn kill_orphan_bridge(file: &Path) {
     let _ = std::fs::remove_file(file);
 }
 
-/// An agent's REPL runs: its `repl.pid` names a live process.
+/// An agent's REPL runs: its `repl.pid` names a live process, never a
+/// zombie (SIGKILLed, not reaped yet: it answers `kill -0` while its
+/// bridge retires; that bridge still lists the tools it held, so a call
+/// judged there went on to a server that was gone).
 pub(crate) fn repl_alive(pid_file: &Path) -> bool {
-    std::fs::read_to_string(pid_file).ok().and_then(|t| t.trim().parse::<u32>().ok()).is_some_and(|p| p > 1 && crate::procs::alive(p))
+    std::fs::read_to_string(pid_file)
+        .ok()
+        .and_then(|t| t.trim().parse::<u32>().ok())
+        .is_some_and(|p| p > 1 && bise_peer::table::one(p).is_some_and(|r| !r.zombie))
 }
 
 #[cfg(test)]
@@ -232,6 +238,16 @@ pub(crate) mod tests {
         c.wait().unwrap();
         std::fs::write(&f, pid.to_string()).unwrap();
         assert!(!repl_alive(&f), "a pid gone");
+        // a REPL SIGKILLed, not reaped yet: a zombie, its bridge retiring
+        // (mcp_apps_e2e's REPL-gone step: the call went to that bridge)
+        let mut z = std::process::Command::new("true").spawn().unwrap();
+        let until = std::time::Instant::now() + Duration::from_secs(5);
+        while bise_peer::table::one(z.id()).is_some_and(|p| !p.zombie) && std::time::Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        std::fs::write(&f, z.id().to_string()).unwrap();
+        assert!(!repl_alive(&f), "a zombie is gone");
+        z.wait().unwrap();
         std::fs::write(&f, "1").unwrap();
         assert!(!repl_alive(&f), "never launchd");
         let _ = std::fs::remove_dir_all(&d);

@@ -265,10 +265,13 @@ impl Shell {
 
     /// The `bridge.json` a view's server is reached through: its agent's
     /// own bridge while its REPL lives (`own`: not tried yet), else the
-    /// hub's views bridge.
-    fn bridge_json(&mut self, dir: &str, own: bool) -> Result<(PathBuf, bool), String> {
+    /// hub's views bridge. A view moved to the views bridge stays there
+    /// (`Servers::moved`): a fresh REPL's servers never ran it, and its
+    /// server there keeps the state its calls built.
+    fn bridge_json(&mut self, dir: &str, key: &ViewKey, own: bool) -> Result<(PathBuf, bool), String> {
         // its REPL alive, never only its port known: a REPL just killed
         // leaves a bridge that retires its servers ("turned off")
+        let own = own && !self.views.servers.moved(key);
         if let Some(port) = self.ports.get(dir).filter(|_| own && repl_alive(&self.opts.paths.agent_dir(dir).join("repl.pid"))) {
             let own = self.opts.paths.agent_bridge_json(*port);
             if own.exists() {
@@ -313,7 +316,7 @@ impl Shell {
     /// leaves one that resets: then once more on the views bridge).
     fn view_resource(&mut self, p: ViewParams, dir: String, done: ViewDone, own: bool) {
         let file = self.view_file(&dir, &p.call);
-        let bridge = self.bridge_json(&dir, own);
+        let bridge = self.bridge_json(&dir, &ViewKey::new(&p.agent, &p.call), own);
         let via_own = matches!(bridge, Ok((_, false)));
         let step = self.view_step();
         std::thread::spawn(move || {
@@ -388,7 +391,7 @@ impl Shell {
     /// bridge, judging read nothing but the tools).
     fn view_call_via(&mut self, key: ViewKey, dir: String, method: String, inner: Value, done: ViewDone, own: bool) {
         let file = self.view_file(&dir, &key.call);
-        let bridge = self.bridge_json(&dir, own);
+        let bridge = self.bridge_json(&dir, &key, own);
         let via_own = matches!(bridge, Ok((_, false)));
         let state_path = bend_plugins::state::state_path();
         let step = self.view_step();
@@ -568,16 +571,19 @@ mod tests {
     }
 
     /// A view whose agent's REPL went: its first call through the views
-    /// bridge, or a call through a new bridge, is said restarted once.
+    /// bridge, or a call through a new bridge, is said restarted once per
+    /// server; a moved view stays on the views bridge.
     #[test]
-    fn a_new_server_is_said_once_per_view() {
+    fn a_new_server_is_said_once_per_server() {
         let mut v = Views::default();
         let route = |base: &str, hubs: bool| Route { base: base.into(), url: format!("{base}/p/s"), hubs };
         let (a, b) = (ViewKey::new("docs", "1-1"), ViewKey::new("docs", "1-2"));
         assert!(!v.server_restarted(&a, &route("http://127.0.0.1:1/x", false)), "its own bridge: the server that ran it");
         assert!(!v.server_restarted(&a, &route("http://127.0.0.1:1/x", false)));
         assert!(v.server_restarted(&a, &route("http://127.0.0.1:2/y", true)), "another bridge");
-        assert!(!v.server_restarted(&a, &route("http://127.0.0.1:3/z", false)), "once per view");
+        assert!(!v.server_restarted(&a, &route("http://127.0.0.1:2/y", true)), "once per server");
+        assert!(v.servers.moved(&a) && !v.servers.moved(&b), "a moved view stays on the views bridge");
+        assert!(v.server_restarted(&a, &route("http://127.0.0.1:3/z", true)), "a views bridge started again: said again");
         assert!(v.server_restarted(&b, &route("http://127.0.0.1:2/y", true)), "first call on the views bridge");
         assert!(!v.server_restarted(&b, &route("http://127.0.0.1:2/y", true)));
     }

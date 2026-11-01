@@ -51,16 +51,18 @@ pub const SERVER_MEMORY_MS: u64 = 60 * 60_000;
 /// first).
 pub const SERVERS: usize = 4096;
 
-/// The server (the bridge's base) a view's calls went through last.
+/// The server (the bridge's base) a view's calls went through last, and
+/// whether they went through the hub's views bridge once.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Seen {
     base: String,
-    told: bool,
+    moved: bool,
     at: u64,
 }
 
 /// The server each view's calls last went through, so a restart is said
-/// once per view (docs/mcp-apps.md C5); pruned like [`Limits`].
+/// once per server, and the views moved to the views bridge
+/// (docs/mcp-apps.md C5); pruned like [`Limits`].
 #[derive(Debug, Default)]
 pub struct Servers {
     map: BTreeMap<ViewKey, Seen>,
@@ -68,20 +70,30 @@ pub struct Servers {
 
 impl Servers {
     /// A call of `key` through the bridge `base` at `now` (`hubs`: the
-    /// hub's views bridge): true once per view when its server is not the
-    /// one before (another bridge, or the views bridge for its first
-    /// call: the REPL that ran it is gone).
+    /// hub's views bridge): true once per server, when it is not the one
+    /// before (another bridge, a views bridge started again: its base
+    /// carries a new token; or the views bridge for its first call: the
+    /// REPL that ran it is gone). A view that went through the views
+    /// bridge is [`Servers::moved`] from then on.
     pub fn restarted(&mut self, key: &ViewKey, base: &str, hubs: bool, now: u64) -> bool {
         let fresh = match self.map.get(key) {
             Some(s) => s.base != base,
             None => hubs,
         };
-        let seen = self.map.entry(key.clone()).or_insert_with(|| Seen { base: base.to_string(), told: false, at: now });
+        let seen = self.map.entry(key.clone()).or_insert_with(|| Seen { base: base.to_string(), moved: false, at: now });
         seen.base = base.to_string();
+        seen.moved |= hubs;
         seen.at = now;
-        let say = fresh && !seen.told;
-        seen.told |= fresh;
-        say
+        fresh
+    }
+
+    /// The view's calls went through the hub's views bridge: they stay
+    /// there for the view's life (until it is pruned), never back to its
+    /// agent's own bridge. A fresh REPL's servers never ran that view,
+    /// and a REPL respawns often (a switch's reload, a recycle): the view
+    /// keeps the server, and the state, it has (architect m_51383).
+    pub fn moved(&self, key: &ViewKey) -> bool {
+        self.map.get(key).is_some_and(|s| s.moved)
     }
 
     /// Forget the views not called for [`SERVER_MEMORY_MS`], and the
@@ -276,7 +288,7 @@ mod tests {
         assert!(!s.restarted(&k("1-1"), "http://own", false, 1000), "its own bridge, first call");
         assert!(!s.restarted(&k("1-1"), "http://own", false, 1001));
         assert!(s.restarted(&k("1-1"), "http://hubs", true, 1002), "another bridge: said");
-        assert!(!s.restarted(&k("1-1"), "http://other", true, 1003), "once per view");
+        assert!(!s.restarted(&k("1-1"), "http://hubs", true, 1003), "once per server");
         assert!(s.restarted(&k("1-2"), "http://hubs", true, 1004), "the views bridge for its first call");
         assert_eq!(s.len(), 2);
         s.prune(1003 + SERVER_MEMORY_MS - 1);
@@ -289,6 +301,25 @@ mod tests {
         s.prune(5000 + SERVERS as u64 + 10);
         assert_eq!(s.len(), SERVERS, "the least recently called went first");
         assert!(!s.restarted(&k(&format!("{}-1", SERVERS + 9)), "http://own", false, 9_999), "the newest stayed");
+    }
+
+    /// A view moved to the hub's views bridge stays there (its server
+    /// keeps its state across the REPL's respawns, architect m_51383);
+    /// a views bridge started again is a new server: said again.
+    #[test]
+    fn a_moved_view_stays_on_the_views_bridge_and_each_new_server_is_said() {
+        let mut s = Servers::default();
+        assert!(!s.moved(&k("1-1")), "never called");
+        assert!(!s.restarted(&k("1-1"), "http://own", false, 1000));
+        assert!(!s.moved(&k("1-1")), "on its own bridge");
+        assert!(s.restarted(&k("1-1"), "http://hubs/a", true, 1001), "its REPL went");
+        assert!(s.moved(&k("1-1")), "moved");
+        assert!(!s.restarted(&k("1-1"), "http://hubs/a", true, 1002), "the same server: said once");
+        assert!(s.moved(&k("1-1")), "still moved");
+        assert!(s.restarted(&k("1-1"), "http://hubs/b", true, 1003), "the views bridge stopped idle, a new one: said again");
+        assert!(!s.restarted(&k("1-1"), "http://hubs/b", true, 1004));
+        s.prune(1004 + SERVER_MEMORY_MS);
+        assert!(!s.moved(&k("1-1")), "forgotten with its server");
     }
 
     #[test]

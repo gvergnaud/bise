@@ -82,9 +82,11 @@ pub fn around(pids: &[u32]) -> Vec<Proc> {
     got.into_values().collect()
 }
 
-/// One process, read alone; None when it is gone or unreadable.
+/// One process, read alone; None when it is gone or unreadable. A
+/// zombie (killed, not reaped yet) is Some with `zombie` set: it answers
+/// `kill -0`, but it runs nothing.
 #[cfg(target_os = "macos")]
-fn one(pid: u32) -> Option<Proc> {
+pub fn one(pid: u32) -> Option<Proc> {
     // SAFETY: proc_pidinfo writes at most `size` bytes into `info`
     let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
     let size = std::mem::size_of::<libc::proc_bsdinfo>() as libc::c_int;
@@ -195,12 +197,12 @@ pub fn argv(_: u32) -> Option<Vec<String>> {
 }
 
 #[cfg(target_os = "linux")]
-fn one(pid: u32) -> Option<Proc> {
+pub fn one(pid: u32) -> Option<Proc> {
     linux_proc(pid, &std::path::Path::new("/proc").join(pid.to_string()))
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-fn one(_: u32) -> Option<Proc> {
+pub fn one(_: u32) -> Option<Proc> {
     None
 }
 

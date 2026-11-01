@@ -339,12 +339,15 @@ impl Shell {
         self.repls.remove(&dir);
         self.gate_forget(&dir);
         self.pids.remove(&dir);
+        // a dead REPL's port names no route, even for a moment: a view's
+        // call would reach its retiring bridge (architect m_51383); its
+        // next process registers its own at its spawn
+        let port = self.ports.remove(&dir);
         // its writer's lock goes with it (a respawn resumes the log)
         self.recorders.remove(&dir);
         if self.switching.contains_key(&dir) && !self.switch_spawned.contains(&dir) {
             // the reload a switch asked for: the same session on
             // this hub's binary, the same port
-            let port = self.ports.get(&dir).copied();
             if let Some(name) = self.agent_by_dir(&dir).map(|a| a.name.clone()) {
                 self.restored.insert(dir.clone());
                 self.switch_spawned.insert(dir.clone());
