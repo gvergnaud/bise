@@ -35,9 +35,9 @@
   .empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--k-s-1); color: var(--k-text-3); font-size: var(--k-t-sm); pointer-events: none; text-align: center; }
   .empty[hidden] { display: none; }
   .empty b { color: var(--k-text-2); font-weight: 500; font-size: var(--k-t-md); }
-  .props { position: absolute; left: var(--k-s-2); top: var(--k-s-2); display: flex; flex-direction: column; gap: var(--k-s-2); padding: var(--k-s-2); width: 184px;
+  .props { position: absolute; top: var(--k-s-2); display: flex; flex-direction: column; gap: var(--k-s-2); padding: var(--k-s-2); width: 184px;
     border-radius: var(--k-r-md); background: var(--k-bg); box-shadow: var(--k-shadow-md); font-size: var(--k-t-xs); color: var(--k-text-2);
-    max-height: calc(100% - 2 * var(--k-s-2)); overflow: auto; }
+    max-height: calc(100% - 2 * var(--k-s-2)); overflow: auto; z-index: 3; }
   .props[hidden] { display: none; }
   .props .lbl { margin-bottom: var(--k-s-1); }
   .swatches { display: flex; flex-wrap: wrap; gap: var(--k-s-1); }
@@ -49,15 +49,32 @@
   .props .k-seg button { flex: 1; padding: 0 var(--k-s-1); }
   .props .row { display: flex; gap: var(--k-s-1); }
   .props .row .k-btn { flex: 1; justify-content: center; }
+  .props .row.del { padding-top: var(--k-s-1); border-top: 1px solid var(--k-line); }
+  .props .row.del .k-btn { color: var(--k-err); }
+  .props .row.del .k-btn:hover { background: var(--k-err-soft); }
   .editor { position: absolute; margin: 0; padding: 0; border: 0; outline: none; resize: none; overflow: hidden; background: transparent; white-space: pre; line-height: 1.25; z-index: 5; }
   .zoom { position: absolute; right: var(--k-s-2); bottom: var(--k-s-2); display: flex; align-items: center; gap: 2px; padding: 2px; border-radius: var(--k-r-sm); background: var(--k-bg); box-shadow: var(--k-shadow); }
   .zoom .k-btn { border-color: transparent; height: 22px; }
   .zoom .pct { min-width: 44px; justify-content: center; font-variant-numeric: tabular-nums; }
   .foot { display: flex; align-items: center; gap: var(--k-s-2); font-size: var(--k-t-xs); color: var(--k-text-3); min-height: 16px; }
-  .dot { width: 6px; height: 6px; border-radius: var(--k-r-full); background: var(--k-text-3); }
-  .dot.on { background: var(--k-ok); }
+  .dot { width: 6px; height: 6px; border-radius: var(--k-r-full); background: var(--k-text-3); flex: none; }
+  .dot.off { background: transparent; box-shadow: inset 0 0 0 1px var(--k-text-3); }
+  .dot.agent { width: auto; height: auto; background: none; line-height: 1; }
+  .dot.agent::before { content: "∿"; }
   .status.err { color: var(--k-err); }
-  .hint { margin-left: auto; }
+  .hint { margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  /* the head never wraps: it gives way (fitBar) - the shape tools fold into a picker,
+     then Export and the panel into ⋯, then the title is cut; Send to agent stays whole */
+  .bar { flex-wrap: nowrap; min-width: 0; }
+  .bar > * { flex: none; }
+  .bar .title { flex: 0 1 auto; min-width: 48px; overflow: hidden; }
+  .bar.measuring .title { flex-shrink: 0; }
+  .bar .k-spacer { flex: 1 1 0; min-width: 0; }
+  .wide { display: inline-flex; align-items: center; gap: var(--k-s-1); }
+  .picker { gap: 2px; padding: 0 var(--k-s-1); }
+  .picker .chev { width: 12px; height: 12px; }
+  .bar.fold-tools .tools, .bar:not(.fold-tools) .picker { display: none; }
+  .bar.fold-more .wide, .bar:not(.fold-more) #more { display: none; }
 </style>
 </head>
 <body>
@@ -65,14 +82,17 @@
   <div class="bar">
     <input class="title" id="title" data-testid="title" aria-label="Drawing title" spellcheck="false">
     <div class="tools" id="tools" role="toolbar" aria-label="Tools"></div>
+    <button class="k-btn k-ghost picker" id="picker" data-testid="tool-picker" aria-label="Tools"><span id="pickerIcon"></span><svg class="i chev" viewBox="0 0 20 20"><path d="M6 8l4 4 4-4"/></svg></button>
     <span class="k-spacer"></span>
     <button class="k-btn k-ghost k-icon" id="undo" aria-label="Undo"><svg class="i" viewBox="0 0 20 20"><path d="M7 5L3 9l4 4"/><path d="M3 9h9a5 5 0 010 10h-2"/></svg></button>
     <button class="k-btn k-ghost k-icon" id="redo" aria-label="Redo"><svg class="i" viewBox="0 0 20 20"><path d="M13 5l4 4-4 4"/><path d="M17 9H8a5 5 0 000 10h2"/></svg></button>
     <span class="sep"></span>
-    <button class="k-btn k-ghost" id="svgBtn" data-testid="export-svg"><svg class="i" viewBox="0 0 20 20"><path d="M10 3v10M6 9l4 4 4-4M4 16h12"/></svg>SVG</button>
-    <button class="k-btn k-ghost" id="pngBtn" data-testid="export-png">PNG</button>
-    <button class="k-btn k-ghost k-icon" id="panel" aria-label="Open in the panel"><svg class="i" viewBox="0 0 20 20"><path d="M12 3h5v5M8 17H3v-5M17 3l-6 6M3 17l6-6"/></svg></button>
-    <button class="k-btn" id="send" data-testid="send" disabled><svg class="i" viewBox="0 0 20 20"><path d="M4 10h11M11 6l4 4-4 4"/></svg>Send to agent</button>
+    <span class="wide" id="wide">
+      <button class="k-btn k-ghost" id="exportBtn" data-testid="export"><svg class="i" viewBox="0 0 20 20"><path d="M10 3v10M6 9l4 4 4-4M4 16h12"/></svg>Export</button>
+      <button class="k-btn k-ghost k-icon" id="panel" aria-label="Open in the panel"><svg class="i" viewBox="0 0 20 20"><path d="M12 3h5v5M8 17H3v-5M17 3l-6 6M3 17l6-6"/></svg></button>
+    </span>
+    <button class="k-btn k-ghost k-icon" id="more" data-testid="more" aria-label="More"><svg class="i" viewBox="0 0 20 20"><path d="M5 10h.01M10 10h.01M15 10h.01" stroke-width="2.6"/></svg></button>
+    <button class="k-btn k-primary" id="send" data-testid="send" disabled><svg class="i" viewBox="0 0 20 20"><path d="M4 10h11M11 6l4 4-4 4"/></svg>Send to agent</button>
   </div>
   <div class="stage" id="stage" data-tool="select" data-testid="stage" tabindex="0">
     <svg class="canvas" id="svg" xmlns="http://www.w3.org/2000/svg"><g id="world"><g id="els"></g><g id="over"></g></g></svg>
@@ -124,9 +144,10 @@ const TOOLS = [["select", "Select · V"], ["hand", "Pan · H or hold space"], ["
 const KEYS = { v: "select", h: "hand", r: "rect", o: "ellipse", d: "diamond", a: "arrow", l: "line", p: "draw", t: "text" };
 $("tools").innerHTML = TOOLS.map(([t, label]) => `<button class="k-btn k-icon" data-tool="${t}" aria-label="${esc(label)}" aria-pressed="${t === tool}"><svg class="i" viewBox="0 0 20 20">${ICONS[t]}</svg></button>`).join("");
 for (const b of $("tools").querySelectorAll("button")) { b.onclick = () => setTool(b.dataset.tool); kit.tip(b, esc(b.getAttribute("aria-label"))); }
-for (const [id, t] of [["undo", "Undo · ⌘Z"], ["redo", "Redo · ⇧⌘Z"], ["panel", "Open in the panel"], ["zpct", "Fit the drawing"], ["svgBtn", "Download as SVG"], ["pngBtn", "Download as PNG"], ["send", "Tell the agent what you changed"]]) kit.tip($(id), esc(t));
+for (const [id, t] of [["undo", "Undo · ⌘Z"], ["redo", "Redo · ⇧⌘Z"], ["panel", "Open in the panel"], ["zpct", "Fit the drawing"], ["send", "Tell the agent what you changed"]]) kit.tip($(id), esc(t));
 function setTool(t) {
   tool = t;
+  $("pickerIcon").innerHTML = `<svg class="i" viewBox="0 0 20 20">${ICONS[t]}</svg>`;
   $("stage").dataset.tool = t;
   for (const b of $("tools").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.tool === t));
   if (t !== "select") { sel.clear(); paint(); }
@@ -159,20 +180,34 @@ function inView() {
   const x0 = b.x * view.k + view.x, y0 = b.y * view.k + view.y;
   return x0 >= 0 && y0 >= 0 && x0 + b.w * view.k <= r.width && y0 + b.h * view.k <= r.height;
 }
-const INLINE_MIN = 240, INLINE_MAX = 560;
+const INLINE_MIN = 240, INLINE_MAX = 560, MIN_TEXT = 12;
+// the zoom under which the drawing's smallest text drops below MIN_TEXT
+function minZoom() {
+  let small = Infinity;
+  for (const e of els) {
+    if (e.type === "frame") { if (e.text) small = Math.min(small, 14); }
+    else if (e.points) { if (e.label) small = Math.min(small, Math.max(10, e.fontSize * 0.8)); }
+    else if (e.text) small = Math.min(small, e.fontSize);
+  }
+  return small === Infinity ? 0.1 : Math.min(1, MIN_TEXT / small);
+}
 function fit() {
   const b = D.sceneBounds(els);
   if (b && document.documentElement.dataset.mode !== "fullscreen") {
     // inline, the stage takes the drawing's height (at most 1:1), within bounds
     const w = $("stage").getBoundingClientRect().width, top = els.some((e) => e.type === "frame" && e.text) ? D.FRAME_LABEL : 0;
-    const k = Math.min(1, (w - 80) / Math.max(b.w, 1));
+    const k = Math.max(minZoom(), Math.min(1, (w - 80) / Math.max(b.w, 1)));
     $("stage").style.height = Math.round(Math.max(INLINE_MIN, Math.min(INLINE_MAX, (b.h + top) * k + 80))) + "px";
+    if (grownFrom != null) { grownFrom = $("stage").style.height; if (parseFloat(grownFrom) < PANEL_MIN) $("stage").style.height = PANEL_MIN + "px"; }
   } else $("stage").style.height = "";
   const r = $("stage").getBoundingClientRect();
   if (!b || !r.width) { view = { x: r.width / 2, y: r.height / 2, k: 1 }; applyView(); return; }
   const pad = 40, top = els.some((e) => e.type === "frame" && e.text) ? D.FRAME_LABEL : 0;
-  const k = Math.max(0.1, Math.min(1, (r.width - 2 * pad) / Math.max(b.w, 1), (r.height - 2 * pad) / Math.max(b.h + top, 1)));
-  view = { k, x: r.width / 2 - (b.x + b.w / 2) * k, y: r.height / 2 - (b.y - top + (b.h + top) / 2) * k };
+  const k = Math.max(minZoom(), Math.min(1, (r.width - 2 * pad) / Math.max(b.w, 1), (r.height - 2 * pad) / Math.max(b.h + top, 1)));
+  // centered when it fits; else from its top-left corner (the rest pans)
+  const cx = b.w * k <= r.width - 2 * pad ? r.width / 2 - (b.x + b.w / 2) * k : pad - b.x * k;
+  const cy = (b.h + top) * k <= r.height - 2 * pad ? r.height / 2 - (b.y - top + (b.h + top) / 2) * k : pad - (b.y - top) * k;
+  view = { k, x: cx, y: cy };
   applyView();
 }
 
@@ -235,7 +270,7 @@ function swatches(name, cur, none) {
 function props() {
   const list = [...sel].map(byId).filter(Boolean);
   const box = $("props");
-  if (!list.length || drag || tool !== "select") { box.hidden = true; return; }
+  if (!list.length || drag || tool !== "select") { box.hidden = true; dockedFor = ""; shrink(); return; }
   const closed = list.filter((e) => D.SHAPES.includes(e.type));
   const texty = list.filter((e) => e.text || e.label || e.type === "text" || D.SHAPES.includes(e.type));
   let h = `<div><div class="lbl">Stroke</div>${swatches("stroke", common(list, "stroke"))}</div>`;
@@ -251,9 +286,49 @@ function props() {
   if (texty.length) h += `<div><div class="lbl">Text</div>${seg("fontSize", [[14, "S"], [18, "M"], [24, "L"], [32, "XL"]], common(texty, "fontSize"))}</div>` + seg("font", [["hand", "Hand"], ["sans", "Sans"], ["mono", "Mono"]], common(texty, "font"));
   if (list.some((e) => e.type === "arrow" || e.type === "line")) h += `<div><div class="lbl">Arrowheads</div>${seg("head", [["none", "None"], ["end", "End"], ["both", "Both"]], common(list.filter((e) => e.head), "head"))}</div>`;
   h += `<div class="row"><button class="k-btn" data-act="front">To front</button><button class="k-btn" data-act="back">To back</button></div>`;
-  h += `<div class="row">${list.length > 1 ? '<button class="k-btn" data-act="group">Group</button>' : ""}${list.some((e) => e.type === "frame") ? '<button class="k-btn" data-act="ungroup">Ungroup</button>' : ""}<button class="k-btn" data-act="delete">Delete</button></div>`;
+  const grouping = (list.length > 1 ? '<button class="k-btn" data-act="group">Group</button>' : "") + (list.some((e) => e.type === "frame") ? '<button class="k-btn" data-act="ungroup">Ungroup</button>' : "");
+  if (grouping) h += `<div class="row">${grouping}</div>`;
+  h += `<div class="row del"><button class="k-btn k-ghost" data-act="delete">Delete</button></div>`;
   box.innerHTML = h;
   box.hidden = false;
+  grow();
+  dock(list);
+}
+// inline, a stage under PANEL_MIN tall grows to it while the style panel shows (never cut)
+const PANEL_MIN = 360;
+let grownFrom = null;
+function grow() {
+  if (fullscreen()) return;
+  // the panel's own height, plus its margins: the stage holds it whole
+  const need = Math.max(PANEL_MIN, Math.ceil($("props").scrollHeight) + 16);
+  const h = $("stage").getBoundingClientRect().height;
+  if (h >= need) return;
+  if (grownFrom == null) grownFrom = $("stage").style.height || "";
+  $("stage").style.height = need + "px";
+}
+function shrink() {
+  if (grownFrom == null) return;
+  $("stage").style.height = grownFrom;
+  grownFrom = null;
+}
+// the panel sits on the canvas side away from the selection; when the
+// selection still sits under it, the canvas pans just enough to clear it
+let dockedFor = "";
+function dock(list) {
+  const box = $("props"), r = $("stage").getBoundingClientRect();
+  const b = D.union(list.map(D.bounds));
+  const s = { x: b.x * view.k + view.x, y: b.y * view.k + view.y, w: b.w * view.k, h: b.h * view.k };
+  const right = s.x + s.w / 2 < r.width / 2;
+  box.style.left = right ? "" : "var(--k-s-2)";
+  box.style.right = right ? "var(--k-s-2)" : "";
+  const key = [...sel].join();
+  if (key === dockedFor) return;
+  dockedFor = key;
+  const p = box.getBoundingClientRect(), px = p.left - r.left, gap = 12;
+  const under = s.x < px + p.width + gap && s.x + s.w > px - gap && s.y < p.bottom - r.top && s.y + s.h > p.top - r.top;
+  if (!under) return;
+  view.x += right ? px - gap - (s.x + s.w) : px + p.width + gap - s.x;
+  applyView(); paintOver();
 }
 $("props").addEventListener("pointerdown", (e) => e.stopPropagation());
 $("props").addEventListener("click", (e) => {
@@ -387,7 +462,7 @@ function adopt(s, fromSave) {
   if (first) { nextN = 1; }
   paint();
   if (!fitted) { fitted = true; requestAnimationFrame(fit); }
-  if (theirs) { status("The agent changed the drawing."); if (!inView()) fit(); }
+  if (theirs) { status("The agent changed the drawing."); agentWrote(); if (!inView()) fit(); }
   snapLater();
 }
 // his edits since the agent's last change, as words for the agent's next turn
@@ -462,21 +537,44 @@ function rasterize(svgText, scale) {
   });
 }
 const file = (name, mimeType, body) => [{ type: "resource", resource: { uri: "file:///" + name, mimeType, ...body } }];
-$("svgBtn").onclick = async () => {
+async function exportSvg() {
   try { await app.download(file(slug() + ".svg", "image/svg+xml", { text: D.toSVG({ ...doc, elements: els }, { theme }) })); status("Downloaded " + slug() + ".svg"); }
   catch (err) { status("Download: " + why(err), true); }
-};
-$("pngBtn").onclick = async () => {
+}
+async function exportPng() {
   try { const blob = await rasterize(D.toSVG({ ...doc, elements: els }, { theme }), 2); await app.download(file(slug() + ".png", "image/png", { blob })); status("Downloaded " + slug() + ".png"); }
   catch (err) { status("Download: " + why(err), true); }
-};
-$("panel").onclick = () => app.displayMode(document.documentElement.dataset.mode === "fullscreen" ? "inline" : "fullscreen").catch((err) => status(why(err), true));
+}
+const fullscreen = () => document.documentElement.dataset.mode === "fullscreen";
+const togglePanel = () => app.displayMode(fullscreen() ? "inline" : "fullscreen").catch((err) => status(why(err), true));
+kit.menu($("exportBtn"), [{ label: "SVG", run: exportSvg, testid: "export-svg" }, { label: "PNG", run: exportPng, testid: "export-png" }]);
+kit.menu($("picker"), TOOLS.map(([t, label]) => ({ label, run: () => setTool(t), testid: "pick-" + t })));
+// ⋯ holds Export and the panel when the head is narrow; its items follow the mode
+function buildMore() {
+  const old = $("more"), b = old.cloneNode(true);
+  old.replaceWith(b);
+  const items = [{ label: "Export SVG", run: exportSvg, testid: "export-svg" }, { label: "Export PNG", run: exportPng, testid: "export-png" }];
+  if (!fullscreen() && panelOk) items.push({ label: "Open in the panel", run: togglePanel });
+  kit.menu(b, items);
+}
+let panelOk = true;
+function fitBar() {
+  const bar = document.querySelector(".bar");
+  bar.classList.add("measuring");
+  bar.classList.remove("fold-tools", "fold-more");
+  const over = () => bar.scrollWidth > bar.clientWidth + 1;
+  if (over()) bar.classList.add("fold-tools");
+  if (over()) bar.classList.add("fold-more");
+  bar.classList.remove("measuring");
+}
+new ResizeObserver(fitBar).observe(document.querySelector(".bar"));
+$("panel").onclick = togglePanel;
 $("undo").onclick = () => undo(true);
 $("redo").onclick = () => undo(false);
 $("zin").onclick = () => { const r = $("stage").getBoundingClientRect(); zoomAt(view.k * 1.2, r.width / 2, r.height / 2); };
 $("zout").onclick = () => { const r = $("stage").getBoundingClientRect(); zoomAt(view.k / 1.2, r.width / 2, r.height / 2); };
 $("zpct").onclick = fit;
-function sizeTitle() { $("title").size = Math.max(8, Math.min(40, $("title").value.length + 1)); }
+function sizeTitle() { $("title").size = Math.max(8, Math.min(40, $("title").value.length + 1)); fitBar(); }
 $("title").addEventListener("input", sizeTitle);
 $("title").addEventListener("change", scheduleSave);
 $("title").addEventListener("keydown", (e) => { if (e.key === "Enter") e.target.blur(); });
@@ -506,8 +604,12 @@ function moving() {
   return ids;
 }
 const stage = $("stage");
+let lastDown = { t: 0, x: 0, y: 0 };
 stage.addEventListener("pointerdown", (e) => {
   if (editing) { commitEdit(); return; }
+  const now = e.timeStamp, twice = now - lastDown.t < 400 && Math.hypot(e.clientX - lastDown.x, e.clientY - lastDown.y) < 6;
+  lastDown = twice ? { t: 0, x: 0, y: 0 } : { t: now, x: e.clientX, y: e.clientY };
+  if (twice && e.button === 0 && tool === "select" && !spaceDown) { e.preventDefault(); return dbl(e); }
   stage.focus({ preventScroll: true });
   const p = toWorld(e);
   if (e.button === 1 || spaceDown || tool === "hand") { drag = { kind: "pan", sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y }; stage.classList.add("panning"); stage.setPointerCapture(e.pointerId); return; }
@@ -644,13 +746,14 @@ function endDrag() {
 stage.addEventListener("pointerup", endDrag);
 stage.addEventListener("pointercancel", endDrag);
 stage.addEventListener("pointerleave", () => { if (hover) { hover = null; paintOver(); } });
-stage.addEventListener("dblclick", (e) => {
+function dbl(e) {
+  drag = null;
   const p = toWorld(e);
   const el = topAt(p, 4 / view.k);
   if (!el) return newText(p);
   if (el.type === "draw") return;
   edit(el, el.points ? "label" : "text");
-});
+}
 stage.addEventListener("wheel", (e) => {
   const r = $("svg").getBoundingClientRect();
   if (e.ctrlKey || e.metaKey) { e.preventDefault(); zoomAt(view.k * Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top); return; }
@@ -784,13 +887,24 @@ function why(err) {
   return reasons[String(err && err.code)] || (err && err.message) || "it failed";
 }
 function status(text, err) { const s = $("status"); s.textContent = text ? "· " + text : ""; s.className = "status" + (err ? " err" : ""); }
-function setLive(text, on) { $("live").textContent = text; $("dot").classList.toggle("on", !!on); }
+function setLive(text, on) { $("live").textContent = text; $("dot").classList.toggle("off", !on); }
+let agentTimer = 0;
+function agentWrote() { $("dot").classList.add("agent"); clearTimeout(agentTimer); agentTimer = setTimeout(() => $("dot").classList.remove("agent"), 3000); }
 function readTheme() {
   const t = document.documentElement.dataset.theme;
   const next = t === "dark" || t === "light" ? t : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   if (next !== theme) { theme = next; cache.clear(); if (doc) paint(); }
 }
-app.on("context", (c) => { readTheme(); $("panel").hidden = !(c.availableDisplayModes || ["inline", "fullscreen"]).includes("fullscreen"); requestAnimationFrame(() => { if (doc) fit(); }); });
+let lastMode = null;
+app.on("context", (c) => {
+  readTheme();
+  panelOk = (c.availableDisplayModes || ["inline", "fullscreen"]).includes("fullscreen");
+  $("panel").hidden = !panelOk || fullscreen();
+  buildMore();
+  fitBar();
+  const mode = c.displayMode || lastMode;
+  if (mode !== lastMode) { lastMode = mode; requestAnimationFrame(() => { if (doc) fit(); }); }
+});
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readTheme);
 app.on("tool-result", (r) => {
   const s = r && r.structuredContent && r.structuredContent.drawing;
@@ -802,7 +916,7 @@ app.on("tool-cancelled", () => { setLive("the tool was stopped", false); });
 app.on("teardown", () => { alive = false; clearTimeout(pollTimer); clearTimeout(snapTimer); clearTimeout(ctxTimer); if (saveTimer) { clearTimeout(saveTimer); saveNow(); } });
 new ResizeObserver(() => { if (doc && !drag) applyView(); }).observe(stage);
 readTheme();
-hint();
+setTool("select");
 paint();
 app.start("draw").then(readTheme, () => setLive("not connected", false));
 </script>
