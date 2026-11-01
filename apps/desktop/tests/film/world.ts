@@ -2,6 +2,8 @@
 // his: fake paths, fake agents, fake numbers. The story's events are built here, sent on cue by
 // readme.spec.ts while the real app is recorded off screen.
 
+import { thread } from '../../src/proto/words_thread.gen';
+
 export const HOME = 'bise-home-00000000';
 export const P = 'acme-5h0p2026';
 const PATH = '/Users/sam/acme';
@@ -27,7 +29,9 @@ export function agentRow(r: Row, now: number): Ev {
     name: r.name, main, status: r.status, phase: r.phase ?? null, archived: false,
     title: r.title ?? '', purpose: r.purpose ?? '', since_ms: now - 2000, waits: r.waits ?? 0,
     dir: r.name, watching: [], waiting_on: (r.waits ?? 0) > 0 ? { who: 'you' } : null,
-    turn_ms: r.status === 'working' ? (r.turn_ms ?? 4000) : null,
+    // a working main has no turn_ms here: the window's title bar reads it as a time (app/title.ts
+    // stateFactOf: now - turn_ms), which drew 'working · 20758 d' in take 3
+    turn_ms: r.status === 'working' && !main ? (r.turn_ms ?? 4000) : null,
     ...(main ? { mode: 'shared', path: PATH, checkout_branch: 'main', place_id: 'shared', parent: null }
       : { parent: 'main', branch: r.branch ?? `sb/${r.name}`, worktree: `/Users/sam/.bise/worktrees/acme/${r.name}`, place_id: `wt:sb/${r.name}`, mode: 'worktree' }),
     model: 'anthropic/claude-opus', effort: 'high',
@@ -58,11 +62,14 @@ export function history(now: number): Ev[] {
   ];
 }
 
+// the tools' summaries in the app's own words (words_thread.gen.ts), never retyped
+const SUM_READ = `${thread.did_read({ n: 2 })}, ${thread.did_run({ n: 1 })}`;
+
 /** perf's thread: its brief's work so far, then what comes while he looks (perfLive) */
 const tool = (pos: number, at: number, kind: string, text: string, more: Record<string, unknown> = {}) => ({ pos, id: pos, at_ms: at, text, kind, state: 'ok', ms: 400, ...more });
 export function perfThread(now: number): Ev[] {
   return [
-    { pos: 1, at_ms: now - 9000, kind: 'tools', text: 'read 2 files, ran 1 command', tools: { count: 3, summary: 'read 2 files, ran 1 command', items: [
+    { pos: 1, at_ms: now - 9000, kind: 'tools', text: SUM_READ, tools: { count: 3, summary: SUM_READ, items: [
       tool(1, now - 9000, 'read', 'reading src/pages/product.tsx'),
       tool(2, now - 8800, 'read', 'reading src/lib/images.ts'),
       tool(3, now - 8000, 'run', 'measuring the product page', { name: 'bash', code: JSON.stringify({ command: 'pnpm lighthouse /product/42', description: 'measuring the product page' }), out: 'LCP 2.9 s · TBT 410 ms' }),
@@ -72,7 +79,7 @@ export function perfThread(now: number): Ev[] {
 }
 export function perfLive(now: number): Ev[] {
   return [
-    { pos: 3, at_ms: now, kind: 'tools', text: 'edited 2 files', tools: { count: 2, summary: 'edited 2 files', items: [
+    { pos: 3, at_ms: now, kind: 'tools', text: thread.did_edit({ n: 2 }), tools: { count: 2, summary: thread.did_edit({ n: 2 }), items: [
       tool(3, now, 'edit', 'images through the CDN, 3 widths', { files: [{ path: 'src/lib/images.ts', add: 24, del: 3 }] }),
       tool(4, now + 300, 'edit', 'reviews after the first paint', { files: [{ path: 'src/pages/product.tsx', add: 9, del: 4 }] }),
     ] } },
@@ -80,7 +87,7 @@ export function perfLive(now: number): Ev[] {
 }
 export function perfLive2(now: number): Ev[] {
   return [
-    { pos: 5, at_ms: now, kind: 'tools', text: 'ran 1 command', tools: { count: 1, summary: 'ran 1 command', items: [
+    { pos: 5, at_ms: now, kind: 'tools', text: thread.did_run({ n: 1 }), tools: { count: 1, summary: thread.did_run({ n: 1 }), items: [
       tool(5, now, 'run', 'measuring again', { name: 'bash', code: JSON.stringify({ command: 'pnpm lighthouse /product/42', description: 'measuring again' }), out: 'LCP 0.8 s · TBT 90 ms' }),
     ] } },
     { pos: 6, at_ms: now + 200, kind: 'agent', text: '0.8 s now, it was 2.9 s. i run the tests, then i land it.' },

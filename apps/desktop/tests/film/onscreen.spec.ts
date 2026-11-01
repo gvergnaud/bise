@@ -5,13 +5,13 @@
 //   FILM_OUT=<dir> playwright test -c tests/film/film.config.ts onscreen                  (dry: off screen)
 // Both run the app from out/ in test mode, in a throwaway home (the harness's isolation and sentinel),
 // on the scripted core with live.ts's made-up project. On his go, the app's main process opens two
-// windows of its own (test mode's window fence off while it makes them): a backdrop with macOS's
-// 'Mac Pink' wallpaper over the whole screen (so the glass
-// shows the wallpaper, never his windows) and a real bise window (hiddenInset lights, under-window
+// windows of its own (test mode's window fence off while it makes them): a backdrop with our own
+// wallpaper (backdrop.html, in the spirit of his) over the whole screen (so the glass shows it,
+// never his windows or his desktop's files) and a real bise window (hiddenInset lights, under-window
 // vibrancy) on the same renderer; macOS's screencapture records the rect around it (-v -R), then
-// everything closes. Nothing of his is read but the system wallpaper file.
+// everything closes. Nothing of his is read.
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
 import { DESKTOP_DIR, harnessElectron } from '../harness/electron';
@@ -24,9 +24,8 @@ import { P, type Row } from './world';
 const OUT = process.env['FILM_OUT'] ?? '';
 const SHOWN = process.env['FILM_ONSCREEN'] === '1';
 const WIN = { w: 1280, h: 800 };
-const MARGIN = 64; // points of wallpaper around the window in the recording
+const MARGIN = 43; // points of wallpaper around the window in the recording (1.5x less than 64: his m_51838)
 const SECONDS = 19;
-const WALLPAPER = '/System/Library/Desktop Pictures/Mac Pink.heic';
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 type Geo = { x: number; y: number; w: number; h: number; scale: number };
@@ -41,9 +40,8 @@ async function showWindows(app: ElectronApplication, url: string, backdrop: stri
     const d = screen.getPrimaryDisplay();
     const b = d.bounds, wa = d.workArea;
     const back = new BrowserWindow({ x: b.x, y: b.y, width: b.width, height: b.height, frame: false, show: false, hasShadow: false, focusable: false, skipTaskbar: true, enableLargerThanScreen: true, backgroundColor: '#c0587a', webPreferences: { sandbox: true, contextIsolation: true } });
-    // the wallpaper painted into a blank page (the main process loads it; the page itself navigates nowhere)
-    await back.loadURL('about:blank');
-    await back.webContents.executeJavaScript(`document.documentElement.style.cssText = 'margin:0;height:100%;background:#c0587a url(${o.backdrop}) center/cover no-repeat'; document.body.style.margin = '0';`);
+    // our own wallpaper (backdrop.html, drawn at the screen's size), loaded by the main process
+    await back.loadFile(o.backdrop, { query: { look: 'dusk', w: String(b.width), h: String(b.height) } });
     const x = Math.round(wa.x + (wa.width - o.w) / 2), y = Math.round(wa.y + (wa.height - o.h) / 2);
     const win = new BrowserWindow({
       x, y, width: o.w, height: o.h, show: false, title: 'bise', titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 20, y: 20 },
@@ -52,8 +50,12 @@ async function showWindows(app: ElectronApplication, url: string, backdrop: stri
     });
     await win.loadURL(o.url);
     for (const f of fences) a.on('browser-window-created', f);
+    // both above his windows whatever is active (the backdrop under the window, the same level)
+    back.setAlwaysOnTop(true, 'floating');
+    win.setAlwaysOnTop(true, 'floating');
     back.showInactive();
     win.show();
+    win.moveTop();
     a.focus({ steal: true });
     win.focus();
     return { x, y, w: o.w, h: o.h, scale: d.scaleFactor };
@@ -145,10 +147,8 @@ test('readme first shot: the real window', async () => {
       writeFileSync(path.join(OUT, 'dry.png'), await hidden.screenshot());
       return;
     }
-    // the wallpaper, as a page the backdrop window loads (a PNG beside it)
-    const jpg = path.join(OUT, 'wallpaper.jpg');
-    execFileSync('sips', ['-Z', '3200', '-s', 'format', 'jpeg', '-s', 'formatOptions', '85', WALLPAPER, '--out', jpg], { stdio: 'ignore' });
-    const backdrop = `data:image/jpeg;base64,${readFileSync(jpg).toString('base64')}`;
+    // our own wallpaper in the spirit of his (m_51854): never Apple's art, never his desktop's files
+    const backdrop = path.join(__dirname, 'backdrop.html');
     // never more than a minute on his screen: past it, the app is killed whatever the take is doing
     const cap = setTimeout(kill, 60_000);
     const geo = await showWindows(app, hidden.url(), backdrop, h.home);
