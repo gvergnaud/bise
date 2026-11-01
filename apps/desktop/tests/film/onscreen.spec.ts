@@ -5,12 +5,13 @@
 //   FILM_OUT=<dir> playwright test -c tests/film/film.config.ts onscreen                  (dry: off screen)
 // Both run the app from out/ in test mode, in a throwaway home (the harness's isolation and sentinel),
 // on the scripted core with live.ts's made-up project. On his go, the app's main process opens two
-// windows of its own: a backdrop with macOS's 'Mac Pink' wallpaper over the whole screen (so the glass
+// windows of its own (test mode's window fence off while it makes them): a backdrop with macOS's
+// 'Mac Pink' wallpaper over the whole screen (so the glass
 // shows the wallpaper, never his windows) and a real bise window (hiddenInset lights, under-window
 // vibrancy) on the same renderer; macOS's screencapture records the rect around it (-v -R), then
 // everything closes. Nothing of his is read but the system wallpaper file.
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
 import { DESKTOP_DIR, harnessElectron } from '../harness/electron';
@@ -33,10 +34,16 @@ type Geo = { x: number; y: number; w: number; h: number; scale: number };
 /** The backdrop and the real window, opened by the app's main process; their geometry in points. */
 async function showWindows(app: ElectronApplication, url: string, backdrop: string, home: string): Promise<Geo> {
   return app.evaluate(async ({ BrowserWindow, app: a, screen }, o) => {
+    // test mode's own fence (guard.ts fenceWindow) destroys any window not rendered off screen: these
+    // two are the film's, made while its listener is off, then it is back for anything else
+    const fences = a.listeners('browser-window-created') as ((...args: unknown[]) => void)[];
+    a.removeAllListeners('browser-window-created');
     const d = screen.getPrimaryDisplay();
     const b = d.bounds, wa = d.workArea;
     const back = new BrowserWindow({ x: b.x, y: b.y, width: b.width, height: b.height, frame: false, show: false, hasShadow: false, focusable: false, skipTaskbar: true, enableLargerThanScreen: true, backgroundColor: '#c0587a', webPreferences: { sandbox: true, contextIsolation: true } });
-    await back.loadFile(o.backdrop);
+    // the wallpaper painted into a blank page (the main process loads it; the page itself navigates nowhere)
+    await back.loadURL('about:blank');
+    await back.webContents.executeJavaScript(`document.documentElement.style.cssText = 'margin:0;height:100%;background:#c0587a url(${o.backdrop}) center/cover no-repeat'; document.body.style.margin = '0';`);
     const x = Math.round(wa.x + (wa.width - o.w) / 2), y = Math.round(wa.y + (wa.height - o.h) / 2);
     const win = new BrowserWindow({
       x, y, width: o.w, height: o.h, show: false, title: 'bise', titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 20, y: 20 },
@@ -44,6 +51,7 @@ async function showWindows(app: ElectronApplication, url: string, backdrop: stri
       webPreferences: { preload: o.preload, contextIsolation: true, sandbox: true, nodeIntegration: false, additionalArguments: ['--bise-surface=window', `--bise-home=${o.home}`] },
     });
     await win.loadURL(o.url);
+    for (const f of fences) a.on('browser-window-created', f);
     back.showInactive();
     win.show();
     a.focus({ steal: true });
@@ -138,10 +146,11 @@ test('readme first shot: the real window', async () => {
       return;
     }
     // the wallpaper, as a page the backdrop window loads (a PNG beside it)
-    const png = path.join(OUT, 'wallpaper.png');
-    execFileSync('sips', ['-s', 'format', 'png', WALLPAPER, '--out', png], { stdio: 'ignore' });
-    const backdrop = path.join(OUT, 'backdrop.html');
-    writeFileSync(backdrop, `<!doctype html><body style="margin:0;width:100vw;height:100vh;background:#c0587a url('wallpaper.png') center/cover no-repeat"></body>`);
+    const jpg = path.join(OUT, 'wallpaper.jpg');
+    execFileSync('sips', ['-Z', '3200', '-s', 'format', 'jpeg', '-s', 'formatOptions', '85', WALLPAPER, '--out', jpg], { stdio: 'ignore' });
+    const backdrop = `data:image/jpeg;base64,${readFileSync(jpg).toString('base64')}`;
+    // never more than a minute on his screen: past it, the app is killed whatever the take is doing
+    const cap = setTimeout(kill, 60_000);
     const geo = await showWindows(app, hidden.url(), backdrop, h.home);
     const page = await shownPage(app, hidden);
     await expect(page.getByTestId('thread.list')).toBeVisible({ timeout: 20_000 });
@@ -156,6 +165,7 @@ test('readme first shot: the real window', async () => {
     await story(page, core);
     await rec;
     execFileSync('screencapture', ['-x', `-R${rect}`, path.join(OUT, 'last.png')]);
+    clearTimeout(cap);
   } finally {
     const tree = await sentinel.tree();
     await app?.close().catch(() => undefined);
