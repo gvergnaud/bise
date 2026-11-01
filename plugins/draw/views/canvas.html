@@ -109,7 +109,7 @@
     <div class="fade t" id="fadeT"></div><div class="fade r" id="fadeR"></div><div class="fade b" id="fadeB"></div><div class="fade l" id="fadeL"></div>
     <div class="empty" id="empty" hidden><b>Nothing drawn yet</b><span>Pick a tool above, or ask the agent to draw something.</span></div>
     <div class="props" id="props" hidden data-testid="props"></div>
-    <div class="zoom">
+    <div class="zoom" id="zoomBox">
       <button class="k-btn k-icon" id="zout" aria-label="Zoom out"><svg class="i" viewBox="0 0 20 20"><path d="M5 10h10"/></svg></button>
       <button class="k-btn pct" id="zpct" aria-label="Fit the drawing">100%</button>
       <button class="k-btn k-icon" id="zin" aria-label="Zoom in"><svg class="i" viewBox="0 0 20 20"><path d="M5 10h10M10 5v10"/></svg></button>
@@ -192,7 +192,9 @@ function applyView() {
   placeEditor();
   cutCue();
 }
+let moved = false; // he zoomed or panned himself: no refit on a resize
 function zoomAt(k, sx, sy) {
+  moved = true;
   k = Math.max(0.1, Math.min(4, k));
   view.x = sx - ((sx - view.x) * k) / view.k; view.y = sy - ((sy - view.y) * k) / view.k; view.k = k;
   applyView(); paintOver();
@@ -218,6 +220,7 @@ function minZoom() {
   return fullscreen() ? floor : Math.min(floor, INLINE_ZOOM);
 }
 function fit(all) {
+  moved = false;
   const b = D.sceneBounds(els);
   if (b && document.documentElement.dataset.mode !== "fullscreen") {
     // inline, the stage takes the drawing's height (at most 1:1), within bounds
@@ -356,7 +359,8 @@ function dock(list) {
   view.x += right ? px - gap - (s.x + s.w) : px + p.width + gap - s.x;
   applyView(); paintOver();
 }
-$("props").addEventListener("pointerdown", (e) => e.stopPropagation());
+// the controls inside the stage keep their clicks (the stage captures the pointer on pointerdown)
+for (const id of ["props", "zoomBox"]) $(id).addEventListener("pointerdown", (e) => e.stopPropagation());
 $("props").addEventListener("click", (e) => {
   const b = e.target.closest("button");
   if (!b) return;
@@ -684,7 +688,7 @@ stage.addEventListener("pointermove", (e) => {
     stage.style.cursor = tool === "select" && handleAt(p) ? (byId([...sel][0]).points ? "move" : "nwse-resize") : "";
     return;
   }
-  if (drag.kind === "pan") { view.x = drag.vx + e.clientX - drag.sx; view.y = drag.vy + e.clientY - drag.sy; applyView(); return; }
+  if (drag.kind === "pan") { moved = true; view.x = drag.vx + e.clientX - drag.sx; view.y = drag.vy + e.clientY - drag.sy; applyView(); return; }
   if (drag.kind === "marquee") {
     drag.b = p;
     const box = norm(drag.a, drag.b);
@@ -787,6 +791,7 @@ stage.addEventListener("wheel", (e) => {
   // inline, a plain wheel scrolls the thread; in the panel it pans
   if (document.documentElement.dataset.mode !== "fullscreen") return;
   e.preventDefault();
+  moved = true;
   view.x -= e.deltaX; view.y -= e.deltaY; applyView();
 }, { passive: false });
 
@@ -941,7 +946,10 @@ app.on("tool-result", (r) => {
 });
 app.on("tool-cancelled", () => { setLive("the tool was stopped", false); });
 app.on("teardown", () => { alive = false; clearTimeout(pollTimer); clearTimeout(snapTimer); clearTimeout(ctxTimer); if (saveTimer) { clearTimeout(saveTimer); saveNow(); } });
-new ResizeObserver(() => { if (doc && !drag) applyView(); }).observe(stage);
+new ResizeObserver(() => {
+  if (!doc || drag) return;
+  if (fullscreen() && !moved && !editing) fit(); else applyView();
+}).observe(stage);
 readTheme();
 setTool("select");
 paint();
