@@ -1,0 +1,467 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Diagram</title>
+<!-- bise-view-kit -->
+<style>
+  /* the kit's tokens only (plugins/.view-kit/kit.css) */
+  .app { display: flex; flex-direction: column; }
+  html[data-mode="fullscreen"] .app { height: 100%; }
+  .bar { display: flex; align-items: center; gap: var(--k-s-2); padding: var(--k-s-2) var(--k-s-2) var(--k-s-2) var(--k-s-4); border-bottom: 1px solid var(--k-line); }
+  .bar .k-title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--k-t-md); }
+  .bar .k-chip { flex: none; }
+  .zoom { min-width: calc(var(--k-h-control) * 2); justify-content: center; }
+  .k-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .to-inline, html[data-mode="fullscreen"] .to-panel { display: none; }
+  html[data-mode="fullscreen"] .to-inline { display: block; }
+  .sep { width: 1px; align-self: stretch; margin: var(--k-s-1) var(--k-s-1); background: var(--k-line); }
+  .stage { position: relative; overflow: hidden; cursor: grab; touch-action: none; outline: none; }
+  .stage:focus-visible { box-shadow: inset 0 0 0 2px var(--k-focus); }
+  .stage.drag { cursor: grabbing; }
+  html[data-mode="fullscreen"] .stage, html[data-mode="fullscreen"] .source { flex: 1; min-height: 0; height: auto !important; }
+  .canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+  .canvas svg { display: block; }
+  .hint { position: absolute; right: var(--k-s-3); bottom: var(--k-s-2); pointer-events: none; opacity: 0; transition: opacity var(--k-fast) var(--k-ease); }
+  .stage:hover .hint, .stage:focus-visible .hint { opacity: 1; }
+  .stage .k-skeleton { position: absolute; inset: var(--k-s-3); }
+  .source { display: flex; flex-direction: column; }
+  .code { display: flex; align-items: flex-start; flex: 1; min-height: 0; overflow: auto; font-family: var(--k-mono); font-size: var(--k-t-sm); line-height: 1.6; background: var(--k-bg-2); }
+  .gutter { padding: var(--k-s-2) 0; text-align: right; color: var(--k-text-3); user-select: none; font-variant-numeric: tabular-nums; border-right: 1px solid var(--k-line); }
+  .gutter div { padding: 0 var(--k-s-2); }
+  .gutter div.bad { color: var(--k-err); background: var(--k-err-soft); font-weight: 600; }
+  textarea { flex: 1; align-self: stretch; border: 0; outline: none; resize: none; margin: 0; padding: var(--k-s-2) var(--k-s-3); font: inherit; line-height: inherit; color: var(--k-text); background: transparent; white-space: pre; overflow: hidden; tab-size: 2; }
+  .srcbar { display: flex; align-items: center; gap: var(--k-s-1); padding: var(--k-s-2) var(--k-s-2) var(--k-s-2) var(--k-s-4); border-top: 1px solid var(--k-line); }
+  .error { margin: var(--k-s-3) var(--k-s-4) var(--k-s-4); overflow: hidden; }
+  .error .head { display: flex; align-items: baseline; gap: var(--k-s-2); padding: var(--k-s-2) var(--k-s-3) 0; }
+  .error .head b { color: var(--k-err); font-weight: 600; }
+  .error .msg { padding: var(--k-s-1) var(--k-s-3) var(--k-s-2); }
+  .error pre { margin: 0; padding: var(--k-s-2) 0; background: var(--k-bg-2); font-family: var(--k-mono); font-size: var(--k-t-sm); line-height: 1.6; overflow-x: auto; border-top: 1px solid var(--k-line); }
+  .error pre div { padding: 0 var(--k-s-3); white-space: pre; }
+  .error pre div.bad { background: var(--k-err-soft); }
+  .error pre .ln { display: inline-block; min-width: 3ch; color: var(--k-text-3); text-align: right; margin-right: var(--k-s-3); user-select: none; }
+  .error pre .caret { color: var(--k-err); font-weight: 600; }
+  .error .actions { display: flex; align-items: center; gap: var(--k-s-2); padding: var(--k-s-2) var(--k-s-3); border-top: 1px solid var(--k-line); }
+  .toast { position: fixed; left: 50%; bottom: var(--k-s-3); transform: translateX(-50%); background: var(--k-inverse); color: var(--k-on-inverse); padding: var(--k-s-1) var(--k-s-3); border-radius: var(--k-r-md); font-size: var(--k-t-sm); box-shadow: var(--k-shadow-md); opacity: 0; transition: opacity var(--k-fast) var(--k-ease); pointer-events: none; }
+  .toast.on { opacity: 1; }
+  [hidden] { display: none !important; }
+</style>
+<!-- mermaid -->
+</head>
+<body>
+<div class="app">
+  <div class="bar">
+    <h1 class="k-title" id="title" data-testid="title">Diagram</h1>
+    <span class="k-chip" id="kind" data-testid="kind" hidden></span>
+    <span class="k-spacer"></span>
+    <span class="k-toolbar" id="zoomtools" hidden>
+      <button class="k-btn k-ghost k-icon" id="zoomOut" aria-label="Zoom out" data-testid="zoom-out"><svg viewBox="0 0 16 16"><path d="M4 8h8"/></svg></button>
+      <button class="k-btn k-ghost zoom k-num" id="zoomPct" aria-label="Fit to the view" data-testid="zoom">100%</button>
+      <button class="k-btn k-ghost k-icon" id="zoomIn" aria-label="Zoom in" data-testid="zoom-in"><svg viewBox="0 0 16 16"><path d="M4 8h8M8 4v8"/></svg></button>
+      <span class="sep"></span>
+      <button class="k-btn k-ghost" id="svgBtn" data-testid="export-svg">SVG</button>
+      <button class="k-btn k-ghost" id="pngBtn" data-testid="export-png">PNG</button>
+      <button class="k-btn k-ghost k-icon" id="panelBtn" aria-label="Open in the panel" data-testid="panel"><svg class="to-panel" viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9"/></svg><svg class="to-inline" viewBox="0 0 16 16"><path d="M13.5 6.5h-4v-4M9.5 6.5 14 2M2.5 9.5h4v4M6.5 9.5 2 14"/></svg></button>
+      <span class="sep"></span>
+    </span>
+    <span class="k-seg" role="tablist">
+      <button id="tabDiagram" role="tab" aria-pressed="true" data-testid="tab-diagram">Diagram</button>
+      <button id="tabSource" role="tab" aria-pressed="false" data-testid="tab-source">Source</button>
+    </span>
+  </div>
+  <div class="stage" id="stage" tabindex="0" data-testid="stage" style="height:200px">
+    <div class="k-skeleton" id="skeleton"></div>
+    <div class="canvas" id="canvas"></div>
+    <div class="hint k-faint" id="hint">drag to pan · ⌘ scroll to zoom · double-click to fit</div>
+  </div>
+  <div id="errorBox" hidden></div>
+  <div class="source" id="source" hidden>
+    <div class="code" id="code"><div class="gutter" id="gutter"></div><textarea id="src" rows="1" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Mermaid source" data-testid="source"></textarea></div>
+    <div class="srcbar">
+      <span class="k-faint">edit it to try a change: it draws here, and the agent sees your version</span>
+      <span class="k-spacer"></span>
+      <button class="k-btn k-ghost" id="copyBtn" data-testid="copy-source">Copy</button>
+      <button class="k-btn k-ghost" id="mmdBtn" data-testid="export-mmd">Download .mmd</button>
+      <button class="k-btn k-primary" id="applyBtn" data-testid="apply" disabled>Draw it</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+<script>
+const app = kit.app, esc = kit.esc;
+function why(err) {
+  const reasons = { "-32031": "this view may not do that", "-32032": "the plugin is turned off", "-32033": "you declined it",
+    "-32034": "not supported in bise", "-32035": "too many at once: try again in a moment", "-32037": "bise wants a click in the view first",
+    "-32038": "too large to send" };
+  return reasons[String(err && err.code)] || (err && err.message) || "it failed";
+}
+
+// ---- state
+const $ = (id) => document.getElementById(id);
+const KINDS = { "flowchart-v2": "flowchart", flowchart: "flowchart", sequence: "sequence", class: "class diagram", classDiagram: "class diagram",
+  stateDiagram: "state diagram", state: "state diagram", er: "ER diagram", gantt: "Gantt", pie: "pie chart", journey: "user journey", gitGraph: "git graph",
+  mindmap: "mind map", timeline: "timeline", quadrantChart: "quadrant chart", requirement: "requirements", c4: "C4", sankey: "Sankey", xychart: "XY chart",
+  block: "block diagram", packet: "packet", kanban: "kanban", architecture: "architecture", radar: "radar", treemap: "treemap" };
+let source = "", shown = "", title = "", tab = "diagram", error = null, edited = false;
+let natural = { w: 0, h: 0 }, view = { x: 0, y: 0, k: 1 }, renderSeq = 0, svgEl = null;
+const PAD = 16, INLINE_MIN = 140, INLINE_MAX = 520;
+const fullscreen = () => document.documentElement.dataset.mode === "fullscreen";
+
+// ---- bise's look for mermaid: the kit's tokens, resolved to plain hex (mermaid computes on them)
+const probe = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+const probeEl = document.createElement("span");
+probeEl.style.display = "none";
+document.body.appendChild(probeEl);
+function hex(cssVar, over) {
+  probeEl.style.color = `var(${cssVar})`;
+  const c = getComputedStyle(probeEl).color;
+  probe.clearRect(0, 0, 1, 1);
+  if (over) { probe.fillStyle = over; probe.fillRect(0, 0, 1, 1); }
+  probe.fillStyle = c; probe.fillRect(0, 0, 1, 1);
+  const [r, g, b] = probe.getImageData(0, 0, 1, 1).data;
+  return "#" + [r, g, b].map((n) => n.toString(16).padStart(2, "0")).join("");
+}
+function isDark() {
+  const t = document.documentElement.dataset.theme;
+  return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+}
+function themeVars() {
+  const bg = hex("--k-bg"), dark = isDark();
+  const c = (v) => hex(v, bg);
+  const bg2 = c("--k-bg-2"), hover = c("--k-hover"), fg = c("--k-text"), fg2 = c("--k-text-2"), fg3 = c("--k-text-3");
+  const line = c("--k-line-strong"), line2 = c("--k-line"), err = c("--k-err"), errBg = c("--k-err-soft");
+  const s = [1, 2, 3, 4, 5, 6, 7, 8].map((i) => c(`--k-series-${i}`));
+  const onS = c("--k-on-inverse"); // text on a series fill: the series are the text-strength hues of their theme
+  const font = getComputedStyle(document.body).fontFamily;
+  const v = {
+    darkMode: dark, background: bg, fontFamily: font, fontSize: getComputedStyle(document.body).fontSize,
+    primaryColor: bg2, primaryTextColor: fg, primaryBorderColor: line,
+    secondaryColor: hover, secondaryTextColor: fg, secondaryBorderColor: line,
+    tertiaryColor: bg, tertiaryTextColor: fg, tertiaryBorderColor: line2,
+    mainBkg: bg2, nodeBorder: line, nodeTextColor: fg, textColor: fg, titleColor: fg, lineColor: fg2, arrowheadColor: fg2,
+    clusterBkg: bg, clusterBorder: line, edgeLabelBackground: bg, labelBackground: bg,
+    // never the accent: bise keeps its pink for 'waits for you' (designer m_51492)
+    noteBkgColor: bg2, noteTextColor: fg, noteBorderColor: line,
+    actorBkg: bg2, actorBorder: line, actorTextColor: fg, actorLineColor: fg3, signalColor: fg2, signalTextColor: fg,
+    labelBoxBkgColor: bg2, labelBoxBorderColor: line, labelTextColor: fg, loopTextColor: fg2, activationBkgColor: hover, activationBorderColor: line, sequenceNumberColor: bg,
+    errorBkgColor: errBg, errorTextColor: err,
+    sectionBkgColor: bg2, altSectionBkgColor: bg, sectionBkgColor2: hover, gridColor: line2, todayLineColor: err,
+    taskBkgColor: s[0], taskBorderColor: s[0], taskTextColor: onS, taskTextLightColor: onS, taskTextDarkColor: fg, taskTextOutsideColor: fg, taskTextClickableColor: s[0],
+    activeTaskBkgColor: s[1], activeTaskBorderColor: s[1], doneTaskBkgColor: hover, doneTaskBorderColor: line, critBkgColor: err, critBorderColor: err,
+    pieStrokeColor: bg, pieStrokeWidth: "1.5px", pieOuterStrokeColor: line2, pieTitleTextColor: fg, pieSectionTextColor: onS, pieLegendTextColor: fg, pieOpacity: "1",
+    git0: s[0], git1: s[1], git2: s[2], git3: s[3], git4: s[4], git5: s[5], git6: s[6], git7: s[7], commitLabelColor: fg, commitLabelBackground: bg2, tagLabelColor: fg, tagLabelBackground: bg2, tagLabelBorder: line,
+    quadrant1Fill: bg2, quadrant2Fill: hover, quadrant3Fill: bg2, quadrant4Fill: hover, quadrantPointFill: s[0], quadrantTitleFill: fg, quadrantXAxisTextFill: fg2, quadrantYAxisTextFill: fg2, quadrantInternalBorderStrokeFill: line2, quadrantExternalBorderStrokeFill: line,
+    relationColor: fg2, relationLabelBackground: bg, relationLabelColor: fg, requirementBackground: bg2, requirementBorderColor: line, requirementTextColor: fg,
+    attributeBackgroundColorOdd: bg, attributeBackgroundColorEven: bg2,
+    xyChart: { backgroundColor: bg, titleColor: fg, xAxisLabelColor: fg2, xAxisTitleColor: fg2, xAxisTickColor: line, xAxisLineColor: line, yAxisLabelColor: fg2, yAxisTitleColor: fg2, yAxisTickColor: line, yAxisLineColor: line, plotColorPalette: s.join(",") },
+    radar: { curveOpacity: 0.25, graticuleColor: line2, axisColor: line },
+  };
+  for (let i = 0; i < 12; i++) { v["cScale" + i] = s[i % 8]; v["cScaleLabel" + i] = onS; v["pie" + (i + 1)] = s[i % 8]; }
+  for (let i = 0; i < 8; i++) v["fillType" + i] = s[i];
+  return v;
+}
+function setupMermaid() {
+  const body = getComputedStyle(document.body), root = getComputedStyle(document.documentElement);
+  const size = parseFloat(body.fontSize) || 13, r = parseFloat(root.getPropertyValue("--k-r-sm")) || 6;
+  mermaid.initialize({
+    startOnLoad: false, securityLevel: "strict", theme: "base", themeVariables: themeVars(), suppressErrorRendering: true, deterministicIds: true,
+    // SVG text labels, not HTML: the PNG export draws the SVG on a canvas, which HTML labels (foreignObject) would taint
+    htmlLabels: false, flowchart: { htmlLabels: false, padding: 12, curve: "basis" }, class: { htmlLabels: false },
+    // one text size for every diagram type: the body's (mermaid's sequence defaults to 16)
+    sequence: { actorFontSize: size, messageFontSize: size, noteFontSize: size, actorFontFamily: body.fontFamily, messageFontFamily: body.fontFamily, noteFontFamily: body.fontFamily },
+    fontFamily: body.fontFamily,
+    // the kit's radius on boxes, as bise draws its cards
+    themeCSS: `.node rect, rect.actor, rect.note, .cluster rect, rect.labelBox { rx: ${r}px; ry: ${r}px; }`,
+  });
+}
+
+// ---- drawing
+async function draw(text) {
+  const seq = ++renderSeq;
+  shown = text;
+  setupMermaid();
+  let type = null;
+  try {
+    type = (await mermaid.parse(text)).diagramType;
+    const { svg } = await mermaid.render("mmd" + seq, text);
+    if (seq !== renderSeq) return;
+    $("canvas").innerHTML = svg;
+    svgEl = $("canvas").querySelector("svg");
+    const vb = svgEl.viewBox.baseVal;
+    const box = vb && vb.width ? vb : svgEl.getBBox();
+    natural = { w: Math.max(1, Math.ceil(box.width)), h: Math.max(1, Math.ceil(box.height)) };
+    svgEl.removeAttribute("style");
+    svgEl.setAttribute("width", natural.w);
+    svgEl.setAttribute("height", natural.h);
+    error = null;
+  } catch (e) {
+    if (seq !== renderSeq) return;
+    for (const el of document.querySelectorAll('body > [id^="dmmd"], body > #mmd' + seq)) el.remove();
+    error = explain(e, text);
+  }
+  setKind(type);
+  $("skeleton").hidden = true;
+  paint();
+  if (!error) { sizeStage(); fit(); }
+}
+function setKind(type) { $("kind").textContent = KINDS[type] || type || ""; $("kind").hidden = !type; }
+
+// a parse or render error here, as {message, line, column} (the server's comes ready in structuredContent)
+function explain(e, text) {
+  const raw = String((e && e.message) || e || "it did not draw");
+  let line = null, column = null;
+  if (e && e.hash) { const l = e.hash.loc || {}; line = l.first_line || null; column = Number.isInteger(l.first_column) ? l.first_column + 1 : null; }
+  else if (e && e.result) { const x = (e.result.lexerErrors || [])[0], p = (e.result.parserErrors || [])[0]; if (x) { line = x.line; column = x.column; } else if (p && p.token) { line = p.token.startLine; column = p.token.startColumn; } }
+  else { const m = /line (\d+)/.exec(raw); if (m) line = +m[1]; }
+  const n = text.split("\n").length;
+  if (line && line > n) line = n;
+  let message = raw.split("\n").filter((l) => l && !/^[-.]*\^?$/.test(l) && !/^Parse error on line/.test(l) && !l.startsWith("...")).join(" ") || raw;
+  if (/No diagram type detected/.test(raw)) { message = "no diagram type: the first line must name one (flowchart TD, sequenceDiagram, classDiagram...)"; line = line || 1; }
+  return { message: message.slice(0, 400), line, column };
+}
+
+function paint() {
+  const failed = !!error;
+  $("stage").hidden = failed || tab !== "diagram";
+  $("source").hidden = tab !== "source";
+  $("zoomtools").hidden = failed || tab !== "diagram" || !svgEl;
+  $("tabDiagram").setAttribute("aria-pressed", String(tab === "diagram"));
+  $("tabSource").setAttribute("aria-pressed", String(tab === "source"));
+  $("errorBox").hidden = !failed || tab !== "diagram";
+  if (failed) $("errorBox").innerHTML = errorHtml();
+  gutter();
+}
+
+function errorHtml() {
+  const lines = shown.split("\n"), at = error.line;
+  const from = at ? Math.max(0, at - 3) : 0, to = at ? Math.min(lines.length, at + 2) : Math.min(lines.length, 6);
+  let pre = "";
+  for (let i = from; i < to; i++) {
+    const bad = at === i + 1;
+    pre += `<div${bad ? ' class="bad"' : ""}><span class="ln">${i + 1}</span>${esc(lines[i])}</div>`;
+    if (bad && error.column) pre += `<div><span class="ln"></span><span class="caret">${" ".repeat(Math.max(0, error.column - 1))}^</span></div>`;
+  }
+  const mine = edited && shown !== source;
+  return `<div class="error k-card" data-testid="error">
+    <div class="head"><b>Mermaid syntax error</b><span class="k-faint">${at ? `line ${at}${error.column ? `, column ${error.column}` : ""}` : ""}</span></div>
+    <div class="msg" data-testid="error-message">${esc(error.message)}</div>
+    ${pre ? `<pre>${pre}</pre>` : ""}
+    <div class="actions">
+      <button class="k-btn k-primary" id="fixBtn" data-testid="ask-fix">Ask the agent to fix it</button>
+      <button class="k-btn" id="editBtn" data-testid="edit-source">Edit the source</button>
+      <span class="k-faint">${mine ? "your edit does not draw" : "the agent got this error in its tool result"}</span>
+    </div></div>`;
+}
+$("errorBox").addEventListener("click", async (e) => {
+  const id = e.target.closest("button") && e.target.closest("button").id;
+  if (id === "editBtn") { tab = "source"; paint(); focusLine(error && error.line); }
+  if (id === "fixBtn") {
+    const where = error.line ? ` on line ${error.line}${error.column ? `, column ${error.column}` : ""}` : "";
+    const text = `The Mermaid diagram${title ? ` "${title}"` : ""} does not draw: syntax error${where}: ${error.message}. Fix it and draw it again.` +
+      (shown !== source ? `\n\nMy version of the source:\n\`\`\`mermaid\n${shown}\n\`\`\`` : "");
+    try { await app.message(text); toast("Sent to the agent"); } catch (err) { toast(why(err)); }
+  }
+});
+
+// ---- the source tab
+function gutter() {
+  const ta = $("src"), n = ta.value.split("\n").length, bad = error && shown === ta.value ? error.line : 0;
+  let h = "";
+  for (let i = 1; i <= n; i++) h += `<div${i === bad ? ' class="bad"' : ""}>${i}</div>`;
+  $("gutter").innerHTML = h;
+  ta.rows = n;
+  if (!fullscreen() && !$("source").hidden) {
+    $("source").style.height = "";
+    const want = $("code").scrollHeight + $("source").lastElementChild.offsetHeight;
+    $("source").style.height = Math.min(INLINE_MAX, Math.max(INLINE_MIN, want)) + "px";
+  }
+}
+function focusLine(line) {
+  const ta = $("src");
+  if (!line) return ta.focus();
+  const lines = ta.value.split("\n");
+  const start = lines.slice(0, line - 1).reduce((a, l) => a + l.length + 1, 0);
+  ta.focus(); ta.setSelectionRange(start, start + (lines[line - 1] || "").length);
+  const row = $("gutter").children[line - 1];
+  if (row) $("code").scrollTop = Math.max(0, row.offsetTop - $("code").clientHeight / 3);
+}
+$("src").addEventListener("input", () => { $("applyBtn").disabled = $("src").value === shown; gutter(); });
+$("src").addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); apply(); }
+  if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); document.execCommand("insertText", false, "  "); }
+});
+async function apply() {
+  const text = $("src").value;
+  if (text === shown) return;
+  edited = true;
+  $("applyBtn").disabled = true;
+  tab = "diagram";
+  await draw(text);
+  const summary = error
+    ? `The user edited the Mermaid diagram${title ? ` "${title}"` : ""}; their version does not draw (line ${error.line || "?"}: ${error.message}).`
+    : `The user edited the Mermaid diagram${title ? ` "${title}"` : ""}; it now draws from this source.`;
+  app.setContext(`${summary}\n\`\`\`mermaid\n${text.slice(0, 12000)}\n\`\`\``, { source: text, title, ok: !error }).catch(() => {});
+}
+$("applyBtn").onclick = apply;
+$("copyBtn").onclick = async () => {
+  try { await navigator.clipboard.writeText($("src").value); toast("Copied"); }
+  catch { $("src").select(); toast(document.execCommand("copy") ? "Copied" : "Select it and copy with ⌘C"); }
+};
+
+// ---- pan and zoom
+function sizeStage() {
+  if (fullscreen()) { $("stage").style.height = ""; return; }
+  const W = $("stage").clientWidth || document.body.clientWidth || 600;
+  const k = Math.min(1, (W - 2 * PAD) / natural.w);
+  $("stage").style.height = Math.round(Math.min(INLINE_MAX, Math.max(INLINE_MIN, natural.h * k + 2 * PAD))) + "px";
+}
+function place() {
+  $("canvas").style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.k})`;
+  $("zoomPct").textContent = Math.round(view.k * 100) + "%";
+}
+function fit() {
+  if (!svgEl) return;
+  const W = $("stage").clientWidth, H = $("stage").clientHeight;
+  if (!W || !H) return;
+  const k = Math.max(0.05, Math.min((W - 2 * PAD) / natural.w, (H - 2 * PAD) / natural.h, 1.25));
+  view = { k, x: (W - natural.w * k) / 2, y: (H - natural.h * k) / 2 };
+  place();
+}
+function zoomAt(factor, cx, cy) {
+  const k = Math.min(8, Math.max(0.05, view.k * factor));
+  view.x = cx - (cx - view.x) * (k / view.k);
+  view.y = cy - (cy - view.y) * (k / view.k);
+  view.k = k;
+  place();
+}
+const center = () => [$("stage").clientWidth / 2, $("stage").clientHeight / 2];
+$("zoomIn").onclick = () => zoomAt(1.25, ...center());
+$("zoomOut").onclick = () => zoomAt(0.8, ...center());
+$("zoomPct").onclick = fit;
+kit.tip($("zoomIn"), "Zoom in <b>+</b>");
+kit.tip($("zoomOut"), "Zoom out <b>−</b>");
+kit.tip($("zoomPct"), "Fit to the view <b>0</b>");
+kit.tip($("svgBtn"), "Download as SVG");
+kit.tip($("pngBtn"), "Download as PNG");
+kit.tip($("panelBtn"), () => fullscreen() ? "Back to the thread" : "Open in the panel");
+$("stage").addEventListener("dblclick", fit);
+$("stage").addEventListener("wheel", (e) => {
+  const r = $("stage").getBoundingClientRect();
+  if (e.ctrlKey || e.metaKey) { e.preventDefault(); zoomAt(Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top); }
+  else if (fullscreen()) { e.preventDefault(); view.x -= e.deltaX; view.y -= e.deltaY; place(); }
+}, { passive: false });
+let drag = null;
+$("stage").addEventListener("pointerdown", (e) => {
+  if (e.button !== 0) return;
+  drag = { x: e.clientX - view.x, y: e.clientY - view.y };
+  $("stage").setPointerCapture(e.pointerId); $("stage").classList.add("drag");
+});
+$("stage").addEventListener("pointermove", (e) => { if (drag) { view.x = e.clientX - drag.x; view.y = e.clientY - drag.y; place(); } });
+const endDrag = () => { drag = null; $("stage").classList.remove("drag"); };
+$("stage").addEventListener("pointerup", endDrag);
+$("stage").addEventListener("pointercancel", endDrag);
+$("stage").addEventListener("keydown", (e) => {
+  const d = e.shiftKey ? 80 : 24;
+  if (e.key === "+" || e.key === "=") zoomAt(1.25, ...center());
+  else if (e.key === "-") zoomAt(0.8, ...center());
+  else if (e.key === "0") fit();
+  else if (e.key === "ArrowLeft") view.x += d;
+  else if (e.key === "ArrowRight") view.x -= d;
+  else if (e.key === "ArrowUp") view.y += d;
+  else if (e.key === "ArrowDown") view.y -= d;
+  else return;
+  e.preventDefault(); place();
+});
+
+// ---- export: mermaid's SVG carries its own style (plain hex), so it stands alone as it is
+const fileName = () => (title || $("kind").textContent || "diagram").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "diagram";
+function svgText() {
+  const s = svgEl.cloneNode(true);
+  s.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  s.setAttribute("width", natural.w); s.setAttribute("height", natural.h);
+  s.setAttribute("style", `background-color: ${hex("--k-bg")}`);
+  return '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(s);
+}
+const file = (ext, mimeType, body) => [{ type: "resource", resource: { uri: `file:///${fileName()}.${ext}`, mimeType, ...body } }];
+async function save(contents, done) {
+  try { await app.download(contents); toast(done); } catch (err) { toast(why(err)); }
+}
+$("svgBtn").onclick = () => svgEl && save(file("svg", "image/svg+xml", { text: svgText() }), "SVG saved");
+$("pngBtn").onclick = async () => {
+  if (!svgEl) return;
+  const scale = Math.max(1, Math.min(2, 8192 / Math.max(natural.w, natural.h)));
+  const img = new Image();
+  img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgText());
+  try { await img.decode(); } catch { return toast("No PNG: the diagram did not load as an image"); }
+  const c = document.createElement("canvas");
+  c.width = Math.round(natural.w * scale); c.height = Math.round(natural.h * scale);
+  const g = c.getContext("2d");
+  g.fillStyle = hex("--k-bg"); g.fillRect(0, 0, c.width, c.height);
+  g.drawImage(img, 0, 0, c.width, c.height);
+  let blob;
+  try { blob = c.toDataURL("image/png").split(",")[1]; } catch { return toast("No PNG: the browser refused the canvas"); }
+  save(file("png", "image/png", { blob }), "PNG saved");
+};
+$("mmdBtn").onclick = () => save(file("mmd", "text/plain", { text: $("src").value }), "Source saved");
+$("panelBtn").onclick = async () => {
+  try { await app.displayMode(fullscreen() ? "inline" : "fullscreen"); } catch (err) { toast(why(err)); }
+};
+
+let toastTimer = 0;
+function toast(t) { $("toast").textContent = t; $("toast").classList.add("on"); clearTimeout(toastTimer); toastTimer = setTimeout(() => $("toast").classList.remove("on"), 1800); }
+
+// ---- tabs and host events
+$("tabDiagram").onclick = () => { tab = "diagram"; paint(); if (!error) { sizeStage(); fit(); } };
+$("tabSource").onclick = () => { tab = "source"; paint(); };
+
+function load(sc, isError) {
+  source = String(sc.source || "");
+  title = String(sc.title || "");
+  edited = false;
+  $("title").textContent = title || "Diagram";
+  $("src").value = source;
+  $("applyBtn").disabled = true;
+  if (isError && sc.error) {
+    renderSeq++;
+    shown = source; error = sc.error; svgEl = null;
+    $("skeleton").hidden = true;
+    setKind(null);
+    paint();
+    return;
+  }
+  draw(source);
+}
+app.on("tool-input", (p) => {
+  const a = p.arguments || {};
+  if (a.title) $("title").textContent = a.title;
+});
+app.on("tool-result", (r) => {
+  const sc = r.structuredContent;
+  if (sc && typeof sc.source === "string") return load(sc, r.isError);
+  $("skeleton").hidden = true;
+  shown = ""; svgEl = null;
+  error = { message: ((r.content || [])[0] || {}).text || "No diagram.", line: null, column: null };
+  paint();
+});
+app.on("tool-cancelled", () => { $("skeleton").hidden = true; shown = ""; svgEl = null; error = { message: "The diagram was stopped.", line: null }; paint(); });
+let lastLook = "";
+function relook() {
+  const look = (document.documentElement.dataset.theme || "") + document.documentElement.getAttribute("style");
+  if (look !== lastLook && shown && svgEl) { lastLook = look; draw(shown); return; }
+  lastLook = look;
+  if (svgEl && !error) { sizeStage(); fit(); }
+  gutter();
+}
+app.on("context", relook);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (shown && svgEl) draw(shown); });
+let lastW = 0;
+new ResizeObserver(() => {
+  const w = document.body.clientWidth;
+  if (w === lastW || !svgEl || error) return;
+  lastW = w; sizeStage(); fit();
+}).observe(document.body);
+app.on("teardown", () => clearTimeout(toastTimer));
+app.start("mermaid");
+</script>
+</body>
+</html>

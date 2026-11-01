@@ -1,0 +1,18 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "mermaid",
+  "version": "0.1.0",
+  "description": "Mermaid diagrams drawn in the thread: flowcharts, sequence, class, state, ER, Gantt, mind maps, timelines and more, in bise's look, with pan and zoom, the source, SVG and PNG export, and syntax errors the agent reads back and fixes.",
+  "homepage": "https://bise.dev",
+  "license": "Apache-2.0",
+  "extensions": {
+    "dev.bise": {
+      "default": "off",
+      "prompts": [
+        "draw the login flow of this repo as a sequence diagram",
+        "make a flowchart of how a task goes from main to landed",
+        "a Gantt chart of the launch plan for the next 3 weeks"
+      ]
+    }
+  }
+}
