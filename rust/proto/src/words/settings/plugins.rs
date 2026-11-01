@@ -521,4 +521,33 @@ crate::words! { settings:
     plugins_needs_node = "needs Node 18 or newer";
     /// a setting: just saved (4 s, then 'set')
     plugins_setting_applies = "applies from the next call";
+    /// TUI `/plugins set NAME VAR`: the line that asks for the value, typed
+    /// hidden (a secret setting: the composer shows •, designer m_51514)
+    plugins_setting_prompt(label) = "value for {label} (hidden):";
+    /// the same for a setting that isn't secret
+    plugins_setting_prompt_plain(label) = "value for {label}:";
+    /// the composer's tab while it asks for a secret (no agent: the
+    /// keystrokes go to none, designer m_51698); a plain one is its label
+    plugins_setting_tab(label) = "{label} · hidden";
+    /// the key bar while it asks: ⏎
+    plugins_setting_key_save = "save";
+    /// the key bar while it asks: esc
+    plugins_setting_key_keep = "keep it as is";
+    /// the value is saved (the bridge restarts its servers with it)
+    plugins_setting_saved = "saved. applies from the next call.";
+    /// esc, or an empty line: nothing written
+    plugins_setting_kept = "nothing changed.";
+    /// `/plugins unset NAME VAR` (label: the plugin's own words)
+    plugins_setting_forgot(label) = "forgot the {label}.";
+    /// `/plugins set` or `unset` without its two names
+    plugins_setting_usage = "usage: /plugins set PLUGIN VAR · /plugins unset PLUGIN VAR";
+    /// a plugin's page: how to give or forget the selected setting's value
+    /// (its var's real name, designer m_51698), under its settings
+    plugins_setting_how(name, var) = "/plugins set {name} {var} gives a value · /plugins unset {name} {var} forgets it";
+    /// a list row whose required setting has no value
+    plugins_setting_waits = "needs a setting";
+    /// its hint, the same verb wide and narrow (`s` asks for the value)
+    plugins_hint_setting = "s sets it";
+    /// key bar: s (a row that needs a setting), ⏎ (a setting's line)
+    plugins_key_setting = "set it";
 }

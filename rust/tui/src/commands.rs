@@ -47,6 +47,10 @@ pub(crate) struct PopItem {
 }
 
 pub(crate) fn popup_items(app: &App) -> Vec<PopItem> {
+    // `/plugins set` asks for a value: no @ / $ / / list opens
+    if app.plugin_ask.is_some() {
+        return Vec::new();
+    }
     let mut cmds = popup_matches(&app.ed.text);
     // the dev build's own (BISE-235): nowhere else
     if app.ed.text.starts_with('/') && !app.ed.text.contains(' ') {

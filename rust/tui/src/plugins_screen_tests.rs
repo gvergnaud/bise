@@ -150,8 +150,13 @@ fn find<'a>(t: &'a [String], needle: &str) -> &'a str {
 /// The whole frame, as text (the shell's draw on a TestBackend);
 /// `PLUGINS_SHOTS=<dir>` also writes it there (the designer's shots).
 fn frame(sc: Screen, width: u16, height: u16) -> String {
+    frame_of(sc, fixture(), width, height)
+}
+
+/// [`frame`] on given rows.
+fn frame_of(sc: Screen, rows: Vec<Plugin>, width: u16, height: u16) -> String {
     let mut app = crate::sb::bench::test_app();
-    crate::plugins::open_on(&mut app, sc, fixture(), markets());
+    crate::plugins::open_on(&mut app, sc, rows, markets());
     let mut term = Terminal::new(TestBackend::new(width, height)).unwrap();
     term.draw(|f| crate::plugins::draw(&mut app, f)).unwrap();
     let buf = term.backend().buffer().clone();
@@ -553,4 +558,124 @@ fn a_plugins_views_and_their_grants() {
     let pv = Preview { name: "piano".into(), from: "examples".into(), views: vec![view("score", &["midi"], &[], false)], ..Default::default() };
     let f = frame(Screen { add: Some(Add::Preview { preview: pv, error: None }), ..Default::default() }, 150, 30);
     assert!(f.contains(views::preview_label) && f.contains(views::not_granted), "{f}");
+}
+
+// ---- a plugin's settings (dev.bise.settings, designer m_51514) ----
+
+/// maps with a required secret key (`set` or not) and an optional style.
+fn maps(set: bool) -> Plugin {
+    let mut p = plugin("maps", PluginKind::Plugin, Scope::BuiltIn, "maps in the thread: places, routes, areas", vec![part("maps", PartKind::Mcp, "maps", true)]);
+    p.settings = vec![
+        PluginSetting {
+            var: "GOOGLE_MAPS_API_KEY".into(),
+            label: "Google Maps API key".into(),
+            secret: true,
+            required: true,
+            help: Some("for places and routes; console.cloud.google.com".into()),
+            placeholder: Some("AIza…".into()),
+            set,
+        },
+        PluginSetting { var: "MAPS_STYLE".into(), label: "Map style".into(), secret: false, required: false, help: Some("light, dark or satellite".into()), placeholder: None, set: false },
+    ];
+    p
+}
+
+/// Its rows: label, help, then `set`, `not set` or `? needed to work`;
+/// the var's name only in the commands' line (wide), never a value.
+#[test]
+fn a_plugins_settings_150_80() {
+    for wd in [146usize, 76] {
+        let t = texts(&page_body(&Screen::default(), &maps(false), wd));
+        assert!(t.iter().any(|l| l.trim() == format!("{} · 2", settings::plugins_settings_head)), "{t:?}");
+        let key = find(&t, "Google Maps API key");
+        assert!(key.ends_with(&format!("? {}", settings::plugins_setting_needed)), "{key}");
+        let style = find(&t, "Map style");
+        assert!(style.contains("light, dark or satellite") && style.ends_with(settings::plugins_setting_not_set), "{style}");
+        assert!(t.iter().all(|l| l.width() < wd), "{t:?}");
+        // the commands line: the first setting's var (none selected), wide only
+        let how = t.iter().any(|l| l.contains(&settings::plugins_setting_how("maps", "GOOGLE_MAPS_API_KEY")));
+        assert_eq!(how, wd == 146, "{t:?}");
+        assert!(!t.iter().any(|l| l.contains("AIza")), "{t:?}");
+    }
+    // it follows the › setting
+    let sc = Screen { part: Some("setting:MAPS_STYLE".into()), ..Default::default() };
+    let t = texts(&page_body(&sc, &maps(false), 146));
+    assert!(t.iter().any(|l| l.contains(&settings::plugins_setting_how("maps", "MAPS_STYLE"))), "{t:?}");
+    let t = texts(&page_body(&Screen::default(), &maps(true), 146));
+    let key = find(&t, "Google Maps API key");
+    assert!(key.ends_with(settings::plugins_setting_set) && !key.contains('?'), "{key}");
+}
+
+/// A required setting with no value: the row waits (`?`, `s sets it`),
+/// s asks for it; ⏎ on a setting's line asks for that one.
+#[test]
+fn a_setting_it_needs_waits_and_s_asks() {
+    let rows = vec![maps(false)];
+    assert_eq!(mark(&rows[0]), Mark::Waits);
+    assert_eq!(mark(&maps(true)), Mark::On);
+    let l = find(&texts(&list_body(&Screen::default(), &rows, 146)), " maps ").to_string();
+    assert!(l.contains(" ? ") && l.contains(&format!("{}: {}", settings::plugins_setting_waits, settings::plugins_hint_setting)), "{l}");
+    let l = find(&texts(&list_body(&Screen::default(), &rows, 76)), " maps ").to_string();
+    assert!(l.contains(&format!("{} · {}", settings::plugins_setting_waits, settings::plugins_hint_setting)), "{l}");
+    let ask = Effect::AskSetting { plugin: "maps".into(), var: "GOOGLE_MAPS_API_KEY".into(), label: "Google Maps API key".into(), secret: true };
+    let mut sc = Screen { sel: Some("maps".into()), ..Default::default() };
+    let bar: String = key_bar(&sc, &rows, 150).spans.iter().map(|s| s.content.as_ref()).collect();
+    assert!(bar.contains(&format!("s {}", settings::plugins_key_setting)), "{bar}");
+    assert_eq!(key(&mut sc, &rows, &[], &press(KeyCode::Char('s'))), ask);
+    // set: s does nothing
+    assert_eq!(key(&mut sc, &[maps(true)], &[], &press(KeyCode::Char('s'))), Effect::None);
+    // its page: ↓ reaches the settings first, ⏎ asks for the one selected
+    let mut sc = Screen { opened: Some("maps".into()), ..Default::default() };
+    key(&mut sc, &rows, &[], &press(KeyCode::Down));
+    key(&mut sc, &rows, &[], &press(KeyCode::Down));
+    assert_eq!(sc.part.as_deref(), Some("setting:MAPS_STYLE"));
+    let bar: String = key_bar(&sc, &rows, 150).spans.iter().map(|s| s.content.as_ref()).collect();
+    assert!(bar.contains(&format!("⏎ {}", settings::plugins_key_setting)), "{bar}");
+    assert_eq!(
+        key(&mut sc, &rows, &[], &press(KeyCode::Enter)),
+        Effect::AskSetting { plugin: "maps".into(), var: "MAPS_STYLE".into(), label: "Map style".into(), secret: false }
+    );
+}
+
+fn with_maps() -> Vec<Plugin> {
+    let mut rows = fixture();
+    rows.insert(3, maps(false));
+    rows
+}
+
+/// The designer's shots: maps' page, its key selected...
+#[test]
+fn a_plugins_settings_page() {
+    for w in [150u16, 80] {
+        let f = frame_of(Screen { opened: Some("maps".into()), part: Some("setting:GOOGLE_MAPS_API_KEY".into()), ..Default::default() }, with_maps(), w, 24);
+        assert!(f.contains("Google Maps API key") && f.contains(settings::plugins_setting_needed), "{f}");
+        assert!(f.lines().all(|l| l.width() <= w as usize), "{f}");
+    }
+}
+
+/// ...and the list it waits in.
+#[test]
+fn a_plugins_settings_list() {
+    for w in [150u16, 80] {
+        let f = frame_of(Screen { sel: Some("maps".into()), ..Default::default() }, with_maps(), w, 34);
+        assert!(f.lines().any(|l| l.contains(" maps ") && l.contains(" ? ")), "{f}");
+    }
+}
+
+/// A server that runs on Node, none 18 or newer here: the row's own
+/// state in the error tone, its mark still on or off; its page says it
+/// beside its switch, which still turns it on (architect m_51637).
+#[test]
+fn a_plugin_that_needs_node() {
+    let mut p = maps(true);
+    p.needs_node = true;
+    for wd in [146usize, 76] {
+        let l = find(&texts(&list_body(&Screen::default(), std::slice::from_ref(&p), wd)), " maps ").to_string();
+        assert!(l.contains(settings::plugins_needs_node) && l.contains(&format!(" {} ", settings::plugins_mark_on.trim())), "{l}");
+    }
+    assert_eq!(mark(&p), Mark::On);
+    let t = texts(&page_body(&Screen::default(), &p, 146));
+    assert!(find(&t, settings::plugins_on_everywhere).ends_with(&format!(" · {}", settings::plugins_needs_node)), "{t:?}");
+    let mut sc = Screen { sel: Some("maps".into()), ..Default::default() };
+    assert!(matches!(key(&mut sc, std::slice::from_ref(&p), &[], &press(KeyCode::Char(' '))), Effect::Set { on: false, .. }));
 }

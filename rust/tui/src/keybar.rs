@@ -187,6 +187,10 @@ pub(crate) const CHIP_HOVER: [(&str, &str); 2] = [("click", composer::bar_previe
 
 pub(crate) fn line(app: &App, width: u16) -> Line<'static> {
     let dimmed = Style::default().fg(theme::dim());
+    // `/plugins set` asks for a setting's value: only ⏎ and esc
+    if app.plugin_ask.is_some() {
+        return pairs_line(&crate::plugins::ASK_KEYS, usize::from(width)).0;
+    }
     // the diff panel has the keys (site/m/artifacts D)
     if app.diff.as_ref().is_some_and(|p| p.focused) {
         let pairs = crate::diffview::key_pairs(app);

@@ -3061,6 +3061,11 @@
     "one": null,
     "text": "c sets it up"
   },
+  "settings.plugins_hint_setting": {
+    "args": [],
+    "one": null,
+    "text": "s sets it"
+  },
   "settings.plugins_import_added": {
     "args": [
       "name"
@@ -3177,6 +3182,11 @@
     "args": [],
     "one": null,
     "text": "open"
+  },
+  "settings.plugins_key_setting": {
+    "args": [],
+    "one": null,
+    "text": "set it"
   },
   "settings.plugins_key_toggle": {
     "args": [],
@@ -3666,10 +3676,40 @@
     "one": null,
     "text": "forget the {label}? it can't be shown again."
   },
+  "settings.plugins_setting_forgot": {
+    "args": [
+      "label"
+    ],
+    "one": null,
+    "text": "forgot the {label}."
+  },
+  "settings.plugins_setting_how": {
+    "args": [
+      "name",
+      "var"
+    ],
+    "one": null,
+    "text": "/plugins set {name} {var} gives a value · /plugins unset {name} {var} forgets it"
+  },
   "settings.plugins_setting_keep": {
     "args": [],
     "one": null,
     "text": "Keep"
+  },
+  "settings.plugins_setting_kept": {
+    "args": [],
+    "one": null,
+    "text": "nothing changed."
+  },
+  "settings.plugins_setting_key_keep": {
+    "args": [],
+    "one": null,
+    "text": "keep it as is"
+  },
+  "settings.plugins_setting_key_save": {
+    "args": [],
+    "one": null,
+    "text": "save"
   },
   "settings.plugins_setting_needed": {
     "args": [],
@@ -3681,10 +3721,29 @@
     "one": null,
     "text": "not set"
   },
+  "settings.plugins_setting_prompt": {
+    "args": [
+      "label"
+    ],
+    "one": null,
+    "text": "value for {label} (hidden):"
+  },
+  "settings.plugins_setting_prompt_plain": {
+    "args": [
+      "label"
+    ],
+    "one": null,
+    "text": "value for {label}:"
+  },
   "settings.plugins_setting_save": {
     "args": [],
     "one": null,
     "text": "Save"
+  },
+  "settings.plugins_setting_saved": {
+    "args": [],
+    "one": null,
+    "text": "saved. applies from the next call."
   },
   "settings.plugins_setting_set": {
     "args": [],
@@ -3695,6 +3754,23 @@
     "args": [],
     "one": null,
     "text": "Set…"
+  },
+  "settings.plugins_setting_tab": {
+    "args": [
+      "label"
+    ],
+    "one": null,
+    "text": "{label} · hidden"
+  },
+  "settings.plugins_setting_usage": {
+    "args": [],
+    "one": null,
+    "text": "usage: /plugins set PLUGIN VAR · /plugins unset PLUGIN VAR"
+  },
+  "settings.plugins_setting_waits": {
+    "args": [],
+    "one": null,
+    "text": "needs a setting"
   },
   "settings.plugins_settings_head": {
     "args": [],

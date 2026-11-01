@@ -112,6 +112,65 @@ pub(crate) fn setting(workspace: &Path, name: &str, var: &str, value: Option<&st
     secrets::set_setting(&bise_home::Home::from_env().mcp_secrets_dir(), p, var, value).map_err(|e| e.to_string())
 }
 
+/// The setting the composer asks a value for (`/plugins set NAME VAR`,
+/// or ⏎ on its line in the screen): the next ⏎ saves what he typed through
+/// [`setting`]; it is never sent, never in the history, a draft or the
+/// feed. esc keeps the value as it was.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Ask {
+    pub(crate) plugin: String,
+    pub(crate) var: String,
+    pub(crate) label: String,
+    pub(crate) secret: bool,
+}
+
+/// Ask for `a`'s value: the composer empties and waits for it (shown as •
+/// when secret); the line that asks.
+pub(crate) fn start_ask(app: &mut crate::app::App, a: Ask) -> String {
+    app.ed.clear();
+    let line = if a.secret { settings::plugins_setting_prompt(&a.label) } else { settings::plugins_setting_prompt_plain(&a.label) };
+    app.plugin_ask = Some(a);
+    line
+}
+
+/// The composer types a secret setting: each character shows as •.
+pub(crate) fn masked(app: &crate::app::App) -> bool {
+    app.plugin_ask.as_ref().is_some_and(|a| a.secret)
+}
+
+/// The composer's tab while it asks: the setting, `· hidden` for a
+/// secret, dim, no agent (the keystrokes go to none, designer m_51698).
+pub(crate) fn ask_label(app: &crate::app::App) -> Option<Vec<ratatui::text::Span<'static>>> {
+    let a = app.plugin_ask.as_ref()?;
+    let words = if a.secret { settings::plugins_setting_tab(&a.label) } else { a.label.clone() };
+    Some(vec![ratatui::text::Span::styled(format!(" {words} "), ratatui::style::Style::default().fg(crate::theme::dim()))])
+}
+
+/// The key bar while it asks: ⏎ save, esc keep it as is.
+pub(crate) const ASK_KEYS: [(&str, &str); 2] = [("⏎", settings::plugins_setting_key_save), ("esc", settings::plugins_setting_key_keep)];
+
+/// ⏎ while it asks: the value saved (or nothing, for an empty line); the
+/// line that says so.
+pub(crate) fn answer(app: &mut crate::app::App) -> crate::wire::Ev {
+    let typed = app.ed.take();
+    let Some(a) = app.plugin_ask.take() else { return crate::wire::Ev::Info(String::new()) };
+    if typed.trim().is_empty() {
+        return crate::wire::Ev::Info(settings::plugins_setting_kept.to_string());
+    }
+    let ws = crate::sb::workspace(app).unwrap_or_default();
+    match setting(Path::new(&ws), &a.plugin, &a.var, Some(&typed)) {
+        Ok(()) => crate::wire::Ev::Info(settings::plugins_setting_saved.to_string()),
+        Err(e) => crate::wire::Ev::Err(e),
+    }
+}
+
+/// esc while it asks: nothing written.
+pub(crate) fn keep(app: &mut crate::app::App) -> crate::wire::Ev {
+    app.ed.clear();
+    app.plugin_ask = None;
+    crate::wire::Ev::Info(settings::plugins_setting_kept.to_string())
+}
+
 /// Forget the login of server `name` (`/plugins logout NAME`).
 pub(crate) fn logout(workspace: &Path, name: &str) -> Result<String, String> {
     let ts = bend_plugins::login::targets(workspace);
@@ -656,6 +715,12 @@ fn run(app: &mut crate::app::App, e: Effect) {
             app.flash = Some((settings::plugins_agent_started.to_string(), Instant::now()));
             return;
         }
+        Effect::AskSetting { plugin, var, label, secret } => {
+            app.plugins = None;
+            let line = start_ask(app, Ask { plugin, var, label, secret });
+            crate::feed::push_event(&mut app.events, &mut app.cache, crate::wire::Ev::Info(line));
+            return;
+        }
         other => crate::plugins_add::run(app, other),
     }
     reread(app, true);
@@ -717,6 +782,21 @@ pub(crate) fn slash(app: &mut crate::app::App, typed: &str) -> Vec<String> {
             return vec![settings::plugins_connecting(title)];
         }
         (Some("refresh"), None) if !skills => refresh_said(),
+        (Some(sub @ ("set" | "unset")), name) if !skills => {
+            let (Some(name), Some(var)) = (name, words.next()) else { return vec![settings::plugins_setting_usage.to_string()] };
+            let rows = rows(&ws, &pending());
+            let p = rows.iter().find(|p| p.kind == bise_proto::app_rows::PluginKind::Plugin && (p.name == name || p.id == name || p.title.eq_ignore_ascii_case(name)));
+            let found = p.and_then(|p| p.settings.iter().find(|s| s.var == var).map(|s| (p, s)));
+            return match (sub, found) {
+                ("set", Some((p, s))) => vec![start_ask(app, Ask { plugin: p.name.clone(), var: s.var.clone(), label: s.label.clone(), secret: s.secret })],
+                // not one of its settings: the writer's own refusal
+                (_, None) => vec![setting(&ws, p.map_or(name, |p| p.name.as_str()), var, None).err().unwrap_or_else(|| settings::plugins_setting_usage.to_string())],
+                (_, Some((p, s))) => match setting(&ws, &p.name, &s.var, None) {
+                    Ok(()) => vec![settings::plugins_setting_forgot(&s.label)],
+                    Err(e) => vec![e],
+                },
+            };
+        }
         _ if skills => return vec![settings::skills_usage.to_string()],
         _ => return command(typed, &ws).lines().map(String::from).collect(),
     }
@@ -749,6 +829,54 @@ pub(crate) fn open_on(app: &mut crate::app::App, sc: screen::Screen, rows: Vec<P
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    /// `/plugins set`: the composer asks, each character drawn as •, the
+    /// key bar's placeholder says ⏎ and esc; esc and an empty line write
+    /// nothing; the value is never in the history, a draft or the feed.
+    #[test]
+    fn a_setting_is_asked_hidden_and_never_kept() {
+        let mut app = crate::sb::bench::test_app();
+        let ask = Ask { plugin: "maps".into(), var: "GOOGLE_MAPS_API_KEY".into(), label: "Google Maps API key".into(), secret: true };
+        assert_eq!(start_ask(&mut app, ask.clone()), "value for Google Maps API key (hidden):");
+        assert!(masked(&app));
+        let draw = |app: &mut crate::app::App| {
+            let mut term = ratatui::Terminal::new(ratatui::backend::TestBackend::new(100, 20)).unwrap();
+            term.draw(|f| crate::ui::draw(app, f)).unwrap();
+            let buf = term.backend().buffer().clone();
+            buf.content.chunks(100).map(|r| r.iter().map(|c| c.symbol()).collect::<String>()).collect::<Vec<_>>().join("\n")
+        };
+        // the tab names the setting, no agent; the key bar ⏎ and esc only
+        let f = draw(&mut app);
+        assert!(f.contains(&settings::plugins_setting_tab("Google Maps API key")) && !f.contains("you → main"), "{f}");
+        assert!(f.contains(&format!("⏎ {}   esc {}", settings::plugins_setting_key_save, settings::plugins_setting_key_keep)) && !f.contains("@ file"), "{f}");
+        // no @ / $ / / list opens
+        for c in "/AIzaSECRET".chars() {
+            crate::input::on_key(&mut app, &KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        assert!(crate::commands::popup_items(&app).is_empty());
+        let f = draw(&mut app);
+        assert!(f.contains("•••••••••••") && !f.contains("AIzaSECRET"), "{f}");
+        if let Ok(dir) = std::env::var("PLUGINS_SHOTS") {
+            // the designer's shot: the line that asks, then the composer
+            let line = settings::plugins_setting_prompt("Google Maps API key");
+            crate::feed::push_event(&mut app.events, &mut app.cache, crate::wire::Ev::Info(line));
+            let _ = std::fs::write(format!("{dir}/a_setting_asked-100.txt"), draw(&mut app));
+        }
+        assert!(!crate::sb::drafts::snapshot_texts(&app).iter().any(|t| t.contains("AIza")));
+        crate::input::on_key(&mut app, &KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(app.plugin_ask.is_none() && app.ed.text.is_empty());
+        // an empty line: nothing written either
+        start_ask(&mut app, Ask { secret: false, ..ask });
+        assert!(!masked(&app));
+        crate::input::on_key(&mut app, &KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert!(app.plugin_ask.is_none());
+        let said: Vec<String> = app.events.iter().filter_map(|e| if let crate::wire::Ev::Info(t) = e { Some(t.clone()) } else { None }).collect();
+        // (the shot's own prompt line comes first when PLUGINS_SHOTS is set)
+        assert!(said.ends_with(&[settings::plugins_setting_kept.to_string(), settings::plugins_setting_kept.to_string()]), "{said:?}");
+        assert_eq!(said.len(), if std::env::var_os("PLUGINS_SHOTS").is_some() { 3 } else { 2 }, "{said:?}");
+        assert!(app.history.is_empty());
+    }
 
     #[test]
     fn lists_the_workspace_plugins() {

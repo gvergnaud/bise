@@ -322,6 +322,13 @@ fn prune(dir: &Path, keep: &Path) {
 
 // ---- the app's side ----
 
+/// The drafts' texts [`snapshot`] would keep (the tests: a secret typed
+/// for `/plugins set` is never one).
+#[cfg(test)]
+pub(crate) fn snapshot_texts(app: &App) -> Vec<String> {
+    snapshot(app).drafts.into_values().map(|d| d.text).collect()
+}
+
 /// What the app holds now.
 fn snapshot(app: &App) -> Saved {
     let own = |ed: &crate::editor::Editor| {
@@ -331,7 +338,8 @@ fn snapshot(app: &App) -> Saved {
     let mut drafts = BTreeMap::new();
     // the card view holds the thread's draft aside (cards v2)
     let focused = own(app.sb.card.thread.as_ref().filter(|_| app.sb.card.open).unwrap_or(&app.ed));
-    if !focused.text.is_empty() {
+    // a setting's value being typed (`/plugins set`) is never kept
+    if !focused.text.is_empty() && app.plugin_ask.is_none() {
         drafts.insert(app.sb.focus.clone(), focused);
     }
     for (a, v) in &app.sb.views {

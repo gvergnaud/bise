@@ -18,7 +18,7 @@
 //! Marks and buttons read data (`on`, `action`, `parts[].login`,
 //! `parts[].error`), never the status words.
 
-use bise_proto::app_rows::{LoginState, PartKind, Plugin, PluginAction, PluginKind, PluginPart, PluginScope, PluginState};
+use bise_proto::app_rows::{LoginState, PartKind, Plugin, PluginAction, PluginKind, PluginPart, PluginScope, PluginSetting, PluginState};
 use bise_proto::view_rules::ViewPerm;
 use bise_proto::words::{settings, views};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -34,6 +34,8 @@ pub(crate) const WIDE_FROM: usize = 110;
 const NAME_W: usize = 18;
 /// The `built-in` column.
 const SCOPE_W: usize = 10;
+/// A setting's label column: as wide as its longest label, up to this.
+const LABEL_MAX: usize = 28;
 /// Where a row's mark starts, and its name.
 const MARK_X: usize = 2;
 const NAME_X: usize = 7;
@@ -226,6 +228,9 @@ pub(crate) enum Effect {
     MarketAdd(String),
     /// start an agent that makes the plugin
     Agent(String),
+    /// ask for a setting's value in the composer (`/plugins set`): the
+    /// plugin's name, the var, its label, typed hidden when `secret`
+    AskSetting { plugin: String, var: String, label: String, secret: bool },
 }
 
 // ---- what a row is (pure) ----
@@ -249,12 +254,18 @@ fn login_waits(l: Option<LoginState>) -> bool {
     matches!(l, Some(LoginState::Needs | LoginState::Out | LoginState::Pending))
 }
 
+/// A setting it needs to work (`required`) has no value: it waits on him
+/// like a login (the same rule as bend_plugins' summary `needs_setting`).
+pub(crate) fn needs_setting(p: &Plugin) -> Option<&PluginSetting> {
+    p.settings.iter().find(|s| s.required && !s.set)
+}
+
 pub(crate) fn mark(p: &Plugin) -> Mark {
     if !p.on {
         Mark::Off
     } else if p.parts.iter().any(|x| x.error.is_some()) {
         Mark::Failed
-    } else if (p.action.is_some() && installed(p)) || p.login == Some(LoginState::Pending) || p.parts.iter().any(|x| login_waits(x.login)) {
+    } else if (p.action.is_some() && installed(p)) || p.login == Some(LoginState::Pending) || p.parts.iter().any(|x| login_waits(x.login)) || needs_setting(p).is_some() {
         Mark::Waits
     } else {
         Mark::On
@@ -304,7 +315,71 @@ fn wait_hint(p: &Plugin) -> Option<Wait> {
         (Some(PluginAction::Connect), _) => w('c', settings::plugins_expired, settings::plugins_hint_connect_again, settings::plugins_hint_connect_short),
         (Some(PluginAction::SetUp), _) => w('c', settings::plugins_needs_setup, settings::plugins_hint_set_up, settings::plugins_hint_set_up_short),
         (Some(PluginAction::LogIn), _) | (_, Some(_)) => w('l', settings::plugins_part_needs_login, settings::plugins_hint_login, settings::plugins_hint_login_short),
+        _ if needs_setting(p).is_some() => w('s', settings::plugins_setting_waits, settings::plugins_hint_setting, settings::plugins_hint_setting),
         _ => None,
+    }
+}
+
+/// A wait's key and its word on the key bar.
+fn wait_key(h: &Wait) -> (&'static str, &'static str) {
+    match h.key {
+        'c' => ("c", settings::plugins_key_connect),
+        's' => ("s", settings::plugins_key_setting),
+        _ => ("l", settings::plugins_key_login),
+    }
+}
+
+/// A setting's line id on a plugin's page.
+fn setting_id(var: &str) -> String {
+    format!("setting:{var}")
+}
+
+/// What `/plugins set` needs to ask for a setting's value.
+pub(crate) fn ask_of(p: &Plugin, s: &PluginSetting) -> Effect {
+    Effect::AskSetting { plugin: p.name.clone(), var: s.var.clone(), label: s.label.clone(), secret: s.secret }
+}
+
+/// A setting's line: its label, its help (dim), then `set`, `not set`
+/// or `? needed to work` (the ? in the accent). Never its value: the row
+/// has none (architect m_51451); the var's name only in the commands.
+fn setting_line(s: &PluginSetting, selected: bool, label_w: usize, width: usize) -> Line<'static> {
+    let mut left = vec![
+        plain(if selected { "›" } else { " " }, Style::default().fg(accent())),
+        Span::raw(" ".repeat(NAME_X - 1)),
+        plain(pad(&cut(&s.label, label_w), label_w), Style::default().fg(text())),
+        Span::raw("  "),
+    ];
+    if let Some(h) = &s.help {
+        left.push(plain(h.clone(), Style::default().fg(dim())));
+    }
+    let right = if s.set {
+        vec![plain(settings::plugins_setting_set, Style::default().fg(dim()))]
+    } else if s.required {
+        vec![plain("? ", Style::default().fg(accent())), plain(settings::plugins_setting_needed, Style::default().fg(text()))]
+    } else {
+        vec![plain(settings::plugins_setting_not_set, Style::default().fg(dim()))]
+    };
+    split(left, right, width)
+}
+
+/// A plugin's settings group on its page (dev.bise.settings), after the
+/// lines to try and before its parts, as in the app (designer m_51514).
+fn setting_lines(sc: &Screen, p: &Plugin, width: usize, out: &mut Body) {
+    if p.settings.is_empty() {
+        return;
+    }
+    out.push((Line::default(), None));
+    out.push((Line::from(plain(format!(" {} · {}", settings::plugins_settings_head, p.settings.len()), Style::default().fg(dim()).add_modifier(Modifier::BOLD))), None));
+    let label_w = p.settings.iter().map(|s| s.label.width()).max().unwrap_or(0).clamp(NAME_W, LABEL_MAX);
+    for s in &p.settings {
+        let id = setting_id(&s.var);
+        out.push((setting_line(s, sc.part.as_deref() == Some(id.as_str()), label_w, width), Some(id)));
+    }
+    // the commands for the › setting (else the first), its var's real
+    // name: wide only (designer m_51698)
+    let sel = p.settings.iter().find(|s| sc.part.as_deref() == Some(setting_id(&s.var).as_str())).or(p.settings.first());
+    if let Some(s) = sel.filter(|_| width >= WIDE_FROM) {
+        out.push((Line::from(plain(format!("{}{}", " ".repeat(NAME_X), settings::plugins_setting_how(&p.name, &s.var)), Style::default().fg(faint()))), None));
     }
 }
 
@@ -315,6 +390,11 @@ fn state_words(p: &Plugin, wide: bool) -> Option<String> {
     if let Some(e) = p.parts.iter().find_map(|x| x.error.as_deref()).filter(|_| p.on) {
         let e = e.trim_start_matches('✗').trim();
         return Some(if wide { e.to_string() } else { e.split(':').next().unwrap_or(e).to_string() });
+    }
+    // its server runs on Node and this Mac has none 18 or newer: the row's
+    // own state, its mark still on or off (architect m_51637)
+    if p.needs_node {
+        return Some(settings::plugins_needs_node.to_string());
     }
     if mark(p) != Mark::Waits {
         return None;
@@ -573,7 +653,7 @@ fn row_line(p: &Plugin, selected: bool, width: usize) -> Line<'static> {
     };
     match (said, wide) {
         (Some(s), _) => {
-            let st = if m == Mark::Failed { Style::default().fg(error()) } else { Style::default().fg(accent()) };
+            let st = if m == Mark::Failed || p.needs_node { Style::default().fg(error()) } else { Style::default().fg(accent()) };
             left.push(plain(s, st));
         }
         (None, true) => left.push(plain(p.what.clone().unwrap_or_default(), Style::default().fg(dim()))),
@@ -786,7 +866,13 @@ pub(crate) fn page_body(sc: &Screen, p: &Plugin, width: usize) -> Body {
     out.push((Line::default(), None));
     let everywhere = if p.on { settings::plugins_on_everywhere } else { settings::plugins_off_everywhere };
     let state = if wide { format!(" {everywhere} · {}", settings::plugins_change_when(when(reaches_prompt(p, None)))) } else { format!(" {everywhere}") };
-    out.push((Line::from(plain(state, Style::default().fg(if p.on { text() } else { dim() }))), None));
+    let mut state = vec![plain(state, Style::default().fg(if p.on { text() } else { dim() }))];
+    if p.needs_node {
+        // beside its switch, which still turns it on (architect m_51637)
+        state.push(plain(" · ", Style::default().fg(dim())));
+        state.push(plain(settings::plugins_needs_node, Style::default().fg(error())));
+    }
+    out.push((Line::from(state), None));
     if !p.prompts.is_empty() {
         out.push((Line::default(), None));
         let head = if wide { settings::plugins_try_head_wide } else { settings::plugins_try_head };
@@ -798,6 +884,7 @@ pub(crate) fn page_body(sc: &Screen, p: &Plugin, width: usize) -> Body {
             ));
         }
     }
+    setting_lines(sc, p, width, &mut out);
     let skills: Vec<&PluginPart> = p.parts.iter().filter(|x| x.kind == PartKind::Skill).collect();
     let servers: Vec<&PluginPart> = p.parts.iter().filter(|x| x.kind == PartKind::Mcp).collect();
     let tools = tools_of(p);
@@ -1130,8 +1217,13 @@ pub(crate) fn key_bar(sc: &Screen, rows: &[Plugin], width: usize) -> Line<'stati
         if !p.prompts.is_empty() {
             pairs.push(("1-3", settings::plugins_key_try));
         }
-        if let Some(h) = wait_hint(p).filter(|_| mark(p) == Mark::Waits) {
-            pairs.push(if h.key == 'c' { ("c", settings::plugins_key_connect) } else { ("l", settings::plugins_key_login) });
+        // on a setting's line ⏎ asks for it (then no `s` beside it)
+        let on_setting = sc.part.as_deref().is_some_and(|id| id.starts_with("setting:"));
+        if let Some(h) = wait_hint(p).filter(|h| mark(p) == Mark::Waits && !(on_setting && h.key == 's')) {
+            pairs.push(wait_key(&h));
+        }
+        if on_setting {
+            pairs.push(("⏎", settings::plugins_key_setting));
         }
         if wide {
             if p.parts.iter().any(|x| !x.tools.is_empty()) {
@@ -1155,7 +1247,7 @@ pub(crate) fn key_bar(sc: &Screen, rows: &[Plugin], width: usize) -> Line<'stati
     let sel = sc.sel.as_deref().and_then(|id| rows.iter().find(|p| p.id == id));
     let mut pairs = vec![("space", settings::plugins_key_toggle), ("⏎", settings::plugins_key_open)];
     if let Some(h) = sel.filter(|p| mark(p) == Mark::Waits).and_then(wait_hint) {
-        pairs.push(if h.key == 'c' { ("c", settings::plugins_key_connect) } else { ("l", settings::plugins_key_login) });
+        pairs.push(wait_key(&h));
     }
     if wide {
         pairs.push(("tab", settings::plugins_key_kind));
@@ -1219,6 +1311,7 @@ fn page_ids(sc: &Screen, p: &Plugin) -> Vec<String> {
             out.push(more_id(owner));
         }
     };
+    out.extend(p.settings.iter().map(|s| setting_id(&s.var)));
     for x in p.parts.iter().filter(|x| x.kind == PartKind::Skill) {
         out.push(x.id.clone());
     }
@@ -1282,6 +1375,7 @@ fn answer_wait(p: &Plugin, k: char) -> Effect {
             Some(x) => Effect::Login(x.name.clone()),
             None => Effect::Login(p.name.clone()),
         },
+        Some('s') if k == 's' => needs_setting(p).map_or(Effect::None, |s| ask_of(p, s)),
         _ => Effect::None,
     }
 }
@@ -1405,9 +1499,12 @@ fn page_key(sc: &mut Screen, p: &Plugin, k: &KeyEvent) -> Effect {
                 return Effect::OpenFolder(path.clone());
             }
         }
-        KeyCode::Char(c @ ('c' | 'l')) => return answer_wait(p, c),
+        KeyCode::Char(c @ ('c' | 'l' | 's')) => return answer_wait(p, c),
         KeyCode::Enter => {
             let Some(id) = sc.part.clone() else { return Effect::None };
+            if let Some(s) = p.settings.iter().find(|s| setting_id(&s.var) == id) {
+                return ask_of(p, s);
+            }
             if let Some(owner) = id.strip_prefix("more:") {
                 sc.every_tool.push(owner.to_string());
             } else if p.parts.iter().any(|x| x.id == id && !x.tools.is_empty()) {
@@ -1495,7 +1592,7 @@ pub(crate) fn key(sc: &mut Screen, rows: &[Plugin], markets: &[Market], k: &KeyE
             sc.part = None;
             sc.top = 0;
         }
-        KeyCode::Char(c @ ('a' | 'b' | 'c' | 'l')) if sc.query.is_empty() => match c {
+        KeyCode::Char(c @ ('a' | 'b' | 'c' | 'l' | 's')) if sc.query.is_empty() => match c {
             'a' => sc.add = Some(Add::Menu { sel: 0 }),
             'b' => {
                 sc.browse = !sc.browse;

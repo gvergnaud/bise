@@ -687,6 +687,14 @@ pub(crate) fn on_key(app: &mut App, k: &crossterm::event::KeyEvent) -> bool {
     if k.kind != KeyEventKind::Press {
         return false;
     }
+    // `/plugins set`: ⏎ saves the line as the setting's value (never sent,
+    // never in the history), esc keeps it as it is (plugins.rs)
+    if app.plugin_ask.is_some() && matches!(k.code, KeyCode::Enter | KeyCode::Esc) && k.modifiers.is_empty() {
+        let ev = if k.code == KeyCode::Enter { crate::plugins::answer(app) } else { crate::plugins::keep(app) };
+        push_event(&mut app.events, &mut app.cache, ev);
+        app.follow = true;
+        return false;
+    }
     // the diff panel (site/m/artifacts D): ctrl+g opens and closes it;
     // focused, it takes the keys (esc gives them back)
     if crate::diffview::on_key(app, k) {

@@ -22,6 +22,9 @@ pub(crate) struct App {
     pub(crate) scheduled: Option<crate::scheduled_screen::Screen>,
     /// `/plugins` and `/skills`, the Plugins screen, when open
     pub(crate) plugins: Option<crate::plugins::Open>,
+    /// `/plugins set NAME VAR`: the setting the composer asks a value for
+    /// (plugins.rs: its next ⏎ is that value, never a message)
+    pub(crate) plugin_ask: Option<crate::plugins::Ask>,
     /// `/inbox`, what waits then his past answers, when open
     pub(crate) inbox: Option<crate::inbox_screen::Screen>,
     /// `/usage`, the full screen of what the calls cost, when open
@@ -305,6 +308,7 @@ impl App {
             artifacts: None,
             scheduled: None,
             plugins: None,
+            plugin_ask: None,
             inbox: None,
             usage: None,
             running: None,

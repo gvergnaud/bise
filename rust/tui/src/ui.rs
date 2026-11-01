@@ -304,7 +304,7 @@ fn draw_bise(app: &mut App, frame: &mut Frame, area: Rect, cols: crate::layout::
     });
     // voice mode: `you ⇄ main · voice mode · headphones`
     let voice_label = voice.as_ref().map(|(v, _)| crate::voicemode::pane::divider(v));
-    let (state_rect, label_rect) = match card_label.or_else(|| sb::palette::divider_label(app)).or(voice_label).or_else(|| sb::lead::label(app)) {
+    let (state_rect, label_rect) = match card_label.or_else(|| crate::plugins::ask_label(app)).or_else(|| sb::palette::divider_label(app)).or(voice_label).or_else(|| sb::lead::label(app)) {
         Some(label) => chrome::draw_divider_label(frame.buffer_mut(), area, cols, divider_y, label, |room| sb::answer_target::divider(app, room, fresh_note(&app.flash)).or_else(|| sb::lead::divider(app, room))),
         None => chrome::draw_divider(frame.buffer_mut(), area, cols, divider_y, &name, &who, working.as_ref(), state),
     };
@@ -879,15 +879,21 @@ fn draw_composer(app: &mut App, frame: &mut Frame, area: Rect, inner: usize, lea
     // dim, the placeholder says where the keys are
     let diff_keys = crate::diffview::has_keys(app);
     let rows = if empty {
-        let note = if diff_keys { crate::diffview::COMPOSER_NOTE.to_string() } else { sb::answer_target::placeholder(app).or_else(|| sb::placeholder_parts(app).map(|(head, tail)| sb::placeholder_fit(&head, tail.as_deref(), text_w.saturating_sub(1)))).unwrap_or_default() };
+        let note = if diff_keys {
+            crate::diffview::COMPOSER_NOTE.to_string()
+        } else if app.plugin_ask.is_some() {
+            // `/plugins set`: the tab and the key bar say what it waits for
+            String::new()
+        } else { sb::answer_target::placeholder(app).or_else(|| sb::placeholder_parts(app).map(|(head, tail)| sb::placeholder_fit(&head, tail.as_deref(), text_w.saturating_sub(1)))).unwrap_or_default() };
         let caret = if finding || diff_keys { Style::default() } else { Style::default().fg(text()).add_modifier(Modifier::REVERSED) };
         let mut spans = vec![Span::styled(" ", caret)];
         if !note.is_empty() {
             spans.push(Span::styled(format!(" {}", note), Style::default().fg(dim())));
         }
         vec![Line::from(spans)]
-    } else if sb::setup::masked(app) {
-        // the key card (BISE-245): a key is never shown
+    } else if sb::setup::masked(app) || crate::plugins::masked(app) {
+        // the key card (BISE-245), a secret setting (`/plugins set`): a key
+        // is never shown
         typed_lines(app, text_w, text_rows)
             .into_iter()
             .map(|l| {
