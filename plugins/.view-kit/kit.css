@@ -1,0 +1,124 @@
+/* bise view kit · the shared look of the gallery's built-in plugins' MCP Apps views.
+   Inlined as-is into each view by its server at resources/read (plugins/.view-kit/inline.mjs);
+   the host injects nothing. The colors, fonts, sizes and radii are the spec's CSS variables,
+   which bise desktop maps to its own tokens (apps/desktop/src/views/context.ts); each has a
+   fallback copied from apps/desktop/src/ds/tokens.css, light and dark, for a host that sends
+   none. The theme: the host context's `theme` (html[data-theme], set by kit.js), else the
+   system's. A view uses the --k-* names below, never a raw color or a hand-picked px. */
+:root {
+  color-scheme: light dark;
+  --k-bg: var(--color-background-primary, light-dark(#fdfbf7, #141211));
+  --k-bg-2: var(--color-background-secondary, light-dark(#efe9df, #231f1d));
+  --k-hover: var(--color-background-tertiary, light-dark(rgb(27 25 23 / .06), rgb(236 230 218 / .06)));
+  --k-text: var(--color-text-primary, light-dark(#1b1917, #ece6da));
+  --k-text-2: var(--color-text-secondary, light-dark(#6b645a, #a39c90));
+  --k-text-3: var(--color-text-tertiary, light-dark(#7d766c, #857d72));
+  --k-accent: var(--color-text-info, light-dark(#b8416b, #f4a6b0));
+  --k-accent-soft: var(--color-background-info, light-dark(#f7e9ee, #2b2022));
+  --k-ok: var(--color-text-success, light-dark(#3f7a2a, #b9d99a));
+  --k-err: var(--color-text-danger, light-dark(#b3261e, #ff5a52));
+  --k-err-soft: var(--color-background-danger, light-dark(rgb(179 38 30 / .12), rgb(255 90 82 / .12)));
+  --k-line: var(--color-border-secondary, light-dark(rgb(27 25 23 / .1), rgb(236 230 218 / .1)));
+  --k-line-strong: var(--color-border-primary, light-dark(#cfc8bd, #4a4540));
+  --k-focus: var(--color-ring-primary, light-dark(rgb(27 25 23 / .6), rgb(236 230 218 / .6)));
+  --k-inverse: var(--color-background-inverse, light-dark(#1b1917, #ece6da));
+  --k-on-inverse: var(--color-text-inverse, light-dark(#fdfbf7, #141211));
+  --k-sans: var(--font-sans, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif);
+  --k-mono: var(--font-mono, "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace);
+  /* sizes: 11.5 px is the floor (nothing smaller) */
+  --k-t-xs: var(--font-text-xs-size, .71875rem);
+  --k-t-sm: var(--font-text-sm-size, .75rem);
+  --k-t-md: var(--font-text-md-size, .8125rem);
+  --k-t-lg: var(--font-text-lg-size, .9375rem);
+  --k-h-sm: var(--font-heading-sm-size, .9375rem);
+  --k-h-md: var(--font-heading-md-size, 1.0625rem);
+  --k-r-sm: var(--border-radius-sm, 6px);
+  --k-r-md: var(--border-radius-md, 8px);
+  --k-r-lg: var(--border-radius-lg, 12px);
+  --k-r-full: var(--border-radius-full, 999px);
+  --k-shadow: var(--shadow-sm, 0 0 0 1px var(--k-line), 0 1px 2px rgb(0 0 0 / .25));
+  --k-shadow-md: var(--shadow-md, 0 0 0 1px var(--k-line), 0 8px 24px rgb(0 0 0 / .25));
+  /* the 4 px grid (desktop's --s-*): a margin, padding or gap is one of these */
+  --k-s-1: 4px; --k-s-2: 8px; --k-s-3: 12px; --k-s-4: 16px; --k-s-6: 24px; --k-s-8: 32px;
+  --k-h-control: 24px; --k-h-row: 28px;
+  --k-fast: 140ms; --k-ease: cubic-bezier(.2, 0, 0, 1);
+  /* the series palette (charts, diagrams, drawings, map layers): 8 hues around bise's rose,
+     each readable on --k-bg in its theme; series 1 is the accent */
+  --k-series-1: light-dark(#b8416b, #f4a6b0);
+  --k-series-2: light-dark(#2f6f9f, #8ec0e8);
+  --k-series-3: light-dark(#b0690f, #f0b860);
+  --k-series-4: light-dark(#3f7a2a, #b9d99a);
+  --k-series-5: light-dark(#6b4fa0, #c3a8f0);
+  --k-series-6: light-dark(#1f7f7a, #7fd1c9);
+  --k-series-7: light-dark(#a8502f, #f09a7a);
+  --k-series-8: light-dark(#6b645a, #a39c90);
+}
+html[data-theme="light"] { color-scheme: light; }
+html[data-theme="dark"] { color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  font-family: var(--k-sans); font-size: var(--k-t-md); line-height: 1.35; color: var(--k-text);
+  background: var(--k-bg); -webkit-font-smoothing: antialiased;
+}
+/* a view with no frame of its own: the panel (fullscreen) fills the tab */
+html[data-mode="fullscreen"], html[data-mode="fullscreen"] body { height: 100%; }
+.k-app { padding: var(--k-s-3) var(--k-s-4); }
+.k-title { margin: 0; font-size: var(--k-h-sm); font-weight: 600; }
+.k-dim { color: var(--k-text-2); }
+.k-faint { color: var(--k-text-3); font-size: var(--k-t-sm); }
+.k-num { font-variant-numeric: tabular-nums; }
+.k-mono { font-family: var(--k-mono); }
+.k-row { display: flex; align-items: center; gap: var(--k-s-2); }
+.k-spacer { flex: 1; }
+/* the toolbar: a row of quiet buttons above or below the view's content */
+.k-toolbar { display: flex; align-items: center; gap: var(--k-s-1); flex-wrap: wrap; }
+.k-btn {
+  font: inherit; font-size: var(--k-t-sm); height: var(--k-h-control); padding: 0 var(--k-s-2);
+  display: inline-flex; align-items: center; gap: var(--k-s-1); white-space: nowrap;
+  border: 1px solid var(--k-line); border-radius: var(--k-r-sm); background: var(--k-bg); color: var(--k-text);
+  cursor: pointer; transition: background var(--k-fast) var(--k-ease);
+}
+.k-btn:hover { background: var(--k-hover); }
+.k-btn:focus-visible, .k-seg button:focus-visible, .k-input:focus-visible { outline: 2px solid var(--k-focus); outline-offset: 1px; }
+.k-btn:disabled { opacity: .5; cursor: default; }
+.k-btn.k-primary { background: var(--k-inverse); color: var(--k-on-inverse); border-color: transparent; }
+.k-btn.k-ghost { border-color: transparent; background: transparent; color: var(--k-text-2); }
+.k-btn.k-ghost:hover { color: var(--k-text); background: var(--k-hover); }
+.k-btn.k-icon { width: var(--k-h-control); padding: 0; justify-content: center; }
+.k-btn[aria-pressed="true"] { background: var(--k-bg-2); }
+/* a segmented control: one choice of a few (°C/°F, bars/lines, walk/bike/car) */
+.k-seg { display: inline-flex; padding: 2px; gap: 2px; border-radius: var(--k-r-sm); background: var(--k-bg-2); }
+.k-seg button {
+  font: inherit; font-size: var(--k-t-sm); height: 20px; padding: 0 var(--k-s-2); border: 0;
+  border-radius: 4px; background: transparent; color: var(--k-text-2); cursor: pointer;
+}
+.k-seg button[aria-pressed="true"] { background: var(--k-bg); color: var(--k-text); box-shadow: var(--k-shadow); }
+.k-input {
+  font: inherit; font-size: var(--k-t-md); height: var(--k-h-row); padding: 0 var(--k-s-2);
+  border: 1px solid var(--k-line-strong); border-radius: var(--k-r-sm); background: var(--k-bg); color: var(--k-text);
+}
+.k-card { border: 1px solid var(--k-line); border-radius: var(--k-r-md); background: var(--k-bg); }
+.k-chip {
+  display: inline-flex; align-items: center; gap: var(--k-s-1); height: 20px; padding: 0 var(--k-s-2);
+  border-radius: var(--k-r-full); background: var(--k-bg-2); color: var(--k-text-2); font-size: var(--k-t-xs);
+}
+.k-swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex: none; }
+/* a legend under a chart or a map: a swatch and its name, wrapped */
+.k-legend { display: flex; flex-wrap: wrap; gap: var(--k-s-1) var(--k-s-3); font-size: var(--k-t-sm); color: var(--k-text-2); }
+.k-legend > span { display: inline-flex; align-items: center; gap: var(--k-s-1); }
+/* a note in the view: what is missing, a sample, an error the user can act on */
+.k-note { padding: var(--k-s-2) var(--k-s-3); border-radius: var(--k-r-md); background: var(--k-bg-2); color: var(--k-text-2); font-size: var(--k-t-sm); }
+.k-note.k-err { background: var(--k-err-soft); color: var(--k-err); }
+.k-skeleton { border-radius: var(--k-r-md); background: var(--k-bg-2); animation: k-beat 1.4s ease-in-out infinite; }
+@keyframes k-beat { 50% { opacity: .45; } }
+/* the tooltip (kit.js tip()): a short tip that never takes the pointer */
+.k-tip {
+  position: fixed; z-index: 1000; pointer-events: none; max-width: 260px;
+  padding: var(--k-s-1) var(--k-s-2); border-radius: var(--k-r-sm);
+  background: var(--k-inverse); color: var(--k-on-inverse); font-size: var(--k-t-sm); line-height: 1.35;
+  box-shadow: var(--k-shadow-md); opacity: 0; transition: opacity var(--k-fast) var(--k-ease);
+}
+.k-tip.k-on { opacity: 1; }
+.k-tip b { font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }

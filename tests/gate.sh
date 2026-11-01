@@ -225,8 +225,11 @@ map_paths() {  # <changed path>...
     # and emit, bise.dev's (site/) with them
     case "$f" in kit/*|site/*) kit=1 ;; esac
     # the MCP Apps plugins' shapes and their views' escaping (tests/fixtures/mcp-apps/check.py,
-    # no deps, ~2 s): the example plugins and the test fixtures
+    # no deps, ~2 s): the example plugins, the test fixtures and the gallery's built-in
+    # plugins (plugins/<name>/ with views, their shared kit plugins/.view-kit/), with
+    # the gallery plugins' own node:test units
     case "$f" in examples/plugins/*|tests/fixtures/mcp-apps/*) mcpapps=1 ;; esac
+    case "$f" in plugins/.view-kit/*|plugins/*/views/*|plugins/*/server.mjs|plugins/*/lib/*|plugins/*/test/*|plugins/*/mcp.json|plugins/*/vendor/*) mcpapps=1; gallery=1 ;; esac
     # the extension's unit tests and the computer-use scripts' types (~2 s)
     case "$f" in computer-use/extension/*|computer-use/bench/*|computer-use/tsconfig.node.json) cu=1 ;; esac
     # the as-he-does driver and pagedrive: fx's unit test and their types (~3 s)
@@ -1161,6 +1164,8 @@ fi
 [ "${kit:-0}" = 1 ] && step kit kit_check
 # the MCP Apps fixtures and example plugins against the spec's shapes, their views' innerHTML escaped
 [ "${mcpapps:-0}" = 1 ] && step mcp_apps_plugins python3 tests/fixtures/mcp-apps/check.py
+# the gallery plugins' unit tests (plugins/*/test/*.test.mjs and the kit's, node:test, no deps)
+[ "${gallery:-0}" = 1 ] && step gallery_plugins bash -c 'shopt -s nullglob; t=(plugins/.view-kit/test/*.test.mjs plugins/*/test/*.test.mjs); [ ${#t[@]} = 0 ] || node --test "${t[@]}"'
 # the extension's unit tests and the computer-use scripts' types
 [ "${cu:-0}" = 1 ] && step computer_use cu_check
 # the as-he-does helpers' unit test and the driver's types

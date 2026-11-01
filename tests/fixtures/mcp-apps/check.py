@@ -33,12 +33,32 @@ def ui_caps():
     return {"extensions": {EXT: {"mimeTypes": [MIME]}}}
 
 
+def expand(s, env):
+    """A `${VAR}` or `${VAR:-default}` the way the bridge expands it (resolve.rs expand_env),
+    `${BISE_NODE}` as the node on PATH (the gallery plugins' command): unset with no default
+    is an error, as there."""
+    def one(m):
+        name, default = m.group(1), m.group(3)
+        if name == "BISE_NODE":
+            return env.get("BISE_NODE") or "node"
+        v = env.get(name)
+        if v:
+            return v
+        if default is not None:
+            return default
+        raise RuntimeError(f"${{{name}}} is unset and has no default")
+    return VAR.sub(one, s)
+
+
+VAR = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(:-([^}]*))?\}")
+
+
 class Server:
     def __init__(self, root, spec):
         env = dict(os.environ, PLUGIN_ROOT=root, PLUGIN_DATA=os.path.join(root, ".data"))
-        sub = lambda s: s.replace("${PLUGIN_ROOT}", root).replace("${PLUGIN_DATA}", env["PLUGIN_DATA"])
+        sub = lambda s: expand(s, env)
         env.update({k: sub(v) for k, v in (spec.get("env") or {}).items()})
-        self.p = subprocess.Popen([spec["command"]] + [sub(a) for a in spec.get("args", [])], cwd=root,
+        self.p = subprocess.Popen([sub(spec["command"])] + [sub(a) for a in spec.get("args", [])], cwd=root,
                                   env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
         self.n = 0
 
@@ -235,6 +255,15 @@ def self_test():
     got = sorted(unescaped_html(raw))
     assert got == ["data.note", "r.text"], got
     assert unescaped_html('el.innerHTML = `<b>${esc(r.text)}</b>${deg(t)}`;') == []
+    env = {"PLUGIN_ROOT": "/p", "KEY": "k"}
+    assert expand("${PLUGIN_ROOT}/s.mjs", env) == "/p/s.mjs"
+    assert expand("${KEY:-}", env) == "k" and expand("${NONE:-}", env) == "" and expand("${NONE:-d}", env) == "d"
+    assert expand("${BISE_NODE}", env) == "node"
+    try:
+        expand("${NONE}", env)
+        raise AssertionError("an unset ${NONE} expanded")
+    except RuntimeError:
+        pass
 
 
 def check_plugin(root, bad):
@@ -257,8 +286,11 @@ def main(argv):
     self_test()
     here = os.path.dirname(os.path.abspath(__file__))
     examples = os.path.join(here, "..", "..", "..", "examples", "plugins")
-    roots = argv or [os.path.join(top, d) for top in (here, examples) for d in sorted(os.listdir(top))
-                     if os.path.isfile(os.path.join(top, d, "plugin.json"))]
+    # the gallery's built-in plugins: those with views (computer, docs, sheets, slides have none)
+    builtin = os.path.join(here, "..", "..", "..", "plugins")
+    roots = argv or [os.path.join(top, d) for top in (here, examples, builtin) for d in sorted(os.listdir(top))
+                     if os.path.isfile(os.path.join(top, d, "plugin.json"))
+                     and (top != builtin or os.path.isdir(os.path.join(top, d, "views")))]
     problems = []
     for root in roots:
         try:

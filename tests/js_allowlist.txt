@@ -9,3 +9,8 @@ computer-use/extension/build.js        # a stamp bise computer-use rewrites on e
 docs/research/computer-use-spike/**    # a frozen record the design docs cite, never typechecked
 site/desktop/hero/*.js                 # generated: apps/desktop's vite hero bundle (hero.vite.config.ts), minified, no banner
 examples/plugins/*/server.mjs        # example MCP servers run by plain `node` from mcp.json, no build step (Node 18+): a plugin folder must run as copied
+plugins/*/server.mjs                   # the gallery's built-in MCP servers, started by ${BISE_NODE} from mcp.json with no build step (stdlib only): a plugin folder runs as shipped
+plugins/*/lib/**                       # the gallery plugins' server modules, imported by their server.mjs, same reason
+plugins/*/test/**                      # the gallery plugins' node:test units (gate.sh quick's gallery_plugins step)
+plugins/.view-kit/**                   # the gallery's shared view kit, inlined as-is into each view's HTML by its server at resources/read (no build step)
+plugins/*/vendor/**                    # vendored third-party code a gallery plugin ships with its LICENSE (mermaid)
