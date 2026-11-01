@@ -37,6 +37,7 @@ fn plugin(id: &str, kind: PluginKind, scope: Scope, what: &str, parts: Vec<Plugi
         version: None,
         path: None,
         prompts: vec![],
+        settings: vec![],
     }
 }
 

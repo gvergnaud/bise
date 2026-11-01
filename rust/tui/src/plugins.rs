@@ -31,6 +31,7 @@ pub(crate) fn rows(workspace: &Path, pending: &[String]) -> Vec<bise_proto::app_
     let st = state::read(&state::state_path());
     let grants = state::grants(&state::state_path());
     let (sd, od) = (status::dir(), oauth::store_dir());
+    let secrets = bise_home::Home::from_env().mcp_secrets_dir();
     // the skills folders main reads (the user's view), off ones too; a
     // short wait per folder: a stuck one is skipped (bend_plugins::skills)
     let home = std::env::var_os("HOME").filter(|h| !h.is_empty()).map(std::path::PathBuf::from);
@@ -46,6 +47,7 @@ pub(crate) fn rows(workspace: &Path, pending: &[String]) -> Vec<bise_proto::app_
         status_dir: Some(&sd),
         oauth_dir: Some(&od),
         pending_logins: pending,
+        secrets_dir: Some(&secrets),
     };
     catalog::rows(&inputs)
 }
@@ -97,6 +99,17 @@ pub(crate) fn grant(plugin: &str, uri: &str, perms: &[String]) -> Result<bool, S
     let id = bend_plugins::id::PluginId::plugin(plugin).part(bend_plugins::id::PartKind::View, None, uri);
     let path = bend_plugins::state::state_path();
     bend_plugins::state::grant(&path, &id, perms).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// Give (or forget: `value` none) setting `var` of plugin `name` (the
+/// plugins page's field, `/plugins set NAME VAR`): its declared settings
+/// only, kept by bend_plugins::secrets' one writer (the add menu's). The
+/// bridge restarts its servers with it.
+pub(crate) fn setting(workspace: &Path, name: &str, var: &str, value: Option<&str>) -> Result<(), String> {
+    use bend_plugins::{resolve, secrets};
+    let res = resolve::resolve(&resolve::Roots::standard(Some(workspace)));
+    let p = res.plugins.iter().find(|p| p.name == name).ok_or_else(|| secrets::SettingError::NoPlugin(name.into()).to_string())?;
+    secrets::set_setting(&bise_home::Home::from_env().mcp_secrets_dir(), p, var, value).map_err(|e| e.to_string())
 }
 
 /// Forget the login of server `name` (`/plugins logout NAME`).

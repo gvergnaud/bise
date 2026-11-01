@@ -25,6 +25,7 @@ fn row(id: &str, kind: PluginKind, scope: PluginScope, state: PluginState, on: b
         login: None,
         parts: Vec::new(),
         prompts: Vec::new(),
+        settings: Vec::new(),
         logins: Vec::new(),
     }
 }
@@ -92,9 +93,17 @@ fn what_waits_comes_from_typed_fields_only() {
     // a connector's own login that needs one
     let mut outlook = connector("outlook", true);
     outlook.login = Some(LoginState::Needs);
-    let s = summary(&[linear, pg, said, off, outlook], &[], &[], &[], false);
+    // a required setting with no value waits on him; an optional one or a set one does not
+    let setting = |required: bool, set: bool| bise_proto::app_rows::PluginSetting {
+        var: "K".into(), label: "Key".into(), secret: true, required, help: None, placeholder: None, set,
+    };
+    let mut maps = plugin("maps", true);
+    maps.settings = vec![setting(true, false)];
+    let mut draw = plugin("draw", true);
+    draw.settings = vec![setting(false, false), setting(true, true)];
+    let s = summary(&[linear, pg, said, off, outlook, maps, draw], &[], &[], &[], false);
     law(&s);
-    assert_eq!(s.waiting, 3);
+    assert_eq!(s.waiting, 4);
     assert_eq!(s.suggest[0].kind, SuggestKind::Login);
     assert_eq!(s.suggest[0].ids, vec!["linear", "mistral:outlook"]);
     assert_eq!(s.suggest[1].kind, SuggestKind::Error);

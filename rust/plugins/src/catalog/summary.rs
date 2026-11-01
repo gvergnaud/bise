@@ -12,7 +12,8 @@
 //! evidence come first (seen in more projects first), then [`USEFUL`].
 //!
 //! What waits on him comes from typed fields only: a row's or a part's
-//! `login: needs`, a part's `error`; never from a status word. An off row
+//! `login: needs`, a part's `error`, a required setting not `set`; never
+//! from a status word. An off row
 //! waits on nothing (its servers don't start).
 
 use crate::add::{default_import_name, import_title, Found};
@@ -45,7 +46,7 @@ pub fn summary(rows: &[Plugin], found: &[Found], markets: &[Market], evidence: &
     let off = rows.iter().filter(listed).filter(|p| !(p.on && p.state == PluginState::Loaded)).count();
     let login: Vec<&Plugin> = on.iter().copied().filter(|p| needs_login(p)).collect();
     let error: Vec<&Plugin> = on.iter().copied().filter(|p| failed(p)).collect();
-    let waiting = on.iter().filter(|p| needs_login(p) || failed(p)).count();
+    let waiting = on.iter().filter(|p| needs_login(p) || failed(p) || needs_setting(p)).count();
     let mistral: Vec<&Plugin> = rows.iter().filter(|p| p.kind == PluginKind::Mistral).collect();
     let connected = mistral.iter().filter(|p| p.login == Some(LoginState::In) || (p.login.is_none() && p.state != PluginState::Available)).count();
     let mut to_connect: Vec<&Plugin> = mistral.iter().copied().filter(|p| p.state == PluginState::Available).collect();
@@ -94,6 +95,12 @@ pub fn summary(rows: &[Plugin], found: &[Found], markets: &[Market], evidence: &
 /// Its own login or one of its servers' says it needs one.
 fn needs_login(p: &Plugin) -> bool {
     p.login == Some(LoginState::Needs) || p.parts.iter().any(|x| x.on && x.login == Some(LoginState::Needs))
+}
+
+/// A setting it needs to work (`required`) has no value: it waits on him
+/// like a login (designer m_51514).
+pub fn needs_setting(p: &Plugin) -> bool {
+    p.settings.iter().any(|s| s.required && !s.set)
 }
 
 /// One of its servers failed.

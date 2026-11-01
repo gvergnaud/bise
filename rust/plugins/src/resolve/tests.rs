@@ -465,3 +465,58 @@ fn mcp_servers_take_codex_limits_and_can_be_off() {
     assert!(said.iter().any(|m| m.contains("\"e\" is off")), "{said:?}");
     assert!(said.iter().any(|m| m.contains("\"f\": \"enabled\" must be true or false")), "{said:?}");
 }
+
+fn with_bise(ext: &str) -> String {
+    format!("{{\"$schema\":\"{}\",\"name\":\"maps\",\"extensions\":{{\"dev.bise\":{}}}}}", PLUGIN_SCHEMA, ext)
+}
+
+#[test]
+fn a_plugins_settings_are_read_from_dev_bise() {
+    let m = parse_manifest(&with_bise(r#"{"default":"off","settings":[{"var":"GOOGLE_MAPS_API_KEY","label":"Google Maps API key","secret":true,"help":"optional"},{"var":"UNITS","label":"Units","placeholder":"metric"}]}"#)).unwrap();
+    assert!(m.default_off);
+    assert_eq!(m.settings, vec![
+        Setting { var: "GOOGLE_MAPS_API_KEY".into(), label: "Google Maps API key".into(), secret: true, required: false, help: Some("optional".into()), placeholder: None },
+        Setting { var: "UNITS".into(), label: "Units".into(), secret: false, required: false, help: None, placeholder: Some("metric".into()) },
+    ]);
+    // the resolved plugin carries them
+    let t = tmp("settings");
+    write(&t.0.join("builtin/maps/plugin.json"), &with_bise(r#"{"settings":[{"var":"K","label":"Key"}]}"#));
+    let r = resolve(&roots(&t));
+    let p = r.plugins.iter().find(|p| p.name == "maps").unwrap();
+    assert_eq!(p.settings.iter().map(|s| s.var.as_str()).collect::<Vec<_>>(), ["K"]);
+}
+
+#[test]
+fn a_bad_setting_is_a_manifest_error_naming_it() {
+    for (ext, why) in [
+        (r#"{"settings":{}}"#, "settings must be an array"),
+        (r#"{"settings":[{"label":"x"}]}"#, "missing /extensions/dev.bise/settings/0/var"),
+        (r#"{"settings":[{"var":"k","label":"x"}]}"#, "must be an env name"),
+        (r#"{"settings":[{"var":"PLUGIN_ROOT","label":"x"}]}"#, "is bise's own"),
+        (r#"{"settings":[{"var":"BISE_NODE","label":"x"}]}"#, "is bise's own"),
+        (r#"{"settings":[{"var":"K","label":"x"},{"var":"K","label":"y"}]}"#, "given twice"),
+        (r#"{"settings":[{"var":"K"}]}"#, "missing /extensions/dev.bise/settings/0/label"),
+        (r#"{"settings":[{"var":"K","label":"x","secret":"yes"}]}"#, "must be true or false"),
+        (r#"{"settings":[{"var":"K","label":"x","value":"v"}]}"#, "unknown field /extensions/dev.bise/settings/0/value"),
+    ] {
+        let e = parse_manifest(&with_bise(ext)).unwrap_err();
+        assert!(e.contains(why), "{ext}: {e}");
+    }
+}
+
+#[test]
+fn bise_node_is_the_node_found_or_says_it_needs_one() {
+    assert_eq!(node_major("v20.11.1\n"), Some(20));
+    assert_eq!(node_major("v18.0.0"), Some(18));
+    assert_eq!(node_major("20.1"), None);
+    let t = tmp("node");
+    let spec: Map<String, Value> = serde_json::from_str(r#"{"command":"${BISE_NODE}","args":["${PLUGIN_ROOT}/server.mjs"]}"#).unwrap();
+    match (parse_stdio("maps", &spec, &t.0, &t.0.join("data")), node_exe()) {
+        (Ok(s), Some(n)) => {
+            assert_eq!(s.command, n.to_string_lossy());
+            assert_eq!(s.args, [format!("{}/server.mjs", t.0.display())]);
+        }
+        (Err(e), None) => assert_eq!(e, NEEDS_NODE),
+        (got, node) => panic!("{got:?} with node {node:?}"),
+    }
+}

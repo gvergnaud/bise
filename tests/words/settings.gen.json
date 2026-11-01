@@ -3634,6 +3634,68 @@
     "one": null,
     "text": "set up"
   },
+  "settings.plugins_setting_applies": {
+    "args": [],
+    "one": null,
+    "text": "applies from the next call"
+  },
+  "settings.plugins_setting_cancel": {
+    "args": [],
+    "one": null,
+    "text": "Cancel"
+  },
+  "settings.plugins_setting_change": {
+    "args": [],
+    "one": null,
+    "text": "Change…"
+  },
+  "settings.plugins_setting_forget": {
+    "args": [],
+    "one": null,
+    "text": "Forget"
+  },
+  "settings.plugins_setting_forget_ask": {
+    "args": [
+      "label"
+    ],
+    "one": null,
+    "text": "forget the {label}? it can't be shown again."
+  },
+  "settings.plugins_setting_keep": {
+    "args": [],
+    "one": null,
+    "text": "Keep"
+  },
+  "settings.plugins_setting_needed": {
+    "args": [],
+    "one": null,
+    "text": "needed to work"
+  },
+  "settings.plugins_setting_not_set": {
+    "args": [],
+    "one": null,
+    "text": "not set"
+  },
+  "settings.plugins_setting_save": {
+    "args": [],
+    "one": null,
+    "text": "Save"
+  },
+  "settings.plugins_setting_set": {
+    "args": [],
+    "one": null,
+    "text": "set"
+  },
+  "settings.plugins_setting_set_button": {
+    "args": [],
+    "one": null,
+    "text": "Set…"
+  },
+  "settings.plugins_settings_head": {
+    "args": [],
+    "one": null,
+    "text": "settings"
+  },
   "settings.plugins_side_tip": {
     "args": [
       "n"

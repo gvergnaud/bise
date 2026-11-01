@@ -219,11 +219,42 @@ pub struct Plugin {
     /// 3, one line each); a click puts one in the composer, never sends it
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub prompts: Vec<String>,
+    /// what he may give it (its manifest's `dev.bise.settings`: an API
+    /// key), each set with `plugin_setting`; never a value, only `set`
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub settings: Vec<PluginSetting>,
     /// the released app's (before desktop-v2026.10.16) remote MCP servers
     /// that log in: kept on the wire for the released law, always empty
     /// now; a server's login is its `mcp` part's `login`
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub logins: Vec<PluginLogin>,
+}
+
+/// One of a plugin's settings (`bend_plugins::resolve::Setting`): a field
+/// of the plugins page. The value is never on the wire, not even a
+/// non-secret one: `set` says whether he gave one (his MCP secrets, or
+/// the environment). `label` and `help` are the plugin's own words
+/// (third-party text: drawn escaped, like its description).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct PluginSetting {
+    /// the `${VAR}` its mcp.json reads, what `plugin_setting` takes
+    pub var: String,
+    pub label: String,
+    /// typed as a password
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub secret: bool,
+    /// the plugin cannot work without it
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub required: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub help: Option<String>,
+    /// an example of a value: the empty field's placeholder
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placeholder: Option<String>,
+    /// a value is given
+    #[serde(default)]
+    pub set: bool,
 }
 
 /// A plugin's remote MCP server that logs in through his browser (the

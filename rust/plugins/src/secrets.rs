@@ -85,6 +85,60 @@ pub fn write(dir: &Path, id: &PluginId, values: &[(String, String)]) -> Result<(
     bise_secrets::write(&file, &text, &|| bise_secrets::write_private(&file, &text)).map_err(io)
 }
 
+/// Why a setting could not be given (never a value in it).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SettingError {
+    /// no plugin of that name is found
+    NoPlugin(String),
+    /// the plugin declares no such setting: a var it did not declare is
+    /// never written (nor read by another plugin: secrets are per plugin)
+    NotDeclared { plugin: String, var: String },
+    Secrets(SecretsError),
+}
+
+impl std::fmt::Display for SettingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SettingError::NoPlugin(p) => write!(f, "no plugin {p:?}"),
+            SettingError::NotDeclared { plugin, var } => write!(f, "{plugin} has no setting {var}"),
+            SettingError::Secrets(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+/// His value for one of `plugin`'s declared settings (`dev.bise.settings`,
+/// the plugins page's field): `Some` writes it through [`write`] (the add
+/// menu's one writer), `None` or an empty value forgets it. The plugin's
+/// servers see it at their next start: the bridge restarts them when their
+/// env changes ([`crate::tools_cache`]'s key holds it).
+pub fn set_setting(dir: &Path, plugin: &crate::resolve::Plugin, var: &str, value: Option<&str>) -> Result<(), SettingError> {
+    if !plugin.settings.iter().any(|s| s.var == var) {
+        return Err(SettingError::NotDeclared { plugin: plugin.name.clone(), var: var.to_string() });
+    }
+    let id = PluginId::plugin(&plugin.name);
+    match value.map(str::trim).filter(|v| !v.is_empty()) {
+        Some(v) => write(dir, &id, &[(var.to_string(), v.to_string())]).map_err(SettingError::Secrets),
+        None => forget(dir, &id, var).map_err(SettingError::Secrets),
+    }
+}
+
+/// `id`'s secrets without `var` (the others kept), under the same lock as
+/// [`write`]; nothing saved for it: nothing touched.
+fn forget(dir: &Path, id: &PluginId, var: &str) -> Result<(), SecretsError> {
+    let io = |e: std::io::Error| if bise_secrets::is_locked(&e) { SecretsError::Locked } else { SecretsError::Io { why: e.to_string() } };
+    let file = path(dir, id);
+    if !file.exists() {
+        return Ok(());
+    }
+    let _held = lock(&file.with_extension("json.lock")).map_err(io)?;
+    let mut all = read(dir, id)?;
+    if all.remove(var).is_none() {
+        return Ok(());
+    }
+    let text = serde_json::to_string_pretty(&all).unwrap_or_default() + "\n";
+    bise_secrets::write(&file, &text, &|| bise_secrets::write_private(&file, &text)).map_err(io)
+}
+
 /// The one rule for a `${NAME}` of `plugin`'s servers (URL, headers,
 /// env): the environment's value when non-empty, else the one he typed
 /// in ([`read`] of `dir`, once, at the first name the environment lacks;
@@ -158,6 +212,50 @@ mod tests {
         remove(&d, &id).unwrap();
         assert!(!path(&d, &id).exists());
         assert_eq!(read(&d, &id).unwrap(), BTreeMap::new());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    fn plugin(name: &str, vars: &[&str]) -> crate::resolve::Plugin {
+        let t = std::env::temp_dir().join(format!("bp-secrets-plugin-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(t.join(name)).unwrap();
+        let ext = vars.iter().map(|v| format!(r#"{{"var":"{v}","label":"{v}"}}"#)).collect::<Vec<_>>().join(",");
+        std::fs::write(
+            t.join(name).join("plugin.json"),
+            format!(r#"{{"$schema":"{}","name":"{name}","extensions":{{"dev.bise":{{"settings":[{ext}]}}}}}}"#, crate::resolve::PLUGIN_SCHEMA),
+        )
+        .unwrap();
+        let roots = crate::resolve::Roots { builtin: Some(t.clone()), user: None, workspace: None, data: t.join(".data"), state: Default::default() };
+        let p = crate::resolve::resolve(&roots).plugins.into_iter().find(|p| p.name == name).unwrap();
+        let _ = std::fs::remove_dir_all(&t);
+        p
+    }
+
+    #[test]
+    fn a_setting_is_written_for_its_plugin_only_and_forgotten_alone() {
+        let d = dir("setting");
+        let maps = plugin("maps", &["BP_SETTING_KEY", "BP_SETTING_UNITS"]);
+        let draw = plugin("draw", &["BP_SETTING_OTHER"]);
+        set_setting(&d, &maps, "BP_SETTING_KEY", Some(" k1 ")).unwrap();
+        set_setting(&d, &maps, "BP_SETTING_UNITS", Some("metric")).unwrap();
+        let id = PluginId::plugin("maps");
+        assert_eq!(var(&d, &id, "BP_SETTING_KEY").as_deref(), Some("k1"), "trimmed");
+        // a var it did not declare: refused, nothing written
+        let e = set_setting(&d, &maps, "BP_SETTING_OTHER", Some("x")).unwrap_err();
+        assert_eq!(e, SettingError::NotDeclared { plugin: "maps".into(), var: "BP_SETTING_OTHER".into() });
+        assert_eq!(var(&d, &id, "BP_SETTING_OTHER"), None);
+        // another plugin never reads maps' values, even a var of the same name
+        assert_eq!(var(&d, &PluginId::plugin("draw"), "BP_SETTING_KEY"), None);
+        set_setting(&d, &draw, "BP_SETTING_OTHER", Some("o")).unwrap();
+        assert_eq!(var(&d, &id, "BP_SETTING_OTHER"), None);
+        // forgotten: an empty value or none, the others kept
+        set_setting(&d, &maps, "BP_SETTING_KEY", Some("  ")).unwrap();
+        assert_eq!(var(&d, &id, "BP_SETTING_KEY"), None);
+        assert_eq!(var(&d, &id, "BP_SETTING_UNITS").as_deref(), Some("metric"));
+        set_setting(&d, &maps, "BP_SETTING_UNITS", None).unwrap();
+        assert_eq!(read(&d, &id).unwrap(), BTreeMap::new());
+        // forgetting what was never given touches nothing
+        set_setting(&d, &plugin("mermaid", &["BP_SETTING_M"]), "BP_SETTING_M", None).unwrap();
+        assert!(!path(&d, &PluginId::plugin("mermaid")).exists());
         let _ = std::fs::remove_dir_all(&d);
     }
 

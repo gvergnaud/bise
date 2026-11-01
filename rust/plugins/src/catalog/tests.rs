@@ -135,7 +135,7 @@ fn build(t: &Tmp, st: &StateV2, pending: &[String]) -> Vec<Plugin> {
     let res = resolve::resolve(&roots);
     let (cat, sk, sd) = (catalog(), skills(t), t.0.join("status"));
     let grants = crate::state::Grants::new();
-    rows(&Inputs { resolution: &res, catalog: &cat, skills: &sk, state: st, grants: &grants, status_dir: Some(&sd), oauth_dir: None, pending_logins: pending })
+    rows(&Inputs { resolution: &res, catalog: &cat, skills: &sk, state: st, grants: &grants, status_dir: Some(&sd), oauth_dir: None, pending_logins: pending, secrets_dir: None })
 }
 
 fn row<'a>(rows: &'a [Plugin], id: &str) -> &'a Plugin {
@@ -379,4 +379,24 @@ fn prompts_must_be_strings_and_the_built_ins_have_three_uncut() {
         assert_eq!(p.prompts.len(), MAX_PROMPTS, "{name}");
     }
     assert!(res.diagnostics.iter().all(|d| d.code != "plugin.prompts.cut"), "{:?}", res.diagnostics);
+}
+
+#[test]
+fn a_plugins_settings_say_whether_they_are_set_never_their_value() {
+    let t = tmp();
+    write(&t.0.join("builtin/maps/plugin.json"), &format!(
+        r#"{{"$schema":"{PLUGIN_SCHEMA}","name":"maps","extensions":{{"dev.bise":{{"settings":[{{"var":"BP_CAT_MAPS_KEY","label":"Google Maps API key","secret":true,"help":"optional"}},{{"var":"BP_CAT_MAPS_UNITS","label":"Units","required":true}}]}}}}}}"#));
+    let roots = Roots { builtin: Some(t.0.join("builtin")), user: None, workspace: None, data: t.0.join("data"), state: StateV2::default() };
+    let res = resolve::resolve(&roots);
+    let p = res.plugins.iter().find(|p| p.name == "maps").unwrap();
+    let dir = t.0.join("secrets");
+    crate::secrets::write(&dir, &PluginId::plugin("maps"), &[("BP_CAT_MAPS_KEY".into(), "sekret-value".into())]).unwrap();
+    let rows = settings_of(p, Some(&dir));
+    assert_eq!(rows.iter().map(|s| (s.var.as_str(), s.set, s.secret, s.required)).collect::<Vec<_>>(),
+        [("BP_CAT_MAPS_KEY", true, true, false), ("BP_CAT_MAPS_UNITS", false, false, true)]);
+    assert_eq!(rows[0].help.as_deref(), Some("optional"));
+    let wire = serde_json::to_string(&rows).unwrap();
+    assert!(!wire.contains("sekret-value"), "{wire}");
+    // no secrets dir: only the environment counts
+    assert!(settings_of(p, None).iter().all(|s| !s.set));
 }

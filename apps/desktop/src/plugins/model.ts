@@ -91,6 +91,8 @@ export function failedPart(p: Plugin): PluginPart | null {
 export function badgeOf(p: Plugin): Badge {
   if (!p.on || !installed(p)) return null;
   if (needsLogin(p) || p.state === 'invalid') return p.state === 'invalid' ? '✗' : '?';
+  // a setting it needs to work, not given: it waits on him like a login (designer m_51514)
+  if ((p.settings ?? []).some((s) => s.required === true && !s.set)) return '?';
   return failedPart(p) !== null ? '✗' : null;
 }
 

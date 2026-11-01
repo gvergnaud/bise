@@ -124,6 +124,19 @@ pub enum AppCmd {
         #[serde(default)]
         perms: Vec<String>,
     },
+    /// give or forget one of a plugin's settings (its `dev.bise.settings`,
+    /// the plugins page's field): `value` none or empty forgets it. Kept
+    /// in his MCP secrets by bend_plugins' one writer (the add menu's);
+    /// a var the plugin does not declare is an error and writes nothing.
+    /// Its servers restart with it (new calls); then `plugins` again
+    PluginSetting {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        project: Option<Project>,
+        name: String,
+        var: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        value: Option<String>,
+    },
     /// connect a Mistral connector (`mistral:<name>`): opens his browser
     /// on Mistral's page (his click only, never a test), then the catalog
     /// is read again until it is ready: `plugins` at each change
@@ -551,6 +564,7 @@ impl AppCmd {
         "plugins",
         "plugin_set",
         "plugin_grant",
+        "plugin_setting",
         "plugin_connect",
         "plugins_refresh",
         "plugin_add",

@@ -25,7 +25,7 @@ use crate::model::{ConnectorAuth, ConnectorEntry, SkillEntry, StateV2};
 use crate::resolve::{self, HttpServer, StdioServer};
 use crate::title::display_name;
 use crate::{connectors, status};
-use bise_proto::app_rows::{ConnectorsProblem, LoginState, PartKind, Plugin, PluginAction, PluginKind, PluginPart, PluginScope, PluginState};
+use bise_proto::app_rows::{ConnectorsProblem, LoginState, PartKind, Plugin, PluginAction, PluginKind, PluginPart, PluginScope, PluginSetting, PluginState};
 use bise_proto::words::settings;
 use std::path::{Path, PathBuf};
 
@@ -53,6 +53,9 @@ pub struct Inputs<'a> {
     /// the logins open in his browser, by name (a remote server's), and
     /// the connectors whose connect runs, by id (`mistral:gmail`)
     pub pending_logins: &'a [String],
+    /// his MCP secrets (`Home::mcp_secrets_dir`): whether each setting
+    /// of a plugin is given (`set`), never its value
+    pub secrets_dir: Option<&'a Path>,
 }
 
 /// At most this many `prompts` per row (a longer manifest list is cut).
@@ -157,9 +160,32 @@ fn plugin_row(i: &Inputs, p: &resolve::Plugin, names: &[(String, String, String)
         action: (on && needs).then_some(PluginAction::LogIn),
         login: None,
         prompts: prompts(&p.prompts),
+        settings: settings_of(p, i.secrets_dir),
         logins: Vec::new(),
         parts,
     }
+}
+
+/// `p`'s settings as rows: each `set` when the environment or his saved
+/// secrets ([`crate::secrets::lookup`], the bridge's one rule) give its
+/// var a non-empty value. The value itself never leaves here.
+pub fn settings_of(p: &resolve::Plugin, secrets_dir: Option<&Path>) -> Vec<PluginSetting> {
+    if p.settings.is_empty() {
+        return Vec::new();
+    }
+    let vars = crate::secrets::lookup(secrets_dir, &PluginId::plugin(&p.name));
+    p.settings
+        .iter()
+        .map(|s| PluginSetting {
+            var: s.var.clone(),
+            label: s.label.clone(),
+            secret: s.secret,
+            required: s.required,
+            help: s.help.clone(),
+            placeholder: s.placeholder.clone(),
+            set: vars(&s.var).is_some_and(|v| !v.is_empty()),
+        })
+        .collect()
 }
 
 /// A part with nothing known yet but its id, kind, name and words.
@@ -347,6 +373,7 @@ fn connector_base(c: &ConnectorEntry, id: PluginId) -> Plugin {
         login: None,
         parts: Vec::new(),
         prompts: Vec::new(),
+        settings: Vec::new(),
         logins: Vec::new(),
     }
 }
@@ -398,6 +425,7 @@ fn skills_row(i: &Inputs, scope: SkillsScope) -> Option<Plugin> {
         login: None,
         parts,
         prompts: Vec::new(),
+        settings: Vec::new(),
         logins: Vec::new(),
     })
 }

@@ -292,6 +292,8 @@ pub struct Plugin {
     pub off_servers: Vec<crate::id::PluginId>,
     /// what to try it with (`dev.bise.prompts`, cut: [`cut_prompts`])
     pub prompts: Vec<String>,
+    /// what he may give it on the plugins page (`dev.bise.settings`)
+    pub settings: Vec<Setting>,
     /// components present on disk but not supported yet
     pub unsupported: Vec<String>,
     /// opt-in (`"dev.bise": {"default": "off"}`): on only when named in
@@ -485,6 +487,80 @@ pub struct Manifest {
     /// `"extensions": {"dev.bise": {"prompts": [...]}}`: what to try it
     /// with, as written (cut at load, [`MAX_PROMPTS`] of [`PROMPT_CHARS`])
     pub prompts: Vec<String>,
+    /// `"extensions": {"dev.bise": {"settings": [...]}}`: what he may give
+    /// it on the plugins page (an API key), each a `${VAR}` of its mcp.json
+    pub settings: Vec<Setting>,
+}
+
+/// One of a plugin's settings (`dev.bise.settings`): a value he types on
+/// the plugins page, kept in his MCP secrets ([`crate::secrets`], the add
+/// menu's store) under `var`, read by its mcp.json as `${var}`. `label`
+/// and `help` are the plugin's own words (third-party text, escaped where
+/// drawn). The value is never in a row: a row says only whether it is set.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Setting {
+    pub var: String,
+    pub label: String,
+    /// typed as a password, never shown back
+    pub secret: bool,
+    /// the plugin cannot work without it (a row says so while it is unset)
+    pub required: bool,
+    pub help: Option<String>,
+    /// an example of a value, the empty field's placeholder (`eu-west-1`)
+    pub placeholder: Option<String>,
+}
+
+/// At most this many settings per plugin, each label and help cut there.
+pub const MAX_SETTINGS: usize = 8;
+pub const SETTING_CHARS: usize = 200;
+
+/// `dev.bise.settings`: an array of `{var, label, secret?, required?,
+/// help?, placeholder?}`; `var` an env name (`[A-Z_][A-Z0-9_]*`) given once, not one of
+/// bise's own (`PLUGIN_ROOT`, `PLUGIN_DATA`, `BISE_*`).
+fn parse_settings(k: &str, v: &Value) -> Result<Vec<Setting>, String> {
+    let at = |i: usize, f: &str| format!("/extensions/{}/settings/{}/{}", k, i, f);
+    let list = v.as_array().ok_or(format!("/extensions/{}/settings must be an array", k))?;
+    if list.len() > MAX_SETTINGS {
+        return Err(format!("/extensions/{}/settings: at most {}", k, MAX_SETTINGS));
+    }
+    let mut out: Vec<Setting> = Vec::new();
+    for (i, s) in list.iter().enumerate() {
+        let o = s.as_object().ok_or(format!("/extensions/{}/settings/{} must be an object", k, i))?;
+        for f in o.keys() {
+            if !["var", "label", "secret", "required", "help", "placeholder"].contains(&f.as_str()) {
+                return Err(format!("unknown field {}", at(i, f)));
+            }
+        }
+        let text = |f: &str| -> Result<Option<String>, String> {
+            match o.get(f) {
+                None => Ok(None),
+                Some(Value::String(t)) if !t.trim().is_empty() => Ok(Some(t.trim().chars().take(SETTING_CHARS).collect())),
+                Some(_) => Err(format!("{} must be a non-empty string", at(i, f))),
+            }
+        };
+        let flag = |f: &str| -> Result<bool, String> {
+            match o.get(f) {
+                None => Ok(false),
+                Some(Value::Bool(b)) => Ok(*b),
+                Some(_) => Err(format!("{} must be true or false", at(i, f))),
+            }
+        };
+        let var = text("var")?.ok_or(format!("missing {}", at(i, "var")))?;
+        let ok = var.starts_with(|c: char| c.is_ascii_uppercase() || c == '_')
+            && var.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_');
+        if !ok {
+            return Err(format!("{} {:?} must be an env name: A-Z, 0-9 and _", at(i, "var"), var));
+        }
+        if var == "PLUGIN_ROOT" || var == "PLUGIN_DATA" || var.starts_with("BISE_") {
+            return Err(format!("{} {:?} is bise's own", at(i, "var"), var));
+        }
+        if out.iter().any(|s| s.var == var) {
+            return Err(format!("{} {:?} is given twice", at(i, "var"), var));
+        }
+        let label = text("label")?.ok_or(format!("missing {}", at(i, "label")))?;
+        out.push(Setting { var, label, secret: flag("secret")?, required: flag("required")?, help: text("help")?, placeholder: text("placeholder")? });
+    }
+    Ok(out)
 }
 
 /// bise's own manifest extension.
@@ -556,6 +632,7 @@ pub fn parse_manifest(text: &str) -> Result<Manifest, String> {
     let mut default_off = false;
     let mut vibe = false;
     let mut prompts = Vec::new();
+    let mut settings = Vec::new();
     if let Some(ex) = o.get("extensions") {
         let ex = ex.as_object().ok_or("/extensions must be an object")?;
         for (k, v) in ex {
@@ -575,6 +652,7 @@ pub fn parse_manifest(text: &str) -> Result<Manifest, String> {
                             };
                             prompts = list.iter().filter_map(|s| s.as_str().map(String::from)).collect();
                         }
+                        ("settings", _) => settings = parse_settings(k, fv)?,
                         _ => return Err(format!("unknown field /extensions/{}/{}", k, f)),
                     }
                 }
@@ -593,6 +671,7 @@ pub fn parse_manifest(text: &str) -> Result<Manifest, String> {
         vibe,
         default_off,
         prompts,
+        settings,
     })
 }
 
@@ -777,6 +856,46 @@ fn parse_server(id: &str, v: &Value, root: &Path, data: &Path) -> Result<Parsed,
     }
 }
 
+/// A stdio server's `"command": "${BISE_NODE}"` (the gallery's built-in
+/// plugins, plugins/<name>/server.mjs): the Node bise runs it with
+/// ([`node_exe`]). One resolver, so a node bundled with bise later
+/// changes only it (architect m_51451: never Electron as node, its
+/// RunAsNode fuse is locked off).
+pub const NODE_COMMAND: &str = "${BISE_NODE}";
+/// Its server's error when there is none: the plugin's row says it.
+pub const NEEDS_NODE: &str = "needs Node 18 or newer (brew install node)";
+/// The oldest Node a `${BISE_NODE}` server may run on.
+pub const NODE_MIN_MAJOR: u32 = 18;
+
+/// The Node for `${BISE_NODE}`: `$BISE_NODE` when set, else the first
+/// `node` of PATH then Homebrew's and /usr/local's whose `--version` is
+/// [`NODE_MIN_MAJOR`] or newer. Asked once per process (a resolve runs
+/// often), none when none fits.
+pub fn node_exe() -> Option<PathBuf> {
+    static NODE: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    NODE.get_or_init(|| {
+        let path = std::env::var_os("PATH").unwrap_or_default();
+        let mut dirs: Vec<PathBuf> = std::env::split_paths(&path).collect();
+        dirs.extend(["/opt/homebrew/bin", "/usr/local/bin"].map(PathBuf::from));
+        let given = std::env::var_os("BISE_NODE").filter(|v| !v.is_empty()).map(PathBuf::from);
+        given.into_iter().chain(dirs.into_iter().map(|d| d.join("node"))).find(|n| node_fits(n))
+    })
+    .clone()
+}
+
+fn node_fits(exe: &Path) -> bool {
+    if !exe.is_file() {
+        return false;
+    }
+    let out = std::process::Command::new(exe).arg("--version").stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null()).output();
+    out.ok().filter(|o| o.status.success()).is_some_and(|o| node_major(&String::from_utf8_lossy(&o.stdout)).is_some_and(|m| m >= NODE_MIN_MAJOR))
+}
+
+/// `v20.11.1` → 20.
+pub fn node_major(version: &str) -> Option<u32> {
+    version.trim().strip_prefix('v')?.split('.').next()?.parse().ok()
+}
+
 fn parse_stdio(id: &str, o: &Map<String, Value>, root: &Path, data: &Path) -> Result<StdioServer, String> {
     for k in o.keys() {
         if !["type", "command", "args", "env", "cwd"].contains(&k.as_str()) && !Limits::KEYS.contains(&k.as_str()) {
@@ -789,7 +908,9 @@ fn parse_stdio(id: &str, o: &Map<String, Value>, root: &Path, data: &Path) -> Re
         .filter(|s| !s.is_empty())
         .ok_or("\"command\" must be a non-empty string")?;
     let command = expand(raw, root, data);
-    let command = if let Some(rel) = raw.strip_prefix("./") {
+    let command = if raw == NODE_COMMAND {
+        node_exe().ok_or(NEEDS_NODE)?.to_string_lossy().into_owned()
+    } else if let Some(rel) = raw.strip_prefix("./") {
         let p = root.join(rel);
         if !contained(root, &p) {
             return Err("\"command\" resolves outside the plugin root".into());
@@ -1030,6 +1151,7 @@ fn discover(root: &Path, scope: Scope, data: &Path, out: &mut Vec<Diagnostic>) -
             off_skills: Vec::new(),
             off_servers: Vec::new(),
             prompts: Vec::new(),
+            settings: Vec::new(),
             unsupported: Vec::new(),
             opt_in: false,
         };
@@ -1057,6 +1179,7 @@ fn discover(root: &Path, scope: Scope, data: &Path, out: &mut Vec<Diagnostic>) -
                         format!("dev.bise prompts: at most {} of {} characters each; the rest is cut", MAX_PROMPTS, PROMPT_CHARS)));
                 }
                 p.prompts = kept;
+                p.settings = m.settings;
             }
             Err(e) => out.push(diag("plugin.manifest.invalid", Severity::Error, &folder,
                 format!("{}: {}", manifest.display(), e))),

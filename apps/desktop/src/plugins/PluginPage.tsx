@@ -2,7 +2,7 @@
 // its switch: 'on for every project'), up to 3 lines to try (a click puts one in main's composer),
 // then its parts, each with its switch: skills, MCP servers (their status words, a login or a
 // failure's line, their tools folded under '▸ n tools', each tool a switch), a connector's tools;
-// then 'about': where it comes from, for which projects, when his agents see a change. A plugin of
+// then its settings (an API key: SettingsGroup), then 'about': where it comes from, for which projects, when his agents see a change. A plugin of
 // his own folder has remove (one confirm, plug-tidy's `plugin_remove`). A row to add (browse) has
 // connect or + add in place of the switch. Every change is the core's. Owner: plug-desktop.
 import { useMemo, useState, type KeyboardEvent, type MouseEvent } from 'react';
@@ -20,6 +20,7 @@ import { badgeOf, controlOf, gives, installed, isComputer, leadOf, removable, ta
 import { ds } from '@/proto/words_ds.gen';
 import { PluginIcon } from './PluginIcon';
 import { ViewsGroup } from './ViewsGroup';
+import { SettingsGroup } from './SettingsGroup';
 
 export interface PagePorts {
   send: (cmd: AppCmd) => void;
@@ -120,6 +121,8 @@ export function PluginPage({ p, project, ports }: { p: Plugin; project?: string;
           ))}
         </div>
       )}
+      {/* its settings (dev.bise.settings: an API key), after the try lines, before its parts (designer m_51514) */}
+      <SettingsGroup plugin={p.name} list={p.settings ?? []} {...at} send={ports.send} />
       {skills.length > 0 && (
         <Parts head={settings.plugins_kind_skills} n={skills.length}>
           {skills.map((x) => (

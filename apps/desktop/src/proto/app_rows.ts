@@ -189,11 +189,45 @@ login?: LoginState | null, parts?: Array<PluginPart>,
  */
 prompts?: Array<string>, 
 /**
+ * what he may give it (its manifest's `dev.bise.settings`: an API
+ * key), each set with `plugin_setting`; never a value, only `set`
+ */
+settings?: Array<PluginSetting>, 
+/**
  * the released app's (before desktop-v2026.10.16) remote MCP servers
  * that log in: kept on the wire for the released law, always empty
  * now; a server's login is its `mcp` part's `login`
  */
 logins?: Array<PluginLogin>, };
+
+/**
+ * One of a plugin's settings (`bend_plugins::resolve::Setting`): a field
+ * of the plugins page. The value is never on the wire, not even a
+ * non-secret one: `set` says whether he gave one (his MCP secrets, or
+ * the environment). `label` and `help` are the plugin's own words
+ * (third-party text: drawn escaped, like its description).
+ */
+export type PluginSetting = { 
+/**
+ * the `${VAR}` its mcp.json reads, what `plugin_setting` takes
+ */
+var: string, label: string, 
+/**
+ * typed as a password
+ */
+secret?: boolean, 
+/**
+ * the plugin cannot work without it
+ */
+required?: boolean, help?: string | null, 
+/**
+ * an example of a value: the empty field's placeholder
+ */
+placeholder?: string | null, 
+/**
+ * a value is given
+ */
+set: boolean, };
 
 /**
  * A plugin's remote MCP server that logs in through his browser (the

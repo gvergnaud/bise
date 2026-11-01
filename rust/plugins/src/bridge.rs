@@ -306,6 +306,36 @@ fn env_lookup(plugin: &str, dir: Option<&Path>) -> impl Fn(&str) -> Option<Strin
     crate::secrets::lookup(dir, &PluginId::plugin(plugin))
 }
 
+/// A stdio server's key: its spec and its env as its start resolves it
+/// (a token from the hub's env or his secrets is in it, hashed: rule 2).
+/// Its tools cache's key, and what tells a running server from one whose
+/// settings changed ([`Live::apply`] restarts it).
+fn env_key(p: &Plugin, spec: &Spec, env_dir: Option<&Path>, salt: &[u8], inherited: &[(String, String)]) -> Option<String> {
+    match spec {
+        Spec::Stdio(s) => {
+            let declared = tools_cache::declared(s, &env_lookup(&p.name, env_dir));
+            Some(tools_cache::key(&p.name, &p.root, s, &tools_cache::env_mac(salt, &declared, inherited)))
+        }
+        Spec::Http(_) => None,
+    }
+}
+
+/// The stamp of the saved settings of `res`'s plugins that declare some
+/// (`dev.bise.settings`): each one's secrets file's mtime (the keychain's
+/// stub too, rewritten at each write), so a setting he gives on the
+/// plugins page moves it and the next poll restarts that plugin's servers.
+fn settings_stamp(res: &Resolution, env_dir: Option<&Path>) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    let Some(dir) = env_dir else { return 0 };
+    for p in res.plugins.iter().filter(|p| !p.settings.is_empty()) {
+        p.name.hash(&mut h);
+        let f = crate::secrets::path(dir, &PluginId::plugin(&p.name));
+        std::fs::metadata(&f).and_then(|m| m.modified()).ok().hash(&mut h);
+    }
+    h.finish()
+}
+
 /// One server of one plugin, as the bridge holds it.
 struct Entry {
     /// `<plugin>/<server>`
@@ -368,15 +398,7 @@ impl Entry {
     ) -> Entry {
         let (secrets, env_dir, status_dir) = dirs;
         let (cache, salt, inherited) = cache;
-        let cache_key = match &spec {
-            Spec::Stdio(s) => {
-                // its env as its start resolves it: a token from the hub's
-                // env or his secrets is in the key, hashed (rule 2)
-                let declared = tools_cache::declared(s, &env_lookup(&p.name, env_dir.as_deref()));
-                Some(tools_cache::key(&p.name, &p.root, s, &tools_cache::env_mac(salt, &declared, inherited)))
-            }
-            Spec::Http(_) => None,
-        };
+        let cache_key = env_key(p, &spec, env_dir.as_deref(), salt, inherited);
         Entry {
             log: log_dir.join(format!("{}.{}.log", p.name, spec.id())),
             key: format!("{}/{}", p.name, spec.id()),
@@ -858,7 +880,9 @@ impl Live {
             let specs = p.servers.iter().cloned().map(Spec::Stdio).chain(p.remotes.iter().cloned().map(Spec::Http));
             for spec in specs {
                 let key = format!("{}/{}", p.name, spec.id());
-                let same = old.iter().find(|e| e.key == key && e.spec == spec && e.plugin_root == p.root && !e.off.load(Ordering::SeqCst));
+                // the same spec with the same env (a setting he changed: a new key)
+                let env = env_key(p, &spec, self.env_dir.as_deref(), self.key_env.0.as_slice(), self.key_env.1.as_slice());
+                let same = old.iter().find(|e| e.key == key && e.spec == spec && e.plugin_root == p.root && e.cache_key == env && !e.off.load(Ordering::SeqCst));
                 if let Some(e) = same {
                     next.push(e.clone());
                     continue;
@@ -1128,6 +1152,8 @@ fn refresh_loop(rx: Receiver<String>, live: Arc<Live>) {
 struct Seen {
     state: StateV2,
     fingerprint: u64,
+    /// [`settings_stamp`]
+    settings: u64,
 }
 
 /// One poll: plugins.json and the roots moved: re-resolve, start and
@@ -1139,10 +1165,12 @@ fn poll_once(live: &Arc<Live>, catalog: Option<&CatalogSource>, seen: &mut Seen)
         let mut roots = live.roots.clone();
         roots.state = state::read(p);
         let fp = resolve::fingerprint(&roots);
-        if roots.state != seen.state || fp != seen.fingerprint {
+        let settings = settings_stamp(&lock(&live.res), live.env_dir.as_deref());
+        if roots.state != seen.state || fp != seen.fingerprint || settings != seen.settings {
             *live.state.write().unwrap_or_else(|e| e.into_inner()) = roots.state.clone();
-            *seen = Seen { state: roots.state.clone(), fingerprint: fp };
-            live.apply(resolve::resolve(&roots));
+            let res = resolve::resolve(&roots);
+            *seen = Seen { state: roots.state.clone(), fingerprint: fp, settings: settings_stamp(&res, live.env_dir.as_deref()) };
+            live.apply(res);
             moved = true;
         }
     }
@@ -1449,8 +1477,8 @@ pub fn serve(opts: Opts) -> std::io::Result<()> {
     if let Some(p) = &opts.state_path {
         roots.state = state::read(p);
     }
-    let mut seen = Seen { state: roots.state.clone(), fingerprint: resolve::fingerprint(&roots) };
     let res = resolve::resolve(&roots);
+    let mut seen = Seen { state: roots.state.clone(), fingerprint: resolve::fingerprint(&roots), settings: settings_stamp(&res, opts.env_dir.as_deref()) };
     let (changed_tx, changed_rx) = channel();
     // no salt: nothing cached (a key without it would be a bare hash of
     // his env values)

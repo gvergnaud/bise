@@ -1882,4 +1882,28 @@ export const settings = {
   plugins_secret_empty: (a: { name: string | number }): string => "leave empty to keep $" + String(a.name) + " as it is",
   /** browse: add a marketplace plugin */
   plugins_browse_add_one: "+ add",
+  /** plugin page: the group of a plugin's settings (dev.bise.settings, designer m_51514) */
+  plugins_settings_head: "settings",
+  /** a setting: no value given, optional */
+  plugins_setting_not_set: "not set",
+  /** a setting: a value given (never shown back, architect m_51451) */
+  plugins_setting_set: "set",
+  /** a required setting with no value: it waits on him (the accent) */
+  plugins_setting_needed: "needed to work",
+  /** a setting: open its field, unset */
+  plugins_setting_set_button: "Set…",
+  /** a setting: open its field, set */
+  plugins_setting_change: "Change…",
+  /** a setting: its field's save */
+  plugins_setting_save: "Save",
+  /** a setting: its field's cancel */
+  plugins_setting_cancel: "Cancel",
+  /** a setting: forget its value (asks once, in the row) */
+  plugins_setting_forget: "Forget",
+  /** a setting's forget: the question (label: the plugin's own words) */
+  plugins_setting_forget_ask: (a: { label: string | number }): string => "forget the " + String(a.label) + "? it can't be shown again.",
+  /** a setting's forget: keep it */
+  plugins_setting_keep: "Keep",
+  /** a setting: just saved (4 s, then 'set') */
+  plugins_setting_applies: "applies from the next call",
 } as const;

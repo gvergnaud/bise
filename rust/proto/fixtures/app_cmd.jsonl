@@ -19,6 +19,8 @@
 {"cmd":"plugin_set","project":"acme-1a2b3c4d","name":"mistral:gmail#tool:send_email","on":false}
 {"cmd":"plugin_grant","project":"acme-1a2b3c4d","plugin":"fake-app","uri":"ui://fake-app/counter","perms":["midi"]}
 {"cmd":"plugin_grant","plugin":"fake-app","uri":"ui://fake-app/hostile","perms":[]}
+{"cmd":"plugin_setting","project":"acme-1a2b3c4d","name":"maps","var":"GOOGLE_MAPS_API_KEY","value":"fake-key"}
+{"cmd":"plugin_setting","name":"maps","var":"GOOGLE_MAPS_API_KEY"}
 {"cmd":"plugin_connect","id":"mistral:notion"}
 {"cmd":"plugins_refresh"}
 {"cmd":"plugins_refresh","project":"acme-1a2b3c4d"}
