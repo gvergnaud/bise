@@ -81,8 +81,8 @@ export function standSpotOf(o: Office, p: Placed, all: readonly Placed[], reach 
   return standSpotsOf(o, p, all, reach)[0] ?? null;
 }
 
-/** two bims at one object stand at least this far apart (two bodies and a hair) */
-const APART = 2 * BODY + 0.06;
+/** two bims at objects stand at least this far apart, and as far from a chair: a body's width between them (the iso view stacks two closer ones) */
+export const APART = 3 * BODY + 0.1;
 
 /**
  * Every spot round a placed object a bim can use it from (standSpotOf's, best first), each at least
@@ -95,7 +95,11 @@ export function standSpotsOf(o: Office, p: Placed, all: readonly Placed[], reach
   // its front, the way it faces (three's y turn, front to +z)
   const fx = Math.sin(p.rot);
   const fz = Math.cos(p.rot);
-  const found: { s: Spot; d: number }[] = [];
+  const seats = [...o.desks.values(), o.mainDesk];
+  const found: { s: Spot; d: number; i: number }[] = [];
+  // how far a point is from a box (0 inside)
+  const off = (q: Pt, x: Box): number => Math.hypot(Math.max(x.x0 - q.x, 0, q.x - x.x1), Math.max(x.z0 - q.z, 0, q.z - x.z1));
+  const others = all.filter((q) => q.key !== p.key);
   for (const more of [0, 0.3, 0.6, 0.9, 1.2]) {
     const m = BODY + GAP + more;
     const b = { x0: p.box.x0 - m, x1: p.box.x1 + m, z0: p.box.z0 - m, z1: p.box.z1 + m };
@@ -109,17 +113,23 @@ export function standSpotsOf(o: Office, p: Placed, all: readonly Placed[], reach
       const k = Math.min(Math.abs(dx) > 1e-9 ? (dx > 0 ? b.x1 - cx : cx - b.x0) / Math.abs(dx) : Infinity, Math.abs(dz) > 1e-9 ? (dz > 0 ? b.z1 - cz : cz - b.z0) / Math.abs(dz) : Infinity);
       const at = { x: cx + dx * k, z: cz + dz * k };
       if (boxes.some((x) => inside(at, x, BODY))) continue;
+      // never on a bim's chair (one sits there, or comes back to it)
+      if (seats.some((q) => Math.hypot(q.x - at.x, q.z - at.z) < APART)) continue;
+      // no other object much nearer: it reads as using this one
+      if (others.some((q) => off(at, q.box) + 0.5 < off(at, p.box))) continue;
       // its way in is the straight step from its nearest point on the network (paths.ts path)
       const net = nearOnNet(network(o), at);
       if (net === null || net.d > reach || !clearWay(net.at, at, boxes)) continue;
-      // behind it costs more than beside it, beside more than in front
-      const d = net.d + (1 - (dx * fx + dz * fz)) * 0.5 + more;
-      found.push({ s: { x: at.x, z: at.z, wz: at.z, ax: at.x, face: Math.atan2(cx - at.x, cz - at.z) }, d });
+      // close to it first, then behind it costs more than beside it, beside more than in front, then the walk in
+      const d = net.d * 0.5 + (1 - (dx * fx + dz * fz)) * 0.5 + more * 3;
+      found.push({ s: { x: at.x, z: at.z, wz: at.z, ax: at.x, face: Math.atan2(cx - at.x, cz - at.z) }, d, i });
     }
   }
-  const out: Spot[] = [];
-  for (const f of found.sort((u, v) => u.d - v.d)) if (out.every((q) => Math.hypot(q.x - f.s.x, q.z - f.s.z) >= APART)) out.push(f.s);
-  return out;
+  // a second bim stands round it, never behind the first on its ray (the iso view stacks those): two rays apart at least
+  const out: { s: Spot; i: number }[] = [];
+  const rays = (a: number, b: number): number => Math.min((a - b + 16) % 16, (b - a + 16) % 16);
+  for (const f of found.sort((u, v) => u.d - v.d)) if (out.every((q) => Math.hypot(q.s.x - f.s.x, q.s.z - f.s.z) >= APART && rays(q.i, f.i) >= 2)) out.push(f);
+  return out.map((f) => f.s);
 }
 
 /**

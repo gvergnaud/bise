@@ -18,7 +18,7 @@ import { forcedPokes, notePokes, NO_POKES, pokesAt, pokeWake, roomOf, type Click
 import { uniqueObjects, type PluginObject } from './plugin-objects';
 import { NO_CORNERS, objectSpots, type Corners } from './corners';
 import { GROWS, NO_NEED, either, grownFor, type Need } from './extensions';
-import { NO_TRIPS, nextTrips, pluginOfUse, howUsed, standSpotsOf, type Trips } from './uses';
+import { APART, NO_TRIPS, nextTrips, pluginOfUse, howUsed, standSpotsOf, type Trips } from './uses';
 
 /** The pure modules a driver runs on: feed.ts's, or fakes in a test. */
 export interface DriverParts {
@@ -336,14 +336,14 @@ export function makeDriver(parts: DriverParts): OfficeDriver {
     const out = new Map(acts);
     // the bims at one object take its spots in the order they came (then by name): one there keeps its spot
     const at = [...next.now].sort(([a, x], [b, y]) => x.began - y.began || (a < b ? -1 : a > b ? 1 : 0));
-    const taken = new Map<string, number>();
+    // a spot APART from every one taken, at this object or the next one (two objects side by side)
+    const taken: { x: number; z: number }[] = [];
     for (const [bim, trip] of at) {
       const act = acts.get(bim);
       const p = co.placed.find((q) => q.key === trip.key);
-      const i = taken.get(trip.key) ?? 0;
-      const spot = spotsOf(trip.key)[i];
+      const spot = spotsOf(trip.key).find((s) => taken.every((q) => Math.hypot(q.x - s.x, q.z - s.z) >= APART));
       if (act === undefined || p === undefined || spot === undefined) continue;
-      taken.set(trip.key, i + 1);
+      taken.push(spot);
       out.set(bim, { ...act, at: 'object', use: { key: trip.key, obj: p.obj, spot, how: howUsed(p.obj) } });
     }
     return out;
