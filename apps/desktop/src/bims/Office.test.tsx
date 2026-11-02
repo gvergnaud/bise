@@ -46,6 +46,8 @@ function fakeRenderer() {
     idleWake: () => r.wake,
     headOf: vi.fn(() => ({ x: 10, y: 20, feet: 40 })),
     pick: vi.fn((x: number): string | null => (x < 50 ? 'perf' : null)),
+    /** the bims' desks on the canvas (an object's tip keeps off them) */
+    deskSpots: () => [],
     copyTo: vi.fn(),
     falling: () => null,
     onLost: (cb: () => void) => {
