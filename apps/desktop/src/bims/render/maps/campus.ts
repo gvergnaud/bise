@@ -7,7 +7,7 @@ import { decorOf } from '../decor';
 import { boxOf, onFloor } from '../kit';
 import { WORLD } from '../palette';
 import { loftLounge, loftTree } from '../stages';
-import { bigDesk, boxHolding, dim, grow, loftGrower, palettes, pieceAtOf, turnedDesk } from './blook';
+import { bigDesk, boxHolding, dim, grow, loftGrower, palettes, pastBoard, pieceAtOf, turnedDesk } from './blook';
 import type { Build, MapLook } from './look';
 
 const CARPETS = ['#bfe1f2', '#ffe3a3', '#cfe8c3', '#e2dcf7'] as const;
@@ -24,7 +24,8 @@ const grower = loftGrower({
   fruit2: (o) => ({ x: (o.island.x0 + o.island.x1) / 2, z: o.island.z0 + 2.9 }),
   boombox: (o) => ({ x: (o.island.x0 + o.island.x1) / 2, z: o.island.z1 - 0.5 }),
   mural: (o) => loungeX(o),
-  arcade: (o) => ({ x: loungeX(o)[1] + 0.3, z: 0.3 }),
+  // past the whiteboard, as the loft's: at the lounge's end it stood 0.27 into the board (main m_51988)
+  arcade: pastBoard,
   nap: (o) => ({ x: (o.lounge[0]?.x ?? o.x0) + 1.0, z: 1.5 }),
 });
 

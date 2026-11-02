@@ -34,6 +34,7 @@ import { HEAD_Y } from './laptop';
 import { headBoxOf } from './heads.testkit';
 import { BACK, type Fit, fitSite, siteOf, toScreen, wideSiteOf } from './camera';
 import { STYLE } from './style';
+import { ARCADE_W } from './maps/blook';
 
 /** what two boxes may share (float noise, a hat's edge on a cushion) */
 const SLACK = 0.02;
@@ -293,5 +294,25 @@ describe('clip: nothing through a desk, a bed or a bim', () => {
       expect(out).toEqual([]);
       // 30 worlds built per map: half a minute alone, more on a loaded machine
     }, 180_000);
+  }
+});
+
+describe('clip: the arcade cabinet stands clear of the whiteboard', () => {
+  // campus put its arcade (stage 11) at the lounge's end, 0.27 into the whiteboard (stage 4) on the
+  // back wall: the cabinet's purple box through the board (Gabriel, main m_51988)
+  for (const id of ['loft', 'greenhouse', 'campus'] as const) {
+    it(`${id}: 0..31 agents`, () => {
+      const out: string[] = [];
+      for (let n = 0; n <= 31; n++) {
+        const o = officeAt(id, n);
+        const look = lookOf(id);
+        const a = look.pieceAt(o, 11);
+        const b = look.pieceAt(o, 4);
+        // the board 1.8 wide on the back wall, the cabinet ARCADE_W wide, 0.45 deep from the wall
+        const gap = Math.abs(a.x - b.x) - 0.9 - ARCADE_W / 2;
+        if (a.z < 1 && gap < 0.1) out.push(`${String(n)} agents: arcade at ${a.x.toFixed(2)}, board at ${b.x.toFixed(2)}, ${gap.toFixed(2)} apart`);
+      }
+      expect([...new Set(out)]).toEqual([]);
+    });
   }
 });
