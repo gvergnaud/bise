@@ -363,10 +363,10 @@ export function Office({
   const [objPills, setObjPills] = useState<readonly ObjPill[]>([]);
   // the hovered object's name over its top (Gabriel m_51985); it fades in when shown cold (the ds tips' rule)
   const [objTip, setObjTip] = useState<ObjTip | null>(null);
-  const objFade = useRef(false);
+  const [objFade, setObjFade] = useState(false);
   const objTipRef = useRef<HTMLDivElement>(null);
+  // the tip shown, for the frame loop's placeTipEl (set once it is drawn)
   const objTipNow = useRef<ObjTip | null>(null);
-  objTipNow.current = objTip;
   // over the object, or under its foot when a bim's head is there; 8 inside the tile (objpills.ts placeObjTip)
   const placeTipEl = useCallback(() => {
     const el = objTipRef.current;
@@ -379,7 +379,10 @@ export function Office({
     el.dataset.side = at.side;
     el.style.visibility = 'visible';
   }, []);
-  useLayoutEffect(placeTipEl, [placeTipEl, objTip]);
+  useLayoutEffect(() => {
+    objTipNow.current = objTip;
+    placeTipEl();
+  }, [placeTipEl, objTip]);
   // the growth drawn: before the rows, so the first one is no unlock moment (no mark yet: a bare room)
   useEffect(() => {
     if (high === null) return;
@@ -767,7 +770,7 @@ export function Office({
       if (headRef !== undefined) headRef.current = null;
       r?.dispose();
     };
-  }, [parts, driver, layoutTags, moveCam, snapRef, headRef, transparent, fill]);
+  }, [parts, driver, layoutTags, placeTipEl, moveCam, snapRef, headRef, transparent, fill]);
 
   // hover: the bim under the pointer, its line after the tip's delay; off it, at once
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -800,7 +803,7 @@ export function Office({
   const setObj = (key: string | null, fade: boolean) => {
     if (live.current.obj === key) return;
     if (key === null && live.current.obj !== null) warmUntil.current = Date.now() + WARM_MS;
-    objFade.current = fade;
+    setObjFade(fade);
     live.current.obj = key;
     kickRef.current();
   };
@@ -1052,7 +1055,7 @@ export function Office({
         {objTip !== null && (
           <div
             ref={objTipRef}
-            className={`b-tip bims-objtip${objFade.current ? ' in' : ''}`}
+            className={`b-tip bims-objtip${objFade ? ' in' : ''}`}
             role="tooltip"
             data-testid="app.right.bims.objtip"
             data-key={objTip.key}
