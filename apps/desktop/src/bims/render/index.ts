@@ -310,9 +310,9 @@ export const makeRenderer: MakeRenderer = (canvas, opts) => {
       const targets: ObjTarget[] = [...office.objectBoxes()].map(([key, b]) => ({ key, ...screenBox(f, b) }));
       return pickObjectAt(targets, x, y);
     },
-    objectFootOf(key) {
+    objectBoxOf(key) {
       const b = office.objectBoxes().get(key);
-      return fit && b ? screenBox(fit, b).bottom : null;
+      return fit && b ? screenBox(fit, b) : null;
     },
     copyTo(target) {
       view.copyTo(target);

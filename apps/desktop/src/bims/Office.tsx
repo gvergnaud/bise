@@ -45,7 +45,7 @@ import type { Growth } from '@/proto';
 import { DEFAULT_MAP, type MapId, mapOf } from './maps/ids';
 import type { PluginObject } from './plugin-objects';
 import type { Corners } from './corners';
-import { objPillsOf, objTipOf, placeObjTip, type ObjPill, type ObjTip } from './objpills';
+import { bimBox, objPillsOf, objTipOf, placeObjTip, type ObjPill, type ObjTip, type Rect } from './objpills';
 import { extKept, keepExt } from './ext-keep';
 import { planOf } from './maps';
 import './office.css';
@@ -367,13 +367,27 @@ export function Office({
   const objTipRef = useRef<HTMLDivElement>(null);
   // the tip shown, for the frame loop's placeTipEl (set once it is drawn)
   const objTipNow = useRef<ObjTip | null>(null);
-  // over the object, or under its foot when a bim's head is there; 8 inside the tile (objpills.ts placeObjTip)
+  // every bim's head and body box as drawn now (the frame loop's), for the object's tip to keep clear of
+  const bimRects = useRef<readonly Rect[]>([]);
+  // over the object, under its foot, or beside it, clear of the bims and the tile's chips; no room: none (objpills.ts placeObjTip)
   const placeTipEl = useCallback(() => {
     const el = objTipRef.current;
     const box = holder.current;
     const t = objTipNow.current;
     if (el === null || box === null || t === null) return;
-    const at = placeObjTip(t, { w: el.offsetWidth, h: el.offsetHeight }, { w: box.clientWidth, h: box.clientHeight }, [...heads.current.values()]);
+    const at0 = box.getBoundingClientRect();
+    // the tile's chips: the map chip and '⤢ fit' here, and what the tile lays over the office (data-bims-keep: its '⤢' and '×')
+    const chips: Rect[] = [];
+    for (const c of [mapChipRef.current, fitRef.current, ...document.querySelectorAll<HTMLElement>('[data-bims-keep]')]) {
+      if (c === null) continue;
+      const r = c.getBoundingClientRect();
+      if (r.width > 0) chips.push({ left: r.left - at0.left, top: r.top - at0.top, right: r.right - at0.left, bottom: r.bottom - at0.top });
+    }
+    const at = placeObjTip(t, { w: el.offsetWidth, h: el.offsetHeight }, { w: box.clientWidth, h: box.clientHeight }, { bims: bimRects.current, chips });
+    if (at === null) {
+      el.style.visibility = 'hidden';
+      return;
+    }
     el.style.left = `${String(at.left)}px`;
     el.style.top = `${String(at.top)}px`;
     el.dataset.side = at.side;
@@ -594,8 +608,8 @@ export function Office({
       }
       const tip = objTipOf(step.corners.placed, L.obj, (key) => {
         const top = r?.objectTopOf(key) ?? null;
-        const foot = r?.objectFootOf(key) ?? null;
-        return top === null || foot === null ? null : { ...top, foot };
+        const box = r?.objectBoxOf(key) ?? null;
+        return top === null || box === null ? null : { ...top, box };
       });
       const tipSig = JSON.stringify(tip);
       if (tipSig !== lastTip) {
@@ -618,7 +632,11 @@ export function Office({
         }
       }
       layoutTags();
-      // the bims walk: the object's tip moves off a head that comes into its place
+      // the bims walk: the object's tip moves off a bim that comes into its place
+      bimRects.current = frames.flatMap((f) => {
+        const h = r?.headOf(f.name) ?? null;
+        return h === null ? [] : [bimBox(h)];
+      });
       placeTipEl();
       if (pinsRef.current !== null) placePins(pinsRef.current, pinPoints(r, step.agents.find((a) => a.main)?.name ?? null));
       if (zzzRef.current !== null) {

@@ -11,9 +11,6 @@ import { namesWords } from '@/app/tipwords';
 import { settings } from '@/proto/words.gen';
 import type { Placed } from './corners';
 
-/** how far round a bim's head (its top point, its head below it) an object's tip keeps clear, css px; render/pick.ts stays out of the entry chunk (electron.vite.config.ts bims-budget) */
-const HEAD_PX = 14;
-
 /** a pill over an object: the key of the plugin it is for (its click opens it), its sign, css px on the canvas */
 export interface ObjPill {
   readonly key: string;
@@ -51,48 +48,83 @@ export interface ObjTip {
   /** its drawn top's middle (where its pill sits) */
   readonly x: number;
   readonly y: number;
-  /** its drawn foot's y (the tip goes under it when its place over the object is a bim's) */
+  /** its drawn box on the canvas: its sides and its foot (the tip goes under or beside it) */
+  readonly left: number;
+  readonly right: number;
   readonly foot: number;
+}
+
+/** a box on the canvas, css px from the tile's top left */
+export interface Rect {
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
 }
 
 /**
  * The tip of the object under his pointer (Gabriel m_51985: hovering a plugin's object names its
  * plugins); null when none is hovered, the key is no drawn object, or it is off view. Pure:
- * `at` gives an object's drawn top and foot on the canvas.
+ * `at` gives an object's drawn top (its middle) and its drawn box on the canvas.
  */
 export function objTipOf(
   placed: readonly Placed[],
   key: string | null,
-  at: (key: string) => { readonly x: number; readonly y: number; readonly foot: number } | null,
+  at: (key: string) => { readonly x: number; readonly y: number; readonly box: Rect } | null,
 ): ObjTip | null {
   if (key === null) return null;
   const p = placed.find((q) => q.key === key);
   if (p === undefined) return null;
   const s = at(p.key);
-  return s === null ? null : { key: p.key, words: namesWords(p.names), pill: p.pill !== null, x: Math.round(s.x), y: Math.round(s.y), foot: Math.round(s.foot) };
+  if (s === null) return null;
+  const r = Math.round;
+  return { key: p.key, words: namesWords(p.names), pill: p.pill !== null, x: r(s.x), y: r(s.y), left: r(s.box.left), right: r(s.box.right), foot: r(s.box.bottom) };
 }
 
 /** an object's pill's height, css px (office.css .bims-pill: --s-4): a tip over a pill clears it */
 export const OBJ_PILL_PX = 16;
+/** what an object's tip keeps clear of every bim, every chip of the tile and the tile's edge, css px (designer m_52074) */
+export const TIP_CLEAR = 4;
+/** a bim's half width around its head's middle, css px: its head and body box (headOf: its head's top, its feet) */
+export const BIM_HALF_PX = 14;
+
+/** where an object's tip goes: its box's top left in the tile, and the object's side it is on */
+export interface TipAt {
+  readonly left: number;
+  readonly top: number;
+  readonly side: 'above' | 'below' | 'left' | 'right';
+}
 
 /**
- * Where an object's tip goes in the tile (designer m_51998), css px from the tile's top left: a
- * tip's gap over the object's top (over its pill when it wears one), centred on it; under its foot
- * (the same gap) when a bim's head sits in that place or the tile has no room over it; always
- * TIP_GAP inside the tile's edges. `heads`: the bims' heads on the canvas. Pure.
+ * Where an object's tip goes in the tile (designer m_52074), css px from its top left: TIP_GAP
+ * from the object, first over its top (over its pill when it wears one), else under its foot (both
+ * centred on it, slid to stay in the tile), else beside it, left then right (centred on its
+ * height). Each place keeps TIP_CLEAR from every bim's head and body box, from the tile's chips
+ * and from its edge; none does: null, no tip (the pill or a zoom names it). Pure.
  */
 export function placeObjTip(
   tip: ObjTip,
   size: { readonly w: number; readonly h: number },
   tile: { readonly w: number; readonly h: number },
-  heads: readonly { readonly x: number; readonly y: number }[],
-): { readonly left: number; readonly top: number; readonly side: 'above' | 'below' } {
-  const clamp = (v: number, hi: number): number => Math.max(TIP_GAP, Math.min(v, hi - TIP_GAP));
-  const left = Math.round(clamp(tip.x - size.w / 2, tile.w - size.w));
-  const above = tip.y - TIP_GAP - (tip.pill ? OBJ_PILL_PX : 0) - size.h;
-  // a head near the tip's box (a bim's head is about HEAD_PX round, under its top point)
-  const onHead = heads.some((h) => h.x >= left - HEAD_PX && h.x <= left + size.w + HEAD_PX && h.y >= above - 2 * HEAD_PX && h.y <= above + size.h);
-  const side = above >= TIP_GAP && !onHead ? 'above' : 'below';
-  const top = side === 'above' ? above : tip.foot + TIP_GAP;
-  return { left, top: Math.round(clamp(top, tile.h - size.h)), side };
+  keep: { readonly bims: readonly Rect[]; readonly chips: readonly Rect[] },
+): TipAt | null {
+  const slide = (v: number, room: number, len: number): number => Math.max(TIP_CLEAR, Math.min(v, room - TIP_CLEAR - len));
+  const across = slide(tip.x - size.w / 2, tile.w, size.w);
+  const mid = slide((tip.y + tip.foot) / 2 - size.h / 2, tile.h, size.h);
+  const places: readonly TipAt[] = [
+    { side: 'above', left: across, top: tip.y - TIP_GAP - (tip.pill ? OBJ_PILL_PX : 0) - size.h },
+    { side: 'below', left: across, top: tip.foot + TIP_GAP },
+    { side: 'left', left: tip.left - TIP_GAP - size.w, top: mid },
+    { side: 'right', left: tip.right + TIP_GAP, top: mid },
+  ];
+  const inTile = (p: TipAt): boolean => p.left >= TIP_CLEAR && p.top >= TIP_CLEAR && p.left + size.w <= tile.w - TIP_CLEAR && p.top + size.h <= tile.h - TIP_CLEAR;
+  const hits = (p: TipAt, r: Rect): boolean =>
+    p.left - TIP_CLEAR < r.right && p.left + size.w + TIP_CLEAR > r.left && p.top - TIP_CLEAR < r.bottom && p.top + size.h + TIP_CLEAR > r.top;
+  const found = places.find((p) => inTile(p) && !keep.bims.some((r) => hits(p, r)) && !keep.chips.some((r) => hits(p, r)));
+  return found === undefined ? null : { ...found, left: Math.round(found.left), top: Math.round(found.top) };
+}
+
+/** a bim's head and body box on the canvas from its head's top and its feet (OfficeRenderer.headOf). Pure. */
+export function bimBox(h: { readonly x: number; readonly y: number; readonly feet: number }): Rect {
+  return { left: h.x - BIM_HALF_PX, top: h.y, right: h.x + BIM_HALF_PX, bottom: Math.max(h.y, h.feet) };
 }

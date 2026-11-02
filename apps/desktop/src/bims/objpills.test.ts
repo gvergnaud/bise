@@ -4,7 +4,7 @@ import { layoutOf } from './maps';
 import { objectSpots } from './corners';
 import { crewOf, objsOf } from './corners.test';
 import { settings } from '@/proto/words.gen';
-import { OBJ_PILL_PX, objPillsOf, objTipOf, placeObjTip, type ObjTip } from './objpills';
+import { BIM_HALF_PX, bimBox, OBJ_PILL_PX, objPillsOf, objTipOf, placeObjTip, TIP_CLEAR, type ObjTip, type Rect } from './objpills';
 import { TIP_GAP } from '@/ds';
 
 describe("the objects' pills", () => {
@@ -48,7 +48,7 @@ describe("an object's name tip", () => {
   const o = layoutOf(crewOf(5), 'loft');
   const { placed } = objectSpots(o, objsOf(4).map((p, i) => (i === 0 ? { ...p, names: ['Gmail'] } : p)));
   const first = placed.find((p) => p.names[0] === 'Gmail');
-  const at = { x: 40.4, y: 12.6, foot: 60.2 };
+  const at = { x: 40.4, y: 12.6, box: { left: 20.2, top: 12.6, right: 60.4, bottom: 60.2 } };
 
   it('names the hovered object’s plugin, as he reads it, from its drawn top and foot', () => {
     if (first === undefined) throw new Error('no object placed');
@@ -57,7 +57,7 @@ describe("an object's name tip", () => {
       asked.push(key);
       return at;
     });
-    expect(tip).toEqual({ key: first.key, words: 'Gmail', pill: false, x: 40, y: 13, foot: 60 });
+    expect(tip).toEqual({ key: first.key, words: 'Gmail', pill: false, x: 40, y: 13, left: 20, right: 60, foot: 60 });
     expect(asked).toEqual([first.key]);
     // it knows the object wears a pill (the tip goes over it)
     expect(objTipOf([{ ...first, pill: '?' }], first.key, () => at)?.pill).toBe(true);
@@ -77,27 +77,53 @@ describe("an object's name tip", () => {
   });
 });
 
-describe("where an object's tip goes (placeObjTip, designer m_51998)", () => {
-  const tip = (x: number, y: number, foot: number, pill = false): ObjTip => ({ key: 'k', words: 'Gmail', pill, x, y, foot });
+describe("where an object's tip goes (placeObjTip, designer m_52074)", () => {
+  // an object 40 wide, its top's middle at (x, y), its foot at `foot`
+  const tip = (x: number, y: number, foot: number, pill = false): ObjTip => ({ key: 'k', words: 'Gmail', pill, x, y, left: x - 20, right: x + 20, foot });
   const size = { w: 60, h: 24 };
   const tile = { w: 400, h: 300 };
+  const none = { bims: [], chips: [] };
+  // a bim whose head's top is at (x, y), feet 40 under it
+  const bim = (x: number, y: number): Rect => bimBox({ x, y, feet: y + 40 });
 
   it('a tip’s gap over the object’s top, centred on it; over its pill when it wears one', () => {
-    expect(placeObjTip(tip(200, 150, 190), size, tile, [])).toEqual({ left: 170, top: 150 - TIP_GAP - 24, side: 'above' });
-    expect(placeObjTip(tip(200, 150, 190, true), size, tile, [])).toEqual({ left: 170, top: 150 - TIP_GAP - OBJ_PILL_PX - 24, side: 'above' });
+    expect(placeObjTip(tip(200, 150, 190), size, tile, none)).toEqual({ left: 170, top: 150 - TIP_GAP - 24, side: 'above' });
+    expect(placeObjTip(tip(200, 150, 190, true), size, tile, none)).toEqual({ left: 170, top: 150 - TIP_GAP - OBJ_PILL_PX - 24, side: 'above' });
   });
 
-  it('under the object’s foot when a bim’s head sits in its place, never over the bim', () => {
-    expect(placeObjTip(tip(200, 150, 190), size, tile, [{ x: 205, y: 125 }])).toEqual({ left: 170, top: 190 + TIP_GAP, side: 'below' });
-    // a head elsewhere changes nothing
-    expect(placeObjTip(tip(200, 150, 190), size, tile, [{ x: 320, y: 125 }]).side).toBe('above');
+  it('under the object’s foot when a bim’s head or body is in that place, never over the bim (ui-review m_52072 a)', () => {
+    // main at his desk right behind the object: his head where the tip would go
+    expect(placeObjTip(tip(200, 150, 190), size, tile, { bims: [bim(205, 110)], chips: [] })).toEqual({ left: 170, top: 190 + TIP_GAP, side: 'below' });
+    // TIP_CLEAR from a bim counts: a head 3 px off the tip's box still sends it away
+    const above = 150 - TIP_GAP - 24;
+    expect(placeObjTip(tip(200, 150, 190), size, tile, { bims: [bimBox({ x: 170 + 60 + BIM_HALF_PX + TIP_CLEAR - 1, y: above, feet: above + 40 })], chips: [] })?.side).not.toBe('above');
+    // a bim elsewhere changes nothing
+    expect(placeObjTip(tip(200, 150, 190), size, tile, { bims: [bim(330, 110)], chips: [] })?.side).toBe('above');
   });
 
-  it('stays a gap inside the tile: under the foot when there is no room over it, clamped at the sides', () => {
-    expect(placeObjTip(tip(200, 20, 70), size, tile, [])).toEqual({ left: 170, top: 70 + TIP_GAP, side: 'below' });
-    expect(placeObjTip(tip(10, 150, 190), size, tile, []).left).toBe(TIP_GAP);
-    expect(placeObjTip(tip(395, 150, 190), size, tile, []).left).toBe(400 - TIP_GAP - 60);
-    // a foot at the tile's bottom: the tip stays inside
-    expect(placeObjTip(tip(200, 20, 295), size, tile, []).top).toBe(300 - TIP_GAP - 24);
+  it('off the tile’s chips: the tip never lands on ⤢ fit (ui-review m_52072 b)', () => {
+    // pinched, the object near the bottom right; fit's chip over the tip's place above it
+    const fit: Rect = { left: 330, top: 220, right: 390, bottom: 250 };
+    // over it: on the chip; under it: past the tile's bottom; at its left (its box 340-380), centred on its height
+    expect(placeObjTip(tip(360, 275, 290), size, tile, { bims: [], chips: [fit] })).toEqual({ left: 340 - TIP_GAP - 60, top: Math.round((275 + 290) / 2 - 12), side: 'left' });
+    // without the chip: over it
+    expect(placeObjTip(tip(360, 275, 290), size, tile, none)?.side).toBe('above');
+  });
+
+  it('beside it, left then right, when over and under have no room; none when nothing fits', () => {
+    // a bim over it, the tile's bottom under it: at its left
+    const low = tip(200, 250, 296);
+    expect(placeObjTip(low, size, tile, { bims: [bim(200, 205)], chips: [] })?.side).toBe('left');
+    // a bim at its left too: at its right
+    expect(placeObjTip(low, size, tile, { bims: [bim(200, 205), bim(140, 245)], chips: [] })?.side).toBe('right');
+    // bims all round: no tip
+    expect(placeObjTip(low, size, tile, { bims: [bim(200, 205), bim(140, 245), bim(260, 245)], chips: [] })).toBeNull();
+  });
+
+  it('TIP_CLEAR inside the tile: slid along its edge, never past it', () => {
+    expect(placeObjTip(tip(10, 150, 190), size, tile, none)?.left).toBe(TIP_CLEAR);
+    expect(placeObjTip(tip(395, 150, 190), size, tile, none)?.left).toBe(400 - TIP_CLEAR - 60);
+    // no room over it: under its foot
+    expect(placeObjTip(tip(200, 20, 70), size, tile, none)).toEqual({ left: 170, top: 70 + TIP_GAP, side: 'below' });
   });
 });

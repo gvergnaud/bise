@@ -96,8 +96,9 @@ export function OuterTile({ project, name, agents, cards, h, w = OUTER_W, follow
         )}
       </span>
       {!waiting && <span ref={actsRef} className="s3-otile-acts">
-        {town === null && <Press look="s3-otile-btn" aria-label={side.tile_panel} {...tipAttrs(side.tile_panel)} onClick={onPanel} data-testid="app.outer.world.panel">⤢</Press>}
-        <Press look="s3-otile-btn" aria-label={side.tile_hide} {...tipAttrs(side.tile_hide)} onClick={onHide} data-testid="app.outer.world.hide">×</Press>
+        {/* data-bims-keep: a plugin object's tip keeps clear of them (bims/objpills.ts placeObjTip, designer m_52074) */}
+        {town === null && <Press look="s3-otile-btn" aria-label={side.tile_panel} {...tipAttrs(side.tile_panel)} onClick={onPanel} data-bims-keep="" data-testid="app.outer.world.panel">⤢</Press>}
+        <Press look="s3-otile-btn" aria-label={side.tile_hide} {...tipAttrs(side.tile_hide)} onClick={onHide} data-bims-keep="" data-testid="app.outer.world.hide">×</Press>
       </span>}
     </section>
   );
