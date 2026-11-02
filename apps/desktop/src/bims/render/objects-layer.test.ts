@@ -53,4 +53,25 @@ describe('objects-layer: the objects as drawn', () => {
     }
     expect(found.slice(0, 8)).toEqual([]);
   });
+
+  // his hover's tip stands 8 px from the drawn edge (designer m_52085): an object's silhouette is
+  // its meshes' shape, never its contact shadow's (a disc wider than the thing)
+  it("an object's silhouette is its drawn meshes', its contact shadow left out", () => {
+    const layer = makeObjectsLayer(STYLE);
+    layer.set(objectSpots(layoutOf(crewOf(5), 'loft'), objsOf(12)), false);
+    const ds = drawn(layer.root);
+    expect(ds.length).toBeGreaterThan(0);
+    let shadowWider = 0;
+    for (const { key, box } of ds) {
+      const pts = layer.shapes().get(key) ?? [];
+      expect(pts.length, key).toBeGreaterThan(0);
+      const out = pts.filter((p) => p.x < box.min.x - 1e-6 || p.x > box.max.x + 1e-6 || p.z < box.min.z - 1e-6 || p.z > box.max.z + 1e-6);
+      expect(out, `${key}: a point past its drawn meshes`).toEqual([]);
+      const whole = new Box3().setFromObject(layer.root.getObjectByName(`obj:${key}`) as Object3D);
+      if (whole.max.x - whole.min.x > box.max.x - box.min.x + 0.05) shadowWider++;
+    }
+    // the shadow is wider than the thing for some: the silhouette is what keeps the tip close
+    expect(shadowWider).toBeGreaterThan(0);
+    layer.dispose();
+  });
 });

@@ -55,18 +55,17 @@ function hullOf(ps: { x: number; y: number }[]): { x: number; y: number }[] {
 /** from this width (css px) the camera fits the building and a little ground (wideSiteOf); under it the building */
 const WIDE_FIT_PX = 480;
 
-/** a world box's 8 corners on the canvas: the rectangle they span, css px (a plugin object's hit area and foot) */
-function screenBox(f: Fit, b: { readonly min: { x: number; y: number; z: number }; readonly max: { x: number; y: number; z: number } }): { left: number; top: number; right: number; bottom: number } {
+/** a plugin object's silhouette points on the canvas: the rectangle they span, css px (its hit area, and the edges its tip stands 8 px from); null: no point */
+function screenBox(f: Fit, pts: readonly { readonly x: number; readonly y: number; readonly z: number }[]): { left: number; top: number; right: number; bottom: number } | null {
+  if (pts.length === 0) return null;
   const r = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
-  for (const x of [b.min.x, b.max.x])
-    for (const y of [b.min.y, b.max.y])
-      for (const z of [b.min.z, b.max.z]) {
-        const p = toScreen(f, { x, y, z });
-        r.left = Math.min(r.left, p.x);
-        r.right = Math.max(r.right, p.x);
-        r.top = Math.min(r.top, p.y);
-        r.bottom = Math.max(r.bottom, p.y);
-      }
+  for (const w of pts) {
+    const p = toScreen(f, w);
+    r.left = Math.min(r.left, p.x);
+    r.right = Math.max(r.right, p.x);
+    r.top = Math.min(r.top, p.y);
+    r.bottom = Math.max(r.bottom, p.y);
+  }
   return r;
 }
 
@@ -307,12 +306,15 @@ export const makeRenderer: MakeRenderer = (canvas, opts) => {
     objectAt(x, y) {
       if (!fit) return null;
       const f = fit;
-      const targets: ObjTarget[] = [...office.objectBoxes()].map(([key, b]) => ({ key, ...screenBox(f, b) }));
+      const targets: ObjTarget[] = [...office.objectShapes()].flatMap(([key, pts]) => {
+        const b = screenBox(f, pts);
+        return b === null ? [] : [{ key, ...b }];
+      });
       return pickObjectAt(targets, x, y);
     },
     objectBoxOf(key) {
-      const b = office.objectBoxes().get(key);
-      return fit && b ? screenBox(fit, b) : null;
+      const pts = office.objectShapes().get(key);
+      return fit && pts ? screenBox(fit, pts) : null;
     },
     copyTo(target) {
       view.copyTo(target);

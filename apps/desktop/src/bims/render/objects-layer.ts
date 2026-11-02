@@ -3,16 +3,40 @@
 // compact one when the office had no room for it) at its spot, turned, and a rug under each
 // corner's cluster. Built again only when the spots or the theme change (a still office draws no
 // frame for them). Owner: bims-life.
-import { Box3, type BufferGeometry, Group, Mesh } from 'three';
+import { Box3, type BufferGeometry, Group, Mesh, type Object3D, Vector3 } from 'three';
 import type { Corners, Rug } from '../corners';
 import { makeObject } from './objects';
 import type { Style } from './style';
 
 /** a point in the office, world units */
-interface Vec3 {
+export interface Vec3 {
   readonly x: number;
   readonly y: number;
   readonly z: number;
+}
+
+/** at most this many of a mesh's points stand for it in its object's silhouette (evenly taken) */
+const POINTS_PER_MESH = 48;
+
+/**
+ * An object's drawn shape as points in the office (world units): its meshes' points, but its
+ * contact shadow's (a flat disc wider than the thing: its box read 120 px off the printer, designer
+ * m_52085), at most POINTS_PER_MESH a mesh. Projected, their span is its silhouette's on screen.
+ */
+export function silhouetteOf(group: Object3D): Vec3[] {
+  const out: Vec3[] = [];
+  const v = new Vector3();
+  group.updateMatrixWorld(true);
+  group.traverse((m) => {
+    if (!(m instanceof Mesh) || m.userData.contact === true) return;
+    const pos = (m.geometry as BufferGeometry).getAttribute('position');
+    const step = Math.max(1, Math.ceil(pos.count / POINTS_PER_MESH));
+    for (let i = 0; i < pos.count; i += step) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld);
+      out.push({ x: v.x, y: v.y, z: v.z });
+    }
+  });
+  return out;
 }
 
 /** the corners' rugs (no pink or red: palette.test.ts), by day and at night */
@@ -30,8 +54,8 @@ export interface ObjectsLayer {
   set(c: Corners, night: boolean): void;
   /** the middle of an object's top as drawn (world units: its pill sits there, objpills.ts); null: not drawn */
   topOf(key: string): { readonly x: number; readonly y: number; readonly z: number } | null;
-  /** every drawn object's box (world units, min and max corners): what his hover picks (pick.ts pickObjectAt) */
-  boxes(): ReadonlyMap<string, { readonly min: Vec3; readonly max: Vec3 }>;
+  /** every drawn object's silhouette (silhouetteOf, world units): what his hover picks (pick.ts pickObjectAt) and its tip stands by */
+  shapes(): ReadonlyMap<string, readonly Vec3[]>;
   dispose(): void;
 }
 
@@ -41,7 +65,7 @@ export function makeObjectsLayer(style: Style): ObjectsLayer {
   let drawn: Corners | null = null;
   let drawnNight = false;
   const tops = new Map<string, { x: number; y: number; z: number }>();
-  const boxes = new Map<string, { min: Vec3; max: Vec3 }>();
+  const shapes = new Map<string, readonly Vec3[]>();
 
   const clear = (): void => {
     for (const c of [...root.children]) {
@@ -70,7 +94,7 @@ export function makeObjectsLayer(style: Style): ObjectsLayer {
       drawnNight = night;
       clear();
       tops.clear();
-      boxes.clear();
+      shapes.clear();
       for (const r of c.rugs) root.add(rug(r, night));
       for (const p of c.placed) {
         // a swapped one is already its compact id; makeObject's compact only scales the others
@@ -84,15 +108,15 @@ export function makeObjectsLayer(style: Style): ObjectsLayer {
         const b = new Box3().setFromObject(made.group);
         if (b.isEmpty()) continue;
         tops.set(p.key, { x: (b.min.x + b.max.x) / 2, y: b.max.y, z: (b.min.z + b.max.z) / 2 });
-        boxes.set(p.key, { min: { x: b.min.x, y: b.min.y, z: b.min.z }, max: { x: b.max.x, y: b.max.y, z: b.max.z } });
+        shapes.set(p.key, silhouetteOf(made.group));
       }
     },
     topOf: (key) => tops.get(key) ?? null,
-    boxes: () => boxes,
+    shapes: () => shapes,
     dispose() {
       clear();
       tops.clear();
-      boxes.clear();
+      shapes.clear();
       drawn = null;
     },
   };
