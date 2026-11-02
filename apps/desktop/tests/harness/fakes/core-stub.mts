@@ -43,10 +43,13 @@ const NOT_HEALTHY = new Set(['broken', 'machine_update']);
 // Nor the fixtures' `app_open`: the hub's one-shot answer to his 'app ↗' (a view's tab opens), never
 // a state of the world; from the start world it opened a view's tab over every check's thread
 // (scroll-steady, compact-fold: its box took their clicks and wheels). A check that wants it sends it.
+// Dropped from a check's own world too: running/processes builds its world from the fixtures, and
+// the view's failed box in the panel took the click on its row (red alone since 85d2e95f3 left it in).
 const ASKED = new Set(['app_open']);
-const all = world === 'none' ? []
+const all = (world === 'none' ? []
   : world ? jsonl(world)
-  : [...jsonl(path.join(FIXTURES, 'core_ev.jsonl')), ...jsonl(path.join(FIXTURES, 'hub_ev.jsonl'))].filter((l) => !NOT_HEALTHY.has(parse(l).ev ?? '') && !ASKED.has(parse(l).ev ?? ''));
+  : [...jsonl(path.join(FIXTURES, 'core_ev.jsonl')), ...jsonl(path.join(FIXTURES, 'hub_ev.jsonl'))].filter((l) => !NOT_HEALTHY.has(parse(l).ev ?? '')))
+  .filter((l) => !ASKED.has(parse(l).ev ?? ''));
 // A restart (FakeCore.exit: the app's main spawns the stub again) sends the start world again, but
 // never the hub's one-shot ask: a `confirm` goes to the connection whose command asked it, and a
 // real core restart is a new connection, so it is gone (app/keep-all :166 red: the replayed
