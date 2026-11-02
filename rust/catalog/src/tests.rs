@@ -590,7 +590,7 @@ fn thinking_and_betas_per_model_reach_the_handoff() {
     let foundry = &h[h.find("[providers.foundry]").unwrap()..];
     let foundry = &foundry[..foundry[1..].find("\n[").unwrap()];
     assert!(!foundry.contains("thinking") && !foundry.contains("betas"), "{foundry}");
-    assert!(h.contains("[models.\"anthropic/claude-opus-4-6\"]\nthinking = \"none\"\n"), "{h}");
+    assert!(h.contains("[models.\"anthropic/claude-opus-4-6\"]\nvision = true\nthinking = \"none\"\n"), "{h}");
 }
 
 #[test]

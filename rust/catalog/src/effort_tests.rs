@@ -140,7 +140,9 @@ fn the_list_comes_from_config_then_the_api_then_the_table_then_the_family() {
     assert_eq!(s.catalog.resolve("anthropic/claude-opus-5-5").default_effort(), "max", "high gone: the last word");
     // the hand-off carries the API's list, and each provider's family list
     let h = s.handoff_toml();
-    assert!(h.contains("[models.\"anthropic/claude-opus-5-5\"]\nefforts = \"none,low,max\""), "{h}");
+    // (every listed model says its own vision first: tests.rs
+    // the_handoff_says_each_listed_models_vision)
+    assert!(h.contains("[models.\"anthropic/claude-opus-5-5\"]\nvision = true\nefforts = \"none,low,max\""), "{h}");
     let table = |name: &str| {
         let t = &h[h.find(name).unwrap()..];
         t[..t[1..].find("\n[").unwrap_or(t.len() - 1)].to_string()
