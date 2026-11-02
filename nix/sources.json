@@ -1,13 +1,13 @@
 {
-  "version": "2026.10.30-2",
-  "id": "1e8bb41",
-  "built": "2026-10-30T22:58:06Z",
+  "version": "2026.11.2",
+  "id": "ce5d002",
+  "built": "2026-11-02T21:14:03Z",
   "aarch64-linux": {
-    "url": "https://github.com/gvergnaud/bise/releases/download/v2026.10.30-2/bise-1e8bb41-linux-arm64.tar.gz",
-    "sha256": "1d54fe95a5b612688ad6c899ec0eb36478e43f163026d7477bc6245284edbc3e"
+    "url": "https://github.com/gvergnaud/bise/releases/download/v2026.11.2/bise-ce5d002-linux-arm64.tar.gz",
+    "sha256": "caedb2ebad58a44896256d952073180d2330589e2d0f603c4a4e3ce74b053300"
   },
   "x86_64-linux": {
-    "url": "https://github.com/gvergnaud/bise/releases/download/v2026.10.30-2/bise-1e8bb41-linux-x86_64.tar.gz",
-    "sha256": "cb9e199ab9229c317188aac0a994aa1ddf7c6a920695f6ec557119e41573076f"
+    "url": "https://github.com/gvergnaud/bise/releases/download/v2026.11.2/bise-ce5d002-linux-x86_64.tar.gz",
+    "sha256": "22c214f1ba33bcd8a43c7bb2b0e0b5a479caa45d81455e3abec739014eaf25f7"
   }
 }
