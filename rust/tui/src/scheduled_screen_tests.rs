@@ -94,8 +94,12 @@ fn eighty_columns() {
     assert_eq!(t[t.len() - 1], format!("⏎ {}   r {}   x {}   esc {}", w::key_open, w::key_run_now, w::key_stop, w::key_close));
     sc.ended_too = true;
     let t = texts(&lines(&mut sc, &all, 80, 20, NOW).0);
-    assert!(t.iter().any(|l| l.contains("◷ launch       check the build ") && l.contains(&w::stopped_at("15:"))), "{t:?}");
-    assert!(t.iter().any(|l| l.contains("◷ sock-path    check the build ") && l.contains(&w::ended_at("15:")) && l.contains(&format!("· {}", w::runs(3)))), "{t:?}");
+    // the ended time renders on the machine's local clock (crate::when's
+    // offset_at): the same ahead() the row uses says what to expect, so
+    // the assert holds in any zone (it read "15:" where it was written)
+    let (launch_at, sock_at) = (ahead(NOW - 60 * MIN, NOW), ahead(NOW - 30 * MIN, NOW));
+    assert!(t.iter().any(|l| l.contains("◷ launch       check the build ") && l.contains(&w::stopped_at(&launch_at))), "{t:?}");
+    assert!(t.iter().any(|l| l.contains("◷ sock-path    check the build ") && l.contains(&w::ended_at(&sock_at)) && l.contains(&format!("· {}", w::runs(3)))), "{t:?}");
     // a name is a label, never cut with … (the detail line below may be)
     assert!(t.iter().filter(|l| l.contains('◷')).all(|l| !l.contains('…')), "{t:?}");
     assert!(t.iter().all(|l| !l.contains('#') && l.width() <= 80), "{t:?}");

@@ -323,7 +323,7 @@ impl Core {
 /// The event without its absent fields (and `muted` only when true).
 fn strip_nulls(mut v: Value) -> Value {
     if let Some(m) = v.as_object_mut() {
-        m.retain(|k, x| !x.is_null() && !(k == "muted" && *x == Value::Bool(false)));
+        m.retain(|k, x| !(x.is_null() || k == "muted" && *x == Value::Bool(false)));
     }
     v
 }

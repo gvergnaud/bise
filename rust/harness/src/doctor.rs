@@ -79,7 +79,7 @@ fn tilde_paths(t: &str, home: &str) -> String {
     let mut o = String::new();
     let mut rest = t;
     while let Some(i) = rest.find(home) {
-        let starts = i == 0 || rest[..i].ends_with([' ', '(', '`', '\'', '"']) || (i == 0 && o.is_empty());
+        let starts = i == 0 || rest[..i].ends_with([' ', '(', '`', '\'', '"']);
         o.push_str(&rest[..i]);
         o.push_str(if starts { "~/" } else { home });
         rest = &rest[i + home.len()..];

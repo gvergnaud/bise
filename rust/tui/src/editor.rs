@@ -201,7 +201,7 @@ pub(crate) fn word_at(s: &str, ci: usize) -> (usize, usize) {
         return (gs[i].0, gs[i].0);
     }
     let kind = is_word(gs[i].1);
-    let same = |g: &str| is_word(g) == kind && g != "\n" && (kind || !g.chars().all(char::is_whitespace) == !gs[i].1.chars().all(char::is_whitespace));
+    let same = |g: &str| is_word(g) == kind && g != "\n" && (kind || g.chars().all(char::is_whitespace) == gs[i].1.chars().all(char::is_whitespace));
     let mut a = i;
     while a > 0 && same(gs[a - 1].1) {
         a -= 1;

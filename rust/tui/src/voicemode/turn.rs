@@ -920,7 +920,7 @@ impl VoiceMode {
                 let none_yet = self.heard.trim().is_empty();
                 let words = !only_backchannels(&self.heard) && !self.echo(&self.heard, now);
                 let cut = (long >= BARGE_IN && words) || (none_yet && long >= BARGE_IN_NO_WORDS) || long >= BARGE_IN_ANYWAY;
-                if talking && cut && !(!none_yet && self.echo(&self.heard, now)) {
+                if talking && cut && (none_yet || !self.echo(&self.heard, now)) {
                     self.cut_in(now, false);
                 } else if !talking && !self.holding {
                     // "mm", "ok": the agent goes on

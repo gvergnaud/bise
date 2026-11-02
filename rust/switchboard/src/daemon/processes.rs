@@ -357,7 +357,7 @@ impl State {
         let ask: Vec<u32> = trees
             .iter()
             .flat_map(|t| t.pids.iter().copied())
-            .filter(|p| key(*p).is_some_and(|k| if ports { !self.ports.get(&k).is_some_and(|v| !v.is_empty()) } else { !self.asked.contains(&k) }))
+            .filter(|p| key(*p).is_some_and(|k| if ports { self.ports.get(&k).is_none_or(|v| v.is_empty()) } else { !self.asked.contains(&k) }))
             .collect();
         if !ask.is_empty() {
             let got = pv::lsof_ports(&lsof(&ask, &["-iTCP", "-sTCP:LISTEN", "-Fpn"]));

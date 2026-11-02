@@ -390,10 +390,8 @@ fn on_screen_mouse(app: &mut App, m: &crossterm::event::MouseEvent, term_h: u16)
             app.follow = false;
             app.scroll -= 3;
         }
-        MouseEventKind::ScrollDown => {
-            if !app.follow {
-                app.scroll += 3;
-            }
+        MouseEventKind::ScrollDown if !app.follow => {
+            app.scroll += 3;
         }
         // click the back-to-bottom bar to return to the tail;
         // click a thinking section to expand/collapse it

@@ -1233,9 +1233,7 @@ impl Hub {
             let detached = crate::place::private_path(&l.place).is_some() && l.branch.is_empty();
             match l.commits {
                 Some(0) if detached => {
-                    if self.pr_lids.remove(&l.place).is_some() {
-                        self.dirty = true;
-                    }
+                    self.dirty |= self.pr_lids.remove(&l.place).is_some();
                 }
                 Some(n) => {
                     let lid = forge::no_pr_lid(n);
@@ -1596,11 +1594,9 @@ impl Hub {
                 }
             }
             Wire::BgHandoff(args) => self.bg_handoff(fx, env, agent, &args),
-            Wire::Intent(text) => {
-                if self.st.agents.contains_key(agent) {
-                    self.set_activity(agent, now, clip(&text, 120));
-                    self.dirty = true;
-                }
+            Wire::Intent(text) if self.st.agents.contains_key(agent) => {
+                self.set_activity(agent, now, clip(&text, 120));
+                self.dirty = true;
             }
             Wire::Tool { args, .. } => {
                 let files = wire::patch_files(&args);

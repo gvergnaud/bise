@@ -52,7 +52,7 @@ pub fn start(paths: &Paths) -> Result<SignIn<()>, String> {
 
 pub fn start_ctx(ctx: &Ctx) -> Result<SignIn<()>, String> {
     let o = bend_plugins::http::Url::parse(&ctx.origin).map_err(|e| format!("{}: {}", AUTH_ENV, e))?;
-    if !o.tls && !(o.host == "localhost" || o.host.starts_with("127.")) {
+    if !(o.tls || o.host == "localhost" || o.host.starts_with("127.")) {
         return Err(format!("{} must be https (or http on this machine)", AUTH_ENV));
     }
     // a broken auth.json is said now, not after the browser

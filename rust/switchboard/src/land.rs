@@ -700,7 +700,10 @@ mod tests {
     fn trunk_pushes_main_after_a_land() {
         let ws = repo("push");
         let remote = ws.parent().unwrap().join("remote.git");
-        sh(&ws, &format!("git init -q --bare {} && git remote add origin {} && git push -q origin main", remote.display(), remote.display()));
+        // -b main: the bare remote's HEAD names the branch it serves (a
+        // machine whose init.defaultBranch is unset defaults to master,
+        // the clone then checks out nothing and the push test below fails)
+        sh(&ws, &format!("git init -q -b main --bare {} && git remote add origin {} && git push -q origin main", remote.display(), remote.display()));
         sh(&ws, "echo a2 > a");
         let mut j = job("x", &ws, &ws, &["a"], &[]);
         j.flow.mode = Some(FlowMode::Trunk);

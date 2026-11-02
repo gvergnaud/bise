@@ -198,7 +198,7 @@ fn load_keys() {
     }
     for f in &files {
         for (k, v) in &f.vars {
-            if !std::env::var_os(k).is_some_and(|x| !x.is_empty()) {
+            if std::env::var_os(k).is_none_or(|x| x.is_empty()) {
                 std::env::set_var(k, v);
                 ours.push((k.clone(), None));
             }
