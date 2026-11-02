@@ -7,6 +7,10 @@
   height: 100%;
   outline: none;
   --lg-k: var(--c-text-2);
+  /* the right side's band (its coins, its card: app/pagecol.ts usePageBand) stays clear, the
+     charts end left of it (his m_51994) */
+  padding-right: var(--page-band, 0px);
+  box-sizing: border-box;
 }
 
 /* the kinds' colours (logview.rs kind_color) */

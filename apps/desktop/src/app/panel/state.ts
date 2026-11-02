@@ -15,13 +15,13 @@ import { useLeftWidth } from '@/app/frame-state';
 import { iconKindOf } from '@/ds';
 import { useAllArtifacts } from '@/artifacts';
 import { armHandoff } from '@/composer/handoff';
-import { activate, artFit, clampShare, shareOf, closeBack, closeIn, closeOthers, launcherToReuse, moveIn, nextBrowser, nextLauncher, nextShell, openIn, pushClosed, pushRecent, reopenIn, stepIn, widenFor, clampW, fitW, fullFit, withOpen, FOLDED, dropGone, dropGoneArts, type Before, type Closed, type PanelFit, type PanelKept, type TabWhat, type Tabs } from './model';
+import { activate, boxOf, clampShare, closeBackKept, closeKept, closeOthers, fitOf, launcherToReuse, moveIn, nextBrowser, nextLauncher, nextShell, openKept, pushClosed, reopenIn, stepIn, clampW, withOpen, FOLDED, dropGone, dropGoneArts, type Before, type Closed, type PanelBox, type PanelFit, type PanelKept, type TabWhat, type Tabs } from './model';
 import { parseRec, pruneScopes, putView, scopeOf, switchTo, viewOf, type PanelRec } from './scope';
 
 const KEY = 'panel';
 
 let rec: PanelRec = parseRec(keep.view(KEY));
-let state: PanelKept = viewOf(rec);
+let state: PanelKept = withOpen(viewOf(rec));
 const listeners = new Set<() => void>();
 
 function emit(): void {
@@ -48,7 +48,7 @@ export function panelScope(project: string): void {
   // what he opened before any project was in front (a first launch) is the first project's
   if (rec.at === '' && rec.byProject[project] === undefined) rec = putView(switchTo(rec, project), state);
   else rec = switchTo(rec, project);
-  state = viewOf(rec);
+  state = withOpen(viewOf(rec));
   keep.setView(KEY, rec);
   emit();
 }
@@ -121,7 +121,7 @@ export const panelState = {
   /** tests only: back to a fresh window (`raw`: the kept record it starts from) */
   reset(raw?: unknown): void {
     rec = parseRec(raw);
-    state = viewOf(rec);
+    state = withOpen(viewOf(rec));
     before.clear();
     drafts.clear();
     closed.clear();
@@ -158,8 +158,7 @@ export function usePanelFit(): PanelFit {
   const kind = useFrontArtKind();
   const win = useWindowWidth();
   const left = useLeftWidth();
-  const fit = kind === undefined ? fitW(widthNow(s), win, left) : artFit(shareOf(kind, s.shares), win, left);
-  return s.open && s.full ? fullFit(fit, win, left) : fit;
+  return fitOf(s, kind, win, left);
 }
 
 /** The artifact in front of the panel (its tab's entity, open or folded); undefined for any other tab. */
@@ -194,10 +193,8 @@ export function resetArtShare(kind: string): void {
  * Open or folded, and the column it takes (0 folded, 0 as a sheet over the thread): what the right
  * side (nm-side's sideLayout) and the shell read. `over`: it is a sheet now.
  */
-export function usePanelBox(): { readonly open: boolean; readonly width: number; readonly over: boolean; readonly full: boolean } {
-  const s = usePanelState();
-  const f = usePanelFit();
-  return { open: s.open, width: s.open && !f.over ? f.width : 0, over: s.open && f.over, full: s.open && s.full && !f.over };
+export function usePanelBox(): PanelBox {
+  return boxOf(usePanelState(), usePanelFit());
 }
 
 /** Full width now (model.ts fullFit): open, full, and not a sheet. The thread hides, the floating composer comes over the panel. */
@@ -270,16 +267,14 @@ export function takeOpened(id: string): boolean {
 
 /** Opens `what` in a tab (an open one comes to the front), unfolding the panel; `instead`: the launcher it replaces. */
 export function openWhat(what: TabWhat, instead?: string): void {
-  const recent = what.kind === 'thing' ? pushRecent(state.recent, what.e) : state.recent;
-  const tabs = openIn(state.tabs, what, instead);
-  opened = tabs.active;
+  const o = openKept(state, what, instead);
+  const active = o.kept.tabs.active;
+  opened = active;
   openedN += 1;
-  if (!state.open || tabs.active !== state.tabs.active) before.set(beforeKey(tabs.active), { open: state.open, active: state.tabs.active });
-  // a page newly opened may widen the panel once (widenFor); an open one coming to the front doesn't
-  const isNew = !state.tabs.list.some((t) => t.id === tabs.active);
+  if (o.before !== null) before.set(beforeKey(active), o.before);
   // a New tab that opens fresh starts with an empty field, whatever an earlier one of its number held
-  if (isNew) drafts.delete(beforeKey(tabs.active));
-  set({ ...state, open: true, tabs, recent, width: isNew ? widenFor(state, what) : state.width });
+  if (!state.tabs.list.some((t) => t.id === active)) drafts.delete(beforeKey(active));
+  set(o.kept);
 }
 
 /**
@@ -361,10 +356,8 @@ function remember(ids: readonly string[]): void {
  */
 export function closeTabId(id: string, opts: { readonly remember?: boolean } = {}): void {
   if (opts.remember !== false) remember([id]);
-  const tabs = closeIn(state.tabs, id);
   // the last tab closed: the panel folds (the outer card comes back), nothing left to show
-  if (tabs.list.length === 0) set({ ...state, tabs, open: false });
-  else setTabs(tabs);
+  set(closeKept(state, id));
 }
 
 /**
@@ -386,9 +379,9 @@ const beforeKey = (id: string): string => `${rec.at}\n${id}`;
 /** Esc on the tab `id`: it closes, the panel as it was before it came (model.ts closeBack, app/escape.ts). */
 export function closeTabBack(id: string): void {
   remember([id]);
-  const b = closeBack(state.tabs, id, before.get(beforeKey(id)));
+  const next = closeBackKept(state, id, before.get(beforeKey(id)));
   before.delete(beforeKey(id));
-  set({ ...state, tabs: b.tabs, open: b.open });
+  set(next);
 }
 
 export function closeOthersId(id: string): void {

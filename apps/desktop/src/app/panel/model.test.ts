@@ -9,6 +9,7 @@ import {
   withOpen,
   fitW,
   clampW,
+  closeBack,
   closeIn,
   closeOthers,
   dropGone,
@@ -290,8 +291,20 @@ describe('full width (panel-full, designer m_45445)', () => {
   });
   it('a folded panel is never full', () => {
     expect(withOpen({ ...FOLDED, open: false, full: true }).full).toBe(false);
-    const open = { ...FOLDED, open: true, full: true };
+    const open = { ...FOLDED, open: true, full: true, tabs: openIn(FIRST, { kind: 'browser', n: 1 }) };
     expect(withOpen(open)).toBe(open);
+  });
+  it('an open panel always has a tab: with none it folds, full width ends', () => {
+    const empty = withOpen({ ...FOLDED, open: true, full: true });
+    expect(empty.open).toBe(false);
+    expect(empty.full).toBe(false);
+  });
+  it('esc on the last tab folds the panel, whatever was in front before it came', () => {
+    const one = openIn(FIRST, { kind: 'browser', n: 1 });
+    expect(closeBack(one, one.active, undefined).open).toBe(false);
+    expect(closeBack(one, one.active, { open: true, active: 'gone' }).open).toBe(false);
+    const two = openIn(one, { kind: 'browser', n: 2 });
+    expect(closeBack(two, two.active, undefined).open).toBe(true);
   });
 });
 

@@ -13,7 +13,7 @@ import { ThreadScreen } from '@/thread/ThreadScreen';
 import { FloatHost } from '@/composer/float/Host';
 import { resetHandoff } from '@/composer/handoff';
 import { UnlessFull } from './Full';
-import { FOLDED } from './model';
+import { FOLDED, openIn, FIRST } from './model';
 import { EMPTY_REC, putView, switchTo } from './scope';
 import { panelState, setFull, toggleFull } from './state';
 
@@ -24,7 +24,8 @@ beforeEach(() => {
   Object.defineProperty(window, 'innerWidth', { value: 1440, configurable: true });
   localStorage.clear();
   resetHandoff();
-  panelState.reset(putView(switchTo(EMPTY_REC, P), { ...FOLDED, open: true }));
+  // open on a tab: an open panel always shows one (model.ts withOpen)
+  panelState.reset(putView(switchTo(EMPTY_REC, P), { ...FOLDED, open: true, tabs: openIn(FIRST, { kind: 'browser', n: 1 }) }));
 });
 afterEach(cleanup);
 

@@ -25,6 +25,7 @@ import { Head, Press } from "@/ds";
 import { useCoreEvent, useStore } from "@/store";
 import type { Ev } from "@/store/store";
 import { useRouter } from "@/app/router";
+import { usePageBand } from "@/app/pagecol";
 import { stepOf } from "@/app/listkeys";
 import { Markdown } from "@/thread/Markdown";
 import { Code } from "@/thread/Code";
@@ -95,8 +96,11 @@ export function LogScreen({
       {t}
     </span>
   );
+  // the right side's band (its coins, its card) stays clear: the page ends left of it (app/pagecol.ts)
+  const page = useRef<HTMLElement>(null);
+  const band = usePageBand(page);
   return (
-    <section className="lg" data-testid="log">
+    <section className="lg" ref={page} style={band} data-testid="log">
       <Head
         title={`${agent} · debug`}
         sub={<span data-testid="log.sub">read-only · redacted</span>}

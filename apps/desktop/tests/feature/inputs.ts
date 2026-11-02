@@ -160,6 +160,8 @@ export type Gesture =
   | { readonly g: 'go'; readonly route: Route }
   | { readonly g: 'rail'; readonly place: RailPlace }
   | { readonly g: 'win'; readonly width: number }
+  | { readonly g: 'tab'; readonly project: string; readonly id: string }
+  | { readonly g: 'untab'; readonly how: 'x' | 'esc'; readonly forget?: true }
   | { readonly g: 'outer'; readonly want: number | null };
 
 export const answer = (project: string, card: number, reply: string, from?: Here): Gesture =>
@@ -185,6 +187,10 @@ export const goTo = (route: Route): Gesture => ({ g: 'go', route });
 export const rail = (place: RailPlace): Gesture => ({ g: 'rail', place });
 /** He makes the window this wide (the rail and a 240 sidebar on its left). */
 export const windowAt = (width: number): Gesture => ({ g: 'win', width });
+/** An artifact opens in the panel's tab (its route, a chip, the side's list), the panel unfolding. */
+export const tabArtifact = (project: string, id: string): Gesture => ({ g: 'tab', project, id });
+/** He closes the panel's tab in front: its × ('x'), or esc ('esc'; `forget`: what was in front before it came is not known, after a relaunch or another door). */
+export const closeFrontTab = (how: 'x' | 'esc', forget = false): Gesture => ({ g: 'untab', how, ...(forget ? { forget: true as const } : {}) });
 /** His drag (or ←/→) on the outer card's left border asks this width (the Splitter's want). */
 export const dragOuter = (want: number): Gesture => ({ g: 'outer', want });
 /** A double-click (or Enter) on the outer card's left border. */

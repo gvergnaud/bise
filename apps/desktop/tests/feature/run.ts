@@ -48,6 +48,17 @@ import {
   type Place,
   type Route,
   type SideShows,
+  FOLDED,
+  boxOf,
+  closeBackKept,
+  closeKept,
+  fitOf,
+  openKept,
+  pageBand,
+  THREAD_KEEPS,
+  rightSideShows,
+  type Before,
+  type PanelKept,
 } from './app';
 import type { Cmd, Gesture, Here, Input } from './inputs';
 
@@ -84,9 +95,30 @@ export interface Feature {
     projectRows(seen?: Readonly<Record<string, number>>): readonly ProjectRowView[];
     /** The outer card at the window's right on a project's thread, the panel folded: where the coins are ('card' when it shows) and its width (side3d/layout.ts sideLayout over his kept width, outerwidth.ts). */
     outerCard(): OuterCardView;
+    /** The right side's coins (or card) against what the window draws beside them, window px: the band they keep, the panel's column, and the content (the thread's column on a thread, the page's box on /debug) (side3d/layout.ts sideLayout over the panel's box, panel/model.ts boxOf; app/pagecol.ts pageBand). */
+    side(): SideView;
     /** An artifact opened by id: the centre (its maker's thread, the project's main when the list doesn't have it, nothing before the list came) and the panel (its view, or the gone lines' link and where it goes, or nothing yet) (artifacts/gone.ts). */
     artifact(project: string, id: string): ArtifactView;
   };
+}
+
+/** A box across the window, px from its left edge. */
+export interface Span {
+  readonly l: number;
+  readonly r: number;
+}
+
+/** The right side and what is beside it. */
+export interface SideView {
+  readonly coins: CoinsAt;
+  /** the band the coins (or the card) take; null when they are not beside the content (minis, none) */
+  readonly band: Span | null;
+  /** the panel's column, null folded or a sheet */
+  readonly panel: Span | null;
+  /** the panel has a tab to show (an open panel with none is an empty column) */
+  readonly panelShows: boolean;
+  /** what the screen draws: the thread's column, or the page's box less its band */
+  readonly content: Span;
 }
 
 /** What the window shows for an artifact's route. */
@@ -146,6 +178,9 @@ export function feature(now = 1_791_100_000_000): Feature {
     back.saw(r);
   };
   let win = 1440;
+  // the tabbed panel (panel/state.ts over model.ts's pure steps): its kept state and what was in front before each tab came
+  let panel: PanelKept = FOLDED;
+  const befores = new Map<string, Before>();
   // the room the left takes: the rail and a docked sidebar at its default width (frame-state.ts)
   const left = (): number => leftWidthOf(win, { hidden: false, width: SIDE.def });
   const open = (): Store => {
@@ -215,6 +250,20 @@ export function feature(now = 1_791_100_000_000): Feature {
       case 'win':
         win = g.width;
         return;
+      case 'tab': {
+        // an artifact opened in the panel (panel/state.ts openWhat, ArtifactView.tsx ArtifactRoute's openTab)
+        const o = openKept(panel, { kind: 'thing', e: { kind: 'artifact', project: g.project, id: g.id } });
+        if (o.before !== null) befores.set(o.kept.tabs.active, o.before);
+        panel = o.kept;
+        return;
+      }
+      case 'untab': {
+        // the tab in front closes: its × (panel/state.ts closeTabId) or esc (app/escape.ts closeArtifactTab, closeTabBack)
+        const id = panel.tabs.active;
+        panel = g.how === 'x' ? closeKept(panel, id) : closeBackKept(panel, id, g.forget === true ? undefined : befores.get(id));
+        befores.delete(id);
+        return;
+      }
       case 'outer':
         // the card's border (side3d/Host.tsx): a drag clamped to the room beside the left, a double-click back
         if (g.want === null) outer.reset();
@@ -262,6 +311,24 @@ export function feature(now = 1_791_100_000_000): Feature {
       outerCard: () => {
         const l = sideLayout(win, left(), false, undefined, true, undefined, false, outer.want());
         return { coins: l.coins, width: l.coins === 'card' ? (l.outerW ?? null) : null };
+      },
+      side: () => {
+        const l0 = left();
+        // the artifact in front takes its kind's share (an unknown kind reads as a page: state.ts useFrontArtKind)
+        const front = panel.tabs.list.find((t) => t.id === panel.tabs.active)?.what;
+        const art = front?.kind === 'thing' && front.e.kind === 'artifact' ? 'page' : undefined;
+        const box = boxOf(panel, fitOf(panel, art, win, l0));
+        // the same call as side3d/Host.tsx SideHost (useLayoutDriver)
+        const lay = sideLayout(win, l0, box.open, box.open && box.width > 0 ? box.width : undefined, rightSideShows(route), { over: box.over, full: box.full, threadMin: art === undefined ? THREAD_KEEPS.rows : THREAD_KEEPS.artifact }, false, outer.want());
+        const screenR = win - box.width;
+        const content = route.screen === 'debug' ? { l: l0, r: screenR - pageBand(lay, screenR) } : { l: lay.colLeft, r: lay.colLeft + lay.colW };
+        return {
+          coins: lay.coins,
+          band: lay.side ? { l: lay.bandL, r: win - lay.right } : null,
+          panel: box.width > 0 ? { l: screenR, r: win } : null,
+          panelShows: panel.tabs.list.length > 0,
+          content,
+        };
       },
       artifact: (project, id) => {
         const listed = store.artifacts(project);

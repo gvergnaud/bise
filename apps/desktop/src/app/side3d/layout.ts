@@ -75,6 +75,8 @@ export interface SideLayout {
   readonly right: number;
   /** the outer card's and its tile's width when the coins are 'card' (outerFit of his width) */
   readonly outerW?: number;
+  /** the left edge of the band the right side keeps (its coins, its card), px from the window's left: nothing of a page goes right of it (pagecol.ts pageBand); the window's width when no side is drawn */
+  readonly bandL: number;
 }
 
 /** The outer card (page outer-side v2) and the tile over it: their width by default (292, 12 more for the titles: his m_47018, designer m_47025; set inline), and the band it keeps with its two 12 */
@@ -154,9 +156,19 @@ function fit(room: number, band: number): { left: number; w: number } | null {
  * (outerwidth.ts), drawn as outerFit lets it. Pure.
  */
 export const sideLayout = (winW: number, sideW: number, panelOpen: boolean, panelW: number = PANEL_W, shows = true, beside: Omit<PanelIn, 'open' | 'width'> = { over: false, full: false, threadMin: THREAD_KEEPS.rows }, compact = false, outerWant: number = OUTER_W): SideLayout => {
+  const l = placed(winW, sideW, panelOpen, panelW, shows, beside, compact, outerWant);
+  // the band's left edge: the coins' (or the card's) band ends at the panel's left edge, or the window's
+  return { ...l, bandL: l.side ? winW - l.right - l.gutter : winW };
+};
+
+/** Placed = SideLayout less its band's edge (sideLayout adds it). */
+type Placed = Omit<SideLayout, 'bandL'>;
+
+/** sideLayout's places, its band's edge aside. Pure. */
+function placed(winW: number, sideW: number, panelOpen: boolean, panelW: number, shows: boolean, beside: Omit<PanelIn, 'open' | 'width'>, compact: boolean, outerWant: number): Placed {
   // a sheet goes over the thread: the thread keeps the whole room under it (ui-review m_47216)
   const room = Math.max(0, winW - sideW - (panelOpen && !beside.over ? panelW : 0));
-  const centred = (coins: CoinsAt): SideLayout => {
+  const centred = (coins: CoinsAt): Placed => {
     const w = Math.min(COL_W, Math.max(0, room - 2 * MIN_LEFT));
     return { colLeft: sideW + (room - w) / 2, colW: w, world: 'small', gutter: 0, side: false, coins, right: 0 };
   };
@@ -167,7 +179,7 @@ export const sideLayout = (winW: number, sideW: number, panelOpen: boolean, pane
     const at = fit(room, BETWEEN_BAND) ?? { left: MIN_LEFT, w: Math.max(0, room - BETWEEN_BAND - MIN_LEFT) };
     return { colLeft: sideW + at.left, colW: at.w, world: 'bubble', gutter: BETWEEN_BAND, side: true, coins: 'between', right: panelW };
   }
-  const edge = (l: { left: number; w: number }, world: WorldSize, gutter: number): SideLayout =>
+  const edge = (l: { left: number; w: number }, world: WorldSize, gutter: number): Placed =>
     ({ colLeft: sideW + l.left, colW: l.w, world, gutter, side: true, coins: 'edge', right: 0 });
   // the outer card (page outer-side v2): at his width while the room holds it (outerFit), the
   // column, at least 480, centred in what it leaves
@@ -183,7 +195,7 @@ export const sideLayout = (winW: number, sideW: number, panelOpen: boolean, pane
   const bubble = fit(room, BUBBLE_BAND);
   if (bubble !== null) return edge(bubble, 'bubble', BUBBLE_BAND);
   return edge({ left: MIN_LEFT, w: Math.max(0, room - BUBBLE_BAND - MIN_LEFT) }, 'bubble', BUBBLE_BAND);
-};
+}
 
 /** the room a card keeps above the window's bottom (designer m_44499) */
 export const CARD_ROOM = 16;

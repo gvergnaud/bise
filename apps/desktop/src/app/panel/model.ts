@@ -127,12 +127,14 @@ export interface Before {
 
 /**
  * Esc on the tab `id` (r3-escape, designer m_44693): it closes and the panel goes back to how it
- * was before the tab came, the tab then in front if it is still there, folded if it was. Pure.
+ * was before the tab came, the tab then in front if it is still there, folded if it was, or
+ * when no tab is left (none known before: a relaunch, another door). Pure.
  */
 export function closeBack(t: Tabs, id: string, before: Before | undefined): { readonly tabs: Tabs; readonly open: boolean } {
   const tabs = closeIn(t, id);
-  if (before === undefined) return { tabs, open: true };
-  return { tabs: activate(tabs, before.active), open: before.open };
+  const left = tabs.list.length > 0;
+  if (before === undefined) return { tabs, open: left };
+  return { tabs: activate(tabs, before.active), open: left && before.open };
 }
 
 /** Every tab but `id` closed (a tab's menu: Close others). Pure. */
@@ -402,9 +404,54 @@ export interface PanelKept {
 
 export const FOLDED: PanelKept = { open: false, tabs: FIRST, width: WIDTHS.rows, dragged: false, recent: [], shares: {}, full: false };
 
-/** The state as kept: a folded panel is never full, so it opens again beside the thread. Pure. */
+/**
+ * The state as kept: open only with a tab to show (an open panel with none drew an empty column
+ * the right side's coins stood beside, over the thread: his m_51994), and a folded panel is never
+ * full, so it opens again beside the thread. Pure.
+ */
 export function withOpen(k: PanelKept): PanelKept {
-  return !k.open && k.full ? { ...k, full: false } : k;
+  const open = k.open && k.tabs.list.length > 0;
+  return open === k.open && (open || !k.full) ? k : { ...k, open, full: open && k.full };
+}
+
+/** The panel's column as the window draws it and the right side reads it: open, its width (0 folded or a sheet), a sheet, full width. Pure. */
+export interface PanelBox {
+  readonly open: boolean;
+  readonly width: number;
+  readonly over: boolean;
+  readonly full: boolean;
+}
+
+/** `k`'s box at its fit (state.ts usePanelFit). Pure. */
+export function boxOf(k: PanelKept, f: PanelFit): PanelBox {
+  return { open: k.open, width: k.open && !f.over ? f.width : 0, over: k.open && f.over, full: k.open && k.full && !f.over };
+}
+
+/** Where `k` stands in a window `win` wide with `left` (rail and sidebar), `artKind` the kind of the artifact in front (none: another tab). Pure. */
+export function fitOf(k: PanelKept, artKind: string | undefined, win: number, left: number): PanelFit {
+  const fit = artKind === undefined ? fitW(k.width, win, left) : artFit(shareOf(artKind, k.shares), win, left);
+  return k.open && k.full ? fullFit(fit, win, left) : fit;
+}
+
+/** `what` opens in a tab (an open one comes to the front), the panel unfolds; `before`: what was in front, when that changed (esc goes back to it). Pure. */
+export function openKept(k: PanelKept, what: TabWhat, instead?: string): { readonly kept: PanelKept; readonly before: Before | null } {
+  const recent = what.kind === 'thing' ? pushRecent(k.recent, what.e) : k.recent;
+  const tabs = openIn(k.tabs, what, instead);
+  // a page newly opened may widen the panel once (widenFor); an open one coming to the front doesn't
+  const isNew = !k.tabs.list.some((t) => t.id === tabs.active);
+  const before = !k.open || tabs.active !== k.tabs.active ? { open: k.open, active: k.tabs.active } : null;
+  return { kept: withOpen({ ...k, open: true, tabs, recent, width: isNew ? widenFor(k, what) : k.width }), before };
+}
+
+/** The tab `id` closes (its ×, ⌘W): the last one folds the panel. Pure. */
+export function closeKept(k: PanelKept, id: string): PanelKept {
+  return withOpen({ ...k, tabs: closeIn(k.tabs, id) });
+}
+
+/** Esc on the tab `id` (closeBack): the panel as it was before the tab came, folded when nothing is left. Pure. */
+export function closeBackKept(k: PanelKept, id: string, before: Before | undefined): PanelKept {
+  const b = closeBack(k.tabs, id, before);
+  return withOpen({ ...k, tabs: b.tabs, open: b.open });
 }
 
 /**

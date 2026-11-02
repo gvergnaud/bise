@@ -33,3 +33,7 @@ export { createOuterWidth, type OuterWidth } from '@/app/side3d/outerwidth';
 export { sideLayout, type CoinsAt } from '@/app/side3d/layout';
 export { leftWidthOf } from '@/app/frame-state';
 export { SIDE } from '@/app/resize';
+// the tabbed panel's own pure steps (panel/model.ts) and the page band beside the right side (app/pagecol.ts)
+export { FOLDED, boxOf, closeBackKept, closeKept, fitOf, openKept, type Before, type PanelKept } from '@/app/panel/model';
+export { THREAD_KEEPS, sideShows as rightSideShows } from '@/app/side3d/layout';
+export { pageBand } from '@/app/pagecol';

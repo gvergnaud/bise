@@ -18,7 +18,7 @@ const subs = new Set<() => void>();
 
 /** Put a new layout (SideHost's); its readers hear it only when a place changed. */
 export function setSideLayout(next: SideLayout): void {
-  if (next.colLeft === now.colLeft && next.colW === now.colW && next.world === now.world && next.gutter === now.gutter && next.side === now.side && next.coins === now.coins && next.right === now.right && next.outerW === now.outerW) return;
+  if (next.colLeft === now.colLeft && next.colW === now.colW && next.world === now.world && next.gutter === now.gutter && next.side === now.side && next.coins === now.coins && next.right === now.right && next.outerW === now.outerW && next.bandL === now.bandL) return;
   now = next;
   for (const f of [...subs]) f();
 }
