@@ -1,6 +1,6 @@
 // A plugin's icon in the plugins place: one tile for every icon (ui-review #4: the same frame and
-// mass), its office object inside (bims-link's objectOf(row, picks), drawn small by render.ts
-// through bims-objects' makeObject), dimmed when off, with its '?' / '✗' badge, each explaining
+// mass), its office object inside (bims-link's objectOf(row, picks), drawn by render.ts through
+// bims-objects' makeObject at its shown size x the screen's ratio, 2x at least), dimmed when off, with its '?' / '✗' badge, each explaining
 // itself on hover. Until the object is drawn, and for good without WebGL or for a row that brings
 // none, the same tile holds the title's capital initial (MonoTile, also the band's for a connector
 // with no row). Takes the row as is (bims-link m_40142: its pick, its count and its badges come
@@ -10,10 +10,15 @@ import type { Plugin } from '@/proto';
 import { settings } from '@/proto/words.gen';
 import { useIconUrl, usePicks } from './icons';
 import { badgeOf, titleOf } from './model';
-import { iconObject } from './spots';
+import { iconObject, iconScale } from './spots';
 
-/** the object's css size inside its tile: a row's (tile 40), the plugin page's head (tile 56) */
-const PX = { row: 32, head: 48 } as const;
+/** the object's css size: a row's (in its tile 40), the plugin page's head (shown in the banner's
+ * visual box at its full height, tokens.css --h-banner-vis 176; drawn smaller it was upscaled and
+ * blurred, Gabriel m_52286) */
+const PX = { row: 32, head: 176 } as const;
+
+/** device px per css px for this screen's icons (2x at least) */
+const scaleNow = (): number => iconScale(typeof window === 'undefined' ? 1 : window.devicePixelRatio);
 
 /** 'Linear' -> 'L', 'image generation' -> 'I', 'élan' -> 'É', '' -> '?'. Pure. */
 export function initialOf(title: string): string {
@@ -37,7 +42,7 @@ export function PluginIcon({ row, project, size = 'row', lit = false, testId }: 
   const o = iconObject(row, picks, lit);
   // off: drawn solid and dimmed by the tile (.glass, half), never in glass, which all but vanished
   // in dark (ui-review #15); the room keeps its glass
-  const url = useIconUrl(o === null ? null : { ...o, glass: false }, PX[size]);
+  const url = useIconUrl(o === null ? null : { ...o, glass: false }, PX[size], scaleNow());
   return (
     <span className={`plg-icon ${size}${row.on || lit || row.state === 'available' ? '' : ' glass'}`} data-kind={row.kind} data-obj={url === null ? undefined : o?.obj}
       aria-hidden={badge === null || undefined} data-testid={testId}>

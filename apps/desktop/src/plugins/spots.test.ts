@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PluginObject } from '@/bims/plugin-objects';
 import type { ObjId } from '@/bims/render/objects/ids';
-import { iconKey, iconObject, planRoom, seedOf, SPOTS, type Foot } from './spots';
+import { iconKey, iconObject, iconScale, planRoom, seedOf, SPOTS, type Foot } from './spots';
 
 const obj = (key: string, id: ObjId, glass = false): PluginObject => ({ key, names: [key], obj: id, glass, pill: null, picked: false });
 /** every object 1 x 1 but the library (3 x 0.6), the calendar on the wall */
@@ -84,5 +84,10 @@ describe('iconObject', () => {
   it('keys an icon by its object, count, glass and size', () => {
     expect(iconKey({ obj: 'rack', n: 3, glass: true }, 40)).toBe('rack|3|g|0|40');
     expect(iconKey({ obj: 'shelf', glass: false, seed: 4 }, 56)).toBe('shelf|||4|56');
+    expect(iconKey({ obj: 'shelf', glass: false }, 176, 3)).toBe('shelf|||0|176@3x');
+  });
+
+  it('draws an icon at 2x at least, the screen ratio rounded up past it, 3x at most', () => {
+    expect([1, 1.5, 2, 2.5, 3, 4, 0, Number.NaN].map(iconScale)).toEqual([2, 2, 2, 3, 3, 3, 2, 2]);
   });
 });

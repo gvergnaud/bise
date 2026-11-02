@@ -89,11 +89,12 @@ function theIconView(): View {
 }
 
 /**
- * One object's icon, `px` css px square, drawn at 2x: a PNG data URL, the same one for every row
- * with that object, count and glass. Throws when there is no WebGL (the caller draws the plain tile).
+ * One object's icon, `px` css px square, drawn at `scale`x (2 by default; spots.ts iconScale): a PNG
+ * data URL, the same one for every row with that object, count, glass and size. Throws when there
+ * is no WebGL (the caller draws the plain tile).
  */
-export function iconOf(o: Pick<IconObject, 'obj' | 'n' | 'glass' | 'seed'>, px: number): string {
-  const key = iconKey(o, px);
+export function iconOf(o: Pick<IconObject, 'obj' | 'n' | 'glass' | 'seed'>, px: number, scale = 2): string {
+  const key = iconKey(o, px, scale);
   const had = icons.get(key);
   if (had !== undefined) return had;
   const v = theIconView();
@@ -102,7 +103,7 @@ export function iconOf(o: Pick<IconObject, 'obj' | 'n' | 'glass' | 'seed'>, px: 
   const b = new Box3().setFromObject(made.group);
   const floor = shadowFloor(Math.max(1, (b.max.x - b.min.x) * 2), Math.max(1, (b.max.z - b.min.z) * 2));
   v.scene.add(made.group, floor);
-  const fit = tightFit(b, px * 2);
+  const fit = tightFit(b, Math.round(px * scale));
   v.renderer.setSize(fit.widthPx, fit.heightPx, false);
   v.look(fit);
   v.render();

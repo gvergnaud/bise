@@ -144,7 +144,13 @@ function defaultIcon(row: PluginRow): PluginObject {
   return { key: row.id ?? row.name, names: [row.title !== undefined && row.title !== null && row.title !== '' ? row.title : row.name], obj: d.obj, ...(d.n === undefined ? {} : { n: d.n }), glass: false, pill: null, picked: false };
 }
 
-/** The cache key of one icon's render. */
-export function iconKey(o: Pick<IconObject, 'obj' | 'n' | 'glass' | 'seed'>, px: number): string {
-  return `${o.obj}|${o.n ?? ''}|${o.glass ? 'g' : ''}|${o.seed ?? 0}|${px}`;
+/** The cache key of one icon's render: `px` css px square, drawn at `scale` device px per css px. */
+export function iconKey(o: Pick<IconObject, 'obj' | 'n' | 'glass' | 'seed'>, px: number, scale = 2): string {
+  return `${o.obj}|${o.n ?? ''}|${o.glass ? 'g' : ''}|${o.seed ?? 0}|${px}${scale === 2 ? '' : `@${scale}x`}`;
+}
+
+/** How many device px an icon gets per css px on this screen: 2 at least (a 1x screen gets 2x for
+ * free, the same PNG as on retina), the screen's ratio rounded up past it (3 on a 3x screen). */
+export function iconScale(dpr: number): number {
+  return Math.max(2, Math.min(3, Math.ceil(Number.isFinite(dpr) && dpr > 0 ? dpr : 1)));
 }

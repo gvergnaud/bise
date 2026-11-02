@@ -22,7 +22,7 @@ export function usePicks(project: string | undefined): Picks {
 const drawn = new Map<string, string>();
 let dead = false;
 let loading: Promise<Render> | null = null;
-const queue: { key: string; o: Pick<IconObject, 'obj' | 'n' | 'glass' | 'seed'>; px: number; done: (url: string | null) => void }[] = [];
+const queue: { key: string; o: Pick<IconObject, 'obj' | 'n' | 'glass' | 'seed'>; px: number; scale: number; done: (url: string | null) => void }[] = [];
 let pumping = false;
 
 /** how long a frame may spend drawing icons, ms */
@@ -38,7 +38,7 @@ function pump(r: Render): void {
       let url = drawn.get(job.key) ?? null;
       if (url === null && !dead) {
         try {
-          url = r.iconOf(job.o, job.px);
+          url = r.iconOf(job.o, job.px, job.scale);
           drawn.set(job.key, url);
         } catch {
           dead = true;
@@ -51,9 +51,9 @@ function pump(r: Render): void {
   });
 }
 
-function ask(o: Pick<IconObject, 'obj' | 'n' | 'glass' | 'seed'>, px: number, done: (url: string | null) => void): void {
-  const key = iconKey(o, px);
-  queue.push({ key, o, px, done });
+function ask(o: Pick<IconObject, 'obj' | 'n' | 'glass' | 'seed'>, px: number, scale: number, done: (url: string | null) => void): void {
+  const key = iconKey(o, px, scale);
+  queue.push({ key, o, px, scale, done });
   loading ??= import('./render');
   loading.then(
     (r) => {
@@ -66,21 +66,22 @@ function ask(o: Pick<IconObject, 'obj' | 'n' | 'glass' | 'seed'>, px: number, do
   );
 }
 
-/** the object's icon as a data URL once drawn; null: not yet, or never (the plain tile) */
-export function useIconUrl(o: IconObject | null, px: number): string | null {
-  const key = o === null ? null : iconKey(o, px);
+/** the object's icon, `px` css px square drawn at `scale`x, as a data URL once drawn; null: not
+ * yet, or never (the plain tile) */
+export function useIconUrl(o: IconObject | null, px: number, scale = 2): string | null {
+  const key = o === null ? null : iconKey(o, px, scale);
   // bumped when an asked icon comes back drawn (or never): the render reads `drawn` again
   const [, setTick] = useState(0);
   useEffect(() => {
     if (o === null || key === null || dead || drawn.has(key)) return;
     let live = true;
-    ask(o, px, () => {
+    ask(o, px, scale, () => {
       if (live) setTick((n) => n + 1);
     });
     return () => {
       live = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the key says all of o and px
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the key says all of o, px and scale
   }, [key]);
   return key === null ? null : (drawn.get(key) ?? null);
 }
