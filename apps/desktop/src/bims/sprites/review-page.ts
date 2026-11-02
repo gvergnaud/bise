@@ -19,7 +19,7 @@ import { OUTFIT_BIMS, clipperOf, posesOf } from '../render/outfits.testkit';
 import { STYLE } from '../render/style';
 import { makeView, type View } from '../render/view';
 import { castShadows, lightOffice } from '../render/world';
-import type { Pose } from '../model';
+import type { MapId, Pose } from '../model';
 import type { Feature } from '../parkpath';
 import { FOLLOW_ZOOM } from '../focus';
 import { kitOf } from '../render/kit';
