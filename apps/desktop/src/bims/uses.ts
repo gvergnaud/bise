@@ -150,6 +150,14 @@ export function standSpotsOf(o: Office, p: Placed, all: readonly Placed[], reach
   const fx = Math.sin(p.rot);
   const fz = Math.cos(p.rot);
   const seats = [...o.desks.values(), o.mainDesk];
+  // the tall pieces round the room (its lamps and plants): the middles of their boxes
+  const tall = (c ? [...c.lamps, ...c.plants] : []).map(({ box: x }) => ({ x: (x.x0 + x.x1) / 2, z: (x.z0 + x.z1) / 2 }));
+  // q between the camera (+x +z) and a bim at p, within a body and a half across the view
+  const screened = (p: Pt, q: Pt): boolean => {
+    const ahead = (q.x - p.x + (q.z - p.z)) / Math.SQRT2;
+    const across = Math.abs(q.x - p.x - (q.z - p.z)) / Math.SQRT2;
+    return ahead > 0 && ahead < 2 && across < 3 * BODY;
+  };
   const found: { s: Spot; d: number; i: number; way: readonly Pt[] }[] = [];
   // how far a point is from a box (0 inside)
   const off = (q: Pt, x: Box): number => Math.hypot(Math.max(x.x0 - q.x, 0, q.x - x.x1), Math.max(x.z0 - q.z, 0, q.z - x.z1));
@@ -186,6 +194,8 @@ export function standSpotsOf(o: Office, p: Placed, all: readonly Placed[], reach
       // (a low table hides no one: none for it); right behind it, never
       const back = side === 'ends' ? 0 : -(dx + dz) / Math.SQRT2;
       if (back > 0.4) continue;
+      // nor right behind a tall piece seen from the camera (a floor lamp, a plant: designer m_52181)
+      if (tall.some((q) => screened(at, q))) continue;
       const hidden = Math.max(0, back) * 1.5;
       const d = net.d * 0.5 + turn + hidden + more * 3;
       found.push({ s: { x: at.x, z: at.z, wz: at.z, ax: at.x, face: Math.atan2(cx - at.x, cz - at.z) }, d, i, way });
