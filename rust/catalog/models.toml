@@ -404,6 +404,7 @@ output_price = 1.5
 cache_read_price = 0.05
 
 [models."mistral/codestral-latest"]
+vision = false
 context = 256000
 input_price = 0.3
 output_price = 0.9
@@ -411,6 +412,7 @@ cache_read_price = 0.03
 
 # the vibe CLI's model: reasoning_effort "high" rides its calls (BISE-145)
 [models."mistral/zai-glm-5-3"]
+vision = false
 reasoning = true
 context = 1048576
 
@@ -495,11 +497,13 @@ input_price = 3
 output_price = 15
 
 [models."openrouter/z-ai/glm-5.3"]
+vision = false
 context = 1048576
 input_price = 1.4
 output_price = 4.4
 
 [models."openrouter/deepseek/deepseek-v4-pro-0813"]
+vision = false
 context = 1048576
 input_price = 0.66
 output_price = 1.98
@@ -535,6 +539,7 @@ max_output = 65536
 reasoning = true
 
 [models."groq/openai/gpt-oss-120b"]
+vision = false
 input_price = 0.15
 output_price = 0.6
 
@@ -546,6 +551,7 @@ input_price = 0.8
 output_price = 4
 
 [models."groq/openai/gpt-oss-20b"]
+vision = false
 input_price = 0.075
 output_price = 0.3
 
@@ -622,6 +628,9 @@ reasoning = true
 
 # V4 Pro 0813
 [models."deepseek/deepseek-v4-pro"]
+# text only: api-docs.deepseek.com/guides/vision names deepseek-flash
+# alone for images (checked 2026-11-02)
+vision = false
 input_price = 1.32
 output_price = 3.96
 cache_read_price = 0.044
@@ -653,6 +662,7 @@ context = 1048576
 reasoning = true
 
 [models."together/zai-org/GLM-5.3"]
+vision = false
 input_price = 1.4
 output_price = 4.4
 cache_read_price = 0.26
@@ -664,22 +674,30 @@ output_price = 15
 cache_read_price = 0.3
 
 [models."together/deepseek-ai/DeepSeek-V4-Pro-0813"]
+vision = false
 input_price = 1.32
 output_price = 3.96
 cache_read_price = 0.13
 
 [models."together/MiniMaxAI/MiniMax-M3"]
+# together.ai/models/minimax-m3: "supports image and video input"
+# (checked 2026-11-02)
+vision = true
 context = 524288
 input_price = 0.3
 output_price = 1.2
 cache_read_price = 0.06
 
 [models."together/zai-org/GLM-5.3-Flash"]
+# together.ai/models/glm-5-3-flash: "supports text and image input"
+# (checked 2026-11-02; GLM-5.3 itself is text only)
+vision = true
 input_price = 0.15
 output_price = 0.5
 cache_read_price = 0.03
 
 [models."together/openai/gpt-oss-120b"]
+vision = false
 context = 131072
 input_price = 0.15
 output_price = 0.6
@@ -707,6 +725,7 @@ context = 1048576
 reasoning = true
 
 [models."fireworks/accounts/fireworks/models/glm-5p3"]
+vision = false
 
 [models."fireworks/accounts/fireworks/models/kimi-k3"]
 vision = true
@@ -716,6 +735,7 @@ context = 262144
 vision = true
 
 [models."fireworks/accounts/fireworks/models/deepseek-v4-pro"]
+vision = false
 
 [models."fireworks/accounts/fireworks/models/minimax-m3"]
 vision = true
@@ -744,8 +764,12 @@ context = 131072
 reasoning = true
 
 [models."cerebras/gpt-oss-120b"]
+vision = false
 
 [models."cerebras/qwen-3.8-27b"]
+# inference-docs.cerebras.ai/models/qwen-3.8-27b: "accepts text and
+# image inputs" on chat completions (checked 2026-11-02)
+vision = true
 context = 128000
 
 # ---- coding plans: a plan's API key and its coding endpoint ----
@@ -770,8 +794,12 @@ small_model = "glm-5.3-flash"
 context = 1048576
 
 [models."zai-coding/glm-5.3"]
+vision = false
 
+# docs.z.ai/guides/vlm/glm-5.3-flash: native image input, image_url
+# parts (checked 2026-11-02; GLM-5.3 itself is text only)
 [models."zai-coding/glm-5.3-flash"]
+vision = true
 
 # Checked 2026-10-03: kimi.com/en/help/kimi-code/membership-guide (the
 # OpenAI-compatible base URL https://api.kimi.com/coding/v1; "always use
@@ -787,6 +815,10 @@ base_url = "https://api.kimi.com/coding/v1"
 key_env = "KIMI_API_KEY"
 
 [models."kimi-code/kimi-for-coding"]
+# Kimi's latest model (K3: platform.kimi.ai/docs/guide/use-kimi-vision-model);
+# moonshotai.github.io/kimi-cli: image input on by default for a Kimi
+# Code account (checked 2026-11-02)
+vision = true
 
 # Checked 2026-10-03: platform.minimax.io/docs/api-reference/text-openai-api
 # (OpenAI-compatible at https://api.minimax.io/v1, the same URL for the

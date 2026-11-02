@@ -505,6 +505,7 @@ A deleted file is read with `git show 6f9114127:<path>` (the tree before the cul
 | `idle_exit_e2e` | KEEP | a hub with no UI stops by itself, nothing lost (process lifecycle) |
 | `image_tag_e2e` | TRANSFORM | one process's decision or format: no seam needs the real hub |
 | `images_mem_e2e` | KEEP | repl-live's real heap with 20 images (the file parts' streaming): no cheap unit (KEEP, min-tests, main m_37200; run_all, ~10 s) |
+| `images_blind_e2e` | KEEP | the models file Rust hands to a real repl-live (`vision = false`) and the body it sends: no image part, the text names the image and the model (PR #28, architect m_52352; run_all, ~5 s) |
 | `images_prune_e2e` | TRANSFORM | one process's decision or format: no seam needs the real hub |
 | `interrupt_e2e` | KEEP | a stop ends the turn in under 1 s mid-stream (hub → REPL flag, real stream) |
 | `land_every_e2e` | KEEP | nothing moves main without the land check (real git + gate) |

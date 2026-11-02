@@ -157,7 +157,7 @@ TESTS="e2e subscriptions_e2e approvals_e2e approvals_sandbox_e2e socket_auth_e2e
 tui_card_image_tmux
 tui_onboarding_tmux subscriptions_tui_tmux tui_reload_tmux tui_keep_state_tmux tui_release_tmux tui_update_tmux tui_voice_tmux tui_mcp_login_tmux interrupt_e2e compact_resume_e2e partial_e2e
 hub_stall_e2e send_latency_e2e wake_e2e desktop_app_test ambient_qa_world_test
-tui_term_tmux tui_running_tmux images_mem_e2e skills_hang_e2e"
+tui_term_tmux tui_running_tmux images_mem_e2e images_blind_e2e skills_hang_e2e"
 [ -n "$only" ] && TESTS="$only"
 [ "$picked" = 1 ] && TESTS="$pick"
 if [ -z "$(echo $TESTS)" ]; then echo "== no e2e/tmux test picked for this change"; rust_wait || exit 1; exit 0; fi

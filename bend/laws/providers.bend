@@ -91,23 +91,29 @@ law provider_unlisted_model_works:
     == Pv.ROk{Pv.Prov{"mistral", "brand-new-7b", Api.OpenAI{},
       "https://api.mistral.ai/v1/chat/completions", "MISTRAL_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "", False{}}}} : Pv.Resolved}
 
-# LAW: a model the models file lists without vision (`vision = false`
-# of its own, what the Rust handoff writes for every listed no-vision
-# model) is blind; one the file does not list is the provider's to
-# decide - nothing is stripped on a guess (Catalog::vision's rule).
+# LAW: a model the models file lists with its own `vision = false` (the
+# text the Rust handoff writes for every listed model, pinned by
+# rust/catalog tests.rs the_handoff_says_each_listed_models_vision) is
+# blind; one the file lists with vision, or does not list at all, is
+# not - its provider's line is never read, nothing is stripped on a
+# guess (Catalog::vision's rule).
 law provider_blind_is_a_listed_vision_false:
-  {(Pv.model_blind("
-[models.\"ai-gw/glm-5-3\"]
-vision = false
-", "ai-gw", "ai-gw/glm-5-3"),
-    Pv.model_blind("
+  {(Pv.model_blind(Pv.registry("
 [providers.ai-gw]
 vision = false
-", "ai-gw", "ai-gw/unlisted"),
-    Pv.model_blind("
+
+[models.\"ai-gw/glm-5-3\"]
+context = 99000
+vision = false
+"), "ai-gw/glm-5-3"),
+    Pv.model_blind(Pv.registry("
+[providers.ai-gw]
+vision = false
+"), "ai-gw/unlisted"),
+    Pv.model_blind(Pv.registry("
 [models.\"ai-gw/glm-5-3-flash\"]
 vision = true
-", "ai-gw", "ai-gw/glm-5-3-flash"))
+"), "ai-gw/glm-5-3-flash"))
     == (True{}, False{}, False{}) : Bool & Bool & Bool}
 
 # LAW: the choice order (as rust/catalog's Setup): main = BISE_MODEL >

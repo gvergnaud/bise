@@ -1405,14 +1405,17 @@ impl Setup {
             if a.idle_timeout_sec != b.idle_timeout_sec {
                 o.push_str(&format!("idle_timeout_sec = {}\n", a.idle_timeout_sec));
             }
-            // a model the file lists without vision says so always (the
-            // runtime never sends it an image part: a provider behind a
-            // gateway refuses the whole request for one); a listed model
-            // with vision says so only when its provider's line would
-            // not (the entry marks the model as listed, Catalog::vision)
-            if !a.vision || a.vision != b.vision {
-                o.push_str(&format!("vision = {}\n", a.vision));
-            }
+            // every listed model says its own `vision = true|false`, even
+            // when its provider's line says the same: the runtime never
+            // sends an image part to a model whose own line says false (a
+            // provider behind a gateway refuses the whole request for
+            // one), and a model the file does not list has no line (its
+            // provider decides, Catalog::vision). The runtime reads the
+            // line, never this inheritance (bend/runtime/provider-pure.bend
+            // model_blind; pinned by tests.rs
+            // the_handoff_says_each_listed_models_vision and the law
+            // provider_blind_is_a_listed_vision_false)
+            o.push_str(&format!("vision = {}\n", a.vision));
             for (k, x, y) in [
                 ("reasoning", a.reasoning, b.reasoning),
                 ("tools", a.tools, b.tools),

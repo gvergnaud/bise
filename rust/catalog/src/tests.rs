@@ -384,11 +384,11 @@ fast = "groq/openai/gpt-oss-120b"
 
 #[test]
 fn the_handoff_is_small_and_flat_for_the_bend_reader() {
-    // every listed no-vision model carries its own `vision = false` line
-    // (the runtime's marker of a model listed without vision: its image
-    // parts are never sent), so the file grew past the old 500
+    // every listed model carries its own `vision` line (the runtime's
+    // marker of a model listed without vision: its image parts are never
+    // sent), so the file grew past the old 500
     let text = Setup::from_text(None, &no_env).handoff_toml();
-    assert!(text.lines().count() < 560, "{} lines", text.lines().count());
+    assert!(text.lines().count() < 600, "{} lines", text.lines().count());
     // core/config.bend: one `key = value` per line, [section] headers,
     // # comments; no inline tables, arrays or multi-line strings
     for l in text.lines() {
@@ -399,8 +399,48 @@ fn the_handoff_is_small_and_flat_for_the_bend_reader() {
         let (_, v) = l.split_once(" = ").unwrap_or_else(|| panic!("{l}"));
         assert!(!v.starts_with('{') && !v.starts_with('[') && !v.starts_with("\"\"\""), "{l}");
     }
-    // a model section only carries what differs from its provider
+    // a model section only carries what differs from its provider, and
+    // its own vision line
     assert!(text.contains("[models.\"fireworks/accounts/fireworks/models/kimi-k3\"]\nvision = true\n\n"), "{text}");
+}
+
+/// The lines of the handoff's `[models."<name>"]` section.
+fn model_section<'a>(text: &'a str, name: &str) -> Vec<&'a str> {
+    let head = format!("[models.\"{name}\"]");
+    text.lines().skip_while(|l| *l != head).skip(1).take_while(|l| !l.starts_with('[')).collect()
+}
+
+// The seam of a model listed without vision (PR #28): the runtime sends no
+// image part to a model whose own section says `vision = false`, so every
+// listed model says its own line, even one its provider's line already
+// says, and an unlisted model has none (its provider decides). The Bend
+// side reads the same text: bend/laws/providers.bend
+// provider_blind_is_a_listed_vision_false.
+#[test]
+fn the_handoff_says_each_listed_models_vision() {
+    let s = setup(
+        r#"
+[providers.gw]
+base_url = "https://gw.example/v1"
+key_env = "GW"
+[models."gw/glm-5-3"]
+context = 99000
+[models."gw/claude"]
+vision = true
+"#,
+    );
+    let text = s.handoff_toml();
+    // the provider says false and so does the model: still its own line
+    assert!(text.contains("[providers.gw]"), "{text}");
+    assert_eq!(model_section(&text, "gw/glm-5-3"), ["context = 99000", "vision = false", ""], "{text}");
+    assert!(model_section(&text, "gw/claude").contains(&"vision = true"), "{text}");
+    assert!(!text.contains("gw/unlisted"), "{text}");
+    // every listed chat model of the built-in catalog, one line each
+    for m in s.catalog.models.iter().filter(|m| !m.stt) {
+        let want = format!("vision = {}", s.catalog.resolve(&m.name()).caps.vision);
+        let sec = model_section(&text, &m.name());
+        assert_eq!(sec.iter().filter(|l| l.starts_with("vision = ")).collect::<Vec<_>>(), [&want.as_str()], "{}", m.name());
+    }
 }
 
 #[test]

@@ -186,8 +186,8 @@ def model_key(+reg: List<&2, Cf.KV>, +prov: String, +id: String,
 type CNames is Data:
   CN{field: String, header: String}
 
-def cache_names(+file: String, +prov: String, +id: String) -> CNames:
-  +reg = registry(file)
+def cache_names(+reg: List<&2, Cf.KV>, +prov: String, +id: String)
+    -> CNames:
   CN{Cf.cfg_or(model_key(reg, prov, id, "cache_key"), ""),
     Cf.cfg_or(model_key(reg, prov, id, "cache_header"), "")}
 
@@ -436,16 +436,17 @@ def facts(+reg: List<&2, Cf.KV>, +prov: String, +id: String, +asked: String)
     is_plan_shape(Cf.cfg_or(model_key(reg, prov, id, "shape"), ""))}
 
 # ---- a model listed without vision ----
-# The models file writes every listed no-vision model a `vision = false`
-# of its own (Rust, Catalog::vision's rule): a model it names this way
-# never gets an image part (runtime/provider.bend img_body), because the
-# provider behind a gateway refuses the whole request for one (the
-# Datadog one: "Image input is not supported for this endpoint"). A
-# model the file does not list (no models."id".vision line, nor any
-# other: the handoff writes none) is the provider's to decide: nothing
-# is stripped on a guess.
-def model_blind(+file: String, +prov: String, +id: String) -> Bool:
-  String.eq(Cf.cfg_or(Cf.cfg_find(registry(file),
+# The models file writes every listed model its own `vision = true|false`
+# (Rust handoff_toml, pinned by rust/catalog tests.rs
+# the_handoff_says_each_listed_models_vision): a model whose own line
+# says false never gets an image part (runtime/provider.bend img_body),
+# because the provider behind a gateway refuses the whole request for
+# one (the Datadog one: "Image input is not supported for this
+# endpoint"). The provider's line is never read here: a model the file
+# does not list has no line and is the provider's to decide, nothing is
+# stripped on a guess. `reg` is the registry the request already read.
+def model_blind(+reg: List<&2, Cf.KV>, +id: String) -> Bool:
+  String.eq(Cf.cfg_or(Cf.cfg_find(reg,
     String.concat(["models.\"", id, "\".vision"])), ""), "false")
 
 def resolve.family(m: Maybe<&2, Api.Style>, +api: String, +prov: String,

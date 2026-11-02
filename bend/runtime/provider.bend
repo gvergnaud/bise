@@ -673,16 +673,17 @@ def request_body(+request: String, +pv: Pvp.Prov, +limit: Nat) -> IO(Built):
         osr : Result<&1, &1, U32 & String, String> <- IO.get_env("BISE_ONESHOT")
         +wreq : W.WReq <- IO.pure(W.WReq, W.parse_wire(request))
         +mfile : String <- models_file()
+        # the models file read once: the cache names and the vision line
+        +reg : List<&2, Cf.KV> <- IO.pure(List<&2, Cf.KV>, Pvp.registry(mfile))
+        +id : String <- IO.pure(String, String.concat([prov, "/", model]))
         +names : Pvp.CNames <- IO.pure(Pvp.CNames,
-          Pvp.cache_names(mfile, prov, String.concat([prov, "/", model])))
+          Pvp.cache_names(reg, prov, id))
         +ckey : String <- IO.pure(String, Api.session_key(wreq))
         +json : String <- IO.pure(String,
           Osp.light_if(Bool.not(String.is_empty(P.env_or(osr, ""))),
             Api.wire_body(st, Api.with_cache_key(Pvp.cache_field(names), ckey,
               Api.api_body_for(st, model, facts, W.pair_wire(wreq))))))
-        +fill : Im.IFill <- img_body(json, limit,
-          Pvp.model_blind(mfile, prov, String.concat([prov, "/", model])),
-          String.concat([prov, "/", model]))
+        +fill : Im.IFill <- img_body(json, limit, Pvp.model_blind(reg, id), id)
         IO.pure(Built, Built{wreq, mfile, names, ckey, json, fill,
           Enc.utf8.encode(fill_body(fill))})
 

@@ -762,7 +762,12 @@ def res_blind(+rs: List<&2, IRes>, +model: String) -> List<&2, IRes>:
 # caller's flag, runtime/provider.bend), else what they were
 def res_blind_if(blind: Bool, +rs: List<&2, IRes>, +model: String)
     -> List<&2, IRes>:
-  Bool.pick(List<&2, IRes>, blind, res_blind(rs, model), rs)
+  # a match, not Bool.pick: a pick builds both lists for every request
+  match blind:
+    case True{}:
+      res_blind(rs, model)
+    case False{}:
+      rs
 
 # the bytes of the good images that go
 def res_bytes(+rs: List<&2, IRes>) -> Nat:
