@@ -247,7 +247,7 @@ function using(how: UseHow, lt: number, ph: number, mouth: Rig['mouth'], props: 
   switch (how) {
     case 'types':
       // both hands on its keys, tapping in turn, head down to them
-      return { ...STAND, mouth, armL: [-1.25 + Math.max(0, s(12)) * 0.12, 0, 0.12], armR: [-1.25 + Math.max(0, s(12, Math.PI)) * 0.12, 0, -0.12], head: [0.3, 0, 0], body: [0.12, 0, 0], props };
+      return { ...STAND, mouth, armL: [-1.25 + Math.max(0, s(12)) * 0.12, 0, 0.12], armR: [-1.25 + Math.max(0, s(12, Math.PI)) * 0.12, 0, -0.12], head: [0.3, 0, 0], body: [0.04, 0, 0], props };
     case 'reads':
       // a hand up to its shelf, the other at its side, head going along the spines
       return { ...STAND, mouth, armR: [-2.1 + s(1.2) * 0.1, 0, -0.15], armL: [-0.2, 0, 0.1], head: [-0.12, s(0.8) * 0.3, 0], props };
@@ -259,7 +259,7 @@ function using(how: UseHow, lt: number, ph: number, mouth: Rig['mouth'], props: 
       return { ...STAND, mouth: 'laugh', armL: [-1.4 + s(9) * 0.18, 0, 0.2], armR: [-1.4 + s(9, 1.7) * 0.18, 0, -0.2], body: [0.08, 0, s(4) * 0.04], head: [0.15, 0, 0], y: -Math.abs(s(4)) * 0.02, props };
     case 'tends':
       // leans in, a hand out patting it gently
-      return { ...STAND, mouth, armR: [-1.0 + s(3) * 0.15, 0, -0.1], armL: [-0.3, 0, 0.1], body: [0.25, 0, 0], head: [0.25, 0, 0], props };
+      return { ...STAND, mouth, armR: [-1.0 + s(3) * 0.15, 0, -0.1], armL: [-0.3, 0, 0.1], body: [0.08, 0, 0], head: [0.3, 0, 0], props };
   }
 }
 

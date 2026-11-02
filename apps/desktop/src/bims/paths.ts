@@ -39,23 +39,45 @@ export function nearOnNet(legs: readonly Leg[], p: Pt): { readonly d: number; re
   return best;
 }
 
+/** the ways in to points off an office's network (wayIn): from a point on it, clear legs to the point */
+const ways = new WeakMap<Office, Map<string, readonly Pt[]>>();
+const wayKey = (p: Pt): string => `${p.x.toFixed(4)},${p.z.toFixed(4)}`;
+
+/**
+ * Says how a walk reaches a point off this office's network (a plugin object's use spot, uses.ts):
+ * `way` from a point on the network to it, each leg clear (uses.ts checks). path() walks it, there
+ * and back. The same office and way: the same walks.
+ */
+export function wayIn(o: Office, way: readonly Pt[]): void {
+  const end = way.at(-1);
+  if (end === undefined) return;
+  let m = ways.get(o);
+  if (m === undefined) {
+    m = new Map();
+    ways.set(o, m);
+  }
+  m.set(wayKey(end), way);
+}
+
 /**
  * The shortest walk from `from` (a point on the network: a spot, or a point along a walk) to
- * `to` (a spot or a point on the network). An end off the network (a plugin object's use spot,
- * uses.ts, which keeps that step clear): a straight step between it and its nearest point there.
+ * `to` (a spot or a point on the network). An end off the network: its way in (wayIn), else a
+ * straight step between it and its nearest point there.
  */
 export function path(o: Office, from: Pt, to: Pt): Path {
   if (near(from, to)) return makePath([from]);
   const net = netOf(o);
-  const off = (p: Pt): Pt | null => {
+  const off = (p: Pt): readonly Pt[] | null => {
     if (net.nodes.some((n) => near(n, p)) || net.legs.some((l) => onLeg(l, p))) return null;
+    const way = ways.get(o)?.get(wayKey(p));
+    if (way !== undefined && way.length >= 2) return way;
     const q = nearOnNet(net.legs, p);
-    return q === null || near(q.at, p) ? null : q.at;
+    return q === null || near(q.at, p) ? null : [q.at, p];
   };
   const toIn = off(to);
-  if (toIn !== null) return makePath([...path(o, from, toIn).pts, to]);
+  if (toIn !== null) return makePath([...path(o, from, toIn[0] as Pt).pts, ...toIn.slice(1)]);
   const fromIn = off(from);
-  if (fromIn !== null) return makePath([from, ...path(o, fromIn, to).pts]);
+  if (fromIn !== null) return makePath([...[...fromIn].reverse(), ...path(o, fromIn[0] as Pt, to).pts.slice(1)]);
   const a = locate(net, from);
   const b = locate(net, to);
   if (sameLeg(a, b)) return makePath([from, to]);

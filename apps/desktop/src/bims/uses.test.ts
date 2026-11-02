@@ -84,7 +84,8 @@ describe('the trips', () => {
 });
 
 describe('where a bim stands to use an object', () => {
-  const inside = (p: { x: number; z: number }, b: Box): boolean => p.x > b.x0 && p.x < b.x1 && p.z > b.z0 && p.z < b.z1;
+  // its head (render/laptop.ts HEAD_R) and a little air clear of every box, which may stand at head height (a mailbox, a canvas)
+  const inside = (p: { x: number; z: number }, b: Box, m = 0.245 + 0.15): boolean => p.x > b.x0 - m && p.x < b.x1 + m && p.z > b.z0 - m && p.z < b.z1 + m;
 
   it('on every map: clear of every box, near the network, facing the object; most objects have one', () => {
     const out: string[] = [];

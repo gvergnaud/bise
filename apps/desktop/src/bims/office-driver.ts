@@ -18,7 +18,7 @@ import { forcedPokes, notePokes, NO_POKES, pokesAt, pokeWake, roomOf, type Click
 import { uniqueObjects, type PluginObject } from './plugin-objects';
 import { NO_CORNERS, objectSpots, type Corners } from './corners';
 import { GROWS, NO_NEED, either, grownFor, type Need } from './extensions';
-import { APART, NO_TRIPS, nextTrips, pluginOfUse, howUsed, standSpotsOf, type Trips } from './uses';
+import { standApart, NO_TRIPS, nextTrips, pluginOfUse, howUsed, standSpotsOf, type Trips } from './uses';
 
 /** The pure modules a driver runs on: feed.ts's, or fakes in a test. */
 export interface DriverParts {
@@ -341,7 +341,7 @@ export function makeDriver(parts: DriverParts): OfficeDriver {
     for (const [bim, trip] of at) {
       const act = acts.get(bim);
       const p = co.placed.find((q) => q.key === trip.key);
-      const spot = spotsOf(trip.key).find((s) => taken.every((q) => Math.hypot(q.x - s.x, q.z - s.z) >= APART));
+      const spot = spotsOf(trip.key).find((s) => taken.every((q) => standApart(q, s)));
       if (act === undefined || p === undefined || spot === undefined) continue;
       taken.push(spot);
       out.set(bim, { ...act, at: 'object', use: { key: trip.key, obj: p.obj, spot, how: howUsed(p.obj) } });
