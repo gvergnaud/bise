@@ -85,6 +85,37 @@ law image_splice_data:
       Con{Im.IL{"/s/1.b64", "QUJD"}, Nil{}})
     == "{\"d\":\"QUJD\",\"e\":\"\"}" : String}
 
+# LAW: a model the catalog lists without vision gets no image part:
+# every image becomes text that names the model, the bad ones keep
+# their own reason (the request still goes; a provider behind such a
+# model refuses the whole request - the Datadog gateway's 400).
+law image_blind_model_gets_no_image:
+  {Im.res_blind_if(True{},
+      Con{Im.IROk{"a", 4n}, Con{Im.IRBad{"file missing"}, Con{Im.IROk{"b", 4n}, Nil{}}}},
+      "ai-gw/glm-5-3")
+    == Con{Im.IRBad{"not supported by ai-gw/glm-5-3"},
+      Con{Im.IRBad{"file missing"},
+      Con{Im.IRBad{"not supported by ai-gw/glm-5-3"}, Nil{}}}}
+    : List<&2, Im.IRes>}
+
+# LAW: a model that reads images (or one the file does not list) keeps
+# every image part.
+law image_kept_for_a_sighted_model:
+  {Im.res_blind_if(False{},
+      Con{Im.IROk{"a", 4n}, Con{Im.IRBad{"file missing"}, Nil{}}},
+      "ai-gw/glm-5-3")
+    == Con{Im.IROk{"a", 4n}, Con{Im.IRBad{"file missing"}, Nil{}}}
+    : List<&2, Im.IRes>}
+
+# LAW: a model that does not read images (the catalog's `vision` cap) has
+# none sent: the body's image part becomes the text every dropped image
+# becomes, and the request goes without it.
+law image_blind_part_is_text:
+  {Im.body_fill(Im.body_segs("[{\"a\":1},\"@@BENDPART:o|image/png|/s/1.b64|[Image #1]@@\"]"),
+    Im.res_blind(Con{Im.IROk{"QUJD", 4n}, Nil{}}, "ai-gw/glm-5-3"))
+    == "[{\"a\":1},{\"type\":\"text\",\"text\":\"[image unavailable: [Image #1] (not supported by ai-gw/glm-5-3)]\"}]"
+    : String}
+
 # ---- Anthropic per model: prompt caching, thinking, max_tokens (BISE-146) ----
 
 # LAW: prompt caching - four cache_control breakpoints, the API's
