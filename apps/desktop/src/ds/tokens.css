@@ -41,10 +41,10 @@
   --c-err-soft: color-mix(in srgb, var(--p-err) 12%, transparent);
   --c-shadow: color-mix(in srgb, var(--p-shadow) 55%, transparent);
   --c-seg-on: color-mix(in srgb, var(--p-text) 14%, var(--p-chip)); /* the chosen segment: lighter than its --c-sunken track (macOS; designer m_42136) */
-  /* the switch (designer m_44968): a grey track off, a dimmed ink on (never cream, never the pink),
-     a light knob always; hover 4 % more text off, 64 % on */
-  --c-switch-off: color-mix(in srgb, var(--p-text) 20%, var(--p-bg)); --c-switch-off-hover: color-mix(in srgb, var(--p-text) 24%, var(--p-bg));
-  --c-switch-on: color-mix(in srgb, var(--p-text) 58%, var(--p-bg)); --c-switch-on-hover: color-mix(in srgb, var(--p-text) 64%, var(--p-bg));
+  /* the switch: a quiet grey track off (designer m_44968); on = ink, inverted knob (designer m_52208:
+     never the pink, which means 'needs you'); hover 4 % more text off, 92 % on */
+  --c-switch-off: color-mix(in srgb, var(--p-text) 14%, var(--p-bg)); --c-switch-off-hover: color-mix(in srgb, var(--p-text) 18%, var(--p-bg));
+  --c-switch-on: color-mix(in srgb, var(--p-text) 86%, var(--p-bg)); --c-switch-on-hover: color-mix(in srgb, var(--p-text) 92%, var(--p-bg));
   --c-knob: #f4efe6; --sh-knob: 0 1px 3px rgb(0 0 0 / .5);
   --t-11: .71875rem; /* the floor: 11.5 px, nothing smaller (ambient m_8298) */ --t-12: .75rem; --t-13: .8125rem; --t-14: .875rem; --t-15: .9375rem; --t-17: 1.0625rem; --t-22: 1.375rem; --t-30: 1.875rem;
   --lh-ui: 1.35; --lh-read: 1.55;
@@ -196,10 +196,10 @@
   --c-err-soft: color-mix(in srgb, var(--p-err) 12%, transparent);
   --c-shadow: color-mix(in srgb, var(--p-shadow) 55%, transparent);
   --c-seg-on: color-mix(in srgb, var(--p-text) 14%, var(--p-chip)); /* the chosen segment: lighter than its --c-sunken track (macOS; designer m_42136) */
-  /* the switch (designer m_44968): a grey track off, a dimmed ink on (never cream, never the pink),
-     a light knob always; hover 4 % more text off, 64 % on */
-  --c-switch-off: color-mix(in srgb, var(--p-text) 20%, var(--p-bg)); --c-switch-off-hover: color-mix(in srgb, var(--p-text) 24%, var(--p-bg));
-  --c-switch-on: color-mix(in srgb, var(--p-text) 58%, var(--p-bg)); --c-switch-on-hover: color-mix(in srgb, var(--p-text) 64%, var(--p-bg));
+  /* the switch: a quiet grey track off (designer m_44968); on = ink, inverted knob (designer m_52208:
+     never the pink, which means 'needs you'); hover 4 % more text off, 92 % on */
+  --c-switch-off: color-mix(in srgb, var(--p-text) 14%, var(--p-bg)); --c-switch-off-hover: color-mix(in srgb, var(--p-text) 18%, var(--p-bg));
+  --c-switch-on: color-mix(in srgb, var(--p-text) 86%, var(--p-bg)); --c-switch-on-hover: color-mix(in srgb, var(--p-text) 92%, var(--p-bg));
   --c-knob: #f4efe6; --sh-knob: 0 1px 3px rgb(0 0 0 / .5);
   --t-11: .71875rem; /* the floor: 11.5 px, nothing smaller (ambient m_8298) */ --t-12: .75rem; --t-13: .8125rem; --t-14: .875rem; --t-15: .9375rem; --t-17: 1.0625rem; --t-22: 1.375rem; --t-30: 1.875rem;
   --lh-ui: 1.35; --lh-read: 1.55;

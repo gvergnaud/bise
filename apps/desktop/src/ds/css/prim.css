@@ -32,7 +32,7 @@
 .b-toggle{--sw-line:inset 0 0 0 1px color-mix(in srgb,var(--c-text) 6%,transparent);--sw-ring:0 0 0 0 transparent;display:inline-block;margin:0;padding:0;border:0;font:inherit;appearance:none;width:var(--w-switch);height:var(--h-switch);border-radius:var(--r-pill);background:var(--c-switch-off);box-shadow:var(--sw-line),var(--sw-ring);position:relative;flex:none;align-self:center;transition:background var(--d-switch) var(--ease-switch)}
 .b-toggle>i{position:absolute;top:calc(var(--s-1) / 2);left:calc(var(--s-1) / 2);width:var(--s-4);height:var(--s-4);border-radius:var(--r-pill);background:var(--c-knob);box-shadow:var(--sh-knob);transition:transform var(--d-switch) var(--ease-switch),width var(--d-switch-press) var(--ease-switch)}
 .b-toggle.on{--sw-line:0 0 0 0 transparent;background:var(--c-switch-on)}
-.b-toggle.on>i{transform:translateX(var(--s-4))}
+.b-toggle.on>i{transform:translateX(var(--s-4));background:var(--p-bg);box-shadow:none}
 /* pressed: the knob stretches to 20 toward its travel (on, it stays at the track's end) */
 .b-toggle:not(.is-disabled):active>i,.b-toggle.is-active>i{width:var(--s-5)}
 .b-toggle.on:not(.is-disabled):active>i,.b-toggle.on.is-active>i{transform:translateX(var(--s-3))}
