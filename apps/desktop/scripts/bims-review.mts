@@ -18,6 +18,7 @@ interface Review {
   sheet(rows: Row[], title: string, size: number, cols: number): { png: string; cells: Cell[] };
   cell(r: Row, size: number): string;
   park(stage: number, night: boolean, size: number): string;
+  map(id: string, stage: number, night: boolean, n: number, size: number, pieces: readonly number[]): string;
   trick(trick: string, stage: number, night: boolean, size: number, frames: number): string | null;
 }
 
@@ -36,6 +37,8 @@ const per = Number(arg('--sheet', '48'));
 const given = arg('--rows', '');
 /** California's skatepark instead of the rows: the park at stages 0 and 13, day and night, and a strip of each trick named (comma list) */
 const skate = arg('--skate', '');
+/** maps instead of the rows: `map:stage:agents[:pieces]` comma list (pieces with +, framed round them; empty: the whole office), day and night */
+const maps = arg('--map', '');
 /** a trick strip's frame size (css px) and its frames */
 const skateSize = Number(arg('--skate-size', '260'));
 const skateFrames = Number(arg('--skate-frames', '6'));
@@ -64,6 +67,21 @@ try {
     throw new Error(`the review page did not load: ${errors.join('; ')}`);
   });
   const all = await page.evaluate((s) => (globalThis as unknown as { review: Review }).review.rows(s), seed);
+  if (maps) {
+    // map:stage:agents[:pieces with +, none: whole], day and night each
+    mkdirSync(resolve(out, 'maps'), { recursive: true });
+    for (const spec of maps.split(',')) {
+      const [id = 'loft', st = '13', n = '1', ps] = spec.split(':');
+      const pieces = ps === undefined ? [11, 4] : ps === '' ? [] : ps.split('+').map(Number);
+      for (const night of [false, true]) {
+        const url = await page.evaluate(([i, s, ni, k, p]) => (globalThis as unknown as { review: Review }).review.map(i, s, ni, k, 900, p), [id, Number(st), night, Number(n), pieces] as const);
+        const framed = pieces.length === 0 ? 'whole' : pieces.join('+');
+        writeFileSync(resolve(out, 'maps', `${id}-s${st}-n${n}-${framed}-${night ? 'night' : 'day'}.png`), png(url));
+      }
+    }
+    console.log(`maps: ${resolve(out, 'maps')}`);
+    process.exit(0);
+  }
   if (skate) {
     mkdirSync(resolve(out, 'skate'), { recursive: true });
     for (const stage of [0, 13]) {

@@ -26,7 +26,7 @@ import { kitOf } from '../render/kit';
 import { loft } from '../render/maps/loft';
 import { COIN_HEAD, cutPng, headPng } from '@/app/side3d/render';
 import { aliveRig, aliveSeed, stanceAt, stands } from '../render/alive';
-import { parkShot, trickStrip } from './review-skate';
+import { mapShot, parkShot, trickStrip } from './review-skate';
 import type { TrickKey } from '../skate';
 import { DUR, type IdleMove, idleRig } from '../render/idle';
 import type { Row } from './pairwise';
@@ -528,6 +528,8 @@ declare global {
       check(r: Row): Issue[];
       /** California's park at a growth stage, pinched in on its slab (review-skate.ts) */
       park(stage: number, night: boolean, size: number): string;
+      /** any map's office of n agents at a stage, framed round stage pieces (none: whole) (review-skate.ts mapShot) */
+      map(id: string, stage: number, night: boolean, n: number, size: number, pieces?: number[]): string;
       /** one trick on its piece: `frames` shots from its start to its end in one strip, labelled */
       trick(trick: string, stage: number, night: boolean, size: number, frames: number): string | null;
     };
@@ -560,6 +562,11 @@ window.review = {
     const v = sharedView();
     camReset();
     return parkShot(v, stage, night, size).toDataURL('image/png');
+  },
+  map(id, stage, night, n, size, pieces) {
+    const v = sharedView();
+    camReset();
+    return mapShot(v, id as MapId, stage, night, n, size, pieces).toDataURL('image/png');
   },
   trick(trick, stage, night, size, frames) {
     const v = sharedView();

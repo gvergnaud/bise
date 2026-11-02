@@ -15,7 +15,7 @@ import { lookOf } from '../render/maps/index';
 import { layoutOf } from '../maps/index';
 import { NO_GROW } from '../growth';
 import { SESSION_S, type TrickKey, lineOf } from '../skate';
-import type { Office, Park, Pose, SkatePastime } from '../model';
+import type { MapId, Office, Park, Pose, SkatePastime } from '../model';
 import type { Feature } from '../parkpath';
 import { agent } from '../fixtures';
 
@@ -64,6 +64,31 @@ export function parkShot(v: View, stage: number, night: boolean, size: number): 
   lightOffice(v.hemi, v.sun, night ? NIGHT : DAY, o, STYLE);
   const a = parkOf(o).area;
   const out = shoot(v, size, fitOn(new Box3(new Vector3(a.x0, 0, a.z0), new Vector3(a.x1, 1.6, a.z1)), size));
+  v.scene.remove(w.root);
+  return out;
+}
+
+/**
+ * Any map's office of `n` agents at a stage, by day or night, framed round two of its stage
+ * pieces (look.pieceAt: 11 the arcade, 4 the whiteboard by default) with `pad` units round them,
+ * or whole when `pieces` is empty: a check that two pieces clear each other where they stand.
+ */
+export function mapShot(v: View, id: MapId, stage: number, night: boolean, n: number, size: number, pieces: readonly number[] = [11, 4], pad = 2.2): HTMLCanvasElement {
+  const o = layoutOf([agent('main', { main: true }), ...Array.from({ length: Math.max(0, n - 1) }, (_, i) => agent(`a${String(i + 1)}`))], id);
+  const look = lookOf(id);
+  const w = buildWorld(o, 'main', STYLE, look, night, { ...NO_GROW, stage });
+  w.lit(night ? 1 : 0);
+  castShadows(w.root);
+  v.scene.add(w.root);
+  lightOffice(v.hemi, v.sun, night ? NIGHT : DAY, o, STYLE);
+  const box = new Box3();
+  if (pieces.length === 0) box.setFromObject(w.root, true);
+  else for (const s of pieces) {
+    const p = look.pieceAt(o, s);
+    box.expandByPoint(new Vector3(p.x - pad, 0, p.z - pad));
+    box.expandByPoint(new Vector3(p.x + pad, 2.2, p.z + pad));
+  }
+  const out = shoot(v, size, fitOn(box, size));
   v.scene.remove(w.root);
   return out;
 }
