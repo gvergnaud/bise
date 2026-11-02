@@ -32,8 +32,8 @@ export type PluginKind = 'plugin' | 'connector' | 'mcp' | 'skills' | 'bise';
 export interface PluginObject {
   /** the plugin's id string (pluginKey): the prefs' key and the placement's seed */
   readonly key: string;
-  /** the plugin's name as he reads it (its title, else its name): the object's hover tip */
-  readonly name: string;
+  /** the names, as he reads them (a title, else its name), of the plugins it stands for: its own first, then the ones not drawn whose object this is (uniqueObjects); its hover tip names them all (designer m_51998) */
+  readonly names: readonly string[];
   readonly obj: ObjId;
   /** the object's count (makeObject's n): books on a shelf, lights on a rack, the plant's pot */
   readonly n?: number;
@@ -189,7 +189,7 @@ export function objectOf(row: PluginRow, picks: Picks): PluginObject | null {
   const name = row.title !== undefined && row.title !== null && row.title !== '' ? row.title : row.name;
   return {
     key,
-    name,
+    names: [name],
     obj: pick ?? dflt.obj,
     ...(n === undefined ? {} : { n }),
     // broken is not off (designer m_41417): a broken plugin's object stays lit, its '✗' says it failed; glass is for off
@@ -255,14 +255,17 @@ export function uniqueObjects(objs: readonly PluginObject[]): readonly PluginObj
   for (const o of lost) {
     const kin = (KIN[o.obj] ?? []).find((k) => !taken.has(k));
     if (kin === undefined) {
-      // not drawn: its object carries the worst state of the plugins it stands for (designer m_43133)
+      // not drawn: its object stands for it too (its tip names it, designer m_51998) and carries
+      // the worst state of the plugins it stands for (designer m_43133)
       const at = out.findIndex((h) => unitOf(h) === unitOf(o));
       const h = out[at];
-      if (h !== undefined && worse(h.pill, o.pill)) out[at] = { ...h, pill: o.pill, pillOf: o.key, ...(o.pillName === undefined ? {} : { pillName: o.pillName }) };
+      if (h === undefined) continue;
+      const also = { ...h, names: [...h.names, ...o.names] };
+      out[at] = worse(h.pill, o.pill) ? { ...also, pill: o.pill, pillOf: o.key, ...(o.pillName === undefined ? {} : { pillName: o.pillName }) } : also;
       continue;
     }
     taken.add(kin);
-    out.push({ key: o.key, name: o.name, obj: kin, glass: o.glass, pill: o.pill, picked: o.picked, ...(o.pillName === undefined ? {} : { pillName: o.pillName }) });
+    out.push({ key: o.key, names: o.names, obj: kin, glass: o.glass, pill: o.pill, picked: o.picked, ...(o.pillName === undefined ? {} : { pillName: o.pillName }) });
   }
   return out.sort(byKey);
 }

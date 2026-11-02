@@ -91,7 +91,7 @@ describe('defaultObject', () => {
 
 describe('objectOf', () => {
   it('on: the object; disabled: glass; invalid: lit and ✗; shadowed: nothing', () => {
-    expect(objectOf(mainRow('docs'), NONE)).toEqual({ key: 'docs', name: 'docs', obj: 'printer', n: 1, glass: false, pill: null, picked: false });
+    expect(objectOf(mainRow('docs'), NONE)).toEqual({ key: 'docs', names: ['docs'], obj: 'printer', n: 1, glass: false, pill: null, picked: false });
     expect(objectOf(mainRow('docs', 'disabled'), NONE)).toMatchObject({ glass: true, pill: null });
     expect(objectOf(mainRow('docs', 'invalid'), NONE)).toMatchObject({ glass: false, pill: '✗' });
     expect(objectOf(mainRow('docs', 'shadowed'), NONE)).toBeNull();
@@ -112,7 +112,7 @@ describe('objectOf', () => {
   });
 
   it('his pick wins, the default count only stays on the same object', () => {
-    expect(objectOf(mainRow('docs'), new Map([['docs', 'piano']]))).toEqual({ key: 'docs', name: 'docs', obj: 'piano', glass: false, pill: null, picked: true });
+    expect(objectOf(mainRow('docs'), new Map([['docs', 'piano']]))).toEqual({ key: 'docs', names: ['docs'], obj: 'piano', glass: false, pill: null, picked: true });
     expect(objectOf(mainRow('sheets'), new Map([['sheets', 'printer']]))).toMatchObject({ obj: 'printer', n: 2, picked: true });
   });
 });
@@ -156,7 +156,7 @@ describe('officeObjects', () => {
 });
 
 describe('uniqueObjects: each object once in an office (bims-plugins m_42693)', () => {
-  const o = (key: string, obj: ObjId, more: Partial<PluginObject> = {}): PluginObject => ({ key, name: key, obj, glass: false, pill: null, picked: false, ...more });
+  const o = (key: string, obj: ObjId, more: Partial<PluginObject> = {}): PluginObject => ({ key, names: [key], obj, glass: false, pill: null, picked: false, ...more });
   const pairs = (objs: readonly PluginObject[]) => objs.map((x) => [x.key, x.obj]);
 
   it('three printers: one keeps it, one takes the press, the third is not drawn', () => {
@@ -181,6 +181,10 @@ describe('uniqueObjects: each object once in an office (bims-plugins m_42693)', 
     // his pick keeps the printer, the failed one takes the press; the one not drawn puts its '?' on the printer, and the pill is that plugin's
     const picked = uniqueObjects([o('docs', 'printer', { picked: true }), o('sheets', 'printer', { pill: '?' }), o('slides', 'printer', { pill: '✗' })]);
     expect(picked.map((x) => [x.key, x.obj, x.pill, x.pillOf])).toEqual([['docs', 'printer', '?', 'sheets'], ['slides', 'press', '✗', undefined]]);
+    // the printer stands for both: its tip names them (designer m_51998)
+    expect(picked.map((x) => [x.key, x.names])).toEqual([['docs', ['docs', 'sheets']], ['slides', ['slides']]]);
+    // a fine plugin not drawn is named too, its object's state unchanged
+    expect(uniqueObjects([o('a', 'chess', { pill: '?' }), o('b', 'chess')]).map((x) => [x.names, x.pill])).toEqual([[['a', 'b'], '?']]);
     // a better state never hides a worse one
     const kept = uniqueObjects([o('a', 'chess', { picked: true, pill: '✗' }), o('b', 'chess', { pill: '?' })]);
     expect(kept.map((x) => [x.key, x.pill, x.pillOf])).toEqual([['a', '✗', undefined]]);

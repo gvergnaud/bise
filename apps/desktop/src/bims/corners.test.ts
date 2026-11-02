@@ -22,7 +22,7 @@ const MINE: readonly ObjId[] = [
   'extinguisher', 'charts', 'cat', 'cushion', 'rack', 'shelf', 'plant', 'chess', 'piano', 'jukebox', 'aquarium', 'babyfoot', 'dog', 'bike', 'campfire', 'pinball', 'catwalk', 'globe', 'espresso',
 ];
 export const objsOf = (n: number, from: readonly ObjId[] = MINE): PluginObject[] =>
-  Array.from({ length: n }, (_, i) => ({ key: `p${String(i).padStart(2, '0')}-${from[i % from.length] as string}`, name: `p${String(i)}`, obj: from[i % from.length] as ObjId, glass: false, pill: null, picked: false }));
+  Array.from({ length: n }, (_, i) => ({ key: `p${String(i).padStart(2, '0')}-${from[i % from.length] as string}`, names: [`p${String(i)}`], obj: from[i % from.length] as ObjId, glass: false, pill: null, picked: false }));
 
 export const crewOf = (n: number) => [mainAgent(), ...Array.from({ length: Math.max(0, n - 1) }, (_, i) => agent(`a${String(i + 1)}`))];
 

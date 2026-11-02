@@ -2,11 +2,15 @@
 // object (glass) gets the '✗', one that waits on his login the '?', each on its object's drawn top (the gap a
 // bim's pill keeps over its head). An object that stands for plugins not drawn carries the worst of
 // their pills, and its pill is that plugin's (Placed.pillOf). Each pill's tip names its plugin and
-// its state ('slides failed to start', designer m_43241). Hovering an object names its plugin in a
-// tip on its top (objTipOf, Gabriel m_51985). Pure: the office (Office.tsx) gives it the canvas's projection.
-// Owner: bims-life.
+// its state ('slides failed to start', designer m_43241). Hovering an object names the plugins it
+// stands for in the ds's tip over its top, under its foot when a bim's head is there (objTipOf,
+// placeObjTip: Gabriel m_51985, designer m_51998). Pure: the office (Office.tsx) gives it the
+// canvas's projection. Owner: bims-life.
+import { TIP_GAP } from '@/ds';
+import { namesWords } from '@/app/tipwords';
 import { settings } from '@/proto/words.gen';
 import type { Placed } from './corners';
+import { BODY_PX } from './render/pick';
 
 /** a pill over an object: the key of the plugin it is for (its click opens it), its sign, css px on the canvas */
 export interface ObjPill {
@@ -35,25 +39,58 @@ export function objPillsOf(placed: readonly Placed[], topOf: (key: string) => { 
   return out;
 }
 
-/** the name tip over a hovered object: its plugin's key, its name as he reads it, its drawn top in css px */
+/** the name tip of a hovered object: its key, its words, and where it is drawn on the canvas (css px) */
 export interface ObjTip {
   readonly key: string;
-  readonly name: string;
-  /** the object wears a '?' / '✗' pill on that top: the tip goes over it */
+  /** the plugins it stands for, all of them ('docs, sheets and slides', designer m_51998) */
+  readonly words: string;
+  /** it wears a '?' / '✗' pill on its top: the tip goes over the pill */
   readonly pill: boolean;
+  /** its drawn top's middle (where its pill sits) */
   readonly x: number;
   readonly y: number;
+  /** its drawn foot's y (the tip goes under it when its place over the object is a bim's) */
+  readonly foot: number;
 }
 
 /**
- * The tip over the object under his pointer (Gabriel m_51985: hovering a plugin's object names
- * the plugin), on its drawn top as its pill is; null when none is hovered, the key is no drawn
- * object, or it is off view. Pure: `topOf` as objPillsOf's.
+ * The tip of the object under his pointer (Gabriel m_51985: hovering a plugin's object names its
+ * plugins); null when none is hovered, the key is no drawn object, or it is off view. Pure:
+ * `at` gives an object's drawn top and foot on the canvas.
  */
-export function objTipOf(placed: readonly Placed[], key: string | null, topOf: (key: string) => { readonly x: number; readonly y: number } | null): ObjTip | null {
+export function objTipOf(
+  placed: readonly Placed[],
+  key: string | null,
+  at: (key: string) => { readonly x: number; readonly y: number; readonly foot: number } | null,
+): ObjTip | null {
   if (key === null) return null;
   const p = placed.find((q) => q.key === key);
   if (p === undefined) return null;
-  const s = topOf(p.key);
-  return s === null ? null : { key: p.key, name: p.name, pill: p.pill !== null, x: Math.round(s.x), y: Math.round(s.y) };
+  const s = at(p.key);
+  return s === null ? null : { key: p.key, words: namesWords(p.names), pill: p.pill !== null, x: Math.round(s.x), y: Math.round(s.y), foot: Math.round(s.foot) };
+}
+
+/** an object's pill's height, css px (office.css .bims-pill: --s-4): a tip over a pill clears it */
+export const OBJ_PILL_PX = 16;
+
+/**
+ * Where an object's tip goes in the tile (designer m_51998), css px from the tile's top left: a
+ * tip's gap over the object's top (over its pill when it wears one), centred on it; under its foot
+ * (the same gap) when a bim's head sits in that place or the tile has no room over it; always
+ * TIP_GAP inside the tile's edges. `heads`: the bims' heads on the canvas. Pure.
+ */
+export function placeObjTip(
+  tip: ObjTip,
+  size: { readonly w: number; readonly h: number },
+  tile: { readonly w: number; readonly h: number },
+  heads: readonly { readonly x: number; readonly y: number }[],
+): { readonly left: number; readonly top: number; readonly side: 'above' | 'below' } {
+  const clamp = (v: number, hi: number): number => Math.max(TIP_GAP, Math.min(v, hi - TIP_GAP));
+  const left = Math.round(clamp(tip.x - size.w / 2, tile.w - size.w));
+  const above = tip.y - TIP_GAP - (tip.pill ? OBJ_PILL_PX : 0) - size.h;
+  // a head near the tip's box (a bim's head is about BODY_PX round, under its top point)
+  const onHead = heads.some((h) => h.x >= left - BODY_PX && h.x <= left + size.w + BODY_PX && h.y >= above - 2 * BODY_PX && h.y <= above + size.h);
+  const side = above >= TIP_GAP && !onHead ? 'above' : 'below';
+  const top = side === 'above' ? above : tip.foot + TIP_GAP;
+  return { left, top: Math.round(clamp(top, tile.h - size.h)), side };
 }

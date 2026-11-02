@@ -45,7 +45,7 @@ import type { Growth } from '@/proto';
 import { DEFAULT_MAP, type MapId, mapOf } from './maps/ids';
 import type { PluginObject } from './plugin-objects';
 import type { Corners } from './corners';
-import { objPillsOf, objTipOf, type ObjPill, type ObjTip } from './objpills';
+import { objPillsOf, objTipOf, placeObjTip, type ObjPill, type ObjTip } from './objpills';
 import { extKept, keepExt } from './ext-keep';
 import { planOf } from './maps';
 import './office.css';
@@ -364,6 +364,22 @@ export function Office({
   // the hovered object's name over its top (Gabriel m_51985); it fades in when shown cold (the ds tips' rule)
   const [objTip, setObjTip] = useState<ObjTip | null>(null);
   const objFade = useRef(false);
+  const objTipRef = useRef<HTMLDivElement>(null);
+  const objTipNow = useRef<ObjTip | null>(null);
+  objTipNow.current = objTip;
+  // over the object, or under its foot when a bim's head is there; 8 inside the tile (objpills.ts placeObjTip)
+  const placeTipEl = useCallback(() => {
+    const el = objTipRef.current;
+    const box = holder.current;
+    const t = objTipNow.current;
+    if (el === null || box === null || t === null) return;
+    const at = placeObjTip(t, { w: el.offsetWidth, h: el.offsetHeight }, { w: box.clientWidth, h: box.clientHeight }, [...heads.current.values()]);
+    el.style.left = `${String(at.left)}px`;
+    el.style.top = `${String(at.top)}px`;
+    el.dataset.side = at.side;
+    el.style.visibility = 'visible';
+  }, []);
+  useLayoutEffect(placeTipEl, [placeTipEl, objTip]);
   // the growth drawn: before the rows, so the first one is no unlock moment (no mark yet: a bare room)
   useEffect(() => {
     if (high === null) return;
@@ -573,7 +589,11 @@ export function Office({
         lastPills = pillSig;
         setObjPills(pills);
       }
-      const tip = objTipOf(step.corners.placed, L.obj, (key) => r?.objectTopOf(key) ?? null);
+      const tip = objTipOf(step.corners.placed, L.obj, (key) => {
+        const top = r?.objectTopOf(key) ?? null;
+        const foot = r?.objectFootOf(key) ?? null;
+        return top === null || foot === null ? null : { ...top, foot };
+      });
       const tipSig = JSON.stringify(tip);
       if (tipSig !== lastTip) {
         lastTip = tipSig;
@@ -595,6 +615,8 @@ export function Office({
         }
       }
       layoutTags();
+      // the bims walk: the object's tip moves off a head that comes into its place
+      placeTipEl();
       if (pinsRef.current !== null) placePins(pinsRef.current, pinPoints(r, step.agents.find((a) => a.main)?.name ?? null));
       if (zzzRef.current !== null) {
         const zs = new Map<string, { x: number; y: number }>();
@@ -950,8 +972,9 @@ export function Office({
         if (dragMove(e, e.currentTarget)) return;
         const name = pickEvent(e);
         setPointer(name !== null);
-        // a bim goes first: over one, no object's tip
-        hoverObj(name === null ? objEvent(e) : null);
+        // a bim goes first: over one, no object's tip; on an object's pill, the pill's own tip alone (designer m_51998)
+        const onPill = (e.target as Element).closest('.bims-objpill') !== null;
+        hoverObj(name === null && !onPill ? objEvent(e) : null);
         if (name === pending.current) return;
         pending.current = name;
         clearTimeout(hoverTimer.current);
@@ -1025,17 +1048,17 @@ export function Office({
             {p.pill}
           </span>
         ))}
-        {/* the hovered object's plugin, the ds's tip (.b-tip) over its top, over its pill when it has one */}
+        {/* the hovered object's plugins, the ds's tip (.b-tip) over its top; placeTipEl places it once its size is known */}
         {objTip !== null && (
           <div
+            ref={objTipRef}
             className={`b-tip bims-objtip${objFade.current ? ' in' : ''}`}
             role="tooltip"
-            data-pill={objTip.pill || undefined}
             data-testid="app.right.bims.objtip"
             data-key={objTip.key}
-            style={{ left: `${String(objTip.x)}px`, top: `${String(objTip.y)}px` }}
+            style={{ visibility: 'hidden' }}
           >
-            <span className="w">{objTip.name}</span>
+            <span className="w">{objTip.words}</span>
           </div>
         )}
         {newTag !== null && (

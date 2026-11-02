@@ -5,7 +5,7 @@ import type { PluginObject } from '@/bims/plugin-objects';
 import type { ObjId } from '@/bims/render/objects/ids';
 import { iconKey, iconObject, planRoom, seedOf, SPOTS, type Foot } from './spots';
 
-const obj = (key: string, id: ObjId, glass = false): PluginObject => ({ key, name: key, obj: id, glass, pill: null, picked: false });
+const obj = (key: string, id: ObjId, glass = false): PluginObject => ({ key, names: [key], obj: id, glass, pill: null, picked: false });
 /** every object 1 x 1 but the library (3 x 0.6), the calendar on the wall */
 const feet = (id: ObjId): Foot => (id === 'library' ? { w: 3, d: 0.6, h: 2 } : id === 'calendar' ? { w: 0.8, d: 0.05, h: 0.8, wall: true } : { w: 1, d: 1, h: 1 });
 

@@ -216,15 +216,11 @@
 .bims-pill.bims-objpill:not([role='button']) {
   cursor: default;
 }
-/* the hovered object's plugin (objpills.ts objTipOf): the ds's tip, held in the office, centred a
-   tip's gap over the object's top, or over its pill when it wears one */
+/* the hovered object's plugins (objpills.ts objTipOf): the ds's tip, held in the office, where
+   placeObjTip puts it (over the object or its pill, under its foot when a bim's head is there) */
 .b-tip.bims-objtip {
   position: absolute;
   z-index: 1;
-  transform: translate(-50%, calc(-100% - var(--s-2)));
-}
-.b-tip.bims-objtip[data-pill] {
-  transform: translate(-50%, calc(-100% - var(--s-4) - var(--s-2)));
 }
 .bims-label.bims-new {
   position: absolute;

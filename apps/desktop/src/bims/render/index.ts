@@ -55,6 +55,21 @@ function hullOf(ps: { x: number; y: number }[]): { x: number; y: number }[] {
 /** from this width (css px) the camera fits the building and a little ground (wideSiteOf); under it the building */
 const WIDE_FIT_PX = 480;
 
+/** a world box's 8 corners on the canvas: the rectangle they span, css px (a plugin object's hit area and foot) */
+function screenBox(f: Fit, b: { readonly min: { x: number; y: number; z: number }; readonly max: { x: number; y: number; z: number } }): { left: number; top: number; right: number; bottom: number } {
+  const r = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
+  for (const x of [b.min.x, b.max.x])
+    for (const y of [b.min.y, b.max.y])
+      for (const z of [b.min.z, b.max.z]) {
+        const p = toScreen(f, { x, y, z });
+        r.left = Math.min(r.left, p.x);
+        r.right = Math.max(r.right, p.x);
+        r.top = Math.min(r.top, p.y);
+        r.bottom = Math.max(r.bottom, p.y);
+      }
+  return r;
+}
+
 /** what the headless check reads (test mode only) */
 interface Probe {
   frames: number;
@@ -292,25 +307,12 @@ export const makeRenderer: MakeRenderer = (canvas, opts) => {
     objectAt(x, y) {
       if (!fit) return null;
       const f = fit;
-      const targets: ObjTarget[] = [];
-      for (const [key, b] of office.objectBoxes()) {
-        // its box's 8 corners on the canvas: the rectangle they span
-        let left = Infinity;
-        let top = Infinity;
-        let right = -Infinity;
-        let bottom = -Infinity;
-        for (const px of [b.min.x, b.max.x])
-          for (const py of [b.min.y, b.max.y])
-            for (const pz of [b.min.z, b.max.z]) {
-              const p = toScreen(f, { x: px, y: py, z: pz });
-              left = Math.min(left, p.x);
-              right = Math.max(right, p.x);
-              top = Math.min(top, p.y);
-              bottom = Math.max(bottom, p.y);
-            }
-        targets.push({ key, left, top, right, bottom });
-      }
+      const targets: ObjTarget[] = [...office.objectBoxes()].map(([key, b]) => ({ key, ...screenBox(f, b) }));
       return pickObjectAt(targets, x, y);
+    },
+    objectFootOf(key) {
+      const b = office.objectBoxes().get(key);
+      return fit && b ? screenBox(fit, b).bottom : null;
     },
     copyTo(target) {
       view.copyTo(target);

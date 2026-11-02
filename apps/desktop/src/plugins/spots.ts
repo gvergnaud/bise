@@ -141,7 +141,7 @@ export function seedOf(key: string): number {
 /** a row he never added: its own object, never glass, no pill */
 function defaultIcon(row: PluginRow): PluginObject {
   const d = defaultObject(row);
-  return { key: row.id ?? row.name, name: row.title !== undefined && row.title !== null && row.title !== '' ? row.title : row.name, obj: d.obj, ...(d.n === undefined ? {} : { n: d.n }), glass: false, pill: null, picked: false };
+  return { key: row.id ?? row.name, names: [row.title !== undefined && row.title !== null && row.title !== '' ? row.title : row.name], obj: d.obj, ...(d.n === undefined ? {} : { n: d.n }), glass: false, pill: null, picked: false };
 }
 
 /** The cache key of one icon's render. */
