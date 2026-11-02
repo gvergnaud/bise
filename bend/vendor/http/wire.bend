@@ -41,8 +41,10 @@ def send_to(sock: Socket, host: String, port: U32, data: String) ->
   import "./effs/wire.c"
   import "./effs/wire.js"
 
-# TLS over a connected TCP socket (OpenSSL 3, loaded at run time; BEND_LIBSSL
-# overrides its path). The certificate chain and host name are always checked.
+# TLS over a connected TCP socket: macOS's own TLS (Security.framework), or
+# OpenSSL 3 on Linux and under BEND_LIBSSL, loaded at run time (effs/wire.c).
+# The certificate chain and host name are always checked; BEND_TLS_CA adds
+# trust anchors (a PEM file).
 def tls.connect(sock: Socket, host: String, ms: U32) ->
   IO(Socket & Result<&1, &1, U32 & String, Unit>):
   import "./effs/wire.c"

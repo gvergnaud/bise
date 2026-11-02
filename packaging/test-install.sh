@@ -10,8 +10,8 @@
 # login (key file), a single-agent session start (--headless, scripted
 # and live), one headless turn answered by tests/fake_provider.py (the
 # installed REPL calls a provider and answers; needs python3, nothing
-# leaves the machine), the same turn over HTTPS (the runtime's TLS loads
-# OpenSSL 3: libssl.3 from Homebrew on macOS, libssl.so.3 on Linux), the Switchboard hub start / sb list / stop on a
+# leaves the machine), the same turn over HTTPS (the runtime's TLS: macOS's
+# own on macOS, OpenSSL 3's libssl.so.3 on Linux), the Switchboard hub start / sb list / stop on a
 # throwaway git workspace, the built-in office plugins (a new agent lists
 # and loads their skills and makes a pptx with `bise office run`:
 # tests/office_fresh_install_e2e.py), a reinstall (idempotent), then uninstall
@@ -128,17 +128,19 @@ check "sessions dir created in ~/.bise (BISE-161: a fresh HOME starts there)" te
 
 # one turn through the installed REPL: the provider is the tests' fake
 # (openai-chat), which answers "ack: <the message>". `turn tls`: the same
-# over HTTPS (FAKE_TLS=1, tests/fixtures/tls's self-signed localhost cert,
-# trusted with SSL_CERT_FILE): the runtime's TLS loads OpenSSL 3 at run
-# time, and -41's hardened runtime refused Homebrew's libssl (every real
-# provider call failed while the plain-http turn passed)
+# over HTTPS (FAKE_TLS=1: tests/fake_tls.py mints a test CA and a localhost
+# cert, the CA trusted with BEND_TLS_CA): on macOS the runtime's TLS is the
+# system's (SecureTransport, no OpenSSL at all), on Linux OpenSSL 3. -41's
+# hardened runtime refused Homebrew's libssl, and a Mac without Homebrew
+# had no libssl at all (every real provider call failed while the
+# plain-http turn passed)
 echo "== a headless turn (fake provider)"
 turn() {
   local d fpid port pid i line got="" msg="hello from test-install" tls="${1:-}" url label="" n
-  local certs="$HERE/../tests/fixtures/tls/localhost-cert.pem"
   [ -n "$tls" ] && { msg="hello over TLS"; label=" (TLS)"; }
   d="$(mktemp -d /tmp/pk-turn.XXXXXX)"
-  FAKE_LOG="$d/fake.log" FAKE_TLS="${tls:+1}" python3 -u "$HERE/../tests/fake_provider.py" > "$d/fake.out" 2> "$d/fake.err" &
+  local certs="$d/ca.pem"
+  FAKE_LOG="$d/fake.log" FAKE_TLS="${tls:+1}" FAKE_TLS_CA="${tls:+$certs}" python3 -u "$HERE/../tests/fake_provider.py" > "$d/fake.out" 2> "$d/fake.err" &
   fpid=$!
   # 30 s: a cold runner is slow; it exits early when python dies
   i=0; while [ $i -lt 300 ] && ! grep -q '^PORT ' "$d/fake.out" 2>/dev/null; do
@@ -154,7 +156,7 @@ turn() {
   fi
   if [ -n "$tls" ]; then url="https://localhost:$port/v1/chat/completions"; else url="http://127.0.0.1:$port/v1/chat/completions"; fi
   mkfifo "$d/in"
-  (cd "$WORK" && E BEND_PROVIDER_URL="$url" ${tls:+SSL_CERT_FILE="$certs"} \
+  (cd "$WORK" && E BEND_PROVIDER_URL="$url" ${tls:+BEND_TLS_CA="$certs"} \
      MISTRAL_API_KEY=fake-key "$BIN" --headless --model mistral-small-latest \
      < "$d/in" > "$d/out" 2> "$d/err") &
   pid=$!

@@ -370,8 +370,9 @@ NO_UPSTREAM_TEXT = {"sys_traits"}
 
 NOT_SHIPPED = """\
 Not shipped, listed for completeness:
-  - OpenSSL 3: the Bend http package loads the system's libssl/libcrypto at
-    run time (Apache-2.0); bise does not ship it.
+  - OpenSSL 3: on Linux, the Bend http package loads the system's
+    libssl/libcrypto at run time (Apache-2.0); bise does not ship it. On
+    macOS it uses the system's TLS (Security.framework).
   - JetBrains Mono (SIL Open Font License 1.1): the site
     (site) loads it from Google Fonts; no
     font file is in the repo or the bundle.

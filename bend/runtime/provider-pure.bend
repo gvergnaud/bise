@@ -757,6 +757,11 @@ def url_host(+url: String) -> String:
 def check_network() -> String:
   " — check your network or VPN"
 
+# what a failed TLS handshake asks to check: code 2 (ENOENT) is wire.c's "no
+# TLS library", which its own words explain; the network has no part in it
+def tls_check(+c: U32) -> String:
+  Bool.pick(String, U32.is_eq(c, 2), "", check_network())
+
 # " — check <what>", or nothing when there is nothing to check
 def check_what(+what: String) -> String:
   Bool.pick(String, String.is_empty(what), "", String.append(" — check ", what))
@@ -777,7 +782,7 @@ def net_cause(+host: String, e: NetErr) -> String:
         ")", check_network()])
     case NTls{+c, +w}:
       String.concat(["TLS handshake with ", host, " failed (",
-        coded("tls ", c, w), ")", check_network()])
+        coded("tls ", c, w), ")", tls_check(c)])
     case NRead{+c, +w}:
       String.concat(["connection to ", host, " lost while reading (",
         coded("read ", c, w), ")", check_network()])

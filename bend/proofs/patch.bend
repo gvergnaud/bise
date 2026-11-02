@@ -28,6 +28,9 @@ def Laws.attempt_timeout_retries():
 def Laws.attempt_tls_fails():
   {==}
 
+def Laws.attempt_tls_no_library_no_network():
+  {==}
+
 def Laws.retryable_status_transient():
   {==}
 

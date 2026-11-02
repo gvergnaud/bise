@@ -2,8 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- bise desktop's hardened runtime entitlements (scripts/desktop_sign.py): on the app, Electron's
      helper apps and the bare executables it carries (sb-core, bise-mac-helper); never on a
-     library. The runtime's bise.app gets bise.plist, bend-jsrt bend-jsrt.plist, repl-live
-     runtime.plist, the terminal release's own files (scripts/mac_sign.py entitlements_for). JIT: V8 in Electron. audio-input:
+     library; repl-live gets these too (its TLS is macOS's own: no library validation key). The
+     runtime's bise.app gets bise.plist, bend-jsrt bend-jsrt.plist, the terminal release's own
+     files (scripts/mac_sign.py entitlements_for). JIT: V8 in Electron. audio-input:
      the fn dictation, a view's microphone. camera: an MCP Apps view granted it (docs/mcp-apps.md
      C6). apple-events: the address of the tab in front. -->
 <plist version="1.0">

@@ -192,7 +192,7 @@ fi
 # 5c. sign, NEVER strip (scripts/dist_sign.py): every piece of code inside
 #     out, hardened runtime, the entitlements of packaging/entitlements/
 #     (bise.app: the mic, Apple Events; bend-jsrt: V8's JIT; repl-live,
-#     repl-scripted: Homebrew's libssl.3 for TLS), each checked.
+#     repl-scripted: none, their TLS is macOS's own), each checked.
 #     BISE_SIGN_ID (+ BISE_SIGN_KEYCHAIN): a Developer ID, whose designated
 #     requirement (identifier + team, no hash) is the same for every
 #     version; else ad hoc. BISE_NOTARIZE=1: one notarization of the whole

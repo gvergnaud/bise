@@ -10,8 +10,8 @@ rust/Cargo.lock and rust/jsrt/Cargo.lock: do not edit by hand.
 
 1. Summary
 
-Rust crates (273), by license expression:
-   117  MIT OR Apache-2.0
+Rust crates (274), by license expression:
+   118  MIT OR Apache-2.0
     57  MIT
     27  Apache-2.0
     22  Unicode-3.0
@@ -405,6 +405,8 @@ Other components (section 3), by license:
   serial2 0.2.38  [bise]  BSD-2-Clause OR Apache-2.0 -> Apache-2.0
       https://github.com/de-vri-es/serial2-rs
   sha1 0.10.7  [jsrt,bise]  MIT OR Apache-2.0 -> MIT
+      https://github.com/RustCrypto/hashes
+  sha2 0.10.9  [bise]  MIT OR Apache-2.0 -> MIT
       https://github.com/RustCrypto/hashes
   shell-words 1.1.1  [bise]  MIT OR Apache-2.0 -> MIT
       https://github.com/tmiasko/shell-words
@@ -919,8 +921,9 @@ Other components (section 3), by license:
       https://github.com/github/gemoji
 
 Not shipped, listed for completeness:
-  - OpenSSL 3: the Bend http package loads the system's libssl/libcrypto at
-    run time (Apache-2.0); bise does not ship it.
+  - OpenSSL 3: on Linux, the Bend http package loads the system's
+    libssl/libcrypto at run time (Apache-2.0); bise does not ship it. On
+    macOS it uses the system's TLS (Security.framework).
   - JetBrains Mono (SIL Open Font License 1.1): the site
     (site) loads it from Google Fonts; no
     font file is in the repo or the bundle.
@@ -4876,7 +4879,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 ------------------------------------------------------------------------------
-Used by: sha1 0.10.7
+Used by: sha1 0.10.7, sha2 0.10.9
 ------------------------------------------------------------------------------
 
 Copyright (c) 2006-2009 Graydon Hoare

@@ -130,6 +130,13 @@ law attempt_tls_fails:
     == Pv.AFail{"TLS handshake with api.example.com failed (tls 1 handshake) — check your network or VPN"}
     : Pv.Attempt}
 
+# LAW: no TLS library (wire.c's code 2) is not the network's fault: its
+# words say what to do, with no "check your network or VPN" after them.
+law attempt_tls_no_library_no_network:
+  {Pv.attempt_err("api.example.com", Pv.NTls{2, "TLS needs OpenSSL 3 (libssl.so.3)"})
+    == Pv.AFail{"TLS handshake with api.example.com failed (tls 2 TLS needs OpenSSL 3 (libssl.so.3))"}
+    : Pv.Attempt}
+
 # LAW: the other transient statuses retry too - 529 (Anthropic
 # overloaded), 408, 425 - while auth and validation errors do not.
 law retryable_status_transient:

@@ -202,6 +202,9 @@ function send_to(socket, host, port, data, k) {
 // ===
 // Twins of the TLS effects in wire.c: OpenSSL 3 through bun:ffi, the SSL
 // object per fd in a Map, peer verification always on, TLS 1.2 floor.
+// OpenSSL only, on every OS: no product ships Bend's JS target (releases
+// ship the C-built repl-live and repl-scripted, whose macOS TLS is the
+// system's), so the Homebrew paths below are a dev's convenience.
 
 function wire_tls() {
   if (globalThis.BEND_TLS !== undefined) {

@@ -223,11 +223,13 @@ the old `release.sh` ("an EDR quarantine … must FAIL LOUDLY"). Consequences:
   `com.apple.security.cs.allow-jit` (V8; maybe
   `allow-unsigned-executable-memory` — to verify); `bend-harness` needs
   `com.apple.security.device.audio-input` for voice; `repl-live` and
-  `repl-scripted` need `com.apple.security.cs.disable-library-validation`
-  (`packaging/entitlements/runtime.plist`, both products): their TLS
-  dlopens Homebrew's `libssl.3`, which library validation refuses (-41
-  shipped without it: every HTTPS provider call failed;
-  `test-install.sh`'s TLS turn is the check).
+  `repl-scripted` need nothing: their TLS on macOS is the system's
+  (Security.framework's SecureTransport, Keychain roots, `wire.c`), so
+  library validation stays on and no Mac needs Homebrew's OpenSSL (a Mac
+  without it made no HTTPS call before; -41's hardened runtime refused
+  Homebrew's `libssl.3`). `BEND_LIBSSL` (an OpenSSL override) works in
+  dev builds only; `BEND_TLS_CA` adds trust anchors (a PEM file).
+  `test-install.sh`'s TLS turn and `tests/tls_trust.py` are the checks.
 - **Microphone**: a CLI has no Info.plist; macOS asks for the permission
   on behalf of the *terminal app* (Terminal, iTerm2, Ghostty) — the
   prompt says "Ghostty would like to access the microphone". Document it
@@ -526,7 +528,7 @@ OFF until the repository variable `DESKTOP_RELEASE` is `on`.
   microphone, Apple Events) on the executables and the apps; before it,
   `cli_bundle` makes the runtime's `bin/bise.app` (dev.bise.cli, the
   terminal release's bundle, its `bise.plist`) with `bin/bise` a link into
-  it, bend-jsrt gets `bend-jsrt.plist`, repl-live `runtime.plist`
+  it, bend-jsrt gets `bend-jsrt.plist`, repl-live the desktop's default
   (`scripts/mac_sign.py`). Then
   notarytool (App Store Connect API key) and stapler on the app, the zip for the
   updater (`ditto`), the DMG (dmgbuild: the designer's window,

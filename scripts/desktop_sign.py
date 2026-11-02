@@ -18,7 +18,8 @@ The signing core is scripts/mac_sign.py, the terminal release's too (scripts/dis
     (packaging/entitlements/desktop.plist: V8's JIT for Electron, the microphone, Apple Events)
     on its executables and apps, never on a library; the runtime's bise.app (dev.bise.cli),
     bend-jsrt and repl-live get the terminal release's files, so the hub has one identity, V8
-    one set of entitlements and the runtime's TLS loads Homebrew's libssl.3 in both products;
+    one set of entitlements; repl-live gets the desktop's default (its TLS is macOS's own: no
+    library validation key anywhere);
   - a bare executable is named dev.bise.<name>; a bundle keeps its Info.plist's id.
 
 What a symlink points at is signed where it lives, never twice. The pure parts are tested in
