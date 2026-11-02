@@ -1618,7 +1618,8 @@ fn model_list(o: &Onb, w: u16, gap: usize) -> Vec<Line<'static>> {
     let lw = opts
         .iter()
         .map(|x| match x {
-            Opt::Use(p) => format!("{} ", p.key_env).width() + 1,
+            // the whole found label, `✓ ANTHROPIC_API_KEY found`, + 2: every description on one column (designer m_52369)
+            Opt::Use(p) => format!("{FOUND_MARK}{} {}", p.key_env, settings::first_found).width() + 2,
             _ => 0,
         })
         .max()
@@ -2332,16 +2333,21 @@ mod tests {
         for s in [
             "how do you want to pay for the models?",
             "a plan you already have, or a key. you can add more later in /provider.",
-            "› ✓ ANTHROPIC_FOUNDRY_API_KEY found",
-            "Anthropic (foundry proxy), already set up",
-            "Continue with ChatGPT      use your Plus or Pro plan",
-            "OpenRouter                 sign in, or paste its key",
-            "an API key                 Anthropic, OpenAI, Google, Mistral…",
-            "a coding plan key          GLM, Kimi or MiniMax",
+            // the label column: the longest label ('✓ ANTHROPIC_FOUNDRY_API_KEY found') + 2, every description on it (designer m_52369)
+            "› ✓ ANTHROPIC_FOUNDRY_API_KEY found  Anthropic (foundry proxy), already set up",
+            "  Continue with ChatGPT              use your Plus or Pro plan",
+            "  OpenRouter                         sign in, or paste its key",
+            "  an API key                         Anthropic, OpenAI, Google, Mistral…",
+            "  a coding plan key                  GLM, Kimi or MiniMax",
             "↑↓ choose   ⏎ go   esc back",
         ] {
             assert!(sc.contains(s), "{}\n{}", s, sc);
         }
+        // 80 columns: a description that doesn't fit after the column goes under its label, never one space after it
+        let narrow = screen(&o, 10, 80, 30);
+        let found_row = narrow.lines().find(|l| l.contains("ANTHROPIC_FOUNDRY_API_KEY found")).expect("the found row");
+        assert!(!found_row.contains("found Anthropic"), "{}", narrow);
+        assert!(narrow.contains("Anthropic (foundry proxy), already set up"), "{}", narrow);
         // the key found's mark, its name and 'found' in ink, never the accent (designer m_52236)
         let found = model_list(&o, 110, 1)
             .into_iter()
