@@ -29,6 +29,9 @@ def Laws.provider_legacy_glm_is_mistral():
 def Laws.provider_unlisted_model_works():
   {==}
 
+def Laws.provider_blind_is_a_listed_vision_false():
+  {==}
+
 def Laws.provider_bise_model_first():
   {==}
 

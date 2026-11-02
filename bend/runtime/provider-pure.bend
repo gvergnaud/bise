@@ -435,6 +435,19 @@ def facts(+reg: List<&2, Cf.KV>, +prov: String, +id: String, +asked: String)
     effort_of(reg, prov, id, asked),
     is_plan_shape(Cf.cfg_or(model_key(reg, prov, id, "shape"), ""))}
 
+# ---- a model listed without vision ----
+# The models file writes every listed no-vision model a `vision = false`
+# of its own (Rust, Catalog::vision's rule): a model it names this way
+# never gets an image part (runtime/provider.bend img_body), because the
+# provider behind a gateway refuses the whole request for one (the
+# Datadog one: "Image input is not supported for this endpoint"). A
+# model the file does not list (no models."id".vision line, nor any
+# other: the handoff writes none) is the provider's to decide: nothing
+# is stripped on a guess.
+def model_blind(+file: String, +prov: String, +id: String) -> Bool:
+  String.eq(Cf.cfg_or(Cf.cfg_find(registry(file),
+    String.concat(["models.\"", id, "\".vision"])), ""), "false")
+
 def resolve.family(m: Maybe<&2, Api.Style>, +api: String, +prov: String,
     +model: String, +id: String, +base: String, +key_env: String,
     +url_env: String, +fs: Api.MFacts) -> Resolved:

@@ -731,6 +731,39 @@ def res_fit(+rs: List<&2, IRes>, +cap: Nat, +base: Nat, +limit: Nat)
     Nat.sub(Nat.sub(n, img_kept(n, res_fit_cap(rs, cap, base, limit))), by_count),
     res_cap.why(cap), res_fit.why(limit))
 
+# ---- a model that does not read images (the catalog's vision cap) ----
+# A model listed `vision = false` (config.toml, the models file) must
+# never be sent an image part: the provider behind a gateway refuses
+# the whole request for it (the Datadog one: "Image input is not
+# supported for this endpoint" - a 400 on every turn once one image is
+# in the history). So every image becomes the same text the unreadable
+# ones become, and the request goes: nothing is guessed about a model
+# the file does not list (the provider decides).
+
+def res_blind.go(rs: List<&2, IRes>, +why: String) -> List<&2, IRes>:
+  match rs:
+    case Nil{}:
+      Nil{}
+    case Con{+r, +rest}:
+      match r:
+        case IROk{_, _}:
+          Con{IRBad{why}, res_blind.go(rest, why)}
+        case IRBad{+w}:
+          Con{IRBad{w}, res_blind.go(rest, why)}
+
+def res_blind.why(+model: String) -> String:
+  String.concat(["not supported by ", model])
+
+# every image of a no-vision model becomes text that says why
+def res_blind(+rs: List<&2, IRes>, +model: String) -> List<&2, IRes>:
+  res_blind.go(rs, res_blind.why(model))
+
+# the images that go: every one text when the model reads none (the
+# caller's flag, runtime/provider.bend), else what they were
+def res_blind_if(blind: Bool, +rs: List<&2, IRes>, +model: String)
+    -> List<&2, IRes>:
+  Bool.pick(List<&2, IRes>, blind, res_blind(rs, model), rs)
+
 # the bytes of the good images that go
 def res_bytes(+rs: List<&2, IRes>) -> Nat:
   res_last_bytes(rs, res_count(rs))

@@ -556,26 +556,34 @@ def img_checks(phs: List<&2, Im.IPh>, +dir: String,
         img_checks(rest, dir, Con{r, acc})
 
 @unsafe
-def img_body.fill(+segs: List<&2, Im.IBSeg>, +limit: Nat) -> IO(Im.IFill):
+def img_body.fill(+segs: List<&2, Im.IBSeg>, +limit: Nat, +blind: Bool,
+    +model: String) -> IO(Im.IFill):
   do IO<Im.IFill>:
     +dir : String <- img_dir()
     rs : List<&2, Im.IRes> <- img_checks(Im.body_phs(segs), dir, Nil{})
-    IO.pure(Im.IFill, Im.fill_fit(segs, rs, img_cap(), limit))
+    IO.pure(Im.IFill, Im.fill_fit(segs, Im.res_blind_if(blind, rs, model),
+      img_cap(), limit))
 
 # a body without image part costs one scan
 @unsafe
-def img_body.pick(has: Bool, +json: String, +limit: Nat) -> IO(Im.IFill):
+def img_body.pick(has: Bool, +json: String, +limit: Nat, +blind: Bool,
+    +model: String) -> IO(Im.IFill):
   match has:
     case True{}:
-      img_body.fill(Im.body_segs(json), limit)
+      img_body.fill(Im.body_segs(json), limit, blind, model)
     case False{}:
       IO.pure(Im.IFill, Im.IFill{json, String.length(json), 0n})
 
 # the printed body, each image part checked and filled (or made text),
-# the images within the byte limit (Im.res_fit); with its weight
+# the images within the byte limit (Im.res_fit); with its weight. A
+# model the models file lists without vision (Pvp.model_blind) gets no
+# image part at all: each becomes text that says why, the request still
+# goes (a provider behind such a model refuses the whole request).
 @unsafe
-def img_body(+json: String, +limit: Nat) -> IO(Im.IFill):
-  img_body.pick(String.contains(json, Im.part_open()), json, limit)
+def img_body(+json: String, +limit: Nat, +blind: Bool, +model: String)
+    -> IO(Im.IFill):
+  img_body.pick(String.contains(json, Im.part_open()), json, limit, blind,
+    model)
 
 # the byte limit of a request (big-request, 2026-10-04): what bise lets
 # the images make a body weigh. $BISE_REQUEST_MAX_BYTES, else 24 MiB:
@@ -671,7 +679,9 @@ def request_body(+request: String, +pv: Pvp.Prov, +limit: Nat) -> IO(Built):
           Osp.light_if(Bool.not(String.is_empty(P.env_or(osr, ""))),
             Api.wire_body(st, Api.with_cache_key(Pvp.cache_field(names), ckey,
               Api.api_body_for(st, model, facts, W.pair_wire(wreq))))))
-        +fill : Im.IFill <- img_body(json, limit)
+        +fill : Im.IFill <- img_body(json, limit,
+          Pvp.model_blind(mfile, prov, String.concat([prov, "/", model])),
+          String.concat([prov, "/", model]))
         IO.pure(Built, Built{wreq, mfile, names, ckey, json, fill,
           Enc.utf8.encode(fill_body(fill))})
 

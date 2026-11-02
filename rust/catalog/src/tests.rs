@@ -380,8 +380,11 @@ fast = "groq/openai/gpt-oss-120b"
 
 #[test]
 fn the_handoff_is_small_and_flat_for_the_bend_reader() {
+    // every listed no-vision model carries its own `vision = false` line
+    // (the runtime's marker of a model listed without vision: its image
+    // parts are never sent), so the file grew past the old 500
     let text = Setup::from_text(None, &no_env).handoff_toml();
-    assert!(text.lines().count() < 500, "{} lines", text.lines().count());
+    assert!(text.lines().count() < 560, "{} lines", text.lines().count());
     // core/config.bend: one `key = value` per line, [section] headers,
     // # comments; no inline tables, arrays or multi-line strings
     for l in text.lines() {

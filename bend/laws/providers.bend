@@ -91,6 +91,25 @@ law provider_unlisted_model_works:
     == Pv.ROk{Pv.Prov{"mistral", "brand-new-7b", Api.OpenAI{},
       "https://api.mistral.ai/v1/chat/completions", "MISTRAL_API_KEY", Api.MFacts{True{}, 0n, "max_tokens", "", "", "", False{}}}} : Pv.Resolved}
 
+# LAW: a model the models file lists without vision (`vision = false`
+# of its own, what the Rust handoff writes for every listed no-vision
+# model) is blind; one the file does not list is the provider's to
+# decide - nothing is stripped on a guess (Catalog::vision's rule).
+law provider_blind_is_a_listed_vision_false:
+  {(Pv.model_blind("
+[models.\"ai-gw/glm-5-3\"]
+vision = false
+", "ai-gw", "ai-gw/glm-5-3"),
+    Pv.model_blind("
+[providers.ai-gw]
+vision = false
+", "ai-gw", "ai-gw/unlisted"),
+    Pv.model_blind("
+[models.\"ai-gw/glm-5-3-flash\"]
+vision = true
+", "ai-gw", "ai-gw/glm-5-3-flash"))
+    == (True{}, False{}, False{}) : Bool & Bool & Bool}
+
 # LAW: the choice order (as rust/catalog's Setup): main = BISE_MODEL >
 # BEND_MODEL > config model; a sub-agent (BISE_ROLE=agent) =
 # BISE_AGENT_MODEL > config agent_model > the main order.

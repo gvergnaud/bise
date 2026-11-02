@@ -318,3 +318,12 @@ def Laws.image_fill_fit_weighs():
 
 def Laws.image_why_checks():
   {==}
+
+def Laws.image_blind_model_gets_no_image():
+  {==}
+
+def Laws.image_kept_for_a_sighted_model():
+  {==}
+
+def Laws.image_blind_part_is_text():
+  {==}
