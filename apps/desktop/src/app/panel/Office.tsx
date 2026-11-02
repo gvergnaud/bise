@@ -11,7 +11,8 @@ import { mapOf, mapPrefKey } from '@/bims/maps/ids';
 import { useOfficeObjects } from '@/bims/useOfficeObjects';
 import { followOf } from '@/bims/focus';
 import { getPref, type Prefs } from '@/settings/prefs';
-import { useAgents, useCards, useGrowth, usePlaces, usePlugins, usePrefs, useStore } from '@/store';
+import { useAgents, useCards, useGrowth, usePlaces, usePrefs, useStore } from '@/store';
+import { usePlugins as usePluginRows } from '@/store';
 import { useRoute, useRouter } from '@/app/router';
 
 /** A project's office, the whole tab. */
@@ -29,7 +30,7 @@ export function OfficeTab({ project }: { project: string }) {
   // again on each change), and his picks (prefs bims.objects.<project>)
   const objects = useOfficeObjects(project);
   // and the plugins rows: a working bim walks to the object of the plugin its call uses (uses.ts)
-  const plugins = usePlugins(project);
+  const pluginRows = usePluginRows(project);
   const live = useMemo(() => agents.filter((a) => !a.archived), [agents]);
   const follow = followOf(route, project, agents);
   return (
@@ -40,7 +41,7 @@ export function OfficeTab({ project }: { project: string }) {
         cards={cards}
         places={places}
         objects={objects}
-        plugins={plugins}
+        plugins={pluginRows}
         growth={growth}
         map={map}
         parts={bimsParts}
