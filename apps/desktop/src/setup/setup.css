@@ -31,6 +31,10 @@
   .setup .b-onb .steps { margin-top: var(--s-2); }
 }
 .setup-acts { display: inline-flex; align-items: center; gap: var(--s-1); }
+/* the sign-in's way out, 8 px under its waiting line, left with it: 'cancel' (an Act: text-2, underline on hover, the focus ring), then 'esc' in mono text-3 (designer m_52216) */
+.setup-cancel { display: flex; align-items: baseline; gap: var(--s-2); margin: var(--s-2) 0 0; font-size: var(--t-13); }
+.setup-cancel .b-act { padding: 0; }
+.setup-esc { font: var(--t-12) var(--font-mono); color: var(--c-text-3); }
 /* '← back' top left, 'skip for now' (or 'open bise') top right: 13 px, dim (designer's brief §2) */
 .setup-top { position: absolute; top: var(--s-3); left: var(--s-4); right: var(--s-4); display: flex; justify-content: space-between; align-items: center; }
 .setup-top .b-act { font-size: var(--t-13); color: var(--c-text-3); }

@@ -30,9 +30,11 @@ export interface PayProps {
   open?: (url: string) => void;
   /** the core refused the sign-in he started (error {cmd: sign_in}): its words */
   signInError?: string | null;
+  /** '← back' from here (the waiting view's 'cancel'): the sign-in cancelled, back to the list */
+  back?: () => void;
 }
 
-export function PayStep({ frame, accounts, claudePlan = false, check, s, set, send, go, open, signInError = null }: PayProps) {
+export function PayStep({ frame, accounts, claudePlan = false, check, s, set, send, go, open, signInError = null, back }: PayProps) {
   const run = (r: { s: PayState; cmd: AppCmd | null }) => {
     if (r.cmd !== null) send(r.cmd);
     set(r.s);
@@ -187,6 +189,13 @@ export function PayStep({ frame, accounts, claudePlan = false, check, s, set, se
     if (ph === 'signing') {
       return (
         <Onb {...frame} title={common.signing_wait({ label: name(v.id) })} cta={cont}>
+          {/* a way out where he looks, the terminal's 'esc cancel': what '← back' does from here (designer m_52216) */}
+          <p className="setup-cancel">
+            <Act onClick={() => { back?.(); }} testId="setup.pay.signin.cancel">
+              {settings.cancel}
+            </Act>
+            <span className="setup-esc">esc</span>
+          </p>
           {signInError !== null && <p className="setup-dim err" data-testid="setup.pay.signin.err">{signInError}</p>}
         </Onb>
       );

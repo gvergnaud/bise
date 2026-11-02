@@ -1,7 +1,8 @@
 // The first launch's screen (route `onboarding`, desktop-onboarding v4):
 // four steps in the DS's Onb frame (a 480 px column: the mark, a title, a
 // line, the step's rows, its button, the step dots), '← back' top left and
-// 'skip for now' top right; ⏎ the step's button, esc a step back. hello
+// 'skip for now' top right; ⏎ the step's button, '← back' and esc a step
+// back (on the model step, its own levels first: a sign-in under way is cancelled). hello
 // shows bise's typed ':*' (never the mist pearl); the last step, first, is
 // a real composer: ⏎ sends his first message to bise and opens bise with it
 // running, an idea chip fills the composer, holding fn works too, 'open
@@ -137,6 +138,17 @@ export function Onboarding({ accounts, claudePlan = false, found, perms, fn = nu
     run(next(s, { signedIn: ok, found, now }));
   };
   const at = stepOf(s);
+  // '← back' and esc: the model step's own levels first (a key field, a provider list, a sign-in or a
+  // check: a sign-in under way is cancelled), then a step back (Matthias, Slack: stuck on OpenRouter's sign-in)
+  const stepBack = () => {
+    const up = at === 'model' ? upOf(pay, accounts) : null;
+    if (up === null) {
+      setSt(back(s));
+      return;
+    }
+    if (up.cmd !== null) ports.send(up.cmd);
+    setPay(up.s);
+  };
   const frame = {
     steps: STEPS.length,
     step: s.at,
@@ -170,6 +182,7 @@ export function Onboarding({ accounts, claudePlan = false, found, perms, fn = nu
           set={setPay}
           send={ports.send}
           go={go}
+          back={stepBack}
           signInError={signInError}
           {...(ports.open ? { open: ports.open } : {})}
         />
@@ -321,10 +334,7 @@ export function Onboarding({ accounts, claudePlan = false, found, perms, fn = nu
           go();
         } else if (e.key === 'Escape') {
           e.preventDefault();
-          // the model step's own levels first (a key field, a provider list, a check)
-          const up = at === 'model' ? upOf(pay, accounts) : null;
-          if (up !== null) setPay(up);
-          else setSt(back(s));
+          stepBack();
         }
       }}
     >
@@ -333,7 +343,7 @@ export function Onboarding({ accounts, claudePlan = false, found, perms, fn = nu
       <div className="setup-top">
         <span>
           {s.at > 0 && (
-            <Act onClick={() => { setSt(back(s)); }} testId="setup.back">
+            <Act onClick={stepBack} testId="setup.back">
               {settings.onb_back}
             </Act>
           )}

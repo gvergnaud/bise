@@ -185,6 +185,39 @@ describe('Onboarding', () => {
     expect(screen.getByTestId('setup.step.model')).toBeTruthy();
   });
 
+  it("'← back' on OpenRouter's sign-in cancels it and goes to the list, to pick another way (Matthias, Slack: stuck on 'waiting for you to sign in')", () => {
+    const p = ports();
+    const out: Account[] = [...accounts().map((a) => ({ ...a, state: 'signed_out' as const })), { id: 'openrouter', kind: 'key', label: 'OpenRouter', state: 'signed_out' }];
+    render(<Onboarding accounts={out} found={[]} perms={{}} ports={p} now={NOW} />);
+    fireEvent.click(screen.getByTestId('setup.next'));
+    fireEvent.click(screen.getByTestId('setup.pay.openrouter'));
+    fireEvent.click(screen.getByTestId('setup.pay.openrouter.signin'));
+    expect(p.sent).toEqual([{ cmd: 'sign_in', id: 'openrouter' }]);
+    expect(screen.getByTestId('setup.step.model').textContent).toContain('waiting for you to sign in to OpenRouter in your browser');
+    fireEvent.click(screen.getByTestId('setup.back'));
+    // still the model step, back on its list (never hello), the browser's sign-in cancelled
+    expect(screen.getByTestId('setup.pay')).toBeTruthy();
+    expect(screen.getByTestId('setup.step.model').textContent).not.toContain('waiting for you to sign in');
+    expect(p.sent.at(-1)).toEqual({ cmd: 'sign_in_cancel', id: 'openrouter' });
+    // another way from there: an API key
+    fireEvent.click(screen.getByTestId('setup.pay.api'));
+    expect(screen.getByTestId('setup.pay.which')).toBeTruthy();
+    // back twice more: the list, then hello
+    fireEvent.click(screen.getByTestId('setup.back'));
+    expect(screen.getByTestId('setup.pay')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('setup.back'));
+    expect(screen.getByTestId('setup.step.hello')).toBeTruthy();
+    expect(p.sent.filter((c) => c.cmd === 'sign_in_cancel')).toHaveLength(1);
+    // the waiting view's own way out, where he looks (designer m_52216): 'cancel  esc' does what back does
+    fireEvent.click(screen.getByTestId('setup.next'));
+    fireEvent.click(screen.getByTestId('setup.pay.openrouter'));
+    fireEvent.click(screen.getByTestId('setup.pay.openrouter.signin'));
+    expect(screen.getByTestId('setup.pay.signin.cancel').parentElement?.textContent).toBe('cancelesc');
+    fireEvent.click(screen.getByTestId('setup.pay.signin.cancel'));
+    expect(screen.getByTestId('setup.pay')).toBeTruthy();
+    expect(p.sent.filter((c) => c.cmd === 'sign_in_cancel')).toHaveLength(2);
+  });
+
   it("with the island drawn, 'it works' keeps the model's name whole and says how long it took (its words are the bubble's)", () => {
     // hasWebGL asks only whether the name exists; the scene then fails in happy-dom and the island goes
     vi.stubGlobal('WebGLRenderingContext', vi.fn());

@@ -52,10 +52,12 @@ describe('the model step (pay.ts)', () => {
     expect(pickRow(PAY_START, { t: 'chatgpt', acc: must(signed[0]) }, null).cmd).toEqual({ cmd: 'provider_use', id: 'chatgpt' });
   });
 
-  it('esc goes one level up: a key field to its provider list, a check to the list, the list out', () => {
-    expect(upOf({ ...PAY_START, view: { t: 'key', id: 'kimi-code' } }, ACCOUNTS)?.view).toEqual({ t: 'which', coding: true });
-    expect(upOf({ ...PAY_START, view: { t: 'key', id: 'openrouter' } }, ACCOUNTS)?.view).toEqual({ t: 'openrouter' });
-    expect(upOf({ ...PAY_START, view: { t: 'check', id: 'x' }, signing: 'x' }, ACCOUNTS)).toEqual(PAY_START);
+  it('back (or esc) goes one level up: a key field to its provider list, a check to the list, the list out; a sign-in under way is cancelled', () => {
+    expect(upOf({ ...PAY_START, view: { t: 'key', id: 'kimi-code' } }, ACCOUNTS)).toEqual({ s: { ...PAY_START, view: { t: 'which', coding: true } }, cmd: null });
+    expect(upOf({ ...PAY_START, view: { t: 'key', id: 'openrouter' } }, ACCOUNTS)?.s.view).toEqual({ t: 'openrouter' });
+    expect(upOf({ ...PAY_START, view: { t: 'check', id: 'x' }, signing: 'x' }, ACCOUNTS)).toEqual({ s: PAY_START, cmd: { cmd: 'sign_in_cancel', id: 'x' } });
+    // a check with no sign-in under way: nothing to cancel
+    expect(upOf({ ...PAY_START, view: { t: 'check', id: 'x' } }, ACCOUNTS)).toEqual({ s: PAY_START, cmd: null });
     expect(upOf(PAY_START, ACCOUNTS)).toBeNull();
   });
 });

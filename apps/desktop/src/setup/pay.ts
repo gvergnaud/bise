@@ -116,14 +116,20 @@ export function ready(s: PayState, check: ProviderCheck | null): boolean {
   return phase(s, check) === 'works';
 }
 
-/** esc inside the step: one level up (a key field to its provider list, a check to the list). */
-export function upOf(s: PayState, accounts: readonly Account[]): PayState | null {
+/**
+ * '← back' or esc inside the step: one level up (a key field to its provider list, a check to the
+ * list); a browser sign-in under way is cancelled on the way (sign_in_cancel), so he can pick
+ * another way (Matthias, Slack: stuck on 'waiting for you to sign in to OpenRouter'). Null: the
+ * list, the step itself goes back.
+ */
+export function upOf(s: PayState, accounts: readonly Account[]): { s: PayState; cmd: AppCmd | null } | null {
   const v = s.view;
   if (v.t === 'list') return null;
   if (v.t === 'key') {
     const acc = accounts.find((a) => a.id === v.id);
-    if (v.id === OPENROUTER) return { ...s, view: { t: 'openrouter' } };
-    return { ...s, view: { t: 'which', coding: acc?.coding === true } };
+    if (v.id === OPENROUTER) return { s: { ...s, view: { t: 'openrouter' } }, cmd: null };
+    return { s: { ...s, view: { t: 'which', coding: acc?.coding === true } }, cmd: null };
   }
-  return { ...s, view: { t: 'list' }, signing: null };
+  const cmd: AppCmd | null = s.signing !== null ? { cmd: 'sign_in_cancel', id: s.signing } : null;
+  return { s: { ...s, view: { t: 'list' }, signing: null }, cmd };
 }
