@@ -1602,6 +1602,9 @@ fn padded(label: &str, n: usize) -> String {
     if w >= n { format!("{} ", label) } else { format!("{}{}", label, " ".repeat(n - w)) }
 }
 
+/// Before a key found's row: it works already (the desktop's ✓, designer m_52236).
+const FOUND_MARK: &str = "✓ ";
+
 /// The first run's key step (designer, subscriptions): how you pay, a
 /// plan you have or a key; the keys found first. Each row: its label,
 /// then its description, dim, on the same line when it fits, else under.
@@ -1646,9 +1649,10 @@ fn model_list(o: &Onb, w: u16, gap: usize) -> Vec<Line<'static>> {
             Opt::Coding => (settings::first_coding.to_string(), false, settings::first_coding_sub.to_string()),
         };
         let mut name = if found {
-            // `ANTHROPIC_API_KEY found`, padded to the column
-            let used = label.width() + 1 + settings::first_found.width();
-            vec![s(format!("{} ", label), theme::text()), s(settings::first_found, theme::accent()), Span::raw(" ".repeat(lw.saturating_sub(used).max(1)))]
+            // `✓ ANTHROPIC_API_KEY found`, padded to the column: all in ink, never the accent (the
+            // accent is what waits on him; this works already: designer m_52236, the desktop's 'Ready on this Mac')
+            let used = FOUND_MARK.width() + label.width() + 1 + settings::first_found.width();
+            vec![s(format!("{FOUND_MARK}{label} {}", settings::first_found), theme::text()), Span::raw(" ".repeat(lw.saturating_sub(used).max(1)))]
         } else {
             vec![s(padded(&label, lw), theme::text())]
         };
@@ -2328,7 +2332,7 @@ mod tests {
         for s in [
             "how do you want to pay for the models?",
             "a plan you already have, or a key. you can add more later in /provider.",
-            "› ANTHROPIC_FOUNDRY_API_KEY found",
+            "› ✓ ANTHROPIC_FOUNDRY_API_KEY found",
             "Anthropic (foundry proxy), already set up",
             "Continue with ChatGPT      use your Plus or Pro plan",
             "OpenRouter                 sign in, or paste its key",
@@ -2338,6 +2342,13 @@ mod tests {
         ] {
             assert!(sc.contains(s), "{}\n{}", s, sc);
         }
+        // the key found's mark, its name and 'found' in ink, never the accent (designer m_52236)
+        let found = model_list(&o, 110, 1)
+            .into_iter()
+            .flat_map(|l| l.spans)
+            .find(|sp| sp.content.contains(settings::first_found) && sp.content.contains("ANTHROPIC_FOUNDRY_API_KEY"))
+            .expect("the found row");
+        assert_eq!((found.content.as_ref(), found.style.fg), ("✓ ANTHROPIC_FOUNDRY_API_KEY found", Some(theme::text())));
         // no detection: no Codex mark, no Claude line
         assert!(!sc.contains("Codex") && !sc.contains("Claude Code"), "{}", sc);
         // ↑↓ wrap over the five rows
@@ -2540,7 +2551,7 @@ mod tests {
         assert!(o.ask_key);
         o.go(Step::Model, 0);
         let sc = screen(&o, 10, 110, 30);
-        assert!(sc.contains("› OPENAI_API_KEY found") && sc.contains("OpenAI. i'll use gpt-6-astra"), "{}", sc);
+        assert!(sc.contains("› ✓ OPENAI_API_KEY found") && sc.contains("OpenAI. i'll use gpt-6-astra"), "{}", sc);
         o.on_key(key(KeyCode::Enter), 1, &e);
         assert!(matches!(&o.sub, Sub::Model(p, 0, _) if p.id == "openai"));
         o.on_key(key(KeyCode::Enter), 1, &e);
