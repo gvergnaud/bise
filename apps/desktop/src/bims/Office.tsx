@@ -45,7 +45,7 @@ import type { Growth } from '@/proto';
 import { DEFAULT_MAP, type MapId, mapOf } from './maps/ids';
 import type { PluginObject } from './plugin-objects';
 import type { Corners } from './corners';
-import { objPillsOf, type ObjPill } from './objpills';
+import { objPillsOf, objTipOf, type ObjPill, type ObjTip } from './objpills';
 import { extKept, keepExt } from './ext-keep';
 import { planOf } from './maps';
 import './office.css';
@@ -170,6 +170,8 @@ interface Live {
   held: boolean;
   /** the agent whose row the pointer is on (focus.ts): a halo under its bim */
   lit: string | null;
+  /** the plugin object under his pointer once the tip's delay passed (its key): its name's tip (objpills.ts objTipOf) */
+  obj: string | null;
 }
 
 /** The follow camera (focus.ts): the bim it aims at ('fit': back to the whole office, then null), and its last step's time. */
@@ -301,6 +303,8 @@ export function Office({
   }, [project]);
   // the bim under a point of the canvas, css px: the renderer's once loaded
   const pick = useRef<(x: number, y: number) => string | null>(() => null);
+  // the plugin object under a point of the canvas (its key), css px: the renderer's once loaded
+  const objAt = useRef<(x: number, y: number) => string | null>(() => null);
   const held = useModHeld('Control');
   // his last keys, for the konami code (m1); the driver keeps when he typed it
   const keys = useRef<string[]>([]);
@@ -321,7 +325,7 @@ export function Office({
     setFitted(atFit(c));
     applyCam.current(c);
   }, []);
-  const live = useRef<Live>({ hover: null, held, lit: null });
+  const live = useRef<Live>({ hover: null, held, lit: null, obj: null });
   useEffect(() => {
     const was = followRef.current.target;
     if (follow === (was === null || was === 'fit' ? null : was.name)) return;
@@ -357,6 +361,9 @@ export function Office({
   const [newTag, setNewTag] = useState<{ text: string; x: number; y: number } | null>(null);
   // his plugins' objects' '?' / '✗' (plugin-objects.ts pill): over each object, where it stands
   const [objPills, setObjPills] = useState<readonly ObjPill[]>([]);
+  // the hovered object's name over its top (Gabriel m_51985); it fades in when shown cold (the ds tips' rule)
+  const [objTip, setObjTip] = useState<ObjTip | null>(null);
+  const objFade = useRef(false);
   // the growth drawn: before the rows, so the first one is no unlock moment (no mark yet: a bare room)
   useEffect(() => {
     if (high === null) return;
@@ -465,6 +472,7 @@ export function Office({
     let lastLabels = '';
     let lastNew = 'null';
     let lastPills = '[]';
+    let lastTip = 'null';
     let lastGrown = '';
     let reduced = reducedMotion();
     let firstDrawn = false;
@@ -564,6 +572,12 @@ export function Office({
       if (pillSig !== lastPills) {
         lastPills = pillSig;
         setObjPills(pills);
+      }
+      const tip = objTipOf(step.corners.placed, L.obj, (key) => r?.objectTopOf(key) ?? null);
+      const tipSig = JSON.stringify(tip);
+      if (tipSig !== lastTip) {
+        lastTip = tipSig;
+        setObjTip(tip);
       }
       ranks.current = new Map(frames.map((f) => [f.name, tagRank(f.pose.seg.act.k)]));
       heads.current = new Map();
@@ -695,6 +709,7 @@ export function Office({
         r = made;
         made.onLost(fail);
         pick.current = (x, y) => (lost ? null : made.pick(x, y));
+        objAt.current = (x, y) => (lost ? null : made.objectAt(x, y));
         if (snapRef !== undefined)
           snapRef.current = (target) => {
             made.copyTo(target);
@@ -725,6 +740,7 @@ export function Office({
       kickRef.current = () => undefined;
       applyCam.current = () => undefined;
       pick.current = () => null;
+      objAt.current = () => null;
       if (snapRef !== undefined) snapRef.current = null;
       if (headRef !== undefined) headRef.current = null;
       r?.dispose();
@@ -748,6 +764,40 @@ export function Office({
     if (name === null && live.current.hover !== null) warmUntil.current = Date.now() + WARM_MS;
     live.current.hover = name;
     kickRef.current();
+  };
+  // the plugin object under the pointer (no bim there): its name's tip after the tip's delay, at
+  // once while warm (one card or tip warms the next), off it at once (Gabriel m_51985)
+  const objTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const objPending = useRef<string | null>(null);
+  useEffect(
+    () => () => {
+      clearTimeout(objTimer.current);
+    },
+    [],
+  );
+  const setObj = (key: string | null, fade: boolean) => {
+    if (live.current.obj === key) return;
+    if (key === null && live.current.obj !== null) warmUntil.current = Date.now() + WARM_MS;
+    objFade.current = fade;
+    live.current.obj = key;
+    kickRef.current();
+  };
+  const hoverObj = (key: string | null) => {
+    if (key === objPending.current) return;
+    objPending.current = key;
+    clearTimeout(objTimer.current);
+    if (key === null) setObj(null, false);
+    else if (Date.now() < warmUntil.current || live.current.obj !== null) setObj(key, false);
+    else
+      objTimer.current = setTimeout(() => {
+        setObj(key, true);
+      }, HOVER_MS);
+  };
+  const objEvent = (e: { clientX: number; clientY: number }): string | null => {
+    const box = holder.current;
+    if (box === null) return null;
+    const at = box.getBoundingClientRect();
+    return objAt.current(e.clientX - at.left, e.clientY - at.top);
   };
   // a one-finger (or mouse) drag moves the view while zoomed; past DRAG_PX it is never a click
   const drag = useRef<{ id: number; x: number; y: number; moved: boolean } | null>(null);
@@ -783,6 +833,7 @@ export function Office({
       pending.current = null;
       clearTimeout(hoverTimer.current);
       setHover(null);
+      hoverObj(null);
     }
     d.x = e.clientX;
     d.y = e.clientY;
@@ -899,6 +950,8 @@ export function Office({
         if (dragMove(e, e.currentTarget)) return;
         const name = pickEvent(e);
         setPointer(name !== null);
+        // a bim goes first: over one, no object's tip
+        hoverObj(name === null ? objEvent(e) : null);
         if (name === pending.current) return;
         pending.current = name;
         clearTimeout(hoverTimer.current);
@@ -916,6 +969,7 @@ export function Office({
         clearTimeout(hoverTimer.current);
         setPointer(false);
         setHover(null);
+        hoverObj(null);
       }}
       onClick={(e) => {
         if (dragged.current) {
@@ -971,6 +1025,19 @@ export function Office({
             {p.pill}
           </span>
         ))}
+        {/* the hovered object's plugin, the ds's tip (.b-tip) over its top, over its pill when it has one */}
+        {objTip !== null && (
+          <div
+            className={`b-tip bims-objtip${objFade.current ? ' in' : ''}`}
+            role="tooltip"
+            data-pill={objTip.pill || undefined}
+            data-testid="app.right.bims.objtip"
+            data-key={objTip.key}
+            style={{ left: `${String(objTip.x)}px`, top: `${String(objTip.y)}px` }}
+          >
+            <span className="w">{objTip.name}</span>
+          </div>
+        )}
         {newTag !== null && (
           <div className="bims-label bims-new" data-mode="event" style={{ left: `${String(newTag.x)}px`, top: `${String(newTag.y)}px` }} data-testid="app.right.bims.new">
             {newTag.text}

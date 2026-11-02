@@ -17,7 +17,7 @@ import type { BimFrame, Look, MakeRenderer, Motion, OfficeRenderer } from '../mo
 import { FIT, type Cam } from '../zoom';
 import { type Fit, boxSite, fitSite, groundAllOf, siteOf, toScreen, viewFit, wideSiteOf } from './camera';
 import { NO_GROW } from '../growth';
-import { pickAt, type Target } from './pick';
+import { pickAt, pickObjectAt, type ObjTarget, type Target } from './pick';
 import type { Rig } from './pose';
 import { sinceArrived, skateAt } from '../skate';
 import { STYLE } from './style';
@@ -288,6 +288,29 @@ export const makeRenderer: MakeRenderer = (canvas, opts) => {
         });
       }
       return pickAt(targets, x, y);
+    },
+    objectAt(x, y) {
+      if (!fit) return null;
+      const f = fit;
+      const targets: ObjTarget[] = [];
+      for (const [key, b] of office.objectBoxes()) {
+        // its box's 8 corners on the canvas: the rectangle they span
+        let left = Infinity;
+        let top = Infinity;
+        let right = -Infinity;
+        let bottom = -Infinity;
+        for (const px of [b.min.x, b.max.x])
+          for (const py of [b.min.y, b.max.y])
+            for (const pz of [b.min.z, b.max.z]) {
+              const p = toScreen(f, { x: px, y: py, z: pz });
+              left = Math.min(left, p.x);
+              right = Math.max(right, p.x);
+              top = Math.min(top, p.y);
+              bottom = Math.max(bottom, p.y);
+            }
+        targets.push({ key, left, top, right, bottom });
+      }
+      return pickObjectAt(targets, x, y);
     },
     copyTo(target) {
       view.copyTo(target);

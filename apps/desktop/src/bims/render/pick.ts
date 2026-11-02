@@ -1,4 +1,4 @@
-// What is under a canvas point (pure): the nearest bim's body, else the desk under it. index.ts
+// What is under a canvas point (pure): the nearest bim's body, else the desk under it; and the plugin object under it (pickObjectAt). index.ts
 // projects the heads and desks with camera.toScreen and hands them here.
 
 export interface Target {
@@ -40,4 +40,27 @@ export function pickAt(targets: readonly Target[], x: number, y: number): string
     if (d < t.desk.r && d < dd) { dd = d; deskBest = t.name; }
   }
   return deskBest;
+}
+
+/** a plugin's object as drawn on the canvas (its box's corners projected), css px */
+export interface ObjTarget {
+  readonly key: string;
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+}
+
+/**
+ * The plugin object under a canvas point (his hover names its plugin, Gabriel m_51985): of the
+ * drawn boxes that hold it, the front one (its foot lowest on the canvas, nearest the camera);
+ * null on none. The bims go first: the office asks this only when pickAt found none.
+ */
+export function pickObjectAt(targets: readonly ObjTarget[], x: number, y: number): string | null {
+  let best: ObjTarget | null = null;
+  for (const t of targets) {
+    if (x < t.left || x > t.right || y < t.top || y > t.bottom) continue;
+    if (best === null || t.bottom > best.bottom) best = t;
+  }
+  return best?.key ?? null;
 }

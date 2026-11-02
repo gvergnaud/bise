@@ -8,6 +8,13 @@ import type { Corners, Rug } from '../corners';
 import { makeObject } from './objects';
 import type { Style } from './style';
 
+/** a point in the office, world units */
+interface Vec3 {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
 /** the corners' rugs (no pink or red: palette.test.ts), by day and at night */
 export const RUG = {
   play: { day: '#bfe1f2', night: '#4c6b80' },
@@ -23,6 +30,8 @@ export interface ObjectsLayer {
   set(c: Corners, night: boolean): void;
   /** the middle of an object's top as drawn (world units: its pill sits there, objpills.ts); null: not drawn */
   topOf(key: string): { readonly x: number; readonly y: number; readonly z: number } | null;
+  /** every drawn object's box (world units, min and max corners): what his hover picks (pick.ts pickObjectAt) */
+  boxes(): ReadonlyMap<string, { readonly min: Vec3; readonly max: Vec3 }>;
   dispose(): void;
 }
 
@@ -32,6 +41,7 @@ export function makeObjectsLayer(style: Style): ObjectsLayer {
   let drawn: Corners | null = null;
   let drawnNight = false;
   const tops = new Map<string, { x: number; y: number; z: number }>();
+  const boxes = new Map<string, { min: Vec3; max: Vec3 }>();
 
   const clear = (): void => {
     for (const c of [...root.children]) {
@@ -60,6 +70,7 @@ export function makeObjectsLayer(style: Style): ObjectsLayer {
       drawnNight = night;
       clear();
       tops.clear();
+      boxes.clear();
       for (const r of c.rugs) root.add(rug(r, night));
       for (const p of c.placed) {
         // a swapped one is already its compact id; makeObject's compact only scales the others
@@ -71,13 +82,17 @@ export function makeObjectsLayer(style: Style): ObjectsLayer {
         root.add(made.group);
         made.group.updateMatrixWorld(true);
         const b = new Box3().setFromObject(made.group);
-        if (!b.isEmpty()) tops.set(p.key, { x: (b.min.x + b.max.x) / 2, y: b.max.y, z: (b.min.z + b.max.z) / 2 });
+        if (b.isEmpty()) continue;
+        tops.set(p.key, { x: (b.min.x + b.max.x) / 2, y: b.max.y, z: (b.min.z + b.max.z) / 2 });
+        boxes.set(p.key, { min: { x: b.min.x, y: b.min.y, z: b.min.z }, max: { x: b.max.x, y: b.max.y, z: b.max.z } });
       }
     },
     topOf: (key) => tops.get(key) ?? null,
+    boxes: () => boxes,
     dispose() {
       clear();
       tops.clear();
+      boxes.clear();
       drawn = null;
     },
   };

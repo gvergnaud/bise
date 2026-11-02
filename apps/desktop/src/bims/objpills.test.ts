@@ -4,7 +4,7 @@ import { layoutOf } from './maps';
 import { objectSpots } from './corners';
 import { crewOf, objsOf } from './corners.test';
 import { settings } from '@/proto/words.gen';
-import { objPillsOf } from './objpills';
+import { objPillsOf, objTipOf } from './objpills';
 
 describe("the objects' pills", () => {
   const o = layoutOf(crewOf(5), 'loft');
@@ -39,5 +39,33 @@ describe("the objects' pills", () => {
 
   it('drops the pill of an object off view or not drawn', () => {
     expect(objPillsOf(placed, () => null)).toEqual([]);
+  });
+});
+
+// hovering a plugin's object names it in a tip over its top (Gabriel m_51985)
+describe("an object's name tip", () => {
+  const o = layoutOf(crewOf(5), 'loft');
+  const { placed } = objectSpots(o, objsOf(4).map((p, i) => (i === 0 ? { ...p, name: 'Gmail' } : p)));
+  const first = placed[0];
+
+  it('names the hovered object’s plugin, as he reads it, on its drawn top', () => {
+    if (first === undefined) throw new Error('no object placed');
+    const asked: string[] = [];
+    const tip = objTipOf(placed, first.key, (key) => {
+      asked.push(key);
+      return { x: 40.4, y: 12.6 };
+    });
+    expect(tip).toEqual({ key: first.key, name: first.name, pill: false, x: 40, y: 13 });
+    expect(asked).toEqual([first.key]);
+    expect(placed.some((p) => p.name === 'Gmail')).toBe(true);
+    // over its pill when it wears one
+    expect(objTipOf([{ ...first, pill: '?' }], first.key, () => ({ x: 0, y: 0 }))?.pill).toBe(true);
+  });
+
+  it('none when nothing is hovered, the key is no drawn object, or it is off view', () => {
+    if (first === undefined) throw new Error('no object placed');
+    expect(objTipOf(placed, null, () => ({ x: 0, y: 0 }))).toBeNull();
+    expect(objTipOf(placed, 'gone', () => ({ x: 0, y: 0 }))).toBeNull();
+    expect(objTipOf(placed, first.key, () => null)).toBeNull();
   });
 });

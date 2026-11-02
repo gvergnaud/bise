@@ -104,6 +104,8 @@ const OFF_WALL = 0.08;
 
 export interface Placed {
   readonly key: string;
+  /** the plugin's name as he reads it (its hover tip, objpills.ts objTipOf) */
+  readonly name: string;
   /** what is drawn: the plugin's object, or its compact one */
   readonly obj: ObjId;
   /** the plugin's own object (its corner's: CORNER) */
@@ -605,7 +607,7 @@ export function objectSpots(o: Office, objs: readonly PluginObject[], prev: read
 
 function placedOf(p: PluginObject, obj: ObjId, size: Size, foot: FootOf, corner: Corner, t: Try): Placed {
   return {
-    key: p.key, obj, of: p.obj, ...(p.n === undefined ? {} : { n: p.n }), glass: p.glass, pill: p.pill, ...(p.pillOf === undefined ? {} : { pillOf: p.pillOf }), ...(p.pillName === undefined ? {} : { pillName: p.pillName }),
+    key: p.key, name: p.name, obj, of: p.obj, ...(p.n === undefined ? {} : { n: p.n }), glass: p.glass, pill: p.pill, ...(p.pillOf === undefined ? {} : { pillOf: p.pillOf }), ...(p.pillName === undefined ? {} : { pillName: p.pillName }),
     x: t.x, z: t.z, rot: t.rot, compact: size > 0, scaled: size === 2 || (size === 1 && COMPACT[p.obj] === undefined), foot, corner, box: boxOf(t.x, t.z, foot.w, foot.d, t.rot),
   };
 }

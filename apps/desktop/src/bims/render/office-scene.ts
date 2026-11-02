@@ -103,6 +103,8 @@ export interface OfficeScene {
   inboxTop(): { readonly x: number; readonly y: number; readonly z: number } | null;
   /** a plugin object's top as drawn, world units (its pill); null: not drawn */
   objectTop(key: string): { readonly x: number; readonly y: number; readonly z: number } | null;
+  /** every drawn plugin object's box, world units (his hover picks one: pick.ts pickObjectAt); empty: none drawn */
+  objectBoxes(): ReturnType<ObjectsLayer['boxes']>;
   /** where a stage's piece stands (the map's look), office units */
   pieceAt(stage: number): { readonly x: number; readonly z: number } | null;
   /** its world alone (no bim, plane, halo): the town bakes its walls while its bims move */
@@ -781,6 +783,7 @@ export function makeOfficeScene(style: Style, o: { readonly ground?: boolean; re
     desk: (name) => world?.desks.get(name),
     inboxTop: () => world?.inbox?.top ?? null,
     objectTop: (key) => objects?.topOf(key) ?? null,
+    objectBoxes: () => objects?.boxes() ?? new Map(),
     pieceAt(stage) {
       return office ? mapLook().pieceAt(office, stage) : null;
     },

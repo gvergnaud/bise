@@ -32,6 +32,8 @@ export type PluginKind = 'plugin' | 'connector' | 'mcp' | 'skills' | 'bise';
 export interface PluginObject {
   /** the plugin's id string (pluginKey): the prefs' key and the placement's seed */
   readonly key: string;
+  /** the plugin's name as he reads it (its title, else its name): the object's hover tip */
+  readonly name: string;
   readonly obj: ObjId;
   /** the object's count (makeObject's n): books on a shelf, lights on a rack, the plant's pot */
   readonly n?: number;
@@ -184,15 +186,17 @@ export function objectOf(row: PluginRow, picks: Picks): PluginObject | null {
   // his pick keeps the default's count only when it is the same object (the plant's pot, the shelf's books)
   const n = pick === undefined || pick === dflt.obj ? dflt.n : undefined;
   const pill = broken ? '✗' : owesLogin(row) ? '?' : null;
+  const name = row.title !== undefined && row.title !== null && row.title !== '' ? row.title : row.name;
   return {
     key,
+    name,
     obj: pick ?? dflt.obj,
     ...(n === undefined ? {} : { n }),
     // broken is not off (designer m_41417): a broken plugin's object stays lit, its '✗' says it failed; glass is for off
     glass: !on && !broken,
     pill,
     picked: pick !== undefined,
-    ...(pill === null ? {} : { pillName: row.title !== undefined && row.title !== null && row.title !== '' ? row.title : row.name }),
+    ...(pill === null ? {} : { pillName: name }),
   };
 }
 
@@ -258,7 +262,7 @@ export function uniqueObjects(objs: readonly PluginObject[]): readonly PluginObj
       continue;
     }
     taken.add(kin);
-    out.push({ key: o.key, obj: kin, glass: o.glass, pill: o.pill, picked: o.picked, ...(o.pillName === undefined ? {} : { pillName: o.pillName }) });
+    out.push({ key: o.key, name: o.name, obj: kin, glass: o.glass, pill: o.pill, picked: o.picked, ...(o.pillName === undefined ? {} : { pillName: o.pillName }) });
   }
   return out.sort(byKey);
 }

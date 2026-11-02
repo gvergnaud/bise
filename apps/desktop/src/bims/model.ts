@@ -575,6 +575,8 @@ export interface OfficeRenderer {
   pointOf(what: 'tray' | { readonly ghost: number }): { readonly x: number; readonly y: number } | null;
   /** the bim (or its desk) under a canvas point, css px; null on nothing */
   pick(x: number, y: number): string | null;
+  /** the plugin object (its key) under a canvas point, css px: the front one of the drawn boxes that hold it (pick.ts pickObjectAt); null on none */
+  objectAt(x: number, y: number): string | null;
   /** the office as drawn now, copied onto a 2d canvas of the same pixel size (the map's crossfade, /bims) */
   copyTo(target: HTMLCanvasElement): void;
   /**

@@ -2,7 +2,8 @@
 // object (glass) gets the '✗', one that waits on his login the '?', each on its object's drawn top (the gap a
 // bim's pill keeps over its head). An object that stands for plugins not drawn carries the worst of
 // their pills, and its pill is that plugin's (Placed.pillOf). Each pill's tip names its plugin and
-// its state ('slides failed to start', designer m_43241). Pure: the office (Office.tsx) gives it the canvas's projection.
+// its state ('slides failed to start', designer m_43241). Hovering an object names its plugin in a
+// tip on its top (objTipOf, Gabriel m_51985). Pure: the office (Office.tsx) gives it the canvas's projection.
 // Owner: bims-life.
 import { settings } from '@/proto/words.gen';
 import type { Placed } from './corners';
@@ -32,4 +33,27 @@ export function objPillsOf(placed: readonly Placed[], topOf: (key: string) => { 
     out.push({ key, pill: p.pill, tip: p.pill === '✗' ? settings.plugins_waits_error({ name }) : settings.plugins_waits_login({ name }), x: Math.round(s.x), y: Math.round(s.y) });
   }
   return out;
+}
+
+/** the name tip over a hovered object: its plugin's key, its name as he reads it, its drawn top in css px */
+export interface ObjTip {
+  readonly key: string;
+  readonly name: string;
+  /** the object wears a '?' / '✗' pill on that top: the tip goes over it */
+  readonly pill: boolean;
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * The tip over the object under his pointer (Gabriel m_51985: hovering a plugin's object names
+ * the plugin), on its drawn top as its pill is; null when none is hovered, the key is no drawn
+ * object, or it is off view. Pure: `topOf` as objPillsOf's.
+ */
+export function objTipOf(placed: readonly Placed[], key: string | null, topOf: (key: string) => { readonly x: number; readonly y: number } | null): ObjTip | null {
+  if (key === null) return null;
+  const p = placed.find((q) => q.key === key);
+  if (p === undefined) return null;
+  const s = topOf(p.key);
+  return s === null ? null : { key: p.key, name: p.name, pill: p.pill !== null, x: Math.round(s.x), y: Math.round(s.y) };
 }
