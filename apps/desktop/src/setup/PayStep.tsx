@@ -188,7 +188,8 @@ export function PayStep({ frame, accounts, claudePlan = false, check, s, set, se
     const from = acc?.from != null ? fromWords(acc.from) : null;
     if (ph === 'signing') {
       return (
-        <Onb {...frame} title={common.signing_wait({ label: name(v.id) })} cta={cont}>
+        // no 'continue' while he signs in: a dead button; it comes back on the list (designer m_52243)
+        <Onb {...frame} title={common.signing_wait({ label: name(v.id) })}>
           {/* a way out where he looks, the terminal's 'esc cancel': what '← back' does from here (designer m_52216) */}
           <p className="setup-cancel">
             <Act onClick={() => { back?.(); }} testId="setup.pay.signin.cancel">

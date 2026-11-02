@@ -110,6 +110,13 @@ export function Onboarding({ accounts, claudePlan = false, found, perms, fn = nu
   const composer = useRef<ComposerActions | null>(null);
   // the model step (pay.ts): a sign-in he started here that ended signed in gets its check, once
   const [pay, setPay] = useState<PayState>(PAY_START);
+  // the screen keeps the keys: a button he clicked that goes away (the sign-in's, a row) drops focus on the body,
+  // where ⏎ and esc reach nothing (ui-review m_52241: esc on the waiting view did nothing); the root takes it back
+  const root = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const r = root.current;
+    if (r !== null && !r.contains(document.activeElement)) r.focus({ preventScroll: true });
+  }, [pay, s.at]);
   const [payAccounts, setPayAccounts] = useState(accounts);
   if (payAccounts !== accounts) {
     setPayAccounts(accounts);
@@ -323,6 +330,7 @@ export function Onboarding({ accounts, claudePlan = false, found, perms, fn = nu
   });
   return (
     <section
+      ref={root}
       className="setup setup-a"
       data-testid="setup.root"
       tabIndex={-1}

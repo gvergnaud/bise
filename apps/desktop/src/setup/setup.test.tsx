@@ -216,6 +216,15 @@ describe('Onboarding', () => {
     fireEvent.click(screen.getByTestId('setup.pay.signin.cancel'));
     expect(screen.getByTestId('setup.pay')).toBeTruthy();
     expect(p.sent.filter((c) => c.cmd === 'sign_in_cancel')).toHaveLength(2);
+    // esc where the focus is once the sign-in's button has gone (ui-review m_52241: it fell on the body); no dead 'continue' while it waits (designer m_52243)
+    fireEvent.click(screen.getByTestId('setup.pay.openrouter'));
+    fireEvent.click(screen.getByTestId('setup.pay.openrouter.signin'));
+    expect(screen.queryByTestId('setup.next')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByTestId('setup.root'));
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    expect(screen.getByTestId('setup.pay')).toBeTruthy();
+    expect(p.sent.filter((c) => c.cmd === 'sign_in_cancel')).toHaveLength(3);
+    expect(screen.getByTestId('setup.next')).toBeTruthy();
   });
 
   it("with the island drawn, 'it works' keeps the model's name whole and says how long it took (its words are the bubble's)", () => {
