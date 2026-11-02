@@ -45,7 +45,7 @@ import type { Growth } from '@/proto';
 import { DEFAULT_MAP, type MapId, mapOf } from './maps/ids';
 import type { PluginObject } from './plugin-objects';
 import type { Corners } from './corners';
-import { bimBox, objPillsOf, objTipOf, placeObjTip, type ObjPill, type ObjTip, type Rect } from './objpills';
+import { bimBox, deskBox, objPillsOf, objTipOf, placeObjTip, type ObjPill, type ObjTip, type Rect } from './objpills';
 import { extKept, keepExt } from './ext-keep';
 import { planOf } from './maps';
 import './office.css';
@@ -633,10 +633,14 @@ export function Office({
       }
       layoutTags();
       // the bims walk: the object's tip moves off a bim that comes into its place
-      bimRects.current = frames.flatMap((f) => {
-        const h = r?.headOf(f.name) ?? null;
-        return h === null ? [] : [bimBox(h)];
-      });
+      bimRects.current = [
+        ...frames.flatMap((f) => {
+          const h = r?.headOf(f.name) ?? null;
+          return h === null ? [] : [bimBox(h)];
+        }),
+        // their desks too: one in front of an object hides its edge (ui-review m_52091)
+        ...r.deskSpots().map(deskBox),
+      ];
       placeTipEl();
       if (pinsRef.current !== null) placePins(pinsRef.current, pinPoints(r, step.agents.find((a) => a.main)?.name ?? null));
       if (zzzRef.current !== null) {

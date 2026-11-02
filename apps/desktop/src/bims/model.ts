@@ -579,6 +579,8 @@ export interface OfficeRenderer {
   objectAt(x: number, y: number): string | null;
   /** a plugin object's drawn box on the canvas, css px (its tip goes over, under or beside it: objpills.ts placeObjTip); null: not drawn */
   objectBoxOf(key: string): { readonly left: number; readonly top: number; readonly right: number; readonly bottom: number } | null;
+  /** every bim's desk on the canvas: its top's middle and its reach, css px (pick's desk circle; an object's tip keeps off it) */
+  deskSpots(): readonly { readonly x: number; readonly y: number; readonly r: number }[];
   /** the office as drawn now, copied onto a 2d canvas of the same pixel size (the map's crossfade, /bims) */
   copyTo(target: HTMLCanvasElement): void;
   /**

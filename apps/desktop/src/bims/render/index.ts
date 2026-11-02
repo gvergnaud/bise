@@ -312,6 +312,15 @@ export const makeRenderer: MakeRenderer = (canvas, opts) => {
       });
       return pickObjectAt(targets, x, y);
     },
+    deskSpots() {
+      if (!fit) return [];
+      const f = fit;
+      // pick's desk circle: its top's middle, 0.8 world units round
+      return office.names().flatMap((name) => {
+        const d = office.desk(name);
+        return d ? [{ ...toScreen(f, d.top), r: 0.8 / f.scale }] : [];
+      });
+    },
     objectBoxOf(key) {
       const pts = office.objectShapes().get(key);
       return fit && pts ? screenBox(fit, pts) : null;

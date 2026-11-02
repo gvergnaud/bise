@@ -4,7 +4,7 @@ import { layoutOf } from './maps';
 import { objectSpots } from './corners';
 import { crewOf, objsOf } from './corners.test';
 import { settings } from '@/proto/words.gen';
-import { BIM_HALF_PX, bimBox, OBJ_PILL_PX, objPillsOf, objTipOf, placeObjTip, TIP_CLEAR, type ObjTip, type Rect } from './objpills';
+import { BIM_HALF_OF_HEIGHT, BIM_HALF_PX, bimBox, deskBox, OBJ_PILL_PX, objPillsOf, objTipOf, placeObjTip, TIP_CLEAR, type ObjTip, type Rect } from './objpills';
 import { TIP_GAP } from '@/ds';
 
 describe("the objects' pills", () => {
@@ -118,6 +118,21 @@ describe("where an object's tip goes (placeObjTip, designer m_52074)", () => {
     expect(placeObjTip(low, size, tile, { bims: [bim(200, 205), bim(140, 245)], chips: [] })?.side).toBe('right');
     // bims all round: no tip
     expect(placeObjTip(low, size, tile, { bims: [bim(200, 205), bim(140, 245), bim(260, 245)], chips: [] })).toBeNull();
+  });
+
+  it('pinched, a bim is as wide as it is drawn and its desk counts: the tip never lands on main’s hand or laptop (ui-review m_52091)', () => {
+    // zoomed in, main 160 px tall: his box reaches his hands, not 14 px round his head
+    const main = bimBox({ x: 100, y: 120, feet: 280 });
+    expect(main.right - main.left).toBe(2 * BIM_HALF_OF_HEIGHT * 160);
+    // the printer behind his desk, its left part hidden: no room over it (a chip) or under it (the tile's bottom); its left spot 132-192 × 203-227
+    const printer = tip(220, 150, 280);
+    const top = { left: 0, top: 0, right: 400, bottom: 140 };
+    // his drawn width reaches the left spot: at the printer's right
+    expect(placeObjTip(printer, size, tile, { bims: [main], chips: [top] })?.side).toBe('right');
+    // 14 px round his head (the old box) never reached it: the tip sat on his hand
+    expect(placeObjTip(printer, size, tile, { bims: [bimBox({ x: 100, y: 120, feet: 140 })], chips: [top] })?.side).toBe('left');
+    // his desk in the left spot sends it away too
+    expect(placeObjTip(printer, size, tile, { bims: [deskBox({ x: 150, y: 200, r: 30 })], chips: [top] })?.side).toBe('right');
   });
 
   it('TIP_CLEAR inside the tile: slid along its edge, never past it', () => {

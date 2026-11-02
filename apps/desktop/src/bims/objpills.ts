@@ -124,7 +124,20 @@ export function placeObjTip(
   return found === undefined ? null : { ...found, left: Math.round(found.left), top: Math.round(found.top) };
 }
 
-/** a bim's head and body box on the canvas from its head's top and its feet (OfficeRenderer.headOf). Pure. */
+/** a bim's half width, arms out at its desk, as a share of its drawn height (head's top to feet) */
+export const BIM_HALF_OF_HEIGHT = 0.4;
+
+/**
+ * A bim's head and body box on the canvas from its head's top and its feet (OfficeRenderer.headOf):
+ * as wide as it is drawn, so a zoom widens it with its arms (ui-review m_52091: pinched, the tip
+ * stood over main's hand). Pure.
+ */
 export function bimBox(h: { readonly x: number; readonly y: number; readonly feet: number }): Rect {
-  return { left: h.x - BIM_HALF_PX, top: h.y, right: h.x + BIM_HALF_PX, bottom: Math.max(h.y, h.feet) };
+  const half = Math.max(BIM_HALF_PX, BIM_HALF_OF_HEIGHT * (h.feet - h.y));
+  return { left: h.x - half, top: h.y, right: h.x + half, bottom: Math.max(h.y, h.feet) };
+}
+
+/** a bim's desk on the canvas (its top's middle and its reach, OfficeRenderer.deskSpots): what stands in front of an object hides its edge, the tip keeps off it. Pure. */
+export function deskBox(d: { readonly x: number; readonly y: number; readonly r: number }): Rect {
+  return { left: d.x - d.r, top: d.y - d.r, right: d.x + d.r, bottom: d.y + d.r };
 }
