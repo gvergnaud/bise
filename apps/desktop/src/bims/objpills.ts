@@ -10,7 +10,9 @@ import { TIP_GAP } from '@/ds';
 import { namesWords } from '@/app/tipwords';
 import { settings } from '@/proto/words.gen';
 import type { Placed } from './corners';
-import { BODY_PX } from './render/pick';
+
+/** how far round a bim's head (its top point, its head below it) an object's tip keeps clear, css px; render/pick.ts stays out of the entry chunk (electron.vite.config.ts bims-budget) */
+const HEAD_PX = 14;
 
 /** a pill over an object: the key of the plugin it is for (its click opens it), its sign, css px on the canvas */
 export interface ObjPill {
@@ -88,8 +90,8 @@ export function placeObjTip(
   const clamp = (v: number, hi: number): number => Math.max(TIP_GAP, Math.min(v, hi - TIP_GAP));
   const left = Math.round(clamp(tip.x - size.w / 2, tile.w - size.w));
   const above = tip.y - TIP_GAP - (tip.pill ? OBJ_PILL_PX : 0) - size.h;
-  // a head near the tip's box (a bim's head is about BODY_PX round, under its top point)
-  const onHead = heads.some((h) => h.x >= left - BODY_PX && h.x <= left + size.w + BODY_PX && h.y >= above - 2 * BODY_PX && h.y <= above + size.h);
+  // a head near the tip's box (a bim's head is about HEAD_PX round, under its top point)
+  const onHead = heads.some((h) => h.x >= left - HEAD_PX && h.x <= left + size.w + HEAD_PX && h.y >= above - 2 * HEAD_PX && h.y <= above + size.h);
   const side = above >= TIP_GAP && !onHead ? 'above' : 'below';
   const top = side === 'above' ? above : tip.foot + TIP_GAP;
   return { left, top: Math.round(clamp(top, tile.h - size.h)), side };
