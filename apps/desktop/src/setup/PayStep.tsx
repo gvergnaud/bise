@@ -8,7 +8,7 @@ import type { Account, AppCmd, KeyFrom } from '@/proto';
 import { Act, Button, Field, Group, Help, Onb, type GroupItem } from '@/ds';
 import { failedWords, fromWords, retries, shortModel, type ProviderCheck } from '@/settings';
 import { common, settings } from '@/proto/words.gen';
-import { CHATGPT, OPENROUTER, keyFieldSend, keyProviders, openRouterSignIn, phase, pickRow, rows, startCheck, type PayState, type Row } from './pay';
+import { CHATGPT, OPENROUTER, enterRow, keyFieldSend, keyProviders, openRouterSignIn, phase, pickRow, readyId, rows, startCheck, type PayState, type Row } from './pay';
 import { hasWebGL } from './island/Island';
 
 /** where the model's name goes in first_works' words (a sentinel no name holds) */
@@ -236,18 +236,24 @@ export function PayStep({ frame, accounts, claudePlan = false, check, s, set, se
 
   // what already works here on top, under its head; the other ways under theirs; nothing found: one list, no heads (designer m_52236)
   const { ready, other } = rows(accounts);
-  const item = (r: Row, i: number): GroupItem => {
+  const item = (r: Row): GroupItem => {
     const it = rowItem(r, () => { run(pickRow(s, r, check)); });
     if (!ready.includes(r)) return it;
     // a ready row checked in place: 'checking…' or its failure under it, the row stays (the first comes selected: ⏎ takes it)
-    const id = r.t === 'found' ? r.acc.id : CHATGPT;
+    const acc = r.t === 'found' || r.t === 'chatgpt' ? r.acc : null;
+    const id = readyId(r);
     const mine = s.sent?.id === id;
-    const failed = mine && ph === 'failed' && check !== null ? failedWords(check, r.t === 'found' && r.acc.from != null ? fromWords(r.acc.from) : null, r.t === 'chatgpt') : null;
+    // the provider's name and keys page from its account when the check has none (ui-review m_52268: 'undefined says it's wrong')
+    const c = mine && ph === 'failed' && check !== null ? { ...check, name: check.name || (acc?.label ?? id), url: check.url ?? (acc?.keys_url || null) } : null;
+    const failed = c !== null ? failedWords(c, r.t === 'found' && r.acc.from != null ? fromWords(r.acc.from) : null, r.t === 'chatgpt') : null;
     const sub: ReactNode = mine && ph === 'checking' ? (r.t === 'chatgpt' ? settings.first_checking_plan : settings.first_checking_key) : it.sub;
+    const fix = failed?.fix ?? null;
     return {
       ...it,
-      check: READY,
-      sel: i === 0 && ph === 'none',
+      // a key that doesn't work isn't ready: no ✓, its slot kept so nothing moves (designer m_52270)
+      check: failed === null ? READY : NOT_READY,
+      // ⏎'s row: the first, or the one that failed (it checks again)
+      sel: ph !== 'checking' && ph !== 'works' && id === (enterRow(s, accounts) ?? null),
       sub:
         failed === null ? sub : (
           <>
@@ -255,7 +261,16 @@ export function PayStep({ frame, accounts, claudePlan = false, check, s, set, se
             <span className="setup-row-failed" data-testid={`setup.pay.failed.${id}`}>
               <span className="setup-mark">▲</span> {failed.line}
               {failed.said !== null && <> {failed.said}</>}
-              {failed.fix !== null && <> {link(failed.fix.text, failed.fix.url, 'fix')}</>}
+              {/* its page as a link at the end, never a bare ':' (designer m_52270) */}
+              {fix !== null && fix.url !== null && (
+                <>
+                  {' '}
+                  <Act kind="ref" onClick={() => { if (fix.url !== null) open?.(fix.url); }} testId="setup.pay.link.fix">
+                    {fix.text.replace(/[:\s]+$/, '')} ↗
+                  </Act>
+                </>
+              )}
+              {fix !== null && fix.url === null && <> {fix.text}</>}
             </span>
           </>
         ),
@@ -288,7 +303,10 @@ function rowItem(r: Row, pick: () => void): GroupItem {
     case 'chatgpt':
       // signed in, it already works: its own name, who and which plan (designer m_52236)
       if (r.acc?.state === 'signed_in') {
-        return { id: 'chatgpt', label: r.acc.label, sub: r.acc.who != null ? settings.first_signed_in({ email: r.acc.who, plan: r.acc.label }) : undefined, onPick: pick };
+        // its plan after the email ('· Plus'); none known: the email alone, never 'ChatGPT' again (designer m_52270)
+        const { who, plan } = r.acc;
+        const sub = who == null ? undefined : plan != null && plan !== '' ? settings.first_signed_in({ email: who, plan }) : settings.onb_signed_in({ email: who });
+        return { id: 'chatgpt', label: r.acc.label, sub, onPick: pick };
       }
       return { id: 'chatgpt', label: settings.first_chatgpt, sub: settings.first_chatgpt_sub, onPick: pick };
     case 'openrouter':
@@ -302,6 +320,8 @@ function rowItem(r: Row, pick: () => void): GroupItem {
 
 /** A ready row's mark, in its lead slot: ✓ in ink, never the accent (pink waits on him; this works: designer m_52236). */
 const READY = <span className="setup-ready" aria-hidden="true">✓</span>;
+/** A ready row whose check failed: its slot, empty (the ▲ under it says why; nothing moves). */
+const NOT_READY = <span className="setup-ready" aria-hidden="true" />;
 
 /** Where a found key comes from, its place in mono: "from ANTHROPIC_API_KEY in your shell", "from ~/.env". */
 function foundWords(f: KeyFrom): ReactNode {

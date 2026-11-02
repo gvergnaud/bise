@@ -3,7 +3,7 @@
 {"ev":"open","project":"acme-1a2b3c4d","what":"thread","agent":"perf"}
 {"ev":"open","project":"acme-1a2b3c4d","what":"artifact","id":"perf-notes"}
 {"ev":"prefs","prefs":{"onboarded":true,"theme":"system","context":{"shot":true,"url":true,"file":true,"window_text":false},"excluded_apps":["1Password"],"quiet":{"call":true,"share":true,"fullscreen":true,"focus":true,"batch_min":20,"away_card":true},"voice":{"fn_hold":true,"fn_twice":"spotlight","language":"auto"},"shots_keep_days":7}}
-{"ev":"accounts","items":[{"id":"chatgpt","label":"ChatGPT","kind":"subscription","state":"signed_in","who":"camille@example.com"},{"id":"anthropic-key","label":"Anthropic key","kind":"key","state":"signed_out"}],"claude_plan":true}
+{"ev":"accounts","items":[{"id":"chatgpt","label":"ChatGPT","kind":"subscription","state":"signed_in","who":"camille@example.com","plan":"Plus"},{"id":"anthropic-key","label":"Anthropic key","kind":"key","state":"signed_out"}],"claude_plan":true}
 {"ev":"signing","id":"chatgpt","url":"https://auth.openai.com/oauth/authorize?client_id=app_x&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback"}
 {"ev":"found","dir":"/Users/camille/code","items":[{"path":"/Users/camille/code/shop","name":"shop","git":true,"last_ms":1791100000000,"known":false},{"path":"/Users/camille/acme","name":"acme","git":true,"last_ms":1791000000000,"known":true}]}
 {"ev":"away_summary","since_ms":1791100000000,"done":3,"questions":1,"failed":0,"projects":[{"project":"acme-1a2b3c4d","done":2,"questions":1,"failed":0},{"project":"shop-0badc0de","done":1,"questions":0,"failed":0}]}

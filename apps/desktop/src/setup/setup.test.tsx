@@ -306,10 +306,19 @@ describe('Onboarding', () => {
     fireEvent.keyDown(root, { key: 'Enter' });
     expect(p.sent).toEqual([{ cmd: 'provider_use', id: 'anthropic-key' }]);
     expect(screen.getByTestId('setup.pay.ready.found-anthropic-key').textContent).toContain(settings.first_checking_key);
-    rerender(<Onboarding accounts={withEnv} found={[]} perms={{}} ports={p} now={NOW} check={{ ev: 'provider_check', id: 'anthropic-key', name: 'Anthropic', state: 'failed', why: 'wrong_key', model: 'anthropic/claude-opus-5-5' }} />);
-    // the failure under the row, the row still in its group
-    expect(screen.getByTestId('setup.pay.ready.found-anthropic-key').querySelector('[data-testid="setup.pay.failed.anthropic-key"]')).toBeTruthy();
+    // a check with no provider name (ui-review m_52268's fake core): the account's name, never 'undefined'
+    rerender(<Onboarding accounts={withEnv} found={[]} perms={{}} ports={p} now={NOW} check={{ ev: 'provider_check', id: 'anthropic-key', name: '', state: 'failed', why: 'wrong_key', model: 'anthropic/claude-opus-5-5', url: 'https://keys.test' }} />);
+    // the failure under the row, the row still in its group, its ✓ gone (its slot kept), still ⏎'s row; it ends on the keys page's link (designer m_52270)
+    const row = screen.getByTestId('setup.pay.ready.found-anthropic-key');
+    const fail = row.querySelector('[data-testid="setup.pay.failed.anthropic-key"]');
+    expect(fail?.textContent).toContain(settings.first_found_wrong({ key: settings.first_the_key_in({ var: 'ANTHROPIC_API_KEY' }), provider: 'Anthropic key' }));
+    expect(fail?.textContent).not.toContain('undefined');
+    expect(row.querySelector('[data-testid="setup.pay.link.fix"]')?.textContent).toBe(`${settings.first_paste_another_get.replace(/[:\s]+$/, '')} ↗`);
+    expect(row.querySelector('.setup-ready')?.textContent).toBe('');
+    expect(row.getAttribute('aria-selected')).toBe('true');
     expect(screen.getByTestId('setup.pay.ready')).toBeTruthy();
+    // ChatGPT signed in: its plan after the email
+    expect(screen.getByTestId('setup.pay.ready.chatgpt').textContent).toContain(settings.first_signed_in({ email: 'camille@example.com', plan: 'Plus' }));
     // a click checks it again
     fireEvent.click(screen.getByTestId('setup.pay.ready.found-anthropic-key'));
     expect(p.sent.at(-1)).toEqual({ cmd: 'provider_use', id: 'anthropic-key' });
@@ -318,6 +327,11 @@ describe('Onboarding', () => {
     const which = screen.getByTestId('setup.pay.which.found.anthropic-key');
     expect(which.querySelector('.setup-ready')).toBeTruthy();
     expect(which.textContent).toContain(settings.onb_found_at({ at: 'ANTHROPIC_API_KEY' }));
+    cleanup();
+    // ChatGPT signed in with no plan known: the email alone, never 'ChatGPT' twice
+    render(<Onboarding accounts={accounts().map((a) => ({ ...a, plan: null }))} found={[]} perms={{}} ports={ports()} now={NOW} />);
+    fireEvent.keyDown(screen.getByTestId('setup.root'), { key: 'Enter' });
+    expect(screen.getByTestId('setup.pay.ready.chatgpt').textContent).toBe(`✓ ChatGPT${settings.onb_signed_in({ email: 'camille@example.com' })}`);
     cleanup();
     // nothing found: one list, no heads, today's line
     render(<Onboarding accounts={accounts().map((a) => ({ ...a, state: 'signed_out' as const }))} found={[]} perms={{}} ports={ports()} now={NOW} />);

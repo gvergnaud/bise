@@ -100,6 +100,7 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
                 kind: "key".into(),
                 state: if keyed { "signed_in" } else { "signed_out" }.into(),
                 who: None,
+                plan: None,
                 from: None,
                 keys_url: String::new(),
                 coding: false,

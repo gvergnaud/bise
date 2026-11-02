@@ -2369,6 +2369,13 @@
     "one": null,
     "text": "for the capture fn adds to your question"
   },
+  "settings.onb_signed_in": {
+    "args": [
+      "email"
+    ],
+    "one": null,
+    "text": "signed in as {email}"
+  },
   "settings.onb_skip": {
     "args": [],
     "one": null,

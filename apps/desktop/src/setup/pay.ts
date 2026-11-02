@@ -61,12 +61,24 @@ export function keyProviders(accounts: readonly Account[], coding: boolean): { f
   };
 }
 
-/** ⏎ on the list before anything works: the first ready row, checked (designer m_52236: it comes selected). Null: none, or a check runs. */
+/** A ready row's provider id (a key found's account, ChatGPT). */
+export function readyId(r: Row): string {
+  return r.t === 'found' ? r.acc.id : r.t === 'chatgpt' ? (r.acc?.id ?? CHATGPT) : r.t;
+}
+
+/** The ready row ⏎ takes, shown selected: the one he last checked (a failure: again), else the first. Undefined: none ready. */
+export function enterRow(s: PayState, accounts: readonly Account[]): string | undefined {
+  const ids = rows(accounts).ready.map(readyId);
+  return ids.find((id) => id === s.sent?.id) ?? ids[0];
+}
+
+/** ⏎ on the list before anything works: its ready row (enterRow), checked (designer m_52236: it comes selected). Null: none, or a check runs. */
 export function enterOf(s: PayState, accounts: readonly Account[], check: ProviderCheck | null): { s: PayState; cmd: AppCmd | null } | null {
-  const first = rows(accounts).ready[0];
+  const id = enterRow(s, accounts);
+  const row = rows(accounts).ready.find((r) => readyId(r) === id);
   const ph = phase(s, check);
-  if (s.view.t !== 'list' || first === undefined || ph === 'checking' || ph === 'works' || ph === 'signing') return null;
-  return pickRow(s, first, check);
+  if (s.view.t !== 'list' || row === undefined || ph === 'checking' || ph === 'works' || ph === 'signing') return null;
+  return pickRow(s, row, check);
 }
 
 /** What his pick of a row does: a command to send (a check, a sign-in), and where the step goes. */

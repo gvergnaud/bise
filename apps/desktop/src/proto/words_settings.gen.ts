@@ -790,6 +790,8 @@ export const settings = {
   onb_found_from: (a: { var: string | number }): string => "from " + String(a.var) + " in your shell",
   /** onboarding: where a key was found, short: a file's row in onb_ready_head, a provider's row in 'which provider?' */
   onb_found_at: (a: { at: string | number }): string => "from " + String(a.at),
+  /** onboarding, 'Ready on this Mac': ChatGPT signed in with no plan known (first_signed_in has the plan; designer m_52270) */
+  onb_signed_in: (a: { email: string | number }): string => "signed in as " + String(a.email),
   /** onboarding: the model step's line under onb_model_title when something already works here */
   onb_found_title: "these already work on this Mac. pick one, or set up another.",
   /** onboarding: a folder he chose by hand */

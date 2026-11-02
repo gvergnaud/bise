@@ -72,6 +72,10 @@ kind: string,
  */
 state: string, who?: string | null, 
 /**
+ * a plan signed in: which one ("Plus", "Pro"); none known: absent
+ */
+plan?: string | null, 
+/**
  * L5: the catalog provider it sets up (a model row's `provider_id`)
  */
 provider?: string, 

@@ -234,7 +234,7 @@ export const core_ev: readonly CoreEv[] = [
   {"agent":"perf","ev":"open","project":"acme-1a2b3c4d","what":"thread"},
   {"ev":"open","id":"perf-notes","project":"acme-1a2b3c4d","what":"artifact"},
   {"ev":"prefs","prefs":{"context":{"file":true,"shot":true,"url":true,"window_text":false},"excluded_apps":["1Password"],"onboarded":true,"quiet":{"away_card":true,"batch_min":20,"call":true,"focus":true,"fullscreen":true,"share":true},"shots_keep_days":7,"theme":"system","voice":{"fn_hold":true,"fn_twice":"spotlight","language":"auto"}}},
-  {"claude_plan":true,"ev":"accounts","items":[{"id":"chatgpt","kind":"subscription","label":"ChatGPT","state":"signed_in","who":"camille@example.com"},{"id":"anthropic-key","kind":"key","label":"Anthropic key","state":"signed_out"}]},
+  {"claude_plan":true,"ev":"accounts","items":[{"id":"chatgpt","kind":"subscription","label":"ChatGPT","plan":"Plus","state":"signed_in","who":"camille@example.com"},{"id":"anthropic-key","kind":"key","label":"Anthropic key","state":"signed_out"}]},
   {"ev":"signing","id":"chatgpt","url":"https://auth.openai.com/oauth/authorize?client_id=app_x&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback"},
   {"dir":"/Users/camille/code","ev":"found","items":[{"git":true,"known":false,"last_ms":1791100000000,"name":"shop","path":"/Users/camille/code/shop"},{"git":true,"known":true,"last_ms":1791000000000,"name":"acme","path":"/Users/camille/acme"}]},
   {"done":3,"ev":"away_summary","failed":0,"projects":[{"done":2,"failed":0,"project":"acme-1a2b3c4d","questions":1},{"done":1,"failed":0,"project":"shop-0badc0de","questions":0}],"questions":1,"since_ms":1791100000000},
