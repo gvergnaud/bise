@@ -145,11 +145,27 @@ impl State {
             Payload::CompactionDone(c) => {
                 self.open_compaction = None;
                 self.counters.compaction = self.counters.compaction.max(c.id);
+                // the range is a span of the context, from `from` to `to`
+                // (the recorder resolved the Core's positions to seqs),
+                // never a span of seqs: after a compaction the context is
+                // out of seq order (the summary goes before the messages it
+                // kept), and a seq range left those kept messages in the
+                // log for good (compact-100k). A bound that is not in the
+                // context (a log written by hand) falls back to the first
+                // or last event inside the seqs.
+                let ctx = &self.context;
                 let inside = |s: u64| s >= c.replaces.from && s <= c.replaces.to;
-                let at = self.context.iter().position(|&s| inside(s)).unwrap_or(self.context.len());
-                self.context.retain(|&s| !inside(s) || c.kept.contains(&s));
-                let at = at.min(self.context.len());
-                self.context.insert(at, seq);
+                let a = ctx.iter().position(|&x| x == c.replaces.from).or_else(|| ctx.iter().position(|&s| inside(s)));
+                let b = ctx.iter().position(|&x| x == c.replaces.to).or_else(|| ctx.iter().rposition(|&s| inside(s)));
+                let (a, b) = match (a, b) {
+                    (Some(a), Some(b)) if a <= b => (a, b + 1),
+                    _ => (ctx.len(), ctx.len()),
+                };
+                let tail = self.context.split_off(b);
+                let span = self.context.split_off(a);
+                self.context.push(seq);
+                self.context.extend(span.into_iter().filter(|s| c.kept.contains(s)));
+                self.context.extend(tail);
             }
             _ => {}
         }

@@ -90,6 +90,32 @@ fn a_compaction_replays_the_same_without_its_checkpoint() {
 }
 
 #[test]
+fn a_second_compaction_drops_what_the_first_one_kept() {
+    // after a compaction the context is no longer in seq order (the
+    // summary, a high seq, goes before the messages it kept): the next
+    // compaction's range is a span of the context, not of seqs. Read as
+    // seqs, q2 (seq 4 < from 5) stayed in the log for good and came back
+    // at every REPL restart: main's log held 2691 such messages (2.8 MB),
+    // and each recycle compacted at the first turn (compact-100k).
+    let l = |seq: u64, typ: &str, data: Value| {
+        let must = bise_session::types::must_of(typ);
+        format!("{}\n", json!({"seq": seq, "type": typ, "v": 1, "must": must, "data": data}))
+    };
+    let txt = |t: &str| json!([{"kind": "text", "text": t}]);
+    let mut raw = l(1, "session_start", json!({"session": "s", "format": 1, "created_by": "t", "cwd": "/"}));
+    raw += &l(2, "user_message", json!({"content": txt("q1"), "delivery": "prompt"}));
+    raw += &l(3, "assistant_message", json!({"req": 1, "model": "m", "parts": txt("a1"), "calls": []}));
+    raw += &l(4, "user_message", json!({"content": txt("q2"), "delivery": "prompt"}));
+    raw += &l(5, "compaction_done", json!({"id": 1, "summary": txt("s1"), "replaces": {"from": 2, "to": 4}, "kept": [4]}));
+    raw += &l(6, "user_message", json!({"content": txt("q3"), "delivery": "prompt"}));
+    raw += &l(7, "assistant_message", json!({"req": 2, "model": "m", "parts": txt("a3"), "calls": []}));
+    // the whole context [5, 4, 6, 7] is replaced, q3 kept
+    raw += &l(8, "compaction_done", json!({"id": 2, "summary": txt("s2"), "replaces": {"from": 5, "to": 7}, "kept": [6]}));
+    let log = bise_session::read_bytes(&[("events.jsonl".into(), raw.into_bytes())]);
+    assert_eq!(State::rebuild(&log).context, [8, 6]);
+}
+
+#[test]
 fn the_text_codecs_mirror_the_cores() {
     use project::*;
     for s in ["a\nb", "a\\nb", "tail\\", "\\\\n", "x\r\ny", "\\N\\R"] {
