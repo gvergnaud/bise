@@ -24,6 +24,17 @@
 .setup-list { flex: 1 1 auto; min-height: 72px; width: calc(100% + var(--s-1)); margin: 0 calc(var(--s-1) / -2); overflow-y: auto; overscroll-behavior: contain; padding: calc(var(--s-1) / 2) calc(var(--s-1) / 2) var(--s-6); box-sizing: border-box;
   -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 24px), transparent); mask-image: linear-gradient(to bottom, black calc(100% - 24px), transparent); }
 .setup-list .b-group { margin: 0; }
+/* the model step's heads, 'Ready on this Mac' over what already works, 'Other ways' under it: a chrome label,
+   sentence case, t-12 text-3, 16 above, 8 under (designer m_52236) */
+.setup-list .b-gt { margin: var(--s-4) 0 var(--s-2); padding: 0; font: 500 var(--t-12)/var(--s-4) var(--font-ui); letter-spacing: normal; text-transform: none; color: var(--c-text-3); }
+/* a ready row's ✓ in ink, in its 16 px lead slot (.b-gi .l span is the sub's block: not this one) */
+.setup-list .b-gi .l > .setup-ready { display: inline-block; width: var(--s-4); font: inherit; color: var(--c-text); }
+/* 'which provider?': the ones with a key found, 12 px, then the rest */
+.setup-rest { margin-top: var(--s-3); }
+/* a ready row's failed check, under its line; only the ▲ is red (designer m_28734) */
+.setup-list .b-gi .l span.setup-row-failed { font-family: var(--font-ui); color: var(--c-text-2); }
+.setup-list .b-gi .l span.setup-row-failed span { display: inline; font: inherit; }
+.setup-list .b-gi .l span.setup-row-failed .setup-mark { color: var(--c-err); }
 @media (max-height: 640px) {
   .setup { padding-top: var(--s-3); padding-bottom: var(--s-3); }
   .setup .b-onb { padding-top: var(--s-3); padding-bottom: var(--s-3); }

@@ -44,7 +44,7 @@ const ports = (): OnboardingPorts & { sent: AppCmd[]; looks: AppCmd[]; log: stri
 /** The model step's check that works (ChatGPT, signed in in the fixture): its pick, then the answer. */
 const WORKS = { ev: 'provider_check', id: 'chatgpt', name: 'ChatGPT', state: 'works', model: 'chatgpt/gpt-6.1-sol', answer: 'Hi!' } as const;
 function passModel(rerender: (ui: ReactElement) => void, ui: (check: typeof WORKS) => ReactElement): void {
-  fireEvent.click(screen.getByTestId('setup.pay.chatgpt'));
+  fireEvent.click(screen.getByTestId('setup.pay.ready.chatgpt'));
   rerender(ui(WORKS));
   fireEvent.click(screen.getByTestId('setup.next'));
 }
@@ -283,16 +283,48 @@ describe('Onboarding', () => {
     expect(screen.queryByTestId('setup.pay.claude')).toBeNull();
   });
 
-  it('the model step lists a key found first, and checks it with no key sent', () => {
+  it("what already works goes on top, under 'Ready on this Mac', ✓ and where it comes from; ⏎ checks the first in place, a failure stays under its row (Gabriel m_52208, designer m_52236)", () => {
     const p = ports();
     const withEnv = accounts().map((a) => (a.kind === 'key' ? { ...a, state: 'signed_in' as const, from: { t: 'env' as const, var: 'ANTHROPIC_API_KEY' } } : a));
-    render(<Onboarding accounts={withEnv} found={[]} perms={{}} ports={p} now={NOW} />);
+    const { rerender } = render(<Onboarding accounts={withEnv} found={[]} perms={{}} ports={p} now={NOW} />);
     const root = screen.getByTestId('setup.root');
     fireEvent.keyDown(root, { key: 'Enter' });
-    const rows = screen.getByTestId('setup.pay').querySelectorAll('[data-row]');
-    expect(rows[0]?.textContent).toContain('use the ANTHROPIC_API_KEY from your shell');
-    fireEvent.click(screen.getByTestId('setup.pay.found-anthropic-key'));
+    const step = screen.getByTestId('setup.step.model');
+    expect(step.textContent).toContain(settings.onb_found_title);
+    // the ready group first, with its head: the key found, then ChatGPT signed in; the other ways under their own head
+    const ready = screen.getByTestId('setup.pay.ready');
+    expect(ready.querySelector('.b-gt')?.textContent).toBe(settings.onb_ready_head);
+    const rows = [...ready.querySelectorAll('[data-row]')];
+    expect(rows.map((r) => r.getAttribute('data-row'))).toEqual(['found-anthropic-key', 'chatgpt']);
+    expect(rows.every((r) => r.querySelector('.setup-ready')?.textContent === '✓')).toBe(true);
+    expect(rows[0]?.textContent).toContain(settings.onb_found_from({ var: 'ANTHROPIC_API_KEY' }));
+    expect(rows[0]?.querySelector('code')?.textContent).toBe('ANTHROPIC_API_KEY');
+    expect(rows[0]?.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByTestId('setup.pay').querySelector('.b-gt')?.textContent).toBe(settings.onb_other_head);
+    expect(ready.compareDocumentPosition(screen.getByTestId('setup.pay')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // ⏎ takes the first: its check, no key sent, on the list; 'checking' under its row
+    fireEvent.keyDown(root, { key: 'Enter' });
     expect(p.sent).toEqual([{ cmd: 'provider_use', id: 'anthropic-key' }]);
+    expect(screen.getByTestId('setup.pay.ready.found-anthropic-key').textContent).toContain(settings.first_checking_key);
+    rerender(<Onboarding accounts={withEnv} found={[]} perms={{}} ports={p} now={NOW} check={{ ev: 'provider_check', id: 'anthropic-key', name: 'Anthropic', state: 'failed', why: 'wrong_key', model: 'anthropic/claude-opus-5-5' }} />);
+    // the failure under the row, the row still in its group
+    expect(screen.getByTestId('setup.pay.ready.found-anthropic-key').querySelector('[data-testid="setup.pay.failed.anthropic-key"]')).toBeTruthy();
+    expect(screen.getByTestId('setup.pay.ready')).toBeTruthy();
+    // a click checks it again
+    fireEvent.click(screen.getByTestId('setup.pay.ready.found-anthropic-key'));
+    expect(p.sent.at(-1)).toEqual({ cmd: 'provider_use', id: 'anthropic-key' });
+    // 'which provider?': the one with a key found first, ✓ and its variable; the rest after
+    fireEvent.click(screen.getByTestId('setup.pay.api'));
+    const which = screen.getByTestId('setup.pay.which.found.anthropic-key');
+    expect(which.querySelector('.setup-ready')).toBeTruthy();
+    expect(which.textContent).toContain(settings.onb_found_at({ at: 'ANTHROPIC_API_KEY' }));
+    cleanup();
+    // nothing found: one list, no heads, today's line
+    render(<Onboarding accounts={accounts().map((a) => ({ ...a, state: 'signed_out' as const }))} found={[]} perms={{}} ports={ports()} now={NOW} />);
+    fireEvent.keyDown(screen.getByTestId('setup.root'), { key: 'Enter' });
+    expect(screen.queryByTestId('setup.pay.ready')).toBeNull();
+    expect(screen.getByTestId('setup.pay').querySelector('.b-gt')).toBeNull();
+    expect(screen.getByTestId('setup.step.model').textContent).toContain(settings.onb_pay_sub);
   });
 
   it('the projects step (round 3): a filter narrows the found list; choose a folder… adds it ticked and it is added on ⏎', async () => {

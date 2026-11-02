@@ -782,10 +782,16 @@ export const settings = {
   onb_key_wrong: (a: { provider: string | number; said: string | number }): string => String(a.provider) + " says this key is wrong: “" + String(a.said) + "”",
   /** onboarding: the provider's own words under a failed check */
   onb_said: (a: { provider: string | number; said: string | number }): string => String(a.provider) + " said: “" + String(a.said) + "”",
-  /** onboarding: a key found in his shell's environment, the pay list's row */
-  onb_found_env: (a: { var: string | number }): string => "use the " + String(a.var) + " from your shell",
-  /** onboarding: a key found in a file (auth.json, an old .env), the pay list's row */
-  onb_found_file: (a: { path: string | number }): string => "use the key in " + String(a.path),
+  /** onboarding, the model step: the head over what already works here (keys found, a plan signed in; designer m_52236) */
+  onb_ready_head: "Ready on this Mac",
+  /** onboarding, the model step: the head over the other ways, under onb_ready_head */
+  onb_other_head: "Other ways",
+  /** onboarding: a key found in his shell's environment, its row's line in onb_ready_head */
+  onb_found_from: (a: { var: string | number }): string => "from " + String(a.var) + " in your shell",
+  /** onboarding: where a key was found, short: a file's row in onb_ready_head, a provider's row in 'which provider?' */
+  onb_found_at: (a: { at: string | number }): string => "from " + String(a.at),
+  /** onboarding: the model step's line under onb_model_title when something already works here */
+  onb_found_title: "these already work on this Mac. pick one, or set up another.",
   /** onboarding: a folder he chose by hand */
   onb_chosen: "chosen",
   /** onboarding: a found repo's age */

@@ -62,10 +62,16 @@ crate::words! { settings:
     onb_key_wrong(provider, said) = "{provider} says this key is wrong: “{said}”";
     /// onboarding: the provider's own words under a failed check
     onb_said(provider, said) = "{provider} said: “{said}”";
-    /// onboarding: a key found in his shell's environment, the pay list's row
-    onb_found_env(var) = "use the {var} from your shell";
-    /// onboarding: a key found in a file (auth.json, an old .env), the pay list's row
-    onb_found_file(path) = "use the key in {path}";
+    /// onboarding, the model step: the head over what already works here (keys found, a plan signed in; designer m_52236)
+    onb_ready_head = "Ready on this Mac";
+    /// onboarding, the model step: the head over the other ways, under onb_ready_head
+    onb_other_head = "Other ways";
+    /// onboarding: a key found in his shell's environment, its row's line in onb_ready_head
+    onb_found_from(var) = "from {var} in your shell";
+    /// onboarding: where a key was found, short: a file's row in onb_ready_head, a provider's row in 'which provider?'
+    onb_found_at(at) = "from {at}";
+    /// onboarding: the model step's line under onb_model_title when something already works here
+    onb_found_title = "these already work on this Mac. pick one, or set up another.";
     /// onboarding: a folder he chose by hand
     onb_chosen = "chosen";
     /// onboarding: a found repo's age

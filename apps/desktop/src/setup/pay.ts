@@ -34,21 +34,39 @@ export type Row =
   | { t: 'api' }
   | { t: 'coding' };
 
-/** The list's rows: the keys found (env, auth.json, an old .env) first, then the ways to pay. */
-export function rows(accounts: readonly Account[]): Row[] {
-  const found: Row[] = accounts.filter((a) => a.kind === 'key' && a.from != null).map((acc) => ({ t: 'found', acc }));
+/**
+ * The list's rows in two groups (designer m_52236, Gabriel: what works already goes on top):
+ * `ready`, what already works here (a key found in his shell, auth.json or an old .env, ready; ChatGPT
+ * signed in); `other`, the other ways (a key found that can't answer yet first: the foundry proxy
+ * with no URL; then ChatGPT to sign in, OpenRouter, an API key, a coding plan key).
+ */
+export function rows(accounts: readonly Account[]): { ready: Row[]; other: Row[] } {
+  const ready: Row[] = [];
+  const other: Row[] = [];
+  for (const acc of accounts.filter((a) => a.kind === 'key' && a.from != null)) (acc.state === 'signed_in' ? ready : other).push({ t: 'found', acc });
   const chatgpt = accounts.find((a) => a.id === CHATGPT) ?? null;
-  const v: Row[] = [...found];
-  if (chatgpt !== null) v.push({ t: 'chatgpt', acc: chatgpt });
-  if (accounts.some((a) => a.id === OPENROUTER)) v.push({ t: 'openrouter' });
-  v.push({ t: 'api' });
-  if (accounts.some((a) => a.coding === true)) v.push({ t: 'coding' });
-  return v;
+  if (chatgpt !== null) (chatgpt.state === 'signed_in' ? ready : other).push({ t: 'chatgpt', acc: chatgpt });
+  if (accounts.some((a) => a.id === OPENROUTER)) other.push({ t: 'openrouter' });
+  other.push({ t: 'api' });
+  if (accounts.some((a) => a.coding === true)) other.push({ t: 'coding' });
+  return { ready, other };
 }
 
-/** `which provider?`: the providers a key is pasted for (the coding plans after `a coding plan key`). */
-export function keyProviders(accounts: readonly Account[], coding: boolean): Account[] {
-  return accounts.filter((a) => a.kind === 'key' && (a.coding === true) === coding);
+/** `which provider?`: the providers a key is pasted for (the coding plans after `a coding plan key`): the ones with a key found first, then the rest by name. */
+export function keyProviders(accounts: readonly Account[], coding: boolean): { found: Account[]; rest: Account[] } {
+  const all = accounts.filter((a) => a.kind === 'key' && (a.coding === true) === coding);
+  return {
+    found: all.filter((a) => a.from != null),
+    rest: all.filter((a) => a.from == null).sort((a, b) => a.label.localeCompare(b.label)),
+  };
+}
+
+/** ⏎ on the list before anything works: the first ready row, checked (designer m_52236: it comes selected). Null: none, or a check runs. */
+export function enterOf(s: PayState, accounts: readonly Account[], check: ProviderCheck | null): { s: PayState; cmd: AppCmd | null } | null {
+  const first = rows(accounts).ready[0];
+  const ph = phase(s, check);
+  if (s.view.t !== 'list' || first === undefined || ph === 'checking' || ph === 'works' || ph === 'signing') return null;
+  return pickRow(s, first, check);
 }
 
 /** What his pick of a row does: a command to send (a check, a sign-in), and where the step goes. */
@@ -57,10 +75,11 @@ export function pickRow(s: PayState, r: Row, check: ProviderCheck | null): { s: 
     case 'found':
       // a key with no base URL (the foundry proxy): its field asks for the URL first (Isidor, 28 oct)
       if (r.acc.needs_url === true) return { s: { ...s, view: { t: 'key', id: r.acc.id } }, cmd: null };
-      return startCheck(s, r.acc.id, undefined, check);
+      // a ready one is checked in place: its checking and its failure show under its row (designer m_52236)
+      return onList(startCheck(s, r.acc.id, undefined, check));
     case 'chatgpt':
-      // signed in already: check the plan; else its browser sign-in, then the check
-      if (r.acc?.state === 'signed_in') return startCheck(s, CHATGPT, undefined, check);
+      // signed in already: check the plan, in place; else its browser sign-in, then the check
+      if (r.acc?.state === 'signed_in') return onList(startCheck(s, CHATGPT, undefined, check));
       return { s: { ...s, signing: CHATGPT, view: { t: 'check', id: CHATGPT } }, cmd: { cmd: 'sign_in', id: CHATGPT } };
     case 'openrouter':
       return { s: { ...s, view: { t: 'openrouter' } }, cmd: null };
@@ -69,6 +88,10 @@ export function pickRow(s: PayState, r: Row, check: ProviderCheck | null): { s: 
     case 'coding':
       return { s: { ...s, view: { t: 'which', coding: true } }, cmd: null };
   }
+}
+
+function onList(r: { s: PayState; cmd: AppCmd }): { s: PayState; cmd: AppCmd } {
+  return { s: { ...r.s, view: { t: 'list' } }, cmd: r.cmd };
 }
 
 /** OpenRouter's browser login (it mints a key in auth.json), then its check. */

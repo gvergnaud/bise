@@ -58,18 +58,26 @@ export function PayStep({ frame, accounts, claudePlan = false, check, s, set, se
   const v = s.view;
 
   if (v.t === 'which') {
-    const items: GroupItem[] = keyProviders(accounts, v.coding).map((a) => ({
+    // the ones with a key found first, ✓ and where it is; then a 12 px gap and the rest by name, no heads (designer m_52236)
+    const { found: withKey, rest } = keyProviders(accounts, v.coding);
+    const item = (a: Account): GroupItem => ({
       id: a.id,
       label: a.label,
-      sub: a.state === 'signed_in' ? settings.first_found : undefined,
+      ...(a.from != null ? { check: READY, sub: inMono(settings.onb_found_at({ at: fromWords(a.from) }), fromWords(a.from)) } : {}),
       onPick: () => {
         set({ ...s, view: { t: 'key', id: a.id } });
       },
-    }));
+    });
     return (
       <Onb {...frame} title={v.coding ? settings.first_which_plan : settings.first_which_provider} cta={cont}>
+        {/* the rest keep their test ids (setup.pay.which.<id>, the as-he-does run's); the found ones setup.pay.which.found.<id> */}
         <div className="setup-list">
-          <Group list testId="setup.pay.which" items={items} />
+          {withKey.length > 0 && <Group list testId="setup.pay.which.found" items={withKey.map(item)} />}
+          {rest.length > 0 && (
+            <div className={withKey.length > 0 ? 'setup-rest' : undefined}>
+              <Group list testId="setup.pay.which" items={rest.map(item)} />
+            </div>
+          )}
         </div>
       </Onb>
     );
@@ -226,13 +234,41 @@ export function PayStep({ frame, accounts, claudePlan = false, check, s, set, se
     return <Onb {...frame} title={plan ? settings.first_checking_plan : settings.first_checking_key} cta={cont} />;
   }
 
-  const items: GroupItem[] = rows(accounts).map((r) => rowItem(r, () => { run(pickRow(s, r, check)); }));
+  // what already works here on top, under its head; the other ways under theirs; nothing found: one list, no heads (designer m_52236)
+  const { ready, other } = rows(accounts);
+  const item = (r: Row, i: number): GroupItem => {
+    const it = rowItem(r, () => { run(pickRow(s, r, check)); });
+    if (!ready.includes(r)) return it;
+    // a ready row checked in place: 'checking…' or its failure under it, the row stays (the first comes selected: ⏎ takes it)
+    const id = r.t === 'found' ? r.acc.id : CHATGPT;
+    const mine = s.sent?.id === id;
+    const failed = mine && ph === 'failed' && check !== null ? failedWords(check, r.t === 'found' && r.acc.from != null ? fromWords(r.acc.from) : null, r.t === 'chatgpt') : null;
+    const sub: ReactNode = mine && ph === 'checking' ? (r.t === 'chatgpt' ? settings.first_checking_plan : settings.first_checking_key) : it.sub;
+    return {
+      ...it,
+      check: READY,
+      sel: i === 0 && ph === 'none',
+      sub:
+        failed === null ? sub : (
+          <>
+            {sub}
+            <span className="setup-row-failed" data-testid={`setup.pay.failed.${id}`}>
+              <span className="setup-mark">▲</span> {failed.line}
+              {failed.said !== null && <> {failed.said}</>}
+              {failed.fix !== null && <> {link(failed.fix.text, failed.fix.url, 'fix')}</>}
+            </span>
+          </>
+        ),
+    };
+  };
   // Claude Code's plan, no Anthropic key: its monthly API credits, and how a key uses them (the TUI's words)
   const credits = claudePlan && !accounts.some((a) => a.provider === 'anthropic' && a.state === 'signed_in');
   return (
-    <Onb {...frame} title={settings.onb_model_title} sub={settings.onb_pay_sub} cta={cont}>
+    <Onb {...frame} title={settings.onb_model_title} sub={ready.length > 0 ? settings.onb_found_title : settings.onb_pay_sub} cta={cont}>
+      {/* the other ways keep their test ids (setup.pay.<row>, the as-he-does run's); the ready ones setup.pay.ready.<row> */}
       <div className="setup-list">
-        <Group list testId="setup.pay" items={items} />
+        {ready.length > 0 && <Group list title={settings.onb_ready_head} testId="setup.pay.ready" items={ready.map(item)} />}
+        <Group list title={ready.length > 0 ? settings.onb_other_head : undefined} testId="setup.pay" items={other.map(item)} />
       </div>
       {credits && (
         <div className="setup-works" data-testid="setup.pay.claude">
@@ -250,12 +286,11 @@ function rowItem(r: Row, pick: () => void): GroupItem {
     case 'found':
       return { id: `found-${r.acc.id}`, label: r.acc.label, sub: r.acc.from != null ? foundWords(r.acc.from) : settings.first_found, onPick: pick };
     case 'chatgpt':
-      return {
-        id: 'chatgpt',
-        label: settings.first_chatgpt,
-        sub: r.acc?.state === 'signed_in' && r.acc.who != null ? settings.first_signed_in({ email: r.acc.who, plan: r.acc.label }) : settings.first_chatgpt_sub,
-        onPick: pick,
-      };
+      // signed in, it already works: its own name, who and which plan (designer m_52236)
+      if (r.acc?.state === 'signed_in') {
+        return { id: 'chatgpt', label: r.acc.label, sub: r.acc.who != null ? settings.first_signed_in({ email: r.acc.who, plan: r.acc.label }) : undefined, onPick: pick };
+      }
+      return { id: 'chatgpt', label: settings.first_chatgpt, sub: settings.first_chatgpt_sub, onPick: pick };
     case 'openrouter':
       return { id: 'openrouter', label: 'OpenRouter', sub: settings.first_openrouter_way, onPick: pick };
     case 'api':
@@ -265,17 +300,24 @@ function rowItem(r: Row, pick: () => void): GroupItem {
   }
 }
 
-/** Where a found key comes from, its place in mono: "use the ANTHROPIC_API_KEY from your shell". */
+/** A ready row's mark, in its lead slot: ✓ in ink, never the accent (pink waits on him; this works: designer m_52236). */
+const READY = <span className="setup-ready" aria-hidden="true">✓</span>;
+
+/** Where a found key comes from, its place in mono: "from ANTHROPIC_API_KEY in your shell", "from ~/.env". */
 function foundWords(f: KeyFrom): ReactNode {
   const where = fromWords(f);
-  const text = f.t === 'env' ? settings.onb_found_env({ var: where }) : settings.onb_found_file({ path: where });
-  const i = text.indexOf(where);
-  if (where === '' || i < 0) return text;
+  return inMono(f.t === 'env' ? settings.onb_found_from({ var: where }) : settings.onb_found_at({ at: where }), where);
+}
+
+/** `text` with `part` in mono (a variable, a path). */
+function inMono(text: string, part: string): ReactNode {
+  const i = text.indexOf(part);
+  if (part === '' || i < 0) return text;
   return (
     <>
       {text.slice(0, i)}
-      <code>{where}</code>
-      {text.slice(i + where.length)}
+      <code>{part}</code>
+      {text.slice(i + part.length)}
     </>
   );
 }

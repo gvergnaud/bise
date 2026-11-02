@@ -16,7 +16,7 @@ import { Composer } from '@/composer';
 import type { ComposerActions } from '@/composer/actions';
 import type { ProviderCheck } from '@/settings';
 import { PayStep } from './PayStep';
-import { afterSignIn, PAY_START, phase, ready, upOf, type PayState } from './pay';
+import { afterSignIn, enterOf, PAY_START, phase, ready, upOf, type PayState } from './pay';
 import { IslandStage } from './island/Island';
 import { planOf } from './island/plan';
 import { reducedMotion } from '@/ds/hooks';
@@ -339,7 +339,14 @@ export function Onboarding({ accounts, claudePlan = false, found, perms, fn = nu
         if (e.defaultPrevented || e.target instanceof HTMLInputElement || (e.target instanceof HTMLElement && e.target.isContentEditable)) return;
         if (e.key === 'Enter' && !e.metaKey && !e.shiftKey) {
           e.preventDefault();
-          go();
+          // the model step's list: ⏎ takes its first ready row, which comes selected (designer m_52236)
+          const take = at === 'model' ? enterOf(pay, accounts, check) : null;
+          if (take === null) {
+            go();
+            return;
+          }
+          if (take.cmd !== null) ports.send(take.cmd);
+          setPay(take.s);
         } else if (e.key === 'Escape') {
           e.preventDefault();
           stepBack();

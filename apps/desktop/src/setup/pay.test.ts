@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Account } from '@/proto';
 import { failedWords, keyField, type ProviderCheck } from '@/settings';
-import { afterSignIn, keyFieldSend, keyProviders, PAY_START, phase, pickRow, ready, rows, upOf, startCheck } from './pay';
+import { afterSignIn, enterOf, keyFieldSend, keyProviders, PAY_START, phase, pickRow, ready, rows, upOf, startCheck, type Row } from './pay';
 
 const acc = (id: string, kind: 'key' | 'subscription', extra: Partial<Account> = {}): Account => ({ id, label: id, kind, state: 'signed_out', provider: id, ...extra });
 const ACCOUNTS: Account[] = [
@@ -19,11 +19,30 @@ const acct = (i: number): Account => must(ACCOUNTS[i]);
 const check = (state: ProviderCheck['state'], extra: Partial<ProviderCheck> = {}): ProviderCheck => ({ ev: 'provider_check', id: 'anthropic', name: 'Anthropic', state, model: 'anthropic/claude-opus-5-5', ...extra });
 
 describe('the model step (pay.ts)', () => {
-  it('lists the keys found first, then ChatGPT, OpenRouter, an API key, a coding plan key', () => {
-    expect(rows(ACCOUNTS).map((r) => (r.t === 'found' ? `found:${r.acc.id}` : r.t))).toEqual(['found:openai', 'chatgpt', 'openrouter', 'api', 'coding']);
-    expect(rows(ACCOUNTS.filter((a) => a.coding !== true && a.id !== 'openrouter')).map((r) => r.t)).toEqual(['found', 'chatgpt', 'api']);
-    expect(keyProviders(ACCOUNTS, false).map((a) => a.id)).toEqual(['anthropic', 'openrouter', 'openai']);
-    expect(keyProviders(ACCOUNTS, true).map((a) => a.id)).toEqual(['kimi-code']);
+  it('what already works first (a key found ready, ChatGPT signed in), then the other ways: ChatGPT, OpenRouter, an API key, a coding plan key', () => {
+    const t = (r: Row) => (r.t === 'found' ? `found:${r.acc.id}` : r.t);
+    const g = rows(ACCOUNTS);
+    expect(g.ready.map(t)).toEqual(['found:openai']);
+    expect(g.other.map(t)).toEqual(['chatgpt', 'openrouter', 'api', 'coding']);
+    // ChatGPT signed in works already: it goes up; a key found that can't answer (no base URL) stays with the other ways
+    const more = [...ACCOUNTS.map((a) => (a.id === 'chatgpt' ? { ...a, state: 'signed_in' } : a)), acc('foundry', 'key', { needs_url: true, from: { t: 'env', var: 'ANTHROPIC_FOUNDRY_API_KEY' } })];
+    expect(rows(more).ready.map(t)).toEqual(['found:openai', 'chatgpt']);
+    expect(rows(more).other.map(t)).toEqual(['found:foundry', 'openrouter', 'api', 'coding']);
+    expect(rows(ACCOUNTS.filter((a) => a.coding !== true && a.id !== 'openrouter' && a.from == null))).toEqual({ ready: [], other: [{ t: 'chatgpt', acc: acct(0) }, { t: 'api' }] });
+    // which provider: a key found first, then the rest by name
+    expect(keyProviders(ACCOUNTS, false)).toEqual({ found: [acct(3)], rest: [acct(1), acct(2)] });
+    expect(keyProviders(ACCOUNTS, true).rest.map((a) => a.id)).toEqual(['kimi-code']);
+  });
+
+  it('a ready row is checked in place (the list stays); ⏎ takes the first ready row until a check runs', () => {
+    const r = pickRow(PAY_START, { t: 'found', acc: acct(3) }, null);
+    expect(r.s.view).toEqual({ t: 'list' });
+    expect(enterOf(PAY_START, ACCOUNTS, null)).toEqual(r);
+    // checking: ⏎ waits; failed: ⏎ checks it again; nothing ready: none
+    expect(enterOf(r.s, ACCOUNTS, null)).toBeNull();
+    expect(enterOf(r.s, ACCOUNTS, check('failed', { id: 'openai' }))?.cmd).toEqual({ cmd: 'provider_use', id: 'openai' });
+    expect(enterOf(PAY_START, ACCOUNTS.filter((a) => a.from == null), null)).toBeNull();
+    expect(enterOf({ ...PAY_START, view: { t: 'which', coding: false } }, ACCOUNTS, null)).toBeNull();
   });
 
   it('a found key is checked with no key sent; a pasted one is sent once; only its own answer counts', () => {

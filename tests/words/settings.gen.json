@@ -2188,19 +2188,24 @@
     "one": null,
     "text": "what should i do first?"
   },
-  "settings.onb_found_env": {
+  "settings.onb_found_at": {
+    "args": [
+      "at"
+    ],
+    "one": null,
+    "text": "from {at}"
+  },
+  "settings.onb_found_from": {
     "args": [
       "var"
     ],
     "one": null,
-    "text": "use the {var} from your shell"
+    "text": "from {var} in your shell"
   },
-  "settings.onb_found_file": {
-    "args": [
-      "path"
-    ],
+  "settings.onb_found_title": {
+    "args": [],
     "one": null,
-    "text": "use the key in {path}"
+    "text": "these already work on this Mac. pick one, or set up another."
   },
   "settings.onb_git": {
     "args": [
@@ -2291,6 +2296,11 @@
     "one": null,
     "text": "open bise"
   },
+  "settings.onb_other_head": {
+    "args": [],
+    "one": null,
+    "text": "Other ways"
+  },
   "settings.onb_pay_sub": {
     "args": [],
     "one": null,
@@ -2335,6 +2345,11 @@
     "args": [],
     "one": null,
     "text": "your projects"
+  },
+  "settings.onb_ready_head": {
+    "args": [],
+    "one": null,
+    "text": "Ready on this Mac"
   },
   "settings.onb_said": {
     "args": [
