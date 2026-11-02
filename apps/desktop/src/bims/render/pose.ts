@@ -5,7 +5,7 @@
 // box). Loops (typing, hot's sweat, the '?' hops, eating at the island) are 'loop' at LOOP_FPS;
 // reduced motion has none. restingSince says when a bim came to rest in its still pose: the resting
 // bims' rare idle moves (render/idle.ts) start from there.
-import type { Activity, ActivityKind, Doing, Motion, Pose, Pt } from '../model';
+import type { Activity, ActivityKind, Doing, Motion, Pose, Pt, UseHow } from '../model';
 import { walkTime } from '../avoid';
 import { NAP_UP, SIT, SIT_S, sitBeat, toWorld } from '../sit';
 import { BEAT, PLANE_CATCH, REACH_S, awayOf } from './catch';
@@ -170,6 +170,7 @@ function working(k: ActivityKind, act: Activity, lt: number, ph: number, main: b
   const hot = k === 'hot';
   const base = { ...NO_PROPS, hot: hot ? (lt * 0.9 + ph) % 1 : null };
   const mouth = hot ? ('oh' as const) : ('smile' as const);
+  if (act.at === 'object' && act.use !== undefined) return using(act.use.how, lt, ph, mouth, base);
   switch (act.doing) {
     case 'think':
       if (act.at === 'board') {
@@ -236,9 +237,36 @@ function working(k: ActivityKind, act: Activity, lt: number, ph: number, main: b
   }
 }
 
+/**
+ * a working bim at the plugin object its call uses (uses.ts), standing and facing it, by how it
+ * uses it (bims-plugins m_52119: a few poses, the object's own move does the rest): it types at a
+ * machine, reads off a shelf, looks at a globe or a sky, plays a game, tends a plant or a pet
+ */
+function using(how: UseHow, lt: number, ph: number, mouth: Rig['mouth'], props: Props): Body {
+  const s = (f: number, a = 0): number => Math.sin(lt * f + ph + a);
+  switch (how) {
+    case 'types':
+      // both hands on its keys, tapping in turn, head down to them
+      return { ...STAND, mouth, armL: [-1.25 + Math.max(0, s(12)) * 0.12, 0, 0.12], armR: [-1.25 + Math.max(0, s(12, Math.PI)) * 0.12, 0, -0.12], head: [0.3, 0, 0], body: [0.12, 0, 0], props };
+    case 'reads':
+      // a hand up to its shelf, the other at its side, head going along the spines
+      return { ...STAND, mouth, armR: [-2.1 + s(1.2) * 0.1, 0, -0.15], armL: [-0.2, 0, 0.1], head: [-0.12, s(0.8) * 0.3, 0], props };
+    case 'looks':
+      // hands behind its back, chin up, looking about
+      return { ...STAND, mouth: 'oh', armL: [0.45, 0, 0.25], armR: [0.45, 0, -0.25], head: [-0.25, s(0.6) * 0.25, 0], props };
+    case 'plays':
+      // both hands out at it, quick, a bob in its knees
+      return { ...STAND, mouth: 'laugh', armL: [-1.4 + s(9) * 0.18, 0, 0.2], armR: [-1.4 + s(9, 1.7) * 0.18, 0, -0.2], body: [0.08, 0, s(4) * 0.04], head: [0.15, 0, 0], y: -Math.abs(s(4)) * 0.02, props };
+    case 'tends':
+      // leans in, a hand out patting it gently
+      return { ...STAND, mouth, armR: [-1.0 + s(3) * 0.15, 0, -0.1], armL: [-0.3, 0, 0.1], body: [0.25, 0, 0], head: [0.25, 0, 0], props };
+  }
+}
+
 /** whether a working bim's pose loops (typing and its siblings) or holds still (reading, a poster) */
 export function workLoops(act: Activity): boolean {
-  return act.doing === undefined || DOING_LOOPS.has(act.doing) || act.k === 'hot';
+  // at a plugin object it uses, it loops (its pose, and the object's move every USE_EVERY s)
+  return act.at === 'object' || act.doing === undefined || DOING_LOOPS.has(act.doing) || act.k === 'hot';
 }
 
 /**

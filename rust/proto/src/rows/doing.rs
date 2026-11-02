@@ -6,8 +6,11 @@
 //! [`DoingKind::of_call`] is the one tool call -> kind mapping: one
 //! table of rules ([`RULES`]), so a new tool or build runner is a row.
 //! The call's args are read here, inside the hub, never sent: only the
-//! kind leaves. (`thread::ToolKind::of` answers another question, the
-//! summary's counts; a test keeps the two in agreement.)
+//! kind leaves, and [`uses_of`]'s names (the plugin group, skill or MCP
+//! server the call touches, typed, never its args or code: architect
+//! m_52117), so the office walks the bim to that plugin's object.
+//! (`thread::ToolKind::of` answers another question, the summary's
+//! counts; a test keeps the two in agreement.)
 
 use serde::{Deserialize, Serialize};
 
@@ -40,11 +43,80 @@ pub enum DoingKind {
 }
 
 /// What an agent is doing now and since when (ms).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Doing {
     pub kind: DoingKind,
     pub since_ms: u64,
+    /// what the current call names that a plugin may own ([`uses_of`]);
+    /// none: no such call (an older hub's row has none either)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub uses: Option<Uses>,
+}
+
+/// How a call names what it uses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum UsesKind {
+    /// a run_typescript call's `tools.<group>.` (a connector's group)
+    Group,
+    /// a skill call (`plugin:skill`, or a skill of his own)
+    Skill,
+    /// an MCP tool's server (`mcp__<server>__<tool>`)
+    Server,
+    /// a kind this version doesn't know (a newer hub)
+    #[serde(other)]
+    Unknown,
+}
+
+/// What a call uses, by the names it gives (never its args): the window
+/// matches it against its plugins rows (bims/uses.ts).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Uses {
+    pub kind: UsesKind,
+    /// the plugin the call names itself (a skill's `plugin:`); none: it names none
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub plugin: Option<String>,
+    pub name: String,
+}
+
+/// A name a call may give: letters, digits, `_`, `-` (an identifier, a
+/// skill's slug), 1..=64 of them; anything else is no name (a secret, a
+/// path, code never passes).
+fn a_name(s: &str) -> Option<String> {
+    let ok = !s.is_empty() && s.len() <= 64 && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+    ok.then(|| s.to_string())
+}
+
+/// What the call to `name` with `args` uses, as names: the first
+/// `tools.<group>.` of a run_typescript call; a skill call's skill
+/// (`computer:computer-use`: plugin `computer`, name `computer-use`); an
+/// MCP tool's server. None for anything else. Total, never a panic.
+pub fn uses_of(name: &str, args: &str) -> Option<Uses> {
+    if name == "run_typescript" {
+        // the first group the code calls, past the bise's own (computer use is a plugin too)
+        let at = args.find("tools.")?;
+        let rest = &args[at + "tools.".len()..];
+        let group = rest.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-')).next()?;
+        if !rest[group.len()..].starts_with('.') {
+            return None;
+        }
+        return a_name(group).map(|name| Uses { kind: UsesKind::Group, plugin: None, name });
+    }
+    if name == "skill" {
+        let v: serde_json::Value = serde_json::from_str(args).ok()?;
+        let full = v.get("name").or_else(|| v.get("arg")).and_then(|x| x.as_str())?;
+        return match full.split_once(':') {
+            Some((p, s)) => Some(Uses { kind: UsesKind::Skill, plugin: Some(a_name(p)?), name: a_name(s)? }),
+            None => a_name(full).map(|name| Uses { kind: UsesKind::Skill, plugin: None, name }),
+        };
+    }
+    let server = name.strip_prefix("mcp__")?.split("__").next()?;
+    a_name(server).map(|name| Uses { kind: UsesKind::Server, plugin: None, name })
 }
 
 /// One rule of [`DoingKind::of_call`]: a call to `tool` ("*": any tool)
@@ -141,6 +213,69 @@ mod tests {
     use super::*;
     use crate::thread::ToolKind;
 
+    /// Every line of fixtures/doing_calls.jsonl with its `uses` (absent: none).
+    fn fixture_uses() -> Vec<(String, String, Option<Uses>)> {
+        include_str!("../../fixtures/doing_calls.jsonl")
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(|l| {
+                let v: serde_json::Value = serde_json::from_str(l).unwrap_or_else(|e| panic!("{e}: {l}"));
+                let s = |k: &str| v[k].as_str().unwrap_or_else(|| panic!("{k}: {l}")).to_string();
+                let uses = v.get("uses").map(|u| serde_json::from_value(u.clone()).unwrap_or_else(|e| panic!("{e}: {l}")));
+                (s("name"), s("args"), uses)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn every_fixture_call_names_what_it_uses() {
+        let fx = fixture_uses();
+        assert!(fx.iter().filter(|f| f.2.is_some()).count() >= 5);
+        for (name, args, uses) in fx {
+            assert_eq!(uses_of(&name, &args), uses, "{name} : {args}");
+        }
+    }
+
+    /// Total, and only names: no args, code, path or secret-looking
+    /// string ever comes out.
+    #[test]
+    fn uses_of_is_total_and_gives_only_names() {
+        let names = ["", "bash", "run_typescript", "skill", "mcp__github__get", "mcp__", "mcp____x", "é", "tool #3"];
+        let args = [
+            "",
+            "{}",
+            "tools.",
+            "tools.gmail",
+            "tools..x",
+            "const k = 'sk-live-0123456789abcdef'; tools.slack.post({token: k})",
+            "tools.sk-live-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.x()",
+            "{\"name\":\"/etc/passwd\"}",
+            "{\"name\":\"a:b:c\"}",
+            "\u{0}",
+            "tools.é.x",
+        ];
+        for n in names {
+            for a in args {
+                if let Some(u) = uses_of(n, a) {
+                    for s in std::iter::once(&u.name).chain(u.plugin.iter()) {
+                        assert!(!s.is_empty() && s.len() <= 64, "{n} {a}: {s}");
+                        assert!(s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'), "{n} {a}: {s}");
+                        assert!(!s.contains("sk-live"), "{n} {a}: a secret-looking string left: {s}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_doing_with_uses_on_the_wire() {
+        let d = Doing { kind: Tool, since_ms: 7, uses: Some(Uses { kind: UsesKind::Skill, plugin: Some("computer".into()), name: "computer-use".into() }) };
+        let v = serde_json::json!({"kind": "tool", "since_ms": 7, "uses": {"kind": "skill", "plugin": "computer", "name": "computer-use"}});
+        assert_eq!(serde_json::to_value(&d).unwrap(), v);
+        assert_eq!(serde_json::from_value::<Doing>(v).unwrap(), d);
+        assert_eq!(serde_json::from_value::<UsesKind>(serde_json::json!("app")).unwrap(), UsesKind::Unknown);
+    }
+
     /// Every line of fixtures/doing_calls.jsonl: {name, args, kind}.
     fn fixtures() -> Vec<(String, String, DoingKind)> {
         include_str!("../../fixtures/doing_calls.jsonl")
@@ -201,8 +336,8 @@ mod tests {
     #[test]
     fn a_newer_kind_reads_as_unknown() {
         assert_eq!(serde_json::from_value::<DoingKind>(serde_json::json!("dance")).unwrap(), Unknown);
-        let d = Doing { kind: Build, since_ms: 7 };
-        assert_eq!(serde_json::to_value(d).unwrap(), serde_json::json!({"kind": "build", "since_ms": 7}));
+        let d = Doing { kind: Build, since_ms: 7, uses: None };
+        assert_eq!(serde_json::to_value(&d).unwrap(), serde_json::json!({"kind": "build", "since_ms": 7}));
         assert_eq!(serde_json::from_value::<Doing>(serde_json::json!({"kind": "build", "since_ms": 7})).unwrap(), d);
     }
 }

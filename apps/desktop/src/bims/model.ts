@@ -76,7 +76,7 @@ export type PokeKind =
 /** what a poke plays: its reaction, or under reduced motion its word alone */
 export type PlayKind = PokeKind | 'word';
 
-export type SpotKind = 'desk' | 'main' | 'lounge' | 'island' | 'coffee' | 'nook' | 'board' | 'queue' | 'door' | 'terrace';
+export type SpotKind = 'desk' | 'main' | 'lounge' | 'island' | 'coffee' | 'nook' | 'board' | 'queue' | 'door' | 'terrace' | 'object';
 
 export interface Activity {
   readonly k: ActivityKind;
@@ -105,7 +105,20 @@ export interface Activity {
   readonly sip?: true;
   /** ('snack' at a nook) it sits there (the sofa, the drum stool); absent: it stands, thinking (the bench, the lift, beside a taken nook) */
   readonly sits?: true;
+  /** (at 'object') the plugin object its turn uses now (uses.ts, Gabriel m_52113): where it stands to use it, and how */
+  readonly use?: UseAt;
 }
+
+/** a plugin object a working bim walks to (uses.ts): its plugin's key, what it is, where the bim stands, how it uses it */
+export interface UseAt {
+  readonly key: string;
+  readonly obj: string;
+  readonly spot: Spot;
+  readonly how: UseHow;
+}
+
+/** how a bim uses an object (bims-plugins m_52119: a few poses, not one per object) */
+export type UseHow = 'types' | 'reads' | 'looks' | 'plays' | 'tends';
 
 /** The hub's Agent.doing kinds (architect m_27522, bims-facts m_27638); absent = nothing running. */
 export type Doing = 'think' | 'tool' | 'edit' | 'search' | 'computer' | 'image' | 'publish' | 'compact' | 'build' | 'unknown';
@@ -540,6 +553,8 @@ export interface Look {
   readonly planesUp?: boolean;
   /** his open items in this project: the sheets in the inbox's top tray (0..3, render/inbox.ts); absent: none */
   readonly inbox?: number;
+  /** the plugin objects (their keys) a working bim's call uses now (uses.ts, the driver's Step.using): each plays its move while used; absent: none */
+  readonly using?: ReadonlySet<string>;
 }
 
 /**

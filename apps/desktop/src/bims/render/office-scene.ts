@@ -66,6 +66,8 @@ const ECLIPSE_MIX = 0.45;
 /** what a frame says of each bim it posed (the headless checks' trace, render/index.ts) */
 export type OnRig = (f: BimFrame, rig: Rig, skating: boolean) => void;
 
+const NO_USE: ReadonlySet<string> = new Set();
+
 export interface OfficeScene {
   /** everything of the office, in its own units */
   readonly root: Group;
@@ -720,6 +722,8 @@ export function makeOfficeScene(style: Style, o: { readonly ground?: boolean; re
       if (drawPlanes(t, frames, fit, !look.night, look.reduced, look.planeFrom, look.planesUp === true)) motion = 'walk';
       // the office's own eggs: the ghost crossing asks for frames; april's outfits rebuild the bims once
       if (eggDecor?.update(look.eggs) === true) motion = 'walk';
+      // the plugin objects a working bim's call uses play their move (uses.ts); at rest, none moves
+      if (objects?.play(look.using ?? NO_USE, t, look.reduced) === true) motion = 'walk';
       // a new extension arriving: it falls in, squashes, settles; reduced motion: there at once
       for (const [kind, ar] of arriving) {
         const g = world.ext.get(kind);

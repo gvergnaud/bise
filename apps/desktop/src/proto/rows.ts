@@ -1252,9 +1252,29 @@ reason?: string, at_ms: number, };
 export type DoingKind = "think" | "tool" | "edit" | "search" | "computer" | "image" | "publish" | "compact" | "build" | "unknown";
 
 /**
+ * How a call names what it uses.
+ */
+export type UsesKind = "group" | "skill" | "server" | "unknown";
+
+/**
+ * What a call uses, by the names it gives (never its args): the window
+ * matches it against its plugins rows (bims/uses.ts).
+ */
+export type Uses = { kind: UsesKind, 
+/**
+ * the plugin the call names itself (a skill's `plugin:`); none: it names none
+ */
+plugin?: string, name: string, };
+
+/**
  * What an agent is doing now and since when (ms).
  */
-export type Doing = { kind: DoingKind, since_ms: number, };
+export type Doing = { kind: DoingKind, since_ms: number, 
+/**
+ * what the current call names that a plugin may own ([`uses_of`]);
+ * none: no such call (an older hub's row has none either)
+ */
+uses?: Uses, };
 
 /**
  * The project's counters. `since_ms`: its first agent's `created_ms`

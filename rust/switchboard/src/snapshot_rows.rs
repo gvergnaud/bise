@@ -208,7 +208,7 @@ pub fn build(i: &RowIn) -> AgentRow {
         turns: a.turns,
         waiting_on: a.waiting_on.clone().filter(|_| a.waiting),
         watching: i.watching.clone(),
-        doing: crate::doing::row(a.run == crate::model::Run::Busy, i.doing, &i.watching),
+        doing: crate::doing::row(a.run == crate::model::Run::Busy, i.doing.clone(), &i.watching),
         procs: i.procs,
         model: None,
     }

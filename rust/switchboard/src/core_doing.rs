@@ -18,8 +18,8 @@ impl Hub {
         if !self.st.agents.contains_key(agent) {
             return;
         }
-        let cur = self.doing.get(agent).copied();
-        let next = crate::doing::next(cur, line, now);
+        let cur = self.doing.get(agent).cloned();
+        let next = crate::doing::next(cur.clone(), line, now);
         if next == cur {
             return;
         }

@@ -41,7 +41,7 @@ impl Hub {
         let mut agents: Vec<AgentRow> = Vec::with_capacity(self.st.order.len());
         for a in self.st.order.iter().filter_map(|n| self.st.agents.get(n)) {
             let role = self.roles.get(&a.dir).and_then(|r| r.line.as_deref());
-            let i = self.rows.input(a, role, now, self.st.wakes.watching(&a.name), self.doing.get(&a.name).copied(), self.procs.get(&a.name).copied().unwrap_or_default());
+            let i = self.rows.input(a, role, now, self.st.wakes.watching(&a.name), self.doing.get(&a.name).cloned(), self.procs.get(&a.name).copied().unwrap_or_default());
             agents.push(self.rows.row(i));
         }
         self.rows.keep_only(self.st.agents.keys());

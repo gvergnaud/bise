@@ -6,6 +6,8 @@
 import { Box3, type BufferGeometry, Group, Mesh, type Object3D, Vector3 } from 'three';
 import type { Corners, Rug } from '../corners';
 import { makeObject } from './objects';
+import { HOVER_MS, MOVES, REST, hoverAt, type HoverPose } from './objects/hover';
+import type { ObjId } from './objects/ids';
 import type { Style } from './style';
 
 /** a point in the office, world units */
@@ -56,7 +58,22 @@ export interface ObjectsLayer {
   topOf(key: string): { readonly x: number; readonly y: number; readonly z: number } | null;
   /** every drawn object's silhouette (silhouetteOf, world units): what his hover picks (pick.ts pickObjectAt) and its tip stands by */
   shapes(): ReadonlyMap<string, readonly Vec3[]>;
+  /**
+   * the objects a working bim's call uses at t (uses.ts, Step.using): each plays its own move
+   * (objects/hover.ts MOVES) every USE_EVERY s while used, the others at rest; whether one moves
+   * now (the loop runs at full rate then). Reduced motion: none moves.
+   */
+  play(using: ReadonlySet<string>, t: number, reduced: boolean): boolean;
   dispose(): void;
+}
+
+/** s between two of an object's moves while a call uses it */
+export const USE_EVERY = 2.4;
+
+/** an object's move at t while used: its hover move at the start of every USE_EVERY s, rest between */
+export function moveWhileUsed(obj: ObjId, t: number): HoverPose {
+  const f = (((t % USE_EVERY) + USE_EVERY) % USE_EVERY) / (HOVER_MS / 1000);
+  return f >= 1 ? REST : hoverAt(MOVES[obj], f);
 }
 
 export function makeObjectsLayer(style: Style): ObjectsLayer {
@@ -66,6 +83,9 @@ export function makeObjectsLayer(style: Style): ObjectsLayer {
   let drawnNight = false;
   const tops = new Map<string, { x: number; y: number; z: number }>();
   const shapes = new Map<string, readonly Vec3[]>();
+  /** each drawn object's group, what it is and its rest place; the ones off rest now */
+  const groups = new Map<string, { g: Object3D; obj: ObjId; x: number; z: number; rot: number }>();
+  const moved = new Set<string>();
 
   const clear = (): void => {
     for (const c of [...root.children]) {
@@ -95,6 +115,8 @@ export function makeObjectsLayer(style: Style): ObjectsLayer {
       clear();
       tops.clear();
       shapes.clear();
+      groups.clear();
+      moved.clear();
       for (const r of c.rugs) root.add(rug(r, night));
       for (const p of c.placed) {
         // a swapped one is already its compact id; makeObject's compact only scales the others
@@ -104,6 +126,7 @@ export function makeObjectsLayer(style: Style): ObjectsLayer {
         made.group.name = `obj:${p.key}`;
         made.group.userData.plugin = p.key;
         root.add(made.group);
+        groups.set(p.key, { g: made.group, obj: p.obj, x: p.x, z: p.z, rot: p.rot });
         made.group.updateMatrixWorld(true);
         const b = new Box3().setFromObject(made.group);
         if (b.isEmpty()) continue;
@@ -113,10 +136,30 @@ export function makeObjectsLayer(style: Style): ObjectsLayer {
     },
     topOf: (key) => tops.get(key) ?? null,
     shapes: () => shapes,
+    play(using, t, reduced) {
+      let moving = false;
+      for (const [key, d] of groups) {
+        const on = using.has(key) && !reduced;
+        if (!on && !moved.has(key)) continue;
+        const h = on ? moveWhileUsed(d.obj, t) : REST;
+        // the move in the object's own frame: aside along its x, its turns about its own axes
+        d.g.position.set(d.x + Math.cos(d.rot) * h.dx, h.lift, d.z - Math.sin(d.rot) * h.dx);
+        d.g.rotation.set(h.pitch, d.rot + h.yaw, h.roll, 'YXZ');
+        d.g.scale.set(h.sx, h.sy, h.sz);
+        if (h === REST) moved.delete(key);
+        else {
+          moved.add(key);
+          moving = true;
+        }
+      }
+      return moving;
+    },
     dispose() {
       clear();
       tops.clear();
       shapes.clear();
+      groups.clear();
+      moved.clear();
       drawn = null;
     },
   };

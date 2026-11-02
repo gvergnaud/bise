@@ -6,8 +6,8 @@
 // the timeline, today's lands, his konami time, his pokes and the unlock moment. No React, no three, no DOM:
 // the caller hands it the clock (t, his local time, night, reduced motion) and the forced eggs of
 // a check; the look carries his local time's sky (sky.ts skyAt; none for the hero's film). Owner: bims-wire.
-import type { Agent } from '@/proto';
-import type { BimEvent, BimFrame, Box, Label, Look, NewTimelineFn, ActivitiesFn, LabelsFn, LayoutFn, Office, Snapshot, Timeline } from './model';
+import type { Agent, Plugin } from '@/proto';
+import type { Activity, BimEvent, BimFrame, Box, Label, Look, NewTimelineFn, ActivitiesFn, LabelsFn, LayoutFn, Office, Snapshot, Timeline } from './model';
 import { clockSig, eggLabels, eggsAt, NO_EGGS, noteLands, withForced, type Forced, type Land, type Local } from './eggs';
 import { builtAt, NO_GROW, UNLOCK_LABEL, UNLOCK_WALK, unlockOf, type Grow } from './growth';
 import { dayOf } from './skate';
@@ -18,6 +18,7 @@ import { forcedPokes, notePokes, NO_POKES, pokesAt, pokeWake, roomOf, type Click
 import { uniqueObjects, type PluginObject } from './plugin-objects';
 import { NO_CORNERS, objectSpots, type Corners } from './corners';
 import { GROWS, NO_NEED, either, grownFor, type Need } from './extensions';
+import { NO_TRIPS, nextTrips, pluginOfUse, howUsed, standSpotsOf, type Trips } from './uses';
 
 /** The pure modules a driver runs on: feed.ts's, or fakes in a test. */
 export interface DriverParts {
@@ -76,6 +77,8 @@ export interface Step {
   readonly corners: Corners;
   /** the extensions come on this map (extensions.ts: a high-water mark, Office.tsx keeps it per project); null: a map that does not grow */
   readonly grown: { readonly map: MapId; readonly need: Need } | null;
+  /** the plugin objects (their keys) a working bim's call uses now, gone to or not (uses.ts): each plays its move while used */
+  readonly using: ReadonlySet<string>;
 }
 
 export interface OfficeDriver {
@@ -87,6 +90,8 @@ export interface OfficeDriver {
   event(e: BimEvent): void;
   /** his plugins' objects (plugin-objects.ts officeObjects): each at most once (uniqueObjects), the next step places them (corners.ts); no desk moves for them */
   objects(list: readonly PluginObject[]): void;
+  /** his plugins rows (the store's usePlugins): a working bim walks to the object of the plugin its call uses (uses.ts); null: none heard, no trips */
+  plugins(rows: readonly Plugin[] | null): void;
   /** the extensions this map already had (Office.tsx's kept mark): they come back, and never go */
   seedNeed(map: MapId, kept: Need): void;
   /** he typed the konami code at t */
@@ -148,6 +153,12 @@ export function makeDriver(parts: DriverParts): OfficeDriver {
   let need: Need = NO_NEED;
   let needMap: MapId | null = null;
   let regrow = false;
+  /** his plugins rows, the bims' trips to their objects, and the objects in use at the last step */
+  let rowsP: readonly Plugin[] | null = null;
+  let trips: Trips = NO_TRIPS;
+  let using: ReadonlySet<string> = new Set();
+  /** each placed object's use spots (uses.ts standSpotsOf), for the corners they were found in */
+  let spotsFor: { corners: Corners; spots: Map<string, ReturnType<typeof standSpotsOf>> } | null = null;
 
   return {
     rows(s, as, m) {
@@ -177,6 +188,10 @@ export function makeDriver(parts: DriverParts): OfficeDriver {
         regrow = true;
         fresh = true;
       }
+    },
+    plugins(rows) {
+      rowsP = rows;
+      fresh = true;
     },
     seedNeed(m, kept) {
       if (needMap !== m) {
@@ -209,7 +224,7 @@ export function makeDriver(parts: DriverParts): OfficeDriver {
       if (snap === null) return false;
       // the clock's eggs (the eclipse, friday 17:00, midnight) start and end without a row change
       // a new sky slot (sky.ts: every 5 min at most) is a frame too: its blend
-      const changed = clockSig(c.local, c.night, agents) !== lastClock || skyKey(c) !== lastSky || JSON.stringify([...parts.activities(snap, c.t)]) !== lastActs;
+      const changed = clockSig(c.local, c.night, agents) !== lastClock || skyKey(c) !== lastSky || JSON.stringify([...withUses(parts.activities(snap, c.t), c.t, false)]) !== lastActs;
       // the next step hears the rows again: the timeline walks the bims to their new activities
       if (changed) fresh = true;
       return changed;
@@ -238,7 +253,7 @@ export function makeDriver(parts: DriverParts): OfficeDriver {
           }
         }
         regrow = false;
-        const acts = parts.activities(snap, t);
+        const acts = withUses(parts.activities(snap, t), t, true);
         lastActs = JSON.stringify([...acts]);
         // a map with a park: who skates reads the stage, the jobs' high-water mark (never the live count), his day, reduced motion
         const fun = parts.pastimes === false ? undefined : { stage: g.stage, jobs: g.jobs, dow: local.dow, day: dayOf(local.y, local.mo, local.d), reduced };
@@ -275,12 +290,63 @@ export function makeDriver(parts: DriverParts): OfficeDriver {
       // the office grows: what it draws, and the unlock moment while it lasts
       const u = still ? undefined : unlock;
       const sky = skyOfClock(c);
-      const look: Look = { night, reduced, eggs: eg.office, grow: g, inbox: snap?.cards.length ?? 0, ...(u ? { unlock: u } : {}), ...(sky ? { sky } : {}) };
+      const look: Look = { night, reduced, eggs: eg.office, grow: g, inbox: snap?.cards.length ?? 0, ...(u ? { unlock: u } : {}), ...(sky ? { sky } : {}), ...(using.size > 0 ? { using } : {}) };
       if (u && t - u.at > UNLOCK_WALK + UNLOCK_LABEL) unlock = undefined;
       const words = new Map([...pk].map(([n, x]) => [n, x.label]));
       const labels = parts.labelsOf(played, { t, hover: a.hover, held: a.held, agents, eggs: eggLabels(eg), pokes: words, follow: a.follow, park: office.park });
       const wake = c.forced !== undefined ? null : pokeWake(pokes, frames, t, reduced);
-      return { office, agents, want: map ?? office.map, reshaped, frames, played, look, labels, moving: timeline.moving(t), wake, corners: cornersIn(office), grown: GROWS.has(office.map) && needMap === office.map ? { map: office.map, need } : null };
+      return { office, agents, want: map ?? office.map, reshaped, frames, played, look, labels, moving: timeline.moving(t), wake, corners: cornersIn(office), grown: GROWS.has(office.map) && needMap === office.map ? { map: office.map, need } : null, using };
+  }
+
+  /**
+   * The activities with each working bim's trip to the plugin object its call uses (uses.ts, Gabriel
+   * m_52113): at that object's use spot, its second one for a second bim (none free: it stays at its
+   * desk), the object in `using` either way. A state wins: only a bim at work (main too) goes.
+   * `commit`: the trips move on (a step); else only looked at (stale's check).
+   */
+  function withUses(acts: ReadonlyMap<string, Activity>, t: number, commit: boolean): ReadonlyMap<string, Activity> {
+    if (rowsP === null || office === null) return acts;
+    const co = cornersIn(office);
+    if (spotsFor === null || spotsFor.corners !== co) spotsFor = { corners: co, spots: new Map() };
+    const cache = spotsFor.spots;
+    const spotsOf = (key: string): ReturnType<typeof standSpotsOf> => {
+      let s = cache.get(key);
+      if (s === undefined) {
+        const p = co.placed.find((q) => q.key === key);
+        s = p === undefined || office === null ? [] : standSpotsOf(office, p, co.placed);
+        cache.set(key, s);
+      }
+      return s;
+    };
+    const calls = new Map<string, string | null>();
+    for (const a of agents) {
+      const act = acts.get(a.name);
+      if (act === undefined || !WORKING.has(act.k)) continue;
+      const u = a.doing?.uses;
+      calls.set(a.name, u === undefined ? null : pluginOfUse(u, rowsP));
+    }
+    const next = nextTrips(trips, calls, t, (_bim, key) => spotsOf(key).length > 0);
+    const inUse = new Set<string>();
+    for (const k of calls.values()) if (k !== null && co.placed.some((q) => q.key === k)) inUse.add(k);
+    if (commit) {
+      trips = next;
+      using = inUse;
+    }
+    if (next.now.size === 0) return acts;
+    const out = new Map(acts);
+    // the bims at one object take its spots in the order they came (then by name): one there keeps its spot
+    const at = [...next.now].sort(([a, x], [b, y]) => x.began - y.began || (a < b ? -1 : a > b ? 1 : 0));
+    const taken = new Map<string, number>();
+    for (const [bim, trip] of at) {
+      const act = acts.get(bim);
+      const p = co.placed.find((q) => q.key === trip.key);
+      const i = taken.get(trip.key) ?? 0;
+      const spot = spotsOf(trip.key)[i];
+      if (act === undefined || p === undefined || spot === undefined) continue;
+      taken.set(trip.key, i + 1);
+      out.set(bim, { ...act, at: 'object', use: { key: trip.key, obj: p.obj, spot, how: howUsed(p.obj) } });
+    }
+    return out;
   }
 
   /** the office his objects need (extensions.ts): the laid one on a map that does not grow yet; the extensions already come stay */
@@ -315,6 +381,9 @@ export function makeDriver(parts: DriverParts): OfficeDriver {
     return corners;
   }
 }
+
+/** the activities of a bim at work: it may walk to the object its call uses (main too) */
+const WORKING: ReadonlySet<Activity['k']> = new Set(['work', 'hot', 'main']);
 
 const sameExt = (a: Box | undefined, b: Box | undefined): boolean =>
   a === b || (a !== undefined && b !== undefined && a.x0 === b.x0 && a.x1 === b.x1 && a.z0 === b.z0 && a.z1 === b.z1);

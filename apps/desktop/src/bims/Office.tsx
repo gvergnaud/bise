@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Press, tipAttrs } from '@/ds';
 import { reducedMotion, textWidth } from '@/ds/hooks';
-import type { Agent, Card, Place } from '@/proto';
+import type { Agent, Card, Place, Plugin } from '@/proto';
 import { shownName } from '@/agents/model';
 import { bims } from '@/proto/words_bims.gen';
 import { useModHeld } from '@/app/held';
@@ -200,6 +200,7 @@ export function Office({
   cards,
   places,
   objects = NO_OBJECTS,
+  plugins = null,
   growth = null,
   map = DEFAULT_MAP,
   parts,
@@ -225,6 +226,8 @@ export function Office({
   places: readonly Place[];
   /** his plugins' objects (plugin-objects.ts officeObjects): the office places them by corners (corners.ts); absent: none */
   objects?: readonly PluginObject[];
+  /** his plugins rows (the store's usePlugins): a working bim walks to the object of the plugin its call uses (uses.ts); absent: no trips */
+  plugins?: readonly Plugin[] | null;
   /** how much the project has done (hub/growth); the office draws its high-water mark (growth.ts) */
   growth?: Growth | null;
   /** the project's map (his /bims pick, prefs bims.map.<project>); the loft when he never picked one */
@@ -415,6 +418,11 @@ export function Office({
     driver.objects(objects);
     kickRef.current();
   }, [driver, objects]);
+  // his plugins rows: a working bim's call to one of them walks it to that plugin's object
+  useEffect(() => {
+    driver.plugins(plugins);
+    kickRef.current();
+  }, [driver, plugins]);
   // the extensions this project's map already had (ext-keep.ts): they come back, never go
   useEffect(() => {
     driver.seedNeed(map, extKept(project, map));

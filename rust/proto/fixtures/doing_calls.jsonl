@@ -9,9 +9,9 @@
 {"name": "bash", "args": "sb artifact add out/deck.pptx --title deck", "kind": "publish"}
 {"name": "bash", "args": "rg -n \"StateGate\" rust", "kind": "search"}
 {"name": "bash", "args": "grep -rn foo src", "kind": "search"}
-{"name": "run_typescript", "args": "async function main() { return await tools.computer.screenshot({}) }", "kind": "computer"}
+{"name": "run_typescript", "args": "async function main() { return await tools.computer.screenshot({}) }", "kind": "computer", "uses": {"kind": "group", "name": "computer"}}
 {"name": "run_typescript", "args": "return self.readImages('/a.png')", "kind": "image"}
-{"name": "run_typescript", "args": "async function main() { return tools.gmail.search({}) }", "kind": "tool"}
+{"name": "run_typescript", "args": "async function main() { return tools.gmail.search({}) }", "kind": "tool", "uses": {"kind": "group", "name": "gmail"}}
 {"name": "edit", "args": "{\"file_path\":\"src/a.rs\",\"old_string\":\"x\"}", "kind": "edit"}
 {"name": "write_file", "args": "{\"file_path\":\"a.md\",\"content\":\"hi\"}", "kind": "edit"}
 {"name": "apply_patch", "args": "*** Begin Patch", "kind": "edit"}
@@ -19,7 +19,10 @@
 {"name": "web_search", "args": "{\"query\":\"bise\"}", "kind": "search"}
 {"name": "search_tool_functions", "args": "{\"query\":\"list issues\"}", "kind": "search"}
 {"name": "read_image", "args": "{\"path\":\"a.png\"}", "kind": "image"}
-{"name": "skill", "args": "{\"name\":\"bise-pages\"}", "kind": "tool"}
+{"name": "skill", "args": "{\"name\":\"bise-pages\"}", "kind": "tool", "uses": {"kind": "skill", "name": "bise-pages"}}
 {"name": "mcp_tool", "args": "", "kind": "tool"}
 {"name": "bash", "args": "jq --arg x 1 . a.json", "kind": "tool"}
 {"name": "bash", "args": "ls | rg foo", "kind": "search"}
+{"name": "skill", "args": "{\"name\":\"computer:computer-use\"}", "kind": "tool", "uses": {"kind": "skill", "plugin": "computer", "name": "computer-use"}}
+{"name": "mcp__github__get_issue", "args": "{\"n\":3}", "kind": "tool", "uses": {"kind": "server", "name": "github"}}
+{"name": "run_typescript", "args": "async function main() { const r = await tools.linear.list_issues({}); return tools.slack.post(r) }", "kind": "tool", "uses": {"kind": "group", "name": "linear"}}

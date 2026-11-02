@@ -342,7 +342,7 @@ function aside(seg: Segment): boolean {
 
 /** what makes two activities the same stretch: its kind, its rank in the queue, its trip, the other bim of a message */
 function sigOf(a: Activity): string {
-  return `${a.k}|${a.rank === undefined ? '' : String(a.rank)}|${a.key === undefined ? '' : String(a.key)}|${a.with ?? ''}${a.standing ? '|stand' : ''}`;
+  return `${a.k}|${a.rank === undefined ? '' : String(a.rank)}|${a.key === undefined ? '' : String(a.key)}|${a.with ?? ''}${a.standing ? '|stand' : ''}${a.use ? `|use:${a.use.key}:${a.use.spot.x.toFixed(2)},${a.use.spot.z.toFixed(2)}` : ''}`;
 }
 
 /**
@@ -440,6 +440,9 @@ function fixedSpot(o: Office, name: string, act: Activity): Spot | null {
       return act.k === 'report' ? visitAt(o, o.mainDesk) : o.mainDesk;
     case 'door':
       return o.door;
+    // a plugin object its call uses (uses.ts): the spot the driver gave it, else its desk
+    case 'object':
+      return act.use?.spot ?? o.desks.get(name) ?? o.door;
     case 'queue': {
       const rank = Math.max(1, act.rank ?? 1);
       const place = o.queue[rank - 1];

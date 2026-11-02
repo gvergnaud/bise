@@ -28,7 +28,7 @@ import { beatDelay, EASE_MS, happenedOf, HOLD_MS, pickBeat, seenOf, stillRecent,
 import { speechOf, speechWord } from './model';
 import type { Agent, Card } from '@/proto';
 import { getPref, type Prefs } from '@/settings/prefs';
-import { useGrowth, usePlaces, usePrefs } from '@/store';
+import { useGrowth, usePlaces, usePlugins, usePrefs } from '@/store';
 import { side } from '@/proto/words_side.gen';
 
 /** the hover that grows the world, ms (native-mac §7) */
@@ -187,8 +187,10 @@ export function WorldOffice({ project, agents, cards, cameraFrom = null, headRef
   const map = useMap(project);
   // his plugins' objects, the plugins asked here too: the tile drew none until the Office tab asked (his m_49375)
   const objects = useOfficeObjects(project);
+  // and the plugins rows: a working bim walks to the object of the plugin its call uses (uses.ts)
+  const plugins = usePlugins(project);
   return (
-    <Office project={project} agents={agents} cards={cards} places={places} objects={objects} growth={growth} map={map}
+    <Office project={project} agents={agents} cards={cards} places={places} objects={objects} plugins={plugins} growth={growth} map={map}
       parts={bimsParts} transparent fill={fill} onOpen={onOpen ?? (() => undefined)} {...(onPickMap === undefined ? {} : { onPickMap })} follow={follow} cameraFrom={cameraFrom} headRef={headRef} onZoomed={onZoomed} refit={refit} />
   );
 }

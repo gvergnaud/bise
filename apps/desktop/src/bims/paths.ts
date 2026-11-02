@@ -24,14 +24,38 @@ export function network(o: Office): readonly Leg[] {
   return netOf(o).legs;
 }
 
+/** p's nearest point on these legs and how far it is; null: no legs */
+export function nearOnNet(legs: readonly Leg[], p: Pt): { readonly d: number; readonly at: Pt } | null {
+  let best: { d: number; at: Pt } | null = null;
+  for (const [a, b] of legs) {
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const l = dx * dx + dz * dz;
+    const f = l === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / l));
+    const q = { x: a.x + f * dx, z: a.z + f * dz };
+    const d = dist(p, q);
+    if (best === null || d < best.d) best = { d, at: q };
+  }
+  return best;
+}
+
 /**
  * The shortest walk from `from` (a point on the network: a spot, or a point along a walk) to
- * `to` (a spot or a point on the network). Off the network (never, but the timeline must not
- * break): the walk starts at the network's nearest junction.
+ * `to` (a spot or a point on the network). An end off the network (a plugin object's use spot,
+ * uses.ts, which keeps that step clear): a straight step between it and its nearest point there.
  */
 export function path(o: Office, from: Pt, to: Pt): Path {
   if (near(from, to)) return makePath([from]);
   const net = netOf(o);
+  const off = (p: Pt): Pt | null => {
+    if (net.nodes.some((n) => near(n, p)) || net.legs.some((l) => onLeg(l, p))) return null;
+    const q = nearOnNet(net.legs, p);
+    return q === null || near(q.at, p) ? null : q.at;
+  };
+  const toIn = off(to);
+  if (toIn !== null) return makePath([...path(o, from, toIn).pts, to]);
+  const fromIn = off(from);
+  if (fromIn !== null) return makePath([from, ...path(o, fromIn, to).pts]);
   const a = locate(net, from);
   const b = locate(net, to);
   if (sameLeg(a, b)) return makePath([from, to]);

@@ -6,7 +6,7 @@ use super::super::*;
 use bise_proto::rows::{Doing, DoingKind};
 
 fn row_doing(t: &mut T, name: &str) -> Option<Doing> {
-    t.hub.snapshot(t.env.now).agent(name).doing
+    t.hub.snapshot(t.env.now).agent(name).doing.clone()
 }
 
 fn line(t: &mut T, agent: &str, l: &str) -> Vec<Effect> {
@@ -30,8 +30,8 @@ fn the_row_says_what_the_map_says() {
     for (l, want) in steps {
         t.env.now += 10;
         line(&mut t, "a", l);
-        let map = t.hub.doing.get("a").copied();
-        assert_eq!(map.map(|d| d.kind), want, "{l}");
+        let map = t.hub.doing.get("a").cloned();
+        assert_eq!(map.as_ref().map(|d| d.kind), want, "{l}");
         assert_eq!(row_doing(&mut t, "a"), map, "the row is the map's after {l}");
     }
     // the turn ends: neither says anything any more
@@ -48,11 +48,11 @@ fn a_view_rebuild_keeps_it() {
     t.spawn_task("a");
     line(&mut t, "a", "tool #1 bash : sleep 9");
     let before = row_doing(&mut t, "a");
-    assert_eq!(before.map(|d| d.kind), Some(DoingKind::Tool));
+    assert_eq!(before.as_ref().map(|d| d.kind), Some(DoingKind::Tool));
     // a step that goes through sb-core (a message to it) rebuilds the view
     t.req(MAIN, AgentReq::Send { to: "a".into(), text: "hi".into(), expect_reply: false, reply_to: None, queued: true, why: String::new(), switch: None, parts: String::new(), attach: Vec::new(), fwd: None });
     assert_eq!(row_doing(&mut t, "a"), before);
-    assert_eq!(t.hub.doing.get("a").copied(), before);
+    assert_eq!(t.hub.doing.get("a").cloned(), before);
 }
 
 /// sb-core's journal effects are activity events, in the same step.

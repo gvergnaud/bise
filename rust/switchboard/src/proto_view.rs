@@ -229,7 +229,7 @@ fn agent(
         // event-wake: what it waits for (wake.rs `Wakes::watching`)
         watching: a.watching.clone(),
         // les bims: what it is doing now (snapshot_rows, crate::doing::row)
-        doing: a.doing,
+        doing: a.doing.clone(),
         // P4b: the terminal's facts, each the snapshot's own field
         mode: Some(if worktree { AgentMode::Worktree } else { AgentMode::Shared }),
         path: a.path.trim().to_string(),
