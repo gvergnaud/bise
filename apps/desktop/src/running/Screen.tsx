@@ -1,7 +1,7 @@
 // The processes screen (bise fait mac: page native-mac §6 and §8; designer's running-procs; route
-// running): what his agents left running in every project. The page's name and its search
-// (InBar, '/') are in the window's bar; under it the banner (ds PageBanner), the filter (ds Filters:
-// 'running N' / 'ended today N'), a ds GroupLabel per project, one ds ListRow per process (its
+// running): what his agents left running in every project. The page's name is in the window's bar;
+// under it the banner (ds PageBanner), the list's row (ds ListBar, his m_52658: the filter, ds Filters
+// 'running N' / 'ended today N', and the search at its right; '/' and ⌘F focus it, app/searchkeys.ts), a ds GroupLabel per project, one ds ListRow per process (its
 // command in mono 12, then agent · address · age; a --c-ok dot while it runs; the chosen one's
 // 'open'; its '…' and a right click are its menu, useEntityMenu), and the selected one's output
 // beside it (head: meta, find ⌘F, open ↗ / stop; a read-only terminal that follows its end; no
@@ -12,13 +12,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { nextHit, type Hit } from './find';
 import type { Terminal as Xterm } from '@xterm/xterm';
-import { AppIcon, BarSearch, Empty, Field, FilterRow, Filters, GroupLabel, ListRow, MoreButton, PageBanner, Press, RowAction, sentenceCase, tipAttrs } from '@/ds';
+import { AppIcon, Empty, Field, Filters, GroupLabel, ListBar, ListRow, ListSearch, MoreButton, PageBanner, Press, RowAction, sentenceCase, tipAttrs } from '@/ds';
 import { PageVignette, useBannerGutter } from '@/artifacts/hero/vignettes';
 import { useEntityMenu } from '@/app/menus/use';
 import { Code } from '@/thread/Code';
 import { hero } from '@/proto/words_hero.gen';
 import { useListKeys } from '@/app/listkeys';
-import { InBar } from '@/app/barslot';
+import { usePageSearchKeys } from '@/app/searchkeys';
 import { useKeptScroll } from '@/app/keep';
 import { pinFirst, pinnedIn, procPinId, usePins, type PinSet } from '@/app/pins';
 import { PinMark } from '@/app/pinbutton';
@@ -166,7 +166,7 @@ export function RunningView({
     setKept(new Set());
     setFilter(f);
   };
-  // the TUI's /running keys: s stop, o open, / search; esc closes the output, then clears the search
+  // the TUI's /running keys: s stop, o open; esc closes the output, then clears the search
   const screenKey = (e: KeyboardEvent, k: string | null): boolean => {
     if (e.metaKey && e.key === 'f' && open !== null) {
       setFinding(true);
@@ -186,19 +186,26 @@ export function RunningView({
       else return false;
     } else if (e.key === 's' && x) stop(x);
     else if (e.key === 'o' && x) openUrl(x);
-    else if (e.key === '/') searchRef.current?.focus();
     else return false;
     return true;
   };
   const { sel, setSel, ref, onKeyDown, move } = useListKeys({ order, keepAs: 'running.sel', onOpen: setOpen, onKey: screenKey });
+  // '/' and ⌘F focus the search; ⌘F with an output open is its find (the output's own)
+  usePageSearchKeys(searchRef, () => {
+    if (open === null) return false;
+    setFinding(true);
+    return true;
+  });
   const searchKey = (e: KeyboardEvent<HTMLInputElement>) => {
     const back = () => {
       e.preventDefault();
       ref.current?.focus({ preventScroll: true });
     };
     if (e.key === 'Escape') {
-      setQ('');
-      back();
+      if (q !== '') {
+        e.preventDefault();
+        setQ('');
+      } else back();
     } else if (e.key === 'Enter') back();
     else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       back();
@@ -226,7 +233,8 @@ export function RunningView({
         {/* one scroller: the filters scroll away with the list; its foot keeps the floating
             composer's room (--float-room) */}
         <div className="run-scroll" data-testid="running.scroll">
-        <FilterRow testId="running.filters">
+        <ListBar inset testId="running.filters"
+          end={<ListSearch ref={searchRef} value={q} onChange={(e) => { setQ(e.currentTarget.value); }} onKeyDown={searchKey} onClear={() => { setQ(''); searchRef.current?.focus(); }} testId="running.search" />}>
           <Filters
             items={FILTERS.map((f) => ({ id: f, label: <>{sentenceCase(f === 'running' ? running.state_running : running.ended_today)}<span className="run-n">{f === 'running' ? counts.running : counts.ended}</span></> }))}
             on={filter}
@@ -234,15 +242,11 @@ export function RunningView({
             onPick={(id) => { pick(id === 'ended' ? 'ended' : 'running'); }}
             testId="running.filter"
           />
-          {/* the page's search, in the window's bar (app-polish #4) */}
-          <InBar>
-            <BarSearch ref={searchRef} value={q} onChange={(e) => { setQ(e.currentTarget.value); }} onKeyDown={searchKey} testId="running.search" />
-          </InBar>
-        </FilterRow>
+        </ListBar>
         {order.length === 0 ? (
           <Empty testId="running.empty" title={q !== '' ? running.none_match : filter === 'running' ? running.empty : running.empty_ended} />
         ) : (
-          <div className="run-list" data-testid="running.list">
+          <div data-testid="running.list">
             {groups.map((g) => (
               <div key={g.key} role="group" aria-label={g.projectName} data-testid={`running.group.${g.key}`}>
                 {/* one label per project; none with one project: the lead says it (designer m_41694 #2) */}

@@ -1,4 +1,4 @@
-/* src/ds · Filters, FilterRow, BarSearch (filters.tsx; page native-mac §6, mockup 6). The chosen
+/* src/ds · Filters, FilterRow, ListBar, ListSearch (filters.tsx; page native-mac §6, mockup 6). The chosen
    segment is --c-seg-on with --e-1, lighter than its track in both themes as macOS's segmented
    control (designer m_42136): never the hover's tint, never the accent. Every control of the row 28
    on one line, the row on the page's 12 edge (the rows' glyphs, the group labels, the lead). The
@@ -9,12 +9,29 @@
 .b-filters>[role=tab]:not(.on):hover{color:var(--c-text)}
 .b-filters>[role=tab].on{background:var(--c-seg-on);color:var(--c-text);box-shadow:var(--e-1)}
 .b-filters>[role=tab]:focus-visible{outline:2px solid var(--c-focus);outline-offset:-2px}
-.b-barsearch{display:inline-flex;align-items:center;gap:var(--s-2);flex:none;box-sizing:border-box;width:var(--w-search);height:var(--h-control-sm);padding:0 var(--s-2);border-radius:var(--r-2);background:var(--c-sunken);color:var(--c-text-3);cursor:text}
-.b-barsearch:focus-within{box-shadow:0 0 0 2px var(--c-focus)}
-.b-barsearch input{flex:1;min-width:0;height:100%;margin:0;padding:0;border:0;outline:0;background:none;font:400 var(--f-ui);color:var(--c-text);-webkit-appearance:none;appearance:none}
-.b-barsearch input::placeholder{color:var(--c-text-3)}
-.b-barsearch input::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none}
+/* the row above a list (ListBar; his m_52658, designer m_52674, Artifacts' spec D m_44968): 32 high,
+   8 above the list, filters left and search right on the list's edges (12 in with `inset`: the ds
+   ListRow's content edge); sticky at the top of the page's scroller on the page's ground, a 1 px
+   --c-line under it only while stuck. */
+.b-listbar{position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:var(--s-2);box-sizing:border-box;height:var(--h-control);margin:0 0 var(--s-2);background:var(--c-solid);box-shadow:0 1px 0 transparent;transition:box-shadow var(--d-fast) var(--ease-out)}
+.b-listbar.inset{padding:0 var(--s-3)}
+.b-listbar[data-stuck]{box-shadow:0 1px 0 var(--c-line)}
+.b-listbar-start,.b-listbar-end{display:flex;align-items:center;gap:var(--s-2)}
+/* the filters never shrink (a page that has too many folds them: Artifacts' Toolbar.tsx) */
+.b-listbar-start{flex:1 1 auto;min-width:0}
+.b-listbar-start > *{flex:none}
+.b-listbar-end{flex:none}
+@media (prefers-reduced-motion:reduce){.b-listbar{transition:none}}
+/* the search (ListSearch): 200 (160 under a 900 window) x 28, r 8, --c-sunken with a 1 px --c-line;
+   its '/' key goes with the focus or words, its x comes with words */
+.b-listsearch{display:inline-flex;align-items:center;gap:var(--s-2);flex:none;box-sizing:border-box;width:var(--w-search);height:var(--h-control-sm);padding:0 var(--s-2);border-radius:var(--r-2);background:var(--c-sunken);box-shadow:inset 0 0 0 1px var(--c-line);color:var(--c-text-3);cursor:text}
+.b-listsearch:focus-within{box-shadow:inset 0 0 0 1px var(--c-line),0 0 0 2px var(--c-focus)}
+.b-listsearch:focus-within .b-kbd{display:none}
+@media (max-width:900px){.b-listsearch{width:160px}}
+.b-listsearch input{flex:1;min-width:0;height:100%;margin:0;padding:0;border:0;outline:0;background:none;font:400 var(--f-ui);color:var(--c-text);-webkit-appearance:none;appearance:none}
+.b-listsearch input::placeholder{color:var(--c-text-3)}
+.b-listsearch input::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none}
 /* its × once it has words (onClear): text-3, text on hover, 8 from its right edge like the key */
-.b-barsearch-x{display:inline-flex;align-items:center;justify-content:center;flex:none;width:var(--h-kbd);height:var(--h-kbd);padding:0;border:0;border-radius:var(--r-1);background:none;color:var(--c-text-3)}
-.b-barsearch-x:hover{color:var(--c-text);background:var(--c-hover)}
-.b-barsearch-x:focus-visible{outline:2px solid var(--c-focus);outline-offset:0}
+.b-listsearch-x{display:inline-flex;align-items:center;justify-content:center;flex:none;width:var(--h-kbd);height:var(--h-kbd);padding:0;border:0;border-radius:var(--r-1);background:none;color:var(--c-text-3)}
+.b-listsearch-x:hover{color:var(--c-text);background:var(--c-hover)}
+.b-listsearch-x:focus-visible{outline:2px solid var(--c-focus);outline-offset:0}

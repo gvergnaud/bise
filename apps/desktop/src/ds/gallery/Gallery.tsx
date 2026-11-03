@@ -12,7 +12,7 @@ import {
   Field, Fold, Group, Head, Help, IconButton, Job, Kbd, Main, Marker, Menu, MenuItem, MenuSep, Msg, Onb, Opts, Pearl, Picker, PickerSeg, PickerTrigger, Quote, Route, Row,
   SchedHead, SectionHead, Seg, Select, Side, SideView, Skel, Spot, SpotGroup, SpotRow, SpotStill, Tabs, TextArea, Thread, Thumbs, Toast, Toggle, Tool,
   Win, type Opt,
-  APP_ICONS, AppIcon, BannerWait, BarSearch, FilterRow, Filters, GroupLabel, ListRow, MoreButton, PageBanner, RowAction, type EntityMenu,
+  APP_ICONS, AppIcon, BannerWait, Filters, GroupLabel, ListBar, ListRow, ListSearch, MoreButton, PageBanner, RowAction, type EntityMenu,
 } from "../index";
 import { BimsToggle } from "@/bims/Cube";
 import { BimsSwitch } from "@/bims/Office";
@@ -540,11 +540,10 @@ export const SECTIONS: Record<string, () => ReactNode> = {
         {/* the banner (designer m_42762) with no vignette: the page's line icon at 64 */}
         <PageBanner title="Inbox" sentence="what your agents wait on you for, from every project." facts={<><BannerWait>3 waiting</BannerWait> · the oldest 21 d ago</>}
           icon="inbox" edge="page" testId="ds.mac.lead" />
-        <FilterRow>
+        <ListBar inset end={<ListSearch value="" testId="ds.mac.search" />}>
           <Filters items={[{ id: "w", label: "waiting" }, { id: "a", label: "answered" }, { id: "x", label: "withdrawn" }]} on="w" onPick={noop} testId="ds.mac.filters" />
           <PickerTrigger look="pop" onClick={noop}>all projects</PickerTrigger>
-          <span className="g-mac-end"><BarSearch value="" testId="ds.mac.search" /></span>
-        </FilterRow>
+        </ListBar>
         <GroupLabel count={3} waits tip="3 waiting for you" testId="ds.mac.group">waiting for you</GroupLabel>
         <ListRow on state={q} title={<><b>perf</b> run rm -rf target?</>} sub="acme · 21 d · #10" end={<><RowAction>answer</RowAction><MoreButton menu={m} /></>} testId="ds.mac.row.on" />
         <ListRow state={q} title={<><b>perf</b> which bench: cold or warm?</>} sub="acme · 21 d · #9" end={<MoreButton menu={m} />} testId="ds.mac.row" />

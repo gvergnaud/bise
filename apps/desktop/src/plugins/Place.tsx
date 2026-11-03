@@ -6,14 +6,15 @@
 // right) with the kind chips, and the list in sentence-case ds GroupLabels: one row per plugin, its
 // object as its icon, its tags, what it gives and its one control (a switch; 'always on'; connect /
 // log in where it waits on his account; a failed server's red line and details); a skill the search
-// found opens in its own tab (SkillTab.tsx). The search is in the window's bar (InBar). Adding goes
+// found opens in its own tab (SkillTab.tsx). The search is in the list's row (ds ListBar: installed |
+// browse left, the search then add right; '/' and ⌘F focus it, app/searchkeys.ts). Adding goes
 // through add, the band and browse only. Every number is the core's (catalog::rows,
 // catalog::summary); every change is the core's (plugin_set, plugin_connect, plugin_login,
 // plugin_add…), answered by `plugins` again. Owner: nm-pages-b (plug-desktop's before).
-import { useMemo, useRef, useState, type ReactNode } from 'react';
-import { BannerWait, BarSearch, Button, Chip, FilterRow, Filters, GroupLabel, PageBanner, sentenceCase, Toggle, tipAttrs } from '@/ds';
+import { useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { BannerWait, Button, Chip, Filters, GroupLabel, ListBar, ListSearch, PageBanner, sentenceCase, Toggle, tipAttrs } from '@/ds';
+import { usePageSearchKeys } from '@/app/searchkeys';
 import { hero } from '@/proto/words_hero.gen';
-import { InBar } from '@/app/barslot';
 import { openTab } from '@/app/panel/tabs';
 import { useBannerGutter } from '@/artifacts/hero/vignettes';
 import type { AppCmd, Plugin, PluginsSummary, ConnectorsProblem } from '@/proto';
@@ -89,7 +90,15 @@ export function PlaceView({ rows, summary, browse, problem, project, projectName
   const toBrowse = browse.reduce((n, b) => n + b.items.length, 0);
   // three sections at --gap-page (the banner, connect your tools, the list); inside the list, its
   // filters (installed | browse, add at their right), the chips and the groups at --gap-block
-  // (ui-review #1, #2, #10); the search is in the window's bar and filters the list
+  // (ui-review #1, #2, #10); the search is in the list's row and filters the list
+  usePageSearchKeys(searchRef);
+  // its esc clears the words, a second esc leaves it (Artifacts' search, designer m_52674)
+  const searchKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+    if (q !== '') setQ('');
+    else e.currentTarget.blur();
+  };
   return (
     <section className="plg-place" data-testid="plugins.place">
       {/* the page's banner (ds PageBanner, designer m_42762): its name, what it is, its counts (the
@@ -97,10 +106,6 @@ export function PlaceView({ rows, summary, browse, problem, project, projectName
       <PageBanner title={hero.plugins_title} sentence={settings.plugins_place_sub} edge="column" gutter={gutter} icon="plugins" testId="plugins.head"
         {...(summary !== null ? { facts: <span data-testid="plugins.counts">{settings.plugins_place_counts({ on: summary.on, off: summary.off })}{summary.waiting > 0 && <>{' · '}<BannerWait>{settings.plugins_place_waits({ n: summary.waiting })}</BannerWait></>}</span> } : {})}
         visual={<div className="plg-room" data-bleed data-testid="plugins.room">{room ?? <Room rows={all} project={project} fallback={<PlainRoom rows={all} project={project} />} onOpen={ports.open} />}</div>} />
-      {/* the page's search, in the window's bar (app-polish #4); its action row under the banner */}
-      <InBar>
-        <BarSearch ref={searchRef} value={q} onChange={(e) => { setQ(e.currentTarget.value); }} onKeyDown={(e) => { if (e.key === 'Escape') { setQ(''); e.currentTarget.blur(); } }} testId="plugins.search" />
-      </InBar>
       {(bandShows(summary) && summary !== null) || problem != null ? (
         <div className="plg-sec">
           {bandShows(summary) && summary !== null && (
@@ -114,13 +119,16 @@ export function PlaceView({ rows, summary, browse, problem, project, projectName
         </div>
       ) : null}
       <div className="plg-sec" data-testid="plugins.list">
-        <FilterRow testId="plugins.tabs.row">
+        <ListBar inset testId="plugins.tabs.row"
+          end={
+            <>
+              <ListSearch ref={searchRef} value={q} onChange={(e) => { setQ(e.currentTarget.value); }} onKeyDown={searchKey} onClear={() => { setQ(''); searchRef.current?.focus(); }} testId="plugins.search" />
+              <AddMenu summary={summary} onPick={(item) => { if (item === 'browse') setTab('browse'); else ports.add(item); }} />
+            </>
+          }>
           <Filters items={[{ id: 'installed', label: <TabWords words={sentenceCase(settings.plugins_tab_installed)} n={counts.all} /> }, { id: 'browse', label: <TabWords words={sentenceCase(settings.plugins_tab_browse)} n={toBrowse} /> }]}
             on={tab} onPick={(id) => { setTab(id === 'browse' ? 'browse' : 'installed'); }} testId="plugins.tabs" />
-          <span className="plg-add">
-            <AddMenu summary={summary} onPick={(item) => { if (item === 'browse') setTab('browse'); else ports.add(item); }} />
-          </span>
-        </FilterRow>
+        </ListBar>
         {tab === 'installed' ? (
           <>
             <div className="plg-kinds" role="group" data-testid="plugins.kinds">

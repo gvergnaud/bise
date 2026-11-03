@@ -5,7 +5,7 @@
 //      (/ @ $): theirs, they close (a bubble's card gives the focus back to its bubble)
 //   2. the sidebar slid over (narrow): it closes                                  layer 'over'
 //   3. the focus in the find bar: theirs, find closes; the focus in a page's search field
-//      (ds BarSearch, data-esc-own): theirs, its words clear, then it gives the focus back
+//      (ds ListSearch, data-esc-own): theirs, its words clear, then it gives the focus back
 //   4. an inbox item open in place: theirs, it folds; an outer card's ask open in place: it folds,
 //      the focus back on its row (designer m_47321)                               layer 'ask'
 //   5. the focus in the unfolded floating composer: theirs (its lists, then it folds)
@@ -45,7 +45,7 @@ export interface EscFacts {
   readonly over: boolean;
   /** the focus in the thread's find bar */
   readonly find: boolean;
-  /** the focus in a page's search field that takes esc itself (data-esc-own: ds BarSearch) */
+  /** the focus in a page's search field that takes esc itself (data-esc-own: ds ListSearch) */
   readonly field: boolean;
   /** an inbox item open in place */
   readonly inboxItem: boolean;

@@ -18,7 +18,7 @@ vi.mock('./Output', () => ({
 }));
 const { RunningView } = await import('./Screen');
 
-// the window's bar, where the page's search goes (InBar)
+// the window's bar: the page's search is never there (his m_52658)
 beforeEach(() => { render(<BarSlot />); });
 afterEach(cleanup);
 
@@ -162,6 +162,23 @@ describe('the running screen', () => {
     expect(runs.some(([t, c]) => t === '"rc=$?"' && c === 'var(--md-syn-string)')).toBe(true);
     // the empty state's words go to the output (quietWords)
     expect(screen.getByTestId('running.out').getAttribute('data-quiet')).toBe('running for 14 min · nothing printed yet');
+  });
+
+  it("the search is at the right of the filter's row, never in the window's bar (his m_52658); '/' from anywhere, esc clears then gives the keys back", () => {
+    render(<RunningView items={[dev, nohup]} ports={ports()} now={NOW} />);
+    expect(screen.getByTestId('app.bar.slot').childElementCount).toBe(0);
+    const bar = screen.getByTestId('running.filters');
+    expect(bar.querySelector('.b-listbar-start [data-testid="running.filter"]')).not.toBeNull();
+    expect(bar.querySelector('.b-listbar-end [data-testid="running.search"]')).not.toBeNull();
+    const field = screen.getByTestId<HTMLInputElement>('running.search.input');
+    fireEvent.keyDown(document.body, { key: '/' });
+    expect(document.activeElement).toBe(field);
+    fireEvent.change(field, { target: { value: 'zzqx' } });
+    expect(screen.getByTestId('running.empty')).toBeTruthy();
+    fireEvent.keyDown(field, { key: 'Escape' });
+    expect([field.value, document.activeElement]).toEqual(['', field]);
+    fireEvent.keyDown(field, { key: 'Escape' });
+    expect(document.activeElement).toBe(screen.getByTestId('running.screen'));
   });
 
   it('stop asks once before it stops: the first click asks, the second stops', () => {

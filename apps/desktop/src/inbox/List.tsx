@@ -1,8 +1,9 @@
 // The inbox screen's view (bise fait mac: page native-mac §6, mockup 6; designer's inbox-history
 // pick A, m_24212 (2)-(6); route inbox/all, the rail's inbox): the page's name is in the window's
-// bar, its search there too (InBar, '/'); under the bar the banner (ds PageBanner: 'Inbox', its sentence, '3
-// waiting · the oldest 2 h ago', the accent on what waits), the filters 24 under it (ds Filters:
-// all / waiting / answered / withdrawn; the projects and agents menus), 'waiting for you N' first
+// bar; under the bar the banner (ds PageBanner: 'Inbox', its sentence, '3 waiting · the oldest 2 h
+// ago', the accent on what waits), the list's row 24 under it (ds ListBar, his m_52658: the filters
+// all / waiting / answered / withdrawn and the projects and agents menus, the search at its right;
+// '/' and ⌘F focus it, app/searchkeys.ts), 'waiting for you N' first
 // (ds GroupLabel; ⏎ or the chosen row's 'answer' opens the item above the composer, as ⌘I: the
 // store's one answer path), then the past by day, one ds ListRow each (two lines), read-only. The
 // rows' order is the hub's (Card.rank, given). No key line at the foot: the rows' tips say the keys.
@@ -16,8 +17,8 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import type { Card } from '@/proto';
 import { useListKeys } from '@/app/listkeys';
-import { InBar } from '@/app/barslot';
-import { AppIcon, BannerWait, BarSearch, Dropdown, Empty, FilterRow, Filters, GroupLabel, ListRow, PageBanner, Press, RowAction, RowMark, tipAttrs } from '@/ds';
+import { usePageSearchKeys } from '@/app/searchkeys';
+import { AppIcon, BannerWait, Dropdown, Empty, Filters, GroupLabel, ListBar, ListRow, ListSearch, PageBanner, Press, RowAction, RowMark, tipAttrs } from '@/ds';
 import { LiveVignette, useBannerGutter } from '@/artifacts';
 import { hero } from '@/proto/words_hero.gen';
 import { shownName } from '@/agents/model';
@@ -95,7 +96,6 @@ export function InboxView({ cards, records, onEnd, names, projects, ports, nextO
       return true;
     }
     if (e.key === ' ' && k !== null && pastBy.has(k)) setPaned(true);
-    else if (e.key === '/') searchRef.current?.focus();
     else if (e.key === 'Escape' && f.q !== '') setF({ ...f, q: '' });
     else return false;
     return true;
@@ -106,15 +106,19 @@ export function InboxView({ cards, records, onEnd, names, projects, ports, nextO
   useEffect(() => {
     onDetail?.(looked);
   }, [onDetail, looked]);
-  // the search has the keys: ⏎ gives them back, ↑↓ give them back and move, esc clears
+  usePageSearchKeys(searchRef);
+  // the search has the keys: ⏎ gives them back, ↑↓ give them back and move; esc clears its words, a
+  // second esc gives the keys back (Artifacts' search, designer m_52674)
   const searchKey = (e: KeyboardEvent<HTMLInputElement>) => {
     const back = () => {
       e.preventDefault();
       ref.current?.focus({ preventScroll: true });
     };
     if (e.key === 'Escape') {
-      setF({ ...f, q: '' });
-      back();
+      if (f.q !== '') {
+        e.preventDefault();
+        setF({ ...f, q: '' });
+      } else back();
     } else if (e.key === 'Enter') back();
     else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       back();
@@ -159,7 +163,8 @@ export function InboxView({ cards, records, onEnd, names, projects, ports, nextO
         }}>
       <PageBanner title={hero.inbox_title} sentence={hero.inbox_say} facts={<>{facts.wait !== undefined && <><BannerWait>{facts.wait}</BannerWait>{' · '}</>}{facts.rest}</>}
         visual={<LiveVignette page="inbox" />} icon="inbox" gutter={gutter} testId="inbox.lead" />
-      <FilterRow testId="inbox.filters">
+      <ListBar inset testId="inbox.filters"
+        end={<ListSearch ref={searchRef} value={f.q} onChange={(e) => { search(e.currentTarget.value); }} onKeyDown={searchKey} onClear={() => { search(''); searchRef.current?.focus(); }} testId="inbox.search" />}>
         <Filters items={STATES.map((s) => ({ id: s, label: STATE_WORDS[s] }))} on={f.state} label={inbox.filter_label}
           onPick={(id) => { set({ state: id as StateFilter }); }} testId="inbox.state" />
         <Dropdown look="pop" label={f.project === '' ? inbox.all_projects : (names[f.project] ?? f.project)} testId="inbox.projects"
@@ -174,11 +179,7 @@ export function InboxView({ cards, records, onEnd, names, projects, ports, nextO
             ...askers.map((a) => ({ id: `a:${a}`, name: shownName(a), current: f.agent === a, testId: `inbox.agents.${a}` })),
           ] }]}
           onPick={(id) => { set({ agent: id.slice(2) }); }} />
-        {/* the page's search, in the window's bar (app-polish #4: filters left, search right, one height) */}
-        <InBar>
-          <BarSearch ref={searchRef} value={f.q} onChange={(e) => { search(e.currentTarget.value); }} onKeyDown={searchKey} testId="inbox.search" />
-        </InBar>
-      </FilterRow>
+      </ListBar>
       <div className={`ip-body${cur ? ' paned' : ''}`}>
       {empty ? (
         <Empty title={inbox.screen_empty} testId="inbox.empty" />

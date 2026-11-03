@@ -2,11 +2,11 @@
 // src/ds · bise fait mac's shared components (page native-mac §6, nm-ds): what each draws for its
 // props, what it says to VoiceOver and in its tip, what a click sends; and noClip's walk. The sizes
 // are tokens.css's (lint.test.ts reads their values); a box's pixels are ui-review's shots.
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ds } from "@/proto/words_ds.gen";
 import { entityKey } from "@/shared/entity";
-import { APP_ICONS, AppIcon, BannerWait, BarSearch, Filters, GroupLabel, ListRow, MoreButton, PageBanner, roomOf, RowAction, sentenceCase, type EntityMenu } from "./index";
+import { APP_ICONS, AppIcon, BannerWait, Filters, GroupLabel, ListBar, ListRow, ListSearch, MoreButton, PageBanner, roomOf, RowAction, sentenceCase, type EntityMenu } from "./index";
 import { clippers, noClip } from "./noclip";
 
 afterEach(cleanup);
@@ -89,16 +89,35 @@ describe("Filters", () => {
   });
 });
 
-describe("BarSearch", () => {
+describe("ListSearch", () => {
   it("the ds's words: its placeholder, its VoiceOver name, its tip with the key; the key shown while empty", () => {
-    const { getByTestId, rerender } = render(<BarSearch value="" testId="s" />);
+    const { getByTestId, rerender } = render(<ListSearch value="" testId="s" />);
     const input = getByTestId("s.input") as HTMLInputElement;
     expect([input.placeholder, input.getAttribute("aria-label")]).toEqual([ds.search, ds.search]);
     expect(getByTestId("s").dataset["tip"]).toBe(ds.search_tip({ key: "/" }));
     expect(getByTestId("s").querySelector(".b-kbd")?.textContent).toBe("/");
     expect(getByTestId("s").querySelector("svg[data-icon=search]")).not.toBeNull();
-    rerender(<BarSearch value="perf" testId="s" />);
+    rerender(<ListSearch value="perf" testId="s" />);
     expect(getByTestId("s").querySelector(".b-kbd")).toBeNull();
+  });
+});
+
+describe("ListBar", () => {
+  it("the list's row: its filters left, its search right; stuck only once its scroller scrolled it to the top", () => {
+    const { getByTestId } = render(
+      <div data-testid="sc" style={{ overflowY: "auto" }}>
+        <ListBar inset end={<ListSearch value="" testId="s" />} testId="b"><Filters items={[{ id: "a", label: "all" }]} on="a" testId="f" /></ListBar>
+      </div>,
+    );
+    const bar = getByTestId("b");
+    expect(bar.className).toBe("b-listbar inset");
+    expect(bar.querySelector(".b-listbar-start [data-testid=f]")).not.toBeNull();
+    expect(bar.querySelector(".b-listbar-end [data-testid=s]")).not.toBeNull();
+    expect(bar.dataset["stuck"]).toBeUndefined();
+    const sc = getByTestId("sc");
+    sc.scrollTop = 40;
+    act(() => { sc.dispatchEvent(new Event("scroll")); });
+    expect(bar.dataset["stuck"]).toBe("true");
   });
 });
 

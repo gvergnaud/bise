@@ -12,7 +12,6 @@
 .ip-scroll > :not(.b-banner) { margin-inline: var(--pad-page-x); }
 .ip-search { margin-left: auto; }
 
-.ip-list { margin-top: var(--s-2); }
 .ip-who { margin-right: var(--s-2); font-weight: 600; }
 .ip-q { color: var(--c-text); }
 /* '?' waits on him: the accent's one use on a row */

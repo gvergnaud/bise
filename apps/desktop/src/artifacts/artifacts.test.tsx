@@ -20,7 +20,7 @@ import { aboutText } from '@/thread/about';
 import { load } from '@/composer/drafts';
 import { entryOf, entrySegments } from '@/composer/entry';
 
-// the window's bar, where the page's kinds, search and + go (InBar)
+// the window's bar: the page's kinds, search and + are never there (his m_44961)
 beforeEach(() => { render(<BarSlot />); });
 afterEach(cleanup);
 

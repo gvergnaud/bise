@@ -1,6 +1,6 @@
 // The page's room in the window's bar (bise fait mac, app-polish #4; native-lead m_42140): the
 // title bar draws <BarSlot/> right of the crumb, before the panel's tabs and its ▯; a page renders
-// <InBar>{its BarSearch, its right-side action}</InBar> anywhere in its tree and that content shows
+// <InBar>{its '…'}</InBar> anywhere in its tree and that content shows
 // in the bar (a portal), gone when the page unmounts. One page's content at a time: the route's
 // screen (App.tsx remounts the screen on each route). The slot drags the window like the bar;
 // what a page puts in it does not (app.css .app-barslot > *).
@@ -65,7 +65,8 @@ export function BarSlot() {
   return <div ref={setBar} className="app-barslot" data-testid="app.bar.slot" />;
 }
 
-/** What a page shows in the window's bar: its search, its action; nothing once the page leaves. */
+/** What a page shows in the window's bar: its action ('…'); nothing once the page leaves. A page's
+ *  search is never there: it goes in its list's row (ds ListBar, his m_52658). */
 export function InBar({ children }: { children: ReactNode }) {
   const el = bar.useEl();
   return el === null ? null : createPortal(children, el);

@@ -1,5 +1,5 @@
 /* src/plugins (nm-pages-b, plug-desktop's before): the plugins place (page plugins v48; bise fait mac
-   §9: the ds PageBanner with the room in its box, the search in the bar, ds Filters and GroupLabels),
+   §9: the ds PageBanner with the room in its box, the search in the list's row (ds ListBar), ds Filters and GroupLabels),
    a plugin's page and a skill's tab (SkillTab.tsx). ds tokens only, the 4 px grid; colour only for
    what waits on him (accent) and what failed (err). */
 /* the rhythm (ui-review #1): the sections (the hero, connect your tools, the list) --gap-page apart;
@@ -8,13 +8,14 @@
 .plg-place { height: 100%; overflow-y: auto; box-sizing: border-box; padding: 0 0 calc(var(--float-room) + var(--s-2)); display: flex; flex-direction: column; gap: var(--gap-page); }
 .plg-place > .b-banner { margin-bottom: 0; }
 .plg-place > :not(.b-banner) { margin-inline: var(--pad-page-x); box-sizing: border-box; }
-.plg-add { margin-left: auto; }
 .plg-acc { color: var(--c-accent); }
 .plg-dim { color: var(--c-text-3); }
 .plg-n { margin-left: var(--s-1); color: var(--c-text-3); font-variant-numeric: tabular-nums; }
 .plg-mono { font-family: var(--font-mono); font-size: var(--t-12); }
 .plg-add-words { display: inline-flex; align-items: center; gap: var(--gap-inline); }
 .plg-sec { display: flex; flex-direction: column; gap: var(--gap-block); }
+/* the list's row (ds ListBar): the section's gap is its room to the chips */
+.plg-sec > .b-listbar { margin-bottom: 0; }
 
 /* the room: bims' diorama of his plugins' objects (Room.tsx), the banner's visual: it fills the
    banner's box (360 x 176, 264 x 132 narrow), the canvas at 2.2:1 centred; without WebGL their icons

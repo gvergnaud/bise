@@ -124,7 +124,7 @@
   --w-rail: 56px;          /* the permanent rail on the window's left */
   --w-panel: 384px; --w-panel-min: 320px; --w-panel-max: 640px; /* the tabbed panel on the right */
   --w-flyout: 360px;       /* a bubble's card on the right side */
-  --w-search: 200px;       /* the search field in a page's bar */
+  --w-search: 200px;       /* the search field above a page's list (ds ListSearch) */
   /* a page's banner (ds PageBanner, designer m_42762): 200 high, its visual 360 x 176; under a
      1000 content area 160 high and 264 x 132; its text 560 wide at most */
   --h-banner: 200px; --h-banner-sm: 160px;

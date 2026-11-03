@@ -108,6 +108,25 @@ describe('the plugins place', () => {
     expect(screen.getByTestId('plugins.browse.row.mistral:linear')).toBeTruthy();
   });
 
+  it("the search is at the right of installed | browse, before add, never in the window's bar (his m_52658); '/' from anywhere, esc clears then leaves", () => {
+    render(<BarSlot />);
+    place();
+    expect(screen.getByTestId('app.bar.slot').childElementCount).toBe(0);
+    const bar = screen.getByTestId('plugins.tabs.row');
+    expect(bar.querySelector('.b-listbar-start [data-testid="plugins.tabs"]')).not.toBeNull();
+    const end = bar.querySelector('.b-listbar-end');
+    expect(end?.firstElementChild?.getAttribute('data-testid')).toBe('plugins.search');
+    const field = screen.getByTestId<HTMLInputElement>('plugins.search.input');
+    fireEvent.keyDown(document.body, { key: '/' });
+    expect(document.activeElement).toBe(field);
+    fireEvent.change(field, { target: { value: 'zzqx' } });
+    expect(screen.getByTestId('plugins.none')).toBeTruthy();
+    fireEvent.keyDown(field, { key: 'Escape' });
+    expect([field.value, document.activeElement]).toEqual(['', field]);
+    fireEvent.keyDown(field, { key: 'Escape' });
+    expect(document.activeElement).not.toBe(field);
+  });
+
   it('says it reads before the rows came; no band before the summary', () => {
     place({ rows: null, summary: null });
     expect(screen.getByTestId('plugins.loading')).toBeTruthy();

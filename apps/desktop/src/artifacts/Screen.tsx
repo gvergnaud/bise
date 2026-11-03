@@ -20,6 +20,7 @@ import { library } from '@/proto/words_library.gen';
 import { useFolders, useProjects, useStore } from '@/store';
 import { DEPTH, useRouter } from '@/app/router';
 import { libraryExit } from '@/app/escape';
+import { usePageSearchKeys } from '@/app/searchkeys';
 import { publishColumn, retractColumn, useLibraryShown, type ColumnBits } from './library';
 import { useKeptScroll } from '@/app/keep';
 import { usePins } from '@/app/pins';
@@ -312,18 +313,8 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
     onDrop: (keys, id) => { moveTo(keys, id); },
   });
 
-  // '/' focuses the search when no field has the focus, wherever the focus is on the page
-  useEffect(() => {
-    const slash = (e: globalThis.KeyboardEvent) => {
-      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented || isField(e.target)) return;
-      const field = searchRef.current;
-      if (field === null) return;
-      e.preventDefault();
-      field.focus();
-    };
-    window.addEventListener('keydown', slash);
-    return () => { window.removeEventListener('keydown', slash); };
-  }, []);
+  // '/' (outside a text field) and ⌘F focus the search, wherever the focus is on the page
+  usePageSearchKeys(searchRef);
   // the search has the keys: ⏎ opens the first result, ↓ the first card, ↑ gives them back; esc
   // clears its words, a second esc leaves it (designer's spec D)
   const searchKey = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -417,8 +408,7 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
       view={view} onView={setView}
       q={q} onQ={(e) => { setQ(e.currentTarget.value); }} onQKey={searchKey}
       onClear={() => { setQ(''); searchRef.current?.focus(); }} searchRef={searchRef}
-      add={<AddButton place={place_} tip={library.add_tip} testId="artifacts.add" />}
-      scroller={scrollEl} />
+      add={<AddButton place={place_} tip={library.add_tip} testId="artifacts.add" />} />
   );
   // the archived ones: a faint row under the list, as the window's panel and the TUI (designer m_45148)
   const archivedRow = stack === null && archived.length > 0 && (
@@ -642,10 +632,6 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
 
 /** The page's one scroller (the grid's virtual rows and the toolbar's stick read it). */
 const scrollEl = (): HTMLElement | null => document.querySelector<HTMLElement>('[data-testid="artifacts.scroll"]');
-
-/** A field has the focus: '/' is a letter there. */
-const isField = (t: EventTarget | null): boolean =>
-  t instanceof HTMLElement && (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t.isContentEditable);
 
 const toggled = (s: ReadonlySet<string>, k: string): Set<string> => {
   const n = new Set(s);

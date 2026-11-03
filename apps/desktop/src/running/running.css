@@ -17,7 +17,6 @@
 @media (max-width: 1000px) { .run-screen:not(.has-pane) .run-scroll > :not(.b-banner) { margin-inline: var(--pad-page-x); } }
 .run-n { margin-left: var(--s-1); color: var(--c-text-3); }
 .run-search { margin-left: auto; }
-.run-list { margin-top: var(--s-2); }
 /* the state column: a --c-ok dot while it runs, a check, a --c-err x, a minus (§8's line icons) */
 .run-mark { display: inline-flex; align-items: center; }
 .run-wave { font: 400 var(--f-ui); color: var(--c-text-3); }

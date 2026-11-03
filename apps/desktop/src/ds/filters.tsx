@@ -3,10 +3,17 @@
 //   the chosen one is --c-solid with --e-1 (never the hover's look, never the accent); role tablist
 //   of tabs, each part's test id `<testId>.<id>`. A row of filters is `<FilterRow>` (the segmented
 //   one, then Dropdowns), 24 under the page's lead.
-// - BarSearch: the page's search field in the window's bar, 200 × 28, r 8, --c-sunken, the '/' key
-//   at its right; its placeholder, VoiceOver name and tip are the ds's words (words_ds).
-// Pure render of their props; the screens own the choice, the query and the keys. Owner: nm-ds.
-import type { ChangeEventHandler, KeyboardEventHandler, ReactNode, Ref } from "react";
+// - ListBar: the row right above a list (his m_44961 for Artifacts, then m_52658 for every list page:
+//   'too far away from the list being sorted'; designer m_52674): its filters at the left, its
+//   search (then the page's action) at the right, on the list's edges. Sticky at the top of the
+//   page's scroller, a 1 px line under it only while stuck. `inset`: the list's rows draw their
+//   content 12 in (ds ListRow), the row's controls on that edge.
+// - ListSearch: the page's search, in its ListBar: 200 × 28 (160 under a 900 window), r 8,
+//   --c-sunken with a 1 px --c-line, the '/' key at its right until it has the focus or words, a ×
+//   once it has words; its placeholder, VoiceOver name and tip are the ds's words (words_ds).
+// Pure render of their props; the screens own the choice, the query and the keys (app/searchkeys.ts:
+// '/' and ⌘F). Owner: nm-ds.
+import { useLayoutEffect, useRef, useState, type ChangeEventHandler, type KeyboardEventHandler, type ReactNode, type Ref, type RefObject } from "react";
 import { ds } from "@/proto/words_ds.gen";
 import { cx, sub } from "./cx";
 import { AppIcon } from "./icons-app";
@@ -53,7 +60,55 @@ export function FilterRow({ children, testId }: { children: ReactNode; testId?: 
   return <div className="b-filter-row" data-testid={testId}>{children}</div>;
 }
 
-export interface BarSearchProps {
+export interface ListBarProps {
+  /** the left side: the list's filters (none: the search alone at the right) */
+  children?: ReactNode;
+  /** the right side: the page's ListSearch, then its action */
+  end: ReactNode;
+  /** the list's rows draw their content 12 in (ds ListRow): the controls on that edge */
+  inset?: boolean;
+  /** the row's box (a page that measures it: Artifacts folds its filters) */
+  ref?: RefObject<HTMLDivElement | null>;
+  startRef?: Ref<HTMLSpanElement>;
+  endRef?: Ref<HTMLSpanElement>;
+  /** data-folded on the row: its page folded the filters into one menu */
+  folded?: boolean;
+  testId?: string;
+}
+
+/** The nearest ancestor that scrolls: the row sticks to its top. */
+function scrollerOf(el: HTMLElement): HTMLElement | null {
+  for (let p = el.parentElement; p !== null; p = p.parentElement) {
+    const o = getComputedStyle(p).overflowY;
+    if (o === "auto" || o === "scroll") return p;
+  }
+  return null;
+}
+
+/** the row above a list: filters left, search and action right; sticky, its line only while stuck */
+export function ListBar({ children, end, inset, ref, startRef, endRef, folded, testId }: ListBarProps) {
+  const own = useRef<HTMLDivElement>(null);
+  const box = ref ?? own;
+  const [stuck, setStuck] = useState(false);
+  // stuck: the page scrolled and the row sits at its scroller's top
+  useLayoutEffect(() => {
+    const el = box.current;
+    const sc = el === null ? null : scrollerOf(el);
+    if (el === null || sc === null) return undefined;
+    const check = () => { setStuck(sc.scrollTop > 0 && el.getBoundingClientRect().top - sc.getBoundingClientRect().top < 1); };
+    check();
+    sc.addEventListener("scroll", check, { passive: true });
+    return () => { sc.removeEventListener("scroll", check); };
+  }, [box]);
+  return (
+    <div ref={box} className={cx("b-listbar", inset === true && "inset")} data-stuck={stuck || undefined} data-folded={folded === true || undefined} data-testid={testId}>
+      <span ref={startRef} className="b-listbar-start">{children}</span>
+      <span ref={endRef} className="b-listbar-end">{end}</span>
+    </div>
+  );
+}
+
+export interface ListSearchProps {
   value: string;
   onChange?: ChangeEventHandler<HTMLInputElement>;
   onKeyDown?: KeyboardEventHandler<HTMLInputElement>;
@@ -68,16 +123,16 @@ export interface BarSearchProps {
 }
 
 /** the page's search: 200 × 28, r 8, --c-sunken, the icon 14, the key at its right (× once it has words, with onClear) */
-export function BarSearch({ value, onChange, onKeyDown, keys = "/", placeholder = ds.search, onClear, ref, testId }: BarSearchProps) {
+export function ListSearch({ value, onChange, onKeyDown, keys = "/", placeholder = ds.search, onClear, ref, testId }: ListSearchProps) {
   return (
-    <label className="b-barsearch" {...tipAttrs(ds.search_tip({ key: keys }))} data-testid={testId}>
+    <label className="b-listsearch" {...tipAttrs(ds.search_tip({ key: keys }))} data-testid={testId}>
       <AppIcon name="search" size={14} />
       {/* data-esc-own: esc is its own (it clears, then gives the focus back), before the float's (app/escape.ts) */}
       <input ref={ref} type="search" value={value} placeholder={placeholder} aria-label={placeholder} spellCheck={false} data-esc-own=""
         onChange={onChange} onKeyDown={onKeyDown} data-testid={sub(testId, "input")} />
       {value === "" && <span className="b-kbd">{keys}</span>}
       {value !== "" && onClear !== undefined && (
-        <button type="button" className="b-barsearch-x" aria-label={ds.search_clear} onClick={onClear} data-testid={sub(testId, "clear")}>
+        <button type="button" className="b-listsearch-x" aria-label={ds.search_clear} onClick={onClear} data-testid={sub(testId, "clear")}>
           <AppIcon name="close" size={14} />
         </button>
       )}

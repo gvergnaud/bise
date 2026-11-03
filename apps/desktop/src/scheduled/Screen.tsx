@@ -1,18 +1,20 @@
 // The scheduled screen (bise fait mac: page native-mac §6, mockup 8; route scheduled, the rail's
 // clock): what wakes his agents, and when. The page's name is in the window's bar; under it the lead
-// (ds PageBanner: 'Scheduled', its sentence, how many run and the next run), the search, then the tasks by project
+// (ds PageBanner: 'Scheduled', its sentence, how many run and the next run), the list's row with the
+// search at its right (ds ListBar), then the tasks by project
 // (ds GroupLabel), one ds ListRow each (its name and how often, then who it wakes and its next run;
 // its '…' and a right click are its menu, useEntityMenu). One task opens in a 400 px pane at the
 // right (under 1000 px it replaces the list, with '← scheduled'); stop asks in place there. The keys
-// are the shared list keys (app/listkeys.ts) plus the TUI's r, x, / and esc (tui-parity m_22176).
+// are the shared list keys (app/listkeys.ts) plus the TUI's r, x and esc (tui-parity m_22176); '/' and
+// ⌘F focus the search (app/searchkeys.ts).
 // The floating composer's room at the foot (--float-room). Owner: nm-pages-a (amb-mac's before).
 import { useRef, useState, type KeyboardEvent } from 'react';
-import { AppIcon, BarSearch, Button, Empty, GroupLabel, ListRow, MoreButton, PageBanner, Press, sentenceCase } from '@/ds';
+import { AppIcon, Button, Empty, GroupLabel, ListBar, ListRow, ListSearch, MoreButton, PageBanner, Press, sentenceCase } from '@/ds';
 import { LiveVignette, useBannerGutter } from '@/artifacts';
 import { shownName } from '@/agents/model';
 import { hero } from '@/proto/words_hero.gen';
 import { useListKeys } from '@/app/listkeys';
-import { InBar } from '@/app/barslot';
+import { usePageSearchKeys } from '@/app/searchkeys';
 import { useEntityMenu } from '@/app/menus/use';
 import { useStore } from '@/store';
 import { useKeptScroll } from '@/app/keep';
@@ -66,8 +68,8 @@ export function ScheduledView({ tasks, ports, now: pinned, pins }: { tasks: read
     setAsking(false);
     setOpen(null);
   };
-  // the TUI's scheduled keys (scheduled_screen.rs on_key, tui-parity m_22176): r run, x stop (asks),
-  // / search; esc closes the opened task, then clears the search
+  // the TUI's scheduled keys (scheduled_screen.rs on_key, tui-parity m_22176): r run, x stop (asks);
+  // esc closes the opened task, then clears the search. '/' and ⌘F focus the search (app/searchkeys.ts)
   const screenKey = (e: KeyboardEvent, k: string | null): boolean => {
     if (e.metaKey || e.ctrlKey || e.altKey) return false;
     const at = shown.find((x) => keyOf(x) === k);
@@ -85,7 +87,6 @@ export function ScheduledView({ tasks, ports, now: pinned, pins }: { tasks: read
       setOpen(keyOf(x));
       setAsking(true);
     } else if (e.key === 'r' && ports.runNow && x) ports.runNow(x.project, x.t.id);
-    else if (e.key === '/' && !cur) searchRef.current?.focus();
     else return false;
     return true;
   };
@@ -96,15 +97,19 @@ export function ScheduledView({ tasks, ports, now: pinned, pins }: { tasks: read
     onOpen: setOpen,
     onKey: screenKey,
   });
-  // the search has the keys: ⏎ gives them back, ↑↓ give them back and move, esc clears
+  usePageSearchKeys(searchRef);
+  // the search has the keys: ⏎ gives them back, ↑↓ give them back and move; esc clears its words, a
+  // second esc gives the keys back (Artifacts' search, designer m_52674)
   const searchKey = (e: KeyboardEvent<HTMLInputElement>) => {
     const back = () => {
       e.preventDefault();
       ref.current?.focus({ preventScroll: true });
     };
     if (e.key === 'Escape') {
-      setQ('');
-      back();
+      if (q !== '') {
+        e.preventDefault();
+        setQ('');
+      } else back();
     } else if (e.key === 'Enter') back();
     else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       back();
@@ -136,17 +141,16 @@ export function ScheduledView({ tasks, ports, now: pinned, pins }: { tasks: read
         <PageBanner title={hero.scheduled_title} sentence={hero.scheduled_say} facts={heroFacts(list, now)}
           visual={<LiveVignette page="scheduled" />} icon="scheduled" gutter={cur ? 0 : gutter} testId="scheduled.lead" />
         {list.length > 0 && (
-          // the page's search, in the window's bar (app-polish #4)
-          <InBar>
-            <BarSearch ref={searchRef} value={q} onChange={(e) => { setQ(e.currentTarget.value); }} onKeyDown={searchKey} testId="scheduled.search" />
-          </InBar>
+          // the list's own row, the search at its right (his m_52658, designer m_52674)
+          <ListBar inset testId="scheduled.bar"
+            end={<ListSearch ref={searchRef} value={q} onChange={(e) => { setQ(e.currentTarget.value); }} onKeyDown={searchKey} onClear={() => { setQ(''); searchRef.current?.focus(); }} testId="scheduled.search" />} />
         )}
         {list.length === 0 ? (
           <Empty testId="scheduled.empty" title={scheduled.empty_desktop} />
         ) : shown.length === 0 ? (
           <Empty testId="scheduled.none" title={scheduled.none_match_desktop} />
         ) : (
-          <div className="sch-list" data-testid="scheduled.list">
+          <div data-testid="scheduled.list">
             {groups.map((g) => (
               <div key={g.project} role="group" aria-label={g.name}>
                 <GroupLabel testId={`scheduled.group.${g.project}`}>{g.name}</GroupLabel>

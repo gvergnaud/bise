@@ -1,27 +1,12 @@
-/* src/artifacts · the toolbar above the list (Toolbar.tsx; designer's spec D m_44968, m_45148): one
-   row 32 high, 12 under the banner, 8 above the list, its edges the list's; sticky at the
-   scroller's top on the page's own ground, a 1 px --c-line under it only while stuck. The search
-   200 (160 under a 900 window), 28 high, r 8, --c-sunken with a 1 px --c-line; its '/' keycap goes
-   with the focus or words. */
-.art-toolbar{position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:var(--s-2);box-sizing:border-box;height:var(--h-control);margin:0 0 var(--s-2);background:var(--c-solid);box-shadow:0 1px 0 transparent;transition:box-shadow var(--d-fast) var(--ease-out)}
-.art-toolbar[data-stuck]{box-shadow:0 1px 0 var(--c-line)}
-.art-tb-l,.art-tb-r{display:flex;align-items:center;gap:var(--s-2)}
-/* the filters never shrink: Toolbar.tsx reads their width and folds them when they don't fit */
-.art-tb-l{flex:1 1 auto;min-width:0}
-.art-tb-l > *{flex:none}
-.art-tb-r{flex:none}
-.art-toolbar .art-views{margin-left:0}
-.art-toolbar .b-barsearch{box-shadow:inset 0 0 0 1px var(--c-line)}
-.art-toolbar .b-barsearch:focus-within{box-shadow:inset 0 0 0 1px var(--c-line),0 0 0 2px var(--c-focus)}
-.art-toolbar .b-barsearch:focus-within .b-kbd{display:none}
-@media (max-width:900px){.art-toolbar .b-barsearch{width:160px}}
-@media (prefers-reduced-motion:reduce){.art-toolbar{transition:none}}
+/* src/artifacts · the toolbar above the list (Toolbar.tsx; designer's spec D m_44968, m_45148): the
+   ds ListBar (sticky, its line while stuck) and ListSearch (filters.css); here only Artifacts' own:
+   12 under the banner, the cards/list switch, the crumb under 900. */
 /* 12 from the banner to the toolbar (the banner's own 24 under it, ds banner.css, is the gap) */
 .art-scroll > .b-banner{margin-bottom:var(--gap-block)}
 /* every line of the list on the cards' left edge: the no-match Empty too (designer m_45293) */
 .art-main .b-empty{padding-inline:0}
 /* under 900 the library's crumb leads the row: its words on the list's edge at rest, its hover tint
    bleeding left (designer m_45342) */
-.art-toolbar .art-fold-crumb{margin-left:calc(var(--s-2) * -1)}
+.b-listbar .art-fold-crumb{margin-left:calc(var(--s-2) * -1)}
 /* the archived ones: a faint row under the list (as the window's panel and the TUI) */
 .art-archived-row{display:flex;margin:var(--s-4) 0 0}

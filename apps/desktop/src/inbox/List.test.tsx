@@ -8,7 +8,7 @@ import { formatRoute, parseRoute } from '@/app/route';
 import { InboxView } from './List';
 import type { InboxRecord, Jump } from './past';
 
-// the window's bar, where the page's search goes (InBar)
+// the window's bar: the page's search is never there (his m_52658)
 beforeEach(() => { render(<BarSlot />); });
 afterEach(cleanup);
 
@@ -153,6 +153,23 @@ describe('the inbox screen', () => {
     expect(rowsOf()).toEqual(['p:shop/1']);
     fireEvent.keyDown(field, { key: 'Escape' });
     expect(rowsOf()).toHaveLength(4);
+  });
+
+  it("the search is at the right of the filters' row, never in the window's bar (his m_52658); '/' from anywhere, esc clears then gives the keys back", () => {
+    const { root } = mount();
+    expect(screen.getByTestId('app.bar.slot').childElementCount).toBe(0);
+    const bar = screen.getByTestId('inbox.filters');
+    expect(bar.querySelector('.b-listbar-start [data-testid="inbox.state"]')).not.toBeNull();
+    expect(bar.querySelector('.b-listbar-end [data-testid="inbox.search"]')).not.toBeNull();
+    const field = screen.getByTestId<HTMLInputElement>('inbox.search.input');
+    fireEvent.keyDown(document.body, { key: '/' });
+    expect(document.activeElement).toBe(field);
+    fireEvent.change(field, { target: { value: 'zzqx' } });
+    expect(screen.getByTestId('inbox.none').textContent).toBe(inbox.screen_none);
+    fireEvent.keyDown(field, { key: 'Escape' });
+    expect([field.value, document.activeElement]).toEqual(['', field]);
+    fireEvent.keyDown(field, { key: 'Escape' });
+    expect(document.activeElement).toBe(root);
   });
 
   it("draws a question's artifact link by its name, as the card does, never its markdown (ui-review m_46410)", () => {
