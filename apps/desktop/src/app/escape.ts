@@ -29,7 +29,6 @@
 // libraryExit gives the way out to where he was before it (artifacts/Screen.tsx). Owner: r3-escape.
 import { useEffect } from 'react';
 import { isZoomed, takeZoomKey } from '@/artifacts/zoomKeys';
-import { takeFindEsc } from '@/artifacts/find';
 import { useStore, type Store } from '@/store';
 import { closeTabBack, panelState } from './panel/state';
 import { MAIN, type Route } from './route';
@@ -141,8 +140,6 @@ const ESC_KEY = { key: 'Escape', code: 'Escape', metaKey: false, ctrlKey: false,
  */
 export function frameEsc(tab: string): void {
   if (takeZoomKey(ESC_KEY)) return;
-  // ⌘F's bar over the page (artifact-find): it closes first, the artifact stays
-  if (takeFindEsc()) return;
   closeArtifactTab(tab);
 }
 

@@ -107,7 +107,7 @@ export const FIND_AGENT = `(() => {
     return b.height > 0 && b.top < 40 ? Math.round(b.bottom) : 0;
   };
   // one of its own frames' count for q (no answer in time: 0)
-  const ask = (w, q, seq) => new Promise((done) => {
+  const ask = (w, q, seq, on0) => new Promise((done) => {
     const on = (e) => {
       const d = e.data;
       if (e.source !== w || d === null || typeof d !== 'object' || d.bise !== K.found || d.seq !== seq) return;
@@ -117,12 +117,30 @@ export const FIND_AGENT = `(() => {
     };
     const t = setTimeout(() => { removeEventListener('message', on); done(0); }, ${String(KID_WAIT_MS)});
     addEventListener('message', on);
-    w.postMessage({ bise: K.find, q, at: -1, seq }, '*');
+    w.postMessage({ bise: K.find, q, at: -1, seq, open: on0 }, '*');
   });
+  // while the window's bar shows (open), an esc here is the bar's: it closes it, never the artifact
+  // (taken before ESC_FORWARD reads it), and a frame's own frames say theirs up the same way
+  let open = false;
+  const escUp = () => {
+    open = false;
+    parent.postMessage({ bise: K.found, esc: true }, '*');
+  };
+  addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || !open || e.repeat || e.isComposing || e.defaultPrevented) return;
+    e.preventDefault();
+    escUp();
+  }, true);
   let latest = 0;
   addEventListener('message', async (e) => {
     const d = e.data;
-    if (e.source !== parent || d === null || typeof d !== 'object' || d.bise !== K.find) return;
+    if (d === null || typeof d !== 'object') return;
+    if (d.bise === K.found && d.esc === true && e.source !== parent && open && Array.from(document.querySelectorAll('iframe')).some((f) => f.contentWindow === e.source)) {
+      escUp();
+      return;
+    }
+    if (e.source !== parent || d.bise !== K.find) return;
+    open = d.open === true;
     const q = typeof d.q === 'string' ? d.q : '';
     const cur = Number.isInteger(d.at) ? d.at : -1;
     const seq = d.seq;
@@ -130,7 +148,7 @@ export const FIND_AGENT = `(() => {
     const mine = ++latest;
     const rs = ranges(q);
     const frames = Array.from(document.querySelectorAll('iframe')).filter((f) => f.contentWindow !== null);
-    const ns = await Promise.all(frames.map((f) => ask(f.contentWindow, q, seq)));
+    const ns = await Promise.all(frames.map((f) => ask(f.contentWindow, q, seq, open)));
     if (mine !== latest) return;
     paint(rs, cur);
     if (cur >= 0 && cur < rs.length) reveal(rs[cur], clear);
@@ -141,7 +159,7 @@ export const FIND_AGENT = `(() => {
         f.scrollIntoView({ block: 'nearest', inline: 'nearest' });
         const fb = f.getBoundingClientRect();
         const inner = clear === null ? null : { x: clear.x - fb.left, y: clear.y - fb.top };
-        if (f.contentWindow !== null) f.contentWindow.postMessage({ bise: K.find, q, at: k, seq, clear: inner }, '*');
+        if (f.contentWindow !== null) f.contentWindow.postMessage({ bise: K.find, q, at: k, seq, clear: inner, open }, '*');
       }
       k -= n;
     });

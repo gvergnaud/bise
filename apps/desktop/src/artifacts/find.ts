@@ -146,24 +146,3 @@ export function useArtifactFindKey(): void {
     return true;
   });
 }
-
-// ---- esc from inside the page ----
-
-const escs: (() => void)[] = [];
-
-/** While the bar shows: an esc the page forwards (app/escape.ts frameEsc) closes it before the artifact. */
-export function claimFindEsc(close: () => void): () => void {
-  escs.push(close);
-  return () => {
-    const i = escs.indexOf(close);
-    if (i >= 0) escs.splice(i, 1);
-  };
-}
-
-/** An open find bar closes (the last one opened): true when one did. */
-export function takeFindEsc(): boolean {
-  const close = escs.at(-1);
-  if (close === undefined) return false;
-  close();
-  return true;
-}

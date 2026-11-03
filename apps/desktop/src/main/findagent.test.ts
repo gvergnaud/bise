@@ -12,14 +12,25 @@ const run = new Function('window', 'parent', 'addEventListener', 'removeEventLis
 function frame(html: string) {
   document.body.innerHTML = html;
   const on: Listener[] = [];
+  const keys: ((e: Record<string, unknown>) => void)[] = [];
   const posted: unknown[] = [];
   const parent = { postMessage: (m: unknown) => posted.push(m) };
-  run({}, parent, (t: string, f: Listener) => { if (t === 'message') on.push(f); }, () => undefined);
-  const find = async (q: string, at = -1, seq = 1) => {
-    await Promise.all(on.map((f) => f({ data: { bise: FRAME_KINDS.find, q, at, seq }, source: parent })));
+  run({}, parent, (t: string, f: Listener) => {
+    if (t === 'message') on.push(f);
+    if (t === 'keydown') keys.push(f as never);
+  }, () => undefined);
+  const find = async (q: string, at = -1, seq = 1, open = true) => {
+    await Promise.all(on.map((f) => f({ data: { bise: FRAME_KINDS.find, q, at, seq, open }, source: parent })));
     return posted.at(-1);
   };
-  return { find, posted, on, parent };
+  /** an esc in the page: whether the agent took it (ESC_FORWARD then never sends it to close the artifact) */
+  const esc = (): boolean => {
+    let taken = false;
+    const e = { key: 'Escape', repeat: false, isComposing: false, defaultPrevented: false, preventDefault: () => { taken = true; } };
+    for (const f of keys) f(e);
+    return taken;
+  };
+  return { find, esc, posted, on, parent };
 }
 
 afterEach(() => {
@@ -32,6 +43,18 @@ describe('the find agent in an artifact frame (FIND_AGENT)', () => {
     expect(await f.find('kiwi', 0, 7)).toEqual({ bise: FRAME_KINDS.found, seq: 7, n: 4, head: 0 });
     expect(await f.find('nope', -1, 8)).toEqual({ bise: FRAME_KINDS.found, seq: 8, n: 0, head: 0 });
     expect(await f.find('', -1, 9)).toEqual({ bise: FRAME_KINDS.found, seq: 9, n: 0, head: 0 });
+  });
+
+  it("while the window's bar shows, an esc in the page is the bar's: taken, said up; closed, the page keeps it (ui-review m_52737)", async () => {
+    const f = frame('<p>kiwi</p>');
+    expect(f.esc()).toBe(false);
+    await f.find('kiwi', 0, 1, true);
+    expect(f.esc()).toBe(true);
+    expect(f.posted.at(-1)).toEqual({ bise: FRAME_KINDS.found, esc: true });
+    // once said, the next esc is the page's again (the bar is closing)
+    expect(f.esc()).toBe(false);
+    await f.find('', -1, 2, false);
+    expect(f.esc()).toBe(false);
   });
 
   it('hears its parent only', async () => {

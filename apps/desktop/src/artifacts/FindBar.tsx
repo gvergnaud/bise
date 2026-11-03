@@ -3,14 +3,15 @@
 // The page is a pages-server frame the window cannot read: the frame's find agent (main's
 // findagent.ts FIND_AGENT) finds, highlights and scrolls; this says the needle and the current
 // match ({bise: find, q, at, seq}) and reads the count back ({bise: found, seq, n}). ⏎ next,
-// ⇧⏎ previous (around the ends), esc closes and clears the page's highlights; an esc inside the
-// page closes it too, before the artifact (claimFindEsc, app/escape.ts frameEsc). `ask` bumps
+// ⇧⏎ previous (around the ends), esc closes and clears the page's highlights. While it shows it
+// says so ({open}): an esc inside the page is the agent's then, which says it ({bise: found, esc})
+// and never forwards it to close the artifact (ui-review m_52737). `ask` bumps
 // when ⌘F comes again while it shows: the field takes the focus back, its words selected.
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { Field, IconButton } from '@/ds';
 import { panel } from '@/proto/words_panel.gen';
 import { FRAME_KINDS, originOf } from './frameNote';
-import { claimFindEsc, counterOf, headPx, stepAt } from './find';
+import { counterOf, headPx, stepAt } from './find';
 
 export interface ArtifactFindBarProps {
   /** the page's frame */
@@ -31,13 +32,15 @@ export function ArtifactFindBar({ frame, src, ask, onClose }: ArtifactFindBarPro
   const seq = useRef(0);
   const field = useRef<HTMLInputElement>(null);
   const bar = useRef<HTMLDivElement>(null);
+  // the bar's close, for the page's esc (set below, once close exists)
+  const closeRef = useRef<() => void>(() => undefined);
   const origin = originOf(src);
 
   // to '*': a copy served under the sandbox CSP (a site, a text file) has an opaque origin; the
   // guard keeps every subframe on the pages server, and only the needle goes
   // with where the bar sits over the frame (its left and bottom, in the frame's px): the page
   // scrolls a current match under it to 8 px below it (designer m_52698)
-  const tell = (q: string, cur: number): void => {
+  const tell = (q: string, cur: number, open = true): void => {
     seq.current += 1;
     const el = frame.current;
     const win = el?.contentWindow;
@@ -45,7 +48,7 @@ export function ArtifactFindBar({ frame, src, ask, onClose }: ArtifactFindBarPro
     const b = bar.current?.getBoundingClientRect();
     const f = el.getBoundingClientRect();
     const clear = b === undefined ? null : { x: b.left - f.left, y: b.bottom - f.top };
-    win.postMessage({ bise: FRAME_KINDS.find, q, at: cur, seq: seq.current, clear }, '*');
+    win.postMessage({ bise: FRAME_KINDS.find, q, at: cur, seq: seq.current, clear, open }, '*');
   };
   const tellRef = useRef(tell);
   useEffect(() => {
@@ -59,7 +62,12 @@ export function ArtifactFindBar({ frame, src, ask, onClose }: ArtifactFindBarPro
       // its own frame only, on the pages server's origin or an opaque one (a sandboxed copy)
       if (e.source == null || e.source !== frame.current?.contentWindow || (e.origin !== 'null' && e.origin.toLowerCase() !== origin)) return;
       if (typeof d !== 'object' || d === null) return;
-      const m = d as { bise?: unknown; seq?: unknown; n?: unknown; head?: unknown };
+      const m = d as { bise?: unknown; seq?: unknown; n?: unknown; head?: unknown; esc?: unknown };
+      // an esc in the page while it shows: the bar closes, the artifact stays
+      if (m.bise === FRAME_KINDS.found && m.esc === true) {
+        closeRef.current();
+        return;
+      }
       if (m.bise !== FRAME_KINDS.found || m.seq !== seq.current || typeof m.n !== 'number') return;
       const count = Math.max(0, Math.floor(m.n));
       setN(count);
@@ -83,18 +91,16 @@ export function ArtifactFindBar({ frame, src, ask, onClose }: ArtifactFindBarPro
   }, [ask]);
 
   const close = (): void => {
-    tellRef.current('', -1);
+    tellRef.current('', -1, false);
     onClose();
   };
-  const closeRef = useRef(close);
   useEffect(() => {
     closeRef.current = close;
   });
-  useEffect(() => claimFindEsc(() => { closeRef.current(); }), []);
   // gone (the artifact closed, another version): the page's highlights go with it
   useEffect(
     () => () => {
-      tellRef.current('', -1);
+      tellRef.current('', -1, false);
     },
     [],
   );
