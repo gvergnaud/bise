@@ -348,4 +348,12 @@ export const panel = {
   art_gone_archived: "show archived ›",
   /** its second line when the project has nothing archived: the link to the library */
   art_gone_library: "open the library ›",
+  /** ⌘F's bar over an artifact's page (artifact-find): the field's placeholder and label */
+  art_find_placeholder: "find in this page",
+  /** its ↑ button (⇧⏎) */
+  art_find_prev: "previous match",
+  /** its ↓ button (⏎) */
+  art_find_next: "next match",
+  /** its × button (esc) */
+  art_find_close: "close find",
 } as const;

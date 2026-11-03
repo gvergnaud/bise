@@ -122,3 +122,39 @@
 .art-save-ico { display: block; color: var(--c-text-3); }
 .b-ibtn:hover > .art-save-ico, .b-ibtn:focus-visible > .art-save-ico { color: var(--c-ink); }
 .art-live > .art-live-back { flex: none; }
+
+/* ⌘F's bar over the page (artifact-find, FindBar.tsx): the thread's find bar as it looks (thread.css
+   .th-find: the menu's surface, the field, its count, ↑ ↓ × touching), at the page's top right, 8 in
+   from the paper's corner */
+.art-open-body { position: relative; }
+.art-find {
+  position: absolute;
+  top: calc(var(--s-4) + var(--s-2));
+  right: calc(var(--s-4) + var(--s-2));
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: var(--gap-inline);
+  max-width: calc(100% - 2 * (var(--s-4) + var(--s-2)));
+  padding: var(--s-1);
+  border-radius: var(--r-3);
+  background: var(--c-overlay);
+  backdrop-filter: var(--glass);
+  box-shadow: var(--e-2);
+}
+.art-find .b-field {
+  flex: 0 1 auto;
+  width: calc(var(--s-16) * 3);
+  min-width: var(--s-16);
+  height: var(--h-control-sm);
+  padding: 0 var(--pad-control-x-sm);
+}
+.art-find-count {
+  flex: none;
+  min-width: var(--s-8);
+  color: var(--c-text-2);
+  font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.art-find-acts { flex: none; display: flex; align-items: center; }

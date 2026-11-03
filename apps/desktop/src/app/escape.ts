@@ -29,6 +29,7 @@
 // libraryExit gives the way out to where he was before it (artifacts/Screen.tsx). Owner: r3-escape.
 import { useEffect } from 'react';
 import { isZoomed, takeZoomKey } from '@/artifacts/zoomKeys';
+import { takeFindEsc } from '@/artifacts/find';
 import { useStore, type Store } from '@/store';
 import { closeTabBack, panelState } from './panel/state';
 import { MAIN, type Route } from './route';
@@ -43,7 +44,7 @@ export interface EscFacts {
   readonly popup: boolean;
   /** the sidebar slid over the window */
   readonly over: boolean;
-  /** the focus in the thread's find bar */
+  /** the focus in a find bar: the thread's, an artifact's (artifacts/FindBar.tsx) */
   readonly find: boolean;
   /** the focus in a page's search field that takes esc itself (data-esc-own: ds ListSearch) */
   readonly field: boolean;
@@ -99,7 +100,7 @@ export function escFacts(doc: Document = document): EscFacts {
   return {
     popup: doc.querySelector(POPUP) !== null,
     over: (layers.get('over')?.length ?? 0) > 0,
-    find: inside('[data-testid="thread.find"]'),
+    find: inside('[data-testid="thread.find"], [data-testid="artifact.find"]'),
     field: inside('[data-esc-own]'),
     inboxItem: doc.querySelector('[data-testid="inbox.block"][data-open]') !== null,
     ask: (layers.get('ask')?.length ?? 0) > 0,
@@ -140,6 +141,8 @@ const ESC_KEY = { key: 'Escape', code: 'Escape', metaKey: false, ctrlKey: false,
  */
 export function frameEsc(tab: string): void {
   if (takeZoomKey(ESC_KEY)) return;
+  // ⌘F's bar over the page (artifact-find): it closes first, the artifact stays
+  if (takeFindEsc()) return;
   closeArtifactTab(tab);
 }
 

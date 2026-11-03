@@ -10,6 +10,7 @@
 // touches, never the shell, the sidebar or the composer.
 import { takeZoomKey } from '@/artifacts/zoomKeys';
 import { useHasFront, usePrimaryKey } from '@/artifacts/front';
+import { useArtifactFindKey } from '@/artifacts/find';
 import { inboxItemOpen } from '@/inbox';
 import { goLibrary, libraryPlaces } from '@/artifacts/library';
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
@@ -282,6 +283,9 @@ function Shell() {
   // ⌘⏎ and File › Open in Browser: the artifact in front's primary action (artifacts/front.ts); the
   // inbox in front (its screen, an item open in its block) keeps its own ⌘⏎
   usePrimaryKey(() => router.get().screen === 'inbox' || inboxItemOpen());
+  // ⌘F and Edit › Find: the artifact with the focus (or the pointer, focus on nothing) before the
+  // screen's own search (artifacts/find.ts)
+  useArtifactFindKey();
   const artifactShown = useHasFront();
   // View › Panel Full Width ⇧⌥⌘B (panel-full, designer m_45445): a check item, dimmed while the panel is a sheet
   // File › Reopen Closed Tab ⇧⌘T (reopen-panel, designer m_46216): the menu's alone, no echo to drop

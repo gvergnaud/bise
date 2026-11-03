@@ -18,4 +18,7 @@
 //   (useFrameNote.ts; PINCH_FORWARD takes it only from its parent)
 // - storage: {local}, a site copy's localStorage, site frame -> bise's viewer (kit/storage.js ->
 //   kit/office/site.js -> the hub; web-storage). The viewer takes it: the window never reads it.
-export const FRAME_KINDS = { anchor: 'anchor', esc: 'esc', zoom: 'zoom', fit: 'fit', size: 'size', pinch: 'pinch', pan: 'pan', room: 'room', storage: 'site-storage' } as const;
+// - find: {q, at, seq}, ⌘F's needle and the current match (-1: none), window -> frame, and a
+//   frame -> its own frames (main/findagent.ts FIND_AGENT, artifacts/FindBar.tsx)
+// - found: {seq, n}, how many matches the frame and its own frames hold, frame -> parent (FIND_AGENT)
+export const FRAME_KINDS = { anchor: 'anchor', esc: 'esc', zoom: 'zoom', fit: 'fit', size: 'size', pinch: 'pinch', pan: 'pan', room: 'room', storage: 'site-storage', find: 'find', found: 'found' } as const;

@@ -15,6 +15,8 @@ import { library } from '@/proto/words_library.gen';
 import { panel } from '@/proto/words_panel.gen';
 import { useModHeld } from '@/app/held';
 import { PRIMARY_KEY, useArtifactFront } from './front';
+import { findable, useArtifactFind } from './find';
+import { ArtifactFindBar } from './FindBar';
 import type { Artifact, ArtifactLive } from '@/proto';
 import { useRouter } from '@/app/router';
 import { useAgents, usePrefs, useProjects, useStore } from '@/store';
@@ -435,6 +437,10 @@ export function ArtifactOpen({ project, id, onClose, composer = true, lead, bare
   const runPrimary = primary === null ? null : primary.act === 'browser' ? () => { openChecked(primary.url, bise, again); } : save;
   const box = useRef<HTMLElement>(null);
   useArtifactFront(box, bare ? 'panel' : 'view', runPrimary);
+  // ⌘F (find.ts): a page with words gets its find bar; null: closed, else bumped by each ⌘F
+  const [findAsk, setFindAsk] = useState<number | null>(null);
+  const canFind = it !== undefined && src !== null && reach === 'up' && findable(it.a);
+  useArtifactFind(box, canFind ? () => { setFindAsk((x) => (x ?? 0) + 1); } : null);
   // ⌘ held: the first button's ⌘⏎ keycap in place of its words (held.ts)
   const cmd = useModHeld('Meta');
   const row = useProjects().find((p) => p.project === project);
@@ -565,6 +571,13 @@ export function ArtifactOpen({ project, id, onClose, composer = true, lead, bare
           <iframe ref={frame} name={APP_FRAME_NAME} className="art-paper" src={src} title={a.title} sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
             allow="fullscreen" style={hug === null ? undefined : { maxHeight: `${String(hug)}px` }}
             data-testid="artifact.page" />
+        )}
+        {/* ⌘F's bar over the page's top right (find.ts, FindBar.tsx); a new src starts it again */}
+        {canFind && findAsk !== null && (
+          <ArtifactFindBar key={src} frame={frame} src={src} ask={findAsk} onClose={() => {
+            setFindAsk(null);
+            frame.current?.focus();
+          }} />
         )}
 
       </div>

@@ -23,7 +23,8 @@
 //   - no <webview>;
 //   - an artifact's page gets two forwarders: its unused esc (ESC_FORWARD) and its pinch
 //     (pinch.ts PINCH_FORWARD: the window zooms the frame, as a browser's visual zoom; the
-//     window's own visual zoom stays off, it would zoom the whole app).
+//     window's own visual zoom stays off, it would zoom the whole app); and the find agent
+//     (findagent.ts FIND_AGENT: ⌘F's matches in the page, for the window's find bar).
 // In test mode also: a window that isn't offscreen is destroyed at birth, and
 // every window's show/showInactive/focus are no-ops, with a 'show' that still
 // happens destroying the window (the last fence).
@@ -33,6 +34,7 @@ import { FRAME_KINDS } from '../shared/frame';
 import { frameLink, isPagesFrame, type FrameLink } from './framelink';
 import { openLink } from './ipc';
 import { PINCH_FORWARD } from './pinch';
+import { FIND_AGENT } from './findagent';
 import { isViewOrigin, isViewProxy, viewNavigation, type NavFrame } from './viewrules';
 
 export interface OwnPage {
@@ -149,6 +151,7 @@ function guardContents(wc: WebContents, own: OwnPage, testMode: boolean): void {
     if (f === undefined || !isPagesFrame(f.url)) return;
     f.executeJavaScript(ESC_FORWARD).catch(() => undefined);
     f.executeJavaScript(PINCH_FORWARD).catch(() => undefined);
+    f.executeJavaScript(FIND_AGENT).catch(() => undefined);
   });
 }
 

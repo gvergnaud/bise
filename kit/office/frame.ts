@@ -19,5 +19,8 @@
 // - storage: {local}, a site copy's whole localStorage after a write, site frame -> bise's viewer
 //   (kit/storage.js, which writes the kind as a literal; office/site.js sends it to the hub,
 //   web-storage, architect m_46151). Never reaches the window: the viewer takes it.
+// - find: {q, at, seq}, ⌘F's needle and the current match (-1: none), window -> frame and a frame
+//   -> its own frames (the desktop's injected main/findagent.ts FIND_AGENT; artifact-find)
+// - found: {seq, n}, how many matches a frame and its own frames hold, frame -> parent (FIND_AGENT)
 
-export const FRAME = Object.freeze({ anchor: "anchor", esc: "esc", zoom: "zoom", fit: "fit", size: "size", pinch: "pinch", pan: "pan", room: "room", storage: "site-storage" });
+export const FRAME = Object.freeze({ anchor: "anchor", esc: "esc", zoom: "zoom", fit: "fit", size: "size", pinch: "pinch", pan: "pan", room: "room", storage: "site-storage", find: "find", found: "found" });

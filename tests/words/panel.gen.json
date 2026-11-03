@@ -42,6 +42,26 @@
     "one": null,
     "text": "{n} archived"
   },
+  "panel.art_find_close": {
+    "args": [],
+    "one": null,
+    "text": "close find"
+  },
+  "panel.art_find_next": {
+    "args": [],
+    "one": null,
+    "text": "next match"
+  },
+  "panel.art_find_placeholder": {
+    "args": [],
+    "one": null,
+    "text": "find in this page"
+  },
+  "panel.art_find_prev": {
+    "args": [],
+    "one": null,
+    "text": "previous match"
+  },
   "panel.art_gone": {
     "args": [],
     "one": null,

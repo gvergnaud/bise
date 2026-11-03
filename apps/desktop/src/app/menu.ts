@@ -27,9 +27,30 @@ export type AppAction = MenuAction | ScreenAction;
 type Listener = (action: AppAction) => void;
 const listeners = new Set<Listener>();
 
-/** Ask the shown screens (the shell's keys call it). */
+/** Runs the action and says true when it is its own now (an artifact in front takes ⌘F: artifacts/find.ts). */
+type Taker = { readonly action: AppAction; readonly take: () => boolean };
+const takers: Taker[] = [];
+
+/** Ask the shown screens (the shell's keys call it); a taker that takes it first: the screens never hear it. */
 export function emitAction(action: AppAction): void {
+  if (takers.some((t) => t.action === action && t.take())) return;
   for (const l of [...listeners]) l(action);
+}
+
+/** While mounted: `take` is asked before the screens hear `action`, and keeps it when it says true. */
+export function useActionTaker(action: AppAction, take: () => boolean) {
+  const latest = useRef(take);
+  useEffect(() => {
+    latest.current = take;
+  });
+  useEffect(() => {
+    const t: Taker = { action, take: () => latest.current() };
+    takers.push(t);
+    return () => {
+      const i = takers.indexOf(t);
+      if (i >= 0) takers.splice(i, 1);
+    };
+  }, [action]);
 }
 
 /** The route a menu action opens, if it is one: settings, and the Go menu's places (the rail's). Pure. */
