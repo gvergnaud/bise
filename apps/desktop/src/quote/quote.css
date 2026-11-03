@@ -16,7 +16,7 @@
   opacity: 0.6;
 }
 
-/* the thread's pop: under the selection's last line, over the rows */
+/* the thread's pop: above the selection's first line (under its last without room above), over the rows */
 .q-float {
   position: fixed;
   z-index: 15;

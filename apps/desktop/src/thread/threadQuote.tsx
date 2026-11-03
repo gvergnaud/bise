@@ -9,7 +9,7 @@ import { copyText } from '@/quote/QuotePop';
 
 /**
  * Text selected in this thread's list: quoting while there is some (the
- * composer's key bar says typing asks about it) and the selection pop under it
+ * composer's key bar says typing asks about it) and the selection pop over it
  * (src/quote); a printable key (Space too) then puts it in the composer as a
  * quote chip at the caret followed by that key, ⌘' as the chip alone
  * (quote.ts), a click on the pop's ask words as the chip alone. Capture phase
@@ -96,8 +96,10 @@ interface ThreadQuote {
   readonly copy: () => void;
 }
 
-/** Height of the pop with its gap to the text (12 px words, 3 px padding). */
-const POP_H = 30;
+/** The pop's height (12 px words on their 15 px line, 4 px padding each side: 23, measured on FakeCore). */
+export const POP_H = 23;
+/** The pop's gap to the selected line (designer m_52558's 4 px clear). */
+export const POP_GAP = 4;
 /** The room kept for the pop's width (its words are ~250 px at 12 px; 'type to ask … about it' grows them). */
 export const POP_W = 280;
 
@@ -130,9 +132,11 @@ export function popRoom(list: Box, screenLeft: number, column: ColumnPlace | nul
 }
 
 /**
- * Under the selection's last line, at its left; over its first line when the list has no room
- * under it (the thread opens at its end); kept inside the room across (popRoom) and the list
- * down; null when the selection is out of view. Pure.
+ * Above the selection's first line, 4 px clear, at its left (the TUI's rule, quote.rs hint_rect;
+ * designer m_52558: under it, it hid the row he reads next); under its last line when the list has no room
+ * above (the first line at the list's top, or scrolled out); none when it has room neither side
+ * (the selection fills the list: the key bar says it). Kept inside the room across (popRoom);
+ * null when the selection is out of view. Pure.
  */
 export function popAt(clientRects: readonly Box[], list: Box, room: Room): PopAt | null {
   const rects = clientRects.filter((x) => x.width > 0 && x.height > 0);
@@ -140,9 +144,10 @@ export function popAt(clientRects: readonly Box[], list: Box, room: Room): PopAt
   const last = rects.at(-1);
   if (first === undefined || last === undefined) return null;
   if (last.bottom < list.top || first.top > list.bottom) return null;
-  const under = last.bottom + 6;
-  const y = under + POP_H <= list.bottom ? under : Math.max(list.top + 4, first.top - POP_H);
-  const line = under + POP_H <= list.bottom ? last : first;
+  const above = first.top - POP_GAP - POP_H;
+  const under = last.bottom + POP_GAP;
+  const line = above >= list.top ? first : under + POP_H <= list.bottom ? last : undefined;
+  if (line === undefined) return null;
   const left = Math.min(...rects.filter((x) => Math.abs(x.bottom - line.bottom) < 2).map((x) => x.left));
-  return { x: Math.max(room.left + 8, Math.min(left, room.right - POP_W)), y };
+  return { x: Math.max(room.left + 8, Math.min(left, room.right - POP_W)), y: line === first ? above : under };
 }
