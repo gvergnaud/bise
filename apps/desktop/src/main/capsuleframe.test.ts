@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { appendCapsuleFrame, capsuleFrame, capsuleFramesDir, CAPSULE_FRAMES_FILE } from './capsuleframe';
 import { capsuleBounds, CORNER, dockOf, OFF, type DisplayBox } from './place';
 
@@ -52,9 +52,21 @@ describe('capsule frames under the off-screen knob', () => {
     }
   });
 
-  it("a write that fails throws nothing (the app goes on)", () => {
-    expect(() => {
-      appendCapsuleFrame('/nonexistent/dir/for/sure', capsuleFrame(1, 'show', 'corner', parked, mac, parked));
-    }).not.toThrow();
+  it("a write that fails throws nothing (the app goes on) and says it on stderr", () => {
+    // caught here, not printed: the gate showed this expected line first under
+    // 'FAIL desktop_check' in 3 of 8 reds (loop audit 11-03), never their cause
+    const said: string[] = [];
+    const err = vi.spyOn(process.stderr, 'write').mockImplementation((s: string | Uint8Array) => {
+      said.push(String(s));
+      return true;
+    });
+    try {
+      expect(() => {
+        appendCapsuleFrame('/nonexistent/dir/for/sure', capsuleFrame(1, 'show', 'corner', parked, mac, parked));
+      }).not.toThrow();
+    } finally {
+      err.mockRestore();
+    }
+    expect(said.join('')).toContain('bise-desktop: capsule-frames: Error: ENOENT');
   });
 });
