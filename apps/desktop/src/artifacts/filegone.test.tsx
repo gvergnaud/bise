@@ -60,7 +60,7 @@ describe("the 'file gone' state", () => {
     keptStorage.removeItem('bise.composer.v1.shop-1/perf');
     fireEvent.click(screen.getByTestId('artifact.filegone.ask'));
     const segs = entrySegments(load(keptStorage, 'shop-1/perf').draft ?? 'null') ?? [];
-    expect(segs.filter((x) => x.kind === 'chip').map((x) => x.kind === 'chip' ? x.chip : null)).toEqual([{ kind: 'artifact', n: 1, id: 'notes', title: 'notes.md', url: '/w/notes.md' }]);
+    expect(segs.flatMap((x) => (x.kind === 'chip' ? [x.chip] : []))).toEqual([{ kind: 'artifact', n: 1, id: 'notes', title: 'notes.md', url: '/w/notes.md' }]);
   });
 
   it("an older version's file gone, a newer one there: 'open v3' shows the newest", async () => {
