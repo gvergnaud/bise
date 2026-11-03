@@ -10,7 +10,7 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 import { Field, IconButton } from '@/ds';
 import { panel } from '@/proto/words_panel.gen';
 import { FRAME_KINDS, originOf } from './frameNote';
-import { claimFindEsc, counterOf, stepAt } from './find';
+import { claimFindEsc, counterOf, headPx, stepAt } from './find';
 
 export interface ArtifactFindBarProps {
   /** the page's frame */
@@ -26,17 +26,26 @@ export function ArtifactFindBar({ frame, src, ask, onClose }: ArtifactFindBarPro
   const [needle, setNeedle] = useState('');
   const [n, setN] = useState(0);
   const [at, setAt] = useState(-1);
+  // the bottom of the page's own head (a bise page's frame), in its px: the bar sits 8 px under it
+  const [head, setHead] = useState(0);
   const seq = useRef(0);
   const field = useRef<HTMLInputElement>(null);
+  const bar = useRef<HTMLDivElement>(null);
   const origin = originOf(src);
 
   // to '*': a copy served under the sandbox CSP (a site, a text file) has an opaque origin; the
   // guard keeps every subframe on the pages server, and only the needle goes
+  // with where the bar sits over the frame (its left and bottom, in the frame's px): the page
+  // scrolls a current match under it to 8 px below it (designer m_52698)
   const tell = (q: string, cur: number): void => {
     seq.current += 1;
-    const win = frame.current?.contentWindow;
-    if (win == null) return;
-    win.postMessage({ bise: FRAME_KINDS.find, q, at: cur, seq: seq.current }, '*');
+    const el = frame.current;
+    const win = el?.contentWindow;
+    if (el == null || win == null) return;
+    const b = bar.current?.getBoundingClientRect();
+    const f = el.getBoundingClientRect();
+    const clear = b === undefined ? null : { x: b.left - f.left, y: b.bottom - f.top };
+    win.postMessage({ bise: FRAME_KINDS.find, q, at: cur, seq: seq.current, clear }, '*');
   };
   const tellRef = useRef(tell);
   useEffect(() => {
@@ -50,10 +59,11 @@ export function ArtifactFindBar({ frame, src, ask, onClose }: ArtifactFindBarPro
       // its own frame only, on the pages server's origin or an opaque one (a sandboxed copy)
       if (e.source == null || e.source !== frame.current?.contentWindow || (e.origin !== 'null' && e.origin.toLowerCase() !== origin)) return;
       if (typeof d !== 'object' || d === null) return;
-      const m = d as { bise?: unknown; seq?: unknown; n?: unknown };
+      const m = d as { bise?: unknown; seq?: unknown; n?: unknown; head?: unknown };
       if (m.bise !== FRAME_KINDS.found || m.seq !== seq.current || typeof m.n !== 'number') return;
       const count = Math.max(0, Math.floor(m.n));
       setN(count);
+      setHead(headPx(m.head));
       setAt((x) => (count === 0 ? -1 : Math.min(Math.max(x, 0), count - 1)));
     };
     window.addEventListener('message', on);
@@ -62,6 +72,10 @@ export function ArtifactFindBar({ frame, src, ask, onClose }: ArtifactFindBarPro
     };
   }, [frame, origin]);
 
+  // at once, before a needle: the frame says its head, the bar goes under it
+  useEffect(() => {
+    tellRef.current('', -1);
+  }, []);
   // ⌘F again: the field again, its words selected
   useEffect(() => {
     field.current?.focus();
@@ -92,7 +106,8 @@ export function ArtifactFindBar({ frame, src, ask, onClose }: ArtifactFindBarPro
   };
 
   return (
-    <div className="art-find" data-testid="artifact.find" role="search">
+    <div ref={bar} className="art-find" data-testid="artifact.find" role="search"
+      style={head > 0 ? { top: `calc(var(--s-4) + ${String(head)}px + var(--s-2))` } : undefined}>
       <Field
         ref={field}
         testId="artifact.find.field"

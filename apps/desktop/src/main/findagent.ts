@@ -81,7 +81,7 @@ export const FIND_AGENT = `(() => {
     reg.set('bise-find-at', now);
   };
   // the current match in the middle of each box that scrolls it, then of the page
-  const reveal = (r) => {
+  const reveal = (r, clear) => {
     const el = r.startContainer.parentElement;
     if (el === null) return;
     for (let p = el; p !== null && p !== document.body && p !== document.documentElement; p = p.parentElement) {
@@ -92,6 +92,19 @@ export const FIND_AGENT = `(() => {
     const b = r.getBoundingClientRect();
     if (b.top < 0 || b.bottom > innerHeight) scrollBy(0, b.top - innerHeight / 2);
     if (b.left < 0 || b.right > innerWidth) scrollBy(b.left - innerWidth / 2, 0);
+    // under the window's bar (clear: its bottom and left in this frame's px): 8 px below it
+    if (clear === null) return;
+    const c = r.getBoundingClientRect();
+    if (c.top < clear.y + 8 && c.bottom > 0 && c.right > clear.x) scrollBy(0, c.top - clear.y - 8);
+  };
+  // where the window's bar sits over this frame ({x, y}: its left and bottom), null: nowhere
+  const clearOf = (v) => (v !== null && typeof v === 'object' && typeof v.x === 'number' && typeof v.y === 'number' ? { x: v.x, y: v.y } : null);
+  // the bottom of the page's own head pinned at its top (a bise page's frame: its title, 'v6', 'send'), 0: none
+  const headOf = () => {
+    const h = document.querySelector('.bise-frame');
+    if (h === null) return 0;
+    const b = h.getBoundingClientRect();
+    return b.height > 0 && b.top < 40 ? Math.round(b.bottom) : 0;
   };
   // one of its own frames' count for q (no answer in time: 0)
   const ask = (w, q, seq) => new Promise((done) => {
@@ -113,22 +126,25 @@ export const FIND_AGENT = `(() => {
     const q = typeof d.q === 'string' ? d.q : '';
     const cur = Number.isInteger(d.at) ? d.at : -1;
     const seq = d.seq;
+    const clear = clearOf(d.clear);
     const mine = ++latest;
     const rs = ranges(q);
     const frames = Array.from(document.querySelectorAll('iframe')).filter((f) => f.contentWindow !== null);
     const ns = await Promise.all(frames.map((f) => ask(f.contentWindow, q, seq)));
     if (mine !== latest) return;
     paint(rs, cur);
-    if (cur >= 0 && cur < rs.length) reveal(rs[cur]);
+    if (cur >= 0 && cur < rs.length) reveal(rs[cur], clear);
     let k = cur - rs.length;
     frames.forEach((f, i) => {
       const n = ns[i];
       if (k >= 0 && k < n) {
         f.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-        if (f.contentWindow !== null) f.contentWindow.postMessage({ bise: K.find, q, at: k, seq }, '*');
+        const fb = f.getBoundingClientRect();
+        const inner = clear === null ? null : { x: clear.x - fb.left, y: clear.y - fb.top };
+        if (f.contentWindow !== null) f.contentWindow.postMessage({ bise: K.find, q, at: k, seq, clear: inner }, '*');
       }
       k -= n;
     });
-    parent.postMessage({ bise: K.found, seq, n: rs.length + ns.reduce((a, b) => a + b, 0) }, '*');
+    parent.postMessage({ bise: K.found, seq, n: rs.length + ns.reduce((a, b) => a + b, 0), head: headOf() }, '*');
   });
 })();`;

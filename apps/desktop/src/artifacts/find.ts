@@ -60,6 +60,11 @@ export function counterOf(needle: string, n: number, at: number): string {
   return `${String(n > 0 && at >= 0 ? at + 1 : 0)}/${String(n)}`;
 }
 
+/** The page's head bottom a frame says (a bise page's pinned frame, designer m_52698), in px: 0 when none or off. Pure. */
+export function headPx(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 400 ? Math.round(v) : 0;
+}
+
 // ---- the window's artifacts that have a find ----
 
 interface Entry {
