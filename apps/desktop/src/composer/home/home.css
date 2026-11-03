@@ -14,6 +14,8 @@
   font: 500 var(--f-question);
   letter-spacing: -0.01em;
   color: var(--c-text);
+  /* a long project's name in a narrow column: its lines split evenly */
+  text-wrap: balance;
 }
 .cmp-home .cmp-home-proj {
   display: inline;
@@ -59,7 +61,13 @@
   background: var(--c-hover);
   color: var(--c-text);
 }
-/* over an empty thread with no welcome under it: the slot's own centre, 80 above the composer */
+/* over an empty thread with no welcome under it: the slot's own centre (the column's, thread.css
+   .th-first), 80 above the composer; its words in the column's text, 24 in from each side, and the
+   ideas wrap there before they ever run under the right side (Lorenzo's shot, m_52509) */
 .th-home {
-  padding-bottom: var(--s-16);
+  padding: 0 var(--pad-column) var(--s-16);
+}
+.th-home > .cmp-home {
+  min-width: 0;
+  max-width: 100%;
 }

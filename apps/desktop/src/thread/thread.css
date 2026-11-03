@@ -288,9 +288,16 @@ body:has(.th-screen > .art-give) .s3-side {
     display: none;
   }
 }
+/* its box is the column's (the composer's: --th-col-x - --pad-column, --th-col + 2 --pad-column),
+   never the screen's: the column slides left of the bims' world and its outer card, and the home's
+   third idea ran under the card, clipped (Lorenzo's shot, m_52509) */
 .th-first {
   position: absolute;
-  inset: 0;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--th-col-x) - var(--pad-column));
+  width: calc(var(--th-col) + 2 * var(--pad-column));
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
