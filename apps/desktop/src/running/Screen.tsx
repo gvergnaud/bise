@@ -1,7 +1,8 @@
 // The processes screen (bise fait mac: page native-mac §6 and §8; designer's running-procs; route
 // running): what his agents left running in every project. The page's name is in the window's bar;
 // under it the banner (ds PageBanner), the list's row (ds ListBar, his m_52658: the filter, ds Filters
-// 'running N' / 'ended today N', and the search at its right; '/' and ⌘F focus it, app/searchkeys.ts), a ds GroupLabel per project, one ds ListRow per process (its
+// 'running N' / 'ended today N', and the search at its right; '/' and ⌘F focus it, app/searchkeys.ts;
+// it stays over the list, which scrolls in its own box: its line once that box scrolled), a ds GroupLabel per project, one ds ListRow per process (its
 // command in mono 12, then agent · address · age; a --c-ok dot while it runs; the chosen one's
 // 'open'; its '…' and a right click are its menu, useEntityMenu), and the selected one's output
 // beside it (head: meta, find ⌘F, open ↗ / stop; a read-only terminal that follows its end; no
@@ -123,6 +124,8 @@ export function RunningView({
   const [filter, setFilter] = useState<Filter>(() => (endedOne(opened) ? 'ended' : 'running'));
   const [q, setQ] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
+  // the list's own scroller, under its row: the row's line shows once it scrolled
+  const listBox = useRef<HTMLDivElement>(null);
   const gutter = useBannerGutter();
   // what he stopped from here, until its hub says it ended
   const [stopping, setStopping] = useState<ReadonlySet<string>>(new Set());
@@ -230,10 +233,10 @@ export function RunningView({
         />
       <div className="run-body">
       <div className="run-main">
-        {/* one scroller: the filters scroll away with the list; its foot keeps the floating
-            composer's room (--float-room) */}
-        <div className="run-scroll" data-testid="running.scroll">
-        <ListBar inset testId="running.filters"
+        {/* the list's row stays over the list, which scrolls in its own box under it: the row's
+            1 px line once it scrolled (designer m_52731); its foot keeps the floating composer's
+            room (--float-room) */}
+        <ListBar inset scroller={listBox} testId="running.filters"
           end={<ListSearch ref={searchRef} value={q} onChange={(e) => { setQ(e.currentTarget.value); }} onKeyDown={searchKey} onClear={() => { setQ(''); searchRef.current?.focus(); }} testId="running.search" />}>
           <Filters
             items={FILTERS.map((f) => ({ id: f, label: <>{sentenceCase(f === 'running' ? running.state_running : running.ended_today)}<span className="run-n">{f === 'running' ? counts.running : counts.ended}</span></> }))}
@@ -243,6 +246,7 @@ export function RunningView({
             testId="running.filter"
           />
         </ListBar>
+        <div ref={listBox} className="run-scroll" data-testid="running.scroll">
         {order.length === 0 ? (
           <Empty testId="running.empty" title={q !== '' ? running.none_match : filter === 'running' ? running.empty : running.empty_ended} />
         ) : (

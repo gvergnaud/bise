@@ -6,14 +6,15 @@
 // - ListBar: the row right above a list (his m_44961 for Artifacts, then m_52658 for every list page:
 //   'too far away from the list being sorted'; designer m_52674): its filters at the left, its
 //   search (then the page's action) at the right, on the list's edges. Sticky at the top of the
-//   page's scroller, a 1 px line under it only while stuck. `inset`: the list's rows draw their
+//   page's scroller, a 1 px line under it only while stuck; a list that scrolls in its own box
+//   under the row (`scroller`, Running) gets that line as soon as it scrolled. `inset`: the list's rows draw their
 //   content 12 in (ds ListRow), the row's controls on that edge.
 // - ListSearch: the page's search, in its ListBar: 200 × 28 (160 under a 900 window), r 8,
 //   --c-sunken with a 1 px --c-line, the '/' key at its right until it has the focus or words, a ×
 //   once it has words; its placeholder, VoiceOver name and tip are the ds's words (words_ds).
 // Pure render of their props; the screens own the choice, the query and the keys (app/searchkeys.ts:
 // '/' and ⌘F). Owner: nm-ds.
-import { useLayoutEffect, useRef, useState, type ChangeEventHandler, type KeyboardEventHandler, type ReactNode, type Ref, type RefObject } from "react";
+import { useEffect, useRef, useState, type ChangeEventHandler, type KeyboardEventHandler, type ReactNode, type Ref, type RefObject } from "react";
 import { ds } from "@/proto/words_ds.gen";
 import { cx, sub } from "./cx";
 import { AppIcon } from "./icons-app";
@@ -73,6 +74,9 @@ export interface ListBarProps {
   endRef?: Ref<HTMLSpanElement>;
   /** data-folded on the row: its page folded the filters into one menu */
   folded?: boolean;
+  /** the list scrolls in its own box under the row (Running's split view), not in the row's
+   *  scroller: the row's line shows as soon as that box scrolled */
+  scroller?: RefObject<HTMLElement | null>;
   testId?: string;
 }
 
@@ -86,20 +90,23 @@ function scrollerOf(el: HTMLElement): HTMLElement | null {
 }
 
 /** the row above a list: filters left, search and action right; sticky, its line only while stuck */
-export function ListBar({ children, end, inset, ref, startRef, endRef, folded, testId }: ListBarProps) {
+export function ListBar({ children, end, inset, ref, startRef, endRef, folded, scroller, testId }: ListBarProps) {
   const own = useRef<HTMLDivElement>(null);
   const box = ref ?? own;
   const [stuck, setStuck] = useState(false);
-  // stuck: the page scrolled and the row sits at its scroller's top
-  useLayoutEffect(() => {
+  // stuck: the page scrolled and the row sits at its scroller's top; or the list's own box (under
+  // the row) scrolled at all. A passive effect: a scroller rendered after the row has its ref only
+  // once every layout effect ran
+  useEffect(() => {
     const el = box.current;
-    const sc = el === null ? null : scrollerOf(el);
+    const below = scroller?.current ?? null;
+    const sc = below ?? (el === null ? null : scrollerOf(el));
     if (el === null || sc === null) return undefined;
-    const check = () => { setStuck(sc.scrollTop > 0 && el.getBoundingClientRect().top - sc.getBoundingClientRect().top < 1); };
+    const check = () => { setStuck(sc.scrollTop > 0 && (below !== null || el.getBoundingClientRect().top - sc.getBoundingClientRect().top < 1)); };
     check();
     sc.addEventListener("scroll", check, { passive: true });
     return () => { sc.removeEventListener("scroll", check); };
-  }, [box]);
+  }, [box, scroller]);
   return (
     <div ref={box} className={cx("b-listbar", inset === true && "inset")} data-stuck={stuck || undefined} data-folded={folded === true || undefined} data-testid={testId}>
       <span ref={startRef} className="b-listbar-start">{children}</span>

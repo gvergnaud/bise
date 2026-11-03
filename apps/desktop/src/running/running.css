@@ -7,14 +7,17 @@
 .run-body { flex: 1 1 auto; min-height: 0; display: flex; }
 .run-screen > .b-banner { flex: none; margin-bottom: 0; }
 .run-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
-/* the lead, the filters and the list in one scroller (designer m_39330: the lead scrolls away); the
-   floating composer's room at its foot (--float-room). Beside the pane (always, over 1000 px) the
+/* the list in its own scroller, under its row (the filters and the search); the floating composer's
+   room at its foot (--float-room). Beside the pane (always, over 1000 px) the
    list is its own column: the page's centring would squeeze it, so its sides are the page's least,
    --pad-column (ui-review qa g5) */
-.run-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--s-6) 0 var(--float-room); box-sizing: border-box; }
+.run-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--s-2) 0 var(--float-room); box-sizing: border-box; }
+/* the list's row (ds ListBar) stays over the list's own scroller, 24 under the banner, the list 8
+   under it; its 1 px line once the list scrolled (designer m_52731) */
+.run-main > .b-listbar { flex: none; margin: var(--s-6) 0 0; }
 /* the banner (ds PageBanner) takes the list's width, 24 from its edges; the rest its column */
-.run-scroll > :not(.b-banner) { margin-inline: var(--pad-column); }
-@media (max-width: 1000px) { .run-screen:not(.has-pane) .run-scroll > :not(.b-banner) { margin-inline: var(--pad-page-x); } }
+.run-main > .b-listbar, .run-scroll > :not(.b-banner) { margin-inline: var(--pad-column); }
+@media (max-width: 1000px) { .run-screen:not(.has-pane) :is(.run-main > .b-listbar, .run-scroll > :not(.b-banner)) { margin-inline: var(--pad-page-x); } }
 .run-n { margin-left: var(--s-1); color: var(--c-text-3); }
 .run-search { margin-left: auto; }
 /* the state column: a --c-ok dot while it runs, a check, a --c-err x, a minus (§8's line icons) */

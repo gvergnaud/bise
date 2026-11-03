@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render as rtlRender, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render as rtlRender, screen } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 import { BarSlot } from '@/app/barslot';
 import { formatRoute, parseRoute } from '@/app/route';
@@ -179,6 +179,21 @@ describe('the running screen', () => {
     expect([field.value, document.activeElement]).toEqual(['', field]);
     fireEvent.keyDown(field, { key: 'Escape' });
     expect(document.activeElement).toBe(screen.getByTestId('running.screen'));
+  });
+
+  it("beside an output, the list scrolls in its own box under its row: the row's 1 px line as soon as that box scrolled (designer m_52731)", () => {
+    render(<RunningView items={[dev, nohup]} ports={ports()} now={NOW} opened="shop/perf/bg3" />);
+    const bar = screen.getByTestId('running.filters');
+    const box = screen.getByTestId('running.scroll');
+    expect(box.contains(bar)).toBe(false);
+    expect(box.contains(screen.getByTestId('running.list'))).toBe(true);
+    expect(bar.dataset['stuck']).toBeUndefined();
+    box.scrollTop = 1;
+    act(() => { box.dispatchEvent(new Event('scroll')); });
+    expect(bar.dataset['stuck']).toBe('true');
+    box.scrollTop = 0;
+    act(() => { box.dispatchEvent(new Event('scroll')); });
+    expect(bar.dataset['stuck']).toBeUndefined();
   });
 
   it('stop asks once before it stops: the first click asks, the second stops', () => {
