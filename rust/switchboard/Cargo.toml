@@ -11,6 +11,8 @@ bise-catalog = { path = "../catalog" }
 # his attached images into the image store (attached.rs, daemon/fn_context.rs)
 bend-images = { path = "../images" }
 bise-home = { path = "../home" }
+# the secrets no agent reads (bise_secrets::held), the sandbox's list
+bise-secrets = { path = "../secrets" }
 # the process table, the peer's pid and the judge (procs, peer, docs/issues/16)
 bise-peer = { path = "../peer" }
 # a window's /stop of an agent's computer use, by its key (cli::stop_agent)

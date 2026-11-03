@@ -1,9 +1,10 @@
 // generated from cdp.ts by scripts/ts_emit.ts: never hand-edited (edit the .ts, then run it)
-// chrome.debugger (CDP): attach and detach, a lost tab, evaluating in the
-// page, the accessibility snapshot.
+// chrome.debugger (CDP): attach (file choosers intercepted) and detach, a
+// lost tab, evaluating in the page, the accessibility snapshot.
 import { CuError, fail, agents, tabs, note } from "./state.js";
 import { refuseUrl, owned, serial } from "./tabs.js";
 import { stopAgent } from "./control.js";
+import { chooserOpened, unshim } from "./upload.js";
 import { walk, render } from "../lib/ax.js";
 import { failure, hostOf, refused } from "../lib/text.js";
 // ---------------------------------------------------------------- CDP
@@ -52,12 +53,19 @@ async function attach(tabId, t) {
     const send = (method, params = {}) => chrome.debugger.sendCommand({ tabId }, method, params);
     await send("Emulation.setFocusEmulationEnabled", { enabled: true });
     await send("Page.enable");
+    // A file chooser the page opens (an agent's click on Upload) never
+    // shows the native dialog: it only fires Page.fileChooserOpened
+    // (upload.ts). Only this tab, only while attached: a detach gives the
+    // user's own clicks their dialog back.
+    await send("Page.setInterceptFileChooserDialog", { enabled: true }).catch(() => { });
     await send("DOM.enable");
     await send("Accessibility.enable");
 }
 async function detach(tabId, t) {
     if (!t.attached)
         return;
+    // a parked showOpenFilePicker() call ends (AbortError), the page's picker is its own again
+    await unshim(tabId, t);
     t.attached = false;
     try {
         await chrome.debugger.detach({ tabId });
@@ -75,7 +83,12 @@ chrome.debugger.onEvent.addListener((src, method, params) => {
         t.navs++;
         t.refs.clear();
         t.byRef.clear();
+        // a new document has no shim and no open chooser
+        t.shimmed = false;
+        t.choosers = [];
     }
+    if (method === "Page.fileChooserOpened")
+        chooserOpened(t, params);
 });
 /**
  * chrome.debugger.attach failed: [code, message, extra] for fail(). The

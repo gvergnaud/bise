@@ -4,8 +4,9 @@
 const HOST = "dev.bise.computer_use";
 const MAX_TABS = 5;
 const GROUP_PREFIX = "bise · ";
-const CODES = new Set(["not_set_up", "no_browser", "no_helper", "no_permission", "not_found", "ambiguous", "stale_ref", "stopped", "paused", "refused", "timeout", "needs_front", "bad_args"]);
-const ACTIONS = new Set(["click", "fill", "type", "press", "select", "check", "hover", "scroll", "goto", "close", "wait", "read"]);
+const CODES = new Set(["not_set_up", "no_browser", "no_helper", "no_permission", "not_found", "ambiguous", "stale_ref", "stopped", "paused", "refused", "timeout", "needs_front", "bad_args", "file_not_found", "file_too_large", "no_file_input", "chooser_not_opened"]);
+// the last three: uploads (sw/upload.ts)
+const ACTIONS = new Set(["click", "fill", "type", "press", "select", "check", "hover", "scroll", "goto", "close", "wait", "read", "set_input_files", "expect_chooser", "wait_chooser"]);
 // C1's locator keys; anything else is bad_args
 const LOCATOR_KEYS = new Set(["role", "name", "name_re", "text", "text_re", "label", "exact", "nth"]);
 class CuError extends Error {
@@ -62,7 +63,7 @@ const ownerKey = (groupId) => `g${groupId}`;
 /** Which agent opened which tab, the same way: `t<tab id>` → key. Only these tabs are ever an agent's. */
 const tabKey = (tabId) => `t${tabId}`;
 function register(tabId, agent) {
-    const t = { agent, attached: false, paused: false, userTouched: false, refs: new Map(), byRef: new Map(), nextRef: 1, navs: 0, acting: false, actingUntil: 0, queue: Promise.resolve(), overlayNavs: -1 };
+    const t = { agent, attached: false, paused: false, userTouched: false, refs: new Map(), byRef: new Map(), nextRef: 1, navs: 0, acting: false, actingUntil: 0, queue: Promise.resolve(), overlayNavs: -1, choosers: [], chooserSeq: 0 };
     tabs.set(tabId, t);
     return t;
 }

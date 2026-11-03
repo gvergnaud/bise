@@ -7,6 +7,8 @@ description = "Computer use for bise: the broker between the agents, the browser
 
 [dependencies]
 bise-home = { path = "../home" }
+# the secrets no agent reads: an upload refuses them too (files.rs)
+bise-secrets = { path = "../secrets" }
 # who opened a connection: the peer's pid, the process table, judge_any (who.rs, docs/issues/18)
 bise-peer = { path = "../peer" }
 serde_json = "1"

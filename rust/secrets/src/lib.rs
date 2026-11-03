@@ -46,6 +46,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
 
+pub mod held;
 pub mod keychain;
 pub mod parts;
 pub mod ready;

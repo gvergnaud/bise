@@ -71,6 +71,16 @@
 
   const badArgs = (message: string) => new ComputerError("bad_args", message);
 
+  // setInputFiles' paths: one string or a list of strings, as given (the
+  // broker checks them: absolute, existing, not a secret)
+  function filesArg(files: string | string[]): string[] {
+    const list = typeof files === "string" ? [files] : files;
+    if (!Array.isArray(list) || list.length === 0 || !list.every((f) => typeof f === "string")) {
+      throw badArgs("setInputFiles takes an absolute path or a list of them: ['/Users/me/Documents/id.pdf']");
+    }
+    return list.map(String);
+  }
+
   // a RegExp -> the C1 `*_re` string: its source, flags after a `/`
   // (RegExp.source escapes every `/`, so the last one is the separator)
   function reSource(re: RegExp): string {
@@ -183,6 +193,13 @@
     }
     async innerText(opts?: { timeout?: number }): Promise<string> { return this.textContent(opts); }
     async waitFor(opts?: { timeout?: number }) { return this.act("wait", ms(opts)); }
+    // attach files (absolute paths): on the file input itself, or on the
+    // button, label or drop zone that leads to it (the extension finds the
+    // input, else catches the chooser its click opens, else drops them);
+    // the result's `via` says which: input, chooser or drop
+    async setInputFiles(files: string | string[], opts?: { timeout?: number }) {
+      return this.act("set_input_files", Object.assign({ files: filesArg(files) }, ms(opts)));
+    }
     // how many elements match, in one snapshot (no auto-wait); a ref: 0 or 1
     async count(): Promise<number> {
       const entries = parseSnapshot(this.page.snapshotText(2000));
@@ -315,9 +332,37 @@
       else a.text = String(what);
       return this.act(a);
     }
+    // the file chooser `action` opens (a click on Upload): never a native
+    // dialog; `chooser.setFiles(paths)` attaches the files to it
+    async waitForFileChooser(action: () => unknown, opts?: { timeout?: number }): Promise<FileChooser> {
+      if (typeof action !== "function") throw badArgs("waitForFileChooser takes a function that opens the chooser: () => tab.getByRole('button', { name: /upload/i }).click()");
+      this.act({ action: "expect_chooser" });
+      await action();
+      const r = this.act(Object.assign({ action: "wait_chooser" }, ms(opts)));
+      return new FileChooser(this, Number(r.chooser), !!r.multiple, String(r.kind || "input"));
+    }
     // the page's (window's) text, cut at 4000 characters
     async read(): Promise<string> { return String(this.act({ action: "read" }).changed ?? ""); }
     toJSON() { return { target: this.target, url: this.url, title: this.title, window: this.windowTitle }; }
+  }
+
+  // a file chooser the page opened (waitForFileChooser), intercepted
+  class FileChooser {
+    page: Page;
+    id: number;
+    multiple: boolean;
+    kind: string;
+    constructor(page: Page, id: number, multiple: boolean, kind: string) {
+      this.page = page;
+      this.id = id;
+      this.multiple = multiple;
+      this.kind = kind;
+    }
+    isMultiple() { return this.multiple; }
+    async setFiles(files: string | string[], opts?: { timeout?: number }) {
+      return this.page.act(Object.assign({ action: "set_input_files", chooser: this.id, files: filesArg(files) }, ms(opts)));
+    }
+    toJSON() { return { chooser: this.id, multiple: this.multiple, kind: this.kind }; }
   }
 
   class Tab extends Page {

@@ -1,6 +1,6 @@
 // generated from act.ts by scripts/ts_emit.ts: never hand-edited (edit the .ts, then run it)
 // Driving a tab: finding an element, the overlay (cursor, his touch), the
-// actions, the screenshot.
+// actions, the screenshot. Uploads are upload.ts's.
 import { ACTIONS, LOCATOR_KEYS, CuError, fail, sleep, agents, tabs, note, agentOf, tabsOf, forget } from "./state.js";
 import { toError } from "./host.js";
 import { refuseUrl, normalUrl, waitLoaded, owned, serial } from "./tabs.js";
@@ -9,6 +9,7 @@ import { pick, diff, describeLocator, TEXT_ROLES } from "../lib/ax.js";
 import { parseKeys, chordEvents, keyLabel } from "../lib/keys.js";
 import { summary, failure, withPlace, hostOf, label } from "../lib/text.js";
 import { jpegSize } from "../lib/jpeg.js";
+import { setInputFiles, expectChooser, waitChooser } from "./upload.js";
 // ---------------------------------------------------------------- finding an element
 const quadArea = (q) => Math.abs((q[2] - q[0]) * (q[5] - q[1]) - (q[4] - q[0]) * (q[3] - q[1]));
 /** Where to click the element: { ok, x, y, box } or { ok: false, reason }. */
@@ -56,7 +57,19 @@ async function pointOf(tabId, backendNodeId) {
                         return true; return false; };
                 return !!t && (up(o, t) || up(t, o));
             }, [{ objectId: object.objectId }]);
-            if (inside === false)
+            // In a background tab, DOM.getNodeForLocation can answer from before
+            // the scroll just above (no frame was drawn since): a button below
+            // the fold read as covered (cu-upload, a 900 px page in a 613 px
+            // tab). The page's own hit test (it lays out first) decides.
+            const seen = inside === false && (await callOn(tabId, backendNodeId, function (px, py) {
+                const t = this.nodeType === 1 ? this : this.parentElement;
+                const o = document.elementFromPoint(px, py);
+                const up = (a, b) => { for (let n = a; n; n = n.parentNode || n.host)
+                    if (n === b)
+                        return true; return false; };
+                return !!t && !!o && (up(o, t) || up(t, o));
+            }, [{ value: x }, { value: y }]).catch(() => false));
+            if (inside === false && !seen)
                 return { ok: false, reason: "something covers it", covered: true };
         }
     }
@@ -363,6 +376,8 @@ async function doAct(tabId, t, agent, action, args, seen) {
     const hasTarget = !!(args.ref || args.locator);
     const need = (opts) => resolve(tabId, t, args, deadline, opts).then((r) => (seen(r.entry), r));
     let el = null, before = null, extra = "";
+    // fields of this action's result besides the usual ones (an upload's `via`)
+    let more = {};
     switch (action) {
         case "click": {
             if (!hasTarget)
@@ -539,6 +554,22 @@ async function doAct(tabId, t, agent, action, args, seen) {
             const tab = await chrome.tabs.get(tabId);
             return { ok: true, url: tab.url, title: tab.title, changed: "", summary: summary("wait", el, args, hostOf(tab.url)) };
         }
+        case "set_input_files": {
+            const up = await setInputFiles(tabId, t, agent, args, deadline, seen);
+            ({ el, before } = up);
+            more = { via: up.via };
+            break;
+        }
+        case "expect_chooser": {
+            await expectChooser(tabId, t);
+            const tab = await chrome.tabs.get(tabId);
+            return { ok: true, url: tab.url, title: tab.title, changed: "", summary: summary("expect_chooser", null, args, hostOf(tab.url)) };
+        }
+        case "wait_chooser": {
+            const c = await waitChooser(tabId, t, timeout);
+            const tab = await chrome.tabs.get(tabId);
+            return { ok: true, url: tab.url, title: tab.title, changed: "", summary: summary("wait_chooser", null, args, hostOf(tab.url)), ...c };
+        }
         case "read": {
             let text;
             if (hasTarget) {
@@ -567,6 +598,7 @@ async function doAct(tabId, t, agent, action, args, seen) {
         title: after.title,
         changed: changedText(before, after),
         summary: summary(action, el, args, after.host, extra),
+        ...more,
     };
 }
 async function screenshotOp(agent, args) {
@@ -619,4 +651,4 @@ async function peekOp(agent, args) {
         fail("not_found", "the tab let go meanwhile");
     }
 }
-export { ensureOverlay, touched, act, screenshotOp, peekOp };
+export { ensureOverlay, touched, act, screenshotOp, peekOp, resolve, pointOf, mouse, cursor };

@@ -159,3 +159,86 @@ fn a_read_runs_and_the_rest_asks_the_checker() {
     // drafts stay free (docs/ambient-roadmap.md A)
     assert_eq!(j("gmail.create_draft"), Verdict::Allow { tier: 1 });
 }
+
+/// computer use's upload (task cu-upload, architect m_52654): the checker
+/// judges it with his words, by the exact call; a saved `computer.act` rule
+/// doesn't cover it, its card never saves "always", and a click is as before.
+#[test]
+fn an_upload_goes_to_the_checker_by_its_exact_call() {
+    let up = |files: serde_json::Value| {
+        let mut c = call("computer.act");
+        c.args = json!({"target": "tab:7", "action": "set_input_files", "locator": {"role": "button", "name": "Upload"}, "files": files});
+        c
+    };
+    let a = up(json!(["/h/Documents/CAFPI/01 payslip.pdf"]));
+    let key = CacheKey::Exact(format!("{} {}", a.tool, a.args));
+    assert_eq!(
+        judge_with(&a, &Rules::default(), &Cache::default(), false, &LexicalFs),
+        Verdict::Check {
+            parts: vec![],
+            keys: vec![key.clone()]
+        }
+    );
+    // the checker sees the action and the file names
+    let st = checker::checker_state(&a, &[], "attach my payslips on cafpi", &[], None);
+    assert!(
+        st.commands[0].contains("set_input_files") && st.commands[0].contains("01 payslip.pdf"),
+        "{:?}",
+        st.commands
+    );
+    // the cache allows that call again, never another file
+    let mut cache = Cache::default();
+    cache.allow(key);
+    assert_eq!(
+        judge_with(&a, &Rules::default(), &cache, false, &LexicalFs),
+        Verdict::Allow { tier: 4 }
+    );
+    assert!(matches!(
+        judge_with(
+            &up(json!(["/h/.aws/x"])),
+            &Rules::default(),
+            &cache,
+            false,
+            &LexicalFs
+        ),
+        Verdict::Check { .. }
+    ));
+    // his "always" for computer.act runs clicks, not uploads
+    let rules = rules::parse(
+        "[[allow]]
+project = \"/w/repo\"
+tool = \"computer.act\"
+",
+    )
+    .unwrap();
+    assert!(matches!(
+        judge_with(&a, &rules, &Cache::default(), false, &LexicalFs),
+        Verdict::Check { .. }
+    ));
+    let mut click = call("computer.act");
+    click.args = json!({"target": "tab:7", "action": "click", "locator": {"role": "button", "name": "Upload"}});
+    assert_eq!(
+        judge_with(&click, &rules, &Cache::default(), false, &LexicalFs),
+        Verdict::Allow { tier: 2 }
+    );
+    assert!(matches!(
+        judge_with(
+            &click,
+            &Rules::default(),
+            &Cache::default(),
+            false,
+            &LexicalFs
+        ),
+        Verdict::Check { .. }
+    ));
+    // its card (checker off, or the checker asks) offers no "always"
+    assert_eq!(always_tool(&a), None);
+    assert_eq!(always_tool(&click), Some("computer.act".to_string()));
+    assert_eq!(
+        card_when_off(&[], always_tool(&a)),
+        Verdict::Card {
+            reason: CHECKER_OFF.into(),
+            always: None
+        }
+    );
+}

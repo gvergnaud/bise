@@ -1,5 +1,5 @@
 // Driving a tab: finding an element, the overlay (cursor, his touch), the
-// actions, the screenshot.
+// actions, the screenshot. Uploads are upload.ts's.
 
 import { ACTIONS, LOCATOR_KEYS, CuError, fail, sleep, agents, tabs, note, agentOf, tabsOf, forget } from "./state.js";
 import { toError } from "./host.js";
@@ -9,6 +9,7 @@ import { pick, diff, describeLocator, TEXT_ROLES } from "../lib/ax.js";
 import { parseKeys, chordEvents, keyLabel } from "../lib/keys.js";
 import { summary, failure, withPlace, hostOf, label } from "../lib/text.js";
 import { jpegSize } from "../lib/jpeg.js";
+import { setInputFiles, expectChooser, waitChooser } from "./upload.js";
 import type { Entry, Locator, Picked } from "../lib/ax.js";
 import type { Chord } from "../lib/keys.js";
 import type { Tab } from "./state.js";
@@ -16,9 +17,9 @@ import type { Args } from "./tabs.js";
 import type { Evaluated, RemoteObject } from "./cdp.js";
 
 /** An act's args (C1): the action, its target, its own fields. */
-type ActArgs = Args & {
+export type ActArgs = Args & {
   action?: string; ref?: string; locator?: Locator; text?: string; value?: unknown; keys?: string; direction?: string;
-  amount?: number; clear?: boolean; full_page?: boolean; max_width?: number; [k: string]: unknown;
+  amount?: number; clear?: boolean; full_page?: boolean; max_width?: number; files?: unknown; chooser?: unknown; [k: string]: unknown;
 };
 /** Where a click lands, or why not. */
 type Point = { ok: true; x: number; y: number; box: Box } | { ok: false; reason: string; covered?: boolean };
@@ -70,7 +71,17 @@ async function pointOf(tabId: number, backendNodeId: number | undefined): Promis
         const up = (a: Node | null, b: Node | null) => { for (let n = a; n; n = n.parentNode || (n as ShadowRoot).host) if (n === b) return true; return false; };
         return !!t && (up(o, t) || up(t, o));
       }, [{ objectId: object.objectId }]);
-      if (inside === false) return { ok: false, reason: "something covers it", covered: true };
+      // In a background tab, DOM.getNodeForLocation can answer from before
+      // the scroll just above (no frame was drawn since): a button below
+      // the fold read as covered (cu-upload, a 900 px page in a 613 px
+      // tab). The page's own hit test (it lays out first) decides.
+      const seen = inside === false && (await callOn(tabId, backendNodeId!, function (this: Node, px: number, py: number) {
+        const t = this.nodeType === 1 ? this : this.parentElement;
+        const o = document.elementFromPoint(px, py);
+        const up = (a: Node | null, b: Node | null) => { for (let n = a; n; n = n.parentNode || (n as ShadowRoot).host) if (n === b) return true; return false; };
+        return !!t && !!o && (up(o, t) || up(t, o));
+      }, [{ value: x }, { value: y }]).catch(() => false));
+      if (inside === false && !seen) return { ok: false, reason: "something covers it", covered: true };
     }
   } catch (e) {
     // hit test unavailable: click anyway
@@ -361,6 +372,8 @@ async function doAct(tabId: number, t: Tab, agent: string, action: string, args:
   const hasTarget = !!(args.ref || args.locator);
   const need = (opts: { visible?: boolean; enabled?: boolean }) => resolve(tabId, t, args, deadline, opts).then((r) => (seen(r.entry), r as typeof r & { point: Point & { ok: true } }));
   let el: Entry | null = null, before: Snap | null = null, extra = "";
+  // fields of this action's result besides the usual ones (an upload's `via`)
+  let more: Record<string, unknown> = {};
 
   switch (action) {
     case "click": {
@@ -512,6 +525,22 @@ async function doAct(tabId: number, t: Tab, agent: string, action: string, args:
       const tab = await chrome.tabs.get(tabId);
       return { ok: true, url: tab.url, title: tab.title, changed: "", summary: summary("wait", el, args, hostOf(tab.url)) };
     }
+    case "set_input_files": {
+      const up = await setInputFiles(tabId, t, agent, args, deadline, seen);
+      ({ el, before } = up);
+      more = { via: up.via };
+      break;
+    }
+    case "expect_chooser": {
+      await expectChooser(tabId, t);
+      const tab = await chrome.tabs.get(tabId);
+      return { ok: true, url: tab.url, title: tab.title, changed: "", summary: summary("expect_chooser", null, args, hostOf(tab.url)) };
+    }
+    case "wait_chooser": {
+      const c = await waitChooser(tabId, t, timeout);
+      const tab = await chrome.tabs.get(tabId);
+      return { ok: true, url: tab.url, title: tab.title, changed: "", summary: summary("wait_chooser", null, args, hostOf(tab.url)), ...c };
+    }
     case "read": {
       let text;
       if (hasTarget) {
@@ -538,6 +567,7 @@ async function doAct(tabId: number, t: Tab, agent: string, action: string, args:
     title: after.title,
     changed: changedText(before!, after),
     summary: summary(action, el, args, after.host, extra),
+    ...more,
   };
 }
 
@@ -596,4 +626,4 @@ async function peekOp(agent: string, args: ActArgs) {
   }
 }
 
-export { ensureOverlay, touched, act, screenshotOp, peekOp };
+export { ensureOverlay, touched, act, screenshotOp, peekOp, resolve, pointOf, mouse, cursor };

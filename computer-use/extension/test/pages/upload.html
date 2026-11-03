@@ -1,0 +1,56 @@
+<!doctype html>
+<title>Test uploads</title>
+<h1>Test uploads</h1>
+<!-- the four uploaders of the upload test (test/upload.ts), each showing what it got -->
+<section>
+  <h2>Visible</h2>
+  <label>Identity card <input id="visible" type="file"></label>
+  <p id="visible-out">no file</p>
+</section>
+<section>
+  <h2>Hidden behind a button</h2>
+  <input id="hidden" type="file" style="display:none" accept=".pdf,.txt">
+  <button id="pick" onclick="document.getElementById('hidden').click()">Upload payslip</button>
+  <p id="hidden-out">no file</p>
+</section>
+<section>
+  <h2>Drop zone</h2>
+  <div id="zone" role="region" aria-label="Drop your tax notice here" style="width:300px;height:80px;border:2px dashed #888">Drop your tax notice here</div>
+  <p id="zone-out">no file</p>
+</section>
+<section>
+  <h2>Several files</h2>
+  <label>Bank statements <input id="many" type="file" multiple></label>
+  <p id="many-out">no file</p>
+</section>
+<section>
+  <h2>Input elsewhere</h2>
+  <button id="far-pick" onclick="document.getElementById('far').click()">Add a proof of address</button>
+  <p id="far-out">no file</p>
+</section>
+<section>
+  <h2>File System Access</h2>
+  <button id="fsa" onclick="pickFsa()">Choose a contract</button>
+  <p id="fsa-out">no file</p>
+</section>
+<div><input id="far" type="file" style="display:none"><input id="spare" type="file" style="display:none"></div>
+<script>
+  const show = (id, files) => {
+    document.getElementById(id + "-out").textContent = files.length ? "got " + [...files].map((f) => f.name + " (" + f.size + " B)").join(", ") : "no file";
+  };
+  for (const id of ["visible", "hidden", "many", "far"]) {
+    const el = document.getElementById(id);
+    el.addEventListener("change", () => show(id, el.files));
+  }
+  const zone = document.getElementById("zone");
+  zone.addEventListener("dragover", (e) => e.preventDefault());
+  zone.addEventListener("drop", (e) => { e.preventDefault(); show("zone", e.dataTransfer.files); });
+  async function pickFsa() {
+    try {
+      const [h] = await window.showOpenFilePicker();
+      show("fsa", [await h.getFile()]);
+    } catch (e) {
+      document.getElementById("fsa-out").textContent = "error " + e.name;
+    }
+  }
+</script>

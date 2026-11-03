@@ -5,6 +5,8 @@ import { walk, render, pick, match, diff, parseRe, ariaRole } from "../lib/ax.js
 import { parseKeys, chordEvents, keyLabel } from "../lib/keys.js";
 import { summary, failure, withPlace, hostOf, label, refusal } from "../lib/text.js";
 import { jpegSize } from "../lib/jpeg.js";
+import { remember, nextChooser, sawPicker, filesOf, namesLine, uploadSummary, uploadCandidates, KEEP } from "../lib/upload.js";
+import type { Chooser } from "../lib/upload.js";
 
 // A small CDP AX tree: root → heading, button (with its own text), a
 // password textbox, a generic wrapper, a paragraph of text, an ignored node.
@@ -203,4 +205,33 @@ test("jpegSize reads the SOF marker", () => {
   const bytes = [0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x00, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x01, 0x02, 0x03, 0x04, 0x03, 0, 0, 0, 0, 0, 0, 0, 0];
   assert.deepEqual(jpegSize(Buffer.from(bytes).toString("base64")), { width: 0x0304, height: 0x0102 });
   assert.deepEqual(jpegSize(Buffer.from("not a jpeg").toString("base64")), { width: 0, height: 0 });
+});
+
+test("uploads: the choosers a tab opened, the files, the summary, the candidates", () => {
+  let list: Chooser[] = [];
+  for (let i = 1; i <= KEEP + 2; i++) list = remember(list, { id: i, kind: i === 3 ? "picker" : "input", backendNodeId: i, multiple: false });
+  assert.equal(list.length, KEEP);
+  assert.equal(list[0].id, 3);
+  // after 2: 3 is a picker bise can't feed, 4 is next
+  assert.equal(nextChooser(list, 2)?.id, 4);
+  assert.ok(sawPicker(list, 2));
+  list[1].used = true;
+  assert.equal(nextChooser(list, 2)?.id, 5);
+  assert.equal(nextChooser(list, KEEP + 2), null);
+  assert.ok(!sawPicker(list, 3));
+  assert.deepEqual(filesOf("/a/b.pdf"), ["/a/b.pdf"]);
+  assert.deepEqual(filesOf(["/a", "/b"]), ["/a", "/b"]);
+  for (const bad of [[], ["rel.pdf"], [1], null, {}]) assert.equal(typeof filesOf(bad), "string", JSON.stringify(bad));
+  assert.equal(namesLine(["a.pdf", "b.pdf", "c.pdf"]), "a.pdf, b.pdf, c.pdf");
+  assert.equal(namesLine(["a", "b", "c", "d", "e"]), "a, b and 3 more");
+  assert.equal(uploadSummary(["01.pdf"], '"Upload payslip"', "cafpi.fr"), 'attached 01.pdf to "Upload payslip" · cafpi.fr');
+  assert.equal(summary("set_input_files", { role: "button", name: "Upload payslip" }, { files: ["/x/01.pdf", "/x/02.pdf"] }, "cafpi.fr"), 'attached 01.pdf, 02.pdf to "Upload payslip" · cafpi.fr');
+  assert.equal(summary("set_input_files", null, { files: "/x/01.pdf" }, "cafpi.fr"), "attached 01.pdf · cafpi.fr");
+  assert.equal(failure("set_input_files", '"Next"', "no_file_input", "it takes no file"), 'couldn\'t attach files to "Next": it takes no file');
+  const c = uploadCandidates([{ name: "Identity card", hidden: false }, { name: "payslip", hidden: true }], [
+    { role: "button", name: "Upload payslip", line: '- button "Upload payslip" [e4]' },
+    { role: "button", name: "Next", line: '- button "Next" [e5]' },
+    { role: "link", name: "Joindre un justificatif", line: '- link "Joindre un justificatif" [e6]' },
+  ]);
+  assert.deepEqual(c.map((l) => l.slice(0, 30)), ['- file input "Identity card"', '- file input "payslip" (hidden', '- button "Upload payslip" [e4]', '- link "Joindre un justificati']);
 });

@@ -1,6 +1,6 @@
 //! C6's files: `state.json` (rewritten whole on each change; the TUI reads
-//! it by mtime) and `events.jsonl` (appended; the hub turns `stopped` into
-//! main's feed line).
+//! it by mtime) and `events.jsonl` (appended; the hub turns `stopped` and
+//! `attached` (an upload's files, [`Attached`]) into main's feed lines).
 
 use std::collections::BTreeMap;
 use std::io::Write;
@@ -215,6 +215,58 @@ pub fn event_driving(paths: &Paths, agent: &str, event: &str, by: &str, driving:
     let line = v.to_string() + "\n";
     let f = paths.events_file();
     let mut file = std::fs::OpenOptions::new().create(true).append(true).open(&f)?;
+    crate::paths::private(&f, 0o600)?;
+    file.write_all(line.as_bytes())
+}
+
+/// An `attached` event (task cu-upload, architect m_52652): an agent
+/// attached files to a page; every real path, for main's feed line.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Attached {
+    /// its key, `<hub>.<dir>`
+    pub agent: String,
+    pub name: String,
+    pub hub: Option<String>,
+    /// the page's host (`cafpi.fr`)
+    pub site: String,
+    pub files: Vec<String>,
+}
+
+impl Attached {
+    /// An events.jsonl line's `attached` event; None for any other line.
+    pub fn of(v: &Value) -> Option<Attached> {
+        if v.get("event")?.as_str()? != "attached" {
+            return None;
+        }
+        let s = |k: &str| v.get(k).and_then(Value::as_str).map(String::from);
+        let files: Vec<String> = v
+            .get("files")?
+            .as_array()?
+            .iter()
+            .filter_map(|f| f.as_str().map(String::from))
+            .collect();
+        Some(Attached {
+            agent: s("agent")?,
+            name: s("name")?,
+            hub: s("hub"),
+            site: s("site").unwrap_or_default(),
+            files,
+        })
+    }
+}
+
+/// Append an `attached` event: `agent` attached `files` (real paths) to a
+/// page of `site`.
+pub fn attached(paths: &Paths, agent: &str, site: &str, files: &[String]) -> std::io::Result<()> {
+    paths.ensure()?;
+    let (name, hub) = who(agent);
+    let v = json!({"t": crate::now_ms(), "agent": agent, "name": name, "hub": hub, "event": "attached", "site": site, "files": files});
+    let line = v.to_string() + "\n";
+    let f = paths.events_file();
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&f)?;
     crate::paths::private(&f, 0o600)?;
     file.write_all(line.as_bytes())
 }

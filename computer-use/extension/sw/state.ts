@@ -1,11 +1,14 @@
 // The service worker's state: its codes and errors, the agents and their
 // tabs, the groups' titles, and the owners recovered after a restart.
 
+import type { Chooser } from "../lib/upload.js";
+
 const HOST = "dev.bise.computer_use";
 const MAX_TABS = 5;
 const GROUP_PREFIX = "bise · ";
-const CODES = new Set(["not_set_up", "no_browser", "no_helper", "no_permission", "not_found", "ambiguous", "stale_ref", "stopped", "paused", "refused", "timeout", "needs_front", "bad_args"]);
-const ACTIONS = new Set(["click", "fill", "type", "press", "select", "check", "hover", "scroll", "goto", "close", "wait", "read"]);
+const CODES = new Set(["not_set_up", "no_browser", "no_helper", "no_permission", "not_found", "ambiguous", "stale_ref", "stopped", "paused", "refused", "timeout", "needs_front", "bad_args", "file_not_found", "file_too_large", "no_file_input", "chooser_not_opened"]);
+// the last three: uploads (sw/upload.ts)
+const ACTIONS = new Set(["click", "fill", "type", "press", "select", "check", "hover", "scroll", "goto", "close", "wait", "read", "set_input_files", "expect_chooser", "wait_chooser"]);
 // C1's locator keys; anything else is bad_args
 const LOCATOR_KEYS = new Set(["role", "name", "name_re", "text", "text_re", "label", "exact", "nth"]);
 
@@ -15,6 +18,8 @@ export type Agent = { name: string; label: string; project: string; groupId: num
 export type Tab = {
   agent: string; attached: boolean; paused: boolean; userTouched: boolean; refs: Map<number, number>; byRef: Map<number, number>;
   nextRef: number; navs: number; acting: boolean; actingUntil: number; queue: Promise<unknown>; overlayNavs: number;
+  /** the file choosers the page opened while attached (intercepted: never a native dialog), last 5; their ids from chooserSeq */
+  choosers: Chooser[]; chooserSeq: number;
   [k: string]: unknown;
 };
 
@@ -77,7 +82,7 @@ const ownerKey = (groupId: number) => `g${groupId}`;
 const tabKey = (tabId: number) => `t${tabId}`;
 
 function register(tabId: number, agent: string) {
-  const t: Tab = { agent, attached: false, paused: false, userTouched: false, refs: new Map(), byRef: new Map(), nextRef: 1, navs: 0, acting: false, actingUntil: 0, queue: Promise.resolve(), overlayNavs: -1 };
+  const t: Tab = { agent, attached: false, paused: false, userTouched: false, refs: new Map(), byRef: new Map(), nextRef: 1, navs: 0, acting: false, actingUntil: 0, queue: Promise.resolve(), overlayNavs: -1, choosers: [], chooserSeq: 0 };
   tabs.set(tabId, t);
   return t;
 }

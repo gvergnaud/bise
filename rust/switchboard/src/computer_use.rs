@@ -1,6 +1,8 @@
 //! The hub's side of computer use (docs/computer-use-design.md §7.3,
 //! C6): every stop the broker writes in `events.jsonl` becomes one line
 //! in main's feed ("↖ api-v2 stopped driving Chrome · you stopped it"),
+//! and so does every upload, with each path sent ("↖ ai-docs attached 2
+//! files on cafpi.fr: ~/Documents/…"),
 //! and an agent dropped (archived) closes its tab group (`bise
 //! computer-use drop <agent>`, unless the user touched one of its tabs:
 //! the extension decides).
@@ -68,9 +70,14 @@ impl Watch {
     }
 }
 
-/// Main's line for one event: a stop only (designer m_3551, m_3896). The
-/// agent by its name (the event's `agent` is its key, `<hub>.<dir>`).
+/// Main's line for one event: a stop (designer m_3551, m_3896) or an
+/// upload's files (`attached`, task cu-upload: every path he sent, one line
+/// per call). The agent by its name (the event's `agent` is its key,
+/// `<hub>.<dir>`).
 pub fn feed_line(ev: &Value) -> Option<String> {
+    if let Some(a) = bise_computer_use::state::Attached::of(ev) {
+        return Some(attached_line(&a, bise_home::Home::from_env().user_home()));
+    }
     if ev.get("event")?.as_str()? != "stopped" {
         return None;
     }
@@ -86,6 +93,31 @@ pub fn feed_line(ev: &Value) -> Option<String> {
         _ => "you stopped it".to_string(),
     };
     Some(format!("{what} · {by}"))
+}
+
+/// `↖ api-v2 attached 2 files on cafpi.fr: ~/Documents/a.pdf, ~/Documents/b.pdf`:
+/// every path, under `home` as `~`.
+fn attached_line(a: &bise_computer_use::state::Attached, home: &std::path::Path) -> String {
+    let short = |f: &String| match std::path::Path::new(f).strip_prefix(home) {
+        Ok(rel) => format!("~/{}", rel.display()),
+        Err(_) => f.clone(),
+    };
+    let n = a.files.len();
+    let what = if n == 1 {
+        "1 file".to_string()
+    } else {
+        format!("{n} files")
+    };
+    let site = if a.site.is_empty() {
+        String::new()
+    } else {
+        format!(" on {}", a.site)
+    };
+    format!(
+        "↖ {} attached {what}{site}: {}",
+        a.name,
+        a.files.iter().map(short).collect::<Vec<_>>().join(", ")
+    )
 }
 
 /// A journal event that archives an agent: its name.
@@ -224,6 +256,28 @@ mod tests {
         );
         assert_eq!(l(json!({"agent": "perf", "event": "paused", "by": "you"})), None);
         assert_eq!(l(json!({"agent": "perf", "event": "resumed", "by": "you"})), None);
+    }
+
+    #[test]
+    fn an_upload_is_one_line_with_every_path() {
+        let ev = json!({"agent": "aa.ai-docs", "name": "ai-docs", "hub": "aa", "event": "attached", "site": "cafpi.fr",
+            "files": ["/Users/me/Documents/CAFPI dossier/01.pdf", "/Users/me/Documents/CAFPI dossier/02.pdf", "/private/tmp/x.pdf"]});
+        let a = bise_computer_use::state::Attached::of(&ev).unwrap();
+        assert_eq!(
+            attached_line(&a, std::path::Path::new("/Users/me")),
+            "↖ ai-docs attached 3 files on cafpi.fr: ~/Documents/CAFPI dossier/01.pdf, ~/Documents/CAFPI dossier/02.pdf, /private/tmp/x.pdf"
+        );
+        let one = json!({"agent": "aa.a", "name": "a", "hub": "aa", "event": "attached", "site": "", "files": ["/Users/me/a.pdf"]});
+        assert_eq!(
+            attached_line(
+                &bise_computer_use::state::Attached::of(&one).unwrap(),
+                std::path::Path::new("/Users/me")
+            ),
+            "↖ a attached 1 file: ~/a.pdf"
+        );
+        assert!(feed_line(&ev)
+            .unwrap()
+            .starts_with("↖ ai-docs attached 3 files on cafpi.fr: "));
     }
 
     #[test]

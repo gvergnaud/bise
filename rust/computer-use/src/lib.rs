@@ -14,7 +14,8 @@
 //!
 //! - `paths`: every file and socket, from one bise home;
 //! - `proto`: the C1 error codes and targets;
-//! - `refuse`: the hard refusals (design §5.1, §5.2);
+//! - `refuse`: the hard refusals (design §5.1, §5.2); `files`: what an
+//!   upload may send (never a file the agents' sandbox denies);
 //! - `nm`: native messaging frames; `b64` and `image`: screenshots;
 //! - `state`: C6's state.json and events.jsonl;
 //! - `browsers`: the Chromium family, native host manifests, the shim;
@@ -32,6 +33,7 @@ pub mod cli;
 pub mod client;
 #[cfg(test)]
 mod e2e;
+pub mod files;
 pub mod host;
 pub mod image;
 pub mod live;

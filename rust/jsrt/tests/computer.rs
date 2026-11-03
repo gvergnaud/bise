@@ -501,3 +501,53 @@ fn the_design_example_runs() {
     ]);
     assert!(out.starts_with("12,99 €\n<image name=\"[Image #1]\""), "{out}");
 }
+
+// ---- uploads (task cu-upload) ----
+
+#[test]
+fn set_input_files_is_one_act_with_the_paths() {
+    let b = Box::new(true);
+    let p = "const t = computer.browser.tab(7); return (await t.getByRole('button', { name: /upload/i }).setInputFiles(['/Users/me/a.pdf', '/Users/me/b.pdf'])).summary";
+    let want = r#"{"target":"tab:7","action":"set_input_files","locator":{"role":"button","name_re":"upload/i"},"files":["/Users/me/a.pdf","/Users/me/b.pdf"]}"#;
+    assert_eq!(b.ok(p, &[("act", want, ACT_OK)]), "clicked \"Add to cart\" · shop.test");
+    // one path is a list of one; a ref and a timeout ride along
+    let p = "const t = computer.browser.tab(7); await t.ref('e4').setInputFiles('/Users/me/a.pdf', { timeout: 9000 }); return 'ok'";
+    let want = r#"{"target":"tab:7","action":"set_input_files","ref":"e4","files":["/Users/me/a.pdf"],"timeout_ms":9000}"#;
+    assert_eq!(b.ok(p, &[("act", want, ACT_OK)]), "ok");
+    // no files: bad_args, no call
+    let e = b.err("const t = computer.browser.tab(7); await t.ref('e4').setInputFiles([])", &[]);
+    assert!(e.starts_with("bad_args: setInputFiles takes an absolute path"), "{e}");
+}
+
+#[test]
+fn wait_for_file_chooser_arms_clicks_waits_then_sets() {
+    let b = Box::new(true);
+    let p = "const t = computer.browser.tab(7);
+const chooser = await t.waitForFileChooser(() => t.getByText('Justificatif').click());
+const r = await chooser.setFiles(['/Users/me/id.pdf']);
+return [chooser.multiple, chooser.id, r.ok].join(' ')";
+    let waited = r#"{"ok":true,"url":"https://shop.test/","title":"Shop","changed":"","summary":"a file chooser opened · shop.test","chooser":3,"multiple":false,"kind":"input"}"#;
+    let out = b.ok(
+        p,
+        &[
+            ("act", r#"{"target":"tab:7","action":"expect_chooser"}"#, ACT_OK),
+            ("act", r#"{"target":"tab:7","action":"click","locator":{"text":"Justificatif"}}"#, ACT_OK),
+            ("act", r#"{"target":"tab:7","action":"wait_chooser"}"#, waited),
+            ("act", r#"{"target":"tab:7","action":"set_input_files","chooser":3,"files":["/Users/me/id.pdf"]}"#, ACT_OK),
+        ],
+    );
+    assert_eq!(out, "false 3 true");
+    // no chooser: the C1 error is thrown, catchable by its code
+    let p = "const t = computer.browser.tab(7);
+try { await t.waitForFileChooser(() => t.ref('e2').click(), { timeout: 1000 }); } catch (e) { return e.code; }";
+    let none = r#"{"error":{"code":"chooser_not_opened","message":"no file chooser opened within 1000 ms"}}"#;
+    let out = b.ok(
+        p,
+        &[
+            ("act", r#"{"target":"tab:7","action":"expect_chooser"}"#, ACT_OK),
+            ("act", r#"{"target":"tab:7","action":"click","ref":"e2"}"#, ACT_OK),
+            ("act", r#"{"target":"tab:7","action":"wait_chooser","timeout_ms":1000}"#, none),
+        ],
+    );
+    assert_eq!(out, "chooser_not_opened");
+}

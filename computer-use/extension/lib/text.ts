@@ -1,11 +1,15 @@
 // What people read: the `summary` line the TUI shows after ↖ (designer,
 // m_3616), and the pages the extension refuses (design §5.1). Pure.
 
+import { uploadSummary, baseName } from "./upload.js";
+
+const filesList = (f: unknown): string[] => (typeof f === "string" ? [f] : Array.isArray(f) ? f.map(String) : []);
+
 /** "https://www.amazon.fr/x" → "amazon.fr"; no host → "". */
 /** An element as a summary names it (a snapshot's node). */
 export type Named = { role: string; name?: string };
 /** The act args a summary reads. */
-export type SummaryArgs = { value?: unknown; text?: unknown; direction?: string; amount?: number };
+export type SummaryArgs = { value?: unknown; text?: unknown; direction?: string; amount?: number; files?: unknown };
 /** A refused URL: the C1 message's start, the summary's reason, the place. */
 export type Refused = { why: string; short: string; place: string };
 
@@ -59,11 +63,14 @@ export function summary(action: string, el: Named | null | undefined, args: Summ
     case "wait": return `waited for ${el ? what(el) : args.text !== undefined ? q(args.text) : `${Math.round((args.amount ?? 0) / 100) / 10} s`}${at(host)}`;
     case "read": return `read ${el ? what(el) : "the page"}${at(host)}`;
     case "open": return `opened a tab${at(host)}`;
+    case "set_input_files": return uploadSummary(filesList(args.files).map(baseName), what(el), host);
+    case "expect_chooser": return `waiting for a file chooser${at(host)}`;
+    case "wait_chooser": return `a file chooser opened${at(host)}`;
     default: return `${action}${at(host)}`;
   }
 }
 
-const VERB: Record<string, string> = { click: "click", fill: "type in", type: "type in", press: "press", select: "pick in", check: "check", hover: "point at", scroll: "scroll", goto: "go to", close: "close", wait: "wait for", read: "read", open: "open" };
+const VERB: Record<string, string> = { set_input_files: "attach files to", expect_chooser: "wait for a file chooser", wait_chooser: "wait for a file chooser", click: "click", fill: "type in", type: "type in", press: "press", select: "pick in", check: "check", hover: "point at", scroll: "scroll", goto: "go to", close: "close", wait: "wait for", read: "read", open: "open" };
 
 /**
  * The user-facing line of a failed action (no ✗: the TUI adds it):

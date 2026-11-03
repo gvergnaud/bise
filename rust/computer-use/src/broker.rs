@@ -10,8 +10,10 @@
 //! The broker connects to the helper app itself (C5), starting it when
 //! its socket is missing. It routes `tab:` targets to the browser that owns
 //! the tab and `app:` targets to the helper, refuses the hard-refused
-//! targets (`refuse.rs`), writes screenshots to the agent's `TMPDIR`, holds
-//! stop and pause, and writes C6's files.
+//! targets (`refuse.rs`), checks an upload's files right before they go
+//! (`files.rs`: the browser gets their real paths, events.jsonl each one),
+//! writes screenshots to the agent's `TMPDIR`, holds stop and pause, and
+//! writes C6's files.
 
 use std::collections::{BTreeMap, HashMap};
 use std::io::{BufRead, BufReader, Write};
@@ -823,7 +825,7 @@ fn on_target(sh: &Arc<Shared>, agent: &str, tmpdir: &std::path::Path, op: &str, 
     };
     let action = str_of(args, "action").unwrap_or("");
     if op == "act" && action.is_empty() {
-        return Err(err("bad_args", "act needs an action: click, fill, type, press, select, check, hover, scroll, goto, close, wait or read"));
+        return Err(err("bad_args", "act needs an action: click, fill, type, press, select, check, hover, scroll, goto, close, wait, read, set_input_files, expect_chooser or wait_chooser"));
     }
     // one target the user took over, or all of them ("*": ctl `pause`)
     if lock(&sh.inner).agents.get(agent).is_some_and(|a| a.paused.iter().any(|p| p == ts || p == "*")) {
@@ -857,12 +859,34 @@ fn on_target(sh: &Arc<Shared>, agent: &str, tmpdir: &std::path::Path, op: &str, 
             if action == "goto" {
                 return Err(err("bad_args", "goto works on tabs only"));
             }
+            if matches!(
+                action,
+                "set_input_files" | "expect_chooser" | "wait_chooser"
+            ) {
+                return Err(err("bad_args", "attaching files works in tabs only"));
+            }
             let link = helper(sh)?;
             let name = lock(&sh.inner).app_names.get(ts).cloned().unwrap_or_else(|| bundle.rsplit('.').next().unwrap_or(bundle).to_string());
             (link, name.clone(), name)
         }
     };
-    let r = forward(sh, link, Some(agent), Some(ts), op, args, wait)?;
+    // an upload: the files are checked here, right before they go (the
+    // broker reads what the agent's sandbox can't: files.rs), and the
+    // browser gets their real paths
+    let upload = (op == "act" && action == "set_input_files")
+        .then(|| upload_files(sh, args))
+        .transpose()?;
+    let r = match &upload {
+        Some((sent, _)) => forward(sh, link, Some(agent), Some(ts), op, sent, wait)?,
+        None => forward(sh, link, Some(agent), Some(ts), op, args, wait)?,
+    };
+    if let Some((_, files)) = &upload {
+        let url = str_of(&r, "url")
+            .map(String::from)
+            .or_else(|| lock(&sh.inner).seen.get(ts).map(|s| s.0.clone()))
+            .unwrap_or_default();
+        let _ = state::attached(&sh.opts.paths, agent, &short_host(&url), files);
+    }
     let r = if op == "screenshot" {
         let n = {
             let mut inner = lock(&sh.inner);
@@ -888,6 +912,24 @@ fn on_target(sh: &Arc<Shared>, agent: &str, tmpdir: &std::path::Path, op: &str, 
     };
     driving(sh, agent, &what, &place);
     Ok(r)
+}
+
+/// `set_input_files`'s args with its files checked and made real
+/// (files.rs), and those real paths for the `attached` event.
+fn upload_files(sh: &Arc<Shared>, args: &Value) -> Result<(Value, Vec<String>), Value> {
+    let p = &sh.opts.paths;
+    let homes = crate::files::Homes {
+        home: p.home.clone(),
+        bise: p.root.clone(),
+    };
+    let files = crate::files::check(args.get("files").unwrap_or(&Value::Null), &homes)?;
+    let real: Vec<String> = files
+        .iter()
+        .map(|f| f.path.to_string_lossy().into_owned())
+        .collect();
+    let mut sent = args.clone();
+    sent["files"] = json!(real);
+    Ok((sent, real))
 }
 
 fn ticker(sh: Arc<Shared>) {

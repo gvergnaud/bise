@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use bise_home::DICTATION_DIR;
 
 use super::paths::{fold, Fs, Roots};
-use super::secrets::{Held, Secrets};
+use super::secrets::{Held, Secrets, SecretsUse};
 use super::{parse, tiers, CacheKey, Call};
 
 /// The profile with the network closed (loopback and unix sockets kept).

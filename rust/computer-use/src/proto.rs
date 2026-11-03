@@ -2,10 +2,11 @@
 
 use serde_json::{json, Value};
 
-/// C1 error codes.
-pub const CODES: [&str; 13] = [
+/// C1 error codes (the last 4: uploads, `set_input_files`).
+pub const CODES: [&str; 17] = [
     "not_set_up", "no_browser", "no_helper", "no_permission", "not_found", "ambiguous", "stale_ref", "stopped",
-    "paused", "refused", "timeout", "needs_front", "bad_args",
+    "paused", "refused", "timeout", "needs_front", "bad_args", "file_not_found", "file_too_large", "no_file_input",
+    "chooser_not_opened",
 ];
 
 /// The raw tools (C1).

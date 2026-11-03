@@ -532,7 +532,34 @@ fn judge_edit(
 /// runs whatever it gets: in `auto` nothing writes without his word); a
 /// read runs; a name that says neither: the cache by exact arguments,
 /// else the checker.
+/// computer use's upload (`computer.act` with `set_input_files`, task
+/// cu-upload): it sends the user's files to a site. Neither a read nor a
+/// plain write: the checker judges it with his words (he may have asked
+/// for exactly this upload), a saved `computer.act` rule never covers it,
+/// and its card never offers "always" ([`always_tool`]).
+pub fn is_upload(tool: &str, args: &serde_json::Value) -> bool {
+    tool == "computer.act" && args.get("action").and_then(|a| a.as_str()) == Some("set_input_files")
+}
+
+/// The rule a card's "always" saves for a call judged whole (no parts):
+/// its tool, but never bash's nor an upload's (`computer.act` would allow
+/// every click; architect m_52654).
+pub fn always_tool(call: &Call) -> Option<String> {
+    (call.tool != "bash" && !is_upload(&call.tool, &call.args)).then(|| call.tool.clone())
+}
+
 fn judge_connector(call: &Call, rules: &Rules, cache: &Cache) -> Verdict {
+    if is_upload(&call.tool, &call.args) {
+        // the exact call only (same files, same target): never the tool
+        let key = CacheKey::Exact(format!("{} {}", call.tool, call.args));
+        if cache.allows(&key) {
+            return Verdict::Allow { tier: 4 };
+        }
+        return Verdict::Check {
+            parts: vec![],
+            keys: vec![key],
+        };
+    }
     if rules.allows_tool(&call.repo, &call.tool) {
         return Verdict::Allow { tier: 2 };
     }

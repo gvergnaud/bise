@@ -651,7 +651,11 @@ impl Shell {
             Verdict::Card { reason, always } => self.open_gate_card(dir, &call, &[], &reason, always, vec![]),
             Verdict::Check { parts, keys } => {
                 if self.gates.runner.checker() == Checker::Off {
-                    let tool = (parts.is_empty()).then(|| call.tool.clone());
+                    let tool = if parts.is_empty() {
+                        approvals::always_tool(&call)
+                    } else {
+                        None
+                    };
                     let (reason, always) = match approvals::card_when_off(&parts, tool) {
                         Verdict::Card { reason, always } => (reason, always),
                         _ => (approvals::CHECKER_OFF.to_string(), None),
@@ -702,9 +706,9 @@ impl Shell {
                     let reason = d.reason(&req.call.roots());
                     return self.open_gate_card(dir, &req.call, &[], &reason, always, req.keys);
                 }
-                let always = Some(approvals::always_rules(&req.parts)).filter(|a| !a.is_empty()).or_else(|| {
-                    req.parts.is_empty().then(|| vec![req.call.tool.clone()]).filter(|_| req.call.tool != "bash")
-                });
+                let always = Some(approvals::always_rules(&req.parts))
+                    .filter(|a| !a.is_empty())
+                    .or_else(|| req.parts.is_empty().then(|| approvals::always_tool(&req.call)).flatten().map(|t| vec![t]));
                 self.open_gate_card(dir, &req.call, &req.parts, &reason, always, req.keys);
             }
         }
@@ -1051,7 +1055,7 @@ impl Shell {
                 match verdict {
                     Verdict::Card { always, .. } => (always, vec![]),
                     Verdict::Check { parts, keys } => {
-                        let tool = (call.tool != "bash").then(|| call.tool.clone());
+                        let tool = approvals::always_tool(&call);
                         let always = Some(approvals::always_rules(&parts))
                             .filter(|a| !a.is_empty())
                             .or_else(|| parts.is_empty().then_some(tool).flatten().map(|t| vec![t]));

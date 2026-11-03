@@ -1,6 +1,6 @@
 ---
 name: computer-use
-description: Computer use - you can drive the user's own browser (Chrome, Edge, Brave, Vivaldi, Opera, Arc) in the background, with his logins, and control his Mac apps (Notes, TextEdit, Figma...) through Accessibility, from run_typescript - open pages in your own tab group, read them, click, type, fill forms, check boxes, take screenshots of a tab or an app window. Load it when the user says computer use, or asks about his browser, his tabs, Chrome, a web page or an app, or when a task needs to see, read, click or type in one - looking something up on a site, checking a page or a deploy, filling a form, reading a dashboard, testing a local web page, or anything the user would otherwise do by hand in a browser or an app. The shell (open, osascript) can only launch a URL or list tab titles: it cannot read or act in a page.
+description: Computer use - you can drive the user's own browser (Chrome, Edge, Brave, Vivaldi, Opera, Arc) in the background, with his logins, and control his Mac apps (Notes, TextEdit, Figma...) through Accessibility, from run_typescript - open pages in your own tab group, read them, click, type, fill forms, check boxes, take screenshots of a tab or an app window, attach files to a page (uploads). Load it when the user says computer use, or asks about his browser, his tabs, Chrome, a web page or an app, or when a task needs to see, read, click or type in one - looking something up on a site, checking a page or a deploy, filling a form, reading a dashboard, testing a local web page, or anything the user would otherwise do by hand in a browser or an app. The shell (open, osascript) can only launch a URL or list tab titles: it cannot read or act in a page.
 ---
 
 # Computer use
@@ -55,7 +55,8 @@ return snap;
 | tab and app | `snapshot({ maxNodes })` (text), `screenshot({ element?, maxWidth? })` (image block), `getByRole(role, { name, exact })`, `getByText(text \| /re/)`, `getByLabel(text)`, `locator({...})`, `ref("e14")`, `press("Control+A Delete")`, `type(text)`, `scroll(dir?, px?)`, `waitFor(text \| locator \| ms, { timeout })`, `read()` (page text, 4000 chars), `act({...})` (raw) |
 | tab only | `goto(url)`, `close()`, `.url`, `.title`, `.userTouched` |
 | app only | `window(title)` (a handle on that window), `.name`, `.pid`, `.windows` |
-| locator | `click()`, `fill(text)`, `type(text)`, `press(keys)`, `check()`, `uncheck()`, `select(value)`, `hover()`, `scroll(dir?, px?)`, `textContent()`, `waitFor()`, `count()`, `ref()`, `screenshot()`, `first()`, `last()`, `nth(i)` |
+| tab only | `waitForFileChooser(fn, { timeout })` (a `FileChooser`: `setFiles(paths)`, `.multiple`) |
+| locator | `click()`, `fill(text)`, `type(text)`, `press(keys)`, `check()`, `uncheck()`, `select(value)`, `hover()`, `scroll(dir?, px?)`, `setInputFiles(paths)`, `textContent()`, `waitFor()`, `count()`, `ref()`, `screenshot()`, `first()`, `last()`, `nth(i)` |
 
 Every action returns `{ ok, url, title, changed, summary }`: `changed` is a
 short diff of the page after the action, so you often need no new
@@ -83,6 +84,39 @@ visible, enabled element.
 - Raw tools stay callable for odd cases: `tools.computer.act({ target,
   action, ref | locator, ... })`; they return `{ error }` instead of
   throwing.
+
+## Attaching files (uploads)
+
+Attach files to a page with `setInputFiles`, by absolute path. It never
+opens the Mac's file dialog, and it needs no helper app: bise catches the
+file chooser in your tab and hands the files to the page.
+
+```ts
+// on the input, or on the button, label or drop zone that leads to it
+const r = await tab.getByRole("button", { name: /upload payslip/i }).setInputFiles(["/Users/me/Documents/CAFPI/02 payslip.pdf"]);
+// r.via: "input" (the page's file input), "chooser" (the click opened one) or "drop" (a drop zone)
+// r.changed: what the page shows after (the file name, a progress bar)
+
+// when only a click opens the chooser, or setInputFiles can't tell which input:
+const chooser = await tab.waitForFileChooser(() => tab.getByText("Justificatif d'identité").click());
+await chooser.setFiles(["/Users/me/Documents/CAFPI/01 id.pdf"]);
+```
+
+- **An upload sends his files to that site: ask first**, unless the user
+  asked for this upload in this task. bise may also ask him on its own,
+  and every path you attach goes in his activity.
+- Absolute paths that exist, at most 20 per call and 50 MB per file.
+  Never secrets: `~/.ssh`, keys and keychains, `~/Library` (but iCloud
+  Drive and the cloud drives), `~/.bise`, other tools' credentials and
+  system folders are `refused`.
+- In a snapshot a file input shows as a button named by its label,
+  `- button "Identity card" [e5] value="No file chosen"`: target it, or
+  the page's own Upload button next to it.
+- One file per slot: an input that takes one file gets one (`bad_args`
+  otherwise). Several slots: one call each. Check `changed` (or
+  `waitFor("01 id.pdf")`) to see the page took it.
+- A page that uploads in a frame from another site, or a site that checks
+  its drops are real mouse drags, may refuse: say so and ask the user.
 
 ## Pages bise can't read
 
@@ -130,3 +164,7 @@ visible, enabled element.
 | `refused` | a protected target: do it another way, or ask the user |
 | `needs_front` | this action needs the app in front: ask the user |
 | `bad_args` | fix the call (the message says how) |
+| `file_not_found` | the path doesn't exist: check it (`ls` in bash), absolute, no `~` |
+| `file_too_large` | over 50 MB: ask the user to attach it himself |
+| `no_file_input` | the element leads to no file input, opened no chooser and took no drop: read `candidates` (the page's file inputs, the upload buttons) and target one |
+| `chooser_not_opened` | the click opened no file chooser: snapshot to see what happened, or use `setInputFiles` on the button |

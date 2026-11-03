@@ -124,7 +124,9 @@ Namespace `computer` (the built-in plugin). Targets are strings:
 - Errors: `{ code, message, candidates? }` with `code` in
   `not_set_up`, `no_browser`, `no_helper`, `no_permission`, `not_found`,
   `ambiguous`, `stale_ref`, `stopped`, `paused`, `refused`, `timeout`,
-  `needs_front`, `bad_args`. `message` is one sentence the agent can
+  `needs_front`, `bad_args`, and for uploads (`set_input_files`, task
+  cu-upload) `file_not_found`, `file_too_large`, `no_file_input`,
+  `chooser_not_opened`. `message` is one sentence the agent can
   act on ("the user stopped you in Chrome; ask before you start again").
   An `act` error also carries `summary`, the user-facing failure line
   without the `✗` (the TUI adds it in err colour): `couldn't click "Add
