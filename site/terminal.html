@@ -613,13 +613,20 @@
 
   /* the windows may spill over the frame only where there's room; on a phone the stage clips as before */
   @media (max-width: 900px) { .v1 .stage, .v2 .stage { overflow:hidden; } }
-  /* once the page moves, frosted paper under the header so its links stay readable over the screens (the home's header does the same) */
-  header { transition:background-color .3s, box-shadow .3s, backdrop-filter .3s, -webkit-backdrop-filter .3s; }
-  header.lifted { background-color:color-mix(in srgb, var(--bg) 72%, transparent); -webkit-backdrop-filter:blur(12px) saturate(1.2); backdrop-filter:blur(12px) saturate(1.2);
-    box-shadow:0 1px 0 color-mix(in srgb, var(--faint) 70%, transparent), 0 10px 24px -18px #4a3a2a59; }
-  @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) { header.lifted { background-color:color-mix(in srgb, var(--bg) 95%, transparent); } }
-  @media (prefers-reduced-transparency: reduce) { header.lifted { background-color:var(--bg); -webkit-backdrop-filter:none; backdrop-filter:none; } }
-  @media (prefers-reduced-motion: reduce) { header, header .logo { transition:none; } }
+  /* once the page moves, a progressive blur under the header so its links stay readable over the screens (the home's header does the same):
+     sharp at its bottom edge, blurrier and more paper toward the top, no line. four masked blur layers, then the paper (b) on the same ramp */
+  header .haze { position:absolute; inset:0 0 -24px; z-index:-1; pointer-events:none; }
+  header .haze > * { position:absolute; inset:0; opacity:0; transition:opacity .3s; }
+  header.lifted .haze > * { opacity:1; }
+  header .haze i:nth-child(1) { -webkit-backdrop-filter:blur(1px); backdrop-filter:blur(1px); --m:linear-gradient(to top, transparent 0%, #000 20%, #000 40%, transparent 60%); }
+  header .haze i:nth-child(2) { -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px); --m:linear-gradient(to top, transparent 20%, #000 40%, #000 60%, transparent 80%); }
+  header .haze i:nth-child(3) { -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); --m:linear-gradient(to top, transparent 40%, #000 60%, #000 80%, transparent 100%); }
+  header .haze i:nth-child(4) { -webkit-backdrop-filter:blur(12px); backdrop-filter:blur(12px); --m:linear-gradient(to top, transparent 60%, #000 80%); }
+  header .haze i { -webkit-mask-image:var(--m); mask-image:var(--m); }
+  header .haze b { background:linear-gradient(to top, transparent, color-mix(in srgb, var(--bg) 55%, transparent) 45%, color-mix(in srgb, var(--bg) 82%, transparent)); }
+  @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) { header .haze b { background:linear-gradient(to top, transparent, color-mix(in srgb, var(--bg) 92%, transparent) 40%, var(--bg)); } }
+  @media (prefers-reduced-transparency: reduce) { header .haze i { display:none; } header .haze b { background:linear-gradient(to top, transparent, var(--bg) 30%); } }
+  @media (prefers-reduced-motion: reduce) { header .logo, header .haze > * { transition:none; } }
   @media (max-width: 640px) { body { font-size:18px; } h2 { font-size:30px; } .bub { white-space:nowrap; } }
 
   /* landing-b: no thread-and-kiss animation in the hero sky (user). the seeds drift there instead */
@@ -650,6 +657,7 @@
 </defs></svg>
 
 <header id="top">
+  <div class="haze" aria-hidden="true"><i></i><i></i><i></i><i></i><b></b></div>
   <a class="logo" href="#">bise <span class="acc">:*</span></a>
   <nav>
     <a class="opt" href="/">bise desktop</a>
