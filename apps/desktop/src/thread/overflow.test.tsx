@@ -63,7 +63,7 @@ const CTX: RowCtx = { tkey: 'acme/main', project: 'acme-1a2b3c4d', agent: 'main'
 /** a 200-char path with no space, as the signing error's public key */
 const PATH = `/Users/someone/Library/Containers/com.example.SecretAgent/Data/PublicKeys/${'553053d9d8e6075500c2cb0bb0'.repeat(5)}.pub`.slice(0, 200);
 
-const notice = (text: string): Entry => ({ pos: 7, at_ms: 1, kind: 'notice', text, notice: { level: 'err', text } }) as Entry;
+const notice = (text: string): Entry => ({ pos: 7, at_ms: 1, kind: 'notice', text, notice: { level: 'err', text } });
 
 /** a row of the thread's column, as ThreadScreen and EntryRow draw it */
 function inColumn(child: React.ReactNode) {
