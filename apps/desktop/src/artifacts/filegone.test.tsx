@@ -8,6 +8,9 @@ import { panel } from '@/proto/words_panel.gen';
 import { Store, StoreProvider } from '@/store';
 import { RouterContext, createRouter } from '@/app/router';
 import { ArtifactOpen } from './index';
+import { keptStorage } from '@/app/keep';
+import { load } from '@/composer/drafts';
+import { entrySegments } from '@/composer/entry';
 
 afterEach(() => {
   cleanup();
@@ -53,6 +56,11 @@ describe("the 'file gone' state", () => {
     expect(screen.getByTestId('artifact.filegone.ask').textContent).toBe(panel.art_file_gone_ask({ agent: 'perf' }));
     // the head stays as it is
     expect(screen.getByTestId('artifact.title').textContent).toBe('notes.md');
+    // ask: the artifact as a chip in perf's composer, its own drafts (ui-review m_52808)
+    keptStorage.removeItem('bise.composer.v1.shop-1/perf');
+    fireEvent.click(screen.getByTestId('artifact.filegone.ask'));
+    const segs = entrySegments(load(keptStorage, 'shop-1/perf').draft ?? 'null') ?? [];
+    expect(segs.filter((x) => x.kind === 'chip').map((x) => x.kind === 'chip' ? x.chip : null)).toEqual([{ kind: 'artifact', n: 1, id: 'notes', title: 'notes.md', url: '/w/notes.md' }]);
   });
 
   it("an older version's file gone, a newer one there: 'open v3' shows the newest", async () => {

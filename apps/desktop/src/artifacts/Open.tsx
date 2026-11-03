@@ -33,6 +33,7 @@ import { useMenuAction } from '@/app/menu';
 import { tilde } from '@/app/barplaces';
 import type { SaveResult } from '@/shared/api';
 import { putInDraft } from './put';
+import { keptStorage } from '@/app/keep';
 import { useAboutWords } from './maker';
 import { goneLinkOf, goneRoute } from './gone';
 import { takeVersion, useArtifactLinks } from './links';
@@ -54,7 +55,9 @@ export function usePutInMessage(): (project: string, a: { id: string; title: str
   const router = useRouter();
   return useCallback(
     (project, a) => {
-      putInDraft(window.localStorage, `${project}/${a.agent}`, a);
+      // the composer's own drafts (app/keep.ts keptStorage), never the page's localStorage: the
+      // chip never reached the composer (ui-review m_52808)
+      putInDraft(keptStorage, `${project}/${a.agent}`, a);
       router.go({ screen: 'thread', project, agent: a.agent });
     },
     [router],
@@ -323,8 +326,8 @@ export function FileGone({ agent, shown, newest, onNewest, onAsk }: { agent: str
       <Empty
         title={older ? panel.art_file_gone_version : panel.art_file_gone}
         action={older
-          ? <Button kind="ghost" size="sm" onClick={onNewest} testId="artifact.filegone.newest">{panel.art_file_gone_open({ v: newest })}</Button>
-          : <Button kind="ghost" size="sm" onClick={onAsk} testId="artifact.filegone.ask">{panel.art_file_gone_ask({ agent })}</Button>}
+          ? <Button onClick={onNewest} testId="artifact.filegone.newest">{panel.art_file_gone_open({ v: newest })}</Button>
+          : <Button onClick={onAsk} testId="artifact.filegone.ask">{panel.art_file_gone_ask({ agent })}</Button>}
       >
         {panel.art_file_gone_why}
       </Empty>

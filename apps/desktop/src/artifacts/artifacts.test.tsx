@@ -18,6 +18,7 @@ import { putInDraft } from './put';
 import { browserUrl, cutFolder, frameSrc, themedUrl } from './Open';
 import { aboutText } from '@/thread/about';
 import { load } from '@/composer/drafts';
+import { keptStorage } from '@/app/keep';
 import { entryOf, entrySegments } from '@/composer/entry';
 
 // the window's bar: the page's kinds, search and + are never there (his m_44961)
@@ -308,13 +309,13 @@ describe('artifacts screens', () => {
 
   it("⋯ puts it in a message: a chip at the end of perf's draft, then perf's thread; show in Finder only with a file and the bridge", () => {
     window.localStorage.clear();
-    window.localStorage.setItem('bise.composer.v1.shop-1/perf', JSON.stringify({ draft: entryOf([{ kind: 'text', text: 'look at' }]), history: [], queue: [] }));
+    keptStorage.setItem('bise.composer.v1.shop-1/perf', JSON.stringify({ draft: entryOf([{ kind: 'text', text: 'look at' }]), history: [], queue: [] }));
     const router = mount(<ArtifactOpen project="shop-1" id="notes" />, { screen: 'artifacts', project: 'shop-1', id: 'notes' });
     fireEvent.click(screen.getByTestId('artifact.more'));
     expect(screen.queryByTestId('artifact.finder')).toBeNull();
     fireEvent.click(screen.getByTestId('artifact.put'));
     expect(router.get()).toEqual({ screen: 'thread', project: 'shop-1', agent: 'perf' });
-    const draft = load(window.localStorage, 'shop-1/perf').draft ?? '';
+    const draft = load(keptStorage, 'shop-1/perf').draft ?? '';
     expect(entrySegments(draft)).toEqual([
       { kind: 'text', text: 'look at ' },
       { kind: 'chip', chip: { kind: 'artifact', n: 1, id: 'notes', title: 'product page, before / after', url: 'http://127.0.0.1:47123/p/notes' } },
@@ -388,7 +389,7 @@ describe('artifacts screens', () => {
       expect(looked).toEqual(['/x/shop/bench.csv']);
       expect(opened).toEqual(['notes']);
       fireEvent.keyDown(list, { key: '@' });
-      expect(load(window.localStorage, 'shop-1/perf').draft).toContain('"id":"bench"');
+      expect(load(keptStorage, 'shop-1/perf').draft).toContain('"id":"bench"');
     } finally {
       delete g.bise;
     }
