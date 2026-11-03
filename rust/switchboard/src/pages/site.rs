@@ -93,8 +93,21 @@ pub fn items(pages: &[PageMeta], arts: &[ArtMeta]) -> Vec<Item> {
 /// Where the page server serves version `v` of artifact `id` from bise's
 /// copy (server.rs `/a/<id>/<v>/<file>`): the one rule for the pages'
 /// artifact links and the typed row's `frame_url` (proto_view::artifacts).
+/// The file's name is %-encoded byte for byte ([`href_name`]).
 pub fn copy_href(id: &str, v: u64, copy: &str) -> String {
-    format!("/a/{}/{}/{}", id, v, file_of(copy))
+    format!("/a/{}/{}/{}", id, v, href_name(&file_of(copy)))
+}
+
+/// A copy's name in a link: each byte but A-Z a-z 0-9 - . _ ~ %-encoded,
+/// so the server decodes it back to the very bytes on disk (an accent
+/// written NFD stays NFD; architect m_52591: no NFC/NFD guess).
+pub fn href_name(name: &str) -> String {
+    name.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => (b as char).to_string(),
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
 }
 
 /// Where bise's viewer frames a site's copy (kit/office/site.js):
@@ -102,7 +115,7 @@ pub fn copy_href(id: &str, v: u64, copy: &str) -> String {
 /// notes' selection script in each html page ([`framed`], architect
 /// m_24172). A site's own relative links stay under `framed/`.
 pub fn framed_href(id: &str, v: u64, copy: &str) -> String {
-    format!("/a/{}/{}/framed/{}", id, v, file_of(copy))
+    format!("/a/{}/{}/framed/{}", id, v, href_name(&file_of(copy)))
 }
 
 /// The one rule for "does this request get the selection script?": a path
@@ -301,8 +314,8 @@ pub fn sidebar(items: &[Item], home: &str) -> String {
 /// `/a/<id>/<v>/` and [`framed`]), `base` the copy (`<id>/v<n>/<name>`):
 /// a folder's file (none: its index.html); a copied file by its name (or
 /// none), or a file it links kept beside it (artifacts_assets). The one
-/// rule for both: inside the version's folder, plain names only
-/// ([`safe_rel`], after %-decoding), and its real path stays there (a
+/// rule for both: inside the version's folder, no `..`, hidden name or
+/// separator ([`safe_rel`], after %-decoding), and its real path stays there (a
 /// symlink out is refused). None: not served.
 pub fn copy_file(base: &std::path::Path, rest: &[&str]) -> Option<std::path::PathBuf> {
     let file = base.is_file();
@@ -319,14 +332,15 @@ pub fn copy_file(base: &std::path::Path, rest: &[&str]) -> Option<std::path::Pat
     (real.is_file() && real.starts_with(root.canonicalize().ok()?)).then_some(real)
 }
 
-/// A path under an artifact's copy, safe to join: plain names, no `..`,
-/// no hidden files.
+/// A path under an artifact's copy (its names, %-decoded), safe to join:
+/// refused only what can leave the folder or reach a hidden file: no
+/// names, an empty one, one that starts with `.` (`..`, `.git`), a `/`
+/// or `\` inside one (a decoded `%2f`, `%5c`), a control character (NUL).
+/// Any other name passes, accents and parentheses too (artifact-name-404);
+/// copy_file's canonicalize + starts_with stays the real guard.
 pub fn safe_rel(rest: &[&str]) -> Option<String> {
-    let ok = rest.iter().all(|s| {
-        !s.is_empty()
-            && !s.starts_with('.')
-            && s.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_' | b' ' | b'@' | b'+'))
-    });
+    let ok = !rest.is_empty()
+        && rest.iter().all(|s| !s.is_empty() && !s.starts_with('.') && !s.chars().any(|c| c == '/' || c == '\\' || c.is_control()));
     ok.then(|| rest.join("/"))
 }
 
@@ -422,7 +436,18 @@ mod tests {
         assert_eq!(safe_rel(&[".."]), None);
         assert_eq!(safe_rel(&["a", "..", "b"]), None);
         assert_eq!(safe_rel(&[".git", "config"]), None);
-        assert_eq!(safe_rel(&["a%2f..", "b"]), None);
+        // safe_rel gets names decoded once (copy_file): a decoded %2f is a `/`
+        assert_eq!(safe_rel(&["a/..", "b"]), None, "a decoded %2f");
+        assert_eq!(safe_rel(&["..\\x"]), None);
+        assert_eq!(safe_rel(&["a\\b.pdf"]), None, "a decoded %5c");
+        assert_eq!(safe_rel(&["a\0.pdf"]), None);
+        assert_eq!(safe_rel(&["a\n.pdf"]), None);
+        assert_eq!(safe_rel(&["a", ""]), None);
+        assert_eq!(safe_rel(&[]), None);
+        let name = "Résumé (à signer) 日本.pdf";
+        assert_eq!(safe_rel(&[name]).as_deref(), Some(name));
+        assert_eq!(href_name(name), "R%C3%A9sum%C3%A9%20%28%C3%A0%20signer%29%20%E6%97%A5%E6%9C%AC.pdf");
+        assert_eq!(crate::artifacts_assets::decode(&href_name(name)), name, "the bytes come back");
         assert_eq!(ctype("x/a.HTML"), Some("text/html; charset=utf-8"));
         assert_eq!(ctype("a.sh"), None);
     }

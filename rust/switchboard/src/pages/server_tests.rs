@@ -221,6 +221,44 @@ fn a_copied_file_is_served_at_its_frame_url() {
     let _ = std::fs::remove_dir_all(d);
 }
 
+/// artifact-name-404: a copy named in plain words (accents, parentheses)
+/// is served at its href; before, safe_rel took only ASCII and it was a
+/// 404. A name written NFD comes back NFD through its href (site::href_name,
+/// architect m_52591). `..`, a hidden name and a decoded separator stay refused.
+#[test]
+fn a_copy_named_with_accents_and_parentheses_is_served() {
+    let (p, d) = pages();
+    let work = d.join("work");
+    std::fs::create_dir_all(&work).unwrap();
+    let name = "Auto-certification résidence fiscale BoursoBank - Gabriel Vergnaud (à dater et signer).pdf";
+    std::fs::write(work.join(name), b"%PDF-1.4").unwrap();
+    std::fs::write(d.join("artifacts.pdf"), b"%PDF-secret").unwrap();
+    let arts = crate::artifacts::Store::new(&d);
+    let a = crate::artifacts::Add { target: name.into(), agent: "main".into(), by: "main".into(), cwd: work.to_string_lossy().to_string(), ..Default::default() };
+    let m = arts.add(&a, 10).unwrap().meta;
+    let href = crate::pages::site::copy_href(&m.id, 1, m.versions[0].copy.as_deref().unwrap());
+    assert!(href.ends_with("/1/Auto-certification%20r%C3%A9sidence%20fiscale%20BoursoBank%20-%20Gabriel%20Vergnaud%20%28%C3%A0%20dater%20et%20signer%29.pdf"), "{href}");
+    let r = get(&p, &href);
+    assert_eq!((r.status, r.ctype, text(&r)), (200, "application/pdf", "%PDF-1.4".to_string()), "{href}");
+    assert_eq!(get(&p, &crate::pages::site::framed_href(&m.id, 1, m.versions[0].copy.as_deref().unwrap())).status, 200, "framed");
+    // what the browser sent in the bug (parentheses as they are) is served too
+    let r = get(&p, &format!("/a/{}/1/Auto-certification%20r%C3%A9sidence%20fiscale%20BoursoBank%20-%20Gabriel%20Vergnaud%20(%C3%A0%20dater%20et%20signer).pdf", m.id));
+    assert_eq!(r.status, 200);
+    // a name written decomposed (é = e + U+0301): its href keeps those bytes
+    let nfd = "re\u{301}sume\u{301} (v2).pdf";
+    std::fs::write(work.join(nfd), b"%PDF-nfd").unwrap();
+    let m2 = arts.add(&crate::artifacts::Add { target: nfd.into(), ..a.clone() }, 20).unwrap().meta;
+    let href2 = crate::pages::site::copy_href(&m2.id, 1, m2.versions[0].copy.as_deref().unwrap());
+    let r = get(&p, &href2);
+    assert_eq!((r.status, text(&r)), (200, "%PDF-nfd".to_string()), "{href2}");
+    // nothing outside the copy's folder, nothing hidden
+    let at = |bad: &str| get(&p, &format!("/a/{}/1/{bad}", m.id)).status;
+    for bad in ["..%2f..%2f..%2fartifacts.pdf", "../../../artifacts.pdf", "..%5c..%5cartifacts.pdf", "a%2f..%2f..%2f..%2f..%2fartifacts.pdf", ".hidden.pdf", "%2e%2e", "x%00.pdf", "%2fetc%2fpasswd"] {
+        assert_eq!(at(bad), 404, "{bad}");
+    }
+    let _ = std::fs::remove_dir_all(d);
+}
+
 /// art-assets: an html artifact's images and css (and the css's
 /// url()) are kept beside its copy and served from its version's
 /// path, plain and framed, byte for byte; a later version keeps its
