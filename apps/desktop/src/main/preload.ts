@@ -105,7 +105,10 @@ const api: BiseApi = {
   openPath: async (path, opts) => (await ipcRenderer.invoke(IPC.openPath, path, opts)) === true,
   quickLook: async (path) => (await ipcRenderer.invoke(IPC.quickLook, path)) === true,
   showInFinder: async (path) => (await ipcRenderer.invoke(IPC.showInFinder, path)) === true,
-  probePage: async (url) => ((await ipcRenderer.invoke(IPC.probePage, url)) === 'down' ? 'down' : 'up'),
+  probePage: async (url) => {
+    const r: unknown = await ipcRenderer.invoke(IPC.probePage, url);
+    return r === 'down' || r === 'gone' ? r : 'up';
+  },
   readSkill: (path, file) => ipcRenderer.invoke(IPC.readSkill, path, file) as Promise<SkillRead>,
   saveCopy: async (path, name) => saved(await ipcRenderer.invoke(IPC.saveCopy, path, name)),
   fileIcon: async (path) => {

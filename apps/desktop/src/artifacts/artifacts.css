@@ -161,3 +161,7 @@
 /* a current match under the top spot that can't scroll out of it: the bar steps to the page's
    bottom right, 8 in from the paper's corner, until it no longer is (designer m_52781) */
 .art-find[data-low] { top: auto; bottom: calc(var(--s-4) + var(--s-2)); }
+
+/* its file gone (designer m_52746): bise's own empty state, centred in the stage, never the
+   server's raw 404 line; ds Empty's words (t-15 text-2, t-13 text-3) and its one action */
+.art-file-gone { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }

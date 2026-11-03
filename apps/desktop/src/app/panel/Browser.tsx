@@ -136,6 +136,7 @@ export function Browser({ project, id, tabId }: { project: string; id: string; t
           id={id}
           bare
           {...(version === undefined ? {} : { version })}
+          onVersion={setVersion}
           composer={false}
           onClose={() => {
             closeTabId(tabId);

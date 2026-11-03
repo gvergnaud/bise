@@ -10,9 +10,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 /** How often a page that doesn't answer is asked again while the panel shows it. */
 export const REPROBE_MS = 2000;
 
-export type Reach = 'checking' | 'up' | 'down';
+/** 'gone': the server answered 404, the artifact's file is gone (designer m_52746: its own state, Open.tsx FileGone) */
+export type Reach = 'checking' | 'up' | 'down' | 'gone';
 
-type ProbeBridge = { probePage?: (url: string) => Promise<'up' | 'down'> };
+type ProbeBridge = { probePage?: (url: string) => Promise<'up' | 'down' | 'gone'> };
 
 /** Pure: is `src` a url of the local pages server (the one kind we probe)? */
 export function probed(src: string | null): src is string {

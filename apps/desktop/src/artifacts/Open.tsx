@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { APP_FRAME_NAME } from './frameNote';
 import { useFrameNote } from './useFrameNote';
-import { Button, IconButton, Kbd, PickerPop, PickerTrigger, Press } from '@/ds';
+import { Button, Empty, IconButton, Kbd, PickerPop, PickerTrigger, Press } from '@/ds';
 import { frame as frameWords } from '@/proto/words_frame.gen';
 import { library } from '@/proto/words_library.gen';
 import { panel } from '@/proto/words_panel.gen';
@@ -312,10 +312,31 @@ export function PageDown({ reach, words, onAgain, onReveal }: { reach: 'checking
 }
 
 /**
+ * An artifact whose file is gone (the pages server's 404; designer m_52746): ds Empty centred in
+ * the stage. An older version's: 'open v<newest>'; the newest's (or the only one's): ask its agent
+ * about it (the artifact in that agent's composer). The head stays as it is. Pure of its props.
+ */
+export function FileGone({ agent, shown, newest, onNewest, onAsk }: { agent: string; shown: number; newest: number; onNewest: () => void; onAsk: () => void }) {
+  const older = shown < newest;
+  return (
+    <div className="art-file-gone" data-testid="artifact.filegone" role="status">
+      <Empty
+        title={older ? panel.art_file_gone_version : panel.art_file_gone}
+        action={older
+          ? <Button kind="ghost" size="sm" onClick={onNewest} testId="artifact.filegone.newest">{panel.art_file_gone_open({ v: newest })}</Button>
+          : <Button kind="ghost" size="sm" onClick={onAsk} testId="artifact.filegone.ask">{panel.art_file_gone_ask({ agent })}</Button>}
+      >
+        {panel.art_file_gone_why}
+      </Empty>
+    </div>
+  );
+}
+
+/**
  * '↗ browser' (page-unreach): a pages-server url is asked first; one that doesn't answer opens no
  * dead tab: the panel asks again and says why. Anything else opens at once.
  */
-export function openChecked(url: string, bise: (ArtBridge & { probePage?: (u: string) => Promise<'up' | 'down'> }) | undefined, again: () => void): void {
+export function openChecked(url: string, bise: (ArtBridge & { probePage?: (u: string) => Promise<'up' | 'down' | 'gone'> }) | undefined, again: () => void): void {
   const probe = bise?.probePage;
   if (!probed(url) || probe === undefined) {
     void bise?.openExternal?.(url);
@@ -340,6 +361,8 @@ export interface ArtifactOpenProps {
   bare?: boolean;
   /** the version shown, when the frame picks it (its own ArtifactVersions); absent: the head's own pick */
   version?: number;
+  /** the frame's own version pick (a panel tab's): the 'file gone' state's 'open v3' goes through it; absent: the head's own pick */
+  onVersion?: (v: number | undefined) => void;
 }
 
 /**
@@ -377,7 +400,7 @@ export function ArtifactVersions({ a, shown, now, anchor, onPick, onClose }: {
  * (maker.ts: the project's main when the maker is archived); the frame draws it under the
  * maker's thread, so here only with `composer`.
  */
-export function ArtifactOpen({ project, id, onClose, composer = true, lead, bare = false, version }: ArtifactOpenProps) {
+export function ArtifactOpen({ project, id, onClose, composer = true, lead, bare = false, version, onVersion }: ArtifactOpenProps) {
   const router = useRouter();
   const it = useAllArtifacts(project).find((x) => x.a.id === id);
   // 'v' on a row of the list opens it with its versions shown
@@ -559,7 +582,18 @@ export function ArtifactOpen({ project, id, onClose, composer = true, lead, bare
             (useFrameNote) for the maker's composer, not the frame's own note. An image zooms in
             the viewer itself (kit/office/image.js; image-pinch), its esc and ⌘0 lent by useFrameNote.
             A video's player goes full screen from its own button (kit/office/video.js): allow it */}
-        {src !== null && reach !== 'up' && (
+        {/* its file gone (the server's 404, designer m_52746): bise's own empty state, never the server's line */}
+        {src !== null && reach === 'gone' && (
+          <FileGone agent={a.agent} shown={shown} newest={a.version}
+            onNewest={() => {
+              if (onVersion !== undefined) onVersion(undefined);
+              else setV(null);
+              setGoneLine(null);
+              setSaved(null);
+            }}
+            onAsk={() => { put(project, a); }} />
+        )}
+        {src !== null && (reach === 'checking' || reach === 'down') && (
           <PageDown reach={reach} words={downWords(row === undefined ? undefined : { name: row.name, running: row.running, down: row.down ?? null }, src, bise?.home)}
             {...(finder === undefined ? {} : { onReveal: (p: string) => { void finder(p); } })}
             onAgain={() => {

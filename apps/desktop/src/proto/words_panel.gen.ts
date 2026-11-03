@@ -356,4 +356,14 @@ export const panel = {
   art_find_next: "next match",
   /** its × button (esc) */
   art_find_close: "close find",
+  /** an artifact whose file is gone (the pages server's 404; designer m_52746): an older version's, a newer one exists */
+  art_file_gone_version: "this version's file is gone.",
+  /** the newest (or only) version's file is gone */
+  art_file_gone: "this file is gone.",
+  /** the line under either */
+  art_file_gone_why: "its agent moved or deleted it.",
+  /** an older version's action: the newest */
+  art_file_gone_open: (a: { v: string | number }): string => "open v" + String(a.v),
+  /** the newest's action: the artifact in its agent's composer */
+  art_file_gone_ask: (a: { agent: string | number }): string => "ask " + String(a.agent) + " about it",
 } as const;

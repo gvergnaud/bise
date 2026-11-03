@@ -119,6 +119,11 @@ pub fn serve(pages: &Pages, id: &str, v: Option<u64>) -> Response {
     };
     let Some(copy) = ver.copy.as_deref().filter(|c| site::serves_copy(&m.by, c)) else { return Response::missing(&format!("no copy of it: {at}")) };
     let Some(kind) = site::viewer_kind(copy) else { return Response::missing(&format!("not a file bise's viewer draws: {at}")) };
+    // its copy gone from bise's store: the 404 the window reads to draw its 'file gone' state
+    // (desktop probe.ts; artifact-find), never a viewer that fails inside the frame
+    if site::copy_file(&state.join("artifacts").join(&m.id).join(copy), &[]).is_none() {
+        return Response::missing(&format!("no such file: {at}"));
+    }
     let shown = Shown {
         id: &m.id,
         title: &m.title,

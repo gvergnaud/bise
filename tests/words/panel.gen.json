@@ -42,6 +42,35 @@
     "one": null,
     "text": "{n} archived"
   },
+  "panel.art_file_gone": {
+    "args": [],
+    "one": null,
+    "text": "this file is gone."
+  },
+  "panel.art_file_gone_ask": {
+    "args": [
+      "agent"
+    ],
+    "one": null,
+    "text": "ask {agent} about it"
+  },
+  "panel.art_file_gone_open": {
+    "args": [
+      "v"
+    ],
+    "one": null,
+    "text": "open v{v}"
+  },
+  "panel.art_file_gone_version": {
+    "args": [],
+    "one": null,
+    "text": "this version's file is gone."
+  },
+  "panel.art_file_gone_why": {
+    "args": [],
+    "one": null,
+    "text": "its agent moved or deleted it."
+  },
   "panel.art_find_close": {
     "args": [],
     "one": null,

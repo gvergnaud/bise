@@ -144,7 +144,7 @@ export function installIpc(testMode: boolean): void {
   ipcMain.handle(IPC.quickLook, (e, raw: unknown): boolean => quickLook(BrowserWindow.fromWebContents(e.sender), raw, testMode));
   ipcMain.handle(IPC.showInFinder, (_e, raw: unknown): boolean => showInFinder(raw, testMode));
   // page-unreach: does an artifact's page server answer, before the panel frames it (probe.ts)
-  ipcMain.handle(IPC.probePage, (_e, raw: unknown): Promise<'up' | 'down'> => probePage(raw));
+  ipcMain.handle(IPC.probePage, (_e, raw: unknown): Promise<'up' | 'down' | 'gone'> => probePage(raw));
   // the skill tab (nm-pages-b): a skill's SKILL.md and its folder, fenced to the latest plugins rows' skill paths
   // kept per project: a later plugins event of another project (or of none) never wipes the paths a
   // tab open on this one reads (a built-in skill gave not_allowed; designer m_43933 #12)

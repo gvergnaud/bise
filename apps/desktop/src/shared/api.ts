@@ -111,7 +111,7 @@ export interface BiseApi {
    * 127.0.0.1 port: 'down' when refused or slow (its project's hub stopped or starting); any
    * other url is 'up' (not probed).
    */
-  readonly probePage: (url: string) => Promise<'up' | 'down'>;
+  readonly probePage: (url: string) => Promise<'up' | 'down' | 'gone'>;
   /**
    * The skill tab's read (nm-pages-b, main/skillfile.ts): a skill's SKILL.md (`path`, from the
    * plugins rows' skill part) or `file`, a .md name from its folder's own listing; fenced to the
