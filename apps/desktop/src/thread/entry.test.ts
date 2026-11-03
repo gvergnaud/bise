@@ -208,6 +208,14 @@ describe('D14 / D15: a report is a status line, a command reads once', () => {
     expect(reportLine('a plain answer')).toBeNull();
     expect(reportLine('waiting for your answer: x', 'blocked')).toBe('blocked · waiting for your answer');
   });
+  it("words that open on the kind say it once: 'blocked: signing key …', never 'blocked · blocked: …' (designer m_52857)", () => {
+    expect(reportLine('[report: blocked] blocked: signing key not found')).toBe('blocked: signing key not found');
+    expect(reportLine('Blocked · waiting on signing', 'blocked')).toBe('Blocked · waiting on signing');
+    expect(reportStatus('[report: done] done: p95 at 180 ms')).toBe('✓ done: p95 at 180 ms');
+    expect(reportStatus('[report: failed] failed: token expired')).toBe('✗ failed: token expired');
+    // a word that only starts like the kind keeps it
+    expect(reportLine('[report: done] doneness checked')).toBe('done · doneness checked');
+  });
   it("'bash: bash /Users/…' reads '$ bash /Users/…'; a tool's args object never shows", () => {
     expect(toolWords('bash: bash /Users/me/x.sh')).toBe('bash /Users/me/x.sh');
     expect(toolWords('cargo test')).toBe('cargo test');

@@ -133,6 +133,44 @@
   margin: 0 0 var(--gap-block);
 }
 
+/* a wide table says it scrolls (designer m_52857): its words fade out over 16 px into the thread's
+   ground on its right edge while there's more to the right, and on its left once scrolled. The
+   table's own scroll drives both (a scroll timeline): the left fade grows over the first 16 px of
+   scroll, the right one shrinks over the last 16. A table that fits has no scroll, so no timeline:
+   both stay 0, no fade. The bar stays the overlay one, on hover (below). */
+@property --th-fade-l {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+@property --th-fade-r {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+@keyframes th-fade-l {
+  from {
+    --th-fade-l: 0px;
+  }
+  to {
+    --th-fade-l: 16px;
+  }
+}
+@keyframes th-fade-r {
+  from {
+    --th-fade-r: 16px;
+  }
+  to {
+    --th-fade-r: 0px;
+  }
+}
+.th-table {
+  mask-image: linear-gradient(to right, transparent, #000 var(--th-fade-l), #000 calc(100% - var(--th-fade-r)), transparent);
+  animation: th-fade-l linear both, th-fade-r linear both;
+  animation-timeline: scroll(self inline), scroll(self inline);
+  animation-range: 0 16px, calc(100% - 16px) 100%;
+}
+
 .th-table table {
   border-collapse: collapse;
 }

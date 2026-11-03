@@ -313,7 +313,8 @@ export function toolWords(text: string): string {
  * A report as the TUI reads it (render.rs report_parts: '[report: <kind>] <body>'), never shown in its
  * bracket form (designer D14): a status line '<kind> · <first line>'; a blocked agent waiting on his
  * answer says only that ('blocked · waiting for your answer'): the question card under it says the
- * question. null: not a report. Pure.
+ * question. Words that already start with the kind ('blocked: signing key …') say it once, never
+ * 'blocked · blocked: signing key …' (designer m_52857). null: not a report. Pure.
  */
 export function reportLine(text: string, kind?: string | null): string | null {
   const m = /^\[report:\s*([^\]]+)\]\s*([\s\S]*)$/.exec(text.trim());
@@ -323,7 +324,14 @@ export function reportLine(text: string, kind?: string | null): string | null {
   const first = body.split('\n')[0]?.trim() ?? '';
   const waiting = /^waiting for your answer\b/i.exec(first);
   const words = waiting !== null ? thread.report_waiting : first;
-  return words === '' ? k : `${k} · ${words}`;
+  if (words === '') return k;
+  return k !== '' && saysKind(words, k) ? words : `${k} · ${words}`;
+}
+
+/** The words open on the report's kind, as a word of their own ('blocked: …', 'Done · …', 'failed'). */
+function saysKind(words: string, k: string): boolean {
+  const head = words.slice(0, k.length);
+  return head.toLowerCase() === k.toLowerCase() && /^(?:$|[\s:·.,—-])/.test(words.slice(k.length));
 }
 
 /** A report's words without its '[report: kind]' tag (the whole of them, every line). Pure. */
@@ -357,7 +365,8 @@ export function repeatedReport(e: Pick<Entry, 'kind' | 'text' | 'report'>, next:
 export function reportStatus(text: string, kind?: string | null): string | null {
   const line = reportLine(text, kind);
   if (line === null) return null;
-  const k = line.split(' · ')[0] ?? '';
+  // the kind is the line's first word ('done · …', and said once: 'done: …')
+  const k = (/^[^\s·:.,]+/.exec(line)?.[0] ?? '').toLowerCase();
   return `${k === 'done' ? '✓ ' : k.includes('fail') ? '✗ ' : ''}${line}`;
 }
 
