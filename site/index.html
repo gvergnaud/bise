@@ -43,6 +43,14 @@
   header nav { display:flex; gap:28px; align-items:center; }
   header nav a:hover, header button:hover { color:var(--text); }
   header button { font:inherit; font-style:normal; background:none; border:0; color:inherit; cursor:pointer; }
+  /* once the page moves, frosted paper under the header so its links stay readable over the islands and the screens */
+  header { transition:background-color .3s, box-shadow .3s, backdrop-filter .3s, -webkit-backdrop-filter .3s; }
+  header.lifted { background-color:color-mix(in srgb, var(--bg) 72%, transparent); -webkit-backdrop-filter:blur(12px) saturate(1.2); backdrop-filter:blur(12px) saturate(1.2);
+    box-shadow:0 1px 0 color-mix(in srgb, var(--faint) 70%, transparent), 0 10px 24px -18px #4a3a2a59; }
+  html.pd header.lifted { box-shadow:0 1px 0 color-mix(in srgb, var(--faint) 70%, transparent), 0 10px 24px -16px #000000a6; }
+  @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) { header.lifted { background-color:color-mix(in srgb, var(--bg) 95%, transparent); } }
+  @media (prefers-reduced-transparency: reduce) { header.lifted { background-color:var(--bg); -webkit-backdrop-filter:none; backdrop-filter:none; } }
+  @media (prefers-reduced-motion: reduce) { header { transition:none; } }
 
   section { padding:14vh 6vw; }
   .inner { max-width:36em; margin:0 auto; }
@@ -778,6 +786,9 @@
   const dark = (on, keep) => { r.classList.toggle('pd', on); if (keep) try { localStorage.setItem('bise-theme', on ? '1' : '0'); } catch {} document.querySelector('meta[name=theme-color]').content = on ? '#171513' : '#f2ede2'; };
   dark(r.classList.contains('pd'));
   document.getElementById('theme').onclick = () => dark(!r.classList.contains('pd'), true);
+  /* the header lifts off the page once it scrolls */
+  const hdr = document.querySelector('body > header'), lift = () => hdr.classList.toggle('lifted', scrollY > 8);
+  addEventListener('scroll', lift, { passive:true }); lift();
   /* preview states without the feed: ?state=soon|unknown, ?got */
   if (q.get('state')) body.dataset.state = q.get('state');
   /* the reveal */

@@ -613,9 +613,13 @@
 
   /* the windows may spill over the frame only where there's room; on a phone the stage clips as before */
   @media (max-width: 900px) { .v1 .stage, .v2 .stage { overflow:hidden; } }
-  /* the fixed header gets the paper under it once you scroll, so text never runs under the logo */
-  header { transition:background .3s; }
-  header.scrolled { background:linear-gradient(var(--bg) 70%, transparent); }
+  /* once the page moves, frosted paper under the header so its links stay readable over the screens (the home's header does the same) */
+  header { transition:background-color .3s, box-shadow .3s, backdrop-filter .3s, -webkit-backdrop-filter .3s; }
+  header.lifted { background-color:color-mix(in srgb, var(--bg) 72%, transparent); -webkit-backdrop-filter:blur(12px) saturate(1.2); backdrop-filter:blur(12px) saturate(1.2);
+    box-shadow:0 1px 0 color-mix(in srgb, var(--faint) 70%, transparent), 0 10px 24px -18px #4a3a2a59; }
+  @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) { header.lifted { background-color:color-mix(in srgb, var(--bg) 95%, transparent); } }
+  @media (prefers-reduced-transparency: reduce) { header.lifted { background-color:var(--bg); -webkit-backdrop-filter:none; backdrop-filter:none; } }
+  @media (prefers-reduced-motion: reduce) { header, header .logo { transition:none; } }
   @media (max-width: 640px) { body { font-size:18px; } h2 { font-size:30px; } .bub { white-space:nowrap; } }
 
   /* landing-b: no thread-and-kiss animation in the hero sky (user). the seeds drift there instead */
@@ -965,7 +969,9 @@ const root = document.documentElement;
 root.dataset.theme = "dark";  /* landing-b: the page is paper, the screens stay dark */
 document.getElementById("theme").onclick = () => root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
 const hdr = document.getElementById("top");
-addEventListener("scroll", () => hdr.classList.toggle("scrolled", scrollY > innerHeight * .6));
+/* the header lifts off the page once it scrolls; the logo comes in past the hero */
+const lift = () => { hdr.classList.toggle("lifted", scrollY > 8); hdr.classList.toggle("scrolled", scrollY > innerHeight * .6); };
+addEventListener("scroll", lift, { passive: true }); lift();
 for (const id of ["install", "install2", "install3"]) document.getElementById(id).onclick = (e) => {
   navigator.clipboard?.writeText(document.getElementById("cmd").textContent);
   const box = e.currentTarget, c = box.querySelector(".c"); c.textContent = "copied :*"; box.classList.add("done"); setTimeout(() => { c.textContent = "copy"; box.classList.remove("done"); }, 1600);
