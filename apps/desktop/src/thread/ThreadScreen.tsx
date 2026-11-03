@@ -174,7 +174,9 @@ export function ThreadScreen({ project, agent, bise = false, projectName, artifa
     },
     [project, agent],
   );
-  const quote = useThreadQuote(section, composer, agent);
+  // the column where the window's sideLayout puts it (column.ts); the selection pop stays in it
+  const column = useColumn(section);
+  const quote = useThreadQuote(section, composer, agent, column.place);
   const quoting = quote.quoting;
   // L25: the demo's tips; 'inside' and 'end' sit at the thread's top, his send moves the tour
   const tour = useTour(project);
@@ -304,13 +306,11 @@ export function ThreadScreen({ project, agent, bise = false, projectName, artifa
   useShowsMainAtEnd(project, inView && agent === MAIN && !reading);
   const menu = useEntityMenu({ kind: 'agent', project, agent });
   const ours = !bise && me !== undefined && !me.archived;
-  // the column where the window's sideLayout puts it (column.ts)
-  const column = useColumn(section);
   return (
     <FoldsContext value={folds}>
     <FindMarkContext value={mark}>
     <OpenArtifactContext value={artifact?.id}>
-      <section ref={section} className="th-screen" data-testid="thread.screen" data-project={project} data-agent={agent} data-quoting={quoting} data-answering={answering !== null} data-reading={reading} data-about={artifact !== undefined || undefined} data-dim={(artifact !== undefined && me?.archived === true) || undefined} onKeyDown={onKeyDown} onKeyDownCapture={onKeyDownCapture} style={column}>
+      <section ref={section} className="th-screen" data-testid="thread.screen" data-project={project} data-agent={agent} data-quoting={quoting} data-answering={answering !== null} data-reading={reading} data-about={artifact !== undefined || undefined} data-dim={(artifact !== undefined && me?.archived === true) || undefined} onKeyDown={onKeyDown} onKeyDownCapture={onKeyDownCapture} style={column.style}>
         {inView && ours && (
           <InBar>
             <BarMore menu={menu} testId="thread.more" />

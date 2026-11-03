@@ -4,8 +4,10 @@
 // bims' world needs its band, the whole width with the panel folded. columnPlace turns that layout
 // into the screen's own coordinates; a screen the layout doesn't describe (a thread in a panel's
 // tab, beside an artifact) keeps the CSS's centred column. useColumn measures the screen and hands
-// ThreadScreen the two CSS variables its rows read (thread.css --th-col, --th-col-x). Owner: nm-thread.
-import { useLayoutEffect, useState, type CSSProperties, type RefObject } from 'react';
+// ThreadScreen the two CSS variables its rows read (thread.css --th-col, --th-col-x), and the place
+// itself: what floats over the rows (the selection pop, threadQuote.tsx) stays in it, never under
+// the right side. Owner: nm-thread.
+import { useLayoutEffect, useMemo, useState, type CSSProperties, type RefObject } from 'react';
 import { useSideLayout } from '@/app/side3d/place';
 
 /** --pad-column: the column's room each side of its text */
@@ -34,8 +36,14 @@ export function columnStyle(p: ColumnPlace | null): CSSProperties | undefined {
   return { '--th-col': `${String(p.w)}px`, '--th-col-x': `${String(p.x)}px` } as CSSProperties;
 }
 
+/** The screen's column: its CSS variables and its place (null: the CSS's centred column). */
+export interface Column {
+  readonly style: CSSProperties | undefined;
+  readonly place: ColumnPlace | null;
+}
+
 /** The screen's column, from the window's sideLayout; measured again when the layout or the screen's box changes. */
-export function useColumn(ref: RefObject<HTMLElement | null>): CSSProperties | undefined {
+export function useColumn(ref: RefObject<HTMLElement | null>): Column {
   const lay = useSideLayout();
   const [place, setPlace] = useState<ColumnPlace | null>(null);
   useLayoutEffect(() => {
@@ -54,5 +62,5 @@ export function useColumn(ref: RefObject<HTMLElement | null>): CSSProperties | u
       ro.disconnect();
     };
   }, [ref, lay]);
-  return columnStyle(place);
+  return useMemo(() => ({ style: columnStyle(place), place }), [place]);
 }
