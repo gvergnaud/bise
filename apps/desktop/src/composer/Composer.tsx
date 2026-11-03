@@ -12,6 +12,7 @@
 // words live in the menus and the controls' tips; a modifier held alone lists bise's keys of it in
 // the row's empty middle and puts ⌃R on the mic (heldkeys.ts, designer m_44287). Owner: r2-hints
 // (nm-composer's before).
+import { takeCaret } from './caret';
 import {
   Fragment,
   memo,
@@ -245,8 +246,11 @@ export const Composer = memo(function Composer(
         onStrip={setStrip}
         onBar={setField}
         onActions={(a) => {
-          if (actions.current === null) cb.current.onReady?.(a);
+          const first = actions.current === null;
+          if (first) cb.current.onReady?.(a);
           actions.current = a;
+          // asked to show with the caret (a chip just put in its draft: composer/caret.ts)
+          if (first && takeCaret(cb.current.target)) a.focusEnd();
         }}
         onEmptyEnter={() => {
           cb.current.onEmptyEnter?.();

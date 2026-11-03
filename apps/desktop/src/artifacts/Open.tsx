@@ -34,6 +34,7 @@ import { tilde } from '@/app/barplaces';
 import type { SaveResult } from '@/shared/api';
 import { putInDraft } from './put';
 import { keptStorage } from '@/app/keep';
+import { askCaret } from '@/composer/caret';
 import { useAboutWords } from './maker';
 import { goneLinkOf, goneRoute } from './gone';
 import { takeVersion, useArtifactLinks } from './links';
@@ -58,6 +59,8 @@ export function usePutInMessage(): (project: string, a: { id: string; title: str
       // the composer's own drafts (app/keep.ts keptStorage), never the page's localStorage: the
       // chip never reached the composer (ui-review m_52808)
       putInDraft(keptStorage, `${project}/${a.agent}`, a);
+      // and the caret after the chip, in that thread's composer (ui-review m_52822)
+      askCaret(`${project}/${a.agent}`);
       router.go({ screen: 'thread', project, agent: a.agent });
     },
     [router],

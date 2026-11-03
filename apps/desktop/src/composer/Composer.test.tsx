@@ -5,6 +5,7 @@
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Composer } from './Composer';
+import { askCaret } from './caret';
 import type { ComposerActions } from './actions';
 import type { Store } from './drafts';
 import { NO_SOURCES } from './sources';
@@ -34,6 +35,15 @@ async function mount(extra: Partial<Parameters<typeof Composer>[0]> = {}) {
 }
 
 describe('the composer', () => {
+  it('asked for the caret (a chip just put in its draft): it takes the focus when it shows; never asked: it leaves it (ui-review m_52822)', async () => {
+    const other = await mount({ target: 'p/other' });
+    expect(other.getByTestId('composer.field').contains(document.activeElement)).toBe(false);
+    cleanup();
+    askCaret('p/main');
+    const { getByTestId } = await mount();
+    expect(getByTestId('composer.field').contains(document.activeElement)).toBe(true);
+  });
+
   it('keeps one field node through prop changes and sends', async () => {
     const { getByTestId, rerender, onSend, act: a, store } = await mount();
     const field = getByTestId('composer.field');
