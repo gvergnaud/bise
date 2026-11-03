@@ -375,6 +375,16 @@ body:has(.th-screen > .art-give) .s3-side {
   width: var(--th-col);
   margin-left: var(--th-col-x);
   margin-right: 0;
+  /* a word longer than the column (a path, a URL, a key's hash) breaks anywhere, in every row's
+     words (his m_52838: a signing error's 200-char path ran under the right card). Inherited, and
+     'anywhere' (not 'break-word') also lowers a flex item's min-content width, so a row's words
+     (a notice's, a tool line's, a report's, a card's) never push their flex row past the column */
+  overflow-wrap: anywhere;
+}
+/* a table keeps its words whole and scrolls sideways in its own box (.th-table's overflow-x),
+   never squeezed to one letter a column */
+.th-table {
+  overflow-wrap: normal;
 }
 .th-screen .b-composer {
   box-sizing: border-box;
