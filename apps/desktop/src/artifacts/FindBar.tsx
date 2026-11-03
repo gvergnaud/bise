@@ -5,13 +5,17 @@
 // match ({bise: find, q, at, seq}) and reads the count back ({bise: found, seq, n}). ⏎ next,
 // ⇧⏎ previous (around the ends), esc closes and clears the page's highlights. While it shows it
 // says so ({open}): an esc inside the page is the agent's then, which says it ({bise: found, esc})
-// and never forwards it to close the artifact (ui-review m_52737). `ask` bumps
+// and never forwards it to close the artifact (ui-review m_52737); the window may get that key
+// itself, the frame its active element: escape.ts's 'artFind' closes the bar (holdFindBar). `ask` bumps
 // when ⌘F comes again while it shows: the field takes the focus back, its words selected.
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { Field, IconButton } from '@/ds';
 import { panel } from '@/proto/words_panel.gen';
 import { FRAME_KINDS, originOf } from './frameNote';
-import { counterOf, headPx, stepAt } from './find';
+import { counterOf, headPx, holdFindBar, stepAt } from './find';
+
+/** The bar's gap from the paper's corner, or from the page's head (designer m_52698), in px. */
+const GAP = 8;
 
 export interface ArtifactFindBarProps {
   /** the page's frame */
@@ -29,6 +33,10 @@ export function ArtifactFindBar({ frame, src, ask, onClose }: ArtifactFindBarPro
   const [at, setAt] = useState(-1);
   // the bottom of the page's own head (a bise page's frame), in its px: the bar sits 8 px under it
   const [head, setHead] = useState(0);
+  const headRef = useRef(0);
+  // the current match stays under the bar's top spot (no room to scroll it out): the bar steps to
+  // the page's bottom right until it no longer is (designer m_52781)
+  const [low, setLow] = useState(false);
   const seq = useRef(0);
   const field = useRef<HTMLInputElement>(null);
   const bar = useRef<HTMLDivElement>(null);
@@ -47,7 +55,9 @@ export function ArtifactFindBar({ frame, src, ask, onClose }: ArtifactFindBarPro
     if (el == null || win == null) return;
     const b = bar.current?.getBoundingClientRect();
     const f = el.getBoundingClientRect();
-    const clear = b === undefined ? null : { x: b.left - f.left, y: b.bottom - f.top };
+    // the bar's top spot (where it sits unless it stepped aside), in the frame's px
+    const top = headRef.current > 0 ? headRef.current + GAP : GAP;
+    const clear = b === undefined ? null : { x: b.left - f.left, top, y: top + b.height };
     win.postMessage({ bise: FRAME_KINDS.find, q, at: cur, seq: seq.current, clear, open }, '*');
   };
   const tellRef = useRef(tell);
@@ -62,7 +72,7 @@ export function ArtifactFindBar({ frame, src, ask, onClose }: ArtifactFindBarPro
       // its own frame only, on the pages server's origin or an opaque one (a sandboxed copy)
       if (e.source == null || e.source !== frame.current?.contentWindow || (e.origin !== 'null' && e.origin.toLowerCase() !== origin)) return;
       if (typeof d !== 'object' || d === null) return;
-      const m = d as { bise?: unknown; seq?: unknown; n?: unknown; head?: unknown; esc?: unknown };
+      const m = d as { bise?: unknown; seq?: unknown; n?: unknown; head?: unknown; esc?: unknown; under?: unknown };
       // an esc in the page while it shows: the bar closes, the artifact stays
       if (m.bise === FRAME_KINDS.found && m.esc === true) {
         closeRef.current();
@@ -71,7 +81,9 @@ export function ArtifactFindBar({ frame, src, ask, onClose }: ArtifactFindBarPro
       if (m.bise !== FRAME_KINDS.found || m.seq !== seq.current || typeof m.n !== 'number') return;
       const count = Math.max(0, Math.floor(m.n));
       setN(count);
-      setHead(headPx(m.head));
+      headRef.current = headPx(m.head);
+      setHead(headRef.current);
+      setLow(m.under === true);
       setAt((x) => (count === 0 ? -1 : Math.min(Math.max(x, 0), count - 1)));
     };
     window.addEventListener('message', on);
@@ -80,6 +92,15 @@ export function ArtifactFindBar({ frame, src, ask, onClose }: ArtifactFindBarPro
     };
   }, [frame, origin]);
 
+  // a step aside or back: a 120 ms fade in its new spot, none under reduced motion
+  const [wasLow, setWasLow] = useState(low);
+  if (wasLow !== low) setWasLow(low);
+  useEffect(() => {
+    const el = bar.current;
+    if (el === null || typeof el.animate !== 'function') return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 120, easing: 'ease-out' });
+  }, [wasLow]);
   // at once, before a needle: the frame says its head, the bar goes under it
   useEffect(() => {
     tellRef.current('', -1);
@@ -97,6 +118,8 @@ export function ArtifactFindBar({ frame, src, ask, onClose }: ArtifactFindBarPro
   useEffect(() => {
     closeRef.current = close;
   });
+  // an esc the window gets with the focus in this artifact (its frame): this bar's (app/escape.ts)
+  useEffect(() => holdFindBar(() => bar.current?.closest<HTMLElement>('.art-open') ?? null, () => { closeRef.current(); }), []);
   // gone (the artifact closed, another version): the page's highlights go with it
   useEffect(
     () => () => {
@@ -112,8 +135,8 @@ export function ArtifactFindBar({ frame, src, ask, onClose }: ArtifactFindBarPro
   };
 
   return (
-    <div ref={bar} className="art-find" data-testid="artifact.find" role="search"
-      style={head > 0 ? { top: `calc(var(--s-4) + ${String(head)}px + var(--s-2))` } : undefined}>
+    <div ref={bar} className="art-find" data-testid="artifact.find" role="search" data-low={low || undefined}
+      style={head > 0 && !low ? { top: `calc(var(--s-4) + ${String(head)}px + var(--s-2))` } : undefined}>
       <Field
         ref={field}
         testId="artifact.find.field"

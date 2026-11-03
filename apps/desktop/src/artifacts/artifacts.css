@@ -158,3 +158,6 @@
   text-align: center;
 }
 .art-find-acts { flex: none; display: flex; align-items: center; }
+/* a current match under the top spot that can't scroll out of it: the bar steps to the page's
+   bottom right, 8 in from the paper's corner, until it no longer is (designer m_52781) */
+.art-find[data-low] { top: auto; bottom: calc(var(--s-4) + var(--s-2)); }

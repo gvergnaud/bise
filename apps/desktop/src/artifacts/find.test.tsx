@@ -8,6 +8,7 @@ import { Store, StoreProvider } from '@/store';
 import { RouterContext, createRouter } from '@/app/router';
 import { emitAction, useMenuAction } from '@/app/menu';
 import { ArtifactOpen } from './index';
+import '@/app/escape';
 import { counterOf, findable, findTarget, stepAt, useArtifactFindKey } from './find';
 
 afterEach(() => {
@@ -130,6 +131,20 @@ describe('the law: ⌘F with the focus in an artifact finds in it; elsewhere the
       emitAction('find');
     });
     fireEvent.keyDown(screen.getByTestId('artifact.find.field'), { key: 'Escape' });
+    expect(screen.queryByTestId('artifact.find')).toBeNull();
+    expect(screen.getByTestId('artifact.open')).toBeTruthy();
+  });
+
+  it('esc with the focus in the page (the window gets it, the frame its active element): the bar closes, the artifact stays (ui-review m_52779)', () => {
+    mount([art('notes', 'page')], 'notes');
+    const page = screen.getByTestId('artifact.page');
+    page.focus();
+    act(() => {
+      emitAction('find');
+    });
+    page.focus();
+    expect(document.activeElement).toBe(page);
+    fireEvent.keyDown(page, { key: 'Escape' });
     expect(screen.queryByTestId('artifact.find')).toBeNull();
     expect(screen.getByTestId('artifact.open')).toBeTruthy();
   });

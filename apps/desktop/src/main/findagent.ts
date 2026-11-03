@@ -7,7 +7,9 @@
 //     words only, a match may span text nodes) in its own document first, then in each of its own
 //     frames (the viewer frames a site: it asks them the same, they answer {bise: found}); match
 //     `at` is the current one (-1: none), shown and scrolled to, in this document or in the frame
-//     that holds it; it answers {bise: found, seq, n} to its parent;
+//     that holds it; it answers {bise: found, seq, n, head, under} to its parent (head: the bottom
+//     of a bise page's pinned head; under: the current match stays under the bar's top spot
+//     `clear`, no room to scroll it out: the bar steps aside);
 //   - q '' clears. The matches are CSS highlights (the page's DOM stays as drawn), styled by a
 //     constructed sheet (no inline style: a page's CSP may forbid one).
 // Once per document; a newer find wins over one still waiting for its frames. Owner: artifact-find.
@@ -97,8 +99,15 @@ export const FIND_AGENT = `(() => {
     const c = r.getBoundingClientRect();
     if (c.top < clear.y + 8 && c.bottom > 0 && c.right > clear.x) scrollBy(0, c.top - clear.y - 8);
   };
-  // where the window's bar sits over this frame ({x, y}: its left and bottom), null: nowhere
-  const clearOf = (v) => (v !== null && typeof v === 'object' && typeof v.x === 'number' && typeof v.y === 'number' ? { x: v.x, y: v.y } : null);
+  // where the window's bar sits over this frame at its top spot ({x, top, y}: its left, top and
+  // bottom), null: nowhere
+  const clearOf = (v) => (v !== null && typeof v === 'object' && typeof v.x === 'number' && typeof v.y === 'number' ? { x: v.x, y: v.y, top: typeof v.top === 'number' ? v.top : 0 } : null);
+  // the current match still under the bar's top spot (no room to scroll it clear): the bar steps aside
+  const underOf = (r, clear) => {
+    if (clear === null) return false;
+    const c = r.getBoundingClientRect();
+    return c.bottom > clear.top && c.top < clear.y && c.right > clear.x;
+  };
   // the bottom of the page's own head pinned at its top (a bise page's frame: its title, 'v6', 'send'), 0: none
   const headOf = () => {
     const h = document.querySelector('.bise-frame');
@@ -106,18 +115,18 @@ export const FIND_AGENT = `(() => {
     const b = h.getBoundingClientRect();
     return b.height > 0 && b.top < 40 ? Math.round(b.bottom) : 0;
   };
-  // one of its own frames' count for q (no answer in time: 0)
-  const ask = (w, q, seq, on0) => new Promise((done) => {
+  // one of its own frames' answer to a find (no answer in time: no match)
+  const ask = (w, m) => new Promise((done) => {
     const on = (e) => {
       const d = e.data;
-      if (e.source !== w || d === null || typeof d !== 'object' || d.bise !== K.found || d.seq !== seq) return;
+      if (e.source !== w || d === null || typeof d !== 'object' || d.bise !== K.found || d.seq !== m.seq) return;
       clearTimeout(t);
       removeEventListener('message', on);
-      done(typeof d.n === 'number' && d.n >= 0 ? d.n : 0);
+      done({ n: typeof d.n === 'number' && d.n >= 0 ? d.n : 0, under: d.under === true });
     };
-    const t = setTimeout(() => { removeEventListener('message', on); done(0); }, ${String(KID_WAIT_MS)});
+    const t = setTimeout(() => { removeEventListener('message', on); done({ n: 0, under: false }); }, ${String(KID_WAIT_MS)});
     addEventListener('message', on);
-    w.postMessage({ bise: K.find, q, at: -1, seq, open: on0 }, '*');
+    w.postMessage({ bise: K.find, ...m }, '*');
   });
   // while the window's bar shows (open), an esc here is the bar's: it closes it, never the artifact
   // (taken before ESC_FORWARD reads it), and a frame's own frames say theirs up the same way
@@ -148,21 +157,27 @@ export const FIND_AGENT = `(() => {
     const mine = ++latest;
     const rs = ranges(q);
     const frames = Array.from(document.querySelectorAll('iframe')).filter((f) => f.contentWindow !== null);
-    const ns = await Promise.all(frames.map((f) => ask(f.contentWindow, q, seq, open)));
+    const ns = (await Promise.all(frames.map((f) => ask(f.contentWindow, { q, at: -1, seq, open })))).map((x) => x.n);
     if (mine !== latest) return;
     paint(rs, cur);
-    if (cur >= 0 && cur < rs.length) reveal(rs[cur], clear);
+    let under = false;
+    if (cur >= 0 && cur < rs.length) {
+      reveal(rs[cur], clear);
+      under = underOf(rs[cur], clear);
+    }
+    // the current match in one of its own frames: that frame shows it, and says if it stays under the bar
     let k = cur - rs.length;
-    frames.forEach((f, i) => {
-      const n = ns[i];
-      if (k >= 0 && k < n) {
+    for (let i = 0; i < frames.length; i++) {
+      const f = frames[i], n = ns[i];
+      if (k >= 0 && k < n && f.contentWindow !== null) {
         f.scrollIntoView({ block: 'nearest', inline: 'nearest' });
         const fb = f.getBoundingClientRect();
-        const inner = clear === null ? null : { x: clear.x - fb.left, y: clear.y - fb.top };
-        if (f.contentWindow !== null) f.contentWindow.postMessage({ bise: K.find, q, at: k, seq, clear: inner, open }, '*');
+        const inner = clear === null ? null : { x: clear.x - fb.left, y: clear.y - fb.top, top: clear.top - fb.top };
+        under = (await ask(f.contentWindow, { q, at: k, seq, clear: inner, open })).under;
+        if (mine !== latest) return;
       }
       k -= n;
-    });
-    parent.postMessage({ bise: K.found, seq, n: rs.length + ns.reduce((a, b) => a + b, 0), head: headOf() }, '*');
+    }
+    parent.postMessage({ bise: K.found, seq, n: rs.length + ns.reduce((a, b) => a + b, 0), head: headOf(), under }, '*');
   });
 })();`;

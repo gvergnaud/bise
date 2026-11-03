@@ -40,9 +40,9 @@ afterEach(() => {
 describe('the find agent in an artifact frame (FIND_AGENT)', () => {
   it('counts the needle case-insensitive, across text nodes, never in a script or a style', async () => {
     const f = frame('<p>Kiwi and <b>ki</b>wi</p><pre>a kiwi\nKIWI</pre><script>var kiwi</script><style>.kiwi{}</style>');
-    expect(await f.find('kiwi', 0, 7)).toEqual({ bise: FRAME_KINDS.found, seq: 7, n: 4, head: 0 });
-    expect(await f.find('nope', -1, 8)).toEqual({ bise: FRAME_KINDS.found, seq: 8, n: 0, head: 0 });
-    expect(await f.find('', -1, 9)).toEqual({ bise: FRAME_KINDS.found, seq: 9, n: 0, head: 0 });
+    expect(await f.find('kiwi', 0, 7)).toEqual({ bise: FRAME_KINDS.found, seq: 7, n: 4, head: 0, under: false });
+    expect(await f.find('nope', -1, 8)).toEqual({ bise: FRAME_KINDS.found, seq: 8, n: 0, head: 0, under: false });
+    expect(await f.find('', -1, 9)).toEqual({ bise: FRAME_KINDS.found, seq: 9, n: 0, head: 0, under: false });
   });
 
   it("while the window's bar shows, an esc in the page is the bar's: taken, said up; closed, the page keeps it (ui-review m_52737)", async () => {

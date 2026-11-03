@@ -119,6 +119,36 @@ export function useArtifactFind(ref: RefObject<HTMLElement | null>, open: (() =>
   }, [ref, on]);
 }
 
+// ---- the open bars, for esc ----
+
+interface OpenBar {
+  /** the artifact's box the bar sits in */
+  readonly el: () => HTMLElement | null;
+  readonly close: () => void;
+}
+
+const bars: OpenBar[] = [];
+
+/** While a bar shows: an esc with the focus in its artifact (its frame, its head) closes it (app/escape.ts). */
+export function holdFindBar(el: () => HTMLElement | null, close: () => void): () => void {
+  const b: OpenBar = { el, close };
+  bars.push(b);
+  return () => {
+    const i = bars.indexOf(b);
+    if (i >= 0) bars.splice(i, 1);
+  };
+}
+
+/** The close of the open bar whose artifact holds `active`, if any (the last opened first). */
+export function openFindAt(active: Element | null): (() => void) | undefined {
+  if (active === null) return undefined;
+  for (let i = bars.length - 1; i >= 0; i--) {
+    const b = bars[i];
+    if (b?.el()?.contains(active) === true) return b.close;
+  }
+  return undefined;
+}
+
 /**
  * In the shell: ⌘F goes to the artifact that takes it, before any screen hears it (the window's key
  * in the capture phase, Edit › Find before the screens' useMenuAction('find')). The key's menu

@@ -9,6 +9,9 @@
 //   4. an inbox item open in place: theirs, it folds; an outer card's ask open in place: it folds,
 //      the focus back on its row (designer m_47321)                               layer 'ask'
 //   5. the focus in the unfolded floating composer: theirs (its lists, then it folds)
+//   5b. an artifact's find bar open, the focus elsewhere in that artifact (its page's frame: the
+//      window gets that key with the frame as its active element): the bar closes, the artifact
+//      stays (artifacts/find.ts openFindAt; ui-review m_52779)                   'artFind'
 //   6. a zoomed image: back to fit                                                'zoom'
 //   7. an artifact in front of the open panel: its tab closes, the panel as it was before it came,
 //      and the route back when the artifact came by its route (artifacts/<p>/<id>); before the
@@ -29,6 +32,7 @@
 // libraryExit gives the way out to where he was before it (artifacts/Screen.tsx). Owner: r3-escape.
 import { useEffect } from 'react';
 import { isZoomed, takeZoomKey } from '@/artifacts/zoomKeys';
+import { openFindAt } from '@/artifacts/find';
 import { useStore, type Store } from '@/store';
 import { closeTabBack, panelState } from './panel/state';
 import { MAIN, type Route } from './route';
@@ -53,6 +57,8 @@ export interface EscFacts {
   readonly ask: boolean;
   /** the focus in the unfolded floating composer */
   readonly inFloat: boolean;
+  /** an artifact's find bar open, the focus elsewhere in that artifact (its page's frame, its head) */
+  readonly artFind: boolean;
   readonly zoomed: boolean;
   /** an artifact's tab in front of the open panel */
   readonly artifact: boolean;
@@ -63,7 +69,7 @@ export interface EscFacts {
 }
 
 /** Who acts: 'below' leaves the esc to the handlers (1, 3-5, 10); the others the listener runs. */
-export type EscAct = 'below' | 'over' | 'ask' | 'zoom' | 'artifact' | 'sheet' | 'float';
+export type EscAct = 'below' | 'over' | 'ask' | 'artFind' | 'zoom' | 'artifact' | 'sheet' | 'float';
 
 /** The order, innermost first. Pure. */
 export function escapeAct(f: EscFacts): EscAct {
@@ -71,6 +77,7 @@ export function escapeAct(f: EscFacts): EscAct {
   if (f.over) return 'over';
   if (f.find || f.field || f.inboxItem || f.inFloat) return 'below';
   if (f.ask) return 'ask';
+  if (f.artFind) return 'artFind';
   if (f.zoomed) return 'zoom';
   if (f.artifact) return 'artifact';
   if (f.sheet) return 'sheet';
@@ -104,6 +111,7 @@ export function escFacts(doc: Document = document): EscFacts {
     inboxItem: doc.querySelector('[data-testid="inbox.block"][data-open]') !== null,
     ask: (layers.get('ask')?.length ?? 0) > 0,
     inFloat: (layers.get('float')?.length ?? 0) > 0 && inside('[data-testid="composer.float"]'),
+    artFind: openFindAt(el) !== undefined,
     zoomed: isZoomed(),
     artifact: frontArtifact() !== undefined,
     sheet: (layers.get('sheet')?.length ?? 0) > 0,
@@ -145,6 +153,7 @@ export function frameEsc(tab: string): void {
 
 function run(act: Exclude<EscAct, 'below'>, e: KeyboardEvent): void {
   if (act === 'zoom') takeZoomKey(e);
+  else if (act === 'artFind') openFindAt(document.activeElement)?.();
   else if (act === 'artifact') {
     const a = frontArtifact();
     if (a !== undefined) closeArtifactTab(a.tab);
