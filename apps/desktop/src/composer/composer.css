@@ -602,3 +602,7 @@
 .b-composer .box {
   position: relative;
 }
+/* the @ list: a plugin that waits on him (at-plugins, designer m_53299): '? needs a login' in the
+   accent, '✗ didn't start' in err */
+.at-plugin-wait { color: var(--c-accent); }
+.at-plugin-fail { color: var(--c-err); }

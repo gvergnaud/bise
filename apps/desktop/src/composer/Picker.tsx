@@ -65,7 +65,7 @@ export function pickerRow(r: Row, testId: string): PickerRow {
         ) : (
           <span>
             {sec.slice(0, at)}
-            <span className={r.waits === 'login' ? 'b-picker-wait' : 'b-picker-fail'}>{mark}</span>
+            <span className={r.waits === 'login' ? 'at-plugin-wait' : 'at-plugin-fail'}>{mark}</span>
             {sec.slice(at + 1)}
           </span>
         );

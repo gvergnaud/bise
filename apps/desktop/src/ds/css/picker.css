@@ -155,9 +155,6 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-/* a plugin that waits on him (at-plugins, designer m_53299): '? needs a login', '✗ didn't start' */
-.b-picker-row .s .b-picker-wait { color: var(--c-accent); }
-.b-picker-row .s .b-picker-fail { color: var(--c-err); }
 .b-picker-row .s .b-picker-path {
   display: block;
   overflow: hidden;
