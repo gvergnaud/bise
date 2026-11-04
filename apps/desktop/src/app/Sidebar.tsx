@@ -2,8 +2,8 @@
 // wide (200-320 by its border, kept: frame-state.ts), --p-raised 82% with a 12 top-left corner.
 // Its head, in his order (round 3, main m_44657): bise's own row (its ':*', what waits in all his
 // projects, ⌘0; as on main), 'Search ⌘K', 'New project ⌘N' (no New agent row: he talks to main;
-// ⇧⌘N stays in keys.ts, the File menu, the project menu and ⌘K). Then 'Pinned' (pins.ts, his own
-// shortcuts) and 'Projects': one
+// ⇧⌘N stays in keys.ts, the File menu, the project menu and ⌘K). Then 'Projects' (no 'Pinned':
+// his pinned agents lead the right side's rows only, his m_52954): one
 // row per project, a click opens it (its main), no agent under it (round 2, his r2-img11: the
 // agents live on the right side), as Gabriel's H1 (round 3, designer m_44783): its name and the
 // inbox pill or its age, one plain sentence and its week's day bars, a quiet one on one line; ⌘
@@ -11,12 +11,12 @@
 // marked seen (seen.ts), and a row with an entry for him he hasn't seen has the unread dot after its
 // name (proj-unread). A project row dragged up or down (or ⌥⌘↑ ⌥⌘↓) moves it in his order, the
 // core's (sidedrag.ts, his m_49107). Its head stays, its list scrolls;
-// a right click on a pin or a project opens its menu (useEntityMenu, nm-menus'). On the artifacts
+// a right click on a project opens its menu (useEntityMenu, nm-menus'). On the artifacts
 // library page (decision d2) it shows '← Projects' and the library (artifacts' ArtLibrary) at the
 // same width, a 160 ms crossfade; an artifact open in a panel keeps the projects (sideshows.ts says
 // which, his m_46395). Owner: r3-projects this round (nm-frame's, archived).
 //
-// Each project row and each pin read their own project's agents (useAgents): an event re-renders
+// Each project row reads its own project's agents (useAgents): an event re-renders
 // the row it touches, never the sidebar, and a thread's entries never do.
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { AppIcon, Input, tipAttrs, type AppIconName, Press } from '@/ds';
@@ -36,10 +36,9 @@ import { useRoute, useRouter } from './router';
 import { sideShows } from './sideshows';
 import { useKeptScroll } from './keep';
 import { useModHeld } from './held';
-import { LiveBiseMark, WorkingMark } from './Marks';
-import { usePinned, type Pin } from './pins';
+import { LiveBiseMark } from './Marks';
 import { addProject } from './addProject';
-import { pinRowOf, projectRowOf, projectsOf, type RowEnd } from './siderows';
+import { projectRowOf, projectsOf } from './siderows';
 import { BAR_GAP, BAR_H, BAR_W, rowBars, type DayBar, type ProjectFacts } from './projectfacts';
 import { newestOf, useLookedAt, useMarkSeen, useSeen } from './seen';
 import { useNow } from './clock';
@@ -210,20 +209,12 @@ function UnreadDot({ on, testId }: { on: boolean; testId: string }) {
   return <span className={`app-s-unread${on ? '' : ' out'}`} aria-hidden="true" data-testid={testId} />;
 }
 
-/** A pinned agent's end: the accent dot (it waits on him) or main's breath (it works), each with its tip; nothing else. */
-export function AgentEnd({ end, testId }: { end: RowEnd; testId: string }) {
-  if (end === 'waits') return <span className="app-s-dot" {...tipAttrs(panel.asks_you)} data-testid={`${testId}.waits`} />;
-  if (end === 'works') return <WorkingMark testId={`${testId}.works`} />;
-  return null;
-}
-
-function Row({ kind, icon, name, end, on, stopped, tip, onClick, onContextMenu, testId }: {
-  kind: 'top' | 'agent' | 'back';
+function Row({ kind, icon, name, end, on, tip, onClick, onContextMenu, testId }: {
+  kind: 'top' | 'back';
   icon?: AppIconName;
   name: string;
   end?: ReactNode;
   on?: boolean;
-  stopped?: boolean;
   /** the row's whole story on hover */
   tip?: string;
   onClick: () => void;
@@ -232,7 +223,7 @@ function Row({ kind, icon, name, end, on, stopped, tip, onClick, onContextMenu, 
 }) {
   return (
     <Press
-      look={`app-s-row ${kind}${on === true ? ' on' : ''}${stopped === true ? ' stopped' : ''}`}
+      look={`app-s-row ${kind}${on === true ? ' on' : ''}`}
       aria-current={on === true ? 'page' : undefined}
       {...tipAttrs(tip)}
       onClick={onClick}
@@ -314,7 +305,6 @@ function LibraryList() {
 function ProjectList() {
   const rows = useProjects();
   const store = useStore();
-  const pins = usePinned();
   // ⌘ held: each project row shows its ⌘1-9 (keys.ts opens it), the held hints' delay (held.ts)
   const cmd = useModHeld('Meta');
   const route = useRoute();
@@ -342,7 +332,6 @@ function ProjectList() {
   const now = useNow();
   return (
     <div ref={root} className="app-s-list" data-testid="app.side.list" data-drag={drag !== null || undefined} data-tip-quiet={quiet || undefined} {...handlers}>
-      {pins.length > 0 && <PinnedList pins={pins} />}
       <Label testId="app.side.label.projects" end={<AddProject />}>
         {frame.projects}
       </Label>
@@ -403,25 +392,6 @@ function BiseRow() {
       )}
     </Press>
   );
-}
-
-/** 'Pinned' and its rows; nothing while no pin is live (a pin whose agent left is never shown). */
-function PinnedList({ pins }: { pins: readonly Pin[] }) {
-  const rows = pins.map((p) => <PinItem key={`${p.project}/${p.agent}`} pin={p} />);
-  return (
-    <div className="app-s-pins" data-testid="app.side.pinned">
-      <Label testId="app.side.label.pinned">{frame.pinned}</Label>
-      {rows}
-    </div>
-  );
-}
-
-function PinItem({ pin }: { pin: Pin }) {
-  const route = useRoute();
-  const agents = useAgents(pin.project);
-  const at = route.screen === 'thread' && route.project === pin.project ? route.agent : undefined;
-  const r = pinRowOf(pin.project, pin.agent, agents, at);
-  return r === null || r.kind !== 'agent' ? null : <PinRow project={r.project} name={r.a.name} main={r.a.main} on={r.on} end={r.end} stopped={r.stopped} />;
 }
 
 /** '+' at the Projects label's end: add a project (the add-a-project sheet). */
@@ -508,7 +478,6 @@ const ProjectItem = memo(function ProjectItem({ p, index, on, cmd, seen, now, li
       </div>
     );
   }
-  if (r.kind !== 'project') return null;
   return (
     <ProjectRowView
       name={p.name}
@@ -527,25 +496,3 @@ const ProjectItem = memo(function ProjectItem({ p, index, on, cmd, seen, now, li
     />
   );
 });
-
-/** A pinned agent's row: his own shortcut to it (pins.ts); its end the dot or the breath. */
-function PinRow({ project, name, main, on, end, stopped }: { project: string; name: string; main: boolean; on: boolean; end: RowEnd; stopped: boolean }) {
-  const router = useRouter();
-  const menu = useEntityMenu({ kind: 'agent', project, agent: name });
-  const id = `app.side.pin.${project}.${name}`;
-  return (
-    <Row
-      kind="agent"
-      // a project's lead is bise, as everywhere (the TUI's panel too)
-      name={main ? panel.bise : name}
-      on={on}
-      stopped={stopped}
-      end={<AgentEnd end={end} testId={id} />}
-      onClick={() => {
-        router.go({ screen: 'thread', project, agent: main ? MAIN : name });
-      }}
-      onContextMenu={menu.onContextMenu}
-      testId={id}
-    />
-  );
-}

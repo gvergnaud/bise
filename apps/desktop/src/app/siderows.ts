@@ -1,31 +1,21 @@
-// The sidebar's rows: 'Pinned' (the agents he pinned himself, pins.ts: his shortcuts, designer
-// m_44271), then 'Projects', one row per project in his order (Settings › Projects), no agent under
-// it: the agents of a project live on the right side. A project row is Gabriel's H1 (round 3, page
+// The sidebar's rows: 'Projects', one row per project in his order (Settings › Projects), no agent
+// under it: the agents of a project live on the right side, his pinned ones first (no 'Pinned'
+// here, his m_52954). A project row is Gabriel's H1 (round 3, page
 // sidebar-projects, designer m_44783): its name, the inbox pill or its age, one plain sentence and
 // its week (projectfacts.ts says them); a quiet one is one line. With ⌘ held, its ⌘ digit in the
-// pill's place (⌘1-9 opens it, keys.ts). A pinned agent's row keeps the dot (it waits on him) or
-// the breath (it works).
+// pill's place (⌘1-9 opens it, keys.ts).
 // Pure: Sidebar.tsx draws them. Owner: r3-projects this round (nm-frame's, archived).
 import type { Agent, ProjectRow } from '@/proto';
 import { liveOf } from '@/agents/model';
 import { projectFacts, type ProjectFacts } from './projectfacts';
 
-/** A pinned agent's end: it waits on him (the accent dot), it works (the breath), or nothing. */
-export type RowEnd = 'waits' | 'works' | null;
-
-export type SideRow =
-  | { readonly kind: 'project'; readonly p: ProjectRow; readonly on: boolean; readonly facts: ProjectFacts; readonly digit?: number }
-  | { readonly kind: 'agent'; readonly project: string; readonly a: Agent; readonly on: boolean; readonly end: RowEnd; readonly stopped: boolean };
-
-/** An agent's end: the dot when it asks him (a card, or the hub says it waits on him), the breath at work. Pure. */
-export function endOf(a: Agent): RowEnd {
-  if (a.waits > 0 || a.waiting_on?.who === 'you') return 'waits';
-  if (a.status === 'working') return 'works';
-  return null;
+/** A project's row in the sidebar. */
+export interface SideRow {
+  readonly p: ProjectRow;
+  readonly on: boolean;
+  readonly facts: ProjectFacts;
+  readonly digit?: number;
 }
-
-/** A stopped agent reads text-2 (the hub folds 'stopped' into done). Pure. */
-export const stoppedOf = (a: Agent): boolean => a.status === 'done' || a.status === 'failed';
 
 /** His projects in his order, bise's own out (the rail's ':*' is it). Pure. */
 export function projectsOf(rows: readonly ProjectRow[]): ProjectRow[] {
@@ -53,12 +43,5 @@ export function projectRowOf(c: {
 }): SideRow {
   const facts = projectFacts({ p: c.p, name: c.p.name, working: workingOf(c.agents), waits: c.waits, seen: c.seen, now: c.now });
   const digit = c.cmd && c.index < 9 ? c.index + 1 : undefined;
-  return { kind: 'project', p: c.p, on: c.on, facts, ...(digit === undefined ? {} : { digit }) };
-}
-
-/** A pinned agent's row; none when it left its project's live rows (renamed, archived). Pure. */
-export function pinRowOf(project: string, agent: string, agents: readonly Agent[], at?: string): SideRow | null {
-  const a = liveOf(agents).find((x) => x.name === agent);
-  if (a === undefined) return null;
-  return { kind: 'agent', project, a, on: at === agent, end: endOf(a), stopped: stoppedOf(a) };
+  return { p: c.p, on: c.on, facts, ...(digit === undefined ? {} : { digit }) };
 }

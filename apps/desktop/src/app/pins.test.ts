@@ -1,10 +1,7 @@
 // Pins (d5): his pinned agents read from the prefs, a pin and an unpin as the list prefs_set
-// writes, a renamed agent's old key dropped, a dead pin never shown.
+// writes, a renamed agent's old key dropped.
 import { describe, expect, it } from 'vitest';
-import type { Agent } from '@/proto';
-import { isPinned, livePins, namesOf, pinFirst, pinKeyOf, pinned, pinnedIn, pinSetOf, pinsKey, pinsOf, procPinId, watchPinId } from './pins';
-
-const agent = (name: string) => ({ name }) as Agent;
+import { isPinned, namesOf, pinFirst, pinKeyOf, pinned, pinnedIn, pinSetOf, pinsKey, pinsOf, procPinId, watchPinId } from './pins';
 
 describe('pinsOf', () => {
   it('reads every project’s pins in pin order, strings only, each once', () => {
@@ -38,16 +35,12 @@ describe('pinned', () => {
   });
 });
 
-describe('livePins', () => {
-  it('shows only the pins whose agent is still in its project’s rows', () => {
-    const pins = [
-      { project: 'acme', agent: 'perf' },
-      { project: 'acme', agent: 'gone' },
-    ];
-    const live = livePins(pins, (p) => (p === 'acme' ? [agent('perf'), agent('docs')] : []));
-    expect(live).toEqual([{ project: 'acme', agent: 'perf' }]);
-    expect(isPinned(live, 'acme', 'perf')).toBe(true);
-    expect(isPinned(live, 'acme', 'gone')).toBe(false);
+describe('isPinned', () => {
+  it('is true for a pinned agent of that project only', () => {
+    const pins = [{ project: 'acme', agent: 'perf' }];
+    expect(isPinned(pins, 'acme', 'perf')).toBe(true);
+    expect(isPinned(pins, 'acme', 'docs')).toBe(false);
+    expect(isPinned(pins, 'shop', 'perf')).toBe(false);
   });
 });
 

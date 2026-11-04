@@ -320,11 +320,6 @@ body:has(.app-shell) {
     opacity: 0;
   }
 }
-/* Pinned: its label and rows, over Projects */
-.app-s-pins {
-  display: flex;
-  flex-direction: column;
-}
 .app-s-list {
   flex: 1;
   min-height: 0;
@@ -526,13 +521,6 @@ body:has(.app-shell) {
   font: 500 var(--f-ui);
   outline: 2px solid var(--c-focus);
 }
-/* an agent: its text at x 40 (8 margin + 32) */
-.app-s-row.agent {
-  padding-left: var(--s-8);
-}
-.app-s-row.agent.stopped {
-  color: var(--c-text-2);
-}
 .app-s-end {
   flex: none;
   display: inline-flex;
@@ -542,21 +530,8 @@ body:has(.app-shell) {
   color: var(--c-text-3);
   font: 400 var(--f-meta);
 }
-/* a pinned agent's end: one 10 box for the dot and the ring alike, so a name never shifts */
-.app-s-row.agent .app-s-end {
-  width: calc(var(--s-2) + var(--s-1) / 2);
-  height: calc(var(--s-2) + var(--s-1) / 2);
-}
 .app-s-end kbd {
   font: inherit;
-}
-/* what asks something, at a row's end: the accent dot 6 (it waits on him); at work, main's breath
-   (Marks.tsx WorkingMark, marks.css .mk-wk; his m_44714: never a turning arc) */
-.app-s-dot {
-  width: calc(var(--s-1) + var(--s-1) / 2);
-  height: calc(var(--s-1) + var(--s-1) / 2);
-  border-radius: 50%;
-  background: var(--c-accent);
 }
 /* unread (designer m_47372): 6 round in the accent (the rail inbox's 'new for you'), 8 after the
    name, which is cut first; still while it shows, it fades out in 150 ms once seen (none under

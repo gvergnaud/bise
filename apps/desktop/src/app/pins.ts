@@ -5,7 +5,7 @@
 // and on its page. Desktop view
 // state that lasts across windows and restarts, kept in the app's prefs through prefs_set, one key
 // per kind and project hub id (pinKeyOf), each the pinned ids in the order he pinned them:
-// `pins.<project>` the agents' names (the left sidebar's Pinned reads them too), `pins_art.<project>`
+// `pins.<project>` the agents' names (the right side only: no 'Pinned' in the left sidebar, his m_52954), `pins_art.<project>`
 // artifact ids, `pins_sched.<project>` timer ids and watches' (watchPinId), `pins_proc.<project>` '<agent>/<process id>'
 // (procPinId: a process's id carries its start, so a pin is that run and ends with it). Ids are the
 // rows' own, never rebuilt. A pin whose thing left its list is not shown (a pinned row is only ever
@@ -14,9 +14,9 @@
 // stays in the hub's list, so its pin is kept and comes back when it comes back. Pinned rows go
 // first by `pinFirst`, a stable partition (no client sorts on its own: each group keeps the hub's
 // order, agents' ⌥N follow it, agents/model numbersOf). This module is the one writer (`pinThing`,
-// `pin`) and the reader (`usePins`, `usePinned`). Owner: nm-frame.
+// `pin`) and the reader (`usePins`). Owner: nm-frame.
 import { useMemo } from 'react';
-import type { Agent, JsonValue } from '@/proto';
+import type { JsonValue } from '@/proto';
 import type { Entity } from '@/shared/entity';
 import { getAppStore, usePrefs, type Store } from '@/store';
 import { getPref, type Prefs } from '@/settings/prefs';
@@ -100,11 +100,6 @@ export function pinned(names: readonly string[], id: string, on: boolean, live?:
   return on ? [...kept, id] : kept;
 }
 
-/** The pins whose agent is still in its project's rows (the sidebar never shows a dead pin). Pure. */
-export function livePins(pins: readonly Pin[], agents: (project: string) => readonly Agent[]): Pin[] {
-  return pins.filter((p) => agents(p.project).some((a) => a.name === p.agent));
-}
-
 /** Whether `agent` of `project` is pinned in `pins`. Pure. */
 export const isPinned = (pins: readonly Pin[], project: string, agent: string): boolean =>
   pins.some((p) => p.project === project && p.agent === agent);
@@ -124,12 +119,6 @@ export function pinFirst<T>(rows: readonly T[], isPin: (r: T) => boolean): reado
 export function usePins(kind: PinKind): PinSet {
   const prefs = usePrefs() as Prefs | null;
   return useMemo(() => pinSetOf(prefs, kind), [prefs, kind]);
-}
-
-/** Every pinned agent now, re-read when the prefs change. */
-export function usePinned(): readonly Pin[] {
-  const prefs = usePrefs() as Prefs | null;
-  return useMemo(() => pinsOf(prefs), [prefs]);
 }
 
 /** The ids of `project`'s things of `kind` the hub lists now; none until its list came (nothing is dropped before). */

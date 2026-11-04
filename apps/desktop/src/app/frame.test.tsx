@@ -17,6 +17,10 @@ import { createRouter, RouterContext } from './router';
 import type { Route } from './route';
 import { Sidebar, UNREAD_FADE_MS } from './Sidebar';
 import { projects } from '@/proto/words_projects.gen';
+import { frame as frameWords } from '@/proto/words_frame.gen';
+import { numbersOf } from '@/agents/model';
+import type { Prefs } from '@/settings/prefs';
+import { pinSetOf } from './pins';
 import { common } from '@/proto/words.gen';
 import { waitsTip, workingTip } from './tipwords';
 import { SideRail } from './SideRail';
@@ -92,6 +96,24 @@ describe('the sidebar', () => {
       delete document.documentElement.dataset.theme;
     });
   }
+
+  // his m_52954: a pinned agent leads its project's right side, never a row in the left sidebar.
+  // Mutation: ProjectList drawing the old 'Pinned' list again (PinnedList over pinsOf) turns it red.
+  it('a pinned agent is no row of the left sidebar; it still leads the right side', () => {
+    const agents = [agent('main'), agent('perf', { rank: 1 }), agent('designer', { rank: 2 })];
+    const { v, store } = frame({ screen: 'thread', project: ACME, agent: 'main' }, agents);
+    act(() => {
+      store.apply(ev('prefs', { prefs: { pins: { [ACME]: ['designer'] } } }));
+    });
+    const list = v.getByTestId('app.side.list');
+    expect(list.querySelector('[data-testid="app.side.pinned"], [data-testid^="app.side.pin."]')).toBeNull();
+    expect([...list.querySelectorAll('[role="heading"]')].map((h) => h.textContent)).toEqual([frameWords.projects]);
+    expect(list.textContent).not.toContain('designer');
+    // the right side: the pin is kept and puts designer first (⌥1), as agentrows.ts numbers it
+    const pins = pinSetOf(store.prefs() as Prefs | null, 'agent').get(ACME);
+    expect(pins).toEqual(['designer']);
+    expect([...numbersOf(ACME, store.agents(ACME), false, 0, pins)]).toEqual([['main', 0], ['designer', 1], ['perf', 2]]);
+  });
 
   it("H1: a project's pill, its sentence, its tip; a quiet one draws the same two lines", () => {
     const working = [agent('main', { status: 'working' }), agent('perf', { status: 'working' })];

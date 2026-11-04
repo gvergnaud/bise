@@ -13,7 +13,6 @@ import { ev } from '../../tests/feature/inputs';
 import { BREATH } from '@/working/gust';
 import { StateMark } from '@/agents/AgentsScreen';
 import { WorkingMark } from './Marks';
-import { AgentEnd } from './Sidebar';
 import { AgentSign } from './Marks';
 import { Store, StoreProvider } from '@/store';
 import { ComposerTab } from '@/thread/ComposerTab';
@@ -25,7 +24,6 @@ const working: Agent = { ...AGENT, name: 'perf', main: false, status: 'working',
 
 /** surface -> its working mark, drawn by the surface's own component */
 const SURFACES: readonly (readonly [string, () => ReactElement])[] = [
-  ['sidebar: a pinned agent at work', () => <AgentEnd end="works" testId="t" />],
   ['panel overview: an agent row at work', () => <AgentSign mark="works" testId="t" />],
   ['agents and changes pages: a row at work', () => <StateMark a={working} />],
   ['prs page and changes: a dirty or running dot', () => <Dot state="wk" />],

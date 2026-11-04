@@ -348,7 +348,6 @@ export function feature(now = 1_791_100_000_000): Feature {
         projectsOf(store.projects()).flatMap((p, index) => {
           const waits = projectWaiting(store.inboxItems(), p);
           const r = projectRowOf({ p, agents: store.agents(p.project), waits, index, on: false, cmd: false, seen: seen[p.project], now: clock });
-          if (r.kind !== 'project') return [];
           return [{ name: p.name, quiet: r.facts.quiet, say: r.facts.sentence.text, bars: rowBars(r.facts.week, clock).length }];
         }),
     },

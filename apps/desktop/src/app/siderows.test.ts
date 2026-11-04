@@ -1,10 +1,9 @@
 // The sidebar's rows (round 2, his r2-img11): one row per project, no agent under it, its facts
-// (round 3, H1: projectfacts.test.ts); ⌘ held, its digit 1-9. A pinned agent's row keeps the dot or
-// the breath.
+// (round 3, H1: projectfacts.test.ts); ⌘ held, its digit 1-9.
 import { describe, expect, it } from 'vitest';
 import type { Agent, ProjectRow } from '@/proto';
 import { projects } from '@/proto/words_projects.gen';
-import { endOf, pinRowOf, projectRowOf, projectsOf, workingOf } from './siderows';
+import { projectRowOf, projectsOf, workingOf } from './siderows';
 
 const agent = (name: string, o: Partial<Agent> = {}): Agent =>
   ({ name, main: name === 'main', status: 'idle', archived: false, title: '', purpose: '', since_ms: 0, waits: 0, ...o }) as Agent;
@@ -17,7 +16,7 @@ describe('projectRowOf', () => {
     const agents = [agent('main', { status: 'working' }), agent('perf', { status: 'working' }), agent('old', { status: 'working', archived: true }), agent('docs')];
     expect(workingOf(agents)).toBe(2);
     const r = projectRowOf({ p: ACME, agents, waits: 1, index: 0, on: true, cmd: false, now: 0 });
-    expect(r).toMatchObject({ kind: 'project', p: ACME, on: true, facts: { pill: 1, quiet: false, sentence: { text: projects.working({ n: 2 }), err: false } } });
+    expect(r).toMatchObject({ p: ACME, on: true, facts: { pill: 1, quiet: false, sentence: { text: projects.working({ n: 2 }), err: false } } });
   });
 
   it('⌘ held: its digit, index + 1, the first 9 only (⌘1-9 in keys.ts)', () => {
@@ -26,24 +25,6 @@ describe('projectRowOf', () => {
     expect(row(8, true)).toMatchObject({ digit: 9 });
     expect(row(9, true)).not.toHaveProperty('digit');
     expect(row(0, false)).not.toHaveProperty('digit');
-  });
-});
-
-describe('endOf', () => {
-  it('the dot when it asks him, the breath at work, else nothing: no count, no date', () => {
-    expect(endOf(agent('perf', { waits: 2, status: 'working' }))).toBe('waits');
-    expect(endOf(agent('perf', { waiting_on: { who: 'you' } }))).toBe('waits');
-    expect(endOf(agent('perf', { status: 'working' }))).toBe('works');
-    expect(endOf(agent('perf', { status: 'done' }))).toBeNull();
-    expect(endOf(agent('perf', { status: 'waiting' }))).toBeNull();
-  });
-});
-
-describe('pinRowOf', () => {
-  it("a pinned agent's row, none once it left the live rows", () => {
-    const agents = [agent('main'), agent('perf', { status: 'done' })];
-    expect(pinRowOf('acme', 'perf', agents, 'perf')).toMatchObject({ kind: 'agent', on: true, stopped: true });
-    expect(pinRowOf('acme', 'gone', agents)).toBeNull();
   });
 });
 
