@@ -65,6 +65,26 @@ describe('a .diff artifact', () => {
     expect(store.artifactDiff(P, 'cu-upload-diff', 1)).toBeNull();
   });
 
+  it("colors a .ts file's code by its language, its + line still green (diff-syntax, his m_53153)", () => {
+    const { store } = mount(cuDiff(1));
+    act(() => {
+      store.apply({
+        ev: 'diff', project: P, agent: '', base: '', artifact: 'cu-upload-diff', version: 1, title: 'cu-upload at dd86c8a',
+        files: [{
+          path: 'computer-use/extension/lib/text.ts', status: 'modified', add: 1, del: 0,
+          hunks: [{ header: '@@ -1 +1,2 @@', lines: [{ kind: 'ctx', old: 1, new: 1, text: '// a note' }, { kind: 'add', new: 2, text: 'import { uploadSummary } from "./upload.js";' }] }],
+        }],
+      });
+    });
+    const line = screen.getByTestId('artifact.diff.file.0.2');
+    expect(line.classList.contains('ad')).toBe(true);
+    expect(line.textContent).toContain('import { uploadSummary } from "./upload.js";');
+    const colorOf = (word: string) => [...line.querySelectorAll<HTMLElement>('span[style]')].find((s) => s.textContent === word)?.style.color;
+    expect(colorOf('import')).toBe('var(--md-syn-keyword)');
+    expect(colorOf('"./upload.js"')).toBe('var(--md-syn-string)');
+    expect([...screen.getByTestId('artifact.diff.file.0.1').querySelectorAll<HTMLElement>('span[style]')].map((s) => s.style.color)).toContain('var(--md-syn-comment)');
+  });
+
   it('only a .diff or .patch file is drawn as a diff', () => {
     expect(isDiff(cuDiff(1))).toBe(true);
     expect(isDiff({ ...cuDiff(1), path: '/w/fix.PATCH' })).toBe(true);

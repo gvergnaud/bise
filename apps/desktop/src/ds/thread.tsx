@@ -3,7 +3,7 @@
 // row's line icon in its 16 mark column: no Unicode glyph as an icon, ui-review m_43792). The answer's words come in as ReactNode: the
 // markdown render is src/thread's. Msg is memo'd: it sits in a long, virtualized list, and a new
 // message must not re-render the others.
-import { memo, useRef, type MouseEventHandler, type ReactNode, type Ref } from "react";
+import { memo, useRef, type CSSProperties, type MouseEventHandler, type ReactNode, type Ref } from "react";
 import { cx, st, sub } from "./cx";
 import { useFitsAfterWords } from "./hooks";
 import { Bar, Chip, Dot } from "./prim";
@@ -271,11 +271,18 @@ export function Art({ title, meta, isNew, thumb, state, onClick, testId }: ArtPr
   );
 }
 
+/** a run of a diff line's code: its words and their color (its language's syntax) */
+export interface DiffRun {
+  readonly text: string;
+  readonly style?: CSSProperties;
+}
 export interface DiffLine {
   old?: number | null;
   new?: number | null;
   sign?: "+" | "-" | "";
   text: string;
+  /** `text` colored by its language, run by run (their words are `text`'s); none: drawn plain */
+  runs?: readonly DiffRun[] | null;
   /** picked (a quote's lines): a run of picked lines is outlined as one block */
   sel?: boolean;
   /** a hunk's head ('@@ -1 +1 @@ fn x'): one line, cut with … inside the card, whole in its tip */
@@ -304,7 +311,7 @@ export function Diff({ file, add, rm, lines, onLine, pop, testId }: DiffProps) {
           <div key={i} className={cx("b-dl", l.sign === "+" && "ad", l.sign === "-" && "rm", l.head && "hh", l.sel && "pk", first && "first", last && "last")}
             role={onLine ? "button" : undefined} onClick={onLine ? () => { onLine(i); } : undefined} data-testid={sub(testId, i)}
             {...(l.head ? tipAttrs(l.text) : {})}>
-            <i>{l.old ?? ""}</i><i>{l.new ?? ""}</i><i>{l.sign ?? ""}</i>{l.head ? <span>{l.text}</span> : l.text}
+            <i>{l.old ?? ""}</i><i>{l.new ?? ""}</i><i>{l.sign ?? ""}</i>{l.head ? <span>{l.text}</span> : l.runs ? <span className="cd">{l.runs.map((r, k) => <span key={k} style={r.style}>{r.text}</span>)}</span> : l.text}
           </div>
         );
       })}

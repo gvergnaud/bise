@@ -1,11 +1,13 @@
 // A diff's files, one ds Diff each (the review's body, and a .diff artifact's in the panel:
 // try-diff-open, architect m_52963: one component for both, never a copy). Its keys (tui-parity V6):
 // tab / shift+tab next / previous file, j k scroll, esc `onEscape`; V7 / L11: drag or shift+↑↓
-// select whole lines, a typed key quotes them in `to`'s thread. Owner: nm-pages-b.
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
+// select whole lines, a typed key quotes them in `to`'s thread. Each file's code is colored by its
+// language (diff-syntax: syntax.ts), after a first plain paint. Owner: nm-pages-b.
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { copyText, QuotePop } from '@/quote/QuotePop';
 import { flatRows, handQuotes, quotesOf, range, type RowAt, type Sel } from './quote';
-import { Diff, Empty } from '@/ds';
+import { Diff, Empty, type DiffLine as DsLine } from '@/ds';
+import { diffRuns, langOfPath } from './syntax';
 import { useRouter } from '@/app/router';
 import type { Diff as DiffEv } from '@/store';
 import { fileHead, linesOf } from './model';
@@ -142,11 +144,13 @@ export function DiffFiles({ project, diff, loading, none, to, from, onEscape, te
         diff.files.map((f, i) => (
           <div key={f.path} className="rv-file">
             {f.note != null && f.note !== '' && <p className="rv-note">{f.note}</p>}
-            <Diff
-              file={fileHead(f)}
+            <FileDiff
+              path={f.path}
+              head={fileHead(f)}
               add={f.add}
               rm={f.del}
-              lines={(fileLines[i] ?? []).map((l, li) => (inSel(sel, (starts[i] ?? 0) + li) ? { ...l, sel: true } : l))}
+              lines={fileLines[i] ?? []}
+              picked={(li) => inSel(sel, (starts[i] ?? 0) + li)}
               pop={sel !== null && !dragging && lastFileOf(sel, rows) === i ? <QuotePop to={to} testId={`${testId}.quote.pop`} onAsk={askClick} onCopy={copyClick} /> : undefined}
               testId={`${testId}.file.${i}`}
             />
@@ -155,6 +159,33 @@ export function DiffFiles({ project, diff, loading, none, to, from, onEscape, te
       )}
     </div>
   );
+}
+
+interface FileDiffProps {
+  readonly path: string;
+  readonly head: string;
+  readonly add: number;
+  readonly rm: number;
+  readonly lines: readonly DsLine[];
+  readonly picked: (i: number) => boolean;
+  readonly pop: ReactNode;
+  readonly testId: string;
+}
+
+/**
+ * One file's Diff, its code colored by its language (diff-syntax): drawn plain first, then
+ * colored in a deferred render, one file at a time (React yields between files), so a long diff
+ * shows at once and stays scrollable while it colors. A file's runs are kept until its lines change.
+ */
+function FileDiff({ path, head, add, rm, lines, picked, pop, testId }: FileDiffProps) {
+  const colored = useDeferredValue(true, false);
+  const runs = useMemo(() => (colored ? diffRuns(lines, langOfPath(path)) : null), [colored, lines, path]);
+  const shown = lines.map((l, li) => {
+    const r = runs?.[li];
+    const sel = picked(li);
+    return r == null && !sel ? l : { ...l, ...(r == null ? {} : { runs: r }), ...(sel ? { sel: true } : {}) };
+  });
+  return <Diff file={head} add={add} rm={rm} lines={shown} pop={pop} testId={testId} />;
 }
 
 /** Row `i` of the flat list is in the selection. */
