@@ -613,7 +613,10 @@ export function InboxBlock({ here, onAnswer, now: pinned, only, rest }: InboxBlo
     // else his answer, with where he is (inbox picks 3). The block folds only when it answered.
     // '1 update now' on the update card: the app's own update goes with the machine's (UpdateLine.tsx)
     if (isUpdate(c) && n === 1) askedBiseUpdate();
-    const { answered } = store.do({ i: 'pick', project: c.project, card: c.id, n, from: { at: answerAt(here, home) } });
+    // on the inbox page, an option that opens an artifact opens it in the panel's tab only: his list
+    // stays (designer m_53016, a try card's '2 show the diff')
+    const tab = router.get().screen === 'inbox' ? ({ tab: true } as const) : {};
+    const { answered } = store.do({ i: 'pick', project: c.project, card: c.id, n, from: { at: answerAt(here, home) }, ...tab });
     if (answered) leave();
   };
   const close = (c: Card) => {

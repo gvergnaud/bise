@@ -8,7 +8,7 @@ import type { Diff } from '@/store';
 export function linesOf(f: DiffFile): DsLine[] {
   const out: DsLine[] = [];
   for (const h of f.hunks) {
-    out.push({ text: h.header, sign: '' });
+    out.push({ text: h.header, sign: '', head: true });
     for (const l of h.lines) out.push({ old: l.old ?? null, new: l.new ?? null, sign: l.kind === 'add' ? '+' : l.kind === 'del' ? '-' : '', text: l.text });
   }
   return out;

@@ -58,7 +58,7 @@ describe('the review', () => {
     const f = { path: 'b.rs', from: 'a.rs', status: 'renamed', add: 1, del: 0, hunks: [{ header: '@@ -1 +1 @@', lines: [{ kind: 'add' as const, new: 1, text: 'x' }] }] };
     expect(fileHead(f)).toBe('a.rs → b.rs');
     expect(linesOf(f)).toEqual([
-      { text: '@@ -1 +1 @@', sign: '' },
+      { text: '@@ -1 +1 @@', sign: '', head: true },
       { old: null, new: 1, sign: '+', text: 'x' },
     ]);
     expect(fileHead({ ...f, from: null, binary: true, size: 2_200_000 })).toBe('b.rs · a binary file, 2.1 MB');

@@ -42,8 +42,11 @@ export type Intent =
   | { readonly i: "close"; readonly project: string; readonly card: number }
   /** 'try again' on a refused card: what he sent, sent again */
   | { readonly i: "retry_card"; readonly project: string; readonly card: number }
-  /** his option `n` of a card: its act when the hub's row gives it one (nothing sent), else his answer */
-  | { readonly i: "pick"; readonly project: string; readonly card: number; readonly n: number; readonly from?: AnswerFrom }
+  /**
+   * his option `n` of a card: its act when the hub's row gives it one (nothing sent), else his answer;
+   * `tab`: an artifact it opens goes in the panel's tab only (picked on the inbox page: his list stays)
+   */
+  | { readonly i: "pick"; readonly project: string; readonly card: number; readonly n: number; readonly from?: AnswerFrom; readonly tab?: true }
   /** an act the hub gave (a page's chip, a page answer's jump): open it, nothing sent */
   | {
       readonly i: "open";

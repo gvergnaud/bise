@@ -508,6 +508,35 @@ describe("the notifications' permission row (amb-mac's notify.ask)", () => {
     }
   });
 
+  it("try-diff-open: on the inbox page, a try card's '2 show the diff' opens the diff in the panel's tab only: the inbox stays, the card stays, nothing sent (designer m_53016)", () => {
+    panelState.reset();
+    const open = { act: 'open' as const, artifact: 'cu-upload-diff' };
+    const tries = core_ev.map((e) =>
+      e.ev !== 'projects'
+        ? e
+        : { ...e, projects: e.projects.map((r) => ({ ...r, cards: [{ id: 872, project: r.project, kind: 'feature_try', agent: 'main', question: 'cu-upload is ready to try', options: [{ n: 1, label: 'try it' }, { n: 2, label: 'show the diff', act: open }, { n: 3, label: 'not yet' }], urgent: false, since_ms: NOW - 1000, place: 'feature:cu-upload' }] })) },
+    );
+    const sent: CoreCmd[] = [];
+    const store = new Store({ send: (c) => sent.push(c) });
+    replay(store, tries);
+    store.apply({ ev: 'artifacts', project: P, items: [{ id: 'cu-upload-diff', kind: 'code', title: 'cu-upload at dd86c8a', agent: 'main', url: '/s/features/cu-upload.diff', path: '/s/features/cu-upload.diff', version: 1, at_ms: NOW, new: false }] });
+    const router = createRouter({ screen: 'inbox' });
+    render(
+      <StoreProvider store={store}>
+        <RouterContext value={router}>
+          <StoreEdge />
+          <InboxBlock here={{ project: null, agent: null }} onAnswer={() => undefined} now={NOW} />
+        </RouterContext>
+      </StoreProvider>,
+    );
+    fireEvent.keyDown(window, { key: '1', code: 'Digit1', ctrlKey: true });
+    fireEvent.keyDown(window, { key: '2' });
+    expect(router.get()).toEqual({ screen: 'inbox' });
+    expect(tabEntity(panelState.get().tabs.active)).toEqual({ kind: 'artifact', project: P, id: 'cu-upload-diff' });
+    expect(sent.filter((c) => c.cmd !== 'card_in_view' && !(c.cmd === 'diff'))).toEqual([]);
+    expect(screen.getByTestId('inbox.block').textContent).toContain('cu-upload is ready to try');
+  });
+
   it("'not now' (its 2) and it is gone for good: asked once; its words never reach the hub", async () => {
     localStorage.clear();
     sessionStorage.clear();

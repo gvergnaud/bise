@@ -182,7 +182,7 @@ function does(s: CardsState, f: HubFacts, intent: Intent, at: number): Step {
       // the act the hub's row gives option n (rows::opt_act, read, never made here): it opens,
       // nothing is sent and the card stays (his #384 came back when it was); none: his answer
       const act = actOf(f, intent.project, intent.card, intent.n);
-      if (act !== null) return [s, opens(f, intent.project, act)];
+      if (act !== null) return [s, opens(f, intent.project, act, intent.tab === true)];
       const { project, card, n, from } = intent;
       return does(s, f, { i: "answer", project, card, reply: String(n), ...(from !== undefined ? { from } : {}) }, at);
     }
