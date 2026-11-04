@@ -16,7 +16,7 @@ export function DiffArtifact({ project, a, version, onEscape }: { project: strin
     store.command({ cmd: 'diff', project, artifact: a.id, version });
   }, [store, project, a.id, version]);
   return (
-    <div className="art-diff rv-screen" data-testid="artifact.diff">
+    <div className="rv-screen" data-testid="artifact.diff">
       <DiffFiles
         project={project}
         diff={diff}
