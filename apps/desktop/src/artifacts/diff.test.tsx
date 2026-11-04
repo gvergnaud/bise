@@ -59,7 +59,7 @@ describe('a .diff artifact', () => {
     const file = screen.getByTestId('artifact.diff.file.0');
     expect(file.textContent).toContain('rust/upload.rs');
     // the hunk's head, then − old (rm), + new (ad), the context plain: the review's own colours
-    const rows = [...file.querySelectorAll('.b-dl')].map((r) => [r.classList.contains('ad') ? '+' : r.classList.contains('rm') ? '-' : ' ', r.textContent?.includes('old line') ? 'old' : r.textContent?.includes('new line') ? 'new' : r.textContent?.includes('same') ? 'same' : 'head']);
+    const rows = [...file.querySelectorAll('.b-dl')].map((r) => [r.classList.contains('ad') ? '+' : r.classList.contains('rm') ? '-' : ' ', r.textContent.includes('old line') ? 'old' : r.textContent.includes('new line') ? 'new' : r.textContent.includes('same') ? 'same' : 'head']);
     expect(rows).toEqual([[' ', 'head'], ['-', 'old'], ['+', 'new'], [' ', 'same']]);
     // another version's answer never lands on this one
     expect(store.artifactDiff(P, 'cu-upload-diff', 1)).toBeNull();
