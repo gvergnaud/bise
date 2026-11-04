@@ -190,7 +190,7 @@ test("image.js loads its zoom and the frame's kinds", async () => {
   const { boxPct } = await helpers("image.js");
   assert.equal(typeof boxPct, "function");
   const { FRAME } = await import(pathToFileURL(join(root, "kit", "office", "frame.js")).href);
-  assert.deepEqual(FRAME, { anchor: "anchor", esc: "esc", zoom: "zoom", fit: "fit", size: "size", pinch: "pinch", pan: "pan", room: "room", storage: "site-storage" });
+  assert.deepEqual(FRAME, { anchor: "anchor", esc: "esc", zoom: "zoom", fit: "fit", size: "size", pinch: "pinch", pan: "pan", room: "room", storage: "site-storage", find: "find", found: "found" });
 });
 
 test("a site's selection is read again before it counts (architect m_24172)", async () => {
