@@ -190,6 +190,8 @@ fn part_of(a: &Attachment) -> bise_proto::parts::Part {
             let n = chip_parts(&a.label).1.parse::<u32>().ok();
             Part::Quote { from: from.clone(), text: text.clone(), file: file.clone(), new: new.clone(), old: old.clone(), n }
         }
+        // a file's mention names the file; the part keeps its chip's label
+        [Part::File { path, missing, .. }] => Part::File { path: path.clone(), name: a.label.clone(), missing: *missing },
         [p] if !matches!(p, Part::Text { .. }) => p.clone(),
         _ => Part::Text { text: a.marker.clone() },
     }

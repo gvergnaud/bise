@@ -177,8 +177,13 @@ fn composer_like(parts: Vec<Part>) -> Vec<Part> {
             Part::Quote { from, text, n: Some(n), .. } => qn(n, &clean(&from), text.trim_end_matches('\n')),
             Part::Paste { n, text } => Part::Paste { n, text: text.trim_end_matches('\n').to_string() },
             Part::Image { name, source, mime, b64_file, caption } => Part::Image { name: clean(&name), source: clean(&source), mime, b64_file: clean(&b64_file), caption: clean(&caption) },
-            // a chip's name is never empty (empty: a listed file)
-            Part::File { path, name, missing } if !name.is_empty() => chip(&clean(&name), &clean(&path), missing),
+            // a chip's name is never empty (empty: a listed file); its path
+            // is absolute, and read back it is named by its file (the
+            // label is the clients' number, not in the text)
+            Part::File { path, name, missing } if !name.is_empty() => {
+                let path = format!("/{}", clean(&path));
+                chip(&file_mention_name(&path), &path, missing)
+            }
             p => p,
         })
         .collect()
@@ -202,7 +207,6 @@ fn parse_reads_render_back() {
             && !words.contains("<selection from=\"")
             && !words.contains("<pasted n=\"")
             && !words.contains("<image name=\"")
-            && !words.contains("<file name=\"")
             && !words.ends_with('\n');
         let quotes_plain = parts.iter().all(|p| match p {
             Part::Quote { text, .. } | Part::Paste { text, .. } => !text.contains("\n</selection>") && !text.contains("\n</pasted>") && !text.ends_with('\n'),
@@ -283,31 +287,55 @@ fn a_page_part_renders_as_the_hubs_text() {
     assert!(page_of(&[t("x")]).is_none());
 }
 
-/// file-chips (architect m_21764): a named file renders as its marker
-/// where its chip was, in the image marker's grammar, `missing="true"`
-/// when the hub found no file; it reads back as itself; an unnamed one
-/// stays in the list after his words, byte for byte the old text.
+/// file-mention-wire (architect m_53247): a named file renders where its
+/// chip was as a markdown link with its name and absolute path (spaces
+/// kept, the angle form only for a paren, ` (missing)` after it when the
+/// hub found no file); it reads back as itself; an unnamed one stays in
+/// the list after his words, byte for byte the old text.
 #[test]
-fn a_file_chip_is_a_marker_in_place() {
+fn a_file_chip_is_a_link_in_place() {
     let logo = Part::Image { name: "[Image #1]".into(), source: "/u/logo.png".into(), mime: "image/png".into(), b64_file: "/h/images/1.b64".into(), caption: String::new() };
-    let parts = vec![t("ajouter l'image "), logo, t(" dans la presentation powerpoint "), chip("[File #2]", "/u/deck.pptx", false)];
+    let bot = "/Users/ana/vibebot/The Bot.md";
+    let parts = vec![t("demande d'update "), chip("The Bot.md", bot, false), t(" pour interpoler, avec "), logo];
     let text = render(&parts);
     assert_eq!(
         text,
-        "ajouter l'image <image name=\"[Image #1]\" path=\"/u/logo.png\" mime=\"image/png\" b64=\"/h/images/1.b64\"> dans la presentation powerpoint <file name=\"[File #2]\" path=\"/u/deck.pptx\">"
+        "demande d'update [The Bot.md](/Users/ana/vibebot/The Bot.md) pour interpoler, avec <image name=\"[Image #1]\" path=\"/u/logo.png\" mime=\"image/png\" b64=\"/h/images/1.b64\">"
     );
+    // the chip's label is the clients' number, never in the text; read
+    // back, the part is named by its file
+    assert_eq!(render(&[t("demande d'update "), chip("[File #1]", bot, false), t(" pour")]), "demande d'update [The Bot.md](/Users/ana/vibebot/The Bot.md) pour");
     assert_eq!(parse(&text), parts);
-    let gone = [t("see "), chip("[File #1]", "/u/q3 \"final\".csv", true), t(" now")];
-    assert_eq!(render(&gone), "see <file name=\"[File #1]\" path=\"/u/q3 'final'.csv\" missing=\"true\"> now");
-    assert_eq!(render(&parse(&render(&gone))), render(&gone));
+    let gone = [t("see "), chip("q3 [final].csv", "/u/q3 (v2)/q3 [final].csv", true), t(" now")];
+    assert_eq!(render(&gone), "see [q3 \\[final\\].csv](</u/q3 (v2)/q3 [final].csv>) (missing) now");
+    assert_eq!(parse(&render(&gone)), gone);
     // a chip and a listed file: the chip in place, the list after
-    assert_eq!(render(&[chip("[File #1]", "/a.pdf", false), t(" x"), listed("/b.md")]), "<file name=\"[File #1]\" path=\"/a.pdf\"> x\n\n[files he attached:]\n/b.md");
-    // look-alikes stay text
+    assert_eq!(render(&[chip("[File #1]", "/a.pdf", false), t(" x"), listed("/b.md")]), "[a.pdf](/a.pdf) x\n\n[files he attached:]\n/b.md");
+    // look-alikes stay text: a relative path, a text that is not the
+    // file's name (a link he typed), an unclosed one
+    for c in ["[a.pdf](a.pdf)", "[the deck](/u/deck.pptx)", "[a.pdf](/a.pdf", "[a.pdf]\n(/a.pdf)", "see [x] and [y](/z/w)"] {
+        assert_eq!(render(&parse(c)), c, "{c:?}");
+        assert!(parse(c).iter().all(|p| matches!(p, Part::Text { .. })), "{c:?}");
+    }
+    assert_eq!(words(&parts), "demande d'update  pour interpoler, avec ");
+}
+
+/// The old marker of stored history (before file-mention-wire) reads as
+/// the same part as the link, forever (architect m_53247: not a shim): an
+/// old entry with no parts line still gets its chip; its look-alikes stay
+/// text.
+#[test]
+fn an_old_file_marker_reads_as_the_same_part() {
+    let old = "ajouter <file name=\"[File #2]\" path=\"/u/deck q3.pptx\"> et <file name=\"[File #3]\" path=\"/u/gone.csv\" missing=\"true\"> ok";
+    let new = "ajouter [deck q3.pptx](/u/deck q3.pptx) et [gone.csv](/u/gone.csv) (missing) ok";
+    assert_eq!(parse(old), parse(new));
+    assert_eq!(parse(old), vec![t("ajouter "), chip("deck q3.pptx", "/u/deck q3.pptx", false), t(" et "), chip("gone.csv", "/u/gone.csv", true), t(" ok")]);
+    assert_eq!(render(&parse(old)), new);
+    assert!(!of_text(old).is_empty(), "an old entry with no parts gets its chips");
     for c in ["<file name=\"[File #1]\" path=\"/a.pdf\" missing=\"no\">", "<file name=\"x\" path=\"/a\"", "<file name=\"a\">"] {
         assert_eq!(render(&parse(c)), c, "{c:?}");
         assert!(parse(c).iter().all(|p| matches!(p, Part::Text { .. })), "{c:?}");
     }
-    assert_eq!(words(&parts), "ajouter l'image  dans la presentation powerpoint ");
 }
 
 /// architect m_22000: a caption is a fact about the image, the marker's

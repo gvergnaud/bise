@@ -43,6 +43,33 @@ fn main_forwards_his_message_whole_with_a_note() {
     assert_eq!(got.last(), Some(&Part::Text { text: "tiens au fait, forward my words".into() }));
 }
 
+/// file-mention-wire: a file chip in the middle of his words reaches the
+/// model as a link with its name at its place, and a forward of it reads
+/// the same link (the receiver's view and the forward's parts).
+#[test]
+fn a_file_chip_mid_sentence_is_a_link_and_a_forward_keeps_it() {
+    let mut t = T::new();
+    t.spawn_task("docs");
+    t.turn("docs", "ok");
+    let parts = r#"[{"kind":"text","text":"demande d'update "},{"kind":"file","path":"/u/vibebot/The Bot.md","name":"[File #1]"},{"kind":"text","text":" pour interpoler"}]"#;
+    let p: Vec<Part> = serde_json::from_str(parts).unwrap();
+    let text = bise_proto::parts::render(&p);
+    let link = "demande d'update [The Bot.md](/u/vibebot/The Bot.md) pour interpoler";
+    assert_eq!(text, link);
+    t.req(MAIN, AgentReq::Send { to: "docs".into(), text: text.clone(), expect_reply: false, reply_to: None, queued: false, why: String::new(), switch: None, parts: parts.into(), attach: Vec::new(), fwd: None });
+    let n = t.hub.st.msgs().values().find(|m| m.text == text).expect("the message").id;
+    t.spawn_task("b");
+    t.turn("b", "ok");
+    let (tok, fx) = t.req("docs", fwd("b", "", n));
+    assert_eq!(reply(&fx, tok).unwrap()["ok"], true, "{fx:?}");
+    let s = say_to(&fx, "b").expect("b reads it");
+    assert!(s.contains(link), "the receiver's view:\n{s}");
+    let m = t.hub.st.msgs().values().filter(|m| m.fwd == Some(n)).max_by_key(|m| m.id).expect("the forward").clone();
+    let got: Vec<Part> = serde_json::from_str(&m.parts).expect("its parts");
+    assert!(got.contains(&Part::File { path: "/u/vibebot/The Bot.md".into(), name: "[File #1]".into(), missing: false }), "{got:?}");
+    assert_eq!(bise_proto::parts::render(&got), m.text);
+}
+
 /// Architect m_41547: the header has two writers (forward.bend composes
 /// it, bise_proto::parts renders it). Real forwards through sb-core (a
 /// note and none, a plain original, one with an image, one with a quote

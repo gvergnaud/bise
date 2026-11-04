@@ -368,13 +368,14 @@ export function sentParts(parts: readonly Part[]): string {
 /**
  * His words as sent, to match a pending send with its echo: the hub's image markers
  * (`<image name="[Image #1]" path=… mime=… b64=…>`, rust/images marker()) and the composer's
- * '[Image #n]' labels out, and the same for files (`<file name="[File #2]" path=…[ missing="true"]>`,
- * bise_proto parts, file-chips; '[File #n]'), spaces collapsed. Pure.
+ * '[Image #n]' labels out, and the same for files (a link to an absolute path,
+ * `[deck.pptx](/u/deck.pptx)[ (missing)]`, bise_proto parts::file_marker; '[File #n]'), spaces
+ * collapsed. Pure.
  */
 export function sentWords(text: string): string {
   return text
     .replace(/<image name="[^"]*" path="[^"]*" mime="[^"]*" b64="[^"]*">/g, ' ')
-    .replace(/<file name="[^"]*" path="[^"]*"(?: missing="true")?>/g, ' ')
+    .replace(/\[(?:\\.|[^\]\\\n])*\]\((?:<(?:\\.|[^>\\\n])*>|\/[^)\n]*)\)(?: \(missing\))?/g, ' ')
     .replace(/\[(?:Image|File) #\d+\]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();

@@ -210,7 +210,7 @@ pub(crate) fn view_of(text: &str, parts: &[Part]) -> View {
             Part::Image { name, source, mime, b64_file, caption } => v.body.push_str(&parts::image_marker(name, source, mime, b64_file, caption)),
             // a file chip in place, as its marker (`▯ deck.pptx`,
             // attach::chip_spans); a listed file in the list after
-            Part::File { path, name, missing } if !name.is_empty() => v.body.push_str(&parts::file_marker(name, path, *missing)),
+            Part::File { path, name, missing } if !name.is_empty() => v.body.push_str(&parts::file_marker(path, *missing)),
             Part::File { path, .. } => files.push(path),
             // the hub's line for the model (the capsule's), never drawn;
             // a forward's header: its own line (agent_msg.rs), never here

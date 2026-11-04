@@ -236,7 +236,7 @@ mod tests {
         let back: Vec<Part> = serde_json::from_str(&s.parts).unwrap();
         assert_eq!(back[3], file("[File #2]", "/u/deck.pptx"));
         assert_eq!(back[5], Part::File { path: "/u/gone.csv".into(), name: "[File #3]".into(), missing: true });
-        assert!(s.text.ends_with(" dans <file name=\"[File #2]\" path=\"/u/deck.pptx\"> et <file name=\"[File #3]\" path=\"/u/gone.csv\" missing=\"true\">"), "{}", s.text);
+        assert!(s.text.ends_with(" dans [deck.pptx](/u/deck.pptx) et [gone.csv](/u/gone.csv) (missing)"), "{}", s.text);
         assert_eq!(s.text, parts::render(&back));
         assert_eq!(said(&[file("[File #1]", "deck.pptx")], &Door { store: Path::new("/h/images"), put: &none, exists: &yes, known: &|_, _| Ok(1) }), Err("a file part needs an absolute path: deck.pptx".into()));
         let listed = Part::File { path: "/u/gone.md".into(), name: String::new(), missing: false };

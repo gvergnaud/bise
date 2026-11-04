@@ -1947,10 +1947,10 @@ async function fileChips(harness: () => Promise<unknown>) {
     await shot('file-chip-card-answer');
     await page.keyboard.press('Enter');
     // an answer reaches main as the hub's own words ('the user answered card #N (…): "…"'), the file
-    // in them as its <file … path=…> tag where he dropped it (cand-2760), or as a file part
+    // in them as its [name](path) link where he dropped it (cand-2760, file-mention-wire), or as a file part
     const asPart = (r: JournalRow) => r.parts?.some((p) => p.kind === 'file' && p.path === csv);
     // the hub says 'notification #N' since cards became notifications in its words
-    const asTag = (r: JournalRow) => /answered (card|notification)/.test(r.text) && r.text.includes(`cold, see <file name="[File #1]" path="${csv}"`);
+    const asTag = (r: JournalRow) => /answered (card|notification)/.test(r.text) && r.text.includes(`cold, see [${path.basename(csv)}](${csv})`);
     const got = await until(async () => journal('bench-zq.csv').find((r) => asPart(r) || asTag(r)) ?? null, 30000, 1000);
     ans = { ...ans, chip: !!chip, entry: got ? { ...got, parts: got.parts?.map((p) => ({ kind: p.kind, name: p.name, path: p.path ? path.basename(p.path) : undefined, text: p.text })) ?? null } : journal('bench-zq.csv').slice(0, 2) };
     ans.ok = !!chip && !!got && (asTag(got) || (got.parts?.[0]?.kind === 'text' && /cold, see/.test(got.parts?.[0]?.text ?? '')));

@@ -6,19 +6,39 @@
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 
-/// The markers of an attachment (bise_proto::parts' image and file
-/// markers, as `parts::render` writes them).
-const ATTACH_OPENS: [&str; 2] = ["<image name=\"", "<file name=\""];
+/// How an image marker starts (bise_proto::parts' image marker, as
+/// `parts::render` writes it); a file's mention is its link
+/// (`parts::find_file_marker`).
+const IMAGE_OPEN: &str = "<image name=\"";
 
-/// `s` holds an image or file marker.
+/// `s` holds an image marker or a file's mention.
 pub(crate) fn has(s: &str) -> bool {
-    ATTACH_OPENS.iter().any(|m| s.contains(m))
+    s.contains(IMAGE_OPEN) || bise_proto::parts::find_file_marker(s).is_some()
+}
+
+/// The next attachment in `s` from byte `from`: its start and end (an
+/// image marker to its `">`, a file's mention whole).
+fn next_attachment(s: &str, from: usize) -> Option<(usize, usize)> {
+    let rest = s.get(from..)?;
+    let image = rest.find(IMAGE_OPEN).map(|i| (from + i, rest[i..].find("\">").map_or(s.len(), |e| from + i + e + 2)));
+    let file = bise_proto::parts::find_file_marker(rest).map(|(i, _, used)| (from + i, from + i + used));
+    [image, file].into_iter().flatten().min()
 }
 
 /// A brief's words and its attachments after them (send-parts: the
-/// markers come last); none: (`body`, "").
+/// markers come last, with only spaces between them); none: (`body`,
+/// ""). A file's link inside the words stays with the words.
 pub(crate) fn split(body: &str) -> (&str, &str) {
-    match ATTACH_OPENS.iter().filter_map(|m| body.find(m)).min() {
+    let mut tail: Option<usize> = None;
+    let mut last = 0usize;
+    while let Some((a, b)) = next_attachment(body, last) {
+        if !body[last..a].trim().is_empty() {
+            tail = None;
+        }
+        tail = tail.or(Some(a));
+        last = b;
+    }
+    match tail.filter(|_| body[last..].trim().is_empty()) {
         Some(i) => body.split_at(i),
         None => (body, ""),
     }
@@ -74,9 +94,21 @@ mod tests {
 
     #[test]
     fn chips_sent_back_to_back_read_one_space_apart() {
-        let line = "<image name=\"[Image #1]\" path=\"/x/flame.png\" mime=\"image/png\" b64=\"\"><file name=\"[File #2]\" path=\"/x/cold.csv\">";
+        let line = "<image name=\"[Image #1]\" path=\"/x/flame.png\" mime=\"image/png\" b64=\"\">[cold.csv](/x/cold.csv)";
         let flat: String = spans(line, Style::default()).iter().map(|s| s.content.as_ref()).collect();
         assert!(flat.contains("flame.png ") && !flat.contains("flame.png▯"), "{flat}");
         assert!(!flat.starts_with(' '), "{flat}");
+    }
+
+    /// file-mention-wire: the attachments are the links and markers at
+    /// the end; a file's link inside the words stays with them.
+    #[test]
+    fn a_briefs_chips_are_its_last_markers_only() {
+        let body = "update [The Bot.md](/u/The Bot.md) pour moi\n\n[cold.csv](/x/cold.csv) <file name=\"[File #2]\" path=\"/x/old.csv\">";
+        let (words, chips) = split(body);
+        assert_eq!(words, "update [The Bot.md](/u/The Bot.md) pour moi\n\n");
+        assert_eq!(chips, "[cold.csv](/x/cold.csv) <file name=\"[File #2]\" path=\"/x/old.csv\">");
+        assert_eq!(split("see [The Bot.md](/u/The Bot.md) now"), ("see [The Bot.md](/u/The Bot.md) now", ""));
+        assert!(has("see [The Bot.md](/u/The Bot.md) now") && !has("see [the doc](/u/The Bot.md)"));
     }
 }

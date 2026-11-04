@@ -71,7 +71,7 @@ fn the_sentence_keeps_each_chip_at_its_place() {
             Part::Text { text: " ".into() },
         ]
     );
-    assert!(said.text.contains(&format!("powerpoint <file name=\"[File #2]\" path=\"{deck}\">")), "{}", said.text);
+    assert!(said.text.contains(&format!("powerpoint [deck.pptx]({deck})")), "{}", said.text);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -96,7 +96,7 @@ fn an_at_pick_of_code_is_a_chip_at_the_at() {
         said.parts,
         vec![Part::Text { text: "look ".into() }, Part::File { path: main.clone(), name: "[File #1]".into(), missing: false }, Part::Text { text: " then fix it".into() }]
     );
-    assert!(said.text.contains(&format!("look <file name=\"[File #1]\" path=\"{main}\"> then fix it")), "{}", said.text);
+    assert!(said.text.contains(&format!("look [main.rs]({main}) then fix it")), "{}", said.text);
     app.ed.set("and @gone", 9);
     assert!(pick(&mut app, "gone.rs").is_none(), "no such file: stays text");
     let _ = std::fs::remove_dir_all(&dir);
@@ -106,13 +106,13 @@ fn an_at_pick_of_code_is_a_chip_at_the_at() {
 /// so after it, only `missing` in the error tone.
 #[test]
 fn the_history_draws_a_file_chip_and_says_missing() {
-    let text = format!("see {} now", parts::file_marker("[File #2]", "/u/Desk top/deck.pptx", false));
+    let text = format!("see {} now", parts::file_marker("/u/Desk top/deck.pptx", false));
     let spans = attach::chip_spans(&text, Style::default());
     let words: String = spans.iter().map(|s| s.content.as_ref()).collect();
     assert_eq!(words, "see ▯\u{a0}deck.pptx now");
     let (_, urls) = crate::links::collect(|| attach::chip_spans(&text, Style::default()));
     assert_eq!(urls, vec!["bise-file:/u/Desk top/deck.pptx".to_string()]);
-    let gone = parts::file_marker("[File #2]", "/u/q3.csv", true);
+    let gone = parts::file_marker("/u/q3.csv", true);
     let spans = attach::chip_spans(&gone, Style::default());
     let words: String = spans.iter().map(|s| s.content.as_ref()).collect();
     assert_eq!(words, "▯\u{a0}q3.csv · missing");

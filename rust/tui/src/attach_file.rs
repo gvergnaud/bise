@@ -1,7 +1,7 @@
 //! File chips (file-chips: architect m_21764, designer m_21765): any file
 //! on disk attached like an image, by its absolute path, never copied. The
-//! model reads it with its own tools from the `<file name="[File #2]"
-//! path="…">` marker the chip becomes where it was (`bise_proto::parts`).
+//! model reads it with its own tools from the `[deck.pptx](/u/deck.pptx)`
+//! link the chip becomes where it was (`bise_proto::parts::file_marker`).
 //!
 //! - in the composer: the label `[File #N]` (the images', quotes' and
 //!   pastes' one number sequence, `attach::next_number`), drawn with
@@ -67,7 +67,7 @@ pub(crate) fn attach_path(app: &mut App, path: &Path) -> String {
     let label = parts::file_label(n);
     let abs = path.to_string_lossy().to_string();
     let bytes = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
-    let marker = parts::file_marker(&label, &abs, false);
+    let marker = parts::file_marker(&abs, false);
     name_chip(&label, &abs);
     app.attachments.push(Attachment { label: label.clone(), marker, info: Info { source: abs, bytes, ..Info::default() } });
     attach::insert_chip(&mut app.ed, &label);
@@ -152,14 +152,10 @@ pub(crate) fn shown(app: &App) -> Vec<(usize, &Attachment)> {
 /// The first file marker in `text`: its byte range, its path and
 /// whether the hub found it missing.
 pub(crate) fn first_marker(text: &str) -> Option<(usize, usize, String, bool)> {
-    let mut from = 0usize;
-    while let Some(at) = text.get(from..).and_then(|t| t.find("<file name=\"")).map(|i| from + i) {
-        if let Some((Part::File { path, missing, .. }, used)) = parts::file_marker_at(&text[at..]) {
-            return Some((at, at + used, path, missing));
-        }
-        from = at + 1;
+    match parts::find_file_marker(text)? {
+        (at, Part::File { path, missing, .. }, used) => Some((at, at + used, path, missing)),
+        _ => None,
     }
-    None
 }
 
 /// A file chip in the history: `▯ deck.pptx` (accent, a link: a click

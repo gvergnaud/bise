@@ -150,11 +150,13 @@ export function timeOf(atMs: number | undefined, tz?: string): string {
   });
 }
 
-/** Bodies drawn as the thread's prose (the rest in mono, in the code box). */
+/**
+ * Bodies drawn as the thread's prose (the rest in mono, in the code box). His rows are text as
+ * sent (file-mention-wire): markdown would hide the image markers and tags the model reads.
+ */
 export const prose = (it: LogItem): boolean =>
   it.body?.kind === "md" &&
-  (it.role === "you" ||
-    it.role === "assistant" ||
+  (it.role === "assistant" ||
     it.role === "thinking" ||
     it.role === "summary" ||
     it.role === "message" ||
@@ -165,7 +167,7 @@ export function codeText(it: LogItem): { text: string; lang: string } {
   const b = it.body;
   if (b === undefined) return { text: "", lang: "text" };
   const looksJson =
-    b.lang === "json" || (b.lang === undefined && /^\s*[[{]/u.test(b.text));
+    b.lang === "json" || (b.lang === undefined && b.kind !== "md" && /^\s*[[{]/u.test(b.text));
   if (looksJson && b.cut !== true) {
     try {
       return {

@@ -18,7 +18,7 @@
 //!   what does <pasted n="1" lines="240">
 //!   …
 //!   </pasted> mean? <image name="[Image #2]" path="…" mime="image/png" b64="…">
-//!   in <file name="[File #3]" path="/Users/ana/deck.pptx">
+//!   in [deck.pptx](/Users/ana/deck.pptx)
 //!
 //!   [files he attached:]
 //!   /Users/ana/notes.md
@@ -26,9 +26,12 @@
 //!
 //!   the quotes in front (one per line), then the words with the pastes,
 //!   the images and the file chips where they were (file-chips, architect
-//!   m_21764: a file by its path, ` missing="true"` when the hub found
-//!   none at send time), then the list of his files that have no chip (a
-//!   `files` list, an old journal).
+//!   m_21764: a file by its path; file-mention-wire, architect m_53247: as
+//!   a markdown link with its name, ` (missing)` after it when the hub
+//!   found none at send time, [`file_marker`]), then the list of his
+//!   files that have no chip (a `files` list, an old journal). [`parse`]
+//!   reads the old `<file name="[File #3]" path="…">` marker of stored
+//!   history too, as the same part.
 //! - [`chip_kind`]: the one table of what a path he attaches becomes (an
 //!   image chip by [`IMAGE_EXTS`], which the window reads generated, else
 //!   a file chip), an `@` pick and a drop alike.
@@ -436,7 +439,7 @@ fn render_one(parts: &[Part]) -> String {
             Part::Text { text } => body.push_str(text),
             Part::Paste { n, text } => body.push_str(&paste_tag(*n, text)),
             Part::Image { name, source, mime, b64_file, caption } => body.push_str(&image_marker(name, source, mime, b64_file, caption)),
-            Part::File { path, name, missing } if !name.is_empty() => body.push_str(&file_marker(name, path, *missing)),
+            Part::File { path, name, missing } if !name.is_empty() => body.push_str(&file_marker(path, *missing)),
             Part::File { path, .. } => files.push(path),
             Part::Page { text, .. } => body.push_str(text),
             Part::Anchor { artifact, version, rev, anchor, quote, n: None } => head.push(anchor_tag(artifact, *version, *rev, anchor, quote, None)),
@@ -558,11 +561,62 @@ pub fn image_marker(name: &str, source: &str, mime: &str, b64_file: &str, captio
 /// reads the same).
 const CAPTION_ATTR: &str = "\" caption=\"";
 
-/// A named file's marker, in place in his words, in the image marker's
-/// grammar (architect m_21764 C): `<file name="[File #2]"
-/// path="/u/deck.pptx">`, ` missing="true"` added when the hub found no
-/// file there.
-pub fn file_marker(name: &str, path: &str, missing: bool) -> String {
+/// A file chip's mention in place in his words, as the model reads it
+/// (file-mention-wire, architect m_53247): model-facing text, so plain
+/// markdown, a link with the file's name and its absolute path,
+/// `[The Bot.md](/u/The Bot.md)`, ` (missing)` after it when the hub found
+/// no file there. The name's `\`, `[` and `]` are backslash-escaped; the
+/// path stays raw (spaces kept, the model reads it as-is), in the angle
+/// form `[x](</u/a (1).md>)` only when it holds `(`, `)`, `<` or `>`; a
+/// newline in either becomes a space. The chip's label (`[File #2]`) is
+/// the clients' number, never in this text.
+pub fn file_marker(path: &str, missing: bool) -> String {
+    let gone = if missing { FILE_MISSING } else { "" };
+    format!("[{}]({}){gone}", link_text(&file_mention_name(path)), link_dest(path))
+}
+
+/// What follows a file's link when the hub found no file there.
+const FILE_MISSING: &str = " (missing)";
+
+/// A file's name in its mention: its last segment, the path itself when
+/// it has none (`/`).
+fn file_mention_name(path: &str) -> String {
+    match file_name(path) {
+        "" => path.to_string(),
+        n => n.to_string(),
+    }
+}
+
+/// A link's text: `\`, `[`, `]` escaped, a newline a space.
+fn link_text(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\\' | '[' | ']' => {
+                out.push('\\');
+                out.push(c);
+            }
+            '\n' | '\r' => out.push(' '),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// A link's destination: the path raw, in `<…>` (its `<`, `>` escaped)
+/// when it holds a paren or an angle bracket; a newline a space.
+fn link_dest(path: &str) -> String {
+    let p: String = path.chars().map(|c| if c == '\n' || c == '\r' { ' ' } else { c }).collect();
+    match p.contains(['(', ')', '<', '>']) {
+        false => p,
+        true => format!("<{}>", p.replace('<', "\\<").replace('>', "\\>")),
+    }
+}
+
+/// The marker a file chip had before file-mention-wire,
+/// `<file name="[File #2]" path="/u/deck.pptx"[ missing="true"]>`: read
+/// back from stored history forever ([`file_marker_at`]), never written.
+fn old_file_marker(name: &str, path: &str, missing: bool) -> String {
     let gone = if missing { " missing=\"true\"" } else { "" };
     format!("{FILE_OPEN}{}\" path=\"{}\"{gone}>", marker_attr(name), marker_attr(path))
 }
@@ -593,15 +647,18 @@ pub fn parse(text: &str) -> Vec<Part> {
     out
 }
 
+/// The parts of `text` when they render back to it (an old file marker
+/// counts as its new form, [`words_parts`]); else the words alone; else
+/// one text part.
 fn parse_body(text: &str) -> Vec<Part> {
-    let full = parse_all(text);
-    if render(&full) == text {
+    let (full, norm) = parse_all(text);
+    if render(&full) == norm {
         return full;
     }
     // the quotes or the list read a way that doesn't render back (a tag
     // that looks like one but is not the composer's): the words alone
-    let words = words_parts(text);
-    if render(&words) == text {
+    let (words, norm) = words_parts(text);
+    if render(&words) == norm {
         return words;
     }
     text_part(text)
@@ -615,12 +672,17 @@ fn text_part(text: &str) -> Vec<Part> {
     }
 }
 
-fn parse_all(text: &str) -> Vec<Part> {
+/// The quotes in front, the words, the files' list; and `text` with its
+/// words as [`words_parts`] writes them back.
+fn parse_all(text: &str) -> (Vec<Part>, String) {
     let (head, files) = split_files(text);
     let (mut out, body) = split_quotes(head);
-    out.extend(words_parts(body));
+    // body is the end of head, head the start of text
+    let at = head.len() - body.len();
+    let (words, norm_body) = words_parts(body);
+    out.extend(words);
     out.extend(files.into_iter().map(|path| Part::File { path, name: String::new(), missing: false }));
-    out
+    (out, format!("{}{norm_body}{}", &text[..at], &text[head.len()..]))
 }
 
 /// The files' list at the end of `text` (`FILES_HEADER` at the start or
@@ -706,10 +768,13 @@ fn quote_at(s: &str) -> Option<(Part, usize)> {
     Some((q, tag.len()))
 }
 
-/// `body` cut at its paste tags and image markers, in order (texts
-/// between them).
-fn words_parts(body: &str) -> Vec<Part> {
+/// `body` cut at its paste tags, image markers and file mentions, in
+/// order (texts between them), and `body` as the renderer writes it
+/// today: each old file marker in the new form ([`file_marker_at`]), the
+/// rest byte for byte.
+fn words_parts(body: &str) -> (Vec<Part>, String) {
     let mut out = Vec::new();
+    let mut norm = String::with_capacity(body.len());
     let mut from = 0usize;
     let mut scan = 0usize;
     while let Some(at) = next_tag(body, scan) {
@@ -717,6 +782,11 @@ fn words_parts(body: &str) -> Vec<Part> {
             Some((p, used)) => {
                 if at > from {
                     out.push(Part::Text { text: body[from..at].to_string() });
+                }
+                norm.push_str(&body[from..at]);
+                match &p {
+                    Part::File { path, missing, .. } => norm.push_str(&file_marker(path, *missing)),
+                    _ => norm.push_str(&body[at..at + used]),
                 }
                 out.push(p);
                 from = at + used;
@@ -727,30 +797,94 @@ fn words_parts(body: &str) -> Vec<Part> {
     }
     if from < body.len() {
         out.push(Part::Text { text: body[from..].to_string() });
+        norm.push_str(&body[from..]);
     }
-    out
+    (out, norm)
 }
 
-/// The byte where the next paste tag, image or file marker or inline
-/// quote may start.
+/// The byte where the next paste tag, image marker, file mention (its
+/// `[`, or the old `<file name="`) or inline quote may start.
 fn next_tag(s: &str, from: usize) -> Option<usize> {
     let rest = s.get(from..)?;
-    [rest.find(PASTE_OPEN), rest.find(IMAGE_OPEN), rest.find(FILE_OPEN), rest.find(QUOTE_OPEN)].into_iter().flatten().min().map(|i| from + i)
+    [rest.find(PASTE_OPEN), rest.find(IMAGE_OPEN), rest.find(FILE_OPEN), rest.find('['), rest.find(QUOTE_OPEN)].into_iter().flatten().min().map(|i| from + i)
 }
 
-/// The file marker at the very start of `s`, when it renders back the
+/// The file mention at the very start of `s`, when it renders back the
 /// same: the part and the bytes it takes (the TUI's history draws each
-/// as its chip).
+/// as its chip). Reads the link [`file_marker`] writes and, from stored
+/// history forever, the old `<file name="[File #2]" path="…">` marker
+/// (architect m_53247: not a shim): both give the same part, its `name`
+/// the file's name (the old label's number is not in the new text).
 pub fn file_marker_at(s: &str) -> Option<(Part, usize)> {
+    file_link_at(s).or_else(|| old_file_marker_at(s))
+}
+
+/// The first file mention in `s`: where it starts, its part and the
+/// bytes it takes.
+pub fn find_file_marker(s: &str) -> Option<(usize, Part, usize)> {
+    let mut scan = 0usize;
+    while let Some(at) = next_tag(s, scan) {
+        if let Some((p, used)) = file_marker_at(&s[at..]) {
+            return Some((at, p, used));
+        }
+        scan = at + 1;
+    }
+    None
+}
+
+/// A file's link (`[name](path)`, ` (missing)` after it) at the very
+/// start of `s`.
+fn file_link_at(s: &str) -> Option<(Part, usize)> {
+    let rest = s.strip_prefix('[')?;
+    let close = unescaped(rest, ']')?;
+    let dest = rest[close + 1..].strip_prefix('(')?;
+    let path = match dest.strip_prefix('<') {
+        Some(d) => {
+            let end = unescaped(d, '>')?;
+            d[end + 1..].strip_prefix(')')?;
+            d[..end].replace("\\<", "<").replace("\\>", ">")
+        }
+        None => dest[..dest.find(')')?].to_string(),
+    };
+    if !path.starts_with('/') {
+        return None;
+    }
+    let link = file_marker(&path, false);
+    if !s.starts_with(&link) {
+        return None;
+    }
+    let missing = s[link.len()..].starts_with(FILE_MISSING);
+    let used = link.len() + if missing { FILE_MISSING.len() } else { 0 };
+    Some((Part::File { name: file_mention_name(&path), path, missing }, used))
+}
+
+/// The byte of the first `c` in `s` that no `\` escapes, before any
+/// newline.
+fn unescaped(s: &str, c: char) -> Option<usize> {
+    let mut esc = false;
+    for (i, ch) in s.char_indices() {
+        match ch {
+            '\n' => return None,
+            _ if esc => esc = false,
+            '\\' => esc = true,
+            _ if ch == c => return Some(i),
+            _ => {}
+        }
+    }
+    None
+}
+
+/// The old file marker ([`old_file_marker`]) at the very start of `s`.
+fn old_file_marker_at(s: &str) -> Option<(Part, usize)> {
     let rest = s.strip_prefix(FILE_OPEN)?;
     let (name, rest) = rest.split_once("\" path=\"")?;
     let (path, tail) = rest.split_once('"')?;
     let missing = tail.starts_with(" missing=\"true\">");
-    let m = file_marker(name, path, missing);
+    let m = old_file_marker(name, path, missing);
     if !s.starts_with(&m) {
         return None;
     }
-    Some((Part::File { path: path.into(), name: name.into(), missing }, m.len()))
+    Some((Part::File { path: path.into(), name: file_mention_name(path), missing }, m.len()))
 }
 
 /// The paste tag at the very start of `s`, when it renders back the same.

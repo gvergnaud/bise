@@ -72,9 +72,12 @@ fn parts_are_the_text_then_each_attachment_numbered() {
     // the render: his words, then the markers the runtime reads
     let text = parts::render(&p);
     assert!(text.starts_with("here it is\n\n<image name=\"[Image #1]\""));
-    assert!(text.ends_with("<file name=\"[File #2]\" path=\"/w/deck.pptx\">"));
-    // and it reads back as the same parts (the fold's fallback)
-    assert_eq!(parts::parse(&text), p);
+    assert!(text.ends_with("[deck.pptx](/w/deck.pptx)"), "{text}");
+    // and it reads back as the same parts (the fold's fallback), the file
+    // named by its name (its label is not in the text)
+    let mut back = p.clone();
+    back[2] = Part::File { path: "/w/deck.pptx".into(), name: "deck.pptx".into(), missing: false };
+    assert_eq!(parts::parse(&text), back);
 }
 
 #[test]

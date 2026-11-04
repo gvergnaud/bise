@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { LogItem } from "@/proto";
 import {
   codeText,
+  prose,
   editDiff,
   findCount,
   stepHit,
@@ -161,6 +162,15 @@ describe("log model", () => {
         item(1, "call", { body: { kind: "code", lang: "bash", text: "ls" } }),
       ),
     ).toEqual({ text: "ls", lang: "bash" });
+  });
+
+  it("draws his rows as the text sent, the file's link and the image marker kept (file-mention-wire)", () => {
+    const text = 'update [The Bot.md](/u/The Bot.md) pour <image name="[Image #1]" path="/u/a.png" mime="image/png" b64="">';
+    const you = item(1, "you", { body: { kind: "md", text } });
+    expect(prose(you)).toBe(false);
+    expect(codeText(you)).toEqual({ text, lang: "text" });
+    expect(codeText(item(2, "you", { body: { kind: "md", text: "[1, 2]" } }))).toEqual({ text: "[1, 2]", lang: "text" });
+    expect(prose(item(3, "assistant", { body: { kind: "md", text } }))).toBe(true);
   });
 
   it("puts an older page before the rows", () => {
