@@ -3,7 +3,8 @@
 A real hub (bise sbd, scripted model) on a throwaway repo in trunk flow:
 `sb feature new`, two agents spawned with `--feature`, each landing on the
 feature from its own worktree (never on main), the sidebar's feature place,
-`sb feature ready` and its inbox item (2 show the diff, 1 try it: the
+`sb feature ready` and its inbox item (2 show the diff: its artifact, no
+answer; 1 try it: the
 `[flow] try` build), the merge item and `1 merge` (main fast-forwarded,
 the agents archived, the branch in the trash); then a second feature
 dropped, and an existing local branch adopted.
@@ -100,12 +101,19 @@ def main():
         check(t.get("place") == "feature:cu", "the item names its place: %r" % t)
         w.wait(lambda: (feat("cu") or {}).get("card") == t["id"] and feat("cu")["checked"], 30, "the typed row names its try card, checked")
         c.wait_idle("main")
-        # 2 show the diff: a line in main's feed, the item stays
-        c.say("/answer %d 2" % t["id"])
-        c.wait_line("main", "the diff of cu: 2 commits", 30)
-        check(card(c, "feature_try") is not None, "the item stays after the diff")
+        # 2 show the diff (try-diff-open): ready kept the diff as the
+        # feature's artifact, cu-diff; the option opens it in the client and
+        # answers nothing, so a '2' sent anyway runs no step: the item stays
         diff = os.path.join(E.state, "features", "cu.diff")
         check("cu-a" in open(diff).read(), "the diff file")
+        meta = json.load(open(os.path.join(E.state, "artifacts", "cu-diff", "meta.json")))
+        check(meta["title"].startswith("cu at ") and meta["source"] == os.path.realpath(diff) and meta["kind"] == "code",
+              "the diff artifact: %r" % meta)
+        c.say("/answer %d 2" % t["id"])
+        c.wait_idle("main")
+        still = card(c, "feature_try")
+        check(still is not None and still["id"] == t["id"] and not still.get("running"), "the item stays, nothing runs: %r" % still)
+        check(card(c, "feature_merge") is None, "no step ran for 2")
         # 1 try it: built, then the merge item; Δ while on trial
         c.say("/answer %d 1" % t["id"])
         c.wait(lambda: card(c, "feature_merge") is not None, 60, "the merge item")
