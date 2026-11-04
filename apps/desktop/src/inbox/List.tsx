@@ -14,7 +14,7 @@
 // however old, or the page at its block. The list keys are app/listkeys.ts's. At 800 the pane takes
 // the list's place (past.css). The floating composer's room at the foot (--float-room). From props:
 // the store's wiring is InboxScreen (InboxScreen.tsx). Owner: nm-pages-a (inbox-screen's before).
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import type { Card } from '@/proto';
 import { useListKeys } from '@/app/listkeys';
 import { usePageSearchKeys } from '@/app/searchkeys';
@@ -28,6 +28,7 @@ import { idOf } from './id';
 import { timeOf } from '@/artifacts/model';
 import { ALL, askersOf, closedMs, dayHead, heroFacts, jumpOf, jumpWords, listsOf, saidWords, STATES, waitEnd, whenWhere, type Filter, type StateFilter, type InboxRecord, type Jump, type PastRow, type WaitRow } from './past';
 import { ArtText } from './artWords';
+import { barFit, type BarFit } from './barfit';
 import './past.css';
 
 /** A state filter's words. */
@@ -69,6 +70,10 @@ export function InboxView({ cards, records, onEnd, names, projects, ports, nextO
   // the pane is open: it shows the selected row while that is a past one (it follows ↑↓)
   const [paned, setPaned] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  // the list's row as its room shrinks (the panel open beside the page: designer m_53025)
+  const barRef = useRef<HTMLDivElement>(null);
+  const startRef = useRef<HTMLSpanElement>(null);
+  const fitAt = useBarFit(barRef, startRef);
   const gutter = useBannerGutter();
   const lists = listsOf(cards, records, names, f, now);
   const pastBy = new Map(lists.days.flatMap((d) => d.rows.map((r) => [r.key, r] as const)));
@@ -144,6 +149,14 @@ export function InboxView({ cards, records, onEnd, names, projects, ports, nextO
     setF({ ...f, ...g });
   };
   const askers = askersOf(cards, records);
+  const projGroup = { id: 'projects', rows: [
+      { id: 'p:', name: inbox.all_projects, current: f.project === '', testId: 'inbox.projects.all' },
+      ...projects.map((p) => ({ id: `p:${p.project}`, name: p.name !== '' ? p.name : p.project, current: f.project === p.project, testId: `inbox.projects.${p.project}` })),
+    ] };
+  const agentGroup = { id: 'agents', rows: [
+      { id: 'a:', name: inbox.all_agents, current: f.agent === '', testId: 'inbox.agents.all' },
+      ...askers.map((a) => ({ id: `a:${a}`, name: shownName(a), current: f.agent === a, testId: `inbox.agents.${a}` })),
+    ] };
   const facts = heroFacts(cards, now);
   const empty = cards.length === 0 && records.length === 0;
   const none = lists.order.length === 0;
@@ -163,22 +176,25 @@ export function InboxView({ cards, records, onEnd, names, projects, ports, nextO
         }}>
       <PageBanner title={hero.inbox_title} sentence={hero.inbox_say} facts={<>{facts.wait !== undefined && <><BannerWait>{facts.wait}</BannerWait>{' · '}</>}{facts.rest}</>}
         visual={<LiveVignette page="inbox" />} icon="inbox" gutter={gutter} testId="inbox.lead" />
-      <ListBar inset testId="inbox.filters"
-        end={<ListSearch ref={searchRef} value={f.q} onChange={(e) => { search(e.currentTarget.value); }} onKeyDown={searchKey} onClear={() => { search(''); searchRef.current?.focus(); }} testId="inbox.search" />}>
+      <ListBar inset testId="inbox.filters" ref={barRef} startRef={startRef} below={fitAt === 3}
+        end={<ListSearch ref={searchRef} narrow={fitAt >= 1} value={f.q} onChange={(e) => { search(e.currentTarget.value); }} onKeyDown={searchKey} onClear={() => { search(''); searchRef.current?.focus(); }} testId="inbox.search" />}>
         <Filters items={STATES.map((s) => ({ id: s, label: STATE_WORDS[s] }))} on={f.state} label={inbox.filter_label}
           onPick={(id) => { set({ state: id as StateFilter }); }} testId="inbox.state" />
+        {fitAt >= 2 ? (
+          // narrow: the two menus are one, its rows the two lists (designer m_53025)
+          <Dropdown look="pop" label={f.project === '' && f.agent === '' ? inbox.filter_menu : [f.project === '' ? '' : (names[f.project] ?? f.project), f.agent === '' ? '' : shownName(f.agent)].filter(Boolean).join(' · ')} testId="inbox.filter"
+            groups={[projGroup, agentGroup]}
+            onPick={(id) => { set(id.startsWith('p:') ? { project: id.slice(2) } : { agent: id.slice(2) }); }} />
+        ) : (
+          <>
         <Dropdown look="pop" label={f.project === '' ? inbox.all_projects : (names[f.project] ?? f.project)} testId="inbox.projects"
-          groups={[{ id: 'projects', rows: [
-            { id: 'p:', name: inbox.all_projects, current: f.project === '', testId: 'inbox.projects.all' },
-            ...projects.map((p) => ({ id: `p:${p.project}`, name: p.name !== '' ? p.name : p.project, current: f.project === p.project, testId: `inbox.projects.${p.project}` })),
-          ] }]}
+          groups={[projGroup]}
           onPick={(id) => { set({ project: id.slice(2) }); }} />
         <Dropdown look="pop" label={f.agent === '' ? inbox.all_agents : shownName(f.agent)} testId="inbox.agents"
-          groups={[{ id: 'agents', rows: [
-            { id: 'a:', name: inbox.all_agents, current: f.agent === '', testId: 'inbox.agents.all' },
-            ...askers.map((a) => ({ id: `a:${a}`, name: shownName(a), current: f.agent === a, testId: `inbox.agents.${a}` })),
-          ] }]}
+          groups={[agentGroup]}
           onPick={(id) => { set({ agent: id.slice(2) }); }} />
+          </>
+        )}
       </ListBar>
       <div className={`ip-body${cur ? ' paned' : ''}`}>
       {empty ? (
@@ -324,4 +340,35 @@ export function pickedOf(r: InboxRecord): number | null {
 function whenOf(ms: number, now: number): string {
   const day = dayHead(ms, now);
   return ms <= 0 ? day : day === inbox.day_today ? timeOf(ms) : `${day} ${timeOf(ms)}`;
+}
+
+/**
+ * The list row's fit (barfit.ts) as its box gets narrower or wider: measured on each resize, the
+ * menus' widths kept from when they were drawn (the two side by side, or the one 'Filter ⌄').
+ */
+function useBarFit(bar: RefObject<HTMLDivElement | null>, start: RefObject<HTMLSpanElement | null>): BarFit {
+  const [fit, setFit] = useState<BarFit>(0);
+  const seen = useRef({ menus: 0, filter: 0 });
+  useLayoutEffect(() => {
+    const el = bar.current;
+    const st = start.current;
+    if (el === null || st === null) return undefined;
+    const measure = () => {
+      const css = getComputedStyle(el);
+      const room = el.clientWidth - (parseFloat(css.paddingLeft) || 0) - (parseFloat(css.paddingRight) || 0);
+      const gap = parseFloat(getComputedStyle(st).columnGap) || 8;
+      const [tabs, a, b] = [...st.children].map((c) => (c as HTMLElement).offsetWidth);
+      if (b !== undefined && a !== undefined) seen.current.menus = a + gap + b;
+      else if (a !== undefined) seen.current.filter = a;
+      const next = barFit({ room, tabs: tabs ?? 0, menus: seen.current.menus, filter: seen.current.filter || seen.current.menus / 2, gap });
+      setFit((f) => (f === next ? f : next));
+    };
+    measure();
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    ro?.observe(el);
+    return () => {
+      ro?.disconnect();
+    };
+  }, [bar, start, fit]);
+  return fit;
 }

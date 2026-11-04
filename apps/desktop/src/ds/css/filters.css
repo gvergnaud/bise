@@ -16,6 +16,9 @@
 .b-listbar{position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:var(--s-2);box-sizing:border-box;height:var(--h-control);margin:0 0 var(--s-2);background:var(--c-solid);box-shadow:0 1px 0 transparent;transition:box-shadow var(--d-fast) var(--ease-out)}
 .b-listbar.inset{padding:0 var(--s-3)}
 .b-listbar[data-stuck]{box-shadow:0 1px 0 var(--c-line)}
+/* too narrow for its filters and its search: the search on its own row, right edge, 8 below (designer m_53025) */
+.b-listbar[data-below]{flex-wrap:wrap;height:auto;min-height:var(--h-control);row-gap:var(--s-2);padding-block:var(--s-2)}
+.b-listbar[data-below] > .b-listbar-end{flex-basis:100%;justify-content:flex-end}
 .b-listbar-start,.b-listbar-end{display:flex;align-items:center;gap:var(--s-2)}
 /* the filters never shrink (a page that has too many folds them: Artifacts' Toolbar.tsx) */
 .b-listbar-start{flex:1 1 auto;min-width:0}
@@ -25,6 +28,7 @@
 /* the search (ListSearch): 200 (160 under a 900 window) x 28, r 8, --c-sunken with a 1 px --c-line;
    its '/' key goes with the focus or words, its x comes with words */
 .b-listsearch{display:inline-flex;align-items:center;gap:var(--s-2);flex:none;box-sizing:border-box;width:var(--w-search);height:var(--h-control-sm);padding:0 var(--s-2);border-radius:var(--r-2);background:var(--c-sunken);box-shadow:inset 0 0 0 1px var(--c-line);color:var(--c-text-3);cursor:text}
+.b-listsearch.narrow{width:var(--w-search-narrow)}
 .b-listsearch:focus-within{box-shadow:inset 0 0 0 1px var(--c-line),0 0 0 2px var(--c-focus)}
 .b-listsearch:focus-within .b-kbd{display:none}
 @media (max-width:900px){.b-listsearch{width:160px}}

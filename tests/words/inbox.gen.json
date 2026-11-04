@@ -260,6 +260,11 @@
     "one": null,
     "text": "show"
   },
+  "inbox.filter_menu": {
+    "args": [],
+    "one": null,
+    "text": "Filter"
+  },
   "inbox.group_waiting": {
     "args": [],
     "one": null,

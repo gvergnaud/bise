@@ -74,6 +74,9 @@ export interface ListBarProps {
   endRef?: Ref<HTMLSpanElement>;
   /** data-folded on the row: its page folded the filters into one menu */
   folded?: boolean;
+  /** the right side on its own row under the filters, at the right edge, 8 below (a row too narrow
+   *  for both: the filters never shrink or wrap, designer m_53025) */
+  below?: boolean;
   /** the list scrolls in its own box under the row (Running's split view), not in the row's
    *  scroller: the row's line shows as soon as that box scrolled */
   scroller?: RefObject<HTMLElement | null>;
@@ -90,7 +93,7 @@ function scrollerOf(el: HTMLElement): HTMLElement | null {
 }
 
 /** the row above a list: filters left, search and action right; sticky, its line only while stuck */
-export function ListBar({ children, end, inset, ref, startRef, endRef, folded, scroller, testId }: ListBarProps) {
+export function ListBar({ children, end, inset, ref, startRef, endRef, folded, below, scroller, testId }: ListBarProps) {
   const own = useRef<HTMLDivElement>(null);
   const box = ref ?? own;
   const [stuck, setStuck] = useState(false);
@@ -108,7 +111,7 @@ export function ListBar({ children, end, inset, ref, startRef, endRef, folded, s
     return () => { sc.removeEventListener("scroll", check); };
   }, [box, scroller]);
   return (
-    <div ref={box} className={cx("b-listbar", inset === true && "inset")} data-stuck={stuck || undefined} data-folded={folded === true || undefined} data-testid={testId}>
+    <div ref={box} className={cx("b-listbar", inset === true && "inset")} data-stuck={stuck || undefined} data-folded={folded === true || undefined} data-below={below === true || undefined} data-testid={testId}>
       <span ref={startRef} className="b-listbar-start">{children}</span>
       <span ref={endRef} className="b-listbar-end">{end}</span>
     </div>
@@ -125,14 +128,16 @@ export interface ListSearchProps {
   placeholder?: string;
   /** a × at its right end once it has words: clears them (`<testId>.clear`) */
   onClear?: () => void;
+  /** 160 wide, not 200: its row's first give when it narrows (designer m_53025) */
+  narrow?: boolean;
   ref?: Ref<HTMLInputElement>;
   testId?: string;
 }
 
 /** the page's search: 200 × 28, r 8, --c-sunken, the icon 14, the key at its right (× once it has words, with onClear) */
-export function ListSearch({ value, onChange, onKeyDown, keys = "/", placeholder = ds.search, onClear, ref, testId }: ListSearchProps) {
+export function ListSearch({ value, onChange, onKeyDown, keys = "/", placeholder = ds.search, onClear, narrow, ref, testId }: ListSearchProps) {
   return (
-    <label className="b-listsearch" {...tipAttrs(ds.search_tip({ key: keys }))} data-testid={testId}>
+    <label className={cx("b-listsearch", narrow === true && "narrow")} {...tipAttrs(ds.search_tip({ key: keys }))} data-testid={testId}>
       <AppIcon name="search" size={14} />
       {/* data-esc-own: esc is its own (it clears, then gives the focus back), before the float's (app/escape.ts) */}
       <input ref={ref} type="search" value={value} placeholder={placeholder} aria-label={placeholder} spellCheck={false} data-esc-own=""

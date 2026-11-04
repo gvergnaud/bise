@@ -53,6 +53,8 @@ crate::words! { inbox:
     all_projects = "All projects";
     /// the desktop's agent filter: every agent
     all_agents = "All agents";
+    /// the project and agent filters as one menu when the list's row is narrow (designer m_53025)
+    filter_menu = "Filter";
     /// the desktop's state filter: all (a tab name: sentence case, designer m_43052)
     state_all = "All";
     /// the desktop's state filter: waiting

@@ -78,13 +78,17 @@ interface FloatAbout {
   readonly url: string;
 }
 
-/** Where the float's centre goes: the content's column, or the panel's middle in full width. */
-function useFloatLeft(): number {
+/**
+ * Where the float's centre goes: the content's column, or the panel's middle in full width; and
+ * its widest: the column's width, so it lives in the column's box and never runs over the open
+ * panel beside it (designer m_53025: the column narrows, the float with it); none in full width.
+ */
+function useFloatLeft(): { left: number; most: number | undefined } {
   const col = useSideLayout();
   const full = usePanelFull();
   const left = useLeftWidth();
-  if (!full) return col.colLeft + col.colW / 2;
-  return left + (window.innerWidth - left) / 2;
+  if (!full) return { left: col.colLeft + col.colW / 2, most: col.colW > 0 ? col.colW : undefined };
+  return { left: left + (window.innerWidth - left) / 2, most: undefined };
 }
 
 /** Who the floating composer writes to: by default the route's, else what he picked in 'to bise ⌄'. */
@@ -173,14 +177,14 @@ function Float({ to: def, about }: { to: FloatTo; about?: FloatAbout }) {
   }, [open, store, project, agent]);
   // centred on the content's column, not the window (nm-side's one sideLayout, page native-mac §6);
   // on the panel in full width
-  const floatLeft = useFloatLeft();
+  const { left: floatLeft, most: floatMost } = useFloatLeft();
   // its axis for what floats over the page's foot, centred on it (room.ts)
   useFloatX(floatLeft);
   const listRef = useRef<ThreadListHandle | null>(null);
   return (
     // data-pick-anchor: the composer's / @ $ list floats from the whole glass, never over its head (ui-review m_44570)
     <div ref={root} className="cmp-float" data-pick-anchor data-state={state} data-empty={(state === 'open' && (empty || loading)) || undefined} data-testid="composer.float" data-project={project} data-agent={agent}
-      role="region" aria-label={composer.float_name} style={{ left: floatLeft }}
+      role="region" aria-label={composer.float_name} style={floatMost === undefined ? { left: floatLeft } : { left: floatLeft, maxWidth: floatMost }}
       onFocus={() => {
         go('focus');
       }}
