@@ -89,6 +89,14 @@ settings › plugins in bise desktop, `bise plugins` or `/plugins` in bise termi
 
 look for `?` next to it: it may wait for you in the inbox (`⌘I` in bise desktop, `ctrl+1` in bise terminal). stopping its turn (`⌘.`, or `/interrupt` in bise terminal) and writing to it starts the next one. `/stop <agent>` also takes its hands off Chrome and your apps.
 
+### main keeps compacting, or holds on to a wrong idea
+
+main has no reset, on purpose: a fresh start would make it rebuild what it knows about your agents, the work in flight and your open questions, and it could forget one. `/compact` compacts the agent in view: the older part of its thread becomes a summary, and the thread itself is kept. the summary keeps what main believes, so tell it what it has wrong first, then compact.
+
+::: terminal bise session show --context
+`/clear` and `ctrl+l` clear the display only: the model still sees the same context. if main compacts again and again, look at what it sees with `bise session show --context`, and run `bise doctor --verbose`. check both for private paths or content before you paste them in an issue.
+:::
+
 ## logs
 
 ::: terminal bise session show
