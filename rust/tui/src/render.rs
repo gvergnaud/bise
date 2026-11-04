@@ -39,6 +39,22 @@ pub(crate) fn truncate_chars(s: &str, max: usize) -> String {
     }
 }
 
+/// `s` in at most `max` chars, the `…` after them, cut after its last
+/// whole word that fits (a word longer than `max`: in the word); never
+/// a cut in the middle of a word (the popup's descriptions, designer
+/// m_53332).
+pub(crate) fn truncate_words(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        return s.to_string();
+    }
+    let head: String = s.chars().take(max + 1).collect();
+    let cut = match head.rfind(' ') {
+        Some(sp) if sp > 0 => head[..sp].trim_end_matches([' ', ',', ';', ':', '-', '·', '(']).to_string(),
+        _ => s.chars().take(max).collect(),
+    };
+    format!("{}{}", cut, ellipsis())
+}
+
 /// `s` in at most `room` chars, the `…` (`...` in ASCII mode) included
 /// when it is cut.
 pub(crate) fn fit_chars(s: &str, room: usize) -> String {
@@ -2192,5 +2208,19 @@ mod chip_tests {
         assert!(t.starts_with(&format!("{G_CLOSED} 47 messages")) && t.contains('…'), "{t:?}");
         // the pulse stays
         assert!(t.ends_with(crate::theme::working_frame(0).0), "{t:?}");
+    }
+}
+
+#[cfg(test)]
+mod truncate_words_tests {
+    /// designer m_53332: a popup description is cut after a whole word,
+    /// never inside one ('decks (bise o…' was the break).
+    #[test]
+    fn a_description_is_cut_at_a_whole_word() {
+        let e = crate::theme::ellipsis();
+        let s = "plugin · make PowerPoint decks (bise office run)";
+        assert_eq!(super::truncate_words(s, 34), format!("plugin · make PowerPoint decks{e}"));
+        assert_eq!(super::truncate_words(s, 80), s, "it fits: whole");
+        assert_eq!(super::truncate_words("abcdefghij", 4), format!("abcd{e}"), "one long word: in it");
     }
 }

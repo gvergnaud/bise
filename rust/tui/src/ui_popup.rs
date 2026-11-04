@@ -80,7 +80,8 @@ pub(super) fn draw_popup(app: &App, frame: &mut Frame, prompt: Rect) {
                 let label = truncate_left(&c.label, (w as usize).saturating_sub(mark_w + 4));
                 spans.push(Span::styled(format!(" {} ", label), name_style));
                 let room = (w as usize).saturating_sub(label.width() + mark_w + 6);
-                spans.push(Span::styled(truncate_chars(&c.desc, room), desc_style));
+                // cut at a whole word, never inside one (designer m_53332)
+                spans.push(Span::styled(crate::render::truncate_words(&c.desc, room), desc_style));
                 Line::from(spans)
             }))
             .collect();
