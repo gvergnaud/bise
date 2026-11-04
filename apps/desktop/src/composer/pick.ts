@@ -4,7 +4,7 @@ import { filterEmoji } from './emoji';
 import { fileName, type Chip } from './message';
 import { isImagePath, type ComposerSources, type PickAgent, type PickArtifact, type PickCommand, type PickFile, type PickPlugin, type PickSkill } from './sources';
 import { agentPick, filePick, prefixFirst, skillPick, type Trigger } from './tokens';
-import { composer } from '../proto/words.gen';
+import { composer, settings } from '../proto/words.gen';
 
 export interface Row {
   /** Stable per row, for React keys and the test id `composer.pick.<id>`. */
@@ -20,6 +20,8 @@ export interface Row {
   readonly current?: boolean;
   /** its tip words instead of 'label · desc' */
   readonly tip?: string;
+  /** a plugin that waits on him: its state's mark in color ('?' accent, '✗' err) */
+  readonly waits?: 'login' | 'failed';
 }
 
 /** What a pick does: replace the trigger's word by `text` (and keep the list open on `browse`),
@@ -47,17 +49,26 @@ export function agentRows(t: Trigger, agents: readonly PickAgent[]): Row[] {
 
 /** The `@` list's plugins (at-plugins, the TUI's commands.rs plugin_items), after the agents: their
  *  own mark and the word 'plugin' first, so one never reads as an agent; never in a path query. A
- *  pick puts its `◆ name` chip where the `@word` was, sent as Part::Plugin. */
+ *  pick puts its `⊞ name` chip where the `@word` was, sent as Part::Plugin. */
 export function pluginRows(t: Trigger, plugins: readonly PickPlugin[]): Row[] {
   if (t.kind !== 'at' || t.quoted || t.query.includes('/')) return [];
   return prefixFirst(plugins, t.query, (p) => p.name).map((p) => ({
     id: `plugin.${p.name}`,
     label: `@${p.name}`,
-    desc: p.desc === '' ? composer.at_plugin : `${composer.at_plugin} · ${p.desc}`,
+    desc: pluginWords(p),
     tag: 'plugin',
     off: false,
     pick: { kind: 'plugin', name: p.name },
+    ...(p.waits === undefined ? {} : { waits: p.waits }),
   }));
+}
+
+/** A plugin row's words after its name (designer m_53299, the TUI's at_plugins::row_words):
+ *  'plugin · <its first sentence>', or what it waits on in its place ('plugin · ? needs a login',
+ *  'plugin · ✗ didn't start'). Pure. */
+export function pluginWords(p: PickPlugin): string {
+  const what = p.waits === 'login' ? `? ${settings.plugins_part_needs_login}` : p.waits === 'failed' ? `✗ ${composer.at_plugin_failed}` : p.desc;
+  return what === '' ? composer.at_plugin : `${composer.at_plugin} · ${what}`;
 }
 
 /** At most this many artifacts in the `@` list (commands.rs ARTIFACT_ROWS). */

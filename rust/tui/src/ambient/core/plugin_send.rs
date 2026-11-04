@@ -46,7 +46,7 @@ mod tests {
 
     #[test]
     fn a_typed_plugin_name_goes_as_its_part() {
-        let pl = || vec![Pickable { name: "computer".into(), desc: String::new() }];
+        let pl = || vec![Pickable { name: "computer".into(), desc: String::new(), waits: None }];
         let v = typed(json!({"cmd": "send", "text": "@computer open my last Gmail tab"}), &pl, &["main"]);
         assert_eq!(v["parts"], json!([{"kind": "plugin", "name": "computer"}, {"kind": "text", "text": " open my last Gmail tab"}]));
         assert_eq!(v["text"], "@computer open my last Gmail tab");

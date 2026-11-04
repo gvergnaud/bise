@@ -11,7 +11,6 @@ import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type JS
 import { createPortal } from 'react-dom';
 import { PICKER_CAP, Picker as DsPicker, type PickerRow } from '@/ds';
 import type { Row } from './pick';
-import { PLUGIN_GLYPH } from './message';
 
 /** The room a list needs to open on the box's side it prefers (above), else it opens on the larger one. */
 const MIN_ROOM = 240;
@@ -54,8 +53,24 @@ export function pickerRow(r: Row, testId: string): PickerRow {
       return { ...base, glyph: '@', name: r.label.replace(/^@/u, ''), secondary: sec };
     case 'artifact':
       return { ...base, glyph: '↗', name: r.label.replace(/^↗\s*/u, ''), secondary: sec };
-    case 'plugin':
-      return { ...base, glyph: PLUGIN_GLYPH, name: r.label.replace(/^@/u, ''), secondary: sec };
+    case 'plugin': {
+      // the plugins' one sign (designer m_53299); a waiting one's mark in color: '?' accent, '✗' err
+      const name = r.label.replace(/^@/u, '');
+      if (r.waits === undefined || sec === undefined) return { ...base, glyph: '⊞', name, secondary: sec };
+      const mark = r.waits === 'login' ? '?' : '✗';
+      const at = sec.indexOf(`${mark} `);
+      const secondary =
+        at < 0 ? (
+          sec
+        ) : (
+          <span>
+            {sec.slice(0, at)}
+            <span className={r.waits === 'login' ? 'b-picker-wait' : 'b-picker-fail'}>{mark}</span>
+            {sec.slice(at + 1)}
+          </span>
+        );
+      return { ...base, glyph: '⊞', name, secondary };
+    }
     case 'file':
     case 'dir': {
       const path = r.label.replace(/\/$/u, '');

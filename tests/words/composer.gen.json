@@ -57,6 +57,11 @@
     "one": null,
     "text": "plugin"
   },
+  "composer.at_plugin_failed": {
+    "args": [],
+    "one": null,
+    "text": "didn't start"
+  },
   "composer.attach_files": {
     "args": [],
     "one": null,

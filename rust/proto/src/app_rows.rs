@@ -209,6 +209,10 @@ pub struct Plugin {
     /// m_53238): `bend_plugins::resolve::Plugin::pickable`, the one rule
     #[serde(default, skip_serializing_if = "crate::is_false")]
     pub pickable: bool,
+    /// a pickable plugin that waits on him (a login, a server that
+    /// failed): the `@` menu's row says so (none: it works)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pick_waits: Option<PickWaits>,
     /// not his to turn off (the `skills:bise` folder: pages need it)
     #[serde(default, skip_serializing_if = "crate::is_false")]
     pub locked: bool,
@@ -633,6 +637,23 @@ pub enum ConnectorsProblem {
     /// the last fetch failed (`why`: its words, display only); the list is
     /// the last good one
     Fetch { why: String },
+    /// a newer core's value
+    #[serde(other)]
+    Unknown,
+}
+
+/// What a pickable plugin waits on before it works (at-plugins, designer
+/// m_53299): the `@` menu says it in place of its description, and a
+/// pick still makes its chip. bend_plugins' summary rules (typed fields
+/// only: a part's `login: needs`, its `error`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum PickWaits {
+    /// a server of it needs his login
+    Login,
+    /// a server of it failed to start
+    Failed,
     /// a newer core's value
     #[serde(other)]
     Unknown,

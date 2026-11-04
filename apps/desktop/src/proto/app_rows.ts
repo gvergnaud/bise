@@ -179,6 +179,11 @@ on: boolean,
  */
 pickable?: boolean, 
 /**
+ * a pickable plugin that waits on him (a login, a server that
+ * failed): the `@` menu's row says so (none: it works)
+ */
+pick_waits?: PickWaits | null, 
+/**
  * not his to turn off (the `skills:bise` folder: pages need it)
  */
 locked?: boolean, 
@@ -433,6 +438,14 @@ export type PartKind = "skill" | "mcp" | "tool" | "view" | "unknown";
  * A remote MCP server's login.
  */
 export type LoginState = "needs" | "in" | "out" | "pending" | "unknown";
+
+/**
+ * What a pickable plugin waits on before it works (at-plugins, designer
+ * m_53299): the `@` menu says it in place of its description, and a
+ * pick still makes its chip. bend_plugins' summary rules (typed fields
+ * only: a part's `login: needs`, its `error`).
+ */
+export type PickWaits = "login" | "failed" | "unknown";
 
 /**
  * Why his Mistral connectors may be missing or old (the connectors'

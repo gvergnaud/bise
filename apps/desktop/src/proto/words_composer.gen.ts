@@ -22,6 +22,8 @@ export const composer = {
   bar_commands: "commands",
   /** the `@` menu: a plugin's row says what it is, before its description (`plugin · Charts in the thread`), so a plugin never reads as an agent (at-plugins) */
   at_plugin: "plugin",
+  /** the `@` menu: a plugin whose server failed to start, after `✗` in place of its description (`plugin · ✗ didn't start`, designer m_53299); one that needs a login says settings' `plugins_part_needs_login` after `?` */
+  at_plugin_failed: "didn't start",
   /** key bar: the terminal panel has the keys (a plain label) */
   bar_terminal_keys: "terminal: keys go to the shell",
   /** key bar: hide the terminal panel */

@@ -144,7 +144,7 @@ fn plugin_row(i: &Inputs, p: &resolve::Plugin, names: &[(String, String, String)
         p.description.clone().filter(|d| !d.trim().is_empty())
     };
     let needs = parts.iter().any(|x| x.login == Some(LoginState::Needs));
-    Plugin {
+    let mut row = Plugin {
         id: id.to_string(),
         name: p.name.clone(),
         kind: if mcp { PluginKind::Mcp } else { PluginKind::Plugin },
@@ -157,6 +157,7 @@ fn plugin_row(i: &Inputs, p: &resolve::Plugin, names: &[(String, String, String)
         state: state_of(p.state),
         on,
         pickable: p.pickable(),
+        pick_waits: None,
         locked: false,
         action: (on && needs).then_some(PluginAction::LogIn),
         login: None,
@@ -165,7 +166,12 @@ fn plugin_row(i: &Inputs, p: &resolve::Plugin, names: &[(String, String, String)
         needs_node: p.needs_node,
         logins: Vec::new(),
         parts,
+    };
+    // the `@` menu says what a pickable one waits on (at-plugins)
+    if row.pickable {
+        row.pick_waits = summary::pick_waits(&row);
     }
+    row
 }
 
 /// `p`'s settings as rows: each `set` when the environment or his saved
@@ -371,6 +377,7 @@ fn connector_base(c: &ConnectorEntry, id: PluginId) -> Plugin {
         state: PluginState::Available,
         on: false,
         pickable: false,
+        pick_waits: None,
         locked: false,
         action: None,
         login: None,
@@ -425,6 +432,7 @@ fn skills_row(i: &Inputs, scope: SkillsScope) -> Option<Plugin> {
         state: if on { PluginState::Loaded } else { PluginState::Disabled },
         on,
         pickable: false,
+        pick_waits: None,
         locked,
         action: None,
         login: None,

@@ -91,12 +91,10 @@ export function chipLabel(c: Chip): string {
     case 'artifact':
       return `↗ ${c.title}`;
     case 'plugin':
-      return `${PLUGIN_GLYPH} ${c.name}`;
+      // the plugins' one sign (the sidebar's '⊞ plugins', designer m_53299)
+      return `⊞ ${c.name}`;
   }
 }
-
-/** A plugin's mark in the `@` list and on its chip (the TUI's G_PLUGIN). */
-export const PLUGIN_GLYPH = '◆';
 
 /** A path's last segment, the file chip's words: 'deck.pptx' (bise_proto::parts file_name). */
 export const fileName = (path: string): string => path.replace(/\/+$/u, '').split('/').at(-1) ?? path;

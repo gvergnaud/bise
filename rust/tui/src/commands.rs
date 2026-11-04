@@ -456,7 +456,7 @@ const FILE_MARK: &str = "▪";
 const DIR_MARK: &str = theme::G_CLOSED; // a folder opens: the disclosure mark
 
 /// The `@` popup's plugins (at_plugins.rs), after the agents: their own
-/// mark, never in a path query; a pick puts its `◆ name` chip where the
+/// mark (⊞), never in a path query; a pick puts its `⊞ name` chip where the
 /// `@word` was.
 fn plugin_items(app: &App, start: usize, q: &str) -> Vec<PopItem> {
     if q.contains('/') {
@@ -470,11 +470,8 @@ fn plugin_items(app: &App, start: usize, q: &str) -> Vec<PopItem> {
             let (fill, fill_cursor) = files::replace_token(&app.ed.text, start, app.ed.cursor, "");
             PopItem {
                 label: format!("@{}", p.name),
-                desc: match p.desc.is_empty() {
-                    true => bise_proto::words::composer::at_plugin.to_string(),
-                    false => format!("{} · {}", bise_proto::words::composer::at_plugin, p.desc),
-                },
-                mark: Some((theme::glyph(theme::G_PLUGIN), theme::accent())),
+                desc: crate::at_plugins::row_words(p),
+                mark: Some((theme::glyph(theme::G_VIEW), theme::accent())),
                 fill,
                 fill_cursor,
                 run: None,

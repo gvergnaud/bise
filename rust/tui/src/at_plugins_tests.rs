@@ -45,15 +45,36 @@ fn tmp(name: &str) -> std::path::PathBuf {
 #[test]
 fn the_menu_offers_the_plugins_on_that_give_something() {
     let t = tmp("menu");
+    // the rule (bend_plugins Plugin::pickable) on a fake root
     let res = bend_plugins::resolve::resolve(&fake_roots(&t, StateV2::default()));
-    let l = of_resolution(&res);
-    let names: Vec<&str> = l.iter().map(|p| p.name.as_str()).collect();
+    let names: Vec<&str> = res.pickable().map(|p| p.name.as_str()).collect();
     assert_eq!(names, ["computer", "docs"], "dataviz is off, empty gives nothing");
-    assert_eq!(l[0].desc, "Computer use: drive his browser.", "its first sentence");
-    // turned on: offered
     let on = StateV2 { enabled: vec![bend_plugins::id::PluginId::plugin("dataviz").to_string()], ..StateV2::default() };
     let res = bend_plugins::resolve::resolve(&fake_roots(&t, on));
-    assert!(of_resolution(&res).iter().any(|p| p.name == "dataviz"));
+    assert!(res.pickable().any(|p| p.name == "dataviz"), "turned on: offered");
+    // the rows the menu reads: the pickable ones, their first sentence, what they wait on
+    let row = |name: &str, pickable: bool, what: &str, waits| bise_proto::app_rows::Plugin {
+        name: name.into(),
+        pickable,
+        what: Some(what.into()),
+        pick_waits: waits,
+        ..serde_json::from_value(serde_json::json!({"name": name, "scope": "user", "state": "loaded"})).unwrap()
+    };
+    use bise_proto::app_rows::PickWaits;
+    let l = of_rows(&[
+        row("computer", true, "Computer use: drive his browser. More words.", None),
+        row("dataviz", false, "Charts.", None),
+        row("docs", true, "Word documents.", None),
+        row("linear", true, "Issues.", Some(PickWaits::Login)),
+        row("maps", true, "Maps.", Some(PickWaits::Failed)),
+    ]);
+    let words: Vec<String> = l.iter().map(row_words).collect();
+    assert_eq!(
+        words,
+        ["plugin · Computer use: drive his browser.", "plugin · Word documents.", "plugin · ? needs a login", "plugin · ✗ didn't start"],
+        "the off one left out; a waiting one listed, its state in place of its sentence"
+    );
+    let l: Vec<Pickable> = l.into_iter().filter(|p| p.waits.is_none()).collect();
     // the query: prefix first, then substring
     let names = |q: &str| filter(&l, q).into_iter().map(|p| p.name.clone()).collect::<Vec<_>>();
     assert_eq!(names("comp"), ["computer"]);
@@ -71,7 +92,7 @@ fn a_plugin_chip_sends_its_part_and_the_model_reads_at_name() {
     insert(&mut app, "computer");
     let text = app.ed.text.clone();
     assert_eq!(text, "use [Plugin #1] ");
-    assert_eq!(crate::attach::chip_text("[Plugin #1]").trim(), "◆ computer");
+    assert_eq!(crate::attach::chip_text("[Plugin #1]").trim(), "⊞ computer");
     let said = crate::attach::expand(&mut app, &format!("{text}open my last Gmail tab"));
     assert_eq!(said.text, "use @computer open my last Gmail tab", "the model's words: as typed");
     assert_eq!(
@@ -86,7 +107,7 @@ fn a_plugin_chip_sends_its_part_and_the_model_reads_at_name() {
 
 #[test]
 fn a_typed_plugin_name_goes_as_its_part_an_agents_stays_words() {
-    let pl = vec![Pickable { name: "computer".into(), desc: String::new() }, Pickable { name: "docs".into(), desc: String::new() }];
+    let pl = vec![Pickable { name: "computer".into(), desc: String::new(), waits: None }, Pickable { name: "docs".into(), desc: String::new(), waits: None }];
     let list = || pl.clone();
     let said = typed(crate::said::Said::of_parts(vec![Part::Text { text: "@computer open my last Gmail tab".into() }]), &list, &["main", "docs"]);
     assert_eq!(said.parts, vec![Part::Plugin { name: "computer".into() }, Part::Text { text: " open my last Gmail tab".into() }]);

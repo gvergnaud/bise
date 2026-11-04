@@ -1,20 +1,23 @@
 //! The plugins of the composer's `@` menu (at-plugins, architect m_53238):
 //! the workspace's plugins on that give a skill or tools
 //! (`bend_plugins::resolve::Plugin::pickable`, the rule the desktop's rows
-//! carry too), listed after the agents with their own mark. Picking one
-//! puts its chip (`◆ computer`) in the draft; on send the chip is
-//! `Part::Plugin`, which the model reads as `@computer` and after which
-//! the hub adds the line that names its skill and its tools. A typed
-//! `@computer` with no chip becomes the same part at send time
-//! ([`chips_of_typed`], bise_proto's `plugin_chips`).
+//! carry too), listed after the agents with the plugins' mark (⊞, designer
+//! m_53299), one that waits on a login or failed to start with that state
+//! in place of its description. Picking one puts its chip (`⊞ computer`)
+//! in the draft; on send the chip is `Part::Plugin`, which the model reads
+//! as `@computer` and after which the hub adds the line that names its
+//! skill and its tools. A typed `@computer` with no chip becomes the same
+//! part at send time ([`chips_of_typed`], bise_proto's `plugin_chips`).
 //!
-//! The list is resolved here (plugins are his files, as plugins.rs reads
-//! them), cached per workspace and its plugins' fingerprint (stats only).
+//! The list is the Plugins list's rows (plugins.rs: plugins are his files,
+//! no hub), cached per workspace, its plugins' fingerprint and a few
+//! seconds.
 
 use crate::attach::{Attachment, Info};
 use bise_proto::parts::Part;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 /// One plugin of the `@` menu.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -22,16 +25,21 @@ pub(crate) struct Pickable {
     pub(crate) name: String,
     /// its description's first sentence ("" none)
     pub(crate) desc: String,
+    /// what it waits on (a login, a server that failed): said in place
+    /// of its description; a pick still makes its chip
+    pub(crate) waits: Option<bise_proto::app_rows::PickWaits>,
 }
 
 /// How a plugin chip's label starts (`[Plugin #2]`): the composer draws
-/// it ` ◆ computer `; on send it is `Part::Plugin`.
+/// it ` ⊞ computer `; on send it is `Part::Plugin`.
 pub(crate) const OPEN: &str = "[Plugin #";
 
-/// The pickable plugins of a resolution, in its order. Pure.
-pub(crate) fn of_resolution(res: &bend_plugins::resolve::Resolution) -> Vec<Pickable> {
-    res.pickable()
-        .map(|p| Pickable { name: p.name.clone(), desc: first_sentence(p.description.as_deref().unwrap_or("")) })
+/// The pickable rows of the Plugins list (plugins.rs rows: the window's
+/// rows too), in its order, each with what it waits on. Pure.
+pub(crate) fn of_rows(rows: &[bise_proto::app_rows::Plugin]) -> Vec<Pickable> {
+    rows.iter()
+        .filter(|p| p.pickable)
+        .map(|p| Pickable { name: p.name.clone(), desc: first_sentence(p.what.as_deref().unwrap_or("")), waits: p.pick_waits })
         .collect()
 }
 
@@ -43,23 +51,44 @@ fn first_sentence(d: &str) -> String {
     }
 }
 
-type Cached = (PathBuf, u64, Vec<Pickable>);
+/// How long a list stays fresh with the same plugins (a login or a
+/// server's start changes its rows, not its fingerprint).
+const FRESH: Duration = Duration::from_secs(3);
+
+type Cached = (PathBuf, u64, Instant, Vec<Pickable>);
 static CACHE: Mutex<Option<Cached>> = Mutex::new(None);
 
-/// The `@` menu's plugins for `workspace`: resolved again only when its
-/// plugins' fingerprint moved (an install, a switch, an edit).
+/// The `@` menu's plugins for `workspace`: the Plugins list read again
+/// when its plugins' fingerprint moved (an install, a switch, an edit)
+/// or after [`FRESH`] (a login, a server that failed).
 pub(crate) fn list(workspace: &Path) -> Vec<Pickable> {
-    let roots = bend_plugins::resolve::Roots::standard(Some(workspace));
-    let fp = bend_plugins::resolve::fingerprint(&roots);
+    let fp = bend_plugins::resolve::fingerprint(&bend_plugins::resolve::Roots::standard(Some(workspace)));
     let mut c = CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some((ws, f, l)) = c.as_ref() {
-        if ws == workspace && *f == fp {
+    if let Some((ws, f, at, l)) = c.as_ref() {
+        if ws == workspace && *f == fp && at.elapsed() < FRESH {
             return l.clone();
         }
     }
-    let l = of_resolution(&bend_plugins::resolve::resolve(&roots));
-    *c = Some((workspace.to_path_buf(), fp, l.clone()));
+    let l = of_rows(&crate::plugins::rows(workspace, &[]));
+    *c = Some((workspace.to_path_buf(), fp, Instant::now(), l.clone()));
     l
+}
+
+/// A plugin row's words after its name (designer m_53299): `plugin · <its
+/// first sentence>`, or what it waits on in its place (`plugin · ? needs a
+/// login`, `plugin · ✗ didn't start`). Pure.
+pub(crate) fn row_words(p: &Pickable) -> String {
+    use bise_proto::app_rows::PickWaits;
+    use bise_proto::words::{composer, settings};
+    let what = match p.waits {
+        Some(PickWaits::Login) => format!("? {}", settings::plugins_part_needs_login),
+        Some(PickWaits::Failed) => format!("✗ {}", composer::at_plugin_failed),
+        _ => p.desc.clone(),
+    };
+    match what.is_empty() {
+        true => composer::at_plugin.to_string(),
+        false => format!("{} · {what}", composer::at_plugin),
+    }
 }
 
 /// The `@query`'s plugins: case-insensitive prefix matches first, then

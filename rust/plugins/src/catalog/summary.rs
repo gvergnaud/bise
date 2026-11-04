@@ -108,6 +108,20 @@ fn failed(p: &Plugin) -> bool {
     p.parts.iter().any(|x| x.on && x.error.is_some())
 }
 
+/// What a row waits on for the composer's `@` menu (at-plugins, designer
+/// m_53299): a server that failed first, then a login; none: it works.
+/// The same typed rules as the summary's.
+pub fn pick_waits(p: &Plugin) -> Option<bise_proto::app_rows::PickWaits> {
+    use bise_proto::app_rows::PickWaits;
+    if failed(p) {
+        Some(PickWaits::Failed)
+    } else if needs_login(p) {
+        Some(PickWaits::Login)
+    } else {
+        None
+    }
+}
+
 /// Its server's error line, the first that failed.
 fn first_error(p: &Plugin) -> String {
     let e = p.parts.iter().find_map(|x| if x.on { x.error.as_deref() } else { None }).unwrap_or_default();

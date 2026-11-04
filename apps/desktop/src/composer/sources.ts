@@ -21,6 +21,8 @@ export interface PickPlugin {
   readonly name: string;
   /** its description's first sentence ('' none) */
   readonly desc: string;
+  /** what it waits on (the core row's `pick_waits`): said in place of its sentence */
+  readonly waits?: 'login' | 'failed';
 }
 
 /** What completes one argument of a command (the TUI's commands.rs `Arg`): fixed words, or a

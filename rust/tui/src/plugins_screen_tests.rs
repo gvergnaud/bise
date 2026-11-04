@@ -30,6 +30,7 @@ fn plugin(id: &str, kind: PluginKind, scope: Scope, what: &str, parts: Vec<Plugi
         state: PluginState::Loaded,
         on: true,
         pickable: false,
+        pick_waits: None,
         locked: false,
         action: None,
         login: None,

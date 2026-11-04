@@ -2,16 +2,25 @@
 // with their own mark; a pick is a chip sent as Part::Plugin, the model reads `@name`.
 import { describe, expect, it } from 'vitest';
 import type { Plugin } from '@/proto';
-import { agentRows, pluginRows } from './pick';
+import { agentRows, pluginRows, pluginWords } from './pick';
 import { triggerAt } from './tokens';
 import { buildMessage, chipLabel, type Chip } from './message';
 import { segmentsOfParts } from './partsback';
 import { pickablePlugins } from './useSources';
 import { youView, partsGist } from '../thread/parts';
-import { composer } from '../proto/words.gen';
+import { composer, settings } from '../proto/words.gen';
 
-const row = (name: string, pickable: boolean, what?: string): Plugin =>
-  ({ id: name, name, kind: 'plugin', scope: 'built-in', title: name, state: pickable ? 'loaded' : 'disabled', on: pickable, ...(pickable ? { pickable } : {}), ...(what === undefined ? {} : { what }) }) as Plugin;
+const row = (name: string, pickable: boolean, what?: string): Plugin => ({
+  id: name,
+  name,
+  kind: 'plugin',
+  scope: 'built-in',
+  title: name,
+  state: pickable ? 'loaded' : 'disabled',
+  on: pickable,
+  ...(pickable ? { pickable } : {}),
+  ...(what === undefined ? {} : { what }),
+});
 
 describe('the @ list offers plugins', () => {
   const plugins = pickablePlugins([row('computer', true, 'Computer use: drive his browser. More.'), row('dataviz', false, 'Charts.'), row('docs', true)]);
@@ -22,6 +31,17 @@ describe('the @ list offers plugins', () => {
       { name: 'docs', desc: '' },
     ]);
     expect(pickablePlugins(null)).toEqual([]);
+  });
+
+  it('keeps a plugin that waits on him, its state in place of its sentence', () => {
+    const waiting = pickablePlugins([{ ...row('linear', true, 'Issues.'), pick_waits: 'login' }, { ...row('maps', true, 'Maps.'), pick_waits: 'failed' }]);
+    expect(waiting.map(pluginWords)).toEqual([`${composer.at_plugin} · ? ${settings.plugins_part_needs_login}`, `${composer.at_plugin} · ✗ ${composer.at_plugin_failed}`]);
+    const t = triggerAt('@', true);
+    if (t === null) throw new Error('no trigger');
+    expect(pluginRows(t, waiting).map((r) => [r.waits, r.pick])).toEqual([
+      ['login', { kind: 'plugin', name: 'linear' }],
+      ['failed', { kind: 'plugin', name: 'maps' }],
+    ]);
   });
 
   it('shows @computer as a plugin row, apart from the agents', () => {
@@ -41,7 +61,7 @@ describe('the @ list offers plugins', () => {
 
   it('sends the chip as Part::Plugin, the model reading @name', () => {
     const chip: Chip = { kind: 'plugin', n: 1, name: 'computer' };
-    expect(chipLabel(chip)).toBe('◆ computer');
+    expect(chipLabel(chip)).toBe('⊞ computer');
     const out = buildMessage([{ kind: 'chip', chip }, { kind: 'text', text: ' open my last Gmail tab' }]);
     expect(out.parts).toEqual([
       { kind: 'plugin', name: 'computer' },
