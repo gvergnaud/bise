@@ -17,6 +17,7 @@ import { useAllArtifacts } from '@/artifacts';
 import { armHandoff } from '@/composer/handoff';
 import { activate, boxOf, clampShare, closeBackKept, closeKept, closeOthers, fitOf, launcherToReuse, moveIn, nextBrowser, nextLauncher, nextShell, openKept, pushClosed, reopenIn, stepIn, clampW, withOpen, FOLDED, dropGone, dropGoneArts, type Before, type Closed, type PanelBox, type PanelFit, type PanelKept, type TabWhat, type Tabs } from './model';
 import { parseRec, pruneScopes, putView, scopeOf, switchTo, viewOf, type PanelRec } from './scope';
+import { focusBackOf, noteFocus } from './focusback';
 
 const KEY = 'panel';
 
@@ -272,6 +273,8 @@ export function openWhat(what: TabWhat, instead?: string): void {
   opened = active;
   openedN += 1;
   if (o.before !== null) before.set(beforeKey(active), o.before);
+  // where ⌘W gives his focus back when this tab closes (focusback.ts)
+  if (typeof document !== 'undefined') noteFocus(beforeKey(active));
   // a New tab that opens fresh starts with an empty field, whatever an earlier one of its number held
   if (!state.tabs.list.some((t) => t.id === active)) drafts.delete(beforeKey(active));
   set(o.kept);
@@ -402,11 +405,22 @@ export function stepTab(dir: 1 | -1): void {
   if (state.open) setTabs(stepIn(state.tabs, dir));
 }
 
-/** ⌘W on the panel: the tab in front closes (the last one folds the panel); no tab: the panel folds. */
+/**
+ * ⌘W in the main window (the window's key, or File › Close Tab when the focus is in an artifact's
+ * frame; cmd-w-artifact, designer m_53158): the tab in front closes (the last one folds the panel),
+ * his focus back where it was before it opened (focusback.ts); no tab: the panel folds; folded:
+ * nothing, never the window.
+ */
 export function closeActive(): void {
   if (!state.open) return;
-  if (state.tabs.active !== '') closeTabId(state.tabs.active);
-  else set({ ...state, open: false });
+  const id = state.tabs.active;
+  if (id === '') {
+    set({ ...state, open: false });
+    return;
+  }
+  const back = typeof document === 'undefined' ? undefined : focusBackOf(beforeKey(id));
+  closeTabId(id);
+  back?.();
 }
 
 /** The panel's width now: its one width, whatever tab is in front (designer m_43050 #7a). */

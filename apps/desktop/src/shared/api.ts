@@ -463,7 +463,7 @@ export interface A11y {
 }
 
 /** What a bise item of the application menu asks the focused window (src/main/menu.ts). */
-export type MenuAction = 'settings' | 'inbox' | 'find' | 'terminal' | 'save' | 'browser' | 'newProject' | 'newAgent' | 'sidebar' | 'panel' | 'panelFull' | 'reopenTab' | 'bims' | 'sideCard' | GoAction;
+export type MenuAction = 'settings' | 'inbox' | 'find' | 'terminal' | 'save' | 'browser' | 'newProject' | 'newAgent' | 'sidebar' | 'panel' | 'panelFull' | 'reopenTab' | 'closeTab' | 'bims' | 'sideCard' | GoAction;
 
 /** The Go menu's places, the rail's (rail-keys): each a route of the main window (app/menu.ts routeOfMenu). */
 export type GoAction = 'bise' | 'inboxPage' | 'scheduled' | 'artifacts' | 'plugins';
@@ -473,6 +473,8 @@ export type GoAction = 'bise' | 'inboxPage' | 'scheduled' | 'artifacts' | 'plugi
 export interface ViewSides {
   readonly sidebar: boolean;
   readonly panel: boolean;
+  /** ⌘W has something to close (the panel open, or a window of its own): File › Close Tab lit; none: dimmed */
+  readonly closeTab?: boolean;
   /** none: no artifact in front, the item dimmed */
   readonly artifact?: boolean;
   /** the panel full width (panel-full): View › Panel Full Width checked */

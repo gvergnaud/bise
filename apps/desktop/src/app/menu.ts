@@ -19,6 +19,7 @@ import { biseBack } from './railback';
 import { useStore } from '@/store';
 import { menuEcho, type ScreenAction } from './keys';
 import { panel } from '@/terminal/panel';
+import { closeActive } from './panel/state';
 import { useAgentMenuBar } from './menus/use';
 
 /** What a screen may be asked: a menu item's ('find') or a window key's ('fold-all', 'stop'...). */
@@ -104,6 +105,13 @@ export function useMenuRouting(router: Router) {
       if (action === 'newAgent') {
         const p = projectOf(router.get()) ?? store.projects().find((x) => x.home)?.project;
         if (p !== undefined) newAgent(p);
+        return;
+      }
+      // File › Close Tab ⌘W (cmd-w-artifact): the panel's tab in front closes, never the window. It
+      // comes alone when his focus is in an artifact's frame (the window never sees that key); the
+      // echo of a ⌘W the window took itself (app/panel/keys.ts) is dropped: one press, one tab
+      if (action === 'closeTab') {
+        if (!menuEcho(windowKeyAt, Date.now())) closeActive();
         return;
       }
       // Go › bise as the rail's ':*': back to his last project or chat from a page (railback.ts)

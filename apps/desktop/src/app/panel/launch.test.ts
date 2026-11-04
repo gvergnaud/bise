@@ -133,9 +133,10 @@ describe("the panel's keys (native-mac-qa §7, the launcher's rows)", () => {
     expect(panelKeyOf(key('KeyS', { meta: true, alt: true }), false)).toBeUndefined();
     expect(panelKeyOf(key('KeyD', { meta: true, alt: true }), false)).toBe('changes');
   });
-  it('⌘W and ⌘⇧[ ] are the open panel\'s only: folded, ⌘W stays the window\'s', () => {
+  it('⌘⇧[ ] are the open panel\'s only; ⌘W is the main window\'s open or folded (never the window: cmd-w-artifact), the menu\'s in a window of its own', () => {
     expect(panelKeyOf(key('KeyW', { meta: true }), true)).toBe('close-tab');
-    expect(panelKeyOf(key('KeyW', { meta: true }), false)).toBeUndefined();
+    expect(panelKeyOf(key('KeyW', { meta: true }), false)).toBe('close-tab');
+    expect(panelKeyOf(key('KeyW', { meta: true }), true, true)).toBeUndefined();
     expect(panelKeyOf(key('BracketRight', { meta: true, shift: true }), true)).toBe('next-tab');
     expect(panelKeyOf(key('BracketLeft', { meta: true, shift: true }), true)).toBe('prev-tab');
     expect(panelKeyOf(key('BracketLeft', { meta: true, shift: true }), false)).toBeUndefined();

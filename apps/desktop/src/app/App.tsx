@@ -311,7 +311,8 @@ function Shell() {
   useEffect(() => {
     // a component test's window.bise may be a partial fake, and the page outside Electron has none
     const bise = (window as Partial<Window>).bise as Partial<Window['bise']> | undefined;
-    bise?.viewMenu?.({ sidebar: sidebarShown, panel: panelOpen, artifact: artifactShown, panelFull, panelFullCan: !panelSheet, ...(bimsHidden ? { bimsHidden } : {}), ...(sideIsCompact ? { sideCompact: true } : {}), ...(sideCardCant ? { sideCardCant } : {}) });
+    // File › Close Tab ⌘W (cmd-w-artifact): live while the panel is open, or in a window of its own (it closes it)
+    bise?.viewMenu?.({ sidebar: sidebarShown, panel: panelOpen, closeTab: panelOpen || ownWindow() !== undefined, artifact: artifactShown, panelFull, panelFullCan: !panelSheet, ...(bimsHidden ? { bimsHidden } : {}), ...(sideIsCompact ? { sideCompact: true } : {}), ...(sideCardCant ? { sideCardCant } : {}) });
   }, [sidebarShown, panelOpen, artifactShown, panelFull, panelSheet, bimsHidden, sideIsCompact, sideCardCant]);
   // a home not onboarded opens on the onboarding once (amb-home c44c926d)
   useFirstLaunch();
@@ -606,6 +607,7 @@ function useWindowKeys(openPalette: () => void, openHelp: () => void, onFrame: (
         agents: (p) => store.agents(p),
         typing: typingIn(document.activeElement),
         panelOpen: panelState.get().open,
+        own: ownWindow() !== undefined,
         library: libraryPlaces,
         // ⌘0 as the rail's ':*': back to his last project or chat from a page
         bise: () => biseBack.go(router.get(), { projects: store.projects(), agents: (p) => store.agents(p) }),

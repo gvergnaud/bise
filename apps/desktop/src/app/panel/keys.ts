@@ -1,5 +1,5 @@
 // src/app/panel · the panel's keys (page native-mac §4 #2, native-mac-qa §7 and §12): ⌘T New tab,
-// ⌘W closes the tab in front (only while the panel is open: else the window's), ⌃⇧T the last closed
+// ⌘W closes the tab in front (folded: nothing, never the window; cmd-w-artifact), ⌃⇧T the last closed
 // tab back (⇧⌘T is File › Reopen Closed Tab's, App.tsx), ⌘⇧] and ⌘⇧[ the next and previous tab, and the launcher's rows: ⌘P Artifacts (the picker of the latest), ⌥⌘D
 // Changes (nothing when the agent in view has none), ⌘L Browser (a browser
 // tab). ⌥⌘0 (the panel) and ⌃` (the terminal) keep their arms in app/keys.ts and
@@ -29,8 +29,13 @@ export const PANEL_KEYS = {
 /** What a panel key does. */
 export type PanelKey = 'new-tab' | 'close-tab' | 'reopen-tab' | 'next-tab' | 'prev-tab' | 'files' | 'changes' | 'browser';
 
-/** The panel's key for `e`, if it is one; ⌘W, ⌘⇧[ and ⌘⇧] only while the panel is open. Pure. */
-export function panelKeyOf(e: KeyLike, open: boolean): PanelKey | undefined {
+/**
+ * The panel's key for `e`, if it is one; ⌘⇧[ and ⌘⇧] only while the panel is open. ⌘W is the
+ * main window's always (cmd-w-artifact, his m_53150: never the window): open, its tab in front
+ * closes; folded, nothing. In a window of its own (`own`) ⌘W is the menu's: File › Close Tab closes
+ * that window. Pure.
+ */
+export function panelKeyOf(e: KeyLike, open: boolean, own = false): PanelKey | undefined {
   // ⌃⇧T, as Chrome on Windows and Linux (his m_46187), folded or open; ⇧⌘T is File › Reopen Closed
   // Tab's (main/menu.ts), never the page's: one press, one tab (designer m_46216)
   if (e.ctrlKey && e.shiftKey && !e.metaKey && !e.altKey && e.code === 'KeyT') return 'reopen-tab';
@@ -38,7 +43,7 @@ export function panelKeyOf(e: KeyLike, open: boolean): PanelKey | undefined {
   if (!meta) return undefined;
   if (!e.altKey && !e.shiftKey) {
     if (e.code === 'KeyT') return 'new-tab';
-    if (e.code === 'KeyW') return open ? 'close-tab' : undefined;
+    if (e.code === 'KeyW') return own ? undefined : 'close-tab';
     if (e.code === 'KeyP') return 'files';
     if (e.code === 'KeyL') return 'browser';
     return undefined;

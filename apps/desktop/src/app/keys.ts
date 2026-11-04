@@ -75,8 +75,10 @@ export interface KeyCtx {
   readonly typing: boolean;
   /** the project's ⌥ numbers as the sidebar shows them (agents/model numbersOf); none: the hub's rank */
   readonly numbers?: (project: string) => ReadonlyMap<string, number>;
-  /** the tabbed panel is open: ⌘W and ⌘⇧[ ] are its */
+  /** the tabbed panel is open: ⌘⇧[ ] are its (⌘W is the main window's open or folded) */
   readonly panelOpen?: boolean;
+  /** a window of its own (app/own.ts): its ⌘W is the menu's, which closes it */
+  readonly own?: boolean;
   /** the artifacts library's places in its order (artifacts/library.tsx libraryPlaces), none: no library */
   readonly library?: () => readonly At[] | undefined;
   /** where bise's tab goes from here, as its rail button (railback.ts biseGo); none: bise's thread */
@@ -121,7 +123,7 @@ export function keyAction(e: KeyLike, c: KeyCtx): KeyAct | undefined {
     return name !== undefined ? { go: { screen: 'thread', project: p, agent: name } } : undefined;
   }
   if (only('meta') && e.code === 'KeyK') return { palette: true };
-  const pk = panelKeyOf(e, c.panelOpen === true);
+  const pk = panelKeyOf(e, c.panelOpen === true, c.own === true);
   if (pk !== undefined) return { panel: pk };
   // the two sides (his m_44999, designer m_45008 / m_45164): ⌘B the sidebar, ⌥⌘B the panel (VS Code,
   // Cursor, Zed); ⌃⌘S (macOS's Show Sidebar), ⌘\ and ⌥⌘0 (the old ones) still work, shown nowhere.

@@ -37,9 +37,28 @@ describe('the application menu (bar ⛔2)', () => {
     }
   });
 
-  it('has the mac app keys: ⌘H hide, ⌘Q quit, ⌘W close, the Window menu', () => {
+  it('has the mac app keys: ⌘H hide, ⌘Q quit, ⇧⌘W close the window, the Window menu', () => {
     const r = roles(build('darwin').items);
     for (const want of ['hide', 'hideOthers', 'quit', 'close', 'windowMenu', 'about']) expect(r).toContain(want);
+    expect(build('darwin').items.find((i) => i.role === 'quit')?.accelerator).toBeUndefined();
+  });
+
+  it('⌘W never closes the window (cmd-w-artifact, his m_53150, designer m_53158): File › Close Tab sends closeTab, dimmed with nothing to close; Close Window is ⇧⌘W', () => {
+    for (const p of ['darwin', 'win32', 'linux'] as const) {
+      const { items, sent } = build(p);
+      const w = items.filter((i) => i.accelerator === 'CmdOrCtrl+W');
+      expect(w.map((i) => [i.label, i.role]), p).toEqual([['Close Tab', undefined]]);
+      (w[0]?.click as (() => void) | undefined)?.();
+      expect(sent, p).toEqual(['closeTab']);
+      expect(w[0]?.enabled, p).toBe(false);
+      for (const c of items.filter((i) => i.role === 'close')) expect([c.label, c.accelerator], p).toEqual(['Close Window', 'Shift+CmdOrCtrl+W']);
+    }
+    const lit = flat(menuTemplate({ platform: 'darwin', appName: 'bise', dev: false, send: () => undefined, sides: { sidebar: true, panel: true, closeTab: true } }));
+    expect(lit.find((i) => i.label === 'Close Tab')?.enabled).toBe(true);
+    // the main window's renderer decides (its panel's tab, or nothing); another bise window closes
+    expect(menuTarget('closeTab', true, true)).toEqual({ send: 'focused' });
+    expect(menuTarget('closeTab', false, true)).toEqual({ close: 'focused' });
+    expect(menuTarget('closeTab', false, false)).toEqual({ send: 'focused' });
   });
 
   it("sends bise's own keys to the renderer: ⌘, settings, ⌘I inbox, ⌘F find, ⌃` terminal, ⌘S save, ⌘N / ⇧⌘N new project / agent, ⌘B / ⌥⌘B the sides, Go's places", () => {
@@ -47,7 +66,7 @@ describe('the application menu (bar ⛔2)', () => {
     // the keyed items only (View › Hide the Bims has no key: outer-world v2, its own test below)
     const keys = new Map(items.filter((i) => i.click !== undefined && i.accelerator !== undefined).map((i) => [i.accelerator, i]));
     expect([...keys.keys()].sort()).toEqual([
-      'Alt+CmdOrCtrl+B', 'CmdOrCtrl+,', 'CmdOrCtrl+0', 'CmdOrCtrl+B', 'CmdOrCtrl+Enter', 'CmdOrCtrl+F', 'CmdOrCtrl+I', 'CmdOrCtrl+N', 'CmdOrCtrl+S', 'CmdOrCtrl+Y', 'Ctrl+`',
+      'Alt+CmdOrCtrl+B', 'CmdOrCtrl+,', 'CmdOrCtrl+0', 'CmdOrCtrl+B', 'CmdOrCtrl+Enter', 'CmdOrCtrl+F', 'CmdOrCtrl+I', 'CmdOrCtrl+N', 'CmdOrCtrl+S', 'CmdOrCtrl+W', 'CmdOrCtrl+Y', 'Ctrl+`',
       'Shift+Alt+CmdOrCtrl+B', 'Shift+CmdOrCtrl+A', 'Shift+CmdOrCtrl+I', 'Shift+CmdOrCtrl+N', 'Shift+CmdOrCtrl+T', 'Shift+CmdOrCtrl+X',
     ]);
     for (const k of ['CmdOrCtrl+,', 'CmdOrCtrl+I', 'CmdOrCtrl+F', 'Ctrl+`', 'CmdOrCtrl+S', 'CmdOrCtrl+N', 'Shift+CmdOrCtrl+N', 'CmdOrCtrl+B', 'Alt+CmdOrCtrl+B', 'Shift+Alt+CmdOrCtrl+B', 'CmdOrCtrl+0', 'Shift+CmdOrCtrl+I', 'CmdOrCtrl+Y', 'Shift+CmdOrCtrl+A', 'Shift+CmdOrCtrl+X', 'Shift+CmdOrCtrl+T']) {

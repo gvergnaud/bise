@@ -358,8 +358,9 @@ export function sendClip(op: ClipOp): void {
 /** A bise item of the menu, sent where menuTarget says. */
 export function sendMenu(action: MenuAction, main: { readonly window: BrowserWindow | null; open: (route?: string) => void }): void {
   const focused = BrowserWindow.getFocusedWindow();
-  const t = menuTarget(action, focused !== null && focused === main.window);
+  const t = menuTarget(action, focused !== null && focused === main.window, focused !== null);
   if ('open' in t) main.open(t.open);
+  else if ('close' in t) focused?.close();
   // nothing of bise's has the keys (his app does, or a test run): the main window's
   else (focused ?? main.window)?.webContents.send(IPC.menu, action);
 }

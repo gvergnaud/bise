@@ -2,7 +2,8 @@
 // builds Electron's template; index.ts installs it. The standard actions are
 // Electron roles, so each does exactly what the OS does (undo, redo, cut,
 // copy, paste, select all in the focused field; hide, quit, close, minimize)
-// and shows in the menu bar with its key. bise's own items (settings ⌘,,
+// and shows in the menu bar with its key. Close Window is ⇧⌘W: ⌘W is File › Close Tab, never the
+// main window (cmd-w-artifact, designer m_53158). bise's own items (settings ⌘,,
 // inbox ⌘I, find ⌘F, terminal ⌃`, File › open in browser ⌘⏎ and save a copy ⌘S) only send a MenuAction to the focused window's
 // renderer, which decides what it means (src/shared/api.ts onMenu). The Agent menu (bise fait mac,
 // d4) is the agent in view's '…' with its keys live, every item dimmed when no agent is (main/agentmenu.ts).
@@ -91,6 +92,14 @@ export function menuTemplate(o: MenuOptions): MenuItemConstructorOptions[] {
   // ⌘⏎ (artifact-shortcut, side-ux m_45436): the artifact in front's primary action, its head's first
   // button (artifacts/front.ts); dimmed while the focused window shows none (ViewSides.artifact)
   const browser: MenuItemConstructorOptions = { ...item(menus.open_browser, 'CmdOrCtrl+Enter', 'browser'), enabled: o.sides?.artifact === true };
+  // ⌘W never closes bise's window (cmd-w-artifact, his m_53150, designer m_53158): Close Tab is the
+  // focused window's (the panel's tab in front, the focus in an artifact's frame too: the window
+  // never sees that key), dimmed while it has nothing to close; a window of its own closes
+  // (sendMenu). Close Window ⇧⌘W, as Safari and Chrome, is the only key that closes the main window
+  const closing: MenuItemConstructorOptions[] = [
+    { ...item('Close Tab', 'CmdOrCtrl+W', 'closeTab'), enabled: o.sides?.closeTab === true },
+    { role: 'close', label: 'Close Window', accelerator: 'Shift+CmdOrCtrl+W' },
+  ];
   const file: MenuItemConstructorOptions = {
     label: 'File',
     // art-save: the open artifact's 'save a copy…' (no artifact open: the window does nothing);
@@ -104,8 +113,8 @@ export function menuTemplate(o: MenuOptions): MenuItemConstructorOptions[] {
       item('Reopen Closed Tab', 'Shift+CmdOrCtrl+T', 'reopenTab'),
       { type: 'separator' },
       ...(mac
-        ? [browser, item('Save a Copy…', 'CmdOrCtrl+S', 'save'), { type: 'separator' as const }, { role: 'close' as const }]
-        : [browser, item('Save a Copy…', 'CmdOrCtrl+S', 'save'), { type: 'separator' as const }, settings, { type: 'separator' as const }, { role: 'close' as const }, { role: 'quit' as const }]),
+        ? [browser, item('Save a Copy…', 'CmdOrCtrl+S', 'save'), { type: 'separator' as const }, ...closing]
+        : [browser, item('Save a Copy…', 'CmdOrCtrl+S', 'save'), { type: 'separator' as const }, settings, { type: 'separator' as const }, ...closing, { role: 'quit' as const }]),
     ],
   };
 
@@ -172,7 +181,7 @@ export function menuTemplate(o: MenuOptions): MenuItemConstructorOptions[] {
 
   const window: MenuItemConstructorOptions = mac
     ? { role: 'windowMenu' }
-    : { label: 'Window', submenu: [{ role: 'minimize' }, { role: 'close' }] };
+    : { label: 'Window', submenu: [{ role: 'minimize' }, { role: 'close', label: 'Close Window', accelerator: 'Shift+CmdOrCtrl+W' }] };
 
   const help: MenuItemConstructorOptions[] =
     o.testNotify === undefined
@@ -185,7 +194,7 @@ export function menuTemplate(o: MenuOptions): MenuItemConstructorOptions[] {
 /** Whether Help › 'send a test notification' shows: a try or check build (its own name) or a test run, never 'bise'. */
 export const hasTestNotify = (appName: string, testMode: boolean): boolean => testMode || appName !== 'bise';
 
-export type MenuTarget = { readonly send: 'focused' } | { readonly open: string };
+export type MenuTarget = { readonly send: 'focused' } | { readonly open: string } | { readonly close: 'focused' };
 
 /** The route a Go item opens the main window on when it does not have the keys (app/route.ts's
  *  paths; 'inbox' alone is the block's ask, so the page is 'inbox/all'). */
@@ -199,7 +208,10 @@ const isGo = (a: MenuAction): a is GoAction => a in GO_OPENS;
  * keys, a test run). Find is the focused page's (the capsule's own search
  * included), else the main window's (qa-flows m_9739: never dropped).
  */
-export function menuTarget(action: MenuAction, mainFocused: boolean): MenuTarget {
+export function menuTarget(action: MenuAction, mainFocused: boolean, otherFocused = false): MenuTarget {
+  // File › Close Tab ⌘W (cmd-w-artifact): the main window's renderer closes its panel's tab in
+  // front (or nothing), never the window; another bise window (an artifact's or an agent's own) closes
+  if (action === 'closeTab') return otherFocused && !mainFocused ? { close: 'focused' } : { send: 'focused' };
   // New Project / New Agent are the main window's sheets: the focused window's (the main one, or
   // nothing in the capsule), never a route to open
   // the two sides are the focused window's own (View › Hide/Show Sidebar, Panel), never a route either
