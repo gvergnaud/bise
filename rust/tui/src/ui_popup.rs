@@ -81,7 +81,8 @@ pub(super) fn draw_popup(app: &App, frame: &mut Frame, prompt: Rect) {
                 spans.push(Span::styled(format!(" {} ", label), name_style));
                 let room = (w as usize).saturating_sub(label.width() + mark_w + 6);
                 // cut at a whole word, never inside one (designer m_53332)
-                spans.push(Span::styled(crate::render::truncate_words(&c.desc, room), desc_style));
+                let desc = crate::render::truncate_words(&c.desc, room);
+                spans.extend(desc_spans(desc, c.sign.filter(|_| !sel), desc_style));
                 Line::from(spans)
             }))
             .collect();
@@ -98,4 +99,18 @@ pub(super) fn draw_popup(app: &App, frame: &mut Frame, prompt: Rect) {
         // BISE-290: its text selects, copies and has links (between the rules)
         crate::textlayer::text(Rect { x: area.x + 1, width: area.width.saturating_sub(2), ..area });
     }
+}
+
+/// A row's description in `style`, its one sign (a byte offset in it, a
+/// color: [`crate::commands::PopItem::sign`]) in that color; a sign cut
+/// off by the row's width, or none: one span. Pure.
+pub(crate) fn desc_spans(desc: String, sign: Option<(usize, Color)>, style: Style) -> Vec<Span<'static>> {
+    let Some((at, color)) = sign else { return vec![Span::styled(desc, style)] };
+    let Some(g) = desc.get(at..).and_then(|r| r.chars().next()) else { return vec![Span::styled(desc, style)] };
+    let end = at + g.len_utf8();
+    vec![
+        Span::styled(desc[..at].to_string(), style),
+        Span::styled(desc[at..end].to_string(), style.fg(color)),
+        Span::styled(desc[end..].to_string(), style),
+    ]
 }

@@ -487,6 +487,37 @@ fn a_plugins_settings_are_read_from_dev_bise() {
 }
 
 #[test]
+fn a_plugins_tagline_is_read_from_dev_bise_and_cut() {
+    let m = parse_manifest(&with_bise(r#"{"tagline":"places, routes and maps in the thread"}"#)).unwrap();
+    assert_eq!(m.tagline.as_deref(), Some("places, routes and maps in the thread"));
+    let e = parse_manifest(&with_bise(r#"{"tagline":["x"]}"#)).unwrap_err();
+    assert!(e.contains("/extensions/dev.bise/tagline must be a string"), "{e}");
+    assert_eq!(cut_tagline(Some("  ")), (None, false), "a blank one: none");
+    // the resolved plugin carries it; a long one is cut, with a warning
+    let t = tmp("tagline");
+    let long = "w".repeat(TAGLINE_CHARS + 5);
+    write(&t.0.join("builtin/maps/plugin.json"), &with_bise(&format!(r#"{{"tagline":"{long}"}}"#)));
+    let r = resolve(&roots(&t));
+    let p = r.plugins.iter().find(|p| p.name == "maps").unwrap();
+    assert_eq!(p.tagline.as_ref().map(|t| t.chars().count()), Some(TAGLINE_CHARS));
+    assert!(codes(&r).contains(&"plugin.tagline.cut"), "{:?}", codes(&r));
+}
+
+#[test]
+fn every_plugin_the_repo_ships_has_a_tagline_for_him() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
+    let names: Vec<String> = fs::read_dir(&root).unwrap().flatten().filter(|e| e.path().join("plugin.json").is_file()).map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+    assert!(names.len() >= 5, "{names:?}");
+    for n in names {
+        let m = parse_manifest(&fs::read_to_string(root.join(&n).join("plugin.json")).unwrap()).unwrap();
+        let t = m.tagline.unwrap_or_else(|| panic!("plugins/{n}: no dev.bise tagline"));
+        let (_, cut) = cut_tagline(Some(&t));
+        // designer m_53372: short, no final period
+        assert!(!cut && !t.ends_with('.'), "plugins/{n}: {t:?}");
+    }
+}
+
+#[test]
 fn a_bad_setting_is_a_manifest_error_naming_it() {
     for (ext, why) in [
         (r#"{"settings":{}}"#, "settings must be an array"),

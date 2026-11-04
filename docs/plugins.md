@@ -247,7 +247,11 @@ live REPLs, so two sessions (or two Switchboard tasks) never share it.
    `"prompts": [...]` is what to try a plugin with (the list's `prompts`):
    at most 3 kept, each at most 120 characters (`resolve::cut_prompts`,
    a longer list or line: warning `plugin.prompts.cut`); bise's built-in
-   plugins have three each. A part is on only when its
+   plugins have three each. `"tagline": "..."` is its line for the user
+   in the composer's `@` menu (the description is written for the
+   model): lowercase start, no final period, at most 80 characters
+   (`resolve::cut_tagline`, longer: warning `plugin.tagline.cut`); none:
+   the menu says the description's first sentence. A part is on only when its
    plugin is on, it is not in `parts_off`, and, for a plugin's tool, its
    server's `#mcp:` part is not off (`parts_on` never overrides an off
    owner or server). The resolver lists a loaded plugin's off skills and

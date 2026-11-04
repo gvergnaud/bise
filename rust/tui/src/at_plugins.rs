@@ -2,8 +2,10 @@
 //! the workspace's plugins on that give a skill or tools
 //! (`bend_plugins::resolve::Plugin::pickable`, the rule the desktop's rows
 //! carry too), listed after the agents with the plugins' mark (⊞, designer
-//! m_53299), one that waits on a login or failed to start with that state
-//! in place of its description. Picking one puts its chip (`⊞ computer`)
+//! m_53299), each with its line for him (its manifest's `dev.bise.tagline`,
+//! else its description's first sentence), one that waits on a login or
+//! failed to start with that state in place of it, its sign in color
+//! (`?` the accent, `✗` the error's). Picking one puts its chip (`⊞ computer`)
 //! in the draft; on send the chip is `Part::Plugin`, which the model reads
 //! as `@computer` and after which the hub adds the line that names its
 //! skill and its tools. A typed `@computer` with no chip becomes the same
@@ -23,7 +25,8 @@ use std::time::{Duration, Instant};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Pickable {
     pub(crate) name: String,
-    /// its description's first sentence ("" none)
+    /// its line for him: its `dev.bise.tagline`, else its description's
+    /// first sentence ("" none)
     pub(crate) desc: String,
     /// what it waits on (a login, a server that failed): said in place
     /// of its description; a pick still makes its chip
@@ -35,11 +38,16 @@ pub(crate) struct Pickable {
 pub(crate) const OPEN: &str = "[Plugin #";
 
 /// The pickable rows of the Plugins list (plugins.rs rows: the window's
-/// rows too), in its order, each with what it waits on. Pure.
+/// rows too), in its order, each with its line for him (its tagline,
+/// else its description's first sentence: the description is for the
+/// model) and what it waits on. Pure.
 pub(crate) fn of_rows(rows: &[bise_proto::app_rows::Plugin]) -> Vec<Pickable> {
     rows.iter()
         .filter(|p| p.pickable)
-        .map(|p| Pickable { name: p.name.clone(), desc: first_sentence(p.what.as_deref().unwrap_or("")), waits: p.pick_waits })
+        .map(|p| {
+            let desc = p.tagline.clone().unwrap_or_else(|| first_sentence(p.what.as_deref().unwrap_or("")));
+            Pickable { name: p.name.clone(), desc, waits: p.pick_waits }
+        })
         .collect()
 }
 
@@ -75,19 +83,24 @@ pub(crate) fn list(workspace: &Path) -> Vec<Pickable> {
 }
 
 /// A plugin row's words after its name (designer m_53299): `plugin · <its
-/// first sentence>`, or what it waits on in its place (`plugin · ? needs a
-/// login`, `plugin · ✗ didn't start`). Pure.
-pub(crate) fn row_words(p: &Pickable) -> String {
+/// line>`, or what it waits on in its place (`plugin · ? needs a login`,
+/// `plugin · ✗ didn't start`), with that sign's byte offset and color
+/// (`?` the accent, `✗` err: designer m_53312), which the popup draws
+/// apart from the dim rest. Pure.
+pub(crate) fn row_words(p: &Pickable) -> (String, Option<(usize, ratatui::style::Color)>) {
+    use crate::theme;
     use bise_proto::app_rows::PickWaits;
     use bise_proto::words::{composer, settings};
-    let what = match p.waits {
-        Some(PickWaits::Login) => format!("? {}", settings::plugins_part_needs_login),
-        Some(PickWaits::Failed) => format!("✗ {}", composer::at_plugin_failed),
-        _ => p.desc.clone(),
+    let sign = match p.waits {
+        Some(PickWaits::Login) => Some(("?", settings::plugins_part_needs_login, theme::accent())),
+        Some(PickWaits::Failed) => Some(("✗", composer::at_plugin_failed, theme::error())),
+        _ => None,
     };
-    match what.is_empty() {
-        true => composer::at_plugin.to_string(),
-        false => format!("{} · {what}", composer::at_plugin),
+    let lead = format!("{} · ", composer::at_plugin);
+    match (sign, p.desc.is_empty()) {
+        (Some((g, words, color)), _) => (format!("{lead}{g} {words}"), Some((lead.len(), color))),
+        (None, true) => (composer::at_plugin.to_string(), None),
+        (None, false) => (format!("{lead}{}", p.desc), None),
     }
 }
 

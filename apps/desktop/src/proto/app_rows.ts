@@ -184,6 +184,12 @@ pickable?: boolean,
  */
 pick_waits?: PickWaits | null, 
 /**
+ * its line for him in the `@` menu: its manifest's
+ * `dev.bise.tagline` (`what` is written for the model); none: the
+ * menu says `what`'s first sentence
+ */
+tagline?: string | null, 
+/**
  * not his to turn off (the `skills:bise` folder: pages need it)
  */
 locked?: boolean, 

@@ -100,13 +100,15 @@ export function useComposerSources(project: string, extra: Partial<ComposerSourc
 }
 
 /** The `@` list's plugins from the core's rows: the ones its row says `pickable` (one rule,
- *  bend_plugins' Plugin::pickable), each with its description's first sentence. Pure. */
+ *  bend_plugins' Plugin::pickable), each with its line for him: its manifest's tagline, else
+ *  its description's first sentence (the description is written for the model). Pure. */
 export function pickablePlugins(rows: readonly Plugin[] | null): PickPlugin[] {
   return (rows ?? [])
     .filter((p) => p.pickable === true)
     .map((p) => {
       const waits = p.pick_waits === 'login' || p.pick_waits === 'failed' ? p.pick_waits : undefined;
-      return { name: p.name, desc: firstSentence(p.what ?? ''), ...(waits === undefined ? {} : { waits }) };
+      const desc = p.tagline ?? firstSentence(p.what ?? '');
+      return { name: p.name, desc, ...(waits === undefined ? {} : { waits }) };
     });
 }
 

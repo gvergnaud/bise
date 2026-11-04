@@ -68,7 +68,7 @@ fn the_menu_offers_the_plugins_on_that_give_something() {
         row("linear", true, "Issues.", Some(PickWaits::Login)),
         row("maps", true, "Maps.", Some(PickWaits::Failed)),
     ]);
-    let words: Vec<String> = l.iter().map(row_words).collect();
+    let words: Vec<String> = l.iter().map(|p| row_words(p).0).collect();
     assert_eq!(
         words,
         ["plugin · Computer use: drive his browser.", "plugin · Word documents.", "plugin · ? needs a login", "plugin · ✗ didn't start"],
@@ -118,4 +118,33 @@ fn a_typed_plugin_name_goes_as_its_part_an_agents_stays_words() {
     let never = || -> Vec<Pickable> { panic!("resolved for no @") };
     let said = typed(crate::said::Said::of_parts(vec![Part::Text { text: "hello".into() }]), &never, &[]);
     assert_eq!(said.text, "hello");
+}
+
+#[test]
+fn a_plugins_row_says_its_tagline_and_colors_its_sign() {
+    use crate::theme;
+    use bise_proto::app_rows::PickWaits;
+    // the tagline, written for him, over the description written for the model
+    let row = |tagline: Option<&str>, waits| bise_proto::app_rows::Plugin {
+        pickable: true,
+        what: Some("computer use: you can drive the user's own browser. More.".into()),
+        tagline: tagline.map(String::from),
+        pick_waits: waits,
+        ..serde_json::from_value(serde_json::json!({"name": "computer", "scope": "user", "state": "loaded"})).unwrap()
+    };
+    let l = of_rows(&[row(Some("an agent uses your browser and Mac apps"), None), row(None, None)]);
+    assert_eq!(row_words(&l[0]), ("plugin · an agent uses your browser and Mac apps".to_string(), None));
+    assert_eq!(row_words(&l[1]).0, "plugin · computer use: you can drive the user's own browser.", "no tagline: the first sentence");
+    // the waiting signs in their own color (designer m_53312), the rest dim
+    let dim = ratatui::style::Style::default().fg(theme::dim());
+    let drawn = |waits| {
+        let (desc, sign) = row_words(&of_rows(&[row(None, Some(waits))])[0]);
+        crate::ui::popup_desc_spans(desc, sign, dim).into_iter().map(|s| (s.content.into_owned(), s.style.fg)).collect::<Vec<_>>()
+    };
+    let lead = "plugin · ".to_string();
+    assert_eq!(drawn(PickWaits::Login), [(lead.clone(), Some(theme::dim())), ("?".into(), Some(theme::accent())), (" needs a login".into(), Some(theme::dim()))]);
+    assert_eq!(drawn(PickWaits::Failed), [(lead, Some(theme::dim())), ("✗".into(), Some(theme::error())), (" didn't start".into(), Some(theme::dim()))]);
+    // a row too short for its sign: one dim span
+    let cut = crate::ui::popup_desc_spans("plugin".into(), Some((9, theme::error())), dim);
+    assert_eq!(cut.len(), 1);
 }

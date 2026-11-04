@@ -7,6 +7,7 @@
   "license": "Apache-2.0",
   "extensions": {
     "dev.bise": {
+      "tagline": "diagrams from text, in the thread",
       "default": "off",
       "prompts": [
         "draw the login flow of this repo as a sequence diagram",

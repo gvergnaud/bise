@@ -22,6 +22,7 @@ fn row(id: &str, kind: PluginKind, scope: PluginScope, state: PluginState, on: b
         on,
         pickable: false,
         pick_waits: None,
+        tagline: None,
         locked: false,
         action: None,
         login: None,

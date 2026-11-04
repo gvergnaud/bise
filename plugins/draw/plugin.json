@@ -7,6 +7,7 @@
   "license": "Apache-2.0",
   "extensions": {
     "dev.bise": {
+      "tagline": "a hand-drawn canvas you and the agent share",
       "default": "off",
       "prompts": ["sketch how the hub, the agents and the TUI talk to each other", "draw the signup flow as boxes and arrows, I'll fix it by hand", "look at what I changed in the drawing and update the plan"]
     }

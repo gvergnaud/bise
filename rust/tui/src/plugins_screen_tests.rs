@@ -31,6 +31,7 @@ fn plugin(id: &str, kind: PluginKind, scope: Scope, what: &str, parts: Vec<Plugi
         on: true,
         pickable: false,
         pick_waits: None,
+        tagline: None,
         locked: false,
         action: None,
         login: None,

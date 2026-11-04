@@ -7,6 +7,7 @@
   "license": "Apache-2.0",
   "extensions": {
     "dev.bise": {
+      "tagline": "Word documents: make, read, edit",
       "prompts": ["write a one-page memo from this thread as a .docx", "read the attached contract and list its dates and amounts", "review this docx with tracked changes and comments"]
     }
   }

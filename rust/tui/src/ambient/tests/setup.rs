@@ -193,6 +193,7 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
                 on,
                 pickable: false,
                 pick_waits: None,
+                tagline: None,
                 locked: false,
                 action: None,
                 login: None,

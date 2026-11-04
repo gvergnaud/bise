@@ -47,6 +47,10 @@ pub(crate) struct PopItem {
     /// a plugin of the `@` popup (at_plugins.rs): picking it puts its
     /// chip where the `@word` was
     pub(crate) plugin: Option<String>,
+    /// one sign in `desc` drawn in its own color, by its byte offset
+    /// (a plugin's `?` of a login, `✗` of a failed start: at_plugins.rs
+    /// `row_words`); the rest of `desc` stays dim
+    pub(crate) sign: Option<(usize, Color)>,
 }
 
 pub(crate) fn popup_items(app: &App) -> Vec<PopItem> {
@@ -77,6 +81,7 @@ pub(crate) fn popup_items(app: &App) -> Vec<PopItem> {
                 path: None,
                 folder: false,
                 plugin: None,
+                sign: None,
             })
             .collect();
     }
@@ -421,6 +426,7 @@ pub(crate) fn arg_items(app: &App) -> Vec<PopItem> {
                 path: None,
                 folder: false,
                 plugin: None,
+                sign: None,
             }
         })
         .collect()
@@ -468,9 +474,11 @@ fn plugin_items(app: &App, start: usize, q: &str) -> Vec<PopItem> {
         .into_iter()
         .map(|p| {
             let (fill, fill_cursor) = files::replace_token(&app.ed.text, start, app.ed.cursor, "");
+            let (desc, sign) = crate::at_plugins::row_words(p);
             PopItem {
                 label: format!("@{}", p.name),
-                desc: crate::at_plugins::row_words(p),
+                desc,
+                sign,
                 mark: Some((theme::plugin_glyph(), theme::accent())),
                 fill,
                 fill_cursor,
@@ -511,6 +519,7 @@ pub(crate) fn at_items(app: &App) -> Vec<PopItem> {
             path: None,
             folder: false,
             plugin: None,
+            sign: None,
         }
     });
     // site/m/artifacts C: the artifacts by name, after the agents; a
@@ -534,6 +543,7 @@ pub(crate) fn at_items(app: &App) -> Vec<PopItem> {
                 path: Some(crate::artifacts::url_of(&a.id, None)),
                 folder: false,
                 plugin: None,
+                sign: None,
             }
         })
         .collect();
@@ -566,6 +576,7 @@ pub(crate) fn at_items(app: &App) -> Vec<PopItem> {
             path: Some(if h.dir { h.path } else { sent(&h.path) }),
             folder: h.dir,
             plugin: None,
+            sign: None,
         }
     });
     let this = this.map(|path| {
@@ -582,6 +593,7 @@ pub(crate) fn at_items(app: &App) -> Vec<PopItem> {
             path: Some(sent),
             folder: false,
             plugin: None,
+            sign: None,
         }
     });
     agents.chain(files).chain(this).collect()
@@ -626,6 +638,7 @@ pub(crate) fn skill_items(app: &App) -> Vec<PopItem> {
                 path: None,
                 folder: false,
                 plugin: None,
+                sign: None,
             }
         })
         .collect()
@@ -654,6 +667,7 @@ pub(crate) fn emoji_items(app: &App) -> Vec<PopItem> {
                 path: None,
                 folder: false,
                 plugin: None,
+                sign: None,
             }
         })
         .collect()

@@ -19,7 +19,7 @@ export interface PickSkill {
 /** A plugin the `@` list offers for a turn (at-plugins): the core's row says `pickable`. */
 export interface PickPlugin {
   readonly name: string;
-  /** its description's first sentence ('' none) */
+  /** its line for him: its manifest's tagline, else its description's first sentence ('' none) */
   readonly desc: string;
   /** what it waits on (the core row's `pick_waits`): said in place of its sentence */
   readonly waits?: 'login' | 'failed';

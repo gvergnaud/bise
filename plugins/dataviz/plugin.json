@@ -7,6 +7,7 @@
   "license": "Apache-2.0",
   "extensions": {
     "dev.bise": {
+      "tagline": "charts in the thread",
       "default": "off",
       "prompts": [
         "chart the commits per week on this repo over the last 6 months",

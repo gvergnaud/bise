@@ -984,6 +984,8 @@ fn composer_bar_color(app: &App) -> ratatui::style::Color {
 #[path = "ui_popup.rs"]
 mod popup;
 use popup::draw_popup;
+#[cfg(test)]
+pub(crate) use popup::desc_spans as popup_desc_spans;
 
 /// `s` in at most `max` columns: its end, after a `…` when cut.
 pub(crate) fn truncate_left(s: &str, max: usize) -> String {

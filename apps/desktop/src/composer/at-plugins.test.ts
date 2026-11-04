@@ -33,6 +33,11 @@ describe('the @ list offers plugins', () => {
     expect(pickablePlugins(null)).toEqual([]);
   });
 
+  it('says its tagline for him over the description written for the model', () => {
+    const tagged = { ...row('computer', true, 'computer use: you can drive the user’s own browser. More.'), tagline: 'an agent uses your browser and Mac apps' };
+    expect(pickablePlugins([tagged]).map(pluginWords)).toEqual([`${composer.at_plugin} · an agent uses your browser and Mac apps`]);
+  });
+
   it('keeps a plugin that waits on him, its state in place of its sentence', () => {
     const waiting = pickablePlugins([{ ...row('linear', true, 'Issues.'), pick_waits: 'login' }, { ...row('maps', true, 'Maps.'), pick_waits: 'failed' }]);
     expect(waiting.map(pluginWords)).toEqual([`${composer.at_plugin} · ? ${settings.plugins_part_needs_login}`, `${composer.at_plugin} · ✗ ${composer.at_plugin_failed}`]);

@@ -7,6 +7,7 @@
   "license": "Apache-2.0",
   "extensions": {
     "dev.bise": {
+      "tagline": "an agent uses your browser and Mac apps",
       "default": "off",
       "prompts": ["open my last Gmail tab and sum up the thread", "fill the form in my open tab from my notes, don't submit it", "check bise.dev in my browser and tell me what looks broken"]
     }

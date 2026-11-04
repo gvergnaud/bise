@@ -213,6 +213,11 @@ pub struct Plugin {
     /// failed): the `@` menu's row says so (none: it works)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pick_waits: Option<PickWaits>,
+    /// its line for him in the `@` menu: its manifest's
+    /// `dev.bise.tagline` (`what` is written for the model); none: the
+    /// menu says `what`'s first sentence
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tagline: Option<String>,
     /// not his to turn off (the `skills:bise` folder: pages need it)
     #[serde(default, skip_serializing_if = "crate::is_false")]
     pub locked: bool,

@@ -292,6 +292,9 @@ pub struct Plugin {
     pub off_servers: Vec<crate::id::PluginId>,
     /// what to try it with (`dev.bise.prompts`, cut: [`cut_prompts`])
     pub prompts: Vec<String>,
+    /// its line for him in the composer's `@` menu (`dev.bise.tagline`,
+    /// cut at [`TAGLINE_CHARS`]); its description is for the model
+    pub tagline: Option<String>,
     /// what he may give it on the plugins page (`dev.bise.settings`)
     pub settings: Vec<Setting>,
     /// a `${BISE_NODE}` server found no Node 18 or newer ([`node_exe`]):
@@ -512,6 +515,10 @@ pub struct Manifest {
     /// `"extensions": {"dev.bise": {"prompts": [...]}}`: what to try it
     /// with, as written (cut at load, [`MAX_PROMPTS`] of [`PROMPT_CHARS`])
     pub prompts: Vec<String>,
+    /// `"extensions": {"dev.bise": {"tagline": "..."}}`: one short line
+    /// for him, the `@` menu's (its description is for the model), as
+    /// written (cut at load: [`cut_tagline`])
+    pub tagline: Option<String>,
     /// `"extensions": {"dev.bise": {"settings": [...]}}`: what he may give
     /// it on the plugins page (an API key), each a `${VAR}` of its mcp.json
     pub settings: Vec<Setting>,
@@ -594,6 +601,8 @@ pub const BISE_EXTENSION: &str = "dev.bise";
 /// [`PROMPT_CHARS`] characters (a longer list or line: a warning).
 pub const MAX_PROMPTS: usize = 3;
 pub const PROMPT_CHARS: usize = 120;
+/// A `dev.bise.tagline` longer than this is cut there (a warning).
+pub const TAGLINE_CHARS: usize = 80;
 
 
 fn opt_string(o: &Map<String, Value>, k: &str) -> Result<Option<String>, String> {
@@ -657,6 +666,7 @@ pub fn parse_manifest(text: &str) -> Result<Manifest, String> {
     let mut default_off = false;
     let mut vibe = false;
     let mut prompts = Vec::new();
+    let mut tagline = None;
     let mut settings = Vec::new();
     if let Some(ex) = o.get("extensions") {
         let ex = ex.as_object().ok_or("/extensions must be an object")?;
@@ -677,6 +687,8 @@ pub fn parse_manifest(text: &str) -> Result<Manifest, String> {
                             };
                             prompts = list.iter().filter_map(|s| s.as_str().map(String::from)).collect();
                         }
+                        ("tagline", Some(t)) => tagline = Some(t.to_string()),
+                        ("tagline", _) => return Err(format!("/extensions/{}/tagline must be a string", k)),
                         ("settings", _) => settings = parse_settings(k, fv)?,
                         _ => return Err(format!("unknown field /extensions/{}/{}", k, f)),
                     }
@@ -696,6 +708,7 @@ pub fn parse_manifest(text: &str) -> Result<Manifest, String> {
         vibe,
         default_off,
         prompts,
+        tagline,
         settings,
     })
 }
@@ -1154,6 +1167,18 @@ pub fn cut_prompts(list: &[String]) -> (Vec<String>, bool) {
     (kept, cut)
 }
 
+/// The tagline kept (a blank one: none; cut at [`TAGLINE_CHARS`]
+/// characters), and whether it was cut.
+pub fn cut_tagline(t: Option<&str>) -> (Option<String>, bool) {
+    let Some(t) = t.map(str::trim).filter(|t| !t.is_empty()) else {
+        return (None, false);
+    };
+    match t.chars().count() > TAGLINE_CHARS {
+        true => (Some(t.chars().take(TAGLINE_CHARS).collect::<String>().trim_end().to_string()), true),
+        false => (Some(t.to_string()), false),
+    }
+}
+
 struct Candidate {
     plugin: Plugin,
     extensions: Vec<String>,
@@ -1205,6 +1230,7 @@ fn discover(root: &Path, scope: Scope, data: &Path, out: &mut Vec<Diagnostic>) -
             off_skills: Vec::new(),
             off_servers: Vec::new(),
             prompts: Vec::new(),
+            tagline: None,
             settings: Vec::new(),
             needs_node: false,
             unsupported: Vec::new(),
@@ -1234,6 +1260,12 @@ fn discover(root: &Path, scope: Scope, data: &Path, out: &mut Vec<Diagnostic>) -
                         format!("dev.bise prompts: at most {} of {} characters each; the rest is cut", MAX_PROMPTS, PROMPT_CHARS)));
                 }
                 p.prompts = kept;
+                let (tagline, cut) = cut_tagline(m.tagline.as_deref());
+                if cut {
+                    out.push(diag("plugin.tagline.cut", Severity::Warning, &p.name,
+                        format!("dev.bise tagline: at most {} characters; the rest is cut", TAGLINE_CHARS)));
+                }
+                p.tagline = tagline;
                 p.settings = m.settings;
             }
             Err(e) => out.push(diag("plugin.manifest.invalid", Severity::Error, &folder,
