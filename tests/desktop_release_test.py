@@ -160,7 +160,7 @@ def test_the_fuse_wire():
     if shutil.which("node"):
         # electron-builder.mjs flips what the gates read back, nothing more, nothing less
         with tempfile.TemporaryDirectory() as t:
-            for f in ("bise", "helper", "VERSION", "repl-live", "sb-core"):
+            for f in ("bise", "helper", "tray-badge.node", "VERSION", "repl-live", "sb-core"):
                 open(os.path.join(t, f), "w").close()
             js = "import(process.argv[1]).then(m => console.log(JSON.stringify(m.FUSES)))"
             r = subprocess.run(["node", "-e", js, "file://" + os.path.join(R.DESKTOP, "electron-builder.mjs")],
@@ -283,7 +283,7 @@ def test_pack_and_dmg_settings():
     if shutil.which("node"):
         # electron-builder.mjs itself, with the notary keys in the env: it never notarizes
         with tempfile.TemporaryDirectory() as t:
-            for f in ("bise", "helper", "VERSION", "repl-live", "sb-core"):
+            for f in ("bise", "helper", "tray-badge.node", "VERSION", "repl-live", "sb-core"):
                 open(os.path.join(t, f), "w").close()
             js = "import(process.argv[1]).then(m => console.log(JSON.stringify(m.default.mac)))"
             r = subprocess.run(["node", "-e", js, "file://" + os.path.join(R.DESKTOP, "electron-builder.mjs")],

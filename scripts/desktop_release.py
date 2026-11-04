@@ -383,6 +383,11 @@ def build(a):
     if a.helper:
         # CI's cache of the helper, keyed on its sources (desktop-release.yml): signed again below
         shutil.copy2(a.helper, p["helper"])
+        # and the tray's badge addon, built next to it by the same build.sh
+        badge = os.path.join(os.path.dirname(a.helper), "tray-badge.node")
+        if not os.path.isfile(badge):
+            raise ReleaseError("no tray-badge.node next to --helper %s: native/mac/build.sh builds both" % a.helper)
+        shutil.copy2(badge, os.path.join(os.path.dirname(p["helper"]), "tray-badge.node"))
         say("helper %s (built before from the same sources)" % a.helper)
     else:
         env = dict(os.environ, MACOSX_DEPLOYMENT_TARGET=MACOS_TARGET)

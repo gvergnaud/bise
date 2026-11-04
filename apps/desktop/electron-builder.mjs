@@ -11,7 +11,8 @@
 //   Contents/MacOS/bise-mac-helper       the native helper, next to the app's executable
 //                                        so macOS charges its permissions to the app
 //                                        (src/main/helper/run.ts helperPath)
-//   Contents/Resources/pearl/*.png       the tray's pearl frames (src/main/tray.ts)
+//   Contents/Resources/tray-badge.node   the tray's wait dot, an N-API addon (src/main/traybadge.ts),
+//                                        built next to the helper (native/mac/build.sh)
 //   Contents/Resources/VERSION           the app's build (id=, built= UTC with a Z), from
 //                                        BISE_PACK_VERSION when given: the updater says it to
 //                                        the core (src/main/update); none = a dev build, never
@@ -31,7 +32,7 @@
 // give their paths; a missing one stops the build with its name.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 function need(name) {
@@ -44,6 +45,9 @@ function need(name) {
 
 const bise = need('BISE_PACK_BISE');
 const helper = need('BISE_PACK_HELPER');
+// the tray's wait dot (src/main/traybadge.ts): native/mac/build.sh builds it next to the helper
+const badge = join(dirname(helper), 'tray-badge.node');
+if (!existsSync(badge)) throw new Error(`electron-builder.mjs: no tray-badge.node next to BISE_PACK_HELPER (${badge}): native/mac/build.sh builds both`);
 // the runtime bise runs its hubs with (architect m_18354): a version dir's layout (VERSION,
 // repl-live, sb-core, bend-jsrt, prompts/, plugins/, kit/, computer-use/extension), packed next to
 // bise in Contents/Resources/bin, so the app finds it with no env (approot: VERSION next to the
@@ -161,6 +165,7 @@ export default {
     // after the pack (scripts/desktop_release.py cli_bundle, the terminal's one bundle builder)
     { from: root, to: 'bin', filter: ['**/*', '!rust/**', '!bise', '!bise.app', '!bise.app/**'] },
     { from: bise, to: 'bin/bise' },
+    { from: badge, to: 'tray-badge.node' },
     ...(version === null ? [] : [{ from: version, to: 'VERSION' }]),
   ],
   mac: {

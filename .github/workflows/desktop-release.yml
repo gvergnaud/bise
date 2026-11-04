@@ -172,7 +172,7 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
           args=(--out "$RUNNER_TEMP/desk" --runtime-root "$RUNTIME_ROOT" --repo "$GH_REPO")
-          if [ -x "$RUNNER_TEMP/helper/bise-mac-helper" ]; then
+          if [ -x "$RUNNER_TEMP/helper/bise-mac-helper" ] && [ -f "$RUNNER_TEMP/helper/tray-badge.node" ]; then
             args+=(--helper "$RUNNER_TEMP/helper/bise-mac-helper")
           fi
           if [ "$ACTION" = build ]; then
@@ -183,7 +183,7 @@ jobs:
 
       - name: Keep the helper for the next build
         if: ${{ steps.helper.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' }}
-        run: mkdir -p "$RUNNER_TEMP/helper" && cp "$RUNNER_TEMP/desk/helper/bise-mac-helper" "$RUNNER_TEMP/helper/"
+        run: mkdir -p "$RUNNER_TEMP/helper" && cp "$RUNNER_TEMP/desk/helper/bise-mac-helper" "$RUNNER_TEMP/desk/helper/tray-badge.node" "$RUNNER_TEMP/helper/"
 
       - name: Save the helper
         if: ${{ steps.helper.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' }}

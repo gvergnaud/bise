@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { armAngles, armCount, markDistance, rasterMark } from '../shared/mark';
-import { KISSES, newWait, stepTurn, toBgra, trayFrame, trayLook, trayTip, TRAY_PT } from './traylook';
+import { KISSES, newWait, stepTurn, TITLE_DOT, toBgra, TRAY_DOT, trayFrame, trayLook, trayPaint, trayTip, TRAY_PT } from './traylook';
 
 describe("the ':*' geometry", () => {
   it('the star is the team: one branch per running agent, none is the plain three, capped at 6', () => {
@@ -60,20 +60,48 @@ describe('the tray look', () => {
     expect(trayTip({ waiting: 2, working: 0 })).toBe('bise: 2 things wait for you');
   });
 
-  it('frames: black (template) at rest, all one pink on a wait whatever the bar, 1x and 2x', () => {
+  const inked = (f: Uint8Array): number[][] => {
+    const out: number[][] = [];
+    for (let o = 0; o < f.length; o += 4) if ((f[o + 3] ?? 0) > 0) out.push(Array.from(f.slice(o, o + 3)));
+    return out;
+  };
+  const alphaAt = (f: { bgra: Uint8Array; px: number }, x: number, y: number): number => f.bgra[(y * f.px + x) * 4 + 3] ?? -1;
+
+  it('a wait keeps the template shape and has the dot: a template image with a hole, the dot over it', () => {
+    const wait = trayPaint('wait', true);
+    expect(wait.template).toBe(true);
+    expect(wait.badge).toEqual(TRAY_DOT);
+    expect(wait.hole).toBe(true);
+    expect(wait.title).toBe('');
+    // the dot sits at the icon's bottom right, inside its 15 pt box
+    expect(TRAY_DOT.x).toBeGreaterThan(TRAY_PT / 2);
+    expect(TRAY_DOT.y).toBeGreaterThan(TRAY_PT / 2);
+    expect(TRAY_DOT.x + TRAY_DOT.d / 2).toBeLessThanOrEqual(TRAY_PT);
+    for (const scale of [1, 2]) {
+      const f = trayFrame('wait', scale, { hole: true });
+      expect(f.px).toBe(TRAY_PT * scale);
+      // black + alpha only (macOS tints it), whatever the bar
+      const ink = inked(f.bgra);
+      expect(ink.length).toBeGreaterThan(0);
+      expect(ink.every(([b, g, r]) => b === 0 && g === 0 && r === 0)).toBe(true);
+      // the same ':*' as at rest, but clear where the dot goes
+      const rest = trayFrame('rest', scale);
+      const at = (p: number): number => Math.floor(p * scale);
+      expect(alphaAt(f, at(TRAY_DOT.x), at(TRAY_DOT.y))).toBe(0);
+      expect(alphaAt(rest, at(4.5), at(4.5))).toBe(alphaAt(f, at(4.5), at(4.5)));
+    }
+  });
+
+  it('rest and work: the template alone, no dot, no title', () => {
+    for (const look of ['rest', 'work'] as const) {
+      for (const addon of [true, false]) expect(trayPaint(look, addon)).toEqual({ template: true, hole: false, badge: null, title: '' });
+    }
     const rest = trayFrame('rest', 2);
-    expect(rest.px).toBe(TRAY_PT * 2);
-    const opaque = (f: Uint8Array): number[][] => {
-      const out: number[][] = [];
-      for (let o = 0; o < f.length; o += 4) if (f[o + 3] === 255) out.push(Array.from(f.slice(o, o + 3)));
-      return out;
-    };
-    expect(opaque(rest.bgra).every(([b, g, r]) => b === 0 && g === 0 && r === 0)).toBe(true);
-    // BGRA: #d03a72, eyes and star alike (a dark bar or a light one: the image can't know)
-    const wait = opaque(trayFrame('wait', 2).bgra);
-    expect(wait.length).toBeGreaterThan(0);
-    expect(wait.every(([b, g, r]) => b === 114 && g === 58 && r === 208)).toBe(true);
-    expect(trayFrame('wait', 1).px).toBe(TRAY_PT);
+    expect(inked(rest.bgra).every(([b, g, r]) => b === 0 && g === 0 && r === 0)).toBe(true);
+  });
+
+  it('a wait without the addon: the plain template and the dot as the title', () => {
+    expect(trayPaint('wait', false)).toEqual({ template: true, hole: false, badge: null, title: TITLE_DOT });
   });
 
   it('BGRA premultiplied', () => {

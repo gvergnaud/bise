@@ -6,7 +6,9 @@
 # <sha>: default HEAD of this tree. The nightly (scripts/nightly_gate.sh --in-slot) runs it as one
 # night_step, in the slot it holds; desktop_try and desktop_dmg nest there at nice 10 (heavy_argv),
 # never a second slot. Its steps, by value (a night cut short keeps the most useful part):
-#   candidate  scripts/desktop-try.sh --candidate <sha>: the packed 'bise cand' app
+#   candidate  scripts/desktop-try.sh --candidate <sha>: the packed 'bise cand' app, then
+#              scripts/tray_badge_check.sh on it (the tray's dot addon, signed and universal;
+#              its red: desktop/tray-badge)
 #   quick      every quick as-he-does row (no QUICK_ROWS), the first run (fresh home, the model
 #              step) and one fake-voice ctrl+r take: cand.sh with AS_HE_DOES_ONLY=quick
 #   land       apps/desktop pnpm build + pnpm test:land
@@ -51,6 +53,7 @@ bh="${BISE_HOME:-$HOME/.bise}"
 try_sh="${NIGHTLY_DESKTOP_TRY:-$here/scripts/desktop-try.sh}"
 hostile_sh="${NIGHTLY_DESKTOP_HOSTILE:-}"
 dmg_sh="${NIGHTLY_DESKTOP_DMG:-$here/scripts/desktop-dmg.sh}"
+badge_sh="${NIGHTLY_DESKTOP_BADGE:-$here/scripts/tray_badge_check.sh}"
 cand_sh="${NIGHTLY_DESKTOP_CAND:-$here/dev/plugins/ambient-qa/as-he-does/cand.sh}"
 pnpm="${NIGHTLY_DESKTOP_PNPM:-pnpm}"
 sum="$out/summary.txt"
@@ -153,7 +156,10 @@ for s in "${steps[@]}"; do
       cdir="$(printf '%s' "$j" | jq -r '.dir // empty' 2>/dev/null)"
       # built before this run (desktop_try's 'candidate <sha8> is built'): someone else's, kept
       grep -q "candidate ${sha:0:8} is built" "$out/candidate.log" || made="$cdir"
-      if [ $rc = 0 ] && [ -d "$app" ]; then record candidate green "$app"
+      if [ $rc = 0 ] && [ -d "$app" ]; then
+        # the tray's wait-dot addon packed whole (else his bar falls back to the title dot)
+        if why="$(bash "$badge_sh" "$app" 2>&1)"; then record candidate green "$app"
+        else reds+=("desktop/tray-badge"); record candidate red "$why"; fi
       else reds+=("desktop/candidate"); record candidate red "desktop-try.sh --candidate exit $rc, $out/candidate.log"; app=""; fi ;;
     quick|full)
       if [ -z "$app" ]; then record "$s" none "no candidate"; continue; fi

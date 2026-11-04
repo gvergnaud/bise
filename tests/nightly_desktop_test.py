@@ -55,6 +55,12 @@ echo "dmg $*" >> "$FAKE_LOG"
 echo "$FAKE_CAND_DIR/share/bise.dmg"
 """
 
+FAKE_BADGE = """#!/usr/bin/env bash
+echo "badge $1" >> "$FAKE_LOG"
+[ -n "${FAKE_BADGE_RED:-}" ] && { echo "tray badge: no $1/Contents/Resources/tray-badge.node"; exit 1; }
+echo "tray badge: ok"
+"""
+
 FAKE_HOSTILE = """#!/usr/bin/env bash
 echo "hostile" >> "$FAKE_LOG"
 [ -n "${FAKE_HOSTILE_RED:-}" ] && { echo "FAIL every probe blocked: ['nested-blob-escape: reached']"; exit 1; }
@@ -102,7 +108,8 @@ def main():
         subprocess.run(["git", "-C", repo, "-c", "user.email=t@t", "-c", "user.name=t", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "one"], check=True)
         sha = subprocess.run(["git", "-C", repo, "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
         fakes = os.path.join(t, "fakes")
-        for n, body in (("try", FAKE_TRY), ("cand", FAKE_CAND), ("dmg", FAKE_DMG), ("pnpm", FAKE_PNPM), ("hostile", FAKE_HOSTILE)):
+        for n, body in (("try", FAKE_TRY), ("cand", FAKE_CAND), ("dmg", FAKE_DMG), ("pnpm", FAKE_PNPM), ("hostile", FAKE_HOSTILE),
+                        ("badge", FAKE_BADGE)):
             write(os.path.join(fakes, n), body)
         clock = os.path.join(t, "now")
 
@@ -117,7 +124,7 @@ def main():
                        FAKE_CAND_DIR=os.path.join(t, "cand"), NIGHTLY_DESKTOP_NOW=clock, NIGHTLY_DESKTOP_BATTERY="0",
                        NIGHTLY_DESKTOP_TRY=os.path.join(fakes, "try"), NIGHTLY_DESKTOP_CAND=os.path.join(fakes, "cand"),
                        NIGHTLY_DESKTOP_DMG=os.path.join(fakes, "dmg"), NIGHTLY_DESKTOP_PNPM=os.path.join(fakes, "pnpm"),
-                       NIGHTLY_DESKTOP_HOSTILE=os.path.join(fakes, "hostile"))
+                       NIGHTLY_DESKTOP_HOSTILE=os.path.join(fakes, "hostile"), NIGHTLY_DESKTOP_BADGE=os.path.join(fakes, "badge"))
             env.update(extra)
             env.pop("BISE_SOCKET", None)
             r = subprocess.run(["bash", os.path.join(repo, "scripts", "nightly_desktop.sh"), out, *args], env=env,
@@ -143,7 +150,7 @@ def main():
         rc, o, calls = run()
         check(rc == 0, "green: rc %s\n%s" % (rc, o))
         kinds = [c.split()[0] + ("" if not c.startswith("cand") else " " + c.split()[1]) for c in calls]
-        check(kinds == ["try", "cand quick", "pnpm", "pnpm", "hostile", "cand full", "dmg"], "green: the order %s" % kinds)
+        check(kinds == ["try", "badge", "cand quick", "pnpm", "pnpm", "hostile", "cand full", "dmg"], "green: the order %s" % kinds)
         check(any(c.startswith("cand quick") and "first=1 voice=1 rows=" in c and c.endswith("rows=") for c in calls), "green: quick args %s" % calls)
         lr = last_run()
         check(len(lr) == 4 and lr[1:] == [sha, "green", out], "green: desktop-runs.tsv's line %s" % lr)
@@ -184,10 +191,16 @@ def main():
         check(facts()[0] == ["desktop/mcp-apps-hostile"] and facts()[1].get("mcp-apps") == "red", "hostile red: reds.txt, steps.tsv %s" % (facts(),))
         check("NEW reds (not in tests/known_reds.txt): desktop/mcp-apps-hostile" in o, "hostile red, NEW: " + o)
 
+        # the candidate without its tray-badge addon: the candidate is red, desktop/tray-badge
+        rc, o, calls = run(FAKE_BADGE_RED="1")
+        check(rc == 1 and "FAIL candidate" in o and "tray-badge.node" in o, "badge red: " + o)
+        check("desktop/tray-badge" in facts()[0] and facts()[1].get("candidate") == "red", "badge red: reds.txt, steps.tsv %s" % (facts(),))
+        check(calls[1].startswith("badge "), "badge: checked right after the build %s" % calls)
+
         # the hard end: the build ends past 08:00, nothing new starts: none, never green
         rc, o, calls = run("--until", "08:00", NOW=at(7, 50), FAKE_TRY_NOW=at(8, 1))
         check(rc == 2 and "STEP quick: none (past 08:00)" in o and "STEP dmg: none (past 08:00)" in o, "until\n" + o)
-        check([c.split()[0] for c in calls] == ["try"], "until: nothing after the build %s" % calls)
+        check([c.split()[0] for c in calls] == ["try", "badge"], "until: nothing after the build (and its badge check) %s" % calls)
         check(last_run()[2] == "none" and facts()[1].get("quick") == "none", "until: a none run %s %s" % (last_run(), facts()))
         # a start after the hour ends at tomorrow's: everything runs
         rc, o, _ = run("--until", "08:00", NOW=at(9, 0))

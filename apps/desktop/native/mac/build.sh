@@ -8,7 +8,10 @@
 #                           rust/proto/fixtures/helper_*.jsonl) through the swift
 #                           interpreter (JIT in memory: no binary on disk)
 #   build.sh <out path>     build the binary there and sign it (one stable path:
-#                           the EDR deletes fresh unsigned binaries)
+#                           the EDR deletes fresh unsigned binaries), and next to it
+#                           tray-badge.node (badge/TrayBadge.m: the in-process N-API
+#                           addon that draws the tray's wait dot, src/main/traybadge.ts),
+#                           universal (arm64 + x86_64), signed the same way
 #
 # MACOSX_DEPLOYMENT_TARGET: from the caller, 14.0 at least (ScreenCaptureKit
 # screenshots). HELPER_SIGN_ID: a codesigning identity
@@ -28,6 +31,8 @@ case "${1:-}" in
   --check)
     swiftc -typecheck "${FLAGS[@]}" "${SOURCES[@]}"
     echo "bise-mac-helper: type-check ok (${#SOURCES[@]} files)"
+    clang -fsyntax-only -fobjc-arc -isysroot "$SDK" -mmacosx-version-min="$TARGET" "$HERE/badge/TrayBadge.m"
+    echo "tray-badge: syntax ok"
     ;;
   --test)
     t="$(mktemp -d "${TMPDIR:-/tmp}/helper-test.XXXXXX")"
@@ -55,5 +60,13 @@ case "${1:-}" in
     swiftc -O "${FLAGS[@]}" -o "$OUT" "${SOURCES[@]}"
     codesign --force --sign "${HELPER_SIGN_ID:--}" --identifier dev.bise.mac-helper "$OUT" >/dev/null
     echo "bise-mac-helper: built $OUT"
+    # N-API only: its few functions are resolved from the host at load, no headers, no node-gyp
+    BADGE="$(dirname "$OUT")/tray-badge.node"
+    rm -f "$BADGE"
+    clang -bundle -fobjc-arc -O2 -arch arm64 -arch x86_64 -mmacosx-version-min="$TARGET" \
+      -isysroot "$SDK" -undefined dynamic_lookup -framework AppKit -framework QuartzCore \
+      -o "$BADGE" "$HERE/badge/TrayBadge.m"
+    codesign --force --sign "${HELPER_SIGN_ID:--}" --identifier dev.bise.tray-badge "$BADGE" >/dev/null
+    echo "tray-badge: built $BADGE"
     ;;
 esac
