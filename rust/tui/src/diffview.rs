@@ -65,6 +65,9 @@ pub(crate) enum Ask {
     Pr(u64),
     /// a landed range `from..to`, by an agent
     Range(String, String),
+    /// a `.diff` kept as an artifact (a feature's diff), its newest
+    /// version: the hub parses bise's copy
+    Artifact(String),
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -196,6 +199,7 @@ fn ask_json(ask: &Ask, req: u64) -> Value {
         Ask::Branch(br) => serde_json::json!({"req": req, "branch": br}),
         Ask::Pr(n) => serde_json::json!({"req": req, "pr": n}),
         Ask::Range(r, a) => serde_json::json!({"req": req, "range": r, "agent": a}),
+        Ask::Artifact(id) => serde_json::json!({"req": req, "artifact": id}),
     }
 }
 
@@ -225,6 +229,7 @@ pub(crate) fn request(app: &mut App, ask: Ask, by: By) {
         Ask::Branch(b) => format!("{} vs main", b),
         Ask::Pr(n) => format!("PR #{}", n),
         Ask::Range(r, a) => range_title(r, a),
+        Ask::Artifact(id) => id.clone(),
     };
     // whose work this is: an empty diff then says it is on main
     let owner = match &ask {
@@ -1161,7 +1166,7 @@ pub(crate) fn mouse(app: &mut App, m: &crossterm::event::MouseEvent) -> bool {
 
 /// A `bise-diff:` url (the `± 3 files` under a landed line):
 /// `bise-diff:range/<from>..<to>?agent=<a>`, `bise-diff:agent/<a>`,
-/// `bise-diff:branch/<b>`.
+/// `bise-diff:branch/<b>`, `bise-diff:artifact/<id>`.
 pub(crate) fn ask_of_url(url: &str) -> Option<Ask> {
     let rest = url.strip_prefix("bise-diff:")?;
     let (kind, arg) = rest.split_once('/')?;
@@ -1169,6 +1174,7 @@ pub(crate) fn ask_of_url(url: &str) -> Option<Ask> {
         "agent" => Some(Ask::Agent(arg.to_string())),
         "branch" => Some(Ask::Branch(arg.to_string())),
         "pr" => arg.parse().ok().map(Ask::Pr),
+        "artifact" => Some(Ask::Artifact(arg.to_string())),
         "range" => {
             let (range, agent) = arg.split_once("?agent=").unwrap_or((arg, ""));
             Some(Ask::Range(range.to_string(), agent.to_string()))
@@ -1183,6 +1189,7 @@ pub(crate) fn url_of(ask: &Ask) -> String {
         Ask::Branch(b) => format!("bise-diff:branch/{}", b),
         Ask::Pr(n) => format!("bise-diff:pr/{}", n),
         Ask::Range(r, a) => format!("bise-diff:range/{}?agent={}", r, a),
+        Ask::Artifact(id) => format!("bise-diff:artifact/{}", id),
     }
 }
 

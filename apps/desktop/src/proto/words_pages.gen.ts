@@ -142,6 +142,8 @@ export const pages = {
   review_loading: (a: { agent: string | number }): string => "loading " + String(a.agent) + "'s changes…",
   /** while a commit's diff comes */
   review_loading_commit: (a: { sha: string | number }): string => "loading commit " + String(a.sha) + "…",
+  /** while a .diff artifact's diff comes (a feature's: `cu-upload at dd86c8a`) */
+  review_loading_diff: (a: { title: string | number }): string => "loading " + String(a.title) + "…",
   /** the feature head's sub when it isn't known */
   feature_word: "feature",
   /** no such feature: the empty state's title */

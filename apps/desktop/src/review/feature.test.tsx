@@ -70,6 +70,11 @@ describe('features, pure', () => {
     expect(dropAsk(feat())).toBe('drop gift-cards? 2 commits go.');
     const tryCard: Card = { ...mergeCard, kind: 'feature_try', options: [{ n: 1, label: 'try it' }, { n: 2, label: 'show the diff' }, { n: 3, label: 'not yet' }] };
     expect(choicesOf(tryCard, false).every((c) => c.reply !== undefined)).toBe(true);
+    // try-diff-open: an option the hub's row gives an act (its '2 show the diff' opens the
+    // feature's diff artifact) opens it, never sent as an answer
+    const open = { act: 'open', artifact: 'cu-diff' } as const;
+    const withDiff: Card = { ...tryCard, options: tryCard.options.map((o) => (o.n === 2 ? { ...o, act: open } : o)) };
+    expect(choicesOf(withDiff, false)).toEqual([{ reply: '1', label: 'try it' }, { act: open, label: 'show the diff', n: 2 }, { reply: '3', label: 'not yet' }]);
   });
   it('has its route', () => {
     expect(parseRoute('feature/shop/gift-cards')).toEqual({ screen: 'feature', project: 'shop', name: 'gift-cards' });

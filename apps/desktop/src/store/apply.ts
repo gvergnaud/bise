@@ -6,6 +6,7 @@ import {
   type BranchesList,
   type Dictation,
   diffKey,
+  artDiffKey,
   type Ev,
   type HubLine,
   type InboxList,
@@ -192,7 +193,9 @@ export function applyTyped(s: Store, ev: Ev): void {
         if (!s.diffReqs.has(ev.req)) return;
         s.diffReqs.delete(ev.req);
       }
-      s.put(diffKey(ev.project, ev.agent, ev.commit ?? undefined), ev);
+      // a .diff artifact's, by its id and version; else an agent's change or one commit
+      if (ev.artifact != null) s.put(artDiffKey(ev.project, ev.artifact, ev.version ?? 0), ev);
+      else s.put(diffKey(ev.project, ev.agent, ev.commit ?? undefined), ev);
       return;
     case "prefs":
       s.put("prefs", ev.prefs);

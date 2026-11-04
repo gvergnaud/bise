@@ -193,6 +193,13 @@
     "one": null,
     "text": "loading commit {sha}…"
   },
+  "pages.review_loading_diff": {
+    "args": [
+      "title"
+    ],
+    "one": null,
+    "text": "loading {title}…"
+  },
   "pages.review_merge": {
     "args": [],
     "one": null,

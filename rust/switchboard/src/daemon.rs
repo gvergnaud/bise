@@ -770,6 +770,8 @@ impl Shell {
         // cards' page links (daemon/page_cards.rs)
         self.snapshot_pages(&mut snap);
         self.snapshot_card_links(&mut snap);
+        // a try item's `2 show the diff` opens its diff (daemon/features.rs)
+        self.snapshot_feature_acts(&mut snap);
         // one gate card for several agents' identical calls: it names them all
         self.gate_card_agents(&mut snap);
         self.snapshot_models(&mut snap, &used);

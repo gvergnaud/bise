@@ -116,4 +116,10 @@ pub struct DiffView {
     pub landed_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "crate::is_false")]
     pub gone: bool,
+    /// a `.diff` artifact's diff (the `diff` ask's `artifact`): its id and
+    /// the version read; a client keys the answer by them
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<u32>,
 }

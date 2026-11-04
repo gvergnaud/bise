@@ -117,8 +117,10 @@ impl Hub {
     }
 
     /// The user's number on a feature item (pr-merge's choice cards,
-    /// dev-flow §5.1): `feature_try` 1 try it / 2 show the diff / 3 not
-    /// yet; `feature_merge` 1 merge / 2 keep working / 3 drop the branch
+    /// dev-flow §5.1): `feature_try` 1 try it / 3 not yet (its `2 show
+    /// the diff` is a client's act, never sent: it opens the feature's
+    /// diff artifact, Shell::snapshot_card_links); `feature_merge` 1
+    /// merge / 2 keep working / 3 drop the branch
     /// (the TUI asked "drop it?" once more before sending 3). The card
     /// stays open until the step ends (`feature_done` closes or replaces
     /// it). A number out of range: nothing. A merge, a try or a drop runs
@@ -128,7 +130,6 @@ impl Hub {
         let Some(name) = place.and_then(crate::feature::of_place) else { return };
         let op = match (kind, choice.trim()) {
             (crate::feature::TRY, "1") => "try",
-            (crate::feature::TRY, "2") => "diff",
             (crate::feature::TRY, "3") => "later",
             (crate::feature::MERGE, "1") => "merge",
             (crate::feature::MERGE, "2") => "keep",

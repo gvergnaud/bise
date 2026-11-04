@@ -341,6 +341,7 @@ impl Shell {
                     sitting: None,
                     changed: changed.as_ref().and_then(bise_proto::office::Changed::of_value).map(|c| c.0),
                     folder,
+                    id: None,
                 };
                 match store.add(&add, now_ms()) {
                     Ok(a) => {
@@ -566,8 +567,11 @@ impl Shell {
             Ask::Branch(s("branch"))
         } else if let Some(n) = v.get("pr").and_then(|x| x.as_u64()) {
             Ask::Pr(n)
+        } else if !s("artifact").is_empty() {
+            let version = v.get("version").and_then(Value::as_u64);
+            artifact_ask(&self.art_store(), &s("artifact"), version)
         } else {
-            Ask::Bad("diff: agent, branch, range or pr".into())
+            Ask::Bad("diff: agent, branch, range, pr or artifact".into())
         }
     }
 
@@ -631,7 +635,36 @@ enum Ask {
     Branch(String),
     Range(String, String),
     Pr(u64),
+    /// a `.diff` kept as an artifact ([`artifact_ask`])
+    Artifact(ArtDiff),
     Bad(String),
+}
+
+/// A `.diff` artifact's version to read: its id, title and version, and
+/// bise's copy of that version (read in the diff's thread, never on the
+/// loop).
+#[derive(Clone, Debug)]
+struct ArtDiff {
+    id: String,
+    title: String,
+    v: u64,
+    copy: PathBuf,
+}
+
+/// What a diff of artifact `id` (its `version`, none: the newest) reads:
+/// bise's copy, through the store (its owner); a page, a link or a
+/// version with no copy is refused in words.
+fn artifact_ask(store: &crate::artifacts::Store, id: &str, version: Option<u64>) -> Ask {
+    let Some(m) = store.get(id) else { return Ask::Bad(format!("no artifact {id}")) };
+    let v = match version {
+        Some(n) => m.versions.iter().find(|x| x.v == n),
+        None => m.current(),
+    };
+    let Some(v) = v else { return Ask::Bad(format!("{id} has no version {}", version.unwrap_or(0))) };
+    match store.copy_path(&m, v) {
+        Some(copy) => Ask::Artifact(ArtDiff { id: m.id.clone(), title: m.title.clone(), v: v.v, copy }),
+        None => Ask::Bad(format!("{id} v{} has no copy to read", v.v)),
+    }
 }
 
 /// The `diff` event answering `ask` (git runs in `shared` or the
@@ -724,6 +757,13 @@ fn diff_answer(ask: Ask, shared: &Path, req: Value) -> Value {
             ev["pr"] = json!(n);
             diff::pr(&shared, n).map(|f| (f, None))
         }
+        // its text is a diff already: the one parser, no git
+        Ask::Artifact(a) => {
+            ev["title"] = json!(a.title);
+            ev["artifact"] = json!(a.id);
+            ev["version"] = json!(a.v);
+            std::fs::read(&a.copy).map(|b| (diff::parse(&String::from_utf8_lossy(&b)), None)).map_err(|e| format!("{} v{}: {}", a.id, a.v, e))
+        }
         Ask::Bad(e) => Err(e),
     };
     match out {
@@ -812,6 +852,50 @@ mod tests {
     fn no_git_fatal(ev: &Value) {
         let s = ev.to_string();
         assert!(!s.contains("fatal") && !s.contains("cannot change to"), "{s}");
+    }
+
+    /// try-diff-open (architect m_52963): a feature's diff kept at `sb
+    /// feature ready` (its artifact), read back through the store, is the
+    /// same files and lines as the branch's diff at that tip; an older
+    /// version stays readable, an unknown id or version is refused.
+    #[test]
+    fn a_diff_artifact_reads_as_the_branchs_diff() {
+        let (shared, _) = gone("artdiff");
+        let state = shared.parent().unwrap().join("state");
+        sh(&shared, &["branch", "-q", "-m", "sb/t1", "cu"]);
+        let file = state.join("features/cu.diff");
+        let store = crate::artifacts::Store::new(&state);
+        crate::feature::write_diff(&shared, "cu", &file).unwrap();
+        let add = crate::feature::diff_artifact("cu", "abc1234", &file);
+        let id = store.add(&add, 1).unwrap().meta.id;
+        assert_eq!(id, "cu-diff");
+        let strip = |mut ev: Value| {
+            for f in ev["files"].as_array_mut().unwrap() {
+                f.as_object_mut().unwrap().remove("abs");
+            }
+            (ev["files"].clone(), ev["stat"].clone())
+        };
+        let read = diff_answer(artifact_ask(&store, &id, None), &shared, json!(1));
+        assert_eq!((read["title"].clone(), read["artifact"].clone(), read["version"].clone()), (json!("cu at abc1234"), json!("cu-diff"), json!(1)));
+        assert_eq!(read["error"], Value::Null);
+        let branch = diff_answer(Ask::Branch("cu".into()), &shared, json!(1));
+        assert_eq!(strip(read), strip(branch.clone()));
+        assert_eq!(branch["files"][0]["hunks"][0]["lines"], json!([" one", "+two"]));
+        // the next ready: a next version, the first still read
+        std::fs::create_dir_all(shared.join("b")).unwrap();
+        sh(&shared, &["checkout", "-q", "cu"]);
+        std::fs::write(shared.join("b/c.txt"), "c\n").unwrap();
+        sh(&shared, &["add", "."]);
+        sh(&shared, &["commit", "-q", "-m", "c"]);
+        sh(&shared, &["checkout", "-q", "main"]);
+        crate::feature::write_diff(&shared, "cu", &file).unwrap();
+        let next = store.add(&crate::feature::diff_artifact("cu", "def5678", &file), 2).unwrap().meta;
+        assert_eq!((next.id.as_str(), next.title.as_str(), next.versions.len()), ("cu-diff", "cu at def5678", 2));
+        assert_eq!(diff_answer(artifact_ask(&store, "cu-diff", None), &shared, json!(1))["files"].as_array().unwrap().len(), 2);
+        assert_eq!(diff_answer(artifact_ask(&store, "cu-diff", Some(1)), &shared, json!(1))["files"].as_array().unwrap().len(), 1);
+        assert_eq!(diff_answer(artifact_ask(&store, "cu-diff", Some(9)), &shared, json!(1))["error"], "cu-diff has no version 9");
+        assert_eq!(diff_answer(artifact_ask(&store, "nope", None), &shared, json!(1))["error"], "no artifact nope");
+        let _ = std::fs::remove_dir_all(shared.parent().unwrap());
     }
 
     #[test]

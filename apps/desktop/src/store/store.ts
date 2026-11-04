@@ -576,6 +576,7 @@ export class Store extends StoreVoice {
 // the store's shapes and helpers live in types.ts; importers keep reading them here
 export {
   TAGS,
+  artDiffKey,
   diffKey,
   takeKey,
   threadKey,

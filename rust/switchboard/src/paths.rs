@@ -144,6 +144,12 @@ impl Paths {
     pub fn bin_dir(&self) -> PathBuf {
         self.state.join("bin")
     }
+    /// Feature `name`'s diff against the trunk, written at each `sb
+    /// feature ready` (daemon/features.rs) and kept as one artifact: the
+    /// try item's `2 show the diff` opens it.
+    pub fn feature_diff(&self, name: &str) -> PathBuf {
+        self.state.join("features").join(format!("{name}.diff"))
+    }
     /// The last login-shell PATH a hub of this workspace read
     /// (tools_env::remembered_login's): the next hub's agents get it when
     /// its own probe fails.

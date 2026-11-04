@@ -698,11 +698,17 @@ pub enum HubCmd {
     /// change; `commit`: one commit of it instead, a landed one: the
     /// review's "merged · e0f3df5"), `branch` (a local branch vs the
     /// trunk), `pr` (an open pull request) or `range` (`a..b`, with
-    /// `agent` naming it in the title); `req` the client's number for
+    /// `agent` naming it in the title), `artifact` (a `.diff` file kept
+    /// as an artifact, its `version`, none: the newest; a feature's diff);
+    /// `req` the client's number for
     /// this ask, echoed in the answer (the terminal's /diff drops older
     /// answers). Anything else is an `error`
     Diff {
         project: Project,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        artifact: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        version: Option<u32>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         agent: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]

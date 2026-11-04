@@ -1,6 +1,8 @@
 //! Feature branches, the daemon's side (dev-flow §5.1): `sb feature
 //! new|sync|ready|merge|drop|list`, and the user's answers on a feature's
-//! items (`try`, `diff`, `later`, `keep`, `merge`, `drop`). Git, the check
+//! items (`try`, `later`, `keep`, `merge`, `drop`; the try item's `2 show
+//! the diff` is a client's act: `ready` keeps the diff as the feature's
+//! artifact, `Paths::feature_diff`, and the item's option opens it). Git, the check
 //! and the try build run in a thread, in line on the land queue (the
 //! feature's lands wait meanwhile; a merge waits for main's line too);
 //! the registry and the facts are shared with those threads; the end
@@ -141,6 +143,8 @@ struct Job {
     agents: Vec<(String, String)>,
     shared: PathBuf,
     state: PathBuf,
+    /// The feature's diff file (`Paths::feature_diff`), its artifact.
+    diff: PathBuf,
     scratch: PathBuf,
     /// The land check's warm tree's root (`scratch::CheckTree`).
     checks: PathBuf,
@@ -184,7 +188,7 @@ impl Shell {
             }
             return;
         }
-        if !matches!(op.as_str(), "new" | "sync" | "ready" | "merge" | "drop" | "retire" | "try" | "diff" | "later" | "keep") {
+        if !matches!(op.as_str(), "new" | "sync" | "ready" | "merge" | "drop" | "retire" | "try" | "later" | "keep") {
             return refuse(&mut stream, "usage: sb feature new|sync|ready|merge|drop|retire|list <name>".into());
         }
         if name.is_empty() {
@@ -215,6 +219,7 @@ impl Shell {
         let job = Job {
             asked: stream.is_some(),
             op,
+            diff: self.opts.paths.feature_diff(&name),
             name,
             agents,
             shared: self.opts.paths.workspace.clone(),
@@ -265,6 +270,30 @@ impl Shell {
             };
             let _ = job.tx.send(Msg::input(Input::Feature(done)));
         });
+    }
+
+    /// The try items' `2 show the diff` (after `snapshot_card_links`, its
+    /// one writer of `opens`): it opens the feature's diff artifact (the
+    /// one whose file is `Paths::feature_diff`, `ready` keeps it), in the
+    /// app, nothing sent, the item stays. Read from the store, not saved
+    /// with the card: an item from before a restart, or one whose diff
+    /// was added by hand, opens it too. The store is read only while a
+    /// try item is open.
+    pub(super) fn snapshot_feature_acts(&self, snap: &mut crate::snapshot::Snapshot) {
+        let tries = || snap.cards.iter().any(|c| c.kind == feature::TRY && !c.opens.contains_key(&feature::DIFF_OPTION));
+        if !tries() {
+            return;
+        }
+        let stored = crate::artifacts::Store::new(&self.opts.paths.state).stored();
+        for c in snap.cards.iter_mut().filter(|c| !c.opens.contains_key(&feature::DIFF_OPTION)) {
+            let Some(name) = c.place.as_deref().and_then(feature::of_place) else { continue };
+            let file = self.opts.paths.feature_diff(name);
+            let source = file.canonicalize().unwrap_or(file).to_string_lossy().to_string();
+            let id = stored.iter().find(|m| m.source == source).map(|m| m.id.as_str());
+            if let Some((n, act)) = feature::try_acts(&c.kind, id) {
+                c.opens.insert(n, act);
+            }
+        }
     }
 
     /// The typed `features` event (bar A.6): the registry's rows with each
@@ -397,6 +426,12 @@ fn step(job: &Job) -> Out {
             if f.ahead == 0 {
                 return Err(format!("{} has no commit that {} lacks: nothing to try", name, main).into());
             }
+            // what is ready, kept: the item's `2 show the diff` opens it
+            // (its act, Shell::snapshot_card_links), nothing sent
+            let at = crate::land::shorten(&job.shared, &f.tip);
+            feature::write_diff(&job.shared, name, &job.diff)?;
+            let store = crate::artifacts::Store::new(&job.state);
+            store.add(&feature::diff_artifact(name, &at, &job.diff), now)?;
             let mut d = done();
             d.open = Some((feature::TRY.into(), feature::try_text(name, &f, &main, job.flow.check.is_some())));
             Ok((format!("the user's inbox asks them to try {} now.", name), d))
@@ -428,21 +463,6 @@ fn step(job: &Job) -> Out {
             d.open = Some((feature::MERGE.into(), feature::merge_text(name, &f, &main, &tried, checked)));
             d.line = Some(Feed::info(format!("{} is built to try ({}): in another terminal, {}{}", name, tried.sha, tried.run, synced)));
             Ok((format!("built {}: {}", tried.sha, tried.run), d))
-        }
-        "diff" => {
-            let file = job.state.join("features").join(format!("{}.diff", name));
-            feature::write_diff(&job.shared, name, &file)?;
-            let f = facts(&job.features).unwrap_or_default();
-            let mut d = done();
-            d.line = Some(Feed::info(format!(
-                "the diff of {}: {} commits, +{} −{} · {}",
-                name,
-                f.ahead,
-                feature::thousands(f.adds),
-                feature::thousands(f.dels),
-                feature::home_short(&file.to_string_lossy())
-            )));
-            Ok((format!("written to {}", file.display()), d))
         }
         "later" => {
             let mut d = done();

@@ -72,6 +72,27 @@ fn each_kind_opens_where_it_belongs() {
     let pr = Artifact { pr: Some(Pr { repo: "o/r".into(), number: 6, branch: "b".into() }), ..a("pr", "https://github.com/o/r/pull/6") };
     assert_eq!(how(&pr, None, true), How::Diff(6));
     assert_eq!(how(&pr, None, false), How::Browser("https://github.com/o/r/pull/6".into()));
+    // a .diff or .patch kept (a feature's diff, try-diff-open): the diff
+    // panel, its newest version; an older version opens its file
+    let diff = Artifact { id: "cu-diff".into(), ..a("code", "/s/features/cu.diff") };
+    assert_eq!(how(&diff, None, false), How::Patch("cu-diff".into()));
+    assert_eq!(how(&a("doc", "/w/fix.PATCH"), None, false), How::Patch("x".into()));
+    assert_eq!(how(&a("link", "https://x.dev/a.diff"), None, false), How::Browser("https://x.dev/a.diff".into()));
+}
+
+/// try-diff-open: a .diff artifact opened from /artifacts or an inbox
+/// option (its act) opens the diff panel on it, and the hub is asked
+/// for that artifact's diff.
+#[test]
+fn a_diff_artifact_opens_the_diff_panel() {
+    let mut app = crate::sb::bench::test_app();
+    let a = Artifact { id: "cu-diff".into(), title: "cu at abc1234".into(), kind: "code".into(), target: "/s/features/cu.diff".into(), ..Default::default() };
+    let note = open(&mut app, &a, None);
+    assert_eq!(note, "cu at abc1234 · its diff");
+    let p = app.diff.as_ref().expect("the panel opens");
+    assert_eq!(p.ask, crate::diffview::Ask::Artifact("cu-diff".into()));
+    assert!(p.focused, "it takes the keys");
+    assert_eq!(crate::diffview::ask_of_url(&crate::diffview::url_of(&p.ask)), Some(p.ask.clone()));
 }
 
 #[test]

@@ -318,6 +318,11 @@ export function diffKey(project: string, agent: string, commit?: string): string
   return commit === undefined ? `diff:${project}/${agent}` : `diff:${project}/@${commit}`;
 }
 
+/** A `.diff` artifact's diff at its version (the `diff` ask's `artifact`, try-diff-open). */
+export function artDiffKey(project: string, id: string, version: number): string {
+  return `diff:${project}/#${id}@${String(version)}`;
+}
+
 export function sameStrings(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((x, i) => x === b[i]);
 }

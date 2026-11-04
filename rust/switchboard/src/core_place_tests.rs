@@ -228,6 +228,19 @@ fn a_feature_item_runs_his_answer_until_its_step_ends() {
     assert!(t.hub.running_cards().is_empty(), "nothing runs");
     // a try: running until its step ends with the merge item
     let try_id = open(&mut t, "feature_try");
+    // `2 show the diff` is a client's act (it opens the diff artifact):
+    // the hub runs nothing for it and the item stays (try-diff-open)
+    let fx = t.user(MAIN, &format!("/answer {} 2", try_id));
+    assert!(!fx.iter().any(|e| matches!(e, Effect::Feature { .. })), "{fx:?}");
+    assert_eq!(running(&mut t, try_id), Some(false), "still open, nothing runs");
+    // the row says it: its option 2 opens the diff kept (the shell's
+    // snapshot_feature_acts), 1 and 3 answer
+    let mut snap = t.hub.snapshot(0);
+    let c = snap.cards.iter_mut().find(|c| c.id == try_id).unwrap();
+    c.opens.extend(crate::feature::try_acts(&c.kind, Some("cu-diff")));
+    let row = crate::proto_view::cards(&snap, "p", 0, |_| true).0.into_iter().find(|c| c.id == try_id).unwrap();
+    let acts: Vec<(u32, bool)> = row.options.iter().map(|o| (o.n, o.act == Some(bise_proto::rows::OptAct::artifact("cu-diff", None, None)))).collect();
+    assert_eq!(acts, vec![(1, false), (2, true), (3, false)]);
     t.user(MAIN, &format!("/answer {} 1", try_id));
     assert_eq!(running(&mut t, try_id), Some(true), "its try builds");
     t.go(Input::Feature(FeatureDone { name: "cu".into(), close: Some("replaced".into()), ..FeatureDone::default() }));

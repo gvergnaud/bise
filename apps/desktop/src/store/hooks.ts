@@ -13,7 +13,7 @@ import type { AnswerJump } from './store';
 import type { Acted } from './acted';
 import type { Refused } from './refused';
 import type { InboxItem } from '@/inbox/listed';
-import { diffKey, toolOutKey, Store, type ToolOut, type Away, type Dictation, type HubLine, type Diff, type FilesAnswer, type Ev, type EvOf, type Pending, type PrsList, type BranchesList, type VersionsList, type PagesList, type ThreadHits, type ThreadOrder, type VoiceModeState, type TalkShot } from './store';
+import { artDiffKey, diffKey, toolOutKey, Store, type ToolOut, type Away, type Dictation, type HubLine, type Diff, type FilesAnswer, type Ev, type EvOf, type Pending, type PrsList, type BranchesList, type VersionsList, type PagesList, type ThreadHits, type ThreadOrder, type VoiceModeState, type TalkShot } from './store';
 
 /**
  * Feeds a store from a core port: its live events, then the state events
@@ -134,6 +134,8 @@ export const useModels = (project: string): readonly Model[] => useSlice(`models
 export const useFeatures = (project: string): readonly Feature[] => useSlice(`features:${project}`, (s) => s.features(project));
 export const usePlaces = (project: string): readonly Place[] => useSlice(`places:${project}`, (s) => s.places(project));
 export const useJobs = (project: string): readonly Job[] => useSlice(`jobs:${project}`, (s) => s.jobs(project));
+export const useArtifactDiff = (project: string, id: string, version: number): Diff | null =>
+  useSlice(artDiffKey(project, id, version), (s) => s.artifactDiff(project, id, version));
 export const useDiff = (project: string, agent: string, commit?: string): Diff | null =>
   useSlice(diffKey(project, agent, commit), (s) => s.diff(project, agent, commit));
 /** A tool call's real output once its open row asked (askToolOut), or the hub's refusal; null until then. */

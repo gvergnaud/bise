@@ -557,6 +557,33 @@ pub fn home_short(p: &str) -> String {
     }
 }
 
+/// The try item's option that shows the diff (`2 show the diff`).
+pub const DIFF_OPTION: u32 = 2;
+
+/// The try item's options' acts (a client's, never sent, the item stays):
+/// its `2 show the diff` opens `diff`, the feature's diff artifact, when
+/// there is one (none: the item as it is). Pure.
+pub fn try_acts(kind: &str, diff: Option<&str>) -> Option<(u32, bise_proto::rows::OptAct)> {
+    (kind == TRY).then_some(())?;
+    Some((DIFF_OPTION, bise_proto::rows::OptAct::artifact(diff?, None, None)))
+}
+
+/// The add that keeps feature `name`'s diff (`file`, written at `at`, the
+/// tip's short sha) as its one artifact, `<name>-diff`: each `sb feature
+/// ready` a next version, its title the tip it shows. Pure.
+pub fn diff_artifact(name: &str, at: &str, file: &Path) -> crate::artifacts::Add {
+    crate::artifacts::Add {
+        target: file.to_string_lossy().to_string(),
+        title: Some(format!("{name} at {at}")),
+        kind: Some("code".into()),
+        agent: crate::model::MAIN.into(),
+        by: crate::model::MAIN.into(),
+        cwd: file.parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_default(),
+        id: Some(format!("{name}-diff")),
+        ..Default::default()
+    }
+}
+
 /// The diff for `2 show the diff`, written to `file`: the stat, then the
 /// patch, against where it leaves main.
 pub fn write_diff(shared: &Path, name: &str, file: &Path) -> Result<(), String> {

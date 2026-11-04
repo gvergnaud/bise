@@ -162,6 +162,8 @@ crate::words! { pages:
     review_loading(agent) = "loading {agent}'s changes…";
     /// while a commit's diff comes
     review_loading_commit(sha) = "loading commit {sha}…";
+    /// while a .diff artifact's diff comes (a feature's: `cu-upload at dd86c8a`)
+    review_loading_diff(title) = "loading {title}…";
 
     // ---- a feature (route feature)
     /// the feature head's sub when it isn't known

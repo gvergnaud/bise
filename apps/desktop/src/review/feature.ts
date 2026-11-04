@@ -3,7 +3,7 @@
 // state, and its card's answers (try / merge / drop: no typed command, the
 // feature card answers through store.answer, architect m_10203). Pure.
 // Owner: amb-win.
-import type { Agent, Card, Feature } from '@/proto';
+import type { Agent, Card, Feature, OptAct } from '@/proto';
 
 export interface Group {
   readonly feature: Feature;
@@ -53,6 +53,10 @@ export interface Choice {
   readonly confirm?: true;
   /** goes back from the drop's ask */
   readonly back?: true;
+  /** done here, nothing sent, the card stays (the hub's row: the try card's '2 show the diff' opens its diff) */
+  readonly act?: OptAct;
+  /** its option's number (an act's: its test id) */
+  readonly n?: number;
 }
 
 /** The merge card's option that drops the branch (the TUI's '3 drop the branch'). */
@@ -71,7 +75,10 @@ export function choicesOf(card: Card, asking: boolean): Choice[] {
     const drop = card.options.find((o) => isDrop(card, o.n, o.label));
     return [{ reply: String(drop?.n ?? 3), label: 'drop it' }, { label: 'keep it', back: true }];
   }
-  return card.options.map((o) => (isDrop(card, o.n, o.label) ? { label: o.label, confirm: true } : { reply: String(o.n), label: o.label }));
+  return card.options.map((o) => {
+    if (o.act != null) return { act: o.act, label: o.label, n: o.n };
+    return isDrop(card, o.n, o.label) ? { label: o.label, confirm: true } : { reply: String(o.n), label: o.label };
+  });
 }
 
 /** The drop's second ask. */

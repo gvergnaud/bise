@@ -39,6 +39,7 @@ import {
   type Dictation,
   type Diff,
   diffKey,
+  artDiffKey,
   type EvOf,
   type HubLine,
   type InboxList,
@@ -312,6 +313,10 @@ export class StoreReads extends StoreBase {
    */
   queuedSteer(project: string, agent: string, id: number): void {
     this.command({ cmd: "queued_steer", project, agent, id });
+  }
+  /** A `.diff` artifact's diff at `version` (null until the hub answers). */
+  artifactDiff(project: string, id: string, version: number): Diff | null {
+    return this.slice<Diff | null>(artDiffKey(project, id, version), null);
   }
   /** The latest diff of an agent's change, or of one commit (`commit`). */
   diff(project: string, agent: string, commit?: string): Diff | null {

@@ -121,6 +121,7 @@ export const hub_ev: readonly HubEv[] = [
   {"ev":"artifacts_moved","moved":[{"from":"f-abcdefghij","id":"perf-notes"},{"id":"report-html"}],"project":"acme-1a2b3c4d"},
   {"ev":"folders","folders":[{"by":"you","id":"f-abcdefghij","name":"docs","named_by_you":true},{"by":"main","id":"f-klmnopqrst","name":"pricing","named_by_you":false,"parent":"f-abcdefghij"}],"made":"f-klmnopqrst","project":"acme-1a2b3c4d"},
   {"ev":"library","folders":[{"by":"you","id":"f-abcdefghij","name":"docs","named_by_you":true}],"here":"acme","project":"acme-1a2b3c4d","projects":[{"items":[{"agent":"design","at_ms":1791100010000,"folder":"f-abcdefghij","id":"hero","kind":"image","new":false,"title":"hero","turn":1791100009000,"url":"/s/hero.png","version":1}],"name":"site","project":"site-9f8e7d6c"}]},
+  {"agent":"","artifact":"cu-upload-diff","base":"","ev":"diff","files":[{"add":1,"del":1,"hunks":[{"header":"@@ -1 +1 @@","lines":[{"kind":"del","old":1,"text":"old line"},{"kind":"add","new":1,"text":"new line"}]}],"path":"rust/upload.rs","status":"modified"}],"project":"acme-1a2b3c4d","req":7,"title":"cu-upload at dd86c8a","version":2},
 ];
 
 /** rust/proto/fixtures/hub_cmd.jsonl */
@@ -225,6 +226,7 @@ export const hub_cmd: readonly HubCmd[] = [
   {"agent":"perf","call":"1730000000000-1","cmd":"view_message","content":[{"text":"count is 4","type":"text"}],"gesture_ms":1730000001000,"project":"acme-1a2b3c4d"},
   {"agent":"perf","call":"1730000000000-1","cmd":"view_context","content":[{"text":"count=4","type":"text"}],"project":"acme-1a2b3c4d"},
   {"cmd":"plugin_views","plugin":"fake-app","project":"acme-1a2b3c4d"},
+  {"artifact":"cu-upload-diff","cmd":"diff","project":"acme-1a2b3c4d","req":7,"version":2},
 ];
 
 /** rust/proto/fixtures/core_ev.jsonl */

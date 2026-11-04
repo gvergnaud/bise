@@ -562,6 +562,8 @@ pub fn diff(ev: &Value, project: &str, agent: &str) -> HubEv {
             uncommitted: flag(ev, "uncommitted"),
             landed_ms: ev.get("landed_ms").and_then(Value::as_u64),
             gone: flag(ev, "gone"),
+            artifact: Some(s(ev, "artifact")).filter(|a| !a.is_empty()),
+            version: ev.get("version").and_then(Value::as_u64).map(|v| v as u32),
         }),
     }
 }

@@ -28,7 +28,8 @@ import { useTabPlace } from '@/thread/ComposerTab';
 import { usageLine } from '@/thread/head';
 import { InboxBlock, type Answering } from '@/inbox';
 import { useAllArtifacts } from './hooks';
-import { kindOf, revealPathOf, saveOf, versions } from './model';
+import { isDiff, kindOf, revealPathOf, saveOf, versions } from './model';
+import { DiffArtifact } from './DiffArtifact';
 import { useMenuAction } from '@/app/menu';
 import { tilde } from '@/app/barplaces';
 import type { SaveResult } from '@/shared/api';
@@ -588,6 +589,8 @@ export function ArtifactOpen({ project, id, onClose, composer = true, lead, bare
             (useFrameNote) for the maker's composer, not the frame's own note. An image zooms in
             the viewer itself (kit/office/image.js; image-pinch), its esc and ⌘0 lent by useFrameNote.
             A video's player goes full screen from its own button (kit/office/video.js): allow it */}
+        {/* a .diff or .patch: its files and hunks, the review's own view (try-diff-open), never a blank frame */}
+        {src === null && isDiff(a) && <DiffArtifact project={project} a={a} version={shown} onEscape={close} />}
         {/* its file gone (the server's 404, designer m_52746): bise's own empty state, never the server's line */}
         {src !== null && reach === 'gone' && (
           <FileGone agent={a.agent} shown={shown} newest={a.version}

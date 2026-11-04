@@ -155,6 +155,10 @@ pub struct Add {
     pub changed: Option<Vec<Anchor>>,
     /// The folder it goes in (a library folder's id), see [`Filed`].
     pub folder: Option<Filed>,
+    /// A new artifact's id when the hub names it itself (a feature's
+    /// diff: `<feature>-diff`); taken by another one, or none: from its
+    /// title. A next version keeps its id.
+    pub id: Option<String>,
 }
 
 /// An add's folder: `Asked` (`--folder`) files it, a next version too;
@@ -370,7 +374,7 @@ pub fn path_kind(p: &Path) -> &'static str {
         "mp4" | "mov" | "webm" | "mkv" | "m4v" => "video",
         "wav" | "mp3" | "m4a" | "aac" | "flac" | "ogg" => "sound",
         "rs" | "py" | "ts" | "tsx" | "js" | "jsx" | "sh" | "go" | "rb" | "swift" | "c" | "h" | "cpp" | "java"
-        | "kt" | "bend" | "sql" | "toml" | "yaml" | "yml" | "json" | "css" | "lua" | "zig" => "code",
+        | "kt" | "bend" | "sql" | "toml" | "yaml" | "yml" | "json" | "css" | "lua" | "zig" | "diff" | "patch" => "code",
         _ => "doc",
     }
 }
@@ -610,8 +614,9 @@ impl Store {
             Some(m) => m.clone(),
             None => {
                 let title = a.title.clone().filter(|t| !t.trim().is_empty()).unwrap_or_else(|| default_title(&target, url.is_some()));
-                let base = slug(&title);
                 let taken = |id: &str| stored.iter().any(|m| m.id == id) || pages.iter().any(|p| p.id == id);
+                let named = a.id.as_deref().map(slug).filter(|id| !taken(id));
+                let base = named.unwrap_or_else(|| slug(&title));
                 let mut id = base.clone();
                 let mut n = 2;
                 while taken(&id) {
@@ -728,7 +733,12 @@ impl Store {
 
     /// The bytes of bise's copy of version `v` (None: no copy, or unreadable).
     pub fn copy_bytes(&self, meta: &Meta, v: &Version) -> Option<Vec<u8>> {
-        std::fs::read(self.dir().join(&meta.id).join(v.copy.as_ref()?)).ok()
+        std::fs::read(self.copy_path(meta, v)?).ok()
+    }
+
+    /// Where bise's copy of version `v` is (None: no copy kept).
+    pub fn copy_path(&self, meta: &Meta, v: &Version) -> Option<PathBuf> {
+        Some(self.dir().join(&meta.id).join(v.copy.as_ref()?))
     }
 
     /// His edits of a file artifact in the viewer (pages/artifact/save.rs,

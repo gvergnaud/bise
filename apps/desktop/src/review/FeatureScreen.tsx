@@ -71,9 +71,10 @@ export function FeatureScreen({ project, name }: { project: string; name: string
                 <Button
                   key={c.label}
                   kind={i === 0 ? 'pri' : c.confirm || (asking && c.reply !== undefined) ? 'danger' : 'ghost'}
-                  testId={c.back ? 'feature.keep' : c.confirm ? 'feature.drop' : asking ? 'feature.drop.yes' : `feature.opt.${c.reply ?? ''}`}
+                  testId={c.back ? 'feature.keep' : c.confirm ? 'feature.drop' : asking ? 'feature.drop.yes' : `feature.opt.${c.reply ?? String(c.n ?? '')}`}
                   onClick={() => {
-                    if (c.confirm) setAsking(true);
+                    if (c.act !== undefined) store.do({ i: 'open', project, act: c.act });
+                    else if (c.confirm) setAsking(true);
                     else if (c.back) setAsking(false);
                     else if (c.reply !== undefined) {
                       setAsking(false);

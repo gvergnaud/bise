@@ -175,6 +175,16 @@ export function pathOf(a: Artifact): string | null {
 }
 
 /**
+ * A patch kept as an artifact (a .diff or .patch file, a feature's diff: try-diff-open): the panel
+ * draws its files with the review's diff (the hub parses it, `diff` with `artifact`), never a frame.
+ * Pure.
+ */
+export function isDiff(a: Artifact): boolean {
+  const file = pathOf(a) ?? a.copy ?? '';
+  return /\.(diff|patch)$/iu.test(file);
+}
+
+/**
  * What 'show in Finder' selects (art-save): the file itself while it is there, else bise's copy
  * of the version shown (the current one's when that version kept none), else null (no item).
  * Never a bise page's or a link's. Pure.

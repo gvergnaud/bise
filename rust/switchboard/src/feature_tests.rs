@@ -436,3 +436,18 @@ fn the_handoff_brief_says_what_failed_and_the_steps() {
     let t = handoff(&Handoff { op: "merge", name: "cu", trunk: "main", base: "", tip: "", picked_ms: 0, failed: &failed, agents: &[] });
     assert!(t.contains("cu has no live agent.") && t.contains("what failed: it failed: x"), "{t}");
 }
+
+/// try-diff-open (architect m_52963): the try item's `2 show the diff`
+/// opens the feature's diff artifact in the client, nothing sent (the
+/// row's act, read by both clients; the wire: core_place_tests); no diff
+/// kept, or another kind: no act.
+#[test]
+fn the_try_items_show_the_diff_opens_its_artifact() {
+    let act = bise_proto::rows::OptAct::artifact("cu-diff", None, None);
+    assert_eq!(try_acts(TRY, Some("cu-diff")), Some((2, act.clone())));
+    assert_eq!(try_acts(TRY, None), None, "no diff kept yet");
+    assert_eq!(try_acts(MERGE, Some("cu-diff")), None, "the merge item's 2 is keep working");
+    // its artifact: one per feature, the tip in its title
+    let add = diff_artifact("cu", "abc1234", Path::new("/s/features/cu.diff"));
+    assert_eq!((add.id.as_deref(), add.title.as_deref(), add.kind.as_deref()), (Some("cu-diff"), Some("cu at abc1234"), Some("code")));
+}

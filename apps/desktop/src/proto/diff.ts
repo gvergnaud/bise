@@ -69,4 +69,9 @@ export type Series = { before: Array<number>, after: Array<number>, };
  * still working, edits not committed yet, when it landed, its folder
  * gone.
  */
-export type DiffView = { title?: string | null, req?: number | null, commits?: number | null, working?: boolean, uncommitted?: boolean, landed_ms?: number | null, gone?: boolean, };
+export type DiffView = { title?: string | null, req?: number | null, commits?: number | null, working?: boolean, uncommitted?: boolean, landed_ms?: number | null, gone?: boolean, 
+/**
+ * a `.diff` artifact's diff (the `diff` ask's `artifact`): its id and
+ * the version read; a client keys the answer by them
+ */
+artifact?: string | null, version?: number | null, };

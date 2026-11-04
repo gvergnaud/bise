@@ -5,7 +5,8 @@
 use serde_json::{json, Value};
 
 /// What `HubCmd::Diff` asks: an agent's change (`commit`: one of its
-/// commits), a branch, a PR or a range (`agent` then only names it).
+/// commits), a branch, a PR, a range (`agent` then only names it) or a
+/// `.diff` kept as an artifact (`version`: none, the newest).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct DiffAsk {
     pub agent: Option<String>,
@@ -14,6 +15,8 @@ pub struct DiffAsk {
     pub pr: Option<u64>,
     pub range: Option<String>,
     pub req: Option<u64>,
+    pub artifact: Option<String>,
+    pub version: Option<u32>,
 }
 
 /// A ref as a client may name one for git: no option (`-x`), no
@@ -41,12 +44,19 @@ pub fn range_ok(r: &str) -> bool {
 
 impl DiffAsk {
     /// Exactly one of agent, branch, pr, range (a range's agent only
-    /// names it); `commit` only with an agent; each one well formed.
+    /// names it), artifact; `commit` only with an agent, `version` only
+    /// with an artifact; each one well formed.
     pub fn check(&self) -> Result<(), String> {
         let agent = self.agent.is_some() && self.range.is_none();
-        let n = [agent, self.branch.is_some(), self.pr.is_some(), self.range.is_some()].iter().filter(|x| **x).count();
+        let n = [agent, self.branch.is_some(), self.pr.is_some(), self.range.is_some(), self.artifact.is_some()].iter().filter(|x| **x).count();
         if n != 1 {
-            return Err("diff: one of agent, branch, pr or range".into());
+            return Err("diff: one of agent, branch, pr, range or artifact".into());
+        }
+        if self.version.is_some() && self.artifact.is_none() {
+            return Err("diff: a version is an artifact's".into());
+        }
+        if self.artifact.as_deref().is_some_and(|a| a.is_empty() || crate::artifacts::slug(a) != a) {
+            return Err(format!("diff: {} is not an artifact id", self.artifact.as_deref().unwrap_or("")));
         }
         if self.commit.is_some() && !agent {
             return Err("diff: a commit is an agent's".into());
@@ -81,6 +91,12 @@ impl DiffAsk {
         }
         if let Some(r) = &self.range {
             v["range"] = json!(r);
+        }
+        if let Some(a) = &self.artifact {
+            v["artifact"] = json!(a);
+        }
+        if let Some(n) = self.version {
+            v["version"] = json!(n);
         }
         v
     }
@@ -140,6 +156,27 @@ mod tests {
         assert!(ask(|a| a.range = Some("-p..x".into())).check().is_err());
         assert!(ask(|a| a.range = Some("main".into())).check().is_err());
         assert!(range_ok("main...sb/perf"));
+        // a feature's diff kept as an artifact, at a version
+        assert!(ask(|a| a.artifact = Some("cu-upload-diff".into())).check().is_ok());
+        assert!(ask(|a| {
+            a.artifact = Some("cu-upload-diff".into());
+            a.version = Some(2);
+        })
+        .check()
+        .is_ok());
+        assert!(ask(|a| {
+            a.artifact = Some("cu-upload-diff".into());
+            a.branch = Some("x".into());
+        })
+        .check()
+        .is_err());
+        assert!(ask(|a| a.artifact = Some("../meta.json".into())).check().is_err(), "an id, never a path");
+        assert!(ask(|a| {
+            a.branch = Some("x".into());
+            a.version = Some(2);
+        })
+        .check()
+        .is_err(), "a version without an artifact");
     }
 
     #[test]
@@ -151,5 +188,10 @@ mod tests {
         assert_eq!(a.op(), json!({"agent": "perf", "range": "e0f3df5^..e0f3df5"}));
         assert_eq!(ask(|a| a.pr = Some(31)).op(), json!({"pr": 31}));
         assert_eq!(ask(|a| a.branch = Some("x".into())).op(), json!({"branch": "x"}));
+        let art = ask(|a| {
+            a.artifact = Some("cu-diff".into());
+            a.version = Some(2);
+        });
+        assert_eq!(art.op(), json!({"artifact": "cu-diff", "version": 2}));
     }
 }

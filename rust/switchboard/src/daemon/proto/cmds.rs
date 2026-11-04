@@ -226,9 +226,9 @@ impl Shell {
             // the TUI's own `seen`: the clock moves, the list comes again
             HubCmd::ArtifactsSeen { at_ms, .. } => self.artifacts_seen(at_ms),
             // git in a thread (art.rs), the typed answer to this client
-            // diff/read's asks (agent, branch, pr, range), checked here
-            HubCmd::Diff { project, agent, commit, branch, pr, range, req } => {
-                let ask = DiffAsk { agent, commit, branch, pr, range, req };
+            // diff/read's asks (agent, branch, pr, range, artifact), checked here
+            HubCmd::Diff { project, agent, commit, branch, pr, range, req, artifact, version } => {
+                let ask = DiffAsk { agent, commit, branch, pr, range, req, artifact, version };
                 if let Err(e) = ask.check() {
                     return self.proto_error(id, &tag, &e);
                 }

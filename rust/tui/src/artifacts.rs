@@ -624,6 +624,9 @@ pub(crate) enum How {
     App(std::path::PathBuf),
     /// a PR: its diff in the panel
     Diff(u64),
+    /// a `.diff` or `.patch` file (a feature's diff): its files and
+    /// hunks in the diff panel, the hub parses it (try-diff-open)
+    Patch(String),
     Nothing,
 }
 
@@ -642,6 +645,10 @@ pub(crate) fn how(a: &Artifact, v: Option<u32>, diff: bool) -> How {
     let t = a.open_target(v);
     if t.is_empty() {
         return How::Nothing;
+    }
+    // its newest version: the panel reads the hub's copy
+    if v.is_none() && is_patch(&t) {
+        return How::Patch(a.id.clone());
     }
     if is_url(&t) {
         return How::Browser(t);
@@ -705,8 +712,17 @@ pub(crate) fn open(app: &mut crate::App, a: &Artifact, v: Option<u32>) -> String
                 format!("could not open {}", name)
             }
         }
+        How::Patch(id) => {
+            crate::diffview::request(app, crate::diffview::Ask::Artifact(id), crate::diffview::By::Key);
+            format!("{} · its diff", a.title)
+        }
         How::Diff(_) | How::Nothing => format!("{} has nothing to open", a.title),
     }
+}
+
+/// A file that holds a diff (`.diff`, `.patch`): drawn by the diff panel.
+fn is_patch(target: &str) -> bool {
+    !is_url(target) && [".diff", ".patch"].iter().any(|x| target.to_ascii_lowercase().ends_with(x))
 }
 
 #[cfg(test)]
