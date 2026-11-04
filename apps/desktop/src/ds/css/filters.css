@@ -19,6 +19,8 @@
 /* too narrow for its filters and its search: the search on its own row, right edge, 8 below (designer m_53025) */
 .b-listbar[data-below]{flex-wrap:wrap;height:auto;min-height:var(--h-control);row-gap:var(--s-2);padding-block:var(--s-2)}
 .b-listbar[data-below] > .b-listbar-end{flex-basis:100%;justify-content:flex-end}
+/* its second row ends on the row's own right edge, not 12 in (designer m_53073) */
+.b-listbar.inset[data-below] > .b-listbar-end{margin-right:calc(-1 * var(--s-3))}
 .b-listbar-start,.b-listbar-end{display:flex;align-items:center;gap:var(--s-2)}
 /* the filters never shrink (a page that has too many folds them: Artifacts' Toolbar.tsx) */
 .b-listbar-start{flex:1 1 auto;min-width:0}

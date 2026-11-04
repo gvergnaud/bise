@@ -157,6 +157,12 @@ export function InboxView({ cards, records, onEnd, names, projects, ports, nextO
       { id: 'a:', name: inbox.all_agents, current: f.agent === '', testId: 'inbox.agents.all' },
       ...askers.map((a) => ({ id: `a:${a}`, name: shownName(a), current: f.agent === a, testId: `inbox.agents.${a}` })),
     ] };
+  // narrow: the two menus are one, its rows the two lists (designer m_53025)
+  const filterMenu = (
+    <Dropdown look="pop" label={f.project === '' && f.agent === '' ? inbox.filter_menu : [f.project === '' ? '' : (names[f.project] ?? f.project), f.agent === '' ? '' : shownName(f.agent)].filter(Boolean).join(' · ')} testId="inbox.filter"
+      groups={[projGroup, agentGroup]}
+      onPick={(id) => { set(id.startsWith('p:') ? { project: id.slice(2) } : { agent: id.slice(2) }); }} />
+  );
   const facts = heroFacts(cards, now);
   const empty = cards.length === 0 && records.length === 0;
   const none = lists.order.length === 0;
@@ -177,22 +183,22 @@ export function InboxView({ cards, records, onEnd, names, projects, ports, nextO
       <PageBanner title={hero.inbox_title} sentence={hero.inbox_say} facts={<>{facts.wait !== undefined && <><BannerWait>{facts.wait}</BannerWait>{' · '}</>}{facts.rest}</>}
         visual={<LiveVignette page="inbox" />} icon="inbox" gutter={gutter} testId="inbox.lead" />
       <ListBar inset testId="inbox.filters" ref={barRef} startRef={startRef} below={fitAt === 3}
-        end={<ListSearch ref={searchRef} narrow={fitAt >= 1} value={f.q} onChange={(e) => { search(e.currentTarget.value); }} onKeyDown={searchKey} onClear={() => { search(''); searchRef.current?.focus(); }} testId="inbox.search" />}>
+        end={<>
+          {fitAt === 3 && filterMenu}
+          <ListSearch ref={searchRef} narrow={fitAt >= 1} value={f.q} onChange={(e) => { search(e.currentTarget.value); }} onKeyDown={searchKey} onClear={() => { search(''); searchRef.current?.focus(); }} testId="inbox.search" />
+        </>}>
         <Filters items={STATES.map((s) => ({ id: s, label: STATE_WORDS[s] }))} on={f.state} label={inbox.filter_label}
           onPick={(id) => { set({ state: id as StateFilter }); }} testId="inbox.state" />
-        {fitAt >= 2 ? (
-          // narrow: the two menus are one, its rows the two lists (designer m_53025)
-          <Dropdown look="pop" label={f.project === '' && f.agent === '' ? inbox.filter_menu : [f.project === '' ? '' : (names[f.project] ?? f.project), f.agent === '' ? '' : shownName(f.agent)].filter(Boolean).join(' · ')} testId="inbox.filter"
-            groups={[projGroup, agentGroup]}
-            onPick={(id) => { set(id.startsWith('p:') ? { project: id.slice(2) } : { agent: id.slice(2) }); }} />
-        ) : (
+        {/* fit 3: the menu goes down beside the search (designer m_53073); the first row is the tabs */}
+        {fitAt === 2 && filterMenu}
+        {fitAt < 2 && (
           <>
-        <Dropdown look="pop" label={f.project === '' ? inbox.all_projects : (names[f.project] ?? f.project)} testId="inbox.projects"
-          groups={[projGroup]}
-          onPick={(id) => { set({ project: id.slice(2) }); }} />
-        <Dropdown look="pop" label={f.agent === '' ? inbox.all_agents : shownName(f.agent)} testId="inbox.agents"
-          groups={[agentGroup]}
-          onPick={(id) => { set({ agent: id.slice(2) }); }} />
+            <Dropdown look="pop" label={f.project === '' ? inbox.all_projects : (names[f.project] ?? f.project)} testId="inbox.projects"
+              groups={[projGroup]}
+              onPick={(id) => { set({ project: id.slice(2) }); }} />
+            <Dropdown look="pop" label={f.agent === '' ? inbox.all_agents : shownName(f.agent)} testId="inbox.agents"
+              groups={[agentGroup]}
+              onPick={(id) => { set({ agent: id.slice(2) }); }} />
           </>
         )}
       </ListBar>
