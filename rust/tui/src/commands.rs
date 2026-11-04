@@ -471,7 +471,7 @@ fn plugin_items(app: &App, start: usize, q: &str) -> Vec<PopItem> {
             PopItem {
                 label: format!("@{}", p.name),
                 desc: crate::at_plugins::row_words(p),
-                mark: Some((theme::glyph(theme::G_VIEW), theme::accent())),
+                mark: Some((theme::plugin_glyph(), theme::accent())),
                 fill,
                 fill_cursor,
                 run: None,

@@ -336,7 +336,8 @@ pub(crate) const G_SUBCALL: &str = "↳"; // a sub-call inside a TypeScript run
 pub(crate) const G_PATCH: &str = "±"; // a file edit
 pub(crate) const G_MSG: &str = "@"; // a message between agents, or to you (was ✉)
 pub(crate) const G_IMAGE: &str = "▣"; // an image (accent chip)
-pub(crate) const G_VIEW: &str = "⊞"; // an MCP Apps view under its tool row (dim; designer m_50266); a plugin's mark in the @ menu and on its chip (designer m_53299)
+pub(crate) const G_VIEW: &str = "⊞"; // an MCP Apps view under its tool row (dim; designer m_50266)
+pub(crate) const G_PLUGIN: &str = "⊞"; // a plugin: the @ menu's rows and its chip (designer m_53312); draw it with [`plugin_glyph`] (ASCII `&`)
 pub(crate) const G_QUOTE: &str = "❝"; // a quote of the history (accent chip, BISE-134)
 pub(crate) const G_PASTE: &str = "▤"; // a long paste (accent chip, BISE-240)
 pub(crate) const G_FILE: &str = "▯"; // a file he attached (accent chip, file-chips: designer m_21765)
@@ -624,6 +625,17 @@ pub(crate) fn glyph(g: &'static str) -> &'static str {
         return g;
     }
     ASCII.iter().find(|(u, _)| *u == g).map_or(g, |(_, a)| *a)
+}
+
+/// A plugin's mark (the `@` menu's rows, its chip): `⊞`, `&` under
+/// `BISE_ASCII=1` (plugins-ui v48, designer m_53312). Not `glyph(G_PLUGIN)`:
+/// the table's `⊞` is a view's (`V`).
+pub(crate) fn plugin_glyph() -> &'static str {
+    if ascii_mode() {
+        "&"
+    } else {
+        G_PLUGIN
+    }
 }
 
 /// The PR glyph: `↑`, `P` under `BISE_ASCII=1`. Not `glyph(G_PR)`: the
