@@ -10,12 +10,12 @@
   --p-syn-bare: #d3cec3;
 }
 @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
-  --p-syn-keyword: #8a3fb0; --p-syn-string: #44782a; --p-syn-comment: #726b60;
+  --p-syn-keyword: #8a3fb0; --p-syn-string: #417228; --p-syn-comment: #6c665b;
   --p-syn-number: #9a4a0c; --p-syn-call: #1f63a8; --p-syn-type: #7a5c00;
   --p-syn-bare: #2e2b29;
 } }
 [data-theme="light"] {
-  --p-syn-keyword: #8a3fb0; --p-syn-string: #44782a; --p-syn-comment: #726b60;
+  --p-syn-keyword: #8a3fb0; --p-syn-string: #417228; --p-syn-comment: #6c665b;
   --p-syn-number: #9a4a0c; --p-syn-call: #1f63a8; --p-syn-type: #7a5c00;
   --p-syn-bare: #2e2b29;
 }

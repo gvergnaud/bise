@@ -14,7 +14,7 @@ ROLES = {
              "kw": "d7a6f0", "str": "b9d99a", "comment": "857e74", "num": "f0b27a", "call": "8fc4f0", "type": "e8cf9a",
              "on_accent": "1b1917"},
     "light": {"text": "1b1917", "dim": "6b645a", "faint": "7d766c", "rule": "cfc8bd", "accent": "b8416b", "error": "b3261e", "ok": "3f7a2a",
-              "kw": "8a3fb0", "str": "44782a", "comment": "726b60", "num": "9a4a0c", "call": "1f63a8", "type": "7a5c00",
+              "kw": "8a3fb0", "str": "417228", "comment": "6c665b", "num": "9a4a0c", "call": "1f63a8", "type": "7a5c00",
               "on_accent": "ffffff"},
 }
 d, mode = sys.argv[1], sys.argv[2]

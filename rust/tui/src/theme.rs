@@ -172,8 +172,9 @@ pub(crate) const LIGHT: Palette = Palette {
     pill: rgb(0xf0d3dc),
     bg: rgb(0xfdfbf7),
     syntax_keyword: rgb(0x8a3fb0),
-    syntax_string: rgb(0x44782a),
-    syntax_comment: rgb(0x726b60),
+    // string and comment ≥ 4.5:1 on the desktop diff's +/- tints too (diff-syntax, designer m_53174)
+    syntax_string: rgb(0x417228),
+    syntax_comment: rgb(0x6c665b),
     syntax_number: rgb(0x9a4a0c),
     syntax_call: rgb(0x1f63a8),
     syntax_type: rgb(0x7a5c00),

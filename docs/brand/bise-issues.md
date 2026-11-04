@@ -83,8 +83,10 @@ Index:
     `working_frame(tick) -> (&str, Color)`: `∿` text/dim, one phase every 4
     ticks; `starting_frame(tick)`: `·` dim/faint. `SPLIT` kept (not deprecated).
   - **Light syntax colors (for the book §5):** keyword `#8a3fb0`, string
-    `#44782a`, comment `#726b60`, number `#9a4a0c`, call `#1f63a8`, type
-    `#7a5c00` (all ≥ 4.5:1 on white and `#f7f4ee`). Dark type: `#e8cf9a`.
+    `#417228`, comment `#6c665b`, number `#9a4a0c`, call `#1f63a8`, type
+    `#7a5c00` (all ≥ 4.5:1 on white and `#f7f4ee`; string and comment
+    darkened from `#44782a` / `#726b60` to hold 4.5:1 on the desktop diff's
+    +/- tints, designer m_53174). Dark type: `#e8cf9a`.
   - **Book correction:** the dark comment `#857e74` is only 3.5:1 on
     `#282c34`; lifted to `#99928a` (4.56:1). Tints: selection `#33292c` dark /
     `#faeef0` light, card `#211d1b` dark / `#f3eee6` light (text, dim and
