@@ -7,7 +7,7 @@
 use std::io::{self, BufRead, Write};
 use std::os::unix::net::UnixStream;
 use std::sync::mpsc::Sender;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
@@ -55,6 +55,9 @@ fn refusal(l: &str) -> Option<String> {
 #[derive(Clone, Default)]
 pub struct Hub {
     writer: Arc<Mutex<Option<UnixStream>>>,
+    /// the connections made so far: bumped with the writer, under its
+    /// lock, at each connect ([`Hub::epoch`], [`Hub::send_on`])
+    epoch: Arc<AtomicU64>,
     /// [`Hub::close`] said: the reader thread ends at its next turn
     closed: Arc<AtomicBool>,
     /// [`Hub::hold`] said: the reader doesn't connect until released
@@ -78,6 +81,7 @@ impl Hub {
     ) -> Hub {
         let hub = Hub::default();
         let writer = hub.writer.clone();
+        let epoch = hub.epoch.clone();
         let closed = hub.closed.clone();
         let held = hub.held.clone();
         let slow = hub.slow.clone();
@@ -138,6 +142,7 @@ impl Hub {
                         return;
                     }
                     *slot = Some(w);
+                    epoch.fetch_add(1, Ordering::SeqCst);
                 }
                 if tx.send(wrap(HubIn::Up)).is_err() {
                     return;
@@ -222,6 +227,29 @@ impl Hub {
     /// failed (nothing was sent).
     pub fn send(&self, v: &serde_json::Value) -> bool {
         let Ok(mut slot) = self.writer.lock() else { return false };
+        let Some(s) = slot.as_mut() else { return false };
+        let mut line = v.to_string();
+        line.push('\n');
+        s.write_all(line.as_bytes()).is_ok()
+    }
+
+    /// The connection the writer is on now (0: none made yet): a
+    /// connection's `initialize` is written on it, by [`Hub::send`].
+    pub fn epoch(&self) -> u64 {
+        // read under the writer's lock: the reader bumps it there
+        let _slot = self.writer.lock();
+        self.epoch.load(Ordering::SeqCst)
+    }
+
+    /// [`Hub::send`] on connection `epoch` only: false, nothing written,
+    /// when the reader has connected again since (the core welcomed the
+    /// older one: a command must not reach a hub before its `initialize`,
+    /// fast-loop, architect m_53375).
+    pub fn send_on(&self, epoch: u64, v: &serde_json::Value) -> bool {
+        let Ok(mut slot) = self.writer.lock() else { return false };
+        if self.epoch.load(Ordering::SeqCst) != epoch {
+            return false;
+        }
         let Some(s) = slot.as_mut() else { return false };
         let mut line = v.to_string();
         line.push('\n');

@@ -111,6 +111,17 @@ struct Conn {
     hub: Hub,
     /// its `welcome` came since the last connection: commands go
     welcomed: bool,
+    /// the connection its `initialize` went on ([`Hub::epoch`]): its
+    /// commands go on that one only. The reader connects again on its
+    /// own, before the core has read its Down/Up: a command typed then
+    /// went on the new connection ahead of its `initialize`, neither
+    /// written nor errored (fast-loop, architect m_53375)
+    epoch: u64,
+    /// the reader's Ups read so far: one a connect, in order, so this Up
+    /// is connection `ups`; behind [`Hub::epoch`], a newer connection's
+    /// own Up waits behind it and this one says nothing (two reconnects
+    /// before the core reads either: one `initialize`, architect m_53385)
+    ups: u64,
     /// its own rows, as its hub sent them (fresher than its view.json)
     rows: Option<(Vec<Agent>, Vec<Card>)>,
     /// agents-light: its hub's archived light list as last sent (merged
@@ -138,17 +149,18 @@ struct Conn {
 
 impl Conn {
     fn new(hub: Hub, until: Option<Instant>) -> Conn {
-        Conn { hub, welcomed: false, rows: None, archived: Default::default(), pending: Vec::new(), until, cmds: Vec::new(), rpc: RpcConn::default(), down: None, pulse: None, bise_update: None }
+        Conn { hub, welcomed: false, epoch: 0, ups: 0, rows: None, archived: Default::default(), pending: Vec::new(), until, cmds: Vec::new(), rpc: RpcConn::default(), down: None, pulse: None, bise_update: None }
     }
 
     /// One window command (a `HubCmd`'s JSON) to its hub, as a request
-    /// once `initialize` answered; false when nothing was written.
+    /// once `initialize` answered, on the connection that answered it;
+    /// false when nothing was written (the command takes the pending path).
     fn send(&mut self, v: &Value, app: Option<Id>) -> bool {
-        if !self.rpc.ready {
+        if !self.rpc.ready || self.hub.epoch() != self.epoch {
             return false;
         }
         match self.rpc.request(v, app, Instant::now()) {
-            Some(req) => self.hub.send(&req),
+            Some(req) => self.hub.send_on(self.epoch, &req),
             None => false,
         }
     }
@@ -733,8 +745,14 @@ impl Core {
             HubIn::Up => {
                 c.welcomed = false;
                 let was_down = c.down.take().is_some();
-                let init = c.rpc.initialize(env!("CARGO_PKG_VERSION"));
-                c.hub.send(&init);
+                // this Up is connection `ups`; a newer one's Up waits behind it: it says initialize
+                c.ups += 1;
+                if c.ups == c.hub.epoch() {
+                    // the one write on a connection not welcomed yet, by its own call
+                    c.epoch = c.ups;
+                    let init = c.rpc.initialize(env!("CARGO_PKG_VERSION"));
+                    c.hub.send_on(c.epoch, &init);
+                }
                 if was_down {
                     self.emit_projects();
                 }
@@ -780,7 +798,7 @@ impl Core {
                     }
                     Read::Resync => {
                         let req = c.rpc.read_again();
-                        c.hub.send(&req);
+                        c.hub.send_on(c.epoch, &req);
                     }
                     Read::Refused(why) => self.project_refused(id, why, ErrorKind::HubRefused),
                     // a hub from before client-protocol: refused the same

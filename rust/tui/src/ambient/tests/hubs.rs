@@ -135,6 +135,25 @@ impl World {
         }
     }
 
+    /// `id`'s reader has connected again (its new end open here) while
+    /// the core read nothing of it: the readers' events (its Down, its
+    /// Up) kept in order, for the core to read later.
+    pub(super) fn reconnected_unseen(&mut self, id: &str) -> Vec<(String, HubIn)> {
+        let t0 = Instant::now();
+        let mut kept: Vec<(String, HubIn)> = Vec::new();
+        while !self.open.contains_key(id) || !kept.iter().any(|(p, h)| p == id && *h == HubIn::Up) {
+            while let Ok((p, e)) = self.ends.try_recv() {
+                self.open.insert(p, e);
+            }
+            while let Ok(e) = self.rx.try_recv() {
+                kept.push(e);
+            }
+            assert!(t0.elapsed() < Duration::from_secs(10), "{id} never connected again: {kept:?}");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        kept
+    }
+
     pub(super) fn end(&mut self, id: &str) -> &mut HubEnd {
         self.open.get_mut(id).unwrap_or_else(|| panic!("no connection to {id}"))
     }
@@ -485,6 +504,80 @@ fn a_command_is_written_at_most_once_and_ends_written_or_errored() {
     t.core.tick(Instant::now() + START + Duration::from_secs(2));
     t.out.extend(t.core.take_out());
     assert_eq!(t.take().iter().filter(|v| v["ev"] == "error" && v["cmd"] == "stop").count(), 1);
+}
+
+/// A project hub's reader connects again on its own, before the core has
+/// read its Down/Up: commands typed in that window never go ahead of the
+/// new connection's `initialize` (the core still had it welcomed: they
+/// went there and a hub drops them, neither written nor errored); they
+/// go once each, in order, at the new welcome (fast-loop, architect
+/// m_53375; the flake of the test above under load).
+#[test]
+fn commands_typed_while_its_hub_reconnects_go_once_after_the_new_welcome() {
+    let mut t = T::new();
+    t.ready();
+    let mut w = world(&mut t);
+    typed(&mut t, json!({"cmd": "shown", "projects": ["shop"]}));
+    w.opened(&mut t, &["home", "shop"]);
+    w.welcome(&mut t, "shop");
+    // its hub goes; its reader connects again; the core has read none of it
+    w.end("shop").w.shutdown(std::net::Shutdown::Both).unwrap();
+    w.open.remove("shop");
+    let kept = w.reconnected_unseen("shop");
+    let (a, b) = (json!({"cmd": "stop", "project": "shop", "agent": "main"}), json!({"cmd": "stop", "project": "shop", "agent": "x"}));
+    typed(&mut t, a.clone());
+    typed(&mut t, b.clone());
+    // the core reads the reader's Down and Up: `initialize` first on the new connection
+    for (p, h) in kept {
+        t.core.project_hub(&p, h);
+    }
+    t.out.extend(t.core.take_out());
+    let first = w.end("shop").raw(Duration::from_secs(3)).expect("the core's first line on the new connection");
+    assert_eq!(first["method"], "initialize", "nothing ahead of initialize: {first}");
+    w.end("shop").take(first);
+    // the first welcome's event out of the way: `welcome` waits for the new one
+    let before = t.take();
+    assert!(!before.iter().any(|v| v["ev"] == "error" && v["cmd"] == "stop"), "no error while it reconnects: {before:?}");
+    w.welcome(&mut t, "shop");
+    assert_eq!((w.end("shop").next(), w.end("shop").next()), (a, b), "each once, in order, at the new welcome");
+    let mut l = String::new();
+    assert!(w.end("shop").r.read_line(&mut l).is_err(), "nothing twice: {l}");
+    assert!(!t.take().iter().any(|v| v["ev"] == "error" && v["cmd"] == "stop"), "no error: both went");
+}
+
+/// Two reconnects before the core reads either (architect m_53385): the
+/// first Up is stale (a newer connection's own Up waits behind it) and
+/// says nothing; the newest connection gets one `initialize`, then the
+/// command, once.
+#[test]
+fn two_reconnects_unread_give_the_newest_connection_one_initialize() {
+    let mut t = T::new();
+    t.ready();
+    let mut w = world(&mut t);
+    typed(&mut t, json!({"cmd": "shown", "projects": ["shop"]}));
+    w.opened(&mut t, &["home", "shop"]);
+    w.welcome(&mut t, "shop");
+    let mut kept = Vec::new();
+    for _ in 0..2 {
+        w.end("shop").w.shutdown(std::net::Shutdown::Both).unwrap();
+        w.open.remove("shop");
+        kept.extend(w.reconnected_unseen("shop"));
+    }
+    let a = json!({"cmd": "stop", "project": "shop", "agent": "main"});
+    typed(&mut t, a.clone());
+    for (p, h) in kept {
+        t.core.project_hub(&p, h);
+    }
+    t.out.extend(t.core.take_out());
+    let first = w.end("shop").raw(Duration::from_secs(3)).expect("the newest connection's initialize");
+    assert_eq!(first["method"], "initialize", "initialize first: {first}");
+    assert_eq!(w.end("shop").raw(Duration::from_millis(300)), None, "one initialize, never two on one connection");
+    w.end("shop").take(first);
+    t.take();
+    w.welcome(&mut t, "shop");
+    assert_eq!(w.end("shop").next(), a, "the command once, at the welcome");
+    let mut l = String::new();
+    assert!(w.end("shop").r.read_line(&mut l).is_err(), "nothing twice: {l}");
 }
 
 /// mail's journal (its hub not running): an answered card, a withdrawn
