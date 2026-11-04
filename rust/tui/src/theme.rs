@@ -340,6 +340,7 @@ pub(crate) const G_VIEW: &str = "⊞"; // an MCP Apps view under its tool row (d
 pub(crate) const G_QUOTE: &str = "❝"; // a quote of the history (accent chip, BISE-134)
 pub(crate) const G_PASTE: &str = "▤"; // a long paste (accent chip, BISE-240)
 pub(crate) const G_FILE: &str = "▯"; // a file he attached (accent chip, file-chips: designer m_21765)
+pub(crate) const G_PLUGIN: &str = "◆"; // a plugin he picked with @ (accent chip and row, at-plugins)
 pub(crate) const G_CARD: &str = "?"; // a card: a decision that needs you (accent)
 pub(crate) const G_COMPACTING: &str = "≡"; // compaction running (dim, pulsing; was ⟳)
 pub(crate) const G_SUMMARY: &str = "≡"; // compaction summary (dim, still)

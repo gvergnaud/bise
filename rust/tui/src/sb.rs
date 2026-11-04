@@ -572,6 +572,12 @@ impl Sb {
         self.agents.iter().map(|a| a.name.clone()).collect()
     }
 
+    /// The live agents' names: a typed `@name` of one stays his words,
+    /// never a plugin's part (at_plugins.rs).
+    pub(crate) fn live_names(&self) -> Vec<String> {
+        self.agents.iter().filter(|a| !a.archived()).map(|a| a.name.clone()).collect()
+    }
+
     /// The agent in view when it is not main (/running opens on its rows).
     pub(crate) fn focused_task(&self) -> Option<String> {
         self.agent(&self.focus).filter(|a| !a.main).map(|a| a.name.clone())

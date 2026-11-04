@@ -19,6 +19,7 @@ mod index;
 mod leases;
 mod library;
 mod picks;
+mod plugin_send;
 mod voice_answer;
 mod setup;
 mod shot;

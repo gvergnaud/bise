@@ -94,6 +94,7 @@ mod emoji;
 mod editor;
 mod undo;
 mod clipboard;
+mod at_plugins;
 mod attach;
 mod attach_file;
 mod image_gone;

@@ -878,6 +878,12 @@ pub(crate) fn on_key(app: &mut App, k: &crossterm::event::KeyEvent) -> bool {
                     true => v,
                     false => {
                         let said = crate::attach::expand(app, &v);
+                        // a typed `@computer`: its plugin's part, as the menu's chip (at-plugins)
+                        let ws = sb::workspace(app);
+                        let live = app.sb.live_names();
+                        let agents: Vec<&str> = live.iter().map(String::as_str).collect();
+                        let list = || ws.as_deref().map(|w| crate::at_plugins::list(std::path::Path::new(w))).unwrap_or_default();
+                        let said = crate::at_plugins::typed(said, &list, &agents);
                         app.sb.parts_out = said.parts;
                         said.text
                     }
@@ -964,6 +970,13 @@ fn at_nav(app: &mut App, k: &crossterm::event::KeyEvent, sel: Option<&PopItem>) 
 /// Take the popup entry `c` into the composer (a picked path ranks first
 /// in the next `@` searches; a folder is browsed, not picked).
 fn pick(app: &mut App, c: &PopItem) {
+    // a plugin (at-plugins): the `@token` goes, its chip comes
+    if let Some(name) = &c.plugin {
+        app.ed.set(&c.fill, c.fill_cursor);
+        crate::at_plugins::insert(app, name);
+        app.popup_sel = 0;
+        return;
+    }
     // an artifact (site/m/artifacts C): the `@token` goes, its chip comes
     if let Some((id, _)) = c.path.as_deref().and_then(crate::artifacts::parse_url) {
         app.ed.set(&c.fill, c.fill_cursor);

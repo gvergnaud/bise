@@ -51,6 +51,7 @@ import {
   commandRows,
   emojiRows,
   fileRows,
+  pluginRows,
   skillRows,
   MAX_ROWS,
   pickedChip,
@@ -437,6 +438,8 @@ export function PmField(p: PmFieldProps): JSX.Element {
       trigger.kind === "at"
         ? [
             ...agentRows(trigger, p.sources.agents),
+            // at-plugins: the plugins on, after the agents, their own mark
+            ...pluginRows(trigger, p.sources.plugins ?? []),
             ...artifactRows(trigger, p.sources.artifacts ?? [], openedAt),
             // the last answer of this same @ stays while the next query's is on its way: a
             // key typed never empties the list for a frame (his flicker, at-steady)
@@ -590,6 +593,18 @@ export function PmField(p: PmFieldProps): JSX.Element {
     const before = st === null ? null : beforeCaret(st);
     if (st === null || before === null) return;
     const word = before.text.slice(t.start).length;
+    if (pick.kind === "plugin") {
+      // at-plugins: the @word goes, the plugin's chip comes (the TUI's at_plugins::insert), one
+      // space after it: what he types next is a new word
+      replaceBefore(word, "");
+      const now = state();
+      if (now !== null) {
+        const tr = insertChip(now, { kind: "plugin", n: nextChipNumber(segmentsOf(now.doc)), name: pick.name });
+        tr.insertText(" ");
+        dispatch(tr);
+      }
+      return;
+    }
     if (pick.kind === "artifact") {
       // W11: the @word goes, the artifact's chip comes (attach.rs insert_artifact)
       replaceBefore(word, "");

@@ -34,6 +34,10 @@ crate::words! { composer:
     bar_skills = "skills";
     /// key bar at rest: `/ commands`
     bar_commands = "commands";
+    /// the `@` menu: a plugin's row says what it is, before its
+    /// description (`plugin · Charts in the thread`), so a plugin never
+    /// reads as an agent (at-plugins)
+    at_plugin = "plugin";
     /// key bar: the terminal panel has the keys (a plain label)
     bar_terminal_keys = "terminal: keys go to the shell";
     /// key bar: hide the terminal panel

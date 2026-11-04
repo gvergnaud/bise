@@ -4,7 +4,7 @@
 //! m_27881); the box's rows keep a file's number (`named` false).
 
 use super::artifact_title;
-use crate::theme::{accent, dim, glyph, text, G_FILE, G_IMAGE, G_PASTE, G_QUOTE};
+use crate::theme::{accent, dim, glyph, text, G_FILE, G_IMAGE, G_PASTE, G_PLUGIN, G_QUOTE};
 use ratatui::style::Style;
 use ratatui::text::Span;
 use std::borrow::Cow;
@@ -18,6 +18,10 @@ pub(super) fn chip_parts(label: &str) -> (&'static str, Cow<'_, str>) {
 /// [`chip_parts`]; `named` false: a file chip by its number (the box's
 /// row, designer m_27881: '▯ 3  e2e.mjs').
 fn chip_parts_as(label: &str, named: bool) -> (&'static str, Cow<'_, str>) {
+    // a plugin he picked with `@` says its name (at_plugins.rs)
+    if let Some(name) = crate::at_plugins::chip_name(label) {
+        return (glyph(G_PLUGIN), Cow::Owned(name));
+    }
     if let Some(n) = label.strip_prefix(crate::quote::OPEN) {
         return (glyph(G_QUOTE), Cow::Borrowed(n.trim_end_matches(']')));
     }

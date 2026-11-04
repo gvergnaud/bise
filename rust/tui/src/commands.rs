@@ -44,6 +44,9 @@ pub(crate) struct PopItem {
     /// a folder of the `@` popup: `fill` browses it (`@path/`, the popup
     /// stays open on its entries); Tab, Enter and → take it
     pub(crate) folder: bool,
+    /// a plugin of the `@` popup (at_plugins.rs): picking it puts its
+    /// chip where the `@word` was
+    pub(crate) plugin: Option<String>,
 }
 
 pub(crate) fn popup_items(app: &App) -> Vec<PopItem> {
@@ -73,6 +76,7 @@ pub(crate) fn popup_items(app: &App) -> Vec<PopItem> {
                 closable: false,
                 path: None,
                 folder: false,
+                plugin: None,
             })
             .collect();
     }
@@ -416,6 +420,7 @@ pub(crate) fn arg_items(app: &App) -> Vec<PopItem> {
                 closable: true,
                 path: None,
                 folder: false,
+                plugin: None,
             }
         })
         .collect()
@@ -450,9 +455,41 @@ const FILE_ROWS: usize = 50;
 const FILE_MARK: &str = "▪";
 const DIR_MARK: &str = theme::G_CLOSED; // a folder opens: the disclosure mark
 
-/// `@word` at the start or inline: the live agents (Switchboard), then
-/// the files and folders of the workspace (files.rs). A file inserts its
-/// relative path, an agent `@name`.
+/// The `@` popup's plugins (at_plugins.rs), after the agents: their own
+/// mark, never in a path query; a pick puts its `◆ name` chip where the
+/// `@word` was.
+fn plugin_items(app: &App, start: usize, q: &str) -> Vec<PopItem> {
+    if q.contains('/') {
+        return Vec::new();
+    }
+    let Some(ws) = sb::workspace(app) else { return Vec::new() };
+    let all = crate::at_plugins::list(std::path::Path::new(&ws));
+    crate::at_plugins::filter(&all, q)
+        .into_iter()
+        .map(|p| {
+            let (fill, fill_cursor) = files::replace_token(&app.ed.text, start, app.ed.cursor, "");
+            PopItem {
+                label: format!("@{}", p.name),
+                desc: match p.desc.is_empty() {
+                    true => bise_proto::words::composer::at_plugin.to_string(),
+                    false => format!("{} · {}", bise_proto::words::composer::at_plugin, p.desc),
+                },
+                mark: Some((theme::glyph(theme::G_PLUGIN), theme::accent())),
+                fill,
+                fill_cursor,
+                run: None,
+                closable: true,
+                path: None,
+                folder: false,
+                plugin: Some(p.name.clone()),
+            }
+        })
+        .collect()
+}
+
+/// `@word` at the start or inline: the live agents (Switchboard), the
+/// plugins on, then the files and folders of the workspace (files.rs).
+/// A file inserts its relative path, an agent `@name`, a plugin its chip.
 pub(crate) fn at_items(app: &App) -> Vec<PopItem> {
     let token = popup_open(app).then(|| files::token(&app.ed.text, app.ed.cursor)).flatten();
     let Some((start, q)) = token else {
@@ -476,6 +513,7 @@ pub(crate) fn at_items(app: &App) -> Vec<PopItem> {
             closable: true,
             path: None,
             folder: false,
+            plugin: None,
         }
     });
     // site/m/artifacts C: the artifacts by name, after the agents; a
@@ -498,10 +536,11 @@ pub(crate) fn at_items(app: &App) -> Vec<PopItem> {
                 closable: true,
                 path: Some(crate::artifacts::url_of(&a.id, None)),
                 folder: false,
+                plugin: None,
             }
         })
         .collect();
-    let agents = agents.chain(made);
+    let agents = agents.chain(plugin_items(app, start, &q)).chain(made);
     // the Switchboard workspace, else the folder the TUI runs in
     let root = sb::workspace(app)
         .map(std::path::PathBuf::from)
@@ -529,6 +568,7 @@ pub(crate) fn at_items(app: &App) -> Vec<PopItem> {
             closable: true,
             path: Some(if h.dir { h.path } else { sent(&h.path) }),
             folder: h.dir,
+            plugin: None,
         }
     });
     let this = this.map(|path| {
@@ -544,6 +584,7 @@ pub(crate) fn at_items(app: &App) -> Vec<PopItem> {
             closable: true,
             path: Some(sent),
             folder: false,
+            plugin: None,
         }
     });
     agents.chain(files).chain(this).collect()
@@ -587,6 +628,7 @@ pub(crate) fn skill_items(app: &App) -> Vec<PopItem> {
                 closable: true,
                 path: None,
                 folder: false,
+                plugin: None,
             }
         })
         .collect()
@@ -614,6 +656,7 @@ pub(crate) fn emoji_items(app: &App) -> Vec<PopItem> {
                 closable: true,
                 path: None,
                 folder: false,
+                plugin: None,
             }
         })
         .collect()

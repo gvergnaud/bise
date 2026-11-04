@@ -2,7 +2,7 @@
 // for the rows when the trigger changes and applies the pick to the editor.
 import { filterEmoji } from './emoji';
 import { fileName, type Chip } from './message';
-import { isImagePath, type ComposerSources, type PickAgent, type PickArtifact, type PickCommand, type PickFile, type PickSkill } from './sources';
+import { isImagePath, type ComposerSources, type PickAgent, type PickArtifact, type PickCommand, type PickFile, type PickPlugin, type PickSkill } from './sources';
 import { agentPick, filePick, prefixFirst, skillPick, type Trigger } from './tokens';
 import { composer } from '../proto/words.gen';
 
@@ -12,7 +12,7 @@ export interface Row {
   readonly label: string;
   readonly desc: string;
   /** A tag in front: `agent`, `dir`, `file`, `skill`, `cmd`, `emoji`. */
-  readonly tag: 'agent' | 'artifact' | 'dir' | 'file' | 'skill' | 'cmd' | 'emoji' | 'choice';
+  readonly tag: 'agent' | 'plugin' | 'artifact' | 'dir' | 'file' | 'skill' | 'cmd' | 'emoji' | 'choice';
   /** Greyed, `not yet`: shown, picking it does nothing (bar 2.1). */
   readonly off: boolean;
   readonly pick: Pick;
@@ -27,7 +27,8 @@ export interface Row {
 export type Pick =
   | { readonly kind: 'insert'; readonly text: string; readonly browse: boolean; readonly path?: string }
   | { readonly kind: 'run'; readonly name: string; readonly args?: string }
-  | { readonly kind: 'artifact'; readonly id: string; readonly title: string; readonly url: string };
+  | { readonly kind: 'artifact'; readonly id: string; readonly title: string; readonly url: string }
+  | { readonly kind: 'plugin'; readonly name: string };
 
 /** At most this many rows in a list (the TUI's popup shows fewer; the rest is a query away). */
 export const MAX_ROWS = 50;
@@ -41,6 +42,21 @@ export function agentRows(t: Trigger, agents: readonly PickAgent[]): Row[] {
     tag: 'agent',
     off: false,
     pick: { kind: 'insert', text: agentPick(a.name), browse: false },
+  }));
+}
+
+/** The `@` list's plugins (at-plugins, the TUI's commands.rs plugin_items), after the agents: their
+ *  own mark and the word 'plugin' first, so one never reads as an agent; never in a path query. A
+ *  pick puts its `◆ name` chip where the `@word` was, sent as Part::Plugin. */
+export function pluginRows(t: Trigger, plugins: readonly PickPlugin[]): Row[] {
+  if (t.kind !== 'at' || t.quoted || t.query.includes('/')) return [];
+  return prefixFirst(plugins, t.query, (p) => p.name).map((p) => ({
+    id: `plugin.${p.name}`,
+    label: `@${p.name}`,
+    desc: p.desc === '' ? composer.at_plugin : `${composer.at_plugin} · ${p.desc}`,
+    tag: 'plugin',
+    off: false,
+    pick: { kind: 'plugin', name: p.name },
   }));
 }
 

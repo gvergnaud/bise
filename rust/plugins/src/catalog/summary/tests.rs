@@ -20,6 +20,7 @@ fn row(id: &str, kind: PluginKind, scope: PluginScope, state: PluginState, on: b
         path: None,
         state,
         on,
+        pickable: false,
         locked: false,
         action: None,
         login: None,

@@ -536,3 +536,30 @@ fn a_views_contexts_join_his_message_by_a_newline() {
         assert_eq!(render(&all), [one(&c1), one(&c2), render(&his)].join("\n"), "{his:?}");
     }
 }
+
+/// at-plugins: a typed `@name` of a plugin becomes its part, only when it
+/// opens a word and names a plugin that is no live agent; the model's
+/// text never changes.
+#[test]
+fn a_typed_plugin_name_becomes_its_part() {
+    let pl = |s: &str| Part::Plugin { name: s.into() };
+    let chips = |parts: Vec<Part>| plugin_chips(parts, &["computer", "dataviz"], &["architect", "dataviz"]);
+    assert_eq!(chips(vec![t("@computer open my last Gmail tab")]), vec![pl("computer"), t(" open my last Gmail tab")]);
+    assert_eq!(chips(vec![t("use @computer, then @computer.")]), vec![t("use "), pl("computer"), t(", then "), pl("computer"), t(".")]);
+    // a live agent's name stays words (it routes, or it is a mention)
+    assert_eq!(chips(vec![t("@dataviz draw it")]), vec![t("@dataviz draw it")]);
+    // not a word's start, not the exact name, not a plugin
+    for s in ["mail@computer now", "@computers", "@comp", "@ computer", "@architect hi", "@nothing"] {
+        assert_eq!(chips(vec![t(s)]), vec![t(s)], "{s}");
+    }
+    // after another part: a word opens only after a blank
+    assert_eq!(chips(vec![img("a.png"), t("@computer")]), vec![img("a.png"), t("@computer")]);
+    assert_eq!(chips(vec![t("see "), img("a.png"), t(" @computer")]), vec![t("see "), img("a.png"), t(" "), pl("computer")]);
+    // render is unchanged and the part renders as `@name`
+    for s in ["@computer open it", "a @computer b @dataviz c", "x\n@computer!"] {
+        assert_eq!(render(&chips(vec![t(s)])), s);
+    }
+    assert_eq!(render(&[t("use "), pl("computer"), t(" now")]), "use @computer now");
+    let wire = serde_json::to_value(pl("computer")).unwrap();
+    assert_eq!(wire, serde_json::json!({"kind": "plugin", "name": "computer"}));
+}

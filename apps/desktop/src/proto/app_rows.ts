@@ -174,6 +174,11 @@ path?: string | null, state: PluginState,
  */
 on: boolean, 
 /**
+ * the composer's `@` menu offers it for a turn (at-plugins, architect
+ * m_53238): `bend_plugins::resolve::Plugin::pickable`, the one rule
+ */
+pickable?: boolean, 
+/**
  * not his to turn off (the `skills:bise` folder: pages need it)
  */
 locked?: boolean, 

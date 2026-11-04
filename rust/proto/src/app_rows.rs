@@ -205,6 +205,10 @@ pub struct Plugin {
     /// turned on (plugins.json: everything on but the opt-in plugins)
     #[serde(default)]
     pub on: bool,
+    /// the composer's `@` menu offers it for a turn (at-plugins, architect
+    /// m_53238): `bend_plugins::resolve::Plugin::pickable`, the one rule
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub pickable: bool,
     /// not his to turn off (the `skills:bise` folder: pages need it)
     #[serde(default, skip_serializing_if = "crate::is_false")]
     pub locked: bool,

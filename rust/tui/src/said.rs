@@ -201,6 +201,11 @@ pub(crate) fn view_of(text: &str, parts: &[Part]) -> View {
                 }
             }
             Part::Text { text } => v.body.push_str(text),
+            // a plugin he picked with `@`: its name, as he typed it
+            Part::Plugin { name } => {
+                v.body.push('@');
+                v.body.push_str(name);
+            }
             Part::Paste { n, text } => {
                 v.body.push(MARK_OPEN);
                 v.body.push_str(&n.to_string());
@@ -246,6 +251,7 @@ pub(crate) fn gist(parts: &[Part]) -> String {
             Part::Quote { n: Some(n), .. } => words.push_str(&format!("❝ {n}")),
             Part::Quote { from, .. } => quotes.push(format!("❝ {from}")),
             Part::Text { text } => words.push_str(text),
+            Part::Plugin { name } => words.push_str(&format!("@{name}")),
             Part::Paste { n, .. } => words.push_str(&format!("▤ {n}")),
             Part::Image { name, source, .. } => {
                 let shown = std::path::Path::new(source).file_name().and_then(|f| f.to_str()).filter(|_| !name.starts_with('[')).unwrap_or(name);

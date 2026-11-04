@@ -22,9 +22,9 @@ export type PageNote = { block: string, kind: string, text?: string, quote?: str
  * with fn space: answer in one short line), the capsule's start (fn space
  * + tab: start an agent), his open steps (a capsule message).
  */
-export type HintKind = "capsule" | "capsule_start" | "steps" | "notes" | "unknown";
+export type HintKind = "capsule" | "capsule_start" | "steps" | "notes" | "plugin" | "unknown";
 
 /**
  * One piece of his message.
  */
-export type Part = { "kind": "text", text: string, } | { "kind": "quote", from: string, text: string, file?: string, new?: string, old?: string, n?: number | null, } | { "kind": "paste", n: number, text: string, } | { "kind": "image", name: string, source: string, mime?: string, b64_file?: string, caption?: string, } | { "kind": "file", path: string, name?: string, missing?: boolean, } | { "kind": "page", text: string, to: string, page: string, title?: string, version: number, notes: Array<PageNote>, } | { "kind": "anchor", artifact: string, version: number, rev?: number, anchor: Anchor, quote?: string, n?: number | null, } | { "kind": "hint", of: HintKind, text: string, } | { "kind": "forwarded", id: number, from: string, to: string, at?: string, by: string, } | { "kind": "view_context", plugin: string, uri: string, text: string, };
+export type Part = { "kind": "text", text: string, } | { "kind": "quote", from: string, text: string, file?: string, new?: string, old?: string, n?: number | null, } | { "kind": "paste", n: number, text: string, } | { "kind": "image", name: string, source: string, mime?: string, b64_file?: string, caption?: string, } | { "kind": "file", path: string, name?: string, missing?: boolean, } | { "kind": "page", text: string, to: string, page: string, title?: string, version: number, notes: Array<PageNote>, } | { "kind": "anchor", artifact: string, version: number, rev?: number, anchor: Anchor, quote?: string, n?: number | null, } | { "kind": "hint", of: HintKind, text: string, } | { "kind": "forwarded", id: number, from: string, to: string, at?: string, by: string, } | { "kind": "view_context", plugin: string, uri: string, text: string, } | { "kind": "plugin", name: string, };

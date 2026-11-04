@@ -97,6 +97,13 @@ impl Hubs {
     pub(super) fn holds(&self, id: &str) -> bool {
         self.conns.contains_key(id)
     }
+
+    /// The live agents of project `id` as its hub last sent them (none:
+    /// not connected yet).
+    pub(super) fn live_agents(&self, id: &str) -> Option<Vec<String>> {
+        let (agents, _) = self.conns.get(id)?.rows.as_ref()?;
+        Some(agents.iter().filter(|a| !a.archived).map(|a| a.name.clone()).collect())
+    }
 }
 
 /// One held project's connection.
@@ -435,7 +442,9 @@ impl Core {
         let v = match cmd == "send" {
             true => {
                 self.voice_mode_typed(&project, &agent);
-                self.send_shot(v)
+                let v = self.send_shot(v);
+                // his typed `@computer`: that plugin's part (at-plugins, core/plugin_send.rs)
+                self.send_plugins(v, &project, &row.path)
             }
             false => v,
         };

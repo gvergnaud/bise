@@ -350,6 +350,9 @@ export function sentParts(parts: readonly Part[]): string {
           return `\u0000image:${p.name}\u0000`;
         case 'file':
           return `\u0000file:${p.path}\u0000`;
+        // a plugin he picked with @ (at-plugins)
+        case 'plugin':
+          return `\u0000plugin:${p.name}\u0000`;
         // a part of an artifact: which one, which version, where (the hub may add its rev)
         case 'anchor':
           return `\u0000anchor:${p.artifact}:${String(p.version)}:${JSON.stringify(p.anchor)}\u0000`;

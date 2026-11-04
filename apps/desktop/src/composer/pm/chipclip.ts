@@ -38,7 +38,7 @@ export function writeClip(segs: readonly Segment[], text: string): string | null
 }
 
 const isObj = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
-const KINDS: readonly string[] = ['image', 'paste', 'quote', 'file', 'artifact', 'anchor'];
+const KINDS: readonly string[] = ['image', 'paste', 'quote', 'file', 'artifact', 'anchor', 'plugin'];
 const isChip = (x: unknown): x is Chip => isObj(x) && Number.isInteger(x.n) && (x.n as number) > 0 && typeof x.kind === 'string' && KINDS.includes(x.kind);
 const isSegment = (x: unknown): x is Segment =>
   isObj(x) && (x.kind === 'text' ? typeof x.text === 'string' : x.kind === 'chip' && isChip(x.chip));

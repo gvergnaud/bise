@@ -315,6 +315,27 @@ impl Resolution {
     pub fn loaded(&self) -> impl Iterator<Item = &Plugin> {
         self.plugins.iter().filter(|p| p.state == State::Loaded)
     }
+
+    /// The plugins the composer's `@` menu offers ([`Plugin::pickable`]).
+    pub fn pickable(&self) -> impl Iterator<Item = &Plugin> {
+        self.plugins.iter().filter(|p| p.pickable())
+    }
+}
+
+impl Plugin {
+    /// The composer's `@` menu offers it for a turn (at-plugins, architect
+    /// m_53238), the one rule both apps follow: on and loaded, with a
+    /// skill on or tools to give (a server or a view). An off, shadowed or
+    /// invalid plugin, and one with nothing to give, never.
+    pub fn pickable(&self) -> bool {
+        self.state == State::Loaded && (!self.skills.is_empty() || self.has_tools())
+    }
+
+    /// It gives tools, `tools.<namespace>` (bridge.rs's group): a server
+    /// on or a view.
+    pub fn has_tools(&self) -> bool {
+        !self.servers.is_empty() || !self.remotes.is_empty() || !self.views.is_empty()
+    }
 }
 
 #[derive(Clone, Debug)]

@@ -64,6 +64,8 @@ impl Shell {
                 // none of them
                 let mut hints: Vec<Part> = Self::capsule_hint(&said, &s("via")).into_iter().collect();
                 hints.extend(self.steps_hint(&said, &s("via")));
+                // a plugin he picked with `@` (at-plugins): its line, from his typed part
+                hints.extend(self.plugin_hints(&s("focus"), &s("parts")));
                 if !hints.is_empty() {
                     let (text, parts) = hinted(&said, &s("parts"), hints);
                     let mut v = v.clone();
@@ -112,6 +114,21 @@ impl Shell {
     }
 }
 
+impl Shell {
+    /// One hidden line per plugin he picked with `@` (`Part::Plugin` in his
+    /// parts, at-plugins, architect m_53238): its skill and tools, or that
+    /// it is off or not here (crate::plugin_hint). The plugins of the
+    /// agent's own workspace (a task's worktree), resolved only when his
+    /// message holds such a part.
+    fn plugin_hints(&self, focus: &str, parts: &str) -> Vec<Part> {
+        let focus = if focus.is_empty() { "main" } else { focus };
+        let ws = self.dir_of(focus).and_then(|d| self.spawn_plugins.get(&d).map(|p| p.ws.clone())).unwrap_or_else(|| self.opts.paths.workspace.clone());
+        crate::plugin_hint::of_json(parts, || {
+            crate::plugin_hint::known_of(&bend_plugins::resolve::resolve(&bend_plugins::resolve::Roots::standard(Some(&ws))))
+        })
+    }
+}
+
 /// His words with the hub's hints after them: his parts (his words as one
 /// text part when he sent none) then `hints`, and the model's text,
 /// `render` of that one list, so the two agree. Pure.
@@ -129,6 +146,25 @@ fn hinted(said: &str, parts: &str, hints: Vec<Part>) -> (String, String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// at-plugins: his message with a plugin part reaches the model as he
+    /// typed it, the plugin's line after it; his bubble's words stay his.
+    #[test]
+    fn a_plugin_part_gets_its_line_after_his_words() {
+        let his = serde_json::to_string(&vec![Part::Plugin { name: "computer".into() }, Part::Text { text: " open my last Gmail tab".into() }]).unwrap();
+        let known = || vec![crate::plugin_hint::Known { name: "computer".into(), on: true, skills: vec!["computer:computer-use".into()], group: Some("computer".into()) }];
+        let (text, parts) = hinted("ignored", &his, crate::plugin_hint::of_json(&his, known));
+        assert_eq!(
+            text,
+            "@computer open my last Gmail tab\n\n[@computer: he picked the computer plugin for this turn: load its skill `computer:computer-use` with the skill tool first, then use its tools in tools.computer]"
+        );
+        let back: Vec<Part> = serde_json::from_str(&parts).unwrap();
+        assert_eq!(bise_proto::parts::words(&back), "@computer open my last Gmail tab", "his words alone");
+        // no plugin part: nothing resolved, nothing added
+        let plain = serde_json::to_string(&vec![Part::Text { text: "@computer as words".into() }]).unwrap();
+        assert!(crate::plugin_hint::of_json(&plain, || panic!("resolved for no plugin part")).is_empty());
+        assert!(crate::plugin_hint::of_json("", || panic!("resolved for no parts")).is_empty());
+    }
 
     /// The capsule's input carries the line main's rule reads (prompts.rs);
     /// any other client's input, and a slash command, stay as they are.

@@ -51,6 +51,8 @@ pub(crate) fn of(parts: &[Part], text: &str, first: usize) -> (String, Vec<Attac
                 crate::attach_file::name_chip(&label, path);
                 (label, marker, Info { source: path.clone(), ..Info::default() })
             }
+            // a plugin he picked with `@`: its chip again
+            Part::Plugin { name } => crate::at_plugins::chip(n, name),
             // his notes on a page: their words; the hub's hints and a
             // newer client's parts are not his to edit
             Part::Page { text, .. } => {

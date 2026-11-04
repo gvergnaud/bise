@@ -90,6 +90,10 @@ export function youView(parts: readonly Part[]): YouView {
       case 'text':
         words += p.text;
         break;
+      case 'plugin':
+        // a plugin he picked with @ (at-plugins): its name, as he typed it
+        words += `@${p.name}`;
+        break;
       case 'paste':
         words += `▤ ${String(p.n)}`;
         pastes.push({ n: p.n, text: p.text });
@@ -125,6 +129,7 @@ export function partsGist(parts: readonly Part[]): string {
     else if (p.kind === 'quote' && p.n != null) words += `❝ ${String(p.n)}`;
     else if (p.kind === 'quote') quotes.push(`❝ ${p.from === 'main' ? 'bise' : p.from}`);
     else if (p.kind === 'text') words += p.text;
+    else if (p.kind === 'plugin') words += `@${p.name}`;
     else if (p.kind === 'paste') words += `▤ ${String(p.n)}`;
     else if (p.kind === 'image') {
       const file = p.source.split('/').at(-1) ?? '';

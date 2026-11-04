@@ -185,6 +185,10 @@ pub(crate) fn expand(app: &mut App, text: &str) -> crate::said::Said {
 /// artifact's link) stays its text.
 fn part_of(a: &Attachment) -> bise_proto::parts::Part {
     use bise_proto::parts::Part;
+    // a plugin he picked with `@` (at_plugins.rs): its part, never its words
+    if let Some(p) = crate::at_plugins::part_of(a) {
+        return p;
+    }
     match bise_proto::parts::parse(&a.marker).as_slice() {
         [Part::Quote { from, text, file, new, old, .. }] => {
             let n = chip_parts(&a.label).1.parse::<u32>().ok();
@@ -219,6 +223,7 @@ pub(crate) fn chips(text: &str) -> Vec<(usize, usize, usize)> {
     v.extend(crate::pasted::chips(text));
     v.extend(find_labels(text, crate::voice::chip::OPEN));
     v.extend(find_labels(text, ARTIFACT_OPEN));
+    v.extend(find_labels(text, crate::at_plugins::OPEN));
     v.sort_unstable();
     v
 }

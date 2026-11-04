@@ -86,6 +86,7 @@ pub use bise_peer::os as peer_os;
 pub mod photo;
 pub mod place;
 pub mod place_job;
+pub mod plugin_hint;
 pub mod procs;
 pub mod proto_view;
 pub mod pulse;

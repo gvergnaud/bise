@@ -29,6 +29,7 @@ fn plugin(id: &str, kind: PluginKind, scope: Scope, what: &str, parts: Vec<Plugi
         icon: None,
         state: PluginState::Loaded,
         on: true,
+        pickable: false,
         locked: false,
         action: None,
         login: None,

@@ -174,6 +174,13 @@ pub enum Part {
     /// agent once. Only the hub makes one (`parts_in::said` refuses it
     /// from a client); rendered before his words, never drawn as them
     ViewContext { plugin: String, uri: String, text: String },
+    /// a plugin he picked for this turn in the `@` menu (at-plugins,
+    /// architect m_53238): his chip, rendered `@name` where it was, so
+    /// the model's words are what he typed. The hub reads the part, never
+    /// the words, and adds a [`HintKind::Plugin`] line after them (its
+    /// skill to load, its tools); a typed `@name` is a part only when
+    /// [`plugin_chips`] made it one
+    Plugin { name: String },
     /// a part a newer client sent: kept whole, never rendered
     #[serde(untagged)]
     #[cfg_attr(feature = "ts", ts(skip))]
@@ -192,6 +199,9 @@ pub enum HintKind {
     Steps,
     /// his notes on an artifact: how the agent answers them
     Notes,
+    /// a plugin he picked with `@` ([`Part::Plugin`]): its skill to
+    /// load, its tools
+    Plugin,
     #[default]
     #[serde(other)]
     Unknown,
@@ -445,6 +455,10 @@ fn render_one(parts: &[Part]) -> String {
             Part::Anchor { artifact, version, rev, anchor, quote, n: None } => head.push(anchor_tag(artifact, *version, *rev, anchor, quote, None)),
             Part::Anchor { artifact, version, rev, anchor, quote, n: Some(n) } => body.push_str(&anchor_tag(artifact, *version, *rev, anchor, quote, Some(*n))),
             Part::ViewContext { plugin, uri, text } => head.push(view_context_tag(plugin, uri, text)),
+            Part::Plugin { name } => {
+                body.push('@');
+                body.push_str(name);
+            }
             Part::Unknown(_) | Part::Forwarded { .. } => {}
         }
     }
@@ -922,6 +936,58 @@ fn image_at(s: &str) -> Option<(Part, usize)> {
     Some((Part::Image { name: name.into(), source: source.into(), mime: mime.into(), b64_file: b64.into(), caption: caption.into() }, m.len()))
 }
 
+// ---- plugin chips ----
+
+/// His typed `@name` of a plugin as its [`Part::Plugin`], at send time,
+/// in both clients (at-plugins, architect m_53238): `@computer open my
+/// last tab` typed whole works as the `@` menu's pick does. Only an `@`
+/// that opens a word (his message's start, or after a blank) followed by
+/// a name of `plugins` exactly, then a blank, a mark (`NO_SPACE_BEFORE`)
+/// or the end; never a name of `agents` (a live agent's `@name` is his,
+/// at the start it routes). Lossless: the model's text doesn't change
+/// (`render(&plugin_chips(p, ..)) == render(&p)`). Pure.
+pub fn plugin_chips(parts: Vec<Part>, plugins: &[&str], agents: &[&str]) -> Vec<Part> {
+    let mut out: Vec<Part> = Vec::with_capacity(parts.len());
+    // the char before the next text: a word opens after a blank or at the start
+    let mut open = true;
+    for p in parts {
+        let Part::Text { text } = p else {
+            open = false;
+            out.push(p);
+            continue;
+        };
+        let mut from = 0usize;
+        for (at, c) in text.char_indices() {
+            if c != '@' || at < from {
+                continue;
+            }
+            let opens = match text[..at].chars().next_back() {
+                Some(b) => b.is_whitespace(),
+                None => open,
+            };
+            if !opens {
+                continue;
+            }
+            let rest = &text[at + 1..];
+            let end = rest.find(|ch: char| ch.is_whitespace() || NO_SPACE_BEFORE.contains(&ch)).unwrap_or(rest.len());
+            let name = &rest[..end];
+            if name.is_empty() || !plugins.contains(&name) || agents.contains(&name) {
+                continue;
+            }
+            if at > from {
+                out.push(Part::Text { text: text[from..at].to_string() });
+            }
+            out.push(Part::Plugin { name: name.to_string() });
+            from = at + 1 + end;
+        }
+        open = text.chars().next_back().map_or(open, char::is_whitespace);
+        if from < text.len() {
+            out.push(Part::Text { text: text[from..].to_string() });
+        }
+    }
+    out
+}
+
 // ---- reading parts ----
 
 /// The parts of an old text (`parse`), only when it holds more than words
@@ -958,16 +1024,22 @@ pub fn typed_page_notes(mut parts: Vec<Part>) -> Vec<Part> {
     parts
 }
 
-/// His words: the text parts, the pastes and images as nothing (the
-/// gist of a row, a notification).
+/// His words: the text parts and a plugin he picked (`@name`, as he
+/// typed it), the pastes and images as nothing (the gist of a row, a
+/// notification).
 pub fn words(parts: &[Part]) -> String {
-    parts
-        .iter()
-        .filter_map(|p| match p {
-            Part::Text { text } => Some(text.as_str()),
-            _ => None,
-        })
-        .collect()
+    let mut out = String::new();
+    for p in parts {
+        match p {
+            Part::Text { text } => out.push_str(text),
+            Part::Plugin { name } => {
+                out.push('@');
+                out.push_str(name);
+            }
+            _ => {}
+        }
+    }
+    out
 }
 
 /// Parts as the composers make them: adjacent texts joined, empty texts

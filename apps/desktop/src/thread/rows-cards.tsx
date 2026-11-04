@@ -475,6 +475,8 @@ export function foldedWords(parts: readonly Part[]): string {
     switch (p.kind) {
       case 'text':
         return p.text;
+      case 'plugin':
+        return `@${p.name}`;
       case 'image':
         images += 1;
         return ` ▣ ${partImageWords(p.name, labelN(p.name) ?? images)} `;

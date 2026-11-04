@@ -49,6 +49,10 @@ export function segmentsOfParts(parts: readonly Part[]): Segment[] {
       case 'page':
         words(p.text);
         break;
+      // a plugin he picked with @ (at-plugins): its chip again
+      case 'plugin':
+        chip({ kind: 'plugin', n: next++, name: p.name });
+        break;
       case 'hint':
         break;
     }

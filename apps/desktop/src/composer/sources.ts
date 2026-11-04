@@ -16,6 +16,13 @@ export interface PickSkill {
   readonly desc: string;
 }
 
+/** A plugin the `@` list offers for a turn (at-plugins): the core's row says `pickable`. */
+export interface PickPlugin {
+  readonly name: string;
+  /** its description's first sentence ('' none) */
+  readonly desc: string;
+}
+
 /** What completes one argument of a command (the TUI's commands.rs `Arg`): fixed words, or a
  *  list the screen knows (live agents, archived ones, open cards, branches, models, efforts,
  *  plugins); `text` takes the rest of the line and completes nothing. */
@@ -82,6 +89,8 @@ export interface SavedImage {
 export interface ComposerSources {
   /** The live agents for the `@` list (routes the message, as in the TUI). */
   readonly agents: readonly PickAgent[];
+  /** The plugins on for the `@` list, after the agents (none: no rows). */
+  readonly plugins?: readonly PickPlugin[];
   readonly skills: readonly PickSkill[];
   readonly commands: readonly PickCommand[];
   /** The project's artifacts for the `@` list, after the agents (none: no rows). */

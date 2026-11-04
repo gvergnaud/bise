@@ -191,6 +191,7 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
                 path: None,
                 state: if on { PluginState::Loaded } else { PluginState::Disabled },
                 on,
+                pickable: false,
                 locked: false,
                 action: None,
                 login: None,

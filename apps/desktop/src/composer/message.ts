@@ -23,6 +23,8 @@ export type Chip =
   | { readonly kind: 'quote'; readonly n: number; readonly text: string; readonly from: string; readonly at?: QuoteAt }
   | { readonly kind: 'file'; readonly n: number; readonly path: string; readonly bytes?: number; readonly icon?: string }
   | { readonly kind: 'artifact'; readonly n: number; readonly id: string; readonly title: string; readonly url: string }
+  // a plugin picked in the `@` list (at-plugins): sent as Part::Plugin, the model reads `@name`
+  | { readonly kind: 'plugin'; readonly n: number; readonly name: string }
   // a part of an artifact picked in the side panel (plan §9b): sent as Part::Anchor with its number
   | { readonly kind: 'anchor'; readonly n: number; readonly artifact: string; readonly version: number; readonly rev?: number; readonly anchor: Anchor; readonly quote?: string; readonly file: string };
 
@@ -88,8 +90,13 @@ export function chipLabel(c: Chip): string {
       return `[File #${String(c.n)}]`;
     case 'artifact':
       return `↗ ${c.title}`;
+    case 'plugin':
+      return `${PLUGIN_GLYPH} ${c.name}`;
   }
 }
+
+/** A plugin's mark in the `@` list and on its chip (the TUI's G_PLUGIN). */
+export const PLUGIN_GLYPH = '◆';
 
 /** A path's last segment, the file chip's words: 'deck.pptx' (bise_proto::parts file_name). */
 export const fileName = (path: string): string => path.replace(/\/+$/u, '').split('/').at(-1) ?? path;
@@ -150,6 +157,8 @@ export function chipStrip(c: Chip): string {
       return `${chipLabel(c)}  ${c.url}`;
     case 'anchor':
       return `${chipLabel(c)} ${anchorLabel(c.anchor)}  ${anchorWhere(c.file, c.version)}`;
+    case 'plugin':
+      return chipLabel(c);
   }
 }
 
@@ -176,6 +185,7 @@ export function attachRow(c: Chip, home = ''): { readonly name: string; readonly
       return { name: fileName(c.path), info: [c.bytes === undefined ? '' : sizeText(c.bytes), where].filter((s) => s !== '').join(' · ') };
     }
     case 'artifact':
+    case 'plugin':
       return null;
     case 'anchor':
       // designer's row: '❝ Summary!C4:E4  q3-forecast.xlsx · v4'
@@ -220,7 +230,7 @@ export function buildMessage(segments: readonly Segment[]): Outgoing {
       continue;
     }
     const c = s.chip;
-    if (c.kind !== 'artifact' && sent.has(c.n)) {
+    if (c.kind !== 'artifact' && c.kind !== 'plugin' && sent.has(c.n)) {
       // a chip pasted again in the draft (pm/chipclip.ts): its part went with its first mention,
       // this one is its label in his words ('as in [Image #1]')
       const pad = /\S$/u.test(body) ? ' ' : '';
@@ -257,6 +267,16 @@ export function buildMessage(segments: readonly Segment[]): Outgoing {
       body += chipLabel(c);
       bodyParts.push({ kind: 'paste', n: c.n, text: c.text });
       spaceNext = false;
+      continue;
+    }
+    if (c.kind === 'plugin') {
+      // at-plugins: his pick goes typed (Part::Plugin, the model reads `@name`); the hub adds the
+      // line that names its skill and its tools
+      const pad = /\S$/u.test(body) ? ' ' : '';
+      body += `${pad}@${c.name}`;
+      say(pad);
+      bodyParts.push({ kind: 'plugin', name: c.name });
+      spaceNext = true;
       continue;
     }
     const label = c.kind === 'artifact' ? `[${c.title.replace(/[[\]]/gu, '')}](${c.url})` : chipLabel(c);
