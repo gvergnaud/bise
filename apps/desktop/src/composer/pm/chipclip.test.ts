@@ -25,6 +25,7 @@ const CHIPS: Record<Chip['kind'], Chip> = {
   file: { kind: 'file', n: 4, path: '/Users/g/deck.pptx', bytes: 9, icon: 'data:image/png;base64,BB' },
   artifact: { kind: 'artifact', n: 5, id: 'a1', title: 'plan', url: 'https://bise.dev/p/plan' },
   anchor: { kind: 'anchor', n: 6, artifact: 'q3.xlsx', version: 4, anchor: { kind: 'cell', sheet: 'Summary', range: 'C4:E4' }, quote: '12', file: 'q3.xlsx' },
+  plugin: { kind: 'plugin', n: 7, name: 'computer' },
 };
 const IMAGE_PATH = '/s/images/ab.png';
 
