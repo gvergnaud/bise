@@ -568,6 +568,26 @@ pub fn try_acts(kind: &str, diff: Option<&str>) -> Option<(u32, bise_proto::rows
     Some((DIFF_OPTION, bise_proto::rows::OptAct::artifact(diff?, None, None)))
 }
 
+/// Each feature's diff artifact, by feature: of `names`, the stored
+/// artifact not archived whose source is its diff file (`file`,
+/// `Paths::feature_diff`). Pure but for `file`'s canonical form.
+pub fn diff_ids(
+    names: &[String],
+    stored: &[crate::artifacts::Meta],
+    archived: &std::collections::BTreeMap<String, u64>,
+    file: &dyn Fn(&str) -> std::path::PathBuf,
+) -> std::collections::BTreeMap<String, String> {
+    names
+        .iter()
+        .filter_map(|n| {
+            let f = file(n);
+            let source = f.canonicalize().unwrap_or(f).to_string_lossy().to_string();
+            let m = stored.iter().filter(|m| m.source == source && !archived.contains_key(&m.id)).max_by_key(|m| m.current().map_or(m.created_ms, |v| v.at_ms))?;
+            Some((n.clone(), m.id.clone()))
+        })
+        .collect()
+}
+
 /// The add that keeps feature `name`'s diff (`file`, written at `at`, the
 /// tip's short sha) as its one artifact, `<name>-diff`: each `sb feature
 /// ready` a next version, its title the tip it shows. Pure.

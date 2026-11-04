@@ -38,6 +38,11 @@ struct Inner {
     main: String,
     /// When the last refresh began (ms; 0: never).
     refreshed_ms: u64,
+    /// Each feature's diff artifact (`feature::diff_ids`), by feature:
+    /// the try item's `2 show the diff` opens it. Built at boot from the
+    /// store, set at `ready`, built again after an agent's artifact add
+    /// or archive; the snapshot only reads it (architect m_52989).
+    diffs: BTreeMap<String, String>,
 }
 
 /// The features' facts and the trunk's name are read again at least this
@@ -52,10 +57,26 @@ pub(super) struct Features {
 }
 
 impl Features {
-    pub(super) fn load(state: &Path) -> Features {
+    /// The registry, and its features' diff artifacts from the store
+    /// (`diff_file`: `Paths::feature_diff`).
+    pub(super) fn load(state: &Path, diff_file: &dyn Fn(&str) -> PathBuf) -> Features {
         let f = Features::default();
         f.lock().reg = Registry::load(state);
+        f.diffs_from(state, diff_file);
         f
+    }
+
+    /// Each feature's diff artifact, read from the store again.
+    pub(super) fn diffs_from(&self, state: &Path, diff_file: &dyn Fn(&str) -> PathBuf) {
+        let store = crate::artifacts::Store::new(state);
+        let names = self.names();
+        let diffs = feature::diff_ids(&names, &store.stored(), &store.archived(), diff_file);
+        self.lock().diffs = diffs;
+    }
+
+    /// Feature `name`'s diff artifact, if any.
+    pub(super) fn diff_id(&self, name: &str) -> Option<String> {
+        self.lock().diffs.get(name).cloned()
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Inner> {
@@ -275,25 +296,25 @@ impl Shell {
     /// The try items' `2 show the diff` (after `snapshot_card_links`, its
     /// one writer of `opens`): it opens the feature's diff artifact (the
     /// one whose file is `Paths::feature_diff`, `ready` keeps it), in the
-    /// app, nothing sent, the item stays. Read from the store, not saved
-    /// with the card: an item from before a restart, or one whose diff
-    /// was added by hand, opens it too. The store is read only while a
-    /// try item is open.
+    /// app, nothing sent, the item stays. From the features' map, not
+    /// saved with the card: an item from before a restart, or one whose
+    /// diff was added by hand, opens it too.
+    // TODO: the feature from a typed card field, not its place's text
+    // (feature::of_place; architect m_52989's follow-up)
     pub(super) fn snapshot_feature_acts(&self, snap: &mut crate::snapshot::Snapshot) {
-        let tries = || snap.cards.iter().any(|c| c.kind == feature::TRY && !c.opens.contains_key(&feature::DIFF_OPTION));
-        if !tries() {
-            return;
-        }
-        let stored = crate::artifacts::Store::new(&self.opts.paths.state).stored();
-        for c in snap.cards.iter_mut().filter(|c| !c.opens.contains_key(&feature::DIFF_OPTION)) {
+        for c in snap.cards.iter_mut().filter(|c| c.kind == feature::TRY && !c.opens.contains_key(&feature::DIFF_OPTION)) {
             let Some(name) = c.place.as_deref().and_then(feature::of_place) else { continue };
-            let file = self.opts.paths.feature_diff(name);
-            let source = file.canonicalize().unwrap_or(file).to_string_lossy().to_string();
-            let id = stored.iter().find(|m| m.source == source).map(|m| m.id.as_str());
-            if let Some((n, act)) = feature::try_acts(&c.kind, id) {
+            if let Some((n, act)) = feature::try_acts(&c.kind, self.features.diff_id(name).as_deref()) {
                 c.opens.insert(n, act);
             }
         }
+    }
+
+    /// The features' diff artifacts read from the store again (an
+    /// agent's artifact add or archive may have changed one).
+    pub(super) fn feature_diffs_refresh(&self) {
+        let paths = &self.opts.paths;
+        self.features.diffs_from(&paths.state, &|n| paths.feature_diff(n));
     }
 
     /// The typed `features` event (bar A.6): the registry's rows with each
@@ -431,7 +452,8 @@ fn step(job: &Job) -> Out {
             let at = crate::land::shorten(&job.shared, &f.tip);
             feature::write_diff(&job.shared, name, &job.diff)?;
             let store = crate::artifacts::Store::new(&job.state);
-            store.add(&feature::diff_artifact(name, &at, &job.diff), now)?;
+            let kept = store.add(&feature::diff_artifact(name, &at, &job.diff), now)?;
+            job.features.lock().diffs.insert(name.to_string(), kept.meta.id);
             let mut d = done();
             d.open = Some((feature::TRY.into(), feature::try_text(name, &f, &main, job.flow.check.is_some())));
             Ok((format!("the user's inbox asks them to try {} now.", name), d))
@@ -601,5 +623,38 @@ pub(super) fn onto_now(tx: &std::sync::mpsc::Sender<Msg>, agent: &str, was: Opti
         let (reply, rx) = std::sync::mpsc::channel();
         let _ = tx.send(Msg::input(Input::Onto { agent: agent.clone(), reply }));
         rx.recv().unwrap_or_else(|_| was.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// architect m_52989: after a hub restart, the try item's `2 show the
+    /// diff` still opens its diff: the map is built at boot from the store
+    /// (the artifact whose source is the feature's diff file, not
+    /// archived); a feature with no diff kept gets none.
+    #[test]
+    fn a_try_item_opens_its_diff_after_a_restart() {
+        let state = std::env::temp_dir().join(format!("sb-feat-diffs-{}-{}", std::process::id(), crate::util::now_ms()));
+        let file = |n: &str| state.join("features").join(format!("{n}.diff"));
+        let reg = Registry {
+            features: ["cu", "bims"].iter().map(|n| feature::Feature { name: (*n).into(), ..feature::Feature::default() }).collect(),
+        };
+        reg.save(&state).unwrap();
+        std::fs::create_dir_all(state.join("features")).unwrap();
+        std::fs::write(file("cu"), "diff --git a/x b/x\n").unwrap();
+        let store = crate::artifacts::Store::new(&state);
+        store.add(&feature::diff_artifact("cu", "abc1234", &file("cu")), 1).unwrap();
+        // the restart: the registry and the map, read again
+        let f = Features::load(&state, &file);
+        assert_eq!(f.diff_id("cu").as_deref(), Some("cu-diff"));
+        assert_eq!(f.diff_id("bims"), None, "no diff kept: its item as it is");
+        assert_eq!(feature::try_acts(feature::TRY, f.diff_id("cu").as_deref()), Some((2, bise_proto::rows::OptAct::artifact("cu-diff", None, None))));
+        // archived: it opens no more
+        store.archive(&crate::artifacts::Pick { ids: vec!["cu-diff".into()], ..Default::default() }, 2).unwrap();
+        f.diffs_from(&state, &file);
+        assert_eq!(f.diff_id("cu"), None);
+        let _ = std::fs::remove_dir_all(&state);
     }
 }

@@ -1729,7 +1729,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         ),
         views: views::Views::default(),
         lands: crate::land::Queue::default(),
-        features: features::Features::load(&paths.state),
+        features: features::Features::load(&paths.state, &|n| paths.feature_diff(n)),
         prs: None,
         cu: crate::computer_use::Watch::new(&proc_hub),
         pg: pages::PageState::load(&paths.state),

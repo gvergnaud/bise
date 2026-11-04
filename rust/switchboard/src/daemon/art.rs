@@ -354,6 +354,10 @@ impl Shell {
                         }
                         self.serve_ask(&a);
                         self.artifacts_refresh(false);
+                        // a feature's diff added by hand: its try item opens it
+                        if a.meta.source.ends_with(".diff") {
+                            self.feature_diffs_refresh();
+                        }
                         json!({"ok": true, "text": artifacts::added_text(&a), "id": a.meta.id})
                     }
                     Err(e) => json!({"ok": false, "error": e}),
@@ -388,6 +392,8 @@ impl Shell {
         match text {
             Ok(text) => {
                 self.artifacts_refresh(false);
+                // an archived feature diff opens no more (and back again)
+                self.feature_diffs_refresh();
                 json!({"ok": true, "text": text})
             }
             Err(e) => json!({"ok": false, "error": e}),
