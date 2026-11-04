@@ -1,6 +1,6 @@
 ---
 title: subscriptions
-description: use a plan you already pay for, ChatGPT Plus or Pro, or a coding plan from Z.ai, Kimi or MiniMax, in place of an API key.
+description: use a plan you already pay for, ChatGPT Plus or Pro, Mistral's Vibe Pro, or a coding plan from Z.ai, Kimi or MiniMax, in place of an API key.
 ---
 
 an API key bills each call. a plan is a monthly price you may already pay. bise can use a few plans, signed in with the provider's own login or with the plan's key.
@@ -12,6 +12,7 @@ an API key bills each call. a plan is a monthly price you may already pay. bise 
 | GLM Coding Plan (Z.ai) | the plan's API key | `bise login zai-coding` |
 | Kimi Code | the plan's API key | `bise login kimi-code` |
 | MiniMax M plan | the plan's API key | `bise login minimax` |
+| Vibe Pro or Team (Mistral) | the plan's API key | `bise login mistral` |
 | Claude Max or Team | its monthly API credits, through a key of a linked Console org | `bise login anthropic` |
 
 the first run asks how you want to pay for the models: ChatGPT, OpenRouter, an API key, or a coding plan key. later:
@@ -117,6 +118,21 @@ bise login zai-coding
 ```
 
 or the first run's **a coding plan key**. the key is checked with one tiny call, then saved like any key (see [providers and keys](providers#where-a-key-comes-from)).
+
+## Mistral Vibe Pro or Team
+
+Le Chat is now Vibe ([Mistral's help](https://help.mistral.ai/en/articles/682992-le-chat-is-now-vibe)). its Pro and Team plans include monthly usage for Vibe Code, and a plan key draws on that usage ([Mistral's docs](https://docs.mistral.ai/vibe/code/cli/api-keys-profiles#plan-and-billing-notes)). the key calls Mistral's usual API, `api.mistral.ai`, so bise uses it as its `mistral` provider.
+
+1. on [console.mistral.ai](https://console.mistral.ai), open **Code › Vibe CLI** and make a key.
+2. paste it in bise: the first run's **an API key** then Mistral, `/provider`, or
+
+```sh
+bise login mistral
+```
+
+the key is checked with one tiny call, then saved like any key. the models are `mistral/<model>`, for example `mistral/mistral-large-4`. the same key also runs [voice](voice) and the Mistral connectors (web search and other tools). already set up in Vibe? when the key is in `~/.vibe/.env` or `MISTRAL_API_KEY`, the first run finds it.
+
+when the month's usage is spent, the key stops until the next billing period, unless pay-as-you-go is on in your Mistral organization: then it draws on your prepaid credits. pay-as-you-go is off by default, and a Pro plan bought through Google, Apple, Free Mobile or Orange can't turn it on. your usage is at **Code › CLI › View organization usage** ([Mistral's help](https://help.mistral.ai/en/articles/698531-why-am-i-hitting-api-rate-limits-and-how-do-i-increase-them)).
 
 ## where it's saved
 
