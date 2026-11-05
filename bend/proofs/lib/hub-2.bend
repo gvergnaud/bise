@@ -467,26 +467,20 @@ def hub_word_cmp_refl(+n: Nat, +w: Word(n)) -> {Word.cmp(n, w, w) == EQ{} : Cmp}
           %Equal.sym(Cmp, Word.cmp(p, t, t), EQ{}, hub_word_cmp_refl(p, t)) : {Word.cmp.fin(b, b, _) == EQ{} : Cmp}
           hub_bool_cmp_refl(b)
 
-def hub_char_cmp_refl(+c: Char) -> {Char.cmp(c, c) == ((c, c), EQ{}) : (Char & Char) & Cmp}:
-  match c:
-    case Chr{x}:
-      match x:
-        case U32{w}:
-          %Equal.sym(Cmp, Word.cmp(32n, w, w), EQ{}, hub_word_cmp_refl(32n, w)) : {((Chr{U32{w}}, Chr{U32{w}}), _) == ((Chr{U32{w}}, Chr{U32{w}}), EQ{}) : (Char & Char) & Cmp}
-          {==}
-
-def hub_str_cmp_refl(+s: String) -> {String.cmp(s, s) == ((s, s), EQ{}) : (String & String) & Cmp}:
+# String.order (bend 2.0.38+) finds every string equal to itself
+def hub_sord_refl(+s: String) -> {String.order.go(s, s, EQ{}) == EQ{} : Cmp}:
   match s:
     case SNil{}:
       {==}
-    case SCon{h, t}:
-      %Equal.sym((Char & Char) & Cmp, Char.cmp(h, h), ((h, h), EQ{}), hub_char_cmp_refl(h)) : {String.cmp.fin(t, t, _) == ((SCon{h, t}, SCon{h, t}), EQ{}) : (String & String) & Cmp}
-      %Equal.sym((String & String) & Cmp, String.cmp(t, t), ((t, t), EQ{}), hub_str_cmp_refl(t)) : {String.cmp.rec(h, h, _) == ((SCon{h, t}, SCon{h, t}), EQ{}) : (String & String) & Cmp}
-      {==}
+    case SCon{Chr{x}, t}:
+      match x:
+        case U32{w}:
+          %Equal.sym(Cmp, Word.cmp(32n, w, w), EQ{}, hub_word_cmp_refl(32n, w)) : {String.order.go(t, t, _) == EQ{} : Cmp}
+          hub_sord_refl(t)
 
 # every string equals itself
 def hub_str_eq_refl(+s: String) -> {String.eq(s, s) == True{} : Bool}:
-  %Equal.sym((String & String) & Cmp, String.cmp(s, s), ((s, s), EQ{}), hub_str_cmp_refl(s)) : {Cmp.is_eq(Pair.snd(String & String, Cmp, _)) == True{} : Bool}
+  %Equal.sym(Cmp, String.order.go(s, s, EQ{}), EQ{}, hub_sord_refl(s)) : {Cmp.is_eq(_) == True{} : Bool}
   {==}
 
 def hub_and_false_r(a: Bool) -> {Bool.and(a, False{}) == False{} : Bool}:
@@ -573,7 +567,7 @@ def hub_ccmp(a: Char, b: Char) -> Cmp:
     case Chr{x} Chr{y}:
       U32.cmp(x, y)
 
-# the comparison of String.cmp, on its own
+# the comparison of String.order, by structure
 def hub_cmpc(a: String, b: String) -> Cmp:
   match a b:
     case SNil{} SNil{}:
@@ -584,33 +578,6 @@ def hub_cmpc(a: String, b: String) -> Cmp:
       GT{}
     case SCon{h1, t1} SCon{h2, t2}:
       hub_ccomb(hub_ccmp(h1, h2), hub_cmpc(t1, t2))
-
-def hub_scmp_shape.fin(+x: U32, +y: U32, +t1: String, +t2: String, c: Cmp, +ec: {U32.cmp(x, y) == c : Cmp},
-    ih: {String.cmp(t1, t2) == ((t1, t2), hub_cmpc(t1, t2)) : (String & String) & Cmp})
-    -> {String.cmp.fin(t1, t2, ((Chr{x}, Chr{y}), U32.cmp(x, y))) == ((SCon{Chr{x}, t1}, SCon{Chr{y}, t2}), hub_ccomb(U32.cmp(x, y), hub_cmpc(t1, t2))) : (String & String) & Cmp}:
-  match c:
-    case LT{}:
-      %Equal.sym(Cmp, U32.cmp(x, y), LT{}, ec) : {String.cmp.fin(t1, t2, ((Chr{x}, Chr{y}), _)) == ((SCon{Chr{x}, t1}, SCon{Chr{y}, t2}), hub_ccomb(_, hub_cmpc(t1, t2))) : (String & String) & Cmp}
-      {==}
-    case GT{}:
-      %Equal.sym(Cmp, U32.cmp(x, y), GT{}, ec) : {String.cmp.fin(t1, t2, ((Chr{x}, Chr{y}), _)) == ((SCon{Chr{x}, t1}, SCon{Chr{y}, t2}), hub_ccomb(_, hub_cmpc(t1, t2))) : (String & String) & Cmp}
-      {==}
-    case EQ{}:
-      %Equal.sym(Cmp, U32.cmp(x, y), EQ{}, ec) : {String.cmp.fin(t1, t2, ((Chr{x}, Chr{y}), _)) == ((SCon{Chr{x}, t1}, SCon{Chr{y}, t2}), hub_ccomb(_, hub_cmpc(t1, t2))) : (String & String) & Cmp}
-      %Equal.sym((String & String) & Cmp, String.cmp(t1, t2), ((t1, t2), hub_cmpc(t1, t2)), ih) : {String.cmp.rec(Chr{x}, Chr{y}, _) == ((SCon{Chr{x}, t1}, SCon{Chr{y}, t2}), hub_cmpc(t1, t2)) : (String & String) & Cmp}
-      {==}
-
-# String.cmp hands its strings back with hub_cmpc
-def hub_scmp_shape(+a: String, +b: String) -> {String.cmp(a, b) == ((a, b), hub_cmpc(a, b)) : (String & String) & Cmp}:
-  match a b:
-    case SNil{} SNil{}:
-      {==}
-    case SNil{} SCon{h, t}:
-      {==}
-    case SCon{h, t} SNil{}:
-      {==}
-    case SCon{Chr{x}, t1} SCon{Chr{y}, t2}:
-      hub_scmp_shape.fin(x, y, t1, t2, U32.cmp(x, y), {==}, hub_scmp_shape(t1, t2))
 
 def hub_cmpc_tail(c: Cmp, -r: Cmp, e: {Cmp.is_eq(hub_ccomb(c, r)) == True{} : Bool}) -> {Cmp.is_eq(r) == True{} : Bool}:
   match c:
@@ -652,8 +619,44 @@ def hub_cmpc_sound(+a: String, +b: String, +e: {Cmp.is_eq(hub_cmpc(a, b)) == Tru
       %ht : {SCon{Chr{x}, t1} == SCon{Chr{x}, _} : String}
       {==}
 
+# String.order.go after a head comparison c is that c, then hub_cmpc
+def hub_sord_cmpc(+a: String, +b: String, +c: Cmp) -> {String.order.go(a, b, c) == hub_ccomb(c, hub_cmpc(a, b)) : Cmp}:
+  match a b:
+    case SNil{} SNil{}:
+      match c:
+        case EQ{}:
+          {==}
+        case LT{}:
+          {==}
+        case GT{}:
+          {==}
+    case SNil{} SCon{h, t}:
+      match c:
+        case EQ{}:
+          {==}
+        case LT{}:
+          {==}
+        case GT{}:
+          {==}
+    case SCon{h, t} SNil{}:
+      match c:
+        case EQ{}:
+          {==}
+        case LT{}:
+          {==}
+        case GT{}:
+          {==}
+    case SCon{Chr{x}, t1} SCon{Chr{y}, t2}:
+      match c:
+        case EQ{}:
+          hub_sord_cmpc(t1, t2, U32.cmp(x, y))
+        case LT{}:
+          {==}
+        case GT{}:
+          {==}
+
 def hub_str_eq_sound.k(+a: String, +b: String, e: {String.eq(a, b) == True{} : Bool}) -> {Cmp.is_eq(hub_cmpc(a, b)) == True{} : Bool}:
-  %hub_scmp_shape(a, b) : {Cmp.is_eq(Pair.snd(String & String, Cmp, _)) == True{} : Bool}
+  %hub_sord_cmpc(a, b, EQ{}) : {Cmp.is_eq(_) == True{} : Bool}
   e
 
 # String.eq is sound: strings it finds equal are the same string

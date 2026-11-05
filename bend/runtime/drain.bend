@@ -39,7 +39,7 @@ def emit(out: Pv.Out, +lines: List<&2, String>) -> IO(Pv.Out):
         +text : String <- IO.pure(String,
           String.append(String.join(lines, "\n"), "\n"))
         Pv.wire_log(text)
-        sm : Socket & Result<&1, &1, (U32 & String) & String, Unit> <- TCP.send(sock, text)
+        sm : Socket & Result<&1, &1, (U32 & String) & List<&2, U32>, Unit> <- TCP.send(sock, text)
         s2 : Socket <- IO.pure(Socket, Pv.out.pair(sm))
         IO.pure(Pv.Out, Pv.ONet{s2})
 

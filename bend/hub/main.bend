@@ -169,9 +169,10 @@ def handle(+h: H.Hub, +line: String) -> H.Hub & String:
 
 # ---- the line server ----
 
-# a failed send's error carries the text the kernel did not take (bend
-# 2.0.37): dropped, as the failed send itself always was
-def send_line.after(r: Socket & Result<&1, &1, (U32 & String) & String, Unit>) -> IO(Socket):
+# a failed send's error carries the bytes the kernel did not take (bend
+# 2.0.38: a List of U32, was a String): dropped, as the failed send itself
+# always was
+def send_line.after(r: Socket & Result<&1, &1, (U32 & String) & List<&2, U32>, Unit>) -> IO(Socket):
   match r:
     case (s, _):
       IO.pure(Socket, s)
@@ -180,9 +181,9 @@ def send_line.after(r: Socket & Result<&1, &1, (U32 & String) & String, Unit>) -
 # the whole answer to add one char (view_all: 30 MB, ~0.2 s)
 def send_line(s: Socket, +text: String) -> IO(Socket):
   do IO<Socket>:
-    r0 : Socket & Result<&1, &1, (U32 & String) & String, Unit> <- TCP.send(s, text)
+    r0 : Socket & Result<&1, &1, (U32 & String) & List<&2, U32>, Unit> <- TCP.send(s, text)
     s2 : Socket <- send_line.after(r0)
-    r : Socket & Result<&1, &1, (U32 & String) & String, Unit> <- TCP.send(s2, "\n")
+    r : Socket & Result<&1, &1, (U32 & String) & List<&2, U32>, Unit> <- TCP.send(s2, "\n")
     send_line.after(r)
 
 # the received `data` after `part` (the line so far, newest first): the

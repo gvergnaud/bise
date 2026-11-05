@@ -7,21 +7,21 @@
 #define WIRE_BYTES
 
 static Term wire_bytes(Env e, const char* p, u64 n) {
-  Term s    = term_pak(CID_SNIL, 0);
+  Term s    = term_pak(CID(SNil), 0);
   u64  hole = 0;
   for (u64 i = 0; i < n; i += 1) {
     u64  l = heap_alloc(e, 1);
-    Term t = term_ctr(CID_SCON, l);
+    Term t = term_ctr(CID(SCon), l);
     e.mem[l] = (uint8_t)p[i];
     if (hole == 0) {
       s = t;
     } else {
-      e.mem[hole] = io_seal(e, t, CID_SCON);
+      e.mem[hole] = io_seal(e, t, CID(SCon));
     }
     hole = l + 1;
   }
   if (hole != 0) {
-    e.mem[hole] = io_seal(e, term_pak(CID_SNIL, 0), CID_SCON);
+    e.mem[hole] = io_seal(e, term_pak(CID(SNil), 0), CID(SCon));
   }
   return s;
 }
@@ -32,7 +32,7 @@ static char* wire_octets(Env e, Term s, u64* len, bool* bad) {
   u64   n   = 0;
   char* buf = io_mem(malloc(cap));
   *bad = false;
-  while (term_aux(s) == CID_SCON) {
+  while (term_aux(s) == CID(SCon)) {
     Term fb[2];
     spare_free(e, cls_fit(2), ctr_take(e, s, 2, fb));
     if (n + 1 > cap) {
@@ -168,7 +168,7 @@ static Term wire_send_more(Env e, IoWork* w) {
     w->made += io_sys_end(w, n);
   }
   Term r = w->code != 0 ? io_fail(e, w->code, NULL)
-    : io_done(e, term_pak(CID_UNIT, 0));
+    : io_done(e, term_pak(CID(Unit), 0));
   free(w->data);
   return io_tup(e, io_hand(w->hand), r);
 }
@@ -311,7 +311,7 @@ static Term wire_send_to_more(Env e, IoWork* w) {
     return io_wait_on(w, fd, POLLOUT, 0, wire_send_to_more);
   }
   Term r = w->code != 0 ? io_fail(e, w->code, NULL)
-    : io_done(e, term_pak(CID_UNIT, 0));
+    : io_done(e, term_pak(CID(Unit), 0));
   free(w->text);
   free(w->data);
   return io_tup(e, io_hand(w->hand), r);
@@ -926,7 +926,7 @@ static Term wire_tls_connect_more(Env e, IoWork* w) {
   const char* why = NULL;
   int         r   = wire_tls_shake(fd, &why);
   if (r == WIRE_TLS_DONE) {
-    return wire_tls_connect_end(e, w, io_done(e, term_pak(CID_UNIT, 0)));
+    return wire_tls_connect_end(e, w, io_done(e, term_pak(CID(Unit), 0)));
   }
   if (r == WIRE_TLS_READ || r == WIRE_TLS_WRITE) {
     if (!wire_late(w->size)) {
@@ -986,7 +986,7 @@ static Term wire_tls_send_more(Env e, IoWork* w) {
     w->code = EPIPE;
   }
   Term r = w->code != 0 ? io_fail(e, w->code, NULL)
-    : io_done(e, term_pak(CID_UNIT, 0));
+    : io_done(e, term_pak(CID(Unit), 0));
   free(w->data);
   return io_tup(e, io_hand(w->hand), r);
 }
@@ -1062,7 +1062,7 @@ static Term wire_tls_recv_go(Env e, IoWork* w, IoPack more, bool words) {
       }
       err = -1;
     }
-    r = err == WIRE_TLS_CLOSED ? io_done(e, words ? wire_words(e, w->data, 0) : term_pak(CID_SNIL, 0))
+    r = err == WIRE_TLS_CLOSED ? io_done(e, words ? wire_words(e, w->data, 0) : term_pak(CID(SNil), 0))
       : err == -1 ? io_fail(e, ETIMEDOUT, NULL)
       : io_fail(e, ssl != NULL ? EIO : EBADF, ssl != NULL ? "TLS read failed" : NULL);
   }
@@ -1120,7 +1120,7 @@ Term tls_close_run(Env e, Term* f, IoWork* w) {
   int fd = (int)io_hand_v(f[0]);
   wire_tls_end(fd);
   close(fd);
-  return term_pak(CID_UNIT, 0);
+  return term_pak(CID(Unit), 0);
 }
 
 static void __attribute__((constructor)) tls_close_use(void) {

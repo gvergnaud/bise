@@ -123,7 +123,7 @@ type Out is Type:
   OStd{}
   ONet{sock: Socket}
 
-def out.pair(sm: Socket & Result<&1, &1, (U32 & String) & String, Unit>) -> Socket:
+def out.pair(sm: Socket & Result<&1, &1, (U32 & String) & List<&2, U32>, Unit>) -> Socket:
   match sm:
     case (s2, _):
       s2
@@ -159,7 +159,7 @@ def note(n: Out, +line: String) -> IO(Out):
     case ONet{sock}:
       do IO<Out>:
         wire_log(String.append(line, "\n"))
-        sm : Socket & Result<&1, &1, (U32 & String) & String, Unit> <- TCP.send(sock,
+        sm : Socket & Result<&1, &1, (U32 & String) & List<&2, U32>, Unit> <- TCP.send(sock,
           String.append(line, "\n"))
         s2 : Socket <- IO.pure(Socket, out.pair(sm))
         IO.pure(Out, ONet{s2})
