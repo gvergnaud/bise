@@ -70,6 +70,10 @@ def test_repack():
     check("pnpm build" not in sc and "cargo" not in sc and sc.count("pnpm install") == 1
           and "if [ ! -d node_modules ]; then pnpm install --frozen-lockfile; fi" in sc, "a repack, never a build: " + sc)
     check("BISE_PACK_VERSION" not in sc, "a dev build: never offered an app update")
+    # electron-builder.mjs reads tray-badge.node next to BISE_PACK_HELPER: the candidate's helper
+    # (MacOS/) and badge (Resources/) are copied into one dir, the helper given from there
+    check("'/c/dist/mac-arm64/bise cand.app/Contents/Resources/tray-badge.node'" in sc
+          and "BISE_PACK_HELPER=/c/share/pack-helper/bise-mac-helper " in sc, "the helper and its badge side by side: " + sc)
 
 
 def test_dmg_of_a_stand_in():

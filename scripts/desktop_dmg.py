@@ -93,13 +93,20 @@ def repack_script(c, s, sign_dir):
     q = shlex.quote
     app = c["app"]
     sign = " BISE_PACK_SIGN_DIR=%s" % q(sign_dir) if sign_dir else ""
+    # electron-builder.mjs reads the tray's badge addon next to BISE_PACK_HELPER (native/mac/build.sh
+    # builds both in one dir); the candidate packed them apart (MacOS/, Resources/): both go in one
+    # dir again (cf6922d30 added the badge; desktop-tag-88207c55's dmg red)
+    hd = os.path.join(s["dir"], "pack-helper")
     return "\n".join([
         "set -euo pipefail",
         "cd %s" % q(os.path.join(c["src"], "apps", "desktop")),
         promote_install(),
-        "rm -rf %s" % q(s["dist"]),
+        "rm -rf %s %s" % (q(s["dist"]), q(hd)),
+        "mkdir -p %s" % q(hd),
+        "cp -p %s %s %s/" % (q(os.path.join(app, "Contents", "MacOS", "bise-mac-helper")),
+                             q(os.path.join(app, "Contents", "Resources", "tray-badge.node")), q(hd)),
         "BISE_PACK_NAME=%s BISE_PACK_APP_ID=%s BISE_PACK_BISE=%s BISE_PACK_HELPER=%s BISE_PACK_ROOT=%s%s BISE_PACK_OUT=%s pnpm dist"
-        % (q(NAME), q(APP_ID), q(packed_bise(app)), q(os.path.join(app, "Contents", "MacOS", "bise-mac-helper")), q(s["root"]), sign,
+        % (q(NAME), q(APP_ID), q(packed_bise(app)), q(os.path.join(hd, "bise-mac-helper")), q(s["root"]), sign,
            q(s["dist"]))]) + "\n"
 
 
