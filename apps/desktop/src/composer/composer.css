@@ -606,3 +606,17 @@
    accent, '✗ didn't start' in err */
 .at-plugin-wait { color: var(--c-accent); }
 .at-plugin-fail { color: var(--c-err); }
+/* the @ list's group heads (at-menu-icons, designer's C): sentence case, text-3 12, 8 above and 4
+   under, on the rows' left edge; the groups follow each other with no other gap */
+.b-composer-pick .at-group > .b-picker-ghead {
+  height: auto;
+  padding: var(--s-2) var(--s-3) var(--s-1);
+  line-height: 16px;
+}
+.b-composer-pick .at-group + .at-group {
+  margin-top: 0;
+}
+/* its row's icon 10 px before the name (designer's v4 hi-fi): the row's 8 px gap and 2 more */
+.b-composer-pick .at-group .b-picker-row > .g {
+  margin-right: calc(var(--s-1) / 2);
+}

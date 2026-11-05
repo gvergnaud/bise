@@ -27,10 +27,6 @@ impl Mention {
     pub(crate) fn completion(&self) -> String {
         format!("@{}", self.name)
     }
-
-    pub(crate) fn glyph(&self, tick: u32, motion: crate::gust::Motion) -> (&'static str, Color) {
-        glyph(&self.status, tick, motion)
-    }
 }
 
 /// The agents for the `@query` being typed.

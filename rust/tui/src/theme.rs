@@ -518,6 +518,10 @@ pub(crate) const ASCII: &[(&str, &str)] = &[
     ("❝", "\""),
     ("▤", "T"),
     ("▯", "F"),
+    // the `@` popup's artifact marks (commands.rs artifact_mark): an image, a PR, a page or link
+    ("◫", "I"),
+    ("⇡", "P"),
+    ("↗", "/"),
     ("≡", "="),
     ("▲", "^"),
     ("»", "}"),

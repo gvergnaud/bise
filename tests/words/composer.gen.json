@@ -52,6 +52,26 @@
     "one": null,
     "text": "{agent} is archived. /restore brings it back · esc → main"
   },
+  "composer.at_group_agents": {
+    "args": [],
+    "one": null,
+    "text": "Agents"
+  },
+  "composer.at_group_artifacts": {
+    "args": [],
+    "one": null,
+    "text": "Artifacts"
+  },
+  "composer.at_group_files": {
+    "args": [],
+    "one": null,
+    "text": "Files"
+  },
+  "composer.at_group_plugins": {
+    "args": [],
+    "one": null,
+    "text": "Plugins"
+  },
   "composer.at_plugin": {
     "args": [],
     "one": null,

@@ -55,3 +55,13 @@
   border-color: var(--c-text-3);
   background: var(--c-hover);
 }
+/* an artifact's and a plugin's chip: the @ list's icon for it, 14 px text-3, before its words
+   (at-menu-icons, designer's C) */
+.b-chip.b-inchip.artifact,
+.b-chip.b-inchip.plugin {
+  gap: var(--s-1);
+}
+.b-chip.b-inchip > .icon {
+  flex: none;
+  color: var(--c-text-3);
+}

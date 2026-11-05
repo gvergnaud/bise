@@ -29,7 +29,7 @@ export interface Row {
 export type Pick =
   | { readonly kind: 'insert'; readonly text: string; readonly browse: boolean; readonly path?: string }
   | { readonly kind: 'run'; readonly name: string; readonly args?: string }
-  | { readonly kind: 'artifact'; readonly id: string; readonly title: string; readonly url: string }
+  | { readonly kind: 'artifact'; readonly id: string; readonly title: string; readonly url: string; readonly what: string }
   | { readonly kind: 'plugin'; readonly name: string };
 
 /** At most this many rows in a list (the TUI's popup shows fewer; the rest is a query away). */
@@ -100,7 +100,7 @@ export function artifactRows(t: Trigger, artifacts: readonly PickArtifact[], now
       desc: `${a.kind} · ${a.agent} · ${agoWords(a.atMs, now)}`,
       tag: 'artifact',
       off: false,
-      pick: { kind: 'artifact', id: a.id, title: a.title, url: a.url },
+      pick: { kind: 'artifact', id: a.id, title: a.title, url: a.url, what: a.kind },
     }));
 }
 

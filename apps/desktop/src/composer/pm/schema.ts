@@ -8,6 +8,7 @@
 //     send, not the draft), replaced by the words when the last ones come.
 // The node views are plain DOM (no React portal), drawn once per node: typing never renders React.
 import { Node } from '@tiptap/core';
+import { appIconPaths, iconKindOf, kindIconPaths, type AppIconName } from '@/ds';
 import { chipLabel, fileChipName, type Chip } from '../message';
 import './chip.css';
 import { BARS, fitFor, flat, push, SAMPLE_MS, timeOf, wave, WAVE_MS } from './meter';
@@ -60,8 +61,44 @@ export function chipDom(c: Chip, testId = `composer.chip.${c.n}`): HTMLElement {
     el.append(fileChipName(c.path));
     return el;
   }
+  if (c.kind === 'artifact' || c.kind === 'plugin') {
+    // the @ list's icon for it (at-menu-icons, designer's C), 14 px in text, then its words;
+    // '↗ title' / '⊞ name' stay the copied text (chipLabel)
+    el.title = c.kind === 'artifact' ? c.title : c.name;
+    el.append(c.kind === 'plugin' ? chipIcon(appIconPaths('plugins'), 24) : artifactIcon(c.what ?? '', c.url));
+    el.append(c.kind === 'artifact' ? c.title : c.name);
+    return el;
+  }
   el.append(chipLabel(c));
   return el;
+}
+
+/** An artifact chip's icon: its kind's (ds KindIcon), a folder of artifacts the 'artifacts' stack. */
+function artifactIcon(what: string, url: string): Element {
+  if (what.toLowerCase() === 'folder') return chipIcon(appIconPaths('artifacts' satisfies AppIconName), 24);
+  const kind = iconKindOf({ kind: what, url });
+  const svg = chipIcon(kindIconPaths(kind), 16);
+  svg.dataset.kind = kind;
+  return svg;
+}
+
+/** A line icon in a chip, 14 px on its `grid`, stroke 1.5 in currentColor (the ds icons' look). */
+function chipIcon(paths: readonly string[], grid: number): SVGSVGElement {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('class', 'icon');
+  svg.setAttribute('viewBox', `0 0 ${String(grid)} ${String(grid)}`);
+  svg.setAttribute('width', '14');
+  svg.setAttribute('height', '14');
+  svg.setAttribute('aria-hidden', 'true');
+  for (const [k, v] of Object.entries({ fill: 'none', stroke: 'currentColor', 'stroke-width': '1.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })) svg.setAttribute(k, v);
+  for (const d of paths) {
+    const p = document.createElementNS(ns, 'path');
+    p.setAttribute('d', d);
+    p.setAttribute('vector-effect', 'non-scaling-stroke');
+    svg.append(p);
+  }
+  return svg;
 }
 
 /** A file chip's glyph slot when the system gives no icon: ▯, 16 px (the TUI's G_FILE). */

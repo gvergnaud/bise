@@ -26,6 +26,9 @@ export interface PickerRow {
   secondary?: ReactNode;
   /** a 16 px glyph before the name, text-3 ('/', a file kind, ψ) */
   glyph?: ReactNode;
+  /** what an icon glyph stands for ('agent', 'file'): the column's mixed-kinds rule reads it (a
+   *  node glyph without it is one kind with every other node) */
+  glyphKind?: string;
   /** one trailing item, text-3 12 (a key, an age, a count); the ✓ wins when `current` */
   trailing?: ReactNode;
   /** the current value: its ✓ */
@@ -119,7 +122,7 @@ export function typeahead(groups: readonly PickerGroup[], from: string | null, p
 /** The glyph column shows only when the list mixes kinds: every row with the same glyph (or none)
  *  drops it (designer m_25011). Pure. */
 export function glyphColumn(groups: readonly PickerGroup[]): boolean {
-  const kinds = new Set(groups.flatMap((g) => g.rows.map((r) => (r.glyph == null ? "" : typeof r.glyph === "string" ? r.glyph : "node"))));
+  const kinds = new Set(groups.flatMap((g) => g.rows.map((r) => (r.glyph == null ? "" : typeof r.glyph === "string" ? r.glyph : (r.glyphKind ?? "node")))));
   return kinds.size > 1;
 }
 

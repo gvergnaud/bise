@@ -355,3 +355,76 @@ fn dot_dot_browses_outside_the_workspace() {
     key(&mut app, KeyCode::Left);
     assert_eq!(text(&app), ("@", 1));
 }
+
+/// at-menu-icons (designer's C): the `@` rows under the heads Agents,
+/// Artifacts, Files in that order (a group only with rows), each row
+/// with its kind's one-cell dim mark; the heads are lines over the rows,
+/// never a row, so ↓ goes from the last agent to the first artifact.
+#[test]
+fn the_at_rows_sit_under_their_group_heads_with_their_marks() {
+    use crate::artifacts::Artifact;
+    let mut app = app();
+    let art = |id: &str, kind: &str, target: &str| Artifact { id: id.into(), title: format!("{id} title"), kind: kind.into(), agent: "notes-👍-agent".into(), v: 1, target: target.into(), ..Default::default() };
+    crate::artifacts::set_for_test(
+        vec![art("the-doc", "doc", "/w/a.md"), art("the-shot", "page", "/w/s.png"), art("the-site", "page", "/w/index.html"), art("the-pr", "pr", "https://github.com/o/r/pull/1")],
+        0,
+    );
+    typed(&mut app, "@");
+    let items = commands::popup_items(&app);
+    let groups: Vec<_> = items.iter().map(|c| c.group).collect();
+    use commands::AtGroup::*;
+    let order: Vec<_> = groups.iter().fold(Vec::new(), |mut v, g| {
+        if v.last() != Some(g) {
+            v.push(*g);
+        }
+        v
+    });
+    // the plugins on this machine may add their group; the order holds
+    let want: Vec<_> = [Agents, Plugins, Artifacts, Files].into_iter().map(Some).filter(|g| order.contains(g)).collect();
+    assert_eq!(order, want, "each group once, in its order");
+    assert!([Agents, Artifacts, Files].iter().all(|g| order.contains(&Some(*g))), "{order:?}");
+    let mark = |label: &str| items.iter().find(|c| c.label == label).and_then(|c| c.mark).unwrap();
+    assert_eq!(mark("@notes-👍-agent"), ("@", theme::dim()));
+    assert_eq!(mark("the-doc title").0, "▤");
+    assert_eq!(mark("the-shot title").0, "◫", "a page that is an image: its extension says more");
+    assert_eq!(mark("the-site title").0, "↗");
+    assert_eq!(mark("the-pr title").0, "⇡");
+    assert_eq!(mark("rust/"), ("▸", theme::dim()));
+    assert_eq!(mark("README.md"), ("·", theme::dim()));
+    // the window: a head before each group's first row, on top of the 8 rows
+    let lines = commands::pop_lines(&groups, 0, 8);
+    let heads: Vec<_> = lines.iter().filter_map(|l| if let commands::PopLine::Head(g) = l { Some(g.head()) } else { None }).collect();
+    let shown = groups[..8].iter().fold(Vec::new(), |mut v, g| {
+        if v.last() != Some(g) {
+            v.push(*g);
+        }
+        v
+    });
+    assert_eq!(heads, shown.iter().map(|g| g.unwrap().head()).collect::<Vec<_>>());
+    assert_eq!(lines.iter().filter(|l| matches!(l, commands::PopLine::Row(_))).count(), 8, "the heads don't count in the cap");
+    // drawn: the heads are lines of the popup, dim, above their rows
+    let mut term = Terminal::new(TestBackend::new(150, 40)).unwrap();
+    term.draw(|f| sb::draw_sb(&mut app, f)).unwrap();
+    let screen: Vec<String> = (0..40).map(|y| (0..150).map(|x| term.backend().buffer()[(x, y)].symbol().to_string()).collect()).collect();
+    let at = |w: &str| screen.iter().position(|l| l.contains(w)).unwrap_or_else(|| panic!("no {w:?} on screen:\n{}", screen.join("\n")));
+    assert!(at("┃ Agents") < at("@ @notes-") && at("@ @notes-") < at("┃ Artifacts"));
+    let first_art = items.iter().position(|c| c.group == Some(Artifacts)).unwrap();
+    assert!(at("┃ Artifacts") < at("▤ the-doc title"));
+    // ↓ from the last row before the artifacts: the first artifact, never a head
+    app.popup_sel = first_art - 1;
+    key(&mut app, KeyCode::Down);
+    assert_eq!(commands::popup_items(&app)[app.popup_sel].label, "the-doc title");
+    crate::artifacts::set_for_test(Vec::new(), 0);
+}
+
+/// The window scrolled into the files: its first row's group is named on
+/// top, and a group's head shows once, before its first row.
+#[test]
+fn a_scrolled_window_names_its_first_group() {
+    use commands::{pop_lines, AtGroup::*, PopLine::*};
+    let g = [Some(Agents), Some(Plugins), Some(Files), Some(Files), Some(Files)];
+    assert_eq!(pop_lines(&g, 0, 3), [Head(Agents), Row(0), Head(Plugins), Row(1), Head(Files), Row(2)]);
+    assert_eq!(pop_lines(&g, 3, 2), [Head(Files), Row(3), Row(4)]);
+    // another list (commands, skills): no head
+    assert_eq!(pop_lines(&[None, None], 0, 8), [Row(0), Row(1)]);
+}

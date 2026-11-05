@@ -1,8 +1,8 @@
 //! The plugins of the composer's `@` menu (at-plugins, architect m_53238):
 //! the workspace's plugins on that give a skill or tools
 //! (`bend_plugins::resolve::Plugin::pickable`, the rule the desktop's rows
-//! carry too), listed after the agents with the plugins' mark (⊞, designer
-//! m_53299), each with its line for him (its manifest's `dev.bise.tagline`,
+//! carry too), listed after the agents under their `Plugins` head with the
+//! plugins' mark (⊞ dim, designer m_53299 and at-menu-icons), each with its line for him (its manifest's `dev.bise.tagline`,
 //! else its description's first sentence), one that waits on a login or
 //! failed to start with that state in place of it, its sign in color
 //! (`?` the accent, `✗` the error's). Picking one puts its chip (`⊞ computer`)

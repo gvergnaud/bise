@@ -617,6 +617,7 @@ export function PmField(p: PmFieldProps): JSX.Element {
             id: pick.id,
             title: pick.title,
             url: pick.url,
+            what: pick.what,
           }),
         );
       return;

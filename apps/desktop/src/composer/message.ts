@@ -22,7 +22,7 @@ export type Chip =
   | { readonly kind: 'paste'; readonly n: number; readonly text: string }
   | { readonly kind: 'quote'; readonly n: number; readonly text: string; readonly from: string; readonly at?: QuoteAt }
   | { readonly kind: 'file'; readonly n: number; readonly path: string; readonly bytes?: number; readonly icon?: string }
-  | { readonly kind: 'artifact'; readonly n: number; readonly id: string; readonly title: string; readonly url: string }
+  | { readonly kind: 'artifact'; readonly n: number; readonly id: string; readonly title: string; readonly url: string; readonly what?: string }
   // a plugin picked in the `@` list (at-plugins): sent as Part::Plugin, the model reads `@name`
   | { readonly kind: 'plugin'; readonly n: number; readonly name: string }
   // a part of an artifact picked in the side panel (plan §9b): sent as Part::Anchor with its number

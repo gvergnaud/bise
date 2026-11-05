@@ -114,3 +114,10 @@ export function AppIcon({ name, size = 16, testId }: { name: AppIconName; size?:
     </svg>
   );
 }
+
+/** An app icon's path data on its 24 grid, for a DOM drawn without React (the composer's chips);
+ *  its circles and fills left out: the icons drawn so (plugins, artifacts, file, folder, thread)
+ *  are lines only. Pure. */
+export function appIconPaths(name: AppIconName): readonly string[] {
+  return (PARTS[name] as readonly Part[]).filter((p): p is string => typeof p === "string");
+}

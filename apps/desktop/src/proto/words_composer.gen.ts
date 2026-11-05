@@ -24,6 +24,14 @@ export const composer = {
   at_plugin: "plugin",
   /** the `@` menu: a plugin whose server failed to start, after `✗` in place of its description (`plugin · ✗ didn't start`, designer m_53299); one that needs a login says settings' `plugins_part_needs_login` after `?` */
   at_plugin_failed: "didn't start",
+  /** the `@` menu's group heads (at-menu-icons, designer's C): its rows under Agents, Plugins, Artifacts, Files, a group only with rows */
+  at_group_agents: "Agents",
+  /** the `@` menu's plugins' head */
+  at_group_plugins: "Plugins",
+  /** the `@` menu's artifacts' head */
+  at_group_artifacts: "Artifacts",
+  /** the `@` menu's head over the repo's files and folders */
+  at_group_files: "Files",
   /** key bar: the terminal panel has the keys (a plain label) */
   bar_terminal_keys: "terminal: keys go to the shell",
   /** key bar: hide the terminal panel */

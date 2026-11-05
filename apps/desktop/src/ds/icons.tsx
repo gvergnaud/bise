@@ -81,6 +81,11 @@ const LINES: Readonly<Record<IconKind, readonly string[]>> = {
   release: ["M2.25 8V2.25H8l6 6-5.75 5.75z", "M5.25 4.25a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"],
 };
 
+/** A kind's path data on its 16 grid, for a DOM drawn without React (the composer's chips). Pure. */
+export function kindIconPaths(kind: IconKind): readonly string[] {
+  return LINES[kind];
+}
+
 /** A kind's icon: 16 px (or `size`), stroke 1.5, currentColor; decorative (its words are the card's tip). */
 export function KindIcon({ kind, size = 16, testId }: { kind: IconKind; size?: number; testId?: string }) {
   return (

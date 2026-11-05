@@ -51,6 +51,80 @@ pub(crate) struct PopItem {
     /// (a plugin's `?` of a login, `✗` of a failed start: at_plugins.rs
     /// `row_words`); the rest of `desc` stays dim
     pub(crate) sign: Option<(usize, Color)>,
+    /// the `@` popup's group it sits under (designer's C): a dim head
+    /// line before the first row of each group, never a row itself
+    pub(crate) group: Option<AtGroup>,
+}
+
+/// The `@` popup's groups, in their order (at-menu-icons, designer's C):
+/// each shows its head only when it has rows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AtGroup {
+    Agents,
+    Plugins,
+    Artifacts,
+    Files,
+}
+
+impl AtGroup {
+    /// Its head's words (`Agents`).
+    pub(crate) fn head(self) -> &'static str {
+        use bise_proto::words::composer;
+        match self {
+            AtGroup::Agents => composer::at_group_agents,
+            AtGroup::Plugins => composer::at_group_plugins,
+            AtGroup::Artifacts => composer::at_group_artifacts,
+            AtGroup::Files => composer::at_group_files,
+        }
+    }
+}
+
+/// One line of the popup's visible window: a group's head, or the row
+/// at that index of the items.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PopLine {
+    Head(AtGroup),
+    Row(usize),
+}
+
+/// The lines of the popup's window, rows `top..top + rows` of `groups`
+/// (each item's group): a head before the first row of a group, and
+/// before the window's first row so its group is always named. Heads are
+/// lines on top of the `rows` (they never count in the height cap) and
+/// are never selected (the selection is a row index). Pure.
+pub(crate) fn pop_lines(groups: &[Option<AtGroup>], top: usize, rows: usize) -> Vec<PopLine> {
+    let mut out = Vec::new();
+    for (i, g) in groups.iter().enumerate().skip(top).take(rows) {
+        if let Some(g) = g {
+            if i == top || groups[i - 1] != Some(*g) {
+                out.push(PopLine::Head(*g));
+            }
+        }
+        out.push(PopLine::Row(i));
+    }
+    out
+}
+
+/// The `@` popup's mark of an artifact by its kind (or its target's
+/// extension): `⇡` a PR, `◫` an image, `↗` a page or a link, `▸` a
+/// folder, `▤` a doc or any other file (designer's terminal glyphs). Pure.
+pub(crate) fn artifact_mark(kind: &str, target: &str) -> &'static str {
+    const IMAGE: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "svg", "heic", "avif", "bmp", "tif", "tiff"];
+    let name = target.trim_end_matches('/').rsplit('/').next().unwrap_or("");
+    let path_part = name.split(['?', '#']).next().unwrap_or("");
+    let ext = path_part.rsplit_once('.').filter(|(s, _)| !s.is_empty()).map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
+    let image = IMAGE.contains(&ext.as_str());
+    match kind.to_ascii_lowercase().as_str() {
+        "pr" => AT_PR,
+        "folder" => DIR_MARK,
+        "image" | "shot" | "shots" | "png" => AT_IMAGE,
+        _ if image => AT_IMAGE,
+        "page" | "site" | "link" | "url" => AT_LINK,
+        _ if matches!(ext.as_str(), "html" | "htm") => AT_LINK,
+        "doc" | "sheet" | "slides" | "deck" | "code" | "video" | "sound" | "audio" | "release" | "file" => AT_DOC,
+        _ if ext.is_empty() && crate::artifacts::is_url(target) => AT_LINK,
+        _ => AT_DOC,
+    }
 }
 
 pub(crate) fn popup_items(app: &App) -> Vec<PopItem> {
@@ -82,6 +156,7 @@ pub(crate) fn popup_items(app: &App) -> Vec<PopItem> {
                 folder: false,
                 plugin: None,
                 sign: None,
+                group: None,
             })
             .collect();
     }
@@ -427,6 +502,7 @@ pub(crate) fn arg_items(app: &App) -> Vec<PopItem> {
                 folder: false,
                 plugin: None,
                 sign: None,
+                group: None,
             }
         })
         .collect()
@@ -457,9 +533,17 @@ pub(crate) fn popup_open(app: &App) -> bool {
 const ARTIFACT_ROWS: usize = 8;
 /// Files listed after the agents in the `@` popup.
 const FILE_ROWS: usize = 50;
-/// The file and folder marks of the `@` popup.
-const FILE_MARK: &str = "▪";
+/// The `@` popup's marks, one cell each, dim (designer's terminal glyphs,
+/// at-menu-icons): `@` an agent, the plugin's `⊞` (theme::plugin_glyph),
+/// an artifact's kind ([`artifact_mark`]), `▸` a folder, `·` a file. Drawn
+/// through theme::glyph (their ASCII forms).
+const AGENT_MARK: &str = theme::G_MSG;
+const FILE_MARK: &str = "·";
 const DIR_MARK: &str = theme::G_CLOSED; // a folder opens: the disclosure mark
+const AT_DOC: &str = "▤";
+const AT_IMAGE: &str = "◫";
+const AT_LINK: &str = "↗";
+const AT_PR: &str = "⇡";
 
 /// The `@` popup's plugins (at_plugins.rs), after the agents: their own
 /// mark (⊞), never in a path query; a pick puts its `⊞ name` chip where the
@@ -479,7 +563,7 @@ fn plugin_items(app: &App, start: usize, q: &str) -> Vec<PopItem> {
                 label: format!("@{}", p.name),
                 desc,
                 sign,
-                mark: Some((theme::plugin_glyph(), theme::accent())),
+                mark: Some((theme::plugin_glyph(), theme::dim())),
                 fill,
                 fill_cursor,
                 run: None,
@@ -487,6 +571,7 @@ fn plugin_items(app: &App, start: usize, q: &str) -> Vec<PopItem> {
                 path: None,
                 folder: false,
                 plugin: Some(p.name.clone()),
+                group: Some(AtGroup::Plugins),
             }
         })
         .collect()
@@ -511,7 +596,8 @@ pub(crate) fn at_items(app: &App) -> Vec<PopItem> {
             } else {
                 format!("{} · {}", m.status, m.objective)
             },
-            mark: Some(m.glyph(app.tick, app.motion)),
+            // the kind's mark (designer's C): its status is the words after
+            mark: Some((theme::glyph(AGENT_MARK), theme::dim())),
             fill,
             fill_cursor,
             run: None,
@@ -520,6 +606,7 @@ pub(crate) fn at_items(app: &App) -> Vec<PopItem> {
             folder: false,
             plugin: None,
             sign: None,
+            group: Some(AtGroup::Agents),
         }
     });
     // site/m/artifacts C: the artifacts by name, after the agents; a
@@ -535,7 +622,7 @@ pub(crate) fn at_items(app: &App) -> Vec<PopItem> {
             PopItem {
                 label: a.title.clone(),
                 desc: format!("{} · {} · {}", a.kind_word(), who, crate::artifacts::ago_words(a.ts_ms, now)),
-                mark: Some(("↗", theme::accent())),
+                mark: Some((theme::glyph(artifact_mark(&a.kind, &a.target)), theme::dim())),
                 fill,
                 fill_cursor,
                 run: None,
@@ -544,6 +631,7 @@ pub(crate) fn at_items(app: &App) -> Vec<PopItem> {
                 folder: false,
                 plugin: None,
                 sign: None,
+                group: Some(AtGroup::Artifacts),
             }
         })
         .collect();
@@ -568,7 +656,7 @@ pub(crate) fn at_items(app: &App) -> Vec<PopItem> {
             label: format!("{}{}", h.path, if h.dir { "/" } else { "" }),
             // macOS asks for this folder once it is entered
             desc: if h.protected { "protected".into() } else { String::new() },
-            mark: Some(if h.dir { (theme::glyph(DIR_MARK), theme::accent()) } else { (FILE_MARK, theme::dim()) }),
+            mark: Some((theme::glyph(if h.dir { DIR_MARK } else { FILE_MARK }), theme::dim())),
             fill,
             fill_cursor,
             run: None,
@@ -577,6 +665,7 @@ pub(crate) fn at_items(app: &App) -> Vec<PopItem> {
             folder: h.dir,
             plugin: None,
             sign: None,
+            group: Some(AtGroup::Files),
         }
     });
     let this = this.map(|path| {
@@ -585,7 +674,7 @@ pub(crate) fn at_items(app: &App) -> Vec<PopItem> {
         PopItem {
             label: if path == "/" { path.clone() } else { format!("{path}/") },
             desc: if locked { "this folder · no access".into() } else { "this folder".into() },
-            mark: Some((theme::glyph(DIR_MARK), theme::accent())),
+            mark: Some((theme::glyph(DIR_MARK), theme::dim())),
             fill,
             fill_cursor,
             run: None,
@@ -594,6 +683,7 @@ pub(crate) fn at_items(app: &App) -> Vec<PopItem> {
             folder: false,
             plugin: None,
             sign: None,
+            group: Some(AtGroup::Files),
         }
     });
     agents.chain(files).chain(this).collect()
@@ -639,6 +729,7 @@ pub(crate) fn skill_items(app: &App) -> Vec<PopItem> {
                 folder: false,
                 plugin: None,
                 sign: None,
+                group: None,
             }
         })
         .collect()
@@ -668,6 +759,7 @@ pub(crate) fn emoji_items(app: &App) -> Vec<PopItem> {
                 folder: false,
                 plugin: None,
                 sign: None,
+                group: None,
             }
         })
         .collect()

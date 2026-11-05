@@ -1,15 +1,19 @@
 // The @ $ / list above the composer: the ds Picker (designer's list-menu m_24793, m_25011), one
-// 32 px row per entry: its kind's glyph (only when the list mixes kinds: '@' agents, '↗' artifacts,
-// none for files; a folder ends with '/'), its name, its description (or a file's folder) inline. The
-// editor keeps the keys: the keyboard's row is `active`; a greyed row reads `not yet`. A click picks.
-// It floats on <body>, never inside the composer's box (its overflow is hidden, and the floating
-// composer's too: Gabriel m_44279 saw them cut): 8 px above the box, below when the room above is
-// short, its height the room less 24, the list scrolling inside (pickPlace). Placed when it opens,
-// again on a window resize or the box's own resize (his lines growing it), never per keystroke.
-// Owner: r2-hints (nm-composer's before).
+// 32 px row per entry: its kind's glyph (only when the list mixes kinds), its name, its description
+// (or a file's folder) inline. The @ list (at-menu-icons, designer's C): its rows under the heads
+// Agents, Plugins, Artifacts, Files (a group only with rows; never a row, so the keys skip it), each
+// with its 16 px line icon in text-3: an agent the thread bubble, a plugin the plug, an artifact its
+// kind's icon (a folder of them the stack), a file and a folder theirs; the $ and / lists keep '$'
+// and '/'. The editor keeps the keys: the keyboard's row is `active`; a greyed row reads `not yet`.
+// A click picks. It floats on <body>, never inside the composer's box (its overflow is hidden, and
+// the floating composer's too: Gabriel m_44279 saw them cut): 8 px above the box, below when the
+// room above is short, its height the room less 24, the list scrolling inside (pickPlace). Placed
+// when it opens, again on a window resize or the box's own resize (his lines growing it), never per
+// keystroke. Owner: r2-hints (nm-composer's before).
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type JSX } from 'react';
 import { createPortal } from 'react-dom';
-import { PICKER_CAP, Picker as DsPicker, type PickerRow } from '@/ds';
+import { AppIcon, iconKindOf, KindIcon, PICKER_CAP, Picker as DsPicker, type PickerGroup, type PickerRow } from '@/ds';
+import { composer } from '../proto/words.gen';
 import type { Row } from './pick';
 
 /** The room a list needs to open on the box's side it prefers (above), else it opens on the larger one. */
@@ -50,13 +54,14 @@ export function pickerRow(r: Row, testId: string): PickerRow {
     case 'skill':
       return { ...base, glyph: '$', name: r.label.replace(/^\$/u, ''), secondary: sec };
     case 'agent':
-      return { ...base, glyph: '@', name: r.label.replace(/^@/u, ''), secondary: sec };
+      return { ...base, glyph: <AppIcon name="thread" />, glyphKind: 'agent', name: r.label.replace(/^@/u, ''), secondary: sec };
     case 'artifact':
-      return { ...base, glyph: '↗', name: r.label.replace(/^↗\s*/u, ''), secondary: sec };
+      return { ...base, glyph: <ArtifactIcon what={r.pick.kind === 'artifact' ? r.pick.what : ''} url={r.pick.kind === 'artifact' ? r.pick.url : ''} />, glyphKind: 'artifact', name: r.label.replace(/^↗\s*/u, ''), secondary: sec };
     case 'plugin': {
-      // the plugins' one sign (designer m_53299); a waiting one's mark in color: '?' accent, '✗' err
+      // the plug (designer's C); a waiting one's mark in color: '?' accent, '✗' err (m_53299)
       const name = r.label.replace(/^@/u, '');
-      if (r.waits === undefined || sec === undefined) return { ...base, glyph: '⊞', name, secondary: sec };
+      const plug = { glyph: <AppIcon name="plugins" />, glyphKind: 'plugin' };
+      if (r.waits === undefined || sec === undefined) return { ...base, ...plug, name, secondary: sec };
       const mark = r.waits === 'login' ? '?' : '✗';
       const at = sec.indexOf(`${mark} `);
       const secondary =
@@ -69,7 +74,7 @@ export function pickerRow(r: Row, testId: string): PickerRow {
             {sec.slice(at + 1)}
           </span>
         );
-      return { ...base, glyph: '⊞', name, secondary };
+      return { ...base, ...plug, name, secondary };
     }
     case 'file':
     case 'dir': {
@@ -77,11 +82,40 @@ export function pickerRow(r: Row, testId: string): PickerRow {
       const cut = path.lastIndexOf('/');
       const name = (cut < 0 ? path : path.slice(cut + 1)) + (r.tag === 'dir' ? '/' : '');
       const folder = cut < 0 ? '' : path.slice(0, cut);
-      return { ...base, name, secondary: folder === '' ? undefined : <span className="b-picker-path">{folder}</span>, tip: r.label };
+      const icon = r.tag === 'dir' ? { glyph: <AppIcon name="folder" />, glyphKind: 'dir' } : { glyph: <AppIcon name="file" />, glyphKind: 'file' };
+      return { ...base, ...icon, name, secondary: folder === '' ? undefined : <span className="b-picker-path">{folder}</span>, tip: r.label };
     }
     default:
       return { ...base, name: r.label, secondary: sec };
   }
+}
+
+/** An artifact's icon (the @ list's row, its chip's the same): its kind's, a folder of artifacts the
+ *  'artifacts' stack. */
+function ArtifactIcon({ what, url }: { what: string; url: string }): JSX.Element {
+  return what.toLowerCase() === 'folder' ? <AppIcon name="artifacts" /> : <KindIcon kind={iconKindOf({ kind: what, url })} />;
+}
+
+/** The @ list's groups, in their order, each with its head (designer's C). */
+const AT_GROUPS = [
+  { id: 'agents', head: composer.at_group_agents, tags: ['agent'] },
+  { id: 'plugins', head: composer.at_group_plugins, tags: ['plugin'] },
+  { id: 'artifacts', head: composer.at_group_artifacts, tags: ['artifact'] },
+  { id: 'files', head: composer.at_group_files, tags: ['file', 'dir'] },
+] as const;
+
+/** The list's groups: the @ list's rows under their heads (Agents, Plugins, Artifacts, Files, in that
+ *  order, a group only with rows, today's order inside), any other list one group with no head. The
+ *  heads are no rows: the keys (the editor's index over `rows`) never land on one. Pure. */
+export function pickerGroups(rows: readonly Row[], testId: string): PickerGroup[] {
+  const at = rows.some((r) => AT_GROUPS.some((g) => (g.tags as readonly string[]).includes(r.tag)));
+  if (!at) return [{ id: 'rows', rows: rows.map((r) => pickerRow(r, testId)) }];
+  return AT_GROUPS.map((g) => ({
+    id: g.id,
+    head: g.head,
+    look: 'at-group',
+    rows: rows.filter((r) => (g.tags as readonly string[]).includes(r.tag)).map((r) => pickerRow(r, testId)),
+  })).filter((g) => g.rows.length > 0);
 }
 
 /** `empty`: no rows, its one text-3 line instead (a bare '@' or '$' with nothing to offer) */
@@ -107,7 +141,7 @@ export function Picker({ rows, index, testId, onPick, empty }: { rows: readonly 
       ro?.disconnect();
     };
   }, []);
-  const groups = useMemo(() => [{ id: 'rows', rows: rows.map((r) => pickerRow(r, testId)) }], [rows, testId]);
+  const groups = useMemo(() => pickerGroups(rows, testId), [rows, testId]);
   return (
     <span ref={at} className="b-composer-pick-at" hidden>
       {createPortal(

@@ -1,5 +1,6 @@
 //! The slash-command popup above the composer (OpenCode autocomplete),
-//! moved out of ui.rs unchanged.
+//! moved out of ui.rs. The `@` popup's group heads (commands.rs
+//! `pop_lines`) are dim lines over its 8 rows, never selected.
 
 use super::truncate_left;
 use crate::*;
@@ -17,7 +18,13 @@ pub(super) fn draw_popup(app: &App, frame: &mut Frame, prompt: Rect) {
     if !matches.is_empty() {
         // `/archive`'s and `/restore`'s question, dim, above the rows
         let title = crate::commands::popup_title(app);
-        let n = matches.len().min(8) as u16 + u16::from(title.is_some());
+        let sel_i = app.popup_sel.min(matches.len() - 1);
+        let top = popup_top(sel_i, matches.len(), 8);
+        // the `@` popup's group heads (designer's C) are lines on top of
+        // the 8 rows, never one of them, never selected
+        let groups: Vec<_> = matches.iter().map(|c| c.group).collect();
+        let window = crate::commands::pop_lines(&groups, top, 8);
+        let n = window.len() as u16 + u16::from(title.is_some());
         // wide enough for the widest line, whole (QA 6), within the prompt
         let need = matches
             .iter()
@@ -26,8 +33,6 @@ pub(super) fn draw_popup(app: &App, frame: &mut Frame, prompt: Rect) {
             .unwrap_or(0);
         let min = if matches[0].closable { 72 } else { 56 };
         let w = (need.max(min) as u16).min(prompt.width);
-        let sel_i = app.popup_sel.min(matches.len() - 1);
-        let top = popup_top(sel_i, matches.len(), 8);
         let area = Rect {
             x: prompt.x,
             y: prompt.y.saturating_sub(n + 2),
@@ -43,12 +48,14 @@ pub(super) fn draw_popup(app: &App, frame: &mut Frame, prompt: Rect) {
         let head = title.map(|t| Line::from(Span::styled(format!(" {t}"), Style::default().fg(theme::dim()))));
         let lines: Vec<Line> = head
             .into_iter()
-            .chain(matches
-            .iter()
-            .enumerate()
-            .skip(top)
-            .take(8)
-            .map(|(i, c)| {
+            .chain(window.iter().map(|l| {
+                let i = match *l {
+                    crate::commands::PopLine::Head(g) => {
+                        return Line::from(Span::styled(format!(" {}", g.head()), Style::default().fg(theme::dim())));
+                    }
+                    crate::commands::PopLine::Row(i) => i,
+                };
+                let c = &matches[i];
                 let sel = i == sel_i;
                 let (name_style, desc_style) = if sel {
                     (
