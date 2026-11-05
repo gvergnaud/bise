@@ -118,6 +118,21 @@ export function pickerGroups(rows: readonly Row[], testId: string): PickerGroup[
   })).filter((g) => g.rows.length > 0);
 }
 
+/** A group head's place in the list, its first row's under it (px from the list's top). */
+export interface HeadPlace {
+  readonly top: number;
+  readonly rowTop: number;
+  readonly rowHeight: number;
+}
+
+/** How much shorter the list must be so a head is never its last visible line (designer m_53730):
+ *  when the list's visible bottom `cut` falls after a head's top and before half of its first row,
+ *  the list stops above that head. 0: no head there. Pure. */
+export function headTrim(cut: number, heads: readonly HeadPlace[]): number {
+  const h = heads.find((x) => cut > x.top && cut < x.rowTop + x.rowHeight / 2);
+  return h === undefined ? 0 : cut - h.top;
+}
+
 /** `empty`: no rows, its one text-3 line instead (a bare '@' or '$' with nothing to offer) */
 export function Picker({ rows, index, testId, onPick, empty }: { rows: readonly Row[]; index: number; testId: string; onPick: (i: number) => void; empty?: string }): JSX.Element {
   // where it is in the composer: its box (the frame's .box), measured from here
@@ -142,10 +157,28 @@ export function Picker({ rows, index, testId, onPick, empty }: { rows: readonly 
     };
   }, []);
   const groups = useMemo(() => pickerGroups(rows, testId), [rows, testId]);
+  // the list's height cut above a head that would end it (headTrim), measured once laid out
+  const shell = useRef<HTMLDivElement>(null);
+  const [trim, setTrim] = useState(0);
+  useLayoutEffect(() => {
+    const list = shell.current?.querySelector<HTMLElement>('.b-picker-list');
+    if (list === null || list === undefined || list.scrollHeight <= list.clientHeight + trim) {
+      setTrim(0);
+      return;
+    }
+    const heads = [...list.querySelectorAll<HTMLElement>('.b-picker-ghead')].flatMap((h) => {
+      const row = h.nextElementSibling;
+      return row instanceof HTMLElement ? [{ top: h.offsetTop, rowTop: row.offsetTop, rowHeight: row.offsetHeight }] : [];
+    });
+    // the bottom with no trim: the list shrank by `trim` exactly (it overflows)
+    setTrim(headTrim(list.clientHeight + trim, heads));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- measured again when the rows or the place change, never on its own trim
+  }, [groups, place]);
+  const maxHeight = place === null ? undefined : Math.max(0, place.maxHeight - trim);
   return (
     <span ref={at} className="b-composer-pick-at" hidden>
       {createPortal(
-        <div className="b-composer-pick" style={place?.style} data-up={place?.up === false ? 'false' : undefined}>
+        <div ref={shell} className="b-composer-pick" style={place?.style} data-up={place?.up === false ? 'false' : undefined}>
           <DsPicker
             groups={groups}
             active={rows[index]?.id ?? null}
@@ -153,7 +186,7 @@ export function Picker({ rows, index, testId, onPick, empty }: { rows: readonly 
               const i = rows.findIndex((r) => r.id === id);
               if (i >= 0) onPick(i);
             }}
-            maxHeight={place?.maxHeight}
+            maxHeight={maxHeight}
             empty={empty}
             inline
             testId={testId}

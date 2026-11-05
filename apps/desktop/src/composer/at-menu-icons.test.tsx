@@ -5,7 +5,7 @@
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { agentRows, artifactRows, fileRows, pluginRows, move, type Row } from './pick';
-import { Picker, pickerGroups } from './Picker';
+import { headTrim, Picker, pickerGroups } from './Picker';
 import { triggerAt } from './tokens';
 import { chipDom } from './pm/schema';
 import { composer } from '../proto/words.gen';
@@ -97,5 +97,21 @@ describe("a pick's chip keeps its icon", () => {
     const plug = chipDom({ kind: 'plugin', n: 3, name: 'computer' });
     expect(plug.querySelector('svg.icon')).not.toBeNull();
     expect(plug.textContent).toBe('computer');
+  });
+});
+
+describe('a head never ends the list (designer m_53730)', () => {
+  // '@' alone: rows 32 px, the Files head at 300 (28 px), its first row at 328
+  const files = { top: 300, rowTop: 328, rowHeight: 32 };
+  it('stops above a head whose first row the cut leaves out', () => {
+    expect(headTrim(328, [files])).toBe(28);
+    expect(headTrim(340, [files])).toBe(40);
+    expect(headTrim(310, [files])).toBe(10);
+  });
+  it('keeps the height when the cut shows half the first row or more, or ends before the head', () => {
+    expect(headTrim(344, [files])).toBe(0);
+    expect(headTrim(300, [files])).toBe(0);
+    expect(headTrim(250, [files])).toBe(0);
+    expect(headTrim(340, [])).toBe(0);
   });
 });
