@@ -452,20 +452,35 @@ def cand_built(c):
             and bundle_id(c["app"]) == CAND_ID)
 
 
+def pack_helper(app, hd):
+    """A repack's native helper from a packed bundle `app`: electron-builder.mjs reads the tray's
+    badge addon next to BISE_PACK_HELPER (native/mac/build.sh builds both in one dir), and a bundle
+    has them apart (MacOS/, Resources/), so both are copied into `hd`; without it the config's load
+    throws, which electron-builder says as 'Cannot access default before initialization'
+    (cf6922d30 added the badge). Returns (its shell lines, the helper's path in `hd`). Pure."""
+    q = shlex.quote
+    return (["rm -rf %s" % q(hd), "mkdir -p %s" % q(hd),
+             "cp -p %s %s %s/" % (q(os.path.join(app, "Contents", "MacOS", "bise-mac-helper")),
+                                  q(os.path.join(app, "Contents", "Resources", "tray-badge.node")), q(hd))],
+            os.path.join(hd, "bise-mac-helper"))
+
+
 def repack_script(c, sign_dir=None):
     """--promote's repack (ambient-lead m_20670): the candidate's gated build packed again as his
     try's bundle (APP_NAME, APP_ID), from what the candidate built and nothing else: its worktree's
-    apps/desktop out/ and node_modules (no install, no build), the bise and native helper inside its
-    bundle, its root; electron-builder --dir only, into c["promoted_dir"]. Pure."""
+    apps/desktop out/ and node_modules (no install, no build), the bise, native helper and tray badge
+    inside its bundle (pack_helper), its root; electron-builder --dir only, into c["promoted_dir"]. Pure."""
     q = shlex.quote
     app = c["app"]
+    copy, helper = pack_helper(app, os.path.join(c["dir"], "pack-helper"))
     return "\n".join([
         "set -euo pipefail",
         "cd %s" % q(os.path.join(c["src"], "apps", "desktop")),
         promote_install(),
         "rm -rf %s" % q(c["promoted_dir"]),
+        *copy,
         "BISE_PACK_NAME=%s BISE_PACK_APP_ID=%s BISE_PACK_BISE=%s BISE_PACK_HELPER=%s BISE_PACK_ROOT=%s%s BISE_PACK_OUT=%s pnpm dist"
-        % (q(APP_NAME), q(APP_ID), q(packed_bise(app)), q(os.path.join(app, "Contents", "MacOS", "bise-mac-helper")), q(c["root"]),
+        % (q(APP_NAME), q(APP_ID), q(packed_bise(app)), q(helper), q(c["root"]),
            " BISE_PACK_SIGN_DIR=%s" % q(sign_dir) if sign_dir else "", q(c["promoted_dir"]))]) + "\n"
 
 

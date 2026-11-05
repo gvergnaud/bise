@@ -804,9 +804,10 @@ def candidate_then_promote():
               "the repack is electron-builder only, in the candidate's worktree: %s" % rp)
         check("BISE_PACK_NAME='bise try' BISE_PACK_APP_ID=dev.bise.desktop.try " in rp
               and "BISE_PACK_BISE=%s" % shlex.quote(T.packed_bise(c["app"])) in rp
-              and "BISE_PACK_HELPER=%s" % shlex.quote(os.path.join(c["app"], "Contents", "MacOS", "bise-mac-helper")) in rp
+              and "BISE_PACK_HELPER=%s " % shlex.quote(os.path.join(c["dir"], "pack-helper", "bise-mac-helper")) in rp
+              and shlex.quote(os.path.join(c["app"], "Contents", "Resources", "tray-badge.node")) in rp
               and "BISE_PACK_ROOT=%s" % shlex.quote(c["root"]) in rp,
-              "repacked as his try from the candidate's own bise, helper and root: %s" % rp)
+              "repacked as his try from the candidate's own bise, helper (with its badge) and root: %s" % rp)
         check(git("rev-parse", "HEAD", cwd=trysrc) == b, "the try checkout moved to b")
         check(stamp["head"] == b and stamp["where"] == "live" and stamp.get("old_root") == old_root, "live now (no try open): %s" % stamp)
         check(open(os.path.join(tp["app"], "Contents", "build.txt")).read() == "build 2 dev.bise.desktop.try"
@@ -822,6 +823,34 @@ def candidate_then_promote():
     finally:
         T.subprocess.run, T.say = real_run, real_say
         shutil.rmtree(w, ignore_errors=True)
+
+
+def repack_reads_its_config():
+    """try-repack-fix: a packed bundle has its helper in MacOS/ and its tray badge in Resources/;
+    pack_helper's lines put them side by side, and electron-builder.mjs loads with that helper
+    (it throws without the badge next to it, which electron-builder says as 'Cannot access
+    default before initialization': --promote's repack failed so from cf6922d30 to this fix)."""
+    if not shutil.which("node"):
+        return
+    with tempfile.TemporaryDirectory() as t:
+        app = os.path.join(t, "cand", "bise cand.app")
+        for f in ("Contents/MacOS/bise-mac-helper", "Contents/Resources/tray-badge.node",
+                  "bise", "root/VERSION", "root/repl-live", "root/sb-core"):
+            p = os.path.join(app if f.startswith("Contents") else t, f)
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            open(p, "w").close()
+        copy, helper = T.pack_helper(app, os.path.join(t, "pack-helper"))
+        r = subprocess.run(["bash", "-euo", "pipefail", "-c", "\n".join(copy * 2)], capture_output=True, text=True)
+        check(r.returncode == 0, "pack_helper's lines run (twice: a re-run starts clean): %s" % r.stderr)
+        js = "import(process.argv[1]).then(m => console.log(m.default.appId))"
+        env = {"PATH": os.environ.get("PATH", ""), "BISE_PACK_APP_ID": T.APP_ID, "BISE_PACK_BISE": os.path.join(t, "bise"),
+               "BISE_PACK_ROOT": os.path.join(t, "root"), "BISE_PACK_HELPER": helper}
+        load = lambda e: subprocess.run(["node", "-e", js, "file://" + os.path.join(ROOT, "apps", "desktop", "electron-builder.mjs")],
+                                        capture_output=True, text=True, env=e)
+        r = load(env)
+        check(r.returncode == 0 and r.stdout.strip() == T.APP_ID, "electron-builder.mjs loads with pack_helper's helper: %s" % r.stderr)
+        r = load(dict(env, BISE_PACK_HELPER=os.path.join(app, "Contents", "MacOS", "bise-mac-helper")))
+        check(r.returncode != 0 and "tray-badge.node" in r.stderr, "the bundle's own helper path, its badge apart, still fails: %s" % r.stderr)
 
 
 def cand_users():
@@ -938,6 +967,7 @@ if __name__ == "__main__":
     quit_only_this_bundle()
     real_open_in_background_offscreen()
     candidate_then_promote()
+    repack_reads_its_config()
     cand_users()
     if "--pure" not in sys.argv:
         hook_keeps_pid()
