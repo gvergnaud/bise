@@ -224,12 +224,17 @@ def refuse_real_skills(index):
         raise AssertionError("a test hub indexed the user's own skills: %s" % bad[:3])
 
 
+def default_run_dir():
+    """The run folder of his HOME, where a session with no BEND_RUN_DIR
+    writes: ~/.bise/run."""
+    return os.path.realpath(os.path.join(os.path.expanduser("~"), ".bise", "run"))
+
+
 def real_run_dirs():
     """The run folders of the user's own sessions: the caller's
-    $BEND_RUN_DIR and the default of his HOME (~/.bise/run) and of
-    his $BISE_HOME."""
-    home = os.path.expanduser("~")
-    dirs = [os.environ.get("BEND_RUN_DIR"), os.path.join(home, ".bise", "run")]
+    $BEND_RUN_DIR (unset outside a hub agent's shell) and the default
+    of his HOME (~/.bise/run) and of his $BISE_HOME."""
+    dirs = [os.environ.get("BEND_RUN_DIR"), default_run_dir()]
     if os.environ.get("BISE_HOME"):
         dirs.append(os.path.join(os.environ["BISE_HOME"], "run"))
     return [os.path.realpath(d) for d in dirs if d]
@@ -242,7 +247,7 @@ def refuse_real_run_dir(env, tmp):
     they collide with his live REPLs'."""
     run = env.get("BEND_RUN_DIR")
     if not run:
-        raise AssertionError("a test env without its own BEND_RUN_DIR (it would be %s)" % real_run_dirs()[1])
+        raise AssertionError("a test env without its own BEND_RUN_DIR (it would be %s)" % default_run_dir())
     rp = os.path.realpath(run)
     if rp in real_run_dirs() or not rp.startswith(os.path.realpath(tmp) + "/"):
         raise AssertionError("a test env's BEND_RUN_DIR %s is not under its tmp %s" % (run, tmp))
@@ -280,13 +285,27 @@ def _self_test():
         assert "indexed the user's own skills" in str(e), e
     open(idx, "w").write("x\td\t%s/.vibe/skills/x/SKILL.md\n" % test_home())
     refuse_real_skills(idx)
-    refuse_real_run_dir({"BEND_RUN_DIR": "/t/x/run"}, "/t/x")
-    for bad in ({}, {"BEND_RUN_DIR": os.path.expanduser("~/.bise/run")}, {"BEND_RUN_DIR": "/elsewhere/run"}):
-        try:
-            refuse_real_run_dir(bad, "/t/x")
-        except AssertionError:
-            continue
-        raise AssertionError("refuse_real_run_dir let %r through" % bad)
+    # the run-dir law, from an agent's shell (BEND_RUN_DIR set) and from a
+    # plain terminal (unset: the gate run outside a hub)
+    saved_run = os.environ.get("BEND_RUN_DIR")
+    try:
+        for caller_run in ("/his/run", None):
+            if caller_run is None:
+                os.environ.pop("BEND_RUN_DIR", None)
+            else:
+                os.environ["BEND_RUN_DIR"] = caller_run
+            refuse_real_run_dir({"BEND_RUN_DIR": "/t/x/run"}, "/t/x")
+            for bad in ({}, {"BEND_RUN_DIR": os.path.expanduser("~/.bise/run")}, {"BEND_RUN_DIR": "/elsewhere/run"}):
+                try:
+                    refuse_real_run_dir(bad, "/t/x")
+                except AssertionError:
+                    continue
+                raise AssertionError("refuse_real_run_dir let %r through (caller BEND_RUN_DIR %r)" % (bad, caller_run))
+    finally:
+        if saved_run is None:
+            os.environ.pop("BEND_RUN_DIR", None)
+        else:
+            os.environ["BEND_RUN_DIR"] = saved_run
     # the keys law: his provider keys never reach a test env, a fake one may
     assert "ANTHROPIC_FOUNDRY_API_KEY" in PROVIDER_KEYS and "AWS_BEARER_TOKEN_BEDROCK" in PROVIDER_KEYS
     saved = {k: os.environ.get(k) for k in ("OPENROUTER_API_KEY", "AWS_BEARER_TOKEN_BEDROCK", "KIT_API_KEY", "BISE_TEST_REAL_ACCOUNTS")}

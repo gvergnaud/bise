@@ -38,6 +38,7 @@ mod approot;
 mod debuglog;
 mod doctor;
 mod project_cli;
+mod repl_end;
 mod session_cli;
 mod info;
 mod office;
@@ -931,8 +932,9 @@ fn run_main() -> std::io::Result<()> {
             }
         }
         let log = std::fs::read_to_string(&log_path).unwrap_or_default();
-        match (&exited, log.contains("reload-exit")) {
-            (Some(status), true) if status.success() => {
+        let marker = log.contains("reload-exit");
+        match exited.as_ref().map(|s| (s, repl_end::ending(s, marker))) {
+            Some((_, repl_end::Ending::Reload)) => {
                 reloads += 1;
                 dbg.event("repl_reload", &[("generation", generation.to_string())]);
                 if reloads > 10 {
@@ -954,8 +956,9 @@ fn run_main() -> std::io::Result<()> {
                 cause = "reload";
                 continue;
             }
-            (Some(status), _) => {
-                // a crash: never take the session down with it
+            Some((status, repl_end::Ending::Crash)) => {
+                // a crash (an exit code or a signal): never take the
+                // session down with it
                 if spawned_at.elapsed() > CRASH_WINDOW {
                     crashes = 0;
                 }
@@ -992,7 +995,7 @@ fn run_main() -> std::io::Result<()> {
                 cause = "crash";
                 continue;
             }
-            (None, _) => {
+            None => {
                 // child alive: the client hung up — give the REPL a
                 // beat to checkpoint the session, then die with us
                 std::thread::sleep(Duration::from_millis(200));
