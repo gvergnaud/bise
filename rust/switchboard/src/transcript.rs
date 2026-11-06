@@ -32,13 +32,41 @@ pub fn read(path: &Path) -> Vec<Raw> {
 }
 
 pub fn parse(text: &str) -> Vec<Raw> {
-    text.lines()
-        .enumerate()
-        .filter_map(|(i, l)| {
-            l.split_once('\t')
-                .map(|(t, l)| (i + 1, t.parse().unwrap_or(0), l.to_string()))
-        })
-        .collect()
+    text.lines().enumerate().filter_map(|(i, l)| raw(i + 1, l)).collect()
+}
+
+fn raw(pos: usize, l: &str) -> Option<Raw> {
+    l.split_once('\t').map(|(t, l)| (pos, t.parse().unwrap_or(0), l.to_string()))
+}
+
+/// The hub's feed of a transcript at boot (boot-speed): the position of
+/// its last line and its last `n` lines, as `read` then a skip would give
+/// them, without a `Raw` for every line of a long thread (main's held
+/// 254k lines, 107 MB).
+pub fn tail(path: &Path, n: usize) -> (usize, Vec<Raw>) {
+    std::fs::read_to_string(path).map(|t| tail_of(&t, n)).unwrap_or_default()
+}
+
+/// [`tail`] of the text: (`parse(text).last()`'s position or 0, the last
+/// `n` of `parse(text)`).
+pub fn tail_of(text: &str, n: usize) -> (usize, Vec<Raw>) {
+    let total = text.lines().count();
+    let mut last = Vec::with_capacity(n.min(total));
+    for (i, l) in text.lines().rev().enumerate() {
+        if last.len() == n {
+            break;
+        }
+        if let Some(r) = raw(total - i, l) {
+            last.push(r);
+        }
+    }
+    last.reverse();
+    let pos = match last.last() {
+        Some(r) => r.0,
+        // n == 0: the last parsed line's position still counts
+        None => text.lines().rev().enumerate().find(|(_, l)| l.contains('\t')).map_or(0, |(i, _)| total - i),
+    };
+    (pos, last)
 }
 
 /// What a human would call "the conversation": user messages, messages
@@ -401,6 +429,35 @@ pub fn render_origin(agent: &str, task: &str, all: &[Entry], o: &Origin, now: u6
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The boot's tail read holds what the full read then a skip held:
+    /// the same last position and the same last n lines (architect
+    /// m_54045: a last line without a newline, multibyte text, a file
+    /// shorter than the tail, a line longer than any window, lines
+    /// without a stamp, CRLF, empty lines).
+    #[test]
+    fn the_tail_read_is_the_full_read_then_a_skip() {
+        let long = "é".repeat(70_000);
+        let texts = [
+            String::new(),
+            "\n\n".to_string(),
+            "1\ta\n2\tb\n3\tc\n".to_string(),
+            "1\ta\n2\tb\n3\tc".to_string(),
+            "1\tà\n\nno stamp\n4\t日本語 ✓\n".to_string(),
+            format!("1\ta\n2\t{long}\n3\tb\nend without a tab"),
+            "1\ta\r\n2\tb\r\n\r\n4\tc\r\n".to_string(),
+            "x\ny\n".to_string(),
+            (1..=50).map(|i| format!("{i}\tline {i}\n")).collect::<String>(),
+        ];
+        for text in &texts {
+            for n in [0, 1, 2, 3, 10, 1000] {
+                let all = parse(text);
+                let want_pos = all.last().map_or(0, |r| r.0);
+                let want: Vec<Raw> = all.iter().skip(all.len().saturating_sub(n)).cloned().collect();
+                assert_eq!(tail_of(text, n), (want_pos, want), "n={n} text={:?}", crate::util::clip(text, 80));
+            }
+        }
+    }
 
     /// The v2 kinds (C2) read back as conversation entries; v1 lines
     /// still read as before.

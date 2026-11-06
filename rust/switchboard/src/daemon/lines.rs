@@ -24,6 +24,22 @@ pub(super) fn transcript_len(path: &Path) -> usize {
 }
 
 impl Shell {
+    /// An agent's feed from its transcript: its last position and its last
+    /// BUFFER_LINES lines. At boot for every agent not archived; an
+    /// archived one's when its head is seeded (it came back). Never twice:
+    /// a feed already held stays as it is. An agent never loaded gets its
+    /// next position from the file (`transcript_len`).
+    pub(super) fn load_feed(&mut self, name: &str, dir: &str) {
+        if self.positions.contains_key(name) {
+            return;
+        }
+        let (pos, tail) = transcript::tail(&self.transcript(dir), BUFFER_LINES);
+        self.positions.insert(name.to_string(), pos);
+        if !tail.is_empty() {
+            self.buffers.insert(name.to_string(), tail.into_iter().collect());
+        }
+    }
+
     /// The lines of one feed entry (its context line too, fn_ctx_lines),
     /// stamped `ts`: (the transcript text to append, the events to send).
     pub(super) fn buffer_lines(&mut self, name: &str, path: &Path, lines: Vec<String>, ts: u64) -> (String, Vec<Value>) {

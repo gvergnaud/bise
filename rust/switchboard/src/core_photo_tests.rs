@@ -140,13 +140,19 @@ fn instructions(pid: u32) -> u64 {
 fn boot_phases_on_a_real_journal() {
     let Ok(path) = std::env::var("PHOTO_JOURNAL") else { return };
     let text = std::fs::read_to_string(path).unwrap();
-    let events: Vec<Value> = text.lines().filter_map(|l| serde_json::from_str(l).ok()).collect();
+    let all: Vec<Value> = text.lines().filter_map(|l| serde_json::from_str(l).ok()).collect();
+    // PHOTO_TAIL=n (boot-speed): the photo holds all but the last n
+    // events, which the boot replays after the restore, as a real boot does
+    let tail: usize = std::env::var("PHOTO_TAIL").ok().and_then(|n| n.parse().ok()).unwrap_or(0).min(all.len());
+    let events = &all[..all.len() - tail];
     let dir = std::env::temp_dir().join(format!("sb-photo-phases-{}", std::process::id()));
     let me = std::process::id();
     let mut lines = Vec::new();
+    let t0 = std::cell::Cell::new(std::time::Instant::now());
     let phase = |lines: &mut Vec<String>, hub: &Hub, name: &str, from: &mut (u64, u64)| {
         let now = (instructions(hub.core_pid()), instructions(me));
-        lines.push(format!("{name:<28} sb-core {:>6.1} G  hub {:>6.1} G", (now.0 - from.0) as f64 / 1e9, (now.1 - from.1) as f64 / 1e9));
+        let ms = t0.replace(std::time::Instant::now()).elapsed().as_millis();
+        lines.push(format!("{name:<28} sb-core {:>6.1} G  hub {:>6.1} G  {ms:>6} ms", (now.0 - from.0) as f64 / 1e9, (now.1 - from.1) as f64 / 1e9));
         *from = now;
     };
     // the full replay, its batches as replay_with sends them
@@ -164,7 +170,7 @@ fn boot_phases_on_a_real_journal() {
     phase(&mut lines, &full, "full: view decode + load", &mut at);
     let st = full.photo().expect("a photo");
     phase(&mut lines, &full, "photo: take", &mut at);
-    crate::photo::write(&dir, "real", &crate::photo::Mark::of(&events), &st).unwrap();
+    crate::photo::write(&dir, "real", &crate::photo::Mark::of(events), &st).unwrap();
     phase(&mut lines, &full, "photo: mark + write", &mut at);
     drop(st);
     // the boot from it
@@ -172,7 +178,7 @@ fn boot_phases_on_a_real_journal() {
     let mut at = (instructions(boot.core_pid()), instructions(me));
     let (head, st) = crate::photo::read(&dir, "real").unwrap();
     phase(&mut lines, &boot, "boot: photo file read", &mut at);
-    let k = match crate::photo::usable(Some(&head), "real", &events, false) {
+    let k = match crate::photo::usable(Some(&head), "real", events, false) {
         crate::photo::Use::Photo { k } => k,
         u => panic!("{u:?}"),
     };
@@ -185,6 +191,12 @@ fn boot_phases_on_a_real_journal() {
         boot.pr_news.read_journal(ev);
     }
     phase(&mut lines, &boot, "boot: PR lines", &mut at);
+    let after: Vec<&Value> = all[k..].iter().filter(|e| !crate::forge::is_pr_line(e)).collect();
+    for batch in after.chunks(REPLAY_BATCH) {
+        let evs = batch.iter().map(|ev| (*ev).clone()).collect();
+        boot.raw(&Link::ReplayMany(cl::ReplayMany { evs }).to_value());
+    }
+    phase(&mut lines, &boot, &format!("boot: replay {} after it", after.len()), &mut at);
     let out = boot.raw(&Link::ViewAll(cl::ViewAll {}).to_value());
     phase(&mut lines, &boot, "boot: view_all call", &mut at);
     let bytes = out.to_string().len();

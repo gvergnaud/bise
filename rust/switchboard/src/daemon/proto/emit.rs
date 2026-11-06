@@ -485,6 +485,12 @@ impl Shell {
         if names.is_empty() {
             return;
         }
+        for n in &names {
+            // an agent archived at boot, back now: its feed from the file
+            if let Some(dir) = self.dir_of(n) {
+                self.load_feed(n, &dir);
+            }
+        }
         let facts = self.facts();
         self.setup();
         let setup = &self.setup;

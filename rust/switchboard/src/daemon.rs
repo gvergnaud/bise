@@ -1766,15 +1766,13 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
             sh.hub.load_role(&dir, line, key);
         }
     }
-    // the feeds survive a hub restart through their transcripts
-    for a in sh.hub.st.agents.values() {
-        let all = transcript::read(&sh.transcript(&a.dir));
-        sh.positions.insert(a.name.clone(), all.last().map_or(0, |r| r.0));
-        let skip = all.len().saturating_sub(BUFFER_LINES);
-        let tail: VecDeque<(usize, u64, String)> = all.into_iter().skip(skip).collect();
-        if !tail.is_empty() {
-            sh.buffers.insert(a.name.clone(), tail);
-        }
+    // the feeds survive a hub restart through their transcripts: the
+    // agents not archived now, an archived one when it comes back
+    // (Shell::load_feed)
+    let feeds: Vec<(String, String)> =
+        sh.hub.st.agents.values().filter(|a| a.lifecycle != Lifecycle::Archived).map(|a| (a.name.clone(), a.dir.clone())).collect();
+    for (name, dir) in feeds {
+        sh.load_feed(&name, &dir);
     }
     boot.step(&format!("transcripts read ({} buffered lines)", sh.buffers.values().map(|b| b.len()).sum::<usize>()));
 
