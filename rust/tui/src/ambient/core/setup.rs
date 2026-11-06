@@ -449,6 +449,7 @@ impl Core {
                 let res = self.registry(&project, RegistryOp::Remove);
                 if res.is_ok() {
                     self.drop_held(Some(&project));
+                    self.forget_thread_copy(&project);
                 }
                 ("project_remove", res)
             }

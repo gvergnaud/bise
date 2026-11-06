@@ -73,3 +73,40 @@ describe("a thread's newest page on its way (thread-loading)", () => {
     expect(store.threadSyncing(K)).toBe(true);
   });
 });
+
+// boot-speed: the core's copy of main's last page, shown while the hub boots, replaced whole
+describe("the core's copy of a thread's last page (boot-speed)", () => {
+  const copy = (pos: number[]) => ({ ...page(pos), cached: true }) as const;
+
+  it("shows at once with the cue on, and the hub's page replaces it whole", () => {
+    const { store } = fake();
+    store.subscribeThread(P, "perf");
+    store.apply(copy([5, 6, 7]));
+    expect(store.threadOrder(K).order).toEqual([5, 6, 7]);
+    expect(store.threadSyncing(K)).toBe(true);
+    // a live entry never merges into the copy: the hub's page holds it
+    store.apply({ ev: "entry", project: P, agent: "perf", entry: entry(8) });
+    expect(store.threadOrder(K).order).toEqual([5, 6, 7]);
+    // the hub's page: only its entries, none of the copy's left
+    store.apply(page([7, 8, 9]));
+    expect(store.threadOrder(K).order).toEqual([7, 8, 9]);
+    expect(store.threadSyncing(K)).toBe(false);
+    store.apply({ ev: "entry", project: P, agent: "perf", entry: entry(10) });
+    expect(store.threadOrder(K).order).toEqual([7, 8, 9, 10]);
+  });
+
+  it("never replaces what the window holds, and never steps a send", () => {
+    const { store } = fake();
+    store.subscribeThread(P, "perf");
+    store.apply(page([1, 2]));
+    store.apply(copy([5, 6]));
+    expect(store.threadOrder(K).order).toEqual([1, 2]);
+    // his message in a copy is not a landed send
+    const { store: s2 } = fake();
+    s2.subscribeThread(P, "perf");
+    s2.apply({ ...copy([3]), entries: [entry(3, "you")] });
+    expect(s2.threadOrder(K).order).toEqual([3]);
+    s2.apply(page([4]));
+    expect(s2.threadOrder(K).order).toEqual([4]);
+  });
+});

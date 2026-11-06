@@ -220,6 +220,8 @@ export function usePeek(key: string | null, opts: { on?: boolean; maxWidth?: num
 export const useThreadOrder = (key: string): ThreadOrder => useSlice(`order:${key}`, (s) => s.threadOrder(key));
 /** Its newest page is on its way (subscribed, not in yet): what it shows may be old (thread-loading). */
 export const useThreadSyncing = (key: string): boolean => useSlice(`sync:${key}`, (s) => s.threadSyncing(key));
+/** What it shows is the core's copy of its last page, from before the hub answered (boot-speed). */
+export const useThreadCopy = (key: string): boolean => useSlice(`sync:${key}`, (s) => s.threadCopy(key));
 /** The hub's newest answer to ⌘F in a thread (store.findInThread); null before one. */
 export const useThreadHits = (key: string): ThreadHits | null => useSlice(`hits:${key}`, (s) => s.threadHits(key));
 /** One entry: re-renders only when that entry is replaced. */

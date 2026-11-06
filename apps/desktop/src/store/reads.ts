@@ -335,6 +335,10 @@ export class StoreReads extends StoreBase {
   threadSyncing(key: string): boolean {
     return this.threads.get(key)?.syncing === true;
   }
+  /** What it shows is the core's copy from before (boot-speed): its cue shows at once. */
+  threadCopy(key: string): boolean {
+    return this.threads.get(key)?.cached === true;
+  }
   /** The hub's newest answer to ⌘F in thread `key` (findInThread); hits null: the hub can't search (older hub). */
   threadHits(key: string): ThreadHits | null {
     return this.slice<ThreadHits | null>(`hits:${key}`, null);

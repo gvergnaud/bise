@@ -258,6 +258,10 @@
   opacity: 1;
   transition: opacity var(--d-base) var(--ease-out) 300ms;
 }
+/* the core's copy from before (boot-speed): its rows are known to be old, the cue shows at once */
+.th-sync[data-on='true'][data-copy='true'] {
+  transition-delay: 0ms;
+}
 .th-sync-dots {
   display: inline-flex;
   gap: var(--s-1);

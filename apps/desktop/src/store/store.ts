@@ -160,6 +160,12 @@ export class Store extends StoreVoice {
   /** @internal for apply.ts */ page(ev: EvOf<"thread">): void {
     const key = threadKey(ev.project, ev.agent);
     const t = this.thread(key);
+    if (ev.cached === true) {
+      this.copyPage(key, t, ev);
+      return;
+    }
+    // the hub's page replaces the core's copy whole: never merged with it (boot-speed)
+    if (t.cached === true) this.dropCopy(key, t);
     for (const e of ev.entries) this.putEntry(key, t, e);
     // his message can come back in a page, not as an entry event: its row goes the same way (machine/sends.ts)
     this.stepIn({ at_ms: this.now(), in: "ev", ev });
@@ -172,6 +178,29 @@ export class Store extends StoreVoice {
     // the first page after a subscribe that answers no window ask is its newest one: the view is
     // current (the hub answers a connection's commands in order)
     if (ask === null) this.setSyncing(key, t, false);
+  }
+
+  /**
+   * The core's copy of main's last page (boot-speed): shown only in a thread that holds nothing
+   * yet, with the catching-up cue on (the hub's page is still on its way). Display only: no send's
+   * step reads it, and the hub's first page replaces it whole.
+   */
+  private copyPage(key: string, t: Thread, ev: EvOf<"thread">): void {
+    if (t.view.loaded || t.byPos.size > 0) return;
+    for (const e of ev.entries) this.putEntry(key, t, e);
+    t.cached = true;
+    this.emit(`sync:${key}`);
+    this.setView(key, t, merged(t.view, ev.entries.map((e) => e.pos), ev.before, ev.more, null));
+  }
+
+  /** The copy goes, its rows with it, before the hub's page lands (boot-speed). */
+  private dropCopy(key: string, t: Thread): void {
+    delete t.cached;
+    this.emit(`sync:${key}`);
+    const gone = [...t.byPos.keys()];
+    t.byPos.clear();
+    for (const pos of gone) this.emit(`entry:${key}:${String(pos)}`);
+    this.setView(key, t, EMPTY_ORDER);
   }
 
   /** The thread's newest page is on its way, or came (thread-loading: the list's cue). */
@@ -201,6 +230,8 @@ export class Store extends StoreVoice {
   /** @internal for apply.ts */ entryEv(ev: EvOf<"entry">): void {
     const key = threadKey(ev.project, ev.agent);
     const t = this.thread(key);
+    // the core's copy is never merged with: the hub's page, on its way, holds this entry (boot-speed)
+    if (t.cached === true) return;
     const known = t.byPos.has(ev.entry.pos);
     this.putEntry(key, t, ev.entry);
     // a live entry lands in the tail; one that falls in the window's gap waits for its page

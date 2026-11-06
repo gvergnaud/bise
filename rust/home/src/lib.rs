@@ -258,6 +258,14 @@ impl Home {
         self.cache_dir().join("thumbs")
     }
 
+    /// `<root>/cache/threads/<project>.json`: the desktop core's copy of a
+    /// project's main thread, its last page, shown before its hub answers
+    /// (boot-speed; tui ambient/core/thread_cache.rs, its one writer);
+    /// rebuildable, deleted with the project.
+    pub fn thread_cache(&self, project: &str) -> PathBuf {
+        self.cache_dir().join("threads").join(format!("{project}.json"))
+    }
+
     /// The plugins' enable state (`$BEND_PLUGINS_STATE`).
     pub fn plugins_state(&self) -> PathBuf {
         self.or("BEND_PLUGINS_STATE", self.root.join("plugins.json"))

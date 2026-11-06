@@ -84,7 +84,7 @@ impl Shell {
                 // its answer streaming in, if one is: the whole text once,
                 // at off 0; the deltas follow
                 let partial = self.partials.get(&agent).map(|p| (p.call.clone(), p.text())).filter(|(_, t)| !t.is_empty());
-                self.proto_send(id, &HubEv::Thread { project: project.clone(), agent: agent.clone(), entries, before, more });
+                self.proto_send(id, &HubEv::Thread { project: project.clone(), agent: agent.clone(), entries, before, more, cached: false });
                 if let Some((call, text)) = partial {
                     self.proto_send(id, &HubEv::Partial { project, agent, call, off: 0, text });
                 }
@@ -106,7 +106,7 @@ impl Shell {
                 let ctx = Ctx { open_cards: &facts.open, page: &|p: &str| facts.page(p), provider: &|i: &str, k: &str| provider_name(setup, i, k), width: &width, offset: &offset, attached: &crate::attached::split };
                 let (mut entries, before, more) = pthread::page(&lines, &ahead, &ctx, limit.map_or(LIMIT, |l| (l as usize).clamp(1, MAX_LIMIT)));
                 self.expire_views(&dir, &mut entries);
-                self.proto_send(id, &HubEv::Thread { project, agent, entries, before, more });
+                self.proto_send(id, &HubEv::Thread { project, agent, entries, before, more, cached: false });
             }
             HubCmd::Find { agent, needle, rid, .. } => self.proto_find(id, &tag, project, agent, needle, rid),
             HubCmd::Send { agent, text, opts, cid, parts, .. } if parts.is_empty() => self.proto_input(id, &tag, agent, text, opts, cid, String::new()),

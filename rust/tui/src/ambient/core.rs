@@ -12,6 +12,7 @@ mod computer;
 mod dictate;
 mod gauge;
 mod takes;
+mod thread_cache;
 mod hub_rpc;
 mod home;
 mod home_switch;
@@ -655,6 +656,7 @@ impl Core {
     /// Stdin closed: the app is gone. The unsent still goes; the sent ones
     /// stay with his messages.
     pub fn shutdown(&mut self) {
+        self.write_thread_copies(Instant::now(), true);
         self.voice_mode_off(Instant::now(), Some("bise stopped"));
         self.close_projects();
         self.stop_voice();

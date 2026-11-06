@@ -4,12 +4,15 @@
 // moves when it comes or goes, so a thread with nothing newer looks the same once it goes. It
 // shows only after a short wait (a page in time never flashes it) and fades out (thread.css
 // .th-sync). Always mounted, so it can fade. Owner: thread-loading.
-import { useThreadSyncing } from '@/store';
+// The rows of the core's copy from before (boot-speed: a hub still booting) show it at once: they
+// are known to be old, so a moment without it would read as live (ui-review m_54190).
+import { useThreadCopy, useThreadSyncing } from '@/store';
 
 export function SyncCue({ tkey }: { tkey: string }) {
   const on = useThreadSyncing(tkey);
+  const copy = useThreadCopy(tkey);
   return (
-    <div className="th-sync" data-on={on} data-testid="thread.sync" aria-hidden={!on}>
+    <div className="th-sync" data-on={on} data-copy={copy} data-testid="thread.sync" aria-hidden={!on}>
       <span className="th-sync-dots">
         <i />
         <i />

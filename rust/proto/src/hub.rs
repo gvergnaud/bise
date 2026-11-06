@@ -92,8 +92,19 @@ pub enum HubEv {
         others: Vec<Card>,
     },
     /// one page of a thread, newest last: the answer to `subscribe` and
-    /// `page`; `before` the oldest entry's pos when there is more
-    Thread { project: Project, agent: String, entries: Vec<Entry>, before: Option<Pos>, more: bool },
+    /// `page`; `before` the oldest entry's pos when there is more.
+    /// `cached` (boot-speed): never the hub's; the desktop core's copy of
+    /// main's last page, shown before the hub's page comes and replaced
+    /// whole by it (tui ambient/core/thread_cache.rs)
+    Thread {
+        project: Project,
+        agent: String,
+        entries: Vec<Entry>,
+        before: Option<Pos>,
+        more: bool,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        cached: bool,
+    },
     /// the answer to `find` (`thread/find`): every entry of the thread up
     /// to the line `upto` that holds `needle` (`thread::find`'s rule),
     /// oldest first, at most `thread::find::MAX_HITS` (the newest kept);

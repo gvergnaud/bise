@@ -213,6 +213,9 @@ pub(super) struct Hubs {
     lists: Leases,
     /// update-flow: the machine's line the window last got (`bise_update`)
     bise_sent: Option<Option<bise_proto::rows::BiseUpdate>>,
+    /// boot-speed: each project's copy of main's last page, shown before
+    /// its hub's page (core/thread_cache.rs)
+    threads: super::thread_cache::Threads,
 }
 
 /// The rows the running screen holds: the projects whose hub runs, never
@@ -444,6 +447,14 @@ impl Core {
         if track(&mut self.hubs.subs, &cmd, &project, &agent) {
             self.hold();
         }
+        // boot-speed: main's last page from this core's copy at once, while
+        // its hub's page is on its way (a booting hub); replaced whole by it
+        if cmd == "subscribe" {
+            let path = bise_home::Home::from_env().thread_cache(&project);
+            if let Some(copy) = self.hubs.threads.copy_for(&project, &agent, || super::thread_cache::read(&path)) {
+                self.emit(copy.to_value());
+            }
+        }
         // voice mode still follows that thread: the window's unsubscribe
         // stays here (the core's own subscription goes when voice mode ends)
         if cmd == "unsubscribe" && self.hubs.voice.as_ref().is_some_and(|(p, a)| *p == project && *a == agent) {
@@ -526,9 +537,25 @@ impl Core {
         }
     }
 
+    /// boot-speed: main's changed copies to their files (at most every
+    /// thread_cache::FLUSH_EVERY; `all`: now, at the core's end).
+    pub(super) fn write_thread_copies(&mut self, now: Instant, all: bool) {
+        let home = bise_home::Home::from_env();
+        for (project, text) in self.hubs.threads.take_due(now, all) {
+            super::thread_cache::write(&home.thread_cache(&project), text.as_deref());
+        }
+    }
+
+    /// boot-speed: a removed project's copy of main goes with it.
+    pub(super) fn forget_thread_copy(&mut self, project: &str) {
+        self.hubs.threads.forget(project);
+        super::thread_cache::write(&bise_home::Home::from_env().thread_cache(project), None);
+    }
+
     /// Commands past their deadline get their error; the hubs held for a
     /// command only go once it went.
     pub(super) fn tick_projects(&mut self, now: Instant) {
+        self.write_thread_copies(now, false);
         // (project, cmd, cid, the app's request, its words)
         type Late = (String, String, Option<u64>, Option<Id>, String);
         let mut late: Vec<Late> = Vec::new();
@@ -844,6 +871,8 @@ impl Core {
             return;
         }
         let Some(c) = self.hubs.conns.get_mut(id) else { return };
+        // boot-speed: main's page and entries into its copy (written at the tick)
+        self.hubs.threads.seen(id, &typed);
         let v = typed.to_value();
         let tag = typed.tag().to_string();
         // voice mode hears its agent's turn and messages

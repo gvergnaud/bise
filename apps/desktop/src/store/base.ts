@@ -16,6 +16,11 @@ export interface Thread {
   ask?: Ask; // the window's page on its way (window.ts)
   /** subscribed, its newest page not in yet: what the view holds may be old (thread-loading) */
   syncing?: boolean;
+  /**
+   * what it holds is the core's copy of main's last page (boot-speed, a `thread` event marked
+   * `cached`): shown while the hub's page is on its way, replaced whole by it, never a send's
+   */
+  cached?: boolean;
 }
 
 export type Listener = () => void;
