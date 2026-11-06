@@ -6,8 +6,10 @@
 //! renderer per format (`kit/office/{sheet,slides,docx}.js`) on the office
 //! SDK's bundles (`/kit/office/office.js`, `office-view.js`).
 //!
-//! Which artifacts get the viewer is pages::site's one rule (serves_copy +
-//! office_kind), the same that gives the row its `frame_url`.
+//! Which artifacts get the viewer is pages::site's one rule (served +
+//! viewer_kind), the same that gives the row its `frame_url`: its copy, or
+//! a video too big to copy from its own file while its sig holds
+//! (media::own_holds; video-artifact).
 //!
 //! The shell sets the theme the panel asked for first (`?theme=`,
 //! kit/office/theme.js: kit.js's rule; md-artifact). It also carries the page server's token and loads the notes
@@ -117,11 +119,18 @@ pub fn serve(pages: &Pages, id: &str, v: Option<u64>) -> Response {
     }) else {
         return Response::missing(&format!("no such version: {at}"));
     };
-    let Some(copy) = ver.copy.as_deref().filter(|c| site::serves_copy(&m.by, c)) else { return Response::missing(&format!("no copy of it: {at}")) };
+    // its copy, or its own file for a video too big to copy (site::served, architect m_54229)
+    let Some(served) = site::served(&m.by, ver.copy.as_deref(), ver.no_copy.as_deref(), &ver.target) else { return Response::missing(&format!("no copy of it: {at}")) };
+    let copy = served.file();
     let Some(kind) = site::viewer_kind(copy) else { return Response::missing(&format!("not a file bise's viewer draws: {at}")) };
-    // its copy gone from bise's store: the 404 the window reads to draw its 'file gone' state
-    // (desktop probe.ts; artifact-find), never a viewer that fails inside the frame
-    if site::copy_file(&state.join("artifacts").join(&m.id).join(copy), &[]).is_none() {
+    // its copy gone from bise's store, or its own file changed or gone: the 404 the window reads
+    // to draw its 'file gone' state (desktop probe.ts; artifact-find), never a viewer that fails
+    // inside the frame
+    let there = match served {
+        site::Served::Copy(c) => site::copy_file(&state.join("artifacts").join(&m.id).join(c), &[]).is_some(),
+        site::Served::Own(file) => super::super::media::own_holds(std::path::Path::new(file), &ver.sig),
+    };
+    if !there {
         return Response::missing(&format!("no such file: {at}"));
     }
     let shown = Shown {

@@ -40,6 +40,10 @@ use std::path::{Path, PathBuf};
 
 /// The largest file (or folder, summed) bise keeps a copy of.
 pub const MAX_COPY: u64 = 50 * 1024 * 1024;
+/// A version's `no_copy` when it is over [`MAX_COPY`]: the one name for it,
+/// written here and read by pages::site::served (a video too big to copy is
+/// streamed from its own file; video-artifact, architect m_54229).
+pub const TOO_BIG: &str = "over 50 MB";
 /// A folder with more files than this is not copied.
 const MAX_COPY_FILES: usize = 5000;
 
@@ -394,6 +398,15 @@ fn default_title(target: &str, is_url: bool) -> String {
         .unwrap_or_else(|| target.to_string())
 }
 
+/// A file's sig now, as [`Version::sig`] has it for a file that links no
+/// other (`<bytes>:<mtime ms>`); None: not a file. The page server checks
+/// it before it streams a file bise kept no copy of (pages::media::own_holds).
+pub fn file_sig(p: &Path) -> Option<String> {
+    std::fs::metadata(p).ok().filter(std::fs::Metadata::is_file)?;
+    let (bytes, mtime, _) = measure(p);
+    Some(format!("{}:{}", bytes, mtime))
+}
+
 /// Size and newest mtime (ms) of a file or folder (`.git` skipped), and
 /// how many files it holds.
 fn measure(p: &Path) -> (u64, u64, usize) {
@@ -694,7 +707,7 @@ impl Store {
         let (copy, no_copy) = match (&path, size) {
             (Some(p), Some((bytes, _, files))) => {
                 if bytes > MAX_COPY {
-                    (None, Some("over 50 MB".to_string()))
+                    (None, Some(TOO_BIG.to_string()))
                 } else if files > MAX_COPY_FILES {
                     (None, Some(format!("over {} files", MAX_COPY_FILES)))
                 } else {
@@ -865,6 +878,8 @@ impl Store {
             json!({
                 "v": v.v, "ts_ms": v.at_ms, "target": v.target,
                 "copy": v.copy.as_ref().map(|c| dir.join(c).to_string_lossy().to_string()),
+                // why it has no copy: a video too big to copy is framed from its own file (site::served)
+                "no_copy": v.no_copy,
                 "note": if page {
                     notes(v.v)
                 } else {
@@ -887,6 +902,7 @@ impl Store {
             "archived": archived, "archived_at": archived_at, "ts_ms": cur.at_ms, "created_ms": m.created_ms, "v": cur.v,
             "target": cur.target,
             "copy": cur.copy.as_ref().map(|c| dir.join(c).to_string_lossy().to_string()),
+            "no_copy": cur.no_copy,
             "gone": gone,
             "detail": detail,
             "pr": pr_of(&cur.target).map(|(repo, n)| json!({"repo": repo, "number": n})),
@@ -923,7 +939,7 @@ impl Store {
         if let Some(root) = root.filter(|_| ver.copy.is_none()) {
             let (bytes, _, files) = measure(root);
             if bytes > MAX_COPY {
-                ver.no_copy = Some("over 50 MB".into());
+                ver.no_copy = Some(TOO_BIG.into());
             } else if files > MAX_COPY_FILES {
                 ver.no_copy = Some(format!("over {} files", MAX_COPY_FILES));
             } else {

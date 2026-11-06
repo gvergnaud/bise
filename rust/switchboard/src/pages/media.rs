@@ -5,7 +5,9 @@
 //! (its path and content type from the same rule as any copy,
 //! `artifact_target`), before `route`, as it does the SSE streams; the
 //! slice is read from disk with a seek and copied to the socket, never
-//! the whole file in memory.
+//! the whole file in memory. A video too big to copy (over 50 MB) is read
+//! from its own file the same way (site::Served::Own), only while
+//! [`own_holds`] (video-artifact, architect m_54229).
 //!
 //! [`byte_range`] and [`head`] are pure, with their tests; [`send`] does
 //! the file and the socket.
@@ -82,6 +84,14 @@ pub fn send(w: &mut impl Write, path: &Path, ctype: &str, csp: &str, range: Opti
     // error then is the end of this answer, never an error to report
     let _ = std::io::copy(&mut f.take(n), w);
     true
+}
+
+/// Whether a version's own file (site::Served::Own: a video too big to
+/// copy) is still the one it was: a file, its sig (`<bytes>:<mtime ms>`)
+/// unchanged. Checked on every request, ranges too; false (changed, gone,
+/// no sig): the server says 404 and the panel shows its file-gone state.
+pub fn own_holds(target: &Path, sig: &str) -> bool {
+    !sig.is_empty() && crate::artifacts::file_sig(target).as_deref() == Some(sig)
 }
 
 #[cfg(test)]

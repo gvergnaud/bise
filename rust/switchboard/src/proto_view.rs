@@ -446,9 +446,15 @@ pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>, frame_ba
             let target = s(r, "target");
             let path = Some(target.clone()).filter(|t| s(r, "by") != "page" && !crate::artifacts::is_link(t) && Path::new(t).is_absolute());
             let version = r.get("v").and_then(Value::as_u64).unwrap_or(0);
-            let frame_url = frame_base
-                .filter(|_| crate::pages::site::serves_copy(&s(r, "by"), &s(r, "copy")))
-                .map(|b| format!("{b}{}", crate::pages::site::frame_href(&id, version, &s(r, "copy"), true)));
+            // a version's frame: its copy, or its own file for a video too big to
+            // copy (pages::site::served, architect m_54229; the server checks its sig)
+            let by = s(r, "by");
+            let frame_of = |x: &Value, n: u64, newest: bool| -> Option<String> {
+                let (copy, no_copy, target) = (s(x, "copy"), s(x, "no_copy"), s(x, "target"));
+                let served = crate::pages::site::served(&by, Some(copy.as_str()), Some(no_copy.as_str()).filter(|w| !w.is_empty()), &target)?;
+                frame_base.map(|b| format!("{b}{}", crate::pages::site::frame_href(&id, n, served.file(), newest)))
+            };
+            let frame_url = frame_of(r, version, true);
             let versions = r.get("versions").and_then(Value::as_array).map_or_else(Vec::new, |vs| {
                 vs.iter()
                     .map(|x| {
@@ -460,9 +466,7 @@ pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>, frame_ba
                             target: s(x, "target"),
                             copy: Some(s(x, "copy")).filter(|c| !c.is_empty()),
                             // the row's rule, per version (architect m_23970)
-                            frame_url: frame_base
-                                .filter(|_| crate::pages::site::serves_copy(&s(r, "by"), &s(x, "copy")))
-                                .map(|b| format!("{b}{}", crate::pages::site::frame_href(&id, n, &s(x, "copy"), n == version))),
+                            frame_url: frame_of(x, n, n == version),
                         }
                     })
                     .collect()
@@ -485,6 +489,7 @@ pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>, frame_ba
                 archived_at: r.get("archived_at").and_then(Value::as_u64),
                 created_ms: r.get("created_ms").and_then(Value::as_u64),
                 copy: Some(s(r, "copy")).filter(|c| !c.is_empty()),
+                no_copy: Some(s(r, "no_copy")).filter(|w| !w.is_empty()),
                 gone: r.get("gone").and_then(Value::as_bool).unwrap_or(false),
                 detail: s(r, "detail"),
                 pr,

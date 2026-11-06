@@ -25,9 +25,10 @@ const notes = (version: number): Artifact => ({
 });
 
 /** The window's bridge: the pages server answers 404 for `gone` urls, else up. */
-function mount(a: Artifact, gone: (url: string) => boolean) {
+function mount(a: Artifact, gone: (url: string) => boolean, more: Record<string, unknown> = {}) {
   const asked: string[] = [];
   (globalThis as { bise?: unknown }).bise = {
+    ...more,
     probePage: (u: string) => {
       asked.push(u);
       return Promise.resolve(gone(u) ? 'gone' : 'up');
@@ -80,5 +81,30 @@ describe("the 'file gone' state", () => {
     mount(notes(1), () => false);
     await waitFor(() => screen.getByTestId('artifact.page'));
     expect(screen.queryByTestId('artifact.filegone')).toBeNull();
+  });
+});
+
+// video-artifact (architect m_54229): a file with nothing to frame says why, never a blank body
+describe('a file with nothing to frame', () => {
+  const big = (no_copy: string | null): Artifact => ({
+    id: 'deck', kind: 'slides', title: 'deck.key', agent: 'perf', version: 1, at_ms: 0, new: false,
+    url: '/w/deck.key', path: '/w/deck.key', no_copy,
+  });
+
+  it('no copy kept: its reason, and show in Finder', async () => {
+    const shown: string[] = [];
+    mount(big('over 50 MB'), () => false, { showInFinder: (p: string) => { shown.push(p); return Promise.resolve(); } });
+    await waitFor(() => screen.getByTestId('artifact.unframed'));
+    expect(screen.getByTestId('artifact.unframed').textContent).toContain(panel.art_no_copy({ why: 'over 50 MB' }));
+    expect(screen.queryByTestId('artifact.page')).toBeNull();
+    fireEvent.click(screen.getByTestId('artifact.unframed.finder'));
+    expect(shown).toEqual(['/w/deck.key']);
+  });
+
+  it('a copy kept, no viewer for it: says so', async () => {
+    mount(big(null), () => false);
+    await waitFor(() => screen.getByTestId('artifact.unframed'));
+    expect(screen.getByTestId('artifact.unframed').textContent).toContain(panel.art_no_view);
+    expect(screen.getByTestId('artifact.unframed').textContent).toContain(panel.art_no_frame_why);
   });
 });

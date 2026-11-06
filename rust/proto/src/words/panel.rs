@@ -415,6 +415,12 @@ crate::words! { panel:
     art_file_gone_open(v) = "open v{v}";
     /// the newest's action: the artifact in its agent's composer
     art_file_gone_ask(agent) = "ask {agent} about it";
+    /// a file with nothing to frame: bise kept no copy of it (its reason: `over 50 MB`)
+    art_no_copy(why) = "no copy kept: {why}";
+    /// a file with nothing to frame, a copy kept: bise has no viewer for its kind
+    art_no_view = "bise doesn't show this kind of file here.";
+    /// under either: where to see it
+    art_no_frame_why = "open it in Finder to see it.";
 
     // ---- the Overview tab's sections (bise fait mac, mockup 1): the head's '…' menu
 }

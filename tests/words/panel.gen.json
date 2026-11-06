@@ -111,6 +111,23 @@
     "one": null,
     "text": "it may be archived"
   },
+  "panel.art_no_copy": {
+    "args": [
+      "why"
+    ],
+    "one": null,
+    "text": "no copy kept: {why}"
+  },
+  "panel.art_no_frame_why": {
+    "args": [],
+    "one": null,
+    "text": "open it in Finder to see it."
+  },
+  "panel.art_no_view": {
+    "args": [],
+    "one": null,
+    "text": "bise doesn't show this kind of file here."
+  },
   "panel.artifacts": {
     "args": [],
     "one": null,

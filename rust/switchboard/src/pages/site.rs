@@ -204,6 +204,48 @@ pub fn serves_copy(by: &str, copy: &str) -> bool {
     by != "page" && !copy.is_empty() && (file.is_empty() || ctype(&file).is_some())
 }
 
+/// Where the page server reads a version's bytes (video-artifact,
+/// architect m_54229): the one rule for the server's routes
+/// (`artifact_target`, `media`), the viewer's shell (artifact/view.rs) and
+/// the typed row's `frame_url` (proto_view::artifacts).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Served<'a> {
+    /// bise's copy ([`serves_copy`])
+    Copy(&'a str),
+    /// its own file (an absolute local path): a streamed kind
+    /// ([`STREAMED_KINDS`]) too big to copy (`artifacts::TOO_BIG`), read by
+    /// its ranges (media.rs) only while its sig still holds
+    /// (media::own_holds); the path never goes in a url, a page or an event
+    Own(&'a str),
+}
+
+impl<'a> Served<'a> {
+    /// what its name and kind are read from ([`frame_href`], [`viewer_kind`], [`copy_href`])
+    pub fn file(self) -> &'a str {
+        match self {
+            Served::Copy(f) | Served::Own(f) => f,
+        }
+    }
+}
+
+/// What the page server serves for a version of an artifact added `by`
+/// with that `copy`, `no_copy` and `target`: its copy when it serves one;
+/// else its own file for a streamed kind with no copy because it was too
+/// big; else nothing (a link, a bise page, a file too big to copy that is
+/// not streamed). Pure: the sig is checked where the bytes are read.
+pub fn served<'a>(by: &str, copy: Option<&'a str>, no_copy: Option<&str>, target: &'a str) -> Option<Served<'a>> {
+    if let Some(c) = copy.filter(|c| serves_copy(by, c)) {
+        return Some(Served::Copy(c));
+    }
+    let own = by != "page"
+        && copy.is_none_or(str::is_empty)
+        && no_copy == Some(crate::artifacts::TOO_BIG)
+        && !is_link(target)
+        && std::path::Path::new(target).is_absolute()
+        && viewer_kind(target).is_some_and(|k| STREAMED_KINDS.contains(&k));
+    own.then_some(Served::Own(target))
+}
+
 /// Where an artifact's copy is framed (the typed row's `frame_url`,
 /// proto_view::artifacts): what bise's viewer draws ([`viewer_kind`]: an
 /// office file, a site, an image, a pdf; pages/artifact/view.rs), at
@@ -507,6 +549,32 @@ mod tests {
     /// architect m_24172: the selection script only for the viewer's frame
     /// (and the site's own links in it), never the plain copy; the bytes
     /// otherwise as they are.
+    /// video-artifact (architect m_54229): the copy wins when there is one;
+    /// its own file only for a streamed kind too big to copy, at an absolute
+    /// local path; anything else: nothing to frame.
+    #[test]
+    fn a_video_too_big_to_copy_is_served_from_its_own_file() {
+        let big = Some(crate::artifacts::TOO_BIG);
+        let film = "/w/film.mp4";
+        assert_eq!(served("main", Some("v1/film.mp4"), None, film), Some(Served::Copy("v1/film.mp4")), "a copy first");
+        assert_eq!(served("main", None, big, film), Some(Served::Own(film)));
+        assert_eq!(served("main", Some(""), big, "/w/clip.MOV"), Some(Served::Own("/w/clip.MOV")));
+        assert_eq!(frame_href("q", 1, Served::Own(film).file(), true), "/a/q/view", "framed in bise's viewer");
+        assert_eq!(copy_href("q", 1, Served::Own("/w/big film.mp4").file()), "/a/q/1/big%20film.mp4", "its name only, never its path");
+        for (by, no_copy, target, why) in [
+            ("main", Some("copy failed: x"), film, "no copy for another reason"),
+            ("main", Some("archived"), film, "archived: not kept"),
+            ("main", None, film, "no reason"),
+            ("page", big, film, "a bise page"),
+            ("main", big, "/w/deck.pptx", "not streamed"),
+            ("main", big, "/w/site", "a folder"),
+            ("main", big, "film.mp4", "not absolute"),
+            ("main", big, "https://x.test/film.mp4", "a link"),
+        ] {
+            assert_eq!(served(by, None, no_copy, target), None, "{why}");
+        }
+    }
+
     #[test]
     fn only_the_framed_path_gets_the_selection_script() {
         assert_eq!(framed(&["framed", "docs", "a.html"]), (true, &["docs", "a.html"][..]));

@@ -56,6 +56,11 @@ pub struct Artifact {
     /// the store's copy of the current version (absolute), when it kept one
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub copy: Option<String>,
+    /// why the store kept no copy of the current version (`over 50 MB`,
+    /// `copy failed: …`): the window says it where it would frame the file
+    /// (a video too big to copy still gets its `frame_url`, from its own file)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub no_copy: Option<String>,
     /// its target is a file that is no longer there
     #[serde(default, skip_serializing_if = "crate::is_false")]
     pub gone: bool,

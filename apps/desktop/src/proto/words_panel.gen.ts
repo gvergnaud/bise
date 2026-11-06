@@ -386,4 +386,10 @@ export const panel = {
   art_file_gone_open: (a: { v: string | number }): string => "open v" + String(a.v),
   /** the newest's action: the artifact in its agent's composer */
   art_file_gone_ask: (a: { agent: string | number }): string => "ask " + String(a.agent) + " about it",
+  /** a file with nothing to frame: bise kept no copy of it (its reason: `over 50 MB`) */
+  art_no_copy: (a: { why: string | number }): string => "no copy kept: " + String(a.why),
+  /** a file with nothing to frame, a copy kept: bise has no viewer for its kind */
+  art_no_view: "bise doesn't show this kind of file here.",
+  /** under either: where to see it */
+  art_no_frame_why: "open it in Finder to see it.",
 } as const;

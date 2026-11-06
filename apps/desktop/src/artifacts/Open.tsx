@@ -340,6 +340,27 @@ export function FileGone({ agent, shown, newest, onNewest, onAsk }: { agent: str
 }
 
 /**
+ * A file the panel has nothing to frame (video-artifact, architect m_54229): bise kept no copy of
+ * it (the row's typed `no_copy`, `over 50 MB`) or has no viewer for its kind. Never a blank body.
+ * Pure words: the reason only for the current version (the row carries the current's).
+ */
+export function unframedWords(a: Pick<Artifact, 'version' | 'no_copy'>, shown: number): { title: string; why: string } {
+  const reason = shown === a.version ? (a.no_copy ?? null) : null;
+  return { title: reason === null ? panel.art_no_view : panel.art_no_copy({ why: reason }), why: panel.art_no_frame_why };
+}
+
+export function Unframed({ a, shown, onReveal }: { a: Artifact; shown: number; onReveal: (() => void) | null }) {
+  const w = unframedWords(a, shown);
+  return (
+    <div className="art-file-gone" data-testid="artifact.unframed" role="status">
+      <Empty title={w.title} action={onReveal === null ? undefined : <Button onClick={onReveal} testId="artifact.unframed.finder">show in Finder</Button>}>
+        {w.why}
+      </Empty>
+    </div>
+  );
+}
+
+/**
  * '↗ browser' (page-unreach): a pages-server url is asked first; one that doesn't answer opens no
  * dead tab: the panel asks again and says why. Anything else opens at once.
  */
@@ -591,6 +612,10 @@ export function ArtifactOpen({ project, id, onClose, composer = true, lead, bare
             A video's player goes full screen from its own button (kit/office/video.js): allow it */}
         {/* a .diff or .patch: its files and hunks, the review's own view (try-diff-open), never a blank frame */}
         {src === null && isDiff(a) && <DiffArtifact project={project} a={a} version={shown} onEscape={close} />}
+        {/* a file with nothing to frame (no copy kept, no viewer for it): says why, never a blank body */}
+        {src === null && !isDiff(a) && a.path != null && (
+          <Unframed a={a} shown={shown} onReveal={finder === undefined || path === null ? null : () => { void finder(path); }} />
+        )}
         {/* its file gone (the server's 404, designer m_52746): bise's own empty state, never the server's line */}
         {src !== null && reach === 'gone' && (
           <FileGone agent={a.agent} shown={shown} newest={a.version}

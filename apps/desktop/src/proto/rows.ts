@@ -885,6 +885,12 @@ target?: string,
  */
 copy?: string | null, 
 /**
+ * why the store kept no copy of the current version (`over 50 MB`,
+ * `copy failed: …`): the window says it where it would frame the file
+ * (a video too big to copy still gets its `frame_url`, from its own file)
+ */
+no_copy?: string | null, 
+/**
  * its target is a file that is no longer there
  */
 gone?: boolean, 
