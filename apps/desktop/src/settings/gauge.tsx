@@ -55,7 +55,7 @@ export function markOf(r: FeatureRow, g: SetupGauge): { text: string; tone: Tone
     const tts = r.parts.find((p) => p.role === 'tts');
     return { text: ms === null ? settings.mark_on : settings.mark_key_works, tone: 'ink', tip: settings.tip_key_only({ provider: tts?.provider ?? '' }) };
   }
-  const better = r.better !== undefined && r.better.t === 'add_key' ? settings.tip_better({ provider: providerName(g, r.better.provider) }) : null;
+  const better = r.better != null && r.better.t === 'add_key' ? settings.tip_better({ provider: providerName(g, r.better.provider) }) : null;
   if (ms === null) return { text: settings.mark_on, tone: 'ink', tip: better ?? settings.tip_untested };
   return { text: settings.mark_took({ secs: secsOf(ms) }), tone: 'ink', tip: better ?? settings.tip_took({ secs: secsOf(ms) }) };
 }
@@ -90,7 +90,7 @@ export function fixButton(f: SetupFix, g: SetupGauge): string {
 /** Next's words: the action, then what it brings back or turns on. Pure. */
 export function nextWords(g: SetupGauge): string {
   const n = g.next;
-  if (n === undefined) return settings.gauge_all_set;
+  if (n == null) return settings.gauge_all_set;
   const f = n.fix;
   const act =
     f.t === 'add_key'
@@ -201,9 +201,9 @@ export function GaugeHead({ g, ports }: { g: SetupGauge; ports: GaugePorts }) {
         <span className="n">{settings.gauge_count({ on: String(g.on), of: String(g.of) })}</span>
       </span>
       <span className="st-next" data-testid="settings.gauge.next">
-        {n !== undefined && <b>{settings.gauge_next}</b>} {nextWords(g)}
+        {n != null && <b>{settings.gauge_next}</b>} {nextWords(g)}
       </span>
-      {n !== undefined && (
+      {n != null && (
         <Button kind="pri" onClick={() => { ports.fix(n.fix, n.unlocks[0] ?? null); }} testId="settings.gauge.next.fix">
           {fixButton(n.fix, g)}
         </Button>
@@ -257,17 +257,17 @@ export function FeatureRows({ g, ports, at }: { g: SetupGauge; ports: GaugePorts
               <span className={cx('st-mark', testing ? 'faint' : m.tone)} {...tipAttrs(m.tip)} data-testid={`settings.feature.${r.id}.mark`}>
                 {testing ? settings.gauge_testing : m.text}
               </span>
-              {r.fix !== undefined && !open && (
+              {r.fix != null && !open && (
                 <Button
                   kind={r.state === 'failed' ? 'pri' : undefined}
-                  onClick={() => { if (r.fix !== undefined) ports.fix(r.fix, r.id); }}
+                  onClick={() => { if (r.fix != null) ports.fix(r.fix, r.id); }}
                   testId={`settings.feature.${r.id}.fix`}
                 >
                   {fixButton(r.fix, g)}
                 </Button>
               )}
-              {r.fix === undefined && r.better !== undefined && r.better.t === 'allow_perm' && (
-                <Act onClick={() => { if (r.better !== undefined) ports.fix(r.better, r.id); }} testId={`settings.feature.${r.id}.better`}>
+              {r.fix === undefined && r.better != null && r.better.t === 'allow_perm' && (
+                <Act onClick={() => { if (r.better != null) ports.fix(r.better, r.id); }} testId={`settings.feature.${r.id}.better`}>
                   {fixButton(r.better, g)}
                 </Act>
               )}
@@ -299,8 +299,8 @@ function Trouble({ r, g, ports }: { r: FeatureRow; g: SetupGauge; ports: GaugePo
       {env != null && <p className="said">{settings.trouble_env({ var: env })}</p>}
       {at != null && <p className="when">{settings.trouble_checked({ time: new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })}</p>}
       <div className="acts">
-        {r.fix !== undefined && (
-          <Button kind="pri" onClick={() => { if (r.fix !== undefined) ports.fix(r.fix, r.id); }} testId={`settings.feature.${r.id}.trouble.fix`}>
+        {r.fix != null && (
+          <Button kind="pri" onClick={() => { if (r.fix != null) ports.fix(r.fix, r.id); }} testId={`settings.feature.${r.id}.trouble.fix`}>
             {fixButton(r.fix, g)}
           </Button>
         )}

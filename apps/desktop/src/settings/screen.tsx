@@ -145,7 +145,8 @@ export function SettingsScreen({ page }: { page?: string | undefined }) {
   // and only when the models page is shown (the roles pick from them), never when settings mount
   const asked = useRef(false);
   const homeProject = home?.project;
-  const onModels = pageOf(page).id === 'models';
+  // the roles live in settings · Setup now (/models opens it with them unfolded)
+  const onModels = pageOf(page).id === 'setup';
   useEffect(() => {
     if (!onModels || asked.current || homeProject === undefined || models.length > 0) return;
     asked.current = true;
