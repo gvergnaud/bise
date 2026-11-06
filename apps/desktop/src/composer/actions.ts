@@ -21,6 +21,12 @@ export interface ComposerActions {
   focus(): void;
   /** The focus with the caret at the draft's end (a press on the frame's padding or empty area, his round 2). */
   focusEnd(): void;
+  /** All his words selected, with the focus: typing replaces them (the spotlight's kept draft on its next fn+space). */
+  selectAll(): void;
+  /** The field's content as an entry (entry.ts): his words and chips, to carry elsewhere. */
+  entry(): string;
+  /** The field emptied as by a send (its undo forgotten, the draft dropped): his words went elsewhere. */
+  clear(): void;
   /** Files he picked by path (the '+' in the box's row): each a chip at the caret, an image as an image chip. */
   attach(paths: readonly string[]): void;
   /** The mic control: on, or off when on (bar I). */

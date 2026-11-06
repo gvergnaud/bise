@@ -19,7 +19,9 @@ import { useHistoryWays } from './esc-up';
 import { useAnswerJumps } from '@/thread/useAnswerJumps';
 import { formatRoute, inboxAtOf, MAIN, parseRoute, projectOf, shownOf, startRouteOf, type Route } from './route';
 import { askInbox, useInboxAsks } from './inboxAsk';
-import { keep } from './keep';
+import { keep, keptStorage } from './keep';
+import { draftAskOf } from '@/shared/asks';
+import { handIn } from '@/composer/handin';
 import { noteWindowKey, useMainRoutes, useMenuRouting } from './menu';
 import { ComposerLab, PearlLab, SpotlightLab } from '@/composer/Lab';
 import { ThreadScreen } from '@/thread/ThreadScreen';
@@ -163,6 +165,13 @@ function firstRoute(): Route {
   if (inbox !== undefined) {
     askInbox(inbox.at);
     return keptRoute() ?? { screen: 'bise' };
+  }
+  // the window opened by the spotlight's ⏎ on an agent's row under a message: its thread, his
+  // words its draft (no composer is mounted yet: they are its saved draft)
+  const draft = draftAskOf(start);
+  if (draft !== undefined) {
+    handIn(keptStorage, `${draft.project}/${draft.agent}`, draft.entry);
+    return parseRoute(`agent/${draft.project}/${draft.agent}`);
   }
   return (testMode() ? startRouteOf(window.location.hash) : undefined) ?? keptRoute() ?? { screen: 'bise' };
 }

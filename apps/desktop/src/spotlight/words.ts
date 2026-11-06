@@ -9,28 +9,24 @@ export const W = {
   atWork: 'at work',
   envs: 'projects',
   found: 'found',
-  askBise: 'ask bise',
   /** a waiting row's own key, like the other rows' (ambient-pm's try gate): ⏎ answers it */
   answerKey: '⏎ answer',
   /** the key on an agent's or a project's active row (designer m_25150) */
   openKey: '⏎ open',
-  askKey: '⏎ ask',
+  /** a row the keyboard is on under a message (Gabriel's v4): his words go as its draft, or to it */
+  openWithKey: '⏎ open with your words   ⌘⏎ send to it',
   startKey: '⏎ start',
   openInBise: 'open in bise',
   close: 'close',
   inFront: (what: string): string => (what ? `in front: ${what}` : 'in front'),
   /** the count first: a long path is the part that gets cut (designer N4) */
   envSub: (branch: string, n: number): string => `${n} agent${n === 1 ? '' : 's'} · ${branch}`,
-  sendQ: (q: string): string => `send “${q}” to bise`,
-  keysEmpty: '⏎ open in bise   ↑↓ move   esc close',
-  keysAsk: '⏎ send to bise   ↑↓ move   esc close',
-  // R41: an image or a file in the spot: ⏎ asks bise with it, ⌫ at the start takes the last one away
-  keysFiles: '⏎ send to bise   ⌫ remove   esc close',
-  // R41: the 'ask bise' row says what goes with his words (designer m_13808): '2 images · …'
-  withFiles: (images: number, others: number): string => {
-    const one = (n: number, a: string, many: string): string => (n === 0 ? '' : n === 1 ? a : `${String(n)} ${many}`);
-    return [one(images, 'an image', 'images'), one(others, 'a file', 'files')].filter((s) => s !== '').join(', ');
-  },
+  // the key line (Gabriel's v4, spotlight-composer#choix): what ⏎ does says which way it goes
+  keysEmpty: '⏎ open   ↓ the list   esc close',
+  keysSearch: (name: string): string => `⏎ open ${name}   ↓ the list   esc close`,
+  keysMessage: '⏎ send to bise   ⇧⏎ new line   esc close, draft kept',
+  keysList: '↑ on the first row: the text   esc the text',
+  keysMenu: '⏎ pick   ⇥ complete   ↑↓ move   esc close the menu',
   answerMore: 'the rest in bise   ⏎ open',
   // spot-shot: the window he was on rides his ask as a chip (the talk's 'no screenshot' words)
   shotDrop: "don't send this window",

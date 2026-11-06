@@ -32,6 +32,7 @@ import { aboutParts, aboutText } from './about';
 import { composer } from '../proto/words.gen';
 import { useHomeShows } from '@/composer/home/Home';
 import { noteComposerFocus, talkFocusHandlers } from '@/composer/talking';
+import { useHandIn } from '@/composer/handin';
 
 /**
  * The thread's composer, also mounted under an open artifact (amb-kit's src/artifacts/Open.tsx,
@@ -194,6 +195,8 @@ export const ThreadComposer = memo(function ThreadComposer({
     },
     [onReady],
   );
+  // his words from the spotlight (⏎ on this agent's row under a message): into this field
+  useHandIn(about === undefined ? `${project}/${agent}` : `${project}/${agent}/artifact/${about.id}`, actions);
   // his queued messages, the hub's (issue 23): tab queues there, the drawer above the tab shows
   // them with send now / edit / delete, ↑ in the empty field edits the newest (ThreadQueue.ts)
   const queue = useThreadQueue(project, agent, actions);

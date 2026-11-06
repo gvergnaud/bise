@@ -220,7 +220,7 @@ export function feature(now = 1_791_100_000_000): Feature {
     },
     openExternal: (url: string) => {
       capsuleRan.push({ out: 'fx', fx: { fx: 'openExternal', args: [url] } });
-      return Promise.resolve();
+      return Promise.resolve(true);
     },
   };
   let capsule: Store | null = null;

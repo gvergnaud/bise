@@ -14,6 +14,9 @@ import type { Router } from './router';
 import { inboxAtOf, parseRoute, projectOf, type Route } from './route';
 import { askInbox, inboxFromMenu } from './inboxAsk';
 import { askEffect, runNav } from './edge';
+import { draftAskOf } from '@/shared/asks';
+import { handIn } from '@/composer/handin';
+import { keptStorage } from './keep';
 import { addProject } from './addProject';
 import { newAgent } from './newagent';
 import { biseBack } from './railback';
@@ -143,6 +146,13 @@ export function useMainRoutes(router: Router) {
       const art = askEffect(route);
       if (art !== undefined) {
         runNav(art, router);
+        return;
+      }
+      // the spotlight's ⏎ on an agent's row under a message: its thread, his words its draft
+      const draft = draftAskOf(route);
+      if (draft !== undefined) {
+        handIn(keptStorage, `${draft.project}/${draft.agent}`, draft.entry);
+        router.go(parseRoute(`agent/${draft.project}/${draft.agent}`));
         return;
       }
       // b1/b2: 'inbox' / a notification's 'inbox?card=<project>/<id>' open the block in place

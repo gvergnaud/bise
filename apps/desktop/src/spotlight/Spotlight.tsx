@@ -1,10 +1,13 @@
-// The spotlight (fn space; bar ⛔1s, his bugs 7, 6 and 2): amb-kit's Spot frame, an uncontrolled
-// <InputArea> (it wraps his long words, spot-shot) the app never writes while he types (only a send
-// clears it), the list under it as
-// memo'd rows keyed by id (a keystroke updates the rows that changed, the input and the other rows
-// stay the same nodes), the live pearl mounted once. bise's answer shows under the input at a
-// readable size; the panel grows with it (onHeight tells the window), and past ANSWER_MAX_LINES it
-// cuts with 'the rest in bise' (⏎ opens it in the window).
+// The spotlight (fn space; bar ⛔1s, his bugs 7, 6 and 2; Gabriel's v4, spotlight-composer#choix):
+// amb-kit's Spot frame, the app's own composer field (composer/pm/PmField.tsx: live markdown,
+// ⇧⏎, the @ menu by groups, chips, pastes, ⌘Z, dictation) with the spotlight's keys taken first
+// (keyFirst), the list under it as memo'd rows keyed by id (a keystroke updates the rows that
+// changed, the field and the other rows stay the same nodes), the live pearl mounted once.
+// A search first: a name that finds something, ⏎ opens it; a message (a sentence, a line break,
+// a chip) is a standard composer whose ⏎ sends to bise. ↓ on his last character goes into the
+// list, ↑ on its first row comes back. bise's answer shows under the field at a readable size;
+// the panel grows with it (onHeight tells the window), and past ANSWER_MAX_LINES it cuts with
+// 'the rest in bise' (⏎ opens it in the window).
 import {
   memo,
   useDeferredValue,
@@ -13,106 +16,42 @@ import {
   useRef,
   useState,
   type JSX,
-  type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { BiseMark, InputArea, Press, Spot, SpotGroup, SpotRow } from "@/ds";
+import { BiseMark, Press, Spot, SpotGroup, SpotRow } from "@/ds";
 import { cx } from "@/ds/cx";
 import { LivePearl, type Mood } from "@/pearl";
 import {
   flat,
   routeList,
   spotList,
+  spotView,
   type AgentStatus,
   type SpotData,
   type SpotItem,
 } from "./list";
 import { W, newBrief } from "./words";
-
-/** The overlay scrollbar's stay after his last scroll (the capsule's SCROLLBAR_LINGER_MS). */
-const SCROLLBAR_LINGER_MS = 700;
 import { LiveText } from "./LiveText";
 import { shownName } from "@/agents/model";
-import { caretAtEnd, keep } from "@/app/keep";
+import { keptStorage } from "@/app/keep";
 import type { PreviewLine } from "./preview";
-import {
-  filePathOf,
-  isImageFile,
-  saveImageFile,
-  thumbnail,
-} from "@/composer/attach";
-import type { SavedImage } from "@/composer/sources";
+import { PmField } from "@/composer/pm/PmField";
+import type { CaretPlace } from "@/composer/pm/pmtext";
+import type { ComposerActions } from "@/composer/actions";
+import { buildMessage, type Outgoing } from "@/composer/message";
+import { entrySegments, messageOf } from "@/composer/entry";
+import { NO_SOURCES, type ComposerSources } from "@/composer/sources";
+import type { Store } from "@/composer/drafts";
 import type { Part } from "@/proto";
 import "./spotlight.css";
 
-/** What he pasted or dropped in the spot (R41): an image saved in bise's image store, or a file by its own path. */
-export interface SpotFile {
-  readonly n: number;
-  readonly path: string;
-  readonly name: string;
-  readonly image: boolean;
-  readonly thumb?: string;
-}
+/** The spotlight's composer target: its draft, kept through esc, a reload or a relaunch (keep.ts
+ *  keptStorage), and its history (↑ in the empty field: his last message back). */
+export const SPOT_TARGET = "spot";
 
-/** A chip's words: an image as the composer's '[Image #n]', a file by its name. */
-export const spotFileLabel = (f: SpotFile): string =>
-  f.image ? `[Image #${String(f.n)}]` : `[File #${String(f.n)}]`;
-
-/** A chip's words on screen, as the sent bubble's chip (amb-win 900f998e, designer m_18136): an
- *  image reads 'image n' in ink, never its '[Image #n]' tag; a file by its name. */
-export const spotChipWords = (f: SpotFile): string =>
-  f.image ? `image ${String(f.n)}` : f.name;
-
-/** The bubble's no-file glyph (rows-cards Thumb): an image chip whose thumbnail could not be drawn. */
-function NoThumb() {
-  return (
-    <span className="thumb none" aria-hidden="true">
-      <svg viewBox="0 0 16 16" width="16" height="16">
-        <rect
-          x="2.5"
-          y="3.5"
-          width="11"
-          height="9"
-          rx="1.5"
-          fill="none"
-          stroke="currentColor"
-        />
-        <circle cx="6" cy="6.5" r="1" fill="currentColor" />
-        <path
-          d="M3 11.5l3.5-3 2.5 2 2-1.5 2.5 2"
-          fill="none"
-          stroke="currentColor"
-        />
-      </svg>
-    </span>
-  );
-}
-
-/** His ask with chips as typed parts (msg-parts, like the thread's d68b4867): each chip in order, an
- *  image by its source in the image store alone (the hub stores it, main 18a32ce3; no b64_file), a
- *  file by its path, then his words. The text keeps the chips' labels before his words for older
- *  readers and the pending row's match; never `files` (the hub takes one list or the other). */
-export function spotAsk(
-  words: string,
-  files: readonly SpotFile[],
-): { text: string; parts: Part[] } {
-  const parts: Part[] = files.map((f) =>
-    f.image
-      ? { kind: "image", name: spotFileLabel(f), source: f.path }
-      : // file-chips: a file chip by its path, in order (the hub marks it missing when gone)
-        { kind: "file", name: spotFileLabel(f), path: f.path },
-  );
-  if (words !== "") parts.push({ kind: "text", text: words });
-  return {
-    text: [...files.map(spotFileLabel), words]
-      .filter((x) => x !== "")
-      .join(" "),
-    parts,
-  };
-}
-
-/** His typed words' field in the keep (keep.ts). */
-const KEPT = "spot";
+/** An entry's message as it would be sent (entry.ts → message.ts): ⌘⏎ on a row sends it there. */
+export const outgoingOf = (entry: string): Outgoing =>
+  buildMessage(messageOf(entrySegments(entry) ?? []));
 
 export interface SpotAnswer {
   readonly text: string;
@@ -145,13 +84,18 @@ export interface SpotlightProps {
   readonly onRouteKeep?: () => void;
   /** ⏎ on another project during the hold (route_correct). */
   readonly onRouteTo?: (project: string) => void;
-  /** A sentence for bise (⏎ on 'ask bise', or ⏎ with nothing picked); with images or files he
-   *  pasted or dropped (R41), its typed parts too (spotAsk; absent when none). */
+  /** His message for bise (⏎ in a message, ⌘⏎ anywhere in his words): its text, and its typed
+   *  parts when it has more than words (msg-parts: chips, pastes, images, files; message.ts). */
   readonly onAsk: (text: string, parts?: readonly Part[]) => void;
-  /** A pasted or dropped image into bise's image store (default: window.bise.saveImage). */
-  readonly saveImage?: (file: File) => Promise<SavedImage | null>;
-  /** A dropped file's absolute path (default: window.bise.filePath). */
-  readonly filePath?: (file: File) => string;
+  /** ⏎ on an agent's or a project's row under a message: open it with his words and chips as its
+   *  composer's draft (an entry, entry.ts), never sent. */
+  readonly onOpenWith?: (item: SpotItem, entry: string) => void;
+  /** ⌘⏎ on an agent's or a project's row: his message sent to it (a project: its main). */
+  readonly onSendTo?: (item: SpotItem, out: Outgoing) => void;
+  /** The composer's lists (@ agents, plugins, artifacts, files) and effects (a pasted image saved). */
+  readonly sources?: ComposerSources;
+  /** Where the draft and history live (keep.ts keptStorage; tests pass their own). */
+  readonly store?: Store;
   /** '/new …' or 'start an agent: …' (bar A.1): start an agent with that brief; none: it goes to bise as words. */
   readonly onNew?: (brief: string) => void;
   /** Open a card, an agent or an environment in bise's window. */
@@ -232,39 +176,22 @@ const Row = memo(function Row({
   testId,
   onPick,
   acts,
-  withFiles,
+  withWords = false,
 }: {
   item: SpotItem;
   on: boolean;
   testId: string;
   onPick: (item: SpotItem) => void;
   acts?: readonly PreviewLine[] | undefined;
-  withFiles?: string | undefined;
+  /** the keyboard on it under a message: ⏎ opens it with his words, ⌘⏎ sends them to it */
+  withWords?: boolean;
 }): JSX.Element {
   const click = (): void => {
     onPick(item);
   };
   const id = `${testId}.row.${item.id}`;
+  const openKey = withWords ? W.openWithKey : W.openKey;
   switch (item.kind) {
-    case "ask":
-      // with chips in the spot it says they go too ('2 images · what is wrong in these', designer m_13808)
-      return (
-        <SpotRow
-          glyph={BISE}
-          name={W.askBise}
-          what={
-            withFiles === undefined || withFiles === ""
-              ? item.text
-              : item.text === ""
-                ? withFiles
-                : `${withFiles} · ${item.text}`
-          }
-          hotkey={W.askKey}
-          on={on}
-          onClick={click}
-          testId={id}
-        />
-      );
     case "new":
       return (
         <SpotRow
@@ -295,7 +222,7 @@ const Row = memo(function Row({
       return (
         <SpotRow
           glyph={MARK[item.status]}
-          hotkey={W.openKey}
+          hotkey={openKey}
           name={item.name}
           where={item.pname}
           what={
@@ -316,7 +243,7 @@ const Row = memo(function Row({
           glyph="·"
           name={item.name}
           what={item.sub}
-          hotkey={item.n === null ? undefined : `⌘${item.n}`}
+          hotkey={withWords ? openKey : item.n === null ? undefined : `⌘${item.n}`}
           on={on}
           onClick={click}
           testId={id}
@@ -383,32 +310,34 @@ export function answerLines(text: string): {
 
 export function Spotlight(p: SpotlightProps): JSX.Element {
   const testId = p.testId ?? "spot";
-  const input = useRef<HTMLTextAreaElement>(null);
   const box = useRef<HTMLDivElement>(null);
-  // the field's overlay scrollbar timer (data-scrolling, spotlight.css)
-  const scrolling = useRef<number | null>(null);
-  useEffect(
-    () => () => {
-      if (scrolling.current !== null) window.clearTimeout(scrolling.current);
-    },
-    [],
-  );
-  // his words survive a reload or an update swap until sent or put away with esc (keep.ts, amb-win)
-  const [text, setText] = useState(() => keep.text(KEPT));
-  // the list follows the words at React's pace; the input itself is never re-rendered by it
+  // the field's acts (composer/actions.ts), once it is mounted
+  const actions = useRef<ComposerActions | null>(null);
+  // his words as plain text (a chip one U+FFFC, a newline '\n'), read at each change, never written
+  const [text, setText] = useState("");
+  // the list follows the words at React's pace; the field itself is never re-rendered by it
   const query = useDeferredValue(text);
   const route = p.route ?? null;
-  // R41: what he pasted or dropped, as chips before his words; they leave with the ask
-  const [files, setFiles] = useState<readonly SpotFile[]>([]);
   const list = useMemo(
     () =>
-      route === null ? spotList(p.data, query) : routeList(p.data, route.to),
+      route === null ? spotView(p.data, query) : routeList(p.data, route.to),
     [p.data, query, route],
   );
   const items = useMemo(() => flat(list), [list]);
-  const [sel, setSel] = useState({ q: "", i: 0 });
-  const index =
-    sel.q === query ? Math.min(sel.i, Math.max(0, items.length - 1)) : 0;
+  // the keyboard in the list (↓ on his last character), on its row i, for the words it came in
+  // with; none: in his words. A key that changes the words takes it back to them
+  const [inList, setInList] = useState<{ q: string; i: number } | null>(null);
+  // the field's @ menu open: it takes the list's place
+  const [menu, setMenu] = useState(false);
+  // the field's one-off line (⌘Z with nothing to undo, ...)
+  const [strip, setStrip] = useState<JSX.Element | null>(null);
+  const message = route === null && list.mode === "ask";
+  const into =
+    inList !== null && inList.q === query && items.length > 0
+      ? Math.min(inList.i, items.length - 1)
+      : null;
+  // the row ⏎ acts on: the keyboard's in the list; in his words a search's first (a message: none)
+  const index = into ?? (message ? -1 : 0);
   const props = useRef(p);
   useEffect(() => {
     props.current = p;
@@ -419,9 +348,9 @@ export function Spotlight(p: SpotlightProps): JSX.Element {
     props.current.onSelect?.(selected);
   }, [selected]);
 
+  // his kept draft comes back selected: typing replaces it (Gabriel's v4, esc)
   useEffect(() => {
-    input.current?.focus();
-    caretAtEnd(input.current);
+    actions.current?.selectAll();
   }, []);
 
   useEffect(() => {
@@ -436,160 +365,150 @@ export function Spotlight(p: SpotlightProps): JSX.Element {
     };
   }, []);
 
-  /** A chip for each pasted or dropped file, in order: an image saved in bise's image store (with
-   *  its thumbnail), any other file by its own path (none: a page-made non-image, left out). */
-  const addFiles = (list: readonly File[]): void => {
-    const add = (f: Omit<SpotFile, "n">): void => {
-      setFiles((now) => [
-        ...now,
-        { ...f, n: now.reduce((m, x) => Math.max(m, x.n), 0) + 1 },
-      ]);
-    };
-    for (const f of list) {
-      if (isImageFile(f)) {
-        const save = props.current.saveImage ?? saveImageFile;
-        void Promise.all([save(f), thumbnail(f)]).then(([img, thumb]) => {
-          if (img !== null)
-            add({
-              path: img.path,
-              name: img.name,
-              image: true,
-              ...(thumb === null ? {} : { thumb }),
-            });
-        });
-      } else {
-        const path = (props.current.filePath ?? filePathOf)(f);
-        if (path !== "") add({ path, name: f.name, image: false });
-      }
-    }
-  };
-  const addRef = useRef(addFiles);
-  useEffect(() => {
-    addRef.current = addFiles;
-  });
-
-  // a file dropped anywhere on the spot (its field, its list, the pearl over its hole) is his ask's,
-  // never a navigation of the capsule
-  useEffect(() => {
-    const over = (e: DragEvent): void => {
-      e.preventDefault();
-    };
-    const drop = (e: DragEvent): void => {
-      e.preventDefault();
-      const list = Array.from(e.dataTransfer?.files ?? []);
-      if (list.length > 0) addRef.current(list);
-      input.current?.focus();
-    };
-    window.addEventListener("dragover", over);
-    window.addEventListener("drop", drop);
-    return () => {
-      window.removeEventListener("dragover", over);
-      window.removeEventListener("drop", drop);
-    };
-  }, []);
-
-  const send = (q: string): void => {
-    if (q.trim() === "" && files.length === 0) return;
-    const brief = files.length === 0 ? newBrief(q) : undefined;
+  /** The field's send (⏎ in a message, ⌘⏎ in his words): '/new …' starts an agent, else bise. */
+  const sendOut = (o: Outgoing): void => {
+    const brief = o.parts === undefined ? newBrief(o.text) : undefined;
     const onNew = props.current.onNew;
     if (brief !== undefined && onNew !== undefined) onNew(brief);
-    else if (files.length > 0) {
-      const ask = spotAsk(q.trim(), files);
-      props.current.onAsk(ask.text, ask.parts);
-    } else props.current.onAsk(q.trim());
-    if (input.current !== null) input.current.value = ""; // his send: the one write to the input
-    setText("");
-    setFiles([]);
-    keep.dropText(KEPT);
+    else props.current.onAsk(o.text, o.parts);
+    setInList(null);
   };
 
-  const pick = (item: SpotItem): void => {
+  /** A row picked (⏎, ⌘⏎ `send`, a click): during a hold another project; under a message an
+   *  agent or a project gets his words as its draft, or as a message with ⌘⏎. */
+  const pick = (item: SpotItem, send = false): void => {
     if (props.current.route != null) {
       if (item.kind === "env") props.current.onRouteTo?.(item.project);
       return;
     }
-    if (item.kind === "ask") send(item.text);
-    else if (item.kind === "new")
-      send(input.current?.value ?? `/new ${item.brief}`);
-    else if (item.kind !== "front") props.current.onOpen(item);
-  };
-
-  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
-    if (e.nativeEvent.isComposing) return;
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      e.preventDefault();
-      const by = e.key === "ArrowDown" ? 1 : -1;
-      setSel({
-        q: query,
-        i: items.length === 0 ? 0 : (index + by + items.length) % items.length,
-      });
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      const a = p.answer;
-      if (a && text.trim() === "" && answerLines(a.text).cut) {
-        p.onOpenAnswer?.();
+    if (item.kind === "new") {
+      actions.current?.submit();
+      return;
+    }
+    if (item.kind === "front") return;
+    const a = actions.current;
+    if (message && a !== null && (item.kind === "agent" || item.kind === "env")) {
+      const entry = a.entry();
+      if (send && props.current.onSendTo !== undefined) {
+        props.current.onSendTo(item, outgoingOf(entry));
+        a.clear();
         return;
       }
-      const item = items[index];
-      if (route !== null) {
-        if (item !== undefined) pick(item);
+      if (props.current.onOpenWith !== undefined) {
+        props.current.onOpenWith(item, entry);
+        a.clear();
         return;
-      }
-      // R41: with an image or a file in the spot, ⏎ asks bise with it (opening a row would drop it)
-      if (files.length > 0) send(text);
-      else if (item !== undefined && text === query) pick(item);
-      else send(text);
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      if (route !== null) p.onRouteKeep?.();
-      else {
-        keep.dropText(KEPT);
-        setFiles([]);
-        p.onClose();
-      }
-    } else if (
-      e.key === "Backspace" &&
-      files.length > 0 &&
-      e.currentTarget.selectionStart === 0 &&
-      e.currentTarget.selectionEnd === 0
-    ) {
-      // ⌫ at the start of his words takes the last chip away, as the composer's ⌫ before a chip
-      e.preventDefault();
-      setFiles((now) => now.slice(0, -1));
-    } else if (
-      e.key === "Backspace" &&
-      p.shot != null &&
-      e.currentTarget.selectionStart === 0 &&
-      e.currentTarget.selectionEnd === 0
-    ) {
-      // the still's chip is the first: ⌫ at the start takes it once the files went
-      e.preventDefault();
-      p.onShotDrop?.();
-    } else if (e.metaKey && /^[1-9]$/u.test(e.key)) {
-      const env = items.find((x) => x.kind === "env" && x.n === Number(e.key));
-      if (env !== undefined) {
-        e.preventDefault();
-        p.onOpen(env);
       }
     }
+    props.current.onOpen(item);
+  };
+
+  /** The spotlight's keys, before the field's (the @ menu open, they stay the field's). */
+  const keyFirst = (e: KeyboardEvent, at: CaretPlace): boolean => {
+    const k = e.key;
+    const mods = e.metaKey || e.ctrlKey || e.altKey;
+    const bare = !mods && !e.shiftKey;
+    const take = (): true => {
+      e.preventDefault();
+      return true;
+    };
+    if (e.metaKey && /^[1-9]$/u.test(k)) {
+      // ⌘1-9 always opens a project, from the words or the list, whatever the list shows now
+      const env = flat(spotList(props.current.data, "")).find((x) => x.kind === "env" && x.n === Number(k));
+      if (env === undefined) return false;
+      props.current.onOpen(env);
+      return take();
+    }
+    if (into !== null) {
+      // in the list: ↑↓ move, ↑ on its first row back to his words (the caret at the end), ⏎ the
+      // row, ⌘⏎ his words to it, esc back to his words; a key that writes goes back with it
+      if (k === "ArrowDown" && bare) {
+        setInList({ q: query, i: Math.min(into + 1, items.length - 1) });
+        return take();
+      }
+      if (k === "ArrowUp" && bare) {
+        if (into === 0) {
+          setInList(null);
+          actions.current?.focusEnd();
+        } else setInList({ q: query, i: into - 1 });
+        return take();
+      }
+      if (k === "Enter") {
+        const item = items[into];
+        if (item !== undefined) pick(item, e.metaKey);
+        return take();
+      }
+      if (k === "Escape") {
+        setInList(null);
+        return take();
+      }
+      if (k === "Tab") return take();
+      if (["Shift", "Meta", "Alt", "Control", "CapsLock"].includes(k)) return false;
+      setInList(null);
+      return false;
+    }
+    if (k === "Escape") {
+      // the hold: keep it with bise; else the window goes, his draft kept (it comes back selected)
+      if (route !== null) props.current.onRouteKeep?.();
+      else props.current.onClose();
+      return take();
+    }
+    if (k === "ArrowDown" && bare) {
+      // on his last character (or an empty field): into the list; on the last line: to its end
+      if ((at.atEnd || at.blank) && items.length > 0) {
+        setInList({ q: query, i: 0 });
+        return take();
+      }
+      if (at.lastLine && !at.atEnd) {
+        actions.current?.focusEnd();
+        return take();
+      }
+      return false;
+    }
+    if (k === "Enter" && bare) {
+      const a = props.current.answer;
+      if (a && at.blank && answerLines(a.text).cut) {
+        props.current.onOpenAnswer?.();
+        return take();
+      }
+      // the list for his words now (the deferred one may be a key late)
+      const now =
+        route !== null
+          ? list
+          : text === query
+            ? list
+            : spotView(props.current.data, text);
+      // a message, '/new …': the field's ⏎ sends it (sendOut)
+      if (route === null && (now.mode === "ask" || now.mode === "new")) return false;
+      const item = flat(now)[0];
+      if (item === undefined) return false;
+      pick(item);
+      return take();
+    }
+    if (k === "Backspace" && bare && at.atStart && props.current.shot != null) {
+      // the still's chip is before his words: ⌫ at their start takes it
+      props.current.onShotDrop?.();
+      return take();
+    }
+    return false;
   };
 
   const ans = p.answer ? answerLines(p.answer.text) : null;
-  const imageCount = files.filter((f) => f.image).length;
-  const filesWords =
-    files.length > 0
-      ? W.withFiles(imageCount, files.length - imageCount)
-      : undefined;
+  const first = items[0];
   const keys =
     route !== null
       ? W.keysRoute
-      : files.length > 0
-        ? W.keysFiles
-        : list.mode === "new"
-          ? W.keysNew
-          : list.mode === "ask"
-            ? W.keysAsk
-            : W.keysEmpty;
+      : menu
+        ? W.keysMenu
+        : into !== null
+          ? W.keysList
+          : list.mode === "new"
+            ? W.keysNew
+            : message
+              ? W.keysMessage
+              : text.trim() === "" || first === undefined
+                ? W.keysEmpty
+                : W.keysSearch(rowName(first));
   // one key per row even when two cards share an id (a hub's cards and its `others` count apart:
   // the fixture world's acme has two #11). A shared key let React keep a stale row after the
   // list changed (spotlight/new saw 2 rows); the second one gets '#1', in list order.
@@ -617,83 +536,54 @@ export function Spotlight(p: SpotlightProps): JSX.Element {
           )
         }
         input={
-          <span className="b-spot-field">
-            {/* the chips on their own row above his words (designer m_32542, the composer's
+          <span className="b-spot-field" data-list={into !== null ? "in" : undefined}>
+            {/* the still's chip on its own row above his words (designer m_32542, the composer's
                 attachments): the words keep the full width when they wrap */}
-            {(p.shot != null || p.shotOff != null || files.length > 0) && (
-            <span className="b-spot-chips">
-            {p.shot != null && (
-              <span className="b-spot-chip" data-kind="shot" title={p.shot.title} data-testid={`${testId}.shot`}>
-                <img className="thumb" src={p.shot.thumb} alt="" />
-                {p.shot.name}
-                <Press look="b-spot-chip-x" title={W.shotDrop} aria-label={W.shotDrop} onClick={p.onShotDrop} data-testid={`${testId}.shot.drop`}>
-                  ✕
-                </Press>
-              </span>
-            )}
-            {p.shot == null && p.shotOff != null && (
-              <Press look="b-spot-chip b-spot-noshot" title={W.shotOffTitle} onClick={p.shotOff.onOpen} data-testid={`${testId}.noshot`}>
-                {W.shotOff}
-              </Press>
-            )}
-            {files.length > 0 && (
-              <span className="b-spot-files" data-testid={`${testId}.files`}>
-                {files.map((f) => (
-                  <span
-                    key={f.n}
-                    className="b-spot-chip"
-                    data-kind={f.image ? "image" : "file"}
-                    title={f.path}
-                    data-testid={`${testId}.file.${String(f.n)}`}
-                  >
-                    {f.image &&
-                      (f.thumb !== undefined ? (
-                        <img className="thumb" src={f.thumb} alt="" />
-                      ) : (
-                        <NoThumb />
-                      ))}
-                    {spotChipWords(f)}
+            {(p.shot != null || p.shotOff != null) && (
+              <span className="b-spot-chips">
+                {p.shot != null && (
+                  <span className="b-spot-chip" data-kind="shot" title={p.shot.title} data-testid={`${testId}.shot`}>
+                    <img className="thumb" src={p.shot.thumb} alt="" />
+                    {p.shot.name}
+                    <Press look="b-spot-chip-x" title={W.shotDrop} aria-label={W.shotDrop} onClick={p.onShotDrop} data-testid={`${testId}.shot.drop`}>
+                      ✕
+                    </Press>
                   </span>
-                ))}
+                )}
+                {p.shot == null && p.shotOff != null && (
+                  <Press look="b-spot-chip b-spot-noshot" title={W.shotOffTitle} onClick={p.shotOff.onOpen} data-testid={`${testId}.noshot`}>
+                    {W.shotOff}
+                  </Press>
+                )}
               </span>
             )}
-            </span>
-            )}
-            {/* his words wrap and the field grows to a few lines, then scrolls down: never sideways,
-                the start of a long ask stays in view (spot-shot); ⏎ sends, so no line break of his */}
-            <InputArea
-              ref={input}
-              rows={1}
-              look="b-spot-words"
+            {strip}
+            {/* the app's composer field (PmField): his words wrap and the field grows, a long one
+                scrolls; ⇧⏎ a new line, the @ menu under it in the window's flow */}
+            <span className="b-spot-words">
+            <PmField
+              target={SPOT_TARGET}
+              busy={false}
+              sources={p.sources ?? NO_SOURCES}
+              store={p.store ?? keptStorage}
+              testId={`${testId}.input`}
               placeholder={W.ph}
-              aria-label={W.ph}
-              spellCheck={false}
-              autoComplete="off"
-              data-testid={`${testId}.input`}
-              defaultValue={text}
-              onInput={(e) => {
-                setText(e.currentTarget.value);
-                keep.setText(KEPT, e.currentTarget.value);
+              send={sendOut}
+              queue={() => undefined}
+              editNewest={() => false}
+              command={() => undefined}
+              onCanSend={() => undefined}
+              onStrip={setStrip}
+              onBar={() => undefined}
+              onActions={(a) => {
+                actions.current = a;
               }}
-              onKeyDown={onKeyDown}
-              onScroll={(e) => {
-                // the DS overlay scrollbar, only while his words scroll (designer m_32542)
-                const el = e.currentTarget;
-                el.toggleAttribute("data-scrolling", true);
-                if (scrolling.current !== null) window.clearTimeout(scrolling.current);
-                scrolling.current = window.setTimeout(() => {
-                  el.toggleAttribute("data-scrolling", false);
-                  scrolling.current = null;
-                }, SCROLLBAR_LINGER_MS);
-              }}
-              onPaste={(e) => {
-                // ⌘V of an image (a screenshot, a Finder copy) or a copied file: a chip, never its name as words
-                const list = Array.from(e.clipboardData.files);
-                if (list.length === 0) return;
-                e.preventDefault();
-                addFiles(list);
-              }}
+              keyFirst={keyFirst}
+              onText={setText}
+              onListOpen={setMenu}
+              pickInFlow
             />
+            </span>
           </span>
         }
         keys={ans?.cut === true ? W.answerMore : keys}
@@ -735,29 +625,42 @@ export function Spotlight(p: SpotlightProps): JSX.Element {
         )}
         {/* one flat keyed list, the group heads as items: a row that stays listed keeps its element
             when it changes group or place (qa-type's spotlight/typing: rows keyed inside their group
-            were rebuilt when typing moved them, bug 7's blink) */}
-        {list.sections.flatMap((s) => [
-          s.label === null ? null : (
-            <div
-              key={`group.${s.label}`}
-              data-testid={`${testId}.group.${s.label}`}
-            >
-              <SpotGroup>{s.label}</SpotGroup>
-            </div>
-          ),
-          ...s.items.map((item) => (
-            <Row
-              key={keyOf(item.id)}
-              item={item}
-              on={items[index]?.id === item.id}
-              testId={testId}
-              onPick={pick}
-              acts={p.preview?.id === item.id ? p.preview.lines : undefined}
-              withFiles={item.kind === "ask" ? filesWords : undefined}
-            />
-          )),
-        ])}
+            were rebuilt when typing moved them, bug 7's blink). The @ menu open: it takes its place */}
+        {!menu &&
+          list.sections.flatMap((s) => [
+            s.label === null ? null : (
+              <div
+                key={`group.${s.label}`}
+                data-testid={`${testId}.group.${s.label}`}
+              >
+                <SpotGroup>{s.label}</SpotGroup>
+              </div>
+            ),
+            ...s.items.map((item) => (
+              <Row
+                key={keyOf(item.id)}
+                item={item}
+                on={items[index]?.id === item.id}
+                testId={testId}
+                onPick={pick}
+                acts={p.preview?.id === item.id ? p.preview.lines : undefined}
+                withWords={message && into !== null && items[into]?.id === item.id}
+              />
+            )),
+          ])}
       </Spot>
     </div>
   );
+}
+
+/** A row's name in the key line ('⏎ open vibebot-poc'). */
+function rowName(item: SpotItem): string {
+  switch (item.kind) {
+    case "card":
+      return shownName(item.agent);
+    case "new":
+      return W.startAgent;
+    default:
+      return item.name;
+  }
 }

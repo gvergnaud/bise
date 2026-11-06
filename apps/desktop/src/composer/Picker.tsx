@@ -134,7 +134,7 @@ export function headTrim(cut: number, heads: readonly HeadPlace[]): number {
 }
 
 /** `empty`: no rows, its one text-3 line instead (a bare '@' or '$' with nothing to offer) */
-export function Picker({ rows, index, testId, onPick, empty }: { rows: readonly Row[]; index: number; testId: string; onPick: (i: number) => void; empty?: string }): JSX.Element {
+export function Picker({ rows, index, testId, onPick, empty, inFlow = false }: { rows: readonly Row[]; index: number; testId: string; onPick: (i: number) => void; empty?: string; inFlow?: boolean }): JSX.Element {
   // where it is in the composer: its box (the frame's .box), measured from here
   const at = useRef<HTMLSpanElement>(null);
   const [place, setPlace] = useState<ReturnType<typeof pickPlace> | null>(null);
@@ -175,6 +175,24 @@ export function Picker({ rows, index, testId, onPick, empty }: { rows: readonly 
     // eslint-disable-next-line react-hooks/exhaustive-deps -- measured again when the rows or the place change, never on its own trim
   }, [groups, place]);
   const maxHeight = place === null ? undefined : Math.max(0, place.maxHeight - trim);
+  // in the page's flow where the field puts it (the spotlight: the @ menu takes its list's place,
+  // inside the window that grows with it), never floating over the box
+  if (inFlow)
+    return (
+      <div className="b-composer-pick-flow">
+        <DsPicker
+          groups={groups}
+          active={rows[index]?.id ?? null}
+          onPick={(id) => {
+            const i = rows.findIndex((r) => r.id === id);
+            if (i >= 0) onPick(i);
+          }}
+          empty={empty}
+          inline
+          testId={testId}
+        />
+      </div>
+    );
   return (
     <span ref={at} className="b-composer-pick-at" hidden>
       {createPortal(

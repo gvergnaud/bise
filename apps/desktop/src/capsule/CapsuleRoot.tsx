@@ -30,6 +30,8 @@ import { answeredOver, errorOver, heardOver, lingerOf, OVER_FADE_MS } from "./ov
 import { asksForScreen, shotOf, shotPref } from "./shot";
 import { useAgentPreview, useSpotData } from "./data";
 import { capsuleCardActs, runCapsuleEffect } from "./cardacts";
+import { draftAsk } from "@/shared/asks";
+import { useComposerSources } from "@/composer/useSources";
 import { MARK_SHOWN, nextAsk, sheetOpens, shownIn, type Perms } from "@/setup/perms";
 import { CORNER_OUT_MS, START, step, type CapEvent, type Fx, type State, type View } from "./machine";
 
@@ -59,6 +61,13 @@ export function routeOf(item: SpotItem): string | undefined {
     default:
       return undefined;
   }
+}
+
+/** Who a row under a message hands his words to: an agent, or a project's main; else none. */
+export function draftTo(item: SpotItem): { project: string; agent: string } | null {
+  if (item.kind === "agent") return { project: item.project, agent: item.name };
+  if (item.kind === "env") return { project: item.project, agent: "main" };
+  return null;
 }
 
 const frontOf = (ev: Extract<HelperEv, { ev: "front" }>): SpotFront | null =>
@@ -135,6 +144,8 @@ export function CapsuleRoot(): JSX.Element {
   });
   const projects = useProjects();
   const home = projects.find((p) => p.home)?.project ?? null;
+  // the spotlight's composer: bise's home's lists (@ agents, plugins, artifacts, files)
+  const sources = useComposerSources(home ?? "");
   // R07-a: the agent row the spotlight's keyboard is on shows its last actions (main's thread
   // stays followed for his asks: never unsubscribed from here)
   const [selAgent, setSelAgent] = useState<{
@@ -635,6 +646,28 @@ export function CapsuleRoot(): JSX.Element {
         spotShot.current = null;
         // asked: the spot says so at once (∿), its first words take the line's place (R18)
         setLast({ text: "", done: false });
+      }}
+      sources={sources}
+      onOpenWith={(item, entry) => {
+        // ⏎ on a row under a message: its thread in the window, his words its draft, never sent
+        const to = draftTo(item);
+        if (to === null) return;
+        bise?.openWindow(draftAsk({ ...to, entry }));
+        dispatch({ ev: "close" });
+      }}
+      onSendTo={(item, out) => {
+        // ⌘⏎ on a row: his message to that agent (a project: its main), the spot says where it went
+        const to = draftTo(item);
+        if (to === null) return;
+        store.send({
+          project: to.project,
+          agent: to.agent,
+          text: out.text,
+          mode: "now",
+          ...(out.parts === undefined ? {} : { parts: out.parts }),
+          via: "capsule",
+        });
+        setLast({ text: W.wentTo(item.kind === "agent" ? item.name : to.agent), done: true, note: true });
       }}
       onNew={(brief) => {
         // amb-win's newAgent (the TUI's /new): bise's home names it from the brief; it shows in 'at work'

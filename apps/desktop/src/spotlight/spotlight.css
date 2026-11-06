@@ -38,34 +38,63 @@
   gap: var(--gap-inline);
   min-width: 0;
 }
-/* spot-shot: his words wrap and the field grows with them (field-sizing), up to 4 lines, then
-   scroll down; never sideways (the start of a long ask stays in view) */
-.b-spot-field > .b-spot-words {
+/* the app's composer field (PmField, Gabriel's v4): his words wrap and the field grows with them,
+   then scroll down; never sideways (the start of a long ask stays in view). The DS field's control
+   box (height, fill, ring) is not its look here: the words sit on the glass */
+.b-spot-field .b-field-host {
+  display: contents;
+}
+.b-spot-field .b-field.ProseMirror {
+  display: block;
   width: 100%;
   min-width: 4em;
-  field-sizing: content;
+  height: auto;
   max-height: calc(1.2em * 4);
-  resize: none;
   overflow-x: hidden;
   overflow-y: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  font-variant-ligatures: none;
   padding: 0;
   border: 0;
+  border-radius: 0;
   outline: 0;
+  box-shadow: none;
   background: none;
   font: inherit;
   line-height: 1.2;
   color: inherit;
 }
-.b-spot-field > .b-spot-words::placeholder {
-  color: var(--c-text-3);
+.b-spot-field .b-field .p {
+  margin: 0;
 }
-/* the DS overlay scrollbar (the capsule's): 4 px, text-3, only while his words scroll, no resting bar */
-.b-spot-words::-webkit-scrollbar { width: 4px; background: transparent; }
-.b-spot-words::-webkit-scrollbar-track { background: transparent; }
-.b-spot-words::-webkit-scrollbar-thumb { border-radius: 2px; background: transparent; }
-.b-spot-words[data-scrolling]::-webkit-scrollbar-thumb { background: var(--c-text-3); }
+/* the field's own column (its chips list, the field, the placeholder, the @ menu) */
+.b-spot-words {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+}
+/* the placeholder on the field's first line: shown only when the field is blank, so the field
+   is the column's first item then */
+.b-spot-words > .b-field-ph {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 1.2em;
+  overflow: hidden;
+  line-height: 1.2;
+  white-space: pre;
+  color: var(--c-text-3);
+  pointer-events: none;
+  user-select: none;
+}
+/* the @ menu in the window's flow, where the list was (the window grows with it) */
+.b-spot-field .b-composer-pick-flow {
+  margin: 0 calc(-1 * var(--s-3));
+}
 /* the still's ✕, inside its chip (the talk's chip ✕) */
 .b-spot-chip-x {
   margin-left: var(--s-1);

@@ -30,3 +30,24 @@ export function artifactAskOf(path: string): ArtAsk | undefined {
     return undefined;
   }
 }
+
+/** His words carried to an agent's composer from outside the window (the spotlight's ⏎ on a row
+ *  under a message): its project, its agent, the words and chips as an entry (entry.ts). */
+export type DraftAsk = { readonly project: string; readonly agent: string; readonly entry: string };
+
+/** The ask that opens an agent's thread with his words as its draft, never sent:
+ *  'draft?to=<project>/<agent>&entry=<entry>'. */
+export const draftAsk = (d: DraftAsk): string =>
+  `draft?to=${encodeURIComponent(d.project)}/${encodeURIComponent(d.agent)}&entry=${encodeURIComponent(d.entry)}`;
+
+/** The draft a draftAsk route carries; anything else: undefined. */
+export function draftAskOf(path: string): DraftAsk | undefined {
+  const m = /^\/?draft\?to=([^/\s&]+)\/([^/\s&]+)&entry=([^\s&]*)$/u.exec(path.trim());
+  if (m === null) return undefined;
+  const [, project = '', agent = '', entry = ''] = m;
+  try {
+    return { project: decodeURIComponent(project), agent: decodeURIComponent(agent), entry: decodeURIComponent(entry) };
+  } catch {
+    return undefined;
+  }
+}

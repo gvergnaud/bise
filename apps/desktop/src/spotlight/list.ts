@@ -82,7 +82,6 @@ export type SpotItem =
   | { readonly kind: 'agent'; readonly id: string; readonly name: string; readonly project: string; readonly pname: string; readonly status: AgentStatus; readonly title: string }
   | { readonly kind: 'env'; readonly id: string; readonly project: string; readonly name: string; readonly sub: string; readonly front: boolean; readonly n: number | null }
   | { readonly kind: 'front'; readonly id: string; readonly name: string; readonly sub: string }
-  | { readonly kind: 'ask'; readonly id: string; readonly text: string }
   | { readonly kind: 'new'; readonly id: string; readonly brief: string };
 
 export interface SpotSection {
@@ -184,13 +183,33 @@ export function spotList(d: SpotData, text: string): SpotList {
   if (!asksBise(q, byName.length + envHit.length > 0)) {
     return { mode: 'names', sections: [{ label: W.found, items: [...byName, ...envHit] }] };
   }
-  // a sentence: bise first; the agents it names (a word is its name, or 2 of its title's long
-  // words), archived ones too, after the live ones
+  // a sentence: a message, ⏎ sends it to bise (Gabriel's v4: no 'ask bise' row); the agents it
+  // names stay below (a word is its name, or 2 of its title's long words), archived ones after the
+  // live ones; none: no list
   const named = live
     .filter((x) => sentenceNames(q, x.a))
     .sort((x, y) => Number(x.a.archived === true) - Number(y.a.archived === true))
     .map((x) => agentItem(x.a, x.status));
-  return { mode: 'ask', sections: [{ label: null, items: [{ kind: 'ask', id: 'ask', text: q }, ...named] }] };
+  return { mode: 'ask', sections: named.length === 0 ? [] : [{ label: W.found, items: named }] };
+}
+
+/** A chip in the field's plain text (the composer's pmtext OBJ). */
+const CHIP = '\uFFFC';
+
+/**
+ * The list for the field's plain text (Gabriel's v4, spotlight-composer#choix): a search first. A
+ * name or two words that find an agent or a project are a search, ⏎ opens the first; a sentence,
+ * a line break or a chip (@ agent, ▤ paste, image, file) make a message: ⏎ sends it to bise, only
+ * the agents it names stay listed ('found'); none: no list, the field alone. Pure.
+ */
+export function spotView(d: SpotData, text: string): SpotList {
+  const flatText = text.split(CHIP).join(' ').replace(/\s+/gu, ' ').trim();
+  const base = spotList(d, flatText);
+  const message = text.includes('\n') || text.includes(CHIP);
+  if (!message || base.mode === 'ask') return base;
+  // a chip or a line break: a message whatever its words say (chips alone name nothing)
+  const named = flatText === '' ? [] : flat(base).filter((x) => x.kind === 'agent' || x.kind === 'env');
+  return { mode: 'ask', sections: named.length === 0 ? [] : [{ label: W.found, items: named }] };
 }
 
 /** While a routing hold runs: the other projects he can send it to instead (⏎ corrects the route). */

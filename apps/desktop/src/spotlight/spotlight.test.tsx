@@ -1,10 +1,14 @@
 // @vitest-environment happy-dom
-// The spotlight: its list rules (the capsule's, signed by ambient) and the input that stays one
-// node while the list changes under it (bug 7).
+// The spotlight: its list rules (the capsule's, signed by ambient), the app's composer field that
+// stays one node while the list changes under it (bug 7), and its keys (Gabriel's v4): each rule
+// here fails without its line in Spotlight.tsx's keyFirst.
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { flat, spotList, type SpotData } from "./list";
-import { Spotlight, answerLines, ANSWER_MAX_LINES } from "./Spotlight";
+import type { Editor } from "@tiptap/core";
+import { TextSelection } from "@tiptap/pm/state";
+import type { Store } from "@/composer/drafts";
+import { flat, spotList, spotView, type SpotData } from "./list";
+import { Spotlight, answerLines, outgoingOf, ANSWER_MAX_LINES } from "./Spotlight";
 import { cardLine, newBrief, shortPath } from "./words";
 
 afterEach(cleanup);
@@ -78,7 +82,7 @@ describe("the spotlight list", () => {
       sub: "2 agents · main · ~/code/telemetry",
     });
   });
-  it("a word names agents and projects; a sentence asks bise first", () => {
+  it("a word names agents and projects; a sentence is a message: only the agents it names stay", () => {
     expect(flat(spotList(D, "perf")).map((i) => i.id)).toEqual([
       "agent.tel.perf",
     ]);
@@ -89,9 +93,20 @@ describe("the spotlight list", () => {
     ]);
     const ask = spotList(D, "why is the hot query slow for perf");
     expect(ask.mode).toBe("ask");
-    expect(flat(ask).map((i) => i.id)).toEqual(["ask", "agent.tel.perf"]);
+    expect(flat(ask).map((i) => i.id)).toEqual(["agent.tel.perf"]);
+    // a message with no result: no list, the field alone
+    expect(spotList(D, "can you check this against the POC?").sections).toEqual([]);
   });
-  it("⌘K's rule (main m_12973): a sentence asks first and keeps the archived agents it names too, after the live ones", () => {
+  it("Gabriel's v4: a line break or a chip makes a message whatever its words; a name alone is a search", () => {
+    expect(spotView(D, "perf").mode).toBe("names");
+    const lines = spotView(D, "perf\ncheck the sort");
+    expect(lines.mode).toBe("ask");
+    expect(flat(lines).map((i) => i.id)).toEqual(["agent.tel.perf"]);
+    expect(spotView(D, "\uFFFC tele").mode).toBe("ask");
+    expect(spotView(D, "\uFFFC").sections).toEqual([]);
+    expect(spotView(D, "").mode).toBe("empty");
+  });
+  it("⌘K's rule (main m_12973): a sentence keeps the archived agents it names too, after the live ones", () => {
     const old = {
       name: "perf-v1",
       project: "tel",
@@ -103,7 +118,6 @@ describe("the spotlight list", () => {
     expect(spotList(d, "perf").mode).toBe("names");
     const ask = spotList(d, "why is the hot query slow for perf");
     expect(flat(ask).map((i) => i.id)).toEqual([
-      "ask",
       "agent.tel.perf",
       "agent.tel.perf-v1",
     ]);
@@ -138,112 +152,218 @@ describe("the spotlight", () => {
       expect(trail ?? "").not.toBe("");
     }
   });
-  it("keeps one input node while the list changes, ⏎ on a sentence asks bise", async () => {
-    const onAsk = vi.fn();
-    const ui = render(
-      <Spotlight data={D} onAsk={onAsk} onOpen={vi.fn()} onClose={vi.fn()} />,
-    );
-    const input = ui.getByTestId("spot.input") as HTMLInputElement;
-    for (const v of ["w", "wh", "why is the hot query slow"]) {
-      await act(async () => {
-        fireEvent.input(input, { target: { value: v } });
-        await Promise.resolve();
-      });
-      expect(ui.getByTestId("spot.input")).toBe(input);
-    }
-    expect(ui.getByTestId("spot.row.ask")).toBeTruthy();
-    await act(async () => {
-      fireEvent.keyDown(input, { key: "Enter" });
-      await Promise.resolve();
-    });
-    expect(onAsk).toHaveBeenCalledWith("why is the hot query slow");
-    expect(input.value).toBe("");
-  });
-  it("R41: a pasted image and a dropped file are chips, ⏎ asks bise with their paths, ⌫ takes the last away", async () => {
-    const onAsk = vi.fn();
-    const saveImage = vi.fn((f: File) =>
-      Promise.resolve({ path: `/store/${f.name}`, name: f.name }),
-    );
-    const filePath = (f: File): string => `/Users/me/${f.name}`;
-    const ui = render(
-      <Spotlight
-        data={D}
-        onAsk={onAsk}
-        onOpen={vi.fn()}
-        onClose={vi.fn()}
-        saveImage={saveImage}
-        filePath={filePath}
-      />,
-    );
-    const input = ui.getByTestId("spot.input") as HTMLInputElement;
-    const png = new File([new Uint8Array([137, 80, 78, 71])], "shot.png", {
-      type: "image/png",
-    });
-    await act(async () => {
-      fireEvent.paste(input, {
-        clipboardData: { files: [png], getData: () => "" },
-      });
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    expect(saveImage).toHaveBeenCalledWith(png);
-    expect(ui.getByTestId("spot.file.1").textContent).toBe("image 1");
-    const notes = new File(["q3"], "q3-notes.md", { type: "text/markdown" });
-    const drop = new Event("drop", { cancelable: true }) as Event & {
-      dataTransfer: unknown;
-    };
-    drop.dataTransfer = { files: [notes] };
-    await act(async () => {
-      window.dispatchEvent(drop);
-      await Promise.resolve();
-    });
-    expect(drop.defaultPrevented).toBe(true);
-    expect(ui.getByTestId("spot.file.2").textContent).toBe("q3-notes.md");
-    expect(ui.getByTestId("spot.frame").textContent).toContain("⌫ remove");
-    // ⌫ at the start: the dropped file goes, the image stays
-    await act(async () => {
-      fireEvent.keyDown(input, { key: "Backspace" });
-      await Promise.resolve();
-    });
-    expect(ui.queryByTestId("spot.file.2")).toBeNull();
-    // the 'ask bise' row says the image goes with his words (designer m_13808)
-    await act(async () => {
-      fireEvent.input(input, { target: { value: "what is wrong in this" } });
-      await Promise.resolve();
-    });
-    expect(ui.getByTestId("spot.row.ask").textContent).toContain(
-      "an image · what is wrong in this",
-    );
-    // 'perf' alone would open perf: with an image in the spot ⏎ asks bise with it
-    await act(async () => {
-      fireEvent.input(input, { target: { value: "perf" } });
-      await Promise.resolve();
-    });
-    await act(async () => {
-      fireEvent.keyDown(input, { key: "Enter" });
-      await Promise.resolve();
-    });
-    // msg-parts: the image goes typed by its source alone (no files, no b64_file), then his words
-    expect(onAsk).toHaveBeenCalledWith("[Image #1] perf", [
-      { kind: "image", name: "[Image #1]", source: "/store/shot.png" },
-      { kind: "text", text: "perf" },
-    ]);
-    expect(ui.queryByTestId("spot.files")).toBeNull();
-  });
 });
 
-describe("the spotlight rows", () => {
-  it("a row that stays listed keeps its element when typing moves it to another group", async () => {
-    const ui = render(
-      <Spotlight data={D} onAsk={vi.fn()} onOpen={vi.fn()} onClose={vi.fn()} />,
-    );
-    const input = ui.getByTestId("spot.input") as HTMLInputElement;
-    const perf = ui.getByTestId("spot.row.agent.tel.perf");
+/** A Storage in memory: the spotlight's draft and history (keep.ts in the app). */
+const memStore = (): Store & { m: Map<string, string> } => {
+  const m = new Map<string, string>();
+  return {
+    m,
+    getItem: (k) => m.get(k) ?? null,
+    setItem: (k, v) => void m.set(k, v),
+    removeItem: (k) => void m.delete(k),
+  };
+};
+
+type Props = Partial<Parameters<typeof Spotlight>[0]>;
+
+/** The spotlight with the app's composer field: his typing goes in through the editor, his keys
+ *  as keydowns on it (ProseMirror's handleKeyDown, the spotlight's keyFirst first). */
+function spot(over: Props = {}) {
+  const onAsk = vi.fn();
+  const onOpen = vi.fn();
+  const onClose = vi.fn();
+  const store = memStore();
+  const ui = render(
+    <Spotlight data={D} onAsk={onAsk} onOpen={onOpen} onClose={onClose} store={store} {...over} />,
+  );
+  const field = (): HTMLElement => ui.getByTestId("spot.input.field");
+  const editor = (): Editor => (field() as unknown as { editor: Editor }).editor;
+  const type = async (s: string): Promise<void> => {
     await act(async () => {
-      fireEvent.input(input, { target: { value: "p" } });
+      const v = editor().view;
+      s.split("\n").forEach((line, i) => {
+        const br = v.state.schema.nodes.hardBreak;
+        if (i > 0 && br !== undefined) v.dispatch(v.state.tr.replaceSelectionWith(br.create()));
+        if (line !== "") v.dispatch(v.state.tr.insertText(line));
+      });
       await Promise.resolve();
     });
-    expect(ui.getByTestId("spot.group.found")).toBeTruthy();
-    expect(ui.getByTestId("spot.row.agent.tel.perf")).toBe(perf);
+  };
+  const caret = async (offset: number): Promise<void> => {
+    await act(async () => {
+      const v = editor().view;
+      v.dispatch(v.state.tr.setSelection(TextSelection.create(v.state.doc, offset + 1)));
+      await Promise.resolve();
+    });
+  };
+  const press = async (key: string, mods: { metaKey?: boolean; shiftKey?: boolean } = {}): Promise<KeyboardEvent> => {
+    const e = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...mods });
+    await act(async () => {
+      field().dispatchEvent(e);
+      await Promise.resolve();
+    });
+    return e;
+  };
+  const text = (): string => field().textContent;
+  const lit = (): string | null =>
+    ui.container.querySelector('[data-testid^="spot.row."][aria-selected="true"]')?.getAttribute("data-testid") ?? null;
+  const keys = (): string => ui.getByTestId("spot.frame").textContent;
+  return { ui, onAsk, onOpen, onClose, store, field, type, caret, press, text, lit, keys };
+}
+
+describe("the spotlight's composer (Gabriel's v4, spotlight-composer#choix)", () => {
+  it("the app's composer field, one node while the list changes under it", async () => {
+    const s = spot();
+    const f = s.field();
+    expect(f.getAttribute("contenteditable")).toBe("true");
+    for (const w of ["w", "h", "y is the hot query slow"]) {
+      await s.type(w);
+      expect(s.field()).toBe(f);
+    }
+  });
+
+  it("⏎ on a search opens its first result; the key line names it", async () => {
+    const s = spot();
+    await s.type("perf");
+    expect(s.lit()).toBe("spot.row.agent.tel.perf");
+    expect(s.keys()).toContain("⏎ open perf");
+    await s.press("Enter");
+    expect(s.onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: "agent.tel.perf" }));
+    expect(s.onAsk).not.toHaveBeenCalled();
+  });
+
+  it("⏎ on a message sends it to bise, the list gone when nothing is named; the field empties", async () => {
+    const s = spot();
+    await s.type("can you check this against the POC?");
+    expect(s.ui.container.querySelector('[data-testid^="spot.row."]')).toBeNull();
+    expect(s.keys()).toContain("⏎ send to bise");
+    await s.press("Enter");
+    expect(s.onAsk).toHaveBeenCalledWith("can you check this against the POC?", undefined);
+    expect(s.onOpen).not.toHaveBeenCalled();
+    expect(s.text()).toBe("");
+  });
+
+  it("⇧⏎ is a new line, and a line break makes a message: ⏎ then sends, even after a name", async () => {
+    const s = spot();
+    await s.type("perf");
+    const e = await s.press("Enter", { shiftKey: true });
+    expect(e.defaultPrevented).toBe(true);
+    expect(s.onOpen).not.toHaveBeenCalled();
+    await s.type("check the sort");
+    await s.press("Enter");
+    expect(s.onAsk).toHaveBeenCalledWith("perf\ncheck the sort", undefined);
+    expect(s.onOpen).not.toHaveBeenCalled();
+  });
+
+  it("⌘⏎ in his words sends to bise, even on a search", async () => {
+    const s = spot();
+    await s.type("perf");
+    await s.press("Enter", { metaKey: true });
+    expect(s.onAsk).toHaveBeenCalledWith("perf", undefined);
+    expect(s.onOpen).not.toHaveBeenCalled();
+  });
+
+  it("↓ on his last character goes into the list; elsewhere it is the caret's", async () => {
+    const s = spot();
+    await s.type("can perf check this?\nthe sort");
+    expect(s.lit(), "a message lights no row").toBeNull();
+    // the caret on the first line: ↓ is the caret's (the field moves it), not the list's
+    await s.caret(3);
+    const mid = await s.press("ArrowDown");
+    expect(mid.defaultPrevented).toBe(false);
+    expect(s.lit()).toBeNull();
+    // on the last line, not at its end: to its end, the list still out
+    await s.caret(23);
+    await s.press("ArrowDown");
+    expect(s.lit()).toBeNull();
+    // on the last character: into the list, its first row lit
+    await s.press("ArrowDown");
+    expect(s.lit()).toBe("spot.row.agent.tel.perf");
+    expect(s.keys()).toContain("↑ on the first row: the text");
+  });
+
+  it("↑ on the list's first row comes back to his words; a letter typed in the list comes back with it", async () => {
+    const s = spot();
+    await s.type("tele");
+    await s.press("ArrowDown");
+    expect(s.lit()).toBe("spot.row.agent.tel.alerts");
+    await s.press("ArrowDown");
+    expect(s.lit()).toBe("spot.row.agent.tel.perf");
+    await s.press("ArrowUp");
+    await s.press("ArrowUp");
+    expect(s.keys(), "back in his words").toContain("⏎ open alerts");
+    await s.press("ArrowDown");
+    const letter = await s.press("m");
+    expect(letter.defaultPrevented, "the letter goes in his words").toBe(false);
+    expect(s.keys()).toContain("↓ the list");
+  });
+
+  it("esc in the list comes back to his words; in his words it closes, the draft kept for the next fn space, selected", async () => {
+    const s = spot();
+    await s.type("tele");
+    await s.press("ArrowDown");
+    await s.press("Escape");
+    expect(s.onClose).not.toHaveBeenCalled();
+    expect(s.keys()).toContain("↓ the list");
+    await s.press("Escape");
+    expect(s.onClose).toHaveBeenCalledTimes(1);
+    expect(s.text(), "esc keeps his words").toBe("tele");
+    // the draft lives in the store: the next spotlight shows it, all selected (typing replaces it)
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 450));
+    });
+    const store = s.store;
+    cleanup();
+    const again = spot({ store });
+    expect(again.text()).toBe("tele");
+    const sel = again.field() as unknown as { editor: Editor };
+    expect(sel.editor.state.selection.empty).toBe(false);
+  });
+
+  it("⏎ on a row under a message opens it with his words as its draft; ⌘⏎ sends them to it", async () => {
+    const onOpenWith = vi.fn();
+    const onSendTo = vi.fn();
+    const s = spot({ onOpenWith, onSendTo });
+    await s.type("can perf check this against the POC?");
+    await s.press("ArrowDown");
+    expect(s.keys()).toContain("⏎ open with your words");
+    await s.press("Enter");
+    expect(onOpenWith).toHaveBeenCalledTimes(1);
+    const [item, entry] = onOpenWith.mock.calls[0] as [{ id: string }, string];
+    expect(item.id).toBe("agent.tel.perf");
+    expect(outgoingOf(entry)).toEqual({ text: "can perf check this against the POC?" });
+    expect(s.onAsk).not.toHaveBeenCalled();
+    expect(s.text(), "his words went with it").toBe("");
+    await s.type("can perf look again?");
+    await s.press("ArrowDown");
+    await s.press("Enter", { metaKey: true });
+    expect(onSendTo).toHaveBeenCalledWith(expect.objectContaining({ id: "agent.tel.perf" }), { text: "can perf look again?" });
+    expect(s.onAsk).not.toHaveBeenCalled();
+  });
+
+  it("↑ in the empty field brings his last message back", async () => {
+    const s = spot();
+    await s.type("why is it slow?");
+    await s.press("Enter");
+    expect(s.text()).toBe("");
+    await s.press("ArrowUp");
+    expect(s.text()).toBe("why is it slow?");
+  });
+
+  it("a row that stays listed keeps its element when typing moves it to another group", async () => {
+    const s = spot();
+    const perf = s.ui.getByTestId("spot.row.agent.tel.perf");
+    await s.type("p");
+    expect(s.ui.getByTestId("spot.group.found")).toBeTruthy();
+    expect(s.ui.getByTestId("spot.row.agent.tel.perf")).toBe(perf);
+  });
+
+  it("⌘1-9 opens a project from his words", async () => {
+    const s = spot();
+    await s.type("draft");
+    await s.press("2", { metaKey: true });
+    expect(s.onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: "env.shop" }));
   });
 });
 
@@ -251,38 +371,15 @@ describe("the routing hold", () => {
   it('shows "→ bise · <project> · N s to change" at once; esc keeps it with bise, ⏎ on another project corrects it', async () => {
     const onRouteKeep = vi.fn();
     const onRouteTo = vi.fn();
-    const route = {
-      rid: 7,
-      to: "tel",
-      name: "telemetry",
-      until: Date.now() + 2000,
-    };
-    const ui = render(
-      <Spotlight
-        data={D}
-        route={route}
-        onRouteKeep={onRouteKeep}
-        onRouteTo={onRouteTo}
-        onAsk={vi.fn()}
-        onOpen={vi.fn()}
-        onClose={vi.fn()}
-      />,
-    );
-    expect(ui.getByTestId("spot.route").textContent).toMatch(
-      /^→ bise · telemetry · 2 s to change/u,
-    );
-    expect(ui.queryByTestId("spot.row.env.tel")).toBeNull();
-    const input = ui.getByTestId("spot.input");
-    await act(async () => {
-      fireEvent.keyDown(input, { key: "Enter" });
-      await Promise.resolve();
-    });
+    const route = { rid: 7, to: "tel", name: "telemetry", until: Date.now() + 2000 };
+    const s = spot({ route, onRouteKeep, onRouteTo });
+    expect(s.ui.getByTestId("spot.route").textContent).toMatch(/^→ bise · telemetry · 2 s to change/u);
+    expect(s.ui.queryByTestId("spot.row.env.tel")).toBeNull();
+    await s.press("Enter");
     expect(onRouteTo).toHaveBeenCalledWith("shop");
-    await act(async () => {
-      fireEvent.keyDown(input, { key: "Escape" });
-      await Promise.resolve();
-    });
+    await s.press("Escape");
     expect(onRouteKeep).toHaveBeenCalledTimes(1);
+    expect(s.onClose).not.toHaveBeenCalled();
   });
 });
 
@@ -362,90 +459,54 @@ describe("start an agent from the spotlight (bar A.1)", () => {
     ]);
   });
 
-  it("⏎ starts it with the brief (not sent to bise), the input clears; with no onNew it goes to bise as words", async () => {
-    const onAsk = vi.fn();
+  it("⏎ starts it with the brief (not sent to bise), the field clears; with no onNew it goes to bise as words", async () => {
     const onNew = vi.fn();
-    const ui = render(
-      <Spotlight
-        data={D}
-        onAsk={onAsk}
-        onNew={onNew}
-        onOpen={vi.fn()}
-        onClose={vi.fn()}
-      />,
-    );
-    const input = ui.getByTestId("spot.input") as HTMLInputElement;
-    await act(async () => {
-      fireEvent.input(input, {
-        target: { value: "start an agent: profile the hub" },
-      });
-      await Promise.resolve();
-    });
-    expect(ui.getByTestId("spot.row.new").textContent).toContain(
-      "start an agent",
-    );
-    await act(async () => {
-      fireEvent.keyDown(input, { key: "Enter" });
-      await Promise.resolve();
-    });
+    const s = spot({ onNew });
+    await s.type("start an agent: profile the hub");
+    expect(s.ui.getByTestId("spot.row.new").textContent).toContain("start an agent");
+    await s.press("Enter");
     expect(onNew).toHaveBeenCalledWith("profile the hub");
-    expect(onAsk).not.toHaveBeenCalled();
-    expect(input.value).toBe("");
+    expect(s.onAsk).not.toHaveBeenCalled();
+    expect(s.text()).toBe("");
     cleanup();
-    const ask = vi.fn();
-    const ui2 = render(
-      <Spotlight data={D} onAsk={ask} onOpen={vi.fn()} onClose={vi.fn()} />,
-    );
-    const in2 = ui2.getByTestId("spot.input") as HTMLInputElement;
-    await act(async () => {
-      fireEvent.input(in2, { target: { value: "/new profile the hub" } });
-      await Promise.resolve();
-    });
-    await act(async () => {
-      fireEvent.keyDown(in2, { key: "Enter" });
-      await Promise.resolve();
-    });
-    expect(ask).toHaveBeenCalledWith("/new profile the hub");
+    const s2 = spot();
+    await s2.type("/new profile the hub");
+    await s2.press("Enter");
+    expect(s2.onAsk).toHaveBeenCalledWith("/new profile the hub", undefined);
   });
 });
 
 describe("spot-shot: the window he was on, and his long words", () => {
-  it("his words wrap: the field is a growing textarea, never a one-line input that scrolls sideways", async () => {
+  it("his words wrap: the field grows to a cap, then scrolls down, never sideways", async () => {
     const { readFileSync } = await import("node:fs");
     // vitest runs in apps/desktop (happy-dom's import.meta.url is not a file URL)
     const SPOT_CSS = readFileSync(`${process.cwd()}/src/spotlight/spotlight.css`, "utf8");
-    const ui = render(<Spotlight data={D} onAsk={vi.fn()} onOpen={vi.fn()} onClose={vi.fn()} />);
-    const field = ui.getByTestId("spot.input");
-    expect(field.tagName, "a one-line <input> scrolls sideways and hides the start").toBe("TEXTAREA");
-    expect(field.getAttribute("rows")).toBe("1");
-    expect(field.classList.contains("b-spot-words")).toBe(true);
-    // its rule: grows with the words up to a cap, then scrolls down, never sideways
-    const rule = /\.b-spot-field > \.b-spot-words \{([^}]*)\}/u.exec(SPOT_CSS)?.[1] ?? "";
-    for (const d of ["field-sizing: content", "max-height:", "overflow-x: hidden", "overflow-y: auto", "overflow-wrap: anywhere"])
+    const rule = /\.b-spot-field \.b-field\.ProseMirror \{([^}]*)\}/u.exec(SPOT_CSS)?.[1] ?? "";
+    for (const d of ["max-height:", "overflow-x: hidden", "overflow-y: auto", "overflow-wrap: anywhere", "white-space: pre-wrap"])
       expect(rule, d).toContain(d);
   });
 
   it("the still's chip comes first; ✕ and ⌫ at the start of his words drop it; no still and Screen Recording off: why", async () => {
     const drop = vi.fn();
     const shot = { thumb: "file:///i/a.png", name: "Safari · stripe.com", title: "Safari · stripe.com/pricing" };
-    const ui = render(<Spotlight data={D} onAsk={vi.fn()} onOpen={vi.fn()} onClose={vi.fn()} shot={shot} onShotDrop={drop} />);
-    const chip = ui.getByTestId("spot.shot");
+    const s = spot({ shot, onShotDrop: drop });
+    const chip = s.ui.getByTestId("spot.shot");
     expect(chip.textContent).toContain("Safari · stripe.com");
     expect(chip.getAttribute("title")).toBe("Safari · stripe.com/pricing");
-    fireEvent.click(ui.getByTestId("spot.shot.drop"));
+    fireEvent.click(s.ui.getByTestId("spot.shot.drop"));
     expect(drop).toHaveBeenCalledTimes(1);
-    const field = ui.getByTestId("spot.input") as HTMLTextAreaElement;
-    await act(async () => {
-      fireEvent.keyDown(field, { key: "Backspace" });
-      await Promise.resolve();
-    });
+    await s.press("Backspace");
     expect(drop).toHaveBeenCalledTimes(2);
-    expect(ui.queryByTestId("spot.noshot"), "a still: nothing to explain").toBeNull();
+    // ⌫ inside his words is the field's
+    await s.type("ab");
+    await s.press("Backspace");
+    expect(drop).toHaveBeenCalledTimes(2);
+    expect(s.ui.queryByTestId("spot.noshot"), "a still: nothing to explain").toBeNull();
     cleanup();
     const open = vi.fn();
-    const off = render(<Spotlight data={D} onAsk={vi.fn()} onOpen={vi.fn()} onClose={vi.fn()} shot={null} shotOff={{ onOpen: open }} />);
-    expect(off.getByTestId("spot.noshot").textContent).toBe("no screenshot · Screen Recording is off");
-    fireEvent.click(off.getByTestId("spot.noshot"));
+    const off = spot({ shot: null, shotOff: { onOpen: open } });
+    expect(off.ui.getByTestId("spot.noshot").textContent).toBe("no screenshot · Screen Recording is off");
+    fireEvent.click(off.ui.getByTestId("spot.noshot"));
     expect(open).toHaveBeenCalledTimes(1);
   });
 });

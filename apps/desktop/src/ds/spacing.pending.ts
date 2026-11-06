@@ -40,6 +40,5 @@ export const PENDING_TYPE: Readonly<Record<string, number>> = {
 /** scrollbars a stylesheet draws itself (lint.ts drawnScrollbars): macOS's overlay ones go classic */
 export const PENDING_SCROLLBAR: Readonly<Record<string, number>> = {
   "capsule/capsule.css": 8,
-  "spotlight/spotlight.css": 4,
   "thread/thread.css": 2,
 };

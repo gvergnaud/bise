@@ -132,6 +132,32 @@ export function caretOnFirstLine(state: EditorState): boolean {
   return at !== null && !plainText(state.doc).slice(0, at).includes('\n');
 }
 
+/** Where the caret is in the field, for a screen's own keys (the spotlight's ↓ into its list). */
+export interface CaretPlace {
+  /** no words, no chip */
+  readonly blank: boolean;
+  /** a caret (no selection) before anything */
+  readonly atStart: boolean;
+  /** a caret (no selection) after everything: on the last character */
+  readonly atEnd: boolean;
+  /** a caret on the first line, on the last line (a newline starts a line) */
+  readonly firstLine: boolean;
+  readonly lastLine: boolean;
+}
+
+/** The caret's place (a selection is at none of them). */
+export function caretPlace(state: EditorState): CaretPlace {
+  const at = caretOf(state);
+  const text = plainText(state.doc);
+  return {
+    blank: isBlank(state.doc),
+    atStart: at === 0,
+    atEnd: at !== null && at === text.length,
+    firstLine: at !== null && !text.slice(0, at).includes('\n'),
+    lastLine: at !== null && !text.slice(at).includes('\n'),
+  };
+}
+
 /** Replace [from, to) (offsets) by `text`, the caret at `caret` (an offset in the new text). */
 export function applyOp(state: EditorState, op: { from: number; to: number; insert: string; caret: number }): Transaction | null {
   const size = plainText(state.doc).length;

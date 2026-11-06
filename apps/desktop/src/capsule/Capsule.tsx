@@ -25,6 +25,8 @@ import {
   type SpotItem,
   type SpotRoute,
 } from "@/spotlight";
+import type { Outgoing } from "@/composer/message";
+import type { ComposerSources } from "@/composer/sources";
 import type { View } from "./machine";
 import { PermSheet } from "@/setup/PermSheet";
 import type { Perms } from "@/setup/perms";
@@ -66,8 +68,14 @@ export interface CapsuleProps {
   readonly onRouteTo: (project: string) => void;
   /** amb-home's card for a pushed card, by id. */
   readonly card: (id: string) => ReactNode;
-  /** his ask, with what he pasted or dropped in the spot as typed parts (R41, msg-parts; absent when none) */
+  /** his message for bise, with its typed parts when it has more than words (msg-parts; absent when none) */
   readonly onAsk: (text: string, parts?: readonly Part[]) => void;
+  /** ⏎ on an agent's or a project's row under a message: open it with his words as its draft */
+  readonly onOpenWith?: (item: SpotItem, entry: string) => void;
+  /** ⌘⏎ on an agent's or a project's row: his message sent to it */
+  readonly onSendTo?: (item: SpotItem, out: Outgoing) => void;
+  /** the spotlight's composer lists (@ agents, plugins, artifacts, files) */
+  readonly sources?: ComposerSources;
   /** '/new …' in the spotlight: start an agent in bise's home (bar A.1) */
   readonly onNew?: (brief: string) => void;
   readonly onOpen: (item: SpotItem) => void;
@@ -192,6 +200,9 @@ export function Capsule(p: CapsuleProps): JSX.Element {
             onRouteTo={p.onRouteTo}
             pearl={<span className="b-cap-hole" />}
             onAsk={p.onAsk}
+            onOpenWith={p.onOpenWith}
+            onSendTo={p.onSendTo}
+            sources={p.sources}
             onNew={p.onNew}
             onOpen={p.onOpen}
             onSelect={p.onSelect}

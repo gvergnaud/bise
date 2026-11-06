@@ -79,8 +79,11 @@ import {
   applyOp,
   beforeCaret,
   caretOf,
+  caretPlace,
   chipsOf,
   dictationAt,
+  plainText,
+  type CaretPlace,
   docOf,
   draftOf,
   insertChip,
@@ -137,6 +140,18 @@ export interface PmFieldProps {
   readonly onEscape?: (() => boolean | undefined) | undefined;
   /** TP-R6, ⇧⇥ with no list open: the screen's act (switch the approvals mode); unset: the browser's. */
   readonly onShiftTab?: (() => void) | undefined;
+  /**
+   * A key the screen takes before the field's own, with the caret's place (the spotlight's ⏎ that
+   * opens its first result, ↓ into its list, esc that closes with the draft kept). Never asked while
+   * the @ / $ / / list is open or a take runs: those keys stay the field's. true: the key was taken.
+   */
+  readonly keyFirst?: ((e: KeyboardEvent, at: CaretPlace) => boolean) | undefined;
+  /** The plain text at each change (a newline '\n', a chip one U+FFFC): the spotlight's search. */
+  readonly onText?: ((text: string) => void) | undefined;
+  /** The field's list (@ $ / :) opened or closed: the spotlight hides its own list under it. */
+  readonly onListOpen?: ((open: boolean) => void) | undefined;
+  /** The list in the page's flow under the field, never floating over the box (the spotlight). */
+  readonly pickInFlow?: boolean | undefined;
 }
 
 /** The draft is written this long after the last change (never on each key of a burst). */
@@ -738,6 +753,10 @@ export function PmField(p: PmFieldProps): JSX.Element {
   useEffect(() => {
     pushBar({ fileList });
   }, [fileList]);
+  const listShown = open || none !== null;
+  useEffect(() => {
+    props.current.onListOpen?.(listShown);
+  }, [listShown]);
 
   // ---- dictation (dictation.ts, the TUI's ctrl+r): a live node at the caret nothing reads ----
   const dictation = useDictation({
@@ -801,6 +820,19 @@ export function PmField(p: PmFieldProps): JSX.Element {
       if (v === null) return;
       v.dispatch(v.state.tr.setSelection(TextSelection.atEnd(v.state.doc)));
       v.focus();
+    },
+    selectAll: () => {
+      const v = view();
+      if (v === null) return;
+      const end = v.state.doc.content.size - 1;
+      v.dispatch(v.state.tr.setSelection(TextSelection.create(v.state.doc, Math.min(1, end), Math.max(1, end))));
+      v.focus();
+    },
+    entry: () => entryNow(),
+    clear: () => {
+      clear();
+      forget();
+      writeNow();
     },
     quote: (text, from, at) => {
       if (text.trim() === "") return;
@@ -879,6 +911,7 @@ export function PmField(p: PmFieldProps): JSX.Element {
     }
     setBlank(b);
     props.current.onCanSend(!b);
+    props.current.onText?.(plainText(st.doc));
     const head = segs[0];
     props.current.onLead?.(head?.kind === "text" ? head.text.slice(0, 120) : "");
     pushBar({
@@ -920,6 +953,17 @@ export function PmField(p: PmFieldProps): JSX.Element {
     const v = view();
     if (v === null) return false;
     const q = props.current;
+    const l = live.current;
+    if (
+      q.keyFirst !== undefined &&
+      !l.open &&
+      !l.none &&
+      dictation.dict.current === null &&
+      !e.isComposing &&
+      !v.composing &&
+      q.keyFirst(e, caretPlace(v.state))
+    )
+      return true;
     return fieldKey(
       {
         view: v,
@@ -1033,10 +1077,11 @@ export function PmField(p: PmFieldProps): JSX.Element {
             if (row !== undefined && !row.off) apply(row.pick);
             view()?.focus();
           }}
+          inFlow={p.pickInFlow === true}
         />
       )}
       {none !== null && (
-        <Picker rows={[]} index={0} testId={`${p.testId}.pick`} empty={none === "at" ? composer.pick_none_at : composer.pick_none_skill} onPick={() => undefined} />
+        <Picker rows={[]} index={0} testId={`${p.testId}.pick`} empty={none === "at" ? composer.pick_none_at : composer.pick_none_skill} onPick={() => undefined} inFlow={p.pickInFlow === true} />
       )}
     </>
   );
