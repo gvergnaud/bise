@@ -7,7 +7,10 @@
 //! - [`github`]: `gh api graphql`, one query per repo, an alias per branch
 //!   (25 aliases measured at 1 point, like 2);
 //! - [`poll`]: the cadence and back-off (§7) and the worker that asks,
-//!   on its own thread (a query takes ~0.5 s: never on the hub's loop).
+//!   on its own thread (a query takes ~0.5 s: never on the hub's loop);
+//! - [`artifact`]: a PR as an artifact of kind `pr` (pr-integration), the
+//!   store's ops for a snapshot; [`pr_link`], the one key of a PR's link;
+//!   [`yours`], what a PR waits on him for.
 //!
 //! The hub's side (`core.rs`, `Input::Prs`): the snapshots by place id
 //! (`Hub::prs`), the journal lines that keep each place's PR number, the
@@ -15,6 +18,7 @@
 //! `activity` (reviews, comments) and `merge` join [`Forge`] with pr-news
 //! and pr-merge (wave 3).
 
+pub mod artifact;
 pub mod github;
 pub mod news;
 pub mod poll;
@@ -302,52 +306,54 @@ pub fn yours(pr: &PrSnapshot) -> Option<bise_proto::rows::PrYours> {
     }
 }
 
-/// A PR's link, the one form the hub keys it by (its artifact's source,
-/// the poller's followed PRs): `https://<host>/<owner>/<repo>/pull/<n>`
-/// (GitLab: `…/-/merge_requests/<n>`), its tab, query and trailing
-/// parts dropped (`…/pull/6/files#x` is `…/pull/6`). None: not a PR.
-pub fn pr_url(url: &str) -> Option<String> {
+/// A PR's link read once, typed (architect m_54220): the one form the
+/// hub keys a PR by (its artifact's source, the poller's followed PRs),
+/// its forge, its repo and number.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PrLink {
+    /// `https://<host>/<owner>/<repo>/pull/<n>` (GitLab:
+    /// `…/<group>/<repo>/-/merge_requests/<n>`), lowercase: GitHub's
+    /// owner and repo are case-insensitive, and GitLab's paths resolve
+    /// whatever their case, so one PR is one key.
+    pub url: String,
+    pub provider: bise_proto::rows::PrProvider,
+    pub host: String,
+    /// `owner/name` (GitLab: `group/sub/name`), lowercase
+    pub repo: String,
+    pub number: u64,
+}
+
+impl PrLink {
+    /// `#412`, GitLab's `!412`.
+    pub fn tag(&self) -> String {
+        tag(self.provider, self.number)
+    }
+}
+
+/// A PR's link: its tab, query and trailing parts dropped
+/// (`…/pull/6/files#x` is `…/pull/6`), lowercase. None: not a PR.
+pub fn pr_link(url: &str) -> Option<PrLink> {
+    use bise_proto::rows::PrProvider;
     let bare = url.trim().trim_start_matches("https://").trim_start_matches("http://");
-    let bare = bare.split(['?', '#']).next()?;
+    let bare = bare.split(['?', '#']).next()?.to_lowercase();
     let parts: Vec<&str> = bare.split('/').filter(|p| !p.is_empty()).collect();
-    let (host, owner, name) = (parts.first()?, parts.get(1)?, parts.get(2)?);
-    let n = |s: &&str| s.parse::<u64>().ok().filter(|n| *n > 0);
-    if parts.get(3) == Some(&"pull") {
-        let num = parts.get(4).and_then(n)?;
-        return Some(format!("https://{}/{}/{}/pull/{}", host.to_lowercase(), owner, name, num));
+    let host = parts.first()?.to_string();
+    let num = |s: Option<&&str>| s.and_then(|s| s.parse::<u64>().ok()).filter(|n| *n > 0);
+    if parts.len() >= 5 && parts[3] == "pull" {
+        let number = num(parts.get(4))?;
+        let repo = format!("{}/{}", parts[1], parts[2]);
+        let url = format!("https://{}/{}/pull/{}", host, repo, number);
+        return Some(PrLink { url, provider: PrProvider::Github, host, repo, number });
     }
     // GitLab: group/(sub/)*repo/-/merge_requests/n
     let dash = parts.iter().position(|p| *p == "-")?;
     if dash >= 3 && parts.get(dash + 1) == Some(&"merge_requests") {
-        let num = parts.get(dash + 2).and_then(n)?;
-        return Some(format!("https://{}/{}/-/merge_requests/{}", host.to_lowercase(), parts[1..dash].join("/"), num));
+        let number = num(parts.get(dash + 2))?;
+        let repo = parts[1..dash].join("/");
+        let url = format!("https://{}/{}/-/merge_requests/{}", host, repo, number);
+        return Some(PrLink { url, provider: PrProvider::Gitlab, host, repo, number });
     }
     None
-}
-
-/// The forge of a PR's link: GitLab's `/-/merge_requests/`, else GitHub
-/// (gh answers for github.com and the GHE hosts it knows).
-pub fn provider_of(url: &str) -> bise_proto::rows::PrProvider {
-    use bise_proto::rows::PrProvider;
-    if url.contains("/-/merge_requests/") {
-        PrProvider::Gitlab
-    } else if pr_url(url).is_some() {
-        PrProvider::Github
-    } else {
-        PrProvider::Unknown
-    }
-}
-
-/// `owner/name` of a PR's link (GitLab: `group/sub/name`).
-pub fn repo_of_pr(url: &str) -> String {
-    let Some(u) = pr_url(url) else { return String::new() };
-    let path = u.trim_start_matches("https://");
-    let path = path.split_once('/').map_or("", |(_, p)| p);
-    let path = path.split("/-/").next().unwrap_or(path);
-    match path.rsplit_once("/pull/") {
-        Some((repo, _)) => repo.to_string(),
-        None => path.to_string(),
-    }
 }
 
 /// The forge's time (`2026-10-01T12:00:00Z`, or with ms) as ms since
@@ -505,24 +511,24 @@ mod tests {
 
     #[test]
     fn one_form_of_a_pr_link() {
-        let u = |s| pr_url(s);
+        use bise_proto::rows::PrProvider;
+        let u = |s| pr_link(s).map(|l| l.url);
         let want = Some("https://github.com/o/r/pull/6".to_string());
         assert_eq!(u("https://github.com/o/r/pull/6"), want);
         assert_eq!(u("https://GitHub.com/o/r/pull/6/files#diff-1"), want);
         assert_eq!(u("github.com/o/r/pull/6?w=1"), want);
         assert_eq!(u("http://github.com/o/r/pull/6/"), want);
+        // GitHub's owner and repo are case-insensitive: one key
+        assert_eq!(u("https://github.com/O/R/pull/6"), want);
         assert_eq!(u("https://github.com/o/r/issues/6"), None);
         assert_eq!(u("https://github.com/o/r/pull/x"), None);
-        assert_eq!(
-            u("https://gitlab.com/g/sub/r/-/merge_requests/12/diffs").as_deref(),
-            Some("https://gitlab.com/g/sub/r/-/merge_requests/12")
-        );
-        use bise_proto::rows::PrProvider;
-        assert_eq!(provider_of("https://github.com/o/r/pull/6"), PrProvider::Github);
-        assert_eq!(provider_of("https://gitlab.com/g/r/-/merge_requests/3"), PrProvider::Gitlab);
-        assert_eq!(provider_of("https://example.com"), PrProvider::Unknown);
-        assert_eq!(repo_of_pr("https://github.com/o/r/pull/6/files"), "o/r");
-        assert_eq!(repo_of_pr("https://gitlab.com/g/sub/r/-/merge_requests/3"), "g/sub/r");
+        assert_eq!(u("https://github.com/o/r/pull/0"), None);
+        assert_eq!(u("https://example.com"), None);
+        let gl = pr_link("https://GitLab.com/G/Sub/R/-/merge_requests/12/diffs").unwrap();
+        assert_eq!(gl.url, "https://gitlab.com/g/sub/r/-/merge_requests/12");
+        assert_eq!((gl.provider, gl.repo.as_str(), gl.number, gl.tag()), (PrProvider::Gitlab, "g/sub/r", 12, "!12".to_string()));
+        let gh = pr_link("https://github.com/Mistralai/Dashboard/pull/6/files").unwrap();
+        assert_eq!((gh.provider, gh.host.as_str(), gh.repo.as_str(), gh.tag()), (PrProvider::Github, "github.com", "mistralai/dashboard", "#6".to_string()));
         assert_eq!(tag(PrProvider::Github, 412), "#412");
         assert_eq!(tag(PrProvider::Gitlab, 412), "!412");
         assert_eq!(iso_ms("1970-01-01T00:00:01Z"), Some(1000));

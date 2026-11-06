@@ -495,6 +495,11 @@ pub enum Effect {
     /// A PR event (pr-design §10): the daemon logs it (pr-news routes
     /// them, wave 3). The journaled ones also come as `Journal`.
     Pr(crate::forge::PrEvent),
+    /// pr-integration rules 2 and 4: the hub's snapshot of a PR changed
+    /// (or came first after a start): the daemon keeps its `pr` artifact
+    /// in step (`forge::artifact::sync`, daemon/pr_arts.rs). `agent`: its
+    /// place's first agent.
+    PrArtifact { pr: Box<crate::place::PrSnapshot>, agent: Option<String> },
     /// pr-design §6.3: the user's `1` on a ready-to-merge item. The
     /// daemon runs `gh pr merge` on a thread (the head pinned) and
     /// answers with `Input::Merged`.
@@ -1363,6 +1368,7 @@ impl Hub {
                     if self.prs.get(&l.place) != Some(pr) {
                         self.prs.insert(l.place.clone(), pr.clone());
                         self.dirty = true;
+                        fx.push(Effect::PrArtifact { pr: Box::new(pr.clone()), agent: p.agents.first().cloned() });
                     }
                 }
                 None => {

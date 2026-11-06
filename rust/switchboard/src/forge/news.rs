@@ -508,7 +508,7 @@ pub fn pr_row(pr: &PrView, agents: &[String]) -> bise_proto::rows::Pr {
         Review::None | Review::Pending => PrReview::None,
     };
     let words = pr_words(pr);
-    let provider = super::provider_of(&pr.url);
+    let link = super::pr_link(&pr.url);
     Pr {
         number: pr.number,
         url: pr.url.clone(),
@@ -529,9 +529,9 @@ pub fn pr_row(pr: &PrView, agents: &[String]) -> bise_proto::rows::Pr {
         stale_ms: pr.stale_ms,
         title: pr.facts.title.clone(),
         base: pr.facts.base.clone(),
-        repo: super::repo_of_pr(&pr.url),
-        provider,
-        tag: super::tag(provider, pr.number),
+        repo: link.as_ref().map(|l| l.repo.clone()).unwrap_or_default(),
+        provider: link.as_ref().map_or(bise_proto::rows::PrProvider::Unknown, |l| l.provider),
+        tag: link.as_ref().map_or_else(|| format!("#{}", pr.number), |l| l.tag()),
         mergeable: pr.facts.mergeable,
         conflicts: pr.facts.conflicts,
         checks_n: pr.facts.checks,

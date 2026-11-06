@@ -61,6 +61,7 @@ mod loop_watch;
 mod merged;
 mod outbox;
 mod photo_take;
+mod pr_arts;
 mod processes;
 mod revive;
 mod state_gate;
@@ -991,6 +992,7 @@ impl Shell {
             }
             Effect::ModelRefused { agent, why } => self.model_refused(&agent, &why),
             Effect::Pr(e) => log_line(&self.opts.paths, &crate::forge::log_line(&e)),
+            Effect::PrArtifact { pr, agent } => self.pr_artifact(&pr, agent.as_deref()),
             Effect::Merge { card, place, number, head, method } => self.merge_pr(card, place, number, head, method),
             Effect::Feature { token, op, name, agents } => self.feature(token, op, name, agents),
             Effect::Update { id, version } => self.update_to(id, version),

@@ -17,6 +17,11 @@
 //! the library (`bise_home::library`) is [`resolve_folders`], for this
 //! hub's rows and another project's ([`rows_of`]).
 //!
+//! A pull request is a stored artifact of kind `pr` keyed by its link in
+//! one form (`forge::pr_link`), made, retitled and archived by the hub
+//! as the forge says (`forge::artifact`, daemon/pr_arts.rs); `pr_ended`
+//! marks the archives the hub made, the only ones a reopen undoes.
+//!
 //! A site's localStorage, `<id>/storage.json`, is crate::artifacts_storage's
 //! (the page server writes it, under its lock).
 //!
@@ -125,6 +130,11 @@ pub struct Meta {
     /// artifact, written only by its own hub ([`Store::move_to`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub folder: Option<String>,
+    /// pr-integration rule 4: the hub archived this PR artifact because
+    /// the PR was merged or closed (forge::artifact). Only such an archive
+    /// is undone when the PR is reopened; his own archive never is.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pr_ended: bool,
 }
 
 impl Meta {
@@ -321,13 +331,12 @@ pub fn link_kind(url: &str) -> &'static str {
     let host = b.split('/').next().unwrap_or("");
     let path = &b[host.len()..];
     let local = host.starts_with("127.0.0.1") || host.starts_with("localhost") || host.starts_with("0.0.0.0");
-    if host == "github.com" {
-        if pr_of(url).is_some() {
-            return "pr";
-        }
-        if path.contains("/releases") {
-            return "release";
-        }
+    // a PR (GitHub, a GitLab merge request): the forge's one parse
+    if crate::forge::pr_link(url).is_some() {
+        return "pr";
+    }
+    if host == "github.com" && path.contains("/releases") {
+        return "release";
     }
     if host == "docs.google.com" {
         if path.starts_with("/spreadsheets") {
@@ -352,17 +361,6 @@ pub fn link_kind(url: &str) -> &'static str {
     "link"
 }
 
-/// A GitHub PR link: (owner/repo, number).
-pub fn pr_of(url: &str) -> Option<(String, u64)> {
-    let b = bare_link(url);
-    let parts: Vec<&str> = b.split('/').collect();
-    if parts.first() != Some(&"github.com") || parts.len() < 5 || parts[3] != "pull" {
-        return None;
-    }
-    let n = parts[4].split(['#', '?']).next()?.parse::<u64>().ok()?;
-    Some((format!("{}/{}", parts[1], parts[2]), n))
-}
-
 /// The kind of a file or folder.
 pub fn path_kind(p: &Path) -> &'static str {
     if p.is_dir() {
@@ -383,12 +381,13 @@ pub fn path_kind(p: &Path) -> &'static str {
     }
 }
 
-/// The default title: a file's name, a PR's `PR #6`, a link's host and
-/// path.
+/// The default title: a file's name, a PR's `PR #6` (`MR !6`) until the
+/// forge says its title, a link's host and path.
 fn default_title(target: &str, is_url: bool) -> String {
     if is_url {
-        if let Some((_, n)) = pr_of(target) {
-            return format!("PR #{}", n);
+        if let Some(l) = crate::forge::pr_link(target) {
+            let what = if l.provider == bise_proto::rows::PrProvider::Gitlab { "MR" } else { "PR" };
+            return format!("{} {}", what, l.tag());
         }
         return crate::util::clip(&bare_link(target), 60);
     }
@@ -509,6 +508,23 @@ impl Store {
         write_atomic(&self.dir().join(&m.id).join("meta.json"), &bytes)
     }
 
+    /// A stored artifact's title, set (a PR's: the forge's,
+    /// forge::artifact). An unknown id: an error.
+    pub fn retitle(&self, id: &str, title: &str) -> Result<(), String> {
+        let m = self.stored().into_iter().find(|m| m.id == id).ok_or_else(|| format!("no artifact {id}"))?;
+        self.save(&Meta { title: title.to_string(), ..m })
+    }
+
+    /// Mark a PR artifact as archived by the hub at the PR's end (or no
+    /// more): [`Meta::pr_ended`].
+    pub fn set_pr_ended(&self, id: &str, ended: bool) -> Result<(), String> {
+        let m = self.stored().into_iter().find(|m| m.id == id).ok_or_else(|| format!("no artifact {id}"))?;
+        if m.pr_ended == ended {
+            return Ok(());
+        }
+        self.save(&Meta { pr_ended: ended, ..m })
+    }
+
     /// name-free (sb-core's `retarget` fx): another agent takes the old
     /// name `from`, so the artifacts that still say `from` say `to`, the
     /// agent that had it. The number moved.
@@ -615,7 +631,12 @@ impl Store {
                 let s = p.to_string_lossy().to_string();
                 (s.clone(), s, path_kind(p))
             }
-            (None, Some(u)) => (u.trim_end_matches('/').to_string(), u.clone(), link_kind(u)),
+            // a PR: its one key (forge::pr_link), so `…/pull/6/files` and
+            // the hub's own add land on the same artifact
+            (None, Some(u)) => match crate::forge::pr_link(u) {
+                Some(l) => (l.url.clone(), l.url, "pr"),
+                None => (u.trim_end_matches('/').to_string(), u.clone(), link_kind(u)),
+            },
             _ => unreachable!(),
         };
         if a.known_only && !stored.iter().any(|m| m.source == source) {
@@ -650,6 +671,7 @@ impl Store {
                         Some(Filed::Asked(f) | Filed::Default(f)) => Some(f.clone()),
                         None => None,
                     },
+                    pr_ended: false,
                 }
             }
         };
@@ -905,7 +927,7 @@ impl Store {
             "no_copy": cur.no_copy,
             "gone": gone,
             "detail": detail,
-            "pr": pr_of(&cur.target).map(|(repo, n)| json!({"repo": repo, "number": n})),
+            "pr": crate::forge::pr_link(&cur.target).map(|l| json!({"repo": l.repo, "number": l.number})),
             "keys": keys(m, workspace),
             "versions": m.versions.iter().map(version).collect::<Vec<_>>(),
             // raw: the hub resolves it against the library (artifacts_ev)
@@ -1033,6 +1055,7 @@ fn page_meta(p: &PageMeta, base: Option<&str>) -> Meta {
         source: url(last, true),
         cwd: String::new(),
         folder: None,
+        pr_ended: false,
         versions: p
             .versions
             .iter()

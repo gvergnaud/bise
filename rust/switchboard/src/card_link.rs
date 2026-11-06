@@ -309,7 +309,7 @@ mod tests {
         assert!(open_act(None, &none, "1=launch-watch").is_err(), "no pages, no such artifact");
         // an artifact that is no page: its link when it has one
         let meta = |t: &str| crate::artifacts::Meta {
-            id: "plan".into(), title: "plan".into(), kind: "doc".into(), agent: "a".into(), by: "a".into(), created_ms: 0, source: t.into(), cwd: String::new(), folder: None,
+            id: "plan".into(), title: "plan".into(), kind: "doc".into(), agent: "a".into(), by: "a".into(), created_ms: 0, source: t.into(), cwd: String::new(), folder: None, pr_ended: false,
             versions: vec![crate::artifacts::Version { v: 1, at_ms: 0, target: t.into(), ..Default::default() }],
         };
         assert_eq!(open_act(None, &|id: &str| (id == "plan").then(|| meta("/w/plan.md")), "3=plan").unwrap(), (3, OptAct::artifact("plan", None, None)));
@@ -332,7 +332,7 @@ mod tests {
         let u = "http://127.0.0.1:47125/p/bims-office";
         let t = p.store.meta("bims-office").unwrap().title;
         let meta = |t: &str| crate::artifacts::Meta {
-            id: "les-bims-prototype".into(), title: "les bims · prototype".into(), kind: "site".into(), agent: "bims".into(), by: "bims".into(), created_ms: 0, source: t.into(), cwd: String::new(), folder: None,
+            id: "les-bims-prototype".into(), title: "les bims · prototype".into(), kind: "site".into(), agent: "bims".into(), by: "bims".into(), created_ms: 0, source: t.into(), cwd: String::new(), folder: None, pr_ended: false,
             versions: vec![crate::artifacts::Version { v: 2, at_ms: 0, target: t.into(), ..Default::default() }],
         };
         let file = |id: &str| (id == "les-bims-prototype").then(|| meta("/w/bims.html"));
