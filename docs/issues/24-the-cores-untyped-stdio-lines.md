@@ -25,9 +25,13 @@ rules that are not shape (an agent's `@` and empty name, absolute files,
 the history's limit). `answer`'s card and `every_stop`'s id are numbers
 only (the old parse took `"#3"`; nothing sent it):
 
-    fn_context, shot, send, start, answer, hush, cut_in, quiet, voice,
+    shot, send, start, answer, hush, cut_in, quiet, voice,
     every_stop, fake_words, agent_preview, agent_history, agent_unwatch,
     agent_send, follow, stop, archive, unarchive
+
+(`fn_context` went in the spotlight's ❝ change, architect m_53938: no app
+sent it, and its selection hid in the model's text; his selection now goes
+as a visible quote part.)
 
 `CORE_EVS` (gone, debt-t6): 13 events were written as `json!` by the
 core. They are `CoreEv` variants now, built typed and serialized at one
@@ -81,7 +85,7 @@ Lines only tests read (the core's Rust tests, `tests/ambient_core_e2e.py`
 and the other e2e, `dev/plugins/ambient-qa`), never the desktop app:
 ambient-lead's product call (delete or keep), as its own change:
 
-- commands sent only by tests: `fn_context`, `start`, `hush`, `cut_in`,
+- commands sent only by tests: `start`, `hush`, `cut_in`,
   `quiet`, `voice`, `every_stop`, `fake_words`, `agent_preview`,
   `agent_history`, `agent_unwatch`, `agent_send`, `follow`, and `send`,
   `answer`, `stop`, `archive`, `unarchive` without a project (the app

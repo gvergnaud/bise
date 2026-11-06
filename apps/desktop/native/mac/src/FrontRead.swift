@@ -16,15 +16,16 @@ enum FrontRead {
     static let textRoles: Set<String> = ["AXStaticText", "AXHeading", "AXTextArea", "AXTextField", "AXLink"]
 
     // `done` runs on the main queue
-    static func read(pid: pid_t, app: String?, bundle: String?, within: Double,
+    // `selection`: read AXSelectedText too (fn space only, Helper.keyOut)
+    static func read(pid: pid_t, app: String?, bundle: String?, selection: Bool, within: Double,
                      done: @escaping @MainActor (FrontRaw) -> Void) {
         queue.async {
             let end = DispatchTime.now().uptimeNanoseconds + UInt64(max(0, within) * 1_000_000_000)
             var raw = FrontRaw(app: app, bundle: bundle)
             let a = AXUIElementCreateApplication(pid)
             AXUIElementSetMessagingTimeout(a, 0.05)
-            // the selection first: what he points at matters most
-            if let f = element(a, kAXFocusedUIElementAttribute) { raw.selection = string(f, kAXSelectedTextAttribute) }
+            // the selection first when asked: what he points at matters most
+            if selection, let f = element(a, kAXFocusedUIElementAttribute) { raw.selection = string(f, kAXSelectedTextAttribute) }
             if let w = element(a, kAXFocusedWindowAttribute) {
                 raw.title = string(w, kAXTitleAttribute)
                 raw.document = string(w, kAXDocumentAttribute)

@@ -23,6 +23,7 @@ import {
   type SpotAnswer,
   type SpotData,
   type SpotItem,
+  type SpotQuote,
   type SpotRoute,
 } from "@/spotlight";
 import type { Outgoing } from "@/composer/message";
@@ -102,6 +103,11 @@ export interface CapsuleProps {
   readonly onShotDrop?: () => void;
   /** The spotlight's 'no screenshot' chip: his switch wants the still, Screen Recording is off (spot-shot). */
   readonly shotOff?: { readonly onOpen: () => void } | null;
+  /** His selection read at fn space: the spotlight's ❝ chip (Spotlight's quote, onQuoteDrop, onQuoteBack). */
+  readonly quote?: SpotQuote | null;
+  readonly frontApp?: string | null;
+  readonly onQuoteDrop?: () => void;
+  readonly onQuoteBack?: (() => void) | null;
   /** fn's permissions sheet (the 'perms' view): the helper's perms, [allow], 'not now'. */
   readonly perms?: { readonly perms: Perms; readonly onAllow: () => void; readonly onNotNow: () => void } | null;
   /** The one-time ask for Screen Recording, under his words (designer m_21903). */
@@ -214,6 +220,10 @@ export function Capsule(p: CapsuleProps): JSX.Element {
             shot={p.shot == null ? null : { thumb: fileUrl(p.shot.file), name: shotName(p.shot), title: `${p.shot.app} · ${p.shot.title}` }}
             onShotDrop={p.onShotDrop}
             shotOff={p.shotOff ?? null}
+            quote={p.quote ?? null}
+            frontApp={p.frontApp ?? null}
+            onQuoteDrop={p.onQuoteDrop}
+            onQuoteBack={p.onQuoteBack ?? null}
             testId="spot"
           />
         </div>

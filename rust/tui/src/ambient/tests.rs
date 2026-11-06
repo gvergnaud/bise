@@ -489,52 +489,23 @@ fn the_talks_still_is_told_to_the_app_and_his_drop_forgets_it() {
     assert!(t.take().contains(&json!({"ev": "shot", "file": null})));
 }
 
-/// S9 (amb-mac m_9035): the latest fn_context rides the next message to
-/// main as the input op's `context` field (never rendered by the core),
-/// the shot an image part beside it (never in it), and it's gone after
-/// that message; an excluded app's `{}` clears it; a cancelled talk drops
-/// it.
+/// No fn context rides a capsule send any more (architect m_53938): the
+/// old `fn_context` command is gone (its selection hid in the model's
+/// text); his selection goes as a visible quote part (the spotlight's ❝).
+/// The shot still goes as his message's image part.
 #[test]
-fn the_fn_context_rides_the_next_message_once() {
-    use bise_proto::context::FnContext;
+fn no_fn_context_rides_a_capsule_send() {
     let mut t = T::new();
     t.ready();
-    let safari = FnContext { app: Some("Safari".into()), url: Some("https://grafana.acme.test/d/p99".into()), ..FnContext::default() };
-    t.cmd(Cmd::FnContext(FnContext { app: Some("Mail".into()), ..FnContext::default() }));
-    t.cmd(Cmd::FnContext(safari.clone()));
+    assert!(Cmd::parse(r#"{"cmd":"fn_context","context":{"app":"Code","selection":"x"}}"#).is_err());
     let png = t.dir.join("front.png");
     std::fs::write(&png, b"\x89PNG fake").unwrap();
     t.cmd(Cmd::Shot { path: png, app: "Safari".into(), title: "p99".into() });
     t.cmd(Cmd::Send { text: "why is this slow?".into() });
     let req = t.hub.next();
-    let text = req["text"].as_str().unwrap();
-    assert_eq!(text, "[Image #1] why is this slow?", "the core never renders the context");
-    assert!(!req["parts"].to_string().contains("grafana"), "{req}");
-    // the shot is his message's image part (architect m_22000), never in
-    // the context
-    let ctx: FnContext = serde_json::from_value(req["context"].clone()).unwrap();
-    assert_eq!(ctx, safari);
+    assert_eq!(req["text"], "[Image #1] why is this slow?");
     assert_eq!(req["parts"][0]["caption"], "Safari · p99");
-    // once
-    t.cmd(Cmd::Send { text: "and this?".into() });
-    assert!(t.hub.next().get("context").is_none());
-    // an excluded app clears it
-    t.cmd(Cmd::FnContext(safari.clone()));
-    t.cmd(Cmd::FnContext(FnContext::default()));
-    t.cmd(Cmd::Send { text: "third".into() });
-    assert!(t.hub.next().get("context").is_none());
-    // a cancelled talk drops it
-    t.cmd(Cmd::TalkStart);
-    t.cmd(Cmd::FnContext(safari));
-    t.cmd(Cmd::TalkCancel);
-    t.cmd(Cmd::Send { text: "fourth".into() });
-    assert!(t.hub.next().get("context").is_none());
-    assert_eq!(Cmd::parse(r#"{"cmd":"fn_context","context":{}}"#), Ok(Cmd::FnContext(FnContext::default())));
-    assert_eq!(
-        Cmd::parse(r#"{"cmd":"fn_context","context":{"app":"Code","file":"/w/a.rs"}}"#),
-        Ok(Cmd::FnContext(FnContext { app: Some("Code".into()), file: Some("/w/a.rs".into()), ..FnContext::default() }))
-    );
-    assert!(Cmd::parse(r#"{"cmd":"fn_context"}"#).is_err());
+    assert!(req.get("context").is_none(), "{req}");
 }
 
 /// The `files` list of a send went in issue 31 (a drop rides as parts): an

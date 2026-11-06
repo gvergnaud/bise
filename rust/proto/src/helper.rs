@@ -206,10 +206,12 @@ impl HelperEv {
 pub enum HelperCmd {
     /// at start and when his prefs change: the apps never read (bundle
     /// ids, on top of the helper's built-in list), right option as the fn
-    /// fallback
+    /// fallback, and `quote`: fn space may read his selection (his
+    /// `context.quote`, the spotlight's ❝ chip; off: never read)
     Config {
         exclude: Vec<String>,
         right_option: bool,
+        quote: bool,
     },
     /// the spotlight's route line is up: a plain tab is bise's
     Route { open: bool },

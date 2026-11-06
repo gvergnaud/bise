@@ -31,6 +31,23 @@ enum KeyOut: Equatable {
     case plainEsc                // esc without fn: passes, and hides bise (§8)
 }
 
+// which keys read the front app, and which of them read his selection
+// (architect m_53938): only fn space, the spotlight, reads AXSelectedText,
+// shown there as the ❝ chip he sees and can drop; a talk reads the app,
+// never the selection; his pref off (context.quote, the helper's config
+// `quote`): no key reads it
+enum FrontAsk: Equatable { case app, appAndSelection }
+
+extension KeyOut {
+    func frontAsk(quote: Bool) -> FrontAsk? {
+        switch self {
+        case .talkStart: return .app
+        case .key("space"): return quote ? .appAndSelection : .app
+        default: return nil
+        }
+    }
+}
+
 // what app.log says for each key decision (the dogfood, B2: 'fn does
 // nothing' must show why next time); the hold's own gate logs in App
 enum KeyLog {

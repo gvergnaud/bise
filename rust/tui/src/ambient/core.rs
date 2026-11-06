@@ -281,9 +281,6 @@ pub struct Core {
     shot: Option<Shot>,
     /// the last shot's id (core/shot.rs)
     shot_n: u64,
-    /// the fn context for the next message (S9); the shot goes as an
-    /// image part, never in it
-    fn_ctx: Option<bise_proto::context::FnContext>,
     /// shots sent: kept with his message (its chip and the model's image
     /// read them), so never deleted here, nor a dropped still with the
     /// same file. The image store has no retention yet (architect's debt).
@@ -367,7 +364,6 @@ impl Core {
             next_utt: 1,
             shot: None,
             shot_n: 0,
-            fn_ctx: None,
             sent_shots: Vec::new(),
             page_titles: Vec::new(),
             batches_seen: Vec::new(),
@@ -458,9 +454,7 @@ impl Core {
             Cmd::Files { project, q, rid, limit } => self.pick_files(project, q, rid, limit),
             Cmd::FilePicked { project, path } => self.file_picked(project, path),
             Cmd::Shot { path, app, title } => self.take_shot(&path, app, title),
-            // the latest fn wins; an excluded app's `{}` clears
             Cmd::AwayBack { away_ms } => self.away_back(away_ms),
-            Cmd::FnContext(c) => self.fn_ctx = Some(c).filter(|c| *c != bise_proto::context::FnContext::default()),
             Cmd::Send { text } => {
                 let text = text.trim().to_string();
                 if !text.is_empty() || self.shot.is_some() {
@@ -561,14 +555,10 @@ impl Core {
     /// "capsule-start" (start an agent; the hub's hint says so).
     fn send_via(&mut self, words: String, voice: bool, via: &str) {
         let shot = self.shot.take();
-        // S9: the fn context goes as a field (the hub frames it after his
-        // words, its one render); the shot goes as an image part, not in it
-        let ctx = self.fn_ctx.take();
-        // via: the hub tells main it came from the capsule (one short line back)
+        // via: the hub tells main it came from the capsule (one short line back);
+        // no fn context rides it (his selection goes as a visible quote part,
+        // the spotlight's ❝, architect m_53938)
         let mut input = json!({"agent": "main", "text": words, "via": via});
-        if let Some(c) = ctx {
-            input["context"] = json!(c);
-        }
         // the talk's still is his message's image part, its caption the app
         // and window (architect m_22000; the spotlight's parts, 7f029104):
         // the text is the label and his words for older readers, the hub

@@ -121,7 +121,39 @@ export interface SpotlightProps {
   /** Why no still rides his ask when his switch wants one (Screen Recording off): a dim chip that
    *  opens System Settings. None: nothing to say. */
   readonly shotOff?: { readonly onOpen: () => void } | null;
+  /** His selection read at fn space (Gabriel's v4): the ❝ chip first on the chips' line, sent
+   *  first with his message; ✕ or ⌫ at the start of his words forgets it. None: no chip. */
+  readonly quote?: SpotQuote | null;
+  /** The app in front now: the ❝ chip names its own app only when it differs. */
+  readonly frontApp?: string | null;
+  readonly onQuoteDrop?: () => void;
+  /** The quote he just forgot: ⌘Z before he types brings it back. None: nothing to bring back. */
+  readonly onQuoteBack?: (() => void) | null;
   readonly testId?: string;
+}
+
+/** His selection, read at fn space only (the helper's context, the capsule's state alone: never
+ *  kept, never sent before he sends): its text and the app it was read in. */
+export interface SpotQuote {
+  readonly text: string;
+  readonly app: string;
+}
+
+/** The ❝ chip's words: its start cut at QUOTE_CHIP_CHARS with …, its app only when it is not the
+ *  app in front (he switched since). Pure. */
+export const QUOTE_CHIP_CHARS = 40;
+export function quoteChip(q: SpotQuote, front: string | null): string {
+  const one = q.text.replace(/\s+/gu, " ").trim();
+  const cut = one.length > QUOTE_CHIP_CHARS ? `${one.slice(0, QUOTE_CHIP_CHARS - 1).trimEnd()}…` : one;
+  return q.app !== "" && q.app !== front ? `❝ ${cut} · ${q.app}` : `❝ ${cut}`;
+}
+
+/** His message with his selection first, as a quote part (bise_proto Part::Quote, `from` its app):
+ *  the thread shows it and the model reads it there, never in a hidden context. Pure. */
+export function withQuote(o: Outgoing, q: SpotQuote | null): Outgoing {
+  if (q === null) return o;
+  const words: readonly Part[] = o.parts ?? (o.text === "" ? [] : [{ kind: "text", text: o.text }]);
+  return { text: o.text, parts: [{ kind: "quote", from: q.app, text: q.text }, ...words] };
 }
 
 /** The still's chip: its thumbnail's URL, its name ('Safari · stripe.com'), its whole title. */
@@ -365,12 +397,23 @@ export function Spotlight(p: SpotlightProps): JSX.Element {
     };
   }, []);
 
-  /** The field's send (⏎ in a message, ⌘⏎ in his words): '/new …' starts an agent, else bise. */
+  // his words when he forgot the ❝ chip: ⌘Z with the same words brings it back
+  const quoteDropped = useRef<string | null>(null);
+  const dropQuote = (): void => {
+    quoteDropped.current = text;
+    props.current.onQuoteDrop?.();
+  };
+
+  /** The field's send (⏎ in a message, ⌘⏎ in his words): '/new …' starts an agent, else bise;
+   *  his ❝ selection goes first in it (withQuote). */
   const sendOut = (o: Outgoing): void => {
     const brief = o.parts === undefined ? newBrief(o.text) : undefined;
     const onNew = props.current.onNew;
     if (brief !== undefined && onNew !== undefined) onNew(brief);
-    else props.current.onAsk(o.text, o.parts);
+    else {
+      const q = withQuote(o, props.current.quote ?? null);
+      props.current.onAsk(q.text, q.parts);
+    }
     setInList(null);
   };
 
@@ -390,7 +433,7 @@ export function Spotlight(p: SpotlightProps): JSX.Element {
     if (message && a !== null && (item.kind === "agent" || item.kind === "env")) {
       const entry = a.entry();
       if (send && props.current.onSendTo !== undefined) {
-        props.current.onSendTo(item, outgoingOf(entry));
+        props.current.onSendTo(item, withQuote(outgoingOf(entry), props.current.quote ?? null));
         a.clear();
         return;
       }
@@ -490,6 +533,18 @@ export function Spotlight(p: SpotlightProps): JSX.Element {
       props.current.onShotDrop?.();
       return take();
     }
+    if (k === "Backspace" && bare && at.atStart && props.current.quote != null) {
+      // the ❝ chip is first on the line, before the still: ⌫ takes it once the still went
+      dropQuote();
+      return take();
+    }
+    const back = props.current.onQuoteBack;
+    if (k.toLowerCase() === "z" && e.metaKey && !e.shiftKey && back != null && quoteDropped.current === text) {
+      // ⌘Z right after he forgot his selection (no word typed since): it comes back
+      quoteDropped.current = null;
+      back();
+      return take();
+    }
     return false;
   };
 
@@ -539,8 +594,16 @@ export function Spotlight(p: SpotlightProps): JSX.Element {
           <span className="b-spot-field" data-list={into !== null ? "in" : undefined}>
             {/* the still's chip on its own row above his words (designer m_32542, the composer's
                 attachments): the words keep the full width when they wrap */}
-            {(p.shot != null || p.shotOff != null) && (
+            {(p.quote != null || p.shot != null || p.shotOff != null) && (
               <span className="b-spot-chips">
+                {p.quote != null && (
+                  <span className="b-spot-chip" data-kind="quote" title={p.quote.text} data-testid={`${testId}.quote`}>
+                    {quoteChip(p.quote, p.frontApp ?? null)}
+                    <Press look="b-spot-chip-x" title={W.quoteDrop} aria-label={W.quoteDrop} onClick={dropQuote} data-testid={`${testId}.quote.drop`}>
+                      ✕
+                    </Press>
+                  </span>
+                )}
                 {p.shot != null && (
                   <span className="b-spot-chip" data-kind="shot" title={p.shot.title} data-testid={`${testId}.shot`}>
                     <img className="thumb" src={p.shot.thumb} alt="" />

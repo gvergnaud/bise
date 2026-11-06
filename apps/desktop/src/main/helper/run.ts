@@ -20,7 +20,7 @@ import type { HelperCmd, HelperEv } from '../../proto';
 import { IPC, TEST_ENV } from '../../shared/api';
 import { fnToWindow } from './fnroute';
 import type { HelperConfig } from './config';
-import { decodeEv, encodeCmd, HelperState, LineSplitter, restartDelay, talkOpen, windowMaySend } from './lines';
+import { decodeEv, encodeCmd, evForWindow, HelperState, LineSplitter, restartDelay, talkOpen, windowMaySend } from './lines';
 import { noAsks } from '../offscreen';
 
 export const HELPER_ENV = 'BISE_DESKTOP_HELPER';
@@ -133,7 +133,8 @@ export class Helper {
       return;
     }
     this.talking = talkOpen(this.talking, ev);
-    for (const w of BrowserWindow.getAllWindows()) w.webContents.send(IPC.helperEv, ev);
+    // his selection (fn space's ❝) to the capsule alone (evForWindow)
+    for (const w of BrowserWindow.getAllWindows()) w.webContents.send(IPC.helperEv, evForWindow(ev, isCapsule(w)));
   }
 }
 

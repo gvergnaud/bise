@@ -11,7 +11,7 @@ import Foundation
 
 // what Electron asks (HelperCmd)
 enum HelperCmd: Equatable {
-    case config(exclude: [String], rightOption: Bool)
+    case config(exclude: [String], rightOption: Bool, quote: Bool)
     case route(open: Bool)
     case ownMic(open: Bool)
     case readContext(id: String)
@@ -41,7 +41,8 @@ enum Lines {
         case "config":
             guard let ex = o["exclude"] as? [Any], ex.allSatisfy({ $0 is String }) else { return bad("exclude") }
             guard let ro = bool("right_option") else { return bad("right_option") }
-            return .success(.config(exclude: ex as! [String], rightOption: ro))
+            guard let q = bool("quote") else { return bad("quote") }
+            return .success(.config(exclude: ex as! [String], rightOption: ro, quote: q))
         case "route":
             guard let v = bool("open") else { return bad("open") }
             return .success(.route(open: v))

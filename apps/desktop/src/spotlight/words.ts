@@ -30,6 +30,8 @@ export const W = {
   answerMore: 'the rest in bise   ⏎ open',
   // spot-shot: the window he was on rides his ask as a chip (the talk's 'no screenshot' words)
   shotDrop: "don't send this window",
+  // the ❝ chip (Gabriel's v4): his selection read at fn space, sent first with his message
+  quoteDrop: "don't send this selection",
   // his switch wants the still but Screen Recording is off: the chip says it and opens the setting
   shotOff: 'no screenshot · Screen Recording is off',
   shotOffTitle: 'open System Settings to let bise see the window you ask about',

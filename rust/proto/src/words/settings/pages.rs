@@ -145,6 +145,10 @@ crate::words! { settings:
     privacy_file = "The open file and your selection";
     /// privacy: the open file's line
     privacy_file_sub = "VS Code, Cursor, Xcode, Zed";
+    /// privacy: fn space reads his selection, the spotlight's ❝ chip (context.quote)
+    privacy_quote = "Quote what you selected";
+    /// privacy: the quote's line
+    privacy_quote_sub = "fn space only: a ❝ chip you see and can remove";
     /// privacy: the window's text
     privacy_window_text = "The text of the window";
     /// privacy: the window's text's line

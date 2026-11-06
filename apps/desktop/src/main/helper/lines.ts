@@ -73,6 +73,18 @@ export function restartDelay(crashes: readonly number[], now: number): number | 
 }
 
 /**
+ * What a window gets of `ev`: his selection (a context's `selection`, read at fn space only) goes
+ * to the capsule alone, where the spotlight shows it as the ❝ chip he can drop; every other window
+ * gets the context without it (architect m_53938). Pure.
+ */
+export function evForWindow(ev: HelperEv, capsule: boolean): HelperEv {
+  if (capsule || ev.ev !== 'context' || !('selection' in ev.context)) return ev;
+  const context = { ...ev.context };
+  delete context.selection;
+  return { ...ev, context };
+}
+
+/**
  * Whether a talk is open after `ev` (fn talk_start or fn fn opens one; talk_end or cancel ends it).
  * A helper that dies mid-talk sends neither: run.ts ends it for the windows (amb-core m_22285).
  */

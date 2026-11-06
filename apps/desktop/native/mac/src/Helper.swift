@@ -16,6 +16,7 @@ final class Helper {
     private let out = FileHandle.standardOutput
     private let keys = Keys()
     private var skip = SkipList.builtIn
+    private var quote = true          // his context.quote: fn space may read his selection
     private var quiet = QuietMachine()
     private var permsSaid: [String: String] = [:]
     private var timers: [Timer] = []
@@ -83,15 +84,16 @@ final class Helper {
 
     private func run(_ c: HelperCmd) {
         switch c {
-        case .config(let ex, let ro):
+        case .config(let ex, let ro, let q):
             skip = SkipList.with(ex)
             keys.rightOption = ro
+            quote = q
         case .route(let open):
             keys.routeOpen = open
         case .ownMic(let open):
             quiet.own(open: open, at: uptime)
         case .readContext(let id):
-            readFront(id: id)
+            readFront(id: id, selection: false)
         case .perm(let p, let ask):
             if ask { Perms.ask(p) { [weak self] in self?.sayPerms() } } else { Perms.open(p) }
         case .shot(let id, let dir):
@@ -114,11 +116,9 @@ final class Helper {
         if let l = KeyLog.line(o) { Log.say(l) }
         send(Lines.fn(o))
         quiet.own(open: keys.talking, at: uptime)
-        // the context goes with the talk (read before he speaks) and with fn space
-        switch o {
-        case .talkStart, .key("space"): readFront(id: nil)
-        default: break
-        }
+        // the context goes with the talk (read before he speaks) and with fn space; his
+        // selection with fn space only (KeyOut.frontAsk)
+        if let ask = o.frontAsk(quote: quote) { readFront(id: nil, selection: ask == .appAndSelection) }
     }
 
     // MARK: the front app
@@ -132,7 +132,7 @@ final class Helper {
         checkFullScreen()
     }
 
-    private func readFront(id: String?) {
+    private func readFront(id: String?, selection: Bool) {
         let skip = self.skip
         guard let front = NSWorkspace.shared.frontmostApplication, !me.contains(front.processIdentifier) else {
             send(Lines.context(FnCtx(), id: id, bundle: nil))
@@ -154,7 +154,8 @@ final class Helper {
             job.sent = true
             settle(job.raw)
         }
-        FrontRead.read(pid: front.processIdentifier, app: base.app, bundle: base.bundle, within: FrontRules.budget - 0.03) { r in
+        FrontRead.read(pid: front.processIdentifier, app: base.app, bundle: base.bundle, selection: selection,
+                       within: FrontRules.budget - 0.03) { r in
             let url = job.raw.tabURL
             job.raw = r
             job.raw.tabURL = url

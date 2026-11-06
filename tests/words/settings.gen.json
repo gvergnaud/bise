@@ -4141,6 +4141,16 @@
     "one": null,
     "text": "Kept"
   },
+  "settings.privacy_quote": {
+    "args": [],
+    "one": null,
+    "text": "Quote what you selected"
+  },
+  "settings.privacy_quote_sub": {
+    "args": [],
+    "one": null,
+    "text": "fn space only: a ❝ chip you see and can remove"
+  },
   "settings.privacy_shot": {
     "args": [],
     "one": null,

@@ -19,8 +19,8 @@ func json(_ l: String) -> NSDictionary { (try? JSONSerialization.jsonObject(with
 
 // every command line decodes to a known command, as Rust's HelperCmd
 let want: [HelperCmd] = [
-    .config(exclude: ["com.agilebits.onepassword7"], rightOption: true),
-    .config(exclude: [], rightOption: false),
+    .config(exclude: ["com.agilebits.onepassword7"], rightOption: true, quote: true),
+    .config(exclude: [], rightOption: false, quote: false),
     .route(open: true), .route(open: false), .ownMic(open: true), .readContext(id: "c7"),
     .perm("accessibility", ask: true), .perm("mic", ask: false), .perm("screen", ask: true),
     .shot(id: "s1", dir: "/Users/u/.bise/run/shots"), .quit,

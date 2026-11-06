@@ -2,7 +2,6 @@
 //! (`core/<tag>` on its stdio: [`crate::app_rpc`]).
 
 use crate::app_rows::*;
-use crate::context::FnContext;
 use crate::hub::Mode;
 use crate::{decode, parse, Project};
 use serde::{Deserialize, Serialize};
@@ -352,10 +351,6 @@ pub enum AppCmd {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         max_width: Option<u32>,
     },
-    /// S9 (amb-mac m_9035): what the app read of his front app at fn (talk
-    /// or spotlight), sent apart from `talk_start`; `{}` (an excluded app)
-    /// clears it. The next turn to main carries it, then it's gone
-    FnContext { context: FnContext },
     /// fn's talk: the still the helper took of his front window (`path`
     /// in the shots folder), sent with the talk's words
     Shot {
@@ -603,7 +598,6 @@ impl AppCmd {
         "setup_check",
         "role_set",
         "computer",
-        "fn_context",
         "shot",
         "send",
         "start",

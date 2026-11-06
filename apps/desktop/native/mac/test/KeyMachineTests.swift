@@ -111,5 +111,13 @@ rm.routeOpen = false
 law("route: the line gone, tab is his again", !rm.feed(.keyDown(48, repeated: false), at: 2).swallow)
 law("log: the route line's tab is said as such", KeyLog.line(.key("tab")) == "keys: tab on the route line")
 
+// the selection is read only at fn space (architect m_53938)
+law("selection: a talk reads the app, never the selection",
+    KeyOut.talkStart(.fn).frontAsk(quote: true) == .app && KeyOut.talkStart(.rightOption).frontAsk(quote: true) == .app)
+law("selection: fn space reads the app and the selection", KeyOut.key("space").frontAsk(quote: true) == .appAndSelection)
+law("selection: his pref off, fn space reads the app only", KeyOut.key("space").frontAsk(quote: false) == .app)
+law("selection: other keys read nothing",
+    [KeyOut.tap, .double, .talkEnd, .cancel, .key("1"), .key("tab"), .plainEsc].allSatisfy { $0.frontAsk(quote: true) == nil })
+
 if failures > 0 { print("\(failures) failed"); exit(1) }
 print("all KeyMachine laws hold")

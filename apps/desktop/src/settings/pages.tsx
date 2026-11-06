@@ -319,6 +319,7 @@ function Privacy({ prefs, setPref, tg }: { prefs: Prefs | null; setPref: (key: s
           tg('context.shot', settings.privacy_shot, settings.privacy_shot_sub),
           tg('context.url', settings.privacy_url, settings.privacy_url_sub),
           tg('context.file', settings.privacy_file, settings.privacy_file_sub),
+          tg('context.quote', settings.privacy_quote, settings.privacy_quote_sub),
           tg('context.window_text', settings.privacy_window_text, settings.privacy_window_text_sub),
         ]}
       />

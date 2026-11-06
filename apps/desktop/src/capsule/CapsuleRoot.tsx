@@ -20,7 +20,7 @@ import type { Card, Grant, HelperEv } from "@/proto";
 import { threadKey, useHeard, useLevel, usePrefs, useProjects, useRefusedList, useShot, useStore } from "@/store";
 import { withRefused } from "@/inbox/listed";
 import { followPartial, type LivePartial } from "@/shared/partial";
-import type { SpotAnswer, SpotFront, SpotItem, SpotRoute } from "@/spotlight";
+import type { SpotAnswer, SpotFront, SpotItem, SpotQuote, SpotRoute } from "@/spotlight";
 import { W } from "@/spotlight/words";
 import { useTheme } from "@/theme";
 import "@/ds/index.css";
@@ -28,6 +28,7 @@ import { Capsule, isCorner } from "./Capsule";
 import { menuCards } from "./TrayMenu";
 import { answeredOver, errorOver, heardOver, lingerOf, OVER_FADE_MS } from "./over";
 import { asksForScreen, shotOf, shotPref } from "./shot";
+import { quoteOf, quotePref } from "./quote";
 import { useAgentPreview, useSpotData } from "./data";
 import { capsuleCardActs, runCapsuleEffect } from "./cardacts";
 import { draftAsk } from "@/shared/asks";
@@ -129,6 +130,20 @@ export function CapsuleRoot(): JSX.Element {
     store.command({ cmd: "shot_drop", id: spotShot.current });
     spotShot.current = null;
   }, [view.kind, shot, store]);
+  // the ❝ chip (Gabriel's v4, architect m_53938): his selection, read by the helper at fn space
+  // only, comes in the next context; React state alone (never keep.ts, never the core before he
+  // sends), forgotten when the spotlight goes or his message went. `on` false: he forgot it (✕, ⌫),
+  // ⌘Z brings it back while the spotlight is open. His context.quote off: ignored
+  const [quote, setQuote] = useState<{ q: SpotQuote; on: boolean } | null>(null);
+  const quoteArm = useRef(false);
+  const quoteOn = quotePref(prefs);
+  const quoteOnRef = useRef(quoteOn);
+  const inSpot = view.kind === "spot";
+  const [wasSpot, setWasSpot] = useState(inSpot);
+  if (inSpot !== wasSpot) {
+    setWasSpot(inSpot);
+    if (!inSpot) setQuote(null);
+  }
   // his switch wants the still (unset counts as on) but Screen Recording is off: the spot says so
   const shotOff = shotOn !== false && screen !== undefined && screen !== "allowed";
   // the helper's fn keys read these: fn+n on the tray menu opens its row n (one-inbox 3)
@@ -141,6 +156,7 @@ export function CapsuleRoot(): JSX.Element {
     permsRef.current = perms;
     menuRef.current = menuCards(spot);
     shotRef.current = shot;
+    quoteOnRef.current = quoteOn;
   });
   const projects = useProjects();
   const home = projects.find((p) => p.home)?.project ?? null;
@@ -410,7 +426,17 @@ export function CapsuleRoot(): JSX.Element {
   useEffect(() => {
     if (bise === undefined) return;
     const offHelper = bise.onHelper((ev) => {
-      if (ev.ev === "fn" && ev.act === "esc" && routeRef.current !== null)
+      // fn space: the next context read carries his selection (the helper reads it then only)
+      if (ev.ev === "fn" && ev.act === "key" && ev.key === "space") {
+        quoteArm.current = true;
+        setQuote(null);
+      }
+      if (ev.ev === "context") {
+        if (ev.id != null || !quoteArm.current) return;
+        quoteArm.current = false;
+        const q = quoteOf(ev, quoteOnRef.current && viewRef.current.kind === "spot");
+        if (q !== null) setQuote({ q, on: true });
+      } else if (ev.ev === "fn" && ev.act === "esc" && routeRef.current !== null)
         keepWithBise();
       else if (ev.ev === "fn" && ev.act === "esc" && viewRef.current.kind === "menu" && menuEsc.current?.() === true) {
         // the tray menu used it: its submenu closed, the menu stays
@@ -583,6 +609,18 @@ export function CapsuleRoot(): JSX.Element {
       route={route}
       shot={shot}
       onShotDrop={dropShot}
+      quote={quote?.on === true ? quote.q : null}
+      frontApp={front?.app ?? null}
+      onQuoteDrop={() => {
+        setQuote((v) => (v === null ? null : { ...v, on: false }));
+      }}
+      onQuoteBack={
+        quote?.on === false
+          ? () => {
+              setQuote((v) => (v === null ? null : { ...v, on: true }));
+            }
+          : null
+      }
       shotOff={
         shotOff
           ? {
@@ -644,6 +682,8 @@ export function CapsuleRoot(): JSX.Element {
           ...(still === undefined ? {} : { shot: still }),
         });
         spotShot.current = null;
+        // his ❝ went first in the parts (Spotlight's withQuote): gone with it
+        setQuote(null);
         // asked: the spot says so at once (∿), its first words take the line's place (R18)
         setLast({ text: "", done: false });
       }}
@@ -667,6 +707,7 @@ export function CapsuleRoot(): JSX.Element {
           ...(out.parts === undefined ? {} : { parts: out.parts }),
           via: "capsule",
         });
+        setQuote(null);
         setLast({ text: W.wentTo(item.kind === "agent" ? item.name : to.agent), done: true, note: true });
       }}
       onNew={(brief) => {

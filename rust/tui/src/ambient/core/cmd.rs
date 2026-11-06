@@ -37,10 +37,6 @@ pub enum Cmd {
     /// R14: a path he took from a workspace's `@` list
     FilePicked { project: String, path: String },
     Shot { path: PathBuf, app: String, title: String },
-    /// S9 (amb-mac m_9035): what the app read of his front app at fn
-    /// (talk or spotlight), sent apart from talk_start; `{}` (an excluded
-    /// app) clears it. The next turn to main carries it, then it's gone.
-    FnContext(bise_proto::context::FnContext),
     /// He's back after `away_ms` (amb-mac m_9038): `away_summary` answers.
     AwayBack { away_ms: u64 },
     Send { text: String },
@@ -146,7 +142,6 @@ impl Cmd {
             AppCmd::FilePicked { project, path } => Cmd::FilePicked { project, path },
             AppCmd::Computer { act, key, max_width } => Cmd::Computer { act, key, max_width },
             AppCmd::AwayBack { away_ms } => Cmd::AwayBack { away_ms },
-            AppCmd::FnContext { context } => Cmd::FnContext(context),
             AppCmd::Shot { path, app, title } => Cmd::Shot { path: PathBuf::from(path), app, title },
             AppCmd::Send { text } => Cmd::Send { text },
             AppCmd::Start { text } => Cmd::Start { text },

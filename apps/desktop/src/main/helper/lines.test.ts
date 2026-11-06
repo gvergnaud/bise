@@ -1,6 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { helper_cmd, helper_ev } from '../../proto/fixtures.gen';
-import { decodeEv, encodeCmd, HelperState, LineSplitter, restartDelay, talkOpen, windowMaySend } from './lines';
+import { decodeEv, encodeCmd, evForWindow, HelperState, LineSplitter, restartDelay, talkOpen, windowMaySend } from './lines';
+
+describe('evForWindow: his selection goes to the capsule alone (architect m_53938)', () => {
+  const read = helper_ev.find((e) => e.ev === 'context' && e.context.selection !== undefined);
+  it('the capsule gets the context with his selection', () => {
+    expect(read).toBeDefined();
+    if (read === undefined) return;
+    expect(evForWindow(read, true)).toBe(read);
+  });
+  it('every other window gets it without the selection, the rest unchanged', () => {
+    if (read === undefined || read.ev !== 'context') throw new Error('no context fixture with a selection');
+    const w = evForWindow(read, false);
+    expect(w.ev === 'context' && 'selection' in w.context).toBe(false);
+    expect(w).toEqual({ ...read, context: Object.fromEntries(Object.entries(read.context).filter(([k]) => k !== 'selection')) });
+  });
+  it('other events pass as they are', () => {
+    for (const ev of helper_ev.filter((e) => e.ev !== 'context')) expect(evForWindow(ev, false)).toBe(ev);
+  });
+});
 
 describe("the helper's lines (bise_proto::helper fixtures)", () => {
   it('decodes every fixture event line as itself', () => {

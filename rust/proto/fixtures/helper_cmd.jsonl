@@ -1,5 +1,5 @@
-{"cmd":"config","exclude":["com.agilebits.onepassword7"],"right_option":true}
-{"cmd":"config","exclude":[],"right_option":false}
+{"cmd":"config","exclude":["com.agilebits.onepassword7"],"right_option":true,"quote":true}
+{"cmd":"config","exclude":[],"right_option":false,"quote":false}
 {"cmd":"route","open":true}
 {"cmd":"route","open":false}
 {"cmd":"own_mic","open":true}

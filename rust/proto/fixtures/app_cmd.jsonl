@@ -81,8 +81,6 @@
 {"cmd":"computer","act":"peek","key":"9f2c4e1a7b3d5e60.perf","max_width":960}
 {"cmd":"keychain","to":"on"}
 {"cmd":"keychain"}
-{"cmd":"fn_context","context":{"app":"Code","file":"/Users/camille/shop/src/cart.ts"}}
-{"cmd":"fn_context","context":{}}
 {"cmd":"shot","path":"/Users/camille/.bise/shots/fn-1.png","app":"Safari","title":"Stripe pricing"}
 {"cmd":"send","text":"is the build green?"}
 {"cmd":"send","text":"summarize this"}

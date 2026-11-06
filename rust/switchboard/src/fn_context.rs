@@ -22,12 +22,13 @@ pub const NOTE: &str = "This is what was in front of the user when he spoke, rea
 
 /// The window's visible text, at most (cut at a word).
 pub const WINDOW_TEXT_MAX: usize = 2000;
-/// His selection, at most (cut at a word).
-pub const SELECTION_MAX: usize = 1000;
 /// The app's name, the title, the URL and the file, each at most.
 pub const FIELD_MAX: usize = 300;
 
 /// The framed block for `ctx`, or None when it holds nothing to show.
+/// His selection is never in it, even when an older app sends one: it goes
+/// as a quote part of his message, the spotlight's ❝ chip he saw (architect
+/// m_53938), never hidden in this block.
 pub fn render(ctx: &FnContext) -> Option<String> {
     let one = |s: &Option<String>| s.as_deref().map(|s| cut(&flat(s), FIELD_MAX)).filter(|s| !s.is_empty());
     let many = |s: &Option<String>, max| s.as_deref().map(|s| cut(s.trim(), max)).filter(|s| !s.is_empty());
@@ -37,10 +38,8 @@ pub fn render(ctx: &FnContext) -> Option<String> {
             body.push(format!("{k}: {v}"));
         }
     }
-    for (k, v) in [("selected text", many(&ctx.selection, SELECTION_MAX)), ("window text", many(&ctx.window_text, WINDOW_TEXT_MAX))] {
-        if let Some(v) = v {
-            body.push(format!("{k}:\n{v}"));
-        }
+    if let Some(v) = many(&ctx.window_text, WINDOW_TEXT_MAX) {
+        body.push(format!("window text:\n{v}"));
     }
     let app = one(&ctx.app);
     if body.is_empty() && app.is_none() {
@@ -138,10 +137,20 @@ mod tests {
         }
     }
 
+    /// Law (architect m_53938): a selection an app still sends never reaches
+    /// the model's text; his selection goes as a visible quote part only.
+    #[test]
+    fn a_sent_selection_never_reaches_the_model() {
+        let secret = "p99 went from 120 ms to 900 ms";
+        let out = with_context("why?", &FnContext { selection: Some(secret.into()), ..ctx() });
+        assert!(!out.contains(secret) && !out.contains("selected"), "{out}");
+        assert!(out.contains("window text:"), "the rest of the screen still goes: {out}");
+    }
+
     #[test]
     fn nothing_to_show_is_no_block() {
         assert_eq!(render(&FnContext::default()), None);
-        assert_eq!(render(&FnContext { selection: Some("  ".into()), ..FnContext::default() }), None);
+        assert_eq!(render(&FnContext { selection: Some("p99 went up".into()), ..FnContext::default() }), None, "a selection alone shows nothing");
         assert_eq!(with_context("hi", &FnContext::default()), "hi");
         assert_eq!(strip_block("sb you : hi"), None);
     }
@@ -149,15 +158,14 @@ mod tests {
     #[test]
     fn the_fields_are_capped_and_cut_at_a_word() {
         let long = "word ".repeat(1000);
-        let c = FnContext { window_text: Some(long.clone()), selection: Some(long.clone()), title: Some(long), ..FnContext::default() };
+        let c = FnContext { window_text: Some(long.clone()), title: Some(long), ..FnContext::default() };
         let b = render(&c).unwrap();
         let part = |k: &str| b.split(&format!("{k}:")).nth(1).unwrap().split('\n').find(|l| !l.is_empty()).unwrap().to_string();
-        let (w, s, t) = (part("window text"), part("selected text"), part("title"));
+        let (w, t) = (part("window text"), part("title"));
         assert!(w.chars().count() <= WINDOW_TEXT_MAX + 1 && w.ends_with("word…"), "{}", w.len());
-        assert!(s.chars().count() <= SELECTION_MAX + 1 && s.ends_with("word…"));
         assert!(t.chars().count() <= FIELD_MAX + 1 && t.ends_with("word…"));
         // one fn press can't blow a turn's prompt
-        assert!(b.chars().count() < WINDOW_TEXT_MAX + SELECTION_MAX + 4 * FIELD_MAX + 400);
+        assert!(b.chars().count() < WINDOW_TEXT_MAX + 4 * FIELD_MAX + 400);
         // a word longer than the cap is cut where it must
         assert_eq!(cut(&"x".repeat(10), 4), "xxxx…");
     }

@@ -399,8 +399,6 @@ export const app_cmd: readonly AppCmd[] = [
   {"act":"peek","cmd":"computer","key":"9f2c4e1a7b3d5e60.perf","max_width":960},
   {"cmd":"keychain","to":"on"},
   {"cmd":"keychain"},
-  {"cmd":"fn_context","context":{"app":"Code","file":"/Users/camille/shop/src/cart.ts"}},
-  {"cmd":"fn_context","context":{}},
   {"app":"Safari","cmd":"shot","path":"/Users/camille/.bise/shots/fn-1.png","title":"Stripe pricing"},
   {"cmd":"send","text":"is the build green?"},
   {"cmd":"send","text":"summarize this"},
@@ -478,8 +476,8 @@ export const helper_ev: readonly HelperEv[] = [
 
 /** rust/proto/fixtures/helper_cmd.jsonl */
 export const helper_cmd: readonly HelperCmd[] = [
-  {"cmd":"config","exclude":["com.agilebits.onepassword7"],"right_option":true},
-  {"cmd":"config","exclude":[],"right_option":false},
+  {"cmd":"config","exclude":["com.agilebits.onepassword7"],"quote":true,"right_option":true},
+  {"cmd":"config","exclude":[],"quote":false,"right_option":false},
   {"cmd":"route","open":true},
   {"cmd":"route","open":false},
   {"cmd":"own_mic","open":true},

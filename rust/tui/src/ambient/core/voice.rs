@@ -250,8 +250,7 @@ impl Core {
             return self.page_voice_over(&page, "cancel", "");
         }
         if self.talk.take().is_some() {
-            // the shot and context of fn down were for these words
-            self.fn_ctx = None;
+            // the shot of fn down was for these words
             self.drop_shot();
             self.set_phase(Phase::Idle, None);
         }
@@ -388,14 +387,12 @@ impl Core {
             return self.page_voice_over(page, phase, &words);
         }
         if words.is_empty() {
-            self.fn_ctx = None;
             self.drop_shot();
             return self.set_phase(Phase::Idle, None);
         }
         // bar N14: words that answer the card in view don't go to main
         if self.voice_answer(&words) {
             notice(self, false);
-            self.fn_ctx = None;
             return self.set_phase(Phase::Idle, None);
         }
         notice(self, true);

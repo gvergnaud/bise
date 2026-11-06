@@ -8,7 +8,7 @@ import type { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import type { Store } from "@/composer/drafts";
 import { flat, spotList, spotView, type SpotData } from "./list";
-import { Spotlight, answerLines, outgoingOf, ANSWER_MAX_LINES } from "./Spotlight";
+import { Spotlight, answerLines, outgoingOf, quoteChip, withQuote, ANSWER_MAX_LINES } from "./Spotlight";
 import { cardLine, newBrief, shortPath } from "./words";
 
 afterEach(cleanup);
@@ -508,5 +508,69 @@ describe("spot-shot: the window he was on, and his long words", () => {
     expect(off.ui.getByTestId("spot.noshot").textContent).toBe("no screenshot · Screen Recording is off");
     fireEvent.click(off.ui.getByTestId("spot.noshot"));
     expect(open).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the ❝ chip: his selection read at fn space (Gabriel's v4, architect m_53938)", () => {
+  const q = { text: "the card number field loses focus when the page scrolls on Safari", app: "Safari" };
+
+  it("its words: cut at 40 with …, its app only when it is not the app in front", () => {
+    expect(quoteChip(q, "Safari")).toBe("❝ the card number field loses focus when…");
+    expect(quoteChip(q, "Chrome")).toBe("❝ the card number field loses focus when… · Safari");
+    expect(quoteChip({ text: "  p99\n 412 ms ", app: "Safari" }, null)).toBe("❝ p99 412 ms · Safari");
+  });
+
+  it("first on the chips' line, before the still; its whole text on hover", () => {
+    const shot = { thumb: "file:///i/a.png", name: "Safari · stripe.com", title: "Safari · stripe.com/pricing" };
+    const s = spot({ quote: q, frontApp: "Safari", shot });
+    const chips = s.ui.container.querySelector(".b-spot-chips");
+    expect([...(chips?.children ?? [])].map((c) => c.getAttribute("data-kind"))).toEqual(["quote", "shot"]);
+    expect(s.ui.getByTestId("spot.quote").getAttribute("title")).toBe(q.text);
+  });
+
+  it("sent first with his message, as a quote part from its app; ⌘⏎ on a row too", async () => {
+    const s = spot({ quote: q });
+    await s.type("why does this happen?");
+    await s.press("Enter");
+    expect(s.onAsk).toHaveBeenCalledWith("why does this happen?", [
+      { kind: "quote", from: "Safari", text: q.text },
+      { kind: "text", text: "why does this happen?" },
+    ]);
+    expect(withQuote({ text: "x" }, null)).toEqual({ text: "x" });
+  });
+
+  it("✕ and ⌫ at the start of his words forget it; ⌫ takes the still first", async () => {
+    const drop = vi.fn();
+    const shotDrop = vi.fn();
+    const shot = { thumb: "file:///i/a.png", name: "Safari", title: "Safari" };
+    const s = spot({ quote: q, onQuoteDrop: drop, shot, onShotDrop: shotDrop });
+    await s.press("Backspace");
+    expect([shotDrop.mock.calls.length, drop.mock.calls.length]).toEqual([1, 0]);
+    s.ui.rerender(<Spotlight data={D} onAsk={s.onAsk} onOpen={s.onOpen} onClose={s.onClose} store={s.store} quote={q} onQuoteDrop={drop} />);
+    await s.press("Backspace");
+    expect(drop).toHaveBeenCalledTimes(1);
+    fireEvent.click(s.ui.getByTestId("spot.quote.drop"));
+    expect(drop).toHaveBeenCalledTimes(2);
+    // ⌫ inside his words is the field's
+    await s.type("ab");
+    await s.press("Backspace");
+    expect(drop).toHaveBeenCalledTimes(2);
+  });
+
+  it("⌘Z right after he forgot it brings it back; once he typed, ⌘Z is the field's", async () => {
+    const back = vi.fn();
+    const s = spot({ quote: q, onQuoteDrop: vi.fn() });
+    await s.press("Backspace");
+    s.ui.rerender(<Spotlight data={D} onAsk={s.onAsk} onOpen={s.onOpen} onClose={s.onClose} store={s.store} quote={null} onQuoteBack={back} />);
+    const e = await s.press("z", { metaKey: true });
+    expect(back).toHaveBeenCalledTimes(1);
+    expect(e.defaultPrevented).toBe(true);
+    cleanup();
+    const t = spot({ quote: q, onQuoteDrop: vi.fn() });
+    await t.press("Backspace");
+    await t.type("a");
+    t.ui.rerender(<Spotlight data={D} onAsk={t.onAsk} onOpen={t.onOpen} onClose={t.onClose} store={t.store} quote={null} onQuoteBack={back} />);
+    await t.press("z", { metaKey: true });
+    expect(back).toHaveBeenCalledTimes(1);
   });
 });
