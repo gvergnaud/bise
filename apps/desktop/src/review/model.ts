@@ -1,8 +1,17 @@
 // The review's words (bar A.6: features and review, the merged/diff work
 // of the old window's S7, winreview.js). Owner: amb-win. Pure.
-import type { Card, DiffFile, Merged, Worktree } from '@/proto';
+import type { Agent, Card, DiffFile, Merged, Place, Pr, Worktree } from '@/proto';
 import type { DiffLine as DsLine } from '@/ds';
 import type { Diff } from '@/store';
+import { livePr, placeOf } from '@/app/barplaces';
+
+/** The open or draft PR of `agent`'s worktree (the hub's PR poller puts it on its place), with its link; else null. Pure. */
+export function openPrOf(agent: string | undefined, agents: readonly Agent[], places: readonly Place[]): Pr | null {
+  const a = agent === undefined ? undefined : agents.find((x) => x.name === agent);
+  const p = a === undefined ? undefined : placeOf(a, places);
+  const pr = p === undefined ? null : livePr(p);
+  return pr !== null && pr.url !== '' ? pr : null;
+}
 
 /** A file's lines for the ds Diff: each hunk's header as a context line, then its lines. */
 export function linesOf(f: DiffFile): DsLine[] {

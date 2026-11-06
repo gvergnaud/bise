@@ -51,6 +51,15 @@ export function sendRefusedEv(cmd: Readonly<Record<string, unknown>>, error: { r
 }
 
 /**
+ * A refused `diff` (no such agent, git failed): the hub's typed `error` with its cmd tag, so the
+ * view that asked it shows why with a retry (pr-changes-blank). Null for any other command.
+ */
+export function diffRefusedEv(cmd: Readonly<Record<string, unknown>>, error: { readonly message: string }): Record<string, unknown> | null {
+  if (cmd['cmd'] !== 'diff') return null;
+  return { ev: 'error', project: cmd['project'], cmd: 'diff', text: error.message };
+}
+
+/**
  * The core's 'send_answered' (CoreEv::SendAnswered: a send it answered late, settled by its hub at
  * last): the window's 'sent' with the hub's result, or 'send_refused' gone when it never answered.
  * Null when `ev` isn't one.

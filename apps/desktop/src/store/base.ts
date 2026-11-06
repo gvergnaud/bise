@@ -3,7 +3,7 @@
 // the events and his actions in store.ts.
 import type { ArchivedAgent, Entry } from "@/proto";
 import type { CoreCmd, CorePort } from "@/shared/api";
-import type { Ev, FilesAnswer, ThreadOrder } from "./types";
+import { artDiffKey, diffErrKey, diffKey, type Ev, type FilesAnswer, type ThreadOrder } from "./types";
 import type { Ask } from "./window";
 import { NO_FACTS, type HubFacts } from "./machine/types";
 
@@ -59,6 +59,11 @@ export class StoreBase {
    * asked, never the review's diff of the same agent (lead m_16528)
    */
   /** @internal for apply.ts */ readonly diffReqs = new Set<number>();
+  /**
+   * each project's last diff ask from this window (its slice key): a refused `diff` (main's
+   * onRefused, an `error` with cmd 'diff') lands on that view, never stays 'loading…' (pr-changes-blank)
+   */
+  /** @internal for apply.ts */ readonly diffAsked = new Map<string, string>();
   /** the dictations this window started and not over yet (bar I) */
   /** @internal for apply.ts */ readonly dictating = new Set<string>();
   /** the `@` queries on their way: rid -> its project and resolve; each project's newest rid */
@@ -139,6 +144,14 @@ export class StoreBase {
       this.put("shot", null);
     if (cmd.cmd === "slash" && cmd.line.trim().startsWith("/model "))
       this.modelSentAt = this.now();
+    // a review's or a .diff artifact's ask: a refusal comes back for it; asked again, its last one goes
+    if (cmd.cmd === "diff" && cmd.req == null) {
+      const key = cmd.artifact != null ? artDiffKey(cmd.project, cmd.artifact, cmd.version ?? 0) : cmd.agent != null ? diffKey(cmd.project, cmd.agent, cmd.commit ?? undefined) : null;
+      if (key !== null) {
+        this.diffAsked.set(cmd.project, key);
+        if (this.slices.get(diffErrKey(key)) != null) this.put(diffErrKey(key), null);
+      }
+    }
     // his own /restart: its cid comes back on the hub's line, so the row knows it answers a restart
     // (ambient-lead m_22833) without reading the hub's words
     if (cmd.cmd === "slash" && /^\/restart(\s|$)/u.test(cmd.line.trim())) {

@@ -80,7 +80,12 @@ commit?: string | null,
 /**
  * why there are no files to show (its folder is gone...)
  */
-note?: string | null, title?: string | null, req?: number | null, commits?: number | null, working?: boolean, uncommitted?: boolean, landed_ms?: number | null, gone?: boolean, 
+note?: string | null, 
+/**
+ * a change too big for one answer: how many of its last files
+ * come without their lines (whole files, `diff::cap`)
+ */
+cut_files?: number | null, title?: string | null, req?: number | null, commits?: number | null, working?: boolean, uncommitted?: boolean, landed_ms?: number | null, gone?: boolean, 
 /**
  * a `.diff` artifact's diff (the `diff` ask's `artifact`): its id and
  * the version read; a client keys the answer by them

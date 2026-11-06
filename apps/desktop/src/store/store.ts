@@ -577,6 +577,7 @@ export class Store extends StoreVoice {
 export {
   TAGS,
   artDiffKey,
+  diffErrKey,
   diffKey,
   takeKey,
   threadKey,

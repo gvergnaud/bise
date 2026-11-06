@@ -6,6 +6,7 @@ import {
   type BranchesList,
   type Dictation,
   diffKey,
+  diffErrKey,
   artDiffKey,
   type Ev,
   type HubLine,
@@ -194,8 +195,11 @@ export function applyTyped(s: Store, ev: Ev): void {
         s.diffReqs.delete(ev.req);
       }
       // a .diff artifact's, by its id and version; else an agent's change or one commit
-      if (ev.artifact != null) s.put(artDiffKey(ev.project, ev.artifact, ev.version ?? 0), ev);
-      else s.put(diffKey(ev.project, ev.agent, ev.commit ?? undefined), ev);
+      {
+        const key = ev.artifact != null ? artDiffKey(ev.project, ev.artifact, ev.version ?? 0) : diffKey(ev.project, ev.agent, ev.commit ?? undefined);
+        s.put(key, ev);
+        if (s.slices.get(diffErrKey(key)) != null) s.put(diffErrKey(key), null);
+      }
       return;
     case "prefs":
       s.put("prefs", ev.prefs);
@@ -301,6 +305,13 @@ export function applyTyped(s: Store, ev: Ev): void {
       // from where he answered and stayed after the hub took it late): the window that sent it gets
       // 'card_refused' for that very card and says so on the card (store.ts cardRefused, refused.ts)
       if (ev.cmd === "answer" || ev.cmd === "close") return;
+      // a refused diff: the view that asked it says why, with a retry, never 'loading…' forever
+      // (pr-changes-blank); one this window never asked is not its own
+      if (ev.cmd === "diff") {
+        const key = ev.project == null ? undefined : s.diffAsked.get(ev.project);
+        if (key !== undefined) s.put(diffErrKey(key), ev.text);
+        return;
+      }
       // a refused subscribe (no such agent): no page comes, its thread's cue goes (thread-loading)
       if (ev.cmd === "subscribe" && ev.project != null) {
         s.subscribeFailed(ev.project);

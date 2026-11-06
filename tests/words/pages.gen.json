@@ -179,6 +179,18 @@
     "one": null,
     "text": "commit {sha}"
   },
+  "pages.review_cut_files": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "{n} more files are too much to show here: names and counts only"
+  },
+  "pages.review_failed": {
+    "args": [],
+    "one": null,
+    "text": "couldn't load these changes"
+  },
   "pages.review_loading": {
     "args": [
       "agent"
@@ -214,6 +226,23 @@
     "args": [],
     "one": null,
     "text": "no changes in this commit"
+  },
+  "pages.review_open_pr": {
+    "args": [],
+    "one": null,
+    "text": "Open on GitHub"
+  },
+  "pages.review_open_pr_tip": {
+    "args": [
+      "n"
+    ],
+    "one": null,
+    "text": "open #{n} in your browser"
+  },
+  "pages.review_retry": {
+    "args": [],
+    "one": null,
+    "text": "Try again"
   },
   "pages.review_thread": {
     "args": [],

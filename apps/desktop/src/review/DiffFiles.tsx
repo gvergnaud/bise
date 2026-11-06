@@ -6,7 +6,8 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { copyText, QuotePop } from '@/quote/QuotePop';
 import { flatRows, handQuotes, quotesOf, range, type RowAt, type Sel } from './quote';
-import { Diff, Empty, type DiffLine as DsLine } from '@/ds';
+import { Button, Diff, Empty, type DiffLine as DsLine } from '@/ds';
+import { pages } from '@/proto/words_pages.gen';
 import { diffRuns, langOfPath } from './syntax';
 import { useRouter } from '@/app/router';
 import type { Diff as DiffEv } from '@/store';
@@ -19,6 +20,9 @@ export interface DiffFilesProps {
   readonly diff: DiffEv | null;
   /** the words while it comes ('loading perf's changes…') */
   readonly loading: string;
+  /** the hub refused it (useDiffError): its words in place of 'loading…', with `onRetry` */
+  readonly error?: string | null;
+  readonly onRetry?: () => void;
   /** the empty state's title when nothing differs */
   readonly none: string;
   /** whose thread a quote goes to, and what it quotes ('perf vs main', 'cu-upload at dd86c8a') */
@@ -29,7 +33,7 @@ export interface DiffFilesProps {
   readonly testId?: string;
 }
 
-export function DiffFiles({ project, diff, loading, none, to, from, onEscape, testId = 'review' }: DiffFilesProps) {
+export function DiffFiles({ project, diff, loading, error, onRetry, none, to, from, onEscape, testId = 'review' }: DiffFilesProps) {
   const router = useRouter();
   const body = useRef<HTMLDivElement>(null);
   const at = useRef(-1);
@@ -136,12 +140,22 @@ export function DiffFiles({ project, diff, loading, none, to, from, onEscape, te
   return (
     <div className="rv-body" data-testid={`${testId}.files`} tabIndex={-1} ref={body} onKeyDown={onKey} onMouseDown={onMouseDown} onMouseOver={onMouseOver} data-selecting={sel !== null || undefined}>
       {/* never a bare grey bar (designer m_15244): say what it waits for, or that nothing differs */}
-      {diff === null ? (
+      {diff === null && error != null ? (
+        <Empty
+          testId={`${testId}.failed`}
+          title={pages.review_failed}
+          action={onRetry && <Button kind="ghost" onClick={onRetry} testId={`${testId}.retry`}>{pages.review_retry}</Button>}
+        >
+          {error}
+        </Empty>
+      ) : diff === null ? (
         <p className="rv-wait" data-testid={`${testId}.loading`}>{loading}</p>
       ) : diff.files.length === 0 ? (
         <Empty testId={`${testId}.none`} title={none}>{diff.note ?? undefined}</Empty>
       ) : (
-        diff.files.map((f, i) => (
+        <>
+        {diff.cut_files != null && diff.cut_files > 0 && <p className="rv-note" data-testid={`${testId}.cut`}>{pages.review_cut_files({ n: diff.cut_files })}</p>}
+        {diff.files.map((f, i) => (
           <div key={f.path} className="rv-file">
             {f.note != null && f.note !== '' && <p className="rv-note">{f.note}</p>}
             <FileDiff
@@ -155,7 +169,8 @@ export function DiffFiles({ project, diff, loading, none, to, from, onEscape, te
               testId={`${testId}.file.${i}`}
             />
           </div>
-        ))
+        ))}
+        </>
       )}
     </div>
   );

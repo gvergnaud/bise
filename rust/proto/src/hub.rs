@@ -288,6 +288,10 @@ pub enum HubEv {
         /// why there are no files to show (its folder is gone...)
         #[serde(default, skip_serializing_if = "Option::is_none")]
         note: Option<String>,
+        /// a change too big for one answer: how many of its last files
+        /// come without their lines (whole files, `diff::cap`)
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cut_files: Option<u64>,
         /// the terminal's `/diff` (client-protocol step 3): its fields
         /// next to these on the wire, boxed (the enum stays small)
         #[serde(flatten)]

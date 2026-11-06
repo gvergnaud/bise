@@ -9,7 +9,6 @@
 
 use super::rpc::Typed;
 use super::*;
-use crate::diff;
 use crate::model::Mode;
 use crate::proto_view;
 use bise_proto::hub::HubEv;
@@ -38,19 +37,20 @@ impl Shell {
             .map(|(n, a)| (n.clone(), a.ws.path.clone()))
             .collect();
         let project = self.project();
-        let tx = self.tx.clone();
+        let (tx, how) = (self.tx.clone(), self.base_how());
         std::thread::spawn(move || {
-            let v = HubEv::Worktrees { project, items: scan(&shared, &agents) }.to_value();
+            let base = how.base(&shared);
+            let v = HubEv::Worktrees { project, items: scan(&shared, &base, &agents) }.to_value();
             let _ = tx.send(Msg::Typed { to, v });
         });
     }
 }
 
-/// The repo's worktrees at `shared` (none: not a git repo).
-fn scan(shared: &Path, agents: &[(String, String)]) -> Vec<Worktree> {
+/// The repo's worktrees at `shared` (none: not a git repo), ahead and
+/// behind `base` (where they start: `BaseHow::base`).
+fn scan(shared: &Path, base: &str, agents: &[(String, String)]) -> Vec<Worktree> {
     let Ok(list) = crate::worktree::git(shared, &["worktree", "list", "--porcelain"]) else { return Vec::new() };
-    let trunk = diff::trunk(shared);
-    proto_view::worktrees(&proto_view::worktree_list(&list), agents, |path| facts(Path::new(path), &trunk))
+    proto_view::worktrees(&proto_view::worktree_list(&list), agents, |path| facts(Path::new(path), base))
 }
 
 /// (dirty, ahead, behind) of the checkout at `dir` (a folder gone: clean

@@ -2,7 +2,9 @@
 //! branch, never whatever the shared folder has checked out. A new
 //! worktree starts from its tip ([`worktree_start`]; PR flow: its
 //! remote copy), `sb land` from a worktree moves it, a feature is made
-//! from it, rebased on it and merged into it.
+//! from it, rebased on it and merged into it. An agent's diff, a branch's
+//! and the worktrees' ahead/behind compare to where the work started
+//! ([`diff_base`]: the same start), lands and today's merges to the trunk.
 //!
 //! The default branch: the name `refs/remotes/origin/HEAD` points to
 //! (`develop`, `trunk`), else `main`, else `master`, as a local branch
@@ -66,6 +68,24 @@ pub fn start_ref(shared: &Path, configured: Option<&str>, pr: bool) -> String {
     let has = has_ref(shared);
     let trunk = if configured.is_some() { None } else { trunk_ref(shared).ok() };
     worktree_start(configured, trunk.as_deref(), pr, &has)
+}
+
+/// A ref's short name for a title (`main`, `origin/main`).
+pub fn short(r: &str) -> &str {
+    r.strip_prefix("refs/heads/").or_else(|| r.strip_prefix("refs/remotes/")).unwrap_or(r)
+}
+
+/// What an agent's checkout, a branch or a worktree is compared to:
+/// where its work started ([`start_ref`], short). PR flow: origin's copy,
+/// so a local `main` never pulled does not count every commit it lacks
+/// (pr-changes-blank: 16,780 files for a 70-file PR).
+pub fn diff_base(shared: &Path, configured: Option<&str>, pr: bool) -> String {
+    short(&start_ref(shared, configured, pr)).to_string()
+}
+
+/// The trunk's short name (`main`): where lands go, today's merges.
+pub fn trunk_short(shared: &Path) -> String {
+    trunk_ref(shared).map(|r| short(&r).to_string()).unwrap_or_else(|_| "HEAD".into())
 }
 
 #[cfg(test)]

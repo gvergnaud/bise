@@ -456,9 +456,10 @@ impl Shell {
         self.art.busy.insert(name.to_string());
         self.art.asked.insert(name.to_string(), std::time::Instant::now());
         let place = self.art_where(a);
-        let (tx, name) = (self.tx.clone(), name.to_string());
+        let (tx, name, how) = (self.tx.clone(), name.to_string(), self.base_how());
+        let shared = PathBuf::from(&self.hub.workspace);
         std::thread::spawn(move || {
-            let v = changes_of(&place);
+            let v = changes_of(&place, &how.base(&shared));
             let _ = tx.send(Msg::Changes { name, v });
         });
     }
@@ -518,9 +519,9 @@ impl Shell {
         let mine = d.range.is_none() && d.commit.is_none();
         let result = self.hub.st.agents.get(&agent).filter(|_| mine).and_then(|a| a.last_report.as_ref()).and_then(|r| r.result.clone());
         let req = d.req.map_or(Value::Null, |r| json!(r));
-        let tx = self.tx.clone();
+        let (tx, how) = (self.tx.clone(), self.base_how());
         std::thread::spawn(move || {
-            let mut ev = diff_answer(ask, &shared, req);
+            let mut ev = diff_answer(ask, &shared, &how, req);
             // a binary file's size, read here (the mapper stays pure):
             // its file in the agent's checkout, when it is still there
             for f in ev.get_mut("files").and_then(Value::as_array_mut).into_iter().flatten() {
@@ -539,6 +540,13 @@ impl Shell {
             }
             let _ = tx.send(Msg::Typed { to: super::rpc::Typed::Answer(id), v: typed.to_value() });
         });
+    }
+
+    /// How the diffs pick their base now: `[worktree] base` and PR flow
+    /// (read on the loop, used off it: `BaseHow::base`).
+    pub(super) fn base_how(&self) -> BaseHow {
+        let pr = self.flow_now().is_some_and(|f| f.mode == crate::flow::FlowMode::Pr);
+        BaseHow { configured: self.env.config.base.clone(), pr }
     }
 
     /// What a diff request asks: an agent's changes, a branch, a range or
@@ -596,8 +604,9 @@ impl Shell {
             }
         }
         let tx = self.tx.clone();
+        let how = self.base_how();
         std::thread::spawn(move || {
-            let base = diff::trunk(&shared);
+            let base = how.base(&shared);
             let rows: Vec<Value> = diff::branches(&shared, &base)
                 .into_iter()
                 .map(|(b, commits, add, del)| {
@@ -616,10 +625,10 @@ impl Shell {
 /// files included) or of its own files in the shared folder; null when
 /// there are none or git cannot say (a folder that is gone: diff.rs
 /// never runs git in it).
-fn changes_of(place: &Where) -> Option<bise_proto::rows::Changes> {
+fn changes_of(place: &Where, start: &str) -> Option<bise_proto::rows::Changes> {
     let files = match place {
         Where::Checkout { dir, base } => {
-            let base = base.clone().unwrap_or_else(|| diff::trunk(dir));
+            let base = base.clone().unwrap_or_else(|| start.to_string());
             diff::checkout(dir, &base).map(|(f, _, _)| f)
         }
         Where::Shared { dir, files } => diff::own_files(dir, files),
@@ -630,6 +639,24 @@ fn changes_of(place: &Where) -> Option<bise_proto::rows::Changes> {
             Some(bise_proto::rows::Changes { files: files as u64, add, del })
         }
         _ => None,
+    }
+}
+
+/// Where an agent's work started, as a new worktree picks it
+/// (`trunk::start_ref`): its checkout, a branch and the worktrees list
+/// are compared to that, never to a local trunk PR flow does not pull.
+#[derive(Clone, Debug, Default)]
+pub(super) struct BaseHow {
+    /// `[worktree] base`
+    pub configured: Option<String>,
+    /// the repo ships through PRs (origin's copy of the trunk)
+    pub pr: bool,
+}
+
+impl BaseHow {
+    /// The base's short name (`main`, `origin/main`); runs git.
+    pub fn base(&self, shared: &Path) -> String {
+        crate::trunk::diff_base(shared, self.configured.as_deref(), self.pr)
     }
 }
 
@@ -675,16 +702,19 @@ fn artifact_ask(store: &crate::artifacts::Store, id: &str, version: Option<u64>)
 
 /// The `diff` event answering `ask` (git runs in `shared` or the
 /// agent's own folder, never in one that is gone).
-fn diff_answer(ask: Ask, shared: &Path, req: Value) -> Value {
+fn diff_answer(ask: Ask, shared: &Path, how: &BaseHow, req: Value) -> Value {
     let shared = shared.to_path_buf();
-    let base_of = |d: &Path| diff::trunk(d);
+    // where the agent's work started (PR flow: origin's copy), and where
+    // lands go (a land's title)
+    let start = how.base(&shared);
+    let trunk = || crate::trunk::trunk_short(&shared);
     let mut ev = json!({"ev": "diff", "req": req, "working": false, "uncommitted": false, "landed_ms": null});
     let out: Result<(Vec<diff::File>, Option<PathBuf>), String> = match ask {
         // its folder is gone (archived, or removed by hand): never
         // git in it; its branch vs main if the branch is still
         // there, else one plain line (designer m_7393)
         Ask::Agent(name, Where::Checkout { dir, .. }, branch, archived) if archived || !dir.is_dir() => {
-            let base = base_of(&shared);
+            let base = start.clone();
             ev["title"] = json!(format!("{} vs {}", name, base));
             ev["base"] = json!(base);
             ev["branch"] = json!(branch);
@@ -706,7 +736,7 @@ fn diff_answer(ask: Ask, shared: &Path, req: Value) -> Value {
         }
         Ask::Agent(name, place, branch, _) => match place {
             Where::Checkout { dir, base } => {
-                let base = base.unwrap_or_else(|| base_of(&dir));
+                let base = base.unwrap_or_else(|| start.clone());
                 ev["title"] = json!(format!("{} vs {}", name, base));
                 ev["base"] = json!(base);
                 ev["branch"] = json!(branch);
@@ -721,7 +751,7 @@ fn diff_answer(ask: Ask, shared: &Path, req: Value) -> Value {
                 // the shared folder isn't only main's (designer
                 // m_7354): `your folder vs main`, the same shape
                 // as a branch's; the files are still the agent's
-                ev["title"] = json!(format!("your folder vs {}", base_of(&dir)));
+                ev["title"] = json!(format!("your folder vs {}", trunk()));
                 ev["base"] = json!("HEAD");
                 ev["branch"] = json!(null);
                 ev["commits"] = json!(0);
@@ -731,7 +761,7 @@ fn diff_answer(ask: Ask, shared: &Path, req: Value) -> Value {
             }
         },
         Ask::Branch(b) => {
-            let base = base_of(&shared);
+            let base = start.clone();
             ev["title"] = json!(format!("{} vs {}", b, base));
             ev["base"] = json!(base);
             ev["branch"] = json!(b);
@@ -749,7 +779,7 @@ fn diff_answer(ask: Ask, shared: &Path, req: Value) -> Value {
             // `diff-focus landed on main · e0f3df5` (the TUI's
             // head adds `· 11 files`)
             let to: String = r.split("..").last().unwrap_or(&r).trim_start_matches('.').chars().take(7).collect();
-            let title = if agent.is_empty() { r.clone() } else { format!("{} landed on {} · {}", agent, base_of(&shared), to) };
+            let title = if agent.is_empty() { r.clone() } else { format!("{} landed on {} · {}", agent, trunk(), to) };
             ev["title"] = json!(title);
             ev["branch"] = json!(null);
             ev["base"] = json!(r.split("..").next().unwrap_or(""));
@@ -773,7 +803,8 @@ fn diff_answer(ask: Ask, shared: &Path, req: Value) -> Value {
         Ask::Bad(e) => Err(e),
     };
     match out {
-        Ok((files, root)) => {
+        Ok((mut files, root)) => {
+            ev["cut_files"] = json!(diff::cap(&mut files, diff::MAX_DIFF_LINES));
             let (n, add, del) = diff::stat(&files);
             ev["stat"] = json!({"files": n, "add": add, "del": del});
             ev["files"] = json!(files.iter().map(|f| diff::file_json(f, root.as_deref())).collect::<Vec<_>>());
@@ -881,10 +912,10 @@ mod tests {
             }
             (ev["files"].clone(), ev["stat"].clone())
         };
-        let read = diff_answer(artifact_ask(&store, &id, None), &shared, json!(1));
+        let read = diff_answer(artifact_ask(&store, &id, None), &shared, &BaseHow::default(), json!(1));
         assert_eq!((read["title"].clone(), read["artifact"].clone(), read["version"].clone()), (json!("cu at abc1234"), json!("cu-diff"), json!(1)));
         assert_eq!(read["error"], Value::Null);
-        let branch = diff_answer(Ask::Branch("cu".into()), &shared, json!(1));
+        let branch = diff_answer(Ask::Branch("cu".into()), &shared, &BaseHow::default(), json!(1));
         assert_eq!(strip(read), strip(branch.clone()));
         assert_eq!(branch["files"][0]["hunks"][0]["lines"], json!([" one", "+two"]));
         // the next ready: a next version, the first still read
@@ -897,10 +928,10 @@ mod tests {
         crate::feature::write_diff(&shared, "cu", &file).unwrap();
         let next = store.add(&crate::feature::diff_artifact("cu", "def5678", &file), 2).unwrap().meta;
         assert_eq!((next.id.as_str(), next.title.as_str(), next.versions.len()), ("cu-diff", "cu at def5678", 2));
-        assert_eq!(diff_answer(artifact_ask(&store, "cu-diff", None), &shared, json!(1))["files"].as_array().unwrap().len(), 2);
-        assert_eq!(diff_answer(artifact_ask(&store, "cu-diff", Some(1)), &shared, json!(1))["files"].as_array().unwrap().len(), 1);
-        assert_eq!(diff_answer(artifact_ask(&store, "cu-diff", Some(9)), &shared, json!(1))["error"], "cu-diff has no version 9");
-        assert_eq!(diff_answer(artifact_ask(&store, "nope", None), &shared, json!(1))["error"], "no artifact nope");
+        assert_eq!(diff_answer(artifact_ask(&store, "cu-diff", None), &shared, &BaseHow::default(), json!(1))["files"].as_array().unwrap().len(), 2);
+        assert_eq!(diff_answer(artifact_ask(&store, "cu-diff", Some(1)), &shared, &BaseHow::default(), json!(1))["files"].as_array().unwrap().len(), 1);
+        assert_eq!(diff_answer(artifact_ask(&store, "cu-diff", Some(9)), &shared, &BaseHow::default(), json!(1))["error"], "cu-diff has no version 9");
+        assert_eq!(diff_answer(artifact_ask(&store, "nope", None), &shared, &BaseHow::default(), json!(1))["error"], "no artifact nope");
         let _ = std::fs::remove_dir_all(shared.parent().unwrap());
     }
 
@@ -908,7 +939,7 @@ mod tests {
     fn a_gone_worktree_shows_its_branch_vs_main() {
         let (shared, wt) = gone("branch");
         for archived in [true, false] {
-            let ev = diff_answer(agent(&wt, Some("sb/t1"), archived), &shared, json!(1));
+            let ev = diff_answer(agent(&wt, Some("sb/t1"), archived), &shared, &BaseHow::default(), json!(1));
             no_git_fatal(&ev);
             assert_eq!(ev["title"], "t1 vs main");
             assert_eq!(ev["error"], Value::Null);
@@ -923,16 +954,16 @@ mod tests {
     fn a_gone_worktree_without_its_branch_says_so_in_one_line() {
         let (shared, wt) = gone("nobranch");
         sh(&shared, &["branch", "-q", "-D", "sb/t1"]);
-        let ev = diff_answer(agent(&wt, Some("sb/t1"), true), &shared, json!(1));
+        let ev = diff_answer(agent(&wt, Some("sb/t1"), true), &shared, &BaseHow::default(), json!(1));
         no_git_fatal(&ev);
         assert_eq!(ev["note"], "t1 is archived and its folder is gone");
         assert_eq!(ev["gone"], true);
         assert_eq!(ev["error"], Value::Null);
         assert_eq!(ev["files"], json!([]));
-        let ev = diff_answer(agent(&wt, None, false), &shared, json!(1));
+        let ev = diff_answer(agent(&wt, None, false), &shared, &BaseHow::default(), json!(1));
         assert_eq!(ev["note"], "t1's folder is gone");
         // the same folder seen as a shared-folder agent's: never git in it
-        let ev = diff_answer(Ask::Agent("t1".into(), Where::Shared { dir: wt.clone(), files: vec!["a.txt".into()] }, None, false), &shared, json!(1));
+        let ev = diff_answer(Ask::Agent("t1".into(), Where::Shared { dir: wt.clone(), files: vec!["a.txt".into()] }, None, false), &shared, &BaseHow::default(), json!(1));
         no_git_fatal(&ev);
         let _ = std::fs::remove_dir_all(shared.parent().unwrap());
     }
@@ -949,26 +980,26 @@ mod tests {
         sh(&shared, &["commit", "-q", "-m", "init"]);
         sh(&shared, &["worktree", "add", "-q", "-b", "sb/t1", wt.to_str().unwrap()]);
         let place = Where::Checkout { dir: wt.clone(), base: None };
-        assert_eq!(changes_of(&place), None, "nothing yet");
+        assert_eq!(changes_of(&place, "main"), None, "nothing yet");
         std::fs::create_dir_all(wt.join("out")).unwrap();
         std::fs::write(wt.join("out/plans.csv"), "plan,price\nfree,0\npro,20\n").unwrap();
         sh(&wt, &["add", "out"]);
         sh(&wt, &["commit", "-q", "-m", "plans"]);
         std::fs::write(wt.join("README"), "hello\nmore\n").unwrap();
         std::fs::write(wt.join("new.txt"), "x\n").unwrap();
-        assert_eq!(changes_of(&place), Some(bise_proto::rows::Changes { files: 3, add: 5, del: 0 }));
+        assert_eq!(changes_of(&place, "main"), Some(bise_proto::rows::Changes { files: 3, add: 5, del: 0 }));
         // its folder gone: null, and no git in it
         sh(&shared, &["worktree", "remove", "--force", wt.to_str().unwrap()]);
-        assert_eq!(changes_of(&place), None);
+        assert_eq!(changes_of(&place, "main"), None);
         let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
     fn other_git_errors_read_as_one_line() {
         let (shared, _) = gone("errors");
-        let ev = diff_answer(Ask::Branch("sb/nope".into()), &shared, json!(1));
+        let ev = diff_answer(Ask::Branch("sb/nope".into()), &shared, &BaseHow::default(), json!(1));
         assert_eq!(ev["note"], "there's no branch named sb/nope.");
-        let ev = diff_answer(Ask::Range("abc1234..def5678".into(), String::new()), &shared, json!(1));
+        let ev = diff_answer(Ask::Range("abc1234..def5678".into(), String::new()), &shared, &BaseHow::default(), json!(1));
         let e = ev["error"].as_str().unwrap();
         assert!(e.starts_with("git couldn't read this diff: ") && !e.contains('\n') && !e.contains("fatal"), "{e}");
         let _ = std::fs::remove_dir_all(shared.parent().unwrap());

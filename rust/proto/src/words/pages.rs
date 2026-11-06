@@ -164,6 +164,16 @@ crate::words! { pages:
     review_loading_commit(sha) = "loading commit {sha}…";
     /// while a .diff artifact's diff comes (a feature's: `cu-upload at dd86c8a`)
     review_loading_diff(title) = "loading {title}…";
+    /// the hub refused the diff (no such agent, git failed): the title over its words
+    review_failed = "couldn't load these changes";
+    /// a refused diff's action: ask it again
+    review_retry = "Try again";
+    /// the review's action when the agent has an open PR: its page in the browser
+    review_open_pr = "Open on GitHub";
+    /// its tip: the PR it opens
+    review_open_pr_tip(n) = "open #{n} in your browser";
+    /// a change too big for one answer: its last files come with their names and counts only
+    review_cut_files(n) = "{n} more files are too much to show here: names and counts only";
 
     // ---- a feature (route feature)
     /// the feature head's sub when it isn't known

@@ -115,7 +115,7 @@ fn a_checkout_shows_commits_uncommitted_and_untracked_together() {
     sh(&d, &["commit", "-q", "-am", "c1"]);
     std::fs::write(d.join("a.txt"), "one\n2\nthree\nfour\n").unwrap();
     std::fs::write(d.join("new.md"), "hello\n").unwrap();
-    assert_eq!(trunk(&d), "main");
+    assert_eq!(crate::trunk::diff_base(&d, None, false), "main");
     let (files, commits, uncommitted) = checkout(&d, "main").unwrap();
     assert_eq!(commits, 1);
     assert!(uncommitted);
@@ -180,4 +180,49 @@ fn one_commit_and_a_merge_commit_are_ranges() {
     let mut paths: Vec<_> = files.iter().map(|f| f.path.as_str()).collect();
     paths.sort();
     assert_eq!((paths, commits), (vec!["f.txt", "g.txt"], 3), "the feature against main's first parent");
+}
+
+/// pr-changes-blank: a clone whose local `main` is never pulled (PR
+/// flow: 5 commits behind origin's) and a worktree started from
+/// origin/main with 2 commits. Its diff is its 2 commits' files, never
+/// origin's 5 more; out of PR flow the base stays the local trunk.
+#[test]
+fn a_pr_checkout_is_compared_to_origins_trunk_not_a_stale_local_main() {
+    let d = repo("stale-main");
+    for i in 0..5 {
+        std::fs::write(d.join(format!("up{i}.txt")), "x\n").unwrap();
+        sh(&d, &["add", "."]);
+        sh(&d, &["commit", "-q", "-m", &format!("up{i}")]);
+    }
+    // origin/main is there now; local main goes back to the first commit
+    sh(&d, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    sh(&d, &["reset", "-q", "--hard", "HEAD~5"]);
+    sh(&d, &["checkout", "-q", "-b", "sb/pr", "origin/main"]);
+    for f in ["mine1.txt", "mine2.txt"] {
+        std::fs::write(d.join(f), "m\n").unwrap();
+        sh(&d, &["add", "."]);
+        sh(&d, &["commit", "-q", "-m", f]);
+    }
+    let base = crate::trunk::diff_base(&d, None, true);
+    assert_eq!(base, "origin/main");
+    let (files, commits, _) = checkout(&d, &base).unwrap();
+    let mut paths: Vec<_> = files.iter().map(|f| f.path.as_str()).collect();
+    paths.sort();
+    assert_eq!((paths, commits), (vec!["mine1.txt", "mine2.txt"], 2));
+    assert_eq!(crate::trunk::diff_base(&d, None, false), "main", "trunk flow: the local trunk, where lands go");
+    assert_eq!(checkout(&d, "main").unwrap().1, 7, "what the stale base counted");
+}
+
+/// pr-changes-blank: one answer keeps whole files while they fit the
+/// cap; the files after keep their name and counts, not their lines.
+#[test]
+fn a_huge_change_keeps_whole_files_then_names_the_rest() {
+    let file = |p: &str, n: usize| File { path: p.into(), status: 'M', add: n as u64, hunks: vec![Hunk { lines: vec!["+x".into(); n], ..Default::default() }], ..Default::default() };
+    let mut files = vec![file("a", 6), file("b", 3), file("c", 5), file("d", 1)];
+    assert_eq!(cap(&mut files, 10), 2);
+    let kept: Vec<_> = files.iter().map(|f| (f.path.as_str(), f.hunks.len(), f.cut, f.add)).collect();
+    assert_eq!(kept, vec![("a", 1, false, 6), ("b", 1, false, 3), ("c", 0, true, 5), ("d", 0, true, 1)], "never mid-file, never a later small one");
+    assert_eq!(stat(&files), (4, 15, 0), "the counts stay whole");
+    let mut small = vec![file("a", 2)];
+    assert_eq!(cap(&mut small, 10), 0);
 }

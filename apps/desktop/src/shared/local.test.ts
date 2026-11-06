@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { answeredEv, lateAnsweredEv, refusedEv, RESTARTED_WORDS, sendRefusedEv } from './local';
+import { answeredEv, diffRefusedEv, lateAnsweredEv, refusedEv, RESTARTED_WORDS, sendRefusedEv } from './local';
 
 const P = 'acme-1a2b3c4d';
 const pick = { agent: 'perf', notice: 'you answered perf: warm', pick: 'warm', question: 'which bench?' };
@@ -9,6 +9,11 @@ describe("the window-local events main builds from the core's answers (ipc.ts, t
     expect(answeredEv({ cmd: 'answer', project: P, card: 9, reply: '2' }, { answer: pick })).toEqual({ ev: 'card_answered', project: P, card: 9, answer: pick });
     expect(answeredEv({ cmd: 'answer', project: P, card: 9, reply: '2' }, {})).toEqual({ ev: 'card_answered', project: P, card: 9, answer: null });
     expect(answeredEv({ cmd: 'answer', project: P, card: 9, reply: '2' }, null)).toEqual({ ev: 'card_answered', project: P, card: 9, answer: null });
+  });
+
+  it("a refused diff: the hub's typed error with its cmd tag; any other command: none", () => {
+    expect(diffRefusedEv({ cmd: 'diff', project: P, agent: 'perf' }, { message: 'no agent perf' })).toEqual({ ev: 'error', project: P, cmd: 'diff', text: 'no agent perf' });
+    expect(diffRefusedEv({ cmd: 'send', project: P }, { message: 'x' })).toBeNull();
   });
 
   it('a send: sent with its message id and why none was made, both null from an older hub', () => {

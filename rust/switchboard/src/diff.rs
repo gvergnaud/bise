@@ -10,6 +10,10 @@ use std::process::Command;
 /// A file's lines past this are cut (`"cut": true`).
 pub const MAX_FILE_LINES: usize = 5000;
 
+/// One diff answer's lines past this: the files after come without
+/// their hunks (`cap`), so a huge change still loads (pr-changes-blank).
+pub const MAX_DIFF_LINES: usize = 20_000;
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Hunk {
     pub old: u64,
@@ -163,6 +167,28 @@ pub fn file_json(f: &File, root: Option<&Path>) -> Value {
     })
 }
 
+/// Keeps whole files, in order, while their lines fit `max`; each file
+/// after keeps its path, + and − but drops its hunks (`cut`). Never cuts
+/// mid-file. Returns how many files lost their hunks. Pure.
+pub fn cap(files: &mut [File], max: usize) -> usize {
+    let mut used = 0;
+    let mut dropped = 0;
+    for f in files.iter_mut() {
+        let n = f.lines();
+        if used + n <= max {
+            used += n;
+            continue;
+        }
+        used = max;
+        if !f.hunks.is_empty() {
+            f.hunks.clear();
+            f.cut = true;
+            dropped += 1;
+        }
+    }
+    dropped
+}
+
 /// files, + and − of a diff.
 pub fn stat(files: &[File]) -> (usize, u64, u64) {
     (files.len(), files.iter().map(|f| f.add).sum(), files.iter().map(|f| f.del).sum())
@@ -228,16 +254,6 @@ fn untracked(dir: &Path, only: Option<&[String]>) -> Vec<File> {
         }
     }
     out
-}
-
-/// The base a branch is compared to: `main` (or `master`) of the repo.
-pub fn trunk(dir: &Path) -> String {
-    for b in ["main", "master"] {
-        if git(dir, &["rev-parse", "--verify", "-q", &format!("refs/heads/{}", b)]).is_ok() {
-            return b.to_string();
-        }
-    }
-    "HEAD".into()
 }
 
 /// What a checkout changed against `base`: its commits since the

@@ -20,7 +20,7 @@ import { DictationRoutes, type Route } from './dictation';
 import { SubRoutes } from './subs';
 import { installViewCalls, isViewCmd, viewAnswered, viewRefused, viewsCoreGone } from '../views';
 import { stampViewGesture } from '../viewframes';
-import { answeredEv, lateAnsweredEv, refusedEv, RESTARTED_WORDS, sendRefusedEv } from '../../shared/local';
+import { answeredEv, diffRefusedEv, lateAnsweredEv, refusedEv, RESTARTED_WORDS, sendRefusedEv } from '../../shared/local';
 
 let core: CoreProcess | null = null;
 // the last state events, for a window or a main-side listener that comes after they went out
@@ -236,6 +236,13 @@ export function startCore(env: Readonly<Record<string, string | undefined>> = pr
       },
       onRefused: (cmd, error) => {
         if (viewRefused(cmd, error)) return;
+        // a refused diff (no such agent, git failed): the windows hear it as the hub's typed error,
+        // keyed by its cmd tag; the one that asked it shows why with a retry (pr-changes-blank)
+        const diffErr = diffRefusedEv(cmd, error);
+        if (diffErr !== null) {
+          broadcast(CORE_IPC.ev, diffErr);
+          return;
+        }
         // his send answered with an error: its window hears why (typed); a late one stays in `sends`
         // for the core's 'send_answered' (its hub may still make it)
         const sk = sendKey(cmd);

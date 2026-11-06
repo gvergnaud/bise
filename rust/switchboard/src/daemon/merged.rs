@@ -48,7 +48,8 @@ impl Shell {
 /// Today's commits on the trunk of the repo at `shared` (none: not a git
 /// repo), each with its lander from main's `transcript`.
 fn scan(shared: &Path, transcript: Option<&Path>) -> Vec<bise_proto::rows::Merged> {
-    let trunk = crate::diff::trunk(shared);
+    // where lands go: the local trunk (trunk::trunk_ref), never origin's
+    let trunk = crate::trunk::trunk_short(shared);
     let Ok(log) = crate::worktree::git(shared, &["log", &trunk, "--first-parent", "--since=midnight", proto_view::MERGED_LOG_FORMAT]) else {
         return Vec::new();
     };

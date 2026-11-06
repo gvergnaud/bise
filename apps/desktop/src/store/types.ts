@@ -323,6 +323,11 @@ export function artDiffKey(project: string, id: string, version: number): string
   return `diff:${project}/#${id}@${String(version)}`;
 }
 
+/** The hub's refusal of the diff at `key` (a diffKey or artDiffKey): its words, until asked again. */
+export function diffErrKey(key: string): string {
+  return `err:${key}`;
+}
+
 export function sameStrings(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((x, i) => x === b[i]);
 }

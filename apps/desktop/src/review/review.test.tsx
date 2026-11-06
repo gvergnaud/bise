@@ -47,6 +47,56 @@ describe('the review', () => {
     expect(v.getByTestId('review.files').textContent).toContain('old is archived and its folder is gone');
   });
 
+  // pr-changes-blank: the PR chip's review stayed 'loading…' forever when the hub refused the diff
+  it("a refused diff leaves 'loading…' for its words and a retry that asks again", () => {
+    const { cmds, store, wrap } = setup();
+    const v = render(wrap(<ReviewScreen project={P} agent="ghost" />));
+    expect(v.getByTestId('review.loading')).toBeTruthy();
+    act(() => {
+      store.apply({ ev: 'error', project: P, cmd: 'diff', text: "git couldn't read this diff: bad revision" });
+    });
+    expect(v.queryByTestId('review.loading')).toBeNull();
+    expect(v.getByTestId('review.failed').textContent).toContain(pages.review_failed);
+    expect(v.getByTestId('review.failed').textContent).toContain('bad revision');
+    const before = cmds.filter((c) => c.cmd === 'diff').length;
+    fireEvent.click(v.getByTestId('review.retry'));
+    expect(cmds.filter((c) => c.cmd === 'diff').length).toBe(before + 1);
+    expect(v.getByTestId('review.loading')).toBeTruthy();
+  });
+
+  it("another command's refusal, or a diff this window never asked, leaves it loading", () => {
+    const { store, wrap } = setup();
+    const v = render(wrap(<ReviewScreen project={P} agent="ghost" />));
+    act(() => {
+      store.apply({ ev: 'error', project: P, cmd: 'tool_out', text: 'no agent ghost' });
+      store.apply({ ev: 'error', project: 'other-0000', cmd: 'diff', text: 'no agent ghost' });
+    });
+    expect(v.getByTestId('review.loading')).toBeTruthy();
+  });
+
+  it("an agent with an open PR gets 'Open on GitHub', which opens its link", () => {
+    const { store, wrap } = setup();
+    const opened: string[] = [];
+    (window as unknown as { bise: { openExternal: (u: string) => Promise<boolean> } }).bise = { openExternal: (u) => (opened.push(u), Promise.resolve(true)) };
+    const url = 'https://github.com/acme/app/pull/75286';
+    const pr = { number: 75286, url, branch: 'sb/perf', agents: ['perf'], state: 'draft' as const, checks: 'running' as const, review: 'none' as const, words: '', text: '' };
+    act(() => {
+      store.apply({ ev: 'agents', project: P, agents: [...store.agents(P)], places: [{ id: 'wt:perf', branch: 'sb/perf', agents: ['perf'], pr }] });
+    });
+    const v = render(wrap(<ReviewScreen project={P} agent="perf" />));
+    expect(v.getByTestId('review.open-pr').textContent).toBe(pages.review_open_pr);
+    fireEvent.click(v.getByTestId('review.open-pr'));
+    expect(opened).toEqual([url]);
+    v.unmount();
+    // a commit's review, and an agent with no open PR: no button
+    expect(render(wrap(<ReviewScreen project={P} agent="main" commit="155ffb0abc" />)).queryByTestId('review.open-pr')).toBeNull();
+    cleanup();
+    act(() => {
+      store.apply({ ev: 'agents', project: P, agents: [...store.agents(P)], places: [{ id: 'wt:perf', branch: 'sb/perf', agents: ['perf'], pr: { ...pr, state: 'merged' as const } }] });
+    });
+    expect(render(wrap(<ReviewScreen project={P} agent="perf" />)).queryByTestId('review.open-pr')).toBeNull();
+  });
+
   it('a commit route asks that commit and reads merged', () => {
     const { cmds, wrap } = setup();
     const v = render(wrap(<ReviewScreen project={P} agent="main" commit="155ffb0abc" />));

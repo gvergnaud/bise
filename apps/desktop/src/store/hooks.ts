@@ -13,7 +13,7 @@ import type { AnswerJump } from './store';
 import type { Acted } from './acted';
 import type { Refused } from './refused';
 import type { InboxItem } from '@/inbox/listed';
-import { artDiffKey, diffKey, toolOutKey, Store, type ToolOut, type Away, type Dictation, type HubLine, type Diff, type FilesAnswer, type Ev, type EvOf, type Pending, type PrsList, type BranchesList, type VersionsList, type PagesList, type ThreadHits, type ThreadOrder, type VoiceModeState, type TalkShot } from './store';
+import { artDiffKey, diffErrKey, diffKey, toolOutKey, Store, type ToolOut, type Away, type Dictation, type HubLine, type Diff, type FilesAnswer, type Ev, type EvOf, type Pending, type PrsList, type BranchesList, type VersionsList, type PagesList, type ThreadHits, type ThreadOrder, type VoiceModeState, type TalkShot } from './store';
 
 /**
  * Feeds a store from a core port: its live events, then the state events
@@ -138,6 +138,9 @@ export const useArtifactDiff = (project: string, id: string, version: number): D
   useSlice(artDiffKey(project, id, version), (s) => s.artifactDiff(project, id, version));
 export const useDiff = (project: string, agent: string, commit?: string): Diff | null =>
   useSlice(diffKey(project, agent, commit), (s) => s.diff(project, agent, commit));
+/** The hub's words when it refused that diff (`diffKey` or `artDiffKey`); null while none. */
+export const useDiffError = (key: string): string | null =>
+  useSlice(diffErrKey(key), (s) => (s.slices.get(diffErrKey(key)) as string | null | undefined) ?? null);
 /** A tool call's real output once its open row asked (askToolOut), or the hub's refusal; null until then. */
 export const useToolOut = (project: string, agent: string, pos: number): ToolOut | null =>
   useSlice(toolOutKey(project, agent, pos), (s) => s.toolOut(project, agent, pos));

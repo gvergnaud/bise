@@ -554,6 +554,7 @@ pub fn diff(ev: &Value, project: &str, agent: &str) -> HubEv {
         merged: None,
         commit: None,
         note: Some(s(ev, "note")).filter(|n| !n.is_empty()),
+        cut_files: ev.get("cut_files").and_then(Value::as_u64).filter(|n| *n > 0),
         view: Box::new(DiffView {
             title: Some(s(ev, "title")).filter(|t| !t.is_empty()),
             req: ev.get("req").and_then(Value::as_u64),
