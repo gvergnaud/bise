@@ -84,6 +84,7 @@ use input::*;
 mod run;
 use run::*;
 mod sb;
+mod herdr;
 mod skills;
 mod files;
 mod keychain;
