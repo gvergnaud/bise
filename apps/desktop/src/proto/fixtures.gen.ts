@@ -426,6 +426,8 @@ export const app_cmd: readonly AppCmd[] = [
   {"cmd":"folders_move","folder":"f-klmnopqrst","items":[{"from":"f-abcdefghij","id":"perf-notes","project":"acme-1a2b3c4d"},{"id":"hero","project":"site-9f8e7d6c"}]},
   {"cmd":"setup_test"},
   {"cmd":"setup_test","models":["mistral/voxtral-mini-tts-2603"]},
+  {"accessibility":"allowed","cmd":"helper_perms","mic":"denied","screen":"ask"},
+  {"cmd":"helper_perms"},
 ];
 
 /** rust/proto/fixtures/draft_hub_cmd.jsonl */
