@@ -908,8 +908,11 @@ pub enum SetupFix {
     /// an env var wins over the setting: remove it (where it is set is
     /// his shell's; the var name is bise_home::env's)
     RemoveEnv { var: String },
-    /// allow the microphone
-    AllowMic,
+    /// allow a permission (`open`: it was refused, only System Settings
+    /// can change it; else macOS asks)
+    AllowPerm { perm: crate::helper::Perm, open: bool },
+    /// bise's home folder is gone: restart bise (it makes it again)
+    Restart,
     /// turn that role on (the checker set to "off")
     TurnOn { role: RoleId },
     /// test again (unreachable: the network, the provider's own trouble)
@@ -963,13 +966,25 @@ pub struct FeatureRow {
     /// failed or off: what fixes it or turns it on
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fix: Option<SetupFix>,
-    /// the mic refused (dictation, voice mode): the helper's fact
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub mic_denied: bool,
+    /// the permissions it needs, as the helper says them (none: no
+    /// helper, nothing said about them)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub perms: Vec<PermGrant>,
+    /// talk to bise: bise's home folder is gone (its path)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub home_gone: Option<String>,
     /// on, but better with this (the checker on Jev): never a failure,
     /// never `next`
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub better: Option<SetupFix>,
+}
+
+/// A permission a feature needs, and where it is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct PermGrant {
+    pub perm: crate::helper::Perm,
+    pub grant: crate::helper::Grant,
 }
 
 /// The action that unlocks the most: a failure before a feature that is

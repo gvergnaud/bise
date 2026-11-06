@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import type { Account, AppCmd, Found, Model, ProjectRow, RoleRow } from '@/proto';
+import type { Account, AppCmd, Found, Model, ProjectRow, RoleRow, SetupGauge } from '@/proto';
 import type { CoreCmd } from '@/shared/api';
 import { heldReady, modelOrSetup, needsSetup, releaseHeld, type Held } from './hold';
 import { Approvals, checkerWords, ruleNote, ruleWhat } from './approvals';
@@ -17,7 +17,7 @@ import { KEY_SECTIONS } from './keys';
 import { notifyRow } from './pages';
 import { capsOf, chromeCase, homeOf } from './chrome';
 import { stepOf } from './computer';
-import { checks } from './check';
+import { focusOf } from './setupPage';
 import { FALLBACK } from './roles';
 import type { ComputerUse } from './computer';
 import { settings } from '@/proto/words.gen';
@@ -198,6 +198,7 @@ describe('Settings', () => {
   it('models: sign in on his click only, a key is sent once and never shown', () => {
     const p = ports();
     view('models', p);
+    fireEvent.click(screen.getByTestId('settings.fold.accounts.head'));
     expect(screen.getByTestId('settings.account.chatgpt.ok')).toBeTruthy();
     expect(p.sent).toEqual([]);
     fireEvent.click(screen.getByTestId('settings.key.add'));
@@ -215,6 +216,7 @@ describe('Settings', () => {
   it('S.2: a key the live check refuses says so in place, the field kept; the key that works closes it', () => {
     const p = ports();
     const r = view('models', p);
+    fireEvent.click(screen.getByTestId('settings.fold.accounts.head'));
     fireEvent.click(screen.getByTestId('settings.key.add'));
     const f = screen.getByTestId<HTMLInputElement>('settings.key.field');
     f.value = 'sk-wrong';
@@ -244,6 +246,7 @@ describe('Settings', () => {
     const p = ports();
     const signedOut = accounts().map((a) => ({ ...a, state: 'signed_out' as const }));
     view('models', p, { accounts: signedOut });
+    fireEvent.click(screen.getByTestId('settings.fold.accounts.head'));
     fireEvent.click(screen.getByTestId('settings.account.chatgpt'));
     expect(p.sent).toEqual([{ cmd: 'sign_in', id: 'chatgpt' }]);
     expect(screen.getByTestId('settings.account.chatgpt').getAttribute('aria-busy')).toBe('true');
@@ -422,30 +425,49 @@ describe('computer use', () => {
   });
 });
 
-describe('setup check (S.8)', () => {
-  it('lists what bise needs with its fix; check again reads fresh', () => {
+describe('settings · Setup (page models-setup, pick B)', () => {
+  const gauge = () => ev('setup_gauge').gauge;
+  const allOn = (): SetupGauge => ({ ...gauge(), on: 7, next: undefined, testing: [], rows: gauge().rows.map((r) => ({ ...r, state: 'on' as const, fix: undefined, parts: r.parts.map((x) => ({ ...x, state: 'on' as const, why: undefined, said: undefined })) })) });
+
+  it('the test world: 5/7, Next adds credit on Mistral, voice mode failed and open, approvals off', () => {
     const p = ports();
-    const perm: string[] = [];
-    view('setup', { ...p, perm: (x, a) => perm.push(`${x} ${a}`) }, { perms: { mic: 'allowed', accessibility: 'denied', screen: 'ask' }, accounts: accounts().map((a) => ({ ...a, state: 'signed_out' as const })) });
-    const g = screen.getByTestId('settings.check');
-    expect(g.textContent).toContain('denied');
-    expect(screen.queryByTestId('settings.check.mic.fix')).toBeNull();
-    fireEvent.click(screen.getByTestId('settings.check.accessibility.fix'));
-    fireEvent.click(screen.getByTestId('settings.check.screen.fix'));
-    fireEvent.click(screen.getByTestId('settings.check.model.fix'));
-    fireEvent.click(screen.getByTestId('settings.check.again'));
-    expect(perm).toEqual(['accessibility open', 'screen ask']);
-    expect(p.went).toEqual(['models']);
-    expect(p.sent).toEqual([{ cmd: 'setup_check' }]);
+    view('setup', p, { gauge: { ...gauge(), testing: [] } });
+    expect(screen.getByTestId('settings.gauge.count').textContent).toContain('5/7');
+    expect(screen.getByTestId('settings.gauge.next').textContent).toContain(settings.next_credit({ provider: 'Mistral' }));
+    expect(screen.getByTestId('settings.feature.voice_mode').getAttribute('data-state')).toBe('failed');
+    expect(screen.getByTestId('settings.feature.voice_mode.trouble').textContent).toContain('No credit left on this workspace');
+    expect(screen.getByTestId('settings.feature.approvals.mark').textContent).toBe(settings.mark_off);
+    // nothing tested on open: a test is his click
+    expect(p.sent).toEqual([]);
+    fireEvent.click(screen.getByTestId('settings.gauge.test'));
+    expect(p.sent).toEqual([{ cmd: 'setup_test' }]);
+    fireEvent.click(screen.getByTestId('settings.feature.voice_mode.trouble.again'));
+    expect(p.sent.at(-1)).toEqual({ cmd: 'setup_test', models: ['groq/whisper-large-v3', 'mistral/voxtral-mini-tts-2603', 'chatgpt/gpt-6.1-sol'] });
+    fireEvent.click(screen.getByTestId('settings.feature.approvals.fix'));
+    expect(p.sent.at(-1)).toEqual({ cmd: 'role_set', role: 'classify' });
   });
 
-  it('no helper: no permission rows; a gone home says to restart', () => {
-    const list = checks({}, accounts(), projects().map((r) => (r.home ? { ...r, missing: true } : r)), false);
-    expect(list.map((c) => [c.id, c.ok])).toEqual([
-      ['model', true],
-      ['home', false],
-    ]);
-    expect(list[1]?.detail).toContain('restart bise');
+  it('copy report has the providers\' words and never a key', () => {
+    const copied: string[] = [];
+    view('setup', { ...ports(), copy: (t) => copied.push(t) }, { gauge: gauge() });
+    fireEvent.click(screen.getByTestId('settings.feature.voice_mode.trouble.copy'));
+    expect(copied[0]).toContain('no_credit');
+    expect(copied[0]).not.toMatch(/sk-|Bearer/);
+  });
+
+  it('all green: 7/7, no Next, every mark in ink', () => {
+    view('setup', ports(), { gauge: allOn() });
+    expect(screen.getByTestId('settings.gauge.count').textContent).toContain('7/7');
+    expect(screen.getByTestId('settings.gauge.next').textContent).toBe(` ${settings.gauge_all_set}`);
+    expect(screen.queryByTestId('settings.gauge.next.fix')).toBeNull();
+    expect(document.querySelectorAll('.st-mark.err')).toHaveLength(0);
+  });
+
+  it('/models opens Setup with the roles unfolded; the nav has no Models page any more', () => {
+    view('models', ports(), { gauge: gauge(), roles: [] });
+    expect(screen.getByTestId('settings.page.setup')).toBeTruthy();
+    expect(screen.getByTestId('settings.fold.roles').getAttribute('data-open')).toBe('true');
+    expect(focusOf('dictation')).toEqual({ roles: false, at: 'dictation' });
   });
 });
 

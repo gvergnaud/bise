@@ -424,61 +424,12 @@
     "one": null,
     "text": "cancel"
   },
-  "settings.check_again": {
-    "args": [],
-    "one": null,
-    "text": "check again"
-  },
-  "settings.check_all_set": {
-    "args": [],
-    "one": null,
-    "text": "all set."
-  },
-  "settings.check_home": {
-    "args": [],
-    "one": null,
-    "text": "bise’s home"
-  },
   "settings.check_home_gone": {
     "args": [
       "path"
     ],
     "one": null,
     "text": "{path} is gone: restart bise and it makes it again"
-  },
-  "settings.check_home_unknown": {
-    "args": [],
-    "one": null,
-    "text": "not known yet: check again in a moment"
-  },
-  "settings.check_left": {
-    "args": [
-      "n"
-    ],
-    "one": "{n} thing needs you.",
-    "text": "{n} things need you."
-  },
-  "settings.check_model": {
-    "args": [],
-    "one": null,
-    "text": "a model"
-  },
-  "settings.check_needs_you": {
-    "args": [],
-    "one": null,
-    "text": "needs you"
-  },
-  "settings.check_no_model": {
-    "args": [],
-    "one": null,
-    "text": "no subscription or key yet: agents can’t answer"
-  },
-  "settings.check_signed_out": {
-    "args": [
-      "label"
-    ],
-    "one": null,
-    "text": "{label}: signed out, sign in again"
   },
   "settings.checker_jev": {
     "args": [
@@ -758,6 +709,41 @@
     ],
     "one": null,
     "text": "your sign-in expired: {names} waits"
+  },
+  "settings.feat_agents": {
+    "args": [],
+    "one": null,
+    "text": "Agents"
+  },
+  "settings.feat_approvals": {
+    "args": [],
+    "one": null,
+    "text": "Auto approvals"
+  },
+  "settings.feat_dictation": {
+    "args": [],
+    "one": null,
+    "text": "Dictation and fn"
+  },
+  "settings.feat_small": {
+    "args": [],
+    "one": null,
+    "text": "Titles and summaries"
+  },
+  "settings.feat_talk": {
+    "args": [],
+    "one": null,
+    "text": "Talk to bise"
+  },
+  "settings.feat_vision": {
+    "args": [],
+    "one": null,
+    "text": "Images and computer use"
+  },
+  "settings.feat_voice_mode": {
+    "args": [],
+    "one": null,
+    "text": "Voice mode"
   },
   "settings.first_add_credit": {
     "args": [],
@@ -1484,6 +1470,76 @@
     "one": null,
     "text": "   your ChatGPT plan"
   },
+  "settings.fix_add_key": {
+    "args": [
+      "provider"
+    ],
+    "one": null,
+    "text": "Add a {provider} key"
+  },
+  "settings.fix_allow": {
+    "args": [
+      "perm"
+    ],
+    "one": null,
+    "text": "Allow {perm}"
+  },
+  "settings.fix_allow_mic": {
+    "args": [],
+    "one": null,
+    "text": "Allow the microphone"
+  },
+  "settings.fix_credit": {
+    "args": [
+      "provider"
+    ],
+    "one": null,
+    "text": "Add credit on {provider}"
+  },
+  "settings.fix_pick_model": {
+    "args": [],
+    "one": null,
+    "text": "Pick another model"
+  },
+  "settings.fix_remove_env": {
+    "args": [
+      "var"
+    ],
+    "one": null,
+    "text": "Remove {var}"
+  },
+  "settings.fix_restart": {
+    "args": [],
+    "one": null,
+    "text": "Restart bise"
+  },
+  "settings.fix_sign_in": {
+    "args": [
+      "provider"
+    ],
+    "one": null,
+    "text": "Sign in to {provider} again"
+  },
+  "settings.fix_test_again": {
+    "args": [],
+    "one": null,
+    "text": "Test again"
+  },
+  "settings.fix_turn_on": {
+    "args": [],
+    "one": null,
+    "text": "Turn on"
+  },
+  "settings.fold_accounts": {
+    "args": [],
+    "one": null,
+    "text": "Accounts and keys"
+  },
+  "settings.fold_roles": {
+    "args": [],
+    "one": null,
+    "text": "Which model does what"
+  },
   "settings.found_sub": {
     "args": [
       "path",
@@ -1499,6 +1555,56 @@
     ],
     "one": null,
     "text": "{path} · git · {when}"
+  },
+  "settings.gauge_all_set": {
+    "args": [],
+    "one": null,
+    "text": "everything works."
+  },
+  "settings.gauge_brings_back": {
+    "args": [
+      "what"
+    ],
+    "one": null,
+    "text": "to bring back {what}"
+  },
+  "settings.gauge_count": {
+    "args": [
+      "on",
+      "of"
+    ],
+    "one": null,
+    "text": "{on}/{of}"
+  },
+  "settings.gauge_next": {
+    "args": [],
+    "one": null,
+    "text": "Next"
+  },
+  "settings.gauge_test_all": {
+    "args": [],
+    "one": null,
+    "text": "Test everything"
+  },
+  "settings.gauge_testing": {
+    "args": [],
+    "one": null,
+    "text": "testing…"
+  },
+  "settings.gauge_tip": {
+    "args": [
+      "on",
+      "of"
+    ],
+    "one": null,
+    "text": "{on} of {of} features work. a test is a real call: only when you click."
+  },
+  "settings.gauge_turns_on": {
+    "args": [
+      "what"
+    ],
+    "one": null,
+    "text": "to turn on {what}"
   },
   "settings.hair_afro": {
     "args": [],
@@ -1954,6 +2060,33 @@
     "one": null,
     "text": "on Max or Team?"
   },
+  "settings.mark_failed": {
+    "args": [],
+    "one": null,
+    "text": "✗ failed"
+  },
+  "settings.mark_key_works": {
+    "args": [],
+    "one": null,
+    "text": "key works"
+  },
+  "settings.mark_off": {
+    "args": [],
+    "one": null,
+    "text": "○ off"
+  },
+  "settings.mark_on": {
+    "args": [],
+    "one": null,
+    "text": "✓"
+  },
+  "settings.mark_took": {
+    "args": [
+      "secs"
+    ],
+    "one": null,
+    "text": "✓ {secs} s"
+  },
   "settings.me_color": {
     "args": [],
     "one": null,
@@ -2033,6 +2166,68 @@
     "args": [],
     "one": null,
     "text": "Settings"
+  },
+  "settings.next_add_key": {
+    "args": [
+      "provider"
+    ],
+    "one": null,
+    "text": "add a {provider} key"
+  },
+  "settings.next_allow": {
+    "args": [
+      "perm"
+    ],
+    "one": null,
+    "text": "allow {perm}"
+  },
+  "settings.next_allow_mic": {
+    "args": [],
+    "one": null,
+    "text": "allow the microphone"
+  },
+  "settings.next_credit": {
+    "args": [
+      "provider"
+    ],
+    "one": null,
+    "text": "add credit on {provider}"
+  },
+  "settings.next_pick_model": {
+    "args": [],
+    "one": null,
+    "text": "pick another model"
+  },
+  "settings.next_remove_env": {
+    "args": [
+      "var"
+    ],
+    "one": null,
+    "text": "remove {var}"
+  },
+  "settings.next_restart": {
+    "args": [],
+    "one": null,
+    "text": "restart bise"
+  },
+  "settings.next_sign_in": {
+    "args": [
+      "provider"
+    ],
+    "one": null,
+    "text": "sign in to {provider} again"
+  },
+  "settings.next_test_again": {
+    "args": [],
+    "one": null,
+    "text": "test again"
+  },
+  "settings.next_turn_on": {
+    "args": [
+      "what"
+    ],
+    "one": null,
+    "text": "turn on {what}"
   },
   "settings.no_answer": {
     "args": [
@@ -2443,16 +2638,6 @@
     "one": null,
     "text": "the keys that reach bise from any app, and in the window."
   },
-  "settings.page_models": {
-    "args": [],
-    "one": null,
-    "text": "Models"
-  },
-  "settings.page_models_sub": {
-    "args": [],
-    "one": null,
-    "text": "the models your agents use, and how you pay for them: a plan, a key, or both."
-  },
   "settings.page_privacy": {
     "args": [],
     "one": null,
@@ -2491,27 +2676,24 @@
   "settings.page_setup_sub": {
     "args": [],
     "one": null,
-    "text": "what's set up and what's left: a model, the permissions, your first project."
+    "text": "what works in bise, what's left, and the one thing that turns on the most."
   },
   "settings.page_voice": {
     "args": [],
     "one": null,
-    "text": "Voice and fn"
+    "text": "fn and dictation"
   },
   "settings.page_voice_sub": {
     "args": [],
     "one": null,
-    "text": "how bise hears you and answers: hold fn to talk from any app, ctrl+r to dictate in the composer."
+    "text": "hold fn to talk from any app, ctrl+r to dictate in the composer. the models that listen and speak are in Setup."
   },
-  "settings.perm_accessibility": {
-    "args": [],
+  "settings.part_env": {
+    "args": [
+      "var"
+    ],
     "one": null,
-    "text": "accessibility"
-  },
-  "settings.perm_accessibility_lost": {
-    "args": [],
-    "one": null,
-    "text": "fn works only in bise’s own windows without it"
+    "text": "from {var}"
   },
   "settings.perm_allow": {
     "args": [],
@@ -2523,37 +2705,15 @@
     "one": null,
     "text": "allowed"
   },
-  "settings.perm_denied": {
-    "args": [
-      "lost"
-    ],
-    "one": null,
-    "text": "denied: {lost}"
-  },
-  "settings.perm_mic": {
-    "args": [],
-    "one": null,
-    "text": "microphone"
-  },
-  "settings.perm_mic_lost": {
-    "args": [],
-    "one": null,
-    "text": "fn can't hear you without it"
-  },
   "settings.perm_not_asked": {
     "args": [],
     "one": null,
     "text": "not asked yet"
   },
-  "settings.perm_screen": {
+  "settings.perm_refused": {
     "args": [],
     "one": null,
-    "text": "screen recording"
-  },
-  "settings.perm_screen_lost": {
-    "args": [],
-    "one": null,
-    "text": "fn sends your words without a capture without it"
+    "text": "refused"
   },
   "settings.plugins_about": {
     "args": [],
@@ -5170,6 +5330,44 @@
     "one": null,
     "text": "System"
   },
+  "settings.tip_better": {
+    "args": [
+      "provider"
+    ],
+    "one": null,
+    "text": "works with your small jobs model · Jev through {provider} decides better"
+  },
+  "settings.tip_key_only": {
+    "args": [
+      "provider"
+    ],
+    "one": null,
+    "text": "the {provider} key answers · the voice itself isn't tested yet"
+  },
+  "settings.tip_no_images": {
+    "args": [
+      "model"
+    ],
+    "one": null,
+    "text": "off · {model} doesn't read images: pick a model that does"
+  },
+  "settings.tip_off": {
+    "args": [],
+    "one": null,
+    "text": "off · its button turns it on"
+  },
+  "settings.tip_took": {
+    "args": [
+      "secs"
+    ],
+    "one": null,
+    "text": "works · the check took {secs} s"
+  },
+  "settings.tip_untested": {
+    "args": [],
+    "one": null,
+    "text": "set up · not tested yet: Test everything makes one small real call"
+  },
   "settings.tour_card": {
     "args": [
       "who",
@@ -5272,6 +5470,50 @@
     "args": [],
     "one": null,
     "text": "your team"
+  },
+  "settings.trouble_checked": {
+    "args": [
+      "time"
+    ],
+    "one": null,
+    "text": "checked at {time}"
+  },
+  "settings.trouble_copied": {
+    "args": [],
+    "one": null,
+    "text": "copied"
+  },
+  "settings.trouble_copy": {
+    "args": [],
+    "one": null,
+    "text": "Copy report"
+  },
+  "settings.trouble_env": {
+    "args": [
+      "var"
+    ],
+    "one": null,
+    "text": "{var} is set in your environment and wins over this setting. remove it from your shell's profile (~/.zshrc or ~/.zprofile), then restart bise."
+  },
+  "settings.trouble_other": {
+    "args": [],
+    "one": null,
+    "text": "Change the model"
+  },
+  "settings.trouble_said": {
+    "args": [
+      "said"
+    ],
+    "one": null,
+    "text": "it said: “{said}”"
+  },
+  "settings.trouble_still": {
+    "args": [
+      "what",
+      "provider"
+    ],
+    "one": null,
+    "text": "{what} still works: it goes through {provider}."
   },
   "settings.tui_bise_failed": {
     "args": [
@@ -5466,5 +5708,64 @@
     "args": [],
     "one": null,
     "text": "nothing"
+  },
+  "settings.why_config": {
+    "args": [
+      "provider"
+    ],
+    "one": null,
+    "text": "{provider} needs a setting before it can answer."
+  },
+  "settings.why_mic": {
+    "args": [],
+    "one": null,
+    "text": "the microphone is refused in System Settings."
+  },
+  "settings.why_model": {
+    "args": [
+      "model"
+    ],
+    "one": null,
+    "text": "the provider doesn't know {model} any more."
+  },
+  "settings.why_no_access": {
+    "args": [
+      "model"
+    ],
+    "one": null,
+    "text": "this key may not use {model}."
+  },
+  "settings.why_no_credit": {
+    "args": [
+      "provider"
+    ],
+    "one": null,
+    "text": "your {provider} key has no credit left."
+  },
+  "settings.why_no_key": {
+    "args": [
+      "provider"
+    ],
+    "one": null,
+    "text": "there's no {provider} key."
+  },
+  "settings.why_off": {
+    "args": [],
+    "one": null,
+    "text": "it's off."
+  },
+  "settings.why_unreachable": {
+    "args": [
+      "provider"
+    ],
+    "one": null,
+    "text": "{provider} didn't answer: the network, or the provider's own trouble."
+  },
+  "settings.why_wrong_key": {
+    "args": [
+      "provider"
+    ],
+    "one": null,
+    "text": "{provider} refused the key, or the sign-in expired."
   }
 }

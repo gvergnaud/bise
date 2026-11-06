@@ -13,7 +13,8 @@
 //! between two, the fix that unlocks the most features.
 
 use crate::{roles, Setup};
-use bise_proto::app_rows::{CheckWhy, FeatureId, FeaturePart, FeatureRow, FeatureState, PartSource, RoleId, SetupFix, SetupGauge, SetupNext};
+use bise_proto::app_rows::{CheckWhy, FeatureId, FeaturePart, FeatureRow, FeatureState, PartSource, PermGrant, RoleId, SetupFix, SetupGauge, SetupNext};
+use bise_proto::helper::{Grant, Perm};
 
 /// A provider's key or sign-in, as the accounts say.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -43,8 +44,13 @@ pub struct Facts<'a> {
     /// a provider's generation now (bumped at each key or sign-in change)
     pub generation: &'a dyn Fn(&str) -> u64,
     pub tests: &'a [Test],
-    /// the helper says the mic is refused
-    pub mic_denied: bool,
+    /// the helper's permissions (None: no helper, or not known yet:
+    /// nothing is said about them)
+    pub mic: Option<Grant>,
+    pub accessibility: Option<Grant>,
+    pub screen: Option<Grant>,
+    /// bise's home folder is gone (its path): nothing works
+    pub home_gone: Option<String>,
     /// voice mode's `tts_model` when he set one
     pub tts_model: Option<String>,
     /// models under test now
@@ -68,12 +74,12 @@ pub fn gauge(setup: &Setup, f: &Facts) -> SetupGauge {
     let rows: Vec<FeatureRow> = FEATURES
         .iter()
         .map(|&id| match id {
-            FeatureId::Talk => row(id, vec![main.clone()], false),
-            FeatureId::Agents => row(id, vec![part(setup, f, RoleId::Agents)], false),
-            FeatureId::Small => row(id, vec![part(setup, f, RoleId::Small)], false),
-            FeatureId::Vision => vision(setup, main.clone()),
-            FeatureId::Dictation => row(id, vec![part(setup, f, RoleId::Voice)], f.mic_denied),
-            FeatureId::VoiceMode => row(id, vec![part(setup, f, RoleId::Voice), part(setup, f, RoleId::Tts), main.clone()], f.mic_denied),
+            FeatureId::Talk => talk(main.clone(), f),
+            FeatureId::Agents => row(id, vec![part(setup, f, RoleId::Agents)], &[]),
+            FeatureId::Small => row(id, vec![part(setup, f, RoleId::Small)], &[]),
+            FeatureId::Vision => vision(setup, main.clone(), f),
+            FeatureId::Dictation => row(id, vec![part(setup, f, RoleId::Voice)], &perms(f, &[Perm::Mic, Perm::Accessibility])),
+            FeatureId::VoiceMode => row(id, vec![part(setup, f, RoleId::Voice), part(setup, f, RoleId::Tts), main.clone()], &perms(f, &[Perm::Mic])),
             _ => approvals(setup, f),
         })
         .collect();
@@ -234,10 +240,26 @@ fn fix_of(setup: &Setup, row: &FeaturePart, pid: &str) -> SetupFix {
     }
 }
 
+/// The permissions of `which` the helper said (none unknown).
+fn perms(f: &Facts, which: &[Perm]) -> Vec<PermGrant> {
+    which
+        .iter()
+        .filter_map(|&perm| {
+            let g = match perm {
+                Perm::Mic => f.mic,
+                Perm::Accessibility => f.accessibility,
+                Perm::Screen => f.screen,
+            };
+            g.map(|grant| PermGrant { perm, grant })
+        })
+        .collect()
+}
+
 /// A feature from its parts: one failed = failed (its fix first), else
-/// one off = off, else on; the mic refused fails a voice feature that
-/// would work.
-fn row(id: FeatureId, parts: Vec<Part>, mic_denied: bool) -> FeatureRow {
+/// one off = off, else on. Then its permissions, when its models work:
+/// one refused fails it (System Settings), one not asked yet leaves it
+/// off (allow).
+fn row(id: FeatureId, parts: Vec<Part>, perms: &[PermGrant]) -> FeatureRow {
     let failed = parts.iter().find(|p| p.row.state == FeatureState::Failed);
     let off = parts.iter().find(|p| p.row.state == FeatureState::Off);
     let (mut state, mut fix) = match (failed, off) {
@@ -245,22 +267,46 @@ fn row(id: FeatureId, parts: Vec<Part>, mic_denied: bool) -> FeatureRow {
         (None, Some(p)) => (FeatureState::Off, p.fix.clone()),
         _ => (FeatureState::On, None),
     };
-    if mic_denied && state == FeatureState::On {
-        state = FeatureState::Failed;
-        fix = Some(SetupFix::AllowMic);
+    if state == FeatureState::On {
+        if let Some(p) = perms.iter().find(|p| p.grant == Grant::Denied) {
+            state = FeatureState::Failed;
+            fix = Some(SetupFix::AllowPerm { perm: p.perm, open: true });
+        } else if let Some(p) = perms.iter().find(|p| p.grant == Grant::Ask) {
+            state = FeatureState::Off;
+            fix = Some(SetupFix::AllowPerm { perm: p.perm, open: false });
+        }
     }
-    FeatureRow { id, state, parts: parts.into_iter().map(|p| p.row).collect(), fix, mic_denied, better: None }
+    FeatureRow { id, state, parts: parts.into_iter().map(|p| p.row).collect(), fix, perms: perms.to_vec(), home_gone: None, better: None }
+}
+
+/// Talk to bise: main's model, and bise's home folder (gone: nothing
+/// works, restart bise makes it again).
+fn talk(main: Part, f: &Facts) -> FeatureRow {
+    let mut r = row(FeatureId::Talk, vec![main], &[]);
+    if let Some(path) = &f.home_gone {
+        r.state = FeatureState::Failed;
+        r.fix = Some(SetupFix::Restart);
+        r.home_gone = Some(path.clone());
+    }
+    r
 }
 
 /// Images: main's model reads them, or it is off (never failed: pick a
-/// model that does); main failed fails it too.
-fn vision(setup: &Setup, main: Part) -> FeatureRow {
+/// model that does); main failed fails it too. Computer use also needs
+/// Screen Recording: not allowed, images still count, allowing it is
+/// `better`.
+fn vision(setup: &Setup, main: Part, f: &Facts) -> FeatureRow {
     let reads = setup.catalog.resolve(&main.row.model).caps.vision;
-    let mut r = row(FeatureId::Vision, vec![main], false);
+    let screen = perms(f, &[Perm::Screen]);
+    let mut r = row(FeatureId::Vision, vec![main], &[]);
     if !reads && r.state == FeatureState::On {
         r.state = FeatureState::Off;
         r.fix = Some(SetupFix::PickModel { role: RoleId::Main });
     }
+    if let Some(p) = screen.iter().find(|p| p.grant != Grant::Allowed) {
+        r.better = Some(SetupFix::AllowPerm { perm: p.perm, open: p.grant == Grant::Denied });
+    }
+    r.perms = screen;
     r
 }
 
@@ -269,16 +315,18 @@ fn vision(setup: &Setup, main: Part) -> FeatureRow {
 fn approvals(setup: &Setup, f: &Facts) -> FeatureRow {
     let p = part(setup, f, RoleId::Classify);
     let follows_small = p.row.follows == Some(RoleId::Small);
-    let mut r = row(FeatureId::Approvals, vec![p], false);
+    let mut r = row(FeatureId::Approvals, vec![p], &[]);
     if follows_small {
         r.better = Some(add_key(setup, "openrouter"));
     }
     r
 }
 
-/// The fix that unlocks the most: a fix of a failed feature first, then
-/// the one shared by the most features, then the page's order.
+/// The fix that unlocks the most: a failure of bise itself (talk) first,
+/// then a fix of a failed feature, then the one shared by the most
+/// features, then the page's order.
 fn next(rows: &[FeatureRow]) -> Option<SetupNext> {
+    let talk_failed = |ids: &[FeatureId]| rows.iter().any(|r| r.id == FeatureId::Talk && r.state == FeatureState::Failed && ids.contains(&FeatureId::Talk));
     let mut groups: Vec<(SetupFix, Vec<FeatureId>, bool)> = Vec::new();
     for r in rows.iter().filter(|r| r.state != FeatureState::On) {
         let Some(fix) = &r.fix else { continue };
@@ -292,6 +340,6 @@ fn next(rows: &[FeatureRow]) -> Option<SetupNext> {
         }
     }
     // stable: among equals, the first in the page's order
-    groups.sort_by_key(|(_, ids, failed)| (!failed, std::cmp::Reverse(ids.len())));
+    groups.sort_by_key(|(_, ids, failed)| (!talk_failed(ids), !failed, std::cmp::Reverse(ids.len())));
     groups.into_iter().next().map(|(fix, unlocks, _)| SetupNext { fix, unlocks })
 }

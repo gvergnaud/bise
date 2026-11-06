@@ -11,19 +11,21 @@
 // A switch flips at once: the value he set shows until the core's next
 // prefs (which carries it, or not when the core refused it).
 import { useState } from 'react';
-import type { Account, AppCmd, Found, JsonValue, Model, Perm, ProjectRow, RoleRow } from '@/proto';
+import type { Account, AppCmd, Found, Grant, JsonValue, Model, Perm, ProjectRow, RoleRow, SetupGauge } from '@/proto';
 import type { Held } from './hold';
 import type { ApprovalsCmd, ApprovalsEv } from './approvals';
 import { putPref, type Prefs } from './prefs';
 import { PageBody, pageOf, type Page } from './pages';
 import type { ComputerUse } from './computer';
-import type { Perms } from './check';
 import type { SignIn } from './accounts';
 import type { ProviderCheck } from './keycheck';
 import type { AppUpdate, NotifyAuth, UpdateInfo, UpdateState } from '@/shared/api';
 import type { UpdatePorts } from './update';
 import type { DistPorts } from './appupdate';
 import './settings.css';
+
+/** The helper's permissions (none: not known, or no helper). */
+export type Perms = Readonly<Partial<Record<Perm, Grant>>>;
 
 export interface SettingsData {
   prefs: Prefs | null;
@@ -37,6 +39,8 @@ export interface SettingsData {
   perms: Perms;
   /** provider_use's last answer (provider_check), shown on the key field (bar S.2) */
   check?: ProviderCheck | null;
+  /** settings · Setup's gauge (the core's setup_gauge; none yet: null) */
+  gauge?: SetupGauge | null;
   /** which model does what (bar V17): the core's roles, and the home's models they pick from */
   roles?: readonly RoleRow[];
   models?: readonly Model[];
@@ -133,7 +137,7 @@ export function Settings({ page, ports, prefs, ...data }: SettingsProps) {
     >
       <div className="b-settings-page" data-testid={`settings.page.${at.id}`}>
         <p className="b-settings-lead">{at.sub}</p>
-        <PageBody page={at.id} prefs={shown} setPref={setPref} data={{ ...data, prefs: shown }} ports={ports} />
+        <PageBody page={at.id} route={page} prefs={shown} setPref={setPref} data={{ ...data, prefs: shown }} ports={ports} />
       </div>
     </section>
   );

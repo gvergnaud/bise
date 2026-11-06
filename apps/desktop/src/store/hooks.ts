@@ -4,7 +4,7 @@
 // The store comes from StoreContext: the app's one store (bound to
 // window.bise.core) by default, a test's own store through the provider.
 import { createContext, createElement, useContext, useEffect, useSyncExternalStore, type ReactNode } from 'react';
-import type { Account, Agent, FlowMode, Growth, ReleaseEv, SwitchRow, UpdateEv, Artifact, ComputerAgent, Card, Entry, Feature, Found, IndexRow, Job, JsonValue, Merged, Model, PickCommand, Place, PickSkill, Plugin, PluginPreview, PluginsSummary, ProjectRow, RoleRow, ScheduledTask, Worktree, Folder } from '@/proto';
+import type { Account, Agent, FlowMode, Growth, ReleaseEv, SwitchRow, UpdateEv, Artifact, ComputerAgent, Card, Entry, Feature, Found, IndexRow, Job, JsonValue, Merged, Model, PickCommand, Place, PickSkill, Plugin, PluginPreview, PluginsSummary, ProjectRow, RoleRow, ScheduledTask, SetupGauge, Worktree, Folder } from '@/proto';
 import type { CorePort, CoreState } from '@/shared/api';
 import type { BiseUpdate, Proc } from '@/proto';
 import { keep } from '@/app/keep';
@@ -147,6 +147,8 @@ export const useToolOut = (project: string, agent: string, pos: number): ToolOut
 export const useAway = (): Away | null => useSlice('away', (s) => s.away());
 /** Each role's model and effort (V17), at the core's start, after each role_set, at setup_check. */
 export const useRoles = (): readonly RoleRow[] => useSlice('roles', (s) => s.roles());
+/** settings · Setup's gauge (page models-setup): the core's rows, drawn as they come. */
+export const useSetupGauge = (): SetupGauge | null => useSlice('setup_gauge', (s) => s.setupGauge());
 /** The `/` commands (the TUI's list; asked from the core on first use). */
 export function useCommands(): readonly PickCommand[] {
   const store = useStore();

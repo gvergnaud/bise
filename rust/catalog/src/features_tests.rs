@@ -3,6 +3,7 @@
 
 use super::*;
 use bise_proto::app_rows::{CheckWhy, FeatureId as F, FeatureState as S, PartSource, RoleId, SetupFix};
+use bise_proto::helper::{Grant, Perm};
 use features::{gauge, Access, Facts, Test};
 
 /// The setup of `cfg` with the env `env`.
@@ -15,7 +16,8 @@ fn setup(cfg: &str, env: &[(&str, &str)]) -> Setup {
 fn run(s: &Setup, ready: &[&str], tests: &[Test], mic_denied: bool, tts: Option<&str>) -> bise_proto::app_rows::SetupGauge {
     let access = |p: &str| if ready.contains(&p) { Access::Ready } else { Access::Missing };
     let generation = |_: &str| 1;
-    gauge(s, &Facts { access: &access, generation: &generation, tests, mic_denied, tts_model: tts.map(String::from), testing: vec![] })
+    let mic = mic_denied.then_some(Grant::Denied);
+    gauge(s, &Facts { access: &access, generation: &generation, tests, mic, accessibility: None, screen: None, home_gone: None, tts_model: tts.map(String::from), testing: vec![] })
 }
 
 fn states(g: &bise_proto::app_rows::SetupGauge) -> Vec<(F, S)> {
@@ -112,10 +114,44 @@ fn the_checker_off_is_off_and_turns_on() {
 }
 
 #[test]
-fn the_mic_refused_fails_dictation_with_allow_mic() {
+fn the_mic_refused_fails_dictation_with_system_settings() {
     let g = run(&setup(WORLD, &[]), &["chatgpt", "groq"], &[], true, None);
     let d = g.rows.iter().find(|r| r.id == F::Dictation).unwrap();
-    assert_eq!((d.state, d.fix.clone(), d.mic_denied), (S::Failed, Some(SetupFix::AllowMic), true));
+    assert_eq!((d.state, d.fix.clone()), (S::Failed, Some(SetupFix::AllowPerm { perm: Perm::Mic, open: true })));
+}
+
+/// The helper's facts in each feature (models-setup v8): accessibility
+/// not asked leaves dictation off with Allow; no helper says nothing;
+/// screen recording missing keeps images on, allowing it is better.
+fn with_perms(mic: Option<Grant>, acc: Option<Grant>, screen: Option<Grant>, home_gone: Option<&str>) -> bise_proto::app_rows::SetupGauge {
+    let s = setup(WORLD, &[]);
+    let access = |p: &str| if ["chatgpt", "groq"].contains(&p) { Access::Ready } else { Access::Missing };
+    gauge(&s, &Facts { access: &access, generation: &|_| 1, tests: &[], mic, accessibility: acc, screen, home_gone: home_gone.map(String::from), tts_model: None, testing: vec![] })
+}
+
+#[test]
+fn each_permission_counts_in_the_feature_that_needs_it() {
+    let g = with_perms(Some(Grant::Allowed), Some(Grant::Ask), Some(Grant::Ask), None);
+    let d = g.rows.iter().find(|r| r.id == F::Dictation).unwrap();
+    assert_eq!((d.state, d.fix.clone()), (S::Off, Some(SetupFix::AllowPerm { perm: Perm::Accessibility, open: false })));
+    assert_eq!(d.perms.len(), 2);
+    let v = g.rows.iter().find(|r| r.id == F::Vision).unwrap();
+    assert_eq!((v.state, v.better.clone()), (S::On, Some(SetupFix::AllowPerm { perm: Perm::Screen, open: false })));
+    // no helper: nothing said, dictation on
+    let g = with_perms(None, None, None, None);
+    let d = g.rows.iter().find(|r| r.id == F::Dictation).unwrap();
+    assert_eq!((d.state, d.perms.len()), (S::On, 0));
+}
+
+#[test]
+fn bises_home_gone_fails_talk_and_is_next_first() {
+    let t = [failed("mistral/voxtral-mini-tts-2603", CheckWhy::NoCredit, 1)];
+    let s = setup(WORLD, &[]);
+    let access = |p: &str| if ["chatgpt", "groq", "mistral"].contains(&p) { Access::Ready } else { Access::Missing };
+    let g = gauge(&s, &Facts { access: &access, generation: &|_| 1, tests: &t, mic: None, accessibility: None, screen: None, home_gone: Some("/Users/x/bise".into()), tts_model: Some("mistral/voxtral-mini-tts-2603".into()), testing: vec![] });
+    let talk = g.rows.iter().find(|r| r.id == F::Talk).unwrap();
+    assert_eq!((talk.state, talk.home_gone.as_deref()), (S::Failed, Some("/Users/x/bise")));
+    assert_eq!(g.next.unwrap().fix, SetupFix::Restart);
 }
 
 #[test]
@@ -146,7 +182,7 @@ fn no_credit_seen_on_one_model_fails_the_other_models_of_that_key() {
 fn an_expired_sign_in_asks_to_sign_in_again() {
     let s = setup(WORLD, &[]);
     let access = |p: &str| if p == "chatgpt" { Access::Expired } else { Access::Ready };
-    let g = gauge(&s, &Facts { access: &access, generation: &|_| 1, tests: &[], mic_denied: false, tts_model: None, testing: vec![] });
+    let g = gauge(&s, &Facts { access: &access, generation: &|_| 1, tests: &[], mic: None, accessibility: None, screen: None, home_gone: None, tts_model: None, testing: vec![] });
     let talk = g.rows.iter().find(|r| r.id == F::Talk).unwrap();
     assert_eq!((talk.state, talk.fix.clone()), (S::Failed, Some(SetupFix::SignIn { provider: "chatgpt".into() })));
 }

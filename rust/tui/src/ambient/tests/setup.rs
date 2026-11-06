@@ -1063,10 +1063,10 @@ fn the_gauge_comes_with_the_roles_and_tests_run_only_on_setup_test() {
         let _ = tx.send(Done::Tested { model: m, generation: g, res: Ok(()), ms: 420 });
     }
     t.until(|o| o.iter().any(|v| v["ev"] == "setup_gauge" && v["gauge"].get("testing").is_none()));
-    // the mic refused: dictation fails with allow_mic
+    // the mic refused: the fact reaches dictation's row (the gauge decides what it means)
     app(&mut t, r#"{"cmd":"helper_perms","mic":"denied"}"#);
     let out = t.take();
     let g = evs(&out, "setup_gauge").last().cloned().unwrap();
     let d = g["gauge"]["rows"].as_array().unwrap().iter().find(|r| r["id"] == "dictation").cloned().unwrap();
-    assert_eq!(d["mic_denied"], true, "{d:#}");
+    assert_eq!(d["perms"][0], serde_json::json!({"perm": "mic", "grant": "denied"}), "{d:#}");
 }

@@ -4,27 +4,24 @@
 // of SettingsData with the DS's Group rows and says what he changes.
 // Owner: amb-home.
 import { useState, type ReactNode } from 'react';
-import type { AppCmd, JsonValue } from '@/proto';
+import type { JsonValue } from '@/proto';
 import { Act, Button, Chip, Field, Group, Kbd, Seg, Toggle, type GroupItem } from '@/ds';
-import { Accounts } from './accounts';
 import { MeGroup } from './me';
 import { TODAY, lookOf, prefOf } from '@/bims/render/look';
-import { Roles } from './roles';
 import { Approvals } from './approvals';
-import { modelRow, needsSetup } from './hold';
 import { Projects } from './projects';
 import { UpdateGroup, updateRow } from './update';
 import { DistUpdateGroup, distRow } from './appupdate';
 import { Computer } from './computer';
 import { capsOf, chromeCase, homeOf } from './chrome';
-import { checks, SetupCheck } from './check';
+import { SetupPage } from './setupPage';
 import { KEY_SECTIONS } from './keys';
 import { appName, excludedApps, flag, getPref, knownApps, num, str, type Prefs } from './prefs';
 import type { SettingsData, SettingsPorts } from './Settings';
 import type { NotifyAuth } from '@/shared/api';
 import { settings } from '@/proto/words.gen';
 
-export type Page = 'setup' | 'general' | 'voice' | 'privacy' | 'quiet' | 'models' | 'approvals' | 'projects' | 'computer' | 'keys';
+export type Page = 'setup' | 'general' | 'voice' | 'privacy' | 'quiet' | 'approvals' | 'projects' | 'computer' | 'keys';
 
 export const PAGES: readonly { id: Page; title: string; sub: string }[] = [
   { id: 'general', title: settings.page_general, sub: settings.page_general_sub },
@@ -32,7 +29,6 @@ export const PAGES: readonly { id: Page; title: string; sub: string }[] = [
   { id: 'voice', title: settings.page_voice, sub: settings.page_voice_sub },
   { id: 'privacy', title: settings.page_privacy, sub: settings.page_privacy_sub },
   { id: 'quiet', title: settings.page_quiet, sub: settings.page_quiet_sub },
-  { id: 'models', title: settings.page_models, sub: settings.page_models_sub },
   { id: 'approvals', title: settings.page_approvals, sub: settings.page_approvals_sub },
   { id: 'projects', title: settings.page_projects, sub: settings.page_projects_sub },
   { id: 'computer', title: settings.page_computer, sub: settings.page_computer_sub },
@@ -67,20 +63,27 @@ export function notifyRow(auth: NotifyAuth | null): { sub: string; act: 'ask' | 
   }
 }
 
+/** The pages a route names that open another (page models-setup): /models opens Setup with the
+ * roles unfolded, /voice Setup at Dictation and fn (setupPage.tsx's focusOf). */
+const ALIAS: Readonly<Record<string, Page>> = { models: 'setup', dictation: 'setup' };
+
 /** A route's page (none, or one this version doesn't know: general). */
 export function pageOf(id: string | undefined): (typeof PAGES)[number] {
-  return PAGES.find((p) => p.id === id) ?? (PAGES[0] as (typeof PAGES)[number]);
+  const to = id !== undefined ? (ALIAS[id] ?? id) : id;
+  return PAGES.find((p) => p.id === to) ?? (PAGES[0] as (typeof PAGES)[number]);
 }
 
 interface PageProps {
   page: Page;
+  /** the route's own page word ('models', 'dictation' open Setup at their part) */
+  route?: string | undefined;
   prefs: Prefs | null;
   setPref: (key: string, value: JsonValue) => void;
   data: SettingsData;
   ports: SettingsPorts;
 }
 
-export function PageBody({ page, prefs, setPref, data, ports }: PageProps) {
+export function PageBody({ page, route, prefs, setPref, data, ports }: PageProps) {
   const tg = (key: string, label: string, sub: string, dflt = true): GroupItem => {
     const on = flag(prefs, key, dflt);
     return {
@@ -237,8 +240,6 @@ export function PageBody({ page, prefs, setPref, data, ports }: PageProps) {
         </>
       );
     }
-    case 'models':
-      return <Models data={data} ports={ports} />;
     case 'approvals':
       return <Approvals approvals={data.approvals ?? null} send={ports.approvals ?? null} error={data.approvalsError ?? null} home={data.home ?? ''} />;
     case 'projects':
@@ -252,18 +253,8 @@ export function PageBody({ page, prefs, setPref, data, ports }: PageProps) {
         />
       );
     case 'setup':
-      return (
-        <SetupCheck
-          list={checks(data.perms, data.accounts, data.projects, ports.perm !== undefined)}
-          ports={{
-            send: ports.send,
-            ...(ports.perm ? { perm: ports.perm } : {}),
-            models: () => {
-              ports.go('models');
-            },
-          }}
-        />
-      );
+      // a new route (/models, /voice) opens the page again at its part
+      return <SetupPage key={route ?? 'setup'} data={data} ports={ports} page={route} />;
     case 'computer':
       return <Computer cu={data.computerUse} send={ports.send} />;
     case 'keys':
@@ -442,77 +433,4 @@ export function KeyList(): ReactNode {
  * that provider's sign-in or open its key field, and the screen sends the held role_set once the
  * provider is signed in (hold.ts).
  */
-function Models({ data, ports }: { data: SettingsData; ports: SettingsPorts }) {
-  const models = data.models ?? [];
-  const held = data.held ?? null;
-  return (
-    <>
-      <Accounts
-        accounts={data.accounts}
-        send={ports.send}
-        check={data.check ?? null}
-        want={held !== null ? { provider: held.provider, providerName: held.providerName, model: held.model } : null}
-        signin={data.signin ?? null}
-        {...(ports.copy ? { copy: ports.copy } : {})}
-        {...(ports.cancelSignIn ? { cancelSignIn: ports.cancelSignIn } : {})}
-      />
-      {/* N1: where his keys and sign-ins are kept, under them (designer m_43851: Keys became Shortcuts) */}
-      {data.keychain != null && <KeychainRow k={data.keychain} send={ports.send} />}
-      <Roles
-        roles={data.roles ?? []}
-        models={models}
-        error={data.roleError ?? null}
-        set={(cmd, model) => {
-          const provider = model !== null ? needsSetup(model, models) : null;
-          if (provider !== null && model !== null && ports.hold) {
-            const row = modelRow(model, models);
-            ports.hold({ provider, providerName: row?.provider ?? provider, model: row?.label ?? model, cmd });
-          } else {
-            ports.send(cmd);
-          }
-        }}
-      />
-    </>
-  );
-}
 
-/**
- * N1 (the TUI's /keychain [on|off], designer m_17435's words): where his keys and sign-ins are kept,
- * the macOS keychain or files in ~/.bise. The switch moves them (AppCmd keychain, the core's thread);
- * while it runs the switch waits and says so; the move's lines (item names and counts) under it, a
- * failed one in the error tone.
- */
-function KeychainRow({ k, send }: { k: NonNullable<SettingsData['keychain']>; send: (cmd: AppCmd) => void }) {
-  const on = k.store === 'keychain';
-  // a move's own lines are the core's (secrets_cli, the terminal's words); with none, where they are
-  const said = k.moving ? settings.keychain_moving : (k.lines?.join(' ') ?? '');
-  const now = on ? settings.keychain_on : settings.keychain_off;
-  return (
-    <Group
-      title={settings.keychain_title}
-      testId="settings.keychain"
-      items={[
-        {
-          id: 'keychain',
-          label: settings.keychain_label,
-          sub: (
-            <span data-testid="settings.keychain.sub" className={k.failed === true && !k.moving ? 'settings-err' : undefined}>
-              {said !== '' ? said : now}
-            </span>
-          ),
-          control: (
-            <Toggle
-              on={on}
-              state={k.moving ? 'disabled' : undefined}
-              label={settings.keychain_switch}
-              onChange={(v) => {
-                send({ cmd: 'keychain', to: v ? 'on' : 'off' });
-              }}
-              testId="settings.keychain.toggle"
-            />
-          ),
-        },
-      ]}
-    />
-  );
-}

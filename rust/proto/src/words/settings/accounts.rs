@@ -75,46 +75,14 @@ crate::words! { settings:
     /// the roles' help
     roles_help = "the terminal's /models shows the same";
 
-    /// setup check: the microphone
-    perm_mic = "microphone";
-    /// setup check: what fn loses without the microphone
-    perm_mic_lost = "fn can't hear you without it";
-    /// setup check: accessibility
-    perm_accessibility = "accessibility";
-    /// setup check: what fn loses without accessibility
-    perm_accessibility_lost = "fn works only in bise’s own windows without it";
-    /// setup check: screen recording
-    perm_screen = "screen recording";
-    /// setup check: what fn loses without screen recording
-    perm_screen_lost = "fn sends your words without a capture without it";
     /// setup check: a permission allowed
     perm_allowed = "allowed";
-    /// setup check: a permission denied
-    perm_denied(lost) = "denied: {lost}";
     /// setup check: a permission not asked
     perm_not_asked = "not asked yet";
     /// setup check: ask a permission
     perm_allow = "allow";
-    /// setup check: the model row
-    check_model = "a model";
-    /// setup check: a model signed out
-    check_signed_out(label) = "{label}: signed out, sign in again";
-    /// setup check: no model at all
-    check_no_model = "no subscription or key yet: agents can’t answer";
-    /// setup check: bise's home
-    check_home = "bise’s home";
-    /// setup check: bise's home not known yet
-    check_home_unknown = "not known yet: check again in a moment";
     /// setup check: bise's home gone
     check_home_gone(path) = "{path} is gone: restart bise and it makes it again";
-    /// setup check: a check with no fix
-    check_needs_you = "needs you";
-    /// setup check: nothing left
-    check_all_set = "all set.";
-    /// setup check: what is left
-    check_left(n) = one "{n} thing needs you." | "{n} things need you.";
-    /// setup check: read them again
-    check_again = "check again";
 
     /// plugins: log out
     log_out = "log out";

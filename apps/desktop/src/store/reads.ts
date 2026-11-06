@@ -20,6 +20,7 @@ import type {
   Model,
   PickCommand,
   RoleRow,
+  SetupGauge,
   PickSkill,
   Plugin,
   PluginPreview,
@@ -352,6 +353,10 @@ export class StoreReads extends StoreBase {
   /** Each role's model and effort (V17; set with command({cmd: 'role_set', role, model?, effort?})). */
   roles(): readonly RoleRow[] {
     return this.slice("roles", EMPTY);
+  }
+  /** settings · Setup's gauge (the core's bise_catalog::features; null until it comes). */
+  setupGauge(): SetupGauge | null {
+    return this.slice<SetupGauge | null>("setup_gauge", null);
   }
   /** The `/` list (the TUI's commands.rs), asked once from each core. */
   commands(): readonly PickCommand[] {

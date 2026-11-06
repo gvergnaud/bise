@@ -12,11 +12,11 @@ crate::words! { settings:
     /// the nav's page: setup
     page_setup = "Setup";
     /// setup's hero sentence
-    page_setup_sub = "what's set up and what's left: a model, the permissions, your first project.";
+    page_setup_sub = "what works in bise, what's left, and the one thing that turns on the most.";
     /// the nav's page: voice
-    page_voice = "Voice and fn";
+    page_voice = "fn and dictation";
     /// voice's hero sentence
-    page_voice_sub = "how bise hears you and answers: hold fn to talk from any app, ctrl+r to dictate in the composer.";
+    page_voice_sub = "hold fn to talk from any app, ctrl+r to dictate in the composer. the models that listen and speak are in Setup.";
     /// the nav's page: context and privacy
     page_privacy = "Context and privacy";
     /// privacy's hero sentence
@@ -25,10 +25,6 @@ crate::words! { settings:
     page_quiet = "Quiet moments";
     /// quiet's hero sentence
     page_quiet_sub = "when bise keeps quiet: in a call, while you share your screen, in full screen.";
-    /// the nav's page: models
-    page_models = "Models";
-    /// models' hero sentence
-    page_models_sub = "the models your agents use, and how you pay for them: a plan, a key, or both.";
     /// the nav's page: approvals
     page_approvals = "Approvals";
     /// approvals' hero sentence

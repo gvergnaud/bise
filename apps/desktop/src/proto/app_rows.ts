@@ -2,6 +2,7 @@
 // BISE_PROTO_BLESS=1 cargo test -p bise-proto --features ts --test ts
 // ids, positions and *_ms are numbers (u64 in Rust, safe below 2^53).
 
+import type { Grant, Perm } from './helper';
 import type { Agent, ArtLink, Artifact, Card, CardBatch, CardPage, Growth, Opt, Pulse, ReportKind, ScheduledTask } from './rows';
 
 /**
@@ -675,7 +676,7 @@ export type PartSource = "config" | "env" | "default" | "unknown";
  * The one thing that fixes or turns on a feature. Words are the
  * window's (its words catalog); the core sends only what they name.
  */
-export type SetupFix = { "t": "add_key", provider: string, url?: string, } | { "t": "sign_in", provider: string, } | { "t": "credit", provider: string, url?: string, } | { "t": "pick_model", role: RoleId, } | { "t": "remove_env", var: string, } | { "t": "allow_mic" } | { "t": "turn_on", role: RoleId, } | { "t": "test_again" } | { "t": "unknown" };
+export type SetupFix = { "t": "add_key", provider: string, url?: string, } | { "t": "sign_in", provider: string, } | { "t": "credit", provider: string, url?: string, } | { "t": "pick_model", role: RoleId, } | { "t": "remove_env", var: string, } | { "t": "allow_perm", perm: Perm, open: boolean, } | { "t": "restart" } | { "t": "turn_on", role: RoleId, } | { "t": "test_again" } | { "t": "unknown" };
 
 /**
  * One model behind a feature, with its last test.
@@ -729,14 +730,24 @@ parts: Array<FeaturePart>,
  */
 fix?: SetupFix | null, 
 /**
- * the mic refused (dictation, voice mode): the helper's fact
+ * the permissions it needs, as the helper says them (none: no
+ * helper, nothing said about them)
  */
-mic_denied?: boolean, 
+perms?: Array<PermGrant>, 
+/**
+ * talk to bise: bise's home folder is gone (its path)
+ */
+home_gone?: string | null, 
 /**
  * on, but better with this (the checker on Jev): never a failure,
  * never `next`
  */
 better?: SetupFix | null, };
+
+/**
+ * A permission a feature needs, and where it is.
+ */
+export type PermGrant = { perm: Perm, grant: Grant, };
 
 /**
  * The action that unlocks the most: a failure before a feature that is

@@ -6,6 +6,7 @@
 // r2-settings.
 import { AppIcon, ListRow, Press, type AppIconName } from '@/ds';
 import { useRoute, useRouter, type Router } from '@/app/router';
+import { useSetupGauge } from '@/store';
 import { settings } from '@/proto/words.gen';
 import { PAGES, pageOf, type Page } from './pages';
 
@@ -19,6 +20,9 @@ export function SettingsNav() {
   const router = useRouter();
   const route = useRoute();
   const at = pageOf(route.screen === 'settings' ? route.page : undefined);
+  // Setup's N/7 (page models-setup): faint, pink only when a feature failed (an off one waits on nobody)
+  const g = useSetupGauge();
+  const failed = g?.rows.some((r) => r.state === 'failed') === true;
   return (
     <nav className="b-snav app-s-list" aria-label={settings.nav_label} data-testid="settings.nav">
       <Press
@@ -41,6 +45,15 @@ export function SettingsNav() {
             </span>
           }
           on={p.id === at.id}
+          {...(p.id === 'setup' && g !== null
+            ? {
+                end: (
+                  <span className="b-snav-count" data-failed={failed || undefined} data-testid="settings.nav.setup.count">
+                    {settings.gauge_count({ on: String(g.on), of: String(g.of) })}
+                  </span>
+                ),
+              }
+            : {})}
           onClick={() => {
             router.go({ screen: 'settings', page: p.id });
           }}
@@ -58,7 +71,6 @@ const PAGE_ICON: Record<Page, AppIconName> = {
   voice: 'mic',
   privacy: 'eye',
   quiet: 'moon',
-  models: 'cpu',
   approvals: 'shield',
   projects: 'folder',
   computer: 'cursor',

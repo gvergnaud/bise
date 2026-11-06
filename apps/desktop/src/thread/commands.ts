@@ -99,7 +99,8 @@ export function windowRun(name: string, args: string, at: { project: string; age
     case 'shortcuts':
       return { help: true };
     case 'voice':
-      return go({ screen: 'settings', page: 'voice' });
+      // Setup at Dictation and fn (page models-setup): the model that listens, its key, the mic
+      return go({ screen: 'settings', page: 'dictation' });
     case 'models':
     case 'provider':
       return go({ screen: 'settings', page: 'models' });

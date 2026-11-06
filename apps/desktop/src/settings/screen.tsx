@@ -3,7 +3,7 @@
 // through it (store.command: the core's AppCmd). Owner: amb-home.
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { JsonValue, Perm, ProjectRow } from '@/proto';
-import { useAccounts, useApprovals, useComputerUse, useCoreEvent, useFound, useKeychain, useModels, usePrefs, useProjects, useRoles, useProviderCheck, useSigning, useStore, type Ev } from '@/store';
+import { useAccounts, useApprovals, useComputerUse, useCoreEvent, useFound, useKeychain, useModels, usePrefs, useProjects, useRoles, useProviderCheck, useSetupGauge, useSigning, useStore, type Ev } from '@/store';
 
 /** the core's last refusal of a command (error {cmd, text}), counted so the same words twice count */
 export interface KeyError {
@@ -186,6 +186,7 @@ export function SettingsScreen({ page }: { page?: string | undefined }) {
       accounts={accounts}
       projects={projects}
       roles={useRoles()}
+      gauge={useSetupGauge()}
       keychain={useKeychain()}
       models={models}
       roleError={roleError?.text ?? null}

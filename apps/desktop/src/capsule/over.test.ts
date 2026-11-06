@@ -8,7 +8,7 @@ describe("capsule/over: a talk the core ends without a send (amb-core m_21857, d
     expect(errorOver(null, "talk_start", "voice needs a key. /voice picks one.")).toEqual({
       ev: "talk_over",
       said: "bise needs a voice key to hear you.",
-      link: { label: "settings › voice", route: "settings/voice" },
+      link: { label: "settings › voice", route: "settings/dictation" },
     });
     expect(errorOver(undefined, null, "main didn't get it: bise isn't reachable. try again in a moment.")).toEqual({ ev: "talk_over", said: "bise didn't get it. try again in a moment." });
   });
@@ -23,7 +23,7 @@ describe("capsule/over: a talk the core ends without a send (amb-core m_21857, d
     expect(heardOver("hello", true)).toBeNull();
   });
   it("the corner card's own time (designer m_22394): an ended answer and a line with an action 8 s, a plain line 4 s; a live talk, a streaming answer and a card answered never", () => {
-    const link = { label: W.voiceSettings, route: "settings/voice" };
+    const link = { label: W.voiceSettings, route: "settings/dictation" };
     expect(lingerOf({ kind: "answer" }, true)).toBe(CORNER_LINGER_MS);
     expect(lingerOf({ kind: "answer" }, false)).toBeNull();
     expect(lingerOf({ kind: "talk", phase: "over", handsFree: false, said: W.needsVoiceKey, link }, false)).toBe(8000);

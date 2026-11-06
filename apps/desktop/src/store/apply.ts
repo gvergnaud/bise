@@ -256,6 +256,9 @@ export function applyTyped(s: Store, ev: Ev): void {
     case "roles":
       s.put("roles", ev.items);
       return;
+    case "setup_gauge":
+      s.put("setup_gauge", ev.gauge);
+      return;
     case "skills":
       s.put(`skills:${ev.project}`, ev.items);
       return;

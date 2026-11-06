@@ -13,11 +13,11 @@ export const settings = {
   /** the nav's page: setup */
   page_setup: "Setup",
   /** setup's hero sentence */
-  page_setup_sub: "what's set up and what's left: a model, the permissions, your first project.",
+  page_setup_sub: "what works in bise, what's left, and the one thing that turns on the most.",
   /** the nav's page: voice */
-  page_voice: "Voice and fn",
+  page_voice: "fn and dictation",
   /** voice's hero sentence */
-  page_voice_sub: "how bise hears you and answers: hold fn to talk from any app, ctrl+r to dictate in the composer.",
+  page_voice_sub: "hold fn to talk from any app, ctrl+r to dictate in the composer. the models that listen and speak are in Setup.",
   /** the nav's page: context and privacy */
   page_privacy: "Context and privacy",
   /** privacy's hero sentence */
@@ -26,10 +26,6 @@ export const settings = {
   page_quiet: "Quiet moments",
   /** quiet's hero sentence */
   page_quiet_sub: "when bise keeps quiet: in a call, while you share your screen, in full screen.",
-  /** the nav's page: models */
-  page_models: "Models",
-  /** models' hero sentence */
-  page_models_sub: "the models your agents use, and how you pay for them: a plan, a key, or both.",
   /** the nav's page: approvals */
   page_approvals: "Approvals",
   /** approvals' hero sentence */
@@ -330,46 +326,14 @@ export const settings = {
   roles_title: "Which model does what",
   /** the roles' help */
   roles_help: "the terminal's /models shows the same",
-  /** setup check: the microphone */
-  perm_mic: "microphone",
-  /** setup check: what fn loses without the microphone */
-  perm_mic_lost: "fn can't hear you without it",
-  /** setup check: accessibility */
-  perm_accessibility: "accessibility",
-  /** setup check: what fn loses without accessibility */
-  perm_accessibility_lost: "fn works only in bise’s own windows without it",
-  /** setup check: screen recording */
-  perm_screen: "screen recording",
-  /** setup check: what fn loses without screen recording */
-  perm_screen_lost: "fn sends your words without a capture without it",
   /** setup check: a permission allowed */
   perm_allowed: "allowed",
-  /** setup check: a permission denied */
-  perm_denied: (a: { lost: string | number }): string => "denied: " + String(a.lost),
   /** setup check: a permission not asked */
   perm_not_asked: "not asked yet",
   /** setup check: ask a permission */
   perm_allow: "allow",
-  /** setup check: the model row */
-  check_model: "a model",
-  /** setup check: a model signed out */
-  check_signed_out: (a: { label: string | number }): string => String(a.label) + ": signed out, sign in again",
-  /** setup check: no model at all */
-  check_no_model: "no subscription or key yet: agents can’t answer",
-  /** setup check: bise's home */
-  check_home: "bise’s home",
-  /** setup check: bise's home not known yet */
-  check_home_unknown: "not known yet: check again in a moment",
   /** setup check: bise's home gone */
   check_home_gone: (a: { path: string | number }): string => String(a.path) + " is gone: restart bise and it makes it again",
-  /** setup check: a check with no fix */
-  check_needs_you: "needs you",
-  /** setup check: nothing left */
-  check_all_set: "all set.",
-  /** setup check: what is left */
-  check_left: (a: { n: number }): string => a.n === 1 ? String(a.n) + " thing needs you." : String(a.n) + " things need you.",
-  /** setup check: read them again */
-  check_again: "check again",
   /** plugins: log out */
   log_out: "log out",
   /** computer use: the switch's row */
@@ -1144,6 +1108,138 @@ export const settings = {
   first_opening: (a: { url: string | number }): string => "opening " + String(a.url),
   /** a link not opened */
   first_open_failed: (a: { url: string | number }): string => "could not open " + String(a.url),
+  /** the gauge: features that work of all, its ring's label and the nav's badge */
+  gauge_count: (a: { on: string | number; of: string | number }): string => String(a.on) + "/" + String(a.of),
+  /** the gauge's hover tip */
+  gauge_tip: (a: { on: string | number; of: string | number }): string => String(a.on) + " of " + String(a.of) + " features work. a test is a real call: only when you click.",
+  /** the button that tests every model once (secondary) */
+  gauge_test_all: "Test everything",
+  /** while a test runs */
+  gauge_testing: "testing…",
+  /** before the next action's words */
+  gauge_next: "Next",
+  /** every feature works: nothing next */
+  gauge_all_set: "everything works.",
+  /** the next action brings back a feature that failed */
+  gauge_brings_back: (a: { what: string | number }): string => "to bring back " + String(a.what),
+  /** the next action turns on a feature that is off */
+  gauge_turns_on: (a: { what: string | number }): string => "to turn on " + String(a.what),
+  /** a feature: talk to bise (main's model) */
+  feat_talk: "Talk to bise",
+  /** a feature: the agents main starts */
+  feat_agents: "Agents",
+  /** a feature: titles and summaries (small jobs) */
+  feat_small: "Titles and summaries",
+  /** a feature: images and computer use (a model that reads images) */
+  feat_vision: "Images and computer use",
+  /** a feature: dictation and fn (the model that listens, the mic) */
+  feat_dictation: "Dictation and fn",
+  /** a feature: voice mode (listens, speaks, answers) */
+  feat_voice_mode: "Voice mode",
+  /** a feature: auto approvals (the checker) */
+  feat_approvals: "Auto approvals",
+  /** a feature's mark: it works, tested, and how long the check took */
+  mark_took: (a: { secs: string | number }): string => "✓ " + String(a.secs) + " s",
+  /** a feature's mark: set up, not tested since its key changed */
+  mark_on: "✓",
+  /** a feature's mark: it failed */
+  mark_failed: "✗ failed",
+  /** a feature's mark: off */
+  mark_off: "○ off",
+  /** voice mode's voice: only its key is checked (no voice test yet; architect m_54103) */
+  mark_key_works: "key works",
+  /** a mark's tip: it works, the check's own duration (never "latency") */
+  tip_took: (a: { secs: string | number }): string => "works · the check took " + String(a.secs) + " s",
+  /** a mark's tip: set up, never tested since its key changed */
+  tip_untested: "set up · not tested yet: Test everything makes one small real call",
+  /** a mark's tip: off, never set up */
+  tip_off: "off · its button turns it on",
+  /** a mark's tip: off because main's model doesn't read images */
+  tip_no_images: (a: { model: string | number }): string => "off · " + String(a.model) + " doesn't read images: pick a model that does",
+  /** a mark's tip: on, but better with this (the checker on Jev) */
+  tip_better: (a: { provider: string | number }): string => "works with your small jobs model · Jev through " + String(a.provider) + " decides better",
+  /** voice mode's voice: what its check proves */
+  tip_key_only: (a: { provider: string | number }): string => "the " + String(a.provider) + " key answers · the voice itself isn't tested yet",
+  /** a feature's sub line: a permission refused */
+  perm_refused: "refused",
+  /** a part's model: where it comes from, an env var */
+  part_env: (a: { var: string | number }): string => "from " + String(a.var),
+  /** the fixing buttons */
+  fix_add_key: (a: { provider: string | number }): string => "Add a " + String(a.provider) + " key",
+  /**  */
+  fix_sign_in: (a: { provider: string | number }): string => "Sign in to " + String(a.provider) + " again",
+  /**  */
+  fix_credit: (a: { provider: string | number }): string => "Add credit on " + String(a.provider),
+  /**  */
+  fix_pick_model: "Pick another model",
+  /**  */
+  fix_remove_env: (a: { var: string | number }): string => "Remove " + String(a.var),
+  /**  */
+  fix_allow_mic: "Allow the microphone",
+  /**  */
+  fix_turn_on: "Turn on",
+  /**  */
+  fix_test_again: "Test again",
+  /**  */
+  fix_restart: "Restart bise",
+  /**  */
+  fix_allow: (a: { perm: string | number }): string => "Allow " + String(a.perm),
+  /** the next action's words (lowercase, after Next) */
+  next_add_key: (a: { provider: string | number }): string => "add a " + String(a.provider) + " key",
+  /**  */
+  next_sign_in: (a: { provider: string | number }): string => "sign in to " + String(a.provider) + " again",
+  /**  */
+  next_credit: (a: { provider: string | number }): string => "add credit on " + String(a.provider),
+  /**  */
+  next_pick_model: "pick another model",
+  /**  */
+  next_remove_env: (a: { var: string | number }): string => "remove " + String(a.var),
+  /**  */
+  next_allow_mic: "allow the microphone",
+  /**  */
+  next_turn_on: (a: { what: string | number }): string => "turn on " + String(a.what),
+  /**  */
+  next_test_again: "test again",
+  /**  */
+  next_restart: "restart bise",
+  /**  */
+  next_allow: (a: { perm: string | number }): string => "allow " + String(a.perm),
+  /** troubleshooting: why, from the check's verdict (keycheck::Why) */
+  why_no_key: (a: { provider: string | number }): string => "there's no " + String(a.provider) + " key.",
+  /**  */
+  why_wrong_key: (a: { provider: string | number }): string => String(a.provider) + " refused the key, or the sign-in expired.",
+  /**  */
+  why_no_credit: (a: { provider: string | number }): string => "your " + String(a.provider) + " key has no credit left.",
+  /**  */
+  why_model: (a: { model: string | number }): string => "the provider doesn't know " + String(a.model) + " any more.",
+  /**  */
+  why_no_access: (a: { model: string | number }): string => "this key may not use " + String(a.model) + ".",
+  /**  */
+  why_unreachable: (a: { provider: string | number }): string => String(a.provider) + " didn't answer: the network, or the provider's own trouble.",
+  /**  */
+  why_config: (a: { provider: string | number }): string => String(a.provider) + " needs a setting before it can answer.",
+  /**  */
+  why_mic: "the microphone is refused in System Settings.",
+  /**  */
+  why_off: "it's off.",
+  /** troubleshooting: what the provider said, its own words */
+  trouble_said: (a: { said: string | number }): string => "it said: “" + String(a.said) + "”",
+  /** troubleshooting: when the last check ran */
+  trouble_checked: (a: { time: string | number }): string => "checked at " + String(a.time),
+  /** troubleshooting: the other features that still work on another provider */
+  trouble_still: (a: { what: string | number; provider: string | number }): string => String(a.what) + " still works: it goes through " + String(a.provider) + ".",
+  /** troubleshooting: an env var wins over the setting, and where to remove it */
+  trouble_env: (a: { var: string | number }): string => String(a.var) + " is set in your environment and wins over this setting. remove it from your shell's profile (~/.zshrc or ~/.zprofile), then restart bise.",
+  /** troubleshooting: another way (the roles table) */
+  trouble_other: "Change the model",
+  /** troubleshooting: copy a report (never a key nor a token in it) */
+  trouble_copy: "Copy report",
+  /** after the copy */
+  trouble_copied: "copied",
+  /** the folded parts under the features */
+  fold_roles: "Which model does what",
+  /**  */
+  fold_accounts: "Accounts and keys",
   /** a key not removed */
   prov_remove_failed: (a: { glyph: string | number; why: string | number }): string => String(a.glyph) + " couldn't remove it: " + String(a.why),
   /** a key removed, another source still gives one */

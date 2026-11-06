@@ -26,7 +26,7 @@ export function lingerOf(v: View, answerDone: boolean): number | null {
  * the terminal, and in the app the global main IS bise); every other error passes through.
  */
 const REWORDED: Readonly<Record<string, Omit<Extract<CapEvent, { ev: "talk_over" }>, "ev">>> = {
-  "voice needs a key. /voice picks one.": { said: W.needsVoiceKey, link: { label: W.voiceSettings, route: "settings/voice" } },
+  "voice needs a key. /voice picks one.": { said: W.needsVoiceKey, link: { label: W.voiceSettings, route: "settings/dictation" } },
   "main didn't get it: bise isn't reachable. try again in a moment.": { said: W.notReached },
 };
 
