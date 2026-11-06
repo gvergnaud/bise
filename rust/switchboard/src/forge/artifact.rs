@@ -60,9 +60,14 @@ pub fn sync(pr: &PrSnapshot, agent: Option<&str>, have: Option<&Have>) -> Vec<St
     if !title.is_empty() && h.title != title {
         out.push(StoreOp::Retitle { id: h.id.clone(), title: title.to_string() });
     }
+    // once per end (architect m_54244): a merged PR he unarchived by
+    // hand stays out of the archive; a reopen clears `pr_ended`, so a
+    // second end archives it again
     match (ended(pr.state), h.archived) {
-        (true, false) => out.push(StoreOp::Archive { id: h.id.clone() }),
-        (false, true) if h.pr_ended => out.push(StoreOp::Unarchive { id: h.id.clone() }),
+        (true, false) if !h.pr_ended => out.push(StoreOp::Archive { id: h.id.clone() }),
+        // reopened: back in the list, the end forgotten (also when he had
+        // unarchived it already: the next end archives it again)
+        (false, _) if h.pr_ended => out.push(StoreOp::Unarchive { id: h.id.clone() }),
         _ => {}
     }
     out
@@ -116,6 +121,10 @@ mod tests {
             assert!(sync(&titled(7, s), Some("perf"), Some(&have(true, false))).is_empty());
         }
         assert_eq!(sync(&titled(7, PrState::Open), Some("perf"), Some(&have(true, true))), [StoreOp::Unarchive { id: id() }]);
+        // archived once per end: he unarchived a merged PR, it stays out
+        assert!(sync(&titled(7, PrState::Merged), Some("perf"), Some(&have(false, true))).is_empty());
+        // ... until it is reopened: the end is forgotten
+        assert_eq!(sync(&titled(7, PrState::Open), Some("perf"), Some(&have(false, true))), [StoreOp::Unarchive { id: id() }]);
         // he archived an open PR himself: it stays archived
         assert!(sync(&titled(7, PrState::Open), Some("perf"), Some(&have(true, false))).is_empty());
         assert!(sync(&titled(7, PrState::Draft), Some("perf"), Some(&have(true, false))).is_empty());

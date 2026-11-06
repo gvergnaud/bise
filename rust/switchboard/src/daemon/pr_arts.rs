@@ -121,6 +121,18 @@ mod tests {
         // a restart's first answer: nothing more
         sync_store(&s, &snap(PrState::Merged, "Faster signup"), None, 15).unwrap();
         assert!(s.archived().contains_key(&id));
+        // he unarchives the merged PR: a restart's answer and a changed
+        // snapshot leave it out of the archive (architect m_54244)
+        s.unarchive(&Pick { ids: vec![id.clone()], ..Pick::default() }).unwrap();
+        sync_store(&s, &snap(PrState::Merged, "Faster signup"), None, 15).unwrap();
+        sync_store(&s, &snap(PrState::Merged, "Faster signup (v2)"), Some("perf"), 15).unwrap();
+        assert!(!s.archived().contains_key(&id));
+        // reopened: open again, the end forgotten; closed a second time:
+        // archived again
+        sync_store(&s, &snap(PrState::Open, "Faster signup"), Some("perf"), 16).unwrap();
+        assert!(!s.archived().contains_key(&id) && !s.get(&id).unwrap().pr_ended);
+        sync_store(&s, &snap(PrState::Closed, "Faster signup"), Some("perf"), 16).unwrap();
+        assert!(s.archived().contains_key(&id) && s.get(&id).unwrap().pr_ended);
         // reopened: back
         sync_store(&s, &snap(PrState::Open, "Faster signup"), Some("perf"), 16).unwrap();
         assert!(!s.archived().contains_key(&id) && !s.get(&id).unwrap().pr_ended);
