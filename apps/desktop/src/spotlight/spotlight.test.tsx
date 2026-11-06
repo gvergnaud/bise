@@ -525,6 +525,9 @@ describe("the window grows down with his words (Gabriel's v4)", () => {
     expect(spotMax(300)).toBe(320);
     const s = spot();
     expect(s.ui.getByTestId("spot").style.getPropertyValue("--spot-max")).toBe(`${String(spotMax(window.screen.availHeight))}px`);
+    cleanup();
+    // main's screen (CapsuleState.room) wins: a window parked off-screen reads a wrong one
+    expect(spot({ room: 1200 }).ui.getByTestId("spot").style.getPropertyValue("--spot-max")).toBe("840px");
   });
 
   it("the spotlight stops at its cap, the keys stay at the bottom", async () => {

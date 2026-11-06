@@ -106,6 +106,8 @@ export interface CapsuleProps {
   /** His selection read at fn space: the spotlight's ❝ chip (Spotlight's quote, onQuoteDrop, onQuoteBack). */
   readonly quote?: SpotQuote | null;
   readonly frontApp?: string | null;
+  /** The work area's height of the screen it shows on (main's CapsuleState.room): the spotlight's cap. */
+  readonly room?: number | null;
   readonly onQuoteDrop?: () => void;
   readonly onQuoteBack?: (() => void) | null;
   /** fn's permissions sheet (the 'perms' view): the helper's perms, [allow], 'not now'. */
@@ -222,6 +224,7 @@ export function Capsule(p: CapsuleProps): JSX.Element {
             shotOff={p.shotOff ?? null}
             quote={p.quote ?? null}
             frontApp={p.frontApp ?? null}
+            room={p.room ?? null}
             onQuoteDrop={p.onQuoteDrop}
             onQuoteBack={p.onQuoteBack ?? null}
             testId="spot"

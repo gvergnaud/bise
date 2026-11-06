@@ -136,6 +136,8 @@ export function CapsuleRoot(): JSX.Element {
   // sends), forgotten when the spotlight goes or his message went. `on` false: he forgot it (✕, ⌫),
   // ⌘Z brings it back while the spotlight is open. His context.quote off: ignored
   const [quote, setQuote] = useState<{ q: SpotQuote; on: boolean } | null>(null);
+  // the work area's height of the screen it shows on (main's CapsuleState.room): the spotlight's cap
+  const [room, setRoom] = useState<number | null>(null);
   const quoteArm = useRef(false);
   const quoteOn = quotePref(prefs);
   const quoteOnRef = useRef(quoteOn);
@@ -470,6 +472,7 @@ export function CapsuleRoot(): JSX.Element {
       }
     });
     const offState = bise.capsule.onState((s) => {
+      if (s.room !== undefined) setRoom(s.room);
       dispatch({ ev: "window", shown: s.shown, why: s.why });
     });
     void bise.helperState().then((evs) => {
@@ -612,6 +615,7 @@ export function CapsuleRoot(): JSX.Element {
       onShotDrop={dropShot}
       quote={quote?.on === true ? quote.q : null}
       frontApp={front?.app ?? null}
+      room={room}
       onQuoteDrop={() => {
         setQuote((v) => (v === null ? null : { ...v, on: false }));
       }}

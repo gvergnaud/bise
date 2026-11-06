@@ -402,6 +402,9 @@ export interface CapsuleState {
   readonly keys: boolean;
   /** why it changed: asked by a page, the tray's click, it lost the keys (blur) */
   readonly why: 'asked' | 'tray' | 'blur';
+  /** the work area's height of the screen it shows on (an off-screen run: the one it would be on),
+   *  in px: the spotlight grows to 70 % of it (Spotlight's spotMax). None: not shown yet. */
+  readonly room?: number;
 }
 
 export interface CapsuleApi {

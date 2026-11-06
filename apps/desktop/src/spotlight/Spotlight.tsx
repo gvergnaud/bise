@@ -137,6 +137,9 @@ export interface SpotlightProps {
   readonly onQuoteDrop?: () => void;
   /** The quote he just forgot: ⌘Z before he types brings it back. None: nothing to bring back. */
   readonly onQuoteBack?: (() => void) | null;
+  /** The work area's height of the screen it shows on (main's CapsuleState.room); none: the
+   *  page's own screen (window.screen, unreliable for a window parked off-screen). */
+  readonly room?: number | null;
   readonly testId?: string;
 }
 
@@ -587,7 +590,7 @@ export function Spotlight(p: SpotlightProps): JSX.Element {
       ref={box}
       className="b-spotlight"
       data-testid={testId}
-      style={{ "--spot-max": `${String(spotMax(window.screen.availHeight))}px` } as CSSProperties}
+      style={{ "--spot-max": `${String(spotMax(p.room ?? window.screen.availHeight))}px` } as CSSProperties}
     >
       <Spot
         testId={`${testId}.frame`}

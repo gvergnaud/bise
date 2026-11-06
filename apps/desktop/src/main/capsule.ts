@@ -93,7 +93,7 @@ export class Capsule {
   }
 
   show(at: CapsuleAt, keys: boolean, why: CapsuleState['why'] = 'asked', fit: CapsuleFit | null = null): void {
-    this.state = { shown: true, at, keys, why };
+    this.state = { shown: true, at, keys, why, room: this.display().workArea.height };
     // placed (and kept inside the screen) once, here; then pinned
     this.pin = null;
     this.would = null;
