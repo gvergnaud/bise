@@ -71,6 +71,8 @@ export const TAGS = {
   skills: true,
   files: true,
   roles: true,
+  // settings · Setup's gauge (page models-setup): known; its page reads it
+  setup_gauge: true,
   signing: true,
   provider_check: true,
   app_update: true,
