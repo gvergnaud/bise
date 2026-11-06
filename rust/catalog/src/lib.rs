@@ -24,6 +24,7 @@ pub mod chatgpt;
 pub mod cli;
 pub mod config_cli;
 pub mod detect;
+pub mod features;
 mod efforts;
 pub use efforts::*;
 pub mod live_efforts;
@@ -1682,6 +1683,8 @@ mod auth_tests;
 #[cfg(test)]
 #[path = "one_key_tests.rs"]
 mod one_key_tests;
+#[cfg(test)]
+mod features_tests;
 
 #[cfg(test)]
 mod spawn_tests;

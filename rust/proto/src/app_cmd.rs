@@ -203,6 +203,15 @@ pub enum AppCmd {
     /// check again (S.8, the TUI's `/setup`): `prefs`, `accounts` and
     /// `projects` come again, read fresh
     SetupCheck,
+    /// settings · Setup's live test (page models-setup, his click only:
+    /// Test everything, Test again): one real call per model, each model
+    /// once even when it serves several roles; `models` none = every
+    /// model behind the gauge. Answered by `setup_gauge` (its `testing`,
+    /// then each result as it ends)
+    SetupTest {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        models: Option<Vec<String>>,
+    },
     /// computer use (P.2): `act` on | off | uninstall | check (its page is
     /// open: the setup check runs, once a second, until leave or 2 min
     /// without a check) | leave | fix (`fix`: a row's fix, his click only)
@@ -599,6 +608,7 @@ impl AppCmd {
         "setup_first_cancel",
         "keychain",
         "setup_check",
+        "setup_test",
         "role_set",
         "computer",
         "shot",

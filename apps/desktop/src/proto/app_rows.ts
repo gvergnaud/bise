@@ -648,6 +648,112 @@ cut?: boolean, };
 export type RoleRow = { role: string, name: string, about: string, kind: string, model: string, effort?: string | null, source: string, follows?: string | null, };
 
 /**
+ * One of the features settings · Setup counts (page models-setup, pick
+ * B): what he gets, each tied to a role or a permission.
+ */
+export type FeatureId = "talk" | "agents" | "small" | "vision" | "dictation" | "voice_mode" | "approvals" | "unknown";
+
+/**
+ * A model's job behind a feature: the config's roles (bise_catalog::roles)
+ * and voice mode's voice (`tts`, `[voice_mode] tts_model`).
+ */
+export type RoleId = "main" | "agents" | "small" | "voice" | "classify" | "tts" | "unknown";
+
+/**
+ * ✓ it works, ✗ it failed (required, or set up and broken: waits on
+ * him), ○ off (optional, never set up, or the model can't).
+ */
+export type FeatureState = "on" | "failed" | "off" | "unknown";
+
+/**
+ * Where a role's model comes from: config.toml, an env var (`var`), or
+ * bise's default (it may follow another role).
+ */
+export type PartSource = "config" | "env" | "default" | "unknown";
+
+/**
+ * The one thing that fixes or turns on a feature. Words are the
+ * window's (its words catalog); the core sends only what they name.
+ */
+export type SetupFix = { "t": "add_key", provider: string, url?: string, } | { "t": "sign_in", provider: string, } | { "t": "credit", provider: string, url?: string, } | { "t": "pick_model", role: RoleId, } | { "t": "remove_env", var: string, } | { "t": "allow_mic" } | { "t": "turn_on", role: RoleId, } | { "t": "test_again" } | { "t": "unknown" };
+
+/**
+ * One model behind a feature, with its last test.
+ */
+export type FeaturePart = { role: RoleId, 
+/**
+ * "provider/id"; "" none (voice mode's voice when no provider speaks)
+ */
+model: string, 
+/**
+ * its provider's name for people ("Mistral")
+ */
+provider?: string, source: PartSource, 
+/**
+ * the env var that set it (`source` env)
+ */
+var?: string | null, 
+/**
+ * unset: the role it follows
+ */
+follows?: RoleId | null, state: FeatureState, 
+/**
+ * failed: why (no key, a test's verdict)
+ */
+why?: CheckWhy | null, 
+/**
+ * the provider's own words of its last failed test
+ */
+said?: string | null, 
+/**
+ * its last test took this long (the whole check, never "latency")
+ */
+ms?: number | null, 
+/**
+ * its last test's end, ms since the epoch (none: never tested since
+ * its key changed)
+ */
+tested_at?: number | null, };
+
+/**
+ * One feature of settings · Setup, computed in the core
+ * (bise_catalog::features), never in the window.
+ */
+export type FeatureRow = { id: FeatureId, state: FeatureState, 
+/**
+ * the models it needs, in the order they act
+ */
+parts: Array<FeaturePart>, 
+/**
+ * failed or off: what fixes it or turns it on
+ */
+fix?: SetupFix | null, 
+/**
+ * the mic refused (dictation, voice mode): the helper's fact
+ */
+mic_denied?: boolean, 
+/**
+ * on, but better with this (the checker on Jev): never a failure,
+ * never `next`
+ */
+better?: SetupFix | null, };
+
+/**
+ * The action that unlocks the most: a failure before a feature that is
+ * off; between two, the one that fixes more features.
+ */
+export type SetupNext = { fix: SetupFix, unlocks: Array<FeatureId>, };
+
+/**
+ * settings · Setup's gauge: `on` of `of` features work (5/7).
+ */
+export type SetupGauge = { rows: Array<FeatureRow>, on: number, of: number, next?: SetupNext | null, 
+/**
+ * models under test now (Test everything, Test again)
+ */
+testing?: Array<string>, };
+
+/**
  * How a slash command runs (C, architect m_10724): `hub` (his typed
  * line goes to the hub's own parser, HubCmd slash), `core` (a window
  * core command), `window` (the window's own screen or state: the window

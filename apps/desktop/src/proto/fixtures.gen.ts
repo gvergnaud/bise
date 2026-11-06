@@ -312,6 +312,7 @@ export const core_ev: readonly CoreEv[] = [
   {"ev":"provider_check","id":"anthropic","label":"opus 5.5","model":"anthropic/claude-opus-5-5","name":"Anthropic","pasted":true,"said":"invalid x-api-key","state":"failed","url":"https://platform.claude.com/settings/keys","why":"wrong_key"},
   {"answer":"Hello!","ev":"provider_check","id":"chatgpt","label":"gpt-6.1-sol","main":"chatgpt/gpt-6.1-sol","model":"chatgpt/gpt-6.1-sol","name":"ChatGPT","state":"works"},
   {"ev":"library_folders","folders":[{"by":"you","id":"f-abcdefghij","name":"docs","named_by_you":true}],"made":"f-abcdefghij","notice":"moved 2 artifacts to docs"},
+  {"ev":"setup_gauge","gauge":{"next":{"fix":{"provider":"mistral","t":"credit","url":"https://console.mistral.ai/billing"},"unlocks":["voice_mode"]},"of":7,"on":5,"rows":[{"id":"talk","parts":[{"model":"chatgpt/gpt-6.1-sol","ms":640,"provider":"ChatGPT","role":"main","source":"config","state":"on","tested_at":1791229364769}],"state":"on"},{"id":"agents","parts":[{"follows":"main","model":"chatgpt/gpt-6.1-sol","provider":"ChatGPT","role":"agents","source":"default","state":"on"}],"state":"on"},{"id":"small","parts":[{"model":"chatgpt/gpt-6-luna","provider":"ChatGPT","role":"small","source":"default","state":"on"}],"state":"on"},{"id":"vision","parts":[{"model":"chatgpt/gpt-6.1-sol","provider":"ChatGPT","role":"main","source":"config","state":"on"}],"state":"on"},{"id":"dictation","parts":[{"model":"groq/whisper-large-v3","provider":"Groq","role":"voice","source":"config","state":"on"}],"state":"on"},{"fix":{"provider":"mistral","t":"credit","url":"https://console.mistral.ai/billing"},"id":"voice_mode","parts":[{"model":"groq/whisper-large-v3","provider":"Groq","role":"voice","source":"config","state":"on"},{"model":"mistral/voxtral-mini-tts-2603","ms":310,"provider":"Mistral","role":"tts","said":"No credit left on this workspace","source":"config","state":"failed","tested_at":1791229364769,"why":"no_credit"},{"model":"chatgpt/gpt-6.1-sol","provider":"ChatGPT","role":"main","source":"config","state":"on"}],"state":"failed"},{"fix":{"role":"classify","t":"turn_on"},"id":"approvals","parts":[{"model":"off","role":"classify","source":"config","state":"off"}],"state":"off"}],"testing":["mistral/voxtral-mini-tts-2603"]}},
 ];
 
 /** rust/proto/fixtures/app_cmd.jsonl */
@@ -423,6 +424,8 @@ export const app_cmd: readonly AppCmd[] = [
   {"cmd":"folders","op":{"merge":{"from":"f-abcdefghij","into":"f-klmnopqrst"}}},
   {"cmd":"folders","op":"undo"},
   {"cmd":"folders_move","folder":"f-klmnopqrst","items":[{"from":"f-abcdefghij","id":"perf-notes","project":"acme-1a2b3c4d"},{"id":"hero","project":"site-9f8e7d6c"}]},
+  {"cmd":"setup_test"},
+  {"cmd":"setup_test","models":["mistral/voxtral-mini-tts-2603"]},
 ];
 
 /** rust/proto/fixtures/draft_hub_cmd.jsonl */

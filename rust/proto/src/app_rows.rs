@@ -817,6 +817,184 @@ pub struct RoleRow {
     pub follows: Option<String>,
 }
 
+/// One of the features settings · Setup counts (page models-setup, pick
+/// B): what he gets, each tied to a role or a permission.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum FeatureId {
+    /// talk to bise (main's model)
+    Talk,
+    /// the agents main starts
+    Agents,
+    /// titles and summaries (the small jobs model)
+    Small,
+    /// images and computer use (main's model reads images)
+    Vision,
+    /// dictation and fn (the model that listens, the mic)
+    Dictation,
+    /// voice mode (listens, speaks, main answers)
+    VoiceMode,
+    /// auto approvals (the checker)
+    Approvals,
+    #[serde(other)]
+    Unknown,
+}
+
+/// A model's job behind a feature: the config's roles (bise_catalog::roles)
+/// and voice mode's voice (`tts`, `[voice_mode] tts_model`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum RoleId {
+    Main,
+    Agents,
+    Small,
+    Voice,
+    Classify,
+    Tts,
+    #[serde(other)]
+    Unknown,
+}
+
+/// ✓ it works, ✗ it failed (required, or set up and broken: waits on
+/// him), ○ off (optional, never set up, or the model can't).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum FeatureState {
+    On,
+    Failed,
+    Off,
+    #[serde(other)]
+    Unknown,
+}
+
+/// Where a role's model comes from: config.toml, an env var (`var`), or
+/// bise's default (it may follow another role).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum PartSource {
+    Config,
+    Env,
+    Default,
+    #[serde(other)]
+    Unknown,
+}
+
+/// The one thing that fixes or turns on a feature. Words are the
+/// window's (its words catalog); the core sends only what they name.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(tag = "t", rename_all = "snake_case")]
+pub enum SetupFix {
+    /// add a key for that provider (`url`: where its keys are made)
+    AddKey {
+        provider: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        url: String,
+    },
+    /// sign in again (a plan whose sign-in expired)
+    SignIn { provider: String },
+    /// add credit (`url`: its billing page, else its keys page)
+    Credit {
+        provider: String,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        url: String,
+    },
+    /// pick another model for that role (the model is gone or refused)
+    PickModel { role: RoleId },
+    /// an env var wins over the setting: remove it (where it is set is
+    /// his shell's; the var name is bise_home::env's)
+    RemoveEnv { var: String },
+    /// allow the microphone
+    AllowMic,
+    /// turn that role on (the checker set to "off")
+    TurnOn { role: RoleId },
+    /// test again (unreachable: the network, the provider's own trouble)
+    TestAgain,
+    #[serde(other)]
+    Unknown,
+}
+
+/// One model behind a feature, with its last test.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct FeaturePart {
+    pub role: RoleId,
+    /// "provider/id"; "" none (voice mode's voice when no provider speaks)
+    pub model: String,
+    /// its provider's name for people ("Mistral")
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub provider: String,
+    pub source: PartSource,
+    /// the env var that set it (`source` env)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub var: Option<String>,
+    /// unset: the role it follows
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub follows: Option<RoleId>,
+    pub state: FeatureState,
+    /// failed: why (no key, a test's verdict)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub why: Option<CheckWhy>,
+    /// the provider's own words of its last failed test
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub said: Option<String>,
+    /// its last test took this long (the whole check, never "latency")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ms: Option<u64>,
+    /// its last test's end, ms since the epoch (none: never tested since
+    /// its key changed)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tested_at: Option<u64>,
+}
+
+/// One feature of settings · Setup, computed in the core
+/// (bise_catalog::features), never in the window.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct FeatureRow {
+    pub id: FeatureId,
+    pub state: FeatureState,
+    /// the models it needs, in the order they act
+    pub parts: Vec<FeaturePart>,
+    /// failed or off: what fixes it or turns it on
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fix: Option<SetupFix>,
+    /// the mic refused (dictation, voice mode): the helper's fact
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub mic_denied: bool,
+    /// on, but better with this (the checker on Jev): never a failure,
+    /// never `next`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub better: Option<SetupFix>,
+}
+
+/// The action that unlocks the most: a failure before a feature that is
+/// off; between two, the one that fixes more features.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct SetupNext {
+    pub fix: SetupFix,
+    pub unlocks: Vec<FeatureId>,
+}
+
+/// settings · Setup's gauge: `on` of `of` features work (5/7).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct SetupGauge {
+    pub rows: Vec<FeatureRow>,
+    pub on: u32,
+    pub of: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next: Option<SetupNext>,
+    /// models under test now (Test everything, Test again)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub testing: Vec<String>,
+}
+
 /// How a slash command runs (C, architect m_10724): `hub` (his typed
 /// line goes to the hub's own parser, HubCmd slash), `core` (a window
 /// core command), `window` (the window's own screen or state: the window

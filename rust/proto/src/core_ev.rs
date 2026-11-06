@@ -171,6 +171,10 @@ pub enum CoreEv {
     /// each role's model and effort (V17): at the start, after each
     /// `role_set`, at `setup_check`
     Roles { items: Vec<RoleRow> },
+    /// settings · Setup's features and gauge (page models-setup), computed
+    /// in the core (bise_catalog::features): with `roles`, and after each
+    /// `setup_test` result
+    SetupGauge { gauge: SetupGauge },
     /// the artifacts library's folders after his `folders` or
     /// `folders_move` (the hubs' `artifacts` follow): `made` the folder a
     /// make made or found, `notice` the toast's words (not `folders`: the
@@ -427,7 +431,7 @@ pub enum CoreEv {
 }
 
 impl CoreEv {
-    pub const TAGS: &'static [&'static str] = &["projects", "open", "prefs", "accounts", "signing", "provider_check", "found", "away_summary", "plugins", "browse", "plugin_preview", "plugins_summary", "computer_use", "level", "heard", "shot", "dictation", "voice_mode", "voice_answer", "commands", "skills", "files", "roles", "library_folders", "app_update", "machine_update", "hub_refused", "index", "setup_first", "computer_live", "computer_peek", "keychain", "broken", "state", "main", "hub", "sent", "agent_sent", "send_answered", "word", "phase", "page", "agent_entry", "agent_history", "agent_preview", "agent_queued", "agent_typing", "fake_voice"];
+    pub const TAGS: &'static [&'static str] = &["projects", "open", "prefs", "accounts", "signing", "provider_check", "found", "away_summary", "plugins", "browse", "plugin_preview", "plugins_summary", "computer_use", "level", "heard", "shot", "dictation", "voice_mode", "voice_answer", "commands", "skills", "files", "roles", "setup_gauge", "library_folders", "app_update", "machine_update", "hub_refused", "index", "setup_first", "computer_live", "computer_peek", "keychain", "broken", "state", "main", "hub", "sent", "agent_sent", "send_answered", "word", "phase", "page", "agent_entry", "agent_history", "agent_preview", "agent_queued", "agent_typing", "fake_voice"];
 
     pub fn decode(line: &str) -> Result<CoreEv, String> {
         decode(parse(line)?, "ev", Self::TAGS, |tag, raw| CoreEv::Unknown { tag, raw })
