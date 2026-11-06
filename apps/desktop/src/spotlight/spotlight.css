@@ -195,18 +195,11 @@
   color: var(--c-text-3);
   opacity: 0.7;
 }
-/* R07-a: the selected agent's last actions in its right column (designer m_13271): the row grows to
-   fit, no height tween; name and project stay on the first line; newest last in --c-text, the
-   older dim; the time right-aligned dim; a question that waits on him in accent; each line cut with … */
-.b-spot .b-picker-row:has(.b-spot-acts) {
-  height: auto;
-  min-height: var(--h-row);
-  align-items: start;
-  padding-top: var(--s-2);
-  padding-bottom: var(--s-2);
-}
-.b-spot .b-picker-row:has(.b-spot-acts) > :is(.t > .n, .k) {
-  line-height: 18px;
+/* R07-a: the selected agent's last action in its right column (designer m_13271), cut with …; a
+   row never changes height when it is chosen, only its 9 % tint (designer m_54051): its newest
+   action alone, in --c-text, a question that waits on him in accent */
+.b-spot .b-picker-row .b-spot-acts .a:not(.new) {
+  display: none;
 }
 .b-spot-acts {
   display: grid;

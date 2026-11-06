@@ -264,7 +264,8 @@ const Row = memo(function Row({
     case "agent":
       return (
         <SpotRow
-          glyph={MARK[item.status]}
+          // what waits on him keeps its sign in accent in every list (designer m_54051)
+          glyph={item.status === "waiting" ? <span className="ib-sign">{MARK.waiting}</span> : MARK[item.status]}
           hotkey={openKey}
           name={item.name}
           where={item.pname}

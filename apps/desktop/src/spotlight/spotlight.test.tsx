@@ -552,6 +552,23 @@ describe("the window grows down with his words (Gabriel's v4)", () => {
   });
 });
 
+describe("rows (designer m_54051)", () => {
+  it("what waits on him keeps its ? in accent in a search's list too", async () => {
+    const waits: SpotData = { ...D, agents: D.agents.map((a) => (a.name === "alerts" ? { ...a, status: "waiting" as const } : a)) };
+    const s = spot({ data: waits });
+    await s.type("alerts");
+    const row = s.ui.getByTestId("spot.row.agent.tel.alerts");
+    expect(row.querySelector(".g .ib-sign")?.textContent).toBe("?");
+  });
+
+  it("a chosen row never changes height: its newest action alone", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync(`${process.cwd()}/src/spotlight/spotlight.css`, "utf8");
+    expect(src).not.toMatch(/:has\(\.b-spot-acts\)\s*\{[^}]*height: auto/u);
+    expect(src).toMatch(/\.b-spot-acts \.a:not\(\.new\) \{\s*display: none;/u);
+  });
+});
+
 describe("the ❝ chip: his selection read at fn space (Gabriel's v4, architect m_53938)", () => {
   const q = { text: "the card number field loses focus when the page scrolls on Safari", app: "Safari" };
 
