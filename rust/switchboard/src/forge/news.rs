@@ -421,32 +421,57 @@ pub fn checks_text(at: &At, pr: &PrSnapshot, failed: &[(&FailedCheck, usize)], o
     parts.join("\n\n")
 }
 
-/// A PR's state in words, as the held lid says it (pr-tui): `draft ·
-/// checks running`, `changes asked · checks pass`, `checks fail: e2e`.
+/// A PR's state in words, pr-integration's table (the one builder: the
+/// artifact row, the PR tab, `/prs`, a place's PR): `draft · checks
+/// running 4/12`, `open · checks running 4/12`, `checks ✗ e2e`,
+/// `conflicts`, `changes asked`, `your review`, `approved · checks ✓
+/// 12/12 · your merge`, `merged`, `closed`. `open` leads only when
+/// nothing else says how it is (no review word, no conflict, no
+/// failing check). How late the forge is stays out: the client adds
+/// `as of <age> ago` from `stale_ms` (an age is never frozen in words).
 pub fn pr_words(pr: &PrView) -> String {
-    let mut w: Vec<String> = Vec::new();
+    use bise_proto::rows::PrYours;
+    use bise_proto::words::panel;
+    let f = &pr.facts;
     match pr.state {
-        PrState::Draft => w.push("draft".into()),
-        PrState::Merged => w.push("merged".into()),
-        PrState::Closed => w.push("closed".into()),
-        PrState::Open => {}
+        PrState::Merged => return panel::pr_merged.into(),
+        PrState::Closed => return panel::pr_closed.into(),
+        PrState::Draft | PrState::Open => {}
     }
-    match pr.review {
-        Review::ChangesRequested => w.push("changes asked".into()),
-        Review::Approved => w.push("approved".into()),
-        _ => {}
+    let mut out: Vec<String> = Vec::new();
+    if pr.state == PrState::Draft {
+        out.push(panel::pr_draft.into());
     }
+    if pr.yours == Some(PrYours::Review) {
+        out.push(panel::pr_your_review.into());
+    } else {
+        match pr.review {
+            Review::ChangesRequested => out.push(panel::pr_changes_asked.into()),
+            Review::Approved => out.push(panel::pr_approved.into()),
+            Review::None | Review::Pending => {}
+        }
+    }
+    if f.conflicts {
+        out.push(panel::pr_conflicts.into());
+    }
+    let failing = matches!(pr.checks, Checks::Fail { .. });
+    if pr.state == PrState::Open && out.is_empty() && !failing {
+        out.push(panel::pr_open.into());
+    }
+    let (done, total) = (f.checks_done.to_string(), f.checks.to_string());
     match &pr.checks {
-        Checks::Pass => w.push("checks pass".into()),
-        Checks::Running => w.push("checks running".into()),
-        Checks::Fail { failing } if failing.is_empty() => w.push("checks fail".into()),
-        Checks::Fail { failing } => w.push(format!("checks fail: {}", failing.join(", "))),
+        Checks::Pass if f.checks > 0 => out.push(panel::pr_checks_ok_of(&total, &total)),
+        Checks::Pass => out.push(panel::pr_checks_ok.into()),
+        Checks::Running if f.checks > 0 => out.push(panel::pr_checks_running_of(&done, &total)),
+        Checks::Running => out.push(panel::pr_checks_running.into()),
+        Checks::Fail { failing } if failing.is_empty() => out.push(panel::pr_checks_failed_bare.into()),
+        Checks::Fail { failing } => out.push(panel::pr_checks_failed(&failing.join(", "))),
         Checks::None => {}
     }
-    if w.is_empty() {
-        w.push("open".into());
+    if pr.yours == Some(PrYours::Merge) {
+        out.push(panel::pr_your_merge.into());
     }
-    w.join(" · ")
+    out.join(" · ")
 }
 
 /// `/prs` (pr-design §4): the open PRs of this repo's places, by number,
@@ -483,6 +508,7 @@ pub fn pr_row(pr: &PrView, agents: &[String]) -> bise_proto::rows::Pr {
         Review::None | Review::Pending => PrReview::None,
     };
     let words = pr_words(pr);
+    let provider = super::provider_of(&pr.url);
     Pr {
         number: pr.number,
         url: pr.url.clone(),
@@ -501,6 +527,17 @@ pub fn pr_row(pr: &PrView, agents: &[String]) -> bise_proto::rows::Pr {
         words,
         in_review: pr.review == Review::Pending,
         stale_ms: pr.stale_ms,
+        title: pr.facts.title.clone(),
+        base: pr.facts.base.clone(),
+        repo: super::repo_of_pr(&pr.url),
+        provider,
+        tag: super::tag(provider, pr.number),
+        mergeable: pr.facts.mergeable,
+        conflicts: pr.facts.conflicts,
+        checks_n: pr.facts.checks,
+        checks_done: pr.facts.checks_done,
+        yours: pr.yours,
+        pushed_ms: super::iso_ms(&pr.facts.pushed_at),
     }
 }
 

@@ -501,6 +501,31 @@
     "one": null,
     "text": "checks fail"
   },
+  "panel.pr_checks_failed": {
+    "args": [
+      "names"
+    ],
+    "one": null,
+    "text": "checks ✗ {names}"
+  },
+  "panel.pr_checks_failed_bare": {
+    "args": [],
+    "one": null,
+    "text": "checks ✗"
+  },
+  "panel.pr_checks_ok": {
+    "args": [],
+    "one": null,
+    "text": "checks ✓"
+  },
+  "panel.pr_checks_ok_of": {
+    "args": [
+      "done",
+      "total"
+    ],
+    "one": null,
+    "text": "checks ✓ {done}/{total}"
+  },
   "panel.pr_checks_pass": {
     "args": [],
     "one": null,
@@ -511,6 +536,24 @@
     "one": null,
     "text": "checks running"
   },
+  "panel.pr_checks_running_of": {
+    "args": [
+      "done",
+      "total"
+    ],
+    "one": null,
+    "text": "checks running {done}/{total}"
+  },
+  "panel.pr_closed": {
+    "args": [],
+    "one": null,
+    "text": "closed"
+  },
+  "panel.pr_conflicts": {
+    "args": [],
+    "one": null,
+    "text": "conflicts"
+  },
   "panel.pr_draft": {
     "args": [],
     "one": null,
@@ -520,6 +563,11 @@
     "args": [],
     "one": null,
     "text": "in review"
+  },
+  "panel.pr_merged": {
+    "args": [],
+    "one": null,
+    "text": "merged"
   },
   "panel.pr_open": {
     "args": [],
@@ -532,6 +580,16 @@
     ],
     "one": null,
     "text": "state from {age} ago"
+  },
+  "panel.pr_your_merge": {
+    "args": [],
+    "one": null,
+    "text": "your merge"
+  },
+  "panel.pr_your_review": {
+    "args": [],
+    "one": null,
+    "text": "your review"
   },
   "panel.preview_of": {
     "args": [

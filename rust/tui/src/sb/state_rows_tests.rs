@@ -70,6 +70,7 @@ fn pr(review: PrReview, in_review: bool) -> RowPr {
         text: String::new(),
         in_review,
         stale_ms: Some(720_000),
+        ..Default::default()
     }
 }
 

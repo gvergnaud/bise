@@ -136,6 +136,24 @@ pub struct PrFacts {
     /// The repo's allowed methods, in pr-design §6.3's order: squash,
     /// else merge, else rebase.
     pub methods: Vec<MergeMethod>,
+    /// pr-integration rule 3: the branch it merges into (`main`).
+    #[serde(default)]
+    pub base: String,
+    /// It conflicts with its base (GitHub's `mergeStateStatus` DIRTY,
+    /// mapped once in forge/github.rs).
+    #[serde(default)]
+    pub conflicts: bool,
+    /// His review is asked: the forge's viewer (gh's login) is one of
+    /// its requested reviewers. v1 counts direct requests only, not a
+    /// team he is in.
+    #[serde(default)]
+    pub asked_you: bool,
+    /// When its head commit was made (ISO 8601): the row's `last push`.
+    #[serde(default)]
+    pub pushed_at: String,
+    /// Its head's checks that finished (pass or fail), of `checks`.
+    #[serde(default)]
+    pub checks_done: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -236,6 +254,13 @@ pub struct PrView {
     pub review: Review,
     pub checks: Checks,
     pub stale_ms: Option<u64>,
+    /// what the forge said besides (title, base, mergeable, …): the
+    /// typed row's (`forge::news::pr_row`); the TUI does not read it
+    #[serde(default)]
+    pub facts: Box<PrFacts>,
+    /// what it waits on him for (`forge::yours`)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub yours: Option<bise_proto::rows::PrYours>,
 }
 
 impl PrView {
@@ -249,6 +274,8 @@ impl PrView {
             review: pr.review,
             checks: pr.checks.clone(),
             stale_ms,
+            facts: pr.facts.clone(),
+            yours: crate::forge::yours(pr),
         }
     }
 }
@@ -564,6 +591,7 @@ mod tests {
                 checks: 6,
                 mergeable: false,
                 methods: vec![MergeMethod::Squash, MergeMethod::Rebase],
+                ..Default::default()
             }),
         };
         let v = PlaceView {
@@ -577,7 +605,11 @@ mod tests {
             trying: false,
             path: None,
         };
-        let j = serde_json::to_value(&v).unwrap();
+        let mut j = serde_json::to_value(&v).unwrap();
+        // the facts ride along for the typed row (pr-integration); the
+        // contract's fields stay as they were
+        let facts = j["pr"].as_object_mut().unwrap().remove("facts").unwrap();
+        assert_eq!(facts["title"], "dark mode");
         assert_eq!(
             j,
             serde_json::json!({"id": "wt:a", "branch": "sb/a", "agents": ["a"], "lid": null,

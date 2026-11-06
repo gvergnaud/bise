@@ -601,9 +601,24 @@ export type PrChecks = "pass" | "fail" | "running" | "none" | "unknown";
 export type PrReview = "approved" | "changes" | "none" | "unknown";
 
 /**
- * An open pull request of the project's places (the TUI's `/prs` row):
- * what it means, and the hub's own words for it (never rebuilt by a
- * client).
+ * The forge a PR lives on (pr-integration rule 14): its words and
+ * sigil (`PR #412` / `MR !412`, checks / pipeline, Open on GitHub /
+ * GitLab) are picked by this, never by a host the client reads.
+ */
+export type PrProvider = "github" | "gitlab" | "unknown";
+
+/**
+ * What a PR waits on him for (pr-integration rule 6): his review is
+ * asked, or only his merge is missing (approved or no review needed,
+ * checks pass, the forge would merge it). The row's pink and the
+ * inbox item read this one field (`forge::yours`, its one owner).
+ */
+export type PrYours = "review" | "merge" | "unknown";
+
+/**
+ * A pull request the hub follows (the TUI's `/prs` row, a place's PR,
+ * a PR artifact's status: one builder, `forge::news::pr_row`): what it
+ * means, and the hub's own words for it (never rebuilt by a client).
  */
 export type Pr = { number: number, url: string, branch: string, 
 /**
@@ -632,7 +647,47 @@ in_review?: boolean,
  * answer is, when it is late (offline, rate limit); none when fresh,
  * and always none in `/prs`'s rows
  */
-stale_ms?: number | null, };
+stale_ms?: number | null, 
+/**
+ * its title on the forge ("" before the forge said it)
+ */
+title?: string, 
+/**
+ * the branch it merges into (`main`)
+ */
+base?: string, 
+/**
+ * its repo, `owner/name`
+ */
+repo?: string, 
+/**
+ * its forge; absent: GitHub (the default, as before GitLab)
+ */
+provider?: PrProvider, 
+/**
+ * its number with the forge's sigil: `#412` (GitHub), `!412` (GitLab)
+ */
+tag?: string, 
+/**
+ * the forge would merge it now (the Merge button shows only then)
+ */
+mergeable?: boolean, 
+/**
+ * it conflicts with its base
+ */
+conflicts?: boolean, 
+/**
+ * its head's checks, and how many of them finished
+ */
+checks_n?: number, checks_done?: number, 
+/**
+ * it waits on him: his review, or his merge
+ */
+yours?: PrYours | null, 
+/**
+ * when its head commit was made (ms): its last push
+ */
+pushed_ms?: number | null, };
 
 /**
  * A bise page of this hub (docs/ambient-pages.md §2.3): `hub/pages`'

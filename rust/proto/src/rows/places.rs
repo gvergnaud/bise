@@ -96,10 +96,11 @@ pub struct Feature {
 }
 
 /// An open pull request's state (merged and closed ones aren't listed).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum PrState {
+    #[default]
     Open,
     Draft,
     /// P4c-4a: a place's PR only (`/prs` lists open and draft ones): a
@@ -112,7 +113,7 @@ pub enum PrState {
 }
 
 /// Its checks on the head commit.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum PrChecks {
@@ -120,27 +121,63 @@ pub enum PrChecks {
     Fail,
     Running,
     /// none reported yet
+    #[default]
     None,
     #[serde(other)]
     Unknown,
 }
 
 /// Its review.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum PrReview {
     Approved,
     Changes,
+    #[default]
     None,
     #[serde(other)]
     Unknown,
 }
 
-/// An open pull request of the project's places (the TUI's `/prs` row):
-/// what it means, and the hub's own words for it (never rebuilt by a
-/// client).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+/// The forge a PR lives on (pr-integration rule 14): its words and
+/// sigil (`PR #412` / `MR !412`, checks / pipeline, Open on GitHub /
+/// GitLab) are picked by this, never by a host the client reads.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum PrProvider {
+    #[default]
+    Github,
+    Gitlab,
+    #[serde(other)]
+    Unknown,
+}
+
+impl PrProvider {
+    pub fn is_github(&self) -> bool {
+        *self == PrProvider::Github
+    }
+}
+
+/// What a PR waits on him for (pr-integration rule 6): his review is
+/// asked, or only his merge is missing (approved or no review needed,
+/// checks pass, the forge would merge it). The row's pink and the
+/// inbox item read this one field (`forge::yours`, its one owner).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum PrYours {
+    Review,
+    Merge,
+    #[serde(other)]
+    Unknown,
+}
+
+/// A pull request the hub follows (the TUI's `/prs` row, a place's PR,
+/// a PR artifact's status: one builder, `forge::news::pr_row`): what it
+/// means, and the hub's own words for it (never rebuilt by a client).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Pr {
     pub number: u64,
@@ -167,6 +204,38 @@ pub struct Pr {
     /// and always none in `/prs`'s rows
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stale_ms: Option<u64>,
+    /// its title on the forge ("" before the forge said it)
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub title: String,
+    /// the branch it merges into (`main`)
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub base: String,
+    /// its repo, `owner/name`
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub repo: String,
+    /// its forge; absent: GitHub (the default, as before GitLab)
+    #[serde(default, skip_serializing_if = "PrProvider::is_github")]
+    pub provider: PrProvider,
+    /// its number with the forge's sigil: `#412` (GitHub), `!412` (GitLab)
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub tag: String,
+    /// the forge would merge it now (the Merge button shows only then)
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub mergeable: bool,
+    /// it conflicts with its base
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub conflicts: bool,
+    /// its head's checks, and how many of them finished
+    #[serde(default, skip_serializing_if = "super::is_zero")]
+    pub checks_n: u32,
+    #[serde(default, skip_serializing_if = "super::is_zero")]
+    pub checks_done: u32,
+    /// it waits on him: his review, or his merge
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub yours: Option<PrYours>,
+    /// when its head commit was made (ms): its last push
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pushed_ms: Option<u64>,
 }
 
 /// A worktree of the project as the terminal's panel draws it (dev-flow

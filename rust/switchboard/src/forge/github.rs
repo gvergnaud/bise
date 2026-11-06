@@ -13,9 +13,9 @@ use std::process::{Command, Stdio};
 /// checks with the names of the failing ones; for the ready-to-merge
 /// item (pr-design §6.3): the title, the size, the reviewers' latest
 /// reviews, whether GitHub would merge it now.
-const FIELDS: &str = "number url state isDraft reviewDecision headRefName headRefOid updatedAt \
-headRepositoryOwner { login } title additions deletions mergeStateStatus total: commits { totalCount } latestReviews(first: 10) { nodes { state author { login } } } \
-commits(last: 1) { nodes { commit { statusCheckRollup { state \
+const FIELDS: &str = "number url state isDraft reviewDecision headRefName baseRefName headRefOid updatedAt \
+headRepositoryOwner { login } title additions deletions mergeStateStatus total: commits { totalCount } latestReviews(first: 10) { nodes { state author { login } } } reviewRequests(first: 10) { nodes { requestedReviewer { __typename ... on User { login } } } } \
+commits(last: 1) { nodes { commit { committedDate statusCheckRollup { state \
 contexts(first: 50) { totalCount nodes { __typename \
 ... on CheckRun { name status conclusion } \
 ... on StatusContext { context state } } } } } } }";
@@ -43,7 +43,7 @@ pub fn query(repo: &RepoRef, branches: &[String]) -> String {
         })
         .collect();
     format!(
-        "query {{ repository(owner: {}, name: {}) {{ {} {} }} }}",
+        "query {{ viewer {{ login }} repository(owner: {}, name: {}) {{ {} {} }} }}",
         lit(&repo.owner),
         lit(&repo.name),
         REPO_FIELDS,
@@ -67,8 +67,10 @@ fn methods_of(r: &Value) -> Vec<MergeMethod> {
 /// The facts of PR node `n` for the ready-to-merge item. Mergeable:
 /// GitHub's `mergeStateStatus` says the merge would go through now
 /// (`CLEAN`; `HAS_HOOKS`: clean with pre-receive hooks; `UNSTABLE`:
-/// only checks that are not required fail).
-fn facts_of(n: &Value, methods: &[MergeMethod]) -> PrFacts {
+/// only checks that are not required fail). Conflicts: `DIRTY` (the one
+/// place `mergeStateStatus` becomes a conflict). `viewer`: gh's login,
+/// whose direct review request is `asked_you` (a team's is not, v1).
+fn facts_of(n: &Value, methods: &[MergeMethod], viewer: &str) -> PrFacts {
     let num = |v: &Value| v.as_u64().unwrap_or(0).min(u32::MAX as u64) as u32;
     let mut approved_by: Vec<String> = n["latestReviews"]["nodes"]
         .as_array()
@@ -78,8 +80,29 @@ fn facts_of(n: &Value, methods: &[MergeMethod]) -> PrFacts {
         .filter_map(|r| r["author"]["login"].as_str().map(str::to_string))
         .collect();
     approved_by.dedup();
-    let rollup = &n["commits"]["nodes"][0]["commit"]["statusCheckRollup"];
+    let commit = &n["commits"]["nodes"][0]["commit"];
+    let rollup = &commit["statusCheckRollup"];
+    let asked_you = !viewer.is_empty()
+        && n["reviewRequests"]["nodes"].as_array().into_iter().flatten().any(|r| {
+            r["requestedReviewer"]["__typename"].as_str() == Some("User")
+                && r["requestedReviewer"]["login"].as_str().is_some_and(|l| l.eq_ignore_ascii_case(viewer))
+        });
+    let checks_done = rollup["contexts"]["nodes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|c| match c["__typename"].as_str() {
+            Some("CheckRun") => c["status"].as_str() == Some("COMPLETED"),
+            Some("StatusContext") => !matches!(c["state"].as_str(), Some("PENDING" | "EXPECTED") | None),
+            _ => false,
+        })
+        .count() as u32;
     PrFacts {
+        base: n["baseRefName"].as_str().unwrap_or_default().to_string(),
+        conflicts: n["mergeStateStatus"].as_str() == Some("DIRTY"),
+        asked_you,
+        pushed_at: commit["committedDate"].as_str().unwrap_or_default().to_string(),
+        checks_done,
         title: n["title"].as_str().unwrap_or_default().to_string(),
         approved_by,
         commits: num(&n["total"]["totalCount"]),
@@ -123,7 +146,7 @@ fn checks_of(rollup: &Value) -> Checks {
     }
 }
 
-fn snapshot(n: &Value, branch: &str, methods: &[MergeMethod]) -> Option<PrSnapshot> {
+fn snapshot(n: &Value, branch: &str, methods: &[MergeMethod], viewer: &str) -> Option<PrSnapshot> {
     let state = match (n["state"].as_str()?, n["isDraft"].as_bool() == Some(true)) {
         ("OPEN", true) => PrState::Draft,
         ("OPEN", false) => PrState::Open,
@@ -147,7 +170,7 @@ fn snapshot(n: &Value, branch: &str, methods: &[MergeMethod]) -> Option<PrSnapsh
         review,
         checks: checks_of(rollup),
         updated_at: n["updatedAt"].as_str().unwrap_or_default().to_string(),
-        facts: Box::new(facts_of(n, methods)),
+        facts: Box::new(facts_of(n, methods, viewer)),
     })
 }
 
@@ -168,12 +191,13 @@ pub fn parse(out: &str, repo: &RepoRef, branches: &[String]) -> Result<Vec<PrSna
         return Err(ForgeError::Other(format!("no repository {}/{} on {}", repo.owner, repo.name, repo.host)));
     }
     let methods = methods_of(r);
+    let viewer = v["data"]["viewer"]["login"].as_str().unwrap_or_default();
     let mut prs = Vec::new();
     for (i, b) in branches.iter().enumerate() {
         let ours = r[format!("b{}", i)]["nodes"].as_array().into_iter().flatten().find(|n| {
             n["headRepositoryOwner"]["login"].as_str().is_none_or(|o| o.eq_ignore_ascii_case(&repo.owner))
         });
-        if let Some(pr) = ours.and_then(|n| snapshot(n, b, &methods)) {
+        if let Some(pr) = ours.and_then(|n| snapshot(n, b, &methods, viewer)) {
             prs.push(pr);
         }
     }
@@ -505,7 +529,7 @@ mod tests {
     #[test]
     fn the_query_has_an_alias_per_branch() {
         let q = query(&repo(), &["sb/a".into(), "sb/\"b".into()]);
-        assert!(q.starts_with("query { repository(owner: \"o\", name: \"r\") {"));
+        assert!(q.starts_with("query { viewer { login } repository(owner: \"o\", name: \"r\") {"));
         assert!(q.contains("b0: pullRequests(headRefName: \"sb/a\", first: 3"));
         assert!(q.contains("b1: pullRequests(headRefName: \"sb/\\\"b\""));
         assert!(!q.contains("b2:"));
@@ -570,6 +594,43 @@ mod tests {
             assert!(!parse(&o.to_string(), &repo(), &["sb/a".to_string()]).unwrap()[0].facts.mergeable, "{s}");
         }
         assert!(query(&repo(), &["sb/a".to_string()]).contains("squashMergeAllowed mergeCommitAllowed rebaseMergeAllowed"));
+    }
+
+    /// pr-integration rule 3: base, conflicts, his review asked (a direct
+    /// request of gh's viewer; a team's is not counted, v1), the head's
+    /// commit time and how many checks finished.
+    #[test]
+    fn the_row_facts() {
+        let out = serde_json::json!({"data": {"viewer": {"login": "Gabriel"}, "repository": {
+            "b0": {"nodes": [{"number": 412, "url": "u", "state": "OPEN", "isDraft": false, "reviewDecision": "REVIEW_REQUIRED",
+                "headRefOid": "h", "baseRefName": "main", "updatedAt": "t", "headRepositoryOwner": {"login": "o"},
+                "mergeStateStatus": "DIRTY",
+                "reviewRequests": {"nodes": [
+                    {"requestedReviewer": {"__typename": "Team"}},
+                    {"requestedReviewer": {"__typename": "User", "login": "gabriel"}}]},
+                "commits": {"nodes": [{"commit": {"committedDate": "2026-11-06T10:00:00Z", "statusCheckRollup": {"state": "PENDING",
+                    "contexts": {"totalCount": 3, "nodes": [
+                        {"__typename": "CheckRun", "name": "a", "status": "COMPLETED", "conclusion": "SUCCESS"},
+                        {"__typename": "CheckRun", "name": "b", "status": "IN_PROGRESS", "conclusion": null},
+                        {"__typename": "StatusContext", "context": "c", "state": "SUCCESS"}]}}}}]}}]}
+        }}});
+        let prs = parse(&out.to_string(), &repo(), &["sb/a".to_string()]).unwrap();
+        let f = &prs[0].facts;
+        assert_eq!((f.base.as_str(), f.conflicts, f.asked_you), ("main", true, true));
+        assert_eq!((f.pushed_at.as_str(), f.checks, f.checks_done), ("2026-11-06T10:00:00Z", 3, 2));
+        assert!(!f.mergeable);
+        // a team's request only, or no viewer: not his
+        let mut o = out.clone();
+        o["data"]["repository"]["b0"]["nodes"][0]["reviewRequests"]["nodes"] =
+            serde_json::json!([{"requestedReviewer": {"__typename": "Team", "login": "gabriel"}}]);
+        assert!(!parse(&o.to_string(), &repo(), &["sb/a".to_string()]).unwrap()[0].facts.asked_you);
+        let mut o = out.clone();
+        o["data"]["viewer"] = Value::Null;
+        assert!(!parse(&o.to_string(), &repo(), &["sb/a".to_string()]).unwrap()[0].facts.asked_you);
+        let q = query(&repo(), &["sb/a".to_string()]);
+        for f in ["viewer { login }", "baseRefName", "reviewRequests(first: 10)", "committedDate"] {
+            assert!(q.contains(f), "{f}");
+        }
     }
 
     #[test]

@@ -274,12 +274,13 @@ fn prs_are_typed_rows_and_the_text_is_made_from_them() {
     assert_eq!(rows.iter().map(|r| r.number).collect::<Vec<_>>(), [412, 415], "open and draft ones, by number");
     let r = &rows[0];
     assert_eq!((r.state, r.checks, r.review, r.failing.clone()), (S::Open, PrChecks::Fail, PrReview::Changes, vec!["e2e".to_string()]));
-    assert_eq!((r.words.as_str(), r.text.as_str()), ("changes asked · checks fail: e2e", "sb/dark-mode · dark-mode · changes asked · checks fail: e2e"));
+    assert_eq!((r.words.as_str(), r.text.as_str()), ("changes asked · checks ✗ e2e", "sb/dark-mode · dark-mode · changes asked · checks ✗ e2e"));
+    assert_eq!((r.tag.as_str(), r.repo.as_str(), r.provider), ("#412", "o/r", bise_proto::rows::PrProvider::Github));
     assert_eq!((rows[1].state, rows[1].checks, rows[1].text.as_str()), (S::Draft, PrChecks::Running, "sb/perf · no agent · draft · checks running"));
     assert_eq!(prs_head(&rows), "2 PRs open");
     assert_eq!(
         prs_list(&rows),
-        "2 PRs open\n↑ #412 sb/dark-mode · dark-mode · changes asked · checks fail: e2e\n  https://github.com/o/r/pull/412\n↑ #415 sb/perf · no agent · draft · checks running\n  https://github.com/o/r/pull/412"
+        "2 PRs open\n↑ #412 sb/dark-mode · dark-mode · changes asked · checks ✗ e2e\n  https://github.com/o/r/pull/412\n↑ #415 sb/perf · no agent · draft · checks running\n  https://github.com/o/r/pull/412"
     );
     match prs_ev("p".into(), &places) {
         bise_proto::hub::HubEv::Prs { head, items, none, .. } => assert_eq!((head.as_str(), items, none), ("2 PRs open", rows, None)),

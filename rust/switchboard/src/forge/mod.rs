@@ -285,6 +285,89 @@ pub fn read_line(known: &mut std::collections::BTreeMap<String, Known>, ev: &ser
     }
 }
 
+/// pr-integration rule 6: what a PR waits on him for, the one owner of
+/// it (the row's pink and the inbox item read this): his review asked
+/// (open or draft), else his merge, when the ready-to-merge item would
+/// open (`core::merge::ready`: approved or no review needed, checks
+/// pass, the forge would merge it).
+pub fn yours(pr: &PrSnapshot) -> Option<bise_proto::rows::PrYours> {
+    use bise_proto::rows::PrYours;
+    let live = matches!(pr.state, PrState::Open | PrState::Draft);
+    if live && pr.facts.asked_you {
+        Some(PrYours::Review)
+    } else if crate::core::merge::ready(pr) {
+        Some(PrYours::Merge)
+    } else {
+        None
+    }
+}
+
+/// A PR's link, the one form the hub keys it by (its artifact's source,
+/// the poller's followed PRs): `https://<host>/<owner>/<repo>/pull/<n>`
+/// (GitLab: `…/-/merge_requests/<n>`), its tab, query and trailing
+/// parts dropped (`…/pull/6/files#x` is `…/pull/6`). None: not a PR.
+pub fn pr_url(url: &str) -> Option<String> {
+    let bare = url.trim().trim_start_matches("https://").trim_start_matches("http://");
+    let bare = bare.split(['?', '#']).next()?;
+    let parts: Vec<&str> = bare.split('/').filter(|p| !p.is_empty()).collect();
+    let (host, owner, name) = (parts.first()?, parts.get(1)?, parts.get(2)?);
+    let n = |s: &&str| s.parse::<u64>().ok().filter(|n| *n > 0);
+    if parts.get(3) == Some(&"pull") {
+        let num = parts.get(4).and_then(n)?;
+        return Some(format!("https://{}/{}/{}/pull/{}", host.to_lowercase(), owner, name, num));
+    }
+    // GitLab: group/(sub/)*repo/-/merge_requests/n
+    let dash = parts.iter().position(|p| *p == "-")?;
+    if dash >= 3 && parts.get(dash + 1) == Some(&"merge_requests") {
+        let num = parts.get(dash + 2).and_then(n)?;
+        return Some(format!("https://{}/{}/-/merge_requests/{}", host.to_lowercase(), parts[1..dash].join("/"), num));
+    }
+    None
+}
+
+/// The forge of a PR's link: GitLab's `/-/merge_requests/`, else GitHub
+/// (gh answers for github.com and the GHE hosts it knows).
+pub fn provider_of(url: &str) -> bise_proto::rows::PrProvider {
+    use bise_proto::rows::PrProvider;
+    if url.contains("/-/merge_requests/") {
+        PrProvider::Gitlab
+    } else if pr_url(url).is_some() {
+        PrProvider::Github
+    } else {
+        PrProvider::Unknown
+    }
+}
+
+/// `owner/name` of a PR's link (GitLab: `group/sub/name`).
+pub fn repo_of_pr(url: &str) -> String {
+    let Some(u) = pr_url(url) else { return String::new() };
+    let path = u.trim_start_matches("https://");
+    let path = path.split_once('/').map_or("", |(_, p)| p);
+    let path = path.split("/-/").next().unwrap_or(path);
+    match path.rsplit_once("/pull/") {
+        Some((repo, _)) => repo.to_string(),
+        None => path.to_string(),
+    }
+}
+
+/// The forge's time (`2026-10-01T12:00:00Z`, or with ms) as ms since
+/// the epoch; None for anything else.
+pub fn iso_ms(s: &str) -> Option<u64> {
+    let s = s.trim();
+    match s.len() {
+        20 if s.ends_with('Z') => bise_session::writer::ms_of_iso(&format!("{}.000Z", &s[..19])),
+        _ => bise_session::writer::ms_of_iso(s),
+    }
+}
+
+/// A PR's number with its forge's sigil: `#412`, GitLab's `!412`.
+pub fn tag(provider: bise_proto::rows::PrProvider, number: u64) -> String {
+    match provider {
+        bise_proto::rows::PrProvider::Gitlab => format!("!{}", number),
+        _ => format!("#{}", number),
+    }
+}
+
 /// The held line of a worktree with no PR yet (pr-design §4.1 rule 5).
 pub fn no_pr_lid(commits: u32) -> String {
     match commits {
@@ -379,6 +462,72 @@ mod tests {
         assert!(belongs(&old, None, Some("h1")));
         assert!(belongs(&old, Some(Known { number: 3, ended: false }), None));
         assert!(belongs(&pr(3, PrState::Open), None, None));
+    }
+
+    /// pr-integration rule 6: his review first, else his merge exactly
+    /// when the ready-to-merge item would open (one owner: the row and
+    /// the card never disagree).
+    #[test]
+    fn what_waits_on_him() {
+        use bise_proto::rows::PrYours;
+        let mut p = pr(7, PrState::Open);
+        assert_eq!(yours(&p), None);
+        p.facts.asked_you = true;
+        assert_eq!(yours(&p), Some(PrYours::Review));
+        p.facts.asked_you = false;
+        p.review = Review::Approved;
+        p.checks = Checks::Pass;
+        p.facts.checks = 3;
+        p.facts.mergeable = true;
+        p.facts.methods = vec![crate::place::MergeMethod::Squash];
+        assert_eq!(yours(&p), Some(PrYours::Merge));
+        for (i, f) in [
+            (|p: &mut PrSnapshot| p.facts.mergeable = false) as fn(&mut PrSnapshot),
+            |p| p.checks = Checks::Running,
+            |p| p.review = Review::ChangesRequested,
+            |p| p.state = PrState::Draft,
+            |p| p.state = PrState::Merged,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let mut q = p.clone();
+            f(&mut q);
+            assert_eq!(yours(&q), None, "case {i}");
+            assert_eq!(yours(&q).is_some(), crate::core::merge::ready(&q), "case {i}");
+        }
+        assert!(crate::core::merge::ready(&p));
+        // a merged PR asks nothing of him, even with a request left
+        let mut m = pr(7, PrState::Merged);
+        m.facts.asked_you = true;
+        assert_eq!(yours(&m), None);
+    }
+
+    #[test]
+    fn one_form_of_a_pr_link() {
+        let u = |s| pr_url(s);
+        let want = Some("https://github.com/o/r/pull/6".to_string());
+        assert_eq!(u("https://github.com/o/r/pull/6"), want);
+        assert_eq!(u("https://GitHub.com/o/r/pull/6/files#diff-1"), want);
+        assert_eq!(u("github.com/o/r/pull/6?w=1"), want);
+        assert_eq!(u("http://github.com/o/r/pull/6/"), want);
+        assert_eq!(u("https://github.com/o/r/issues/6"), None);
+        assert_eq!(u("https://github.com/o/r/pull/x"), None);
+        assert_eq!(
+            u("https://gitlab.com/g/sub/r/-/merge_requests/12/diffs").as_deref(),
+            Some("https://gitlab.com/g/sub/r/-/merge_requests/12")
+        );
+        use bise_proto::rows::PrProvider;
+        assert_eq!(provider_of("https://github.com/o/r/pull/6"), PrProvider::Github);
+        assert_eq!(provider_of("https://gitlab.com/g/r/-/merge_requests/3"), PrProvider::Gitlab);
+        assert_eq!(provider_of("https://example.com"), PrProvider::Unknown);
+        assert_eq!(repo_of_pr("https://github.com/o/r/pull/6/files"), "o/r");
+        assert_eq!(repo_of_pr("https://gitlab.com/g/sub/r/-/merge_requests/3"), "g/sub/r");
+        assert_eq!(tag(PrProvider::Github, 412), "#412");
+        assert_eq!(tag(PrProvider::Gitlab, 412), "!412");
+        assert_eq!(iso_ms("1970-01-01T00:00:01Z"), Some(1000));
+        assert_eq!(iso_ms("1970-01-01T00:00:01.500Z"), Some(1500));
+        assert_eq!(iso_ms(""), None);
     }
 
     #[test]

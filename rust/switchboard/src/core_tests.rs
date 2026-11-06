@@ -3052,6 +3052,7 @@ mod prs {
             checks: 3,
             mergeable: true,
             methods: vec![crate::place::MergeMethod::Squash, crate::place::MergeMethod::Merge],
+            ..Default::default()
         });
         p
     }
@@ -3468,7 +3469,8 @@ mod prs {
         // (its own query, one PR: no `pullRequests(`)
         assert_eq!(calls.lines().filter(|l| l.contains("pullRequests(")).count(), 7, "one gh call a round");
         assert!(calls.lines().filter(|l| l.contains("pullRequest(number: 412)")).count() <= 6, "{}", calls);
-        assert!(calls.lines().all(|l| l.starts_with("api graphql -f query=query { repository(owner: \"o\", name: \"r\")")));
+        assert!(calls.lines().all(|l| l.starts_with("api graphql -f query=query {")
+            && l.contains("repository(owner: \"o\", name: \"r\")")), "{}", calls);
 
         // offline, 401, rate limit: the last state stays, faint
         let mut t = T::new();
@@ -3583,7 +3585,7 @@ mod prs {
         // /prs lists it
         let fx = t.user(MAIN, "/prs");
         assert!(
-            fx.iter().any(|e| matches!(e, Effect::ToClient { body, .. } if body["text"].as_str().is_some_and(|s| s.contains("↑ #412 sb/dark · dark · checks fail: e2e")))),
+            fx.iter().any(|e| matches!(e, Effect::ToClient { body, .. } if body["text"].as_str().is_some_and(|s| s.contains("↑ #412 sb/dark · dark · checks ✗ e2e")))),
             "{:?}",
             fx
         );

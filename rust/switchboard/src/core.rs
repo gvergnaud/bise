@@ -2057,7 +2057,7 @@ pub mod feature;
 pub use feature::FeatureDone;
 
 #[path = "merge.rs"]
-mod merge;
+pub(crate) mod merge;
 
 #[path = "release_line.rs"]
 pub mod release_line;

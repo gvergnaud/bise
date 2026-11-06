@@ -108,6 +108,26 @@ crate::words! { panel:
     pr_checks_fail = "checks fail";
     /// a PR with nothing else to say
     pr_open = "open";
+    /// a PR's state: merged (archived, pr-integration's table)
+    pr_merged = "merged";
+    /// a PR's state: closed without a merge
+    pr_closed = "closed";
+    /// a PR's checks all pass, with no count (the hub's row words)
+    pr_checks_ok = "checks ✓";
+    /// a PR's checks all pass, of its count: `checks ✓ 12/12`
+    pr_checks_ok_of(done, total) = "checks ✓ {done}/{total}";
+    /// a PR's checks run, of its count: `checks running 4/12`
+    pr_checks_running_of(done, total) = "checks running {done}/{total}";
+    /// a PR's failing checks, by name: `checks ✗ e2e`
+    pr_checks_failed(names) = "checks ✗ {names}";
+    /// a PR's checks fail, no name known
+    pr_checks_failed_bare = "checks ✗";
+    /// a PR conflicts with its base
+    pr_conflicts = "conflicts";
+    /// a PR waits on his review (pink, an inbox item)
+    pr_your_review = "your review";
+    /// a PR waits only on his merge (pink, an inbox item)
+    pr_your_merge = "your merge";
     /// the forge is late
     pr_state_from(age) = "state from {age} ago";
     /// a feature branch's tip, before its name

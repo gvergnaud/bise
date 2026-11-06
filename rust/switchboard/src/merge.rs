@@ -317,6 +317,7 @@ mod tests {
                 checks: 6,
                 mergeable: true,
                 methods: vec![MergeMethod::Squash, MergeMethod::Merge],
+                ..Default::default()
             }),
         }
     }
