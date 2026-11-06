@@ -147,8 +147,7 @@
 .st-rows { display: flex; flex-direction: column; border-radius: var(--r-menu); background: var(--c-raised); box-shadow: inset 0 0 0 1px var(--c-line); margin-bottom: var(--gap-section); }
 .st-feature + .st-feature { border-top: 1px solid var(--c-line); }
 .st-feature.is-at { box-shadow: inset 0 0 0 1px var(--c-focus); border-radius: var(--r-menu); }
-.st-row { box-sizing: border-box; display: flex; align-items: center; gap: var(--s-2); min-height: 52px; padding: var(--s-1) var(--s-3); }
-.st-feature[data-state="failed"] .st-row { cursor: pointer; }
+.st-row { box-sizing: border-box; display: flex; align-items: center; gap: var(--s-2); min-height: var(--h-list-row); padding: var(--s-1) var(--s-3); }
 .st-name { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: var(--s-1); font: var(--t-13) var(--font-ui); color: var(--c-text); }
 .st-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--t-12) var(--font-ui); color: var(--c-text-3); }
 .st-mark { flex: none; font: var(--t-12) var(--font-ui); font-variant-numeric: tabular-nums; }
@@ -157,12 +156,13 @@
 .st-mark.faint { color: var(--c-text-3); }
 .st-trouble { margin: 0 var(--s-3) var(--s-3); padding: var(--s-2) var(--s-3); border-left: 2px solid var(--c-err); background: var(--c-sunken); border-radius: 0 var(--r-menu) var(--r-menu) 0; font: var(--t-13) var(--font-ui); color: var(--c-text); }
 .st-trouble p { margin: 0 0 var(--s-1); }
+.st-trouble .why { color: var(--c-text); }
 .st-trouble .said, .st-trouble .when { font-size: var(--t-12); color: var(--c-text-2); }
 /* the provider's own words in mono (designer m_54203) */
 .st-trouble .said.mono { font-family: var(--font-mono); }
 .st-trouble .acts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin-top: var(--s-2); }
 .st-fold { margin-bottom: var(--s-2); }
-.st-fold-head { display: inline-flex; align-items: center; gap: var(--s-1); padding: var(--s-1) 0; font: 600 var(--t-12) var(--font-ui); color: var(--c-text-2); background: none; border: 0; cursor: pointer; }
+.st-fold-head { display: inline-flex; align-items: center; gap: var(--s-1); padding: var(--s-1) 0; font: 600 var(--t-12) var(--font-ui); color: var(--c-text-2); background: none; border: 0; }
 .st-fold-head:hover { color: var(--c-text); }
 .st-fold-head .chev { width: 12px; color: var(--c-text-3); }
 .st-fold-body { padding-top: var(--s-1); }
