@@ -8,7 +8,7 @@ import type { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import type { Store } from "@/composer/drafts";
 import { flat, spotList, spotView, type SpotData } from "./list";
-import { Spotlight, answerLines, outgoingOf, quoteChip, withQuote, ANSWER_MAX_LINES } from "./Spotlight";
+import { Spotlight, answerLines, outgoingOf, quoteChip, spotMax, withQuote, ANSWER_MAX_LINES } from "./Spotlight";
 import { cardLine, newBrief, shortPath } from "./words";
 
 afterEach(cleanup);
@@ -508,6 +508,44 @@ describe("spot-shot: the window he was on, and his long words", () => {
     expect(off.ui.getByTestId("spot.noshot").textContent).toBe("no screenshot · Screen Recording is off");
     fireEvent.click(off.ui.getByTestId("spot.noshot"));
     expect(open).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the window grows down with his words (Gabriel's v4)", () => {
+  const css = async (): Promise<string> => {
+    const { readFileSync } = await import("node:fs");
+    return readFileSync(`${process.cwd()}/src/spotlight/spotlight.css`, "utf8");
+  };
+  const rule = (src: string, sel: string): string =>
+    new RegExp(`${sel.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")} \\{([^}]*)\\}`, "u").exec(src)?.[1] ?? "";
+
+  it("up to 70 % of his screen, with a floor for a tiny or unknown one", () => {
+    expect(spotMax(1000)).toBe(700);
+    expect(spotMax(0)).toBe(560);
+    expect(spotMax(300)).toBe(320);
+    const s = spot();
+    expect(s.ui.getByTestId("spot").style.getPropertyValue("--spot-max")).toBe(`${String(spotMax(window.screen.availHeight))}px`);
+  });
+
+  it("the spotlight stops at its cap, the keys stay at the bottom", async () => {
+    const src = await css();
+    expect(rule(src, ".b-spotlight .b-spot")).toContain("max-height: var(--spot-max");
+    expect(rule(src, ".b-spotlight .b-spot > .keys")).toContain("flex: none");
+  });
+
+  it("his words grow to 12 lines, then scroll; the list gives its rows first, never under 3", async () => {
+    const src = await css();
+    expect(rule(src, ".b-spot-field .b-field.ProseMirror")).toContain("max-height: calc(1.2em * 12)");
+    const list = rule(src, '.b-spotlight .b-spot > [role="listbox"]');
+    expect(list).toContain("flex: 0 1000 auto");
+    expect(list).toContain("min(size, var(--h-row) * 3)");
+    expect(rule(src, ".b-spotlight .b-spot > .in")).toContain("flex: 0 1 auto");
+  });
+
+  it("each line in 140 ms, none with reduced motion", async () => {
+    const src = await css();
+    expect(rule(src, ".b-spot-field .b-field.ProseMirror")).toContain("transition: height 140ms");
+    expect(src).toMatch(/prefers-reduced-motion: reduce\)\s*\{\s*\.b-spot-field \.b-field\.ProseMirror \{\s*transition: none;/u);
   });
 });
 

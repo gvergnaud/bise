@@ -15,6 +15,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type JSX,
   type ReactNode,
 } from "react";
@@ -48,6 +49,13 @@ import "./spotlight.css";
 /** The spotlight's composer target: its draft, kept through esc, a reload or a relaunch (keep.ts
  *  keptStorage), and its history (↑ in the empty field: his last message back). */
 export const SPOT_TARGET = "spot";
+
+/** The window grows down (its top stays, main's place.ts pin) up to this share of his screen's
+ *  height (Gabriel's v4); past it the list gives rows down to 3, then his words scroll. */
+export const SPOT_MAX_SHARE = 0.7;
+/** The spotlight's height cap in CSS px for a screen `avail` px high (a floor for a tiny or
+ *  unknown screen). Pure. */
+export const spotMax = (avail: number): number => Math.max(320, Math.round((avail || 800) * SPOT_MAX_SHARE));
 
 /** An entry's message as it would be sent (entry.ts → message.ts): ⌘⏎ on a row sends it there. */
 export const outgoingOf = (entry: string): Outgoing =>
@@ -575,7 +583,12 @@ export function Spotlight(p: SpotlightProps): JSX.Element {
   };
 
   return (
-    <div ref={box} className="b-spotlight" data-testid={testId}>
+    <div
+      ref={box}
+      className="b-spotlight"
+      data-testid={testId}
+      style={{ "--spot-max": `${String(spotMax(window.screen.availHeight))}px` } as CSSProperties}
+    >
       <Spot
         testId={`${testId}.frame`}
         to={W.to}

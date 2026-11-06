@@ -44,12 +44,57 @@
 .b-spot-field .b-field-host {
   display: contents;
 }
+/* the window grows down with his words (Gabriel's v4): the top stays (main's pin), the keys stay
+   at the bottom, the whole spotlight up to --spot-max (70 % of his screen, Spotlight's spotMax).
+   Past it the list gives its rows first, down to 3, then his words scroll: the list shrinks a
+   thousand times faster than the field's row, and never under 3 rows */
+.b-spotlight .b-spot {
+  display: flex;
+  flex-direction: column;
+  max-height: var(--spot-max, 70vh);
+}
+.b-spotlight .b-spot > .in {
+  flex: 0 1 auto;
+  min-height: 0;
+  align-items: stretch;
+}
+/* the pearl and 'to bise' stay on his first line when the words grow (one line: as before, the
+   words centred on the 40 px pearl) */
+.b-spotlight .b-spot > .in > :not(.tx) {
+  align-self: flex-start;
+}
+.b-spotlight .b-spot > .in > .to {
+  line-height: var(--s-10);
+}
+.b-spotlight .b-spot > .in > .tx {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+}
+.b-spotlight .b-spot > .in > .tx > .b-spot-field,
+.b-spotlight .b-spot-words {
+  flex: 0 1 auto;
+  min-height: 0;
+}
+.b-spotlight .b-spot > [role="listbox"] {
+  flex: 0 1000 auto;
+  min-height: calc-size(max-content, min(size, var(--h-row) * 3));
+  overflow-y: auto;
+}
+.b-spotlight .b-spot > .keys {
+  flex: none;
+}
 .b-spot-field .b-field.ProseMirror {
   display: block;
+  flex: 0 1 auto;
   width: 100%;
   min-width: 4em;
   height: auto;
-  max-height: calc(1.2em * 4);
+  min-height: 1.2em;
+  max-height: calc(1.2em * 12);
+  interpolate-size: allow-keywords;
+  transition: height 140ms var(--ease-out);
   overflow-x: hidden;
   overflow-y: auto;
   white-space: pre-wrap;
@@ -64,6 +109,11 @@
   font: inherit;
   line-height: 1.2;
   color: inherit;
+}
+@media (prefers-reduced-motion: reduce) {
+  .b-spot-field .b-field.ProseMirror {
+    transition: none;
+  }
 }
 .b-spot-field .b-field .p {
   margin: 0;
