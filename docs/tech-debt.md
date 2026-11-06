@@ -190,6 +190,12 @@ Ranked by value: risk removed per hour spent.
 - `#[allow(clippy::too_many_arguments)]` at `chrome.rs:406` and
   `panel.rs:127` have no reason; a struct would do, when someone works
   there.
+- An artifact version's `no_copy` (`artifacts.rs`) is a free string with
+  three writers (`TOO_BIG`, `over N files`, `copy failed: …`), and code
+  compares it: `site::served` to `TOO_BIG` (video-artifact 1986a81ae),
+  the row's words to `"archived"`. Fix: a typed `NoCopy` enum whose serde
+  names are today's stored strings, with `Other(String)` for the failed
+  copy's text (stored metas still read). cheap (S), no UX change.
 
 ## Progress
 
