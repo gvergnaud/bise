@@ -73,7 +73,7 @@ fn a_late_answer_keeps_his_parts() {
     answer(&mut t, card, "<selection from=\"main\">\nq\n</selection>\nv2", parts);
     let late = late_msgs(&t);
     assert_eq!(late.len(), 1);
-    let m = t.hub.st.msgs().values().find(|m| m.text.starts_with("he answered #")).expect("main's message").clone();
+    let m = t.hub.st.whole_msgs().find(|m| m.text.starts_with("he answered #")).expect("main's message").clone();
     assert_eq!(m.parts, parts);
 }
 

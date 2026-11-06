@@ -126,10 +126,11 @@ impl Shell {
     /// thread (`forward::msg_pos` over the transcript as a stream), then
     /// `sb show <agent>#<pos>`; not found: one line naming the recipient.
     pub(super) fn show_msg(&mut self, n: u64, context: Option<u64>) -> Value {
-        let Some(m) = self.hub.st.msgs().get(&n) else {
+        // its recipient only: a cold message's row has it
+        let Some(m) = self.hub.st.peek(n) else {
             return json!({"ok": false, "error": format!("m_{n} unknown")});
         };
-        let to = self.hub.st.resolve(&m.to).unwrap_or_else(|| m.to.clone());
+        let to = self.hub.st.resolve(m.to).unwrap_or_else(|| m.to.to_string());
         let Some(dir) = self.hub.st.agents.get(&to).map(|a| a.dir.clone()) else {
             return json!({"ok": false, "error": format!("m_{n} went to {to}, which has no thread here")});
         };

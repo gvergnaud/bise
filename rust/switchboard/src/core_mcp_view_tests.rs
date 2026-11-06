@@ -84,7 +84,7 @@ fn a_view_message_goes_queued_to_its_agent_via_its_plugin() {
     t.spawn_task("docs");
     t.turn("docs", "ok");
     let fx = t.go(Input::ViewMessage { agent: "docs".into(), plugin: "fake-app".into(), text: "make it major".into() });
-    let m = t.hub.st.msgs().values().find(|m| m.text == "make it major").expect("the message").clone();
+    let m = t.hub.st.whole_msgs().find(|m| m.text == "make it major").expect("the message").clone();
     assert_eq!((m.from.as_str(), m.to.as_str(), m.view.as_deref(), m.queued), ("view", "docs", Some("fake-app"), true));
     let said = say_to(&fx, "docs").expect("an idle agent reads it");
     assert!(said.contains("<view_message plugin=\"fake-app\""), "{said}");
@@ -191,7 +191,7 @@ fn a_views_context_joins_his_next_message_once() {
     assert!(!said.contains("count=3"), "the last context of a view only: {said}");
     let (c4, b) = (said.find("count=4").expect("its context"), said.find("board=x").expect("the other view's"));
     assert!(c4 < b && b < said.find("bump it").unwrap(), "before his words, in order: {said}");
-    let m = t.hub.st.msgs().values().find(|m| m.text.contains("bump it")).expect("his message").clone();
+    let m = t.hub.st.whole_msgs().find(|m| m.text.contains("bump it")).expect("his message").clone();
     let parts: Vec<bise_proto::parts::Part> = serde_json::from_str(&m.parts).expect("its parts");
     assert_eq!(parts.len(), 3, "{parts:?}");
     assert_eq!(bise_proto::parts::render(&parts), m.text, "its text is its parts' render");

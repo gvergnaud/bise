@@ -5,3 +5,4 @@
 {"t": "view_all"}
 {"t": "photo"}
 {"st": {"agents": [], "order": []}, "t": "restore_photo"}
+{"ids": [1, 2], "t": "msg_bodies"}

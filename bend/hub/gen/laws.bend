@@ -1133,6 +1133,12 @@ law link_view_all_bare:
 def link_view_all_bare():
   {==}
 
+law link_msg_bodies_bare:
+  {LINK.of(J.obj([J.kv("t", J.JStr{"msg_bodies"})])) == LINK.TMsgBodies{Nil{}} : LINK.Link}
+
+def link_msg_bodies_bare():
+  {==}
+
 law link_photo_bare:
   {LINK.of(J.obj([J.kv("t", J.JStr{"photo"})])) == LINK.TPhoto{} : LINK.Link}
 
@@ -1188,6 +1194,14 @@ law link_TView_round:
   {LINK.of(LINK.json(LINK.TView{})) == LINK.TView{} : LINK.Link}
 
 def link_TView_round():
+  {==}
+
+law link_TMsgBodies_round:
+  for ids: List<&2, Nat>
+  {LINK.of(LINK.json(LINK.TMsgBodies{ids})) == LINK.TMsgBodies{ids} : LINK.Link}
+
+def link_TMsgBodies_round(ids):
+  %K.nats_round(ids) : {LINK.of(LINK.json(LINK.TMsgBodies{ids})) == LINK.TMsgBodies{_} : LINK.Link}
   {==}
 
 law link_TPhoto_round:

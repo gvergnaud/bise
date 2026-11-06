@@ -154,13 +154,16 @@ pub struct State {
     /// indexes built from them (`threads`, `hot`). Read with
     /// [`State::msgs`] and siblings.
     ///
-    /// Every message stays here, delivered and owing nothing included:
-    /// three readers still ask for such a cold one (issue 21): the
-    /// delivery's text (core_link.rs `deliver`, the step's messages after
-    /// the view that turned them cold), main's `<agent_threads>`
-    /// (board.rs, through `threads`) and a question card's note
-    /// (core.rs `card_note`, main's messages since the card).
-    msgs: BTreeMap<u64, Msg>,
+    /// Every message stays here, delivered and owing nothing included,
+    /// as a [`Row`]: whole, or cold (view-all-perf: `view_all` sends a
+    /// cold one without its body; [`State::cold_of`] names them, the hub
+    /// asks sb-core for their bodies, core.rs `fetch_bodies`). Readers of
+    /// a cold one's body (issue 21): the delivery's text (core_link.rs
+    /// `deliver`: the step's own messages, always whole), main's
+    /// `<agent_threads>` (board.rs, through `threads`: fetched before
+    /// the build), a question card's note (core_snapshot.rs `card_note`)
+    /// and the `--attach m_<n>` of an old message (fetched first).
+    msgs: BTreeMap<u64, Row>,
     msg_state: BTreeMap<u64, MsgState>,
     settled: BTreeSet<u64>,
     /// main's `<agent_threads>`, kept by the same writer (board::Threads)
@@ -204,9 +207,40 @@ impl State {
         st
     }
 
-    /// Every message, by id.
-    pub fn msgs(&self) -> &BTreeMap<u64, Msg> {
-        &self.msgs
+    /// Message `id`, whole (its text and parts); None: unknown, or cold
+    /// (its body not fetched: [`State::cold_of`], then core.rs
+    /// `fetch_bodies`).
+    pub fn msg(&self, id: u64) -> Option<&Msg> {
+        self.msgs.get(&id)?.whole()
+    }
+
+    /// Message `id`'s row without its body, whole or cold.
+    pub fn peek(&self, id: u64) -> Option<Peek<'_>> {
+        self.msgs.get(&id).map(Row::peek)
+    }
+
+    /// Every message's row without its body, by id.
+    pub fn peeks(&self) -> impl DoubleEndedIterator<Item = Peek<'_>> + '_ {
+        self.msgs.values().map(Row::peek)
+    }
+
+    /// Tests only: the whole messages by id (a test hub's messages are
+    /// all among view_all's newest whole ones, view.bend RECENT).
+    #[cfg(test)]
+    pub fn msgs(&self) -> BTreeMap<u64, &Msg> {
+        self.whole_msgs().map(|m| (m.id, m)).collect()
+    }
+
+    /// The whole messages, by id (a cold one is left out).
+    pub fn whole_msgs(&self) -> impl DoubleEndedIterator<Item = &Msg> + '_ {
+        self.msgs.values().filter_map(Row::whole)
+    }
+
+    /// The cold messages of `ids` (their bodies to fetch), each once, in
+    /// order.
+    pub fn cold_of(&self, ids: impl IntoIterator<Item = u64>) -> Vec<u64> {
+        let set: BTreeSet<u64> = ids.into_iter().filter(|id| matches!(self.msgs.get(id), Some(Row::Cold(_)))).collect();
+        set.into_iter().collect()
     }
 
     /// Each message's delivery state, by id.
@@ -221,22 +255,25 @@ impl State {
 
     /// The one writer of a message: its row, its state (None: unchanged),
     /// whether a reply settled it, and what sb-core says of it (`hot`).
-    pub fn put_msg(&mut self, m: Msg, state: Option<MsgState>, settled: bool, hot: Hot) {
+    /// `row`: whole, or cold (view_all's row of a message without its
+    /// body). sb-core sends every hot message whole (view.bend
+    /// `ships_whole`): [`State::hot`] reads whole rows only.
+    pub fn put_msg(&mut self, row: Row, state: Option<MsgState>, settled: bool, hot: Hot) {
+        let (id, thread) = (row.peek().id, row.peek().thread);
         if hot.queued || hot.owes {
-            self.hot.insert(m.id, hot);
+            self.hot.insert(id, hot);
         } else {
-            self.hot.remove(&m.id);
+            self.hot.remove(&id);
         }
         if let Some(state) = state {
-            self.msg_state.insert(m.id, state);
+            self.msg_state.insert(id, state);
         }
         if settled {
-            self.settled.insert(m.id);
+            self.settled.insert(id);
         } else {
-            self.settled.remove(&m.id);
+            self.settled.remove(&id);
         }
-        let (id, thread) = (m.id, m.thread);
-        let was = self.msgs.insert(id, m).map(|o| o.thread);
+        let was = self.msgs.insert(id, row).map(|o| o.peek().thread);
         if let Some(old) = was.filter(|t| *t != thread) {
             self.threads.take(&self.msgs, old, id);
         }
@@ -262,12 +299,13 @@ impl State {
             queued: matches!(st, Some(MsgState::Queued { .. })),
             owes: m.expect_reply && !settled && matches!(st, Some(MsgState::Delivered)),
         };
-        self.put_msg(m, state, settled, hot);
+        self.put_msg(Row::Whole(m), state, settled, hot);
     }
 
-    /// The hot messages, oldest first, with what sb-core says of each.
+    /// The hot messages, oldest first, with what sb-core says of each
+    /// (each whole: sb-core never sends a hot one cold).
     pub fn hot(&self) -> impl Iterator<Item = (&Msg, Hot)> + '_ {
-        self.hot.iter().filter_map(|(id, h)| Some((self.msgs.get(id)?, *h)))
+        self.hot.iter().filter_map(|(id, h)| Some((self.msg(*id)?, *h)))
     }
 
     /// The threads of main's `<agent_threads>` (board::agent_threads).
@@ -325,6 +363,68 @@ impl State {
     /// `m` waits for delivery (sb-core's word, its view's `queued`).
     pub fn is_queued(&self, m: &Msg) -> bool {
         self.hot.get(&m.id).is_some_and(|h| h.queued)
+    }
+}
+
+/// A message of the mirror (view-all-perf): whole, or cold: `view_all`
+/// sent its row without its body (`ViewMsg.whole` false). A cold one
+/// has no text the hub could show by mistake: its body comes from
+/// sb-core's `msg_bodies` (core.rs `fetch_bodies`), which makes it whole.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Row {
+    Whole(Msg),
+    Cold(Head),
+}
+
+/// A cold message's row: what the hub reads of every message without
+/// its body (main's threads, a forward's time, `sb show`'s recipient, a
+/// card's note).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Head {
+    pub id: u64,
+    pub thread: u64,
+    pub from: String,
+    pub to: String,
+    pub reply_to: Option<u64>,
+    pub expect_reply: bool,
+    pub created_ms: u64,
+    pub plain: bool,
+}
+
+impl Head {
+    /// The row of `m` (its body left out).
+    pub fn of(m: Msg) -> Head {
+        Head { id: m.id, thread: m.thread, from: m.from, to: m.to, reply_to: m.reply_to, expect_reply: m.expect_reply, created_ms: m.created_ms, plain: m.plain }
+    }
+}
+
+/// A message's row without its body, whole or cold ([`State::peek`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Peek<'a> {
+    pub id: u64,
+    pub thread: u64,
+    pub from: &'a str,
+    pub to: &'a str,
+    pub reply_to: Option<u64>,
+    pub expect_reply: bool,
+    pub created_ms: u64,
+    pub plain: bool,
+}
+
+impl Row {
+    pub fn peek(&self) -> Peek<'_> {
+        match self {
+            Row::Whole(m) => Peek { id: m.id, thread: m.thread, from: &m.from, to: &m.to, reply_to: m.reply_to, expect_reply: m.expect_reply, created_ms: m.created_ms, plain: m.plain },
+            Row::Cold(h) => Peek { id: h.id, thread: h.thread, from: &h.from, to: &h.to, reply_to: h.reply_to, expect_reply: h.expect_reply, created_ms: h.created_ms, plain: h.plain },
+        }
+    }
+
+    /// The message, when it is whole.
+    pub fn whole(&self) -> Option<&Msg> {
+        match self {
+            Row::Whole(m) => Some(m),
+            Row::Cold(_) => None,
+        }
     }
 }
 

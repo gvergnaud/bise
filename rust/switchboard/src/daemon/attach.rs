@@ -25,7 +25,13 @@ use std::path::Path;
 impl Shell {
     /// `req` with the parts its `attach` list makes (`v`: the CLI's
     /// request); none: unchanged. Err: the words of the refusal.
-    pub(super) fn attached(&self, from: &str, req: AgentReq) -> Result<AgentReq, String> {
+    pub(super) fn attached(&mut self, from: &str, req: AgentReq) -> Result<AgentReq, String> {
+        // view-all-perf: an `m_<n>` attached is read whole: a cold one's
+        // body first
+        if let AgentReq::Send { attach, .. } | AgentReq::Spawn { attach, .. } = &req {
+            let ids: Vec<u64> = attach.iter().filter_map(|a| crate::core::parse_msg_id(a)).collect();
+            self.hub.fetch_bodies(ids);
+        }
         let sender = || self.hub.st.resolve(from).unwrap_or_else(|| from.to_string());
         match req {
             AgentReq::Send { to, text, expect_reply, reply_to, queued, why, switch, attach, fwd, .. } if !attach.is_empty() => {
@@ -57,7 +63,8 @@ impl Shell {
         for a in list {
             match attach::want(a)? {
                 Want::Msg(n) => {
-                    let m = self.hub.st.msgs().get(&n).map(|m| attach::Said { from: &m.from, to: &m.to, text: &m.text, parts: &m.parts });
+                    // whole: `attached` fetched a cold one's body
+                    let m = self.hub.st.msg(n).map(|m| attach::Said { from: &m.from, to: &m.to, text: &m.text, parts: &m.parts });
                     out.extend(attach::forwarded(sender, n, m)?);
                 }
                 Want::Path(p) => out.push(path_item(&p, &store, tmps)?),

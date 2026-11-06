@@ -235,7 +235,8 @@ impl Hub {
         let msgs = d
             .msgs
             .iter()
-            .filter_map(|m| Some(prompts::tagged(self.st.msgs().get(&m.id)?, &m.rel)))
+            // the step's own messages: its view sent them whole
+            .filter_map(|m| Some(prompts::tagged(self.st.msg(m.id)?, &m.rel)))
             .collect();
         let text = core_fx::delivery(&d.notes, status, msgs);
         let agent = d.agent;

@@ -42,16 +42,45 @@ def run(binary, evs, batch, view_at):
             f.flush()
             out.append((label, f.readline()))
 
+        def ask(v):
+            f.write(json.dumps(v) + "
+")
+            f.flush()
+            return json.loads(f.readline())
+
         t = time.time()
         call("init", {"t": "init", "workspace": "/w"})
         for n, i in enumerate(range(0, len(evs), batch)):
             call("replay %d" % n, {"t": "replay_many", "evs": evs[i:i + batch]})
             if n in view_at:
                 call("view_all %d" % n, {"t": "view_all"})
+                out[-1] = (out[-1][0], whole_view(out[-1][1], ask))
         print("%s: %.1f s" % (os.path.basename(binary), time.time() - t), flush=True)
     finally:
         core.kill()
     return out
+
+
+def whole_view(line, ask):
+    """view_all's answer with every message whole (view-all-perf): a cold
+    row (`whole` false, its msg without text and parts) gets its msg from
+    `msg_bodies`, 256 ids a call, and `whole` goes (an older sb-core has
+    none, and never a cold row: it is never asked, msg_bodies would be a
+    step there). The same facts as the old full view_all, so an old and a
+    new binary compare byte for byte."""
+    a = json.loads(line)
+    rows = a.get("view", {}).get("msgs", [])
+    cold = [r["msg"]["id"] for r in rows if r.get("whole") is False]
+    got = {}
+    for i in range(0, len(cold), 256):
+        b = ask({"t": "msg_bodies", "ids": cold[i:i + 256]})
+        got.update({r["msg"]["id"]: r["msg"] for r in b["view"]["msgs"]})
+    for r in rows:
+        if r.get("whole") is False:
+            r["msg"] = got[r["msg"]["id"]]
+        r.pop("whole", None)
+    return json.dumps(a, ensure_ascii=False, separators=(",", ":")) + "
+"
 
 
 def main():

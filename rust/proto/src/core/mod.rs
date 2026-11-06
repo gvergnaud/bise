@@ -50,7 +50,7 @@ pub use fx::Fx;
 pub use input::{In, Step};
 pub use journal::JOURNAL;
 pub use link::{Answer, Link};
-pub use view::{Declaration, View, ViewAgent, ViewMsg, VIEW};
+pub use view::{ColdMsg, Declaration, View, ViewAgent, ViewMsg, VIEW};
 
 use serde::{Deserialize, Serialize};
 

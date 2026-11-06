@@ -32,7 +32,7 @@ fn an_agents_parts_ride_on_its_message() {
     // main → a: a's msg-in then its parts; main's own feed likewise
     let text = rendered("look");
     let (_, fx) = t.req(MAIN, send("a", &text, &parts_of("look")));
-    let m = t.hub.st.msgs().values().find(|m| m.text == text).expect("sent").clone();
+    let m = t.hub.st.whole_msgs().find(|m| m.text == text).expect("sent").clone();
     assert_eq!(m.parts, parts_of("look"), "kept on the message");
     assert!(say_to(&fx, "a").is_some_and(|s| s.contains("<image name=\"[Image #1]\"")), "the model's text has the marker: {fx:?}");
     let want = json!({"sb": "msg-parts", "id": m.id, "parts": serde_json::from_str::<Value>(&parts_of("look")).unwrap()});
@@ -77,7 +77,7 @@ fn a_brief_keeps_its_parts_with_the_head_in_front() {
             fwd: None,
         },
     );
-    let m = t.hub.st.msgs().values().find(|m| m.to == "a").expect("its brief").clone();
+    let m = t.hub.st.whole_msgs().find(|m| m.to == "a").expect("its brief").clone();
     let got: Vec<bise_proto::parts::Part> = serde_json::from_str(&m.parts).expect("its parts");
     assert_eq!(got[0], bise_proto::parts::Part::Text { text: "# Task `a`\n\n".into() });
     assert_eq!(bise_proto::parts::render(&got), m.text, "the text is their render");

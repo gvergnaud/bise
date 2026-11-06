@@ -9,6 +9,11 @@
 //! when an event changed them): the rest of the mirror stays. A view that
 //! doesn't decode is logged and the mirror kept; the step's effects still
 //! run (core_link.rs `apply_step`).
+//!
+//! view-all-perf: `view_all` sends its old messages that owe nothing as
+//! cold rows (`View.cold`, no body): the mirror keeps them as
+//! `Row::Cold`, and core.rs `fetch_bodies` asks sb-core's `msg_bodies`
+//! for a body a reader needs (a step's view and msg_bodies send whole).
 
 use super::*;
 
@@ -58,7 +63,18 @@ impl Hub {
         }
         for r in v.msgs {
             let Some(m) = parse::<Msg>(&r.msg) else { continue };
-            self.st.put_msg(m, parse(&r.state), r.settled, Hot { queued: r.queued, owes: r.owes });
+            self.st.put_msg(Row::Whole(m), parse(&r.state), r.settled, Hot { queued: r.queued, owes: r.owes });
+        }
+        // view-all-perf: view_all's cold messages, rows without their
+        // body (never hot: sb-core sends those whole)
+        for c in v.cold.iter().flatten() {
+            match ColdMsg::decode(c) {
+                Ok(c) => {
+                    let head = Head { id: c.id, thread: c.thread, from: c.from, to: c.to, reply_to: c.reply_to, expect_reply: c.expect_reply, created_ms: c.created_ms, plain: c.plain };
+                    self.st.put_msg(Row::Cold(head), parse(&c.state), c.settled, Hot::default());
+                }
+                Err(e) => eprintln!("sb-core: {} (skipped): {}", e, c),
+            }
         }
         if let Some(cards) = v.cards {
             self.st.cards = cards.iter().filter_map(|c| parse(c).map(|c: Card| (c.id, c))).collect();

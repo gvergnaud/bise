@@ -75,6 +75,12 @@ core_records! {
             msgs: Recs(ViewMsg),
             /// true: `msgs` are every message (drop the ones not in it)
             all_msgs: Bool,
+            /// view-all-perf: `view_all`'s cold messages, each a
+            /// [`ColdMsg`] row without its body (sb-core decides which,
+            /// view.bend `ships_whole`); `msgs` holds the others, whole.
+            /// The hub asks the link's `msg_bodies` for a cold one's body.
+            /// Absent in a step's view and from an older sb-core.
+            cold: OptJsonsOmit,
             next_msg: Nat = 1,
             next_card: Nat = 1,
             /// cost-pause: since when the project is paused (null: it runs)
@@ -101,6 +107,41 @@ impl View {
 
     pub fn to_value(&self) -> serde_json::Value {
         serde_json::to_value(self).expect("a view always serializes")
+    }
+}
+
+/// view-all-perf: one cold message of `view_all` ([`View::cold`]): its
+/// row without its body, as sb-core writes it (view.bend `cold_json`),
+/// one array `[id, thread, from, to, reply_to, expect_reply, created_ms,
+/// plain, state, settled]` (a 54k-message view was ~14 MB of keys as
+/// objects). Never queued nor owing a reply: sb-core sends those whole.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ColdMsg {
+    pub id: u64,
+    pub thread: u64,
+    pub from: String,
+    pub to: String,
+    pub reply_to: Option<u64>,
+    pub expect_reply: bool,
+    pub created_ms: u64,
+    pub plain: bool,
+    /// its delivery state, as a message row's `state`
+    pub state: serde_json::Value,
+    pub settled: bool,
+}
+
+type ColdRow = (u64, u64, String, String, Option<u64>, bool, u64, bool, serde_json::Value, bool);
+
+impl ColdMsg {
+    /// A row that doesn't fit is an error (a bug of sb-core's encoder).
+    pub fn decode(v: &serde_json::Value) -> Result<ColdMsg, String> {
+        let (id, thread, from, to, reply_to, expect_reply, created_ms, plain, state, settled) =
+            <ColdRow as serde::Deserialize>::deserialize(v).map_err(|e| format!("cold msg: {e}"))?;
+        Ok(ColdMsg { id, thread, from, to, reply_to, expect_reply, created_ms, plain, state, settled })
+    }
+
+    pub fn to_value(&self) -> serde_json::Value {
+        serde_json::json!([self.id, self.thread, self.from, self.to, self.reply_to, self.expect_reply, self.created_ms, self.plain, self.state, self.settled])
     }
 }
 

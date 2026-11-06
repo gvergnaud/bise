@@ -105,16 +105,16 @@ impl Hub {
         }
         let m = self
             .st
-            .msgs()
-            .values()
+            .peeks()
             .rev()
             .take_while(|m| m.created_ms >= c.created_ms)
             .find(|m| m.from == MAIN && m.to == c.agent && m.reply_to != c.for_msg)?;
-        Some(format!(
-            "@main wrote to @{} since then (m_{}): {}",
-            c.agent,
-            m.id,
-            clip(&one_line(&m.text), 120)
-        ))
+        // view-all-perf: a cold message (older than view_all's newest
+        // whole ones, view.bend RECENT) is named without its words: this
+        // read-only build cannot fetch its body
+        Some(match self.st.msg(m.id) {
+            Some(w) => format!("@main wrote to @{} since then (m_{}): {}", c.agent, m.id, clip(&one_line(&w.text), 120)),
+            None => format!("@main wrote to @{} since then (m_{})", c.agent, m.id),
+        })
     }
 }

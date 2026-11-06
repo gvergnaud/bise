@@ -10,7 +10,7 @@
 //! agent, a long-lived hub (470 agents, 14,500 messages) spent its whole
 //! loop there and a client's hello never got its turn.
 
-use crate::model::{Agent, Lifecycle, Mode, Msg, State, Status, MAIN, USER};
+use crate::model::{Agent, Lifecycle, Mode, Msg, Peek, Row, State, Status, MAIN, USER};
 use crate::prompts::relation;
 use crate::util::{age, clip, one_line};
 use std::cmp::Reverse;
@@ -90,24 +90,35 @@ pub fn user_board(st: &State, now: u64) -> String {
     lines.join("\n")
 }
 
+/// The first message of each of the `limit` newest threads of
+/// [`agent_threads`]: the bodies it shows (the hub fetches the cold
+/// ones first, view-all-perf).
+pub fn thread_firsts(st: &State, limit: usize) -> Vec<u64> {
+    st.threads().newest(limit).filter_map(|(_, ids)| ids.first().copied()).collect()
+}
+
 /// Threads between agents that the user is not part of, most recent
 /// first (RFC 0003 §9): the `limit` newest of [`Threads`], rendered.
 pub fn agent_threads(st: &State, limit: usize) -> Vec<String> {
     st.threads()
         .newest(limit)
         .map(|(t, ids)| {
-            let ms: Vec<&Msg> = ids.iter().filter_map(|id| st.msgs().get(id)).collect();
+            let ms: Vec<Peek> = ids.iter().filter_map(|id| st.peek(*id)).collect();
             let parties = parties_of(&ms);
             let open = ms.iter().any(|m| m.expect_reply && !st.settled().contains(&m.id));
+            // the first message's words: the hub fetched the body of a
+            // cold one before the build ([`thread_firsts`]); one still
+            // cold (sb-core didn't answer) is shown without them
+            let first = st.msg(ms[0].id).map(|m| format!("  \"{}\"", clip(&one_line(&m.text), 60))).unwrap_or_default();
             format!(
-                "t_{} {}  {} message{}  {}  \"{}\"",
+                "t_{} {}  {} message{}  {}{}",
                 t,
                 // the hub's own id `switchboard` reads `bise`
                 parties.iter().map(|p| crate::prompts::shown_sender(p)).collect::<Vec<_>>().join(" ↔ "),
                 ms.len(),
                 if ms.len() > 1 { "s" } else { "" },
                 if open { "open" } else { "answered" },
-                clip(&one_line(&ms[0].text), 60)
+                first
             )
         })
         .collect()
@@ -136,7 +147,7 @@ pub struct Threads {
 impl Threads {
     /// Message `id` of `thread` was written (`msgs`: every message, it
     /// included): the thread is judged again from its messages.
-    pub fn put(&mut self, msgs: &BTreeMap<u64, Msg>, thread: u64, id: u64) {
+    pub fn put(&mut self, msgs: &BTreeMap<u64, Row>, thread: u64, id: u64) {
         let ids = self.ids.entry(thread).or_default();
         if let Err(at) = ids.binary_search(&id) {
             ids.insert(at, id);
@@ -145,18 +156,18 @@ impl Threads {
     }
 
     /// Message `id` left `thread` (a row rewritten with another thread).
-    pub fn take(&mut self, msgs: &BTreeMap<u64, Msg>, thread: u64, id: u64) {
+    pub fn take(&mut self, msgs: &BTreeMap<u64, Row>, thread: u64, id: u64) {
         if let Some(ids) = self.ids.get_mut(&thread) {
             ids.retain(|x| *x != id);
         }
         self.judge(msgs, thread);
     }
 
-    fn judge(&mut self, msgs: &BTreeMap<u64, Msg>, thread: u64) {
+    fn judge(&mut self, msgs: &BTreeMap<u64, Row>, thread: u64) {
         if let Some(k) = self.key.remove(&thread) {
             self.shown.remove(&(k, thread));
         }
-        let ms: Vec<&Msg> = self.ids.get(&thread).into_iter().flatten().filter_map(|id| msgs.get(id)).collect();
+        let ms: Vec<Peek> = self.ids.get(&thread).into_iter().flatten().filter_map(|id| msgs.get(id).map(Row::peek)).collect();
         let Some(last) = ms.last() else { return };
         let users = ms.iter().any(|m| m.from == USER || m.to == USER || m.plain);
         let parties = parties_of(&ms);
@@ -175,9 +186,9 @@ impl Threads {
 }
 
 /// The senders and recipients of a thread, in order of appearance.
-fn parties_of<'a>(ms: &[&'a crate::model::Msg]) -> Vec<&'a str> {
+fn parties_of<'a>(ms: &[Peek<'a>]) -> Vec<&'a str> {
     let mut p: Vec<&str> = Vec::new();
-    for x in ms.iter().flat_map(|m| [m.from.as_str(), m.to.as_str()]) {
+    for x in ms.iter().flat_map(|m| [m.from, m.to]) {
         if !p.contains(&x) {
             p.push(x);
         }
@@ -375,9 +386,10 @@ pub fn tasks_detail(st: &State, now: u64, models: &Models) -> String {
                 clip(&one_line(&m.text), 120)
             ));
         }
+        // whole ones only: sb-core sends every question not settled whole
+        // (view.bend `ships_whole`)
         for m in st
-            .msgs()
-            .values()
+            .whole_msgs()
             .filter(|m| m.from == a.name && m.expect_reply && !st.settled().contains(&m.id))
         {
             b.push(format!(
@@ -705,8 +717,8 @@ mod tests {
     /// The walk agent_threads made before [`Threads`]: every message
     /// grouped by thread at each call (the reference the index equals).
     fn threads_walk(st: &State, limit: usize) -> Vec<(u64, Vec<u64>)> {
-        let mut threads: BTreeMap<u64, Vec<&Msg>> = BTreeMap::new();
-        for m in st.msgs().values() {
+        let mut threads: BTreeMap<u64, Vec<Peek>> = BTreeMap::new();
+        for m in st.peeks() {
             threads.entry(m.thread).or_default().push(m);
         }
         let mut shown: Vec<(u64, u64, Vec<u64>)> = threads

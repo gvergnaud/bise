@@ -152,7 +152,7 @@ def answers(real, out):
         p.kill()
 
 
-LINK = {"init", "replay", "replay_many", "ping", "view_all"}
+LINK = {"init", "replay", "replay_many", "ping", "view_all", "msg_bodies"}
 ENVELOPE = ("now", "git", "ans")
 
 

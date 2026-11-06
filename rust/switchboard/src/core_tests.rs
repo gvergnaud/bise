@@ -1623,7 +1623,7 @@ fn main_cannot_answer_an_escalated_question_only_the_user_can() {
     // the user's answer resolves it and goes to docs, as a reply to its question
     t.user(MAIN, &format!("/answer {} v2", card));
     assert!(t.hub.st.cards.is_empty());
-    let a = t.hub.st.msgs().values().find(|m| m.text == "v2").expect("the user's answer");
+    let a = t.hub.st.whole_msgs().find(|m| m.text == "v2").expect("the user's answer");
     assert_eq!((a.from.as_str(), a.to.as_str(), a.reply_to), (USER, "docs", Some(id)));
 }
 
@@ -3714,7 +3714,9 @@ fn a_batched_replay_builds_the_same_state_as_one_event_at_a_time() {
         one.raw(&json!({"t": "replay", "ev": e}));
     }
     one.view_all();
-    assert_eq!(batched.st.msgs().len(), 1200 + 240);
+    // every row (view_all sends the old ones cold, view-all-perf)
+    assert_eq!(batched.st.peeks().count(), 1200 + 240);
+    assert!(batched.st.peeks().eq(one.st.peeks()));
     assert_eq!(batched.st.msgs(), one.st.msgs());
     assert_eq!(batched.st.order, one.st.order);
     assert_eq!(batched.st.agents["a"].ws, one.st.agents["a"].ws);
@@ -3794,7 +3796,7 @@ fn bise_forwards_his_message_once_and_settles_on_the_answer() {
     assert!(xdelivers(&t.go(Input::Tick)).is_empty());
     // the answer: main hears it from @shop, once
     t.go(Input::XReply { xid: 1, name: "shop".into(), text: "fixed on sb/login".into() });
-    let ans = t.hub.st.msgs().values().find(|m| m.from == "@shop").expect("an answer from @shop");
+    let ans = t.hub.st.whole_msgs().find(|m| m.from == "@shop").expect("an answer from @shop");
     assert_eq!(ans.to, MAIN);
     assert!(ans.text.contains("fixed on sb/login") && ans.text.contains(&format!("m_{}", his)), "{}", ans.text);
     let n = t.hub.st.msgs().len();
@@ -4406,6 +4408,6 @@ fn his_card_answer_keeps_its_parts() {
     let ls = recs(&fx, MAIN);
     let at = ls.iter().position(|r| r["sb"] == "route" && r["who"] == "docs" && r["card"] == card).expect("the route line");
     assert_eq!(ls[at + 1], json!({"sb": "route-parts", "parts": serde_json::from_str::<Value>(parts).unwrap()}), "{ls:?}");
-    let answer = t.hub.st.msgs().values().find(|m| m.text == text).expect("the asker's message");
+    let answer = t.hub.st.whole_msgs().find(|m| m.text == text).expect("the asker's message");
     assert_eq!(answer.parts, parts);
 }

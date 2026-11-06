@@ -80,6 +80,36 @@ def agents_json(xs: List<&2, S.Agent>, +rts: List<&2, X.Rt>, +ws: List<&2, X.Wai
       agents_json.keep(all || M.str_in(names, S.Agent.name(a)),
         a, rts, ws, s, agents_json(t, rts, ws, s, all, names))
 
+# view-all-perf: how many of the newest messages view_all sends whole
+def RECENT() -> Nat:
+  256n
+
+# view-all-perf: a message view_all sends whole (its text and parts): a
+# hot one (queued, owing a reply), a question not settled, or one of the
+# RECENT newest (`next`: the next message id). Every other one is cold:
+# its compact row in the view's `cold` (cold_json), without its body;
+# the hub asks msg_bodies when it needs one (on a big hub the bodies were
+# ~85 % of view_all, the rows' keys most of the rest). A step's view and
+# msg_bodies send every message whole.
+def ships_whole(+r: S.MRec, +next: Nat) -> Bool:
+  +m = S.MRec.msg(r)
+  M.MRec.is_hot(r) || (S.Msg.expect(m) && Bool.not(S.MRec.settled(r))) || Nat.is_le(next, Nat.add(S.Msg.id(m), RECENT()))
+
+def jmaybe_n(m: Maybe<&2, Nat>) -> J.Json:
+  match m:
+    case None{}:
+      J.JNull{}
+    case Some{+n}:
+      J.JNum{n}
+
+# a cold message's row (bise_proto::core::ColdMsg): [id, thread, from,
+# to, reply_to, expect_reply, created_ms, plain, state, settled]; never
+# queued nor owing (ships_whole sends those whole)
+def cold_json(+r: S.MRec) -> J.Json:
+  +m = S.MRec.msg(r)
+  J.JArr{[J.JNum{S.Msg.id(m)}, J.JNum{S.Msg.thread(m)}, J.JStr{S.Msg.from(m)}, J.JStr{S.Msg.to(m)}, jmaybe_n(S.Msg.reply_to(m)),
+    J.JBool{S.Msg.expect(m)}, J.JNum{S.Msg.created(m)}, J.JBool{S.Msg.plain(m)}, SC.MSt.journal_json(S.MRec.st(r)), J.JBool{S.MRec.settled(r)}]}
+
 # a message, its state, and what the steps' predicates (model.bend) say
 # of it: queued, or delivered owing a reply (the hub's Waiting reads them)
 def rec_json(+r: S.MRec) -> J.Json:
@@ -94,12 +124,43 @@ def recs_json.keep(keep: Bool, +r: S.MRec, +rest: List<&2, J.Json>) -> List<&2, 
     case False{}:
       rest
 
-def recs_json(xs: List<&2, S.MRec>, +all: Bool, +ids: List<&2, Nat>) -> List<&2, J.Json>:
+# the messages of `ids` (`all`: the whole ones of view_all, ships_whole)
+def recs_json.wants(all: Bool, +r: S.MRec, +ids: List<&2, Nat>, +next: Nat) -> Bool:
+  match all:
+    case True{}:
+      ships_whole(r, next)
+    case False{}:
+      M.nat_in(ids, S.Msg.id(S.MRec.msg(r)))
+
+def recs_json(xs: List<&2, S.MRec>, +all: Bool, +ids: List<&2, Nat>, +next: Nat) -> List<&2, J.Json>:
   match xs:
     case Nil{}:
       Nil{}
     case Con{+r, +t}:
-      recs_json.keep(all || M.nat_in(ids, S.Msg.id(S.MRec.msg(r))), r, recs_json(t, all, ids))
+      recs_json.keep(recs_json.wants(all, r, ids, next), r, recs_json(t, all, ids, next))
+
+def colds_json.keep(whole: Bool, +r: S.MRec, +rest: List<&2, J.Json>) -> List<&2, J.Json>:
+  match whole:
+    case True{}:
+      rest
+    case False{}:
+      cold_json(r) <> rest
+
+# view_all's cold messages, in send order (the others of recs_json)
+def colds_json(xs: List<&2, S.MRec>, +next: Nat) -> List<&2, J.Json>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case Con{+r, +t}:
+      colds_json.keep(ships_whole(r, next), r, colds_json(t, next))
+
+# the cold rows: view_all's only (a step's view sends none, absent)
+def colds_when(all: Bool, +xs: List<&2, S.MRec>, +next: Nat) -> Maybe<&2, List<&2, J.Json>>:
+  match all:
+    case True{}:
+      Some{colds_json(xs, next)}
+    case False{}:
+      None{}
 
 # every id of `ids` is a message of `xs`
 def ids_in(ids: List<&2, Nat>, +xs: List<&2, S.MRec>) -> Bool:
@@ -168,10 +229,10 @@ def view_recs(+s: S.St, +all: Bool, +ids: List<&2, Nat>) -> List<&2, S.MRec>:
 
 # the messages of the view: no walk of every message when the step
 # touched none (an idle tick)
-def msgs_json(walk: Bool, +xs: List<&2, S.MRec>, +all: Bool, +ids: List<&2, Nat>) -> List<&2, J.Json>:
+def msgs_json(walk: Bool, +xs: List<&2, S.MRec>, +all: Bool, +ids: List<&2, Nat>, +next: Nat) -> List<&2, J.Json>:
   match walk:
     case True{}:
-      recs_json(xs, all, ids)
+      recs_json(xs, all, ids, next)
     case False{}:
       Nil{}
 
@@ -516,8 +577,10 @@ def view_agents(wide: Bool, +s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Wait
       agents_json(S.St.agents(s), rts, ws, s, False{}, names)
 
 def view.go(+s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +all: Bool, +ids: List<&2, Nat>, +names: List<&2, String>, +durable: Bool, +timers: Bool, +ended: Bool, +wakes: Bool) -> J.Json:
+  +xs = view_recs(s, all, ids)
   V.view(view_agents(all || any_arch(names, s), s, rts, ws, all, names), all,
-    msgs_json(all || Bool.not(List.is_empty(&2, Nat, ids)), view_recs(s, all, ids), all, ids), all,
+    msgs_json(all || Bool.not(List.is_empty(&2, Nat, ids)), xs, all, ids, S.St.next_msg(s)), all,
+    colds_when(all, xs, S.St.next_msg(s)),
     S.St.next_msg(s), S.St.next_card(s), S.St.paused(s),
     order_when(durable, s), cards_when(durable, s), notes_when(durable, s),
     timers_live(timers, s), timers_ended(ended, s), wakes_live(wakes, s), wakes_ended(wakes, s))

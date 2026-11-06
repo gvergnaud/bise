@@ -161,3 +161,13 @@ numbers. The next audit starts from there.
   2 MB after-sample), then wire escape_nl and json escape; persist.bend
   read_all's chunk append is the
   same pattern on a fallback path (not measured).
+- 2026-11-06 (view-all-perf): view_all on boot-speed's synthetic
+  harness-sized hub (215k events, 54k messages, 1,256 agents), boot_phases
+  bench, retired instructions. 58.1 MB, sb-core 29.1G, hub decode+load
+  5.8G -> 10.8 MB, 9.1G, 2.2G. The message bodies were ~85 % of it:
+  view_all now sends an old message that owes nothing as a cold row
+  (View.cold, a 10-item array, no text or parts; view.bend ships_whole:
+  hot, unsettled question, or one of the RECENT 256 newest go whole) and
+  the hub asks the link's msg_bodies for a body a reader needs
+  (core.rs fetch_bodies). Left: the agents, 5.1 MB of the 10.8 (archived
+  ones' briefs 2.1 MB, reports 1.2 MB, files 1.2 MB).

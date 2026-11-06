@@ -72,6 +72,53 @@ fn an_idle_tick_on_a_big_history_is_small_and_cheap() {
     assert_eq!(h.st.agents.len(), 341);
 }
 
+/// view-all-perf: view_all sends an old message that owes nothing as a
+/// cold row without its body (`cold`), the newest 256, a question not
+/// settled and a queued one whole; the mirror keeps the cold one's row
+/// (`peek`), never a text; msg_bodies makes it whole with its own words.
+#[test]
+fn view_all_sends_old_messages_cold_and_msg_bodies_makes_them_whole() {
+    let ws = json!({"mode": "shared", "path": "/w", "branch": null, "base_commit": null, "dropped": false});
+    let mut ev = vec![json!({"type": "task_created", "name": "a", "parent": "main", "ws": ws, "at_ms": 0, "brief": {"objective": "fake"}})];
+    for id in 1..=400u64 {
+        let ask = id == 2;
+        ev.push(json!({"type": "message_sent", "msg": {"id": id, "thread": id, "from": "main", "to": "a",
+            "reply_to": null, "expect_reply": ask, "auto": false, "text": format!("fake {}", id), "created_ms": 1000 + id, "plain": false,
+            "parts": if id == 1 { "[{\"type\":\"text\",\"text\":\"fake 1\"}]" } else { "" }}}));
+        ev.push(json!({"type": "message_state", "id": id, "state": if id == 3 { json!({"state": "queued", "since_ms": 1})} else { json!("delivered") }}));
+    }
+    let mut h = Hub::new("/w");
+    assert!(h.replay(&ev).is_empty());
+    let full = h.raw(&json!({"t": "view_all"}));
+    let rows = full["view"]["msgs"].as_array().unwrap();
+    let colds = full["view"]["cold"].as_array().unwrap();
+    let cold: Vec<u64> = colds.iter().map(|c| ColdMsg::decode(c).unwrap().id).collect();
+    // ids 1..=144 are older than the newest 256; 2 is a question, 3 queued
+    assert_eq!(cold, (1..=144).filter(|i| *i != 2 && *i != 3).collect::<Vec<_>>());
+    assert_eq!(rows.len(), 400 - cold.len());
+    assert_eq!(colds[0], json!([1, 1, "main", "a", null, false, 1001, false, {"state": "delivered"}, false]));
+    assert_eq!(h.st.msg(1), None);
+    assert_eq!(h.st.peek(1).map(|m| (m.to, m.created_ms)), Some(("a", 1001)));
+    assert_eq!(h.st.msg(2).map(|m| m.text.as_str()), Some("fake 2"));
+    assert_eq!(h.st.msg(145).map(|m| m.text.as_str()), Some("fake 145"));
+    assert_eq!(h.st.cold_of(1..=400).len(), cold.len());
+    // the bodies, in batches of MSG_BODIES_MAX: every message whole
+    h.fetch_bodies(1..=400);
+    assert!(h.st.cold_of(1..=400).is_empty());
+    let m = h.st.msg(1).expect("whole");
+    assert_eq!((m.text.as_str(), m.parts.as_str()), ("fake 1", "[{\"type\":\"text\",\"text\":\"fake 1\"}]"));
+    assert_eq!(h.st.msg(144).map(|m| m.text.as_str()), Some("fake 144"));
+    assert_eq!(h.st.whole_msgs().count(), 400);
+    // msg_bodies' rows are view_all's rows, whole: the same facts
+    let bodies = h.raw(&json!({"t": "msg_bodies", "ids": [1, 200]}));
+    let got = bodies["view"]["msgs"].as_array().unwrap();
+    assert_eq!(got.len(), 2);
+    let old = ColdMsg::decode(&colds[0]).unwrap();
+    assert_eq!((&got[0]["state"], &got[0]["settled"], &got[0]["owes"]), (&old.state, &json!(old.settled), &json!(false)));
+    assert_eq!(got[0]["msg"]["text"], "fake 1");
+    assert_eq!(got[1], *rows.iter().find(|r| r["msg"]["id"] == 200).unwrap());
+}
+
 /// The view's fixture lines (bise-proto's fixtures/core_view.jsonl, one
 /// real view per shape) load into a hub's mirror: every agent row and
 /// message of a full view is there, and a step's partial view keeps the

@@ -23,7 +23,7 @@ use crate::role;
 use crate::router::{self, UserCmd};
 use crate::util::{clip, one_line};
 use crate::wire::{self, Wire};
-use bise_proto::core::{input as ci, link as cl, In, Link, View};
+use bise_proto::core::{input as ci, link as cl, ColdMsg, In, Link, View};
 use bise_proto::core::feed as feed_rec;
 use bise_proto::core::Feed;
 use serde_json::{json, Value};
@@ -930,6 +930,19 @@ impl Hub {
     fn view_all(&mut self) {
         if let Some(out) = self.call(&Link::ViewAll(cl::ViewAll {}).to_value()) {
             self.load_answer_view(&out);
+        }
+    }
+
+    /// view-all-perf: the bodies of the cold messages of `ids` (view_all
+    /// sent them without), asked of sb-core (`msg_bodies`, at most
+    /// MSG_BODIES_MAX ids a call) and loaded: they are whole after. A
+    /// whole or unknown id costs nothing; on the loop only, like a step.
+    pub fn fetch_bodies(&mut self, ids: impl IntoIterator<Item = u64>) {
+        let cold = self.st.cold_of(ids);
+        for batch in cold.chunks(cl::MSG_BODIES_MAX) {
+            if let Some(out) = self.call(&Link::MsgBodies(cl::MsgBodies { ids: batch.to_vec() }).to_value()) {
+                self.load_answer_view(&out);
+            }
         }
     }
 

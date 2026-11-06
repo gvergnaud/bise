@@ -19,7 +19,7 @@ use serde_json::{json, Value};
 pub fn keys(st: &State, q: &mut Value, fwd: Option<u64>) {
     let Some(n) = fwd else { return };
     q["fwd"] = json!(n);
-    q["fwd_at"] = json!(st.msgs().get(&n).map(|m| crate::search::fmt_utc(m.created_ms)).unwrap_or_default());
+    q["fwd_at"] = json!(st.peek(n).map(|m| crate::search::fmt_utc(m.created_ms)).unwrap_or_default());
 }
 
 /// The position (from 1, as `transcript.rs`) of message n's entry in a

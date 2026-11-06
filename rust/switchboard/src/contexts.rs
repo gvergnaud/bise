@@ -30,6 +30,9 @@ use std::collections::BTreeMap;
 /// REPL (the loop's gate, daemon/contexts.rs).
 pub const CONTEXT_MS: u64 = 200;
 
+/// How many threads main's `<agent_threads>` shows.
+pub const THREADS: usize = 8;
+
 #[derive(Debug, Default)]
 pub struct Contexts {
     /// What each agent's REPL has: the last text pushed.
@@ -81,7 +84,7 @@ impl Contexts {
 pub fn fresh(st: &State, now: u64, models: &Models) -> BTreeMap<String, String> {
     let waiting = Waiting::of(st);
     let group = Group::of(st, now, models);
-    let threads = board::agent_threads(st, 8);
+    let threads = board::agent_threads(st, THREADS);
     st.agents
         .values()
         .filter(|a| a.lifecycle == Lifecycle::Active)
