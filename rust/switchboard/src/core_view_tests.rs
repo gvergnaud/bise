@@ -119,6 +119,27 @@ fn view_all_sends_old_messages_cold_and_msg_bodies_makes_them_whole() {
     assert_eq!(got[1], *rows.iter().find(|r| r["msg"]["id"] == 200).unwrap());
 }
 
+/// view-all-perf: a question card's note cites main's message with its
+/// words even when view_all sent it cold (the snapshot fetches it).
+#[test]
+fn a_card_note_on_a_cold_message_carries_its_words() {
+    let ws = json!({"mode": "shared", "path": "/w", "branch": null, "base_commit": null, "dropped": false});
+    let mut ev = vec![json!({"type": "task_created", "name": "a", "parent": "main", "ws": ws, "at_ms": 0, "brief": {"objective": "fake"}})];
+    ev.push(json!({"type": "card_opened", "card": {"id": 1, "agent": "a", "kind": "question", "text": "fake question", "for_msg": 999, "created_ms": 1000}}));
+    for id in 1..=300u64 {
+        let (from, to) = if id == 1 { ("main", "a") } else { ("a", "main") };
+        ev.push(json!({"type": "message_sent", "msg": {"id": id, "thread": id, "from": from, "to": to,
+            "reply_to": null, "expect_reply": false, "auto": false, "text": format!("fake {}", id), "created_ms": 1000 + id, "plain": false}}));
+        ev.push(json!({"type": "message_state", "id": id, "state": "delivered"}));
+    }
+    let mut h = Hub::new("/w");
+    assert!(h.replay(&ev).is_empty());
+    assert_eq!(h.st.cold_of([1]), vec![1], "main's message is cold after view_all");
+    let snap = h.snapshot(2000);
+    let card = snap.cards.iter().find(|c| c.id == 1).expect("the card");
+    assert_eq!(card.note.as_deref(), Some("@main wrote to @a since then (m_1): fake 1"));
+}
+
 /// The view's fixture lines (bise-proto's fixtures/core_view.jsonl, one
 /// real view per shape) load into a hub's mirror: every agent row and
 /// message of a full view is there, and a step's partial view keeps the

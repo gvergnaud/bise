@@ -45,6 +45,7 @@ impl Hub {
             agents.push(self.rows.row(i));
         }
         self.rows.keep_only(self.st.agents.keys());
+        self.fetch_card_notes();
         self.snapshot_with(agents, now)
     }
 
@@ -100,21 +101,30 @@ impl Hub {
     /// reply to the question: maybe answered another way (the card
     /// stays open, the view says so).
     fn card_note(&self, c: &Card) -> Option<String> {
+        // whole: `snapshot` fetched a cold one's body first
+        let m = self.st.msg(self.card_note_msg(c)?)?;
+        Some(format!("@main wrote to @{} since then (m_{}): {}", c.agent, m.id, clip(&one_line(&m.text), 120)))
+    }
+
+    /// The message a question card's note cites: main's newest to the
+    /// asker since the card, not the reply to its question.
+    fn card_note_msg(&self, c: &Card) -> Option<u64> {
         if c.kind != "question" || c.agent == MAIN {
             return None;
         }
-        let m = self
-            .st
+        self.st
             .peeks()
             .rev()
             .take_while(|m| m.created_ms >= c.created_ms)
-            .find(|m| m.from == MAIN && m.to == c.agent && m.reply_to != c.for_msg)?;
-        // view-all-perf: a cold message (older than view_all's newest
-        // whole ones, view.bend RECENT) is named without its words: this
-        // read-only build cannot fetch its body
-        Some(match self.st.msg(m.id) {
-            Some(w) => format!("@main wrote to @{} since then (m_{}): {}", c.agent, m.id, clip(&one_line(&w.text), 120)),
-            None => format!("@main wrote to @{} since then (m_{})", c.agent, m.id),
-        })
+            .find(|m| m.from == MAIN && m.to == c.agent && m.reply_to != c.for_msg)
+            .map(|m| m.id)
+    }
+
+    /// view-all-perf: the bodies the open cards' notes cite, fetched
+    /// when cold (a card older than view_all's newest whole messages),
+    /// so a note always carries main's words.
+    fn fetch_card_notes(&mut self) {
+        let ids: Vec<u64> = self.st.open_cards().filter_map(|c| self.card_note_msg(c)).collect();
+        self.fetch_bodies(ids);
     }
 }
