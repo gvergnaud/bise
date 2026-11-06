@@ -1166,61 +1166,61 @@ export const settings = {
   part_env: (a: { var: string | number }): string => "from " + String(a.var),
   /** the fixing buttons */
   fix_add_key: (a: { provider: string | number }): string => "Add a " + String(a.provider) + " key",
-  /**  */
+  /** a fixing button: sign in */
   fix_sign_in: (a: { provider: string | number }): string => "Sign in to " + String(a.provider) + " again",
-  /**  */
+  /** a fixing button: credit */
   fix_credit: (a: { provider: string | number }): string => "Add credit on " + String(a.provider),
-  /**  */
+  /** a fixing button: pick model */
   fix_pick_model: "Pick another model",
-  /**  */
+  /** a fixing button: remove env */
   fix_remove_env: (a: { var: string | number }): string => "Remove " + String(a.var),
-  /**  */
+  /** a fixing button: allow mic */
   fix_allow_mic: "Allow the microphone",
-  /**  */
+  /** a fixing button: turn on */
   fix_turn_on: "Turn on",
-  /**  */
+  /** a fixing button: test again */
   fix_test_again: "Test again",
-  /**  */
+  /** a fixing button: restart */
   fix_restart: "Restart bise",
-  /**  */
+  /** a fixing button: allow */
   fix_allow: (a: { perm: string | number }): string => "Allow " + String(a.perm),
   /** the next action's words (lowercase, after Next) */
   next_add_key: (a: { provider: string | number }): string => "add a " + String(a.provider) + " key",
-  /**  */
+  /** Next's action, lowercase after Next: sign in */
   next_sign_in: (a: { provider: string | number }): string => "sign in to " + String(a.provider) + " again",
-  /**  */
+  /** Next's action, lowercase after Next: credit */
   next_credit: (a: { provider: string | number }): string => "add credit on " + String(a.provider),
-  /**  */
+  /** Next's action, lowercase after Next: pick model */
   next_pick_model: "pick another model",
-  /**  */
+  /** Next's action, lowercase after Next: remove env */
   next_remove_env: (a: { var: string | number }): string => "remove " + String(a.var),
-  /**  */
+  /** Next's action, lowercase after Next: allow mic */
   next_allow_mic: "allow the microphone",
-  /**  */
+  /** Next's action, lowercase after Next: turn on */
   next_turn_on: (a: { what: string | number }): string => "turn on " + String(a.what),
-  /**  */
+  /** Next's action, lowercase after Next: test again */
   next_test_again: "test again",
-  /**  */
+  /** Next's action, lowercase after Next: restart */
   next_restart: "restart bise",
-  /**  */
+  /** Next's action, lowercase after Next: allow */
   next_allow: (a: { perm: string | number }): string => "allow " + String(a.perm),
   /** troubleshooting: why, from the check's verdict (keycheck::Why) */
   why_no_key: (a: { provider: string | number }): string => "there's no " + String(a.provider) + " key.",
-  /**  */
+  /** a word of the gauge: wrong key */
   why_wrong_key: (a: { provider: string | number }): string => String(a.provider) + " refused the key, or the sign-in expired.",
-  /**  */
+  /** a word of the gauge: no credit */
   why_no_credit: (a: { provider: string | number }): string => "your " + String(a.provider) + " key has no credit left.",
-  /**  */
+  /** a word of the gauge: model */
   why_model: (a: { model: string | number }): string => "the provider doesn't know " + String(a.model) + " any more.",
-  /**  */
+  /** a word of the gauge: no access */
   why_no_access: (a: { model: string | number }): string => "this key may not use " + String(a.model) + ".",
-  /**  */
+  /** a word of the gauge: unreachable */
   why_unreachable: (a: { provider: string | number }): string => String(a.provider) + " didn't answer: the network, or the provider's own trouble.",
-  /**  */
+  /** a word of the gauge: config */
   why_config: (a: { provider: string | number }): string => String(a.provider) + " needs a setting before it can answer.",
-  /**  */
+  /** a word of the gauge: mic */
   why_mic: "the microphone is refused in System Settings.",
-  /**  */
+  /** a word of the gauge: off */
   why_off: "it's off.",
   /** troubleshooting: what the provider said, its own words */
   trouble_said: (a: { said: string | number }): string => "it said: “" + String(a.said) + "”",
@@ -1238,7 +1238,7 @@ export const settings = {
   trouble_copied: "copied",
   /** the folded parts under the features */
   fold_roles: "Which model does what",
-  /**  */
+  /** a word of the gauge: accounts */
   fold_accounts: "Accounts and keys",
   /** a key not removed */
   prov_remove_failed: (a: { glyph: string | number; why: string | number }): string => String(a.glyph) + " couldn't remove it: " + String(a.why),

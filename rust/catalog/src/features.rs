@@ -249,8 +249,10 @@ fn perms(f: &Facts, which: &[Perm]) -> Vec<PermGrant> {
                 Perm::Mic => f.mic,
                 Perm::Accessibility => f.accessibility,
                 Perm::Screen => f.screen,
+                Perm::Unknown => None,
             };
-            g.map(|grant| PermGrant { perm, grant })
+            // a grant this build doesn't know: nothing said, like none
+            g.filter(|g| *g != Grant::Unknown).map(|grant| PermGrant { perm, grant })
         })
         .collect()
 }

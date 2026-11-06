@@ -52,9 +52,11 @@ export interface RolesProps {
   error?: string | null;
   /** set a role: the command, and the model's name when it sets a model (L5 checks its provider) */
   set: (cmd: AppCmd, model: string | null) => void;
+  /** its group's own head (none under a fold that says it: settings · Setup) */
+  titled?: boolean;
 }
 
-export function Roles({ roles, models, error = null, set }: RolesProps) {
+export function Roles({ roles, models, error = null, set, titled = true }: RolesProps) {
   if (roles.length === 0) return null;
   const items: GroupItem[] = roles.map((r) => {
     const efforts = effortsOf(r, models);
@@ -108,7 +110,7 @@ export function Roles({ roles, models, error = null, set }: RolesProps) {
   });
   return (
     <>
-      <Group title={settings.roles_title} testId="settings.roles" items={items} help={settings.roles_help} />
+      <Group {...(titled ? { title: settings.roles_title } : {})} testId="settings.roles" items={items} help={settings.roles_help} />
       {error !== null && (
         <Help err testId="settings.roles.error">
           {error}

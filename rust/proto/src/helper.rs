@@ -148,6 +148,9 @@ pub enum Grant {
     Allowed,
     Denied,
     Ask,
+    /// a grant this build doesn't know (it rides a core → window row)
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -172,6 +175,9 @@ pub enum Perm {
     Accessibility,
     Mic,
     Screen,
+    /// a permission this build doesn't know (it rides a core → window row)
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

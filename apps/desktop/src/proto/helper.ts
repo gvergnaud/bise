@@ -43,11 +43,11 @@ export type TalkKey = "fn" | "right_option";
  * Accessibility and the screen, which macOS never calls refused: not
  * granted)
  */
-export type Grant = "allowed" | "denied" | "ask";
+export type Grant = "allowed" | "denied" | "ask" | "unknown";
 
 export type QuietWhy = "call" | "sharing" | "full_screen" | "";
 
-export type Perm = "accessibility" | "mic" | "screen";
+export type Perm = "accessibility" | "mic" | "screen" | "unknown";
 
 export type PermAction = "ask" | "open";
 

@@ -60,7 +60,7 @@ export function markOf(r: FeatureRow, g: SetupGauge): { text: string; tone: Tone
   return { text: settings.mark_took({ secs: secsOf(ms) }), tone: 'ink', tip: better ?? settings.tip_took({ secs: secsOf(ms) }) };
 }
 
-const PERM_NAME: Record<Perm, string> = { mic: settings.onb_perm_mic, accessibility: settings.onb_perm_accessibility, screen: settings.onb_perm_screen };
+const PERM_NAME: Record<Perm, string> = { mic: settings.onb_perm_mic, accessibility: settings.onb_perm_accessibility, screen: settings.onb_perm_screen, unknown: '' };
 
 /** A fix's button words. Pure. */
 export function fixButton(f: SetupFix, g: SetupGauge): string {
@@ -254,7 +254,7 @@ export function FeatureRows({ g, ports, at }: { g: SetupGauge; ports: GaugePorts
                 {FEATURE_WORDS[r.id]}
                 <span className="st-sub">{subOf(r)}</span>
               </span>
-              <span className={cx('st-mark', m.tone)} {...tipAttrs(m.tip)} data-testid={`settings.feature.${r.id}.mark`}>
+              <span className={cx('st-mark', testing ? 'faint' : m.tone)} {...tipAttrs(m.tip)} data-testid={`settings.feature.${r.id}.mark`}>
                 {testing ? settings.gauge_testing : m.text}
               </span>
               {r.fix !== undefined && !open && (
@@ -295,7 +295,7 @@ function Trouble({ r, g, ports }: { r: FeatureRow; g: SetupGauge; ports: GaugePo
         {whyWords(r, g)}
         {still !== null && ` ${still}`}
       </p>
-      {p?.said != null && <p className="said">{settings.trouble_said({ said: p.said })}</p>}
+      {p?.said != null && <p className="said mono">{settings.trouble_said({ said: p.said })}</p>}
       {env != null && <p className="said">{settings.trouble_env({ var: env })}</p>}
       {at != null && <p className="when">{settings.trouble_checked({ time: new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })}</p>}
       <div className="acts">
@@ -305,12 +305,13 @@ function Trouble({ r, g, ports }: { r: FeatureRow; g: SetupGauge; ports: GaugePo
           </Button>
         )}
         {r.parts.length > 0 && r.fix?.t !== 'pick_model' && (
-          <Act onClick={ports.roles} testId={`settings.feature.${r.id}.trouble.other`}>
+          <Button kind="ghost" onClick={ports.roles} testId={`settings.feature.${r.id}.trouble.other`}>
             {settings.trouble_other}
-          </Act>
+          </Button>
         )}
         {ports.copy !== undefined && (
-          <Act
+          <Button
+            kind="ghost"
             onClick={() => {
               ports.copy?.(reportOf(g));
               setCopied(true);
@@ -318,11 +319,11 @@ function Trouble({ r, g, ports }: { r: FeatureRow; g: SetupGauge; ports: GaugePo
             testId={`settings.feature.${r.id}.trouble.copy`}
           >
             {copied ? settings.trouble_copied : settings.trouble_copy}
-          </Act>
+          </Button>
         )}
-        <Act onClick={() => { ports.test(models); }} testId={`settings.feature.${r.id}.trouble.again`}>
+        <Button kind="ghost" onClick={() => { ports.test(models); }} testId={`settings.feature.${r.id}.trouble.again`}>
           {settings.fix_test_again}
-        </Act>
+        </Button>
       </div>
     </div>
   );

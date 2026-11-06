@@ -62,35 +62,61 @@ crate::words! { settings:
     part_env(var) = "from {var}";
     /// the fixing buttons
     fix_add_key(provider) = "Add a {provider} key";
+    /// a fixing button: sign in
     fix_sign_in(provider) = "Sign in to {provider} again";
+    /// a fixing button: credit
     fix_credit(provider) = "Add credit on {provider}";
+    /// a fixing button: pick model
     fix_pick_model = "Pick another model";
+    /// a fixing button: remove env
     fix_remove_env(var) = "Remove {var}";
+    /// a fixing button: allow mic
     fix_allow_mic = "Allow the microphone";
+    /// a fixing button: turn on
     fix_turn_on = "Turn on";
+    /// a fixing button: test again
     fix_test_again = "Test again";
+    /// a fixing button: restart
     fix_restart = "Restart bise";
+    /// a fixing button: allow
     fix_allow(perm) = "Allow {perm}";
     /// the next action's words (lowercase, after Next)
     next_add_key(provider) = "add a {provider} key";
+    /// Next's action, lowercase after Next: sign in
     next_sign_in(provider) = "sign in to {provider} again";
+    /// Next's action, lowercase after Next: credit
     next_credit(provider) = "add credit on {provider}";
+    /// Next's action, lowercase after Next: pick model
     next_pick_model = "pick another model";
+    /// Next's action, lowercase after Next: remove env
     next_remove_env(var) = "remove {var}";
+    /// Next's action, lowercase after Next: allow mic
     next_allow_mic = "allow the microphone";
+    /// Next's action, lowercase after Next: turn on
     next_turn_on(what) = "turn on {what}";
+    /// Next's action, lowercase after Next: test again
     next_test_again = "test again";
+    /// Next's action, lowercase after Next: restart
     next_restart = "restart bise";
+    /// Next's action, lowercase after Next: allow
     next_allow(perm) = "allow {perm}";
     /// troubleshooting: why, from the check's verdict (keycheck::Why)
     why_no_key(provider) = "there's no {provider} key.";
+    /// a word of the gauge: wrong key
     why_wrong_key(provider) = "{provider} refused the key, or the sign-in expired.";
+    /// a word of the gauge: no credit
     why_no_credit(provider) = "your {provider} key has no credit left.";
+    /// a word of the gauge: model
     why_model(model) = "the provider doesn't know {model} any more.";
+    /// a word of the gauge: no access
     why_no_access(model) = "this key may not use {model}.";
+    /// a word of the gauge: unreachable
     why_unreachable(provider) = "{provider} didn't answer: the network, or the provider's own trouble.";
+    /// a word of the gauge: config
     why_config(provider) = "{provider} needs a setting before it can answer.";
+    /// a word of the gauge: mic
     why_mic = "the microphone is refused in System Settings.";
+    /// a word of the gauge: off
     why_off = "it's off.";
     /// troubleshooting: what the provider said, its own words
     trouble_said(said) = "it said: “{said}”";
@@ -108,5 +134,6 @@ crate::words! { settings:
     trouble_copied = "copied";
     /// the folded parts under the features
     fold_roles = "Which model does what";
+    /// a word of the gauge: accounts
     fold_accounts = "Accounts and keys";
 }

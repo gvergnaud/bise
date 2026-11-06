@@ -130,6 +130,7 @@ export function SetupPage({ data, ports, page }: { data: SettingsData; ports: Se
           testId="settings.fold.roles"
         >
           <Roles
+            titled={false}
             roles={data.roles ?? []}
             models={models}
             error={data.roleError ?? null}
