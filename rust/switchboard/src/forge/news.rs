@@ -465,7 +465,7 @@ pub fn pr_words(pr: &PrView) -> String {
         Checks::Running if f.checks > 0 => out.push(panel::pr_checks_running_of(&done, &total)),
         Checks::Running => out.push(panel::pr_checks_running.into()),
         Checks::Fail { failing } if failing.is_empty() => out.push(panel::pr_checks_failed_bare.into()),
-        Checks::Fail { failing } => out.push(panel::pr_checks_failed(&failing.join(", "))),
+        Checks::Fail { failing } => out.push(panel::pr_checks_failed(failing.join(", "))),
         Checks::None => {}
     }
     if pr.yours == Some(PrYours::Merge) {

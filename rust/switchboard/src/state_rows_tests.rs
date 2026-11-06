@@ -106,6 +106,19 @@ fn the_typed_state_rows_carry_everything_the_older_state_did() {
                     assert_eq!(op["checks"]["state"], tp["checks"], "place pr checks");
                     same(&op["checks"], tp, "failing", "failing", "place pr checks");
                 }
+                // pr-integration: the forge's facts become the typed row's
+                // own fields (title, base, mergeable, conflicts, checks n/m)
+                "facts" => {
+                    let f = &op["facts"];
+                    same(f, tp, "title", "title", "place pr facts");
+                    same(f, tp, "base", "base", "place pr facts");
+                    same(f, tp, "mergeable", "mergeable", "place pr facts");
+                    same(f, tp, "conflicts", "conflicts", "place pr facts");
+                    // a count of 0 is nothing to say too
+                    let n = |v: Option<&Value>| some(v).filter(|v| *v != 0);
+                    assert_eq!(n(f.get("checks")), n(tp.get("checks_n")), "place pr facts: checks");
+                    assert_eq!(n(f.get("checks_done")), n(tp.get("checks_done")), "place pr facts: checks_done");
+                }
                 k => same(op, tp, k, k, "place pr"),
             }
         }
