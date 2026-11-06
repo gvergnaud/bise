@@ -14,6 +14,7 @@ mod agents;
 mod core;
 mod fake;
 mod hub;
+pub mod model_test;
 mod plain;
 /// the projects' holds and sidebar rows (bise desktop S1), wired by S3b
 pub mod projects;

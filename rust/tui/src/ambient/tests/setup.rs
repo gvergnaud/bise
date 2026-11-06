@@ -33,6 +33,10 @@ struct World {
     cu_fixes: Vec<String>,
     cu_live_tests: usize,
     cu_offs: Vec<bool>,
+    /// settings · Setup's live tests asked (model, generation) and the
+    /// channel of the last one, to end them from the test
+    model_tests: Vec<(String, u64)>,
+    testing: Option<std::sync::mpsc::Sender<Done>>,
     /// V17: the role_set writes
     role_sets: Vec<(String, Option<String>, Option<String>)>,
     /// S.6: the release channel's reads (the channel of the last one)
@@ -78,7 +82,7 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
     let (a, b, c, d, e, f, g, h, i) = (w.clone(), w.clone(), w.clone(), w.clone(), w.clone(), w.clone(), w.clone(), w.clone(), w.clone());
     let (j, k, l, m) = (w.clone(), w.clone(), w.clone(), w.clone());
     let (n, o, q, r, u, v) = (w.clone(), w.clone(), w.clone(), w.clone(), w.clone(), w.clone());
-    let (x, y, z) = (w.clone(), w.clone(), w.clone());
+    let (x, y, z, mt) = (w.clone(), w.clone(), w.clone(), w.clone());
     let mf = w.clone();
     let sg = w.clone();
     let gr = w.clone();
@@ -283,6 +287,12 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
         roles: Box::new(move || {
             let main = x.borrow().role_sets.iter().rev().find(|(r, _, _)| r == "main").and_then(|(_, m, _)| m.clone()).unwrap_or_else(|| "mistral/m".into());
             vec![RoleRow { role: "main".into(), name: "main".into(), about: "your team lead".into(), kind: "chat".into(), model: main, effort: None, source: "config".into(), follows: None }]
+        }),
+        gauge_input: Box::new(|| (bise_catalog::Setup::from_text(Some("[roles]\nmain = \"mistral/mistral-large-4\"\n"), &|_| None), None)),
+        model_test: Box::new(move |t, generation, tx| {
+            let mut w = mt.borrow_mut();
+            w.model_tests.push((t.model, generation));
+            w.testing = Some(tx);
         }),
         role_set: Box::new(move |role, model, effort| {
             if role == "nope" {
@@ -1022,4 +1032,41 @@ fn a_failed_keychain_move_says_it_and_another_word_is_refused() {
     let o = t.take();
     assert!(evs(&o, "error").iter().any(|e| e["cmd"] == "keychain" && e["text"].as_str().unwrap_or("").contains("on or off")), "{o:?}");
     assert_eq!(w.borrow().keychain_moves, vec![true], "no move for a wrong word");
+}
+
+/// settings · Setup (page models-setup): the gauge comes with the roles,
+/// a test runs only on `setup_test` (each model once, on the port), its
+/// end sends the gauge again, and the helper's mic refused fails
+/// dictation (Electron's main relays it).
+#[test]
+fn the_gauge_comes_with_the_roles_and_tests_run_only_on_setup_test() {
+    let mut t = T::new();
+    let w = setup(&mut t);
+    t.core.app_start();
+    t.until(|o| o.iter().any(|v| v["ev"] == "setup_gauge"));
+    let out = t.take();
+    let g = evs(&out, "setup_gauge").last().cloned().unwrap();
+    assert_eq!(g["gauge"]["of"], 7);
+    // nothing tested at start
+    assert!(w.borrow().model_tests.is_empty());
+    app(&mut t, r#"{"cmd":"setup_test"}"#);
+    let out = t.take();
+    let asked: Vec<String> = w.borrow().model_tests.iter().map(|(m, _)| m.clone()).collect();
+    let mut once = asked.clone();
+    once.dedup();
+    assert_eq!(asked, once, "each model once: {asked:?}");
+    let testing = &evs(&out, "setup_gauge").last().unwrap()["gauge"]["testing"];
+    assert!(testing.as_array().is_some_and(|a| !a.is_empty()), "{out:#?}");
+    // every test ends: nothing under test any more
+    let tx = w.borrow_mut().testing.take().unwrap();
+    for (m, g) in w.borrow().model_tests.clone() {
+        let _ = tx.send(Done::Tested { model: m, generation: g, res: Ok(()), ms: 420 });
+    }
+    t.until(|o| o.iter().any(|v| v["ev"] == "setup_gauge" && v["gauge"].get("testing").is_none()));
+    // the mic refused: dictation fails with allow_mic
+    app(&mut t, r#"{"cmd":"helper_perms","mic":"denied"}"#);
+    let out = t.take();
+    let g = evs(&out, "setup_gauge").last().cloned().unwrap();
+    let d = g["gauge"]["rows"].as_array().unwrap().iter().find(|r| r["id"] == "dictation").cloned().unwrap();
+    assert_eq!(d["mic_denied"], true, "{d:#}");
 }

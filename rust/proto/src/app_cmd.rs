@@ -212,6 +212,17 @@ pub enum AppCmd {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         models: Option<Vec<String>>,
     },
+    /// the helper's permissions, relayed by Electron's main (it owns the
+    /// helper) at each helper `perms` and again after a core (re)start: a
+    /// fact the core keeps for settings · Setup (none: not known yet)
+    HelperPerms {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mic: Option<crate::helper::Grant>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        accessibility: Option<crate::helper::Grant>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        screen: Option<crate::helper::Grant>,
+    },
     /// computer use (P.2): `act` on | off | uninstall | check (its page is
     /// open: the setup check runs, once a second, until leave or 2 min
     /// without a check) | leave | fix (`fix`: a row's fix, his click only)
@@ -609,6 +620,7 @@ impl AppCmd {
         "keychain",
         "setup_check",
         "setup_test",
+        "helper_perms",
         "role_set",
         "computer",
         "shot",

@@ -19,11 +19,12 @@ import { Capsule, installCapsuleIpc } from './capsule';
 import { capsuleFramesDir } from './capsuleframe';
 import { badgeOf, CountKeeper, type Counts } from './counts';
 import { installGuard } from './guard';
-import { startHelper } from './helper/run';
+import { GRANTED, startHelper } from './helper/run';
+import { PermsRelay } from './helper/perms';
 import { adoptLoginEnv } from './loginenv';
 import { appName } from './appname';
 import { aboutPanel } from './about';
-import { micHeld, onCoreEvent, sendToCore, startCore, stopCore } from './core/ipc';
+import { micHeld, onCoreEvent, onCoreState, sendToCore, startCore, stopCore } from './core/ipc';
 import { configOfPrefs } from './helper/config';
 import { Shots } from './helper/shot';
 import { installIpc, panelShown, sendClip, sendMenu, setProjectRoots } from './ipc';
@@ -132,6 +133,14 @@ void app.whenReady().then(() => {
   // what he typed or opened, on disk for a reload, a relaunch or a crash (src/main/keep.ts)
   installKeepIpc(app.getPath('userData'));
   const helper = startHelper(testMode);
+  // the helper's permissions reach the core (settings · Setup's gauge): main relays them, at each
+  // change and again when a core comes up; an off-screen run relays GRANTED, as its pages see (perms.ts)
+  const perms = new PermsRelay(sendToCore);
+  if (helper !== null) helper.on((ev) => { perms.helperEv(ev); });
+  else if (testMode) perms.helperEv(GRANTED);
+  onCoreState((s) => {
+    if (s === 'up') perms.coreUp();
+  });
   // the spotlight's still: the capsule's state tells it when it shows (below)
   let shots: Shots | null = null;
   // his prefs (excluded apps...) reach the helper now and on every change

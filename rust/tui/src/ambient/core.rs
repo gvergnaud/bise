@@ -10,6 +10,7 @@ mod away;
 mod cmd;
 mod computer;
 mod dictate;
+mod gauge;
 mod takes;
 mod hub_rpc;
 mod home;

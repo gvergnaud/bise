@@ -64,6 +64,9 @@ pub enum Done {
     /// the servers of a plugin he just added were tried once: their
     /// states are in the status files, the list is sent again
     Tried,
+    /// settings · Setup's live test of a model ended, on the generation
+    /// of its provider's key it ran with (Err: why, the provider's words)
+    Tested { model: String, generation: u64, res: Result<(), (bise_proto::app_rows::CheckWhy, String)>, ms: u64 },
 }
 
 /// A staged plugin on its way back to the core (compared by its token).
@@ -96,6 +99,8 @@ pub enum RegistryOp {
 pub type FlowFn = Box<dyn Fn(&Path, bool) -> Result<(), String>>;
 pub type WriteFn = Box<dyn Fn(&Value) -> Result<(), String>>;
 pub type IdFn = Box<dyn Fn(&str) -> Result<(), String>>;
+/// (the model and its role, its provider's generation, the channel of its end)
+pub type ModelTestFn = Box<dyn Fn(super::model_test::ModelTest, u64, Sender<Done>)>;
 /// (provider, the key pasted or none, its seq, the channel of its end) ->
 /// (the provider's name, the model it is checked with), at once; the
 /// check's end comes as `Done::Used`
@@ -218,6 +223,12 @@ pub struct SetupPorts {
     pub cu: CuPorts,
     /// each role's model (V17, [`role_rows`] of config.toml's setup)
     pub roles: Box<dyn Fn() -> Vec<RoleRow>>,
+    /// what settings · Setup's gauge reads (bise_catalog::features): the
+    /// setup with the keys, and voice mode's `tts_model` when he set one
+    pub gauge_input: Box<dyn Fn() -> (bise_catalog::Setup, Option<String>)>,
+    /// one live test of a model (his click only), on its own thread,
+    /// `Done::Tested` at its end with the generation given
+    pub model_test: ModelTestFn,
     /// a role's model and effort, checked ([`check_role_set`]) then
     /// written by bise_catalog's roles::save_role
     pub role_set: RoleSetFn,
@@ -638,6 +649,22 @@ pub fn live(flow: FlowFn) -> SetupPorts {
         plugin_grant: Box::new(|plugin, uri, perms| crate::plugins::grant(plugin, uri, perms).map(|_| ())),
         plugin_setting: Box::new(crate::plugins::setting),
         roles: Box::new(move || role_rows(&bise_catalog::Setup::load(&home().config_file()))),
+        gauge_input: Box::new(move || {
+            let file = home().config_file();
+            let text = std::fs::read_to_string(&file).ok();
+            (bise_catalog::Setup::load(&file), bise_catalog::voice::VoiceModeKeys::from_text(text.as_deref()).tts_model)
+        }),
+        model_test: Box::new(move |t, generation, tx| {
+            let h = home();
+            std::thread::spawn(move || {
+                let t0 = std::time::Instant::now();
+                let env = |k: &str| std::env::var(k).ok();
+                let ports = super::model_test::Ports { check: crate::keycheck::check_answer, token: |p| bise_catalog::chatgpt::access_token(p).map_err(|e| e.to_string()) };
+                let res = super::model_test::run(&h, &env, &t, &ports);
+                let ms = u64::try_from(t0.elapsed().as_millis()).unwrap_or(u64::MAX);
+                let _ = tx.send(Done::Tested { model: t.model, generation, res, ms });
+            });
+        }),
         role_set: Box::new(move |role, model, effort| {
             let file = home().config_file();
             check_role_set(&bise_catalog::Setup::load(&file), role, model, effort)?;

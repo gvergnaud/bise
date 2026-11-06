@@ -84,6 +84,8 @@ pub const TAGS: &[&str] = &[
     "plugin_remove",
     "computer_use",
     "setup_check",
+    "setup_test",
+    "helper_perms",
     "role_set",
     "app_version",
     "setup_first_cancel",
@@ -164,6 +166,8 @@ pub(crate) struct Setup {
     use_seq: u64,
     /// the check running per provider: its seq and when it started (its end says how long)
     using: std::collections::HashMap<String, (u64, Instant)>,
+    /// settings · Setup's gauge: its tests, generations, the helper's perms
+    pub(super) gauge: super::gauge::GaugeLive,
 }
 
 /// R8 (the TUI's sb.rs /model, architect m_12214): a `/model <model>`
@@ -193,7 +197,7 @@ impl Core {
     /// The setup's ports (the binary's live ones, or a test's).
     pub fn set_setup(&mut self, ports: SetupPorts) {
         let (tx, rx) = channel();
-        self.setup = Some(Setup { ports, tx, rx, signing: None, logins: Vec::new(), staged: Default::default(), found: None, evidence: Vec::new(), signals_at: None, markets: Vec::new(), summaries: Default::default(), cu: None, update: Default::default(), held: None, keychain_moving: false, keychain_said: (Vec::new(), false), use_seq: 0, using: Default::default() });
+        self.setup = Some(Setup { ports, tx, rx, signing: None, logins: Vec::new(), staged: Default::default(), found: None, evidence: Vec::new(), signals_at: None, markets: Vec::new(), summaries: Default::default(), cu: None, update: Default::default(), held: None, keychain_moving: false, keychain_said: (Vec::new(), false), use_seq: 0, using: Default::default(), gauge: Default::default() });
     }
 
     /// R8: his `/model <model>` in `agent`'s view, before it goes to the
@@ -293,6 +297,7 @@ impl Core {
         let Some(s) = &self.setup else { return };
         let items = (s.ports.roles)();
         self.emit(json!({"ev": "roles", "items": items}));
+        self.emit_gauge();
     }
 
     fn emit_prefs(&mut self) {
@@ -307,6 +312,7 @@ impl Core {
         let claude_plan = (s.ports.claude_plan)();
         self.emit(json!({"ev": "accounts", "items": items, "claude_plan": claude_plan}));
         self.replay_held();
+        self.emit_gauge();
     }
 
     /// `provider_use` (firstkey.rs): `checking` at once, the check on
@@ -558,6 +564,8 @@ impl Core {
                 self.poll_projects(true);
                 ("setup_check", Ok(()))
             }
+            AppCmd::SetupTest { models } => ("setup_test", self.setup_test(models)),
+            AppCmd::HelperPerms { mic, accessibility, screen } => ("helper_perms", self.helper_perms(mic, accessibility, screen)),
             AppCmd::ComputerUse { act, fix } => ("computer_use", self.computer_use(&act, fix.as_deref())),
             other => return self.setup_error("setup", &format!("not a setup command: {other:?}")),
         };
@@ -761,6 +769,7 @@ impl Core {
                     self.emit_accounts();
                 }
                 Done::Used { seq, used } => self.on_used(seq, used),
+                d @ Done::Tested { .. } => self.on_tested(d),
                 Done::CuCheck(v) => {
                     if let Some(c) = self.setup.as_mut().and_then(|s| s.cu.as_mut()) {
                         c.check = v;

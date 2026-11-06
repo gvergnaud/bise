@@ -26,6 +26,8 @@ let core: CoreProcess | null = null;
 // the last state events, for a window or a main-side listener that comes after they went out
 const latest = new Latest();
 const listeners = new Set<(ev: Record<string, unknown>) => void>();
+// main's own listeners on the core's state ('up' after each (re)start: the helper's perms again)
+const stateListeners = new Set<(s: CoreState) => void>();
 // a dictation's words go only to the window that started it (dictation.ts)
 const dictations = new DictationRoutes();
 // the threads each window follows: the core has one set per project (subs.ts)
@@ -58,6 +60,14 @@ export function onCoreEvent(listener: (ev: Record<string, unknown>) => void): ()
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
+  };
+}
+
+/** Main's own listener on the core's state (a core up again hears main's facts again). */
+export function onCoreState(listener: (s: CoreState) => void): () => void {
+  stateListeners.add(listener);
+  return () => {
+    stateListeners.delete(listener);
   };
 }
 
@@ -278,6 +288,7 @@ export function startCore(env: Readonly<Record<string, string | undefined>> = pr
         // back up: a next crash may tell him again
         if (s === 'up') told = false;
         sendState(s);
+        for (const l of stateListeners) l(s);
       },
       onExit: (e) => {
         lastExit = e;
