@@ -157,6 +157,7 @@ export type Gesture =
   | { readonly g: 'resend' | 'dismiss'; readonly project: string; readonly agent: string; readonly cid: number }
   | { readonly g: 'art'; readonly project: string; readonly id: string }
   | { readonly g: 'chip'; readonly card: Card }
+  | { readonly g: 'capsule'; readonly card: Card; readonly does: 'chip' | 'enter' | { readonly pick: number } }
   | { readonly g: 'go'; readonly route: Route }
   | { readonly g: 'rail'; readonly place: RailPlace }
   | { readonly g: 'win'; readonly width: number }
@@ -181,6 +182,11 @@ export const resend = (project: string, agent: string, cid: number): Gesture => 
 export const openArtifact = (project: string, id: string): Gesture => ({ g: 'art', project, id });
 /** He clicks the artifact chip of an open card (or ⌘O on it): what it is about. */
 export const openChip = (c: Card): Gesture => ({ g: 'chip', card: c });
+/**
+ * On a card the spotlight (the capsule, fn+space) opened: a click on its artifact chip ('chip'),
+ * ⏎ 'open in bise' ('enter'), or option n ({ pick: n }, a digit or a click).
+ */
+export const inCapsule = (c: Card, does: 'chip' | 'enter' | { readonly pick: number }): Gesture => ({ g: 'capsule', card: c, does });
 /** He goes to that route (the rail, ⌘K, a link). */
 export const goTo = (route: Route): Gesture => ({ g: 'go', route });
 /** He clicks that button of the left rail (bise's ':*', inbox, scheduled, artifacts, plugins, settings). */

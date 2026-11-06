@@ -15,7 +15,9 @@ export { galleryView, type CardView, type Place } from '@/artifacts/gallery';
 export { libraryView, type LibraryView } from '@/artifacts/folders';
 // the window's route after a move (an option's nav effect, a click on an artifact's name) and what the sidebar shows for it
 export type { Route } from '@/app/route';
-export { navRoute } from '@/app/edge';
+export { askEffect, navRoute } from '@/app/edge';
+// the capsule's card (the spotlight's waiting row): its gestures and its edge, which asks the main window
+export { capsuleCardActs, runCapsuleEffect } from '@/capsule/cardacts';
 export { artifactGo } from '@/artifacts/leave';
 // a card's chip (and ⌘O): the intent the inbox block does (inbox/Block.tsx)
 export { chipOpen } from '@/inbox/about';

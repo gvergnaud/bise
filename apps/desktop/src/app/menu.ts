@@ -13,6 +13,7 @@ import type { MenuAction } from '@/shared/api';
 import type { Router } from './router';
 import { inboxAtOf, parseRoute, projectOf, type Route } from './route';
 import { askInbox, inboxFromMenu } from './inboxAsk';
+import { askEffect, runNav } from './edge';
 import { addProject } from './addProject';
 import { newAgent } from './newagent';
 import { biseBack } from './railback';
@@ -135,6 +136,13 @@ export function useMainRoutes(router: Router) {
       // View > Terminal while another window had the keys: the terminal here, where it lives
       if (route === 'terminal') {
         panel.reveal();
+        return;
+      }
+      // the capsule's card chip (or its option that opens an artifact): it in the panel's tab
+      // at its block, the window stays where it is (edge.tsx askEffect)
+      const art = askEffect(route);
+      if (art !== undefined) {
+        runNav(art, router);
         return;
       }
       // b1/b2: 'inbox' / a notification's 'inbox?card=<project>/<id>' open the block in place

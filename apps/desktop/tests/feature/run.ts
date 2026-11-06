@@ -32,6 +32,9 @@ import {
   libraryView,
   Latest,
   navRoute,
+  askEffect,
+  capsuleCardActs,
+  runCapsuleEffect,
   projectsOf,
   projectRowOf,
   projectWaiting,
@@ -75,6 +78,10 @@ export interface Feature {
   sent(): readonly Cmd[];
   /** Every effect the window ran (a move to an artifact's view, a window.bise call), oldest first. */
   effects(): readonly Effect[];
+  /** What the capsule asked of the main window, oldest first: each brings it to the front on that ask or route (window.bise.openWindow). */
+  windowAsks(): readonly string[];
+  /** The window.bise calls the capsule ran itself (his browser), oldest first. */
+  capsuleEffects(): readonly Effect[];
   /** Each screen's "what I show". */
   readonly view: {
     /** The inbox: every open item he hasn't acted on, in its order, each with its refusal (the store's inbox view, machine/cards.ts inboxView). */
@@ -199,6 +206,37 @@ export function feature(now = 1_791_100_000_000): Feature {
   };
   let store = open();
 
+  // the capsule (fn+space): a window of its own, its own store on the same core events
+  // (capsule/CapsuleRoot.tsx), its edge asking the main window (capsule/cardacts.ts); main's
+  // openWindow sends the ask to the main window, whose useMainRoutes runs it (app/menu.ts)
+  const asks: string[] = [];
+  const capsuleRan: Effect[] = [];
+  const toMain = {
+    openWindow: (to?: unknown) => {
+      if (typeof to !== 'string') return;
+      asks.push(to);
+      const e = askEffect(to);
+      if (e !== undefined) ran.push(e);
+    },
+    openExternal: (url: string) => {
+      capsuleRan.push({ out: 'fx', fx: { fx: 'openExternal', args: [url] } });
+      return Promise.resolve();
+    },
+  };
+  let capsule: Store | null = null;
+  const capsuleStore = (): Store => {
+    if (capsule !== null) return capsule;
+    const s = new Store({ send: (cmd) => { outbox.push(cmd); } }, { now: () => clock });
+    s.setCore('up');
+    for (const e of latest.snapshot()) s.apply(e);
+    s.onEffect((e) => {
+      runCapsuleEffect(e, toMain);
+    });
+    capsule = s;
+    return s;
+  };
+  const stay = { later: () => undefined, done: () => undefined, close: () => undefined };
+
   const doOne = (g: Gesture): void => {
     switch (g.g) {
       case 'answer':
@@ -238,6 +276,14 @@ export function feature(now = 1_791_100_000_000): Feature {
         // the card's chip and ⌘O (inbox/Block.tsx openPage): the app's own intent for it
         const intent = chipOpen(g.card);
         if (intent !== null) store.do(intent);
+        return;
+      }
+      case 'capsule': {
+        // the capsule's card (CapsuleRoot.tsx cardOf, its keys): the acts it draws the card with
+        const acts = capsuleCardActs(capsuleStore(), g.card, toMain, stay);
+        if (g.does === 'chip') acts.openPage?.();
+        else if (g.does === 'enter') acts.open?.();
+        else acts.pick(g.does.pick);
         return;
       }
       case 'go':
@@ -282,6 +328,7 @@ export function feature(now = 1_791_100_000_000): Feature {
         }
         latest.keep(i as unknown as Record<string, unknown>);
         store.apply(i);
+        capsule?.apply(i);
       }
       return f;
     },
@@ -301,6 +348,8 @@ export function feature(now = 1_791_100_000_000): Feature {
     },
     sent: () => [...outbox],
     effects: () => [...ran],
+    windowAsks: () => [...asks],
+    capsuleEffects: () => [...capsuleRan],
     view: {
       inbox: () => store.inboxItems(),
       sending: () => store.sending(),

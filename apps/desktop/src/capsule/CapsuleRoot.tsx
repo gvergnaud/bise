@@ -1,7 +1,7 @@
 // The capsule surface's root (window.bise.surface === 'capsule'; lead m_9618): fn from the helper
 // and the window's state drive the view (machine.ts), the store gives the spotlight its data and
 // bise's answer, and the effects go to the capsule window (show, hide, size) and the main window
-// (openWindow). It never pushes a card (the user's decision 2026-10-09, card #476): a question
+// (openWindow; what the store's machine opens, cardacts.ts). It never pushes a card (the user's decision 2026-10-09, card #476): a question
 // shows in the window's inbox block when the window is in front, as a native notification when it
 // isn't; here a card opens only from the spotlight's 'waiting for you' rows.
 import {
@@ -29,6 +29,7 @@ import { menuCards } from "./TrayMenu";
 import { answeredOver, errorOver, heardOver, lingerOf, OVER_FADE_MS } from "./over";
 import { asksForScreen, shotOf, shotPref } from "./shot";
 import { useAgentPreview, useSpotData } from "./data";
+import { capsuleCardActs, runCapsuleEffect } from "./cardacts";
 import { MARK_SHOWN, nextAsk, sheetOpens, shownIn, type Perms } from "@/setup/perms";
 import { CORNER_OUT_MS, START, step, type CapEvent, type Fx, type State, type View } from "./machine";
 
@@ -450,6 +451,17 @@ export function CapsuleRoot(): JSX.Element {
     };
   }, [bise, keepWithBise, dropShot, store]);
 
+  // the capsule's edge: what the store's machine opens (a card's chip, an option that opens an
+  // artifact) goes to the main window's panel tab, in front; a window.bise call runs here
+  // (cardacts.ts). Without it the capsule's chip did nothing (his m_53914).
+  useEffect(
+    () =>
+      store.onEffect((e) => {
+        runCapsuleEffect(e, bise);
+      }),
+    [store, bise],
+  );
+
   // a card opened from the spotlight's waiting row has the keyboard (the spotlight had it): its
   // digits pick, esc goes back to the list, ⏎ opens it in bise, ⌘⌫ closes it (the strip's keys)
   const fromSpot = view.kind === "card" ? view.id : null;
@@ -462,18 +474,30 @@ export function CapsuleRoot(): JSX.Element {
       if (e.defaultPrevented || e.isComposing) return;
       const c = store.cards(project).find((x) => String(x.id) === n);
       if (c === undefined) return;
+      // the same acts as its clicks (cardacts.ts): ⏎ this card in the window's inbox, a digit the
+      // machine's pick (an option that opens an artifact opens it in the window, nothing sent)
+      const acts = capsuleCardActs(store, c, bise, {
+        later: () => {
+          dispatch({ ev: "later" });
+        },
+        done: () => {
+          dispatch({ ev: "card_done", id: fromSpot });
+        },
+        close: () => {
+          dispatch({ ev: "close" });
+        },
+      });
       if (e.key === "Enter" && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
-        bise?.openWindow("inbox");
-        dispatch({ ev: "close" });
+        acts.open?.();
         return;
       }
       const k = cardKeyOf(e, c, null);
       if (k === null) return;
       e.preventDefault();
-      if (k.t === "later") dispatch({ ev: "later" });
-      else if (k.t === "close") dispatch({ ev: "card_done", id: fromSpot });
-      else if (k.t === "pick") store.do({ i: "answer", project, card: c.id, reply: String(k.n) });
+      if (k.t === "later") acts.later?.();
+      else if (k.t === "close") acts.close?.();
+      else if (k.t === "pick") acts.pick(k.n);
     };
     window.addEventListener("keydown", onKey);
     return () => {
@@ -512,21 +536,17 @@ export function CapsuleRoot(): JSX.Element {
           project={store.projects().find((p) => p.project === project)?.name}
           now={Date.now()}
           surface="glass"
-          acts={{
+          acts={capsuleCardActs(store, c, bise, {
             later: () => {
               dispatch({ ev: "later" });
             },
-            pick: (n) => {
-              store.do({ i: "answer", project, card: c.id, reply: String(n) });
-            },
-            close: () => {
+            done: () => {
               dispatch({ ev: "card_done", id });
             },
-            open: () => {
-              bise?.openWindow("inbox");
+            close: () => {
               dispatch({ ev: "close" });
             },
-          }}
+          })}
           testId="capsule.card.view"
         />
       );

@@ -88,7 +88,7 @@ import '@/ds/index.css';
 import './app.css';
 import './zen.css';
 import { useKissWatch } from './Marks';
-import { StoreEdge } from './edge';
+import { askEffect, runNav, StoreEdge } from './edge';
 
 export function App() {
   const [router] = useState(() => createRouter(firstRoute(), sessionHistory()));
@@ -152,6 +152,12 @@ function firstRoute(): Route {
     start = decodeURIComponent(m?.[1] ?? '');
   } catch {
     // a broken escape: not an inbox ask
+  }
+  // the window opened by the capsule's card chip: the artifact in the panel's tab, his kept screen
+  const art = askEffect(start);
+  if (art !== undefined) {
+    runNav(art, null);
+    return keptRoute() ?? { screen: 'bise' };
   }
   const inbox = inboxAtOf(start);
   if (inbox !== undefined) {

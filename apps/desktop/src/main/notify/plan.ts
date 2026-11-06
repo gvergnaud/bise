@@ -4,6 +4,7 @@
 // one knocks, what its notification says and offers, what a button or a reply answers. The shell is
 // run.ts. Owner: amb-mac.
 import type { Card } from '../../proto';
+import { cardRoute } from '../../shared/asks';
 
 /** The words, en and fr (designer m_14211). */
 export const WORDS = {
@@ -118,8 +119,8 @@ export type Effect =
   | { readonly t: 'open'; readonly route: string }
   | { readonly t: 'none' };
 
-/** The window's route that opens this card in place in the inbox (amb-home's InboxBlock, m_14345). */
-export const cardRoute = (project: string, card: number): string => `inbox?card=${project}/${card}`;
+/** The window's route that opens this card in place in the inbox (amb-home's InboxBlock, m_14345): shared/asks.ts's. */
+export { cardRoute };
 
 /** A button answers with its option (as 1-4 in the window), a reply with his words, the rest opens that card in the inbox. */
 export function effectOf(n: Note, g: Gesture): Effect {

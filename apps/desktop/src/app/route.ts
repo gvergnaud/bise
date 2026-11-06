@@ -24,7 +24,8 @@
 //   plugins[/skills | /p/<id>] the plugins place (every kind, or skills only: /skills), a plugin's page
 //   inbox/all                  the inbox screen: what waits on him, then what he answered (inbox-screen)
 //   ('inbox' and 'inbox?card=<p>/<id>' stay asks to open the block above the composer in place,
-//   read by inboxAtOf, never routes)
+//   read by inboxAtOf, never routes; 'tab?artifact=<p>/<id>[&at=<block>]' asks to open an
+//   artifact in the panel's tab, shared/asks.ts artifactAskOf)
 //   lab/<composer|spotlight|pearl>             amb-web's labs, test mode only
 // Anything else parses to `notfound` with the string kept, never to bise:
 // a wrong link says so.

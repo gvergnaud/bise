@@ -10,6 +10,7 @@ import { openTab } from '@/app/panel/tabs';
 import { useStore } from '@/store';
 import type { Effect, FxName } from '@/store/machine/types';
 import type { BiseApi } from '@/shared/api';
+import { artifactAskOf } from '@/shared/asks';
 import { routeOfOpen, type Route } from './route';
 import { useRouter, type Router } from './router';
 
@@ -18,14 +19,29 @@ export function navRoute(to: Extract<Effect, { out: 'nav' }>['to']): Route {
   return routeOfOpen({ project: to.project, what: 'artifact', id: to.artifact });
 }
 
+/**
+ * The effect another window's ask runs here (route.ts artifactAsk: the capsule's card chip, its
+ * option that opens an artifact): the artifact in the panel's tab at its block, the window stays
+ * where it is, as the chip in this window does. Anything else: undefined. Pure.
+ */
+export function askEffect(route: string): Extract<Effect, { out: 'nav' }> | undefined {
+  const a = artifactAskOf(route);
+  return a === undefined ? undefined : { out: 'nav', to: a, tab: true };
+}
+
+/** A move: the artifact's view at its block, in the panel's tab (`tab`) or through `router`. */
+export function runNav(e: Extract<Effect, { out: 'nav' }>, router: Pick<Router, 'go'> | null): void {
+  if (e.to.at !== null) openAtAnchor(`${e.to.project}/${e.to.artifact}`, e.to.at);
+  // a card's chip: the panel's tab only, the thread and its open card stay (his m_47572)
+  if (e.tab === true) openTab({ kind: 'artifact', project: e.to.project, id: e.to.artifact });
+  else router?.go(navRoute(e.to));
+}
+
 /** Runs one effect: a move through `router`, a call on `bise` (none: a test with no window.bise). */
 export function runEffect(e: Effect, router: Router, bise: Pick<BiseApi, FxName> | undefined): void {
   switch (e.out) {
     case 'nav':
-      if (e.to.at !== null) openAtAnchor(`${e.to.project}/${e.to.artifact}`, e.to.at);
-      // a card's chip: the panel's tab only, the thread and its open card stay (his m_47572)
-      if (e.tab === true) openTab({ kind: 'artifact', project: e.to.project, id: e.to.artifact });
-      else router.go(navRoute(e.to));
+      runNav(e, router);
       return;
     case 'fx':
       void bise?.[e.fx.fx](...e.fx.args);
