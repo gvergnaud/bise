@@ -41,8 +41,9 @@ enum Lines {
         case "config":
             guard let ex = o["exclude"] as? [Any], ex.allSatisfy({ $0 is String }) else { return bad("exclude") }
             guard let ro = bool("right_option") else { return bad("right_option") }
-            guard let q = bool("quote") else { return bad("quote") }
-            return .success(.config(exclude: ex as! [String], rightOption: ro, quote: q))
+            // quote absent (an older app's line): false, his selection never read
+            if o["quote"] != nil && bool("quote") == nil { return bad("quote") }
+            return .success(.config(exclude: ex as! [String], rightOption: ro, quote: bool("quote") ?? false))
         case "route":
             guard let v = bool("open") else { return bad("open") }
             return .success(.route(open: v))

@@ -207,10 +207,12 @@ pub enum HelperCmd {
     /// at start and when his prefs change: the apps never read (bundle
     /// ids, on top of the helper's built-in list), right option as the fn
     /// fallback, and `quote`: fn space may read his selection (his
-    /// `context.quote`, the spotlight's ❝ chip; off: never read)
+    /// `context.quote`, the spotlight's ❝ chip; off: never read). Absent
+    /// (an older app's line, desktop-v2026.10.1): false, closed by default
     Config {
         exclude: Vec<String>,
         right_option: bool,
+        #[serde(default, skip_serializing_if = "is_false")]
         quote: bool,
     },
     /// the spotlight's route line is up: a plain tab is bise's

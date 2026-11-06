@@ -4,15 +4,11 @@
 // its default (on) until it does. context.quote off: the helper never reads
 // his selection (fn space's ❝, architect m_53938).
 import type { HelperCmd } from '../../proto';
+import { quoteOn } from '../../shared/quote';
 
 export type HelperConfig = Extract<HelperCmd, { cmd: 'config' }>;
 
 export const DEFAULT_CONFIG: HelperConfig = { cmd: 'config', exclude: [], right_option: true, quote: true };
-
-/** His context.quote: fn space may read his selection (the spotlight's ❝); unset counts as on, false is off. */
-export function quoteOn(prefs: unknown): boolean {
-  return obj(obj(prefs)?.['context'])?.['quote'] !== false;
-}
 
 function obj(v: unknown): Record<string, unknown> | null {
   return typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;

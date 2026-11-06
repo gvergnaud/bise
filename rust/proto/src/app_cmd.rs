@@ -541,6 +541,9 @@ pub enum ImportFrom {
 }
 
 impl AppCmd {
+    /// Gone tags never come back with another meaning: `fn_context` (the
+    /// fn context with his selection, removed for the spotlight's ❝,
+    /// architect m_53938; decodes as Unknown, the core refuses it).
     pub const TAGS: &'static [&'static str] = &[
         "open",
         "project_add",

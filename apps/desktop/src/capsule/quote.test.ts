@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { quoteOf, quotePref } from "./quote";
+import { quoteOf } from "./quote";
 
 const ctx = (context: Record<string, string>, excluded = false) =>
   ({ ev: "context", context, ...(excluded ? { excluded } : {}) }) as const;
@@ -14,12 +14,5 @@ describe("the ❝ chip, the capsule's side (architect m_53938)", () => {
     expect(quoteOf(ctx({ app: "Safari", selection: "x" }, true), true)).toBeNull();
     expect(quoteOf(ctx({ app: "Safari" }), true)).toBeNull();
     expect(quoteOf(ctx({ app: "Safari", selection: "  \n" }), true)).toBeNull();
-  });
-
-  it("his context.quote: off only when false", () => {
-    expect(quotePref(null)).toBe(true);
-    expect(quotePref({ context: { shot: false } })).toBe(true);
-    expect(quotePref({ context: { quote: true } })).toBe(true);
-    expect(quotePref({ context: { quote: false } })).toBe(false);
   });
 });

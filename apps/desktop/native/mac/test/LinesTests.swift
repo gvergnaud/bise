@@ -19,12 +19,21 @@ func json(_ l: String) -> NSDictionary { (try? JSONSerialization.jsonObject(with
 
 // every command line decodes to a known command, as Rust's HelperCmd
 let want: [HelperCmd] = [
-    .config(exclude: ["com.agilebits.onepassword7"], rightOption: true, quote: true),
+    // desktop-v2026.10.1's lines, without quote: false (his selection never read)
+    .config(exclude: ["com.agilebits.onepassword7"], rightOption: true, quote: false),
     .config(exclude: [], rightOption: false, quote: false),
     .route(open: true), .route(open: false), .ownMic(open: true), .readContext(id: "c7"),
     .perm("accessibility", ask: true), .perm("mic", ask: false), .perm("screen", ask: true),
     .shot(id: "s1", dir: "/Users/u/.bise/run/shots"), .quit,
+    .config(exclude: ["com.agilebits.onepassword7"], rightOption: true, quote: true),
+    .config(exclude: [], rightOption: false, quote: true),
 ]
+// quote said false (Electron's JSON.stringify writes it; Rust leaves it out): off; a non-bool: refused
+law("cmd: config quote false is off",
+    (try? Lines.decode(#"{"cmd":"config","exclude":[],"right_option":true,"quote":false}"#).get())
+        == .config(exclude: [], rightOption: true, quote: false))
+law("cmd: config quote not a bool is refused",
+    (try? Lines.decode(#"{"cmd":"config","exclude":[],"right_option":true,"quote":"yes"}"#).get()) == nil)
 let cmds = lines("helper_cmd.jsonl")
 law("cmd: one expectation per fixture line", cmds.count == want.count)
 for (l, w) in zip(cmds, want) {

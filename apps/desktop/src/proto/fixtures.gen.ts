@@ -476,8 +476,8 @@ export const helper_ev: readonly HelperEv[] = [
 
 /** rust/proto/fixtures/helper_cmd.jsonl */
 export const helper_cmd: readonly HelperCmd[] = [
-  {"cmd":"config","exclude":["com.agilebits.onepassword7"],"quote":true,"right_option":true},
-  {"cmd":"config","exclude":[],"quote":false,"right_option":false},
+  {"cmd":"config","exclude":["com.agilebits.onepassword7"],"right_option":true},
+  {"cmd":"config","exclude":[],"right_option":false},
   {"cmd":"route","open":true},
   {"cmd":"route","open":false},
   {"cmd":"own_mic","open":true},
@@ -487,6 +487,8 @@ export const helper_cmd: readonly HelperCmd[] = [
   {"action":"ask","cmd":"perm","perm":"screen"},
   {"cmd":"shot","dir":"/Users/u/.bise/run/shots","id":"s1"},
   {"cmd":"quit"},
+  {"cmd":"config","exclude":["com.agilebits.onepassword7"],"quote":true,"right_option":true},
+  {"cmd":"config","exclude":[],"quote":true,"right_option":false},
 ];
 
 /** rust/proto/fixtures/pty_ev.jsonl */

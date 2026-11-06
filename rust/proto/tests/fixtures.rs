@@ -63,6 +63,11 @@ fn drafts_round_trip_and_cover_every_tag() {
     covers(&t, CoreEv::TAGS, "core_ev.jsonl");
     let t = round_trip("app_cmd.jsonl", "cmd", AppCmd::decode, |m| !matches!(m, AppCmd::Unknown { .. }), |m| enc(m));
     covers(&t, AppCmd::TAGS, "app_cmd.jsonl");
+    // fn_context went (architect m_53938; desktop-v2026.10.1's fixture still holds it): an old
+    // line decodes as unknown, its tag never comes back meaning something else
+    let old = r#"{"cmd":"fn_context","context":{"app":"Code","selection":"x"}}"#;
+    assert!(matches!(AppCmd::decode(old), Ok(AppCmd::Unknown { .. })), "{old}");
+    assert!(!AppCmd::TAGS.contains(&"fn_context"));
     let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/project_view.json");
     let raw: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
     let v: ProjectView = serde_json::from_value(raw.clone()).unwrap();

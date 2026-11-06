@@ -1,5 +1,5 @@
-{"cmd":"config","exclude":["com.agilebits.onepassword7"],"right_option":true,"quote":true}
-{"cmd":"config","exclude":[],"right_option":false,"quote":false}
+{"cmd":"config","exclude":["com.agilebits.onepassword7"],"right_option":true}
+{"cmd":"config","exclude":[],"right_option":false}
 {"cmd":"route","open":true}
 {"cmd":"route","open":false}
 {"cmd":"own_mic","open":true}
@@ -9,3 +9,5 @@
 {"cmd":"perm","perm":"screen","action":"ask"}
 {"cmd":"shot","id":"s1","dir":"/Users/u/.bise/run/shots"}
 {"cmd":"quit"}
+{"cmd":"config","exclude":["com.agilebits.onepassword7"],"right_option":true,"quote":true}
+{"cmd":"config","exclude":[],"right_option":false,"quote":true}

@@ -54,4 +54,4 @@ export type PermAction = "ask" | "open";
 /**
  * What Electron's main asks the helper.
  */
-export type HelperCmd = { "cmd": "config", exclude: Array<string>, right_option: boolean, quote: boolean, } | { "cmd": "route", open: boolean, } | { "cmd": "own_mic", open: boolean, } | { "cmd": "read_context", id: string, } | { "cmd": "perm", perm: Perm, action: PermAction, } | { "cmd": "shot", id: string, dir: string, } | { "cmd": "quit" };
+export type HelperCmd = { "cmd": "config", exclude: Array<string>, right_option: boolean, quote?: boolean, } | { "cmd": "route", open: boolean, } | { "cmd": "own_mic", open: boolean, } | { "cmd": "read_context", id: string, } | { "cmd": "perm", perm: Perm, action: PermAction, } | { "cmd": "shot", id: string, dir: string, } | { "cmd": "quit" };

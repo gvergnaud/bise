@@ -7,11 +7,8 @@ describe("the helper's config from his prefs", () => {
     expect(c).toEqual({ cmd: 'config', exclude: ['com.apple.MobileSMS', 'com.tinyspeck.slackmacgap'], right_option: true, quote: true });
   });
 
-  it('his context.quote off: the helper never reads his selection; unset or junk: on', () => {
+  it('his context.quote off: the helper never reads his selection (shared/quote.ts says when)', () => {
     expect(configOfPrefs({ context: { quote: false } }).quote).toBe(false);
-    expect(configOfPrefs({ context: { quote: true } }).quote).toBe(true);
-    expect(configOfPrefs({ context: { shot: false } }).quote).toBe(true);
-    expect(configOfPrefs({ context: 'x' }).quote).toBe(true);
   });
 
   it('no prefs yet, or junk: the defaults (the helper keeps its built-in floor)', () => {
