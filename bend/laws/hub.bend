@@ -1332,3 +1332,44 @@ law apply_keeps_order:
   for e: HM.Ev
   for k: {HM.order_ev(e) == False{} : Bool}
   {HS.St.order(HM.apply(s, e)) == HS.St.order(s) : List<&2, String>}
+
+# ---- c4b-core-step-flat: a never_agent name (the user's, bise's,
+# GitHub's, a view's: HM.never_agent) is never an agent's name or old
+# name, so HM.get_agent and HM.alias_of answer none for one without
+# walking the ~900 archived agents of his hub ----
+
+# LAW: a new hub has none...
+law init_no_reserved_names:
+  for +w: String
+  HI.NoReserved(HM.init(w))
+
+# ...and any sequence of inputs keeps it so (a task_created's and a
+# rename's name is never name_held, which holds every reserved name).
+law no_reserved_names:
+  for +ins: List<&2, J.Json>
+  for +h: HC.Hub
+  for u: HI.NoReserved(HC.Hub.d(h))
+  HI.NoReserved(HC.Hub.d(HC.RunR.hub(HC.run(ins, h))))
+
+# LAW: on such a state, the walk the lookup skips would find no agent
+# named a never_agent name, live or archived.
+law never_agent_named:
+  for +s: HS.St
+  for u: HI.NoReserved(s)
+  for +n: String
+  for k: {HM.never_agent(n) == True{} : Bool}
+  {HM.agent_named(List.append(&2, HS.Agent, HS.St.agents(s), HS.St.arch(s)), n) == None{} : Maybe<&2, HS.Agent>}
+
+# LAW: the empty name is always held, so no task_created or renamed to it
+# is ever fresh (HX.FreshEv)...
+law empty_name_held:
+  for +s: HS.St
+  {HM.name_held(s, "") == True{} : Bool}
+
+# ...and a new task with an empty name is refused, never made "-2".
+law empty_name_refused:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +t: HC.NewTask
+  for e: {String.is_empty(HC.NewTask.base(t)) == True{} : Bool}
+  {HC.create_task(o, cx, t) == (cx, HC.TErr{"a new task needs a name"}) : HX.Cx<o> & HC.TaskR}

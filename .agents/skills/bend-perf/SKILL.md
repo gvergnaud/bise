@@ -181,3 +181,16 @@ numbers. The next audit starts from there.
   vendor/json's parallel print: 10-35 % of wall for 25-35 % more CPU on
   28.6 MB (serial join and per-level chunk appends left); a batch parse
   in halves 1.85x; a queued_in-shaped walk never faster forked.
+- 2026-11-07 (c4b-core-step-flat): a step's cost against the archived
+  agents, tests/core_step_cost.py (25 live + N archived that each ran a
+  turn; retired instructions per step via proc_pid_rusage). A journal
+  replay alone hides it (no runtimes): core_profile showed 0.1 ms ticks
+  while the fake hub's loop waited ~46 % on sb-core. Four walks of every
+  agent that ever ran: V.changed diffed the marks of every runtime not at
+  rest, quadratic (tick 178M -> 0.36M at 200; land 1); rt_put appended,
+  so a live runtime sat behind every archived one (rt_put to the head;
+  land 2); every durable view carried St.order, every name (land 3, ~15M
+  of a say at 1,000); get_agent/alias_of misses walked arch for the
+  user's name and for "" (the `from` of his says) (M.never_agent, law
+  no_reserved_names; land 4). At 1,000 archived: tick 4.5G (est.) ->
+  0.36M, sb list's step -> 0.47M, say 27.5M -> 2.7M, flat from 200.

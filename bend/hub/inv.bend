@@ -225,6 +225,20 @@ def NamesOK(ps: List<&2, List<&2, String>>) -> Data:
 def NamesApart(+s: S.St) -> Data:
   NamesOK(profile(List.append(&2, S.Agent, S.St.agents(s), S.St.arch(s))))
 
+# law no_reserved_names (c4b-core-step-flat): no name or old name of an
+# agent, live or archived, is a never_agent name (the user's, bise's,
+# GitHub's, a view's), so model.bend's lookups answer none for one
+# without a walk
+def Clean(xs: List<&2, S.Agent>) -> Data:
+  match xs:
+    case Nil{}:
+      Unit
+    case Con{+a, +t}:
+      X.Both<{M.never_in(names(a)) == False{} : Bool}, Clean(t)>
+
+def NoReserved(+s: S.St) -> Data:
+  X.Both<Clean(S.St.agents(s)), Clean(S.St.arch(s))>
+
 # ---- the agents split (issue 21 sha 2, hub/agents.bend) ----
 
 # every agent of `xs` is live (`v` True) or archived (`v` False)

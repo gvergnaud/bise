@@ -28,6 +28,7 @@ import ./lib/absurd.bend as AB
 import ./lib/hub-2.bend as PL2
 import ./lib/hub-3.bend as PL3
 import ./lib/hub-names.bend as PLN
+import ./lib/hub-clean.bend as PLK
 import ./lib/hub-cold.bend as PLC
 import ./lib/hub-cold-2.bend as PLC2
 import ./lib/hub-cold-3.bend as PLC3
@@ -1240,3 +1241,25 @@ def Laws.apply_keeps_order(s, e, k):
           {==}
         case HM.EResumed{x0}:
           {==}
+
+# ---- c4b-core-step-flat: no agent holds a never_agent name ----
+
+def Laws.init_no_reserved_names(w):
+  HX.Both{HX.Both{{==}, Unit{}}, Unit{}}
+
+def Laws.no_reserved_names(ins, h, u):
+  PLK.cl_tr(HC.Hub.d(HC.RunR.hub(HC.run(ins, h))), HM.apply_all(HC.RunR.journal(HC.run(ins, h)), HC.Hub.d(h)),
+    Laws.hub_run_replays(ins, h),
+    PLK.cl_apply_all(HC.RunR.journal(HC.run(ins, h)), HC.Hub.d(h), u, Laws.msg_ids_fresh(ins, h)))
+
+def Laws.never_agent_named(s, u, n, k):
+  match u:
+    case HX.Both{la, lr}:
+      PLK.cl_named(List.append(&2, HS.Agent, HS.St.agents(s), HS.St.arch(s)), n, k, PLK.cl_join(HS.St.agents(s), HS.St.arch(s), la, lr))
+
+def Laws.empty_name_held(s):
+  {==}
+
+def Laws.empty_name_refused(o, cx, t, e):
+  %Equal.sym(Bool, String.is_empty(HC.NewTask.base(t)), True{}, e) : {HC.create_task.go(o, _, cx, t) == (cx, HC.TErr{"a new task needs a name"}) : HX.Cx<o> & HC.TaskR}
+  {==}

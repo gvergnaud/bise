@@ -132,6 +132,23 @@ def GITHUB() -> String:
 def VIEW() -> String:
   "view"
 
+# a name no agent ever holds, as its name or an old one: the empty name
+# and every reserved name but main's (law no_reserved_names: a
+# task_created's and a rename's name is never name_held). A lookup of one
+# walks no list: the user's name, and "" (the `from` of his says), are
+# looked up in most steps, and the archived agents are ~900 on his hub
+# (c4b-core-step-flat)
+def never_agent(+n: String) -> Bool:
+  String.is_empty(n) || String.eq(n, USER()) || String.eq(n, HUB()) || String.eq(n, GITHUB()) || String.eq(n, VIEW())
+
+# a name of `ns` is never_agent
+def never_in(ns: List<&2, String>) -> Bool:
+  match ns:
+    case Nil{}:
+      False{}
+    case Con{+h, +t}:
+      LZ.or(never_agent(h), u => never_in(t))
+
 # ---- small helpers ----
 
 def snoc(-A: Data, xs: List<&2, A>, +x: A) -> List<&2, A>:
@@ -209,8 +226,17 @@ def get_agent.or(m: Maybe<&2, S.Agent>, +st: S.St, +n: String) -> Maybe<&2, S.Ag
     case None{}:
       agent_named(S.St.arch(st), n)
 
+def get_agent.of(never: Bool, +st: S.St, +n: String) -> Maybe<&2, S.Agent>:
+  match never:
+    case True{}:
+      None{}
+    case False{}:
+      get_agent.or(agent_named(S.St.agents(st), n), st, n)
+
+# the agent named `n`: St.agents, then arch; none for a never_agent name
+# (law no_reserved_names), without a walk
 def get_agent(+st: S.St, +n: String) -> Maybe<&2, S.Agent>:
-  get_agent.or(agent_named(S.St.agents(st), n), st, n)
+  get_agent.of(never_agent(n), st, n)
 
 # the agents not archived, in creation order (the live walks: a tick's
 # boot, overlaps, retirees)
@@ -224,9 +250,17 @@ def alias_of.or(m: Maybe<&2, String>, +st: S.St, +n: String) -> Maybe<&2, String
     case None{}:
       agent_alias(S.St.arch(st), n)
 
-# the agent that has `n` as an old name
+def alias_of.of(never: Bool, +st: S.St, +n: String) -> Maybe<&2, String>:
+  match never:
+    case True{}:
+      None{}
+    case False{}:
+      alias_of.or(agent_alias(S.St.agents(st), n), st, n)
+
+# the agent that has `n` as an old name (none for a never_agent name, law
+# no_reserved_names, without a walk)
 def alias_of(+st: S.St, +n: String) -> Maybe<&2, String>:
-  alias_of.or(agent_alias(S.St.agents(st), n), st, n)
+  alias_of.of(never_agent(n), st, n)
 
 # the canonical name: itself, or the task an alias points to
 def resolve.pick(m: Maybe<&2, S.Agent>, +st: S.St, +n: String) -> Maybe<&2, String>:
@@ -240,7 +274,7 @@ def resolve(+st: S.St, +n: String) -> Maybe<&2, String>:
   resolve.pick(get_agent(st, n), st, n)
 
 def reserved(+n: String) -> Bool:
-  String.eq(n, MAIN()) || String.eq(n, USER()) || String.eq(n, HUB()) || String.eq(n, GITHUB()) || String.eq(n, VIEW())
+  String.eq(n, MAIN()) || never_agent(n)
 
 def live_life(l: S.Life) -> Bool:
   match l:

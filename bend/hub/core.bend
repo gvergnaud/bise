@@ -1049,16 +1049,32 @@ def NewTask.base(x: NewTask) -> String:
     case NewTask{_, +base, _, _, _, _, _, _, _}:
       base
 
-# RFC 0001 §7.1 and RFC 0002 §3-4 (the name was validated by the daemon)
+# RFC 0001 §7.1 and RFC 0002 §3-4 (the name was validated by the daemon).
+# An empty name is never an agent's (M.never_agent): refused, never made
+# `-2` by unique_name (law empty_name_refused)
+def create_task.go(-o: S.St, empty: Bool, +cx: X.Cx<o>, +t: NewTask) -> X.Cx<o> & TaskR:
+  match empty:
+    case True{}:
+      (cx, TErr{"a new task needs a name"})
+    case False{}:
+      create.wt(o, NewTask.worktree(t), cx, t, NT.unique_name(st(o, cx), NewTask.base(t)))
+
 def create_task(-o: S.St, +cx: X.Cx<o>, +t: NewTask) -> X.Cx<o> & TaskR:
-  create.wt(o, NewTask.worktree(t), cx, t, NT.unique_name(st(o, cx), NewTask.base(t)))
+  create_task.go(o, String.is_empty(NewTask.base(t)), cx, t)
+
+def create_in.go(-o: S.St, empty: Bool, +cx: X.Cx<o>, +t: NewTask, +kvs: List<&2, Sigma<&2, &2, String, _ => J.Json>>) -> X.Cx<o> & TaskR:
+  match empty:
+    case True{}:
+      (cx, TErr{"a new task needs a name"})
+    case False{}:
+      create.go(o, cx, t, NT.unique_name(st(o, cx), NewTask.base(t)), J.JObj{kvs})
 
 # `sb spawn --place <agent>|<branch>` (dev-flow §3.1): the new task joins
 # that place (`join`: its ws, found by the daemon); else as create_task
 def create_in(-o: S.St, +cx: X.Cx<o>, +t: NewTask, j: Maybe<&2, J.Json>) -> X.Cx<o> & TaskR:
   match j:
     case Some{J.JObj{+kvs}}:
-      create.go(o, cx, t, NT.unique_name(st(o, cx), NewTask.base(t)), J.JObj{kvs})
+      create_in.go(o, String.is_empty(NewTask.base(t)), cx, t, kvs)
     case _:
       create_task(o, cx, t)
 
@@ -2009,7 +2025,9 @@ def question_card(cs: List<&2, S.Card>, +s: S.St, +to: String) -> Maybe<&2, Nat>
         u => Some{S.Card.id(c)}, u => question_card(t, s, to))
 
 # at-start: his words typed in live agent `from`'s thread went to `to` as `id`: one route
-# row there with that id and his parts (laws say_from_*); none from to's own thread
+# row there with that id and his parts (laws say_from_*); none from to's own thread.
+# The || is strict, so get_agent(from) runs for from = "" too: fine, an
+# empty name ends its lookup at once (M.never_agent, c4b-core-step-flat)
 def says.trace(-o: S.St, +cx: X.Cx<o>, +from: String, +to: String, +id: Nat, +text: String, +parts: String) -> X.Cx<o>:
   LZ.pick(X.Cx<o>, String.is_empty(from) || String.eq(from, to) || Bool.not(M.live_agent(M.get_agent(st(o, cx), from))), u => cx,
     u => route_parts.at(o, feed(o, cx, from, FD.route(to, None{}, text, Some{id}, None{}, None{})), from, parts))
