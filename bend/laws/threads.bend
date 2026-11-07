@@ -787,3 +787,23 @@ END
 ",
       Con{"partial #17.0 +0 : café 😀a\\nb \"q\" é 😀|partial #17.0 +18 : !",
       Con{"partial #17.0 +0 : café 😀a\\nb \"q\" é 😀!", Nil{}}}} : List<&2, String>}
+
+# ---- c4b-core-step-flat: the runtimes are read by name only, so their
+# order is never observable (rt_put puts the runtime it sets at the
+# head), and a put changes only its own name's runtime: with set_rt the
+# one writer of a runtime but a rename (tests/state_guard.py), a step's
+# view diffs only the runtimes its rt outs name (view.bend rt_moved) ----
+
+# LAW: a runtime put is the one found under its name.
+law rt_put_finds_it:
+  for +xs: List<&2, HX.Rt>
+  for +x: HX.Rt
+  {HC.rt_find(HC.rt_put(xs, x), HX.Rt.name(x)) == x : HX.Rt}
+
+# LAW: a runtime put leaves every other name's runtime as it was.
+law rt_put_keeps_others:
+  for +xs: List<&2, HX.Rt>
+  for +x: HX.Rt
+  for +n: String
+  for +e: {String.eq(HX.Rt.name(x), n) == False{} : Bool}
+  {HC.rt_find(HC.rt_put(xs, x), n) == HC.rt_find(xs, n) : HX.Rt}

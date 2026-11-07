@@ -194,6 +194,8 @@ def is_active(l: S.Life) -> Bool:
 
 # ---- the runtime lists ----
 
+# an agent's runtime, read by its name only: the order of the runtimes
+# is never observable (laws rt_put_finds_it, rt_put_keeps_others)
 def rt_find(xs: List<&2, X.Rt>, +n: String) -> X.Rt:
   match xs:
     case Nil{}:
@@ -201,12 +203,20 @@ def rt_find(xs: List<&2, X.Rt>, +n: String) -> X.Rt:
     case Con{+h, +t}:
       LZ.pick(X.Rt, String.eq(X.Rt.name(h), n), u => h, u => rt_find(t, n))
 
-def rt_put(xs: List<&2, X.Rt>, +x: X.Rt) -> List<&2, X.Rt>:
+# the runtimes without the one named `n` (at most one: rt_put's)
+def rt_del(xs: List<&2, X.Rt>, +n: String) -> List<&2, X.Rt>:
   match xs:
     case Nil{}:
-      [x]
+      Nil{}
     case Con{+h, +t}:
-      LZ.pick(List<&2, X.Rt>, String.eq(X.Rt.name(h), X.Rt.name(x)), u => x <> t, u => h <> rt_put(t, x))
+      LZ.pick(List<&2, X.Rt>, String.eq(X.Rt.name(h), n), u => t, u => h <> rt_del(t, n))
+
+# `x` at the head: the runtimes a step sets are the live agents', so a
+# live agent's is found in a few steps and an archived agent's, set last
+# when it stopped, sinks behind them (c4b-core-step-flat: his hub keeps
+# ~900 runtimes of archived agents)
+def rt_put(xs: List<&2, X.Rt>, +x: X.Rt) -> List<&2, X.Rt>:
+  x <> rt_del(xs, X.Rt.name(x))
 
 # (the keyed lists' helpers, `KL.`: hub/keyed.bend)
 

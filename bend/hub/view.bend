@@ -435,7 +435,10 @@ def rt_moved.keep(same: Bool, +n: String, +rest: List<&2, String>) -> List<&2, S
 
 # the agents of `ns` whose runtime mark the step changed (`before`: the
 # runtimes before it): the step's own runtimes only, never every agent
-# that ever ran (c4b-core-step-flat: his hub keeps ~900 of them)
+# that ever ran (c4b-core-step-flat: his hub keeps ~900 of them). Safe
+# because set_rt (or a rename) is the one writer of a runtime
+# (tests/state_guard.py) and a put changes only its own name's runtime
+# (laws rt_put_finds_it, rt_put_keeps_others)
 def rt_moved(ns: List<&2, String>, +before: List<&2, X.Rt>, +after: List<&2, X.Rt>) -> List<&2, String>:
   match ns:
     case Nil{}:

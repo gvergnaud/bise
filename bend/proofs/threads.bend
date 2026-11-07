@@ -19,28 +19,61 @@ import ../laws/threads.bend as Laws
 
 # ---- L4 support: a delivery attempt never leaves its agent stuck ----
 
-def hub_rt_put_find.pick(c: Bool, +h: HX.Rt, +t: List<&2, HX.Rt>, +n: String, +run: HS.Run, +w: Bool, +tm: Maybe<&2, Nat>, +k: Nat,
-    +e: {String.eq(HX.Rt.name(h), n) == c : Bool}, ih: {HC.rt_find(HC.rt_put(t, HX.Rt{n, run, w, tm, k}), n) == HX.Rt{n, run, w, tm, k} : HX.Rt})
-    -> {HC.rt_find(HLZ.pick(List<&2, HX.Rt>, String.eq(HX.Rt.name(h), n), u => HX.Rt{n, run, w, tm, k} <> t, u => h <> HC.rt_put(t, HX.Rt{n, run, w, tm, k})), n) == HX.Rt{n, run, w, tm, k} : HX.Rt}:
-  match c:
-    case True{}:
-      %Equal.sym(Bool, String.eq(HX.Rt.name(h), n), True{}, e) : {HC.rt_find(HLZ.pick(List<&2, HX.Rt>, _, u => HX.Rt{n, run, w, tm, k} <> t, u => h <> HC.rt_put(t, HX.Rt{n, run, w, tm, k})), n) == HX.Rt{n, run, w, tm, k} : HX.Rt}
-      %Equal.sym(Bool, String.eq(n, n), True{}, PL2.hub_str_eq_refl(n)) : {HLZ.pick(HX.Rt, _, u => HX.Rt{n, run, w, tm, k}, u => HC.rt_find(t, n)) == HX.Rt{n, run, w, tm, k} : HX.Rt}
-      {==}
-    case False{}:
-      %Equal.sym(Bool, String.eq(HX.Rt.name(h), n), False{}, e) : {HC.rt_find(HLZ.pick(List<&2, HX.Rt>, _, u => HX.Rt{n, run, w, tm, k} <> t, u => h <> HC.rt_put(t, HX.Rt{n, run, w, tm, k})), n) == HX.Rt{n, run, w, tm, k} : HX.Rt}
-      %Equal.sym(Bool, String.eq(HX.Rt.name(h), n), False{}, e) : {HLZ.pick(HX.Rt, _, u => h, u => HC.rt_find(HC.rt_put(t, HX.Rt{n, run, w, tm, k}), n)) == HX.Rt{n, run, w, tm, k} : HX.Rt}
-      ih
-
-# putting an agent's runtime state and reading it back gives it
+# putting an agent's runtime state and reading it back gives it (rt_put
+# puts it at the head: the find's first step)
 def hub_rt_put_find(+xs: List<&2, HX.Rt>, +n: String, +run: HS.Run, +w: Bool, +tm: Maybe<&2, Nat>, +k: Nat)
     -> {HC.rt_find(HC.rt_put(xs, HX.Rt{n, run, w, tm, k}), n) == HX.Rt{n, run, w, tm, k} : HX.Rt}:
+  %Equal.sym(Bool, String.eq(n, n), True{}, PL2.hub_str_eq_refl(n)) : {HLZ.pick(HX.Rt, _, u => HX.Rt{n, run, w, tm, k}, u => HC.rt_find(HC.rt_del(xs, n), n)) == HX.Rt{n, run, w, tm, k} : HX.Rt}
+  {==}
+
+def Laws.rt_put_finds_it(xs, x):
+  match x:
+    case HX.Rt{n, run, w, tm, k}:
+      hub_rt_put_find(xs, n, run, w, tm, k)
+
+# the runtime named h's is m's, and m is not n: h's is not n's
+def hub_rt_del_other.ne(+h: HX.Rt, +m: String, +n: String, ec: {String.eq(HX.Rt.name(h), m) == True{} : Bool}, e: {String.eq(m, n) == False{} : Bool})
+    -> {String.eq(HX.Rt.name(h), n) == False{} : Bool}:
+  %Equal.sym(String, HX.Rt.name(h), m, PL2.hub_str_eq_sound(HX.Rt.name(h), m, ec)) : {String.eq(_, n) == False{} : Bool}
+  e
+
+# the find of n past h, h's name `d`-equal to n
+def hub_rt_del_other.find(d: Bool, +h: HX.Rt, +t: List<&2, HX.Rt>, +m: String, +n: String,
+    +ed: {String.eq(HX.Rt.name(h), n) == d : Bool}, ih: {HC.rt_find(HC.rt_del(t, m), n) == HC.rt_find(t, n) : HX.Rt})
+    -> {HC.rt_find(h <> HC.rt_del(t, m), n) == HC.rt_find(h <> t, n) : HX.Rt}:
+  match d:
+    case True{}:
+      %Equal.sym(Bool, String.eq(HX.Rt.name(h), n), True{}, ed) : {HLZ.pick(HX.Rt, _, u => h, u => HC.rt_find(HC.rt_del(t, m), n)) == HLZ.pick(HX.Rt, _, u => h, u => HC.rt_find(t, n)) : HX.Rt}
+      {==}
+    case False{}:
+      %Equal.sym(Bool, String.eq(HX.Rt.name(h), n), False{}, ed) : {HLZ.pick(HX.Rt, _, u => h, u => HC.rt_find(HC.rt_del(t, m), n)) == HLZ.pick(HX.Rt, _, u => h, u => HC.rt_find(t, n)) : HX.Rt}
+      ih
+
+def hub_rt_del_other.pick(c: Bool, +h: HX.Rt, +t: List<&2, HX.Rt>, +m: String, +n: String,
+    +ec: {String.eq(HX.Rt.name(h), m) == c : Bool}, e: {String.eq(m, n) == False{} : Bool},
+    ih: {HC.rt_find(HC.rt_del(t, m), n) == HC.rt_find(t, n) : HX.Rt})
+    -> {HC.rt_find(HLZ.pick(List<&2, HX.Rt>, String.eq(HX.Rt.name(h), m), u => t, u => h <> HC.rt_del(t, m)), n) == HC.rt_find(h <> t, n) : HX.Rt}:
+  match c:
+    case True{}:
+      %Equal.sym(Bool, String.eq(HX.Rt.name(h), m), True{}, ec) : {HC.rt_find(HLZ.pick(List<&2, HX.Rt>, _, u => t, u => h <> HC.rt_del(t, m)), n) == HC.rt_find(h <> t, n) : HX.Rt}
+      %Equal.sym(Bool, String.eq(HX.Rt.name(h), n), False{}, hub_rt_del_other.ne(h, m, n, ec, e)) : {HC.rt_find(t, n) == HLZ.pick(HX.Rt, _, u => h, u => HC.rt_find(t, n)) : HX.Rt}
+      {==}
+    case False{}:
+      %Equal.sym(Bool, String.eq(HX.Rt.name(h), m), False{}, ec) : {HC.rt_find(HLZ.pick(List<&2, HX.Rt>, _, u => t, u => h <> HC.rt_del(t, m)), n) == HC.rt_find(h <> t, n) : HX.Rt}
+      hub_rt_del_other.find(String.eq(HX.Rt.name(h), n), h, t, m, n, {==}, ih)
+
+# taking m's runtime out leaves every other name's find as it was
+def hub_rt_del_other(+xs: List<&2, HX.Rt>, +m: String, +n: String, +e: {String.eq(m, n) == False{} : Bool})
+    -> {HC.rt_find(HC.rt_del(xs, m), n) == HC.rt_find(xs, n) : HX.Rt}:
   match xs:
     case Nil{}:
-      %Equal.sym(Bool, String.eq(n, n), True{}, PL2.hub_str_eq_refl(n)) : {HLZ.pick(HX.Rt, _, u => HX.Rt{n, run, w, tm, k}, u => HC.rt_find(Nil{}, n)) == HX.Rt{n, run, w, tm, k} : HX.Rt}
       {==}
     case Con{h, t}:
-      hub_rt_put_find.pick(String.eq(HX.Rt.name(h), n), h, t, n, run, w, tm, k, {==}, hub_rt_put_find(t, n, run, w, tm, k))
+      hub_rt_del_other.pick(String.eq(HX.Rt.name(h), m), h, t, m, n, {==}, e, hub_rt_del_other(t, m, n, e))
+
+def Laws.rt_put_keeps_others(xs, x, n, e):
+  %Equal.sym(Bool, String.eq(HX.Rt.name(x), n), False{}, e) : {HLZ.pick(HX.Rt, _, u => x, u => HC.rt_find(HC.rt_del(xs, HX.Rt.name(x)), n)) == HC.rt_find(xs, n) : HX.Rt}
+  hub_rt_del_other(xs, HX.Rt.name(x), n, e)
 
 # ---- cost-pause: a delivery keeps the pause (L4 support) ----
 

@@ -12,6 +12,10 @@ Red when, outside bend/hub/gen/:
   - a hand record (a type with one constructor of its own name, with fields) is declared in
     bend/hub/ and is in neither HAND nor MIGRATING: a new record needs its declaration in
     bise_proto::core::state.
+  - a def of bend/hub writes the runtimes (`R.with_rts(`) and is not in RTS_WRITERS: core.bend
+    set_rt is their one writer (its rt out names the runtime), take.bend rename.new the other
+    (its event names both names); view.bend rt_moved diffs only the runtimes those name
+    (c4b-core-step-flat; laws rt_put_finds_it, rt_put_keeps_others);
   - a name is added to MIGRATING or HAND: both lists only shrink, vs the base's
     tests/state_guard.py (GATE_BASE, default HEAD; a base without this file: no check),
     but a RENAMES row: a hand record that shared a generated name, renamed, enters HAND.
@@ -58,6 +62,10 @@ RENAMES = {
     "Answer": "Ans",  # picks.bend: his answer a step routes (state-card)
     "Turn": "Out",  # core.bend: a step's commit, hub fx need (state-xhub)
 }
+
+# the defs that may write R's runtimes (`R.with_rts(`), by file
+RTS_WRITERS = {("bend/hub/core.bend", "set_rt"), ("bend/hub/take.bend", "rename.new")}
+DEF = re.compile(r"^def\s+([\w.]+)\(")
 
 TYPE = re.compile(r"^type\s+([A-Za-z_][\w.]*)(?:<[^>]*>)?\s+is\s+\w+")
 CTOR = re.compile(r"^\s+([A-Z]\w*)\{(.*)\}\s*$")
@@ -168,6 +176,26 @@ def check(root, files=None, migrating=MIGRATING, hand=HAND):
     return bad
 
 
+def rts_writers(root, allowed=RTS_WRITERS):
+    """The defs of bend/hub that write the runtimes and may not: (path, line, what)."""
+    bad = []
+    hub = os.path.join(root, "bend/hub")
+    for dp, _, fs in os.walk(hub):
+        for fn in sorted(fs):
+            rel = os.path.relpath(os.path.join(dp, fn), root)
+            if not fn.endswith(".bend") or rel.startswith("bend/hub/gen/"):
+                continue
+            cur = None
+            for n, line in enumerate(open(os.path.join(dp, fn)).read().splitlines(), 1):
+                m = DEF.match(line)
+                if m:
+                    cur = m.group(1)
+                    continue
+                if "R.with_rts(" in line.split("#", 1)[0] and (rel, cur) not in allowed:
+                    bad.append((rel, n, f"{cur} writes the runtimes: only set_rt does (its rt out names the runtime: view.bend rt_moved)"))
+    return bad
+
+
 def self_test():
     import tempfile
     with tempfile.TemporaryDirectory() as root:
@@ -186,6 +214,10 @@ def self_test():
         got = check(root, migrating={"Msg"}, hand=set())
         assert sorted((p, n) for p, n, _ in got) == [("bend/hub/a.bend", 4), ("bend/hub/b.bend", 4)], got
         assert check(root, migrating={"Msg"}, hand={"New"}) == [("bend/hub/a.bend", 4, got[0][2])], "self-test: allow-lists"
+        # a third writer of the runtimes goes red; set_rt and a comment do not
+        w("bend/hub/c.bend", "def set_rt(r: R) -> R:\n  X.R.with_rts(r, Nil{})\n\n# X.R.with_rts( in a comment\ndef sneak(r: R) -> R:\n  X.R.with_rts(r, Nil{})\n")
+        got = rts_writers(root, allowed={("bend/hub/c.bend", "set_rt")})
+        assert [(p, n) for p, n, _ in got] == [("bend/hub/c.bend", 6)], f"self-test: rts writers {got}"
     # the lists only shrink
     base = 'MIGRATING = {\n    "Msg", "Card",\n}\n\nHAND = {\n    # "Old" in a comment\n    "Core",\n}\n'
     assert grown(None, base) == [], "self-test: no base, no check"
@@ -207,7 +239,7 @@ def main():
     if not os.path.exists(os.path.join(ROOT, GEN)):
         print(f"state_guard: no {GEN} (bless core_gen)")
         return 1
-    bad = check(ROOT)
+    bad = check(ROOT) + rts_writers(ROOT)
     for p, n, what in bad:
         print(f"{p}:{n}: {what}")
     with open(os.path.abspath(__file__)) as f:
