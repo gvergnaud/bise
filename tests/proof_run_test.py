@@ -40,7 +40,9 @@ def main():
         root, fbin = os.path.join(tmp, "repo"), os.path.join(tmp, "bin")
         put(root, "bend/hub/core.bend", "import Base\n")
         put(root, "bend/core/session.bend", "import Base\n")
-        put(root, "bend/laws/hub.bend", "import Base\nimport ../hub/core.bend as HC\n")
+        put(root, "bend/laws/hub.bend", "import Base\nimport ../hub/core.bend as HC\nimport ../hub/deep.bend as HD\n")
+        # reached only through the laws (proofs -> laws -> hub)
+        put(root, "bend/hub/deep.bend", "import Base\n")
         put(root, "bend/proofs/lib/absurd.bend", "import Base\n")
         put(root, "bend/proofs/lib/hub-1.bend", "import Base\nimport ./absurd.bend as AB\nimport ../../hub/core.bend as HC\n")
         put(root, "bend/proofs/hub.bend", "import Base\nimport ./lib/hub-1.bend as PL1\nimport ../laws/hub.bend as Laws\n")
@@ -55,7 +57,8 @@ def main():
 
         bend = os.path.join(root, "bend")
         check("closure: transitive, relative", proof_run.closure(bend, "proofs/hub.bend") == sorted(
-            ["proofs/hub.bend", "proofs/lib/hub-1.bend", "proofs/lib/absurd.bend", "hub/core.bend", "laws/hub.bend"]),
+            ["proofs/hub.bend", "proofs/lib/hub-1.bend", "proofs/lib/absurd.bend", "hub/core.bend", "hub/deep.bend",
+             "laws/hub.bend"]),
             repr(proof_run.closure(bend, "proofs/hub.bend")))
         check("closure: models reads no hub file", "hub/core.bend" not in proof_run.closure(bend, "proofs/models.bend"))
 
@@ -80,6 +83,10 @@ def main():
         put(root, "bend/hub/core.bend", "import Base\n# changed\n")
         rc, out, ran = run("--cache", cache)
         check("cache: a hub change re-checks the hub's proofs only", rc == 0 and ran == ["hub.bend"], "%r" % ran)
+        put(root, "bend/hub/deep.bend", "import Base\n# changed\n")
+        rc, out, ran = run("--cache", cache)
+        check("cache: a file reached only through the laws re-checks its proofs", rc == 0 and ran == ["hub.bend"],
+              "%r" % ran)
         put(root, "bend/core/session.bend", "import Base\n# RED\n")
         put(root, "bend/proofs/models.bend", "import Base\nimport ./lib/absurd.bend as AB\nimport ../core/session.bend as S\n# RED\n")
         rc, out, ran = run("--cache", cache)
@@ -88,6 +95,18 @@ def main():
               "%d %d %r %r" % (rc, rc2, ran, ran2))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+    # the repo's bend/: every import line is Base, a package, or a path closure() follows (an
+    # import form it can't read would leave a file out of a closure: its proofs never picked)
+    odd = []
+    for d, _, files in os.walk(os.path.join(os.path.dirname(HERE), "bend")):
+        for f in files:
+            if f.endswith(".bend"):
+                for line in open(os.path.join(d, f), errors="replace"):
+                    s = line.strip()
+                    if s.startswith("import ") and s != "import Base" and not proof_run.IMPORT_RX.match(s) \
+                            and not s.startswith(("import 0x", "import \"")) and "@" not in s.split()[1]:
+                        odd.append("%s: %s" % (os.path.join(d, f), s))
+    check("repo: every bend import is one closure() reads", not odd, "; ".join(odd[:5]))
     if FAILS:
         sys.exit("proof_run_test: %d failed: %s" % (len(FAILS), ", ".join(FAILS)))
     print("proof_run_test: ok")
