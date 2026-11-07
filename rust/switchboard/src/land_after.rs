@@ -33,17 +33,29 @@ pub fn argv(shared: &Path, after: &str, base: &str, tip: &str, agent: &str) -> O
     Some((prog, args))
 }
 
-/// Start the after job of a land `base..tip` by `agent` in the trunk at
-/// `shared`, if `wanted`: its output appended to `log`, `owners` its
-/// `BISE_OWNERS` (main's tag). Returns its pid, or None (not wanted, or
-/// it could not start: said on stderr, the hub's log).
-pub fn start(shared: &Path, onto_trunk: bool, commits: usize, base: &str, tip: &str, agent: &str, owners: &str, log: &Path) -> Option<u32> {
-    let text = crate::land::git(shared, &["show", &format!("{}:{}", tip, crate::flow::TRACKED)]).ok();
+/// A land as the after job sees it: the trunk's checkout, whether it
+/// went onto the trunk, its commits `base..tip` and who landed them.
+pub struct Moved<'a> {
+    pub shared: &'a Path,
+    pub onto_trunk: bool,
+    pub commits: usize,
+    pub base: &'a str,
+    pub tip: &'a str,
+    pub agent: &'a str,
+}
+
+/// Start the after job of the land `m`, if `wanted`: its output appended
+/// to `log`, `owners` its `BISE_OWNERS` (main's tag). Returns its pid,
+/// or None (not wanted, or it could not start: said on stderr, the
+/// hub's log).
+pub fn start(m: &Moved, owners: &str, log: &Path) -> Option<u32> {
+    let shared = m.shared;
+    let text = crate::land::git(shared, &["show", &format!("{}:{}", m.tip, crate::flow::TRACKED)]).ok();
     let after = text.as_deref().and_then(crate::flow::land_after);
-    if !wanted(onto_trunk, commits, after.as_deref()) {
+    if !wanted(m.onto_trunk, m.commits, after.as_deref()) {
         return None;
     }
-    let (prog, args) = argv(shared, after.as_deref()?, base, tip, agent)?;
+    let (prog, args) = argv(shared, after.as_deref()?, m.base, m.tip, m.agent)?;
     if !prog.exists() {
         eprintln!("land after: {} not found in {}: nothing started", prog.display(), shared.display());
         return None;
@@ -108,8 +120,11 @@ mod tests {
         sh("printf '[land]\\nafter = \"scripts/after.sh\"\\n' > bise.toml && printf '#!/bin/sh\\necho \"args=$* owners=$BISE_OWNERS\" > out.txt\\n' > scripts/after.sh && chmod +x scripts/after.sh && git add . && git commit -qm a");
         let tip = crate::land::git(&ws, &["rev-parse", "HEAD"]).unwrap();
         let log = root.join("after.log");
-        assert!(start(&ws, false, 1, "b0", &tip, "alpha", "h.main.1", &log).is_none(), "not onto the trunk");
-        let pid = start(&ws, true, 1, "b0", &tip, "alpha", "h.main.1", &log);
+        let moved = |onto_trunk: bool, base: &'static str, tip: &str| -> Option<u32> {
+            start(&Moved { shared: &ws, onto_trunk, commits: 1, base, tip, agent: "alpha" }, "h.main.1", &log)
+        };
+        assert!(moved(false, "b0", &tip).is_none(), "not onto the trunk");
+        let pid = moved(true, "b0", &tip);
         assert!(pid.is_some());
         let out = ws.join("out.txt");
         let t0 = std::time::Instant::now();
@@ -119,7 +134,8 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&out).unwrap(), format!("args=b0 {} alpha owners=h.main.1\n", tip));
         sh("git rm -q scripts/after.sh && git commit -qm gone");
         let tip2 = crate::land::git(&ws, &["rev-parse", "HEAD"]).unwrap();
-        assert!(start(&ws, true, 1, &tip, &tip2, "alpha", "h.main.1", &log).is_none(), "its program gone: nothing");
+        let gone = Moved { shared: &ws, onto_trunk: true, commits: 1, base: &tip, tip: &tip2, agent: "alpha" };
+        assert!(start(&gone, "h.main.1", &log).is_none(), "its program gone: nothing");
         let _ = std::fs::remove_dir_all(&root);
     }
 }

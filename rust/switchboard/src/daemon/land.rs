@@ -98,7 +98,15 @@ impl Shell {
                     let onto = o.target == crate::trunk::trunk_short(&job.shared);
                     let owners = crate::procs::tag(&proc_hub, crate::model::MAIN, now_ms());
                     let log = job.lands.with_file_name("land-after.log");
-                    crate::land_after::start(&job.shared, onto, o.commits, &o.base, &o.tip, &job.agent, &owners, &log);
+                    let moved = crate::land_after::Moved {
+                        shared: &job.shared,
+                        onto_trunk: onto,
+                        commits: o.commits,
+                        base: &o.base,
+                        tip: &o.tip,
+                        agent: &job.agent,
+                    };
+                    crate::land_after::start(&moved, &owners, &log);
                     if !job.worktree {
                         let all: Vec<String> = job.files.iter().chain(job.others.iter().flat_map(|(_, fs)| fs)).cloned().collect();
                         claims_clean(&tx, &job.dir, &all);
