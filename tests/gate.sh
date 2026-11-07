@@ -841,7 +841,12 @@ desktop_check() {
     python3 -c 'import json, sys, time; print(json.dumps({"t": int(time.time()), "agent": sys.argv[1], "sha": sys.argv[2], "changed": sys.argv[3].split(), "ran": sys.argv[4].split(), "rc": int(sys.argv[5])}))' \
       "${SB_AGENT:-?}" "$(git -C "$root" rev-parse HEAD 2>/dev/null)" "$rel" "$ran" "$drc" >>"$gdir/vitest-related.jsonl" 2>/dev/null
     if [ $drc = 0 ]; then echo "ok   desktop_check ($((SECONDS - s))s, vitest: related + by path; full runs all)"; return 0; fi
-  elif (cd "$root/apps/desktop" && pnpm -s check) >"$log" 2>&1; then echo "ok   desktop_check ($((SECONDS - s))s)"; return 0; fi
+  # the whole app: an agent's quick lints through its tree's eslint cache (check:cached,
+  # node_modules/.cache/eslint-quick: a file re-linted when its content changed). Its
+  # typed rules read other files, which the cache doesn't track: a type change can leave an
+  # unchanged file's red hidden there, so every other gate (full, land, the tip gate, a
+  # release) lints cold with `check` (main m_54506, architect)
+  elif (cd "$root/apps/desktop" && pnpm -s "$([ "$mode" = quick ] && [ "${1:-}" != strict ] && echo check:cached || echo check)") >"$log" 2>&1; then echo "ok   desktop_check ($((SECONDS - s))s)"; return 0; fi
   echo "FAIL desktop_check"
   grep -E "error|Error|FAIL|✗|×" "$log" | head -30
   # one name a tree's gate (the agent's), never shared: side-resize's red overwrote
