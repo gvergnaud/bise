@@ -121,9 +121,9 @@ def cl_op(+a: HS.Agent, +op: HM.AgentOp, +nr: {PL2.hub_is_rename(op) == False{} 
 # a rename to a clean name: the old name joins the old names
 def cl_ren_one(+a: HS.Agent, +nn: String, kn: {HM.never_agent(nn) == False{} : Bool}, +l1: {HM.never_in(HI.names(a)) == False{} : Bool})
     -> {HM.never_in(HI.names(HM.agent_op(a, HM.ORename{nn}))) == False{} : Bool}:
-  match a:
-    case HS.Agent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15}:
-      ni_cons(nn, HM.snoc(String, f5, f0), kn, ni_snoc(f5, f0, ni_tail(f0, f5, l1), ni_head(f0, f5, l1)))
+  %HSL.Agent.name.eta(a, nn) : {HM.never_in(HI.names(HS.Agent.with_aliases(_, HM.snoc(String, HS.Agent.aliases(a), HS.Agent.name(a))))) == False{} : Bool}
+  ni_cons(nn, HM.snoc(String, HS.Agent.aliases(a), HS.Agent.name(a)), kn,
+    ni_snoc(HS.Agent.aliases(a), HS.Agent.name(a), ni_tail(HS.Agent.name(a), HS.Agent.aliases(a), l1), ni_head(HS.Agent.name(a), HS.Agent.aliases(a), l1)))
 
 def cl_map.pick(c: Bool, +h: HS.Agent, +t: List<&2, HS.Agent>, +n: String, +op: HM.AgentOp, +nr: {PL2.hub_is_rename(op) == False{} : Bool},
     l1: {HM.never_in(HI.names(h)) == False{} : Bool}, l2: HI.Clean(t), ih: HI.Clean(HM.map_agent(t, n, op))) -> HI.Clean(HM.map_agent.go(h <> t, c, n, op)):
