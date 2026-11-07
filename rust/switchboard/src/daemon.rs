@@ -70,6 +70,7 @@ mod state_gate;
 mod contexts;
 mod tindex;
 mod usage;
+mod view_out;
 mod views;
 mod wake_look;
 mod place_work;

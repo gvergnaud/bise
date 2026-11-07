@@ -9,10 +9,12 @@
 //!   with `stopped_ms` when it stops for good (idle-exit or `stop_hub`),
 //!   with the hub's pulse (daemon/pulse.rs: its last value, a fresh one
 //!   at the stop, so a stopped project's sidebar row keeps it).
-//!   Only this hub writes it; the window, `bise project list` and bise's
+//!   The loop builds the view; daemon/view_out.rs renders and writes it
+//!   off the loop, only when it changed. Only this hub writes it; the window, `bise project list` and bise's
 //!   reads of other projects read it.
 
-use super::{log_line, rename_logged, write_logged, Shell};
+use super::view_out::ViewOut;
+use super::{log_line, Shell};
 use crate::paths::Paths;
 use crate::proto_view::Since;
 use crate::snapshot::Snapshot;
@@ -20,7 +22,6 @@ use crate::util::now_ms;
 use crate::view::{self, Writer};
 
 /// The hub's view writer (one field of the Shell).
-#[derive(Default)]
 pub(super) struct Projects {
     writer: Writer,
     since: Since,
@@ -28,6 +29,8 @@ pub(super) struct Projects {
     /// (send-fast: the tick built a whole new snapshot for it, pages and
     /// artifacts read from disk, 12% of his loop's time).
     pending: Option<Snapshot>,
+    /// the file's writer, off the loop (daemon/view_out.rs)
+    out: ViewOut,
 }
 
 impl Projects {
@@ -45,7 +48,7 @@ impl Projects {
                 }
             }
         }
-        Projects::default()
+        Projects { writer: Writer::default(), since: Since::default(), pending: None, out: ViewOut::start(paths.clone()) }
     }
 }
 
@@ -95,10 +98,11 @@ impl Shell {
         let cat = Some(&self.config.setup().catalog);
         let vision = |m: &str| cat.and_then(|c| c.vision(m));
         let v = view::of(snap, &project, now, self.projects.writer.last_activity_ms, stopped_ms, &mut self.projects.since, &vision, arts, sched, growth, pulse);
-        let paths = self.opts.paths.clone();
-        let (tmp, file) = (paths.state.join("view.json.tmp"), paths.state.join(view::FILE));
-        if write_logged(&paths, &tmp, &view::render(&v)) {
-            rename_logged(&paths, &tmp, &file);
+        // rendered and written off the loop, only when it changed
+        // (daemon/view_out.rs); the stop's is the last, waited for
+        match stopped_ms {
+            Some(_) => self.projects.out.finish(v),
+            None => self.projects.out.send(v),
         }
         self.projects.writer.wrote(now);
     }
