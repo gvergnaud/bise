@@ -209,7 +209,7 @@ function spot(over: Props = {}) {
   const lit = (): string | null =>
     ui.container.querySelector('[data-testid^="spot.row."][aria-selected="true"]')?.getAttribute("data-testid") ?? null;
   const keys = (): string => ui.getByTestId("spot.frame").textContent;
-  return { ui, onAsk, onOpen, onClose, store, field, type, caret, press, text, lit, keys };
+  return { ui, onAsk, onOpen, onClose, store, field, editor, type, caret, press, text, lit, keys };
 }
 
 describe("the spotlight's composer (Gabriel's v4, spotlight-composer#choix)", () => {
@@ -630,5 +630,53 @@ describe("the ❝ chip: his selection read at fn space (Gabriel's v4, architect 
     t.ui.rerender(<Spotlight data={D} onAsk={t.onAsk} onOpen={t.onOpen} onClose={t.onClose} store={t.store} quote={null} onQuoteBack={back} />);
     await t.press("z", { metaKey: true });
     expect(back).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("spotlight/images (R41): a pasted image is a chip, sent to bise as an image part", () => {
+  it("⌘V of a PNG makes '[Image #1]' with its thumbnail before his words; ⏎ sends it from the image store", async () => {
+    const saved: File[] = [];
+    const sources = {
+      agents: [], skills: [], commands: [], files: () => Promise.resolve([]),
+      saveImage: (f: File) => {
+        saved.push(f);
+        return Promise.resolve({ path: "/h/.bise/images/ab12.png", name: "[Image #1]" });
+      },
+    };
+    // happy-dom draws no bitmap: a 1200 x 630 one, and its canvas's data url
+    vi.stubGlobal("createImageBitmap", () => Promise.resolve({ width: 1200, height: 630, close: () => undefined }));
+    vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue("data:image/png;base64,iVBORw0KGgo=");
+    try {
+      const s = spot({ sources });
+      const png = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], "image.png", { type: "image/png" });
+      const e = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(e, "clipboardData", {
+        value: { files: [png], types: ["Files"], getData: () => "" },
+      });
+      await act(async () => {
+        s.editor().view.dom.dispatchEvent(e);
+        for (let i = 0; i < 5; i++) await Promise.resolve();
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+      expect(saved).toEqual([png]);
+      const chip = s.ui.getByTestId("composer.chip.1");
+      expect([chip.getAttribute("data-kind"), chip.getAttribute("title")]).toEqual(["image", "[Image #1]"]);
+      expect(chip.querySelector("img.thumb")?.getAttribute("src")).toBe("data:image/png;base64,iVBORw0KGgo=");
+      await s.type("what is this?");
+      await s.press("Enter");
+      expect(s.onAsk).toHaveBeenCalledTimes(1);
+      const [text, parts] = s.onAsk.mock.calls[0] as [string, readonly unknown[]];
+      expect(text).toBe("[Image #1] what is this?");
+      expect(parts).toEqual([
+        { kind: "image", name: "[Image #1]", source: "/h/.bise/images/ab12.png" },
+        { kind: "text", text: " what is this?" },
+      ]);
+      expect(s.text(), "the chip leaves with the send").toBe("");
+    } finally {
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    }
   });
 });

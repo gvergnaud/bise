@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { argAt, browseText, filePick, parentQuery, prefixFirst, triggerAt } from './tokens';
 import { emojiToken, filterEmoji, get, typedEmoji, all as allEmoji, EMOJI_MAX } from './emoji';
-import { agoWords, artifactRows, emojiRows, pickedChip } from './pick';
+import { agoWords, artifactRows, emojiRows, fileRows, pickedChip } from './pick';
 import TUI_EMOJI from '../../../../rust/tui/src/emoji.tsv?raw';
 import DESKTOP_EMOJI from './emoji.tsv?raw';
 import COMPOSER_PARTS from '../../../../rust/proto/fixtures/composer_parts.json';
@@ -316,6 +316,20 @@ describe('live markdown keys (mdlive.rs)', () => {
 });
 
 describe('@ folders (files.rs)', () => {
+  it("thread/at-recent-real: the list is the core's, in its order (newest first, folders and files mixed), never sorted again here", () => {
+    const core = [
+      { path: 'notes/today.md', dir: false },
+      { path: 'src', dir: true },
+      { path: 'a-old.txt', dir: false },
+      { path: 'docs/', dir: true },
+    ];
+    expect(fileRows(core).map((r) => [r.label, r.tag])).toEqual([
+      ['notes/today.md', 'file'],
+      ['src/', 'dir'],
+      ['a-old.txt', 'file'],
+      ['docs/', 'dir'],
+    ]);
+  });
   it('one folder up, and the word that browses it', () => {
     expect(parentQuery('rust/tui/')).toBe('rust');
     expect(parentQuery('rust/')).toBe('');

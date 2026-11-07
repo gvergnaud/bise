@@ -181,3 +181,40 @@ describe("a live line's summary and its submenu (designer m_29577)", () => {
     }
   });
 });
+
+describe("the tray menu's waiting items (spotlight/menu, one-inbox 3, designer m_19631)", () => {
+  // 7 cards in the block's order (data.ts: the hub's rank, then the oldest)
+  const cards: SpotData['cards'] = Array.from({ length: 7 }, (_, i) => ({
+    id: `shop.${String(i + 1)}`,
+    card: i + 1,
+    agent: i === 0 ? 'main' : `a${String(i + 1)}`,
+    project: 'shop',
+    text: `question ${String(i + 1)}?\nits second line`,
+    kind: i === 1 ? ('approval' as const) : ('question' as const),
+    pname: 'shop',
+  }));
+  const spot: SpotData = { agents: [], projects: [], cards };
+
+  it("shows 5 rows in the block's order, '<n> <sign> <agent> <first line> <project>', then '+ 2 more in the inbox'", () => {
+    const onOpenWindow = vi.fn();
+    const onOpenCard = vi.fn();
+    const ui = render(
+      <Capsule
+        view={{ kind: 'menu' }} spot={spot} answer={null} heard="" level={0}
+        card={() => null} route={null} onRouteKeep={vi.fn()} onRouteTo={vi.fn()} onAsk={vi.fn()} onOpen={vi.fn()}
+        onOpenWindow={onOpenWindow} onOpenCard={onOpenCard} onClose={vi.fn()} onQuit={null} onSize={vi.fn()}
+      />,
+    );
+    const rows = [...ui.getByTestId('capsule.menu.items').querySelectorAll('[data-testid^="capsule.menu.item."]')];
+    expect(rows.map((r) => r.getAttribute('data-testid'))).toEqual([1, 2, 3, 4, 5].map((n) => `capsule.menu.item.${String(n)}`));
+    // main reads 'bise'; an approval its '!'; the first line only, no age
+    expect(rows[0]?.textContent).toBe('1?bisequestion 1?shop');
+    expect(rows[1]?.textContent).toBe('2!a2question 2?shop');
+    expect(rows[4]?.textContent).toBe('5?a5question 5?shop');
+    expect(ui.getByTestId('capsule.menu.more').textContent).toBe('+ 2 more in the inbox');
+    fireEvent.click(rows[2] as Element);
+    expect(onOpenCard).toHaveBeenCalledWith('shop.3');
+    fireEvent.click(ui.getByTestId('capsule.menu.more'));
+    expect(onOpenWindow).toHaveBeenCalledWith('inbox');
+  });
+});
