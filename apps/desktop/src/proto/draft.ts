@@ -32,7 +32,12 @@ export type DraftHubCmd = { "cmd": "send_quote", project: string, agent: string,
  * `hubs/<id>/view.json` (S1, written only by that hub): what the sidebar
  * and bise read of a project without its hub.
  */
-export type ProjectView = { v: number, project: string, written_ms: number, 
+export type ProjectView = { v: number, project: string, 
+/**
+ * `written_ms` and `last_activity_ms` move only when something a
+ * reader sees changed (the hub skips a view equal but for them)
+ */
+written_ms: number, 
 /**
  * set at a clean stop, absent while it runs (readers tell a running
  * hub by its pid or a ping, never by a flag here)
