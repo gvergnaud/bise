@@ -196,7 +196,7 @@ export function GaugeHead({ g, ports, onNext }: { g: SetupGauge; ports: GaugePor
   const first = n?.unlocks[0];
   return (
     <div className="st-head" data-testid="settings.gauge">
-      <span className="st-count" {...tipAttrs(settings.gauge_tip({ on: String(g.on), of: String(g.of) }), undefined, 'below')} data-testid="settings.gauge.count">
+      <span className="st-count" {...tipAttrs(settings.gauge_tip({ on: String(g.on), of: String(g.of) }), undefined, 'below', undefined, 'start')} data-testid="settings.gauge.count">
         <GaugeRing on={g.on} of={g.of} />
         <span className="n">{settings.gauge_count({ on: String(g.on), of: String(g.of) })}</span>
       </span>
@@ -210,9 +210,11 @@ export function GaugeHead({ g, ports, onNext }: { g: SetupGauge; ports: GaugePor
           {nextWords(g)}
         </span>
       )}
-      <Button onClick={() => { ports.test(); }} disabled={testing} testId="settings.gauge.test">
-        {testing ? settings.gauge_testing : settings.gauge_test_all}
-      </Button>
+      <span className="st-test" {...tipAttrs(settings.gauge_test_tip, undefined, 'below')}>
+        <Button onClick={() => { ports.test(); }} disabled={testing} testId="settings.gauge.test">
+          {testing ? settings.gauge_testing : settings.gauge_test_all}
+        </Button>
+      </span>
     </div>
   );
 }

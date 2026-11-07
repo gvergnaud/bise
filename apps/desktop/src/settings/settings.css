@@ -139,6 +139,7 @@
 .st-count { flex: none; display: inline-flex; align-items: center; gap: var(--s-2); }
 .st-count .n { font: 600 var(--t-15, 15px) var(--font-ui); color: var(--c-ink); font-variant-numeric: tabular-nums; }
 .st-ring { flex: none; }
+.st-test { flex: none; display: inline-flex; }
 .st-ring circle { fill: none; stroke-width: 3; }
 .st-ring .track { stroke: var(--c-line); }
 .st-ring .used { stroke: var(--c-ink); stroke-linecap: round; }

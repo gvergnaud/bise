@@ -7,7 +7,9 @@ crate::words! { settings:
     /// the gauge: features that work of all, its ring's label and the nav's badge
     gauge_count(on, of) = "{on}/{of}";
     /// the gauge's hover tip
-    gauge_tip(on, of) = "{on} of {of} features work. a test is a real call: only when you click.";
+    gauge_tip(on, of) = "{on} of {of} features work";
+    /// Test everything's tip: what a test costs
+    gauge_test_tip = "a test is one small real call per model: only when you click";
     /// the button that tests every model once (secondary)
     gauge_test_all = "Test everything";
     /// while a test runs

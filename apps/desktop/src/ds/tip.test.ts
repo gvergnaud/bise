@@ -9,6 +9,11 @@ describe('the hover tip (designer m_24359)', () => {
     expect(placeTip({ left: 100, top: 300, width: 20, height: 16 }, { width: 120, height: 24 }, VIEW)).toEqual({ left: 50, top: 268, side: 'above' });
   });
 
+  it("'start': its left edge on its mark's, never left of a column's edge (designer m_54574)", () => {
+    expect(placeTip({ left: 100, top: 300, width: 40, height: 16 }, { width: 160, height: 24 }, VIEW, 'below', 'start')).toEqual({ left: 100, top: 324, side: 'below' });
+    expect(tipAttrs('5 of 7', undefined, 'below', undefined, 'start')).toEqual({ 'data-tip': '5 of 7', 'data-tip-side': 'below', 'data-tip-align': 'start' });
+  });
+
   it('goes 8 px below when there is no room above', () => {
     expect(placeTip({ left: 100, top: 20, width: 20, height: 16 }, { width: 120, height: 24 }, VIEW)).toEqual({ left: 50, top: 44, side: 'below' });
   });

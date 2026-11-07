@@ -33,7 +33,7 @@ export const TIP_WARM_MS = 1000;
 export type TipSide = 'above' | 'below' | 'left';
 
 /** Where the tip goes: its left and top, and the side of the mark it is on. `first`: the side it tries first ('above' unless the mark asks). Pure. */
-export function placeTip(mark: Box, tip: { width: number; height: number }, view: { width: number; height: number }, first: TipSide = 'above'): { left: number; top: number; side: TipSide } {
+export function placeTip(mark: Box, tip: { width: number; height: number }, view: { width: number; height: number }, first: TipSide = 'above', align: 'centre' | 'start' = 'centre'): { left: number; top: number; side: TipSide } {
   if (first === 'left') {
     // beside the mark, centred on its height, clamped to the window; no room at its left: above or below
     const besideLeft = mark.left - TIP_GAP - tip.width;
@@ -53,7 +53,9 @@ export function placeTip(mark: Box, tip: { width: number; height: number }, view
   const roomBelow = view.height - mark.top - mark.height;
   const side: TipSide = fits[first] ? first : fits[other] ? other : roomAbove > roomBelow ? 'above' : 'below';
   const top = side === 'above' ? Math.max(TIP_GAP, above) : below;
-  const centred = mark.left + mark.width / 2 - tip.width / 2;
+  // 'start': its left edge on the mark's (a mark at a column's left edge, settings · Setup's ring:
+  // the tip never leaves the content column, designer m_54574); else centred on it
+  const centred = align === 'start' ? mark.left : mark.left + mark.width / 2 - tip.width / 2;
   const left = Math.max(TIP_GAP, Math.min(centred, view.width - TIP_GAP - tip.width));
   return { left: Math.round(left), top: Math.round(top), side };
 }
@@ -69,13 +71,15 @@ export function tipAttrs(
   keys?: string,
   side?: 'below' | 'left',
   clear?: 'outer',
-): { 'data-tip'?: string; 'data-tip-keys'?: string; 'data-tip-side'?: 'below' | 'left'; 'data-tip-clear'?: 'outer' } {
+  align?: 'start',
+): { 'data-tip'?: string; 'data-tip-keys'?: string; 'data-tip-side'?: 'below' | 'left'; 'data-tip-clear'?: 'outer'; 'data-tip-align'?: 'start' } {
   if (words === undefined || words === '') return {};
   return {
     'data-tip': words,
     ...(keys === undefined || keys === '' ? {} : { 'data-tip-keys': keys }),
     ...(side === undefined ? {} : { 'data-tip-side': side }),
     ...(clear === undefined ? {} : { 'data-tip-clear': clear }),
+    ...(align === undefined ? {} : { 'data-tip-align': align }),
   };
 }
 

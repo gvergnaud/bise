@@ -37,6 +37,8 @@ interface Shown {
   readonly first: TipSide;
   /** it clears its outer mark's box (data-tip-clear 'outer'), not only its own */
   readonly clear: boolean;
+  /** its left edge on the mark's (data-tip-align 'start'), not centred */
+  readonly start: boolean;
   /** shown cold (after the delay): it fades in; a warm one is there at once */
   readonly fade: boolean;
 }
@@ -57,6 +59,7 @@ export function TipLayer({ testId = 'tip' }: { testId?: string }) {
       keys: mark.dataset.tipKeys ?? '',
       first: mark.dataset.tipSide === 'below' ? 'below' : mark.dataset.tipSide === 'left' ? 'left' : 'above',
       clear: mark.dataset.tipClear === 'outer',
+      start: mark.dataset.tipAlign === 'start',
       fade,
     });
     const stop = () => {
@@ -84,7 +87,7 @@ export function TipLayer({ testId = 'tip' }: { testId?: string }) {
       });
       watch.observe(mark, {
         attributes: true,
-        attributeFilter: ['data-tip', 'data-tip-keys', 'data-tip-side'],
+        attributeFilter: ['data-tip', 'data-tip-keys', 'data-tip-side', 'data-tip-align'],
       });
     };
     const to = (mark: HTMLElement | null, focus: boolean) => {
@@ -155,7 +158,7 @@ export function TipLayer({ testId = 'tip' }: { testId?: string }) {
     const box = shown.first === 'left'
       ? besideBox(mark, b === null ? null : { left: b.left, top: b.top, width: b.width, height: b.height })
       : clearBox(mark, o === null ? null : { left: o.left, top: o.top, width: o.width, height: o.height });
-    const at = placeTip(box, { width: el.offsetWidth, height: el.offsetHeight }, { width: window.innerWidth, height: window.innerHeight }, shown.first);
+    const at = placeTip(box, { width: el.offsetWidth, height: el.offsetHeight }, { width: window.innerWidth, height: window.innerHeight }, shown.first, shown.start ? 'start' : 'centre');
     el.style.left = `${String(at.left)}px`;
     el.style.top = `${String(at.top)}px`;
     el.dataset.side = at.side;

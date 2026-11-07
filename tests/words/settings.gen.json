@@ -1586,6 +1586,11 @@
     "one": null,
     "text": "Test everything"
   },
+  "settings.gauge_test_tip": {
+    "args": [],
+    "one": null,
+    "text": "a test is one small real call per model: only when you click"
+  },
   "settings.gauge_testing": {
     "args": [],
     "one": null,
@@ -1597,7 +1602,7 @@
       "of"
     ],
     "one": null,
-    "text": "{on} of {of} features work. a test is a real call: only when you click."
+    "text": "{on} of {of} features work"
   },
   "settings.gauge_turns_on": {
     "args": [
