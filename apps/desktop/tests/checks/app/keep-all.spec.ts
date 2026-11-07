@@ -256,7 +256,9 @@ test('app/keep-all: spotlight: his half-typed words', async () => {
     // fn space, from the scripted helper (the one input we script)
     const cap = await capsulePage(s);
     // fn space toggles: only when the spotlight isn't up already
-    if (h && !(await cap.getByTestId('spot.input').isVisible())) await h.send({ ev: 'fn', act: 'key', key: 'space' });
+    // its field: the app's composer (PmField testId 'spot.input' draws its editable as
+    // 'spot.input.field', 33d67f61d), a contenteditable: his words are its text, not a value
+    if (h && !(await cap.getByTestId('spot.input.field').isVisible())) await h.send({ ev: 'fn', act: 'key', key: 'space' });
     return cap;
   };
   const { dispose } = await cycles({
@@ -264,7 +266,7 @@ test('app/keep-all: spotlight: his half-typed words', async () => {
     helper: true,
     setup: async (s, h) => {
       const cap = await open(s, h);
-      const field = cap.getByTestId('spot.input');
+      const field = cap.getByTestId('spot.input.field');
       await expect(field, 'the spotlight').toBeVisible({ timeout: 5000 });
       await field.click();
       await cap.keyboard.type(WORDS);
@@ -273,7 +275,7 @@ test('app/keep-all: spotlight: his half-typed words', async () => {
     },
     check: async (s, c, h) => {
       const cap = await open(s, h);
-      await expect.soft(cap.getByTestId('spot.input'), `${c}: his words in the spotlight`).toHaveValue(WORDS, { timeout: 5000 });
+      await expect.soft(cap.getByTestId('spot.input.field'), `${c}: his words in the spotlight`).toHaveText(WORDS, { timeout: 5000 });
       await cap.screenshot({ path: test.info().outputPath(`spot-${c.replace(/\W+/g, '-')}.png`) });
     },
   });
