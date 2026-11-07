@@ -43,8 +43,7 @@ def run(binary, evs, batch, view_at):
             out.append((label, f.readline()))
 
         def ask(v):
-            f.write(json.dumps(v) + "
-")
+            f.write(json.dumps(v) + "\n")
             f.flush()
             return json.loads(f.readline())
 
@@ -79,8 +78,7 @@ def whole_view(line, ask):
         if r.get("whole") is False:
             r["msg"] = got[r["msg"]["id"]]
         r.pop("whole", None)
-    return json.dumps(a, ensure_ascii=False, separators=(",", ":")) + "
-"
+    return json.dumps(a, ensure_ascii=False, separators=(",", ":")) + "\n"
 
 
 def main():
