@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { Account, AppCmd, Found, Model, ProjectRow, RoleRow, SetupGauge } from '@/proto';
 import type { CoreCmd } from '@/shared/api';
@@ -18,6 +18,7 @@ import { notifyRow } from './pages';
 import { capsOf, chromeCase, homeOf } from './chrome';
 import { stepOf } from './computer';
 import { focusOf } from './setupPage';
+import { TRY_MS } from './gauge';
 import { FALLBACK } from './roles';
 import type { ComputerUse } from './computer';
 import { settings } from '@/proto/words.gen';
@@ -464,6 +465,33 @@ describe('settings · Setup (page models-setup, pick B)', () => {
     expect(screen.getByTestId('settings.gauge.next').textContent).toBe(settings.gauge_all_set);
     expect(screen.queryByTestId('settings.gauge.next.fix')).toBeNull();
     expect(document.querySelectorAll('.st-mark.err')).toHaveLength(0);
+  });
+
+  it('Try it on dictation: the mic on his click only, stopped after 3 s, then what it heard', () => {
+    vi.useFakeTimers();
+    const calls: string[] = [];
+    let heard: { text: string; final: boolean; error: string | null } | null = null;
+    const tryIt = {
+      start: () => {
+        calls.push('start');
+        heard = { text: '', final: false, error: null };
+        return 'd1';
+      },
+      stop: (id: string) => {
+        calls.push(`stop ${id}`);
+      },
+      useHeard: (id: string | null) => (id === null ? null : heard),
+    };
+    const r = view('setup', { ...ports(), tryIt }, { gauge: gauge() });
+    expect(calls).toEqual([]);
+    fireEvent.click(screen.getByTestId('settings.feature.dictation.try'));
+    expect(calls).toEqual(['start']);
+    vi.advanceTimersByTime(TRY_MS);
+    expect(calls).toEqual(['start', 'stop d1']);
+    heard = { text: 'hello bise', final: true, error: null };
+    r.rerender(<Settings page="setup" prefs={prefs()} accounts={accounts()} projects={projects()} found={found()} computerUse={null} perms={{}} ports={{ ...ports(), tryIt }} gauge={gauge()} />);
+    expect(screen.getByTestId('settings.feature.dictation.heard').textContent).toBe(settings.try_heard({ text: 'hello bise' }));
+    vi.useRealTimers();
   });
 
   it('/models opens Setup with the roles unfolded; the nav has no Models page any more', () => {

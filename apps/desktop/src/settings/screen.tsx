@@ -3,7 +3,7 @@
 // through it (store.command: the core's AppCmd). Owner: amb-home.
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { JsonValue, Perm, ProjectRow } from '@/proto';
-import { useAccounts, useApprovals, useComputerUse, useCoreEvent, useFound, useKeychain, useModels, usePrefs, useProjects, useRoles, useProviderCheck, useSetupGauge, useSigning, useStore, type Ev } from '@/store';
+import { useAccounts, useApprovals, useComputerUse, useCoreEvent, useFound, useKeychain, useModels, usePrefs, useProjects, useRoles, useProviderCheck, useSetupGauge, useDictation, useSigning, useStore, type Ev } from '@/store';
 
 /** the core's last refusal of a command (error {cmd, text}), counted so the same words twice count */
 export interface KeyError {
@@ -205,6 +205,14 @@ export function SettingsScreen({ page }: { page?: string | undefined }) {
       {...(bise?.home !== undefined ? { home: bise.home } : {})}
       dist={dist}
       ports={{
+        // settings · Setup's Try it: dictation's own path (the core's mic, his click only)
+        tryIt: {
+          start: () => store.dictateStart(),
+          stop: (id: string) => {
+            store.dictateStop(id);
+          },
+          useHeard: useDictation,
+        },
         ...(updateApi
           ? {
               dist: {

@@ -19,6 +19,7 @@ import { PageBody, pageOf, type Page } from './pages';
 import type { ComputerUse } from './computer';
 import type { SignIn } from './accounts';
 import type { ProviderCheck } from './keycheck';
+import type { TryPort } from './gauge';
 import type { AppUpdate, NotifyAuth, UpdateInfo, UpdateState } from '@/shared/api';
 import type { UpdatePorts } from './update';
 import type { DistPorts } from './appupdate';
@@ -98,6 +99,8 @@ export interface SettingsPorts {
   update?: UpdatePorts;
   /** a distributed app's update group: restart to update, go back */
   dist?: DistPorts;
+  /** settings · Setup's Try it on dictation (gauge.tsx): the store's dictation */
+  tryIt?: TryPort;
 }
 
 export interface SettingsProps extends SettingsData {

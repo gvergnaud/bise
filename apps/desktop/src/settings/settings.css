@@ -172,6 +172,10 @@ button.st-next:hover { color: var(--c-text); }
 .st-fold-head:hover { color: var(--c-text); }
 .st-fold-head .chev { width: 12px; color: var(--c-text-3); }
 .st-fold-body { padding-top: var(--s-1); }
+/* dictation's Try it: shown on hover or focus (designer), and while it listens or says what it heard */
+.st-try { flex: none; display: inline-flex; align-items: center; gap: var(--s-2); visibility: hidden; }
+.st-row:hover .st-try, .st-try:focus-within, .st-try[data-busy] { visibility: visible; }
+.st-heard { font: var(--t-12) var(--font-ui); color: var(--c-text-2); }
 /* the nav's N/7 on Setup: faint, pink only when a feature failed */
 .b-snav-count { font: var(--t-12) var(--font-ui); font-variant-numeric: tabular-nums; color: var(--c-text-3); }
 .b-snav-count[data-failed] { color: var(--c-accent); }

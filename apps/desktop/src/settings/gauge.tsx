@@ -175,6 +175,59 @@ export interface GaugePorts {
   /** open the roles table (another way) */
   roles: () => void;
   copy?: (text: string) => void;
+  /** dictation's Try it: its own path (the store's dictateStart / dictateStop and useDictation);
+   * none: no Try it (no core mic in this run) */
+  tryIt?: TryPort;
+}
+
+/** What Try it needs: start the mic (an id), stop it, and read that dictation's words. */
+export interface TryPort {
+  start: () => string;
+  stop: (id: string) => void;
+  useHeard: (id: string | null) => { readonly text: string; readonly final: boolean; readonly error: string | null } | null;
+}
+
+/** Try it lasts this long: then the mic stops and the words come (page models-setup: 3 s). */
+export const TRY_MS = 3000;
+
+/** Dictation's Try it (his click only): 3 s of mic through dictation's own path, then what it heard. */
+function TryIt({ port }: { port: TryPort }) {
+  const [id, setId] = useState<string | null>(null);
+  const heard = port.useHeard(id);
+  const busy = id !== null && heard?.final !== true;
+  const said =
+    id === null || heard === null
+      ? null
+      : !heard.final
+        ? settings.try_listening
+        : heard.error !== null
+          ? heard.error
+          : heard.text.trim() === ''
+            ? settings.try_nothing
+            : settings.try_heard({ text: heard.text.trim() });
+  return (
+    <span className="st-try" data-busy={busy || said !== null || undefined}>
+      {said !== null && (
+        <span className="st-heard" data-testid="settings.feature.dictation.heard">
+          {said}
+        </span>
+      )}
+      <Act
+        disabled={busy}
+        onClick={(e) => {
+          e.stopPropagation();
+          const d = port.start();
+          setId(d);
+          setTimeout(() => {
+            port.stop(d);
+          }, TRY_MS);
+        }}
+        testId="settings.feature.dictation.try"
+      >
+        {settings.try_it}
+      </Act>
+    </span>
+  );
 }
 
 /** The gauge's ring, 40 px, in ink: on/of. */
@@ -280,6 +333,7 @@ export function FeatureRows({ g, ports, at, shut, setShut }: { g: SetupGauge; po
               <span className={cx('st-mark', testing ? 'faint' : m.tone)} {...tipAttrs(m.tip)} data-testid={`settings.feature.${r.id}.mark`}>
                 {testing ? settings.gauge_testing : m.text}
               </span>
+              {r.id === 'dictation' && r.state === 'on' && ports.tryIt !== undefined && <TryIt port={ports.tryIt} />}
               {r.fix != null && !open && (
                 <Button
                   kind={r.state === 'failed' ? 'pri' : undefined}

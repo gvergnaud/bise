@@ -1236,6 +1236,14 @@ export const settings = {
   trouble_copy: "Copy report",
   /** after the copy */
   trouble_copied: "copied",
+  /** dictation's Try it: 3 s of the mic through dictation's own path (his click only) */
+  try_it: "Try it",
+  /** Try it while the mic listens */
+  try_listening: "listening… say a few words",
+  /** Try it's words, the core's own transcription */
+  try_heard: (a: { text: string | number }): string => "heard: “" + String(a.text) + "”",
+  /** Try it heard no word */
+  try_nothing: "heard nothing: speak closer, or check the microphone in System Settings",
   /** the folded parts under the features */
   fold_roles: "Which model does what",
   /** a word of the gauge: accounts */

@@ -112,6 +112,7 @@ export function SetupPage({ data, ports, page }: { data: SettingsData; ports: Se
     },
     roles: openRoles,
     ...(ports.copy ? { copy: ports.copy } : {}),
+    ...(ports.tryIt ? { tryIt: ports.tryIt } : {}),
   };
   const g = data.gauge ?? null;
   const models = data.models ?? [];

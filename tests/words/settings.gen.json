@@ -5515,6 +5515,28 @@
     "one": null,
     "text": "{what} still work: it goes through {provider}."
   },
+  "settings.try_heard": {
+    "args": [
+      "text"
+    ],
+    "one": null,
+    "text": "heard: “{text}”"
+  },
+  "settings.try_it": {
+    "args": [],
+    "one": null,
+    "text": "Try it"
+  },
+  "settings.try_listening": {
+    "args": [],
+    "one": null,
+    "text": "listening… say a few words"
+  },
+  "settings.try_nothing": {
+    "args": [],
+    "one": null,
+    "text": "heard nothing: speak closer, or check the microphone in System Settings"
+  },
   "settings.tui_bise_failed": {
     "args": [
       "version"
