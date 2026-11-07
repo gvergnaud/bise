@@ -48,9 +48,15 @@ def main(argv):
     p.add_argument("--tasks", type=int, default=25)
     p.add_argument("--archived", type=int, default=25)
     p.add_argument("--secs", type=int, default=120)
+    p.add_argument("--seed-archived", type=int, default=0,
+                   help="archived tasks written in the journal before the start (e2e.seed_archived): "
+                        "1,000 in seconds, not spawned one by one")
     p.add_argument("--sample", default="", help="a file: macOS `sample` of the hub during the load")
+    p.add_argument("--core-sample", default="", help="a file: macOS `sample` of sb-core during the load")
     a = p.parse_args(argv)
     E = e2e.Env()
+    if a.seed_archived:
+        e2e.seed_archived(E.state, E.ws, ["s%04d" % i for i in range(a.seed_archived)])
     E.env["SB_LOOP_STATS_MS"] = str(STATS_MS)
     # the REPLs of this tree (scripts/bins.sh repl-live repl-scripted sb-core first)
     E.env["BISE_APP_ROOT"] = e2e.ROOT
@@ -84,6 +90,13 @@ def main(argv):
             # where the hub's CPU goes meanwhile (macOS `sample`, 20 s, 1 ms)
             subprocess.Popen(["sample", str(E.hub.pid), "20", "1", "-file", a.sample],
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if a.core_sample:
+            core = subprocess.run(["pgrep", "-P", str(E.hub.pid), "sb-core"], capture_output=True, text=True).stdout.split()
+            if core:
+                subprocess.Popen(["sample", core[0], "20", "1", "-file", a.core_sample],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            else:
+                print("no sb-core child of the hub to sample")
         i = 0
         while time.time() - start < a.secs:
             sb(E, "main", "send", live[i % len(live)], "bench message %d" % i)

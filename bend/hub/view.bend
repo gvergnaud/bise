@@ -388,19 +388,60 @@ def turn_key(m: Maybe<&2, Nat>) -> String:
 def rt_key(+x: X.Rt) -> String:
   H.cat([H.run_str(X.Rt.run(x)), " ", Bool.pick(String, X.Rt.waiting(x), "w", "-"), " ", turn_key(X.Rt.turn(x)), " ", Nat.show(X.Rt.turns(x))])
 
-def rt_marks.keep(rest: Bool, +x: X.Rt, +acc: List<&2, Mark>) -> List<&2, Mark>:
+# a runtime's mark: none at rest, else its key
+def rt_mark.of(rest: Bool, +x: X.Rt) -> Maybe<&2, String>:
   match rest:
     case True{}:
-      acc
+      None{}
     case False{}:
-      Mark{X.Rt.name(x), rt_key(x)} <> acc
+      Some{rt_key(x)}
 
-def rt_marks(rts: List<&2, X.Rt>) -> List<&2, Mark>:
-  match rts:
+def rt_mark(+x: X.Rt) -> Maybe<&2, String>:
+  rt_mark.of(rt_rest(X.Rt.turn(x), H.is_down(X.Rt.run(x)), X.Rt.waiting(x), X.Rt.turns(x)), x)
+
+def mark_same(a: Maybe<&2, String>, +b: Maybe<&2, String>) -> Bool:
+  match a b:
+    case None{} None{}:
+      True{}
+    case Some{+x} Some{+y}:
+      String.eq(x, y)
+    case _ _:
+      False{}
+
+# the agents of the step's `rt` outs (core.bend set_rt, the one writer of
+# a runtime but a rename, whose names its event gives)
+def rt_fx.of(is_rt: Bool, +x: J.Json) -> List<&2, String>:
+  match is_rt:
+    case True{}:
+      [J.get_str_or(x, "agent", "")]
+    case False{}:
+      Nil{}
+
+def rt_names(xs: List<&2, X.Fx>) -> List<&2, String>:
+  match xs:
     case Nil{}:
       Nil{}
-    case Con{+x, +t}:
-      rt_marks.keep(rt_rest(X.Rt.turn(x), H.is_down(X.Rt.run(x)), X.Rt.waiting(x), X.Rt.turns(x)), x, rt_marks(t))
+    case Con{X.FO{+x}, +t}:
+      List.append(&2, String, rt_fx.of(String.eq(J.get_str_or(x, "fx", ""), "rt"), x), rt_names(t))
+    case Con{_, +t}:
+      rt_names(t)
+
+def rt_moved.keep(same: Bool, +n: String, +rest: List<&2, String>) -> List<&2, String>:
+  match same:
+    case True{}:
+      rest
+    case False{}:
+      n <> rest
+
+# the agents of `ns` whose runtime mark the step changed (`before`: the
+# runtimes before it): the step's own runtimes only, never every agent
+# that ever ran (c4b-core-step-flat: his hub keeps ~900 of them)
+def rt_moved(ns: List<&2, String>, +before: List<&2, X.Rt>, +after: List<&2, X.Rt>) -> List<&2, String>:
+  match ns:
+    case Nil{}:
+      Nil{}
+    case Con{+n, +t}:
+      rt_moved.keep(mark_same(rt_mark(H.rt_find(before, n)), rt_mark(H.rt_find(after, n))), n, rt_moved(t, before, after))
 
 def waiter_marks(ws: List<&2, X.Waiter>) -> List<&2, Mark>:
   match ws:
@@ -408,11 +449,6 @@ def waiter_marks(ws: List<&2, X.Waiter>) -> List<&2, Mark>:
       Nil{}
     case Con{+w, +t}:
       Mark{X.Waiter.agent(w), H.cat(["wait ", Nat.show(X.Waiter.token(w)), " ", Nat.show(X.Waiter.msg(w))])} <> waiter_marks(t)
-
-# the marks of every runtime not at rest and every wait (main.bend takes
-# them before a step, `changed` after it)
-def marks(+rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>) -> List<&2, Mark>:
-  List.append(&2, Mark, rt_marks(rts), waiter_marks(ws))
 
 def mark_in(xs: List<&2, Mark>, +m: Mark) -> Bool:
   match xs:
@@ -444,8 +480,11 @@ def gone(xs: List<&2, Mark>, +ys: List<&2, Mark>) -> List<&2, String>:
 def changed.go(+names: List<&2, String>, +before: List<&2, Mark>, +after: List<&2, Mark>) -> List<&2, String>:
   List.append(&2, String, names, List.append(&2, String, gone(before, after), gone(after, before)))
 
-def changed(+evs: List<&2, M.Ev>, +before: List<&2, Mark>, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>) -> List<&2, String>:
-  changed.go(names_of(evs), before, marks(rts, ws))
+# `rts0`, `ws0`: the runtimes and the wait marks before the step; a
+# runtime changes only by the step's `rt` outs (rt_moved) or a rename (its
+# event names both names)
+def changed(+evs: List<&2, M.Ev>, +fx: List<&2, X.Fx>, +rts0: List<&2, X.Rt>, +ws0: List<&2, Mark>, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>) -> List<&2, String>:
+  changed.go(List.append(&2, String, names_of(evs), rt_moved(rt_names(fx), rts0, rts)), ws0, waiter_marks(ws))
 
 # the order, the cards and the notes change only by an event (model.bend
 # `apply`): a view with none (`durable` False) leaves them out, the

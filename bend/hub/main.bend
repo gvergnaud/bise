@@ -68,28 +68,29 @@ def fxs_json(xs: List<&2, X.Fx>) -> List<&2, J.Json>:
     case Con{+h, +t}:
       fx_json(h) <> fxs_json(t)
 
-# `before`: the runtime and wait marks before the step (V.changed). The
+# `rts0`, `ws0`: the runtimes and the wait marks before the step
+# (V.changed). The
 # view carries only what the step changed: an idle tick answers a few
 # hundred bytes, whatever the history (idle-cpu). `msg`: the id of his
 # message the step made (SD.said), for the asker's send result (A1).
 # `ans_*`: his answer to a card in the step (X.R.answered), for the
 # answer's result (inbox picks (3), architect m_22636)
-def answer.go(need: Maybe<&2, J.Json>, +h: H.Hub, +fx: List<&2, X.Fx>, +before: List<&2, V.Mark>) -> H.Hub & String:
+def answer.go(need: Maybe<&2, J.Json>, +h: H.Hub, +fx: List<&2, X.Fx>, +rts0: List<&2, X.Rt>, +ws0: List<&2, V.Mark>) -> H.Hub & String:
   match need:
     case Some{+q}:
       (h, J.stringify(L.answer_need(q)))
     case None{}:
       (h, J.stringify(L.answer_step(fxs_json(fx), X.R.dirty(H.Hub.r(h)),
         V.view(H.Hub.d(h), X.R.rts(H.Hub.r(h)), X.R.waiters(H.Hub.r(h)), False{}, List.append(&2, Nat, V.touched(X.journal(fx)), V.moved_ids(X.journal(fx), S.St.hot(H.Hub.d(h)))),
-          List.append(&2, String, V.changed(X.journal(fx), before, X.R.rts(H.Hub.r(h)), X.R.waiters(H.Hub.r(h))), V.fx_names(fx)),
+          List.append(&2, String, V.changed(X.journal(fx), fx, rts0, ws0, X.R.rts(H.Hub.r(h)), X.R.waiters(H.Hub.r(h))), V.fx_names(fx)),
           X.journal(fx)),
         SD.said_id(SD.said(X.journal(fx))),
         PK.card_of(X.R.answered(H.Hub.r(h))), PK.who_of(X.R.answered(H.Hub.r(h))), PK.said_of(X.R.answered(H.Hub.r(h))),
         PK.ask_of(X.R.answered(H.Hub.r(h))), PK.pick_of_ans(X.R.answered(H.Hub.r(h))))))
 
 # the answer line of a committed step (H.commit, the law run_replays)
-def answer(+before: List<&2, V.Mark>, +o: H.Turn) -> H.Hub & String:
-  answer.go(H.Turn.need(o), H.Turn.hub(o), H.Turn.fx(o), before)
+def answer(+rts0: List<&2, X.Rt>, +ws0: List<&2, V.Mark>, +o: H.Turn) -> H.Hub & String:
+  answer.go(H.Turn.need(o), H.Turn.hub(o), H.Turn.fx(o), rts0, ws0)
 
 # an event this hub does not know (written by a newer hub, before a
 # /version rollback), or a message_sent with a reused or older id, is
@@ -158,7 +159,7 @@ def handle.link(l: L.Link, +h: H.Hub, +i: J.Json) -> H.Hub & String:
     case L.TRestorePhoto{+st}:
       restore_photo(PH.restore(h, st), h)
     case L.TStep{}:
-      answer(V.marks(X.R.rts(H.Hub.r(h)), X.R.waiters(H.Hub.r(h))), H.commit(h, i))
+      answer(X.R.rts(H.Hub.r(h)), V.waiter_marks(X.R.waiters(H.Hub.r(h))), H.commit(h, i))
 
 def handle.parsed(r: Result<&2, &2, String, J.Json>, +h: H.Hub) -> H.Hub & String:
   match r:

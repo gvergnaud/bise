@@ -614,6 +614,34 @@ def seed_tasks(state, ws, names):
                                 "brief": {"objective": "fake objective of %s" % name, "context": ""}}) + "\n")
 
 
+def seed_archived(state, ws, names, msgs=2):
+    """Archived tasks in a throwaway hub's journal before its start: each
+    created by main, `msgs` messages to and from main (delivered), a turn
+    report, then dropped (archived). His hub keeps every archived agent
+    in its state; spawning them through REPLs costs ~0.7 s each
+    (hub_loop_bench at 1,000)."""
+    os.makedirs(state, exist_ok=True)
+    space = {"mode": "shared", "path": ws, "branch": None, "base_commit": None, "dropped": False}
+    mid = 1_000_000
+    with open(os.path.join(state, "journal.jsonl"), "a") as f:
+        def put(e):
+            f.write(json.dumps(e) + "\n")
+        for i, name in enumerate(names):
+            at = 1_000_000 + i * 100
+            put({"type": "task_created", "name": name, "parent": "main", "ws": space, "at_ms": at,
+                 "brief": {"objective": "fake objective of %s" % name, "context": "an archived task"}})
+            for k in range(msgs):
+                for frm, to in (("main", name), (name, "main")):
+                    mid += 1
+                    put({"type": "message_sent", "msg": {"id": mid, "thread": mid, "from": frm, "to": to, "reply_to": None,
+                                                         "expect_reply": False, "auto": False, "text": "seeded message %d" % k,
+                                                         "created_ms": at + k, "plain": False}})
+                    put({"type": "message_state", "id": mid, "state": "delivered"})
+            put({"type": "reported", "name": name, "report": {"at_ms": at + 50, "kind": "turn", "summary": "done",
+                                                              "decisions": [], "auto": True}})
+            put({"type": "lifecycle", "name": name, "lifecycle": "archived", "reason": "drop"})
+
+
 # ---- scenarios ----
 
 def t_spawn_and_auto_reply(E, c):
