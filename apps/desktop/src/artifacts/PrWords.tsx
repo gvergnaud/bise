@@ -33,6 +33,25 @@ export function PrWords({ a, tag = true, fit = false, tail, testId }: {
     ...(l.late === '' ? [] : [{ key: 'late', node: l.late, cls: 'prw-late', tip: panel.pr_as_of_tip }]),
     ...(tail === undefined || tail === '' ? [] : [{ key: 'tail', node: tail, cls: 'prw-dim' }]),
   ];
+  // in a row, his part goes with the tag as one head: the tag gives way first, so with little room
+  // 'your merge' stays alone in the accent (designer m_54766)
+  const [t0, w0] = parts;
+  if (fit && tag && t0 !== undefined && w0 !== undefined && w0.cls === 'prw-acc') {
+    return (
+      <span className="prw prw-fit" data-testid={testId}>
+        <span className="prw-head">
+          <span className="prw-tag prw-shrink">{t0.node}{' · '}</span>
+          <span className="prw-acc" data-acc="">{w0.node}</span>
+        </span>
+        {parts.slice(2).map((p) => (
+          <span key={p.key} className={p.cls} {...(p.tip === undefined ? {} : tipAttrs(p.tip))}>
+            {' · '}
+            {p.node}
+          </span>
+        ))}
+      </span>
+    );
+  }
   return (
     <span className={fit ? 'prw prw-fit' : 'prw'} data-testid={testId}>
       {parts.map((p, i) => (

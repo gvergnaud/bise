@@ -13,6 +13,7 @@ import { panel } from '@/proto/words_panel.gen';
 import { frame } from '@/proto/words_frame.gen';
 import { agoWords } from '@/composer/pick';
 import { Thumb } from './thumbs';
+import { PrWords } from './PrWords';
 import { pathOf, type Library } from './folders';
 import { keyOf, type Item } from './model';
 
@@ -87,7 +88,10 @@ export function RecentRow({ items, lib, now, list, onOpen, onAll, kind = 'recent
                 <span className="nm" {...tipAttrs(name)}>{name}</span>
                 {it.a.new && <span className="art-new" data-testid={`${testId}.item.${k}.new`} {...tipAttrs(library.tip_new)}>{panel.new_chip}</span>}
               </span>
-              <span className="mt" data-testid={`${testId}.item.${k}.line`}>{age} · <span className="fd">{folder}</span></span>
+              {/* a PR: its line, as its small tile and its row (designer m_54766) */}
+              <span className="mt" data-testid={`${testId}.item.${k}.line`}>
+                {it.a.pr != null ? <PrWords a={it.a} fit /> : <>{age} · <span className="fd">{folder}</span></>}
+              </span>
             </Press>
           );
         })}

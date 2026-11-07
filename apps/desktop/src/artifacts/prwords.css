@@ -10,3 +10,7 @@
 .prw-fit { display: flex; flex-wrap: wrap; height: 1lh; overflow: hidden; min-width: 0; }
 .prw-fit > span { white-space: pre; }
 .prw-fit > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* his part with the tag: the tag gives way first, 'your merge' stays whole (designer m_54766) */
+.prw-fit > .prw-head { display: flex; min-width: 0; max-width: 100%; }
+.prw-head > .prw-shrink { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: pre; text-overflow: clip; }
+.prw-head > .prw-acc { flex: none; white-space: pre; }
