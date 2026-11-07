@@ -59,6 +59,32 @@ fn option_1_archives_like_yes_and_restore_brings_it_back() {
     assert!(c.contains(&pick("accepted", 1, "archive it")), "{c:?}");
     let fx = t.user(MAIN, "/restore fix");
     assert!(fx.iter().any(|e| matches!(e, Effect::Spawn { agent, resume: true, .. } if agent == "fix")), "{fx:?}");
+    // its saved work is used: no snapshot left
+    assert!(t.hub.st.agents["fix"].snapshot_ref.is_none());
+}
+
+// issue 32 3b: a restore whose worktree git could not make again (law
+// restore_err_keeps_archived): back archived in its dropped worktree, its
+// saved work kept, git's words in main's feed, no REPL
+#[test]
+fn a_restore_git_refuses_keeps_it_archived_with_its_work() {
+    let mut t = T::new();
+    let (card, _) = drop_card(&mut t);
+    answer(&mut t, card, "1");
+    let snap = t.hub.st.agents["fix"].snapshot_ref.clone();
+    assert!(snap.is_some());
+    t.env.restore_err = Some("fatal: 'sb/fix' is already checked out".into());
+    let fx = t.user(MAIN, "/restore fix");
+    assert!(!fx.iter().any(|e| matches!(e, Effect::Spawn { agent, .. } if agent == "fix")), "{fx:?}");
+    assert_eq!(t.status("fix"), Status::Archived);
+    let a = &t.hub.st.agents["fix"];
+    assert!(a.ws.dropped, "its dropped ws back");
+    assert_eq!(a.snapshot_ref, snap, "its saved work kept");
+    assert!(has_line(&fx, MAIN, "@fix could not be restored: its worktree was not made again: fatal: 'sb/fix' is already checked out"), "{fx:?}");
+    // git fixed: the next /restore brings it back
+    t.env.restore_err = None;
+    let fx = t.user(MAIN, "/restore fix");
+    assert!(fx.iter().any(|e| matches!(e, Effect::Spawn { agent, resume: true, .. } if agent == "fix")), "{fx:?}");
 }
 
 #[test]

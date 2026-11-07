@@ -20,6 +20,8 @@ type Fx is Data:
   FWorktreeCreate{name: String, with_changes: Bool}
   # worktree_drop
   FWorktreeDrop{name: String, ws: J.Json, dirty: Nat, unpushed: Nat}
+  # worktree_restore
+  FWorktreeRestore{name: String, ws: J.Json, snapshot: Maybe<&2, String>}
   # say
   FSay{agent: String, text: String}
   # passthrough
@@ -88,6 +90,9 @@ def FWorktreeCreate.of(+i: J.Json) -> Fx:
 
 def FWorktreeDrop.of(+i: J.Json) -> Fx:
   FWorktreeDrop{K.get_s(i, "name"), K.get_j(i, "ws"), K.get_n(i, "dirty"), K.get_n(i, "unpushed")}
+
+def FWorktreeRestore.of(+i: J.Json) -> Fx:
+  FWorktreeRestore{K.get_s(i, "name"), K.get_j(i, "ws"), K.opt_s(J.get(i, "snapshot"))}
 
 def FSay.of(+i: J.Json) -> Fx:
   FSay{K.get_s(i, "agent"), K.get_s(i, "text")}
@@ -257,6 +262,15 @@ def of.t12(c: Cmp, +t: String, +i: J.Json) -> Fx:
     case GT{}:
       FNone{}
 
+def of.t14(c: Cmp, +t: String, +i: J.Json) -> Fx:
+  match c:
+    case LT{}:
+      FNone{}
+    case EQ{}:
+      FRetarget.of(i)
+    case GT{}:
+      FNone{}
+
 def of.t13(c: Cmp, +t: String, +i: J.Json) -> Fx:
   match c:
     case LT{}:
@@ -264,7 +278,7 @@ def of.t13(c: Cmp, +t: String, +i: J.Json) -> Fx:
     case EQ{}:
       FReply.of(i)
     case GT{}:
-      FNone{}
+      of.t14(String.order(t, "retarget"), t, i)
 
 def of.t11(c: Cmp, +t: String, +i: J.Json) -> Fx:
   match c:
@@ -284,97 +298,97 @@ def of.t7(c: Cmp, +t: String, +i: J.Json) -> Fx:
     case GT{}:
       of.t11(String.order(t, "passthrough"), t, i)
 
-def of.t15(c: Cmp, +t: String, +i: J.Json) -> Fx:
+def of.t16(c: Cmp, +t: String, +i: J.Json) -> Fx:
   match c:
     case LT{}:
       FNone{}
     case EQ{}:
-      FRoute.of(i)
+      FRouteAsked.of(i)
+    case GT{}:
+      FNone{}
+
+def of.t18(c: Cmp, +t: String, +i: J.Json) -> Fx:
+  match c:
+    case LT{}:
+      FNone{}
+    case EQ{}:
+      FRt.of(i)
     case GT{}:
       FNone{}
 
 def of.t17(c: Cmp, +t: String, +i: J.Json) -> Fx:
   match c:
     case LT{}:
-      FNone{}
+      of.t16(String.order(t, "route_asked"), t, i)
     case EQ{}:
       FRouteDone.of(i)
     case GT{}:
-      FNone{}
+      of.t18(String.order(t, "rt"), t, i)
 
-def of.t16(c: Cmp, +t: String, +i: J.Json) -> Fx:
+def of.t20(c: Cmp, +t: String, +i: J.Json) -> Fx:
   match c:
     case LT{}:
-      of.t15(String.order(t, "route"), t, i)
+      FNone{}
     case EQ{}:
-      FRouteAsked.of(i)
+      FSpawn.of(i)
     case GT{}:
-      of.t17(String.order(t, "route_done"), t, i)
+      FNone{}
 
-def of.t19(c: Cmp, +t: String, +i: J.Json) -> Fx:
+def of.t22(c: Cmp, +t: String, +i: J.Json) -> Fx:
   match c:
     case LT{}:
       FNone{}
     case EQ{}:
-      FSay.of(i)
+      FUserSent.of(i)
     case GT{}:
       FNone{}
 
 def of.t21(c: Cmp, +t: String, +i: J.Json) -> Fx:
   match c:
     case LT{}:
-      FNone{}
+      of.t20(String.order(t, "spawn"), t, i)
     case EQ{}:
       FSpoke.of(i)
     case GT{}:
-      FNone{}
+      of.t22(String.order(t, "user_sent"), t, i)
 
-def of.t20(c: Cmp, +t: String, +i: J.Json) -> Fx:
+def of.t19(c: Cmp, +t: String, +i: J.Json) -> Fx:
   match c:
     case LT{}:
-      of.t19(String.order(t, "say"), t, i)
+      of.t17(String.order(t, "route_done"), t, i)
     case EQ{}:
-      FSpawn.of(i)
+      FSay.of(i)
     case GT{}:
       of.t21(String.order(t, "spoke"), t, i)
 
-def of.t18(c: Cmp, +t: String, +i: J.Json) -> Fx:
-  match c:
-    case LT{}:
-      of.t16(String.order(t, "route_asked"), t, i)
-    case EQ{}:
-      FRt.of(i)
-    case GT{}:
-      of.t20(String.order(t, "spawn"), t, i)
-
-def of.t23(c: Cmp, +t: String, +i: J.Json) -> Fx:
+def of.t24(c: Cmp, +t: String, +i: J.Json) -> Fx:
   match c:
     case LT{}:
       FNone{}
     case EQ{}:
-      FViewCard.of(i)
+      FViewContext.of(i)
+    case GT{}:
+      FNone{}
+
+def of.t26(c: Cmp, +t: String, +i: J.Json) -> Fx:
+  match c:
+    case LT{}:
+      FNone{}
+    case EQ{}:
+      FWorktreeDrop.of(i)
     case GT{}:
       FNone{}
 
 def of.t25(c: Cmp, +t: String, +i: J.Json) -> Fx:
   match c:
     case LT{}:
-      FNone{}
+      of.t24(String.order(t, "view_context"), t, i)
     case EQ{}:
       FWorktreeCreate.of(i)
     case GT{}:
-      FNone{}
+      of.t26(String.order(t, "worktree_drop"), t, i)
 
-def of.t24(c: Cmp, +t: String, +i: J.Json) -> Fx:
-  match c:
-    case LT{}:
-      of.t23(String.order(t, "view_card"), t, i)
-    case EQ{}:
-      FViewContext.of(i)
-    case GT{}:
-      of.t25(String.order(t, "worktree_create"), t, i)
-
-def of.t27(c: Cmp, +t: String, +i: J.Json) -> Fx:
+def of.t28(c: Cmp, +t: String, +i: J.Json) -> Fx:
   match c:
     case LT{}:
       FNone{}
@@ -383,46 +397,46 @@ def of.t27(c: Cmp, +t: String, +i: J.Json) -> Fx:
     case GT{}:
       FNone{}
 
-def of.t28(c: Cmp, +t: String, +i: J.Json) -> Fx:
+def of.t29(c: Cmp, +t: String, +i: J.Json) -> Fx:
   match c:
     case LT{}:
-      of.t27(String.order(t, "xdeliver"), t, i)
+      of.t28(String.order(t, "xdeliver"), t, i)
     case EQ{}:
       FXReply.of(i)
     case GT{}:
       FNone{}
 
-def of.t26(c: Cmp, +t: String, +i: J.Json) -> Fx:
+def of.t27(c: Cmp, +t: String, +i: J.Json) -> Fx:
   match c:
     case LT{}:
-      of.t24(String.order(t, "view_context"), t, i)
+      of.t25(String.order(t, "worktree_create"), t, i)
     case EQ{}:
-      FWorktreeDrop.of(i)
+      FWorktreeRestore.of(i)
     case GT{}:
-      of.t28(String.order(t, "xreply"), t, i)
+      of.t29(String.order(t, "xreply"), t, i)
 
-def of.t22(c: Cmp, +t: String, +i: J.Json) -> Fx:
+def of.t23(c: Cmp, +t: String, +i: J.Json) -> Fx:
   match c:
     case LT{}:
-      of.t18(String.order(t, "rt"), t, i)
+      of.t19(String.order(t, "say"), t, i)
     case EQ{}:
-      FUserSent.of(i)
+      FViewCard.of(i)
     case GT{}:
-      of.t26(String.order(t, "worktree_drop"), t, i)
+      of.t27(String.order(t, "worktree_restore"), t, i)
 
-def of.t14(c: Cmp, +t: String, +i: J.Json) -> Fx:
+def of.t15(c: Cmp, +t: String, +i: J.Json) -> Fx:
   match c:
     case LT{}:
       of.t7(String.order(t, "job_end"), t, i)
     case EQ{}:
-      FRetarget.of(i)
+      FRoute.of(i)
     case GT{}:
-      of.t22(String.order(t, "user_sent"), t, i)
+      of.t23(String.order(t, "view_card"), t, i)
 
-# the record of a tag (a binary search over the 29 sorted tags); any
+# the record of a tag (a binary search over the 30 sorted tags); any
 # other tag: FNone
 def of_tag(+t: String, +i: J.Json) -> Fx:
-  of.t14(String.order(t, "retarget"), t, i)
+  of.t15(String.order(t, "route"), t, i)
 
 # one Fx from its JSON object
 def of(+i: J.Json) -> Fx:
@@ -444,6 +458,8 @@ def kvs(x: Fx) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
       [J.kv("fx", J.JStr{"worktree_create"}), J.kv("name", J.JStr{name}), J.kv("with_changes", J.JBool{with_changes})]
     case FWorktreeDrop{+name, +ws, +dirty, +unpushed}:
       [J.kv("fx", J.JStr{"worktree_drop"}), J.kv("name", J.JStr{name}), J.kv("ws", ws), J.kv("dirty", J.JNum{dirty}), J.kv("unpushed", J.JNum{unpushed})]
+    case FWorktreeRestore{+name, +ws, +snapshot}:
+      [J.kv("fx", J.JStr{"worktree_restore"}), J.kv("name", J.JStr{name}), J.kv("ws", ws), J.kv("snapshot", K.jmaybe_s(snapshot))]
     case FSay{+agent, +text}:
       [J.kv("fx", J.JStr{"say"}), J.kv("agent", J.JStr{agent}), J.kv("text", J.JStr{text})]
     case FPassthrough{+agent, +line}:
@@ -516,6 +532,9 @@ def worktree_create(+name: String, +with_changes: Bool) -> List<&2, Sigma<&2, &2
 
 def worktree_drop(+name: String, +ws: J.Json, +dirty: Nat, +unpushed: Nat) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   kvs(FWorktreeDrop{name, ws, dirty, unpushed})
+
+def worktree_restore(+name: String, +ws: J.Json, +snapshot: Maybe<&2, String>) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  kvs(FWorktreeRestore{name, ws, snapshot})
 
 def say(+agent: String, +text: String) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
   kvs(FSay{agent, text})

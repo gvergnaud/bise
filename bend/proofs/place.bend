@@ -72,3 +72,25 @@ def Laws.boot_reemits_stuck_drop(o, cx, a):
 
 def Laws.boot_skips_not_dropping(o, cx, a):
   {==}
+
+def Laws.restore_off_asks_once(o, cx, a):
+  {==}
+
+def Laws.placed_restored(a, n, ws, from):
+  {==}
+
+def Laws.placed_unrestored(a, n, ws, from, err, e):
+  %Equal.sym(Bool, String.is_empty(err), False{}, e) : {Bool.pick(HPL.Do, _, HPL.PRestored{n, ws}, HPL.PUnrestored{n, err, from}) == HPL.PUnrestored{n, err, from} : HPL.Do}
+  {==}
+
+def Laws.restore_ok_clears_snapshot(o, cx, n, ws):
+  {==}
+
+def Laws.restore_err_keeps_archived(o, cx, n, e, from):
+  {==}
+
+def Laws.boot_reemits_stuck_restore(o, cx, a, from):
+  {==}
+
+def Laws.boot_skips_restore_joiner(ws):
+  {==}

@@ -7,7 +7,14 @@ an fx, `placed` an input, `worktree_placed` a journal kind). 3b's drop
 in with chantier c4-loop-never-waits (land 4a: fx `worktree_drop`, input
 `unplaced`, journal kind `worktree_dropped`, a restore refused while
 dropping, a boot that asks again for a drop a stopped hub left; laws in
-bend/laws/place.bend). Next: 3b's restore off the loop (4b), then 3c
+bend/laws/place.bend; bdcd2b7dc). 3b's restore in with land 4b: fx
+`worktree_restore`, answered by `placed` (PRestored: its saved work
+used, its REPL resumes; PUnrestored: back archived in its dropped ws,
+git's words in main's feed), a boot that asks again for a stuck restore;
+the `worktree_restore` need is gone. ws.restore / ws.restore_joined:
+untyped, c9 types them with ws (their only reads and writes are
+place.bend's ws_restore, ws_with_restore, ws_restore_joined,
+ws_with_restore_joined). Next: 3c
 (`sb spawn --feature`, `sb isolate`, deleting the `worktree_create` NEED,
 tests/hub_loop_e2e.py into run_all) (4c). Their signed plan is the last
 section. Label: hub, loop.

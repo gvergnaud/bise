@@ -1636,35 +1636,30 @@ def agent_of(+s: S.St, m: Maybe<&2, String>) -> Maybe<&2, S.Agent>:
 def drop_task(-o: S.St, +cx: X.Cx<o>, +name: String, +force: Bool) -> X.Cx<o> & DropR:
   drop.agent(o, agent_of(st(o, cx), M.resolve(st(o, cx), name)), cx, name, force)
 
-def restore.go(-o: S.St, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o> & TaskR:
+def restore.go.as(-o: S.St, +cx: X.Cx<o>, +a: S.Agent, +label: String) -> X.Cx<o> & TaskR:
   +n = S.Agent.name(a)
   +cx2 = emit(o, cx, M.ELifecycle{n, S.LActive{}, None{}}, Unit{}, Unit{}, Unit{})
   +r = rr(o, cx2)
   +cx3 = set_r(o, cx2, X.R.with_crashes(r, KL.kn_del(X.R.crashes(r), n)))
   +cx4 = spawn(o, cx3, n, True{})
   # an idle task back from failed gets the mail it kept (law L4)
-  (feed(o, pump(o, cx4, n), M.MAIN(), FD.info(cat(["@", n, " restored"]))), TOk{n})
+  (feed(o, pump(o, cx4, n), M.MAIN(), FD.info(cat(["@", n, " restored", label]))), TOk{n})
 
-def restore.res(-o: S.St, r: Result<&2, &2, String, J.Json>, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o> & TaskR:
-  match r:
-    case Fail{+e}:
-      (cx, TErr{e})
-    case Done{+ws}:
-      +cx2 = emit(o, cx, M.EWorkspace{S.Agent.name(a), ws}, Unit{}, Unit{}, Unit{})
-      restore.go(o, emit(o, cx2, M.ESnapshot{S.Agent.name(a), None{}}, Unit{}, Unit{}, Unit{}), a)
+def restore.go(-o: S.St, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o> & TaskR:
+  restore.go.as(o, cx, a, "")
 
-def restore.ans(-o: S.St, p: X.Cx<o> & Maybe<&2, J.Json>, +a: S.Agent) -> X.Cx<o> & TaskR:
-  match p:
-    case (+cx, None{}):
-      (cx, THalt{})
-    case (+cx, Some{+ans}):
-      restore.res(o, PL.ans_ok(ans), cx, a)
+# issue 32 3b: its dropped worktree is made again off the loop: the task
+# is active now, its ws placing (no REPL, its messages wait) until the
+# shell's `placed` (placed: PRestored, PUnrestored)
+def restore.off(-o: S.St, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o> & TaskR:
+  +n = S.Agent.name(a)
+  +cx2 = emit(o, cx, M.EWorkspace{n, PL.restoring_ws(S.Agent.ws(a))}, Unit{}, Unit{}, Unit{})
+  restore.go.as(o, out(o, cx2, F.worktree_restore(n, S.Agent.ws(a), S.Agent.snap(a))), a, PL.restoring_note())
 
 def restore.wt(-o: S.St, dropped: Bool, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o> & TaskR:
   match dropped:
     case True{}:
-      restore.ans(o, ask(o, cx, J.obj([J.kv("q", J.JStr{"worktree_restore"}), J.kv("name", J.JStr{S.Agent.name(a)}), J.kv("ws", S.Agent.ws(a)),
-        J.kv("snapshot_ref", K.jmaybe_s(S.Agent.snap(a)))])), a)
+      restore.off(o, cx, a)
     case False{}:
       restore.go(o, cx, a)
 
@@ -1675,7 +1670,7 @@ def restore.join(-o: S.St, m: Maybe<&2, S.Agent>, +cx: X.Cx<o>, +a: S.Agent) -> 
       restore.wt(o, True{}, cx, a)
     case Some{+b}:
       +n = S.Agent.name(a)
-      +cx2 = emit(o, cx, M.EWorkspace{n, S.Agent.ws(b)}, Unit{}, Unit{}, Unit{})
+      +cx2 = emit(o, cx, M.EWorkspace{n, PL.joined_ws(S.Agent.ws(b))}, Unit{}, Unit{}, Unit{})
       restore.go(o, emit(o, cx2, M.ESnapshot{n, None{}}, Unit{}, Unit{}, Unit{}), a)
 
 def restore.dropped(-o: S.St, dropped: Bool, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o> & TaskR:
@@ -3770,11 +3765,19 @@ def boot.live(-o: S.St, live: Bool, +cx: X.Cx<o>, +n: String) -> X.Cx<o>:
       cx
 
 # issue 32: a task a stopped hub was still placing gets its fx again (a
-# joiner waits for its place's); its REPL starts at its `placed`
+# joiner waits for its place's): its worktree_create, or its restore's
+# worktree_restore; its REPL starts at its `placed`
+def boot.place(-o: S.St, r: Maybe<&2, J.Json>, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o>:
+  match r:
+    case None{}:
+      place.ask(o, PL.makes(S.Agent.ws(a)), cx, S.Agent.name(a), S.Agent.ws(a))
+    case Some{+from}:
+      out(o, cx, F.worktree_restore(S.Agent.name(a), from, S.Agent.snap(a)))
+
 def boot.placing(-o: S.St, placing: Bool, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o>:
   match placing:
     case True{}:
-      place.ask(o, PL.makes(S.Agent.ws(a)), cx, S.Agent.name(a), S.Agent.ws(a))
+      boot.place(o, PL.restore_of(S.Agent.ws(a)), cx, a)
     case False{}:
       boot.live(o, is_active(S.Agent.life(a)), cx, S.Agent.name(a))
 
@@ -4031,6 +4034,12 @@ def placed(-o: S.St, d: PL.Do, +cx: X.Cx<o>) -> X.Cx<o>:
       out(o, cx, F.worktree_drop(n, ws, 0n, 0n))
     case PL.PNone{}:
       cx
+    case PL.PRestored{+n, +ws}:
+      +cx2 = emit(o, emit(o, cx, M.EPlaced{n, ws, ""}, Unit{}, Unit{}, Unit{}), M.ESnapshot{n, None{}}, Unit{}, Unit{}, Unit{})
+      spawn(o, feed(o, cx2, M.MAIN(), FD.info(PL.ready_text(n, ws))), n, True{})
+    case PL.PUnrestored{+n, +e, +from}:
+      +cx2 = emit(o, emit(o, cx, M.EPlaced{n, J.JNull{}, e}, Unit{}, Unit{}, Unit{}), M.EWorkspace{n, from}, Unit{}, Unit{}, Unit{})
+      feed(o, stop_noted(o, cx2, n, S.LArchived{}, e), M.MAIN(), FD.warn(PL.unrestored_text(n, e)))
 
 # then its joiners (`sb spawn --place` while it was placing): the same
 def placed.join(-o: S.St, ns: List<&2, String>, +cx: X.Cx<o>, +d: PL.Do, +err: String) -> X.Cx<o>:

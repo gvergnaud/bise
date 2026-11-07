@@ -1274,6 +1274,12 @@ law fx_worktree_drop_bare:
 def fx_worktree_drop_bare():
   {==}
 
+law fx_worktree_restore_bare:
+  {FX.of(J.obj([J.kv("fx", J.JStr{"worktree_restore"})])) == FX.FWorktreeRestore{"", J.JNull{}, None{}} : FX.Fx}
+
+def fx_worktree_restore_bare():
+  {==}
+
 law fx_say_bare:
   {FX.of(J.obj([J.kv("fx", J.JStr{"say"})])) == FX.FSay{"", ""} : FX.Fx}
 
@@ -1484,6 +1490,19 @@ law fx_FWorktreeDrop_round:
 
 def fx_FWorktreeDrop_round(name, ws, dirty, unpushed):
   {==}
+
+law fx_FWorktreeRestore_round:
+  for name: String
+  for ws: J.Json
+  for snapshot: Maybe<&2, String>
+  {FX.of(FX.json(FX.FWorktreeRestore{name, ws, snapshot})) == FX.FWorktreeRestore{name, ws, snapshot} : FX.Fx}
+
+def fx_FWorktreeRestore_round(name, ws, snapshot):
+  match snapshot:
+    case None{}:
+      {==}
+    case Some{x_snapshot}:
+      {==}
 
 law fx_FSay_round:
   for agent: String

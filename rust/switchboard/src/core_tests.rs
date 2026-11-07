@@ -8,6 +8,8 @@ pub(super) struct FakeEnv {
     git: bool,
     loss: Loss,
     dropped: Vec<String>,
+    /// a restore's git error (issue 32 3b: its worktree not made again)
+    restore_err: Option<String>,
 }
 
 impl FakeEnv {
@@ -17,6 +19,7 @@ impl FakeEnv {
             git: true,
             loss: Loss::default(),
             dropped: Vec::new(),
+            restore_err: None,
         }
     }
 }
@@ -67,6 +70,9 @@ impl Env for FakeEnv {
         ws: &Workspace,
         _snap: Option<&str>,
     ) -> Result<Workspace, String> {
+        if let Some(e) = &self.restore_err {
+            return Err(e.clone());
+        }
         let mut ws = ws.clone();
         ws.dropped = false;
         let _ = name;

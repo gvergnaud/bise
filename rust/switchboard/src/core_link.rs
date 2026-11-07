@@ -153,7 +153,6 @@ impl Hub {
     fn query(&mut self, env: &mut dyn Env, q: &Value) -> Value {
         let name = jstr(q, "name");
         let ws: Option<Workspace> = serde_json::from_value(q["ws"].clone()).ok();
-        let snap = q["snapshot_ref"].as_str().map(|x| x.to_string());
         let res = |r: Result<Value, String>| match r {
             Ok(v) => json!({"ok": v}),
             Err(e) => json!({"err": e}),
@@ -162,7 +161,6 @@ impl Hub {
         let _t = self.spent.part(match jstr(q, "q").as_str() {
             "worktree_create" => "git worktree_create",
             "worktree_loss" => "git worktree_loss",
-            "worktree_restore" => "git worktree_restore",
             _ => "git query",
         });
         match jstr(q, "q").as_str() {
@@ -174,12 +172,6 @@ impl Hub {
                 let l = ws.map(|w| env.worktree_loss(&w)).unwrap_or_default();
                 json!({"dirty": l.dirty, "unpushed": l.unpushed})
             }
-            "worktree_restore" => match ws {
-                Some(w) => res(env
-                    .worktree_restore(&name, &w, snap.as_deref())
-                    .map(|w| json!(w))),
-                None => json!({"err": "no agent"}),
-            },
             other => json!({"err": format!("unknown query: {}", other)}),
         }
     }

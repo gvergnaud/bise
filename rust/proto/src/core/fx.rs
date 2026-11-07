@@ -28,6 +28,10 @@ core_kinds! {
         /// hub-loop: save (when `dirty`/`unpushed`) and remove the
         /// worktree `ws` of task `name`, off the hub's loop
         WorktreeDrop = "worktree_drop" => FWorktreeDrop { name: Str, ws: Json, dirty: Nat, unpushed: Nat },
+        /// hub-loop (issue 32 3b): make the dropped worktree `ws` of task
+        /// `name` again, its saved work (`snapshot`) put back, off the
+        /// hub's loop, then send input `placed` (its REPL starts after it)
+        WorktreeRestore = "worktree_restore" => FWorktreeRestore { name: Str, ws: Json, snapshot: OptStr },
         /// a text into an agent's REPL, starting a turn
         Say = "say" => FSay { agent: Str, text: Str },
         Passthrough = "passthrough" => FPassthrough { agent: Str, line: Str },

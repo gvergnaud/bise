@@ -6,8 +6,8 @@
 //! sb-core decides and commits first (bend/hub/place.bend), and its fx
 //! (`Effect::Place`) comes here: one worker thread runs the jobs in order
 //! (one git at a time on the repo, as before), with its own `GitEnv`; a
-//! made worktree goes back to the loop as `Msg::Placed`, which steps
-//! sb-core's `placed`; a removed one (its work saved first) as
+//! made worktree (a restored one too) goes back to the loop as
+//! `Msg::Placed`, which steps sb-core's `placed`; a removed one (its work saved first) as
 //! `Msg::Unplaced`, which steps sb-core's `unplaced` (issue 32 3b).
 //!
 //! Owns: the worker and its queue. Not here: what to make or remove and
@@ -75,6 +75,14 @@ fn worker(rx: Receiver<Job>, paths: Paths, to_loop: Sender<Msg>, git: crate::git
                 // sb-core ends the drop (a worktree it made for a task gone
                 // while placing: no task dropping, nothing follows)
                 if to_loop.send(Msg::Unplaced { name, snapshot, err }).is_err() {
+                    return;
+                }
+            }
+            Job::Restore { name, ws, snapshot } => {
+                let t0 = now_ms();
+                let (ws, err) = crate::place_job::restore(&mut env, &name, &ws, snapshot.as_deref());
+                log_line(&paths, &format!("worktree of {} made again off the loop in {} ms{}", name, now_ms().saturating_sub(t0), if err.is_empty() { String::new() } else { format!(": {err}") }));
+                if to_loop.send(Msg::Placed { name, ws, err }).is_err() {
                     return;
                 }
             }

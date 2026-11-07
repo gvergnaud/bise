@@ -1,5 +1,6 @@
 //! A worktree job of sb-core's (hub-loop, docs/issues/32): its fx
-//! `worktree_create` and `worktree_drop` (bend/hub/place.bend), run off the
+//! `worktree_create`, `worktree_drop` and `worktree_restore`
+//! (bend/hub/place.bend), run off the
 //! hub's loop by daemon/place_work.rs. Pure data; the decision is sb-core's.
 
 use serde_json::Value;
@@ -12,6 +13,19 @@ pub enum Job {
     /// Save what `dirty`/`unpushed` say would be lost, then remove the
     /// worktree `ws` of task `name`.
     Drop { name: String, ws: Value, dirty: u64, unpushed: u64 },
+    /// Make the dropped worktree `ws` of task `name` again, its saved work
+    /// (`snapshot`) put back; its end comes back as `Input::Placed`
+    /// (issue 32 3b: a /restore off the loop).
+    Restore { name: String, ws: Value, snapshot: Option<String> },
+}
+
+/// A restore's job, the same for the worker and the tests: the made
+/// worktree's ws, or git's words.
+pub(crate) fn restore(env: &mut dyn crate::core::Env, name: &str, ws: &Value, snapshot: Option<&str>) -> (Value, String) {
+    match serde_json::from_value(ws.clone()).map_err(|e| format!("its workspace does not read: {e}")).and_then(|w| env.worktree_restore(name, &w, snapshot)) {
+        Ok(w) => (serde_json::to_value(w).unwrap_or(Value::Null), String::new()),
+        Err(e) => (Value::Null, e),
+    }
 }
 
 /// Tests: what daemon/place_work.rs answers a `worktree_create`, at once
@@ -32,6 +46,10 @@ pub(crate) fn placed_now(env: &mut dyn crate::core::Env, e: &crate::core::Effect
                 Ok(snapshot) => Input::Unplaced { name: name.clone(), snapshot, err: String::new() },
                 Err(err) => Input::Unplaced { name: name.clone(), snapshot: None, err },
             }
+        }
+        Job::Restore { name, ws, snapshot } => {
+            let (ws, err) = restore(env, name, ws, snapshot.as_deref());
+            Input::Placed { name: name.clone(), ws, err }
         }
     })
 }

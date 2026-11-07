@@ -16,6 +16,7 @@ import ../hub/cx.bend as HX
 import ../hub/core.bend as HC
 import ../hub/place.bend as HPL
 import ../hub/gen/fx.bend as HF
+import ../hub/gen/feed.bend as FD
 
 # LAW: no REPL starts for a task whose worktree is still being made:
 # spawn (every path: the create, a message to a down task, a restore)
@@ -38,15 +39,16 @@ law placed_create_once:
   for e: {HM.ws_placing(HS.Agent.ws(a)) == False{} : Bool}
   {HPL.is_ok(HPL.placed_of.agent(Some{a}, n, ws, err)) == False{} : Bool}
 
-# LAW: a worktree that could not be made fails its live placing task,
-# with git's words, and names its spawner.
+# LAW: a worktree that could not be made fails its live placing task
+# (not a restore's: placed_of.made's None), with git's words, and names
+# its spawner.
 law placed_err_fails:
   for +a: HS.Agent
   for +n: String
   for +ws: J.Json
   for +err: String
   for e: {String.is_empty(err) == False{} : Bool}
-  {HPL.placed_of.live(True{}, a, n, ws, err) == HPL.PErr{n, err, HPL.parent_of(HS.Agent.parent(a))} : HPL.Do}
+  {HPL.placed_of.made(None{}, a, n, ws, err) == HPL.PErr{n, err, HPL.parent_of(HS.Agent.parent(a))} : HPL.Do}
 
 # LAW: that failure is one stop (as failed, with git's words) and one
 # word to the spawner (placed.tell: a message, or main's feed for his
@@ -110,7 +112,7 @@ law place_join_shares:
   for +n: String
   for +ws: J.Json
   for +err: String
-  {HPL.placed_of.live(True{}, a, b, HPL.join.ws(HPL.POk{n, ws}), HPL.join.err(HPL.POk{n, ws}, err)) == HPL.POk{b, ws} : HPL.Do}
+  {HPL.placed_of.made(None{}, a, b, HPL.join.ws(HPL.POk{n, ws}), HPL.join.err(HPL.POk{n, ws}, err)) == HPL.POk{b, ws} : HPL.Do}
 
 # LAW: A's worktree not made, a live placing joiner fails too, with the
 # same words, and its spawner is told (PErr, then placed_err_tells_once).
@@ -122,7 +124,7 @@ law place_join_err_fails_both:
   for +p: String
   for +err: String
   for h: {String.is_empty(e) == False{} : Bool}
-  {HPL.placed_of.live(True{}, a, b, HPL.join.ws(HPL.PErr{n, e, p}), HPL.join.err(HPL.PErr{n, e, p}, err))
+  {HPL.placed_of.made(None{}, a, b, HPL.join.ws(HPL.PErr{n, e, p}), HPL.join.err(HPL.PErr{n, e, p}, err))
     == HPL.PErr{b, e, HPL.parent_of(HS.Agent.parent(a))} : HPL.Do}
 
 # ---- a drop off the loop (issue 32 3b: `worktree_drop`, `unplaced`) ----
@@ -188,3 +190,71 @@ law boot_skips_not_dropping:
   for +cx: HX.Cx<o>
   for +a: HS.Agent
   {HC.boot.drop(o, False{}, cx, a) == cx : HX.Cx<o>}
+
+# ---- a restore off the loop (issue 32 3b: `worktree_restore`, `placed`) ----
+
+# LAW: a /restore of a task whose worktree is gone makes the task active
+# at once, its ws placing (no REPL: no_repl_before_placed), then asks the
+# shell to make the dropped ws again with its saved work.
+law restore_off_asks_once:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +a: HS.Agent
+  {HC.restore.off(o, cx, a)
+    == HC.restore.go.as(o, HC.out(o, HC.emit(o, cx, HM.EWorkspace{HS.Agent.name(a), HPL.restoring_ws(HS.Agent.ws(a))}, Unit{}, Unit{}, Unit{}),
+      HF.worktree_restore(HS.Agent.name(a), HS.Agent.ws(a), HS.Agent.snap(a))), a, HPL.restoring_note()) : HX.Cx<o> & HC.TaskR}
+
+# LAW: a restore's worktree made: PRestored (its REPL resumes); not made:
+# PUnrestored, back to the dropped ws it came from, with git's words.
+law placed_restored:
+  for +a: HS.Agent
+  for +n: String
+  for +ws: J.Json
+  for +from: J.Json
+  {HPL.placed_of.made(Some{from}, a, n, ws, "") == HPL.PRestored{n, ws} : HPL.Do}
+
+law placed_unrestored:
+  for +a: HS.Agent
+  for +n: String
+  for +ws: J.Json
+  for +from: J.Json
+  for +err: String
+  for e: {String.is_empty(err) == False{} : Bool}
+  {HPL.placed_of.made(Some{from}, a, n, ws, err) == HPL.PUnrestored{n, err, from} : HPL.Do}
+
+# LAW: a restore made again: its ws, its saved work used (no snapshot
+# left), then its REPL resumes.
+law restore_ok_clears_snapshot:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +n: String
+  for +ws: J.Json
+  {HC.placed(o, HPL.PRestored{n, ws}, cx)
+    == HC.spawn(o, HC.feed(o, HC.emit(o, HC.emit(o, cx, HM.EPlaced{n, ws, ""}, Unit{}, Unit{}, Unit{}), HM.ESnapshot{n, None{}}, Unit{}, Unit{}, Unit{}),
+      HM.MAIN(), FD.info(HPL.ready_text(n, ws))), n, True{}) : HX.Cx<o>}
+
+# LAW: a restore not made again: the task goes back archived in the
+# dropped ws it came from (its snapshot untouched), git's words in main's
+# feed; no REPL.
+law restore_err_keeps_archived:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +n: String
+  for +e: String
+  for +from: J.Json
+  {HC.placed(o, HPL.PUnrestored{n, e, from}, cx)
+    == HC.feed(o, HC.stop_noted(o, HC.emit(o, HC.emit(o, cx, HM.EPlaced{n, J.JNull{}, e}, Unit{}, Unit{}, Unit{}), HM.EWorkspace{n, from}, Unit{}, Unit{}, Unit{}),
+      n, HS.LArchived{}, e), HM.MAIN(), FD.warn(HPL.unrestored_text(n, e))) : HX.Cx<o>}
+
+# LAW: a hub stopped mid-restore asks for it again at its boot (a mate
+# that joined it waits for the same: restore_of skips it).
+law boot_reemits_stuck_restore:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +a: HS.Agent
+  for +from: J.Json
+  {HC.boot.place(o, Some{from}, cx, a) == HC.out(o, cx, HF.worktree_restore(HS.Agent.name(a), from, HS.Agent.snap(a))) : HX.Cx<o>}
+
+law boot_skips_restore_joiner:
+  for +ws: J.Json
+  {HPL.restore_of.go(True{}, ws) == None{} : Maybe<&2, J.Json>}

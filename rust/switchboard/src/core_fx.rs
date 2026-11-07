@@ -74,6 +74,7 @@ pub(super) fn plain(f: CoreFx) -> Plain {
         CoreFx::Kill(k) => Effect::Kill { agent: k.agent },
         CoreFx::WorktreeCreate(w) => Effect::Place(Job::Create { name: w.name, with_changes: w.with_changes }),
         CoreFx::WorktreeDrop(w) => Effect::Place(Job::Drop { name: w.name, ws: w.ws, dirty: w.dirty, unpushed: w.unpushed }),
+        CoreFx::WorktreeRestore(w) => Effect::Place(Job::Restore { name: w.name, ws: w.ws, snapshot: w.snapshot }),
         CoreFx::Say(s) => Effect::Say { agent: s.agent, text: s.text },
         CoreFx::Passthrough(p) => Effect::Passthrough { agent: p.agent, line: p.line },
         // a record of an agent's feed, written `sb <kind> :: <json>` (a
