@@ -440,12 +440,10 @@ impl super::Sb {
     }
 }
 
-/// The hub's items with numbered options, about a place (the hub's
-/// `choice_kind`): a digit answers them (the hub acts, then closes the
-/// item); typed words go to main.
-pub(super) fn choice_kind(kind: &str) -> bool {
-    matches!(kind, "merge" | "review" | "feature_try" | "feature_merge" | "update" | "signin")
-}
+/// The hub's items with numbered options, about a place
+/// ([`bise_proto::rows::CHOICE_KINDS`]): a digit answers them (the hub
+/// acts, then closes the item); typed words go to main.
+pub(super) use bise_proto::rows::choice_kind;
 
 /// A hub item, as the hub writes it: its head line (`#409 is ready to
 /// merge`), then its body (a merge: the PR's title, its facts dim, its

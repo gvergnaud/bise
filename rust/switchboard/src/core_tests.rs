@@ -4145,6 +4145,30 @@ fn open_card(t: &mut T, kind: &str, text: &str) -> u64 {
     *t.hub.st.cards.keys().max().unwrap_or_else(|| panic!("a {kind} card"))
 }
 
+/// The hub's item kinds live once, in bise_proto::rows::CHOICE_KINDS
+/// (architect m_54640); sb-core has its own list (hub/cardkind.bend
+/// `choice_kind`). Through the core link: sb-core opens an item of each
+/// kind of the const, and refuses a kind outside it, so the two never
+/// drift.
+#[test]
+fn sb_core_s_choice_kinds_are_the_proto_s() {
+    let open = |kind: &str| {
+        let mut t = T::new();
+        let mut fx = Vec::new();
+        let card = ci::CardOpen { kind: kind.into(), agent: MAIN.into(), text: "x
+
+1. yes
+2. no".into(), place: Some("wt:x".into()), pr: None };
+        t.hub.core(&mut fx, &mut t.env, None, In::CardOpen(card));
+        let opened = t.hub.st.open_cards().any(|c| c.kind == kind);
+        opened
+    };
+    for kind in bise_proto::rows::CHOICE_KINDS {
+        assert!(open(kind), "sb-core refuses the hub item kind {kind:?}: add it to bend/hub/cardkind.bend choice_kind");
+    }
+    assert!(!open("not_a_choice"), "sb-core opens a kind outside CHOICE_KINDS");
+}
+
 // an approval card takes one of its options, never typed words: they leave
 // it open and wake nobody; the TUI's explicit deny (`deny: <why>`) refuses
 #[test]

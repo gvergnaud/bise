@@ -15,6 +15,7 @@
 // until the core's next rows no longer have it (the TUI's `answered` set):
 // the hub's snapshot lags the act by a moment.
 import type { Card } from '@/proto';
+import { CHOICE_KINDS as CHOICE_KIND_LIST } from '@/proto/app_methods.gen';
 import { inbox } from '@/proto/words_inbox.gen';
 import { cardKey, sortCards } from './order';
 
@@ -57,9 +58,9 @@ export function current(list: readonly Card[], s: InboxState): Card | undefined 
   return list.find((c) => cardKey(c) === s.cur) ?? list[0];
 }
 
-/** The hub's items with numbered options about a place (the TUI's and the hub's choice_kind): a
+/** The hub's items with numbered options about a place (bise_proto::rows::CHOICE_KINDS, generated): a
  *  digit answers them; typed words go to main, never as their answer. */
-const CHOICE_KINDS: ReadonlySet<string> = new Set(['merge', 'review', 'feature_try', 'feature_merge', 'update', 'signin']);
+const CHOICE_KINDS: ReadonlySet<string> = new Set(CHOICE_KIND_LIST);
 
 /** Words answer it (a question), not only its options: never an approval or a choice item, which
  *  only 1/2 (a click, ⌘⏎) decides (ambient m_8773: a typed line never merges anything). */

@@ -14,3 +14,5 @@ export const NOTIFICATIONS = ["core/projects", "core/open", "core/prefs", "core/
 export const NO_LOG = ["core/provider_use", "core/shot", "core/computer_peek"] as const;
 /** the prefs key of when he last looked at a project: SEEN_PREFIX + its id (bise_proto::rows::seen_key) */
 export const SEEN_PREFIX = "seen.";
+/** the hub's items with numbered options: a digit answers them, typed words go to main (bise_proto::rows::CHOICE_KINDS) */
+export const CHOICE_KINDS = ["merge", "review", "feature_try", "feature_merge", "update", "signin"] as const;

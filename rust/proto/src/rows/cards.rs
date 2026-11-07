@@ -60,6 +60,26 @@ pub enum OptAct {
     SignIn,
 }
 
+/// The hub's items with numbered options, about a place: opened and
+/// closed by the hub's Rust side, his digit answers them (the hub acts,
+/// then closes the item), typed words go to main. `merge`: a PR ready to
+/// merge (pr-design §6.3); `review`: a PR that asks his review
+/// (pr-integration rule 6); `feature_try`, `feature_merge`: a feature
+/// branch ready to try, then to merge (dev-flow §5.1); `update`: a newer
+/// bise release; `signin`: the ChatGPT sign-in expired (expired-ux).
+///
+/// The one list: the hub and the TUI read it by [`choice_kind`], the
+/// window by its generated copy (app_methods.gen.ts); sb-core's own
+/// (bend/hub/cardkind.bend `choice_kind`) is pinned to it by a test
+/// through the core link (switchboard core_tests
+/// `sb_core_s_choice_kinds_are_the_proto_s`).
+pub const CHOICE_KINDS: &[&str] = &["merge", "review", "feature_try", "feature_merge", "update", "signin"];
+
+/// A kind of [`CHOICE_KINDS`].
+pub fn choice_kind(kind: &str) -> bool {
+    CHOICE_KINDS.contains(&kind)
+}
+
 /// Option `n` of a card of `kind`, done by the client and never sent:
 /// a merge's `2 open it on GitHub` (pr-design §6.3: the item stays), a
 /// review's `1 open it on GitHub` (pr-integration rule 6), a sign-in's

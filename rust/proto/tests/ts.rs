@@ -214,6 +214,8 @@ fn render_app_methods() -> String {
     writeln!(s, "export const NO_LOG = [{}] as const;", list(app_rpc::NO_LOG.iter().map(|x| x.to_string()).collect())).unwrap();
     writeln!(s, "/** the prefs key of when he last looked at a project: SEEN_PREFIX + its id (bise_proto::rows::seen_key) */").unwrap();
     writeln!(s, "export const SEEN_PREFIX = {:?};", bise_proto::rows::SEEN_PREFIX).unwrap();
+    writeln!(s, "/** the hub's items with numbered options: a digit answers them, typed words go to main (bise_proto::rows::CHOICE_KINDS) */").unwrap();
+    writeln!(s, "export const CHOICE_KINDS = [{}] as const;", list(bise_proto::rows::CHOICE_KINDS.iter().map(|x| x.to_string()).collect())).unwrap();
     s
 }
 

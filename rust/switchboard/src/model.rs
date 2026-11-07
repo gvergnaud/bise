@@ -133,20 +133,11 @@ pub fn user_kind(kind: &str) -> bool {
     matches!(kind, "question" | "plan" | "drop" | "confirm") || choice_kind(kind)
 }
 
-/// The hub's items with numbered options, about a place (hub/model.bend
-/// `choice_kind`): opened and closed by the hub's Rust side, the user's
-/// digit comes back as `Effect::CardChoice`. `merge`: a PR ready to merge
-/// (pr-design §6.3); `review`: a PR that asks his review (pr-integration
-/// rule 6, core_review.rs); `feature_try`, `feature_merge`: a feature
-/// branch ready to try, then to merge (dev-flow §5.1); `update`: a newer
-/// bise release (release_line.rs); `signin`: the ChatGPT sign-in expired
-/// (expired-ux, signin_card.rs).
-pub fn choice_kind(kind: &str) -> bool {
-    matches!(
-        kind,
-        "merge" | "review" | "feature_try" | "feature_merge" | "update" | "signin"
-    )
-}
+/// The hub's items with numbered options, about a place
+/// ([`bise_proto::rows::CHOICE_KINDS`], sb-core's hub/cardkind.bend
+/// `choice_kind` pinned to it): opened and closed by the hub's Rust side,
+/// the user's digit comes back as `Effect::CardChoice`.
+pub use bise_proto::rows::choice_kind;
 
 /// The durable state, as sb-core last sent it.
 #[derive(Clone, Debug, Default)]
