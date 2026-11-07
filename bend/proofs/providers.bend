@@ -320,6 +320,21 @@ def Laws.plan_401_expired():
 def Laws.plan_key_command_failed():
   {==}
 
+def Laws.key_fresh_kept():
+  {==}
+
+def Laws.key_cached_on_failure(why):
+  {==}
+
+def Laws.key_cached_on_exit():
+  {==}
+
+def Laws.key_cache_needs_same_command():
+  {==}
+
+def Laws.key_dropped_on_401():
+  {==}
+
 def Laws.plan_other_attempts_unchanged(a):
   {==}
 

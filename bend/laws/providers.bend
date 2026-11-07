@@ -959,10 +959,72 @@ law plan_401_expired:
 # refresh refused) is the expired sign-in too; another provider's
 # key_command keeps its line.
 law plan_key_command_failed:
-  {Bool.and(String.eq(Pv.key_why(True{}, True{}, "chatgpt", ""),
+  {Bool.and(String.eq(Pv.key_why(True{}, True{}, "chatgpt", "", "exit 1"),
       "your ChatGPT sign-in expired. sign in again in /provider, or run bise login chatgpt."),
-    String.eq(Pv.key_why(True{}, False{}, "corp", ""),
+    String.eq(Pv.key_why(True{}, False{}, "corp", "", ""),
       "no corp key: its key_command failed or printed nothing (config.toml)"))
+    == True{} : Bool}
+
+# ---- the last good key (runtime/provider-pure.bend key_pick) ----
+# key_command runs before every call; the login keychain locked at night
+# made it fail, and the turn with it (15 of 34 failed turns, 24 Oct -
+# 7 Nov). The REPL keeps the last good key per provider and command, in
+# memory (Pv.Out), and uses it when the command fails.
+
+# LAW: a command that prints a key gives a fresh key (trimmed), which
+# the memory keeps for that provider and command.
+law key_fresh_kept:
+  {Pv.key_mem(Pv.mem0(), "corp", "get-token",
+      Pv.key_pick(Pv.mem0(), "corp", "get-token", Pv.KRan{0, " tok1\n", ""}))
+    == Pv.CallMem{Con{Pv.KeyMem{"corp", "get-token", "tok1"}, Nil{}}}
+    : Pv.CallMem}
+
+# LAW: whatever made the command fail (no answer in time, could not
+# start), the last good key of the same provider and command goes on,
+# with the cause (logged).
+law key_cached_on_failure:
+  for why: String
+  {Pv.key_pick(Pv.CallMem{Con{Pv.KeyMem{"corp", "get-token", "k1"}, Nil{}}},
+      "corp", "get-token", Pv.KFail{why})
+    == Pv.KCached{"k1", why} : Pv.KeyPick}
+
+# LAW: a non-zero exit too (the keychain locked: security exits 36), and
+# the cause is its exit code and the first line of its stderr; the
+# memory is left as it was.
+law key_cached_on_exit:
+  {Pv.key_pick(Pv.CallMem{Con{Pv.KeyMem{"corp", "get-token", "k1"}, Nil{}}},
+      "corp", "get-token",
+      Pv.KRan{36, "", "security: The user name or passphrase you entered is not correct.\nmore"})
+    == Pv.KCached{"k1",
+      "exit 36: security: The user name or passphrase you entered is not correct."}
+    : Pv.KeyPick}
+
+# LAW: a key kept for another command (the user changed key_command) is
+# not used: no key, and the turn's error names the command's failure.
+law key_cache_needs_same_command:
+  {Pv.key_why(True{}, False{}, "corp", "", Pv.key_missing_cause(
+      Pv.key_pick(Pv.CallMem{Con{Pv.KeyMem{"corp", "old-cmd", "k1"}, Nil{}}},
+        "corp", "get-token", Pv.KRan{1, "", ""})))
+    == "no corp key: its key_command failed (exit 1); check it in config.toml"
+    : String}
+
+# LAW: the provider refusing the key (401, 403) forgets the provider's
+# kept key; another answer (a 500, a 200) keeps it, and another
+# provider's key stays.
+law key_dropped_on_401:
+  {Bool.and(
+      Bool.and(String.eq(Pv.key_used(Pv.key_pick(
+          Pv.key_drop(Pv.CallMem{Con{Pv.KeyMem{"corp", "c", "k1"}, Nil{}}}, "corp", 401),
+          "corp", "c", Pv.KFail{"t"})), ""),
+        String.eq(Pv.key_used(Pv.key_pick(
+          Pv.key_drop(Pv.CallMem{Con{Pv.KeyMem{"corp", "c", "k1"}, Nil{}}}, "corp", 403),
+          "corp", "c", Pv.KFail{"t"})), "")),
+      Bool.and(String.eq(Pv.key_used(Pv.key_pick(
+          Pv.key_drop(Pv.CallMem{Con{Pv.KeyMem{"corp", "c", "k1"}, Nil{}}}, "corp", 500),
+          "corp", "c", Pv.KFail{"t"})), "k1"),
+        String.eq(Pv.key_used(Pv.key_pick(
+          Pv.key_drop(Pv.CallMem{Con{Pv.KeyMem{"gw", "c", "k2"}, Nil{}}}, "corp", 401),
+          "gw", "c", Pv.KFail{"t"})), "k2")))
     == True{} : Bool}
 
 # LAW: a plan provider's other attempts are unchanged (a completed

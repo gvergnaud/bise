@@ -261,6 +261,186 @@ type CallMem is Data:
 def mem0() -> CallMem:
   CallMem{Nil{}}
 
+# ---- a key_command's answer, and the key the call uses ----
+# key_command runs before every call (a gateway's short-lived token, a
+# keychain read). It fails at night when the login keychain is locked:
+# then the last good key of the same provider and command goes on; only
+# the provider refusing it (401/403, key_drop) forgets it.
+
+# what the command did: exited with its streams, or never answered
+# (could not start, ran past its limit: why)
+type KeyRun is Data:
+  KRan{code: U32, out: String, err: String}
+  KFail{why: String}
+
+# the key of this call: a fresh one (kept for the next calls), the last
+# good one (the command failed: cause, logged), or none (cause, in the
+# turn's error)
+type KeyPick is Data:
+  KFresh{key: String}
+  KCached{key: String, cause: String}
+  KNone{cause: String}
+
+# the fresh key: the trimmed stdout of a command that exited 0, else ""
+def key_out(r: KeyRun) -> String:
+  match r:
+    case KRan{+code, +out, _}:
+      Bool.pick(String, U32.is_zero(code), String.trim(out), "")
+    case KFail{_}:
+      ""
+
+def key_first(xs: List<&2, String>) -> String:
+  match xs:
+    case Nil{}:
+      ""
+    case Con{+l, _}:
+      l
+
+def key_err_line(+err: String) -> String:
+  String.take(String.trim(key_first(String.split(String.trim(err),
+    Tx.newline()))), 200n)
+
+def key_cause.err(empty: Bool, +head: String, +line: String) -> String:
+  match empty:
+    case True{}:
+      head
+    case False{}:
+      String.concat([head, ": ", line])
+
+# why the command gave no key, in the user's words: its exit code and
+# the first line of its stderr ("exit 36: security: ... keychain")
+def key_cause(r: KeyRun) -> String:
+  match r:
+    case KRan{+code, _, +err}:
+      key_cause.err(String.is_empty(key_err_line(err)),
+        Bool.pick(String, U32.is_zero(code), "it printed nothing",
+          String.append("exit ", U32.show(code))),
+        key_err_line(err))
+    case KFail{+why}:
+      why
+
+def key_is(+prov: String, +cmd: String, +k: KeyMem) -> Bool:
+  match k:
+    case KeyMem{+p, +c, _}:
+      Bool.and(String.eq(p, prov), String.eq(c, cmd))
+
+def key_of_mem(+k: KeyMem) -> String:
+  match k:
+    case KeyMem{_, _, +key}:
+      key
+
+def key_prov(+k: KeyMem) -> String:
+  match k:
+    case KeyMem{+p, _, _}:
+      p
+
+# whether the list's head is the provider's key for that command
+def key_at(+keys: List<&2, KeyMem>, +prov: String, +cmd: String) -> Bool:
+  match keys:
+    case Nil{}:
+      False{}
+    case Con{+k, _}:
+      key_is(prov, cmd, k)
+
+# the walk stops at its hit (the hit is a parameter, computed on the tail)
+def key_find.go(keys: List<&2, KeyMem>, +hit: Bool, +prov: String,
+    +cmd: String) -> Maybe<&2, String>:
+  match keys hit:
+    case Nil{} _:
+      None{}
+    case Con{+k, _} True{}:
+      Some{key_of_mem(k)}
+    case Con{_, +rest} False{}:
+      key_find.go(rest, key_at(rest, prov, cmd), prov, cmd)
+
+def key_find(+keys: List<&2, KeyMem>, +prov: String, +cmd: String)
+    -> Maybe<&2, String>:
+  key_find.go(keys, key_at(keys, prov, cmd), prov, cmd)
+
+def key_without.at(hit: Bool, +k: KeyMem, +rest: List<&2, KeyMem>)
+    -> List<&2, KeyMem>:
+  match hit:
+    case True{}:
+      rest
+    case False{}:
+      Con{k, rest}
+
+# every key but the provider's (whatever its command)
+def key_without(+keys: List<&2, KeyMem>, +prov: String) -> List<&2, KeyMem> :
+  match keys:
+    case Nil{}:
+      Nil{}
+    case Con{+k, +rest}:
+      key_without.at(String.eq(key_prov(k), prov), k,
+        key_without(rest, prov))
+
+def key_pick.old(m: Maybe<&2, String>, +cause: String) -> KeyPick:
+  match m:
+    case None{}:
+      KNone{cause}
+    case Some{+key}:
+      KCached{key, cause}
+
+def key_pick.of(empty: Bool, +fresh: String, +mem: CallMem, +prov: String,
+    +cmd: String, +cause: String) -> KeyPick:
+  match empty:
+    case False{}:
+      KFresh{fresh}
+    case True{}:
+      match mem:
+        case CallMem{+keys}:
+          key_pick.old(key_find(keys, prov, cmd), cause)
+
+# the key a call uses, from what key_command did and the REPL's memory
+def key_pick(+mem: CallMem, +prov: String, +cmd: String, +r: KeyRun)
+    -> KeyPick:
+  key_pick.of(String.is_empty(key_out(r)), key_out(r), mem, prov, cmd,
+    key_cause(r))
+
+# why the pick has no key ("" when it has one)
+def key_missing_cause(+p: KeyPick) -> String:
+  match p:
+    case KNone{+cause}:
+      cause
+    case _:
+      ""
+
+def key_used(+p: KeyPick) -> String:
+  match p:
+    case KFresh{+key}:
+      key
+    case KCached{+key, _}:
+      key
+    case KNone{_}:
+      ""
+
+# the memory after the pick: a fresh key replaces the provider's entry
+# (a changed command drops the old one); a cached or no key leaves it
+def key_keep(+mem: CallMem, +prov: String, +cmd: String, +key: String)
+    -> CallMem:
+  match mem:
+    case CallMem{+keys}:
+      CallMem{Con{KeyMem{prov, cmd, key}, key_without(keys, prov)}}
+
+def key_mem(+mem: CallMem, +prov: String, +cmd: String, +p: KeyPick)
+    -> CallMem:
+  match p:
+    case KFresh{+key}:
+      key_keep(mem, prov, cmd, key)
+    case _:
+      mem
+
+def key_refused(+status: U32) -> Bool:
+  Bool.or(U32.is_eq(status, 401), U32.is_eq(status, 403))
+
+# the provider refused the key (401/403): its entry goes, the next call
+# asks key_command again and uses nothing older; any other answer keeps it
+def key_drop(+mem: CallMem, +prov: String, +status: U32) -> CallMem:
+  match mem:
+    case CallMem{+keys}:
+      Bool.pick(CallMem, key_refused(status),
+        CallMem{key_without(keys, prov)}, CallMem{keys})
+
 # ---- the resolution ----
 
 # what a call needs: the provider id, the model id sent on the wire,
@@ -1165,20 +1345,29 @@ def attempt_plan(plan: Bool, +status: U32, +code: String, a: Attempt)
 
 # the missing key's line: a plan's token command failed (signed out, the
 # refresh refused): its sign-in expired; else the key_command's, else
-# the key_env's
-def key_why.cmd(plan: Bool, +prov: String) -> String:
+# the key_env's. cause: why the key_command gave no key (key_cause:
+# its exit code and the first line of its stderr; "" unknown)
+def key_why.said(empty: Bool, +prov: String, +cause: String) -> String:
+  match empty:
+    case True{}:
+      String.concat(["no ", prov,
+        " key: its key_command failed or printed nothing (config.toml)"])
+    case False{}:
+      String.concat(["no ", prov, " key: its key_command failed (", cause,
+        "); check it in config.toml"])
+
+def key_why.cmd(plan: Bool, +prov: String, +cause: String) -> String:
   match plan:
     case True{}:
       Plan.PLAN_EXPIRED()
     case False{}:
-      String.concat(["no ", prov,
-        " key: its key_command failed or printed nothing (config.toml)"])
+      key_why.said(String.is_empty(cause), prov, cause)
 
-def key_why(has_cmd: Bool, plan: Bool, +prov: String, +key_env: String)
-    -> String:
+def key_why(has_cmd: Bool, plan: Bool, +prov: String, +key_env: String,
+    +cause: String) -> String:
   match has_cmd:
     case True{}:
-      key_why.cmd(plan, prov)
+      key_why.cmd(plan, prov, cause)
     case False{}:
       String.concat(["no ", prov, " key yet (", key_env,
         " is not set): /provider sets it up"])
@@ -1299,3 +1488,35 @@ def slice_ms(stop: Bool, +left: U32) -> U32:
 
 def left_after(stop: Bool, +left: U32) -> U32:
   Bool.pick(U32, stop, 0, U32.sub(left, U32.min(left, 100)))
+
+# ---- the call's context ----
+# What one model call needs beside its request, resolved once per call
+# (not per attempt) by prepare: the provider, its full id, the models
+# file, the key (key_pick's), whether it also goes as a bearer token (a
+# key_command gateway), the extra headers (headers in config.toml, then
+# the headers_env value), the stream's wait, the name errors give the
+# provider; req: the Core's action id; live: the reply streams in.
+type CallCtx is Data:
+  CallCtx{pv: Prov, id: String, mfile: String, key: String, bearer: Bool,
+    extra: String, wait: ProvWait, label: String, req: U32, live: Bool}
+
+# hval: the headers_env variable's value ("" none)
+def prepare(+pv: Prov, +mfile: String, +key: String, +hval: String,
+    +req: U32, +live: Bool) -> CallCtx:
+  match pv:
+    case Prov{+prov, +model, _, +url, _, _}:
+      CallCtx{pv, String.concat([prov, "/", model]), mfile, key,
+        Bool.not(String.is_empty(key_command(mfile, prov,
+          String.concat([prov, "/", model])))),
+        String.append(headers(mfile, prov, String.concat([prov, "/", model])),
+          hval),
+        stream_wait(mfile, prov, String.concat([prov, "/", model])),
+        prov_label(mfile, prov, url), req, live}
+
+# the provider id of a call (the key memory's key)
+def ctx_prov(+c: CallCtx) -> String:
+  match c:
+    case CallCtx{+pv, _, _, _, _, _, _, _, _, _}:
+      match pv:
+        case Prov{+provider, _, _, _, _, _}:
+          provider

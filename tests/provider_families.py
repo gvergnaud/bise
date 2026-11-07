@@ -233,6 +233,8 @@ def part_d():
         '[models."fakegw/missing"]\nheaders_env = "UNSET_GW_HEADERS"\n\n'
         '[models."fakegw/empty"]\nheaders_env = "EMPTY_GW_HEADERS"\n\n'
         '[models."fakegw/broken"]\nkey_command = "echo nope; exit 3"\n\n'
+        # a keychain that locks after its first read (the night: security exits 36)
+        '[models."fakegw/flaky"]\nkey_command = "f=$TMPDIR/flaky-key; if test -e $f; then echo keychain locked >&2; exit 36; fi; touch $f; echo flaky-tok"\n\n'
         '[providers.fakeslow]\nname = "Fake Slow"\napi = "openai-chat"\nbase_url = "%s"\nkey_env = ""\n'
         'idle_timeout_sec = 1\n\n'
         '[providers.fakepatient]\nname = "Fake Patient"\napi = "openai-chat"\nbase_url = "%s"\nkey_env = ""\n'
@@ -334,6 +336,20 @@ def part_d():
         recs = [json.loads(l) for l in open(F.LOG)][n:]
         check(repl.poll() is None and not recs and any("key_command failed" in l for l in out),
               "a failing key_command: no call, a line that names it: %r" % out[-3:])
+        # c2-turn-survives (a): the keychain locks after the first call;
+        # the second call goes on with the key the REPL kept, and the
+        # command's failure (exit code, stderr) is one line in repl.err
+        recs_flaky = []
+        for text in ("hello flaky 1", "hello flaky 2"):
+            turn("fakegw/flaky", text)
+            recs_flaky += [json.loads(l) for l in open(F.LOG)][n:]
+            n = len(open(F.LOG).readlines())
+        keys = [r["headers"].get("x-api-key") for r in recs_flaky]
+        errs = open(err).read()
+        check(keys == ["flaky-tok", "flaky-tok"]
+              and "key_command failed (exit 36: keychain locked); the last good key goes on" in errs,
+              "a key_command that fails on its 2nd run: the last good key goes on, the cause logged: %r %r"
+              % (keys, errs[-300:]))
         # provider-timeout: the same slow server (3 s before the first
         # byte), two idle_timeout_sec; the first ends with a Ctrl+C (ten
         # attempts with their backoff would take minutes)

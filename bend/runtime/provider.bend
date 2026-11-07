@@ -5,6 +5,9 @@
 # The provider table and the retry policy are pure and live in
 # runtime/provider-pure.bend (the laws pin them there); this module
 # only maps the Http values onto that policy and runs the effects.
+# A call resolves once (Pvp.prepare: its CallCtx, the key in it), then
+# runs its attempts on that context. The key: key_command's, else the
+# last good one the REPL kept (Pvp.key_pick, in Out's CallMem).
 import Base
 import ../core/api.bend as Api
 import ../core/wire.bend as W
@@ -697,76 +700,83 @@ def request_body(+request: String, +pv: Pvp.Prov, +limit: Nat) -> IO(Built):
 # names the call in the debug log
 @unsafe
 def model_call.try(fuel: Nat, +tries: Nat, n: Out, +request: String,
-    +key: String, +pv: Pvp.Prov, +call: Nat, +req: U32, +limit: Nat,
-    +shrunk: Bool, +live: Bool) -> IO(Out & Rem.RemoteRes):
+    +ctx: Pvp.CallCtx, +call: Nat, +limit: Nat, +shrunk: Bool)
+    -> IO(Out & Rem.RemoteRes):
   match fuel:
     case 0n:
       IO.pure(Out & Rem.RemoteRes,
         (n, Rem.RRErr{"provider unreachable: retries exhausted"}))
     case 1n+k:
-      do IO<Out & Rem.RemoteRes>:
-        +b : Built <- request_body(request, pv, limit)
-        model_call.sent(b, k, tries, n, request, key, pv, call, req, limit,
-          shrunk, live)
+      match ctx:
+        case Pvp.CallCtx{+pv, _, _, _, _, _, _, _, _, _}:
+          do IO<Out & Rem.RemoteRes>:
+            +b : Built <- request_body(request, pv, limit)
+            model_call.sent(b, k, tries, n, request, ctx, call, limit, shrunk)
+
+# the provider refused the call's key (401/403): the REPL forgets the
+# key it kept for that provider (Pvp.key_drop)
+def out.key_drop(n: Out, +prov: String, +status: U32) -> Out:
+  match n:
+    case OStd{+mem}:
+      OStd{Pvp.key_drop(mem, prov, status)}
+    case ONet{sock, +mem}:
+      ONet{sock, Pvp.key_drop(mem, prov, status)}
 
 # one attempt with its body built: logged in the ring (/debug
 # completion, runtime/reqlog.bend) before it goes out, then sent
 @unsafe
 def model_call.sent(b: Built, +k: Nat, +tries: Nat, n: Out,
-    +request: String, +key: String, +pv: Pvp.Prov, +call: Nat, +req: U32,
-    +limit: Nat, +shrunk: Bool, +live: Bool) -> IO(Out & Rem.RemoteRes):
+    +request: String, +ctx: Pvp.CallCtx, +call: Nat, +limit: Nat,
+    +shrunk: Bool) -> IO(Out & Rem.RemoteRes):
   match b:
-    case Built{+wreq, +mfile, +names, +ckey, +json, +fill, +body}:
-      match pv:
-        case Pvp.Prov{+prov, +model, +st, +url, _, +facts}:
-          do IO<Out & Rem.RemoteRes>:
-            # the last guard (BISE-242): every call answered, logged
-            # when it had to answer one
-            og : Unit <- unpaired_log(W.wire_unpaired(wreq), call, req)
-            rl : Unit <- Rl.write(req, live, String.concat([prov, "/", model]),
-              tries, call, fill_body(fill), request)
-            # a gateway (headers_env, key_command), read on each call:
-            # its extra headers, its key also as a bearer token
-            +hvar : String <- IO.pure(String,
-              Pvp.headers_env(mfile, prov, String.concat([prov, "/", model])))
-            hr : Result<&1, &1, U32 & String, String> <- IO.get_env(hvar)
-            +bearer : Bool <- IO.pure(Bool, Bool.not(String.is_empty(
-              Pvp.key_command(mfile, prov, String.concat([prov, "/", model])))))
-            hdrs : Map<&2, List<&2, String>> <- IO.pure(Map<&2, List<&2, String>>,
-              headers_of(Api.with_extra_headers(String.append(
-                Pvp.headers(mfile, prov, String.concat([prov, "/", model])), P.env_or(hr, "")),
-                Api.with_bearer(bearer, key,
-                  Api.with_cache_header(Pvp.cache_header(names), ckey,
-                    Api.headers(st, Api.facts_betas(facts), key)))), Http.empty()))
-            +rpath : String <- Rl.reply_path(req)
-            # a slow gateway or local model: its idle_timeout_sec
-            ng : Out & Got <- call.raced(n,
-              String.concat([Nat.show(call), "-", Nat.show(tries)]),
-              String.concat([Nat.show(call), ".", Nat.show(tries)]), live,
-              st, url, hdrs, body,
-              Pvp.stream_wait(mfile, prov, String.concat([prov, "/", model])), rpath)
-            got_then(ng, n0 => +g => do IO<Out & Rem.RemoteRes>:
-              lg : Unit <- model_call.log(call, tries, model, url, json, g)
-              # the usage line names the full id (the TUI's catalog key)
-              nu : Out <- usage_note(g, n0, st, String.concat([prov, "/", model]), req)
-              # big-request: a body over the provider's size limit goes
-              # again once, its images within half its weight
-              # (model_call.sized); else BISE-293: the calls named back
-              # through the request's tools, a refusal in bise's words and
-              # the provider's
-              model_call.sized(Bool.and(Bool.not(shrunk),
-                  Bool.and(W.size_refused(got_status(g), got_raw(g)),
-                    Nat.is_lt(0n, fill_img_bytes(fill)))),
-                nu, k, tries, req,
-                Pvp.size_retry_why(Pvp.prov_label(mfile, prov, url), got_status(g),
-                  Nat.div(fill_bytes(fill), 2n)),
-                k4 => n3 => model_call.step(got_for(W.req_tools(wreq),
-                    Pvp.prov_label(mfile, prov, url), key, Api.facts_plan(facts), model, st, g),
-                  n3, k4, tries, req,
-                  k2 => n2 => model_call.try(k2, Nat.add(tries, 1n), n2, request,
-                    key, pv, call, req, limit, shrunk, live)),
-                k3 => n4 => model_call.try(k3, Nat.add(tries, 1n), n4, request,
-                  key, pv, call, req, Nat.div(fill_bytes(fill), 2n), True{}, live)))
+    case Built{+wreq, _, +names, +ckey, +json, +fill, +body}:
+      match ctx:
+        case Pvp.CallCtx{+pv, +id, _, +key, +bearer, +extra, +wait, +label,
+            +req, +live}:
+          match pv:
+            case Pvp.Prov{+prov, +model, +st, +url, _, +facts}:
+              do IO<Out & Rem.RemoteRes>:
+                # the last guard (BISE-242): every call answered, logged
+                # when it had to answer one
+                og : Unit <- unpaired_log(W.wire_unpaired(wreq), call, req)
+                rl : Unit <- Rl.write(req, live, id, tries, call,
+                  fill_body(fill), request)
+                # a gateway (headers_env, key_command): its extra
+                # headers, its key also as a bearer token
+                hdrs : Map<&2, List<&2, String>> <- IO.pure(Map<&2, List<&2, String>>,
+                  headers_of(Api.with_extra_headers(extra,
+                    Api.with_bearer(bearer, key,
+                      Api.with_cache_header(Pvp.cache_header(names), ckey,
+                        Api.headers(st, Api.facts_betas(facts), key)))), Http.empty()))
+                +rpath : String <- Rl.reply_path(req)
+                # a slow gateway or local model: its idle_timeout_sec
+                ng : Out & Got <- call.raced(n,
+                  String.concat([Nat.show(call), "-", Nat.show(tries)]),
+                  String.concat([Nat.show(call), ".", Nat.show(tries)]), live,
+                  st, url, hdrs, body, wait, rpath)
+                got_then(ng, n0 => +g => do IO<Out & Rem.RemoteRes>:
+                  lg : Unit <- model_call.log(call, tries, model, url, json, g)
+                  # the usage line names the full id (the TUI's catalog key)
+                  nu : Out <- usage_note(g, out.key_drop(n0, prov, got_status(g)),
+                    st, id, req)
+                  # big-request: a body over the provider's size limit goes
+                  # again once, its images within half its weight
+                  # (model_call.sized); else BISE-293: the calls named back
+                  # through the request's tools, a refusal in bise's words and
+                  # the provider's
+                  model_call.sized(Bool.and(Bool.not(shrunk),
+                      Bool.and(W.size_refused(got_status(g), got_raw(g)),
+                        Nat.is_lt(0n, fill_img_bytes(fill)))),
+                    nu, k, tries, req,
+                    Pvp.size_retry_why(label, got_status(g),
+                      Nat.div(fill_bytes(fill), 2n)),
+                    k4 => n3 => model_call.step(got_for(W.req_tools(wreq),
+                        label, key, Api.facts_plan(facts), model, st, g),
+                      n3, k4, tries, req,
+                      k2 => n2 => model_call.try(k2, Nat.add(tries, 1n), n2, request,
+                        ctx, call, limit, shrunk)),
+                    k3 => n4 => model_call.try(k3, Nat.add(tries, 1n), n4, request,
+                      ctx, call, Nat.div(fill_bytes(fill), 2n), True{})))
 
 # a request the provider refused for its size, that had images: one line
 # (a retry the TUI shows), then the same request at once with half the
@@ -784,27 +794,30 @@ def model_call.sized(big: Bool, nu: Out, +k: Nat, +tries: Nat, +req: U32,
         n2 : Out <- note(n1, Ev.retry(req, Nat.add(tries, 1n), why, 0))
         again(k)(n2)
 
+# the call's context, built once (Pvp.prepare), then its attempts
 @unsafe
 def model_call.go(n: Out, +request: String, +key: String, +pv: Pvp.Prov,
-    +req: U32, +live: Bool) -> IO(Out & Rem.RemoteRes):
+    +mfile: String, +hval: String, +req: U32, +live: Bool)
+    -> IO(Out & Rem.RemoteRes):
   do IO<Out & Rem.RemoteRes>:
     +call : Nat <- IO.now()
     +limit : Nat <- req_limit()
-    model_call.try(Pvp.max_attempts(), 0n, n, request, key, pv, call, req,
-      limit, False{}, live)
+    model_call.try(Pvp.max_attempts(), 0n, n, request,
+      Pvp.prepare(pv, mfile, key, hval, req, live), call, limit, False{})
 
 # a provider with a key_env (or a key_command) needs its key; one with
 # key_env = "" and no key_command (a local server) calls without a key.
 # No key: one line that says what to do (BISE-294: the TUI names the
 # provider and points at /provider; main's thread reads it as is)
+@unsafe
 def model_call.key(missing: Bool, n: Out, +request: String, +key: String,
-    +pv: Pvp.Prov, +why: String, +req: U32, +live: Bool)
-    -> IO(Out & Rem.RemoteRes):
+    +pv: Pvp.Prov, +mfile: String, +hval: String, +why: String, +req: U32,
+    +live: Bool) -> IO(Out & Rem.RemoteRes):
   match missing:
     case True{}:
       IO.pure(Out & Rem.RemoteRes, (n, Rem.RRErr{why}))
     case False{}:
-      model_call.go(n, request, key, pv, req, live)
+      model_call.go(n, request, key, pv, mfile, hval, req, live)
 
 def key_cmd.max_output() -> U32:
   65536
@@ -812,87 +825,139 @@ def key_cmd.max_output() -> U32:
 def key_cmd.timeout_ms() -> U32:
   60000
 
-# key_command's answer: its stdout, trimmed, when it exits 0; else ""
-def key_cmd.out(ok: Bool, +out: String) -> String:
-  match ok:
-    case True{}:
-      String.trim(out)
-    case False{}:
-      ""
-
-def key_cmd.streams(+code: U32, oe: String & String) -> String:
-  match oe:
-    case (out, _):
-      key_cmd.out(U32.is_zero(code), out)
-
-def key_cmd.done(res: U32 & (String & String)) -> String:
+def key_cmd.done(res: U32 & (String & String)) -> Pvp.KeyRun:
   match res:
-    case (code, oe):
-      key_cmd.streams(code, oe)
+    case (code, (out, err)):
+      Pvp.KRan{code, out, err}
 
+def key_cmd.failed(e: U32 & String) -> Pvp.KeyRun:
+  match e:
+    case (_, why):
+      Pvp.KFail{String.concat(["no answer in ",
+        U32.show(U32.div(key_cmd.timeout_ms(), 1000)), " s or could not start: ",
+        why])}
+
+# what key_command did, as the pure pick reads it (Pvp.KeyRun)
 def key_cmd.answer(r: Result<&1, &1, U32 & String, U32 & (String & String)>)
-    -> String:
+    -> Pvp.KeyRun:
   match r:
     case Done{res}:
       key_cmd.done(res)
-    case Fail{_}:
-      ""
+    case Fail{e}:
+      key_cmd.failed(e)
+
+# the REPL's memory of its calls, read without losing the handle
+def out.mem(n: Out) -> Out & Pvp.CallMem:
+  match n:
+    case OStd{+mem}:
+      (OStd{mem}, mem)
+    case ONet{sock, +mem}:
+      (ONet{sock, mem}, mem)
+
+def out.set_mem(n: Out, +mem: Pvp.CallMem) -> Out:
+  match n:
+    case OStd{_}:
+      OStd{mem}
+    case ONet{sock, _}:
+      ONet{sock, mem}
+
+# a call that goes on with the last good key: its command's failure,
+# one line on stderr (repl.err) and in the session debug log, so a
+# locked keychain is seen even when no turn fails
+def key_log(+p: Pvp.KeyPick, +prov: String, +req: U32) -> IO(Unit):
+  match p:
+    case Pvp.KCached{_, +cause}:
+      do IO<Unit>:
+        IO.print_err(String.concat(["bise: request ", U32.show(req), ": the ",
+          prov, " key_command failed (", cause, "); the last good key goes on"]))
+        +d : String <- Dbg.dir()
+        +ts : Nat <- Dbg.now(d)
+        Dbg.append(d, Dp.ev_line(ts, "key_command_failed_cached",
+          Con{Dp.FStr{"provider", prov}, Con{Dp.FStr{"cause", cause},
+            Con{Dp.FNat{"req", U32.to_nat(req)}, Nil{}}}}) ++ "
+")
+    case _:
+      IO.pure(Unit, Unit{})
+
+# the key key_command gave, else the one the REPL kept (Pvp.key_pick);
+# the memory follows the pick (Pvp.key_mem)
+@unsafe
+def model_call.picked(nm: Out & Pvp.CallMem, +request: String, +pv: Pvp.Prov,
+    +mfile: String, +hval: String, +cmd: String, +run: Pvp.KeyRun, +req: U32,
+    +live: Bool) -> IO(Out & Rem.RemoteRes):
+  match nm:
+    case (n, +mem):
+      match pv:
+        case Pvp.Prov{+prov, _, _, _, +key_env, +facts}:
+          do IO<Out & Rem.RemoteRes>:
+            +p : Pvp.KeyPick <- IO.pure(Pvp.KeyPick, Pvp.key_pick(mem, prov, cmd, run))
+            lg : Unit <- key_log(p, prov, req)
+            model_call.key(String.is_empty(Pvp.key_used(p)),
+              out.set_mem(n, Pvp.key_mem(mem, prov, cmd, p)), request,
+              Pvp.key_used(p), pv, mfile, hval,
+              Pvp.key_why(True{}, Api.facts_plan(facts), prov, key_env,
+                Pvp.key_missing_cause(p)), req, live)
 
 # the key of a call: key_command's output when the catalog names one,
 # run by /bin/sh before every call like Claude Code's apiKeyHelper (a
 # gateway's short-lived token); else the key_env variable's value
 @unsafe
-def key_of.pick(none: Bool, +cmd: String, +env_key: String) -> IO(String):
+def model_call.key_of(none: Bool, n: Out, +request: String, +pv: Pvp.Prov,
+    +mfile: String, +hval: String, +cmd: String, +env_key: String, +req: U32,
+    +live: Bool) -> IO(Out & Rem.RemoteRes):
   match none:
     case True{}:
-      IO.pure(String, env_key)
+      match pv:
+        case Pvp.Prov{+prov, _, _, _, +key_env, +facts}:
+          model_call.key(Bool.and(Bool.not(String.is_empty(key_env)),
+              String.is_empty(env_key)), n, request, env_key, pv, mfile, hval,
+            Pvp.key_why(False{}, Api.facts_plan(facts), prov, key_env, ""),
+            req, live)
     case False{}:
-      do IO<String>:
+      do IO<Out & Rem.RemoteRes>:
         r : Result<&1, &1, U32 & String, U32 & (String & String)> <- Process.run(
           "/bin/sh", Con{"-c", Con{cmd, Nil{}}}, "", key_cmd.max_output(),
           key_cmd.timeout_ms())
-        IO.pure(String, key_cmd.answer(r))
+        model_call.picked(out.mem(n), request, pv, mfile, hval, cmd,
+          key_cmd.answer(r), req, live)
 
 # the missing key's line: Pvp.key_why (a ChatGPT plan's: its sign-in
-# expired; the key_command's, else the key_env's)
+# expired; the key_command's with its cause, else the key_env's)
 @unsafe
-def model_call.auth(n: Out, +request: String, +pv: Pvp.Prov, +req: U32,
-    +live: Bool) -> IO(Out & Rem.RemoteRes):
+def model_call.auth(n: Out, +request: String, +pv: Pvp.Prov, +mfile: String,
+    +hval: String, +req: U32, +live: Bool) -> IO(Out & Rem.RemoteRes):
   match pv:
-    case Pvp.Prov{+prov, +model, _, _, +key_env, +facts}:
+    case Pvp.Prov{+prov, +model, _, _, +key_env, _}:
       do IO<Out & Rem.RemoteRes>:
-        +mfile : String <- models_file()
         +cmd : String <- IO.pure(String,
           Pvp.key_command(mfile, prov, String.concat([prov, "/", model])))
         kr : Result<&1, &1, U32 & String, String> <- IO.get_env(key_env)
-        +key : String <- key_of.pick(String.is_empty(cmd), cmd, P.env_or(kr, ""))
-        model_call.key(Bool.and(Bool.not(Bool.and(String.is_empty(key_env),
-            String.is_empty(cmd))), String.is_empty(key)), n, request, key, pv,
-          Pvp.key_why(Bool.not(String.is_empty(cmd)), Api.facts_plan(facts), prov,
-            key_env), req, live)
+        model_call.key_of(String.is_empty(cmd), n, request, pv, mfile, hval,
+          cmd, P.env_or(kr, ""), req, live)
 
 @unsafe
 def model_call.headers_ready(missing: Bool, +hvar: String, n: Out,
-    +request: String, +pv: Pvp.Prov, +req: U32, +live: Bool)
-    -> IO(Out & Rem.RemoteRes):
+    +request: String, +pv: Pvp.Prov, +mfile: String, +hval: String,
+    +req: U32, +live: Bool) -> IO(Out & Rem.RemoteRes):
   match missing:
     case True{}:
       IO.pure(Out & Rem.RemoteRes, (n, Rem.RRErr{Pvp.headers_why(hvar)}))
     case False{}:
-      model_call.auth(n, request, pv, req, live)
+      model_call.auth(n, request, pv, mfile, hval, req, live)
 
 @unsafe
 def model_call.env(n: Out, +request: String, +pv: Pvp.Prov, +req: U32,
     +live: Bool) -> IO(Out & Rem.RemoteRes):
   match pv:
-    case Pvp.Prov{+prov, +model, _, _, +key_env, +facts}:
+    case Pvp.Prov{+prov, +model, _, _, _, _}:
       do IO<Out & Rem.RemoteRes>:
         +mfile : String <- models_file()
         +hvar : String <- IO.pure(String,
           Pvp.headers_env(mfile, prov, String.concat([prov, "/", model])))
         hr : Result<&1, &1, U32 & String, String> <- IO.get_env(hvar)
-        model_call.headers_ready(Pvp.headers_missing(hvar, P.env_or(hr, "")),
-          hvar, n, request, pv, req, live)
+        +hval : String <- IO.pure(String, P.env_or(hr, ""))
+        model_call.headers_ready(Pvp.headers_missing(hvar, hval),
+          hvar, n, request, pv, mfile, hval, req, live)
 
 def model_call.resolved(r: Pvp.Resolved, n: Out, +request: String,
     +req: U32, +live: Bool) -> IO(Out & Rem.RemoteRes):
