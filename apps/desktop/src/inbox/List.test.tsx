@@ -7,7 +7,7 @@ import { inbox } from '@/proto/words_inbox.gen';
 import { formatRoute, parseRoute } from '@/app/route';
 import { createRouter, RouterContext } from '@/app/router';
 import { Store, StoreProvider } from '@/store';
-import { InboxView } from './List';
+import { InboxView, type InboxPorts } from './List';
 import { pickedN } from './settled';
 import type { InboxRecord, Jump } from './past';
 
@@ -30,9 +30,15 @@ function mount(records: InboxRecord[] = RECORDS) {
   const answered: string[] = [];
   const jumps: Jump[] = [];
   const pages: string[] = [];
+  // the screen's ports, each act written down: the answer, the jump, the page beside (⌘O)
+  const ports: InboxPorts = {
+    answer: (p, c) => answered.push(`${p}#${String(c)}`),
+    jump: (j) => jumps.push(j),
+    openPage: (p, page, block) => pages.push(`${p}/${page}#${block ?? ''}`),
+  };
   render(<InboxView cards={CARDS} records={records} names={NAMES} projects={PROJECTS} now={NOW}
     pageOf={(_, page) => (page === 'wait-line' ? { title: 'the wait line', version: 3 } : undefined)}
-    ports={{ answer: (p, c) => answered.push(`${p}#${String(c)}`), jump: (j) => jumps.push(j), openPage: (p, page, block) => pages.push(`${p}/${page}#${block ?? ''}`) }} />);
+    ports={ports} />);
   return { answered, jumps, pages, root: screen.getByTestId('inbox.screen') };
 }
 
