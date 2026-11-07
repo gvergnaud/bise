@@ -1069,7 +1069,7 @@ impl Shell {
     /// Tell the poller the branches to follow (it sends nothing when
     /// they did not change).
     fn plan_prs(&mut self) {
-        let plan = crate::forge::poll::Plan { watches: self.hub.pr_watches(), clients: self.hub.has_clients() };
+        let plan = crate::forge::poll::Plan { watches: self.hub.pr_watches(), clients: self.hub.has_clients(), followed: self.pr_followed() };
         if let Some(p) = self.prs.as_mut() {
             p.plan(plan);
         }

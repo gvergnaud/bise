@@ -711,6 +711,12 @@ pub struct Hub {
     pr_ok_ms: BTreeMap<String, u64>,
     pub pr_late: Option<crate::forge::ForgeError>,
     pr_done: BTreeSet<String>,
+    /// pr-integration rule 2: the PRs followed by number (an agent only
+    /// reviews them: their artifact, no place), by their link's one form,
+    /// as the last answer said; `followed_ok_ms` its time. Runtime only:
+    /// no news, no cleanup, only their artifact's status and archive.
+    followed: BTreeMap<String, crate::place::PrSnapshot>,
+    followed_ok_ms: u64,
     /// pr-news (pr-design §6): who owns each PR, what was passed on, the
     /// checks' tries (forge/news.rs); `pr_bots`: the repo's `[pr]
     /// trusted_bots` (the daemon reads config.toml).
@@ -850,6 +856,8 @@ impl Hub {
             places: BTreeMap::new(),
             on_you: BTreeSet::new(),
             prs: BTreeMap::new(),
+            followed: BTreeMap::new(),
+            followed_ok_ms: 0,
             landing: BTreeMap::new(),
             flow: None,
             feature_lids: BTreeMap::new(),
@@ -1385,6 +1393,7 @@ impl Hub {
                 self.pr_cleanup(fx, env, l, pr, &agents);
             }
         }
+        self.followed_in(fx, r.at_ms, &r.followed);
         // pr-news: the reviews, comments and failing checks of the PRs
         // that changed, to the agent that owns each
         for (branch, act) in &r.activity {
@@ -1402,6 +1411,26 @@ impl Hub {
         self.pr_ok_ms.retain(|k, _| ids.contains(k.as_str()));
         // pr-merge: the ready-to-merge items against the PRs now
         self.merge_sync(fx, env);
+    }
+
+    /// pr-integration rule 2: the followed PRs' answer (every one asked
+    /// this round): each changed one's artifact kept in step (its status,
+    /// its archive at the end), one that no longer resolves dropped. Not
+    /// a place's: no news, no cleanup, no merge item.
+    fn followed_in(&mut self, fx: &mut Fx, at_ms: u64, answer: &[crate::forge::poll::Followed]) {
+        let mut now: BTreeMap<String, crate::place::PrSnapshot> = BTreeMap::new();
+        for f in answer {
+            let Some(pr) = &f.pr else { continue };
+            if self.followed.get(&f.url) != Some(pr) {
+                fx.push(Effect::PrArtifact { pr: Box::new(pr.clone()), agent: None });
+            }
+            now.insert(f.url.clone(), pr.clone());
+        }
+        if now != self.followed {
+            self.dirty = true;
+        }
+        self.followed = now;
+        self.followed_ok_ms = at_ms;
     }
 
     /// pr-news' decisions, carried out: a message from `github` (sb-core's

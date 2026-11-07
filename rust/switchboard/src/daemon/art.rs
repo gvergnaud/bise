@@ -50,6 +50,9 @@ pub(super) struct Art {
     memo: std::cell::RefCell<crate::store_gen::Memo<(u64, u64, u64, u64), ArtView>>,
     /// The library's folders, read by its mtime (daemon/art_folders.rs).
     pub(super) lib: super::art_folders::LibCache,
+    /// The open PR artifacts' links, newest first, by the store's
+    /// generation (daemon/pr_arts.rs: the PRs the poller follows).
+    pub(super) prs: std::cell::RefCell<Option<(u64, Vec<String>)>>,
 }
 
 /// What the artifacts event is built from (the memo's value).

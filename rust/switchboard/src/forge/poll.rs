@@ -6,6 +6,11 @@
 //! when no client is attached. A merged PR's branch is not asked again.
 //! An error backs off (×2, at most 10 min); the boxes keep their last
 //! state (faint once stale).
+//!
+//! pr-integration rule 2: the PRs an agent only reviews (their artifact,
+//! no place) are followed by number in the same round ([`Plan::followed`],
+//! the own repo's in the branches' query, another repo's in one more
+//! call); one that no longer resolves is not asked again.
 
 use super::{Activity, Forge, ForgeError, RepoRef};
 use crate::place::{Checks, PrSnapshot, PrState};
@@ -94,6 +99,22 @@ pub struct Plan {
     pub watches: Vec<Watch>,
     /// A client is attached (else the slow cadence).
     pub clients: bool,
+    /// pr-integration rule 2: the PRs followed by number, by their link's
+    /// one form (`forge::pr_link`): the open PR artifacts no place has
+    /// (an agent reviews it), newest first, [`FOLLOW_MAX`] at most.
+    /// Asked in the same round as the branches, at their pace.
+    pub followed: Vec<String>,
+}
+
+/// The PRs followed by number at most (the newest artifacts first).
+pub const FOLLOW_MAX: usize = 20;
+
+/// A followed PR's answer: its PR, or None when it no longer resolves
+/// (the hub stops following it).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Followed {
+    pub url: String,
+    pub pr: Option<PrSnapshot>,
 }
 
 /// A place's branch as git sees it here.
@@ -120,6 +141,8 @@ pub struct Report {
     /// pr-news: the activity of the PRs that changed, by branch (only
     /// with an answer; see [`Watcher`]'s `activity`).
     pub activity: Vec<(String, Activity)>,
+    /// The followed PRs' answers (only with an answer: every one asked).
+    pub followed: Vec<Followed>,
 }
 
 /// The local git side the worker needs (a fake in the tests).
@@ -194,6 +217,28 @@ pub struct Watcher {
     /// BISE-136: place -> what its private worktree has checked out (its
     /// branch, "" detached) and its commits not on the trunk.
     heads: BTreeMap<String, (String, Option<u32>)>,
+    /// pr-integration rule 2: the followed PRs that no longer resolve
+    /// (the forge's typed not-found): never asked again by this worker.
+    gone: BTreeSet<String>,
+}
+
+/// The followed PRs to ask, by repo (the watcher's own first, in the
+/// branches' query): each repo's numbers and their links.
+fn follow_by_repo(own: &RepoRef, followed: &[String], gone: &BTreeSet<String>) -> Vec<(RepoRef, Vec<(u64, String)>)> {
+    let mut out: Vec<(RepoRef, Vec<(u64, String)>)> = vec![(own.clone(), Vec::new())];
+    for l in followed.iter().filter(|u| !gone.contains(*u)).filter_map(|u| super::pr_link(u)) {
+        if l.provider != bise_proto::rows::PrProvider::Github {
+            continue;
+        }
+        let Some((owner, name)) = l.repo.split_once('/') else { continue };
+        let repo = RepoRef { host: l.host.clone(), owner: owner.into(), name: name.into() };
+        let same = |r: &RepoRef| r.host == repo.host && r.owner.eq_ignore_ascii_case(owner) && r.name.eq_ignore_ascii_case(name);
+        match out.iter_mut().find(|(r, _)| same(r)) {
+            Some((_, ns)) => ns.push((l.number, l.url)),
+            None => out.push((repo, vec![(l.number, l.url)])),
+        }
+    }
+    out
 }
 
 impl Watcher {
@@ -210,6 +255,7 @@ impl Watcher {
             looked: BTreeMap::new(),
             logs: BTreeMap::new(),
             heads: BTreeMap::new(),
+            gone: BTreeSet::new(),
         }
     }
 
@@ -338,12 +384,13 @@ impl Watcher {
     pub fn step(&mut self, now: u64) -> Option<Report> {
         let moved = if self.tips_ms.is_none_or(|t| now >= t + TIPS_MS) { self.read_tips(now) } else { false };
         let asked = self.asked();
+        let follow = follow_by_repo(&self.repo, &self.plan.followed, &self.gone);
         let every = every(self.plan.clients, self.fast(now));
-        if asked.is_empty() || !self.cadence.due(now, every) {
+        if (asked.is_empty() && follow.iter().all(|(_, ns)| ns.is_empty())) || !self.cadence.due(now, every) {
             // only the local side is new (a commit: the held line counts it)
-            return moved.then(|| Report { at_ms: now, prs: None, local: self.local(&BTreeSet::new()), activity: Vec::new() });
+            return moved.then(|| Report { at_ms: now, prs: None, local: self.local(&BTreeSet::new()), activity: Vec::new(), followed: Vec::new() });
         }
-        let prs = self.forge.fetch(&self.repo, &asked);
+        let (prs, followed) = self.fetch_all(&asked, &follow);
         let mut merged = BTreeSet::new();
         let mut activity = Vec::new();
         match &prs {
@@ -371,7 +418,39 @@ impl Watcher {
             }
             ps
         });
-        Some(Report { at_ms: now, prs: Some(prs), local: self.local(&merged), activity })
+        Some(Report { at_ms: now, prs: Some(prs), local: self.local(&merged), activity, followed })
+    }
+
+    /// One round's asks: the own repo's branches and followed numbers in
+    /// one query, each other repo's followed numbers in one more (rule
+    /// 2: the same round, never a timer of their own). The branches'
+    /// answer, and the followed ones' (none when the own query failed;
+    /// another repo's failure only skips its PRs this round). A followed
+    /// PR that no longer resolves is not asked again.
+    fn fetch_all(&mut self, asked: &[String], follow: &[(RepoRef, Vec<(u64, String)>)]) -> (Result<Vec<PrSnapshot>, super::ForgeError>, Vec<Followed>) {
+        let mut followed = Vec::new();
+        let mut own = Err(super::ForgeError::Other("not asked".into()));
+        for (i, (repo, ns)) in follow.iter().enumerate() {
+            let numbers: Vec<u64> = ns.iter().map(|(n, _)| *n).collect();
+            let branches = if i == 0 { asked } else { &[] };
+            let answer = self.forge.fetch(repo, branches, &numbers);
+            if let Ok(a) = &answer {
+                for ((n, url), (m, pr)) in ns.iter().zip(&a.numbered) {
+                    debug_assert_eq!(n, m);
+                    if pr.is_none() {
+                        self.gone.insert(url.clone());
+                    }
+                    followed.push(Followed { url: url.clone(), pr: pr.clone() });
+                }
+            }
+            if i == 0 {
+                own = answer.map(|a| a.prs);
+                if own.is_err() {
+                    return (own, Vec::new());
+                }
+            }
+        }
+        (own, followed)
     }
 }
 
@@ -468,13 +547,16 @@ mod tests {
     }
 
     impl Forge for Fake {
-        fn fetch(&self, _repo: &RepoRef, branches: &[String]) -> Result<Vec<PrSnapshot>, ForgeError> {
-            self.calls.lock().unwrap().push(branches.to_vec());
-            let mut a = self.answer.lock().unwrap().clone();
-            if let Ok(ps) = a.as_mut() {
-                ps.retain(|p| branches.contains(&p.branch));
-            }
-            a
+        /// A followed number answers the scripted PR of that number
+        /// (`u<n>`), none when the script has no such PR.
+        fn fetch(&self, repo: &RepoRef, branches: &[String], numbers: &[u64]) -> Result<super::super::Answer, ForgeError> {
+            let mut call = branches.to_vec();
+            call.extend(numbers.iter().map(|n| format!("{}/{}#{}", repo.owner, repo.name, n)));
+            self.calls.lock().unwrap().push(call);
+            let all = self.answer.lock().unwrap().clone()?;
+            let prs = all.iter().filter(|p| branches.contains(&p.branch)).cloned().collect();
+            let numbered = numbers.iter().map(|n| (*n, all.iter().find(|p| p.number == *n).cloned())).collect();
+            Ok(super::super::Answer { prs, numbered })
         }
     }
 
@@ -561,14 +643,14 @@ mod tests {
             }),
         );
         let w = Watch { place: "wt:a".into(), branch: "sb/a".into(), path: root.to_string_lossy().into(), base: Some(base), head: false };
-        p.plan(Plan { watches: vec![w], clients: true });
+        p.plan(Plan { watches: vec![w], clients: true, followed: Vec::new() });
         let r = rx.recv_timeout(Duration::from_secs(10)).expect("a report");
         assert_eq!(r.local[0].tip.as_deref(), Some(tip.as_str()));
         assert_eq!(r.local[0].commits, Some(2));
         assert_eq!(r.local[0].dirty, Some(true));
         assert_eq!(r.prs.unwrap().unwrap()[0].number, 5);
         // the same plan again: not sent (the worker keeps its cadence)
-        p.plan(Plan { watches: p.last.clone().unwrap().watches, clients: true });
+        p.plan(Plan { watches: p.last.clone().unwrap().watches, clients: true, followed: Vec::new() });
         drop(p);
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -589,7 +671,7 @@ mod tests {
             Box::new(FakeGit { tips: tips.clone() }),
         );
         let head = |b: &str| Watch { place: "pt:/p/fix".into(), branch: b.into(), path: "/p/fix".into(), base: None, head: true };
-        w.plan(Plan { watches: vec![head("")], clients: true });
+        w.plan(Plan { watches: vec![head("")], clients: true, followed: Vec::new() });
         // a first sight: the hub hears it, the forge is not asked
         let r = w.step(1_000).unwrap();
         assert_eq!(r.prs, None);
@@ -605,7 +687,7 @@ mod tests {
         let r = w.step(19_000).unwrap();
         assert_eq!(r.local[0].branch, "feat/x");
         assert_eq!(r.local[0].tip, None, "the tip is the watched branch's");
-        w.plan(Plan { watches: vec![head("feat/x")], clients: true });
+        w.plan(Plan { watches: vec![head("feat/x")], clients: true, followed: Vec::new() });
         let r = w.step(25_000).unwrap();
         assert_eq!(calls.lock().unwrap().last().unwrap(), &["feat/x"]);
         assert_eq!(r.prs.unwrap().unwrap()[0].number, 7);
@@ -629,7 +711,7 @@ mod tests {
         );
         // nothing to follow: nothing asked
         assert!(w.step(0).is_none());
-        w.plan(Plan { watches: vec![watch("a"), watch("b")], clients: true });
+        w.plan(Plan { watches: vec![watch("a"), watch("b")], clients: true, followed: Vec::new() });
         let r = w.step(1_000).unwrap();
         assert_eq!(calls.lock().unwrap().len(), 1);
         assert_eq!(calls.lock().unwrap()[0], ["a", "b"]);
@@ -652,12 +734,12 @@ mod tests {
         assert_eq!(calls.lock().unwrap().len(), 4, "a tip move alone asks nothing");
         assert!(w.step(106_000).is_some(), "fast again (pushed), 15 s after the last ask");
         // no client: 5 min
-        w.plan(Plan { watches: vec![watch("a"), watch("b")], clients: false });
+        w.plan(Plan { watches: vec![watch("a"), watch("b")], clients: false, followed: Vec::new() });
         assert!(w.step(200_000).is_none());
         assert!(w.step(406_000).is_some());
         // offline: back-off, the hub gets the error
         *answer.lock().unwrap() = Err(ForgeError::Offline("x".into()));
-        w.plan(Plan { watches: vec![watch("a"), watch("b")], clients: true });
+        w.plan(Plan { watches: vec![watch("a"), watch("b")], clients: true, followed: Vec::new() });
         let r = w.step(466_000).unwrap();
         assert!(matches!(r.prs, Some(Err(ForgeError::Offline(_)))));
         assert!(w.step(466_000 + 2 * SLOW_MS - 1).is_none());
@@ -670,5 +752,40 @@ mod tests {
         let r = w.step(466_000 + 3 * SLOW_MS).unwrap();
         assert_eq!(calls.lock().unwrap()[n], ["b"]);
         assert_eq!(r.prs.unwrap().unwrap()[0].state, PrState::Merged);
+    }
+
+    /// pr-integration rule 2 (architect m_54087): the followed PRs go in
+    /// the same round as the branches, the own repo's in the branches'
+    /// query, another repo's in one more call; one that no longer
+    /// resolves is not asked again; with nothing but followed PRs the
+    /// worker still asks.
+    #[test]
+    fn followed_prs_ride_the_same_round() {
+        let answer = Arc::new(Mutex::new(Ok(vec![pr("a", 1, PrState::Open, Checks::Pass), pr("feat/x", 75286, PrState::Open, Checks::Running)])));
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let repo = RepoRef { host: "github.com".into(), owner: "o".into(), name: "r".into() };
+        let mut w = Watcher::new(repo, Box::new(Fake { answer: answer.clone(), calls: calls.clone() }), Box::new(FakeGit { tips: Default::default() }));
+        let followed = vec![
+            "https://github.com/O/R/pull/75286".to_string(),
+            "https://github.com/o/r/pull/12".to_string(),
+            "https://github.com/acme/web/pull/1".to_string(),
+        ];
+        w.plan(Plan { watches: vec![watch("a")], clients: true, followed: followed.clone() });
+        let r = w.step(1_000).unwrap();
+        assert_eq!(*calls.lock().unwrap(), [vec!["a", "o/r#75286", "o/r#12"], vec!["acme/web#1"]]);
+        assert_eq!(r.prs.unwrap().unwrap().len(), 1);
+        let got: Vec<(&str, Option<u64>)> = r.followed.iter().map(|f| (f.url.as_str(), f.pr.as_ref().map(|p| p.number))).collect();
+        // each by its link's one form
+        assert_eq!(got, [("https://github.com/o/r/pull/75286", Some(75286)), ("https://github.com/o/r/pull/12", None), ("https://github.com/acme/web/pull/1", Some(1))]);
+        // #12 does not resolve: not asked again; no branch left: still asked
+        w.plan(Plan { watches: Vec::new(), clients: true, followed });
+        calls.lock().unwrap().clear();
+        let r = w.step(100_000).unwrap();
+        assert_eq!(*calls.lock().unwrap(), [vec!["o/r#75286"], vec!["acme/web#1"]]);
+        assert_eq!(r.followed.len(), 2);
+        // the own query fails: the round's error, no followed answers
+        *answer.lock().unwrap() = Err(ForgeError::Offline("x".into()));
+        let r = w.step(200_000).unwrap();
+        assert!(matches!(r.prs, Some(Err(_))) && r.followed.is_empty());
     }
 }

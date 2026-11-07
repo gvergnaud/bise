@@ -275,8 +275,14 @@ impl PrView {
             checks: pr.checks.clone(),
             stale_ms,
             facts: pr.facts.clone(),
-            yours: crate::forge::yours(pr),
+            yours: crate::forge::yours(pr, true),
         }
+    }
+
+    /// A followed PR (an agent only reviews it, pr-integration rule 2):
+    /// the same view, but it never waits on his merge (no merge item).
+    pub fn followed(pr: &PrSnapshot, stale_ms: Option<u64>) -> PrView {
+        PrView { yours: crate::forge::yours(pr, false), ..PrView::of(pr, stale_ms) }
     }
 }
 

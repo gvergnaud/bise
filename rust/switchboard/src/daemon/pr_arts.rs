@@ -16,6 +16,37 @@ impl Shell {
     }
 }
 
+impl Shell {
+    /// pr-integration rule 2: the PRs the poller follows by number: the
+    /// open PR artifacts (not archived) no place has (an agent reviews
+    /// them), newest first, `poll::FOLLOW_MAX` at most. The store is read
+    /// again only when it changed (its generation).
+    pub(super) fn pr_followed(&self) -> Vec<String> {
+        let gen = crate::store_gen::now();
+        let open = {
+            let mut cache = self.art.prs.borrow_mut();
+            match cache.as_ref().filter(|(g, _)| *g == gen) {
+                Some((_, urls)) => urls.clone(),
+                None => {
+                    let urls = open_prs(&self.art_store());
+                    *cache = Some((gen, urls.clone()));
+                    urls
+                }
+            }
+        };
+        let places: BTreeSet<String> = self.hub.prs.values().filter_map(|p| crate::forge::pr_link(&p.url)).map(|l| l.url).collect();
+        open.into_iter().filter(|u| !places.contains(u)).take(crate::forge::poll::FOLLOW_MAX).collect()
+    }
+}
+
+/// The open PR artifacts' links (not archived), newest first.
+fn open_prs(store: &Store) -> Vec<String> {
+    let archived = store.archived();
+    let mut ms: Vec<_> = store.stored().into_iter().filter(|m| m.kind == "pr" && !archived.contains_key(&m.id)).collect();
+    ms.sort_by_key(|m| std::cmp::Reverse(m.current().map_or(m.created_ms, |v| v.at_ms)));
+    ms.iter().filter_map(|m| crate::forge::pr_link(&m.source)).map(|l| l.url).collect()
+}
+
 /// Read what the store holds for `pr`, apply what `sync` says.
 fn sync_store(store: &Store, pr: &crate::place::PrSnapshot, agent: Option<&str>, now: u64) -> Result<(), String> {
     let Some(link) = crate::forge::pr_link(&pr.url) else { return Ok(()) };

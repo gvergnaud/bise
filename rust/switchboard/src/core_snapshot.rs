@@ -39,15 +39,22 @@ impl Hub {
     /// artifact rows' status (artifacts::join_pr_status).
     pub fn pr_rows_by_url(&self, now: u64) -> BTreeMap<String, bise_proto::rows::Pr> {
         let (_, stale) = self.pr_views(now);
-        crate::place::places(&self.st, &self.prs)
+        // the followed PRs (an agent only reviews them): no place, no agents
+        let age = now.saturating_sub(self.followed_ok_ms);
+        let late = (self.pr_late.is_some() || age > PR_STALE_MS).then_some(age);
+        let mut out: BTreeMap<String, bise_proto::rows::Pr> = self
+            .followed
             .iter()
-            .filter_map(|p| {
-                let pr = p.pr.as_ref()?;
-                let url = crate::forge::pr_link(&pr.url)?.url;
-                let view = crate::place::PrView::of(pr, stale.get(&p.id).copied());
-                Some((url, crate::forge::news::pr_row(&view, &p.agents)))
-            })
-            .collect()
+            .map(|(url, pr)| (url.clone(), crate::forge::news::pr_row(&crate::place::PrView::followed(pr, late), &[])))
+            .collect();
+        // a place's PR wins over the same one followed
+        for p in crate::place::places(&self.st, &self.prs) {
+            let Some(pr) = p.pr.as_ref() else { continue };
+            let Some(link) = crate::forge::pr_link(&pr.url) else { continue };
+            let view = crate::place::PrView::of(pr, stale.get(&p.id).copied());
+            out.insert(link.url, crate::forge::news::pr_row(&view, &p.agents));
+        }
+        out
     }
 
     /// The client snapshot (agents, cards) for the views.

@@ -28,8 +28,10 @@ fn lit(s: &str) -> String {
     serde_json::to_string(s).unwrap_or_else(|_| "\"\"".into())
 }
 
-/// The query for `branches` of `repo` (measured: 25 aliases cost 1 point).
-pub fn query(repo: &RepoRef, branches: &[String]) -> String {
+/// The query for `branches` of `repo` and the PRs it follows by number
+/// (pr-integration rule 2: an alias `n<i>` each, in the same query;
+/// measured: 25 aliases cost 1 point).
+pub fn query(repo: &RepoRef, branches: &[String], numbers: &[u64]) -> String {
     let aliases: Vec<String> = branches
         .iter()
         .enumerate()
@@ -41,6 +43,7 @@ pub fn query(repo: &RepoRef, branches: &[String]) -> String {
                 FIELDS
             )
         })
+        .chain(numbers.iter().enumerate().map(|(i, n)| format!("n{}: pullRequest(number: {}) {{ {} }}", i, n, FIELDS)))
         .collect();
     format!(
         "query {{ viewer {{ login }} repository(owner: {}, name: {}) {{ {} {} }} }}",
@@ -174,17 +177,39 @@ fn snapshot(n: &Value, branch: &str, methods: &[MergeMethod], viewer: &str) -> O
     })
 }
 
-/// The PRs in gh's answer to [`query`]: per alias, the latest PR from the
-/// repo's owner (not a fork's).
-pub fn parse(out: &str, repo: &RepoRef, branches: &[String]) -> Result<Vec<PrSnapshot>, ForgeError> {
+/// An error of gh's answer that only says a followed PR (alias `n<i>`)
+/// does not resolve (deleted, no access): its index. GitHub's typed
+/// `NOT_FOUND` at that alias's path, never its message.
+fn gone_alias(e: &Value) -> Option<usize> {
+    if e["type"].as_str() != Some("NOT_FOUND") {
+        return None;
+    }
+    let path = e["path"].as_array()?;
+    let alias = path.get(1)?.as_str()?;
+    (path.first()?.as_str() == Some("repository") && path.len() == 2).then_some(())?;
+    alias.strip_prefix('n')?.parse().ok()
+}
+
+/// The PRs in gh's answer to [`query`]: per branch alias, the latest PR
+/// from the repo's owner (not a fork's); per followed number, its PR, or
+/// none when it no longer resolves.
+pub fn parse(out: &str, repo: &RepoRef, branches: &[String], numbers: &[u64]) -> Result<super::Answer, ForgeError> {
     let v: Value = serde_json::from_str(out).map_err(|e| ForgeError::Other(format!("gh answered no JSON: {}", e)))?;
-    if let Some(errs) = v["errors"].as_array().filter(|e| !e.is_empty()) {
-        let e = &errs[0];
-        let msg = e["message"].as_str().unwrap_or("error").to_string();
-        return Err(match e["type"].as_str() {
-            Some("RATE_LIMITED") => ForgeError::RateLimited(msg),
-            _ => ForgeError::Other(msg),
-        });
+    let errs = v["errors"].as_array().cloned().unwrap_or_default();
+    let mut gone = std::collections::BTreeSet::new();
+    for e in &errs {
+        match gone_alias(e) {
+            Some(i) => {
+                gone.insert(i);
+            }
+            None => {
+                let msg = e["message"].as_str().unwrap_or("error").to_string();
+                return Err(match e["type"].as_str() {
+                    Some("RATE_LIMITED") => ForgeError::RateLimited(msg),
+                    _ => ForgeError::Other(msg),
+                });
+            }
+        }
     }
     let r = &v["data"]["repository"];
     if r.is_null() {
@@ -201,7 +226,20 @@ pub fn parse(out: &str, repo: &RepoRef, branches: &[String]) -> Result<Vec<PrSna
             prs.push(pr);
         }
     }
-    Ok(prs)
+    let numbered = numbers
+        .iter()
+        .enumerate()
+        .map(|(i, num)| {
+            let n = &r[format!("n{}", i)];
+            let pr = if gone.contains(&i) || n.is_null() {
+                None
+            } else {
+                snapshot(n, n["headRefName"].as_str().unwrap_or_default(), &methods, viewer)
+            };
+            (*num, pr)
+        })
+        .collect();
+    Ok(super::Answer { prs, numbered })
 }
 
 // ---- pr-news: a PR's reviews, comments and failing checks ----
@@ -439,17 +477,17 @@ impl GitHub {
 }
 
 impl Forge for GitHub {
-    fn fetch(&self, repo: &RepoRef, branches: &[String]) -> Result<Vec<PrSnapshot>, ForgeError> {
-        if branches.is_empty() {
-            return Ok(Vec::new());
+    fn fetch(&self, repo: &RepoRef, branches: &[String], numbers: &[u64]) -> Result<super::Answer, ForgeError> {
+        if branches.is_empty() && numbers.is_empty() {
+            return Ok(super::Answer::default());
         }
-        let q = format!("query={}", query(repo, branches));
+        let q = format!("query={}", query(repo, branches, numbers));
         let mut args = vec!["api", "graphql", "-f", q.as_str()];
         if repo.host != "github.com" {
             args.extend(["--hostname", repo.host.as_str()]);
         }
         let out = self.gh(&args)?;
-        parse(&out, repo, branches)
+        parse(&out, repo, branches, numbers)
     }
 
     fn activity(&self, repo: &RepoRef, pr: &PrSnapshot, logs: bool) -> Result<Activity, ForgeError> {
@@ -528,11 +566,39 @@ mod tests {
 
     #[test]
     fn the_query_has_an_alias_per_branch() {
-        let q = query(&repo(), &["sb/a".into(), "sb/\"b".into()]);
+        let q = query(&repo(), &["sb/a".into(), "sb/\"b".into()], &[]);
         assert!(q.starts_with("query { viewer { login } repository(owner: \"o\", name: \"r\") {"));
         assert!(q.contains("b0: pullRequests(headRefName: \"sb/a\", first: 3"));
         assert!(q.contains("b1: pullRequests(headRefName: \"sb/\\\"b\""));
-        assert!(!q.contains("b2:"));
+        assert!(!q.contains("b2:") && !q.contains("n0:"));
+        // pr-integration rule 2: followed numbers in the same query
+        let q = query(&repo(), &["sb/a".into()], &[75286, 12]);
+        assert!(q.contains("b0: pullRequests(") && q.contains("n0: pullRequest(number: 75286) {") && q.contains("n1: pullRequest(number: 12) {"));
+    }
+
+    /// A followed PR answers its snapshot (its head branch read from the
+    /// node); one that no longer resolves is the forge's typed NOT_FOUND
+    /// at its alias, never its message; any other error fails the round.
+    #[test]
+    fn followed_numbers_read_or_are_gone() {
+        let node = serde_json::json!({"number": 75286, "url": "https://github.com/o/r/pull/75286", "state": "OPEN", "isDraft": false,
+            "reviewDecision": "APPROVED", "headRefName": "feat/x", "headRefOid": "h", "updatedAt": "t", "title": "Faster boot",
+            "commits": {"nodes": []}});
+        let out = serde_json::json!({
+            "data": {"repository": {"n0": node, "n1": null}},
+            "errors": [{"type": "NOT_FOUND", "path": ["repository", "n1"], "message": "Could not resolve to a PullRequest with the number of 12."}]
+        });
+        let a = parse(&out.to_string(), &repo(), &[], &[75286, 12]).unwrap();
+        assert!(a.prs.is_empty());
+        assert_eq!(a.numbered.len(), 2);
+        let (n, pr) = &a.numbered[0];
+        let pr = pr.as_ref().unwrap();
+        assert_eq!((*n, pr.number, pr.branch.as_str(), pr.facts.title.as_str()), (75286, 75286, "feat/x", "Faster boot"));
+        assert_eq!(a.numbered[1], (12, None));
+        // NOT_FOUND elsewhere (the repository) is no followed PR: an error
+        let mut o = out.clone();
+        o["errors"][0]["path"] = serde_json::json!(["repository"]);
+        assert!(parse(&o.to_string(), &repo(), &[], &[75286, 12]).is_err());
     }
 
     #[test]
@@ -553,7 +619,7 @@ mod tests {
                  "commits": {"nodes": [{"commit": {"statusCheckRollup": {"state": "SUCCESS", "contexts": {"nodes": []}}}}]}}]}
         }}});
         let bs = ["sb/a".to_string(), "sb/b".into(), "sb/c".into()];
-        let prs = parse(&out.to_string(), &repo(), &bs).unwrap();
+        let prs = parse(&out.to_string(), &repo(), &bs, &[]).unwrap().prs;
         assert_eq!(prs.len(), 2);
         assert_eq!(prs[0].number, 7);
         assert_eq!(prs[0].branch, "sb/a");
@@ -579,7 +645,7 @@ mod tests {
                 "commits": {"nodes": [{"commit": {"statusCheckRollup": {"state": "SUCCESS",
                     "contexts": {"totalCount": 6, "nodes": []}}}}]}}]}
         }}});
-        let prs = parse(&out.to_string(), &repo(), &["sb/a".to_string()]).unwrap();
+        let prs = parse(&out.to_string(), &repo(), &["sb/a".to_string()], &[]).unwrap().prs;
         let f = &prs[0].facts;
         assert_eq!(f.title, "the cookie banner stops covering buy");
         assert_eq!(f.approved_by, ["alice"]);
@@ -591,9 +657,9 @@ mod tests {
         for s in ["BLOCKED", "BEHIND", "DIRTY", "UNKNOWN", "DRAFT"] {
             let mut o = out.clone();
             o["data"]["repository"]["b0"]["nodes"][0]["mergeStateStatus"] = s.into();
-            assert!(!parse(&o.to_string(), &repo(), &["sb/a".to_string()]).unwrap()[0].facts.mergeable, "{s}");
+            assert!(!parse(&o.to_string(), &repo(), &["sb/a".to_string()], &[]).unwrap().prs[0].facts.mergeable, "{s}");
         }
-        assert!(query(&repo(), &["sb/a".to_string()]).contains("squashMergeAllowed mergeCommitAllowed rebaseMergeAllowed"));
+        assert!(query(&repo(), &["sb/a".to_string()], &[]).contains("squashMergeAllowed mergeCommitAllowed rebaseMergeAllowed"));
     }
 
     /// pr-integration rule 3: base, conflicts, his review asked (a direct
@@ -614,7 +680,7 @@ mod tests {
                         {"__typename": "CheckRun", "name": "b", "status": "IN_PROGRESS", "conclusion": null},
                         {"__typename": "StatusContext", "context": "c", "state": "SUCCESS"}]}}}}]}}]}
         }}});
-        let prs = parse(&out.to_string(), &repo(), &["sb/a".to_string()]).unwrap();
+        let prs = parse(&out.to_string(), &repo(), &["sb/a".to_string()], &[]).unwrap().prs;
         let f = &prs[0].facts;
         assert_eq!((f.base.as_str(), f.conflicts, f.asked_you), ("main", true, true));
         assert_eq!((f.pushed_at.as_str(), f.checks, f.checks_done), ("2026-11-06T10:00:00Z", 3, 2));
@@ -623,11 +689,11 @@ mod tests {
         let mut o = out.clone();
         o["data"]["repository"]["b0"]["nodes"][0]["reviewRequests"]["nodes"] =
             serde_json::json!([{"requestedReviewer": {"__typename": "Team", "login": "gabriel"}}]);
-        assert!(!parse(&o.to_string(), &repo(), &["sb/a".to_string()]).unwrap()[0].facts.asked_you);
+        assert!(!parse(&o.to_string(), &repo(), &["sb/a".to_string()], &[]).unwrap().prs[0].facts.asked_you);
         let mut o = out.clone();
         o["data"]["viewer"] = Value::Null;
-        assert!(!parse(&o.to_string(), &repo(), &["sb/a".to_string()]).unwrap()[0].facts.asked_you);
-        let q = query(&repo(), &["sb/a".to_string()]);
+        assert!(!parse(&o.to_string(), &repo(), &["sb/a".to_string()], &[]).unwrap().prs[0].facts.asked_you);
+        let q = query(&repo(), &["sb/a".to_string()], &[]);
         for f in ["viewer { login }", "baseRefName", "reviewRequests(first: 10)", "committedDate"] {
             assert!(q.contains(f), "{f}");
         }
@@ -647,14 +713,14 @@ mod tests {
 
     #[test]
     fn errors() {
-        let e = parse(r#"{"errors": [{"type": "RATE_LIMITED", "message": "API rate limit exceeded"}]}"#, &repo(), &[]);
+        let e = parse(r#"{"errors": [{"type": "RATE_LIMITED", "message": "API rate limit exceeded"}]}"#, &repo(), &[], &[]);
         assert!(matches!(e, Err(ForgeError::RateLimited(_))));
         assert!(matches!(error_of("HTTP 401: Bad credentials (https://api.github.com/graphql)"), ForgeError::Auth(_)));
         assert!(matches!(error_of("To get started with GitHub CLI, please run:  gh auth login"), ForgeError::Auth(_)));
         assert!(matches!(error_of("error connecting to api.github.com"), ForgeError::Offline(_)));
         assert!(matches!(error_of("HTTP 403: API rate limit exceeded for user"), ForgeError::RateLimited(_)));
         assert!(matches!(error_of("something else"), ForgeError::Other(_)));
-        assert!(matches!(parse(r#"{"data": {"repository": null}}"#, &repo(), &[]), Err(ForgeError::Other(_))));
+        assert!(matches!(parse(r#"{"data": {"repository": null}}"#, &repo(), &[], &[]), Err(ForgeError::Other(_))));
     }
 
     #[test]

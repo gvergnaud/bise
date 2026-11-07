@@ -2554,7 +2554,7 @@ fn a_private_worktree_is_a_place() {
     assert!(w[0].head && w[0].branch.is_empty() && w[0].path == "/p/docs-wt");
     let read = |branch: &str, commits: u32| {
         let local = vec![Local { place: "pt:/p/docs-wt".into(), branch: branch.into(), tip: None, commits: Some(commits), dirty: None }];
-        Input::Prs(Report { at_ms: 1_000, prs: None, local, activity: Vec::new() })
+        Input::Prs(Report { at_ms: 1_000, prs: None, local, activity: Vec::new(), followed: Vec::new() })
     };
     t.go(read("", 2));
     assert_eq!(view(&mut t)["lid"], "no PR yet · 2 commits");
@@ -2578,7 +2578,7 @@ fn a_private_worktree_is_a_place() {
         facts: Default::default(),
     };
     let local = vec![Local { place: "pt:/p/docs-wt".into(), branch: "feat/x".into(), tip: Some("h".into()), commits: Some(0), dirty: Some(false) }];
-    let fx = t.go(Input::Prs(Report { at_ms: 2_000, prs: Some(Ok(vec![merged])), local, activity: Vec::new() }));
+    let fx = t.go(Input::Prs(Report { at_ms: 2_000, prs: Some(Ok(vec![merged])), local, activity: Vec::new(), followed: Vec::new() }));
     assert!(!format!("{:?}", fx).contains("\"drop\""), "{:?}", fx);
     assert_eq!(view(&mut t)["agents"], json!(["docs", "api"]));
     // none: back in the shared folder, the place goes
@@ -2966,7 +2966,33 @@ mod prs {
     }
 
     pub(super) fn report(at: u64, prs: Result<Vec<PrSnapshot>, ForgeError>, dirty: Option<bool>) -> Input {
-        Input::Prs(Report { at_ms: at, prs: Some(prs), local: local(dirty), activity: Vec::new() })
+        Input::Prs(Report { at_ms: at, prs: Some(prs), local: local(dirty), activity: Vec::new(), followed: Vec::new() })
+    }
+
+    /// pr-integration rule 2: a PR an agent only reviews (followed by its
+    /// artifact): a changed answer keeps its artifact in step (no agent:
+    /// it exists already), the same answer again asks nothing, its row is
+    /// in the artifacts' status map and never waits on his merge (no
+    /// merge item for it), a PR that no longer resolves leaves the map.
+    #[test]
+    fn a_followed_pr_keeps_its_artifact_and_status() {
+        use crate::forge::poll::Followed;
+        let mut t = T::new();
+        let url = "https://github.com/o/r/pull/75286".to_string();
+        let mut p = pr(75286, PrState::Open, Review::Approved, Checks::Pass);
+        (p.facts.mergeable, p.facts.methods) = (true, vec![crate::place::MergeMethod::Squash]);
+        let round = |pr: Option<PrSnapshot>| {
+            Input::Prs(Report { at_ms: 1_000, prs: Some(Ok(Vec::new())), local: Vec::new(), activity: Vec::new(), followed: vec![Followed { url: url.clone(), pr }] })
+        };
+        let fx = t.go(round(Some(p.clone())));
+        assert!(fx.iter().any(|e| matches!(e, Effect::PrArtifact { pr, agent: None } if pr.number == 75286)), "{fx:?}");
+        let rows = t.hub.pr_rows_by_url(2_000);
+        assert_eq!(rows[&url].number, 75286);
+        assert_eq!(rows[&url].yours, None, "a followed PR never waits on his merge");
+        assert!(crate::core::merge::ready(&p), "a place's PR this ready would");
+        assert!(!t.go(round(Some(p.clone()))).iter().any(|e| matches!(e, Effect::PrArtifact { .. })), "the same answer asks nothing");
+        t.go(round(None));
+        assert!(t.hub.pr_rows_by_url(3_000).is_empty());
     }
 
     pub(super) fn place_view(t: &mut T, now: u64) -> Value {
@@ -3425,7 +3451,7 @@ mod prs {
         let mut w = Watcher::new(repo, Box::new(gh), Box::new(Tip));
         let mut t = T::new();
         spawn_wt(&mut t, "dark");
-        w.plan(Plan { watches: t.hub.pr_watches(), clients: true });
+        w.plan(Plan { watches: t.hub.pr_watches(), clients: true, followed: Vec::new() });
         let mut now = 1_000u64;
         // one round of the worker, its answer to the hub; the next round
         // well after the cadence (a back-off at most 10 min)
@@ -3480,7 +3506,7 @@ mod prs {
             Box::new(crate::forge::github::GitHub { gh: fake_gh(&dir) }),
             Box::new(Tip),
         );
-        w.plan(Plan { watches: t.hub.pr_watches(), clients: true });
+        w.plan(Plan { watches: t.hub.pr_watches(), clients: true, followed: Vec::new() });
         answer(&dir, "OPEN", false, "", "SUCCESS");
         t.go(Input::Prs(w.step(1_000).unwrap()));
         let mut at = 1_000 + SLOW_MS;
@@ -3510,7 +3536,7 @@ mod prs {
     // ---- pr-news (pr-design §6): the news to the agent, main's lines
 
     fn with_activity(at: u64, p: PrSnapshot, act: crate::forge::Activity) -> Input {
-        Input::Prs(Report { at_ms: at, prs: Some(Ok(vec![p])), local: local(None), activity: vec![("sb/dark".into(), act)] })
+        Input::Prs(Report { at_ms: at, prs: Some(Ok(vec![p])), local: local(None), activity: vec![("sb/dark".into(), act)], followed: Vec::new() })
     }
 
     fn from_github(t: &T, to: &str) -> Vec<String> {

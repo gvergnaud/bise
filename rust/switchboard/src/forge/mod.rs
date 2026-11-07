@@ -86,8 +86,10 @@ impl ForgeError {
 /// One forge (GitHub now, GitLab later: pr-design §9).
 pub trait Forge: Send {
     /// The latest PR whose head is each of `branches` (none for a branch
-    /// without one): one call for them all.
-    fn fetch(&self, repo: &RepoRef, branches: &[String]) -> Result<Vec<PrSnapshot>, ForgeError>;
+    /// without one), and each PR of `numbers` (pr-integration rule 2: a
+    /// PR an agent only reviews, followed by its artifact): one call for
+    /// them all.
+    fn fetch(&self, repo: &RepoRef, branches: &[String], numbers: &[u64]) -> Result<Answer, ForgeError>;
 
     /// pr-news (pr-design §6.1, §6.2): the PR's reviews and comments, and
     /// for `logs` the failing checks with their log's tail. Asked only
@@ -104,6 +106,16 @@ pub trait Forge: Send {
     fn merge(&self, _repo: &RepoRef, _number: u64, _head: &str, _method: MergeMethod) -> Result<(), ForgeError> {
         Err(ForgeError::Other("this forge can't merge".into()))
     }
+}
+
+/// One answer of [`Forge::fetch`].
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Answer {
+    /// The branches' PRs.
+    pub prs: Vec<PrSnapshot>,
+    /// Each number asked, its PR; None: it no longer resolves (gone, no
+    /// access: the forge's typed not-found), it stops being followed.
+    pub numbered: Vec<(u64, Option<PrSnapshot>)>,
 }
 
 /// What people and CI said on a PR (pr-news): all of it, the hub keeps
@@ -293,13 +305,15 @@ pub fn read_line(known: &mut std::collections::BTreeMap<String, Known>, ev: &ser
 /// it (the row's pink and the inbox item read this): his review asked
 /// (open or draft), else his merge, when the ready-to-merge item would
 /// open (`core::merge::ready`: approved or no review needed, checks
-/// pass, the forge would merge it).
-pub fn yours(pr: &PrSnapshot) -> Option<bise_proto::rows::PrYours> {
+/// pass, the forge would merge it). `place`: a place's PR, the only ones
+/// the merge item opens for; a followed PR (an agent only reviews it)
+/// never waits on his merge.
+pub fn yours(pr: &PrSnapshot, place: bool) -> Option<bise_proto::rows::PrYours> {
     use bise_proto::rows::PrYours;
     let live = matches!(pr.state, PrState::Open | PrState::Draft);
     if live && pr.facts.asked_you {
         Some(PrYours::Review)
-    } else if crate::core::merge::ready(pr) {
+    } else if place && crate::core::merge::ready(pr) {
         Some(PrYours::Merge)
     } else {
         None
@@ -476,10 +490,13 @@ mod tests {
     #[test]
     fn what_waits_on_him() {
         use bise_proto::rows::PrYours;
+        let yours = |p: &PrSnapshot| yours(p, true);
         let mut p = pr(7, PrState::Open);
         assert_eq!(yours(&p), None);
         p.facts.asked_you = true;
         assert_eq!(yours(&p), Some(PrYours::Review));
+        // a followed PR (no place): his review too
+        assert_eq!(super::yours(&p, false), Some(PrYours::Review));
         p.facts.asked_you = false;
         p.review = Review::Approved;
         p.checks = Checks::Pass;
@@ -487,6 +504,8 @@ mod tests {
         p.facts.mergeable = true;
         p.facts.methods = vec![crate::place::MergeMethod::Squash];
         assert_eq!(yours(&p), Some(PrYours::Merge));
+        // a followed PR never waits on his merge (no merge item for it)
+        assert_eq!(super::yours(&p, false), None);
         for (i, f) in [
             (|p: &mut PrSnapshot| p.facts.mergeable = false) as fn(&mut PrSnapshot),
             |p| p.checks = Checks::Running,
