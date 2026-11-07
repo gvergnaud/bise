@@ -25,8 +25,12 @@ export type Entity =
   | { readonly kind: 'office'; readonly project: string }
   /** an artifact by its id, in its store's project (the hub id, the shared library's too) */
   | { readonly kind: 'artifact'; readonly project: string; readonly id: string }
-  /** a pull request of a project, by its number */
-  | { readonly kind: 'pr'; readonly project: string; readonly number: number }
+  /**
+   * a pull request the project's hub follows, by its link in the hub's one form (forge::pr_link:
+   * lowercased, `https://github.com/o/r/pull/412`): a number alone is ambiguous across repos (a PR
+   * an agent only reviews may live in another one)
+   */
+  | { readonly kind: 'pr'; readonly project: string; readonly url: string }
   /** a commit of a project, by its sha */
   | { readonly kind: 'commit'; readonly project: string; readonly sha: string }
   /** an agent's changes, or one file of them (`path`, from the repo's root) */
@@ -62,7 +66,7 @@ export function entityKey(e: Entity): string {
     case 'artifact':
       return `artifact:${e.project}/${e.id}`;
     case 'pr':
-      return `pr:${e.project}/${String(e.number)}`;
+      return `pr:${e.project}/${e.url}`;
     case 'commit':
       return `commit:${e.project}/${e.sha}`;
     case 'diff':

@@ -170,11 +170,11 @@ describe("entityKey (shared/entity.ts)", () => {
     expect([
       entityKey({ kind: "agent", project: "acme", agent: "perf" }),
       entityKey({ kind: "office", project: "acme" }),
-      entityKey({ kind: "pr", project: "acme", number: 12 }),
+      entityKey({ kind: "pr", project: "acme", url: "https://github.com/acme/web/pull/12" }),
       entityKey({ kind: "diff", project: "acme", agent: "perf" }),
       entityKey({ kind: "diff", project: "acme", agent: "perf", path: "src/a.rs" }),
       entityKey({ kind: "scheduled", project: "acme", id: 7 }),
-    ]).toEqual(["agent:acme/perf", "office:acme", "pr:acme/12", "diff:acme/perf", "diff:acme/perf/src/a.rs", "scheduled:acme/7"]);
+    ]).toEqual(["agent:acme/perf", "office:acme", "pr:acme/https://github.com/acme/web/pull/12", "diff:acme/perf", "diff:acme/perf/src/a.rs", "scheduled:acme/7"]);
   });
 });
 

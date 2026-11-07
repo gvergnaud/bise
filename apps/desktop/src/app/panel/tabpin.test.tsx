@@ -159,7 +159,7 @@ describe('the pin in the tab', () => {
   it('no pin on what has none, on Scheduled (the whole list), nor on a thing no longer in its list', () => {
     world();
     act(() => {
-      openTab({ kind: 'pr', project: ACME, number: 12 });
+      openTab({ kind: 'pr', project: ACME, url: 'https://github.com/acme/web/pull/12' });
     });
     expect(frontPin()).toBeNull();
     act(() => {
@@ -203,6 +203,6 @@ describe('the tab’s menu', () => {
     expect(pinRefOf({ kind: 'agent', project: ACME, agent: 'perf' })).toEqual({ kind: 'agent', project: ACME, id: 'perf' });
     expect(pinRefOf({ kind: 'process', project: ACME, agent: 'perf', id: 'bg1' })).toEqual({ kind: 'process', project: ACME, id: 'perf/bg1' });
     expect(pinRefOf({ kind: 'scheduled', project: ACME, id: 7 })).toEqual({ kind: 'schedule', project: ACME, id: '7' });
-    expect(pinRefOf({ kind: 'pr', project: ACME, number: 1 })).toBeUndefined();
+    expect(pinRefOf({ kind: 'pr', project: ACME, url: 'https://github.com/acme/web/pull/1' })).toBeUndefined();
   });
 });

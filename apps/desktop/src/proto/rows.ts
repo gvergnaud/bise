@@ -687,7 +687,12 @@ yours?: PrYours | null,
 /**
  * when its head commit was made (ms): its last push
  */
-pushed_ms?: number | null, };
+pushed_ms?: number | null, 
+/**
+ * its head commit as the forge said: his Merge or Close on the tab
+ * is for this one (`pr_act.head`; a push since is refused)
+ */
+head_oid?: string, };
 
 /**
  * What a PR's tab reads besides its row (`pr_detail`): its description,

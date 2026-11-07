@@ -538,6 +538,7 @@ pub fn pr_row(pr: &PrView, agents: &[String]) -> bise_proto::rows::Pr {
         checks_done: pr.facts.checks_done,
         yours: pr.yours,
         pushed_ms: super::iso_ms(&pr.facts.pushed_at),
+        head_oid: pr.head_oid.clone(),
     }
 }
 

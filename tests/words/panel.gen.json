@@ -797,10 +797,10 @@
   },
   "panel.tab_pr": {
     "args": [
-      "number"
+      "tag"
     ],
     "one": null,
-    "text": "PR #{number}"
+    "text": "PR {tag}"
   },
   "panel.tab_scheduled": {
     "args": [],

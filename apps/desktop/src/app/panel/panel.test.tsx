@@ -24,6 +24,8 @@ beforeEach(() => {
   Object.defineProperty(window, 'innerWidth', { value: 1920, configurable: true });
 });
 const ACME = 'acme-1a2b3c4d';
+/** a PR's link, its tab's key (forge::pr_link's one form) */
+const PR = (n: number) => `https://github.com/acme/web/pull/${String(n)}`;
 
 function shell(more: { events?: readonly unknown[]; bise?: Record<string, unknown> } = {}) {
   const port: CorePort = { send: () => undefined, onEvent: () => () => undefined, onState: () => () => undefined, state: () => Promise.resolve('up') };
@@ -88,43 +90,43 @@ describe('the tabbed panel', () => {
   it('openTab unfolds it on the thing; × closes it; the last one folds the panel', () => {
     const v = shell();
     act(() => {
-      openTab({ kind: 'pr', project: ACME, number: 6 });
+      openTab({ kind: 'pr', project: ACME, url: PR(6) });
     });
-    const tab = v.getByTestId(`app.panel.tab.pr:${ACME}/6`);
+    const tab = v.getByTestId(`app.panel.tab.pr:${ACME}/${PR(6)}`);
     expect(tab.getAttribute('aria-selected')).toBe('true');
     expect(tab.textContent).toContain('PR #6');
     expect(v.getByTestId('app.panel').style.width).toBe('640px');
-    fireEvent.click(v.getByTestId(`app.panel.tab.pr:${ACME}/6.close`));
+    fireEvent.click(v.getByTestId(`app.panel.tab.pr:${ACME}/${PR(6)}.close`));
     expect(panelState.get().tabs.list).toEqual([]);
     expect(panelState.get().open).toBe(false);
   });
   it('⇧⌘T (his m_46187, as Chrome): close two tabs, reopen twice, both come back in their place, the last closed first', () => {
     const v = shell();
     act(() => {
-      openTab({ kind: 'pr', project: ACME, number: 6 });
-      openTab({ kind: 'pr', project: ACME, number: 7 });
-      openTab({ kind: 'pr', project: ACME, number: 8 });
+      openTab({ kind: 'pr', project: ACME, url: PR(6) });
+      openTab({ kind: 'pr', project: ACME, url: PR(7) });
+      openTab({ kind: 'pr', project: ACME, url: PR(8) });
     });
     const ids = () => panelState.get().tabs.list.map((t) => t.id);
-    const all = [`pr:${ACME}/6`, `pr:${ACME}/7`, `pr:${ACME}/8`];
+    const all = [`pr:${ACME}/${PR(6)}`, `pr:${ACME}/${PR(7)}`, `pr:${ACME}/${PR(8)}`];
     expect(ids()).toEqual(all);
-    fireEvent.click(v.getByTestId(`app.panel.tab.pr:${ACME}/7.close`));
-    fireEvent.click(v.getByTestId(`app.panel.tab.pr:${ACME}/6.close`));
+    fireEvent.click(v.getByTestId(`app.panel.tab.pr:${ACME}/${PR(7)}.close`));
+    fireEvent.click(v.getByTestId(`app.panel.tab.pr:${ACME}/${PR(6)}.close`));
     act(() => {
       panelToggle();
     });
-    expect(ids()).toEqual([`pr:${ACME}/8`]);
+    expect(ids()).toEqual([`pr:${ACME}/${PR(8)}`]);
     act(() => {
       reopenClosed();
     });
     expect(panelState.get().open, 'a folded panel unfolds on it').toBe(true);
-    expect(ids()).toEqual([`pr:${ACME}/6`, `pr:${ACME}/8`]);
-    expect(v.getByTestId(`app.panel.tab.pr:${ACME}/6`).getAttribute('aria-selected')).toBe('true');
+    expect(ids()).toEqual([`pr:${ACME}/${PR(6)}`, `pr:${ACME}/${PR(8)}`]);
+    expect(v.getByTestId(`app.panel.tab.pr:${ACME}/${PR(6)}`).getAttribute('aria-selected')).toBe('true');
     act(() => {
       reopenClosed();
     });
     expect(ids()).toEqual(all);
-    expect(v.getByTestId(`app.panel.tab.pr:${ACME}/7`).getAttribute('aria-selected')).toBe('true');
+    expect(v.getByTestId(`app.panel.tab.pr:${ACME}/${PR(7)}`).getAttribute('aria-selected')).toBe('true');
     act(() => {
       reopenClosed();
     });
@@ -202,30 +204,30 @@ describe('the tabbed panel', () => {
       </StoreProvider>,
     );
     act(() => {
-      openTab({ kind: 'pr', project: ACME, number: 6 });
+      openTab({ kind: 'pr', project: ACME, url: PR(6) });
     });
-    expect(v.getByTestId(`app.panel.tab.pr:${ACME}/6`)).toBeTruthy();
+    expect(v.getByTestId(`app.panel.tab.pr:${ACME}/${PR(6)}`)).toBeTruthy();
     act(() => {
       router.go({ screen: 'thread', project: BETA, agent: 'main' });
     });
     // beta never opened a panel: none
     expect(v.getByTestId('app.panel').hasAttribute('data-open')).toBe(false);
-    expect(v.queryByTestId(`app.panel.tab.pr:${ACME}/6`)).toBeNull();
+    expect(v.queryByTestId(`app.panel.tab.pr:${ACME}/${PR(6)}`)).toBeNull();
     act(() => {
-      openTab({ kind: 'pr', project: BETA, number: 9 });
+      openTab({ kind: 'pr', project: BETA, url: PR(9) });
     });
     // a screen of no project keeps beta's
     act(() => {
       router.go({ screen: 'settings' });
     });
-    expect(v.getByTestId(`app.panel.tab.pr:${BETA}/9`)).toBeTruthy();
+    expect(v.getByTestId(`app.panel.tab.pr:${BETA}/${PR(9)}`)).toBeTruthy();
     const r = render(<Probe />);
     drawn.length = 0;
     act(() => {
       router.go({ screen: 'thread', project: ACME, agent: 'main' });
     });
-    expect(v.getByTestId(`app.panel.tab.pr:${ACME}/6`).getAttribute('aria-selected')).toBe('true');
-    expect(v.queryByTestId(`app.panel.tab.pr:${BETA}/9`)).toBeNull();
+    expect(v.getByTestId(`app.panel.tab.pr:${ACME}/${PR(6)}`).getAttribute('aria-selected')).toBe('true');
+    expect(v.queryByTestId(`app.panel.tab.pr:${BETA}/${PR(9)}`)).toBeNull();
     expect(drawn.every((d) => !d.includes(BETA))).toBe(true);
     // its width snaps for the frame of the switch (ui-review m_45602), the ease back after it
     expect(v.getByTestId('app.panel').hasAttribute('data-snap')).toBe(true);

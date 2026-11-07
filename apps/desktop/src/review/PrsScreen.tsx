@@ -58,7 +58,7 @@ export function PrsScreen({ project }: { project: string }) {
 
 function PrRow({ project, p }: { project: string; p: Pr }) {
   const tone = toneOf(p);
-  const menu = useEntityMenu({ kind: 'pr', project, number: p.number });
+  const menu = useEntityMenu({ kind: 'pr', project, url: p.url });
   const tid = `prs.row.${String(p.number)}`;
   return (
     <div data-tone={tone}>

@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+/** a PR's link, the hub's one form (forge::pr_link) */
+const PR6 = 'https://github.com/acme/web/pull/6';
 import {
   activate,
   backFromFull,
@@ -245,14 +247,15 @@ describe('the kept record (kept per window, read back after a reload)', () => {
       },
       width: 9999,
       dragged: true,
-      recent: [{ kind: 'pr', project: 'acme', number: 6 }, { kind: 'pr' }],
+      recent: [{ kind: 'pr', project: 'acme', url: PR6 }, { kind: 'pr' }, { kind: 'pr', project: 'acme', number: 7 }],
     });
     expect(k.open).toBe(true);
     expect(ids(k.tabs)).toEqual(['artifact:acme/a']);
     expect(k.tabs.active).toBe('artifact:acme/a');
     expect(k.width).toBe(640);
     expect(k.dragged).toBe(true);
-    expect(k.recent).toEqual([{ kind: 'pr', project: 'acme', number: 6 }]);
+    // a PR kept by its number (before pr-artifacts) is dropped, never a second tab of it
+    expect(k.recent).toEqual([{ kind: 'pr', project: 'acme', url: PR6 }]);
   });
   it('a tab in front that is gone falls back to the first', () => {
     const k = parseKept({ tabs: { active: 'nope', list: [{ what: { kind: 'terminal', project: 'acme', n: 1 } }] } });

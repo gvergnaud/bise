@@ -290,8 +290,8 @@ export const panel = {
   tab_terminal: (a: { project: string | number }): string => "Terminal · " + String(a.project),
   /** a project's next shell's tab */
   tab_terminal_n: (a: { n: string | number; project: string | number }): string => "Terminal " + String(a.n) + " · " + String(a.project),
-  /** a pull request's tab */
-  tab_pr: (a: { number: string | number }): string => "PR #" + String(a.number),
+  /** a pull request's tab: its sigil and number ('#412', a GitLab merge request '!412') */
+  tab_pr: (a: { tag: string | number }): string => "PR " + String(a.tag),
   /** an agent's changes' tab */
   tab_changes: (a: { agent: string | number }): string => "Changes · " + String(a.agent),
   /** a scheduled task's tab */

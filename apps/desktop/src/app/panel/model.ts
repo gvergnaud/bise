@@ -489,8 +489,10 @@ function entityOf(x: unknown): Entity | undefined {
       return s('project') ? (x as Entity) : undefined;
     case 'artifact':
       return s('project') && s('id') ? (x as Entity) : undefined;
+    // a PR by its link; a kept one by its number (before pr-artifacts) is read as no entity and
+    // dropped like any unknown thing (architect m_54668): never a second tab for the same PR
     case 'pr':
-      return s('project') && typeof x['number'] === 'number' ? (x as Entity) : undefined;
+      return s('project') && s('url') ? (x as Entity) : undefined;
     case 'commit':
       return s('project') && s('sha') ? (x as Entity) : undefined;
     case 'diff':

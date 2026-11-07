@@ -261,6 +261,10 @@ pub struct PrView {
     /// what it waits on him for (`forge::yours`)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub yours: Option<bise_proto::rows::PrYours>,
+    /// its head commit (the typed row's `head_oid`: what the tab's
+    /// Merge or Close is for)
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub head_oid: String,
 }
 
 impl PrView {
@@ -276,6 +280,7 @@ impl PrView {
             stale_ms,
             facts: pr.facts.clone(),
             yours: crate::forge::yours(pr, true),
+            head_oid: pr.head_oid.clone(),
         }
     }
 
@@ -616,6 +621,8 @@ mod tests {
         // contract's fields stay as they were
         let facts = j["pr"].as_object_mut().unwrap().remove("facts").unwrap();
         assert_eq!(facts["title"], "dark mode");
+        // and its head, for the tab's Merge (pr_act.head)
+        assert_eq!(j["pr"].as_object_mut().unwrap().remove("head_oid"), Some(serde_json::json!(pr.head_oid)));
         assert_eq!(
             j,
             serde_json::json!({"id": "wt:a", "branch": "sb/a", "agents": ["a"], "lid": null,

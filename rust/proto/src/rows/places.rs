@@ -236,6 +236,10 @@ pub struct Pr {
     /// when its head commit was made (ms): its last push
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pushed_ms: Option<u64>,
+    /// its head commit as the forge said: his Merge or Close on the tab
+    /// is for this one (`pr_act.head`; a push since is refused)
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub head_oid: String,
 }
 
 /// What a PR's tab reads besides its row (`pr_detail`): its description,
