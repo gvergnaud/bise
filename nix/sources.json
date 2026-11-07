@@ -1,13 +1,13 @@
 {
-  "version": "2026.11.5",
-  "id": "159ec6c",
-  "built": "2026-11-05T19:14:57Z",
+  "version": "2026.11.7",
+  "id": "ec8001c",
+  "built": "2026-11-07T18:01:17Z",
   "aarch64-linux": {
-    "url": "https://github.com/gvergnaud/bise/releases/download/v2026.11.5/bise-159ec6c-linux-arm64.tar.gz",
-    "sha256": "798f6ebb764bf72ff7d89e737505fa4ec76e4a37eabb9d16bfd460c6ac3f6ced"
+    "url": "https://github.com/gvergnaud/bise/releases/download/v2026.11.7/bise-ec8001c-linux-arm64.tar.gz",
+    "sha256": "bec64f130f2d7bd37c63749977dc0e97bb3c37c74e19b1072867921a8e65af0f"
   },
   "x86_64-linux": {
-    "url": "https://github.com/gvergnaud/bise/releases/download/v2026.11.5/bise-159ec6c-linux-x86_64.tar.gz",
-    "sha256": "b757e80e69d70e84592ced224ba652d02c4c71dd4d326e828781f00dfe4e97bc"
+    "url": "https://github.com/gvergnaud/bise/releases/download/v2026.11.7/bise-ec8001c-linux-x86_64.tar.gz",
+    "sha256": "93f7ce285ec170a544a916805dee94bfcddbcea482e16a2f42269dd54671792b"
   }
 }
