@@ -40,7 +40,9 @@ test('native/capsule-pin (a): fn space, 20 keystrokes filter the list, the frame
     await w.helper.send({ ev: 'fn', act: 'key', key: 'space' });
     await w.out.wait(CAPSULE, (l) => l.startsWith('show'));
     const cap = await capsulePage(w.s);
-    await expect(cap.getByTestId('spot.input'), 'the spotlight has the keys').toBeFocused({ timeout: 3000 });
+    // the field that takes his keys: the app's composer (PmField testId 'spot.input' draws its
+    // editable as 'spot.input.field', 33d67f61d), focused at show (Spotlight's selectAll)
+    await expect(cap.getByTestId('spot.input.field'), 'the spotlight has the keys').toBeFocused({ timeout: 3000 });
     await sleep(300);
     const first = await frame(w);
     const seen: Frame[] = [first];
