@@ -69,6 +69,8 @@ impl DraftHubCmd {
 pub struct ProjectView {
     pub v: u32,
     pub project: Project,
+    /// `written_ms` and `last_activity_ms` move only when something a
+    /// reader sees changed (the hub skips a view equal but for them)
     pub written_ms: u64,
     /// set at a clean stop, absent while it runs (readers tell a running
     /// hub by its pid or a ping, never by a flag here)
