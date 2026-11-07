@@ -17,7 +17,7 @@
     "lint": "eslint --max-warnings 0 .",
     "lint:cached": "python3 ../../tests/eslint_quick_key.py && eslint --max-warnings 0 --cache --cache-strategy content --cache-location node_modules/.cache/eslint-quick/lint/ .",
     "check": "python3 ../../tests/conflict_markers.py && pnpm typecheck && pnpm lint && pnpm test && pnpm build",
-    "check:cached": "python3 ../../tests/conflict_markers.py && pnpm typecheck && pnpm lint:cached && pnpm test && pnpm build",
+    "check:cached": "python3 ../../tests/conflict_markers.py && pnpm typecheck && pnpm lint:cached && pnpm test",
     "test:land": "NODE_OPTIONS='--experimental-strip-types --disable-warning=ExperimentalWarning' node tests/harness/land.mts",
     "smoke": "NODE_OPTIONS='--experimental-strip-types --disable-warning=ExperimentalWarning' node scripts/smoke.mts",
     "test:e2e": "playwright test -c tests/harness/playwright.config.ts",

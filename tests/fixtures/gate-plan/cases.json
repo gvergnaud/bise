@@ -672,5 +672,128 @@
     "gate_queue_test"
    ]
   }
+ },
+ {
+  "name": "a desktop module: the by-path tests reading it, the unknown one, none other",
+  "paths": [
+   "apps/desktop/src/thread/Code.tsx"
+  ],
+  "exists": [
+   "apps/desktop/src/thread/Code.tsx"
+  ],
+  "bypath": {
+   "src/ds/lint.test.ts": [
+    "apps/desktop/src/*"
+   ],
+   "src/thread/to-end.test.ts": [
+    "apps/desktop/src/thread/thread.css"
+   ],
+   "src/main/images.test.ts": [],
+   "src/x/unknown.test.ts": null,
+   "src/views/port.test.ts": [
+    "rust/proto/src/view_rpc.rs"
+   ]
+  },
+  "want": {
+   "desktop": {
+    "rel": [
+     "src/thread/Code.tsx"
+    ],
+    "bypath": [
+     "src/ds/lint.test.ts",
+     "src/x/unknown.test.ts"
+    ]
+   }
+  }
+ },
+ {
+  "name": "a sheet a test reads: that test too",
+  "paths": [
+   "apps/desktop/src/thread/thread.css"
+  ],
+  "exists": [
+   "apps/desktop/src/thread/thread.css"
+  ],
+  "bypath": {
+   "src/ds/lint.test.ts": [
+    "apps/desktop/src/*"
+   ],
+   "src/thread/to-end.test.ts": [
+    "apps/desktop/src/thread/thread.css"
+   ],
+   "src/main/images.test.ts": [],
+   "src/x/unknown.test.ts": null,
+   "src/views/port.test.ts": [
+    "rust/proto/src/view_rpc.rs"
+   ]
+  },
+  "want": {
+   "desktop": {
+    "bypath": [
+     "src/ds/lint.test.ts",
+     "src/thread/to-end.test.ts",
+     "src/x/unknown.test.ts"
+    ]
+   }
+  }
+ },
+ {
+  "name": "a by-path test changed: itself",
+  "paths": [
+   "apps/desktop/src/main/images.test.ts"
+  ],
+  "exists": [
+   "apps/desktop/src/main/images.test.ts"
+  ],
+  "bypath": {
+   "src/ds/lint.test.ts": [
+    "apps/desktop/src/*"
+   ],
+   "src/thread/to-end.test.ts": [
+    "apps/desktop/src/thread/thread.css"
+   ],
+   "src/main/images.test.ts": [],
+   "src/x/unknown.test.ts": null,
+   "src/views/port.test.ts": [
+    "rust/proto/src/view_rpc.rs"
+   ]
+  },
+  "want": {
+   "desktop": {
+    "bypath": [
+     "src/ds/lint.test.ts",
+     "src/main/images.test.ts",
+     "src/x/unknown.test.ts"
+    ]
+   }
+  }
+ },
+ {
+  "name": "the whole app (a config): no by-path pick, pnpm check runs all",
+  "paths": [
+   "apps/desktop/vitest.config.ts"
+  ],
+  "exists": [
+   "apps/desktop/vitest.config.ts"
+  ],
+  "bypath": {
+   "src/ds/lint.test.ts": [
+    "apps/desktop/src/*"
+   ],
+   "src/thread/to-end.test.ts": [
+    "apps/desktop/src/thread/thread.css"
+   ],
+   "src/main/images.test.ts": [],
+   "src/x/unknown.test.ts": null,
+   "src/views/port.test.ts": [
+    "rust/proto/src/view_rpc.rs"
+   ]
+  },
+  "want": {
+   "desktop": {
+    "rel": [],
+    "bypath": []
+   }
+  }
  }
 ]

@@ -99,12 +99,14 @@ def desktop_lint_cache_quick_only():
     """An agent's quick lints the whole desktop app through its tree's eslint
     cache; every other gate lints cold (main m_54506): the typed rules read
     other files, which the cache doesn't track, so a hidden red is caught on
-    main. check:cached is check with lint:cached for lint, nothing else; the
-    cache lives in the tree's own node_modules, never shared."""
+    main. check:cached is check with lint:cached for lint and no build (quick
+    builds nothing, c3-quick-90s: the full gate, the tip and a release build),
+    nothing else; the cache lives in the tree's own node_modules, never shared."""
     import json
     s = json.load(open(os.path.join(HERE, "..", "apps", "desktop", "package.json")))["scripts"]
-    check(s.get("check:cached") == s["check"].replace("pnpm lint ", "pnpm lint:cached ") and s.get("check:cached") != s["check"],
-          "check:cached is check with lint:cached for lint: %r" % s.get("check:cached"))
+    want = s["check"].replace("pnpm lint ", "pnpm lint:cached ")
+    check(want.endswith(" && pnpm build") and s.get("check:cached") == want[:-len(" && pnpm build")],
+          "check:cached is check with lint:cached for lint, without its build: %r" % s.get("check:cached"))
     lc = s.get("lint:cached", "")
     check(lc == "python3 ../../tests/eslint_quick_key.py && " + s["lint"].rsplit(" .", 1)[0]
           + " --cache --cache-strategy content --cache-location node_modules/.cache/eslint-quick/lint/ .",

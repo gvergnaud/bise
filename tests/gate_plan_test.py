@@ -31,7 +31,7 @@ def main():
     fails = []
     for c in cases:
         tree = gate_plan.Tree(includes=c.get("includes"), exists=c.get("exists"), desktop=c.get("desktop", True),
-                              proofs=c.get("proofs"))
+                              proofs=c.get("proofs"), bypath=c.get("bypath"))
         got = gate_plan.plan(c["paths"], tree)
         bad = diff(c["want"], got)
         print(("ok   " if not bad else "FAIL ") + c["name"])

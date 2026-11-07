@@ -133,6 +133,36 @@ SELFTESTS = [
     ("covmap_self", "NODE_OPTIONS=\"$TS_NODE_OPTIONS\" node apps/desktop/tests/harness/coverage/covmap.mts --self-test",
      ("apps/desktop/tests/harness/coverage/*",)),
 ]
+# The desktop's by-path tests (they read files by path: a CSS sheet, a Rust source, a fixture), in
+# quick's related mode: one runs when a changed path is one it reads (or the test itself). What
+# each reads is read from its source by the CLI (bypath_reads: its path literals). The ones whose
+# reads are no literal (a walk of a folder, a name built at run time) say their globs here,
+# repo-relative; such a test missing here runs on every desktop change. The full gate (pnpm check),
+# the tip and a release run every one.
+BYPATH_DYNAMIC = {
+    # the ds laws and the words: every source file
+    "src/ds/lint.test.ts": ["apps/desktop/src/*"],
+    "src/shared/words.test.ts": ["apps/desktop/src/*"],
+    # every sheet's turning animation
+    "src/app/working.test.tsx": ["apps/desktop/src/*.css"],
+    # the hero's sources, walked
+    "src/hero/film-maps.test.ts": ["apps/desktop/src/hero/*"],
+    # main's sources and the composer's, walked
+    "src/main/asks.test.ts": ["apps/desktop/src/main/*", "apps/desktop/src/composer/*"],
+    # index.css's imports, in order
+    "src/ds/pointer.test.tsx": ["apps/desktop/src/ds/*.css"],
+    # the look files by name
+    "src/bims/render/maps/blook.test.ts": ["apps/desktop/src/bims/render/maps/*", "apps/desktop/src/ds/tokens.css"],
+    # names joined at run time
+    "src/review/syntax.test.ts": ["apps/desktop/src/ds/*.css"],
+    "src/views/port.test.ts": ["rust/proto/src/view_rpc.rs"],
+    "src/spotlight/spotlight.test.tsx": ["apps/desktop/src/spotlight/spotlight.css"],
+    "src/thread/markdown-parity.test.tsx": ["office/fixtures/gfm.*"],
+    # a temp folder of its own: no repo file
+    "src/main/images.test.ts": [],
+}
+DYNAMIC_RX = re.compile(r"readdir|import\.meta\.glob|readFileSync\([^)]*\$\{")
+PATH_LIT = re.compile(r"""['"`]([^'"`\s]*?\.(?:css|ts|tsx|mts|js|mjs|json|md|rs|html|svg|txt|bend))['"`]""")
 PROOF_RX = re.compile(r"^bend/(core|hub|vendor|laws|proofs)/.*\.bend$")
 HUB_RX = re.compile(r"^bend/(hub|vendor)/")
 CORE_GEN_RX = re.compile(r"^(rust/proto/src/core/|rust/proto/tests/core_gen(\.rs|/)|bend/hub/gen/|bend/hub/state-hand\.bend)")
@@ -147,13 +177,16 @@ class Tree:
     desktop:  whether the tree has apps/desktop
     proofs:   {bend/proofs/<f>.bend: [every bend/ file of its imports' closure, itself too]}
               (tests/proof_run.py closures; read only when a .bend file changed)
+    bypath:   {the desktop's by-path test (src/x.test.ts): [repo globs it reads] or None (unknown:
+              always)} (bypath_reads; read only when a desktop src file changed)
     """
 
-    def __init__(self, includes=None, exists=None, desktop=True, proofs=None):
+    def __init__(self, includes=None, exists=None, desktop=True, proofs=None, bypath=None):
         self.includes = includes or {}
         self.exists = set(exists or ())
         self.desktop = desktop
         self.proofs = proofs or {}
+        self.bypath = bypath or {}
 
 
 def proofs_for(changed, tree):
@@ -223,6 +256,18 @@ def desktop_rel(changed, tree):
     return rel
 
 
+def bypath_pick(changed, tree):
+    """The desktop's by-path tests these paths reach (relative to apps/desktop, sorted): a test
+    whose reads match a changed path, a changed test itself, and one whose reads are unknown
+    (None: it runs on every desktop change)."""
+    out = []
+    for t, reads in sorted(tree.bypath.items()):
+        if reads is None or "apps/desktop/" + t in changed \
+                or any(fnmatch.fnmatchcase(p, g) for p in changed for g in reads):
+            out.append(t)
+    return out
+
+
 def plan(changed, tree):
     """The gate's steps for these changed paths (see the module's header)."""
     changed = [p.strip() for p in changed if p.strip()]
@@ -248,7 +293,10 @@ def plan(changed, tree):
     bend = any(PROOF_RX.match(p) for p in changed)
     core_gen = any(CORE_GEN_RX.match(p) for p in changed)
     why = desktop_why(changed, tree)
-    desktop = {"why": why, "rel": desktop_rel(changed, tree)} if why else None
+    desktop = None
+    if why:
+        rel = desktop_rel(changed, tree)
+        desktop = {"why": why, "rel": rel, "bypath": bypath_pick(changed, tree) if rel else []}
     heavy = ""
     if pkgs:
         heavy += " rust(%s )" % "".join(" " + c for c in pkgs)
@@ -292,6 +340,7 @@ def to_sh(p):
     v = {"pkgs": " ".join(p["pkgs"]), "hub_changed": p["hub_changed"], "bend_changed": p["bend_changed"],
          "proof_files": " ".join(p["proofs"]),
          "core_gen": p["core_gen"], "dwhy": d.get("why") or "", "drel": " ".join(d.get("rel") or []),
+         "dbypath": " ".join(d.get("bypath") or []),
          "heavy": p["heavy"], "land_steps": int(p["land_steps"]), **p["flags"]}
     lines = ["%s=%s" % (k, shlex.quote(str(x))) for k, x in v.items()]
     # the self-tests as two bash arrays of "name<TAB>command": this plan's, and every one (full)
@@ -316,12 +365,49 @@ def read_tree(changed, root=ROOT):
                     hit.append(c)
             if hit:
                 includes[p] = ["%s/(include)" % c for c in hit]
+    bypath = bypath_reads(root) if any(p.startswith("apps/desktop/src/") for p in changed) else {}
     proofs = {}
     if any(PROOF_RX.match(p) for p in changed):
         import proof_run
         proofs = proof_run.closures(root)
     return Tree(includes=includes, exists={p for p in changed if os.path.isfile(os.path.join(root, p))},
-                desktop=os.path.isdir(os.path.join(root, "apps", "desktop")), proofs=proofs)
+                desktop=os.path.isdir(os.path.join(root, "apps", "desktop")), proofs=proofs, bypath=bypath)
+
+
+def bypath_reads(root=ROOT):
+    """{by-path test (src/x.test.ts): [repo paths it reads] or None (unknown)}: the desktop's
+    tests that read files by path, and what: BYPATH_DYNAMIC's globs, else the path literals of
+    its source resolved from its folder ('./a.css', '../ds/tokens.css', 'side3d.css') or from
+    apps/desktop ('src/app/app.css', `${process.cwd()}/src/...`), the existing ones. A test that
+    walks a folder or builds a name at run time and is not in BYPATH_DYNAMIC: None."""
+    app = os.path.join(root, "apps", "desktop")
+    src = os.path.join(app, "src")
+    out = {}
+    for d, _, files in os.walk(src):
+        for f in files:
+            if not f.endswith((".test.ts", ".test.tsx")):
+                continue
+            full = os.path.join(d, f)
+            text = open(full, errors="replace").read()
+            if not re.search(r"readFile|readdir|import\.meta\.glob|import\.meta\.url", text):
+                continue
+            t = os.path.relpath(full, app)
+            if t in BYPATH_DYNAMIC:
+                out[t] = list(BYPATH_DYNAMIC[t])
+                continue
+            if DYNAMIC_RX.search(text):
+                out[t] = None
+                continue
+            reads = set()
+            for lit in PATH_LIT.findall(text):
+                lit = re.sub(r"^\$\{[^}]*\}/", "", lit)
+                for base in (d, app):
+                    p = os.path.normpath(os.path.join(base, lit))
+                    if os.path.isfile(p):
+                        reads.add(os.path.relpath(p, root))
+            # no repo file found, and no temp folder of its own: it reads something unknown
+            out[t] = sorted(reads) if reads or re.search(r"tmpdir|mkdtemp", text) else None
+    return out
 
 
 def main(argv):

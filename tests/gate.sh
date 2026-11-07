@@ -753,20 +753,27 @@ desktop_check() {
   # shellcheck disable=SC2086
   [ "${1:-}" = strict ] || rel="${drel:+ $drel}"
   if [ -n "$rel" ]; then
-    # by path: fs reads (sync, async, promises), globs, a file URL (review-gates m_33177);
-    # an empty list: vitest run runs them all (safe)
-    local byfile drc ran; byfile="$(cd "$root/apps/desktop" && grep -rlE 'readFile|readdir|import\.meta\.glob|import\.meta\.url' src --include='*.test.ts' --include='*.test.tsx' | tr '\n' ' ')"
+    # by path (fs reads, globs, a file URL: review-gates m_33177): only the ones that read a
+    # changed file, or whose reads are unknown (the plan's dbypath, tests/gate_plan.py
+    # bypath_reads; all 38 took 19 s each run); the full gate runs every one
+    local drc ran
     # lint: the changed files only (eslint of the whole app took 527 s at load 30, of 3 files
     # 14 s, fast-loop m_46374); typecheck still covers every file, and the full gate lints all.
     # --no-warn-ignored: $rel holds .css/.webp/.html too, which eslint warns are ignored, and
     # --max-warnings 0 made a css-only change red (review-gates m_46660)
     # shellcheck disable=SC2086
     (cd "$root/apps/desktop" && python3 ../../tests/conflict_markers.py && pnpm -s typecheck && pnpm -s exec eslint --max-warnings 0 --no-warn-ignored $rel \
-        && pnpm -s exec vitest related --run --passWithNoTests $rel && pnpm -s exec vitest run $byfile && pnpm -s build) >"$log" 2>&1
+        && pnpm -s exec vitest related --run --passWithNoTests $rel && echo "@@ by path" \
+        && { [ -z "$dbypath" ] || pnpm -s exec vitest run $dbypath; }) >"$log" 2>&1
     drc=$?
     # what it ran, said and kept (<gate dir>/vitest-related.jsonl: the audit's 'vitest-related miss')
-    ran="$(grep -oE '(✓|❯|×|FAIL) +src/[^ ]+\.test\.tsx?' "$log" | awk '{ print $NF }' | sort -u | tr '\n' ' ')"
-    echo "  vitest related to$rel: $(wc -w <<<"$ran" | tr -d ' ') files ($ran)"
+    local tests_rx='(✓|❯|×|FAIL) +src/[^ ]+\.test\.tsx?' related
+    ran="$(grep -oE "$tests_rx" "$log" | awk '{ print $NF }' | sort -u | tr '\n' ' ')"
+    related="$(sed '/^@@ by path$/q' "$log" | grep -oE "$tests_rx" | awk '{ print $NF }' | sort -u | tr '\n' ' ')"
+    echo "  vitest related to$rel: $(wc -w <<<"$related" | tr -d ' ') files ($related); by path: ${dbypath:-none}"
+    # a change no test imports: said, with its modules (51 of 339 related quicks ran no test)
+    local bare; bare="$(printf '%s\n' $rel | grep -E '\.tsx?$' | grep -vE '\.test\.tsx?$' | tr '\n' ' ')"
+    [ $drc = 0 ] && [ -z "$related" ] && [ -n "$bare" ] && echo "WARN 0 tests ran for ${bare% }: no test imports it (a test next to it, or the full gate's run)"
     python3 -c 'import json, sys, time; print(json.dumps({"t": int(time.time()), "agent": sys.argv[1], "sha": sys.argv[2], "changed": sys.argv[3].split(), "ran": sys.argv[4].split(), "rc": int(sys.argv[5])}))' \
       "${SB_AGENT:-?}" "$(git -C "$root" rev-parse HEAD 2>/dev/null)" "$rel" "$ran" "$drc" >>"$gdir/vitest-related.jsonl" 2>/dev/null
     if [ $drc = 0 ]; then echo "ok   desktop_check ($((SECONDS - s))s, vitest: related + by path; full runs all)"; return 0; fi
