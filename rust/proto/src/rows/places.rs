@@ -174,6 +174,28 @@ pub enum PrYours {
     Unknown,
 }
 
+/// What a part of a PR's words says, for its tone: `yours` waits on him
+/// (the accent), `fail` a failing check (err), `plain` the rest (dim).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum PrTone {
+    Yours,
+    Fail,
+    Plain,
+    #[serde(other)]
+    Unknown,
+}
+
+/// One part of a PR's words (`Pr.pieces`): its text, from the catalog
+/// as `words` has it, and its tone.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct PrPiece {
+    pub text: String,
+    pub tone: PrTone,
+}
+
 /// A pull request the hub follows (the TUI's `/prs` row, a place's PR,
 /// a PR artifact's status: one builder, `forge::news::pr_row`): what it
 /// means, and the hub's own words for it (never rebuilt by a client).
@@ -193,6 +215,12 @@ pub struct Pr {
     pub review: PrReview,
     /// its state in words: `changes asked · checks pass`, `draft · checks running`
     pub words: String,
+    /// the same words as typed parts, in the order a client draws them
+    /// (what waits on him first, designer m_54748): a client tones them
+    /// by `tone`, never by reading their text (architect m_54755). Empty
+    /// from an older hub: the client draws `words` as they are.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pieces: Vec<PrPiece>,
     /// its `/prs` line after `#<number>`: `sb/x · x, y · <words>`
     pub text: String,
     /// P4c-4a: a review was asked and none came yet (`review` stays

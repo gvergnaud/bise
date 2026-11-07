@@ -5,7 +5,7 @@ import type { Artifact, Pr } from '@/proto';
 import { library } from '@/proto/words_library.gen';
 import { chipOf, chipsOf, chipWord, prSideItems } from './folders';
 import type { Item } from './model';
-import { prLine, prParts, prPieces, prSettled } from './pr';
+import { prLine, prParts, prSettled } from './pr';
 
 const status = (over: Partial<Pr> = {}): Pr => ({
   number: 412, url: 'https://github.com/acme/web/pull/412', branch: 'sb/perf', agents: ['perf'], state: 'open', checks: 'pass',
@@ -16,21 +16,6 @@ const prArt = (id: string, over: Partial<Artifact> = {}, s: Pr | null = status()
   pr: { repo: 'acme/web', number: 412, tag: '#412', status: s }, ...over,
 });
 const item = (a: Artifact): Item => ({ project: 'acme', projectName: 'acme', a });
-
-describe('a PR’s pieces (designer m_54748)', () => {
-  it('what waits on him first, in the accent; the rest as the hub said them', () => {
-    expect(prPieces(prArt('a'))).toEqual([
-      { text: 'your merge', acc: true },
-      { text: 'approved', acc: false },
-      { text: 'checks ✓ 12/12', acc: false },
-    ]);
-    expect(prPieces(prArt('b', {}, status({ words: 'changes asked · checks ✗ e2e', yours: null })))).toEqual([
-      { text: 'changes asked', acc: false },
-      { text: 'checks ✗ e2e', acc: false },
-    ]);
-    expect(prPieces(prArt('c', {}, null))).toEqual([]);
-  });
-});
 
 describe('a PR artifact line', () => {
   it('says the sigil, the hub words, pink only when it waits on him', () => {

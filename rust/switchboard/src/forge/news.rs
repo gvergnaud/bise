@@ -430,48 +430,67 @@ pub fn checks_text(at: &At, pr: &PrSnapshot, failed: &[(&FailedCheck, usize)], o
 /// failing check). How late the forge is stays out: the client adds
 /// `as of <age> ago` from `stale_ms` (an age is never frozen in words).
 pub fn pr_words(pr: &PrView) -> String {
-    use bise_proto::rows::PrYours;
+    parts(pr).into_iter().map(|p| p.text).collect::<Vec<_>>().join(" · ")
+}
+
+/// The same words as typed parts, in the order a client draws them
+/// (designer m_54748): the one that waits on him first (`yours`, the
+/// accent), the rest as `pr_words` says them, a failing check's `fail`
+/// (err). Joined with ' · ' they are `pr_words` with the `yours` part
+/// moved first. A client tones them by `tone`, never by their text
+/// (architect m_54755).
+pub fn pr_pieces(pr: &PrView) -> Vec<bise_proto::rows::PrPiece> {
+    use bise_proto::rows::PrTone;
+    let (mine, rest): (Vec<_>, Vec<_>) = parts(pr).into_iter().partition(|p| p.tone == PrTone::Yours);
+    mine.into_iter().chain(rest).collect()
+}
+
+/// pr-integration's table, one part each, in the words' order.
+fn parts(pr: &PrView) -> Vec<bise_proto::rows::PrPiece> {
+    use bise_proto::rows::{PrPiece, PrTone, PrYours};
     use bise_proto::words::panel;
+    let part = |text: String, tone| PrPiece { text, tone };
+    let plain = |text: &str| part(text.into(), PrTone::Plain);
     let f = &pr.facts;
     match pr.state {
-        PrState::Merged => return panel::pr_merged.into(),
-        PrState::Closed => return panel::pr_closed.into(),
+        PrState::Merged => return vec![plain(panel::pr_merged)],
+        PrState::Closed => return vec![plain(panel::pr_closed)],
         PrState::Draft | PrState::Open => {}
     }
-    let mut out: Vec<String> = Vec::new();
+    let mut out: Vec<PrPiece> = Vec::new();
     if pr.state == PrState::Draft {
-        out.push(panel::pr_draft.into());
+        out.push(plain(panel::pr_draft));
     }
     if pr.yours == Some(PrYours::Review) {
-        out.push(panel::pr_your_review.into());
+        out.push(part(panel::pr_your_review.into(), PrTone::Yours));
     } else {
         match pr.review {
-            Review::ChangesRequested => out.push(panel::pr_changes_asked.into()),
-            Review::Approved => out.push(panel::pr_approved.into()),
+            Review::ChangesRequested => out.push(plain(panel::pr_changes_asked)),
+            Review::Approved => out.push(plain(panel::pr_approved)),
             Review::None | Review::Pending => {}
         }
     }
     if f.conflicts {
-        out.push(panel::pr_conflicts.into());
+        out.push(part(panel::pr_conflicts.into(), PrTone::Fail));
     }
     let failing = matches!(pr.checks, Checks::Fail { .. });
     if pr.state == PrState::Open && out.is_empty() && !failing {
-        out.push(panel::pr_open.into());
+        out.push(plain(panel::pr_open));
     }
     let (done, total) = (f.checks_done.to_string(), f.checks.to_string());
     match &pr.checks {
-        Checks::Pass if f.checks > 0 => out.push(panel::pr_checks_ok_of(&total, &total)),
-        Checks::Pass => out.push(panel::pr_checks_ok.into()),
-        Checks::Running if f.checks > 0 => out.push(panel::pr_checks_running_of(&done, &total)),
-        Checks::Running => out.push(panel::pr_checks_running.into()),
-        Checks::Fail { failing } if failing.is_empty() => out.push(panel::pr_checks_failed_bare.into()),
-        Checks::Fail { failing } => out.push(panel::pr_checks_failed(failing.join(", "))),
+        Checks::Pass if f.checks > 0 => out.push(part(panel::pr_checks_ok_of(&total, &total), PrTone::Plain)),
+        Checks::Pass => out.push(plain(panel::pr_checks_ok)),
+        Checks::Running if f.checks > 0 => out.push(part(panel::pr_checks_running_of(&done, &total), PrTone::Plain)),
+        Checks::Running => out.push(plain(panel::pr_checks_running)),
+        Checks::Fail { failing } if failing.is_empty() => out.push(part(panel::pr_checks_failed_bare.into(), PrTone::Fail)),
+        Checks::Fail { failing } => out.push(part(panel::pr_checks_failed(failing.join(", ")), PrTone::Fail)),
         Checks::None => {}
     }
     if pr.yours == Some(PrYours::Merge) {
-        out.push(panel::pr_your_merge.into());
+        out.push(part(panel::pr_your_merge.into(), PrTone::Yours));
     }
-    out.join(" · ")
+    out
 }
 
 /// `/prs` (pr-design §4): the open PRs of this repo's places, by number,
@@ -525,6 +544,7 @@ pub fn pr_row(pr: &PrView, agents: &[String]) -> bise_proto::rows::Pr {
         review,
         text: format!("{} · {} · {}", pr.branch, who, words),
         words,
+        pieces: pr_pieces(pr),
         in_review: pr.review == Review::Pending,
         stale_ms: pr.stale_ms,
         title: pr.facts.title.clone(),

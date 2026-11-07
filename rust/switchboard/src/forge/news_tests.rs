@@ -307,3 +307,26 @@ fn every_pr_tone_reads_as_its_state() {
         assert!(matches!(lines::read(&line), lines::Rec::Hub(lines::Hub::Pr { state: s, number: 7, .. }) if s == state), "{line}");
     }
 }
+
+#[test]
+fn the_pieces_are_the_words_with_his_part_first_and_typed() {
+    use bise_proto::rows::{PrTone, PrYours};
+    let mut s = crate::forge::tests::pr(412, PrState::Open);
+    s.review = Review::Approved;
+    s.checks = Checks::Pass;
+    s.facts.checks = 12;
+    s.facts.checks_done = 12;
+    let mut v = crate::place::PrView::of(&s, None);
+    v.yours = Some(PrYours::Merge);
+    let (words, pieces) = (pr_words(&v), pr_pieces(&v));
+    assert_eq!(words, "approved · checks ✓ 12/12 · your merge");
+    assert_eq!(pieces[0].tone, PrTone::Yours, "his part first: {pieces:?}");
+    assert_eq!(pieces.iter().map(|p| p.text.as_str()).collect::<Vec<_>>().join(" · "), "your merge · approved · checks ✓ 12/12");
+    // with no part of his, the pieces are the words as said; a failing check is typed fail
+    s.checks = Checks::Fail { failing: vec!["e2e".into()] };
+    s.review = Review::ChangesRequested;
+    let v = crate::place::PrView::of(&s, None);
+    let pieces = pr_pieces(&v);
+    assert_eq!(pieces.iter().map(|p| p.text.as_str()).collect::<Vec<_>>().join(" · "), pr_words(&v));
+    assert_eq!(pieces.iter().map(|p| p.tone).collect::<Vec<_>>(), vec![PrTone::Plain, PrTone::Fail]);
+}

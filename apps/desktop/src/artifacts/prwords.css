@@ -1,13 +1,12 @@
-/* A PR's words (PrWords.tsx, designer m_54748): the accent only on what waits on him, the rest
-   dim, a ✗ in err with ink after it. `.prw-fit`: one line, a part with no room wraps under it out
+/* A PR's words (PrWords.tsx, designer m_54748): by the hub's tone, the accent only on what waits
+   on him, a failing check in err, the rest dim. `.prw-fit`: one line, a part with no room wraps under it out
    of sight, so each shows whole or not at all, the last first to go. Owner: pr-artifacts. */
 .prw { color: var(--c-text-2); }
 .prw-tag { color: inherit; }
 .prw-acc { color: var(--c-accent); }
 .prw-dim { color: var(--c-text-2); }
 .prw-late { color: var(--c-text-3); }
-.prw-x { color: var(--c-err); }
-.prw-ink { color: var(--c-text); }
+.prw-fail { color: var(--c-err); }
 .prw-fit { display: flex; flex-wrap: wrap; height: 1lh; overflow: hidden; min-width: 0; }
 .prw-fit > span { white-space: pre; }
 .prw-fit > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }

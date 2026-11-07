@@ -616,6 +616,18 @@ export type PrProvider = "github" | "gitlab" | "unknown";
 export type PrYours = "review" | "merge" | "unknown";
 
 /**
+ * What a part of a PR's words says, for its tone: `yours` waits on him
+ * (the accent), `fail` a failing check (err), `plain` the rest (dim).
+ */
+export type PrTone = "yours" | "fail" | "plain" | "unknown";
+
+/**
+ * One part of a PR's words (`Pr.pieces`): its text, from the catalog
+ * as `words` has it, and its tone.
+ */
+export type PrPiece = { text: string, tone: PrTone, };
+
+/**
  * A pull request the hub follows (the TUI's `/prs` row, a place's PR,
  * a PR artifact's status: one builder, `forge::news::pr_row`): what it
  * means, and the hub's own words for it (never rebuilt by a client).
@@ -633,6 +645,13 @@ failing?: Array<string>, review: PrReview,
  * its state in words: `changes asked · checks pass`, `draft · checks running`
  */
 words: string, 
+/**
+ * the same words as typed parts, in the order a client draws them
+ * (what waits on him first, designer m_54748): a client tones them
+ * by `tone`, never by reading their text (architect m_54755). Empty
+ * from an older hub: the client draws `words` as they are.
+ */
+pieces?: Array<PrPiece>, 
 /**
  * its `/prs` line after `#<number>`: `sb/x · x, y · <words>`
  */

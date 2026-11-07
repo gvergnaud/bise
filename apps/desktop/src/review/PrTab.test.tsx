@@ -18,7 +18,8 @@ const URL = 'https://github.com/acme/web/pull/412';
 
 const status = (over: Partial<Pr> = {}): Pr => ({
   number: 412, url: URL, branch: 'sb/perf', base: 'main', agents: ['perf'], state: 'open', checks: 'pass', review: 'approved',
-  words: 'approved · checks ✓ 12/12 · your merge', text: '', yours: 'merge', mergeable: true, head_oid: 'abc123', ...over,
+  words: 'approved · checks ✓ 12/12 · your merge', text: '', yours: 'merge', mergeable: true, head_oid: 'abc123',
+  pieces: [{ text: 'your merge', tone: 'yours' }, { text: 'approved', tone: 'plain' }, { text: 'checks ✓ 12/12', tone: 'plain' }], ...over,
 });
 
 function shell(s: Pr | null, bise: Record<string, unknown> = {}) {
