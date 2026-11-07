@@ -23,6 +23,7 @@ The plan's fields (and their shell names for gate.sh):
                 '' is a light run (heavy-run's light lane)
   land_steps    whether a land (gate.sh land) has any step for these paths
 """
+import fnmatch
 import json
 import os
 import re
@@ -75,6 +76,57 @@ CU = ("computer-use/extension/", "computer-use/bench/", "computer-use/tsconfig.n
 AQA = re.compile(r"^dev/plugins/ambient-qa/([^/]+\.ts|as-he-does/[^/]+\.ts|tsconfig\.json)$")
 WORDS = re.compile(r"^(tests/[^/]+_tmux\.py|apps/desktop/tests/|apps/desktop/src/|tests/words/|rust/proto/src/words/"
                    r"|tests/word_literals\.txt$)")
+# The gate's own tests, by the paths they test (c3-quick-90s b: ~27 s of them ran in every quick).
+# quick runs one when a changed path matches one of its globs (fnmatch: * crosses /); the full
+# gate (the tip, the nightly, a release) runs every one. The real ratchets on the tree (no blind
+# sleep, no conflict marker, shims, state_guard, js_guard, pick_gate, word_lint) are no self-test:
+# quick runs them always (gate.sh). A test whose sources are not listed here never runs in quick.
+GATE = ("tests/gate.sh", "tests/gate_plan.py")
+SELFTESTS = [
+    ("gate_plan_test", "python3 -B tests/gate_plan_test.py",
+     ("tests/gate_plan*.py", "tests/fixtures/gate-plan/*", "tests/test_map.py", "tests/desktop_assets.py",
+      "tests/include_map.py")),
+    ("sleep_check_self", "python3 tests/sleep_check.py --self-test", ("tests/sleep_check.py",)),
+    # wait.py's timeouts count awake time (issue 26)
+    ("wait_test", "python3 -B tests/wait_test.py", ("tests/wait.py", "tests/wait_test.py")),
+    # a test's env never keeps the caller's path overrides (its own self-test)
+    ("bise_env", "python3 tests/bise_env.py", ("tests/bise_env.py", "tests/run_all.sh", "tests/e2e.py")),
+    # tests/known_reds.txt parses (issue 28)
+    ("known_reds_self", "python3 tests/known_reds.py --self-test", ("tests/known_reds.py", "tests/known_reds.txt")),
+    ("shims_check_self", "python3 tests/shims_check.py --self-test", ("tests/shims_check.py",)),
+    ("state_guard_self", "python3 tests/state_guard.py --self-test", ("tests/state_guard.py",)),
+    ("js_guard_self", "python3 tests/js_guard.py --self-test", ("tests/js_guard.py",)),
+    ("pick_gate_self", "python3 tests/pick_gate.py --self-test", ("tests/pick_gate.py",)),
+    # the full gate's test map knows every test, every top-level path, every generated file's seam
+    ("test_map_self", "python3 tests/test_map.py --self-test",
+     ("tests/test_map.py", "tests/desktop_assets.py", "tests/run_all.sh", "tests/*_e2e.py", "tests/*_tmux.py",
+      "*.gen.ts", "apps/desktop/tests/harness/coverage/*")),
+    # the crates' compile-time reads outside rust/ map to their crate
+    ("include_map_self", "python3 tests/include_map.py --self-test",
+     ("tests/include_map.py", "rust/*.rs", "prompts/*", "kit/examples/*")),
+    # the desktop pick's shadow never fails or holds its caller (gate.sh land's guarded line)
+    ("desktop_pick_test", "python3 -B tests/desktop_pick_test.py",
+     ("tests/desktop_pick_test.py", "tests/desktop_pick_shadow.sh", "tests/gate.sh")),
+    # gate.sh's process sweep never kills the pool around a gate in a test (16 s)
+    ("gate_sweep_test", "python3 -B tests/gate_sweep_test.py", ("tests/gate_sweep_test.py", "tests/gate.sh",
+                                                                 "tests/run_all.sh")),
+    # a red e2e test keeps its world's logs
+    ("keep_logs_test", "python3 -B tests/keep_logs_test.py", ("tests/keep_logs_test.py", "tests/e2e.py",
+                                                               "tests/run_all.sh", "tests/gate.sh")),
+    # every agent's gate takes heavy-run's queue, one gate a tree (5 s)
+    ("gate_queue_test", "python3 -B tests/gate_queue_test.py",
+     ("tests/gate_queue_test.py", "tests/gate.sh", "scripts/heavy-run", "scripts/heavy_slot.py",
+      "tests/eslint_quick_key.py", "tests/proof_run.py")),
+    # every build that ships a runtime checks it is whole for the viewer (xlsx-fix)
+    ("runtime_check_test", "python3 -B tests/runtime_check_test.py",
+     ("tests/runtime_check_test.py", "scripts/runtime_check.sh", "scripts/try_build.py", "scripts/versions.sh",
+      "apps/desktop/electron-builder.mjs")),
+    ("desktop_pick_audit_self", "python3 -B tests/desktop_pick_audit.py --self-test",
+     ("tests/desktop_pick_audit.py", "tests/desktop_pick_shadow.sh")),
+    # the coverage map's rules on synthetic coverage (needs apps/desktop)
+    ("covmap_self", "NODE_OPTIONS=\"$TS_NODE_OPTIONS\" node apps/desktop/tests/harness/coverage/covmap.mts --self-test",
+     ("apps/desktop/tests/harness/coverage/*",)),
+]
 PROOF_RX = re.compile(r"^bend/(core|hub|vendor|laws|proofs)/.*\.bend$")
 HUB_RX = re.compile(r"^bend/(hub|vendor)/")
 CORE_GEN_RX = re.compile(r"^(rust/proto/src/core/|rust/proto/tests/core_gen(\.rs|/)|bend/hub/gen/|bend/hub/state-hand\.bend)")
@@ -196,7 +248,20 @@ def plan(changed, tree):
     land_steps = bool(any(SRC_RX.search(p) for p in changed) or pkgs or desktop or land_flags)
     return {"changed": changed, "pkgs": pkgs, "flags": {f: int(f in flags) for f in FLAG_NAMES},
             "hub_changed": int(hub), "bend_changed": int(bend), "core_gen": int(core_gen),
-            "desktop": desktop, "heavy": heavy, "land_steps": land_steps}
+            "desktop": desktop, "heavy": heavy, "land_steps": land_steps,
+            "selftests": selftests(changed, tree), "selftests_all": selftests(changed, tree, every=True)}
+
+
+def selftests(changed, tree, every=False):
+    """The gate's own tests these paths reach (every: all of them, the full gate's), in
+    SELFTESTS' order; covmap only with apps/desktop."""
+    out = []
+    for name, _, globs in SELFTESTS:
+        if name == "covmap_self" and not tree.desktop:
+            continue
+        if every or any(fnmatch.fnmatchcase(p, g) for p in changed for g in globs):
+            out.append(name)
+    return out
 
 
 def to_sh(p):
@@ -205,7 +270,12 @@ def to_sh(p):
     v = {"pkgs": " ".join(p["pkgs"]), "hub_changed": p["hub_changed"], "bend_changed": p["bend_changed"],
          "core_gen": p["core_gen"], "dwhy": d.get("why") or "", "drel": " ".join(d.get("rel") or []),
          "heavy": p["heavy"], "land_steps": int(p["land_steps"]), **p["flags"]}
-    return "\n".join("%s=%s" % (k, shlex.quote(str(x))) for k, x in v.items())
+    lines = ["%s=%s" % (k, shlex.quote(str(x))) for k, x in v.items()]
+    # the self-tests as two bash arrays of "name<TAB>command": this plan's, and every one (full)
+    cmds = {n: c for n, c, _ in SELFTESTS}
+    for var, names in (("selftests", p["selftests"]), ("selftests_all", p["selftests_all"])):
+        lines.append("%s=(%s)" % (var, " ".join(shlex.quote("%s\t%s" % (n, cmds[n])) for n in names)))
+    return "\n".join(lines)
 
 
 def read_tree(changed, root=ROOT):

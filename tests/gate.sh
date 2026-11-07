@@ -13,6 +13,9 @@
 #                     in parallel (tests/proof_run.py, 4 jobs);
 #                     no changed test hard-codes a UI word past its count in
 #                     tests/word_literals.txt (tests/word_lint.py, issue 29).
+#                     The gate's own tests (gate_sweep, gate_queue, desktop_pick,
+#                     test_map, the ratchets' --self-test...) only when their
+#                     sources changed (gate_plan.py SELFTESTS); full runs them all.
 #                     The tests run bins.sh's cached sb-core of the tree's
 #                     hub/ vendor/ itself (SB_CORE_BIN = the cache file, one
 #                     compile per source hash for every worktree and the
@@ -191,6 +194,19 @@ gate_plan() {  # <changed path>...
   local sh
   sh="$(python3 -B "$root/tests/gate_plan.py" --sh -- "$@")" || { echo "FAIL gate_plan: tests/gate_plan.py failed"; return 1; }
   eval "$sh"
+}
+# the gate's own tests of a plan's array (selftests: quick's, by path; selftests_all: full's),
+# from the repo root, one at a time: quiet when green, the test's output again when red
+selftests_run() {  # <array name> <red line>
+  local arr=() e n c s t=$SECONDS ran="" tab=$'\t'
+  eval "arr=(\${$1[@]+\"\${$1[@]}\"})"
+  # ${a[@]+...}: macOS /bin/bash 3.2 calls an empty array unbound under set -u
+  for e in ${arr[@]+"${arr[@]}"}; do
+    n="${e%%"$tab"*}" c="${e#*"$tab"}" s=$SECONDS
+    (cd "$root" && eval "$c") >/dev/null 2>&1 || { (cd "$root" && eval "$c"); echo "FAIL $n"; echo "$2"; return 1; }
+    ran="$ran $n($((SECONDS - s))s)"
+  done
+  echo "ok   gate self-tests ($((SECONDS - t))s):${ran:- none for these paths}"
 }
 # node as the desktop lanes find it (desktop_path): the hub's land queue has no shell setup
 # Node runs the repo's .ts scripts by type stripping: flagged before node 22.18 (js-to-ts,
@@ -862,6 +878,11 @@ if [ "$mode" = full ]; then
   python3 tests/state_guard.py || { echo "GATE full FAILED"; exit 1; }
   # no new hand-written JS (js-to-ts, ~0.1 s)
   python3 tests/js_guard.py || { echo "GATE full FAILED"; exit 1; }
+  # every gate self-test, whatever changed (quick runs them by path; ~30 s); the ratchets
+  python3 tests/sleep_check.py >/dev/null || { python3 tests/sleep_check.py; echo "GATE full FAILED"; exit 1; }
+  python3 tests/conflict_markers.py || { echo "GATE full FAILED"; exit 1; }
+  python3 tests/pick_gate.py || { echo "GATE full FAILED"; exit 1; }
+  selftests_run selftests_all "GATE full FAILED" || exit 1
   export FUZZ_RUNS="${FUZZ_RUNS:-2000}"
   rm -f "$red"; export SB_RED_FILE="$red"
   # the e2e/tmux tests this change can break (tests/test_map.py; the user's
@@ -921,51 +942,25 @@ fi
 # ---- quick
 t0=$SECONDS
 # no blind time.sleep in tests/ (docs/issues/10-tests-wait.md): a test
-# waits for a state with tests/wait.py; the check proves itself first
-python3 "$root/tests/sleep_check.py" --self-test >/dev/null && python3 "$root/tests/sleep_check.py" >/dev/null \
-  || { python3 "$root/tests/sleep_check.py"; echo "GATE quick FAILED"; exit 1; }
-# wait.py's timeouts count awake time: a Mac sleep under the gate is no
-# timeout (issue 26)
-python3 -B "$root/tests/wait_test.py" >/dev/null || { python3 -B "$root/tests/wait_test.py"; echo "GATE quick FAILED"; exit 1; }
-# a test's env never keeps the caller's path overrides with an own HOME, and
-# its hub's BEND_RUN_DIR is under its tmp (tests/bise_env.py's self-test)
-python3 "$root/tests/bise_env.py" >/dev/null || { python3 "$root/tests/bise_env.py"; echo "GATE quick FAILED"; exit 1; }
+# waits for a state with tests/wait.py (its --self-test: with the gate's own tests below)
+python3 "$root/tests/sleep_check.py" >/dev/null || { python3 "$root/tests/sleep_check.py"; echo "GATE quick FAILED"; exit 1; }
+# the ratchets on the tree, always (a few tenths of a second each):
 # no merge or stash conflict marker in a tracked file (2393001f landed stash markers)
 python3 "$root/tests/conflict_markers.py" >/dev/null || { python3 "$root/tests/conflict_markers.py"; echo "GATE quick FAILED"; exit 1; }
-# tests/known_reds.txt parses (tests/known_reds.py, issue 28)
-python3 "$root/tests/known_reds.py" --self-test >/dev/null || { python3 "$root/tests/known_reds.py" --self-test; echo "GATE quick FAILED"; exit 1; }
 # every compatibility shim in tests/shims.txt with its removal release, none
 # past it (tests/shims_check.py, issue 31; always: the release moves with tags)
-python3 "$root/tests/shims_check.py" --self-test >/dev/null || { python3 "$root/tests/shims_check.py" --self-test; echo "GATE quick FAILED"; exit 1; }
 python3 "$root/tests/shims_check.py" || { echo "GATE quick FAILED"; exit 1; }
 # sb-core's records built or opened only in bend/hub/gen/ (tests/state_guard.py, state-schema)
-python3 "$root/tests/state_guard.py" --self-test >/dev/null || { python3 "$root/tests/state_guard.py" --self-test; echo "GATE quick FAILED"; exit 1; }
 python3 "$root/tests/state_guard.py" || { echo "GATE quick FAILED"; exit 1; }
 # no new hand-written JS: generated, vendored or on tests/js_allowlist.txt (js-to-ts, ~0.1 s)
-python3 "$root/tests/js_guard.py" --self-test >/dev/null || { python3 "$root/tests/js_guard.py" --self-test; echo "GATE quick FAILED"; exit 1; }
 python3 "$root/tests/js_guard.py" || { echo "GATE quick FAILED"; exit 1; }
-# the plan this run follows, on its fixtures (tests/gate_plan.py, < 0.1 s)
-python3 -B "$root/tests/gate_plan_test.py" >/dev/null || { python3 -B "$root/tests/gate_plan_test.py"; echo "GATE quick FAILED"; exit 1; }
-# the full gate's test map knows every test and every top-level path (tests/test_map.py)
-python3 "$root/tests/test_map.py" --self-test >/dev/null || { python3 "$root/tests/test_map.py" --self-test; echo "GATE quick FAILED"; exit 1; }
-# the crates' compile-time reads outside rust/ map to their crate (tests/include_map.py)
-python3 "$root/tests/include_map.py" --self-test >/dev/null || { python3 "$root/tests/include_map.py" --self-test; echo "GATE quick FAILED"; exit 1; }
-# the desktop checks' selection: its shadow never fails a land, its audit, the coverage map's rules
-# on synthetic coverage (fast-try p2; review-gates m_29412)
-python3 -B "$root/tests/desktop_pick_test.py" >/dev/null || { python3 -B "$root/tests/desktop_pick_test.py"; echo "GATE quick FAILED"; exit 1; }
-# every build that ships a runtime checks it is whole for the viewer (the xlsx grid; xlsx-fix)
-python3 -B "$root/tests/gate_sweep_test.py" >/dev/null || { python3 -B "$root/tests/gate_sweep_test.py"; echo "GATE quick FAILED"; exit 1; }
-python3 -B "$root/tests/keep_logs_test.py" >/dev/null || { python3 -B "$root/tests/keep_logs_test.py"; echo "GATE quick FAILED"; exit 1; }
-python3 -B "$root/tests/gate_queue_test.py" >/dev/null || { python3 -B "$root/tests/gate_queue_test.py"; echo "GATE quick FAILED"; exit 1; }
-python3 -B "$root/tests/runtime_check_test.py" >/dev/null || { python3 -B "$root/tests/runtime_check_test.py"; echo "GATE quick FAILED"; exit 1; }
-python3 -B "$root/tests/desktop_pick_audit.py" --self-test >/dev/null || { python3 -B "$root/tests/desktop_pick_audit.py" --self-test; echo "GATE quick FAILED"; exit 1; }
-if [ -d "$root/apps/desktop" ]; then
-  NODE_OPTIONS="$TS_NODE_OPTIONS" node "$root/apps/desktop/tests/harness/coverage/covmap.mts" --self-test >/dev/null || { NODE_OPTIONS="$TS_NODE_OPTIONS" node "$root/apps/desktop/tests/harness/coverage/covmap.mts" --self-test; echo "GATE quick FAILED"; exit 1; }
-fi
 # no new Bool.pick walk that never stops; the list of old ones only shrinks; no
 # def that calls itself twice with the same arguments (2^n: hub-tick) (tests/pick_gate.py)
-python3 "$root/tests/pick_gate.py" --self-test >/dev/null || { python3 "$root/tests/pick_gate.py" --self-test; echo "GATE quick FAILED"; exit 1; }
 python3 "$root/tests/pick_gate.py" || { echo "GATE quick FAILED"; exit 1; }
+# the gate's own tests whose sources changed (the plan's selftests, tests/gate_plan.py SELFTESTS:
+# the ratchets' --self-test, gate_plan_test, test_map, include_map, the desktop pick, the sweep,
+# the queue, keep_logs, runtime_check, covmap); the full gate runs every one
+selftests_run selftests "GATE quick FAILED" || exit 1
 # no changed test hard-codes a UI word past its count in the shrink-only
 # tests/word_literals.txt (tests/word_lint.py, issue 29: read it by key)
 GATE_BASE="$base" python3 "$root/tests/word_lint.py" $changed || { echo "GATE quick FAILED"; exit 1; }

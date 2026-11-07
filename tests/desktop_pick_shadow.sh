@@ -17,7 +17,9 @@ bound="${DESKTOP_PICK_TIMEOUT:-20}"
 set -m
 ${DESKTOP_PICK_PY:-python3} "$root/tests/test_map.py" desktop-pick --from "$from" ${to:+--to "$to"} --log "$kind" >"$out" 2>/dev/null </dev/null &
 pid=$!
-( sleep "$bound" & s=$!; trap 'kill "$s" 2>/dev/null; exit 0' TERM; wait "$s"
+# DESKTOP_PICK_SLEEP: the timer's clock (default sleep); its test passes one whose bound is already
+# over, so it checks the kill without a wall-clock bound (6 quick gates red at load on 'secs < 10')
+( ${DESKTOP_PICK_SLEEP:-sleep} "$bound" & s=$!; trap 'kill "$s" 2>/dev/null; exit 0' TERM; wait "$s"
   : >"$out.late"; kill -TERM -- -"$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null
   sleep 1; kill -KILL -- -"$pid" 2>/dev/null ) >/dev/null 2>&1 </dev/null &
 timer=$!
