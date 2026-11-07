@@ -73,6 +73,7 @@ export const TEST_VARS = [
   'SB_CORE_BIN',
   'SB_EVERY_MIN_MS',
   'SB_LOAD_FACTOR',
+  'SB_LOOP_STATS_MS',
   'SB_ONBOARDING',
   'SB_PULSE_MS',
   'SB_SEARCH_BENCH',
