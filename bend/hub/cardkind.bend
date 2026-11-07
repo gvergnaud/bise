@@ -11,7 +11,7 @@ import ./lazy.bend as LZ
 # `card_open`): the user's digit goes back to Rust (`card_choice`), which
 # acts and closes the item; typed words go to main
 def choice_kind(+k: String) -> Bool:
-  String.eq(k, "merge") || String.eq(k, "feature_try") || String.eq(k, "feature_merge") || String.eq(k, "update") || String.eq(k, "signin")
+  String.eq(k, "merge") || String.eq(k, "review") || String.eq(k, "feature_try") || String.eq(k, "feature_merge") || String.eq(k, "update") || String.eq(k, "signin")
 
 # a page's own card (plan-ok): a plan an agent proposes, or a page's
 # question or drawn pick (notif-artifact), asked by that agent (core.bend

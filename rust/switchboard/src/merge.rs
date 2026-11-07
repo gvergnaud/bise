@@ -42,6 +42,14 @@ pub fn ready(pr: &PrSnapshot) -> bool {
         && !pr.facts.methods.is_empty()
 }
 
+/// pr-integration rule 6: the item opens (and stays) only while the PR
+/// waits on his merge as `forge::yours` says (the row's words read the
+/// same owner): ready, and not asking his review first (that item comes
+/// first: one item per PR, never two).
+fn waits_merge(pr: &PrSnapshot) -> bool {
+    crate::forge::yours(pr, true) == Some(bise_proto::rows::PrYours::Merge)
+}
+
 /// The method `1` uses: squash, else merge, else rebase (the repo's).
 pub fn method(pr: &PrSnapshot) -> Option<MergeMethod> {
     pr.facts.methods.first().copied()
@@ -158,6 +166,7 @@ impl Hub {
         // one arm per kind
         match kind.as_str() {
             "merge" => self.merge_choice(fx, env, card, place, pr, &choice),
+            review::KIND => self.review_choice(fx, env, card, place, &choice),
             release_line::KIND => self.update_choice(fx, env, card, place, &choice),
             // dev-flow §5.1: a feature's try and merge items
             k @ (crate::feature::TRY | crate::feature::MERGE) => self.feature_choice(fx, card, k, place.as_deref(), &choice),
@@ -235,7 +244,7 @@ impl Hub {
                 continue;
             }
             let pr = place.as_ref().and_then(|p| self.prs.get(p)).cloned();
-            let now = pr.as_ref().filter(|p| Some(p.number) == n && ready(p)).map(key);
+            let now = pr.as_ref().filter(|p| Some(p.number) == n && waits_merge(p)).map(key);
             match (now, self.merges.keys.get(&id).cloned()) {
                 (None, _) => self.close_card(fx, env, id, withdrawn(pr.as_ref())),
                 (Some(k), Some(was)) if k != was => self.close_card(fx, env, id, withdrawn(pr.as_ref())),
@@ -251,7 +260,7 @@ impl Hub {
         let places = crate::place::places(&self.st, &self.prs);
         self.merges.quiet.retain(|p, k| self.prs.get(p).is_some_and(|pr| key(pr) == *k));
         for p in places.iter().filter(|p| p.kind == crate::place::PlaceKind::Worktree) {
-            let Some(pr) = p.pr.as_ref().filter(|pr| ready(pr)) else { continue };
+            let Some(pr) = p.pr.as_ref().filter(|pr| waits_merge(pr)) else { continue };
             if asked.contains(&p.id) || self.merges.quiet.contains_key(&p.id) {
                 continue;
             }

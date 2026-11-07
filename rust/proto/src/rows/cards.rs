@@ -62,12 +62,16 @@ pub enum OptAct {
 
 /// Option `n` of a card of `kind`, done by the client and never sent:
 /// a merge's `2 open it on GitHub` (pr-design §6.3: the item stays), a
-/// sign-in's `1 sign in again`. `link`: the page that kind opens (a
-/// merge: its PR, [`pr_link`] or the place's box). None: the option
-/// answers the card.
+/// review's `1 open it on GitHub` (pr-integration rule 6), a sign-in's
+/// `1 sign in again`. `link`: the page that kind opens (a merge or a
+/// review: its PR, [`pr_link`] or the place's box). None: the option
+/// answers the card. Clients act on the option's act, never on its kind
+/// and number.
 pub fn opt_act(kind: &str, n: u32, link: Option<&str>) -> Option<OptAct> {
     match (kind, n) {
         ("merge", 2) => Some(OptAct::link(link)),
+        // pr-integration rule 6: "your review"'s `1 open it on GitHub`
+        ("review", 1) => Some(OptAct::link(link)),
         ("signin", 1) => Some(OptAct::SignIn),
         _ => None,
     }
@@ -86,7 +90,7 @@ impl Card {
     /// its link (an update's release page).
     pub fn act_link(&self) -> Option<String> {
         match self.kind.as_str() {
-            "merge" => pr_link(&self.text, self.pr).or_else(|| self.link.clone()),
+            "merge" | "review" => pr_link(&self.text, self.pr).or_else(|| self.link.clone()),
             _ => self.link.clone(),
         }
     }

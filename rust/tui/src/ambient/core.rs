@@ -219,6 +219,9 @@ struct CardInfo {
     /// a batch of drafts' card: {count, title, what, names} (amb-web
     /// m_6061: the capsule's words)
     batch: Option<bise_proto::rows::CardBatch>,
+    /// the digits whose option carries a client act (the hub's typed
+    /// `act`: a PR page to open), done here, never sent
+    opens: Vec<usize>,
 }
 
 /// Milliseconds since the epoch.
@@ -599,11 +602,11 @@ impl Core {
             // "opens in the terminal" and its card never closed (pm's D
             // fail 31)
             (Some(c), Some(d)) if c.page.is_some() => d.to_string(),
-            (Some(c), Some(d)) => match crate::sb::ambient_reply(&c.kind, &c.agent, &c.text, d) {
+            (Some(c), Some(d)) => match crate::sb::ambient_reply(&c.kind, &c.agent, &c.text, d, &c.opens) {
                 Some(r) => r,
                 // a PR or release page to open, the feature drop's second
                 // ask: the box acts on those itself
-                None if crate::sb::ambient_local(&c.kind, d) => return self.error("that option opens in the terminal."),
+                None if crate::sb::ambient_local(&c.kind, d, &c.opens) => return self.error("that option opens in the terminal."),
                 // options this split can't read: the digit as is, the
                 // hub's question path resolves it; never a refusal (pm's
                 // C fail 41)

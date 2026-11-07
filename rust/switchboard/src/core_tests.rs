@@ -3087,6 +3087,84 @@ mod prs {
         t.hub.st.open_cards().filter(|c| c.kind == "merge").cloned().collect()
     }
 
+    fn review_cards(t: &T) -> Vec<Card> {
+        t.hub.st.open_cards().filter(|c| c.kind == "review").cloned().collect()
+    }
+
+    /// pr-integration rule 6: "your review", one item per PR. Its `1`
+    /// opens the link by the option's act (the item stays), `2 not now`
+    /// is quiet until the head moves; reviewed and ready, the review item
+    /// closes and the merge item opens in the same sync.
+    #[test]
+    fn the_your_review_item() {
+        let mut t = T::new();
+        spawn_wt(&mut t, "dark");
+        let mut asked = ready_pr("tip1", &[]);
+        (asked.review, asked.facts.asked_you) = (Review::Pending, true);
+        t.go(report(1_000, Ok(vec![asked.clone()]), None));
+        let cs = review_cards(&t);
+        assert_eq!(cs.len(), 1, "{:?}", t.hub.st.cards);
+        assert!(merge_cards(&t).is_empty(), "his review first: one item, never two");
+        let c = &cs[0];
+        assert_eq!((c.agent.as_str(), c.place.as_deref(), c.pr), ("dark", Some("wt:dark"), Some(412)));
+        assert!(c.text.starts_with("#412 asks your review\ndark mode\nyour review · checks ✓ 3/3"), "{}", c.text);
+        assert!(c.text.ends_with("github.com/o/r/pull/412\n\n1. open it on GitHub\n2. not now"), "{}", c.text);
+        // option 1's act opens the PR (clients act on it, never on kind + number)
+        let (his, _) = crate::proto_view::cards(&t.hub.snapshot(1_000), "p", 1_000, crate::model::user_kind);
+        let row = his.iter().find(|r| r.kind == "review").unwrap();
+        assert_eq!(row.options[0].act, Some(bise_proto::rows::OptAct::link(Some("https://github.com/o/r/pull/412"))));
+        assert_eq!(row.options[1].act, None);
+        // `1`: nothing sent to the forge, the item stays
+        let fx = t.user(MAIN, &format!("/answer {} 1", c.id));
+        assert!(!fx.iter().any(|e| matches!(e, Effect::Merge { .. })));
+        assert_eq!(review_cards(&t).len(), 1);
+        // `2 not now`: closed, quiet while the PR is the same
+        t.user(MAIN, &format!("/answer {} 2", c.id));
+        assert_eq!(closed_as(&t, c.id).as_deref(), Some("not now"));
+        t.go(report(2_000, Ok(vec![asked.clone()]), None));
+        assert!(review_cards(&t).is_empty());
+        // a push: asked again
+        asked.head_oid = "tip2".into();
+        t.go(report(3_000, Ok(vec![asked.clone()]), None));
+        let id = review_cards(&t)[0].id;
+        // he reviewed it, it is ready: the review closes, the merge opens, the same sync
+        let ready = ready_pr("tip2", &["gabriel"]);
+        t.go(report(4_000, Ok(vec![ready]), None));
+        assert!(review_cards(&t).is_empty());
+        assert_eq!(closed_as(&t, id).as_deref(), Some("withdrawn: your review is no longer asked"));
+        assert_eq!(merge_cards(&t).len(), 1);
+    }
+
+    /// pr-integration rule 6, the law (architect m_54613): for every PR,
+    /// the row's `yours` is the open item's kind, or none and no item.
+    #[test]
+    fn the_row_and_the_item_never_disagree() {
+        use bise_proto::rows::PrYours;
+        for asked_you in [false, true] {
+            for review in [Review::None, Review::Pending, Review::Approved, Review::ChangesRequested] {
+                for checks in [Checks::Pass, Checks::Running, Checks::Fail { failing: vec!["e2e".into()] }] {
+                    for state in [PrState::Open, PrState::Draft, PrState::Merged] {
+                        for mergeable in [false, true] {
+                            let mut t = T::new();
+                            spawn_wt(&mut t, "dark");
+                            let mut p = ready_pr("tip1", &[]);
+                            (p.review, p.checks, p.state, p.facts.asked_you, p.facts.mergeable) = (review, checks.clone(), state, asked_you, mergeable);
+                            t.go(report(1_000, Ok(vec![p.clone()]), None));
+                            let row = t.hub.pr_rows_by_url(1_000).remove("https://github.com/o/r/pull/412").map(|r| r.yours);
+                            let items: Vec<String> = t.hub.st.open_cards().filter(|c| c.kind == "review" || c.kind == "merge").map(|c| c.kind.clone()).collect();
+                            let want: Vec<String> = match row.flatten() {
+                                Some(PrYours::Review) => vec!["review".into()],
+                                Some(PrYours::Merge) => vec!["merge".into()],
+                                _ => vec![],
+                            };
+                            assert_eq!(items, want, "{p:?}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     fn closed_as(t: &T, id: u64) -> Option<String> {
         t.journal
             .borrow()

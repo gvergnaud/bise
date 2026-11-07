@@ -278,6 +278,8 @@ export const inbox = {
   digits_to: (a: { n: string | number }): string => "1 to " + String(a.n),
   /** the item's noun: a merge */
   noun_merge: "merge",
+  /** the item's noun: a review asked of him (pr-integration rule 6) */
+  noun_review: "review",
   /** the item's noun: a try */
   noun_try: "try",
   /** the item's noun: a sign-in */

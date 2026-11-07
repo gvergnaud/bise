@@ -725,6 +725,8 @@ pub struct Hub {
     /// pr-merge (pr-design §6.3): the ready-to-merge items' runtime side
     /// (merge.rs).
     merges: merge::Merges,
+    /// pr-integration rule 6: the "your review" items (core_review.rs).
+    reviews: review::Reviews,
     /// update-flow: a newer bise, this hub's side (release_line.rs).
     updates: release_line::Updates,
     /// expired-ux: the agents waiting for the ChatGPT sign-in
@@ -871,6 +873,7 @@ impl Hub {
             pr_news: Default::default(),
             pr_bots: Vec::new(),
             merges: merge::Merges::default(),
+            reviews: review::Reviews::default(),
             updates: release_line::Updates::default(),
             signin: signin_card::SignIn::default(),
             dirty: false,
@@ -1411,6 +1414,7 @@ impl Hub {
         self.pr_ok_ms.retain(|k, _| ids.contains(k.as_str()));
         // pr-merge: the ready-to-merge items against the PRs now
         self.merge_sync(fx, env);
+        self.review_sync(fx, env);
     }
 
     /// pr-integration rule 2: the followed PRs' answer (every one asked
@@ -2106,6 +2110,9 @@ pub use feature::FeatureDone;
 
 #[path = "merge.rs"]
 pub(crate) mod merge;
+
+#[path = "core_review.rs"]
+pub(crate) mod review;
 
 #[path = "release_line.rs"]
 pub mod release_line;

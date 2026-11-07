@@ -292,6 +292,8 @@ crate::words! { inbox:
     digits_to(n) = "1 to {n}";
     /// the item's noun: a merge
     noun_merge = "merge";
+    /// the item's noun: a review asked of him (pr-integration rule 6)
+    noun_review = "review";
     /// the item's noun: a try
     noun_try = "try";
     /// the item's noun: a sign-in

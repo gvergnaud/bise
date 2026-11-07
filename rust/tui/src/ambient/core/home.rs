@@ -90,6 +90,7 @@ fn card_info(c: &rows::Card) -> CardInfo {
         page: c.page.clone(),
         artifact: c.artifact.clone(),
         batch: c.batch.clone(),
+        opens: c.options.iter().filter(|o| o.act.is_some()).map(|o| o.n as usize).collect(),
     }
 }
 

@@ -444,7 +444,7 @@ impl super::Sb {
 /// `choice_kind`): a digit answers them (the hub acts, then closes the
 /// item); typed words go to main.
 pub(super) fn choice_kind(kind: &str) -> bool {
-    matches!(kind, "merge" | "feature_try" | "feature_merge" | "update" | "signin")
+    matches!(kind, "merge" | "review" | "feature_try" | "feature_merge" | "update" | "signin")
 }
 
 /// A hub item, as the hub writes it: its head line (`#409 is ready to

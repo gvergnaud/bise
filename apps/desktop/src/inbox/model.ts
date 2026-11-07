@@ -59,7 +59,7 @@ export function current(list: readonly Card[], s: InboxState): Card | undefined 
 
 /** The hub's items with numbered options about a place (the TUI's and the hub's choice_kind): a
  *  digit answers them; typed words go to main, never as their answer. */
-const CHOICE_KINDS: ReadonlySet<string> = new Set(['merge', 'feature_try', 'feature_merge', 'update', 'signin']);
+const CHOICE_KINDS: ReadonlySet<string> = new Set(['merge', 'review', 'feature_try', 'feature_merge', 'update', 'signin']);
 
 /** Words answer it (a question), not only its options: never an approval or a choice item, which
  *  only 1/2 (a click, ⌘⏎) decides (ambient m_8773: a typed line never merges anything). */
@@ -102,7 +102,7 @@ export function digitWords(n: number): string {
 export function pickWaits(c: Pick<Card, 'approval' | 'kind' | 'options'>): string | null {
   if (takesWords(c) || c.options.length === 0) return null;
   // the item's own verb ('the merge'), else 'the approval' (designer m_26683)
-  const noun = c.kind === 'merge' || c.kind === 'feature_merge' ? inbox.noun_merge : c.kind === 'feature_try' ? inbox.noun_try : c.kind === 'signin' ? inbox.noun_signin : c.approval === true ? inbox.noun_approval : c.kind;
+  const noun = c.kind === 'merge' || c.kind === 'feature_merge' ? inbox.noun_merge : c.kind === 'review' ? inbox.noun_review : c.kind === 'feature_try' ? inbox.noun_try : c.kind === 'signin' ? inbox.noun_signin : c.approval === true ? inbox.noun_approval : c.kind;
   return inbox.waits_for({ noun, digits: digitWords(c.options.length) });
 }
 

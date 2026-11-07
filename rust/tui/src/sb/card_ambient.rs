@@ -39,18 +39,21 @@ pub(crate) fn ambient_options(kind: &str, agent: &str, text: &str) -> Vec<(usize
 /// does: a hub item's or an archive card's digit itself (sb-core reads
 /// a drop card's `1` as its yes, drop-card), else the option's words.
 /// None: no such option, or one the box acts on locally (a PR or
-/// release page to open, the feature drop's second ask).
-pub(crate) fn ambient_reply(kind: &str, agent: &str, text: &str, d: usize) -> Option<String> {
+/// release page to open, the feature drop's second ask). `opens`: the
+/// digits whose option carries an act (the hub's typed `act`).
+pub(crate) fn ambient_reply(kind: &str, agent: &str, text: &str, d: usize, opens: &[usize]) -> Option<String> {
     let s = base_shape(&ambient_card(kind, agent, text));
     let i = s.by_digit(d)?;
     if !choice_kind(kind) && kind != "drop" {
         return s.options.get(i).cloned();
     }
-    (!ambient_local(kind, d)).then(|| d.to_string())
+    (!ambient_local(kind, d, opens)).then(|| d.to_string())
 }
 
-/// Digit `d` of a `kind` card is one the box acts on itself (a PR page
-/// to open, the feature drop's second ask).
-pub(crate) fn ambient_local(kind: &str, d: usize) -> bool {
-    matches!((kind, d), ("merge", 2) | ("feature_merge", 3))
+/// Digit `d` of a `kind` card is one the box acts on itself: an option
+/// whose act opens a page (a merge's or a review's PR, read from the
+/// option's act, never its kind and number), or the feature drop's
+/// second ask.
+pub(crate) fn ambient_local(kind: &str, d: usize, opens: &[usize]) -> bool {
+    opens.contains(&d) || (kind, d) == ("feature_merge", 3)
 }
