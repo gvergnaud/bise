@@ -807,9 +807,10 @@
   mask-image: linear-gradient(to left, transparent, #000 var(--s-8));
 }
 /* an agent's line with its ψ and nothing at its end: the ψ never goes under the hover pin nor its
-   fade (designer m_55493), so the line's words end 4 before the pin's box while it shows; the name
-   gives way with its …, the ψ stays right after it */
-.s3-orow:is(:hover, :has(> .s3-pin:focus-within)):has(> .s3-pin):has(.s3-orow-wt):not(:has(:is(.s3-orow-age, .s3-orow-pr, .b-pinmark))) .s3-orow-open {
+   fade (designer m_55493), and a hover moves nothing (designer m_55542): the pin's room is kept at
+   rest too, its words ending 4 before the pin's box; the name gives way with its …, the ψ stays
+   right after it */
+.s3-orow:has(> .s3-pin):has(.s3-orow-wt):not(:has(:is(.s3-orow-age, .s3-orow-pr, .b-pinmark))) .s3-orow-open {
   padding-right: calc(var(--s-8) + var(--s-1));
 }
 /* an agent's line: 28 high, its words 12 from its right (.s3-orow-open's padding) */
