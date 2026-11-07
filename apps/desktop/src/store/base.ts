@@ -69,6 +69,20 @@ export class StoreBase {
    * onRefused, an `error` with cmd 'diff') lands on that view, never stays 'loading…' (pr-changes-blank)
    */
   /** @internal for apply.ts */ readonly diffAsked = new Map<string, string>();
+  /**
+   * a PR tab's asks on their way (pr/detail, pr/checkLog, pr/act, its diff): req -> its slice key,
+   * and each key's newest req. An answer to an older req, or to a req this window never sent (a
+   * closed tab's, another window's), is dropped (architect m_54668)
+   */
+  /** @internal for apply.ts */ readonly prReqs = new Map<number, string>();
+  /** @internal for apply.ts */ readonly prLatest = new Map<string, number>();
+  /** @internal for apply.ts */ prTake(req: number): string | undefined {
+    const key = this.prReqs.get(req);
+    this.prReqs.delete(req);
+    if (key === undefined || this.prLatest.get(key) !== req) return undefined;
+    this.prLatest.delete(key);
+    return key;
+  }
   /** the dictations this window started and not over yet (bar I) */
   /** @internal for apply.ts */ readonly dictating = new Set<string>();
   /** the `@` queries on their way: rid -> its project and resolve; each project's newest rid */

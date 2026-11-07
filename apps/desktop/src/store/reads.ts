@@ -40,7 +40,13 @@ import {
   type Dictation,
   type Diff,
   diffKey,
+  diffErrKey,
   artDiffKey,
+  prActKey,
+  type PrActState,
+  prDetailKey,
+  prDiffKey,
+  prLogKey,
   type EvOf,
   type HubLine,
   type InboxList,
@@ -318,6 +324,52 @@ export class StoreReads extends StoreBase {
   /** A `.diff` artifact's diff at `version` (null until the hub answers). */
   artifactDiff(project: string, id: string, version: number): Diff | null {
     return this.slice<Diff | null>(artDiffKey(project, id, version), null);
+  }
+  /** A new req for a PR tab's ask, the newest for `key`: an older one's answer is dropped. */
+  private prReq(key: string): number {
+    this.cid += 1;
+    this.prReqs.set(this.cid, key);
+    this.prLatest.set(key, this.cid);
+    return this.cid;
+  }
+  /** A PR tab's detail, asked again: the last one stays until the new one comes. */
+  askPrDetail(project: string, url: string): void {
+    const req = this.prReq(prDetailKey(project, url));
+    this.command({ cmd: "pr_detail", project, url, req });
+  }
+  prDetail(project: string, url: string): EvOf<"pr_detail"> | null {
+    return this.slice<EvOf<"pr_detail"> | null>(prDetailKey(project, url), null);
+  }
+  /** A failing check's last lines ('Ask <agent> to fix'): null while they come. */
+  askPrCheckLog(project: string, url: string, check: string): void {
+    const key = prLogKey(project, url, check);
+    const req = this.prReq(key);
+    this.put(key, null);
+    this.command({ cmd: "pr_check_log", project, url, check, req });
+  }
+  prCheckLog(project: string, url: string, check: string): EvOf<"pr_check_log"> | null {
+    return this.slice<EvOf<"pr_check_log"> | null>(prLogKey(project, url, check), null);
+  }
+  /** His Merge or Close on a PR's tab, at the head he saw: on its way until the hub answers. */
+  prAct(project: string, url: string, head: string, act: PrActState["act"]): void {
+    const key = prActKey(project, url);
+    const req = this.prReq(key);
+    this.put(key, { act, done: false } satisfies PrActState);
+    this.command({ cmd: "pr_act", project, url, head, act, req });
+  }
+  prActed(project: string, url: string): PrActState | null {
+    return this.slice<PrActState | null>(prActKey(project, url), null);
+  }
+  /** A PR's diff (the hub picks its place's checkout or the forge's): known by its req. */
+  askPrDiff(project: string, url: string): void {
+    const key = prDiffKey(project, url);
+    const req = this.prReq(key);
+    this.diffAsked.set(project, key);
+    if (this.slices.get(diffErrKey(key)) != null) this.put(diffErrKey(key), null);
+    this.command({ cmd: "diff", project, pr_url: url, req });
+  }
+  prDiff(project: string, url: string): Diff | null {
+    return this.slice<Diff | null>(prDiffKey(project, url), null);
   }
   /** The latest diff of an agent's change, or of one commit (`commit`). */
   diff(project: string, agent: string, commit?: string): Diff | null {

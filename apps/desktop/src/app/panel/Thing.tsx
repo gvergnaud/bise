@@ -6,7 +6,7 @@
 import type { Entity } from '@/shared/entity';
 import { ThreadScreen } from '@/thread/ThreadScreen';
 import { ReviewScreen } from '@/review/ReviewScreen';
-import { PrsScreen } from '@/review/PrsScreen';
+import { PrTab } from '@/review/PrTab';
 import { PluginsScreen } from '@/plugins';
 import { SkillTab } from '@/plugins/SkillTab';
 import { ScheduledScreen } from '@/scheduled';
@@ -49,7 +49,7 @@ export function ThingTab({ e, tabId }: { e: Exclude<Entity, { kind: 'tab' }>; ta
     case 'pr':
       return (
         <div className="pn-screen" data-testid="app.panel.pr">
-          <PrsScreen project={e.project} />
+          <PrTab project={e.project} url={e.url} />
         </div>
       );
     case 'process':

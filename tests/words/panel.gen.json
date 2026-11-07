@@ -625,6 +625,313 @@
     "one": null,
     "text": "projects"
   },
+  "panel.prtab_agents": {
+    "args": [],
+    "one": null,
+    "text": "Agents"
+  },
+  "panel.prtab_approved": {
+    "args": [],
+    "one": null,
+    "text": "approved"
+  },
+  "panel.prtab_ask_fix": {
+    "args": [
+      "agent"
+    ],
+    "one": null,
+    "text": "Ask {agent} to fix"
+  },
+  "panel.prtab_ask_fix_log": {
+    "args": [],
+    "one": null,
+    "text": "Its last lines:"
+  },
+  "panel.prtab_ask_fix_reading": {
+    "args": [],
+    "one": null,
+    "text": "reading its log…"
+  },
+  "panel.prtab_ask_fix_text": {
+    "args": [
+      "check",
+      "tag"
+    ],
+    "one": null,
+    "text": "The check {check} fails on {tag}. Can you fix it?"
+  },
+  "panel.prtab_body_cut": {
+    "args": [
+      "forge"
+    ],
+    "one": null,
+    "text": "the rest is on {forge}"
+  },
+  "panel.prtab_branches": {
+    "args": [
+      "head",
+      "base"
+    ],
+    "one": null,
+    "text": "{head} → {base}"
+  },
+  "panel.prtab_changes": {
+    "args": [],
+    "one": null,
+    "text": "Changes"
+  },
+  "panel.prtab_changes_asked": {
+    "args": [],
+    "one": null,
+    "text": "asked for changes"
+  },
+  "panel.prtab_check_fail": {
+    "args": [],
+    "one": null,
+    "text": "failed"
+  },
+  "panel.prtab_check_pass": {
+    "args": [],
+    "one": null,
+    "text": "passed"
+  },
+  "panel.prtab_check_running": {
+    "args": [],
+    "one": null,
+    "text": "running"
+  },
+  "panel.prtab_check_skipped": {
+    "args": [],
+    "one": null,
+    "text": "skipped"
+  },
+  "panel.prtab_check_unknown": {
+    "args": [],
+    "one": null,
+    "text": "state unknown"
+  },
+  "panel.prtab_checks": {
+    "args": [],
+    "one": null,
+    "text": "Checks"
+  },
+  "panel.prtab_close": {
+    "args": [],
+    "one": null,
+    "text": "Close pull request…"
+  },
+  "panel.prtab_close_confirm": {
+    "args": [
+      "tag",
+      "forge"
+    ],
+    "one": null,
+    "text": "Close {tag} on {forge}? Everyone on it sees it closed; its branch stays."
+  },
+  "panel.prtab_close_no": {
+    "args": [],
+    "one": null,
+    "text": "Keep it open"
+  },
+  "panel.prtab_close_yes": {
+    "args": [],
+    "one": null,
+    "text": "Close it"
+  },
+  "panel.prtab_closed_now": {
+    "args": [
+      "forge"
+    ],
+    "one": null,
+    "text": "closed on {forge}"
+  },
+  "panel.prtab_closing": {
+    "args": [],
+    "one": null,
+    "text": "closing…"
+  },
+  "panel.prtab_commented": {
+    "args": [],
+    "one": null,
+    "text": "commented"
+  },
+  "panel.prtab_description": {
+    "args": [],
+    "one": null,
+    "text": "Description"
+  },
+  "panel.prtab_err_ended": {
+    "args": [],
+    "one": null,
+    "text": "it's already merged or closed"
+  },
+  "panel.prtab_err_forge": {
+    "args": [
+      "forge",
+      "why"
+    ],
+    "one": null,
+    "text": "{forge} refused: {why}"
+  },
+  "panel.prtab_err_moved": {
+    "args": [],
+    "one": null,
+    "text": "not merged: new commits came since you looked. look at them, then merge"
+  },
+  "panel.prtab_err_not_mergeable": {
+    "args": [
+      "forge"
+    ],
+    "one": null,
+    "text": "not merged: {forge} says it can't be merged now"
+  },
+  "panel.prtab_err_other": {
+    "args": [],
+    "one": null,
+    "text": "it didn't go through"
+  },
+  "panel.prtab_err_running": {
+    "args": [],
+    "one": null,
+    "text": "one is already on its way"
+  },
+  "panel.prtab_err_unknown": {
+    "args": [],
+    "one": null,
+    "text": "this hub doesn't follow this pull request"
+  },
+  "panel.prtab_github": {
+    "args": [],
+    "one": null,
+    "text": "GitHub"
+  },
+  "panel.prtab_gitlab": {
+    "args": [],
+    "one": null,
+    "text": "GitLab"
+  },
+  "panel.prtab_late": {
+    "args": [
+      "forge"
+    ],
+    "one": null,
+    "text": "{forge} is late to answer"
+  },
+  "panel.prtab_loading_changes": {
+    "args": [],
+    "one": null,
+    "text": "loading its changes…"
+  },
+  "panel.prtab_loading_detail": {
+    "args": [
+      "forge"
+    ],
+    "one": null,
+    "text": "asking {forge} for its description, checks and reviews…"
+  },
+  "panel.prtab_merge": {
+    "args": [],
+    "one": null,
+    "text": "Merge"
+  },
+  "panel.prtab_merge_tip": {
+    "args": [
+      "forge"
+    ],
+    "one": null,
+    "text": "merge it on {forge} now, at the commit you see"
+  },
+  "panel.prtab_merged_now": {
+    "args": [
+      "forge"
+    ],
+    "one": null,
+    "text": "merged on {forge}"
+  },
+  "panel.prtab_merging": {
+    "args": [],
+    "one": null,
+    "text": "merging…"
+  },
+  "panel.prtab_more_notes": {
+    "args": [
+      "n",
+      "forge"
+    ],
+    "one": null,
+    "text": "{n} more on {forge}"
+  },
+  "panel.prtab_no_changes": {
+    "args": [],
+    "one": null,
+    "text": "No change against its base."
+  },
+  "panel.prtab_no_checks": {
+    "args": [],
+    "one": null,
+    "text": "No checks."
+  },
+  "panel.prtab_no_description": {
+    "args": [],
+    "one": null,
+    "text": "No description."
+  },
+  "panel.prtab_no_forge": {
+    "args": [
+      "forge"
+    ],
+    "one": null,
+    "text": "no {forge} login on this Mac (gh auth login)"
+  },
+  "panel.prtab_no_log": {
+    "args": [],
+    "one": null,
+    "text": "no log for this check"
+  },
+  "panel.prtab_no_reviews": {
+    "args": [],
+    "one": null,
+    "text": "No review yet."
+  },
+  "panel.prtab_open_on": {
+    "args": [
+      "forge"
+    ],
+    "one": null,
+    "text": "Open on {forge} ↗"
+  },
+  "panel.prtab_pushed": {
+    "args": [
+      "age"
+    ],
+    "one": null,
+    "text": "pushed {age} ago"
+  },
+  "panel.prtab_retry": {
+    "args": [],
+    "one": null,
+    "text": "Try again"
+  },
+  "panel.prtab_reviews": {
+    "args": [],
+    "one": null,
+    "text": "Reviews"
+  },
+  "panel.prtab_summary": {
+    "args": [],
+    "one": null,
+    "text": "Summary"
+  },
+  "panel.prtab_unknown": {
+    "args": [],
+    "one": null,
+    "text": "it didn't come"
+  },
+  "panel.prtab_waiting_row": {
+    "args": [],
+    "one": null,
+    "text": "waiting for the hub's row of this pull request…"
+  },
   "panel.queued": {
     "args": [
       "n"

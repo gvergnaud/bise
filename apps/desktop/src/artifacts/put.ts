@@ -6,6 +6,22 @@ import { keepUnread, load, save, type Store } from '@/composer/drafts';
 import { entryOf, entrySegments, messageOf, type DraftSeg } from '@/composer/entry';
 import { nextChipNumber, type Segment } from '@/composer/message';
 
+/**
+ * Words at the end of `target`'s draft ('Ask perf to fix' on a PR's failing check: the check and
+ * its log, never sent by itself): a draft he had keeps every word and chip, a line between.
+ */
+export function putTextInDraft(store: Store, target: string, text: string): void {
+  const saved = load(store, target);
+  let segs: DraftSeg[] = [];
+  if (saved.draft !== null) {
+    const read = entrySegments(saved.draft);
+    if (read === null) keepUnread(store, target, saved.draft);
+    else segs = read;
+  }
+  const gap = segs.length === 0 ? [] : [{ kind: 'text', text: '\n\n' } as const];
+  save(store, target, { ...saved, draft: entryOf([...segs, ...gap, { kind: 'text', text }]) });
+}
+
 /** The artifact as a chip at the end of `target`'s draft (a project's agent: 'p/agent'). */
 export function putInDraft(store: Store, target: string, a: { id: string; title: string; url: string }): void {
   const saved = load(store, target);

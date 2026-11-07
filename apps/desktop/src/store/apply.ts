@@ -13,6 +13,7 @@ import {
   type InboxList,
   type PagesList,
   type PrsList,
+  type PrActState,
   type QueuedTake,
   takeKey,
   threadKey,
@@ -171,6 +172,25 @@ export function applyTyped(s: Store, ev: Ev): void {
         none: ev.none ?? null,
       } satisfies PrsList);
       return;
+    // a PR tab's answers: each by its req, the newest one for its key only (a closed tab's, an
+    // older ask's, another window's: dropped)
+    case "pr_detail":
+    case "pr_check_log": {
+      const key = s.prTake(ev.req);
+      if (key !== undefined) s.put(key, ev);
+      return;
+    }
+    case "pr_acted": {
+      const key = s.prTake(ev.req);
+      if (key === undefined) return;
+      s.put(key, {
+        act: ev.act,
+        done: true,
+        ...(ev.err == null ? {} : { err: ev.err }),
+        ...(ev.why == null ? {} : { why: ev.why }),
+      } satisfies PrActState);
+      return;
+    }
     case "tool_out": {
       const key = toolOutKey(ev.project, ev.agent, ev.pos);
       s.toolAsks.delete(key);
@@ -191,6 +211,14 @@ export function applyTyped(s: Store, ev: Ev): void {
     case "diff":
       // an answer to someone else's `req` (a terminal's /diff) never lands on this window's views
       if (ev.req != null) {
+        // a PR tab's diff: its answer carries no link, its req says whose it is
+        if (s.prReqs.has(ev.req)) {
+          const key = s.prTake(ev.req);
+          if (key === undefined) return;
+          s.put(key, ev);
+          if (s.slices.get(diffErrKey(key)) != null) s.put(diffErrKey(key), null);
+          return;
+        }
         if (!s.diffReqs.has(ev.req)) return;
         s.diffReqs.delete(ev.req);
       }

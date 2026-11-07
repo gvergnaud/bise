@@ -132,6 +132,114 @@ crate::words! { panel:
     pr_as_of(age) = "as of {age} ago";
     /// the late words' tip
     pr_as_of_tip = "the forge has not answered since: this is the state it last gave";
+    /// a PR tab's forge word: GitHub (pr-integration: GitLab-ready)
+    prtab_github = "GitHub";
+    /// a PR tab's forge word: GitLab
+    prtab_gitlab = "GitLab";
+    /// the link out, always in its head
+    prtab_open_on(forge) = "Open on {forge} ↗";
+    /// its head's branch line
+    prtab_branches(head, base) = "{head} → {base}";
+    /// its head's last push
+    prtab_pushed(age) = "pushed {age} ago";
+    /// the ghost button, only when the forge says it can merge
+    prtab_merge = "Merge";
+    /// the Merge button's tip
+    prtab_merge_tip(forge) = "merge it on {forge} now, at the commit you see";
+    /// his merge on its way
+    prtab_merging = "merging…";
+    /// his close on its way
+    prtab_closing = "closing…";
+    /// the hub merged it: the row's state follows from the forge
+    prtab_merged_now(forge) = "merged on {forge}";
+    /// the hub closed it: the row's state follows from the forge
+    prtab_closed_now(forge) = "closed on {forge}";
+    /// not merged: its head moved since he looked (pr_acted.err moved)
+    prtab_err_moved = "not merged: new commits came since you looked. look at them, then merge";
+    /// not merged: the forge says no (not_mergeable)
+    prtab_err_not_mergeable(forge) = "not merged: {forge} says it can't be merged now";
+    /// a merge or close of it already running
+    prtab_err_running = "one is already on its way";
+    /// it ended before his click
+    prtab_err_ended = "it's already merged or closed";
+    /// the hub does not follow that PR
+    prtab_err_unknown = "this hub doesn't follow this pull request";
+    /// the forge refused, its words after
+    prtab_err_forge(forge, why) = "{forge} refused: {why}";
+    /// any other refusal
+    prtab_err_other = "it didn't go through";
+    /// Close, in its ⋯ only
+    prtab_close = "Close pull request…";
+    /// Close's confirm (a close is seen by everyone on it)
+    prtab_close_confirm(tag, forge) = "Close {tag} on {forge}? Everyone on it sees it closed; its branch stays.";
+    /// the confirm's yes
+    prtab_close_yes = "Close it";
+    /// the confirm's no
+    prtab_close_no = "Keep it open";
+    /// its first tab
+    prtab_summary = "Summary";
+    /// its second tab: the PR's diff
+    prtab_changes = "Changes";
+    /// a tab whose row is not here yet
+    prtab_waiting_row = "waiting for the hub's row of this pull request…";
+    /// the Summary while it comes
+    prtab_loading_detail(forge) = "asking {forge} for its description, checks and reviews…";
+    /// the Changes while they come
+    prtab_loading_changes = "loading its changes…";
+    /// the Changes when nothing differs
+    prtab_no_changes = "No change against its base.";
+    /// a detail or a log that came late (PrErr late)
+    prtab_late(forge) = "{forge} is late to answer";
+    /// no forge login (PrErr no_forge)
+    prtab_no_forge(forge) = "no {forge} login on this Mac (gh auth login)";
+    /// a check with no log (PrErr no_log)
+    prtab_no_log = "no log for this check";
+    /// any other miss (PrErr unknown)
+    prtab_unknown = "it didn't come";
+    /// ask it again
+    prtab_retry = "Try again";
+    /// the Summary's description's title
+    prtab_description = "Description";
+    /// a PR with no description
+    prtab_no_description = "No description.";
+    /// a description cut by the hub
+    prtab_body_cut(forge) = "the rest is on {forge}";
+    /// the Summary's checks' title
+    prtab_checks = "Checks";
+    /// a PR with no checks
+    prtab_no_checks = "No checks.";
+    /// the Summary's reviews' title
+    prtab_reviews = "Reviews";
+    /// a PR with no review
+    prtab_no_reviews = "No review yet.";
+    /// the reviews the hub did not send
+    prtab_more_notes(n, forge) = "{n} more on {forge}";
+    /// the Summary's agents' title
+    prtab_agents = "Agents";
+    /// a check's glyph's tip: passed
+    prtab_check_pass = "passed";
+    /// a check's glyph's tip: failed
+    prtab_check_fail = "failed";
+    /// a check's glyph's tip: running
+    prtab_check_running = "running";
+    /// a check's glyph's tip: skipped
+    prtab_check_skipped = "skipped";
+    /// a check's glyph's tip: unknown
+    prtab_check_unknown = "state unknown";
+    /// a review's verdict: approved
+    prtab_approved = "approved";
+    /// a review's verdict: changes asked
+    prtab_changes_asked = "asked for changes";
+    /// a review's verdict: a comment
+    prtab_commented = "commented";
+    /// a failing check: fills that agent's composer, never sends
+    prtab_ask_fix(agent) = "Ask {agent} to fix";
+    /// Ask to fix while the log comes
+    prtab_ask_fix_reading = "reading its log…";
+    /// what Ask to fix puts in the composer
+    prtab_ask_fix_text(check, tag) = "The check {check} fails on {tag}. Can you fix it?";
+    /// before the log's lines in the composer
+    prtab_ask_fix_log = "Its last lines:";
     /// a feature branch's tip, before its name
     wt_feature_branch(g) = "{g} feature branch ";
     /// a feature branch's tip, after its name

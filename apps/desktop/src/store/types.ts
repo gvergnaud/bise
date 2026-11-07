@@ -335,6 +335,34 @@ export function diffErrKey(key: string): string {
   return `err:${key}`;
 }
 
+/** A PR's diff, by its link (the `diff` ask's `pr_url`; its answer is known by its `req`). */
+export function prDiffKey(project: string, url: string): string {
+  return `diff:${project}/pr:${url}`;
+}
+
+/** A PR tab's detail (pr/detail's last answer for it). */
+export function prDetailKey(project: string, url: string): string {
+  return `pr_detail:${project}/${url}`;
+}
+
+/** A failing check's log, asked for 'Ask <agent> to fix' (pr/checkLog). */
+export function prLogKey(project: string, url: string, check: string): string {
+  return `pr_check_log:${project}/${url}\u0000${check}`;
+}
+
+/** His last Merge or Close on a PR's tab: on its way, then the hub's answer (pr/act). */
+export function prActKey(project: string, url: string): string {
+  return `pr_act:${project}/${url}`;
+}
+
+/** His Merge or Close: `done` once the hub answered, its refusal typed with the forge's words. */
+export interface PrActState {
+  readonly act: EvOf<'pr_acted'>['act'];
+  readonly done: boolean;
+  readonly err?: EvOf<'pr_acted'>['err'];
+  readonly why?: string;
+}
+
 export function sameStrings(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((x, i) => x === b[i]);
 }

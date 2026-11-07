@@ -13,6 +13,7 @@ import type { AnswerJump } from './store';
 import type { Acted } from './acted';
 import type { Refused } from './refused';
 import type { InboxItem } from '@/inbox/listed';
+import { prActKey, prDetailKey, prDiffKey, prLogKey, type PrActState } from './types';
 import { artDiffKey, diffErrKey, diffKey, toolOutKey, Store, type ToolOut, type Away, type Dictation, type HubLine, type Diff, type FilesAnswer, type Ev, type EvOf, type Pending, type PrsList, type BranchesList, type VersionsList, type PagesList, type ThreadHits, type ThreadOrder, type VoiceModeState, type TalkShot } from './store';
 
 /**
@@ -138,6 +139,18 @@ export const useArtifactDiff = (project: string, id: string, version: number): D
   useSlice(artDiffKey(project, id, version), (s) => s.artifactDiff(project, id, version));
 export const useDiff = (project: string, agent: string, commit?: string): Diff | null =>
   useSlice(diffKey(project, agent, commit), (s) => s.diff(project, agent, commit));
+/** A PR's diff by its link (askPrDiff); null until the hub answers. */
+export const usePrDiff = (project: string, url: string): Diff | null =>
+  useSlice(prDiffKey(project, url), (s) => s.prDiff(project, url));
+/** A PR tab's detail (askPrDetail): the last answer, a detail or a typed error; null before one. */
+export const usePrDetail = (project: string, url: string): EvOf<'pr_detail'> | null =>
+  useSlice(prDetailKey(project, url), (s) => s.prDetail(project, url));
+/** A check's log (askPrCheckLog): null while it comes. */
+export const usePrCheckLog = (project: string, url: string, check: string): EvOf<'pr_check_log'> | null =>
+  useSlice(prLogKey(project, url, check), (s) => s.prCheckLog(project, url, check));
+/** His last Merge or Close on that PR's tab: on its way, then the hub's answer; null before one. */
+export const usePrActed = (project: string, url: string): PrActState | null =>
+  useSlice(prActKey(project, url), (s) => s.prActed(project, url));
 /** The hub's words when it refused that diff (`diffKey` or `artDiffKey`); null while none. */
 export const useDiffError = (key: string): string | null =>
   useSlice(diffErrKey(key), (s) => (s.slices.get(diffErrKey(key)) as string | null | undefined) ?? null);
