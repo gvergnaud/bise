@@ -23,15 +23,18 @@ audit rests on:
 - **Strings are cons lists of chars** (`SCon{head, tail}`): `a ++ b` costs
   the length of `a`. Building output by appending is quadratic; build a list
   of chunks and join once (vendor/json's join_chunks).
-- **Parallel calls**: `a b = f(x) g(y)` (a parallel let) forks two
-  independent pure calls on CPU cores (native build: sb-core and repl-live are
-  compiled with `bend -o`, so they run in parallel; the JS target does not).
-  The scheduler is a binary fork-join that never moves a task: the two
-  halves must cost about the same. A list must be split into halves to
-  parallelise a map over it; worth it only when each element is real work
-  (a JSON parse, a stringify), never for a cheap fold.
-- **`IO.fork`/`IO.join`** run effects concurrently on the event loop: for
-  waits (network, processes), not for CPU.
+- **Parallelism: read `parallelism.md` (next to this file) before you write
+  a def that walks a list or a tree.** Its rules, each measured: only a
+  parallel let `a b = f(x) g(y)` forks (two lets on two lines never do);
+  only the native build runs it in parallel (sb-core, repl-live; not the
+  JS target); two halves of equal cost (a lopsided split caps the gain);
+  a list split a few levels deep then folded, only when each item is real
+  work (a parse, a stringify: B2 1.85x; a cheap test: B3 never faster,
+  twice the CPU); an accumulator, an early exit and a serial envelope
+  block it; check with `--threads 1` vs `8` and CPU / wall.
+- **`IO.fork`/`IO.join`** run effects concurrently on the event loop, one
+  computation at a time: for waits (network, processes), not for CPU
+  (measured: two forked 2 s computations used 1.0 core).
 - **A hub step is sequential** (each step reads the state the previous one
   wrote). Parallelism fits only pure bulk work inside one step or one batch.
 
@@ -87,7 +90,8 @@ The agent runtime (repl-live): `ps -o time` against its age, then `sample
    arrives as one JSON string pays a char-by-char decode first (bp-boot,
    2026-10-17: the outer string cost more than the whole old replay), and
    check the sample shows more than one core busy (1.1 cores = no gain).
-   Make the per-char work cheap (pattern 1) before you split it.
+   Make the per-char work cheap (pattern 1) before you split it. How to
+   shape it and what it gains: `parallelism.md`.
 
 ## 3. Change it safely
 
@@ -171,3 +175,9 @@ numbers. The next audit starts from there.
   the hub asks the link's msg_bodies for a body a reader needs
   (core.rs fetch_bodies). Left: the agents, 5.1 MB of the 10.8 (archived
   ones' briefs 2.1 MB, reports 1.2 MB, files 1.2 MB).
+- 2026-11-07 (bend-parallel): parallelism measured on Bend 2.0.39 native
+  binaries, 1 vs 8 threads, heavy-run `--low` at load 20-90:
+  `parallelism.md` (E1-E7 language rules, B1-B3 on copies of bise code).
+  vendor/json's parallel print: 10-35 % of wall for 25-35 % more CPU on
+  28.6 MB (serial join and per-level chunk appends left); a batch parse
+  in halves 1.85x; a queued_in-shaped walk never faster forked.

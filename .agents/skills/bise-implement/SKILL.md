@@ -19,6 +19,11 @@ each from this repo. It is short. The architect agent keeps it current.
 - the TUI: `rust/tui/src/lib.rs`, `sb.rs`, and the module you change;
 - paths, sockets, state files: `rust/home/src/lib.rs`;
 - the agent runtime: `bend/runtime/repl-core.bend`, `repl-live.bend`;
+- any `.bend` code (bend/hub, bend/runtime, bend/vendor): the `bend` skill
+  (`bend guide` first), then `.agents/skills/bend-perf/parallelism.md`
+  before a def that walks a list or a tree: Bend uses every core only
+  where you write a parallel let on work shaped to split, and agents write
+  one-core folds by habit;
 - tests and gates: `tests/gate.sh`'s header, `docs/loop-speed.md`; before
   you write or change a test, the `bise-testing` skill
   (`.agents/skills/bise-testing/SKILL.md`): the cheapest test that fails;
