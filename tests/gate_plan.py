@@ -300,7 +300,10 @@ def plan(changed, tree):
         # the bims' world simulations (vitest project bims-laws, ~1000 s of cpu) only when a bims
         # file changed; the full gate (the tip, the nightly, a release) runs them always
         bims = any(p.startswith(BIMS_PATHS) for p in changed)
-        desktop = {"why": why, "rel": rel, "bypath": bypath_pick(changed, tree) if rel else [], "bims": bims}
+        # the app's changed files still there (whole-app mode: vitest related on bims-laws)
+        files = [p[len("apps/desktop/"):] for p in changed if p.startswith("apps/desktop/") and p in tree.exists]
+        desktop = {"why": why, "rel": rel, "bypath": bypath_pick(changed, tree) if rel else [], "bims": bims,
+                   "files": files}
     heavy = ""
     if pkgs:
         heavy += " rust(%s )" % "".join(" " + c for c in pkgs)
@@ -345,6 +348,7 @@ def to_sh(p):
          "proof_files": " ".join(p["proofs"]),
          "core_gen": p["core_gen"], "dwhy": d.get("why") or "", "drel": " ".join(d.get("rel") or []),
          "dbypath": " ".join(d.get("bypath") or []), "dbims": int(bool(d.get("bims"))),
+         "dfiles": " ".join(d.get("files") or []),
          "heavy": p["heavy"], "land_steps": int(p["land_steps"]), **p["flags"]}
     lines = ["%s=%s" % (k, shlex.quote(str(x))) for k, x in v.items()]
     # the self-tests as two bash arrays of "name<TAB>command": this plan's, and every one (full)

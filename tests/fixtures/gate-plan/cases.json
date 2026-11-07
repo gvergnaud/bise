@@ -838,5 +838,45 @@
     "rel": []
    }
   }
+ },
+ {
+  "name": "a shared module a bims law imports: not dbims; its file goes to vitest related on bims-laws",
+  "paths": [
+   "apps/desktop/src/shared/geom.ts"
+  ],
+  "exists": [
+   "apps/desktop/src/shared/geom.ts"
+  ],
+  "want": {
+   "desktop": {
+    "bims": false,
+    "rel": [
+     "src/shared/geom.ts"
+    ],
+    "files": [
+     "src/shared/geom.ts"
+    ]
+   }
+  }
+ },
+ {
+  "name": "whole-app mode: the app's files for bims-laws' related, a deleted one left out",
+  "paths": [
+   "apps/desktop/package.json",
+   "apps/desktop/src/shared/gone.ts",
+   "rust/proto/src/x.rs"
+  ],
+  "exists": [
+   "apps/desktop/package.json",
+   "rust/proto/src/x.rs"
+  ],
+  "want": {
+   "desktop": {
+    "rel": [],
+    "files": [
+     "package.json"
+    ]
+   }
+  }
  }
 ]
