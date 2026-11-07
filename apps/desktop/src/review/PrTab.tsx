@@ -19,6 +19,7 @@ import { keptStorage } from '@/app/keep';
 import { askCaret } from '@/composer/caret';
 import { putTextInDraft } from '@/artifacts/put';
 import { prLine } from '@/artifacts/pr';
+import { PrWords } from '@/artifacts/PrWords';
 import { DiffFiles } from './DiffFiles';
 import { actLine, askFixText, canClose, canMerge, checkMark, errWords, forgeWord, headFacts, verdictWord } from './prwords';
 import './prtab.css';
@@ -86,6 +87,13 @@ export function PrTab({ project, url }: { project: string; url: string }) {
         title={<span data-testid="prtab.title">{art?.title ?? tag}</span>}
         sub={<span data-testid="prtab.facts">{headFacts(tag, s, now).join(' · ')}</span>}
       />
+      {/* title → meta → status → acts (designer m_54748): the status under the meta it qualifies;
+          only what waits on him in the accent, a ✗ in err (PrWords) */}
+      {art !== undefined && line !== null && line.words !== '' && (
+        <p className="prt-status" data-testid="prtab.status">
+          <PrWords a={art} tag={false} />
+        </p>
+      )}
       {/* its acts on their own line: a panel's width never cuts Open on GitHub (shots v1) */}
       <div className="prt-acts" data-testid="prtab.acts">
         {out}
@@ -96,12 +104,6 @@ export function PrTab({ project, url }: { project: string; url: string }) {
         )}
         <MoreButton menu={menu} testId="prtab.more" />
       </div>
-      {line !== null && line.words !== '' && (
-        <p className="prt-status" data-testid="prtab.status">
-          <span className={line.yours ? 'prt-yours' : undefined}>{line.words}</span>
-          {line.late !== '' && <span className="prt-late" {...tipAttrs(panel.pr_as_of_tip)}>{` · ${line.late}`}</span>}
-        </p>
-      )}
       {said !== null && (
         <p className={said.err ? 'prt-said prt-err' : 'prt-said'} data-testid="prtab.acted">{said.words}</p>
       )}

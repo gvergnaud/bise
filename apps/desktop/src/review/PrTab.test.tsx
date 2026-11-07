@@ -47,7 +47,10 @@ describe('a PR tab', () => {
     const { v } = shell(status());
     expect(v.getByTestId('prtab.title').textContent).toBe('Faster signup');
     expect(v.getByTestId('prtab.facts').textContent).toBe('#412 · open · sb/perf → main · perf');
-    expect(v.getByTestId('prtab.status').querySelector('.prt-yours')?.textContent).toBe('approved · checks ✓ 12/12 · your merge');
+    // only what waits on him in the accent, first; the rest dim (designer m_54748)
+    const said = v.getByTestId('prtab.status');
+    expect(said.textContent).toBe('your merge · approved · checks ✓ 12/12');
+    expect([...said.querySelectorAll('.prw-acc')].map((e) => e.textContent)).toEqual(['your merge']);
     expect(v.getByTestId('prtab.open').textContent).toBe(panel.prtab_open_on({ forge: 'GitHub' }));
   });
 

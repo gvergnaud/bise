@@ -15,6 +15,7 @@ import { useAllArtifacts } from './hooks';
 import { bridge, copyLink, openWithVersions, rowPrimary, usePutInMessage } from './Open';
 import { leaves, LEAVES, useGoArtifact } from './leave';
 import { openPr } from '@/review/openPr';
+import { PrWords } from './PrWords';
 import './artifacts.css';
 import { Press } from '@/ds';
 import { panel } from '@/proto/words_panel.gen';
@@ -184,6 +185,8 @@ export const ListRow = memo(function ListRow({ card, on, picked, now, visible, o
       <span className="art-title">
         <span className="art-t" {...tipAttrs(name)}>{name}</span>
         {isNew(card) && <span className="art-new" data-testid={`${testId}.new`}>{panel.new_chip}</span>}
+        {/* a PR: its words after its name, dim but for what waits on him (designer m_54748) */}
+        {it.a.pr != null && <span className="art-lr-pr"><PrWords a={it.a} fit testId={`${testId}.pr`} /></span>}
       </span>
       <span className="art-lr-a" {...tipAttrs(lineTip(card))}>{whoOf(it.a)}</span>
       <span className="art-lr-a">{listKind(card)}</span>

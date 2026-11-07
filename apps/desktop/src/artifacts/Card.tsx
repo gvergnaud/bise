@@ -5,7 +5,7 @@
 // 2 px ink ring, several picked fill their circles. A stack: two sheets behind its cover and its
 // count at the top right ('16 shots saved in one turn'). Every mark has its tip
 // (page block tips). The picture inside the 16:10 box is art-thumbs' <Thumb>. Owner: art-grid.
-import { memo, type HTMLAttributes, type MouseEvent } from 'react';
+import { memo, type HTMLAttributes, type MouseEvent, type ReactNode } from 'react';
 import { Press, tipAttrs } from '@/ds';
 import { Thumb, thumbExt } from './thumbs';
 import { countTip, domainOf, extTip, isNew, lineTip, titleOf, topOf, type Card } from './gallery';
@@ -57,7 +57,8 @@ export function CardPic({ card, it, visible, picked, onPick, onMenu, testId }: {
         <Thumb item={it} visible={visible} />
         {ext !== null && !out && <span className="art-card-x" data-testid={`${testId}.ext`} {...tipAttrs(extTip(it))}>{ext}</span>}
         {stack && <span className="art-card-n" data-testid={`${testId}.count`} {...tipAttrs(countTip(stack))}>{stack.items.length}</span>}
-        {out && <span className="art-card-lk" data-testid={`${testId}.out`} {...tipAttrs(library.tip_leaves)}>{domain === '' ? '↗' : `↗ ${domain}`}</span>}
+        {/* a PR hovers like any artifact: ⋯ and its tip, no 'github.com' over its tile (designer m_54748) */}
+        {out && it.a.pr == null && <span className="art-card-lk" data-testid={`${testId}.out`} {...tipAttrs(library.tip_leaves)}>{domain === '' ? '↗' : `↗ ${domain}`}</span>}
       </span>
       {onPick && (
         <Press tabIndex={-1} look={`art-card-ck${picked ? ' y' : ''}`} aria-label="pick" aria-pressed={picked}
@@ -82,8 +83,8 @@ export function CardPic({ card, it, visible, picked, onPick, onMenu, testId }: {
 
 export interface CardProps {
   card: Card;
-  /** the line under its name (grid.ts lineOf) */
-  line: string;
+  /** the line under its name (grid.ts lineOf; a PR's: its words, PrWords) */
+  line: ReactNode;
   /** the keyboard cursor: its ring */
   on: boolean;
   /** in his multi-pick */

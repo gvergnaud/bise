@@ -905,10 +905,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* a PR's words take the pink only when it waits on him (pr-integration rule 5) */
-.s3-pr-words[data-tone="acc"] {
-  color: var(--c-accent);
-}
 /* its items 8 apart, a pinned row's mark first (designer m_49518) */
 .s3-row-end {
   display: inline-flex;

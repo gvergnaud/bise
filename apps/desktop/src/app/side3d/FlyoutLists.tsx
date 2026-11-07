@@ -15,7 +15,7 @@ import { useStore } from '@/store';
 import { common } from '@/proto/words_common.gen';
 import { ago } from '@/agents/model';
 import { kindOf, type Item } from '@/artifacts/model';
-import { prLine } from '@/artifacts/pr';
+import { PrWords } from '@/artifacts/PrWords';
 import { isRunning, markOf, portWords, rowCmd, stateOf, urlWords, type ProcItem } from '@/running/model';
 import { asks, howOften, nextWords, type Task } from '@/scheduled/model';
 import { alarms } from '@/thread/wake';
@@ -80,18 +80,10 @@ export function ArtifactRow({ it, now, group, pinned = false }: { it: Item; now:
  * waits on him (artifacts/pr.ts), the forge's lateness dim after them.
  */
 function ArtSub({ a, by }: { a: Item['a']; by: string }) {
-  const l = prLine(a);
-  if (l === null) return <>{`${a.kind} · ${by}`}</>;
-  return (
-    <span className="s3-parts" data-testid={`app.flyout.artifacts.pr.${a.id}`}>
-      <span>{l.sigil}</span>
-      {l.words !== '' && (
-        <span className="s3-pr-words" data-tone={l.yours ? 'acc' : undefined} data-testid={`app.flyout.artifacts.pr.${a.id}.words`}>{` · ${l.words}`}</span>
-      )}
-      {l.late !== '' && <span {...tipAttrs(panel.pr_as_of_tip)}>{` · ${l.late}`}</span>}
-      <span>{` · ${by}`}</span>
-    </span>
-  );
+  if (a.pr == null) return <>{`${a.kind} · ${by}`}</>;
+  // '#412 · your merge' first, then its state and checks, its maker last: parts drop from the end
+  // for room, so the pink one stays (designer m_54748)
+  return <PrWords a={a} fit tail={by} testId={`app.flyout.artifacts.pr.${a.id}`} />;
 }
 
 /** where a process listens, its age: 'perf · localhost:5173 · 2 h'; `linked`: its end shows the

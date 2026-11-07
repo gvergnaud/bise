@@ -6,8 +6,6 @@
 .prt-acts { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; margin: 0 0 var(--s-2); }
 .prt > .b-seg { margin: var(--s-3) 0 var(--s-2); }
 .prt-status, .prt-said { margin: 0 0 var(--s-2); font-size: var(--t-13); color: var(--c-text-2); }
-.prt-yours { color: var(--c-accent); }
-.prt-late { color: var(--c-text-3); }
 .prt-err { color: var(--c-err); }
 .prt-confirm { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; margin: 0 0 var(--s-3); padding: var(--s-2) var(--s-3);
   border: 1px solid var(--c-line); border-radius: 6px; font-size: var(--t-13); color: var(--c-text); }
