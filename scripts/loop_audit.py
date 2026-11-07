@@ -598,6 +598,10 @@ def audit(h, hub, since):
     rep["flow"] = flow_section(h, hub, since, ss)
     rep["flakes"] = flake_section(h, time.time())
     rep["known_reds"] = known_reds_section(h)
+    plan = os.path.join(repo_root(), PLAN)
+    if os.path.exists(plan):
+        with open(plan) as fh:
+            rep["transform_open"] = transform_open(fh.read())
     return rep
 
 
@@ -643,6 +647,58 @@ def flow_section(h, hub, since, ss):
     return out["summary"]
 
 
+# ---- transform ouvertes: the TRANSFORM lines of docs/test-plan-min.md with no test proven yet ----
+
+PLAN = os.path.join("docs", "test-plan-min.md")
+COUNTER_RX = re.compile(r"\*\*deleted, not yet replaced: (\d+)\*\*")
+TICKED_RX = re.compile(r" — (proven\b|done [0-9a-f]{7,})")
+
+
+def transform_open(text):
+    """(open, counter) of test-plan-min's text: open = the lines under '## Transform lines' that say
+    neither '— proven: <break>' nor '— done <sha>' (review-gates m_37172: a '— covered by' line counts
+    only once its test went red on a break); counter = its 'deleted, not yet replaced: N'. Pure."""
+    body = text.split(NL + "## Transform lines", 1)
+    lines = body[1].splitlines() if len(body) == 2 else []
+    n = sum(1 for ln in lines if ln.startswith("- `") and not TICKED_RX.search(ln))
+    m = COUNTER_RX.search(text)
+    return n, int(m.group(1)) if m else None
+
+
+def transform_ratchet(now_text, before_text):
+    """What is wrong with test-plan-min's transform count, [] when nothing: the counter says the
+    count, and it never goes up from `before_text` (the last commit's file; None: no older one). Pure."""
+    n, c = transform_open(now_text)
+    bad = []
+    if c is None:
+        bad.append("no 'deleted, not yet replaced: N' counter")
+    elif n != c:
+        bad.append("transform ouvertes: %d open lines, the counter says %d" % (n, c))
+    if before_text is not None:
+        _, b = transform_open(before_text)
+        if b is not None and c is not None and c > b:
+            bad.append("transform ouvertes went up: %d -> %d (it only goes down)" % (b, c))
+    return bad
+
+
+def repo_root():
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def transform_check(root):
+    """The ratchet on the tree: the working file against HEAD's. Prints, returns the exit code."""
+    with open(os.path.join(root, PLAN)) as fh:
+        now = fh.read()
+    import subprocess
+    p = subprocess.run(["git", "-C", root, "show", "HEAD:" + PLAN], capture_output=True, text=True)
+    bad = transform_ratchet(now, p.stdout if p.returncode == 0 else None)
+    for b in bad:
+        print("FAIL " + b)
+    if not bad:
+        print("ok   transform ouvertes: %d" % transform_open(now)[0])
+    return 1 if bad else 0
+
+
 def group(cs):
     out = {}
     for c in cs:
@@ -682,6 +738,9 @@ def health(rep):
         ("worst flake rate, 14 d (flaky / full gates)", (rep.get("flakes") or {}).get("worst"), FLAKE_LIMIT),
         ("known_reds expired lines (of %s open)" % (rep.get("known_reds") or {}).get("open"),
          len((rep.get("known_reds") or {}).get("expired", [])), 0),
+        # c7-untested: the e2e cull's TRANSFORM lines with no proven test; its limit is the plan's
+        # own counter, which only goes down (transform_ratchet, quick's transform_open step)
+        ("transform ouvertes", *rep.get("transform_open", (None, None))),
     ]
     return [(n, v, lim, v is None or v <= lim) for n, v, lim in checks]
 
@@ -866,6 +925,16 @@ def self_test():
                "waits": {"ended_at_max": []}, "related_misses": [], "flakes": fs, "known_reds": {"open": 3, "expired": ["x (y)"]}}
         hl = {n: ok for n, _, _, ok in health(rep)}
         assert hl["worst flake rate, 14 d (flaky / full gates)"] is False and hl["known_reds expired lines (of 3 open)"] is False, hl
+    plan = NL.join(["**deleted, not yet replaced: 2**", "- `a`: KEEP row, not counted", "## Transform lines", "",
+                    "- `x`: y → `t` — covered by a.test.ts", "- `y`: y → `t` — covered by b.test.ts — proven: z",
+                    "- `z`: y → `t` — done afc4baebf", "- `w`: y → `t` — covered by c.test.ts"])
+    assert transform_open(plan) == (2, 2), transform_open(plan)
+    assert transform_ratchet(plan, plan) == []
+    assert transform_ratchet(plan, None) == []
+    up = plan.replace(": 2**", ": 3**")
+    assert transform_ratchet(up, plan) == ["transform ouvertes: 2 open lines, the counter says 3",
+                                           "transform ouvertes went up: 2 -> 3 (it only goes down)"], transform_ratchet(up, plan)
+    assert transform_ratchet(plan.replace(" — proven: z", ""), plan) == ["transform ouvertes: 3 open lines, the counter says 2"]
     print("loop_audit self-test: ok")
 
 
@@ -875,9 +944,13 @@ def main(argv):
     ap.add_argument("--hub", default=None, help="hub id (default: the one with the newest journal)")
     ap.add_argument("--json", default=None)
     ap.add_argument("--self-test", action="store_true")
+    ap.add_argument("--transform-check", action="store_true",
+                    help="the ratchet on docs/test-plan-min.md: its counter is its open TRANSFORM lines, never up from HEAD")
     a = ap.parse_args(argv[1:])
     if a.self_test:
         return self_test()
+    if a.transform_check:
+        sys.exit(transform_check(repo_root()))
     m = re.fullmatch(r"(\d+)([hd])", a.since)
     since = time.time() - int(m.group(1)) * (3600 if m.group(2) == "h" else 86400) if m else float(a.since)
     h = home()

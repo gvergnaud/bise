@@ -127,6 +127,10 @@ SELFTESTS = [
     ("runtime_check_test", "python3 -B tests/runtime_check_test.py",
      ("tests/runtime_check_test.py", "scripts/runtime_check.sh", "scripts/try_build.py", "scripts/versions.sh",
       "apps/desktop/electron-builder.mjs")),
+    # c7-untested: test-plan-min's open TRANSFORM lines only go down, and its counter says them
+    ("loop_audit_self", "python3 -B scripts/loop_audit.py --self-test", ("scripts/loop_audit.py",)),
+    ("transform_open", "python3 -B scripts/loop_audit.py --transform-check",
+     ("docs/test-plan-min.md", "scripts/loop_audit.py")),
     ("desktop_pick_audit_self", "python3 -B tests/desktop_pick_audit.py --self-test",
      ("tests/desktop_pick_audit.py", "tests/desktop_pick_shadow.sh")),
     # the coverage map's rules on synthetic coverage (needs apps/desktop)
