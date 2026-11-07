@@ -435,5 +435,27 @@
     "test_map_self"
    ]
   }
+ },
+ {
+  "name": "the hub loop's measure: its test only",
+  "paths": [
+   "scripts/hub_loop_held.py"
+  ],
+  "want": {
+   "selftests": [
+    "hub_loop_held_test"
+   ]
+  }
+ },
+ {
+  "name": "the loop blocking check: its self-test only",
+  "paths": [
+   "tests/loop_blocking_check.py"
+  ],
+  "want": {
+   "selftests": [
+    "loop_blocking_self"
+   ]
+  }
  }
 ]

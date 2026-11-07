@@ -106,6 +106,8 @@ rust_wait() {  # the result of the cargo tests and clippy started next to the e2
 if [ -z "$only" ]; then
 echo "== No blind sleep in tests/ (tests/sleep_check.py: wait for a state with tests/wait.py)"
 python3 tests/sleep_check.py --self-test && python3 tests/sleep_check.py || exit 1
+echo "== Nothing slow on the hub's loop (tests/loop_blocking_check.py, tests/hub_loop_held_test.py)"
+python3 tests/loop_blocking_check.py --self-test && python3 tests/loop_blocking_check.py && python3 -B tests/hub_loop_held_test.py || exit 1
 echo "== Waits count awake time, not the wall clock (tests/wait_test.py)"
 python3 -B tests/wait_test.py || exit 1
 echo "== The terminal and the desktop app release apart (tests/release_split_test.py)"

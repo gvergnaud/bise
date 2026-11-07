@@ -87,6 +87,10 @@ SELFTESTS = [
      ("tests/gate_plan*.py", "tests/fixtures/gate-plan/*", "tests/test_map.py", "tests/desktop_assets.py",
       "tests/include_map.py")),
     ("sleep_check_self", "python3 tests/sleep_check.py --self-test", ("tests/sleep_check.py",)),
+    # nothing slow on the hub's loop (its ratchet runs always) and the measure of hub.log
+    ("loop_blocking_self", "python3 tests/loop_blocking_check.py --self-test", ("tests/loop_blocking_check.py",)),
+    ("hub_loop_held_test", "python3 -B tests/hub_loop_held_test.py",
+     ("scripts/hub_loop_held.py", "tests/hub_loop_held_test.py")),
     # wait.py's timeouts count awake time (issue 26)
     ("wait_test", "python3 -B tests/wait_test.py", ("tests/wait.py", "tests/wait_test.py")),
     # a test's env never keeps the caller's path overrides (its own self-test)

@@ -881,6 +881,7 @@ if [ "$mode" = full ]; then
   # every gate self-test, whatever changed (quick runs them by path; ~30 s); the ratchets
   python3 tests/sleep_check.py >/dev/null || { python3 tests/sleep_check.py; echo "GATE full FAILED"; exit 1; }
   python3 tests/conflict_markers.py || { echo "GATE full FAILED"; exit 1; }
+  python3 tests/loop_blocking_check.py || { echo "GATE full FAILED"; exit 1; }
   python3 tests/pick_gate.py || { echo "GATE full FAILED"; exit 1; }
   selftests_run selftests_all "GATE full FAILED" || exit 1
   export FUZZ_RUNS="${FUZZ_RUNS:-2000}"
@@ -945,6 +946,8 @@ t0=$SECONDS
 # waits for a state with tests/wait.py (its --self-test: with the gate's own tests below)
 python3 "$root/tests/sleep_check.py" >/dev/null || { python3 "$root/tests/sleep_check.py"; echo "GATE quick FAILED"; exit 1; }
 # the ratchets on the tree, always (a few tenths of a second each):
+# nothing slow on the hub's loop past tests/loop_blocking.txt (c4-loop-never-waits)
+python3 "$root/tests/loop_blocking_check.py" >/dev/null || { python3 "$root/tests/loop_blocking_check.py"; echo "GATE quick FAILED"; exit 1; }
 # no merge or stash conflict marker in a tracked file (2393001f landed stash markers)
 python3 "$root/tests/conflict_markers.py" >/dev/null || { python3 "$root/tests/conflict_markers.py"; echo "GATE quick FAILED"; exit 1; }
 # every compatibility shim in tests/shims.txt with its removal release, none

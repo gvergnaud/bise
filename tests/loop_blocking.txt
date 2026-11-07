@@ -1,0 +1,41 @@
+# tests/loop_blocking_check.py's list: the functions of the hub's loop
+# modules that may run a process to its end, sleep or read a whole wire.log.
+# `<file>::<fn> | <n> | off|loop | <why>`, file under rust/switchboard/src,
+# n its slow calls (exact: fewer or more is refused).
+# off: never on the loop. loop: still holds it; the why names the land of
+# chantier c4-loop-never-waits that takes it off, or why it stays.
+
+# ---- off: workers, starts, stops, test knobs
+core_fresh.rs::tree_key | 1 | off | test-only: the stale sb-core check of Hub::new in tests
+daemon.rs::kill_stale_repls | 1 | off | the hub's start, before the loop
+daemon.rs::wait_previous_hub | 2 | off | the hub's start, before the loop
+daemon.rs::run | 1 | off | the stop, after the loop: the REPLs' reload wait
+daemon.rs::stall_for_tests | 1 | off | a test knob (hub_stall_e2e), never set in his hub
+daemon/art.rs::landed_rec | 1 | off | the land job's thread (daemon/land.rs)
+daemon/processes.rs::lsof | 1 | off | the processes worker's thread
+daemon/processes.rs::table | 1 | off | the processes worker's thread
+daemon/processes.rs::signal_stop | 1 | off | a thread per stop (processes.rs)
+daemon/processes.rs::quit | 1 | off | the stop, after the loop
+daemon/release.rs::git | 1 | off | release plan's thread only
+daemon/release.rs::plan | 1 | off | its own thread (release.rs)
+daemon/repl.rs::adopt | 1 | off | a REPL's thread (repl_starts.rs)
+daemon/repl.rs::pump_wire | 1 | off | a REPL's thread
+daemon/repl.rs::supervise | 1 | off | a REPL's supervisor thread
+daemon/repl_starts.rs::slow_spawn_for_tests | 1 | off | a test knob, never set in his hub
+daemon/revive.rs::stop_all | 1 | off | the stop, after the loop
+daemon/small_ask.rs::oneshot | 1 | off | Small::call, always on its own thread
+daemon/versions.rs::fetch | 1 | off | the release look's thread
+daemon/wake_look.rs::job | 1 | off | the wake look worker's thread
+daemon/xhub.rs::call | 1 | off | another hub's call, always on its own thread
+
+# ---- loop: the debt
+daemon.rs::commit_style | 1 | loop | git log on each land's message: land 5 (commit_style, wire.log read from the end)
+daemon/gate.rs::gate_restore | 1 | loop | reads a whole wire.log: land 5
+daemon/gate.rs::repo_of | 1 | loop | git rev-parse once per folder (cached): land 5
+daemon/repl.rs::busy_at | 1 | loop | reads a whole wire.log: land 5
+daemon/repl.rs::is_repl | 1 | loop | ps per adopted REPL, mostly at the start: land 5
+daemon/session_log.rs::catch_up_wire | 1 | loop | reads a whole wire.log before a fresh REPL: land 5
+daemon/proto/completion.rs::render | 1 | loop | a REPL run to render a request in another model: his own rare ask, not in c4
+daemon/versions.rs::recent_commits | 1 | loop | git log for /version: his own rare ask, not in c4
+daemon/versions.rs::version_op | 2 | loop | /version switch: his own rare ask, not in c4
+daemon/versions.rs::dev_update | 1 | loop | /update in a dev tree: his own rare ask, not in c4
