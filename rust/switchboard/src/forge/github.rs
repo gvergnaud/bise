@@ -382,6 +382,115 @@ pub fn tail(log: &str, n: usize) -> String {
         .join("\n")
 }
 
+/// A PR's description past this many characters is cut (`body_cut`).
+pub const DETAIL_BODY_CAP: usize = 8_000;
+/// A note past this many characters is cut.
+pub const NOTE_CAP: usize = 4_000;
+/// The notes a PR's tab gets, newest first; the rest are `more_notes`.
+pub const NOTES_CAP: usize = 30;
+/// The lines of a check's log his "ask to fix" gets.
+pub const CHECK_LOG_LINES: usize = 80;
+
+/// `gh pr view`'s fields for a PR's tab.
+pub const DETAIL_FIELDS: &str = "body,statusCheckRollup,reviews,comments";
+
+fn cut(s: &str, n: usize) -> (String, bool) {
+    match s.char_indices().nth(n) {
+        Some((i, _)) => (format!("{}…", &s[..i]), true),
+        None => (s.to_string(), false),
+    }
+}
+
+/// One check of `statusCheckRollup` (a check run or a commit status),
+/// typed: anything new is `Unknown`, never a pass.
+fn check_of(c: &Value) -> bise_proto::rows::PrCheck {
+    use bise_proto::rows::{PrCheck, PrCheckState as S};
+    let s = |k: &str| c[k].as_str().unwrap_or_default().to_string();
+    let run = c["__typename"] == "CheckRun" || c.get("conclusion").is_some();
+    let state = if run {
+        match (s("status").as_str(), s("conclusion").as_str()) {
+            ("COMPLETED", "SUCCESS") => S::Pass,
+            ("COMPLETED", "FAILURE" | "TIMED_OUT" | "STARTUP_FAILURE" | "ACTION_REQUIRED") => S::Fail,
+            ("COMPLETED", "SKIPPED" | "NEUTRAL" | "CANCELLED" | "STALE") => S::Skipped,
+            ("QUEUED" | "IN_PROGRESS" | "WAITING" | "PENDING" | "REQUESTED", _) => S::Running,
+            _ => S::Unknown,
+        }
+    } else {
+        match s("state").as_str() {
+            "SUCCESS" => S::Pass,
+            "FAILURE" | "ERROR" => S::Fail,
+            "PENDING" | "EXPECTED" => S::Running,
+            _ => S::Unknown,
+        }
+    };
+    let name = if run { s("name") } else { s("context") };
+    let url = if run { s("detailsUrl") } else { s("targetUrl") };
+    PrCheck { name, state, url }
+}
+
+/// `gh pr view --json body,statusCheckRollup,reviews,comments` as a PR's
+/// tab reads it: its description cut at the cap, its checks typed, its
+/// reviews and comments newest first, at most [`NOTES_CAP`] (a review
+/// with no words and no verdict is skipped).
+pub fn parse_detail(out: &str) -> Result<bise_proto::rows::PrDetail, ForgeError> {
+    use bise_proto::rows::{PrDetail, PrNote, PrVerdict};
+    let v: Value = serde_json::from_str(out).map_err(|e| ForgeError::Other(format!("gh pr view: {}", e)))?;
+    let (body, body_cut) = cut(v["body"].as_str().unwrap_or_default(), DETAIL_BODY_CAP);
+    let checks = v["statusCheckRollup"].as_array().map(|a| a.iter().map(check_of).collect()).unwrap_or_default();
+    let note = |n: &Value, at: &str, verdict: Option<PrVerdict>| PrNote {
+        author: n["author"]["login"].as_str().unwrap_or("someone").to_string(),
+        body: cut(n["body"].as_str().unwrap_or_default(), NOTE_CAP).0,
+        at_ms: n[at].as_str().and_then(super::iso_ms).unwrap_or(0),
+        verdict,
+    };
+    let mut notes: Vec<PrNote> = Vec::new();
+    for r in v["reviews"].as_array().into_iter().flatten() {
+        let verdict = match r["state"].as_str().unwrap_or_default() {
+            "APPROVED" => PrVerdict::Approved,
+            "CHANGES_REQUESTED" => PrVerdict::Changes,
+            "COMMENTED" => PrVerdict::Commented,
+            // a pending review is the reviewer's draft, a dismissed one gone
+            "PENDING" | "DISMISSED" => continue,
+            _ => PrVerdict::Unknown,
+        };
+        if verdict == PrVerdict::Commented && r["body"].as_str().unwrap_or_default().trim().is_empty() {
+            continue;
+        }
+        notes.push(note(r, "submittedAt", Some(verdict)));
+    }
+    for c in v["comments"].as_array().into_iter().flatten() {
+        notes.push(note(c, "createdAt", None));
+    }
+    notes.sort_by_key(|n| std::cmp::Reverse(n.at_ms));
+    let more_notes = u32::try_from(notes.len().saturating_sub(NOTES_CAP)).unwrap_or(u32::MAX);
+    notes.truncate(NOTES_CAP);
+    Ok(PrDetail { body, body_cut, checks, notes, more_notes })
+}
+
+/// A GitHub Actions check's run: `-R`'s repo (`host/owner/name`) and the
+/// run id from its details link (`…/owner/name/actions/runs/<id>/job/<j>`).
+/// None: not an Actions run (another CI): no log the hub can read.
+pub fn run_of(details_url: &str) -> Option<(String, u64)> {
+    let bare = details_url.trim().strip_prefix("https://")?;
+    let parts: Vec<&str> = bare.split(['?', '#']).next()?.split('/').collect();
+    let at = parts.iter().position(|p| *p == "actions")?;
+    if at != 3 || parts.get(4) != Some(&"runs") {
+        return None;
+    }
+    let run = parts.get(5)?.parse().ok()?;
+    Some((format!("{}/{}/{}", parts[0], parts[1], parts[2]), run))
+}
+
+/// The last lines of check `name` in its run's `--log-failed` output, at
+/// most [`CHECK_LOG_LINES`], each line's `job\tstep\t` prefix dropped.
+pub fn check_log_lines(log: &str, name: &str) -> Vec<String> {
+    let job = name.rsplit(" / ").next().unwrap_or(name);
+    let mine: Vec<&str> = log.lines().filter(|l| l.split('\t').next() == Some(job)).collect();
+    let all: Vec<&str> = if mine.is_empty() { log.lines().collect() } else { mine };
+    let from = all.len().saturating_sub(CHECK_LOG_LINES);
+    all[from..].iter().map(|l| cut(l.splitn(3, '\t').last().unwrap_or(l).trim_end(), 300).0).collect()
+}
+
 /// The tail of check `name`'s lines in a run's `--log-failed` output: a
 /// run's log holds all its failed jobs, each line `job\tstep\tline`; the
 /// check `ci / test` is the job `test`. None of them: the whole log's tail.
@@ -456,6 +565,20 @@ impl GitHub {
             }
             Err(error_of(&String::from_utf8_lossy(&out.stderr)))
         }
+    }
+
+    /// A PR's tab: its description, checks, reviews and comments
+    /// ([`parse_detail`]), with his login.
+    pub fn pr_detail(&self, url: &str) -> Result<bise_proto::rows::PrDetail, ForgeError> {
+        parse_detail(&self.gh(&["pr", "view", url, "--json", DETAIL_FIELDS])?)
+    }
+
+    /// Check `name`'s last log lines, from its Actions run (`details`
+    /// its link, [`run_of`]); None: not a run the hub can read.
+    pub fn check_log(&self, details: &str, name: &str) -> Option<Result<Vec<String>, ForgeError>> {
+        let (repo, run) = run_of(details)?;
+        let run = run.to_string();
+        Some(self.gh(&["run", "view", run.as_str(), "--log-failed", "-R", repo.as_str()]).map(|log| check_log_lines(&log, name)))
     }
 
     /// Whether gh has a login for `host` (`gh auth status`'s exit code;
@@ -740,5 +863,70 @@ mod tests {
         // another host: only when gh knows it
         assert_eq!(detect("https://gitlab.com/o/r.git", None), None);
         assert_eq!(detect("not a url", None), None);
+    }
+
+    /// A PR's tab: gh's JSON typed once here. A check state nobody knows
+    /// is Unknown (never a pass); notes newest first, a draft or a
+    /// dismissed review skipped, an empty "commented" review too; the
+    /// caps say how many more.
+    #[test]
+    fn a_prs_detail_from_gh() {
+        use bise_proto::rows::{PrCheckState as S, PrVerdict as V};
+        let out = r#"{"body":"fixes the banner","statusCheckRollup":[
+          {"__typename":"CheckRun","name":"ci / test","status":"COMPLETED","conclusion":"FAILURE","detailsUrl":"https://github.com/acme/web/actions/runs/77/job/8"},
+          {"__typename":"CheckRun","name":"lint","status":"COMPLETED","conclusion":"SUCCESS","detailsUrl":""},
+          {"__typename":"CheckRun","name":"e2e","status":"IN_PROGRESS","conclusion":""},
+          {"__typename":"CheckRun","name":"docs","status":"COMPLETED","conclusion":"SKIPPED"},
+          {"__typename":"CheckRun","name":"new","status":"COMPLETED","conclusion":"SOMETHING_NEW"},
+          {"__typename":"StatusContext","context":"vercel","state":"PENDING","targetUrl":"https://vercel.com/x"}],
+          "reviews":[
+          {"author":{"login":"alice"},"body":"","state":"APPROVED","submittedAt":"2026-10-01T12:00:00Z"},
+          {"author":{"login":"bob"},"body":"","state":"COMMENTED","submittedAt":"2026-10-01T12:05:00Z"},
+          {"author":{"login":"bob"},"body":"draft","state":"PENDING","submittedAt":"2026-10-01T12:06:00Z"},
+          {"author":{"login":"carol"},"body":"rename it","state":"CHANGES_REQUESTED","submittedAt":"2026-10-01T11:00:00Z"}],
+          "comments":[{"author":{"login":"dan"},"body":"<img src=x onerror=alert(1)> looks good","createdAt":"2026-10-01T12:10:00Z"}]}"#;
+        let d = parse_detail(out).unwrap();
+        assert_eq!((d.body.as_str(), d.body_cut), ("fixes the banner", false));
+        let states: Vec<(&str, S)> = d.checks.iter().map(|c| (c.name.as_str(), c.state)).collect();
+        assert_eq!(
+            states,
+            [("ci / test", S::Fail), ("lint", S::Pass), ("e2e", S::Running), ("docs", S::Skipped), ("new", S::Unknown), ("vercel", S::Running)]
+        );
+        assert_eq!(d.checks[5].url, "https://vercel.com/x");
+        let notes: Vec<(&str, Option<V>)> = d.notes.iter().map(|n| (n.author.as_str(), n.verdict)).collect();
+        assert_eq!(notes, [("dan", None), ("alice", Some(V::Approved)), ("carol", Some(V::Changes))]);
+        // the body is the forge's text, as is: the client skips its HTML
+        assert!(d.notes[0].body.starts_with("<img"));
+        assert_eq!(d.more_notes, 0);
+        // caps: a long body is cut, the oldest notes become a count
+        let many: Vec<String> = (0..NOTES_CAP + 3)
+            .map(|i| format!(r#"{{"author":{{"login":"u{i}"}},"body":"n","createdAt":"2026-10-01T12:{:02}:00Z"}}"#, i % 60))
+            .collect();
+        let big = format!(r#"{{"body":"{}","comments":[{}]}}"#, "x".repeat(DETAIL_BODY_CAP + 5), many.join(","));
+        let d = parse_detail(&big).unwrap();
+        assert!(d.body_cut && d.body.chars().count() == DETAIL_BODY_CAP + 1);
+        assert_eq!((d.notes.len(), d.more_notes), (NOTES_CAP, 3));
+        assert!(d.notes.windows(2).all(|w| w[0].at_ms >= w[1].at_ms), "newest first");
+        assert!(parse_detail("not json").is_err());
+    }
+
+    /// A check's log: only a GitHub Actions run has one the hub reads;
+    /// its job's lines, the last 80, without gh's `job\tstep\t` prefix.
+    #[test]
+    fn a_checks_log_is_its_runs_last_lines() {
+        assert_eq!(run_of("https://github.com/acme/web/actions/runs/77/job/8"), Some(("github.com/acme/web".into(), 77)));
+        assert_eq!(run_of("https://ghe.acme.io/acme/web/actions/runs/9?pr=1"), Some(("ghe.acme.io/acme/web".into(), 9)));
+        assert_eq!(run_of("https://vercel.com/acme/web/actions/runs/9"), Some(("vercel.com/acme/web".into(), 9)));
+        assert_eq!(run_of("https://circleci.com/gh/acme/web/12"), None);
+        assert_eq!(run_of(""), None);
+        let mut log = String::new();
+        for i in 0..100 {
+            log.push_str(&format!("test\trun tests\tline {i}\nlint\trun\tother {i}\n"));
+        }
+        let lines = check_log_lines(&log, "ci / test");
+        assert_eq!(lines.len(), CHECK_LOG_LINES);
+        assert_eq!((lines[0].as_str(), lines[79].as_str()), ("line 20", "line 99"));
+        // no line of that job: the log's own tail
+        assert_eq!(check_log_lines("a\nb", "ci / build"), ["a", "b"]);
     }
 }

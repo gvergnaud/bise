@@ -238,6 +238,94 @@ pub struct Pr {
     pub pushed_ms: Option<u64>,
 }
 
+/// What a PR's tab reads besides its row (`pr_detail`): its description,
+/// its head's checks one by one, what people said, newest first. Never
+/// its state, its checks' sum or whose turn it is: those are the row's.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct PrDetail {
+    /// its description, markdown from the forge (untrusted: drawn with
+    /// HTML skipped), cut at the hub's cap
+    pub body: String,
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub body_cut: bool,
+    pub checks: Vec<PrCheck>,
+    /// reviews and comments, newest first, at most the hub's cap
+    pub notes: Vec<PrNote>,
+    /// how many more the forge has (`N more on GitHub`)
+    #[serde(default, skip_serializing_if = "super::is_zero")]
+    pub more_notes: u32,
+}
+
+/// One check of the PR's head.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct PrCheck {
+    pub name: String,
+    pub state: PrCheckState,
+    /// its page on the forge
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub url: String,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum PrCheckState {
+    Pass,
+    Fail,
+    Running,
+    /// skipped, neutral, cancelled: not a failure
+    Skipped,
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// A review or a comment on the PR.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct PrNote {
+    /// the forge login
+    pub author: String,
+    /// markdown from the forge (untrusted), cut at the hub's cap
+    pub body: String,
+    pub at_ms: u64,
+    /// a review's verdict; none: a comment
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verdict: Option<PrVerdict>,
+}
+
+/// What a review said.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum PrVerdict {
+    Approved,
+    Changes,
+    Commented,
+    #[serde(other)]
+    Unknown,
+}
+
+/// Why a PR's detail or a check's log didn't come (`pr_detail.err`,
+/// `pr_check_log.err`), typed: the client says it in its words.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum PrErr {
+    /// the forge didn't answer in the hub's time
+    Late,
+    /// gh is missing or logged out
+    NoForge,
+    /// the forge refused or failed: its words in `why`
+    Forge,
+    /// that check has no log the hub can read (not a GitHub Actions run)
+    NoLog,
+    #[serde(other)]
+    Unknown,
+}
+
 /// A worktree of the project as the terminal's panel draws it (dev-flow
 /// §3.1, the `places` of the hub's snapshot, P4c-4a): a worktree its
 /// agents share, a feature branch, a solo agent's own worktree. Never

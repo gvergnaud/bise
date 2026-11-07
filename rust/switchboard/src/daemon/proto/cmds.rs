@@ -360,6 +360,15 @@ impl Shell {
             // only, never an agent's op): sb-core plans it (merge::plan),
             // `pr_acted` answers this client
             HubCmd::PrAct { url, head, act, req, .. } => self.step_typed(id, &tag, Input::PrAct { client: id, req, url, head, act }),
+            // a PR's tab reads the forge on a thread (daemon/pr_detail.rs)
+            HubCmd::PrDetail { url, req, .. } => match crate::forge::pr_link(&url) {
+                Some(l) => self.pr_detail(id, l.url, req),
+                None => self.proto_error(id, &tag, &format!("{url} is not a pull request's link")),
+            },
+            HubCmd::PrCheckLog { url, check, req, .. } => match crate::forge::pr_link(&url) {
+                Some(l) => self.pr_check_log(id, l.url, check, req),
+                None => self.proto_error(id, &tag, &format!("{url} is not a pull request's link")),
+            },
             // git in a thread (art.rs, the `branches` op's scan), to this client
             HubCmd::Branches { .. } => self.branches_scan(id),
             // git in a thread (worktrees.rs), to this client

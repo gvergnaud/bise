@@ -39,6 +39,7 @@ mod projects;
 mod prompt_inputs;
 use prompt_inputs::{plugins_fingerprint, prompt_is_stale, PromptInputs, PROMPT_PLUGINS_FILE};
 mod proto;
+mod pr_detail;
 mod pulse;
 mod repl;
 mod repl_starts;

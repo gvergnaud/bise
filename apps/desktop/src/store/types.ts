@@ -30,6 +30,9 @@ export const TAGS = {
   prs: true,
   // the answer to his Merge or Close on a PR's tab (pr/act): its request's result, never pushed
   pr_acted: true,
+  // a PR tab's detail and a check's log (pr/detail, pr/checkLog): results, never pushed
+  pr_detail: true,
+  pr_check_log: true,
   models: true,
   tool_out: true,
   // the answer to queued_take (turn/unqueue): his taken-back words, to the asking window (main 34c35175)

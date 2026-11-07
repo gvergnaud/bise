@@ -41,6 +41,8 @@ export const METHODS = {
   "features/list": { cmd: "features", result: "features" },
   "prs/list": { cmd: "prs", result: "prs" },
   "pr/act": { cmd: "pr_act", result: "pr_acted" },
+  "pr/detail": { cmd: "pr_detail", result: "pr_detail" },
+  "pr/checkLog": { cmd: "pr_check_log", result: "pr_check_log" },
   "inbox/history": { cmd: "inbox_history", result: "inbox_history" },
   "scheduled/list": { cmd: "scheduled", result: "scheduled" },
   "scheduled/stop": { cmd: "scheduled_stop", result: null },

@@ -47,7 +47,7 @@ fn one_ev(project: &str, body: &Value) -> Option<HubEv> {
 }
 
 /// The methods answered from a thread (git, lsof), after the arm returns.
-const LATER: &[&str] = &["diff/read", "worktrees/list", "processes/list", "process/output", "merged/list", "branches/list", "release/plan", "tool/output", "log/read", "log/completion", "log/body", "pr/act"];
+const LATER: &[&str] = &["diff/read", "worktrees/list", "processes/list", "process/output", "merged/list", "branches/list", "release/plan", "tool/output", "log/read", "log/completion", "log/body", "pr/act", "pr/detail", "pr/checkLog"];
 
 /// The hub-wide kinds sent from a thread: `hub/read` gives their last.
 const SCANNED: &[&str] = &["worktrees", "processes", "merged"];

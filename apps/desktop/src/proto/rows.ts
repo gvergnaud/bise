@@ -690,6 +690,65 @@ yours?: PrYours | null,
 pushed_ms?: number | null, };
 
 /**
+ * What a PR's tab reads besides its row (`pr_detail`): its description,
+ * its head's checks one by one, what people said, newest first. Never
+ * its state, its checks' sum or whose turn it is: those are the row's.
+ */
+export type PrDetail = { 
+/**
+ * its description, markdown from the forge (untrusted: drawn with
+ * HTML skipped), cut at the hub's cap
+ */
+body: string, body_cut?: boolean, checks: Array<PrCheck>, 
+/**
+ * reviews and comments, newest first, at most the hub's cap
+ */
+notes: Array<PrNote>, 
+/**
+ * how many more the forge has (`N more on GitHub`)
+ */
+more_notes?: number, };
+
+/**
+ * One check of the PR's head.
+ */
+export type PrCheck = { name: string, state: PrCheckState, 
+/**
+ * its page on the forge
+ */
+url?: string, };
+
+export type PrCheckState = "pass" | "fail" | "running" | "skipped" | "unknown";
+
+/**
+ * A review or a comment on the PR.
+ */
+export type PrNote = { 
+/**
+ * the forge login
+ */
+author: string, 
+/**
+ * markdown from the forge (untrusted), cut at the hub's cap
+ */
+body: string, at_ms: number, 
+/**
+ * a review's verdict; none: a comment
+ */
+verdict?: PrVerdict | null, };
+
+/**
+ * What a review said.
+ */
+export type PrVerdict = "approved" | "changes" | "commented" | "unknown";
+
+/**
+ * Why a PR's detail or a check's log didn't come (`pr_detail.err`,
+ * `pr_check_log.err`), typed: the client says it in its words.
+ */
+export type PrErr = "late" | "no_forge" | "forge" | "no_log" | "unknown";
+
+/**
  * A bise page of this hub (docs/ambient-pages.md §2.3): `hub/pages`'
  * rows (newest first) and `page/changed`'s page. `state`: `ready`,
  * `updating` (its agent answers his notes)...; the counts and marks are
