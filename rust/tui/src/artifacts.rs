@@ -637,10 +637,8 @@ const EDITOR_EXT: &[&str] = &[
 
 /// How `a` (its version `v`) opens. A PR opens its diff when `diff`.
 pub(crate) fn how(a: &Artifact, v: Option<u32>, diff: bool) -> How {
-    if diff {
-        if a.pr.as_ref().is_some_and(|p| p.number > 0) && a.target.starts_with("https://") {
-            return How::Diff(a.target.clone());
-        }
+    if diff && a.pr.as_ref().is_some_and(|p| p.number > 0) && a.target.starts_with("https://") {
+        return How::Diff(a.target.clone());
     }
     let t = a.open_target(v);
     if t.is_empty() {
