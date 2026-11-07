@@ -97,11 +97,14 @@ const KEEP_PER_KIND: usize = 50_000;
 /// The loop's time over a window, by message kind (c4-loop-never-waits):
 /// what a hold under 1 s, never in a held line, costs in all, and the
 /// state push's median (its goal: under 100 ms).
+/// One kind's window: how many, their total ms, the times kept.
+type Kind = (u64, u64, Vec<u32>);
+
 #[derive(Default)]
 struct Stats {
     since_ms: u64,
     /// each kind: how many, their total ms, the times kept
-    kinds: std::collections::BTreeMap<String, (u64, u64, Vec<u32>)>,
+    kinds: std::collections::BTreeMap<String, Kind>,
 }
 
 impl Stats {
@@ -126,7 +129,7 @@ impl Stats {
             return None;
         }
         let busy: u64 = kinds.values().map(|k| k.1).sum();
-        let mut by: Vec<(String, (u64, u64, Vec<u32>))> = kinds.into_iter().collect();
+        let mut by: Vec<(String, Kind)> = kinds.into_iter().collect();
         by.sort_by(|a, b| b.1 .1.cmp(&a.1 .1).then(a.0.cmp(&b.0)));
         let parts: Vec<String> = by
             .into_iter()

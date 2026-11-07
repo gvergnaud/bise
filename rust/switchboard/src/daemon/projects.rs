@@ -38,7 +38,7 @@ impl Projects {
         if bise_home::env::test_setting("SB_STATE_DIR").is_none() {
             let home_ws = crate::paths::home_workspace();
             if bise_home::projects::canonical(&paths.workspace) != bise_home::projects::canonical(&home_ws) {
-                match bise_home::projects::add_path(&home, &home_ws, &paths.workspace, None, now_ms()) {
+                match bise_home::projects::add_path(home, &home_ws, &paths.workspace, None, now_ms()) {
                     Ok(bise_home::projects::Added::New(p)) => log_line(paths, &format!("projects: added as {}", p.name)),
                     Ok(bise_home::projects::Added::Already(_)) => {}
                     Err(e) => log_line(paths, &format!("projects: not added ({e})")),
