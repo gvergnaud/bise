@@ -526,7 +526,7 @@ impl Shell {
             choices,
             ..Step::default()
         };
-        let about = self.page_about(id, &first.block, Some(&first.anchor()));
+        let about = self.page_about(id, &first.block, Some(first.anchor()));
         match self.open_page_card(id, s.card_text(), format!("drafts:{}:{}", first.block, first.anchor()), about) {
             Some(card) => s.card = card,
             None => {

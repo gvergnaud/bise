@@ -199,8 +199,9 @@ def rts_writers(root, allowed=RTS_WRITERS):
     return bad
 
 
-# a J./K. getter whose first argument is a card's about (`S.Card.about(c)`)
-ABOUT_READ = re.compile(r"(?<![\w.])[JK]\.\w*(?:get|opt)\w*\(\s*[\w.]*Card\.about\(")
+# a J./K. getter whose first argument is a card's about (`S.Card.about(c)`),
+# or a match that opens it (`match S.Card.about(c):`, a Some/JObj case)
+ABOUT_READ = re.compile(r"(?<![\w.])[JK]\.\w*(?:get|opt)\w*\(\s*[\w.]*Card\.about\(|^\s*match\b.*\bCard\.about\(")
 
 
 def about_reads(root):
@@ -250,9 +251,16 @@ def self_test():
             "def peek(c: S.Card) -> String:",
             "  K.get_s(S.Card.about(c), 'id')",
             "",
+            "def peek2(c: S.Card) -> Bool:",
+            "  match S.Card.about(c):",
+            "    case Some{J.JObj{kvs}}:",
+            "      True{}",
+            "    case _:",
+            "      False{}",
+            "",
         ]))
         got = about_reads(root)
-        assert [(p, n) for p, n, _ in got] == [("bend/hub/d.bend", 6)], f"self-test: about reads {got}"
+        assert [(p, n) for p, n, _ in got] == [("bend/hub/d.bend", 6), ("bend/hub/d.bend", 9)], f"self-test: about reads {got}"
     # the lists only shrink
     base = 'MIGRATING = {\n    "Msg", "Card",\n}\n\nHAND = {\n    # "Old" in a comment\n    "Core",\n}\n'
     assert grown(None, base) == [], "self-test: no base, no check"
