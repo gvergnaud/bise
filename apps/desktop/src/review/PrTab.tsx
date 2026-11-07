@@ -7,7 +7,7 @@
 // diff, the hub's pick of place or forge). Every wait says what it waits for, with the link out
 // beside a miss. Owner: pr-artifacts.
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
-import { Button, Empty, Head, MoreButton, Seg, Skel, tipAttrs, type EntityMenu } from '@/ds';
+import { Button, Empty, Head, MoreButton, Press, Seg, Skel, tipAttrs, type EntityMenu } from '@/ds';
 import { prDiffKey, useArtifacts, useDiffError, usePrActed, usePrCheckLog, usePrDetail, usePrDiff, useStore } from '@/store';
 import type { Pr, PrCheck, PrDetail } from '@/proto';
 import { panel } from '@/proto/words_panel.gen';
@@ -169,16 +169,16 @@ function Summary({ project, url, s, tag, forge, out }: { project: string; url: s
         </ul>
       )}
       {(d.more_notes ?? 0) > 0 && (
-        <button type="button" className="prt-link" onClick={() => { openOut(url); }} data-testid="prtab.more_notes">
+        <Press look="prt-link" onClick={() => { openOut(url); }} data-testid="prtab.more_notes">
           {panel.prtab_more_notes({ n: d.more_notes ?? 0, forge })}
-        </button>
+        </Press>
       )}
       {agents.length > 0 && (
         <>
           <h3>{panel.prtab_agents}</h3>
           <p className="prt-agents" data-testid="prtab.agents">
             {agents.map((a) => (
-              <button key={a} type="button" className="prt-link" onClick={() => { router.go({ screen: 'thread', project, agent: a }); }}>{a}</button>
+              <Press key={a} look="prt-link" onClick={() => { router.go({ screen: 'thread', project, agent: a }); }}>{a}</Press>
             ))}
           </p>
         </>
@@ -209,7 +209,7 @@ function CheckRow({ project, url, c, tag, forge, agent }: { project: string; url
     <li data-testid={`prtab.check.${c.name}`} data-state={c.state}>
       <span className={`prt-mark prt-${c.state}`} {...tipAttrs(mark.tip)}>{mark.glyph}</span>
       {c.url == null ? <span>{c.name}</span> : (
-        <button type="button" className="prt-link" onClick={() => { if (c.url != null) openOut(c.url); }}>{c.name}</button>
+        <Press look="prt-link" onClick={() => { if (c.url != null) openOut(c.url); }}>{c.name}</Press>
       )}
       {c.state === 'fail' && agent !== undefined && (
         reading ? <span className="prt-wait">{panel.prtab_ask_fix_reading}</span> : (
