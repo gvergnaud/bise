@@ -476,13 +476,16 @@ law interrupt_flag_semantics:
 law provider_stream_step_timeout:
   {Pv.stream_step_ms() == 90000 : U32}
 
-# LAW: a provider with no idle_timeout_sec (or 0, or not a number) waits
-# 90 s, as before the key existed: nothing changes for who sets nothing.
-law provider_idle_timeout_default:
-  {Bool.and(U32.is_eq(Pv.wait_ms(Pv.stream_wait("", "fake", "fake/m")), 90000),
-      Bool.and(U32.is_eq(Pv.wait_ms(Pv.stream_wait(
+# LAW (c8-gateway-hang gap_timeout_unchanged): the gap of a body read is
+# the wait of before the head limit existed: 90 s with no
+# idle_timeout_sec (or 0, or not a number), as before the key existed:
+# nothing changes for who sets nothing. Retries keep it
+# (gap_timeout_unchanged_per_try).
+law gap_timeout_unchanged:
+  {Bool.and(U32.is_eq(Pv.gap_ms(Pv.stream_wait("", "fake", "fake/m")), 90000),
+      Bool.and(U32.is_eq(Pv.gap_ms(Pv.stream_wait(
           "[providers.fake]\nidle_timeout_sec = 0\n", "fake", "fake/m")), 90000),
-        U32.is_eq(Pv.wait_ms(Pv.stream_wait(
+        U32.is_eq(Pv.gap_ms(Pv.stream_wait(
           "[providers.fake]\nidle_timeout_sec = \"soon\"\n", "fake", "fake/m")), 90000)))
     == True{} : Bool}
 
@@ -490,28 +493,111 @@ law provider_idle_timeout_default:
 # models, a model's own table wins, another provider keeps 90 s, and a
 # huge value is capped at a day.
 law provider_idle_timeout_set:
-  {Bool.and(U32.is_eq(Pv.wait_ms(Pv.stream_wait(
+  {Bool.and(U32.is_eq(Pv.gap_ms(Pv.stream_wait(
         "[providers.fake]\nidle_timeout_sec = 600\n", "fake", "fake/m")), 600000),
-      Bool.and(U32.is_eq(Pv.wait_ms(Pv.stream_wait(
+      Bool.and(U32.is_eq(Pv.gap_ms(Pv.stream_wait(
           "[providers.fake]\nidle_timeout_sec = 600\n[models.\"fake/m\"]\nidle_timeout_sec = 5\n",
           "fake", "fake/m")), 5000),
-        Bool.and(U32.is_eq(Pv.wait_ms(Pv.stream_wait(
+        Bool.and(U32.is_eq(Pv.gap_ms(Pv.stream_wait(
             "[providers.fake]\nidle_timeout_sec = 600\n", "mistral", "mistral/m")), 90000),
-          U32.is_eq(Pv.wait_ms(Pv.stream_wait(
+          U32.is_eq(Pv.gap_ms(Pv.stream_wait(
             "[providers.fake]\nidle_timeout_sec = 99999999\n", "fake", "fake/m")), 86400000))))
     == True{} : Bool}
 
+# LAW (c8-gateway-hang): the gap stays 90 s on every retry.
+law gap_timeout_unchanged_per_try:
+  {Bool.and(U32.is_eq(Pv.gap_ms(Pv.wait_for_try(
+        Pv.stream_wait("", "fake", "fake/m"), 0n)), 90000),
+      U32.is_eq(Pv.gap_ms(Pv.wait_for_try(
+        Pv.stream_wait("", "fake", "fake/m"), 7n)), 90000))
+    == True{} : Bool}
+
+# LAW (c8-gateway-hang head_grows_per_attempt): with no idle_timeout_sec
+# the first attempt waits head_ms (30 s) for the response head, a retry
+# doubles it: 30 s, 60 s, then the gap.
+law head_grows_per_attempt:
+  {Bool.and(U32.is_eq(Pv.head_ms(), 30000),
+      Bool.and(U32.is_eq(Pv.head_of(Pv.wait_for_try(
+          Pv.stream_wait("", "fake", "fake/m"), 0n)), 30000),
+        Bool.and(U32.is_eq(Pv.head_of(Pv.wait_for_try(
+            Pv.stream_wait("", "fake", "fake/m"), 1n)), 60000),
+          U32.is_eq(Pv.head_of(Pv.wait_for_try(
+            Pv.stream_wait("", "fake", "fake/m"), 2n)), 90000))))
+    == True{} : Bool}
+
+# LAW (c8-gateway-hang head_capped_at_gap): the head never waits past the
+# gap, however many retries (a slow but alive head gets today's 90 s
+# from the third attempt on: no turn lost that the old limit saved), and
+# a day-long wait never overflows.
+law head_capped_at_gap:
+  {Bool.and(U32.is_eq(Pv.head_of(Pv.wait_for_try(
+        Pv.stream_wait("", "fake", "fake/m"), 9n)), 90000),
+      Bool.and(U32.is_eq(Pv.head_of(Pv.wait_for_try(
+          Pv.ProvWait{"x", 30000, 20000}, 0n)), 20000),
+        U32.is_eq(Pv.head_of(Pv.wait_for_try(
+          Pv.ProvWait{"x", 86400000, 86400000}, 9n)), 86400000)))
+    == True{} : Bool}
+
+# LAW (c8-gateway-hang): a provider with idle_timeout_sec keeps head ==
+# gap, its own value, on every attempt (a local model reading a long
+# prompt before its head is not cut at 30 s).
+law idle_timeout_head_is_gap:
+  {Bool.and(U32.is_eq(Pv.head_of(Pv.wait_for_try(
+        Pv.stream_wait.of("fake", 600), 0n)), 600000),
+      Bool.and(U32.is_eq(Pv.head_of(Pv.wait_for_try(
+          Pv.stream_wait.of("fake", 600), 3n)), 600000),
+        U32.is_eq(Pv.head_of(Pv.wait_for_try(
+          Pv.stream_wait.of("fake", 5), 0n)), 5000)))
+    == True{} : Bool}
+
 # LAW: a streamed call that times out still retries, and its text names
-# the host, the limit and the key to raise, under its provider's table.
+# the host, the limit, which one ran out and the key to raise, under its
+# provider's table; the attempt carries the limit and its ms, typed.
 law attempt_timeout_names_the_key:
-  {Pv.attempt_err_in("127.0.0.1:8080", Pv.ProvWait{"ollama", 5000}, Pv.NTimeout{})
-    == Pv.ARetry{0, "no answer from 127.0.0.1:8080 in 5 s (timeout) — a slow model or gateway? raise idle_timeout_sec under [providers.ollama] in ~/.bise/config.toml"}
+  {Pv.attempt_err_in("127.0.0.1:8080", Pv.ProvWait{"ollama", 3000, 5000},
+      Pv.LHead{}, Pv.NTimeout{})
+    == Pv.ATimeout{Pv.LHead{}, 3000, "no answer from 127.0.0.1:8080 in 3 s (timeout, no response head) — a slow model or gateway? raise idle_timeout_sec under [providers.ollama] in ~/.bise/config.toml"}
+    : Pv.Attempt}
+
+law attempt_timeout_names_the_gap:
+  {Pv.attempt_err_in("127.0.0.1:8080", Pv.ProvWait{"ollama", 3000, 5000},
+      Pv.LGap{}, Pv.NTimeout{})
+    == Pv.ATimeout{Pv.LGap{}, 5000, "no answer from 127.0.0.1:8080 in 5 s (timeout, the reply stalled) — a slow model or gateway? raise idle_timeout_sec under [providers.ollama] in ~/.bise/config.toml"}
     : Pv.Attempt}
 
 # LAW: the other transport failures of a streamed call read as before.
 law attempt_err_in_others:
-  {Pv.attempt_err_in("api.example.com", Pv.ProvWait{"x", 5000}, Pv.NDns{"no address", ""})
+  {Pv.attempt_err_in("api.example.com", Pv.ProvWait{"x", 5000, 5000},
+      Pv.LHead{}, Pv.NDns{"no address", ""})
     == Pv.attempt_err("api.example.com", Pv.NDns{"no address", ""}) : Pv.Attempt}
+
+# LAW (c8-gateway-hang): a head timeout spends a status attempt with the
+# growing backoff (1 s, 2 s, 4 s...), as any retry without a server
+# hint: a shorter head limit never hammers a gateway in an episode.
+law head_timeout_backoff_grows:
+  {[Pv.next_of(Pv.ATimeout{Pv.LHead{}, 30000, "w"}, Pv.Budget{9n, 0}, 0n),
+      Pv.next_of(Pv.ATimeout{Pv.LHead{}, 60000, "w"}, Pv.Budget{8n, 0}, 1n),
+      Pv.next_of(Pv.ATimeout{Pv.LHead{}, 90000, "w"}, Pv.Budget{7n, 0}, 2n)]
+    == [Pv.XRetry{1000, "w", Pv.Budget{8n, 0}}, Pv.XRetry{2000, "w", Pv.Budget{7n, 0}},
+      Pv.XRetry{4000, "w", Pv.Budget{6n, 0}}] : List<&2, Pv.Next>}
+
+# LAW (c8-gateway-hang): a timeout's request_failed event says kind
+# "timeout", the limit and its ms, typed (scripts/call_times.py counts
+# head hangs without reading the message); any other retry keeps
+# "other" and no limit.
+law retry_event_types_the_timeout:
+  {Ev.retry(4, 1n, Pv.retry_kind(Pv.ATimeout{Pv.LHead{}, 30000, "w"}),
+      Pv.retry_limit(Pv.ATimeout{Pv.LHead{}, 30000, "w"}),
+      Pv.retry_waited(Pv.ATimeout{Pv.LHead{}, 30000, "w"}), "w", 1000)
+    == "  ev: {\"type\":\"request_failed\",\"v\":1,\"data\":{\"req\":4,\"attempt\":1,\"error\":{\"kind\":\"timeout\",\"message\":\"w\"},\"retry_in_ms\":1000,\"limit\":\"head\",\"waited_ms\":30000}}"
+    : String}
+
+law retry_event_other_unchanged:
+  {Ev.retry(4, 2n, Pv.retry_kind(Pv.ARetry{0, "x"}),
+      Pv.retry_limit(Pv.ARetry{0, "x"}), Pv.retry_waited(Pv.ARetry{0, "x"}),
+      "x", 2000)
+    == "  ev: {\"type\":\"request_failed\",\"v\":1,\"data\":{\"req\":4,\"attempt\":2,\"error\":{\"kind\":\"other\",\"message\":\"x\"},\"retry_in_ms\":2000}}"
+    : String}
 
 # LAW: a debug event is one JSON object on one line: ts, src, kind, then
 # the fields in order; strings are JSON-escaped (a newline stays \\n).

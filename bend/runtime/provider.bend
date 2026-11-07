@@ -296,8 +296,9 @@ def wait_notes(says: Bool, n: Out, +waited: U32, +delay_ms: U32, +why: String,
 
 # what follows a failed attempt (Pvp.next_of): a status retry (its two
 # lines at each one), a network wait, or the turn's error
-def model_call.next(x: Pvp.Next, n: Out, +tries: Nat, +req: U32,
-    next: Pvp.Budget -> Out -> IO(Out & Rem.RemoteRes))
+# a: the failed attempt (its event says a timeout's limit, typed)
+def model_call.next(x: Pvp.Next, +a: Pvp.Attempt, n: Out, +tries: Nat,
+    +req: U32, next: Pvp.Budget -> Out -> IO(Out & Rem.RemoteRes))
     -> IO(Out & Rem.RemoteRes):
   match x:
     case Pvp.XStop{+why}:
@@ -305,7 +306,9 @@ def model_call.next(x: Pvp.Next, n: Out, +tries: Nat, +req: U32,
     case Pvp.XRetry{+delay_ms, +why, +b}:
       do IO<Out & Rem.RemoteRes>:
         n1 : Out <- note(n, Pvp.retry_line(tries, why, delay_ms))
-        n2 : Out <- note(n1, Ev.retry(req, Nat.add(tries, 1n), why, delay_ms))
+        n2 : Out <- note(n1, Ev.retry(req, Nat.add(tries, 1n),
+          Pvp.retry_kind(a), Pvp.retry_limit(a), Pvp.retry_waited(a), why,
+          delay_ms))
         model_call.pause(n2, delay_ms, why, b, tries, next)
     case Pvp.XWait{+delay_ms, +why, +b, +says}:
       do IO<Out & Rem.RemoteRes>:
@@ -322,11 +325,14 @@ def model_call.step(a: Pvp.Attempt, n: Out, +b: Pvp.Budget, +tries: Nat,
     case Pvp.AFail{+why}:
       IO.pure(Out & Rem.RemoteRes, (n, Rem.RRErr{why}))
     case Pvp.ARetry{+after_ms, +why}:
-      model_call.next(Pvp.next_of(Pvp.ARetry{after_ms, why}, b, tries), n,
-        tries, req, next)
+      model_call.next(Pvp.next_of(Pvp.ARetry{after_ms, why}, b, tries),
+        Pvp.ARetry{after_ms, why}, n, tries, req, next)
     case Pvp.AWait{+why}:
-      model_call.next(Pvp.next_of(Pvp.AWait{why}, b, tries), n, tries, req,
-        next)
+      model_call.next(Pvp.next_of(Pvp.AWait{why}, b, tries), Pvp.AWait{why},
+        n, tries, req, next)
+    case Pvp.ATimeout{+l, +ms, +why}:
+      model_call.next(Pvp.next_of(Pvp.ATimeout{l, ms, why}, b, tries),
+        Pvp.ATimeout{l, ms, why}, n, tries, req, next)
 
 # the body text, decoded once from the raw pieces (newest first)
 def sse.text(+parts: List<&2, String>) -> String:
@@ -370,8 +376,8 @@ def sse.done(rd: Sr.Rd, +status: U32, +retry_after: String, +ck: Sr.Ck,
     case Sr.RdErr{st, +parts, +e}:
       do IO<Got>:
         c : Unit <- Http.stream.close(st)
-        IO.pure(Got, Got{Pvp.attempt_err_in(host, w, net_of(e)), status,
-          sse.text(parts), head})
+        IO.pure(Got, Got{Pvp.attempt_err_in(host, w, Pvp.LGap{}, net_of(e)),
+          status, sse.text(parts), head})
     case Sr.RdStop{st, +parts}:
       # cancelled: the race already answered the turn (call.raced) and
       # nobody reads this Got; the connection closes, the provider stops,
@@ -404,11 +410,15 @@ def sse.opened(r: Result<&1, &1, Http.Err, Http.Stream>,
     +w: Pvp.ProvWait, fam: Api.Style, +rpath: String) -> IO(Got):
   match r:
     case Fail{+e}:
-      IO.pure(Got, Got{Pvp.attempt_err_in(host, w, net_of(e)), 0, "", 0n})
+      IO.pure(Got, Got{Pvp.attempt_err_in(host, w, Pvp.LHead{}, net_of(e)), 0,
+        "", 0n})
     case Done{st}:
       sse.head(Http.stream.res(st), c, lv, ck, host, w, fam, rpath)
 
-# the wait (Pvp.stream_wait): the provider's idle_timeout_sec, else 90 s;
+# the wait (Pvp.wait_for_try of Pvp.stream_wait): the open waits up to
+# its head limit for the response head, then each read of the body up
+# to its gap (the provider's idle_timeout_sec sets both, else 30 s
+# doubled per retry up to the gap, and 90 s);
 # tok: the attempt's token in the cancel file at cpath; c, lv: the race
 # channel its partials go to and its live reader (runtime/live-pure.bend)
 @unsafe
@@ -417,8 +427,8 @@ def sse.call(+c: Chan(Race.Step<Got>), +lv: Lp.Lv, +tok: String,
     +body: String, +w: Pvp.ProvWait, fam: Api.Style, +rpath: String) -> IO(Got):
   do IO<Got>:
     r : Result<&1, &1, Http.Err, Http.Stream> <- Http.open.with("POST", url,
-      hdrs, body, Pvp.wait_ms(w))
-    sse.opened(r, c, lv, Sr.Ck{cpath, tok, Pvp.wait_ms(w)}, Pvp.url_host(url),
+      hdrs, body, Pvp.head_of(w))
+    sse.opened(r, c, lv, Sr.Ck{cpath, tok, Pvp.gap_ms(w)}, Pvp.url_host(url),
       w, fam, rpath)
 
 # the whole reply at once (a family that does not stream)
@@ -827,11 +837,12 @@ def model_call.sent(b: Built, +k: Nat, +tries: Nat, +bd: Pvp.Budget, n: Out,
                       Api.with_cache_header(Pvp.cache_header(names), ckey,
                         Api.headers(st, Api.facts_betas(facts), key)))), Http.empty()))
                 +rpath : String <- Rl.reply_path(req)
-                # a slow gateway or local model: its idle_timeout_sec
+                # a slow gateway or local model: its idle_timeout_sec;
+                # a hung head: the head limit of this attempt
                 ng : Out & Got <- call.raced(n,
                   String.concat([Nat.show(call), "-", Nat.show(tries)]),
                   String.concat([Nat.show(call), ".", Nat.show(tries)]), live,
-                  st, url, hdrs, body, wait, rpath)
+                  st, url, hdrs, body, Pvp.wait_for_try(wait, tries), rpath)
                 got_then(ng, n0 => +g => do IO<Out & Rem.RemoteRes>:
                   +t2 : Nat <- IO.now()
                   lg : Unit <- model_call.log(call, tries, model, url, json, g)
@@ -875,7 +886,8 @@ def model_call.sized(big: Bool, nu: Out, +bd: Pvp.Budget, +tries: Nat,
     case True{}:
       do IO<Out & Rem.RemoteRes>:
         n1 : Out <- note(nu, Pvp.retry_line(tries, why, 0))
-        n2 : Out <- note(n1, Ev.retry(req, Nat.add(tries, 1n), why, 0))
+        n2 : Out <- note(n1, Ev.retry(req, Nat.add(tries, 1n), "other", "", 0,
+          why, 0))
         again(Pvp.budget_spent(bd))(n2)
 
 # the call's context, built once (Pvp.prepare), then its attempts

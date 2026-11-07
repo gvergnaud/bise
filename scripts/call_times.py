@@ -9,7 +9,10 @@ writes nothing.
 Per provider (the model id's part before "/"), from the usage events
 that carry the times (build_ms, save_ms, ttfb_ms, total_ms, attempt;
 older events have none): the count and p50 / p99 / p99.9 of each, and
-how many calls needed more than one attempt. Then the turns: how many
+how many calls needed more than one attempt. Then the timeouts by the
+limit that ran out (request_failed's `limit`, "head" or "gap", and its
+`waited_ms`; c8-gateway-hang): the time lost to hung heads. Then the
+turns: how many
 ended, how many failed or crashed (the lost ones), and the lost turns
 by their first words.
 """
@@ -53,6 +56,7 @@ def main():
     retried = Counter()
     ended, lost, why = 0, 0, Counter()
     failed_last = {}
+    hung, hung_ms = Counter(), Counter()
     for path, r in events(a.home, a.since):
         t, d = r.get("type"), r.get("data") or {}
         if t == "usage" and "ttfb_ms" in d:
@@ -65,6 +69,9 @@ def main():
                 retried[prov] += 1
         elif t == "request_failed":
             failed_last[path] = ((d.get("error") or {}).get("message") or "")
+            if d.get("limit"):
+                hung[d["limit"]] += 1
+                hung_ms[d["limit"]] += d.get("waited_ms") or 0
         elif t == "interrupted" and d.get("by") == "restart":
             failed_last[path] = "interrupted by a restart during " + str(d.get("during"))
         elif t == "turn_ended":
@@ -84,6 +91,12 @@ def main():
                   % (k, len(xs), pct(xs, 50), pct(xs, 99), pct(xs, 99.9)))
     if not times:
         print("no usage event with times yet (they start with c2-turn-survives d)")
+    if hung:
+        print("timeouts (c8-gateway-hang: the request_failed's limit, typed):")
+        for lim in sorted(hung):
+            print("  %-4s %5d retries, %.2f h waited" % (lim, hung[lim], hung_ms[lim] / 3600000.0))
+    else:
+        print("no timeout with its limit yet (it starts with c8-gateway-hang)")
     share = 100.0 * lost / ended if ended else 0.0
     print("turns: %d ended, %d lost (failed or crashed): %.2f %%" % (ended, lost, share))
     for w, n in why.most_common(12):

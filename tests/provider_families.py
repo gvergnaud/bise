@@ -239,7 +239,9 @@ def part_d():
         'idle_timeout_sec = 1\n\n'
         '[providers.fakepatient]\nname = "Fake Patient"\napi = "openai-chat"\nbase_url = "%s"\nkey_env = ""\n'
         'idle_timeout_sec = 8\n'
-        % (base, base, base, base, base, base))
+        '\n[providers.fakehang]\nname = "Fake Hang"\napi = "openai-chat"\nbase_url = "%s"\nkey_env = ""\n'
+        'idle_timeout_sec = 2\n'
+        % (base, base, base, base, base, base, base))
     cfg = os.path.join(tmp, "config.toml")
     s = socket.socket()
     s.bind(("127.0.0.1", 0))
@@ -357,7 +359,7 @@ def part_d():
         out = turn("fakeslow/m", "[[slow: 3]] hello slow", ctrl_c_on="provider_retry")
         took = time.time() - t0
         retry = [l for l in out if "provider_retry" in l]
-        key = "(timeout) — a slow model or gateway? raise idle_timeout_sec under [providers.fakeslow] in ~/.bise/config.toml"
+        key = "(timeout, no response head) — a slow model or gateway? raise idle_timeout_sec under [providers.fakeslow] in ~/.bise/config.toml"
         check(retry and "no answer from 127.0.0.1:%d in 1 s %s" % (fport, key) in retry[0],
               "idle_timeout_sec = 1: the read times out after 1 s and the retry line names the key: %r"
               % (retry[:1] or out[-3:]))
@@ -377,6 +379,29 @@ def part_d():
               and [r["status"] for r in recs] == [200] and took >= 3,
               "idle_timeout_sec = 8: the same 3 s wait answers, no retry (%.1fs): %r"
               % (took, said[-1:] or out[-3:]))
+        # c8-gateway-hang: a gateway that never sends its head ([[hang]]);
+        # the head limit (idle_timeout_sec = 2 here, else 30 s) gives up,
+        # the event says it was the head, typed, and the retry answers
+        n = len(open(F.LOG).readlines())
+        wn = len(open(os.path.join(tmp, "wire.log")).readlines())
+        t0 = time.time()
+        out = turn("fakehang/m", "[[hang: 1]] hello hang")
+        took = time.time() - t0
+        recs = [json.loads(l) for l in open(F.LOG)][n:]
+        recs = [r for r in recs if r.get("path", "").endswith("/chat/completions")]
+        evs = [json.loads(l.split("ev: ", 1)[1]) for l in open(os.path.join(tmp, "wire.log")).readlines()[wn:]
+               if "ev: " in l and '"request_failed"' in l]
+        said = [l for l in out if obs_lines.kind(l) == "assistant"]
+        check([r.get("hang") for r in recs][:1] == [1] and [r["status"] for r in recs][1:] == [200]
+              and 1.5 <= recs[0]["held_s"] < 10,
+              "[[hang: 1]]: the first request holds its head until the client gives up (~2 s), the next answers: %r"
+              % [(r.get("hang"), r["status"], r.get("held_s")) for r in recs])
+        check(len(evs) == 1 and evs[0]["data"].get("limit") == "head" and evs[0]["data"].get("waited_ms") == 2000
+              and evs[0]["data"]["error"]["kind"] == "timeout",
+              "the hung head's request_failed says kind timeout, limit head, waited_ms 2000: %r"
+              % [e["data"] for e in evs])
+        check(said and "ack: " in said[-1] and took < 15,
+              "the retry after the hung head answers the turn (%.1fs): %r" % (took, said[-1:] or out[-3:]))
     finally:
         repl.kill()
         srv.shutdown()

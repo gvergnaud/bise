@@ -914,12 +914,32 @@ def usage(+req: U32, +model: String, +inp: Nat, +out: Nat, +cr: Nat,
         Con{J.kv("cache_read", J.num(cr)),
           Con{J.kv("cache_write", J.num(cw)), timing_kvs(t)}}}}}}))
 
-# a failed attempt that will be retried (the provider's retry loop)
-def retry(+req: U32, +attempt: Nat, +why: String, +delay_ms: U32) -> String:
+# a timeout's limit and its ms (runtime/provider-pure.bend retry_limit:
+# "head" or "gap"); "" for any other failure: no field
+def retry_limit_kvs.pick(none: Bool, +limit: String, +waited: U32)
+    -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  match none:
+    case True{}:
+      Nil{}
+    case False{}:
+      Con{J.kv("limit", J.str(limit)), Con{J.kv("waited_ms", u32(waited)),
+        Nil{}}}
+
+def retry_limit_kvs(+limit: String, +waited: U32)
+    -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  retry_limit_kvs.pick(String.is_empty(limit), limit, waited)
+
+# a failed attempt that will be retried (the provider's retry loop);
+# kind: "timeout" or "other" (provider-pure.bend retry_kind), and a
+# timeout's limit with its ms, so a reader counts head hangs apart
+# (scripts/call_times.py) without reading the message
+def retry(+req: U32, +attempt: Nat, +kind: String, +limit: String,
+    +waited: U32, +why: String, +delay_ms: U32) -> String:
   line("request_failed", False{},
     J.obj(Con{J.kv("req", u32(req)), Con{J.kv("attempt", J.num(attempt)),
-      Con{J.kv("error", err("other", why)),
-        Con{J.kv("retry_in_ms", u32(delay_ms)), Nil{}}}}}))
+      Con{J.kv("error", err(kind, why)),
+        Con{J.kv("retry_in_ms", u32(delay_ms)),
+          retry_limit_kvs(limit, waited)}}}}))
 
 # a call waiting for the network (runtime/provider-pure.bend, the network
 # wait: no attempt spent): written when the wait starts and every 5 min

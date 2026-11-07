@@ -117,6 +117,8 @@ def plan(a: Pvp.Attempt, +tries: Nat) -> Plan:
       PFailed{"retry", why, after_ms}
     case Pvp.AWait{+why}:
       PFailed{"wait", why, 0}
+    case Pvp.ATimeout{_, _, +why}:
+      PFailed{"retry", why, 0}
 
 # artifact names: the request once per call, a reply per attempt
 def req_name(+call: Nat) -> String:

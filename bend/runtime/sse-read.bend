@@ -17,10 +17,11 @@ import ../vendor/http/encoding/encoding.bend as Enc
 # slice of Rcp.poll_ms (Http.stream.poll keeps a silent stream open),
 # and closes the connection when the file names its token, so the
 # provider stops generating, and charging, at once. Not covered: the
-# wait for the response headers (inside Http.open.with) - a streamed
-# reply sends them before it generates. A read that waits longer than
-# the stream's wait in total is a dead connection (a timeout the policy
-# retries).
+# wait for the response headers (inside Http.open.with, bounded by the
+# attempt's head limit, Pvp.head_of) - a streamed reply sends them
+# before it generates. A read that waits longer than the stream's gap
+# (Ck.limit = Pvp.gap_ms) in total is a dead connection (a timeout the
+# policy retries).
 #
 # The answer as it streams in: each piece also feeds the live reader
 # (runtime/live-pure.bend, lv) beside the raw parts; at most every

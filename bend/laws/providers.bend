@@ -1075,6 +1075,8 @@ def net_tag(a: Pv.Attempt) -> String:
       "retry"
     case Pv.AWait{_}:
       "wait"
+    case Pv.ATimeout{_, _, _}:
+      "timeout"
 
 # LAW: no name and no connection wait (AWait); a timeout or a cut stream
 # keeps the status retry, a TLS failure fails at once.

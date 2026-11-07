@@ -46,6 +46,11 @@ the injected <bise_state> block is not one):
 - `[[slow: S]]`: every request for that message waits S seconds (a
   float) before its first byte: a local model reading a long prompt, a
   gateway holding the head (provider-timeout: idle_timeout_sec);
+- `[[hang: N]]`: the first N requests for that message (N = 1) never
+  answer: no status line, no header, until the client hangs up (120 s
+  at most); the next one answers as usual. A hung gateway
+  (c8-gateway-hang): the client's head limit must give up and retry.
+  The log line says `hang` (the request's number) and how long it held;
 - `[[drip: N S]]` (streamed Anthropic only): the head and a first event
   at once, then N ping events S seconds apart before the reply: a model
   that generates for a long time. The log line says how many pings went
@@ -94,6 +99,7 @@ import http.server
 import json
 import os
 import re
+import socket
 import socketserver
 import sys
 import threading
@@ -114,6 +120,8 @@ REPLY = re.compile(r"\[\[reply: ([^\]\n]+)\]\]")
 ERROR = re.compile(r"\[\[error: (\w+)(?: x(\d+))?(?: retry=(\d+))?\]\]")
 FIXTURE = re.compile(r"\[\[fixture: ([\w.-]+)\]\]")
 SLOW = re.compile(r"\[\[slow: ([\d.]+)\]\]")
+HANG = re.compile(r"\[\[hang(?:: (\d+))?\]\]")
+HANG_MAX_S = 120
 DRIP = re.compile(r"\[\[drip: (\d+) ([\d.]+)\]\]")
 SPLIT = re.compile(r"\[\[split: ([\d.]+)\]\]")
 PIECES = re.compile(r"\[\[pieces: (\d+) ([\d.]+)\]\]")
@@ -1011,6 +1019,21 @@ class H(http.server.BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass
 
+    def hold_head(self):
+        """[[hang: N]]: send nothing until the client hangs up (its head
+        limit ran out) or HANG_MAX_S; the seconds held."""
+        import select
+        t0 = time.time()
+        while time.time() - t0 < HANG_MAX_S:
+            r, _, _ = select.select([self.connection], [], [], 0.1)
+            if r:
+                try:
+                    if not self.connection.recv(1, socket.MSG_PEEK):
+                        break
+                except OSError:
+                    break
+        return time.time() - t0
+
     def send(self, status, data, ctype="application/json", headers=None):
         self.send_response(status)
         self.send_header("content-type", ctype)
@@ -1269,6 +1292,14 @@ class H(http.server.BaseHTTPRequestHandler):
         with State.lock:
             seen = State.seen.get(key, 0)
             State.seen[key] = seen + 1
+        hang = HANG.search(script_of(conv[idx]["text"])) if idx is not None else None
+        if hang and seen < int(hang.group(1) or 1):
+            held = self.hold_head()
+            with open(LOG, "a") as f:
+                f.write(json.dumps({"agent": agent, "family": family, "path": self.path,
+                                    "status": 0, "hang": seen + 1, "held_s": round(held, 1)}) + "\n")
+            self.close_connection = True
+            return
         turn = reply_for(conv, seen)
         slow = SLOW.search(script_of(conv[idx]["text"])) if idx is not None else None
         if slow:

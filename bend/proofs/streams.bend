@@ -218,16 +218,41 @@ def Laws.context_skips_compaction_with_tools():
   {==}
 
 # provider-timeout: idle_timeout_sec (runtime/provider-pure.bend)
-def Laws.provider_idle_timeout_default():
+def Laws.gap_timeout_unchanged():
   {==}
 
 def Laws.provider_idle_timeout_set():
   {==}
 
+# c8-gateway-hang: the head limit beside the gap
+def Laws.gap_timeout_unchanged_per_try():
+  {==}
+
+def Laws.head_grows_per_attempt():
+  {==}
+
+def Laws.head_capped_at_gap():
+  {==}
+
+def Laws.idle_timeout_head_is_gap():
+  {==}
+
 def Laws.attempt_timeout_names_the_key():
   {==}
 
+def Laws.attempt_timeout_names_the_gap():
+  {==}
+
 def Laws.attempt_err_in_others():
+  {==}
+
+def Laws.head_timeout_backoff_grows():
+  {==}
+
+def Laws.retry_event_types_the_timeout():
+  {==}
+
+def Laws.retry_event_other_unchanged():
   {==}
 
 def Laws.usage_carries_timing():

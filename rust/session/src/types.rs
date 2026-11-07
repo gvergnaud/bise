@@ -25,6 +25,7 @@ open_enum!(InjectedKind { Preamble = "preamble", Notification = "notification", 
 open_enum!(Relation { Parent = "parent", Child = "child", Peer = "peer", User = "user", Hub = "hub" });
 open_enum!(Stop { End = "end", ToolUse = "tool_use", MaxTokens = "max_tokens" });
 open_enum!(ErrorKind { Http = "http", Network = "network", Timeout = "timeout", Parse = "parse", Tool = "tool", Internal = "internal" });
+open_enum!(TimeoutLimit { Head = "head", Gap = "gap" });
 open_enum!(DiscardCause { Empty = "empty", Interrupted = "interrupted", Invalid = "invalid" });
 open_enum!(By { User = "user", Restart = "restart", Agent = "agent" });
 open_enum!(During { Request = "request", Tool = "tool", Compaction = "compaction", Idle = "idle" });
@@ -45,6 +46,7 @@ pub(crate) const ENUM_FIELDS: &[(&str, &str, &[&str])] = &[
     ("agent_message", "relation", Relation::KNOWN),
     ("assistant_message", "stop", Stop::KNOWN),
     ("response_discarded", "cause", DiscardCause::KNOWN),
+    ("request_failed", "limit", TimeoutLimit::KNOWN),
     ("interrupted", "by", By::KNOWN),
     ("interrupted", "during", During::KNOWN),
     ("input_queued", "kind", QueuedKind::KNOWN),
@@ -324,6 +326,14 @@ pub struct RequestFailed {
     pub error: ErrorInfo,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retry_in_ms: Option<u64>,
+    /// a timeout (error kind "timeout"): the limit that ran out, the
+    /// response head or a gap in the body, and its ms
+    /// (bend/runtime/provider-pure.bend retry_limit). Absent before
+    /// c8-gateway-hang and on any other failure.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<TimeoutLimit>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub waited_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

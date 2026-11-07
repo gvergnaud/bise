@@ -215,6 +215,10 @@ export type RequestFailed = Ev<"request_failed", 1, {
   attempt: number;          // 1, 2…
   error: ErrorInfo;
   retry_in_ms?: number;     // absent = no retry
+  // a timeout (error.kind "timeout"): the limit that ran out, the
+  // response head or a gap in the body, and its ms; absent otherwise
+  limit?: "head" | "gap" | "other";
+  waited_ms?: number;
 }>;
 
 export type ResponseDiscarded = Ev<"response_discarded", 1, {
