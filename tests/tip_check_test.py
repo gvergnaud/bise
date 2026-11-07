@@ -133,7 +133,9 @@ def world():
         check(r.returncode == 0 and len(vs) == 1 and vs[0]["tip"] == a1 and vs[0]["base"] == base0 and vs[0]["state"] == "green"
               and vs[0]["commits"] == 1, "first land green %s %s" % (vs, r.stderr))
         log = open(vs[0]["log"]).read() if vs else ""
-        check("base=%s" % base0[:7] in log and "nice=15" in log and "slot=low" in log, "quick at nice 15 in heavy-run --low: %r" % log)
+        # nice 15 over the caller's own (this test inside a gate already runs at heavy-run's 10)
+        want = "nice=%d" % min(20, os.nice(0) + 15)
+        check("base=%s" % base0[:7] in log and want in log and "slot=low" in log, "quick at %s in heavy-run --low: %r" % (want, log))
         wt = os.path.join(home, "run", "tip-check", "tree", "repo")
         check(os.path.exists(os.path.join(wt, ".git")), "its own tree")
         # 2. the same tip again: nothing runs
