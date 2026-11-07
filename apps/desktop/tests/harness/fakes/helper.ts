@@ -92,9 +92,16 @@ export class FakeHelper extends Stub<HelperEv, HelperCmd> {
  */
 export class FakeCore extends Stub<CoreEv | HubEv, AppCmd | HubCmd> {
   private readonly world: string | undefined;
+  /** the answers to this command wait from the stub's start (`hold` before the app's first ask) */
+  private readonly holdAtStart: string | undefined;
 
-  constructor(start: 'fixtures' | 'none' | readonly (CoreEv | HubEv)[] = 'fixtures') {
+  /**
+   * `opts.hold`: as `hold(cmd)`, armed from the start, before the app's first command (boot-speed:
+   * main's first subscribe waits, as a booting hub's does, so the core's copy shows first).
+   */
+  constructor(start: 'fixtures' | 'none' | readonly (CoreEv | HubEv)[] = 'fixtures', opts: { hold?: string } = {}) {
     super(path.join(__dirname, 'core-stub.mts'));
+    this.holdAtStart = opts.hold;
     if (start === 'none') this.world = 'none';
     else if (start !== 'fixtures') {
       this.world = path.join(this.dir, 'world.jsonl');
@@ -146,6 +153,7 @@ export class FakeCore extends Stub<CoreEv | HubEv, AppCmd | HubCmd> {
       BISE_HARNESS_CORE_SOCK: this.sock,
       BISE_HARNESS_CORE_LOG: this.log,
       ...(this.world ? { BISE_HARNESS_CORE_EVENTS: this.world } : {}),
+      ...(this.holdAtStart === undefined ? {} : { BISE_HARNESS_CORE_HOLD: this.holdAtStart }),
     };
   }
 }

@@ -146,8 +146,9 @@ export function runStub({ start = [], sock, log, quitCmd, answer, rpc, follow }:
   };
   for (const l of start) out(typeof l === 'string' ? l : JSON.stringify(l));
   // a test's {"harness":"hold","cmd":c}: the answers to `c` wait (a busy hub, thread-loading)
-  // until {"harness":"release"} sends them, in order
-  let holding: unknown = null;
+  // until {"harness":"release"} sends them, in order; BISE_HARNESS_CORE_HOLD arms it from the start
+  // (FakeCore's `hold` option: the app's very first ask waits, boot-speed)
+  let holding: unknown = process.env.BISE_HARNESS_CORE_HOLD ?? null;
   let held: string[] = [];
   // a test's {"harness":"exit","code":n} line ends this process with that code (a core that
   // stops: the app restarts it, amb-win's app/keep); any other line goes out as is
