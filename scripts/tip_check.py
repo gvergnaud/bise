@@ -172,6 +172,31 @@ def blame(home, main_tree, named, log, agent_journals):
     os.replace(dst + ".tmp", dst)
 
 
+def flaky_text(sha, log, when):
+    """flaky-open's report of a red the re-run didn't confirm (main's: no test named to own it). Pure."""
+    return "\n".join([
+        "to: main",
+        "tip check (quick) flaky on main %s (%s): red, then green on the same sha; nobody named" % (sha[:9], when),
+        "log: %s" % log,
+        "a flake is a bug (bise-testing rule 8): the log's FAIL lines name the test",
+    ]) + "\n"
+
+
+def flaky(home, sha, log):
+    """the unconfirmed red into flaky-open, merged with one main hasn't forwarded yet"""
+    sys.path.insert(0, HERE)
+    import tip_blame
+    out = os.path.join(home, "run", "nightly")
+    os.makedirs(out, exist_ok=True)
+    text = flaky_text(sha, log, time.strftime("%Y-%m-%d %H:%M"))
+    dst = os.path.join(out, "flaky-open")
+    if os.path.exists(dst):
+        text = tip_blame.merged(open(dst).read(), text)
+    with open(dst + ".tmp", "w") as f:
+        f.write(text)
+    os.replace(dst + ".tmp", dst)
+
+
 def run(home, main_tree, hook_base, now=time.time, sleep=time.sleep):
     """the runner's rounds: until main's tip has a verdict"""
     vfile = os.path.join(home, "gate", "tip-verdicts.tsv")
@@ -224,7 +249,16 @@ def run(home, main_tree, hook_base, now=time.time, sleep=time.sleep):
             elif green is False:
                 v["named"] = tip
             if v["named"]:
-                blame(home, main_tree, v["named"], log, journals)
+                # the halving assumes one steady break (architect m_55231): the named commit once
+                # more; green that time is a flake (flaky-open), never a tip-red on an innocent lander
+                g, _, c_ = quick(home, wt, v["named"], base, log)
+                v["cpu"] += c_
+                if g is False:
+                    blame(home, main_tree, v["named"], log, journals)
+                else:
+                    v["state"] = "flaky"
+                    flaky(home, v["named"], log)
+                    v["named"] = ""
         with open(vfile, "a") as f:
             f.write(verdict_line(v))
         hook_base = None

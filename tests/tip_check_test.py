@@ -23,6 +23,8 @@ FAKE_GATE = """#!/usr/bin/env bash
 echo "fake quick $(git rev-parse --short HEAD) base=${GATE_BASE:0:7} nice=$(ps -o nice= -p $$ | tr -d ' ') slot=${FAKE_SLOT:-}"
 [ "${1:-}" = seed ] && exit 0
 [ -e BAD ] && { echo "FAIL fake_test"; exit 1; }
+# a flake: red once, while the file is there
+[ -n "${FAKE_FLAKY_FILE:-}" ] && [ -e "$FAKE_FLAKY_FILE" ] && { rm -f "$FAKE_FLAKY_FILE"; echo "FAIL flaky_test"; exit 1; }
 exit 0
 """
 # the fake heavy-run: --low, then nice 10 as the real one on AC, then the command
@@ -151,19 +153,35 @@ def world():
         text = open(tr).read() if os.path.exists(tr) else ""
         check(text.startswith("to: epsilon main\n") and "tip check (quick) red on main %s" % c2[:9] in text and "feat: c2 (epsilon)" in text
               and "feat: c1" not in text and "fake_test" in text, "tip-red names c2's lander only\n" + text)
+        # 4b. a red the re-run doesn't confirm (architect m_55231): flaky, into flaky-open; no
+        # tip-red on the innocent lander
+        os.remove(tr)
+        os.remove(os.path.join(repo, "BAD"))
+        g("rm", "-q", "--cached", "BAD")
+        g("-c", "commit.gpgsign=false", "commit", "-q", "-m", "fix: c2")
+        e1 = land("e1", "theta")
+        once = os.path.join(t, "flaky-once")
+        open(once, "w").close()
+        r = tip_check(c3, e1, "theta", FAKE_FLAKY_FILE=once)
+        vs = verdicts()
+        fo = os.path.join(home, "run", "nightly", "flaky-open")
+        ftext = open(fo).read() if os.path.exists(fo) else ""
+        check(len(vs) == 4 and vs[3]["state"] == "flaky" and vs[3]["named"] == "" and not os.path.exists(tr)
+              and ftext.startswith("to: main\n") and "flaky on main %s" % e1[:9] in ftext,
+              "an unconfirmed red: flaky %s %r %s" % (vs[-1:], ftext, r.stderr))
         # 5. on battery: nothing runs (it waits for AC; the test's POWER_MAX makes it give up at once)
         land("d1", "eta")
         r = subprocess.run([sys.executable, "-c", "import sys; sys.path.insert(0, %r); import tip_check as T; T.POWER_MAX = 0; "
                             "sys.exit(T.main(['x']))" % os.path.join(repo, "scripts")],
                            env=dict(os.environ, BISE_HOME=home, TIP_CHECK_POWER="battery", TIP_CHECK_SPACING="0"),
                            capture_output=True, text=True, timeout=60)
-        check(len(verdicts()) == 3, "on battery: no run %s" % r.stderr)
+        check(len(verdicts()) == 4, "on battery: no run %s" % r.stderr)
         # 6. one runner on the machine: a second start while the lock is held exits at once
         lock = open(os.path.join(home, "run", "tip-check", "lock"), "w")
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         r = tip_check()
         lock.close()
-        check(r.returncode == 0 and "a runner is on it" in r.stdout and len(verdicts()) == 3, "a second runner: %r" % r.stdout)
+        check(r.returncode == 0 and "a runner is on it" in r.stdout and len(verdicts()) == 4, "a second runner: %r" % r.stdout)
         heavy = open(os.path.join(t, "heavy.log")).read().splitlines()
         check(all(l.startswith("--low nice -n 5 bash tests/gate.sh quick") for l in heavy), "every run --low, +5: %r" % heavy)
     finally:
