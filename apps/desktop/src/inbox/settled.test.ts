@@ -41,15 +41,6 @@ describe('the settled card (inbox-answered)', () => {
     expect(pickedN({ ...R, state: 'withdrawn', pick_n: 1 })).toBeNull();
   });
 
-  // inbox-open (c7-batch-1, 584c020d8; moved here with pickedOf → pickedN, 1-based)
-  it('inbox-open: his pick by number wins over his words; words alone mark the option they are; neither marks none', () => {
-    const answered = (over: Partial<InboxRecord>): InboxRecord => ({ ...R, options: ['webp', 'avif'], ...over });
-    expect(pickedN(answered({ said: 'avif, as said above', pick_n: 2 }))).toBe(2);
-    expect(pickedN(answered({ said: 'avif', pick_n: undefined }))).toBe(2);
-    expect(pickedN(answered({ said: 'only for Safari 16', pick_n: undefined }))).toBeNull();
-    expect(pickedN(answered({ said: 'avif', pick_n: 2, state: 'withdrawn' }))).toBeNull();
-  });
-
   it("the foot says where and when: on the page, a pick's number, withdrawn", () => {
     expect(footWords(R, NOW)).toBe(inbox.when_answered_at({ place: inbox.where_the_page, when: '21:29' }));
     expect(footWords({ ...R, where: { kind: 'inbox' }, pick_n: 2 }, NOW)).toBe(inbox.when_picked_at({ n: 2, place: inbox.where_inbox, when: '21:29' }));

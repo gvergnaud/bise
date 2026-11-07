@@ -8,6 +8,7 @@ import { formatRoute, parseRoute } from '@/app/route';
 import { createRouter, RouterContext } from '@/app/router';
 import { Store, StoreProvider } from '@/store';
 import { InboxView } from './List';
+import { pickedN } from './settled';
 import type { InboxRecord, Jump } from './past';
 
 // the window's bar: the page's search is never there (his m_52658)
@@ -246,5 +247,17 @@ describe('the inbox screen', () => {
     render(<InboxView cards={[]} records={[]} names={NAMES} projects={PROJECTS} now={NOW} ports={{ answer: () => undefined, jump: () => undefined }} />);
     expect(screen.getByTestId('inbox.empty').className).toBe('b-empty');
     expect(screen.getByTestId('inbox.empty').textContent).toBe(inbox.screen_empty);
+  });
+});
+
+describe('inbox-open: the option he picked, in the pane', () => {
+  // c7-batch-1's case (584c020d8), on the settled card's pickedN (1-based: the option's n)
+  it('his pick by number wins over his words; words alone mark the option they are; neither marks none', () => {
+    const r = RECORDS[0] as InboxRecord;
+    const answered = (over: Partial<InboxRecord>): InboxRecord => ({ ...r, options: ['webp', 'avif'], ...over });
+    expect(pickedN(answered({ said: 'avif, as said above', pick_n: 2 }))).toBe(2);
+    expect(pickedN(answered({ said: 'avif', pick_n: undefined }))).toBe(2);
+    expect(pickedN(answered({ said: 'only for Safari 16', pick_n: undefined }))).toBeNull();
+    expect(pickedN(answered({ said: 'avif', pick_n: 2, state: 'withdrawn' }))).toBeNull();
   });
 });
