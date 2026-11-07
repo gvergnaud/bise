@@ -88,11 +88,72 @@ impl Mark {
     }
 }
 
+/// How often the loop's timings by kind go to hub.log (SB_LOOP_STATS_MS
+/// in tests and measures).
+const STATS_MS: u64 = 600_000;
+/// The times kept per kind in a window (a flood counts the rest, unsorted).
+const KEEP_PER_KIND: usize = 50_000;
+
+/// The loop's time over a window, by message kind (c4-loop-never-waits):
+/// what a hold under 1 s, never in a held line, costs in all, and the
+/// state push's median (its goal: under 100 ms).
+#[derive(Default)]
+struct Stats {
+    since_ms: u64,
+    /// each kind: how many, their total ms, the times kept
+    kinds: std::collections::BTreeMap<String, (u64, u64, Vec<u32>)>,
+}
+
+impl Stats {
+    fn add(&mut self, kind: &str, ms: u64) {
+        let k = self.kinds.entry(kind.to_string()).or_default();
+        k.0 += 1;
+        k.1 += ms;
+        if k.2.len() < KEEP_PER_KIND {
+            k.2.push(ms.min(u32::MAX as u64) as u32);
+        }
+    }
+
+    /// The window's line, from `since_ms` to `now`, and a new window:
+    /// `hub loop stats 600 s: busy 4.12 % (24.7 s); state push 312 p50 38
+    /// p95 120 max 1200 ms 11.2 s; ...` (the kinds by total, the first 6).
+    /// None for a window without a message.
+    fn line(&mut self, now: u64) -> Option<String> {
+        let span = now.saturating_sub(self.since_ms).max(1);
+        let kinds = std::mem::take(&mut self.kinds);
+        self.since_ms = now;
+        if kinds.is_empty() {
+            return None;
+        }
+        let busy: u64 = kinds.values().map(|k| k.1).sum();
+        let mut by: Vec<(String, (u64, u64, Vec<u32>))> = kinds.into_iter().collect();
+        by.sort_by(|a, b| b.1 .1.cmp(&a.1 .1).then(a.0.cmp(&b.0)));
+        let parts: Vec<String> = by
+            .into_iter()
+            .take(6)
+            .map(|(kind, (n, total, mut ms))| {
+                ms.sort_unstable();
+                let at = |q: usize| ms.get((ms.len().saturating_sub(1)) * q / 100).copied().unwrap_or(0);
+                format!("{kind} {n} p50 {} p95 {} max {} ms {:.1} s", at(50), at(95), ms.last().copied().unwrap_or(0), total as f64 / 1000.0)
+            })
+            .collect();
+        Some(format!(
+            "hub loop stats {} s: busy {:.2} % ({:.1} s); {}",
+            span / 1000,
+            100.0 * busy as f64 / span as f64,
+            busy as f64 / 1000.0,
+            parts.join("; ")
+        ))
+    }
+}
+
 #[derive(Clone, Default)]
 pub(super) struct LoopWatch {
     mark: Arc<Mutex<Mark>>,
     /// where the message spends its time (crate::spent, the hub's)
     spent: Spent,
+    /// the loop's time by kind, said every STATS_MS
+    stats: Arc<Mutex<Stats>>,
 }
 
 impl LoopWatch {
@@ -100,9 +161,20 @@ impl LoopWatch {
     /// hub's split of each message (hub-loop).
     pub(super) fn start(paths: &Paths, spent: Spent) -> LoopWatch {
         let w = LoopWatch { spent, ..Default::default() };
-        let (mark, spent, paths) = (w.mark.clone(), w.spent.clone(), paths.clone());
+        let every =
+            bise_home::env::test_setting("SB_LOOP_STATS_MS").and_then(|v| v.parse::<u64>().ok()).unwrap_or(STATS_MS).max(1_000);
+        w.stats.lock().unwrap_or_else(|e| e.into_inner()).since_ms = now_ms();
+        let (mark, spent, paths, stats) = (w.mark.clone(), w.spent.clone(), paths.clone(), w.stats.clone());
         std::thread::spawn(move || loop {
             std::thread::sleep(Duration::from_secs(1));
+            let said = {
+                let mut s = stats.lock().unwrap_or_else(|e| e.into_inner());
+                let now = now_ms();
+                (now.saturating_sub(s.since_ms) >= every).then(|| s.line(now)).flatten()
+            };
+            if let Some(l) = said {
+                log_line(&paths, &l);
+            }
             let line = {
                 let mut m = mark.lock().unwrap_or_else(|e| e.into_inner());
                 let busy = now_ms().saturating_sub(m.since_ms);
@@ -149,8 +221,25 @@ impl LoopWatch {
             // a hold too short for a busy line, said once at its end
             (busy >= HELD_MS).then(|| format!("hub loop held {:.1} s on {} ({})", busy as f64 / 1000.0, m.held_on(end), split(busy, &self.spent)))
         };
+        if !m.what.is_empty() {
+            self.stats.lock().unwrap_or_else(|e| e.into_inner()).add(kind_of(&m.what), busy);
+        }
         *m = Mark::default();
         out
+    }
+}
+
+/// A message's kind for the stats: its label (`Msg::label`) without
+/// whose it is: `repl line t1` -> `repl line`, `sb list from main` ->
+/// `sb list`, `placed t1` -> `placed`; `input Tick`, `state push` whole.
+fn kind_of(label: &str) -> &str {
+    if label.starts_with("a ") || label.starts_with("another ") {
+        return label;
+    }
+    let words = if label.starts_with("placed ") { 1 } else { 2 };
+    match label.match_indices(' ').nth(words - 1) {
+        Some((i, _)) => &label[..i],
+        None => label,
     }
 }
 
@@ -313,5 +402,32 @@ mod tests {
         }
         let l = w.idle().unwrap();
         assert!(l.starts_with("hub loop held 2.0 s on input Tick: idle check 1.8 s ("), "{l}");
+    }
+
+    #[test]
+    fn a_kind_is_the_label_without_whose() {
+        let k: Vec<&str> = ["repl line t1", "sb list from main", "placed t1", "input Tick", "state push", "a view's request", "page"]
+            .into_iter()
+            .map(kind_of)
+            .collect();
+        assert_eq!(k, ["repl line", "sb list", "placed", "input Tick", "state push", "a view's request", "page"]);
+    }
+
+    /// c4-loop-never-waits: every message counts, under 1 s too; the
+    /// kinds by total, each with its median; a new window after.
+    #[test]
+    fn the_stats_line_says_the_share_and_each_kinds_median() {
+        let mut s = Stats { since_ms: 0, ..Default::default() };
+        for ms in [10, 20, 30, 40, 900] {
+            s.add("state push", ms);
+        }
+        s.add("repl line", 2_000);
+        let l = s.line(100_000).unwrap();
+        assert_eq!(
+            l,
+            "hub loop stats 100 s: busy 3.00 % (3.0 s); repl line 1 p50 2000 p95 2000 max 2000 ms 2.0 s; \
+             state push 5 p50 30 p95 40 max 900 ms 1.0 s"
+        );
+        assert_eq!((s.line(200_000), s.since_ms), (None, 200_000), "a new window, empty");
     }
 }

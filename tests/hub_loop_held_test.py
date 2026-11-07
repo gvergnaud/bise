@@ -19,6 +19,8 @@ LOG = """\
 30000 hub loop busy 5 s on state push (shell 5.0 s)
 56000 hub loop busy 30 s on state push (shell 30.0 s)
 60000 hub loop free after 34 s on state push (shell 34.0 s)
+80000 hub loop stats 60 s: busy 10.00 % (6.0 s); state push 30 p50 40 p95 90 max 900 ms 1.5 s; repl line 9 p50 3 p95 5 max 5 ms 0.0 s
+101000 hub loop stats 20 s: busy 5.00 % (1.0 s); state push 10 p50 200 p95 300 max 300 ms 1.0 s
 101000 a last line of the first run
 200000 hub start pid=2 workspace=/w
 201000 boot: boot done
@@ -39,6 +41,8 @@ def test_up_time_holds_and_blocks():
     # the 7 s before boot done is a start's; 34 s and 15 s are blocks
     assert (s["blocks_over_5s"], s["in_starts_over_5s"], s["worst_ms"]) == (2, 1, 34_000), s
     assert s["worst"][0]["on"] == "state push", s
+    # the stats lines: 7 s busy in 80 s, 40 pushes, the median the window of the 20th
+    assert (s["busy_pct"], s["pushes"], s["push_p50_ms"]) == (8.75, 40, 40), s
 
 
 def test_the_window_cuts_up_time_and_holds():

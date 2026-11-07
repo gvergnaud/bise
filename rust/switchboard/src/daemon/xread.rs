@@ -65,9 +65,8 @@ struct Proj {
 
 /// The project `p` (a name or a hub id) through the registry, never this
 /// hub itself.
-fn project(p: &str, own: &str) -> Result<Proj, String> {
-    let home = bise_home::Home::from_env();
-    let rows = bise_home::projects::list(&home, &crate::paths::home_workspace());
+fn project(home: &bise_home::Home, p: &str, own: &str) -> Result<Proj, String> {
+    let rows = bise_home::projects::list(home, &crate::paths::home_workspace());
     let id = bise_home::projects::target(&rows, p, own)?;
     let name = rows.iter().find(|r| r.id == id).map(|r| r.name.clone()).unwrap_or_else(|| id.clone());
     if !plain(&name) {
@@ -77,9 +76,8 @@ fn project(p: &str, own: &str) -> Result<Proj, String> {
 }
 
 /// Every registered project but this hub.
-fn projects(own: &str) -> Vec<Proj> {
-    let home = bise_home::Home::from_env();
-    let rows = bise_home::projects::list(&home, &crate::paths::home_workspace());
+fn projects(home: &bise_home::Home, own: &str) -> Vec<Proj> {
+    let rows = bise_home::projects::list(home, &crate::paths::home_workspace());
     rows.iter()
         .filter(|r| r.id != own && plain(&r.name))
         .map(|r| Proj { name: r.name.clone(), state: home.hub_dir(&r.id) })
@@ -138,7 +136,7 @@ impl Shell {
             self.xsearch.refresh_as(&dir, HOME);
             return Ok((HOME.to_string(), self.home_who()));
         }
-        let pr = project(p, &self.project())?;
+        let pr = project(&self.opts.home, p, &self.project())?;
         self.xsearch.refresh_as(&pr.state.join("agents"), &pr.name);
         let who = who_of(&pr.name, &pr.state);
         Ok((pr.name, who))
@@ -164,7 +162,7 @@ impl Shell {
             return json!({"ok": false, "error": REFUSED});
         }
         let res = if h.all {
-            let ps = projects(&self.project());
+            let ps = projects(&self.opts.home, &self.project());
             let mut keep = vec![HOME.to_string()];
             let mut who = self.home_who();
             self.xsearch.refresh_as(&self.opts.paths.state.join("agents"), HOME);
@@ -190,7 +188,7 @@ impl Shell {
             return json!({"ok": false, "error": "--origin reads your own thread: sb inspect <agent> --origin"});
         }
         let res = split_ref(&q.agent).and_then(|(p, a)| {
-            let pr = project(&p, &self.project())?;
+            let pr = project(&self.opts.home, &p, &self.project())?;
             let who = who_of(&pr.name, &pr.state);
             let full = format!("{}/{a}", pr.name);
             let dir = who

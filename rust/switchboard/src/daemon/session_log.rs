@@ -61,7 +61,7 @@ impl Shell {
     }
 
     fn keep(&mut self, dir: &str, mut r: Recorder) {
-        let home = bise_home::Home::from_env();
+        let home = &self.opts.home;
         r.set_redactor(bise_session::Redactor::from_home(&home.auth_file(), &home.env_files()));
         self.recorders.insert(dir.to_string(), r);
     }
@@ -70,8 +70,7 @@ impl Shell {
     /// loads. Returns (BEND_SESSION_FILE, whether to continue).
     pub(super) fn prepare_session(&mut self, a: &Agent, dir: &str, adir: &Path, resume: bool) -> (PathBuf, bool) {
         self.recorders.remove(dir); // the old process's writer, if any
-        let home = bise_home::Home::from_env();
-        let (sessions, blobs) = (home.sessions_dir(), home.blobs_dir());
+        let (sessions, blobs) = (self.opts.home.sessions_dir(), self.opts.home.blobs_dir());
         let idf = adir.join("session");
         let resume_file = adir.join(RESUME_FILE);
         let legacy = adir.join("session.txt");
@@ -153,8 +152,8 @@ impl Shell {
         let agents = self.opts.paths.state.join("agents");
         let paths = self.opts.paths.clone();
         let hub = paths.state.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+        let home = self.opts.home.clone();
         std::thread::spawn(move || {
-            let home = bise_home::Home::from_env();
             let (sessions, blobs) = (home.sessions_dir(), home.blobs_dir());
             let done: serde_json::Map<String, Value> = std::fs::read_to_string(sessions.join("migrated.json"))
                 .ok()
@@ -202,7 +201,7 @@ impl Shell {
     /// An adopted REPL (a hub restart): its log goes on, no repair.
     pub(super) fn attach_session(&mut self, a: &Agent, dir: &str, adir: &Path) {
         let Some(id) = session_of(adir) else { return };
-        let home = bise_home::Home::from_env();
+        let home = &self.opts.home;
         match Recorder::attach(&home.sessions_dir().join(&id), &home.blobs_dir()) {
             Ok(r) => self.keep(dir, r),
             Err(e) => log_line(&self.opts.paths, &format!("session log of {}: {e}", a.name)),
@@ -222,7 +221,7 @@ impl Shell {
         }
         if !self.recorders.contains_key(dir) {
             let Some(id) = session_of(adir) else { return 0 };
-            let home = bise_home::Home::from_env();
+            let home = &self.opts.home;
             match Recorder::attach(&home.sessions_dir().join(&id), &home.blobs_dir()) {
                 Ok(r) => self.keep(dir, r),
                 Err(e) => {

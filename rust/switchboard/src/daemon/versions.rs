@@ -155,8 +155,7 @@ fn release_look_every() -> std::time::Duration {
 
 /// The release `bise update` last read (`~/.bise/cache/latest.json`),
 /// in words, with what to do: None when it is the running version.
-fn release_line(inst: &Install, running_id: &str) -> Option<String> {
-    let home = bise_home::Home::from_env();
+fn release_line(home: &bise_home::Home, inst: &Install, running_id: &str) -> Option<String> {
     let text = std::fs::read_to_string(home.release_manifest()).ok()?;
     let v: Value = serde_json::from_str(&text).ok()?;
     let id = v.get("id").and_then(|x| x.as_str())?.to_string();
@@ -181,8 +180,8 @@ fn release_every() -> std::time::Duration {
 
 /// The update card's `2 later`: no card again for release `id`, in any
 /// project (every hub's own card closes at its next look).
-pub(super) fn update_later(id: &str) {
-    let _ = bise_home::release_offer::write_later(&bise_home::Home::from_env(), Some(id));
+pub(super) fn update_later(home: &bise_home::Home, id: &str) {
+    let _ = bise_home::release_offer::write_later(home, Some(id));
 }
 
 /// The last non-empty line of a command's output, without its
@@ -195,8 +194,8 @@ fn last_line(out: &str) -> String {
 }
 
 /// The id of the latest release known (`~/.bise/cache/latest.json`).
-fn manifest_id() -> Option<String> {
-    let text = std::fs::read_to_string(bise_home::Home::from_env().release_manifest()).ok()?;
+fn manifest_id(home: &bise_home::Home) -> Option<String> {
+    let text = std::fs::read_to_string(home.release_manifest()).ok()?;
     let v: Value = serde_json::from_str(&text).ok()?;
     v.get("id").and_then(|x| x.as_str()).map(String::from)
 }
@@ -341,7 +340,7 @@ const SUBJECT_MAX: usize = 100;
 /// `/version` in an installed bise (BISE-172): the installed versions
 /// (● running, ★ what `current` points at, new sessions run it) and the
 /// latest release `bise update` saw.
-fn installed_lines(inst: &Install, root: &Path, running_id: &str) -> Vec<String> {
+fn installed_lines(home: &bise_home::Home, inst: &Install, root: &Path, running_id: &str) -> Vec<String> {
     let running = root.canonicalize().ok();
     let current = inst.current();
     let mut out = vec![format!("installed ({}) — ● running · ★ current (new sessions):", inst.prefix.display())];
@@ -354,7 +353,7 @@ fn installed_lines(inst: &Install, root: &Path, running_id: &str) -> Vec<String>
         };
         out.push(format!("  {} {} {} ({})", mark, i.id, clip(&i.subject, 80), i.built));
     }
-    if let Some(l) = release_line(inst, running_id) {
+    if let Some(l) = release_line(home, inst, running_id) {
         out.push(l);
     } else if current.is_some() && current != running {
         out.push("a newer version is installed: /restart switches to it".into());
@@ -408,7 +407,7 @@ impl Shell {
                     ));
                 }
                 if let Some(inst) = Install::of_root(root) {
-                    out.extend(installed_lines(&inst, root, cur));
+                    out.extend(installed_lines(&self.opts.home, &inst, root, cur));
                     return out.join("\n");
                 }
                 let log = recent_commits(&repo, 12);
@@ -575,7 +574,7 @@ impl Shell {
                 self.feed_rec(MAIN, Feed::info(format!("version {}: building…", to)));
                 self.broadcast_versions();
                 let exe = self.opts.exe.clone();
-                let tx = self.tx.clone();
+                let (tx, home) = (self.tx.clone(), self.opts.home.clone());
                 let answer = format!(
                     "building {} (nothing is interrupted), then switching to this version",
                     to
@@ -583,7 +582,6 @@ impl Shell {
                 std::thread::spawn(move || {
                     // the build goes where version_ctx looks (bise_home), not
                     // where the script's own default would put it
-                    let home = bise_home::Home::from_env();
                     let out = Command::new(&script)
                         .args(["build", &rev])
                         .env("SB_VERSIONS_DIR", &versions_dir)
@@ -638,7 +636,7 @@ impl Shell {
         } else {
             None
         }
-        .unwrap_or_else(|| bise_home::Home::from_env().versions_dir());
+        .unwrap_or_else(|| self.opts.home.versions_dir());
         (repo, versions_dir)
     }
 
@@ -799,7 +797,7 @@ impl Shell {
         }
         self.update_told = Some(cur.clone());
         // update-card: the latest release's item says it already
-        if manifest_id().is_some_and(|id| crate::switch::id_of(&cur) == id) {
+        if manifest_id(&self.opts.home).is_some_and(|id| crate::switch::id_of(&cur) == id) {
             return;
         }
         let text = format!(
@@ -830,9 +828,8 @@ impl Shell {
             }
             self.release_checked = Some(std::time::Instant::now());
         }
-        let tx = self.tx.clone();
+        let (tx, home) = (self.tx.clone(), self.opts.home.clone());
         std::thread::spawn(move || {
-            let home = bise_home::Home::from_env();
             if asked.is_some() {
                 let _ = bise_home::release_offer::write_later(&home, None);
             }
@@ -872,7 +869,7 @@ impl Shell {
         let Some(inst) = Install::of_root(&self.opts.app_root) else { return };
         let Some(dir) = inst.find(id).map(|i| i.dir) else { return };
         let running = self.opts.app_root.canonicalize().unwrap_or_else(|_| self.opts.app_root.clone());
-        let home = bise_home::Home::from_env();
+        let home = self.opts.home.clone();
         let busy = self.hub.st.agents.values().any(|a| a.run == crate::model::Run::Busy);
         let spawned = self.release_switched.is_some_and(|t| t.elapsed() < release_look_every() * 2);
         if dir == running
@@ -951,11 +948,10 @@ impl Shell {
         self.updating = Some((head.clone(), since));
         self.broadcast(&update_now(&head, since));
         self.broadcast_versions();
-        let (exe, tx) = (self.opts.exe.clone(), self.tx.clone());
+        let (exe, tx, home) = (self.opts.exe.clone(), self.tx.clone(), self.opts.home.clone());
         let running_name = running_id.unwrap_or_else(|| "the dev tree".into());
         let answer = format!("building the latest commit, {}, then restarting on it. your agents keep running.", head);
         std::thread::spawn(move || {
-            let home = bise_home::Home::from_env();
             let out = Command::new(&script)
                 .args(["build", &head])
                 .env("SB_VERSIONS_DIR", &versions_dir)
@@ -1008,10 +1004,9 @@ impl Shell {
             let res = Err("this bise is not an installed one".into());
             return self.step(Input::Updated { version, res });
         };
-        let tx = self.tx.clone();
+        let (tx, home) = (self.tx.clone(), self.opts.home.clone());
         std::thread::spawn(move || {
             use bise_home::release_offer as offer;
-            let home = bise_home::Home::from_env();
             let (inst, exe) = (&look.inst, &look.exe);
             let res = (|| {
                 // another project installs it: its go switches this one too
@@ -1284,7 +1279,7 @@ mod tests {
         std::os::unix::fs::symlink("versions/bbb2222", t.join("current")).unwrap();
         let root = t.join("versions/aaa1111");
         let inst = super::Install::of_root(&root).unwrap();
-        let lines = super::installed_lines(&inst, &root, "aaa1111").join("\n");
+        let lines = super::installed_lines(&bise_home::Home::from_env(), &inst, &root, "aaa1111").join("\n");
         assert!(lines.contains(" ★ bbb2222 s bbb2222"), "{lines}");
         assert!(lines.contains("●  aaa1111 s aaa1111"), "{lines}");
         assert!(lines.contains("/restart latest"), "{lines}");

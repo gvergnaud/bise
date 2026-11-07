@@ -154,7 +154,7 @@ impl Shell {
             AgentReq::Taste(k) => self.keeps_op("taste", &k),
             AgentReq::People(k) => self.keeps_op("people", &k),
             AgentReq::Artifact(a) => self.artifact_cmd(&from, a),
-            AgentReq::ProjectList => xhub::list_body(),
+            AgentReq::ProjectList => xhub::list_body(&self.opts.home),
             req => return self.core_files(token, stream, from, req, asker),
         };
         write_json(&mut stream, &body);

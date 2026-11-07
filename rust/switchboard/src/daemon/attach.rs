@@ -42,13 +42,13 @@ impl Shell {
                     Some((dir(&sender)?, dir(&r)?))
                 });
                 let items = self.items(&sender, &attach, tmps.as_ref())?;
-                let said = said(&text, &items)?;
+                let said = said(&self.opts.home.images_dir(), &text, &items)?;
                 Ok(AgentReq::Send { to, text: said.text, expect_reply, reply_to, queued, why, switch, attach, parts: said.parts, fwd })
             }
             AgentReq::Spawn { name, brief, worktree, with_changes, place, feature, ask, attach, fwd, .. } if !attach.is_empty() => {
                 attach::capped(attach.len())?;
                 let items = self.items(&sender(), &attach, None)?;
-                let said = said(&crate::prompts::brief_body(&brief), &items)?;
+                let said = said(&self.opts.home.images_dir(), &crate::prompts::brief_body(&brief), &items)?;
                 Ok(AgentReq::Spawn { name, brief, worktree, with_changes, place, feature, ask, attach, parts: said.parts, fwd })
             }
             req => Ok(req),
@@ -58,7 +58,7 @@ impl Shell {
     /// Each `--attach` found (`tmps`: the sender's and the receiver's
     /// tmp, when a file in the first goes to the second).
     fn items(&self, sender: &str, list: &[String], tmps: Option<&(std::path::PathBuf, std::path::PathBuf)>) -> Result<Vec<Item>, String> {
-        let store = bise_home::Home::from_env().images_dir();
+        let store = self.opts.home.images_dir();
         let mut out = Vec::new();
         for a in list {
             match attach::want(a)? {
@@ -105,10 +105,10 @@ fn path_item(p: &str, store: &Path, tmps: Option<&(std::path::PathBuf, std::path
 }
 
 /// The parts checked and rendered, as his own (`parts_in::said`).
-fn said(text: &str, items: &[Item]) -> Result<crate::parts_in::Said, String> {
+fn said(store: &std::path::Path, text: &str, items: &[Item]) -> Result<crate::parts_in::Said, String> {
     let parts = attach::parts(text, items);
     // an agent's attachments are images and files only: no artifact note
     let known = |_: &str, _: u64| Err("an agent's message carries no note on an artifact".to_string());
-    let door = crate::parts_in::Door { store: &bise_home::Home::from_env().images_dir(), put: &super::fn_context::store_image, exists: &super::fn_context::file_exists, known: &known };
+    let door = crate::parts_in::Door { store, put: &super::fn_context::store_image, exists: &super::fn_context::file_exists, known: &known };
     crate::parts_in::said(&parts, &door)
 }

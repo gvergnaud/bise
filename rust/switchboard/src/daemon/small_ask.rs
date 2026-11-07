@@ -22,9 +22,9 @@ pub(super) struct Small {
 }
 
 impl Small {
-    pub(super) fn of(sh: &Shell) -> Small {
+    pub(super) fn of(sh: &mut Shell) -> Small {
         Small {
-            setup: bise_catalog::Setup::load(&bise_home::Home::from_env().config_file()),
+            setup: sh.config.setup().clone(),
             broken: sh.small_broken.clone(),
             repl: sh.opts.repl_bin.clone(),
             root: sh.opts.app_root.clone(),

@@ -73,7 +73,7 @@ impl Shell {
         if default {
             // BISE-298: the role's line of [roles], its old key dropped
             let role = if is_main { bise_catalog::roles::MAIN } else { bise_catalog::roles::AGENTS };
-            let cfg = bise_home::Home::from_env().config_file();
+            let cfg = self.opts.home.config_file();
             let text = std::fs::read_to_string(&cfg).unwrap_or_default();
             let new = bise_catalog::roles::with_role(&text, role, &choice.model);
             let tmp = cfg.with_extension("toml.tmp");

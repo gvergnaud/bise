@@ -91,8 +91,7 @@ impl Shell {
         self.seed_heads(snap);
         // K4: each agent's model read against the hub's catalog (his
         // config.toml merged, re-read when it changes), fresh each time
-        self.setup();
-        let cat = self.setup.as_ref().map(|(_, s)| &s.catalog);
+        let cat = Some(&self.config.setup().catalog);
         let vision = |m: &str| cat.and_then(|c| c.vision(m));
         // S13: each agent's context after its last call, its window from
         // the same catalog, the gauge's words the TUI's divider says
@@ -148,9 +147,9 @@ impl Shell {
     /// (bise_catalog::picks), with the providers ready for this hub's own
     /// environment: what its REPLs will have (architect m_10427).
     pub(in crate::daemon) fn models_ev(&mut self) -> HubEv {
-        self.proto.models_at = Some(models_mtimes());
+        self.proto.models_at = Some(models_mtimes(&self.opts.home));
         let env = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
-        let home = bise_home::Home::from_env();
+        let home = self.opts.home.clone();
         let setup = self.setup().clone();
         let ready = bise_catalog::picks::ready_in(&setup, &env, &home);
         // L5: every model, each row saying whether its provider is ready
@@ -162,7 +161,7 @@ impl Shell {
 
     /// config.toml or auth.json changed since the last `models` (a stat).
     fn models_moved(&self) -> bool {
-        self.proto.models_at.is_some_and(|at| at != models_mtimes())
+        self.proto.models_at.is_some_and(|at| at != models_mtimes(&self.opts.home))
     }
 
     /// The hub's `approvals` event (gate.rs `approvals_ev`, the TUI's) as
@@ -470,8 +469,7 @@ impl Shell {
     fn proto_head_line(&mut self, agent: &str, line: pthread::Line) -> bool {
         let known = self.proto.conns.values().filter_map(|c| c.subs.get(agent)).filter_map(|l| l.last_pos()).max();
         let facts = self.facts();
-        self.setup();
-        let setup = &self.setup;
+        let setup = self.config.setup();
         let ctx = Ctx { open_cards: &facts.open, page: &|p: &str| facts.page(p), provider: &|i: &str, k: &str| provider_name(setup, i, k), width: &width, offset: &offset, attached: &crate::attached::split };
         self.proto.heads.push(agent, line, known, &ctx)
     }
@@ -492,8 +490,7 @@ impl Shell {
             }
         }
         let facts = self.facts();
-        self.setup();
-        let setup = &self.setup;
+        let setup = self.config.setup();
         let ctx = Ctx { open_cards: &facts.open, page: &|p: &str| facts.page(p), provider: &|i: &str, k: &str| provider_name(setup, i, k), width: &width, offset: &offset, attached: &crate::attached::split };
         for n in names {
             let lines: Vec<pthread::Line> = self.buffers.get(&n).into_iter().flatten().map(|(p, ts, l)| (*p as u64, *ts, l.clone())).collect();
@@ -517,8 +514,7 @@ impl Shell {
     /// One agent's subscriptions through `f`; the clients subscribed.
     fn proto_live_of(&mut self, agent: &str, f: impl Fn(&mut Live, &Ctx) -> Vec<pthread::Entry>) -> Vec<ClientId> {
         let facts = self.facts();
-        self.setup();
-        let setup = &self.setup;
+        let setup = self.config.setup();
         let ctx = Ctx { open_cards: &facts.open, page: &|p: &str| facts.page(p), provider: &|i: &str, k: &str| provider_name(setup, i, k), width: &width, offset: &offset, attached: &crate::attached::split };
         let mut out: Vec<(ClientId, Vec<pthread::Entry>)> = Vec::new();
         for (id, c) in self.proto.conns.iter_mut() {
@@ -565,8 +561,7 @@ fn transcript_tail(path: &std::path::Path, bytes: u64) -> Vec<String> {
 }
 
 /// The mtimes of config.toml and auth.json (none: no file).
-fn models_mtimes() -> (Option<std::time::SystemTime>, Option<std::time::SystemTime>) {
-    let home = bise_home::Home::from_env();
+fn models_mtimes(home: &bise_home::Home) -> (Option<std::time::SystemTime>, Option<std::time::SystemTime>) {
     let at = |p: PathBuf| std::fs::metadata(p).and_then(|m| m.modified()).ok();
     (at(home.config_file()), at(home.auth_file()))
 }

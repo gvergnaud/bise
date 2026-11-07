@@ -286,7 +286,7 @@ impl Shell {
                         // a public page changed (or was taken back): the static export, then the
                         // user's mirror if he set one (pages/mirror.rs); nothing else ever leaves
                         if meta.public || was_public {
-                            crate::pages::mirror::spawn(pages.clone(), meta.id.clone(), bise_home::Home::from_env().config_file());
+                            crate::pages::mirror::spawn(pages.clone(), meta.id.clone(), self.opts.home.config_file());
                         }
                         // the notes it was updating for are answered
                         if let Some((ids, _)) = self.pg.page_turns.get_mut(from) {

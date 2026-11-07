@@ -402,7 +402,7 @@ impl Shell {
     /// images this hub's hot messages and open cards name are touched
     /// hourly, the store pruned at most once a day; hub.log says so.
     fn image_care(&mut self) {
-        let home = bise_home::Home::from_env();
+        let home = self.opts.home.clone();
         let st = &self.hub.st;
         let texts = st.hot().map(|(m, _)| m.text.as_str()).chain(st.open_cards().map(|c| c.text.as_str()));
         let paths = self.opts.paths.clone();

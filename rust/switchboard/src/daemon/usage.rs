@@ -72,8 +72,8 @@ impl Shell {
         self.week_fill_start();
         let today = day(now);
         self.usage.ledger.forget_before(today);
-        self.setup(); // the catalog's prices, re-read when config changed
-        let setup = &self.setup.as_ref().expect("just set").1;
+        // the catalog's prices, re-read when config changed
+        let setup = self.config.setup();
         let live: BTreeSet<&str> = self.hub.st.agents.values().filter(|a| a.lifecycle != crate::model::Lifecycle::Archived).map(|a| a.dir.as_str()).collect();
         let names: BTreeMap<&str, &str> = self.hub.st.agents.values().map(|a| (a.dir.as_str(), a.name.as_str())).collect();
         let cost = |model: &str, t: &Tokens| {

@@ -31,8 +31,7 @@ impl Shell {
     pub(super) fn route_input(&mut self, focus: &str, text: &str, via: &str, queued: bool, context: Option<&serde_json::Value>, parts: &str) -> bool {
         let projects = match crate::paths::is_home(&self.opts.paths.workspace) {
             true => {
-                let home = bise_home::Home::from_env();
-                let rows = bise_home::projects::list(&home, &crate::paths::home_workspace());
+                let rows = bise_home::projects::list(&self.opts.home, &crate::paths::home_workspace());
                 rows.into_iter().filter(|r| !r.home).map(|r| (r.id, r.name)).collect()
             }
             false => Vec::new(),

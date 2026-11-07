@@ -313,6 +313,7 @@ fn run_sbd(args: &[String]) -> std::io::Result<()> {
     // the REPLs load their MCP index like a session (bise_home's exports)
     switchboard::daemon::run(switchboard::daemon::Opts {
         paths,
+        home: bise_home::Home::from_env(),
         core_bin: core_bin_of(&root),
         jsrt_bin: approot::jsrt_bin(&root),
         repl_bin: root.join("repl-live"),

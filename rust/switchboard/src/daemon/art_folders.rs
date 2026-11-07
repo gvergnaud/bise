@@ -30,8 +30,8 @@ pub(super) struct LibCache {
     seen: Option<SystemTime>,
 }
 
-fn mtime() -> Option<SystemTime> {
-    let f = bise_home::Home::from_env().library_folders();
+fn mtime(home: &bise_home::Home) -> Option<SystemTime> {
+    let f = home.library_folders();
     std::fs::metadata(f).ok()?.modified().ok()
 }
 
@@ -55,9 +55,8 @@ fn op_of(op: FolderOp) -> library::Op {
 }
 
 /// The registry's rows but this hub's: (hub id, name, workspace).
-fn other_projects(own: &str) -> Vec<(String, String, PathBuf)> {
-    let home = bise_home::Home::from_env();
-    bise_home::projects::list(&home, &crate::paths::home_workspace())
+fn other_projects(home: &bise_home::Home, own: &str) -> Vec<(String, String, PathBuf)> {
+    bise_home::projects::list(home, &crate::paths::home_workspace())
         .into_iter()
         .filter(|r| r.id != own && r.path.is_dir())
         .map(|r| (r.id, r.name, r.path))
@@ -67,10 +66,10 @@ fn other_projects(own: &str) -> Vec<(String, String, PathBuf)> {
 impl Shell {
     /// The library now (read again only when its file's mtime moved).
     pub(super) fn art_library(&self) -> Library {
-        let m = mtime();
+        let m = mtime(&self.opts.home);
         let mut c = self.art.lib.read.borrow_mut();
         if c.0 != m || m.is_none() {
-            *c = (m, library::read(&bise_home::Home::from_env()));
+            *c = (m, library::read(&self.opts.home));
         }
         c.1.clone()
     }
@@ -81,7 +80,7 @@ impl Shell {
         if self.typed_ids().is_empty() {
             return;
         }
-        let m = mtime();
+        let m = mtime(&self.opts.home);
         if m != self.art.lib.seen {
             self.art.lib.seen = m;
             self.artifacts_refresh(false);
@@ -109,7 +108,7 @@ impl Shell {
         let target = match to.filter(|t| !t.is_empty() && *t != own) {
             None => None,
             Some(t) => {
-                let rows = bise_home::projects::list(&bise_home::Home::from_env(), &crate::paths::home_workspace());
+                let rows = bise_home::projects::list(&self.opts.home, &crate::paths::home_workspace());
                 match bise_home::projects::target(&rows, &t, &own) {
                     Ok(hub) => Some(hub),
                     Err(e) => return self.proto_error(id, tag, &e),
@@ -120,21 +119,21 @@ impl Shell {
             return match self.art_move(&ids, folder.as_deref()) {
                 Ok(moved) => {
                     if undo {
-                        remember(&own, &moved);
+                        remember(&self.opts.home, &own, &moved);
                     }
                     self.proto_send(id, &moved_ev(&own, moved));
                 }
                 Err(e) => self.proto_error(id, tag, &e),
             };
         };
-        let (tx, exe, root, tag) = (self.tx.clone(), self.opts.exe.clone(), self.opts.app_root.clone(), tag.to_string());
+        let (tx, exe, root, tag, home) = (self.tx.clone(), self.opts.exe.clone(), self.opts.app_root.clone(), tag.to_string(), self.opts.home.clone());
         std::thread::spawn(move || {
             let req = json!({"op": "xartmove", "ids": ids, "folder": folder});
-            let ev = match super::xhub::call_hub(&hub, &exe, &root, &req) {
+            let ev = match super::xhub::call_hub(&home, &hub, &exe, &root, &req) {
                 Ok(v) => {
                     let moved: Vec<(String, Option<String>)> = serde_json::from_value(v["moved"].clone()).unwrap_or_default();
                     if undo {
-                        remember(&hub, &moved);
+                        remember(&home, &hub, &moved);
                     }
                     moved_ev(&own, moved).to_value()
                 }
@@ -160,7 +159,7 @@ impl Shell {
     /// writer; an undo's moves of this hub's artifacts done here, the
     /// others' forwarded. `folders` answers.
     pub(super) fn art_folders_typed(&mut self, id: ClientId, tag: &str, op: FolderOp) {
-        match library::run(&bise_home::Home::from_env(), op_of(op)) {
+        match library::run(&self.opts.home, op_of(op)) {
             Ok(done) => {
                 self.undo_moves(done.moves);
                 self.artifacts_refresh(false);
@@ -194,10 +193,10 @@ impl Shell {
         if away.is_empty() {
             return;
         }
-        let (exe, root, log) = (self.opts.exe.clone(), self.opts.app_root.clone(), self.opts.paths.clone());
+        let (exe, root, log, home) = (self.opts.exe.clone(), self.opts.app_root.clone(), self.opts.paths.clone(), self.opts.home.clone());
         std::thread::spawn(move || {
             for (hub, req) in away {
-                if let Err(e) = super::xhub::call_hub(&hub, &exe, &root, &req) {
+                if let Err(e) = super::xhub::call_hub(&home, &hub, &exe, &root, &req) {
                     log_line(&log, &format!("artifacts: undo of a move in {hub}: {e}"));
                 }
             }
@@ -215,10 +214,10 @@ impl Shell {
     /// `artifacts/library`: the other registered projects' rows, read
     /// from their stores off the loop (never watched), and the folders.
     pub(super) fn art_library_typed(&mut self, id: ClientId) {
-        let (own, tx, lib) = (self.project(), self.tx.clone(), self.art_library());
-        let here = super::xhub::own_name(&self.opts.paths.workspace);
+        let (own, tx, lib, home) = (self.project(), self.tx.clone(), self.art_library(), self.opts.home.clone());
+        let here = super::xhub::own_name(&self.opts.home, &self.opts.paths.workspace);
         std::thread::spawn(move || {
-            let projects = other_projects(&own)
+            let projects = other_projects(&home, &own)
                 .into_iter()
                 .map(|(hub, name, ws)| {
                     let paths = crate::paths::Paths::for_workspace(&ws);
@@ -256,7 +255,7 @@ impl Shell {
         let lib = self.art_library();
         match filing(Some(&brief), last.as_ref().map(|f| f.as_deref()), |id| library::resolve(&lib, id).map(|f| f.id.clone())) {
             Filing::Use(id) => Some(id),
-            Filing::Ensure(path) => library::update(&bise_home::Home::from_env(), false, |l| library::make_path(l, &path, crate::model::MAIN)).ok(),
+            Filing::Ensure(path) => library::update(&self.opts.home, false, |l| library::make_path(l, &path, crate::model::MAIN)).ok(),
             Filing::Unfiled => None,
         }
     }
@@ -267,7 +266,7 @@ impl Shell {
         if let Some(f) = library::find(&self.art_library(), asked) {
             return Ok(f.id.clone());
         }
-        library::update(&bise_home::Home::from_env(), false, |l| library::make_path(l, asked, agent))
+        library::update(&self.opts.home, false, |l| library::make_path(l, asked, agent))
     }
 
     /// `sb artifact move <id>... <folder> | --unfiled` (an agent's).
@@ -317,7 +316,7 @@ fn moved_ev(project: &str, moved: Vec<(String, Option<String>)>) -> HubEv {
 }
 
 /// His move takes the undo slot: each artifact's folder before.
-fn remember(project: &str, moved: &[(String, Option<String>)]) {
+fn remember(home: &bise_home::Home, project: &str, moved: &[(String, Option<String>)]) {
     let moves = moved.iter().map(|(id, from)| Move { project: project.to_string(), id: id.clone(), folder: from.clone() }).collect();
-    let _ = library::remember_moves(&bise_home::Home::from_env(), moves);
+    let _ = library::remember_moves(home, moves);
 }

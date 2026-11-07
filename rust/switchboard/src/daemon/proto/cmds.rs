@@ -53,8 +53,7 @@ impl Shell {
         if to == "bise" {
             return Ok(None);
         }
-        let home = bise_home::Home::from_env();
-        let rows = bise_home::projects::list(&home, &crate::paths::home_workspace());
+        let rows = bise_home::projects::list(&self.opts.home, &crate::paths::home_workspace());
         let hub = bise_home::projects::target(&rows, to, &self.project())?;
         let name = rows.iter().find(|r| r.id == hub).map_or_else(|| hub.clone(), |r| r.name.clone());
         Ok(Some((hub, name)))
@@ -71,8 +70,7 @@ impl Shell {
                 let path = self.transcript(&dir);
                 let lines = lines_of(self.page_lines(&path, None, LINES));
                 let facts = self.facts();
-                self.setup();
-                let setup = &self.setup;
+                let setup = self.config.setup();
                 let ctx = Ctx { open_cards: &facts.open, page: &|p: &str| facts.page(p), provider: &|i: &str, k: &str| provider_name(setup, i, k), width: &width, offset: &offset, attached: &crate::attached::split };
                 // the newest page: nothing after it yet
                 let (mut entries, before, more) = pthread::page(&lines, &[], &ctx, limit.map_or(LIMIT, |l| (l as usize).clamp(1, MAX_LIMIT)));
@@ -101,8 +99,7 @@ impl Shell {
                 // its last turn's steered receipts may sit after it
                 let ahead = lines_of(self.ahead_lines(&path, before as usize, LINES));
                 let facts = self.facts();
-                self.setup();
-                let setup = &self.setup;
+                let setup = self.config.setup();
                 let ctx = Ctx { open_cards: &facts.open, page: &|p: &str| facts.page(p), provider: &|i: &str, k: &str| provider_name(setup, i, k), width: &width, offset: &offset, attached: &crate::attached::split };
                 let (mut entries, before, more) = pthread::page(&lines, &ahead, &ctx, limit.map_or(LIMIT, |l| (l as usize).clamp(1, MAX_LIMIT)));
                 self.expire_views(&dir, &mut entries);
@@ -116,7 +113,7 @@ impl Shell {
                 if text_beside_parts(&text, &parts) {
                     return self.proto_error_cid(id, &tag, bise_proto::words::composer::refused_text_beside_parts, cid, cid.map(|_| "refused"));
                 }
-                match crate::parts_in::said(&parts, &crate::parts_in::Door { store: &bise_home::Home::from_env().images_dir(), put: &crate::daemon::fn_context::store_image, exists: &crate::daemon::fn_context::file_exists, known: &self.artifact_known() }) {
+                match crate::parts_in::said(&parts, &crate::parts_in::Door { store: &self.opts.home.images_dir(), put: &crate::daemon::fn_context::store_image, exists: &crate::daemon::fn_context::file_exists, known: &self.artifact_known() }) {
                     Ok(s) => {
                         self.artifact_notes_said(&s.parts);
                         self.proto_input(id, &tag, agent, s.text, opts, cid, s.parts)
@@ -127,7 +124,7 @@ impl Shell {
             HubCmd::Answer { card, reply, parts, .. } => {
                 let (reply, parts) = match parts.is_empty() {
                     true => (reply, String::new()),
-                    false => match crate::parts_in::said(&parts, &crate::parts_in::Door { store: &bise_home::Home::from_env().images_dir(), put: &crate::daemon::fn_context::store_image, exists: &crate::daemon::fn_context::file_exists, known: &self.artifact_known() }) {
+                    false => match crate::parts_in::said(&parts, &crate::parts_in::Door { store: &self.opts.home.images_dir(), put: &crate::daemon::fn_context::store_image, exists: &crate::daemon::fn_context::file_exists, known: &self.artifact_known() }) {
                         Ok(s) => {
                             self.artifact_notes_said(&s.parts);
                             (s.text, s.parts)
@@ -244,9 +241,8 @@ impl Shell {
             HubCmd::ToolOut { project, agent, pos } => {
                 let Some(dir) = self.dir_of(&agent) else { return self.proto_error(id, &tag, &format!("no agent {agent}")) };
                 let (transcript, adir) = (self.transcript(&dir), self.opts.paths.agent_dir(&dir));
-                let tx = self.tx.clone();
+                let (tx, home) = (self.tx.clone(), self.opts.home.clone());
                 std::thread::spawn(move || {
-                    let home = bise_home::Home::from_env();
                     let (sessions, blobs) = (home.sessions_dir(), home.blobs_dir());
                     let v = match super::tool_out::answer(&transcript, &adir, pos, &super::tool_out::Logs { sessions: &sessions, blobs: &blobs }) {
                         Ok((out, cut, total)) => HubEv::ToolOut { project, agent, pos, out, cut, total }.to_value(),
@@ -261,9 +257,8 @@ impl Shell {
             HubCmd::Log { project, agent, before, find } => {
                 let Some(dir) = self.dir_of(&agent) else { return self.proto_error(id, &tag, &format!("no agent {agent}")) };
                 let adir = self.opts.paths.agent_dir(&dir);
-                let tx = self.tx.clone();
+                let (tx, home) = (self.tx.clone(), self.opts.home.clone());
                 std::thread::spawn(move || {
-                    let home = bise_home::Home::from_env();
                     let redact = bise_session::Redactor::from_home(&home.auth_file(), &home.env_files());
                     let got = super::super::session_log::session_of(&adir)
                         .ok_or_else(|| format!("{agent} has no session log yet"))
@@ -288,9 +283,8 @@ impl Shell {
                 let models: Vec<String> = bise_catalog::picks::picks(&setup, &|_| true).into_iter().map(|p| p.value).filter(|v| v.contains('/')).collect();
                 let (repl, root) = (self.opts.repl_bin.clone(), self.opts.app_root.clone());
                 let keys = self.opts.spawn_env.map(|f| f()).unwrap_or_default();
-                let tx = self.tx.clone();
+                let (tx, home) = (self.tx.clone(), self.opts.home.clone());
                 std::thread::spawn(move || {
-                    let home = bise_home::Home::from_env();
                     let redact = bise_session::Redactor::from_home(&home.auth_file(), &home.env_files());
                     let render = |wire: &std::path::Path, model: &str| super::completion::render(&repl, &root, wire, model, &keys);
                     let project = ask.project.clone();
@@ -312,9 +306,8 @@ impl Shell {
                     BodyOf::Block { provider: Some(_), .. } => bise_catalog::picks::picks(self.setup(), &|_| true).into_iter().map(|p| p.value).filter(|v| v.contains('/')).collect(),
                     _ => Vec::new(),
                 };
-                let tx = self.tx.clone();
+                let (tx, home) = (self.tx.clone(), self.opts.home.clone());
                 std::thread::spawn(move || {
-                    let home = bise_home::Home::from_env();
                     let redact = bise_session::Redactor::from_home(&home.auth_file(), &home.env_files());
                     let got = match &of {
                         BodyOf::Row { pos } => super::super::session_log::session_of(&adir)
@@ -538,7 +531,7 @@ impl Shell {
                 // before; a line that isn't refuses (never a command)
                 if !parts.is_empty() {
                     let refused = cid.map(|_| "refused");
-                    let said = crate::parts_in::said(&parts, &crate::parts_in::Door { store: &bise_home::Home::from_env().images_dir(), put: &crate::daemon::fn_context::store_image, exists: &crate::daemon::fn_context::file_exists, known: &self.artifact_known() });
+                    let said = crate::parts_in::said(&parts, &crate::parts_in::Door { store: &self.opts.home.images_dir(), put: &crate::daemon::fn_context::store_image, exists: &crate::daemon::fn_context::file_exists, known: &self.artifact_known() });
                     if let Ok(s) = &said {
                         self.artifact_notes_said(&s.parts);
                     }

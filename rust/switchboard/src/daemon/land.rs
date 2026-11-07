@@ -80,7 +80,7 @@ impl Shell {
                 return;
             }
         };
-        (job.flow, job.checks) = (crate::flow::FlowConfig::load(&self.opts.paths), self.opts.paths.worktrees.clone());
+        (job.flow, job.checks) = (self.config.repo().flow.clone(), self.opts.paths.worktrees.clone());
         job.lands = self.opts.paths.lands();
         let (queue, tx) = (self.lands.clone(), self.tx.clone());
         std::thread::spawn(move || {

@@ -410,7 +410,7 @@ fn repo_of(dir: &str) -> PathBuf {
 impl Shell {
     /// Where bise's home is (`~/.bise`, `BISE_HOME`).
     fn bise_root(&self) -> PathBuf {
-        bise_home::Home::from_env().root().to_path_buf()
+        self.opts.home.root().to_path_buf()
     }
 
     /// The mode file of one agent, written at its spawn and at a switch.
@@ -429,7 +429,7 @@ impl Shell {
     pub(super) fn set_mode(&mut self, m: Mode) {
         self.gates.mode = m;
         if !self.gates.env {
-            let path = bise_home::Home::from_env().config_file();
+            let path = self.opts.home.config_file();
             let text = std::fs::read_to_string(&path).unwrap_or_default();
             let new = bise_catalog::with_key(&text, "approvals", &bise_catalog::toml_string(m.word()));
             if new != text {
@@ -571,7 +571,7 @@ impl Shell {
     /// stop/resume/status.
     fn client_socks(&self, dir: &str) -> Vec<std::path::PathBuf> {
         let paths = &self.opts.paths;
-        let run = bise_home::Home::from_env().run_dir();
+        let run = self.opts.home.run_dir();
         let ctl = run.join(bise_home::socket::COMPUTER_USE_CTL);
         let mut out = vec![ctl.clone()];
         if bise_home::socket::computer_use_ctl(&run) != ctl {

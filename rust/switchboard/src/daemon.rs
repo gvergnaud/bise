@@ -58,6 +58,7 @@ mod journal_file;
 mod keys;
 mod land;
 use keys::hash_keys;
+mod config_watch;
 mod loop_watch;
 mod merged;
 mod outbox;
@@ -113,6 +114,9 @@ const PAGE_HINT: &str = "[from the page: answer on the page; one short line at m
 
 pub struct Opts {
     pub paths: Paths,
+    /// The bise home, read once from the environment at the hub's start
+    /// (c4-loop-never-waits): the shell asks it, never `Home::from_env`.
+    pub home: bise_home::Home,
     /// Where repl-live and the runtime's relative files live.
     pub app_root: PathBuf,
     /// The sb-core of the app root (never one named by the environment).
@@ -414,13 +418,10 @@ struct Shell {
     /// The small model failed and agent_model answered: role lines use
     /// agent_model for the rest of this hub's life (BISE-126).
     small_broken: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    /// The catalog and config.toml (BISE-135: the model and effort each
-    /// agent runs with), re-read when config.toml changes.
-    setup: Option<(Option<std::time::SystemTime>, bise_catalog::Setup)>,
-    /// config.toml's path, found once (the env a hub runs with doesn't
-    /// change): `setup()` runs per REPL line, `Home::from_env` each time
-    /// was 8% of a flooded loop (hub-lag-7); only the stat is per call.
-    config_path: Option<PathBuf>,
+    /// The config files, each read once per change (daemon/config_watch.rs):
+    /// the catalog and config.toml (BISE-135), the repo's config, the
+    /// agents' choice files.
+    config: config_watch::ConfigWatch,
     /// Each live REPL's session log writer (BISE-196), by agent dir.
     recorders: BTreeMap<String, bise_session::recorder::Recorder>,
     /// The archived agents (dirs): one more is a /drop, whose worktree
@@ -573,12 +574,7 @@ impl Shell {
     /// The catalog merged with config.toml, re-read when the file
     /// changes (a `/model ... default`, the user's editor).
     fn setup(&mut self) -> &bise_catalog::Setup {
-        let path = self.config_path.get_or_insert_with(|| bise_home::Home::from_env().config_file()).clone();
-        let mtime = bise_catalog::live_fetch::stamp(&path, &bise_home::Home::from_env().cache_dir());
-        if self.setup.as_ref().is_none_or(|(t, _)| *t != mtime) {
-            self.setup = Some((mtime, bise_catalog::Setup::load(&path)));
-        }
-        &self.setup.as_ref().expect("just set").1
+        self.config.setup()
     }
 
     /// The agent's own choice (`/model`, `/reasoning`): a file of its
@@ -590,7 +586,7 @@ impl Shell {
     /// What an agent runs with: the same resolution as its REPL's
     /// (rust/catalog Setup::in_use = runtime/provider-pure.bend).
     fn in_use(&mut self, dir: &str, is_main: bool) -> bise_catalog::InUse {
-        let choice = bise_catalog::Choice::read(&self.choice_path(dir));
+        let choice = self.config.choice(&self.choice_path(dir), true);
         self.setup().in_use(if is_main { "main" } else { "agent" }, &choice)
     }
 
@@ -598,8 +594,8 @@ impl Shell {
 
     /// Whether a provider can run a turn now: its key or its sign-in
     /// (auth.json, the env, the .env files: the REPLs' own sources).
-    fn key_ready() -> impl Fn(&bise_catalog::Provider) -> bool {
-        let home = bise_home::Home::from_env();
+    fn key_ready(&self) -> impl Fn(&bise_catalog::Provider) -> bool + use<> {
+        let home = &self.opts.home;
         let files = bise_catalog::auth::EnvFile::read_all(&home.env_files());
         let store = bise_catalog::auth::Store::read(&home.auth_file()).unwrap_or_default();
         move |p| {
@@ -625,7 +621,7 @@ impl Shell {
     /// top of its thread. The words of main's answer (`on gpt-9 · low`).
     fn spawn_model(&mut self, agent: &str, ask: &bise_catalog::spawn::Ask) -> String {
         let Some(dir) = self.dir_of(agent) else { return String::new() };
-        let ready = Self::key_ready();
+        let ready = self.key_ready();
         let pick = self.setup().spawn_pick(ask, &ready);
         if let Err(e) = pick.choice.write(&self.choice_path(&dir)) {
             log_line(&self.opts.paths, &format!("{}: its model choice is not saved: {}", agent, e));
@@ -647,7 +643,7 @@ impl Shell {
     /// a running task to move, it hears why not.
     fn switch_model(&mut self, from: &str, to: &str, model: &str, effort: &str) -> Result<String, String> {
         let dir = self.dir_of(to).ok_or_else(|| format!("unknown agent: {}", to))?;
-        let ready = Self::key_ready();
+        let ready = self.key_ready();
         let ask = bise_catalog::spawn::Ask { model: model.into(), effort: effort.into(), profile: String::new() };
         let mut pick = self.setup().spawn_pick(&ask, &ready);
         if !pick.choice.why.is_empty() {
@@ -727,16 +723,21 @@ impl Shell {
     /// (issue #4): its tag and its `model:` line, from its choice file.
     /// What each agent runs with, by name (the snapshot's model fields).
     fn refresh_models(&mut self) -> BTreeMap<String, bise_catalog::InUse> {
-        let who: Vec<(String, String, bool)> =
-            self.hub.st.agents.values().map(|a| (a.name.clone(), a.dir.clone(), a.is_main)).collect();
-        self.setup(); // re-read when config.toml changed
-        let setup = &self.setup.as_ref().expect("just set").1;
+        let who: Vec<(String, PathBuf, bool, bool)> = self
+            .hub
+            .st
+            .agents
+            .values()
+            .map(|a| (a.name.clone(), self.choice_path(&a.dir), a.is_main, a.lifecycle != crate::model::Lifecycle::Archived))
+            .collect();
+        // each file read once per change (daemon/config_watch.rs): an
+        // archived agent's choice once, a live one's on a change
+        let choices: Vec<bise_catalog::Choice> = who.iter().map(|(_, path, _, live)| self.config.choice(path, *live)).collect();
+        let setup = self.config.setup();
         let used: Vec<(String, bise_catalog::InUse, bise_catalog::Choice)> = who
             .iter()
-            .map(|(name, dir, main)| {
-                let c = bise_catalog::Choice::read(&self.choice_path(dir));
-                (name.clone(), setup.in_use(if *main { "main" } else { "agent" }, &c), c)
-            })
+            .zip(choices)
+            .map(|((name, _, main, _), c)| (name.clone(), setup.in_use(if *main { "main" } else { "agent" }, &c), c))
             .collect();
         let others: Vec<&str> = used.iter().map(|(_, u, _)| u.model.name.as_str()).collect();
         let models: crate::board::Models = used
@@ -758,11 +759,10 @@ impl Shell {
     fn snapshot(&mut self) -> crate::snapshot::Snapshot {
         // issue #4: each agent's model, for sb list / sb tasks too
         let used = self.refresh_models();
-        // the repo's flow, as config.toml says now (flow-prompts saves it)
-        self.hub.flow = crate::flow::FlowConfig::load(&self.opts.paths).mode;
-        // pr-news: whose bots' comments reach the agents (`[pr] trusted_bots`)
-        self.hub.pr_bots =
-            crate::forge::news::trusted_bots(&std::fs::read_to_string(self.opts.paths.config()).unwrap_or_default());
+        // the repo's flow, as config.toml says now (flow-prompts saves it),
+        // and pr-news' trusted bots (`[pr] trusted_bots`): read on a change
+        let repo = self.config.repo();
+        (self.hub.flow, self.hub.pr_bots) = (repo.flow.mode, repo.pr_bots.clone());
         // who lands, who waits in line (the boxes' lids are said from it)
         self.hub.landing = self.lands.ranks();
         // the features' lids and Δ (dev-flow §5.1)
@@ -1002,7 +1002,7 @@ impl Shell {
             }
             Effect::Feature { token, op, name, agents } => self.feature(token, op, name, agents),
             Effect::Update { id, version } => self.update_to(id, version),
-            Effect::UpdateLater { id } => versions::update_later(&id),
+            Effect::UpdateLater { id } => versions::update_later(&self.opts.home, &id),
             Effect::BiseUpdate { update } => self.proto_note_all(&HubEv::BiseUpdate { project: self.project(), update }),
             Effect::ReleaseSwitch { id } => self.release_switch(&id),
             Effect::XDeliver { xid, project, kind, text, context, parts } => self.xdeliver(xid, project, kind, text, context, parts),
@@ -1110,8 +1110,8 @@ impl Shell {
 
     /// The repo's flow now (dev-flow §2): `[flow]` of the config, and
     /// the last detection (`detect_flow`'s cache). None: neither yet.
-    fn flow_now(&self) -> Option<devflow::Flow> {
-        let cfg = crate::flow::FlowConfig::load(&self.opts.paths);
+    fn flow_now(&mut self) -> Option<devflow::Flow> {
+        let cfg = self.config.repo().flow.clone();
         devflow::resolve(&cfg, devflow::read_cache(&self.opts.paths.state).as_ref())
     }
 
@@ -1178,7 +1178,7 @@ impl Shell {
 
     /// The role of `a` (its system prompt's end), with the repo's flow
     /// (dev-flow §6).
-    fn role_of(&self, a: &Agent, tmp: &str) -> String {
+    fn role_of(&mut self, a: &Agent, tmp: &str) -> String {
         // the home workspace (docs/ambient-pages.md §5.1): no git, no flow
         // the env's probe, never a git on the loop per spawn (boot-speed)
         let git = self.env.git.is_git();
@@ -1699,7 +1699,9 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     let place_git = env.git.clone();
     // the checker (approvals-design.md §4): a chat model in the role runs
     // through repl-live's one-shot, like the role lines
-    let runner = crate::approvals::check::Runner::new(&bise_home::Home::from_env())
+    let home = opts.home.clone();
+    let user_config = std::fs::read_to_string(home.config_file()).unwrap_or_default();
+    let runner = crate::approvals::check::Runner::new(&home)
         .with_oneshot(opts.repl_bin.clone(), opts.app_root.clone(), opts.spawn_env);
     let mut sh = Shell {
         opts,
@@ -1722,7 +1724,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         proto: proto::Proto::default(),
         answers: answers::Answers::new(crate::paths::workspace_id(&paths.workspace)),
         rpc: rpc::Rpcs::default(),
-        projects: projects::Projects::boot(&paths),
+        projects: projects::Projects::boot(&home, &paths),
         state_gate: state_gate::StateGate::default(),
         context_gate: state_gate::StateGate::every(crate::contexts::CONTEXT_MS),
         search: search::Index::default(),
@@ -1755,13 +1757,12 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         usage: Default::default(),
         pulse: Default::default(),
         small_broken: Default::default(),
-        setup: None,
-        config_path: None,
+        config: config_watch::ConfigWatch::new(&home, &paths),
         archived: BTreeSet::new(),
         proc_hub: proc_hub.clone(),
         down: BTreeSet::new(),
         gates: gate::Gates::new(
-            &std::fs::read_to_string(bise_home::Home::from_env().config_file()).unwrap_or_default(),
+            &user_config,
             std::env::var(crate::approvals::mode::ENV).ok().as_deref(),
             runner,
         ),
@@ -1772,14 +1773,11 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         cu: crate::computer_use::Watch::new(&proc_hub),
         pg: pages::PageState::load(&paths.state),
         fn_ctx: None,
-        idle: {
-            let config = std::fs::read_to_string(bise_home::Home::from_env().config_file()).unwrap_or_default();
-            crate::idle::Watch::new(
-                crate::idle::grace(std::env::var(crate::idle::ENV).ok().as_deref(), &config),
-                crate::idle::waits(&config),
-                std::time::Instant::now(),
-            )
-        },
+        idle: crate::idle::Watch::new(
+            crate::idle::grace(std::env::var(crate::idle::ENV).ok().as_deref(), &user_config),
+            crate::idle::waits(&user_config),
+            std::time::Instant::now(),
+        ),
         holds: crate::idle::Holds::default(),
         art: art::Art::default(),
         revive: revive::Revive::default(),
@@ -1840,9 +1838,8 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     // second (a stat); changed and signed in: Input::SignedIn
     // (signin_card::AuthWatch)
     {
-        let tx = tx.clone();
+        let (tx, path) = (tx.clone(), home.auth_file());
         std::thread::spawn(move || {
-            let path = bise_home::Home::from_env().auth_file();
             let mut watch = crate::core::signin_card::AuthWatch::default();
             loop {
                 std::thread::sleep(Duration::from_secs(1));

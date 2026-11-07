@@ -34,9 +34,8 @@ impl Projects {
     /// At the hub's start: register its workspace (see the header). A side
     /// effect on purpose: it is the Shell field's initializer in
     /// `daemon::run`, so the registration costs run no line of its own.
-    pub(super) fn boot(paths: &Paths) -> Projects {
+    pub(super) fn boot(home: &bise_home::Home, paths: &Paths) -> Projects {
         if bise_home::env::test_setting("SB_STATE_DIR").is_none() {
-            let home = bise_home::Home::from_env();
             let home_ws = crate::paths::home_workspace();
             if bise_home::projects::canonical(&paths.workspace) != bise_home::projects::canonical(&home_ws) {
                 match bise_home::projects::add_path(&home, &home_ws, &paths.workspace, None, now_ms()) {
@@ -93,8 +92,7 @@ impl Shell {
         let sched = crate::proto_view::scheduled(self.hub.timers());
         // the H1 sidebar: the pulse the typed event has (fresh at a stop)
         let pulse = self.pulse_view(stopped_ms.is_some());
-        self.setup();
-        let cat = self.setup.as_ref().map(|(_, s)| &s.catalog);
+        let cat = Some(&self.config.setup().catalog);
         let vision = |m: &str| cat.and_then(|c| c.vision(m));
         let v = view::of(snap, &project, now, self.projects.writer.last_activity_ms, stopped_ms, &mut self.projects.since, &vision, arts, sched, growth, pulse);
         let paths = self.opts.paths.clone();

@@ -549,7 +549,7 @@ impl Shell {
 
     /// How the diffs pick their base now: `[worktree] base` and PR flow
     /// (read on the loop, used off it: `BaseHow::base`).
-    pub(super) fn base_how(&self) -> BaseHow {
+    pub(super) fn base_how(&mut self) -> BaseHow {
         let pr = self.flow_now().is_some_and(|f| f.mode == crate::flow::FlowMode::Pr);
         BaseHow { configured: self.env.config.base.clone(), pr }
     }

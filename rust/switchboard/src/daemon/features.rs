@@ -184,7 +184,7 @@ impl Shell {
     /// `Effect::Feature`: checks on the loop (no git), the step in a thread.
     pub(super) fn feature(&mut self, token: Option<Token>, op: String, name: String, agents: Vec<(String, String)>) {
         let mut stream = token.and_then(|t| self.replies.remove(&t));
-        let flow = FlowConfig::load(&self.opts.paths);
+        let flow = self.config.repo().flow.clone();
         // an agent's refusal is its answer; the user's (an item's number)
         // is handed to main with a brief, his item closed
         let tx = self.tx.clone();

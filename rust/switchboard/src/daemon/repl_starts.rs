@@ -377,7 +377,7 @@ impl Shell {
         self.bins.insert(dir.clone(), self.opts.repl_bin.clone());
         self.ports.insert(dir.clone(), port);
         let tx = self.tx.clone();
-        let paths = self.opts.paths.clone();
+        let (paths, home) = (self.opts.paths.clone(), self.opts.home.clone());
         let workdir = PathBuf::from(&a.ws.path);
         std::thread::spawn(move || {
             stall_for_tests();
@@ -395,7 +395,7 @@ impl Shell {
             // worktree's), read again at each start and /reload (BISE-232)
             env.set(
                 crate::agents_md::ENV,
-                crate::agents_md::write_for(&workdir, &bise_home::Home::from_env(), &adir.join("agents-md.md")),
+                crate::agents_md::write_for(&workdir, &home, &adir.join("agents-md.md")),
             );
             step();
             slow_spawn_for_tests();

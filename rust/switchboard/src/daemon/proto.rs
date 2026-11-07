@@ -167,12 +167,8 @@ fn offset(ms: u64) -> i32 {
 
 /// A provider's name for people from the hub's catalog (a missing key's
 /// notice in a thread, bise_proto's `words::no_key`).
-fn provider_name(setup: &Option<(Option<std::time::SystemTime>, bise_catalog::Setup)>, id: &str, key: &str) -> String {
-    match setup {
-        Some((_, s)) => s.catalog.provider_name(id, key),
-        None if id.is_empty() => key.to_string(),
-        None => id.to_string(),
-    }
+fn provider_name(setup: &bise_catalog::Setup, id: &str, key: &str) -> String {
+    setup.catalog.provider_name(id, key)
 }
 
 impl Shell {

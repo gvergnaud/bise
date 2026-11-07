@@ -50,7 +50,7 @@ impl Shell {
                 // in it, else stored from their source or the sender's .b64
                 let (text, parts) = match s("kind").as_str() {
                     "input" => {
-                        let store = bise_home::Home::from_env().images_dir();
+                        let store = self.opts.home.images_dir();
                         let r = crate::parts_in::restored(&s("text"), &s("parts"), &store, &super::fn_context::store_image, &super::fn_context::store_b64);
                         if let Some(n) = &r.note {
                             log_line(&self.opts.paths, &format!("xhub: x{xid} from {}: {n}", s("hub")));
@@ -93,17 +93,17 @@ impl Shell {
     pub(super) fn xdeliver(&mut self, xid: u64, project: String, kind: String, text: String, context: String, parts: String) {
         let own = crate::paths::workspace_id(&self.opts.paths.workspace);
         let ws = self.opts.paths.workspace.clone();
-        let (tx, exe, root, log) = (self.tx.clone(), self.opts.exe.clone(), self.opts.app_root.clone(), self.opts.paths.clone());
+        let (tx, exe, root, log, home) = (self.tx.clone(), self.opts.exe.clone(), self.opts.app_root.clone(), self.opts.paths.clone(), self.opts.home.clone());
         std::thread::spawn(move || {
             // J: `name` says who sends (a followed task's end is said from it)
-            let mut req = json!({"op": "xin", "hub": own, "xid": xid, "kind": kind, "text": text, "name": own_name(&ws)});
+            let mut req = json!({"op": "xin", "hub": own, "xid": xid, "kind": kind, "text": text, "name": own_name(&home, &ws)});
             if let Some(c) = serde_json::from_str::<Value>(&context).ok().filter(Value::is_object) {
                 req["context"] = c;
             }
             if !parts.is_empty() {
                 req["parts"] = json!(parts);
             }
-            let res = hub_paths(&project).and_then(|p| call(&p, &exe, &root, &req));
+            let res = hub_paths(&home, &project).and_then(|p| call(&p, &exe, &root, &req));
             let input = match res {
                 Ok(_) => Input::XAck { xid },
                 Err(e) => {
@@ -138,7 +138,7 @@ impl Shell {
             }
         };
         let own = crate::paths::workspace_id(&self.opts.paths.workspace);
-        let home = bise_home::Home::from_env();
+        let home = self.opts.home.clone();
         let rows = bise_home::projects::list(&home, &crate::paths::home_workspace());
         let id = match bise_home::projects::target(&rows, &p, &own) {
             Ok(id) => id,
@@ -151,7 +151,7 @@ impl Shell {
         std::thread::spawn(move || {
             // J: `hub` (this one): the project's hub sends the job's end back here
             let req = json!({"op": "xfollow", "agent": agent, "on": on, "hub": own});
-            let body = match hub_paths(&id).and_then(|paths| call(&paths, &exe, &root, &req)) {
+            let body = match hub_paths(&home, &id).and_then(|paths| call(&paths, &exe, &root, &req)) {
                 Ok(_) => json!({"ok": true, "agent": format!("{p}/{agent}"), "on": on}),
                 Err(e) => json!({"ok": false, "error": format!("{p}: {e}")}),
             };
@@ -163,11 +163,11 @@ impl Shell {
     /// bise's hub `hub`, named as this project.
     pub(super) fn xreply_back(&mut self, hub: String, xid: u64, text: String) {
         let ws = self.opts.paths.workspace.clone();
-        let (exe, root, log) = (self.opts.exe.clone(), self.opts.app_root.clone(), self.opts.paths.clone());
+        let (exe, root, log, home) = (self.opts.exe.clone(), self.opts.app_root.clone(), self.opts.paths.clone(), self.opts.home.clone());
         std::thread::spawn(move || {
-            let req = json!({"op": "xreply", "xid": xid, "name": own_name(&ws), "text": text});
+            let req = json!({"op": "xreply", "xid": xid, "name": own_name(&home, &ws), "text": text});
             for i in 1..=REPLY_TRIES {
-                match hub_paths(&hub).and_then(|p| call(&p, &exe, &root, &req)) {
+                match hub_paths(&home, &hub).and_then(|p| call(&p, &exe, &root, &req)) {
                     Ok(_) => return,
                     Err(e) => {
                         log_line(&log, &format!("xhub: answer to x{xid} not sent to {hub} (try {i}): {e}"));
@@ -181,9 +181,8 @@ impl Shell {
 
 /// `sb project list`: the registry's rows, one line each (the name `sb
 /// project send|ask` takes, the folder).
-pub(super) fn list_body() -> Value {
-    let home = bise_home::Home::from_env();
-    let rows = bise_home::projects::list(&home, &crate::paths::home_workspace());
+pub(super) fn list_body(home: &bise_home::Home) -> Value {
+    let rows = bise_home::projects::list(home, &crate::paths::home_workspace());
     let lines: Vec<String> = rows
         .iter()
         .map(|r| format!("{}{} · {}", r.name, if r.home { " (you: bise's home)" } else { "" }, r.path.display()))
@@ -197,14 +196,13 @@ pub(super) fn is_home(ws: &Path) -> bool {
 }
 
 /// One request to the registered hub `id` (started when none runs).
-pub(super) fn call_hub(id: &str, exe: &Path, root: &Path, req: &Value) -> Result<Value, String> {
-    hub_paths(id).and_then(|paths| call(&paths, exe, root, req))
+pub(super) fn call_hub(home: &bise_home::Home, id: &str, exe: &Path, root: &Path, req: &Value) -> Result<Value, String> {
+    hub_paths(home, id).and_then(|paths| call(&paths, exe, root, req))
 }
 
 /// The paths of the registered hub `id` (its workspace from the registry).
-fn hub_paths(id: &str) -> Result<Paths, String> {
-    let home = bise_home::Home::from_env();
-    let rows = bise_home::projects::list(&home, &crate::paths::home_workspace());
+fn hub_paths(home: &bise_home::Home, id: &str) -> Result<Paths, String> {
+    let rows = bise_home::projects::list(home, &crate::paths::home_workspace());
     let row = rows.iter().find(|r| r.id == id).ok_or_else(|| format!("{id} is not a registered project"))?;
     if !row.path.is_dir() {
         return Err(format!("{} is gone", row.path.display()));
@@ -213,10 +211,9 @@ fn hub_paths(id: &str) -> Result<Paths, String> {
 }
 
 /// This workspace's name in the registry (its folder's when absent).
-pub(super) fn own_name(ws: &Path) -> String {
-    let home = bise_home::Home::from_env();
+pub(super) fn own_name(home: &bise_home::Home, ws: &Path) -> String {
     let id = crate::paths::workspace_id(ws);
-    bise_home::projects::list(&home, &crate::paths::home_workspace())
+    bise_home::projects::list(home, &crate::paths::home_workspace())
         .into_iter()
         .find(|r| r.id == id)
         .map(|r| r.name)
