@@ -489,12 +489,15 @@ def changed.go(+names: List<&2, String>, +before: List<&2, Mark>, +after: List<&
 def changed(+evs: List<&2, M.Ev>, +fx: List<&2, X.Fx>, +rts0: List<&2, X.Rt>, +ws0: List<&2, Mark>, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>) -> List<&2, String>:
   changed.go(List.append(&2, String, names_of(evs), rt_moved(rt_names(fx), rts0, rts)), ws0, waiter_marks(ws))
 
-# the order, the cards and the notes change only by an event (model.bend
-# `apply`): a view with none (`durable` False) leaves them out, the
-# daemon keeps its own. A match each, not Bool.pick: pick would encode
-# them, sent or not.
-def order_when(durable: Bool, +s: S.St) -> Maybe<&2, List<&2, String>>:
-  match durable:
+# the cards and the notes change only by an event (model.bend `apply`):
+# a view with none (`durable` False) leaves them out, the daemon keeps its
+# own. The order (every name, archived ones too: ~900 on his hub) only by
+# a task_created or a renamed (M.order_ev; law apply_keeps_order): any
+# other step leaves it out
+# (c4b-core-step-flat, audit-core F7). A match each, not Bool.pick: pick
+# would encode them, sent or not.
+def order_when(ordered: Bool, +s: S.St) -> Maybe<&2, List<&2, String>>:
+  match ordered:
     case True{}:
       Some{S.St.order(s)}
     case False{}:
@@ -552,6 +555,14 @@ def timers_ended(go: Bool, +s: S.St) -> Maybe<&2, List<&2, J.Json>>:
       Some{TM.ended_list_json(S.Tms.ended(S.St.tm(s)))}
     case False{}:
       None{}
+
+# an event of the step changes the order (M.order_ev)
+def order_evs(evs: List<&2, M.Ev>) -> Bool:
+  match evs:
+    case Nil{}:
+      False{}
+    case Con{+e, +t}:
+      LZ.or(M.order_ev(e), u => order_evs(t))
 
 def wake_evs(evs: List<&2, M.Ev>) -> Bool:
   match evs:
@@ -618,15 +629,15 @@ def view_agents(wide: Bool, +s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Wait
     case False{}:
       agents_json(S.St.agents(s), rts, ws, s, False{}, names)
 
-def view.go(+s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +all: Bool, +ids: List<&2, Nat>, +names: List<&2, String>, +durable: Bool, +timers: Bool, +ended: Bool, +wakes: Bool) -> J.Json:
+def view.go(+s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +all: Bool, +ids: List<&2, Nat>, +names: List<&2, String>, +durable: Bool, +ordered: Bool, +timers: Bool, +ended: Bool, +wakes: Bool) -> J.Json:
   +xs = view_recs(s, all, ids)
   V.view(view_agents(all || any_arch(names, s), s, rts, ws, all, names), all,
     msgs_json(all || Bool.not(List.is_empty(&2, Nat, ids)), xs, all, ids, S.St.next_msg(s)), all,
     colds_when(all, xs, S.St.next_msg(s)),
     S.St.next_msg(s), S.St.next_card(s), S.St.paused(s),
-    order_when(durable, s), cards_when(durable, s), notes_when(durable, s),
+    order_when(ordered, s), cards_when(durable, s), notes_when(durable, s),
     timers_live(timers, s), timers_ended(ended, s), wakes_live(wakes, s), wakes_ended(wakes, s))
 
 def view(+s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +all: Bool, +ids: List<&2, Nat>, +names: List<&2, String>, +evs: List<&2, M.Ev>) -> J.Json:
-  view.go(s, rts, ws, all, ids, names, all || Bool.not(List.is_empty(&2, M.Ev, evs)),
+  view.go(s, rts, ws, all, ids, names, all || Bool.not(List.is_empty(&2, M.Ev, evs)), all || order_evs(evs),
     all || timer_evs(False{}, evs), all || timer_evs(True{}, evs), all || wake_evs(evs))

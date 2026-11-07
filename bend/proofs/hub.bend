@@ -1167,3 +1167,76 @@ def Laws.view_msg_queued(agent, plugin, text, id, now):
 
 def Laws.view_msg_plugin(agent, plugin, text, id, now):
   {==}
+
+# ---- c4b-core-step-flat: St.order changes only by an order event ----
+
+def Laws.apply_keeps_order(s, e, k):
+  match s:
+    case HS.St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}:
+      match e:
+        case HM.ETaskCreated{x0, x1, x2, x3, x4}:
+          AB.absurd_eq(AB.tf_absurd(k), List<&2, String>, HS.St.order(HM.apply(HS.St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}, HM.ETaskCreated{x0, x1, x2, x3, x4})), f1)
+        case HM.ELifecycle{x0, x1, x2}:
+          {==}
+        case HM.EWorkspace{x0, x1}:
+          {==}
+        case HM.ESnapshot{x0, x1}:
+          {==}
+        case HM.EPlaced{x0, x1, x2}:
+          {==}
+        case HM.EDeclared{x0, x1, x2}:
+          {==}
+        case HM.EReported{x0, x1}:
+          {==}
+        case HM.EFileTouched{x0, x1}:
+          {==}
+        case HM.EClaimDropped{x0, x1}:
+          {==}
+        case HM.ERenamed{x0, x1}:
+          AB.absurd_eq(AB.tf_absurd(k), List<&2, String>, HS.St.order(HM.apply(HS.St{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12}, HM.ERenamed{x0, x1})), f1)
+        case HM.EMsgsMoved{x0, x1}:
+          {==}
+        case HM.EMsgSent{x0}:
+          {==}
+        case HM.EMsgState{x0, x1}:
+          {==}
+        case HM.ESettled{x0}:
+          {==}
+        case HM.ECardOpened{x0}:
+          {==}
+        case HM.ECardClosed{x0, x1, x2}:
+          {==}
+        case HM.ECardAnswerPos{x0, x1, x2}:
+          {==}
+        case HM.ECardWithdrawn{x0, x1}:
+          {==}
+        case HM.ECardLate{x0}:
+          {==}
+        case HM.EMainNote{x0, x1}:
+          {==}
+        case HM.ENotesFlushed{}:
+          {==}
+        case HM.ETimerSet{x0, x1}:
+          {==}
+        case HM.ETimerFired{x0, x1, x2, x3, x4}:
+          {==}
+        case HM.ETimerRun{x0, x1}:
+          {==}
+        case HM.ETimerStop{x0, x1, x2}:
+          {==}
+        case HM.ETimerName{x0, x1, x2, x3}:
+          {==}
+        case HM.EX{x0}:
+          {==}
+        case HM.EAct{x0}:
+          {==}
+        case HM.EFollow{x0, x1, x2}:
+          {==}
+        case HM.EJobEnd{x0, x1}:
+          {==}
+        case HM.EWake{x0}:
+          {==}
+        case HM.EPaused{x0}:
+          {==}
+        case HM.EResumed{x0}:
+          {==}

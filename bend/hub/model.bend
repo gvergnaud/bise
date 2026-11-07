@@ -746,6 +746,18 @@ def apply(+st: S.St, e: Ev) -> S.St:
     case EResumed{_}:
       S.St.with_paused(st, None{})
 
+# an event that changes St.order (apply's over_order): a new task, a
+# rename. Every other one keeps it (law apply_keeps_order), so a step
+# without one leaves the order out of its view (view.bend order_when)
+def order_ev(e: Ev) -> Bool:
+  match e:
+    case ETaskCreated{_, _, _, _, _}:
+      True{}
+    case ERenamed{_, _}:
+      True{}
+    case _:
+      False{}
+
 # the state after a journal: the replay of a list of events
 def apply_all(evs: List<&2, Ev>, +st: S.St) -> S.St:
   match evs:

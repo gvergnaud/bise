@@ -4604,3 +4604,31 @@ fn his_card_answer_keeps_its_parts() {
     let answer = t.hub.st.whole_msgs().find(|m| m.text == text).expect("the asker's message");
     assert_eq!(answer.parts, parts);
 }
+
+/// c4b-core-step-flat (audit-core F7): a step's view carries the order
+/// (every name, the archived agents' too: ~900 on his hub) only when its
+/// journal has a task_created or a renamed (view.bend order_when, law
+/// apply_keeps_order). The mirror keeps its own order otherwise, and
+/// ends with sb-core's through new tasks, a drop, a rename, a say and a
+/// tick.
+#[test]
+fn the_order_comes_only_with_an_order_event_and_the_mirror_keeps_it() {
+    let mut t = T::new();
+    for brief in ["fix: x", "doc: y", "old: z"] {
+        t.user(MAIN, &format!("/new {brief}"));
+    }
+    t.go(Input::ReplReady { agent: "fix".into() });
+    t.go(Input::ReplIdle { agent: "fix".into(), leftover: false });
+    t.req(MAIN, AgentReq::Drop { agent: "old".into() });
+    assert_eq!(t.status("old"), Status::Archived);
+    t.go(Input::UserCmd { client: 1, focus: MAIN.into(), cmd: UserCmd::Rename { name: "doc".into(), new_name: "docs".into() } });
+    t.user("fix", "a word for fix");
+    t.go(Input::Tick);
+    assert_eq!(t.hub.st.order, ["main", "fix", "docs", "old"]);
+    let all = t.hub.raw(&json!({"t": "view_all"}));
+    assert_eq!(json!(t.hub.st.order), all["view"]["order"], "the mirror folds to sb-core's order");
+    // a durable step with no order event: no order in its view
+    let out = t.hub.raw(&json!({"t": "say", "focus": "fix", "text": "one more", "queued": true, "now": 2_000_000_000_000u64, "git": true, "ans": []}));
+    assert!(out["view"].is_object() && out["view"].get("order").is_none(), "{out}");
+    assert!(out["fx"].as_array().is_some_and(|f| f.iter().any(|x| x["fx"] == "journal")), "a durable step: {out}");
+}

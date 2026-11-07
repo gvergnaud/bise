@@ -1320,3 +1320,15 @@ law boot_closes_view_cards:
   for +c: HS.Card
   {HX.journal(HX.Core.fx(o, HX.Cx.c(o, HC.view_ends.one(o, True{}, cx, c))))
     == HM.snoc(HM.Ev, HX.journal(HX.Core.fx(o, HX.Cx.c(o, cx))), HM.ECardClosed{HS.Card.id(c), "ended with the hub", HS.Ans.empty()}) : List<&2, HM.Ev>}
+
+# ---- c4b-core-step-flat: the order (every name, archived ones too)
+# changes only by a task_created or a renamed (HM.order_ev), so a step's
+# view leaves it out unless one is in its journal (view.bend order_when)
+# and the daemon's own copy stays right ----
+
+# LAW: every other event keeps St.order.
+law apply_keeps_order:
+  for +s: HS.St
+  for e: HM.Ev
+  for k: {HM.order_ev(e) == False{} : Bool}
+  {HS.St.order(HM.apply(s, e)) == HS.St.order(s) : List<&2, String>}
