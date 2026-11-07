@@ -82,8 +82,8 @@ impl Pr {
 
     /// The PR's state in words, ctrl held, `st` their look: `changes
     /// asked · checks pass`, `draft · checks running`, `checks fail:
-    /// e2e/login` (red only on the words `checks fail`), `state from 12m
-    /// ago` when the forge is late.
+    /// e2e/login` (red only on the words `checks fail`), `as of 12m ago`
+    /// when the forge is late.
     pub(crate) fn words(&self, st: Style) -> Vec<Span<'static>> {
         let mut parts: Vec<Vec<Span<'static>>> = Vec::new();
         let w = |t: &str| vec![Span::styled(t.to_string(), st)];
@@ -113,7 +113,7 @@ impl Pr {
             parts.push(w(words::panel::pr_open));
         }
         if let Some(ms) = self.stale_ms {
-            parts.push(w(&words::panel::pr_state_from(panel::short_age(ms))));
+            parts.push(w(&words::panel::pr_as_of(panel::short_age(ms))));
         }
         let mut out = Vec::new();
         for (k, p) in parts.into_iter().enumerate() {
@@ -506,7 +506,7 @@ mod tests {
         let failing = Pr { failing: vec!["e2e/login".into()], ..pr("open", "none", "fail") };
         assert_eq!(lid(&place("b", Some(failing.clone()), None)).unwrap(), " checks fail: e2e/login");
         let stale = Pr { stale_ms: Some(12 * 60_000), ..pr("open", "approved", "pass") };
-        assert_eq!(lid(&place("b", Some(stale), None)).unwrap(), " approved · checks pass · sta…");
+        assert_eq!(lid(&place("b", Some(stale), None)).unwrap(), " approved · checks pass · as …");
         // the hub's lid wins, as it is
         assert_eq!(lid(&place("b", None, Some("no PR yet · 2 commits"))).unwrap(), " no PR yet · 2 commits");
         assert_eq!(lid(&place("b", Some(pr("open", "none", "pass")), Some("waits to land · 2nd"))).unwrap(), " waits to land · 2nd");

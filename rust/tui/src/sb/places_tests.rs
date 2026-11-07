@@ -377,7 +377,7 @@ fn ctrl_held_says_the_words() {
     app.sb.places[5].pr.as_mut().unwrap().stale_ms = Some(12 * 60_000);
     let words = app.sb.places[5].words_line(Some("docs"), 60).unwrap();
     let t: String = words.spans.iter().map(|s| s.content.to_string()).collect();
-    assert_eq!(t, "     #409 · approved · checks pass · state from 12m ago");
+    assert_eq!(t, "     #409 · approved · checks pass · as of 12m ago");
     assert_eq!(app.sb.places[5].row_mark(true).style.fg, Some(faint()));
     // the header: `↑ 4 PRs` with the counts, the flow after the folder
     app.sb.workspace = "/w/acme".into();

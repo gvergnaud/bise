@@ -118,8 +118,10 @@ export const panel = {
   pr_your_review: "your review",
   /** a PR waits only on his merge (pink, an inbox item) */
   pr_your_merge: "your merge",
-  /** the forge is late */
-  pr_state_from: (a: { age: string | number }): string => "state from " + String(a.age) + " ago",
+  /** the forge is late (pr-integration's table: `… · as of 12 min ago`) */
+  pr_as_of: (a: { age: string | number }): string => "as of " + String(a.age) + " ago",
+  /** the late words' tip */
+  pr_as_of_tip: "the forge has not answered since: this is the state it last gave",
   /** a feature branch's tip, before its name */
   wt_feature_branch: (a: { g: string | number }): string => String(a.g) + " feature branch ",
   /** a feature branch's tip, after its name */

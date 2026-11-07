@@ -15,6 +15,7 @@ import { useStore } from '@/store';
 import { common } from '@/proto/words_common.gen';
 import { ago } from '@/agents/model';
 import { kindOf, type Item } from '@/artifacts/model';
+import { prLine } from '@/artifacts/pr';
 import { isRunning, markOf, portWords, rowCmd, stateOf, urlWords, type ProcItem } from '@/running/model';
 import { asks, howOften, nextWords, type Task } from '@/scheduled/model';
 import { alarms } from '@/thread/wake';
@@ -51,7 +52,7 @@ export function ArtifactRow({ it, now, group, pinned = false }: { it: Item; now:
           <span className="b-artchip-title">{a.title}</span>
         </span>
       }
-      sub={`${a.kind} · ${groupWords(group, a.agent)}`}
+      sub={<ArtSub a={a} by={groupWords(group, a.agent)} />}
       end={
         <>
           {a.new && <span className="s3-dot" data-tone="acc" {...tipAttrs(side.new_tip)} />}
@@ -67,6 +68,26 @@ export function ArtifactRow({ it, now, group, pinned = false }: { it: Item; now:
       pin={{ kind: 'artifact', project: it.project, id: a.id, on: pinned }}
       testId={`app.flyout.artifacts.${it.project}.${a.id}`}
     />
+  );
+}
+
+/**
+ * An artifact row's line: its kind and maker ('page · perf'); a PR's own line (pr-integration A):
+ * '#412 · approved · checks ✓ 12/12 · your merge · perf', the hub's words in the pink only when it
+ * waits on him (artifacts/pr.ts), the forge's lateness dim after them.
+ */
+function ArtSub({ a, by }: { a: Item['a']; by: string }) {
+  const l = prLine(a);
+  if (l === null) return <>{`${a.kind} · ${by}`}</>;
+  return (
+    <span className="s3-parts" data-testid={`app.flyout.artifacts.pr.${a.id}`}>
+      <span>{l.sigil}</span>
+      {l.words !== '' && (
+        <span className="s3-pr-words" data-tone={l.yours ? 'acc' : undefined} data-testid={`app.flyout.artifacts.pr.${a.id}.words`}>{` · ${l.words}`}</span>
+      )}
+      {l.late !== '' && <span {...tipAttrs(panel.pr_as_of_tip)}>{` · ${l.late}`}</span>}
+      <span>{` · ${by}`}</span>
+    </span>
   );
 }
 

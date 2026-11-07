@@ -10,3 +10,5 @@
 .b-listbar .art-fold-crumb{margin-left:calc(var(--s-2) * -1)}
 /* the archived ones: a faint row under the list (as the window's panel and the TUI) */
 .art-archived-row{display:flex;margin:var(--s-4) 0 0}
+/* the Pull requests filter's two sides, under the kinds (pr-integration A) */
+.art-prside{display:flex;margin:var(--s-2) 0 0}

@@ -508,6 +508,18 @@
     "one": null,
     "text": "approved"
   },
+  "panel.pr_as_of": {
+    "args": [
+      "age"
+    ],
+    "one": null,
+    "text": "as of {age} ago"
+  },
+  "panel.pr_as_of_tip": {
+    "args": [],
+    "one": null,
+    "text": "the forge has not answered since: this is the state it last gave"
+  },
   "panel.pr_changes_asked": {
     "args": [],
     "one": null,
@@ -590,13 +602,6 @@
     "args": [],
     "one": null,
     "text": "open"
-  },
-  "panel.pr_state_from": {
-    "args": [
-      "age"
-    ],
-    "one": null,
-    "text": "state from {age} ago"
   },
   "panel.pr_your_merge": {
     "args": [],

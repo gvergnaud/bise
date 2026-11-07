@@ -107,6 +107,16 @@ crate::words! { library:
     archived_n(n) = "{n} archived";
     /// the same toggle's tip, with its key
     archived_tip = "show the archived ones · a";
+    /// the kind filter of pull requests (pr-integration A)
+    kind_prs = "Pull requests";
+    /// inside it, the PRs still at work: open and draft (the default)
+    prs_open = "Open & draft";
+    /// its tip
+    prs_open_tip = "the pull requests still open, drafts too";
+    /// inside it, the settled ones: merged and closed (archived, out of the right bar)
+    prs_settled = "Merged & closed";
+    /// its tip
+    prs_settled_tip = "merged and closed pull requests: archived, out of the right bar";
     /// the + in the bar (its tip when no project takes it) and the empty page's action
     add_files = "Add files";
     /// a project filter that leaves a folder empty

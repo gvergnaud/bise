@@ -244,6 +244,11 @@
     "one": null,
     "text": "pages"
   },
+  "library.kind_prs": {
+    "args": [],
+    "one": null,
+    "text": "Pull requests"
+  },
   "library.kind_sheets": {
     "args": [],
     "one": null,
@@ -492,6 +497,26 @@
     ],
     "one": "{n} project",
     "text": "{n} projects"
+  },
+  "library.prs_open": {
+    "args": [],
+    "one": null,
+    "text": "Open & draft"
+  },
+  "library.prs_open_tip": {
+    "args": [],
+    "one": null,
+    "text": "the pull requests still open, drafts too"
+  },
+  "library.prs_settled": {
+    "args": [],
+    "one": null,
+    "text": "Merged & closed"
+  },
+  "library.prs_settled_tip": {
+    "args": [],
+    "one": null,
+    "text": "merged and closed pull requests: archived, out of the right bar"
   },
   "library.put_in_message": {
     "args": [],

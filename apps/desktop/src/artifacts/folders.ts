@@ -10,6 +10,7 @@ import { library } from '@/proto/words_library.gen';
 import { hero } from '@/proto/words_hero.gen';
 import type { Folder } from '@/proto';
 import type { Item } from './model';
+import { prSettled } from './pr';
 
 /** One folder of the library (bise_proto Folder): a theme (no parent) or a task folder in one, two levels at most. */
 export type { Folder } from '@/proto';
@@ -325,15 +326,26 @@ export function rememberMove(recent: readonly string[], id: string): string[] {
 // ---- search across folders
 
 /** The kind chips the search and a folder show: a word and its icon kinds. */
-export type ChipKind = 'shots' | 'pages' | 'docs' | 'sheets' | 'slides' | 'videos' | 'sounds' | '3d' | 'links' | 'files';
+export type ChipKind = 'shots' | 'pages' | 'docs' | 'sheets' | 'slides' | 'videos' | 'sounds' | '3d' | 'prs' | 'links' | 'files';
 const CHIP_OF: Readonly<Record<IconKind, ChipKind>> = {
   image: 'shots', page: 'pages', doc: 'docs', sheet: 'sheets', deck: 'slides', video: 'videos', audio: 'sounds', '3d': '3d',
-  link: 'links', pr: 'links', release: 'links', file: 'files',
+  link: 'links', pr: 'prs', release: 'links', file: 'files',
 };
 const CHIP_WORD: Readonly<Record<ChipKind, string>> = {
   shots: library.kind_shots, pages: library.kind_pages, docs: library.kind_docs, sheets: library.kind_sheets, slides: library.kind_slides,
-  videos: library.kind_videos, sounds: library.kind_sounds, '3d': library.kind_3d, links: library.kind_links, files: library.kind_files,
+  videos: library.kind_videos, sounds: library.kind_sounds, '3d': library.kind_3d, prs: library.kind_prs, links: library.kind_links,
+  files: library.kind_files,
 };
+
+/**
+ * The Pull requests filter's two sides (pr-integration A): open & draft by default, merged &
+ * closed one click away. The settled ones are archived (the hub archives a PR at its end), so
+ * the side reads every PR of the place, archived or not (artifacts/pr.ts prSettled). Pure.
+ */
+export type PrSide = 'open' | 'settled';
+export function prSideItems(items: readonly Item[], side: PrSide): Item[] {
+  return items.filter((it) => chipOf(it) === 'prs' && prSettled(it.a) === (side === 'settled'));
+}
 export const chipOf = (it: Item): ChipKind => CHIP_OF[iconKindOf(it.a)];
 export const chipWord = (k: ChipKind): string => CHIP_WORD[k];
 

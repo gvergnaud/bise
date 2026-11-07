@@ -14,7 +14,7 @@
 // deletes (a dialog). Every move and folder edit has its undo (⌘Z, and the toast's). The grid, the
 // cards, the stacks and the list view are art-grid's (Grid.tsx, Sheet.tsx). Owner: art-folders.
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
-import { Button, Empty, GroupLabel, MoreButton, PageBanner, Press, sentenceCase, Sheet, tipAttrs, Toast, type EntityMenu } from '@/ds';
+import { Button, Empty, Filters, GroupLabel, MoreButton, PageBanner, Press, sentenceCase, Sheet, tipAttrs, Toast, type EntityMenu } from '@/ds';
 import { hero } from '@/proto/words_hero.gen';
 import { library } from '@/proto/words_library.gen';
 import { useFolders, useProjects, useStore } from '@/store';
@@ -38,7 +38,8 @@ import { Thumb } from './thumbs';
 import { keyOf, revealPathOf, splitArchived, type Item } from './model';
 import {
   AT_ALL, atOfPath, atPath, chipOf, chipsOf, countsOf, coverOf, crumbOf, folderLine, inFolder, itemsAt, libraryFacts, libraryOf,
-  nameOf, parseQuery, pathOf, projectOfTyped, rememberMove, searchItems, titlePath, type At, type ChipKind, type Library,
+  nameOf, parseQuery, pathOf, prSideItems, projectOfTyped, rememberMove, searchItems, titlePath, type At, type ChipKind, type Library,
+  type PrSide,
 } from './folders';
 import { FolderColumn, type Editing } from './Column';
 import { chipWord } from './folders';
@@ -101,6 +102,8 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   const at = atOfPath(atRoute);
   const [q, setQ] = useState('');
   const [chip, setChip] = useState<ChipKind | null>(null);
+  // the Pull requests filter's side: open & draft first, merged & closed one click away
+  const [prSide, setPrSide] = useState<PrSide>('open');
   const [view, setViewRaw] = useState<View>(mem.view);
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
   const [anchorKey, setAnchorKey] = useState<string | null>(null);
@@ -166,8 +169,14 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   const atNow: At = at.at === 'folder' && !lib.byId.has(at.id) ? { at: 'all' } : at;
   const found = searching ? searchItems(lib, scoped, parsed.words) : [];
   const here = searching ? found : itemsAt(lib, scoped, atNow);
-  const chips = chipsOf(here);
-  const shown = chip === null ? here : here.filter((it) => chipOf(it) === chip);
+  // the PRs read archived ones too: a merged or closed PR is archived by the hub, and the Pull
+  // requests filter's second side shows them (pr-integration A)
+  const allScoped = eff === '' ? all : all.filter((it) => it.project === eff);
+  const hereAll = searching ? searchItems(lib, allScoped, parsed.words) : itemsAt(lib, allScoped, atNow);
+  const anyPr = hereAll.some((it) => chipOf(it) === 'prs');
+  const chips0 = chipsOf(here);
+  const chips = anyPr && !chips0.some((c) => c.kind === 'prs') ? [...chips0, { kind: 'prs' as const, n: 0 }] : chips0;
+  const shown = chip === null ? here : chip === 'prs' ? prSideItems(hereAll, prSide) : here.filter((it) => chipOf(it) === chip);
   const byKey = new Map(base.map((it) => [keyOf(it), it]));
   const place = placeOf(lib, atNow, searching, shown);
   const curId = atNow.at === 'folder' ? atNow.id : null;
@@ -569,6 +578,15 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
           {!narrow && !sideLib && column}
           <div className="art-main">
             {toolbar}
+            {stack === null && chip === 'prs' && (
+              <div className="art-prside">
+                <Filters testId="artifacts.prside" label={library.kind_prs} on={prSide} onPick={(id) => { setPrSide(id as PrSide); }}
+                  items={[
+                    { id: 'open', label: library.prs_open, tip: library.prs_open_tip },
+                    { id: 'settled', label: library.prs_settled, tip: library.prs_settled_tip },
+                  ]} />
+              </div>
+            )}
             {stackHead ?? head}
             <AddDrop place={place_} testId="artifacts.drop">{body}</AddDrop>
             {archivedRow}
