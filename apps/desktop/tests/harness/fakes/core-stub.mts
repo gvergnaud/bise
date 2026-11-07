@@ -90,7 +90,17 @@ function answer(cmd: Cmd): Ev[] {
   switch (cmd.cmd) {
     case 'subscribe': return of(['thread', 'entry', 'typing'], (ev) => ev.ev !== 'thread' || ev.before === null || ev.before === undefined);
     case 'page': return of(['thread'], (ev) => ev.before !== null && ev.before !== undefined);
-    case 'diff': return of(['diff'], (ev) => (cmd.commit ? ev.merged === cmd.commit : !ev.merged));
+    // a PR tab's Changes (pr-artifacts): the world's agent diff, answered by its req (the hub's
+    // pick of place or forge is the hub's; the window knows the answer by its req alone)
+    case 'diff':
+      if (cmd.pr_url) return of(['diff'], (ev) => !ev.merged && ev.agent === 'perf').slice(0, 1).map((ev) => ({ ...ev, req: cmd.req }));
+      return of(['diff'], (ev) => (cmd.commit ? ev.merged === cmd.commit : !ev.merged));
+    // a PR tab's Summary and a check's log (pr/detail, pr/checkLog): the world's answer with a
+    // detail (or lines) for that PR, else none (the tab says what it waits for), echoing the req;
+    // his Merge or Close: done (pr/act)
+    case 'pr_detail': return of(['pr_detail'], (ev) => ev.url === cmd.url && ev.detail != null).slice(-1).map((ev) => ({ ...ev, req: cmd.req }));
+    case 'pr_check_log': return of(['pr_check_log'], (ev) => ev.url === cmd.url && ev.lines != null).slice(-1).map((ev) => ({ ...ev, check: cmd.check, req: cmd.req }));
+    case 'pr_act': return [{ ev: 'pr_acted', project: cmd.project, req: cmd.req, url: cmd.url, act: cmd.act }];
     case 'worktrees': case 'dev_servers': case 'merged': case 'processes': return of([cmd.cmd]);
     // a process's output (the running screen's terminal): the world's ranges of that one, in order
     case 'proc_out': return of(['proc_out'], (ev) => ev.id === cmd.id);
