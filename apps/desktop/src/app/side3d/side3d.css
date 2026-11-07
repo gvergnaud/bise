@@ -795,16 +795,22 @@
 }
 .s3-row:is(:hover, :has(> .s3-pin:focus-within)) .s3-row-end > :last-child,
 .s3-row:is(:hover, :has(> .s3-pin:focus-within)) .s3-row-end > .b-pinmark,
-.s3-orow:is(:hover, :has(> .s3-pin:focus-within)) .s3-orow-open > :is(.s3-orow-age, .s3-orow-pr, .s3-orow-wt):last-child,
+.s3-orow:is(:hover, :has(> .s3-pin:focus-within)) .s3-orow-open > :is(.s3-orow-age, .s3-orow-pr):last-child,
 .s3-orow:is(:hover, :has(> .s3-pin:focus-within)) .s3-orow-open > .b-pinmark {
   visibility: hidden;
 }
-/* a row with nothing at its end (a watch, an agent's line with no age, PR or ψ): while the hover
-   pin shows, its words' last 32 (the 24 box and 8) fade out under it, never reflowed nor cut again
-   (designer m_49536) */
+/* a row with nothing at its end (a watch, an agent's line with no age, PR, pin mark nor ψ): while
+   the hover pin shows, its words' last 32 (the 24 box and 8) fade out under it, never reflowed nor
+   cut again (designer m_49536) */
 .s3-row:is(:hover, :has(> .s3-pin:focus-within)):has(> .s3-pin):not(:has(.s3-row-end)) .s3-row-lines,
 .s3-orow:is(:hover, :has(> .s3-pin:focus-within)):has(> .s3-pin):not(:has(:is(.s3-orow-age, .s3-orow-pr, .s3-orow-wt, .b-pinmark))) .s3-orow-name {
   mask-image: linear-gradient(to left, transparent, #000 var(--s-8));
+}
+/* an agent's line with its ψ and nothing at its end: the ψ never goes under the hover pin nor its
+   fade (designer m_55493), so the line's words end 4 before the pin's box while it shows; the name
+   gives way with its …, the ψ stays right after it */
+.s3-orow:is(:hover, :has(> .s3-pin:focus-within)):has(> .s3-pin):has(.s3-orow-wt):not(:has(:is(.s3-orow-age, .s3-orow-pr, .b-pinmark))) .s3-orow-open {
+  padding-right: calc(var(--s-8) + var(--s-1));
 }
 /* an agent's line: 28 high, its words 12 from its right (.s3-orow-open's padding) */
 .s3-orow {
@@ -1528,8 +1534,9 @@
   height: 130%;
   margin-top: var(--s-1);
 }
+/* the name takes its own width (its ψ right after it), and gives way first with its … */
 .s3-orow-name {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1563,12 +1570,24 @@
 .s3-orow-pr:hover {
   color: var(--c-text);
 }
+/* the ψ right after the name (designer m_55493): 8 from it, never cut, its hover box 14 wide and
+   16 high around the glyph (padded, the glyph as before) */
 .s3-orow-wt {
+  display: inline-flex;
   flex: none;
-  width: 12px;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: var(--s-4);
+  margin-left: calc(var(--s-1) * -1);
   font: 400 var(--f-meta);
   color: var(--c-text-3);
-  text-align: center;
+}
+/* past the name and its ψ, the end's column (pin mark, age, PR) right-aligned; its own gap taken back */
+.s3-orow-gap {
+  flex: 1 1 0;
+  min-width: 0;
+  margin-left: calc(var(--s-2) * -1);
 }
 /* an ask opened in place: its question t-12 text-2, its options (the float's buttons), 'answer…' */
 /* an ask opened in place: the row and its block one tinted piece (the row r8 on top, the block r8

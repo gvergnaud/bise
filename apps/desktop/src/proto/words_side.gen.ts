@@ -72,8 +72,12 @@ export const side = {
   show_less: "show less",
   /** the outer card's agents head, in the accent: the agents that ask him */
   head_waits: (a: { n: string | number }): string => String(a.n) + " waits",
-  /** the ψ at an agent row's right, its tip: it works in a worktree */
+  /** the ψ after an agent row's name, its tip when its worktree's folder is unknown */
   in_worktree: "works in a worktree",
+  /** the ψ's tip: its worktree's folder, its branch being that same word (sb/<folder>) or none */
+  worktree_at: (a: { folder: string | number }): string => "worktree " + String(a.folder),
+  /** the ψ's tip: its worktree's folder and its own branch (designer m_55493) */
+  worktree_on: (a: { folder: string | number; branch: string | number }): string => "worktree " + String(a.folder) + " · " + String(a.branch),
   /** a row's state: it asks him (the accent, the only pink) */
   row_asks: "asks you",
   /** a row's state: another agent holds it (its line 2 says which) */

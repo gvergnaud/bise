@@ -436,6 +436,21 @@
     "one": null,
     "text": "{n} working"
   },
+  "side.worktree_at": {
+    "args": [
+      "folder"
+    ],
+    "one": null,
+    "text": "worktree {folder}"
+  },
+  "side.worktree_on": {
+    "args": [
+      "folder",
+      "branch"
+    ],
+    "one": null,
+    "text": "worktree {folder} · {branch}"
+  },
   "side.world": {
     "args": [],
     "one": null,

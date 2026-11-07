@@ -10,7 +10,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { Agent } from '@/proto';
 import { side } from '@/proto/words_side.gen';
 import { panel } from '@/proto/words_panel.gen';
-import { jobOf, lineTip, OuterHead } from './OuterCard';
+import type { BarRow, ProjAgent } from '../barrows';
+import { jobOf, lineTip, outerRows, OuterHead, worktreeTip } from './OuterCard';
 
 // the head's 3D picture needs WebGL: a picture that never draws
 vi.mock('./Bubbles', () => ({ ThingPic: () => <span /> }));
@@ -69,5 +70,36 @@ describe('an agent line\'s job words', () => {
     expect(jobOf(a({ main: true, note: 'merging the docs', purpose: 'orchestrator' }))).toBe('merging the docs');
     expect(jobOf(a({ title: 'speed', purpose: 'make it fast' }))).toBe('speed');
     expect(jobOf(a({ purpose: 'make it fast' }))).toBe('make it fast');
+  });
+});
+
+describe('an agent line\'s ψ (designer m_55493)', () => {
+  const row = (agent: string, group?: string): BarRow => ({ key: `p/${agent}`, project: 'p', agent, kind: 'agent', glyph: '', name: agent, sub: '', title: agent, ...(group === undefined ? {} : { group }) }) as BarRow;
+  const pa = (a: Partial<Agent> & { name: string }): ProjAgent => ({ project: 'p', projectName: 'p', a: a as Agent });
+
+  it('its tip names the worktree; its branch only when it says something else', () => {
+    expect(worktreeTip({ worktree: '/h/.bise/worktrees/hub/perf/harness', branch: 'sb/perf' }, 'harness')).toBe(side.worktree_at({ folder: 'perf' }));
+    expect(worktreeTip({ worktree: '/h/wt/perf', branch: 'perf' }, 'harness')).toBe(side.worktree_at({ folder: 'perf' }));
+    expect(worktreeTip({ worktree: '/h/wt/perf', branch: 'fix/speed' }, 'harness')).toBe(side.worktree_on({ folder: 'perf', branch: 'fix/speed' }));
+    expect(worktreeTip({ worktree: null }, 'harness')).toBe(side.in_worktree);
+    expect(worktreeTip(undefined, 'harness')).toBe(side.in_worktree);
+  });
+
+  it('a row in a worktree carries its tip, a row in the shared checkout none', () => {
+    const rows = outerRows([row('perf'), row('docs')], [pa({ name: 'perf', mode: 'worktree', worktree: '/h/wt/perf/harness', branch: 'sb/perf' }), pa({ name: 'docs' })], () => 'harness');
+    expect(rows.map((x) => x.wt)).toEqual([side.worktree_at({ folder: 'perf' }), null]);
+  });
+
+  it('it sits right after the name, the end\'s column right-aligned past it; the hover pin never covers it', () => {
+    const css = readFileSync(join(__dirname, 'side3d.css'), 'utf8');
+    expect(css).not.toMatch(/\.s3-orow-wt\):last-child/u);
+    const box = document.createElement('div');
+    box.innerHTML = '<span class="s3-orow-name"></span><span class="s3-orow-wt"></span><span class="s3-orow-gap"></span>';
+    document.body.append(box);
+    const [name, wt, gap] = [...box.children].map((e) => getComputedStyle(e));
+    expect(name?.flexGrow).toBe('0');
+    expect(wt?.flexShrink).toBe('0');
+    expect(gap?.flexGrow).toBe('1');
+    box.remove();
   });
 });

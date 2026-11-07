@@ -4,8 +4,9 @@
 // open gives way to the coins, then to the minis (Host). Its sections head in the folded side's
 // style: the section's 3D object at 20, its name, its count, 'all ›'. AGENTS: one line of 28 each,
 // in the hub's rank: its mark (the bar's language, ⌥N while ⌥ is held, an ask's in the accent),
-// its head at 20, its name, its age while it works or asks, its PR, its ψ when it has its own
-// worktree; idle and done step back. A row of the tile's project and its bim light each other (bims/focus,
+// its head at 20, its name and its ψ right after it when it has its own worktree (its tip names
+// the worktree and its branch; never under the hover pin, designer m_55493), then right-aligned
+// its age while it works or asks and its PR; idle and done step back. A row of the tile's project and its bim light each other (bims/focus,
 // his m_47261): the row hovered rings its bim, the bim hovered gives its row the hover tint. A click opens its thread; an ask's click opens it in place,
 // its options and 'answer…' / 'write to perf…' under it. The other sections keep the floats' rows
 // (FlyoutLists). Each section shows its first rows (Agents 10, the others 5), then '+ N more' adds
@@ -17,7 +18,8 @@ import { flushSync } from 'react-dom';
 import type { Agent, Card } from '@/proto';
 import { AppIcon, Press, tipAttrs } from '@/ds';
 import { sortCards } from '@/inbox/order';
-import { useStore } from '@/store';
+import { useProjects, useStore } from '@/store';
+import { worktreeName } from '@/running/model';
 import type { AnswerAt } from '@/store/answered';
 import { side } from '@/proto/words_side.gen';
 import { panel } from '@/proto/words_panel.gen';
@@ -84,20 +86,42 @@ export interface OuterAgentsProps {
   readonly onAsk?: (ask: { readonly project: string; readonly agent: string } | null) => void;
 }
 
-/** The agents' rows past their worktree heads: each with its PR (its own, or its shared worktree's) and whether it works in a worktree. Pure. */
-export function outerRows(live: readonly BarRow[], agents: readonly ProjAgent[]): { r: BarRow; pr: number | undefined; wt: boolean }[] {
+/**
+ * The ψ's tip (designer m_55493): 'worktree <folder> · <branch>', only the folder when the branch
+ * is that same word (sb/<folder>) or none; 'works in a worktree' when its folder is unknown. `repo`:
+ * its project's own folder name (a bise worktree is `<task>/<repo>`: the task names it). Pure.
+ */
+export function worktreeTip(a: Pick<Agent, 'worktree' | 'branch'> | undefined, repo: string): string {
+  const path = a?.worktree ?? '';
+  const folder = path === '' ? '' : worktreeName(path, repo);
+  if (folder === '') return side.in_worktree;
+  const branch = a?.branch ?? '';
+  return branch === '' || branch === folder || branch === `sb/${folder}` ? side.worktree_at({ folder }) : side.worktree_on({ folder, branch });
+}
+
+/**
+ * The agents' rows past their worktree heads: each with its PR (its own, or its shared worktree's)
+ * and, when it works in a worktree, its ψ's tip (worktreeTip; null: the shared checkout). `repoOf`:
+ * a project's own folder name. Pure.
+ */
+export function outerRows(live: readonly BarRow[], agents: readonly ProjAgent[], repoOf: (project: string) => string = () => ''): { r: BarRow; pr: number | undefined; wt: string | null }[] {
   const heads = new Map(live.filter((r) => r.kind === 'group' && r.group !== undefined).map((r) => [r.group ?? '', r]));
   const byKey = new Map(agents.map((x) => [`${x.project}/${x.a.name}`, x.a]));
   return live.filter((r) => r.kind === 'agent').map((r) => {
     const head = r.group === undefined ? undefined : heads.get(r.group);
     const a = byKey.get(`${r.project}/${r.agent ?? ''}`);
-    return { r, pr: r.mark?.pr ?? head?.mark?.pr ?? undefined, wt: r.group !== undefined || a?.mode === 'worktree' };
+    const inWt = r.group !== undefined || a?.mode === 'worktree';
+    return { r, pr: r.mark?.pr ?? head?.mark?.pr ?? undefined, wt: inWt ? worktreeTip(a, repoOf(r.project)) : null };
   });
 }
 
+/** A project's own folder name, from its path ('' when unknown). Pure. */
+export const repoName = (path: string): string => path.split('/').filter((x) => x !== '').pop() ?? '';
+
 /** AGENTS in the card: its first 10 lines, then '+ N more' adds 50. */
 export function OuterAgents({ live, agents, cards, at, here, now, groupOf, onOpen, onOpenPr, bims, onAsk }: OuterAgentsProps) {
-  const rows = outerRows(live, agents);
+  const projects = useProjects();
+  const rows = outerRows(live, agents, (p) => repoName(projects.find((x) => x.project === p)?.path ?? ''));
   const pins = usePins('agent');
   const byKey = new Map(agents.map((x) => [`${x.project}/${x.a.name}`, x.a]));
   const [open, setOpen] = useState<string | null>(null);
@@ -190,7 +214,8 @@ function MoreRow({ id, first, shown, total, onMore, onLess }: { id: BubbleId; fi
 interface LineProps {
   readonly r: BarRow;
   readonly pr: number | undefined;
-  readonly wt: boolean;
+  /** its ψ's tip when it works in a worktree (worktreeTip); null: none */
+  readonly wt: string | null;
   readonly job: string;
   readonly card: Card | undefined;
   readonly at: AnswerAt | null;
@@ -220,7 +245,7 @@ export function lineTip(r: Pick<BarRow, 'name' | 'main'>, job: string): string {
   return r.main === true ? `${r.name} · ${panel.role_lead}` : r.name;
 }
 
-/** One agent's line: mark · head · name · age · PR · ψ; an ask opens in place under it. */
+/** One agent's line: mark · head · name · ψ, then the end's column: pin mark · age · PR; an ask opens in place under it. */
 function AgentLine({ r, pr, wt, job, card, at, now, here, group, pinned, open, onToggle, onOpen, onOpenPr, lit, onLit }: LineProps) {
   const store = useStore();
   const menu = useEntityMenu({ kind: 'agent', project: r.project, agent: r.agent ?? '' });
@@ -252,6 +277,10 @@ function AgentLine({ r, pr, wt, job, card, at, now, here, group, pinned, open, o
           <ThingPic thing={{ head: r.agent ?? '', main: r.main === true }} px={OUTER_HEAD_PX} tile="thread" />
         </span>
         <span className="s3-orow-name" data-testid={`${id}.name`}>{g.project !== '' && <span className="s3-group">{g.project}</span>}{g.name}</span>
+        {/* the ψ says where it works: right after the name, never under the hover pin (designer m_55493) */}
+        {wt !== null && <span className="s3-orow-wt" {...tipAttrs(wt)} data-testid={`${id}.wt`}>ψ</span>}
+        {/* the end's column (pin mark, age, PR) stays right-aligned past this */}
+        <span className="s3-orow-gap" aria-hidden="true" />
         {pinned && <PinMark testId={`${id}.pinned`} />}
         {age !== '' && <span className="s3-orow-age" {...tipAttrs(st?.tip)} data-testid={`${id}.age`}>{age}</span>}
         {pr !== undefined && (
@@ -260,7 +289,6 @@ function AgentLine({ r, pr, wt, job, card, at, now, here, group, pinned, open, o
             onOpenPr(r);
           }} data-testid={`${id}.pr`}><AppIcon name="branch" size={14} />#{String(pr)}</span>
         )}
-        {wt && <span className="s3-orow-wt" {...tipAttrs(side.in_worktree)} data-testid={`${id}.wt`}>ψ</span>}
       </Press>
       {/* the hover pin over the line's last thing, no room kept at rest (designer m_49518); main leads anyway, never pinned here */}
       {pinnable && <PinButton pin={{ kind: 'agent', project: r.project, id: r.agent ?? '', on: pinned }} look="s3-pin s3-opin" testId={`${id}.pin`} />}
