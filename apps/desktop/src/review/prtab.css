@@ -2,6 +2,8 @@
    Summary's parts. The 4 px grid (--s-*), the ds colours only: ink at rest, the accent only on
    what waits on him (pink), err on a refusal. Light and dark from the tokens. Owner: pr-artifacts. */
 .prt { display: flex; flex-direction: column; min-height: 0; height: 100%; overflow: auto; padding: 0 var(--s-4) var(--s-6); }
+.prt > .b-head { padding-inline: 0; white-space: normal; }
+.prt-acts { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; margin: 0 0 var(--s-2); }
 .prt > .b-seg { margin: var(--s-3) 0 var(--s-2); }
 .prt-status, .prt-said { margin: 0 0 var(--s-2); font-size: var(--t-13); color: var(--c-text-2); }
 .prt-yours { color: var(--c-accent); }

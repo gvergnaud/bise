@@ -85,18 +85,17 @@ export function PrTab({ project, url }: { project: string; url: string }) {
       <Head
         title={<span data-testid="prtab.title">{art?.title ?? tag}</span>}
         sub={<span data-testid="prtab.facts">{headFacts(tag, s, now).join(' · ')}</span>}
-        end={
-          <>
-            {out}
-            {canMerge(s) && !busy && (
-              <Button kind="ghost" size="sm" onClick={merge} title={panel.prtab_merge_tip({ forge })} testId="prtab.merge">
-                {panel.prtab_merge}
-              </Button>
-            )}
-            <MoreButton menu={menu} testId="prtab.more" />
-          </>
-        }
       />
+      {/* its acts on their own line: a panel's width never cuts Open on GitHub (shots v1) */}
+      <div className="prt-acts" data-testid="prtab.acts">
+        {out}
+        {canMerge(s) && !busy && (
+          <Button kind="ghost" size="sm" onClick={merge} title={panel.prtab_merge_tip({ forge })} testId="prtab.merge">
+            {panel.prtab_merge}
+          </Button>
+        )}
+        <MoreButton menu={menu} testId="prtab.more" />
+      </div>
       {line !== null && line.words !== '' && (
         <p className="prt-status" data-testid="prtab.status">
           <span className={line.yours ? 'prt-yours' : undefined}>{line.words}</span>
