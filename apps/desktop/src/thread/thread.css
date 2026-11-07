@@ -405,6 +405,7 @@ body:has(.th-screen > .art-give) .s3-side {
 .th-screen .th-starting,
 .th-screen .th-stopping,
 .th-screen .th-refused,
+.th-screen .th-hubnote,
 .th-screen .inbox-strip,
 .th-screen .inbox-dock,
 .th-screen .vm-pane,

@@ -3,8 +3,10 @@
 /* a typed command's result (desktop-notices, designer): one quiet row in the thread, above the
    composer, never a bar under it; tier 4 (dim sans 13, '·') from .th-notice.info. On the thread's
    text column like the rows above it, its '·' on the column's left edge (his restart row sat 16 px
-   in from the screen's edge, left of the column: ambient-lead m_22827) */
-.th-hubnote { box-sizing: border-box; width: var(--th-col, auto); margin: 0 auto var(--s-2); }
+   in from the screen's edge, left of the column: ambient-lead m_22827). Its width and left edge are
+   the column's (thread.css's column rule, from --th-col-x): centred here, it slid right of a column
+   that sits left of the right side, under the right bar (sent-line-overflow, his m_55331) */
+.th-hubnote { margin-bottom: var(--s-2); }
 /* his /restart's row when a newer app is staged: '⏎ restart to update' after the words; a refusal's why dim */
 .th-hubnote .b-act { vertical-align: baseline; }
 .th-hubnote-why { color: var(--c-text-3); }
