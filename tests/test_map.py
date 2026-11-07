@@ -76,7 +76,7 @@ TOP = {
     "office": "none",
     # example plugins users add by hand (examples/plugins/: MCP Apps views); no e2e/tmux
     # test loads them: tests/fixtures/mcp-apps/check.py checks their shapes and
-    # their views' escaping, in gate.sh quick (map_paths' mcpapps)
+    # their views' escaping, in gate.sh quick (tests/gate_plan.py's mcpapps)
     "examples": "none",
 }
 # the desktop app's own paths: its checks, no terminal test

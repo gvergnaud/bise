@@ -346,7 +346,7 @@ def is_ancestor(a, b):
 
 
 def related_misses(h, gl, since):
-    """quick's vitest-related selection (gate.sh desktop_related, review-gates
+    """quick's vitest-related selection (tests/gate_plan.py drel, review-gates
     m_33177): a vitest file red in a full gate or the nightly, and a green
     related-mode quick since the last full where it was not red (24 h at most)
     that did not run it although its sha is in that full's history: a suspect

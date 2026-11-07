@@ -5,7 +5,8 @@
 #                     steps only, never an e2e, tmux, Playwright, desktop
 #                     harness or as-he-does step (those run on main: the tip
 #                     gate, the nightly, a release's full --all).
-#                     What the tree's changes touch, ~5-10 s warm: clippy -D
+#                     What the tree's changes touch (the plan: tests/gate_plan.py,
+#                     paths in, steps out; this script runs it), ~5-10 s warm: clippy -D
 #                     warnings (next to the tests, in $target/clippy), the
 #                     tests of the changed crates and of the crates using them; if a .bend file of core/ hub/ vendor/
 #                     or of laws/ proofs/ changed: PROOF, every bend/proofs/*.bend
@@ -180,78 +181,16 @@ gate_stop() {
   return 0
 }
 older_than_a_minute() { [ -n "$(find "$1" -maxdepth 0 -mmin +1 2>/dev/null)" ]; }
-# whether this change runs desktop_check (tests/test_map.py desktop): its
-# why on stdout, nothing when it doesn't
-desktop_why() {  # <changed path>...
-  [ -d "$root/apps/desktop" ] || return 0
-  local w; w="$(python3 "$root/tests/test_map.py" desktop "$@")" || w="desktop test_map.py failed"
-  [ "$w" = none ] || echo "${w#desktop }"
-}
-
-# ---- the one map from a changed path to its steps (quick and land): the
-# crates to test or lint (pkgs: the changed ones and the crates using them)
-# and the flags proto_ts, office, office_skills, crossterm_changed, kit
-pkgs=""
-add() { case " $pkgs " in *" $1 "*) ;; *) pkgs="$pkgs $1" ;; esac; }
-map_paths() {  # <changed path>...
-  local f
-  for f in "$@"; do
-    case "$f" in
-      rust/Cargo.toml|rust/Cargo.lock|rust/.cargo/*) add bise-session; add bise-home; add bise-peer; add bise-catalog; add bend-plugins; add bend-images; add bend-tui; add switchboard; add bend-harness ;;
-      rust/home/*) add bise-home; add bend-plugins; add bend-images; add bend-tui; add switchboard; add bise-catalog; add bend-harness ;;
-      rust/catalog/*) add bise-catalog; add bend-harness ;;
-      rust/computer-use/*) add bise-computer-use; add bend-harness ;;
-      rust/plugins/*) add bend-plugins; add bend-tui; add bend-harness ;;
-      rust/images/*) add bend-images; add bend-tui; add bend-harness ;;
-      rust/tui/*) add bend-tui; add bend-harness ;;
-      rust/vendor/crossterm/*) add bend-tui; add bend-harness; crossterm_changed=1 ;;
-      rust/switchboard/*) add switchboard; add bend-harness ;;
-      rust/peer/*) add bise-peer; add switchboard; add bend-harness ;;
-      rust/harness/*) add bend-harness ;;
-      rust/session/*) add bise-session; add switchboard; add bend-harness ;;
-      bend/hub/*|bend/vendor/*) add switchboard ;;
-      rust/proto/*) add bise-proto; add bend-tui; add switchboard; add bend-harness; proto_ts=1 ;;
-      apps/desktop/src/proto/*) proto_ts=1 ;;
-      # bise_proto::words' JSON for the Python tests (a stale one is red)
-      tests/words/*) proto_ts=1 ;;
-      # bise-proto's Anchor, generated for the SDK too (architect m_23712)
-      office/sdk/src/anchor.gen.ts) proto_ts=1; office=1 ;;
-      office/*) office=1; office_skills=1 ;;
-      kit/office/*) office=1 ;;
-      # the skills teach the SDK through bise office run (architect m_23951)
-      plugins/sheets/*|plugins/slides/*|plugins/docs/*|rust/jsrt/*) office_skills=1 ;;
-    esac
-    # the kit's node checks (kit/*.check.ts, no deps, ~0.1 s), and the page scripts' types
-    # and emit, bise.dev's (site/) with them
-    case "$f" in kit/*|site/*) kit=1 ;; esac
-    # the MCP Apps plugins' shapes and their views' escaping (tests/fixtures/mcp-apps/check.py,
-    # no deps, ~2 s): the example plugins, the test fixtures and the gallery's built-in
-    # plugins (plugins/<name>/ with views, their shared kit plugins/.view-kit/), with
-    # the gallery plugins' own node:test units
-    case "$f" in examples/plugins/*|tests/fixtures/mcp-apps/*) mcpapps=1 ;; esac
-    case "$f" in plugins/.view-kit/*|plugins/*/views/*|plugins/*/server.mjs|plugins/*/lib/*|plugins/*/test/*|plugins/*/mcp.json|plugins/*/vendor/*) mcpapps=1; gallery=1 ;; esac
-    # the extension's unit tests and the computer-use scripts' types (~2 s)
-    case "$f" in computer-use/extension/*|computer-use/bench/*|computer-use/tsconfig.node.json) cu=1 ;; esac
-    # the as-he-does driver and pagedrive: fx's unit test and their types (~3 s)
-    case "$f" in dev/plugins/ambient-qa/*.ts|dev/plugins/ambient-qa/as-he-does/*.ts|dev/plugins/ambient-qa/tsconfig.json) aqa=1 ;; esac
-    # the words ratchet (tests/word_lint.py, issue 29): the tests it lints,
-    # the catalog and its generated words, its list (quick runs it always)
-    case "$f" in
-      tests/*_tmux.py|apps/desktop/tests/*|apps/desktop/src/*|tests/words/*|rust/proto/src/words/*|tests/word_literals.txt) words=1 ;;
-    esac
-    # no Bend walk that never stops or calls itself twice alike
-    # (tests/pick_gate.py, hub-tick m_28679; quick runs it always)
-    case "$f" in bend/*) bendw=1 ;; esac
-  done
-  # a file a crate reads at compile time from outside its folder (include_str!, include_bytes!,
-  # CARGO_MANIFEST_DIR joins: prompts/, kit/examples/, bend/laws/...) maps as a change in that
-  # crate's folder: its tests and clippy (tests/include_map.py reads them from the source,
-  # review-gates m_37101). Only paths outside rust/ are looked up: a crate's own files map above.
-  local out=() x
-  for f in "$@"; do case "$f" in rust/*) ;; *) out+=("$f") ;; esac; done
-  if [ ${#out[@]} -gt 0 ]; then
-    for x in $(python3 "$root/tests/include_map.py" "${out[@]}" 2>/dev/null); do map_paths "$x"; done
-  fi
+# ---- the plan: which steps run for the changed paths (quick, land, full's desktop part) is
+# tests/gate_plan.py's, pure, with its test on fixtures (tests/gate_plan_test.py); this script
+# only runs it. Sets the plan's shell variables: pkgs (the crates to test and clippy), the step
+# flags (proto_ts office office_skills crossterm_changed kit mcpapps gallery cu aqa words
+# bendw), hub_changed, bend_changed, core_gen, dwhy and drel (desktop_check, its related
+# files), heavy (the heavy steps, '' for a light run), land_steps. A plan that fails: red.
+gate_plan() {  # <changed path>...
+  local sh
+  sh="$(python3 -B "$root/tests/gate_plan.py" --sh -- "$@")" || { echo "FAIL gate_plan: tests/gate_plan.py failed"; return 1; }
+  eval "$sh"
 }
 # node as the desktop lanes find it (desktop_path): the hub's land queue has no shell setup
 # Node runs the repo's .ts scripts by type stripping: flagged before node 22.18 (js-to-ts,
@@ -450,32 +389,19 @@ PY
   echo "now: cd $wt && export CARGO_TARGET_DIR=$tgt   (end: gate.sh done $name)"
   exit 0
 fi
-# after map_paths $changed: the heavy steps a quick gate would run on $changed ('' when none):
-# cargo (pkgs), PROOF, sb-core, core_gen, proto_ts, office, crossterm, desktop. One answer for
-# `gate.sh light` and for a light run's own refusal below (review-gates m_37126)
-heavy_why() {
-  local why="" v
-  [ -n "$pkgs" ] && why="$why rust($pkgs )"
-  printf '%s\n' "$changed" | grep -qE '^bend/(core|hub|vendor|laws|proofs)/.*\.bend$' && why="$why PROOF"
-  printf '%s\n' "$changed" | grep -qE '^bend/(hub|vendor)/' && why="$why sb-core"
-  printf '%s\n' "$changed" | grep -qE '^(rust/proto/src/core/|rust/proto/tests/core_gen(\.rs|/)|bend/hub/gen/|bend/hub/state-hand\.bend)' && why="$why core_gen"
-  for v in proto_ts office office_skills crossterm_changed; do eval "[ \"\${$v:-0}\" = 1 ]" && why="$why $v"; done
-  [ -n "$changed" ] && [ -n "$(desktop_why $changed)" ] && why="$why desktop"
-  echo "$why"
-}
 # light: whether this tree's quick gate runs no heavy step (no cargo, PROOF, desktop, office or
-# proto step: map_paths and desktop_why, as quick decides them). Exit 0 and 'light', else 1 and
-# 'heavy: <why>'. heavy-run runs a light quick gate without a slot or a disk reserve (fast-loop:
-# a quick gate waited p50 409 s for a slot, its own run 32-41 s of python checks)
+# proto step: the plan's heavy, one answer for this and for a light run's own refusal below,
+# review-gates m_37126). Exit 0 and 'light', else 1 and 'heavy: <why>'. heavy-run runs a light
+# quick gate without a slot or a disk reserve (fast-loop: a quick gate waited p50 409 s for a
+# slot, its own run 32-41 s of python checks)
 if [ "$mode" = light ]; then
   cd "$(dirname "$0")/.." || exit 2
   root="$PWD"
   base="${GATE_BASE:-HEAD}"
   changed="$( { git diff --name-only "$base"; git ls-files --others --exclude-standard; } | sort -u)" || { echo "heavy: git"; exit 1; }
-  map_paths $changed
-  why="$(heavy_why)"
-  if [ -z "$why" ]; then echo light; exit 0; fi
-  echo "heavy:$why"; exit 1
+  gate_plan $changed || { echo "heavy: gate_plan"; exit 1; }
+  if [ -z "$heavy" ]; then echo light; exit 0; fi
+  echo "heavy:$heavy"; exit 1
 fi
 [ "$mode" = stop ] && { gate_stop "$(cd "$(dirname "$0")/.." && pwd)"; exit 0; }
 case "$mode" in quick|full|rerun|land) ;; *) echo "usage: gate.sh [quick|full|rerun|land <base> <head>|light|new [name]|done [name]|wait <file|pid>|stop]" >&2; exit 2 ;; esac
@@ -531,12 +457,8 @@ if [ "$mode" = land ]; then
   { [ -n "$base" ] && [ -n "$head" ]; } || { echo "usage: gate.sh land <base> <head>" >&2; exit 2; }
   [ "$(git rev-parse HEAD)" = "$(git rev-parse "$head")" ] || { echo "GATE land FAILED: tree (HEAD is not $head)"; exit 1; }
   changed="$(git diff --name-only "$base" "$head")" || { echo "GATE land FAILED: diff ($base..$head)"; exit 1; }
-  map_paths $changed
-  dwhy=""; [ -n "$changed" ] && dwhy="$(desktop_why $changed)"
-  src=0; printf '%s\n' "$changed" | grep -qE '\.(rs|bend|ts|tsx|py)$' && src=1
-  if [ $src = 0 ] && [ -z "$pkgs" ] && [ -z "$dwhy" ] && [ "${proto_ts:-0}${office:-0}${kit:-0}${cu:-0}${aqa:-0}${words:-0}${bendw:-0}" = 0000000 ]; then
-    echo "GATE land GREEN (0s): no step for these paths"; exit 0
-  fi
+  gate_plan $changed || { echo "GATE land FAILED: gate_plan"; exit 1; }
+  [ "$land_steps" = 1 ] || { echo "GATE land GREEN (0s): no step for these paths"; exit 0; }
 fi
 share_machine
 # a task worktree the hub made (<task dir>/<repo>, its <task dir>/owner)
@@ -742,14 +664,15 @@ if [ "$mode" != land ]; then
   base="${GATE_BASE:-HEAD}"
   changed="$( { git diff --name-only "$base"; git ls-files --others --exclude-standard; } | sort -u)"
 fi
-hub_changed=0 bend_changed=0
-printf '%s\n' "$changed" | grep -qE '^bend/(hub|vendor)/' && hub_changed=1
-printf '%s\n' "$changed" | grep -qE '^bend/(core|hub|vendor|laws|proofs)/.*\.bend$' && bend_changed=1
+# the steps for these paths (tests/gate_plan.py), said in the log
+if [ "$mode" != land ]; then
+  gate_plan $changed || { echo "GATE $mode FAILED"; exit 1; }
+  echo "plan:${heavy:- light}$([ -n "$dwhy" ] && echo "; desktop: $dwhy${drel:+ (related:$([ -n "$drel" ] && echo " $drel"))}")"
+fi
 # a light run (heavy-run's light lane: HEAVY_SLOT 'light <pid>', no slot, no disk reserve) runs
 # no heavy step, whatever changed since heavy-run asked `gate.sh light` (review-gates m_37126)
-if [ "$mode" = quick ] && [ "${HEAVY_SLOT:-}" != "" ] && [ "${HEAVY_SLOT%% *}" = light ]; then
-  lw="$(map_paths $changed; heavy_why)"
-  [ -n "$lw" ] && { echo "FAIL heavy step in a light run:$lw: rerun through heavy-run (HEAVY_NO_LIGHT=1)"; echo "GATE quick FAILED"; exit 1; }
+if [ "$mode" = quick ] && [ "${HEAVY_SLOT:-}" != "" ] && [ "${HEAVY_SLOT%% *}" = light ] && [ -n "$heavy" ]; then
+  echo "FAIL heavy step in a light run:$heavy: rerun through heavy-run (HEAVY_NO_LIGHT=1)"; echo "GATE quick FAILED"; exit 1
 fi
 # ./sb-core (not in git, BISE-114): the build of this tree's hub/ vendor/,
 # from bins.sh's cache shared by every worktree (a copy; ~15 s on a miss).
@@ -796,23 +719,11 @@ desktop_deps() {  # [strict]: node_modules (installed when strict); what is miss
   fi
   echo "$miss"
 }
-# quick's vitest share (gate-reds, main m_33154): when every changed path the
-# desktop counts is under apps/desktop/src/, the tests that import them
-# (vitest related) and the ones that read src/ by path (the ds laws, the CSP,
-# the words...: grep) rather than all ~250 files (157-182 s at load 30, and its
-# worker RPC times out there). Prints those two lists, or nothing: all of them
-# (a config, a fixture, a seam outside the app, a deleted file). Full: all.
-desktop_related() {  # <changed path>...
-  local f src="" n=0
-  for f in "$@"; do
-    [ "$(desktop_why "$f")" ] || continue
-    case "$f" in apps/desktop/src/*) ;; *) return 0 ;; esac
-    [ -f "$root/$f" ] || return 0
-    src="$src ${f#apps/desktop/}"; n=$((n + 1))
-  done
-  [ $n -gt 0 ] || return 0
-  echo "$src"
-}
+# quick's vitest share (gate-reds, main m_33154): when every changed path the desktop counts is
+# under apps/desktop/src/ (the plan's drel), the tests that import them (vitest related) and the
+# ones that read src/ by path (the ds laws, the CSP, the words...: grep) rather than all ~250
+# files (157-182 s at load 30, and its worker RPC times out there). drel empty: all of them (a
+# config, a fixture, a seam outside the app, a deleted file). Full: all.
 desktop_check() {
   [ -d "$root/apps/desktop" ] || return 0
   local miss; desktop_path; miss="$(desktop_deps "${1:-}")"
@@ -822,7 +733,7 @@ desktop_check() {
   fi
   local s=$SECONDS log="$run/desktop_check.log" rel=""
   # shellcheck disable=SC2086
-  [ "${1:-}" = strict ] || rel="$(desktop_related $changed)"
+  [ "${1:-}" = strict ] || rel="${drel:+ $drel}"
   if [ -n "$rel" ]; then
     # by path: fs reads (sync, async, promises), globs, a file URL (review-gates m_33177);
     # an empty list: vitest run runs them all (safe)
@@ -859,13 +770,13 @@ desktop_check() {
 # before main moves: only the fast steps that are always green on main
 # (lines, clippy, generated proto TS, the desktop's types and build, the
 # office SDK, the kit), only for the paths <base>..<head> touches
-# (map_paths). No e2e, tmux, PROOF or vitest: the quick/full gate and the
+# (the plan). No e2e, tmux, PROOF or vitest: the quick/full gate and the
 # nightly keep those. No known reds here. A land with no step ended above,
 # before the run's setup.
 # Red: "FAIL <step>", its error lines, then "GATE land FAILED: <step>"
 # (land_check.rs reads those words).
 if [ "$mode" = land ]; then
-  t0=$SECONDS  # its steps: map_paths, dwhy and src above
+  t0=$SECONDS  # its steps: the plan above
   ran=""
   lstep() {  # <name> <cmd...>
     local n=$1 s=$SECONDS log="$run/land-$1.log"; shift
@@ -966,7 +877,7 @@ if [ "$mode" = full ]; then
     if [ -z "$fchanged" ]; then picked="ALL no change vs ${GATE_FULL_BASE:-main}"
     else
       picked="$(python3 tests/test_map.py select $fchanged 2>"$gdir/pick-$$.why")" || picked="ALL test_map.py failed"
-      dwhy="$(desktop_why $fchanged)"
+      dwhy="$(gate_plan $fchanged && echo "$dwhy")" || dwhy="gate_plan failed"
     fi
   fi
   # the desktop's checks: with every test, or when the change reaches it
@@ -1033,6 +944,8 @@ python3 "$root/tests/state_guard.py" || { echo "GATE quick FAILED"; exit 1; }
 # no new hand-written JS: generated, vendored or on tests/js_allowlist.txt (js-to-ts, ~0.1 s)
 python3 "$root/tests/js_guard.py" --self-test >/dev/null || { python3 "$root/tests/js_guard.py" --self-test; echo "GATE quick FAILED"; exit 1; }
 python3 "$root/tests/js_guard.py" || { echo "GATE quick FAILED"; exit 1; }
+# the plan this run follows, on its fixtures (tests/gate_plan.py, < 0.1 s)
+python3 -B "$root/tests/gate_plan_test.py" >/dev/null || { python3 -B "$root/tests/gate_plan_test.py"; echo "GATE quick FAILED"; exit 1; }
 # the full gate's test map knows every test and every top-level path (tests/test_map.py)
 python3 "$root/tests/test_map.py" --self-test >/dev/null || { python3 "$root/tests/test_map.py" --self-test; echo "GATE quick FAILED"; exit 1; }
 # the crates' compile-time reads outside rust/ map to their crate (tests/include_map.py)
@@ -1110,8 +1023,6 @@ else
   # a hit: ./sb-core was just put in place from it
   SB_CORE_BIN="$(scripts/bins.sh path sb-core 2>/dev/null)" && export SB_CORE_BIN || unset SB_CORE_BIN
 fi
-# the crates to test, and the other steps (map_paths, above)
-map_paths $changed
 step() {  # <name> <cmd...>: one line when green, the failures and the log when red
   local n=$1 s=$SECONDS; shift
   # in the background: a kill or ctrl-c reaches the trap at once
@@ -1123,15 +1034,13 @@ step() {  # <name> <cmd...>: one line when green, the failures and the log when 
 # a stale or hand-edited gen file is red) and gen/laws.bend,
 # gen/journal-laws.bend (decode∘encode, the tag table, the journal fixture),
 # gen/state.bend, state-laws.bend and state-codec.bend (sb-core's records,
-# state-schema) must check; a bend/ change still runs PROOF above
-if printf '%s\n' "$changed" | grep -qE '^(rust/proto/src/core/|rust/proto/tests/core_gen(\.rs|/)|bend/hub/gen/|bend/hub/state-hand\.bend)'; then
-  add bise-proto; core_gen=1
-fi
+# state-schema) must check; a bend/ change still runs PROOF above (the plan's core_gen, its
+# bise-proto in pkgs)
 # no `cargo build`: clippy checks every target, the tests compile and link
 # the changed crates; the binary itself is built by gate.sh full.
 # clippy runs next to the tests in its own target dir ($target/clippy: its
 # own cargo lock; ~300 MB, 30-40 s the first time)
-# No Rust or hub change ($pkgs empty, map_paths): no clippy either. It only
+# No Rust or hub change ($pkgs empty, the plan): no clippy either. It only
 # re-read an unchanged workspace (1-3 s warm), but cold, on a target the disk
 # reclaim deleted, it took 200-490 s (fast-loop: p50 83 s, p90 491 s of the
 # quick gate's p50 282 s over 78 runs, 74 of them with no Rust change)
@@ -1178,7 +1087,7 @@ fi
 # the office skills' scripts, through bise office run (skipped with words when bise or bend-jsrt is not built)
 [ "${office_skills:-0}" = 1 ] && step office_skills python3 tests/office_skills_check.py
 # then the desktop's own checks, when the change reaches it (tests/test_map.py desktop)
-if [ -n "$changed" ] && [ -n "$(desktop_why $changed)" ]; then desktop_check || exit 1; fi
+if [ -n "$dwhy" ]; then desktop_check || exit 1; fi
 if [ -n "$clippy_pid" ]; then
   wait "$clippy_pid"
   [ "$(cat "$out/clippy.rc")" = 0 ] || fail clippy "$out/clippy.log"

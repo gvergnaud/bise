@@ -74,7 +74,7 @@ gate log are lost; the report says so (`gate logs start <date>`).
 | heavy-run slot wait p50 | 5 min | |
 | full gates red | 20 % | a red gate for nothing costs a rerun; above that, fix flakes first |
 | wakes that ran to --max | 0 | a dead job nobody noticed |
-| vitest-related misses | 0 | quick's desktop_check runs only the vitest files related to the change (gate.sh desktop_related, `<gate dir>/vitest-related.jsonl`); a file red in a full gate that a green related quick before it skipped is a suspect miss: one, and quick goes back to the whole `pnpm check` (review-gates m_33177) |
+| vitest-related misses | 0 | quick's desktop_check runs only the vitest files related to the change (tests/gate_plan.py drel, `<gate dir>/vitest-related.jsonl`); a file red in a full gate that a green related quick before it skipped is a suspect miss: one, and quick goes back to the whole `pnpm check` (review-gates m_33177) |
 | spawn -> on main p50 | 3 h | Gabriel's metric (flow-time): 4.8 h on the 111 tasks archived 16-20 oct |
 
 ## How to read it, what to do

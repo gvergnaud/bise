@@ -2,7 +2,7 @@
 """The crates that read a changed file at compile time from outside their folder (review-gates
 m_37101): include_str!/include_bytes!/include! of a path, plain or concat!(env!("CARGO_MANIFEST_DIR"),
 "..."), and Path::new(env!("CARGO_MANIFEST_DIR")).join("...") (a folder a test reads). Read from the
-source each run, never a list by hand, so a new include is covered. tests/gate.sh's map_paths runs
+source each run, never a list by hand, so a new include is covered. tests/gate_plan.py (the gate's plan) runs
 this on the changed paths and maps each crate as a change in its folder (its tests and clippy).
 
   python3 tests/include_map.py <changed path>...   one line per crate hit: rust/<its folder>/(include)
