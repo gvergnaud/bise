@@ -35,8 +35,8 @@ export function HubNoteRow({ project }: { project: string }) {
   const words = notice.back === true ? '' : notice.text;
   return (
     <div className="th-notice info th-hubnote" role="status" data-level="info" data-testid="confirm.notice" data-app={tail?.kind}>
-      {/* an info line: no mark, its 16 column kept empty like the thread's info notice (ui-review m_43980) */}
-      <span className="b-rowmark" aria-hidden="true" />
+      {/* no mark and no empty mark column: its words on the column's left edge, as the thread's
+          text above it (designer m_55413) */}
       <span>
         {words}
         {tail !== null && (

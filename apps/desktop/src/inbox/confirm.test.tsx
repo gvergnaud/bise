@@ -33,6 +33,16 @@ describe('HubNoteRow', () => {
     expect(screen.getByTestId('confirm.notice').textContent).toBe('@x stays: nothing archived');
   });
 
+  it("no mark and no empty mark column: its words start on the column's left edge (designer m_55413)", () => {
+    const { store } = setup();
+    act(() => {
+      store.apply({ ev: 'notice', project: P, cmd: 'answer', text: 'sent to disk-audit: "on peut essayer". the drafts still wait for you.' });
+    });
+    const row = screen.getByTestId('confirm.notice');
+    expect(row.querySelector('.b-rowmark')).toBeNull();
+    expect(row.firstElementChild?.textContent).toBe('sent to disk-audit: "on peut essayer". the drafts still wait for you.');
+  });
+
   it("/flow's answer shows until the flow is known, then the composer's strip says it (designer m_43996)", () => {
     const { store } = setup();
     act(() => {

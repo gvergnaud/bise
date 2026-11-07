@@ -1,8 +1,9 @@
 /* src/inbox (amb-home): one inbox, the block at the bottom of every view (no ⌘I screen since
    designer m_19631); ds tokens only */
 /* a typed command's result (desktop-notices, designer): one quiet row in the thread, above the
-   composer, never a bar under it; tier 4 (dim sans 13, '·') from .th-notice.info. On the thread's
-   text column like the rows above it, its '·' on the column's left edge (his restart row sat 16 px
+   composer, never a bar under it; tier 4 (dim sans 13) from .th-notice.info, no mark and no empty
+   mark column (designer m_55413). On the thread's text column like the rows above it, its words on
+   the column's left edge (his restart row sat 16 px
    in from the screen's edge, left of the column: ambient-lead m_22827). Its width and left edge are
    the column's (thread.css's column rule, from --th-col-x): centred here, it slid right of a column
    that sits left of the right side, under the right bar (sent-line-overflow, his m_55331) */
