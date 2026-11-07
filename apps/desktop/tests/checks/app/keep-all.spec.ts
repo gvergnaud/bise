@@ -52,6 +52,24 @@ async function caretAtEnd(page: Page, field: ReturnType<Page['locator']>, words:
 }
 
 /**
+ * The next native menu (Menu.popup) is never drawn: its item `id` is picked as his click would,
+ * then the menu closes. Once: the popup after it is macOS's again.
+ */
+async function pickInNextMenu(s: Session, id: string): Promise<void> {
+  await s.app.evaluate(({ Menu }, pick) => {
+    const proto = Menu.prototype as unknown as { popup: (o?: { callback?: () => void }) => void };
+    const own = proto.popup;
+    proto.popup = function (this: { getMenuItemById: (i: string) => { click: () => void } | null }, o?: { callback?: () => void }) {
+      proto.popup = own;
+      const item = this.getMenuItemById(pick);
+      if (item === null) throw new Error(`no '${pick}' in the menu`);
+      item.click();
+      o?.callback?.();
+    };
+  }, id);
+}
+
+/**
  * One cycle on one userData: quit + relaunch (no start route), the one that loses the renderer's
  * memory and the core both; a reload and a core restart read the same keep files (app/keep.test.ts).
  * `check` reads everything back; returns the last session, still open.
@@ -96,38 +114,52 @@ test("app/keep-all: threads: two targets' drafts, ⌘F, an open row, the termina
   const MAIN = 'main: à finir après le café';
   const PERF = 'perf: la moitié d’une question 👍';
   const field = (p: Page) => p.locator('[data-testid="composer.field"]').first();
+  // ⌃` shows the terminal where it lives (terminal/panel.ts place): a shell tab in the right panel
+  // by default since bise fait mac, the bottom panel when he moved it there
+  const term = (p: Page) => p.locator(`[data-testid="terminal.panel"], [data-testid="terminal.tab"][data-project="${ACME}"]:not([hidden])`).first();
   const { s, userData, dispose } = await cycles({
     route: `agent/${ACME}/perf`,
-    setup: async ({ page }) => {
+    setup: async (s) => {
+      const { page } = s;
       await expect(field(page), "perf's composer").toBeVisible({ timeout: 10_000 });
       await field(page).click();
       await page.keyboard.type(PERF);
-      await page.getByTestId(`app.side.agent.${ACME}.main`).click();
+      // acme's row in the sidebar opens its main's thread (one row per project since a80965b1d;
+      // app/Sidebar.tsx ProjectItem)
+      await page.getByTestId(`app.side.project.${ACME}`).click();
       await expect(page.getByTestId('thread.screen')).toHaveAttribute('data-agent', 'main', { timeout: 5000 });
       await field(page).click();
       await page.keyboard.type(MAIN);
-      await page.getByTestId('app.right.agent.perf').click();
+      // back to perf by the bar's ‹ (a click on perf's outer row opens its ask in place when it asks)
+      await page.getByTestId('app.bar.back').click();
       await expect(page.getByTestId('thread.screen')).toHaveAttribute('data-agent', 'perf', { timeout: 5000 });
-      await page.getByTestId('thread.tools.17').click();
-      await expect(page.getByTestId('thread.tools.17')).toHaveAttribute('aria-expanded', 'true');
+      // the thread comes back by ‹ and settles (its kept scroll, the list's first draw): a click
+      // in that redraw can be lost, so he clicks again while the row is still closed
+      const tools = page.getByTestId('thread.tools.17');
+      await expect(async () => {
+        if ((await tools.getAttribute('aria-expanded')) !== 'true') await tools.click();
+        await expect(tools).toHaveAttribute('aria-expanded', 'true', { timeout: 1000 });
+      }).toPass({ timeout: 10_000 });
       await page.keyboard.press('Meta+f');
       await expect(page.getByTestId('thread.find.field'), '⌘F opens').toBeFocused({ timeout: 3000 });
       await page.keyboard.type('cold');
       await page.keyboard.press('Control+Backquote');
-      await expect(page.getByTestId('terminal.panel'), '⌃` shows the terminal panel').toBeVisible({ timeout: 5000 });
+      await expect(term(page), '⌃` shows the terminal').toBeVisible({ timeout: 5000 });
     },
-    check: async ({ page }, c) => {
+    check: async (s, c) => {
+      const { page } = s;
       await expect.soft(page.getByTestId('thread.screen'), `${c}: perf's thread`).toHaveAttribute('data-agent', 'perf', { timeout: 10_000 });
       await expect.soft(field(page), `${c}: perf's words`).toContainText(PERF, { timeout: 5000 });
       await expect.soft(page.getByTestId('thread.find.field'), `${c}: ⌘F's needle`).toHaveValue('cold');
       await expect.soft(page.getByTestId('thread.tools.17'), `${c}: the row he opened`).toHaveAttribute('aria-expanded', 'true');
-      await expect.soft(page.getByTestId('terminal.panel'), `${c}: the terminal panel`).toBeVisible();
+      await expect.soft(term(page), `${c}: the terminal`).toBeVisible();
       await caretAtEnd(page, field(page), PERF, `${c}, perf's composer`);
       await page.screenshot({ path: test.info().outputPath(`threads-${c.replace(/\W+/g, '-')}.png`) });
       // the other target's draft: acme main's
-      await page.getByTestId(`app.side.agent.${ACME}.main`).click();
+      await page.getByTestId(`app.side.project.${ACME}`).click();
+      await expect.soft(page.getByTestId('thread.screen'), `${c}: acme main's thread`).toHaveAttribute('data-agent', 'main', { timeout: 5000 });
       await expect.soft(field(page), `${c}: acme main's words`).toContainText(MAIN, { timeout: 5000 });
-      await page.getByTestId('app.right.agent.perf').click();
+      await page.getByTestId('app.bar.back').click();
       await expect(page.getByTestId('thread.screen')).toHaveAttribute('data-agent', 'perf', { timeout: 5000 });
     },
   });
@@ -161,7 +193,12 @@ test('app/keep-all: agents: Tune with a half-typed rename and model id, then the
   const MODEL = 'mistral/devstral-med';
   const { dispose } = await cycles({
     route: `agents/${ACME}`,
-    setup: async ({ page }) => {
+    setup: async (s) => {
+      const { page } = s;
+      // the row's '…' opens macOS's own menu (bise fait mac, main/menu-popup.ts Menu.popup): drawn
+      // on his screen (the harness rule: a window of the app on screen, 6,34 243x294) and out of
+      // Playwright's reach. His pick, Rename…, is made in the menu itself, never drawn.
+      await pickInNextMenu(s, 'rename');
       await page.getByTestId('agents.more.perf').click();
       const rename = page.getByTestId('agents.rename.perf');
       await expect(rename, "perf's Tune opens with its name field").toBeVisible({ timeout: 5000 });

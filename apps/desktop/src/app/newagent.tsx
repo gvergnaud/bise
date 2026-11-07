@@ -8,13 +8,27 @@ import { Sheet } from '@/ds';
 import { NewAgentSheet } from '@/agents/Tune';
 import { frame } from '@/proto/words_frame.gen';
 import { useProjects } from '@/store';
+import { keep } from './keep';
 
-let asked: string | null = null;
+// the open sheet is kept (keep.ts, a view bit), so a reload or a relaunch opens it again with his
+// half-typed brief and name (app/keep-all: 'the new-agent sheet', lost when the sheet left the
+// agents page for the window); read once, at its first use
+const KEPT = 'newagent.asked';
+let asked: string | null | undefined;
 const listeners = new Set<() => void>();
 
+function now(): string | null {
+  if (asked === undefined) {
+    const v = keep.view(KEPT);
+    asked = typeof v === 'string' ? v : null;
+  }
+  return asked;
+}
+
 function set(project: string | null): void {
-  if (asked === project) return;
+  if (now() === project) return;
   asked = project;
+  keep.setView(KEPT, project ?? undefined);
   for (const l of listeners) l();
 }
 
@@ -32,7 +46,7 @@ export function useNewAgentAsked(): string | null {
         listeners.delete(cb);
       };
     },
-    () => asked,
+    now,
   );
 }
 
