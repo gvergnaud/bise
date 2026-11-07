@@ -589,9 +589,10 @@ pub(crate) fn open(app: &mut crate::App, url: &str) -> String {
         let Some(a) = crate::artifacts::get(&id) else {
             return format!("no artifact {} (it was removed?)", id);
         };
-        if let (None, crate::artifacts::How::Diff(n)) = (v, crate::artifacts::how(&a, None, true)) {
-            crate::diffview::request(app, crate::diffview::Ask::Pr(n), crate::diffview::By::Click);
-            return format!("PR #{} · its diff", n);
+        if let (None, crate::artifacts::How::Diff(url)) = (v, crate::artifacts::how(&a, None, true)) {
+            let title = crate::diffview::pr_title(&url);
+            crate::diffview::request(app, crate::diffview::Ask::Pr(url), crate::diffview::By::Click);
+            return format!("{title} · its diff");
         }
         return crate::artifacts::open(app, &a, v);
     }

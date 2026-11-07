@@ -758,12 +758,15 @@ pub enum HubCmd {
     /// a change, once (`diff` answers): exactly one of `agent` (its
     /// change; `commit`: one commit of it instead, a landed one: the
     /// review's "merged · e0f3df5"), `branch` (a local branch vs the
-    /// trunk), `pr` (an open pull request) or `range` (`a..b`, with
+    /// trunk), `pr_url` (a pull request by its link: the PR as the forge
+    /// has it, against its base) or `range` (`a..b`, with
     /// `agent` naming it in the title), `artifact` (a `.diff` file kept
     /// as an artifact, its `version`, none: the newest; a feature's diff);
     /// `req` the client's number for
     /// this ask, echoed in the answer (the terminal's /diff drops older
-    /// answers). Anything else is an `error`
+    /// answers). Anything else is an `error`. `pr` is older clients'
+    /// (that number in the hub's own repo, read as its link); `pr_url`
+    /// wins when both come
     Diff {
         project: Project,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -778,6 +781,9 @@ pub enum HubCmd {
         branch: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pr: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts", ts(optional))]
+        pr_url: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         range: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -60,6 +60,7 @@
 {"cmd":"send","project":"acme-1a2b3c4d","agent":"main","text":"what's running?","mode":"now","via":"capsule","voice":true}
 {"cmd":"diff","project":"acme-1a2b3c4d","branch":"sb/perf","req":4}
 {"cmd":"diff","project":"acme-1a2b3c4d","pr":31,"req":5}
+{"cmd":"diff","project":"acme-1a2b3c4d","pr_url":"https://github.com/acme/web/pull/31","req":5}
 {"cmd":"diff","project":"acme-1a2b3c4d","agent":"perf","range":"e0f3df5^..e0f3df5","req":6}
 {"cmd":"branches","project":"acme-1a2b3c4d"}
 {"cmd":"scheduled_run","project":"acme-1a2b3c4d","id":48}

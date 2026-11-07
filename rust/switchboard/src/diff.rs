@@ -318,19 +318,42 @@ pub fn range(dir: &Path, r: &str) -> Result<(Vec<File>, usize), String> {
     Ok((files, commits))
 }
 
-/// A PR, through `gh pr diff <n>`.
-pub fn pr(dir: &Path, n: u64) -> Result<Vec<File>, String> {
-    let out = Command::new("gh")
-        .current_dir(dir)
-        .args(["pr", "diff", &n.to_string(), "--color", "never"])
-        .output()
-        .map_err(|e| format!("gh: {}", e))?;
+/// A PR by its link, against its base: the place's checkout when it is
+/// at the PR's head (`git diff origin/<base>...<head>`, its folder for
+/// the files), else the forge's (`gh pr diff <url>`).
+pub fn pr(url: &str, local: Option<&PrLocal>) -> Result<(Vec<File>, Option<std::path::PathBuf>), String> {
+    if let Some(l) = local.filter(|l| l.at_head()) {
+        let range = format!("origin/{}...{}", l.base, l.head);
+        if let Ok(text) = git(&l.dir, &diff_args(&[range.as_str()])) {
+            return Ok((parse(&text), Some(l.dir.clone())));
+        }
+    }
+    let out = Command::new("gh").args(["pr", "diff", url, "--color", "never"]).output().map_err(|e| format!("gh: {}", e))?;
     if !out.status.success() {
         let why = String::from_utf8_lossy(&out.stderr);
         let why = why.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("it failed");
-        return Err(format!("gh couldn't read PR #{}: {}", n, why));
+        return Err(format!("gh couldn't read {}: {}", url, why));
     }
-    Ok(parse(&String::from_utf8_lossy(&out.stdout)))
+    Ok((parse(&String::from_utf8_lossy(&out.stdout)), None))
+}
+
+/// A place that has a PR checked out: its folder, the PR's base and
+/// head as the forge said. Its diff is the PR's only while its HEAD is
+/// that head (unpushed or newer work: the forge's diff instead).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PrLocal {
+    pub dir: std::path::PathBuf,
+    pub base: String,
+    pub head: String,
+}
+
+impl PrLocal {
+    fn at_head(&self) -> bool {
+        !self.base.is_empty()
+            && !self.head.is_empty()
+            && self.dir.is_dir()
+            && git(&self.dir, &["rev-parse", "HEAD"]).is_ok_and(|h| h.trim() == self.head)
+    }
 }
 
 /// The local branches ahead of `base`, with their + and − and commits:

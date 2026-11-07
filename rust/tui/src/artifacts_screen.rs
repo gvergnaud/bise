@@ -293,9 +293,9 @@ fn open_selected(app: &mut App) {
     let Some(a) = sel_row(sc) else { return };
     let v = sc.versions.and_then(|k| a.versions.iter().rev().nth(k)).map(|x| x.v);
     if v.is_none() {
-        if let artifacts::How::Diff(n) = artifacts::how(&a, None, true) {
+        if let artifacts::How::Diff(url) = artifacts::how(&a, None, true) {
             app.artifacts = None;
-            crate::diffview::request(app, crate::diffview::Ask::Pr(n), crate::diffview::By::Key);
+            crate::diffview::request(app, crate::diffview::Ask::Pr(url), crate::diffview::By::Key);
             return;
         }
     }

@@ -584,8 +584,17 @@ impl Shell {
             }
         } else if !s("branch").is_empty() {
             Ask::Branch(s("branch"))
-        } else if let Some(n) = v.get("pr").and_then(|x| x.as_u64()) {
-            Ask::Pr(n)
+        } else if let Some(at) = pr_at(v) {
+            // a place's checkout of that PR, its base: read in the thread
+            let link = |u: &str| crate::forge::pr_link(u).map(|l| l.url);
+            let local = match &at {
+                PrAt::Url(u) => crate::place::places(&self.hub.st, &self.hub.prs).into_iter().find_map(|p| {
+                    let pr = p.pr.filter(|pr| link(&pr.url).as_deref() == Some(u.as_str()))?;
+                    Some(diff::PrLocal { dir: PathBuf::from(&p.path), base: pr.facts.base.clone(), head: pr.head_oid.clone() })
+                }),
+                PrAt::Number(_) => None,
+            };
+            Ask::Pr(at, local)
         } else if !s("artifact").is_empty() {
             let version = v.get("version").and_then(Value::as_u64);
             artifact_ask(&self.art_store(), &s("artifact"), version)
@@ -672,10 +681,35 @@ enum Ask {
     Agent(String, Where, Option<String>, bool),
     Branch(String),
     Range(String, String),
-    Pr(u64),
+    /// a PR, and the place that has it checked out
+    Pr(PrAt, Option<diff::PrLocal>),
     /// a `.diff` kept as an artifact ([`artifact_ask`])
     Artifact(ArtDiff),
     Bad(String),
+}
+
+/// Which PR a diff asks: its link (pr_link's one form), or an older
+/// client's number in the hub's own repo (made a link in the thread:
+/// `origin`'s repo is read by git, never on the loop).
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum PrAt {
+    Url(String),
+    Number(u64),
+}
+
+/// The PR a diff op asks (`pr_url` wins over `pr`); none: not a PR's.
+fn pr_at(v: &Value) -> Option<PrAt> {
+    match v.get("pr_url").and_then(Value::as_str) {
+        Some(u) => crate::forge::pr_link(u).map(|l| PrAt::Url(l.url)),
+        None => v.get("pr").and_then(Value::as_u64).map(PrAt::Number),
+    }
+}
+
+/// An older client's PR number as its link: that number in `origin`'s
+/// repo (`remote` its url).
+fn pr_url_in(remote: &str, n: u64) -> Option<String> {
+    let r = crate::forge::repo_of_url(remote)?;
+    crate::forge::pr_link(&format!("https://{}/{}/{}/pull/{}", r.host, r.owner, r.name, n)).map(|l| l.url)
 }
 
 /// A `.diff` artifact's version to read: its id, title and version, and
@@ -793,10 +827,19 @@ fn diff_answer(ask: Ask, shared: &Path, how: &BaseHow, req: Value) -> Value {
                 (f, Some(shared.clone()))
             })
         }
-        Ask::Pr(n) => {
-            ev["title"] = json!(format!("PR #{}", n));
-            ev["pr"] = json!(n);
-            diff::pr(&shared, n).map(|f| (f, None))
+        Ask::Pr(at, local) => {
+            let url = match at {
+                PrAt::Url(u) => Some(u),
+                PrAt::Number(n) => crate::worktree::git(&shared, &["remote", "get-url", "origin"]).ok().and_then(|r| pr_url_in(r.trim(), n)),
+            };
+            match url.and_then(|u| crate::forge::pr_link(&u)) {
+                Some(l) => {
+                    ev["title"] = json!(format!("PR #{}", l.number));
+                    ev["pr"] = json!(l.number);
+                    diff::pr(&l.url, local.as_ref())
+                }
+                None => Err("this PR isn't on this project's forge".into()),
+            }
         }
         // its text is a diff already: the one parser, no git
         Ask::Artifact(a) => {
@@ -855,6 +898,22 @@ pub(super) fn landed_rec(shared: &Path, agent: &str, target: &str, sha: &str, co
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An older client's `"pr":31` and a new one's link ask the same PR
+    /// (architect m_54680): the number is made a link in origin's repo;
+    /// the link wins when both come.
+    #[test]
+    fn an_old_pr_number_and_its_link_ask_the_same_pr() {
+        let url = "https://github.com/acme/web/pull/31";
+        assert_eq!(pr_at(&json!({"pr": 31})), Some(PrAt::Number(31)));
+        assert_eq!(pr_at(&json!({"pr_url": "https://GitHub.com/Acme/Web/pull/31"})), Some(PrAt::Url(url.into())));
+        assert_eq!(pr_at(&json!({"pr": 9, "pr_url": url})), Some(PrAt::Url(url.into())));
+        for remote in ["git@github.com:acme/web.git", "https://github.com/acme/web.git", "https://github.com/acme/web"] {
+            assert_eq!(pr_url_in(remote, 31).as_deref(), Some(url), "{remote}");
+        }
+        assert_eq!(pr_at(&json!({"branch": "x"})), None);
+        assert_eq!(pr_url_in("/a/local/folder", 31), None);
+    }
 
     fn sh(dir: &Path, args: &[&str]) {
         let ok = std::process::Command::new("git")

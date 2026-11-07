@@ -227,8 +227,8 @@ impl Shell {
             HubCmd::ArtifactsSeen { at_ms, .. } => self.artifacts_seen(at_ms),
             // git in a thread (art.rs), the typed answer to this client
             // diff/read's asks (agent, branch, pr, range, artifact), checked here
-            HubCmd::Diff { project, agent, commit, branch, pr, range, req, artifact, version } => {
-                let ask = DiffAsk { agent, commit, branch, pr, range, req, artifact, version };
+            HubCmd::Diff { project, agent, commit, branch, pr, pr_url, range, req, artifact, version } => {
+                let ask = DiffAsk { agent, commit, branch, pr, pr_url, range, req, artifact, version };
                 if let Err(e) = ask.check() {
                     return self.proto_error(id, &tag, &e);
                 }

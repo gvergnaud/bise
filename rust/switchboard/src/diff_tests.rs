@@ -213,6 +213,32 @@ fn a_pr_checkout_is_compared_to_origins_trunk_not_a_stale_local_main() {
     assert_eq!(checkout(&d, "main").unwrap().1, 7, "what the stale base counted");
 }
 
+/// A PR's diff from the place that has it: its checkout against
+/// origin's base while HEAD is the PR's head; unpushed or newer work
+/// there is not the PR's: the forge's diff instead (never asked here).
+#[test]
+fn a_pr_reads_its_place_only_at_the_prs_head() {
+    let d = repo("pr-local");
+    sh(&d, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    sh(&d, &["checkout", "-q", "-b", "sb/pr"]);
+    std::fs::write(d.join("mine.txt"), "m\n").unwrap();
+    sh(&d, &["add", "."]);
+    sh(&d, &["commit", "-q", "-m", "mine"]);
+    let head = git(&d, &["rev-parse", "HEAD"]).unwrap().trim().to_string();
+    let local = PrLocal { dir: d.clone(), base: "main".into(), head: head.clone() };
+    assert!(local.at_head());
+    let (files, root) = pr("https://github.com/o/r/pull/7", Some(&local)).unwrap();
+    assert_eq!((files.iter().map(|f| f.path.as_str()).collect::<Vec<_>>(), root), (vec!["mine.txt"], Some(d.clone())));
+    // a commit since the push: not the PR any more
+    std::fs::write(d.join("later.txt"), "l\n").unwrap();
+    sh(&d, &["add", "."]);
+    sh(&d, &["commit", "-q", "-m", "later"]);
+    assert!(!local.at_head());
+    // no base known: never a guess
+    assert!(!PrLocal { base: String::new(), ..local.clone() }.at_head());
+    assert!(!PrLocal { dir: d.join("gone"), ..local }.at_head());
+}
+
 /// pr-changes-blank: one answer keeps whole files while they fit the
 /// cap; the files after keep their name and counts, not their lines.
 #[test]

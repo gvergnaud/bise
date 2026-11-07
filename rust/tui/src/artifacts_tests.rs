@@ -70,7 +70,7 @@ fn each_kind_opens_where_it_belongs() {
     assert_eq!(how(&a("sheet", "/w/plans.xlsx"), None, false), How::App("/w/plans.xlsx".into()));
     assert_eq!(how(&a("code", "/w/run"), None, false), How::Editor("/w/run".into()));
     let pr = Artifact { pr: Some(Pr { repo: "o/r".into(), number: 6, branch: "b".into() }), ..a("pr", "https://github.com/o/r/pull/6") };
-    assert_eq!(how(&pr, None, true), How::Diff(6));
+    assert_eq!(how(&pr, None, true), How::Diff("https://github.com/o/r/pull/6".into()));
     assert_eq!(how(&pr, None, false), How::Browser("https://github.com/o/r/pull/6".into()));
     // a .diff or .patch kept (a feature's diff, try-diff-open): the diff
     // panel, its newest version; an older version opens its file

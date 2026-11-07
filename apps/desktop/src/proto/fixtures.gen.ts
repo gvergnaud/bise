@@ -190,6 +190,7 @@ export const hub_cmd: readonly HubCmd[] = [
   {"agent":"main","cmd":"send","mode":"now","project":"acme-1a2b3c4d","text":"what's running?","via":"capsule","voice":true},
   {"branch":"sb/perf","cmd":"diff","project":"acme-1a2b3c4d","req":4},
   {"cmd":"diff","pr":31,"project":"acme-1a2b3c4d","req":5},
+  {"cmd":"diff","pr_url":"https://github.com/acme/web/pull/31","project":"acme-1a2b3c4d","req":5},
   {"agent":"perf","cmd":"diff","project":"acme-1a2b3c4d","range":"e0f3df5^..e0f3df5","req":6},
   {"cmd":"branches","project":"acme-1a2b3c4d"},
   {"cmd":"scheduled_run","id":48,"project":"acme-1a2b3c4d"},

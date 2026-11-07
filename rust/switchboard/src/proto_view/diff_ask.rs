@@ -12,7 +12,10 @@ pub struct DiffAsk {
     pub agent: Option<String>,
     pub commit: Option<String>,
     pub branch: Option<String>,
+    /// older clients': that number in the hub's own repo
     pub pr: Option<u64>,
+    /// a PR by its link (`forge::pr_link`); wins over `pr`
+    pub pr_url: Option<String>,
     pub range: Option<String>,
     pub req: Option<u64>,
     pub artifact: Option<String>,
@@ -48,9 +51,13 @@ impl DiffAsk {
     /// with an artifact; each one well formed.
     pub fn check(&self) -> Result<(), String> {
         let agent = self.agent.is_some() && self.range.is_none();
-        let n = [agent, self.branch.is_some(), self.pr.is_some(), self.range.is_some(), self.artifact.is_some()].iter().filter(|x| **x).count();
+        let pr = self.pr.is_some() || self.pr_url.is_some();
+        let n = [agent, self.branch.is_some(), pr, self.range.is_some(), self.artifact.is_some()].iter().filter(|x| **x).count();
         if n != 1 {
             return Err("diff: one of agent, branch, pr, range or artifact".into());
+        }
+        if let Some(u) = self.pr_url.as_deref().filter(|u| crate::forge::pr_link(u).is_none()) {
+            return Err(format!("diff: {u} is not a pull request's link"));
         }
         if self.version.is_some() && self.artifact.is_none() {
             return Err("diff: a version is an artifact's".into());
@@ -86,8 +93,10 @@ impl DiffAsk {
         if let Some(b) = &self.branch {
             v["branch"] = json!(b);
         }
-        if let Some(p) = self.pr {
-            v["pr"] = json!(p);
+        match (&self.pr_url, self.pr) {
+            (Some(u), _) => v["pr_url"] = json!(u),
+            (None, Some(p)) => v["pr"] = json!(p),
+            (None, None) => {}
         }
         if let Some(r) = &self.range {
             v["range"] = json!(r);
@@ -187,6 +196,16 @@ mod tests {
         });
         assert_eq!(a.op(), json!({"agent": "perf", "range": "e0f3df5^..e0f3df5"}));
         assert_eq!(ask(|a| a.pr = Some(31)).op(), json!({"pr": 31}));
+        let url = "https://github.com/acme/web/pull/31";
+        assert_eq!(ask(|a| a.pr_url = Some(url.into())).op(), json!({"pr_url": url}));
+        // both: the link wins, no error
+        let both = ask(|a| {
+            a.pr = Some(9);
+            a.pr_url = Some(url.into());
+        });
+        assert!(both.check().is_ok());
+        assert_eq!(both.op(), json!({"pr_url": url}));
+        assert!(ask(|a| a.pr_url = Some("https://github.com/acme/web".into())).check().is_err(), "not a PR's link");
         assert_eq!(ask(|a| a.branch = Some("x".into())).op(), json!({"branch": "x"}));
         let art = ask(|a| {
             a.artifact = Some("cu-diff".into());

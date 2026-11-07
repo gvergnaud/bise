@@ -622,8 +622,8 @@ pub(crate) enum How {
     Browser(String),
     Editor(std::path::PathBuf),
     App(std::path::PathBuf),
-    /// a PR: its diff in the panel
-    Diff(u64),
+    /// a PR: its diff in the panel, by its link
+    Diff(String),
     /// a `.diff` or `.patch` file (a feature's diff): its files and
     /// hunks in the diff panel, the hub parses it (try-diff-open)
     Patch(String),
@@ -638,8 +638,8 @@ const EDITOR_EXT: &[&str] = &[
 /// How `a` (its version `v`) opens. A PR opens its diff when `diff`.
 pub(crate) fn how(a: &Artifact, v: Option<u32>, diff: bool) -> How {
     if diff {
-        if let Some(pr) = a.pr.as_ref().filter(|p| p.number > 0) {
-            return How::Diff(pr.number);
+        if a.pr.as_ref().is_some_and(|p| p.number > 0) && a.target.starts_with("https://") {
+            return How::Diff(a.target.clone());
         }
     }
     let t = a.open_target(v);

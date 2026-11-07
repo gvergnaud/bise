@@ -61,8 +61,8 @@ pub(crate) enum Ask {
     Agent(String),
     /// a branch vs main
     Branch(String),
-    /// a GitHub PR
-    Pr(u64),
+    /// a PR, by its link (the hub's diff of it against its base)
+    Pr(String),
     /// a landed range `from..to`, by an agent
     Range(String, String),
     /// a `.diff` kept as an artifact (a feature's diff), its newest
@@ -197,7 +197,7 @@ fn ask_json(ask: &Ask, req: u64) -> Value {
     match ask {
         Ask::Agent(a) => serde_json::json!({"req": req, "agent": a}),
         Ask::Branch(br) => serde_json::json!({"req": req, "branch": br}),
-        Ask::Pr(n) => serde_json::json!({"req": req, "pr": n}),
+        Ask::Pr(url) => serde_json::json!({"req": req, "pr_url": url}),
         Ask::Range(r, a) => serde_json::json!({"req": req, "range": r, "agent": a}),
         Ask::Artifact(id) => serde_json::json!({"req": req, "artifact": id}),
     }
@@ -227,7 +227,7 @@ pub(crate) fn request(app: &mut App, ask: Ask, by: By) {
         Ask::Agent(a) if app.sb.in_shared_folder(a) => "your folder vs main".to_string(),
         Ask::Agent(a) => format!("{} vs main", a),
         Ask::Branch(b) => format!("{} vs main", b),
-        Ask::Pr(n) => format!("PR #{}", n),
+        Ask::Pr(url) => pr_title(url),
         Ask::Range(r, a) => range_title(r, a),
         Ask::Artifact(id) => id.clone(),
     };
@@ -262,6 +262,13 @@ pub(crate) fn request(app: &mut App, ask: Ask, by: By) {
 
 /// A land's title: `diff-focus landed on main · e0f3df5` (the head adds
 /// `· 11 files`), the range's own words without an agent.
+/// A PR's panel title from its link: `PR #412` (GitLab's `!412`).
+pub(crate) fn pr_title(url: &str) -> String {
+    let n = url.trim_end_matches('/').rsplit('/').next().unwrap_or("");
+    let sigil = if url.contains("/-/merge_requests/") { '!' } else { '#' };
+    format!("PR {sigil}{n}")
+}
+
 pub(crate) fn range_title(range: &str, agent: &str) -> String {
     let to: String = range.split("..").last().unwrap_or(range).trim_start_matches('.').chars().take(7).collect();
     if agent.is_empty() {
@@ -1173,7 +1180,7 @@ pub(crate) fn ask_of_url(url: &str) -> Option<Ask> {
     match kind {
         "agent" => Some(Ask::Agent(arg.to_string())),
         "branch" => Some(Ask::Branch(arg.to_string())),
-        "pr" => arg.parse().ok().map(Ask::Pr),
+        "pr" => arg.starts_with("https://").then(|| Ask::Pr(arg.to_string())),
         "artifact" => Some(Ask::Artifact(arg.to_string())),
         "range" => {
             let (range, agent) = arg.split_once("?agent=").unwrap_or((arg, ""));
@@ -1187,7 +1194,7 @@ pub(crate) fn url_of(ask: &Ask) -> String {
     match ask {
         Ask::Agent(a) => format!("bise-diff:agent/{}", a),
         Ask::Branch(b) => format!("bise-diff:branch/{}", b),
-        Ask::Pr(n) => format!("bise-diff:pr/{}", n),
+        Ask::Pr(url) => format!("bise-diff:pr/{}", url),
         Ask::Range(r, a) => format!("bise-diff:range/{}?agent={}", r, a),
         Ask::Artifact(id) => format!("bise-diff:artifact/{}", id),
     }

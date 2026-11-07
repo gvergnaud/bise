@@ -157,7 +157,11 @@ fn the_doors_name_what_they_open() {
     let ask = Ask::Range("a1b2c3d..e4f5a6b".into(), "pricing-page".into());
     assert_eq!(ask_of_url(&url_of(&ask)), Some(ask));
     assert_eq!(ask_of_url("bise-diff:branch/sculpt"), Some(Ask::Branch("sculpt".into())));
-    assert_eq!(ask_of_url("bise-diff:pr/7"), Some(Ask::Pr(7)));
+    let pr = Ask::Pr("https://github.com/o/r/pull/7".into());
+    assert_eq!(ask_of_url(&url_of(&pr)), Some(pr));
+    assert_eq!(ask_of_url("bise-diff:pr/7"), None, "a PR is its link");
+    assert_eq!(pr_title("https://github.com/o/r/pull/7"), "PR #7");
+    assert_eq!(pr_title("https://gitlab.com/g/r/-/merge_requests/9"), "PR !9");
     assert_eq!(ask_of_url("https://x"), None);
     assert!(is_lock("web/package-lock.json") && is_lock("Cargo.lock") && !is_lock("src/lock.rs"));
     use crate::diffbranches::{branch_words, Branch};
