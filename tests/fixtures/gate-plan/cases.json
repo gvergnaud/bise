@@ -795,5 +795,48 @@
     "bypath": []
    }
   }
+ },
+ {
+  "name": "a bims file: the bims-laws project too",
+  "paths": [
+   "apps/desktop/src/bims/sit.ts"
+  ],
+  "exists": [
+   "apps/desktop/src/bims/sit.ts"
+  ],
+  "want": {
+   "desktop": {
+    "bims": true
+   }
+  }
+ },
+ {
+  "name": "a thread file: unit only, no bims-laws",
+  "paths": [
+   "apps/desktop/src/thread/Code.tsx"
+  ],
+  "exists": [
+   "apps/desktop/src/thread/Code.tsx"
+  ],
+  "want": {
+   "desktop": {
+    "bims": false
+   }
+  }
+ },
+ {
+  "name": "the vitest config: the whole app, no bims-laws (the full gate runs them)",
+  "paths": [
+   "apps/desktop/vitest.config.ts"
+  ],
+  "exists": [
+   "apps/desktop/vitest.config.ts"
+  ],
+  "want": {
+   "desktop": {
+    "bims": false,
+    "rel": []
+   }
+  }
  }
 ]

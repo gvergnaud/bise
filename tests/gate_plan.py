@@ -161,6 +161,7 @@ BYPATH_DYNAMIC = {
     # a temp folder of its own: no repo file
     "src/main/images.test.ts": [],
 }
+BIMS_PATHS = ("apps/desktop/src/bims/",)
 DYNAMIC_RX = re.compile(r"readdir|import\.meta\.glob|readFileSync\([^)]*\$\{")
 PATH_LIT = re.compile(r"""['"`]([^'"`\s]*?\.(?:css|ts|tsx|mts|js|mjs|json|md|rs|html|svg|txt|bend))['"`]""")
 PROOF_RX = re.compile(r"^bend/(core|hub|vendor|laws|proofs)/.*\.bend$")
@@ -296,7 +297,10 @@ def plan(changed, tree):
     desktop = None
     if why:
         rel = desktop_rel(changed, tree)
-        desktop = {"why": why, "rel": rel, "bypath": bypath_pick(changed, tree) if rel else []}
+        # the bims' world simulations (vitest project bims-laws, ~1000 s of cpu) only when a bims
+        # file changed; the full gate (the tip, the nightly, a release) runs them always
+        bims = any(p.startswith(BIMS_PATHS) for p in changed)
+        desktop = {"why": why, "rel": rel, "bypath": bypath_pick(changed, tree) if rel else [], "bims": bims}
     heavy = ""
     if pkgs:
         heavy += " rust(%s )" % "".join(" " + c for c in pkgs)
@@ -340,7 +344,7 @@ def to_sh(p):
     v = {"pkgs": " ".join(p["pkgs"]), "hub_changed": p["hub_changed"], "bend_changed": p["bend_changed"],
          "proof_files": " ".join(p["proofs"]),
          "core_gen": p["core_gen"], "dwhy": d.get("why") or "", "drel": " ".join(d.get("rel") or []),
-         "dbypath": " ".join(d.get("bypath") or []),
+         "dbypath": " ".join(d.get("bypath") or []), "dbims": int(bool(d.get("bims"))),
          "heavy": p["heavy"], "land_steps": int(p["land_steps"]), **p["flags"]}
     lines = ["%s=%s" % (k, shlex.quote(str(x))) for k, x in v.items()]
     # the self-tests as two bash arrays of "name<TAB>command": this plan's, and every one (full)

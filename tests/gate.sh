@@ -756,15 +756,17 @@ desktop_check() {
     # by path (fs reads, globs, a file URL: review-gates m_33177): only the ones that read a
     # changed file, or whose reads are unknown (the plan's dbypath, tests/gate_plan.py
     # bypath_reads; all 38 took 19 s each run); the full gate runs every one
-    local drc ran
+    local drc ran projects="--project unit"
+    # the bims' world simulations (vitest project bims-laws) only on a bims change (the plan's dbims)
+    [ "${dbims:-0}" = 1 ] && projects="--project unit --project bims-laws"
     # lint: the changed files only (eslint of the whole app took 527 s at load 30, of 3 files
     # 14 s, fast-loop m_46374); typecheck still covers every file, and the full gate lints all.
     # --no-warn-ignored: $rel holds .css/.webp/.html too, which eslint warns are ignored, and
     # --max-warnings 0 made a css-only change red (review-gates m_46660)
     # shellcheck disable=SC2086
     (cd "$root/apps/desktop" && python3 ../../tests/conflict_markers.py && pnpm -s typecheck && pnpm -s exec eslint --max-warnings 0 --no-warn-ignored $rel \
-        && pnpm -s exec vitest related --run --passWithNoTests $rel && echo "@@ by path" \
-        && { [ -z "$dbypath" ] || pnpm -s exec vitest run $dbypath; }) >"$log" 2>&1
+        && pnpm -s exec vitest related --run --passWithNoTests $projects $rel && echo "@@ by path" \
+        && { [ -z "$dbypath" ] || pnpm -s exec vitest run --passWithNoTests $projects $dbypath; }) >"$log" 2>&1
     drc=$?
     # what it ran, said and kept (<gate dir>/vitest-related.jsonl: the audit's 'vitest-related miss')
     local tests_rx='(✓|❯|×|FAIL) +src/[^ ]+\.test\.tsx?' related
@@ -782,7 +784,11 @@ desktop_check() {
   # typed rules read other files, which the cache doesn't track: a type change can leave an
   # unchanged file's red hidden there, so every other gate (full, land, the tip gate, a
   # release) lints cold with `check` (main m_54506, architect)
-  elif (cd "$root/apps/desktop" && pnpm -s "$([ "$mode" = quick ] && [ "${1:-}" != strict ] && echo check:cached || echo check)") >"$log" 2>&1; then echo "ok   desktop_check ($((SECONDS - s))s)"; return 0; fi
+  # (check:cached tests the unit project; the bims' world simulations after it when a bims file
+  # changed, the plan's dbims)
+  elif (cd "$root/apps/desktop" && pnpm -s "$([ "$mode" = quick ] && [ "${1:-}" != strict ] && echo check:cached || echo check)" \
+      && { [ "$mode" != quick ] || [ "${1:-}" = strict ] || [ "${dbims:-0}" = 0 ] || pnpm -s exec vitest run --project bims-laws; }) >"$log" 2>&1
+  then echo "ok   desktop_check ($((SECONDS - s))s$([ "$mode" = quick ] && [ "${1:-}" != strict ] && [ "${dbims:-0}" = 0 ] && echo ', no bims-laws: no bims change'))"; return 0; fi
   echo "FAIL desktop_check"
   grep -E "error|Error|FAIL|✗|×" "$log" | head -30
   # one name a tree's gate (the agent's), never shared: side-resize's red overwrote

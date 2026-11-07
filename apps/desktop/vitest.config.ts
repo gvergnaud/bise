@@ -6,15 +6,34 @@
 // in, a screen's view and the sent commands out, in milliseconds.
 import { availableParallelism } from 'node:os';
 import { resolve } from 'node:path';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+
+// every test: src/**/*.test.ts(x) next to its code, the feature tests, the checks' pure helpers
+// (tests/checks/**/*.test.ts: composer/still.ts; the checks themselves are *.spec.ts)
+const TESTS = ['src/**/*.test.ts', 'src/**/*.test.tsx', 'tests/feature/**/*.test.ts', 'tests/checks/**/*.test.ts'];
+// the bims' world simulations: the slowest files of the suite (measured 2026-11-07, 4 workers at
+// load 22: nap 209 s, clip 206 s, cozy 154 s, collide 145 s, shade 64 s, walklaw 46 s,
+// pathlaw 44 s, workshop-view 27 s, standing 24 s, parkpath 22 s)
+const BIMS_LAWS = [
+  'src/bims/render/nap.test.ts',
+  'src/bims/render/clip.test.ts',
+  'src/bims/render/cozy.test.ts',
+  'src/bims/render/collide.test.ts',
+  'src/bims/render/shade.test.ts',
+  'src/bims/walklaw.test.ts',
+  'src/bims/render/pathlaw.test.ts',
+  'src/bims/render/maps/workshop-view.test.ts',
+  'src/bims/render/standing.test.ts',
+  'src/bims/parkpath.test.ts',
+];
 
 export default defineConfig({
   plugins: [react()],
   resolve: { alias: { '@': resolve(__dirname, 'src') } },
   test: {
     // tests/checks/**/*.test.ts: a check's pure helpers (composer/still.ts); the checks are *.spec.ts
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'tests/feature/**/*.test.ts', 'tests/checks/**/*.test.ts'],
+    // (the projects' include, below: a root include would merge into each project's)
     environment: 'node',
     // an iframe's src is never fetched: happy-dom loaded every <iframe src="http://127.0.0.1:47123/p/…">
     // a component test renders (artifacts.test.tsx: 7 fetches a run, to nothing), and under load
@@ -29,5 +48,13 @@ export default defineConfig({
     // runner ('Timeout calling onTaskUpdate', -43's gate). 4 runs as fast here: the long bims
     // files set the wall time, and they yield between worlds (lying, walklaw, parkpath tests).
     maxWorkers: Math.max(1, Math.min(4, Math.floor(availableParallelism() / 2))),
+    // two projects (c3-quick-90s): bims-laws, the bims' world simulations (each file 20-210 s
+    // at load 22, ~1000 s of the bims' 1090), and unit, the rest. `pnpm test` runs both (the
+    // full gate, the tip, a release); the quick gate runs unit, and bims-laws only when a
+    // src/bims file changed (tests/gate_plan.py's dbims). A new slow bims law goes in BIMS_LAWS.
+    projects: [
+      { extends: true, test: { name: 'unit', include: TESTS, exclude: [...configDefaults.exclude, ...BIMS_LAWS] } },
+      { extends: true, test: { name: 'bims-laws', include: BIMS_LAWS } },
+    ],
   },
 });

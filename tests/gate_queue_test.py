@@ -104,9 +104,11 @@ def desktop_lint_cache_quick_only():
     nothing else; the cache lives in the tree's own node_modules, never shared."""
     import json
     s = json.load(open(os.path.join(HERE, "..", "apps", "desktop", "package.json")))["scripts"]
-    want = s["check"].replace("pnpm lint ", "pnpm lint:cached ")
-    check(want.endswith(" && pnpm build") and s.get("check:cached") == want[:-len(" && pnpm build")],
-          "check:cached is check with lint:cached for lint, without its build: %r" % s.get("check:cached"))
+    want = s["check"].replace("pnpm lint ", "pnpm lint:cached ").replace("pnpm test ", "pnpm test:quick ")
+    check(want.endswith(" && pnpm build") and s.get("check:cached") == want[:-len(" && pnpm build")]
+          and s.get("test:quick") == s["test"] + " --project unit",
+          "check:cached is check with lint:cached for lint, test:quick (unit, no bims-laws) for test, "
+          "without its build: %r" % s.get("check:cached"))
     lc = s.get("lint:cached", "")
     check(lc == "python3 ../../tests/eslint_quick_key.py && " + s["lint"].rsplit(" .", 1)[0]
           + " --cache --cache-strategy content --cache-location node_modules/.cache/eslint-quick/lint/ .",
