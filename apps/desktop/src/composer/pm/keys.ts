@@ -1,4 +1,5 @@
-// The field's keys, out of PmField.tsx: ⏎ send (⇧⏎ a new line, ⌘⏎ send under a list), tab queue
+// The field's keys, out of PmField.tsx: ⏎ send (⇧⏎ a new line, ⌘⏎ send under a list; ⌘⏎ in the
+// empty field is the artifact in front's, artifacts/front.ts leaveToFront), tab queue
 // or complete, esc put away or close, ↑/↓ the drafts' history or the list, ←/⌫ a folder up in
 // the @ list, ⌘Z with NO_UNDO, ctrl+alt the sub-word moves, and the dictation's own keys. One
 // function over what the field gives it (KeyCtx); true: the key was the field's.
@@ -19,6 +20,7 @@ import { historyAt, type Saved } from "../drafts";
 import { completion, enterSends, move, type Pick, type Row } from "../pick";
 import type { Trigger } from "../tokens";
 import { freeEscape } from "../escape";
+import { leaveToFront } from "@/artifacts/front";
 import type { Dictation } from "./dictation";
 import {
   applyOp,
@@ -204,6 +206,8 @@ export function fieldKey(c: KeyCtx, e: KeyboardEvent): boolean {
       e.preventDefault();
       return true;
     case "Enter": {
+      // ⌘⏎ with nothing to send: the artifact in front opens in his browser (artifacts/front.ts)
+      if (e.metaKey && !l.open && blankNow() && leaveToFront(e)) return false;
       if (e.metaKey && !l.open) {
         e.preventDefault();
         c.submit();

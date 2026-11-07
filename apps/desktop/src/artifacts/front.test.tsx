@@ -2,7 +2,9 @@
 // ⌘⏎ (artifact-shortcut, side-ux m_45436): the artifact in front's head's first button, nothing
 // else; the inbox's ⌘⏎ and a field's keep theirs.
 import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { Composer } from '@/composer/Composer';
+import type { ComposerActions } from '@/composer/actions';
 import type { Artifact } from '@/proto';
 import { Store, StoreProvider } from '@/store';
 import { RouterContext, createRouter } from '@/app/router';
@@ -86,7 +88,8 @@ function fakeBise() {
   return calls;
 }
 
-const cmdEnter = (target: Element | Window = window) => { fireEvent.keyDown(target, { key: 'Enter', metaKey: true }); };
+// keyCode 13 as Chromium sends it: ProseMirror prevents every ⏎ by its keyCode (captureKeyDown)
+const cmdEnter = (target: Element | Window = window) => { fireEvent.keyDown(target, { key: 'Enter', keyCode: 13, metaKey: true }); };
 
 describe('the law: ⌘⏎ runs exactly the head\'s first button', () => {
   const page = art('notes', 'page', { version: 2 });
@@ -168,6 +171,41 @@ describe('the law: ⌘⏎ runs exactly the head\'s first button', () => {
     expect(rowKey(ev('Enter'), { project: 'shop-1', projectName: 'storefront', a: page }, ports)).toBe(true);
     expect(rowKey(ev('Enter'), { project: 'shop-1', projectName: 'storefront', a: file }, ports)).toBe(true);
     expect(calls).toEqual(['open http://127.0.0.1:47123/p/notes', 'save /x/shop/bench.csv bench.csv']);
+  });
+
+  it("the composer beside it, empty, the caret in it: ⌘⏎ is the artifact's; with words it sends them (his m_54852)", async () => {
+    const calls = fakeBise();
+    const sent: unknown[] = [];
+    const got: { a: ComposerActions | null } = { a: null };
+    const store = new Store(null);
+    store.apply({ ev: 'projects', projects: [{ project: 'shop-1', name: 'storefront', path: '/x/shop' }] });
+    store.apply({ ev: 'artifacts', project: 'shop-1', items: [page] });
+    const mem = new Map<string, string>();
+    render(
+      <StoreProvider store={store}>
+        <RouterContext.Provider value={createRouter({ screen: 'thread', project: 'shop-1', agent: 'perf' })}>
+          <Shell inbox={() => false} />
+          <ArtifactOpen project="shop-1" id="notes" bare composer={false} />
+          <Composer target="shop-1/perf" store={{ getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => void mem.set(k, v), removeItem: (k) => void mem.delete(k) }} onSend={(o) => sent.push(o)} onReady={(a) => (got.a = a)} />
+        </RouterContext.Provider>
+      </StoreProvider>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const field = screen.getByTestId('composer.field');
+    field.focus();
+    expect(field.contains(document.activeElement)).toBe(true);
+    cmdEnter(field);
+    expect(calls).toEqual(['open http://127.0.0.1:47123/p/notes']);
+    expect(sent).toEqual([]);
+    await act(async () => {
+      got.a?.insertText('ship it');
+      await Promise.resolve();
+    });
+    cmdEnter(field);
+    expect(calls).toHaveLength(1);
+    expect(sent).toHaveLength(1);
   });
 
   it("File › Open in Browser runs it; the key's own menu echo is dropped", () => {

@@ -6,7 +6,8 @@
 // one under the pointer, else the open view before a panel tab. Its key is the window's last word,
 // in the bubble phase: a screen that owns ⌘⏎ (the inbox, the palette, the folder picker) takes it
 // first; it fires only with the focus in an artifact or on nothing, never with the caret in a field
-// (the composer, a search) or the inbox in front (primaryKeyFires, designer m_45455). File › Open in
+// (a search, the composer with words: it sends) or the inbox in front (primaryKeyFires, designer
+// m_45455); the empty composer leaves it to the artifact (leaveToFront, his m_54852). File › Open in
 // Browser ⌘⏎ (main/menu.ts) sends 'browser': the key's own echo is dropped (keys.ts menuEcho), a
 // pick from the menu (or ⌘⏎ inside a page's frame, which the window never sees) runs the front.
 // Owner: artifact-shortcut.
@@ -57,12 +58,15 @@ export const isPrimaryKey = (e: Omit<PrimaryKeyLike, 'repeat' | 'defaultPrevente
   e.key === 'Enter' && e.metaKey && !e.altKey && !e.ctrlKey && !e.shiftKey;
 
 /**
- * Whether ⌘⏎ is the artifact's: no screen took it, no repeat, the caret in no field (the
- * composer, a search: empty or not), the focus in an artifact or on nothing (`elsewhere`: a list,
- * a card, ⌘K keep their ⌘⏎; designer m_45455), the inbox not in front (its screen, or an item open
- * in its block). Pure.
+ * Whether ⌘⏎ is the artifact's: no screen took it, no repeat, the caret in no field (a search, the
+ * composer with words), the focus in an artifact or on nothing (`elsewhere`: a list, a card, ⌘K
+ * keep their ⌘⏎; designer m_45455), the inbox not in front (its screen, or an item open in its
+ * block). `left`: the field with the caret had nothing to do with it and left it here (the empty
+ * composer, leaveToFront): field, focus and the field's own preventDefault no longer count. Pure.
  */
-export function primaryKeyFires(e: PrimaryKeyLike, c: { readonly field: boolean; readonly elsewhere: boolean; readonly inbox: boolean }): boolean {
+export function primaryKeyFires(e: PrimaryKeyLike, c: { readonly field: boolean; readonly elsewhere: boolean; readonly inbox: boolean; readonly left?: boolean }): boolean {
+  // a key left by its field comes prevented: ProseMirror prevents every ⏎ it sees (captureKeyDown)
+  if (c.left === true) return isPrimaryKey(e) && !e.repeat && !c.inbox;
   return isPrimaryKey(e) && !e.repeat && !e.defaultPrevented && !c.field && !c.elsewhere && !c.inbox;
 }
 
@@ -113,6 +117,21 @@ export function frontAction(): (() => void) | undefined {
     return [{ place: x.place, focus, hover: hovered(el), x }];
   });
   return frontOf(live)?.x.run() ?? undefined;
+}
+
+// the keys a field left to the artifact in front (leaveToFront), read by the window's ⌘⏎
+const left = new WeakSet<Event>();
+
+/**
+ * A field's ⌘⏎ it has nothing to do with (the composer, empty: nothing to send; his m_54852, the
+ * composer takes the focus when an artifact opens beside the thread): the artifact in front's, when
+ * one shows with a primary action. true: left to it (the field takes nothing, the window's ⌘⏎
+ * runs it); false: no artifact to give it to, the field keeps it.
+ */
+export function leaveToFront(e: KeyboardEvent): boolean {
+  if (!isPrimaryKey(e) || frontAction() === undefined) return false;
+  left.add(e);
+  return true;
 }
 
 /**
@@ -168,7 +187,7 @@ export function usePrimaryKey(inbox: () => boolean): void {
     };
     // bubble: what no screen took
     const onKey = (e: KeyboardEvent) => {
-      if (!primaryKeyFires(e, { field: inField(document.activeElement), elsewhere: focusElsewhere(), inbox: inboxNow.current() })) return;
+      if (!primaryKeyFires(e, { field: inField(document.activeElement), elsewhere: focusElsewhere(), inbox: inboxNow.current(), left: left.has(e) })) return;
       const run = frontAction();
       if (run === undefined) return;
       e.preventDefault();
