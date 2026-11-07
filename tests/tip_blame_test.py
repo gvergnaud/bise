@@ -71,6 +71,49 @@ def main():
         check(r.returncode == 0 and both.startswith("to: beta alpha main\n") and both.count("to:") == 1
               and "tip gate red on main %s" % sha["b1"][:9] in both and "nightly red on main %s" % sha["a2"][:9] in both,
               "merged\n" + both)
+        # flaky-open: the log's FLAKY lines, each with its rate (gate-full rows of 14 days) and its
+        # owner (who last landed a change to its test file, else main)
+        with open(os.path.join(repo, "tests_flaky.py"), "w") as f:
+            f.write("x\n")
+        os.makedirs(os.path.join(repo, "tests"))
+        os.rename(os.path.join(repo, "tests_flaky.py"), os.path.join(repo, "tests", "partial_e2e.py"))
+        g("add", "tests/partial_e2e.py")
+        g("-c", "commit.gpgsign=false", "commit", "-q", "-m", "test: partial")
+        sha["c1"] = g("rev-parse", "HEAD")
+        with open(journal, "a") as f:
+            f.write('{"msg":{"text":"✓ gamma landed 1 commit on main (%s)"}}\n' % sha["c1"][:9])
+        flog = os.path.join(t, "flaky.log")
+        with open(flog, "w") as f:
+            f.write("FLAKY e2e partial_e2e (red, then green alone)\nFLAKY cargo sb::a::b (red, then green alone)\n"
+                    "FLAKY e2e partial_e2e (red, then green alone)\n")
+        now = 100 * 86400
+        timings = os.path.join(t, "timings.tsv")
+        with open(timings, "w") as f:
+            for i, rc in enumerate((1, 0, 0, 1)):
+                f.write("%d\tabc\tpartial_e2e\t%d\t1\t1\t3\tgate-full\n" % (now - i * 3600, rc))
+            f.write("%d\tabc\tpartial_e2e\t1\t1\t1\t3\tgate-full\n" % (now - 15 * 86400))  # older than 14 days
+            f.write("%d\tabc\tpartial_e2e\t1\t1\t1\t3\tadhoc\n" % now)  # an agent's own run
+        check(B.flakes(open(flog).read()) == [("e2e", "partial_e2e"), ("cargo", "sb::a::b")], "flakes")
+        with open(os.path.join(t, "flaky.tsv"), "w") as f:  # next to timings.tsv, run_all.sh's
+            f.write("%d\tabc\te2e\tpartial_e2e\n%d\tabc\te2e\tpartial_e2e\n" % (now - 3600, now))
+            f.write("%d\tabc\te2e\tpartial_e2e\n" % (now - 15 * 86400))  # older than 14 days
+            f.write("%d\tabc\tcargo\tsb::a::b\n" % now)
+        rates = B.flake_rates(B.tsv_rows(timings), B.tsv_rows(os.path.join(t, "flaky.tsv")), now)
+        check(rates.get("partial_e2e") == (2, 4) and rates.get("sb::a::b") == (1, 1), "rates %s" % rates)
+        agents, text = B.flaky_report(repo, sha["c1"], flog, [journal], timings, now=now)
+        lines = text.splitlines()
+        check(agents == ["gamma"] and lines[0] == "to: gamma main", "flaky to %r" % text)
+        check("partial_e2e (e2e): flaky in 2 of 4 full gates in 14 days, owner gamma" in text, "flaky line\n" + text)
+        check("sb::a::b (cargo): flaky in 1 of 1 full gates in 14 days, owner main" in text, "a cargo flake: main\n" + text)
+        check(B.flaky_report(repo, sha["c1"], log, [journal], timings, now=now) == (None, None), "no FLAKY line: no file")
+        fo = os.path.join(t, "flaky-open")
+        r = subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "tip_blame.py"), "--flaky", timings, "--repo", repo,
+                            "--tested", "main", "--green", green, "--log", log, "--journal", journal, "--out", fo], capture_output=True, text=True)
+        check(r.returncode == 0 and not os.path.exists(fo), "no flake: no flaky-open %s" % r.stderr)
+        r = subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "tip_blame.py"), "--flaky", timings, "--repo", repo,
+                            "--tested", "main", "--green", green, "--log", flog, "--journal", journal, "--out", fo], capture_output=True, text=True)
+        check(r.returncode == 0 and open(fo).read().startswith("to: gamma main\n") and "1 flaky" not in open(fo).read(),
+              "flaky-open written %s" % r.stderr)
         # no green known: the last 20 commits, said so
         _, text = B.report(repo, sha["b1"], os.path.join(t, "none.tsv"), log, [journal], now=0)
         check("(none known: the last 20)" in text and "feat: base" in text, "no green\n" + text)

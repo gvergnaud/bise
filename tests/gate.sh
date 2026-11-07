@@ -978,6 +978,9 @@ python3 "$root/tests/conflict_markers.py" >/dev/null || { python3 "$root/tests/c
 # every compatibility shim in tests/shims.txt with its removal release, none
 # past it (tests/shims_check.py, issue 31; always: the release moves with tags)
 python3 "$root/tests/shims_check.py" || { echo "GATE quick FAILED"; exit 1; }
+# a known red whose test went green on its last 2 shas since: red in its owner's quick, a note in
+# the others' (tests/known_reds.py --expire, c5-tip-per-land; ~1 s: git merge-base on a few shas)
+python3 "$root/tests/known_reds.py" --expire || { echo "GATE quick FAILED: your known_reds line expired"; exit 1; }
 # sb-core's records built or opened only in bend/hub/gen/ (tests/state_guard.py, state-schema)
 python3 "$root/tests/state_guard.py" || { echo "GATE quick FAILED"; exit 1; }
 # no new hand-written JS: generated, vendored or on tests/js_allowlist.txt (js-to-ts, ~0.1 s)

@@ -26,6 +26,7 @@ FAILS = []
 
 FAKE_GATE = """#!/usr/bin/env bash
 echo "fake gate $(git rev-parse --short HEAD) in $PWD GATE_ALL=${GATE_ALL:-} args=$*"
+[ -n "${FAKE_GATE_FLAKY:-}" ] && echo "FLAKY e2e $FAKE_GATE_FLAKY (red, then green alone)"
 [ "${FAKE_GATE_RC:-0}" = 0 ] && exit 0
 echo "FAIL e2e_fake"; exit 1
 """
@@ -436,8 +437,16 @@ def main():
         tr = open(os.path.join(out, "tip-red")).read() if os.path.exists(os.path.join(out, "tip-red")) else ""
         check(tr.startswith("to: lander main\n") and " moved (lander)" in tr,
               "tip red: tip-red names the lander and its commit: %r" % tr)
+        check(not os.path.exists(os.path.join(out, "flaky-open")), "no FLAKY line: no flaky-open")
         rc, log, last = tip_run()
         check(log == "", "tip red: not retried on the same sha (%r)" % log)
+        # a green tip with a flake: flaky-open, its test and its rate, to main (c5-tip-per-land)
+        git(repo, "commit", "-q", "--allow-empty", "-m", "moved again")
+        rc, log, last = tip_run(FAKE_GATE_FLAKY="flake_e2e", TIP_JOURNALS=jour)
+        fo = open(os.path.join(out, "flaky-open")).read() if os.path.exists(os.path.join(out, "flaky-open")) else ""
+        check(rc == 0 and last[1:2] == ["green"] and fo.startswith("to: main\n") and "flake_e2e (e2e): flaky in 0 of 0" in fo,
+              "tip green with a flake: flaky-open %r (rc %s, last %r)" % (fo, rc, last))
+        os.remove(os.path.join(out, "flaky-open"))
 
         # 6. main's tip has no tests/gate.sh: NOSTART, an infra red
         git(repo, "rm", "-q", "tests/gate.sh")

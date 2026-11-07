@@ -30,6 +30,8 @@ import time
 from datetime import datetime
 
 NL = chr(10)
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
 
 # ---- pure part: classify, cut, sum ----------------------------------------
 
@@ -593,7 +595,39 @@ def audit(h, hub, since):
     rep["reds"] = reds
     rep["adhoc"] = adhoc
     rep["flow"] = flow_section(h, hub, since, ss)
+    rep["flakes"] = flake_section(h, time.time())
+    rep["known_reds"] = known_reds_section(h)
     return rep
+
+
+# a test flaky (red, then green alone) in more than this share of its full gates over 14 days is
+# an offender; under MIN_RUNS runs its rate says nothing
+FLAKE_LIMIT = 0.05
+FLAKE_MIN_RUNS = 5
+
+
+def flake_section(h, now):
+    """the flake rate per test over 14 days (scripts/tip_blame.py's flake_rates: flaky.tsv over
+    timings.tsv's gate-full rows): the offenders, worst first, and the worst rate"""
+    import tip_blame
+    g = os.path.join(h, "gate")
+    rates = tip_blame.flake_rates(tip_blame.tsv_rows(os.path.join(g, "timings.tsv")),
+                                  tip_blame.tsv_rows(os.path.join(g, "flaky.tsv")), now)
+    rated = sorted(((f / n, t, f, n) for t, (f, n) in rates.items() if f and n >= FLAKE_MIN_RUNS), reverse=True)
+    return {"days": tip_blame.FLAKE_DAYS, "worst": round(rated[0][0], 3) if rated else 0.0,
+            "offenders": [{"test": t, "flaky": f, "runs": n} for r, t, f, n in rated if r > FLAKE_LIMIT]}
+
+
+def known_reds_section(h):
+    """tests/known_reds.txt: its open lines and the expired ones (tests/known_reds.py --expire)"""
+    sys.path.insert(0, os.path.join(ROOT, "tests"))
+    import known_reds as K
+    try:
+        reds = K.parse(open(K.FILE).read())
+    except (OSError, ValueError):
+        return {"open": None, "expired": []}
+    found = K.expired(reds, K.results(h, reds, K.desktop_checks(ROOT)), K.git_after(ROOT))
+    return {"open": len(reds), "expired": ["%s (%s)" % (t, line[1]) for t, line, _ in found]}
 
 
 def flow_section(h, hub, since, ss):
@@ -642,6 +676,11 @@ def health(rep):
         ("vitest-related misses", len(rep["related_misses"]), 0),
         # Gabriel's metric (flow-time): a task's spawn to its code on main
         ("spawn -> on main p50 (s)", flow_p50(rep), 3 * 3600),
+        # c5-tip-per-land: a flake is a bug (bise-testing rule 8), seen per test; a known red goes
+        # when its test is green again (tests/known_reds.py --expire)
+        ("worst flake rate, 14 d (flaky / full gates)", (rep.get("flakes") or {}).get("worst"), FLAKE_LIMIT),
+        ("known_reds expired lines (of %s open)" % (rep.get("known_reds") or {}).get("open"),
+         len((rep.get("known_reds") or {}).get("expired", [])), 0),
     ]
     return [(n, v, lim, v is None or v <= lim) for n, v, lim in checks]
 
@@ -722,6 +761,12 @@ def report(rep):
     if rep["adhoc"]["runs"]:
         w("- left out: %d runs outside a gate (agents' own loops), %d red" % (rep["adhoc"]["runs"], rep["adhoc"]["fails"]))
     w("")
+    fk, kr = rep.get("flakes") or {}, rep.get("known_reds") or {}
+    w("## flakes (%s days: red, then green alone; over %d%% of its full gates)" % (fk.get("days"), round(100 * FLAKE_LIMIT)))
+    for o in fk.get("offenders", [])[:12]:
+        w("- %-28s flaky in %d of %d" % (o["test"], o["flaky"], o["runs"]))
+    w("- known_reds.txt: %s open lines; expired: %s" % (kr.get("open"), ", ".join(kr.get("expired", [])) or "none"))
+    w("")
     w("## waits (sb wake)")
     for k, v in rep["waits"]["by_kind"].items():
         w("- %s: %d, %.1f h" % (k, v["n"], v["hours"]))
@@ -800,6 +845,25 @@ def self_test():
     assert r["tests"] == {"e2e": (True, 49, 120), "every_e2e": (False, 93, None)}, r
     q = gate_run("ok   test-build (15s)" + NL + "ok   clippy (10s)" + NL + "GATE quick GREEN (35s): x")
     assert q["secs"] == 35 and q["steps"] == {"test-build": 15, "clippy": 10}, q
+    # the flakes: flaky.tsv over timings.tsv's gate-full rows; an offender over 5 %, never under 5 runs
+    with tempfile.TemporaryDirectory() as hd:
+        os.makedirs(os.path.join(hd, "gate"))
+        now = 100 * 86400
+        with open(os.path.join(hd, "gate", "timings.tsv"), "w") as fh:
+            for i in range(10):
+                fh.write("%d\tabc\ta_e2e\t0\t1\t1\t3\tgate-full\n%d\tabc\tb_e2e\t0\t1\t1\t3\tgate-full\n" % (now - i, now - i))
+            fh.write("%d\tabc\tc_e2e\t0\t1\t1\t3\tgate-full\n" % now)
+        with open(os.path.join(hd, "gate", "flaky.tsv"), "w") as fh:
+            fh.write("%d\tabc\te2e\ta_e2e\n%d\tabc\te2e\ta_e2e\n%d\tabc\te2e\tc_e2e\n" % (now, now, now))
+            fh.write("%d\tabc\te2e\tb_e2e\n" % (now - 20 * 86400))  # out of the 14 days
+        fs = flake_section(hd, now)
+        assert fs["worst"] == 0.2 and fs["offenders"] == [{"test": "a_e2e", "flaky": 2, "runs": 10}], fs
+        kr = known_reds_section(hd)
+        assert kr["open"] and kr["expired"] == [], kr
+        rep = {"gates": {"quick": {"secs_p50": 1}, "full": {"runs": 0, "secs_p50": 1, "queue_p50": 0}}, "heavy": {"wait_p50": 0},
+               "waits": {"ended_at_max": []}, "related_misses": [], "flakes": fs, "known_reds": {"open": 3, "expired": ["x (y)"]}}
+        hl = {n: ok for n, _, _, ok in health(rep)}
+        assert hl["worst flake rate, 14 d (flaky / full gates)"] is False and hl["known_reds expired lines (of 3 open)"] is False, hl
     print("loop_audit self-test: ok")
 
 

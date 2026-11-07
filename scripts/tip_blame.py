@@ -78,15 +78,7 @@ def report(repo, tested, green_tsv, log, journals, now=None, what="tip gate"):
     green = last_green(repo, green_tsv, tested)
     rng = "%s..%s" % (green, tested) if green else tested
     lines = git(repo, "log", "--first-parent", "--format=%H %s", rng, *([] if green else ["-n", "20"])) or ""
-    texts = []
-    for j in journals:
-        try:
-            with open(j, "rb") as f:
-                f.seek(max(0, os.path.getsize(j) - JOURNAL_TAIL))
-                texts.append(f.read().decode("utf-8", "replace"))
-        except OSError:
-            pass
-    own = owners(repo, landed(texts))
+    own = owners(repo, landed(journal_texts(journals)))
     commits, agents = [], []
     for l in lines.splitlines():
         sha, _, subject = l.partition(" ")
@@ -111,6 +103,110 @@ def report(repo, tested, green_tsv, log, journals, now=None, what="tip gate"):
     return agents, text
 
 
+FLAKY = re.compile(r"^FLAKY (\S+) (\S+) ")
+FLAKE_DAYS = 14
+
+
+def flakes(log_text):
+    """[(kind, test)]: the log's 'FLAKY <kind> <test> (red, then green alone)' lines (run_all.sh's
+    rerun), in order, once each"""
+    out = []
+    for l in log_text.splitlines():
+        m = FLAKY.match(l)
+        if m and (m.group(1), m.group(2)) not in out:
+            out.append((m.group(1), m.group(2)))
+    return out
+
+
+def flake_rates(timings, flaky, now, days=FLAKE_DAYS):
+    """{test: (flaky, runs)} over the last `days` days: runs, its rows in timings.tsv's gate-full
+    rows ([epoch, rev, test, rc, ..., kind]); flaky, its rows in flaky.tsv ([epoch, rev, kind,
+    test]: run_all.sh's red, then green alone). Pure; scripts/loop_audit.py reads it too."""
+    since = now - days * 86400
+    out = {}
+    for r in timings:
+        if len(r) >= 8 and r[7] == "gate-full" and r[0].isdigit() and int(r[0]) >= since:
+            f, n = out.get(r[2], (0, 0))
+            out[r[2]] = (f, n + 1)
+    for r in flaky:
+        if len(r) >= 4 and r[0].isdigit() and int(r[0]) >= since:
+            f, n = out.get(r[3], (0, 0))
+            out[r[3]] = (f + 1, max(n, f + 1))
+    return out
+
+
+def tsv_rows(path):
+    try:
+        with open(path, errors="replace") as f:
+            return [l.rstrip("\n").split("\t") for l in f if l.strip()]
+    except OSError:
+        return []
+
+
+def test_file(repo, kind, test):
+    """the file of a flaky test: tests/<test>.py for an e2e/tmux one; a cargo test's module path
+    names none"""
+    if kind == "e2e":
+        for f in ("tests/%s.py" % test, "tests/%s.sh" % test):
+            if os.path.exists(os.path.join(repo, f)):
+                return f
+    return None
+
+
+def flake_owner(repo, kind, test, own):
+    """who owns a flake: the agent that last landed a change to its test's file (own: {sha:
+    agent}), else main"""
+    f = test_file(repo, kind, test)
+    for sha in ((git(repo, "log", "--format=%H", "-n", "20", "main", "--", f) or "").split() if f else []):
+        if sha in own:
+            return own[sha]
+    return "main"
+
+
+def flaky_report(repo, tested, log, journals, timings, now=None, what="tip gate"):
+    """(agents, text) of the flaky-open file, or (None, None) when the log has no FLAKY line: each
+    flake with its rate over 14 days and its owner"""
+    try:
+        log_text = open(log, errors="replace").read()
+    except OSError:
+        log_text = ""
+    fl = flakes(log_text)
+    if not fl:
+        return None, None
+    now = now or time.time()
+    own = owners(repo, landed(journal_texts(journals)))
+    rates = flake_rates(tsv_rows(timings), tsv_rows(os.path.join(os.path.dirname(timings), "flaky.tsv")), now)
+    agents, body = [], []
+    for kind, test in fl:
+        who = flake_owner(repo, kind, test, own)
+        n, runs = rates.get(test, (0, 0))
+        body.append("  %s (%s): flaky in %d of %d full gates in %d days, owner %s" % (test, kind, n, runs, FLAKE_DAYS, who))
+        if who != "main" and who not in agents:
+            agents.append(who)
+    when = time.strftime("%Y-%m-%d %H:%M", time.localtime(now))
+    text = "\n".join([
+        "to: %s" % " ".join(agents + ["main"]),
+        "%s on main %s (%s): %d flaky (red, then green alone)" % (what, tested[:9], when, len(fl)),
+        *body,
+        "log: %s" % log,
+        "a flake is a bug (bise-testing rule 8): find the race and make it an input, or say why in tests/known_reds.txt",
+    ]) + "\n"
+    return agents, text
+
+
+def journal_texts(journals):
+    """the last JOURNAL_TAIL bytes of each journal"""
+    texts = []
+    for j in journals:
+        try:
+            with open(j, "rb") as f:
+                f.seek(max(0, os.path.getsize(j) - JOURNAL_TAIL))
+                texts.append(f.read().decode("utf-8", "replace"))
+        except OSError:
+            pass
+    return texts
+
+
 def merged(old, new):
     """a report main has not forwarded yet (the file still there) and a new one: one 'to:' line, every
     agent of both (main last), then both bodies"""
@@ -133,9 +229,15 @@ def main(argv):
     a.add_argument("--journal", action="append", default=[])
     a.add_argument("--out")
     a.add_argument("--what", default="tip gate")
+    a.add_argument("--flaky", metavar="TIMINGS", help="write the flakes (flaky-open) instead of the reds; timings.tsv for their rate")
     o = a.parse_args(argv)
     tested = git(o.repo, "rev-parse", o.tested) or o.tested
-    _, text = report(o.repo, tested, o.green, o.log, o.journal, what=o.what)
+    if o.flaky:
+        _, text = flaky_report(o.repo, tested, o.log, o.journal, o.flaky, what=o.what)
+        if text is None:
+            return 0
+    else:
+        _, text = report(o.repo, tested, o.green, o.log, o.journal, what=o.what)
     if o.out:
         text = merged(open(o.out).read(), text) if os.path.exists(o.out) else text
         with open(o.out + ".tmp", "w") as f:

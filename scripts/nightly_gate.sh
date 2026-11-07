@@ -336,10 +336,16 @@ if [ "${1:-}" = --tip ]; then
   else sha="$(git -C "$main_tree" rev-parse "$sha" 2>/dev/null || echo "$tip")"; [ $rc = 0 ] && state=green || state=red; fi
   echo "$sha $state $((SECONDS - s)) $log" >"$out/tip-last"
   # red: who landed since the last green, told through tip-red (main forwards it, main m_36219)
+  j=(); for f in ${TIP_JOURNALS:-"$bh"/hubs/*/journal.jsonl}; do [ -f "$f" ] && j+=(--journal "$f"); done
   if [ "$state" = red ]; then
-    j=(); for f in ${TIP_JOURNALS:-"$bh"/hubs/*/journal.jsonl}; do [ -f "$f" ] && j+=(--journal "$f"); done
     python3 -B "$here/scripts/tip_blame.py" --repo "$main_tree" --tested "$sha" --green "$bh/gate/green-shas.tsv" \
       --log "$log" ${j[@]+"${j[@]}"} --out "$out/tip-red" || echo "tip_blame failed: no tip-red" >>"$log"
+  fi
+  # its flakes, green or red (run_all.sh's FLAKY lines: red, then green alone), each with its rate
+  # over 14 days and its owner: flaky-open, which main forwards like tip-red (c5-tip-per-land)
+  if [ "$state" != infra ] && grep -q '^FLAKY ' "$log"; then
+    python3 -B "$here/scripts/tip_blame.py" --flaky "$bh/gate/timings.tsv" --repo "$main_tree" --tested "$sha" \
+      --green "$bh/gate/green-shas.tsv" --log "$log" ${j[@]+"${j[@]}"} --out "$out/flaky-open" || echo "tip_blame failed: no flaky-open" >>"$log"
   fi
   find "$out" -name 'tip-*.log' -mtime +7 -delete 2>/dev/null
   exit $rc
@@ -438,6 +444,13 @@ else
     python3 -B "$here/scripts/tip_blame.py" --what "nightly" --repo "$main_tree" --tested "$full" --green "$out/nightly-green.tsv" \
       --log "$log" ${j[@]+"${j[@]}"} --out "$out/tip-red" || echo "tip_blame failed: no tip-red" >>"$log"
   fi
+fi
+# a night that ran: its flakes, green or red, in flaky-open (main forwards it, like tip-red)
+if [ -n "$sha" ] && grep -q '^FLAKY ' "$log" && full="$(git -C "$main_tree" rev-parse "$sha" 2>/dev/null)"; then
+  bh="${BISE_HOME:-$HOME/.bise}"
+  j=(); for f in ${TIP_JOURNALS:-"$bh"/hubs/*/journal.jsonl}; do [ -f "$f" ] && j+=(--journal "$f"); done
+  python3 -B "$here/scripts/tip_blame.py" --flaky "$bh/gate/timings.tsv" --what "nightly" --repo "$main_tree" --tested "$full" \
+    --green "$out/nightly-green.tsv" --log "$log" ${j[@]+"${j[@]}"} --out "$out/flaky-open" || echo "tip_blame failed: no flaky-open" >>"$log"
 fi
 # old logs: two weeks
 find "$out" -name '20*.log' -mtime +14 -delete 2>/dev/null
