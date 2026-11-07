@@ -139,7 +139,7 @@ crate::words! { settings:
     /// Try it's words, the core's own transcription
     try_heard(text) = "heard: “{text}”";
     /// Try it heard no word
-    try_nothing = "heard nothing: speak closer, or check the microphone in System Settings";
+    try_nothing = "✗ heard nothing";
     /// the folded parts under the features
     fold_roles = "Which model does what";
     /// a word of the gauge: accounts

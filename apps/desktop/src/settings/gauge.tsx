@@ -3,7 +3,7 @@
 // from the core's setup_gauge (bise_catalog::features): on, failed or off, the fix, Next and its
 // order are the core's; this file only words and draws them (one owner, architect m_53985). A test
 // is a real call: only on his click (Test everything, Test again), never at open. Owner: setup-page.
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { FeatureId, FeaturePart, FeatureRow, Perm, RoleId, SetupFix, SetupGauge } from '@/proto';
 import { Act, Button, Press, tipAttrs } from '@/ds';
 import { settings } from '@/proto/words.gen';
@@ -190,43 +190,50 @@ export interface TryPort {
 /** Try it lasts this long: then the mic stops and the words come (page models-setup: 3 s). */
 export const TRY_MS = 3000;
 
-/** Dictation's Try it (his click only): 3 s of mic through dictation's own path, then what it heard. */
-function TryIt({ port }: { port: TryPort }) {
+/** Dictation's Try it (his click only): 3 s of mic through dictation's own path, then what it
+ * heard. It owns the row's mark (designer m_54627): while it listens no ✓ (nothing is done yet) and
+ * the instruction in the text colour; heard words bring the ✓ back; nothing heard is ✗ in red. */
+function TryIt({ port, mark }: { port: TryPort; mark: ReactNode }) {
   const [id, setId] = useState<string | null>(null);
   const heard = port.useHeard(id);
-  const busy = id !== null && heard?.final !== true;
-  const said =
-    id === null || heard === null
-      ? null
-      : !heard.final
-        ? settings.try_listening
-        : heard.error !== null
-          ? heard.error
-          : heard.text.trim() === ''
-            ? settings.try_nothing
-            : settings.try_heard({ text: heard.text.trim() });
+  const listening = id !== null && heard !== null && !heard.final;
+  const nothing = id !== null && heard?.final === true && (heard.error !== null || heard.text.trim() === '');
+  const words = id !== null && heard?.final === true && !nothing ? heard.text.trim() : null;
   return (
-    <span className="st-try" data-busy={busy || said !== null || undefined}>
-      {said !== null && (
-        <span className="st-heard" data-testid="settings.feature.dictation.heard">
-          {said}
+    <>
+      {listening ? (
+        <span className="st-listen" data-testid="settings.feature.dictation.heard">
+          {settings.try_listening}
         </span>
+      ) : nothing ? (
+        <span className="st-mark err" data-testid="settings.feature.dictation.heard">
+          {heard.error ?? settings.try_nothing}
+        </span>
+      ) : (
+        mark
       )}
-      <Act
-        disabled={busy}
-        onClick={(e) => {
-          e.stopPropagation();
-          const d = port.start();
-          setId(d);
-          setTimeout(() => {
-            port.stop(d);
-          }, TRY_MS);
-        }}
-        testId="settings.feature.dictation.try"
-      >
-        {settings.try_it}
-      </Act>
-    </span>
+      <span className="st-try" data-busy={id !== null || undefined}>
+        {words !== null && (
+          <span className="st-heard" data-testid="settings.feature.dictation.heard">
+            {settings.try_heard({ text: words })}
+          </span>
+        )}
+        <Act
+          disabled={listening}
+          onClick={(e) => {
+            e.stopPropagation();
+            const d = port.start();
+            setId(d);
+            setTimeout(() => {
+              port.stop(d);
+            }, TRY_MS);
+          }}
+          testId="settings.feature.dictation.try"
+        >
+          {settings.try_it}
+        </Act>
+      </span>
+    </>
   );
 }
 
@@ -310,6 +317,11 @@ export function FeatureRows({ g, ports, at, shut, setShut }: { g: SetupGauge; po
         const m = markOf(r, g);
         const open = r.state === 'failed' && !shut.has(r.id);
         const testing = r.parts.some((p) => g.testing?.includes(p.model) === true);
+        const markEl = (
+          <span className={cx('st-mark', testing ? 'faint' : m.tone)} {...tipAttrs(m.tip)} data-testid={`settings.feature.${r.id}.mark`}>
+            {testing ? settings.gauge_testing : m.text}
+          </span>
+        );
         return (
           <div key={r.id} className={cx('st-feature', at === r.id && 'is-at')} data-state={r.state} data-testid={`settings.feature.${r.id}`}>
             <div
@@ -330,10 +342,11 @@ export function FeatureRows({ g, ports, at, shut, setShut }: { g: SetupGauge; po
                 {FEATURE_WORDS[r.id]}
                 <span className="st-sub">{subOf(r)}</span>
               </span>
-              <span className={cx('st-mark', testing ? 'faint' : m.tone)} {...tipAttrs(m.tip)} data-testid={`settings.feature.${r.id}.mark`}>
-                {testing ? settings.gauge_testing : m.text}
-              </span>
-              {r.id === 'dictation' && r.state === 'on' && ports.tryIt !== undefined && <TryIt port={ports.tryIt} />}
+              {r.id === 'dictation' && r.state === 'on' && ports.tryIt !== undefined ? (
+                <TryIt port={ports.tryIt} mark={markEl} />
+              ) : (
+                markEl
+              )}
               {r.fix != null && !open && (
                 <Button
                   kind={r.state === 'failed' ? 'pri' : undefined}

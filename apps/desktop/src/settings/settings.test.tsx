@@ -486,11 +486,15 @@ describe('settings · Setup (page models-setup, pick B)', () => {
     expect(calls).toEqual([]);
     fireEvent.click(screen.getByTestId('settings.feature.dictation.try'));
     expect(calls).toEqual(['start']);
+    // while it listens: no ✓, the instruction instead (designer m_54627)
+    expect(screen.queryByTestId('settings.feature.dictation.mark')).toBeNull();
+    expect(screen.getByTestId('settings.feature.dictation.heard').textContent).toBe(settings.try_listening);
     vi.advanceTimersByTime(TRY_MS);
     expect(calls).toEqual(['start', 'stop d1']);
     heard = { text: 'hello bise', final: true, error: null };
     r.rerender(<Settings page="setup" prefs={prefs()} accounts={accounts()} projects={projects()} found={found()} computerUse={null} perms={{}} ports={{ ...ports(), tryIt }} gauge={gauge()} />);
     expect(screen.getByTestId('settings.feature.dictation.heard').textContent).toBe(settings.try_heard({ text: 'hello bise' }));
+    expect(screen.getByTestId('settings.feature.dictation.mark')).toBeTruthy();
     vi.useRealTimers();
   });
 

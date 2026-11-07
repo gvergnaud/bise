@@ -5535,7 +5535,7 @@
   "settings.try_nothing": {
     "args": [],
     "one": null,
-    "text": "heard nothing: speak closer, or check the microphone in System Settings"
+    "text": "✗ heard nothing"
   },
   "settings.tui_bise_failed": {
     "args": [
