@@ -7,7 +7,7 @@
 // first two options in one click and 'answer…'. A worktree two agents share: its 'ψ <branch> · N
 // agents' head with its PR, its agents under it; an open PR with no agent its own row. The foot
 // folds ARCHIVED open ('▸ 3 archived'). Owner: nm-side.
-import { useRef } from 'react';
+import { useRef, type MouseEvent } from 'react';
 import type { Agent, Card } from '@/proto';
 import { AppIcon, Press, Ring, tipAttrs } from '@/ds';
 import { sortCards } from '@/inbox/order';
@@ -45,7 +45,7 @@ export interface FloatAgentsProps {
   readonly at: AnswerAt | null;
   readonly onOpen: (r: BarRow) => void;
   /** a mark or a head's PR: the review (an orphan's: its branch) */
-  readonly onOpenPr: (r: BarRow) => void;
+  readonly onOpenPr: (r: BarRow, e?: MouseEvent) => void;
   /** a row's project's name on bise's own screen ('acme › perf', designer m_45706); none in a project */
   readonly groupOf?: (project: string) => string | undefined;
   /** 'answer…' hands over to the composer: the float closes */
@@ -74,21 +74,21 @@ export function FloatAgents({ live, agents, cards, at, onOpen, onOpenPr, groupOf
 }
 
 /** A row's PR: its number when it has one, else its worktree's mark; a click opens the review. */
-function Pr({ r, onOpenPr }: { r: BarRow; onOpenPr: (r: BarRow) => void }) {
+function Pr({ r, onOpenPr }: { r: BarRow; onOpenPr: (r: BarRow, e?: MouseEvent) => void }) {
   const m = r.mark;
   if (m === undefined) return null;
   return (
     <span className="s3-arow-pr" data-tone={m.tone} role="button" aria-label={m.tip} {...tipAttrs(markTip(m, r.kind === 'orphan'))}
       onClick={(e) => {
         e.stopPropagation();
-        onOpenPr(r);
+        onOpenPr(r, e);
       }} data-testid={`${floatId(r)}.pr`}>
       {m.pr !== undefined ? `#${String(m.pr)}` : m.g}
     </span>
   );
 }
 
-function AgentRow({ r, a, card, at, onOpen, onOpenPr, group, onHandoff }: { r: BarRow; a: Agent | undefined; card: Card | undefined; at: AnswerAt | null; onOpen: (r: BarRow) => void; onOpenPr: (r: BarRow) => void; group: string | undefined; onHandoff: () => void }) {
+function AgentRow({ r, a, card, at, onOpen, onOpenPr, group, onHandoff }: { r: BarRow; a: Agent | undefined; card: Card | undefined; at: AnswerAt | null; onOpen: (r: BarRow) => void; onOpenPr: (r: BarRow, e?: MouseEvent) => void; group: string | undefined; onHandoff: () => void }) {
   const g = groupParts(group, r.name);
   const store = useStore();
   const menu = useEntityMenu({ kind: 'agent', project: r.project, agent: r.agent ?? '' });
@@ -164,7 +164,7 @@ function AgentRow({ r, a, card, at, onOpen, onOpenPr, group, onHandoff }: { r: B
 }
 
 /** A worktree's head ('ψ auth-v2 · 2 agents', its PR) or an open PR with no agent. */
-function HeadRow({ r, members, onOpen, onOpenPr }: { r: BarRow; members: number; onOpen: (r: BarRow) => void; onOpenPr: (r: BarRow) => void }) {
+function HeadRow({ r, members, onOpen, onOpenPr }: { r: BarRow; members: number; onOpen: (r: BarRow) => void; onOpenPr: (r: BarRow, e?: MouseEvent) => void }) {
   const id = floatId(r);
   return (
     <Press look="s3-arow-group" aria-label={r.title} {...tipAttrs(r.title)} onClick={() => {

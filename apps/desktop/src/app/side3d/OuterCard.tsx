@@ -11,7 +11,7 @@
 // (FlyoutLists). Each section shows its first rows (Agents 10, the others 5), then '+ N more' adds
 // 50 (outerrows.ts); an empty one keeps its empty line. The card scrolls as a whole, a 16 fade at
 // the edge that has more, macOS's overlay scrollbar. Owner: nm-side.
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { bimsLit, useBimsLit } from '@/bims/focus';
 import { flushSync } from 'react-dom';
 import type { Agent, Card } from '@/proto';
@@ -77,7 +77,7 @@ export interface OuterAgentsProps {
   readonly now: number;
   readonly groupOf?: (project: string) => string | undefined;
   readonly onOpen: (r: BarRow) => void;
-  readonly onOpenPr: (r: BarRow) => void;
+  readonly onOpenPr: (r: BarRow, e?: MouseEvent) => void;
   /** the project whose office the tile shows (its rows and its bims light each other, bims/focus); null: no tile */
   readonly bims: string | null;
   /** an ask opened in place (its agent) or closed (null): the tile looks at that bim while it is open (designer m_47300); keep it stable */
@@ -202,7 +202,7 @@ interface LineProps {
   readonly open: boolean;
   readonly onToggle: () => void;
   readonly onOpen: (r: BarRow) => void;
-  readonly onOpenPr: (r: BarRow) => void;
+  readonly onOpenPr: (r: BarRow, e?: MouseEvent) => void;
   /** its bim is hovered in the tile: the rows' hover tint */
   readonly lit: boolean;
   /** the pointer comes on the row (true) or leaves it: its bim lights; none, the row has no bim in the tile */

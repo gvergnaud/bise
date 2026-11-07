@@ -71,6 +71,12 @@ function copied(act: Act, f: MenuFacts, fx: MenuFx): string | undefined {
   if (e.kind === 'artifact' && 'row' in f && f.row !== undefined && 'version' in f.row) {
     if (act === 'copy-link') return f.row.url;
     if (act === 'copy-path') return f.row.path ?? undefined;
+    if (act === 'copy-branch') return f.row.pr?.status?.branch;
+  }
+  // a PR's tab: its link always, its branch from its row
+  if (e.kind === 'pr' && 'row' in f) {
+    if (act === 'copy-link') return e.url;
+    if (act === 'copy-branch' && f.row !== undefined && 'version' in f.row) return f.row.pr?.status?.branch;
   }
   if (e.kind === 'process' && 'row' in f && f.row !== undefined && 'pid' in f.row && act === 'copy-link') return procUrl(f.row);
   return undefined;

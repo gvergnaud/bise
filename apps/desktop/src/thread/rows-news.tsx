@@ -16,6 +16,7 @@ import { wakeLine, wakeTail } from './wake';
 import { useRouter } from '@/app/router';
 import { useCut } from '@/app/side3d/Flyout';
 import type { RowCtx } from './rows';
+import { openPr } from '@/review/openPr';
 import { retryOf, retryWords, typedRetry, type Retry } from './tiers';
 /** A news line's mark: what it means, never its color alone. */
 export function NewsLine({ mark, tone, testId, children }: { mark: AppIconName; tone: 'ok' | 'err' | 'plain' | 'dim'; testId: string; children: ReactNode }) {
@@ -98,8 +99,9 @@ export function PrRow({ e, ctx }: { e: Entry; ctx: RowCtx }) {
     <NewsLine mark={mark} tone={tone} testId={`thread.pr.${e.pos}`}>
       <Act
         kind="ref"
-        onClick={() => {
-          ctx.onLink(p.url);
+        onClick={(ev) => {
+          // its tab in the panel (⌘: the forge's page), as every PR door (review/openPr.ts)
+          openPr(ctx.project, p.url, ev);
         }}
         testId={`thread.pr.${e.pos}.link`}
       >

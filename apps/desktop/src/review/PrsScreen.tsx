@@ -15,6 +15,7 @@ import type { Pr } from '@/proto';
 import { PageVignette, useBannerGutter } from '@/artifacts/hero/vignettes';
 import { useEntityMenu } from '@/app/menus/use';
 import { agentsOf, toneOf, wordsOf, type PrTone } from './prs';
+import { openPr } from './openPr';
 import './review.css';
 import { useKeptScroll } from '@/app/keep';
 
@@ -67,8 +68,8 @@ function PrRow({ project, p }: { project: string; p: Pr }) {
         sub={<>{agentsOf(p)}{' · '}<span className={`pr-words pr-${tone}`} data-testid={`prs.words.${String(p.number)}`}>{wordsOf(p)}</span></>}
         onContextMenu={menu.onContextMenu}
         end={<MoreButton menu={menu} testId={`${tid}.more`} />}
-        onClick={() => {
-          void (window as Partial<Window>).bise?.openExternal(p.url);
+        onClick={(e) => {
+          openPr(project, p.url, e);
         }} />
     </div>
   );

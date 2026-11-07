@@ -53,6 +53,8 @@ export function factsOf(e: Entity, r: FactReads): MenuFacts {
       return { e, row: r.processes(e.project).find((p) => p.agent === e.agent && p.id === e.id), pinned: r.pinnedThing('process', e.project, procPinId(e.agent, e.id)) };
     case 'scheduled':
       return { e, row: r.scheduled(e.project).find((t) => t.id === e.id), pinned: r.pinnedThing('schedule', e.project, String(e.id)) };
+    case 'pr':
+      return { e, row: r.artifacts(e.project).find((a) => a.pr != null && a.url === e.url) };
     case 'tab': {
       const t = r.tab(e.id);
       return { e, inner: t.inner === undefined ? undefined : factsOf(t.inner, r), moveable: t.moveable, closable: t.closable, others: t.others };

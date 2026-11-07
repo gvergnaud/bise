@@ -27,6 +27,7 @@ import { SideRow } from './Flyout';
 import { groupParts, groupWords } from './lists';
 import { artifactObj, laterObj, procObj } from './objects';
 import { openTab } from './ports';
+import { openPr } from '@/review/openPr';
 import { usePortFull, type PortBoxes } from './portfit';
 import { pinnedIn, procPinId, watchPinId, type PinSet } from '../pins';
 
@@ -61,8 +62,10 @@ export function ArtifactRow({ it, now, group, pinned = false }: { it: Item; now:
       }
       label={a.title}
       tip={a.title}
-      onClick={() => {
-        openTab({ kind: 'artifact', project: it.project, id: a.id });
+      onClick={(e) => {
+        // a PR opens its own tab (⌘: the forge's page); any other artifact its view
+        if (a.pr != null && a.url !== '') openPr(it.project, a.url, e);
+        else openTab({ kind: 'artifact', project: it.project, id: a.id });
       }}
       menu={menu}
       pin={{ kind: 'artifact', project: it.project, id: a.id, on: pinned }}

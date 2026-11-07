@@ -57,8 +57,10 @@ export type MenuFacts =
   | { readonly e: Of<'scheduled'>; readonly row: ScheduledTask | undefined; readonly pinned?: boolean }
   /** a panel tab: the menu of the thing in it (`inner`, none for Overview, New tab, a terminal) under its own items */
   | { readonly e: Of<'tab'>; readonly inner: MenuFacts | undefined; readonly moveable: boolean; readonly closable: boolean; readonly others: boolean }
-  /** an office, a PR, a commit, a diff, a plugin: opened in a tab or a window */
-  | { readonly e: Of<'office' | 'pr' | 'commit' | 'diff' | 'plugin'> }
+  /** a PR, by its link: its artifact row when the hub sent it (its branch) */
+  | { readonly e: Of<'pr'>; readonly row: Artifact | undefined }
+  /** an office, a commit, a diff, a plugin: opened in a tab or a window */
+  | { readonly e: Of<'office' | 'commit' | 'diff' | 'plugin'> }
   /** a plugin's skill: its tab's own '…' holds its actions (plugins/SkillTab.tsx), its tab menu only the tab's; an MCP App's view (src/views): its tab menu only the tab's */
   | { readonly e: Of<'skill' | 'view'> };
 
@@ -204,7 +206,20 @@ function artifactMenu(a: Artifact, pinned: boolean): PopupItem[] {
     [pinItem(pinned)],
     [item('move-right', menus.move_right), item('new-window', menus.new_window)],
     when(file, item('quick-look', menus.quick_look), item('show-in-finder', menus.show_in_finder)),
-    copySub([...when(present(a.url), item('copy-link', menus.copy_link)), ...when(file, item('copy-path', menus.copy_path))]),
+    copySub([
+      ...when(present(a.url), item('copy-link', menus.copy_link)),
+      // a PR: its branch too (pr-integration A rule 7: right-click Copy link, Copy branch)
+      ...when(present(a.pr?.status?.branch), item('copy-branch', menus.copy_branch)),
+      ...when(file, item('copy-path', menus.copy_path)),
+    ]),
+  ]);
+}
+
+/** A PR's tab: Move to right pane, New window, Copy › Link · Branch (its row's, when here). */
+function prMenu(row: Artifact | undefined): PopupItem[] {
+  return grouped([
+    [item('move-right', menus.move_right), item('new-window', menus.new_window)],
+    copySub([item('copy-link', menus.copy_link), ...when(present(row?.pr?.status?.branch), item('copy-branch', menus.copy_branch))]),
   ]);
 }
 
@@ -257,8 +272,11 @@ export function menuOf(f: MenuFacts): PopupItem[] {
         [...when(t.closable, item('close-tab', menus.close_tab)), ...when(t.others, item('close-others', menus.close_others))],
       ]);
     }
+    case 'pr': {
+      const p = f as Extract<MenuFacts, { e: Of<'pr'> }>;
+      return prMenu(p.row);
+    }
     case 'office':
-    case 'pr':
     case 'commit':
     case 'diff':
     case 'plugin':

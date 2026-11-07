@@ -11,6 +11,7 @@ import { formatRoute, parseRoute } from '@/app/route';
 import { runWindowCommand } from '@/thread/commands';
 import { agentsOf, toneOf, wordsOf } from './prs';
 import { PrsScreen } from './PrsScreen';
+import { panelState } from '@/app/panel/state';
 import { ChangesScreen } from './ChangesScreen';
 
 const P = 'acme-1a2b3c4d';
@@ -67,7 +68,7 @@ function setup() {
 afterEach(cleanup);
 
 describe('the PR list', () => {
-  it('asks prs on open; rows say number, branch, agents, state in words; a click opens the PR in his browser', () => {
+  it('asks prs on open; rows say number, branch, agents, state in words; a click opens its tab, ⌘-click the forge', () => {
     const { store, cmds, wrap } = setup();
     const list = fixtures.find((e) => e.items.length > 0);
     if (!list) throw new Error('fixture');
@@ -85,6 +86,9 @@ describe('the PR list', () => {
     expect(row.closest('[data-tone]')?.getAttribute('data-tone')).toBe('err');
     expect(v.getByTestId('prs.row.415').textContent).toContain('draft');
     fireEvent.click(v.getByTestId('prs.row.412.open'));
+    expect(openExternal, 'a plain click stays in the app').not.toHaveBeenCalled();
+    expect(panelState.get().tabs.list.map((t) => t.id)).toContain(`pr:${P}/https://github.com/acme/acme/pull/412`);
+    fireEvent.click(v.getByTestId('prs.row.412.open'), { metaKey: true });
     expect(openExternal).toHaveBeenCalledWith('https://github.com/acme/acme/pull/412');
     delete (window as unknown as { bise?: unknown }).bise;
   });

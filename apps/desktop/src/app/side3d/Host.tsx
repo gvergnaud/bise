@@ -24,7 +24,8 @@
 // cardMaxH, designer m_44499): nothing measured places it, so it never moves nor runs past the
 // window. Under every palette, sheet and menu
 // (z 15: over the composer's 10, under the palette's 20). Owner: nm-side.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { openPr as openPrTab } from '@/review/openPr';
 import { createPortal } from 'react-dom';
 import { useNowFor } from '../clock';
 import { useRoute, useRouter } from '../router';
@@ -441,8 +442,10 @@ function Side({ project, scope, home, world, at: coinsAt, right, outerW, room }:
     else if (r.kind === 'group' && r.feature !== undefined) router.go({ screen: 'feature', project: r.project, name: r.feature });
     else if (r.agent !== undefined) router.go({ screen: 'thread', project: r.project, agent: r.agent });
   };
-  const openPr = (r: BarRow) => {
-    if (r.kind === 'orphan' && r.branch !== undefined) router.go({ screen: 'branch', project: r.project, branch: r.branch });
+  // the ⑂ #412 chip: that PR's tab (⌘: the forge's page); a mark with no PR (a land, a worktree) as before
+  const openPr = (r: BarRow, e?: MouseEvent) => {
+    if (r.mark?.url != null && r.mark.url !== '') openPrTab(r.project, r.mark.url, e);
+    else if (r.kind === 'orphan' && r.branch !== undefined) router.go({ screen: 'branch', project: r.project, branch: r.branch });
     else if (r.agent !== undefined) router.go({ screen: 'review', project: r.project, agent: r.agent });
   };
   // a click in the float that navigates (a row opens a thread, a page, an artifact or a task's tab; a
