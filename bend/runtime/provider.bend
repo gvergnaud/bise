@@ -117,11 +117,17 @@ def model_call.verdict(r: Result<&2, &2, Http.Err, Http.Res>, st: Api.Style,
 # ---- the loop's output: stdout (scripted) or the client socket ----
 # Defined here, below main, so the provider call carries it through (its
 # retry notes reach the client while the call waits). Sockets are affine
-# handles, so Out is a Type: it is threaded, never copied.
+# handles, so Out is a Type: it is threaded, never copied. It also
+# carries the REPL's memory of its calls (Pvp.CallMem: the last good key
+# of each provider), which therefore lives in memory only.
 
 type Out is Type:
-  OStd{}
-  ONet{sock: Socket}
+  OStd{mem: Pvp.CallMem}
+  ONet{sock: Socket, mem: Pvp.CallMem}
+
+# stdout with an empty memory (a one-shot call, the demo scenarios)
+def std0() -> Out:
+  OStd{Pvp.mem0()}
 
 def out.pair(sm: Socket & Result<&1, &1, (U32 & String) & List<&2, U32>, Unit>) -> Socket:
   match sm:
@@ -152,17 +158,17 @@ def wire_log(+text: String) -> IO(Unit):
 
 def note(n: Out, +line: String) -> IO(Out):
   match n:
-    case OStd{}:
+    case OStd{+mem}:
       do IO<Out>:
         IO.print(line)
-        IO.pure(Out, OStd{})
-    case ONet{sock}:
+        IO.pure(Out, OStd{mem})
+    case ONet{sock, +mem}:
       do IO<Out>:
         wire_log(String.append(line, "\n"))
         sm : Socket & Result<&1, &1, (U32 & String) & List<&2, U32>, Unit> <- TCP.send(sock,
           String.append(line, "\n"))
         s2 : Socket <- IO.pure(Socket, out.pair(sm))
-        IO.pure(Out, ONet{s2})
+        IO.pure(Out, ONet{s2, mem})
 
 # the token usage of a reply, as a feed line (runtime/usage-pure.bend);
 # a reply without usage, or a failed call, prints nothing
@@ -400,15 +406,15 @@ def call.raced.got(n: Out, r: Race.Raced<Got>, +tok: String, +cpath: String)
 # read once per call (wpath), not per partial (R40's CPU bar)
 def note.partial(n: Out, +wpath: String, +line: String) -> IO(Out):
   match n:
-    case OStd{}:
+    case OStd{+mem}:
       do IO<Out>:
         IO.print(line)
-        IO.pure(Out, OStd{})
-    case ONet{sock}:
+        IO.pure(Out, OStd{mem})
+    case ONet{sock, +mem}:
       do IO<Out>:
         wire_log.when(String.is_empty(wpath), wpath, String.append(line, "
 "))
-        IO.pure(Out, ONet{sock})
+        IO.pure(Out, ONet{sock, mem})
 
 # the race read until its end; each partial the attempt sends is written
 # here, by the one owner of the wire (Out)

@@ -42,6 +42,7 @@ import ./main.bend as R
 import ./drain.bend as Dr
 import ./main-pure.bend as Rp
 import ../runtime/provider.bend as Pv
+import ../runtime/provider-pure.bend as Pvp
 import ../runtime/selftools.bend as Sf
 import ../runtime/selftools-pure.bend as Sfp
 import ./repl-core-pure.bend as Rcp
@@ -51,9 +52,11 @@ import ../core/gen/obs.bend as OG
 
 # what the loops return: keep serving, or stop. The reload path
 # unwinds to main so the process exits 0 — the parent then recompiles
-# the latest source and respawns on the SAME session (--continue)
+# the latest source and respawns on the SAME session (--continue).
+# Go keeps the calls' memory too (Pvp.CallMem): the next connection
+# (a hub that reconnects) goes on with it; it is never saved.
 type Flow is Data:
-  Go{sess: T.Session}
+  Go{sess: T.Session, mem: Pvp.CallMem}
   Stop{}
 
 def repl_help() -> List<&2, String>:
@@ -83,19 +86,19 @@ def plan_of(cl: Cm.CmdLine) -> Rcp.Plan:
 # parent respawns the latest code on the same session).
 
 def repl_out(out: Pv.Out, +sess: T.Session,
-    next: Socket -> T.Session -> IO(Flow)) -> IO(Flow):
+    next: Socket -> Pvp.CallMem -> T.Session -> IO(Flow)) -> IO(Flow):
   match out:
-    case Pv.OStd{}:
-      IO.pure(Flow, Go{sess})
-    case Pv.ONet{s2}:
-      next(s2)(sess)
+    case Pv.OStd{+mem}:
+      IO.pure(Flow, Go{sess, mem})
+    case Pv.ONet{s2, +mem}:
+      next(s2)(mem)(sess)
 
 # ---- /reload and the deferred self.reload: gated, then a clean exit ----
 
 # refused: turn/pending/queued/notifs would be lost — the checkpoint
 # only serializes turn boundaries (ADR 0002); say so, keep serving
 def repl_reload.busy(out: Pv.Out, +sess: T.Session,
-    next: Socket -> T.Session -> IO(Flow)) -> IO(Flow):
+    next: Socket -> Pvp.CallMem -> T.Session -> IO(Flow)) -> IO(Flow):
   do IO<Flow>:
     out2 : Pv.Out <- Dr.emit(out,
       Con{OG.reload(True{}, "not between turns — finish or interrupt the pending turn first"),
@@ -109,18 +112,18 @@ def repl_reload.busy(out: Pv.Out, +sess: T.Session,
 # reload and stay reachable from the new process.
 def repl_reload.halt(out: Pv.Out, +sess: T.Session) -> IO(Flow):
   match out:
-    case Pv.OStd{}:
+    case Pv.OStd{_}:
       do IO<Flow>:
         P.save(sess)
         IO.pure(Flow, Stop{})
-    case Pv.ONet{s2}:
+    case Pv.ONet{s2, _}:
       do IO<Flow>:
         Socket.close(s2)
         P.save(sess)
         IO.pure(Flow, Stop{})
 
 def repl_reload(out: Pv.Out, ok: Bool, +sess: T.Session,
-    next: Socket -> T.Session -> IO(Flow)) -> IO(Flow):
+    next: Socket -> Pvp.CallMem -> T.Session -> IO(Flow)) -> IO(Flow):
   match ok:
     case True{}:
       do IO<Flow>:
@@ -139,14 +142,14 @@ def repl_reload(out: Pv.Out, ok: Bool, +sess: T.Session,
 # deferred: the Core compacts inside the turn, which goes on.)
 
 def repl_deferred.reload(+sess: T.Session, out: Pv.Out,
-    next: Socket -> T.Session -> IO(Flow)) -> IO(Flow):
+    next: Socket -> Pvp.CallMem -> T.Session -> IO(Flow)) -> IO(Flow):
   do IO<Flow>:
     +ok : Bool <- IO.pure(Bool, S.reload_allowed(sess))
     f : Flow <- repl_reload(out, ok, sess, next)
     IO.pure(Flow, f)
 
 def repl_deferred.reload.only(reload: Bool, +sess2: T.Session, out2: Pv.Out,
-    next: Socket -> T.Session -> IO(Flow)) -> IO(Flow):
+    next: Socket -> Pvp.CallMem -> T.Session -> IO(Flow)) -> IO(Flow):
   match reload:
     case True{}:
       repl_deferred.reload(sess2, out2, next)
@@ -163,13 +166,13 @@ def repl_run(+live: Bool, out: Pv.Out, +sess: T.Session,
   R.run(1000000n, out, rt, Rp.JIdle{}, Rp.transition(rt, Rp.JIdle{}))
 
 def repl_deferred(d: Sfp.Def, +sess2: T.Session, out2: Pv.Out,
-    next: Socket -> T.Session -> IO(Flow)) -> IO(Flow):
+    next: Socket -> Pvp.CallMem -> T.Session -> IO(Flow)) -> IO(Flow):
   match d:
     case Sfp.Def{_, +reload}:
       repl_deferred.reload.only(reload, sess2, out2, next)
 
 def repl_end_save.then(+live: Bool, +sess2: T.Session, out2: Pv.Out,
-    next: Socket -> T.Session -> IO(Flow)) -> IO(Flow):
+    next: Socket -> Pvp.CallMem -> T.Session -> IO(Flow)) -> IO(Flow):
   do IO<Flow>:
     # BR-002: the turn is over - a stale interrupt flag would kill the
     # NEXT turn at its first boundary. The runtime is the authority on
@@ -183,7 +186,7 @@ def repl_end_save.then(+live: Bool, +sess2: T.Session, out2: Pv.Out,
     f : Flow <- repl_deferred(d, sess2, out2, next)
     IO.pure(Flow, f)
 
-def repl_end_save(+live: Bool, e: R.RtEnd, next: Socket -> T.Session -> IO(Flow))
+def repl_end_save(+live: Bool, e: R.RtEnd, next: Socket -> Pvp.CallMem -> T.Session -> IO(Flow))
     -> IO(Flow):
   match e:
     case R.REnd{sess2, out2}:
@@ -201,7 +204,7 @@ def turn_active(s: T.Session) -> Bool:
           True{}
 
 def repl_end_stalled.stalled(+live: Bool, active: Bool, e: R.RtEnd,
-    next: Socket -> T.Session -> IO(Flow)) -> IO(Flow):
+    next: Socket -> Pvp.CallMem -> T.Session -> IO(Flow)) -> IO(Flow):
   match active:
     case True{}:
       match e:
@@ -216,7 +219,7 @@ def repl_end_stalled.stalled(+live: Bool, active: Bool, e: R.RtEnd,
       repl_end_save(live, e, next)
 
 def repl_end_stalled(+live: Bool, e: R.RtEnd,
-    next: Socket -> T.Session -> IO(Flow)) -> IO(Flow):
+    next: Socket -> Pvp.CallMem -> T.Session -> IO(Flow)) -> IO(Flow):
   match e:
     case R.REnd{+sess2, _}:
       repl_end_stalled.stalled(live, turn_active(sess2), e, next)
@@ -244,110 +247,117 @@ def script_file(live: Bool, +cmds: List<&2, T.Cmd>, +dflt: List<&2, M.Reply>)
         +path : String <- IO.pure(String, P.env_or(r, ""))
         script_file.read(String.is_empty(path), path, Rcp.script_key(cmds), dflt)
 
-def repl_plan(+live: Bool, s: Socket, plan: Rcp.Plan, +sess: T.Session,
-    next: Socket -> T.Session -> IO(Flow)) -> IO(Flow):
+def repl_plan(+live: Bool, s: Socket, +mem: Pvp.CallMem, plan: Rcp.Plan,
+    +sess: T.Session,
+    next: Socket -> Pvp.CallMem -> T.Session -> IO(Flow)) -> IO(Flow):
   match plan:
     case Rcp.PQuit{}:
       do IO<Flow>:
         Socket.close(s)
-        IO.pure(Flow, Go{sess})
+        IO.pure(Flow, Go{sess, mem})
     case Rcp.PHelp{}:
       do IO<Flow>:
-        out2 : Pv.Out <- Dr.emit(Pv.ONet{s}, repl_help())
+        out2 : Pv.Out <- Dr.emit(Pv.ONet{s, mem}, repl_help())
         repl_out(out2, sess, next)
     case Rcp.PReload{}:
       do IO<Flow>:
         +ok : Bool <- IO.pure(Bool, S.reload_allowed(sess))
-        f : Flow <- repl_reload(Pv.ONet{s}, ok, sess, next)
+        f : Flow <- repl_reload(Pv.ONet{s, mem}, ok, sess, next)
         IO.pure(Flow, f)
     case Rcp.PRun{+cmds, +script0}:
       do IO<Flow>:
         +script : List<&2, M.Reply> <- script_file(live, cmds, script0)
-        e : R.RtEnd <- repl_run(live, Pv.ONet{s}, sess, script, cmds)
+        e : R.RtEnd <- repl_run(live, Pv.ONet{s, mem}, sess, script, cmds)
         repl_end_stalled(live, e, next)
 
-def repl_interpret(+live: Bool, s: Socket, i: Cm.Interpretation, +sess: T.Session,
-    next: Socket -> T.Session -> IO(Flow)) -> IO(Flow):
+def repl_interpret(+live: Bool, s: Socket, +mem: Pvp.CallMem,
+    i: Cm.Interpretation, +sess: T.Session,
+    next: Socket -> Pvp.CallMem -> T.Session -> IO(Flow)) -> IO(Flow):
   match i:
     case Cm.Send{+line}:
-      repl_plan(live, s, plan_of(Cm.op_of(line)), sess, next)
+      repl_plan(live, s, mem, plan_of(Cm.op_of(line)), sess, next)
     case Cm.Note{+warning}:
       # a local warning: no protocol effect, the session is untouched;
       # the idle marker keeps the client contract (batch + idle)
       do IO<Flow>:
-        out2 : Pv.Out <- Dr.emit(Pv.ONet{s},
+        out2 : Pv.Out <- Dr.emit(Pv.ONet{s, mem},
           Con{String.append("  obs: ", warning), Con{"--- idle", Nil{}}})
         repl_out(out2, sess, next)
 
-def repl_cmd(+live: Bool, s: Socket, +line: String, +sess: T.Session,
-    next: Socket -> T.Session -> IO(Flow)) -> IO(Flow):
-  repl_interpret(live, s, Cm.interpret(line), sess, next)
+def repl_cmd(+live: Bool, s: Socket, +mem: Pvp.CallMem, +line: String,
+    +sess: T.Session,
+    next: Socket -> Pvp.CallMem -> T.Session -> IO(Flow)) -> IO(Flow):
+  repl_interpret(live, s, mem, Cm.interpret(line), sess, next)
 
 # @unsafe: the continuation closure self-references the batch loop
 @unsafe
-def repl_lines.go(+live: Bool, +lines: List<&2, String>, s: Socket, +sess: T.Session,
-    next: Socket -> T.Session -> IO(Flow)) -> IO(Flow):
+def repl_lines.go(+live: Bool, +lines: List<&2, String>, s: Socket,
+    +mem: Pvp.CallMem, +sess: T.Session,
+    next: Socket -> Pvp.CallMem -> T.Session -> IO(Flow)) -> IO(Flow):
   match lines:
     case Nil{}:
-      next(s)(sess)
+      next(s)(mem)(sess)
     case Con{+l, +rest}:
       do IO<Flow>:
-        f : Flow <- repl_cmd(live, s, l, sess,
-          s2 => sess2 => repl_lines.go(live, rest, s2, sess2, next))
+        f : Flow <- repl_cmd(live, s, mem, l, sess,
+          s2 => +mem2 => sess2 => repl_lines.go(live, rest, s2, mem2, sess2, next))
         IO.pure(Flow, f)
 
 # `lines`: the commands this chunk's newlines end (after the line the
 # last chunks left unfinished: Rcp.feed); they run, then `next` reads
 # the next chunk (a message longer than one recv stays one message,
 # BISE-240)
-def repl_data(+live: Bool, closed: Bool, s: Socket, +lines: List<&2, String>, +sess: T.Session,
-    next: Socket -> T.Session -> IO(Flow)) -> IO(Flow):
+def repl_data(+live: Bool, closed: Bool, s: Socket, +mem: Pvp.CallMem,
+    +lines: List<&2, String>, +sess: T.Session,
+    next: Socket -> Pvp.CallMem -> T.Session -> IO(Flow)) -> IO(Flow):
   match closed:
     case True{}:
       do IO<Flow>:
         Socket.close(s)
-        IO.pure(Flow, Go{sess})
+        IO.pure(Flow, Go{sess, mem})
     case False{}:
-      repl_lines.go(live, lines, s, sess, next)
+      repl_lines.go(live, lines, s, mem, sess, next)
 
 # one recv's bytes, after the bytes of the char the last recv cut
 # (core/utf8.bend: a char a recv boundary cuts reaches its line whole,
 # issue 36); no bytes: the hub closed the connection. `carry`: the
 # pieces of the unfinished line, newest first (Rcp.feed)
 @unsafe
-def repl_got(+live: Bool, s: Socket, +bs: List<&2, U32>, +carry: List<&2, String>, +pend: List<&2, U32>, +sess: T.Session) -> IO(Flow):
-  repl_decoded(live, List.is_empty(&2, U32, bs), s, U8.decode(pend, bs), carry, sess)
+def repl_got(+live: Bool, s: Socket, +mem: Pvp.CallMem, +bs: List<&2, U32>, +carry: List<&2, String>, +pend: List<&2, U32>, +sess: T.Session) -> IO(Flow):
+  repl_decoded(live, List.is_empty(&2, U32, bs), s, mem, U8.decode(pend, bs), carry, sess)
 
 @unsafe
-def repl_fed(+live: Bool, closed: Bool, s: Socket, f: List<&2, String> & List<&2, String>,
+def repl_fed(+live: Bool, closed: Bool, s: Socket, +mem: Pvp.CallMem,
+    f: List<&2, String> & List<&2, String>,
     +pend2: List<&2, U32>, +sess: T.Session) -> IO(Flow):
   match f:
     case (+lines, +carry2):
-      repl_data(live, closed, s, lines, sess,
-        s2 => sess2 => repl_conn(live, s2, carry2, pend2, sess2))
+      repl_data(live, closed, s, mem, lines, sess,
+        s2 => +mem2 => sess2 => repl_conn(live, s2, mem2, carry2, pend2, sess2))
 
 @unsafe
-def repl_decoded(+live: Bool, closed: Bool, s: Socket, r: String & List<&2, U32>, +carry: List<&2, String>, +sess: T.Session) -> IO(Flow):
+def repl_decoded(+live: Bool, closed: Bool, s: Socket, +mem: Pvp.CallMem, r: String & List<&2, U32>, +carry: List<&2, String>, +sess: T.Session) -> IO(Flow):
   match r:
     case (+text, +pend2):
-      repl_fed(live, closed, s, Rcp.feed(carry, text), pend2, sess)
+      repl_fed(live, closed, s, mem, Rcp.feed(carry, text), pend2, sess)
 
 @unsafe
 def repl_after(+live: Bool, rm: Socket & Result<&1, &1, U32 & String, Maybe<&1, List<&2, U32>>>,
-    +carry: List<&2, String>, +pend: List<&2, U32>, +sess: T.Session) -> IO(Flow):
+    +mem: Pvp.CallMem, +carry: List<&2, String>, +pend: List<&2, U32>,
+    +sess: T.Session) -> IO(Flow):
   match rm:
     case (s, Fail{_}):
       do IO<Flow>:
         Socket.close(s)
-        IO.pure(Flow, Go{sess})
+        IO.pure(Flow, Go{sess, mem})
     case (s, Done{m}):
-      repl_got(live, s, Rcp.recv_bytes(m), carry, pend, sess)
+      repl_got(live, s, mem, Rcp.recv_bytes(m), carry, pend, sess)
 
 @unsafe
-def repl_conn(+live: Bool, sock: Socket, +carry: List<&2, String>, +pend: List<&2, U32>, sess: T.Session) -> IO(Flow):
+def repl_conn(+live: Bool, sock: Socket, +mem: Pvp.CallMem, +carry: List<&2, String>, +pend: List<&2, U32>, sess: T.Session) -> IO(Flow):
   do IO<Flow>:
     rm : Socket & Result<&1, &1, U32 & String, Maybe<&1, List<&2, U32>>> <- TCP.recv_bytes(sock, 4096)
-    repl_after(live, rm, carry, pend, sess)
+    repl_after(live, rm, mem, carry, pend, sess)
 
 # ---- the accept loop: one connection at a time, session survives ----
 
@@ -375,18 +385,18 @@ def crash_lines(empty: Bool, +note: String) -> List<&2, String>:
 
 # `pre`: the session-log configuration facts (core/ev.bend), first on
 # every connection (the writer skips a fact equal to its state)
-def greet_out(greet: Maybe<&2, Nat>, s: Socket, +sess: T.Session,
-    +pre: List<&2, String>) -> IO(Pv.Out):
+def greet_out(greet: Maybe<&2, Nat>, s: Socket, +mem: Pvp.CallMem,
+    +sess: T.Session, +pre: List<&2, String>) -> IO(Pv.Out):
   match greet:
     case Some{+n}:
       do IO<Pv.Out>:
         cr : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_CRASH_NOTE")
         +note : String <- IO.pure(String, P.env_or(cr, ""))
-        Dr.emit(Pv.ONet{s}, List.concat(&2, String, [pre,
+        Dr.emit(Pv.ONet{s, mem}, List.concat(&2, String, [pre,
           greet_lines(n, P.history_of(sess)),
           crash_lines(String.is_empty(note), note)]))
     case None{}:
-      Dr.emit(Pv.ONet{s}, pre)
+      Dr.emit(Pv.ONet{s, mem}, pre)
 
 # the model the session-log facts name: the resolved one (live), or
 # "scripted"
@@ -403,47 +413,51 @@ def ev_model(live: Bool) -> IO(String):
 # re-typing it; further queued messages chain the same way inside the
 # one run loop entry. Turn/pending are still boundary-empty at a reload,
 # so only the queue and the held notifications resume here.
-def resume_queued.run(+live: Bool, s: Socket, +sess: T.Session,
-    next: Socket -> T.Session -> IO(Flow)) -> IO(Flow):
+def resume_queued.run(+live: Bool, s: Socket, +mem: Pvp.CallMem,
+    +sess: T.Session,
+    next: Socket -> Pvp.CallMem -> T.Session -> IO(Flow)) -> IO(Flow):
   do IO<Flow>:
-    e : R.RtEnd <- repl_run(live, Pv.ONet{s}, sess, Nil{}, Nil{})
+    e : R.RtEnd <- repl_run(live, Pv.ONet{s, mem}, sess, Nil{}, Nil{})
     f : Flow <- repl_end_stalled(live, e, next)
     IO.pure(Flow, f)
 
-def resume_queued(+live: Bool, empty: Bool, s: Socket, +sess: T.Session,
-    next: Socket -> T.Session -> IO(Flow)) -> IO(Flow):
+def resume_queued(+live: Bool, empty: Bool, s: Socket, +mem: Pvp.CallMem,
+    +sess: T.Session,
+    next: Socket -> Pvp.CallMem -> T.Session -> IO(Flow)) -> IO(Flow):
   match empty:
     case True{}:
-      next(s)(sess)
+      next(s)(mem)(sess)
     case False{}:
-      resume_queued.run(live, s, sess, next)
+      resume_queued.run(live, s, mem, sess, next)
 
 def greet_conn(+live: Bool, out: Pv.Out, +sess: T.Session) -> IO(Flow):
   match out:
-    case Pv.OStd{}:
-      IO.pure(Flow, Go{sess})
-    case Pv.ONet{s2}:
+    case Pv.OStd{+mem}:
+      IO.pure(Flow, Go{sess, mem})
+    case Pv.ONet{s2, +mem}:
       resume_queued(live, List.is_empty(&2, String, S.sess_queued(sess)), s2,
-        sess, s3 => sess3 => repl_conn(live, s3, Nil{}, Nil{}, sess3))
+        mem, sess,
+        s3 => +mem3 => sess3 => repl_conn(live, s3, mem3, Nil{}, Nil{}, sess3))
 
 
 
 # the connection loop ended: Go keeps serving (checkpoint + accept the
-# next client), Stop unwinds to main (the reload exit)
+# next client, with the calls' memory), Stop unwinds to main (the
+# reload exit)
 def serve_after.cont(f: Flow, l2: Listener,
-    next: Listener -> Maybe<&2, Nat> -> T.Session -> IO(Flow))
+    next: Listener -> Maybe<&2, Nat> -> T.Session -> Pvp.CallMem -> IO(Flow))
     -> IO(Flow):
   match f:
-    case Go{+sess2}:
+    case Go{+sess2, +mem2}:
       do IO<Flow>:
         P.save(sess2)
-        next(l2)(None{})(sess2)
+        next(l2)(None{})(sess2)(mem2)
     case Stop{}:
       IO.pure(Flow, Stop{})
 
 def serve_after(+live: Bool, am: Listener & Result<&1, &1, U32 & String, Socket>,
-    +greet: Maybe<&2, Nat>, +sess: T.Session,
-    next: Listener -> Maybe<&2, Nat> -> T.Session -> IO(Flow))
+    +greet: Maybe<&2, Nat>, +sess: T.Session, +mem: Pvp.CallMem,
+    next: Listener -> Maybe<&2, Nat> -> T.Session -> Pvp.CallMem -> IO(Flow))
     -> IO(Flow):
   match am:
     case (l2, Fail{_}):
@@ -453,16 +467,23 @@ def serve_after(+live: Bool, am: Listener & Result<&1, &1, U32 & String, Socket>
     case (l2, Done{s}):
       do IO<Flow>:
         +model : String <- ev_model(live)
-        out2 : Pv.Out <- greet_out(greet, s, sess,
+        out2 : Pv.Out <- greet_out(greet, s, mem, sess,
           Ev.sess_evs(sess, model, "config"))
         f : Flow <- greet_conn(live, out2, sess)
         serve_after.cont(f, l2, next)
 
 @unsafe
-def serve(+live: Bool, l: Listener, greet: Maybe<&2, Nat>, sess: T.Session) -> IO(Flow):
+def serve.go(+live: Bool, l: Listener, greet: Maybe<&2, Nat>, sess: T.Session,
+    +mem: Pvp.CallMem) -> IO(Flow):
   do IO<Flow>:
     am : Listener & Result<&1, &1, U32 & String, Socket> <- TCP.accept(l)
-    serve_after(live, am, greet, sess, l2 => g2 => s2 => serve(live, l2, g2, s2))
+    serve_after(live, am, greet, sess, mem,
+      l2 => g2 => s2 => +m2 => serve.go(live, l2, g2, s2, m2))
+
+# the accept loop, from an empty memory of calls (a new process)
+@unsafe
+def serve(+live: Bool, l: Listener, greet: Maybe<&2, Nat>, sess: T.Session) -> IO(Flow):
+  serve.go(live, l, greet, sess, Pvp.mem0())
 
 # the REPL listen port: BEND_REPL_PORT env (default: the entry's) so several
 # harness instances can run side by side
@@ -501,7 +522,7 @@ def flow_note.body(stopped: Bool) -> IO(Unit):
 
 def flow_note(f: Flow) -> IO(Unit):
   match f:
-    case Go{_}:
+    case Go{_, _}:
       flow_note.body(False{})
     case Stop{}:
       flow_note.body(True{})

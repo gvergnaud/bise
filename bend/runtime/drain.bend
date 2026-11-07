@@ -28,12 +28,12 @@ def print_lines(lines: List<&2, String>) -> IO(Unit):
 # the wire log: Pv.wire_log (the provider's in-flight notes share it)
 def emit(out: Pv.Out, +lines: List<&2, String>) -> IO(Pv.Out):
   match out:
-    case Pv.OStd{}:
+    case Pv.OStd{+mem}:
       do IO<Pv.Out>:
         d : Unit <- Dbg.sent(lines)
         print_lines(lines)
-        IO.pure(Pv.Out, Pv.OStd{})
-    case Pv.ONet{sock}:
+        IO.pure(Pv.Out, Pv.OStd{mem})
+    case Pv.ONet{sock, +mem}:
       do IO<Pv.Out>:
         d : Unit <- Dbg.sent(lines)
         +text : String <- IO.pure(String,
@@ -41,7 +41,7 @@ def emit(out: Pv.Out, +lines: List<&2, String>) -> IO(Pv.Out):
         Pv.wire_log(text)
         sm : Socket & Result<&1, &1, (U32 & String) & List<&2, U32>, Unit> <- TCP.send(sock, text)
         s2 : Socket <- IO.pure(Socket, Pv.out.pair(sm))
-        IO.pure(Pv.Out, Pv.ONet{s2})
+        IO.pure(Pv.Out, Pv.ONet{s2, mem})
 
 
 def steer_path() -> IO(String):

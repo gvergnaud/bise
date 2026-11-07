@@ -245,6 +245,22 @@ def headers_why(+name: String) -> String:
 def key_command(+file: String, +prov: String, +id: String) -> String:
   Cf.cfg_or(model_key(registry(file), prov, id, "key_command"), "")
 
+# ---- the REPL's memory of its calls ----
+# What one call leaves for the next ones of the same REPL process: the
+# last good key each provider's key_command gave. runtime/provider.bend's
+# Out carries it (the loop threads Out through every call, the REPL
+# keeps it across its connections), so it lives in memory only: never
+# in the checkpoint (P.save writes the Session alone), the reqlog ring
+# or a log. A REPL restart starts empty.
+type KeyMem is Data:
+  KeyMem{prov: String, cmd: String, key: String}
+
+type CallMem is Data:
+  CallMem{keys: List<&2, KeyMem>}
+
+def mem0() -> CallMem:
+  CallMem{Nil{}}
+
 # ---- the resolution ----
 
 # what a call needs: the provider id, the model id sent on the wire,

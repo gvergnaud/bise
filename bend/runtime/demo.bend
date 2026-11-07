@@ -24,7 +24,7 @@ def scenario(name: String, +c: T.Cfg, +cmds: List<&2, T.Cmd>,
     +script: List<&2, M.Reply>) -> IO(Unit):
   do IO<Unit>:
     IO.print(String.append("\n=== ", String.append(name, " ===")))
-    e : R.RtEnd <- R.run(500n, Pv.OStd{},
+    e : R.RtEnd <- R.run(500n, Pv.std0(),
       Rp.Rt{T.new_session(c), script, cmds, False{}},
       Rp.JIdle{},
       Rp.transition(Rp.Rt{T.new_session(c), script, cmds, False{}}, Rp.JIdle{}))

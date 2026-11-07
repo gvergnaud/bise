@@ -30,7 +30,7 @@ def call(m: Maybe<&2, String>) -> IO(Unit):
   match m:
     case Some{+request}:
       do IO<Unit>:
-        r : Pv.Out & Rem.RemoteRes <- Pv.model_call(Pv.OStd{}, request)
+        r : Pv.Out & Rem.RemoteRes <- Pv.model_call(Pv.std0(), request)
         answer(r)
     case None{}:
       IO.print("ONESHOT_ERR the request file is unreadable")
