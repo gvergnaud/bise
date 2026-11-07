@@ -24,25 +24,14 @@ export function prLine(a: Pick<Artifact, 'pr'>): PrLine | null {
   const pr = a.pr;
   if (pr == null) return null;
   const s = pr.status ?? null;
-  const tag = s?.tag ?? '#';
   const stale = s?.stale_ms ?? null;
   return {
-    sigil: `${tag}${String(pr.number)}`,
+    // the hub's one read of the link ('#412', '!412'); a row from an older hub: its number
+    sigil: pr.tag ?? `#${String(pr.number)}`,
     words: s?.words ?? '',
     yours: s?.yours != null && s.yours !== 'unknown',
     late: stale === null ? '' : panel.pr_as_of({ age: shortAge(stale) }),
   };
-}
-
-/**
- * A PR's sigil and number from its link alone ('#412'; a GitLab merge request's
- * '…/-/merge_requests/412' is '!412'), for a tab whose artifact is not here yet; '' for a link
- * with no number. Pure.
- */
-export function prTagOfUrl(url: string): string {
-  const m = /\/(pull|merge_requests)\/(\d+)\/?$/.exec(url);
-  if (m === null) return '';
-  return `${m[1] === 'merge_requests' ? '!' : '#'}${m[2] ?? ''}`;
 }
 
 /** The line's parts in order, '' ones left out: '#412', its words, then the late words. Pure. */

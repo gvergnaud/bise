@@ -87,8 +87,16 @@ describe('the tabbed panel', () => {
     expect(v.queryByTestId('app.panel.tab.new:1')).toBeNull();
     expect(v.getByTestId(`app.panel.tab.diff:${ACME}/perf`).getAttribute('aria-selected')).toBe('true');
   });
-  it('openTab unfolds it on the thing; × closes it; the last one folds the panel', () => {
+  it('a PR’s tab says its row’s tag, the plain word before its row comes, never a number read from the link', () => {
     const v = shell();
+    act(() => {
+      openTab({ kind: 'pr', project: ACME, url: PR(7) });
+    });
+    expect(v.getByTestId(`app.panel.tab.pr:${ACME}/${PR(7)}`).textContent).toBe(panel.tab_pr_plain);
+  });
+  it('openTab unfolds it on the thing; × closes it; the last one folds the panel', () => {
+    const six = artifact({ id: 'pr-6', kind: 'pr', url: PR(6), pr: { repo: 'acme/web', number: 6, tag: '#6' } });
+    const v = shell({ events: [artifacts(ACME, six)] });
     act(() => {
       openTab({ kind: 'pr', project: ACME, url: PR(6) });
     });

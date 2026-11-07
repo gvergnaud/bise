@@ -927,7 +927,7 @@ impl Store {
             "no_copy": cur.no_copy,
             "gone": gone,
             "detail": detail,
-            "pr": crate::forge::pr_link(&cur.target).map(|l| json!({"repo": l.repo, "number": l.number})),
+            "pr": crate::forge::pr_link(&cur.target).map(|l| json!({"repo": l.repo, "number": l.number, "tag": l.tag()})),
             "keys": keys(m, workspace),
             "versions": m.versions.iter().map(version).collect::<Vec<_>>(),
             // raw: the hub resolves it against the library (artifacts_ev)

@@ -6,7 +6,6 @@ import type { ReactNode } from 'react';
 import { AppIcon, KindIcon, iconKindOf } from '@/ds';
 import { panel } from '@/proto/words_panel.gen';
 import { useAllArtifacts } from '@/artifacts';
-import { prTagOfUrl } from '@/artifacts/pr';
 import { useAllProcesses } from '@/running';
 import { useProjects } from '@/store';
 import type { Tab } from './model';
@@ -55,8 +54,11 @@ function lookOf(tab: Tab, projects: ReturnType<typeof useProjects>, arts: Return
       return { title: panel.tab_changes({ agent: e.agent }), icon: <AppIcon name="changes" size={14} /> };
     case 'commit':
       return { title: e.sha.slice(0, 7), icon: <AppIcon name="branch" size={14} /> };
-    case 'pr':
-      return { title: panel.tab_pr({ tag: prTagOfUrl(e.url) }), icon: <KindIcon kind="pr" size={14} /> };
+    case 'pr': {
+      // its row's tag, the hub's one read of the link ('#412', '!412'); the plain word until it comes
+      const tag = arts.find((x) => x.project === e.project && x.a.pr != null && x.a.url === e.url)?.a.pr?.tag;
+      return { title: tag == null ? panel.tab_pr_plain : panel.tab_pr({ tag }), icon: <KindIcon kind="pr" size={14} /> };
+    }
     case 'process': {
       const p = procs.find((x) => x.project === e.project && x.p.agent === e.agent && x.p.id === e.id)?.p;
       return { title: p?.cmd ?? e.id, icon: <AppIcon name="terminal" size={14} /> };

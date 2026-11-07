@@ -199,6 +199,11 @@ pub struct ArtifactBack {
 pub struct ArtifactPr {
     pub repo: String,
     pub number: u64,
+    /// its sigil and number, `#412` (GitLab `!412`), from the hub's one
+    /// read of its link (`forge::PrLink::tag`), there before the forge
+    /// says anything: clients never parse a PR link (architect m_54703)
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub tag: String,
     /// pr-integration rules 1 and 3: the PR as the hub follows it, the
     /// one row the chip, the place and `/prs` read too
     /// (`forge::news::pr_row`), joined when the event is sent; none

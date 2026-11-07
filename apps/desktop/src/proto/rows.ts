@@ -996,6 +996,12 @@ turn?: number, };
  */
 export type ArtifactPr = { repo: string, number: number, 
 /**
+ * its sigil and number, `#412` (GitLab `!412`), from the hub's one
+ * read of its link (`forge::PrLink::tag`), there before the forge
+ * says anything: clients never parse a PR link (architect m_54703)
+ */
+tag?: string, 
+/**
  * pr-integration rules 1 and 3: the PR as the hub follows it, the
  * one row the chip, the place and `/prs` read too
  * (`forge::news::pr_row`), joined when the event is sent; none

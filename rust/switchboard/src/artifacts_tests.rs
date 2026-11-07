@@ -153,7 +153,7 @@ fn links_get_their_kind_and_a_pr_its_number() {
     assert_eq!(link_kind("https://example.com/a"), "link");
     let rows = s.rows(&nobody, "/");
     let pr_row = rows.iter().find(|r| r["id"] == "pr-6").unwrap();
-    assert_eq!(pr_row["pr"], json!({"repo": "acme/web", "number": 6}));
+    assert_eq!(pr_row["pr"], json!({"repo": "acme/web", "number": 6, "tag": "#6"}));
     let mock_row = rows.iter().find(|r| r["id"] == "the-artifacts-mock").unwrap();
     let keys: Vec<&str> = mock_row["keys"].as_array().unwrap().iter().map(|k| k.as_str().unwrap()).collect();
     assert!(keys.contains(&"bise.dev/m/artifacts") && keys.contains(&"https://bise.dev/m/artifacts"), "{keys:?}");

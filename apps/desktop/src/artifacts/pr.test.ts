@@ -13,7 +13,7 @@ const status = (over: Partial<Pr> = {}): Pr => ({
 });
 const prArt = (id: string, over: Partial<Artifact> = {}, s: Pr | null = status()): Artifact => ({
   id, kind: 'pr', title: 'Faster signup', agent: 'perf', url: 'https://github.com/acme/web/pull/412', at_ms: 1, version: 1, new: false,
-  pr: { repo: 'acme/web', number: 412, status: s }, ...over,
+  pr: { repo: 'acme/web', number: 412, tag: '#412', status: s }, ...over,
 });
 const item = (a: Artifact): Item => ({ project: 'acme', projectName: 'acme', a });
 
@@ -25,8 +25,10 @@ describe('a PR artifact line', () => {
     expect(changes?.words).toBe('changes asked');
   });
 
-  it('says a merge request with its own sigil', () => {
-    expect(prLine(prArt('a', {}, status({ tag: '!', provider: 'gitlab' })))?.sigil).toBe('!412');
+  it('says the hub’s tag (a merge request’s own sigil), and an older hub’s row by its number', () => {
+    const mr = status({ tag: '!', provider: 'gitlab' });
+    expect(prLine(prArt('a', { pr: { repo: 'acme/web', number: 412, tag: '!412', status: mr } }))?.sigil).toBe('!412');
+    expect(prLine(prArt('b', { pr: { repo: 'acme/web', number: 7, status: null } }))?.sigil).toBe('#7');
   });
 
   it('says how late the forge is, and nothing made up before it answers', () => {

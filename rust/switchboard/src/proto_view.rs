@@ -474,6 +474,8 @@ pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>, frame_ba
             let pr = r.get("pr").filter(|p| p.is_object()).map(|p| ArtifactPr {
                 repo: s(p, "repo"),
                 number: p.get("number").and_then(Value::as_u64).unwrap_or(0),
+                // '#412' / '!412' from the one read of its link: a kept row from before the field has it too
+                tag: crate::forge::pr_link(&s(r, "target")).map(|l| l.tag()).unwrap_or_default(),
                 // the hub's PR row (artifacts::join_pr_status), typed as sent
                 status: p.get("status").and_then(|x| serde_json::from_value(x.clone()).ok()),
             });

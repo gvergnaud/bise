@@ -314,6 +314,8 @@ crate::words! { panel:
     tab_terminal_n(n, project) = "Terminal {n} · {project}";
     /// a pull request's tab: its sigil and number ('#412', a GitLab merge request '!412')
     tab_pr(tag) = "PR {tag}";
+    /// a pull request's tab while its row is not here yet: no number, never one parsed from its link
+    tab_pr_plain = "PR";
     /// an agent's changes' tab
     tab_changes(agent) = "Changes · {agent}";
     /// a scheduled task's tab
