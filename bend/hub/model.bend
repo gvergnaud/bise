@@ -24,6 +24,9 @@ type Ev is Data:
   ESnapshot{name: String, snap: Maybe<&2, String>}
   # hub-loop: the worktree made for a placing task (`err` "": `ws`)
   EPlaced{name: String, ws: J.Json, err: String}
+  # hub-loop: a dropping task's worktree removed (`err` "": `snap` its
+  # saved work's ref), or not (`err`: git's words, the worktree stays)
+  EDropped{name: String, snap: Maybe<&2, String>, err: String}
   EDeclared{name: String, status: Maybe<&2, S.Decl>, note: String}
   EReported{name: String, report: J.Json}
   EFileTouched{name: String, path: String}
@@ -78,6 +81,8 @@ type AgentOp is Data:
   OUnclaim{path: String}
   ORename{new_name: String}
   OFollow{f: Maybe<&2, String>}
+  # hub-loop: the end of a drop (`ok`: removed, `snap` its saved work)
+  ODrop{ok: Bool, snap: Maybe<&2, String>}
 
 type MsgOp is Data:
   OSt{st: S.MSt}
@@ -317,6 +322,15 @@ def agent_op.file(known: Bool, +files: List<&2, String>, +p: String) -> List<&2,
     case False{}:
       snoc(String, files, p)
 
+# hub-loop: the end of a drop, on its ws: no longer dropping; removed
+# (`ok`): dropped too, its saved work's ref kept
+def agent_op.drop(ok: Bool, +a: S.Agent, +sn: Maybe<&2, String>) -> S.Agent:
+  match ok:
+    case True{}:
+      S.Agent.with_snap(S.Agent.with_ws(a, J.set(J.set(S.Agent.ws(a), "state", J.JStr{""}), "dropped", J.JBool{True{}})), sn)
+    case False{}:
+      S.Agent.with_ws(a, J.set(S.Agent.ws(a), "state", J.JStr{""}))
+
 def agent_op(+a: S.Agent, op: AgentOp) -> S.Agent:
   match op:
     case OLife{+l, +why}:
@@ -337,6 +351,8 @@ def agent_op(+a: S.Agent, op: AgentOp) -> S.Agent:
       S.Agent.with_report(a, rp)
     case OFollow{+f}:
       S.Agent.with_follow(a, f)
+    case ODrop{ok, +sn}:
+      agent_op.drop(ok, a, sn)
 
 def Agent.strip(+a: S.Agent, +n: String) -> S.Agent:
   S.Agent.with_aliases(a, NM.drop_str(S.Agent.aliases(a), n))
@@ -706,6 +722,8 @@ def apply(+st: S.St, e: Ev) -> S.St:
       on_agent(st, name, OSnap{snap})
     case EPlaced{+name, +ws, +err}:
       placed(String.is_empty(err), st, name, ws)
+    case EDropped{+name, +snap, +err}:
+      on_agent(st, name, ODrop{String.is_empty(err), snap})
     case EDeclared{+name, +status, +note}:
       on_agent(st, name, ODeclared{status, note})
     case EReported{+name, +report}:
@@ -874,6 +892,10 @@ def ws_dropped(+ws: J.Json) -> Bool:
 # hub-loop: a worktree task whose worktree the shell is still making
 def ws_placing(+ws: J.Json) -> Bool:
   String.eq(J.get_str_or(ws, "state", ""), "placing")
+
+# hub-loop: a worktree the shell is removing (its task archived meanwhile)
+def ws_dropping(+ws: J.Json) -> Bool:
+  String.eq(J.get_str_or(ws, "state", ""), "dropping")
 
 def ws_branch(+ws: J.Json) -> J.Json:
   Maybe.default(&2, J.Json, J.get(ws, "branch"), J.JNull{})

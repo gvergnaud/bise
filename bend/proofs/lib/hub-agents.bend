@@ -547,6 +547,16 @@ def lv_is_life(op: HM.AgentOp) -> Bool:
     case _:
       False{}
 
+# the end of a drop keeps the agent's life
+def lv_drop_life(ok: Bool, +h: HS.Agent, +sn: Maybe<&2, String>) -> {HS.Agent.life(HM.agent_op.drop(ok, h, sn)) == HS.Agent.life(h) : HS.Life}:
+  match ok:
+    case True{}:
+      %HSL.Agent.ws.eta(h, J.set(J.set(HS.Agent.ws(h), "state", J.JStr{""}), "dropped", J.JBool{True{}})) : {HS.Agent.life(HS.Agent.with_snap(_, sn)) == HS.Agent.life(h) : HS.Life}
+      {==}
+    case False{}:
+      %HSL.Agent.ws.eta(h, J.set(HS.Agent.ws(h), "state", J.JStr{""})) : {HS.Agent.life(_) == HS.Agent.life(h) : HS.Life}
+      {==}
+
 # an operation that is not a lifecycle keeps the agent's life
 def lv_life_op(+h: HS.Agent, op: HM.AgentOp, nl: {lv_is_life(op) == False{} : Bool}) -> {HS.Agent.life(HM.agent_op(h, op)) == HS.Agent.life(h) : HS.Life}:
   match op:
@@ -576,6 +586,8 @@ def lv_life_op(+h: HS.Agent, op: HM.AgentOp, nl: {lv_is_life(op) == False{} : Bo
     case HM.OFollow{x}:
       %HSL.Agent.follow.eta(h, x) : {HS.Agent.life(_) == HS.Agent.life(h) : HS.Life}
       {==}
+    case HM.ODrop{ok, sn}:
+      lv_drop_life(ok, h, sn)
 
 # a lifecycle gives the agent its life
 def lv_life_set(+h: HS.Agent, +l: HS.Life, +why: Maybe<&2, String>) -> {HM.live_life(HS.Agent.life(HM.agent_op(h, HM.OLife{l, why}))) == HM.live_life(l) : Bool}:
@@ -764,6 +776,8 @@ def lv_apply.go(+e: HM.Ev, +s: HS.St, la: HI.Lives(HS.St.agents(s), True{}), lr:
       lv_on(HAG.has(HS.St.agents(s), x), HS.St.agents(s), HS.St.arch(s), x, HM.OSnap{sn}, {==}, la, lr)
     case HM.EPlaced{+x, +w, +er}:
       lv_placed(String.is_empty(er), HS.St.agents(s), HS.St.arch(s), x, w, la, lr)
+    case HM.EDropped{+x, +sn, +er}:
+      lv_on(HAG.has(HS.St.agents(s), x), HS.St.agents(s), HS.St.arch(s), x, HM.ODrop{String.is_empty(er), sn}, {==}, la, lr)
     case HM.EReported{+x, +rp}:
       lv_on(HAG.has(HS.St.agents(s), x), HS.St.agents(s), HS.St.arch(s), x, HM.OReport{rp}, {==}, la, lr)
     case HM.EFollow{+x, +f, +h}:

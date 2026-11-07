@@ -102,6 +102,8 @@ def hub_apply_names.go(+e: HM.Ev, +s: HS.St, u: HI.NamesApart(s), +k: HX.FreshEv
       PLA.ag_on_ok(HAG.has(HS.St.agents(s), x), HS.St.agents(s), HS.St.arch(s), x, HM.OSnap{sn}, {==}, u)
     case HM.EPlaced{+x, +w, +er}:
       PLA.ag_placed_ok(String.is_empty(er), HS.St.agents(s), HS.St.arch(s), x, w, u)
+    case HM.EDropped{+x, +sn, +er}:
+      PLA.ag_on_ok(HAG.has(HS.St.agents(s), x), HS.St.agents(s), HS.St.arch(s), x, HM.ODrop{String.is_empty(er), sn}, {==}, u)
     case HM.EReported{+x, +rp}:
       PLA.ag_on_ok(HAG.has(HS.St.agents(s), x), HS.St.agents(s), HS.St.arch(s), x, HM.OReport{rp}, {==}, u)
     case HM.EMsgsMoved{a, b}:

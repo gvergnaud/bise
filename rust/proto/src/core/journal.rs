@@ -63,6 +63,10 @@ pub const JOURNAL: Table = Table {
         // hub-loop: the worktree the shell made for a placing task (its
         // `ws`), or why it could not (`err`; `ws` null)
         k("worktree_placed", "Placed", "M.EPlaced{name, ws, err}", &[f("name", Str), f("ws", Json), f("err", Str)]),
+        // hub-loop: the shell removed the worktree of a dropping task
+        // (`snapshot`: its saved work's ref), or could not (`err`: git's
+        // words; the worktree stays); an older core skips it
+        k("worktree_dropped", "Dropped", "M.EDropped{name, snapshot, err}", &[f("name", Str), f("snapshot", OptStr), f("err", Str)]),
         k("declared", "Declared", "M.EDeclared{name, status, note}",
             &[f("name", Str), f("status", Rec(&DECL)), f("note", Str)]),
         k("reported", "Reported", "M.EReported{name, report}", &[f("name", Str), f("report", Json)]),

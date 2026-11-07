@@ -137,6 +137,8 @@ def gone_bound.go(+e: HM.Ev, +s: HS.St, h: {Nat.is_le(List.length(&2, HS.Item, H
           h
         case HM.EPlaced{a, b, c}:
           h
+        case HM.EDropped{a, b, c}:
+          h
         case HM.EDeclared{a, b, c}:
           h
         case HM.EReported{a, b}:

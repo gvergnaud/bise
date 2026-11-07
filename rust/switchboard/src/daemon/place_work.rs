@@ -7,7 +7,8 @@
 //! (`Effect::Place`) comes here: one worker thread runs the jobs in order
 //! (one git at a time on the repo, as before), with its own `GitEnv`; a
 //! made worktree goes back to the loop as `Msg::Placed`, which steps
-//! sb-core's `placed`.
+//! sb-core's `placed`; a removed one (its work saved first) as
+//! `Msg::Unplaced`, which steps sb-core's `unplaced` (issue 32 3b).
 //!
 //! Owns: the worker and its queue. Not here: what to make or remove and
 //! what follows (sb-core), how (worktree.rs `GitEnv`).
@@ -62,13 +63,19 @@ fn worker(rx: Receiver<Job>, paths: Paths, to_loop: Sender<Msg>, git: crate::git
                 }
             }
             Job::Drop { name, ws, dirty, unpushed } => {
-                let Ok(ws) = serde_json::from_value::<Workspace>(ws) else {
-                    log_line(&paths, &format!("worktree of {name}: not removed, its workspace does not read"));
-                    continue;
+                let t0 = now_ms();
+                let (snapshot, err) = match serde_json::from_value::<Workspace>(ws) {
+                    Ok(ws) => match env.worktree_drop(&name, &ws, &Loss { dirty: dirty as usize, unpushed: unpushed as usize }) {
+                        Ok(snap) => (snap, String::new()),
+                        Err(e) => (None, e),
+                    },
+                    Err(e) => (None, format!("its workspace does not read: {e}")),
                 };
-                let loss = Loss { dirty: dirty as usize, unpushed: unpushed as usize };
-                if let Err(e) = env.worktree_drop(&name, &ws, &loss) {
-                    log_line(&paths, &format!("worktree of {name} not removed: {e}"));
+                log_line(&paths, &format!("worktree of {} removed off the loop in {} ms{}", name, now_ms().saturating_sub(t0), if err.is_empty() { String::new() } else { format!(": NOT removed: {err}") }));
+                // sb-core ends the drop (a worktree it made for a task gone
+                // while placing: no task dropping, nothing follows)
+                if to_loop.send(Msg::Unplaced { name, snapshot, err }).is_err() {
+                    return;
                 }
             }
         }

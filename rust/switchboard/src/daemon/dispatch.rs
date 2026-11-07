@@ -285,6 +285,7 @@ impl Shell {
             Msg::AgentNew { token, stream, v, asker } => self.agent_new(token, stream, v, &asker),
             Msg::WakeSeen(s) => self.wake_seen(s),
             Msg::Placed { name, ws, err } => self.step(Input::Placed { name, ws, err }),
+            Msg::Unplaced { name, snapshot, err } => self.step(Input::Unplaced { name, snapshot, err }),
             Msg::XHub { token, stream, v } => self.xhub_op(token, stream, v),
             Msg::Version { mut stream, v, asker } => {
                 let from = v.get("from").and_then(|x| x.as_str()).unwrap_or("").to_string();

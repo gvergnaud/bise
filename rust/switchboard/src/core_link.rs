@@ -162,7 +162,6 @@ impl Hub {
         let _t = self.spent.part(match jstr(q, "q").as_str() {
             "worktree_create" => "git worktree_create",
             "worktree_loss" => "git worktree_loss",
-            "worktree_drop" => "git worktree_drop",
             "worktree_restore" => "git worktree_restore",
             _ => "git query",
         });
@@ -174,17 +173,6 @@ impl Hub {
             "worktree_loss" => {
                 let l = ws.map(|w| env.worktree_loss(&w)).unwrap_or_default();
                 json!({"dirty": l.dirty, "unpushed": l.unpushed})
-            }
-            "worktree_drop" => {
-                let n = |k: &str| q.get(k).and_then(|x| x.as_u64()).unwrap_or(0) as usize;
-                let loss = Loss {
-                    dirty: n("dirty"),
-                    unpushed: n("unpushed"),
-                };
-                match ws {
-                    Some(w) => res(env.worktree_drop(&name, &w, &loss).map(|r| json!(r))),
-                    None => json!({"err": "no agent"}),
-                }
             }
             "worktree_restore" => match ws {
                 Some(w) => res(env

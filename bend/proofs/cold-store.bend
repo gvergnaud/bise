@@ -444,6 +444,8 @@ def ail.go(+e: HM.Ev, +s: HS.St, +x: Nat, -r: HS.MRec, +n: {HM.nat_in(N.Needs.ms
       {==}
     case HM.EPlaced{a, b, c}:
       {==}
+    case HM.EDropped{a, b, c}:
+      {==}
     case HM.EDeclared{a, b, c}:
       {==}
     case HM.EReported{a, b}:
@@ -638,6 +640,8 @@ def cs_keep.go(+e: HM.Ev, +s: HS.St, +x: Nat, -r: HS.MRec, +n: {HM.nat_in(N.Need
     case HM.ESnapshot{a, b}:
       o
     case HM.EPlaced{a, b, c}:
+      o
+    case HM.EDropped{a, b, c}:
       o
     case HM.EDeclared{a, b, c}:
       o

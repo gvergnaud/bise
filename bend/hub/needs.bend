@@ -63,6 +63,8 @@ def needs(e: M.Ev) -> Needs():
       of_agent(name)
     case M.EPlaced{+name, _, _}:
       of_agent(name)
+    case M.EDropped{+name, _, _}:
+      of_agent(name)
     case M.EDeclared{+name, _, _}:
       of_agent(name)
     case M.EReported{+name, _}:

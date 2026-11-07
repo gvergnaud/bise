@@ -172,6 +172,8 @@ def hc_apply.go(+e: HM.Ev, +s: HS.St, sp: HI.Split(s), k: hc_GeEv(s, e)) -> hc_S
       HX.Both{{==}, sp}
     case HM.EPlaced{a, b, c}:
       HX.Both{{==}, sp}
+    case HM.EDropped{a, b, c}:
+      HX.Both{{==}, sp}
     case HM.EDeclared{a, b, c}:
       HX.Both{{==}, sp}
     case HM.EReported{a, b}:
@@ -275,6 +277,8 @@ def hc_fresh_ge(+s: HS.St, e: HM.Ev, k: HX.FreshEv(s, e)) -> hc_GeEv(s, e):
       Unit{}
     case HM.EPlaced{a, b, c}:
       Unit{}
+    case HM.EDropped{a, b, c}:
+      Unit{}
     case HM.EDeclared{a, b, c}:
       Unit{}
     case HM.EReported{a, b}:
@@ -364,6 +368,8 @@ def hc_replay_ge(+st: HS.St, e: HM.Ev, ok: {CO.replay_fresh(st, e) == True{} : B
     case HM.ESnapshot{a, b}:
       Unit{}
     case HM.EPlaced{a, b, c}:
+      Unit{}
+    case HM.EDropped{a, b, c}:
       Unit{}
     case HM.EDeclared{a, b, c}:
       Unit{}
@@ -463,6 +469,8 @@ def hc_kept1(+xs: List<&2, HS.MRec>, e: HM.Ev) -> HI.IsPrefix(HI.ids(xs), HI.ids
     case HM.ESnapshot{a, b}:
       PL1.hub_prefix_refl(HI.ids(xs))
     case HM.EPlaced{a, b, c}:
+      PL1.hub_prefix_refl(HI.ids(xs))
+    case HM.EDropped{a, b, c}:
       PL1.hub_prefix_refl(HI.ids(xs))
     case HM.EDeclared{a, b, c}:
       PL1.hub_prefix_refl(HI.ids(xs))

@@ -88,12 +88,15 @@ FIXTURE = [
     # next restart)
     {"type": "worktree_placed", "name": "perf", "ws": {"mode": "worktree", "path": "/w/wt/perf", "branch": "sb/perf",
                                                        "base_commit": "abc", "dropped": False}, "err": ""},
+    # issue 32 3b: the end of a drop run off the loop (skipped by an older
+    # sb-core: the task keeps its workspace as it was before the drop)
+    {"type": "worktree_dropped", "name": "perf", "snapshot": None, "err": "fatal: could not remove the worktree"},
 ]
 
 
 def is_new(e):
     """A kind an older sb-core may not know (it skips it, never misreads it)."""
-    return e["type"].startswith(("x_", "act_", "wake_", "route_")) or e["type"] in ("follow", "job_end", "every_name", "worktree_placed",
+    return e["type"].startswith(("x_", "act_", "wake_", "route_")) or e["type"] in ("follow", "job_end", "every_name", "worktree_placed", "worktree_dropped",
                                                                                  "card_withdrawn", "card_late")
 
 

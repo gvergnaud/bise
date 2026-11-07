@@ -3,6 +3,7 @@
 {"type":"workspace_changed","name":"docs","ws":{"kind":"shared","dir":"/Users/camille/acme"}}
 {"type":"snapshot","name":"docs","snapshot_ref":"refs/bise/snap/docs-1"}
 {"type":"worktree_placed","name":"docs","ws":{"mode":"worktree","path":"/w/wt/docs","branch":"sb/docs","base_commit":"abc","dropped":false},"err":""}
+{"type":"worktree_dropped","name":"docs","snapshot":"refs/switchboard/trash/docs/1","err":""}
 {"type":"declared","name":"docs","status":"blocked","note":"needs the API key"}
 {"type":"reported","name":"docs","report":{"kind":"done","summary":"the page is up"}}
 {"type":"file_touched","name":"docs","path":"docs/index.md"}

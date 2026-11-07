@@ -69,6 +69,10 @@ core_kinds! {
         /// task `name` (fx `worktree_create`): `ws` its workspace, null
         /// when `err` says why not
         Placed = "placed" => IPlaced { name: Str, ws: Json, err: Str },
+        /// hub-loop: the shell removed (or failed to remove) the worktree
+        /// of task `name` (fx `worktree_drop`): `snapshot` the ref of its
+        /// saved work (none: nothing to save), `err` git's words
+        Unplaced = "unplaced" => IUnplaced { name: Str, snapshot: OptStr, err: Str },
         /// `sb feature retire <name>` (main's): the feature's tip is in
         /// the trunk (the hub checked); its live agents land on the trunk
         /// from now on. `kept`: the branch's name after the retire

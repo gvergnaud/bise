@@ -173,21 +173,26 @@ def drop_card(+body: String) -> String:
 def drop_asked(+body: String) -> String:
   String.append(body, drop_opts())
 
-def drop_label(r: Result<&2, &2, String, J.Json>) -> String:
-  match r:
-    case Fail{+e}:
-      String.append(" — worktree NOT deleted: ", e)
-    case Done{J.JStr{_}}:
-      " — work saved (/restore)"
-    case Done{_}:
-      " · its worktree removed"
+# ---- a drop off the loop (issue 32 3b): the archive is committed, its
+# ws `dropping` while the shell saves and removes its worktree; the
+# shell's `unplaced` ends it (core.bend's unplaced.in) ----
 
-def drop_snap(j: J.Json) -> Maybe<&2, String>:
-  match j:
-    case J.JStr{+s}:
-      Some{s}
-    case _:
-      None{}
+# the ws of a task whose worktree the shell is removing: what to save
+# rides with it, so a stopped hub's `boot` asks again with the same
+def dropping_ws(+ws: J.Json, +dirty: Nat, +unpushed: Nat) -> J.Json:
+  J.set(J.set(J.set(ws, "state", J.JStr{"dropping"}), "drop_dirty", J.JNum{dirty}), "drop_unpushed", J.JNum{unpushed})
+
+# the drop's line in main's feed while it runs
+def removing_note() -> String:
+  " · its worktree is being removed"
+
+# main's feed when the shell could not remove it (git's words)
+def undropped_text(+n: String, +err: String) -> String:
+  String.concat(["@", n, "'s worktree was not removed: ", err, ". it stays: /restore brings @", n, " back in it"])
+
+# a restore while the shell still removes its worktree
+def dropping_text(+n: String) -> String:
+  String.concat(["@", n, " is still being archived: restore it in a moment"])
 
 # a `placed` that starts the task (laws: placed_create_once)
 def is_ok(d: Do) -> Bool:

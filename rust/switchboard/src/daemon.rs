@@ -230,6 +230,8 @@ enum Msg {
     WakeSeen(wake_look::WakeSeen),
     /// A worktree made off the loop (daemon/place_work.rs).
     Placed { name: String, ws: Value, err: String },
+    /// A worktree removed off the loop (daemon/place_work.rs, issue 32 3b).
+    Unplaced { name: String, snapshot: Option<String>, err: String },
     /// A role-line call is over (BISE-126).
     RoleLine {
         dir: String,

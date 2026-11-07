@@ -296,6 +296,7 @@ impl Msg {
             Msg::Typed { .. } => "typed event".into(),
             Msg::WakeSeen(s) => format!("wake seen {}", s.id),
             Msg::Placed { name, .. } => format!("placed {name}"),
+            Msg::Unplaced { name, .. } => format!("unplaced {name}"),
             _ => "a hub message".into(),
         }
     }

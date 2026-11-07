@@ -129,6 +129,12 @@ law in_placed_bare:
 def in_placed_bare():
   {==}
 
+law in_unplaced_bare:
+  {IN.of(J.obj([J.kv("t", J.JStr{"unplaced"})])) == IN.IUnplaced{"", None{}, ""} : IN.In}
+
+def in_unplaced_bare():
+  {==}
+
 law in_feature_retire_bare:
   {IN.of(J.obj([J.kv("t", J.JStr{"feature_retire"})])) == IN.IFeatureRetire{"", "", ""} : IN.In}
 
@@ -581,6 +587,19 @@ law in_IPlaced_round:
 
 def in_IPlaced_round(name, ws, err):
   {==}
+
+law in_IUnplaced_round:
+  for name: String
+  for snapshot: Maybe<&2, String>
+  for err: String
+  {IN.of(IN.json(IN.IUnplaced{name, snapshot, err})) == IN.IUnplaced{name, snapshot, err} : IN.In}
+
+def in_IUnplaced_round(name, snapshot, err):
+  match snapshot:
+    case None{}:
+      {==}
+    case Some{x_snapshot}:
+      {==}
 
 law in_IFeatureRetire_round:
   for name: String

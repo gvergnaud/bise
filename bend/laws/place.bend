@@ -124,3 +124,67 @@ law place_join_err_fails_both:
   for h: {String.is_empty(e) == False{} : Bool}
   {HPL.placed_of.live(True{}, a, b, HPL.join.ws(HPL.PErr{n, e, p}), HPL.join.err(HPL.PErr{n, e, p}, err))
     == HPL.PErr{b, e, HPL.parent_of(HS.Agent.parent(a))} : HPL.Do}
+
+# ---- a drop off the loop (issue 32 3b: `worktree_drop`, `unplaced`) ----
+
+# LAW: a drop commits the archive first (the task stopped, its ws
+# `dropping` with what to save), then asks the shell for the removal: the
+# step never waits on git.
+law drop_fx_after_archive:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +a: HS.Agent
+  for +d: Nat
+  for +u: Nat
+  {HC.drop.off(o, cx, a, d, u)
+    == HC.out(o, HC.emit(o, HC.stop_noted(o, cx, HS.Agent.name(a), HS.LArchived{}, "drop"),
+      HM.EWorkspace{HS.Agent.name(a), HPL.dropping_ws(HS.Agent.ws(a), d, u)}, Unit{}, Unit{}, Unit{}),
+      HF.worktree_drop(HS.Agent.name(a), HS.Agent.ws(a), d, u)) : HX.Cx<o>}
+
+# LAW: no restore while the shell still removes the worktree: the answer
+# says so, and nothing else moves.
+law no_restore_while_dropping:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +a: HS.Agent
+  {HC.restore.dropping(o, True{}, cx, a) == (cx, HC.TErr{HPL.dropping_text(HS.Agent.name(a))}) : HX.Cx<o> & HC.TaskR}
+
+# LAW: an `unplaced` for a task not dropping (an orphan's worktree, a
+# second answer) changes nothing.
+law unplaced_not_dropping_inert:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +a: HS.Agent
+  for +snap: Maybe<&2, String>
+  for +err: String
+  {HC.unplaced.go(o, False{}, cx, a, snap, err) == cx : HX.Cx<o>}
+
+# LAW: a removal that failed keeps the worktree (no longer dropping, not
+# dropped) and the saved work the task had: a /restore reuses it.
+law undropped_keeps_worktree:
+  for +a: HS.Agent
+  for +sn: Maybe<&2, String>
+  {HM.agent_op(a, HM.ODrop{False{}, sn}) == HM.agent_op(a, HM.OWs{J.set(HS.Agent.ws(a), "state", J.JStr{""})}) : HS.Agent}
+
+# LAW: the journal's `worktree_dropped` replays as the dropped workspace
+# and its saved work's ref (a restart rebuilds the archived task as it was).
+law dropped_replays_as_ws:
+  for +a: HS.Agent
+  for +sn: Maybe<&2, String>
+  {HM.agent_op(a, HM.ODrop{True{}, sn})
+    == HM.agent_op(HM.agent_op(a, HM.OWs{J.set(J.set(HS.Agent.ws(a), "state", J.JStr{""}), "dropped", J.JBool{True{}})}), HM.OSnap{sn}) : HS.Agent}
+
+# LAW: a hub stopped mid-drop asks for the removal again at its boot, with
+# what to save (it rode with the ws); a task not dropping gets nothing.
+law boot_reemits_stuck_drop:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +a: HS.Agent
+  {HC.boot.drop(o, True{}, cx, a)
+    == HC.out(o, cx, HF.worktree_drop(HS.Agent.name(a), HS.Agent.ws(a), J.get_num_or(HS.Agent.ws(a), "drop_dirty", 0n), J.get_num_or(HS.Agent.ws(a), "drop_unpushed", 0n))) : HX.Cx<o>}
+
+law boot_skips_not_dropping:
+  for -o: HS.St
+  for +cx: HX.Cx<o>
+  for +a: HS.Agent
+  {HC.boot.drop(o, False{}, cx, a) == cx : HX.Cx<o>}

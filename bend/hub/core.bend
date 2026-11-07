@@ -1529,27 +1529,18 @@ def drop.left(-o: S.St, ns: List<&2, String>, +cx: X.Cx<o>, +snap: Maybe<&2, Str
       +cx2 = emit(o, cx, M.EWorkspace{n, PL.drop.left.ws(M.get_agent(st(o, cx), n))}, Unit{}, Unit{}, Unit{})
       drop.left(o, t, emit(o, cx2, M.ESnapshot{n, snap}, Unit{}, Unit{}, Unit{}), snap)
 
-def drop.ws(-o: S.St, r: Result<&2, &2, String, J.Json>, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o>:
-  match r:
-    case Fail{_}:
-      cx
-    case Done{+snap}:
-      +left = PL.mates_of(st(o, cx), a, False{})
-      +sn = PL.drop_snap(snap)
-      +cx2 = emit(o, cx, M.EWorkspace{S.Agent.name(a), J.set(S.Agent.ws(a), "dropped", J.JBool{True{}})}, Unit{}, Unit{}, Unit{})
-      drop.left(o, left, emit(o, cx2, M.ESnapshot{S.Agent.name(a), sn}, Unit{}, Unit{}, Unit{}), sn)
-
 def drop.finish(-o: S.St, +cx: X.Cx<o>, +a: S.Agent, +label: String) -> X.Cx<o> & DropR:
   +cx2 = feed(o, cx, M.MAIN(), FD.info(cat(["@", S.Agent.name(a), " archived", label])))
   # a client looking at it goes back to main
   (out(o, cx2, F.focus_main(S.Agent.name(a))), DDone{})
 
-def drop.git(-o: S.St, p: X.Cx<o> & Maybe<&2, J.Json>, +a: S.Agent) -> X.Cx<o> & DropR:
-  match p:
-    case (+cx, None{}):
-      (cx, DHalt{})
-    case (+cx, Some{+ans}):
-      drop.finish(o, drop.ws(o, PL.ans_ok(ans), cx, a), a, PL.drop_label(PL.ans_ok(ans)))
+# issue 32 3b: the archive is committed now; the worktree's save and
+# removal run off the loop (fx worktree_drop), its ws `dropping` until
+# the shell's `unplaced` (unplaced.in)
+def drop.off(-o: S.St, +cx: X.Cx<o>, +a: S.Agent, +dirty: Nat, +unpushed: Nat) -> X.Cx<o>:
+  +n = S.Agent.name(a)
+  +cx2 = emit(o, stop_noted(o, cx, n, S.LArchived{}, "drop"), M.EWorkspace{n, PL.dropping_ws(S.Agent.ws(a), dirty, unpushed)}, Unit{}, Unit{}, Unit{})
+  out(o, cx2, F.worktree_drop(n, S.Agent.ws(a), dirty, unpushed))
 
 def drop.now(-o: S.St, has_wt: Bool, +cx: X.Cx<o>, +a: S.Agent, +loss: J.Json) -> X.Cx<o> & DropR:
   match has_wt:
@@ -1558,9 +1549,36 @@ def drop.now(-o: S.St, has_wt: Bool, +cx: X.Cx<o>, +a: S.Agent, +loss: J.Json) -
       +label = PL.drop.stays(PL.mates_of(st(o, cx), a, True{}))
       drop.finish(o, stop_noted(o, cx, S.Agent.name(a), S.LArchived{}, "drop"), a, label)
     case True{}:
-      +cx2 = stop_noted(o, cx, S.Agent.name(a), S.LArchived{}, "drop")
-      drop.git(o, ask(o, cx2, J.obj([J.kv("q", J.JStr{"worktree_drop"}), J.kv("name", J.JStr{S.Agent.name(a)}), J.kv("ws", S.Agent.ws(a)),
-        J.kv("dirty", J.JNum{J.get_num_or(loss, "dirty", 0n)}), J.kv("unpushed", J.JNum{J.get_num_or(loss, "unpushed", 0n)})])), a)
+      drop.finish(o, drop.off(o, cx, a, J.get_num_or(loss, "dirty", 0n), J.get_num_or(loss, "unpushed", 0n)), a, PL.removing_note())
+
+# the shell's `unplaced` for a dropping task: removed (its mates that left
+# before lose the folder too, with the same saved work), or not (git's
+# words in main's feed; the worktree stays, a /restore reuses it)
+def unplaced.end(-o: S.St, ok: Bool, +cx: X.Cx<o>, +a: S.Agent, +snap: Maybe<&2, String>, +err: String) -> X.Cx<o>:
+  match ok:
+    case True{}:
+      drop.left(o, PL.mates_of(st(o, cx), a, False{}), cx, snap)
+    case False{}:
+      feed(o, cx, M.MAIN(), FD.warn(PL.undropped_text(S.Agent.name(a), err)))
+
+def unplaced.go(-o: S.St, dropping: Bool, +cx: X.Cx<o>, +a: S.Agent, +snap: Maybe<&2, String>, +err: String) -> X.Cx<o>:
+  match dropping:
+    case False{}:
+      # not dropping (an orphan worktree removed, a second answer): nothing
+      cx
+    case True{}:
+      +cx2 = emit(o, cx, M.EDropped{S.Agent.name(a), snap, err}, Unit{}, Unit{}, Unit{})
+      unplaced.end(o, String.is_empty(err), cx2, a, snap, err)
+
+def unplaced.agent(-o: S.St, m: Maybe<&2, S.Agent>, +cx: X.Cx<o>, +snap: Maybe<&2, String>, +err: String) -> X.Cx<o>:
+  match m:
+    case None{}:
+      cx
+    case Some{+a}:
+      unplaced.go(o, M.ws_dropping(S.Agent.ws(a)), cx, a, snap, err)
+
+def unplaced.in(-o: S.St, +cx: X.Cx<o>, +name: String, +snap: Maybe<&2, String>, +err: String) -> X.Cx<o>:
+  unplaced.agent(o, M.get_agent(st(o, cx), name), cx, snap, err)
 
 def drop.decide(-o: S.St, confirm: Bool, +cx: X.Cx<o>, +a: S.Agent, +has_wt: Bool, +loss: J.Json, +busy: Bool) -> X.Cx<o> & DropR:
   match confirm:
@@ -1667,13 +1685,21 @@ def restore.dropped(-o: S.St, dropped: Bool, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<
     case False{}:
       restore.go(o, cx, a)
 
+# issue 32 3b: no restore while the shell still removes its worktree
+def restore.dropping(-o: S.St, dropping: Bool, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o> & TaskR:
+  match dropping:
+    case True{}:
+      (cx, TErr{PL.dropping_text(S.Agent.name(a))})
+    case False{}:
+      restore.dropped(o, M.ws_worktree(S.Agent.ws(a)) && M.ws_dropped(S.Agent.ws(a)), cx, a)
+
 def restore.agent(-o: S.St, m: Maybe<&2, S.Agent>, +cx: X.Cx<o>, +name: String) -> X.Cx<o> & TaskR:
   match m:
     case None{}:
       (cx, TErr{String.append("no agent named ", name)})
     case Some{+a}:
       LZ.pick(X.Cx<o> & TaskR, is_active(S.Agent.life(a)), u => (cx, TErr{cat(["@", S.Agent.name(a), " is active"])}),
-        u => restore.dropped(o, M.ws_worktree(S.Agent.ws(a)) && M.ws_dropped(S.Agent.ws(a)), cx, a))
+        u => restore.dropping(o, M.ws_dropping(S.Agent.ws(a)), cx, a))
 
 def restore_task(-o: S.St, +cx: X.Cx<o>, +name: String) -> X.Cx<o> & TaskR:
   restore.agent(o, agent_of(st(o, cx), M.resolve(st(o, cx), name)), cx, name)
@@ -3743,12 +3769,38 @@ def boot.live(-o: S.St, live: Bool, +cx: X.Cx<o>, +n: String) -> X.Cx<o>:
     case False{}:
       cx
 
+# issue 32: a task a stopped hub was still placing gets its fx again (a
+# joiner waits for its place's); its REPL starts at its `placed`
+def boot.placing(-o: S.St, placing: Bool, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o>:
+  match placing:
+    case True{}:
+      place.ask(o, PL.makes(S.Agent.ws(a)), cx, S.Agent.name(a), S.Agent.ws(a))
+    case False{}:
+      boot.live(o, is_active(S.Agent.life(a)), cx, S.Agent.name(a))
+
 def boot.one(-o: S.St, m: Maybe<&2, S.Agent>, +cx: X.Cx<o>, +n: String) -> X.Cx<o>:
   match m:
     case None{}:
       cx
     case Some{+a}:
-      boot.live(o, is_active(S.Agent.life(a)), cx, n)
+      boot.placing(o, M.ws_placing(S.Agent.ws(a)), cx, a)
+
+# issue 32 3b: an archived task a stopped hub was still dropping: its
+# worktree_drop again, with what to save (it rode with its ws)
+def boot.drop(-o: S.St, dropping: Bool, +cx: X.Cx<o>, +a: S.Agent) -> X.Cx<o>:
+  match dropping:
+    case True{}:
+      +ws = S.Agent.ws(a)
+      out(o, cx, F.worktree_drop(S.Agent.name(a), ws, J.get_num_or(ws, "drop_dirty", 0n), J.get_num_or(ws, "drop_unpushed", 0n)))
+    case False{}:
+      cx
+
+def boot.drops(-o: S.St, xs: List<&2, S.Agent>, +cx: X.Cx<o>) -> X.Cx<o>:
+  match xs:
+    case Nil{}:
+      cx
+    case Con{+a, +t}:
+      boot.drops(o, t, boot.drop(o, M.ws_dropping(S.Agent.ws(a)), cx, a))
 
 def boot.each(-o: S.St, names: List<&2, String>, +cx: X.Cx<o>) -> X.Cx<o>:
   match names:
@@ -3764,7 +3816,8 @@ def boot.each(-o: S.St, names: List<&2, String>, +cx: X.Cx<o>) -> X.Cx<o>:
 def boot(-o: S.St, +cx: X.Cx<o>) -> X.Cx<o>:
   +cx1 = view_ends(o, S.St.cards(st(o, cx)), cx)
   +cx2 = close_ids(o, CK.legacy_cards(S.St.cards(st(o, cx1))), cx1, "moved to main's inbox")
-  boot.each(o, M.live_names(st(o, cx2)), cx2)
+  +cx3 = boot.each(o, M.live_names(st(o, cx2)), cx2)
+  boot.drops(o, S.St.arch(st(o, cx3)), cx3)
 
 # the asked message, still with no reply watch and no reply, of an active
 # agent: one more pause, from the ask (laws ask_timeout_pauses, ask_once)
@@ -4038,6 +4091,8 @@ def dispatch(-o: S.St, +cx: X.Cx<o>, +i: GI.In) -> X.Cx<o>:
       user_isolate.res(o, isolate_task(o, cx, name))
     case GI.IPlaced{+name, +ws, +err}:
       placed.in(o, cx, name, ws, err)
+    case GI.IUnplaced{+name, +snapshot, +err}:
+      unplaced.in(o, cx, name, snapshot, err)
     case GI.IFeatureRetire{+name, +kept, +main}:
       feature_retire(o, cx, name, kept, main)
     case GI.IRename{+name, +new_name, +valid}:

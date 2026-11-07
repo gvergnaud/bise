@@ -3,12 +3,14 @@
 Status: chunks 1-2 and the agents' read lane on main (822f0a619, 419f82125,
 7333f6bff), signed by architect. Chunk 3 (sb-core decides, git runs as an
 effect; architect m_30076, m_30446): 3a spawn on main (worktree_create is
-an fx, `placed` an input, `worktree_placed` a journal kind). 3b (drop) and
-3c (`sb spawn --feature`, `sb isolate`, deleting the `worktree_create`
-NEED) are parked (main m_30915, Gabriel's no-new-refactors rule): their
-signed plan is the last section. Until 3b, /archive of a worktree task
-still holds the loop 1-3 s (git worktree_drop), so tests/hub_loop_e2e.py
-stays out of run_all. Label: hub, loop.
+an fx, `placed` an input, `worktree_placed` a journal kind). 3b's drop
+in with chantier c4-loop-never-waits (land 4a: fx `worktree_drop`, input
+`unplaced`, journal kind `worktree_dropped`, a restore refused while
+dropping, a boot that asks again for a drop a stopped hub left; laws in
+bend/laws/place.bend). Next: 3b's restore off the loop (4b), then 3c
+(`sb spawn --feature`, `sb isolate`, deleting the `worktree_create` NEED,
+tests/hub_loop_e2e.py into run_all) (4c). Their signed plan is the last
+section. Label: hub, loop.
 
 ## The problem
 

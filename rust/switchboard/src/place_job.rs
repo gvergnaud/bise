@@ -18,9 +18,20 @@ pub enum Job {
 /// (the env's worktree), as the `Input::Placed` the loop would step.
 #[cfg(test)]
 pub(crate) fn placed_now(env: &mut dyn crate::core::Env, e: &crate::core::Effect) -> Option<crate::core::Input> {
-    let crate::core::Effect::Place(Job::Create { name, with_changes }) = e else { return None };
-    Some(match env.worktree_create(name, *with_changes) {
-        Ok(ws) => crate::core::Input::Placed { name: name.clone(), ws: serde_json::to_value(ws).ok()?, err: String::new() },
-        Err(err) => crate::core::Input::Placed { name: name.clone(), ws: Value::Null, err },
+    use crate::core::Input;
+    let crate::core::Effect::Place(job) = e else { return None };
+    Some(match job {
+        Job::Create { name, with_changes } => match env.worktree_create(name, *with_changes) {
+            Ok(ws) => Input::Placed { name: name.clone(), ws: serde_json::to_value(ws).ok()?, err: String::new() },
+            Err(err) => Input::Placed { name: name.clone(), ws: Value::Null, err },
+        },
+        // issue 32 3b: a drop's end, as the worker sends it
+        Job::Drop { name, ws, dirty, unpushed } => {
+            let loss = crate::core::Loss { dirty: *dirty as usize, unpushed: *unpushed as usize };
+            match serde_json::from_value(ws.clone()).map_err(|e| e.to_string()).and_then(|w| env.worktree_drop(name, &w, &loss)) {
+                Ok(snapshot) => Input::Unplaced { name: name.clone(), snapshot, err: String::new() },
+                Err(err) => Input::Unplaced { name: name.clone(), snapshot: None, err },
+            }
+        }
     })
 }

@@ -51,3 +51,24 @@ def Laws.place_join_shares(a, b, n, ws, err):
 
 def Laws.place_join_err_fails_both(a, b, n, e, p, err, h):
   Laws.placed_err_fails(a, b, J.JNull{}, e, h)
+
+def Laws.drop_fx_after_archive(o, cx, a, d, u):
+  {==}
+
+def Laws.no_restore_while_dropping(o, cx, a):
+  {==}
+
+def Laws.unplaced_not_dropping_inert(o, cx, a, snap, err):
+  {==}
+
+def Laws.undropped_keeps_worktree(a, sn):
+  {==}
+
+def Laws.dropped_replays_as_ws(a, sn):
+  {==}
+
+def Laws.boot_reemits_stuck_drop(o, cx, a):
+  {==}
+
+def Laws.boot_skips_not_dropping(o, cx, a):
+  {==}

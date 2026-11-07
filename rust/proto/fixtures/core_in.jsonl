@@ -38,6 +38,7 @@
 {"agent": "net", "ans": [], "git": true, "now": 1000000, "t": "interrupt"}
 {"ans": [], "git": true, "name": "a", "now": 1000000, "t": "isolate"}
 {"ans": [], "err": "", "git": true, "name": "a", "now": 1000000, "t": "placed", "ws": {"mode": "worktree", "path": "/w/wt/a", "branch": "sb/a"}}
+{"ans": [], "err": "", "git": true, "name": "a", "now": 1000000, "snapshot": "refs/switchboard/trash/a/1", "t": "unplaced"}
 {"ans": [], "git": true, "kept": "fr-retired", "main": "main", "name": "fr", "now": 1000000, "t": "feature_retire"}
 {"ans": [], "base": "x", "brief": {"constraints": [], "context": "", "done_when": null, "objective": "y", "report_format": null}, "brief_text": "Objective: y\n\nNo end criterion: this is a long-running task. Stay available.\n", "git": false, "now": 1000000, "objective": "y", "t": "new", "with_changes": false, "worktree": true}
 {"t": "passthrough", "focus": "main", "line": "/status", "now": 2, "git": false, "ans": []}

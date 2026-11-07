@@ -185,6 +185,9 @@ pub enum Input {
     /// hub-loop: the shell made task `name`'s worktree (`ws`), or could
     /// not (`err`); daemon/place_work.rs, sb-core's hub/place.bend
     Placed { name: String, ws: Value, err: String },
+    /// issue 32 3b: the shell removed task `name`'s worktree (`snapshot`:
+    /// its saved work's ref), or could not (`err`); daemon/place_work.rs
+    Unplaced { name: String, snapshot: Option<String>, err: String },
     /// The approvals gate (approvals-design.md §9): a `confirm` card for
     /// `agent`'s waiting call, in the user's inbox.
     ConfirmOpen { agent: String, text: String },
@@ -1703,6 +1706,7 @@ impl Hub {
             Input::WakeStop { id } => self.wake_stop_by_him(&mut fx, env, id),
             Input::WakeHit { id, text, rc, tail, after_ms } => self.wake_hit(&mut fx, env, id, &text, crate::wake::Hit { rc, tail, after_ms }),
             Input::Placed { name, ws, err } => self.core(&mut fx, env, None, In::Placed(ci::Placed { name, ws, err })),
+            Input::Unplaced { name, snapshot, err } => self.core(&mut fx, env, None, In::Unplaced(ci::Unplaced { name, snapshot, err })),
             Input::ConfirmOpen { agent, text } => self.core(&mut fx, env, None, In::ConfirmOpen(ci::ConfirmOpen { agent, text })),
             Input::ConfirmClose { card, res } => self.core(&mut fx, env, None, In::ConfirmClose(ci::ConfirmClose { card, res })),
             Input::ViewConfirmOpen { agent, call, text, ask } => self.core(&mut fx, env, None, In::ViewConfirmOpen(ci::ViewConfirmOpen { agent, call, text, ask })),

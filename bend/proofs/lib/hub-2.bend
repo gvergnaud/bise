@@ -385,6 +385,8 @@ def hub_apply_ucards.go(+e: HM.Ev, +s: HS.St, u: HI.UniqueCards(s), k: HX.FreshE
       u
     case HM.EPlaced{a, b, c}:
       u
+    case HM.EDropped{a, b, c}:
+      u
     case HM.EDeclared{a, b, c}:
       u
     case HM.EReported{a, b}:
@@ -685,6 +687,16 @@ def hub_is_rename(op: HM.AgentOp) -> Bool:
     case _:
       False{}
 
+# the end of a drop keeps the agent's names
+def hub_drop_names(ok: Bool, +h: HS.Agent, +sn: Maybe<&2, String>) -> {HI.names(HM.agent_op.drop(ok, h, sn)) == HI.names(h) : List<&2, String>}:
+  match ok:
+    case True{}:
+      %HSL.Agent.ws.eta(h, J.set(J.set(HS.Agent.ws(h), "state", J.JStr{""}), "dropped", J.JBool{True{}})) : {HI.names(HS.Agent.with_snap(_, sn)) == HI.names(h) : List<&2, String>}
+      {==}
+    case False{}:
+      %HSL.Agent.ws.eta(h, J.set(HS.Agent.ws(h), "state", J.JStr{""})) : {HI.names(_) == HI.names(h) : List<&2, String>}
+      {==}
+
 def hub_names_op(+h: HS.Agent, op: HM.AgentOp, nr: {hub_is_rename(op) == False{} : Bool}) -> {HI.names(HM.agent_op(h, op)) == HI.names(h) : List<&2, String>}:
   match op:
     case HM.OLife{l, why}:
@@ -713,6 +725,8 @@ def hub_names_op(+h: HS.Agent, op: HM.AgentOp, nr: {hub_is_rename(op) == False{}
     case HM.OFollow{x}:
       %HSL.Agent.follow.eta(h, x) : {HI.names(_) == HI.names(h) : List<&2, String>}
       {==}
+    case HM.ODrop{ok, sn}:
+      hub_drop_names(ok, h, sn)
 
 def hub_prof_map.pick(c: Bool, +h: HS.Agent, +t: List<&2, HS.Agent>, +n: String, +op: HM.AgentOp, +e: {String.eq(HS.Agent.name(h), n) == c : Bool},
     +nr: {hub_is_rename(op) == False{} : Bool}, ih: {HI.profile(HM.map_agent(t, n, op)) == HI.profile(t) : List<&2, List<&2, String>>})
