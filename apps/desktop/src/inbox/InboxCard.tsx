@@ -18,7 +18,7 @@ import type { ArtLink } from '@/proto/rows';
 import { aboutOf, aboutWords } from './about';
 import { inbox } from '@/proto/words_inbox.gen';
 import { common } from '@/proto/words_common.gen';
-import { Act, ArtChip, Kbd, RowMark, tipAttrs, type AppIconName } from '@/ds';
+import { Act, AppIcon, ArtChip, Kbd, Press, RowMark, tipAttrs, type AppIconName } from '@/ds';
 import { refusedLine, useStore } from '@/store';
 import type { InboxItem } from './listed';
 import { cardKey } from './order';
@@ -73,9 +73,83 @@ export interface InboxCardProps {
   testId?: string;
   /** the hub closed it while his words were typed (card-draft-keep): '· closed', its options dim, no pick */
   closed?: boolean;
+  /** answered or withdrawn: the same card settled (inbox-answered, Gabriel's pick A), read-only */
+  settled?: Settled;
 }
 
-export function InboxCard({ card, project, home, acts, on = null, now, keys, note, children, stacked, full, surface = 'dock', testId, closed = false }: InboxCardProps) {
+/**
+ * A card he answered or that was withdrawn (the inbox page's pane; inbox-answered, Gabriel's pick
+ * A): its head's mark ✓ in ink or – faint, '<asker> asked', when it was asked and ✕; its options
+ * read-only, the one he picked in ink with ✓, the others dim; withdrawn, the question and the
+ * options dim. His words and the foot come as `children` and `keys`.
+ */
+export interface Settled {
+  readonly state: 'answered' | 'withdrawn';
+  /** when it was asked ('19:24', 'oct 12 19:24'), the head's right */
+  readonly asked: string;
+  /** the option he picked (its n); null: none */
+  readonly picked: number | null;
+  /** the page he answered on, under the question's own when it is another one */
+  readonly also?: ArtLink | null;
+  readonly openAlso?: () => void;
+  /** ✕ (esc) */
+  readonly close: () => void;
+}
+
+export function InboxCard(props: InboxCardProps) {
+  return props.settled === undefined ? <OpenCard {...props} /> : <SettledCard {...props} settled={props.settled} />;
+}
+
+/** The card he answered or that was withdrawn: the open card's parts, settled. No pick, no keys of its own. */
+function SettledCard({ card, project, home, acts, keys, children, testId, settled }: InboxCardProps & { settled: Settled }) {
+  const id = testId ?? `inbox.card.${cardKey(card)}`;
+  const about = aboutOf(card);
+  const answered = settled.state === 'answered';
+  const where = project ?? card.project;
+  return (
+    <div className={`ic dock settled${answered ? '' : ' gone'}`} role="group" data-testid={id} data-state={settled.state}>
+      <div className="ic-h">
+        <span className="ic-g" data-testid={`${id}.g`}>
+          <RowMark icon={answered ? 'check' : 'fold'} tone={answered ? 'plain' : 'dim'} label={answered ? inbox.state_answered : inbox.state_withdrawn} />
+        </span>
+        <b>{inbox.title_asked({ agent: shownAgent(card.agent) })}</b>
+        {home !== true && <span className="ic-p" data-testid={`${id}.project`}>{`· ${where}`}</span>}
+        <span className="ic-k" data-testid={`${id}.age`} {...tipAttrs(idTip(card.id))}>{settled.asked}</span>
+        <Press look="ic-x" onClick={settled.close} aria-label={inbox.detail_close_label} data-tip={inbox.detail_close_tip} data-testid={`${id}.close`}>
+          <AppIcon name="close" size={14} />
+        </Press>
+      </div>
+      <div className="ic-q" data-testid={`${id}.q`}>
+        <Question card={card} id={id} />
+      </div>
+      {(about != null || settled.also != null) && (
+        <div className="ic-links">
+          {about != null && <PageChip about={about} open={acts.openPage} id={id} />}
+          {settled.also != null && <PageChip about={settled.also} open={settled.openAlso} id={`${id}.also`} hint={false} />}
+        </div>
+      )}
+      {card.options.length > 0 && (
+        <div className="ic-opts" role="list" data-testid={`${id}.opt`}>
+          {card.options.map((o) => {
+            const mine = o.n === settled.picked;
+            return (
+              <div key={o.n} role="listitem" aria-current={mine || undefined} className={`ic-opt${mine ? ' picked' : settled.picked !== null ? ' dim' : ''}`} data-testid={`${id}.opt.${String(o.n)}`}>
+                <span className="ic-n">{mine ? <AppIcon name="check" size={14} /> : o.n}</span>
+                <span className="ic-l">{o.label}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {children}
+      <div className="ic-foot" data-testid={`${id}.keys`}>
+        {keys}
+      </div>
+    </div>
+  );
+}
+
+function OpenCard({ card, project, home, acts, on = null, now, keys, note, children, stacked, full, surface = 'dock', testId, closed = false }: InboxCardProps) {
   const id = testId ?? `inbox.card.${cardKey(card)}`;
   const about = aboutOf(card);
   const [picked, setPicked] = useState<number | null>(null);
@@ -261,12 +335,12 @@ export const CHIP_KEEP = 12;
 
 /** What it is about under the question (designer m_26560, m_26776; card-links: any artifact): the
  * artifact chip, '⌘O open beside' at its right. */
-function PageChip({ about, open, id }: { about: ArtLink; open: (() => void) | undefined; id: string }) {
+function PageChip({ about, open, id, hint = true }: { about: ArtLink; open: (() => void) | undefined; id: string; hint?: boolean }) {
   const w = aboutWords(about);
   return (
     <div className="ic-page" data-testid={`${id}.page`}>
-      <ArtChip title={w.title} meta={w.meta} keep={CHIP_KEEP} tip={chipTip(w.title, open !== undefined)} {...(open ? { onClick: open } : {})} testId={`${id}.page.chip`} />
-      {open && (
+      <ArtChip title={w.title} meta={w.meta} keep={CHIP_KEEP} tip={chipTip(w.title, open !== undefined && hint)} {...(open ? { onClick: open } : {})} testId={`${id}.page.chip`} />
+      {open && hint && (
         // a key hint is whole or gone (designer m_47764): too narrow, it wraps to the row's hidden
         // second line (inbox.css .ic-page), never clipped; the chip's tip still says the key
         <Act onClick={open} testId={`${id}.page.open`}>

@@ -22,6 +22,7 @@ fn rec(card: u64, done: bool) -> InboxRecord {
         at_ms: NOW - card * 60_000,
         thread: done.then(|| AnswerAt { agent: "perf".into(), pos: 9 }),
         line2: if done { "you: avif · in the inbox".into() } else { "withdrawn: moot".into() },
+        about: None,
     }
 }
 

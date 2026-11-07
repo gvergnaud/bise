@@ -87,14 +87,6 @@ crate::words! { inbox:
     detail_close_label = "close (esc)";
     /// the desktop's detail close button's tip
     detail_close_tip = "close · esc";
-    /// the desktop's detail: who asked where and when
-    detail_asked(agent, project, when) = "{agent} asked in {project} · {when}";
-    /// the desktop's detail: what the agent did next
-    detail_next(agent, next) = "{agent} went on: {next}";
-    /// the desktop's detail: the page he answered on, its title unknown
-    page_chip(page) = "↗ {page} · page";
-    /// the desktop's detail: the page he answered on
-    page_chip_v(title, v) = "↗ {title} · page · v{v}";
     /// a notification's chip, what it is about: any artifact (card-links)
     art_chip(title, kind) = "↗ {title} · {kind}";
     /// a notification's chip with its version (card-links)
@@ -111,6 +103,14 @@ crate::words! { inbox:
     when_answered(when) = "you answered · {when}";
     /// the detail's where and when: answered there
     when_answered_at(place, when) = "you answered {place} · {when}";
+    /// the desktop's settled card: he picked an option, there
+    when_picked_at(n, place, when) = "you picked {n} {place} · {when}";
+    /// the desktop's settled card's foot: he answered on the page its chip shows
+    where_the_page = "on the page";
+    /// the desktop's settled card's head: who asked (the waiting card's 'perf asks', past)
+    title_asked(agent) = "{agent} asked";
+    /// the desktop's settled card: his typed answer's bubble, who said it
+    said_you = "you";
     /// a waiting page item's right column on the desktop
     wait_end_page(project, age) = "{project} · page · {age}";
 

@@ -174,3 +174,35 @@
 .ic-why { display: block; color: var(--c-text-2); font-size: var(--t-12); }
 .ic-opt.picked .ic-why { color: var(--c-on-ink); }
 .ic-mine { font-size: var(--t-12); color: var(--c-text-3); }
+/* the card settled (InboxCard Settled; inbox-answered, Gabriel's pick A): answered or withdrawn, in
+   the inbox page's pane. The same parts, nothing waits any more: no pink (the mark, the numbers,
+   the chip are neutral). Gaps 12 · 16 · 16 · 4 · 20 · 20 (header, question, artifact, options,
+   his answer, foot); the question in the reading font 15/1.55, never bold */
+.ic.settled .ic-h { align-items: center; }
+.ic.settled .ic-g .b-rowmark { color: var(--c-text); }
+.ic.settled.gone .ic-g .b-rowmark { color: var(--c-text-3); }
+.ic-x { flex: none; display: inline-flex; align-items: center; justify-content: center; width: var(--h-control-sm); height: var(--h-control-sm); margin: calc(-1 * var(--s-1)) calc(-1 * var(--s-2)) calc(-1 * var(--s-1)) 0; padding: 0; border: 0; border-radius: var(--r-1); background: none; color: var(--c-text-3); }
+.ic-x:hover { color: var(--c-text); background: var(--c-hover); }
+.ic-x:focus-visible { outline: 0; box-shadow: 0 0 0 2px var(--c-focus); }
+.ic.settled .ic-q { flex: none; overflow: visible; margin: var(--s-3) 0 var(--s-4); font: 400 15px/1.55 var(--font-read); }
+.ic-links { flex: none; display: flex; flex-direction: column; gap: var(--s-2); margin: 0 0 var(--s-4); }
+.ic-links > .ic-page { margin: 0; }
+.ic.settled .b-artchip { background: var(--c-solid); box-shadow: inset 0 0 0 1px var(--c-line); color: var(--c-text); }
+.ic.settled .b-artchip:hover { background: var(--c-hover); }
+.ic.settled .b-artchip-meta { color: var(--c-text-3); }
+.ic.settled .ic-opts { flex: none; overflow: visible; }
+.ic.settled .ic-opt { cursor: default; }
+.ic.settled .ic-opt:hover { background: var(--c-solid); }
+.ic.settled .ic-opt.picked:hover { background: var(--c-ink); }
+.ic.settled .ic-n { display: inline-flex; justify-content: center; color: var(--c-text-3); }
+.ic.settled .ic-opt.picked .ic-n { color: var(--c-on-ink); }
+.ic.settled .ic-opt.dim, .ic.settled.gone .ic-opt { color: var(--c-text-3); }
+.ic.settled.gone .ic-q { color: var(--c-text-3); }
+/* his typed answer: his bubble at the right, as in the thread, 'you' over it */
+.ic-said { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: var(--s-1); margin-top: var(--s-5); }
+.ic-said-who { font: 400 var(--f-meta); color: var(--c-text-3); }
+.ic-said-b { max-width: 75%; padding: var(--s-2) var(--s-3); border-radius: var(--r-4); background: var(--c-active); font: 400 15px/1.55 var(--font-read); color: var(--c-text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ic-gone { flex: none; margin-top: var(--s-5); font: 400 var(--f-ui); color: var(--c-text-2); }
+.ic.settled .ic-foot { margin-top: var(--s-5); align-items: center; }
+.ic.settled .ic-foot .b-act { color: var(--c-text-2); }
+.ic.settled .ic-foot .b-act:hover { color: var(--c-text); }

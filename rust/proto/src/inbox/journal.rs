@@ -43,6 +43,10 @@ pub struct Card {
     pub place: Option<String>,
     #[serde(default)]
     pub pr: Option<u64>,
+    /// what it is about, as it opened (card-links: `sb notify --artifact`,
+    /// a page's question); none from a line sb-core wrote before it
+    #[serde(default)]
+    pub about: Option<crate::rows::ArtLink>,
 }
 
 /// `card_closed`: `via` "" when it closed without his answer (an older

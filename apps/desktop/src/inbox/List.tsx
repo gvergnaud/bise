@@ -14,19 +14,22 @@
 // however old, or the page at its block. The list keys are app/listkeys.ts's. At 800 the pane takes
 // the list's place (past.css). The floating composer's room at the foot (--float-room). From props:
 // the store's wiring is InboxScreen (InboxScreen.tsx). Owner: nm-pages-a (inbox-screen's before).
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
+import { useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import type { Card } from '@/proto';
 import { useListKeys } from '@/app/listkeys';
 import { usePageSearchKeys } from '@/app/searchkeys';
-import { AppIcon, BannerWait, Dropdown, Empty, Filters, GroupLabel, ListBar, ListRow, ListSearch, PageBanner, Press, RowAction, RowMark, tipAttrs } from '@/ds';
+import type { ArtLink } from '@/proto/rows';
+import { Act, AppIcon, BannerWait, Dropdown, Empty, Filters, GroupLabel, Kbd, ListBar, ListRow, ListSearch, PageBanner, Press, RowAction, RowMark, tipAttrs } from '@/ds';
 import { LiveVignette, useBannerGutter } from '@/artifacts';
 import { hero } from '@/proto/words_hero.gen';
 import { shownName } from '@/agents/model';
 import { inbox } from '@/proto/words_inbox.gen';
-import { idTip } from './InboxCard';
+import { idTip, InboxCard } from './InboxCard';
+import { blockOf } from './about';
 import { idOf } from './id';
 import { timeOf } from '@/artifacts/model';
-import { ALL, askersOf, closedMs, dayHead, heroFacts, jumpOf, jumpWords, listsOf, saidWords, STATES, waitEnd, whenWhere, type Filter, type StateFilter, type InboxRecord, type Jump, type PastRow, type WaitRow } from './past';
+import { ALL, askersOf, closedMs, heroFacts, jumpOf, jumpWords, listsOf, saidWords, STATES, waitEnd, type Filter, type StateFilter, type InboxRecord, type Jump, type PastRow, type WaitRow } from './past';
+import { aboutOfRecord, alsoPage, footWords, pickedN, settledCard, whenOf } from './settled';
 import { ArtText } from './artWords';
 import { barFit, type BarFit } from './barfit';
 import './past.css';
@@ -53,17 +56,13 @@ export interface InboxViewProps {
   /** the projects, in the sidebar's order, for the menu */
   readonly projects: readonly { readonly project: string; readonly name: string }[];
   readonly ports: InboxPorts;
-  /** the asker's first line after his answer, when its thread holds it (the detail's 'went on') */
-  readonly nextOf?: (r: InboxRecord) => string | undefined;
-  /** the record the pane shows (none: closed): the screen reads its thread meanwhile */
-  readonly onDetail?: (r: InboxRecord | null) => void;
   /** a page's title and version, for the pane's chip ('↗ <title> · page · v3'; none: its id) */
   readonly pageOf?: (project: string, page: string) => PageMeta | undefined;
   /** now (a test or a shot pins it) */
   readonly now?: number;
 }
 
-export function InboxView({ cards, records, onEnd, names, projects, ports, nextOf, onDetail, pageOf, now: pinned }: InboxViewProps) {
+export function InboxView({ cards, records, onEnd, names, projects, ports, pageOf, now: pinned }: InboxViewProps) {
   const [opened] = useState(() => Date.now());
   const now = pinned ?? opened;
   const [f, setF] = useState<Filter>(ALL);
@@ -90,8 +89,16 @@ export function InboxView({ cards, records, onEnd, names, projects, ports, nextO
     if (p) ports.jump(jumpOf(p.r));
     return p !== undefined;
   };
+  // ⌘O (the pane's chip): the question's own artifact beside, at its block
+  const beside = (): boolean => {
+    const a = cur === undefined ? null : aboutOfRecord(cur.r);
+    if (cur === undefined || a === null || ports.openPage === undefined) return false;
+    ports.openPage(cur.r.project, a.id, blockOf(a) ?? undefined);
+    return true;
+  };
   const screenKey = (e: KeyboardEvent, k: string | null): boolean => {
     if (e.key === 'Enter' && e.metaKey && !e.ctrlKey && !e.altKey) return go(k);
+    if (e.key === 'o' && e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) return beside();
     if (e.metaKey || e.ctrlKey || e.altKey) return false;
     if (cur) {
       if (e.key === 'Escape') setPaned(false);
@@ -107,10 +114,6 @@ export function InboxView({ cards, records, onEnd, names, projects, ports, nextO
   };
   const { sel, setSel, ref, onKeyDown, move } = useListKeys({ order: lists.order, keepAs: 'inbox.sel', onOpen: open, onKey: screenKey });
   const cur = !paned || sel === null ? undefined : pastBy.get(sel);
-  const looked = cur?.r ?? null;
-  useEffect(() => {
-    onDetail?.(looked);
-  }, [onDetail, looked]);
   usePageSearchKeys(searchRef);
   // the search has the keys: ⏎ gives them back, ↑↓ give them back and move; esc clears its words, a
   // second esc gives the keys back (Artifacts' search, designer m_52674)
@@ -230,7 +233,7 @@ export function InboxView({ cards, records, onEnd, names, projects, ports, nextO
         </div>
       )}
       {cur && (
-        <Pane row={cur} now={now} names={names} next={nextOf?.(cur.r)} meta={pageOf}
+        <Pane row={cur} now={now} names={names} meta={pageOf}
           onJump={() => { ports.jump(jumpOf(cur.r)); }}
           onClose={() => { setPaned(false); ref.current?.focus({ preventScroll: true }); }}
           {...(ports.openPage === undefined ? {} : { onPage: ports.openPage })} />
@@ -273,79 +276,70 @@ function PastLine({ p, on, project, onClick }: { p: PastRow; on: boolean; projec
     </div>
   );
 }
-/**
- * One past item, whole, in the pane beside the list (his ask, inbox-open): who asked where and
- * when, the question whole, every option with the one he picked marked (or his words as his
- * bubble), where and when he answered, the page he answered on, what the agent did next, and the
- * way to his answer (⌘⏎).
- */
+/** A page's title and version, for its chip ('↗ <title> · page · v3'). */
 export interface PageMeta {
   readonly title: string;
   readonly version: number;
 }
 
-/** The pane's page chip: '↗ size chips · page · v3' (notif-artifact's chip), its id when unknown. Pure. */
-export function pageChip(page: string, meta: PageMeta | undefined): string {
-  return meta === undefined ? inbox.page_chip({ page }) : inbox.page_chip_v({ title: meta.title !== '' ? meta.title : page, v: meta.version });
+/** A page link the record names by its id alone ('wait-line'): its title and version when the
+ *  store knows the page. Pure. */
+export function withMeta(a: ArtLink, meta: PageMeta | undefined): ArtLink {
+  if (a.kind !== 'page' || meta === undefined || (a.title !== '' && a.title !== a.id)) return a;
+  return { ...a, title: meta.title !== '' ? meta.title : a.id, v: a.v ?? meta.version };
 }
 
-function Pane({ row, now, names, next, meta, onJump, onClose, onPage }: {
-  row: PastRow; now: number; names: Readonly<Record<string, string>>; next: string | undefined;
+/**
+ * One past item, whole, in the pane beside the list (his ask, inbox-open), as the card it was
+ * (inbox-answered, Gabriel's pick A): InboxCard settled, ✓ or – in its head, the question's own
+ * artifact under the question (and the page he answered on when it is another one, ⌘O opens the
+ * first beside), his pick in ink or his words as his bubble, or the reason it was withdrawn; the
+ * foot says where and when he answered, and the way to his answer (⌘⏎). At 800 '← inbox' over it.
+ */
+function Pane({ row, now, names, meta, onJump, onClose, onPage }: {
+  row: PastRow; now: number; names: Readonly<Record<string, string>>;
   meta: ((project: string, page: string) => PageMeta | undefined) | undefined;
   onJump: () => void; onClose: () => void; onPage?: (project: string, page: string, block?: string) => void;
 }) {
   const r = row.r;
   const j = jumpOf(r);
   const said = saidWords(r);
-  const picked = pickedOf(r);
-  const page = r.where?.kind === 'page' ? r.where : null;
+  const picked = pickedN(r);
+  const answered = r.state === 'answered';
+  const card0 = settledCard(r);
+  const card = card0.artifact == null ? card0 : { ...card0, artifact: withMeta(card0.artifact, meta?.(r.project, card0.artifact.id)) };
+  const also0 = alsoPage(r);
+  const also = also0 === null ? null : withMeta(also0, meta?.(r.project, also0.id));
+  const open = (a: ArtLink) => () => {
+    onPage?.(r.project, a.id, blockOf(a) ?? undefined);
+  };
   return (
     <aside className="ip-pane" aria-label={inbox.detail_label({ agent: shownName(r.asker) })} data-testid="inbox.detail">
       <div className="ip-p-head">
         <Press look="ip-crumb" onClick={onClose} data-testid="inbox.detail.back"><AppIcon name="back" size={14} />{inbox.head}</Press>
-        <span className="ip-d-k">{inbox.detail_asked({ agent: shownName(r.asker), project: names[r.project] ?? r.project, when: whenOf(r.asked_ms, now) })}</span>
-        <Press look="ip-p-close" onClick={onClose} aria-label={inbox.detail_close_label} data-tip={inbox.detail_close_tip} data-testid="inbox.detail.close"><AppIcon name="close" size={16} /></Press>
       </div>
       <div className="ip-p-body">
-        <div className="ip-d-q" data-testid="inbox.detail.question"><ArtText text={r.question} /></div>
-        {r.options.length > 0 && (
-          <ol className="ip-d-opts" data-testid="inbox.detail.options">
-            {r.options.map((o, i) => (
-              <li key={`${String(i)}:${o}`} className={picked === i ? 'on' : undefined} data-testid={`inbox.detail.option.${String(i + 1)}`} aria-current={picked === i ? 'true' : undefined}>
-                <span className="ip-d-n">{picked === i ? <AppIcon name="check" size={14} /> : i + 1}</span>{o}
-              </li>
-            ))}
-          </ol>
-        )}
-        {r.state === 'answered'
-          ? picked === null && said !== '' && <div className="ip-d-said" data-testid="inbox.detail.said">{said}</div>
-          : <div className="ip-d-gone">{r.line2}</div>}
-        <div className="ip-d-k" data-testid="inbox.detail.where">{whenWhere(r, now)}</div>
-        {page !== null && (
-          <Press look="ip-d-chip" onClick={() => { onPage?.(r.project, page.page, page.block); }} data-testid="inbox.detail.page">
-            {pageChip(page.page, meta?.(r.project, page.page))}
-          </Press>
-        )}
-        {next !== undefined && next !== '' && <div className="ip-d-next">{inbox.detail_next({ agent: shownName(j.kind === 'thread' ? j.agent : r.asker), next })}</div>}
-        <Press look="ip-d-go" onClick={onJump} data-testid="inbox.detail.go">{jumpWords(j, r.state === 'answered')}<kbd>⌘⏎</kbd></Press>
+        <InboxCard card={card} project={names[r.project] ?? r.project} now={now} testId="inbox.detail.card"
+          acts={{ pick: () => undefined, ...(card.artifact == null || onPage === undefined ? {} : { openPage: open(card.artifact) }) }}
+          settled={{ state: answered ? 'answered' : 'withdrawn', asked: whenOf(r.asked_ms, now), picked, also, close: onClose, ...(also === null || onPage === undefined ? {} : { openAlso: open(also) }) }}
+          keys={<>
+            <span data-testid="inbox.detail.where">{footWords(r, now)}</span>
+            <span className="ic-foot-end">
+              <Act onClick={onJump} testId="inbox.detail.go"><Kbd>⌘⏎</Kbd>{jumpWords(j, answered)}</Act>
+            </span>
+          </>}>
+          {answered
+            ? picked === null && said !== '' && (
+              <div className="ic-said" data-testid="inbox.detail.said">
+                <span className="ic-said-who">{inbox.said_you}</span>
+                <div className="ic-said-b">{said}</div>
+              </div>
+            )
+            : <div className="ic-gone" data-testid="inbox.detail.gone">{r.line2}</div>}
+        </InboxCard>
       </div>
     </aside>
   );
-}
-
-/** The option he picked: its number, else the option his words are; null for his own words. Pure. */
-export function pickedOf(r: InboxRecord): number | null {
-  if (r.state !== 'answered') return null;
-  if (r.pick_n != null && r.pick_n >= 1 && r.pick_n <= r.options.length) return r.pick_n - 1;
-  const said = saidWords(r);
-  const i = r.options.indexOf(said);
-  return i < 0 ? null : i;
-}
-
-/** 'today 14:02' → '14:02', else 'oct 12 14:02'. */
-function whenOf(ms: number, now: number): string {
-  const day = dayHead(ms, now);
-  return ms <= 0 ? day : day === inbox.day_today ? timeOf(ms) : `${day} ${timeOf(ms)}`;
 }
 
 /**

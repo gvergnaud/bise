@@ -24,36 +24,21 @@
 .ip-body > .ip-list, .ip-body > .b-empty { flex: 1 1 auto; min-width: 0; }
 .ip-body.paned > .ip-list { flex: 1 1 56%; min-width: 360px; }
 .ip-pane { position: sticky; top: 0; max-height: 100cqh; box-sizing: border-box; flex: 0 1 44%; min-width: 320px; min-height: 0; display: flex; flex-direction: column; margin-left: var(--s-3); padding-left: var(--s-5); border-left: 1px solid var(--c-line); }
-.ip-p-head { flex: none; display: flex; align-items: center; gap: var(--s-2); min-height: var(--h-group); }
-.ip-p-head .ip-d-k { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.ip-crumb { display: none; align-items: center; gap: var(--s-1); padding: 0; border: 0; background: none; font: 400 var(--f-ui); color: var(--c-text-2); }
+/* the pane holds the settled card (InboxCard, inbox.css .ic.settled: inbox-answered, Gabriel's pick
+   A): its look is the card's; here only its room, and '← inbox' over it at 800 */
+.ip-p-head { display: none; }
+.ip-crumb { display: inline-flex; align-items: center; gap: var(--s-1); padding: 0; border: 0; background: none; font: 400 var(--f-ui); color: var(--c-text-2); }
 .ip-crumb:hover { color: var(--c-text); }
-.ip-p-close { flex: none; display: inline-flex; align-items: center; justify-content: center; width: var(--h-control-sm); height: var(--h-control-sm); padding: 0; border: 0; border-radius: var(--r-1); background: none; color: var(--c-text-3); }
-.ip-p-close:hover { color: var(--c-text); background: var(--c-hover); }
-.ip-p-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--s-3); padding: var(--s-2) 0 var(--s-4); }
-.ip-d-chip { align-self: flex-start; height: var(--h-control-sm); padding: 0 var(--s-3); border: 1px solid var(--c-line); border-radius: var(--r-1); background: none; font: 400 var(--f-meta); color: var(--c-text-2); }
-.ip-d-chip:hover { color: var(--c-text); background: var(--c-hover); }
-.ip-d-k { font: 400 var(--f-meta); color: var(--c-text-3); }
-.ip-d-q { font: 600 var(--f-lead); color: var(--c-text); }
-.ip-d-opts { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--s-1); font: 400 var(--f-ui); color: var(--c-text-2); }
-.ip-d-opts li { display: flex; align-items: center; padding: var(--s-1) var(--s-2); margin: 0 calc(-1 * var(--s-2)); border-radius: var(--r-1); }
-.ip-d-opts li.on { color: var(--c-text); background: var(--c-active); }
-.ip-d-n { display: inline-flex; flex: none; width: var(--s-5); color: var(--c-text-3); }
-.ip-d-opts li.on .ip-d-n { color: var(--c-text); }
-/* his answer as his bubble, at the right as in the thread */
-.ip-d-said { align-self: flex-end; max-width: 75%; padding: var(--s-3) var(--s-4); border: 1px solid var(--c-line); border-radius: var(--r-4); background: var(--c-raised); font: 400 var(--f-read); color: var(--c-text); }
-.ip-d-gone { font: 400 var(--f-ui); color: var(--c-text-3); }
-.ip-d-next { font: 400 var(--f-read); color: var(--c-text-2); }
-.ip-d-go { align-self: flex-start; margin-top: var(--s-2); display: inline-flex; align-items: center; gap: var(--s-2); height: var(--h-control-sm); padding: 0 var(--s-3); border: 1px solid var(--c-line); border-radius: var(--r-1); background: none; font: 400 var(--f-ui); color: var(--c-text); }
-.ip-d-go:hover { background: var(--c-hover); }
-.ip-d-go:focus-visible, .ip-d-chip:focus-visible, .ip-p-close:focus-visible, .ip-crumb:focus-visible { outline: 0; box-shadow: 0 0 0 2px var(--c-focus); }
-.ip-d-go kbd { font: 400 var(--f-kbd); color: var(--c-text-3); }
+.ip-crumb:focus-visible { outline: 0; box-shadow: 0 0 0 2px var(--c-focus); }
+.ip-p-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--s-2) 0 var(--s-4); }
+/* the pane scrolls, never the card inside it: its 55vh cap off */
+.ip-p-body > .ic { max-height: none; }
 
-/* 800: the pane takes the list's place, '← inbox' back */
+/* 800: the pane takes the list's place, '← inbox' back, the card's ✕ gone */
 @media (max-width: 900px) {
   .ip-scroll > :not(.b-banner) { margin-inline: var(--s-4); }
   .ip-body.paned > .ip-list { display: none; }
   .ip-pane { flex: 1 1 auto; min-width: 0; margin: 0; padding: 0; border: 0; }
-  .ip-p-head .ip-crumb { display: inline-flex; }
-  .ip-p-close { display: none; }
+  .ip-p-head { flex: none; display: flex; align-items: center; min-height: var(--h-group); }
+  .ip-pane .ic-x { display: none; }
 }

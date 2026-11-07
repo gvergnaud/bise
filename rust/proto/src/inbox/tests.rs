@@ -58,6 +58,20 @@ fn a_picked_digit_reads_as_the_options_words() {
 }
 
 #[test]
+fn the_link_a_card_opened_with_stays_in_its_record_after_a_re_fold() {
+    let mut open = opened(5, "question", "perf", "run the bench?", 100);
+    open["card"]["about"] = json!({"id": "signup-bench", "kind": "page", "title": "signup, before / after", "v": 3, "url": null, "at": null});
+    let lines = vec![open, closed(5, "answered", json!({"said": "yes", "via": "inbox"}), 200)];
+    // the journal folded again (a restart) gives it back: the card's link isn't a side file's
+    let mut x = Index::new("harness-1".into());
+    x.read_all(&lines);
+    let about = x.get(5).and_then(|r| r.about.clone()).unwrap();
+    assert_eq!((about.id.as_str(), about.kind.as_str(), about.v), ("signup-bench", "page", Some(3)));
+    // a line from before cards kept it reads none
+    assert_eq!(index().get(1).and_then(|r| r.about.clone()), None);
+}
+
+#[test]
 fn a_close_without_his_answer_is_withdrawn_with_its_reason() {
     let r = index().get(2).cloned().unwrap();
     assert_eq!(r.state, InboxState::Withdrawn);

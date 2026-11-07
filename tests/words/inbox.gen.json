@@ -189,15 +189,6 @@
     "one": null,
     "text": "or say no to {who} and why, then ⏎"
   },
-  "inbox.detail_asked": {
-    "args": [
-      "agent",
-      "project",
-      "when"
-    ],
-    "one": null,
-    "text": "{agent} asked in {project} · {when}"
-  },
   "inbox.detail_close_label": {
     "args": [],
     "one": null,
@@ -214,14 +205,6 @@
     ],
     "one": null,
     "text": "{agent}'s question"
-  },
-  "inbox.detail_next": {
-    "args": [
-      "agent",
-      "next"
-    ],
-    "one": null,
-    "text": "{agent} went on: {next}"
   },
   "inbox.digits_to": {
     "args": [
@@ -618,21 +601,6 @@
     "one": null,
     "text": "or type: {agent} reads it"
   },
-  "inbox.page_chip": {
-    "args": [
-      "page"
-    ],
-    "one": null,
-    "text": "↗ {page} · page"
-  },
-  "inbox.page_chip_v": {
-    "args": [
-      "title",
-      "v"
-    ],
-    "one": null,
-    "text": "↗ {title} · page · v{v}"
-  },
   "inbox.page_noun": {
     "args": [],
     "one": null,
@@ -734,6 +702,11 @@
     "one": null,
     "text": "⏎ answer"
   },
+  "inbox.said_you": {
+    "args": [],
+    "one": null,
+    "text": "you"
+  },
   "inbox.screen_empty": {
     "args": [],
     "one": null,
@@ -792,6 +765,13 @@
     "args": [],
     "one": null,
     "text": "the branch"
+  },
+  "inbox.title_asked": {
+    "args": [
+      "agent"
+    ],
+    "one": null,
+    "text": "{agent} asked"
   },
   "inbox.title_blocked": {
     "args": [
@@ -928,6 +908,15 @@
     "one": null,
     "text": "you answered {place} · {when}"
   },
+  "inbox.when_picked_at": {
+    "args": [
+      "n",
+      "place",
+      "when"
+    ],
+    "one": null,
+    "text": "you picked {n} {place} · {when}"
+  },
   "inbox.when_withdrawn": {
     "args": [
       "when"
@@ -944,6 +933,11 @@
     "args": [],
     "one": null,
     "text": "on a page"
+  },
+  "inbox.where_the_page": {
+    "args": [],
+    "one": null,
+    "text": "on the page"
   },
   "inbox.where_thread": {
     "args": [

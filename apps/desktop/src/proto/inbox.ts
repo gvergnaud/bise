@@ -2,6 +2,8 @@
 // BISE_PROTO_BLESS=1 cargo test -p bise-proto --features ts --test ts
 // ids, positions and *_ms are numbers (u64 in Rust, safe below 2^53).
 
+import type { ArtLink } from './rows';
+
 /**
  * What became of a card.
  */
@@ -78,7 +80,13 @@ thread?: AnswerAt | null,
  * in the inbox`, `withdrawn: moot`): the terminal and the desktop
  * draw these words, never their own
  */
-line2: string, };
+line2: string, 
+/**
+ * what the question was about (its card's link as it opened: `sb
+ * notify --artifact`, a page's question): the desktop's chip under
+ * it; none for a card without one, or journaled before cards kept it
+ */
+about?: ArtLink | null, };
 
 /**
  * Which records a list wants.

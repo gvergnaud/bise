@@ -82,14 +82,6 @@ export const inbox = {
   detail_close_label: "close (esc)",
   /** the desktop's detail close button's tip */
   detail_close_tip: "close · esc",
-  /** the desktop's detail: who asked where and when */
-  detail_asked: (a: { agent: string | number; project: string | number; when: string | number }): string => String(a.agent) + " asked in " + String(a.project) + " · " + String(a.when),
-  /** the desktop's detail: what the agent did next */
-  detail_next: (a: { agent: string | number; next: string | number }): string => String(a.agent) + " went on: " + String(a.next),
-  /** the desktop's detail: the page he answered on, its title unknown */
-  page_chip: (a: { page: string | number }): string => "↗ " + String(a.page) + " · page",
-  /** the desktop's detail: the page he answered on */
-  page_chip_v: (a: { title: string | number; v: string | number }): string => "↗ " + String(a.title) + " · page · v" + String(a.v),
   /** a notification's chip, what it is about: any artifact (card-links) */
   art_chip: (a: { title: string | number; kind: string | number }): string => "↗ " + String(a.title) + " · " + String(a.kind),
   /** a notification's chip with its version (card-links) */
@@ -106,6 +98,14 @@ export const inbox = {
   when_answered: (a: { when: string | number }): string => "you answered · " + String(a.when),
   /** the detail's where and when: answered there */
   when_answered_at: (a: { place: string | number; when: string | number }): string => "you answered " + String(a.place) + " · " + String(a.when),
+  /** the desktop's settled card: he picked an option, there */
+  when_picked_at: (a: { n: string | number; place: string | number; when: string | number }): string => "you picked " + String(a.n) + " " + String(a.place) + " · " + String(a.when),
+  /** the desktop's settled card's foot: he answered on the page its chip shows */
+  where_the_page: "on the page",
+  /** the desktop's settled card's head: who asked (the waiting card's 'perf asks', past) */
+  title_asked: (a: { agent: string | number }): string => String(a.agent) + " asked",
+  /** the desktop's settled card: his typed answer's bubble, who said it */
+  said_you: "you",
   /** a waiting page item's right column on the desktop */
   wait_end_page: (a: { project: string | number; age: string | number }): string => String(a.project) + " · page · " + String(a.age),
   /** a blocked agent's title */

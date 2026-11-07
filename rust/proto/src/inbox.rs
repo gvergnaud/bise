@@ -139,6 +139,11 @@ pub struct InboxRecord {
     /// draw these words, never their own
     #[serde(default)]
     pub line2: String,
+    /// what the question was about (its card's link as it opened: `sb
+    /// notify --artifact`, a page's question): the desktop's chip under
+    /// it; none for a card without one, or journaled before cards kept it
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub about: Option<crate::rows::ArtLink>,
 }
 
 /// Which records a list wants.
@@ -221,6 +226,7 @@ struct Open {
     agent: String,
     text: String,
     created_ms: u64,
+    about: Option<crate::rows::ArtLink>,
 }
 
 /// The fold of the journal's card lines.
@@ -262,7 +268,7 @@ impl Index {
         match journal::CardLine::of(line)? {
             journal::CardLine::Opened(o) => {
                 let c = o.card;
-                self.open.insert(c.id, Open { kind: c.kind, agent: c.agent, text: c.text, created_ms: c.created_ms });
+                self.open.insert(c.id, Open { kind: c.kind, agent: c.agent, text: c.text, created_ms: c.created_ms, about: c.about });
                 None
             }
             journal::CardLine::Closed(c) => {
@@ -354,6 +360,7 @@ fn record(project: &Project, c: journal::CardClosed, o: Open, ts: u64) -> InboxR
         at_ms: ts,
         thread: None,
         line2: String::new(),
+        about: o.about,
     };
     r.line2 = words::second_line(&r);
     r

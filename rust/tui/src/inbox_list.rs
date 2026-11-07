@@ -209,6 +209,7 @@ mod tests {
             at_ms: at,
             thread: done.then(|| AnswerAt { agent: "perf".into(), pos: 9 }),
             line2: if done { "you: avif · in the inbox".into() } else { "withdrawn: moot".into() },
+            about: None,
         }
     }
 
