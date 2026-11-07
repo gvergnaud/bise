@@ -28,6 +28,7 @@ import { useAllArtifacts } from './hooks';
 import { rowKey, useLook } from './List';
 import { usePutInMessage } from './Open';
 import { leaves, useGoArtifact } from './leave';
+import { openPr } from '@/review/openPr';
 import { openTab } from '@/app/panel/tabs';
 import { AddButton, AddDrop, useAddPlace } from './Drops';
 import { ArtifactGrid } from './Grid';
@@ -186,7 +187,9 @@ export function ArtifactsScreen({ project = '', at: atRoute = '' }: { project?: 
   // one opens in a tab of the panel on the right (plan native-mac-plan v4 §1: the page stays); a
   // browser-only one (a PR, a link) in his browser, as before
   const openIt = (it: Item) => {
-    if (leaves(it.a)) goArtifact(it.project, it.a.id, it.a);
+    // a PR: its own tab, as every PR door (review/openPr.ts)
+    if (it.a.pr != null && it.a.url !== '') openPr(it.project, it.a.url);
+    else if (leaves(it.a)) goArtifact(it.project, it.a.id, it.a);
     else openTab({ kind: 'artifact', project: it.project, id: it.a.id });
   };
   const look = useLook(openIt);
