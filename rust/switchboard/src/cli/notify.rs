@@ -36,5 +36,5 @@ pub(super) fn notify_req(rest: &[String]) -> Result<bise_proto::sb::Req, String>
         Ok(Some(spec.trim().to_string()))
     };
     // a notification is a card on the wire: the hub's command keeps its name
-    Ok(bise_proto::sb::Req::Card { text, for_msg, page: link("page")?, artifact: link("artifact")?, open })
+    Ok(bise_proto::sb::Req::Card { text, for_msg, page: link("page")?, artifact: link("artifact")?, open, about: None })
 }

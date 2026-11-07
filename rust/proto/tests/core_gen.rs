@@ -129,6 +129,7 @@ fn bend_ty(k: FieldKind) -> &'static str {
         OptNat | OptNatOmit => "Maybe<&2, Nat>",
         OptBoolOmit => "Maybe<&2, Bool>",
         Json => "J.Json",
+        OptJsonOmit => "Maybe<&2, J.Json>",
         Strs => "List<&2, String>",
         OptStrsOmit => "Maybe<&2, List<&2, String>>",
         Nats => "List<&2, Nat>",
@@ -164,6 +165,7 @@ fn decode(k: FieldKind, name: &str) -> String {
         OptNat | OptNatOmit => format!("K.opt_n(J.get(i, \"{name}\"))"),
         OptBoolOmit => format!("K.opt_b(J.get(i, \"{name}\"))"),
         Json => format!("K.get_j(i, \"{name}\")"),
+        OptJsonOmit => format!("J.get(i, \"{name}\")"),
         Strs => format!("K.get_ss(i, \"{name}\")"),
         OptStrsOmit => format!("K.opt_ss(J.get(i, \"{name}\"))"),
         Nats => format!("K.get_ns(i, \"{name}\")"),
@@ -185,7 +187,7 @@ fn default(k: FieldKind) -> &'static str {
         Nat => "0n",
         Ver => "0n",
         Bool => "False{}",
-        OptStr | OptStrOmit | OptNat | OptNatOmit | OptBoolOmit | OptStrsOmit => "None{}",
+        OptStr | OptStrOmit | OptNat | OptNatOmit | OptBoolOmit | OptStrsOmit | OptJsonOmit => "None{}",
         Json => "J.JNull{}",
         Strs | Nats | Jsons | Msgs => "Nil{}",
         Recs(_) | OptJsonsOmit => unreachable!("a view field, never decoded (decodable)"),
@@ -209,6 +211,7 @@ fn encode(k: FieldKind, name: &str, v: &str) -> Result<String, String> {
         OptNatOmit => Err(format!("K.omit_mn(\"{name}\", {v})")),
         OptBoolOmit => Err(format!("K.omit_mb(\"{name}\", {v})")),
         OptStrsOmit => Err(format!("K.omit_mss(\"{name}\", {v})")),
+        OptJsonOmit => Err(format!("K.omit_mj(\"{name}\", {v})")),
         Json => Ok(format!("J.kv(\"{name}\", {v})")),
         Strs => Ok(format!("J.kv(\"{name}\", J.JArr{{K.jstrs({v})}})")),
         Nats => Ok(format!("J.kv(\"{name}\", J.JArr{{K.jnats({v})}})")),
@@ -379,6 +382,7 @@ fn codec(g: &Gen) -> String {
                         FieldKind::OptNatOmit => (true, "Nat"),
                         FieldKind::OptBoolOmit => (true, "Bool"),
                         FieldKind::OptStrsOmit => (true, "List<&2, String>"),
+                        FieldKind::OptJsonOmit => (true, "J.Json"),
                         k => (false, bend_ty(k)),
                     };
                     match (on, opt) {
@@ -810,7 +814,7 @@ fn cases(k: FieldKind, v: &str) -> Vec<(String, Option<Rewrite>)> {
     use FieldKind::*;
     match k {
         StrOmit => vec![("SNil{}".into(), None), (format!("SCon{{h_{v}, t_{v}}}"), None)],
-        OptStr | OptStrOmit | OptNat | OptNatOmit | OptBoolOmit => vec![("None{}".into(), None), (format!("Some{{x_{v}}}"), None)],
+        OptStr | OptStrOmit | OptNat | OptNatOmit | OptBoolOmit | OptJsonOmit => vec![("None{}".into(), None), (format!("Some{{x_{v}}}"), None)],
         OptStrsOmit => vec![("None{}".into(), None), (format!("Some{{x_{v}}}"), Some(("strs", format!("x_{v}"), "Some{_}".into())))],
         Strs => vec![(v.to_string(), Some(("strs", v.to_string(), "_".into())))],
         Nats => vec![(v.to_string(), Some(("nats", v.to_string(), "_".into())))],

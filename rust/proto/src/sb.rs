@@ -250,6 +250,11 @@ sb_reqs! {
             /// an option's artifact, `<n>=<artifact>[#<anchor>]`
             #[serde(default, skip_serializing_if = "Vec::is_empty")]
             open: Vec<String>,
+            /// the artifact the card is about (an ArtLink's JSON): the
+            /// hub's own, resolved from `page`/`artifact`; what a client
+            /// sends here is overwritten (daemon/page_cards.rs)
+            #[serde(default, skip_serializing_if = "Option::is_none")]
+            about: Option<Value>,
         },
         /// `sb close N ["note"]`
         Close = "close" {
@@ -367,7 +372,13 @@ impl Req {
     /// A notification of `text` alone (no `--for`, no link): the hub's
     /// own (a page's question, a step of his).
     pub fn card(text: impl Into<String>) -> Req {
-        Req::Card { text: text.into(), for_msg: None, page: None, artifact: None, open: Vec::new() }
+        Req::card_about(text, None)
+    }
+
+    /// The same, about an artifact the hub resolved (a page at its
+    /// block: the card's `about`, an ArtLink's JSON).
+    pub fn card_about(text: impl Into<String>, about: Option<Value>) -> Req {
+        Req::Card { text: text.into(), for_msg: None, page: None, artifact: None, open: Vec::new(), about }
     }
 
     /// Its JSON (`Unknown`: the value it was read from).

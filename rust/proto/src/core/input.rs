@@ -140,8 +140,9 @@ core_kinds! {
         /// agent of `agents` (a plan's data-agent, then the page's agent),
         /// else main (laws page_card_asker_*); its answer is the hub's
         /// page path. `key`: what it asks on its page ('plan:<block>'),
-        /// for the record
-        PageCard = "page_card" => IPageCard { agents: Strs, kind: Str, text: Str, key: Str },
+        /// for the record. `about`: the page as an artifact (the shell's
+        /// ArtLink), stored on the card opened as is, never read
+        PageCard = "page_card" => IPageCard { agents: Strs, kind: Str, text: Str, key: Str, about: OptJsonOmit },
         /// the shell appended card `card`'s route line (his answer) to
         /// `agent`'s transcript at `pos`: journaled once per card closed
         /// with his answer (law answer_pos_once)

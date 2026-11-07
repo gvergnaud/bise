@@ -114,6 +114,35 @@ pub fn open_act(pages: Option<&Pages>, art: &dyn Fn(&str) -> Option<crate::artif
 }
 
 
+/// A card request's resolved link split in two (inbox-answered, architect
+/// m_55388): what it is about rides the request to sb-core, which keeps
+/// it on the card (card_opened's `about`, the inbox's record): the hub's
+/// resolution is its one owner, so what a client sent there is
+/// overwritten. The link the file keeps is its options' `opens` alone
+/// (none without them): a card's page and artifact are never written
+/// here again.
+pub fn about_on(req: crate::core::AgentReq, link: Option<CardLink>) -> (crate::core::AgentReq, Option<CardLink>) {
+    let crate::core::AgentReq::Card { text, for_msg, page, artifact, open, .. } = req else { return (req, link) };
+    let about = link.as_ref().and_then(|l| l.artifact.as_ref()).and_then(|a| serde_json::to_value(a).ok());
+    let opens = link.map(|l| l.opens).unwrap_or_default();
+    let link = (!opens.is_empty()).then_some(CardLink { opens, ..CardLink::default() });
+    (crate::core::AgentReq::Card { text, for_msg, page, artifact, open, about }, link)
+}
+
+/// The older client's `page` of a card about a page (its `about`): the
+/// page, at its anchor's block, its url there, its chip. None: about
+/// another kind of artifact.
+pub fn page_of_art(a: &ArtLink) -> Option<PageLink> {
+    if a.kind != "page" || a.id.is_empty() {
+        return None;
+    }
+    let block = match &a.at {
+        Some(Anchor::Block { block, .. }) => Some(block.clone()),
+        _ => None,
+    };
+    Some(PageLink { id: a.id.clone(), url: a.url.clone().unwrap_or_default(), block, title: Some(a.title.clone()), v: a.v, ..PageLink::default() })
+}
+
 /// Card → link, written whole (a temp file, then a rename).
 pub fn save(path: &Path, links: &BTreeMap<u64, CardLink>) -> Result<(), String> {
     let text = serde_json::to_string(links).map_err(|e| e.to_string())?;

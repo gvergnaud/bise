@@ -64,6 +64,17 @@ impl Shell {
                     c.opens = link.opens.clone();
                 }
             }
+            // what it is about, its card_opened's (inbox-answered): an
+            // older client's `page` derived from it
+            let about = self.hub.st.cards.get(&c.id).and_then(|k| k.about.clone()).and_then(|v| serde_json::from_value::<bise_proto::rows::ArtLink>(v).ok());
+            if let Some(a) = about {
+                if c.page.is_none() {
+                    c.page = crate::card_link::page_of_art(&a);
+                }
+                if c.artifact.is_none() {
+                    c.artifact = Some(a);
+                }
+            }
             let Some((id, block)) = qs.get(&c.id) else { continue };
             // drafts batched in one card: the page opens at the first
             // (ambient-lead m_5977)
@@ -112,6 +123,16 @@ impl Shell {
         for c in snap.cards.iter_mut().filter(|c| c.artifact.is_none()) {
             c.artifact = c.page.as_ref().and_then(crate::card_link::art_of_page);
         }
+    }
+
+    /// Page `id` at `block` (and `item`) as the artifact its card is
+    /// about: an ArtLink's JSON, stored on its card_opened as is (none
+    /// when there are no pages).
+    pub(super) fn page_about(&self, id: &str, block: &str, item: Option<&str>) -> Option<serde_json::Value> {
+        let p = self.pg.pages.as_deref()?;
+        let at = item.unwrap_or(block);
+        let page = PageLink { id: id.into(), block: Some(block.into()), item: item.map(Into::into), url: format!("{}#{}", p.url(id), at), ..Self::page_chip(p, id) };
+        crate::card_link::art_of_page(&page).and_then(|a| serde_json::to_value(a).ok())
     }
 
     /// A page's chip on its card: its title and version (none when it is
@@ -232,7 +253,8 @@ impl Shell {
             // page's agent (main when it is gone: page_asker), a question or
             // a drawn pick alike; his answer is the hub's own page path
             // (page_card_answer: the pick goes to the page's agent)
-            self.step(Input::PageCard { agents: vec![agent.to_string()], kind: "question".into(), text: q.card_text(), key: format!("question:{}", q.block) });
+            let about = self.page_about(id, &q.block, None);
+            self.step(Input::PageCard { agents: vec![agent.to_string()], kind: "question".into(), text: q.card_text(), key: format!("question:{}", q.block), about });
             let card = self.hub.st.open_cards().filter(|c| !before.contains(&c.id) && c.kind == "question").map(|c| c.id).max();
             match card {
                 Some(card) => {
@@ -397,7 +419,7 @@ impl Shell {
                 by: crate::peer::Sender::hub(),
                 // (the page's title first: where this step is, with no page
                 // open; notif-words)
-                req: crate::core::AgentReq::card(crate::pages::checklist::with_title(&meta.title, &s.card_text())),
+                req: crate::core::AgentReq::card_about(crate::pages::checklist::with_title(&meta.title, &s.card_text()), self.page_about(id, &r.block, Some(&r.item))),
             });
             match self.hub.st.open_cards().filter(|c| !before.contains(&c.id) && c.kind == "question").map(|c| c.id).max() {
                 Some(card) => {
@@ -422,9 +444,9 @@ impl Shell {
 
     /// Main asks a page's card (sb-core's cards are main's, pm's 25);
     /// `key` maps it back to the page's own answer path. None: no card.
-    pub(super) fn open_page_card(&mut self, id: &str, text: String, key: String) -> Option<u64> {
+    pub(super) fn open_page_card(&mut self, id: &str, text: String, key: String, about: Option<serde_json::Value>) -> Option<u64> {
         let before: Vec<u64> = self.hub.st.open_cards().map(|c| c.id).collect();
-        self.step(Input::Agent { token: 0, from: MAIN.to_string(), req: crate::core::AgentReq::card(text), by: crate::peer::Sender::hub() });
+        self.step(Input::Agent { token: 0, from: MAIN.to_string(), req: crate::core::AgentReq::card_about(text, about), by: crate::peer::Sender::hub() });
         let card = self.hub.st.open_cards().filter(|c| !before.contains(&c.id) && c.kind == "question").map(|c| c.id).max()?;
         self.page_cards().insert(card, (id.to_string(), key));
         Some(card)
@@ -504,7 +526,8 @@ impl Shell {
             choices,
             ..Step::default()
         };
-        match self.open_page_card(id, s.card_text(), format!("drafts:{}:{}", first.block, first.anchor())) {
+        let about = self.page_about(id, &first.block, Some(&first.anchor()));
+        match self.open_page_card(id, s.card_text(), format!("drafts:{}:{}", first.block, first.anchor()), about) {
             Some(card) => s.card = card,
             None => {
                 log_line(&self.opts.paths, &format!("page {id}: no card opened for its {} drafts", drafts.len()));

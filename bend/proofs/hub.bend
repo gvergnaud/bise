@@ -378,13 +378,16 @@ def Laws.page_card_asker_next(s, h, t, q):
   %Equal.sym(Bool, HR.agent_active(s, h), False{}, q) : {HR.page_asker.pick(_, h, HR.page_asker(s, t)) == HR.page_asker(s, t) : String}
   {==}
 
-def Laws.page_card_opens(o, cx, agents, text):
+def Laws.page_card_opens(o, cx, agents, text, about):
   {==}
 
-def Laws.page_card_opens_question(o, cx, agents, text):
+def Laws.page_card_opens_question(o, cx, agents, text, about):
   {==}
 
-def Laws.page_card_other_kind(o, cx, agents, text):
+def Laws.page_card_other_kind(o, cx, agents, text, about):
+  {==}
+
+def Laws.card_opened_about(id, kind, agent, text, for_msg, created, place, pr, about):
   {==}
 
 def Laws.page_asker_other(x, y, q):

@@ -754,7 +754,7 @@ fn an_escalated_question_is_answered_by_the_user() {
         AgentReq::Card {
             text: "La doc : v1 ou v2 ?".into(),
             for_msg: Some(id),
-            page: None, artifact: None, open: Vec::new(),
+            page: None, artifact: None, open: Vec::new(), about: None,
         },
     );
     assert!(
@@ -803,7 +803,7 @@ fn answering_in_the_task_view_answers_its_question() {
         AgentReq::Card {
             text: "v1 ou v2 ?".into(),
             for_msg: Some(id),
-            page: None, artifact: None, open: Vec::new(),
+            page: None, artifact: None, open: Vec::new(), about: None,
         },
     );
     t.go(Input::ReplIdle {
@@ -1559,7 +1559,7 @@ fn docs_question_card(t: &mut T) -> (u64, u64) {
         AgentReq::Card {
             text: "v1 ou v2 ?".into(),
             for_msg: Some(id),
-            page: None, artifact: None, open: Vec::new(),
+            page: None, artifact: None, open: Vec::new(), about: None,
         },
     );
     let card = *t.hub.st.cards.keys().next().unwrap();
@@ -1726,7 +1726,7 @@ fn the_user_closes_a_card_without_answering() {
 fn answering_a_main_card_starts_a_main_turn_holding_the_answer() {
     let mut t = T::new();
     t.user(MAIN, "prépare la release");
-    let (_, _) = t.req(MAIN, AgentReq::Card { text: "on publie ce soir ?".into(), for_msg: None, page: None, artifact: None, open: Vec::new() });
+    let (_, _) = t.req(MAIN, AgentReq::Card { text: "on publie ce soir ?".into(), for_msg: None, page: None, artifact: None, open: Vec::new(), about: None });
     let card = *t.hub.st.cards.keys().next().unwrap();
     t.turn(MAIN, "J'ai demandé à l'utilisateur.");
     assert_eq!(t.status(MAIN), Status::Idle);
@@ -1737,7 +1737,7 @@ fn answering_a_main_card_starts_a_main_turn_holding_the_answer() {
     assert_eq!(t.status(MAIN), Status::Working);
     assert!(!t.hub.st.main_notes.iter().any(|n| n.contains("oui, à 20h")), "{:?}", t.hub.st.main_notes);
     // busy: a second answer steers the running turn
-    t.req(MAIN, AgentReq::Card { text: "et le changelog ?".into(), for_msg: None, page: None, artifact: None, open: Vec::new() });
+    t.req(MAIN, AgentReq::Card { text: "et le changelog ?".into(), for_msg: None, page: None, artifact: None, open: Vec::new(), about: None });
     let card = *t.hub.st.cards.keys().next().unwrap();
     let fx = t.user(MAIN, &format!("/answer {} je l'écris", card));
     let steered = steer_to(&fx, MAIN).expect("a busy main gets it at once");
@@ -1754,7 +1754,7 @@ fn answering_mains_card_routes_it_and_notes_main() {
     use bise_proto::thread::lines::{self, Hub, Rec};
     let mut t = T::new();
     t.user(MAIN, "prépare la release");
-    t.req(MAIN, AgentReq::Card { text: "merge checkout into main?\n\n1. merge\n2. not yet".into(), for_msg: None, page: None, artifact: None, open: Vec::new() });
+    t.req(MAIN, AgentReq::Card { text: "merge checkout into main?\n\n1. merge\n2. not yet".into(), for_msg: None, page: None, artifact: None, open: Vec::new(), about: None });
     let card = *t.hub.st.cards.keys().next().unwrap();
     t.turn(MAIN, "J'ai demandé à l'utilisateur.");
     let fx = t.go(Input::UserCmd { client: 1, focus: MAIN.into(), cmd: UserCmd::Answer { card, text: "this one\nand the second line".into(), parts: String::new() } });
@@ -4193,7 +4193,7 @@ fn a_reports_result_is_kept_with_it() {
 fn open_card(t: &mut T, kind: &str, text: &str) -> u64 {
     match kind {
         "question" => {
-            t.req(MAIN, AgentReq::Card { text: text.into(), for_msg: None, page: None, artifact: None, open: Vec::new() });
+            t.req(MAIN, AgentReq::Card { text: text.into(), for_msg: None, page: None, artifact: None, open: Vec::new(), about: None });
         }
         "confirm" => {
             t.go(Input::ConfirmOpen { agent: MAIN.into(), text: text.into() });
@@ -4598,7 +4598,7 @@ fn his_card_answer_keeps_its_parts() {
         AgentReq::Send { to: MAIN.into(), text: "v1 ou v2 ?".into(), expect_reply: true, reply_to: None, queued: false, why: String::new(), switch: None, parts: String::new(), attach: Vec::new(), fwd: None },
     );
     let id = t.hub.st.msgs().values().find(|m| m.text == "v1 ou v2 ?").unwrap().id;
-    t.req(MAIN, AgentReq::Card { text: "La doc : v1 ou v2 ?".into(), for_msg: Some(id), page: None, artifact: None, open: Vec::new() });
+    t.req(MAIN, AgentReq::Card { text: "La doc : v1 ou v2 ?".into(), for_msg: Some(id), page: None, artifact: None, open: Vec::new(), about: None });
     t.turn(MAIN, "J'ai demandé à l'utilisateur.");
     let card = *t.hub.st.cards.keys().next().unwrap();
     let parts = r#"[{"kind":"quote","from":"main","text":"q"},{"kind":"text","text":"v2"}]"#;

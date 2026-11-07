@@ -35,6 +35,7 @@ fn ty(t: Ty, q: &str) -> String {
         Ty::Str => "String".into(),
         Ty::Bool => "Bool".into(),
         Ty::Json => "J.Json".into(),
+        Ty::OptJson => "Maybe<&2, J.Json>".into(),
         Ty::OptNat => "Maybe<&2, Nat>".into(),
         Ty::OptStr => "Maybe<&2, String>".into(),
         Ty::Strs => "List<&2, String>".into(),
@@ -63,7 +64,7 @@ fn dflt(f: &st::Field, q: &str) -> String {
         Ty::Str => "\"\"".into(),
         Ty::Bool => "False{}".into(),
         Ty::Json => "J.JNull{}".into(),
-        Ty::OptNat | Ty::OptStr | Ty::OptT(_) => "None{}".into(),
+        Ty::OptNat | Ty::OptStr | Ty::OptJson | Ty::OptT(_) => "None{}".into(),
         Ty::Strs | Ty::Nats | Ty::Ts(_) => "Nil{}".into(),
         Ty::T(n) => {
             assert!(STATE.record(n).is_some(), "{}: an enum field says its default", f.name);
@@ -283,7 +284,7 @@ fn enum_codec(s: &mut String, e: &st::Enum) {
 /// How a key's segment of the key-value list is: always one key-value
 /// (`Lit`), or its presence or its key known only from its value.
 fn stuck(w: Wire) -> bool {
-    matches!(w, Wire::StrOmit | Wire::OptStrOmit | Wire::OptNatOmit | Wire::OptObjOmit | Wire::Flag | Wire::Hand(_) | Wire::Inline)
+    matches!(w, Wire::StrOmit | Wire::OptStrOmit | Wire::OptNatOmit | Wire::OptObjOmit | Wire::OptJsonOmit | Wire::Flag | Wire::Hand(_) | Wire::Inline)
 }
 
 /// A record's shape of the same name as `shape`, else its journal's.
@@ -315,6 +316,7 @@ fn key_kv(k: &st::Key, f: &st::Field, shape: &str, v: &str) -> String {
         Wire::OptStrOmit => format!("K.omit_ms(\"{key}\", {v})"),
         Wire::OptNatOmit => format!("K.omit_mn(\"{key}\", {v})"),
         Wire::OptObjOmit => format!("K.omit_mj(\"{key}\", {})", opt_json(f, shape, v)),
+        Wire::OptJsonOmit => format!("K.omit_mj(\"{key}\", {v})"),
         Wire::Flag => format!("K.flag(\"{key}\", {v})"),
         Wire::Hand(h) => format!("[SH.{}_kv({v})]", h.name),
         Wire::Inline => match STATE.record(named(f.ty)) {
@@ -424,6 +426,8 @@ fn key_read(k: &st::Key, f: &st::Field, shape: &str, look: &dyn Fn(&str) -> Stri
         Wire::OptStr | Wire::OptStrOmit => format!("K.opt_s({m})"),
         Wire::OptNat | Wire::OptNatOmit => format!("K.opt_n({m})"),
         Wire::Json => format!("rd.j({m})"),
+        // the lookup itself: absent reads none, any JSON reads as is
+        Wire::OptJsonOmit => m,
         Wire::Strs => format!("rd.ss({m})"),
         Wire::Nats => format!("rd.ns({m})"),
         Wire::Word => format!("{}.of_word(rd.s({m}))", named(f.ty)),
@@ -483,7 +487,7 @@ fn split(k: &st::Key, f: &st::Field, v: &str) -> Vec<(String, String)> {
     let one = |p: &str| (p.to_string(), p.to_string());
     match k.wire {
         Wire::StrOmit => vec![one("SNil{}"), one(&format!("SCon{{{v}_h, {v}_t}}"))],
-        Wire::OptStr | Wire::OptStrOmit | Wire::OptNat | Wire::OptNatOmit | Wire::OptObjOmit => vec![one("None{}"), one(&format!("Some{{{v}_x}}"))],
+        Wire::OptStr | Wire::OptStrOmit | Wire::OptNat | Wire::OptNatOmit | Wire::OptObjOmit | Wire::OptJsonOmit => vec![one("None{}"), one(&format!("Some{{{v}_x}}"))],
         Wire::Flag => vec![one("True{}"), one("False{}")],
         Wire::Word => the_enum(named(f.ty)).variants.iter().map(|x| one(&format!("S.{}{{}}", x.name))).collect(),
         Wire::OptWord => {
@@ -507,7 +511,7 @@ fn writes(k: &st::Key, p: Option<&str>, look: &str) -> Option<bool> {
     let p = p?;
     Some(match k.wire {
         Wire::StrOmit => p.starts_with("SCon") && k.key == look,
-        Wire::OptStrOmit | Wire::OptNatOmit | Wire::OptObjOmit => p.starts_with("Some") && k.key == look,
+        Wire::OptStrOmit | Wire::OptNatOmit | Wire::OptObjOmit | Wire::OptJsonOmit => p.starts_with("Some") && k.key == look,
         Wire::Flag => p == "True{}" && k.key == look,
         Wire::Hand(h) => h.keys.iter().any(|(vn, key)| p.starts_with(&format!("S.{vn}{{")) && *key == look),
         _ => k.key == look,
@@ -519,6 +523,7 @@ fn writes(k: &st::Key, p: Option<&str>, look: &str) -> Option<bool> {
 fn skip_call(k: &st::Key, f: &st::Field, shape: &str, v: &str, rest: &str, look: &str) -> String {
     match k.wire {
         Wire::OptObjOmit => format!("skip_mj(\"{}\", {}, {rest}, \"{look}\", {{==}})", k.key, opt_json(f, shape, v)),
+        Wire::OptJsonOmit => format!("skip_mj(\"{}\", {v}, {rest}, \"{look}\", {{==}})", k.key),
         Wire::StrOmit => format!("skip_s(\"{}\", {v}, {rest}, \"{look}\", {{==}})", k.key),
         Wire::OptStrOmit => format!("skip_ms(\"{}\", {v}, {rest}, \"{look}\", {{==}})", k.key),
         Wire::OptNatOmit => format!("skip_mn(\"{}\", {v}, {rest}, \"{look}\", {{==}})", k.key),
@@ -751,6 +756,7 @@ fn pinned(r: &st::Record, sh: &st::Shape, o: &Jv) -> String {
             (Ty::OptStr, Some(Jv::Str(x))) => format!("Some{{\"{x}\"}}"),
             (Ty::OptNat | Ty::OptStr, Some(Jv::Null)) => "None{}".into(),
             (Ty::Json, Some(v)) => bend_json(v),
+            (Ty::OptJson, Some(v)) => format!("Some{{{}}}", bend_json(v)),
             (Ty::Nats | Ty::Strs, Some(Jv::Arr(xs))) if xs.is_empty() => "Nil{}".into(),
             (Ty::Nats, Some(Jv::Arr(xs))) => format!("[{}]", xs.iter().map(|x| match x { Jv::Num(n) => format!("{n}n"), _ => panic!("a number list") }).collect::<Vec<_>>().join(", ")),
             (Ty::Strs, Some(Jv::Arr(xs))) => format!("[{}]", xs.iter().map(|x| match x { Jv::Str(t) => format!("\"{t}\""), _ => panic!("a string list") }).collect::<Vec<_>>().join(", ")),

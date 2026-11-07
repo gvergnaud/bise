@@ -210,8 +210,9 @@ pub enum Input {
     PageAnswered { card: u64, agent: String, page: String, text: String, block: String },
     /// A page's own card (plan-ok): sb-core's page_card opens a `kind`
     /// card asked by the first live agent of `agents`, else main; `key`:
-    /// what it asks on its page, for the record.
-    PageCard { agents: Vec<String>, kind: String, text: String, key: String },
+    /// what it asks on its page, for the record; `about`: the page as an
+    /// artifact (an ArtLink's JSON), on its card_opened.
+    PageCard { agents: Vec<String>, kind: String, text: String, key: String, about: Option<serde_json::Value> },
     /// inbox-record: his answer's route line went into `agent`'s transcript at `pos` (daemon/answers.rs).
     AnswerPos { card: u64, agent: String, pos: u64 },
     /// The end of a role-line call (BISE-126) for the task in `dir`,
@@ -1713,7 +1714,7 @@ impl Hub {
             Input::ViewContext { agent, call, text, part } => self.core(&mut fx, env, None, In::ViewContext(ci::ViewContext { agent, call, text, part })),
             Input::ViewMessage { agent, plugin, text } => self.core(&mut fx, env, None, In::ViewMessage(ci::ViewMessage { agent, plugin, text })),
             Input::PageAnswered { card, agent, page, text, block } => self.core(&mut fx, env, None, In::PageAnswered(ci::PageAnswered { card, agent, page, text, block })),
-            Input::PageCard { agents, kind, text, key } => self.core(&mut fx, env, None, In::PageCard(ci::PageCard { agents, kind, text, key })),
+            Input::PageCard { agents, kind, text, key, about } => self.core(&mut fx, env, None, In::PageCard(ci::PageCard { agents, kind, text, key, about })),
             Input::AnswerPos { card, agent, pos } => self.core(&mut fx, env, None, In::AnswerPos(ci::AnswerPos { card, agent, pos })),
             Input::Merged { card, place, number, res } => self.merged(&mut fx, env, card, &place, number, res),
             Input::PrAct { client, req, url, head, act } => self.pr_act(&mut fx, merge::Click { client, req, url, act }, &head),
@@ -2107,9 +2108,14 @@ impl Hub {
                 }
                 json!({"cmd": "drop", "agent": agent})
             }
-            // its page or artifact links are the daemon's (daemon/page_cards.rs)
-            AgentReq::Card { text, for_msg, .. } => {
-                json!({"cmd": "card", "text": text, "for": for_msg})
+            // its page or artifact links are the daemon's (daemon/page_cards.rs);
+            // `about`, the artifact it resolved, rides it to card_opened
+            AgentReq::Card { text, for_msg, about, .. } => {
+                let mut q = json!({"cmd": "card", "text": text, "for": for_msg});
+                if let Some(a) = about {
+                    q["about"] = a;
+                }
+                q
             }
             AgentReq::Close { card, note } => json!({"cmd": "close", "card": card, "note": note}),
             AgentReq::Withdraw { card, why } => json!({"cmd": "withdraw", "card": card, "why": why}),

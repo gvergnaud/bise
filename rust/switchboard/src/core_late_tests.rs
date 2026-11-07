@@ -107,7 +107,7 @@ fn any_other_closed_card_is_refused() {
     t.user(MAIN, &format!("/close {closed}"));
     let fx = answer(&mut t, closed, "v2", "");
     assert_eq!(notices(&fx), vec![format!("notification #{closed} isn't open")]);
-    t.req(MAIN, AgentReq::Card { text: "ship it?".into(), for_msg: None, page: None, artifact: None, open: Vec::new() });
+    t.req(MAIN, AgentReq::Card { text: "ship it?".into(), for_msg: None, page: None, artifact: None, open: Vec::new(), about: None });
     let answered = *t.hub.st.cards.keys().max().unwrap();
     answer(&mut t, answered, "yes", "");
     let fx = answer(&mut t, answered, "no", "");

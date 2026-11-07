@@ -268,7 +268,7 @@ def in_page_answered_bare():
   {==}
 
 law in_page_card_bare:
-  {IN.of(J.obj([J.kv("t", J.JStr{"page_card"})])) == IN.IPageCard{Nil{}, "", "", ""} : IN.In}
+  {IN.of(J.obj([J.kv("t", J.JStr{"page_card"})])) == IN.IPageCard{Nil{}, "", "", "", None{}} : IN.In}
 
 def in_page_card_bare():
   {==}
@@ -806,11 +806,17 @@ law in_IPageCard_round:
   for kind: String
   for text: String
   for key: String
-  {IN.of(IN.json(IN.IPageCard{agents, kind, text, key})) == IN.IPageCard{agents, kind, text, key} : IN.In}
+  for about: Maybe<&2, J.Json>
+  {IN.of(IN.json(IN.IPageCard{agents, kind, text, key, about})) == IN.IPageCard{agents, kind, text, key, about} : IN.In}
 
-def in_IPageCard_round(agents, kind, text, key):
-  %K.strs_round(agents) : {IN.of(IN.json(IN.IPageCard{agents, kind, text, key})) == IN.IPageCard{_, kind, text, key} : IN.In}
-  {==}
+def in_IPageCard_round(agents, kind, text, key, about):
+  match about:
+    case None{}:
+      %K.strs_round(agents) : {IN.of(IN.json(IN.IPageCard{agents, kind, text, key, None{}})) == IN.IPageCard{_, kind, text, key, None{}} : IN.In}
+      {==}
+    case Some{x_about}:
+      %K.strs_round(agents) : {IN.of(IN.json(IN.IPageCard{agents, kind, text, key, Some{x_about}})) == IN.IPageCard{_, kind, text, key, Some{x_about}} : IN.In}
+      {==}
 
 law in_IAnswerPos_round:
   for card: Nat

@@ -35,6 +35,9 @@ pub enum Ty {
     Bool,
     /// `J.Json`, kept as is
     Json,
+    /// `Maybe<&2, J.Json>`, kept as is: a value sb-core stores and
+    /// never reads (a card's `about`), absent when none
+    OptJson,
     OptNat,
     OptStr,
     /// `List<&2, String>`
@@ -82,6 +85,9 @@ pub enum Wire {
     OptNatOmit,
     /// any JSON, as is
     Json,
+    /// `Maybe` of any JSON, as is, absent when none (an old line reads
+    /// none, and a none writes nothing: its lines stay byte-identical)
+    OptJsonOmit,
     /// a list of strings
     Strs,
     /// a list of numbers
@@ -408,7 +414,7 @@ pub const STATE: State = State {
         },
         Record {
             name: "Card",
-            doc: "a card of his inbox; `place`, `pr`: a place's card (ready to merge: its id, PR); `view`: a view's call's card (mcp-apps)",
+            doc: "a card of his inbox; `place`, `pr`: a place's card (ready to merge: its id, PR); `view`: a view's call's card (mcp-apps); `about`: the artifact it is about (the shell's ArtLink, opaque: sb-core stores it, never reads it)",
             fields: &[
                 f("id", Nat),
                 f("kind", Str),
@@ -419,6 +425,7 @@ pub const STATE: State = State {
                 f("place", OptStr),
                 f("pr", OptNat),
                 f("view", OptT("ViewAsk")),
+                f("about", OptJson),
             ],
             shapes: &[Shape {
                 name: "journal",
@@ -433,6 +440,7 @@ pub const STATE: State = State {
                     k("place", W::OptStr),
                     k("pr", W::OptNat),
                     k("view", W::OptObjOmit),
+                    k("about", W::OptJsonOmit),
                 ],
             }],
         },
@@ -861,6 +869,7 @@ mod tests {
                         Wire::OptStr | Wire::OptStrOmit => fl.ty == OptStr,
                         Wire::OptNat | Wire::OptNatOmit => fl.ty == OptNat,
                         Wire::Json => fl.ty == Json,
+                        Wire::OptJsonOmit => fl.ty == OptJson,
                         Wire::Strs => fl.ty == Strs,
                         Wire::Nats => fl.ty == Nats,
                         Wire::Word => matches!(fl.ty, T(n) if STATE.enum_(n).is_some_and(|e| e.tag_key.is_empty())),
@@ -920,5 +929,21 @@ mod tests {
             }
         }
         assert!(done.contains(&"Msg") && done.contains(&"WatchEnd"), "the walk reaches every record");
+    }
+
+    /// A card's `about` (inbox-answered, architect m_55388): a released
+    /// card_opened line (none) reads none and writes back byte-identical;
+    /// a new one keeps its JSON whole.
+    #[test]
+    fn a_cards_about_is_absent_when_none_and_whole_when_some() {
+        let old = r#"{"id":3,"kind":"question","agent":"docs","text":"which theme?","for_msg":7,"created_ms":1000200,"place":null,"pr":null}"#;
+        let c: Card = serde_json::from_str(old).unwrap();
+        assert_eq!(c.about, None);
+        assert_eq!(serde_json::to_string(&c).unwrap(), old);
+        let about = serde_json::json!({"id": "signup-bench", "kind": "page", "title": "signup, before / after", "v": 3, "at": {"kind": "block", "block": "q-bench"}});
+        let new = format!(r#"{{"id":4,"kind":"question","agent":"perf","text":"run it?","for_msg":null,"created_ms":1,"place":null,"pr":null,"about":{about}}}"#);
+        let c: Card = serde_json::from_str(&new).unwrap();
+        assert_eq!(c.about.as_ref(), Some(&about));
+        assert_eq!(serde_json::to_value(&c).unwrap()["about"], about);
     }
 }

@@ -279,7 +279,9 @@ impl<'de> Deserialize<'de> for ViewAsk {
 }
 
 /// a card of his inbox; `place`, `pr`: a place's card (ready to merge: its
-/// id, PR); `view`: a view's call's card (mcp-apps)
+/// id, PR); `view`: a view's call's card (mcp-apps); `about`: the artifact
+/// it is about (the shell's ArtLink, opaque: sb-core stores it, never reads
+/// it)
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct Card {
     pub id: u64,
@@ -292,6 +294,8 @@ pub struct Card {
     pub pr: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub view: Option<ViewAsk>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub about: Option<serde_json::Value>,
 }
 
 /// Not an object: an error (its reader skips it).
@@ -308,6 +312,7 @@ impl<'de> Deserialize<'de> for Card {
             place: field(&o, "place"),
             pr: field(&o, "pr"),
             view: field(&o, "view"),
+            about: field(&o, "about"),
         })
     }
 }

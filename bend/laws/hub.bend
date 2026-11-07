@@ -386,7 +386,8 @@ law page_card_opens:
   for +cx: HX.Cx<o>
   for +agents: List<&2, String>
   for +text: String
-  {HC.page_card(o, cx, agents, "plan", text) == HC.page_card.open(o, cx, "plan", HR.page_asker(HX.d(o, cx), agents), text) : HX.Cx<o>}
+  for +about: Maybe<&2, J.Json>
+  {HC.page_card(o, cx, agents, "plan", text, about) == HC.page_card.open(o, cx, "plan", HR.page_asker(HX.d(o, cx), agents), text, about) : HX.Cx<o>}
 
 # LAW (notif-artifact, architect m_26569): a page's question or drawn
 # pick is a page card too: one card, asked by the page's agent (main when
@@ -396,14 +397,31 @@ law page_card_opens_question:
   for +cx: HX.Cx<o>
   for +agents: List<&2, String>
   for +text: String
-  {HC.page_card(o, cx, agents, "question", text) == HC.page_card.open(o, cx, "question", HR.page_asker(HX.d(o, cx), agents), text) : HX.Cx<o>}
+  for +about: Maybe<&2, J.Json>
+  {HC.page_card(o, cx, agents, "question", text, about) == HC.page_card.open(o, cx, "question", HR.page_asker(HX.d(o, cx), agents), text, about) : HX.Cx<o>}
+
+# LAW (inbox-answered, architect m_55388): the card a step opens keeps
+# what it is about as the input gave it (the shell's ArtLink, opaque):
+# card_opened.about is the input's about, whole.
+law card_opened_about:
+  for +id: Nat
+  for +kind: String
+  for +agent: String
+  for +text: String
+  for +for_msg: Maybe<&2, Nat>
+  for +created: Nat
+  for +place: Maybe<&2, String>
+  for +pr: Maybe<&2, Nat>
+  for +about: Maybe<&2, J.Json>
+  {HS.Card.about(HC.card_new(id, kind, agent, text, for_msg, created, place, pr, about)) == about : Maybe<&2, J.Json>}
 
 law page_card_other_kind:
   for -o: HS.St
   for +cx: HX.Cx<o>
   for +agents: List<&2, String>
   for +text: String
-  {HC.page_card(o, cx, agents, "merge", text) == HC.notice(o, cx, "not a page card: merge") : HX.Cx<o>}
+  for +about: Maybe<&2, J.Json>
+  {HC.page_card(o, cx, agents, "merge", text, about) == HC.notice(o, cx, "not a page card: merge") : HX.Cx<o>}
 
 # LAW: who is told: the asker when it is another agent than the one the
 # pick went to; never the same agent twice, never an unknown asker.

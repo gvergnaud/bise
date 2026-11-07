@@ -34,6 +34,7 @@ fn rust_key(r: &st::Record, k: &st::Key) -> (String, Option<&'static str>) {
         Wire::OptNat => ("Option<u64>".into(), None),
         Wire::OptNatOmit => ("Option<u64>".into(), Some("Option::is_none")),
         Wire::Json => ("serde_json::Value".into(), None),
+        Wire::OptJsonOmit => ("Option<serde_json::Value>".into(), Some("Option::is_none")),
         Wire::Strs => ("Vec<String>".into(), None),
         Wire::Nats => ("Vec<u64>".into(), None),
         Wire::Word | Wire::Obj => (rust_name(named(f.ty)).into(), None),

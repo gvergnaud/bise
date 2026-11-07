@@ -91,7 +91,7 @@ type In is Data:
   # page_answered
   IPageAnswered{card: Nat, agent: String, page: String, text: String, block: String}
   # page_card
-  IPageCard{agents: List<&2, String>, kind: String, text: String, key: String}
+  IPageCard{agents: List<&2, String>, kind: String, text: String, key: String, about: Maybe<&2, J.Json>}
   # answer_pos
   IAnswerPos{card: Nat, agent: String, pos: Nat}
   # every_set
@@ -264,7 +264,7 @@ def IPageAnswered.of(+i: J.Json) -> In:
   IPageAnswered{K.get_n(i, "card"), K.get_s(i, "agent"), K.get_s(i, "page"), K.get_s(i, "text"), K.get_s(i, "block")}
 
 def IPageCard.of(+i: J.Json) -> In:
-  IPageCard{K.get_ss(i, "agents"), K.get_s(i, "kind"), K.get_s(i, "text"), K.get_s(i, "key")}
+  IPageCard{K.get_ss(i, "agents"), K.get_s(i, "kind"), K.get_s(i, "text"), K.get_s(i, "key"), J.get(i, "about")}
 
 def IAnswerPos.of(+i: J.Json) -> In:
   IAnswerPos{K.get_n(i, "card"), K.get_s(i, "agent"), K.get_n(i, "pos")}
@@ -964,8 +964,8 @@ def kvs(x: In) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
       [J.kv("t", J.JStr{"claims_clean"}), J.kv("place", J.JStr{place}), J.kv("paths", J.JArr{K.jstrs(paths)})]
     case IPageAnswered{+card, +agent, +page, +text, +block}:
       K.cat([[J.kv("t", J.JStr{"page_answered"}), J.kv("card", J.JNum{card}), J.kv("agent", J.JStr{agent}), J.kv("page", J.JStr{page}), J.kv("text", J.JStr{text})], K.omit_s("block", block)])
-    case IPageCard{+agents, +kind, +text, +key}:
-      [J.kv("t", J.JStr{"page_card"}), J.kv("agents", J.JArr{K.jstrs(agents)}), J.kv("kind", J.JStr{kind}), J.kv("text", J.JStr{text}), J.kv("key", J.JStr{key})]
+    case IPageCard{+agents, +kind, +text, +key, +about}:
+      K.cat([[J.kv("t", J.JStr{"page_card"}), J.kv("agents", J.JArr{K.jstrs(agents)}), J.kv("kind", J.JStr{kind}), J.kv("text", J.JStr{text}), J.kv("key", J.JStr{key})], K.omit_mj("about", about)])
     case IAnswerPos{+card, +agent, +pos}:
       [J.kv("t", J.JStr{"answer_pos"}), J.kv("card", J.JNum{card}), J.kv("agent", J.JStr{agent}), J.kv("pos", J.JNum{pos})]
     case IEverySet{+agent, +by, +text, +next_ms, +name, +every_ms, +daily_min, +until_ms, +times, +page}:

@@ -16,6 +16,9 @@ Red when, outside bend/hub/gen/:
     set_rt is their one writer (its rt out names the runtime), take.bend rename.new the other
     (its event names both names); view.bend rt_moved diffs only the runtimes those name
     (c4b-core-step-flat; laws rt_put_finds_it, rt_put_keeps_others);
+  - a line of bend/hub reads into a card's `about` (`J.get(..Card.about(..`, `K.get_s(..`,
+    any J./K. getter on it): sb-core stores that JSON (the shell's ArtLink) and never decides
+    on it; if it ever must, it becomes a typed record first (inbox-answered, architect m_55388);
   - a name is added to MIGRATING or HAND: both lists only shrink, vs the base's
     tests/state_guard.py (GATE_BASE, default HEAD; a base without this file: no check),
     but a RENAMES row: a hand record that shared a generated name, renamed, enters HAND.
@@ -196,6 +199,25 @@ def rts_writers(root, allowed=RTS_WRITERS):
     return bad
 
 
+# a J./K. getter whose first argument is a card's about (`S.Card.about(c)`)
+ABOUT_READ = re.compile(r"(?<![\w.])[JK]\.\w*(?:get|opt)\w*\(\s*[\w.]*Card\.about\(")
+
+
+def about_reads(root):
+    """The lines of bend/hub that read into a card's opaque `about`: (path, line, what)."""
+    bad = []
+    hub = os.path.join(root, "bend/hub")
+    for dp, _, fs in os.walk(hub):
+        for fn in sorted(fs):
+            rel = os.path.relpath(os.path.join(dp, fn), root)
+            if not fn.endswith(".bend") or rel.startswith("bend/hub/gen/"):
+                continue
+            for n, line in enumerate(open(os.path.join(dp, fn)).read().splitlines(), 1):
+                if ABOUT_READ.search(line.split("#", 1)[0]):
+                    bad.append((rel, n, "reads a card's about: sb-core stores it as is, never decides on it (make it a typed record first)"))
+    return bad
+
+
 def self_test():
     import tempfile
     with tempfile.TemporaryDirectory() as root:
@@ -218,6 +240,19 @@ def self_test():
         w("bend/hub/c.bend", "def set_rt(r: R) -> R:\n  X.R.with_rts(r, Nil{})\n\n# X.R.with_rts( in a comment\ndef sneak(r: R) -> R:\n  X.R.with_rts(r, Nil{})\n")
         got = rts_writers(root, allowed={("bend/hub/c.bend", "set_rt")})
         assert [(p, n) for p, n, _ in got] == [("bend/hub/c.bend", 6)], f"self-test: rts writers {got}"
+        # a read into a card's about goes red; storing it, a request's own
+        # "about" and a comment do not
+        w("bend/hub/d.bend", "\n".join([
+            "def keep(c: S.Card, q: J.Json) -> S.Card:",
+            "  S.Card.with_about(c, J.get(q, 'about'))",
+            "",
+            "# J.get(S.Card.about(c), 'id') in a comment",
+            "def peek(c: S.Card) -> String:",
+            "  K.get_s(S.Card.about(c), 'id')",
+            "",
+        ]))
+        got = about_reads(root)
+        assert [(p, n) for p, n, _ in got] == [("bend/hub/d.bend", 6)], f"self-test: about reads {got}"
     # the lists only shrink
     base = 'MIGRATING = {\n    "Msg", "Card",\n}\n\nHAND = {\n    # "Old" in a comment\n    "Core",\n}\n'
     assert grown(None, base) == [], "self-test: no base, no check"

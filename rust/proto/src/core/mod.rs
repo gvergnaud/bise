@@ -80,6 +80,10 @@ pub enum FieldKind {
     OptBoolOmit,
     /// any JSON value, kept as is (Bend `J.Json`); missing reads null.
     Json,
+    /// `Option<Value>`, any JSON kept as is, absent when none (Bend
+    /// `Maybe<&2, J.Json>`: a card's `about`, which sb-core stores and
+    /// never reads).
+    OptJsonOmit,
     /// `Vec<String>`, always written; missing reads empty.
     Strs,
     /// `Option<Vec<String>>`, absent when none (a line's `fields`).
@@ -359,6 +363,9 @@ macro_rules! core_fields {
     };
     (@go $m:tt $name:ident [$($done:tt)*] $(#[$fm:meta])* $f:ident : Json $(, $($rest:tt)*)?) => {
         $crate::core::core_fields!(@go $m $name [$($done)* $(#[$fm])* #[serde(default)] pub $f: serde_json::Value,] $($($rest)*)?);
+    };
+    (@go $m:tt $name:ident [$($done:tt)*] $(#[$fm:meta])* $f:ident : OptJsonOmit $(, $($rest:tt)*)?) => {
+        $crate::core::core_fields!(@go $m $name [$($done)* $(#[$fm])* #[serde(default, skip_serializing_if = "Option::is_none")] pub $f: Option<serde_json::Value>,] $($($rest)*)?);
     };
     (@go $m:tt $name:ident [$($done:tt)*] $(#[$fm:meta])* $f:ident : Strs $(, $($rest:tt)*)?) => {
         $crate::core::core_fields!(@go $m $name [$($done)* $(#[$fm])* #[serde(default)] pub $f: Vec<String>,] $($($rest)*)?);

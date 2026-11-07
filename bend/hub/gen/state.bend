@@ -81,9 +81,9 @@ type Vctx is Data:
 type ViewAsk is Data:
   ViewAsk{agent: String, call: String, ask: String}
 
-# a card of his inbox; `place`, `pr`: a place's card (ready to merge: its id, PR); `view`: a view's call's card (mcp-apps)
+# a card of his inbox; `place`, `pr`: a place's card (ready to merge: its id, PR); `view`: a view's call's card (mcp-apps); `about`: the artifact it is about (the shell's ArtLink, opaque: sb-core stores it, never reads it)
 type Card is Data:
-  Card{id: Nat, kind: String, agent: String, text: String, for_msg: Maybe<&2, Nat>, created: Nat, place: Maybe<&2, String>, pr: Maybe<&2, Nat>, view: Maybe<&2, ViewAsk>}
+  Card{id: Nat, kind: String, agent: String, text: String, for_msg: Maybe<&2, Nat>, created: Nat, place: Maybe<&2, String>, pr: Maybe<&2, Nat>, view: Maybe<&2, ViewAsk>, about: Maybe<&2, J.Json>}
 
 # his answer as a card's close journals it: `said`, the option `pick_n`/`pick` ("" none), `via` inbox|thread|page ("" closed without him), the page's question `page`/`block`
 type Ans is Data:
@@ -555,145 +555,160 @@ def ViewAsk.open(+r: ViewAsk) -> ViewAsk:
 # ---- Card ----
 
 def Card.empty() -> Card:
-  Card{0n, "", "", "", None{}, 0n, None{}, None{}, None{}}
+  Card{0n, "", "", "", None{}, 0n, None{}, None{}, None{}, None{}}
 
 def Card.id(r: Card) -> Nat:
   match r:
-    case Card{f0, _, _, _, _, _, _, _, _}:
+    case Card{f0, _, _, _, _, _, _, _, _, _}:
       f0
 
 def Card.with_id(r: Card, v: Nat) -> Card:
   match r:
-    case Card{_, f1, f2, f3, f4, f5, f6, f7, f8}:
-      Card{v, f1, f2, f3, f4, f5, f6, f7, f8}
+    case Card{_, f1, f2, f3, f4, f5, f6, f7, f8, f9}:
+      Card{v, f1, f2, f3, f4, f5, f6, f7, f8, f9}
 
 def Card.over_id(r: Card, g: Nat -> Nat) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
-      Card{g(f0), f1, f2, f3, f4, f5, f6, f7, f8}
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9}:
+      Card{g(f0), f1, f2, f3, f4, f5, f6, f7, f8, f9}
 
 def Card.kind(r: Card) -> String:
   match r:
-    case Card{_, f1, _, _, _, _, _, _, _}:
+    case Card{_, f1, _, _, _, _, _, _, _, _}:
       f1
 
 def Card.with_kind(r: Card, v: String) -> Card:
   match r:
-    case Card{f0, _, f2, f3, f4, f5, f6, f7, f8}:
-      Card{f0, v, f2, f3, f4, f5, f6, f7, f8}
+    case Card{f0, _, f2, f3, f4, f5, f6, f7, f8, f9}:
+      Card{f0, v, f2, f3, f4, f5, f6, f7, f8, f9}
 
 def Card.over_kind(r: Card, g: String -> String) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
-      Card{f0, g(f1), f2, f3, f4, f5, f6, f7, f8}
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9}:
+      Card{f0, g(f1), f2, f3, f4, f5, f6, f7, f8, f9}
 
 def Card.agent(r: Card) -> String:
   match r:
-    case Card{_, _, f2, _, _, _, _, _, _}:
+    case Card{_, _, f2, _, _, _, _, _, _, _}:
       f2
 
 def Card.with_agent(r: Card, v: String) -> Card:
   match r:
-    case Card{f0, f1, _, f3, f4, f5, f6, f7, f8}:
-      Card{f0, f1, v, f3, f4, f5, f6, f7, f8}
+    case Card{f0, f1, _, f3, f4, f5, f6, f7, f8, f9}:
+      Card{f0, f1, v, f3, f4, f5, f6, f7, f8, f9}
 
 def Card.over_agent(r: Card, g: String -> String) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
-      Card{f0, f1, g(f2), f3, f4, f5, f6, f7, f8}
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9}:
+      Card{f0, f1, g(f2), f3, f4, f5, f6, f7, f8, f9}
 
 def Card.text(r: Card) -> String:
   match r:
-    case Card{_, _, _, f3, _, _, _, _, _}:
+    case Card{_, _, _, f3, _, _, _, _, _, _}:
       f3
 
 def Card.with_text(r: Card, v: String) -> Card:
   match r:
-    case Card{f0, f1, f2, _, f4, f5, f6, f7, f8}:
-      Card{f0, f1, f2, v, f4, f5, f6, f7, f8}
+    case Card{f0, f1, f2, _, f4, f5, f6, f7, f8, f9}:
+      Card{f0, f1, f2, v, f4, f5, f6, f7, f8, f9}
 
 def Card.over_text(r: Card, g: String -> String) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
-      Card{f0, f1, f2, g(f3), f4, f5, f6, f7, f8}
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9}:
+      Card{f0, f1, f2, g(f3), f4, f5, f6, f7, f8, f9}
 
 def Card.for_msg(r: Card) -> Maybe<&2, Nat>:
   match r:
-    case Card{_, _, _, _, f4, _, _, _, _}:
+    case Card{_, _, _, _, f4, _, _, _, _, _}:
       f4
 
 def Card.with_for_msg(r: Card, v: Maybe<&2, Nat>) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, _, f5, f6, f7, f8}:
-      Card{f0, f1, f2, f3, v, f5, f6, f7, f8}
+    case Card{f0, f1, f2, f3, _, f5, f6, f7, f8, f9}:
+      Card{f0, f1, f2, f3, v, f5, f6, f7, f8, f9}
 
 def Card.over_for_msg(r: Card, g: Maybe<&2, Nat> -> Maybe<&2, Nat>) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
-      Card{f0, f1, f2, f3, g(f4), f5, f6, f7, f8}
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9}:
+      Card{f0, f1, f2, f3, g(f4), f5, f6, f7, f8, f9}
 
 def Card.created(r: Card) -> Nat:
   match r:
-    case Card{_, _, _, _, _, f5, _, _, _}:
+    case Card{_, _, _, _, _, f5, _, _, _, _}:
       f5
 
 def Card.with_created(r: Card, v: Nat) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, _, f6, f7, f8}:
-      Card{f0, f1, f2, f3, f4, v, f6, f7, f8}
+    case Card{f0, f1, f2, f3, f4, _, f6, f7, f8, f9}:
+      Card{f0, f1, f2, f3, f4, v, f6, f7, f8, f9}
 
 def Card.over_created(r: Card, g: Nat -> Nat) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
-      Card{f0, f1, f2, f3, f4, g(f5), f6, f7, f8}
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9}:
+      Card{f0, f1, f2, f3, f4, g(f5), f6, f7, f8, f9}
 
 def Card.place(r: Card) -> Maybe<&2, String>:
   match r:
-    case Card{_, _, _, _, _, _, f6, _, _}:
+    case Card{_, _, _, _, _, _, f6, _, _, _}:
       f6
 
 def Card.with_place(r: Card, v: Maybe<&2, String>) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, _, f7, f8}:
-      Card{f0, f1, f2, f3, f4, f5, v, f7, f8}
+    case Card{f0, f1, f2, f3, f4, f5, _, f7, f8, f9}:
+      Card{f0, f1, f2, f3, f4, f5, v, f7, f8, f9}
 
 def Card.over_place(r: Card, g: Maybe<&2, String> -> Maybe<&2, String>) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
-      Card{f0, f1, f2, f3, f4, f5, g(f6), f7, f8}
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9}:
+      Card{f0, f1, f2, f3, f4, f5, g(f6), f7, f8, f9}
 
 def Card.pr(r: Card) -> Maybe<&2, Nat>:
   match r:
-    case Card{_, _, _, _, _, _, _, f7, _}:
+    case Card{_, _, _, _, _, _, _, f7, _, _}:
       f7
 
 def Card.with_pr(r: Card, v: Maybe<&2, Nat>) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, f6, _, f8}:
-      Card{f0, f1, f2, f3, f4, f5, f6, v, f8}
+    case Card{f0, f1, f2, f3, f4, f5, f6, _, f8, f9}:
+      Card{f0, f1, f2, f3, f4, f5, f6, v, f8, f9}
 
 def Card.over_pr(r: Card, g: Maybe<&2, Nat> -> Maybe<&2, Nat>) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
-      Card{f0, f1, f2, f3, f4, f5, f6, g(f7), f8}
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9}:
+      Card{f0, f1, f2, f3, f4, f5, f6, g(f7), f8, f9}
 
 def Card.view(r: Card) -> Maybe<&2, ViewAsk>:
   match r:
-    case Card{_, _, _, _, _, _, _, _, f8}:
+    case Card{_, _, _, _, _, _, _, _, f8, _}:
       f8
 
 def Card.with_view(r: Card, v: Maybe<&2, ViewAsk>) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, f6, f7, _}:
-      Card{f0, f1, f2, f3, f4, f5, f6, f7, v}
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, _, f9}:
+      Card{f0, f1, f2, f3, f4, f5, f6, f7, v, f9}
 
 def Card.over_view(r: Card, g: Maybe<&2, ViewAsk> -> Maybe<&2, ViewAsk>) -> Card:
   match r:
-    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8}:
-      Card{f0, f1, f2, f3, f4, f5, f6, f7, g(f8)}
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9}:
+      Card{f0, f1, f2, f3, f4, f5, f6, f7, g(f8), f9}
+
+def Card.about(r: Card) -> Maybe<&2, J.Json>:
+  match r:
+    case Card{_, _, _, _, _, _, _, _, _, f9}:
+      f9
+
+def Card.with_about(r: Card, v: Maybe<&2, J.Json>) -> Card:
+  match r:
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, _}:
+      Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, v}
+
+def Card.over_about(r: Card, g: Maybe<&2, J.Json> -> Maybe<&2, J.Json>) -> Card:
+  match r:
+    case Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9}:
+      Card{f0, f1, f2, f3, f4, f5, f6, f7, f8, g(f9)}
 
 def Card.open(+r: Card) -> Card:
-  Card.with_view(Card.with_pr(Card.with_place(Card.with_created(Card.with_for_msg(Card.with_text(Card.with_agent(Card.with_kind(Card.with_id(Card.empty(), Card.id(r)), Card.kind(r)), Card.agent(r)), Card.text(r)), Card.for_msg(r)), Card.created(r)), Card.place(r)), Card.pr(r)), Card.view(r))
+  Card.with_about(Card.with_view(Card.with_pr(Card.with_place(Card.with_created(Card.with_for_msg(Card.with_text(Card.with_agent(Card.with_kind(Card.with_id(Card.empty(), Card.id(r)), Card.kind(r)), Card.agent(r)), Card.text(r)), Card.for_msg(r)), Card.created(r)), Card.place(r)), Card.pr(r)), Card.view(r)), Card.about(r))
 
 # ---- Ans ----
 

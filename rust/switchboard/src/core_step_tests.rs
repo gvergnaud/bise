@@ -65,7 +65,7 @@ fn an_answer_by_number_names_its_option_in_both_feeds() {
         AgentReq::Send { to: MAIN.into(), text: "where?".into(), expect_reply: true, reply_to: None, queued: false, why: String::new(), switch: None, parts: String::new(), attach: Vec::new(), fwd: None },
     );
     let id = t.hub.st.msgs().values().find(|m| m.text == "where?").unwrap().id;
-    t.req(MAIN, AgentReq::Card { text: "where does the balance show?\n1. at every step\n2. only at checkout".into(), for_msg: Some(id), page: None, artifact: None, open: Vec::new() });
+    t.req(MAIN, AgentReq::Card { text: "where does the balance show?\n1. at every step\n2. only at checkout".into(), for_msg: Some(id), page: None, artifact: None, open: Vec::new(), about: None });
     t.turn(MAIN, "asked");
     let card = *t.hub.st.cards.keys().next().unwrap();
     t.hub.answered = None;
@@ -80,7 +80,7 @@ fn an_answer_by_number_names_its_option_in_both_feeds() {
         assert_eq!(rs, vec![json!({"sb": "route", "who": "docs", "card": card, "said": "2", "msg": answer, "pick_n": 2, "pick": "only at checkout"})], "{feed}: {fx:?}");
     }
     // words: no pick
-    t.req(MAIN, AgentReq::Card { text: "and then?\n1. ship\n2. wait".into(), for_msg: Some(id), page: None, artifact: None, open: Vec::new() });
+    t.req(MAIN, AgentReq::Card { text: "and then?\n1. ship\n2. wait".into(), for_msg: Some(id), page: None, artifact: None, open: Vec::new(), about: None });
     let card2 = *t.hub.st.cards.keys().next().unwrap();
     let fx = t.go(Input::UserCmd { client: 1, focus: MAIN.into(), cmd: UserCmd::Answer { card: card2, text: "ship it today".into(), parts: String::new() } });
     let r = recs(&fx, MAIN).into_iter().find(|r| r["sb"] == "route").expect("the route line");
@@ -91,7 +91,7 @@ fn an_answer_by_number_names_its_option_in_both_feeds() {
     t.turn(MAIN, "ok");
     assert_eq!(t.hub.answered, None);
     // main's own card: one line, no message, in main's feed alone
-    t.req(MAIN, AgentReq::Card { text: "merge?\n1. merge\n2. not yet".into(), for_msg: None, page: None, artifact: None, open: Vec::new() });
+    t.req(MAIN, AgentReq::Card { text: "merge?\n1. merge\n2. not yet".into(), for_msg: None, page: None, artifact: None, open: Vec::new(), about: None });
     let card3 = *t.hub.st.cards.keys().next().unwrap();
     let fx = t.go(Input::UserCmd { client: 1, focus: MAIN.into(), cmd: UserCmd::Answer { card: card3, text: "1".into(), parts: String::new() } });
     let rs: Vec<Value> = recs(&fx, MAIN).into_iter().filter(|r| r["sb"] == "route").collect();
@@ -208,7 +208,7 @@ fn a_page_card_is_asked_by_the_first_live_agent() {
     t.spawn_task("lean-install");
     let card = |t: &mut T, agents: &[&str], kind: &str| {
         let before: Vec<u64> = t.hub.st.open_cards().map(|c| c.id).collect();
-        let fx = t.go(Input::PageCard { agents: agents.iter().map(|a| a.to_string()).collect(), kind: kind.into(), text: "lean installs: start the plan lean-install recommends?\n1. start the plan\n2. open the plan".into(), key: "plan:plan".into() });
+        let fx = t.go(Input::PageCard { agents: agents.iter().map(|a| a.to_string()).collect(), kind: kind.into(), text: "lean installs: start the plan lean-install recommends?\n1. start the plan\n2. open the plan".into(), key: "plan:plan".into(), about: None });
         let new = t.hub.st.open_cards().find(|c| !before.contains(&c.id)).map(|c| (c.kind.clone(), c.agent.clone()));
         (new, fx)
     };

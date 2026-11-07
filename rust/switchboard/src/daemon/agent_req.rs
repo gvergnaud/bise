@@ -167,7 +167,10 @@ impl Shell {
         let cmd = req.tag().to_string();
         let checked = self.attached(&from, req).and_then(|req| self.card_page_link(&req).map(|link| (req, link)));
         match checked {
-            Ok((req, link)) => self.core_step(token, stream, from, &cmd, req, asker, link),
+            Ok((req, link)) => {
+                let (req, link) = crate::card_link::about_on(req, link);
+                self.core_step(token, stream, from, &cmd, req, asker, link)
+            }
             Err(e) => {
                 write_json(&mut stream, &json!({"ok": false, "error": e}));
             }

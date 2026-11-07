@@ -57,7 +57,9 @@ impl Shell {
             let dismissed = steps.iter().any(|s| s.block == p.key() && s.item == version && s.reply.as_deref() == Some(""));
             if !dismissed {
                 let before = open.clone();
-                self.step(Input::PageCard { agents: vec![p.agent.clone(), meta.agent.clone()], kind: KIND.into(), text: text.clone(), key: p.key() });
+                let key = p.key();
+                let about = self.page_about(id, key.strip_prefix("plan:").unwrap_or(&key), None);
+                self.step(Input::PageCard { agents: vec![p.agent.clone(), meta.agent.clone()], kind: KIND.into(), text: text.clone(), key, about });
                 match self.hub.st.open_cards().filter(|c| !before.contains(&c.id) && c.kind == KIND).map(|c| c.id).max() {
                     Some(card) => {
                         self.page_cards().insert(card, (id.to_string(), p.key()));

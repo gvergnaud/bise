@@ -363,13 +363,28 @@ def note_main(-o: S.St, +cx: X.Cx<o>, +text: String) -> X.Cx<o>:
 # agent's traffic (BISE-299)
 #
 # open_card_at: the same, about a place (and its PR): the hub's own items
-def open_card_at(-o: S.St, +cx: X.Cx<o>, +kind: String, +agent: String, +text: String, +for_msg: Maybe<&2, Nat>, +place: Maybe<&2, String>, +pr: Maybe<&2, Nat>) -> X.Cx<o>:
+#
+# open_card_full: the same, with what it is `about` (the shell's ArtLink:
+# a page at its block, an artifact), kept on the card as is and never
+# read here (inbox-answered, architect m_55388; tests/state_guard.py)
+def card_new(+id: Nat, +kind: String, +agent: String, +text: String, +for_msg: Maybe<&2, Nat>, +created: Nat, +place: Maybe<&2, String>, +pr: Maybe<&2, Nat>, +about: Maybe<&2, J.Json>) -> S.Card:
+  S.Card.with_about(S.Card.with_pr(S.Card.with_place(S.Card.with_created(S.Card.with_for_msg(S.Card.with_text(S.Card.with_agent(S.Card.with_kind(S.Card.with_id(S.Card.empty(), id), kind), agent), text), for_msg), created), place), pr), about)
+
+def open_card_full(-o: S.St, +cx: X.Cx<o>, +kind: String, +agent: String, +text: String, +for_msg: Maybe<&2, Nat>, +place: Maybe<&2, String>, +pr: Maybe<&2, Nat>, +about: Maybe<&2, J.Json>) -> X.Cx<o>:
   +id = S.St.next_card(st(o, cx))
-  +cx2 = emit(o, cx, M.ECardOpened{S.Card.with_pr(S.Card.with_place(S.Card.with_created(S.Card.with_for_msg(S.Card.with_text(S.Card.with_agent(S.Card.with_kind(S.Card.with_id(S.Card.empty(), id), kind), agent), text), for_msg), now(o, cx)), place), pr)}, {==}, Unit{}, Unit{})
+  +cx2 = emit(o, cx, M.ECardOpened{card_new(id, kind, agent, text, for_msg, now(o, cx), place, pr, about)}, {==}, Unit{}, Unit{})
   feed(o, cx2, M.MAIN(), FD.card(id, kind, agent, text))
+
+def open_card_at(-o: S.St, +cx: X.Cx<o>, +kind: String, +agent: String, +text: String, +for_msg: Maybe<&2, Nat>, +place: Maybe<&2, String>, +pr: Maybe<&2, Nat>) -> X.Cx<o>:
+  open_card_full(o, cx, kind, agent, text, for_msg, place, pr, None{})
 
 def open_card(-o: S.St, +cx: X.Cx<o>, +kind: String, +agent: String, +text: String, +for_msg: Maybe<&2, Nat>) -> X.Cx<o>:
   open_card_at(o, cx, kind, agent, text, for_msg, None{}, None{})
+
+# open_card about an artifact (`sb notify --page|--artifact`, a page's own
+# card)
+def open_card_about(-o: S.St, +cx: X.Cx<o>, +kind: String, +agent: String, +text: String, +for_msg: Maybe<&2, Nat>, +about: Maybe<&2, J.Json>) -> X.Cx<o>:
+  open_card_full(o, cx, kind, agent, text, for_msg, None{}, None{}, about)
 
 # the hub's Rust side opens one of its items (`card_open`: a PR ready to
 # merge, pr-design §6.3); a kind outside the user's inbox opens nothing
@@ -3255,26 +3270,28 @@ def card_to_asker(-o: S.St, +cx: X.Cx<o>, +id: Nat, +agent: String, +text: Strin
     u => feed(o, cx, agent, FD.card(id, "question", agent, text)),
     u => cx)
 
-def req_card.go(-o: S.St, +cx: X.Cx<o>, +token: Nat, +agent: String, +text: String, +for_msg: Maybe<&2, Nat>) -> X.Cx<o>:
+# `about`: what the card is about, the shell's (its `--page|--artifact`
+# resolved), kept on the card as is
+def req_card.go(-o: S.St, +cx: X.Cx<o>, +token: Nat, +agent: String, +text: String, +for_msg: Maybe<&2, Nat>, +about: Maybe<&2, J.Json>) -> X.Cx<o>:
   +id = S.St.next_card(st(o, cx))
-  +cx2 = card_to_asker(o, open_card(o, cx, "question", agent, text, for_msg), id, agent, text)
+  +cx2 = card_to_asker(o, open_card_about(o, cx, "question", agent, text, for_msg, about), id, agent, text)
   # main hands the question over: no automatic reply
   +cx3 = req_card.settle(o, for_msg, cx2)
   reply(o, cx3, token, ok_body([J.kv("card", J.JNum{id})]))
 
-def req_card.msg(-o: S.St, q: Maybe<&2, S.Msg>, +cx: X.Cx<o>, +token: Nat, +text: String, +id: Nat) -> X.Cx<o>:
+def req_card.msg(-o: S.St, q: Maybe<&2, S.Msg>, +cx: X.Cx<o>, +token: Nat, +text: String, +id: Nat, +about: Maybe<&2, J.Json>) -> X.Cx<o>:
   match q:
     case None{}:
       reply_err(o, cx, token, String.append("message inconnu : ", mid(id)))
     case Some{+m}:
-      req_card.go(o, cx, token, S.Msg.from(m), text, Some{id})
+      req_card.go(o, cx, token, S.Msg.from(m), text, Some{id}, about)
 
-def req_card(-o: S.St, for_msg: Maybe<&2, Nat>, +cx: X.Cx<o>, +token: Nat, +text: String) -> X.Cx<o>:
+def req_card(-o: S.St, for_msg: Maybe<&2, Nat>, +cx: X.Cx<o>, +token: Nat, +text: String, +about: Maybe<&2, J.Json>) -> X.Cx<o>:
   match for_msg:
     case None{}:
-      req_card.go(o, cx, token, M.MAIN(), text, None{})
+      req_card.go(o, cx, token, M.MAIN(), text, None{}, about)
     case Some{+id}:
-      req_card.msg(o, M.msg_of(st(o, cx), id), cx, token, text, id)
+      req_card.msg(o, M.msg_of(st(o, cx), id), cx, token, text, id, about)
 
 # `sb close N ["note"]`: a card in the user's inbox is the user's to
 # answer or close (BISE-299): refused; an older journal's card of another
@@ -3387,7 +3404,7 @@ def req.main.go(-o: S.St, c: Cmd, +cx: X.Cx<o>, +token: Nat, +q: J.Json) -> X.Cx
     case CProjectAsk{}:
       req_xask(o, K.opt_s(J.get(q, "pre_err")), cx, token, q)
     case _:
-      req_card(o, K.opt_n(J.get(q, "for")), cx, token, K.get_s(q, "text"))
+      req_card(o, K.opt_n(J.get(q, "for")), cx, token, K.get_s(q, "text"), J.get(q, "about"))
 
 def req.main(-o: S.St, is_main: Bool, +cx: X.Cx<o>, +token: Nat, +c: Cmd, +q: J.Json) -> X.Cx<o>:
   match is_main:
@@ -4000,13 +4017,14 @@ def page_answered(-o: S.St, m: Maybe<&2, S.Card>, +cx: X.Cx<o>, +to: String, +pa
 
 # {"t":"page_card"}: a page's own card (plan-ok): asked by the first live
 # agent of `agents`, else main (reach.bend page_asker), in its feed too;
-# a kind that is no page card's opens nothing. `key` is the hub's record.
-def page_card.open(-o: S.St, +cx: X.Cx<o>, +kind: String, +who: String, +text: String) -> X.Cx<o>:
-  card_to_asker(o, open_card(o, cx, kind, who, text, None{}), S.St.next_card(st(o, cx)), who, text)
+# a kind that is no page card's opens nothing. `key` is the hub's record;
+# `about`, the page as an artifact (the shell's), is kept on the card.
+def page_card.open(-o: S.St, +cx: X.Cx<o>, +kind: String, +who: String, +text: String, +about: Maybe<&2, J.Json>) -> X.Cx<o>:
+  card_to_asker(o, open_card_about(o, cx, kind, who, text, None{}, about), S.St.next_card(st(o, cx)), who, text)
 
-def page_card(-o: S.St, +cx: X.Cx<o>, +agents: List<&2, String>, +kind: String, +text: String) -> X.Cx<o>:
+def page_card(-o: S.St, +cx: X.Cx<o>, +agents: List<&2, String>, +kind: String, +text: String, +about: Maybe<&2, J.Json>) -> X.Cx<o>:
   LZ.pick(X.Cx<o>, CK.page_kind(kind),
-    u => page_card.open(o, cx, kind, R.page_asker(st(o, cx), agents), text),
+    u => page_card.open(o, cx, kind, R.page_asker(st(o, cx), agents), text, about),
     u => notice(o, cx, String.append("not a page card: ", kind)))
 
 def force_run_of(+r: String) -> S.Run:
@@ -4140,8 +4158,8 @@ def dispatch(-o: S.St, +cx: X.Cx<o>, +i: GI.In) -> X.Cx<o>:
       page_answered(o, M.card_of(S.St.cards(st(o, cx)), card), cx, agent, page, text, block)
     case GI.IForge{+to, +text}:
       fst(o, send(o, cx, msg(M.GITHUB(), to, text, False{}, None{}, False{}, False{})))
-    case GI.IPageCard{+agents, +kind, +text, +key}:
-      page_card(o, cx, agents, kind, text)
+    case GI.IPageCard{+agents, +kind, +text, +key, +about}:
+      page_card(o, cx, agents, kind, text, about)
     case GI.IForgeCard{+agent, +text}:
       open_card(o, cx, "question", agent, text, None{})
     case GI.ICardOpen{+kind, +agent, +text, +place, +pr}:
