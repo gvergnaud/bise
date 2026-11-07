@@ -219,6 +219,9 @@ pub struct Watcher {
     heads: BTreeMap<String, (String, Option<u32>)>,
     /// pr-integration rule 2: the followed PRs that no longer resolve
     /// (the forge's typed not-found): never asked again by this worker.
+    /// It lives as long as the worker: after a hub restart a gone PR is
+    /// asked once more (one alias in the round's query), then dropped
+    /// again (architect m_54590).
     gone: BTreeSet<String>,
 }
 
