@@ -9,7 +9,7 @@ import type { InboxRecord, Where } from '@/proto/inbox';
 import { inbox } from '@/proto/words_inbox.gen';
 import { hero } from '@/proto/words_hero.gen';
 import { shownName } from '@/agents/model';
-import { dayOf, timeOf } from '@/artifacts/model';
+import { dayOf } from '@/artifacts/model';
 import { sentenceCase } from '@/ds/case';
 import { age } from './InboxCard';
 import { idOf } from './id';
@@ -189,21 +189,6 @@ export function jumpOf(r: InboxRecord): Jump {
   return { kind: 'thread', project: r.project, agent, card: r.card, ...(r.thread == null ? {} : { pos: r.thread.pos }) };
 }
 
-/** The jump's words, for the pane's button (⌘⏎): "go to your answer in perf's thread", 'open the
- *  page at your answer'; withdrawn (no answer): "open perf's thread". Pure. */
-export function jumpWords(j: Jump, answered = true): string {
-  if (j.kind === 'page') return inbox.jump_page;
-  return answered ? inbox.jump_thread({ agent: shownName(j.agent) }) : inbox.jump_asker({ agent: shownName(j.agent) });
-}
-
-/** The detail's 'where and when': 'you answered in the inbox · 14:02', 'withdrawn · yesterday 18:30'. Pure. */
-export function whenWhere(r: InboxRecord, now: number): string {
-  const ms = closedMs(r);
-  const day = dayHead(ms, now);
-  const when = ms <= 0 ? day : day === inbox.day_today ? timeOf(ms) : `${day} ${timeOf(ms)}`;
-  if (r.state !== 'answered') return inbox.when_withdrawn({ when });
-  return r.where == null ? inbox.when_answered({ when }) : inbox.when_answered_at({ place: whereWords(r.where), when });
-}
 
 /** Merge each project's records (each hub's own list), one per card, newest first. Pure. */
 export function mergeRecords(lists: readonly (readonly InboxRecord[])[]): InboxRecord[] {

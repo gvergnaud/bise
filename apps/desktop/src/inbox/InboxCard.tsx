@@ -18,7 +18,7 @@ import type { ArtLink } from '@/proto/rows';
 import { aboutOf, aboutWords } from './about';
 import { inbox } from '@/proto/words_inbox.gen';
 import { common } from '@/proto/words_common.gen';
-import { Act, AppIcon, ArtChip, Kbd, Press, RowMark, tipAttrs, type AppIconName } from '@/ds';
+import { Act, AppIcon, ArtChip, iconKindOf, Kbd, KindIcon, Press, RowMark, tipAttrs, type AppIconName } from '@/ds';
 import { refusedLine, useStore } from '@/store';
 import type { InboxItem } from './listed';
 import { cardKey } from './order';
@@ -119,13 +119,16 @@ function SettledCard({ card, project, home, acts, keys, children, testId, settle
           <AppIcon name="close" size={14} />
         </Press>
       </div>
+      {/* the head and the foot always show; what is between them scrolls, the question first
+          (designer m_55234: the card at its cap) */}
+      <div className="ic-mid" data-testid={`${id}.mid`}>
       <div className="ic-q" data-testid={`${id}.q`}>
         <Question card={card} id={id} />
       </div>
       {(about != null || settled.also != null) && (
         <div className="ic-links">
-          {about != null && <PageChip about={about} open={acts.openPage} id={id} />}
-          {settled.also != null && <PageChip about={settled.also} open={settled.openAlso} id={`${id}.also`} hint={false} />}
+          {about != null && <LinkRow about={about} open={acts.openPage} id={id} hint />}
+          {settled.also != null && <LinkRow about={settled.also} open={settled.openAlso} id={`${id}.also`} hint={false} />}
         </div>
       )}
       {card.options.length > 0 && (
@@ -142,9 +145,31 @@ function SettledCard({ card, project, home, acts, keys, children, testId, settle
         </div>
       )}
       {children}
+      </div>
       <div className="ic-foot" data-testid={`${id}.keys`}>
         {keys}
       </div>
+    </div>
+  );
+}
+
+/** The settled card's link (designer m_55234): one full-width neutral row, its kind's icon, the title
+ *  cut only at the row's edge, '<kind> · v3' faint, and '⌘O open beside' at its right end (`hint`). */
+function LinkRow({ about, open, id, hint }: { about: ArtLink; open: (() => void) | undefined; id: string; hint: boolean }) {
+  const w = aboutWords(about);
+  return (
+    <div className="ic-link" data-testid={`${id}.page`}>
+      <Press look="ic-link-b" onClick={open} disabled={open === undefined} data-testid={`${id}.page.chip`} {...tipAttrs(chipTip(w.title, open !== undefined && hint))}>
+        <KindIcon kind={iconKindOf(about)} size={14} />
+        <span className="ic-link-t" data-testid={`${id}.page.title`}>{w.title}</span>
+        {w.meta !== '' && <span className="ic-link-m" data-testid={`${id}.page.meta`}>{w.meta}</span>}
+        {open !== undefined && hint && (
+          <span className="ic-link-k">
+            <Kbd>⌘O</Kbd>
+            {inbox.key_open_beside}
+          </span>
+        )}
+      </Press>
     </div>
   );
 }
@@ -335,12 +360,12 @@ export const CHIP_KEEP = 12;
 
 /** What it is about under the question (designer m_26560, m_26776; card-links: any artifact): the
  * artifact chip, '⌘O open beside' at its right. */
-function PageChip({ about, open, id, hint = true }: { about: ArtLink; open: (() => void) | undefined; id: string; hint?: boolean }) {
+function PageChip({ about, open, id }: { about: ArtLink; open: (() => void) | undefined; id: string }) {
   const w = aboutWords(about);
   return (
     <div className="ic-page" data-testid={`${id}.page`}>
-      <ArtChip title={w.title} meta={w.meta} keep={CHIP_KEEP} tip={chipTip(w.title, open !== undefined && hint)} {...(open ? { onClick: open } : {})} testId={`${id}.page.chip`} />
-      {open && hint && (
+      <ArtChip title={w.title} meta={w.meta} keep={CHIP_KEEP} tip={chipTip(w.title, open !== undefined)} {...(open ? { onClick: open } : {})} testId={`${id}.page.chip`} />
+      {open && (
         // a key hint is whole or gone (designer m_47764): too narrow, it wraps to the row's hidden
         // second line (inbox.css .ic-page), never clipped; the chip's tip still says the key
         <Act onClick={open} testId={`${id}.page.open`}>

@@ -86,20 +86,18 @@ export const inbox = {
   art_chip: (a: { title: string | number; kind: string | number }): string => "↗ " + String(a.title) + " · " + String(a.kind),
   /** a notification's chip with its version (card-links) */
   art_chip_v: (a: { title: string | number; kind: string | number; v: string | number }): string => "↗ " + String(a.title) + " · " + String(a.kind) + " · v" + String(a.v),
-  /** the detail's way to a page answer */
-  jump_page: "open the page at your answer",
-  /** the detail's way to an answer in a thread */
-  jump_thread: (a: { agent: string | number }): string => "go to your answer in " + String(a.agent) + "'s thread",
-  /** the detail's way to a withdrawn item's asker */
-  jump_asker: (a: { agent: string | number }): string => "open " + String(a.agent) + "'s thread",
-  /** the detail's where and when: withdrawn */
+  /** the settled card's way to his answer (⌘⏎): its thread entry or its page block */
+  jump_answer: "open your answer",
+  /** the settled card's way to a withdrawn item's asker (⌘⏎) */
+  jump_asker: "open the thread",
+  /** the settled card's foot: withdrawn */
   when_withdrawn: (a: { when: string | number }): string => "withdrawn · " + String(a.when),
-  /** the detail's where and when: answered, place unknown */
-  when_answered: (a: { when: string | number }): string => "you answered · " + String(a.when),
-  /** the detail's where and when: answered there */
-  when_answered_at: (a: { place: string | number; when: string | number }): string => "you answered " + String(a.place) + " · " + String(a.when),
-  /** the desktop's settled card: he picked an option, there */
-  when_picked_at: (a: { n: string | number; place: string | number; when: string | number }): string => "you picked " + String(a.n) + " " + String(a.place) + " · " + String(a.when),
+  /** the settled card's foot: answered, place unknown */
+  when_answered: (a: { when: string | number }): string => "answered · " + String(a.when),
+  /** the settled card's foot: answered there */
+  when_answered_at: (a: { place: string | number; when: string | number }): string => "answered " + String(a.place) + " · " + String(a.when),
+  /** the settled card's foot: he picked an option, there */
+  when_picked_at: (a: { n: string | number; place: string | number; when: string | number }): string => "picked " + String(a.n) + " " + String(a.place) + " · " + String(a.when),
   /** the desktop's settled card's foot: he answered on the page its chip shows */
   where_the_page: "on the page",
   /** the desktop's settled card's head: who asked (the waiting card's 'perf asks', past) */

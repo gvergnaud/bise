@@ -280,24 +280,15 @@
     "one": null,
     "text": "or type why not, ⏎ says no"
   },
-  "inbox.jump_asker": {
-    "args": [
-      "agent"
-    ],
-    "one": null,
-    "text": "open {agent}'s thread"
-  },
-  "inbox.jump_page": {
+  "inbox.jump_answer": {
     "args": [],
     "one": null,
-    "text": "open the page at your answer"
+    "text": "open your answer"
   },
-  "inbox.jump_thread": {
-    "args": [
-      "agent"
-    ],
+  "inbox.jump_asker": {
+    "args": [],
     "one": null,
-    "text": "go to your answer in {agent}'s thread"
+    "text": "open the thread"
   },
   "inbox.keep_it": {
     "args": [],
@@ -898,7 +889,7 @@
       "when"
     ],
     "one": null,
-    "text": "you answered · {when}"
+    "text": "answered · {when}"
   },
   "inbox.when_answered_at": {
     "args": [
@@ -906,7 +897,7 @@
       "when"
     ],
     "one": null,
-    "text": "you answered {place} · {when}"
+    "text": "answered {place} · {when}"
   },
   "inbox.when_picked_at": {
     "args": [
@@ -915,7 +906,7 @@
       "when"
     ],
     "one": null,
-    "text": "you picked {n} {place} · {when}"
+    "text": "picked {n} {place} · {when}"
   },
   "inbox.when_withdrawn": {
     "args": [

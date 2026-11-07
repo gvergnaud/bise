@@ -30,9 +30,11 @@
 .ip-crumb { display: inline-flex; align-items: center; gap: var(--s-1); padding: 0; border: 0; background: none; font: 400 var(--f-ui); color: var(--c-text-2); }
 .ip-crumb:hover { color: var(--c-text); }
 .ip-crumb:focus-visible { outline: 0; box-shadow: 0 0 0 2px var(--c-focus); }
-.ip-p-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--s-2) 0 var(--s-4); }
-/* the pane scrolls, never the card inside it: its 55vh cap off */
-.ip-p-body > .ic { max-height: none; }
+/* the pane's room ends at the composer's (usePaneRoom's --pane-room): the card's middle scrolls in it,
+   its head and foot stay (its 55vh cap off: the room is the cap) */
+.ip-pane { max-height: min(100cqh, var(--pane-room, 100cqh)); }
+.ip-p-body { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; padding: var(--s-2) 0 0; }
+.ip-p-body > .ic { max-height: none; flex: 0 1 auto; }
 
 /* 800: the pane takes the list's place, '← inbox' back, the card's ✕ gone */
 @media (max-width: 900px) {

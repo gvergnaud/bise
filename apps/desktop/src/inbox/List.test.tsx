@@ -38,8 +38,7 @@ function mount(records: InboxRecord[] = RECORDS) {
 /** a chip's words, '<title> · <meta>' (its cut title's hidden twins left out) */
 const chipOf = (id: string) => {
   const c = screen.getByTestId(id);
-  const title = c.querySelector('.b-artchip-max') ?? c.querySelector('.b-artchip-title');
-  return `${title?.textContent ?? ''} · ${c.querySelector('.b-artchip-meta')?.textContent ?? ''}`;
+  return `${c.querySelector('.ic-link-t')?.textContent ?? ''} · ${c.querySelector('.ic-link-m')?.textContent ?? ''}`;
 };
 
 /** the rows shown, in their order (data-row: the list keys scroll by it) */
@@ -107,7 +106,7 @@ describe('the inbox screen', () => {
     // a click on a page answer opens it in the pane; its button opens the page at its block
     fireEvent.click(screen.getByTestId('inbox.row.p:bise/2.open'));
     expect(jumps).toHaveLength(1);
-    expect(screen.getByTestId('inbox.detail.go').textContent).toBe('⌘⏎open the page at your answer');
+    expect(screen.getByTestId('inbox.detail.go').textContent).toBe(`⌘⏎${inbox.jump_answer}`);
     fireEvent.click(screen.getByTestId('inbox.detail.go'));
     expect(jumps[1]).toEqual({ kind: 'page', project: 'bise', page: 'wait-line', block: 'q1' });
     // ⌘⏎ from the list, the pane closed
@@ -136,7 +135,7 @@ describe('the inbox screen', () => {
     // an inbox answer to a question about nothing: no chip, never one guessed
     expect(screen.queryByTestId('inbox.detail.card.page')).toBeNull();
     expect(screen.getByTestId('inbox.detail.where').textContent).toBe(inbox.when_answered_at({ place: inbox.where_inbox, when: '14:02' }));
-    expect(screen.getByTestId('inbox.detail.go').textContent).toBe("⌘⏎go to your answer in perf's thread");
+    expect(screen.getByTestId('inbox.detail.go').textContent).toBe(`⌘⏎${inbox.jump_answer}`);
     fireEvent.keyDown(root, { key: 'ArrowDown' });
     // a pick on a page (an older record, no about): its option in ink with ✓, the others dim; the
     // page he answered on is the chip under the question, ⌘O opens it beside
@@ -149,7 +148,8 @@ describe('the inbox screen', () => {
     expect(screen.getByTestId('inbox.detail.card.opt.2').className).toContain('dim');
     expect(screen.getByTestId('inbox.detail.card.opt.2').textContent).toBe('2B');
     expect(screen.queryByTestId('inbox.detail.said')).toBeNull();
-    expect(chipOf('inbox.detail.card.page.chip')).toBe('↗ the wait line · page · v3');
+    expect(chipOf('inbox.detail.card.page.chip')).toBe('the wait line · page · v3');
+    expect(screen.getByTestId('inbox.detail.card.page.chip').querySelector('.b-kind-icon')?.getAttribute('data-kind')).toBe('page');
     expect(screen.queryByTestId('inbox.detail.card.also.page')).toBeNull();
     expect(screen.getByTestId('inbox.detail.where').textContent).toBe(inbox.when_picked_at({ n: 1, place: inbox.where_the_page, when: 'yesterday 23:12' }));
     fireEvent.keyDown(root, { key: 'o', metaKey: true });
@@ -161,7 +161,7 @@ describe('the inbox screen', () => {
     expect(screen.getByTestId('inbox.detail.card').getAttribute('data-state')).toBe('withdrawn');
     expect(screen.getByTestId('inbox.detail.card').className).toContain('gone');
     expect(screen.getByTestId('inbox.detail.gone').textContent).toBe('withdrawn: checkout answered itself');
-    expect(screen.getByTestId('inbox.detail.go').textContent).toBe("⌘⏎open checkout's thread");
+    expect(screen.getByTestId('inbox.detail.go').textContent).toBe(`⌘⏎${inbox.jump_asker}`);
     fireEvent.click(screen.getByTestId('inbox.detail.card.close'));
     expect(screen.queryByTestId('inbox.detail')).toBeNull();
     expect(screen.getByTestId('inbox.list')).toBeTruthy();
@@ -169,21 +169,18 @@ describe('the inbox screen', () => {
 
   it("the question's own artifact is the chip, always; the page he answered on joins it when it is another one", () => {
     const about = { id: 'signup-bench', kind: 'page', title: 'signup, before / after', v: 3, url: null, at: null };
-    const recs: InboxRecord[] = [
-      { ...RECORDS[0]!, about },
-      { ...RECORDS[1]!, about },
-    ];
+    const recs: InboxRecord[] = RECORDS.slice(0, 2).map((r) => ({ ...r, about }));
     const { pages, root } = mount(recs);
     fireEvent.click(screen.getByTestId('inbox.row.p:shop/1.open'));
     // answered in the inbox: the question's page all the same
-    expect(chipOf('inbox.detail.card.page.chip')).toBe('↗ signup, before / after · page · v3');
+    expect(chipOf('inbox.detail.card.page.chip')).toBe('signup, before / after · page · v3');
     expect(screen.queryByTestId('inbox.detail.card.also.page')).toBeNull();
     fireEvent.keyDown(root, { key: 'o', metaKey: true });
     expect(pages).toEqual(['shop/signup-bench#']);
     // answered on another page: both, the question's first
     fireEvent.click(screen.getByTestId('inbox.row.p:bise/2.open'));
-    expect(chipOf('inbox.detail.card.page.chip')).toBe('↗ signup, before / after · page · v3');
-    expect(chipOf('inbox.detail.card.also.page.chip')).toBe('↗ the wait line · page · v3');
+    expect(chipOf('inbox.detail.card.page.chip')).toBe('signup, before / after · page · v3');
+    expect(chipOf('inbox.detail.card.also.page.chip')).toBe('the wait line · page · v3');
     fireEvent.click(screen.getByTestId('inbox.detail.card.also.page.chip'));
     expect(pages[1]).toBe('bise/wait-line#q1');
   });

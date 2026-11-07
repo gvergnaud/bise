@@ -61,8 +61,14 @@ export function whenOf(ms: number, now: number): string {
   return ms <= 0 ? day : day === inbox.day_today ? timeOf(ms) : `${day} ${timeOf(ms)}`;
 }
 
-/** The foot's words: 'you answered on the page · 21:29' (the chip above it), 'you picked 2 in the
- *  inbox · 21:29', "you answered in perf's thread · 21:29", 'withdrawn · 15:02'. Pure. */
+/** The jump's words (⌘⏎, designer m_55234: one line in the 320 pane): 'open your answer' (its
+ *  thread entry or its page block), withdrawn 'open the thread' (the asker's). Pure. */
+export function jumpWords(r: InboxRecord): string {
+  return r.state === 'answered' ? inbox.jump_answer : inbox.jump_asker;
+}
+
+/** The foot's words: 'answered on the page · 21:29' (the chip above it), 'picked 2 in the inbox ·
+ *  21:29', "answered in perf's thread · 21:29", 'withdrawn · 15:02'. Pure. */
 export function footWords(r: InboxRecord, now: number): string {
   const when = whenOf(closedMs(r), now);
   if (r.state !== 'answered') return inbox.when_withdrawn({ when });

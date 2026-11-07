@@ -28,8 +28,8 @@ import { idTip, InboxCard } from './InboxCard';
 import { blockOf } from './about';
 import { idOf } from './id';
 import { timeOf } from '@/artifacts/model';
-import { ALL, askersOf, closedMs, heroFacts, jumpOf, jumpWords, listsOf, saidWords, STATES, waitEnd, type Filter, type StateFilter, type InboxRecord, type Jump, type PastRow, type WaitRow } from './past';
-import { aboutOfRecord, alsoPage, footWords, pickedN, settledCard, whenOf } from './settled';
+import { ALL, askersOf, closedMs, heroFacts, jumpOf, listsOf, saidWords, STATES, waitEnd, type Filter, type StateFilter, type InboxRecord, type Jump, type PastRow, type WaitRow } from './past';
+import { aboutOfRecord, alsoPage, footWords, jumpWords, pickedN, settledCard, whenOf } from './settled';
 import { ArtText } from './artWords';
 import { barFit, type BarFit } from './barfit';
 import './past.css';
@@ -302,7 +302,6 @@ function Pane({ row, now, names, meta, onJump, onClose, onPage }: {
   onJump: () => void; onClose: () => void; onPage?: (project: string, page: string, block?: string) => void;
 }) {
   const r = row.r;
-  const j = jumpOf(r);
   const said = saidWords(r);
   const picked = pickedN(r);
   const answered = r.state === 'answered';
@@ -313,8 +312,10 @@ function Pane({ row, now, names, meta, onJump, onClose, onPage }: {
   const open = (a: ArtLink) => () => {
     onPage?.(r.project, a.id, blockOf(a) ?? undefined);
   };
+  const paneRef = useRef<HTMLElement>(null);
+  usePaneRoom(paneRef);
   return (
-    <aside className="ip-pane" aria-label={inbox.detail_label({ agent: shownName(r.asker) })} data-testid="inbox.detail">
+    <aside ref={paneRef} className="ip-pane" aria-label={inbox.detail_label({ agent: shownName(r.asker) })} data-testid="inbox.detail">
       <div className="ip-p-head">
         <Press look="ip-crumb" onClick={onClose} data-testid="inbox.detail.back"><AppIcon name="back" size={14} />{inbox.head}</Press>
       </div>
@@ -325,7 +326,7 @@ function Pane({ row, now, names, meta, onJump, onClose, onPage }: {
           keys={<>
             <span data-testid="inbox.detail.where">{footWords(r, now)}</span>
             <span className="ic-foot-end">
-              <Act onClick={onJump} testId="inbox.detail.go"><Kbd>⌘⏎</Kbd>{jumpWords(j, answered)}</Act>
+              <Act onClick={onJump} testId="inbox.detail.go"><Kbd>⌘⏎</Kbd>{jumpWords(r)}</Act>
             </span>
           </>}>
           {answered
@@ -340,6 +341,33 @@ function Pane({ row, now, names, meta, onJump, onClose, onPage }: {
       </div>
     </aside>
   );
+}
+
+/**
+ * The pane never sits under the floating composer (designer m_55234): its height is what the
+ * scroller shows from the pane's top down to the composer's room (the scroller's --float-room
+ * padding), measured as he scrolls (the pane is sticky: at rest it starts under the banner, scrolled
+ * at the top) and as the window resizes. The card inside keeps its head and foot, its middle scrolls.
+ */
+function usePaneRoom(pane: RefObject<HTMLElement | null>): void {
+  useLayoutEffect(() => {
+    const el = pane.current;
+    const scroller = el?.closest<HTMLElement>('.ip-scroll');
+    if (!el || !scroller) return;
+    const fit = () => {
+      const room = parseFloat(getComputedStyle(scroller).paddingBottom) || 0;
+      const top = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+      el.style.setProperty('--pane-room', `${String(Math.max(160, scroller.clientHeight - room - Math.max(0, top)))}px`);
+    };
+    fit();
+    scroller.addEventListener('scroll', fit, { passive: true });
+    const ro = new ResizeObserver(fit);
+    ro.observe(scroller);
+    return () => {
+      scroller.removeEventListener('scroll', fit);
+      ro.disconnect();
+    };
+  }, [pane]);
 }
 
 /**

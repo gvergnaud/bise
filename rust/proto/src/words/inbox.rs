@@ -91,20 +91,18 @@ crate::words! { inbox:
     art_chip(title, kind) = "↗ {title} · {kind}";
     /// a notification's chip with its version (card-links)
     art_chip_v(title, kind, v) = "↗ {title} · {kind} · v{v}";
-    /// the detail's way to a page answer
-    jump_page = "open the page at your answer";
-    /// the detail's way to an answer in a thread
-    jump_thread(agent) = "go to your answer in {agent}'s thread";
-    /// the detail's way to a withdrawn item's asker
-    jump_asker(agent) = "open {agent}'s thread";
-    /// the detail's where and when: withdrawn
+    /// the settled card's way to his answer (⌘⏎): its thread entry or its page block
+    jump_answer = "open your answer";
+    /// the settled card's way to a withdrawn item's asker (⌘⏎)
+    jump_asker = "open the thread";
+    /// the settled card's foot: withdrawn
     when_withdrawn(when) = "withdrawn · {when}";
-    /// the detail's where and when: answered, place unknown
-    when_answered(when) = "you answered · {when}";
-    /// the detail's where and when: answered there
-    when_answered_at(place, when) = "you answered {place} · {when}";
-    /// the desktop's settled card: he picked an option, there
-    when_picked_at(n, place, when) = "you picked {n} {place} · {when}";
+    /// the settled card's foot: answered, place unknown
+    when_answered(when) = "answered · {when}";
+    /// the settled card's foot: answered there
+    when_answered_at(place, when) = "answered {place} · {when}";
+    /// the settled card's foot: he picked an option, there
+    when_picked_at(n, place, when) = "picked {n} {place} · {when}";
     /// the desktop's settled card's foot: he answered on the page its chip shows
     where_the_page = "on the page";
     /// the desktop's settled card's head: who asked (the waiting card's 'perf asks', past)
