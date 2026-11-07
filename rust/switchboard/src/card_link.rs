@@ -384,4 +384,29 @@ mod tests {
         assert_eq!(art_of_page(&PageLink { url: "x".into(), ..PageLink::default() }), None);
         let _ = std::fs::remove_dir_all(d);
     }
+
+    /// inbox-answered (architect m_55388): what a card is about rides its
+    /// request to sb-core (the hub's resolution overwrites a client's),
+    /// the file keeps its options' opens alone; an older client's page is
+    /// derived back from it.
+    #[test]
+    fn a_cards_about_rides_the_request_and_the_file_keeps_only_opens() {
+        use crate::core::AgentReq;
+        let block = Some(Anchor::Block { block: "q1".into(), quote: String::new() });
+        let a = ArtLink { id: "w".into(), kind: "page".into(), title: "Wait".into(), v: Some(3), url: Some("http://h/p/w#q1".into()), at: block };
+        let forged = Some(serde_json::json!({"id": "forged"}));
+        let req = |about| AgentReq::Card { text: "ok?".into(), for_msg: None, page: Some("w#q1".into()), artifact: None, open: Vec::new(), about };
+        let opens = BTreeMap::from([(2, OptAct::artifact("w", Some("q1"), None))]);
+        let link = CardLink { page: page_of_art(&a), artifact: Some(a.clone()), opens: opens.clone() };
+        let (r, l) = about_on(req(forged.clone()), Some(link));
+        let AgentReq::Card { about, .. } = r else { panic!("a card request") };
+        assert_eq!(about, Some(serde_json::to_value(&a).unwrap()), "the hub's about, never the client's");
+        assert_eq!(l, Some(CardLink { opens, ..CardLink::default() }), "no page or artifact in the file");
+        let (r, l) = about_on(req(forged), None);
+        assert!(matches!(r, AgentReq::Card { about: None, .. }) && l.is_none(), "no link: no about");
+        let p = page_of_art(&a).unwrap();
+        assert_eq!((p.id.as_str(), p.block.as_deref(), p.url.as_str(), p.title.as_deref(), p.v), ("w", Some("q1"), "http://h/p/w#q1", Some("Wait"), Some(3)));
+        assert_eq!(art_of_page(&p).unwrap(), a, "page → artifact → page, the same chip");
+        assert_eq!(page_of_art(&ArtLink { kind: "site".into(), ..a }), None);
+    }
 }
