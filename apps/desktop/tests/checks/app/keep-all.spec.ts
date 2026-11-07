@@ -40,7 +40,16 @@ async function caretAtEnd(page: Page, field: ReturnType<Page['locator']>, words:
   const focused = await field.evaluate((f) => f.contains(document.activeElement)).catch(() => false);
   test.info().annotations.push({ type: 'focus', description: `${what}: focused on its own ${String(focused)}` });
   if (!focused) {
-    const b = await field.boundingBox();
+    // the field may still move (a sheet opening after the relaunch, slow under load): its end is
+    // read once its box holds still for 100 ms, so the click lands at the end of his words
+    // (keep-all's load flake: the model id's caret not after them at load >= 37)
+    let b = await field.boundingBox();
+    await expect.poll(async () => {
+      const prev = b;
+      await page.waitForTimeout(100);
+      b = await field.boundingBox();
+      return prev !== null && b !== null && prev.x === b.x && prev.y === b.y && prev.width === b.width;
+    }, { message: `${what}: the field holds still`, timeout: 5000 }).toBe(true);
     if (b) await page.mouse.click(b.x + b.width - 4, b.y + b.height - 6);
     else await field.click();
   }
@@ -327,7 +336,12 @@ test('app/keep-all: a key typed in settings is never kept', async () => {
   try {
     const { page } = s;
     const add = page.getByTestId('settings.key.add');
-    await expect(add.or(page.getByTestId('settings.key.field')), 'the key form').toBeVisible({ timeout: 10_000 });
+    // the key form sits in Setup's 'Accounts and keys' fold, closed unless a model waits for a key
+    // (settings/setupPage.tsx; under load that ask comes late): he opens it
+    const fold = page.getByTestId('settings.fold.accounts');
+    await expect(add.or(page.getByTestId('settings.key.field')).or(fold).first(), 'the key form or its fold').toBeVisible({ timeout: 10_000 });
+    if ((await add.or(page.getByTestId('settings.key.field')).count()) === 0 && (await fold.getAttribute('aria-expanded')) !== 'true') await fold.click();
+    await expect(add.or(page.getByTestId('settings.key.field')).first(), 'the key form').toBeVisible({ timeout: 10_000 });
     if (await add.isVisible()) await add.click();
     const key = page.getByTestId('settings.key.field');
     await expect(key).toBeVisible({ timeout: 5000 });

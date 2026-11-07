@@ -5,7 +5,6 @@
 # release's checks run is green") when a recorded run after its since meets it; any other one
 # 14 days after its since, or at "until YYYY-MM-DD" in its why. Expired: red in its owner's quick
 # gate until the line goes (fixed) or is renewed (a fresh since, why and until).
-keep-all	d8e6d29ae	gate-reds	load flake, green alone 25/25 (5 runs of its 5 tests, load 41), red only at load >= 37: 'agents: Tune...' after a relaunch the model id's caret is not after his words (row-slide's test:land run 4 of 5, with 4 other reds); main m_33979
 badge	36ab4f688	badge-race	load flake: red in both 10.11 checks runs on 36ab4f688 ('a new card counts at once': expected 6, got 7, the start count read before a fresh home's notifications ask lands), green 3/3 alone; hardened in 909848e44, remove once a release run is green; main m_38005
 
 desktop_check: src/bims/render/bim.test.ts	94538758f	bims-girls	load flake: the -56 tip gate on 94538758f, 'the bim merged by part > draws the same triangles...' timed out at vitest's 5 s at load ~120 (vitest-worker onTaskUpdate timeouts beside it); green alone 3/3 on the same sha (13/13 with outfit-clip, ~14 s per run, load ~100)
