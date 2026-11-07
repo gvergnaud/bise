@@ -5,7 +5,7 @@
 // the roles are open (this window's localStorage: view state, never a setting). A fix is his click:
 // a key opens the accounts, a model the roles, a permission the helper, a test setup_test. Owner:
 // setup-page.
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AppCmd, FeatureId, SetupFix } from '@/proto';
 import { Press } from '@/ds';
 import { settings } from '@/proto/words.gen';
@@ -60,6 +60,11 @@ export function SetupPage({ data, ports, page }: { data: SettingsData; ports: Se
   const [accountsOpen, setAccountsOpen] = useState(false);
   const rolesRef = useRef<HTMLDivElement>(null);
   const accountsRef = useRef<HTMLDivElement>(null);
+  // /models lands on the roles, /voice on Dictation and fn: scrolled into view once, at arrival
+  useEffect(() => {
+    const el = focus.roles ? rolesRef.current : focus.at !== null ? document.querySelector(`[data-testid="settings.feature.${focus.at}"]`) : null;
+    el?.scrollIntoView({ block: 'start' });
+  }, [focus.roles, focus.at]);
   const openRoles = () => {
     setRolesOpen(true);
     keepRolesOpen(true);
