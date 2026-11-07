@@ -153,19 +153,36 @@ def test_file(repo, kind, test):
     return None
 
 
-def flake_owner(repo, kind, test, own):
+def flake_owner(repo, kind, test, own, live=None):
     """who owns a flake: the agent that last landed a change to its test's file (own: {sha:
-    agent}), else main"""
+    agent}), else main; main too when that agent is archived (live: the live agents' names, None
+    when unknown), so the flake still reaches someone (architect m_55171)"""
     f = test_file(repo, kind, test)
     for sha in ((git(repo, "log", "--format=%H", "-n", "20", "main", "--", f) or "").split() if f else []):
         if sha in own:
-            return own[sha]
+            return own[sha] if live is None or own[sha] in live else "main"
     return "main"
 
 
-def flaky_report(repo, tested, log, journals, timings, now=None, what="tip gate"):
+def live_agents(home):
+    """the names of the agents not archived in any hub (hubs/*/view.json), None when no view reads"""
+    import glob
+    import json
+    names, read = set(), False
+    for v in glob.glob(os.path.join(home, "hubs", "*", "view.json")):
+        try:
+            with open(v) as f:
+                agents = json.load(f).get("agents") or []
+        except (OSError, ValueError, AttributeError):
+            continue
+        read = True
+        names.update(a.get("name") for a in agents if isinstance(a, dict) and not a.get("archived"))
+    return names if read else None
+
+
+def flaky_report(repo, tested, log, journals, timings, now=None, what="tip gate", live=None):
     """(agents, text) of the flaky-open file, or (None, None) when the log has no FLAKY line: each
-    flake with its rate over 14 days and its owner"""
+    flake with its rate over 14 days and its owner (live: flake_owner's)"""
     try:
         log_text = open(log, errors="replace").read()
     except OSError:
@@ -178,7 +195,7 @@ def flaky_report(repo, tested, log, journals, timings, now=None, what="tip gate"
     rates = flake_rates(tsv_rows(timings), tsv_rows(os.path.join(os.path.dirname(timings), "flaky.tsv")), now)
     agents, body = [], []
     for kind, test in fl:
-        who = flake_owner(repo, kind, test, own)
+        who = flake_owner(repo, kind, test, own, live)
         n, runs = rates.get(test, (0, 0))
         body.append("  %s (%s): flaky in %d of %d full gates in %d days, owner %s" % (test, kind, n, runs, FLAKE_DAYS, who))
         if who != "main" and who not in agents:
@@ -233,7 +250,8 @@ def main(argv):
     o = a.parse_args(argv)
     tested = git(o.repo, "rev-parse", o.tested) or o.tested
     if o.flaky:
-        _, text = flaky_report(o.repo, tested, o.log, o.journal, o.flaky, what=o.what)
+        home = os.environ.get("BISE_HOME") or os.path.join(os.path.expanduser("~"), ".bise")
+        _, text = flaky_report(o.repo, tested, o.log, o.journal, o.flaky, what=o.what, live=live_agents(home))
         if text is None:
             return 0
     else:

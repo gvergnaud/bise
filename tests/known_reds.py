@@ -11,16 +11,19 @@ The file: one red per line, tab-separated, '#' starts a comment line:
 <test> is the name the runner prints: an e2e/tmux test's (feature_e2e), a desktop check's spec
 name without .spec.ts (history-perf).
 
-A line expires (c5-tip-per-land, audit-tests finding 3c): its test ran green on the last 2 shas
-that ran it after its since (a sha: the runs on its descendants; a date YYYY-MM-DD: the runs
-from that day). It is not red on main now: remove the line, or, still red under load, give it a
-fresh since and why (a flake goes to flaky-open, scripts/tip_blame.py). The runs it reads, under
-${BISE_HOME:-~/.bise}: gate/timings.tsv's gate-full rows (e2e, tmux, cargo: rc 0 green),
-run/nightly/checks-verdicts.tsv (the desktop checks: each run's dir, its specs and reds.txt) and
-run/nightly/desktop-runs.tsv (as-he-does/<mode> rows and test:land's checks: steps.tsv and
-reds.txt). A test none of them names (a desktop_check vitest file) never expires.
+A line expires (c5-tip-per-land, audit-tests finding 3c, architect m_55171), by one of two rules:
+  1. its why states its condition ("remove once a release's checks run is green", "... a nightly
+     run is green"): the condition is met when its test ran green in a recorded run after its
+     since (a sha: a run on a descendant; a date YYYY-MM-DD: from that day);
+  2. any other line: today is past its review date, its since + 14 days or "until YYYY-MM-DD" in
+     its why. A load flake is green on most calm runs, so green runs never decide it.
+Expired: remove the line once fixed, or renew it (a fresh since, why and until). The runs rule 1
+reads, under ${BISE_HOME:-~/.bise}: gate/timings.tsv's gate-full rows (e2e, tmux, cargo: rc 0
+green), run/nightly/checks-verdicts.tsv (the desktop checks: each run's dir, its specs and
+reds.txt) and run/nightly/desktop-runs.tsv (as-he-does/<mode> rows and test:land's checks:
+steps.tsv and reds.txt). No records (a fresh machine): no condition is met, said, never red.
 --expire prints each expired line (EXPIRED <test> ...) and exits 1 when one is $SB_AGENT's: red
-in its owner's quick gate (tests/gate.sh), a note in everyone else's.
+in its owner's quick gate (tests/gate.sh), a note in everyone else's; loop_audit counts them.
 
   python3 tests/known_reds.py split <red test>...   the known ones and the NEW ones, one line each
   python3 tests/known_reds.py --expire               the expired lines; rc 1 if one is $SB_AGENT's
@@ -76,43 +79,60 @@ def split(reds, failed):
     return out
 
 
-# a line expires after this many shas in a row ran its test green (one green run of a load flake
-# says little; two in a row on later shas: it is not red on main now)
-GREEN_SHAS = 2
+# the two rules (architect m_55171): a load flake is green on most calm runs by definition, so
+# green runs decide only a line that names its own condition; any other line has a review date
+CONDITION = re.compile(r"remove (?:it )?once (?:a|the) [^;]*?\b(?:release|nightly)\b[^;]*?\bis green", re.I)
+UNTIL = re.compile(r"\buntil (\d{4}-\d{2}-\d{2})\b")
+REVIEW_DAYS = 14
 SHA = re.compile(r"^[0-9a-f]{7,40}$")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
-def expired(reds, results, after, shas=GREEN_SHAS):
-    """[(test, (since, owner, why), [sha, ...])]: the lines whose test ran green on its last `shas`
-    shas after since. results: {test: [(when, sha, green)]}; after(since, sha, when) -> bool. A sha
-    with a red and a green result of the test is red. Pure."""
+def _day(epoch):
+    return time.strftime("%Y-%m-%d", time.localtime(epoch))
+
+
+def review_date(line, since_time):
+    """a line's review date (YYYY-MM-DD): 'until <date>' in its why, else its since + 14 days;
+    None when its since has no time (a sha not in this clone). Pure but for since_time."""
+    m = UNTIL.search(line[2])
+    if m:
+        return m.group(1)
+    t = since_time(line[0])
+    return None if t is None else _day(t + REVIEW_DAYS * 86400)
+
+
+def expired(reds, results, after, since_time, now):
+    """[(test, (since, owner, why), reason)]: the expired lines. A line whose why states its
+    condition ('remove once a release's checks run is green'): its test ran green in a recorded
+    run after since (results: {test: [(when, sha, green)]}; after(since, sha, when) -> bool; a sha
+    with a red and a green run is red). Any other line: today is past its review date
+    (since_time(since) -> epoch or None). Pure."""
     out = []
     for test, line in reds.items():
-        # each sha: its newest run and whether every run of it was green; newest first, after()
-        # asked only until `shas` of them are found (it runs git)
-        newest, green_all = {}, {}
-        for when, sha, green in results.get(test, []):
-            newest[sha] = max(newest.get(sha, when), when)
-            green_all[sha] = green_all.get(sha, True) and green
-        last = []
-        for sha in sorted(newest, key=lambda s: newest[s], reverse=True):
-            if after(line[0], sha, newest[sha]):
-                last.append(sha)
-                if len(last) == shas or not green_all[sha]:
+        if CONDITION.search(line[2]):
+            green_all = {}
+            for when, sha, green in sorted(results.get(test, [])):
+                green_all[sha] = green_all.get(sha, True) and green
+            newest = {sha: when for when, sha, _ in sorted(results.get(test, []))}
+            for sha in sorted(green_all, key=lambda s: newest[s], reverse=True):
+                if green_all[sha] and after(line[0], sha, newest[sha]):
+                    out.append((test, line, "its condition is met: green on %s (%s)" % (sha[:9], _day(newest[sha]))))
                     break
-        if len(last) == shas and all(green_all[s] for s in last):
-            out.append((test, line, last[::-1]))
+        else:
+            d = review_date(line, since_time)
+            if d is not None and _day(now) > d:
+                out.append((test, line, "its review date %s is past (since + %d days, or 'until <date>' in its why)" % (d, REVIEW_DAYS)))
     return out
 
 
 def expire_lines(found, agent):
     """(lines to print, rc): rc 1 when one of the expired lines is `agent`'s. Pure."""
     lines = []
-    for test, (since, owner, _), last in found:
+    for test, (since, owner, _), why in found:
         mine = " (yours)" if owner == agent else ""
-        lines.append("EXPIRED %s%s: owner %s, since %s; green on its last %d shas since (%s): remove the line, or "
-                     "still red under load, give it a fresh since and why" % (test, mine, owner, since, len(last), " ".join(s[:9] for s in last)))
+        lines.append("EXPIRED %s%s: owner %s, since %s; %s: remove the line once fixed, or renew it with a fresh "
+                     "since, why and 'until <date>'" % (test, mine, owner, since, why))
     return lines, 1 if any(line[1] == agent for _, line, _ in found) else 0
 
 
@@ -217,6 +237,41 @@ def git_after(repo):
     return after
 
 
+def record_files(home):
+    return [os.path.join(home, "gate", "timings.tsv"), os.path.join(home, "run", "nightly", "checks-verdicts.tsv"),
+            os.path.join(home, "run", "nightly", "desktop-runs.tsv")]
+
+
+def check_expiry(reds, home, root, now):
+    """the expired lines of `reds` against this home's records and this clone's git; the records
+    read only for the lines that state a condition"""
+    cond = {t: l for t, l in reds.items() if CONDITION.search(l[2])}
+    res = results(home, cond, desktop_checks(root)) if cond else {}
+    return expired(reds, res, git_after(root), git_since_time(root, [l[0] for l in reds.values()]), now)
+
+
+def git_since_time(repo, sinces):
+    """since_time(since): a date's epoch; a sha's commit time, every sha read by one git call (a
+    sha not in this clone: None, never an error)"""
+    shas = sorted({s for s in sinces if SHA.match(s)})
+    times = {}
+    if shas:
+        # --ignore-missing: a sha not in this clone (a shallow one) is left out, the others read
+        r = subprocess.run(["git", "-C", repo, "log", "--no-walk=unsorted", "--ignore-missing", "--format=%H %ct", *shas],
+                           capture_output=True, text=True)
+        for l in r.stdout.splitlines():
+            full, _, ct = l.partition(" ")
+            for s in shas:
+                if full.startswith(s) and ct.isdigit():
+                    times[s] = int(ct)
+
+    def since_time(since):
+        if DATE.match(since):
+            return time.mktime(time.strptime(since, "%Y-%m-%d"))
+        return times.get(since)
+    return since_time
+
+
 def self_test():
     reds = parse("# test\tsince\towner\twhy\n\nhistory-perf\t12c3d88dc\tland-reds\tthe match moves\n")
     assert reds == {"history-perf": ("12c3d88dc", "land-reds", "the match moves")}, reds
@@ -236,27 +291,44 @@ def self_test():
         "NEW reds (not in tests/known_reds.txt): feature_e2e",
     ]
     assert split(reds, []) == []
-    # the expiry: green on the last 2 shas after since; a red after a green keeps it; a sha with
-    # a red and a green is red; runs before since don't count
-    line = ("s0", "own", "why")
+    # rule 1, a line that states its condition: green once in a recorded run after its since; a
+    # sha with a red and a green is red; runs before since don't count; never by date
+    cond = ("s0", "own", "load flake; remove once a release's checks run is green")
     order = {"s0": 0, "old": -1, "a": 1, "b": 2, "c": 3}
     after = lambda since, sha, when: order[sha] > order[since]  # noqa: E731
     R = lambda *rs: [(n, sha, g) for n, (sha, g) in enumerate(rs)]  # noqa: E731
+    day = 86400
+    t0 = 1000 * day
+    never = lambda since: None  # noqa: E731
     cases = {
-        "fixed": (R(("a", False), ("b", True), ("c", True)), True),
-        "red again": (R(("a", True), ("b", True), ("c", False)), False),
-        "one green sha": (R(("a", True), ("a", True)), False),
-        "mixed sha": (R(("b", True), ("c", True), ("c", False)), False),
-        "before since": (R(("old", True), ("a", True)), False),
+        "met": (R(("a", False), ("b", True)), True),
+        "still red": (R(("a", False), ("b", False)), False),
+        "mixed sha": (R(("b", True), ("b", False)), False),
+        "before since": (R(("old", True), ("a", False)), False),
         "no record": ([], False),
     }
-    found = expired({t: line for t in cases}, {t: c[0] for t, c in cases.items()}, after)
-    got = {t for t, _, _ in found}
-    assert got == {t for t, c in cases.items() if c[1]}, got
-    assert found[0][2] == ["b", "c"], found
+    found = expired({t: cond for t in cases}, {t: c[0] for t, c in cases.items()}, after, never, t0 + 999 * day)
+    assert {t for t, _, _ in found} == {t for t, c in cases.items() if c[1]}, found
+    assert found[0][2] == "its condition is met: green on b (%s)" % _day(1), found
+    assert CONDITION.search("remove once a nightly run is green") and CONDITION.search("remove once a release run is green (main removes it)")
+    # rule 2, any other line: past its review date, since + 14 days or 'until <date>' in its why;
+    # green runs never decide it; a since with no time (not in this clone) never expires
+    st = lambda since: {"s0": t0}.get(since)  # noqa: E731
+    dated = {
+        "fresh": ("s0", "own", "load flake"),
+        "old": ("s0", "own", "load flake, green alone 3/3"),
+        "until": ("s0", "own", "load flake; until %s" % _day(t0 + 30 * day)),
+        "unknown since": ("s9", "own", "load flake"),
+    }
+    green_runs = {t: R(("a", True), ("b", True)) for t in dated}
+    assert expired(dated, green_runs, after, st, t0 + 14 * day) == []
+    found = expired(dated, green_runs, after, st, t0 + 15 * day)
+    assert [t for t, _, _ in found] == ["fresh", "old"], found
+    assert found[0][2].startswith("its review date %s is past" % _day(t0 + 14 * day)), found
+    assert [t for t, _, _ in expired(dated, {}, after, st, t0 + 31 * day)] == ["fresh", "old", "until"]
     lines, rc = expire_lines(found, "own")
-    assert rc == 1 and lines[0].startswith("EXPIRED fixed (yours): owner own, since s0; green on its last 2 shas"), lines
-    assert expire_lines(found, "other") == ([lines[0].replace(" (yours)", "")], 0)
+    assert rc == 1 and lines[0].startswith("EXPIRED fresh (yours): owner own, since s0; its review date"), lines
+    assert expire_lines(found, "other") == ([l.replace(" (yours)", "") for l in lines], 0)
     assert expire_lines([], "own") == ([], 0)
     # the records: a fake home with each kind of run (never the real ~/.bise)
     import tempfile
@@ -309,11 +381,13 @@ def main(argv):
         with open(FILE) as f:
             reds = parse(f.read())
         home = os.environ.get("BISE_HOME") or os.path.join(os.path.expanduser("~"), ".bise")
-        root = os.path.dirname(HERE)
-        found = expired(reds, results(home, reds, desktop_checks(root)), git_after(root))
+        found = check_expiry(reds, home, os.path.dirname(HERE), time.time())
         lines, rc = expire_lines(found, os.environ.get("SB_AGENT", ""))
         for line in lines:
             print(line)
+        if not any(os.path.exists(p) for p in record_files(home)):
+            # fails safe: a fresh machine has no runs, so no condition is met; the dates still count
+            print("known_reds: no run records under %s: no stated condition can be met here" % home)
         return rc
     if argv[1:2] != ["split"]:
         print(__doc__.strip().splitlines()[-2], file=sys.stderr)

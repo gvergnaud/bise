@@ -106,12 +106,27 @@ def main():
         check("partial_e2e (e2e): flaky in 2 of 4 full gates in 14 days, owner gamma" in text, "flaky line\n" + text)
         check("sb::a::b (cargo): flaky in 1 of 1 full gates in 14 days, owner main" in text, "a cargo flake: main\n" + text)
         check(B.flaky_report(repo, sha["c1"], log, [journal], timings, now=now) == (None, None), "no FLAKY line: no file")
+        # its lander archived: main owns it (architect m_55171); the live ones from the hubs' view.json
+        hv = os.path.join(t, "home", "hubs", "h1")
+        os.makedirs(hv)
+        with open(os.path.join(hv, "view.json"), "w") as f:
+            f.write('{"agents": [{"name": "main", "archived": false}, {"name": "gamma", "archived": true}]}')
+        live = B.live_agents(os.path.join(t, "home"))
+        check(live == {"main"} and B.live_agents(os.path.join(t, "nohome")) is None, "live %s" % live)
+        agents, text = B.flaky_report(repo, sha["c1"], flog, [journal], timings, now=now, live=live)
+        check(agents == [] and "partial_e2e (e2e): flaky in 2 of 4 full gates in 14 days, owner main" in text,
+              "an archived lander: main\n" + text)
+        _, text = B.flaky_report(repo, sha["c1"], flog, [journal], timings, now=now, live={"gamma", "main"})
+        check("owner gamma" in text, "a live lander keeps it\n" + text)
         fo = os.path.join(t, "flaky-open")
+        fenv = dict(os.environ, BISE_HOME=os.path.join(t, "nohome"))  # never the real hubs' view.json
         r = subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "tip_blame.py"), "--flaky", timings, "--repo", repo,
-                            "--tested", "main", "--green", green, "--log", log, "--journal", journal, "--out", fo], capture_output=True, text=True)
+                            "--tested", "main", "--green", green, "--log", log, "--journal", journal, "--out", fo],
+                           capture_output=True, text=True, env=fenv)
         check(r.returncode == 0 and not os.path.exists(fo), "no flake: no flaky-open %s" % r.stderr)
         r = subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "tip_blame.py"), "--flaky", timings, "--repo", repo,
-                            "--tested", "main", "--green", green, "--log", flog, "--journal", journal, "--out", fo], capture_output=True, text=True)
+                            "--tested", "main", "--green", green, "--log", flog, "--journal", journal, "--out", fo],
+                           capture_output=True, text=True, env=fenv)
         check(r.returncode == 0 and open(fo).read().startswith("to: gamma main\n") and "1 flaky" not in open(fo).read(),
               "flaky-open written %s" % r.stderr)
         # no green known: the last 20 commits, said so
