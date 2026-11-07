@@ -1,7 +1,10 @@
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import type { SpawnOptions } from 'node:child_process';
+import { EventEmitter, once } from 'node:events';
+import { mkdtempSync, readFileSync, writeSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { PassThrough } from 'node:stream';
+import { describe, expect, it, vi } from 'vitest';
 import type { CoreExit, CoreState } from '../../shared/api';
 import { Backoff, configOf, coreArgs } from './env';
 import { initializeLine, INITIALIZED_LINE, LineSplitter, NL, notAnEventLog, readLine, refusedLog, requestOf } from './lines';
@@ -79,51 +82,158 @@ describe('env', () => {
 });
 
 /**
- * A fake `bise`: speaks JSON-RPC as `ambient-core` does: answers initialize, then
- * (after initialized) a welcome and `after`'s lines; answers each request {} and echoes
- * it; refuses core/nope; exits on core/quit.
+ * The core is a fake child in this process, never a real one: a real `bise`
+ * (a node script, a sh one) took seconds to start at load ~27 and 4 tests hit
+ * vitest's 5 s (fast-loop m_54599). The fake keeps what CoreProcess sees of
+ * node's child_process, as node does it (checked once against a real spawn):
+ * 'spawn' on the next tick, stdout lines, stderr into the stdio[2] fd it was
+ * given, 'exit' (code, signal) after the lines it wrote, kill() ends it with
+ * that signal; a path with no program fails as ENOENT does: 'error' then
+ * 'close', no 'spawn', no 'exit', no pid. A run of a real core process is the
+ * end-to-end tests' (app ↔ core, docs/test-plan-min.md).
  */
-function fakeBise(dir: string, after: readonly string[] = ["process.stdout.write('not an event' + NL);"]): string {
-  const path = join(dir, 'bise');
-  const script = [
-    '#!/usr/bin/env node',
-    "const NL = String.fromCharCode(10);",
-    "const out = (o) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...o }) + NL);",
-    "const note = (method, params) => out({ method, params });",
-    "process.stderr.write('fake core ' + process.argv.slice(2).join(' ') + NL);",
-    "let rest = '';",
-    "process.stdin.setEncoding('utf8');",
-    "process.stdin.on('data', (c) => { const parts = (rest + c).split(NL); rest = parts.pop(); for (const l of parts) { const m = JSON.parse(l);",
-    "  if (m.method === 'initialize') { out({ id: m.id, result: { proto: 1, methods: [], notifications: [] } }); continue; }",
-    "  if (m.method === 'initialized') { note('hub/welcome', { project: 'p', proto: 1, workspace: process.cwd(), name: process.argv.slice(2).join(' ') });",
-    ...after.map((a) => `    ${a}`),
-    "    continue; }",
-    "  if (m.method === 'core/quit') process.exit(3);",
-    "  if (m.method === 'core/nope') { out({ id: m.id, error: { code: -32601, message: 'unknown method' } }); continue; }",
-    "  out({ id: m.id, result: {} }); note('core/echo', { method: m.method, params: m.params }); } });",
-    "process.stdin.on('end', () => process.exit(0));",
-  ].join(NL);
-  writeFileSync(path, script + NL);
-  chmodSync(path, 0o755);
+interface FakeRun {
+  readonly args: readonly string[];
+  readonly cwd: string;
+  /** a stderr line, into the log file: only while spawning (CoreProcess closes its fd right after) */
+  readonly err: (line: string) => void;
+  readonly out: (line: string) => void;
+  readonly exit: (code: number | null, signal?: NodeJS.Signals) => void;
+}
+/** A fake `bise`: runs at spawn; what it returns gets each stdin line. */
+type Program = (run: FakeRun) => ((line: string) => void) | undefined;
+
+const fake = vi.hoisted(() => ({ programs: new Map<string, Program>(), runs: [] as EventEmitter[] }));
+
+vi.mock('node:child_process', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:child_process')>()),
+  spawn: (cmd: string, args: readonly string[], opts: SpawnOptions) => fakeSpawn(cmd, args, opts),
+}));
+
+let nextPid = 1000;
+
+function fakeSpawn(cmd: string, args: readonly string[], opts: SpawnOptions): EventEmitter {
+  const stdin = new PassThrough();
+  const stdout = new PassThrough();
+  let exited = false;
+  const child = Object.assign(new EventEmitter(), {
+    stdin,
+    stdout,
+    pid: undefined as number | undefined,
+    kill: (signal: NodeJS.Signals = 'SIGTERM'): boolean => {
+      run.exit(null, signal);
+      return true;
+    },
+  });
+  fake.runs.push(child);
+  const program = fake.programs.get(cmd);
+  if (program === undefined) {
+    process.nextTick(() => {
+      child.emit('error', Object.assign(new Error(`spawn ${cmd} ENOENT`), { code: 'ENOENT', errno: -2, syscall: `spawn ${cmd}`, path: cmd }));
+      child.emit('close', -2, null);
+    });
+    return child;
+  }
+  child.pid = nextPid;
+  nextPid += 1;
+  const fd = Array.isArray(opts.stdio) ? opts.stdio[2] : undefined;
+  let spawning = true;
+  const run: FakeRun = {
+    args,
+    cwd: typeof opts.cwd === 'string' ? opts.cwd : process.cwd(),
+    err: (line) => {
+      if (!spawning) throw new Error('fake core: stderr is written while spawning only');
+      if (typeof fd === 'number') writeSync(fd, line + NL);
+    },
+    out: (line) => {
+      if (!exited) stdout.write(line + NL);
+    },
+    exit: (code, signal) => {
+      if (exited) return;
+      exited = true;
+      // after the lines it wrote, as a real child's exit comes after its output
+      setImmediate(() => {
+        child.emit('exit', code, signal ?? null);
+        stdout.end();
+        child.emit('close', code, signal ?? null);
+      });
+    },
+  };
+  const onLine = program(run);
+  spawning = false;
+  const lines = new LineSplitter();
+  stdin.setEncoding('utf8');
+  stdin.on('data', (chunk: string) => {
+    for (const l of lines.feed(chunk)) if (!exited) onLine?.(l);
+  });
+  stdin.on('end', () => {
+    run.exit(0);
+  });
+  process.nextTick(() => {
+    if (!exited) child.emit('spawn');
+  });
+  return child;
+}
+
+/** Registers a fake program under a path of its own, for the core's config. */
+function program(p: Program): string {
+  const path = `/fake/bise-${String(fake.programs.size)}`;
+  fake.programs.set(path, p);
   return path;
 }
 
-function waitFor(cond: () => boolean, ms = 5000): Promise<void> {
-  const t0 = Date.now();
-  return new Promise((resolve, reject) => {
-    const tick = (): void => {
-      if (cond()) {
-        resolve();
-        return;
-      }
-      if (Date.now() - t0 > ms) {
-        reject(new Error('timed out'));
-        return;
-      }
-      setTimeout(tick, 10);
+/**
+ * A fake `ambient-core`: speaks JSON-RPC as it does: answers initialize, then (after
+ * initialized) a welcome and `after`'s lines; answers each request {} and echoes it;
+ * refuses core/nope; exits 3 on core/quit.
+ */
+function rpcCore(after: readonly string[] = ['not an event']): string {
+  return program((run) => {
+    const out = (o: object): void => {
+      run.out(JSON.stringify({ jsonrpc: '2.0', ...o }));
     };
-    tick();
+    const note = (method: string, params: unknown): void => {
+      out({ method, params });
+    };
+    run.err(`fake core ${run.args.join(' ')}`);
+    return (l) => {
+      const m = JSON.parse(l) as { id?: number; method: string; params?: unknown };
+      if (m.method === 'initialize') out({ id: m.id, result: { proto: 1, methods: [], notifications: [] } });
+      else if (m.method === 'initialized') {
+        note('hub/welcome', { project: 'p', proto: 1, workspace: run.cwd, name: run.args.join(' ') });
+        for (const a of after) run.out(a);
+      } else if (m.method === 'core/quit') run.exit(3);
+      else if (m.method === 'core/nope') out({ id: m.id, error: { code: -32601, message: 'unknown method' } });
+      else {
+        out({ id: m.id, result: {} });
+        note('core/echo', { method: m.method, params: m.params });
+      }
+    };
   });
+}
+
+/**
+ * The hooks' calls, and a wait on them: `until` resolves at the call that makes
+ * its condition true. No clock: a wait that never ends is vitest's timeout.
+ */
+function hooked(): { readonly until: (cond: () => boolean) => Promise<void>; readonly into: <T>(list: T[]) => (x: T) => void } {
+  const waits = new Set<() => void>();
+  return {
+    until: (cond) =>
+      new Promise((resolve) => {
+        const check = (): void => {
+          if (!cond()) return;
+          waits.delete(check);
+          resolve();
+        };
+        waits.add(check);
+        check();
+      }),
+    into: (list) => (x) => {
+      list.push(x);
+      for (const w of [...waits]) w();
+    },
+  };
 }
 
 describe('CoreProcess', () => {
@@ -133,34 +243,36 @@ describe('CoreProcess', () => {
     const events: Record<string, unknown>[] = [];
     const states: CoreState[] = [];
     const logs: string[] = [];
+    const h = hooked();
     const core = new CoreProcess(
-      { config: { bise: fakeBise(dir), workspace: dir }, logFile, env: { PATH: process.env['PATH'], SB_AGENT: 'leak' }, scale: 10 },
-      { onEvent: (e) => events.push(e), onState: (s) => states.push(s), log: (l) => logs.push(l) },
+      { config: { bise: rpcCore(), workspace: dir }, logFile, env: { PATH: process.env['PATH'], SB_AGENT: 'leak' }, scale: 10 },
+      { onEvent: h.into(events), onState: h.into(states), log: h.into(logs) },
     );
     expect(core.send({ cmd: 'stop', project: 'p', agent: 'a' })).toBe(false);
     core.start();
-    await waitFor(() => events.length === 1);
-    expect(events[0]).toMatchObject({ ev: 'welcome', name: `ambient-core --workspace ${dir}` });
+    await h.until(() => events.length === 1);
+    expect(events[0]).toMatchObject({ ev: 'welcome', name: `ambient-core --workspace ${dir}`, workspace: dir });
     expect(states).toEqual(['starting', 'up']);
-    await waitFor(() => logs.some((l) => l.startsWith('core: not an event: not an event')));
+    await h.until(() => logs.some((l) => l.startsWith('core: not an event: not an event')));
 
     expect(core.send({ cmd: 'stop', project: 'p', agent: 'a' })).toBe(true);
     expect(core.send({ nope: 1 })).toBe(false);
-    await waitFor(() => events.length === 2);
+    await h.until(() => events.length === 2);
     expect(events[1]).toEqual({ ev: 'echo', method: 'hub/stop', params: { project: 'p', agent: 'a' } });
     // a refused request is logged with its method
     expect(core.send({ cmd: 'nope' })).toBe(true);
-    await waitFor(() => logs.some((l) => l === 'core: core/nope refused (-32601): unknown method'));
+    await h.until(() => logs.some((l) => l === 'core: core/nope refused (-32601): unknown method'));
 
     // it exits: down, then started again after the backoff (0.5 * 10 ms here)
     core.send({ cmd: 'quit' }); // core/quit: the fake exits
-    await waitFor(() => events.filter((e) => e['ev'] === 'welcome').length === 2);
+    await h.until(() => events.filter((e) => e['ev'] === 'welcome').length === 2);
     expect(states).toEqual(['starting', 'up', 'down', 'starting', 'up']);
 
     core.stop();
     expect(core.state).toBe('down');
     expect(core.send({ cmd: 'stop', project: 'p', agent: 'a' })).toBe(false);
-    await waitFor(() => readFileSync(logFile, 'utf8').split(NL).filter((l) => l.startsWith('fake core')).length === 2);
+    // each run's stderr went to the log file
+    expect(readFileSync(logFile, 'utf8').split(NL).filter((l) => l.startsWith('fake core'))).toEqual([`fake core ambient-core --workspace ${dir}`, `fake core ambient-core --workspace ${dir}`]);
   });
 
   it("passes a computer use still to the window and never logs it, whole or broken (S29, architect m_14385)", async () => {
@@ -169,12 +281,13 @@ describe('CoreProcess', () => {
     const peek = `{"jsonrpc":"2.0","method":"core/computer_peek","params":{"key":"h.perf","shot":{"data":"${data}","mime":"image/jpeg","width":640,"height":400,"at_ms":9}}}`;
     const events: Record<string, unknown>[] = [];
     const logs: string[] = [];
+    const h = hooked();
     const core = new CoreProcess(
-      { config: { bise: fakeBise(dir, [`process.stdout.write('${peek}' + NL);`, `process.stdout.write('${peek.slice(0, 80)}' + NL);`, "process.stdout.write('done' + NL);"]), workspace: dir }, env: { PATH: process.env['PATH'] }, scale: 10 },
-      { onEvent: (e) => events.push(e), onState: () => undefined, log: (l) => logs.push(l) },
+      { config: { bise: rpcCore([peek, peek.slice(0, 80), 'done']), workspace: dir }, env: { PATH: process.env['PATH'] }, scale: 10 },
+      { onEvent: h.into(events), onState: () => undefined, log: h.into(logs) },
     );
     core.start();
-    await waitFor(() => logs.some((l) => l === 'core: not an event: done'));
+    await h.until(() => logs.some((l) => l === 'core: not an event: done'));
     core.stop();
     expect(events.find((e) => e['ev'] === 'computer_peek')).toEqual({ ev: 'computer_peek', ...(JSON.parse(peek) as { params: object }).params });
     expect(logs.some((l) => l.includes('a core/computer_peek line'))).toBe(true);
@@ -186,16 +299,23 @@ describe('CoreProcess', () => {
     const answers: [Readonly<Record<string, unknown>>, unknown][] = [];
     const refused: [Readonly<Record<string, unknown>>, string][] = [];
     const logs: string[] = [];
+    const h = hooked();
     const core = new CoreProcess(
-      { config: { bise: fakeBise(dir), workspace: dir }, env: { PATH: process.env['PATH'] }, scale: 10 },
-      { onEvent: () => undefined, onState: () => undefined, log: (l) => logs.push(l), onAnswer: (c, r) => answers.push([c, r]), onRefused: (c, e) => refused.push([c, e.message]) },
+      { config: { bise: rpcCore(), workspace: dir }, env: { PATH: process.env['PATH'] }, scale: 10 },
+      { onEvent: () => undefined, onState: h.into<CoreState>([]), log: h.into(logs), onAnswer: (c, r) => {
+          h.into(answers)([c, r]);
+        },
+        onRefused: (c, e) => {
+          h.into(refused)([c, e.message]);
+        },
+      },
     );
     core.start();
-    await waitFor(() => core.state === 'up');
+    await h.until(() => core.state === 'up');
     const send = { cmd: 'send', project: 'p', agent: 'a', text: 'ok', cid: 4 };
     core.send(send);
     core.send({ cmd: 'nope' });
-    await waitFor(() => answers.length === 1 && refused.length === 1 && logs.some((l) => l.includes('core/nope refused')));
+    await h.until(() => answers.length === 1 && refused.length === 1 && logs.some((l) => l.includes('core/nope refused')));
     core.stop();
     expect(answers).toEqual([[send, {}]]);
     expect(refused.map(([c]) => c)).toEqual([{ cmd: 'nope' }]);
@@ -203,12 +323,13 @@ describe('CoreProcess', () => {
 
   it('a bise that cannot start is down and retried, never a crash', async () => {
     const states: CoreState[] = [];
+    const h = hooked();
     const core = new CoreProcess(
       { config: { bise: '/nonexistent/bise', workspace: '' }, scale: 10 },
-      { onEvent: () => undefined, onState: (s) => states.push(s), log: () => undefined },
+      { onEvent: () => undefined, onState: h.into(states), log: () => undefined },
     );
     core.start();
-    await waitFor(() => states.filter((s) => s === 'down').length >= 2);
+    await h.until(() => states.filter((s) => s === 'down').length >= 2);
     core.stop();
     expect(states.includes('up')).toBe(false);
   });
@@ -217,26 +338,22 @@ describe('CoreProcess', () => {
     const dir = mkdtempSync(join(tmpdir(), 'bise-core-test-'));
     const logFile = join(dir, 'core.log');
     writeFileSync(logFile, `an older run's last words${NL}`);
-    const bise = join(dir, 'bise');
-    writeFileSync(
-      bise,
-      [
-        '#!/bin/sh',
-        'echo "ambient-core: hello" >&2',
-        'echo "thread \'main\' panicked at tui/src/ambient/core.rs:120:9:" >&2',
-        'echo "no hub for sk-ant-SECRETSECRET1234" >&2',
-        "echo 'note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace' >&2",
-        'exit 101',
-      ].join(NL) + NL,
-    );
-    chmodSync(bise, 0o755);
+    const bise = program((run) => {
+      run.err('ambient-core: hello');
+      run.err("thread 'main' panicked at tui/src/ambient/core.rs:120:9:");
+      run.err('no hub for sk-ant-SECRETSECRET1234');
+      run.err('note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace');
+      run.exit(101);
+      return undefined;
+    });
     const exits: CoreExit[] = [];
+    const h = hooked();
     const core = new CoreProcess(
       { config: { bise, workspace: '' }, logFile, scale: 1000 },
-      { onEvent: () => undefined, onState: () => undefined, log: () => undefined, onExit: (e) => exits.push(e) },
+      { onEvent: () => undefined, onState: () => undefined, log: () => undefined, onExit: h.into(exits) },
     );
     core.start();
-    await waitFor(() => exits.length === 1);
+    await h.until(() => exits.length === 1);
     core.stop();
     expect(exits[0]).toMatchObject({ how: 'code', code: 101, crash: true, log: logFile });
     expect(exits[0]?.last).toBe('no hub for …');
@@ -245,34 +362,42 @@ describe('CoreProcess', () => {
   it('a core killed by SIGSEGV is a crash; one that exits 0 is clean; stop() says nothing', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'bise-core-test-'));
     const logFile = join(dir, 'core.log');
-    const bise = join(dir, 'bise');
-    writeFileSync(bise, ['#!/bin/sh', 'echo "about to fall" >&2', 'kill -SEGV $$'].join(NL) + NL);
-    chmodSync(bise, 0o755);
+    const segv = program((run) => {
+      run.err('about to fall');
+      run.exit(null, 'SIGSEGV');
+      return undefined;
+    });
     const exits: CoreExit[] = [];
+    const h = hooked();
     const core = new CoreProcess(
-      { config: { bise, workspace: '' }, logFile, scale: 1000 },
-      { onEvent: () => undefined, onState: () => undefined, log: () => undefined, onExit: (e) => exits.push(e) },
+      { config: { bise: segv, workspace: '' }, logFile, scale: 1000 },
+      { onEvent: () => undefined, onState: () => undefined, log: () => undefined, onExit: h.into(exits) },
     );
     core.start();
-    await waitFor(() => exits.length === 1);
+    await h.until(() => exits.length === 1);
     core.stop();
     expect(exits[0]).toMatchObject({ how: 'signal', signal: 'SIGSEGV', crash: true, last: 'about to fall', log: logFile });
 
-    writeFileSync(bise, ['#!/bin/sh', 'echo "done" >&2', 'exit 0'].join(NL) + NL);
+    const done = program((run) => {
+      run.err('done');
+      run.exit(0);
+      return undefined;
+    });
     const clean: CoreExit[] = [];
     const c2 = new CoreProcess(
-      { config: { bise, workspace: '' }, logFile, scale: 1000 },
-      { onEvent: () => undefined, onState: () => undefined, log: () => undefined, onExit: (e) => clean.push(e) },
+      { config: { bise: done, workspace: '' }, logFile, scale: 1000 },
+      { onEvent: () => undefined, onState: () => undefined, log: () => undefined, onExit: h.into(clean) },
     );
     c2.start();
-    await waitFor(() => clean.length === 1);
+    await h.until(() => clean.length === 1);
     c2.stop();
     expect(clean[0]).toMatchObject({ how: 'clean', code: 0, crash: false, last: 'done', log: null });
-    const n = clean.length;
+    // a run stopped at once still ends (its own exit 0, or the SIGTERM): that end says nothing
     c2.start();
+    const last = fake.runs.at(-1);
     c2.stop();
-    await new Promise((r) => setTimeout(r, 200));
-    expect(clean.length - n).toBeLessThanOrEqual(1);
+    if (last !== undefined) await once(last, 'exit');
+    expect(clean).toHaveLength(1);
   });
 });
 
