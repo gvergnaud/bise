@@ -393,12 +393,17 @@ describe("the notifications' permission row (amb-mac's notify.ask)", () => {
     g.bise = { notify: { state: () => Promise.resolve('never'), onState: () => () => undefined, ask: () => { asked += 1; return Promise.resolve('on'); } } };
     try {
       // bise's view: bise's own ask lists only where every project's items do (inbox-scope)
-      mount({ project: null, agent: null });
+      // notify.state()'s answer lands inside act, its render and effects with it: ⌃3 goes to the
+      // window's listener, which calls the handler the last effect set; an answer flushed outside
+      // act left that effect pending under load, and the press reached the 2-item handler
+      await act(async () => {
+        mount({ project: null, agent: null });
+        await Promise.resolve();
+      });
       // H10 (designer m_19835): an ordinary item from bise, the last one, never a line of its own
-      expect((await screen.findByTestId('inbox.block.row.3')).textContent).toContain('let questions reach you');
+      expect(screen.getByTestId('inbox.block.row.3').textContent).toContain('let questions reach you');
       fireEvent.keyDown(window, { key: '3', code: 'Digit3', ctrlKey: true });
-      // waits: under a loaded run the open can land a tick later (it passed alone, failed once in pnpm check)
-      expect((await screen.findByTestId('inbox.block.notify')).textContent).toContain('let questions reach you as macOS notifications?');
+      expect(screen.getByTestId('inbox.block.notify').textContent).toContain('let questions reach you as macOS notifications?');
       await act(async () => {
         fireEvent.click(screen.getByTestId('inbox.block.notify.opt.1'));
         // a clicked option shows picked for PICKED_MS (InboxCard), then picks
