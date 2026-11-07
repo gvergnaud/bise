@@ -1146,8 +1146,6 @@ export const settings = {
   mark_failed: "✗ failed",
   /** a feature's mark: off */
   mark_off: "○ off",
-  /** voice mode's voice: only its key is checked (no voice test yet; architect m_54103) */
-  mark_key_works: "key works",
   /** a mark's tip: it works, the check's own duration (never "latency") */
   tip_took: (a: { secs: string | number }): string => "works · the check took " + String(a.secs) + " s",
   /** a mark's tip: set up, never tested since its key changed */
@@ -1227,7 +1225,7 @@ export const settings = {
   /** troubleshooting: when the last check ran */
   trouble_checked: (a: { time: string | number }): string => "checked at " + String(a.time),
   /** troubleshooting: the other features that still work on another provider */
-  trouble_still: (a: { what: string | number; provider: string | number }): string => String(a.what) + " still works: it goes through " + String(a.provider) + ".",
+  trouble_still: (a: { what: string | number; provider: string | number }): string => String(a.what) + " still work: it goes through " + String(a.provider) + ".",
   /** troubleshooting: an env var wins over the setting, and where to remove it */
   trouble_env: (a: { var: string | number }): string => String(a.var) + " is set in your environment and wins over this setting. remove it from your shell's profile (~/.zshrc or ~/.zprofile), then restart bise.",
   /** troubleshooting: another way (the roles table) */

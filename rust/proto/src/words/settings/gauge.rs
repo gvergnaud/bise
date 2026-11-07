@@ -42,8 +42,6 @@ crate::words! { settings:
     mark_failed = "✗ failed";
     /// a feature's mark: off
     mark_off = "○ off";
-    /// voice mode's voice: only its key is checked (no voice test yet; architect m_54103)
-    mark_key_works = "key works";
     /// a mark's tip: it works, the check's own duration (never "latency")
     tip_took(secs) = "works · the check took {secs} s";
     /// a mark's tip: set up, never tested since its key changed
@@ -123,7 +121,7 @@ crate::words! { settings:
     /// troubleshooting: when the last check ran
     trouble_checked(time) = "checked at {time}";
     /// troubleshooting: the other features that still work on another provider
-    trouble_still(what, provider) = "{what} still works: it goes through {provider}.";
+    trouble_still(what, provider) = "{what} still work: it goes through {provider}.";
     /// troubleshooting: an env var wins over the setting, and where to remove it
     trouble_env(var) = "{var} is set in your environment and wins over this setting. remove it from your shell's profile (~/.zshrc or ~/.zprofile), then restart bise.";
     /// troubleshooting: another way (the roles table)

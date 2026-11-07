@@ -5,7 +5,7 @@
 // is a real call: only on his click (Test everything, Test again), never at open. Owner: setup-page.
 import { useState } from 'react';
 import type { FeatureId, FeaturePart, FeatureRow, Perm, RoleId, SetupFix, SetupGauge } from '@/proto';
-import { Act, Button, tipAttrs } from '@/ds';
+import { Act, Button, Press, tipAttrs } from '@/ds';
 import { settings } from '@/proto/words.gen';
 import { cx } from '@/ds/cx';
 
@@ -42,7 +42,7 @@ export function tookMs(r: FeatureRow): number | null {
 export type Tone = 'ink' | 'err' | 'faint';
 
 /** A feature's mark: ✓ (and how long its check took) in ink, ✗ failed in red, ○ off faint; voice
- * mode says 'key works' (its voice has no test of its own yet, architect m_54103). Pure. */
+ * mode's tip says its voice has no test of its own yet (architect m_54103). Pure. */
 export function markOf(r: FeatureRow, g: SetupGauge): { text: string; tone: Tone; tip: string } {
   if (r.state === 'failed') return { text: settings.mark_failed, tone: 'err', tip: whyWords(r, g) };
   if (r.state !== 'on') {
@@ -51,10 +51,9 @@ export function markOf(r: FeatureRow, g: SetupGauge): { text: string; tone: Tone
     return { text: settings.mark_off, tone: 'faint', tip };
   }
   const ms = tookMs(r);
-  if (r.id === 'voice_mode') {
-    const tts = r.parts.find((p) => p.role === 'tts');
-    return { text: ms === null ? settings.mark_on : settings.mark_key_works, tone: 'ink', tip: settings.tip_key_only({ provider: tts?.provider ?? '' }) };
-  }
+  // voice mode: the same mark as every row; its tip says only the key is checked (architect m_54103)
+  const tts = r.id === 'voice_mode' ? r.parts.find((p) => p.role === 'tts') : undefined;
+  if (tts !== undefined) return { text: ms === null ? settings.mark_on : settings.mark_took({ secs: secsOf(ms) }), tone: 'ink', tip: settings.tip_key_only({ provider: tts.provider ?? '' }) };
   const better = r.better != null && r.better.t === 'add_key' ? settings.tip_better({ provider: providerName(g, r.better.provider) }) : null;
   if (ms === null) return { text: settings.mark_on, tone: 'ink', tip: better ?? settings.tip_untested };
   return { text: settings.mark_took({ secs: secsOf(ms) }), tone: 'ink', tip: better ?? settings.tip_took({ secs: secsOf(ms) }) };
@@ -191,27 +190,50 @@ function GaugeRing({ on, of }: { on: number; of: number }) {
   );
 }
 
-export function GaugeHead({ g, ports }: { g: SetupGauge; ports: GaugePorts }) {
+export function GaugeHead({ g, ports, onNext }: { g: SetupGauge; ports: GaugePorts; onNext: (id: FeatureId) => void }) {
   const testing = (g.testing?.length ?? 0) > 0;
   const n = g.next;
+  const first = n?.unlocks[0];
   return (
     <div className="st-head" data-testid="settings.gauge">
       <span className="st-count" {...tipAttrs(settings.gauge_tip({ on: String(g.on), of: String(g.of) }), undefined, 'below')} data-testid="settings.gauge.count">
         <GaugeRing on={g.on} of={g.of} />
         <span className="n">{settings.gauge_count({ on: String(g.on), of: String(g.of) })}</span>
       </span>
-      <span className="st-next" data-testid="settings.gauge.next">
-        {n != null && <b>{settings.gauge_next}</b>} {nextWords(g)}
-      </span>
-      {n != null && (
-        <Button kind="pri" onClick={() => { ports.fix(n.fix, n.unlocks[0] ?? null); }} testId="settings.gauge.next.fix">
-          {fixButton(n.fix, g)}
-        </Button>
+      {/* one primary per screen (designer m_54523): Next is a link to its row, whose panel holds the fix */}
+      {first !== undefined ? (
+        <Press look="st-next" onClick={() => { onNext(first); }} data-testid="settings.gauge.next">
+          <b>{settings.gauge_next}</b> {nextWords(g)} ›
+        </Press>
+      ) : (
+        <span className="st-next" data-testid="settings.gauge.next">
+          {nextWords(g)}
+        </span>
       )}
       <Button onClick={() => { ports.test(); }} disabled={testing} testId="settings.gauge.test">
         {testing ? settings.gauge_testing : settings.gauge_test_all}
       </Button>
     </div>
+  );
+}
+
+/** The gauge and its features: Next opens its row's troubleshooting and scrolls to it. */
+export function GaugeView({ g, ports, at }: { g: SetupGauge; ports: GaugePorts; at?: FeatureId | null }) {
+  const [shut, setShut] = useState<ReadonlySet<FeatureId>>(new Set());
+  return (
+    <>
+      <GaugeHead
+        g={g}
+        ports={ports}
+        onNext={(id) => {
+          const next = new Set(shut);
+          next.delete(id);
+          setShut(next);
+          document.querySelector(`[data-testid="settings.feature.${id}"]`)?.scrollIntoView({ block: 'nearest' });
+        }}
+      />
+      <FeatureRows g={g} ports={ports} at={at ?? null} shut={shut} setShut={setShut} />
+    </>
   );
 }
 
@@ -225,9 +247,8 @@ function subOf(r: FeatureRow): string {
   return [...models, ...perms].join(' · ');
 }
 
-export function FeatureRows({ g, ports, at }: { g: SetupGauge; ports: GaugePorts; at?: FeatureId | null }) {
-  // a failed feature opens its troubleshooting; he can close it
-  const [shut, setShut] = useState<ReadonlySet<FeatureId>>(new Set());
+/** The features; a failed one opens its troubleshooting unless he closed it (`shut`). */
+export function FeatureRows({ g, ports, at, shut, setShut }: { g: SetupGauge; ports: GaugePorts; at?: FeatureId | null; shut: ReadonlySet<FeatureId>; setShut: (s: ReadonlySet<FeatureId>) => void }) {
   return (
     <div className="st-rows" data-testid="settings.features">
       {g.rows.map((r) => {

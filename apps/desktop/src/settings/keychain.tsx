@@ -11,14 +11,14 @@ import type { SettingsData } from './Settings';
  * while it runs the switch waits and says so; the move's lines (item names and counts) under it, a
  * failed one in the error tone.
  */
-export function KeychainRow({ k, send }: { k: NonNullable<SettingsData['keychain']>; send: (cmd: AppCmd) => void }) {
+export function KeychainRow({ k, send, titled = true }: { k: NonNullable<SettingsData['keychain']>; send: (cmd: AppCmd) => void; titled?: boolean }) {
   const on = k.store === 'keychain';
   // a move's own lines are the core's (secrets_cli, the terminal's words); with none, where they are
   const said = k.moving ? settings.keychain_moving : (k.lines?.join(' ') ?? '');
   const now = on ? settings.keychain_on : settings.keychain_off;
   return (
     <Group
-      title={settings.keychain_title}
+      {...(titled ? { title: settings.keychain_title } : {})}
       testId="settings.keychain"
       items={[
         {

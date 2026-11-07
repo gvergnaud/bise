@@ -2065,11 +2065,6 @@
     "one": null,
     "text": "✗ failed"
   },
-  "settings.mark_key_works": {
-    "args": [],
-    "one": null,
-    "text": "key works"
-  },
   "settings.mark_off": {
     "args": [],
     "one": null,
@@ -5513,7 +5508,7 @@
       "provider"
     ],
     "one": null,
-    "text": "{what} still works: it goes through {provider}."
+    "text": "{what} still work: it goes through {provider}."
   },
   "settings.tui_bise_failed": {
     "args": [

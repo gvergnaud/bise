@@ -12,7 +12,7 @@ import { settings } from '@/proto/words.gen';
 import { Accounts } from './accounts';
 import { Roles } from './roles';
 import { modelRow, needsSetup } from './hold';
-import { FeatureRows, GaugeHead, type GaugePorts } from './gauge';
+import { GaugeView, type GaugePorts } from './gauge';
 import type { SettingsData, SettingsPorts } from './Settings';
 import { KeychainRow } from './keychain';
 
@@ -119,10 +119,7 @@ export function SetupPage({ data, ports, page }: { data: SettingsData; ports: Se
   return (
     <>
       {g !== null && (
-        <>
-          <GaugeHead g={g} ports={gp} />
-          <FeatureRows g={g} ports={gp} at={focus.at} />
-        </>
+        <GaugeView g={g} ports={gp} at={focus.at} />
       )}
       <div ref={rolesRef}>
         <Fold
@@ -162,7 +159,7 @@ export function SetupPage({ data, ports, page }: { data: SettingsData; ports: Se
             {...(ports.copy ? { copy: ports.copy } : {})}
             {...(ports.cancelSignIn ? { cancelSignIn: ports.cancelSignIn } : {})}
           />
-          {data.keychain != null && <KeychainRow k={data.keychain} send={ports.send} />}
+          {data.keychain != null && <KeychainRow k={data.keychain} send={ports.send} titled={false} />}
         </Fold>
       </div>
     </>

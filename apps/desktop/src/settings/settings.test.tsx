@@ -436,6 +436,9 @@ describe('settings · Setup (page models-setup, pick B)', () => {
     expect(screen.getByTestId('settings.gauge.next').textContent).toContain(settings.next_credit({ provider: 'Mistral' }));
     expect(screen.getByTestId('settings.feature.voice_mode').getAttribute('data-state')).toBe('failed');
     expect(screen.getByTestId('settings.feature.voice_mode.trouble').textContent).toContain('No credit left on this workspace');
+    // one primary per screen: the fix is in the panel, Next is a link to it
+    expect(screen.queryByTestId('settings.gauge.next.fix')).toBeNull();
+    expect(screen.getAllByText(settings.fix_credit({ provider: 'Mistral' }))).toHaveLength(1);
     expect(screen.getByTestId('settings.feature.approvals.mark').textContent).toBe(settings.mark_off);
     // nothing tested on open: a test is his click
     expect(p.sent).toEqual([]);
@@ -458,7 +461,7 @@ describe('settings · Setup (page models-setup, pick B)', () => {
   it('all green: 7/7, no Next, every mark in ink', () => {
     view('setup', ports(), { gauge: allOn() });
     expect(screen.getByTestId('settings.gauge.count').textContent).toContain('7/7');
-    expect(screen.getByTestId('settings.gauge.next').textContent).toBe(` ${settings.gauge_all_set}`);
+    expect(screen.getByTestId('settings.gauge.next').textContent).toBe(settings.gauge_all_set);
     expect(screen.queryByTestId('settings.gauge.next.fix')).toBeNull();
     expect(document.querySelectorAll('.st-mark.err')).toHaveLength(0);
   });
