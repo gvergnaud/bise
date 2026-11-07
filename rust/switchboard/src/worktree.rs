@@ -196,7 +196,13 @@ impl GitEnv {
     /// The hub's git on `paths` (its config read now; its first `is_git`
     /// probe started, off the loop).
     pub fn new(paths: &Paths, log: Box<dyn FnMut(&str) + Send>, trash: crate::trash::Trash) -> GitEnv {
-        GitEnv { paths: paths.clone(), config: Config::load(paths), log, merged: BTreeMap::new(), git: git_probe(&paths.workspace), trash }
+        GitEnv::with_git(paths, log, trash, git_probe(&paths.workspace))
+    }
+
+    /// The hub's git on `paths` with a probe that already exists: the place
+    /// worker shares the hub's, so one folder has one probe.
+    pub fn with_git(paths: &Paths, log: Box<dyn FnMut(&str) + Send>, trash: crate::trash::Trash, git: crate::git_probe::GitProbe) -> GitEnv {
+        GitEnv { paths: paths.clone(), config: Config::load(paths), log, merged: BTreeMap::new(), git, trash }
     }
 
     fn ws(&self) -> &Path {

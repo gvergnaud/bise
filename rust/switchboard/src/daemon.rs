@@ -1662,6 +1662,8 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     // a drop's folder rm on the trash's worker, off this loop (trash.rs)
     let trash = crate::trash::Trash::worker(Box::new(move |s| log_line(&trash_paths, s)));
     let env = GitEnv::new(&paths, Box::new(move |s| log_line(&log_paths, s)), trash);
+    // one is_git probe per workspace: the place worker shares it
+    let place_git = env.git.clone();
     // the checker (approvals-design.md §4): a chat model in the role runs
     // through repl-live's one-shot, like the role lines
     let runner = crate::approvals::check::Runner::new(&bise_home::Home::from_env())
@@ -1749,7 +1751,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         art: art::Art::default(),
         revive: revive::Revive::default(),
         wake_look: wake_look::WakeLook::start(tx.clone()),
-        place_work: place_work::PlaceWork::start(&paths, tx.clone()),
+        place_work: place_work::PlaceWork::start(&paths, tx.clone(), place_git),
         procs: processes::Worker::start(paths.clone(), proc_hub.clone(), crate::paths::workspace_id(&paths.workspace), tx.clone()),
         photos,
     };

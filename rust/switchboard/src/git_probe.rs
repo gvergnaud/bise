@@ -145,6 +145,13 @@ impl GitProbe {
                     self.spawn();
                     p = self.lock();
                 }
+                // No bound on purpose: sb-core takes is_git in the same
+                // step, so the first ask has to wait for the first answer.
+                // On a very slow Mac that first probe can still hold the
+                // loop once. Removing the wait means sb-core taking "not
+                // known yet" (a typed In on a later step): a core change,
+                // only if a loaded boot shows this wait again (architect
+                // m_54583).
                 Ask::Wait => p = self.shared.1.wait(p).unwrap_or_else(|e| e.into_inner()),
             }
         }
