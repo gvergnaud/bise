@@ -2,14 +2,15 @@ use super::*;
 use crate::thread::lines::{read, Rec};
 
 /// `fixtures/obs_lines.jsonl`: a text line of each kind the runtime
-/// writes today, and the record line it becomes (sha 2b).
-fn pairs() -> Vec<(String, String)> {
+/// wrote before the records (sha 2b), and the record line it became; a
+/// kind born a record (network_wait) has no `text`.
+fn pairs() -> Vec<(Option<String>, String)> {
     include_str!("../../../fixtures/obs_lines.jsonl")
         .lines()
         .filter(|l| !l.trim().is_empty())
         .map(|l| {
             let v: Value = serde_json::from_str(l).unwrap();
-            (v["text"].as_str().unwrap().to_string(), v["rec"].as_str().unwrap().to_string())
+            (v["text"].as_str().map(str::to_string), v["rec"].as_str().unwrap().to_string())
         })
         .collect()
 }
@@ -20,15 +21,17 @@ fn pairs() -> Vec<(String, String)> {
 fn each_text_line_and_its_record_read_the_same() {
     let mut tags = std::collections::BTreeSet::new();
     for (text, rec) in pairs() {
-        let old = read(&text);
-        assert!(matches!(old, Rec::Obs(_)), "{text}");
-        assert_eq!(read(&rec), old, "{rec}");
+        let new = read(&rec);
+        assert!(matches!(new, Rec::Obs(_)), "{rec}");
+        if let Some(text) = &text {
+            assert_eq!(read(text), new, "{text}");
+        }
         let r = ObsRec::read_rest(rec.strip_prefix(PREFIX).unwrap()).unwrap().1.unwrap();
         assert!(!matches!(r, ObsRec::Unknown { .. }), "{rec}");
         assert_eq!(r.line(), rec);
         tags.insert(r.tag().to_string());
         // a replay reads it too
-        assert_eq!(crate::thread::lines::read_history(&rec), old, "history {rec}");
+        assert_eq!(crate::thread::lines::read_history(&rec), new, "history {rec}");
     }
     let missing: Vec<_> = ObsRec::TAGS.iter().filter(|t| !tags.contains(**t)).collect();
     assert!(missing.is_empty(), "no fixture line for {missing:?}");

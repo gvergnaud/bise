@@ -83,105 +83,111 @@ law obs_line_12_provider_retry:
 def obs_line_12_provider_retry():
   {==}
 
-law obs_line_13_harness_restarted:
+law obs_line_13_network_wait:
+  {OG.network_wait(300000n, 30000n, "no address for api.example.com (dns)") == "obs network_wait :: {\"delay_ms\":30000,\"waited_ms\":300000,\"why\":\"no address for api.example.com (dns)\"}" : String}
+
+def obs_line_13_network_wait():
+  {==}
+
+law obs_line_14_harness_restarted:
   {OG.harness_restarted("the harness crashed (exit 134) and restarted") == "obs harness_restarted :: {\"note\":\"the harness crashed (exit 134) and restarted\"}" : String}
 
-def obs_line_13_harness_restarted():
+def obs_line_14_harness_restarted():
   {==}
 
-law obs_line_14_candidate_discarded:
+law obs_line_15_candidate_discarded:
   {OG.candidate_discarded("empty reply") == "obs candidate_discarded :: {\"cause\":\"empty reply\"}" : String}
 
-def obs_line_14_candidate_discarded():
-  {==}
-
-law obs_line_15_compaction_started:
-  {OG.compaction_started(4n, True{}) == "obs compaction_started :: {\"auto\":true,\"compaction\":4}" : String}
-
-def obs_line_15_compaction_started():
+def obs_line_15_candidate_discarded():
   {==}
 
 law obs_line_16_compaction_started:
-  {OG.compaction_started(5n, False{}) == "obs compaction_started :: {\"auto\":false,\"compaction\":5}" : String}
+  {OG.compaction_started(4n, True{}) == "obs compaction_started :: {\"auto\":true,\"compaction\":4}" : String}
 
 def obs_line_16_compaction_started():
   {==}
 
-law obs_line_17_context_compaction_failed:
+law obs_line_17_compaction_started:
+  {OG.compaction_started(5n, False{}) == "obs compaction_started :: {\"auto\":false,\"compaction\":5}" : String}
+
+def obs_line_17_compaction_started():
+  {==}
+
+law obs_line_18_context_compaction_failed:
   {OG.context_compaction_failed("too big") == "obs context_compaction_failed :: {\"code\":\"too big\"}" : String}
 
-def obs_line_17_context_compaction_failed():
+def obs_line_18_context_compaction_failed():
   {==}
 
-law obs_line_18_compaction_done:
+law obs_line_19_compaction_done:
   {OG.compaction_done("## Who I am I am the agent debt-t5...") == "obs compaction_done :: {\"summary\":\"## Who I am I am the agent debt-t5...\"}" : String}
 
-def obs_line_18_compaction_done():
+def obs_line_19_compaction_done():
   {==}
 
-law obs_line_19_session_restored:
+law obs_line_20_session_restored:
   {OG.session_restored(12n) == "obs session_restored :: {\"messages\":12}" : String}
 
-def obs_line_19_session_restored():
+def obs_line_20_session_restored():
   {==}
 
-law obs_line_20_model_swapped:
+law obs_line_21_model_swapped:
   {OG.model_swapped("chatgpt/gpt-6.1-sol", "chatgpt/gpt-6-luna") == "obs model_swapped :: {\"from\":\"chatgpt/gpt-6.1-sol\",\"to\":\"chatgpt/gpt-6-luna\"}" : String}
 
-def obs_line_20_model_swapped():
+def obs_line_21_model_swapped():
   {==}
 
-law obs_line_21_usage:
+law obs_line_22_usage:
   {OG.usage("fake/claude-x", 3000n, 10n, 2000n, 5n) == "obs usage :: {\"cache_read\":2000,\"cache_write\":5,\"input\":3000,\"model\":\"fake/claude-x\",\"output\":10}" : String}
 
-def obs_line_21_usage():
+def obs_line_22_usage():
   {==}
 
-law obs_line_22_null_iteration:
+law obs_line_23_null_iteration:
   {OG.null_iteration() == "obs null_iteration :: {}" : String}
 
-def obs_line_22_null_iteration():
-  {==}
-
-law obs_line_23_turn_done:
-  {OG.turn_done("completed", "") == "obs turn_done :: {\"end\":\"completed\",\"why\":\"\"}" : String}
-
-def obs_line_23_turn_done():
+def obs_line_23_null_iteration():
   {==}
 
 law obs_line_24_turn_done:
-  {OG.turn_done("interrupted", "") == "obs turn_done :: {\"end\":\"interrupted\",\"why\":\"\"}" : String}
+  {OG.turn_done("completed", "") == "obs turn_done :: {\"end\":\"completed\",\"why\":\"\"}" : String}
 
 def obs_line_24_turn_done():
   {==}
 
 law obs_line_25_turn_done:
-  {OG.turn_done("interrupted", "main") == "obs turn_done :: {\"end\":\"interrupted\",\"why\":\"main\"}" : String}
+  {OG.turn_done("interrupted", "") == "obs turn_done :: {\"end\":\"interrupted\",\"why\":\"\"}" : String}
 
 def obs_line_25_turn_done():
   {==}
 
 law obs_line_26_turn_done:
-  {OG.turn_done("failed", "provider 500") == "obs turn_done :: {\"end\":\"failed\",\"why\":\"provider 500\"}" : String}
+  {OG.turn_done("interrupted", "main") == "obs turn_done :: {\"end\":\"interrupted\",\"why\":\"main\"}" : String}
 
 def obs_line_26_turn_done():
   {==}
 
-law obs_line_27_turn_stalled:
-  {OG.turn_stalled("execution budget exhausted") == "obs turn_stalled :: {\"why\":\"execution budget exhausted\"}" : String}
+law obs_line_27_turn_done:
+  {OG.turn_done("failed", "provider 500") == "obs turn_done :: {\"end\":\"failed\",\"why\":\"provider 500\"}" : String}
 
-def obs_line_27_turn_stalled():
+def obs_line_27_turn_done():
   {==}
 
-law obs_line_28_reload:
-  {OG.reload(False{}, "restarting the harness with the latest code") == "obs reload :: {\"refused\":false,\"text\":\"restarting the harness with the latest code\"}" : String}
+law obs_line_28_turn_stalled:
+  {OG.turn_stalled("execution budget exhausted") == "obs turn_stalled :: {\"why\":\"execution budget exhausted\"}" : String}
 
-def obs_line_28_reload():
+def obs_line_28_turn_stalled():
   {==}
 
 law obs_line_29_reload:
-  {OG.reload(True{}, "not between turns — finish or interrupt the pending turn first") == "obs reload :: {\"refused\":true,\"text\":\"not between turns — finish or interrupt the pending turn first\"}" : String}
+  {OG.reload(False{}, "restarting the harness with the latest code") == "obs reload :: {\"refused\":false,\"text\":\"restarting the harness with the latest code\"}" : String}
 
 def obs_line_29_reload():
+  {==}
+
+law obs_line_30_reload:
+  {OG.reload(True{}, "not between turns — finish or interrupt the pending turn first") == "obs reload :: {\"refused\":true,\"text\":\"not between turns — finish or interrupt the pending turn first\"}" : String}
+
+def obs_line_30_reload():
   {==}
 

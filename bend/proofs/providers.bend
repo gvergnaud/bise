@@ -343,3 +343,21 @@ def Laws.plan_no_shape_unchanged(s, c, a):
 
 def Laws.refusal_names_the_host_of_a_brought_url():
   {==}
+
+def Laws.network_errors_wait():
+  {==}
+
+def Laws.network_wait_spends_no_attempt(left, why, tries):
+  {==}
+
+def Laws.network_wait_bounded():
+  {==}
+
+def Laws.network_wait_gives_up():
+  {==}
+
+def Laws.status_budget_unchanged(p, w, ms, why, tries):
+  {==}
+
+def Laws.status_budget_exhausted(w, ms, why, tries):
+  {==}

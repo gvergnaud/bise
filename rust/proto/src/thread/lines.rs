@@ -229,6 +229,9 @@ pub enum Obs {
     NotificationDelivered(String),
     /// `2/10 · provider 529 (transient) · retry in 4s`
     ProviderRetry(String),
+    /// the call waits for the network: `waited_ms` so far in the outage,
+    /// the next pause, its cause (no attempt spent)
+    NetworkWait { waited_ms: u64, delay_ms: u64, why: String },
     HarnessRestarted(String),
     CandidateDiscarded(String),
     CompactionStarted,
@@ -627,6 +630,7 @@ pub fn keeps_partial(rec: &Rec) -> bool {
                 | Obs::TurnStalled(_)
                 | Obs::HarnessRestarted(_)
                 | Obs::ProviderRetry(_)
+                | Obs::NetworkWait { .. }
                 | Obs::CandidateDiscarded(_)
         )
     )
@@ -647,6 +651,7 @@ pub fn clears_partial(rec: &Rec) -> bool {
                 | Obs::TurnStalled(_)
                 | Obs::HarnessRestarted(_)
                 | Obs::ProviderRetry(_)
+                | Obs::NetworkWait { .. }
                 | Obs::CandidateDiscarded(_)
         ) | Rec::Hub(Hub::Stopped(_))
             | Rec::Idle

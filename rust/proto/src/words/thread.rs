@@ -114,6 +114,10 @@ crate::words! { thread:
     retry_next(attempt, max, wait) = "model call failed · retry {attempt} of {max} in {wait}";
     /// a model call that failed, its line not the usual shape
     retry_odd(why) = "model call failed: {why}";
+    /// a model call waiting for the network (no attempt spent), its first pause
+    network_wait_start(why, secs) = "waiting for the network: {why} · trying again in {secs}s";
+    /// the same wait, `mins` minutes into it
+    network_wait(mins, why, secs) = "waiting for the network ({mins} min so far): {why} · trying again in {secs}s";
     /// a spawn line from the hub
     spawn(text) = "✚ {text}";
     /// a direct message between two agents

@@ -11,6 +11,7 @@
 {"text":"  obs: notification_received: m_12","rec":"obs notification_received :: {\"text\":\"m_12\"}"}
 {"text":"  obs: notification_delivered: m_12","rec":"obs notification_delivered :: {\"text\":\"m_12\"}"}
 {"text":"  obs: provider_retry: 2/10 · provider 529 (transient) · retry in 4s","rec":"obs provider_retry :: {\"delay_ms\":4000,\"n\":2,\"of\":10,\"why\":\"provider 529 (transient)\"}"}
+{"rec":"obs network_wait :: {\"delay_ms\":30000,\"waited_ms\":300000,\"why\":\"no address for api.example.com (dns)\"}"}
 {"text":"  obs: harness_restarted: the harness crashed (exit 134) and restarted","rec":"obs harness_restarted :: {\"note\":\"the harness crashed (exit 134) and restarted\"}"}
 {"text":"  obs: candidate_discarded: empty reply","rec":"obs candidate_discarded :: {\"cause\":\"empty reply\"}"}
 {"text":"  obs: compaction_started #4 (auto)","rec":"obs compaction_started :: {\"auto\":true,\"compaction\":4}"}

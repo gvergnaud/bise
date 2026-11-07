@@ -877,3 +877,11 @@ def retry(+req: U32, +attempt: Nat, +why: String, +delay_ms: U32) -> String:
     J.obj(Con{J.kv("req", u32(req)), Con{J.kv("attempt", J.num(attempt)),
       Con{J.kv("error", err("other", why)),
         Con{J.kv("retry_in_ms", u32(delay_ms)), Nil{}}}}}))
+
+# a call waiting for the network (runtime/provider-pure.bend, the network
+# wait: no attempt spent): written when the wait starts and every 5 min
+def net_wait(+req: U32, +attempt: Nat, +why: String, +delay_ms: U32) -> String:
+  line("request_failed", False{},
+    J.obj(Con{J.kv("req", u32(req)), Con{J.kv("attempt", J.num(attempt)),
+      Con{J.kv("error", err("network", why)),
+        Con{J.kv("retry_in_ms", u32(delay_ms)), Nil{}}}}}))

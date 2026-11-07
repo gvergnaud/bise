@@ -210,11 +210,12 @@ law provider_auth_error_hint:
     == Pv.AFail{"provider 401: bad key — check the API key"} : Pv.Attempt}
 
 # LAW (BR-007): a refused connection names the host and the fix; it
-# retries (a VPN coming back ends the outage).
+# waits for the network (a VPN coming back ends the outage; c2 network
+# wait: no attempt spent).
 law attempt_connect_names_host:
   {Pv.attempt_err(Pv.url_host("https://foundry.example.net/anthropic/v1/messages"),
       Pv.NConnect{61, "Connection refused"})
-    == Pv.ARetry{0, "cannot reach foundry.example.net (connect 61 Connection refused) — check your network or VPN"}
+    == Pv.AWait{"cannot reach foundry.example.net (connect 61 Connection refused) — check your network or VPN"}
     : Pv.Attempt}
 
 # LAW (BR-007): the cleared interrupt flag is an EMPTY file - it is not

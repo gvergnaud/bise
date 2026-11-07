@@ -106,6 +106,10 @@ export const thread = {
   retry_next: (a: { attempt: string | number; max: string | number; wait: string | number }): string => "model call failed · retry " + String(a.attempt) + " of " + String(a.max) + " in " + String(a.wait),
   /** a model call that failed, its line not the usual shape */
   retry_odd: (a: { why: string | number }): string => "model call failed: " + String(a.why),
+  /** a model call waiting for the network (no attempt spent), its first pause */
+  network_wait_start: (a: { why: string | number; secs: string | number }): string => "waiting for the network: " + String(a.why) + " · trying again in " + String(a.secs) + "s",
+  /** the same wait, `mins` minutes into it */
+  network_wait: (a: { mins: string | number; why: string | number; secs: string | number }): string => "waiting for the network (" + String(a.mins) + " min so far): " + String(a.why) + " · trying again in " + String(a.secs) + "s",
   /** a spawn line from the hub */
   spawn: (a: { text: string | number }): string => "✚ " + String(a.text),
   /** a direct message between two agents */

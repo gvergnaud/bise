@@ -42,6 +42,11 @@ core_kinds! {
         NotifDelivered = "notification_delivered" => ONotifDelivered { text: Str },
         /// a provider call retried: attempt `n` of `of`, its cause, the wait
         ProviderRetry = "provider_retry" => OProviderRetry { n: Nat, of: Nat, why: Str, delay_ms: Nat },
+        /// a provider call waits for the network (no name, no connection):
+        /// no attempt spent; `waited_ms` so far in this outage, the next
+        /// pause, its cause. Written when a wait starts and every 5 min
+        /// (bend/runtime/provider-pure.bend wait_says), not at each pause.
+        NetworkWait = "network_wait" => ONetworkWait { waited_ms: Nat, delay_ms: Nat, why: Str },
         /// the parent respawned the process after a crash (its note)
         HarnessRestarted = "harness_restarted" => OHarnessRestarted { note: Str },
         CandidateDiscarded = "candidate_discarded" => OCandidateDiscarded { cause: Str },
@@ -121,6 +126,7 @@ impl ObsRec {
             ObsRec::NotifReceived(r) => Obs::NotificationReceived(r.text),
             ObsRec::NotifDelivered(r) => Obs::NotificationDelivered(r.text),
             ObsRec::ProviderRetry(r) => Obs::ProviderRetry(format!("{}/{} · {} · retry in {}s", r.n, r.of, r.why, r.delay_ms / 1000)),
+            ObsRec::NetworkWait(r) => Obs::NetworkWait { waited_ms: r.waited_ms, delay_ms: r.delay_ms, why: r.why },
             ObsRec::HarnessRestarted(r) => Obs::HarnessRestarted(r.note),
             ObsRec::CandidateDiscarded(r) => Obs::CandidateDiscarded(r.cause),
             ObsRec::CompactionStarted(_) => Obs::CompactionStarted,

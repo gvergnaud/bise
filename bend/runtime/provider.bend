@@ -32,6 +32,7 @@ import ./race-pure.bend as Rcp
 import ./sse-read.bend as Sr
 import ./live-pure.bend as Lp
 import ./reqlog.bend as Rl
+import ../core/gen/obs.bend as OG
 # ---- the live provider call, fully in Bend (hub HTTP client) ----
 # The wire request (MODEL/TOOL/MSG/CALL lines) becomes the provider
 # JSON in core/api.bend, is POSTed by the hub HTTP client, and the reply
@@ -219,9 +220,10 @@ def model_call.wait(fuel: Nat, +ipath: String, +left: U32) -> IO(Bool):
         more : Bool <- model_call.wait(k, ipath, Pvp.left_after(stop, left))
         IO.pure(Bool, Bool.or(stop, more))
 
-def model_call.step.retry.go(stop: Bool, n: Out, +ipath: String, +k: Nat,
-    +tries: Nat, +why: String,
-    next: Nat -> Out -> IO(Out & Rem.RemoteRes)) -> IO(Out & Rem.RemoteRes):
+def model_call.step.retry.go(stop: Bool, n: Out, +ipath: String,
+    +b: Pvp.Budget, +tries: Nat, +why: String,
+    next: Pvp.Budget -> Out -> IO(Out & Rem.RemoteRes))
+    -> IO(Out & Rem.RemoteRes):
   match stop:
     case True{}:
       do IO<Out & Rem.RemoteRes>:
@@ -233,34 +235,64 @@ def model_call.step.retry.go(stop: Bool, n: Out, +ipath: String, +k: Nat,
         IO.pure(Out & Rem.RemoteRes,
           (n, Rem.RRErr{Pvp.interrupted_text(who, Nat.add(tries, 1n), why)}))
     case False{}:
-      next(k)(n)
+      next(b)(n)
 
-def model_call.step.retry(can: Bool, n: Out, +k: Nat, +tries: Nat,
-    +delay_ms: U32, +why: String, +req: U32,
-    next: Nat -> Out -> IO(Out & Rem.RemoteRes)) -> IO(Out & Rem.RemoteRes):
-  match can:
+# the pause before the next attempt, interruptible (model_call.wait)
+def model_call.pause(n: Out, +delay_ms: U32, +why: String, +b: Pvp.Budget,
+    +tries: Nat, next: Pvp.Budget -> Out -> IO(Out & Rem.RemoteRes))
+    -> IO(Out & Rem.RemoteRes):
+  do IO<Out & Rem.RemoteRes>:
+    +ipath : String <- interrupt_path()
+    stop : Bool <- model_call.wait(Pvp.wait_slices(delay_ms), ipath, delay_ms)
+    model_call.step.retry.go(stop, n, ipath, b, tries, why, next)
+
+# a network wait's lines (the obs line the TUI words, the session's
+# request_failed of kind network): only when Pvp.next_of says (the
+# wait's start, every 5 min), not at each pause
+def wait_notes(says: Bool, n: Out, +waited: U32, +delay_ms: U32, +why: String,
+    +tries: Nat, +req: U32) -> IO(Out):
+  match says:
+    case False{}:
+      IO.pure(Out, n)
     case True{}:
+      do IO<Out>:
+        n1 : Out <- note(n, OG.network_wait(U32.to_nat(waited),
+          U32.to_nat(delay_ms), String.take(why, 200n)))
+        note(n1, Ev.net_wait(req, Nat.add(tries, 1n), why, delay_ms))
+
+# what follows a failed attempt (Pvp.next_of): a status retry (its two
+# lines at each one), a network wait, or the turn's error
+def model_call.next(x: Pvp.Next, n: Out, +tries: Nat, +req: U32,
+    next: Pvp.Budget -> Out -> IO(Out & Rem.RemoteRes))
+    -> IO(Out & Rem.RemoteRes):
+  match x:
+    case Pvp.XStop{+why}:
+      IO.pure(Out & Rem.RemoteRes, (n, Rem.RRErr{why}))
+    case Pvp.XRetry{+delay_ms, +why, +b}:
       do IO<Out & Rem.RemoteRes>:
         n1 : Out <- note(n, Pvp.retry_line(tries, why, delay_ms))
         n2 : Out <- note(n1, Ev.retry(req, Nat.add(tries, 1n), why, delay_ms))
-        +ipath : String <- interrupt_path()
-        stop : Bool <- model_call.wait(Pvp.wait_slices(delay_ms), ipath,
-          delay_ms)
-        model_call.step.retry.go(stop, n2, ipath, k, tries, why, next)
-    case False{}:
-      IO.pure(Out & Rem.RemoteRes,
-        (n, Rem.RRErr{Pvp.exhausted_for(Nat.add(tries, 1n), why)}))
+        model_call.pause(n2, delay_ms, why, b, tries, next)
+    case Pvp.XWait{+delay_ms, +why, +b, +says}:
+      do IO<Out & Rem.RemoteRes>:
+        n1 : Out <- wait_notes(says, n,
+          U32.sub(Pvp.budget_waited(b), delay_ms), delay_ms, why, tries, req)
+        model_call.pause(n1, delay_ms, why, b, tries, next)
 
-def model_call.step(a: Pvp.Attempt, n: Out, +k: Nat, +tries: Nat, +req: U32,
-    next: Nat -> Out -> IO(Out & Rem.RemoteRes)) -> IO(Out & Rem.RemoteRes):
+def model_call.step(a: Pvp.Attempt, n: Out, +b: Pvp.Budget, +tries: Nat,
+    +req: U32, next: Pvp.Budget -> Out -> IO(Out & Rem.RemoteRes))
+    -> IO(Out & Rem.RemoteRes):
   match a:
     case Pvp.AOk{+reply}:
       IO.pure(Out & Rem.RemoteRes, (n, Rem.parse_reply(reply)))
     case Pvp.AFail{+why}:
       IO.pure(Out & Rem.RemoteRes, (n, Rem.RRErr{why}))
     case Pvp.ARetry{+after_ms, +why}:
-      model_call.step.retry(Nat.is_lt(0n, k), n, k, tries,
-        Pvp.retry_delay_ms(after_ms, tries), why, req, next)
+      model_call.next(Pvp.next_of(Pvp.ARetry{after_ms, why}, b, tries), n,
+        tries, req, next)
+    case Pvp.AWait{+why}:
+      model_call.next(Pvp.next_of(Pvp.AWait{why}, b, tries), n, tries, req,
+        next)
 
 # the body text, decoded once from the raw pieces (newest first)
 def sse.text(+parts: List<&2, String>) -> String:
@@ -699,9 +731,9 @@ def request_body(+request: String, +pv: Pvp.Prov, +limit: Nat) -> IO(Built):
 # one call = up to max_attempts attempts; `call` (its start time, ms)
 # names the call in the debug log
 @unsafe
-def model_call.try(fuel: Nat, +tries: Nat, n: Out, +request: String,
-    +ctx: Pvp.CallCtx, +call: Nat, +limit: Nat, +shrunk: Bool)
-    -> IO(Out & Rem.RemoteRes):
+def model_call.try(fuel: Nat, +tries: Nat, +bd: Pvp.Budget, n: Out,
+    +request: String, +ctx: Pvp.CallCtx, +call: Nat, +limit: Nat,
+    +shrunk: Bool) -> IO(Out & Rem.RemoteRes):
   match fuel:
     case 0n:
       IO.pure(Out & Rem.RemoteRes,
@@ -711,7 +743,8 @@ def model_call.try(fuel: Nat, +tries: Nat, n: Out, +request: String,
         case Pvp.CallCtx{+pv, _, _, _, _, _, _, _, _, _}:
           do IO<Out & Rem.RemoteRes>:
             +b : Built <- request_body(request, pv, limit)
-            model_call.sent(b, k, tries, n, request, ctx, call, limit, shrunk)
+            model_call.sent(b, k, tries, bd, n, request, ctx, call, limit,
+              shrunk)
 
 # the provider refused the call's key (401/403): the REPL forgets the
 # key it kept for that provider (Pvp.key_drop)
@@ -725,7 +758,7 @@ def out.key_drop(n: Out, +prov: String, +status: U32) -> Out:
 # one attempt with its body built: logged in the ring (/debug
 # completion, runtime/reqlog.bend) before it goes out, then sent
 @unsafe
-def model_call.sent(b: Built, +k: Nat, +tries: Nat, n: Out,
+def model_call.sent(b: Built, +k: Nat, +tries: Nat, +bd: Pvp.Budget, n: Out,
     +request: String, +ctx: Pvp.CallCtx, +call: Nat, +limit: Nat,
     +shrunk: Bool) -> IO(Out & Rem.RemoteRes):
   match b:
@@ -767,32 +800,35 @@ def model_call.sent(b: Built, +k: Nat, +tries: Nat, n: Out,
                   model_call.sized(Bool.and(Bool.not(shrunk),
                       Bool.and(W.size_refused(got_status(g), got_raw(g)),
                         Nat.is_lt(0n, fill_img_bytes(fill)))),
-                    nu, k, tries, req,
+                    nu, bd, tries, req,
                     Pvp.size_retry_why(label, got_status(g),
                       Nat.div(fill_bytes(fill), 2n)),
-                    k4 => n3 => model_call.step(got_for(W.req_tools(wreq),
+                    +b4 => n3 => model_call.step(got_for(W.req_tools(wreq),
                         label, key, Api.facts_plan(facts), model, st, g),
-                      n3, k4, tries, req,
-                      k2 => n2 => model_call.try(k2, Nat.add(tries, 1n), n2, request,
-                        ctx, call, limit, shrunk)),
-                    k3 => n4 => model_call.try(k3, Nat.add(tries, 1n), n4, request,
-                      ctx, call, Nat.div(fill_bytes(fill), 2n), True{})))
+                      n3, b4, tries, req,
+                      +b2 => n2 => model_call.try(k, Nat.add(tries, 1n), b2, n2,
+                        request, ctx, call, limit, shrunk)),
+                    +b3 => n4 => model_call.try(k, Nat.add(tries, 1n), b3, n4,
+                      request, ctx, call, Nat.div(fill_bytes(fill), 2n), True{})))
 
 # a request the provider refused for its size, that had images: one line
 # (a retry the TUI shows), then the same request at once with half the
-# weight (the oldest images go). Once per call: a second refusal is the
-# turn's failure, and the Core compacts (core/session.bend).
-def model_call.sized(big: Bool, nu: Out, +k: Nat, +tries: Nat, +req: U32,
-    +why: String, step: Nat -> Out -> IO(Out & Rem.RemoteRes),
-    again: Nat -> Out -> IO(Out & Rem.RemoteRes)) -> IO(Out & Rem.RemoteRes):
+# weight (the oldest images go), one status attempt spent. Once per
+# call: a second refusal is the turn's failure, and the Core compacts
+# (core/session.bend).
+def model_call.sized(big: Bool, nu: Out, +bd: Pvp.Budget, +tries: Nat,
+    +req: U32, +why: String,
+    step: Pvp.Budget -> Out -> IO(Out & Rem.RemoteRes),
+    again: Pvp.Budget -> Out -> IO(Out & Rem.RemoteRes))
+    -> IO(Out & Rem.RemoteRes):
   match big:
     case False{}:
-      step(k)(nu)
+      step(bd)(nu)
     case True{}:
       do IO<Out & Rem.RemoteRes>:
         n1 : Out <- note(nu, Pvp.retry_line(tries, why, 0))
         n2 : Out <- note(n1, Ev.retry(req, Nat.add(tries, 1n), why, 0))
-        again(k)(n2)
+        again(Pvp.budget_spent(bd))(n2)
 
 # the call's context, built once (Pvp.prepare), then its attempts
 @unsafe
@@ -802,7 +838,7 @@ def model_call.go(n: Out, +request: String, +key: String, +pv: Pvp.Prov,
   do IO<Out & Rem.RemoteRes>:
     +call : Nat <- IO.now()
     +limit : Nat <- req_limit()
-    model_call.try(Pvp.max_attempts(), 0n, n, request,
+    model_call.try(Pvp.call_fuel(), 0n, Pvp.budget0(), n, request,
       Pvp.prepare(pv, mfile, key, hval, req, live), call, limit, False{})
 
 # a provider with a key_env (or a key_command) needs its key; one with

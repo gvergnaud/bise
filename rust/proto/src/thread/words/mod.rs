@@ -71,6 +71,7 @@ pub fn obs_notice(o: &Obs, name: &dyn Fn(&str, &str) -> String) -> Option<Notice
         Obs::NotificationDelivered(t) => notice(Info, thread::notification_delivered(t)),
         // H9: its data rides on the notice (one row per run of them)
         Obs::ProviderRetry(t) => Some(Notice { level: Warn, text: provider_retry(t), retry: lines::retry(t) }),
+        Obs::NetworkWait { waited_ms, delay_ms, why } => notice(Warn, network_wait(*waited_ms, *delay_ms, why)),
         Obs::HarnessRestarted(t) => notice(Err, thread::harness_restarted(t)),
         // no key, or a ChatGPT plan line: the turn's end says it, once
         // (BISE-294; subscriptions)
@@ -470,6 +471,17 @@ pub fn provider_retry(t: &str) -> String {
         // 2/10 failed: the plan is attempt 3/10 after the pause
         Some(r) => thread::retry(r.attempt, r.max, &r.why, r.attempt.saturating_add(1), r.wait_ms / 1000),
         None => thread::retry_odd(t),
+    }
+}
+
+/// A model call waiting for the network (bend/runtime/provider-pure.bend,
+/// the network wait): its cause and next pause, and how long it has
+/// waited, from `waited_ms` (the runtime never writes the time in words).
+pub fn network_wait(waited_ms: u64, delay_ms: u64, why: &str) -> String {
+    let secs = delay_ms.div_ceil(1000);
+    match waited_ms / 60_000 {
+        0 => thread::network_wait_start(why, secs),
+        mins => thread::network_wait(mins, why, secs),
     }
 }
 

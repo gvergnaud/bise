@@ -1039,6 +1039,8 @@ def interrupt_flag(m: Maybe<&2, String>) -> Bool:
 # 16s, then 30s) - or the server's Retry-After when it sends one
 # (capped at 60s). Everything else (auth, validation, a bad URL, TLS)
 # fails the turn immediately: retrying it only wastes the user's time.
+# The network gone (no name, no connection: AWait) spends no attempt:
+# the call waits for it, up to 30 min (the network wait, next_of).
 
 # the verdict on one attempt: the mapped reply, a final failure, or a
 # retry after a pause (0 = no server hint, the backoff decides)
@@ -1046,6 +1048,7 @@ type Attempt is Data:
   AOk{reply: String}
   AFail{why: String}
   ARetry{after_ms: U32, why: String}
+  AWait{why: String}
 
 def max_attempts() -> Nat:
   10n
@@ -1299,6 +1302,8 @@ def attempt_for(+tools: List<&2, W.WTool>, +name: String, +key: String,
           Bool.not(U32.is_eq(status, 200))), why, name, status, body, key)
     case ARetry{+ms, +why}:
       ARetry{ms, why}
+    case AWait{+why}:
+      AWait{why}
 
 # ---- the ChatGPT plan's failures (shape = "chatgpt-plan") ----
 # The designer's lines (docs/subscriptions-design.md, final words §5).
@@ -1372,10 +1377,28 @@ def key_why(has_cmd: Bool, plan: Bool, +prov: String, +key_env: String,
       String.concat(["no ", prov, " key yet (", key_env,
         " is not set): /provider sets it up"])
 
+# the network itself is gone (no name, no route, no connection): the
+# call waits for it (AWait) instead of spending its attempts
+def net_down(e: NetErr) -> Bool:
+  match e:
+    case NDns{_, _}:
+      True{}
+    case NConnect{_, _}:
+      True{}
+    case _:
+      False{}
+
+def attempt_err.retry(down: Bool, +host: String, +e: NetErr) -> Attempt:
+  match down:
+    case True{}:
+      AWait{net_cause(host, e)}
+    case False{}:
+      ARetry{0, net_cause(host, e)}
+
 def attempt_err.pick(retryable: Bool, +host: String, +e: NetErr) -> Attempt:
   match retryable:
     case True{}:
-      ARetry{0, net_cause(host, e)}
+      attempt_err.retry(net_down(e), host, e)
     case False{}:
       AFail{net_cause(host, e)}
 
@@ -1520,3 +1543,105 @@ def ctx_prov(+c: CallCtx) -> String:
       match pv:
         case Prov{+provider, _, _, _, _, _}:
           provider
+
+# ---- the network wait (c2-turn-survives b) ----
+# A call has two budgets. A status failure (a 5xx, a 429, a timeout, a
+# cut stream) spends one of its max_attempts, with the backoff, as
+# before. A network failure (AWait: no name, no connection) spends
+# none: the call waits for the network, the pause doubling from 1 s to
+# 30 s, until net_wait_max_ms (30 min) of waiting; a status failure in
+# between goes back to the status budget (its waiting starts over at
+# the next outage). Every pause is interruptible (model_call.wait).
+
+# left: the status retries the call still has; waited: the ms it has
+# waited for the network in the current outage
+type Budget is Data:
+  Budget{left: Nat, waited: U32}
+
+# a call's first budget: max_attempts in all, the first one running
+def budget0() -> Budget:
+  Budget{Nat.sub(max_attempts(), 1n), 0}
+
+def net_wait_max_ms() -> U32:
+  1800000
+
+def net_every_ms() -> U32:
+  30000
+
+# the next pause of an outage: as long as it has lasted (1 s at first),
+# at most 30 s, never past the 30 min
+def net_delay(+waited: U32) -> U32:
+  U32.min(U32.min(U32.max(waited, 1000), net_every_ms()),
+    U32.sub(net_wait_max_ms(), U32.min(waited, net_wait_max_ms())))
+
+# what the loop does after a failed attempt: retry after a pause with
+# the budget that is left (wait: a network wait; says: it is the first
+# pause of the outage or the first one past a 5 min mark - the one that
+# writes a line, so 30 min of waiting is 7 lines, not 60), or stop with
+# the turn's error
+type Next is Data:
+  XRetry{delay_ms: U32, why: String, b: Budget}
+  XWait{delay_ms: U32, why: String, b: Budget, says: Bool}
+  XStop{why: String}
+
+def net_gave_up(+waited: U32, +why: String) -> String:
+  String.concat(["no network for ", U32.show(U32.div(waited, 60000)),
+    " min; last error: ", why])
+
+# a wait line every 5 min of an outage, and at its start
+def wait_says(+waited: U32, +delay: U32) -> Bool:
+  Bool.or(U32.is_zero(waited),
+    Bool.not(U32.is_eq(U32.div(waited, 300000),
+      U32.div(U32.add(waited, delay), 300000))))
+
+def next_status(left: Nat, +waited: U32, +after_ms: U32, +why: String,
+    +tries: Nat) -> Next:
+  match left:
+    case 0n:
+      XStop{exhausted_for(Nat.add(tries, 1n), why)}
+    case 1n+p:
+      XRetry{retry_delay_ms(after_ms, tries), why, Budget{p, 0}}
+
+def next_net(over: Bool, +left: Nat, +waited: U32, +why: String) -> Next:
+  match over:
+    case True{}:
+      XStop{net_gave_up(waited, why)}
+    case False{}:
+      XWait{net_delay(waited), why,
+        Budget{left, U32.add(waited, net_delay(waited))},
+        wait_says(waited, net_delay(waited))}
+
+# the decision after attempt #tries (0-based) failed with a: a status
+# retry (ARetry) or a network wait (AWait); AOk and AFail end the call
+# before it is asked (they stop here too)
+def next_of(+a: Attempt, +b: Budget, +tries: Nat) -> Next:
+  match a:
+    case ARetry{+after_ms, +why}:
+      match b:
+        case Budget{+left, +waited}:
+          next_status(left, waited, after_ms, why, tries)
+    case AWait{+why}:
+      match b:
+        case Budget{+left, +waited}:
+          next_net(U32.is_le(net_wait_max_ms(), waited), left, waited, why)
+    case AFail{+why}:
+      XStop{why}
+    case AOk{_}:
+      XStop{""}
+
+# a status attempt spent outside next_of (a body refused for its size
+# goes again once, smaller): one retry less
+def budget_spent(+b: Budget) -> Budget:
+  match b:
+    case Budget{+left, _}:
+      Budget{Nat.sub(left, 1n), 0}
+
+def budget_waited(+b: Budget) -> U32:
+  match b:
+    case Budget{_, +waited}:
+      waited
+
+# the guard of a call's loop (model_call.try's fuel): every status
+# attempt, and every pause of a network wait for each of them
+def call_fuel() -> Nat:
+  U32.to_nat(1000)

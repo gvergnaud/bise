@@ -41,6 +41,9 @@ def notification_delivered(+text: String) -> String:
 def provider_retry(+n: Nat, +of: Nat, +why: String, +delay_ms: Nat) -> String:
   line("provider_retry", J.obj([J.kv("delay_ms", J.JNum{delay_ms}), J.kv("n", J.JNum{n}), J.kv("of", J.JNum{of}), J.kv("why", J.JStr{why})]))
 
+def network_wait(+waited_ms: Nat, +delay_ms: Nat, +why: String) -> String:
+  line("network_wait", J.obj([J.kv("delay_ms", J.JNum{delay_ms}), J.kv("waited_ms", J.JNum{waited_ms}), J.kv("why", J.JStr{why})]))
+
 def harness_restarted(+note: String) -> String:
   line("harness_restarted", J.obj([J.kv("note", J.JStr{note})]))
 

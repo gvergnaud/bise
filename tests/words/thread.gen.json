@@ -698,6 +698,23 @@
     "one": null,
     "text": "{from} isn't on your ChatGPT plan: using {to} · /model to pick another"
   },
+  "thread.network_wait": {
+    "args": [
+      "mins",
+      "why",
+      "secs"
+    ],
+    "one": null,
+    "text": "waiting for the network ({mins} min so far): {why} · trying again in {secs}s"
+  },
+  "thread.network_wait_start": {
+    "args": [
+      "why",
+      "secs"
+    ],
+    "one": null,
+    "text": "waiting for the network: {why} · trying again in {secs}s"
+  },
   "thread.newer_messages": {
     "args": [],
     "one": null,

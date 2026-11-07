@@ -1058,3 +1058,86 @@ base_url_env = \"ANTHROPIC_FOUNDRY_BASE_URL\"
     == ["gateway.example.test", Pv.prov_display("", "mistral"),
       "gateway.example.test refused the conversation's history (400). gateway.example.test said: \"messages: text content blocks must be non-empty\""]
     : List<&2, String>}
+
+# ---- the network wait (runtime/provider-pure.bend next_of) ----
+# 17 of 34 failed turns (24 Oct - 7 Nov) were a network gone for more
+# than the ~2.5 min the 10 attempts lasted (DNS 12). A network failure
+# (no name, no connection) now waits for the network instead of
+# spending the attempts; a status failure keeps the 10.
+
+def net_tag(a: Pv.Attempt) -> String:
+  match a:
+    case Pv.AOk{_}:
+      "ok"
+    case Pv.AFail{_}:
+      "fail"
+    case Pv.ARetry{_, _}:
+      "retry"
+    case Pv.AWait{_}:
+      "wait"
+
+# LAW: no name and no connection wait (AWait); a timeout or a cut stream
+# keeps the status retry, a TLS failure fails at once.
+law network_errors_wait:
+  {Bool.and(
+      Bool.and(String.eq(net_tag(Pv.attempt_err("h", Pv.NDns{"no address", ""})), "wait"),
+        String.eq(net_tag(Pv.attempt_err("h", Pv.NConnect{61, "refused"})), "wait")),
+      Bool.and(String.eq(net_tag(Pv.attempt_err("h", Pv.NTimeout{})), "retry"),
+        String.eq(net_tag(Pv.attempt_err("h", Pv.NTls{1, "bad cert"})), "fail")))
+    == True{} : Bool}
+
+# LAW: a network wait spends no attempt: whatever the status retries
+# left, the first pause is 1 s, the retries stay, the wait says so once.
+law network_wait_spends_no_attempt:
+  for left: Nat
+  for why: String
+  for tries: Nat
+  {Pv.next_of(Pv.AWait{why}, Pv.Budget{left, 0}, tries)
+    == Pv.XWait{1000, why, Pv.Budget{left, 1000}, True{}} : Pv.Next}
+
+# the pauses of a call that only meets AWait, from the budget b: their
+# count, their sum, the longest, and how many write a line
+def net_walk(fuel: Nat, x: Pv.Next, +n: Nat, +sum: U32, +top: U32,
+    +says: Nat) -> Nat & (U32 & (U32 & Nat)):
+  match fuel:
+    case 0n:
+      (n, (sum, (top, says)))
+    case 1n+k:
+      match x:
+        case Pv.XWait{+d, _, +b, +s}:
+          net_walk(k, Pv.next_of(Pv.AWait{"w"}, b, 0n), 1n+n, U32.add(sum, d),
+            U32.max(top, d), Bool.pick(Nat, s, 1n+says, says))
+        case _:
+          (n, (sum, (top, says)))
+
+# LAW: a network wait is bounded: 65 pauses of at most 30 s (1 s at
+# first, doubling), 30 min in all, 7 lines (its start, every 5 min);
+# then the turn fails, naming how long and the last error.
+law network_wait_bounded:
+  {net_walk(200n, Pv.next_of(Pv.AWait{"w"}, Pv.budget0(), 0n), 0n, 0, 0, 0n)
+    == (65n, (1800000, (30000, 7n))) : Nat & (U32 & (U32 & Nat))}
+
+law network_wait_gives_up:
+  {Pv.next_of(Pv.AWait{"dns"}, Pv.Budget{9n, 1800000}, 4n)
+    == Pv.XStop{"no network for 30 min; last error: dns"} : Pv.Next}
+
+# LAW: a status failure keeps today's budget (max_attempts, the
+# backoff or the server's hint), also in the middle of a network wait:
+# it spends one retry and the wait starts over at the next outage.
+law status_budget_unchanged:
+  for p: Nat
+  for w: U32
+  for ms: U32
+  for why: String
+  for tries: Nat
+  {Pv.next_of(Pv.ARetry{ms, why}, Pv.Budget{1n+p, w}, tries)
+    == Pv.XRetry{Pv.retry_delay_ms(ms, tries), why, Pv.Budget{p, 0}} : Pv.Next}
+
+# LAW: with no retry left, a status failure ends the call as before.
+law status_budget_exhausted:
+  for w: U32
+  for ms: U32
+  for why: String
+  for tries: Nat
+  {Pv.next_of(Pv.ARetry{ms, why}, Pv.Budget{0n, w}, tries)
+    == Pv.XStop{Pv.exhausted_for(Nat.add(tries, 1n), why)} : Pv.Next}
