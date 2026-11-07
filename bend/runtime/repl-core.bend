@@ -414,10 +414,10 @@ def ev_model(live: Bool) -> IO(String):
 # one run loop entry. Turn/pending are still boundary-empty at a reload,
 # so only the queue and the held notifications resume here.
 def resume_queued.run(+live: Bool, s: Socket, +mem: Pvp.CallMem,
-    +sess: T.Session,
+    +sess: T.Session, +cmds: List<&2, T.Cmd>,
     next: Socket -> Pvp.CallMem -> T.Session -> IO(Flow)) -> IO(Flow):
   do IO<Flow>:
-    e : R.RtEnd <- repl_run(live, Pv.ONet{s, mem}, sess, Nil{}, Nil{})
+    e : R.RtEnd <- repl_run(live, Pv.ONet{s, mem}, sess, Nil{}, cmds)
     f : Flow <- repl_end_stalled(live, e, next)
     IO.pure(Flow, f)
 
@@ -428,18 +428,40 @@ def resume_queued(+live: Bool, empty: Bool, s: Socket, +mem: Pvp.CallMem,
     case True{}:
       next(s)(mem)(sess)
     case False{}:
-      resume_queued.run(live, s, mem, sess, next)
+      resume_queued.run(live, s, mem, sess, Nil{}, next)
 
-def greet_conn(+live: Bool, out: Pv.Out, +sess: T.Session) -> IO(Flow):
+# the restored REPL's turn was cut during its model call (the in-flight
+# mark, Pv.inflight_take): the Core resumes it once (S.apply.resume,
+# its note), then the queue runs as usual; else the queue alone
+def resume_cut(+live: Bool, cut: Bool, s: Socket, +mem: Pvp.CallMem,
+    +sess: T.Session,
+    next: Socket -> Pvp.CallMem -> T.Session -> IO(Flow)) -> IO(Flow):
+  match cut:
+    case True{}:
+      resume_queued.run(live, s, mem, sess, Con{T.Resume{S.RESUME_NOTE()}, Nil{}},
+        next)
+    case False{}:
+      resume_queued(live, List.is_empty(&2, String, S.sess_queued(sess)), s,
+        mem, sess, next)
+
+def greet_conn(+live: Bool, out: Pv.Out, +sess: T.Session, cut: Bool)
+    -> IO(Flow):
   match out:
     case Pv.OStd{+mem}:
       IO.pure(Flow, Go{sess, mem})
     case Pv.ONet{s2, +mem}:
-      resume_queued(live, List.is_empty(&2, String, S.sess_queued(sess)), s2,
-        mem, sess,
+      resume_cut(live, cut, s2, mem, sess,
         s3 => +mem3 => sess3 => repl_conn(live, s3, mem3, Nil{}, Nil{}, sess3))
 
 
+
+# the first connection of a restored session (it gets the greeting)
+def greeted(+greet: Maybe<&2, Nat>) -> Bool:
+  match greet:
+    case Some{_}:
+      True{}
+    case None{}:
+      False{}
 
 # the connection loop ended: Go keeps serving (checkpoint + accept the
 # next client, with the calls' memory), Stop unwinds to main (the
@@ -467,9 +489,10 @@ def serve_after(+live: Bool, am: Listener & Result<&1, &1, U32 & String, Socket>
     case (l2, Done{s}):
       do IO<Flow>:
         +model : String <- ev_model(live)
+        +cut : Bool <- Pv.inflight_take(greeted(greet))
         out2 : Pv.Out <- greet_out(greet, s, mem, sess,
           Ev.sess_evs(sess, model, "config"))
-        f : Flow <- greet_conn(live, out2, sess)
+        f : Flow <- greet_conn(live, out2, sess, cut)
         serve_after.cont(f, l2, next)
 
 @unsafe

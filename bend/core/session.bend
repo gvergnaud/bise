@@ -1124,6 +1124,62 @@ def apply.fail(+error: String, +s: T.Session) -> T.Res:
         case None{}:
           T.Rejected{"no active turn"}
 
+# ---- a turn cut by a restart (c2-turn-survives c) ----
+# The runtime checkpoints the history before each model call, so a
+# process that dies during that call comes back idle with everything
+# the turn had done; the turn itself was lost (20 of 25 crashed turns,
+# 24 Oct - 7 Nov). The restored REPL applies Resume: the turn goes on
+# from that history with a note that says so, at most once per turn: a
+# turn already resumed (the note since the user's last message) is not
+# resumed again. A cut during a tool is not resumed (the tool may have
+# run; the repair gives it a failed result and the next turn decides).
+
+def RESUME_NOTE() -> String:
+  "[resumed] your turn was cut by a restart while it waited for the model; it goes on from where it was. Things may have changed since: check before you act on what you saw."
+
+# whether the history holds the note since the user's last message
+def resumed.step(m: T.Msg, +note: String, +seen: Bool) -> Bool:
+  match m:
+    case T.Msg{role, +t, _, +inj}:
+      match role:
+        case T.RUser{}:
+          Bool.and(inj, Bool.or(seen, String.eq(t, note)))
+        case _:
+          seen
+
+def resumed_since(msgs: List<&2, T.Msg>, +note: String, +seen: Bool) -> Bool:
+  match msgs:
+    case Nil{}:
+      seen
+    case Con{m, rest}:
+      resumed_since(rest, note, resumed.step(m, note, seen))
+
+def start_resume(+note: String, +s: T.Session) -> T.Session:
+  match s:
+    case T.Sess{+cfg, +history, +inputs, +actions, _, _, +queued, +notifs}:
+      T.Sess{cfg, List.append(&2, T.Msg, history, Con{T.injected_user(note), Nil{}}),
+        Nat.add(inputs, 1n), actions,
+        Some{T.Turn{0n, Nil{}, Nil{}, False{}}}, None{}, queued, notifs}
+
+def apply.resume.go(again: Bool, +note: String, +s: T.Session) -> T.Res:
+  match again:
+    case True{}:
+      T.Accepted{Nil{}, Nil{}, s}
+    case False{}:
+      +s1 = start_resume(note, s)
+      d = dispatch(s1)
+      dispatch_result(d, Con{T.TurnStarted{}, Nil{}}, s1)
+
+def apply.resume.idle(idle: Bool, +note: String, +s: T.Session) -> T.Res:
+  match idle:
+    case False{}:
+      T.Rejected{"a turn is running"}
+    case True{}:
+      apply.resume.go(resumed_since(sess_history(s), note, False{}), note, s)
+
+def apply.resume(+note: String, +s: T.Session) -> T.Res:
+  apply.resume.idle(reload_allowed(s), note, s)
+
 # ---- the step protocol entry point ----
 
 def apply.cmd(cmd: T.Cmd, +s: T.Session) -> T.Res:
@@ -1146,6 +1202,8 @@ def apply.cmd(cmd: T.Cmd, +s: T.Session) -> T.Res:
       apply.interrupt(s)
     case T.FailTurn{error}:
       apply.fail(error, s)
+    case T.Resume{note}:
+      apply.resume(note, s)
 
 def apply(s: T.Session, cmd: T.Cmd) -> T.Res:
   apply.cmd(cmd, s)

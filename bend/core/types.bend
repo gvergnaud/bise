@@ -38,6 +38,10 @@ type Cmd is Data:
   ToolFail{call: U32, error: String, compact: Bool}
   Interrupt{}
   FailTurn{error: String}
+  # the restored REPL's turn was cut by a restart during a model call:
+  # the turn goes on from its checkpointed history, with this note
+  # (session.bend apply.resume: at most once per turn)
+  Resume{note: String}
 
 # ---- step protocol: actions (Core -> Runtime) ----
 # AgentCall and CompactionCall carry the projected model input: the Core

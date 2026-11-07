@@ -368,10 +368,28 @@ def plain_user_ev(agent: Bool, +fromq: Bool, +t: String) -> String:
         J.obj(Con{J.kv("content", content(t)),
           Con{J.kv("delivery", J.str("prompt")), fq_kv(fromq)}}))
 
+def ctx_resume(+c: Ctx) -> Bool:
+  match c:
+    case Ctx{_, +cmd, _, _, _}:
+      match cmd:
+        case T.Resume{_}:
+          True{}
+        case _:
+          False{}
+
+# an injected text: the note of a resumed turn (Resume), else by how it
+# entered (inj_kind)
+def user_ev.inj(resume: Bool, +c: Ctx, +t: String) -> String:
+  match resume:
+    case True{}:
+      injected_ev.kind(False{}, False{}, "resume_note", t)
+    case False{}:
+      injected_ev(inj_kind(ctx_obs(c), t), t)
+
 def user_ev(inj: Bool, +c: Ctx, +t: String) -> String:
   match inj:
     case True{}:
-      injected_ev(inj_kind(ctx_obs(c), t), t)
+      user_ev.inj(ctx_resume(c), c, t)
     case False{}:
       plain_user_ev(is_agent(W.unescape_nl(t)), ctx_fromq(c), t)
 
@@ -616,8 +634,18 @@ def notif_held(held: Bool, +t: String) -> List<&2, String>:
 def cause_of(fromq: Bool) -> String:
   Bool.pick(String, fromq, "queue", "user")
 
-# before the context events: the turn start, the inputs that wait
-def pre_evs(os: List<&2, T.Obs>, +all: List<&2, T.Obs>, +fromq: Bool)
+# why a turn starts: a restored turn cut by a restart (Resume), else the
+# user's message, queued or not
+def cause_for(+fromq: Bool, +cmd: T.Cmd) -> String:
+  match cmd:
+    case T.Resume{_}:
+      "resume"
+    case _:
+      cause_of(fromq)
+
+# before the context events: the turn start (its cause), the inputs
+# that wait
+def pre_evs(os: List<&2, T.Obs>, +all: List<&2, T.Obs>, +cause: String)
     -> List<&2, String>:
   match os:
     case Nil{}:
@@ -626,14 +654,14 @@ def pre_evs(os: List<&2, T.Obs>, +all: List<&2, T.Obs>, +fromq: Bool)
       match o:
         case T.TurnStarted{}:
           Con{line("turn_started", False{},
-              J.obj(Con{J.kv("cause", J.str(cause_of(fromq))), Nil{}})),
-            pre_evs(rest, all, fromq)}
+              J.obj(Con{J.kv("cause", J.str(cause)), Nil{}})),
+            pre_evs(rest, all, cause)}
         case T.NotifReceived{+t}:
           List.append(&2, String,
             notif_held(Bool.not(delivered(all, t)), t),
-            pre_evs(rest, all, fromq))
+            pre_evs(rest, all, cause))
         case _:
-          pre_evs(rest, all, fromq)
+          pre_evs(rest, all, cause)
 
 def queued_user.pick(started: Bool, +t: String) -> List<&2, String>:
   match started:
@@ -815,7 +843,7 @@ def evs.accepted(+fromq: Bool, +b: T.Session, +cmd: T.Cmd,
         case T.Sess{_, +nh, +inputs, +actions, _, _, _, _}:
           +c : Ctx = Ctx{fromq, cmd, obs, pending, bact}
           List.concat(&2, String,
-            [pre_evs(obs, obs, fromq), queued_user(cmd, obs),
+            [pre_evs(obs, obs, cause_for(fromq, cmd)), queued_user(cmd, obs),
              ctx_evs(has_done(obs), c, bh, nh),
              post_evs(obs, c, inputs, actions)])
 

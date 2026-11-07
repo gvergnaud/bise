@@ -862,6 +862,19 @@ def est_units(+n: U32) -> U32:
 def interrupt_path_of(+dir: String, +port: String) -> String:
   String.append(dir, String.append("/bend-interrupt-", String.append(port, ".txt")))
 
+# the in-flight mark: "request" while an agent's model call runs, "" else
+# (runtime/main.bend). A REPL restored after a death reads it once: a
+# turn cut during its model call resumes (core/session.bend apply.resume)
+def inflight_path_of(+dir: String, +port: String) -> String:
+  String.append(dir, String.append("/bend-inflight-", String.append(port, ".txt")))
+
+def inflight_cut(m: Maybe<&2, String>) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{+t}:
+      String.eq(String.trim(t), "request")
+
 # the interrupt flag file: the TUI writes "1" on Ctrl+C, the runtime
 # clears it to "" at every turn end. Only a non-empty flag is a request
 # (an empty one read as a Ctrl+C turned every retry after the first

@@ -970,10 +970,15 @@ def run(fuel: Nat, out: Pv.Out, +rt: Rtp.Rt, +job: Rtp.Job, tr: Rtp.Trans) -> IO
                       # the turn at this safe boundary
                       do IO<RtEnd>:
                         sv : Unit <- save_rt(rt2)
+                        # in flight: a process that dies before the
+                        # mark is cleared resumes the turn once
+                        # (Pv.inflight_take, core/session.bend Resume)
+                        mk : Unit <- Pv.inflight_set(live, "request")
                         +ctx : String <- context_now()
                         +req2 : String <- retool_now(Rtp.rt_tools(rt2), request)
                         nr : Pv.Out & Rem.RemoteRes <- Pv.model_call.req(
                           out, Rem.with_context(ctx, req2), action, live)
+                        mc : Unit <- Pv.inflight_set(live, "")
                         model_back(nr, rt2, k, action, after,
                           k2 => o3 => +r3 => +c =>
                             run(k2, o3, r3, Rtp.JCmd{c, after},

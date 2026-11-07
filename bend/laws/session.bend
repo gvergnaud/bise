@@ -1363,3 +1363,62 @@ law other_refusal_fails_the_turn:
     == [T.CandidateDiscarded{"Gateway refused the request (400)."},
       T.TurnDone{"failed", "Gateway refused the request (400)."}]
     : List<&2, T.Obs>}
+
+# ---- a turn cut by a restart resumes once (core/session.bend Resume) ----
+# 20 of 25 crashed turns (24 Oct - 7 Nov) died during a model call: the
+# checkpoint has the history up to that call, so asking again is safe.
+
+def rs.cfg() -> T.Cfg:
+  T.Cfg{4000n, 40n, 3n, "sys", Nil{}}
+
+def rs.idle(+h: List<&2, T.Msg>) -> T.Session:
+  T.Sess{rs.cfg(), h, 1n, 0, None{}, None{}, Nil{}, Nil{}}
+
+def rs.starts(os: List<&2, T.Obs>) -> Bool:
+  match os:
+    case Nil{}:
+      False{}
+    case Con{o, rest}:
+      match o:
+        case T.TurnStarted{}:
+          True{}
+        case _:
+          rs.starts(rest)
+
+# whether an apply started a turn
+def rs.started(r: T.Res) -> Bool:
+  match r:
+    case T.Rejected{_}:
+      False{}
+    case T.Accepted{+obs, _, _}:
+      rs.starts(obs)
+
+# LAW: a restored session whose turn was cut during its model call
+# resumes it: a turn starts, the note last in its history; a turn that
+# was already resumed (its note since the user's message, after tool
+# calls too) does not start again; a new message of the user makes the
+# next cut resumable again.
+law resume_reasks_once:
+  {Bool.and(
+      Bool.and(rs.started(S.apply(rs.idle([T.user("fix the login")]),
+          T.Resume{S.RESUME_NOTE()})),
+        Bool.not(rs.started(S.apply(rs.idle([T.user("fix the login"),
+            T.injected_user(S.RESUME_NOTE()), T.asst("", Nil{}), T.tool_res("ok")]),
+          T.Resume{S.RESUME_NOTE()})))),
+      rs.started(S.apply(rs.idle([T.user("fix the login"),
+          T.injected_user(S.RESUME_NOTE()), T.asst("done", Nil{}), T.user("now the tests")]),
+        T.Resume{S.RESUME_NOTE()})))
+    == True{} : Bool}
+
+# LAW: the resumed turn's model input ends with the note (the history
+# kept, the note appended, injected).
+law resume_appends_the_note:
+  {S.sess_history(S.start_resume(S.RESUME_NOTE(), rs.idle([T.user("fix the login")])))
+    == [T.user("fix the login"), T.injected_user(S.RESUME_NOTE())] : List<&2, T.Msg>}
+
+# LAW: a turn running is never resumed over.
+law resume_needs_idle:
+  {S.apply(T.Sess{rs.cfg(), [T.user("x")], 1n, 0,
+      Some{T.Turn{0n, Nil{}, Nil{}, False{}}}, None{}, Nil{}, Nil{}},
+      T.Resume{S.RESUME_NOTE()})
+    == T.Rejected{"a turn is running"} : T.Res}

@@ -202,6 +202,38 @@ def interrupt_path() -> IO(String):
     +d : String <- P.side_dir()
     IO.pure(String, Pvp.interrupt_path_of(d, p))
 
+# the in-flight mark of this REPL (Pvp.inflight_path_of)
+def inflight_path() -> IO(String):
+  do IO<String>:
+    pr : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_REPL_PORT")
+    +p : String <- IO.pure(String, P.env_or(pr, "0"))
+    +d : String <- P.side_dir()
+    IO.pure(String, Pvp.inflight_path_of(d, p))
+
+# an agent's model call (live) marks itself in flight ("request"), and
+# clears the mark when it returns ("")
+def inflight_set(live: Bool, +text: String) -> IO(Unit):
+  match live:
+    case False{}:
+      IO.pure(Unit, Unit{})
+    case True{}:
+      do IO<Unit>:
+        +path : String <- inflight_path()
+        P.write_file(path, text)
+
+# a restored REPL's first connection (restored: True): whether its last
+# turn was cut during a model call; the mark is cleared, read once
+def inflight_take(restored: Bool) -> IO(Bool):
+  match restored:
+    case False{}:
+      IO.pure(Bool, False{})
+    case True{}:
+      do IO<Bool>:
+        +path : String <- inflight_path()
+        m : Maybe<&2, String> <- P.read_file(path)
+        u : Unit <- P.write_file(path, "")
+        IO.pure(Bool, Pvp.inflight_cut(m))
+
 # BR-005: a Ctrl+C landing during a failed attempt must not wait for
 # the remaining retries: the pause before a retry is slept in 1 s
 # slices and the flag is read between them. BR-007: only a flag WITH

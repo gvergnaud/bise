@@ -349,3 +349,12 @@ def Laws.refused_history_twice_fails_the_turn():
 
 def Laws.other_refusal_fails_the_turn():
   {==}
+
+def Laws.resume_reasks_once():
+  {==}
+
+def Laws.resume_appends_the_note():
+  {==}
+
+def Laws.resume_needs_idle():
+  {==}
