@@ -157,3 +157,40 @@ batch	line	test	file:fn broken	the break	red?	after revert
 4	thread/news-rows	apps/desktop src/thread/ThreadScreen.test.tsx › thread/news-rows: a landing says who landed where (new)	src/thread/rows-news.tsx:LandedRow	a landing's sha opens the changes, not that commit	red	green again
 4	thread/bubble-echo	apps/desktop src/thread/YouBody.test.tsx › a plain send draws as its landed entry does	src/thread/rows-messages.tsx:PendingRow	the sending bubble draws other words than its landed entry	red	green again
 4	thread/steady-bottom	(none: app/pages.test's m_21505 is the search's pages group, a wrong map)	-	LOST: a wheel over a long thread moves only the thread (scroll containment: CSS overflow, no computed state)	-	-
+5	agents/model-setup	apps/desktop src/agents/actions.test.tsx › L5: the sheet's pick of it opens settings · models and sends nothing	src/settings/hold.ts:needsSetup	never holds (drop the key_ready false check)	red	green again
+5	agents/archived-list	apps/desktop src/agents/model.test.ts › main, then the hub's (start) order…; archived apart	src/agents/model.ts:liveOf	keeps archived agents	red	green again
+5	agents/list	apps/desktop src/agents/model.test.ts › the fixture's agents: main first, then the hub's order	src/agents/model.ts:liveOf	main last	red	green again
+5	agents/models	apps/desktop src/agents/actions.test.tsx › the catalog, pure: groups, aliases resolved	src/agents/actions.ts:modelGroups	no aliases group	red	green again
+5	agents/settings	apps/desktop src/agents/actions.test.tsx › a name: not empty, letters digits dashes, not main, not taken	src/agents/actions.ts:nameProblem	never says a name is taken	red	green again
+5	agents/dropped-real	bend/laws/inbox.bend drop_card_words + apps/desktop src/main/notify/plan.test.ts › a drop card	bend/hub/place.bend:drop_opts + src/main/notify/plan.ts:titleOf	'1. archive it' -> '1. archive'; titleOf without the drop case	red (PROOF + vitest)	green again
+5	gate/notify-real	apps/desktop src/main/notify/plan.test.ts › a project's first list never knocks; a later card is fresh	src/main/notify/plan.ts:apply	every card fresh	red	green again
+5	gate/images	apps/desktop src/composer/pure.test.ts › one counter; his m_22231 order in the parts	src/composer/message.ts:send parts	an image chip pushes no image part	red	green again
+5	inbox/ghost-badge	apps/desktop src/store/acted.test.ts › ghost-badge: answered on the page, then from the inbox	src/store/acted.ts:actedAnswered	keeps the entry of a card the hub kept open	red	green again
+5	inbox/answer-sync	apps/desktop src/store/machine/cards.law.test.ts › the inbox is the hub's open cards less his acts in flight	src/store/machine/cards.ts:inboxView	forgets what he just answered	red	green again
+5	inbox/answer-refused	apps/desktop src/store/acted.test.ts › a refused answer or close shows that very card again	src/store/machine/cards.ts:refused step	keeps the card in acted (hidden)	red	green again
+5	inbox/answer-images	apps/desktop src/store/store.test.ts › R41: an answer carries the images he attached as parts	src/store/machine/cards.ts:answer	drops its parts	red	green again
+5	inbox/answer-rows-real	apps/desktop src/inbox/past.test.ts › mergeRecords keeps one per card, newest first	src/inbox/past.ts:mergeRecords	keeps a card's row twice	red	green again
+5	inbox/inbox-zero	apps/desktop src/inbox/Zero.test.ts › is his answer to the last item	src/inbox/Zero.tsx:reachedZero	without his act	red	green again
+5	inbox/keys	apps/desktop src/inbox/model.test.ts + Block.test.tsx › ↑↓ walk the items	src/inbox/model.ts:step	↑↓ move items with words in the field	red	green again
+5	inbox/approvals	apps/desktop src/inbox/model.test.ts + Block.test.tsx › an approval is never answered by his words	src/inbox/model.ts:takesWords	words answer an approval	red	green again
+5	inbox/approvals-cmd-i	apps/desktop src/inbox/model.test.ts › the approval first, then the rank-1 items	src/inbox/order.ts:sortCards	ignores the hub's rank	red	green again
+5	inbox/block-views	apps/desktop src/inbox/Block.test.tsx › inbox-stack: 3 items stacked, then '+ N more'	src/inbox/stripRows.ts:STRIP_ROWS	3 -> 2	red	green again
+5	inbox/cmd-i	apps/desktop src/inbox/Block.test.tsx › ⌘I (openInbox) opens the first item	src/inbox/Block.tsx:openInbox	says nothing opened	red	green again
+5	inbox/new-card-mid-answer	apps/desktop src/inbox/Block.test.tsx › a new card never moves it	src/inbox/model.ts:current	always the top item	red	green again
+5	inbox/inbox-open	apps/desktop src/inbox/List.test.tsx › inbox-open: his pick by number wins over his words (new)	src/inbox/List.tsx:pickedOf	drop the pick_n line (green on the old tests)	red	green again
+5	inbox/inbox-screen	apps/desktop src/inbox/List.test.tsx + app/route.test.ts › the route 'inbox/all'	src/app/route.ts:formatRoute	the bare 'inbox'	red	green again
+5	inbox/page-chip	apps/desktop src/inbox/InboxCard.test.tsx › '⌘O open beside' is one whole hint + List.test.tsx › the pane's page chip	src/inbox/InboxCard.tsx:chipTip + src/inbox/List.tsx:pageChip	no '⌘O open beside'; the page id, not its title	red	green again
+5	inbox/plan-card	apps/desktop src/inbox/planCard.test.ts › is its agent's: '<agent> proposes a plan'	src/inbox/InboxCard.tsx:kindTitle	a plan titled '<agent> asks'	red	green again
+5	review/feature-drop	apps/desktop src/review/feature.test.tsx › the merge card's drop asks once more	src/review/feature.ts:choicesOf	drop answers at once	red	green again
+5	settings/models	apps/desktop src/settings/settings.test.tsx › each role shows its model…; setting main's effort sends role_set	src/settings/roles.tsx:effort pick	sends no role_set	red	green again
+5	settings/onboarding-keys	apps/desktop src/settings/settings.test.tsx › models: a key is sent once and never shown	src/settings/accounts.tsx:key field	a second ⏎ while checking sends again	red	green again
+5	settings/onboarding-first	apps/desktop src/setup/setup.test.tsx › walks four steps	src/setup/model.ts:next	past the model step signed out	red	green again
+5	settings/sign-in-expired	apps/desktop src/settings/settings.test.tsx › expiredWords says who waits	src/settings/accounts.tsx:expiredWords	names every agent, no '+N more'	red	green again
+5	settings/approvals	apps/desktop src/settings/settings.test.tsx › the rules walk with the TUI's /approvals keys	src/settings/approvals.tsx:onKey	⏎ on the ask sends no remove_rule	red	green again
+5	voice/answer-card	apps/desktop src/capsule/over.test.ts › an answered card says its project, then fades	src/capsule/over.ts:answeredOver	never fades	red	green again
+5	voice/corner-card	apps/desktop src/capsule/over.test.ts › the corner card's own time	src/capsule/over.ts:lingerOf	a line with an action lingers 4 s	red	green again
+5	every_e2e	bend/laws/hub.bend stop_leaves_no_timer	bend/hub/core.bend:timers_gone.if	an archived agent's timers stay live	red (PROOF)	green again
+5	chatgpt_cache_key_e2e	bend/laws/models.bend cache_key_field	bend/core/api.bend:with_cache_key.pick	the body unchanged	red (PROOF)	green again
+5	image_tag_e2e	bend/laws/models.bend image_defang_unkept	bend/core/image.bend:img_defang.pick	an unkept marker stays live	red (PROOF)	green again
+5	request_size_e2e	bend/laws/streams.bend refusal_for_size	bend/core/wire.bend:size words	'the request failed'	red (PROOF)	green again
+5	page_answer_parts_e2e	bend/laws/parts.bend agent_send_keeps_parts	bend/hub/core.bend:req_send.snd	drops the send's parts	red (PROOF)	green again
