@@ -991,6 +991,9 @@ mod tests {
     /// A gh that hangs is stopped at its wait (architect m_54692): the
     /// answer is Late at once, its process gone, never one per click
     /// piling up; a quick one answers as before, its output whole.
+    /// The hung fake is found by its own path in the process table,
+    /// never by a pid it writes: under load the wait can end before the
+    /// shell runs its first line, and that gh must be gone too.
     #[cfg(unix)]
     #[test]
     fn a_hung_gh_is_stopped_at_its_wait() {
@@ -1004,13 +1007,15 @@ mod tests {
             std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
             GitHub { gh: p }
         };
-        let hung = fake("hung", "echo $$ > \"$(dirname \"$0\")/pid\"; exec sleep 30");
+        // it hangs in the shell itself (a fifo nobody opens), so its
+        // path stays in its argv and no child of it outlives it
+        assert!(std::process::Command::new("mkfifo").arg(d.join("never")).status().unwrap().success());
+        let hung = fake("hung", "read x < \"$(dirname \"$0\")/never\"");
         let t = std::time::Instant::now();
         assert!(matches!(hung.pr_detail("https://github.com/o/r/pull/1", std::time::Duration::from_millis(300)), Err(ForgeError::Late)));
         assert!(t.elapsed() < std::time::Duration::from_secs(5), "{:?}", t.elapsed());
-        let pid = std::fs::read_to_string(d.join("pid")).unwrap();
-        let alive = std::process::Command::new("kill").args(["-0", pid.trim()]).status().unwrap().success();
-        assert!(!alive, "the hung gh was stopped");
+        let alive = std::process::Command::new("pgrep").args(["-f", &hung.gh.to_string_lossy()]).output().unwrap();
+        assert!(alive.stdout.is_empty(), "the hung gh was stopped: {}", String::from_utf8_lossy(&alive.stdout));
         let quick = fake("quick", r#"echo '{"body":"hi","statusCheckRollup":[],"reviews":[],"comments":[]}'"#);
         assert_eq!(quick.pr_detail("u", std::time::Duration::from_secs(10)).unwrap().body, "hi");
         let _ = std::fs::remove_dir_all(&d);
