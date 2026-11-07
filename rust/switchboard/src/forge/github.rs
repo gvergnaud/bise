@@ -149,6 +149,25 @@ fn checks_of(rollup: &Value) -> Checks {
     }
 }
 
+/// gh's PR url in the hub's one key form (`pr_link`: lowercased, its
+/// tab and query dropped): GitHub answers with the repo's own casing
+/// (`Owner/Repo`), so without it the feed line, the place's PR and the
+/// artifact would each key the same PR differently (architect m_54725).
+/// One that doesn't read as a PR is kept as is, said once on stderr.
+fn key_url(raw: &str) -> String {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static SAID: AtomicBool = AtomicBool::new(false);
+    match super::pr_link(raw) {
+        Some(l) => l.url,
+        None => {
+            if !SAID.swap(true, Ordering::Relaxed) {
+                eprintln!("forge: gh gave a PR url that is not a PR link, kept as is: {}", raw);
+            }
+            raw.to_string()
+        }
+    }
+}
+
 fn snapshot(n: &Value, branch: &str, methods: &[MergeMethod], viewer: &str) -> Option<PrSnapshot> {
     let state = match (n["state"].as_str()?, n["isDraft"].as_bool() == Some(true)) {
         ("OPEN", true) => PrState::Draft,
@@ -166,7 +185,7 @@ fn snapshot(n: &Value, branch: &str, methods: &[MergeMethod], viewer: &str) -> O
     let rollup = &n["commits"]["nodes"][0]["commit"]["statusCheckRollup"];
     Some(PrSnapshot {
         number: n["number"].as_u64()?,
-        url: n["url"].as_str()?.to_string(),
+        url: key_url(n["url"].as_str()?),
         branch: branch.to_string(),
         head_oid: n["headRefOid"].as_str().unwrap_or_default().to_string(),
         state,
@@ -770,6 +789,28 @@ mod tests {
         let mut o = out.clone();
         o["errors"][0]["path"] = serde_json::json!(["repository"]);
         assert!(parse(&o.to_string(), &repo(), &[], &[75286, 12]).is_err());
+    }
+
+    #[test]
+    fn a_mixed_case_url_is_the_key_form_on_the_row_the_feed_and_the_artifact() {
+        let out = serde_json::json!({"data": {"repository": {
+            "b0": {"nodes": [{"number": 412, "url": "https://github.com/Acme/Web/pull/412", "state": "OPEN", "isDraft": false,
+                "reviewDecision": null, "headRefOid": "h", "updatedAt": "t", "headRepositoryOwner": {"login": "o"},
+                "commits": {"nodes": []}}]},
+        }}});
+        let prs = parse(&out.to_string(), &repo(), &["sb/perf".to_string()], &[]).unwrap().prs;
+        let key = "https://github.com/acme/web/pull/412";
+        assert_eq!(prs[0].url, key, "the snapshot");
+        let row = crate::forge::news::pr_row(&crate::place::PrView::of(&prs[0], None), &["perf".into()]);
+        assert_eq!(row.url, key, "the PR row (Place.pr, ArtifactPr.status)");
+        let mut feed = crate::forge::news::News::default();
+        let lines = feed.event(&crate::forge::PrEvent::Seen { place: "perf".into(), pr: prs[0].clone() }, None, false);
+        assert!(lines.iter().any(|o| matches!(o, crate::forge::news::Out::Line { url, .. } if url == key)), "the feed line: {lines:?}");
+        let ops = crate::forge::artifact::sync(&prs[0], Some("perf"), None);
+        assert!(format!("{ops:?}").contains(key), "the artifact: {ops:?}");
+        assert!(!format!("{ops:?}").contains("Acme"), "the artifact: {ops:?}");
+        // one that doesn't read as a PR is kept as is
+        assert_eq!(key_url("u9"), "u9");
     }
 
     #[test]
