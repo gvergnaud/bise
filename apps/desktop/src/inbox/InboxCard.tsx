@@ -11,7 +11,7 @@
 // ⌘I's open item); the capsule's card keeps its glass (surface 'glass') with
 // the same rows. No list, no keys: the mounting screen owns them. A clicked
 // row shows picked for PICKED_MS, then picks. Owner: amb-home.
-import { ReleaseBody } from './Release';
+import { ReleaseBody, useFades } from './Release';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Card as CardRow } from '@/proto';
 import type { ArtLink } from '@/proto/rows';
@@ -106,8 +106,10 @@ function SettledCard({ card, project, home, acts, keys, children, testId, settle
   const about = aboutOf(card);
   const answered = settled.state === 'answered';
   const where = project ?? card.project;
+  const mid = useRef<HTMLDivElement>(null);
+  const fades = useFades(mid);
   return (
-    <div className={`ic dock settled${answered ? '' : ' gone'}`} role="group" data-testid={id} data-state={settled.state}>
+    <div className={`ic settled${answered ? '' : ' gone'}`} role="group" data-testid={id} data-state={settled.state}>
       <div className="ic-h">
         <span className="ic-g" data-testid={`${id}.g`}>
           <RowMark icon={answered ? 'check' : 'fold'} tone={answered ? 'plain' : 'dim'} label={answered ? inbox.state_answered : inbox.state_withdrawn} />
@@ -121,7 +123,7 @@ function SettledCard({ card, project, home, acts, keys, children, testId, settle
       </div>
       {/* the head and the foot always show; what is between them scrolls, the question first
           (designer m_55234: the card at its cap) */}
-      <div className="ic-mid" data-testid={`${id}.mid`}>
+      <div ref={mid} className="ic-mid" data-top={fades.top || undefined} data-end={fades.end || undefined} data-testid={`${id}.mid`}>
       <div className="ic-q" data-testid={`${id}.q`}>
         <Question card={card} id={id} />
       </div>
@@ -158,7 +160,7 @@ function SettledCard({ card, project, home, acts, keys, children, testId, settle
 function LinkRow({ about, open, id, hint }: { about: ArtLink; open: (() => void) | undefined; id: string; hint: boolean }) {
   const w = aboutWords(about);
   return (
-    <div className="ic-link" data-testid={`${id}.page`}>
+    <div data-testid={`${id}.page`}>
       <Press look="ic-link-b" onClick={open} disabled={open === undefined} data-testid={`${id}.page.chip`} {...tipAttrs(chipTip(w.title, open !== undefined && hint))}>
         <KindIcon kind={iconKindOf(about)} size={14} />
         <span className="ic-link-t" data-testid={`${id}.page.title`}>{w.title}</span>
@@ -166,7 +168,7 @@ function LinkRow({ about, open, id, hint }: { about: ArtLink; open: (() => void)
         {open !== undefined && hint && (
           <span className="ic-link-k">
             <Kbd>⌘O</Kbd>
-            {inbox.key_open_beside}
+            <span className="ic-link-kw">{inbox.key_open_beside}</span>
           </span>
         )}
       </Press>

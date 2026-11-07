@@ -15,8 +15,9 @@ const open = (url: string): void => {
   void (window as { bise?: { openExternal?: (u: string) => Promise<boolean> } }).bise?.openExternal?.(url);
 };
 
-/** Whether the box scrolls, and whether he is past its top and before its end (the fades). */
-function useFades(box: React.RefObject<HTMLDivElement | null>): { top: boolean; end: boolean } {
+/** Whether the box scrolls, and whether he is past its top and before its end (the fades; the
+ *  settled card's middle too, InboxCard). */
+export function useFades(box: React.RefObject<HTMLDivElement | null>): { top: boolean; end: boolean } {
   const [f, setF] = useState({ top: false, end: false });
   useLayoutEffect(() => {
     const el = box.current;
