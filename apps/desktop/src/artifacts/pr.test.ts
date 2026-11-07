@@ -34,7 +34,7 @@ describe('a PR artifact line', () => {
     expect(late?.late).toMatch(/^as of 12 ?m(in)? ago$/u);
     const none = prLine(prArt('a', {}, null));
     expect(none).toEqual({ sigil: '#412', words: '', yours: false, late: '' });
-    expect(prParts(none!)).toEqual(['#412']);
+    expect(none === null ? [] : prParts(none)).toEqual(['#412']);
   });
 
   it('is null for any other artifact', () => {
