@@ -930,7 +930,15 @@ turn?: number, };
 /**
  * An artifact that is a pull request: its repo (`owner/name`) and number.
  */
-export type ArtifactPr = { repo: string, number: number, };
+export type ArtifactPr = { repo: string, number: number, 
+/**
+ * pr-integration rules 1 and 3: the PR as the hub follows it, the
+ * one row the chip, the place and `/prs` read too
+ * (`forge::news::pr_row`), joined when the event is sent; none
+ * while the forge has not said (not polled yet, no gh): the row
+ * shows the PR as it is, never a made-up state
+ */
+status?: Pr | null, };
 
 /**
  * One version of an artifact: its number, when it was made, and the

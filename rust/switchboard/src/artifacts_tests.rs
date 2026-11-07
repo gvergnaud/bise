@@ -162,6 +162,38 @@ fn links_get_their_kind_and_a_pr_its_number() {
     assert_eq!((again.meta.id.as_str(), again.meta.versions.len()), ("the-artifacts-mock", 2));
 }
 
+/// pr-integration rules 1 and 3 (architect m_54254): a PR row's status
+/// is the hub's row of that same PR (one PR, never two: its repo and
+/// number are the row's), joined by the link's one form; none when the
+/// hub does not follow it, and a status gone stays gone.
+#[test]
+fn a_pr_row_carries_the_hub_s_status_of_that_pr() {
+    let root = tmp("pr-status");
+    let s = Store::new(&root.join("state"));
+    add(&s, &root, "https://github.com/Acme/Web/pull/6/files", None, 10).unwrap();
+    add(&s, &root, "https://github.com/acme/web/pull/7", None, 11).unwrap();
+    let mut rows = s.rows(&nobody, "/");
+    let status = bise_proto::rows::Pr {
+        number: 6,
+        url: "https://github.com/acme/web/pull/6".into(),
+        repo: "acme/web".into(),
+        words: "approved · checks ✓ 12/12 · your merge".into(),
+        ..Default::default()
+    };
+    let by_url = BTreeMap::from([("https://github.com/acme/web/pull/6".to_string(), status)]);
+    join_pr_status(&mut rows, &by_url);
+    let row = |rows: &[Value], n: u64| rows.iter().find(|r| r["pr"]["number"] == n).unwrap().clone();
+    let six = row(&rows, 6);
+    assert_eq!(six["pr"]["repo"], "acme/web");
+    assert_eq!((&six["pr"]["status"]["repo"], &six["pr"]["status"]["number"]), (&six["pr"]["repo"], &six["pr"]["number"]));
+    assert_eq!(six["pr"]["status"]["words"], "approved · checks ✓ 12/12 · your merge");
+    // not followed: no status, never a made-up one
+    assert!(row(&rows, 7)["pr"].get("status").is_none());
+    // the hub stops following #6: its status goes
+    join_pr_status(&mut rows, &BTreeMap::new());
+    assert!(row(&rows, 6)["pr"].get("status").is_none());
+}
+
 #[test]
 fn nothing_gets_in_without_a_file_or_link() {
     let root = tmp("none");

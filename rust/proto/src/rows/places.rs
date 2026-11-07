@@ -177,7 +177,7 @@ pub enum PrYours {
 /// A pull request the hub follows (the TUI's `/prs` row, a place's PR,
 /// a PR artifact's status: one builder, `forge::news::pr_row`): what it
 /// means, and the hub's own words for it (never rebuilt by a client).
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Pr {
     pub number: u64,

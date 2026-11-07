@@ -199,6 +199,13 @@ pub struct ArtifactBack {
 pub struct ArtifactPr {
     pub repo: String,
     pub number: u64,
+    /// pr-integration rules 1 and 3: the PR as the hub follows it, the
+    /// one row the chip, the place and `/prs` read too
+    /// (`forge::news::pr_row`), joined when the event is sent; none
+    /// while the forge has not said (not polled yet, no gh): the row
+    /// shows the PR as it is, never a made-up state
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<super::Pr>,
 }
 
 /// One version of an artifact: its number, when it was made, and the

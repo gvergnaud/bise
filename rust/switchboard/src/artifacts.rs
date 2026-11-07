@@ -1064,6 +1064,25 @@ fn page_meta(p: &PageMeta, base: Option<&str>) -> Meta {
     }
 }
 
+/// pr-integration rules 1 and 3: each PR row's `pr.status`, the hub's
+/// row of that PR (`Hub::pr_rows_by_url`, by the link's one form), joined
+/// when the event is sent; none when the hub does not follow it (no
+/// answer yet, no gh), so the row never shows a made-up state.
+pub fn join_pr_status(rows: &mut [Value], by_url: &BTreeMap<String, bise_proto::rows::Pr>) {
+    for r in rows.iter_mut() {
+        let Some(url) = r["target"].as_str().and_then(crate::forge::pr_link).map(|l| l.url) else { continue };
+        let Some(pr) = r.get_mut("pr").filter(|p| p.is_object()) else { continue };
+        match by_url.get(&url).and_then(|s| serde_json::to_value(s).ok()) {
+            Some(s) => pr["status"] = s,
+            None => {
+                if let Some(o) = pr.as_object_mut() {
+                    o.remove("status");
+                }
+            }
+        }
+    }
+}
+
 /// The rows' `folder`, raw from their metas, as readers read it: the
 /// live library folder it resolves to (a merged one's target), else
 /// none (a deleted or unknown id: unfiled). The one join of the

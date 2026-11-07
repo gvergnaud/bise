@@ -33,6 +33,23 @@ impl Hub {
         (lids, stale)
     }
 
+    /// pr-integration rule 1: every PR the hub follows as its typed row
+    /// (`forge::news::pr_row`, the place's agents, its age when the
+    /// forge is late), by its link's one form (`forge::pr_link`): the
+    /// artifact rows' status (artifacts::join_pr_status).
+    pub fn pr_rows_by_url(&self, now: u64) -> BTreeMap<String, bise_proto::rows::Pr> {
+        let (_, stale) = self.pr_views(now);
+        crate::place::places(&self.st, &self.prs)
+            .iter()
+            .filter_map(|p| {
+                let pr = p.pr.as_ref()?;
+                let url = crate::forge::pr_link(&pr.url)?.url;
+                let view = crate::place::PrView::of(pr, stale.get(&p.id).copied());
+                Some((url, crate::forge::news::pr_row(&view, &p.agents)))
+            })
+            .collect()
+    }
+
     /// The client snapshot (agents, cards) for the views.
     /// Its agent rows are kept from one snapshot to the next and rebuilt
     /// only when their inputs changed (snapshot_rows.rs).

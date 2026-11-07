@@ -194,6 +194,8 @@ impl Shell {
         // moves no store stamp): each row's folder resolved, the folders
         let lib = self.art_library();
         artifacts::resolve_folders(&mut view.rows, &lib);
+        // each PR's status, the hub's row of it (a change re-sends the event)
+        artifacts::join_pr_status(&mut view.rows, &self.hub.pr_rows_by_url(now));
         json!({
             "ev": "artifacts",
             "rows": view.rows,

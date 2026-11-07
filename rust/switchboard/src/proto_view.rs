@@ -471,7 +471,12 @@ pub fn artifacts(ev: &Value, page_url: impl Fn(&str) -> Option<String>, frame_ba
                     })
                     .collect()
             });
-            let pr = r.get("pr").filter(|p| p.is_object()).map(|p| ArtifactPr { repo: s(p, "repo"), number: p.get("number").and_then(Value::as_u64).unwrap_or(0) });
+            let pr = r.get("pr").filter(|p| p.is_object()).map(|p| ArtifactPr {
+                repo: s(p, "repo"),
+                number: p.get("number").and_then(Value::as_u64).unwrap_or(0),
+                // the hub's PR row (artifacts::join_pr_status), typed as sent
+                status: p.get("status").and_then(|x| serde_json::from_value(x.clone()).ok()),
+            });
             Artifact {
                 path,
                 frame_url,
