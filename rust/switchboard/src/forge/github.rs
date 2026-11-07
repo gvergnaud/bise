@@ -521,6 +521,21 @@ impl Forge for GitHub {
         let args = merge_args(repo, number, head, method);
         self.gh(&args.iter().map(String::as_str).collect::<Vec<_>>()).map(|_| ())
     }
+
+    fn close(&self, repo: &RepoRef, number: u64) -> Result<(), ForgeError> {
+        let n = number.to_string();
+        let r = repo_arg(repo);
+        self.gh(&["pr", "close", n.as_str(), "--repo", r.as_str()]).map(|_| ())
+    }
+}
+
+/// gh's `--repo`: `owner/name`, with its host when not github.com.
+fn repo_arg(repo: &RepoRef) -> String {
+    if repo.host == "github.com" {
+        format!("{}/{}", repo.owner, repo.name)
+    } else {
+        format!("{}/{}/{}", repo.host, repo.owner, repo.name)
+    }
 }
 
 /// `gh pr merge`'s arguments (pr-design §6.3): the repo named (never
@@ -532,11 +547,7 @@ pub fn merge_args(repo: &RepoRef, number: u64, head: &str, method: MergeMethod) 
     a.push(number.to_string());
     a.push(method.flag().into());
     a.push("--repo".into());
-    a.push(if repo.host == "github.com" {
-        format!("{}/{}", repo.owner, repo.name)
-    } else {
-        format!("{}/{}/{}", repo.host, repo.owner, repo.name)
-    });
+    a.push(repo_arg(repo));
     if !head.is_empty() {
         a.push("--match-head-commit".into());
         a.push(head.into());

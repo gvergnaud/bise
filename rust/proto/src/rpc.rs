@@ -93,6 +93,8 @@ pub const METHODS: &[MethodRow] = &[
     m("merged/list", "merged", Some("merged")),
     m("features/list", "features", Some("features")),
     m("prs/list", "prs", Some("prs")),
+    // his Merge or Close on a PR's tab: answered once the forge said
+    m("pr/act", "pr_act", Some("pr_acted")),
     // inbox-record: his answered and withdrawn cards, one page
     m("inbox/history", "inbox_history", Some("inbox_history")),
     m("scheduled/list", "scheduled", Some("scheduled")),

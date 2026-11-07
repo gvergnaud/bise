@@ -55,6 +55,8 @@
 {"ev":"tool_out","project":"acme-1a2b3c4d","agent":"perf","pos":4,"out":"running 40 tests\ntest query::slow ... FAILED\n\nfailures:\n    query::slow","cut":false}
 {"ev":"tool_out","project":"acme-1a2b3c4d","agent":"perf","pos":7,"out":"fn a() {}","cut":true,"total":18432}
 {"ev":"queued_taken","project":"acme-1a2b3c4d","agent":"perf","id":3,"text":"then the cold run"}
+{"ev":"pr_acted","project":"acme-1a2b3c4d","req":4,"url":"https://github.com/acme/web/pull/412","act":"merge"}
+{"ev":"pr_acted","project":"acme-1a2b3c4d","req":5,"url":"https://github.com/acme/web/pull/412","act":"close","err":"forge","why":"Pull request is not mergeable"}
 {"ev":"diff","project":"acme-1a2b3c4d","agent":"old","base":"main","files":[],"merged":"e0f3df5a9c1b2d3e4f5a6b7c8d9e0f1a2b3c4d5e","note":"old is archived and its folder is gone"}
 {"ev":"route","project":"bise-home-00000000","rid":3,"to":"acme-1a2b3c4d","name":"acme","text":"why does p99 rise","correct_until_ms":1791100402000,"why":"Safari: grafana.acme.test"}
 {"ev":"route_done","project":"bise-home-00000000","rid":3,"state":"sent","to":"acme-1a2b3c4d","xid":7,"msg":12}

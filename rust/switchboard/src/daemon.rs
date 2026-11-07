@@ -994,6 +994,11 @@ impl Shell {
             Effect::Pr(e) => log_line(&self.opts.paths, &crate::forge::log_line(&e)),
             Effect::PrArtifact { pr, agent } => self.pr_artifact(&pr, agent.as_deref()),
             Effect::Merge { card, place, number, head, method } => self.merge_pr(card, place, number, head, method),
+            Effect::PrAct { client, req, url, number, head, action } => self.pr_act(client, req, url, number, head, action),
+            Effect::PrActed { client, req, url, act, err, why } => {
+                let ev = HubEv::PrActed { project: self.project(), req, url, act, err, why };
+                self.proto_send(client, &ev);
+            }
             Effect::Feature { token, op, name, agents } => self.feature(token, op, name, agents),
             Effect::Update { id, version } => self.update_to(id, version),
             Effect::UpdateLater { id } => versions::update_later(&id),
@@ -1034,6 +1039,33 @@ impl Shell {
                 &format!("PR #{} merge ({:?}): {}", number, method, res.as_ref().map_or_else(|e| e.as_str(), |_| "merged")),
             );
             let _ = tx.send(Msg::input(Input::Merged { card, place, number, res }));
+        });
+    }
+
+    /// pr-integration: his click on a PR's tab, planned by sb-core
+    /// (`merge::plan`): `gh pr merge` (head pinned) or `gh pr close` with
+    /// his login, on a thread; the answer comes back as `Input::PrActed`.
+    fn pr_act(&self, client: ClientId, req: u64, url: String, number: u64, head: String, action: crate::core::merge::Action) {
+        let log_paths = self.opts.paths.clone();
+        let tx = self.tx.clone();
+        std::thread::spawn(move || {
+            use crate::forge::Forge;
+            use crate::core::merge::Action;
+            let gh = crate::forge::github::GitHub::find(&crate::tools_env::hub_agent_path(&log_paths))
+                .unwrap_or(crate::forge::github::GitHub { gh: "gh".into() });
+            let res = crate::forge::repo_of_url(&url).ok_or_else(|| format!("{} is not a GitHub PR", url)).and_then(|repo| {
+                match action {
+                    Action::Merge(m) => gh.merge(&repo, number, &head, m),
+                    Action::Close => gh.close(&repo, number),
+                }
+                .map_err(|e| e.describe())
+            });
+            let act = match action {
+                Action::Merge(_) => bise_proto::hub::PrAct::Merge,
+                Action::Close => bise_proto::hub::PrAct::Close,
+            };
+            log_line(&log_paths, &format!("PR #{} {:?} from its tab: {}", number, action, res.as_ref().map_or_else(|e| e.as_str(), |_| "done")));
+            let _ = tx.send(Msg::input(Input::PrActed { client, req, url, number, act, res }));
         });
     }
 

@@ -3165,6 +3165,53 @@ mod prs {
         }
     }
 
+    /// pr-integration: his Merge on the PR's tab goes through the item's
+    /// gate (merge::plan). A push since his click is refused and nothing
+    /// runs; a refused merge closes nothing and main says why; a merge
+    /// leaves no open item of that PR and main says it as the item does.
+    #[test]
+    fn a_merge_from_the_pr_tab() {
+        use bise_proto::hub::{PrAct, PrActErr};
+        let url = "https://github.com/o/r/pull/412";
+        let click = |head: &str, act| Input::PrAct { client: 7, req: 1, url: url.into(), head: head.into(), act };
+        let acted = |fx: &[Effect]| fx.iter().find_map(|e| match e {
+            Effect::PrActed { client: 7, req: 1, err, .. } => Some(*err),
+            _ => None,
+        });
+        let mut t = T::new();
+        spawn_wt(&mut t, "dark");
+        t.go(report(1_000, Ok(vec![ready_pr("tip1", &["alice"])]), None));
+        let card = merge_cards(&t)[0].id;
+        // a push since he looked: refused, typed, nothing runs
+        let fx = t.go(click("tip0", PrAct::Merge));
+        assert_eq!(acted(&fx), Some(Some(PrActErr::Moved)), "{:?}", fx);
+        assert!(!fx.iter().any(|e| matches!(e, Effect::PrAct { .. })));
+        // an unknown PR: refused
+        let fx = t.go(Input::PrAct { client: 7, req: 1, url: "https://github.com/o/r/pull/9".into(), head: "x".into(), act: PrAct::Close });
+        assert_eq!(acted(&fx), Some(Some(PrActErr::Unknown)));
+        // his click at the head he saw (the link in any case): the forge runs it once
+        let fx = t.go(Input::PrAct { client: 7, req: 1, url: "https://GitHub.com/O/R/pull/412".into(), head: "tip1".into(), act: PrAct::Merge });
+        assert!(
+            fx.iter().any(|e| matches!(e, Effect::PrAct { number: 412, head, action: crate::core::merge::Action::Merge(crate::place::MergeMethod::Squash), .. } if head == "tip1")),
+            "{:?}",
+            fx
+        );
+        let fx = t.go(click("tip1", PrAct::Merge));
+        assert_eq!(acted(&fx), Some(Some(PrActErr::Running)));
+        // refused by the forge: nothing closes, main says why, the client hears it
+        let fx = t.go(Input::PrActed { client: 7, req: 1, url: url.into(), number: 412, act: PrAct::Merge, res: Err("not mergeable".into()) });
+        assert!(has_line(&fx, MAIN, "gh couldn't merge #412: not mergeable"), "{:?}", fx);
+        assert_eq!(acted(&fx), Some(Some(PrActErr::Forge)));
+        assert_eq!(merge_cards(&t).iter().map(|c| c.id).collect::<Vec<_>>(), [card]);
+        // merged: main's PR line, the item closed in the same step
+        t.go(click("tip1", PrAct::Merge));
+        let fx = t.go(Input::PrActed { client: 7, req: 1, url: url.into(), number: 412, act: PrAct::Merge, res: Ok(()) });
+        assert_eq!(pr_line(&fx), ["done : 412 : https://github.com/o/r/pull/412 : you merged it"], "{:?}", fx);
+        assert_eq!(acted(&fx), Some(None));
+        assert!(merge_cards(&t).is_empty());
+        assert_eq!(closed_as(&t, card).as_deref(), Some("merged"));
+    }
+
     fn closed_as(t: &T, id: u64) -> Option<String> {
         t.journal
             .borrow()

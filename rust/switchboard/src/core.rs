@@ -234,6 +234,25 @@ pub enum Input {
         number: u64,
         res: Result<(), String>,
     },
+    /// pr-integration: his Merge or Close on a PR's tab (`HubCmd::PrAct`,
+    /// his click only): planned by `merge::plan`, run as `Effect::PrAct`.
+    PrAct {
+        client: ClientId,
+        req: u64,
+        url: String,
+        head: String,
+        act: bise_proto::hub::PrAct,
+    },
+    /// The forge's answer to `Effect::PrAct` (the daemon's thread): Err
+    /// is gh's reason.
+    PrActed {
+        client: ClientId,
+        req: u64,
+        url: String,
+        number: u64,
+        act: bise_proto::hub::PrAct,
+        res: Result<(), String>,
+    },
     /// A feature step ended (dev-flow §5.1, the daemon's thread).
     Feature(FeatureDone),
     /// A land in line on a feature asks where its agent lands now
@@ -509,6 +528,26 @@ pub enum Effect {
         number: u64,
         head: String,
         method: crate::place::MergeMethod,
+    },
+    /// pr-integration: his click on a PR's tab, planned (`merge::plan`):
+    /// the daemon runs it on a thread with his forge login (a merge with
+    /// the head pinned) and answers with `Input::PrActed`.
+    PrAct {
+        client: ClientId,
+        req: u64,
+        url: String,
+        number: u64,
+        head: String,
+        action: merge::Action,
+    },
+    /// The answer to his click, to that client (`HubEv::PrActed`).
+    PrActed {
+        client: ClientId,
+        req: u64,
+        url: String,
+        act: bise_proto::hub::PrAct,
+        err: Option<bise_proto::hub::PrActErr>,
+        why: Option<String>,
     },
     /// dev-flow §5.1: a feature step (`sb feature <op> <name>`, or the
     /// user's answer on a feature item: `try`, `diff`, `later`, `keep`,
@@ -1642,6 +1681,8 @@ impl Hub {
             Input::PageCard { agents, kind, text, key } => self.core(&mut fx, env, None, In::PageCard(ci::PageCard { agents, kind, text, key })),
             Input::AnswerPos { card, agent, pos } => self.core(&mut fx, env, None, In::AnswerPos(ci::AnswerPos { card, agent, pos })),
             Input::Merged { card, place, number, res } => self.merged(&mut fx, env, card, &place, number, res),
+            Input::PrAct { client, req, url, head, act } => self.pr_act(&mut fx, merge::Click { client, req, url, act }, &head),
+            Input::PrActed { client, req, url, number, act, res } => self.pr_acted(&mut fx, env, merge::Click { client, req, url, act }, number, res),
             Input::Release(c) => self.release_in(&mut fx, env, c),
             Input::UpdateNow => self.update_now(&mut fx),
             Input::SignedIn => self.signed_in(&mut fx, env),

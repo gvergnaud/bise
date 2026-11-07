@@ -40,6 +40,7 @@
 {"cmd":"merged","project":"acme-1a2b3c4d"}
 {"cmd":"features","project":"acme-1a2b3c4d"}
 {"cmd":"prs","project":"acme-1a2b3c4d"}
+{"cmd":"pr_act","project":"acme-1a2b3c4d","url":"https://github.com/acme/web/pull/412","head":"9f3c2a1","act":"merge","req":4}
 {"cmd":"inbox_history","project":"acme-1a2b3c4d","agent":"perf","state":"answered","words":"avif","before":12,"limit":50}
 {"cmd":"scheduled","project":"acme-1a2b3c4d"}
 {"cmd":"scheduled_stop","project":"acme-1a2b3c4d","id":48}

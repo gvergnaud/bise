@@ -93,7 +93,7 @@ fn modules(cfg: &Config) -> Vec<(&'static str, Vec<Decl>)> {
         ),
         module!(cfg, "ops": ops::BranchRow, ops::VersionItem, ops::ReleaseEv, ops::UpdateEv),
         module!(cfg, "inbox": inbox::InboxState, inbox::InboxKind, inbox::Where, inbox::AnswerAt, inbox::InboxRecord, inbox::StateFilter, inbox::HistoryParams, inbox::InboxPage),
-        module!(cfg, "hub": hub::JobState, hub::Job, activity::Party, activity::MsgMode, activity::ActivityEv, hub::HubEv, hub::Mode, hub::SendOpts, hub::HubCmd, hub::ErrorKind),
+        module!(cfg, "hub": hub::JobState, hub::Job, activity::Party, activity::MsgMode, activity::ActivityEv, hub::HubEv, hub::Mode, hub::PrAct, hub::PrActErr, hub::SendOpts, hub::HubCmd, hub::ErrorKind),
         module!(cfg, "rpc": rpc::Id, rpc::Request, rpc::Notification, rpc::Response, rpc::ErrorData, rpc::RpcError, rpc::Watermark, rpc::ClientInfo, rpc::ClientKind, rpc::InitializeParams, rpc::HubState, rpc::AgentGetParams, rpc::AgentGetResult, rpc::InitializeResult, rpc::CommandsList, rpc::CommandRunResult, rpc::SendReason, rpc::SendResult, rpc::CardAnswer, rpc::AnswerResult, rpc::AppOpenResult, bise_proto::view_rpc::ViewResource, bise_proto::view_rpc::ViewCallResult, bise_proto::view_rpc::PluginViewsResult),
         module!(cfg, "commands": commands::WordRow, commands::ArgRow, commands::CommandRow),
         module!(cfg, "draft": draft::Quote, draft::Queued, draft::DraftHubCmd, draft::ProjectView),

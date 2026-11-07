@@ -106,6 +106,12 @@ pub trait Forge: Send {
     fn merge(&self, _repo: &RepoRef, _number: u64, _head: &str, _method: MergeMethod) -> Result<(), ForgeError> {
         Err(ForgeError::Other("this forge can't merge".into()))
     }
+
+    /// pr-integration: close PR `number` with the user's login. Only his
+    /// click on the PR's tab calls it.
+    fn close(&self, _repo: &RepoRef, _number: u64) -> Result<(), ForgeError> {
+        Err(ForgeError::Other("this forge can't close".into()))
+    }
 }
 
 /// One answer of [`Forge::fetch`].
@@ -192,7 +198,8 @@ pub struct Known {
     pub ended: bool,
 }
 
-fn ended(s: PrState) -> bool {
+/// Merged or closed: the PR's end.
+pub(crate) fn ended(s: PrState) -> bool {
     matches!(s, PrState::Merged | PrState::Closed)
 }
 

@@ -40,6 +40,7 @@ export const METHODS = {
   "merged/list": { cmd: "merged", result: "merged" },
   "features/list": { cmd: "features", result: "features" },
   "prs/list": { cmd: "prs", result: "prs" },
+  "pr/act": { cmd: "pr_act", result: "pr_acted" },
   "inbox/history": { cmd: "inbox_history", result: "inbox_history" },
   "scheduled/list": { cmd: "scheduled", result: "scheduled" },
   "scheduled/stop": { cmd: "scheduled_stop", result: null },

@@ -356,6 +356,10 @@ impl Shell {
             // socket's clients only): sb-core's steer_queued decides; a
             // refusal is its notice as this command's error
             HubCmd::QueuedSteer { id: msg, .. } => self.step_typed(id, &tag, Input::ClientSteerQueued { client: id, id: msg }),
+            // his Merge or Close on a PR's tab (this socket's clients
+            // only, never an agent's op): sb-core plans it (merge::plan),
+            // `pr_acted` answers this client
+            HubCmd::PrAct { url, head, act, req, .. } => self.step_typed(id, &tag, Input::PrAct { client: id, req, url, head, act }),
             // git in a thread (art.rs, the `branches` op's scan), to this client
             HubCmd::Branches { .. } => self.branches_scan(id),
             // git in a thread (worktrees.rs), to this client

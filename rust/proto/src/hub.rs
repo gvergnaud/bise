@@ -208,6 +208,21 @@ pub enum HubEv {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         none: Option<String>,
     },
+    /// the answer to `pr_act`, to that client (`req` echoed): `err` none
+    /// is done (main's thread says it, the PR's row follows at the
+    /// forge's next answer); `why` the forge's own words for `forge`
+    PrActed {
+        project: Project,
+        req: u64,
+        url: String,
+        act: PrAct,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts", ts(optional))]
+        err: Option<PrActErr>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts", ts(optional))]
+        why: Option<String>,
+    },
     /// the models the TUI's `/model` offers on this hub (bar A.5): at
     /// hello, on `models`, and when config.toml or auth.json changed
     Models { project: Project, items: Vec<Model> },
@@ -541,7 +556,7 @@ pub enum HubEv {
 }
 
 impl HubEv {
-    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "thread_hits", "entry", "typing", "partial", "artifacts", "artifacts_moved", "folders", "library", "scheduled", "worktrees", "processes", "proc_out", "merged", "features", "prs", "models", "tool_out", "queued_taken", "log", "completion", "log_body", "diff", "branches", "versions", "release", "update", "route", "route_done", "jobs", "job_end", "followed_end", "activity", "flow", "paused", "switch", "growth", "pulse", "bise_update", "usage", "pages", "page_changed", "card_open", "app_open", "inbox_history", "inbox_recorded", "focused", "approvals", "notice", "refused", "error"];
+    pub const TAGS: &'static [&'static str] = &["welcome", "agents", "cards", "thread", "thread_hits", "entry", "typing", "partial", "artifacts", "artifacts_moved", "folders", "library", "scheduled", "worktrees", "processes", "proc_out", "merged", "features", "prs", "pr_acted", "models", "tool_out", "queued_taken", "log", "completion", "log_body", "diff", "branches", "versions", "release", "update", "route", "route_done", "jobs", "job_end", "followed_end", "activity", "flow", "paused", "switch", "growth", "pulse", "bise_update", "usage", "pages", "page_changed", "card_open", "app_open", "inbox_history", "inbox_recorded", "focused", "approvals", "notice", "refused", "error"];
 
     pub fn decode(line: &str) -> Result<HubEv, String> {
         Self::from_value(parse(line)?)
@@ -582,6 +597,37 @@ pub enum Mode {
     Now,
     /// after its turn
     Queued,
+}
+
+/// What his click on a PR's tab asks (`pr_act`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum PrAct {
+    Merge,
+    Close,
+}
+
+/// Why the hub did not merge or close (`pr_acted.err`), typed: the
+/// client says it in its own words.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum PrActErr {
+    /// the hub doesn't follow that PR
+    Unknown,
+    /// merged or closed already
+    Ended,
+    /// a push since his click: the head isn't the one he saw
+    Moved,
+    /// the forge wouldn't merge it now (draft, checks, conflicts, reviews)
+    NotMergeable,
+    /// a merge or close of it runs already
+    Running,
+    /// the forge refused: its words in `why`
+    Forge,
+    #[serde(other)]
+    Other,
 }
 
 /// How his words go, the same for `send` and `slash` (architect m_13313:
@@ -822,6 +868,17 @@ pub enum HubCmd {
     Features { project: Project },
     /// the PR list opened: `prs` comes again
     Prs { project: Project },
+    /// his Merge or Close on a PR's tab (pr-integration: his click only,
+    /// never an agent's): the hub runs it with his forge login while the
+    /// PR is still at `head` (a push since: refused), answered by
+    /// `pr_acted` with `req`
+    PrAct {
+        project: Project,
+        url: String,
+        head: String,
+        act: PrAct,
+        req: u64,
+    },
     /// the inbox's history (inbox-record): one page of his answered and
     /// withdrawn cards, newest first, answered by `inbox_history`
     InboxHistory {
@@ -1077,7 +1134,7 @@ pub enum HubCmd {
 }
 
 impl HubCmd {
-    pub const TAGS: &'static [&'static str] = &["subscribe", "unsubscribe", "page", "find", "send", "answer", "close", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "log", "completion", "log_body", "queued_take", "queued_steer", "diff", "worktrees", "processes", "proc_out", "proc_follow", "proc_stop", "merged", "features", "prs", "inbox_history", "scheduled", "scheduled_stop", "wake_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "branches", "scheduled_run", "artifacts_add", "artifacts_move", "artifacts_folders", "artifacts_library", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "bise_update", "release_plan", "release_run", "stop_hub", "page_voice", "usage", "pause", "resume", "view_resource", "view_call", "view_message", "view_context", "plugin_views", "app_open"];
+    pub const TAGS: &'static [&'static str] = &["subscribe", "unsubscribe", "page", "find", "send", "answer", "close", "approvals", "remove_rule", "stop", "archive", "unarchive", "artifacts_seen", "tool_out", "log", "completion", "log_body", "queued_take", "queued_steer", "diff", "worktrees", "processes", "proc_out", "proc_follow", "proc_stop", "merged", "features", "prs", "pr_act", "inbox_history", "scheduled", "scheduled_stop", "wake_stop", "models", "new", "rename", "model", "effort", "route_correct", "route_cancel", "follow", "slash", "branches", "scheduled_run", "artifacts_add", "artifacts_move", "artifacts_folders", "artifacts_library", "focus", "versions", "version_info", "version_switch", "version_rollback", "version_restart", "version_update", "bise_update", "release_plan", "release_run", "stop_hub", "page_voice", "usage", "pause", "resume", "view_resource", "view_call", "view_message", "view_context", "plugin_views", "app_open"];
 
     pub fn decode(line: &str) -> Result<HubCmd, String> {
         Self::from_value(parse(line)?)
@@ -1127,6 +1184,7 @@ impl HubCmd {
             | HubCmd::Merged { project }
             | HubCmd::Features { project }
             | HubCmd::Prs { project }
+            | HubCmd::PrAct { project, .. }
             | HubCmd::InboxHistory { project, .. }
             | HubCmd::Scheduled { project }
             | HubCmd::Usage { project }

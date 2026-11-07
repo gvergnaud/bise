@@ -11,12 +11,18 @@
 //!   with the user's login, off the hub's loop (`Effect::Merge`, the
 //!   answer as `Input::Merged`). No agent ever merges.
 //! - `2 open it on GitHub`: the TUI opens the link; the item stays.
+//! - His Merge or Close on a PR's tab (pr-integration, `HubCmd::PrAct`)
+//!   goes through the item's gate, [`plan`] (the head he saw, the
+//!   forge's yes now): `Effect::PrAct`, the answer as `Input::PrActed`;
+//!   done, main's thread says it and the PR's open `merge` and `review`
+//!   items close in the same step; refused, nothing closes.
 //!
 //! The generic part (any hub item with numbered options, `choice_kind`):
 //! `open_card` / `close_card` here, the user's digit in [`Hub::card_choice`].
 
 use super::*;
 use crate::place::{Checks, MergeMethod, PrSnapshot, PrState, Review};
+use bise_proto::hub::{PrAct, PrActErr};
 
 /// What the item was opened for: when it differs, the PR changed and
 /// the item goes (a push moves the head, a review the approvers).
@@ -53,6 +59,40 @@ fn waits_merge(pr: &PrSnapshot) -> bool {
 /// The method `1` uses: squash, else merge, else rebase (the repo's).
 pub fn method(pr: &PrSnapshot) -> Option<MergeMethod> {
     pr.facts.methods.first().copied()
+}
+
+/// What the forge is asked once a click is planned.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Action {
+    Merge(MergeMethod),
+    Close,
+}
+
+/// The one gate of a merge or a close (the item's `1`, the tab's click):
+/// the PR as the hub knows it, at the head he saw. A push since is
+/// refused (`Moved`), never merged; a merge needs the forge's yes now
+/// (open, mergeable, a method the repo allows).
+pub fn plan(pr: Option<&PrSnapshot>, head: &str, act: PrAct) -> Result<Action, PrActErr> {
+    let pr = pr.ok_or(PrActErr::Unknown)?;
+    if crate::forge::ended(pr.state) {
+        return Err(PrActErr::Ended);
+    }
+    if pr.head_oid != head {
+        return Err(PrActErr::Moved);
+    }
+    match act {
+        PrAct::Close => Ok(Action::Close),
+        PrAct::Merge if pr.state == PrState::Open && pr.facts.mergeable => method(pr).map(Action::Merge).ok_or(PrActErr::NotMergeable),
+        PrAct::Merge => Err(PrActErr::NotMergeable),
+    }
+}
+
+/// His click on a PR's tab, carried to its answer.
+pub struct Click {
+    pub client: ClientId,
+    pub req: u64,
+    pub url: String,
+    pub act: PrAct,
 }
 
 /// The item's text (the TUI's `merge` shape reads it): the head line,
@@ -140,6 +180,8 @@ pub struct Merges {
     running: BTreeSet<u64>,
     /// The last failed merge, by place: said on the next item.
     failed: BTreeMap<String, String>,
+    /// His clicks on a PR's tab that run, by the PR's link.
+    by_hand: BTreeSet<String>,
     /// gh missing or logged out, said to main (once a run).
     gh_off_said: bool,
 }
@@ -184,7 +226,16 @@ impl Hub {
                 if self.merges.running.contains(&card) {
                     return;
                 }
-                let Some((pr, m)) = pr.filter(ready).and_then(|p| method(&p).map(|m| (p, m))) else {
+                // the item's PR as it was opened for (a restart: as it is)
+                let head = self.merges.keys.get(&card).map(|k| k.head.clone());
+                let planned = pr.filter(ready).and_then(|p| {
+                    let head = head.unwrap_or_else(|| p.head_oid.clone());
+                    match plan(Some(&p), &head, PrAct::Merge) {
+                        Ok(Action::Merge(m)) => Some((p, m)),
+                        _ => None,
+                    }
+                });
+                let Some((pr, m)) = planned else {
                     let why = withdrawn(self.prs.get(&place));
                     return self.close_card(fx, env, card, why);
                 };
@@ -229,6 +280,80 @@ impl Hub {
                 self.close_card(fx, env, card, "merge failed");
             }
         }
+    }
+
+    /// The PR the hub follows at `url` (pr_link's one form): a place's
+    /// first, else a followed one.
+    fn pr_at(&self, url: &str) -> Option<PrSnapshot> {
+        let link = crate::forge::pr_link(url)?.url;
+        let same = |p: &&PrSnapshot| crate::forge::pr_link(&p.url).is_some_and(|l| l.url == link);
+        self.prs.values().find(same).or_else(|| self.followed.values().find(same)).cloned()
+    }
+
+    /// His Merge or Close on a PR's tab (pr-integration, his click only):
+    /// `plan` says yes and the daemon runs it, or the click is answered
+    /// with why not and nothing runs.
+    pub(super) fn pr_act(&mut self, fx: &mut Fx, c: Click, head: &str) {
+        let pr = self.pr_at(&c.url);
+        let running = pr.as_ref().is_some_and(|p| {
+            self.merges.by_hand.contains(&p.url) || self.st.open_cards().any(|k| k.kind == "merge" && k.pr == Some(p.number) && self.merges.running.contains(&k.id))
+        });
+        let planned = if running { Err(PrActErr::Running) } else { plan(pr.as_ref(), head, c.act) };
+        match (planned, pr) {
+            (Ok(action), Some(pr)) => {
+                self.merges.by_hand.insert(pr.url.clone());
+                fx.push(Effect::PrAct { client: c.client, req: c.req, url: pr.url.clone(), number: pr.number, head: pr.head_oid.clone(), action });
+            }
+            (Err(e), _) => fx.push(Effect::PrActed { client: c.client, req: c.req, url: c.url, act: c.act, err: Some(e), why: None }),
+            (Ok(_), None) => fx.push(Effect::PrActed { client: c.client, req: c.req, url: c.url, act: c.act, err: Some(PrActErr::Unknown), why: None }),
+        }
+    }
+
+    /// The forge's answer to his click. Done: main's thread says it as
+    /// the item's `1` does, and every open `merge` or `review` item of
+    /// that PR closes in the same step (the forge's next answer does the
+    /// rest). Refused: nothing closes, main's thread says gh's reason.
+    pub(super) fn pr_acted(&mut self, fx: &mut Fx, env: &mut dyn Env, c: Click, number: u64, res: Result<(), String>) {
+        self.merges.by_hand.remove(&c.url);
+        self.dirty = true;
+        let (did, verb) = match c.act {
+            PrAct::Merge => ("merged", "merge"),
+            PrAct::Close => ("closed", "close"),
+        };
+        match res {
+            Ok(()) => {
+                let rec = feed_rec::Pr { v: 1, state: "done".into(), number, url: c.url.clone(), text: format!("you {did} it") };
+                fx.push(feed(MAIN, Feed::Pr(rec)));
+                for card in self.cards_of_pr(&c.url, number) {
+                    self.merges.running.remove(&card);
+                    self.merges.keys.remove(&card);
+                    self.close_card(fx, env, card, did);
+                }
+                fx.push(Effect::PrActed { client: c.client, req: c.req, url: c.url, act: c.act, err: None, why: None });
+            }
+            Err(e) => {
+                let e = clip(&one_line(&e), 160);
+                fx.push(feed(MAIN, Feed::warn(format!("gh couldn't {verb} #{number}: {e}"))));
+                fx.push(Effect::PrActed { client: c.client, req: c.req, url: c.url, act: c.act, err: Some(PrActErr::Forge), why: Some(e) });
+            }
+        }
+    }
+
+    /// The open `merge` and `review` items of the PR at `url`: a place's
+    /// (its PR's link) or a followed one's (`pr:<url>`).
+    fn cards_of_pr(&self, url: &str, number: u64) -> Vec<u64> {
+        let link = crate::forge::pr_link(url).map(|l| l.url);
+        let is_it = |place: &str| {
+            place.strip_prefix("pr:").map_or_else(
+                || self.prs.get(place).is_some_and(|p| crate::forge::pr_link(&p.url).map(|l| l.url) == link),
+                |u| crate::forge::pr_link(u).map(|l| l.url) == link,
+            )
+        };
+        self.st
+            .open_cards()
+            .filter(|k| (k.kind == "merge" || k.kind == review::KIND) && k.pr == Some(number) && k.place.as_deref().is_some_and(is_it))
+            .map(|k| k.id)
+            .collect()
     }
 
     /// The items against the PRs, after each answer of the forge: withdraw
@@ -371,6 +496,33 @@ mod tests {
         p.facts.checks = 0;
         p.review = Review::None;
         assert!(ready(&p));
+    }
+
+    /// The one gate of a merge or a close: the head he saw, the forge's
+    /// yes now, never an ended PR.
+    #[test]
+    fn a_click_is_planned_at_the_head_he_saw() {
+        assert_eq!(plan(Some(&pr()), "h1", PrAct::Merge), Ok(Action::Merge(MergeMethod::Squash)));
+        assert_eq!(plan(Some(&pr()), "h1", PrAct::Close), Ok(Action::Close));
+        assert_eq!(plan(None, "h1", PrAct::Merge), Err(PrActErr::Unknown));
+        // a push since his click: refused, never merged (nor closed)
+        assert_eq!(plan(Some(&pr()), "h0", PrAct::Merge), Err(PrActErr::Moved));
+        assert_eq!(plan(Some(&pr()), "h0", PrAct::Close), Err(PrActErr::Moved));
+        let with = |f: &dyn Fn(&mut PrSnapshot)| {
+            let mut p = pr();
+            f(&mut p);
+            p
+        };
+        for s in [PrState::Merged, PrState::Closed] {
+            assert_eq!(plan(Some(&with(&|p| p.state = s)), "h1", PrAct::Close), Err(PrActErr::Ended));
+        }
+        // a draft closes, never merges; nor does a PR the forge refuses now
+        assert_eq!(plan(Some(&with(&|p| p.state = PrState::Draft)), "h1", PrAct::Close), Ok(Action::Close));
+        assert_eq!(plan(Some(&with(&|p| p.state = PrState::Draft)), "h1", PrAct::Merge), Err(PrActErr::NotMergeable));
+        assert_eq!(plan(Some(&with(&|p| p.facts.mergeable = false)), "h1", PrAct::Merge), Err(PrActErr::NotMergeable));
+        assert_eq!(plan(Some(&with(&|p| p.facts.methods.clear())), "h1", PrAct::Merge), Err(PrActErr::NotMergeable));
+        // his merge needs no approval the forge doesn't: pending review, mergeable
+        assert_eq!(plan(Some(&with(&|p| p.review = Review::Pending)), "h1", PrAct::Merge), Ok(Action::Merge(MergeMethod::Squash)));
     }
 
     #[test]
