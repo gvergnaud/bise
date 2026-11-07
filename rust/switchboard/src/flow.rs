@@ -108,6 +108,19 @@ pub const TRACKED: &str = "bise.toml";
 /// 28). The land reads it from main's tip, never from the branch it
 /// checks. None: no such key, or empty.
 pub fn land_check(text: &str) -> Option<String> {
+    land_key(text, "check")
+}
+
+/// `[land] after` of the tracked config's `text`: a command the hub
+/// starts after a land that moved the trunk, `<after> <base> <tip>
+/// <agent>`, never waited for ([`crate::land_after`]; this repo: the
+/// tip check, `scripts/tip_check.py`). Read from main's tip, like the
+/// check. None: no such key, or empty.
+pub fn land_after(text: &str) -> Option<String> {
+    land_key(text, "after")
+}
+
+fn land_key(text: &str, key: &str) -> Option<String> {
     let mut in_land = false;
     for raw in text.lines() {
         let l = raw.trim();
@@ -118,7 +131,7 @@ pub fn land_check(text: &str) -> Option<String> {
         let Some((k, v)) = l.split_once('=').filter(|_| in_land) else {
             continue;
         };
-        if k.trim() == "check" {
+        if k.trim() == key {
             return Some(toml_str(v)).filter(|s| !s.trim().is_empty());
         }
     }
@@ -234,6 +247,15 @@ mod tests {
         assert_eq!(land_check("[flow]\u{a}check = \"x\"\u{a}"), None);
         assert_eq!(land_check("[land]\u{a}check = \"\"\u{a}"), None);
         assert_eq!(land_check(""), None);
+    }
+
+    #[test]
+    fn the_after_land_job_is_the_land_sections_after() {
+        let t = "[flow]\u{a}after = \"no\"\u{a}[land]\u{a}after = \"scripts/tip_check.py\" # base tip agent\u{a}";
+        assert_eq!(land_after(t).as_deref(), Some("scripts/tip_check.py"));
+        assert_eq!(land_check(t), None);
+        assert_eq!(land_after("[land]\u{a}check = \"x\"\u{a}"), None);
+        assert_eq!(land_after("[land]\u{a}after = \" \"\u{a}"), None);
     }
 
     #[test]

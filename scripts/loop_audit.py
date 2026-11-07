@@ -602,7 +602,29 @@ def audit(h, hub, since):
     if os.path.exists(plan):
         with open(plan) as fh:
             rep["transform_open"] = transform_open(fh.read())
+    rep["tip_check"] = tip_check_section(h, since)
     return rep
+
+
+def tip_check_section(h, since):
+    """the tip check's runs (scripts/tip_check.py, tip-verdicts.tsv): its CPU-minutes per day,
+    its verdicts, the time from a land to its verdict"""
+    import tip_check
+    try:
+        vs = tip_check.parse_verdicts(open(os.path.join(h, "gate", "tip-verdicts.tsv")).read())
+    except OSError:
+        vs = []
+    vs = [v for v in vs if v["start"] >= since]
+    per_day = {}
+    for v in vs:
+        d = tip_check.day_of(v["start"])
+        per_day[d] = round(per_day.get(d, 0) + v["cpu"] / 60, 1)
+    states = {}
+    for v in vs:
+        states[v["state"]] = states.get(v["state"], 0) + 1
+    return {"runs": len(vs), "states": states, "cpu_min_per_day": per_day,
+            "cpu_min_max_day": max(per_day.values(), default=0.0), "bound_min": tip_check.CPU_BOUND / 60,
+            "secs_p50": med([v["secs"] for v in vs]), "named": [v["named"][:9] for v in vs if v["named"]]}
 
 
 # a test flaky (red, then green alone) in more than this share of its full gates over 14 days is
@@ -741,6 +763,8 @@ def health(rep):
         # c7-untested: the e2e cull's TRANSFORM lines with no proven test; its limit is the plan's
         # own counter, which only goes down (transform_ratchet, quick's transform_open step)
         ("transform ouvertes", *rep.get("transform_open", (None, None))),
+        # his CPU (c5-tip-per-land): past the bound the tip check spaces its runs (scripts/tip_check.py)
+        ("tip check CPU-min, worst day", (rep.get("tip_check") or {}).get("cpu_min_max_day"), 60),
     ]
     return [(n, v, lim, v is None or v <= lim) for n, v, lim in checks]
 
@@ -826,6 +850,12 @@ def report(rep):
     for o in fk.get("offenders", [])[:12]:
         w("- %-28s flaky in %d of %d" % (o["test"], o["flaky"], o["runs"]))
     w("- known_reds.txt: %s open lines; expired: %s" % (kr.get("open"), ", ".join(kr.get("expired", [])) or "none"))
+    w("")
+    tc = rep.get("tip_check") or {}
+    w("## tip check (the quick gate on main after each land: tip-verdicts.tsv)")
+    w("- %s runs %s; run p50 %s; CPU-min per day %s (spacing doubles past %d); named reds: %s" % (
+        tc.get("runs"), tc.get("states"), fmt_s(tc.get("secs_p50")), tc.get("cpu_min_per_day"), tc.get("bound_min", 60),
+        ", ".join(tc.get("named", [])) or "none"))
     w("")
     w("## waits (sb wake)")
     for k, v in rep["waits"]["by_kind"].items():
@@ -923,7 +953,20 @@ def self_test():
         assert kr["open"] and isinstance(kr["expired"], list), kr
         rep = {"gates": {"quick": {"secs_p50": 1}, "full": {"runs": 0, "secs_p50": 1, "queue_p50": 0}}, "heavy": {"wait_p50": 0},
                "waits": {"ended_at_max": []}, "related_misses": [], "flakes": fs, "known_reds": {"open": 3, "expired": ["x (y)"]}}
+        # the tip check's CPU per day, from tip-verdicts.tsv (tip_check.verdict_line's format)
+        import tip_check
+        day0 = time.mktime((2026, 11, 7, 10, 0, 0, 0, 0, -1))
+        with open(os.path.join(hd, "gate", "tip-verdicts.tsv"), "w") as fh:
+            for i, (cpu, named) in enumerate(((1800, ""), (2400, "abc123456789"), (600, ""))):
+                fh.write(tip_check.verdict_line({"tip": "t%d" % i, "base": "b", "state": "red" if named else "green",
+                                                 "start": int(day0 + i * 3600 + (86400 if i == 2 else 0)), "secs": 100,
+                                                 "cpu": cpu, "commits": 1, "log": "l", "named": named}))
+        tc = tip_check_section(hd, 0)
+        assert tc["cpu_min_per_day"] == {"2026-11-07": 70.0, "2026-11-08": 10.0} and tc["cpu_min_max_day"] == 70.0, tc
+        assert tc["states"] == {"green": 2, "red": 1} and tc["named"] == ["abc123456"], tc
+        rep["tip_check"] = tc
         hl = {n: ok for n, _, _, ok in health(rep)}
+        assert hl["tip check CPU-min, worst day"] is False, hl
         assert hl["worst flake rate, 14 d (flaky / full gates)"] is False and hl["known_reds expired lines (of 3 open)"] is False, hl
     plan = NL.join(["**deleted, not yet replaced: 2**", "- `a`: KEEP row, not counted", "## Transform lines", "",
                     "- `x`: y → `t` — covered by a.test.ts", "- `y`: y → `t` — covered by b.test.ts — proven: z",

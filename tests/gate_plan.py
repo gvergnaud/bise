@@ -99,6 +99,10 @@ SELFTESTS = [
     ("bise_env", "python3 tests/bise_env.py", ("tests/bise_env.py", "tests/run_all.sh", "tests/e2e.py")),
     # tests/known_reds.txt parses (issue 28)
     ("known_reds_self", "python3 tests/known_reds.py --self-test", ("tests/known_reds.py", "tests/known_reds.txt")),
+    # the tip check after each land and its blame (c5-tip-per-land): a fake repo, gate, heavy-run
+    ("tip_check_test", "python3 -B tests/tip_check_test.py",
+     ("scripts/tip_check.py", "scripts/tip_blame.py", "tests/tip_check_test.py")),
+    ("tip_blame_test", "python3 -B tests/tip_blame_test.py", ("scripts/tip_blame.py", "tests/tip_blame_test.py")),
     ("shims_check_self", "python3 tests/shims_check.py --self-test", ("tests/shims_check.py",)),
     ("state_guard_self", "python3 tests/state_guard.py --self-test", ("tests/state_guard.py",)),
     ("js_guard_self", "python3 tests/js_guard.py --self-test", ("tests/js_guard.py",)),

@@ -72,6 +72,7 @@ pub mod idle;
 pub mod image_care;
 pub mod keeps;
 pub mod land;
+pub mod land_after;
 pub mod land_check;
 pub mod land_pick;
 pub mod land_queue;

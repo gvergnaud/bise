@@ -6,6 +6,13 @@
 # et sa file »): the agent's own `gate.sh quick` runs before `sb land`, the
 # tip gate on main after; a land is commit, rebase, move main, push.
 
+# After a land that moved main, the hub starts the tip check (c5-tip-per-land,
+# rust/switchboard/src/land_after.rs): `scripts/tip_check.py <base> <tip>
+# <agent>`, the quick gate on main at low priority, one run per 10 min at
+# most, never on battery (docs/loop-speed.md §0 rule 11).
+[land]
+after = "scripts/tip_check.py"
+
 # A new task worktree's rust/target starts as an APFS clone of the warm cargo
 # seed (~3 s, 0 bytes), so a first bare `cargo test` there is warm, not a cold
 # 6 GB build (side-resize, 21 min at load 93: main m_48101, architect

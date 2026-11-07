@@ -2,7 +2,9 @@
 //! thread, in line on the queue (the views say who waits), git and the
 //! check never on the hub's loop; its answer to the agent's `sb`, and a
 //! line in main's feed. After a land in the shared folder (and at boot),
-//! the claims over there go to sb-core ([`claims_clean`]).
+//! the claims over there go to sb-core ([`claims_clean`]). A land that
+//! moved the trunk starts bise.toml's `[land] after` job from this
+//! thread, as main's process ([`crate::land_after`]: the tip check).
 //!
 //! land-wait: one land per place at a time (`land_queue::Queue::claim`):
 //! a second is refused at once. The `sb` waits for its land
@@ -82,7 +84,7 @@ impl Shell {
         };
         (job.flow, job.checks) = (self.config.repo().flow.clone(), self.opts.paths.worktrees.clone());
         job.lands = self.opts.paths.lands();
-        let (queue, tx) = (self.lands.clone(), self.tx.clone());
+        let (queue, tx, proc_hub) = (self.lands.clone(), self.tx.clone(), self.proc_hub.clone());
         std::thread::spawn(move || {
             let _claim = claim;
             let txj = tx.clone();
@@ -92,6 +94,11 @@ impl Shell {
             let (body, line) = match res {
                 Ok(o) => {
                     record(&job, &o);
+                    // bise.toml's [land] after (the tip check), main's process (crate::land_after)
+                    let onto = o.target == crate::trunk::trunk_short(&job.shared);
+                    let owners = crate::procs::tag(&proc_hub, crate::model::MAIN, now_ms());
+                    let log = job.lands.with_file_name("land-after.log");
+                    crate::land_after::start(&job.shared, onto, o.commits, &o.base, &o.tip, &job.agent, &owners, &log);
                     if !job.worktree {
                         let all: Vec<String> = job.files.iter().chain(job.others.iter().flat_map(|(_, fs)| fs)).cloned().collect();
                         claims_clean(&tx, &job.dir, &all);
