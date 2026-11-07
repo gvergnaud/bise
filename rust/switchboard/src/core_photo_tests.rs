@@ -45,10 +45,10 @@ fn a_hub_rebuilt_from_a_photo_and_the_tail_is_the_full_replays() {
     let events = t.journal.borrow().clone();
     assert!(events.len() > k, "the tail has events");
     let mut full = Hub::new("/w");
-    let all = full.rebuild(&events, None, &mut |_, _| {});
+    let all = full.rebuild(&events, None, &mut |_, _| {}).unwrap();
     assert_eq!(all.photo, Err("no photo".into()));
     let mut from = Hub::new("/w");
-    let got = from.rebuild(&events, Some((k, st)), &mut |_, _| {});
+    let got = from.rebuild(&events, Some((k, st)), &mut |_, _| {}).unwrap();
     assert_eq!(got.photo, Ok(k));
     assert_eq!(from.photo(), full.photo(), "the photo + tail is the full replay");
     assert!(from.st.agents.contains_key("b"), "the mirror has the tail's task");
@@ -62,9 +62,9 @@ fn a_refused_photo_falls_back_to_the_full_replay() {
     t.spawn_task("a");
     let events = t.journal.borrow().clone();
     let mut full = Hub::new("/w");
-    full.rebuild(&events, None, &mut |_, _| {});
+    full.rebuild(&events, None, &mut |_, _| {}).unwrap();
     let mut from = Hub::new("/w");
-    let got = from.rebuild(&events, Some((events.len(), json!(["not a state"]))), &mut |_, _| {});
+    let got = from.rebuild(&events, Some((events.len(), json!(["not a state"]))), &mut |_, _| {}).unwrap();
     assert!(matches!(&got.photo, Err(why) if why.contains("refused")), "{:?}", got.photo);
     assert_eq!(from.photo(), full.photo());
 }
@@ -89,14 +89,14 @@ fn photo_on_a_real_journal() {
     let g = |n: u64| format!("{:.1} G", n as f64 / 1e9);
     let mut full = Hub::new("/w");
     let (c0, h0) = (instructions(full.core_pid()), instructions(me));
-    full.rebuild(&events, None, &mut |_, _| {});
+    full.rebuild(&events, None, &mut |_, _| {}).unwrap();
     let (c1, h1) = (instructions(full.core_pid()), instructions(me));
     println!("full replay: {} events, sb-core {}, hub {}", events.len(), g(c1 - c0), g(h1 - h0));
     let (want, want_view) = (full.photo().expect("the full replay's photo"), full.st.agents.len());
     for pct in pcts {
         let k = events.len() * pct / 100;
         let mut at = Hub::new("/w");
-        at.rebuild(&events[..k], None, &mut |_, _| {});
+        at.rebuild(&events[..k], None, &mut |_, _| {}).unwrap();
         let (c0, h0) = (instructions(at.core_pid()), instructions(me));
         let st = at.photo().expect("a photo");
         crate::photo::write(&dir, "real", &crate::photo::Mark::of(&events[..k]), &st).unwrap();
@@ -109,7 +109,7 @@ fn photo_on_a_real_journal() {
             crate::photo::Use::Photo { k } => Some((k, st)),
             u => panic!("{pct} %: {u:?}"),
         };
-        assert_eq!(boot.rebuild(&events, from, &mut |_, _| {}).photo, Ok(k));
+        assert_eq!(boot.rebuild(&events, from, &mut |_, _| {}).unwrap().photo, Ok(k));
         let (c1, h1) = (instructions(boot.core_pid()), instructions(me));
         let bytes = std::fs::metadata(dir.join("real.json")).map_or(0, |m| m.len());
         println!("{pct} %: k {k}, photo {bytes} bytes; taken+written: {took}; boot from it: sb-core {}, hub {}", g(c1 - c0), g(h1 - h0));

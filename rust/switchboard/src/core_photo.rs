@@ -2,7 +2,8 @@
 //! revival restore sb-core's photo, then replay only the journal events
 //! after it. Which photo fits the journal is crate::photo's call; this
 //! side sends it. Out of core.rs (its line limit), with the revival it
-//! serves (BISE-292).
+//! serves (BISE-292): a failed revival counts as one more restart; past
+//! REVIVE_LIMIT the hub gives up, typed (`Hub::gave_up`), never a panic.
 
 use super::*;
 
@@ -54,43 +55,81 @@ impl Hub {
     /// (a fresh sb-core only, law restore_only_fresh), then replays
     /// events[k..]. The hub's own PR lines are read from every event,
     /// the photo's too (sb-core never holds them). A photo sb-core
-    /// refuses: the full replay, as without one.
-    pub fn rebuild(&mut self, events: &[Value], from: Option<(usize, Value)>, progress: &mut dyn FnMut(usize, usize)) -> Rebuilt {
+    /// refuses: the full replay, as without one. sb-core dead or late
+    /// on it: the error (the boot exits on it, a revival counts it).
+    pub fn rebuild(&mut self, events: &[Value], from: Option<(usize, Value)>, progress: &mut dyn FnMut(usize, usize)) -> Result<Rebuilt, CoreError> {
         let Some((k, st)) = from else {
-            return Rebuilt { skipped: self.replay_with(events, progress), photo: Err("no photo".into()) };
+            return Ok(Rebuilt { skipped: self.replay_with(events, progress)?, photo: Err("no photo".into()) });
         };
-        let out = self.raw(&Link::RestorePhoto(cl::RestorePhoto { st }).to_value());
+        let out = self.try_raw(&Link::RestorePhoto(cl::RestorePhoto { st }).to_value())?;
         if let Some(e) = out.get("error") {
             let why = format!("sb-core refused the photo: {}", one_line(&e.to_string()));
-            return Rebuilt { skipped: self.replay_with(events, progress), photo: Err(why) };
+            return Ok(Rebuilt { skipped: self.replay_with(events, progress)?, photo: Err(why) });
         }
         let k = k.min(events.len());
         for ev in events[..k].iter().filter(|ev| crate::forge::is_pr_line(ev)) {
             crate::forge::read_line(&mut self.pr_known, ev);
             self.pr_news.read_journal(ev);
         }
-        Rebuilt { skipped: self.replay_with(&events[k..], progress), photo: Ok(k) }
+        Ok(Rebuilt { skipped: self.replay_with(&events[k..], progress)?, photo: Ok(k) })
     }
 
     /// A new sb-core with the durable state of the journal and the REPL
-    /// states of the old one (the REPLs themselves never stopped).
+    /// states of the old one (the REPLs themselves never stopped). A
+    /// revival that fails (it does not start, its replay dies or is
+    /// late) counts as one more restart. No revival set, or REVIVE_LIMIT
+    /// restarts in REVIVE_WINDOW_MS: sb-core dies on its state, not by
+    /// accident; the hub gives up (`gave_up`) and its loop stops.
     pub(super) fn restart_core(&mut self, why: &str) {
+        let mut why = why.to_string();
+        // the old one may hang (a late answer): it never outlives its link
+        self.link.kill();
+        loop {
+            if let Err(stop) = self.revive_due(&why) {
+                self.gave_up = Some(stop);
+                return;
+            }
+            match self.revive_once() {
+                Ok(how) => {
+                    self.log(&format!("sb-core restarted: {}", how));
+                    return self.revived.push(format!(
+                        "sb-core, the hub's state machine, stopped ({}): restarted, its state rebuilt from the journal. the agents kept running",
+                        why
+                    ));
+                }
+                Err(e) => {
+                    self.link.kill();
+                    why = format!("its restart failed: {}", e);
+                }
+            }
+        }
+    }
+
+    /// One more restart now, or the reason the hub gives up.
+    fn revive_due(&mut self, why: &str) -> Result<(), String> {
         let Some(r) = self.revive.as_mut() else {
-            panic!("sb-core: {}", why);
+            return Err(format!("sb-core stopped ({}) and nothing restarts it", why));
         };
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| d.as_millis() as u64);
         r.times.retain(|t| now.saturating_sub(*t) < REVIVE_WINDOW_MS);
         if r.times.len() >= REVIVE_LIMIT {
-            (r.log)(&format!("sb-core stopped ({}): {} restarts in {} s, the hub stops", why, REVIVE_LIMIT, REVIVE_WINDOW_MS / 1000));
-            panic!("sb-core: {} ({} restarts in {} s)", why, REVIVE_LIMIT, REVIVE_WINDOW_MS / 1000);
+            let stop = format!("sb-core stopped ({}): {} restarts in {} s", why, REVIVE_LIMIT, REVIVE_WINDOW_MS / 1000);
+            (r.log)(&format!("{}, the hub stops", stop));
+            return Err(stop);
         }
         r.times.push(now);
         (r.log)(&format!("sb-core stopped ({}): restarting it on the journal", why));
+        Ok(())
+    }
+
+    /// Start sb-core and rebuild it: how (for hub.log), or why it failed.
+    fn revive_once(&mut self) -> Result<String, CoreError> {
+        let Some(r) = self.revive.as_mut() else { return Err(CoreError::GaveUp("no revival".into())) };
         let events = (r.journal)();
         let from = r.photo.as_mut().and_then(|p| p(&events));
-        self.link = CoreLink::start(&self.core_bin).unwrap_or_else(|e| panic!("sb-core: {} (and it cannot restart: {})", why, e));
+        self.link = CoreLink::start(&self.core_bin)?;
         let runs: Vec<(String, Run)> = self
             .st
             .agents
@@ -98,23 +137,25 @@ impl Hub {
             .filter(|a| a.run != Run::Down)
             .map(|a| (a.name.clone(), a.run))
             .collect();
-        self.raw(&Link::Init(cl::Init { workspace: self.workspace.clone() }).to_value());
-        let rebuilt = self.rebuild(&events, from, &mut |_, _| {});
+        self.try_raw(&Link::Init(cl::Init { workspace: self.workspace.clone() }).to_value())?;
+        let rebuilt = self.rebuild(&events, from, &mut |_, _| {})?;
         for (agent, run) in runs {
-            self.raw(&force_run_input(&agent, run));
+            self.try_raw(&force_run_input(&agent, run))?;
         }
-        let out = self.raw(&Link::ViewAll(cl::ViewAll {}).to_value());
+        let out = self.try_raw(&Link::ViewAll(cl::ViewAll {}).to_value())?;
         self.load_answer_view(&out);
-        if let Some(r) = self.revive.as_ref() {
-            let how = match &rebuilt.photo {
-                Ok(k) => format!("from the photo of {} events, {} replayed", k, events.len() - k),
-                Err(why) => format!("{} journal events replayed ({})", events.len(), why),
-            };
-            (r.log)(&format!("sb-core restarted: {} ({} skipped)", how, rebuilt.skipped.len()));
+        let how = match &rebuilt.photo {
+            Ok(k) => format!("from the photo of {} events, {} replayed", k, events.len() - k),
+            Err(why) => format!("{} journal events replayed ({})", events.len(), why),
+        };
+        Ok(format!("{} ({} skipped)", how, rebuilt.skipped.len()))
+    }
+
+    /// One line in hub.log (the revival's log; none: stderr, a test).
+    pub(super) fn log(&self, s: &str) {
+        match self.revive.as_ref() {
+            Some(r) => (r.log)(s),
+            None => eprintln!("{}", s),
         }
-        self.revived.push(format!(
-            "sb-core, the hub's state machine, stopped ({}): restarted, its state rebuilt from the journal. the agents kept running",
-            why
-        ));
     }
 }

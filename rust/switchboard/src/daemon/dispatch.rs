@@ -72,6 +72,7 @@ impl Shell {
             // the photo's moment: nothing else waiting behind this message
             self.photos.quiet = inbox.is_empty();
             let flow = self.dispatch(m, tick_queued);
+            let flow = self.core_gone(flow);
             if let Some(l) = self.loop_watch.idle() {
                 log_line(&self.opts.paths, &l);
             }
@@ -83,6 +84,24 @@ impl Shell {
             self.push_state();
         }
         keep
+    }
+
+    /// sb-core could not be revived (Hub::gave_up): the hub stops, its
+    /// REPLs kept for the next hub (nothing of their work lost); one
+    /// hub.log line, and `run` exits non-zero (Shell::exit).
+    fn core_gone(&self, flow: Flow) -> Flow {
+        let Some(why) = self.hub.gave_up() else { return flow };
+        log_line(&self.opts.paths, &format!("sb-core could not be revived ({}): stopping", why));
+        Flow::Stop { keep: true }
+    }
+
+    /// The end of `run`: an error when sb-core stopped the hub (a
+    /// non-zero exit for whoever launched it).
+    pub(super) fn exit(&self) -> std::io::Result<()> {
+        match self.hub.gave_up() {
+            Some(why) => Err(std::io::Error::other(format!("sb-core could not be revived: {}", why))),
+            None => Ok(()),
+        }
     }
 
     /// Run one message. `tick_queued`: the ticker's flag (one tick in the

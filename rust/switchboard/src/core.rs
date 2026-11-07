@@ -665,7 +665,7 @@ pub enum Effect {
 /// (`daemon::Opts::core_bin`: the app root's), never from the environment:
 /// an inherited `SB_CORE_BIN` once ran a stale sb-core on every version
 /// after it (5d136677).
-pub use crate::core_proc::CoreLink;
+pub use crate::core_proc::{CoreError, CoreLink};
 
 pub fn default_core_bin() -> std::path::PathBuf {
     let next_to_exe = std::env::current_exe()
@@ -778,10 +778,16 @@ pub struct Hub {
     /// The sb-core it runs (and starts again after a death).
     core_bin: PathBuf,
     /// How to bring sb-core back when it dies (the daemon's; none: a
-    /// death panics, as at boot and in most tests).
+    /// death stops the hub, `gave_up`, as at boot and in most tests).
     revive: Option<Revive>,
     /// Lines for main's feed from a revival, out at the next input.
     revived: Vec<String>,
+    /// sb-core could not be brought back (no revival, or REVIVE_LIMIT
+    /// restarts in REVIVE_WINDOW_MS): why. The daemon's loop stops on it.
+    gave_up: Option<String>,
+    /// main's feed said an sb-core `{error}` already; a step that works
+    /// clears it (one warning per run of errors, never one per Tick).
+    error_told: bool,
     /// From a step's answer: his message's id (A1, `msg`) for `turn/send`;
     /// his answer to a card (inbox picks (3), `ans_*`) for `card/answer`
     pub said: Option<u64>,
@@ -872,16 +878,14 @@ impl Hub {
         let bin = bise_home::env::test_setting("SB_CORE_BIN").map(PathBuf::from).unwrap_or_else(default_core_bin);
         // a test on an sb-core of other sources lies both ways (core_fresh.rs)
         crate::core_fresh::check(&bin);
-        Hub::with_core(workspace, bin)
+        Hub::with_core(workspace, bin).unwrap_or_else(|e| panic!("sb-core: {}", e))
     }
 
-    /// A hub whose decisions run in the sb-core at `core_bin`.
-    pub fn with_core(workspace: &str, core_bin: PathBuf) -> Hub {
-        let mut link = CoreLink::start(&core_bin).unwrap_or_else(|e| {
-            panic!("sb-core not found ({}): {}", core_bin.display(), e)
-        });
-        link.call(&Link::Init(cl::Init { workspace: workspace.into() }).to_value())
-            .unwrap_or_else(|e| panic!("sb-core: {}", e));
+    /// A hub whose decisions run in the sb-core at `core_bin`; an error
+    /// when it does not start or answer (the boot says it and exits).
+    pub fn with_core(workspace: &str, core_bin: PathBuf) -> Result<Hub, CoreError> {
+        let mut link = CoreLink::start(&core_bin)?;
+        link.call(&Link::Init(cl::Init { workspace: workspace.into() }).to_value())?;
         let mut hub = Hub {
             st: State::new(workspace),
             workspace: workspace.to_string(),
@@ -921,6 +925,8 @@ impl Hub {
             core_bin,
             revive: None,
             revived: Vec::new(),
+            gave_up: None,
+            error_told: false,
             said: None,
             answered: None,
             interrupt_by: None,
@@ -928,8 +934,9 @@ impl Hub {
             model_trial: BTreeSet::new(),
             spawn_asks: BTreeMap::new(),
         };
-        hub.view_all();
-        hub
+        let out = hub.try_raw(&Link::ViewAll(cl::ViewAll {}).to_value())?;
+        hub.load_answer_view(&out);
+        Ok(hub)
     }
 
     /// Tests only: put an agent's REPL in a given state (never sent by
@@ -947,14 +954,17 @@ impl Hub {
     /// hub before a /version rollback), for the caller to log.
     /// Batches of REPLAY_BATCH events (`replay_many`): one event per call
     /// was quadratic in the messages (a 20k-event journal took ~18 s at
-    /// boot, past the switcher's wait).
+    /// boot, past the switcher's wait). Tests only: the boot and a
+    /// revival go through `rebuild`.
+    #[cfg(test)]
     pub fn replay(&mut self, events: &[Value]) -> Vec<Value> {
-        self.replay_with(events, &mut |_, _| {})
+        self.replay_with(events, &mut |_, _| {}).unwrap_or_else(|e| panic!("sb-core: {}", e))
     }
 
     /// `replay`, telling `progress(done, total)` after each batch (the
     /// boot watch, daemon/boot.rs: a long replay is progress, not a hang).
-    pub fn replay_with(&mut self, events: &[Value], progress: &mut dyn FnMut(usize, usize)) -> Vec<Value> {
+    /// sb-core failing a batch (dead, late, a bad line): the error.
+    pub(super) fn replay_with(&mut self, events: &[Value], progress: &mut dyn FnMut(usize, usize)) -> Result<Vec<Value>, CoreError> {
         let mut skipped = Vec::new();
         let mut core: Vec<&Value> = Vec::new();
         for ev in events {
@@ -969,7 +979,7 @@ impl Hub {
         let (mut done, total) = (0, core.len());
         for batch in core.chunks(REPLAY_BATCH) {
             let evs = batch.iter().map(|ev| (*ev).clone()).collect();
-            let out = self.raw(&Link::ReplayMany(cl::ReplayMany { evs }).to_value());
+            let out = self.try_raw(&Link::ReplayMany(cl::ReplayMany { evs }).to_value())?;
             for i in core_fx::skipped_of(&core_fx::answer(&out)) {
                 if let Some(ev) = batch.get(i as usize) {
                     skipped.push((*ev).clone());
@@ -978,10 +988,12 @@ impl Hub {
             done += batch.len();
             progress(done, total);
         }
-        self.view_all();
-        skipped
+        let out = self.try_raw(&Link::ViewAll(cl::ViewAll {}).to_value())?;
+        self.load_answer_view(&out);
+        Ok(skipped)
     }
 
+    #[cfg(test)]
     fn view_all(&mut self) {
         if let Some(out) = self.call(&Link::ViewAll(cl::ViewAll {}).to_value()) {
             self.load_answer_view(&out);
@@ -1033,9 +1045,28 @@ impl Hub {
         self.link.kill();
     }
 
-    /// One call to sb-core, with no revival: its death panics.
+    /// One call to sb-core, with no revival: its failure is the caller's
+    /// (the boot's, a revival's).
+    fn try_raw(&mut self, v: &Value) -> Result<Value, CoreError> {
+        self.link.call(v)
+    }
+
+    /// Tests only: `try_raw`, its failure a panic.
+    #[cfg(test)]
     fn raw(&mut self, v: &Value) -> Value {
-        self.link.call(v).unwrap_or_else(|e| panic!("sb-core: {}", e))
+        self.try_raw(v).unwrap_or_else(|e| panic!("sb-core: {}", e))
+    }
+
+    /// sb-core could not be brought back: why. The daemon's loop stops
+    /// on it (one hub.log line, the normal stop, a non-zero exit).
+    pub fn gave_up(&self) -> Option<&str> {
+        self.gave_up.as_deref()
+    }
+
+    /// Tests only: how long sb-core may take (a fake that sleeps).
+    #[cfg(test)]
+    pub fn set_core_limits(&mut self, l: crate::core_proc::Limits) {
+        self.link.limits = l;
     }
 
     /// The agent's last activity, for the views (not a decision).

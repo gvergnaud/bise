@@ -307,6 +307,7 @@ fn sb_workspace(args: &[String]) -> std::path::PathBuf {
 
 fn run_sbd(args: &[String]) -> std::io::Result<()> {
     let paths = switchboard::paths::Paths::for_workspace(&sb_workspace(args));
+    log_panics_to(paths.log());
     let root = live_app_root_or_exit();
     bise_catalog::live_fetch::spawn_refresher(auth_paths(), cache_dir(), |l| eprintln!("sbd: {l}"));
     // the REPLs load their MCP index like a session (bise_home's exports)
@@ -319,6 +320,29 @@ fn run_sbd(args: &[String]) -> std::io::Result<()> {
         exe: std::env::current_exe()?,
         spawn_env: Some(env_for_spawn),
     })
+}
+
+/// A panic of the hub (any thread) leaves one line in hub.log, its words
+/// and place, then the default report (stderr): a hub that dies never
+/// dies silent (audit-hub finding 1).
+fn log_panics_to(log: std::path::PathBuf) {
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let at = info.location().map(|l| format!("{}:{}", l.file(), l.line())).unwrap_or_default();
+        let words = info
+            .payload()
+            .downcast_ref::<&str>()
+            .map(|s| s.to_string())
+            .or_else(|| info.payload().downcast_ref::<String>().cloned())
+            .unwrap_or_default();
+        let ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis());
+        let thread = std::thread::current().name().unwrap_or("?").to_string();
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&log) {
+            use std::io::Write;
+            let _ = writeln!(f, "{} hub panic ({}): {} at {}", ms, thread, words.replace('\n', " "), at);
+        }
+        previous(info);
+    }));
 }
 
 /// The hub's decisions (sb-core) come from the same app root as the REPLs:

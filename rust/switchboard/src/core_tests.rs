@@ -84,8 +84,13 @@ pub(super) struct T {
 
 impl T {
     pub(super) fn new() -> T {
+        T::with_hub(Hub::new("/w"))
+    }
+
+    /// `new` on a given hub (a fake sb-core's: core_deadline_tests.rs).
+    pub(super) fn with_hub(hub: Hub) -> T {
         let mut t = T {
-            hub: Hub::new("/w"),
+            hub,
             env: FakeEnv::new(),
             token: 0,
             journal: Default::default(),
@@ -2907,9 +2912,10 @@ fn a_dead_sb_core_is_restarted_on_the_journal() {
 }
 
 /// BISE-292: sb-core dying again and again is not an accident: after
-/// REVIVE_LIMIT restarts in a minute the hub stops, as before.
+/// REVIVE_LIMIT restarts in a minute the hub stops, as before, but
+/// typed (`gave_up`: the daemon's loop runs its normal stop), never a
+/// panic; sb-core is not called again.
 #[test]
-#[should_panic(expected = "restarts in 60 s")]
 fn a_crash_loop_of_sb_core_stops_the_hub() {
     let mut t = T::new();
     let journal = t.journal.clone();
@@ -2918,6 +2924,18 @@ fn a_crash_loop_of_sb_core_stops_the_hub() {
         t.hub.kill_core();
         t.user(MAIN, "hello");
     }
+    assert!(t.hub.gave_up().is_some_and(|w| w.contains("restarts in 60 s")), "{:?}", t.hub.gave_up());
+    let fx = t.user(MAIN, "hello");
+    assert!(say_to(&fx, MAIN).is_none(), "{:?}", fx);
+}
+
+/// No revival set (a test hub): its death is the hub's stop, typed.
+#[test]
+fn a_dead_sb_core_without_a_revival_stops_the_hub() {
+    let mut t = T::new();
+    t.hub.kill_core();
+    t.user(MAIN, "hello");
+    assert!(t.hub.gave_up().is_some_and(|w| w.contains("nothing restarts it")), "{:?}", t.hub.gave_up());
 }
 
 // ---- pr-hub (pr-design §7-§10): the poller's answers, as Input::Prs

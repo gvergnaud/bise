@@ -4,7 +4,9 @@
 //! queries, and runs the effects it returns, each read as a
 //! `bise_proto::core::Fx` through serde (core_fx.rs turns the plain ones
 //! into `Effect`s; the ones on the hub's state are here). An effect this
-//! hub does not know is skipped and logged, never a crash.
+//! hub does not know is skipped and logged, never a crash; an `{error}`
+//! answer drops its input (hub.log, main's feed once, its sender told);
+//! a dead or late sb-core is restarted (`Hub::call`, core_photo.rs).
 
 use super::core_fx::{self, Plain};
 use super::*;
@@ -52,7 +54,7 @@ impl Hub {
             for l in std::mem::take(&mut self.revived) {
                 fx.push(feed(MAIN, Feed::warn(l)));
             }
-            let Some(out) = out else { return };
+            let Some(out) = out else { return dropped(fx, &step.input, client, "bise's core stopped on it; try again") };
             let s = match core_fx::answer(&out) {
                 Answer::Need(ANeed { need: q }) => {
                     // sb every's wakes: their words and the local clock
@@ -60,32 +62,57 @@ impl Hub {
                     step.ans.push(a);
                     continue;
                 }
-                Answer::Error(e) => panic!("sb-core: {}", e.error),
+                Answer::Error(e) => return self.refused(fx, &step.input, client, &e.error),
                 Answer::Step(s) => s,
                 // not a step's answer (a newer sb-core?): nothing applied
                 other => return eprintln!("sb-core: not a step's answer (skipped): {}", other.to_value()),
             };
+            self.error_told = false;
             return self.apply_step(fx, env, client, k0, s);
         }
     }
 
+    /// sb-core answered `{error}`: the input is dropped, never a panic.
+    /// hub.log says each; main's feed the first of a run (no flood when
+    /// every Tick fails); whoever sent it gets the plain words.
+    fn refused(&mut self, fx: &mut Fx, input: &In, client: Option<ClientId>, error: &str) {
+        let what = input.to_value()["t"].as_str().unwrap_or("?").to_string();
+        self.log(&format!("sb-core refused an input ({}): {}; dropped", what, one_line(error)));
+        if !std::mem::replace(&mut self.error_told, true) {
+            let w = format!("sb-core could not run an input ({}): it was dropped. hub.log has each one", what);
+            fx.push(feed(MAIN, Feed::warn(w)));
+        }
+        dropped(fx, input, client, "bise's core could not run it; try again");
+    }
+
     /// One call to sb-core. It died: restart it on the journal and run
     /// the input again, once; dead again on it, the input is dropped
-    /// (None) and sb-core restarted once more (BISE-292).
+    /// (None) and sb-core restarted once more (BISE-292). Late: a death
+    /// too, but the input is dropped at once (a retry would hold the
+    /// loop as long again). Given up: None, sb-core no longer called.
     pub(super) fn call(&mut self, v: &Value) -> Option<Value> {
+        if self.gave_up.is_some() {
+            return None;
+        }
         // its share of the loop's message (spent.rs), a restart included
         let _t = self.spent.part("sb-core");
         let e = match self.link.call(v) {
             Ok(out) => return Some(out),
             Err(e) => e,
         };
+        if let CoreError::Late { .. } = e {
+            self.restart_core(&format!("{}, that input dropped", e));
+            return None;
+        }
         self.restart_core(&e.to_string());
+        if self.gave_up.is_some() {
+            return None;
+        }
         match self.link.call(v) {
             Ok(out) => Some(out),
             Err(e) => {
                 let what = v["t"].as_str().unwrap_or("?").to_string();
-                self.restart_core(&e.to_string());
-                self.revived.push(format!("sb-core stopped twice on the same input ({}): that input was dropped", what));
+                self.restart_core(&format!("{}; stopped twice on the same input ({}): that input dropped", e, what));
                 None
             }
         }
@@ -173,8 +200,9 @@ impl Hub {
     /// core_fx.rs's).
     fn effect(&mut self, fx: &mut Fx, env: &mut dyn Env, client: Option<ClientId>, f: CoreFx) {
         match f {
+            // an event that is not an object: never in the journal, never a panic
+            CoreFx::Journal(j) if !j.ev.is_object() => self.log(&format!("sb-core: a bad journal event (skipped): {}", clip(&j.ev.to_string(), 200))),
             CoreFx::Journal(j) => {
-                assert!(j.ev.is_object(), "sb-core: bad event {}", j.ev);
                 fx.push(Effect::Journal(j.ev.clone()));
                 // a timer set or ended (sb every): its ◷ lines
                 self.timer_journal_lines(fx, &j.ev);
@@ -245,5 +273,15 @@ impl Hub {
         } else {
             fx.push(Effect::Say { agent, text });
         }
+    }
+}
+
+/// An input sb-core did not run: whoever sent it hears it in plain
+/// `words` (a request its reply, a client a notice); a hub input, nothing.
+fn dropped(fx: &mut Fx, input: &In, client: Option<ClientId>, words: &str) {
+    match (input, client) {
+        (In::Req(r), _) => fx.push(Effect::Reply { token: r.token, body: json!({"ok": false, "error": words}) }),
+        (_, Some(c)) => fx.push(notice(c, words)),
+        _ => {}
     }
 }

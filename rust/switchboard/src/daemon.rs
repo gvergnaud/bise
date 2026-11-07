@@ -1655,7 +1655,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     });
     crate::util::timing("start (socket bound)");
     let workspace = paths.workspace.to_string_lossy().to_string();
-    let mut hub = Hub::with_core(&workspace, opts.core_bin.clone());
+    let mut hub = Hub::with_core(&workspace, opts.core_bin.clone())?;
     boot.core(hub.core_pid());
     let (mut events, unreadable) = journal_file::read(&paths.journal());
     // BISE-230: the task worktrees of the old place (<state>/worktrees/)
@@ -1674,7 +1674,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         log_line(&paths, &format!("journal: {} unreadable lines (not replayed), at line {}", unreadable.len(), journal_file::lines_list(&unreadable)));
     }
     // from the boot photo when one fits the journal (issue 36), else all of it
-    let photos = photo_take::boot(&mut hub, &paths, &opts.core_bin, &events, !moved.is_empty(), &boot);
+    let photos = photo_take::boot(&mut hub, &paths, &opts.core_bin, &events, !moved.is_empty(), &boot)?;
     boot.step("journal replayed");
     // sb-core dies (an OOM, a runtime error, killed): the hub restarts it
     // on the journal instead of dying with it (BISE-292)
@@ -1966,7 +1966,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         }
         let _ = std::fs::remove_file(paths.pid_file());
     }
-    Ok(())
+    sh.exit()
 }
 
 /// How long a starting hub waits for the previous one of its workspace

@@ -61,14 +61,15 @@ fn pick(dir: &Path, key: Option<&str>, events: &[Value], migrated: bool) -> (Opt
 
 /// The boot's rebuild: from the photo when one fits, else every event.
 /// A full replay takes a photo at once (the next boot starts from it).
-pub(super) fn boot(hub: &mut Hub, paths: &Paths, core_bin: &Path, events: &[Value], migrated: bool, watch: &super::boot::Boot) -> Photos {
+/// sb-core dead or late on the replay: the error, the hub does not start.
+pub(super) fn boot(hub: &mut Hub, paths: &Paths, core_bin: &Path, events: &[Value], migrated: bool, watch: &super::boot::Boot) -> Result<Photos, crate::core::CoreError> {
     let dir = paths.state.join("photo");
     photo::clean(&dir);
     let key = photo::key_of(core_bin);
     let mut ph = Photos { dir, key, mark: Mark::of(events), last_event: now_ms(), last_photo: 0, last_events: 0, last_took: 0, wait: photo::Wait::default(), quiet: false };
     let t0 = now_ms();
     let (from, why) = pick(&ph.dir, ph.key.as_deref(), events, migrated);
-    let rebuilt = hub.rebuild(events, from, &mut |done, total| watch.replayed(done, total));
+    let rebuilt = hub.rebuild(events, from, &mut |done, total| watch.replayed(done, total))?;
     if !rebuilt.skipped.is_empty() {
         let mut kinds: Vec<String> = rebuilt.skipped.iter().map(|e| e["type"].to_string()).collect();
         kinds.dedup();
@@ -83,7 +84,7 @@ pub(super) fn boot(hub: &mut Hub, paths: &Paths, core_bin: &Path, events: &[Valu
             ph.wait.due = true;
         }
     }
-    ph
+    Ok(ph)
 }
 
 /// The revival's photo (crate::core::Revive): the same pick, on the
