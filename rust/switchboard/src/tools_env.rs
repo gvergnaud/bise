@@ -298,9 +298,31 @@ pub fn git() -> Git {
         Some((t, g)) if t.elapsed() < Duration::from_secs(10) => return g.clone(),
         _ => {}
     }
-    let g = probe_git_in(&hub_tools_path(), macos_shim(), &developer_dir_ok);
+    let g = unshim(probe_git_in(&hub_tools_path(), macos_shim(), &developer_dir_ok), macos_shim(), &xcrun_git);
     *c = Some((Instant::now(), g.clone()));
     g
+}
+
+/// The git the macOS shim runs, `xcrun --find git` once (boot-speed,
+/// architect m_54396): every call is then one exec, not the shim's two
+/// (at load ~100 the shim took 1 to 212 s a call, the real git 0.04 to
+/// 13 s). Only when PATH's git is the shim: a git he put first (Homebrew)
+/// stays his. xcrun failing, or naming no file: the shim, as before.
+pub fn unshim(g: Git, shim: Option<&Path>, find: &dyn Fn() -> Option<PathBuf>) -> Git {
+    match g {
+        Git::Works { bin, version } if shim.is_some_and(|s| bin == s) => match find().filter(|p| p.is_file()) {
+            Some(real) => Git::Works { bin: real, version },
+            None => Git::Works { bin, version },
+        },
+        g => g,
+    }
+}
+
+/// `xcrun --find git`: the shim's git (Command Line Tools or Xcode).
+fn xcrun_git() -> Option<PathBuf> {
+    let o = Command::new("/usr/bin/xcrun").args(["--find", "git"]).stdin(Stdio::null()).stderr(Stdio::null()).output().ok()?;
+    let p = String::from_utf8_lossy(&o.stdout).trim().to_string();
+    (o.status.success() && !p.is_empty()).then(|| PathBuf::from(p))
 }
 
 /// A `git` command on the probed binary, or why git cannot be used: the
@@ -927,6 +949,27 @@ mod tests {
         assert_eq!(g, Git::Works { bin: bin.clone(), version: "git version 9.9.9".into() });
         assert_eq!(g.problem(), None);
         assert_eq!(g.describe(), format!("git version 9.9.9 ({})", bin.display()));
+    }
+
+    /// boot-speed: PATH's macOS shim becomes the git it runs (one exec a
+    /// call); a git he put first, or xcrun failing, stays as it was.
+    #[test]
+    fn the_shim_is_resolved_to_its_git_and_only_the_shim() {
+        let d = tmp("unshim");
+        let real = script(&d, "git", "echo real");
+        let shim = Path::new(MACOS_GIT_SHIM);
+        let works = |bin: &Path| Git::Works { bin: bin.to_path_buf(), version: "git version 2.50.1".into() };
+        let found = || Some(real.clone());
+        assert_eq!(unshim(works(shim), Some(shim), &found), works(&real));
+        // his own git first on PATH: never asked
+        let brew = Path::new("/opt/homebrew/bin/git");
+        assert_eq!(unshim(works(brew), Some(shim), &|| panic!("asked")), works(brew));
+        // xcrun fails, or names a file that isn't there: the shim as before
+        assert_eq!(unshim(works(shim), Some(shim), &|| None), works(shim));
+        assert_eq!(unshim(works(shim), Some(shim), &|| Some(d.join("gone"))), works(shim));
+        // no git, or not macOS: as it was
+        assert_eq!(unshim(Git::Missing, Some(shim), &|| panic!("asked")), Git::Missing);
+        assert_eq!(unshim(works(shim), None, &|| panic!("asked")), works(shim));
     }
 
     /// The hub's git takes no optional lock: a `status` poll never holds

@@ -162,24 +162,41 @@ pub struct GitEnv {
     pub log: Box<dyn FnMut(&str) + Send>,
     /// pr-design §6.4: branch -> the head of its merged PR (`pr_merged`).
     pub merged: BTreeMap<String, String>,
-    /// [`Env::is_git`]'s last answer and when (the hub's clock): sb-core
-    /// gets it with every input, and a `git rev-parse` per input was 16%
-    /// of a flooded loop (hub-lag-7). Asked again after
-    /// [`IS_GIT_FRESH_MS`] (a `git init` by hand) and after this env's own
-    /// worktree ops; None: ask.
-    pub git_memo: Option<(bool, u64)>,
+    /// [`Env::is_git`]'s answers, asked off the loop (crate::git_probe):
+    /// sb-core gets it with every input, and a `git rev-parse` per input
+    /// was 16% of a flooded loop (hub-lag-7) and held a booting hub's last
+    /// step under load (boot-speed). Asked again after
+    /// [`crate::git_probe::FRESH_MS`] (a `git init` by hand) and after
+    /// this env's own worktree ops.
+    pub git: crate::git_probe::GitProbe,
     /// Where a removed worktree's folder goes (trash.rs: the hub's loop
     /// gives it to a worker).
     pub trash: crate::trash::Trash,
 }
 
-/// How long [`GitEnv`] trusts its last `is_git` answer.
-pub const IS_GIT_FRESH_MS: u64 = 10_000;
+/// One `is_git` probe of `dir` (crate::git_probe): git's answer, or
+/// unknown when git could not run (a spawn error, a signal). No usable
+/// git at all is an answer: not a repo, as before.
+pub fn probe_git_dir(dir: &Path) -> crate::git_probe::Probed {
+    use crate::git_probe::Probed;
+    let Ok(mut cmd) = crate::tools_env::git_command() else { return Probed::Git(false) };
+    match cmd.arg("-C").arg(dir).args(["rev-parse", "--is-inside-work-tree"]).output() {
+        Err(_) => Probed::Unknown,
+        Ok(o) if o.status.code().is_none() => Probed::Unknown,
+        Ok(o) => Probed::Git(o.status.success() && String::from_utf8_lossy(&o.stdout).trim_end() == "true"),
+    }
+}
+
+/// The workspace's probe, its first ask started now.
+pub fn git_probe(dir: &Path) -> crate::git_probe::GitProbe {
+    crate::git_probe::GitProbe::start(dir, std::sync::Arc::new(probe_git_dir), std::sync::Arc::new(crate::util::now_ms))
+}
 
 impl GitEnv {
-    /// The hub's git on `paths` (its config read now).
+    /// The hub's git on `paths` (its config read now; its first `is_git`
+    /// probe started, off the loop).
     pub fn new(paths: &Paths, log: Box<dyn FnMut(&str) + Send>, trash: crate::trash::Trash) -> GitEnv {
-        GitEnv { paths: paths.clone(), config: Config::load(paths), log, merged: BTreeMap::new(), git_memo: None, trash }
+        GitEnv { paths: paths.clone(), config: Config::load(paths), log, merged: BTreeMap::new(), git: git_probe(&paths.workspace), trash }
     }
 
     fn ws(&self) -> &Path {
@@ -352,19 +369,11 @@ impl Env for GitEnv {
     }
 
     fn is_git(&mut self) -> bool {
-        let now = self.now();
-        match self.git_memo {
-            Some((yes, at)) if now.saturating_sub(at) < IS_GIT_FRESH_MS => yes,
-            _ => {
-                let yes = is_git_dir(self.ws());
-                self.git_memo = Some((yes, now));
-                yes
-            }
-        }
+        self.git.is_git()
     }
 
     fn worktree_create(&mut self, name: &str, with_changes: bool) -> Result<Workspace, String> {
-        self.git_memo = None;
+        self.git.mark_stale();
         // issue #8: main's tip, never the shared folder's HEAD (it may be
         // on another agent's branch); PR flow: the PR's base, origin's copy
         let flow = crate::devflow::resolve(
@@ -485,7 +494,7 @@ impl Env for GitEnv {
         ws: &Workspace,
         loss: &Loss,
     ) -> Result<Option<String>, String> {
-        self.git_memo = None;
+        self.git.mark_stale();
         let path = PathBuf::from(&ws.path);
         let branch = ws.branch.clone().unwrap_or_default();
         let mut snapshot = None;
@@ -535,7 +544,7 @@ impl Env for GitEnv {
         ws: &Workspace,
         snapshot: Option<&str>,
     ) -> Result<Workspace, String> {
-        self.git_memo = None;
+        self.git.mark_stale();
         let branch = self.free_branch(name);
         let path = PathBuf::from(&ws.path);
         let path = if path.exists() {
@@ -630,6 +639,7 @@ mod tests {
             setup: "echo prepared > .prepared".into(),
             ..Config::default()
         };
+        let git = git_probe(&paths.workspace);
         (
             root,
             GitEnv {
@@ -637,7 +647,7 @@ mod tests {
                 config,
                 log: Box::new(|_| {}),
                 merged: BTreeMap::new(),
-                git_memo: None,
+                git,
                 trash: crate::trash::Trash::now(),
             },
         )

@@ -1147,7 +1147,8 @@ impl Shell {
     /// (dev-flow §6).
     fn role_of(&self, a: &Agent, tmp: &str) -> String {
         // the home workspace (docs/ambient-pages.md §5.1): no git, no flow
-        let git = crate::worktree::is_git_dir(&self.opts.paths.workspace);
+        // the env's probe, never a git on the loop per spawn (boot-speed)
+        let git = self.env.git.is_git();
         let flow = self.flow_now().filter(|_| git);
         let style = self.commit_style();
         let ws = &self.opts.paths.workspace;
