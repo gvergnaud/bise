@@ -328,6 +328,8 @@ def cl_apply.go(+e: HM.Ev, +s: HS.St, la: HI.Clean(HS.St.agents(s)), lr: HI.Clea
       cl_on(HAG.has(HS.St.agents(s), x), HS.St.agents(s), HS.St.arch(s), x, HM.OSnap{sn}, {==}, la, lr)
     case HM.EPlaced{+x, +w, +er}:
       cl_placed(String.is_empty(er), HS.St.agents(s), HS.St.arch(s), x, w, la, lr)
+    case HM.EDropped{+x, +sn, +er}:
+      cl_on(HAG.has(HS.St.agents(s), x), HS.St.agents(s), HS.St.arch(s), x, HM.ODrop{String.is_empty(er), sn}, {==}, la, lr)
     case HM.EReported{+x, +rp}:
       cl_on(HAG.has(HS.St.agents(s), x), HS.St.agents(s), HS.St.arch(s), x, HM.OReport{rp}, {==}, la, lr)
     case HM.EFollow{+x, +f, +h}:

@@ -1183,6 +1183,8 @@ def apply_order.go(+e: HM.Ev, +s: HS.St, k: {HM.order_ev(e) == False{} : Bool}) 
       {==}
     case HM.EPlaced{x0, x1, x2}:
       {==}
+    case HM.EDropped{x0, x1, x2}:
+      {==}
     case HM.EDeclared{x0, x1, x2}:
       {==}
     case HM.EReported{x0, x1}:
