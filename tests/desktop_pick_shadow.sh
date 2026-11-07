@@ -10,13 +10,23 @@ kind="${1:-}" from="${2:-}" to="${3:-}"
 [ -n "$kind" ] && [ -n "$from" ] || { echo "desktop-pick (shadow): usage: desktop_pick_shadow.sh land|try <from> [<to>]"; exit 0; }
 root="$(cd "$(dirname "$0")/.." && pwd)"
 out="$(mktemp -t desktop-pick.XXXXXX)" || { echo "desktop-pick (shadow): no temp file"; exit 0; }
-${DESKTOP_PICK_PY:-python3} "$root/tests/test_map.py" desktop-pick --from "$from" ${to:+--to "$to"} --log "$kind" >"$out" 2>/dev/null &
+bound="${DESKTOP_PICK_TIMEOUT:-20}"
+# The pick runs in its own process group (set -m), so the bound kills it and whatever it started.
+# One timer measures the bound: a loop of `sleep 0.1` polls counted forks, not seconds, and under
+# load (50+) each fork took seconds, so a 1 s bound held 25-44 s (pick-timeout, m_54546).
+set -m
+${DESKTOP_PICK_PY:-python3} "$root/tests/test_map.py" desktop-pick --from "$from" ${to:+--to "$to"} --log "$kind" >"$out" 2>/dev/null </dev/null &
 pid=$!
-for _ in $(seq $(( ${DESKTOP_PICK_TIMEOUT:-20} * 10 ))); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
-if kill -0 "$pid" 2>/dev/null; then
-  kill "$pid" 2>/dev/null
-  echo "desktop-pick (shadow): no answer in ${DESKTOP_PICK_TIMEOUT:-20} s, nothing logged"
-elif wait "$pid"; then
+( sleep "$bound" & s=$!; trap 'kill "$s" 2>/dev/null; exit 0' TERM; wait "$s"
+  : >"$out.late"; kill -TERM -- -"$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null
+  sleep 1; kill -KILL -- -"$pid" 2>/dev/null ) >/dev/null 2>&1 </dev/null &
+timer=$!
+set +m
+wait "$pid"; rc=$?
+kill -TERM -- -"$timer" 2>/dev/null || kill -TERM "$timer" 2>/dev/null
+if [ -e "$out.late" ] && [ "$rc" -ne 0 ]; then
+  echo "desktop-pick (shadow): no answer in $bound s, nothing logged"
+elif [ "$rc" -eq 0 ]; then
   first="$(head -1 "$out")"
   case "$first" in
     ALL*) echo "desktop-pick (shadow, all still runs): ALL (${first#ALL })" ;;
@@ -26,5 +36,5 @@ elif wait "$pid"; then
 else
   echo "desktop-pick (shadow): tests/test_map.py desktop-pick failed, nothing logged"
 fi
-rm -f "$out"
+rm -f "$out" "$out.late"
 exit 0
