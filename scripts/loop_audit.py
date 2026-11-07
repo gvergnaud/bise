@@ -200,7 +200,8 @@ STEP_RX = re.compile(r"^ok\s+(test-build|clippy|PROOF|sb-core|proto_ts|test_\S+|
 # a red step: "FAIL desktop_check", "FAIL sb-core build", "FAIL pick_gate: ..." (a test's line has its time)
 STEP_FAIL_RX = re.compile(r"^FAIL ([\w-]+)(?=$|:| build$)", re.M)
 GATE_FAIL_RX = re.compile(r"^GATE FAILED: (.*)$", re.M)
-VITEST_FAIL_RX = re.compile(r"FAIL\s+(src/\S+\.test\.tsx?)")
+# a red vitest file, with or without its project tag (' FAIL  |unit| src/x.test.ts', since e6605de44)
+VITEST_FAIL_RX = re.compile(r"FAIL\s+(?:\|[^|\s]+\|\s+)?(src/\S+\.test\.tsx?)")
 SHA_RX = re.compile(r" sha=(\S+)")
 
 

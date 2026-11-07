@@ -778,7 +778,8 @@ desktop_check() {
         && { [ -z "$dbypath" ] || pnpm -s exec vitest run --passWithNoTests $projects $dbypath; }) >"$log" 2>&1
     drc=$?
     # what it ran, said and kept (<gate dir>/vitest-related.jsonl: the audit's 'vitest-related miss')
-    local tests_rx='(✓|❯|×|FAIL) +src/[^ ]+\.test\.tsx?' related
+    # (vitest tags each file with its project since e6605de44: '✓ |unit| src/x.test.ts')
+    local tests_rx='(✓|❯|×|FAIL) +(\|[^|]+\| +)?src/[^ ]+\.test\.tsx?' related
     ran="$(grep -oE "$tests_rx" "$log" | awk '{ print $NF }' | sort -u | tr '\n' ' ')"
     related="$(sed '/^@@ by path$/q' "$log" | grep -oE "$tests_rx" | awk '{ print $NF }' | sort -u | tr '\n' ' ')"
     echo "  vitest related to$rel: $(wc -w <<<"$related" | tr -d ' ') files ($related); by path: ${dbypath:-none}"
