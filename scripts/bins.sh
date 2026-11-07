@@ -115,6 +115,7 @@ key() {  # <src> <name>
   local r; r="$(recipe "$2" "$1")"
   if [ "${r%% *}" = cargo ]; then jsrt_key "$1" ${r#cargo }; return; fi
   if [ "${r%% *}" = node ]; then node_key "$1" ${r#node }; return; fi
+  local x; x="$(cc_extra "$2")"
   set -- "$1" $r
   # only the dirs <src> has (find exits 1 on a missing one: pipefail)
   local d dirs=(); for d in "${@:3}"; do if [ -e "$1/$d" ]; then dirs+=("$d"); fi; done
@@ -122,7 +123,26 @@ key() {  # <src> <name>
   local v; v="$(BEND_NO_TELEMETRY=1 bend version 2>/dev/null)" && [ -n "$v" ] \
     || { say "no key: \`bend version\` failed (bend not in $TOOLS/.bend/bin nor PATH)"; return 1; }
   (cd "$1" && { find "${dirs[@]}" -type f \( -name '*.bend' -o -name '*.c' -o -name '*.js' \) -print0 | sort -z | xargs -0 cat
-                echo "MACOSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET"; echo "$v"; } | shasum | cut -c1-12)
+                echo "MACOSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET"; echo "$v"
+                # only when there are some: the other targets keep their keys
+                if [ -n "$x" ]; then echo "CC_EXTRA=$x"; fi; } \
+     | shasum | cut -c1-12)
+}
+
+# the clang flags <name>'s C gets on top of bend's (scripts/cc-extra.sh),
+# on stdout; none on every other target. linux-arm64 sb-core: clang 15
+# (CI's, Ubuntu 22.04) dies on its C since Bend 2.0.39 ("Cannot scavenge
+# register without an emergency spill slot", in the 101-argument musttail
+# worklist function WL_FID_core_deliver_each_k766: clang < 19 has no
+# preserve_none, so the arguments go on the stack), at every -O from -O1
+# to -O3 (release run 42376828644). -O0 and clang 17/19 build it.
+# FastISel (instead of SelectionDAG; the IR is still optimized at -O3)
+# builds it: replay +20%, view_all +7% against clang 17 -O3. Drop it when
+# CI's linux-arm64 clang is 17 or newer.
+cc_extra() {  # <name>
+  case "$(uname -s)-$(uname -m)-$1" in
+    Linux-aarch64-sb-core) echo "-mllvm -fast-isel" ;;
+  esac
 }
 
 # the key of a cargo binary: every file (path and content) of its crate
@@ -163,7 +183,10 @@ compile() {  # <src> <name> <out>
       && pnpm -s build --only "$name.js" --out "$out" >/dev/null && chmod +x "$out"); return
   fi
   if [ "${r%% *}" != cargo ]; then
-    (cd "$src" && bend "${r%% *}" -o "$out" >/dev/null); return
+    local x; x="$(cc_extra "$name")"
+    if [ -z "$x" ]; then (cd "$src" && bend "${r%% *}" -o "$out" >/dev/null); return; fi
+    (cd "$src" && BISE_CC="${CC:-clang}" BISE_CC_EXTRA="$x" CC="$REPO/scripts/cc-extra.sh" \
+       bend "${r%% *}" -o "$out" >/dev/null); return
   fi
   # one target dir for every source: cargo decides freshness by mtime, and
   # a tree edited before a worktree was built would look fresh - the local
