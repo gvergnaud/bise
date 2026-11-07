@@ -542,7 +542,14 @@ impl GitHub {
     }
 
     fn gh(&self, args: &[&str]) -> Result<String, ForgeError> {
-        let out = Command::new(&self.gh)
+        self.gh_within(args, None)
+    }
+
+    /// `gh` with `args`; with `wait`, a gh still running then is stopped
+    /// (killed and reaped: a hung gh never piles up) and the answer is
+    /// [`ForgeError::Late`].
+    fn gh_within(&self, args: &[&str], wait: Option<std::time::Duration>) -> Result<String, ForgeError> {
+        let mut child = Command::new(&self.gh)
             .args(args)
             // gh asks nothing, pages nothing, prints no color
             .env("GH_PROMPT_DISABLED", "1")
@@ -550,11 +557,39 @@ impl GitHub {
             .env("NO_COLOR", "1")
             .env("GH_NO_UPDATE_NOTIFIER", "1")
             .stdin(Stdio::null())
-            .output()
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
             .map_err(|e| match e.kind() {
                 std::io::ErrorKind::NotFound => ForgeError::Missing,
                 _ => ForgeError::Other(format!("gh: {}", e)),
             })?;
+        // read both pipes while it runs (a full pipe would stall gh)
+        let drain = |p: Option<Box<dyn std::io::Read + Send>>| {
+            std::thread::spawn(move || {
+                let mut buf = Vec::new();
+                if let Some(mut p) = p {
+                    let _ = p.read_to_end(&mut buf);
+                }
+                buf
+            })
+        };
+        let out_t = drain(child.stdout.take().map(|p| Box::new(p) as Box<dyn std::io::Read + Send>));
+        let err_t = drain(child.stderr.take().map(|p| Box::new(p) as Box<dyn std::io::Read + Send>));
+        let until = wait.map(|w| std::time::Instant::now() + w);
+        let status = loop {
+            match child.try_wait() {
+                Ok(Some(s)) => break s,
+                Ok(None) if until.is_some_and(|u| std::time::Instant::now() >= u) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(ForgeError::Late);
+                }
+                Ok(None) => std::thread::sleep(std::time::Duration::from_millis(20)),
+                Err(e) => return Err(ForgeError::Other(format!("gh: {}", e))),
+            }
+        };
+        let out = std::process::Output { status, stdout: out_t.join().unwrap_or_default(), stderr: err_t.join().unwrap_or_default() };
         if out.status.success() {
             Ok(String::from_utf8_lossy(&out.stdout).into_owned())
         } else {
@@ -569,16 +604,18 @@ impl GitHub {
 
     /// A PR's tab: its description, checks, reviews and comments
     /// ([`parse_detail`]), with his login.
-    pub fn pr_detail(&self, url: &str) -> Result<bise_proto::rows::PrDetail, ForgeError> {
-        parse_detail(&self.gh(&["pr", "view", url, "--json", DETAIL_FIELDS])?)
+    /// gh stopped after `wait` ([`ForgeError::Late`]).
+    pub fn pr_detail(&self, url: &str, wait: std::time::Duration) -> Result<bise_proto::rows::PrDetail, ForgeError> {
+        parse_detail(&self.gh_within(&["pr", "view", url, "--json", DETAIL_FIELDS], Some(wait))?)
     }
 
     /// Check `name`'s last log lines, from its Actions run (`details`
-    /// its link, [`run_of`]); None: not a run the hub can read.
-    pub fn check_log(&self, details: &str, name: &str) -> Option<Result<Vec<String>, ForgeError>> {
+    /// its link, [`run_of`]); None: not a run the hub can read. gh
+    /// stopped after `wait`.
+    pub fn check_log(&self, details: &str, name: &str, wait: std::time::Duration) -> Option<Result<Vec<String>, ForgeError>> {
         let (repo, run) = run_of(details)?;
         let run = run.to_string();
-        Some(self.gh(&["run", "view", run.as_str(), "--log-failed", "-R", repo.as_str()]).map(|log| check_log_lines(&log, name)))
+        Some(self.gh_within(&["run", "view", run.as_str(), "--log-failed", "-R", repo.as_str()], Some(wait)).map(|log| check_log_lines(&log, name)))
     }
 
     /// Whether gh has a login for `host` (`gh auth status`'s exit code;
@@ -908,6 +945,34 @@ mod tests {
         assert_eq!((d.notes.len(), d.more_notes), (NOTES_CAP, 3));
         assert!(d.notes.windows(2).all(|w| w[0].at_ms >= w[1].at_ms), "newest first");
         assert!(parse_detail("not json").is_err());
+    }
+
+    /// A gh that hangs is stopped at its wait (architect m_54692): the
+    /// answer is Late at once, its process gone, never one per click
+    /// piling up; a quick one answers as before, its output whole.
+    #[cfg(unix)]
+    #[test]
+    fn a_hung_gh_is_stopped_at_its_wait() {
+        use std::os::unix::fs::PermissionsExt;
+        let d = std::env::temp_dir().join(format!("sb-gh-wait-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let fake = |name: &str, body: &str| {
+            let p = d.join(name);
+            std::fs::write(&p, format!("#!/bin/sh\n{body}\n")).unwrap();
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+            GitHub { gh: p }
+        };
+        let hung = fake("hung", "echo $$ > \"$(dirname \"$0\")/pid\"; exec sleep 30");
+        let t = std::time::Instant::now();
+        assert!(matches!(hung.pr_detail("https://github.com/o/r/pull/1", std::time::Duration::from_millis(300)), Err(ForgeError::Late)));
+        assert!(t.elapsed() < std::time::Duration::from_secs(5), "{:?}", t.elapsed());
+        let pid = std::fs::read_to_string(d.join("pid")).unwrap();
+        let alive = std::process::Command::new("kill").args(["-0", pid.trim()]).status().unwrap().success();
+        assert!(!alive, "the hung gh was stopped");
+        let quick = fake("quick", r#"echo '{"body":"hi","statusCheckRollup":[],"reviews":[],"comments":[]}'"#);
+        assert_eq!(quick.pr_detail("u", std::time::Duration::from_secs(10)).unwrap().body, "hi");
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     /// A check's log: only a GitHub Actions run has one the hub reads;

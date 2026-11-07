@@ -67,6 +67,8 @@ pub enum ForgeError {
     RateLimited(String),
     /// No network, GitHub down.
     Offline(String),
+    /// gh didn't answer in the time it was given: it was stopped.
+    Late,
     Other(String),
 }
 
@@ -78,6 +80,7 @@ impl ForgeError {
             ForgeError::Auth(s) => format!("gh is not logged in ({})", s),
             ForgeError::RateLimited(s) => format!("GitHub's rate limit ({})", s),
             ForgeError::Offline(s) => format!("GitHub unreachable ({})", s),
+            ForgeError::Late => "GitHub didn't answer in time".into(),
             ForgeError::Other(s) => s.clone(),
         }
     }
