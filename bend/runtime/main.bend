@@ -969,7 +969,11 @@ def run(fuel: Nat, out: Pv.Out, +rt: Rtp.Rt, +job: Rtp.Job, tr: Rtp.Trans) -> IO
                       # applied, so steering sent during the call enters
                       # the turn at this safe boundary
                       do IO<RtEnd>:
+                        # the checkpoint, timed (the call's usage says
+                        # its save_ms)
+                        +s0 : Nat <- IO.now()
                         sv : Unit <- save_rt(rt2)
+                        +s1 : Nat <- IO.now()
                         # in flight: a process that dies before the
                         # mark is cleared resumes the turn once
                         # (Pv.inflight_take, core/session.bend Resume)
@@ -977,7 +981,8 @@ def run(fuel: Nat, out: Pv.Out, +rt: Rtp.Rt, +job: Rtp.Job, tr: Rtp.Trans) -> IO
                         +ctx : String <- context_now()
                         +req2 : String <- retool_now(Rtp.rt_tools(rt2), request)
                         nr : Pv.Out & Rem.RemoteRes <- Pv.model_call.req(
-                          out, Rem.with_context(ctx, req2), action, live)
+                          out, Rem.with_context(ctx, req2), action, live,
+                          Nat.sub(s1, s0))
                         mc : Unit <- Pv.inflight_set(live, "")
                         model_back(nr, rt2, k, action, after,
                           k2 => o3 => +r3 => +c =>

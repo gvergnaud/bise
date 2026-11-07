@@ -96,25 +96,27 @@ def verdict_res(+res: Http.Res, st: Api.Style) -> Pvp.Attempt:
 
 # one attempt as the loop and the debug log see it: the policy's
 # verdict, the HTTP status (0: no response) and the raw body received
+# head: when the response's head came (epoch ms; 0: no response)
 type Got is Data:
-  Got{a: Pvp.Attempt, status: U32, raw: String}
+  Got{a: Pvp.Attempt, status: U32, raw: String, head: Nat}
 
 # a transport failure names the host the call went to (Pvp.net_cause)
 def got_err(+host: String, +e: Http.Err) -> Got:
-  Got{Pvp.attempt_err(host, net_of(e)), 0, ""}
+  Got{Pvp.attempt_err(host, net_of(e)), 0, "", 0n}
 
-def got_res(+res: Http.Res, st: Api.Style) -> Got:
+def got_res(+res: Http.Res, st: Api.Style, +head: Nat) -> Got:
   match res:
     case Http.Res{+status, _, _}:
-      Got{verdict_res(res, st), status, Http.text(res)}
+      Got{verdict_res(res, st), status, Http.text(res), head}
 
 def model_call.verdict(r: Result<&2, &2, Http.Err, Http.Res>, st: Api.Style,
     +host: String, +rpath: String) -> IO(Got):
   match r:
     case Done{+res}:
       do IO<Got>:
+        +head : Nat <- IO.now()
         d : Unit <- model_call.res.dumper(String.is_empty(rpath), rpath, res)
-        IO.pure(Got, got_res(res, st))
+        IO.pure(Got, got_res(res, st, head))
     case Fail{+e}:
       IO.pure(Got, got_err(host, e))
 
@@ -185,12 +187,12 @@ def usage_note.pick(empty: Bool, n: Out, +line: String) -> IO(Out):
 
 # the attempt's body: a whole JSON reply, or the Anthropic stream's
 # events (Us.usage_line reads both); no response (status 0) prints nothing
-def usage_note(g: Got, n: Out, +st: Api.Style, +model: String, +req: U32)
-    -> IO(Out):
+def usage_note(g: Got, n: Out, +st: Api.Style, +model: String, +req: U32,
+    +t: Ev.Timing) -> IO(Out):
   match g:
-    case Got{_, +status, +raw}:
+    case Got{_, +status, +raw, _}:
       +line = Us.usage_line(st, model, status, raw)
-      +ev = Us.usage_ev(st, model, status, raw, req)
+      +ev = Us.usage_ev(st, model, status, raw, req, t)
       do IO<Out>:
         n2 : Out <- usage_note.pick(String.is_empty(line), n, line)
         usage_note.pick(String.is_empty(ev), n2, ev)
@@ -348,27 +350,28 @@ def sse.verdict.pick(ok: Bool, +status: U32, +retry_after: String,
         Api.reply_of_for(st, status, text))
 
 def sse.body(+status: U32, +retry_after: String, +text: String,
-    st: Api.Style, +rpath: String) -> IO(Got):
+    st: Api.Style, +rpath: String, +head: Nat) -> IO(Got):
   do IO<Got>:
     d : Unit <- sse.dump(String.is_empty(rpath), rpath, text)
     IO.pure(Got,
       Got{sse.verdict.pick(U32.is_eq(status, 200), status, retry_after, text,
-        st), status, text})
+        st), status, text, head})
 
 # a stream cut short keeps what it had received (the debug log shows
 # how far the reply got)
 def sse.done(rd: Sr.Rd, +status: U32, +retry_after: String, +ck: Sr.Ck,
-    +host: String, +w: Pvp.ProvWait, fam: Api.Style, +rpath: String) -> IO(Got):
+    +host: String, +w: Pvp.ProvWait, fam: Api.Style, +rpath: String,
+    +head: Nat) -> IO(Got):
   match rd:
     case Sr.RdEnd{st, +parts}:
       do IO<Got>:
         c : Unit <- Http.stream.close(st)
-        sse.body(status, retry_after, sse.text(parts), fam, rpath)
+        sse.body(status, retry_after, sse.text(parts), fam, rpath, head)
     case Sr.RdErr{st, +parts, +e}:
       do IO<Got>:
         c : Unit <- Http.stream.close(st)
         IO.pure(Got, Got{Pvp.attempt_err_in(host, w, net_of(e)), status,
-          sse.text(parts)})
+          sse.text(parts), head})
     case Sr.RdStop{st, +parts}:
       # cancelled: the race already answered the turn (call.raced) and
       # nobody reads this Got; the connection closes, the provider stops,
@@ -378,7 +381,8 @@ def sse.done(rd: Sr.Rd, +status: U32, +retry_after: String, +ck: Sr.Ck,
           do IO<Got>:
             c : Unit <- Http.stream.close(st)
             u : Unit <- P.write_file(cpath, "")
-            IO.pure(Got, Got{Pvp.AFail{"cancelled"}, status, sse.text(parts)})
+            IO.pure(Got, Got{Pvp.AFail{"cancelled"}, status, sse.text(parts),
+              head})
 
 @unsafe
 def sse.head(sr: Http.Stream & Http.Res, +c: Chan(Race.Step<Got>), +lv: Lp.Lv,
@@ -389,9 +393,10 @@ def sse.head(sr: Http.Stream & Http.Res, +c: Chan(Race.Step<Got>), +lv: Lp.Lv,
       match res:
         case Http.Res{+status, +h, _}:
           do IO<Got>:
+            +head : Nat <- IO.now()
             rd : Sr.Rd <- Sr.sse.check(Got, c, lv, st, Nil{}, ck, 0)
             sse.done(rd, status, Http.header(h, "retry-after"), ck, host,
-              w, fam, rpath)
+              w, fam, rpath, head)
 
 @unsafe
 def sse.opened(r: Result<&1, &1, Http.Err, Http.Stream>,
@@ -399,7 +404,7 @@ def sse.opened(r: Result<&1, &1, Http.Err, Http.Stream>,
     +w: Pvp.ProvWait, fam: Api.Style, +rpath: String) -> IO(Got):
   match r:
     case Fail{+e}:
-      IO.pure(Got, Got{Pvp.attempt_err_in(host, w, net_of(e)), 0, ""})
+      IO.pure(Got, Got{Pvp.attempt_err_in(host, w, net_of(e)), 0, "", 0n})
     case Done{st}:
       sse.head(Http.stream.res(st), c, lv, ck, host, w, fam, rpath)
 
@@ -465,7 +470,7 @@ def call.raced.got(n: Out, r: Race.Raced<Got>, +tok: String, +cpath: String)
     case Race.Stopped{+who}:
       do IO<Out & Got>:
         u : Unit <- P.write_file(cpath, tok)
-        IO.pure(Out & Got, (n, Got{Pvp.AFail{Pvp.interrupted_by(who)}, 0, ""}))
+        IO.pure(Out & Got, (n, Got{Pvp.AFail{Pvp.interrupted_by(who)}, 0, "", 0n}))
 
 # a partial line: the hub reads the REPL's lines from the wire log only
 # (switchboard daemon/repl.rs pump_wire; the socket is only drained), so
@@ -521,7 +526,7 @@ def call.raced(n: Out, +tok: String, +id: String, live: Bool,
 def model_call.log(+call: Nat, +tries: Nat, +model: String, +url: String,
     +json: String, g: Got) -> IO(Unit):
   match g:
-    case Got{+a, +status, +raw}:
+    case Got{+a, +status, +raw, _}:
       Dbg.attempt(call, tries, model, url, status, json, raw, a)
 
 # the attempt the Core reads (Pvp.attempt_for, BISE-293); on a ChatGPT
@@ -530,14 +535,14 @@ def model_call.log(+call: Nat, +tries: Nat, +model: String, +url: String,
 def got_for(+tools: List<&2, W.WTool>, +name: String, +key: String,
     +plan: Bool, +model: String, +st: Api.Style, g: Got) -> Pvp.Attempt:
   match g:
-    case Got{+a, +status, +raw}:
+    case Got{+a, +status, +raw, _}:
       Pvp.attempt_plan.line(Plan.refused_line(plan, status, raw, model),
         Pvp.attempt_plan(plan, status, Api.error_code(st, raw),
           Pvp.attempt_for(tools, name, key, status, raw, a)))
 
 def got_attempt(g: Got) -> Pvp.Attempt:
   match g:
-    case Got{+a, _, _}:
+    case Got{+a, _, _, _}:
       a
 
 # ---- images (docs/images.md): check each image part of the printed body ----
@@ -696,13 +701,18 @@ def fill_img_bytes(+f: Im.IFill) -> Nat:
 
 def got_status(g: Got) -> U32:
   match g:
-    case Got{_, +status, _}:
+    case Got{_, +status, _, _}:
       status
 
 def got_raw(g: Got) -> String:
   match g:
-    case Got{_, _, +raw}:
+    case Got{_, _, +raw, _}:
       raw
+
+def got_head(g: Got) -> Nat:
+  match g:
+    case Got{_, _, _, +head}:
+      head
 
 # a request whose tool calls were not all answered (a history cut by a
 # restart): the guard answered them; one line in the debug log and one
@@ -772,11 +782,14 @@ def model_call.try(fuel: Nat, +tries: Nat, +bd: Pvp.Budget, n: Out,
         (n, Rem.RRErr{"provider unreachable: retries exhausted"}))
     case 1n+k:
       match ctx:
-        case Pvp.CallCtx{+pv, _, _, _, _, _, _, _, _, _}:
+        case Pvp.CallCtx{+pv, _, _, _, _, _, _, _, _, _, _}:
           do IO<Out & Rem.RemoteRes>:
+            # the attempt's clock: its start, then its body built
+            +t0 : Nat <- IO.now()
             +b : Built <- request_body(request, pv, limit)
+            +t1 : Nat <- IO.now()
             model_call.sent(b, k, tries, bd, n, request, ctx, call, limit,
-              shrunk)
+              shrunk, t0, t1)
 
 # the provider refused the call's key (401/403): the REPL forgets the
 # key it kept for that provider (Pvp.key_drop)
@@ -792,12 +805,12 @@ def out.key_drop(n: Out, +prov: String, +status: U32) -> Out:
 @unsafe
 def model_call.sent(b: Built, +k: Nat, +tries: Nat, +bd: Pvp.Budget, n: Out,
     +request: String, +ctx: Pvp.CallCtx, +call: Nat, +limit: Nat,
-    +shrunk: Bool) -> IO(Out & Rem.RemoteRes):
+    +shrunk: Bool, +t0: Nat, +t1: Nat) -> IO(Out & Rem.RemoteRes):
   match b:
     case Built{+wreq, _, +names, +ckey, +json, +fill, +body}:
       match ctx:
         case Pvp.CallCtx{+pv, +id, _, +key, +bearer, +extra, +wait, +label,
-            +req, +live}:
+            +req, +live, +save_ms}:
           match pv:
             case Pvp.Prov{+prov, +model, +st, +url, _, +facts}:
               do IO<Out & Rem.RemoteRes>:
@@ -820,10 +833,13 @@ def model_call.sent(b: Built, +k: Nat, +tries: Nat, +bd: Pvp.Budget, n: Out,
                   String.concat([Nat.show(call), ".", Nat.show(tries)]), live,
                   st, url, hdrs, body, wait, rpath)
                 got_then(ng, n0 => +g => do IO<Out & Rem.RemoteRes>:
+                  +t2 : Nat <- IO.now()
                   lg : Unit <- model_call.log(call, tries, model, url, json, g)
-                  # the usage line names the full id (the TUI's catalog key)
+                  # the usage line names the full id (the TUI's catalog
+                  # key); its event carries the attempt's times
                   nu : Out <- usage_note(g, out.key_drop(n0, prov, got_status(g)),
-                    st, id, req)
+                    st, id, req,
+                    Us.timing(t0, t1, got_head(g), t2, save_ms, tries))
                   # big-request: a body over the provider's size limit goes
                   # again once, its images within half its weight
                   # (model_call.sized); else BISE-293: the calls named back
@@ -865,13 +881,14 @@ def model_call.sized(big: Bool, nu: Out, +bd: Pvp.Budget, +tries: Nat,
 # the call's context, built once (Pvp.prepare), then its attempts
 @unsafe
 def model_call.go(n: Out, +request: String, +key: String, +pv: Pvp.Prov,
-    +mfile: String, +hval: String, +req: U32, +live: Bool)
+    +mfile: String, +hval: String, +req: U32, +live: Bool, +save_ms: Nat)
     -> IO(Out & Rem.RemoteRes):
   do IO<Out & Rem.RemoteRes>:
     +call : Nat <- IO.now()
     +limit : Nat <- req_limit()
     model_call.try(Pvp.call_fuel(), 0n, Pvp.budget0(), n, request,
-      Pvp.prepare(pv, mfile, key, hval, req, live), call, limit, False{})
+      Pvp.prepare(pv, mfile, key, hval, req, live, save_ms), call, limit,
+      False{})
 
 # a provider with a key_env (or a key_command) needs its key; one with
 # key_env = "" and no key_command (a local server) calls without a key.
@@ -880,12 +897,12 @@ def model_call.go(n: Out, +request: String, +key: String, +pv: Pvp.Prov,
 @unsafe
 def model_call.key(missing: Bool, n: Out, +request: String, +key: String,
     +pv: Pvp.Prov, +mfile: String, +hval: String, +why: String, +req: U32,
-    +live: Bool) -> IO(Out & Rem.RemoteRes):
+    +live: Bool, +save_ms: Nat) -> IO(Out & Rem.RemoteRes):
   match missing:
     case True{}:
       IO.pure(Out & Rem.RemoteRes, (n, Rem.RRErr{why}))
     case False{}:
-      model_call.go(n, request, key, pv, mfile, hval, req, live)
+      model_call.go(n, request, key, pv, mfile, hval, req, live, save_ms)
 
 def key_cmd.max_output() -> U32:
   65536
@@ -952,7 +969,7 @@ def key_log(+p: Pvp.KeyPick, +prov: String, +req: U32) -> IO(Unit):
 @unsafe
 def model_call.picked(nm: Out & Pvp.CallMem, +request: String, +pv: Pvp.Prov,
     +mfile: String, +hval: String, +cmd: String, +run: Pvp.KeyRun, +req: U32,
-    +live: Bool) -> IO(Out & Rem.RemoteRes):
+    +live: Bool, +save_ms: Nat) -> IO(Out & Rem.RemoteRes):
   match nm:
     case (n, +mem):
       match pv:
@@ -964,7 +981,7 @@ def model_call.picked(nm: Out & Pvp.CallMem, +request: String, +pv: Pvp.Prov,
               out.set_mem(n, Pvp.key_mem(mem, prov, cmd, p)), request,
               Pvp.key_used(p), pv, mfile, hval,
               Pvp.key_why(True{}, Api.facts_plan(facts), prov, key_env,
-                Pvp.key_missing_cause(p)), req, live)
+                Pvp.key_missing_cause(p)), req, live, save_ms)
 
 # the key of a call: key_command's output when the catalog names one,
 # run by /bin/sh before every call like Claude Code's apiKeyHelper (a
@@ -972,7 +989,7 @@ def model_call.picked(nm: Out & Pvp.CallMem, +request: String, +pv: Pvp.Prov,
 @unsafe
 def model_call.key_of(none: Bool, n: Out, +request: String, +pv: Pvp.Prov,
     +mfile: String, +hval: String, +cmd: String, +env_key: String, +req: U32,
-    +live: Bool) -> IO(Out & Rem.RemoteRes):
+    +live: Bool, +save_ms: Nat) -> IO(Out & Rem.RemoteRes):
   match none:
     case True{}:
       match pv:
@@ -980,20 +997,21 @@ def model_call.key_of(none: Bool, n: Out, +request: String, +pv: Pvp.Prov,
           model_call.key(Bool.and(Bool.not(String.is_empty(key_env)),
               String.is_empty(env_key)), n, request, env_key, pv, mfile, hval,
             Pvp.key_why(False{}, Api.facts_plan(facts), prov, key_env, ""),
-            req, live)
+            req, live, save_ms)
     case False{}:
       do IO<Out & Rem.RemoteRes>:
         r : Result<&1, &1, U32 & String, U32 & (String & String)> <- Process.run(
           "/bin/sh", Con{"-c", Con{cmd, Nil{}}}, "", key_cmd.max_output(),
           key_cmd.timeout_ms())
         model_call.picked(out.mem(n), request, pv, mfile, hval, cmd,
-          key_cmd.answer(r), req, live)
+          key_cmd.answer(r), req, live, save_ms)
 
 # the missing key's line: Pvp.key_why (a ChatGPT plan's: its sign-in
 # expired; the key_command's with its cause, else the key_env's)
 @unsafe
 def model_call.auth(n: Out, +request: String, +pv: Pvp.Prov, +mfile: String,
-    +hval: String, +req: U32, +live: Bool) -> IO(Out & Rem.RemoteRes):
+    +hval: String, +req: U32, +live: Bool, +save_ms: Nat)
+    -> IO(Out & Rem.RemoteRes):
   match pv:
     case Pvp.Prov{+prov, +model, _, _, +key_env, _}:
       do IO<Out & Rem.RemoteRes>:
@@ -1001,21 +1019,21 @@ def model_call.auth(n: Out, +request: String, +pv: Pvp.Prov, +mfile: String,
           Pvp.key_command(mfile, prov, String.concat([prov, "/", model])))
         kr : Result<&1, &1, U32 & String, String> <- IO.get_env(key_env)
         model_call.key_of(String.is_empty(cmd), n, request, pv, mfile, hval,
-          cmd, P.env_or(kr, ""), req, live)
+          cmd, P.env_or(kr, ""), req, live, save_ms)
 
 @unsafe
 def model_call.headers_ready(missing: Bool, +hvar: String, n: Out,
     +request: String, +pv: Pvp.Prov, +mfile: String, +hval: String,
-    +req: U32, +live: Bool) -> IO(Out & Rem.RemoteRes):
+    +req: U32, +live: Bool, +save_ms: Nat) -> IO(Out & Rem.RemoteRes):
   match missing:
     case True{}:
       IO.pure(Out & Rem.RemoteRes, (n, Rem.RRErr{Pvp.headers_why(hvar)}))
     case False{}:
-      model_call.auth(n, request, pv, mfile, hval, req, live)
+      model_call.auth(n, request, pv, mfile, hval, req, live, save_ms)
 
 @unsafe
 def model_call.env(n: Out, +request: String, +pv: Pvp.Prov, +req: U32,
-    +live: Bool) -> IO(Out & Rem.RemoteRes):
+    +live: Bool, +save_ms: Nat) -> IO(Out & Rem.RemoteRes):
   match pv:
     case Pvp.Prov{+prov, +model, _, _, _, _}:
       do IO<Out & Rem.RemoteRes>:
@@ -1025,13 +1043,13 @@ def model_call.env(n: Out, +request: String, +pv: Pvp.Prov, +req: U32,
         hr : Result<&1, &1, U32 & String, String> <- IO.get_env(hvar)
         +hval : String <- IO.pure(String, P.env_or(hr, ""))
         model_call.headers_ready(Pvp.headers_missing(hvar, hval),
-          hvar, n, request, pv, mfile, hval, req, live)
+          hvar, n, request, pv, mfile, hval, req, live, save_ms)
 
 def model_call.resolved(r: Pvp.Resolved, n: Out, +request: String,
-    +req: U32, +live: Bool) -> IO(Out & Rem.RemoteRes):
+    +req: U32, +live: Bool, +save_ms: Nat) -> IO(Out & Rem.RemoteRes):
   match r:
     case Pvp.ROk{+pv}:
-      model_call.env(n, request, pv, req, live)
+      model_call.env(n, request, pv, req, live, save_ms)
     case Pvp.RErr{_, +msg}:
       IO.pure(Out & Rem.RemoteRes, (n, Rem.RRErr{msg}))
 
@@ -1124,14 +1142,14 @@ def asked_model() -> IO(String):
     IO.pure(String, Pvp.asked_chosen(choice, P.env_or(br, ""), P.env_or(mr, ""),
       P.env_or(ar, ""), P.env_or(rr, ""), cfgt, file))
 
-def model_call.req(n: Out, +request: String, +req: U32, +live: Bool)
-    -> IO(Out & Rem.RemoteRes):
+def model_call.req(n: Out, +request: String, +req: U32, +live: Bool,
+    +save_ms: Nat) -> IO(Out & Rem.RemoteRes):
   do IO<Out & Rem.RemoteRes>:
     +r : Pvp.Resolved <- resolution()
     +asked : String <- asked_model()
     +said : String <- Pl.swap_said(live, asked, Pvp.shown_model(r))
     n1 : Out <- usage_note.pick(String.is_empty(said), n, said)
-    model_call.resolved(r, n1, request, req, live)
+    model_call.resolved(r, n1, request, req, live, save_ms)
 
 def model_call(n: Out, +request: String) -> IO(Out & Rem.RemoteRes):
-  model_call.req(n, request, 0, False{})
+  model_call.req(n, request, 0, False{}, 0n)

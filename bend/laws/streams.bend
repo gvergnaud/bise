@@ -18,6 +18,7 @@ import ../runtime/settings-pure.bend as St
 import ../runtime/repl-core-pure.bend as Rp
 import ../runtime/debug-pure.bend as Dg
 import ../runtime/usage-pure.bend as Us
+import ../core/ev.bend as Ev
 
 # ---- a refused request, in bise's words and the provider's (BISE-293) ----
 # The feed showed the provider's raw JSON twice; now one line: who
@@ -622,3 +623,17 @@ law solo_tone_not_with_role:
 # LAW: a drained steering line carries escaped newlines back as real ones.
 law steer_line_unescapes:
   {Rt.steer_cmd("a\\nb") == T.UserMsg{T.Steer{}, "a\nb"} : T.Cmd}
+
+# LAW (c2-turn-survives d): a call's usage event carries its times: the
+# body's build, the checkpoint, the response's head after the send, the
+# attempt's whole time and which attempt; no head: ttfb 0.
+law usage_carries_timing:
+  {Us.usage_ev(Api.OpenAI{}, "m", 200,
+      "{\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2}}", 7,
+      Us.timing(1000n, 1040n, 1900n, 2500n, 12n, 1n))
+    == "  ev: {\"type\":\"usage\",\"v\":1,\"data\":{\"req\":7,\"model\":\"m\",\"input\":10,\"output\":2,\"cache_read\":0,\"cache_write\":0,\"build_ms\":40,\"save_ms\":12,\"ttfb_ms\":860,\"total_ms\":1500,\"attempt\":2}}"
+    : String}
+
+law timing_without_head:
+  {Us.timing(1000n, 1040n, 0n, 2500n, 12n, 0n)
+    == Ev.Timing{40n, 12n, 0n, 1500n, 1n} : Ev.Timing}

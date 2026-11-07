@@ -1531,14 +1531,16 @@ def left_after(stop: Bool, +left: U32) -> U32:
 # file, the key (key_pick's), whether it also goes as a bearer token (a
 # key_command gateway), the extra headers (headers in config.toml, then
 # the headers_env value), the stream's wait, the name errors give the
-# provider; req: the Core's action id; live: the reply streams in.
+# provider; req: the Core's action id; live: the reply streams in;
+# save_ms: the checkpoint's time before the call (its usage says it).
 type CallCtx is Data:
   CallCtx{pv: Prov, id: String, mfile: String, key: String, bearer: Bool,
-    extra: String, wait: ProvWait, label: String, req: U32, live: Bool}
+    extra: String, wait: ProvWait, label: String, req: U32, live: Bool,
+    save_ms: Nat}
 
 # hval: the headers_env variable's value ("" none)
 def prepare(+pv: Prov, +mfile: String, +key: String, +hval: String,
-    +req: U32, +live: Bool) -> CallCtx:
+    +req: U32, +live: Bool, +save_ms: Nat) -> CallCtx:
   match pv:
     case Prov{+prov, +model, _, +url, _, _}:
       CallCtx{pv, String.concat([prov, "/", model]), mfile, key,
@@ -1547,12 +1549,12 @@ def prepare(+pv: Prov, +mfile: String, +key: String, +hval: String,
         String.append(headers(mfile, prov, String.concat([prov, "/", model])),
           hval),
         stream_wait(mfile, prov, String.concat([prov, "/", model])),
-        prov_label(mfile, prov, url), req, live}
+        prov_label(mfile, prov, url), req, live, save_ms}
 
 # the provider id of a call (the key memory's key)
 def ctx_prov(+c: CallCtx) -> String:
   match c:
-    case CallCtx{+pv, _, _, _, _, _, _, _, _, _}:
+    case CallCtx{+pv, _, _, _, _, _, _, _, _, _, _}:
       match pv:
         case Prov{+provider, _, _, _, _, _}:
           provider

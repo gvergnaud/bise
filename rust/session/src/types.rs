@@ -301,6 +301,20 @@ pub struct Usage {
     pub request_sha256: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cost: Option<Value>,
+    /// the call's times in ms (bend/core/ev.bend Timing): the request
+    /// body's build, the checkpoint before the call, the response's head
+    /// after the send (0: none), the attempt's whole time; and the
+    /// attempt (1-based) that answered. Absent before c2-turn-survives.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub save_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ttfb_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attempt: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -891,13 +891,28 @@ def sess_evs(+s: T.Session, +model: String, +source: String)
       cfg_evs(cfg, model, source)
 
 # the usage of one model request (the provider's reply)
+# a call's times (c2-turn-survives d), in ms: the request body's build,
+# the checkpoint before the call, the response's first byte (its head)
+# after the send, the attempt's whole time (build to end), and which
+# attempt (1-based) answered
+type Timing is Data:
+  Timing{build_ms: Nat, save_ms: Nat, ttfb_ms: Nat, total_ms: Nat,
+    attempt: Nat}
+
+def timing_kvs(+t: Timing) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  match t:
+    case Timing{+b, +s, +f, +a, +n}:
+      [J.kv("build_ms", J.num(b)), J.kv("save_ms", J.num(s)),
+        J.kv("ttfb_ms", J.num(f)), J.kv("total_ms", J.num(a)),
+        J.kv("attempt", J.num(n))]
+
 def usage(+req: U32, +model: String, +inp: Nat, +out: Nat, +cr: Nat,
-    +cw: Nat) -> String:
+    +cw: Nat, +t: Timing) -> String:
   line("usage", False{},
     J.obj(Con{J.kv("req", u32(req)), Con{J.kv("model", J.str(model)),
       Con{J.kv("input", J.num(inp)), Con{J.kv("output", J.num(out)),
         Con{J.kv("cache_read", J.num(cr)),
-          Con{J.kv("cache_write", J.num(cw)), Nil{}}}}}}}))
+          Con{J.kv("cache_write", J.num(cw)), timing_kvs(t)}}}}}}))
 
 # a failed attempt that will be retried (the provider's retry loop)
 def retry(+req: U32, +attempt: Nat, +why: String, +delay_ms: U32) -> String:

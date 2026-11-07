@@ -229,3 +229,9 @@ def Laws.attempt_timeout_names_the_key():
 
 def Laws.attempt_err_in_others():
   {==}
+
+def Laws.usage_carries_timing():
+  {==}
+
+def Laws.timing_without_head():
+  {==}

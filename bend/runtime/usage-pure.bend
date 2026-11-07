@@ -55,29 +55,42 @@ def usage_line(st: Api.Style, +model: String, +status: U32, +body: String)
 
 # the same usage as a session-log fact (core/ev.bend): req is the
 # Core's action id of the request; no usage: ""
-def usage_ev.of(u: Api.Usage, +model: String, +req: U32) -> String:
-  match u:
-    case Api.Usage{+inp, +out, +cr, +cw}:
-      Ev.usage(req, model, inp, out, cr, cw)
-
-def usage_ev.usage(u: J.Json, st: Api.Style, +model: String, +req: U32)
+def usage_ev.of(u: Api.Usage, +model: String, +req: U32, +t: Ev.Timing)
     -> String:
   match u:
+    case Api.Usage{+inp, +out, +cr, +cw}:
+      Ev.usage(req, model, inp, out, cr, cw, t)
+
+def usage_ev.usage(u: J.Json, st: Api.Style, +model: String, +req: U32,
+    +t: Ev.Timing) -> String:
+  match u:
     case J.JObj{+kvs}:
-      usage_ev.of(Api.usage_of(st, J.JObj{kvs}), model, req)
+      usage_ev.of(Api.usage_of(st, J.JObj{kvs}), model, req, t)
     case _:
       ""
 
 def usage_ev.ok(ok: Bool, +st: Api.Style, +model: String, +body: String,
-    +req: U32) -> String:
+    +req: U32, +t: Ev.Timing) -> String:
   match ok:
     case True{}:
       usage_ev.usage(
         usage_line.body(String.starts_with(String.trim(body), "{"), st, body),
-        st, model, req)
+        st, model, req, t)
     case False{}:
       ""
 
+# t: the call's times (Ev.Timing, Us.timing)
 def usage_ev(st: Api.Style, +model: String, +status: U32, +body: String,
-    +req: U32) -> String:
-  usage_ev.ok(U32.is_eq(status, 200), st, model, body, req)
+    +req: U32, +t: Ev.Timing) -> String:
+  usage_ev.ok(U32.is_eq(status, 200), st, model, body, req, t)
+
+# the times of an attempt from its clock readings (epoch ms): start
+# (before its body was built), sent (the body built, the send begins),
+# head (the response's head; 0: none), end; save_ms: the checkpoint's
+# time before the call; tries: the attempt (0-based). ttfb: the head
+# after the send (0 with no head); every difference floors at 0.
+def timing(+start: Nat, +sent: Nat, +head: Nat, +end: Nat, +save_ms: Nat,
+    +tries: Nat) -> Ev.Timing:
+  Ev.Timing{Nat.sub(sent, start), save_ms,
+    Bool.pick(Nat, Nat.is_eq(head, 0n), 0n, Nat.sub(head, sent)),
+    Nat.sub(end, start), Nat.add(tries, 1n)}
