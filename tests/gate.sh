@@ -789,15 +789,11 @@ desktop_check() {
     python3 -c 'import json, sys, time; print(json.dumps({"t": int(time.time()), "agent": sys.argv[1], "sha": sys.argv[2], "changed": sys.argv[3].split(), "ran": sys.argv[4].split(), "rc": int(sys.argv[5])}))' \
       "${SB_AGENT:-?}" "$(git -C "$root" rev-parse HEAD 2>/dev/null)" "$rel" "$ran" "$drc" >>"$gdir/vitest-related.jsonl" 2>/dev/null
     if [ $drc = 0 ]; then echo "ok   desktop_check ($((SECONDS - s))s, vitest: related + by path; full runs all)"; return 0; fi
-  # the whole app: an agent's quick lints through its tree's eslint cache (check:cached,
-  # node_modules/.cache/eslint-quick: a file re-linted when its content changed). Its
-  # typed rules read other files, which the cache doesn't track: a type change can leave an
-  # unchanged file's red hidden there, so every other gate (full, land, the tip gate, a
-  # release) lints cold with `check` (main m_54506, architect)
-  # (check:cached tests the unit project; then the bims' world simulations: all of them when a
-  # bims file changed (the plan's dbims), else the ones whose imports hold a changed app file
-  # (dfiles: vitest related, usually none)
-  elif (cd "$root/apps/desktop" && pnpm -s "$([ "$mode" = quick ] && [ "${1:-}" != strict ] && echo check:cached || echo check)" \
+  # the whole app: a quick runs check:quick, check with no build and the unit project only;
+  # then the bims' world simulations: all of them when a bims file changed (the plan's
+  # dbims), else the ones whose imports hold a changed app file (dfiles: vitest related,
+  # usually none). Every other gate (full, land, the tip gate, a release) runs `check`
+  elif (cd "$root/apps/desktop" && pnpm -s "$([ "$mode" = quick ] && [ "${1:-}" != strict ] && echo check:quick || echo check)" \
       && { [ "$mode" != quick ] || [ "${1:-}" = strict ] || quick_bims_laws; }) >"$log" 2>&1
   then echo "ok   desktop_check ($((SECONDS - s))s)"; return 0; fi
   echo "FAIL desktop_check"

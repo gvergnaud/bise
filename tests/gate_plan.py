@@ -126,7 +126,7 @@ SELFTESTS = [
     # every agent's gate takes heavy-run's queue, one gate a tree (5 s)
     ("gate_queue_test", "python3 -B tests/gate_queue_test.py",
      ("tests/gate_queue_test.py", "tests/gate.sh", "scripts/heavy-run", "scripts/heavy_slot.py",
-      "tests/eslint_quick_key.py", "tests/proof_run.py")),
+      "tests/proof_run.py")),
     # every build that ships a runtime checks it is whole for the viewer (xlsx-fix)
     ("runtime_check_test", "python3 -B tests/runtime_check_test.py",
      ("tests/runtime_check_test.py", "scripts/runtime_check.sh", "scripts/try_build.py", "scripts/versions.sh",

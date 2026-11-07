@@ -95,81 +95,22 @@ def proof_run_reaps_its_own(tmp):
           % (r.stdout[-200:] + r.stderr[-300:]))
 
 
-def desktop_lint_cache_quick_only():
-    """An agent's quick lints the whole desktop app through its tree's eslint
-    cache; every other gate lints cold (main m_54506): the typed rules read
-    other files, which the cache doesn't track, so a hidden red is caught on
-    main. check:cached is check with lint:cached for lint and no build (quick
-    builds nothing, c3-quick-90s: the full gate, the tip and a release build),
-    nothing else; the cache lives in the tree's own node_modules, never shared."""
+def desktop_check_quick_only():
+    """A quick's whole-app desktop_check runs check:quick: check with test:quick
+    (the unit project) for test and no build (quick builds nothing,
+    c3-quick-90s: the full gate, the tip and a release build), the same plain
+    lint; every other gate runs check."""
     import json
     s = json.load(open(os.path.join(HERE, "..", "apps", "desktop", "package.json")))["scripts"]
-    want = s["check"].replace("pnpm lint ", "pnpm lint:cached ").replace("pnpm test ", "pnpm test:quick ")
-    check(want.endswith(" && pnpm build") and s.get("check:cached") == want[:-len(" && pnpm build")]
+    want = s["check"].replace("pnpm test ", "pnpm test:quick ")
+    check(want.endswith(" && pnpm build") and s.get("check:quick") == want[:-len(" && pnpm build")]
           and s.get("test:quick") == s["test"] + " --project unit",
-          "check:cached is check with lint:cached for lint, test:quick (unit, no bims-laws) for test, "
-          "without its build: %r" % s.get("check:cached"))
-    lc = s.get("lint:cached", "")
-    check(lc == "python3 ../../tests/eslint_quick_key.py && " + s["lint"].rsplit(" .", 1)[0]
-          + " --cache --cache-strategy content --cache-location node_modules/.cache/eslint-quick/lint/ .",
-          "lint:cached is the type key, then lint with a content cache in the tree's node_modules: %r" % lc)
+          "check:quick is check with test:quick (unit, no bims-laws) for test, without its build: %r"
+          % s.get("check:quick"))
     src = open(GATE).read()
-    uses = [l.strip() for l in src.splitlines() if "check:cached" in l and not l.strip().startswith("#")]
-    check(len(uses) == 1 and '[ "$mode" = quick ] && [ "${1:-}" != strict ] && echo check:cached || echo check' in uses[0],
-          "gate.sh: check:cached only in a quick's non-strict desktop_check, `check` (cold) everywhere else: %r" % uses)
-
-
-def eslint_key_wipes_on_type_change(tmp):
-    """tests/eslint_quick_key.py (architect m_54601/m_54604): the eslint cache
-    can't see a type change in another file (a callee now returns a Promise:
-    the caller's no-floating-promises red), so a change in the emitted
-    declarations wipes it; a body-only edit (same declarations) keeps it; an
-    emit error or a tsc that won't start wipes it too (the key is missing:
-    the lint runs cold, never a stale green). A fake tsc writes one .d.ts."""
-    app = os.path.join(tmp, "eslint-key-app")
-    os.makedirs(app)
-    fake = os.path.join(tmp, "fake-tsc")
-    with open(fake, "w") as f:
-        f.write("#!/usr/bin/env python3\n"
-                "import os, sys\n"
-                "a = sys.argv\n"
-                "out = a[a.index('--outDir') + 1]\n"
-                "os.makedirs(out, exist_ok=True)\n"
-                "open(os.path.join(out, 'callee.d.ts'), 'w').write(open(os.environ['FAKE_DTS']).read())\n"
-                "sys.exit(int(open(os.environ['FAKE_RC']).read()))\n")
-    os.chmod(fake, 0o755)
-    dts, rc = os.path.join(tmp, "fake.dts"), os.path.join(tmp, "fake.rc")
-    env = dict(os.environ, TSC=fake, FAKE_DTS=dts, FAKE_RC=rc)
-    cache = os.path.join(app, "node_modules", ".cache", "eslint-quick")
-    marker = os.path.join(cache, "lint", "marker")
-    sig = os.path.join(cache, "types.sig")
-
-    def run(decl, code, what):
-        open(dts, "w").write(decl)
-        open(rc, "w").write(str(code))
-        os.makedirs(os.path.dirname(marker), exist_ok=True)
-        open(marker, "w").write("x")
-        r = subprocess.run([sys.executable, os.path.join(HERE, "eslint_quick_key.py")], cwd=app, env=env,
-                           capture_output=True, text=True)
-        check(r.returncode == 0, "eslint_quick_key exits 0 (%s), whatever the emit: %r" % (what, r.stderr[-300:]))
-        return os.path.exists(marker)
-
-    run("export declare function f(): number;\n", 0, "first run")
-    check(os.path.exists(sig), "eslint_quick_key: a good emit stores its key")
-    check(run("export declare function f(): number;\n", 0, "same declarations"),
-          "eslint_quick_key: the same declarations (a body-only edit) keep the eslint cache")
-    check(not run("export declare function f(): Promise<number>;\n", 0, "a changed .d.ts"),
-          "eslint_quick_key: a changed declaration wipes the eslint cache")
-    check(not run("export declare function f(): Promise<number>;\n", 2, "an emit error"),
-          "eslint_quick_key: an emit error wipes the eslint cache")
-    check(not os.path.exists(sig), "eslint_quick_key: an emit error drops the stored key")
-    check(not run("export declare function f(): Promise<number>;\n", 0, "after an emit error"),
-          "eslint_quick_key: the run after an emit error lints cold (no key to match)")
-    check(run("export declare function f(): Promise<number>;\n", 0, "warm again"),
-          "eslint_quick_key: then the same declarations keep it again")
-    env["TSC"] = os.path.join(tmp, "no-such-tsc")
-    check(not run("export declare function f(): Promise<number>;\n", 0, "no tsc"),
-          "eslint_quick_key: a tsc that won't start wipes the eslint cache")
+    uses = [l.strip() for l in src.splitlines() if "check:quick" in l and not l.strip().startswith("#")]
+    check(len(uses) == 1 and '[ "$mode" = quick ] && [ "${1:-}" != strict ] && echo check:quick || echo check' in uses[0],
+          "gate.sh: check:quick only in a quick's non-strict desktop_check, `check` everywhere else: %r" % uses)
 
 
 def main():
@@ -256,8 +197,7 @@ def main():
     check('setup = "tests/gate.sh seed"' in toml, "bise.toml: [worktree] setup runs gate.sh seed")
     seed_carries_deps_only(tmp, senv)
     proof_run_reaps_its_own(tmp)
-    desktop_lint_cache_quick_only()
-    eslint_key_wipes_on_type_change(tmp)
+    desktop_check_quick_only()
     # 4. the wiring a test can't run whole (a real gate): the nested gate and GATE_NO_HEAVY skip both
     src = open(GATE).read()
     check('if [ "$mode" != land ] && [ -z "$gate_outer" ] && [ -z "${GATE_NO_HEAVY:-}" ]; then' in src,
