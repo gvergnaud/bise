@@ -13,6 +13,7 @@ import ../../hub/wakes.bend as HWK
 import ../../hub/xhub-model.bend as HXH
 import ../../hub/xhub.bend as HXB
 import ./hub-1.bend as PL1
+import ./absurd.bend as AB
 import ./hub-2.bend as PL2
 import ./hub-names.bend as PLN
 import ./hub-agents.bend as PLA
@@ -294,14 +295,14 @@ def hub_and_true_l(+x: Bool, -y: Bool, e: {HLZ.and(x, u => y) == True{} : Bool})
     case True{}:
       {==}
     case False{}:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(e), Bool, False{}, True{})
+      AB.absurd_eq(AB.ft_absurd(e), Bool, False{}, True{})
 
 def hub_and_true_r(+x: Bool, -y: Bool, e: {HLZ.and(x, u => y) == True{} : Bool}) -> {y == True{} : Bool}:
   match x:
     case True{}:
       e
     case False{}:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(e), Bool, y, True{})
+      AB.absurd_eq(AB.ft_absurd(e), Bool, y, True{})
 
 def hub_or_true_and(+c: Bool) -> {HLZ.and(HLZ.or(c, u => True{}), u => True{}) == True{} : Bool}:
   match c:
@@ -361,7 +362,7 @@ def hub_str_out(a: Bool, +h: HS.Timer, +t: List<&2, HS.Timer>, +ns: List<&2, Str
       +hin = hub_and_true_l(HTM.nat_in(l, HS.Timer.id(h)), HTM.all_in(HTM.ids_in(t, ns), l),
         Equal.trans(Bool, HTM.all_in(HS.Timer.id(h) <> HTM.ids_in(t, ns), l), HTM.all_in(HTM.ids_in(h <> t, ns), l), True{},
           Equal.sym(Bool, HTM.all_in(HTM.ids_in(h <> t, ns), l), HTM.all_in(HS.Timer.id(h) <> HTM.ids_in(t, ns), l), e2), hall))
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(Equal.trans(Bool, False{}, HTM.nat_in(l, HS.Timer.id(h)), True{},
+      AB.absurd_eq(AB.ft_absurd(Equal.trans(Bool, False{}, HTM.nat_in(l, HS.Timer.id(h)), True{},
         Equal.sym(Bool, HTM.nat_in(l, HS.Timer.id(h)), False{}, eb), hin)), Bool, HTM.str_in(ns, HS.Timer.agent(h)), False{})
 
 def hub_neq_of(c: Bool, +a: String, +n: String, +ns: List<&2, String>, +ec: {String.eq(a, n) == c : Bool},
@@ -372,7 +373,7 @@ def hub_neq_of(c: Bool, +a: String, +n: String, +ns: List<&2, String>, +ec: {Str
     case True{}:
       +s = PL2.hub_str_eq_sound(a, n, ec)
       +e3 = Equal.cong(String, Bool, x => HTM.str_in(ns, x), a, n, s)
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(Equal.trans(Bool, False{}, HTM.str_in(ns, a), True{},
+      AB.absurd_eq(AB.ft_absurd(Equal.trans(Bool, False{}, HTM.str_in(ns, a), True{},
         Equal.sym(Bool, HTM.str_in(ns, a), False{}, ha), Equal.trans(Bool, HTM.str_in(ns, a), HTM.str_in(ns, n), True{}, e3, hn))), Bool, String.eq(a, n), False{})
 
 def hub_none_keep.pick(b: Bool, +h: HS.Timer, +t: List<&2, HS.Timer>, +l: List<&2, Nat>, +ns: List<&2, String>, +n: String,
@@ -590,7 +591,7 @@ def hub_wk_str_out(a: Bool, +h: HS.Watch, +t: List<&2, HS.Watch>, +ns: List<&2, 
       +hin = hub_and_true_l(HWK.nat_in(l, HS.Watch.id(h)), HWK.all_in(HWK.ids_of(t, ns), l),
         Equal.trans(Bool, HWK.all_in(HS.Watch.id(h) <> HWK.ids_of(t, ns), l), HWK.all_in(HWK.ids_of(h <> t, ns), l), True{},
           Equal.sym(Bool, HWK.all_in(HWK.ids_of(h <> t, ns), l), HWK.all_in(HS.Watch.id(h) <> HWK.ids_of(t, ns), l), e2), hall))
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(Equal.trans(Bool, False{}, HWK.nat_in(l, HS.Watch.id(h)), True{},
+      AB.absurd_eq(AB.ft_absurd(Equal.trans(Bool, False{}, HWK.nat_in(l, HS.Watch.id(h)), True{},
         Equal.sym(Bool, HWK.nat_in(l, HS.Watch.id(h)), False{}, eb), hin)), Bool, HWK.str_in(ns, HS.Watch.agent(h)), False{})
 
 def hub_wk_neq_of(c: Bool, +a: String, +n: String, +ns: List<&2, String>, +ec: {String.eq(a, n) == c : Bool},
@@ -601,7 +602,7 @@ def hub_wk_neq_of(c: Bool, +a: String, +n: String, +ns: List<&2, String>, +ec: {
     case True{}:
       +s = PL2.hub_str_eq_sound(a, n, ec)
       +e3 = Equal.cong(String, Bool, x => HWK.str_in(ns, x), a, n, s)
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(Equal.trans(Bool, False{}, HWK.str_in(ns, a), True{},
+      AB.absurd_eq(AB.ft_absurd(Equal.trans(Bool, False{}, HWK.str_in(ns, a), True{},
         Equal.sym(Bool, HWK.str_in(ns, a), False{}, ha), Equal.trans(Bool, HWK.str_in(ns, a), HWK.str_in(ns, n), True{}, e3, hn))), Bool, String.eq(a, n), False{})
 
 def hub_wk_none_keep.pick(b: Bool, +h: HS.Watch, +t: List<&2, HS.Watch>, +l: List<&2, Nat>, +ns: List<&2, String>, +n: String,
@@ -721,7 +722,7 @@ def hub_or_false_l(+x: Bool, -y: Bool, e: {Bool.or(x, y) == False{} : Bool}) -> 
     case False{}:
       {==}
     case True{}:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(Equal.sym(Bool, True{}, False{}, e)), Bool, True{}, False{})
+      AB.absurd_eq(AB.ft_absurd(Equal.sym(Bool, True{}, False{}, e)), Bool, True{}, False{})
 
 def hub_and_false(+x: Bool) -> {Bool.and(x, False{}) == False{} : Bool}:
   match x:

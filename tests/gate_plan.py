@@ -86,6 +86,8 @@ SELFTESTS = [
     ("gate_plan_test", "python3 -B tests/gate_plan_test.py",
      ("tests/gate_plan*.py", "tests/fixtures/gate-plan/*", "tests/test_map.py", "tests/desktop_assets.py",
       "tests/include_map.py")),
+    # PROOF's closure and per-file cache, on a fake bend
+    ("proof_run_test", "python3 -B tests/proof_run_test.py", ("tests/proof_run*.py",)),
     ("sleep_check_self", "python3 tests/sleep_check.py --self-test", ("tests/sleep_check.py",)),
     # nothing slow on the hub's loop (its ratchet runs always) and the measure of hub.log
     ("loop_blocking_self", "python3 tests/loop_blocking_check.py --self-test", ("tests/loop_blocking_check.py",)),
@@ -143,12 +145,28 @@ class Tree:
     includes: {changed path outside rust/: [rust/<crate>/(include), ...]} (tests/include_map.py)
     exists:   the changed paths still in the tree (a deleted desktop file runs the whole app)
     desktop:  whether the tree has apps/desktop
+    proofs:   {bend/proofs/<f>.bend: [every bend/ file of its imports' closure, itself too]}
+              (tests/proof_run.py closures; read only when a .bend file changed)
     """
 
-    def __init__(self, includes=None, exists=None, desktop=True):
+    def __init__(self, includes=None, exists=None, desktop=True, proofs=None):
         self.includes = includes or {}
         self.exists = set(exists or ())
         self.desktop = desktop
+        self.proofs = proofs or {}
+
+
+def proofs_for(changed, tree):
+    """The proofs files PROOF checks for these paths: the ones whose closure holds a changed
+    .bend file (a hub file: the hub's proofs, not models' or the runtime's); every one when a
+    changed one is gone (a deleted import: no closure says who read it). Names (hub.bend)."""
+    bend = [p for p in changed if PROOF_RX.match(p)]
+    if not bend:
+        return []
+    if any(p not in tree.exists for p in bend):
+        return sorted(os.path.basename(f) for f in tree.proofs)
+    hit = set(bend)
+    return sorted(os.path.basename(f) for f, c in tree.proofs.items() if hit & set(c))
 
 
 def _crates(p):
@@ -252,7 +270,7 @@ def plan(changed, tree):
     land_steps = bool(any(SRC_RX.search(p) for p in changed) or pkgs or desktop or land_flags)
     return {"changed": changed, "pkgs": pkgs, "flags": {f: int(f in flags) for f in FLAG_NAMES},
             "hub_changed": int(hub), "bend_changed": int(bend), "core_gen": int(core_gen),
-            "desktop": desktop, "heavy": heavy, "land_steps": land_steps,
+            "desktop": desktop, "heavy": heavy, "land_steps": land_steps, "proofs": proofs_for(changed, tree),
             "selftests": selftests(changed, tree), "selftests_all": selftests(changed, tree, every=True)}
 
 
@@ -272,6 +290,7 @@ def to_sh(p):
     """The plan as shell assignments for gate.sh (eval)."""
     d = p["desktop"] or {}
     v = {"pkgs": " ".join(p["pkgs"]), "hub_changed": p["hub_changed"], "bend_changed": p["bend_changed"],
+         "proof_files": " ".join(p["proofs"]),
          "core_gen": p["core_gen"], "dwhy": d.get("why") or "", "drel": " ".join(d.get("rel") or []),
          "heavy": p["heavy"], "land_steps": int(p["land_steps"]), **p["flags"]}
     lines = ["%s=%s" % (k, shlex.quote(str(x))) for k, x in v.items()]
@@ -297,8 +316,12 @@ def read_tree(changed, root=ROOT):
                     hit.append(c)
             if hit:
                 includes[p] = ["%s/(include)" % c for c in hit]
+    proofs = {}
+    if any(PROOF_RX.match(p) for p in changed):
+        import proof_run
+        proofs = proof_run.closures(root)
     return Tree(includes=includes, exists={p for p in changed if os.path.isfile(os.path.join(root, p))},
-                desktop=os.path.isdir(os.path.join(root, "apps", "desktop")))
+                desktop=os.path.isdir(os.path.join(root, "apps", "desktop")), proofs=proofs)
 
 
 def main(argv):

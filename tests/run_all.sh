@@ -163,21 +163,18 @@ tui_term_tmux tui_running_tmux images_mem_e2e images_blind_e2e skills_hang_e2e"
 [ -n "$only" ] && TESTS="$only"
 [ "$picked" = 1 ] && TESTS="$pick"
 if [ -z "$(echo $TESTS)" ]; then echo "== no e2e/tmux test picked for this change"; rust_wait || exit 1; exit 0; fi
-# PROOF: every bend/proofs/*.bend (tests/proof_run.py), cached by the content of the .bend files it reads
-# and the bend version, for every worktree (a rerun of a red full gate, or
-# another task on the same hub/ core/: ~2-3 min of one core, skipped)
+# PROOF: every bend/proofs/*.bend (tests/proof_run.py), each cached by the content of its imports'
+# closure and the bend version, for every worktree and the quick gate (a rerun of a red full
+# gate, or another task on the same hub/ core/: ~2-3 min of one core, skipped)
 proof_cache="${BISE_HOME:-$HOME/.bise}/gate/proof-cache"
-proof_key="whole-$( { find bend/core bend/hub bend/vendor bend/runtime bend/laws bend/proofs -name '*.bend' -type f 2>/dev/null | sort | while read -r f; do echo "$f"; cat "$f"; done; } | shasum | cut -c1-16)-$(BEND_NO_TELEMETRY=1 bend version 2>/dev/null | tr -dc '0-9.')"
 mkdir -p "$proof_cache" 2>/dev/null
 echo "== E2E (real hub, REPLs, git; scripted provider), Bend laws (bend/proofs), the TUI under tmux ($jobs jobs)"
 out="$(mktemp -d -t sb-run-all)"
 one() {  # <test>: its last line; its whole output kept on failure
   local s=$SECONDS rc=0 cpu
-  if [ "$1" = PROOF ] && [ -f "$proof_cache/$proof_key" ]; then
-    echo "ok   PROOF (cached: these .bend files checked whole before)"; return 0
-  elif [ "$1" = PROOF ]; then
-    # 2 bend at once: PROOF is one job of the pool
-    /usr/bin/time -p -o "$out/$1.time" python3 tests/proof_run.py . 2 "$out/proof" >"$out/$1.log" 2>&1 || rc=1
+  if [ "$1" = PROOF ]; then
+    # 2 bend at once: PROOF is one job of the pool; a file green on its closure before is skipped
+    /usr/bin/time -p -o "$out/$1.time" python3 tests/proof_run.py . 2 "$out/proof" --cache "$proof_cache" >"$out/$1.log" 2>&1 || rc=1
   else
     # RUN_ALL_KEEP: a red e2e.Env test copies its world's logs there (hub.log,
     # an inner gate's...) before its tmp goes, so the red names its line
@@ -187,13 +184,12 @@ one() {  # <test>: its last line; its whole output kept on failure
   local load; load="$(sysctl -n vm.loadavg 2>/dev/null | awk '{ print $2 }')"
   # one line, one write: the parallel jobs' appends never mix
   echo "$(date +%s)	$rev	$1	$rc	$((SECONDS - s))	${cpu:-0}	${load:-?}	${SB_RUN_KIND:-adhoc}" >>"$timings"
-  [ $rc = 0 ] && [ "$1" = PROOF ] && touch "$proof_cache/$proof_key"
   [ $rc = 0 ] || echo "$1" >>"$out/failed"
   if [ $rc = 0 ]; then echo "ok   $1 ($((SECONDS - s))s, cpu ${cpu:-?}s): $(tail -1 "$out/$1.log")"
   else echo "FAIL $1 ($((SECONDS - s))s, cpu ${cpu:-?}s): $out/$1.log$([ -d "$out/$1.keep" ] && echo ", its world's logs: $out/$1.keep")"; fi
   return $rc
 }
-export -f one; export out timings rev proof_cache proof_key
+export -f one; export out timings rev proof_cache
 rc=0
 # the longest first (median wall of their last 10 runs in $timings; a test
 # with no history counts as long), so the jobs end together instead of a

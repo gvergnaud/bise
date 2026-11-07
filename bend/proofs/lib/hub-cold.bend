@@ -13,15 +13,16 @@ import ../../hub/lazy.bend as HLZ
 import ../../hub/cold.bend as CO
 import ../../hub/core.bend as HC
 import ./hub-1.bend as PL1
+import ./absurd.bend as AB
 
 # ---- numbers ----
 
 def hc_gt_lt(+a: Nat, +b: Nat, h: {Nat.is_gt(a, b) == True{} : Bool}) -> {Nat.is_lt(b, a) == True{} : Bool}:
   match a b:
     case 0n 0n:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(h), Bool, Nat.is_lt(b, a), True{})
+      AB.absurd_eq(AB.ft_absurd(h), Bool, Nat.is_lt(b, a), True{})
     case 0n 1n+bp:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(h), Bool, Nat.is_lt(b, a), True{})
+      AB.absurd_eq(AB.ft_absurd(h), Bool, Nat.is_lt(b, a), True{})
     case 1n+ap 0n:
       {==}
     case 1n+ap 1n+bp:
@@ -30,11 +31,11 @@ def hc_gt_lt(+a: Nat, +b: Nat, h: {Nat.is_gt(a, b) == True{} : Bool}) -> {Nat.is
 def hc_lt_gt(+a: Nat, +b: Nat, h: {Nat.is_lt(a, b) == True{} : Bool}) -> {Nat.is_gt(b, a) == True{} : Bool}:
   match a b:
     case 0n 0n:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(h), Bool, Nat.is_gt(b, a), True{})
+      AB.absurd_eq(AB.ft_absurd(h), Bool, Nat.is_gt(b, a), True{})
     case 0n 1n+bp:
       {==}
     case 1n+ap 0n:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(h), Bool, Nat.is_gt(b, a), True{})
+      AB.absurd_eq(AB.ft_absurd(h), Bool, Nat.is_gt(b, a), True{})
     case 1n+ap 1n+bp:
       hc_lt_gt(ap, bp, h)
 
@@ -42,7 +43,7 @@ def hc_lt_gt(+a: Nat, +b: Nat, h: {Nat.is_lt(a, b) == True{} : Bool}) -> {Nat.is
 def hc_gt_neq(+a: Nat, +b: Nat, h: {Nat.is_gt(a, b) == True{} : Bool}) -> {Nat.is_eq(a, b) == False{} : Bool}:
   match a b:
     case 0n 0n:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(h), Bool, Nat.is_eq(a, b), False{})
+      AB.absurd_eq(AB.ft_absurd(h), Bool, Nat.is_eq(a, b), False{})
     case 0n 1n+bp:
       {==}
     case 1n+ap 0n:
@@ -55,11 +56,11 @@ def hc_ge_gt(+a: Nat, +b: Nat, +c: Nat, g: {Nat.is_gt(a, b) == False{} : Bool}, 
     -> {Nat.is_gt(b, c) == True{} : Bool}:
   match a b c:
     case 0n _ 0n:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(h), Bool, Nat.is_gt(b, c), True{})
+      AB.absurd_eq(AB.ft_absurd(h), Bool, Nat.is_gt(b, c), True{})
     case 0n _ 1n+cp:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(h), Bool, Nat.is_gt(b, c), True{})
+      AB.absurd_eq(AB.ft_absurd(h), Bool, Nat.is_gt(b, c), True{})
     case 1n+ap 0n _:
-      PL1.hub_absurd_eq(PL1.hub_tf_absurd(g), Bool, Nat.is_gt(b, c), True{})
+      AB.absurd_eq(AB.tf_absurd(g), Bool, Nat.is_gt(b, c), True{})
     case 1n+ap 1n+bp 0n:
       {==}
     case 1n+ap 1n+bp 1n+cp:
@@ -69,7 +70,7 @@ def hc_ge_gt(+a: Nat, +b: Nat, +c: Nat, g: {Nat.is_gt(a, b) == False{} : Bool}, 
 def hc_gt_flip(+a: Nat, +b: Nat, ne: {Nat.is_eq(a, b) == False{} : Bool}) -> {Nat.is_gt(b, a) == Bool.not(Nat.is_gt(a, b)) : Bool}:
   match a b:
     case 0n 0n:
-      PL1.hub_absurd_eq(PL1.hub_tf_absurd(ne), Bool, Nat.is_gt(b, a), Bool.not(Nat.is_gt(a, b)))
+      AB.absurd_eq(AB.tf_absurd(ne), Bool, Nat.is_gt(b, a), Bool.not(Nat.is_gt(a, b)))
     case 0n 1n+bp:
       {==}
     case 1n+ap 0n:
@@ -184,7 +185,7 @@ def hc_lt_not_gt(+x: Nat, +n: Nat, h: {Nat.is_lt(x, n) == True{} : Bool}) -> {Na
     case 0n 1n+np:
       {==}
     case 1n+xp 0n:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(h), Bool, Nat.is_gt(x, n), False{})
+      AB.absurd_eq(AB.ft_absurd(h), Bool, Nat.is_gt(x, n), False{})
     case 1n+xp 1n+np:
       hc_lt_not_gt(xp, np, h)
 
@@ -196,7 +197,7 @@ def hc_lt_ge(+a: Nat, +b: Nat, h: {Nat.is_lt(a, b) == True{} : Bool}) -> {Nat.is
     case 0n 1n+bp:
       {==}
     case 1n+ap 0n:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(h), Bool, Nat.is_ge(b, a), True{})
+      AB.absurd_eq(AB.ft_absurd(h), Bool, Nat.is_ge(b, a), True{})
     case 1n+ap 1n+bp:
       hc_lt_ge(ap, bp, h)
 
@@ -205,11 +206,11 @@ def hc_le_ne_lt(+a: Nat, +b: Nat, g: {Nat.is_gt(a, b) == False{} : Bool}, ne: {N
     -> {Nat.is_lt(a, b) == True{} : Bool}:
   match a b:
     case 0n 0n:
-      PL1.hub_absurd_eq(PL1.hub_tf_absurd(ne), Bool, Nat.is_lt(a, b), True{})
+      AB.absurd_eq(AB.tf_absurd(ne), Bool, Nat.is_lt(a, b), True{})
     case 0n 1n+bp:
       {==}
     case 1n+ap 0n:
-      PL1.hub_absurd_eq(PL1.hub_tf_absurd(g), Bool, Nat.is_lt(a, b), True{})
+      AB.absurd_eq(AB.tf_absurd(g), Bool, Nat.is_lt(a, b), True{})
     case 1n+ap 1n+bp:
       hc_le_ne_lt(ap, bp, g, ne)
 
@@ -219,9 +220,9 @@ def hc_eq_nat(+a: Nat, +b: Nat, e: {Nat.is_eq(a, b) == True{} : Bool}) -> {a == 
     case 0n 0n:
       {==}
     case 0n 1n+bp:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(e), Nat, a, b)
+      AB.absurd_eq(AB.ft_absurd(e), Nat, a, b)
     case 1n+ap 0n:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(e), Nat, a, b)
+      AB.absurd_eq(AB.ft_absurd(e), Nat, a, b)
     case 1n+ap 1n+bp:
       Equal.cong(Nat, Nat, x => 1n+x, ap, bp, hc_eq_nat(ap, bp, e))
 
@@ -348,7 +349,7 @@ def hc_map_miss.go(c: Bool, +h: HS.MRec, +t: List<&2, HS.MRec>, +id: Nat, +op: H
     ih: {HM.map_msg(t, id, op) == t : List<&2, HS.MRec>}) -> {HM.map_msg(h <> t, id, op) == h <> t : List<&2, HS.MRec>}:
   match c:
     case True{}:
-      PL1.hub_absurd_eq(PL1.hub_tf_absurd(f), List<&2, HS.MRec>, HM.map_msg(h <> t, id, op), h <> t)
+      AB.absurd_eq(AB.tf_absurd(f), List<&2, HS.MRec>, HM.map_msg(h <> t, id, op), h <> t)
     case False{}:
       %Equal.sym(Bool, Nat.is_eq(HS.Msg.id(HS.MRec.msg(h)), id), False{}, e) : {HLZ.pick(List<&2, HS.MRec>, _, u => HM.rec_op(h, op) <> t, u => h <> HM.map_msg(t, id, op)) == h <> t : List<&2, HS.MRec>}
       Equal.cong(List<&2, HS.MRec>, List<&2, HS.MRec>, x => h <> x, HM.map_msg(t, id, op), t, ih)

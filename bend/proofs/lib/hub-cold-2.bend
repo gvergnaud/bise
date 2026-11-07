@@ -12,6 +12,7 @@ import ../../hub/lazy.bend as HLZ
 import ../../hub/cold.bend as CO
 import ../../hub/core.bend as HC
 import ./hub-1.bend as PL1
+import ./absurd.bend as AB
 import ./hub-cold.bend as PC1
 
 # ---- the hot ones of every message are the hot side ----
@@ -587,10 +588,10 @@ def hc_some_inj(+a: HS.MRec, +b: HS.MRec, e: {Some{a} == Some{b} : Maybe<&2, HS.
   Equal.cong(Maybe<&2, HS.MRec>, HS.MRec, m => hc_val(m, a), Some{a}, Some{b}, e)
 
 def hc_none_some(+c: HS.MRec, e: {None{} == Some{c} : Maybe<&2, HS.MRec>}) -> Empty:
-  PL1.hub_ft_absurd(Equal.cong(Maybe<&2, HS.MRec>, Bool, m => Maybe.is_some(&2, HS.MRec, m), None{}, Some{c}, e))
+  AB.ft_absurd(Equal.cong(Maybe<&2, HS.MRec>, Bool, m => Maybe.is_some(&2, HS.MRec, m), None{}, Some{c}, e))
 
 def hc_some_none(+c: HS.MRec, e: {Some{c} == None{} : Maybe<&2, HS.MRec>}) -> Empty:
-  PL1.hub_tf_absurd(Equal.cong(Maybe<&2, HS.MRec>, Bool, m => Maybe.is_some(&2, HS.MRec, m), Some{c}, None{}, e))
+  AB.tf_absurd(Equal.cong(Maybe<&2, HS.MRec>, Bool, m => Maybe.is_some(&2, HS.MRec, m), Some{c}, None{}, e))
 
 # the found record's id is the one asked
 def hc_okid(m: Maybe<&2, HS.MRec>, +id: Nat) -> Bool:

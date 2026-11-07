@@ -13,6 +13,7 @@ import ../hub/gen/feed.bend as HFD
 import ../hub/said.bend as HSD
 import ../hub/lazy.bend as HLZ
 import ./lib/hub-1.bend as PL1
+import ./lib/absurd.bend as AB
 import ./lib/hub-2.bend as PL2
 import ../laws/threads.bend as Laws
 
@@ -357,9 +358,9 @@ def hub_nat_eq_sound(+a: Nat, +b: Nat, e: {Nat.is_eq(a, b) == True{} : Bool}) ->
     case 0n 0n:
       {==}
     case 0n 1n+bp:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(e), Nat, 0n, 1n+bp)
+      AB.absurd_eq(AB.ft_absurd(e), Nat, 0n, 1n+bp)
     case 1n+ap 0n:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(e), Nat, 1n+ap, 0n)
+      AB.absurd_eq(AB.ft_absurd(e), Nat, 1n+ap, 0n)
     case 1n+ap 1n+bp:
       Equal.cong(Nat, Nat, k => 1n+k, ap, bp, hub_nat_eq_sound(ap, bp, e))
 
@@ -433,7 +434,7 @@ def Laws.mcp_fail_text_says_why_and_safety():
 def Laws.hub_turns_counts_every_busy_exit(now, n, e):
   match now:
     case HS.RBusy{}:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(Equal.sym(Bool, True{}, False{}, e)), Nat, HC.turns_after(HS.RBusy{}, HS.RBusy{}, n), 1n+n)
+      AB.absurd_eq(AB.ft_absurd(Equal.sym(Bool, True{}, False{}, e)), Nat, HC.turns_after(HS.RBusy{}, HS.RBusy{}, n), 1n+n)
     case HS.RIdle{}:
       {==}
     case HS.RDown{}:
@@ -448,11 +449,11 @@ def Laws.hub_turns_never_moves_otherwise(was, now, n, e):
         case HS.RBusy{}:
           {==}
         case HS.RIdle{}:
-          PL1.hub_absurd_eq(PL1.hub_ft_absurd(Equal.sym(Bool, True{}, False{}, e)), Nat, HC.turns_after(HS.RBusy{}, HS.RIdle{}, n), n)
+          AB.absurd_eq(AB.ft_absurd(Equal.sym(Bool, True{}, False{}, e)), Nat, HC.turns_after(HS.RBusy{}, HS.RIdle{}, n), n)
         case HS.RDown{}:
-          PL1.hub_absurd_eq(PL1.hub_ft_absurd(Equal.sym(Bool, True{}, False{}, e)), Nat, HC.turns_after(HS.RBusy{}, HS.RDown{}, n), n)
+          AB.absurd_eq(AB.ft_absurd(Equal.sym(Bool, True{}, False{}, e)), Nat, HC.turns_after(HS.RBusy{}, HS.RDown{}, n), n)
         case HS.RStarting{}:
-          PL1.hub_absurd_eq(PL1.hub_ft_absurd(Equal.sym(Bool, True{}, False{}, e)), Nat, HC.turns_after(HS.RBusy{}, HS.RStarting{}, n), n)
+          AB.absurd_eq(AB.ft_absurd(Equal.sym(Bool, True{}, False{}, e)), Nat, HC.turns_after(HS.RBusy{}, HS.RStarting{}, n), n)
     case HS.RIdle{}:
       {==}
     case HS.RDown{}:

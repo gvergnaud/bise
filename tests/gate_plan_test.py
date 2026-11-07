@@ -30,7 +30,8 @@ def main():
         cases = json.load(fh)
     fails = []
     for c in cases:
-        tree = gate_plan.Tree(includes=c.get("includes"), exists=c.get("exists"), desktop=c.get("desktop", True))
+        tree = gate_plan.Tree(includes=c.get("includes"), exists=c.get("exists"), desktop=c.get("desktop", True),
+                              proofs=c.get("proofs"))
         got = gate_plan.plan(c["paths"], tree)
         bad = diff(c["want"], got)
         print(("ok   " if not bad else "FAIL ") + c["name"])

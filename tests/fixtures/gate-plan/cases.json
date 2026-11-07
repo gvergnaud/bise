@@ -457,5 +457,220 @@
     "loop_blocking_self"
    ]
   }
+ },
+ {
+  "name": "a hub file: the hub's proofs only, not models' (lib/absurd.bend has no hub)",
+  "paths": [
+   "bend/hub/core.bend"
+  ],
+  "exists": [
+   "bend/hub/core.bend"
+  ],
+  "proofs": {
+   "bend/proofs/hub.bend": [
+    "bend/proofs/hub.bend",
+    "bend/laws/hub.bend",
+    "bend/hub/core.bend",
+    "bend/proofs/lib/hub-1.bend",
+    "bend/proofs/lib/absurd.bend"
+   ],
+   "bend/proofs/models.bend": [
+    "bend/proofs/models.bend",
+    "bend/laws/models.bend",
+    "bend/core/session.bend",
+    "bend/proofs/lib/absurd.bend"
+   ],
+   "bend/proofs/runtime.bend": [
+    "bend/proofs/runtime.bend",
+    "bend/laws/runtime.bend",
+    "bend/core/session.bend"
+   ]
+  },
+  "want": {
+   "proofs": [
+    "hub.bend"
+   ]
+  }
+ },
+ {
+  "name": "a core file: every proofs file reading it",
+  "paths": [
+   "bend/core/session.bend"
+  ],
+  "exists": [
+   "bend/core/session.bend"
+  ],
+  "proofs": {
+   "bend/proofs/hub.bend": [
+    "bend/proofs/hub.bend",
+    "bend/laws/hub.bend",
+    "bend/hub/core.bend",
+    "bend/proofs/lib/hub-1.bend",
+    "bend/proofs/lib/absurd.bend"
+   ],
+   "bend/proofs/models.bend": [
+    "bend/proofs/models.bend",
+    "bend/laws/models.bend",
+    "bend/core/session.bend",
+    "bend/proofs/lib/absurd.bend"
+   ],
+   "bend/proofs/runtime.bend": [
+    "bend/proofs/runtime.bend",
+    "bend/laws/runtime.bend",
+    "bend/core/session.bend"
+   ]
+  },
+  "want": {
+   "proofs": [
+    "models.bend",
+    "runtime.bend"
+   ]
+  }
+ },
+ {
+  "name": "the shared absurd lib: its two readers",
+  "paths": [
+   "bend/proofs/lib/absurd.bend"
+  ],
+  "exists": [
+   "bend/proofs/lib/absurd.bend"
+  ],
+  "proofs": {
+   "bend/proofs/hub.bend": [
+    "bend/proofs/hub.bend",
+    "bend/laws/hub.bend",
+    "bend/hub/core.bend",
+    "bend/proofs/lib/hub-1.bend",
+    "bend/proofs/lib/absurd.bend"
+   ],
+   "bend/proofs/models.bend": [
+    "bend/proofs/models.bend",
+    "bend/laws/models.bend",
+    "bend/core/session.bend",
+    "bend/proofs/lib/absurd.bend"
+   ],
+   "bend/proofs/runtime.bend": [
+    "bend/proofs/runtime.bend",
+    "bend/laws/runtime.bend",
+    "bend/core/session.bend"
+   ]
+  },
+  "want": {
+   "proofs": [
+    "hub.bend",
+    "models.bend"
+   ]
+  }
+ },
+ {
+  "name": "a deleted bend file: every proofs file",
+  "paths": [
+   "bend/hub/gone.bend"
+  ],
+  "proofs": {
+   "bend/proofs/hub.bend": [
+    "bend/proofs/hub.bend",
+    "bend/laws/hub.bend",
+    "bend/hub/core.bend",
+    "bend/proofs/lib/hub-1.bend",
+    "bend/proofs/lib/absurd.bend"
+   ],
+   "bend/proofs/models.bend": [
+    "bend/proofs/models.bend",
+    "bend/laws/models.bend",
+    "bend/core/session.bend",
+    "bend/proofs/lib/absurd.bend"
+   ],
+   "bend/proofs/runtime.bend": [
+    "bend/proofs/runtime.bend",
+    "bend/laws/runtime.bend",
+    "bend/core/session.bend"
+   ]
+  },
+  "want": {
+   "proofs": [
+    "hub.bend",
+    "models.bend",
+    "runtime.bend"
+   ]
+  }
+ },
+ {
+  "name": "a hub file no proof imports: none, sb-core still",
+  "paths": [
+   "bend/hub/new.bend"
+  ],
+  "exists": [
+   "bend/hub/new.bend"
+  ],
+  "proofs": {
+   "bend/proofs/hub.bend": [
+    "bend/proofs/hub.bend",
+    "bend/laws/hub.bend",
+    "bend/hub/core.bend",
+    "bend/proofs/lib/hub-1.bend",
+    "bend/proofs/lib/absurd.bend"
+   ],
+   "bend/proofs/models.bend": [
+    "bend/proofs/models.bend",
+    "bend/laws/models.bend",
+    "bend/core/session.bend",
+    "bend/proofs/lib/absurd.bend"
+   ],
+   "bend/proofs/runtime.bend": [
+    "bend/proofs/runtime.bend",
+    "bend/laws/runtime.bend",
+    "bend/core/session.bend"
+   ]
+  },
+  "want": {
+   "proofs": [],
+   "bend_changed": 1,
+   "hub_changed": 1
+  }
+ },
+ {
+  "name": "the runtime's own file: no PROOF step at all",
+  "paths": [
+   "bend/runtime/repl-core.bend"
+  ],
+  "exists": [
+   "bend/runtime/repl-core.bend"
+  ],
+  "proofs": {
+   "bend/proofs/hub.bend": [
+    "bend/proofs/hub.bend",
+    "bend/laws/hub.bend",
+    "bend/hub/core.bend",
+    "bend/proofs/lib/hub-1.bend",
+    "bend/proofs/lib/absurd.bend"
+   ],
+   "bend/proofs/models.bend": [
+    "bend/proofs/models.bend",
+    "bend/laws/models.bend",
+    "bend/core/session.bend",
+    "bend/proofs/lib/absurd.bend"
+   ],
+   "bend/proofs/runtime.bend": [
+    "bend/proofs/runtime.bend",
+    "bend/laws/runtime.bend",
+    "bend/core/session.bend"
+   ]
+  },
+  "want": {
+   "proofs": []
+  }
+ },
+ {
+  "name": "proof_run itself: its test and the queue's reap test",
+  "paths": [
+   "tests/proof_run.py"
+  ],
+  "want": {
+   "selftests": [
+    "proof_run_test",
+    "gate_queue_test"
+   ]
+  }
  }
 ]

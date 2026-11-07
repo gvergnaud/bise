@@ -14,6 +14,7 @@ import ../../hub/inv.bend as HI
 import ../../hub/names.bend as HN
 import ../../hub/lazy.bend as HLZ
 import ./hub-1.bend as PL1
+import ./absurd.bend as AB
 import ./hub-2.bend as PL2
 
 # ---- drop_str: a list of old names without one ----
@@ -121,7 +122,7 @@ def nm_none(m: Maybe<&2, HS.Agent>, e: {Maybe.is_some(&2, HS.Agent, m) == False{
     case None{}:
       {==}
     case Some{x}:
-      PL1.hub_absurd_eq(PL1.hub_tf_absurd(e), Maybe<&2, HS.Agent>, Some{x}, None{})
+      AB.absurd_eq(AB.tf_absurd(e), Maybe<&2, HS.Agent>, Some{x}, None{})
 
 # the agents split (hub/agents.bend): a lookup reads St.agents, then
 # arch: the same as a lookup in both lists, one after the other

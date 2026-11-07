@@ -12,6 +12,7 @@ import ../../hub/timers.bend as HTM
 import ../../hub/wakes.bend as HWK
 import ../../hub/gen/feed.bend as HFD
 import ./hub-1.bend as PL1
+import ./absurd.bend as AB
 import ../../hub/lazy.bend as HLZ
 import ../../hub/names.bend as HN
 
@@ -271,7 +272,7 @@ def hub_drop_absent.go(c: Bool, +h: HS.Card, +t: List<&2, HS.Card>, -id: Nat, +e
     ec: {c == False{} : Bool}, ih: {HM.drop_card(t, id) == t : List<&2, HS.Card>}) -> {HM.drop_card(h <> t, id) == h <> t : List<&2, HS.Card>}:
   match c:
     case True{}:
-      PL1.hub_absurd_eq(PL1.hub_tf_absurd(ec), List<&2, HS.Card>, HM.drop_card(h <> t, id), h <> t)
+      AB.absurd_eq(AB.tf_absurd(ec), List<&2, HS.Card>, HM.drop_card(h <> t, id), h <> t)
     case False{}:
       %Equal.sym(Bool, Nat.is_eq(HS.Card.id(h), id), False{}, e) : {HLZ.pick(List<&2, HS.Card>, _, u => t, u => h <> HM.drop_card(t, id)) == h <> t : List<&2, HS.Card>}
       Equal.cong(List<&2, HS.Card>, List<&2, HS.Card>, xs => h <> xs, HM.drop_card(t, id), t, ih)
@@ -514,16 +515,16 @@ def hub_bool_sound(a: Bool, b: Bool, e: {Bool.cmp(a, b) == EQ{} : Cmp}) -> {a ==
     case True{} True{}:
       {==}
     case False{} True{}:
-      PL1.hub_absurd_eq(hub_lt_eq(e), Bool, False{}, True{})
+      AB.absurd_eq(hub_lt_eq(e), Bool, False{}, True{})
     case True{} False{}:
-      PL1.hub_absurd_eq(hub_gt_eq(e), Bool, True{}, False{})
+      AB.absurd_eq(hub_gt_eq(e), Bool, True{}, False{})
 
 def hub_word_sound.fin(a: Bool, b: Bool, t: Cmp, +et: {t == EQ{} : Cmp}, e: {Word.cmp.fin(a, b, t) == EQ{} : Cmp}) -> {a == b : Bool}:
   match t:
     case LT{}:
-      PL1.hub_absurd_eq(hub_lt_eq(et), Bool, a, b)
+      AB.absurd_eq(hub_lt_eq(et), Bool, a, b)
     case GT{}:
-      PL1.hub_absurd_eq(hub_gt_eq(et), Bool, a, b)
+      AB.absurd_eq(hub_gt_eq(et), Bool, a, b)
     case EQ{}:
       hub_bool_sound(a, b, e)
 
@@ -584,18 +585,18 @@ def hub_cmpc_tail(c: Cmp, -r: Cmp, e: {Cmp.is_eq(hub_ccomb(c, r)) == True{} : Bo
     case EQ{}:
       e
     case LT{}:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(e), Bool, Cmp.is_eq(r), True{})
+      AB.absurd_eq(AB.ft_absurd(e), Bool, Cmp.is_eq(r), True{})
     case GT{}:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(e), Bool, Cmp.is_eq(r), True{})
+      AB.absurd_eq(AB.ft_absurd(e), Bool, Cmp.is_eq(r), True{})
 
 def hub_cmpc_head(c: Cmp, -r: Cmp, e: {Cmp.is_eq(hub_ccomb(c, r)) == True{} : Bool}) -> {c == EQ{} : Cmp}:
   match c:
     case EQ{}:
       {==}
     case LT{}:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(e), Cmp, LT{}, EQ{})
+      AB.absurd_eq(AB.ft_absurd(e), Cmp, LT{}, EQ{})
     case GT{}:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(e), Cmp, GT{}, EQ{})
+      AB.absurd_eq(AB.ft_absurd(e), Cmp, GT{}, EQ{})
 
 def hub_u32_sound(x: U32, y: U32, e: {U32.cmp(x, y) == EQ{} : Cmp}) -> {Chr{x} == Chr{y} : Char}:
   match x y:
@@ -609,9 +610,9 @@ def hub_cmpc_sound(+a: String, +b: String, +e: {Cmp.is_eq(hub_cmpc(a, b)) == Tru
     case SNil{} SNil{}:
       {==}
     case SNil{} SCon{h, t}:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(e), String, SNil{}, SCon{h, t})
+      AB.absurd_eq(AB.ft_absurd(e), String, SNil{}, SCon{h, t})
     case SCon{h, t} SNil{}:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(e), String, SCon{h, t}, SNil{})
+      AB.absurd_eq(AB.ft_absurd(e), String, SCon{h, t}, SNil{})
     case SCon{Chr{x}, t1} SCon{Chr{y}, t2}:
       +ht = hub_cmpc_sound(t1, t2, hub_cmpc_tail(U32.cmp(x, y), hub_cmpc(t1, t2), e))
       +hh = hub_u32_sound(x, y, hub_cmpc_head(U32.cmp(x, y), hub_cmpc(t1, t2), e))
@@ -702,7 +703,7 @@ def hub_names_op(+h: HS.Agent, op: HM.AgentOp, nr: {hub_is_rename(op) == False{}
       %HSL.Agent.files.eta(h, HN.drop_str(HS.Agent.files(h), p)) : {HI.names(_) == HI.names(h) : List<&2, String>}
       {==}
     case HM.ORename{nn}:
-      PL1.hub_absurd_eq(PL1.hub_tf_absurd(nr), List<&2, String>, HI.names(HM.agent_op(h, HM.ORename{nn})), HI.names(h))
+      AB.absurd_eq(AB.tf_absurd(nr), List<&2, String>, HI.names(HM.agent_op(h, HM.ORename{nn})), HI.names(h))
     case HM.OSnap{x}:
       %HSL.Agent.snap.eta(h, x) : {HI.names(_) == HI.names(h) : List<&2, String>}
       {==}
@@ -748,7 +749,7 @@ def hub_str_eq_sym_false.pick(c: Bool, +a: String, +b: String, +ec: {String.eq(b
     case False{}:
       ec
     case True{}:
-      PL1.hub_absurd_eq(PL1.hub_tf_absurd(hub_str_eq_sym_false.bad(a, b, hub_str_eq_sound(b, a, ec), e)), Bool, String.eq(b, a), False{})
+      AB.absurd_eq(AB.tf_absurd(hub_str_eq_sym_false.bad(a, b, hub_str_eq_sound(b, a, ec), e)), Bool, String.eq(b, a), False{})
 
 def hub_str_eq_sym_false(+a: String, +b: String, e: {String.eq(a, b) == False{} : Bool}) -> {String.eq(b, a) == False{} : Bool}:
   hub_str_eq_sym_false.pick(String.eq(b, a), a, b, {==}, e)
@@ -824,7 +825,7 @@ def hub_put_absent.pick(c: Bool, +h: HS.Agent, +t: List<&2, HS.Agent>, +n: Strin
     -> {HI.profile(HLZ.pick(List<&2, HS.Agent>, String.eq(HS.Agent.name(h), n), u => a <> t, u => h <> HM.put_agent(t, n, a))) == HM.snoc(List<&2, String>, HI.profile(h <> t), HI.names(a)) : List<&2, List<&2, String>>}:
   match c:
     case True{}:
-      PL1.hub_absurd_eq(PL1.hub_tf_absurd(ec), List<&2, List<&2, String>>, HI.profile(HLZ.pick(List<&2, HS.Agent>, String.eq(HS.Agent.name(h), n), u => a <> t, u => h <> HM.put_agent(t, n, a))), HM.snoc(List<&2, String>, HI.profile(h <> t), HI.names(a)))
+      AB.absurd_eq(AB.tf_absurd(ec), List<&2, List<&2, String>>, HI.profile(HLZ.pick(List<&2, HS.Agent>, String.eq(HS.Agent.name(h), n), u => a <> t, u => h <> HM.put_agent(t, n, a))), HM.snoc(List<&2, String>, HI.profile(h <> t), HI.names(a)))
     case False{}:
       %Equal.sym(Bool, String.eq(HS.Agent.name(h), n), False{}, e) : {HI.profile(HLZ.pick(List<&2, HS.Agent>, _, u => a <> t, u => h <> HM.put_agent(t, n, a))) == HM.snoc(List<&2, String>, HI.profile(h <> t), HI.names(a)) : List<&2, List<&2, String>>}
       Equal.cong(List<&2, List<&2, String>>, List<&2, List<&2, String>>, x => HI.names(h) <> x, HI.profile(HM.put_agent(t, n, a)), HM.snoc(List<&2, String>, HI.profile(t), HI.names(a)), ih)

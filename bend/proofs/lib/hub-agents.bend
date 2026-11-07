@@ -17,6 +17,7 @@ import ../../hub/agents.bend as HAG
 import ../../hub/lazy.bend as HLZ
 import ../../hub/cold.bend as CO
 import ./hub-1.bend as PL1
+import ./absurd.bend as AB
 import ./hub-2.bend as PL2
 import ./hub-names.bend as PLN
 
@@ -307,7 +308,7 @@ def ag_map_hit(+xs: List<&2, HS.Agent>, +r: List<&2, HS.Agent>, +n: String, +op:
     -> {HM.map_agent(List.append(&2, HS.Agent, xs, r), n, op) == List.append(&2, HS.Agent, HM.map_agent(xs, n, op), r) : List<&2, HS.Agent>}:
   match xs:
     case Nil{}:
-      PL1.hub_absurd_eq(PL1.hub_tf_absurd(Equal.sym(Bool, False{}, True{}, e)), List<&2, HS.Agent>, HM.map_agent(r, n, op), r)
+      AB.absurd_eq(AB.tf_absurd(Equal.sym(Bool, False{}, True{}, e)), List<&2, HS.Agent>, HM.map_agent(r, n, op), r)
     case Con{h, t}:
       ag_map_hit.pick(String.eq(HS.Agent.name(h), n), h, t, r, n, op, e, p => ag_map_hit(t, r, n, op, p))
 
@@ -317,7 +318,7 @@ def ag_map_miss.pick(c: Bool, +h: HS.Agent, +t: List<&2, HS.Agent>, +r: List<&2,
     -> {HM.map_agent.go(h <> List.append(&2, HS.Agent, t, r), c, n, op) == List.append(&2, HS.Agent, h <> t, HM.map_agent(r, n, op)) : List<&2, HS.Agent>}:
   match c:
     case True{}:
-      PL1.hub_absurd_eq(PL1.hub_tf_absurd(e), List<&2, HS.Agent>, HM.map_agent.go(h <> List.append(&2, HS.Agent, t, r), True{}, n, op), List.append(&2, HS.Agent, h <> t, HM.map_agent(r, n, op)))
+      AB.absurd_eq(AB.tf_absurd(e), List<&2, HS.Agent>, HM.map_agent.go(h <> List.append(&2, HS.Agent, t, r), True{}, n, op), List.append(&2, HS.Agent, h <> t, HM.map_agent(r, n, op)))
     case False{}:
       Equal.cong(List<&2, HS.Agent>, List<&2, HS.Agent>, z => h <> z, HM.map_agent(List.append(&2, HS.Agent, t, r), n, op),
         List.append(&2, HS.Agent, t, HM.map_agent(r, n, op)), ih(e))
@@ -339,7 +340,7 @@ def ag_has_none.pick(c: Bool, +h: HS.Agent, +t: List<&2, HS.Agent>, +n: String,
     -> {HLZ.or(c, u => HAG.has(t, n)) == False{} : Bool}:
   match c:
     case True{}:
-      PL1.hub_absurd_eq(PL2.hub_some_none(h, e), Bool, True{}, False{})
+      AB.absurd_eq(PL2.hub_some_none(h, e), Bool, True{}, False{})
     case False{}:
       ih(e)
 
@@ -356,7 +357,7 @@ def ag_none_r.pick(c: Bool, +h: HS.Agent, +t: List<&2, HS.Agent>, +r: List<&2, H
     -> {HM.agent_named(r, n) == None{} : Maybe<&2, HS.Agent>}:
   match c:
     case True{}:
-      PL1.hub_absurd_eq(PL2.hub_some_none(h, e), Maybe<&2, HS.Agent>, HM.agent_named(r, n), None{})
+      AB.absurd_eq(PL2.hub_some_none(h, e), Maybe<&2, HS.Agent>, HM.agent_named(r, n), None{})
     case False{}:
       ih(e)
 
@@ -481,7 +482,7 @@ def ag_new_absurd.of(-g: Type, x: Empty) -> g:
   match x:
 
 def ag_new_absurd(-g: Type, e: {True{} == False{} : Bool}) -> g:
-  ag_new_absurd.of(g, PL1.hub_tf_absurd(e))
+  ag_new_absurd.of(g, AB.tf_absurd(e))
 
 # the new agent goes last of St.agents: it slides there from the end of
 # both lists
@@ -550,7 +551,7 @@ def lv_is_life(op: HM.AgentOp) -> Bool:
 def lv_life_op(+h: HS.Agent, op: HM.AgentOp, nl: {lv_is_life(op) == False{} : Bool}) -> {HS.Agent.life(HM.agent_op(h, op)) == HS.Agent.life(h) : HS.Life}:
   match op:
     case HM.OLife{l, why}:
-      PL1.hub_absurd_eq(PL1.hub_tf_absurd(nl), HS.Life, HS.Agent.life(HM.agent_op(h, HM.OLife{l, why})), HS.Agent.life(h))
+      AB.absurd_eq(AB.tf_absurd(nl), HS.Life, HS.Agent.life(HM.agent_op(h, HM.OLife{l, why})), HS.Agent.life(h))
     case HM.OWs{w}:
       %HSL.Agent.ws.eta(h, w) : {HS.Agent.life(_) == HS.Agent.life(h) : HS.Life}
       {==}
@@ -897,7 +898,7 @@ def sd_pick(c: Bool, +h: HS.Agent, +t: List<&2, HS.Agent>, +r: List<&2, HS.Agent
 def sd_has(+a: List<&2, HS.Agent>, +r: List<&2, HS.Agent>, +n: String, u: HI.NamesOK(HI.profile(List.append(&2, HS.Agent, a, r))), k: {HAG.has(a, n) == True{} : Bool}) -> {HAG.has(r, n) == False{} : Bool}:
   match a:
     case Nil{}:
-      PL1.hub_absurd_eq(PL1.hub_tf_absurd(Equal.sym(Bool, False{}, True{}, k)), Bool, HAG.has(r, n), False{})
+      AB.absurd_eq(AB.tf_absurd(Equal.sym(Bool, False{}, True{}, k)), Bool, HAG.has(r, n), False{})
     case Con{h, t}:
       match u:
         case HX.Both{u1, +u2}:

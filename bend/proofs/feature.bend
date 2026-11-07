@@ -9,6 +9,7 @@ import ../hub/cx.bend as HX
 import ../hub/core.bend as HC
 import ../hub/feature.bend as HFT
 import ./lib/hub-1.bend as PL1
+import ./lib/absurd.bend as AB
 import ./lib/hub-2.bend as PL2
 import ../laws/feature.bend as Laws
 
@@ -98,7 +99,7 @@ def Laws.feature_retire_one(o, cx, a, text):
 def Laws.feature_retire_stops_nothing(o, cx, life, n, text, e):
   match life:
     case HS.LActive{}:
-      PL1.hub_absurd_eq(PL1.hub_tf_absurd(e), HX.Cx<o>, HC.feature_retire.tell(o, HS.LActive{}, cx, n, text), cx)
+      AB.absurd_eq(AB.tf_absurd(e), HX.Cx<o>, HC.feature_retire.tell(o, HS.LActive{}, cx, n, text), cx)
     case HS.LStopped{}:
       {==}
     case HS.LArchived{}:

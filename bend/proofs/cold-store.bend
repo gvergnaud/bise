@@ -13,6 +13,7 @@ import ../hub/lazy.bend as HLZ
 import ../hub/needs.bend as N
 import ../laws/cold-store.bend as Laws
 import ./lib/hub-1.bend as PL1
+import ./lib/absurd.bend as AB
 import ./lib/hub-cold.bend as PC1
 import ./lib/hub-cold-2.bend as PC2
 import ./lib/hub-cold-3.bend as PC3
@@ -45,7 +46,7 @@ def cs_ngt_ge(+a: Nat, +b: Nat, g: {Nat.is_gt(a, b) == False{} : Bool}) -> {Nat.
     case 0n 1n+bp:
       {==}
     case 1n+ap 0n:
-      PL1.hub_absurd_eq(PL1.hub_tf_absurd(g), Bool, Nat.is_ge(b, a), True{})
+      AB.absurd_eq(AB.tf_absurd(g), Bool, Nat.is_ge(b, a), True{})
     case 1n+ap 1n+bp:
       cs_ngt_ge(ap, bp, g)
 
@@ -377,7 +378,7 @@ def cs_disj_nin.go(q: Bool, +h: HS.MRec, +t: List<&2, HS.MRec>, +os: List<&2, HS
       +nx = Equal.trans(Bool, HM.nat_in(HI.ids(os), x), HM.nat_in(HI.ids(os), HM.MRec.id(h)), False{},
         Equal.cong(Nat, Bool, v => HM.nat_in(HI.ids(os), v), x, HM.MRec.id(h), Equal.sym(Nat, HM.MRec.id(h), x, PC1.hc_eq_nat(HM.MRec.id(h), x, eq))), jh)
       +sn = Equal.trans(Maybe<&2, HS.MRec>, Some{r}, HM.rec_of(os, x), None{}, Equal.sym(Maybe<&2, HS.MRec>, HM.rec_of(os, x), Some{r}, f), PC2.hc_rec_miss(os, x, nx))
-      PL1.hub_absurd_eq(cs_some_none(r, sn), Bool, HM.nat_in(HI.ids(h <> t), x), False{})
+      AB.absurd_eq(cs_some_none(r, sn), Bool, HM.nat_in(HI.ids(h <> t), x), False{})
     case False{}:
       PL1.hub_lor_false(Nat.is_eq(HM.MRec.id(h), x), HM.nat_in(HI.ids(t), x), eq, ih)
 

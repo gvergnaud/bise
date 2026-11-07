@@ -24,6 +24,7 @@ import ../hub/gen/fx.bend as HF
 import ../hub/gen/feed.bend as HFD
 import ../hub/viewctx.bend as HVC
 import ./lib/hub-1.bend as PL1
+import ./lib/absurd.bend as AB
 import ./lib/hub-2.bend as PL2
 import ./lib/hub-3.bend as PL3
 import ./lib/hub-names.bend as PLN
@@ -471,7 +472,7 @@ def Laws.xhub_xin_replied_once(i):
 def Laws.route_one_outcome(r, s, e):
   match s:
     case HS.RHeld{}:
-      PL1.hub_absurd_eq(PL1.hub_tf_absurd(e), Maybe<&2, HS.Route>, HXB.held.of(Some{HXH.route_op(HXH.REnd{HS.RHeld{}}, r)}), None{})
+      AB.absurd_eq(AB.tf_absurd(e), Maybe<&2, HS.Route>, HXB.held.of(Some{HXH.route_op(HXH.REnd{HS.RHeld{}}, r)}), None{})
     case HS.RSent{}:
       %HSL.Route.st.eta(r, HS.RSent{}) : {HXB.held.of(Some{_}) == None{} : Maybe<&2, HS.Route>}
       {==}
@@ -691,13 +692,13 @@ def hub_or_false_r(+x: Bool, -y: Bool, e: {Bool.or(x, y) == False{} : Bool}) -> 
     case False{}:
       e
     case True{}:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(Equal.sym(Bool, True{}, False{}, e)), Bool, y, False{})
+      AB.absurd_eq(AB.ft_absurd(Equal.sym(Bool, True{}, False{}, e)), Bool, y, False{})
 
 # pause.bend's is_queued is model.bend's
 def hub_pq_false(+s: HS.MSt, e: {HM.is_queued(s) == False{} : Bool}) -> {HP.is_queued(s) == False{} : Bool}:
   match s:
     case HS.Queued{w}:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(Equal.sym(Bool, True{}, False{}, e)), Bool, HP.is_queued(HS.Queued{w}), False{})
+      AB.absurd_eq(AB.ft_absurd(Equal.sym(Bool, True{}, False{}, e)), Bool, HP.is_queued(HS.Queued{w}), False{})
     case HS.Delivered{}:
       {==}
     case HS.Rejected{w}:

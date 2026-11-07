@@ -1,6 +1,7 @@
 # bend/proofs/lib/hub-1.bend: helpers the hub proofs share (moved from
 # PROOF.bend), layered: a lib calls only the ones before it.
 import Base
+import ./absurd.bend as AB
 import ../../vendor/json.bend as J
 import ../../hub/model.bend as HM
 import ../../hub/gen/state.bend as HS
@@ -161,29 +162,15 @@ def hub_not_none(+ws: List<&2, HX.Waiter>, +n: String) -> HC.NoneOf(HX.waiters_n
 
 # ---- L2: each message is one record (msgs_unique) ----
 
-def hub_bdisc(b: Bool) -> Type:
-  match b:
-    case True{}:
-      Unit
-    case False{}:
-      Empty
-
-def hub_ft_absurd(e: {False{} == True{} : Bool}) -> Empty:
-  %Equal.sym(Bool, False{}, True{}, e) : hub_bdisc(_)
-  Unit{}
-
-def hub_absurd_eq(x: Empty, -A: Type, -a: A, -b: A) -> {a == b : A}:
-  match x:
-
 # y < x: x is not y
 def hub_lt_neq(+y: Nat, +x: Nat, h: {Nat.is_lt(y, x) == True{} : Bool}) -> {Nat.is_eq(x, y) == False{} : Bool}:
   match y x:
     case 0n 0n:
-      hub_absurd_eq(hub_ft_absurd(h), Bool, Nat.is_eq(x, y), False{})
+      AB.absurd_eq(AB.ft_absurd(h), Bool, Nat.is_eq(x, y), False{})
     case 0n 1n+xp:
       {==}
     case 1n+yp 0n:
-      hub_absurd_eq(hub_ft_absurd(h), Bool, Nat.is_eq(x, y), False{})
+      AB.absurd_eq(AB.ft_absurd(h), Bool, Nat.is_eq(x, y), False{})
     case 1n+yp 1n+xp:
       hub_lt_neq(yp, xp, h)
 
@@ -192,13 +179,13 @@ def hub_lt_ge(+x: Nat, +a: Nat, +b: Nat, h: {Nat.is_lt(x, a) == True{} : Bool}, 
     -> {Nat.is_lt(x, b) == True{} : Bool}:
   match x a b:
     case _ 0n _:
-      hub_absurd_eq(hub_ft_absurd(h), Bool, Nat.is_lt(x, b), True{})
+      AB.absurd_eq(AB.ft_absurd(h), Bool, Nat.is_lt(x, b), True{})
     case 0n 1n+ap 0n:
-      hub_absurd_eq(hub_ft_absurd(g), Bool, Nat.is_lt(x, b), True{})
+      AB.absurd_eq(AB.ft_absurd(g), Bool, Nat.is_lt(x, b), True{})
     case 0n 1n+ap 1n+bp:
       {==}
     case 1n+xp 1n+ap 0n:
-      hub_absurd_eq(hub_ft_absurd(g), Bool, Nat.is_lt(x, b), True{})
+      AB.absurd_eq(AB.ft_absurd(g), Bool, Nat.is_lt(x, b), True{})
     case 1n+xp 1n+ap 1n+bp:
       hub_lt_ge(xp, ap, bp, h, g)
 
@@ -272,23 +259,19 @@ def hub_ids_snoc(+xs: List<&2, HS.MRec>, +r: HS.MRec)
       Equal.cong(List<&2, Nat>, List<&2, Nat>, ys => HS.Msg.id(HS.MRec.msg(h)) <> ys,
         HI.ids(HM.snoc(HS.MRec, t, r)), HM.snoc(Nat, HI.ids(t), HS.Msg.id(HS.MRec.msg(r))), hub_ids_snoc(t, r))
 
-def hub_tf_absurd(e: {True{} == False{} : Bool}) -> Empty:
-  %e : hub_bdisc(_)
-  Unit{}
-
 def hub_or_false_l(a: Bool, -b: Bool, e: {Bool.or(a, b) == False{} : Bool}) -> {a == False{} : Bool}:
   match a:
     case False{}:
       {==}
     case True{}:
-      hub_absurd_eq(hub_tf_absurd(e), Bool, True{}, False{})
+      AB.absurd_eq(AB.tf_absurd(e), Bool, True{}, False{})
 
 def hub_or_false_r(a: Bool, -b: Bool, e: {Bool.or(a, b) == False{} : Bool}) -> {b == False{} : Bool}:
   match a:
     case False{}:
       e
     case True{}:
-      hub_absurd_eq(hub_tf_absurd(e), Bool, b, False{})
+      AB.absurd_eq(AB.tf_absurd(e), Bool, b, False{})
 
 def hub_or_false(a: Bool, -b: Bool, ea: {a == False{} : Bool}, eb: {b == False{} : Bool}) -> {Bool.or(a, b) == False{} : Bool}:
   %Equal.sym(Bool, a, False{}, ea) : {Bool.or(_, b) == False{} : Bool}
@@ -300,14 +283,14 @@ def hub_lor_false_l(a: Bool, -b: Bool, e: {HLZ.or(a, u => b) == False{} : Bool})
     case False{}:
       {==}
     case True{}:
-      hub_absurd_eq(hub_tf_absurd(e), Bool, True{}, False{})
+      AB.absurd_eq(AB.tf_absurd(e), Bool, True{}, False{})
 
 def hub_lor_false_r(a: Bool, -b: Bool, e: {HLZ.or(a, u => b) == False{} : Bool}) -> {b == False{} : Bool}:
   match a:
     case False{}:
       e
     case True{}:
-      hub_absurd_eq(hub_tf_absurd(e), Bool, b, False{})
+      AB.absurd_eq(AB.tf_absurd(e), Bool, b, False{})
 
 def hub_lor_false(a: Bool, -b: Bool, ea: {a == False{} : Bool}, eb: {b == False{} : Bool}) -> {HLZ.or(a, u => b) == False{} : Bool}:
   %Equal.sym(Bool, a, False{}, ea) : {HLZ.or(_, u => b) == False{} : Bool}
@@ -629,7 +612,7 @@ def hub_and_left(a: Bool, -b: Bool, e: {Bool.and(a, b) == True{} : Bool}) -> {a 
     case True{}:
       {==}
     case False{}:
-      hub_absurd_eq(hub_ft_absurd(e), Bool, False{}, True{})
+      AB.absurd_eq(AB.ft_absurd(e), Bool, False{}, True{})
 
 # a record's message is its message after a new state (its eta, no record written by position)
 def hub_msg_with_st(+h: HS.MRec, +v: HS.MSt) -> {HS.MRec.msg(HS.MRec.with_st(h, v)) == HS.MRec.msg(h) : HS.Msg}:

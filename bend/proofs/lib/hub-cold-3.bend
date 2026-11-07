@@ -12,6 +12,7 @@ import ../../hub/lazy.bend as HLZ
 import ../../hub/cold.bend as CO
 import ../../hub/core.bend as HC
 import ./hub-1.bend as PL1
+import ./absurd.bend as AB
 import ./hub-cold.bend as PC1
 import ./hub-cold-2.bend as PC2
 
@@ -307,13 +308,13 @@ def hc_gt_trans(+a: Nat, +b: Nat, +c: Nat, ab: {Nat.is_gt(a, b) == True{} : Bool
     -> {Nat.is_gt(a, c) == True{} : Bool}:
   match a b c:
     case 0n 0n _:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(ab), Bool, Nat.is_gt(a, c), True{})
+      AB.absurd_eq(AB.ft_absurd(ab), Bool, Nat.is_gt(a, c), True{})
     case 0n 1n+bp _:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(ab), Bool, Nat.is_gt(a, c), True{})
+      AB.absurd_eq(AB.ft_absurd(ab), Bool, Nat.is_gt(a, c), True{})
     case 1n+ap 0n 0n:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(bc), Bool, Nat.is_gt(a, c), True{})
+      AB.absurd_eq(AB.ft_absurd(bc), Bool, Nat.is_gt(a, c), True{})
     case 1n+ap 0n 1n+cp:
-      PL1.hub_absurd_eq(PL1.hub_ft_absurd(bc), Bool, Nat.is_gt(a, c), True{})
+      AB.absurd_eq(AB.ft_absurd(bc), Bool, Nat.is_gt(a, c), True{})
     case 1n+ap 1n+bp 0n:
       {==}
     case 1n+ap 1n+bp 1n+cp:

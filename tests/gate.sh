@@ -9,7 +9,9 @@
 #                     paths in, steps out; this script runs it), ~5-10 s warm: clippy -D
 #                     warnings (next to the tests, in $target/clippy), the
 #                     tests of the changed crates and of the crates using them; if a .bend file of core/ hub/ vendor/
-#                     or of laws/ proofs/ changed: PROOF, every bend/proofs/*.bend
+#                     or of laws/ proofs/ changed: PROOF, the bend/proofs/*.bend whose
+#                     imports' closure holds it (gate_plan.py; full: every one), each
+#                     cached by that closure's content (<gate dir>/proof-cache),
 #                     in parallel (tests/proof_run.py, 4 jobs);
 #                     no changed test hard-codes a UI word past its count in
 #                     tests/word_literals.txt (tests/word_lint.py, issue 29).
@@ -981,20 +983,20 @@ fail() {  # <name> <log>: the failures, the log kept
   grep -E "^test .* FAILED|panicked|^error|^warning|^failures:|^Location|^Error" "$2" | head -30
   cp "$2" "$gdir/sb-gate-$1-${SB_AGENT:-$$}.log"; echo "log: $gdir/sb-gate-$1-${SB_AGENT:-$$}.log"; exit 1
 }
-hash_of() {  # <dirs/files...>: one hash of the .bend files' names and contents
-  (cd "$root" && find "$@" -name '*.bend' -type f 2>/dev/null | sort | while read -r f; do echo "$f"; cat "$f"; done) | shasum | cut -c1-16
-}
 # the bend part, in the background (it takes longer than cargo)
 proof_job() {
-  # keyed by the bend version too: a new checker rechecks the same files
-  local h; h="$(hash_of bend/core bend/hub bend/vendor bend/runtime bend/laws bend/proofs)-$(BEND_NO_TELEMETRY=1 bend version 2>/dev/null | tr -dc '0-9.')"
-  [ -f "$cache/proof-ok-$h" ] && { echo "ok   PROOF (cached)"; return 0; }
+  # the plan's proofs files: those whose imports' closure holds a changed .bend (a hub file:
+  # the hub's proofs, never models' or the runtime's; the full gate checks every one)
+  [ -n "$proof_files" ] || { echo "ok   PROOF (0 files: no proofs file imports the changed .bend)"; return 0; }
   local d="$out/proof"
   mkdir -p "$d"
-  # every bend/proofs/*.bend, 4 at once: one line per failing file, the last
-  # line ok/FAIL with the wall and CPU time
-  python3 tests/proof_run.py "$root" 4 "$d" >"$d/run.log" 2>&1 || { grep -v '^ok  ' "$d/run.log" | head -40; return 1; }
-  touch "$cache/proof-ok-$h"; tail -1 "$d/run.log"
+  # 4 at once, each cached by its closure's content and the bend version (the gate dir's
+  # proof-cache, every worktree's and run_all's): one line per failing file, the last line
+  # ok/FAIL with the wall and CPU time
+  # shellcheck disable=SC2086
+  python3 tests/proof_run.py "$root" 4 "$d" --cache "$gdir/proof-cache" $proof_files >"$d/run.log" 2>&1 \
+    || { grep -v '^ok  ' "$d/run.log" | head -40; return 1; }
+  tail -1 "$d/run.log"
 }
 # the sb-core of the tests: bins.sh's cache file of this tree's hub/ vendor/
 # (keyed by their content), run in place, never copied. It used to be a

@@ -5,7 +5,7 @@ import Base
 import ../core/types.bend as T
 import ../core/history.bend as H
 import ../core/session.bend as S
-import ./lib/hub-1.bend as PL1
+import ./lib/absurd.bend as AB
 import ../laws/models.bend as Laws
 
 def Laws.image_split_marker():
@@ -185,7 +185,7 @@ def pair_keep(+ms: List<&2, T.Msg>, +owed: List<&2, T.Call>,
         case Nil{}:
           {==}
         case Con{c, ow}:
-          PL1.hub_absurd_eq(PL1.hub_ft_absurd(p), List<&2, T.Msg>, H.pair_calls.go(Nil{}, Con{c, ow}), Nil{})
+          AB.absurd_eq(AB.ft_absurd(p), List<&2, T.Msg>, H.pair_calls.go(Nil{}, Con{c, ow}), Nil{})
     case Con{m, rest}:
       match m:
         case T.Msg{role, text, calls, inj}:
@@ -193,7 +193,7 @@ def pair_keep(+ms: List<&2, T.Msg>, +owed: List<&2, T.Call>,
             case T.RTool{}:
               match owed:
                 case Nil{}:
-                  PL1.hub_absurd_eq(PL1.hub_ft_absurd(p), List<&2, T.Msg>,
+                  AB.absurd_eq(AB.ft_absurd(p), List<&2, T.Msg>,
                     H.pair_calls.go(Con{T.Msg{T.RTool{}, text, calls, inj}, rest}, Nil{}),
                     Con{T.Msg{T.RTool{}, text, calls, inj}, rest})
                 case Con{c, ow}:
@@ -207,7 +207,7 @@ def pair_keep(+ms: List<&2, T.Msg>, +owed: List<&2, T.Call>,
                     x => Con{T.Msg{T.RAsst{}, text, calls, inj}, x},
                     H.pair_calls.go(rest, calls), rest, pair_keep(rest, calls, p))
                 case Con{c, ow}:
-                  PL1.hub_absurd_eq(PL1.hub_ft_absurd(p), List<&2, T.Msg>,
+                  AB.absurd_eq(AB.ft_absurd(p), List<&2, T.Msg>,
                     H.pair_calls.go(Con{T.Msg{T.RAsst{}, text, calls, inj}, rest}, Con{c, ow}),
                     Con{T.Msg{T.RAsst{}, text, calls, inj}, rest})
             case T.RUser{}:
@@ -217,7 +217,7 @@ def pair_keep(+ms: List<&2, T.Msg>, +owed: List<&2, T.Call>,
                     x => Con{T.Msg{T.RUser{}, text, calls, inj}, x},
                     H.pair_calls.go(rest, Nil{}), rest, pair_keep(rest, Nil{}, p))
                 case Con{c, ow}:
-                  PL1.hub_absurd_eq(PL1.hub_ft_absurd(p), List<&2, T.Msg>,
+                  AB.absurd_eq(AB.ft_absurd(p), List<&2, T.Msg>,
                     H.pair_calls.go(Con{T.Msg{T.RUser{}, text, calls, inj}, rest}, Con{c, ow}),
                     Con{T.Msg{T.RUser{}, text, calls, inj}, rest})
             case T.RSys{}:
@@ -227,7 +227,7 @@ def pair_keep(+ms: List<&2, T.Msg>, +owed: List<&2, T.Call>,
                     x => Con{T.Msg{T.RSys{}, text, calls, inj}, x},
                     H.pair_calls.go(rest, Nil{}), rest, pair_keep(rest, Nil{}, p))
                 case Con{c, ow}:
-                  PL1.hub_absurd_eq(PL1.hub_ft_absurd(p), List<&2, T.Msg>,
+                  AB.absurd_eq(AB.ft_absurd(p), List<&2, T.Msg>,
                     H.pair_calls.go(Con{T.Msg{T.RSys{}, text, calls, inj}, rest}, Con{c, ow}),
                     Con{T.Msg{T.RSys{}, text, calls, inj}, rest})
 
