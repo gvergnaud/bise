@@ -269,6 +269,8 @@ export interface PickerPairProps {
   /** a row above the sides, a 1 px rule under it ('Same as bise · opus 5.5'): picked like a model */
   top?: PickerRow;
   sides: readonly PickerSide[];
+  /** the side chosen at open when no row of a side is current (the top row is): its rows show */
+  side?: string;
   /** a control under both columns, the full width (the model's effort) */
   footer?: ReactNode;
   /** one column (no room for two): the sides, then a side's rows under a back row with these words */
@@ -287,11 +289,12 @@ export interface PairAt {
   on: string | null;
 }
 
-/** Where PickerPair opens: on the current row's side, its current row active (else the first side). Pure. */
-export function pairStart(p: Pick<PickerPairProps, "top" | "sides">): PairAt {
+/** Where PickerPair opens: on the current row's side, its current row active; else on `side` (or
+ *  the first), the top row active when it is the current one. Pure. */
+export function pairStart(p: Pick<PickerPairProps, "top" | "sides" | "side">): PairAt {
   const cur = p.sides.find((s) => s.rows.some((r) => r.current === true));
   if (cur !== undefined) return { col: "right", side: cur.id, on: cur.rows.find((r) => r.current === true)?.id ?? null };
-  const side = p.sides[0]?.id ?? null;
+  const side = p.sides.find((s) => s.id === p.side)?.id ?? p.sides[0]?.id ?? null;
   return { col: "left", side, on: p.top?.current === true ? p.top.id : side };
 }
 
@@ -322,8 +325,8 @@ export function pairKey(p: Pick<PickerPairProps, "top" | "sides">, at: PairAt, k
  *  ↑↓ choose it, its rows show on the right at once; a click or → moves there), the chosen side's rows
  *  on the right (a click or ⏎ picks one), the footer under both. `narrow`: one column, a side's rows
  *  under a back row. Keys as Picker's (it takes the focus), plus ← →. */
-export function PickerPair({ top, sides, footer, narrow, onPick, onClose, maxHeight, style, testId }: PickerPairProps) {
-  const [at, setAt] = useState<PairAt>(() => pairStart({ top, sides }));
+export function PickerPair({ top, sides, side: startSide, footer, narrow, onPick, onClose, maxHeight, style, testId }: PickerPairProps) {
+  const [at, setAt] = useState<PairAt>(() => pairStart({ top, sides, ...(startSide !== undefined ? { side: startSide } : {}) }));
   const shell = useRef<HTMLDivElement>(null);
   useEffect(() => {
     shell.current?.focus();
@@ -349,7 +352,8 @@ export function PickerPair({ top, sides, footer, narrow, onPick, onClose, maxHei
   };
   const topRow = top !== undefined && (
     <div className="b-pair-top">
-      <RowView r={top} on={at.col === "left" && at.on === top.id} glyphs={false} inline={false} testId={top.testId ?? sub(testId, top.id)}
+      {/* one line: its words, then what it resolves to, faint ('the default · gpt-6.1-sol') */}
+      <RowView r={top} on={at.col === "left" && at.on === top.id} glyphs={false} inline testId={top.testId ?? sub(testId, top.id)}
         onPoint={() => { setAt({ ...at, col: "left", on: top.id }); }} onPick={() => { onPick(top.id); }} />
     </div>
   );

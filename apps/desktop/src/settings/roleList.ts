@@ -190,14 +190,17 @@ export const FALLBACK = '(fallback)';
  * to ('Same as bise · opus 5.5'), then each provider (✓ set up, 'add a key' when not) with its
  * models on the right, ✓ on the current one. Picking a model whose provider isn't set up holds the
  * pick and opens that setup (hold.ts). Pure. */
-export function pickSides(role: RoleRow, roles: readonly RoleRow[], models: readonly Model[]): { top: PickerRow; sides: PickerSide[] } {
+export function pickSides(role: RoleRow, roles: readonly RoleRow[], models: readonly Model[], shown: string): { top: PickerRow; sides: PickerSide[]; side?: string } {
   const follows = role.follows != null && role.follows !== '' ? roles.find((x) => x.role === role.follows) : undefined;
-  const fallbackModel = follows !== undefined ? follows.model : role.source === 'default' ? role.model : '';
+  // `shown`: the model the row shows (the gauge's): the picker's ✓ and its fallback name say the same
+  const fallbackModel = role.source === 'default' ? shown : (follows?.model ?? '');
   const fallbackName = modelRow(fallbackModel, models)?.label ?? fallbackModel;
   const fallbackWords = follows !== undefined ? settings.role_as({ role: follows.role === 'main' ? settings.role_main_name : follows.name }) : settings.role_default;
   const top: PickerRow = {
     id: FALLBACK,
-    name: fallbackName !== '' ? `${fallbackWords} · ${fallbackName}` : fallbackWords,
+    name: fallbackWords,
+    // what it resolves to, faint after the words (designer m_57422)
+    ...(fallbackName !== '' ? { secondary: fallbackName } : {}),
     current: role.source === 'default',
   };
   const byProvider = new Map<string, Model[]>();
@@ -208,8 +211,11 @@ export function pickSides(role: RoleRow, roles: readonly RoleRow[], models: read
   const sides = [...byProvider].map(([provider, ms]) => ({
     id: provider,
     name: provider,
-    trailing: ms.some((m) => m.key_ready !== false) ? '✓' : settings.pick_add_key,
-    rows: ms.map((m) => ({ id: m.id, name: m.label, current: role.source !== 'default' && role.model === m.id, tip: m.id })),
+    // ✓ means only 'current' (designer m_57422): a ready provider says nothing
+    ...(ms.some((m) => m.key_ready !== false) ? {} : { trailing: settings.pick_add_key }),
+    rows: ms.map((m) => ({ id: m.id, name: m.label, current: role.source !== 'default' && shown === m.id, tip: m.id })),
   }));
-  return { top, sides };
+  // it opens on the provider of the model the row shows
+  const side = models.find((m) => m.id === shown)?.provider;
+  return { top, sides, ...(side !== undefined ? { side } : {}) };
 }

@@ -81,7 +81,7 @@ function ModelCell({ r, p, props, testId }: { r: FeatureRow; p: FeaturePart; pro
         name={settings.role_model({ role: ROW_NAME[r.id] })}
         tip={v?.tip ?? settings.part_pick}
         back={settings.pick_back}
-        {...pickSides(role, roles, models)}
+        {...pickSides(role, roles, models, p.model)}
         {...(efforts.length > 0
           ? {
               footer: (
