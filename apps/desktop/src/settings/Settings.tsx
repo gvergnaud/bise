@@ -91,6 +91,8 @@ export interface SettingsPorts {
   approvals?: (c: ApprovalsCmd) => void;
   /** copy a text to his clipboard (the sign-in link, bar V14) */
   copy?: (text: string) => void;
+  /** open a link in his browser (window.bise.openExternal): a provider's keys or billing page */
+  open?: (url: string) => void;
   /** cancel the sign-in under way (bar V14: AppCmd sign_in_cancel) */
   cancelSignIn?: (id: string) => void;
   /** macOS's notifications: ask (notify.ask(), macOS's alert) or open System Settings › Notifications */

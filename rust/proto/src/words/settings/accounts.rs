@@ -51,6 +51,22 @@ crate::words! { settings:
     key_checking = "checking the key with the provider…";
     /// the key field's help
     key_stays = "it stays on this Mac; esc cancels";
+    /// the key field's guide, its title: a provider with a key already (expired or refused)
+    key_replace(provider) = "Replace your {provider} key";
+    /// the key field's guide, step 1: the provider's keys page (its link follows)
+    key_step_open(provider) = "Open {provider}'s keys page and sign in:";
+    /// the key field's guide, step 1: a provider with no keys page known
+    key_step_site(provider) = "On {provider}'s site, sign in and open your API keys.";
+    /// the key field's guide, step 2
+    key_step_create = "Create a new key (name it bise), then copy it: it's often shown only once.";
+    /// the key field's guide, step 3
+    key_step_paste = "Paste it in the field below and press ⏎.";
+    /// the key field's guide: what happens after ⏎
+    key_after = "bise checks it with one small call and saves it only if it works.";
+    /// the key field's guide: what happens after ⏎, a failed feature waits on it
+    key_after_test(what) = "bise checks it with one small call and saves it only if it works, then tests {what} again.";
+    /// the key field's guide: replacing a key
+    key_old_stays = "Your old key stays until the new one works.";
 
     /// a role's model: set in settings
     role_set_here = "set here";

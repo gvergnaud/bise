@@ -38,6 +38,10 @@
 /* the key field and its caption are one block: 4 between them, then the group gap before the next title (designer m_21395) */
 .settings-key { margin: var(--s-3) 0 var(--gap-section); max-width: 420px; }
 .settings-key .b-help { margin-top: var(--gap-tight); }
+/* the key field's guide: a title, three steps, what ⏎ does (Gabriel: take him by the hand) */
+.settings-key-guide { margin-bottom: var(--s-3); }
+.settings-key-title { margin: 0 0 var(--gap-tight); color: var(--text); }
+.settings-key-steps { margin: 0; padding-left: 1.4em; color: var(--text-2); display: grid; gap: var(--gap-tight); }
 /* the add sheet (AddSheet.tsx, shot 19): the path line, the scan's head with its wait or its error,
    the add's words in the foot before cancel; errors in plain words, red */
 .settings-add-path { display: flex; align-items: center; gap: var(--s-2); margin-bottom: var(--s-3); }

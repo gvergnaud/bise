@@ -304,6 +304,22 @@ export const settings = {
   key_checking: "checking the key with the provider…",
   /** the key field's help */
   key_stays: "it stays on this Mac; esc cancels",
+  /** the key field's guide, its title: a provider with a key already (expired or refused) */
+  key_replace: (a: { provider: string | number }): string => "Replace your " + String(a.provider) + " key",
+  /** the key field's guide, step 1: the provider's keys page (its link follows) */
+  key_step_open: (a: { provider: string | number }): string => "Open " + String(a.provider) + "'s keys page and sign in:",
+  /** the key field's guide, step 1: a provider with no keys page known */
+  key_step_site: (a: { provider: string | number }): string => "On " + String(a.provider) + "'s site, sign in and open your API keys.",
+  /** the key field's guide, step 2 */
+  key_step_create: "Create a new key (name it bise), then copy it: it's often shown only once.",
+  /** the key field's guide, step 3 */
+  key_step_paste: "Paste it in the field below and press ⏎.",
+  /** the key field's guide: what happens after ⏎ */
+  key_after: "bise checks it with one small call and saves it only if it works.",
+  /** the key field's guide: what happens after ⏎, a failed feature waits on it */
+  key_after_test: (a: { what: string | number }): string => "bise checks it with one small call and saves it only if it works, then tests " + String(a.what) + " again.",
+  /** the key field's guide: replacing a key */
+  key_old_stays: "Your old key stays until the new one works.",
   /** a role's model: set in settings */
   role_set_here: "set here",
   /** a role's model: from his environment */
@@ -1165,7 +1181,7 @@ export const settings = {
   /** a part's model: where it comes from, an env var */
   part_env: (a: { var: string | number }): string => "from " + String(a.var),
   /** the fixing buttons */
-  fix_add_key: (a: { provider: string | number }): string => "Add a " + String(a.provider) + " key",
+  fix_add_key: (a: { a: string | number; provider: string | number }): string => "Add " + String(a.a) + " " + String(a.provider) + " key",
   /** a fixing button: sign in */
   fix_sign_in: (a: { provider: string | number }): string => "Sign in to " + String(a.provider) + " again",
   /** a fixing button: credit */
@@ -1185,7 +1201,7 @@ export const settings = {
   /** a fixing button: allow */
   fix_allow: (a: { perm: string | number }): string => "Allow " + String(a.perm),
   /** the next action's words (lowercase, after Next) */
-  next_add_key: (a: { provider: string | number }): string => "add a " + String(a.provider) + " key",
+  next_add_key: (a: { a: string | number; provider: string | number }): string => "add " + String(a.a) + " " + String(a.provider) + " key",
   /** Next's action, lowercase after Next: sign in */
   next_sign_in: (a: { provider: string | number }): string => "sign in to " + String(a.provider) + " again",
   /** Next's action, lowercase after Next: credit */

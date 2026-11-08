@@ -8,6 +8,7 @@ import type { FeatureId, FeaturePart, FeatureRow, Perm, RoleId, SetupFix, SetupG
 import { Act, Button, Press, tipAttrs } from '@/ds';
 import { settings } from '@/proto/words.gen';
 import { cx } from '@/ds/cx';
+import { article } from './keycheck';
 
 /** A feature's name. */
 export const FEATURE_WORDS: Record<FeatureId, string> = {
@@ -64,8 +65,10 @@ const PERM_NAME: Record<Perm, string> = { mic: settings.onb_perm_mic, accessibil
 /** A fix's button words. Pure. */
 export function fixButton(f: SetupFix, g: SetupGauge): string {
   switch (f.t) {
-    case 'add_key':
-      return settings.fix_add_key({ provider: providerName(g, f.provider) });
+    case 'add_key': {
+      const provider = providerName(g, f.provider);
+      return settings.fix_add_key({ a: article(provider), provider });
+    }
     case 'sign_in':
       return settings.fix_sign_in({ provider: providerName(g, f.provider) });
     case 'credit':
@@ -93,7 +96,7 @@ export function nextWords(g: SetupGauge): string {
   const f = n.fix;
   const act =
     f.t === 'add_key'
-      ? settings.next_add_key({ provider: providerName(g, f.provider) })
+      ? settings.next_add_key({ a: article(providerName(g, f.provider)), provider: providerName(g, f.provider) })
       : f.t === 'sign_in'
         ? settings.next_sign_in({ provider: providerName(g, f.provider) })
         : f.t === 'credit'

@@ -7,6 +7,14 @@ import { settings } from '@/proto/words.gen';
 
 export type ProviderCheck = Extract<CoreEv, { ev: 'provider_check' }>;
 
+/** The article before a provider's name, by its sound: "an OpenRouter", "an xAI", "a Mistral",
+ * "a Unify". Pure. */
+export function article(name: string): 'a' | 'an' {
+  if (/^x[A-Z]/.test(name)) return 'an'; // xAI: "ex-A-I"
+  if (/^(uni|use|one)/i.test(name)) return 'a';
+  return /^[aeiou]/i.test(name) ? 'an' : 'a';
+}
+
 /** What he sent last (the provider, and the check the store held at that time: older ones don't count). */
 export interface Sent {
   id: string;

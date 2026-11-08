@@ -19,6 +19,7 @@ import { capsOf, chromeCase, homeOf } from './chrome';
 import { stepOf } from './computer';
 import { focusOf } from './setupPage';
 import { TRY_MS } from './gauge';
+import { article } from './keycheck';
 import { FALLBACK } from './roles';
 import type { ComputerUse } from './computer';
 import { settings } from '@/proto/words.gen';
@@ -457,6 +458,47 @@ describe('settings · Setup (page models-setup, pick B)', () => {
     fireEvent.click(screen.getByTestId('settings.feature.voice_mode.trouble.copy'));
     expect(copied[0]).toContain('no_credit');
     expect(copied[0]).not.toMatch(/sk-|Bearer/);
+  });
+
+  it("an expired OpenRouter key: Add an OpenRouter key opens its field to replace it, with the steps; a key that works tests the row again", () => {
+    const JEV = 'openrouter/typesafe/jev-1.13';
+    const KEYS = 'https://openrouter.ai/settings/keys';
+    const failed: SetupGauge = {
+      ...gauge(),
+      testing: [],
+      rows: gauge().rows.map((r) =>
+        r.id === 'approvals'
+          ? { id: 'approvals', state: 'failed' as const, fix: { t: 'add_key' as const, provider: 'openrouter', url: KEYS }, parts: [{ model: JEV, provider: 'OpenRouter', role: 'classify' as const, source: 'config' as const, state: 'failed' as const, why: 'wrong_key' as const, said: 'API key expired.' }] }
+          : r,
+      ),
+    };
+    // his key is there (it expired at OpenRouter): the accounts say it's set
+    const acc: Account[] = [...accounts(), { id: 'openrouter', kind: 'key', label: 'OpenRouter', state: 'signed_in', provider: 'openrouter' }];
+    const opened: string[] = [];
+    const p = { ...ports(), open: (u: string) => opened.push(u) };
+    const r = view('setup', p, { gauge: failed, accounts: acc });
+    const add = screen.getByTestId('settings.feature.approvals.trouble.fix');
+    expect(add.textContent).toBe('Add an OpenRouter key');
+    fireEvent.click(add);
+    expect(screen.getByTestId('settings.key.field')).toBeTruthy();
+    const guide = screen.getByTestId('settings.key.guide').textContent;
+    expect(guide).toContain(settings.key_replace({ provider: 'OpenRouter' }));
+    expect(guide).toContain(settings.key_step_create);
+    expect(screen.getByTestId('settings.key.after').textContent).toContain(settings.key_after_test({ what: 'auto approvals' }));
+    fireEvent.click(screen.getByTestId('settings.key.link'));
+    expect(opened).toEqual([KEYS]);
+    // he pastes a new key: checked by the core, then it works, and approvals test again
+    const field = screen.getByTestId('settings.key.field');
+    fireEvent.change(field, { target: { value: 'sk-or-v1-new' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+    expect(p.sent.at(-1)).toEqual({ cmd: 'provider_use', id: 'openrouter', key: 'sk-or-v1-new' });
+    const works = { ev: 'provider_check' as const, id: 'openrouter', name: 'OpenRouter', model: JEV, pasted: true, state: 'works' as const };
+    r.rerender(<Settings page="setup" prefs={prefs()} accounts={acc} projects={projects()} found={found()} computerUse={null} perms={{}} ports={p} gauge={failed} check={works} />);
+    expect(p.sent.at(-1)).toEqual({ cmd: 'setup_test', models: [JEV] });
+  });
+
+  it('a provider name takes its article by sound', () => {
+    expect(['OpenRouter', 'Anthropic', 'xAI', 'Mistral', 'Groq', 'Unify'].map((n) => `${article(n)} ${n}`)).toEqual(['an OpenRouter', 'an Anthropic', 'an xAI', 'a Mistral', 'a Groq', 'a Unify']);
   });
 
   it('all green: 7/7, no Next, every mark in ink', () => {

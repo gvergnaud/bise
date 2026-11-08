@@ -9,7 +9,7 @@
 export { Settings, type SettingsData, type SettingsPorts, type SettingsProps } from './Settings';
 export { PAGES, KeyList, type Page } from './pages';
 export { Accounts, signedIn } from './accounts';
-export { keyField, failedWords, fromWords, retries, shortModel, type ProviderCheck, type Sent } from './keycheck';
+export { article, keyField, failedWords, fromWords, retries, shortModel, type ProviderCheck, type Sent } from './keycheck';
 export type { KeyError } from './screen';
 export { onboarded, type Prefs } from './prefs';
 export { KEY_SECTIONS } from './keys';

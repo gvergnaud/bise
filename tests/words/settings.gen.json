@@ -1472,10 +1472,11 @@
   },
   "settings.fix_add_key": {
     "args": [
+      "a",
       "provider"
     ],
     "one": null,
-    "text": "Add a {provider} key"
+    "text": "Add {a} {provider} key"
   },
   "settings.fix_allow": {
     "args": [
@@ -1711,6 +1712,18 @@
     "one": null,
     "text": "added"
   },
+  "settings.key_after": {
+    "args": [],
+    "one": null,
+    "text": "bise checks it with one small call and saves it only if it works."
+  },
+  "settings.key_after_test": {
+    "args": [
+      "what"
+    ],
+    "one": null,
+    "text": "bise checks it with one small call and saves it only if it works, then tests {what} again."
+  },
   "settings.key_artifact_primary": {
     "args": [],
     "one": null,
@@ -1843,6 +1856,11 @@
     "one": null,
     "text": "New project"
   },
+  "settings.key_old_stays": {
+    "args": [],
+    "one": null,
+    "text": "Your old key stays until the new one works."
+  },
   "settings.key_open_folded": {
     "args": [],
     "one": null,
@@ -1918,6 +1936,13 @@
     "one": null,
     "text": "reopen the last closed tab"
   },
+  "settings.key_replace": {
+    "args": [
+      "provider"
+    ],
+    "one": null,
+    "text": "Replace your {provider} key"
+  },
   "settings.key_scheduled": {
     "args": [],
     "one": null,
@@ -1947,6 +1972,30 @@
     "args": [],
     "one": null,
     "text": "it stays on this Mac; esc cancels"
+  },
+  "settings.key_step_create": {
+    "args": [],
+    "one": null,
+    "text": "Create a new key (name it bise), then copy it: it's often shown only once."
+  },
+  "settings.key_step_open": {
+    "args": [
+      "provider"
+    ],
+    "one": null,
+    "text": "Open {provider}'s keys page and sign in:"
+  },
+  "settings.key_step_paste": {
+    "args": [],
+    "one": null,
+    "text": "Paste it in the field below and press ⏎."
+  },
+  "settings.key_step_site": {
+    "args": [
+      "provider"
+    ],
+    "one": null,
+    "text": "On {provider}'s site, sign in and open your API keys."
   },
   "settings.key_stop_agent": {
     "args": [],
@@ -2169,10 +2218,11 @@
   },
   "settings.next_add_key": {
     "args": [
+      "a",
       "provider"
     ],
     "one": null,
-    "text": "add a {provider} key"
+    "text": "add {a} {provider} key"
   },
   "settings.next_allow": {
     "args": [

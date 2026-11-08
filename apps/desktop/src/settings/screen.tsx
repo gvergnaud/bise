@@ -266,7 +266,7 @@ export function SettingsScreen({ page }: { page?: string | undefined }) {
           holdForSetup(h);
         },
         // the sign-in link (V14 c): the window's clipboard (test mode: its private buffer)
-        ...(bise ? { copy: (text: string) => void bise.copy(text) } : {}),
+        ...(bise ? { copy: (text: string) => void bise.copy(text), open: (url: string) => void bise.openExternal(url) } : {}),
         ...(helper
           ? {
               perm: (perm: Perm, action: 'ask' | 'open') => {

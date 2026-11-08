@@ -7,7 +7,7 @@ import { useRef, useState } from 'react';
 import type { Account, AppCmd } from '@/proto';
 import { Act, AppIcon, Button, Chip, Field, Group, Help, type GroupItem } from '@/ds';
 import { common, settings } from '@/proto/words.gen';
-import { failedWords, keyField, type ProviderCheck, type Sent } from './keycheck';
+import { article, failedWords, keyField, type ProviderCheck, type Sent } from './keycheck';
 import { keyFieldSend } from '@/setup/pay';
 
 /**
@@ -35,6 +35,25 @@ export interface Want {
 /** An account sets up `provider` (Account.provider; an older core: its id). */
 export const ofProvider = (a: Account, provider: string): boolean => (a.provider ?? a.id) === provider;
 
+/** The account a key for `provider` goes to: its key account, else any of it (OpenRouter's login
+ * mints a key). Pure. */
+export const keyAccountOf = (accounts: readonly Account[], provider: string): Account | undefined =>
+  accounts.find((a) => a.kind === 'key' && ofProvider(a, provider)) ?? accounts.find((a) => ofProvider(a, provider));
+
+/**
+ * A key asked for by settings · Setup's fix (Add an OpenRouter key): its field opens, added or
+ * replaced, with the steps to get one. A new object per click (the field opens again).
+ */
+export interface KeyAsk {
+  provider: string;
+  /** the provider's name for people */
+  name: string;
+  /** where its keys are made (SetupFix add_key's url); "" none */
+  url: string;
+  /** the features a saved key tests again, in words ("auto approvals"); "" none */
+  what: string;
+}
+
 /** An expired sign-in's line (bar V14 / S28): it expired, and the agents it stopped wait. */
 export function expiredWords(waiting: readonly string[]): string {
   if (waiting.length === 0) return settings.expired_alone;
@@ -54,9 +73,13 @@ export interface AccountsProps {
   copy?: (text: string) => void;
   /** cancel the sign-in under way (esc): AppCmd sign_in_cancel {id} */
   cancelSignIn?: (id: string) => void;
+  /** a key settings · Setup's fix asked for: its field opens */
+  ask?: KeyAsk | null;
+  /** open a link in his browser (window.bise.openExternal) */
+  open?: (url: string) => void;
 }
 
-export function Accounts({ accounts, send, check = null, want = null, signin = null, copy, cancelSignIn }: AccountsProps) {
+export function Accounts({ accounts, send, check = null, want = null, signin = null, copy, cancelSignIn, ask = null, open }: AccountsProps) {
   // the sign-ins he started here: a spinner until the core's next accounts
   const [signing, setSigning] = useState<{ base: readonly Account[]; ids: readonly string[] }>({ base: accounts, ids: [] });
   const busy = signing.base === accounts ? signing.ids : [];
@@ -71,6 +94,15 @@ export function Accounts({ accounts, send, check = null, want = null, signin = n
   const [bad, setBad] = useState(false);
   // the key he sent: checked live by the core (provider_use), saved only once it works
   const [sent, setSent] = useState<Sent | null>(null);
+  // a key asked for (each click): its account's field opens, a key there or not (he replaces it)
+  const [seen, setSeen] = useState<KeyAsk | null>(null);
+  if (ask !== null && ask !== seen) {
+    setSeen(ask);
+    setKeyFor(keyAccountOf(accounts, ask.provider)?.id ?? ask.provider);
+    setBad(false);
+    setSent(null);
+  }
+  const askFor = ask !== null ? (keyAccountOf(accounts, ask.provider)?.id ?? ask.provider) : null;
   const field = keyField(sent, check);
   if (field === 'added') {
     setKeyFor(null);
@@ -185,7 +217,8 @@ export function Accounts({ accounts, send, check = null, want = null, signin = n
         );
       })()}
       {keyFor !== null && (
-        <div className="settings-key">
+        <div className="settings-key" data-testid="settings.key">
+          <KeyGuide acc={keyAcc} ask={keyFor === askFor ? ask : null} open={open} />
           {/* a provider with no base URL (the foundry proxy): its URL too, the key found used when the key is blank */}
           {keyAcc?.needs_url === true && (
             <>
@@ -236,5 +269,49 @@ export function Accounts({ accounts, send, check = null, want = null, signin = n
         </div>
       )}
     </>
+  );
+}
+
+/** The host and path of a link, as it shows ("openrouter.ai/settings/keys"). Pure. */
+const shown = (url: string): string => url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+
+/**
+ * The key field's guide, for every provider (Gabriel: take him by the hand): where to make a key
+ * (its keys page, opened in his browser), what to copy, where to paste it, and what happens after
+ * ⏎. A provider with a key already (expired, refused): he replaces it, the old one stays until the
+ * new one works.
+ */
+function KeyGuide({ acc, ask, open }: { acc: Account | undefined; ask: KeyAsk | null; open: ((url: string) => void) | undefined }) {
+  const name = ask?.name ?? acc?.label ?? '';
+  const url = ask !== null && ask.url !== '' ? ask.url : (acc?.keys_url ?? '');
+  const replace = acc?.state === 'signed_in' || acc?.state === 'expired';
+  return (
+    <div className="settings-key-guide" data-testid="settings.key.guide">
+      <p className="settings-key-title">{replace ? settings.key_replace({ provider: name }) : settings.fix_add_key({ a: article(name), provider: name })}</p>
+      <ol className="settings-key-steps">
+        <li>
+          {url === '' ? (
+            settings.key_step_site({ provider: name })
+          ) : (
+            <>
+              {settings.key_step_open({ provider: name })}{' '}
+              {open !== undefined ? (
+                <Act onClick={() => { open(url); }} testId="settings.key.link">
+                  {shown(url)}
+                </Act>
+              ) : (
+                <span className="mono">{shown(url)}</span>
+              )}
+            </>
+          )}
+        </li>
+        <li>{settings.key_step_create}</li>
+        <li>{settings.key_step_paste}</li>
+      </ol>
+      <Help testId="settings.key.after">
+        {ask !== null && ask.what !== '' ? settings.key_after_test({ what: ask.what }) : settings.key_after}
+        {replace && ` ${settings.key_old_stays}`}
+      </Help>
+    </div>
   );
 }

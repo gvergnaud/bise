@@ -3,16 +3,18 @@
 // (which model does what) and his accounts and keys. /models opens it with the roles unfolded,
 // /voice at Dictation and fn (the route's page: 'models', 'dictation'). The page remembers whether
 // the roles are open (this window's localStorage: view state, never a setting). A fix is his click:
-// a key opens the accounts, a model the roles, a permission the helper, a test setup_test. Owner:
-// setup-page.
+// a key opens its field in the accounts (added or replaced, with the steps to get one; once it
+// works, the features it fixes test again), a model the roles, a permission the helper, a test
+// setup_test. Owner: setup-page.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { AppCmd, FeatureId, SetupFix } from '@/proto';
+import type { Account, AppCmd, FeatureId, SetupFix, SetupGauge } from '@/proto';
 import { Press } from '@/ds';
 import { settings } from '@/proto/words.gen';
-import { Accounts } from './accounts';
+import { Accounts, keyAccountOf, type KeyAsk } from './accounts';
 import { Roles } from './roles';
 import { modelRow, needsSetup } from './hold';
-import { GaugeView, type GaugePorts } from './gauge';
+import { FEATURE_WORDS, GaugeView, providerName, type GaugePorts } from './gauge';
+import { keyField, type ProviderCheck } from './keycheck';
 import type { SettingsData, SettingsPorts } from './Settings';
 import { KeychainRow } from './keychain';
 
@@ -21,6 +23,30 @@ export function focusOf(page: string | undefined): { roles: boolean; at: Feature
   if (page === 'models') return { roles: true, at: null };
   if (page === 'dictation') return { roles: false, at: 'dictation' };
   return { roles: false, at: null };
+}
+
+/** A key the add_key fix asked for: what the accounts' field shows (`ask`), the account it goes
+ * to, the check the store held at the click (older answers don't count) and the models a key that
+ * works tests again. */
+export interface Asked {
+  ask: KeyAsk;
+  id: string;
+  base: ProviderCheck | null;
+  models: readonly string[];
+}
+
+/** The add_key fix for `provider`: the features it would fix (every row whose fix is that key),
+ * their models and names, its keys page. Pure. */
+export function askOf(g: SetupGauge, provider: string, url: string, accounts: readonly Account[], base: ProviderCheck | null): Asked {
+  const rows = g.rows.filter((r) => r.fix?.t === 'add_key' && r.fix.provider === provider);
+  const models = [...new Set(rows.flatMap((r) => r.parts.map((p) => p.model).filter((m) => m !== '')))];
+  const what = rows.map((r) => FEATURE_WORDS[r.id].toLowerCase()).join(', ');
+  return {
+    ask: { provider, name: providerName(g, provider), url, what },
+    id: keyAccountOf(accounts, provider)?.id ?? provider,
+    base,
+    models,
+  };
 }
 
 const ROLES_OPEN = 'bise.settings.setup.roles';
@@ -74,12 +100,26 @@ export function SetupPage({ data, ports, page }: { data: SettingsData; ports: Se
     setAccountsOpen(true);
     requestAnimationFrame(() => accountsRef.current?.scrollIntoView({ block: 'start' }));
   };
+  const g = data.gauge ?? null;
   const accountOf = (provider: string) => data.accounts.find((a) => (a.provider ?? a.id) === provider);
+  // the key the fix asked for: its field opens in the accounts; once a key there works, the
+  // features that failed for it test again (his paste is the click a test needs)
+  const [asked, setAsked] = useState<Asked | null>(null);
+  const check = data.check ?? null;
+  const retested = useRef<Asked | null>(null);
+  useEffect(() => {
+    if (asked === null || retested.current === asked || keyField({ id: asked.id, base: asked.base }, check) !== 'added') return;
+    retested.current = asked;
+    ports.send({ cmd: 'setup_test', models: [...asked.models] });
+  }, [asked, check, ports]);
   const fix = (f: SetupFix) => {
     switch (f.t) {
       case 'add_key':
+        if (g !== null) setAsked(askOf(g, f.provider, f.url ?? '', data.accounts, check));
+        openAccounts();
+        return;
       case 'credit':
-        if (f.url !== undefined && f.url !== '' && f.t === 'credit') window.open(f.url, '_blank', 'noopener');
+        if (f.url !== undefined && f.url !== '') ports.open?.(f.url);
         openAccounts();
         return;
       case 'sign_in': {
@@ -114,7 +154,6 @@ export function SetupPage({ data, ports, page }: { data: SettingsData; ports: Se
     ...(ports.copy ? { copy: ports.copy } : {}),
     ...(ports.tryIt ? { tryIt: ports.tryIt } : {}),
   };
-  const g = data.gauge ?? null;
   const models = data.models ?? [];
   const held = data.held ?? null;
   return (
@@ -159,6 +198,8 @@ export function SetupPage({ data, ports, page }: { data: SettingsData; ports: Se
             signin={data.signin ?? null}
             {...(ports.copy ? { copy: ports.copy } : {})}
             {...(ports.cancelSignIn ? { cancelSignIn: ports.cancelSignIn } : {})}
+            {...(ports.open ? { open: ports.open } : {})}
+            ask={asked?.ask ?? null}
           />
           {data.keychain != null && <KeychainRow k={data.keychain} send={ports.send} titled={false} />}
         </Fold>

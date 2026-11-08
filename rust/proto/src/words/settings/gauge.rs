@@ -61,7 +61,7 @@ crate::words! { settings:
     /// a part's model: where it comes from, an env var
     part_env(var) = "from {var}";
     /// the fixing buttons
-    fix_add_key(provider) = "Add a {provider} key";
+    fix_add_key(a, provider) = "Add {a} {provider} key";
     /// a fixing button: sign in
     fix_sign_in(provider) = "Sign in to {provider} again";
     /// a fixing button: credit
@@ -81,7 +81,7 @@ crate::words! { settings:
     /// a fixing button: allow
     fix_allow(perm) = "Allow {perm}";
     /// the next action's words (lowercase, after Next)
-    next_add_key(provider) = "add a {provider} key";
+    next_add_key(a, provider) = "add {a} {provider} key";
     /// Next's action, lowercase after Next: sign in
     next_sign_in(provider) = "sign in to {provider} again";
     /// Next's action, lowercase after Next: credit
