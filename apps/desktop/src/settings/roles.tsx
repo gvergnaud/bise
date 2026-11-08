@@ -195,17 +195,6 @@ export function RoleList(props: RoleListProps) {
           </Act>
         </span>
       </div>
-      {news !== null && (
-        <div className="st-news" data-testid="settings.news">
-          <span className="w">{news.text}</span>
-          <Act onClick={() => { ports.set(news.use, news.model); }} testId="settings.news.use">
-            {news.act}
-          </Act>
-          <Act onClick={() => { ports.putOff(news.notNow); }} testId="settings.news.not-now">
-            {settings.news_not_now}
-          </Act>
-        </div>
-      )}
       {line !== null && (
         <div className="st-fixline" data-testid="settings.fixline">
           <span className="w">
@@ -214,6 +203,22 @@ export function RoleList(props: RoleListProps) {
           <Button kind="pri" size="sm" onClick={() => { ports.fix(line.fix, null); }} testId="settings.fixline.fix">
             {fixButton(line.fix, g)}
           </Button>
+        </div>
+      )}
+      {/* under the fix line: what's broken before what's new (designer m_57470) */}
+      {news !== null && (
+        <div className="st-news" data-testid="settings.news">
+          <span className="w">{news.text}</span>
+          <span className="st-news-use">
+            <Act onClick={() => { ports.set(news.use, news.model); }} testId="settings.news.use">
+              {news.act}
+            </Act>
+          </span>
+          <span className="st-news-off">
+            <Act onClick={() => { ports.putOff(news.notNow); }} testId="settings.news.not-now">
+              {settings.news_not_now}
+            </Act>
+          </span>
         </div>
       )}
       <div className="st-rows" data-testid="settings.features">
