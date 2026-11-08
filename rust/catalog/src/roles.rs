@@ -435,35 +435,13 @@ pub fn set_role(text: &str, id: &str, model: Option<&str>, effort: Option<&str>)
 /// `config.toml.lock` around the whole read-edit-write, a tmp name only
 /// this call uses, then a rename: two writers at once never lose a change.
 pub fn save_role(file: &std::path::Path, id: &str, model: Option<&str>, effort: Option<&str>) -> Result<(), String> {
-    write_locked(file, |text| set_role(text, id, model, effort))
+    crate::locked::rewrite(file, |text| set_role(text, id, model, effort))
 }
 
 /// `model` for each role of `ids` (the news line's 'use it for the 3
 /// roles', architect m_57407): one write, all of them or none.
 pub fn save_roles(file: &std::path::Path, ids: &[&str], model: &str) -> Result<(), String> {
-    write_locked(file, |text| ids.iter().fold(text.to_string(), |t, id| set_role(&t, id, Some(model), None)))
-}
-
-/// config.toml rewritten by `change`, under its lock (tmp + rename).
-fn write_locked(file: &std::path::Path, change: impl Fn(&str) -> String) -> Result<(), String> {
-    rewrite_locked(file, change)
-}
-
-/// A file of bise's home rewritten by `change` (its text, "" when none),
-/// under `<name>.lock`, through `<name>.tmp-<pid>-<n>` and a rename: config.toml, checks.json.
-pub(crate) fn rewrite_locked(file: &std::path::Path, change: impl Fn(&str) -> String) -> Result<(), String> {
-    let name = file.file_name().map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-    if let Some(dir) = file.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| format!("couldn't write {name}: {e}"))?;
-    }
-    let _lock = lock(&file.with_file_name(format!("{name}.lock"))).map_err(|e| format!("couldn't lock {name}: {e}"))?;
-    let text = std::fs::read_to_string(file).unwrap_or_default();
-    let tmp = file.with_file_name(format!("{name}.tmp-{}-{}", std::process::id(), TMP.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
-    std::fs::write(&tmp, change(&text)).map_err(|e| format!("couldn't write {name}: {e}"))?;
-    std::fs::rename(&tmp, file).map_err(|e| {
-        let _ = std::fs::remove_file(&tmp);
-        format!("couldn't write {name}: {e}")
-    })
+    crate::locked::rewrite(file, |text| ids.iter().fold(text.to_string(), |t, id| set_role(&t, id, Some(model), None)))
 }
 
 /// The model a provider's key is checked with, and main runs when it is
@@ -484,20 +462,6 @@ pub fn pick_for(c: &crate::Catalog, provider: &str, main: &str) -> Option<String
 pub fn model_to_write(main: &str, main_runs: bool, checked: &str) -> Option<String> {
     let none = main.trim().is_empty() || main == "none";
     ((none || !main_runs) && !checked.is_empty() && checked != main).then(|| checked.to_string())
-}
-
-/// Each write's own tmp name in this process (with the pid: across them).
-static TMP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
-/// An exclusive flock on `path`, held until the file is dropped.
-fn lock(path: &std::path::Path) -> std::io::Result<std::fs::File> {
-    use std::os::unix::io::AsRawFd;
-    let f = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(path)?;
-    // SAFETY: flock on a descriptor this function owns; blocks until free
-    if unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX) } != 0 {
-        return Err(std::io::Error::last_os_error());
-    }
-    Ok(f)
 }
 
 fn table_is_empty(text: &str, table: &str) -> bool {

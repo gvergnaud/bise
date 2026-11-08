@@ -12,53 +12,65 @@
 
 use crate::features::Test;
 use bise_proto::app_rows::CheckWhy;
-use serde_json::{Map, Value, json};
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// A day: a result older than that is not a fact any more.
 pub const STALE_MS: u64 = 24 * 60 * 60 * 1000;
+
+/// One model's last test, as checks.json keeps it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct Entry {
+    /// None: it worked (a why a newer bise wrote reads as Unknown)
+    why: Option<CheckWhy>,
+    /// the provider's words when it failed
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    said: String,
+    #[serde(default)]
+    ms: u64,
+    at_ms: u64,
+}
+
+/// checks.json by model (sorted: stable diffs); a file that isn't one is empty.
+type Checks = BTreeMap<String, Entry>;
+
+fn parse(text: &str) -> Checks {
+    serde_json::from_str(text).unwrap_or_default()
+}
 
 /// The results in `text` (checks.json; none when it isn't one), each on
 /// generation 0, the ones older than [`STALE_MS`] at `now_ms` left out.
 /// Pure.
 pub fn read(text: &str, now_ms: u64) -> Vec<Test> {
-    let Ok(Value::Object(all)) = serde_json::from_str::<Value>(text) else { return Vec::new() };
-    all.iter().filter_map(|(model, e)| entry(model, e)).filter(|t| fresh(t, now_ms)).collect()
+    parse(text).into_iter().filter(|(_, e)| fresh(e, now_ms)).map(|(model, e)| test_of(model, e)).collect()
 }
 
 /// `text` with `t` recorded (that model's older result replaced) and the
 /// stale ones gone. Pure.
 pub fn with(text: &str, t: &Test, now_ms: u64) -> String {
-    let mut all = match serde_json::from_str::<Value>(text) {
-        Ok(Value::Object(m)) => m,
-        _ => Map::new(),
-    };
-    all.retain(|model, e| model != &t.model && entry(model, e).is_some_and(|o| fresh(&o, now_ms)));
+    let mut all = parse(text);
+    all.retain(|_, e| fresh(e, now_ms));
     let (why, said) = match &t.failed {
-        Some((w, s)) => (serde_json::to_value(w).unwrap_or(Value::Null), s.clone()),
-        None => (Value::Null, String::new()),
+        Some((w, s)) => (Some(*w), s.clone()),
+        None => (None, String::new()),
     };
-    all.insert(t.model.clone(), json!({"why": why, "said": said, "ms": t.ms, "at_ms": t.at_ms}));
-    let mut out = serde_json::to_string_pretty(&Value::Object(all)).unwrap_or_default();
+    all.insert(t.model.clone(), Entry { why, said, ms: t.ms, at_ms: t.at_ms });
+    let mut out = serde_json::to_string_pretty(&all).unwrap_or_default();
     out.push('\n');
     out
 }
 
 /// `file` (checks.json) with `t` recorded, under its lock (tmp + rename).
 pub fn record(file: &std::path::Path, t: &Test, now_ms: u64) -> Result<(), String> {
-    crate::roles::rewrite_locked(file, |text| with(text, t, now_ms))
+    crate::locked::rewrite(file, |text| with(text, t, now_ms))
 }
 
-fn fresh(t: &Test, now_ms: u64) -> bool {
-    now_ms.saturating_sub(t.at_ms) < STALE_MS
+fn fresh(e: &Entry, now_ms: u64) -> bool {
+    now_ms.saturating_sub(e.at_ms) < STALE_MS
 }
 
-fn entry(model: &str, e: &Value) -> Option<Test> {
-    let at_ms = e["at_ms"].as_u64()?;
-    let failed = match &e["why"] {
-        Value::Null => None,
-        w => Some((serde_json::from_value::<CheckWhy>(w.clone()).ok()?, e["said"].as_str().unwrap_or_default().to_string())),
-    };
-    Some(Test { model: model.to_string(), generation: 0, failed, ms: e["ms"].as_u64().unwrap_or(0), at_ms })
+fn test_of(model: String, e: Entry) -> Test {
+    Test { model, generation: 0, failed: e.why.map(|w| (w, e.said)), ms: e.ms, at_ms: e.at_ms }
 }
 
 #[cfg(test)]
@@ -105,7 +117,9 @@ mod tests {
     fn a_file_that_isnt_checks_reads_as_none() {
         assert!(read("", NOW).is_empty());
         assert!(read("[1, 2]", NOW).is_empty());
-        assert!(read(r#"{"a/b": {"why": null}}"#, NOW).is_empty(), "no at_ms: not a result");
+        assert!(read(r#"{"a/b": {"why": null}}"#, NOW).is_empty(), "no at_ms: not a file of checks");
+        let later = read(&format!(r#"{{"a/b": {{"why": "a_why_from_a_newer_bise", "at_ms": {NOW}}}}}"#), NOW);
+        assert_eq!(later[0].failed, Some((CheckWhy::Unknown, String::new())), "a newer writer's why reads Unknown");
     }
 
     #[test]

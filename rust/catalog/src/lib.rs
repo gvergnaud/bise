@@ -30,6 +30,7 @@ mod efforts;
 pub use efforts::*;
 pub mod live_efforts;
 pub mod live_fetch;
+pub mod locked;
 pub mod openrouter_login;
 pub mod names;
 pub mod news;

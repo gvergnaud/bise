@@ -176,6 +176,7 @@ dependencies = [
  "bise-secrets",
  "libc",
  "ring",
+ "serde",
  "serde_json",
  "toml",
 ]
