@@ -1931,10 +1931,15 @@ def answer_photo_round(st):
 
 law answer_view_round:
   for view: J.Json
-  {LINK.AView.of(LINK.answer_json(LINK.AView{view})) == LINK.AView{view} : LINK.Answer}
+  for more: Maybe<&2, Bool>
+  {LINK.AView.of(LINK.answer_json(LINK.AView{view, more})) == LINK.AView{view, more} : LINK.Answer}
 
-def answer_view_round(view):
-  {==}
+def answer_view_round(view, more):
+  match more:
+    case None{}:
+      {==}
+    case Some{x_more}:
+      {==}
 
 law answer_skipped_round:
   for skipped: Bool

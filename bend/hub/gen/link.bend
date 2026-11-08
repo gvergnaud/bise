@@ -155,7 +155,7 @@ type Answer is Data:
   # photo
   APhoto{st: J.Json}
   # view
-  AView{view: J.Json}
+  AView{view: J.Json, more: Maybe<&2, Bool>}
   # skipped
   ASkipped{skipped: Bool}
   # skipped_at
@@ -175,7 +175,7 @@ def APhoto.of(+i: J.Json) -> Answer:
   APhoto{K.get_j(i, "st")}
 
 def AView.of(+i: J.Json) -> Answer:
-  AView{K.get_j(i, "view")}
+  AView{K.get_j(i, "view"), K.opt_b(J.get(i, "more"))}
 
 def ASkipped.of(+i: J.Json) -> Answer:
   ASkipped{K.get_b(i, "skipped")}
@@ -197,8 +197,8 @@ def answer_kvs(x: Answer) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
       [J.kv("need", need)]
     case APhoto{+st}:
       [J.kv("st", st)]
-    case AView{+view}:
-      [J.kv("view", view)]
+    case AView{+view, +more}:
+      K.cat([[J.kv("view", view)], K.omit_mb("more", more)])
     case ASkipped{+skipped}:
       [J.kv("skipped", J.JBool{skipped})]
     case ASkippedAt{+skipped}:
@@ -220,8 +220,8 @@ def answer_need(+need: J.Json) -> J.Json:
 def answer_photo(+st: J.Json) -> J.Json:
   answer_json(APhoto{st})
 
-def answer_view(+view: J.Json) -> J.Json:
-  answer_json(AView{view})
+def answer_view(+view: J.Json, +more: Maybe<&2, Bool>) -> J.Json:
+  answer_json(AView{view, more})
 
 def answer_skipped(+skipped: Bool) -> J.Json:
   answer_json(ASkipped{skipped})

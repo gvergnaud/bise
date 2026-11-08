@@ -3918,7 +3918,7 @@ fn a_batched_replay_builds_the_same_state_as_one_event_at_a_time() {
     assert_eq!(batched.st.msgs(), one.st.msgs());
     assert_eq!(batched.st.order, one.st.order);
     assert_eq!(batched.st.agents["a"].ws, one.st.agents["a"].ws);
-    assert_eq!(batched.raw(&json!({"t": "view_all"})), one.raw(&json!({"t": "view_all"})));
+    assert_eq!(batched.view_all_answer(), one.view_all_answer());
 }
 
 /// `sb every`'s timers on sb-core (every_tests.rs).
@@ -4656,7 +4656,7 @@ fn the_order_comes_only_with_an_order_event_and_the_mirror_keeps_it() {
     t.user("fix", "a word for fix");
     t.go(Input::Tick);
     assert_eq!(t.hub.st.order, ["main", "fix", "docs", "old"]);
-    let all = t.hub.raw(&json!({"t": "view_all"}));
+    let all = t.hub.view_all_answer();
     assert_eq!(json!(t.hub.st.order), all["view"]["order"], "the mirror folds to sb-core's order");
     // a durable step with no order event: no order in its view
     let out = t.hub.raw(&json!({"t": "say", "focus": "fix", "text": "one more", "queued": true, "now": 2_000_000_000_000u64, "git": true, "ans": []}));

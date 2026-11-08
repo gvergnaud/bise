@@ -13,11 +13,16 @@ use std::time::{Duration, Instant};
 /// A hub on the fake sb-core, its revival on the test's journal, its
 /// hub.log lines in the returned list.
 fn fake_hub() -> (T, Rc<RefCell<Vec<String>>>) {
+    fake_hub_with(0.0)
+}
+
+/// `fake_hub`, the lines of an answer in lines `line_delay` s apart.
+fn fake_hub_with(line_delay: f64) -> (T, Rc<RefCell<Vec<String>>>) {
     let real = bise_home::env::test_setting("SB_CORE_BIN").map(PathBuf::from).unwrap_or_else(crate::core::default_core_bin);
     let python = std::process::Command::new("sh").args(["-c", "command -v python3"]).output().expect("sh");
     let python = String::from_utf8_lossy(&python.stdout).trim().to_string();
     assert!(!python.is_empty(), "python3 not found");
-    let script = include_str!("testdata/fake_sb_core.py").replace("@REAL@", &real.display().to_string());
+    let script = include_str!("testdata/fake_sb_core.py").replace("@REAL@", &real.display().to_string()).replace("@LINE_DELAY@", &line_delay.to_string());
     let dir = std::env::temp_dir().join(format!("fake-sb-core-{}-{}", std::process::id(), FAKES.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
     std::fs::create_dir_all(&dir).unwrap();
     let bin = dir.join("sb-core");
@@ -98,4 +103,57 @@ fn a_broken_answer_line_is_a_death_not_a_panic() {
     assert!(warns(&fx).iter().any(|l| l.contains("a bad answer")), "{:?}", fx);
     assert!(logged.borrow().iter().any(|l| l.contains("sb-core restarted")), "{:?}", logged.borrow());
     still_works(&mut t);
+}
+
+/// A hub whose view_all answers 3 lines (c6 (c)): its head, a line of
+/// archived agents (b), a line of cold rows (600 old messages, the
+/// newest 256 sent whole).
+fn three_line_view(t: &mut T) {
+    let ws = json!({"mode": "shared", "path": "/w", "branch": null, "base_commit": null, "dropped": false});
+    let mut ev = vec![
+        json!({"type": "task_created", "name": "a", "parent": "main", "ws": ws, "at_ms": 0, "brief": {"objective": "fake"}}),
+        json!({"type": "task_created", "name": "b", "parent": "main", "ws": ws, "at_ms": 0, "brief": {"objective": "fake"}}),
+        json!({"type": "lifecycle", "name": "b", "lifecycle": "archived", "reason": "drop"}),
+    ];
+    for id in 1..=600u64 {
+        ev.push(json!({"type": "message_sent", "msg": {"id": id, "thread": id, "from": "main", "to": "a", "reply_to": null,
+            "expect_reply": false, "auto": false, "text": format!("fake {}", id), "created_ms": 1000 + id, "plain": false, "parts": ""}}));
+        ev.push(json!({"type": "message_state", "id": id, "state": "delivered"}));
+    }
+    assert!(t.hub.replay(&ev).is_empty());
+}
+
+/// c6 (c): view_all's lines share the one limit of the input, sized as
+/// view_all's own (scaled by the load): a slow sb-core whose lines come
+/// 0.1 s apart is read whole, every line loaded into the mirror.
+#[test]
+fn a_slow_answer_in_lines_is_read_whole_within_its_limit() {
+    let (mut t, _) = fake_hub_with(0.1);
+    t.hub.set_core_limits(Limits { step: Duration::from_secs(5), ..Limits::default() });
+    three_line_view(&mut t);
+    let t0 = Instant::now();
+    t.hub.try_view_all().unwrap();
+    assert!(t0.elapsed() >= Duration::from_millis(200), "3 lines, 2 delays: {:?}", t0.elapsed());
+    assert_eq!(t.hub.st.peeks().count(), 600, "every row, the cold ones of the last line too");
+    assert!(t.hub.st.agents.contains_key("b"), "the archived one of the second line");
+    assert_eq!(t.hub.st.whole_msgs().count(), 256);
+    still_works(&mut t);
+}
+
+/// ... and the limit is the whole answer's, not each line's: lines that
+/// each come within it but together past it make sb-core late. The
+/// mirror loads only the whole answer (architect m_56956 (a)): late on
+/// its last line, it holds none of the lines before.
+#[test]
+fn an_answer_in_lines_past_its_limit_is_late_though_each_line_is_not() {
+    let (mut t, _) = fake_hub_with(0.25);
+    t.hub.set_core_limits(Limits { step: Duration::from_secs(5), ..Limits::default() });
+    three_line_view(&mut t);
+    t.hub.st.clear_msgs();
+    t.hub.set_core_limits(Limits { step: Duration::from_millis(400), ..Limits::default() });
+    match t.hub.try_view_all() {
+        Err(CoreError::Late { what, .. }) => assert_eq!(what, "view_all"),
+        other => panic!("late, not {:?}", other.map(|_| ())),
+    }
+    assert_eq!(t.hub.st.peeks().count(), 0, "the head line's 256 whole messages were never loaded alone");
 }

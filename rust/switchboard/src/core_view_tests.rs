@@ -40,7 +40,7 @@ fn an_idle_tick_on_a_big_history_is_small_and_cheap() {
     let (cards, notes) = (h.st.cards.len(), h.st.main_notes.clone());
     assert_eq!(order.len(), 341);
     let t0 = std::time::Instant::now();
-    let full = h.raw(&json!({"t": "view_all"}));
+    let full = h.view_all_answer();
     let full_time = t0.elapsed();
     let t0 = std::time::Instant::now();
     let mut biggest = 0;
@@ -89,7 +89,7 @@ fn view_all_sends_old_messages_cold_and_the_journal_has_every_ones_words() {
     }
     let mut h = Hub::new("/w");
     assert!(h.replay(&ev).is_empty());
-    let full = h.raw(&json!({"t": "view_all"}));
+    let full = h.view_all_answer();
     let rows = full["view"]["msgs"].as_array().unwrap();
     let colds = full["view"]["cold"].as_array().unwrap();
     let cold: Vec<u64> = colds.iter().map(|c| ColdMsg::decode(c).unwrap().id).collect();

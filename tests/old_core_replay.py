@@ -25,6 +25,8 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+from core_lines import answer  # noqa: E402
 
 
 def msg(i, frm, to):
@@ -121,7 +123,7 @@ class Core:
     def call(self, v):
         self.f.write(json.dumps(v) + "\n")
         self.f.flush()
-        return json.loads(self.f.readline())
+        return json.loads(answer(self.f.readline))
 
     def kill(self):
         self.proc.kill()
@@ -269,7 +271,7 @@ def main():
         def call(v):
             f.write(json.dumps(v) + "\n")
             f.flush()
-            return json.loads(f.readline())
+            return json.loads(answer(f.readline))
 
         call({"t": "init", "workspace": "/w"})
         written_by_this_tree(os.path.join(tmp, "journal.jsonl"))

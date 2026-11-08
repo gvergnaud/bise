@@ -24,6 +24,8 @@ import subprocess
 import sys
 import time
 
+from core_lines import answer
+
 
 def run(binary, evs, batch, view_at):
     """Every answer line of one sb-core, in order: (step label, line)."""
@@ -41,12 +43,12 @@ def run(binary, evs, batch, view_at):
         def call(label, v):
             f.write(json.dumps(v) + "\n")
             f.flush()
-            out.append((label, f.readline()))
+            out.append((label, answer(f.readline)))
 
         def ask(v):
             f.write(json.dumps(v) + "\n")
             f.flush()
-            return json.loads(f.readline())
+            return json.loads(answer(f.readline))
 
         t = time.time()
         call("init", {"t": "init", "workspace": "/w"})
@@ -207,7 +209,7 @@ class Core:
     def call(self, v):
         self.f.write(json.dumps(v) + "\n")
         self.f.flush()
-        line = self.f.readline()
+        line = answer(self.f.readline)
         if not line:
             raise EOFError("sb-core stopped")
         return json.loads(line)

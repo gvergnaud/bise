@@ -941,8 +941,7 @@ impl Hub {
             model_trial: BTreeSet::new(),
             spawn_asks: BTreeMap::new(),
         };
-        let out = hub.try_raw(&Link::ViewAll(cl::ViewAll {}).to_value())?;
-        hub.load_answer_view(&out);
+        hub.try_view_all()?;
         Ok(hub)
     }
 
@@ -999,20 +998,28 @@ impl Hub {
             done += batch.len();
             progress(done, total);
         }
-        let out = self.try_raw(&Link::ViewAll(cl::ViewAll {}).to_value())?;
-        self.load_answer_view(&out);
+        self.try_view_all()?;
         Ok(skipped)
     }
 
     #[cfg(test)]
     fn view_all(&mut self) {
-        if let Some(out) = self.call(&Link::ViewAll(cl::ViewAll {}).to_value()) {
-            self.load_answer_view(&out);
-        }
+        self.try_view_all().unwrap_or_else(|e| panic!("sb-core: {}", e));
     }
 
-    /// The view an answer of sb-core carries (core_fx::view_of), loaded;
-    /// none (a newer sb-core's shape): the mirror stays as it is.
+    /// `view_all` into the mirror: its lines (c6 (c): never one line
+    /// holding the whole view), loaded as one view.
+    fn try_view_all(&mut self) -> Result<(), CoreError> {
+        let lines = self.link.call_lines(&Link::ViewAll(cl::ViewAll {}).to_value())?;
+        self.load_answer_views(&lines);
+        Ok(())
+    }
+
+    /// Tests only: the view an answer of sb-core carries
+    /// (core_fx::view_of), loaded; none (a newer sb-core's shape): the
+    /// mirror stays as it is. The daemon loads a step's view in
+    /// apply_step and view_all's lines in `try_view_all`.
+    #[cfg(test)]
     fn load_answer_view(&mut self, out: &Value) {
         match core_fx::view_of(&core_fx::answer(out)) {
             Some(v) => self.load_view(v),

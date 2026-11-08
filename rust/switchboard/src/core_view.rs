@@ -27,6 +27,32 @@ impl Hub {
         }
     }
 
+    /// `view_all`'s lines (c6 (c), view.bend `all_head`): a full view
+    /// without the archived agents and the cold rows, then partial views
+    /// of those. Merged into the one view they split, then loaded once:
+    /// nothing reads the mirror half loaded. A line that doesn't decode
+    /// keeps the whole mirror, as a view that doesn't decode does.
+    pub(super) fn load_answer_views(&mut self, lines: &[Value]) {
+        let views: Result<Vec<View>, String> = lines
+            .iter()
+            .map(|out| core_fx::view_of(&core_fx::answer(out)).ok_or_else(|| format!("an answer without a view: {}", out)).and_then(View::decode))
+            .collect();
+        match views.map(merge_views) {
+            Ok(Some(view)) => self.load(view),
+            Ok(None) => eprintln!("sb-core: view_all answered no line (skipped, the mirror kept)"),
+            Err(e) => eprintln!("sb-core: view_all: {} (skipped, the mirror kept)", e),
+        }
+    }
+
+    /// Tests only: `view_all`'s answer as the one view its lines split
+    /// (`{"view": ..}`), the mirror untouched; its failure a panic.
+    #[cfg(test)]
+    pub(super) fn view_all_answer(&mut self) -> Value {
+        let lines = self.link.call_lines(&Link::ViewAll(cl::ViewAll {}).to_value()).unwrap_or_else(|e| panic!("sb-core: {}", e));
+        let views = lines.iter().map(|out| View::decode(core_fx::view_of(&core_fx::answer(out)).expect("a view")).expect("it decodes"));
+        serde_json::json!({ "view": merge_views(views.collect()).expect("a line").to_value() })
+    }
+
     fn load(&mut self, v: View) {
         let mut agents = BTreeMap::new();
         for a in v.agents {
@@ -100,4 +126,19 @@ impl Hub {
         self.st.next_card = v.next_card;
         self.st.paused = v.paused;
     }
+}
+
+/// `view_all`'s lines merged into the one view they split (c6 (c)): the
+/// first line's view, with every next line's agents and cold rows after
+/// its own, in order. None: no line.
+fn merge_views(views: Vec<View>) -> Option<View> {
+    let mut it = views.into_iter();
+    let mut head = it.next()?;
+    for v in it {
+        head.agents.extend(v.agents);
+        if let Some(cold) = v.cold {
+            head.cold.get_or_insert_with(Vec::new).extend(cold);
+        }
+    }
+    Some(head)
 }

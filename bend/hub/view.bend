@@ -638,3 +638,88 @@ def view.go(+s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +all: Bool,
 def view(+s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +all: Bool, +ids: List<&2, Nat>, +names: List<&2, String>, +evs: List<&2, M.Ev>) -> J.Json:
   view.go(s, rts, ws, all, ids, names, all || Bool.not(List.is_empty(&2, M.Ev, evs)), all || order_evs(evs),
     all || timer_evs(False{}, evs), all || timer_evs(True{}, evs), all || wake_evs(evs))
+
+# ---- view_all in lines (c6 (c), architect m_56956) ----
+# One line holding the whole view set sb-core's steady RSS: Bend's heap
+# never shrinks, and the 11 MB line of his journal's view_all (a char
+# list, then its J tree) took sb-core from 166 to 506 MB at every boot.
+# So view_all is a head line, then lines of a bounded size: the head is
+# view_all without the archived agents and the cold rows; each next line
+# a partial view (all_* false, its optional keys absent) of archived
+# agents, then of cold rows. Their agents and cold rows, concatenated,
+# are those of `view(s, .., True{}, ..)`, in its order; the hub's mirror
+# loads every line, then swaps once.
+
+# how many archived agents one line of view_all holds: up to ~4 KB each
+# (brief, report, files), so a line stays near 1 MB
+def ARCH_PART() -> Nat:
+  256n
+
+# how many cold rows one line holds: ~110 bytes each, ~450 KB a line.
+# Not fewer: the JSON printer splits an array of 256 items or more in
+# 64 parallel parts (vendor/json.bend arr_tasks), which a line of a few
+# hundred small rows pays for and never gains from (256 a line: +27%
+# instructions on his journal's view_all)
+def COLD_PART() -> Nat:
+  4096n
+
+def colds_of.keep(whole: Bool, +r: S.MRec, +rest: List<&2, S.MRec>) -> List<&2, S.MRec>:
+  match whole:
+    case True{}:
+      rest
+    case False{}:
+      r <> rest
+
+# the messages view_all sends as cold rows (colds_json's), in send order
+def colds_of(xs: List<&2, S.MRec>, +next: Nat) -> List<&2, S.MRec>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case Con{+r, +t}:
+      colds_of.keep(ships_whole(r, next), r, colds_of(t, next))
+
+def cold_rows(xs: List<&2, S.MRec>) -> List<&2, J.Json>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case Con{+r, +t}:
+      cold_json(r) <> cold_rows(t)
+
+# view_all's head line (`xs`: every message in send order, M.every);
+# the lines after it send St.arch, then colds_of(xs)
+def all_head(+s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +xs: List<&2, S.MRec>) -> J.Json:
+  V.view(agents_json(S.St.agents(s), rts, ws, s, True{}, Nil{}), True{},
+    recs_json(xs, True{}, Nil{}, S.St.next_msg(s)), True{}, Some{Nil{}},
+    S.St.next_msg(s), S.St.next_card(s), S.St.paused(s),
+    order_when(True{}, s), cards_when(True{}, s), notes_when(True{}, s),
+    timers_live(True{}, s), timers_ended(True{}, s), wakes_live(True{}, s), wakes_ended(True{}, s))
+
+# a next line: a partial view of these agents and cold rows
+def all_part(+s: S.St, +agents: List<&2, J.Json>, +cold: Maybe<&2, List<&2, J.Json>>) -> J.Json:
+  V.view(agents, False{}, Nil{}, False{}, cold, S.St.next_msg(s), S.St.next_card(s), S.St.paused(s),
+    None{}, None{}, None{}, None{}, None{}, None{}, None{})
+
+# view_all's next line when these archived agents and cold messages are
+# left to send: the first ARCH_PART() agents, else the first
+# COLD_PART() cold rows; none: nothing is left
+def all_next(+s: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, arch: List<&2, S.Agent>, msgs: List<&2, S.MRec>) -> Maybe<&2, J.Json>:
+  match arch msgs:
+    case Nil{} Nil{}:
+      None{}
+    case Nil{} Con{+m, +t}:
+      Some{all_part(s, Nil{}, Some{cold_rows(List.take(&2, S.MRec, m <> t, COLD_PART()))})}
+    case Con{+a, +t} _:
+      Some{all_part(s, agents_json(List.take(&2, S.Agent, a <> t, ARCH_PART()), rts, ws, s, True{}, Nil{}), None{})}
+
+# the archived agents left after all_next's line
+def all_arch_rest(arch: List<&2, S.Agent>) -> List<&2, S.Agent>:
+  List.drop(&2, S.Agent, arch, ARCH_PART())
+
+# the cold messages left after all_next's line (it sends some only when
+# no archived agent is left)
+def all_msgs_rest(arch: List<&2, S.Agent>, +msgs: List<&2, S.MRec>) -> List<&2, S.MRec>:
+  match arch:
+    case Nil{}:
+      List.drop(&2, S.MRec, msgs, COLD_PART())
+    case Con{_, _}:
+      msgs

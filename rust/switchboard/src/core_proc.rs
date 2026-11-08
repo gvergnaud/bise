@@ -151,17 +151,40 @@ impl CoreLink {
     /// answers something that is not JSON: the link is dead after it
     /// (a late answer would come as the next input's).
     pub fn call(&mut self, v: &Value) -> Result<Value, CoreError> {
+        let limit = self.send(v)?;
+        self.answer_by(v, limit)
+    }
+
+    /// An input answered in lines (`view_all`, c6 (c)): every line up to
+    /// the first without `more`. One limit for the whole answer, sized as
+    /// the input's own (`Limits::of`, scaled by the load): the lines split
+    /// the work of the one line they replace, they add none to it.
+    pub fn call_lines(&mut self, v: &Value) -> Result<Vec<Value>, CoreError> {
+        let limit = self.send(v)?;
+        let mut out = vec![self.answer_by(v, limit)?];
+        while out.last().is_some_and(|a| a["more"] == Value::Bool(true)) {
+            out.push(self.answer_by(v, limit)?);
+        }
+        Ok(out)
+    }
+
+    /// Write input `v`: its limit, which runs from now to its answer's
+    /// last line.
+    fn send(&mut self, v: &Value) -> Result<Limit, CoreError> {
         let line = line_of(v);
         let limit = self.limits.of(v, line.len(), crate::load::factor());
         let end = Instant::now() + limit;
-        let late = || CoreError::Late { what: v["t"].as_str().unwrap_or("?").to_string(), limit };
         self.w.set_write_timeout(Some(limit)).map_err(CoreError::Gone)?;
         match self.w.write_all(line.as_bytes()) {
-            Err(e) if is_timeout(&e) => return Err(late()),
-            r => r.map_err(CoreError::Gone)?,
+            Err(e) if is_timeout(&e) => Err(late(v, limit)),
+            r => r.map(|()| Limit { limit, end }).map_err(CoreError::Gone),
         }
-        let back = match read_line_by(&mut self.r, end) {
-            Err(e) if is_timeout(&e) => return Err(late()),
+    }
+
+    /// One answer line to `v`, before its limit ends.
+    fn answer_by(&mut self, v: &Value, l: Limit) -> Result<Value, CoreError> {
+        let back = match read_line_by(&mut self.r, l.end) {
+            Err(e) if is_timeout(&e) => return Err(late(v, l.limit)),
             r => r.map_err(CoreError::Gone)?,
         };
         serde_json::from_str(&back).map_err(|e| CoreError::BadLine(format!("{:?}: {}", clip(&back, 200), e)))
@@ -179,6 +202,17 @@ impl Drop for CoreLink {
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
+}
+
+/// An input's limit and when it ends (its answer's last line by then).
+#[derive(Clone, Copy)]
+struct Limit {
+    limit: Duration,
+    end: Instant,
+}
+
+fn late(v: &Value, limit: Duration) -> CoreError {
+    CoreError::Late { what: v["t"].as_str().unwrap_or("?").to_string(), limit }
 }
 
 fn is_timeout(e: &std::io::Error) -> bool {

@@ -4,6 +4,8 @@ but an input line holding a marker:
   fake:sleep    no answer (the hub's time limit kills it)
   fake:error    {"error": ...} (sb-core refusing the input)
   fake:garbage  a line that is not JSON
+An answer in lines (view_all's, c6 (c)) is relayed whole, each line but
+the first LINE_DELAY seconds after the one before it (a slow sb-core).
 It dies with its parent (the hub kills it, SIGKILL) and takes the real
 one with it."""
 
@@ -12,9 +14,11 @@ import socket
 import subprocess
 import sys
 import threading
+import json
 import time
 
 REAL = "@REAL@"
+LINE_DELAY = float("@LINE_DELAY@")
 
 
 def free_port():
@@ -68,7 +72,12 @@ def main():
             hub.sendall(b"not json {\n")
             continue
         up.sendall(line)
-        hub.sendall(upr.readline())
+        back = upr.readline()
+        hub.sendall(back)
+        while json.loads(back).get("more") is True:
+            back = upr.readline()
+            time.sleep(LINE_DELAY)
+            hub.sendall(back)
     real.kill()
 
 

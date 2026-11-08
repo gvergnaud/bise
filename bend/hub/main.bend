@@ -54,6 +54,12 @@ type Cut is Data:
 type Flow is Type:
   Go{h: H.Hub}
 
+# what one input answers: a line, or view_all's lines (view.bend
+# all_head: never one line holding the whole view, c6 (c))
+type Out is Data:
+  One{line: String}
+  Views{head: J.Json, arch: List<&2, S.Agent>, msgs: List<&2, S.MRec>}
+
 def fx_json(f: X.Fx) -> J.Json:
   match f:
     case X.FJ{+e}:
@@ -136,36 +142,49 @@ def restore_photo(m: Maybe<&2, H.Hub>, +h: H.Hub) -> H.Hub & String:
     case None{}:
       (h, J.stringify(L.answer_error("restore_photo: only a hub that applied nothing yet, from a photo object")))
 
+# view_all's lines (`xs`: every message in send order)
+def views.go(+d: S.St, +rts: List<&2, X.Rt>, +ws: List<&2, X.Waiter>, +xs: List<&2, S.MRec>) -> Out:
+  Views{V.all_head(d, rts, ws, xs), S.St.arch(d), V.colds_of(xs, S.St.next_msg(d))}
+
+def views(+h: H.Hub) -> Out:
+  views.go(H.Hub.d(h), X.R.rts(H.Hub.r(h)), X.R.waiters(H.Hub.r(h)), M.every(H.Hub.d(h)))
+
+# an answer of one line
+def one(p: H.Hub & String) -> H.Hub & Out:
+  match p:
+    case (+h, +line):
+      (h, One{line})
+
 # the link's own requests (gen/link.bend, from bise_proto::core::Link);
-# any other tag is a step of sb-core
-def handle.link(l: L.Link, +h: H.Hub, +i: J.Json) -> H.Hub & String:
+# any other tag is a step of sb-core. view_all: its lines (Views)
+def handle.link(l: L.Link, +h: H.Hub, +i: J.Json) -> H.Hub & Out:
   match l:
     case L.TInit{+workspace}:
-      (H.hub_new(workspace), J.stringify(L.answer_done()))
+      (H.hub_new(workspace), One{J.stringify(L.answer_done())})
     case L.TReplay{+ev}:
-      replay(h, GJ.of(ev))
+      one(replay(h, GJ.of(ev)))
     case L.TReplayMany{+evs}:
-      replay_many(h, evs)
+      one(replay_many(h, evs))
     case L.TPing{}:
-      (h, J.stringify(L.answer_done()))
+      (h, One{J.stringify(L.answer_done())})
     case L.TView{}:
-      (h, J.stringify(L.answer_view(V.view(H.Hub.d(h), X.R.rts(H.Hub.r(h)), X.R.waiters(H.Hub.r(h)), True{}, Nil{}, Nil{}, Nil{}))))
+      (h, views(h))
     case L.TPhoto{}:
-      (h, J.stringify(photo.answer(PH.photo(h))))
+      (h, One{J.stringify(photo.answer(PH.photo(h)))})
     case L.TRestorePhoto{+st}:
-      restore_photo(PH.restore(h, st), h)
+      one(restore_photo(PH.restore(h, st), h))
     case L.TStep{}:
-      answer(X.R.rts(H.Hub.r(h)), V.waiter_marks(X.R.waiters(H.Hub.r(h))), H.commit(h, i))
+      one(answer(X.R.rts(H.Hub.r(h)), V.waiter_marks(X.R.waiters(H.Hub.r(h))), H.commit(h, i)))
 
-def handle.parsed(r: Result<&2, &2, String, J.Json>, +h: H.Hub) -> H.Hub & String:
+def handle.parsed(r: Result<&2, &2, String, J.Json>, +h: H.Hub) -> H.Hub & Out:
   match r:
     case Fail{+e}:
-      (h, J.stringify(L.answer_error(String.append("json: ", e))))
+      (h, One{J.stringify(L.answer_error(String.append("json: ", e)))})
     case Done{+i}:
       handle.link(L.of(i), h, i)
 
 # one input line
-def handle(+h: H.Hub, +line: String) -> H.Hub & String:
+def handle(+h: H.Hub, +line: String) -> H.Hub & Out:
   handle.parsed(J.parse(line), h)
 
 # ---- the line server ----
@@ -186,6 +205,31 @@ def send_line(s: Socket, +text: String) -> IO(Socket):
     s2 : Socket <- send_line.after(r0)
     r : Socket & Result<&1, &1, (U32 & String) & List<&2, U32>, Unit> <- TCP.send(s2, "\n")
     send_line.after(r)
+
+# view_all's lines: each line is built when the one before it is sent,
+# so at most two are held at once; every line but the last says `more`.
+# Unsafe as the server is: it ends when view.bend's all_next has no
+# line left (each line takes archived agents or cold rows). `m`: the
+# line after `line`, `arch` and `msgs`: what is left after `m`
+@unsafe
+def send_views(s: Socket, +h: H.Hub, +line: J.Json, m: Maybe<&2, J.Json>, +arch: List<&2, S.Agent>, +msgs: List<&2, S.MRec>) -> IO(Socket):
+  match m:
+    case None{}:
+      send_line(s, J.stringify(L.answer_view(line, None{})))
+    case Some{+next}:
+      do IO<Socket>:
+        s2 : Socket <- send_line(s, J.stringify(L.answer_view(line, Some{True{}})))
+        send_views(s2, h, next, V.all_next(H.Hub.d(h), X.R.rts(H.Hub.r(h)), X.R.waiters(H.Hub.r(h)), arch, msgs),
+          V.all_arch_rest(arch), V.all_msgs_rest(arch, msgs))
+
+@unsafe
+def send_out(s: Socket, +h: H.Hub, o: Out) -> IO(Socket):
+  match o:
+    case One{+line}:
+      send_line(s, line)
+    case Views{+head, +arch, +msgs}:
+      send_views(s, h, head, V.all_next(H.Hub.d(h), X.R.rts(H.Hub.r(h)), X.R.waiters(H.Hub.r(h)), arch, msgs),
+        V.all_arch_rest(arch), V.all_msgs_rest(arch, msgs))
 
 # the received `data` after `part` (the line so far, newest first): the
 # first whole line and the data after it, or More: the line so far with
@@ -208,11 +252,11 @@ def lines(s: Socket, +h: H.Hub, +part: String, +data: String) -> IO(Got):
   lines.split(cut(data, part), s, h)
 
 @unsafe
-def lines.answer(p: H.Hub & String, s: Socket, +rest: String) -> IO(Got):
+def lines.answer(p: H.Hub & Out, s: Socket, +rest: String) -> IO(Got):
   match p:
     case (+h2, +out):
       do IO<Got>:
-        s2 : Socket <- send_line(s, out)
+        s2 : Socket <- send_out(s, h2, out)
         lines(s2, h2, "", rest)
 
 @unsafe

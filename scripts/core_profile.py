@@ -23,6 +23,8 @@ import socket
 import subprocess
 import time
 
+from core_lines import answer
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -45,7 +47,7 @@ def main():
         t = time.time()
         f.write(json.dumps(v) + "\n")
         f.flush()
-        line = f.readline()
+        line = answer(f.readline)
         return time.time() - t, len(line)
 
     def sample(name, secs):

@@ -142,8 +142,7 @@ impl Hub {
         for (agent, run) in runs {
             self.try_raw(&force_run_input(&agent, run))?;
         }
-        let out = self.try_raw(&Link::ViewAll(cl::ViewAll {}).to_value())?;
-        self.load_answer_view(&out);
+        self.try_view_all()?;
         let how = match &rebuilt.photo {
             Ok(k) => format!("from the photo of {} events, {} replayed", k, events.len() - k),
             Err(why) => format!("{} journal events replayed ({})", events.len(), why),

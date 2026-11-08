@@ -33,6 +33,9 @@ import socket
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
+from core_lines import answer  # noqa: E402
+
 
 def wrap(real, cap, d):
     os.makedirs(d, exist_ok=True)
@@ -88,7 +91,19 @@ def proxy(real, cap):
                 if not line:
                     break
                 up.sendall(line)
-                back = up_r.readline()
+                # an answer in lines (view_all's, c6 (c)): each line goes
+                # to the hub as it came, the capture keeps the one view
+                backs = []
+
+                def relay():
+                    b = up_r.readline()
+                    backs.append(b)
+                    return b
+
+                try:
+                    back = answer(relay)
+                except EOFError:
+                    return
                 if not back:
                     return
                 # captured before the hub reads it: what it saw is on file
@@ -98,7 +113,7 @@ def proxy(real, cap):
                 with open(cap, "a") as f:
                     fcntl.flock(f, fcntl.LOCK_EX)
                     f.write(rec)
-                conn.sendall(back)
+                conn.sendall(b"".join(backs))
             conn.close()
     finally:
         core.kill()

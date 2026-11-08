@@ -164,9 +164,9 @@ fn boot_phases_on_a_real_journal() {
         full.raw(&Link::ReplayMany(cl::ReplayMany { evs }).to_value());
     }
     phase(&mut lines, &full, "full: replay batches", &mut at);
-    let out = full.raw(&Link::ViewAll(cl::ViewAll {}).to_value());
+    let out = full.link.call_lines(&Link::ViewAll(cl::ViewAll {}).to_value()).unwrap();
     phase(&mut lines, &full, "full: view_all call", &mut at);
-    full.load_answer_view(&out);
+    full.load_answer_views(&out);
     phase(&mut lines, &full, "full: view decode + load", &mut at);
     let st = full.photo().expect("a photo");
     phase(&mut lines, &full, "photo: take", &mut at);
@@ -197,10 +197,10 @@ fn boot_phases_on_a_real_journal() {
         boot.raw(&Link::ReplayMany(cl::ReplayMany { evs }).to_value());
     }
     phase(&mut lines, &boot, &format!("boot: replay {} after it", after.len()), &mut at);
-    let out = boot.raw(&Link::ViewAll(cl::ViewAll {}).to_value());
+    let out = boot.link.call_lines(&Link::ViewAll(cl::ViewAll {}).to_value()).unwrap();
     phase(&mut lines, &boot, "boot: view_all call", &mut at);
-    let bytes = out.to_string().len();
-    boot.load_answer_view(&out);
+    let bytes: usize = out.iter().map(|l| l.to_string().len()).sum();
+    boot.load_answer_views(&out);
     phase(&mut lines, &boot, "boot: view decode + load", &mut at);
     println!("{}\nview_all answer: {bytes} bytes", lines.join("\n"));
     let _ = std::fs::remove_dir_all(dir);
