@@ -385,10 +385,13 @@ def part_d():
         n = len(open(F.LOG).readlines())
         wn = len(open(os.path.join(tmp, "wire.log")).readlines())
         t0 = time.time()
-        out = turn("fakehang/m", "[[hang: 1]] hello hang")
+        out = turn("fakehang/hang", "[[hang: 1]] hello hang")
         took = time.time() - t0
+        # its own model: the Ctrl+C'd [[slow: 3]] requests above (model m) end
+        # 3 s after they began, and under load their 200s land after n (the
+        # flake of 10-29..11-08: three (None, 200) ahead of the hang)
         recs = [json.loads(l) for l in open(F.LOG)][n:]
-        recs = [r for r in recs if r.get("path", "").endswith("/chat/completions")]
+        recs = [r for r in recs if r.get("path", "").endswith("/chat/completions") and r.get("model") == "hang"]
         evs = [json.loads(l.split("ev: ", 1)[1]) for l in open(os.path.join(tmp, "wire.log")).readlines()[wn:]
                if "ev: " in l and '"request_failed"' in l]
         said = [l for l in out if obs_lines.kind(l) == "assistant"]
