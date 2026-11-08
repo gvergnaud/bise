@@ -62,6 +62,10 @@
    folded), a folder's line the stop (mono 12, text-2), then that folder's cards. One left edge for
    the head, the folder line and the cards; the space shows the levels: 24 above a kind (0 for the
    first), 12 above a folder line, 8 from it to its first card, 8 between cards. */
+/* a jump to a part (n / p, the outline, Show it) puts its head under the sticky bar, never behind it */
+.rv-part {
+  scroll-margin-top: var(--s-12);
+}
 .rv-part > .b-fold {
   height: var(--h-group);
   margin: var(--s-6) var(--pad-row-x) 0;
