@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Settings › Privacy's usage counts and Gabriel's note (usage-metrics-plan step 6): the pure words,
+// Settings › Privacy's usage counts and Gabriel's note (usage-metrics-plan steps 6, 6b): the pure words,
 // the acts each control sends, and the note marked seen only once drawn. Fake data only.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -63,13 +63,23 @@ describe("Gabriel's note", () => {
     expect(holes(settings.onb_telemetry_b_off({ cmd: HOLES[0], env: HOLES[1] }), [OFF_CMD, OFF_ENV]).filter((p) => p.code).map((p) => p.text)).toEqual([OFF_CMD, OFF_ENV]);
   });
 
-  it('is marked seen when drawn, and its switch sends his choice', () => {
+  it("is one line, marked seen when drawn; 'Disable telemetry' is unchecked while he shares, and sends his choice", () => {
     const send = vi.fn();
     render(<TelemetryNote share send={send} testId="note" />);
     expect(send).toHaveBeenCalledWith({ cmd: 'telemetry', act: 'note_seen' });
-    fireEvent.click(screen.getByTestId('note.share'));
+    expect(screen.getByTestId('note').querySelector('p')?.textContent).toBe(`${settings.onb_telemetry_line}\u00a0${settings.onb_telemetry_why}`);
+    const disable = screen.getByTestId('note.disable');
+    expect(disable.getAttribute('aria-checked')).toBe('false');
+    expect(disable.textContent).toContain(settings.onb_telemetry_disable);
+    fireEvent.click(disable);
     expect(send).toHaveBeenLastCalledWith({ cmd: 'telemetry', act: 'off' });
     expect(screen.queryByTestId('note.done')).toBeNull();
+    cleanup();
+    render(<TelemetryNote share={false} send={send} done={() => undefined} testId="home" />);
+    expect(screen.getByTestId('home.disable').getAttribute('aria-checked')).toBe('true');
+    fireEvent.keyDown(screen.getByTestId('home.disable'), { key: ' ' });
+    expect(send).toHaveBeenLastCalledWith({ cmd: 'telemetry', act: 'on' });
+    expect(screen.getByTestId('home.done').textContent).toBe(settings.onb_telemetry_got_it);
   });
 
   it('shows on the home only for an onboarded install that never saw it', () => {

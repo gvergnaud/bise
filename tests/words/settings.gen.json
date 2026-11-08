@@ -2683,55 +2683,56 @@
     "one": null,
     "text": "It's just me, Gabriel, building bise. I don't know yet if bise is useful to you, or which parts you actually use. Counting is the only way I have to learn that, and to know what to fix first."
   },
+  "settings.onb_telemetry_disable": {
+    "args": [],
+    "one": null,
+    "text": "Disable telemetry"
+  },
+  "settings.onb_telemetry_disable_key": {
+    "args": [
+      "key"
+    ],
+    "one": null,
+    "text": "{key} disable telemetry"
+  },
+  "settings.onb_telemetry_enable_key": {
+    "args": [
+      "key"
+    ],
+    "one": null,
+    "text": "{key} enable telemetry"
+  },
   "settings.onb_telemetry_got_it": {
     "args": [],
     "one": null,
     "text": "Got it"
   },
-  "settings.onb_telemetry_never": {
+  "settings.onb_telemetry_line": {
     "args": [],
     "one": null,
-    "text": "Never what you write or own: no prompts, messages, files, paths or names. Your IP address is not stored. A random ID lets me see how use changes over time; it's deleted when you turn this off."
+    "text": "Only aggregated usage counts, to help me make bise better. Never your content, files, names or anything personal."
   },
-  "settings.onb_telemetry_off": {
+  "settings.onb_telemetry_off_cmd": {
     "args": [
-      "env"
+      "cmd"
     ],
     "one": null,
-    "text": "Turn it off in Settings › Context and privacy, or with {env}."
+    "text": "turn it off: {cmd}"
   },
-  "settings.onb_telemetry_off_tui": {
-    "args": [
-      "cmd",
-      "env"
-    ],
+  "settings.onb_telemetry_off_now": {
+    "args": [],
     "one": null,
-    "text": "Turn it off with {cmd}, or {env}."
+    "text": "telemetry off"
   },
   "settings.onb_telemetry_sign": {
     "args": [],
     "one": null,
     "text": "— Gabriel"
   },
-  "settings.onb_telemetry_title": {
-    "args": [],
-    "one": null,
-    "text": "a note from me, Gabriel"
-  },
-  "settings.onb_telemetry_what": {
-    "args": [],
-    "one": null,
-    "text": "Once a day, bise sends me totals: how many agents ran and for how long, how long the app was open, which features you used."
-  },
   "settings.onb_telemetry_why": {
     "args": [],
     "one": null,
     "text": "why?"
-  },
-  "settings.onb_telemetry_why_line": {
-    "args": [],
-    "one": null,
-    "text": "I'm building bise alone. I want to know if it's useful and how you use it, so I can learn and make it better."
   },
   "settings.onb_took": {
     "args": [

@@ -418,6 +418,9 @@ pub(crate) struct Onb {
     pub seen: signin::Detected,
     /// the ChatGPT plan's state
     pub plan: PlanState,
+    /// his `telemetry.share` off: how it works says `telemetry off` and
+    /// its key turns it back on (d, usage-metrics-plan step 6b)
+    pub telemetry_off: bool,
     /// the sign-in under way (`Sub::SignIn`)
     pub flow: Option<Box<dyn signin::Flow>>,
     /// `a coding plan key` was picked: `which provider?` lists those
@@ -483,6 +486,7 @@ impl Onb {
             logins: Logins::real(),
             seen: signin::Detected::default(),
             plan: PlanState::NotSetUp,
+            telemetry_off: !bise_home::prefs::telemetry_share(bise_home::Slot::file(home.prefs_file()).get().as_ref()),
             flow: None,
             coding: false,
             signing_out: None,
@@ -665,6 +669,14 @@ impl Onb {
             // any key: all of it at once while it types, then on
             (Step::Welcome, _) if !self.welcome_done(now) => {
                 self.rushed = true;
+                Out::Stay
+            }
+            // usage-metrics-plan step 6b: d turns telemetry off (on again), the step stays
+            (Step::Lines, KeyCode::Char('d')) if now.saturating_sub(self.since) >= HOW_ALL_MS => {
+                let off = !self.telemetry_off;
+                if bise_usage::control::set_share(&self.home, !off).is_ok() {
+                    self.telemetry_off = off;
+                }
                 Out::Stay
             }
             (Step::Welcome | Step::Lines, _) => self.advance(now),
@@ -1772,7 +1784,7 @@ fn how_rows(i: usize, [a, me, b]: [&str; 3], w: u16) -> Vec<Line<'static>> {
 /// note (ms into the step): `how_lines`'s `shown(3)`.
 const HOW_ALL_MS: u64 = 400 + 3 * 900;
 
-fn how_lines(t: u64, gap: usize, w: u16, digits: bool) -> Vec<Line<'static>> {
+fn how_lines(t: u64, gap: usize, w: u16, digits: bool, telemetry_off: bool) -> Vec<Line<'static>> {
     let shown = |i: u64| t >= 400 + i * 900;
     let mut v = vec![title(settings::first_how)];
     blanks(&mut v, gap);
@@ -1787,13 +1799,14 @@ fn how_lines(t: u64, gap: usize, w: u16, digits: bool) -> Vec<Line<'static>> {
     }
     blanks(&mut v, 1);
     v.push(if shown(3) { Line::from(s(HOW_FOOT, theme::faint())) } else { Line::raw("") });
-    // usage-metrics-plan step 6: Gabriel's note under the three lines, with them
+    // usage-metrics-plan step 6b: Gabriel's note under the three lines, with them, and its key
     blanks(&mut v, 1);
-    for row in crate::telemetry_note::rows(w as usize) {
+    for row in crate::telemetry_note::line(w as usize, telemetry_off) {
         v.push(if shown(3) { row } else { Line::raw("") });
     }
     blanks(&mut v, gap);
-    v.push(if shown(3) { keyline(&settings::first_how_key("{any key}")) } else { Line::raw("") });
+    let telemetry = if telemetry_off { settings::onb_telemetry_enable_key("{d}") } else { settings::onb_telemetry_disable_key("{d}") };
+    v.push(if shown(3) { keyline(&format!("{}   {telemetry}", settings::first_how_key("{any key}"))) } else { Line::raw("") });
     v
 }
 
@@ -1901,7 +1914,7 @@ fn draw_page(f: &mut Frame, o: &Onb, now: u64) {
         // the previews (1 blank row above), then the key line after a gap
         Step::Theme => (theme_text(o), 1 + PREVIEW_H + gap as u16 + 1),
         Step::Model => (model_lines(o, col.width, gap), 0),
-        Step::Lines => (how_lines(t, gap, col.width, o.ctrl_digits), 0),
+        Step::Lines => (how_lines(t, gap, col.width, o.ctrl_digits, o.telemetry_off), 0),
     };
     let text_h = height_of(&lines, col.width).min(body.height);
     let h = text_h + extra;
@@ -2705,8 +2718,8 @@ mod tests {
         }
         assert!(!sc.contains("how it works,") && !sc.contains("typing."), "no final periods: {}", sc);
         // bise (me, i) in accent, the numbers dim
-        let l = how_lines(LINES_END, 2, 64, true);
-        let click: String = how_lines(LINES_END, 2, 64, false).iter().flat_map(|l| l.spans.iter().map(|s| s.content.to_string())).collect();
+        let l = how_lines(LINES_END, 2, 64, true, false);
+        let click: String = how_lines(LINES_END, 2, 64, false, false).iter().flat_map(|l| l.spans.iter().map(|s| s.content.to_string())).collect();
         assert!(click.contains("in your inbox · click it") && !click.contains("ctrl+1"), "{click}");
         assert_eq!(l[3].spans[0].style.fg, Some(theme::dim()));
         assert_eq!(l[3].spans[2].content, "me");
@@ -2716,7 +2729,7 @@ mod tests {
         // each line fits the 64-column column (100 and 120 columns): one row
         // each; title, gap, 3 lines and 2 blanks, blank, foot, blank,
         // Gabriel's note (telemetry_note.rs), gap, key
-        let note = crate::telemetry_note::rows(64).len();
+        let note = crate::telemetry_note::line(64, false).len();
         assert_eq!(l.len(), 1 + 2 + 5 + 1 + 1 + 1 + note + 2 + 1, "{:?}", l);
         // narrow: a line wraps at the words with a 3-column hanging indent
         let sc = screen(&o, 100 + LINES_END, 40, 30);
@@ -2726,6 +2739,28 @@ mod tests {
         let x = rows[r2].find("2  ").unwrap();
         assert_eq!(rows[r2 + 1].find(|c: char| c != ' '), Some(x + 3), "hanging indent: {}", sc);
         assert_eq!(o.on_key(key(KeyCode::Char('q')), 1, &none), Out::Done, "any key");
+    }
+
+    /// usage-metrics-plan step 6b: once the step is drawn, d turns
+    /// telemetry off (his `telemetry.share`, the step stays) and on again;
+    /// the key bar and the line say which.
+    #[test]
+    fn d_in_how_it_works_disables_telemetry_and_enables_it_again() {
+        let h = tmp("telemetry-d");
+        let mut o = onb(&h, "/w");
+        o.go(Step::Lines, 100);
+        let none = env_of(HashMap::new());
+        let at = 100 + LINES_END;
+        let sc = flat(&screen(&o, at, 110, 30));
+        assert!(sc.contains("Only aggregated usage counts") && sc.contains("any key ↵   d disable telemetry") && !sc.contains("telemetry off"), "{sc}");
+        let share = || bise_home::prefs::telemetry_share(bise_home::Slot::file(hm(&h).prefs_file()).get().as_ref());
+        assert_eq!(o.on_key(key(KeyCode::Char('d')), at, &none), Out::Stay);
+        assert!(o.telemetry_off && !share());
+        let sc = flat(&screen(&o, at, 110, 30));
+        assert!(sc.contains("· telemetry off") && sc.contains("d enable telemetry"), "{sc}");
+        assert_eq!(o.on_key(key(KeyCode::Char('d')), at, &none), Out::Stay);
+        assert!(!o.telemetry_off && share());
+        assert_eq!(o.on_key(key(KeyCode::Char('x')), at, &none), Out::Done, "any other key goes on");
     }
 
     #[test]

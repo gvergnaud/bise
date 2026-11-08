@@ -16,24 +16,24 @@ crate::words! { settings:
     onb_me_more = "you can change every detail later in Settings › General.";
     /// onboarding, hello: a ready-made look's name (its tip and VoiceOver)
     onb_me_look(n) = "look {n} of 12";
-    /// Gabriel's note about the usage counts (page usage-metrics-plan, A): its title, on hello, the home and the TUI
-    onb_telemetry_title = "a note from me, Gabriel";
-    /// the note: why it exists
-    onb_telemetry_why_line = "I'm building bise alone. I want to know if it's useful and how you use it, so I can learn and make it better.";
-    /// the note: what is sent
-    onb_telemetry_what = "Once a day, bise sends me totals: how many agents ran and for how long, how long the app was open, which features you used.";
-    /// the note: what never is, and the ID
-    onb_telemetry_never = "Never what you write or own: no prompts, messages, files, paths or names. Your IP address is not stored. A random ID lets me see how use changes over time; it's deleted when you turn this off.";
-    /// the note's last line on the desktop; {env} is BISE_TELEMETRY=0, drawn as code
-    onb_telemetry_off(env) = "Turn it off in Settings › Context and privacy, or with {env}.";
-    /// the note's last line in the TUI; {cmd} and {env} drawn as code
-    onb_telemetry_off_tui(cmd, env) = "Turn it off with {cmd}, or {env}.";
-    /// the note: signed
-    onb_telemetry_sign = "— Gabriel";
-    /// the note: the link to the long one (B)
+    /// Gabriel's note about the usage counts (page usage-metrics-plan v13, step 6b): its one line, on hello, the home and the TUI
+    onb_telemetry_line = "Only aggregated usage counts, to help me make bise better. Never your content, files, names or anything personal.";
+    /// the note: the link to the long one (B), right after the line
     onb_telemetry_why = "why?";
+    /// the note: the checkbox under the line, unchecked by default (checked: telemetry.share off)
+    onb_telemetry_disable = "Disable telemetry";
+    /// the note in the TUI: its key in the key bar ({key} is d)
+    onb_telemetry_disable_key(key) = "{key} disable telemetry";
+    /// the note in the TUI, telemetry disabled: the key turns it back on
+    onb_telemetry_enable_key(key) = "{key} enable telemetry";
+    /// the note in the TUI, after the line once d disabled it
+    onb_telemetry_off_now = "telemetry off";
+    /// the note above the TUI's feed (no key there: d types); {cmd} is bise telemetry off, in bold
+    onb_telemetry_off_cmd(cmd) = "turn it off: {cmd}";
     /// the note on the home (installs already set up): its one act
     onb_telemetry_got_it = "Got it";
+    /// the long note (B): signed
+    onb_telemetry_sign = "— Gabriel";
     /// the long note (B, the 'why?' sheet): its title
     onb_telemetry_b_title = "Why bise counts a few things";
     /// the long note: why

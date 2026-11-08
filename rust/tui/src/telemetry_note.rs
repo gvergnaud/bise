@@ -1,9 +1,11 @@
 //! Gabriel's note about the usage counts in the terminal (page
-//! usage-metrics-plan, step 6; designer m_56350): under the three lines of
-//! the onboarding's "how it works" ([`rows`], drawn by onboarding.rs),
-//! and, for an install that never saw it (esc skipped the onboarding, or
-//! it predates the note), once as a block above the feed at the next
-//! start ([`start`], [`draw`]) until his first message or esc.
+//! usage-metrics-plan v13, step 6b; designer m_56751): one dim line,
+//! wrapped. Under the three lines of the onboarding's "how it works"
+//! ([`line`], drawn by onboarding.rs, whose key bar holds `d disable
+//! telemetry`), and, for an install that never saw it (esc skipped the
+//! onboarding, or it predates the note), once as a block above the feed
+//! at the next start ([`start`], [`above`]) until his first message or
+//! esc, with the command that turns it off (d types there).
 //!
 //! The note is marked seen (`bise_usage::control::note_seen`) after it was
 //! drawn, never before: without that mark bise counts nothing. The words
@@ -17,35 +19,28 @@ use ratatui::text::{Line, Span};
 
 use crate::theme;
 
-/// The command and the variable that turn it off, drawn as code.
+/// The command that turns it off, drawn bold above the feed.
 pub(crate) const OFF_CMD: &str = "bise telemetry off";
-pub(crate) const OFF_ENV: &str = "BISE_TELEMETRY=0";
 
-/// The note's rows at `width`: the dim title, the text, the way out with
-/// its command and variable in bold (never the accent).
+/// The line's rows at `width`, dim; `off` (d disabled it): `· telemetry
+/// off` after it.
+pub(crate) fn line(width: usize, off: bool) -> Vec<Line<'static>> {
+    let dim = Style::default().fg(theme::dim());
+    let mut spans = vec![Span::styled(settings::onb_telemetry_line, dim)];
+    if off {
+        spans.push(Span::styled(format!(" · {}", settings::onb_telemetry_off_now), dim));
+    }
+    crate::wrap_line(Line::from(spans), width)
+}
+
+/// The block above the feed at `width`: the line, then the way out with
+/// its command in bold (never the accent).
 pub(crate) fn rows(width: usize) -> Vec<Line<'static>> {
-    let text = Style::default().fg(theme::text());
-    let code = text.add_modifier(Modifier::BOLD);
-    let mut v = vec![Line::from(Span::styled(settings::onb_telemetry_title, Style::default().fg(theme::dim())))];
-    let para = format!("{} {} {}", settings::onb_telemetry_why_line, settings::onb_telemetry_what, settings::onb_telemetry_never);
-    v.extend(crate::wrap_line(Line::from(Span::styled(para, text)), width));
-    // the way out: the words around the two holes, the holes in bold
-    let words = settings::onb_telemetry_off_tui("\u{0}", "\u{1}");
-    let spans: Vec<Span<'static>> = words
-        .split_inclusive(['\u{0}', '\u{1}'])
-        .flat_map(|part| {
-            let (t, hole) = match part.chars().last() {
-                Some('\u{0}') => (&part[..part.len() - 1], Some(OFF_CMD)),
-                Some('\u{1}') => (&part[..part.len() - 1], Some(OFF_ENV)),
-                _ => (part, None),
-            };
-            let mut out = vec![Span::styled(t.to_string(), text)];
-            out.extend(hole.map(|h| Span::styled(h.to_string(), code)));
-            out
-        })
-        .filter(|s| !s.content.is_empty())
-        .collect();
-    v.extend(crate::wrap_line(Line::from(spans), width));
+    let dim = Style::default().fg(theme::dim());
+    let mut v = line(width, false);
+    let (before, after) = settings::onb_telemetry_off_cmd("\u{0}").split_once('\u{0}').map(|(a, b)| (a.to_string(), b.to_string())).unwrap_or_default();
+    let spans = [Span::styled(before, dim), Span::styled(OFF_CMD, Style::default().fg(theme::text()).add_modifier(Modifier::BOLD)), Span::styled(after, dim)];
+    v.extend(crate::wrap_line(Line::from(spans.into_iter().filter(|s| !s.content.is_empty()).collect::<Vec<_>>()), width));
     v
 }
 
@@ -94,16 +89,17 @@ mod tests {
     }
 
     #[test]
-    fn the_note_fits_80_columns_and_ends_with_the_way_out_in_bold() {
-        let r = rows(76);
-        // the wrap keeps the space it broke at; the words fit
-        assert!(text_of(&r).lines().all(|l| l.trim_end().width() <= 76), "{}", text_of(&r));
+    fn the_note_is_one_dim_line_and_above_the_feed_says_the_command_in_bold() {
+        let r = line(76, false);
         let t = text_of(&r);
-        assert!(t.starts_with("a note from me, Gabriel"), "a name keeps its capital: {t}");
-        assert!(t.contains("Never what you write or own"));
-        let last: Vec<&Span> = r.iter().flat_map(|l| l.spans.iter()).collect();
-        let bold: Vec<&str> = last.iter().filter(|s| s.style.add_modifier.contains(Modifier::BOLD)).map(|s| s.content.as_ref()).collect();
-        assert_eq!(bold, [OFF_CMD, OFF_ENV]);
-        assert!(t.ends_with(&format!("Turn it off with {OFF_CMD}, or {OFF_ENV}.")), "{t}");
+        assert!(t.lines().all(|l| l.trim_end().width() <= 76), "{t}");
+        assert!(t.starts_with("Only aggregated usage counts") && t.trim_end().ends_with("anything personal."), "{t}");
+        assert!(r.iter().flat_map(|l| l.spans.iter()).all(|s| s.style.fg == Some(theme::dim())));
+        assert!(text_of(&line(76, true)).trim_end().ends_with("anything personal. · telemetry off"));
+        let above = rows(76);
+        assert_eq!(above.len(), r.len() + 1, "the line, then the way out");
+        let bold: Vec<&str> = above.iter().flat_map(|l| l.spans.iter()).filter(|s| s.style.add_modifier.contains(Modifier::BOLD)).map(|s| s.content.as_ref()).collect();
+        assert_eq!(bold, [OFF_CMD]);
+        assert!(text_of(&above).ends_with(&format!("turn it off: {OFF_CMD}")), "{}", text_of(&above));
     }
 }

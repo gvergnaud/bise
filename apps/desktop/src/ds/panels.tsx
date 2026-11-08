@@ -112,6 +112,19 @@ export function Check({ on, onChange, label, testId }: { on: boolean; onChange?:
   );
 }
 
+/** a checkbox with its label, the whole row clickable (designer m_56751): the box is the Check's look,
+ * the row is the checkbox (its focus ring drawn on the box) */
+export function CheckRow({ on, onChange, children, testId }: { on: boolean; onChange: (on: boolean) => void; children: ReactNode; testId?: string }) {
+  return (
+    <span className="b-checkrow" role="checkbox" aria-checked={on} tabIndex={0} data-testid={testId}
+      onClick={() => { onChange(!on); }}
+      onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); onChange(!on); } }}>
+      <span className={cx("b-check", on && "on")} aria-hidden>{on ? "✓" : ""}</span>
+      <span>{children}</span>
+    </span>
+  );
+}
+
 export interface GroupItem {
   id: string;
   label: ReactNode;

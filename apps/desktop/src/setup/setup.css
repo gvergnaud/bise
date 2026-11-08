@@ -98,15 +98,21 @@
   .setup-a-world { flex: 0 0 40vh; }
   .setup-a-col { flex: 1 1 0; min-height: 0; padding: var(--s-4) var(--s-6) var(--s-6); justify-content: center; }
 }
-/* Gabriel's note about the usage counts (TelemetryNote.tsx, usage-metrics-plan step 6, designer
-   m_56350): a quiet raised block in the reading font, never the accent: it waits on nobody */
-.tm-note { box-sizing: border-box; width: 100%; padding: var(--s-4); border-radius: var(--r-3); background: var(--c-raised); box-shadow: inset 0 0 0 1px var(--c-line); font: var(--f-read); text-align: left; }
-.tm-note .tm-t { font-weight: 600; margin-bottom: var(--gap-tight); }
-.tm-note p { margin: 0 0 var(--gap-rows); }
-.tm-note code, .tm-why code { font-family: var(--font-mono); font-size: var(--t-13); }
-.tm-share { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-inline); padding-top: var(--s-2); margin-top: var(--s-2); border-top: 1px solid var(--c-line); }
-.tm-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-inline); margin-top: var(--s-2); min-height: var(--s-6); }
+/* Gabriel's note about the usage counts (TelemetryNote.tsx, usage-metrics-plan v13 step 6b,
+   designer m_56751): one line in the step's secondary text (as onb_me_more), 'why?' in text-2, the
+   'Disable telemetry' checkbox 8 px under it; never the accent: it waits on nobody */
+.tm-note { box-sizing: border-box; width: 100%; font: var(--t-12)/1.5 var(--font-ui); color: var(--c-text-3); }
+.tm-note p { margin: 0; }
+.tm-note .b-act { color: var(--c-text-2); }
+.tm-row { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-inline); margin-top: var(--s-2); font-size: var(--t-13); }
+.tm-why code { font-family: var(--font-mono); font-size: var(--t-13); }
 .tm-sign { color: var(--c-text-3); }
 .tm-why p { margin: 0 0 var(--gap-block); font: var(--f-read); }
-/* the home's once: docked over the composer, as the inbox's open item docks */
+/* the home's once: docked over the composer as the inbox's open item docks, on the inbox block's
+   surface so it doesn't float in the thread */
 .tm-dock { margin: 0 var(--s-4) var(--s-2); flex: none; }
+.tm-dock .tm-note {
+  padding: var(--pad-card); border-radius: 14px; color: var(--c-text-2);
+  background: color-mix(in srgb, var(--p-raised) 100%, var(--p-bg));
+  box-shadow: 0 0 0 1px var(--c-line), 0 6px 18px color-mix(in srgb, var(--p-shadow) 14%, transparent);
+}

@@ -1,12 +1,13 @@
-// Gabriel's note about the usage counts (page usage-metrics-plan, step 6; designer m_56350): the
-// short note (A) in a quiet raised block, its 'why?' opening the long one (B) in a sheet, and the
-// share switch on its last line, so turning it off is one click where it's announced. Drawn on
-// hello (Onboarding.tsx) and, once, docked over the home's composer for an install that never
-// saw it (HomeNote). Drawing it marks it seen (telemetry {act: note_seen}): without that, bise
-// counts nothing. The words live once in bise_proto (words/settings/setup.rs). Owner: telemetry.
-import { Fragment, useCallback, useEffect, useId, useState, type ReactNode } from 'react';
+// Gabriel's note about the usage counts (page usage-metrics-plan v13, step 6b; designer m_56751):
+// one line, its 'why?' opening the long one (B) in a sheet, and 'Disable telemetry' under it,
+// unchecked unless he turned sharing off, so turning it off is one click where it's announced.
+// Drawn on hello (Onboarding.tsx) in the step's secondary text and, once, docked over the home's
+// composer for an install that never saw it (HomeNote, on the inbox block's surface, with 'Got
+// it'). Drawing it marks it seen (telemetry {act: note_seen}): without that, bise counts nothing.
+// The words live once in bise_proto (words/settings/setup.rs). Owner: telemetry.
+import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'react';
 import type { AppCmd } from '@/proto';
-import { Act, Button, Sheet, Toggle } from '@/ds';
+import { Act, Button, CheckRow, Sheet } from '@/ds';
 import { settings } from '@/proto/words.gen';
 import { flag, type Prefs } from '@/settings/prefs';
 
@@ -63,26 +64,20 @@ export function TelemetryNote({ share, send, done, testId }: TelemetryNoteProps)
   useEffect(() => {
     send(NOTE_SEEN);
   }, [send]);
-  const id = useId();
   return (
     <div className="tm-note" data-testid={testId}>
-      <div className="tm-t">{settings.onb_telemetry_title}</div>
-      <p>{settings.onb_telemetry_why_line}</p>
-      <p>{settings.onb_telemetry_what}</p>
-      <p>{settings.onb_telemetry_never}</p>
       <p>
-        {/* 'why?' right after the last sentence, held to it by a no-break space */}
-        <Coded parts={holes(settings.onb_telemetry_off({ env: HOLES[0] }), [OFF_ENV])} />{'\u00a0'}
+        {/* 'why?' right after the line, held to it by a no-break space */}
+        {settings.onb_telemetry_line}{'\u00a0'}
         <Act onClick={() => { setWhy(true); }} testId={`${testId}.why`}>
           {settings.onb_telemetry_why}
         </Act>
       </p>
-      <label className="tm-share" htmlFor={id}>
-        <span>{settings.privacy_share}</span>
-        <Toggle id={id} on={share} onChange={(on) => { send(shareCmd(on)); }} testId={`${testId}.share`} />
-      </label>
-      <div className="tm-foot">
-        <span className="tm-sign">{settings.onb_telemetry_sign}</span>
+      <div className="tm-row">
+        {/* checked = sharing off: the same pref as Settings' switch */}
+        <CheckRow on={!share} onChange={(off) => { send(shareCmd(!off)); }} testId={`${testId}.disable`}>
+          {settings.onb_telemetry_disable}
+        </CheckRow>
         {done !== undefined && (
           <Button kind="ghost" size="sm" onClick={done} testId={`${testId}.done`}>
             {settings.onb_telemetry_got_it}
