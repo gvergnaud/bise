@@ -591,9 +591,9 @@ impl Core {
                 let res = (p.role_set_many)(&roles, &model);
                 if res.is_ok() {
                     self.emit_roles();
-                    if let (Some(role), true) = (roles.first(), before.iter().any(|b| *b != model)) {
-                        let was = before.first().cloned().unwrap_or_default();
-                        if let Err(e) = self.test_changed_role(role, &was) {
+                    // the first role it moved (one already on the model changed nothing), with its was
+                    if let Some((role, was)) = roles.iter().zip(&before).find(|(_, b)| **b != model) {
+                        if let Err(e) = self.test_changed_role(role, was) {
                             self.setup_error("setup_test", &e);
                         }
                     }

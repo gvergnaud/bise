@@ -295,10 +295,15 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
             let main = x.borrow().role_sets.iter().rev().find(|(r, _, _)| r == "main").and_then(|(_, m, _)| m.clone()).unwrap_or_else(|| "mistral/m".into());
             vec![RoleRow { role: "main".into(), name: "main".into(), about: "your team lead".into(), kind: "chat".into(), model: main, effort: None, source: "config".into(), follows: None }]
         }),
-        // the config as the role_set writes left it (main's last model, else mistral-large-4)
+        // the config as the role_set writes left it (main's last model, else mistral-large-4;
+        // agents and small their last, else none)
         gauge_input: Box::new(move || {
-            let main = gi.borrow().role_sets.iter().rev().find(|(r, _, _)| r == "main").and_then(|(_, m, _)| m.clone()).unwrap_or_else(|| "mistral/mistral-large-4".into());
-            (bise_catalog::Setup::from_text(Some(&format!("[roles]\nmain = \"{main}\"\n")), &|_| None), None)
+            let w = gi.borrow();
+            let last = |role: &str| w.role_sets.iter().rev().find(|(r, _, _)| r == role).and_then(|(_, m, _)| m.clone());
+            let main = last("main").unwrap_or_else(|| "mistral/mistral-large-4".into());
+            // each other role: its last model, else none (it follows main)
+            let others: String = ["agents", "small"].iter().filter_map(|r| last(r).map(|m| format!("{r} = \"{m}\"\n"))).collect();
+            (bise_catalog::Setup::from_text(Some(&format!("[roles]\nmain = \"{main}\"\n{others}")), &|_| None), None)
         }),
         model_test: Box::new(move |t, generation, tx| {
             let mut w = mt.borrow_mut();
@@ -1149,6 +1154,31 @@ fn role_set_many_writes_once_and_tests_the_model_once() {
     assert!(!evs(&out, "roles").is_empty(), "the roles come again");
     let tested: Vec<String> = w.borrow().model_tests.iter().map(|(m, _)| m.clone()).collect();
     assert_eq!(tested, vec!["anthropic/claude-opus-5-5".to_string()], "one test, one paid call");
+}
+
+/// architect m_57461: the first role already on the news model changed
+/// nothing; the switch of the next one is still tested.
+#[test]
+fn role_set_many_tests_the_model_when_only_a_later_role_moves() {
+    let mut t = T::new();
+    let w = setup(&mut t);
+    t.core.app_start();
+    t.until(|o| o.iter().any(|v| v["ev"] == "setup_gauge"));
+    app(&mut t, r#"{"cmd":"provider_use","id":"anthropic","key":"sk-fake-secret"}"#);
+    t.until(|o| evs(o, "provider_check").iter().any(|e| e["state"] == "works"));
+    // main already on the new model, agents on the old one
+    app(&mut t, r#"{"cmd":"role_set","role":"main","model":"anthropic/claude-opus-5-5"}"#);
+    app(&mut t, r#"{"cmd":"role_set","role":"agents","model":"mistral/mistral-large-4"}"#);
+    // their tests end first: a model under test now isn't asked twice
+    let tx = w.borrow_mut().testing.take().unwrap();
+    for (m, g) in std::mem::take(&mut w.borrow_mut().model_tests) {
+        let _ = tx.send(Done::Tested { model: m, generation: g, res: Ok(()), ms: 420 });
+    }
+    t.until(|o| o.iter().any(|v| v["ev"] == "setup_gauge" && v["gauge"].get("testing").is_none()));
+    app(&mut t, r#"{"cmd":"role_set_many","roles":["main","agents"],"model":"anthropic/claude-opus-5-5"}"#);
+    t.take();
+    let tested: Vec<String> = w.borrow().model_tests.iter().map(|(m, _)| m.clone()).collect();
+    assert_eq!(tested, vec!["anthropic/claude-opus-5-5".to_string()], "agents moved: one test");
 }
 
 /// usage-metrics-plan step 6: an act is answered by `telemetry` (the id
