@@ -94,9 +94,57 @@ impl Config {
 }
 
 /// Whether `dir` is inside a git work tree (false: the home workspace,
-/// docs/ambient-pages.md §5.1, or no git at all).
+/// docs/ambient-pages.md §5.1, or no usable git at all). sb-core gets it
+/// with every step (core_link.rs), so it starts no process: a few stat
+/// calls ([`in_work_tree`]), git's own discovery, where a `git rev-parse
+/// --is-inside-work-tree` per step was 16 % of a flooded loop (hub-lag-7)
+/// and 1 to 212 s per call at load ~100 (boot-speed).
 pub fn is_git_dir(dir: &Path) -> bool {
-    git(dir, &["rev-parse", "--is-inside-work-tree"]).is_ok_and(|s| s == "true")
+    matches!(crate::tools_env::git(), crate::tools_env::Git::Works { .. }) && in_work_tree(dir)
+}
+
+/// A git dir as git's discovery takes it: `HEAD`, and `objects` and
+/// `refs` in it or in the dir its `commondir` names (a linked worktree's
+/// admin dir under `<repo>/.git/worktrees/`).
+fn is_git_admin(d: &Path) -> bool {
+    if !d.join("HEAD").is_file() {
+        return false;
+    }
+    let common = std::fs::read_to_string(d.join("commondir")).map(|t| d.join(t.trim())).unwrap_or_else(|_| d.to_path_buf());
+    common.join("objects").is_dir() && common.join("refs").is_dir()
+}
+
+/// `git rev-parse --is-inside-work-tree`'s answer by stat calls, walking up
+/// from `dir` as git's discovery does: a `.git` dir that is a git dir is a
+/// work tree (an empty or broken one is skipped); a `.git` file
+/// (`gitdir: <dir>`, a linked worktree or a submodule) is one when the dir
+/// it names is a git dir, and ends the walk either way; a folder that is
+/// itself a git dir (a bare repo, inside `.git`) is not; the walk stops at
+/// `/` and at a filesystem's edge (git's default). Not followed, as the hub
+/// never sets them: GIT_DIR, GIT_WORK_TREE, GIT_CEILING_DIRECTORIES,
+/// core.worktree, core.bare, safe.directory.
+pub fn in_work_tree(dir: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let Ok(dir) = std::path::absolute(dir) else { return false };
+    let Ok(dev) = std::fs::metadata(&dir).map(|m| m.dev()) else { return false };
+    let mut at = dir.as_path();
+    loop {
+        let dotgit = at.join(".git");
+        if dotgit.is_dir() && is_git_admin(&dotgit) {
+            return true;
+        }
+        if dotgit.is_file() {
+            let named = std::fs::read_to_string(&dotgit).ok().and_then(|t| t.trim().strip_prefix("gitdir:").map(|d| at.join(d.trim())));
+            return named.is_some_and(|d| is_git_admin(&d));
+        }
+        if is_git_admin(at) {
+            return false;
+        }
+        match at.parent() {
+            Some(up) if std::fs::metadata(up).is_ok_and(|m| m.dev() == dev) => at = up,
+            _ => return false,
+        }
+    }
 }
 
 /// The admin dir a linked worktree's `.git` file names
@@ -162,47 +210,15 @@ pub struct GitEnv {
     pub log: Box<dyn FnMut(&str) + Send>,
     /// pr-design §6.4: branch -> the head of its merged PR (`pr_merged`).
     pub merged: BTreeMap<String, String>,
-    /// [`Env::is_git`]'s answers, asked off the loop (crate::git_probe):
-    /// sb-core gets it with every input, and a `git rev-parse` per input
-    /// was 16% of a flooded loop (hub-lag-7) and held a booting hub's last
-    /// step under load (boot-speed). Asked again after
-    /// [`crate::git_probe::FRESH_MS`] (a `git init` by hand) and after
-    /// this env's own worktree ops.
-    pub git: crate::git_probe::GitProbe,
     /// Where a removed worktree's folder goes (trash.rs: the hub's loop
     /// gives it to a worker).
     pub trash: crate::trash::Trash,
 }
 
-/// One `is_git` probe of `dir` (crate::git_probe): git's answer, or
-/// unknown when git could not run (a spawn error, a signal). No usable
-/// git at all is an answer: not a repo, as before.
-pub fn probe_git_dir(dir: &Path) -> crate::git_probe::Probed {
-    use crate::git_probe::Probed;
-    let Ok(mut cmd) = crate::tools_env::git_command() else { return Probed::Git(false) };
-    match cmd.arg("-C").arg(dir).args(["rev-parse", "--is-inside-work-tree"]).output() {
-        Err(_) => Probed::Unknown,
-        Ok(o) if o.status.code().is_none() => Probed::Unknown,
-        Ok(o) => Probed::Git(o.status.success() && String::from_utf8_lossy(&o.stdout).trim_end() == "true"),
-    }
-}
-
-/// The workspace's probe, its first ask started now.
-pub fn git_probe(dir: &Path) -> crate::git_probe::GitProbe {
-    crate::git_probe::GitProbe::start(dir, std::sync::Arc::new(probe_git_dir), std::sync::Arc::new(crate::util::now_ms))
-}
-
 impl GitEnv {
-    /// The hub's git on `paths` (its config read now; its first `is_git`
-    /// probe started, off the loop).
+    /// The hub's git on `paths` (its config read now).
     pub fn new(paths: &Paths, log: Box<dyn FnMut(&str) + Send>, trash: crate::trash::Trash) -> GitEnv {
-        GitEnv::with_git(paths, log, trash, git_probe(&paths.workspace))
-    }
-
-    /// The hub's git on `paths` with a probe that already exists: the place
-    /// worker shares the hub's, so one folder has one probe.
-    pub fn with_git(paths: &Paths, log: Box<dyn FnMut(&str) + Send>, trash: crate::trash::Trash, git: crate::git_probe::GitProbe) -> GitEnv {
-        GitEnv { paths: paths.clone(), config: Config::load(paths), log, merged: BTreeMap::new(), git, trash }
+        GitEnv { paths: paths.clone(), config: Config::load(paths), log, merged: BTreeMap::new(), trash }
     }
 
     fn ws(&self) -> &Path {
@@ -375,11 +391,10 @@ impl Env for GitEnv {
     }
 
     fn is_git(&mut self) -> bool {
-        self.git.is_git()
+        is_git_dir(self.ws())
     }
 
     fn worktree_create(&mut self, name: &str, with_changes: bool) -> Result<Workspace, String> {
-        self.git.mark_stale();
         // issue #8: main's tip, never the shared folder's HEAD (it may be
         // on another agent's branch); PR flow: the PR's base, origin's copy
         let flow = crate::devflow::resolve(
@@ -500,7 +515,6 @@ impl Env for GitEnv {
         ws: &Workspace,
         loss: &Loss,
     ) -> Result<Option<String>, String> {
-        self.git.mark_stale();
         let path = PathBuf::from(&ws.path);
         let branch = ws.branch.clone().unwrap_or_default();
         let mut snapshot = None;
@@ -550,7 +564,6 @@ impl Env for GitEnv {
         ws: &Workspace,
         snapshot: Option<&str>,
     ) -> Result<Workspace, String> {
-        self.git.mark_stale();
         let branch = self.free_branch(name);
         let path = PathBuf::from(&ws.path);
         let path = if path.exists() {
@@ -621,6 +634,50 @@ mod tests {
         assert!(ok, "{}", script);
     }
 
+    // is_git without a process (architect m_55517): the stat walk says
+    // what `git rev-parse --is-inside-work-tree` says, folder by folder
+    #[test]
+    fn the_stat_walk_answers_as_git_rev_parse() {
+        let root = std::env::temp_dir().join(format!("sb-wt-walk-{}-{}", std::process::id(), crate::util::now_ms()));
+        std::fs::create_dir_all(&root).unwrap();
+        let root = root.canonicalize().unwrap();
+        let c = "-c commit.gpgsign=false -c user.email=t@t -c user.name=t";
+        sh(
+            &root,
+            &format!(
+                "git init -q r && mkdir -p r/a/b r/a/empty/.git r/a/junk plain bad && git -C r {c} commit -q --allow-empty -m x \
+                 && git -C r worktree add -q ../wt -b wt && mkdir -p wt/deep \
+                 && git init -q --bare bare.git && echo 'gitdir: /nope' > bad/.git && echo 'not a gitfile' > r/a/junk/.git \
+                 && git init -q sm && git -C sm {c} commit -q --allow-empty -m s \
+                 && git -C r -c protocol.file.allow=always submodule add -q ../sm sub && mkdir -p r/sub/in"
+            ),
+        );
+        let cases = [
+            ("r", true),
+            ("r/a/b", true),
+            ("r/a/empty", true),
+            ("r/a/junk", false),
+            ("r/.git", false),
+            ("r/.git/objects", false),
+            ("wt", true),
+            ("wt/deep", true),
+            ("r/sub", true),
+            ("r/sub/in", true),
+            ("r/.git/modules/sub", false),
+            ("bare.git", false),
+            ("bare.git/refs", false),
+            ("bad", false),
+            ("plain", false),
+        ];
+        for (rel, want) in cases {
+            let p = root.join(rel);
+            let by_git = git(&p, &["rev-parse", "--is-inside-work-tree"]).is_ok_and(|s| s == "true");
+            assert_eq!(by_git, want, "git on {rel}");
+            assert_eq!(in_work_tree(&p), want, "the walk on {rel}");
+        }
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     fn repo(tag: &str) -> (PathBuf, GitEnv) {
         let root = std::env::temp_dir().join(format!(
             "sb-wt-test-{}-{}-{}",
@@ -645,7 +702,6 @@ mod tests {
             setup: "echo prepared > .prepared".into(),
             ..Config::default()
         };
-        let git = git_probe(&paths.workspace);
         (
             root,
             GitEnv {
@@ -653,7 +709,6 @@ mod tests {
                 config,
                 log: Box::new(|_| {}),
                 merged: BTreeMap::new(),
-                git,
                 trash: crate::trash::Trash::now(),
             },
         )

@@ -25,11 +25,10 @@ pub(super) struct PlaceWork {
 
 impl PlaceWork {
     /// The worker, sending what it made on `to_loop`.
-    /// `git`: the hub's is_git probe of the same workspace, shared.
-    pub(super) fn start(paths: &Paths, to_loop: Sender<Msg>, git: crate::git_probe::GitProbe) -> PlaceWork {
+    pub(super) fn start(paths: &Paths, to_loop: Sender<Msg>) -> PlaceWork {
         let (to_worker, rx) = channel();
         let paths = paths.clone();
-        std::thread::spawn(move || worker(rx, paths, to_loop, git));
+        std::thread::spawn(move || worker(rx, paths, to_loop));
         PlaceWork { to_worker }
     }
 
@@ -41,15 +40,15 @@ impl PlaceWork {
 
 /// The hub's git, for one job (its config read now: a change of
 /// `.switchboard/config.toml` counts from the next worktree).
-fn git_env(paths: &Paths, git: &crate::git_probe::GitProbe) -> GitEnv {
+fn git_env(paths: &Paths) -> GitEnv {
     let log_paths = paths.clone();
     // this worker is off the loop already: its rm runs here
-    GitEnv::with_git(paths, Box::new(move |s| log_line(&log_paths, s)), crate::trash::Trash::now(), git.clone())
+    GitEnv::new(paths, Box::new(move |s| log_line(&log_paths, s)), crate::trash::Trash::now())
 }
 
-fn worker(rx: Receiver<Job>, paths: Paths, to_loop: Sender<Msg>, git: crate::git_probe::GitProbe) {
+fn worker(rx: Receiver<Job>, paths: Paths, to_loop: Sender<Msg>) {
     for j in rx {
-        let mut env = git_env(&paths, &git);
+        let mut env = git_env(&paths);
         match j {
             Job::Create { name, with_changes } => {
                 let t0 = now_ms();

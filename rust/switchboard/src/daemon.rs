@@ -1183,8 +1183,8 @@ impl Shell {
     /// (dev-flow §6).
     fn role_of(&mut self, a: &Agent, tmp: &str) -> String {
         // the home workspace (docs/ambient-pages.md §5.1): no git, no flow
-        // the env's probe, never a git on the loop per spawn (boot-speed)
-        let git = self.env.git.is_git();
+        // stat calls, never a git on the loop per spawn (boot-speed)
+        let git = crate::worktree::is_git_dir(&self.opts.paths.workspace);
         let flow = self.flow_now().filter(|_| git);
         let style = self.commit_style();
         let ws = &self.opts.paths.workspace;
@@ -1698,8 +1698,6 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
     // a drop's folder rm on the trash's worker, off this loop (trash.rs)
     let trash = crate::trash::Trash::worker(Box::new(move |s| log_line(&trash_paths, s)));
     let env = GitEnv::new(&paths, Box::new(move |s| log_line(&log_paths, s)), trash);
-    // one is_git probe per workspace: the place worker shares it
-    let place_git = env.git.clone();
     // the checker (approvals-design.md §4): a chat model in the role runs
     // through repl-live's one-shot, like the role lines
     let home = opts.home.clone();
@@ -1785,7 +1783,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         art: art::Art::default(),
         revive: revive::Revive::default(),
         wake_look: wake_look::WakeLook::start(tx.clone()),
-        place_work: place_work::PlaceWork::start(&paths, tx.clone(), place_git),
+        place_work: place_work::PlaceWork::start(&paths, tx.clone()),
         procs: processes::Worker::start(paths.clone(), proc_hub.clone(), crate::paths::workspace_id(&paths.workspace), tx.clone()),
         photos,
     };
