@@ -7,7 +7,9 @@
 //             also its length (media.ts).
 //   a page    a capture of its first screen in a hidden offscreen window (local urls only;
 //             sandboxed, no preload, its own partition with every permission denied, no
-//             navigation, window or download, destroyed at 5 s: architect m_39772).
+//             navigation, window or download, destroyed at 5 s: architect m_39772). Its fence
+//             is its own: the app's guard (guard.ts) skips it (isCaptureContents), so nothing
+//             a captured page does ever reaches his browser.
 // The cache's folder is the core's (cache.ts thumbsDir); before the core said it, nothing is
 // made. After each picture made, the cache is pruned past its cap (prune.ts).
 // One picture made at a time (a capture or a Quick Look each holds a process busy), a cached one
@@ -121,6 +123,16 @@ function keep(root: string, r: ThumbReq, bytes: Buffer): void {
       }
     }
   }
+}
+
+/**
+ * A capture window's contents (their session is the capture partition): guard.ts leaves them to
+ * capture's own fence. The app's guard reads a main frame leaving its page as his link click and
+ * sends it to his browser: on a capture, a local site's 302 (the pages server's /a/<id>/live door)
+ * opened that site in his browser at each card drawn, a burst of tabs per project (art-links-burst).
+ */
+export function isCaptureContents(wc: { readonly session: Electron.Session }): boolean {
+  return wc.session === session.fromPartition(PARTITION);
 }
 
 /** The capture windows' session: no permission, no download, nothing kept (set once). */
