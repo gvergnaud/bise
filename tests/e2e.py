@@ -790,8 +790,10 @@ def t_worktree_drop_restore(E, c):
     c.wait(lambda: any("/restore" in n.get("text", "") for n in c.notices()), 30, "restore hint")
     c.say("/restore t4")
     c.wait_status("t4", ["idle", "starting"], 60)
+    # hub-loop (9c725f4a9): its worktree is made again off the hub's loop;
+    # the row says starting from the restore on, before the worktree is back
     a = c.agent("t4")
-    check(os.path.exists(os.path.join(a["path"], "wt.txt")), "restored worktree has the work")
+    c.wait(lambda: os.path.exists(os.path.join(a["path"], "wt.txt")), 60, "restored worktree has the work")
     check(out(a["path"], "git log -1 --format=%s") == "wt", "restored branch has the commit")
 
 
