@@ -6,7 +6,10 @@
 //! models under test, and the helper's permissions (Electron's main
 //! relays them, `helper_perms`); bise's home folder is read at each
 //! gauge (the registry's home row, gone or not). `setup_test` runs only on his click,
-//! each model once, on the port's thread; each end sends the gauge again.
+//! each model once, on the port's thread, and a role's new model when a
+//! `role_set` changed it (never on open: page models-settings); a newer
+//! change of the same role drops the older test's result. Each end sends
+//! the gauge again.
 //! The window draws `setup_gauge` and decides nothing.
 
 use super::Core;
@@ -26,6 +29,11 @@ pub(crate) struct GaugeLive {
     gens: HashMap<String, (u64, String)>,
     /// models under test now
     testing: Vec<String>,
+    /// the model each role change asked to test, by role: the latest wins
+    asked: HashMap<String, String>,
+    /// models whose pending test a newer change of their role replaced:
+    /// their result never reaches the gauge
+    superseded: Vec<String>,
     /// the helper's permissions (None: not relayed yet)
     pub(super) mic: Option<Grant>,
     pub(super) accessibility: Option<Grant>,
@@ -160,10 +168,39 @@ impl Core {
         Ok(())
     }
 
+    /// A role changed (`role_set`): its new model is tested at once, the
+    /// way his click would (one call, on setup_test's path), only when
+    /// the model it resolves to changed: an effort, or the same model
+    /// picked again, costs nothing. A newer change of the same role
+    /// replaces a test still running: its result is dropped.
+    pub(super) fn test_changed_role(&mut self, role: &str, before: &str) -> Result<(), String> {
+        let s = self.setup.as_mut().ok_or("this core has no setup")?;
+        let now = (s.ports.gauge_input)().0.role_model(role).0;
+        if now == before || now.trim().is_empty() {
+            return Ok(());
+        }
+        let live = &mut s.gauge;
+        live.superseded.retain(|m| *m != now);
+        if let Some(prev) = live.asked.insert(role.to_string(), now.clone()) {
+            if prev != now && live.testing.contains(&prev) {
+                live.superseded.push(prev);
+            }
+        }
+        self.setup_test(Some(vec![now]))
+    }
+
     /// A live test ended (`Done::Tested`).
     pub(super) fn on_tested(&mut self, d: Done) {
         let Done::Tested { model, generation, res, ms } = d else { return };
         let Some(s) = self.setup.as_mut() else { return };
+        s.gauge.asked.retain(|_, m| *m != model);
+        if let Some(i) = s.gauge.superseded.iter().position(|m| *m == model) {
+            // a newer pick of its role replaced it: no old result on a new pick
+            s.gauge.superseded.remove(i);
+            s.gauge.testing.retain(|m| *m != model);
+            self.emit_gauge();
+            return;
+        }
         let at_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
         s.gauge.tested(Test { model, generation, failed: res.err(), ms, at_ms });
         self.emit_gauge();

@@ -86,6 +86,7 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
     let (n, o, q, r, u, v) = (w.clone(), w.clone(), w.clone(), w.clone(), w.clone(), w.clone());
     let (x, y, z, mt) = (w.clone(), w.clone(), w.clone(), w.clone());
     let mf = w.clone();
+    let gi = w.clone();
     let sg = w.clone();
     let gr = w.clone();
     let gs = w.clone();
@@ -291,7 +292,11 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
             let main = x.borrow().role_sets.iter().rev().find(|(r, _, _)| r == "main").and_then(|(_, m, _)| m.clone()).unwrap_or_else(|| "mistral/m".into());
             vec![RoleRow { role: "main".into(), name: "main".into(), about: "your team lead".into(), kind: "chat".into(), model: main, effort: None, source: "config".into(), follows: None }]
         }),
-        gauge_input: Box::new(|| (bise_catalog::Setup::from_text(Some("[roles]\nmain = \"mistral/mistral-large-4\"\n"), &|_| None), None)),
+        // the config as the role_set writes left it (main's last model, else mistral-large-4)
+        gauge_input: Box::new(move || {
+            let main = gi.borrow().role_sets.iter().rev().find(|(r, _, _)| r == "main").and_then(|(_, m, _)| m.clone()).unwrap_or_else(|| "mistral/mistral-large-4".into());
+            (bise_catalog::Setup::from_text(Some(&format!("[roles]\nmain = \"{main}\"\n")), &|_| None), None)
+        }),
         model_test: Box::new(move |t, generation, tx| {
             let mut w = mt.borrow_mut();
             w.model_tests.push((t.model, generation));
@@ -1077,6 +1082,43 @@ fn the_gauge_comes_with_the_roles_and_tests_run_only_on_setup_test() {
     let g = evs(&out, "setup_gauge").last().cloned().unwrap();
     let d = g["gauge"]["rows"].as_array().unwrap().iter().find(|r| r["id"] == "dictation").cloned().unwrap();
     assert_eq!(d["perms"][0], serde_json::json!({"perm": "mic", "grant": "denied"}), "{d:#}");
+}
+
+/// page models-settings (architect m_57196): a role is tested when its
+/// model changes, never for an effort or the same model again; a newer
+/// change of the role drops the older test's result.
+#[test]
+fn a_role_is_tested_when_its_model_changes_and_a_newer_change_drops_the_older_test() {
+    let mut t = T::new();
+    let w = setup(&mut t);
+    t.core.app_start();
+    t.until(|o| o.iter().any(|v| v["ev"] == "setup_gauge"));
+    let tested = |w: &Rc<RefCell<World>>| w.borrow().model_tests.iter().map(|(m, _)| m.clone()).collect::<Vec<_>>();
+    // an Anthropic key (the fake's one provider), so its models can be tested
+    app(&mut t, r#"{"cmd":"provider_use","id":"anthropic","key":"sk-fake-secret"}"#);
+    t.until(|o| evs(o, "provider_check").iter().any(|e| e["state"] == "works"));
+    // a new model: tested once, at once
+    app(&mut t, r#"{"cmd":"role_set","role":"main","model":"anthropic/claude-opus-5-5"}"#);
+    assert_eq!(tested(&w), vec!["anthropic/claude-opus-5-5".to_string()]);
+    // an effort alone, then the same model again: no test (each is a paid call)
+    app(&mut t, r#"{"cmd":"role_set","role":"main","effort":"high"}"#);
+    app(&mut t, r#"{"cmd":"role_set","role":"main","model":"anthropic/claude-opus-5-5"}"#);
+    assert_eq!(tested(&w).len(), 1, "{:?}", tested(&w));
+    // picked again before its tests end: the older tests' results are dropped
+    app(&mut t, r#"{"cmd":"role_set","role":"main","model":"anthropic/claude-sonnet-5-5"}"#);
+    app(&mut t, r#"{"cmd":"role_set","role":"main","model":"anthropic/claude-haiku-4-5"}"#);
+    assert_eq!(tested(&w), ["anthropic/claude-opus-5-5", "anthropic/claude-sonnet-5-5", "anthropic/claude-haiku-4-5"].map(String::from).to_vec());
+    t.take();
+    let tx = w.borrow_mut().testing.take().unwrap();
+    for (m, g) in w.borrow().model_tests.clone() {
+        let _ = tx.send(Done::Tested { model: m, generation: g, res: Err((bise_proto::app_rows::CheckWhy::WrongKey, "nope".into())), ms: 300 });
+    }
+    t.until(|o| o.iter().any(|v| v["ev"] == "setup_gauge" && v["gauge"].get("testing").is_none()));
+    let out = t.take();
+    let g = evs(&out, "setup_gauge").last().cloned().unwrap();
+    let talk = g["gauge"]["rows"].as_array().unwrap().iter().find(|r| r["id"] == "talk").cloned().unwrap();
+    assert_eq!(talk["parts"][0]["model"], "anthropic/claude-haiku-4-5");
+    assert_eq!(talk["parts"][0]["why"], "wrong_key", "the latest pick's own result: {talk:#}");
 }
 
 /// usage-metrics-plan step 6: an act is answered by `telemetry` (the id

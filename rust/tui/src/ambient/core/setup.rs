@@ -572,9 +572,14 @@ impl Core {
                 ("plugin_add_cancel", res)
             }
             AppCmd::RoleSet { role, model, effort } => {
+                // the role's model before, to test it only when it changed (page models-settings)
+                let before = (p.gauge_input)().0.role_model(&role).0;
                 let res = (p.role_set)(&role, model.as_deref(), effort.as_deref());
                 if res.is_ok() {
                     self.emit_roles();
+                    if let Err(e) = self.test_changed_role(&role, &before) {
+                        self.setup_error("setup_test", &e);
+                    }
                 }
                 ("role_set", res)
             }
