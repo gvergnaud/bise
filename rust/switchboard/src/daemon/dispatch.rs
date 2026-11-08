@@ -155,6 +155,8 @@ impl Shell {
                     self.image_care();
                     w.phase("library");
                     self.library_watch();
+                    w.phase("disk");
+                    self.disk_check();
                     w.phase("computer use");
                     // computer use (design §7.3): each stop, one line in main's feed
                     for l in self.cu.poll() {

@@ -928,6 +928,26 @@ fn clean_claims_end_and_a_new_edit_claims_again() {
     assert_eq!(of(&others(&t, "a"), "b"), vec!["tests/k.txt".to_string()]);
 }
 
+/// disk-hygiene (hub/disk.bend): main hears once when the disk goes under
+/// 40 GB, not while it hovers under 45, and again after it climbed back.
+#[test]
+fn a_low_disk_tells_main_once_per_crossing() {
+    let mut t = T::new();
+    let disk = |t: &T| t.hub.st.main_notes.iter().filter(|n| n.starts_with("disk: ")).count();
+    t.go(Input::DiskFree { gb: 60 });
+    assert_eq!(disk(&t), 0);
+    t.go(Input::DiskFree { gb: 39 });
+    assert_eq!(disk(&t), 1);
+    assert!(t.hub.st.main_notes.iter().any(|n| n.starts_with("disk: 39 GB free")));
+    for gb in [38, 41, 44, 39] {
+        t.go(Input::DiskFree { gb });
+    }
+    assert_eq!(disk(&t), 1, "hovering under 45 GB says it once");
+    t.go(Input::DiskFree { gb: 45 });
+    t.go(Input::DiskFree { gb: 37 });
+    assert_eq!(disk(&t), 2, "back over 45, then under 40: a new crossing");
+}
+
 #[test]
 fn shared_tasks_touching_one_file_tell_main() {
     let mut t = T::new();

@@ -62,6 +62,7 @@
 {"agent": "a", "ans": [], "git": true, "now": 1000000, "path": "src/x.rs", "t": "touch"}
 {"agent": "a", "ans": [], "git": true, "now": 1000000, "t": "turn_started"}
 {"ans": [], "git": true, "id": 2, "now": 1000000, "t": "unqueue"}
+{"ans": [], "gb": 39, "git": true, "now": 1000000, "t": "disk_free"}
 {"ans": [], "git": true, "id": 2, "now": 1000000, "t": "steer_queued"}
 {"ans": [], "git": true, "id": 1, "now": 1000000, "t": "wake_hit", "text": "pid 4242 ended · after 5s · the build"}
 {"agent": "t1", "ans": [], "git": true, "max_ms": 86400000, "max_text": "", "now": 1791747996050, "quiet": true, "spec": {"cmd": "sleep 6", "kind": "bg", "slot": "/tmp/sb-e2e-06e4yxde/st/agents/t1/tmp/bg/1", "tail": "/tmp/sb-e2e-06e4yxde/st/agents/t1/tmp/bg/1.out"}, "t": "wake_set"}

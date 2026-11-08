@@ -93,6 +93,9 @@ core_kinds! {
         Focus = "focus" => IFocus { focus: Str, note: OptStr, direct: Str },
         /// `/close N`
         Close = "close" => IClose { card: Nat },
+        /// the data volume's free GB, read on the hub's tick, sent when the
+        /// whole GB changed (hub/disk.bend: one note to main under 40)
+        DiskFree = "disk_free" => IDiskFree { gb: Nat },
         /// tests, and a restarted sb-core: an agent's REPL state
         ForceRun = "force_run" => IForceRun { agent: Str, run: Str },
         /// the approvals gate: a card opens, closes

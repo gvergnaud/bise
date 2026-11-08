@@ -189,6 +189,12 @@ law in_close_bare:
 def in_close_bare():
   {==}
 
+law in_disk_free_bare:
+  {IN.of(J.obj([J.kv("t", J.JStr{"disk_free"})])) == IN.IDiskFree{0n} : IN.In}
+
+def in_disk_free_bare():
+  {==}
+
 law in_force_run_bare:
   {IN.of(J.obj([J.kv("t", J.JStr{"force_run"})])) == IN.IForceRun{"", ""} : IN.In}
 
@@ -679,6 +685,13 @@ law in_IClose_round:
   {IN.of(IN.json(IN.IClose{card})) == IN.IClose{card} : IN.In}
 
 def in_IClose_round(card):
+  {==}
+
+law in_IDiskFree_round:
+  for gb: Nat
+  {IN.of(IN.json(IN.IDiskFree{gb})) == IN.IDiskFree{gb} : IN.In}
+
+def in_IDiskFree_round(gb):
   {==}
 
 law in_IForceRun_round:

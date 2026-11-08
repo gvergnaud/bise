@@ -268,6 +268,9 @@ pub enum Input {
     /// expired-ux: the ChatGPT sign-in is back (the daemon reads
     /// auth.json): the `signin` item closes, its agents go on.
     SignedIn,
+    /// disk-hygiene: the data volume's free GB changed (daemon/disk_watch.rs);
+    /// sb-core notes main once under 40 GB (hub/disk.bend).
+    DiskFree { gb: u64 },
     /// bise's message to `to` (sb-core's IHubMsg): a land whose sb was gone (daemon/land.rs).
     HubMsg { to: String, text: String },
     /// land-claims: the claims of `place`'s agents whose file has no
@@ -1722,6 +1725,7 @@ impl Hub {
             Input::Release(c) => self.release_in(&mut fx, env, c),
             Input::UpdateNow => self.update_now(&mut fx),
             Input::SignedIn => self.signed_in(&mut fx, env),
+            Input::DiskFree { gb } => self.core(&mut fx, env, None, In::DiskFree(ci::DiskFree { gb })),
             Input::HubMsg { to, text } => self.core(&mut fx, env, None, In::HubMsg(ci::HubMsg { to, text })),
             Input::ClaimsClean { place, paths } => self.core(&mut fx, env, None, In::ClaimsClean(ci::ClaimsClean { place, paths })),
             Input::Updated { version, res } => self.updated(&mut fx, &version, res),

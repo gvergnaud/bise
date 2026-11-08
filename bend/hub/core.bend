@@ -46,6 +46,7 @@ import ./gone.bend as G
 import ./take.bend as TK
 import ./peer.bend as PR
 import ./stall.bend as SL
+import ./disk.bend as DK
 import ./forward.bend as FW
 import ./viewctx.bend as VC
 
@@ -357,6 +358,30 @@ def ask(-o: S.St, +cx: X.Cx<o>, +q: J.Json) -> X.Cx<o> & Maybe<&2, J.Json>:
 
 def note_main(-o: S.St, +cx: X.Cx<o>, +text: String) -> X.Cx<o>:
   emit(o, cx, M.EMainNote{text, now(o, cx)}, Unit{}, Unit{}, Unit{})
+
+def disk_band(low: Bool, +rest: List<&2, X.Kv>) -> List<&2, X.Kv>:
+  match low:
+    case True{}:
+      M.snoc(X.Kv, rest, X.Kv{DK.KEY(), "1"})
+    case False{}:
+      rest
+
+def disk_tell(-o: S.St, tell: Bool, +cx: X.Cx<o>, +gb: Nat) -> X.Cx<o>:
+  match tell:
+    case True{}:
+      note_main(o, cx, DK.text(gb))
+    case False{}:
+      cx
+
+# the data volume's free GB (IDiskFree, hub/disk.bend): its band kept in
+# the runtime's last (never journaled: a sensor fact), and main told once
+# on the crossing under DK.LOW()
+def disk_free(-o: S.St, +cx: X.Cx<o>, +gb: Nat) -> X.Cx<o>:
+  +r = rr(o, cx)
+  +was = String.eq(KL.kv_get(X.R.last(r), DK.KEY()), "1")
+  +rest = KL.kv_del(X.R.last(r), DK.KEY())
+  +cx2 = set_r(o, cx, X.R.with_last(r, disk_band(DK.low(was, gb), rest)))
+  disk_tell(o, DK.tells(was, gb), cx2, gb)
 
 # opens card number next_card (the caller reads it first when it needs it)
 # in the user's inbox: `kind` is a user kind (CK.user_kind), never an
@@ -4168,6 +4193,8 @@ def dispatch(-o: S.St, +cx: X.Cx<o>, +i: GI.In) -> X.Cx<o>:
       focus(o, cx, to, note, direct)
     case GI.IClose{+card}:
       close_by_user(o, M.card_of(S.St.cards(st(o, cx)), card), cx, card)
+    case GI.IDiskFree{+gb}:
+      disk_free(o, cx, gb)
     case GI.IForceRun{+agent, +run}:
       # tests only: put an agent's REPL in a given state (then deliver, like
       # any change of run: law L4)

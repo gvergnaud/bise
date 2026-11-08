@@ -51,6 +51,7 @@ mod session_log;
 mod skills;
 mod small_ask;
 mod versions;
+mod disk_watch;
 mod dispatch;
 mod drops;
 mod inbox;
@@ -453,6 +454,8 @@ struct Shell {
     prs: Option<crate::forge::poll::Poller>,
     /// computer use's events.jsonl: each stop, one line in main's feed
     cu: crate::computer_use::Watch,
+    /// the data volume's free GB last sent to sb-core (daemon/disk_watch.rs)
+    disk: disk_watch::DiskWatch,
     /// the pages: their server and what the hub keeps about them (daemon/pages.rs)
     pg: pages::PageState,
     /// the typed protocol's connections (bise desktop S3a, daemon/proto.rs)
@@ -1779,6 +1782,7 @@ pub fn run(opts: Opts) -> std::io::Result<()> {
         features: features::Features::load(&paths.state, &|n| paths.feature_diff(n)),
         prs: None,
         cu: crate::computer_use::Watch::new(&proc_hub),
+        disk: disk_watch::DiskWatch::default(),
         pg: pages::PageState::load(&paths.state),
         fn_ctx: None,
         idle: crate::idle::Watch::new(
