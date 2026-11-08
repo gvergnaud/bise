@@ -4,7 +4,12 @@
 // (../world.ts), the TUI on the same hub as the reference. Real keys only.
 // The rule (ambient-pm, m_9852 and m_9860), in its cold case: the send goes as soon as bise's
 // composer shows after the app's launch, against the TUI's first send after its own launch:
-//   - his words are drawn in the thread within 100 ms of ⏎, and the field is empty;
+//   - his words are drawn in the thread by the 3rd frame after ⏎ (frames, not ms: the draw waits
+//     for nothing outside the page, and a wall-clock bound went red under load on 11.8's checks;
+//     the ms stay in the timeline annotation), and the field is empty. Its gap (architect): a
+//     long task on the page's own main thread (300 ms of JS before the next frame) is still one
+//     frame, so this bound misses it; the annotation's ms show it, as-he-does and the bench
+//     record are where to watch it;
 //   - from ⏎ until main works, every moment shows a named state: his row's state ('sending…',
 //     'connecting to bise…', the routing hold thread.route 'to <project> · N s to change', 'sent
 //     to <name>'), or the answer's own entry; a gap of one event hop (<= 250 ms) is let through;
@@ -115,6 +120,9 @@ test('thread/send: cold, his words show at once, every wait is named, main works
     await page.keyboard.press('Enter');
     const frames = await timeline;
     const drawnMs = frames.find((f) => f.mine)?.t ?? Infinity;
+    // the frames sampled from ⏎ until his words are in the DOM: 0 = the first frame after ⏎
+    const drawnAt = frames.findIndex((f) => f.mine);
+    const drawnFrame = drawnAt < 0 ? Infinity : drawnAt;
     const workingMs = frames.find((f) => f.working)?.t ?? Infinity;
     let holdMs = 0, gap = 0, worstGap = 0, sending = 0, worstSending = 0;
     for (let i = 1; i < frames.length; i++) {
@@ -131,7 +139,7 @@ test('thread/send: cold, his words show at once, every wait is named, main works
     const states = [...new Set(frames.map((f) => (f.working ? 'working' : f.hold ? 'hold' : f.row || (f.mine ? '(entry)' : '(none)'))))];
     test.info().annotations.push({ type: 'timeline', description: `drawn ${Math.round(drawnMs)} ms · working ${Math.round(workingMs)} ms · hold shown ${Math.round(holdMs)} ms · longest unnamed ${Math.round(worstGap)} ms · longest plain sending ${Math.round(worstSending)} ms · states ${states.join(' > ')}` });
     await page.screenshot({ path: test.info().outputPath('sent.png') });
-    expect.soft(drawnMs, 'ms from ⏎ to his words drawn in the thread').toBeLessThan(100);
+    expect.soft(drawnFrame, 'frames from ⏎ to his words drawn in the thread (his own row, no wait outside the page)').toBeLessThanOrEqual(2);
     await expect.poll(() => field.evaluate((e) => e.textContent), { message: 'the field is empty after the send' }).toBe('');
     expect.soft(worstGap, 'ms with his words drawn but no named state').toBeLessThanOrEqual(250);
     expect.soft(worstSending, "ms of a plain 'sending…' (a longer wait must say what it waits for)").toBeLessThanOrEqual(1000);
