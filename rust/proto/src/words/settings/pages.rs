@@ -127,6 +127,73 @@ crate::words! { settings:
     /// quiet: the away card's line
     quiet_away_sub = "one notification when you open your Mac again";
 
+    /// privacy: the usage counts' group (usage-metrics-plan step 6), first
+    privacy_usage = "Usage counts";
+    /// privacy: the share switch, also on Gabriel's note
+    privacy_share = "Share anonymous usage counts";
+    /// privacy: the share switch's line
+    privacy_share_sub = "once a day, totals only, never what you write";
+    /// privacy: why it can't be turned on here: BISE_TELEMETRY
+    privacy_off_env = "off: BISE_TELEMETRY=0 is set";
+    /// privacy: why it can't be turned on here: DO_NOT_TRACK
+    privacy_off_dnt = "off: DO_NOT_TRACK is set";
+    /// privacy: why it can't be turned on here: a dev build
+    privacy_off_dev = "off in dev builds";
+    /// privacy: why it can't be turned on here: a CI run or a test home
+    privacy_off_test = "off in tests and CI";
+    /// privacy: sharing is on, but nothing is sent yet (the global switch)
+    privacy_not_yet = "bise doesn't send anything yet";
+    /// privacy: the row that opens what is sent
+    privacy_seen = "See what's sent";
+    /// privacy: its line
+    privacy_seen_sub = "the next packet and those of the last 7 days, in plain JSON";
+    /// privacy: the reset row
+    privacy_reset = "Reset ID";
+    /// privacy: its line: what the old id sent stays (architect m_56355)
+    privacy_reset_sub = "a new random ID from the next send. What the old one sent stays until it's purged, within 13 months.";
+    /// privacy: its act
+    privacy_reset_act = "Reset";
+    /// privacy: after a reset, for 3 s
+    privacy_reset_done = "reset: a new ID is drawn at the next send";
+    /// privacy: the delete row
+    privacy_delete = "Delete my data";
+    /// privacy: its line
+    privacy_delete_sub = "on the server and on this Mac";
+    /// privacy: its act
+    privacy_delete_act = "Delete…";
+    /// privacy: its inline confirm
+    privacy_delete_ask = "Delete this ID's data on the server and here?";
+    /// privacy: the confirm's act
+    privacy_delete_yes = "Delete";
+    /// privacy: the confirm's way out
+    privacy_delete_no = "Cancel";
+    /// privacy: deleted here, the server's request waits for the next send
+    privacy_delete_asked = "deleted here. The server deletes it at the next send.";
+    /// privacy: deleted here, the server never had anything
+    privacy_delete_here = "deleted here. The server never got anything from this ID.";
+    /// the "See what's sent" sheet: its title
+    seen_title = "What bise sends";
+    /// the sheet: its line
+    seen_sub = "once a day, these totals, nothing else";
+    /// the sheet: the id's head
+    seen_id = "Your random ID";
+    /// the sheet: no id yet
+    seen_no_id = "none yet: it's drawn at the first send";
+    /// the sheet: delete requests not sent yet
+    seen_pending(n) = one "{n} delete request waits for the next send" | "{n} delete requests wait for the next send";
+    /// the sheet: the next packets' head
+    seen_next = "Next";
+    /// the sheet: the sent packets' head
+    seen_last = "Last 7 days";
+    /// the sheet: a sent packet's line
+    seen_sent_on(day, on) = "{day}, sent {on}";
+    /// the sheet: nothing in a section
+    seen_none = "nothing yet";
+    /// the sheet: a packet's copy act
+    seen_copy = "Copy";
+    /// the sheet: its close
+    seen_close = "Close";
+
     /// privacy: the first group's title
     privacy_hold = "When you hold fn";
     /// privacy: the screenshot

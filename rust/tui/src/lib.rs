@@ -36,6 +36,7 @@ use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::Duration;
 
+mod telemetry_note;
 mod theme;
 use theme::*;
 mod theme_detect;

@@ -65,4 +65,47 @@ kicker?: string | null,
 /**
  * it holds a question whose card is open (§4.2)
  */
-asking?: boolean, } | { "ev": "agent_entry", agent: string, entry: Entry, } | { "ev": "agent_history", agent: string, entries: Array<Entry>, before: number | null, more: boolean, } | { "ev": "agent_preview", agent: string, now: string, actions: Array<PreviewAction>, waiting: Array<PreviewWait>, last_report: PreviewReport | null, pages: Array<PageRef>, } | { "ev": "agent_queued", agent: string, text: string, } | { "ev": "agent_typing", agent: string, text: string, } | { "ev": "fake_voice", on: boolean, words?: string | null, };
+asking?: boolean, } | { "ev": "agent_entry", agent: string, entry: Entry, } | { "ev": "agent_history", agent: string, entries: Array<Entry>, before: number | null, more: boolean, } | { "ev": "agent_preview", agent: string, now: string, actions: Array<PreviewAction>, waiting: Array<PreviewWait>, last_report: PreviewReport | null, pages: Array<PageRef>, } | { "ev": "agent_queued", agent: string, text: string, } | { "ev": "agent_typing", agent: string, text: string, } | { "ev": "fake_voice", on: boolean, words?: string | null, } | { "ev": "telemetry", 
+/**
+ * his `telemetry.share`, whatever else turns it off
+ */
+share: boolean, 
+/**
+ * why nothing is shared now (none: it shares)
+ */
+off?: TelemetryOff, 
+/**
+ * the id in use (none: drawn at the first send)
+ */
+id?: string, 
+/**
+ * delete requests waiting to be sent
+ */
+pending?: number, 
+/**
+ * the next packets, each as its JSON
+ */
+next?: Array<string>, 
+/**
+ * those sent the last 7 days
+ */
+sent?: Array<TelemetrySent>, 
+/**
+ * what the act it answers did (none: a show)
+ */
+done?: TelemetryDone, };
+
+/**
+ * Why bise shares no usage counts now (bise_usage's `Off`, by name).
+ */
+export type TelemetryOff = "not_yet" | "env" | "do_not_track" | "ci" | "test_home" | "offscreen" | "dev_build" | "pref" | "note_not_seen" | "unknown";
+
+/**
+ * A packet sent the last 7 days: when, the day it counted, its JSON.
+ */
+export type TelemetrySent = { on: string, day: string, json: string, };
+
+/**
+ * What a `telemetry {act}` did.
+ */
+export type TelemetryDone = "reset" | "asked" | "here" | "unknown";

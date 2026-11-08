@@ -43,7 +43,7 @@ impl UsageSpool {
 /// (a dev tree never shares).
 fn permit(opts: &Opts) -> Option<Permit> {
     let env = |k: &str| std::env::var(k).ok();
-    sharing_allowed(&Facts::read(&opts.home, &env, Channel::of_root(&opts.app_root), false)).ok()
+    sharing_allowed(&Facts::read(&opts.home, &env, Channel::read(&opts.home, &opts.app_root), false)).ok()
 }
 
 impl Shell {

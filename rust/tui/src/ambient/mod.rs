@@ -23,6 +23,8 @@ pub mod setup;
 mod speech;
 /// the stdio with the app: JSON-RPC (client-protocol step 6)
 pub mod stdio;
+/// the window's `telemetry {act}` (usage-metrics-plan step 6): its port
+pub mod telemetry;
 #[cfg(test)]
 mod tests;
 

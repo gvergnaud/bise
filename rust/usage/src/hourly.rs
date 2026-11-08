@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use bise_home::release::{root_kind, DesktopChannel, RootKind};
 use bise_home::Home;
 
 use crate::curl::Curl;
@@ -39,23 +40,32 @@ impl Build {
     }
 
     /// The build of the app root `root`: its `VERSION`'s id and
-    /// [`Channel::of_root`].
-    pub fn of_root(root: &Path) -> Build {
-        Build::this(bise_home::release::read_version(root).get("id").map_or("unknown", String::as_str), Channel::of_root(root))
+    /// [`Channel::read`].
+    pub fn of_root(home: &Home, root: &Path) -> Build {
+        Build::this(bise_home::release::read_version(root).get("id").map_or("unknown", String::as_str), Channel::read(home, root))
     }
 }
 
 impl Channel {
-    /// The channel of the app root `root` (the runtime a hub or the core
-    /// runs from): a dev tree is [`Channel::Dev`] (it never shares), any
-    /// install is stable. The collectors pass it to [`Facts::read`] too.
-    pub fn of_root(root: &Path) -> Channel {
-        use bise_home::release::{root_kind, RootKind};
-        if matches!(root_kind(root), RootKind::Dev) {
-            Channel::Dev
-        } else {
-            Channel::Stable
+    /// The channel of a root of kind `kind` when he follows `desktop`: a
+    /// dev tree is [`Channel::Dev`] (it never shares); any install is
+    /// beta when he follows the desktop's beta (Settings › General), else
+    /// stable.
+    pub fn of(kind: &RootKind, desktop: DesktopChannel) -> Channel {
+        match (kind, desktop) {
+            (RootKind::Dev, _) => Channel::Dev,
+            (RootKind::Install(_) | RootKind::Homebrew | RootKind::Nix, DesktopChannel::Beta) => Channel::Beta,
+            (RootKind::Install(_) | RootKind::Homebrew | RootKind::Nix, DesktopChannel::Stable) => Channel::Stable,
         }
+    }
+
+    /// [`Channel::of`] the app root `root` (the runtime a hub or the core
+    /// runs from) and `home`'s `prefs.json` (`desktop_channel`). The
+    /// collectors pass it to [`Facts::read`] too.
+    pub fn read(home: &Home, root: &Path) -> Channel {
+        let prefs = std::fs::read_to_string(home.prefs_file()).ok().and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok());
+        let desktop = DesktopChannel::from_pref(prefs.as_ref().and_then(|p| p.get("desktop_channel")).and_then(serde_json::Value::as_str));
+        Channel::of(&root_kind(root), desktop)
     }
 }
 
@@ -97,7 +107,7 @@ pub fn tick_now(home: &Home, build: &Build, offscreen: bool) -> Option<String> {
 pub fn spawn_hourly(home: Home, app_root: PathBuf, offscreen: bool, log: impl Fn(&str) + Send + 'static) -> io::Result<JoinHandle<()>> {
     std::thread::Builder::new().name(THREAD.into()).spawn(move || {
         std::thread::sleep(FIRST_TICK);
-        let build = Build::of_root(&app_root);
+        let build = Build::of_root(&home, &app_root);
         loop {
             if let Some(line) = tick_now(&home, &build, offscreen) {
                 log(&line);
@@ -105,4 +115,34 @@ pub fn spawn_hourly(home: Home, app_root: PathBuf, offscreen: bool, log: impl Fn
             std::thread::sleep(EVERY);
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A dev tree never shares, whatever he follows; an installed bise
+    /// is beta only when he follows the desktop's beta.
+    #[test]
+    fn channel_is_dev_for_a_dev_tree_and_beta_only_when_he_follows_it() {
+        for desktop in [DesktopChannel::Stable, DesktopChannel::Beta] {
+            assert_eq!(Channel::of(&RootKind::Dev, desktop), Channel::Dev);
+        }
+        for kind in [RootKind::Homebrew, RootKind::Nix] {
+            assert_eq!(Channel::of(&kind, DesktopChannel::Stable), Channel::Stable);
+            assert_eq!(Channel::of(&kind, DesktopChannel::Beta), Channel::Beta);
+        }
+    }
+
+    #[test]
+    fn read_takes_his_desktop_channel_from_prefs() {
+        let root = std::env::temp_dir().join(format!("bise-usage-channel-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let home = Home::at(&root);
+        // a temp folder is no install: a dev tree, whatever the pref
+        std::fs::write(home.prefs_file(), r#"{"desktop_channel":"beta"}"#).unwrap();
+        assert_eq!(Channel::read(&home, &root), Channel::Dev);
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }

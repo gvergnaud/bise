@@ -2650,6 +2650,89 @@
     "one": null,
     "text": "start"
   },
+  "settings.onb_telemetry_b_id": {
+    "args": [],
+    "one": null,
+    "text": "To see how use changes over time, bise picks a random ID on your Mac. It isn't tied to you, your Mac or any account, and it's renewed at least every 13 months. Turning this off deletes it, and \"Delete my data\" also deletes what I have."
+  },
+  "settings.onb_telemetry_b_never": {
+    "args": [],
+    "one": null,
+    "text": "What it never sends: your prompts, messages or files, your paths, the names of your projects or agents. Your IP address is not stored."
+  },
+  "settings.onb_telemetry_b_off": {
+    "args": [
+      "cmd",
+      "env"
+    ],
+    "one": null,
+    "text": "It's on by default. You can see exactly what's sent, and turn it off, in Settings → Privacy. In the terminal: {cmd}, or {env}."
+  },
+  "settings.onb_telemetry_b_title": {
+    "args": [],
+    "one": null,
+    "text": "Why bise counts a few things"
+  },
+  "settings.onb_telemetry_b_what": {
+    "args": [],
+    "one": null,
+    "text": "What bise sends, once a day: totals. How many agents you ran and how many hours they worked. How long the app was open, and in front. How often you used each feature: artifacts, schedules, the inbox, plugins."
+  },
+  "settings.onb_telemetry_b_why": {
+    "args": [],
+    "one": null,
+    "text": "It's just me, Gabriel, building bise. I don't know yet if bise is useful to you, or which parts you actually use. Counting is the only way I have to learn that, and to know what to fix first."
+  },
+  "settings.onb_telemetry_got_it": {
+    "args": [],
+    "one": null,
+    "text": "Got it"
+  },
+  "settings.onb_telemetry_never": {
+    "args": [],
+    "one": null,
+    "text": "Never what you write or own: no prompts, messages, files, paths or names. Your IP address is not stored. A random ID lets me see how use changes over time; it's deleted when you turn this off."
+  },
+  "settings.onb_telemetry_off": {
+    "args": [
+      "env"
+    ],
+    "one": null,
+    "text": "Turn it off in Settings → Privacy, or with {env}."
+  },
+  "settings.onb_telemetry_off_tui": {
+    "args": [
+      "cmd",
+      "env"
+    ],
+    "one": null,
+    "text": "Turn it off with {cmd}, or {env}."
+  },
+  "settings.onb_telemetry_sign": {
+    "args": [],
+    "one": null,
+    "text": "— Gabriel"
+  },
+  "settings.onb_telemetry_title": {
+    "args": [],
+    "one": null,
+    "text": "A note from me, Gabriel"
+  },
+  "settings.onb_telemetry_what": {
+    "args": [],
+    "one": null,
+    "text": "Once a day, bise sends me totals: how many agents ran and for how long, how long the app was open, which features you used."
+  },
+  "settings.onb_telemetry_why": {
+    "args": [],
+    "one": null,
+    "text": "why?"
+  },
+  "settings.onb_telemetry_why_line": {
+    "args": [],
+    "one": null,
+    "text": "I'm building bise alone. I want to know if it's useful and how you use it, so I can learn and make it better."
+  },
   "settings.onb_took": {
     "args": [
       "secs"
@@ -4350,6 +4433,46 @@
     "one": null,
     "text": "fn reads nothing in these apps: no title, URL, file, selection, text or capture."
   },
+  "settings.privacy_delete": {
+    "args": [],
+    "one": null,
+    "text": "Delete my data"
+  },
+  "settings.privacy_delete_act": {
+    "args": [],
+    "one": null,
+    "text": "Delete…"
+  },
+  "settings.privacy_delete_ask": {
+    "args": [],
+    "one": null,
+    "text": "Delete this ID's data on the server and here?"
+  },
+  "settings.privacy_delete_asked": {
+    "args": [],
+    "one": null,
+    "text": "deleted here. The server deletes it at the next send."
+  },
+  "settings.privacy_delete_here": {
+    "args": [],
+    "one": null,
+    "text": "deleted here. The server never got anything from this ID."
+  },
+  "settings.privacy_delete_no": {
+    "args": [],
+    "one": null,
+    "text": "Cancel"
+  },
+  "settings.privacy_delete_sub": {
+    "args": [],
+    "one": null,
+    "text": "on the server and on this Mac"
+  },
+  "settings.privacy_delete_yes": {
+    "args": [],
+    "one": null,
+    "text": "Delete"
+  },
   "settings.privacy_file": {
     "args": [],
     "one": null,
@@ -4370,6 +4493,31 @@
     "one": null,
     "text": "Kept"
   },
+  "settings.privacy_not_yet": {
+    "args": [],
+    "one": null,
+    "text": "bise doesn't send anything yet"
+  },
+  "settings.privacy_off_dev": {
+    "args": [],
+    "one": null,
+    "text": "off in dev builds"
+  },
+  "settings.privacy_off_dnt": {
+    "args": [],
+    "one": null,
+    "text": "off: DO_NOT_TRACK is set"
+  },
+  "settings.privacy_off_env": {
+    "args": [],
+    "one": null,
+    "text": "off: BISE_TELEMETRY=0 is set"
+  },
+  "settings.privacy_off_test": {
+    "args": [],
+    "one": null,
+    "text": "off in tests and CI"
+  },
   "settings.privacy_quote": {
     "args": [],
     "one": null,
@@ -4379,6 +4527,46 @@
     "args": [],
     "one": null,
     "text": "fn space only: a ❝ chip you see and can remove"
+  },
+  "settings.privacy_reset": {
+    "args": [],
+    "one": null,
+    "text": "Reset ID"
+  },
+  "settings.privacy_reset_act": {
+    "args": [],
+    "one": null,
+    "text": "Reset"
+  },
+  "settings.privacy_reset_done": {
+    "args": [],
+    "one": null,
+    "text": "reset: a new ID is drawn at the next send"
+  },
+  "settings.privacy_reset_sub": {
+    "args": [],
+    "one": null,
+    "text": "a new random ID from the next send. What the old one sent stays until it's purged, within 13 months."
+  },
+  "settings.privacy_seen": {
+    "args": [],
+    "one": null,
+    "text": "See what's sent"
+  },
+  "settings.privacy_seen_sub": {
+    "args": [],
+    "one": null,
+    "text": "the next packet and those of the last 7 days, in plain JSON"
+  },
+  "settings.privacy_share": {
+    "args": [],
+    "one": null,
+    "text": "Share anonymous usage counts"
+  },
+  "settings.privacy_share_sub": {
+    "args": [],
+    "one": null,
+    "text": "once a day, totals only, never what you write"
   },
   "settings.privacy_shot": {
     "args": [],
@@ -4409,6 +4597,11 @@
     "args": [],
     "one": null,
     "text": "Chrome, Safari, Arc"
+  },
+  "settings.privacy_usage": {
+    "args": [],
+    "one": null,
+    "text": "Usage counts"
   },
   "settings.privacy_window_text": {
     "args": [],
@@ -5264,6 +5457,66 @@
     "args": [],
     "one": null,
     "text": "nothing new in your folders"
+  },
+  "settings.seen_close": {
+    "args": [],
+    "one": null,
+    "text": "Close"
+  },
+  "settings.seen_copy": {
+    "args": [],
+    "one": null,
+    "text": "Copy"
+  },
+  "settings.seen_id": {
+    "args": [],
+    "one": null,
+    "text": "Your random ID"
+  },
+  "settings.seen_last": {
+    "args": [],
+    "one": null,
+    "text": "Last 7 days"
+  },
+  "settings.seen_next": {
+    "args": [],
+    "one": null,
+    "text": "Next"
+  },
+  "settings.seen_no_id": {
+    "args": [],
+    "one": null,
+    "text": "none yet: it's drawn at the first send"
+  },
+  "settings.seen_none": {
+    "args": [],
+    "one": null,
+    "text": "nothing yet"
+  },
+  "settings.seen_pending": {
+    "args": [
+      "n"
+    ],
+    "one": "{n} delete request waits for the next send",
+    "text": "{n} delete requests wait for the next send"
+  },
+  "settings.seen_sent_on": {
+    "args": [
+      "day",
+      "on"
+    ],
+    "one": null,
+    "text": "{day}, sent {on}"
+  },
+  "settings.seen_sub": {
+    "args": [],
+    "one": null,
+    "text": "once a day, these totals, nothing else"
+  },
+  "settings.seen_title": {
+    "args": [],
+    "one": null,
+    "text": "What bise sends"
   },
   "settings.sign_in": {
     "args": [],

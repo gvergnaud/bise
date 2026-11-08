@@ -184,6 +184,17 @@ fn draw_bise(app: &mut App, frame: &mut Frame, area: Rect, cols: crate::layout::
             feed = Rect { y: feed.y + n + 1, height: feed.height - n - 1, ..feed };
         }
     }
+    // usage-metrics-plan step 6: Gabriel's note, once, above the feed (telemetry_note.rs); drawn
+    // whole or not at all, and marked seen only once drawn
+    if let Some(rows) = crate::telemetry_note::above(cols.col_w.min(feed.width).max(1) as usize) {
+        let n = rows.len() as u16;
+        if feed.height > n + 4 {
+            frame.render_widget(Paragraph::new(rows), Rect { height: n, ..feed });
+            crate::textlayer::text(Rect { height: n, ..feed });
+            feed = Rect { y: feed.y + n + 1, height: feed.height - n - 1, ..feed };
+            crate::telemetry_note::drawn(&crate::onboarding::home_of(&|k| std::env::var(k).ok().filter(|v| !v.is_empty())));
+        }
+    }
     // the scrollbar's column: the panel's rule, else the frame's right
     // edge; bare, the feed area's last column
     let bar = cols.framed.then(|| {

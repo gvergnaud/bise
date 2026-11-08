@@ -124,6 +124,72 @@ export const settings = {
   quiet_away: "While you were away",
   /** quiet: the away card's line */
   quiet_away_sub: "one notification when you open your Mac again",
+  /** privacy: the usage counts' group (usage-metrics-plan step 6), first */
+  privacy_usage: "Usage counts",
+  /** privacy: the share switch, also on Gabriel's note */
+  privacy_share: "Share anonymous usage counts",
+  /** privacy: the share switch's line */
+  privacy_share_sub: "once a day, totals only, never what you write",
+  /** privacy: why it can't be turned on here: BISE_TELEMETRY */
+  privacy_off_env: "off: BISE_TELEMETRY=0 is set",
+  /** privacy: why it can't be turned on here: DO_NOT_TRACK */
+  privacy_off_dnt: "off: DO_NOT_TRACK is set",
+  /** privacy: why it can't be turned on here: a dev build */
+  privacy_off_dev: "off in dev builds",
+  /** privacy: why it can't be turned on here: a CI run or a test home */
+  privacy_off_test: "off in tests and CI",
+  /** privacy: sharing is on, but nothing is sent yet (the global switch) */
+  privacy_not_yet: "bise doesn't send anything yet",
+  /** privacy: the row that opens what is sent */
+  privacy_seen: "See what's sent",
+  /** privacy: its line */
+  privacy_seen_sub: "the next packet and those of the last 7 days, in plain JSON",
+  /** privacy: the reset row */
+  privacy_reset: "Reset ID",
+  /** privacy: its line: what the old id sent stays (architect m_56355) */
+  privacy_reset_sub: "a new random ID from the next send. What the old one sent stays until it's purged, within 13 months.",
+  /** privacy: its act */
+  privacy_reset_act: "Reset",
+  /** privacy: after a reset, for 3 s */
+  privacy_reset_done: "reset: a new ID is drawn at the next send",
+  /** privacy: the delete row */
+  privacy_delete: "Delete my data",
+  /** privacy: its line */
+  privacy_delete_sub: "on the server and on this Mac",
+  /** privacy: its act */
+  privacy_delete_act: "Delete…",
+  /** privacy: its inline confirm */
+  privacy_delete_ask: "Delete this ID's data on the server and here?",
+  /** privacy: the confirm's act */
+  privacy_delete_yes: "Delete",
+  /** privacy: the confirm's way out */
+  privacy_delete_no: "Cancel",
+  /** privacy: deleted here, the server's request waits for the next send */
+  privacy_delete_asked: "deleted here. The server deletes it at the next send.",
+  /** privacy: deleted here, the server never had anything */
+  privacy_delete_here: "deleted here. The server never got anything from this ID.",
+  /** the "See what's sent" sheet: its title */
+  seen_title: "What bise sends",
+  /** the sheet: its line */
+  seen_sub: "once a day, these totals, nothing else",
+  /** the sheet: the id's head */
+  seen_id: "Your random ID",
+  /** the sheet: no id yet */
+  seen_no_id: "none yet: it's drawn at the first send",
+  /** the sheet: delete requests not sent yet */
+  seen_pending: (a: { n: number }): string => a.n === 1 ? String(a.n) + " delete request waits for the next send" : String(a.n) + " delete requests wait for the next send",
+  /** the sheet: the next packets' head */
+  seen_next: "Next",
+  /** the sheet: the sent packets' head */
+  seen_last: "Last 7 days",
+  /** the sheet: a sent packet's line */
+  seen_sent_on: (a: { day: string | number; on: string | number }): string => String(a.day) + ", sent " + String(a.on),
+  /** the sheet: nothing in a section */
+  seen_none: "nothing yet",
+  /** the sheet: a packet's copy act */
+  seen_copy: "Copy",
+  /** the sheet: its close */
+  seen_close: "Close",
   /** privacy: the first group's title */
   privacy_hold: "When you hold fn",
   /** privacy: the screenshot */
@@ -722,6 +788,36 @@ export const settings = {
   onb_me_more: "you can change every detail later in Settings › General.",
   /** onboarding, hello: a ready-made look's name (its tip and VoiceOver) */
   onb_me_look: (a: { n: string | number }): string => "look " + String(a.n) + " of 12",
+  /** Gabriel's note about the usage counts (page usage-metrics-plan, A): its title, on hello, the home and the TUI */
+  onb_telemetry_title: "A note from me, Gabriel",
+  /** the note: why it exists */
+  onb_telemetry_why_line: "I'm building bise alone. I want to know if it's useful and how you use it, so I can learn and make it better.",
+  /** the note: what is sent */
+  onb_telemetry_what: "Once a day, bise sends me totals: how many agents ran and for how long, how long the app was open, which features you used.",
+  /** the note: what never is, and the ID */
+  onb_telemetry_never: "Never what you write or own: no prompts, messages, files, paths or names. Your IP address is not stored. A random ID lets me see how use changes over time; it's deleted when you turn this off.",
+  /** the note's last line on the desktop; {env} is BISE_TELEMETRY=0, drawn as code */
+  onb_telemetry_off: (a: { env: string | number }): string => "Turn it off in Settings → Privacy, or with " + String(a.env) + ".",
+  /** the note's last line in the TUI; {cmd} and {env} drawn as code */
+  onb_telemetry_off_tui: (a: { cmd: string | number; env: string | number }): string => "Turn it off with " + String(a.cmd) + ", or " + String(a.env) + ".",
+  /** the note: signed */
+  onb_telemetry_sign: "— Gabriel",
+  /** the note: the link to the long one (B) */
+  onb_telemetry_why: "why?",
+  /** the note on the home (installs already set up): its one act */
+  onb_telemetry_got_it: "Got it",
+  /** the long note (B, the 'why?' sheet): its title */
+  onb_telemetry_b_title: "Why bise counts a few things",
+  /** the long note: why */
+  onb_telemetry_b_why: "It's just me, Gabriel, building bise. I don't know yet if bise is useful to you, or which parts you actually use. Counting is the only way I have to learn that, and to know what to fix first.",
+  /** the long note: what is sent */
+  onb_telemetry_b_what: "What bise sends, once a day: totals. How many agents you ran and how many hours they worked. How long the app was open, and in front. How often you used each feature: artifacts, schedules, the inbox, plugins.",
+  /** the long note: what never is */
+  onb_telemetry_b_never: "What it never sends: your prompts, messages or files, your paths, the names of your projects or agents. Your IP address is not stored.",
+  /** the long note: the ID */
+  onb_telemetry_b_id: "To see how use changes over time, bise picks a random ID on your Mac. It isn't tied to you, your Mac or any account, and it's renewed at least every 13 months. Turning this off deletes it, and \"Delete my data\" also deletes what I have.",
+  /** the long note: the way out; {cmd} and {env} drawn as code */
+  onb_telemetry_b_off: (a: { cmd: string | number; env: string | number }): string => "It's on by default. You can see exactly what's sent, and turn it off, in Settings → Privacy. In the terminal: " + String(a.cmd) + ", or " + String(a.env) + ".",
   /** fn's permissions sheet (the capsule, his first fn hold with one missing): its title */
   onb_perms_title: "to hear you from any app",
   /** fn's permissions sheet: its line */

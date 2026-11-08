@@ -111,9 +111,9 @@ pub type Sink = Box<dyn FnMut(Day, &Tally) -> io::Result<()> + Send>;
 /// gives a permit now: None, the process counts nothing. Each write asks
 /// again (he may turn sharing off while a TUI or the core runs for days):
 /// refused, nothing is written. `app_root`: the runtime the process runs
-/// from ([`Channel::of_root`]: a dev tree never shares).
+/// from ([`Channel::read`]: a dev tree never shares).
 pub fn sink(home: Home, source: Source, app_root: &Path, offscreen: bool) -> Option<Sink> {
-    let channel = Channel::of_root(app_root);
+    let channel = Channel::read(&home, app_root);
     let permit = move |home: &Home| sharing_allowed(&Facts::read(home, &|k| std::env::var(k).ok(), channel, offscreen)).ok();
     permit(&home)?;
     Some(Box::new(move |day, tally| match permit(&home) {

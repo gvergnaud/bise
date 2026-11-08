@@ -252,8 +252,9 @@ pub fn forget(home: &Home) -> io::Result<()> {
 /// server ever took a packet from this machine, the id goes to the
 /// delete request the next tick sends (and keeps until a 2xx); if not,
 /// the id is just deleted and nothing is posted (architect m_55984: a
-/// delete request is never bise's first contact with the server).
-/// True when a request is queued.
+/// delete request is never bise's first contact with the server). What
+/// was counted on this Mac is deleted too ([`wipe`]): "Delete my data"
+/// is here and there. True when a request is queued.
 pub fn request_delete(home: &Home) -> io::Result<bool> {
     if !home.usage_dir().exists() {
         return Ok(false);
@@ -270,8 +271,19 @@ pub fn request_delete(home: &Home) -> io::Result<bool> {
         }
         _ => false,
     };
-    remove_file(&home.usage_install_id())?;
+    wipe(home)?;
     Ok(queued)
+}
+
+/// "Reset ID": the install id is deleted now, a new one is drawn at the
+/// next send. No delete request: what the old id sent stays on the
+/// server until its purge (13 months), as Settings › Privacy says.
+pub fn reset_id(home: &Home) -> io::Result<()> {
+    if !home.usage_install_id().exists() {
+        return Ok(());
+    }
+    let _lock = SendLock::take(home)?;
+    remove_file(&home.usage_install_id())
 }
 
 fn load_state(home: &Home) -> Option<LocalState> {

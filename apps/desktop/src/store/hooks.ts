@@ -198,6 +198,8 @@ export const useIndex = (): readonly IndexRow[] => useSlice('index', (s) => s.in
 export const useSetupFirst = (): EvOf<'setup_first'> | null => useSlice('setup_first', (s) => s.setupFirst());
 /** N1: where his keys and sign-ins are kept (the core's keychain), and the last move's lines. */
 export const useKeychain = (): EvOf<'keychain'> | null => useSlice('keychain', (s) => s.keychain());
+/** usage-metrics-plan step 6: his usage counts (the core's telemetry, after a telemetry {act}); none yet: null. */
+export const useTelemetry = (): EvOf<'telemetry'> | null => useSlice('telemetry', (s) => s.telemetry());
 export const useCoreState = (): CoreState => useSlice('core', (s) => s.core());
 /** S29: every agent using computer use now (key, project when his, agent, driving, place, paused, stopped); act with useStore().computer(act, key). */
 export const useComputerLive = (): readonly ComputerAgent[] => useSlice('computer_live', (s) => s.computerLive());

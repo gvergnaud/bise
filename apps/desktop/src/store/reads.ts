@@ -444,6 +444,11 @@ export class StoreReads extends StoreBase {
   keychain(): EvOf<"keychain"> | null {
     return this.slice<EvOf<"keychain"> | null>("keychain", null);
   }
+
+  /** usage-metrics-plan step 6: his usage counts (the core's telemetry, in reply to an act); none yet: null */
+  telemetry(): EvOf<"telemetry"> | null {
+    return this.slice<EvOf<"telemetry"> | null>("telemetry", null);
+  }
   /**
    * ⌘K's index (core/index.rs): every project the core doesn't hold now,
    * from its view.json (agents, the newest artifacts and their total), as of

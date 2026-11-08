@@ -29,6 +29,7 @@ import { ReadyLooks } from '@/settings/me';
 import type { Look } from '@/bims/render/look';
 import { settings } from '@/proto/words.gen';
 import { countGesture } from '@/app/usage';
+import { TelemetryNote } from './TelemetryNote';
 import './setup.css';
 
 export interface OnboardingPorts {
@@ -59,6 +60,8 @@ export interface OnboardingProps {
   home?: string;
   /** main has a model already (the core's roles): skip may end the first launch before the model step */
   hasModel?: boolean;
+  /** his telemetry.share (the switch on Gabriel's note, on hello); absent: on, the default */
+  share?: boolean;
 }
 
 /** how long his first message's plane flies before bise opens, ms (the island's PLANE_MS and a breath) */
@@ -73,7 +76,7 @@ const FIRST_KISS = 48;
 /** A fn sentinel in onb_first_fn's words, where the key chip goes. */
 const FN_HOLE = '\u0000';
 
-export function Onboarding({ accounts, claudePlan = false, found, perms, fn = null, check = null, signInError = null, ports, now: pinned, home = '', hasModel = false }: OnboardingProps) {
+export function Onboarding({ accounts, claudePlan = false, found, perms, fn = null, check = null, signInError = null, ports, now: pinned, home = '', hasModel = false, share = true }: OnboardingProps) {
   const [opened] = useState(() => Date.now());
   const now = pinned ?? opened;
   const [st, setSt] = useState<OnbState>(START);
@@ -180,6 +183,8 @@ export function Onboarding({ accounts, claudePlan = false, found, perms, fn = nu
           <div className="s">{settings.onb_me}</div>
           <ReadyLooks on={me} pick={pickMe} />
           <div className="me-more">{settings.onb_me_more}</div>
+          {/* Gabriel's note: hello is the one step everyone sees ('skip for now' leaves from any) */}
+          <TelemetryNote share={share} send={ports.send} testId="setup.telemetry" />
         </Onb>
       );
       break;

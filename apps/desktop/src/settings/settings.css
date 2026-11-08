@@ -191,3 +191,13 @@ button.st-next:hover { color: var(--c-text); }
 /* the nav's N/7 on Setup: faint, pink only when a feature failed */
 .b-snav-count { font: var(--t-12) var(--font-ui); font-variant-numeric: tabular-nums; color: var(--c-text-3); }
 .b-snav-count[data-failed] { color: var(--c-accent); }
+/* usage counts (telemetry.tsx, designer m_56350): the delete's inline confirm, and the 'See what's
+   sent' sheet: the ID on top, each packet as mono JSON in a sunken block with its copy */
+.tm-confirm { display: inline-flex; gap: var(--gap-inline); }
+.tm-seen .tm-h { font-weight: 600; margin: var(--gap-section) 0 var(--gap-tight); }
+.tm-seen .tm-h:first-child { margin-top: 0; }
+.tm-seen .tm-id { font-family: var(--font-mono); font-size: var(--t-13); user-select: text; }
+.tm-seen .tm-dim, .tm-packet .tm-dim { color: var(--c-text-2); font-size: var(--t-12); }
+.tm-packet { margin-bottom: var(--gap-rows); }
+.tm-packet-head { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-inline); }
+.tm-packet pre { margin: var(--gap-tight) 0 0; padding: var(--s-2) var(--s-3); border-radius: var(--r-2); background: var(--c-sunken); font-family: var(--font-mono); font-size: var(--t-12); line-height: 1.5; white-space: pre-wrap; word-break: break-all; max-height: 240px; overflow: auto; user-select: text; }

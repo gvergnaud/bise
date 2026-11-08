@@ -57,6 +57,13 @@ describe('lines', () => {
     expect(notAnEventLog('"shot":{"data":"U0VDUkVU')).not.toContain('U0VDUkVU');
     expect(notAnEventLog('{"jsonrpc":"2.0","method":"core/provider_use","params":{"key":"sk-SECRET"')).not.toContain('SECRET');
   });
+
+  it('never logs the usage counts\' view: it holds the install id (architect m_56355)', () => {
+    const id = '0b6b3a4e-9f1c-4d2a-8e5f-2c7d9a1b3e4f';
+    const broken = `{"jsonrpc":"2.0","method":"core/telemetry","params":{"share":true,"id":"${id}"`;
+    expect(notAnEventLog(broken)).toBe(`core: not an event: a core/telemetry line (${String(broken.length)} bytes, not logged)`);
+    expect(notAnEventLog(`{"ev":"telemetry","id":"${id}"`)).not.toContain(id);
+  });
 });
 
 describe('env', () => {

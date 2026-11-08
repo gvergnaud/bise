@@ -1034,6 +1034,7 @@ pub(crate) fn handle_input(app: &mut App, v: &str) -> Vec<Ev> {
             let to = lead::send(sb, typed);
             // BISE-61: a hint goes away after the next user message
             crate::hints::user_message();
+            crate::telemetry_note::dismiss();
             crate::tour::on_sent(app);
             if let Some(name) = to {
                 focus(app, &name);

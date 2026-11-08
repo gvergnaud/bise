@@ -16,6 +16,36 @@ crate::words! { settings:
     onb_me_more = "you can change every detail later in Settings › General.";
     /// onboarding, hello: a ready-made look's name (its tip and VoiceOver)
     onb_me_look(n) = "look {n} of 12";
+    /// Gabriel's note about the usage counts (page usage-metrics-plan, A): its title, on hello, the home and the TUI
+    onb_telemetry_title = "A note from me, Gabriel";
+    /// the note: why it exists
+    onb_telemetry_why_line = "I'm building bise alone. I want to know if it's useful and how you use it, so I can learn and make it better.";
+    /// the note: what is sent
+    onb_telemetry_what = "Once a day, bise sends me totals: how many agents ran and for how long, how long the app was open, which features you used.";
+    /// the note: what never is, and the ID
+    onb_telemetry_never = "Never what you write or own: no prompts, messages, files, paths or names. Your IP address is not stored. A random ID lets me see how use changes over time; it's deleted when you turn this off.";
+    /// the note's last line on the desktop; {env} is BISE_TELEMETRY=0, drawn as code
+    onb_telemetry_off(env) = "Turn it off in Settings → Privacy, or with {env}.";
+    /// the note's last line in the TUI; {cmd} and {env} drawn as code
+    onb_telemetry_off_tui(cmd, env) = "Turn it off with {cmd}, or {env}.";
+    /// the note: signed
+    onb_telemetry_sign = "— Gabriel";
+    /// the note: the link to the long one (B)
+    onb_telemetry_why = "why?";
+    /// the note on the home (installs already set up): its one act
+    onb_telemetry_got_it = "Got it";
+    /// the long note (B, the 'why?' sheet): its title
+    onb_telemetry_b_title = "Why bise counts a few things";
+    /// the long note: why
+    onb_telemetry_b_why = "It's just me, Gabriel, building bise. I don't know yet if bise is useful to you, or which parts you actually use. Counting is the only way I have to learn that, and to know what to fix first.";
+    /// the long note: what is sent
+    onb_telemetry_b_what = "What bise sends, once a day: totals. How many agents you ran and how many hours they worked. How long the app was open, and in front. How often you used each feature: artifacts, schedules, the inbox, plugins.";
+    /// the long note: what never is
+    onb_telemetry_b_never = "What it never sends: your prompts, messages or files, your paths, the names of your projects or agents. Your IP address is not stored.";
+    /// the long note: the ID
+    onb_telemetry_b_id = "To see how use changes over time, bise picks a random ID on your Mac. It isn't tied to you, your Mac or any account, and it's renewed at least every 13 months. Turning this off deletes it, and \"Delete my data\" also deletes what I have.";
+    /// the long note: the way out; {cmd} and {env} drawn as code
+    onb_telemetry_b_off(cmd, env) = "It's on by default. You can see exactly what's sent, and turn it off, in Settings → Privacy. In the terminal: {cmd}, or {env}.";
     /// fn's permissions sheet (the capsule, his first fn hold with one missing): its title
     onb_perms_title = "to hear you from any app";
     /// fn's permissions sheet: its line

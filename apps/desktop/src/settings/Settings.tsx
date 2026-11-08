@@ -23,6 +23,7 @@ import type { TryPort } from './gauge';
 import type { AppUpdate, NotifyAuth, UpdateInfo, UpdateState } from '@/shared/api';
 import type { UpdatePorts } from './update';
 import type { DistPorts } from './appupdate';
+import type { TelemetryView } from './telemetry';
 import './settings.css';
 
 /** The helper's permissions (none: not known, or no helper). */
@@ -65,6 +66,8 @@ export interface SettingsData {
   dist?: { readonly state: UpdateState; readonly info: UpdateInfo; readonly readAt: number } | null;
   /** N1: where his keys and sign-ins are kept and the last /keychain move (the core's keychain; none yet: null) */
   keychain?: KeychainState | null;
+  /** usage-metrics-plan step 6: his usage counts (the core's telemetry, after a telemetry {act}; none yet: null) */
+  telemetry?: TelemetryView | null;
 }
 
 /** The core's keychain event, as settings · models reads it. */

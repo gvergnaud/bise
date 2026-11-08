@@ -13,8 +13,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Button, Marker } from '@/ds';
 import type { ComposerActions } from '@/composer';
-import type { Card } from '@/proto';
-import { threadKey, useAgents, useCards, useCoreState, useProjects, useStore, useThreadOrder, useTyping } from '@/store';
+import type { AppCmd, Card } from '@/proto';
+import { threadKey, useAgents, useCards, useCoreState, usePrefs, useProjects, useStore, useThreadOrder, useTyping } from '@/store';
+import { prefsOf } from '@/settings';
+import { HomeNote, useHomeNote } from '@/setup/TelemetryNote';
 import { usePartialText } from '@/shared/partial';
 import { useMenuAction } from '@/app/menu';
 import { useRoute } from '@/app/router';
@@ -184,11 +186,17 @@ export function ThreadScreen({ project, agent, bise = false, projectName, artifa
   useEffect(() => {
     tourSent.current = tour.sent;
   }, [tour.sent]);
+  // Gabriel's note, once, for an install that never saw it (usage-metrics-plan step 6): docked over
+  // bise's composer until 'Got it' or his first message
+  const prefs = prefsOf(usePrefs());
+  const [homeNote, dropHomeNote] = useHomeNote(prefs);
+  const sendCmd = useCallback((cmd: AppCmd) => { store.command(cmd); }, [store]);
   const onSent = useCallback(() => {
     tourSent.current();
     // S36: his message puts the one-time hints away
     hintsUserMessage();
-  }, []);
+    dropHomeNote();
+  }, [dropHomeNote]);
   const topTip = (tour.tip === 'inside' && tour.snap.focus === agent) || tour.tip === 'end' ? tour.tip : null;
   useMenuAction('find', () => {
     setFindOpen(true);
@@ -370,6 +378,7 @@ export function ThreadScreen({ project, agent, bise = false, projectName, artifa
         {/* its hub refused this core: the hub's words and a retry, over the composer (lead m_11347) */}
         <RefusedLine project={project} name={bise ? 'bise' : (projectName ?? project)} className="app-refused th-refused" testId="thread.refused" />
         <CardHint project={project} />
+        {bise && artifact === undefined && <HomeNote prefs={prefs} shown={homeNote} dismiss={dropHomeNote} send={sendCmd} />}
         {/* b1/b2: every project's open items, one opened in place (amb-home's InboxBlock, eb3da983) */}
         {artifact === undefined ? (
           <InboxBlock here={bise ? HERE_BISE : { project, agent }} onAnswer={setAnswering} />

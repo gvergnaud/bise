@@ -10,6 +10,7 @@ import { useRoute, useRouter } from '@/app/router';
 import { onboarded, prefsOf, useCmdError } from '@/settings';
 import { Onboarding } from './Onboarding';
 import { mainHasModel } from './model';
+import { shareOf } from './TelemetryNote';
 import { useHelper } from './helper';
 import { pickerPort } from '@/settings/picker';
 
@@ -27,6 +28,7 @@ export function OnboardingScreen() {
       fn={fn}
       check={useProviderCheck()}
       hasModel={mainHasModel(useRoles())}
+      share={shareOf(prefsOf(usePrefs()))}
       signInError={useCmdError('sign_in')?.text ?? null}
       ports={{
         send: (cmd) => {

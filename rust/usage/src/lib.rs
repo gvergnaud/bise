@@ -29,6 +29,9 @@
 //! - [`sender`]: the one sender of the machine (step 5): its flock, the
 //!   delete request, the wipe when he turns sharing off, the closed days'
 //!   batches, `sent/` ([`sent`]) and the retries ([`retry`]);
+//! - [`control`]: what he does (step 6): share on or off, the note seen,
+//!   Reset ID, Delete my data, and the [`control::View`] of what is sent,
+//!   for `bise telemetry` and the app's core alike;
 //! - [`curl`]: the real transport, the system's curl; [`hourly`]: the
 //!   sender's thread, one call in each hub and in the app's core;
 //! - [`schema`]: the exported schema (snapshot `schema.json`, the doc
@@ -44,6 +47,7 @@
 
 #[macro_use]
 mod closed;
+pub mod control;
 pub mod curl;
 pub mod day;
 pub mod encode;

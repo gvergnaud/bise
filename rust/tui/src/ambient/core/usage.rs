@@ -56,6 +56,8 @@ pub(crate) fn of_cmd(c: &AppCmd) -> Counted {
         AppCmd::DictateStart { .. } => Under(CountKey::DictationStarted),
         // its seconds and gestures are counted by Usage::took
         AppCmd::UsageTime { .. } => NotCounted,
+        // his choice about the counts themselves: never counted
+        AppCmd::Telemetry { .. } => NotCounted,
         // main's own (never reaches the core): artifacts are counted by kind by the window
         AppCmd::Open { .. } => NotCounted,
         // his words and answers: the hub counts them (user_message, card_answered)

@@ -242,6 +242,10 @@ pub struct SetupPorts {
     pub own_built: Box<dyn Fn() -> String>,
     /// N1 (the TUI's /keychain): where the secrets are and the move
     pub keychain: KeychainPort,
+    /// his usage counts' acts and view (step 6): bise_usage::control
+    /// with this core's build (the binary wires its app root's; a dev
+    /// build's here)
+    pub telemetry: super::telemetry::TelemetryFn,
 }
 
 /// N1: his keys and sign-ins, in the macOS keychain or in files. `now`
@@ -730,6 +734,7 @@ pub fn live(flow: FlowFn) -> SetupPorts {
         manifest: Box::new(|_, _| {}),
         own_built: Box::new(String::new),
         keychain: live_keychain(),
+        telemetry: super::telemetry::live(bise_usage::Build::this("unknown", bise_usage::Channel::Dev)),
         cu: CuPorts {
             is_on: Box::new(crate::computer_use::is_on),
             set_on: Box::new(crate::computer_use::set_on),

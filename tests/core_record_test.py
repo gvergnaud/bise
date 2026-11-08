@@ -91,6 +91,10 @@ def main():
     except SystemExit as e:
         check("the world guard refuses a home outside ~/.bise/gate", "not under ~/.bise/gate" in str(e), str(e))
     check("HUB_CMDS read from the generated names", "answer" in json.loads(core_record._gen_const("HUB_CMDS")))
+    # the usage counts' view holds the install id: never recorded, by its kind (architect m_56355)
+    view = {"jsonrpc": "2.0", "method": "core/telemetry", "params": {"share": True, "id": "0b6b3a4e-9f1c-4d2a-8e5f-2c7d9a1b3e4f"}}
+    check("a core/telemetry line is never recorded", not core_record.recordable(view))
+    check("another event is", core_record.recordable({"jsonrpc": "2.0", "method": "core/prefs", "params": {}}))
     if FAILS:
         print("core_record_test: %d failed: %s" % (len(FAILS), ", ".join(FAILS)))
         sys.exit(1)

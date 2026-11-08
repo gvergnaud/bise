@@ -16,7 +16,7 @@
 
 use super::Core;
 use crate::ambient::setup::{rank, CuBusy, Done, RegistryOp, SetupPorts};
-use bise_proto::app_cmd::AppCmd;
+use bise_proto::app_cmd::{AppCmd, TelemetryAct};
 use bise_proto::app_rows::CheckState;
 use bise_proto::core_ev::CoreEv;
 use serde_json::{json, Value};
@@ -90,6 +90,7 @@ pub const TAGS: &[&str] = &[
     "app_version",
     "setup_first_cancel",
     "keychain",
+    "telemetry",
 ];
 
 /// Computer use's setup check stops this long after the page's last
@@ -292,6 +293,19 @@ impl Core {
         Ok(())
     }
 
+    /// His act on his usage counts (step 6): answered by `telemetry`
+    /// (only here: it carries the id), and by `prefs` when the act wrote
+    /// them. An act this core doesn't know: nothing.
+    fn telemetry(&mut self, act: TelemetryAct) -> Result<(), String> {
+        let Some(s) = &self.setup else { return Err("this core has no setup".into()) };
+        let Some(ev) = (s.ports.telemetry)(act)? else { return Ok(()) };
+        if matches!(act, TelemetryAct::On | TelemetryAct::Off | TelemetryAct::NoteSeen) {
+            self.emit_prefs();
+        }
+        self.emit(serde_json::to_value(ev).unwrap_or_else(|_| json!({})));
+        Ok(())
+    }
+
     /// Each role's model and effort (V17).
     fn emit_roles(&mut self) {
         let Some(s) = &self.setup else { return };
@@ -388,6 +402,7 @@ impl Core {
                 return;
             }
             AppCmd::Keychain { to } => ("keychain", self.keychain(to)),
+            AppCmd::Telemetry { act } => ("telemetry", self.telemetry(act)),
             AppCmd::KeyRemove { id } => {
                 let res = (p.key_remove)(&id);
                 if res.is_ok() {

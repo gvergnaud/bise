@@ -89,6 +89,8 @@ export const TAGS = {
   index: true,
   setup_first: true,
   keychain: true,
+  // usage-metrics-plan step 6: his usage counts, in reply to telemetry {act} only (Settings › Privacy)
+  telemetry: true,
   computer_live: true,
   computer_peek: true,
   refused: true,

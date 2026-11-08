@@ -426,12 +426,91 @@ pub enum CoreEv {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         words: Option<String>,
     },
+    /// his usage counts as `bise telemetry show` prints them (page
+    /// usage-metrics-plan, step 6: Settings › Privacy, "See what's
+    /// sent"). Sent only in reply to `telemetry {act}`, never at start,
+    /// never broadcast: it carries the install id, so it is never logged
+    /// (architect m_56355)
+    Telemetry {
+        /// his `telemetry.share`, whatever else turns it off
+        share: bool,
+        /// why nothing is shared now (none: it shares)
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts", ts(optional))]
+        off: Option<TelemetryOff>,
+        /// the id in use (none: drawn at the first send)
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts", ts(optional))]
+        id: Option<String>,
+        /// delete requests waiting to be sent
+        #[serde(default, skip_serializing_if = "is_zero")]
+        pending: u32,
+        /// the next packets, each as its JSON
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[cfg_attr(feature = "ts", ts(optional, as = "Option<Vec<String>>"))]
+        next: Vec<String>,
+        /// those sent the last 7 days
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[cfg_attr(feature = "ts", ts(optional, as = "Option<Vec<TelemetrySent>>"))]
+        sent: Vec<TelemetrySent>,
+        /// what the act it answers did (none: a show)
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "ts", ts(optional))]
+        done: Option<TelemetryDone>,
+    },
     #[serde(skip)]
     Unknown { tag: String, raw: Value },
 }
 
+/// Why bise shares no usage counts now (bise_usage's `Off`, by name).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum TelemetryOff {
+    /// bise doesn't send usage yet (the global switch, until step 9)
+    NotYet,
+    /// `BISE_TELEMETRY=0`
+    Env,
+    /// `DO_NOT_TRACK=1`
+    DoNotTrack,
+    Ci,
+    TestHome,
+    Offscreen,
+    DevBuild,
+    /// he turned it off
+    Pref,
+    /// his note was not shown yet
+    NoteNotSeen,
+    #[serde(other)]
+    Unknown,
+}
+
+/// A packet sent the last 7 days: when, the day it counted, its JSON.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct TelemetrySent {
+    pub on: String,
+    pub day: String,
+    pub json: String,
+}
+
+/// What a `telemetry {act}` did.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum TelemetryDone {
+    /// a new id from the next send
+    Reset,
+    /// deleted here; the server's delete request goes at the next send
+    Asked,
+    /// deleted here; the server never got anything from this id
+    Here,
+    #[serde(other)]
+    Unknown,
+}
+
 impl CoreEv {
-    pub const TAGS: &'static [&'static str] = &["projects", "open", "prefs", "accounts", "signing", "provider_check", "found", "away_summary", "plugins", "browse", "plugin_preview", "plugins_summary", "computer_use", "level", "heard", "shot", "dictation", "voice_mode", "voice_answer", "commands", "skills", "files", "roles", "setup_gauge", "library_folders", "app_update", "machine_update", "hub_refused", "index", "setup_first", "computer_live", "computer_peek", "keychain", "broken", "state", "main", "hub", "sent", "agent_sent", "send_answered", "word", "phase", "page", "agent_entry", "agent_history", "agent_preview", "agent_queued", "agent_typing", "fake_voice"];
+    pub const TAGS: &'static [&'static str] = &["projects", "open", "prefs", "accounts", "signing", "provider_check", "found", "away_summary", "plugins", "browse", "plugin_preview", "plugins_summary", "computer_use", "level", "heard", "shot", "dictation", "voice_mode", "voice_answer", "commands", "skills", "files", "roles", "setup_gauge", "library_folders", "app_update", "machine_update", "hub_refused", "index", "setup_first", "computer_live", "computer_peek", "keychain", "broken", "state", "main", "hub", "sent", "agent_sent", "send_answered", "word", "phase", "page", "agent_entry", "agent_history", "agent_preview", "agent_queued", "agent_typing", "fake_voice", "telemetry"];
 
     pub fn decode(line: &str) -> Result<CoreEv, String> {
         decode(parse(line)?, "ev", Self::TAGS, |tag, raw| CoreEv::Unknown { tag, raw })

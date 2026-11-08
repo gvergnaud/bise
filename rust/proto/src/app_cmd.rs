@@ -51,6 +51,31 @@ pub enum AppGesture {
     Unknown,
 }
 
+/// His act on his usage counts (page usage-metrics-plan, step 6: Settings
+/// › Privacy and Gabriel's note), all through `bise_usage::control`, as
+/// `bise telemetry` does. A newer app's act reads `unknown` here and is
+/// answered with nothing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum TelemetryAct {
+    /// "See what's sent": answered by `telemetry`, the only time the id
+    /// leaves the core
+    Show,
+    /// share the daily counts
+    On,
+    /// stop, and delete what was counted on this Mac
+    Off,
+    /// a new random id from the next send
+    Reset,
+    /// "Delete my data": here, and a request to the server
+    Delete,
+    /// his note was drawn (hello, the home)
+    NoteSeen,
+    #[serde(other)]
+    Unknown,
+}
+
 /// What the app asks the core itself (never forwarded to a hub).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -511,6 +536,10 @@ pub enum AppCmd {
         #[cfg_attr(feature = "ts", ts(optional, as = "Option<Vec<AppGesture>>"))]
         gestures: Vec<AppGesture>,
     },
+    /// his act on his usage counts (step 6). `show`, `reset` and `delete`
+    /// are answered by `telemetry`; `on`, `off` and `note_seen` by `prefs`
+    /// too. An older core reads it as Unknown and answers nothing
+    Telemetry { act: TelemetryAct },
     #[serde(skip)]
     Unknown { tag: String, raw: Value },
 }
@@ -688,6 +717,7 @@ impl AppCmd {
         "archive",
         "unarchive",
         "usage_time",
+        "telemetry",
     ];
 
     pub fn decode(line: &str) -> Result<AppCmd, String> {

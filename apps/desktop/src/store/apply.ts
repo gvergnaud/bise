@@ -414,6 +414,10 @@ export function applyTyped(s: Store, ev: Ev): void {
       // N1: where his keys and sign-ins are kept, and the last /keychain move's lines
       s.put("keychain", ev);
       return;
+    case "telemetry":
+      // usage-metrics-plan step 6: his usage counts, as `bise telemetry show` prints them (the id too)
+      s.put("telemetry", ev);
+      return;
     case "machine_update":
       // update-flow: a newer bise for the machine (every project's, folded by the core)
       s.put("bise_update", ev.update ?? null);

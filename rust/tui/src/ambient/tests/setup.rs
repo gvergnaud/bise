@@ -65,6 +65,8 @@ struct World {
     /// last try's channel
     tries: Vec<PathBuf>,
     trying: Option<std::sync::mpsc::Sender<Done>>,
+    /// step 6: his acts on his usage counts
+    telemetry_acts: Vec<bise_proto::app_cmd::TelemetryAct>,
 }
 
 /// Where the add menu reads and writes in a test: all under `root`.
@@ -89,6 +91,7 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
     let gs = w.clone();
     let (ad, am, ac, pc) = (w.clone(), w.clone(), w.clone(), w.clone());
     let (kn, ks, pt) = (w.clone(), w.clone(), w.clone());
+    let tl = w.clone();
     t.core.set_setup(SetupPorts {
         prefs: Box::new(move || a.borrow().prefs.clone()),
         write_prefs: Box::new(move |v| {
@@ -302,6 +305,11 @@ fn setup(t: &mut T) -> Rc<RefCell<World>> {
             Ok(())
         }),
         own_built: Box::new(String::new),
+        // a fake view: the acts are bise_usage::control's (tested there)
+        telemetry: Box::new(move |act| {
+            tl.borrow_mut().telemetry_acts.push(act);
+            Ok((act != bise_proto::app_cmd::TelemetryAct::Unknown).then(|| bise_proto::core_ev::CoreEv::Telemetry { share: true, off: None, id: Some("fake-id".into()), pending: 0, next: vec![], sent: vec![], done: None }))
+        }),
         manifest: Box::new(move |channel, tx| {
             let mut w = mf.borrow_mut();
             w.manifest_reads += 1;
@@ -1069,4 +1077,26 @@ fn the_gauge_comes_with_the_roles_and_tests_run_only_on_setup_test() {
     let g = evs(&out, "setup_gauge").last().cloned().unwrap();
     let d = g["gauge"]["rows"].as_array().unwrap().iter().find(|r| r["id"] == "dictation").cloned().unwrap();
     assert_eq!(d["perms"][0], serde_json::json!({"perm": "mic", "grant": "denied"}), "{d:#}");
+}
+
+/// usage-metrics-plan step 6: an act is answered by `telemetry` (the id
+/// in it only then), `on`/`off`/`note_seen` by `prefs` too; an act this
+/// core doesn't know by nothing, never an error card (architect m_56355 b).
+#[test]
+fn telemetry_acts_are_answered_by_their_view_and_an_unknown_act_by_nothing() {
+    use bise_proto::app_cmd::TelemetryAct;
+    let mut t = T::new();
+    let w = setup(&mut t);
+    app(&mut t, r#"{"cmd":"telemetry","act":"show"}"#);
+    let o = t.take();
+    assert_eq!(evs(&o, "telemetry").len(), 1, "{o:?}");
+    assert_eq!(evs(&o, "telemetry")[0]["id"], "fake-id");
+    assert!(evs(&o, "prefs").is_empty(), "a show writes no prefs: {o:?}");
+    app(&mut t, r#"{"cmd":"telemetry","act":"off"}"#);
+    let o = t.take();
+    assert_eq!((evs(&o, "telemetry").len(), evs(&o, "prefs").len()), (1, 1), "{o:?}");
+    app(&mut t, r#"{"cmd":"telemetry","act":"from_a_newer_app"}"#);
+    let o = t.take();
+    assert!(evs(&o, "telemetry").is_empty() && evs(&o, "error").is_empty(), "{o:?}");
+    assert_eq!(w.borrow().telemetry_acts, [TelemetryAct::Show, TelemetryAct::Off, TelemetryAct::Unknown]);
 }

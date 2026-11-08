@@ -33,12 +33,15 @@ const found = (): Found[] => {
   if (e?.ev !== 'found') throw new Error('fixture');
   return e.items;
 };
-/** `looks`: his bim's look kept on leaving hello (page bim-pick), apart so the steps' own commands read alone */
-const ports = (): OnboardingPorts & { sent: AppCmd[]; looks: AppCmd[]; log: string[] } => {
+/** `looks`: his bim's look kept on leaving hello (page bim-pick), `telemetry`: Gabriel's note's acts
+ * (hello marks it seen), apart so the steps' own commands read alone */
+const ports = (): OnboardingPorts & { sent: AppCmd[]; looks: AppCmd[]; telemetry: AppCmd[]; log: string[] } => {
   const sent: AppCmd[] = [];
   const looks: AppCmd[] = [];
+  const telemetry: AppCmd[] = [];
   const log: string[] = [];
-  return { sent, looks, log, send: (c) => (c.cmd === 'prefs_set' && c.key === 'bim' ? looks : sent).push(c), done: () => log.push('done') };
+  const to = (c: AppCmd) => (c.cmd === 'prefs_set' && c.key === 'bim' ? looks : c.cmd === 'telemetry' ? telemetry : sent);
+  return { sent, looks, telemetry, log, send: (c) => to(c).push(c), done: () => log.push('done') };
 };
 
 /** The model step's check that works (ChatGPT, signed in in the fixture): its pick, then the answer. */

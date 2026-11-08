@@ -98,3 +98,15 @@
   .setup-a-world { flex: 0 0 40vh; }
   .setup-a-col { flex: 1 1 0; min-height: 0; padding: var(--s-4) var(--s-6) var(--s-6); justify-content: center; }
 }
+/* Gabriel's note about the usage counts (TelemetryNote.tsx, usage-metrics-plan step 6, designer
+   m_56350): a quiet raised block in the reading font, never the accent: it waits on nobody */
+.tm-note { box-sizing: border-box; width: 100%; padding: var(--s-4); border-radius: var(--r-3); background: var(--c-raised); box-shadow: inset 0 0 0 1px var(--c-line); font: var(--f-read); text-align: left; }
+.tm-note .tm-t { font-weight: 600; margin-bottom: var(--gap-tight); }
+.tm-note p { margin: 0 0 var(--gap-rows); }
+.tm-note code, .tm-why code { font-family: var(--font-mono); font-size: var(--t-13); }
+.tm-share { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-inline); padding-top: var(--s-2); margin-top: var(--s-2); border-top: 1px solid var(--c-line); cursor: pointer; }
+.tm-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-inline); margin-top: var(--s-2); min-height: var(--s-6); }
+.tm-sign { color: var(--c-text-3); }
+.tm-why p { margin: 0 0 var(--gap-block); font: var(--f-read); }
+/* the home's once: docked over the composer, as the inbox's open item docks */
+.tm-dock { margin: 0 var(--s-4) var(--s-2); flex: none; }

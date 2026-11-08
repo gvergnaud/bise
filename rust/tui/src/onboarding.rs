@@ -1768,6 +1768,10 @@ fn how_rows(i: usize, [a, me, b]: [&str; 3], w: u16) -> Vec<Line<'static>> {
     out
 }
 
+/// When "how it works" has drawn its last line, the foot and Gabriel's
+/// note (ms into the step): `how_lines`'s `shown(3)`.
+const HOW_ALL_MS: u64 = 400 + 3 * 900;
+
 fn how_lines(t: u64, gap: usize, w: u16, digits: bool) -> Vec<Line<'static>> {
     let shown = |i: u64| t >= 400 + i * 900;
     let mut v = vec![title(settings::first_how)];
@@ -1783,6 +1787,11 @@ fn how_lines(t: u64, gap: usize, w: u16, digits: bool) -> Vec<Line<'static>> {
     }
     blanks(&mut v, 1);
     v.push(if shown(3) { Line::from(s(HOW_FOOT, theme::faint())) } else { Line::raw("") });
+    // usage-metrics-plan step 6: Gabriel's note under the three lines, with them
+    blanks(&mut v, 1);
+    for row in crate::telemetry_note::rows(w as usize) {
+        v.push(if shown(3) { row } else { Line::raw("") });
+    }
     blanks(&mut v, gap);
     v.push(if shown(3) { keyline(&settings::first_how_key("{any key}")) } else { Line::raw("") });
     v
@@ -2016,6 +2025,7 @@ pub(crate) fn show(
     }
     let _ = terminal.clear();
     let mut mouse = Mouse::default();
+    let mut note_seen = false;
     let r = (|| -> io::Result<()> {
         loop {
             pump(app);
@@ -2040,6 +2050,11 @@ pub(crate) fn show(
                 theme::paint(f.buffer_mut()); // BISE-92: bise paints its ground
                 theme::asciify(f.buffer_mut()); // BISE-84: BISE_ASCII=1
             })?;
+            // usage-metrics-plan step 6: Gabriel's note was drawn (Lines, its lines shown): seen
+            if o.step == Step::Lines && now.saturating_sub(o.since) >= HOW_ALL_MS && !note_seen {
+                note_seen = true;
+                let _ = bise_usage::control::note_seen(&home_of(&real_env));
+            }
             terminal.backend_mut().set_pointer(mouse.shape())?;
             if !poll(Duration::from_millis(33))? {
                 continue;
@@ -2699,8 +2714,10 @@ mod tests {
         assert_eq!(l[5].spans[1].content, "i");
         assert_eq!(l[5].spans[1].style.fg, Some(theme::accent()));
         // each line fits the 64-column column (100 and 120 columns): one row
-        // each; title, gap, 3 lines and 2 blanks, blank, foot, gap, key
-        assert_eq!(l.len(), 1 + 2 + 5 + 1 + 1 + 2 + 1, "{:?}", l);
+        // each; title, gap, 3 lines and 2 blanks, blank, foot, blank,
+        // Gabriel's note (telemetry_note.rs), gap, key
+        let note = crate::telemetry_note::rows(64).len();
+        assert_eq!(l.len(), 1 + 2 + 5 + 1 + 1 + 1 + note + 2 + 1, "{:?}", l);
         // narrow: a line wraps at the words with a 3-column hanging indent
         let sc = screen(&o, 100 + LINES_END, 40, 30);
         assert!(flat(&sc).contains("2  i start an agent when a job needs one. they sync on their own"), "{}", sc);

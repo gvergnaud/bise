@@ -175,6 +175,14 @@ def quiet(core, seconds=3, timeout=120):
     wait.stable(lambda: len(core.evs), timeout, "the core quiet for %d s" % seconds, quiet=seconds)
 
 
+NEVER_RECORDED = ("core/telemetry",)
+
+
+def recordable(line):
+    """False for a line of a method never captured, by its kind (core/telemetry: the install id)."""
+    return not (isinstance(line, dict) and line.get("method") in NEVER_RECORDED)
+
+
 def drive(out, timeout):
     info = world_info()
     env = core_env(info)
@@ -184,6 +192,9 @@ def drive(out, timeout):
     lock = threading.Lock()
 
     def rec(line):
+        # the usage counts' view holds the install id: never in a capture (architect m_56355)
+        if not recordable(line):
+            return
         with lock:
             f.write(json.dumps(line, ensure_ascii=False) + "\n")
             f.flush()

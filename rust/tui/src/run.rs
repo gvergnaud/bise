@@ -207,6 +207,8 @@ pub(crate) fn run_tui(app: &mut App) -> io::Result<()> {
     // (BISE-284: at its end, main's composer holds `show me what you can do`)
     app.demo_after_onboarding = crate::onboarding::due(&|k| std::env::var(k).ok().filter(|v| !v.is_empty()));
     crate::onboarding::request_if_due(app);
+    // usage-metrics-plan step 6: Gabriel's note above the feed, once, for an install that never saw it
+    crate::telemetry_note::start(&crate::onboarding::home_of(&|k| std::env::var(k).ok().filter(|v| !v.is_empty())));
     // BISE-245: the setup card, when due, at the first hello
     crate::sb::setup::arm(app);
     let r = ui_loop(app, &mut terminal);

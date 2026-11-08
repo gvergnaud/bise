@@ -15,6 +15,7 @@ import { DistUpdateGroup, distRow } from './appupdate';
 import { Computer } from './computer';
 import { capsOf, chromeCase, homeOf } from './chrome';
 import { SetupPage } from './setupPage';
+import { TelemetryGroup } from './telemetry';
 import { KEY_SECTIONS } from './keys';
 import { appName, excludedApps, flag, getPref, knownApps, num, str, type Prefs } from './prefs';
 import type { SettingsData, SettingsPorts } from './Settings';
@@ -199,7 +200,12 @@ export function PageBody({ page, route, prefs, setPref, data, ports }: PageProps
       );
     }
     case 'privacy':
-      return <Privacy prefs={prefs} setPref={setPref} tg={tg} />;
+      return (
+        <>
+          <TelemetryGroup prefs={prefs} view={data.telemetry ?? null} send={ports.send} />
+          <Privacy prefs={prefs} setPref={setPref} tg={tg} />
+        </>
+      );
     case 'quiet': {
       const every = num(prefs, 'quiet.batch_min', 30);
       return (
