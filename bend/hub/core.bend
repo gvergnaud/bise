@@ -466,13 +466,19 @@ def spawn(-o: S.St, +cx: X.Cx<o>, +n: String, +resume: Bool) -> X.Cx<o>:
 # the reply a wait gets: its message's facts; its words go in the reply's
 # `message` body, the shell writes them into `message` (c6, architect
 # m_56453; law waiter_reply_names_its_message)
-def waiter_reply.fx(+w: X.Waiter, +m: S.Msg, +kind: String) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
-  F.reply(X.Waiter.token(w), ok_body([
+# a wait's answer about m, but its words: `message` is a body the shell
+# fills and sets in it (fx.rs Reply, c6 architect m_56453; law
+# waiter_reply_names_its_message)
+def waiter_reply.body(+w: X.Waiter, +m: S.Msg, +kind: String) -> J.Json:
+  ok_body([
     J.kv("type", J.JStr{kind}), J.kv("from", J.JStr{S.Msg.from(m)}),
     J.kv("message_id", J.JStr{mid(S.Msg.id(m))}),
     J.kv("thread", J.JStr{String.append("t_", ns(S.Msg.thread(m)))}),
     J.kv("expects_reply", J.JBool{S.Msg.expect(m)}), J.kv("auto", J.JBool{S.Msg.auto(m)}),
-    J.kv("asked", J.JStr{mid(X.Waiter.msg(w))})]), Some{K.BText{S.Msg.id(m)}})
+    J.kv("asked", J.JStr{mid(X.Waiter.msg(w))})])
+
+def waiter_reply.fx(+w: X.Waiter, +m: S.Msg, +kind: String) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  F.reply(X.Waiter.token(w), waiter_reply.body(w, m, kind), Some{K.BText{S.Msg.id(m)}})
 
 # a wait gets its message (the message is not marked delivered here)
 def waiter_reply(-o: S.St, +cx: X.Cx<o>, +w: X.Waiter, +m: S.Msg, +kind: String) -> X.Cx<o>:
@@ -696,7 +702,9 @@ def quiet_ok(a: Bool, e: Bool) -> {Bool.and(a, Bool.and(e, Bool.not(a))) == Fals
 def sent_of_snd(+s: Snd, +id: Nat, +thread: Nat, +now: Nat) -> S.Sent:
   match s:
     case Snd{+from, +to, +text, +expect, +reply_to, +plain, +auto, +queued, +via, +parts, +fwd}:
-      S.Sent{id, thread, from, to, reply_to, Bool.and(expect, Bool.not(auto)), auto, text, now, plain, queued, via, parts, fwd, None{}}
+      +m = S.Sent.with_reply_to(S.Sent.with_to(S.Sent.with_from(S.Sent.with_thread(S.Sent.with_id(S.Sent.empty(), id), thread), from), to), reply_to)
+      +m2 = S.Sent.with_created(S.Sent.with_text(S.Sent.with_auto(S.Sent.with_expect(m, Bool.and(expect, Bool.not(auto))), auto), text), now)
+      S.Sent.with_fwd(S.Sent.with_parts(S.Sent.with_via(S.Sent.with_queued(S.Sent.with_plain(m2, plain), queued), via), parts), fwd)
 
 # the message a send leaves in the state (its words in the journal)
 def msg_of_snd(+s: Snd, +id: Nat, +thread: Nat, +now: Nat) -> S.Msg:
@@ -2469,7 +2477,7 @@ def req_xsend(-o: S.St, pre: Maybe<&2, String>, +cx: X.Cx<o>, +token: Nat, +q: J
     case Some{+e}:
       reply_err(o, cx, token, e)
     case None{}:
-      xsend.fwd(o, XB.forward(st(o, cx), M.MAIN(), K.get_n(q, "msg"), FW.Orig.text(FW.orig_of(q))), cx, token, K.get_s(q, "project"), K.get_n(q, "msg"))
+      xsend.fwd(o, XB.forward(st(o, cx), M.MAIN(), K.get_n(q, "msg"), S.Orig.text(FW.orig_of(q))), cx, token, K.get_s(q, "project"), K.get_n(q, "msg"))
 
 def req_xask.go(-o: S.St, err: Maybe<&2, String>, +cx: X.Cx<o>, +token: Nat, +q: J.Json) -> X.Cx<o>:
   match err:
@@ -2928,7 +2936,7 @@ def open_question(+s: S.St, +asker: String, +me: String) -> Maybe<&2, Nat>:
 # the forward of `m` as the sender's message: its note (the text it
 # typed) and the header before m's text, the parts likewise, and m's id
 # on the message (law forward_records_source)
-def fwd_snd(+s: Snd, +m: S.Msg, +w: FW.Orig, +at: String) -> Snd:
+def fwd_snd(+s: Snd, +m: S.Msg, +w: S.Orig, +at: String) -> Snd:
   +note = Snd.text(s)
   +by = Snd.from(s)
   Snd.with_fwd(Snd.with_parts(Snd.with_text(s, FW.text(note, m, w, by, at)), FW.parts(note, m, w, by, at)), Some{S.Msg.id(m)})
@@ -3236,7 +3244,7 @@ def new_task(+parent: String, +q: J.Json) -> NewTask:
 # msg-forward: `sb spawn --forward m_<n>`: the brief gets the message main
 # got or sent as its last section, its parts behind the brief's (law
 # forward_brief_records_source: the brief's message carries the id)
-def new_task.fwd(t: NewTask, +m: S.Msg, +w: FW.Orig, +at: String) -> NewTask:
+def new_task.fwd(t: NewTask, +m: S.Msg, +w: S.Orig, +at: String) -> NewTask:
   match t:
     case NewTask{+parent, +base, +brief, +brief_text, +objective, +worktree, +with_changes, _, _}:
       NewTask{parent, base, brief, FW.brief(brief_text, m, w, parent, at), objective, worktree, with_changes, FW.brief_parts(brief_text, m, w, parent, at), Some{S.Msg.id(m)}}

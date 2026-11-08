@@ -219,6 +219,28 @@ def about_reads(root):
     return bad
 
 
+# c6 (architect m_56402): sb-core's state keeps no message's words; the
+# journal's message_sent (S.Sent) has them, the shell reads them there
+WORDLESS = {"Msg": ("text", "parts")}
+
+
+def words_in_state(root):
+    """The generated records that must not carry a message's words and do: (path, line, what)."""
+    bad = []
+    text = open(os.path.join(root, GEN)).read()
+    lines = text.splitlines()
+    for name, n in records_of(text):
+        if name not in WORDLESS:
+            continue
+        ctor = " ".join(lines[n:n + 40])
+        body = ctor[ctor.index(name + "{") + len(name) + 1:].split("}", 1)[0]
+        fields = {f.split(":", 1)[0].strip().lstrip("~+") for f in body.split(",")}
+        for f in WORDLESS[name]:
+            if f in fields:
+                bad.append((GEN, n, f"S.{name} has `{f}`: sb-core keeps no message's words (c6); the journal's S.Sent has them, the shell fills a Body"))
+    return bad
+
+
 def self_test():
     import tempfile
     with tempfile.TemporaryDirectory() as root:
@@ -229,6 +251,9 @@ def self_test():
         w("bend/hub/a.bend", "import ./gen/state.bend as S\ndef f(m: S.Msg) -> Nat:\n  match m:\n    case S.Msg{i, t}:\n      i\n")
         w("bend/proofs/p.bend", "import ../hub/gen/state.bend as HS\ndef g() -> HS.Msg:\n  HS.Msg.empty()\n# HS.Msg{1n} in a comment\n")
         w("bend/hub/b.bend", "type Msg is Data:\n  Msg{id: Nat}\n\ntype New is Data:\n  New{x: Nat}\n\ntype Op is Data:\n  OA{}\n  OB{x: Nat}\n")
+        # a message's words back in sb-core's state go red, once per field
+        got = words_in_state(root)
+        assert [(p, n, w.split("`")[1]) for p, n, w in got] == [(GEN, 5, "text")], f"self-test: words in state {got}"
         got = check(root, migrating=set(), hand=set())
         want = [("bend/hub/a.bend", 4), ("bend/hub/b.bend", 1), ("bend/hub/b.bend", 4)]
         seen = sorted((p, n) for p, n, _ in got)
@@ -282,7 +307,7 @@ def main():
     if not os.path.exists(os.path.join(ROOT, GEN)):
         print(f"state_guard: no {GEN} (bless core_gen)")
         return 1
-    bad = check(ROOT) + rts_writers(ROOT)
+    bad = check(ROOT) + rts_writers(ROOT) + words_in_state(ROOT)
     for p, n, what in bad:
         print(f"{p}:{n}: {what}")
     with open(os.path.abspath(__file__)) as f:

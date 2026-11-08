@@ -73,6 +73,10 @@ type Msg is Data:
 type Sent is Data:
   Sent{id: Nat, thread: Nat, from: String, to: String, reply_to: Maybe<&2, Nat>, expect: Bool, auto: Bool, text: String, created: Nat, plain: Bool, queued: Bool, via: Maybe<&2, String>, parts: String, fwd: Maybe<&2, Nat>, view: Maybe<&2, String>}
 
+# a forwarded message's words as the shell puts them on a forward request (`orig`, switchboard forward.rs): sb-core keeps no message's words (c6), the journal does
+type Orig is Data:
+  Orig{text: String, parts: String}
+
 # a message, its delivery state and whether it got its (first) reply
 type MRec is Data:
   MRec{msg: Msg, st: MSt, settled: Bool}
@@ -599,6 +603,44 @@ def Sent.over_view(r: Sent, g: Maybe<&2, String> -> Maybe<&2, String>) -> Sent:
 
 def Sent.open(+r: Sent) -> Sent:
   Sent.with_view(Sent.with_fwd(Sent.with_parts(Sent.with_via(Sent.with_queued(Sent.with_plain(Sent.with_created(Sent.with_text(Sent.with_auto(Sent.with_expect(Sent.with_reply_to(Sent.with_to(Sent.with_from(Sent.with_thread(Sent.with_id(Sent.empty(), Sent.id(r)), Sent.thread(r)), Sent.from(r)), Sent.to(r)), Sent.reply_to(r)), Sent.expect(r)), Sent.auto(r)), Sent.text(r)), Sent.created(r)), Sent.plain(r)), Sent.queued(r)), Sent.via(r)), Sent.parts(r)), Sent.fwd(r)), Sent.view(r))
+
+# ---- Orig ----
+
+def Orig.empty() -> Orig:
+  Orig{"", ""}
+
+def Orig.text(r: Orig) -> String:
+  match r:
+    case Orig{f0, _}:
+      f0
+
+def Orig.with_text(r: Orig, v: String) -> Orig:
+  match r:
+    case Orig{_, f1}:
+      Orig{v, f1}
+
+def Orig.over_text(r: Orig, g: String -> String) -> Orig:
+  match r:
+    case Orig{f0, f1}:
+      Orig{g(f0), f1}
+
+def Orig.parts(r: Orig) -> String:
+  match r:
+    case Orig{_, f1}:
+      f1
+
+def Orig.with_parts(r: Orig, v: String) -> Orig:
+  match r:
+    case Orig{f0, _}:
+      Orig{f0, v}
+
+def Orig.over_parts(r: Orig, g: String -> String) -> Orig:
+  match r:
+    case Orig{f0, f1}:
+      Orig{f0, g(f1)}
+
+def Orig.open(+r: Orig) -> Orig:
+  Orig.with_parts(Orig.with_text(Orig.empty(), Orig.text(r)), Orig.parts(r))
 
 # ---- MRec ----
 

@@ -92,7 +92,9 @@ def proxy(real, cap):
                 if not back:
                     return
                 # captured before the hub reads it: what it saw is on file
-                rec = json.dumps({"in": json.loads(line), "out": json.loads(back)}) + "\n"
+                # `hub`: this proxy, so the lines of hubs side by side part
+                # (core_same.py steps replays each hub's own)
+                rec = json.dumps({"in": json.loads(line), "out": json.loads(back), "hub": os.getpid()}) + "\n"
                 with open(cap, "a") as f:
                     fcntl.flock(f, fcntl.LOCK_EX)
                     f.write(rec)

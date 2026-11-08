@@ -138,12 +138,36 @@ def Laws.you_parts_follow_the_id(o, cx, name, m, e):
   %Equal.sym(Bool, HS.Msg.has_parts(m), True{}, e) : {HLZ.pick(HX.Cx<o>, Bool.not(_), u => ln, u => HC.feed(o, ln, name, rec)) == HC.feed(o, ln, name, rec) : HX.Cx<o>}
   {==}
 
-# the message opened: with_has_parts and its getters unfold, and the
-# line without parts adds nothing
+# with_has_parts keeps the message's id and via (its eta law)
+def hub_whp_id(+m: HS.Msg, +p: Bool) -> {HS.Msg.id(HS.Msg.with_has_parts(m, p)) == HS.Msg.id(m) : Nat}:
+  %HSL.Msg.has_parts.eta(m, p) : {HS.Msg.id(_) == HS.Msg.id(m) : Nat}
+  {==}
+
+def hub_whp_via(+m: HS.Msg, +p: Bool) -> {HS.Msg.via(HS.Msg.with_has_parts(m, p)) == HS.Msg.via(m) : Maybe<&2, String>}:
+  %HSL.Msg.has_parts.eta(m, p) : {HS.Msg.via(_) == HS.Msg.via(m) : Maybe<&2, String>}
+  {==}
+
+# his line of m with or without parts: the same you and you-id lines (m's
+# id and via), then its parts as `p` says
+def hub_whp_line(-o: HS.St, +cx: HX.Cx<o>, +name: String, +m: HS.Msg, +p: Bool)
+    -> {HC.deliver.line(o, False{}, True{}, cx, name, HS.Msg.with_has_parts(m, p))
+      == HC.you_parts(o, HC.feed(o, HC.feed(o, cx, name, HFD.you(HK.BText{HS.Msg.id(m)}, HS.Msg.via(m))), name, HFD.you_id(HS.Msg.id(m))), name, p, HK.BParts{HS.Msg.id(m)}) : HX.Cx<o>}:
+  +w = HS.Msg.with_has_parts(m, p)
+  +i = HS.Msg.id(m)
+  +v = HS.Msg.via(m)
+  +want = HC.you_parts(o, HC.feed(o, HC.feed(o, cx, name, HFD.you(HK.BText{i}, v)), name, HFD.you_id(i)), name, p, HK.BParts{i})
+  %Equal.sym(Nat, HS.Msg.id(w), i, hub_whp_id(m, p)) : {HC.you_parts(o, HC.feed(o, HC.feed(o, cx, name, HFD.you(HK.BText{_}, HS.Msg.via(w))), name, HFD.you_id(_)), name, HS.Msg.has_parts(w), HK.BParts{_}) == want : HX.Cx<o>}
+  %Equal.sym(Maybe<&2, String>, HS.Msg.via(w), v, hub_whp_via(m, p)) : {HC.you_parts(o, HC.feed(o, HC.feed(o, cx, name, HFD.you(HK.BText{i}, _)), name, HFD.you_id(i)), name, HS.Msg.has_parts(w), HK.BParts{i}) == want : HX.Cx<o>}
+  %Equal.sym(Bool, HS.Msg.has_parts(w), p, HSL.Msg.has_parts.get_with(m, p)) : {HC.you_parts(o, HC.feed(o, HC.feed(o, cx, name, HFD.you(HK.BText{i}, v)), name, HFD.you_id(i)), name, _, HK.BParts{i}) == want : HX.Cx<o>}
+  {==}
+
+# both sides are hub_whp_line's: without parts its you_parts adds nothing
 def Laws.parts_never_change_text(o, cx, name, m, p):
-  match m:
-    case HS.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, has, fwd, view}:
-      {==}
+  +i = HS.Msg.id(m)
+  +ln = HC.feed(o, HC.feed(o, cx, name, HFD.you(HK.BText{i}, HS.Msg.via(m))), name, HFD.you_id(i))
+  %Equal.sym(HX.Cx<o>, HC.deliver.line(o, False{}, True{}, cx, name, HS.Msg.with_has_parts(m, False{})), HC.you_parts(o, ln, name, False{}, HK.BParts{i}), hub_whp_line(o, cx, name, m, False{}))
+    : {HC.deliver.line(o, False{}, True{}, cx, name, HS.Msg.with_has_parts(m, p)) == HC.you_parts(o, _, name, p, HK.BParts{i}) : HX.Cx<o>}
+  hub_whp_line(o, cx, name, m, p)
 
 def Laws.no_parts_no_line(o, cx, who, card, said):
   {==}

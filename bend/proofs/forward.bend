@@ -44,5 +44,5 @@ def Laws.forward_no_note_parts(m, w, by, at):
   {==}
 
 def Laws.forward_plain_original(w, e):
-  %Equal.sym(String, HFW.Orig.parts(w), "", e) : {HFW.orig.of(J.parse(_), w) == [HFW.text_part(HFW.Orig.text(w))] : List<&2, J.Json>}
+  %Equal.sym(String, HS.Orig.parts(w), "", e) : {HFW.orig.of(J.parse(_), w) == [HFW.text_part(HS.Orig.text(w))] : List<&2, J.Json>}
   {==}

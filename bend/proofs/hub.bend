@@ -79,6 +79,9 @@ def hv_stop_d(-o: HS.St, +cx: HX.Cx<o>, +n: String, +life: HS.Life, +why: String
     PL1.hub_d_with_r(o, vd, HX.R.with_waiters(HC.rr(o, vd), HX.waiters_not(HX.R.waiters(HC.rr(o, cx)), n))),
     PL1.hub_d_with_r(o, wg, HX.R.with_ctx(HC.rr(o, wg), HVC.drop(HX.R.ctx(HC.rr(o, wg)), n))))
 
+def Laws.waiter_reply_names_its_message(w, m, kind):
+  {==}
+
 def Laws.stop_leaves_no_waiter(o, cx, n, life, why):
   PL1.hub_none_tr(HC.waiters_of_cx(o, HC.stop_task(o, cx, n, life, why)), HX.waiters_not(HX.R.waiters(HX.Cx.r(o, cx)), n), n,
     PL1.hub_set_waiters(o, HC.view_ctx_drop(o, HC.wakes_gone(o, life, HC.timers_gone(o, life, HC.stop_task.go(o, cx, n, life, why), n), n), n), HX.waiters_not(HX.R.waiters(HX.Cx.r(o, cx)), n)),

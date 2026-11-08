@@ -454,10 +454,11 @@ def MRec.to(+r: S.MRec, +to: String) -> S.MRec:
 # the message a message_sent line leaves in the state: its header and
 # whether it has parts; its words stay in the journal (c6, architect
 # m_56402: what sb-core writes of them is a body the shell fills)
-def msg_of_sent(s: S.Sent) -> S.Msg:
-  match s:
-    case S.Sent{+id, +thread, +from, +to, +reply_to, +expect, +auto, _, +created, +plain, +queued, +via, +parts, +fwd, +view}:
-      S.Msg{id, thread, from, to, reply_to, expect, auto, created, plain, queued, via, Bool.not(String.is_empty(parts)), fwd, view}
+def msg_of_sent(+s: S.Sent) -> S.Msg:
+  +m = S.Msg.with_reply_to(S.Msg.with_to(S.Msg.with_from(S.Msg.with_thread(S.Msg.with_id(S.Msg.empty(), S.Sent.id(s)), S.Sent.thread(s)), S.Sent.from(s)), S.Sent.to(s)), S.Sent.reply_to(s))
+  +m2 = S.Msg.with_plain(S.Msg.with_created(S.Msg.with_auto(S.Msg.with_expect(m, S.Sent.expect(s)), S.Sent.auto(s)), S.Sent.created(s)), S.Sent.plain(s))
+  +m3 = S.Msg.with_has_parts(S.Msg.with_via(S.Msg.with_queued(m2, S.Sent.queued(s)), S.Sent.via(s)), Bool.not(String.is_empty(S.Sent.parts(s))))
+  S.Msg.with_view(S.Msg.with_fwd(m3, S.Sent.fwd(s)), S.Sent.view(s))
 
 def new_rec(+m: S.Msg) -> S.MRec:
   S.MRec.with_st(S.MRec.with_msg(S.MRec.empty(), m), S.Queued{"new"})

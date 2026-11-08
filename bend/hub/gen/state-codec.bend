@@ -1571,6 +1571,59 @@ def Sent.journal_round(x):
     case S.Sent{id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view}:
       Sent.journal_round_by_fields(id, thread, from, to, reply_to, expect, auto, text, created, plain, queued, via, parts, fwd, view)
 
+# ---- Orig, its journal shape: text, parts ----
+
+def Orig.journal_kvs(r: S.Orig) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:
+  match r:
+    case S.Orig{+text, +parts}:
+      K.cat([[J.kv("text", J.JStr{text})], K.omit_s("parts", parts)])
+
+def Orig.journal_json(r: S.Orig) -> J.Json:
+  J.obj(Orig.journal_kvs(r))
+
+def Orig.journal_of(+j: J.Json) -> S.Orig:
+  S.Orig{rd.s(J.get(j, "text")), rd.s(J.get(j, "parts"))}
+
+law Orig.journal.text:
+  for +text: String
+  for +parts: String
+  {rd.s(J.get(J.obj(Orig.journal_kvs(S.Orig{text, parts})), "text")) == text : String}
+
+def Orig.journal.text(text, parts):
+  {==}
+
+law Orig.journal.parts:
+  for +text: String
+  for +parts: String
+  {rd.s(J.get(J.obj(Orig.journal_kvs(S.Orig{text, parts})), "parts")) == parts : String}
+
+def Orig.journal.parts(text, parts):
+  match parts:
+    case SNil{}:
+      {==}
+    case SCon{parts_h, parts_t}:
+      {==}
+
+# the fields it carries come back (the others at their default)
+law Orig.journal_round_by_fields:
+  for +text: String
+  for +parts: String
+  {Orig.journal_of(Orig.journal_json(S.Orig{text, parts})) == S.Orig{text, parts} : S.Orig}
+
+def Orig.journal_round_by_fields(text, parts):
+  %Equal.sym(String, rd.s(J.get(J.obj(Orig.journal_kvs(S.Orig{text, parts})), "text")), text, Orig.journal.text(text, parts)) : {S.Orig{_, rd.s(J.get(J.obj(Orig.journal_kvs(S.Orig{text, parts})), "parts"))} == S.Orig{text, parts} : S.Orig}
+  %Equal.sym(String, rd.s(J.get(J.obj(Orig.journal_kvs(S.Orig{text, parts})), "parts")), parts, Orig.journal.parts(text, parts)) : {S.Orig{text, _} == S.Orig{text, parts} : S.Orig}
+  {==}
+
+law Orig.journal_round:
+  for x: S.Orig
+  {Orig.journal_of(Orig.journal_json(x)) == x : S.Orig}
+
+def Orig.journal_round(x):
+  match x:
+    case S.Orig{text, parts}:
+      Orig.journal_round_by_fields(text, parts)
+
 # ---- MRec, its photo shape: msg, st, settled ----
 
 def MRec.photo_kvs(r: S.MRec) -> List<&2, Sigma<&2, &2, String, _ => J.Json>>:

@@ -13,7 +13,7 @@ import ../vendor/json.bend as J
 law forward_records_source:
   for +s: HC.Snd
   for +m: HS.Msg
-  for +w: HFW.Orig
+  for +w: HS.Orig
   for +at: String
   {HC.Snd.fwd(HC.fwd_snd(s, m, w, at)) == Some{HS.Msg.id(m)} : Maybe<&2, Nat>}
 
@@ -21,7 +21,7 @@ law forward_records_source:
 law forward_brief_records_source:
   for t: HC.NewTask
   for +m: HS.Msg
-  for +w: HFW.Orig
+  for +w: HS.Orig
   for +at: String
   {HC.NewTask.fwd(HC.new_task.fwd(t, m, w, at)) == Some{HS.Msg.id(m)} : Maybe<&2, Nat>}
 
@@ -53,10 +53,10 @@ law forward_unknown:
 law forward_keeps_text:
   for +note: String
   for +m: HS.Msg
-  for +w: HFW.Orig
+  for +w: HS.Orig
   for +by: String
   for +at: String
-  {HFW.text(note, m, w, by, at) == String.append(HFW.lead(note, m, by, at), HFW.Orig.text(w)) : String}
+  {HFW.text(note, m, w, by, at) == String.append(HFW.lead(note, m, by, at), HS.Orig.text(w)) : String}
 
 # LAW: no note: the lead is the header alone.
 law forward_no_note:
@@ -80,7 +80,7 @@ law forward_names_source:
 # rust/switchboard/src/core_forward_tests.rs (Bend has no parts render).
 law forward_no_note_parts:
   for +m: HS.Msg
-  for +w: HFW.Orig
+  for +w: HS.Orig
   for +by: String
   for +at: String
   {HFW.parts("", m, w, by, at) == J.stringify(J.JArr{HFW.fwd_part(m, by, at) <> HFW.orig(w)}) : String}
@@ -88,6 +88,6 @@ law forward_no_note_parts:
 # LAW: an original without parts is forwarded as its text, one text
 # part: a forward always has parts, so every client draws it from them.
 law forward_plain_original:
-  for +w: HFW.Orig
-  for e: {HFW.Orig.parts(w) == "" : String}
-  {HFW.orig(w) == [HFW.text_part(HFW.Orig.text(w))] : List<&2, J.Json>}
+  for +w: HS.Orig
+  for e: {HS.Orig.parts(w) == "" : String}
+  {HFW.orig(w) == [HFW.text_part(HS.Orig.text(w))] : List<&2, J.Json>}

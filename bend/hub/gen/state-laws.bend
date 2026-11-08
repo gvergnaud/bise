@@ -1479,6 +1479,117 @@ def Sent.open_eq(r):
     case S.Sent{f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14}:
       {==}
 
+# ---- Orig ----
+
+law Orig.text.get_with:
+  for r: S.Orig
+  for v: String
+  {S.Orig.text(S.Orig.with_text(r, v)) == v : String}
+
+def Orig.text.get_with(r, v):
+  match r:
+    case S.Orig{f0, f1}:
+      {==}
+
+law Orig.text.eta:
+  for r: S.Orig
+  for v: String
+  {S.Orig{v, S.Orig.parts(r)} == S.Orig.with_text(r, v) : S.Orig}
+
+def Orig.text.eta(r, v):
+  match r:
+    case S.Orig{f0, f1}:
+      {==}
+
+law Orig.text.set_get:
+  for r: S.Orig
+  {S.Orig.with_text(r, S.Orig.text(r)) == r : S.Orig}
+
+def Orig.text.set_get(r):
+  match r:
+    case S.Orig{f0, f1}:
+      {==}
+
+law Orig.text.set_set:
+  for r: S.Orig
+  for a: String
+  for b: String
+  {S.Orig.with_text(S.Orig.with_text(r, a), b) == S.Orig.with_text(r, b) : S.Orig}
+
+def Orig.text.set_set(r, a, b):
+  match r:
+    case S.Orig{f0, f1}:
+      {==}
+
+law Orig.text.over:
+  for r: S.Orig
+  for g: String -> String
+  {S.Orig.over_text(r, g) == S.Orig.with_text(r, g(S.Orig.text(r))) : S.Orig}
+
+def Orig.text.over(r, g):
+  match r:
+    case S.Orig{f0, f1}:
+      {==}
+
+law Orig.parts.get_with:
+  for r: S.Orig
+  for v: String
+  {S.Orig.parts(S.Orig.with_parts(r, v)) == v : String}
+
+def Orig.parts.get_with(r, v):
+  match r:
+    case S.Orig{f0, f1}:
+      {==}
+
+law Orig.parts.eta:
+  for r: S.Orig
+  for v: String
+  {S.Orig{S.Orig.text(r), v} == S.Orig.with_parts(r, v) : S.Orig}
+
+def Orig.parts.eta(r, v):
+  match r:
+    case S.Orig{f0, f1}:
+      {==}
+
+law Orig.parts.set_get:
+  for r: S.Orig
+  {S.Orig.with_parts(r, S.Orig.parts(r)) == r : S.Orig}
+
+def Orig.parts.set_get(r):
+  match r:
+    case S.Orig{f0, f1}:
+      {==}
+
+law Orig.parts.set_set:
+  for r: S.Orig
+  for a: String
+  for b: String
+  {S.Orig.with_parts(S.Orig.with_parts(r, a), b) == S.Orig.with_parts(r, b) : S.Orig}
+
+def Orig.parts.set_set(r, a, b):
+  match r:
+    case S.Orig{f0, f1}:
+      {==}
+
+law Orig.parts.over:
+  for r: S.Orig
+  for g: String -> String
+  {S.Orig.over_parts(r, g) == S.Orig.with_parts(r, g(S.Orig.parts(r))) : S.Orig}
+
+def Orig.parts.over(r, g):
+  match r:
+    case S.Orig{f0, f1}:
+      {==}
+
+law Orig.open_eq:
+  for r: S.Orig
+  {S.Orig.open(r) == r : S.Orig}
+
+def Orig.open_eq(r):
+  match r:
+    case S.Orig{f0, f1}:
+      {==}
+
 # ---- MRec ----
 
 law MRec.msg.get_with:

@@ -438,6 +438,12 @@ pub const STATE: State = State {
             }],
         },
         Record {
+            name: "Orig",
+            doc: "a forwarded message's words as the shell puts them on a forward request (`orig`, switchboard forward.rs): sb-core keeps no message's words (c6), the journal does",
+            fields: &[f("text", Str), f("parts", Str)],
+            shapes: &[Shape { name: "journal", read: true, keys: &[k("text", W::Str), k("parts", W::StrOmit)] }],
+        },
+        Record {
             name: "MRec",
             doc: "a message, its delivery state and whether it got its (first) reply",
             fields: &[f("msg", T("Msg")), fd("st", T("MSt"), "Queued{\"\"}"), f("settled", Bool)],

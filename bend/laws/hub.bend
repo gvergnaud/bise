@@ -68,6 +68,15 @@ law tick_clears_late_waiters:
   for +cx: HX.Cx<o>
   HC.Later(HC.waiters_of_cx(o, HC.tick(o, cx)), HX.R.now(HX.Cx.r(o, cx)))
 
+# LAW: the reply to `sb wait` names the message it got by its id (c6,
+# architect m_56453): sb-core keeps no words; the shell fills that body
+# and sets it as the reply's `message`, never another message's words.
+law waiter_reply_names_its_message:
+  for +w: HX.Waiter
+  for +m: HS.Msg
+  for +kind: String
+  {HC.waiter_reply.fx(w, m, kind) == HF.reply(HX.Waiter.token(w), HC.waiter_reply.body(w, m, kind), Some{HK.BText{HS.Msg.id(m)}}) : List<&2, Sigma<&2, &2, String, _ => J.Json>>}
+
 # LAW: stopping or dropping a task leaves no wait of it behind (each got
 # its `stopped` error), whatever the state.
 law stop_leaves_no_waiter:

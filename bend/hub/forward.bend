@@ -19,6 +19,7 @@
 import Base
 import ./model.bend as M
 import ./gen/state.bend as S
+import ./gen/state-codec.bend as SC
 import ../vendor/json.bend as J
 
 type Door is Data:
@@ -92,29 +93,14 @@ def lead(+note: String, +m: S.Msg, +by: String, +at: String) -> String:
 
 # the original's words: sb-core's state keeps no message's words (c6),
 # the shell reads them from the journal and puts them on the request
-# (`orig`: its text, its parts' JSON or ""; switchboard forward.rs keys)
-type Orig is Data:
-  Orig{text: String, parts: String}
-
-def Orig.text(o: Orig) -> String:
-  match o:
-    case Orig{+t, _}:
-      t
-
-def Orig.parts(o: Orig) -> String:
-  match o:
-    case Orig{_, +p}:
-      p
-
-# the request's `orig` (missing: no words, the shell's Missing text
-# otherwise)
-def orig_of(+q: J.Json) -> Orig:
-  +j = Maybe.default(&2, J.Json, J.get(q, "orig"), J.JNull{})
-  Orig{J.get_str_or(j, "text", ""), J.get_str_or(j, "parts", "")}
+# (`orig`, an S.Orig: its text, its parts' JSON or ""; switchboard
+# forward.rs keys). Missing: no words; the shell's Missing text otherwise.
+def orig_of(+q: J.Json) -> S.Orig:
+  SC.Orig.journal_of(Maybe.default(&2, J.Json, J.get(q, "orig"), J.JNull{}))
 
 # the forward's text: the lead, then the original's text whole
-def text(+note: String, +m: S.Msg, +w: Orig, +by: String, +at: String) -> String:
-  String.append(lead(note, m, by, at), Orig.text(w))
+def text(+note: String, +m: S.Msg, +w: S.Orig, +by: String, +at: String) -> String:
+  String.append(lead(note, m, by, at), S.Orig.text(w))
 
 # a text part
 def text_part(+t: String) -> J.Json:
@@ -129,15 +115,15 @@ def fwd_part(+m: S.Msg, +by: String, +at: String) -> J.Json:
     J.kv("to", J.JStr{S.Msg.to(m)}), J.kv("at", J.JStr{at}), J.kv("by", J.JStr{by})])
 
 # the original's parts: its own, or its text as one text part
-def orig.of(r: Result<&2, &2, String, J.Json>, +w: Orig) -> List<&2, J.Json>:
+def orig.of(r: Result<&2, &2, String, J.Json>, +w: S.Orig) -> List<&2, J.Json>:
   match r:
     case Done{J.JArr{+xs}}:
       xs
     case _:
-      [text_part(Orig.text(w))]
+      [text_part(S.Orig.text(w))]
 
-def orig(+w: Orig) -> List<&2, J.Json>:
-  orig.of(J.parse(Orig.parts(w)), w)
+def orig(+w: S.Orig) -> List<&2, J.Json>:
+  orig.of(J.parse(S.Orig.parts(w)), w)
 
 # the note's part, with the blank line before the header (none: none)
 def note_parts.pick(empty: Bool, +note: String) -> List<&2, J.Json>:
@@ -152,7 +138,7 @@ def note_parts(+note: String) -> List<&2, J.Json>:
 
 # the forward's parts: the note's, the forwarded part, then the
 # original's; never none, so every client draws it from its parts
-def parts(+note: String, +m: S.Msg, +w: Orig, +by: String, +at: String) -> String:
+def parts(+note: String, +m: S.Msg, +w: S.Orig, +by: String, +at: String) -> String:
   J.stringify(J.JArr{List.append(&2, J.Json, note_parts(note), fwd_part(m, by, at) <> orig(w))})
 
 # `sb spawn --forward`: the brief, then its last section, the forwarded
@@ -160,10 +146,10 @@ def parts(+note: String, +m: S.Msg, +w: Orig, +by: String, +at: String) -> Strin
 def brief_lead(+brief: String, +m: S.Msg, +by: String, +at: String) -> String:
   String.concat([brief, "\n\n## Forwarded message\n\n", header(m, by, at)])
 
-def brief(+brief: String, +m: S.Msg, +w: Orig, +by: String, +at: String) -> String:
-  String.append(brief_lead(brief, m, by, at), Orig.text(w))
+def brief(+brief: String, +m: S.Msg, +w: S.Orig, +by: String, +at: String) -> String:
+  String.append(brief_lead(brief, m, by, at), S.Orig.text(w))
 
 # the brief's parts: the brief and its section's title, the forwarded
 # part, then the original's
-def brief_parts(+brief: String, +m: S.Msg, +w: Orig, +by: String, +at: String) -> String:
+def brief_parts(+brief: String, +m: S.Msg, +w: S.Orig, +by: String, +at: String) -> String:
   J.stringify(J.JArr{text_part(String.concat([brief, "\n\n## Forwarded message\n\n"])) <> fwd_part(m, by, at) <> orig(w)})
