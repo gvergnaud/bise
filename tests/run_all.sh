@@ -200,8 +200,17 @@ printf '%s\n' $TESTS | xargs -P "$jobs" -I{} bash -c 'one {}' || rc=$?
 if [ $rc != 0 ] && [ "$jobs" -gt 1 ] && [ -s "$out/failed" ] && [ "$(wc -l <"$out/failed")" -le "$rerun_max" ]; then
   first="$(sort -u "$out/failed")"; mv "$out/failed" "$out/failed.pool"
   echo "== failed in the pool: $(echo $first), once more alone"
+  # the pool's red kept aside (the rerun writes its own): a flake's red goes to
+  # <gate dir>/flaky-logs for 7 days (tests/flaky_keep.py), else it went with $out
+  for t in $first; do
+    mv "$out/$t.log" "$out/$t.pool.log" 2>/dev/null || true
+    [ -d "$out/$t.keep" ] && mv "$out/$t.keep" "$out/$t.pool.keep"
+  done
   for t in $first; do one "$t" || true; done
-  if [ ! -s "$out/failed" ]; then rc=0; flaky_note e2e $first; fi
+  if [ ! -s "$out/failed" ]; then
+    rc=0; flaky_note e2e $first
+    [ "$flaky" != /dev/null ] && python3 -B tests/flaky_keep.py "$(dirname "$flaky")" "$rev" "$out" $first
+  fi
 fi
 if [ $rc != 0 ]; then
   for f in "$out"/*.log; do grep -q -E "Error|FAIL|Traceback|FALSE|fail" "$f" && { echo "---- $f"; tail -15 "$f"; }; done

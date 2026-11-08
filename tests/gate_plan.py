@@ -122,7 +122,7 @@ SELFTESTS = [
     ("gate_sweep_test", "python3 -B tests/gate_sweep_test.py", ("tests/gate_sweep_test.py", "tests/gate.sh",
                                                                  "tests/run_all.sh")),
     # a red e2e test keeps its world's logs
-    ("keep_logs_test", "python3 -B tests/keep_logs_test.py", ("tests/keep_logs_test.py", "tests/e2e.py",
+    ("keep_logs_test", "python3 -B tests/keep_logs_test.py", ("tests/keep_logs_test.py", "tests/e2e.py", "tests/flaky_keep.py",
                                                                "tests/run_all.sh", "tests/gate.sh")),
     # every agent's gate takes heavy-run's queue, one gate a tree (5 s)
     ("gate_queue_test", "python3 -B tests/gate_queue_test.py",

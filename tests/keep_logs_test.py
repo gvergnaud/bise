@@ -88,8 +88,34 @@ def main():
     p2.terminate()
     rc2 = p2.wait(timeout=20)
     check(rc2 == -15, "a second TERM during a blocked finally kills it: %r" % rc2)
+    # a flake keeps its red (tests/flaky_keep.py): the pool's log and world, capped, in
+    # <gate dir>/flaky-logs/<epoch>-<rev>-<test>/; a folder there older than 7 days goes
+    out, gdir = os.path.join(tmp, "out"), os.path.join(tmp, "gate")
+    write(os.path.join(out, "amb_e2e.pool.log"), b"c" * (e2e.KEEP_FILE_MAX + 10) + b"FAIL the red line\n")
+    write(os.path.join(out, "amb_e2e.log"), b"PASS the rerun\n")
+    write(os.path.join(out, "amb_e2e.pool.keep", "st", "hub.log"), b"the red's hub line\n")
+    old = os.path.join(gdir, "flaky-logs", "1-abc-old_e2e")
+    write(os.path.join(old, "old_e2e.log"), b"old")
+    os.utime(old, (1, 1))
+    r = subprocess.run([sys.executable, "-B", os.path.join(HERE, "flaky_keep.py"), gdir, "r1", out, "amb_e2e"],
+                       capture_output=True, text=True)
+    kept = [d for d in os.listdir(os.path.join(gdir, "flaky-logs"))]
+    check(r.returncode == 0 and len(kept) == 1 and kept[0].endswith("-r1-amb_e2e") and kept[0] in r.stdout,
+          "flaky_keep: one folder <epoch>-<rev>-<test>, named on its line, the 7-day-old one gone: %s %r" % (kept, r.stdout))
+    fk = os.path.join(gdir, "flaky-logs", kept[0]) if kept else tmp
+    red = open(os.path.join(fk, "amb_e2e.log"), "rb").read() if os.path.exists(os.path.join(fk, "amb_e2e.log")) else b""
+    check(len(red) == e2e.KEEP_FILE_MAX and red.endswith(b"FAIL the red line\n"),
+          "flaky_keep: the pool's red log (not the green rerun's), its last %d bytes" % e2e.KEEP_FILE_MAX)
+    check(os.path.exists(os.path.join(fk, "world", "st", "hub.log")), "flaky_keep: the red's world logs too")
+    open(os.path.join(tmp, "f"), "w").close()
+    r = subprocess.run([sys.executable, "-B", os.path.join(HERE, "flaky_keep.py"), os.path.join(tmp, "f"), "r1", out, "x"],
+                       capture_output=True, text=True)
+    check(r.returncode == 0 and "not kept" in r.stdout, "flaky_keep: a gate dir it can't write is one line, rc 0: %r" % r.stdout)
     # the wiring
     run_all = open(os.path.join(HERE, "run_all.sh")).read()
+    check('mv "$out/$t.log" "$out/$t.pool.log"' in run_all and 'mv "$out/$t.keep" "$out/$t.pool.keep"' in run_all
+          and 'python3 -B tests/flaky_keep.py "$(dirname "$flaky")" "$rev" "$out" $first' in run_all,
+          "run_all: the pool's reds set aside before the rerun, a flake's kept by flaky_keep")
     gate = open(os.path.join(HERE, "gate.sh")).read()
     src = open(os.path.join(HERE, "e2e.py")).read()
     check('RUN_ALL_KEEP="$out/$1.keep"' in run_all and "its world's logs: $out/$1.keep" in run_all,
