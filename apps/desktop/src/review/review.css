@@ -57,33 +57,37 @@
   margin: 0 var(--pad-row-x) var(--gap-section);
 }
 
-/* the simple mode's parts (page review-guided): a kind's GroupLabel ('Code · 3 files · +104 −18'),
-   then each folder's line (the path, mono, dim) over its files; the first part's label sits at the
-   body's top, as the first file did */
-.rv-part:first-of-type > .b-glabel,
+/* the simple mode's parts (page review-guided; designer m_57412): a kind's head is the chapter (its
+   name 13/600 in ink, then its facts dim, a faint chevron: he folds any kind; Generated starts
+   folded), a folder's line the stop (mono 12, text-2), then that folder's cards. One left edge for
+   the head, the folder line and the cards; the space shows the levels: 24 above a kind (0 for the
+   first), 12 above a folder line, 8 from it to its first card, 8 between cards. */
+.rv-part > .b-fold {
+  height: var(--h-group);
+  margin: var(--s-6) var(--pad-row-x) 0;
+}
 .rv-part:first-of-type > .b-fold {
   margin-top: 0;
 }
-/* a folder's files: the next folder's line a section's gap below the last file */
-.rv-group + .rv-group {
-  margin-top: var(--gap-block);
+.rv-kind {
+  font: 600 var(--t-13) var(--font-ui);
+  color: var(--c-text);
+}
+.rv-facts {
+  font: var(--t-13) var(--font-ui);
+  color: var(--c-text-3);
+  white-space: pre;
+}
+.rv-group {
+  margin-top: var(--s-3);
 }
 .rv-folder {
-  margin: 0 var(--pad-row-x) var(--gap-tight);
+  margin: 0 var(--pad-row-x) var(--s-2);
   font: var(--t-12) var(--font-mono);
-  color: var(--c-text-3);
+  color: var(--c-text-2);
 }
-/* Generated, folded: one row at the label's place, its chevron on the text edge */
-.rv-part > .b-fold {
-  height: var(--h-group);
-  margin: var(--s-4) var(--pad-row-x) var(--gap-section);
-  padding-inline: var(--s-1);
-}
-.rv-part > .b-fold.open {
-  margin-bottom: var(--gap-tight);
-}
-.rv-fold-words {
-  font: 500 var(--f-meta);
+.rv-group > .rv-file {
+  margin-bottom: var(--s-2);
 }
 
 /* the diff on its way: its words, dim, never a bare bar (designer m_15244) */

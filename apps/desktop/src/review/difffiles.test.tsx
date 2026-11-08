@@ -53,7 +53,7 @@ describe('the review in parts (simple mode)', () => {
   it('shows Code, Tests, Words and docs, then Generated folded; the files in that order', () => {
     const { v } = view(nine);
     const body = v.getByTestId('review.files');
-    const heads = [...body.querySelectorAll('.b-glabel, .b-fold')].map((h) => h.textContent);
+    const heads = [...body.querySelectorAll('.b-fold')].map((h) => h.textContent);
     expect(heads).toEqual([
       `${pages.review_kind_code} · ${pages.review_part_files({ n: 2 })} · +9`,
       `${pages.review_kind_tests} · ${pages.review_part_files({ n: 1 })} · +6`,
@@ -79,13 +79,18 @@ describe('the review in parts (simple mode)', () => {
     };
     const body = v.getByTestId('review.files');
     for (let i = 0; i < 5; i++) fireEvent.keyDown(body, { key: 'Tab' });
-    expect(seen.map((h) => h.split(' ')[0])).toEqual([
-      'apps/desktop/src/agents/rowEnd.ts',
-      'apps/desktop/src/agents/SidebarRow.tsx',
-      'apps/desktop/src/agents/SidebarRow.test.tsx',
-      'docs/desktop-bar.md',
-      'apps/desktop/src/agents/rowEnd.ts',
-    ]);
+    expect(seen.map((h) => h.split(' ')[0])).toEqual(['rowEnd.ts', 'SidebarRow.tsx', 'SidebarRow.test.tsx', 'desktop-bar.md', 'rowEnd.ts']);
+  });
+
+  it('under a folder line a head names the file short, its full path in the tip; he folds any kind', () => {
+    const { v } = view(nine);
+    const head = v.getByTestId('review.file.0').querySelector('.fh');
+    expect(head?.textContent).toBe('rowEnd.ts +5');
+    expect(head?.getAttribute('data-tip')).toBe('apps/desktop/src/agents/rowEnd.ts');
+    fireEvent.click(v.getByTestId('review.part.code.fold'));
+    expect(v.getByTestId('review.part.code.fold').textContent).toBe(`${pages.review_kind_code} · ${pages.review_part_files({ n: 2 })} · rowEnd.ts, SidebarRow.tsx · +9`);
+    // the code's files leave the shown order: the test is first now
+    expect(v.getByTestId('review.file.0').textContent).toContain('SidebarRow.test.tsx');
   });
 
   it('a quote dragged across two parts quotes the lines shown, in the shown order', () => {
@@ -107,7 +112,7 @@ describe('the review in parts (simple mode)', () => {
 
   it('one kind in one folder: no part heads, as before', () => {
     const { v } = view(diffOf([file('src/a.ts', 2), file('src/b.ts', 3)]));
-    expect(v.getByTestId('review.files').querySelector('.b-glabel, .b-fold, .rv-folder')).toBeNull();
+    expect(v.getByTestId('review.files').querySelector('.b-fold, .rv-folder')).toBeNull();
     expect(v.getByTestId('review.file.0').textContent).toContain('src/b.ts');
   });
 });

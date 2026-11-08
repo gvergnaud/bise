@@ -290,6 +290,8 @@ export interface DiffLine {
 }
 export interface DiffProps {
   file: ReactNode;
+  /** the head's tip: the file's full path when `file` names it short */
+  fileTip?: string;
   add?: number;
   rm?: number;
   lines: readonly DiffLine[];
@@ -300,10 +302,10 @@ export interface DiffProps {
   testId?: string;
 }
 /** a diff: a file head and its lines */
-export function Diff({ file, add, rm, lines, onLine, pop, testId }: DiffProps) {
+export function Diff({ file, fileTip, add, rm, lines, onLine, pop, testId }: DiffProps) {
   return (
     <div className="b-diff" data-testid={testId}>
-      <div className="fh">{file}{add ? <> <span className="ok">+{add}</span></> : null}{rm ? <> <span className="er">−{rm}</span></> : null}</div>
+      <div className="fh" {...tipAttrs(fileTip)}>{file}{add ? <> <span className="ok">+{add}</span></> : null}{rm ? <> <span className="er">−{rm}</span></> : null}</div>
       {lines.map((l, i) => {
         const first = l.sel && !lines[i - 1]?.sel;
         const last = l.sel && !lines[i + 1]?.sel;

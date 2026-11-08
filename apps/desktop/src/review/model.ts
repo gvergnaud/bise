@@ -23,9 +23,11 @@ export function linesOf(f: DiffFile): DsLine[] {
   return out;
 }
 
-/** A file's head: its path, a rename's old path, and why its lines aren't all there. */
-export function fileHead(f: DiffFile): string {
-  const parts = [f.from != null && f.from !== '' ? `${f.from} → ${f.path}` : f.path];
+/** A file's head: its path (`short`: its name, under a folder line that says the rest), a rename's
+ *  old path, and why its lines aren't all there. */
+export function fileHead(f: DiffFile, short = false): string {
+  const path = short ? f.path.slice(f.path.lastIndexOf('/') + 1) : f.path;
+  const parts = [f.from != null && f.from !== '' ? `${f.from} → ${path}` : path];
   if (f.binary === true) parts.push(f.size == null ? 'a binary file' : `a binary file, ${bytes(f.size)}`);
   else if (f.generated === true) parts.push('generated, lines left out');
   else if (f.truncated === true) parts.push('cut: too long to show whole');

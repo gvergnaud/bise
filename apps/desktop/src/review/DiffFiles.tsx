@@ -6,7 +6,7 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { copyText, QuotePop } from '@/quote/QuotePop';
 import { flatRows, handQuotes, quotesOf, range, type RowAt, type Sel } from './quote';
-import { Button, Diff, Empty, Fold, GroupLabel, type DiffLine as DsLine } from '@/ds';
+import { Button, Diff, Empty, Fold, type DiffLine as DsLine } from '@/ds';
 import { pages } from '@/proto/words_pages.gen';
 import { diffRuns, langOfPath } from './syntax';
 import { useRouter } from '@/app/router';
@@ -43,9 +43,10 @@ export function DiffFiles({ project, diff, loading, error, onRetry, none, to, fr
   }, []);
   // the files in the parts' order (simple mode: parts.ts), a folded part's left out: the quote's
   // rows, `starts` and the test ids all follow what is shown, never git's order
-  const [genOpen, setGenOpen] = useState(false);
+  // the kinds he folded; Generated starts folded (a path rule, never the guide's weight)
+  const [folded, setFolded] = useState<readonly Kind[]>(['generated']);
   const parts = useMemo(() => (diff === null ? [] : partsOf(diff.files)), [diff]);
-  const order = useMemo(() => shownOrder(parts, framed(parts) && !genOpen ? ['generated'] : []), [parts, genOpen]);
+  const order = useMemo(() => shownOrder(parts, framed(parts) ? folded : []), [parts, folded]);
   const shown = useMemo(() => order.flatMap((i) => diff?.files[i] ?? []), [diff, order]);
   const shownAt = useMemo(() => new Map(order.map((fi, i) => [fi, i])), [order]);
   const fileLines = useMemo(() => shown.map(linesOf), [shown]);
@@ -144,12 +145,14 @@ export function DiffFiles({ project, diff, loading, error, onRetry, none, to, fr
       onEscape();
     }
   };
-  // opening or folding the generated files moves the shown rows: a selection over them goes
-  const toggleGen = () => {
+  // opening or folding a part moves the shown rows: a selection over them goes
+  const toggle = (k: Kind) => {
     setSel(null);
     at.current = -1;
-    setGenOpen((o) => !o);
+    setFolded((f) => (f.includes(k) ? f.filter((x) => x !== k) : [...f, k]));
   };
+  // under a folder line, a file's head names it short (its full path in the tip)
+  const short = framed(parts);
   const fileAt = (i: number) => {
     const f = shown[i];
     if (f === undefined) return null;
@@ -158,7 +161,8 @@ export function DiffFiles({ project, diff, loading, error, onRetry, none, to, fr
         {f.note != null && f.note !== '' && <p className="rv-note">{f.note}</p>}
         <FileDiff
           path={f.path}
-          head={fileHead(f)}
+          head={fileHead(f, short)}
+          tip={short ? f.path : undefined}
           add={f.add}
           rm={f.del}
           lines={fileLines[i] ?? []}
@@ -199,22 +203,17 @@ export function DiffFiles({ project, diff, loading, error, onRetry, none, to, fr
         {!framed(parts)
           ? shown.map((_f, i) => fileAt(i))
           : parts.map((p) => {
-              const head = [kindWord[p.kind], pages.review_part_files({ n: p.files }), counts(p)].filter(Boolean).join(' · ');
-              if (p.kind === 'generated') {
-                const names = p.groups.flatMap((g) => g.files.map((i) => baseName(diff.files[i]?.path ?? '')));
-                return (
-                  <div key={p.kind} className="rv-part" data-testid={`${testId}.part.${p.kind}`}>
-                    <Fold open={genOpen} onToggle={() => { toggleGen(); }} testId={`${testId}.part.${p.kind}.fold`}>
-                      <span className="rv-fold-words">{genOpen ? head : [kindWord[p.kind], pages.review_part_files({ n: p.files }), names.join(', '), counts(p)].filter(Boolean).join(' · ')}</span>
-                    </Fold>
-                    {genOpen && groupsOf(p)}
-                  </div>
-                );
-              }
+              const open = !folded.includes(p.kind);
+              // folded, its files' names say what it holds ('words_pages.gen.ts')
+              const names = open ? '' : p.groups.flatMap((g) => g.files.map((fi) => baseName(diff.files[fi]?.path ?? ''))).join(', ');
+              const facts = ['', pages.review_part_files({ n: p.files }), names, counts(p)].filter((x, k) => k === 0 || x !== '').join(' · ');
               return (
                 <div key={p.kind} className="rv-part" data-testid={`${testId}.part.${p.kind}`}>
-                  <GroupLabel>{head}</GroupLabel>
-                  {groupsOf(p)}
+                  <Fold open={open} onToggle={() => { toggle(p.kind); }} testId={`${testId}.part.${p.kind}.fold`}>
+                    <span className="rv-kind">{kindWord[p.kind]}</span>
+                    <span className="rv-facts">{facts}</span>
+                  </Fold>
+                  {open && groupsOf(p)}
                 </div>
               );
             })}
@@ -227,6 +226,8 @@ export function DiffFiles({ project, diff, loading, error, onRetry, none, to, fr
 interface FileDiffProps {
   readonly path: string;
   readonly head: string;
+  /** the head's tip: the full path when the head names it short */
+  readonly tip?: string | undefined;
   readonly add: number;
   readonly rm: number;
   readonly lines: readonly DsLine[];
@@ -240,7 +241,7 @@ interface FileDiffProps {
  * colored in a deferred render, one file at a time (React yields between files), so a long diff
  * shows at once and stays scrollable while it colors. A file's runs are kept until its lines change.
  */
-function FileDiff({ path, head, add, rm, lines, picked, pop, testId }: FileDiffProps) {
+function FileDiff({ path, head, tip, add, rm, lines, picked, pop, testId }: FileDiffProps) {
   const colored = useDeferredValue(true, false);
   const runs = useMemo(() => (colored ? diffRuns(lines, langOfPath(path)) : null), [colored, lines, path]);
   const shown = lines.map((l, li) => {
@@ -248,7 +249,7 @@ function FileDiff({ path, head, add, rm, lines, picked, pop, testId }: FileDiffP
     const sel = picked(li);
     return r == null && !sel ? l : { ...l, ...(r == null ? {} : { runs: r }), ...(sel ? { sel: true } : {}) };
   });
-  return <Diff file={head} add={add} rm={rm} lines={shown} pop={pop} testId={testId} />;
+  return <Diff file={head} {...(tip === undefined ? {} : { fileTip: tip })} add={add} rm={rm} lines={shown} pop={pop} testId={testId} />;
 }
 
 const kindWord: Record<Kind, string> = {
